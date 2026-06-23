@@ -5,11 +5,11 @@ category: observability
 description: 'Prometheus node_exporter: host metrics over HTTP /metrics.'
 service:
   systemd:
-  - node_exporter
+    - node_exporter
   openrc:
-  - node_exporter
+    - node_exporter
 apps:
-- node_exporter
+  - node_exporter
 variables:
   host: 127.0.0.1
   port: 9100

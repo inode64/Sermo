@@ -4,7 +4,7 @@ display_name: Rspamd
 category: messaging
 service: rspamd
 apps:
-- rspamd
+  - rspamd
 variables:
   port: 11334
   user: rspamd
@@ -12,8 +12,8 @@ preflight:
   config:
     type: command
     command:
-    - ${rspamd_rspamadm}
-    - configtest
+      - ${rspamd_rspamadm}
+      - configtest
     timeout: 30s
 pidfile: /run/rspamd.pid
 socket:
@@ -41,8 +41,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

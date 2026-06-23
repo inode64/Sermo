@@ -1,20 +1,20 @@
 kind: daemon
 name: smb
 aliases:
-- samba
+  - samba
 display_name: Samba SMB/NMB
 category: storage
 description: Combined Samba service unit that supervises SMB and NetBIOS daemons.
 service:
   systemd:
-  - smb
+    - smb
   openrc:
-  - samba
-  - smb
+    - samba
+    - smb
 apps:
-- smbd
-- nmbd
-- winbindd
+  - smbd
+  - nmbd
+  - winbindd
 variables:
   port: 445
   netbios_port: 139
@@ -26,16 +26,16 @@ preflight:
   config:
     type: command
     command:
-    - ${smbd_testparm}
-    - -s
+      - ${smbd_testparm}
+      - -s
     timeout: 30s
     analyze:
       use:
-      - common
+        - common
       rules:
-      - id: dir-artifact
-        match: (?i)(lock|pid) directory .* does not exist
-        severity: ok
+        - id: dir-artifact
+          match: (?i)(lock|pid) directory .* does not exist
+          severity: ok
 processes:
   smbd:
     exe: ${smbd_binary}
@@ -71,7 +71,7 @@ checks:
     user: ${user}
     state: running
     requires:
-    - service
+      - service
     enable_if:
       file: /etc/conf.d/samba
       key: daemon_list
@@ -99,8 +99,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

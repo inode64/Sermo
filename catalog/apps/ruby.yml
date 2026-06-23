@@ -7,5 +7,5 @@ variables:
   binary: ${bindir}/ruby
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
-  version_short: { type: command, command: ["${binary}","-e","print RUBY_VERSION"], timeout: 10s }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
+  version_short: { type: command, command: ["${binary}", "-e", "print RUBY_VERSION"], timeout: 10s }

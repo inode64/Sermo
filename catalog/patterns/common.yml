@@ -4,14 +4,14 @@ display_name: "Common output signals"
 description: "Generic command-output signals: escalate a command's output to warning/error even when it exits 0."
 rules:
   # Errors — the command answered but reports a serious condition.
-  - { id: backup-now, match: 'BACK UP DATA NOW',         severity: error }
-  - { id: too-many,   match: '(?i)too many connections', severity: error }
+  - { id: backup-now, match: 'BACK UP DATA NOW', severity: error }
+  - { id: too-many, match: '(?i)too many connections', severity: error }
 
   # Warnings — surfaced but not a hard failure.
-  - { id: cannot,     match: '(?i)\bcannot\b',     severity: warning }
-  - { id: failed,     match: '(?i)\bfailed\b',     severity: warning }
-  - { id: deprecated, match: '(?i)deprecated',     severity: warning }
-  - { id: not-loaded, match: '(?i)not loaded',     severity: warning }
-  - { id: note,       match: '(?i)\[note\]',       severity: warning }
-  - { id: warn,       match: '(?i)\bwarn(ing)?\b', severity: warning }
-  - { id: unknown,    match: '(?i)\bunknown\b',    severity: warning }
+  - { id: cannot, match: '(?i)\bcannot\b', severity: warning }
+  - { id: failed, match: '(?i)\bfailed\b', severity: warning }
+  - { id: deprecated, match: '(?i)deprecated', severity: warning }
+  - { id: not-loaded, match: '(?i)not loaded', severity: warning }
+  - { id: note, match: '(?i)\[note\]', severity: warning }
+  - { id: warn, match: '(?i)\bwarn(ing)?\b', severity: warning }
+  - { id: unknown, match: '(?i)\bunknown\b', severity: warning }

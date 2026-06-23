@@ -5,9 +5,9 @@ category: system
 description: PolicyKit authorization service.
 service:
   systemd:
-  - polkit
+    - polkit
 apps:
-- polkit
+  - polkit
 variables:
   user: polkitd
 processes:

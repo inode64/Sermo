@@ -5,7 +5,7 @@ category: database
 description: Synchronous multi-master replication engine that provides the wsrep API
 service: garbd
 apps:
-- garbd
+  - garbd
 checks:
   service:
     type: service
@@ -16,7 +16,7 @@ checks:
     user: root
     state: running
     requires:
-    - service
+      - service
 postflight:
   process:
     type: process

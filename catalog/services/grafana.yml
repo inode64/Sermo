@@ -5,18 +5,18 @@ category: observability
 description: Grafana observability and dashboarding server.
 service:
   systemd:
-  - grafana
+    - grafana
   openrc:
-  - grafana
+    - grafana
 apps:
-- grafana
+  - grafana
 variables:
   host: 127.0.0.1
   port: 3000
   user: grafana
 pidfile:
-- /run/grafana.pid
-- /run/grafana/grafana.pid
+  - /run/grafana.pid
+  - /run/grafana/grafana.pid
 processes:
   main:
     exe: ${grafana_binary}

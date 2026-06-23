@@ -3,10 +3,10 @@ name: openvpn-client-%i
 display_name: OpenVPN client ${instance}
 category: vpn
 apps:
-- openvpn
+  - openvpn
 service:
   systemd:
-  - openvpn-client@${instance}
+    - openvpn-client@${instance}
 variables:
   config: /etc/openvpn/client/${instance}.conf
   port:
@@ -14,7 +14,7 @@ variables:
     directive: port
     default: 1194
 config_files:
-- ${config}
+  - ${config}
 checks:
   service:
     type: service

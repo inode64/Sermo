@@ -47,8 +47,8 @@ install_dirs = @set -e; for d in $(1); do \
 	fi; \
 done
 
-# Go-installed developer tools live in ~/go/bin on local machines.
-LINT_PATH = PATH="$(HOME)/go/bin:$(PATH)"
+# Developer tools: Go binaries in ~/go/bin; pip/pipx user scripts in ~/.local/bin.
+LINT_PATH = PATH="$(HOME)/go/bin:$(HOME)/.local/bin:$(PATH)"
 # staticcheck/golangci-lint write analyzer caches. Keep the default outside
 # ~/.cache for restricted shells, but scope it to the checkout path so agent
 # worktrees do not reuse stale absolute paths after a worktree is removed.
@@ -63,7 +63,7 @@ config_subst = sed -e 's|\.\./catalog|$(SERMO_DATADIR)/catalog|g' -e 's|/usr/sha
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
-.PHONY: all build test vet fmt fmt-check lint validate check cover tidy clean \
+.PHONY: all build test vet fmt fmt-check lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate validate check cover tidy clean \
         install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
@@ -73,8 +73,25 @@ build:
 	$(GO_BUILD_ENV) go build -trimpath -buildvcs=false -ldflags '$(GO_LDFLAGS)' -o $(BIN)/sermoctl ./cmd/sermoctl
 	$(GO_BUILD_ENV) go build -trimpath -buildvcs=false -ldflags '$(GO_LDFLAGS)' -o $(BIN)/sermod ./cmd/sermod
 
+# YAML formatting and lint (yamlfmt via go install, yamllint via pip/pipx).
+YAMLFMT ?= yamlfmt
+YAMLLINT ?= yamllint
+YAML_ROOTS = catalog examples templates docs .github
+
+yaml-fmt:
+	@$(LINT_PATH) $(YAMLFMT) -conf .yamlfmt
+	@python3 scripts/normalize_yaml_flow.py
+
+yaml-fmt-check:
+	@$(LINT_PATH) python3 scripts/yaml_format_check.py
+
+yaml-lint:
+	@$(LINT_PATH) $(YAMLLINT) --strict -c .yamllint.yml $(YAML_ROOTS) .golangci.yml
+
+yaml-validate: yaml-fmt-check yaml-lint
+
 # Formatting and static analysis gates; make test and make check run this first.
-validate: lint
+validate: lint yaml-validate
 
 test: validate
 	go test ./...
@@ -102,8 +119,8 @@ lint: fmt-check
 	@echo "govulncheck ./..."
 	@$(LINT_CACHE_ENV) govulncheck ./...
 
-# Everything CI enforces: vet, formatting, static analysis, and the test suite.
-# test depends on validate (fmt-check + lint), so those gates always run first.
+# Everything CI enforces: vet, formatting, static analysis, YAML gates, and tests.
+# test depends on validate (Go lint + yaml-validate), so those gates always run first.
 check: vet test
 
 # Coverage: print the total and write a browsable HTML report.

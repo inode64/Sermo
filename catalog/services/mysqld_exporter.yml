@@ -5,11 +5,11 @@ category: observability
 description: 'Prometheus mysqld_exporter: MySQL/MariaDB metrics over HTTP /metrics.'
 service:
   systemd:
-  - mysqld_exporter
+    - mysqld_exporter
   openrc:
-  - mysqld_exporter
+    - mysqld_exporter
 apps:
-- mysqld_exporter
+  - mysqld_exporter
 variables:
   host: 127.0.0.1
   port: 9104

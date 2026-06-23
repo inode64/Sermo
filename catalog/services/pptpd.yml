@@ -4,7 +4,7 @@ display_name: PPTP Server
 category: network
 service: pptpd
 apps:
-- pptpd
+  - pptpd
 variables:
   port: 1723
 checks:

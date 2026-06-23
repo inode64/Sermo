@@ -5,9 +5,9 @@ category: hardware
 description: D-Bus service for power device and battery status.
 service:
   systemd:
-  - upower
+    - upower
 apps:
-- upower
+  - upower
 variables:
   user: root
 processes:

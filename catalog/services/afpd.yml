@@ -4,7 +4,7 @@ display_name: Netatalk AFP Daemon
 category: storage
 service: afpd
 apps:
-- afpd
+  - afpd
 variables:
   port: 548
 checks:

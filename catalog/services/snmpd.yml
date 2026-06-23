@@ -4,7 +4,7 @@ display_name: Net-SNMP Daemon
 category: observability
 service: snmpd
 apps:
-- snmpd
+  - snmpd
 variables:
   user: root
   port: 161

@@ -5,7 +5,7 @@ category: runtime
 description: A JavaScript runtime built on Chrome's V8 JavaScript engine
 service: node
 apps:
-- node
+  - node
 checks:
   service:
     type: service
@@ -16,7 +16,7 @@ checks:
     user: root
     state: running
     requires:
-    - service
+      - service
     optional: true
 postflight:
   process:

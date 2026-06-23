@@ -5,11 +5,11 @@ category: network
 description: dnsmasq lightweight DNS forwarder and DHCP/TFTP server.
 service:
   systemd:
-  - dnsmasq
+    - dnsmasq
   openrc:
-  - dnsmasq
+    - dnsmasq
 apps:
-- dnsmasq
+  - dnsmasq
 variables:
   host: 127.0.0.1
   port: 53
@@ -19,9 +19,9 @@ preflight:
   config:
     type: command
     command:
-    - ${dnsmasq_binary}
-    - --test
-    - --conf-file=${config}
+      - ${dnsmasq_binary}
+      - --test
+      - --conf-file=${config}
     timeout: 30s
 policy:
   cooldown: 15m
@@ -32,13 +32,13 @@ policy:
     max: 1h
 restart_on_change:
   libraries:
-  - glibc
-  - systemd-libs
-  - nettle
-  - libidn2
+    - glibc
+    - systemd-libs
+    - nettle
+    - libidn2
 config_files:
-- ${config}
-- /etc/dnsmasq.d
+  - ${config}
+  - /etc/dnsmasq.d
 checks:
   service:
     type: service
@@ -53,8 +53,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

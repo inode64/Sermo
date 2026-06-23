@@ -4,12 +4,12 @@ display_name: DHCP Server
 category: network
 service:
   systemd:
-  - dhcpd
-  - dhcpd4
+    - dhcpd
+    - dhcpd4
   openrc:
-  - dhcpd
+    - dhcpd
 apps:
-- dhcpd
+  - dhcpd
 variables:
   port: 67
   user: dhcp
@@ -18,10 +18,10 @@ preflight:
   config:
     type: command
     command:
-    - ${dhcpd_binary}
-    - -t
-    - -cf
-    - ${config}
+      - ${dhcpd_binary}
+      - -t
+      - -cf
+      - ${config}
     timeout: 30s
 os:
   gentoo:
@@ -42,8 +42,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

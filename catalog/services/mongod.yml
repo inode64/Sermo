@@ -5,7 +5,7 @@ category: database
 description: Mongo DB
 service: mongod
 apps:
-- mongod
+  - mongod
 variables:
   host: 127.0.0.1
   port: 27017
@@ -14,13 +14,13 @@ preflight:
   config:
     type: command
     command:
-    - ${mongod_binary}
-    - --config
-    - ${config}
-    - --outputConfig
+      - ${mongod_binary}
+      - --config
+      - ${config}
+      - --outputConfig
     timeout: 15s
 config_files:
-- ${config}
+  - ${config}
 checks:
   service:
     type: service
@@ -37,8 +37,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

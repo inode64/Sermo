@@ -13,4 +13,4 @@ variables:
 preflight:
   binary: { type: binary, path: "${binary}" }
   slaptest: { type: binary, path: "${slaptest}" }
-  version: { type: command, command: ["${binary}","-VVV"], expect_exit: 1, timeout: 10s }
+  version: { type: command, command: ["${binary}", "-VVV"], expect_exit: 1, timeout: 10s }

@@ -5,7 +5,7 @@ category: messaging
 description: Gestor de correo SMTP Exim
 service: exim
 apps:
-- exim
+  - exim
 variables:
   host: 127.0.0.1
   port: 25
@@ -15,8 +15,8 @@ preflight:
   config:
     type: command
     command:
-    - ${exim_binary}
-    - -bV
+      - ${exim_binary}
+      - -bV
     timeout: 10s
 pidfile: /run/exim.pid
 processes:
@@ -58,8 +58,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

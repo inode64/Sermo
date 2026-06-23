@@ -5,11 +5,11 @@ category: observability
 description: Grafana Alloy telemetry collector.
 service:
   systemd:
-  - alloy
+    - alloy
   openrc:
-  - alloy
+    - alloy
 apps:
-- alloy
+  - alloy
 variables:
   host: 127.0.0.1
   port: 12345
@@ -20,10 +20,10 @@ preflight:
   config:
     type: command
     command:
-    - ${alloy_binary}
-    - validate
-    - --stability.level=${stability_level}
-    - ${config}
+      - ${alloy_binary}
+      - validate
+      - --stability.level=${stability_level}
+      - ${config}
     timeout: 30s
 checks:
   service:
@@ -48,8 +48,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

@@ -4,7 +4,7 @@ display_name: S.M.A.R.T. Daemon
 category: storage
 service: smartd
 apps:
-- smartd
+  - smartd
 pidfile: /run/smartd.pid
 processes:
   main:
@@ -20,7 +20,7 @@ checks:
     user: root
     state: running
     requires:
-    - service
+      - service
 postflight:
   process:
     type: process

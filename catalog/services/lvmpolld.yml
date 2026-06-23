@@ -4,7 +4,7 @@ display_name: LVM poll daemon
 category: storage
 service: lvmpolld
 apps:
-- lvmpolld
+  - lvmpolld
 checks:
   service:
     type: service

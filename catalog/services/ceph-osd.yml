@@ -2,13 +2,12 @@ kind: daemon
 name: ceph-osd-%n
 display_name: Ceph OSD ${n}
 category: storage
-description: Ceph object storage daemon (one per backing device). Binds dynamic ports
-  in the 6800-7300 range across the public and cluster networks, so it is monitored
-  by service state rather than a fixed port.
+description: >-
+  Ceph object storage daemon (one per backing device). Binds dynamic ports in the 6800-7300 range across the public and cluster networks, so it is monitored by service state rather than a fixed port.
 service: ceph-osd@${n}
 apps:
-- ceph-osd
-- ceph
+  - ceph-osd
+  - ceph
 variables:
   user: ceph
 socket: /run/ceph/ceph-osd.${n}.asok
@@ -19,26 +18,26 @@ checks:
   status:
     type: command
     command:
-    - ${ceph_binary}
-    - --admin-daemon
-    - /run/ceph/ceph-osd.${n}.asok
-    - status
+      - ${ceph_binary}
+      - --admin-daemon
+      - /run/ceph/ceph-osd.${n}.asok
+      - status
     timeout: 5s
     analyze:
       use:
-      - ceph
+        - ceph
 postflight:
   status:
     type: command
     command:
-    - ${ceph_binary}
-    - --admin-daemon
-    - /run/ceph/ceph-osd.${n}.asok
-    - status
+      - ${ceph_binary}
+      - --admin-daemon
+      - /run/ceph/ceph-osd.${n}.asok
+      - status
     timeout: 5s
     analyze:
       use:
-      - ceph
+        - ceph
 rules:
   restart-if-status-failed:
     type: remediation

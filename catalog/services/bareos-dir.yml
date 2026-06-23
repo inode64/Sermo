@@ -5,15 +5,15 @@ category: storage
 description: Backup director Server
 service: bareos-dir
 apps:
-- bareos-dir
+  - bareos-dir
 variables:
   port: 9101
 preflight:
   config:
     type: command
     command:
-    - ${bareos_dir_binary}
-    - -t
+      - ${bareos_dir_binary}
+      - -t
     timeout: 30s
 checks:
   service:
@@ -26,8 +26,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

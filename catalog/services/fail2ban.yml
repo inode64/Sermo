@@ -4,20 +4,20 @@ display_name: Fail2ban
 category: security
 service:
   systemd:
-  - fail2ban
-  - fail2ban-server
+    - fail2ban
+    - fail2ban-server
   openrc:
-  - fail2ban
-  - fail2ban-server
+    - fail2ban
+    - fail2ban-server
 apps:
-- python3
-- fail2ban
+  - python3
+  - fail2ban
 preflight:
   config:
     type: command
     command:
-    - ${fail2ban_binary}
-    - -t
+      - ${fail2ban_binary}
+      - -t
     timeout: 30s
 pidfile: /run/fail2ban/fail2ban.pid
 checks:
@@ -31,8 +31,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

@@ -2,6 +2,6 @@ notifiers:
   ops-email:
     type: email
     # template: default-alert
-    dsn: "smtp://user:pass@smtp.example.com:587"   # smtp:// (STARTTLS) or smtps:// (implicit TLS)
+    dsn: "smtp://user:pass@smtp.example.com:587"  # smtp:// (STARTTLS) or smtps:// (implicit TLS)
     from: "Sermo <sermo@example.com>"
     to: [ops@example.com, oncall@example.com]

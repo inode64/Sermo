@@ -4,22 +4,22 @@ display_name: Fetchmail
 category: messaging
 service: fetchmail
 apps:
-- fetchmail
+  - fetchmail
 variables:
   config:
-  - /etc/fetchmailrc
-  - /etc/fetchmail/fetchmailrc
+    - /etc/fetchmailrc
+    - /etc/fetchmail/fetchmailrc
 config_files:
-- ${config}
+  - ${config}
 preflight:
   config:
     type: command
     command:
-    - sh
-    - -c
-    - test ! -e "$1" || exec "$0" --configdump -f "$1"
-    - ${fetchmail_binary}
-    - ${config}
+      - sh
+      - -c
+      - test ! -e "$1" || exec "$0" --configdump -f "$1"
+      - ${fetchmail_binary}
+      - ${config}
     timeout: 30s
 checks:
   service:
@@ -31,7 +31,7 @@ checks:
     user: root
     state: running
     requires:
-    - service
+      - service
     optional: true
 postflight:
   process:
@@ -42,13 +42,13 @@ postflight:
     optional: true
 reload_on_change:
   paths:
-  - ${config}
+    - ${config}
 rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

@@ -42,21 +42,21 @@ paths:
   services:
     - /etc/sermo/services
   apps:
-    - /etc/sermo/apps        # host-specific kind: app documents
+    - /etc/sermo/apps  # host-specific kind: app documents
   notifiers:
     - /etc/sermo/notifiers
   storages:
-    - /etc/sermo/storages    # storage watch fragments
+    - /etc/sermo/storages  # storage watch fragments
   networks:
-    - /etc/sermo/networks    # network/uplink watch fragments
+    - /etc/sermo/networks  # network/uplink watch fragments
   watches:
-    - /etc/sermo/watches     # generic host watch fragments
+    - /etc/sermo/watches  # generic host watch fragments
   # The shipped watch examples under storages/, networks/ and watches/ use
   # `monitor: disabled` so copying them cannot immediately run hooks or send
   # notifications. After adapting thresholds, hooks and notify targets for the
   # host, set each fragment to `monitor: enabled` or `monitor: previous`.
   mounts:
-    - /etc/sermo/mounts      # fstab-backed kind: mount documents
+    - /etc/sermo/mounts  # fstab-backed kind: mount documents
 
   # Volatile runtime data (locks, operation markers) on tmpfs; wiped on reboot.
   runtime: /run/sermo

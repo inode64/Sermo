@@ -5,12 +5,12 @@ category: security
 description: ClamAV virus database updater daemon
 service:
   systemd:
-  - clamav-freshclam
-  - freshclam
+    - clamav-freshclam
+    - freshclam
   openrc:
-  - freshclam
+    - freshclam
 apps:
-- freshclam
+  - freshclam
 variables:
   user: clamav
 pidfile: /run/clamav/freshclam.pid
@@ -28,7 +28,7 @@ checks:
     user: ${user}
     state: running
     requires:
-    - service
+      - service
 postflight:
   process:
     type: process

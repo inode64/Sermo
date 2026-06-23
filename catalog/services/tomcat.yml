@@ -3,13 +3,13 @@ name: tomcat-%v%s%i
 display_name: Apache Tomcat ${version} ${instance}
 category: web
 apps:
-- java
-- tomcat-${version}
+  - java
+  - tomcat-${version}
 service:
   openrc:
-  - tomcat-${version}${sep}${instance}
+    - tomcat-${version}${sep}${instance}
   systemd:
-  - tomcat@${version}${sep}${instance}
+    - tomcat@${version}${sep}${instance}
 variables:
   config: /etc/tomcat-${version}${sep}${instance}/server.xml
   port:
@@ -22,7 +22,7 @@ variables:
     pattern: <Connector[^>]*?\bprotocol="(?:AJP/1\.3|org\.apache\.coyote\.ajp\.[^"]+)"[^>]*?\bport="(\d+)"
     default: 8009
 config_files:
-- ${config}
+  - ${config}
 pidfile: /run/tomcat-${version}${sep}${instance}.pid
 checks:
   service:
@@ -58,7 +58,7 @@ postflight:
     timeout: 5s
 reload_on_change:
   paths:
-  - ${config}
+    - ${config}
 rules:
   restart-if-http-failed:
     type: remediation

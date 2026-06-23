@@ -5,9 +5,9 @@ category: storage
 description: D-Bus service for disk management.
 service:
   systemd:
-  - udisks2
+    - udisks2
 apps:
-- udisks2
+  - udisks2
 processes:
   main:
     exe: ${udisks2_binary}

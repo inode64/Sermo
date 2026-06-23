@@ -4,23 +4,23 @@ display_name: Samba SMB
 category: storage
 service: smbd
 apps:
-- smbd
+  - smbd
 variables:
   port: 445
 preflight:
   config:
     type: command
     command:
-    - ${smbd_testparm}
-    - -s
+      - ${smbd_testparm}
+      - -s
     timeout: 30s
     analyze:
       use:
-      - common
+        - common
       rules:
-      - id: dir-artifact
-        match: (?i)(lock|pid) directory .* does not exist
-        severity: ok
+        - id: dir-artifact
+          match: (?i)(lock|pid) directory .* does not exist
+          severity: ok
 checks:
   service:
     type: service
@@ -55,8 +55,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

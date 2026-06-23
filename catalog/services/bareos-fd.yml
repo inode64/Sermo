@@ -5,15 +5,15 @@ category: storage
 description: Backup file Server
 service: bareos-fd
 apps:
-- bareos-fd
+  - bareos-fd
 variables:
   port: 9102
 preflight:
   config:
     type: command
     command:
-    - ${bareos_fd_binary}
-    - -t
+      - ${bareos_fd_binary}
+      - -t
     timeout: 30s
 checks:
   service:
@@ -26,8 +26,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

@@ -3,13 +3,13 @@ name: rsync
 category: storage
 service:
   systemd:
-  - rsync
-  - rsyncd
+    - rsync
+    - rsyncd
   openrc:
-  - rsyncd
-  - rsync
+    - rsyncd
+    - rsync
 apps:
-- rsync
+  - rsync
 variables:
   port: 873
 pidfile: /run/rsyncd.pid
