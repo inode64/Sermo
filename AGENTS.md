@@ -37,8 +37,25 @@ level of integration.
    files alone.
 
 4. Keep edits scoped to the request and the ownership boundaries in this
-   document. Run targeted tests while developing and the complete battery before
-   committing when the change is code-affecting.
+   document. Run targeted tests while developing, and the **full validation gate
+   before treating any code or YAML change as finished** (see below) — not just
+   before committing.
+
+   **Validation gate (run before finishing a task, every time):**
+
+   ```sh
+   make check        # vet + full test suite; transitively runs `make validate`,
+                     # i.e. `make lint` (fmt-check, staticcheck, revive,
+                     # golangci-lint, govulncheck) AND `make yaml-validate`
+                     # (yaml-fmt-check + yaml-lint)
+   ```
+
+   `make check` is the single command that covers everything. Running `go test
+   ./...` and/or `go vet` alone is **not** sufficient: it skips `make lint`
+   (staticcheck/revive/golangci/govulncheck) and `make yaml-validate`
+   (yaml-fmt-check/yaml-lint), which catch issues the Go toolchain does not. If
+   you only touched YAML, `make yaml-validate` is the minimum; for any Go change,
+   run `make check`. Fix every reported issue before reporting the task done.
 
 5. Commit when the user asks for a commit, asks to merge into the main branch,
    or the task explicitly includes committing as part of the deliverable:
@@ -349,9 +366,13 @@ Before finishing any code change:
 - Preserve public YAML, JSON, CLI and web field names unless the change is
   explicitly a migration.
 - Add or move tests when a bug or ambiguous behavior is found.
-- Run `make check` (or at least `make validate`) before treating a code change
-  as complete; do not run `go test ./...` alone and skip fmt-check/lint.
-  YAML edits must pass `make yaml-validate` (included in `make validate`/`check`).
+- **Validation gate — run `make check` before treating any change as complete**
+  (the AI workflow step 4 spells this out). `make check` = vet + full tests, and
+  transitively runs `make lint` (fmt-check, staticcheck, revive, golangci-lint,
+  govulncheck) and `make yaml-validate` (yaml-fmt-check + yaml-lint). Never
+  substitute a bare `go test ./...` / `go vet`: those skip lint and yaml-lint and
+  miss real issues (e.g. revive stutter/comment rules). Fix every finding before
+  reporting done.
 - For daemon-facing changes, check the runtime cost in the steady-state cycle
   and avoid repeated scans, blocking calls or avoidable allocations on hot paths.
 - Update docs and examples in the same change when behavior changes.
