@@ -63,6 +63,9 @@ func TestCommandRunnerTimeout(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("error = %v, want context.DeadlineExceeded", err)
 	}
+	if !strings.Contains(err.Error(), "timeout after") {
+		t.Errorf("error = %q, want timeout after duration", err.Error())
+	}
 	if res.ExitCode != -1 {
 		t.Errorf("exit code = %d, want -1 on timeout", res.ExitCode)
 	}

@@ -179,6 +179,13 @@ func joinFirewallErrors(errs []error) error {
 }
 
 func commandResultError(command string, res execx.Result, err error) error {
+	if res.ExitCode == -1 {
+		msg := execx.OperatorFailure(err, res, 0)
+		if msg == "" {
+			msg = "command failed to run"
+		}
+		return fmt.Errorf("%s: %s", command, msg)
+	}
 	msg := FirstNonEmptyLine(res.Stderr)
 	if msg == "" {
 		msg = FirstNonEmptyLine(res.Stdout)

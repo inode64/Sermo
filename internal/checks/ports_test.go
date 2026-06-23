@@ -131,7 +131,7 @@ func TestPortsCheckRespectsTimeout(t *testing.T) {
 	if elapsed > 500*time.Millisecond {
 		t.Fatalf("check should honor the global timeout, took %v", elapsed)
 	}
-	if !strings.Contains(res.Message, "timed out") {
+	if !strings.Contains(res.Message, "timeout after 50ms") {
 		t.Fatalf("timeout message = %q", res.Message)
 	}
 }

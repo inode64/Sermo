@@ -308,6 +308,12 @@ func inspectOptions(opts []Option) options {
 func runExitProbe(ctx context.Context, runner execx.Runner, cmd probeCommand) (bool, string, string) {
 	res, err := runProbeCommand(ctx, runner, cmd)
 	switch {
+	case res.ExitCode == -1:
+		msg := execx.OperatorFailure(err, res, cmd.timeout)
+		if msg == "" {
+			msg = "command failed to run"
+		}
+		return false, "error: " + msg, checks.BoundedOutput(res.Stdout, res.Stderr)
 	case err != nil && res.ExitCode == 0:
 		return false, "error: " + err.Error(), checks.BoundedOutput(res.Stdout, res.Stderr)
 	case !checks.ExitCodeExpected(res.ExitCode, cmd.expectExit):
@@ -332,6 +338,12 @@ func runVersionProbe(ctx context.Context, runner execx.Runner, tree map[string]a
 		return versionProbeResult{status: status, output: checks.BoundedOutput(res.Stdout, res.Stderr)}
 	}
 	switch {
+	case res.ExitCode == -1:
+		msg := execx.OperatorFailure(err, res, cmd.timeout)
+		if msg == "" {
+			msg = "command failed to run"
+		}
+		return fail("error: " + msg)
 	case err != nil && res.ExitCode == 0:
 		return fail("error: " + err.Error())
 	case !checks.ExitCodeExpected(res.ExitCode, cmd.expectExit):
@@ -387,10 +399,14 @@ func shortVersionFor(ctx context.Context, runner execx.Runner, tree map[string]a
 }
 
 func runProbeCommand(ctx context.Context, runner execx.Runner, cmd probeCommand) (execx.Result, error) {
-	if cmd.user != "" {
-		return execx.RunUser(ctx, runner, probeTimeout, cmd.user, cmd.argv[0], cmd.argv[1:]...)
+	timeout := cmd.timeout
+	if timeout <= 0 {
+		timeout = probeTimeout
 	}
-	return execx.Run(ctx, runner, probeTimeout, cmd.argv[0], cmd.argv[1:]...)
+	if cmd.user != "" {
+		return execx.RunUser(ctx, runner, timeout, cmd.user, cmd.argv[0], cmd.argv[1:]...)
+	}
+	return execx.Run(ctx, runner, timeout, cmd.argv[0], cmd.argv[1:]...)
 }
 
 // binaryPath returns the resolved binary path of a daemon: its preflight
@@ -447,6 +463,7 @@ func namespacedBinaryPrefixes(preflight map[string]any) []string {
 type probeCommand struct {
 	argv             []string
 	user             string
+	timeout          time.Duration
 	expectExit       []int
 	optional         bool
 	stdout           checks.OutputMatcher
@@ -471,7 +488,12 @@ func probeCommandFor(tree map[string]any, key string) probeCommand {
 	if entry == nil {
 		return probeCommand{}
 	}
-	vc := probeCommand{argv: cfgval.StringList(entry["command"]), user: cfgval.String(entry["user"]), expectExit: []int{0}}
+	vc := probeCommand{
+		argv:       cfgval.StringList(entry["command"]),
+		user:       cfgval.String(entry["user"]),
+		timeout:    cfgval.DurationOr(entry["timeout"], probeTimeout),
+		expectExit: []int{0},
+	}
 	if v, ok := cfgval.IntList(entry["expect_exit"]); ok {
 		vc.expectExit = v
 	}

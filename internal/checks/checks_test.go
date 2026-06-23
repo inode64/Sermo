@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"debug/elf"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -345,6 +346,29 @@ func (r *recordingUserRunner) RunUser(_ context.Context, user string, name strin
 	r.name = name
 	r.args = append([]string(nil), args...)
 	return r.result, nil
+}
+
+type slowCommandRunner struct{}
+
+func (slowCommandRunner) Run(ctx context.Context, _ string, _ ...string) (execx.Result, error) {
+	<-ctx.Done()
+	return execx.Result{ExitCode: -1}, fmt.Errorf("run tool: %w", ctx.Err())
+}
+
+func TestCommandCheckTimeoutMessage(t *testing.T) {
+	check := commandCheck{
+		base:       base{name: "c", timeout: time.Millisecond},
+		runner:     slowCommandRunner{},
+		argv:       []string{"/bin/tool", "--version"},
+		expectExit: []int{0},
+	}
+	res := check.Run(context.Background())
+	if res.OK {
+		t.Fatal("expected timeout failure")
+	}
+	if !strings.Contains(res.Message, "timeout after 1ms") {
+		t.Fatalf("message = %q, want timeout after duration", res.Message)
+	}
 }
 
 func TestCommandCheck(t *testing.T) {
