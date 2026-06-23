@@ -94,13 +94,14 @@ type Watch struct {
 // RunCycle runs the check, advances the window, and fires the hook on a firing
 // cycle. An evaluation/hook error is emitted, never fatal.
 func (w *Watch) RunCycle(ctx context.Context) {
+	settleKey := settlingKeyForWatch(w)
 	if w.IsPaused != nil && w.IsPaused() {
-		if w.Settling != nil && !w.Settling.Observed(w.Name) {
+		if w.Settling != nil && !w.Settling.Observed(settleKey) {
 			w.markSettled()
 		}
 		return
 	}
-	observeOnly := w.Settling != nil && !w.Settling.Observed(w.Name)
+	observeOnly := w.Settling != nil && !w.Settling.Observed(settleKey)
 	if w.Cycle != nil {
 		w.Cycle(withObserveOnly(ctx, observeOnly))
 		if observeOnly {
@@ -175,7 +176,7 @@ func observeOnlyCycle(ctx context.Context) bool {
 func (w *Watch) markSettled() {
 	w.settled = true
 	if w.Settling != nil {
-		w.Settling.MarkObserved(w.Name)
+		w.Settling.MarkObserved(settlingKeyForWatch(w))
 	}
 }
 

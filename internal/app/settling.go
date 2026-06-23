@@ -2,6 +2,41 @@ package app
 
 import "sync"
 
+// SettlingServiceKey namespaces a service worker in the settling registry.
+func SettlingServiceKey(name string) string {
+	if name == "" {
+		return ""
+	}
+	return "service:" + name
+}
+
+// SettlingWatchKey namespaces a host or synthesized service watch.
+func SettlingWatchKey(name string) string {
+	if name == "" {
+		return ""
+	}
+	return "watch:" + name
+}
+
+// SettlingAppKey namespaces an installed-app monitor.
+func SettlingAppKey(name string) string {
+	if name == "" {
+		return ""
+	}
+	return "app:" + name
+}
+
+// settlingKeyForWatch returns the registry key for a runnable watch.
+func settlingKeyForWatch(w *Watch) string {
+	if w == nil {
+		return ""
+	}
+	if w.App != "" {
+		return SettlingAppKey(w.Name)
+	}
+	return SettlingWatchKey(w.Name)
+}
+
 // Settling tracks which monitored targets have completed their startup
 // observation cycle (backend active plus a first check for services, or a
 // first check for watches/apps). While unsettled, targets report state

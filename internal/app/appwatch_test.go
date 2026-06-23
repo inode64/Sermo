@@ -36,7 +36,7 @@ func TestAppWatchStartupObserveOnlySkipsNotify(t *testing.T) {
 	n := &fakeNotifier{name: "ops"}
 	var events []Event
 	settling := NewSettling(nil)
-	settling.Reset([]string{"salt-minion"})
+	settling.Reset([]string{SettlingAppKey("salt-minion")})
 	check := &scriptedCheck{results: []checks.Result{
 		{Check: "salt-minion", OK: false, Message: "error: exit 1 (want 0): boom"},
 		{Check: "salt-minion", OK: false, Message: "error: exit 1 (want 0): boom"},
@@ -56,7 +56,7 @@ func TestAppWatchStartupObserveOnlySkipsNotify(t *testing.T) {
 	if len(n.msgs) != 0 || hasEventKind(events, "firing") {
 		t.Fatalf("observe-only app-watch must not notify or fire, events=%v msgs=%d", events, len(n.msgs))
 	}
-	if !settling.Observed("salt-minion") {
+	if !settling.Observed(SettlingAppKey("salt-minion")) {
 		t.Fatal("observe-only app-watch must mark the app observed")
 	}
 

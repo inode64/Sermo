@@ -258,7 +258,7 @@ func TestWatchStartupObserveOnlySkipsFiring(t *testing.T) {
 	n := &fakeNotifier{name: "ops"}
 	var events []Event
 	settling := NewSettling(nil)
-	settling.Reset([]string{"storage-root"})
+	settling.Reset([]string{SettlingWatchKey("storage-root")})
 	w := &Watch{
 		Name:      "storage-root",
 		CheckType: "storage",
@@ -272,7 +272,7 @@ func TestWatchStartupObserveOnlySkipsFiring(t *testing.T) {
 	if len(n.msgs) != 0 || hasEventKind(events, "firing") {
 		t.Fatalf("observe-only watch must not fire or notify, events=%v msgs=%d", events, len(n.msgs))
 	}
-	if !settling.Observed("storage-root") {
+	if !settling.Observed(SettlingWatchKey("storage-root")) {
 		t.Fatal("observe-only watch must mark the watch observed")
 	}
 

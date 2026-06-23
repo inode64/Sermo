@@ -448,7 +448,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		svc.ActiveLocks = activeLocks
 	}
 	b.decorateRemediation(name, &svc)
-	observed := b.settling == nil || b.settling.Observed(name)
+	observed := b.settling == nil || b.settling.Observed(SettlingServiceKey(name))
 	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth, observed)
 	if len(e.alsoApply) > 0 {
 		svc.AlsoApply = slices.Clone(e.alsoApply)
@@ -674,7 +674,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 			ww.LastActivity = activity.At
 			ww.LastActivityKind = activity.Kind
 		}
-		observed := b.settling == nil || b.settling.Observed(name)
+		observed := b.settling == nil || b.settling.Observed(SettlingWatchKey(name))
 		failed := observed && watchViewFailed(ww)
 		ww.State = WatchState(ww.Enabled, ww.Monitored, failed, observed)
 		out = append(out, ww)
@@ -1887,7 +1887,7 @@ func (b *WebBackend) loadApplications(ctx context.Context) []web.Application {
 	opts := appinspect.WithUserLookup(b.userLookup)
 	out := make([]web.Application, 0, len(names))
 	for _, name := range names {
-		if b.settling != nil && !b.settling.Observed(name) {
+		if b.settling != nil && !b.settling.Observed(SettlingAppKey(name)) {
 			resolved, _ := b.cfg.ResolveCatalog(config.CategoryApp, name)
 			out = append(out, web.Application{
 				Name:        name,

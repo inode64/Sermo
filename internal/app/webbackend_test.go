@@ -1650,7 +1650,7 @@ func TestWebBackendIncludesDisabledServices(t *testing.T) {
 
 func TestWebBackendApplicationsStartingUnsettled(t *testing.T) {
 	settling := NewSettling(nil)
-	settling.Reset([]string{"git"})
+	settling.Reset([]string{SettlingAppKey("git")})
 
 	b := &WebBackend{
 		cfg: &config.Config{
@@ -1670,7 +1670,7 @@ func TestWebBackendApplicationsStartingUnsettled(t *testing.T) {
 		t.Fatalf("unsettled app = %+v, want git starting", apps[0])
 	}
 
-	settling.MarkObserved("git")
+	settling.MarkObserved(SettlingAppKey("git"))
 	apps = b.loadApplications(context.Background())
 	for _, a := range apps {
 		if a.State == TargetStateStarting {
@@ -1681,7 +1681,7 @@ func TestWebBackendApplicationsStartingUnsettled(t *testing.T) {
 
 func TestWebBackendStartingStateUnsettled(t *testing.T) {
 	settling := NewSettling(nil)
-	settling.Reset([]string{"web", "disk"})
+	settling.Reset([]string{SettlingServiceKey("web"), SettlingWatchKey("disk")})
 
 	b := &WebBackend{
 		order: []string{"web"},
@@ -1709,8 +1709,8 @@ func TestWebBackendStartingStateUnsettled(t *testing.T) {
 		t.Fatalf("unsettled watch = %+v, want state starting", watches[0])
 	}
 
-	settling.MarkObserved("web")
-	settling.MarkObserved("disk")
+	settling.MarkObserved(SettlingServiceKey("web"))
+	settling.MarkObserved(SettlingWatchKey("disk"))
 
 	svcs = b.Services(context.Background())
 	if svcs[0].State != TargetStateFailed {

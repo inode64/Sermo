@@ -134,21 +134,22 @@ type Worker struct {
 func (w *Worker) RunCycle(ctx context.Context) {
 	w.cycle++
 	defer w.publishRemediation()
+	settleKey := SettlingServiceKey(w.Service)
 	if w.IsPaused != nil && w.IsPaused() {
-		if w.Settling != nil && !w.Settling.Observed(w.Service) {
-			w.Settling.MarkObserved(w.Service)
+		if w.Settling != nil && !w.Settling.Observed(settleKey) {
+			w.Settling.MarkObserved(settleKey)
 		}
 		return // monitoring paused for this service
 	}
 
-	observeOnly := w.Settling != nil && !w.Settling.Observed(w.Service)
+	observeOnly := w.Settling != nil && !w.Settling.Observed(settleKey)
 	if observeOnly && !w.backendActive(ctx) {
 		// The init backend is inactive: complete startup observation without
 		// running checks so stopped services do not block daemon readiness or
 		// stay in state "starting" forever. The web/CLI surface the inactive
 		// backend as failed once observed.
 		if w.Settling != nil {
-			w.Settling.MarkObserved(w.Service)
+			w.Settling.MarkObserved(settleKey)
 		}
 		return
 	}
@@ -181,7 +182,7 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	}
 	if observeOnly {
 		if w.Settling != nil {
-			w.Settling.MarkObserved(w.Service)
+			w.Settling.MarkObserved(settleKey)
 		}
 		return // first active cycle: publish data only, no rules or SLA side effects
 	}
