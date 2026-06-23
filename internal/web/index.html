@@ -441,6 +441,7 @@
       <button data-wf="ok">ok</button>
       <button data-wf="monitorized">monitorized</button>
       <button data-wf="unmonitorized">unmonitorized</button>
+      <button data-wf="starting">starting</button>
       <button data-wf="failed">failed</button>
     </span>
     <span id="storage-filter-count" class="muted"></span>
@@ -484,6 +485,7 @@
       <button data-f="stopped">stopped</button>
       <button data-f="unmonitorized">unmonitorized</button>
       <button data-f="monitorized">monitorized</button>
+      <button data-f="starting">starting</button>
       <button data-f="failed">failed</button>
     </span>
     <span id="svc-count" class="muted"></span>
@@ -519,6 +521,7 @@
       <button data-wf="ok">ok</button>
       <button data-wf="monitorized">monitorized</button>
       <button data-wf="unmonitorized">unmonitorized</button>
+      <button data-wf="starting">starting</button>
       <button data-wf="failed">failed</button>
     </span>
     <span id="network-filter-count" class="muted"></span>
@@ -581,6 +584,7 @@
       <button data-wf="ok">ok</button>
       <button data-wf="monitorized">monitorized</button>
       <button data-wf="unmonitorized">unmonitorized</button>
+      <button data-wf="starting">starting</button>
       <button data-wf="failed">failed</button>
     </span>
     <span id="watch-count" class="muted"></span>
@@ -1756,7 +1760,7 @@ function renderAttention() {
   }
   // While the daemon is settling (starting), the tab favicon is neutral grey and
   // other health signals are premature, so it overrides the ok/warning/critical
-  // colour. The attention box still lists the "Daemon starting" item below.
+  // colour. Startup progress lives in the status bar (`status: starting`).
   const startingNow = latestReady && latestReady.ready === false && latestReady.status === "starting";
   if (startingNow) {
     setFavicon("starting");
@@ -1885,6 +1889,7 @@ function serviceMatches(s) {
     case "paused":
     case "stopped":
     case "monitorized":
+    case "starting":
     case "failed":      return serviceState(s) === svcStatus;
     default:            return true; // "all"
   }
@@ -1969,6 +1974,7 @@ function renderFilterCounts() {
     stopped: s.filter((x) => serviceState(x) === "stopped").length,
     unmonitorized: s.filter(serviceUnmonitorized).length,
     monitorized: s.filter((x) => serviceState(x) === "monitorized").length,
+    starting: s.filter((x) => serviceState(x) === "starting").length,
     failed: s.filter((x) => serviceState(x) === "failed").length,
   };
   renderFilterButtonCounts("#svc-filters", c);
@@ -3243,6 +3249,7 @@ function watchMatches(w, panelKey) {
     case "ok":            return watchStateText(w) === "ok";
     case "monitorized":   return watchMonitorized(w);
     case "unmonitorized": return watchUnmonitorized(w);
+    case "starting":      return watchStateText(w) === "starting";
     case "failed":        return watchStateText(w) === "failed";
     default:           return true;
   }
@@ -3315,6 +3322,7 @@ function renderWatchFilterCounts(panelKey, watches) {
     ok: w.filter((x) => watchStateText(x) === "ok").length,
     monitorized: w.filter(watchMonitorized).length,
     unmonitorized: w.filter(watchUnmonitorized).length,
+    starting: w.filter((x) => watchStateText(x) === "starting").length,
     failed: w.filter((x) => watchStateText(x) === "failed").length,
   });
 }
