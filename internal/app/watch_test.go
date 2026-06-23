@@ -87,6 +87,32 @@ func TestWatchFiresHookWhenConditionTrue(t *testing.T) {
 	}
 }
 
+func TestWatchPanicSuppressesHookButStillFires(t *testing.T) {
+	var calls int
+	var events []Event
+	w := &Watch{
+		Name:      "storage-root",
+		CheckType: "storage",
+		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/", "used_pct": 92.0}},
+		Hook:      HookSpec{Command: []string{"/bin/true"}},
+		Runner: HookRunnerFunc(func(_ context.Context, _ []string, _ map[string]string, _ time.Duration) error {
+			calls++
+			return nil
+		}),
+		InPanic: func() bool { return true },
+		Emit:    func(e Event) { events = append(events, e) },
+	}
+	w.RunCycle(context.Background())
+
+	if calls != 0 {
+		t.Fatalf("panic mode must suppress the hook, ran %d times", calls)
+	}
+	kinds := eventKinds(events)
+	if strings.Join(kinds, ",") != "firing,panic-suppressed" {
+		t.Fatalf("event kinds = %v, want firing,panic-suppressed", kinds)
+	}
+}
+
 func TestWatchEmitsRecoveredAfterFiringClears(t *testing.T) {
 	check := &scriptedCheck{results: []checks.Result{
 		{Check: "dns", OK: false, Message: "dns timeout"},

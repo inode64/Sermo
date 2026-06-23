@@ -133,6 +133,16 @@
   .actions button { margin-right: .25rem; }
   .danger-btn { border-color: color-mix(in srgb, var(--crit) 55%, transparent); background: color-mix(in srgb, var(--crit) 12%, transparent); color: var(--crit); }
   .danger-btn:hover { background: color-mix(in srgb, var(--crit) 20%, transparent); }
+  @keyframes panic-pulse { 50% { opacity: .6; } }
+  .panic-btn { border-color: var(--crit); background: var(--crit); color: #fff; font-weight: 700; letter-spacing: .02em; }
+  .panic-btn:hover { filter: brightness(1.12); }
+  .panic-btn.active { animation: panic-pulse 1.1s ease-in-out infinite; }
+  .status-panic { color: var(--crit); font-weight: 700; }
+  #panic-banner { display: none; }
+  #panic-banner.active { display: flex; align-items: center; gap: .55rem; margin: .5rem 0 0; padding: .55rem .85rem; border-radius: var(--radius); background: color-mix(in srgb, var(--crit) 15%, transparent); border: 1px solid var(--crit); color: var(--crit); font-weight: 600; }
+  #panic-banner svg { flex: none; }
+  .panic-dialog-body { display: flex; gap: .9rem; align-items: flex-start; }
+  .panic-dialog-body svg { flex: none; color: var(--crit); }
   input[type="search"], input[type="text"], select {
     font: inherit; font-size: .85rem; padding: .26rem .55rem; color: var(--text);
     border-radius: var(--radius-s); border: 1px solid var(--line-2); background: var(--panel);
@@ -408,6 +418,10 @@
 <div id="system-status"></div>
 <div id="statusbar"></div>
 </div><!-- /topbar -->
+<div id="panic-banner" role="alert">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+  <span>PANIC MODE — hooks, alerts and automatic remediation are suspended.</span>
+</div>
 <div id="overview"></div>
 <p id="ready" class="muted" style="display:none"></p>
 <div id="err"></div>
@@ -714,6 +728,20 @@
   </div>
 </dialog>
 
+<dialog id="panic-confirm">
+  <div class="modal-head">
+    <h2 id="panic-title" style="font-size:1.05rem; margin:0"></h2>
+  </div>
+  <div class="modal-body panic-dialog-body">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <div id="panic-message"></div>
+  </div>
+  <div class="modal-foot">
+    <button id="panic-cancel-btn" data-panic-result="false">cancel</button>
+    <button id="panic-confirm-btn" class="panic-btn" data-panic-result="true"></button>
+  </div>
+</dialog>
+
 <details id="diag-section">
   <summary>Diagnostics
     <button id="diag-clean" class="danger-btn" style="display:none">clean stale data</button>
@@ -726,6 +754,7 @@
   <div class="footer-actions">
     <button id="reload-btn" style="display:none">reload config</button>
     <button id="state-compact-btn" class="danger-btn" style="display:none">compact state</button>
+    <button id="panic-btn" class="panic-btn" style="display:none" title="Suspend hooks, alerts and automatic remediation">panic mode</button>
     <input id="state-before" type="text" placeholder="before (e.g. 720h)" title="Optional state compact cutoff: duration or RFC3339 timestamp" style="display:none; max-width:11rem">
   </div>
   <div class="footer-version muted">sermo {{VERSION}}</div>
@@ -760,6 +789,7 @@ async function loadMe() {
   updateEventAdminControls();
   updateActivityAdminControls();
   updateStateCompactControls();
+  updatePanicControls();
   updateDiagnosticCleanControls(latestDiagnostics || []);
   // Hide the Diagnostics panel entirely when disabled via web.disable_diagnostics.
   const diagSection = $("#diag-section");
@@ -981,6 +1011,86 @@ function updateStateCompactControls() {
   const before = $("#state-before");
   if (btn) btn.style.display = show ? "inline-block" : "none";
   if (before) before.style.display = show ? "inline-block" : "none";
+}
+
+// ---- Panic mode ----
+let panicOn = false;
+let panicResolve = null;
+
+// updatePanicControls shows the footer button only to operators who can act.
+function updatePanicControls() {
+  const btn = $("#panic-btn");
+  if (btn) btn.style.display = me.can_act ? "inline-block" : "none";
+}
+
+// updatePanicView reflects the current panic state in the button, banner and
+// internal flag. Called every refresh from renderStatus.
+function updatePanicView(active) {
+  panicOn = !!active;
+  const btn = $("#panic-btn");
+  if (btn) {
+    btn.textContent = panicOn ? "exit panic mode" : "panic mode";
+    btn.classList.toggle("active", panicOn);
+    btn.title = panicOn
+      ? "Resume hooks, alerts and automatic remediation"
+      : "Suspend hooks, alerts and automatic remediation";
+  }
+  const banner = $("#panic-banner");
+  if (banner) banner.classList.toggle("active", panicOn);
+}
+
+function panicConfirm(enable) {
+  const dlg = $("#panic-confirm");
+  const title = $("#panic-title");
+  const msg = $("#panic-message");
+  const okBtn = $("#panic-confirm-btn");
+  if (title) title.textContent = enable ? "Enter panic mode?" : "Exit panic mode?";
+  if (msg) {
+    msg.innerHTML = enable
+      ? "Sermo will <b>suspend all hooks, alerts and automatic remediation</b> across the daemon. Monitoring keeps running and manual actions stay available.<br><br>The daemon status will show <b>panic mode</b> until you turn it off."
+      : "Sermo will <b>resume normal operation</b>: hooks, alerts and automatic remediation will fire again.";
+  }
+  if (okBtn) okBtn.textContent = enable ? "enter panic mode" : "exit panic mode";
+  if (!dlg || typeof dlg.showModal !== "function") {
+    return Promise.resolve(confirm(enable ? "Enter panic mode?" : "Exit panic mode?"));
+  }
+  return new Promise((resolve) => {
+    panicResolve = resolve;
+    dlg.oncancel = () => closePanicConfirm(false);
+    dlg.showModal();
+  });
+}
+
+function closePanicConfirm(ok) {
+  const dlg = $("#panic-confirm");
+  if (dlg && dlg.open) dlg.close();
+  const resolve = panicResolve;
+  panicResolve = null;
+  if (resolve) resolve(!!ok);
+}
+
+async function requestPanic(enable) {
+  if (!me.can_act) return;
+  const ok = await panicConfirm(enable);
+  if (!ok) return;
+  setStatus("");
+  const btn = $("#panic-btn");
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(`api/panic/${enable ? "on" : "off"}`, {
+      method: "POST",
+      headers: { "X-Sermo-CSRF": "1" },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
+    updatePanicView(enable);
+    setStatus(body.message || (enable ? "panic mode enabled" : "panic mode disabled"), enable ? "err" : "ok");
+    await load();
+  } catch (e) {
+    setStatus(`panic mode: ${e.message}`, "err");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function clearEventLog(beforeValue) {
@@ -4081,10 +4191,11 @@ function renderStatus(ctx) {
     const hostUp = fmtUptime(daemon.host_uptime_seconds);
     if (hostUp) parts.push(`uptime: <b>${esc(hostUp)}</b>`);
     if (ready.status) {
-      const cls = ready.ready ? "ok" : "inactive";
+      const cls = ready.panic ? "status-panic" : (ready.ready ? "ok" : "inactive");
       parts.push(`status: <span class="${cls}">${esc(ready.status)}</span>`);
     }
     bar.innerHTML = parts.join(" &middot; ");
+    updatePanicView(ready.panic);
     renderOverview({ ready, live, mon, ops, locks, hostMetrics });
 
     // Also populate the runtime part of the Daemon info panel
@@ -4093,7 +4204,7 @@ function renderStatus(ctx) {
     set("#daemon-uptime", fmtUptime(live.uptime_seconds));
     if (live.go) set("#daemon-go", live.go);
     if (ready.status) {
-      const cls = ready.ready ? "ok" : "inactive";
+      const cls = ready.panic ? "status-panic" : (ready.ready ? "ok" : "inactive");
       const el = $("#daemon-ready");
       if (el) {
         el.textContent = ready.status;
@@ -4858,6 +4969,21 @@ function initStaticHandlers() {
       e.stopPropagation();
       compactState();
     });
+  }
+  const panicBtn = $("#panic-btn");
+  if (panicBtn) {
+    panicBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      requestPanic(!panicOn);
+    });
+  }
+  const panicDlg = $("#panic-confirm");
+  if (panicDlg) {
+    panicDlg.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-panic-result]");
+      if (b) closePanicConfirm(b.dataset.panicResult === "true");
+    });
+    panicDlg.addEventListener("close", () => { if (panicResolve) closePanicConfirm(false); });
   }
 }
 

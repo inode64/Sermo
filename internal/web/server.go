@@ -556,11 +556,14 @@ type OperationSlots struct {
 // ReadyReport is the /readyz readiness probe payload.
 type ReadyReport struct {
 	Ready    bool   `json:"ready"`
-	Status   string `json:"status"` // ok | starting | shutting_down
+	Status   string `json:"status"` // ok | starting | shutting_down | panic mode
 	Backend  string `json:"backend,omitempty"`
 	Services int    `json:"services"`
 	Watches  int    `json:"watches"`
 	Message  string `json:"message,omitempty"`
+	// Panic is true while the daemon-wide panic mode is on (hooks, alerts and
+	// automatic remediation suspended). When true, Status is "panic mode".
+	Panic bool `json:"panic,omitempty"`
 }
 
 // ReadinessChecker reports whether the daemon has begun monitoring.
@@ -660,6 +663,10 @@ type Backend interface {
 	ActivitySummary(ctx context.Context) ActivitySummary
 	// MonitoringStatus returns counts of monitored vs paused services.
 	MonitoringStatus(ctx context.Context) MonitoringStatus
+	// SetPanic enables (on=true) or disables the daemon-wide panic mode, which
+	// suspends hooks, alerts and automatic remediation while monitoring keeps
+	// running. The change is persisted so it survives daemon restarts.
+	SetPanic(ctx context.Context, on bool) ActionResult
 }
 
 // operateActions, monitorActions and watchOperateActions are the action verbs the API accepts.
@@ -739,6 +746,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("POST /api/events/clear", s.handleEventsClear)
 	mux.HandleFunc("POST /api/state/compact", s.handleStateCompact)
+	mux.HandleFunc("POST /api/panic/{action}", s.handlePanic)
 	mux.HandleFunc("GET /api/diagnostics", s.handleDiagnostics)
 	mux.HandleFunc("POST /api/diagnostics/clean", s.handleDiagnosticsClean)
 	mux.HandleFunc("GET /api/ops", s.handleOperations)
@@ -1114,6 +1122,27 @@ func (s *Server) handleStateCompact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res := s.Backend.CompactState(s.operateContext(), before)
+	status := http.StatusOK
+	if !res.OK {
+		status = http.StatusConflict
+	}
+	writeJSON(w, status, res)
+}
+
+// handlePanic enables (action "on") or disables (action "off") the daemon-wide
+// panic mode. It is admin-only (POST gated by withAuth) and CSRF-protected.
+func (s *Server) handlePanic(w http.ResponseWriter, r *http.Request) {
+	var on bool
+	switch r.PathValue("action") {
+	case "on":
+		on = true
+	case "off":
+		on = false
+	default:
+		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: "panic action must be on or off"})
+		return
+	}
+	res := s.Backend.SetPanic(s.operateContext(), on)
 	status := http.StatusOK
 	if !res.OK {
 		status = http.StatusConflict

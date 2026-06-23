@@ -65,6 +65,11 @@ type Worker struct {
 	// or remediation.
 	IsPaused func() bool
 
+	// InPanic reports whether the daemon-wide panic mode is on. Unlike IsPaused,
+	// checks and rule evaluation still run (so status stays visible), but alert
+	// notifications and automatic remediation actions are suppressed.
+	InPanic func() bool
+
 	// Shadow when true causes the worker to fully evaluate remediation rules,
 	// advance their for/within windows, consult guards and the remediation policy,
 	// and emit events, but never perform any Operate/Cascade action and never
@@ -342,6 +347,12 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 
 		// All actions of this rule run together: alerts notify, then the operation.
 		w.emitAlerts(ctx, r)
+		// Panic mode keeps the alert visible (emitAlerts above) but never performs
+		// the automatic action; the operator drives services manually instead.
+		if w.InPanic != nil && w.InPanic() {
+			w.emit(Event{Kind: "suppressed", Rule: r.Name, Action: action, Message: "panic mode: remediation suppressed"})
+			continue
+		}
 		// Cascade owns the primary's placement when also_apply is set (so stop can
 		// take additionals down first); it returns this service's own Result, which
 		// drives the bookkeeping below exactly as a bare Operate would.
@@ -381,8 +392,15 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 // them best-effort.
 func (w *Worker) emitAlerts(ctx context.Context, r rules.Rule) {
 	notifiers := resolveNotifiers(effectiveNotify(r.Notify, w.GlobalNotify), w.Notifiers)
+	panicking := w.InPanic != nil && w.InPanic()
 	for _, msg := range r.AlertMessages() {
+		// The alert event is always emitted so the condition stays visible; panic
+		// mode only suppresses the outbound notifications.
 		w.emit(Event{Kind: "alert", Rule: r.Name, Message: msg})
+		if panicking {
+			w.emit(Event{Kind: "notify-suppressed", Rule: r.Name, Message: "panic mode: alert notification suppressed"})
+			continue
+		}
 		for _, n := range notifiers {
 			if err := n.Send(ctx, alertMessage(w.Service, r.Name, msg)); err != nil {
 				w.emit(Event{Kind: "notify-failed", Rule: r.Name, Message: n.Name() + ": " + err.Error()})

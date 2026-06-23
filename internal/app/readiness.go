@@ -21,6 +21,9 @@ type Readiness struct {
 	services int
 	watches  int
 	state    string
+	// panic reports the daemon-wide panic mode (optional). When set and active,
+	// it overrides the "ok" status with "panic mode".
+	panic func() bool
 }
 
 // NewReadiness returns a checker in the starting state (not ready until MarkReady).
@@ -29,6 +32,17 @@ func NewReadiness(backend string, services, watches int) *Readiness {
 		backend: backend, services: services, watches: watches,
 		state: readinessStarting,
 	}
+}
+
+// WatchPanic wires the daemon-wide panic-mode source so the readiness report
+// surfaces it as the daemon status.
+func (r *Readiness) WatchPanic(active func() bool) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.panic = active
+	r.mu.Unlock()
 }
 
 // MarkReady records that workers and watches have been started.
@@ -78,6 +92,14 @@ func (r *Readiness) Report(context.Context) web.ReadyReport {
 	case readinessReady:
 		rep.Ready = true
 		rep.Status = "ok"
+		// Panic mode overrides the healthy status (but not starting/shutting_down,
+		// which describe the lifecycle): the daemon is up but holding back hooks,
+		// alerts and remediation.
+		if r.panic != nil && r.panic() {
+			rep.Panic = true
+			rep.Status = "panic mode"
+			rep.Message = "panic mode: hooks, alerts and automatic remediation are suspended"
+		}
 	case readinessShuttingDown:
 		rep.Status = readinessShuttingDown
 		rep.Message = "daemon is shutting down"

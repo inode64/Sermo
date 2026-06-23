@@ -160,6 +160,15 @@ var migrations = []string{
 	);`,
 	`ALTER TABLE rule_window_state ADD COLUMN true_since INTEGER NOT NULL DEFAULT 0;`,
 	`ALTER TABLE rule_window_state ADD COLUMN timed_history TEXT NOT NULL DEFAULT '[]';`,
+	// global_state holds daemon-wide on/off flags that are not keyed by service
+	// (currently the "panic_mode" toggle). It is control state, not metrics, so it
+	// survives daemon restarts — clearing panic mode must be a deliberate act.
+	`CREATE TABLE global_state (
+		key        TEXT PRIMARY KEY,
+		value      INTEGER NOT NULL,
+		source     TEXT NOT NULL,
+		updated_at TEXT NOT NULL
+	);`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -320,6 +329,55 @@ func (s *Store) SetActive(service string, active bool, source string) error {
 		service, v, source, s.now().UTC().Format(time.RFC3339),
 	)
 	return err
+}
+
+// panicFlagKey is the global_state key for the panic-mode toggle.
+const panicFlagKey = "panic_mode"
+
+// GlobalRecord is one persisted daemon-wide flag row.
+type GlobalRecord struct {
+	On        bool
+	Source    string
+	UpdatedAt time.Time
+}
+
+// SetPanic records the daemon-wide panic-mode flag, upserting the row. source
+// notes who set it (SourceCLI, SourceWeb) for inspection.
+func (s *Store) SetPanic(on bool, source string) error {
+	v := 0
+	if on {
+		v = 1
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO global_state (key, value, source, updated_at)
+		 VALUES (?, ?, ?, ?)
+		 ON CONFLICT(key) DO UPDATE SET
+		   value      = excluded.value,
+		   source     = excluded.source,
+		   updated_at = excluded.updated_at;`,
+		panicFlagKey, v, source, s.now().UTC().Format(time.RFC3339),
+	)
+	return err
+}
+
+// Panic returns the persisted panic-mode flag. found is false when no row has
+// been written yet (the caller treats that as panic off).
+func (s *Store) Panic() (rec GlobalRecord, found bool, err error) {
+	var v int
+	var source, updated string
+	err = s.db.QueryRow(
+		`SELECT value, source, updated_at FROM global_state WHERE key = ?;`,
+		panicFlagKey,
+	).Scan(&v, &source, &updated)
+	switch {
+	case err == sql.ErrNoRows:
+		return GlobalRecord{}, false, nil
+	case err != nil:
+		return GlobalRecord{}, false, err
+	default:
+		at, _ := time.Parse(time.RFC3339, updated)
+		return GlobalRecord{On: v != 0, Source: source, UpdatedAt: at}, true, nil
+	}
 }
 
 // RemediationRecord is the persisted automatic-remediation control state for one

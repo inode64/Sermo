@@ -8,11 +8,14 @@ import (
 )
 
 type fakeStore struct {
-	active  map[string]bool
-	source  map[string]string
-	updated map[string]time.Time
-	failSet bool
-	now     func() time.Time
+	active     map[string]bool
+	source     map[string]string
+	updated    map[string]time.Time
+	failSet    bool
+	now        func() time.Time
+	panicOn    bool
+	panicFound bool
+	panicSrc   string
 }
 
 func newFakeStore() *fakeStore {
@@ -42,6 +45,26 @@ func (f *fakeStore) SetActive(service string, active bool, source string) error 
 	f.active[service] = active
 	f.source[service] = source
 	f.updated[service] = f.now()
+	return nil
+}
+
+func (f *fakeStore) Panic() (state.GlobalRecord, bool, error) {
+	if f == nil {
+		return state.GlobalRecord{}, false, nil
+	}
+	return state.GlobalRecord{On: f.panicOn, Source: f.panicSrc, UpdatedAt: f.now()}, f.panicFound, nil
+}
+
+func (f *fakeStore) SetPanic(on bool, source string) error {
+	if f == nil {
+		return nil
+	}
+	if f.failSet {
+		return fmt.Errorf("set panic failed")
+	}
+	f.panicOn = on
+	f.panicFound = true
+	f.panicSrc = source
 	return nil
 }
 
