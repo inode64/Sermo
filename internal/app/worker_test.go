@@ -148,6 +148,45 @@ func TestCycleFiresRemediation(t *testing.T) {
 	}
 }
 
+func TestCyclePanicSuppressesRemediation(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
+	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
+	w.InPanic = func() bool { return true }
+
+	w.RunCycle(context.Background())
+
+	if len(h.ops) != 0 {
+		t.Fatalf("panic mode must suppress remediation, ops=%v", h.ops)
+	}
+	if !w.State.LastActionAt.IsZero() {
+		t.Errorf("suppressed remediation must not record state: %v", w.State.LastActionAt)
+	}
+	if e, ok := h.eventOf("suppressed"); !ok || !strings.Contains(e.Message, "panic mode") {
+		t.Fatalf("expected a panic suppression event, got %+v", h.events)
+	}
+}
+
+func TestPanicSuppressesAlertDeliveryButKeepsEvent(t *testing.T) {
+	n := &fakeNotifier{name: "ops"}
+	h := &workerHarness{cache: failedCache("http")}
+	w := h.worker(alertRuleTree(nil), rules.Policy{}, nil)
+	w.Notifiers = map[string]notify.Notifier{"ops": n}
+	w.GlobalNotify = []string{"ops"}
+	w.InPanic = func() bool { return true }
+
+	w.RunCycle(context.Background())
+
+	if len(n.msgs) != 0 {
+		t.Fatalf("panic mode must suppress alert delivery, sent %d", len(n.msgs))
+	}
+	if _, ok := h.eventOf("alert"); !ok {
+		t.Errorf("the alert event must still be emitted in panic mode: %+v", h.events)
+	}
+	if _, ok := h.eventOf("notify-suppressed"); !ok {
+		t.Errorf("expected a notify-suppressed event: %+v", h.events)
+	}
+}
+
 func TestCycleGuardCanReferencePreflightCheck(t *testing.T) {
 	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
 	tree := map[string]any{"rules": map[string]any{

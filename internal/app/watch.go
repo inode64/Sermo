@@ -55,6 +55,10 @@ type Watch struct {
 	// IsPaused reports whether this watch is currently paused by an operator.
 	// Paused watches skip checks/hooks/notifies/expand until monitored again.
 	IsPaused func() bool
+	// InPanic reports whether the daemon-wide panic mode is on. A panicking watch
+	// still runs its check and emits its firing event (so status stays visible)
+	// but suppresses its hook, notifications and expand action.
+	InPanic func() bool
 	// Cycle, when set, replaces the default single-check/single-hook behavior.
 	// Stateful multi-target watches (e.g. the file watch) use it to fire one hook
 	// per detected change within a cycle, which the one-Result model cannot express.
@@ -111,6 +115,10 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	w.emit(Event{Watch: w.Name, Kind: "firing", Message: res.Message})
 	if w.DryRun {
 		w.emit(Event{Watch: w.Name, Kind: "dry-run", Message: w.dryRunMessage()})
+		return
+	}
+	if w.InPanic != nil && w.InPanic() {
+		w.emit(Event{Watch: w.Name, Kind: "panic-suppressed", Message: "panic mode: hook/notify/expand suppressed"})
 		return
 	}
 

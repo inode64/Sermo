@@ -49,6 +49,7 @@ type fileWatcher struct {
 	hook      HookSpec
 	notifiers []notify.Notifier
 	dryRun    bool
+	inPanic   func() bool
 	runner    HookRunner
 	emit      func(Event)
 
@@ -196,6 +197,10 @@ func (w *fileWatcher) fire(ctx context.Context, path, change, msg string, extra 
 	}
 	if w.dryRun {
 		w.emitEvent(Event{Watch: w.name, Kind: "dry-run", Message: watchDryRunMessage(w.hook, w.notifiers, nil) + ": " + msg})
+		return
+	}
+	if w.inPanic != nil && w.inPanic() {
+		w.emitEvent(Event{Watch: w.name, Kind: "panic-suppressed", Message: "panic mode: hook/notify suppressed: " + msg})
 		return
 	}
 	if len(w.hook.Command) > 0 {

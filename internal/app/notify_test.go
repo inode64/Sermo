@@ -48,6 +48,27 @@ func TestWatchDispatchesNotifyOnFire(t *testing.T) {
 	}
 }
 
+func TestWatchPanicSuppressesNotify(t *testing.T) {
+	n := &fakeNotifier{name: "ops-email"}
+	var events []Event
+	w := &Watch{
+		Name:      "storage-root",
+		CheckType: "storage",
+		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/", "used_pct": 92.0}},
+		Notifiers: []notify.Notifier{n},
+		InPanic:   func() bool { return true },
+		Emit:      func(e Event) { events = append(events, e) },
+	}
+	w.RunCycle(context.Background())
+
+	if len(n.msgs) != 0 {
+		t.Fatalf("panic mode must suppress notifications, sent %d", len(n.msgs))
+	}
+	if !hasEvent(events, "panic-suppressed") {
+		t.Fatalf("expected a panic-suppressed event, got %v", events)
+	}
+}
+
 func TestWatchNotifyOnlyNoHook(t *testing.T) {
 	n := &fakeNotifier{name: "ops-email"}
 	w := &Watch{
