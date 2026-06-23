@@ -4,12 +4,8 @@ display_name: "MySQL"
 category: database
 version_match: { excludes: MariaDB }
 variables:
-  binary:
-    - /usr/sbin/mysqld
-    - /usr/bin/mysqld
-  client_binary:
-    - /usr/sbin/mysql
-    - /usr/bin/mysql
+  binary: ${bindir}/mysqld
+  client_binary: ${bindir}/mysql
 preflight:
   binary: { type: binary, path: "${binary}" }
   client: { type: binary, path: "${client_binary}", optional: true }

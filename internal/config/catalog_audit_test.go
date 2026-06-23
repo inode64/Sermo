@@ -1081,10 +1081,8 @@ func TestCatalogNetworkManagerStatusIsAuxiliary(t *testing.T) {
 	body := catalogDocByName(t, root, "services", "networkmanager")
 
 	appVariables := nested(t, app, "variables")
-	for _, path := range []string{"/usr/bin/nmcli", "/usr/sbin/nmcli"} {
-		if !slices.Contains(cfgval.StringList(appVariables["nmcli"]), path) {
-			t.Fatalf("networkmanager nmcli candidates = %v, want %s", appVariables["nmcli"], path)
-		}
+	if got := cfgval.String(appVariables["nmcli"]); got != "${bindir}/nmcli" {
+		t.Fatalf("networkmanager nmcli = %v, want ${bindir}/nmcli", appVariables["nmcli"])
 	}
 	nmcliPreflight := nested(t, app, "preflight", "nmcli")
 	if !cfgval.Bool(nmcliPreflight["optional"]) {
@@ -1591,12 +1589,12 @@ func TestNamedCatalogUsesBackendNeutralConfigPreflight(t *testing.T) {
 	body := catalogDocByName(t, root, "services", "named")
 
 	appVariables := nested(t, app, "variables")
-	for name, path := range map[string]string{
-		"binary":    "/usr/sbin/named",
-		"checkconf": "/usr/sbin/named-checkconf",
+	for name, want := range map[string]string{
+		"binary":    "${bindir}/named",
+		"checkconf": "${bindir}/named-checkconf",
 	} {
-		if !slices.Contains(cfgval.StringList(appVariables[name]), path) {
-			t.Fatalf("named app variable %s = %v, want %s candidate", name, appVariables[name], path)
+		if got := cfgval.String(appVariables[name]); got != want {
+			t.Fatalf("named app variable %s = %v, want %s", name, appVariables[name], want)
 		}
 	}
 	appPreflight := nested(t, app, "preflight")

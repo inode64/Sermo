@@ -393,7 +393,7 @@ also_service:                  # auxiliary init units of this same service
 apps: [demo-app]               # injects app preflight and exposes ${demo_app_binary}
 
 variables:                     # flat strings or first-existing path lists
-  binary: [/usr/bin/demo, /usr/local/bin/demo] # preflight.binary selects the executable candidate
+  binary: ${bindir}/demo        # ${bindir} = /usr/bin, /usr/sbin, /usr/local/bin, /usr/local/sbin (first existing)
   user: demo
   group: demo
   host: 127.0.0.1
