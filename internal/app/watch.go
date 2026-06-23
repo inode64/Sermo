@@ -63,6 +63,9 @@ type Watch struct {
 	// still runs its check and emits its firing event (so status stays visible)
 	// but suppresses its hook, notifications and expand action.
 	InPanic func() bool
+	// Settling tracks startup observation for this watch. While unsettled the
+	// first cycle runs checks only and suppresses firing, hooks and notifications.
+	Settling *Settling
 	// Cycle, when set, replaces the default single-check/single-hook behavior.
 	// Stateful multi-target watches (e.g. the file watch) use it to fire one hook
 	// per detected change within a cycle, which the one-Result model cannot express.
@@ -85,19 +88,31 @@ type Watch struct {
 	policyState  rules.RemediationState
 	firing       bool
 	lastNotifyAt time.Time // when a notification was last dispatched this firing episode
+	settled      bool      // true after the startup observation cycle completed
 }
 
 // RunCycle runs the check, advances the window, and fires the hook on a firing
 // cycle. An evaluation/hook error is emitted, never fatal.
 func (w *Watch) RunCycle(ctx context.Context) {
 	if w.IsPaused != nil && w.IsPaused() {
+		if w.Settling != nil && !w.Settling.Observed(w.Name) {
+			w.markSettled()
+		}
 		return
 	}
+	observeOnly := w.Settling != nil && !w.Settling.Observed(w.Name)
 	if w.Cycle != nil {
 		w.Cycle(ctx)
+		if observeOnly {
+			w.markSettled()
+		}
 		return
 	}
 	res := w.Check.Run(ctx)
+	if observeOnly {
+		w.markSettled()
+		return
+	}
 	fired := res.OK
 	if w.FireOnFail {
 		fired = !res.OK
@@ -140,6 +155,13 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	}
 	if w.shouldNotify(wasFiring) {
 		dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
+	}
+}
+
+func (w *Watch) markSettled() {
+	w.settled = true
+	if w.Settling != nil {
+		w.Settling.MarkObserved(w.Name)
 	}
 }
 

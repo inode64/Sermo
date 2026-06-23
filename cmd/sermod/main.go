@@ -197,6 +197,9 @@ func run(args []string) int {
 	opGate := app.NewOpGate(app.EngineInt(cfg, "max_parallel_operations", 2), cfg.Global.RuntimeDir())
 	panicGate := app.NewPanicGate(store)
 	userLookup := app.EngineUserLookup(cfg, runner)
+	readiness := app.NewReadiness(string(detection.Backend), 0, 0)
+	readiness.WatchPanic(panicGate.Active)
+	settling := app.NewSettling(readiness)
 	deps := app.Deps{
 		Backend:          detection.Backend,
 		Manager:          manager,
@@ -226,6 +229,7 @@ func run(args []string) int {
 		OpGate:          opGate,
 		ExecxRunner:     runner,
 		UserLookup:      userLookup,
+		Settling:        settling,
 	}
 
 	collector := metrics.New(metrics.OSReader{})
@@ -271,8 +275,7 @@ func run(args []string) int {
 	if startupDelay > 0 {
 		logger.Info("sermod waiting before first checks", "startup_delay", startupDelay)
 	}
-	readiness := app.NewReadiness(string(detection.Backend), len(workers), hostWatches)
-	readiness.WatchPanic(panicGate.Active)
+	readiness.UpdateCounts(len(workers), hostWatches)
 
 	// Write a pidfile under the runtime directory so sermoctl daemon reload (and
 	// operators) can reliably signal the running daemon for config reload.

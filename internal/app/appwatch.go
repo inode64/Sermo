@@ -78,6 +78,7 @@ func BuildAppWatches(cfg *config.Config, deps Deps) []*Watch {
 			FireOnFail: true,
 			Interval:   interval,
 			Notifiers:  notifiers,
+			Settling:   deps.Settling,
 			Now:        deps.Now,
 			Emit:       deps.Emit,
 		})

@@ -12,6 +12,7 @@ import (
 	"sermo/internal/notify"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
+	"sermo/internal/servicemgr"
 )
 
 // Worker monitors one service. A cycle runs the service's checks, evaluates its
@@ -74,6 +75,11 @@ type Worker struct {
 	// notifications and automatic remediation actions are suppressed.
 	InPanic func() bool
 
+	// Settling tracks startup observation for this service. While unsettled the
+	// worker waits for an active backend, runs one observe-only check cycle, and
+	// suppresses alerts and remediation.
+	Settling *Settling
+
 	// Shadow when true causes the worker to fully evaluate remediation rules,
 	// advance their for/within windows, consult guards and the remediation policy,
 	// and emit events, but never perform any Operate/Cascade action and never
@@ -129,7 +135,15 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	w.cycle++
 	defer w.publishRemediation()
 	if w.IsPaused != nil && w.IsPaused() {
+		if w.Settling != nil && !w.Settling.Observed(w.Service) {
+			w.Settling.MarkObserved(w.Service)
+		}
 		return // monitoring paused for this service
+	}
+
+	observeOnly := w.Settling != nil && !w.Settling.Observed(w.Service)
+	if observeOnly && !w.backendActive(ctx) {
+		return // wait for the init backend to report active before the first check
 	}
 
 	now := w.Now
@@ -147,14 +161,22 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	cache := w.Checks(ctx, deps)
 	w.applyGates(cache)
 	w.cycleFailOutput = failingChecksOutput(cache)
-	if w.RecordChecks != nil {
-		w.RecordChecks(cache, w.cycleRan)
-	}
-	if w.RecordHealth != nil {
-		w.RecordHealth(requiredChecksOK(cache))
+	if !observeOnly {
+		if w.RecordChecks != nil {
+			w.RecordChecks(cache, w.cycleRan)
+		}
+		if w.RecordHealth != nil {
+			w.RecordHealth(requiredChecksOK(cache))
+		}
 	}
 	if w.Publish != nil {
 		w.Publish(cache, w.cycleRan)
+	}
+	if observeOnly {
+		if w.Settling != nil {
+			w.Settling.MarkObserved(w.Service)
+		}
+		return // first active cycle: publish data only, no rules or SLA side effects
 	}
 	var resolveRef rules.RefResolver
 	if w.ResolveRefs != nil {
@@ -168,6 +190,17 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	w.runAlerts(ctx, ev, at, evals)
 	w.publishRuleWindows(ctx, ev, at, evals)
 	w.persistRuleState()
+}
+
+func (w *Worker) backendActive(ctx context.Context) bool {
+	if w.CheckDeps.Status == nil {
+		return true
+	}
+	st, err := w.CheckDeps.Status(ctx)
+	if err != nil {
+		return false
+	}
+	return st == servicemgr.StatusActive
 }
 
 // CheckGate is one check's interdependencies: it is skipped this cycle when any

@@ -32,10 +32,13 @@ func TestStaggerOffsetSpreadsAcrossInterval(t *testing.T) {
 // stays "starting" until every target (here two watches) has run its first cycle.
 func TestSchedulerGateWaitsForFirstCycles(t *testing.T) {
 	ready := NewReadiness("systemd", 0, 0)
+	settling := NewSettling(ready)
+	settling.Reset([]string{"a", "b"})
 	var ran int32
 	mkWatch := func(name string) *Watch {
 		return &Watch{
 			Name:     name,
+			Settling: settling,
 			Interval: time.Second, // slow; only the staggered first cycle runs in-window
 			Check: checkFunc(func(context.Context) checks.Result {
 				atomic.AddInt32(&ran, 1)

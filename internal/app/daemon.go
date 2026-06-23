@@ -256,6 +256,9 @@ type Deps struct {
 	// nil uses volume.Expander with ExecxRunner. Tests inject a fake so no real
 	// LVM/filesystem commands run.
 	VolumeExpander VolumeExpander
+	// Settling tracks per-target startup observation for the web UI and suppresses
+	// premature alerts and remediation. Optional: nil disables settling gates.
+	Settling *Settling
 }
 
 // BuildWorkers resolves every enabled service and wires a Worker for it: a check
@@ -424,6 +427,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		},
 		IsPaused:     monitorPaused(deps.Monitor, name),
 		InPanic:      deps.Panic.Active,
+		Settling:     deps.Settling,
 		Shadow:       shadow,
 		ResolveRefs:  func() rules.RefResolver { return rules.NewCheckResolver(preflightBuilt, maxParallel) },
 		RecordHealth: healthRecorder(deps, name),

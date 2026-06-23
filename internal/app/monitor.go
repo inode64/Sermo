@@ -201,6 +201,25 @@ func (m *Monitor) startGenerationLocked(ctx context.Context, firstBoot bool) {
 		sched.StartupDelay = 0
 	}
 
+	if m.deps.Settling != nil {
+		names := monitorTargetNames(m.workers, m.watches)
+		m.deps.Settling.Reset(names)
+		if !firstGen {
+			var preserved []string
+			for _, w := range m.workers {
+				if w != nil && w.cycle > 0 {
+					preserved = append(preserved, w.Service)
+				}
+			}
+			for _, wt := range m.watches {
+				if wt != nil && wt.settled {
+					preserved = append(preserved, wt.Name)
+				}
+			}
+			m.deps.Settling.MarkObservedBulk(preserved)
+		}
+	}
+
 	m.genWG.Add(1)
 	go func() {
 		defer m.genWG.Done()
@@ -228,6 +247,21 @@ func (m *Monitor) emitReloadError(msg string) {
 }
 
 // formatValidationIssues joins the first few validation findings for reload errors.
+func monitorTargetNames(workers []*Worker, watches []*Watch) []string {
+	names := make([]string, 0, len(workers)+len(watches))
+	for _, w := range workers {
+		if monitorTargetActive(w) {
+			names = append(names, w.Service)
+		}
+	}
+	for _, wt := range watches {
+		if watchTargetActive(wt) {
+			names = append(names, wt.Name)
+		}
+	}
+	return names
+}
+
 func formatValidationIssues(issues []config.Issue) string {
 	const limit = 5
 	msgs := make([]string, 0, min(len(issues), limit))
