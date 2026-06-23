@@ -31,23 +31,24 @@ func (c appCheck) Run(ctx context.Context) checks.Result {
 // appStatusOK is the appinspect status reported by a healthy application.
 const appStatusOK = "ok"
 
-// AppWatchInterval is the cadence at which installed apps are inspected for
+// appWatchInterval is the cadence at which installed apps are inspected for
 // errors (engine.app_interval, default 5m). Apps change rarely and each check
 // runs the app's version/health binary, so the default is slow.
-func AppWatchInterval(cfg *config.Config) time.Duration {
+func appWatchInterval(cfg *config.Config) time.Duration {
 	return EngineDuration(cfg, "app_interval", 5*time.Minute)
 }
 
 // BuildAppWatches builds one app-watch per installed catalog application. Each
-// reuses the whole Watch cycle: every `interval` it inspects its app, and
-// because FireOnFail is set it "fires" when the app is not ok — emitting a
+// reuses the whole Watch cycle: every engine.app_interval it inspects its app,
+// and because FireOnFail is set it "fires" when the app is not ok — emitting a
 // firing/recovered event on the App dimension and notifying the global default
 // once on the rising edge (NotifyInterval 0 = first time only). Only installed
 // apps are watched, matching the web Applications list.
-func BuildAppWatches(cfg *config.Config, deps Deps, interval time.Duration) []*Watch {
+func BuildAppWatches(cfg *config.Config, deps Deps) []*Watch {
 	if cfg == nil {
 		return nil
 	}
+	interval := appWatchInterval(cfg)
 	runner := deps.ExecxRunner
 	reports := appinspect.List(context.Background(), runner, cfg, config.CategoryApp, false,
 		appinspect.WithUserLookup(deps.UserLookup))
