@@ -12,8 +12,6 @@ service:
   - nebula.${instance}
 apps:
 - nebula
-versions:
-  from: /etc/nebula/${instance}.yml
 variables:
   config: /etc/nebula/${instance}.yml
   host:
@@ -36,6 +34,18 @@ preflight:
     - -config
     - ${config}
     timeout: 30s
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks:
+    - restart
+    - start
+    if:
+      failed:
+        check: config
+    then:
+      action: block
+      message: ${display_name} configuration is invalid
 pidfile: /run/supervise-nebula.${instance}.pid
 processes:
   main:

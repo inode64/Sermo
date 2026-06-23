@@ -13,8 +13,8 @@ preflight:
   config:
     type: command
     command:
-    - /etc/init.d/nginx
-    - configtest
+    - ${nginx_binary}
+    - -t
     timeout: 30s
     analyze:
       use:

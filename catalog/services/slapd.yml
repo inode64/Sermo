@@ -48,3 +48,15 @@ checks:
     verify: false
     expires_in_days: 21
     timeout: 5s
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks:
+    - restart
+    - start
+    if:
+      failed:
+        check: config
+    then:
+      action: block
+      message: ${display_name} configuration is invalid

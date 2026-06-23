@@ -4,9 +4,9 @@ display_name: OpenVPN ${instance}
 category: vpn
 apps:
 - openvpn
-versions:
-  from: /etc/init.d/openvpn.${instance}
-service: openvpn.${instance}
+service:
+  openrc:
+  - openvpn.${instance}
 variables:
   config: /etc/openvpn/${instance}.conf
   port:

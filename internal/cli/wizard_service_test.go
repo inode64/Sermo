@@ -140,10 +140,10 @@ func TestParseSystemdActiveUnits(t *testing.T) {
 sshd.service loaded active running OpenSSH server daemon
 dbus.socket loaded active running D-Bus System Message Bus Socket
 `
-	got := parseSystemdActiveUnits(stdout)
+	got := servicemgr.ParseSystemdActiveUnits(stdout)
 	want := []string{"nginx.service", "sshd.service"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("parseSystemdActiveUnits() = %v, want %v", got, want)
+		t.Fatalf("ParseSystemdActiveUnits() = %v, want %v", got, want)
 	}
 }
 
@@ -161,10 +161,10 @@ Dynamic Runlevel: needed/wanted
 Dynamic Runlevel: manual
  zigbee2mqtt                                                       [  started  ]
 `
-	got := parseOpenRCActiveUnits(stdout)
+	got := servicemgr.ParseOpenRCActiveUnits(stdout)
 	want := []string{"bluetooth", "rpcbind", "zigbee2mqtt"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("parseOpenRCActiveUnits() = %v, want %v", got, want)
+		t.Fatalf("ParseOpenRCActiveUnits() = %v, want %v", got, want)
 	}
 }
 
@@ -177,10 +177,10 @@ func TestParseOpenRCActiveUnitsDedupsAcrossRunlevels(t *testing.T) {
 Dynamic Runlevel: manual
  sshd                                                              [  started  ]
 `
-	got := parseOpenRCActiveUnits(stdout)
+	got := servicemgr.ParseOpenRCActiveUnits(stdout)
 	want := []string{"sshd", "cron"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("parseOpenRCActiveUnits() = %v, want %v (duplicates not collapsed)", got, want)
+		t.Fatalf("ParseOpenRCActiveUnits() = %v, want %v (duplicates not collapsed)", got, want)
 	}
 }
 

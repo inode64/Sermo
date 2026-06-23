@@ -14,6 +14,7 @@ service:
 apps:
 - smbd
 - nmbd
+- winbindd
 variables:
   port: 445
   netbios_port: 139
@@ -43,7 +44,7 @@ processes:
     exe: ${nmbd_binary}
     user: ${user}
   winbindd:
-    exe: /usr/sbin/winbindd
+    exe: ${winbindd_binary}
     user: ${user}
     enable_if:
       file: /etc/conf.d/samba
@@ -66,7 +67,7 @@ checks:
     optional: true
   winbindd:
     type: process
-    exe: /usr/sbin/winbindd
+    exe: ${winbindd_binary}
     user: ${user}
     state: running
     requires:
@@ -75,6 +76,13 @@ checks:
       file: /etc/conf.d/samba
       key: daemon_list
       contains: winbindd
+policy:
+  cooldown: 15m
+  max_actions: 2
+  max_actions_window: 1h
+  backoff:
+    initial: 15m
+    max: 1h
 rules:
   restart-if-worker-thread-hot:
     type: remediation

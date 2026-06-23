@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/goccy/go-yaml"
 
@@ -66,6 +67,35 @@ func catalogDocByName(t *testing.T, root, category, name string) map[string]any 
 	return found
 }
 
+func TestCatalogServicesDoNotDeclareVersionsFrom(t *testing.T) {
+	root := repoRoot(t)
+	dir := filepath.Join(root, "catalog", "services")
+	err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || !isYAML(entry.Name()) {
+			return nil
+		}
+		data, err := os.ReadFile(path) //nolint:gosec // test walks YAML files under the repository catalog root.
+		if err != nil {
+			return err
+		}
+		var body map[string]any
+		if err := yaml.Unmarshal(data, &body); err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		versions, _ := body["versions"].(map[string]any)
+		if _, ok := versions["from"]; ok {
+			t.Fatalf("%s declares versions.from; catalog/services must discover daemon templates from service:", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestRealCatalogAllDaemonsValidate enables every instantiable catalog daemon
 // as a service and validates the whole set. Version templates (%v/%n/%i) cannot
 // be materialized off-host, so only the concrete daemon names are exercised.
@@ -84,39 +114,40 @@ func TestRealCatalogAllDaemonsValidate(t *testing.T) {
 		return global
 	}
 
-	// First load with no services, just to enumerate the daemon registry.
-	probeDir := t.TempDir()
-	emptyEnabled := filepath.Join(probeDir, "enabled")
-	if err := os.MkdirAll(emptyEnabled, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	probe, err := Load(writeGlobal(probeDir, emptyEnabled, "systemd"))
-	if err != nil {
-		t.Fatalf("Load (probe): %v", err)
-	}
-
-	dir := t.TempDir()
-	enabled := filepath.Join(dir, "enabled")
-	if err := os.MkdirAll(enabled, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	count := 0
-	for _, name := range probe.DaemonNames {
-		if strings.Contains(name, "%") {
-			continue
-		}
-		svc := "kind: service\nname: " + name + "-audit\nuses: " + name + "\n"
-		if err := os.WriteFile(filepath.Join(enabled, name+".yml"), []byte(svc), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		count++
-	}
-	if count == 0 {
-		t.Fatal("no instantiable catalog daemons found")
-	}
-
 	for _, backend := range []string{"systemd", "openrc"} {
 		t.Run(backend, func(t *testing.T) {
+			// Enumerate and validate each backend separately: version-template
+			// materialization may legitimately differ by active init branch.
+			probeDir := t.TempDir()
+			emptyEnabled := filepath.Join(probeDir, "enabled")
+			if err := os.MkdirAll(emptyEnabled, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			probe, err := Load(writeGlobal(probeDir, emptyEnabled, backend))
+			if err != nil {
+				t.Fatalf("Load (probe): %v", err)
+			}
+
+			dir := t.TempDir()
+			enabled := filepath.Join(dir, "enabled")
+			if err := os.MkdirAll(enabled, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			count := 0
+			for _, name := range probe.DaemonNames {
+				if strings.Contains(name, "%") {
+					continue
+				}
+				svc := "kind: service\nname: " + name + "-audit\nuses: " + name + "\n"
+				if err := os.WriteFile(filepath.Join(enabled, name+".yml"), []byte(svc), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				count++
+			}
+			if count == 0 {
+				t.Fatal("no instantiable catalog daemons found")
+			}
+
 			cfg, err := Load(writeGlobal(dir, enabled, backend))
 			if err != nil {
 				t.Fatalf("Load: %v", err)
@@ -823,6 +854,13 @@ func TestCatalogConfigPreflightsUseResolvedAppTools(t *testing.T) {
 			wantTool:     []string{"/usr/sbin/mariadbd", "/usr/bin/mariadbd"},
 			wantContains: []string{"--help", "--verbose"},
 		},
+		{
+			service:      "nginx",
+			appToolCheck: "nginx-binary",
+			toolArgIndex: 0,
+			wantTool:     []string{"/usr/sbin/nginx", "/usr/bin/nginx"},
+			wantContains: []string{"-t"},
+		},
 	}
 
 	for _, tc := range tests {
@@ -975,6 +1013,33 @@ func TestRequestedHostProfilesExist(t *testing.T) {
 func TestCatalogPHPFPMVersionedConfigTestUsesConfigFile(t *testing.T) {
 	root := repoRoot(t)
 	body := catalogDocByName(t, root, "services", "php-fpm%v%s%i")
+	if _, ok := body["versions"]; ok {
+		t.Fatalf("php-fpm must discover service instances from service:, got versions = %v", body["versions"])
+	}
+	service := nested(t, body, "service")
+	systemdCandidates := cfgval.StringList(service["systemd"])
+	openrcCandidates := cfgval.StringList(service["openrc"])
+	for _, want := range []string{
+		"php-fpm@${version}${sep}${instance}",
+		"php-fpm@php${version}${sep}${instance}",
+		"php-fpm-php${version}${sep}${instance}",
+		"php${version}${sep}${instance}-fpm",
+		"php-fpm${version}",
+	} {
+		if !slices.Contains(systemdCandidates, want) {
+			t.Fatalf("php-fpm service.systemd = %v, want %q", systemdCandidates, want)
+		}
+	}
+	for _, want := range []string{
+		"php-fpm-php${version}${sep}${instance}",
+		"php${version}${sep}${instance}",
+		"php-fpm${version}${sep}${instance}",
+		"php-fpm${version}",
+	} {
+		if !slices.Contains(openrcCandidates, want) {
+			t.Fatalf("php-fpm service.openrc = %v, want %q", openrcCandidates, want)
+		}
+	}
 	if got := cfgval.String(nested(t, body, "variables")["config"]); got != "/etc/php/fpm-php${version}${sep}${instance}/php-fpm.conf" {
 		t.Fatalf("php-fpm config variable = %q", got)
 	}
@@ -995,6 +1060,96 @@ func TestCatalogPHPFPMVersionedConfigTestUsesConfigFile(t *testing.T) {
 	}
 }
 
+func TestCatalogServiceProcessChecksUseLinkedAppBinaries(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	tests := []struct {
+		name         string
+		app          string
+		preflight    string
+		raw          string
+		resolved     string
+		rawPaths     [][]any
+		resolvedPath []any
+	}{
+		{
+			name:      "salt-minion",
+			app:       "salt-minion",
+			preflight: "salt-minion-binary",
+			raw:       "${salt_minion_binary}",
+			resolved:  "/usr/bin/salt-minion",
+			rawPaths: [][]any{
+				{"checks", "process", "exe"},
+				{"postflight", "process", "exe"},
+			},
+			resolvedPath: []any{"checks", "process", "exe"},
+		},
+		{
+			name:      "bluetooth",
+			app:       "bluetoothd",
+			preflight: "bluetoothd-binary",
+			raw:       "${bluetoothd_binary}",
+			resolved:  "/usr/libexec/bluetooth/bluetoothd",
+			rawPaths: [][]any{
+				{"checks", "process", "exe"},
+				{"postflight", "process", "exe"},
+			},
+			resolvedPath: []any{"checks", "process", "exe"},
+		},
+		{
+			name:      "smb",
+			app:       "winbindd",
+			preflight: "winbindd-binary",
+			raw:       "${winbindd_binary}",
+			rawPaths: [][]any{
+				{"processes", "winbindd", "exe"},
+				{"checks", "winbindd", "exe"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := cfg.Daemons[tt.name]
+			if doc == nil {
+				t.Fatalf("service catalog %q not found", tt.name)
+			}
+			if !slices.Contains(cfgval.StringList(doc.Body["apps"]), tt.app) {
+				t.Fatalf("%s apps = %v, want %s", tt.name, doc.Body["apps"], tt.app)
+			}
+			for _, path := range tt.rawPaths {
+				if got := cfgval.String(valueAt(t, doc.Body, path...)); got != tt.raw {
+					t.Fatalf("%s raw %v = %q, want %q", tt.name, path, got, tt.raw)
+				}
+			}
+			resolved, errs := cfg.ResolveCatalog(CategoryService, tt.name)
+			if len(errs) > 0 {
+				t.Fatalf("ResolveCatalog(%s): %v", tt.name, errs)
+			}
+			preflight := nested(t, resolved.Tree, "preflight")
+			if _, ok := preflight[tt.preflight]; !ok {
+				t.Fatalf("%s resolved preflight lacks %q: %v", tt.name, tt.preflight, preflight)
+			}
+			if len(tt.resolvedPath) > 0 {
+				if got := cfgval.String(valueAt(t, resolved.Tree, tt.resolvedPath...)); got != tt.resolved {
+					t.Fatalf("%s resolved %v = %q, want %q", tt.name, tt.resolvedPath, got, tt.resolved)
+				}
+			}
+		})
+	}
+}
+
 func TestCatalogOpenVPNSystemdInstancesAreSystemdOnly(t *testing.T) {
 	root := repoRoot(t)
 	for _, name := range []string{"openvpn-client-%i", "openvpn-server-%i"} {
@@ -1012,6 +1167,18 @@ func TestCatalogOpenVPNSystemdInstancesAreSystemdOnly(t *testing.T) {
 			}
 		})
 	}
+
+	body := catalogDocByName(t, root, "services", "openvpn%s%i")
+	service, ok := body["service"].(map[string]any)
+	if !ok {
+		t.Fatalf("openvpn%%s%%i service = %v, want per-init map", body["service"])
+	}
+	if got := cfgval.StringList(service["systemd"]); len(got) != 0 {
+		t.Fatalf("openvpn%%s%%i service.systemd = %v, want no systemd candidates", got)
+	}
+	if got := cfgval.StringList(service["openrc"]); !slices.Equal(got, []string{"openvpn.${instance}"}) {
+		t.Fatalf("openvpn%%s%%i service.openrc = %v, want OpenRC legacy candidate", got)
+	}
 }
 
 func TestCatalogPHPFPMInstancedCandidatesPreferInstance(t *testing.T) {
@@ -1027,14 +1194,28 @@ func TestCatalogPHPFPMInstancedCandidatesPreferInstance(t *testing.T) {
 			t.Fatalf("php-fpm service.%s first candidate = %q, want instance-specific candidate first", backend, candidates[0])
 		}
 	}
+
+	systemdCandidates := cfgval.StringList(service["systemd"])
+	if got, want := systemdCandidates[0], "php-fpm@${version}${sep}${instance}"; got != want {
+		t.Fatalf("php-fpm service.systemd first candidate = %q, want %q", got, want)
+	}
+	if slices.Contains(systemdCandidates, "php-fpm") {
+		t.Fatalf("php-fpm service.systemd includes generic php-fpm fallback: %v", systemdCandidates)
+	}
 }
 
-func TestCatalogTomcatConfigDiscoveryRequiresRuntime(t *testing.T) {
+func TestCatalogTomcatVersionDiscoveryUsesServiceCandidates(t *testing.T) {
 	root := repoRoot(t)
 	body := catalogDocByName(t, root, "services", "tomcat-%v%s%i")
-	versions := nested(t, body, "versions")
-	if got := cfgval.StringList(versions["require"]); strings.Join(got, ",") != "/usr/share/tomcat-${version}/bin/catalina.sh" {
-		t.Fatalf("tomcat versions.require = %v, want catalina.sh runtime gate", got)
+	if _, ok := body["versions"]; ok {
+		t.Fatalf("tomcat must discover service instances from service:, got versions = %v", body["versions"])
+	}
+	service := nested(t, body, "service")
+	if got := cfgval.StringList(service["systemd"]); !slices.Equal(got, []string{"tomcat@${version}${sep}${instance}"}) {
+		t.Fatalf("tomcat service.systemd = %v", got)
+	}
+	if got := cfgval.StringList(service["openrc"]); !slices.Equal(got, []string{"tomcat-${version}${sep}${instance}"}) {
+		t.Fatalf("tomcat service.openrc = %v", got)
 	}
 }
 
@@ -1215,6 +1396,181 @@ func TestDatabaseCatalogDaemonsAreBackupToolNeutral(t *testing.T) {
 	}
 }
 
+func TestHighRiskCatalogDaemonsHaveConservativeRemediationPolicy(t *testing.T) {
+	root := repoRoot(t)
+
+	for _, name := range []string{"mysql", "mariadb", "postgres-%v", "redis", "kafka-broker", "kafka-controller"} {
+		t.Run(name, func(t *testing.T) {
+			body := catalogDocByName(t, root, "services", name)
+			assertConservativeRemediationPolicy(t, name, body)
+		})
+	}
+}
+
+func TestInstalledAutomationCatalogDaemonsHaveLocalRemediationPolicy(t *testing.T) {
+	root := repoRoot(t)
+
+	for _, name := range []string{
+		"apache", "containerd", "dnsmasq", "docker", "firewalld", "monit",
+		"libvirtd", "networkmanager", "node", "pm2", "polkit", "rsync",
+		"smb", "smbd", "pmcd", "pppd", "syncthing", "tuned", "udisks2",
+		"upower", "virtlockd", "virtlogd", "virtnetworkd", "xinetd",
+		"zigbee2mqtt",
+	} {
+		t.Run(name, func(t *testing.T) {
+			body := catalogDocByName(t, root, "services", name)
+			assertConservativeRemediationPolicy(t, name, body)
+		})
+	}
+}
+
+func assertConservativeRemediationPolicy(t *testing.T, name string, body map[string]any) {
+	t.Helper()
+
+	policy := nested(t, body, "policy")
+	cooldown, err := time.ParseDuration(cfgval.String(policy["cooldown"]))
+	if err != nil {
+		t.Fatalf("%s policy.cooldown does not parse: %v", name, err)
+	}
+	if cooldown < 15*time.Minute {
+		t.Fatalf("%s policy.cooldown = %v, want at least 15m", name, cooldown)
+	}
+	maxActions, ok := cfgval.Int(policy["max_actions"])
+	if !ok || maxActions <= 0 || maxActions > 2 {
+		t.Fatalf("%s policy.max_actions = %v, want 1..2", name, policy["max_actions"])
+	}
+	window, err := time.ParseDuration(cfgval.String(policy["max_actions_window"]))
+	if err != nil {
+		t.Fatalf("%s policy.max_actions_window does not parse: %v", name, err)
+	}
+	if window < time.Hour {
+		t.Fatalf("%s policy.max_actions_window = %v, want at least 1h", name, window)
+	}
+	backoff := nested(t, policy, "backoff")
+	initial, err := time.ParseDuration(cfgval.String(backoff["initial"]))
+	if err != nil {
+		t.Fatalf("%s policy.backoff.initial does not parse: %v", name, err)
+	}
+	limit, err := time.ParseDuration(cfgval.String(backoff["max"]))
+	if err != nil {
+		t.Fatalf("%s policy.backoff.max does not parse: %v", name, err)
+	}
+	if initial < cooldown || limit < initial {
+		t.Fatalf("%s backoff initial/max = %v/%v, want initial >= cooldown and max >= initial", name, initial, limit)
+	}
+}
+
+func TestCatalogConfigPreflightGuardsStartRestart(t *testing.T) {
+	root := repoRoot(t)
+
+	for _, name := range []string{
+		"mysql", "mariadb", "postgres-%v", "dnsmasq", "monit", "nebula-%i",
+		"named", "nginx", "cloudflared", "influxdb", "mongod", "slapd",
+	} {
+		t.Run(name, func(t *testing.T) {
+			body := catalogDocByName(t, root, "services", name)
+			if _, ok := nested(t, body, "preflight")["config"]; !ok {
+				t.Fatalf("%s missing config preflight", name)
+			}
+			rule := nested(t, body, "rules", "block-restart-if-config-invalid")
+			if got := cfgval.String(rule["type"]); got != "guard" {
+				t.Fatalf("%s config guard type = %q, want guard", name, got)
+			}
+			blocks := cfgval.StringList(rule["blocks"])
+			if !slices.Contains(blocks, "restart") || !slices.Contains(blocks, "start") {
+				t.Fatalf("%s config guard blocks = %v, want restart and start", name, blocks)
+			}
+			if !conditionReferencesFailedCheck(rule["if"], "config") {
+				t.Fatalf("%s config guard if = %v, want failed config check", name, rule["if"])
+			}
+			then := nested(t, rule, "then")
+			if got := cfgval.String(then["action"]); got != "block" {
+				t.Fatalf("%s config guard action = %q, want block", name, got)
+			}
+			if cfgval.String(then["message"]) == "" {
+				t.Fatalf("%s config guard message is empty", name)
+			}
+		})
+	}
+}
+
+func conditionReferencesFailedCheck(node any, check string) bool {
+	m, ok := node.(map[string]any)
+	if !ok {
+		return false
+	}
+	if failed, ok := m["failed"].(map[string]any); ok && cfgval.String(failed["check"]) == check {
+		return true
+	}
+	for _, key := range []string{"and", "or"} {
+		children, _ := m[key].([]any)
+		for _, child := range children {
+			if conditionReferencesFailedCheck(child, check) {
+				return true
+			}
+		}
+	}
+	if child, ok := m["not"]; ok {
+		return conditionReferencesFailedCheck(child, check)
+	}
+	return false
+}
+
+func TestNamedCatalogUsesBackendNeutralConfigPreflight(t *testing.T) {
+	root := repoRoot(t)
+	app := catalogDocByName(t, root, "apps", "named")
+	body := catalogDocByName(t, root, "services", "named")
+
+	appVariables := nested(t, app, "variables")
+	for name, path := range map[string]string{
+		"binary":    "/usr/sbin/named",
+		"checkconf": "/usr/sbin/named-checkconf",
+	} {
+		if !slices.Contains(cfgval.StringList(appVariables[name]), path) {
+			t.Fatalf("named app variable %s = %v, want %s candidate", name, appVariables[name], path)
+		}
+	}
+	appPreflight := nested(t, app, "preflight")
+	if _, ok := appPreflight["checkconf"]; !ok {
+		t.Fatalf("named app missing checkconf binary preflight")
+	}
+
+	entry := nested(t, body, "preflight", "config")
+	command := cfgval.StringList(entry["command"])
+	want := []string{"${named_checkconf}", "-z"}
+	if !slices.Equal(command, want) {
+		t.Fatalf("named config command = %v, want %v", command, want)
+	}
+	if _, ok := nested(t, body, "preflight")["zones"]; ok {
+		t.Fatalf("named service should use named-checkconf -z instead of an init-specific zones check")
+	}
+	rule := nested(t, body, "rules", "block-restart-if-config-invalid")
+	if !conditionReferencesFailedCheck(rule["if"], "config") {
+		t.Fatalf("named config guard if = %v, want failed config check", rule["if"])
+	}
+}
+
+func TestRedisCatalogAlertsOnPersistenceFailure(t *testing.T) {
+	root := repoRoot(t)
+	body := catalogDocByName(t, root, "services", "redis")
+
+	if _, ok := nested(t, body, "checks")["persistence"]; !ok {
+		t.Fatal("redis missing persistence check")
+	}
+	rule := nested(t, body, "rules", "alert-if-persistence-failed")
+	if got := cfgval.String(rule["type"]); got != "alert" {
+		t.Fatalf("redis persistence rule type = %q, want alert", got)
+	}
+	failed := nested(t, rule, "if", "failed")
+	if got := cfgval.String(failed["check"]); got != "persistence" {
+		t.Fatalf("redis persistence rule check = %q, want persistence", got)
+	}
+	then := nested(t, rule, "then")
+	if got := cfgval.String(then["action"]); got != "alert" {
+		t.Fatalf("redis persistence rule action = %q, want alert", got)
+	}
+}
+
 func TestWALGBackupAppsResolveRequiredBinaryPreflight(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")
@@ -1351,7 +1707,7 @@ func TestCatalogServicesDoNotOwnRuntimeResourcePreflight(t *testing.T) {
 	}
 }
 
-func TestCatalogVersionedServicesDiscoverFromLinkedApps(t *testing.T) {
+func TestCatalogVersionedServicesHaveDiscoverySource(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")
 
@@ -1404,7 +1760,18 @@ func TestCatalogVersionedServicesDiscoverFromLinkedApps(t *testing.T) {
 			}
 			return false
 		}
-		// v2: a template either owns its discovery (`variables.binary` or
+		serviceDiscovers := false
+		for _, backend := range []string{"systemd", "openrc"} {
+			candidates, _ := ServiceCandidates(doc, backend, "")
+			if len(serviceUnitPatternsForBackend(backend, candidates, toks)) > 0 {
+				serviceDiscovers = true
+				break
+			}
+		}
+		if serviceDiscovers {
+			continue
+		}
+		// A template either owns non-service discovery (`variables.binary` or
 		// `versions.from` carrying every marker) or links an app template whose
 		// discovery source carries them.
 		if discoversAll(directVersionDiscoverySources(doc)) {
@@ -1422,7 +1789,7 @@ func TestCatalogVersionedServicesDiscoverFromLinkedApps(t *testing.T) {
 			}
 		}
 		if !hasLinkedDiscovery {
-			t.Errorf("%s is a template but neither declares its own discovery source nor links an app template that can discover its tokens", path)
+			t.Errorf("%s is a template but neither has token-bearing service candidates nor links an app template that can discover its tokens", path)
 		}
 	}
 }
@@ -1446,6 +1813,46 @@ func TestCatalogCommandEntriesDoNotUseArgumentKeys(t *testing.T) {
 			t.Fatalf("parse %s: %v", path, err)
 		}
 		checkCommandArgumentKeys(t, path, doc, "")
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCatalogServicePreflightCommandsAvoidInitBackendTools(t *testing.T) {
+	root := repoRoot(t)
+	servicesDir := filepath.Join(root, "catalog", "services")
+	forbidden := []string{"/etc/init.d/", "rc-service", "systemctl"}
+
+	err := filepath.WalkDir(servicesDir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || !isYAML(entry.Name()) {
+			return nil
+		}
+		data, err := os.ReadFile(path) //nolint:gosec // test walks YAML files under the repository catalog services root.
+		if err != nil {
+			return err
+		}
+		var doc map[string]any
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		preflight, _ := doc["preflight"].(map[string]any)
+		for name, raw := range preflight {
+			entry, _ := raw.(map[string]any)
+			if cfgval.String(entry["type"]) != "command" {
+				continue
+			}
+			command := strings.Join(cfgval.StringList(entry["command"]), " ")
+			for _, token := range forbidden {
+				if strings.Contains(command, token) {
+					t.Errorf("%s preflight.%s command %q uses init-backend tool %q; use daemon-native validation instead", path, name, command, token)
+				}
+			}
+		}
 		return nil
 	})
 	if err != nil {
