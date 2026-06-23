@@ -740,6 +740,7 @@ checks:
   svc-missing: { type: service }
   svc-state: { type: service, expect: bogus }
   proc-user-only: { type: process, user: mysql }
+  proc-ambiguous: { type: process, exe: /x, exe_any: [/y] }
   proc: { type: process, exe: /x, state: weird }
   opt: { type: binary, path: /x, optional: "yes" }
 preflight:
@@ -749,7 +750,8 @@ preflight:
 	mustHave(t, issues, "command must be an array, not a shell string")
 	mustHave(t, issues, "expect is required for a service check")
 	mustHave(t, issues, `expect "bogus" is not one of`)
-	mustHave(t, issues, "exe is required for a process check")
+	mustHave(t, issues, "exe or exe_any is required for a process check")
+	mustHave(t, issues, "must define only one of exe or exe_any")
 	mustHave(t, issues, `state "weird" is not one of`)
 	mustHave(t, issues, "optional must be a boolean")
 	mustHave(t, issues, "must not point under the runtime lock dir")

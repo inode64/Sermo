@@ -14,6 +14,7 @@ apps:
 - mysql
 variables:
   user: mysql
+  backup_user: mysql
   host: 127.0.0.1
   port: 3306
   config:
@@ -66,6 +67,20 @@ checks:
     op: '>'
     value: 60%
     optional: true
+  backup:
+    type: process
+    optional: true
+    exe_any:
+    - /usr/bin/mysqldump
+    - /usr/bin/mysqlpump
+    - /usr/bin/mysqlbackup
+    - /usr/bin/xtrabackup
+    - /usr/bin/wal-g-mysql
+    - /usr/local/bin/wal-g-mysql
+    - /usr/bin/wal-g
+    - /usr/local/bin/wal-g
+    user: ${backup_user}
+    state: running
 stop_policy:
   graceful_timeout: 120s
   term_timeout: 60s
@@ -93,6 +108,16 @@ rules:
     then:
       action: block
       message: ${display_name} configuration is invalid
+  block-restart-during-backup:
+    type: guard
+    blocks:
+    - restart
+    if:
+      active:
+        check: backup
+    then:
+      action: block
+      message: ${display_name} backup is running; restart denied
   restart-if-tcp-failed:
     type: remediation
     if:

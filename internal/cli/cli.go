@@ -96,6 +96,12 @@ type App struct {
 	// BuildNotifiers constructs delivery targets for ad-hoc CLI reports. nil
 	// uses the configured notifiers without applying alert templates.
 	BuildNotifiers func(*config.Config) (map[string]notify.Notifier, []string)
+	// InteractiveUser reports the local logged-in user for an interactive
+	// terminal session. Nil uses the process stdin and environment.
+	InteractiveUser func() (string, bool)
+	// NotifyBlockedAction delivers best-effort terminal notices for blocked
+	// manual actions that should alert the interactive operator.
+	NotifyBlockedAction func(context.Context, operation.Result, string) error
 }
 
 type options struct {
@@ -501,6 +507,7 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	if err != nil {
 		return a.fail(opts, err.Error())
 	}
+	a.notifyInteractiveBlockedAction(ctx, result)
 
 	if opts.json {
 		writeJSON(a.Stdout, result)
@@ -558,6 +565,9 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 		} else if !opts.quiet {
 			fmt.Fprintf(a.Stdout, "cascade %s: %s %s\n", svc, action, out.Status)
 		}
+		if err == nil {
+			a.notifyInteractiveBlockedAction(ctx, out)
+		}
 	}
 	return app.DowngradePrimaryOnCascadeFailure(primary, cascadeFailed), primaryErr
 }
@@ -604,7 +614,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		Scanner:          locks.NewScanner(filepath.Join(runtime, "locks")),
 		Discoverer:       discoverer,
 		ResolveUser:      discoverer.ResolveUser,
-		CheckDeps:        checks.Deps{DefaultTimeout: engineDefaultTimeout(cfg), Runner: a.Runner},
+		CheckDeps:        checks.Deps{DefaultTimeout: engineDefaultTimeout(cfg), Runner: a.Runner, Processes: discoverer.ObserveState, ProcessesAny: discoverer.ObserveAnyState},
 		MetricSample:     metricSample,
 		Changed:          app.LibChangedFunc(libBaseline),
 		OperationTimeout: operation.ResolveTimeout(opts.timeout, resolved.Tree),

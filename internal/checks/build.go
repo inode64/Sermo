@@ -94,6 +94,9 @@ type Deps struct {
 	// Processes reports the observed state (running/zombie/absent) of processes
 	// matching an exe/user selector, for `process` checks.
 	Processes func(exe, user string) string
+	// ProcessesAny reports the observed state of processes matching any exact
+	// resolved executable in exes with the same user. Nil falls back to Processes.
+	ProcessesAny func(exes []string, user string) string
 	// PidfileFallbackPIDs reports backend-native service PIDs when the active
 	// init system does not publish a PIDFile. It lets catalog pidfile checks
 	// accept systemd's MainPID/cgroup process set instead of failing on an
@@ -780,18 +783,22 @@ func buildMetricCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 // buildProcessCheck builds a check on processes matching an exe/user selector.
 func buildProcessCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	exe := cfgval.AsString(entry["exe"])
-	user := cfgval.AsString(entry["user"])
-	if exe == "" {
-		return nil, "process check requires exe"
+	exes := cfgval.StringList(entry["exe_any"])
+	if exe != "" {
+		exes = []string{exe}
 	}
-	if deps.Processes == nil {
+	user := cfgval.AsString(entry["user"])
+	if len(exes) == 0 {
+		return nil, "process check requires exe or exe_any"
+	}
+	if deps.Processes == nil && deps.ProcessesAny == nil {
 		return nil, "process check needs process discovery, unavailable here"
 	}
 	expect := cfgval.AsString(entry["state"])
 	if expect == "" {
 		expect = "running"
 	}
-	return processCheck{base: b, exe: exe, user: user, expect: expect, observe: deps.Processes}, ""
+	return processCheck{base: b, exes: exes, user: user, expect: expect, observe: deps.Processes, observeAny: deps.ProcessesAny}, ""
 }
 
 // buildCountCheck builds a check on the number of entries under a path.

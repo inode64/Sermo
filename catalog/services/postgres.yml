@@ -17,6 +17,7 @@ apps:
 variables:
   port: 5432
   user: postgres
+  backup_user: postgres
   data_dir: /var/lib/postgresql/${version}/data
   config_dir: /var/lib/postgresql/${version}/data
 os:
@@ -79,6 +80,21 @@ checks:
     op: '>'
     value: 60%
     optional: true
+  backup:
+    type: process
+    optional: true
+    exe_any:
+    - /usr/bin/pg_basebackup
+    - /usr/bin/pg_dump
+    - /usr/bin/pg_dumpall
+    - /usr/bin/pgbackrest
+    - /usr/local/bin/pgbackrest
+    - /usr/bin/wal-g-pg
+    - /usr/local/bin/wal-g-pg
+    - /usr/bin/wal-g
+    - /usr/local/bin/wal-g
+    user: ${backup_user}
+    state: running
 postflight:
   ready:
     type: postgres
@@ -113,6 +129,16 @@ rules:
     then:
       action: block
       message: ${display_name} configuration is invalid
+  block-restart-during-backup:
+    type: guard
+    blocks:
+    - restart
+    if:
+      active:
+        check: backup
+    then:
+      action: block
+      message: ${display_name} backup is running; restart denied
   restart-if-ready-failed:
     type: remediation
     if:

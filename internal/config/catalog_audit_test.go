@@ -1391,7 +1391,7 @@ func TestCatalogServicesUseAppVariablesForBinaryRefs(t *testing.T) {
 	}
 }
 
-func TestDatabaseCatalogDaemonsAreBackupToolNeutral(t *testing.T) {
+func TestDatabaseCatalogDaemonsBlockRestartDuringBackup(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
@@ -1411,15 +1411,44 @@ func TestDatabaseCatalogDaemonsAreBackupToolNeutral(t *testing.T) {
 		return out
 	}
 
-	for _, name := range []string{"mysql", "mariadb"} {
-		doc, ok := cfg.Daemons[name]
-		if !ok {
-			t.Fatalf("service %q not found", name)
-		}
-		if apps := cfgval.StringList(doc.Body["apps"]); slices.Contains(apps, "mariadb-backup") {
+	assertBackupGuard := func(name, label string, body map[string]any) {
+		t.Helper()
+		if apps := cfgval.StringList(body["apps"]); slices.Contains(apps, "mariadb-backup") {
 			t.Fatalf("%s links mariadb-backup by default: %v", name, apps)
 		}
+		backup, ok := section(body, "checks")["backup"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s %s catalog must define backup process check", name, label)
+		}
+		if !cfgval.Bool(backup["optional"]) {
+			t.Fatalf("%s %s backup check must be optional", name, label)
+		}
+		if cfgval.String(backup["user"]) == "" {
+			t.Fatalf("%s %s backup check must declare user", name, label)
+		}
+		if len(cfgval.StringList(backup["exe_any"])) == 0 {
+			t.Fatalf("%s %s backup check must declare exe_any", name, label)
+		}
+		guard, ok := section(body, "rules")["block-restart-during-backup"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s %s catalog must define backup restart guard", name, label)
+		}
+		if !slices.Contains(cfgval.StringList(guard["blocks"]), "restart") {
+			t.Fatalf("%s %s backup guard blocks = %v, want restart", name, label, guard["blocks"])
+		}
+		if _, ok := section(body, "preflight")["mariadb-backup-binary"]; ok {
+			t.Fatalf("%s %s catalog still has mariadb-backup preflight", name, label)
+		}
+	}
 
+	for _, name := range []string{"mysql", "mariadb", "postgres-%v"} {
+		raw := catalogDocByName(t, root, "services", name)
+		assertBackupGuard(name, "raw", raw)
+
+		doc, ok := cfg.Daemons[name]
+		if !ok {
+			continue
+		}
 		resolved, errs := cfg.ResolveCatalog(CategoryService, name)
 		if len(errs) > 0 {
 			t.Fatalf("ResolveCatalog(%s): %v", name, errs)
@@ -1428,18 +1457,10 @@ func TestDatabaseCatalogDaemonsAreBackupToolNeutral(t *testing.T) {
 			label string
 			body  map[string]any
 		}{
-			{label: "raw", body: doc.Body},
+			{label: "loaded", body: doc.Body},
 			{label: "resolved", body: resolved.Tree},
 		} {
-			if _, ok := section(tree.body, "checks")["mariadb-backup"]; ok {
-				t.Fatalf("%s %s catalog still has mariadb-backup check", name, tree.label)
-			}
-			if _, ok := section(tree.body, "rules")["block-restart-during-backup"]; ok {
-				t.Fatalf("%s %s catalog still has mariadb-backup guard", name, tree.label)
-			}
-			if _, ok := section(tree.body, "preflight")["mariadb-backup-binary"]; ok {
-				t.Fatalf("%s %s catalog still has mariadb-backup preflight", name, tree.label)
-			}
+			assertBackupGuard(name, tree.label, tree.body)
 		}
 	}
 }

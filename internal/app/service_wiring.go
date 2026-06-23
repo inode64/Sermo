@@ -58,6 +58,7 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, libBaseli
 			return st.Status, nil
 		},
 		Processes:           discoverer.ObserveState,
+		ProcessesAny:        discoverer.ObserveAnyState,
 		PidfileFallbackPIDs: pidfileFallbackPIDs(context.Background(), deps, unit, backendPIDs),
 	})
 	locker := configureOperationLocker(deps.Runtime, operationLockReclaimEvent(deps.Emit))

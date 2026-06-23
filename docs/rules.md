@@ -1769,17 +1769,28 @@ block-during-backup:
   then: { action: block, message: "Backup is running" }
 ```
 
-Backup-tool-specific guards belong in service examples or local overrides, not
-in the base catalog daemon. The shipped
-[`examples/services/mariadb-backup-guard.yml`](../examples/services/mariadb-backup-guard.yml)
-example shows how to opt in to a `mariadb-backup` process guard for MariaDB.
-[`examples/services/mysql-wal-g-backup-guard.yml`](../examples/services/mysql-wal-g-backup-guard.yml)
-does the same for WAL-G on MySQL/MariaDB. The `apps:` list is an override, so an
-opt-in service must keep the database app and add the backup app, for example
-`apps: [mysql, wal-g-mysql]` or `apps: [mariadb, wal-g-mysql]`.
+The shipped MySQL, MariaDB and PostgreSQL catalog daemons include a default
+optional `backup` process check and a
+`block-restart-during-backup` guard. The check matches common local backup
+tools by exact resolved executable path (`exe_any`) and database backup user
+(`backup_user`, defaulting to `mysql` or `postgres`). Override that check locally
+when your backup runs under another user or from non-standard paths. If a
+logged-in terminal user runs `sermoctl restart` while this backup guard blocks
+the action, Sermo also sends that user a best-effort native TTY notice; cron and
+other non-interactive runs are not notified.
 
-For PostgreSQL, use the concrete materialized catalog daemon and app for the
-installed version (for example `postgres-16`) and add `wal-g-pg`:
+The examples
+[`examples/services/mariadb-backup-guard.yml`](../examples/services/mariadb-backup-guard.yml)
+and
+[`examples/services/mysql-wal-g-backup-guard.yml`](../examples/services/mysql-wal-g-backup-guard.yml)
+show the same shape for extra app-linked tools or site-specific overrides. The
+`apps:` list is an override, so a service that adds a backup app must keep the
+database app too, for example `apps: [mysql, wal-g-mysql]` or
+`apps: [mariadb, wal-g-mysql]`.
+
+For PostgreSQL site-specific WAL-G paths, use the concrete materialized catalog
+daemon and app for the installed version (for example `postgres-16`) and add
+`wal-g-pg`:
 
 ```yaml
 kind: service
@@ -1791,7 +1802,7 @@ checks:
   wal-g-pg:
     type: process
     optional: true
-    exe: "${wal_g_pg_binary}"
+    exe_any: ["${wal_g_pg_binary}", /usr/local/bin/wal-g-pg]
     user: postgres
     state: running
 
