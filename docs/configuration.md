@@ -840,7 +840,30 @@ notifiers:
     webhook: "https://prod-01.westeurope.logic.azure.com:443/workflows/…"
 ```
 
-The supported notifier types today are `email`, `slack` and `teams`.
+- **`tty`** — writes directly to active Linux terminal sessions, similar to
+  `write(1)` but implemented inside Sermo without invoking an external command.
+  The built-in notifier named `tty` is always available:
+
+```yaml
+notify: [tty]      # optional global default: notify logged-in terminal users
+```
+
+  To customize or disable it, define a normal notifier with the same name:
+
+```yaml
+notifiers:
+  tty:
+    type: tty
+    users: [root, deploy]   # optional; omit to target every active terminal
+```
+
+  The `tty` notifier reads `/run/utmp` (falling back to `/var/run/utmp`) and
+  writes to the corresponding `/dev/<tty>` device with non-blocking native Go
+  I/O. It respects terminal permissions such as `mesg n`; if the daemon user
+  cannot write a terminal, delivery to that terminal fails and Sermo records a
+  `notify-failed` event.
+
+The supported notifier types today are `email`, `slack`, `teams` and `tty`.
 
 Set **`enabled: false`** on any notifier to keep it defined but skip delivery.
 Disabled notifiers may still be referenced by `notify` selections.
@@ -848,8 +871,10 @@ Disabled notifiers may still be referenced by `notify` selections.
 `sermoctl services --notify NAME[,NAME]` sends an ad-hoc services inventory
 report through configured notifiers. Email notifiers receive a multipart
 plain-text/HTML message with summary cards and a service table; Slack and Teams
-receive the text fallback. `--notify all` targets every enabled notifier. The
-CLI renders this report directly; notifier templates are not used.
+receive the text fallback, and `tty` writes the text report to logged-in
+terminal users. `--notify all` targets every enabled notifier, including the
+built-in `tty` notifier unless it has been explicitly disabled. The CLI renders
+this report directly; notifier templates are not used.
 
 `none` is a **reserved keyword** and cannot be used as a notifier name.
 

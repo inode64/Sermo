@@ -145,7 +145,7 @@ func validateGlobal(cfg *Config) []Issue {
 		validateWeb(webCfg, add)
 	}
 
-	notifiers, _ := raw["notifiers"].(map[string]any)
+	notifiers := cfg.Notifiers()
 	validateNotifiers(notifiers, cfg.Global.TemplateDir(), add)
 
 	if _, present := raw["notify"]; present {
