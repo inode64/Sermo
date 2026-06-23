@@ -1,0 +1,77 @@
+kind: daemon
+name: postfix
+display_name: "Postfix"
+category: messaging
+description: "Postfix MTA (SMTP)."
+service:
+  systemd: [postfix]
+  openrc: [postfix]
+apps: [postfix]
+
+variables:
+  host: 127.0.0.1
+  port: 25
+  tls_port: 465
+
+preflight:
+  config:
+    type: command
+    command: ["${postfix_binary}", "check"]
+    timeout: 30s
+
+config_files: [/etc/postfix/main.cf, /etc/postfix/master.cf]
+
+checks:
+  service: { type: service, expect: active }
+  port: { type: tcp, host: "${host}", port: "${port}", timeout: 3s }
+  smtp:
+    type: smtp
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s
+  cert:
+    type: cert
+    optional: true
+    host: "${host}"
+    port: "${tls_port}"
+    verify: false
+    expires_in_days: 21
+    timeout: 5s
+
+postflight:
+  smtp:
+    type: smtp
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s
+
+reload_on_change:
+  paths: [/etc/postfix/main.cf, /etc/postfix/master.cf]
+
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks: [restart, start]
+    if:
+      failed: { check: config }
+    then:
+      action: block
+      message: "${display_name} configuration is invalid"
+
+  restart-if-smtp-failed:
+    type: remediation
+    if:
+      failed: { check: smtp }
+    for:
+      cycles: 3
+    then:
+      action: restart
+
+  restart-if-port-failed:
+    type: remediation
+    if:
+      failed: { check: port }
+    for:
+      cycles: 3
+    then:
+      action: restart
