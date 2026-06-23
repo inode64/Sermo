@@ -71,14 +71,15 @@ func TestValidateNotifySelection(t *testing.T) {
 
 func TestValidateBuiltinTTYNotifyReference(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
-		"notify": []any{"tty"},
+		"notify": []any{"tty", "wall"},
 	})
 	var got []string
 	for _, issue := range issues {
 		got = append(got, issue.Msg)
 	}
-	if strings.Contains(strings.Join(got, "\n"), `unknown notifier "tty"`) {
-		t.Fatalf("builtin tty notifier should validate without a notifier fragment: %v", got)
+	joined := strings.Join(got, "\n")
+	if strings.Contains(joined, `unknown notifier "tty"`) || strings.Contains(joined, `unknown notifier "wall"`) {
+		t.Fatalf("builtin terminal notifiers should validate without notifier fragments: %v", got)
 	}
 }
 

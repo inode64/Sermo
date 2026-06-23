@@ -63,8 +63,8 @@ func TestBuildCanSkipTemplates(t *testing.T) {
 
 func TestSupportedTypes(t *testing.T) {
 	got := SupportedTypes()
-	if len(got) != 4 || got[0] != "email" || got[1] != "slack" || got[2] != "teams" || got[3] != "tty" {
-		t.Fatalf("SupportedTypes = %v, want [email slack teams tty]", got)
+	if len(got) != 5 || got[0] != "email" || got[1] != "slack" || got[2] != "teams" || got[3] != "tty" || got[4] != "wall" {
+		t.Fatalf("SupportedTypes = %v, want [email slack teams tty wall]", got)
 	}
 }
 
@@ -74,6 +74,15 @@ func TestBuildTTYRegistry(t *testing.T) {
 	})
 	if _, ok := notifiers["tty"]; !ok || len(warns) != 0 {
 		t.Fatalf("tty notifier should build cleanly: %v %v", notifiers, warns)
+	}
+}
+
+func TestBuildWallRegistry(t *testing.T) {
+	notifiers, warns := Build(map[string]any{
+		"wall": map[string]any{"type": "wall"},
+	})
+	if _, ok := notifiers["wall"]; !ok || len(warns) != 0 {
+		t.Fatalf("wall notifier should build cleanly: %v %v", notifiers, warns)
 	}
 }
 

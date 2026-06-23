@@ -842,7 +842,8 @@ notifiers:
 
 - **`tty`** — writes directly to active Linux terminal sessions, similar to
   `write(1)` but implemented inside Sermo without invoking an external command.
-  The built-in notifier named `tty` is always available:
+  The built-in notifier named `tty` is always available and can be overridden to
+  target specific users:
 
 ```yaml
 notify: [tty]      # optional global default: notify logged-in terminal users
@@ -863,7 +864,19 @@ notifiers:
   cannot write a terminal, delivery to that terminal fails and Sermo records a
   `notify-failed` event.
 
-The supported notifier types today are `email`, `slack`, `teams` and `tty`.
+- **`wall`** — broadcasts to every active Linux terminal session using the same
+  native Go utmp/TTY implementation as `tty`, but with no user filter. The
+  built-in notifier named `wall` is always available:
+
+```yaml
+notify: [wall]     # broadcast to every logged-in terminal session
+```
+
+  `wall` intentionally has no `users` option; use `tty` when you need to target
+  only selected users.
+
+The supported notifier types today are `email`, `slack`, `teams`, `tty` and
+`wall`.
 
 Set **`enabled: false`** on any notifier to keep it defined but skip delivery.
 Disabled notifiers may still be referenced by `notify` selections.
@@ -871,9 +884,11 @@ Disabled notifiers may still be referenced by `notify` selections.
 `sermoctl services --notify NAME[,NAME]` sends an ad-hoc services inventory
 report through configured notifiers. Email notifiers receive a multipart
 plain-text/HTML message with summary cards and a service table; Slack and Teams
-receive the text fallback, and `tty` writes the text report to logged-in
-terminal users. `--notify all` targets every enabled notifier, including the
-built-in `tty` notifier unless it has been explicitly disabled. The CLI renders
+receive the text fallback, and terminal notifiers write the text report to
+logged-in TTY sessions. `--notify all` targets every enabled notifier, including
+the built-in `tty` and `wall` notifiers unless they have been explicitly
+disabled. When a notify selection contains both `tty` and `wall`, Sermo sends
+only `wall` because it already covers every active terminal. The CLI renders
 this report directly; notifier templates are not used.
 
 `none` is a **reserved keyword** and cannot be used as a notifier name.

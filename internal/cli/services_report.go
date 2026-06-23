@@ -64,6 +64,13 @@ func selectServicesReportNotifiers(selection []string, registry map[string]notif
 	seen := map[string]struct{}{}
 	selected := make([]notify.Notifier, 0, len(names))
 	outNames := make([]string, 0, len(names))
+	hasWall := false
+	for _, name := range names {
+		if n, ok := registry[name]; ok && n.Type() == "wall" {
+			hasWall = true
+			break
+		}
+	}
 	for _, name := range names {
 		if name == "" {
 			continue
@@ -74,6 +81,9 @@ func selectServicesReportNotifiers(selection []string, registry map[string]notif
 		n, ok := registry[name]
 		if !ok {
 			return nil, nil, fmt.Errorf("services --notify references unknown or disabled notifier %q", name)
+		}
+		if hasWall && n.Type() == "tty" {
+			continue
 		}
 		seen[name] = struct{}{}
 		selected = append(selected, n)
