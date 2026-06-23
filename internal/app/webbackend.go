@@ -1060,6 +1060,8 @@ func (b *WebBackend) watchLiveView(w *webWatch, system metrics.Snapshot) (*web.W
 		return b.netWatchView(w)
 	case "icmp":
 		return b.icmpWatchView(w)
+	case "swap":
+		return nil, nil, ""
 	case "oom":
 		return b.oomWatchView()
 	case "fds":
