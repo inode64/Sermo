@@ -78,7 +78,7 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 		cur := current[p]
 		prev, known := w.baseline[p]
 		w.baseline[p] = cur
-		if known {
+		if known && !observeOnlyCycle(ctx) {
 			w.diff(ctx, p, prev, cur)
 		}
 		// Unknown paths adopt the baseline silently (no event on first sight).
@@ -96,7 +96,7 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if w.cond.onDelete {
+		if w.cond.onDelete && !observeOnlyCycle(ctx) {
 			w.fire(ctx, p, "deleted", p+" no longer exists", map[string]string{
 				"SERMO_OLD": strconv.FormatInt(w.baseline[p].size, 10),
 			})

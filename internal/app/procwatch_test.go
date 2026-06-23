@@ -143,6 +143,24 @@ func TestProcWatchMemoryThreshold(t *testing.T) {
 	}
 }
 
+func TestProcWatchObserveOnlySkipsFire(t *testing.T) {
+	h := &procHarness{clock: time.Unix(1_000_000, 0)}
+	s := &fakeProcSampler{cycles: [][]ProcInfo{
+		{{PID: 7, RSS: 900}},
+		{{PID: 7, RSS: 900}},
+	}}
+	w := h.watcher(procCond{memOp: ">", memValue: 500}, s)
+
+	w.runCycle(withObserveOnly(context.Background(), true))
+	if len(h.fired) != 0 {
+		t.Fatalf("observe-only cycle fired %d times, want 0", len(h.fired))
+	}
+	h.tick(w, time.Second)
+	if len(h.fired) != 1 {
+		t.Fatalf("second cycle fired %d times, want 1", len(h.fired))
+	}
+}
+
 func TestProcWatchDryRunSkipsHookAndNotify(t *testing.T) {
 	h := &procHarness{clock: time.Unix(1_000_000, 0)}
 	n := &fakeNotifier{name: "ops"}
