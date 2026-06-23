@@ -4072,7 +4072,8 @@ function renderOverview(ctx) {
   const startingWatches = watches.filter((w) => watchStateText(w) === "starting");
   const daemonStarting = ready && ready.status === "starting" && ready.ready === false;
   const activeLocks = (locks || []).filter((l) => l.state === "active");
-  const alerts = failedSvcs.length + failedWatches.length + activeLocks.length;
+  const failedApps = (allApps || []).filter((a) => appStateText(a) === "failed");
+  const alerts = failedSvcs.length + failedWatches.length + failedApps.length + activeLocks.length;
   const settling = daemonStarting || startingSvcs.length > 0 || startingWatches.length > 0;
 
   const tile = (opts) => `
@@ -4111,7 +4112,7 @@ function renderOverview(ctx) {
     value: String(alerts),
     cls: alerts ? "t-crit" : "t-ok",
     sub: alerts
-      ? [failedSvcs.length && `${failedSvcs.length} svc`, failedWatches.length && `${failedWatches.length} watch`, activeLocks.length && `${activeLocks.length} lock`].filter(Boolean).join(" · ")
+      ? [failedSvcs.length && `${failedSvcs.length} svc`, failedWatches.length && `${failedWatches.length} watch`, failedApps.length && `${failedApps.length} app`, activeLocks.length && `${activeLocks.length} lock`].filter(Boolean).join(" · ")
       : "nothing on fire",
     target: alerts ? "failed-services" : "services-section",
   }));
