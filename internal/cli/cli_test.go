@@ -205,6 +205,25 @@ func TestStatusCommandText(t *testing.T) {
 	}
 }
 
+func TestStatusUsesDaemonStateWhenAvailable(t *testing.T) {
+	var stdout bytes.Buffer
+	app := statusApp(servicemgr.ServiceStatus{
+		Service: "mysql", Backend: servicemgr.BackendSystemd,
+		Unit: "mysql.service", Status: servicemgr.StatusInactive,
+	}, nil, &stdout, nil)
+	app.FetchDaemonServiceState = func(context.Context, options, string) (string, bool) {
+		return "starting", true
+	}
+
+	code := app.Run(context.Background(), []string{"status", "mysql"})
+	if code != exitSuccess {
+		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+	}
+	if got := strings.TrimSpace(stdout.String()); got != "mysql state=starting backend=systemd service=mysql.service" {
+		t.Fatalf("stdout = %q", got)
+	}
+}
+
 func TestStatusCommandJSON(t *testing.T) {
 	var stdout bytes.Buffer
 	app := statusApp(servicemgr.ServiceStatus{

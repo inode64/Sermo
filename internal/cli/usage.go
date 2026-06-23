@@ -94,6 +94,11 @@ var commandUsages = []commandUsage{
 		Flags: []string{
 			"--json  print the service state as JSON",
 		},
+		Notes: []string{
+			"When sermod is running with web enabled, status prefers the daemon's",
+			"computed state (including starting during startup settling). Otherwise",
+			"it reflects the init backend and local monitor metadata only.",
+		},
 		Examples: []string{
 			"sermoctl status nginx-main",
 			"sermoctl --json status mysql-main",
