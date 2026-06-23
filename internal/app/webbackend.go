@@ -605,7 +605,7 @@ func (b *WebBackend) Services(ctx context.Context) []web.Service {
 // Watches returns the configured host watches, including disabled ones.
 func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 	if len(b.watchOrder) == 0 {
-		return nil
+		return []web.Watch{}
 	}
 	out := make([]web.Watch, 0, len(b.watchOrder))
 	lastActivities := b.lastWatchActivities()

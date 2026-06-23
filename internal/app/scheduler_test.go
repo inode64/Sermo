@@ -10,6 +10,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/execx"
 	"sermo/internal/operation"
+	"sermo/internal/servicemgr"
 )
 
 func TestStaggerOffsetSpreadsAcrossInterval(t *testing.T) {
@@ -373,4 +374,51 @@ func TestSchedulerRunsWatchWithCustomInjectedRunnerVerifiesEnv(t *testing.T) {
 	if !found {
 		t.Fatalf("custom runner did not receive expected SERMO_WATCH env: %v", call.env)
 	}
+}
+
+func TestSchedulerGateCompletesWithInactiveWorker(t *testing.T) {
+	ready := NewReadiness("systemd", 1, 0)
+	settling := NewSettling(ready)
+	settling.Reset([]string{"web"})
+
+	var checksRan int32
+	w := &Worker{
+		Service:  "web",
+		Settling: settling,
+		Interval: time.Second,
+		CheckDeps: checks.Deps{
+			Status: func(context.Context) (servicemgr.Status, error) {
+				return servicemgr.StatusInactive, nil
+			},
+		},
+		Checks: func(context.Context, checks.Deps) map[string]checks.Result {
+			atomic.AddInt32(&checksRan, 1)
+			return nil
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		Scheduler{Interval: 20 * time.Millisecond}.Run(ctx, []*Worker{w}, nil, nil, ready, false, true)
+		close(done)
+	}()
+
+	deadline := time.After(2 * time.Second)
+	for {
+		if ready.Report(context.Background()).Ready {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("gate never opened for inactive worker (checks ran %d times)", atomic.LoadInt32(&checksRan))
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	if atomic.LoadInt32(&checksRan) != 0 {
+		t.Fatalf("inactive worker ran checks %d times during observe-only, want 0", checksRan)
+	}
+	cancel()
+	<-done
 }
