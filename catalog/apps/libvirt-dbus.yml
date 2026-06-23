@@ -3,9 +3,7 @@ name: libvirt-dbus
 display_name: "libvirt D-Bus"
 category: virtualization
 variables:
-  binary:
-    - /usr/bin/libvirt-dbus
-    - /usr/sbin/libvirt-dbus
+  binary: ${bindir}/libvirt-dbus
 preflight:
   binary: { type: binary, path: "${binary}" }
   health: { type: command, command: ["${binary}", "--help"], timeout: 10s }

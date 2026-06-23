@@ -3,10 +3,8 @@ name: networkmanager
 display_name: "NetworkManager"
 category: network
 variables:
-  binary: /usr/bin/NetworkManager
-  nmcli:
-  - /usr/bin/nmcli
-  - /usr/sbin/nmcli
+  binary: ${bindir}/NetworkManager
+  nmcli: ${bindir}/nmcli
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
