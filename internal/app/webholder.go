@@ -213,6 +213,13 @@ func (h *WebBackendHolder) ServiceEvents(ctx context.Context, name string, limit
 	return nil, false
 }
 
+func (h *WebBackendHolder) ApplicationEvents(ctx context.Context, name string, limit int) ([]web.Event, bool) {
+	if b := h.backend(); b != nil {
+		return b.ApplicationEvents(ctx, name, limit)
+	}
+	return nil, false
+}
+
 // PruneEvents removes old events from the active event feed (if the backend is available).
 func (h *WebBackendHolder) PruneEvents(ctx context.Context, before time.Time) int {
 	if b := h.backend(); b != nil {

@@ -83,6 +83,17 @@ func List(ctx context.Context, runner execx.Runner, cfg *config.Config, category
 	return reports
 }
 
+// InspectOne inspects a single catalog application by name (resolving
+// version_from chains like List does for that app). It is used by the daemon's
+// per-app monitoring, which inspects one app per cycle rather than the whole
+// list.
+func InspectOne(ctx context.Context, runner execx.Runner, cfg *config.Config, name string, opts ...Option) Report {
+	if cfg == nil {
+		return Report{Name: name}
+	}
+	return inspectCatalog(ctx, runner, cfg, config.CategoryApp, name, map[string]Report{}, map[string]bool{}, opts...)
+}
+
 func applyCurrentLabels(reports []Report, cfg *config.Config, category string) {
 	if category != config.CategoryApp || cfg == nil {
 		return

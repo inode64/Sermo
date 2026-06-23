@@ -41,6 +41,26 @@ func TestEventLogPerService(t *testing.T) {
 	}
 }
 
+func TestEventLogPerApp(t *testing.T) {
+	l := NewEventLog(10)
+	l.Add(Event{App: "salt-minion", Kind: "firing", Message: "error: exit 1"})
+	l.Add(Event{Service: "web", Message: "svc"})
+	l.Add(Event{App: "salt-minion", Kind: "recovered", Message: "ok"})
+	l.Add(Event{App: "redis", Kind: "firing", Message: "boom"})
+
+	salt := l.RecentApp("salt-minion", 0)
+	if len(salt) != 2 || salt[0].Message != "ok" || salt[1].Message != "error: exit 1" {
+		t.Fatalf("per-app filter wrong: %+v", salt)
+	}
+	// app events are not mixed into the per-service feed, but appear in the global feed.
+	if len(l.Recent("web", 0)) != 1 {
+		t.Fatalf("service feed must not include app events")
+	}
+	if len(l.Recent("", 0)) != 4 {
+		t.Fatal("global feed should include app events")
+	}
+}
+
 func TestEventLogRingEviction(t *testing.T) {
 	l := NewEventLog(3)
 	for _, m := range []string{"1", "2", "3", "4", "5"} {

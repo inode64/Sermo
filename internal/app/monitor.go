@@ -119,7 +119,9 @@ func (m *Monitor) Reload() {
 
 	workers, warnings := BuildWorkers(newCfg, m.deps, m.collector)
 	watches, watchWarnings := BuildWatches(newCfg, m.deps, m.deps.Interval)
-	if len(workers) == 0 && len(watches) == 0 && !HasConfiguredTargets(newCfg) {
+	hostWatches := len(watches)
+	watches = append(watches, BuildAppWatches(newCfg, m.deps, AppWatchInterval(newCfg))...)
+	if len(workers) == 0 && hostWatches == 0 && !HasConfiguredTargets(newCfg) {
 		// Rollback: restore previous generation and restart it (we stopped above).
 		m.cfg = prevCfg
 		m.deps = prevDeps
@@ -138,7 +140,7 @@ func (m *Monitor) Reload() {
 	m.workers = workers
 	m.watches = watches
 	if m.readiness != nil {
-		m.readiness.UpdateCounts(len(workers), len(watches))
+		m.readiness.UpdateCounts(len(workers), hostWatches)
 	}
 	if m.web != nil {
 		if warns := m.web.Reload(newCfg, m.deps); len(warns) > 0 {

@@ -576,6 +576,7 @@ type Event struct {
 	Time    string `json:"time"` // RFC3339
 	Service string `json:"service,omitempty"`
 	Watch   string `json:"watch,omitempty"`
+	App     string `json:"app,omitempty"`
 	Kind    string `json:"kind"`
 	Rule    string `json:"rule,omitempty"`
 	Action  string `json:"action,omitempty"`
@@ -631,6 +632,9 @@ type Backend interface {
 	// ServiceEvents returns up to limit recent events for one service, newest
 	// first; ok is false for unknown names.
 	ServiceEvents(ctx context.Context, name string, limit int) ([]Event, bool)
+	// ApplicationEvents returns up to limit recent monitoring events for one
+	// installed application, newest first; ok is false for unknown names.
+	ApplicationEvents(ctx context.Context, name string, limit int) ([]Event, bool)
 	// PruneEvents removes events older than 'before' (or all if zero time).
 	// Intended for the `sermoctl events clear` command.
 	PruneEvents(ctx context.Context, before time.Time) int
@@ -743,6 +747,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/services/{name}/metrics", s.handleMetrics)
 	mux.HandleFunc("GET /api/services/{name}/runtime", s.handleServiceRuntime)
 	mux.HandleFunc("GET /api/services/{name}/events", s.handleServiceEvents)
+	mux.HandleFunc("GET /api/applications/{name}/events", s.handleApplicationEvents)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("POST /api/events/clear", s.handleEventsClear)
 	mux.HandleFunc("POST /api/state/compact", s.handleStateCompact)
@@ -1248,6 +1253,15 @@ func (s *Server) handleServiceEvents(w http.ResponseWriter, r *http.Request) {
 	events, ok := s.Backend.ServiceEvents(r.Context(), r.PathValue("name"), eventLimit(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, "unknown service")
+		return
+	}
+	writeJSON(w, http.StatusOK, events)
+}
+
+func (s *Server) handleApplicationEvents(w http.ResponseWriter, r *http.Request) {
+	events, ok := s.Backend.ApplicationEvents(r.Context(), r.PathValue("name"), eventLimit(r))
+	if !ok {
+		writeError(w, http.StatusNotFound, "unknown application")
 		return
 	}
 	writeJSON(w, http.StatusOK, events)

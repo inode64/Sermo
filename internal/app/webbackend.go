@@ -2805,6 +2805,30 @@ func (b *WebBackend) ServiceEvents(_ context.Context, name string, limit int) ([
 	return toWebEvents(b.events.Recent(name, limit)), true
 }
 
+// ApplicationEvents returns one application's recent monitoring events
+// (firing/recovered/notify on the App dimension); ok is false for unknown apps.
+func (b *WebBackend) ApplicationEvents(_ context.Context, name string, limit int) ([]web.Event, bool) {
+	if !b.knownApp(name) {
+		return nil, false
+	}
+	if b.events == nil {
+		return nil, true
+	}
+	return toWebEvents(b.events.RecentApp(name, limit)), true
+}
+
+func (b *WebBackend) knownApp(name string) bool {
+	if name == "" || b.cfg == nil {
+		return false
+	}
+	for _, n := range b.cfg.DaemonsInCategory(config.CategoryApp) {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
 // PruneEvents removes events older than 'before' (all if zero) from the live log.
 func (b *WebBackend) PruneEvents(_ context.Context, before time.Time) int {
 	if b.events == nil {
@@ -2826,6 +2850,7 @@ func loggedEventToWeb(e LoggedEvent) web.Event {
 		Time:    e.Time.Format(time.RFC3339),
 		Service: e.Service,
 		Watch:   e.Watch,
+		App:     e.App,
 		Kind:    e.Kind,
 		Rule:    e.Rule,
 		Action:  e.Action,

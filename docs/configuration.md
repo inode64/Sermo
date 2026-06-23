@@ -279,6 +279,7 @@ engine:
   max_parallel_operations: 2  # bound on concurrent start/stop/restart/reload/resume operations
   default_timeout: 10s        # default per-check timeout
   operation_timeout: 90s        # outer deadline for safe service actions
+  app_interval: 5m            # cadence for inspecting installed apps for errors
   startup_delay: 0            # grace period before the first cycle (0 disables)
   user_lookup: auto           # auto | native | getent | numeric
   user_lookup_timeout: 250ms  # per-getent lookup timeout; cached in-process
@@ -286,6 +287,15 @@ engine:
 
 `engine.interval` is the default cadence at which every service's checks are
 run. Each service runs all of its checks once per cycle.
+
+`engine.app_interval` (default `5m`) is the cadence at which the daemon inspects
+installed applications (the catalog apps shown in the web UI) for errors. When an
+app's version/health probe starts failing, the daemon emits an event with the
+error detail and notifies the global `notify:` default once (on the rising edge),
+and emits a `recovered` event when it passes again — the same edge-triggered
+behavior as host watches. Apps change rarely and each inspection runs the app's
+binary, so the default is slow; the web UI shows each app's recent events when you
+expand its row.
 
 `engine.backend: auto` detects the init system: probe systemd (`systemctl`
 exists, `/run/systemd/system` exists, `is-system-running` usable — `degraded`
