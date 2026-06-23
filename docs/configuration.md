@@ -679,7 +679,7 @@ fleet is staggered across one `engine.interval` (the slow per-app cadence is use
 only after that first check); a config reload does not return to `starting`. A
 plain request returns `ok` or `starting` / `shutting_down` as `text/plain`;
 `GET /readyz?verbose` returns JSON with `ready`, `status`, `backend`, `services`,
-`watches` and an optional `message`. Like `/livez`, it is served **without
+`watches` (host watches plus installed-app monitors) and an optional `message`. Like `/livez`, it is served **without
 authentication**:
 
 ```sh

@@ -258,8 +258,8 @@ func run(args []string) int {
 	}
 	hostWatches := len(watches)
 	// App-watches monitor installed applications for errors on a slower cadence.
-	// They share the scheduler/generation machinery but are not host watches, so
-	// they are kept out of the host-watch count surfaced by readiness.
+	// They share the scheduler/generation machinery and count toward readiness
+	// first-cycle settling alongside host watches.
 	watches = append(watches, app.BuildAppWatches(cfg, deps)...)
 	logger.Debug("built monitor targets", "enabled_services", len(workers), "enabled_watches", hostWatches, "enabled_apps", len(watches)-hostWatches, "configured", app.HasConfiguredTargets(cfg))
 
@@ -275,7 +275,7 @@ func run(args []string) int {
 	if startupDelay > 0 {
 		logger.Info("sermod waiting before first checks", "startup_delay", startupDelay)
 	}
-	readiness.UpdateCounts(len(workers), hostWatches)
+	readiness.UpdateCounts(len(workers), len(watches))
 
 	// Write a pidfile under the runtime directory so sermoctl daemon reload (and
 	// operators) can reliably signal the running daemon for config reload.

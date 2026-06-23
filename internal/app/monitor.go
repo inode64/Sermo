@@ -140,7 +140,7 @@ func (m *Monitor) Reload() {
 	m.workers = workers
 	m.watches = watches
 	if m.readiness != nil {
-		m.readiness.UpdateCounts(len(workers), hostWatches)
+		m.readiness.UpdateCounts(len(workers), len(watches))
 	}
 	if m.web != nil {
 		if warns := m.web.Reload(newCfg, m.deps); len(warns) > 0 {
