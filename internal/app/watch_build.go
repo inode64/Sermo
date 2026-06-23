@@ -686,6 +686,7 @@ func monitorWatch(name, checkType string, check checks.Check, notify []string, d
 		Runner:     OSHookRunner{Runner: deps.ExecxRunner},
 		Interval:   interval,
 		IsPaused:   monitorPaused(deps.Monitor, watchMonitorKey(name)),
+		Settling:   deps.Settling,
 		FireOnFail: true, // command/config are health-style: alert (notify) on failure/change
 		Now:        deps.Now,
 		Emit:       deps.Emit,
