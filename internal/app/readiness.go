@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"sermo/internal/web"
@@ -21,6 +22,12 @@ type Readiness struct {
 	services int
 	watches  int
 	state    string
+	// firstTotal/firstRemaining gate the transition to ready on the first boot:
+	// the daemon stays "starting" until every monitored target has completed its
+	// first cycle (and so has data), not merely been launched. firstRemaining
+	// counts targets that have not yet reported.
+	firstTotal     int
+	firstRemaining int
 	// panic reports the daemon-wide panic mode (optional). When set and active,
 	// it overrides the "ok" status with "panic mode".
 	panic func() bool
@@ -45,13 +52,48 @@ func (r *Readiness) WatchPanic(active func() bool) {
 	r.mu.Unlock()
 }
 
-// MarkReady records that workers and watches have been started.
+// MarkReady records that monitoring is up. It only advances from starting to
+// ready, so a late first-cycle signal can never undo a shutting_down state.
 func (r *Readiness) MarkReady() {
 	if r == nil {
 		return
 	}
 	r.mu.Lock()
-	r.state = readinessReady
+	if r.state == readinessStarting {
+		r.state = readinessReady
+	}
+	r.mu.Unlock()
+}
+
+// ExpectFirstCycles arms the first-cycle gate for n monitored targets: the
+// daemon stays "starting" until markFirstCycle has fired n times. n<=0 means
+// there is nothing to wait for, so it becomes ready immediately.
+func (r *Readiness) ExpectFirstCycles(n int) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.firstTotal = n
+	r.firstRemaining = n
+	if n <= 0 && r.state == readinessStarting {
+		r.state = readinessReady
+	}
+	r.mu.Unlock()
+}
+
+// markFirstCycle records that one target has completed its first cycle. When the
+// last one reports, the daemon transitions from starting to ready.
+func (r *Readiness) markFirstCycle() {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	if r.firstRemaining > 0 {
+		r.firstRemaining--
+		if r.firstRemaining == 0 && r.state == readinessStarting {
+			r.state = readinessReady
+		}
+	}
 	r.mu.Unlock()
 }
 
@@ -105,7 +147,11 @@ func (r *Readiness) Report(context.Context) web.ReadyReport {
 		rep.Message = "daemon is shutting down"
 	default:
 		rep.Status = readinessStarting
-		rep.Message = "monitoring has not started yet"
+		if r.firstTotal > 0 {
+			rep.Message = fmt.Sprintf("starting: %d/%d monitored targets have reported", r.firstTotal-r.firstRemaining, r.firstTotal)
+		} else {
+			rep.Message = "monitoring has not started yet"
+		}
 	}
 	return rep
 }

@@ -663,12 +663,19 @@ It reports process liveness only; for configuration/host/database health use
 ### Readiness (`/readyz`)
 
 `GET /readyz` is a readiness probe: it returns **200** only after `sermod` has
-finished `engine.startup_delay` (if any) and started its service workers and host
-watches. During the startup grace period, or while the daemon is shutting down, it
-returns **503**. A plain request returns `ok` or `starting` / `shutting_down` as
-`text/plain`; `GET /readyz?verbose` returns JSON with `ready`, `status`, `backend`,
-`services`, `watches` and an optional `message`. Like `/livez`, it is served
-**without authentication**:
+finished `engine.startup_delay` (if any) **and every monitored target — services,
+host watches and installed apps — has completed its first cycle**, so the daemon
+actually has data rather than merely having launched. While settling, the verbose
+`message` reports progress (`starting: 3/10 monitored targets have reported`) and
+the web UI header shows `status: starting` with a neutral grey tab favicon. During
+the startup grace period, the first-cycle settling, or while the daemon is shutting
+down, it returns **503**. To avoid a startup stampede the first cycle of the whole
+fleet is staggered across one `engine.interval` (the slow per-app cadence is used
+only after that first check); a config reload does not return to `starting`. A
+plain request returns `ok` or `starting` / `shutting_down` as `text/plain`;
+`GET /readyz?verbose` returns JSON with `ready`, `status`, `backend`, `services`,
+`watches` and an optional `message`. Like `/livez`, it is served **without
+authentication**:
 
 ```sh
 curl -fsS http://127.0.0.1:9797/readyz                 # -> ok (when monitoring)
