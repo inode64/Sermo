@@ -54,6 +54,12 @@ func TestOperatorFailureCanceledStripsRunPrefix(t *testing.T) {
 	}
 }
 
+func TestOperatorFailureEmptyErrorUsesCallerFallback(t *testing.T) {
+	if msg := OperatorFailure(nil, Result{ExitCode: -1}, time.Second); msg != "" {
+		t.Fatalf("OperatorFailure(nil) = %q, want empty for caller fallback", msg)
+	}
+}
+
 func TestFormatContextOrError(t *testing.T) {
 	if got := FormatContextOrError(context.DeadlineExceeded, 500*time.Millisecond); got != "timeout after 500ms" {
 		t.Fatalf("FormatContextOrError(deadline) = %q", got)

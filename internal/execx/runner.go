@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+// CommandDidNotStart is the operator-facing message when execx marks a run
+// failure (exit code -1) but provides no underlying error detail.
+const CommandDidNotStart = "command did not start"
+
 // Result contains the observable result of an external command.
 type Result struct {
 	Stdout   string

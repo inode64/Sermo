@@ -289,14 +289,14 @@ func nativeReloadFunc(spec *reloadSpec, deps checks.Deps, backend, unit string, 
 			if res.ExitCode == -1 {
 				msg := execx.OperatorFailure(err, res, 0)
 				if msg == "" {
-					msg = "command failed to run"
+					msg = execx.CommandDidNotStart
 				}
 				return errors.New(msg)
 			}
 			return err
 		}
 		if res.ExitCode == -1 {
-			return errors.New("command failed to run")
+			return errors.New(execx.CommandDidNotStart)
 		}
 		if res.ExitCode != 0 {
 			msg := strings.TrimSpace(res.Stderr)
