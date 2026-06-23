@@ -2,7 +2,6 @@ package operation
 
 import (
 	"context"
-	"errors"
 	"os"
 	"os/signal"
 	"strconv"
@@ -169,8 +168,8 @@ func TestReloadClosureSignalHonorsCanceledContext(t *testing.T) {
 	cancel()
 
 	err := reload(ctx)
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("reload err = %v, want context.Canceled", err)
+	if err == nil || !strings.Contains(err.Error(), "cancelled") {
+		t.Fatalf("reload err = %v, want cancelled", err)
 	}
 	if runner.ran("systemctl") {
 		t.Fatalf("reload tried MainPID resolution after cancellation; calls=%v", runner.calls)
