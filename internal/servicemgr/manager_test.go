@@ -3,8 +3,10 @@ package servicemgr
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"sermo/internal/execx"
 )
@@ -172,6 +174,23 @@ func TestSystemdManagerActionFailureUsesStderr(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "not found") {
 		t.Fatalf("error = %v, want stderr detail", err)
+	}
+}
+
+func TestSystemdManagerActionTimeoutMessage(t *testing.T) {
+	m := systemdManager{runner: stubRunner{
+		result: execx.Result{ExitCode: -1, Duration: 2 * time.Second},
+		err:    fmt.Errorf("run systemctl: timeout after 2s: %w", context.DeadlineExceeded),
+	}}
+	err := m.Start(context.Background(), "nginx")
+	if err == nil {
+		t.Fatal("Start() error = nil, want failure")
+	}
+	if !strings.Contains(err.Error(), "timeout after 2s") {
+		t.Fatalf("error = %v, want timeout after duration", err)
+	}
+	if strings.Contains(err.Error(), "context deadline exceeded") {
+		t.Fatalf("error = %v, want operator-facing timeout without raw context error", err)
 	}
 }
 
