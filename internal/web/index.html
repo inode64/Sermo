@@ -1647,11 +1647,25 @@ function openPanelTarget(target) {
     sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
     return;
   }
+  if (target === "starting-services") {
+    const sec = $("#services-section");
+    if (sec) sec.open = true;
+    setSvcStatus("starting");
+    sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
+    return;
+  }
 
   if (target === "failed-apps") {
     const sec = $("#apps-section");
     if (sec) sec.open = true;
     setAppStatus("failed");
+    sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
+    return;
+  }
+  if (target === "starting-apps") {
+    const sec = $("#apps-section");
+    if (sec) sec.open = true;
+    setAppStatus("starting");
     sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
     return;
   }
@@ -1668,6 +1682,15 @@ function openPanelTarget(target) {
     if (storage && storage.style.display !== "none" && (allWatches || []).some((w) => isStorageWatch(w) && firing(w))) dest = storage;
     else if (network && network.style.display !== "none" && (allWatches || []).some((w) => isNetworkWatch(w) && firing(w))) dest = network;
     dest && dest.scrollIntoView({ block: "start", behavior: "smooth" });
+    return;
+  }
+  if (target === "starting-watches") {
+    const storage = $("#storage-section");
+    const network = $("#network-section");
+    const sec = $("#watches-section");
+    [storage, network, sec].forEach((s) => { if (s) s.open = true; });
+    setAllWatchStatuses("starting");
+    sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
     return;
   }
   const el = $("#" + target);
@@ -4150,6 +4173,14 @@ function renderOverview(ctx) {
     return parts.length ? parts.join(" · ") : "";
   };
   const watchesSettling = settling && !failedWatches.length;
+  const servicesTarget = failedSvcs.length ? "failed-services"
+    : (startingSvcs.length || daemonStarting ? "starting-services"
+      : (startingWatches.length ? "starting-watches"
+        : (startingApps.length ? "starting-apps" : "services-section")));
+  const watchesTarget = failedWatches.length ? "failed-watches"
+    : (startingWatches.length ? "starting-watches"
+      : (startingApps.length && !startingSvcs.length && !daemonStarting ? "starting-apps"
+        : (settling ? "starting-services" : "watches-section")));
 
   const tile = (opts) => `
     <button class="tile ${opts.cls || ""}" data-panel-target="${esc(opts.target || "services-section")}">
@@ -4167,7 +4198,7 @@ function renderOverview(ctx) {
     sub: failedSvcs.length
       ? `${failedSvcs.length} failed`
       : (servicesSettlingSub() || (enabled.length === 0 ? "none enabled" : "all healthy")),
-    target: failedSvcs.length ? "failed-services" : "services-section",
+    target: servicesTarget,
   }));
   if (watches.length) {
     tiles.push(tile({
@@ -4177,7 +4208,7 @@ function renderOverview(ctx) {
       sub: failedWatches.length
         ? `${failedWatches.length} firing`
         : (watchesSettlingSub() || "quiet"),
-      target: "watches-section",
+      target: watchesTarget,
     }));
   }
   const alertsTarget = alerts
