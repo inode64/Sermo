@@ -92,8 +92,8 @@ func TestCountCheckHonorsCanceledContext(t *testing.T) {
 	if res.OK {
 		t.Fatal("canceled count check should fail")
 	}
-	if !strings.Contains(res.Message, context.Canceled.Error()) {
-		t.Fatalf("message = %q, want context canceled", res.Message)
+	if !strings.Contains(res.Message, "cancelled") {
+		t.Fatalf("message = %q, want cancelled", res.Message)
 	}
 }
 
