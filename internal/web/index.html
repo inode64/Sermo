@@ -3648,9 +3648,10 @@ function appStateText(a) {
 function appStateRank(a) {
   switch (appStateText(a)) {
     case "ok": return 0;
-    case "warning": return 1;
-    case "failed": return 2;
-    default: return 3;
+    case "starting": return 1;
+    case "warning": return 2;
+    case "failed": return 3;
+    default: return 4;
   }
 }
 function appStatusLabel(a) {
