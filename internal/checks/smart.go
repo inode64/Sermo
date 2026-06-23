@@ -28,7 +28,14 @@ func (c smartCheck) Run(ctx context.Context) Result {
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
-	res, _ := c.runner.Run(ctx, "smartctl", "-H", "-A", "-j", c.device)
+	res, runErr := c.runner.Run(ctx, "smartctl", "-H", "-A", "-j", c.device)
+	if res.ExitCode == -1 {
+		msg := execx.OperatorFailure(runErr, res, c.timeout)
+		if msg == "" {
+			msg = "command failed to run"
+		}
+		return c.result(false, "smart "+c.device+": "+msg, start)
+	}
 	data, err := parseSmart(res.Stdout)
 	if err != nil {
 		if s := FirstNonEmptyLine(res.Stderr); s != "" {
@@ -65,12 +72,21 @@ type SmartSample struct {
 	Values      map[string]float64
 }
 
-// SampleSmart runs smartctl -H -A -j on device.
-func SampleSmart(ctx context.Context, runner execx.Runner, device string) (SmartSample, error) {
+// SampleSmart runs smartctl -H -A -j on device. timeout is used for
+// operator-facing timeout messages when the probe context expires before the
+// command finishes.
+func SampleSmart(ctx context.Context, runner execx.Runner, device string, timeout time.Duration) (SmartSample, error) {
 	if runner == nil {
 		runner = execx.CommandRunner{}
 	}
-	res, _ := runner.Run(ctx, "smartctl", "-H", "-A", "-j", device)
+	res, runErr := runner.Run(ctx, "smartctl", "-H", "-A", "-j", device)
+	if res.ExitCode == -1 {
+		msg := execx.OperatorFailure(runErr, res, timeout)
+		if msg == "" {
+			msg = "command failed to run"
+		}
+		return SmartSample{}, fmt.Errorf("%s", msg)
+	}
 	data, err := parseSmart(res.Stdout)
 	if err != nil {
 		if s := FirstNonEmptyLine(res.Stderr); s != "" {
