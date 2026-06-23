@@ -320,6 +320,7 @@ func eventRecordFromLogged(e LoggedEvent) state.EventRecord {
 		Action:  e.Action,
 		Status:  e.Status,
 		Message: e.Message,
+		Output:  e.Output,
 	}
 }
 
@@ -335,6 +336,7 @@ func loggedEventFromRecord(e state.EventRecord) LoggedEvent {
 			Action:  e.Action,
 			Status:  e.Status,
 			Message: e.Message,
+			Output:  e.Output,
 		},
 	}
 }

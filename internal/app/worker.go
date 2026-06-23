@@ -42,6 +42,10 @@ type Worker struct {
 	// present here so a stale cached failure cannot skip a dependent check.
 	cycleRan map[string]bool
 
+	// cycleFailOutput is this cycle's concatenated failing-check command output,
+	// attached to alert events so the operator sees why the rule fired.
+	cycleFailOutput string
+
 	// Checks produces this cycle's named-check cache.
 	Checks func(ctx context.Context, deps checks.Deps) map[string]checks.Result
 	// ResolveRefs returns a per-cycle resolver for named checks outside the main
@@ -142,6 +146,7 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	}
 	cache := w.Checks(ctx, deps)
 	w.applyGates(cache)
+	w.cycleFailOutput = failingChecksOutput(cache)
 	if w.RecordChecks != nil {
 		w.RecordChecks(cache, w.cycleRan)
 	}
@@ -262,6 +267,35 @@ func requiredChecksOK(cache map[string]checks.Result) bool {
 		}
 	}
 	return true
+}
+
+// failingChecksOutput concatenates the bounded command output of this cycle's
+// failing checks (those that captured stdout/stderr under Data["output"]),
+// labelled by check name and ordered for stability, for attaching to alert
+// events. Returns "" when no failing check captured output.
+func failingChecksOutput(cache map[string]checks.Result) string {
+	names := make([]string, 0, len(cache))
+	for name, r := range cache {
+		if r.Optional || r.Skipped || r.Healthy() {
+			continue
+		}
+		if resultOutput(r) != "" {
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	sort.Strings(names)
+	var b strings.Builder
+	for i, name := range names {
+		if i > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString("check " + name + ":\n")
+		b.WriteString(resultOutput(cache[name]))
+	}
+	return b.String()
 }
 
 type ruleEvalResult struct {
@@ -393,16 +427,18 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 func (w *Worker) emitAlerts(ctx context.Context, r rules.Rule) {
 	notifiers := resolveNotifiers(effectiveNotify(r.Notify, w.GlobalNotify), w.Notifiers)
 	panicking := w.InPanic != nil && w.InPanic()
+	output := w.cycleFailOutput
 	for _, msg := range r.AlertMessages() {
 		// The alert event is always emitted so the condition stays visible; panic
-		// mode only suppresses the outbound notifications.
-		w.emit(Event{Kind: "alert", Rule: r.Name, Message: msg})
+		// mode only suppresses the outbound notifications. Output carries the failing
+		// command's stdout/stderr so the operator can see why the rule fired.
+		w.emit(Event{Kind: "alert", Rule: r.Name, Message: msg, Output: output})
 		if panicking {
 			w.emit(Event{Kind: "notify-suppressed", Rule: r.Name, Message: "panic mode: alert notification suppressed"})
 			continue
 		}
 		for _, n := range notifiers {
-			if err := n.Send(ctx, alertMessage(w.Service, r.Name, msg)); err != nil {
+			if err := n.Send(ctx, alertMessage(w.Service, r.Name, msg, output)); err != nil {
 				w.emit(Event{Kind: "notify-failed", Rule: r.Name, Message: n.Name() + ": " + err.Error()})
 			} else {
 				w.emit(Event{Kind: "notify", Rule: r.Name, Message: "notified " + n.Name()})
@@ -412,10 +448,14 @@ func (w *Worker) emitAlerts(ctx context.Context, r rules.Rule) {
 }
 
 // alertMessage builds the notification for a rule's alert message.
-func alertMessage(service, rule, msg string) notify.Message {
+func alertMessage(service, rule, msg, output string) notify.Message {
+	body := msg
+	if output != "" {
+		body += "\n\n" + output
+	}
 	return notify.Message{
 		Subject: fmt.Sprintf("[sermo] %s: %s", service, msg),
-		Body:    msg,
+		Body:    body,
 		Fields:  map[string]string{"SERMO_SERVICE": service, "SERMO_RULE": rule},
 	}
 }

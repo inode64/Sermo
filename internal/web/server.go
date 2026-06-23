@@ -582,6 +582,9 @@ type Event struct {
 	Action  string `json:"action,omitempty"`
 	Status  string `json:"status,omitempty"`
 	Message string `json:"message,omitempty"`
+	// Output is the bounded stdout/stderr of the failing command behind this event
+	// (app probe or service `command` check), shown expandable in the dashboard.
+	Output string `json:"output,omitempty"`
 }
 
 // maxSeriesWindow bounds the history a single request may ask for (the retention).

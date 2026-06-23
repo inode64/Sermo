@@ -39,7 +39,7 @@ func TestStoreEventAppDimensionRoundTrip(t *testing.T) {
 	if err := s.RecordEvent(EventRecord{Service: "web", Kind: "action", Message: "restart"}); err != nil {
 		t.Fatalf("RecordEvent service: %v", err)
 	}
-	if err := s.RecordEvent(EventRecord{App: "salt-minion", Kind: "firing", Message: "error: exit 1"}); err != nil {
+	if err := s.RecordEvent(EventRecord{App: "salt-minion", Kind: "firing", Message: "error: exit 1", Output: "stderr:\nImportError: no module"}); err != nil {
 		t.Fatalf("RecordEvent app: %v", err)
 	}
 	recs, err := s.RecentEvents(0)
@@ -52,6 +52,12 @@ func TestStoreEventAppDimensionRoundTrip(t *testing.T) {
 	// newest first: the app event
 	if recs[0].App != "salt-minion" || recs[0].Service != "" || recs[0].Message != "error: exit 1" {
 		t.Fatalf("app event did not round-trip: %+v", recs[0])
+	}
+	if recs[0].Output != "stderr:\nImportError: no module" {
+		t.Fatalf("event output did not round-trip: %q", recs[0].Output)
+	}
+	if recs[1].Output != "" {
+		t.Fatalf("event without output must round-trip empty, got %q", recs[1].Output)
 	}
 	if recs[1].Service != "web" || recs[1].App != "" {
 		t.Fatalf("service event did not round-trip: %+v", recs[1])

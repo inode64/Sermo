@@ -40,6 +40,9 @@ type Report struct {
 	Installed     bool   `json:"installed"`
 	OK            bool   `json:"ok"`
 	Status        string `json:"status"`
+	// Output is the bounded stdout/stderr of the failing version/health probe,
+	// set only on error so the app's monitoring event can explain WHY it failed.
+	Output string `json:"output,omitempty"`
 }
 
 type options struct {
@@ -235,10 +238,13 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 	health := probeCommandFor(resolved.Tree, "health")
 	version := probeCommandFor(resolved.Tree, "version")
 	if len(health.argv) > 0 {
-		r.OK, r.Status = runExitProbe(ctx, runner, health)
+		var healthOut string
+		r.OK, r.Status, healthOut = runExitProbe(ctx, runner, health)
 		if !r.OK && health.optional {
 			r.OK = true
 			r.Status = "ok"
+		} else if !r.OK {
+			r.Output = healthOut
 		}
 		if r.OK && len(version.argv) > 0 {
 			vres := runVersionProbe(ctx, runner, resolved.Tree, version)
@@ -246,6 +252,7 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 				r.Installed = false
 				r.OK = false
 				r.Status = versionIdentityStatus(vres.status)
+				r.Output = vres.output
 				return r
 			}
 			if vres.ok {
@@ -267,6 +274,7 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 		r.Installed = false
 		r.OK = false
 		r.Status = versionIdentityStatus(vres.status)
+		r.Output = vres.output
 		return r
 	}
 	if !vres.ok && (version.optional || options.versionOptional) {
@@ -276,6 +284,7 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 	}
 	r.OK = vres.ok
 	r.Status = vres.status
+	r.Output = vres.output
 	r.Version = vres.raw
 	r.VersionShort = vres.short
 	return r
@@ -296,15 +305,15 @@ func inspectOptions(opts []Option) options {
 	return o
 }
 
-func runExitProbe(ctx context.Context, runner execx.Runner, cmd probeCommand) (bool, string) {
+func runExitProbe(ctx context.Context, runner execx.Runner, cmd probeCommand) (bool, string, string) {
 	res, err := runProbeCommand(ctx, runner, cmd)
 	switch {
 	case err != nil && res.ExitCode == 0:
-		return false, "error: " + err.Error()
+		return false, "error: " + err.Error(), checks.BoundedOutput(res.Stdout, res.Stderr)
 	case !checks.ExitCodeExpected(res.ExitCode, cmd.expectExit):
-		return false, fmt.Sprintf("error: exit %d (want %s)", res.ExitCode, checks.ExpectExitText(cmd.expectExit))
+		return false, fmt.Sprintf("error: exit %d (want %s)", res.ExitCode, checks.ExpectExitText(cmd.expectExit)), checks.BoundedOutput(res.Stdout, res.Stderr)
 	default:
-		return true, "ok"
+		return true, "ok", ""
 	}
 }
 
@@ -312,15 +321,16 @@ type versionProbeResult struct {
 	ok               bool
 	identityMismatch bool
 	status           string
+	output           string // bounded stdout/stderr, set on failure
 	raw              string
 	short            string
 }
 
 func runVersionProbe(ctx context.Context, runner execx.Runner, tree map[string]any, cmd probeCommand) versionProbeResult {
-	fail := func(status string) versionProbeResult {
-		return versionProbeResult{status: status}
-	}
 	res, err := runProbeCommand(ctx, runner, cmd)
+	fail := func(status string) versionProbeResult {
+		return versionProbeResult{status: status, output: checks.BoundedOutput(res.Stdout, res.Stderr)}
+	}
 	switch {
 	case err != nil && res.ExitCode == 0:
 		return fail("error: " + err.Error())
@@ -341,7 +351,7 @@ func runVersionProbe(ctx context.Context, runner execx.Runner, tree map[string]a
 		return fail("error: version_match " + cmd.versionMatchWarn)
 	}
 	if ok, detail := cmd.versionMatch.Match(checks.VersionOutput(res.Stdout, res.Stderr)); !ok {
-		return versionProbeResult{identityMismatch: true, status: "not installed: version " + detail}
+		return versionProbeResult{identityMismatch: true, status: "not installed: version " + detail, output: checks.BoundedOutput(res.Stdout, res.Stderr)}
 	}
 	raw := checks.FirstNonEmptyLine(res.Stdout)
 	if raw == "" {
