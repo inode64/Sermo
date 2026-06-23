@@ -1647,6 +1647,7 @@ function openPanelTarget(target) {
     sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
     return;
   }
+
   if (target === "failed-apps") {
     const sec = $("#apps-section");
     if (sec) sec.open = true;
@@ -1721,7 +1722,15 @@ function renderAttention() {
       target: "failed-watches",
     });
   }
-
+  const failingApps = (allApps || []).filter((a) => appStateText(a) === "failed");
+  if (failingApps.length) {
+    items.push({
+      level: "critical",
+      title: failingApps.length === 1 ? "1 application failed" : `${failingApps.length} applications failed`,
+      detail: failingApps.slice(0, 4).map((a) => displayName(a) || a.name).join(", ") + (failingApps.length > 4 ? ` and ${failingApps.length - 4} more` : ""),
+      target: "failed-apps",
+    });
+  }
   const activeLocks = (latestLocks || []).filter((l) => l.state === "active");
   if (activeLocks.length) {
     items.push({
