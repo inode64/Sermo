@@ -90,9 +90,9 @@ Rendered by `renderOverview` from already-loaded state, without extra requests.
 
 | Tile kind | Current content |
 | --- | --- |
-| Services up | count / total, warning when degraded |
-| Watches | count and failing state |
-| Alerts | errors / critical signals |
+| Services up | count / total; critical when any service is `failed`, neutral while any service (or the daemon) is `starting`, otherwise healthy |
+| Watches | count / total; critical when any watch is `failed`, neutral with `N starting` while watches settle, otherwise quiet |
+| Alerts | count of failing services, firing watches, failed installed apps and active locks, with a per-kind breakdown |
 | Monitored | monitored vs unmonitored services |
 | Host gauges | memory, load, fds, pids, conntrack, etc. when present |
 | Volumes | one gauge per mounted storage watch, crit when its watch is firing |
@@ -111,10 +111,13 @@ Editable notes:
 | Items | warning / critical buttons |
 | Click behavior | opens the related panel |
 
-Signals include failing services, firing host watches, recent errors and
-readiness issues. A failing-services item opens the Services panel with the
+Signals include failing services, firing host watches, failed installed
+applications, recent errors and readiness issues (including
+`shutting_down`). A failing-services item opens the Services panel with the
 `failed` filter; a firing-watches item opens Host watches with the `failed`
-filter (`failed-watches` target).
+filter (`failed-watches` target); a failing-apps item opens Installed
+applications with the `failed` filter (`failed-apps` target). Daemon startup
+progress stays in the top-bar `status: starting` line, not in this box.
 
 ## Live operations
 
@@ -141,7 +144,7 @@ checks, remediation and actions for what `sermod` monitors now. This is not
 | Title | `Services` plus total count |
 | Title icons | group by category, collapse/expand all groups |
 | Controls | search, category select, status filters, showing count |
-| Status filters | all, disabled, running, paused, stopped, unmonitorized, monitorized, failed |
+| Status filters | all, disabled, running, paused, stopped, unmonitorized, monitorized, starting, failed |
 | Sorting | Service, Category, State |
 | Grouping | category group rows, collapsible |
 
@@ -184,7 +187,8 @@ Section id: `apps-section`
 | --- | --- |
 | Title | `Installed applications` plus total count |
 | Title icons | group by category, collapse/expand all groups |
-| Controls | search, category select, showing count |
+| Controls | search, category select, status filters, showing count |
+| Status filters | all, ok, starting, warning, failed |
 | Sorting | Application, Category, Status, Version |
 | Visibility | hidden when no installed apps are returned |
 | Grouping | category group rows, collapsible |
@@ -195,7 +199,7 @@ Columns:
 | --- | --- |
 | Application | display name, falling back to name, capitalized |
 | Category | YAML category or fallback |
-| Status | app inspection state (`Ok`, warning, failed) |
+| Status | app inspection state (`Ok`, `Starting` while the daemon settles, warning, failed) |
 | Version | short version, falling back to raw version |
 
 Row expansion:
@@ -227,7 +231,7 @@ and `Host watches` contains the remaining host watch types.
 | Title | Panel name plus total count for that panel's watch subset |
 | Controls | search, type filter, state filters, showing count |
 | Type filter | panel-specific `all ... types` plus the distinct check types currently present in that panel |
-| State filters | all, disabled, ok, monitorized, unmonitorized, failed |
+| State filters | all, disabled, ok, monitorized, unmonitorized, starting, failed |
 | Sorting | Name, Type, Summary, Interval, Polarity, Hook, Notifiers, Last activity, State |
 | Visibility | hidden when no watches are configured for that panel's subset |
 
