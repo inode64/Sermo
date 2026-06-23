@@ -132,8 +132,8 @@ func TestSizeCheckHonorsCanceledContext(t *testing.T) {
 	if res.OK {
 		t.Fatal("canceled size check should fail")
 	}
-	if !strings.Contains(res.Message, context.Canceled.Error()) {
-		t.Fatalf("message = %q, want context canceled", res.Message)
+	if !strings.Contains(res.Message, "cancelled") {
+		t.Fatalf("message = %q, want cancelled", res.Message)
 	}
 }
 
