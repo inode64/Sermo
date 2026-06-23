@@ -89,6 +89,12 @@ type App struct {
 	// FetchDaemonServiceState returns the daemon-computed service state when
 	// sermod is running and the web API is reachable. ok is false when unavailable.
 	FetchDaemonServiceState func(ctx context.Context, opts options, service string) (string, bool)
+	// FetchDaemonWatchState returns the daemon-computed watch state when sermod is
+	// running and the web API is reachable. ok is false when unavailable.
+	FetchDaemonWatchState func(ctx context.Context, opts options, watch string) (string, bool)
+	// FetchDaemonApplicationStates returns daemon-computed application states keyed
+	// by catalog name. An empty map means the web API was unavailable.
+	FetchDaemonApplicationStates func(ctx context.Context, opts options) map[string]string
 	// PruneEvents is injectable for `sermoctl events clear` and
 	// `sermoctl activity clear`. Defaults to pruning the daemon's persisted event
 	// feed over HTTP using the config's web address/port (and password for auth if
@@ -208,6 +214,12 @@ func (a App) Run(ctx context.Context, args []string) int {
 	if a.FetchDaemonServiceState == nil {
 		a.FetchDaemonServiceState = a.fetchDaemonServiceState
 	}
+	if a.FetchDaemonWatchState == nil {
+		a.FetchDaemonWatchState = a.fetchDaemonWatchState
+	}
+	if a.FetchDaemonApplicationStates == nil {
+		a.FetchDaemonApplicationStates = a.fetchDaemonApplicationStates
+	}
 	if a.PruneEvents == nil {
 		a.PruneEvents = a.pruneDaemonEvents
 	}
@@ -283,6 +295,8 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runPreflight(ctx, opts)
 	case "daemon":
 		return a.runDaemon(ctx, opts)
+	case "watch":
+		return a.runWatch(ctx, opts)
 	case "events":
 		return a.runEvents(ctx, opts)
 	case "activity":
@@ -1434,6 +1448,43 @@ func (a App) fetchEvents(ctx context.Context, opts options, service string, limi
 	return evs, nil
 }
 
+func applyDaemonWebAuth(req *http.Request, cfg *config.Config) {
+	if wraw, ok := cfg.Global.Raw["web"].(map[string]any); ok {
+		if pw := cfgval.String(wraw["password"]); pw != "" {
+			cred := base64.StdEncoding.EncodeToString([]byte("admin:" + pw))
+			req.Header.Set("Authorization", "Basic "+cred)
+		}
+	}
+}
+
+// daemonAPIGet performs an authenticated GET against the running sermod web API.
+func (a App) daemonAPIGet(ctx context.Context, opts options, path string) ([]byte, int, error) {
+	cfg, err := a.LoadConfig(opts.globalPath())
+	if err != nil || cfg == nil {
+		return nil, 0, err
+	}
+	base, err := webAPIBase(cfg)
+	if err != nil {
+		return nil, 0, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+path, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	applyDaemonWebAuth(req, cfg)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+	return body, resp.StatusCode, nil
+}
+
 // fetchDaemonServiceState reads GET /api/services/{name} from the running
 // sermod web API and returns its computed state field.
 func (a App) fetchDaemonServiceState(ctx context.Context, opts options, service string) (string, bool) {
@@ -1447,37 +1498,61 @@ func (a App) fetchDaemonServiceState(ctx context.Context, opts options, service 
 	} else if len(cfg.Services) > 0 {
 		return "", false
 	}
-	base, err := webAPIBase(cfg)
-	if err != nil {
-		return "", false
-	}
-	u := fmt.Sprintf("%s/api/services/%s", base, url.PathEscape(name))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return "", false
-	}
-	if wraw, ok := cfg.Global.Raw["web"].(map[string]any); ok {
-		if pw := cfgval.String(wraw["password"]); pw != "" {
-			cred := base64.StdEncoding.EncodeToString([]byte("admin:" + pw))
-			req.Header.Set("Authorization", "Basic "+cred)
-		}
-	}
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", false
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	body, status, err := a.daemonAPIGet(ctx, opts, "/api/services/"+url.PathEscape(name))
+	if err != nil || status != http.StatusOK {
 		return "", false
 	}
 	var detail struct {
 		State string `json:"state"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&detail); err != nil || detail.State == "" {
+	if err := json.Unmarshal(body, &detail); err != nil || detail.State == "" {
 		return "", false
 	}
 	return detail.State, true
+}
+
+func (a App) fetchDaemonWatchState(ctx context.Context, opts options, watch string) (string, bool) {
+	body, status, err := a.daemonAPIGet(ctx, opts, "/api/watches")
+	if err != nil || status != http.StatusOK {
+		return "", false
+	}
+	var watches []struct {
+		Name  string `json:"name"`
+		State string `json:"state"`
+	}
+	if err := json.Unmarshal(body, &watches); err != nil {
+		return "", false
+	}
+	for _, w := range watches {
+		if w.Name == watch && w.State != "" {
+			return w.State, true
+		}
+	}
+	return "", false
+}
+
+func (a App) fetchDaemonApplicationStates(ctx context.Context, opts options) map[string]string {
+	body, status, err := a.daemonAPIGet(ctx, opts, "/api/applications")
+	if err != nil || status != http.StatusOK {
+		return nil
+	}
+	var apps []struct {
+		Name  string `json:"name"`
+		State string `json:"state"`
+	}
+	if err := json.Unmarshal(body, &apps); err != nil {
+		return nil
+	}
+	out := make(map[string]string, len(apps))
+	for _, app := range apps {
+		if app.Name != "" && app.State != "" {
+			out[app.Name] = app.State
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func webAPIBase(cfg *config.Config) (string, error) {

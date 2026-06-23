@@ -52,6 +52,15 @@ func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, 
 		inspectOpts = append(inspectOpts, appinspect.WithOptionalVersion())
 	}
 	reports := appinspect.List(ctx, a.Runner, cfg, category, includeMissing, inspectOpts...)
+	if category == config.CategoryApp && a.FetchDaemonApplicationStates != nil {
+		if states := a.FetchDaemonApplicationStates(ctx, opts); len(states) > 0 {
+			for i := range reports {
+				if st, ok := states[reports[i].Name]; ok && st != "" {
+					reports[i].Status = st
+				}
+			}
+		}
+	}
 
 	var notified []string
 	if category == config.CategoryService && len(opts.notifyNames) > 0 {

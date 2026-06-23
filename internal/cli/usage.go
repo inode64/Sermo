@@ -23,7 +23,7 @@ type commandGroup struct {
 var commandGroups = []commandGroup{
 	{
 		Title:    "Basics",
-		Commands: []string{"version", "backend", "status", "is-active"},
+		Commands: []string{"version", "backend", "status", "is-active", "watch"},
 	},
 	{
 		Title:    "Safe Service Operations",
@@ -102,6 +102,25 @@ var commandUsages = []commandUsage{
 		Examples: []string{
 			"sermoctl status nginx-main",
 			"sermoctl --json status mysql-main",
+		},
+	},
+	{
+		Name:    "watch",
+		Summary: "Query host-watch state from the running daemon.",
+		Usage: []string{
+			"sermoctl watch status WATCH",
+		},
+		Flags: []string{
+			"--json  print the watch state as JSON",
+		},
+		Notes: []string{
+			"When sermod is running with web enabled, watch status prefers the",
+			"daemon's computed state (including starting during startup settling).",
+			"Otherwise it reports ok.",
+		},
+		Examples: []string{
+			"sermoctl watch status storage-root",
+			"sermoctl --json watch status load",
 		},
 	},
 	{
@@ -369,6 +388,10 @@ var commandUsages = []commandUsage{
 		Flags: []string{
 			"all     include entries whose binary is not installed",
 			"--long  show full version command output",
+		},
+		Notes: []string{
+			"When sermod is running with web enabled, the STATUS column prefers the",
+			"daemon's computed state (including starting during startup settling).",
 		},
 	},
 	{
