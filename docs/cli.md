@@ -57,6 +57,7 @@ sermoctl backend
 sermoctl version
 sermoctl status SERVICE
 sermoctl is-active SERVICE
+sermoctl watch status WATCH
 sermoctl start SERVICE [--no-cascade]
 sermoctl stop SERVICE [--no-cascade]
 sermoctl restart SERVICE [--no-cascade]
