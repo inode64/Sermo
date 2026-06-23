@@ -3,9 +3,7 @@
 package notify
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -16,23 +14,12 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/utmp"
 )
 
-const (
-	linuxUtmpRecordSize = 384
-	linuxUserProcess    = 7
-	utmpLineOffset      = 8
-	utmpLineSize        = 32
-	utmpUserOffset      = 44
-	utmpUserSize        = 32
-)
-
-var nativeEndian = binary.NativeEndian
-
-type ttySession struct {
-	User string
-	Line string
-}
+// ttySession aliases utmp.Session so the notifier's terminal-targeting helpers
+// keep their names while the binary utmp parsing lives in internal/utmp.
+type ttySession = utmp.Session
 
 type ttyNotifier struct {
 	name      string
@@ -79,30 +66,8 @@ func (n *ttyNotifier) Type() string {
 	return n.typ
 }
 
-// ActiveUserCount reports the number of distinct users with an active login
-// session, read from utmp. It returns 0 when utmp is unreadable or empty, so it
-// is safe to call as a best-effort header stat. Reuses the same utmp parsing as
-// the tty/wall notifiers.
-func ActiveUserCount() int {
-	sessions, err := readUtmpSessions(nil)
-	if err != nil {
-		return 0
-	}
-	return distinctUsers(sessions)
-}
-
-func distinctUsers(sessions []ttySession) int {
-	users := make(map[string]struct{}, len(sessions))
-	for _, s := range sessions {
-		if s.User != "" {
-			users[s.User] = struct{}{}
-		}
-	}
-	return len(users)
-}
-
 func (n *ttyNotifier) Send(ctx context.Context, msg Message) error {
-	sessions, err := readUtmpSessions(n.utmpPaths)
+	sessions, err := utmp.SessionsFrom(n.utmpPaths)
 	if err != nil {
 		return err
 	}
@@ -174,50 +139,6 @@ func (n *ttyNotifier) targetTTYs(sessions []ttySession) []string {
 	}
 	slices.Sort(out)
 	return out
-}
-
-func readUtmpSessions(paths []string) ([]ttySession, error) {
-	if len(paths) == 0 {
-		paths = []string{"/run/utmp", "/var/run/utmp"}
-	}
-	var missing []string
-	for _, path := range paths {
-		data, err := os.ReadFile(path)
-		if errors.Is(err, os.ErrNotExist) {
-			missing = append(missing, path)
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("read utmp %s: %w", path, err)
-		}
-		return parseUtmp(data), nil
-	}
-	return nil, fmt.Errorf("read utmp: no utmp file found (%s)", strings.Join(missing, ", "))
-}
-
-func parseUtmp(data []byte) []ttySession {
-	var out []ttySession
-	for len(data) >= linuxUtmpRecordSize {
-		rec := data[:linuxUtmpRecordSize]
-		data = data[linuxUtmpRecordSize:]
-		if nativeEndian.Uint16(rec[:2]) != linuxUserProcess {
-			continue
-		}
-		line := cString(rec[utmpLineOffset : utmpLineOffset+utmpLineSize])
-		user := cString(rec[utmpUserOffset : utmpUserOffset+utmpUserSize])
-		if line == "" || user == "" {
-			continue
-		}
-		out = append(out, ttySession{User: user, Line: line})
-	}
-	return out
-}
-
-func cString(b []byte) string {
-	if i := bytes.IndexByte(b, 0); i >= 0 {
-		b = b[:i]
-	}
-	return strings.TrimSpace(string(b))
 }
 
 func ttyPath(devRoot, line string) (string, bool) {
