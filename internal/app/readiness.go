@@ -98,6 +98,8 @@ func (r *Readiness) markFirstCycle() {
 }
 
 // UpdateCounts refreshes the service and watch totals after a config reload.
+// watches includes app monitors as well as host watches (same set that gates
+// first-cycle readiness).
 func (r *Readiness) UpdateCounts(services, watches int) {
 	if r == nil {
 		return
