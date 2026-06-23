@@ -4,8 +4,6 @@ display_name: "NFS client tracking daemon"
 category: storage
 version_from: rpc-mountd
 variables:
-  binary:
-    - /usr/sbin/nfsdcld
-    - /usr/bin/nfsdcld
+  binary: ${bindir}/nfsdcld
 preflight:
   binary: { type: binary, path: "${binary}" }

@@ -1909,6 +1909,35 @@ keeps the first non-empty candidate so the runtime preflight reports the bad
 path explicitly instead of expanding to an empty string. Paths must be absolute
 after templating.
 
+### `${bindir}` search prefix
+
+When the only difference between the candidates is the standard binary
+directory, use the `${bindir}` prefix instead of listing them by hand. It
+expands at load time into one candidate per standard search directory, in order:
+
+```
+/usr/bin → /usr/sbin → /usr/local/bin → /usr/local/sbin
+```
+
+So `binary: ${bindir}/mysqld` is shorthand for:
+
+```yaml
+variables:
+  binary:
+    - /usr/bin/mysqld
+    - /usr/sbin/mysqld
+    - /usr/local/bin/mysqld
+    - /usr/local/sbin/mysqld
+```
+
+`${bindir}` is a prefix, not a standalone value: always write `${bindir}/<name>`.
+It composes with `${version}` templates (`${bindir}/php-fpm${version}`) and may
+be mixed with explicit paths inside a list when a binary also lives outside the
+standard directories. Because candidates resolve to the first one that exists,
+the selected path is the installed one regardless of search order. For binaries
+outside these four directories (e.g. `/opt/...`, `/usr/lib/...`), keep an
+explicit path.
+
 Use `variables.binary` plus an explicit
 preflight entry for apps, daemons and services. Libraries use the same pattern
 with `type: file`:

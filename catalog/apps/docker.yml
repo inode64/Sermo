@@ -4,9 +4,7 @@ display_name: "Docker Engine"
 category: virtualization
 variables:
   binary: /usr/bin/docker
-  daemon:
-    - /usr/bin/dockerd
-    - /usr/sbin/dockerd
+  daemon: ${bindir}/dockerd
   proxy_binary:
     - /usr/libexec/docker/docker-proxy
     - /usr/lib/docker/docker-proxy

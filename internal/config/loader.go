@@ -135,6 +135,7 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	}
 	cfg.applyOSSelectors()
 	cfg.bakeBuiltins()
+	cfg.expandBindir()
 	cfg.materializeVersionTemplates()
 	return cfg, nil
 }

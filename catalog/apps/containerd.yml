@@ -3,12 +3,8 @@ name: containerd
 display_name: "containerd"
 category: virtualization
 variables:
-  binary:
-    - /usr/bin/containerd
-    - /usr/sbin/containerd
-  shim_binary:
-    - /usr/bin/containerd-shim-runc-v2
-    - /usr/sbin/containerd-shim-runc-v2
+  binary: ${bindir}/containerd
+  shim_binary: ${bindir}/containerd-shim-runc-v2
 preflight:
   binary: { type: binary, path: "${binary}" }
   shim: { type: binary, path: "${shim_binary}", optional: true }

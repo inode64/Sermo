@@ -3,10 +3,8 @@ name: virtnetworkd
 display_name: "libvirt Network Daemon"
 category: virtualization
 variables:
-  binary: /usr/bin/virtnetworkd
-  dnsmasq_binary:
-    - /usr/sbin/dnsmasq
-    - /usr/bin/dnsmasq
+  binary: ${bindir}/virtnetworkd
+  dnsmasq_binary: ${bindir}/dnsmasq
 preflight:
   binary: { type: binary, path: "${binary}" }
   dnsmasq: { type: binary, path: "${dnsmasq_binary}", optional: true }
