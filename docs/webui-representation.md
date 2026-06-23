@@ -192,7 +192,7 @@ Section id: `apps-section`
 | Controls | search, category select, status filters, showing count |
 | Status filters | all, ok, starting, warning, failed |
 | Sorting | Application, Category, Status, Version |
-| Visibility | hidden when no installed apps are returned |
+| Visibility | hidden when no installed apps are returned; catalog apps without an installed binary are never listed and do not show `starting` during daemon settling |
 | Grouping | category group rows, collapsible |
 
 Columns:
