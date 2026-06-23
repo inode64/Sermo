@@ -53,6 +53,7 @@ type Samplers struct {
 	FirewallRulesSampler FirewallRulesSamplerFunc
 	EntropySampler       EntropySamplerFunc
 	ZombieSampler        ZombieSamplerFunc
+	UsersSampler         UsersSamplerFunc
 }
 
 // ApplyTo returns deps with every sampler from s copied into it.
@@ -77,6 +78,7 @@ func (s Samplers) ApplyTo(deps Deps) Deps {
 	deps.FirewallRulesSampler = s.FirewallRulesSampler
 	deps.EntropySampler = s.EntropySampler
 	deps.ZombieSampler = s.ZombieSampler
+	deps.UsersSampler = s.UsersSampler
 	return deps
 }
 
@@ -115,6 +117,8 @@ type Deps struct {
 	RouteSampler RouteSamplerFunc
 	// LoadSampler reads load averages for `load` checks. Nil reads /proc.
 	LoadSampler LoadSamplerFunc
+	// UsersSampler counts logged-in users for `users` checks. Nil reads utmp.
+	UsersSampler UsersSamplerFunc
 	// OomSampler reads the cumulative OOM-kill counter for `oom` checks. Nil reads
 	// /proc/vmstat.
 	OomSampler OomSamplerFunc
@@ -308,6 +312,8 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildNetCheck(b, entry, deps)
 	case "load":
 		return buildLoadCheck(b, entry, deps)
+	case "users":
+		return buildUsersCheck(b, entry, deps)
 	case "hdparm":
 		return buildHdparmCheck(b, entry, runner)
 	case "sensors":
@@ -934,6 +940,15 @@ func buildLoadCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		return nil, errs
 	}
 	return loadCheck{base: b, preds: preds, perCPU: cfgval.Bool(entry["per_cpu"]), sampler: deps.LoadSampler}, ""
+}
+
+// buildUsersCheck builds a logged-in-user count check.
+func buildUsersCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	preds, errs := requireLevelPreds(entry, UsersPredFields, "users check")
+	if errs != "" {
+		return nil, errs
+	}
+	return usersCheck{base: b, preds: preds, sampler: deps.UsersSampler}, ""
 }
 
 // buildHdparmCheck builds a disk-throughput check (hdparm -t/-T).

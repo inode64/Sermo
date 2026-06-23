@@ -16,6 +16,7 @@ var graphMetrics = map[string][]GraphMetric{
 	"sensors": {{Key: "temp", Unit: "°C"}, {Key: "fan", Unit: "RPM"}},
 	"smart":   {{Key: "temperature", Unit: "°C"}, {Key: "reallocated", Unit: ""}, {Key: "wear", Unit: "%"}, {Key: "power_on_hours", Unit: "h"}},
 	"edac":    {{Key: "ce", Unit: ""}, {Key: "ue", Unit: ""}},
+	"users":   {{Key: "count", Unit: "users"}},
 }
 
 // GraphMetrics returns the graphable metrics declared for a check type, or nil

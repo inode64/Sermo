@@ -10,39 +10,6 @@ import (
 	"time"
 )
 
-func TestDistinctUsers(t *testing.T) {
-	cases := []struct {
-		name string
-		in   []ttySession
-		want int
-	}{
-		{"empty", nil, 0},
-		{"two sessions one user", []ttySession{{User: "fran", Line: "pts/0"}, {User: "fran", Line: "pts/1"}}, 1},
-		{"two users", []ttySession{{User: "fran", Line: "pts/0"}, {User: "root", Line: "tty1"}}, 2},
-		{"blank user ignored", []ttySession{{User: "", Line: "pts/0"}, {User: "root", Line: "tty1"}}, 1},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := distinctUsers(tc.in); got != tc.want {
-				t.Errorf("distinctUsers(%v) = %d, want %d", tc.in, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestParseUtmpUserSessions(t *testing.T) {
-	data := append(utmpRecord(linuxUserProcess, "pts/0", "root"), utmpRecord(2, "tty1", "login")...)
-	data = append(data, utmpRecord(linuxUserProcess, "pts/1", "fran")...)
-
-	got := parseUtmp(data)
-	if len(got) != 2 {
-		t.Fatalf("parseUtmp returned %d sessions: %+v", len(got), got)
-	}
-	if got[0] != (ttySession{User: "root", Line: "pts/0"}) || got[1] != (ttySession{User: "fran", Line: "pts/1"}) {
-		t.Fatalf("parseUtmp = %+v", got)
-	}
-}
-
 func TestTTYNotifierTargetsFilterUsersAndUnsafeLines(t *testing.T) {
 	n := &ttyNotifier{users: stringSet([]string{"root"}), devRoot: "/dev"}
 	got := n.targetTTYs([]ttySession{
@@ -126,12 +93,4 @@ func TestTTYNotifierPartialFailureReportsError(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "delivered to 1 terminal") {
 		t.Fatalf("partial failure error = %v", err)
 	}
-}
-
-func utmpRecord(typ uint16, line, user string) []byte {
-	rec := make([]byte, linuxUtmpRecordSize)
-	nativeEndian.PutUint16(rec[:2], typ)
-	copy(rec[utmpLineOffset:utmpLineOffset+utmpLineSize], line)
-	copy(rec[utmpUserOffset:utmpUserOffset+utmpUserSize], user)
-	return rec
 }
