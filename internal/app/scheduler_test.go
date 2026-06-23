@@ -12,6 +12,76 @@ import (
 	"sermo/internal/operation"
 )
 
+func TestStaggerOffsetSpreadsAcrossInterval(t *testing.T) {
+	const interval = 100 * time.Millisecond
+	// 4 targets fan out evenly: 0, 25, 50, 75ms — first immediate, none at a full
+	// interval (so nobody collides with the next tick).
+	want := []time.Duration{0, 25 * time.Millisecond, 50 * time.Millisecond, 75 * time.Millisecond}
+	for i, w := range want {
+		if got := staggerOffset(i, len(want), interval); got != w {
+			t.Fatalf("staggerOffset(%d,4) = %v, want %v", i, got, w)
+		}
+	}
+	// Degenerate cases stay at 0 (single target starts immediately; no division by zero).
+	if staggerOffset(0, 1, interval) != 0 || staggerOffset(0, 0, interval) != 0 {
+		t.Fatal("single/zero target must start immediately")
+	}
+}
+
+// TestSchedulerGateWaitsForFirstCycles checks that with gateReady=true the daemon
+// stays "starting" until every target (here two watches) has run its first cycle.
+func TestSchedulerGateWaitsForFirstCycles(t *testing.T) {
+	ready := NewReadiness("systemd", 0, 0)
+	var ran int32
+	mkWatch := func(name string) *Watch {
+		return &Watch{
+			Name:     name,
+			Interval: time.Second, // slow; only the staggered first cycle runs in-window
+			Check: checkFunc(func(context.Context) checks.Result {
+				atomic.AddInt32(&ran, 1)
+				return checks.Result{OK: true}
+			}),
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		Scheduler{Interval: 20 * time.Millisecond}.Run(ctx, nil, []*Watch{mkWatch("a"), mkWatch("b")}, nil, ready, false, true)
+		close(done)
+	}()
+
+	deadline := time.After(2 * time.Second)
+	for {
+		if atomic.LoadInt32(&ran) >= 2 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("watches did not run their first cycle (ran=%d)", atomic.LoadInt32(&ran))
+		case <-time.After(2 * time.Millisecond):
+		}
+	}
+	// Give markFirstCycle a beat to flip readiness after the last RunCycle returns.
+	for i := 0; i < 100; i++ {
+		if ready.Report(context.Background()).Ready {
+			break
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	if rep := ready.Report(context.Background()); !rep.Ready || rep.Status != "ok" {
+		t.Fatalf("gate should be ready after both first cycles: %+v", rep)
+	}
+	cancel()
+	<-done
+}
+
+// checkFunc adapts a function to checks.Check for tests.
+type checkFunc func(context.Context) checks.Result
+
+func (f checkFunc) Name() string                          { return "fn" }
+func (f checkFunc) Run(ctx context.Context) checks.Result { return f(ctx) }
+
 func TestSchedulerRunsCyclesAndShutsDown(t *testing.T) {
 	var a, b int32
 	counter := func(n *int32) func(context.Context, checks.Deps) map[string]checks.Result {
@@ -30,7 +100,7 @@ func TestSchedulerRunsCyclesAndShutsDown(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, workers, nil, nil, nil, true)
+		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, workers, nil, nil, nil, true, false)
 		close(done)
 	}()
 
@@ -63,7 +133,7 @@ func TestSchedulerHonorsPerWorkerInterval(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 100 * time.Millisecond}.Run(ctx, workers, nil, nil, nil, true)
+		Scheduler{Interval: 100 * time.Millisecond}.Run(ctx, workers, nil, nil, nil, true, false)
 		close(done)
 	}()
 
@@ -94,7 +164,7 @@ func TestSchedulerStartupDelayHoldsBeforeFirstCycle(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 60 * time.Millisecond}.Run(ctx, workers, nil, nil, nil, true)
+		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 60 * time.Millisecond}.Run(ctx, workers, nil, nil, nil, true, false)
 		close(done)
 	}()
 
@@ -129,7 +199,7 @@ func TestSchedulerStartupDelayInterruptedByShutdown(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: time.Hour}.Run(ctx, workers, nil, nil, nil, true)
+		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: time.Hour}.Run(ctx, workers, nil, nil, nil, true, false)
 		close(done)
 	}()
 
@@ -162,7 +232,7 @@ func TestSchedulerRunsWatches(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, nil, []*Watch{w}, nil, nil, true)
+		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, nil, []*Watch{w}, nil, nil, true, false)
 		close(done)
 	}()
 
@@ -272,7 +342,7 @@ func TestSchedulerRunsWatchWithCustomInjectedRunnerVerifiesEnv(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 10 * time.Millisecond}.Run(ctx, nil, []*Watch{w}, nil, nil, true)
+		Scheduler{Interval: 10 * time.Millisecond}.Run(ctx, nil, []*Watch{w}, nil, nil, true, false)
 		close(done)
 	}()
 

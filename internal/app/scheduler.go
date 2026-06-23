@@ -31,7 +31,7 @@ type cycler interface {
 // wrapped so it waits for a global operation slot, pausing only that service's
 // monitoring. Watches run on their own goroutines using their own interval.
 // When finalShutdown is false (config reload), readiness is left unchanged.
-func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch, opGate *OpGate, ready *Readiness, finalShutdown bool) {
+func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch, opGate *OpGate, ready *Readiness, finalShutdown, gateReady bool) {
 	if opGate == nil {
 		opGate = NewOpGate(s.OpSlots, "")
 	}
@@ -51,25 +51,40 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 			return
 		}
 	}
-	if ready != nil {
+
+	// On the first boot, hold the daemon at "starting" until every target has run
+	// its first cycle (so it has data); each cycler reports via onFirstCycle. On a
+	// config reload the daemon is already up, so mark it ready right away.
+	total := len(workers) + len(watches)
+	var onFirstCycle func()
+	if gateReady {
+		ready.ExpectFirstCycles(total)
+		if ready != nil {
+			onFirstCycle = ready.markFirstCycle
+		}
+	} else if ready != nil {
 		ready.MarkReady()
 	}
 
+	// Stagger the first cycle of the whole fleet (workers + watches, including the
+	// slow app-watches) across one general interval, ignoring each target's own
+	// interval for that first cycle only. This avoids a startup stampede — every
+	// app probe firing at once — while still checking everything within ~one
+	// interval; runCycler then reverts each target to its own cadence.
 	var wg sync.WaitGroup
-	for i, w := range workers {
+	idx := 0
+	for _, w := range workers {
 		gateOperate(w, opGate)
-		// Each worker runs at its own `interval` when set, falling back to the
-		// global engine interval. Starts are still spread across one global
-		// interval so a fleet of services does not all probe on the same tick.
 		wi := w.Interval
 		if wi <= 0 {
 			wi = interval
 		}
-		offset := time.Duration(int64(interval) * int64(i) / int64(len(workers)))
+		offset := staggerOffset(idx, total, interval)
+		idx++
 		wg.Add(1)
 		go func(w *Worker, wi, offset time.Duration) {
 			defer wg.Done()
-			runCycler(ctx, w, wi, offset)
+			runCycler(ctx, w, wi, offset, onFirstCycle)
 		}(w, wi, offset)
 	}
 	for _, wt := range watches {
@@ -77,11 +92,13 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 		if wi <= 0 {
 			wi = interval
 		}
+		offset := staggerOffset(idx, total, interval)
+		idx++
 		wg.Add(1)
-		go func(wt *Watch, wi time.Duration) {
+		go func(wt *Watch, wi, offset time.Duration) {
 			defer wg.Done()
-			runCycler(ctx, wt, wi, 0)
-		}(wt, wi)
+			runCycler(ctx, wt, wi, offset, onFirstCycle)
+		}(wt, wi, offset)
 	}
 	wg.Wait()
 	if finalShutdown && ready != nil {
@@ -89,19 +106,40 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 	}
 }
 
+// staggerOffset spreads target idx of total evenly across one interval, so the
+// whole fleet's first cycle is staggered instead of stampeding at startup. The
+// first target starts immediately and the rest fan out up to (just under) one
+// interval later.
+func staggerOffset(idx, total int, interval time.Duration) time.Duration {
+	if total <= 0 {
+		return 0
+	}
+	return time.Duration(int64(interval) * int64(idx) / int64(total))
+}
+
 // runCycler ticks a cycler from cycle completion: jitter, then cycle, then wait
-// one interval, repeat. A cancelled context stops between cycles (// never start a new operation during shutdown).
-func runCycler(ctx context.Context, c cycler, interval, offset time.Duration) {
+// one interval, repeat. A cancelled context stops between cycles (never start a
+// new operation during shutdown). onFirstCycle, when set, fires once right after
+// the first RunCycle returns — the readiness gate uses it to learn the target has
+// data.
+func runCycler(ctx context.Context, c cycler, interval, offset time.Duration, onFirstCycle func()) {
 	if offset > 0 {
 		if !sleepCtx(ctx, offset) {
 			return
 		}
 	}
+	first := true
 	for {
 		if ctx.Err() != nil {
 			return
 		}
 		c.RunCycle(ctx)
+		if first {
+			first = false
+			if onFirstCycle != nil {
+				onFirstCycle()
+			}
+		}
 		if !sleepCtx(ctx, interval) {
 			return
 		}
