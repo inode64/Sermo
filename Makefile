@@ -63,7 +63,7 @@ config_subst = sed -e 's|\.\./catalog|$(SERMO_DATADIR)/catalog|g' -e 's|/usr/sha
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
-.PHONY: all build test vet fmt fmt-check lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate validate check cover tidy clean \
+.PHONY: all build test vet fmt fmt-check lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate web web-check validate check cover tidy clean \
         install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
@@ -90,8 +90,26 @@ yaml-lint:
 
 yaml-validate: yaml-fmt-check yaml-lint
 
+# Regenerate the embedded dashboard (internal/web/index.html) from its sources
+# in internal/web/src using esbuild's Go API (in-process, no Node/npm). Run this
+# after editing anything under internal/web/src and commit the result.
+web:
+	go run ./internal/web/build
+
+# Fail if the committed internal/web/index.html is out of date with its sources.
+# Modeled on fmt-check; runs in CI via validate so a stale bundle can't land.
+web-check:
+	@tmp="$$(mktemp)"; \
+	go run ./internal/web/build -out "$$tmp"; \
+	if ! cmp -s "$$tmp" internal/web/index.html; then \
+		rm -f "$$tmp"; \
+		echo "internal/web/index.html is stale; run 'make web' and commit the result"; \
+		exit 1; \
+	fi; \
+	rm -f "$$tmp"
+
 # Formatting and static analysis gates; make test and make check run this first.
-validate: lint yaml-validate
+validate: lint yaml-validate web-check
 
 test: validate
 	go test ./...

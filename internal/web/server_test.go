@@ -267,7 +267,10 @@ func TestServesDashboard(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `<script nonce="`) || !strings.Contains(rec.Body.String(), `<style nonce="`) {
 		t.Fatalf("dashboard did not receive CSP nonce attributes")
 	}
-	for _, want := range []string{"usagebar-fill", "usagebar-label", "function storageUsedPct", `style="--usage-pct:${p.toFixed(2)}%"`, "usage-crit", `data-watch-action="expand"`, "confirmWatchExpand"} {
+	// The served page is built from internal/web/src by esbuild, so JS function
+	// names are minified away. Assert on markers that survive minification: CSS
+	// class selectors and the verbatim attribute strings in template literals.
+	for _, want := range []string{"usagebar-fill", "usagebar-label", "usage-crit", `data-watch-action="expand"`} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Fatalf("dashboard missing storage usage UI marker %q", want)
 		}
