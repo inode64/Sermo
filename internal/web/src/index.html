@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sermo</title>
+<link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Ccircle%20cx='8'%20cy='8'%20r='7'%20fill='%238b96a5'/%3E%3C/svg%3E">
+<style nonce="{{CSP_NONCE}}">
+/*__SERMO_CSS__*/
+</style>
+</head>
+<body>
+<div id="topbar">
+<div class="topbar-row">
+  <h1><span class="brand-dot" id="brand-dot"></span>SERMO · Service Remediation Monitor<span id="me" class="muted"></span></h1>
+  <div class="topbar-tools">
+    <label>Auto-refresh
+      <select id="refresh-select">
+        <option value="5000">5s</option>
+        <option value="10000">10s</option>
+        <option value="30000">30s</option>
+        <option value="60000">1m</option>
+        <option value="120000">2m</option>
+        <option value="0">stop</option>
+      </select>
+    </label>
+    <span id="last-refresh" class="muted"></span>
+    <button id="refresh-now" title="Refresh now">&#x27F3;</button>
+  </div>
+</div>
+<div id="system-status"></div>
+<div id="statusbar"></div>
+</div><!-- /topbar -->
+<div id="panic-banner" role="alert">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+  <span>PANIC MODE — hooks, alerts and automatic remediation are suspended.</span>
+</div>
+<div id="overview"></div>
+<div id="err"></div>
+<div id="attention"></div>
+<div id="op-live"></div>
+<details id="storage-section" open style="display:none">
+  <summary>Storage <span id="storage-count" class="muted"></span></summary>
+  <div id="storage-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+    <input id="storage-search" type="search" placeholder="filter storage watches…">
+    <select id="storage-type" title="Filter by type" aria-label="Filter storage watches by type">
+      <option value="all">all storage types</option>
+    </select>
+    <span id="storage-filters">
+      <button data-wf="all" class="f-active">all</button>
+      <button data-wf="disabled">disabled</button>
+      <button data-wf="ok">ok</button>
+      <button data-wf="monitorized">monitorized</button>
+      <button data-wf="unmonitorized">unmonitorized</button>
+      <button data-wf="starting">starting</button>
+      <button data-wf="failed">failed</button>
+    </span>
+    <span id="storage-filter-count" class="muted"></span>
+  </div>
+  <table class="watch-table">
+    <thead><tr>
+      <th class="sortable" data-watch-sort="name">Name<span class="sort-ind" data-wi="name"></span></th>
+      <th class="sortable" data-watch-sort="type">Type<span class="sort-ind" data-wi="type"></span></th>
+      <th class="sortable" data-watch-sort="summary">Summary<span class="sort-ind" data-wi="summary"></span></th>
+      <th class="sortable" data-watch-sort="interval">Interval<span class="sort-ind" data-wi="interval"></span></th>
+      <th class="sortable" data-watch-sort="polarity">Polarity<span class="sort-ind" data-wi="polarity"></span></th>
+      <th class="sortable" data-watch-sort="hook">Hook<span class="sort-ind" data-wi="hook"></span></th>
+      <th class="sortable" data-watch-sort="notifiers">Notifiers<span class="sort-ind" data-wi="notifiers"></span></th>
+      <th class="sortable" data-watch-sort="last">Last activity<span class="sort-ind" data-wi="last"></span></th>
+      <th class="sortable" data-watch-sort="state">State<span class="sort-ind" data-wi="state"></span></th>
+      <th>Actions</th>
+    </tr></thead>
+    <tbody id="storage-rows"></tbody>
+  </table>
+  <p class="muted" style="font-size:.8rem">Storage host watches monitor volume usage and can grow volumes via <code>then.expand</code>. Other host watches are listed below.</p>
+</details>
+
+<details id="services-section" open>
+  <summary>
+    <span class="summary-title">Services <span id="services-count" class="muted"></span></span>
+    <span class="panel-tools">
+      <button id="svc-group-toggle" class="icon-btn" title="Group services by category" aria-label="Group services by category" aria-pressed="false">&#x25A6;</button>
+      <button id="svc-groups-toggle" class="icon-btn" title="Collapse service groups" aria-label="Collapse service groups">&#x25BE;</button>
+    </span>
+  </summary>
+  <div id="svc-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+    <input id="svc-search" type="search" placeholder="filter services…  ( / )">
+    <select id="svc-category" title="Filter by category" aria-label="Filter services by category">
+      <option value="all">all categories</option>
+    </select>
+    <span id="svc-filters">
+      <button data-f="all" class="f-active">all</button>
+      <button data-f="disabled">disabled</button>
+      <button data-f="running">running</button>
+      <button data-f="paused">paused</button>
+      <button data-f="stopped">stopped</button>
+      <button data-f="unmonitorized">unmonitorized</button>
+      <button data-f="monitorized">monitorized</button>
+      <button data-f="starting">starting</button>
+      <button data-f="failed">failed</button>
+    </span>
+    <span id="svc-count" class="muted"></span>
+  </div>
+  <table class="services-table">
+    <thead>
+      <tr>
+        <th class="sortable" data-sort="name">Service<span class="sort-ind" data-si="name"></span></th>
+        <th class="sortable" data-sort="category">Category<span class="sort-ind" data-si="category"></span></th>
+        <th class="sortable" data-sort="state">State<span class="sort-ind" data-si="state"></span></th>
+        <th>Uptime</th>
+        <th>CPU total</th>
+        <th>Memory</th>
+        <th>IO R/W</th>
+        <th class="actions">Actions</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <p id="ops" class="muted" style="margin:.6rem 0 0"></p>
+</details>
+
+<details id="network-section" open style="display:none">
+  <summary>Network <span id="network-count" class="muted"></span></summary>
+  <div id="network-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+    <input id="network-search" type="search" placeholder="filter network watches…">
+    <select id="network-type" title="Filter by type" aria-label="Filter network watches by type">
+      <option value="all">all network types</option>
+    </select>
+    <span id="network-filters">
+      <button data-wf="all" class="f-active">all</button>
+      <button data-wf="disabled">disabled</button>
+      <button data-wf="ok">ok</button>
+      <button data-wf="monitorized">monitorized</button>
+      <button data-wf="unmonitorized">unmonitorized</button>
+      <button data-wf="starting">starting</button>
+      <button data-wf="failed">failed</button>
+    </span>
+    <span id="network-filter-count" class="muted"></span>
+  </div>
+  <table class="watch-table">
+    <thead><tr>
+      <th class="sortable" data-watch-sort="name">Name<span class="sort-ind" data-wi="name"></span></th>
+      <th class="sortable" data-watch-sort="type">Type<span class="sort-ind" data-wi="type"></span></th>
+      <th class="sortable" data-watch-sort="summary">Summary<span class="sort-ind" data-wi="summary"></span></th>
+      <th class="sortable" data-watch-sort="interval">Interval<span class="sort-ind" data-wi="interval"></span></th>
+      <th class="sortable" data-watch-sort="polarity">Polarity<span class="sort-ind" data-wi="polarity"></span></th>
+      <th class="sortable" data-watch-sort="hook">Hook<span class="sort-ind" data-wi="hook"></span></th>
+      <th class="sortable" data-watch-sort="notifiers">Notifiers<span class="sort-ind" data-wi="notifiers"></span></th>
+      <th class="sortable" data-watch-sort="last">Last activity<span class="sort-ind" data-wi="last"></span></th>
+      <th class="sortable" data-watch-sort="state">State<span class="sort-ind" data-wi="state"></span></th>
+      <th>Actions</th>
+    </tr></thead>
+    <tbody id="network-rows"></tbody>
+  </table>
+  <p class="muted" style="font-size:.8rem">Network host watches (connectivity and reachability). Other host watches are listed below.</p>
+</details>
+
+<details id="apps-section" open style="display:none">
+  <summary>
+    <span class="summary-title">Installed applications <span id="apps-count" class="muted"></span></span>
+    <span class="panel-tools">
+      <button id="app-group-toggle" class="icon-btn" title="Group applications by category" aria-label="Group applications by category" aria-pressed="false">&#x25A6;</button>
+      <button id="app-groups-toggle" class="icon-btn" title="Collapse application groups" aria-label="Collapse application groups">&#x25BE;</button>
+    </span>
+  </summary>
+  <div id="app-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+    <input id="app-search" type="search" placeholder="filter applications…">
+    <select id="app-category" title="Filter by category" aria-label="Filter applications by category">
+      <option value="all">all categories</option>
+    </select>
+    <span id="app-filters">
+      <button data-af="all" class="f-active">all</button>
+      <button data-af="ok">ok</button>
+      <button data-af="starting">starting</button>
+      <button data-af="warning">warning</button>
+      <button data-af="failed">failed</button>
+    </span>
+    <span id="app-count" class="muted"></span>
+  </div>
+  <table class="apps-table">
+    <thead><tr>
+      <th class="sortable" data-app-sort="name">Application<span class="sort-ind" data-ai="name"></span></th>
+      <th class="sortable" data-app-sort="category">Category<span class="sort-ind" data-ai="category"></span></th>
+      <th class="sortable" data-app-sort="state">Status<span class="sort-ind" data-ai="state"></span></th>
+      <th class="sortable" data-app-sort="version">Version<span class="sort-ind" data-ai="version"></span></th>
+    </tr></thead>
+    <tbody id="app-rows"></tbody>
+  </table>
+  <p class="muted" style="font-size:.8rem">Applications installed on the host (their binary is present). Click a row for the full version, file location, permissions, user and group.</p>
+</details>
+
+<details id="watches-section" open style="display:none">
+  <summary>Host watches <span id="watches-count" class="muted"></span></summary>
+  <div id="watch-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+    <input id="watch-search" type="search" placeholder="filter watches…">
+    <select id="watch-type" title="Filter by type" aria-label="Filter watches by type">
+      <option value="all">all host types</option>
+    </select>
+    <span id="watch-filters">
+      <button data-wf="all" class="f-active">all</button>
+      <button data-wf="disabled">disabled</button>
+      <button data-wf="ok">ok</button>
+      <button data-wf="monitorized">monitorized</button>
+      <button data-wf="unmonitorized">unmonitorized</button>
+      <button data-wf="starting">starting</button>
+      <button data-wf="failed">failed</button>
+    </span>
+    <span id="watch-count" class="muted"></span>
+  </div>
+  <table class="watch-table">
+    <thead><tr>
+      <th class="sortable" data-watch-sort="name">Name<span class="sort-ind" data-wi="name"></span></th>
+      <th class="sortable" data-watch-sort="type">Type<span class="sort-ind" data-wi="type"></span></th>
+      <th class="sortable" data-watch-sort="summary">Summary<span class="sort-ind" data-wi="summary"></span></th>
+      <th class="sortable" data-watch-sort="interval">Interval<span class="sort-ind" data-wi="interval"></span></th>
+      <th class="sortable" data-watch-sort="polarity">Polarity<span class="sort-ind" data-wi="polarity"></span></th>
+      <th class="sortable" data-watch-sort="hook">Hook<span class="sort-ind" data-wi="hook"></span></th>
+      <th class="sortable" data-watch-sort="notifiers">Notifiers<span class="sort-ind" data-wi="notifiers"></span></th>
+      <th class="sortable" data-watch-sort="last">Last activity<span class="sort-ind" data-wi="last"></span></th>
+      <th class="sortable" data-watch-sort="state">State<span class="sort-ind" data-wi="state"></span></th>
+      <th>Actions</th>
+    </tr></thead>
+    <tbody id="watch-rows"></tbody>
+  </table>
+  <p class="muted" style="font-size:.8rem">Host watches run independently of services and fire hooks/notifiers on thresholds or changes. See the Events log for activity.</p>
+</details>
+
+<details id="events-section" open>
+  <summary>Events <span class="muted">(shadow events appear when a service uses <code>remediation: {shadow: true}</code>)</span></summary>
+  <div id="event-controls">
+    <input id="event-service" type="text" placeholder="service">
+    <input id="event-watch" type="text" placeholder="watch">
+    <input id="event-kind" type="text" placeholder="kind">
+    <input id="event-status" type="text" placeholder="status">
+    <label class="muted"><input id="event-errors" type="checkbox"> only errors</label>
+    <label class="muted"><input id="event-group" type="checkbox" checked> group actions</label>
+    <button id="event-reset-filters" type="button">reset filters</button>
+    <input id="event-before" type="text" placeholder="before (e.g. 720h)" title="Optional: clear only events older than this duration or RFC3339 timestamp">
+    <button id="event-clear" class="danger-btn" type="button" style="display:none">clear log</button>
+    <span id="event-count" class="muted"></span>
+  </div>
+  <table class="events">
+    <thead><tr>
+      <th class="sortable" data-ev-sort="time">Time<span class="sort-ind" data-ei="time"></span></th>
+      <th class="sortable" data-ev-sort="subject">Service / watch<span class="sort-ind" data-ei="subject"></span></th>
+      <th class="sortable" data-ev-sort="kind">Kind<span class="sort-ind" data-ei="kind"></span></th>
+      <th class="sortable" data-ev-sort="message">Message<span class="sort-ind" data-ei="message"></span></th>
+    </tr></thead>
+    <tbody id="events"></tbody>
+  </table>
+</details>
+
+<details id="mounts-section" style="display:none">
+  <summary>Mount units <span id="mounts-count" class="muted"></span></summary>
+  <table>
+    <thead><tr><th>Name</th><th>Path</th><th>Mounted</th><th>Refcount</th><th>Source</th><th>State</th></tr></thead>
+    <tbody id="mount-rows"></tbody>
+  </table>
+  <p class="muted" style="font-size:.8rem">Configured fstab-backed mount units managed by Sermo refcounting (<code>sermoctl mount</code> / <code>umount</code>).</p>
+</details>
+
+<details id="notifiers-section" style="display:none">
+  <summary>Notifiers <span id="notifiers-count" class="muted"></span></summary>
+  <table>
+    <thead><tr><th>Name</th><th>Type</th><th>Destination</th><th>Watches</th><th>State</th></tr></thead>
+    <tbody id="notifier-rows"></tbody>
+  </table>
+  <p class="muted" style="font-size:.8rem">Named targets that watches can notify (email, slack, ...).</p>
+</details>
+
+<details id="daemon-section">
+  <summary>Daemon / Engine settings</summary>
+  <div style="display:flex; flex-wrap:wrap; gap:1.5rem; font-size:.9rem;">
+    <div>
+      <div style="font-weight:600; margin-bottom:.25rem;">Daemon</div>
+      <div>Backend: <b id="daemon-backend"></b></div>
+      <div>Config: <code id="daemon-config" style="font-size:.8rem;"></code></div>
+      <div>Runtime: <code id="daemon-runtime" style="font-size:.8rem;"></code></div>
+      <div>State: <code id="daemon-state" style="font-size:.8rem;"></code></div>
+    </div>
+    <div>
+      <div style="font-weight:600; margin-bottom:.25rem;">Engine</div>
+      <div>Interval: <b id="engine-interval"></b></div>
+      <div>Max parallel checks: <b id="engine-max-checks"></b></div>
+      <div>Max parallel ops: <b id="engine-max-ops"></b></div>
+      <div>Default timeout: <b id="engine-default-timeout"></b></div>
+      <div>Operation timeout: <b id="engine-op-timeout"></b></div>
+      <div>Startup delay: <b id="engine-startup-delay"></b></div>
+    </div>
+    <div>
+      <div style="font-weight:600; margin-bottom:.25rem;">Runtime</div>
+      <div>Started: <b id="daemon-started"></b></div>
+      <div>Uptime: <b id="daemon-uptime"></b></div>
+      <div>Go: <span id="daemon-go" class="muted"></span></div>
+      <div>Ready: <span id="daemon-ready"></span></div>
+    </div>
+  </div>
+  <div style="display:flex; flex-wrap:wrap; gap:1.5rem; font-size:.9rem; margin-top:.75rem;">
+    <div>PID: <b id="daemon-pid"></b></div>
+    <div>CPU: <b id="daemon-cpu-live"></b></div>
+    <div>Memory: <b id="daemon-memory-live"></b></div>
+    <div>IO: <b id="daemon-io-live"></b></div>
+    <div>FDs: <b id="daemon-fds"></b></div>
+    <div>Threads: <b id="daemon-threads"></b></div>
+  </div>
+  <div style="margin-top:.75rem;">
+    <div style="font-weight:600; margin-bottom:.25rem;">Process metrics <span id="daemon-metric-windows" class="muted" style="font-weight:400"></span></div>
+    <div class="muted" id="daemon-metric-summary">loading…</div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:1rem; margin-top:.5rem;">
+      <div><div class="muted">CPU</div><div id="daemon-cpu-chart" class="muted chart-box">loading…</div></div>
+      <div><div class="muted">Memory</div><div id="daemon-memory-chart" class="muted chart-box">loading…</div></div>
+      <div><div class="muted">IO</div><div id="daemon-io-chart" class="muted chart-box">loading…</div></div>
+    </div>
+  </div>
+</details>
+
+<details id="activity-section">
+  <summary>Recent activity <span class="muted">(last 500 events)</span></summary>
+  <div style="display:flex; gap:1.25rem; flex-wrap:wrap; font-size:.9rem;">
+    <div>Service actions: <b id="act-service"></b></div>
+    <div>Watch hooks: <b id="act-hooks"></b></div>
+    <div>Watch notifies: <b id="act-notify"></b></div>
+    <div>Errors: <b id="act-errors" class="bad"></b></div>
+    <div id="act-last" class="muted" style="flex:1; min-width:180px;"></div>
+    <button id="activity-clear" class="danger-btn" type="button" style="display:none">clear log</button>
+  </div>
+</details>
+
+<section id="locks-section" style="margin-top:1rem; display:none">
+  <h2 style="font-size:1.05rem">Runtime Locks <span id="locks-count" class="muted"></span></h2>
+  <table>
+    <thead><tr><th>Service</th><th>Name</th><th>State</th><th>TTL</th><th>Owner</th><th>Created</th><th>Blocks</th><th>Reason</th><th></th></tr></thead>
+    <tbody id="locks-rows"></tbody>
+  </table>
+  <p class="muted" style="font-size:.8rem">Named runtime locks that can block start/stop/restart/reload/resume (manual or automatic). Stale/expired locks are shown for awareness.</p>
+</section>
+
+<dialog id="action-confirm">
+  <div class="modal-head">
+    <h2 id="confirm-title" style="font-size:1.05rem; margin:0"></h2>
+    <div id="confirm-subtitle" class="muted" style="font-size:.85rem; margin-top:.15rem"></div>
+  </div>
+  <div id="confirm-body" class="modal-body"></div>
+  <label id="confirm-no-cascade-wrap" class="muted" style="display:none; font-size:.85rem; margin:.35rem 0 .15rem;">
+    <input id="confirm-no-cascade" type="checkbox"> operate only this service (skip <code>also_apply</code>)
+  </label>
+  <div class="modal-foot">
+    <button data-confirm-result="false">cancel</button>
+    <button id="confirm-preflight-btn">run preflight</button>
+    <button id="confirm-action-btn" class="danger-btn" data-confirm-result="true">confirm</button>
+  </div>
+</dialog>
+
+<dialog id="panic-confirm">
+  <div class="modal-head">
+    <h2 id="panic-title" style="font-size:1.05rem; margin:0"></h2>
+  </div>
+  <div class="modal-body panic-dialog-body">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <div id="panic-message"></div>
+  </div>
+  <div class="modal-foot">
+    <button id="panic-cancel-btn" data-panic-result="false">cancel</button>
+    <button id="panic-confirm-btn" class="panic-btn" data-panic-result="true"></button>
+  </div>
+</dialog>
+
+<footer id="app-footer">
+  <div class="footer-actions">
+    <button id="reload-btn" style="display:none">reload config</button>
+    <button id="state-compact-btn" class="danger-btn" style="display:none">compact state</button>
+    <button id="panic-btn" class="panic-btn" style="display:none" title="Suspend hooks, alerts and automatic remediation">panic mode</button>
+    <input id="state-before" type="text" placeholder="before (e.g. 720h)" title="Optional state compact cutoff: duration or RFC3339 timestamp" style="display:none; max-width:11rem">
+  </div>
+  <div class="footer-version muted">sermo {{VERSION}}</div>
+</footer>
+
+<script nonce="{{CSP_NONCE}}">
+/*__SERMO_JS__*/
+</script>
+</body>
+</html>
