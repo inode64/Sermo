@@ -29,6 +29,11 @@ engine:
   user_lookup: auto
   # Timeout for each getent lookup. Results are cached in-process.
   user_lookup_timeout: 250ms
+  # Optional append-only JSONL export logs (omit to disable):
+  # access: /var/log/sermo/access.log
+  # events: /var/log/sermo/event.log
+  # diagnostics: /var/log/sermo/diagnostics.log
+  # diagnostics_interval: 1h
 
 paths:
   # Directory entries are non-recursive by default. Use

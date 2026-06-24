@@ -47,9 +47,15 @@ func (a App) runPanic(opts options) int {
 	defer store.Close()
 
 	if set {
+		cmd := "panic off"
+		if on {
+			cmd = "panic on"
+		}
 		if err := store.SetPanic(on, state.SourceCLI); err != nil {
+			a.recordAccess(cfg, cmd, "", "error", err.Error())
 			return a.fail(opts, fmt.Sprintf("panic failed: %v", err))
 		}
+		a.recordAccess(cfg, cmd, "", "ok", "")
 	}
 
 	rec, found, err := store.Panic()

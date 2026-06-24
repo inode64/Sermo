@@ -1,13 +1,49 @@
 package app
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"sermo/internal/logfile"
 	"sermo/internal/state"
 )
+
+func TestEventLogExportsToFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "event.log")
+	w, err := logfile.Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	l := NewEventLog(10)
+	l.SetEventFile(w)
+	l.now = func() time.Time { return time.Date(2026, 6, 24, 9, 0, 0, 0, time.UTC) }
+	l.Add(Event{Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "done"})
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	if !sc.Scan() {
+		t.Fatal("expected one line")
+	}
+	var row map[string]any
+	if err := json.Unmarshal(sc.Bytes(), &row); err != nil {
+		t.Fatalf("json: %v", err)
+	}
+	if row["service"] != "web" || row["kind"] != "action" {
+		t.Fatalf("row = %+v", row)
+	}
+}
 
 func TestEventLogRecentNewestFirst(t *testing.T) {
 	l := NewEventLog(10)

@@ -126,6 +126,26 @@ defaults:
 	}
 }
 
+func TestValidateEngineLogPaths(t *testing.T) {
+	global := writeConfig(t, map[string]string{"sermo.yml": `
+engine:
+  access: relative.log
+  events: /var/log/sermo/event.log
+  diagnostics_interval: 1h
+paths:
+  services: [ @ROOT@/enabled ]
+defaults:
+  policy: { cooldown: 5m }
+`})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issues := Validate(cfg)
+	mustHave(t, issues, "engine.access")
+	mustHave(t, issues, "engine.diagnostics_interval")
+}
+
 func TestValidateEngineUserLookup(t *testing.T) {
 	global := writeConfig(t, map[string]string{"sermo.yml": `
 engine:

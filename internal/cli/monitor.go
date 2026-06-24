@@ -44,23 +44,28 @@ func (a App) runMonitor(opts options, pause bool) int {
 
 	if pause {
 		if err := store.SetActive(service, false, state.SourceCLI); err != nil {
+			a.recordAccess(cfg, verb, service, "error", err.Error())
 			return a.fail(opts, fmt.Sprintf("unmonitor failed: %v", err))
 		}
+		a.recordAccess(cfg, verb, service, "ok", "paused")
 		a.reportMonitor(opts, store, service, "paused")
 		return exitSuccess
 	}
 
 	active, found, err := store.Active(service)
 	if err != nil {
+		a.recordAccess(cfg, verb, service, "error", err.Error())
 		return a.fail(opts, fmt.Sprintf("monitor failed: %v", err))
 	}
 	if err := store.SetActive(service, true, state.SourceCLI); err != nil {
+		a.recordAccess(cfg, verb, service, "error", err.Error())
 		return a.fail(opts, fmt.Sprintf("monitor failed: %v", err))
 	}
 	status := "resumed"
 	if !found || active {
 		status = "not-paused"
 	}
+	a.recordAccess(cfg, verb, service, "ok", status)
 	a.reportMonitor(opts, store, service, status)
 	return exitSuccess
 }

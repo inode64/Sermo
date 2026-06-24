@@ -227,6 +227,9 @@ type Deps struct {
 	// Events is the recent-event log the web UI reads (global and per-service).
 	// Optional: nil disables it. Wire it into Emit via MultiEmit to populate it.
 	Events *EventLog
+	// DiagCache holds scheduled diagnostics for the web UI when engine.diagnostics
+	// is configured. Optional: nil runs diagnostics inline on each API request.
+	DiagCache *DiagnosticCache
 	// SystemFreshness caches system metrics so concurrent workers in one cycle
 	// share a computation; it must be below the scheduler interval.
 	SystemFreshness time.Duration

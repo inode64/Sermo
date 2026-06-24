@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"sermo/internal/logfile"
 	"sermo/internal/state"
 )
 
@@ -30,6 +31,7 @@ type EventLog struct {
 	mu            sync.Mutex
 	now           func() time.Time
 	store         EventStore
+	file          *logfile.Writer
 	onStoreError  func(error)
 	buf           []LoggedEvent
 	size          int
@@ -51,6 +53,16 @@ func NewEventLog(size int) *EventLog {
 		lastByService: map[string]LoggedEvent{},
 		lastByWatch:   map[string]LoggedEvent{},
 	}
+}
+
+// SetEventFile attaches an append-only JSONL export for every recorded event.
+func (l *EventLog) SetEventFile(w *logfile.Writer) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	l.file = w
+	l.mu.Unlock()
 }
 
 // NewPersistentEventLog returns an EventLog backed by store. It loads the last
@@ -88,6 +100,32 @@ func (l *EventLog) Add(e Event) {
 			l.reportStoreError(err)
 		}
 	}
+	l.exportEvent(logged)
+}
+
+func (l *EventLog) exportEvent(e LoggedEvent) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	w := l.file
+	l.mu.Unlock()
+	if w == nil {
+		return
+	}
+	rec := eventRecordFromLogged(e)
+	_ = w.Write(map[string]any{
+		"time":    rec.At.UTC().Format(time.RFC3339),
+		"service": rec.Service,
+		"watch":   rec.Watch,
+		"app":     rec.App,
+		"kind":    rec.Kind,
+		"rule":    rec.Rule,
+		"action":  rec.Action,
+		"status":  rec.Status,
+		"message": rec.Message,
+		"output":  rec.Output,
+	})
 }
 
 // Recent returns up to limit events, newest first. A non-empty service filters to

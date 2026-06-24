@@ -284,7 +284,28 @@ engine:
   user_lookup: auto           # auto | native | getent | numeric
   user_lookup_timeout: 250ms  # per-getent lookup timeout; cached in-process
   state_cache_size: 64M       # SQLite page cache for the state database
+  # Optional append-only JSONL export logs (opt-in: omit a key to disable it).
+  # access: /var/log/sermo/access.log
+  # events: /var/log/sermo/event.log
+  # diagnostics: /var/log/sermo/diagnostics.log
+  # diagnostics_interval: 1h  # scheduled diagnostics when diagnostics is set
 ```
+
+Optional `engine.access`, `engine.events` and `engine.diagnostics` enable
+append-only JSON Lines export under absolute paths. Each path must be absolute
+when set; parent directories are created as needed (`0750` dirs, `0640` files).
+Omit a key to leave that channel off.
+
+- `engine.events` mirrors every daemon event the web UI and `sermoctl activity`
+  already record (actions, alerts, hooks, suppressions, …) in addition to the
+  SQLite store.
+- `engine.access` records mutating operator traffic: POST actions through the web
+  API and state-changing `sermoctl` commands (`monitor`, `start`, `lock`, …).
+  Routine GET polling is not logged.
+- `engine.diagnostics` runs scheduled configuration/host diagnostics in the
+  background (default interval `1h`, overridable with `engine.diagnostics_interval`)
+  and appends each snapshot to the file. The web UI serves the cached snapshot
+  instead of recomputing diagnostics on every dashboard refresh.
 
 `engine.interval` is the default cadence at which every service's checks are
 run. Each service runs all of its checks once per cycle.
@@ -2152,9 +2173,10 @@ It reports, as `error` / `warning` / `info` findings:
 
 `diagnose` exits `78` when any **error** finding is present; warnings alone exit
 `0`. The same report is available in the web UI's **Diagnostics** panel and at
-`GET /api/diagnostics`, where each finding is timestamped with the time the web
-endpoint generated the diagnostics response. When the web UI is enabled, that
-feed also includes **operation slot** usage from the running daemon (`info` when
+`GET /api/diagnostics`, where each finding is timestamped with the time of the
+last scheduled snapshot when `engine.diagnostics` is configured (otherwise the
+endpoint runs diagnostics inline). When the web UI is enabled, that feed also
+includes **operation slot** usage from the running daemon (`info` when
 some slots are in use, `warning` when saturated); see also `GET /api/ops`. When
 the panel finds stale control-state rows, admins can use **clean stale data**, which
 calls `POST /api/diagnostics/clean` and performs the same bounded cleanup as
