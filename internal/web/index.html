@@ -1791,9 +1791,14 @@ function renderAttention() {
       target: "daemon-section",
     });
   }
+  // Recent errors are an advisory, not a critical signal: the rollup counts every
+  // error event in the rolling activity window — including stale reload/config
+  // failures and errors from now-unmonitored targets — so it must never drive the
+  // overall status red. A currently-failing *monitored* target turns the favicon
+  // red through its own path (failed services/watches/apps, hook-failed/firing).
   if (latestActivity && (latestActivity.errors || 0) > 0) {
     items.push({
-      level: "critical",
+      level: "warning",
       title: latestActivity.errors === 1 ? "1 recent error" : `${latestActivity.errors} recent errors`,
       detail: latestActivity.last_event_kind ? `last: ${latestActivity.last_event_kind}` : "see recent activity",
       target: "activity-section",
