@@ -164,6 +164,8 @@ type WebBackend struct {
 
 	slaCacheMu sync.Mutex
 	slaCache   map[slaCacheKey]cachedSLATimelines
+
+	diagCache *DiagnosticCache
 }
 
 type slaCacheKey struct {
@@ -234,6 +236,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		operationTimeout: deps.OperationTimeout,
 		now:              deps.Now,
 		slaCache:         map[slaCacheKey]cachedSLATimelines{},
+		diagCache:        deps.DiagCache,
 	}
 	if wb.serviceMetrics == nil {
 		wb.serviceMetrics = NewServiceMetricSampler()
@@ -2649,18 +2652,29 @@ func (b *WebBackend) Series(_ context.Context, name string, since time.Duration)
 	return out, true
 }
 
-// Diagnostics runs configuration and host diagnostics and returns the findings.
+// Diagnostics returns diagnostic findings. When a DiagnosticCache is attached,
+// it serves the last scheduled snapshot instead of running diagnostics inline.
 func (b *WebBackend) Diagnostics(_ context.Context) []web.Finding {
-	r := diag.Diagnose(b.cfg, b.diagStore, b.host)
-	out := make([]web.Finding, 0, len(r.Findings)+1)
-	for _, f := range r.Findings {
-		out = append(out, web.Finding{Level: string(f.Level), Scope: f.Scope, Message: f.Message})
+	if b != nil && b.diagCache != nil {
+		findings, at := b.diagCache.Findings()
+		if !at.IsZero() {
+			return timestampFindings(findings, at)
+		}
+		return findings
 	}
-	if b.opGate != nil {
-		inUse, total := b.opGate.Usage()
-		out = append(out, operationSlotFindings(inUse, total)...)
+	return buildDiagnosticFindings(b.cfg, b.diagStore, b.host, b.opGate)
+}
+
+func timestampFindings(findings []web.Finding, at time.Time) []web.Finding {
+	if len(findings) == 0 {
+		return findings
 	}
-	out = append(out, lockScanFindings(b.cfg)...)
+	ts := at.UTC().Format(time.RFC3339)
+	out := make([]web.Finding, len(findings))
+	for i, f := range findings {
+		out[i] = f
+		out[i].Time = ts
+	}
 	return out
 }
 

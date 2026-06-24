@@ -23,6 +23,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/logfile"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/process"
@@ -195,9 +196,21 @@ func run(args []string) int {
 		logger.Warn("load persisted events failed", "error", err)
 	}
 
+	accessLog := openEngineLog(logger, cfg, "access")
+	eventFile := openEngineLog(logger, cfg, "events")
+	if eventFile != nil {
+		eventLog.SetEventFile(eventFile)
+	}
+	diagFile := openEngineLog(logger, cfg, "diagnostics")
+
 	interval := config.EngineInterval(cfg, 30*time.Second)
 	runner := execx.CommandRunner{}
 	opGate := app.NewOpGate(app.EngineInt(cfg, "max_parallel_operations", 2), cfg.Global.RuntimeDir())
+	var diagCache *app.DiagnosticCache
+	if config.EngineLogPath(cfg, "diagnostics") != "" {
+		diagCache = app.NewDiagnosticCache(cfg, store, nil, opGate, diagFile, time.Now)
+		go diagCache.Run(ctx, config.EngineDiagnosticsInterval(cfg, time.Hour))
+	}
 	panicGate := app.NewPanicGate(store)
 	userLookup := app.EngineUserLookup(cfg, runner)
 	readiness := app.NewReadiness(string(detection.Backend), 0, 0)
@@ -228,6 +241,7 @@ func run(args []string) int {
 		Remediation:     app.NewRemediationRegistry(),
 		RuleWindows:     app.NewRuleWindowRegistry(),
 		Events:          eventLog,
+		DiagCache:       diagCache,
 		SystemFreshness: interval / 2,
 		OpGate:          opGate,
 		ExecxRunner:     runner,
@@ -308,6 +322,7 @@ func run(args []string) int {
 			Backend:          webHolder,
 			Auth:             auth,
 			Logger:           logger,
+			AccessLog:        accessLog,
 			OperationTimeout: app.MaxOperationTimeout(cfg, deps.OperationTimeout),
 			Readiness:        readiness,
 			// Trigger reload by signalling ourself with SIGHUP. This re-uses the
@@ -462,4 +477,18 @@ func webDiagnosticsDisabled(cfg *config.Config) bool {
 	}
 	disabled, _ := m["disable_diagnostics"].(bool)
 	return disabled
+}
+
+func openEngineLog(logger *slog.Logger, cfg *config.Config, key string) *logfile.Writer {
+	path := config.EngineLogPath(cfg, key)
+	if path == "" {
+		return nil
+	}
+	w, err := logfile.Open(path)
+	if err != nil {
+		logger.Warn("engine log disabled", "key", key, "path", path, "error", err)
+		return nil
+	}
+	logger.Info("engine log enabled", "key", key, "path", path)
+	return w
 }

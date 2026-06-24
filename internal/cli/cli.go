@@ -541,9 +541,16 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 
 	result, err := a.operateWithCascade(ctx, opts, cfg, resolved, service, action)
 	if err != nil {
+		a.recordAccess(cfg, action, service, "error", err.Error())
 		return a.fail(opts, err.Error())
 	}
 	a.notifyInteractiveBlockedAction(ctx, result)
+
+	status := "ok"
+	if result.Status != operation.ResultOK {
+		status = "error"
+	}
+	a.recordAccess(cfg, action, service, status, result.Message)
 
 	if opts.json {
 		writeJSON(a.Stdout, result)
@@ -1308,6 +1315,10 @@ func (a App) runActivity(ctx context.Context, opts options) int {
 }
 
 func (a App) runEventsClear(ctx context.Context, opts options, noun string) int {
+	cfg, code := a.loadConfig(opts)
+	if code != exitSuccess {
+		return code
+	}
 	before, err := parseBefore(opts.before, time.Now)
 	if err != nil {
 		return a.fail(opts, err.Error())
@@ -1318,6 +1329,7 @@ func (a App) runEventsClear(ctx context.Context, opts options, noun string) int 
 	}
 	n, err := pruneEvents(ctx, opts, before)
 	if err != nil {
+		a.recordAccess(cfg, "events clear", "", "error", err.Error())
 		return a.fail(opts, err.Error())
 	}
 	if opts.json {
@@ -1327,6 +1339,7 @@ func (a App) runEventsClear(ctx context.Context, opts options, noun string) int 
 	} else {
 		fmt.Fprintf(a.Stdout, "cleared %d %s before %s\n", n, noun, before.Format(time.RFC3339))
 	}
+	a.recordAccess(cfg, "events clear", "", "ok", fmt.Sprintf("pruned %d %s", n, noun))
 	return exitSuccess
 }
 
@@ -1632,14 +1645,17 @@ func (a App) runReload(ctx context.Context, opts options) int {
 	}
 
 	if pid <= 0 {
+		a.recordAccess(cfg, "daemon reload", "", "error", "could not find running sermod pid")
 		return a.fail(opts, "could not find running sermod pid (no pidfile and no running sermod process)")
 	}
 
 	// Send SIGHUP. On Linux this is reliable for the daemon's signal handler.
 	if err := syscall.Kill(pid, syscall.SIGHUP); err != nil {
+		a.recordAccess(cfg, "daemon reload", "", "error", err.Error())
 		return a.fail(opts, fmt.Sprintf("failed to signal pid %d: %v", pid, err))
 	}
 
+	a.recordAccess(cfg, "daemon reload", "", "ok", fmt.Sprintf("pid %d", pid))
 	if opts.json {
 		writeJSON(a.Stdout, map[string]any{"ok": true, "pid": pid})
 	} else {

@@ -52,8 +52,10 @@ func (a App) runLockAcquire(opts options, cfg *config.Config, locker locks.Named
 
 	path, err := locker.Pin(service, opts.name, opts.reason, opts.ttl)
 	if err != nil {
+		a.recordAccess(cfg, "lock acquire", service, "error", err.Error())
 		return a.reportLockError(opts, err)
 	}
+	a.recordAccess(cfg, "lock acquire", service, "ok", path)
 	fmt.Fprintf(a.Stdout, "acquired %s\n", path)
 	return exitSuccess
 }
@@ -67,8 +69,10 @@ func (a App) runLockRelease(opts options, cfg *config.Config, locker locks.Named
 	}
 	service := canonicalServiceIfKnown(cfg, args[0])
 	if err := locker.Release(service, opts.name); err != nil {
+		a.recordAccess(cfg, "lock release", service, "error", err.Error())
 		return a.fail(opts, fmt.Sprintf("release failed: %v", err))
 	}
+	a.recordAccess(cfg, "lock release", service, "ok", lockID(service, opts.name))
 	fmt.Fprintf(a.Stdout, "released %s\n", lockID(service, opts.name))
 	return exitSuccess
 }
@@ -87,6 +91,7 @@ func (a App) runLockWrap(ctx context.Context, opts options, cfg *config.Config, 
 
 	handle, err := locker.Hold(service, opts.name, opts.reason, opts.ttl)
 	if err != nil {
+		a.recordAccess(cfg, "lock wrap", service, "error", err.Error())
 		return a.reportLockError(opts, err)
 	}
 	defer func() { _ = handle.Release() }()
@@ -98,10 +103,13 @@ func (a App) runLockWrap(ctx context.Context, opts options, cfg *config.Config, 
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
+			a.recordAccess(cfg, "lock wrap", service, "error", fmt.Sprintf("exit %d", exitErr.ExitCode()))
 			return exitErr.ExitCode()
 		}
+		a.recordAccess(cfg, "lock wrap", service, "error", err.Error())
 		return a.fail(opts, fmt.Sprintf("run command: %v", err))
 	}
+	a.recordAccess(cfg, "lock wrap", service, "ok", opts.commandArgs[0])
 	return exitSuccess
 }
 

@@ -98,6 +98,23 @@ func validateGlobal(cfg *Config) []Issue {
 				add("engine.state_cache_size must be a positive size with a K/M/G suffix (e.g. 64M)")
 			}
 		}
+		for _, key := range []string{"access", "events", "diagnostics"} {
+			if v, present := engine[key]; present {
+				path := cfgval.AsString(v)
+				if path == "" {
+					add("engine.%s must be a non-empty absolute path when set", key)
+				} else if !filepath.IsAbs(path) {
+					add("engine.%s %q must be an absolute path", key, path)
+				}
+			}
+		}
+		if v, present := engine["diagnostics_interval"]; present {
+			if cfgval.String(engine["diagnostics"]) == "" {
+				add("engine.diagnostics_interval is set but engine.diagnostics is not configured")
+			} else if !isPositiveDuration(cfgval.String(v)) {
+				add("engine.diagnostics_interval %q must be a valid positive duration", cfgval.String(v))
+			}
+		}
 	}
 
 	if paths, ok := raw["paths"].(map[string]any); ok {

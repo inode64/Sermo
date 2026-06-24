@@ -44,12 +44,14 @@ func (a App) runStateCompact(ctx context.Context, opts options) int {
 
 	result, err := store.PruneHistory(before)
 	if err != nil {
+		a.recordAccess(cfg, "state compact", "", "error", err.Error())
 		return a.fail(opts, fmt.Sprintf("prune state history: %v", err))
 	}
 
 	compactCtx, cancel := context.WithTimeout(ctx, opts.timeout)
 	defer cancel()
 	if err := store.Compact(compactCtx); err != nil {
+		a.recordAccess(cfg, "state compact", "", "error", err.Error())
 		return a.fail(opts, fmt.Sprintf("compact state database: %v", err))
 	}
 
@@ -80,5 +82,6 @@ func (a App) runStateCompact(ctx context.Context, opts options) int {
 		result.ServiceMetrics,
 		result.Events,
 	)
+	a.recordAccess(cfg, "state compact", "", "ok", fmt.Sprintf("pruned %d rows", result.Rows))
 	return exitSuccess
 }
