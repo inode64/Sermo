@@ -142,9 +142,12 @@ func TestPackageRun(t *testing.T) {
 
 func TestPackageRunUser(t *testing.T) {
 	t.Run("rejects runners that do not implement UserRunner", func(t *testing.T) {
-		_, err := RunUser(context.Background(), basicRunner{}, 0, "postgres", "echo", "hi")
+		res, err := RunUser(context.Background(), basicRunner{}, 0, "postgres", "echo", "hi")
 		if err == nil || !strings.Contains(err.Error(), "does not support user") {
 			t.Fatalf("expected missing UserRunner support, got: %v", err)
+		}
+		if res.ExitCode != -1 {
+			t.Fatalf("reject exit code = %d, want -1 (run failure, not a real exit)", res.ExitCode)
 		}
 	})
 
