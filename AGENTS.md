@@ -379,11 +379,40 @@ Before finishing any code change:
 
 ## Web UI cohesion
 
-The web UI is a single embedded document, `internal/web/index.html` (HTML, CSS
-and JS in one file). **Before adding or changing any UI element, find the
-existing element that already solves the same problem and copy its structure,
-classes and styling exactly** — do not invent a parallel way to do the same
-thing. Cohesion across panels is a hard requirement, not a preference.
+**Sources live in `internal/web/src/`; `internal/web/index.html` is a generated,
+committed artifact — never edit it by hand.** The dashboard is authored as a
+shell (`src/index.html`), `src/styles.css`, and ES modules (`src/app.js` and the
+vendored `src/vendor/lit-html.js`). `make web` runs the in-process esbuild build
+(`internal/web/build`, the Go API — no Node/npm) to bundle + minify them into
+`internal/web/index.html`, leaving the `{{CSP_NONCE}}`/`{{VERSION}}` placeholders
+for the server to fill per request. **After editing anything under
+`internal/web/src/`, run `make web` and commit the regenerated `index.html`.**
+`make web-check` (wired into `validate`/`check`/CI, modeled on `fmt-check`) fails
+if the committed file is stale.
+
+**Rendering uses lit-html.** Build markup with `tpl\`...\`` (the `html` tag,
+imported aliased as `tpl`) and render into a container with `litRender(...)` (the
+`render` export). lit-html escapes text/attribute bindings, so do **not** wrap
+interpolations in `esc()` inside a template, and never embed a bare HTML string
+in a `tpl` template (it renders as visible escaped text); compose with nested
+templates and use `nothing` to omit a binding/attribute. lit-html diffs the DOM
+in place, so there is no manual row-patching layer — render the full list and let
+it reconcile. Leaf builders (`stateBadge`, `serviceStateBadge`, `categoryBadge`,
+`usageBar`/`usageBarMini`, SLA helpers) and the event/service/watch/app/overview
+row builders return `TemplateResult`s; SVG chart builders (`drawSLAChart`,
+`drawMetricChart`) stay string-based and are assigned to their own container via
+`innerHTML`. Interaction stays wired through the global delegated click handler
+reading `data-*` attributes (`closestFrom`), **not** lit `@event` bindings — this
+keeps the no-inline-handler CSP posture (`server_test.go` asserts it).
+
+`internal/web/index_test.go` parses the generated HTML structurally with
+`golang.org/x/net/html` (server contract, CSP hygiene, shell anchors) rather than
+matching JS source strings, so it survives minification and renames.
+
+**Before adding or changing any UI element, find the existing element that
+already solves the same problem and copy its structure, classes and styling
+exactly** — do not invent a parallel way to do the same thing. Cohesion across
+panels is a hard requirement, not a preference.
 
 Concretely, every data panel is a `<details id="{name}-section">` with a
 `<summary>`, an optional flex `#{name}-controls` row (search + filters + count)
@@ -444,7 +473,7 @@ The visual layer is a token-driven design system (June 2026 redesign):
   bar widths (`--usage-pct`, `--sla-pct`) keep their own fixed precision. When a
   value needs a representation no helper covers, add or extend a helper next to
   the others rather than formatting inline at the call site. See the `fmtNum`
-  banner comment in `internal/web/index.html`.
+  banner comment in `internal/web/src/app.js`.
 
 **CSP and inline styles:** `style-src` deliberately carries `'unsafe-inline'`
 **without** a nonce — per CSP2, a nonce in the list makes browsers ignore

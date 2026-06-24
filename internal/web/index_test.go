@@ -3,152 +3,165 @@ package web
 import (
 	"strings"
 	"testing"
+
+	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
-func TestIndexHTMLServiceProcessMetricsLayout(t *testing.T) {
+// The dashboard markup is generated from internal/web/src by `make web` and
+// committed as index.html (esbuild minifies the JS/CSS, so asserting on JS
+// function names or formatted CSS is meaningless). These tests parse the
+// generated document structurally instead: they pin the server contract
+// (placeholders, the single nonce'd <style>/<script>), CSP hygiene (no inline
+// handlers, no eval in the bundle), and the presence of the static shell
+// anchors the JS and server depend on.
+
+// parsedIndex parses the embedded, generated index.html once per test.
+func parsedIndex(t *testing.T) (*html.Node, string) {
+	t.Helper()
 	page, err := assets.ReadFile("index.html")
 	if err != nil {
 		t.Fatalf("read embedded index.html: %v", err)
 	}
-	html := string(page)
+	doc, err := html.Parse(strings.NewReader(string(page)))
+	if err != nil {
+		t.Fatalf("parse index.html: %v", err)
+	}
+	return doc, string(page)
+}
 
-	for _, forbidden := range []string{
-		"Availability · last 24h",
-		"Availability (SLA)",
-		"<h2>Availability</h2>",
-		`class="sla"`,
-		"chart-summary",
-		"loadSeries(",
-		"drawChart(points)",
-		"1-core peak",
-		"CPU/core",
-		"exe unresolved",
-		"unresolved exe",
-		"exe is unresolved",
-		"Config Review",
-		"config-render",
-		"config-diff",
-		"config-meta",
-		"data-config-render",
-		"data-config-diff",
-		"loadConfigRender(",
-		"loadConfigDiff(",
-		"/config/diff",
-		`Last event<span class="sort-ind"`,
-		`id="detail"`,
-		"data-detail-service",
-		"data-close-detail",
-		"function detail(",
-		"function renderDetail(",
-		"function closeDetail(",
-		"<th>PPID</th>",
-		`style="width:auto; max-width:100%; font-size:.85rem;"`,
-		`<h2>SLA <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>`,
-		"sla-layout",
-		"sla-chart-title",
-	} {
-		if strings.Contains(html, forbidden) {
-			t.Fatalf("index.html still contains %q", forbidden)
+// walk visits every node in the tree.
+func walk(n *html.Node, fn func(*html.Node)) {
+	fn(n)
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		walk(c, fn)
+	}
+}
+
+func attr(n *html.Node, key string) (string, bool) {
+	for _, a := range n.Attr {
+		if a.Key == key {
+			return a.Val, true
+		}
+	}
+	return "", false
+}
+
+// TestIndexServerContract pins what internal/web/server.go fills in per request:
+// a single nonce'd <style> and <script>, both carrying the {{CSP_NONCE}}
+// placeholder, plus the {{VERSION}} placeholder in the footer.
+func TestIndexServerContract(t *testing.T) {
+	doc, raw := parsedIndex(t)
+
+	var styles, scripts []*html.Node
+	walk(doc, func(n *html.Node) {
+		if n.Type != html.ElementNode {
+			return
+		}
+		switch n.DataAtom {
+		case atom.Style:
+			styles = append(styles, n)
+		case atom.Script:
+			scripts = append(scripts, n)
+		}
+	})
+
+	if len(styles) != 1 {
+		t.Fatalf("want exactly 1 <style>, got %d", len(styles))
+	}
+	if len(scripts) != 1 {
+		t.Fatalf("want exactly 1 <script>, got %d", len(scripts))
+	}
+	for _, n := range append(append([]*html.Node{}, styles...), scripts...) {
+		nonce, ok := attr(n, "nonce")
+		if !ok || nonce != "{{CSP_NONCE}}" {
+			t.Fatalf("<%s> nonce = %q, want {{CSP_NONCE}}", n.Data, nonce)
 		}
 	}
 
-	wantProcessHead := `<th>CPU</th><th title="CPU used by this process, normalized to one core">Core peak</th><th>Mem</th>`
-	if !strings.Contains(html, wantProcessHead) {
-		t.Fatalf("index.html missing process CPU/core peak columns")
+	if got := strings.Count(raw, "{{CSP_NONCE}}"); got != 2 {
+		t.Fatalf("{{CSP_NONCE}} count = %d, want 2", got)
 	}
-	if !strings.Contains(html, "function procCpuCells(p)") {
-		t.Fatalf("index.html missing process CPU/core peak cell renderer")
+	if !strings.Contains(raw, "{{VERSION}}") {
+		t.Fatalf("index.html missing {{VERSION}} placeholder")
 	}
-	if !strings.Contains(html, "function procLabel(p)") || !strings.Contains(html, "function procCmd(p)") {
-		t.Fatalf("index.html missing process command fallback renderer")
+}
+
+// TestIndexCSPHygiene guards the security posture the strict script-src nonce
+// relies on: no inline on*= event handlers (all wiring goes through delegated
+// listeners), and no eval/new Function in the bundle.
+func TestIndexCSPHygiene(t *testing.T) {
+	doc, _ := parsedIndex(t)
+
+	var script string
+	walk(doc, func(n *html.Node) {
+		if n.Type == html.ElementNode {
+			for _, a := range n.Attr {
+				if strings.HasPrefix(a.Key, "on") {
+					t.Errorf("inline event handler %q on <%s> breaks the CSP nonce model", a.Key, n.Data)
+				}
+			}
+		}
+		if n.Type == html.ElementNode && n.DataAtom == atom.Script && n.FirstChild != nil {
+			script = n.FirstChild.Data
+		}
+	})
+
+	for _, bad := range []string{"eval(", "new Function("} {
+		if strings.Contains(script, bad) {
+			t.Errorf("bundled script contains %q", bad)
+		}
 	}
-	if !strings.Contains(html, "function processRows(procs)") || !strings.Contains(html, "function procTreeLabel(row)") {
-		t.Fatalf("index.html missing process tree renderer")
+}
+
+// TestIndexShellAnchors checks the static shell still carries the element ids,
+// dialogs, and table headers that the JS and server reference. These survive
+// minification because they live in the src/index.html shell, not the bundle.
+func TestIndexShellAnchors(t *testing.T) {
+	doc, _ := parsedIndex(t)
+
+	ids := map[string]bool{}
+	headers := map[string]bool{}
+	dialogs := 0
+	walk(doc, func(n *html.Node) {
+		if n.Type != html.ElementNode {
+			return
+		}
+		if id, ok := attr(n, "id"); ok {
+			ids[id] = true
+		}
+		switch n.DataAtom {
+		case atom.Dialog:
+			dialogs++
+		case atom.Th:
+			if n.FirstChild != nil && n.FirstChild.Type == html.TextNode {
+				headers[strings.TrimSpace(n.FirstChild.Data)] = true
+			}
+		}
+	})
+
+	wantIDs := []string{
+		"topbar", "favicon", "attention", "events",
+		"services-section", "apps-section", "watches-section", "events-section",
+		"storage-controls", "network-controls",
+		"event-clear", "event-before", "event-reset-filters", "activity-clear",
+		"state-compact-btn", "state-before", "app-rows", "locks-rows",
+		"action-confirm", "confirm-no-cascade",
 	}
-	if !strings.Contains(html, ".proc-tree") || !strings.Contains(html, "proc-branch") {
-		t.Fatalf("index.html missing process tree styles")
-	}
-	if !strings.Contains(html, "function renderServiceDetail(d)") || !strings.Contains(html, "data-service-expand") {
-		t.Fatalf("index.html missing inline service detail renderer")
-	}
-	if !strings.Contains(html, "<th>CMD</th>") || strings.Contains(html, "<th>Exe</th>") {
-		t.Fatalf("index.html should label the process command column as CMD")
-	}
-	if !strings.Contains(html, ".truncate") || !strings.Contains(html, "check-message") {
-		t.Fatalf("index.html missing truncation styles for CMD/check messages")
-	}
-	for _, want := range []string{
-		`data-app-sort="state"`,
-		"function displayName(item)",
-		"function appStatusCell(a)",
-		"state-warning",
-		"row-warning",
-		"row-failing",
-		"<th>Uptime</th>",
-		"<th>CPU total</th>",
-		"<th>Memory</th>",
-		"<th>IO R/W</th>",
-		".service-detail table { width: 100%;",
-		"let expDetailCache = {}",
-		"const SVC_EXPAND_FULL_EVERY = 6",
-		"const EVENT_FILTER_DEBOUNCE_MS = 300",
-		"function scheduleLoadEvents()",
-		"function flushLoadEvents()",
-		"function refreshExpandedServices(opts = {})",
-		"function refreshServiceExpansionLight(key)",
-		"function isWatchAttention(w)",
-		`target === "failed-watches"`,
-		`id="storage-controls"`,
-		`id="network-controls"`,
-		`all storage types`,
-		`all network types`,
-		"const watchPanels = {",
-		"function renderWatchPanel(panelKey, watches)",
-		"function serviceRowParts(s)",
-		"function svcRenderedStructure(list)",
-		"function patchVisibleServiceRows(list)",
-		"const SVC_PATCH_MIN = 50",
-		"function serviceCpuCell(s)",
-		"function loadServiceRuntimeMetrics(name)",
-		"function loadServiceSLA(name)",
-		"function drawSLAChart(points, win)",
-		`id="event-reset-filters"`,
-		`id="event-clear"`,
-		`id="event-before"`,
-		`id="activity-clear"`,
-		`id="state-compact-btn"`,
-		`id="state-before"`,
-		"function clearEventLog(",
-		"function compactState()",
-		"function setStatus(",
-		"function serviceStateBadge(",
-		`api/events/clear`,
-		`api/state/compact`,
-		`confirm-no-cascade`,
-		`data-no-cascade`,
-		`r="3" fill="#1f6feb"`,
-		`api/services/${encodeURIComponent(name)}/sla?since=${metricWindow}`,
-		`aria-label="SLA timeline"`,
-		`width="100%" role="img" aria-label="SLA timeline"`,
-		`api/services/${encodeURIComponent(name)}/runtime?since=${metricWindow}`,
-		"function renderSLAWindows(wins, compact)",
-		`<div class="metric-panel metric-panel-wide">`,
-		`<span class="metric-title">SLA timeline</span>`,
-		`<th>SLA</th>`,
-		`class="app-sla"`,
-		`<h2>General data</h2>`,
-		`<h2>Graphs <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>`,
-	} {
-		if !strings.Contains(html, want) {
-			t.Fatalf("index.html missing %q", want)
+	for _, id := range wantIDs {
+		if !ids[id] {
+			t.Errorf("shell missing element id %q", id)
 		}
 	}
 
-	if strings.Contains(html, `<th>Unit</th>
-        <th class="sortable" data-sort="state"`) ||
-		strings.Contains(html, `<th>Interval</th><th>Policy</th><th>Locks</th>`) ||
-		strings.Contains(html, `<th>Next remediation</th>
-        <th class="actions">Actions</th>`) {
-		t.Fatalf("index.html still contains old services table columns")
+	// The action-confirm and panic-confirm modals.
+	if dialogs != 2 {
+		t.Errorf("want 2 <dialog> elements, got %d", dialogs)
+	}
+
+	for _, h := range []string{"Uptime", "CPU total", "Memory", "IO R/W", "State", "Type", "Actions"} {
+		if !headers[h] {
+			t.Errorf("shell missing static <th> %q", h)
+		}
 	}
 }
