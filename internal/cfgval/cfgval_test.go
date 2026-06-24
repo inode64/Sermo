@@ -126,6 +126,7 @@ func TestInt(t *testing.T) {
 		{5, 5, true},
 		{int64(6), 6, true},
 		{uint64(7), 7, true},
+		{uint64(maxInt), maxInt, true}, // largest uint64 that still fits int (boundary)
 		{uint64(maxInt) + 1, 0, false},
 		{8.9, 8, true}, // float truncates
 		{"10", 10, true},
@@ -272,6 +273,32 @@ func TestCompareFloatCoversCompareOps(t *testing.T) {
 	}
 	if CompareFloat(1, "nope", 1) {
 		t.Fatal("an unknown op must never hold")
+	}
+}
+
+// TestCompareFloatExact pins the exact truth value of every operator at the
+// three relations (a<b, a==b, a>b). The "covers" test above only proves each op
+// fires somewhere; this one nails the boundary (a==b) and polarity of each, so a
+// drifted operator (e.g. ">=" weakened to ">", or "==" flipped to "!=") fails.
+func TestCompareFloatExact(t *testing.T) {
+	cases := []struct {
+		a    float64
+		op   string
+		b    float64
+		want bool
+	}{
+		{1, ">=", 2, false}, {2, ">=", 2, true}, {3, ">=", 2, true},
+		{1, ">", 2, false}, {2, ">", 2, false}, {3, ">", 2, true},
+		{1, "<=", 2, true}, {2, "<=", 2, true}, {3, "<=", 2, false},
+		{1, "<", 2, true}, {2, "<", 2, false}, {3, "<", 2, false},
+		{2, "==", 2, true}, {2, "==", 3, false},
+		{2, "!=", 2, false}, {2, "!=", 3, true},
+		{2, "??", 2, false}, // unknown op never holds
+	}
+	for _, c := range cases {
+		if got := CompareFloat(c.a, c.op, c.b); got != c.want {
+			t.Errorf("CompareFloat(%v, %q, %v) = %v, want %v", c.a, c.op, c.b, got, c.want)
+		}
 	}
 }
 
