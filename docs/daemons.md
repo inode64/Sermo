@@ -214,7 +214,6 @@ sed -n '/^reload()/,/^}/p' /etc/init.d/<unit>
 grep -E '^(command|command_user|pidfile|.*PIDFILE)=' /etc/init.d/<unit> /etc/conf.d/<unit>
 readlink -f /usr/sbin/<daemon>
 namei -l /run/<daemon>.pid
-sermoctl diagnose
 ```
 
 Useful catalog audit while developing:

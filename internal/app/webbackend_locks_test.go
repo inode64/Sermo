@@ -112,32 +112,6 @@ func TestWebBackendDetailLockWarnings(t *testing.T) {
 	}
 }
 
-func TestWebBackendDiagnosticsLockWarnings(t *testing.T) {
-	root := t.TempDir()
-	runtime := filepath.Join(root, "run")
-	locksDir := filepath.Join(runtime, "locks")
-	if err := os.MkdirAll(locksDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(locksDir, "redis.lock"), []byte("not-json"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	b := &WebBackend{cfg: &config.Config{Global: config.Global{Runtime: runtime}}}
-	findings := b.Diagnostics(context.Background())
-	var lockWarn *struct{ Level, Scope, Message string }
-	for i := range findings {
-		f := findings[i]
-		if f.Scope == "locks" && f.Level == "warning" {
-			lockWarn = &struct{ Level, Scope, Message string }{f.Level, f.Scope, f.Message}
-			break
-		}
-	}
-	if lockWarn == nil {
-		t.Fatalf("findings = %+v, want a locks warning", findings)
-	}
-}
-
 func TestWebBackendViewActiveLocks(t *testing.T) {
 	root := t.TempDir()
 	runtime := filepath.Join(root, "run")

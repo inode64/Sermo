@@ -20,14 +20,6 @@ func (h fakeHost) PathExists(p string) bool      { return h.paths[p] }
 func (h fakeHost) InterfaceExists(n string) bool { return h.ifaces[n] }
 func (h fakeHost) IsMountPoint(p string) bool    { return h.mounts[p] }
 
-type fakeStore struct {
-	integrity error
-	tracked   []string
-}
-
-func (s fakeStore) IntegrityCheck() error                   { return s.integrity }
-func (s fakeStore) TrackedControlStates() ([]string, error) { return s.tracked, nil }
-
 // loadCfg writes a base global + one service doc under a temp dir (substituting
 // @ROOT@) and loads it.
 func loadCfg(t *testing.T, global, svc string) *config.Config {
@@ -67,33 +59,6 @@ paths: { services: [ @ROOT@/enabled ], state: @ROOT@/state }
 defaults: { policy: { cooldown: 5m } }
 `
 
-func TestDiagnoseOrphanedData(t *testing.T) {
-	cfg := loadCfg(t, baseGlobal, `
-kind: service
-name: web
-service: nginx
-policy: { cooldown: 5m }
-checks:
-  ping: { type: tcp, host: 127.0.0.1, port: 80 }
-`)
-	store := fakeStore{tracked: []string{"web", "ghost"}}
-	r := Diagnose(cfg, store, fakeHost{})
-	if !has(r, LevelWarning, `target "ghost"`) {
-		t.Fatalf("expected orphaned-data warning for ghost: %+v", r.Findings)
-	}
-	if has(r, LevelWarning, `target "web"`) {
-		t.Fatal("configured service web must not be flagged as orphaned")
-	}
-}
-
-func TestDiagnoseDatabaseIntegrity(t *testing.T) {
-	cfg := loadCfg(t, baseGlobal, "")
-	r := Diagnose(cfg, fakeStore{integrity: errString("malformed")}, fakeHost{})
-	if !has(r, LevelError, "database is unhealthy") {
-		t.Fatalf("expected DB integrity error: %+v", r.Findings)
-	}
-}
-
 func TestDiagnoseIntervalAlignment(t *testing.T) {
 	cfg := loadCfg(t, baseGlobal, `
 kind: service
@@ -105,7 +70,7 @@ checks:
   odd:   { type: tcp, host: 127.0.0.1, port: 80, interval: 40s }
   small: { type: tcp, host: 127.0.0.1, port: 80, interval: 10s }
 `)
-	r := Diagnose(cfg, nil, fakeHost{})
+	r := Diagnose(cfg, fakeHost{})
 	if has(r, LevelWarning, "check ok") {
 		t.Fatal("5m is a multiple of 30s; should not warn")
 	}
@@ -129,7 +94,7 @@ watches:
 `
 	cfg := loadCfg(t, global, "")
 	// eth0 absent, /data exists but is not a mount point
-	r := Diagnose(cfg, nil, fakeHost{paths: map[string]bool{"/data": true}})
+	r := Diagnose(cfg, fakeHost{paths: map[string]bool{"/data": true}})
 	if !has(r, LevelWarning, `interface "eth0" does not exist`) {
 		t.Fatalf("expected missing-interface warning: %+v", r.Findings)
 	}
@@ -138,7 +103,7 @@ watches:
 	}
 
 	// with eth0 present and /data mounted -> no host warnings
-	clean := Diagnose(cfg, nil, fakeHost{
+	clean := Diagnose(cfg, fakeHost{
 		paths:  map[string]bool{"/data": true},
 		ifaces: map[string]bool{"eth0": true},
 		mounts: map[string]bool{"/data": true},
@@ -147,10 +112,6 @@ watches:
 		t.Fatalf("expected no host warnings when present: %+v", clean.Findings)
 	}
 }
-
-type errString string
-
-func (e errString) Error() string { return string(e) }
 
 func TestDiagnoseNewCheckResources(t *testing.T) {
 	global := baseGlobal + `
@@ -174,7 +135,7 @@ watches:
 	cfg := loadCfg(t, global, "")
 
 	// Nothing exists on this fake host.
-	r := Diagnose(cfg, nil, fakeHost{})
+	r := Diagnose(cfg, fakeHost{})
 	for _, want := range []string{
 		`block device "sdz" does not exist`,
 		"no /proc/pressure/memory",
@@ -189,7 +150,7 @@ watches:
 	}
 
 	// With every resource present there are no warnings.
-	clean := Diagnose(cfg, nil, fakeHost{paths: map[string]bool{
+	clean := Diagnose(cfg, fakeHost{paths: map[string]bool{
 		"/sys/class/block/sdz":  true,
 		"/proc/pressure/memory": true,
 		"/dev/sdz":              true,
@@ -209,7 +170,7 @@ checks:
   io: { type: diskio, device: sdz, util_pct: { op: ">=", value: 90 } }
 `
 	cfg := loadCfg(t, baseGlobal, svc)
-	r := Diagnose(cfg, nil, fakeHost{})
+	r := Diagnose(cfg, fakeHost{})
 	if !has(r, LevelWarning, `block device "sdz" does not exist`) {
 		t.Fatalf("expected service-check diskio warning: %+v", r.Findings)
 	}

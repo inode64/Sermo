@@ -38,8 +38,8 @@ var commandGroups = []commandGroup{
 		Commands: []string{"config", "daemon", "services", "apps", "libs", "patterns", "wizard"},
 	},
 	{
-		Title:    "History And Diagnostics",
-		Commands: []string{"events", "activity", "sla", "diagnose", "state"},
+		Title:    "History And State",
+		Commands: []string{"events", "activity", "sla", "state"},
 	},
 	{
 		Title:    "Emergency",
@@ -467,21 +467,6 @@ var commandUsages = []commandUsage{
 			"sermoctl sla",
 			"sermoctl sla apache-main",
 			"sermoctl sla --series apache-main --since 168h",
-		},
-	},
-	{
-		Name:    "diagnose",
-		Summary: "Run configuration and host consistency diagnostics.",
-		Usage: []string{
-			"sermoctl diagnose",
-			"sermoctl diagnose clean",
-		},
-		Flags: []string{
-			"--json  print findings as JSON",
-		},
-		Examples: []string{
-			"sermoctl diagnose",
-			"sermoctl diagnose clean",
 		},
 	},
 	{

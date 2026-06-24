@@ -216,35 +216,6 @@ func TestWebBackendApplicationsIncludeServiceSLA(t *testing.T) {
 	}
 }
 
-func TestWebBackendCleanDiagnosticsPrunesUnconfiguredState(t *testing.T) {
-	store, err := state.Open(filepath.Join(t.TempDir(), state.Filename))
-	if err != nil {
-		t.Fatalf("open state: %v", err)
-	}
-	defer store.Close()
-	for _, service := range []string{"web", "ghost"} {
-		if err := store.SetActive(service, false, state.SourceCLI); err != nil {
-			t.Fatalf("SetActive(%s): %v", service, err)
-		}
-	}
-	b := &WebBackend{
-		cfg:         &config.Config{Services: map[string]*config.Document{"web": {}}},
-		diagStore:   store,
-		diagCleaner: store,
-	}
-
-	res := b.CleanDiagnostics(context.Background())
-	if !res.OK || res.Pruned != 1 || len(res.Services) != 1 || res.Services[0] != "ghost" {
-		t.Fatalf("CleanDiagnostics = %+v, want ghost pruned", res)
-	}
-	if _, found, err := store.Active("ghost"); err != nil || found {
-		t.Fatalf("ghost active after clean: found=%v err=%v, want removed", found, err)
-	}
-	if _, found, err := store.Active("web"); err != nil || !found {
-		t.Fatalf("web active after clean: found=%v err=%v, want kept", found, err)
-	}
-}
-
 func TestWebBackendViewMonitorSource(t *testing.T) {
 	at := time.Date(2026, 6, 7, 14, 0, 0, 0, time.UTC)
 	store := newFakeStore()

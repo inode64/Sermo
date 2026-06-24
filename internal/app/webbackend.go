@@ -19,7 +19,6 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/control"
-	"sermo/internal/diag"
 	"sermo/internal/execx"
 	"sermo/internal/locks"
 	"sermo/internal/metrics"
@@ -91,10 +90,6 @@ type webNotifier struct {
 	summary string
 }
 
-type diagnosticCleaner interface {
-	PruneUnconfiguredControlStates(configured []string) (state.PruneUnconfiguredControlStatesResult, error)
-}
-
 type stateMaintainer interface {
 	PruneHistory(before time.Time) (state.PruneHistoryResult, error)
 	Compact(ctx context.Context) error
@@ -119,9 +114,6 @@ type WebBackend struct {
 	remediation      *RemediationRegistry
 	ruleWindows      *RuleWindowRegistry
 	cfg              *config.Config
-	diagStore        diag.Store
-	diagCleaner      diagnosticCleaner
-	host             diag.Host
 	measure          MeasurementReader
 	collector        *metrics.Collector
 	daemonMetrics    *daemonMetricSampler
@@ -164,8 +156,6 @@ type WebBackend struct {
 
 	slaCacheMu sync.Mutex
 	slaCache   map[slaCacheKey]cachedSLATimelines
-
-	diagCache *DiagnosticCache
 }
 
 type slaCacheKey struct {
@@ -204,7 +194,6 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		remediation:      deps.Remediation,
 		ruleWindows:      deps.RuleWindows,
 		cfg:              cfg,
-		host:             diag.OSHost{},
 		collector:        deps.Collector,
 		daemonMetrics:    newDaemonMetricSampler(deps.Collector, deps.Now, deps.DaemonMetrics),
 		serviceMetrics:   deps.ServiceMetrics,
@@ -236,15 +225,12 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		operationTimeout: deps.OperationTimeout,
 		now:              deps.Now,
 		slaCache:         map[slaCacheKey]cachedSLATimelines{},
-		diagCache:        deps.DiagCache,
 	}
 	if wb.serviceMetrics == nil {
 		wb.serviceMetrics = NewServiceMetricSampler()
 	}
 	wb.sla, _ = deps.SLA.(SLAReader)
 	wb.measure, _ = deps.SLA.(MeasurementReader)
-	wb.diagStore, _ = deps.Monitor.(diag.Store)
-	wb.diagCleaner, _ = deps.Monitor.(diagnosticCleaner)
 	var warnings []string
 	resolver := servicemgr.NewUnitResolver()
 	resolver.Manager = deps.Manager
@@ -2650,86 +2636,6 @@ func (b *WebBackend) Series(_ context.Context, name string, since time.Duration)
 		out = append(out, sp)
 	}
 	return out, true
-}
-
-// Diagnostics returns diagnostic findings. When a DiagnosticCache is attached,
-// it serves the last scheduled snapshot instead of running diagnostics inline.
-func (b *WebBackend) Diagnostics(_ context.Context) []web.Finding {
-	if b != nil && b.diagCache != nil {
-		findings, at := b.diagCache.Findings()
-		if !at.IsZero() {
-			return timestampFindings(findings, at)
-		}
-		return findings
-	}
-	return buildDiagnosticFindings(b.cfg, b.diagStore, b.host, b.opGate)
-}
-
-func timestampFindings(findings []web.Finding, at time.Time) []web.Finding {
-	if len(findings) == 0 {
-		return findings
-	}
-	ts := at.UTC().Format(time.RFC3339)
-	out := make([]web.Finding, len(findings))
-	for i, f := range findings {
-		out[i] = f
-		out[i].Time = ts
-	}
-	return out
-}
-
-// CleanDiagnostics removes stale runtime control state for services and
-// watches that are no longer configured.
-func (b *WebBackend) CleanDiagnostics(_ context.Context) web.DiagnosticCleanResult {
-	if b.diagCleaner == nil {
-		return web.DiagnosticCleanResult{OK: false, Message: "state database is unavailable"}
-	}
-	result, err := b.diagCleaner.PruneUnconfiguredControlStates(diag.ConfiguredStoredNames(b.cfg))
-	if err != nil {
-		return web.DiagnosticCleanResult{OK: false, Message: err.Error()}
-	}
-	if len(result.Services) == 0 {
-		return web.DiagnosticCleanResult{OK: true, Message: "no unconfigured control state found"}
-	}
-	return web.DiagnosticCleanResult{
-		OK:       true,
-		Message:  fmt.Sprintf("cleared control state for %d unconfigured target(s)", len(result.Services)),
-		Pruned:   result.Rows,
-		Services: result.Services,
-	}
-}
-
-func lockScanFindings(cfg *config.Config) []web.Finding {
-	if cfg == nil {
-		return nil
-	}
-	warnings, err := locksScanner(cfg).ScanDir()
-	var out []web.Finding
-	if err != nil {
-		out = append(out, web.Finding{Level: "error", Scope: "locks", Message: err.Error()})
-	}
-	for _, w := range warnings {
-		out = append(out, web.Finding{Level: "warning", Scope: "locks", Message: w})
-	}
-	return out
-}
-
-func operationSlotFindings(inUse, total int) []web.Finding {
-	if total <= 0 || inUse <= 0 {
-		return nil
-	}
-	if inUse >= total {
-		return []web.Finding{{
-			Level:   "warning",
-			Scope:   "operations",
-			Message: fmt.Sprintf("operation slots saturated (%d/%d in use)", inUse, total),
-		}}
-	}
-	return []web.Finding{{
-		Level:   "info",
-		Scope:   "operations",
-		Message: fmt.Sprintf("operation slots %d/%d in use", inUse, total),
-	}}
 }
 
 // SetPanic enables or disables the daemon-wide panic mode, persisting the flag

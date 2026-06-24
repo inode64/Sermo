@@ -160,7 +160,7 @@
   body.disconnected #overview,
   body.disconnected #attention,
   body.disconnected #services-section, body.disconnected #storage-section, body.disconnected #watches-section, body.disconnected #network-section,
-  body.disconnected #locks-section, body.disconnected #activity-section, body.disconnected #daemon-section, body.disconnected #diag-section,
+  body.disconnected #locks-section, body.disconnected #activity-section, body.disconnected #daemon-section,
   body.disconnected #notifiers-section, body.disconnected #mounts-section, body.disconnected #app-section { opacity: .5; transition: opacity .2s; }
   .win-btn-active { background: color-mix(in srgb, var(--text-2) 20%, transparent); }
   .muted { color: var(--text-2); font-size: .85rem; }
@@ -333,7 +333,7 @@
     .events th:nth-child(3), .events td:nth-child(3) { display: none; }
   }
 
-  /* ---- events / diagnostics -------------------------------------------------- */
+  /* ---- events ---------------------------------------------------------------- */
   .events { width: 100%; font-size: .88rem; }
   .events td { vertical-align: top; }
   .events .t { white-space: nowrap; color: var(--text-2); font-variant-numeric: tabular-nums; }
@@ -755,14 +755,6 @@
   </div>
 </dialog>
 
-<details id="diag-section">
-  <summary>Diagnostics
-    <button id="diag-clean" class="danger-btn" style="display:none">clean stale data</button>
-    <span id="diag-clean-note" class="muted" style="display:none; font-weight:400; font-size:.8rem; margin-left:.5rem">removes stale control state for unconfigured targets; metric/SLA/event history is kept</span>
-  </summary>
-  <table class="events"><tbody id="diag"></tbody></table>
-</details>
-
 <footer id="app-footer">
   <div class="footer-actions">
     <button id="reload-btn" style="display:none">reload config</button>
@@ -784,7 +776,7 @@ function setStatus(msg, kind) {
   if (msg) el.classList.add(kind === "ok" ? "status-ok" : kind === "warn" ? "status-warn" : "status-err");
 }
 
-let me = { can_act: true, role: "admin", auth: false, diagnostics: true };
+let me = { can_act: true, role: "admin", auth: false };
 
 async function loadMe() {
   try {
@@ -803,12 +795,6 @@ async function loadMe() {
   updateActivityAdminControls();
   updateStateCompactControls();
   updatePanicControls();
-  updateDiagnosticCleanControls(latestDiagnostics || []);
-  // Hide the Diagnostics panel entirely when disabled via web.disable_diagnostics.
-  const diagSection = $("#diag-section");
-  if (diagSection) {
-    diagSection.style.display = (me.diagnostics === false) ? "none" : "";
-  }
 }
 
 // Connection state: when a fetch fails the table is dimmed and a "disconnected,
@@ -878,7 +864,6 @@ async function load() {
   if (connOK) {
     renderOpsPanel(ops);
     loadEvents();
-    await loadDiag();
     healthIconReady = true;
     renderAttention();
   } else {
@@ -1138,83 +1123,6 @@ async function compactState() {
     await load();
   } catch (e) {
     setStatus(`state compact: ${e.message}`, "err");
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-// loadDiag refreshes the Diagnostics panel. It runs on every dashboard refresh
-// (see load()), so it must not flicker: the "checking…" placeholder shows only on
-// the very first load, and a transient fetch error keeps the last good render
-// instead of replacing it — mirroring how load() degrades the other panels.
-let diagLoaded = false;
-async function loadDiag() {
-  if (me.diagnostics === false) { latestDiagnostics = []; renderAttention(); return; }
-  if (!diagLoaded) {
-    $("#diag").innerHTML = `<tr><td class="muted">checking…</td></tr>`;
-    updateDiagnosticCleanControls([]);
-  }
-  try {
-    const res = await fetch("api/diagnostics");
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const findings = await res.json();
-    diagLoaded = true;
-    latestDiagnostics = findings || [];
-    updateDiagnosticCleanControls(latestDiagnostics);
-    renderAttention();
-    if (!findings || !findings.length) {
-      $("#diag").innerHTML = `<tr><td class="ok">ok — no problems found</td></tr>`;
-      return;
-    }
-    $("#diag").innerHTML = findings.map((f) => `<tr>
-      <td class="t">${esc(fmtTime(f.time))}</td>
-      <td class="lvl-${esc(f.level)}">${esc(f.level)}</td>
-      <td>${esc(f.scope)}</td>
-      <td>${esc(f.message)}</td>
-    </tr>`).join("");
-  } catch (e) {
-    // On auto-refresh keep the last good render; only surface the failure on the
-    // initial load, when there is nothing else to show.
-    if (!diagLoaded) {
-      latestDiagnostics = [];
-      updateDiagnosticCleanControls([]);
-      renderAttention();
-      $("#diag").innerHTML = `<tr><td class="muted">Failed to run diagnostics: ${esc(e.message)}</td></tr>`;
-    }
-  }
-}
-
-function staleDiagnostic(f) {
-  return f && f.scope === "database" && String(f.message || "").includes("which is no longer configured");
-}
-
-function updateDiagnosticCleanControls(findings) {
-  const show = !!(me.can_act && me.diagnostics !== false && (findings || []).some(staleDiagnostic));
-  const btn = $("#diag-clean");
-  const note = $("#diag-clean-note");
-  if (btn) btn.style.display = show ? "inline-block" : "none";
-  if (note) note.style.display = show ? "inline" : "none";
-}
-
-async function cleanDiagnostics() {
-  if (!confirm("Clean stale control state for services/watches that are no longer configured? Metric, SLA and event history is kept.")) return;
-  setStatus("");
-  const btn = $("#diag-clean");
-  if (btn) btn.disabled = true;
-  try {
-    const res = await fetch("api/diagnostics/clean", {
-      method: "POST",
-      headers: { "X-Sermo-CSRF": "1" },
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
-    const services = (body.services || []).join(", ");
-    setStatus(body.pruned
-      ? `cleaned stale control state: ${body.pruned} row${body.pruned === 1 ? "" : "s"}${services ? " (" + services + ")" : ""}`
-      : (body.message || "no stale control state found"), body.pruned ? "ok" : "ok");
-    await loadDiag();
-  } catch (e) {
-    setStatus(`diagnostics clean: ${e.message}`, "err");
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -1564,9 +1472,8 @@ let latestLocks = [];
 let latestActivity = null;
 let latestReady = null;
 let latestHostMetrics = [];   // last /api/host readings (for process memory bars)
-let latestDiagnostics = [];
-// Defer favicon/title until load() has the full dashboard snapshot (including
-// diagnostics). Avoids a green default flashing to red while panels hydrate.
+// Defer favicon/title until load() has the full dashboard snapshot. Avoids a
+// green default flashing to red while panels hydrate.
 let healthIconReady = false;
 
 function targetStateClass(state) {
@@ -1802,18 +1709,6 @@ function renderAttention() {
       title: latestActivity.errors === 1 ? "1 recent error" : `${latestActivity.errors} recent errors`,
       detail: latestActivity.last_event_kind ? `last: ${latestActivity.last_event_kind}` : "see recent activity",
       target: "activity-section",
-    });
-  }
-  const diagErrors = (latestDiagnostics || []).filter((f) => f.level === "error");
-  const diagWarnings = (latestDiagnostics || []).filter((f) => f.level === "warning");
-  if (diagErrors.length || diagWarnings.length) {
-    const count = diagErrors.length || diagWarnings.length;
-    const kind = diagErrors.length ? "error" : "warning";
-    items.push({
-      level: diagErrors.length ? "critical" : "warning",
-      title: `${count} diagnostic ${kind}${count === 1 ? "" : "s"}`,
-      detail: (diagErrors[0] || diagWarnings[0] || {}).message || "",
-      target: "diag-section",
     });
   }
   // While the daemon is settling (starting), the tab favicon is neutral grey and
@@ -5145,13 +5040,6 @@ function initStaticHandlers() {
   const confirmPreflight = $("#confirm-preflight-btn");
   if (confirmPreflight) confirmPreflight.addEventListener("click", runConfirmPreflight);
 
-  const diagClean = $("#diag-clean");
-  if (diagClean) {
-    diagClean.addEventListener("click", (e) => {
-      e.stopPropagation();
-      cleanDiagnostics();
-    });
-  }
   const reloadBtn = $("#reload-btn");
   if (reloadBtn) {
     reloadBtn.addEventListener("click", (e) => {

@@ -29,7 +29,6 @@ type fakeBackend struct {
 	events          []Event
 	releasedLocks   []string
 	releaseOK       bool
-	diagnosticClean DiagnosticCleanResult
 }
 
 func (f *fakeBackend) Services(context.Context) []Service   { return f.services }
@@ -157,15 +156,6 @@ func (f *fakeBackend) ServiceRuntime(_ context.Context, name string, since time.
 		}
 	}
 	return ServiceRuntimeMetrics{}, false
-}
-func (f *fakeBackend) Diagnostics(context.Context) []Finding {
-	return []Finding{{Level: "warning", Scope: "database", Message: `stored control state for target "ghost" which is no longer configured`}}
-}
-func (f *fakeBackend) CleanDiagnostics(context.Context) DiagnosticCleanResult {
-	if f.diagnosticClean.OK || f.diagnosticClean.Message != "" {
-		return f.diagnosticClean
-	}
-	return DiagnosticCleanResult{OK: true, Message: "no unconfigured control state found"}
 }
 func (f *fakeBackend) Operations(context.Context) OperationSlots { return f.opsSlots }
 func (f *fakeBackend) Operate(_ context.Context, name, action string, opts OperateOpts) ActionResult {
@@ -664,69 +654,6 @@ func TestReleaseLockEndpointConflict(t *testing.T) {
 	newServer(&fakeBackend{}).ServeHTTP(rec, postReq("/api/locks/mysql/release"))
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("blocked release status = %d, want 409", rec.Code)
-	}
-}
-
-func TestDiagnostics(t *testing.T) {
-	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/diagnostics", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("diagnostics status %d", rec.Code)
-	}
-	var got []Finding
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(got) != 1 || got[0].Level != "warning" || got[0].Scope != "database" {
-		t.Fatalf("unexpected findings: %+v", got)
-	}
-	if _, err := time.Parse(time.RFC3339, got[0].Time); err != nil {
-		t.Fatalf("diagnostic time = %q, want RFC3339: %v", got[0].Time, err)
-	}
-}
-
-func TestDiagnosticsClean(t *testing.T) {
-	b := &fakeBackend{diagnosticClean: DiagnosticCleanResult{
-		OK:       true,
-		Message:  "cleared control state for 2 unconfigured target(s)",
-		Pruned:   7,
-		Services: []string{"ghost", "watch:old"},
-	}}
-	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, postReq("/api/diagnostics/clean"))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("diagnostics clean status %d", rec.Code)
-	}
-	var got DiagnosticCleanResult
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if !got.OK || got.Pruned != 7 || strings.Join(got.Services, ",") != "ghost,watch:old" {
-		t.Fatalf("diagnostics clean = %+v", got)
-	}
-}
-
-func TestDiagnosticsCleanDisabled(t *testing.T) {
-	rec := httptest.NewRecorder()
-	srv := &Server{Backend: &fakeBackend{}, DiagnosticsDisabled: true}
-	srv.Handler().ServeHTTP(rec, postReq("/api/diagnostics/clean"))
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("disabled diagnostics clean status %d, want 404", rec.Code)
-	}
-}
-
-func TestTimestampFindings(t *testing.T) {
-	at := time.Date(2026, 6, 15, 10, 30, 0, 0, time.UTC)
-	got := timestampFindings([]Finding{
-		{Level: "warning", Scope: "database", Message: "missing time"},
-		{Time: "2026-06-14T09:00:00Z", Level: "info", Scope: "ops", Message: "has time"},
-	}, at)
-
-	if got[0].Time != "2026-06-15T10:30:00Z" {
-		t.Fatalf("first time = %q", got[0].Time)
-	}
-	if got[1].Time != "2026-06-14T09:00:00Z" {
-		t.Fatalf("second time = %q, want preserved existing timestamp", got[1].Time)
 	}
 }
 

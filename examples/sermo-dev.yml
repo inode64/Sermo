@@ -58,4 +58,3 @@ web:
   # password: "change-me"
   # guest_password: "read-only"
   # guest: false
-  # disable_diagnostics: false

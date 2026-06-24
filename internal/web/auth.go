@@ -107,10 +107,9 @@ func (s *Server) handleWhoami(w http.ResponseWriter, r *http.Request) {
 		role = "admin"
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"role":        role,
-		"can_act":     role == "admin",
-		"auth":        s.Auth.Enabled(),
-		"diagnostics": !s.DiagnosticsDisabled,
+		"role":    role,
+		"can_act": role == "admin",
+		"auth":    s.Auth.Enabled(),
 	})
 }
 

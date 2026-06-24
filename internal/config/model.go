@@ -445,7 +445,7 @@ func (c *Config) Notifiers() map[string]any {
 }
 
 // SortedServiceNames returns the configured service names alphabetically —
-// the stable iteration order the daemon, web backend and diagnostics share
+// the stable iteration order the daemon and web backend share
 // (ServiceNames keeps load order for reporting).
 func (c *Config) SortedServiceNames() []string {
 	if c == nil {

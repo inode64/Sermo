@@ -94,8 +94,6 @@ sermoctl events clear [--before TIME]   # omit TIME to clear all; TIME may be RF
                                         # only events strictly before the timestamp are removed
 sermoctl activity clear [--before TIME] # clears the same log shown as Recent activity
 
-sermoctl diagnose
-sermoctl diagnose clean                 # removes stale control state for removed services/watches
 sermoctl state compact [--before TIME]  # prunes old history and vacuums the state database
                                         # omit TIME for normal 366-day retention; TIME may be RFC3339 or duration
 

@@ -351,15 +351,6 @@ type StateCompactResult struct {
 	Vacuum         bool   `json:"vacuum"`
 }
 
-// DiagnosticCleanResult is the outcome of pruning stale control state found
-// by diagnostics.
-type DiagnosticCleanResult struct {
-	OK       bool     `json:"ok"`
-	Message  string   `json:"message,omitempty"`
-	Pruned   int64    `json:"pruned"`
-	Services []string `json:"services,omitempty"`
-}
-
 // PreflightResult is the outcome of an on-demand preflight run.
 type PreflightResult struct {
 	OK     bool    `json:"ok"`
@@ -538,14 +529,6 @@ type CheckMetric struct {
 	Unit string `json:"unit"`
 }
 
-// Finding is one diagnostic result (level: error|warning|info).
-type Finding struct {
-	Time    string `json:"time,omitempty"` // RFC3339 when the diagnostic was generated
-	Level   string `json:"level"`
-	Scope   string `json:"scope"`
-	Message string `json:"message"`
-}
-
 // OperationSlots is the global start/stop/restart/reload/resume concurrency pool.
 type OperationSlots struct {
 	InUse int `json:"in_use"`
@@ -627,11 +610,6 @@ type Backend interface {
 	ServiceRuntime(ctx context.Context, name string, since time.Duration) (ServiceRuntimeMetrics, bool)
 	// Events returns up to limit recent events, newest first (the global feed).
 	Events(ctx context.Context, limit int) []Event
-	// Diagnostics runs config/host/database consistency checks and returns the
-	// findings (ordered by severity).
-	Diagnostics(ctx context.Context) []Finding
-	// CleanDiagnostics removes stale control state for unconfigured targets.
-	CleanDiagnostics(ctx context.Context) DiagnosticCleanResult
 	// Operations reports how many global operation slots are in use.
 	Operations(ctx context.Context) OperationSlots
 	// ServiceEvents returns up to limit recent events for one service, newest
@@ -713,11 +691,6 @@ type Server struct {
 	// trigger a configuration reload (equivalent to SIGHUP on the daemon).
 	Reload func() error
 
-	// DiagnosticsDisabled hides the Diagnostics panel in the dashboard and makes
-	// GET /api/diagnostics return an empty result. Set from web.disable_diagnostics
-	// in the global config.
-	DiagnosticsDisabled bool
-
 	// AccessLog appends operator POST audit records when engine.access is set.
 	AccessLog *logfile.Writer
 
@@ -760,8 +733,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/events/clear", s.handleEventsClear)
 	mux.HandleFunc("POST /api/state/compact", s.handleStateCompact)
 	mux.HandleFunc("POST /api/panic/{action}", s.handlePanic)
-	mux.HandleFunc("GET /api/diagnostics", s.handleDiagnostics)
-	mux.HandleFunc("POST /api/diagnostics/clean", s.handleDiagnosticsClean)
 	mux.HandleFunc("GET /api/ops", s.handleOperations)
 	mux.HandleFunc("POST /api/services/{name}/preflight", s.handlePreflight)
 	mux.HandleFunc("POST /api/services/{name}/{action}", s.handleAction)
@@ -1161,42 +1132,6 @@ func (s *Server) handlePanic(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusConflict
 	}
 	writeJSON(w, status, res)
-}
-
-func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
-	if s.DiagnosticsDisabled {
-		writeJSON(w, http.StatusOK, []Finding{})
-		return
-	}
-	writeJSON(w, http.StatusOK, timestampFindings(s.Backend.Diagnostics(r.Context()), time.Now()))
-}
-
-func (s *Server) handleDiagnosticsClean(w http.ResponseWriter, r *http.Request) {
-	if s.DiagnosticsDisabled {
-		writeError(w, http.StatusNotFound, "diagnostics are disabled")
-		return
-	}
-	res := s.Backend.CleanDiagnostics(r.Context())
-	status := http.StatusOK
-	if !res.OK {
-		status = http.StatusConflict
-	}
-	writeJSON(w, status, res)
-}
-
-func timestampFindings(findings []Finding, at time.Time) []Finding {
-	if len(findings) == 0 {
-		return findings
-	}
-	out := make([]Finding, len(findings))
-	copy(out, findings)
-	ts := at.Format(time.RFC3339)
-	for i := range out {
-		if out[i].Time == "" {
-			out[i].Time = ts
-		}
-	}
-	return out
 }
 
 func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {

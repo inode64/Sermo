@@ -86,8 +86,8 @@ a configtest CLI, `mosquitto`, `supervisord`, `udisks2`, `pm2`, etc. (`redis` /
 - [x] `event.log` (phase 1): `engine.events` append-only JSONL mirroring daemon
       events alongside the SQLite store. Rotation and retention still TODO.
 - [x] `diagnostics.log` (phase 1): `engine.diagnostics` scheduled snapshots
-      (`engine.diagnostics_interval`, default `1h`) with web UI cache. Rotation,
-      on-demand `sermoctl diagnose` export and GET access logging still TODO.
+      (`engine.diagnostics_interval`, default `1h`). Rotation and retention still
+      TODO.
 
 ## Engine and config
 
