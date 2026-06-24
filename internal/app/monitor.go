@@ -185,6 +185,10 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	for _, w := range warns {
 		m.Logger.Warn("reload notifiers", "warning", w)
 	}
+	if m.deps.DiagCache != nil {
+		m.deps.DiagCache.UpdateConfig(cfg)
+		go m.deps.DiagCache.Refresh()
+	}
 }
 
 func (m *Monitor) startGenerationLocked(ctx context.Context, firstBoot bool) {

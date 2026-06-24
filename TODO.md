@@ -80,18 +80,14 @@ a configtest CLI, `mosquitto`, `supervisord`, `udisks2`, `pm2`, etc. (`redis` /
 
 ## Logging and audit
 
-- [ ] `access.log`: append-only access records for operator traffic through the
-      web API and `sermoctl` (timestamp, actor or auth identity, source —
-      HTTP/CLI —, method/command, target, outcome/status). Configurable path
-      (under `paths.runtime` or a dedicated `paths.logs` entry), rotation and
-      retention; distinct from monitoring events and from the web UI activity
-      summary.
-- [ ] `event.log`: append-only structured export of daemon events (actions,
-      alerts, suppressions, shadow/dry-run, hook/notify outcomes, cascades, …)
-      for log shipping and offline forensics. May mirror or supplement the
-      existing SQLite event/activity store the web UI and `sermoctl activity`
-      read today; distinct from `access.log` (who accessed Sermo) and from
-      process/service logs on the host.
+- [x] `access.log` (phase 1): `engine.access` append-only JSONL for mutating web
+      POST `/api/**` traffic and state-changing `sermoctl` commands. Rotation and
+      retention still TODO.
+- [x] `event.log` (phase 1): `engine.events` append-only JSONL mirroring daemon
+      events alongside the SQLite store. Rotation and retention still TODO.
+- [x] `diagnostics.log` (phase 1): `engine.diagnostics` scheduled snapshots
+      (`engine.diagnostics_interval`, default `1h`) with web UI cache. Rotation,
+      on-demand `sermoctl diagnose` export and GET access logging still TODO.
 
 ## Engine and config
 

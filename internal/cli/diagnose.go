@@ -64,6 +64,7 @@ func (a App) runDiagnoseClean(opts options) int {
 
 	result, err := store.PruneUnconfiguredControlStates(diag.ConfiguredStoredNames(cfg))
 	if err != nil {
+		a.recordAccess(cfg, "diagnose clean", "", "error", err.Error())
 		return a.fail(opts, fmt.Sprintf("clean diagnostic state: %v", err))
 	}
 	if opts.json {
@@ -74,9 +75,12 @@ func (a App) runDiagnoseClean(opts options) int {
 		return exitSuccess
 	}
 	if len(result.Services) == 0 {
+		a.recordAccess(cfg, "diagnose clean", "", "ok", "no stale control state")
 		fmt.Fprintln(a.Stdout, "no unconfigured control state found")
 		return exitSuccess
 	}
+	msg := fmt.Sprintf("cleaned %d target(s)", len(result.Services))
+	a.recordAccess(cfg, "diagnose clean", "", "ok", msg)
 	fmt.Fprintf(
 		a.Stdout,
 		"cleaned control state for %d unconfigured target(s): %s (%d row(s))\n",

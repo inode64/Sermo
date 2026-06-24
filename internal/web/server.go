@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"sermo/internal/buildinfo"
+	"sermo/internal/logfile"
 )
 
 //go:embed index.html
@@ -717,6 +718,9 @@ type Server struct {
 	// in the global config.
 	DiagnosticsDisabled bool
 
+	// AccessLog appends operator POST audit records when engine.access is set.
+	AccessLog *logfile.Writer
+
 	started  time.Time       // when the server began serving; for /livez uptime
 	shutdown context.Context // daemon lifetime; set in Run
 }
@@ -762,7 +766,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/services/{name}/preflight", s.handlePreflight)
 	mux.HandleFunc("POST /api/services/{name}/{action}", s.handleAction)
 	mux.HandleFunc("POST /api/reload", s.handleReload)
-	return securityHeaders(s.withAuth(mux))
+	return securityHeaders(s.withAuth(s.withAccessLog(mux)))
 }
 
 type cspNonceCtxKey struct{}
