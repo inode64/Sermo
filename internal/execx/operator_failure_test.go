@@ -39,6 +39,23 @@ func TestOperatorFailureStripsRunPrefix(t *testing.T) {
 	}
 }
 
+// With the ": " separator at the very start of the post-"run " remainder, the
+// strip still applies (the index-zero boundary of the prefix search).
+func TestOperatorFailureStripsRunPrefixAtStart(t *testing.T) {
+	msg := OperatorFailure(errors.New("run : detail"), Result{ExitCode: 1}, time.Second)
+	if msg != "detail" {
+		t.Fatalf("OperatorFailure(run : detail) = %q, want \"detail\"", msg)
+	}
+}
+
+// A timeout with neither a configured timeout nor a measured duration falls
+// through to a bare "timeout" (the d>0 boundary at d==0).
+func TestOperatorFailureTimeoutNoDuration(t *testing.T) {
+	if msg := OperatorFailure(context.DeadlineExceeded, Result{}, 0); msg != "timeout" {
+		t.Fatalf("OperatorFailure(deadline, {}, 0) = %q, want \"timeout\"", msg)
+	}
+}
+
 func TestContextFailureCanceled(t *testing.T) {
 	msg := ContextFailure(context.Canceled, time.Second)
 	if msg != "cancelled" {
