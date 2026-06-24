@@ -36,6 +36,15 @@ func EngineString(cfg *config.Config, key string) string {
 	return cfgval.AsString(engineValue(cfg, key))
 }
 
+// EngineByteSize reads a byte-size field (e.g. "64M", "1G") from the engine
+// block, falling back when unset or unparseable.
+func EngineByteSize(cfg *config.Config, key string, fallback int64) int64 {
+	if v, ok := cfgval.ByteSize(engineValue(cfg, key)); ok {
+		return int64(v)
+	}
+	return fallback
+}
+
 // EngineUserLookup builds the user/group resolver configured under engine.
 func EngineUserLookup(cfg *config.Config, runner execx.Runner) *process.UserLookup {
 	return process.NewUserLookup(process.UserLookupConfig{

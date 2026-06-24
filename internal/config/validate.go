@@ -93,6 +93,11 @@ func validateGlobal(cfg *Config) []Issue {
 				add("engine.max_parallel_operations must be an integer > 0")
 			}
 		}
+		if v, present := engine["state_cache_size"]; present {
+			if n, ok := cfgval.ByteSize(v); !ok || n == 0 {
+				add("engine.state_cache_size must be a positive size with a K/M/G suffix (e.g. 64M)")
+			}
+		}
 	}
 
 	if paths, ok := raw["paths"].(map[string]any); ok {

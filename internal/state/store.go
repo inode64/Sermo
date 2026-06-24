@@ -216,6 +216,25 @@ type PruneHistoryResult struct {
 // the daemon (long-lived reader/writer) and sermoctl (short-lived writer)
 // coexist across processes.
 func Open(path string) (*Store, error) {
+	return OpenWith(path, Options{})
+}
+
+// DefaultCacheBytes is the SQLite page-cache size used when the caller does not
+// override it. The time-series tables (measurement/metric/sla) and their indexes
+// grow into the tens of MB; 64 MiB keeps the hot index pages resident so a
+// per-cycle upsert burst does not thrash them from disk and — because every
+// statement shares the single connection — stall interactive control writes
+// (monitor/unmonitor) behind it for seconds.
+const DefaultCacheBytes = 64 << 20
+
+// Options tunes an opened Store.
+type Options struct {
+	// CacheBytes sets the SQLite page cache. Values <= 0 use DefaultCacheBytes.
+	CacheBytes int64
+}
+
+// OpenWith opens the store with explicit options. Open is the zero-option form.
+func OpenWith(path string, opts Options) (*Store, error) {
 	if dir := filepath.Dir(path); dir != "" {
 		// Owner-only (root): the state DB holds control state and history, not
 		// secrets, but there is no reason for it to be world-traversable. Matches the
@@ -226,11 +245,22 @@ func Open(path string) (*Store, error) {
 		}
 	}
 
+	cacheBytes := opts.CacheBytes
+	if cacheBytes <= 0 {
+		cacheBytes = DefaultCacheBytes
+	}
+	// SQLite reads a negative cache_size as a KiB budget (a positive value would be
+	// a page count); convert the byte budget to KiB.
+	cacheKiB := cacheBytes / 1024
+
 	// synchronous=NORMAL is safe under WAL (no corruption risk; at worst the last
 	// few committed cycles are lost on a power cut) and avoids an fsync on every
 	// commit — the per-cycle SLA/measurement writes would otherwise each force a
 	// disk sync.
-	dsn := "file:" + path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(on)"
+	dsn := fmt.Sprintf(
+		"file:%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(on)&_pragma=cache_size(-%d)",
+		path, cacheKiB,
+	)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open state db %s: %w", path, err)
