@@ -152,7 +152,10 @@ func run(args []string) int {
 	}
 	defer instanceLock.Close()
 
-	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := state.OpenWith(
+		filepath.Join(cfg.Global.StateDir(), state.Filename),
+		state.Options{CacheBytes: app.EngineByteSize(cfg, "state_cache_size", state.DefaultCacheBytes)},
+	)
 	if err != nil {
 		logger.Error("open state store", "error", err)
 		return 2

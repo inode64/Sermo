@@ -31,6 +31,7 @@ engine:
   startup_delay: 0  # grace before the first cycle after boot
   user_lookup: auto  # auto | native | getent | numeric
   user_lookup_timeout: 250ms  # per-getent lookup timeout; cached in-process
+  state_cache_size: 64M  # SQLite page cache for the state DB (K/M/G suffix)
 
 paths:
   # Directory entries are non-recursive unless a list item uses
