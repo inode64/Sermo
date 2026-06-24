@@ -321,8 +321,6 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runPanic(opts)
 	case "sla":
 		return a.runSLA(opts)
-	case "diagnose":
-		return a.runDiagnose(opts)
 	case "reload":
 		if opts.service() == "" {
 			return a.commandUsageError("reload", "reload requires a service name; use `sermoctl daemon reload` to reload sermod config")

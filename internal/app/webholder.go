@@ -181,22 +181,6 @@ func (h *WebBackendHolder) Events(ctx context.Context, limit int) []web.Event {
 	return nil
 }
 
-// Diagnostics returns diagnostic findings from the active backend.
-func (h *WebBackendHolder) Diagnostics(ctx context.Context) []web.Finding {
-	if b := h.backend(); b != nil {
-		return b.Diagnostics(ctx)
-	}
-	return nil
-}
-
-// CleanDiagnostics removes stale control state through the active backend.
-func (h *WebBackendHolder) CleanDiagnostics(ctx context.Context) web.DiagnosticCleanResult {
-	if b := h.backend(); b != nil {
-		return b.CleanDiagnostics(ctx)
-	}
-	return web.DiagnosticCleanResult{OK: false, Message: "web backend unavailable"}
-}
-
 // Operations returns operation-slot usage from the active backend.
 func (h *WebBackendHolder) Operations(ctx context.Context) web.OperationSlots {
 	if b := h.backend(); b != nil {

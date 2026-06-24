@@ -98,7 +98,6 @@ web:
   password: "${env:SERMO_WEB_PASSWORD:-change-me}"  # admin: read + actions
   guest_password: "${env:SERMO_GUEST_PASSWORD:-read-only}"
   guest: false  # true allows anonymous read-only access
-  disable_diagnostics: false  # true hides the Diagnostics panel from the web UI
 
 # Named notification targets. email, slack, teams, tty and wall are built in;
 # `tty` and `wall` are also available as default internal notifiers even when

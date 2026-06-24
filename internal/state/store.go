@@ -188,13 +188,6 @@ type Store struct {
 	now func() time.Time
 }
 
-// PruneUnconfiguredControlStatesResult summarizes stale control state removed
-// from the persistent state database.
-type PruneUnconfiguredControlStatesResult struct {
-	Services []string
-	Rows     int64
-}
-
 // DefaultHistoryRetention is the normal SLA/metrics/event history window kept
 // unless an operator runs state compact with an explicit --before cutoff.
 const DefaultHistoryRetention = 366 * 24 * time.Hour
@@ -1341,117 +1334,6 @@ func (s *Store) ServiceMetricSeries(service, metric string, from, to time.Time) 
 // Returns rows removed.
 func (s *Store) PruneServiceMetrics(before time.Time) (int64, error) {
 	return s.pruneBuckets("service_metric", before)
-}
-
-// IntegrityCheck runs SQLite's PRAGMA integrity_check and returns an error when
-// the database is not "ok" (corruption), for diagnostics.
-func (s *Store) IntegrityCheck() error {
-	var result string
-	if err := s.db.QueryRow("PRAGMA integrity_check;").Scan(&result); err != nil {
-		return err
-	}
-	if result != "ok" {
-		return fmt.Errorf("integrity_check: %s", result)
-	}
-	return nil
-}
-
-// TrackedServices returns the distinct service names that have stored data
-// (control state, SLA samples, check measurements or runtime metrics), so
-// diagnostics can flag rows for services no longer in the configuration.
-func (s *Store) TrackedServices() ([]string, error) {
-	return s.queryNames(`SELECT service FROM monitor_state
-		UNION SELECT service FROM remediation_state
-		UNION SELECT service FROM rule_window_state
-		UNION SELECT service FROM sla_sample
-		UNION SELECT service FROM check_sla_sample
-		UNION SELECT service FROM measurement
-		UNION SELECT service FROM measurement_metric
-		UNION SELECT service FROM service_metric ORDER BY service;`)
-}
-
-// TrackedControlStates returns the distinct service/watch names that have
-// persisted runtime control state. Diagnostics use this narrower view so
-// historical metrics do not make a removed target look like a live problem.
-func (s *Store) TrackedControlStates() ([]string, error) {
-	return s.queryNames(`SELECT service FROM monitor_state
-		UNION SELECT service FROM remediation_state
-		UNION SELECT service FROM rule_window_state ORDER BY service;`)
-}
-
-func (s *Store) queryNames(query string) ([]string, error) {
-	rows, err := s.db.Query(query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, err
-		}
-		out = append(out, name)
-	}
-	return out, rows.Err()
-}
-
-// PruneUnconfiguredControlStates removes persisted runtime control state for
-// services or watches absent from the configured target list. It intentionally
-// leaves SLA, measurements, events and runtime metrics untouched; history
-// maintenance is handled by PruneHistory and Compact.
-func (s *Store) PruneUnconfiguredControlStates(configured []string) (PruneUnconfiguredControlStatesResult, error) {
-	tracked, err := s.TrackedControlStates()
-	if err != nil {
-		return PruneUnconfiguredControlStatesResult{}, err
-	}
-	known := make(map[string]struct{}, len(configured))
-	for _, name := range configured {
-		known[name] = struct{}{}
-	}
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return PruneUnconfiguredControlStatesResult{}, err
-	}
-	defer tx.Rollback()
-
-	var result PruneUnconfiguredControlStatesResult
-	for _, service := range tracked {
-		if _, ok := known[service]; ok {
-			continue
-		}
-		rows, err := deleteControlState(tx, service)
-		if err != nil {
-			return PruneUnconfiguredControlStatesResult{}, err
-		}
-		result.Services = append(result.Services, service)
-		result.Rows += rows
-	}
-	if err := tx.Commit(); err != nil {
-		return PruneUnconfiguredControlStatesResult{}, err
-	}
-	return result, nil
-}
-
-func deleteControlState(tx *sql.Tx, service string) (int64, error) {
-	var rows int64
-	for _, stmt := range [...]string{
-		`DELETE FROM monitor_state WHERE service = ?;`,
-		`DELETE FROM remediation_state WHERE service = ?;`,
-		`DELETE FROM rule_window_state WHERE service = ?;`,
-	} {
-		res, err := tx.Exec(stmt, service)
-		if err != nil {
-			return 0, err
-		}
-		n, err := res.RowsAffected()
-		if err != nil {
-			return 0, err
-		}
-		rows += n
-	}
-	return rows, nil
 }
 
 // PruneSLA deletes SLA buckets older than before, bounding the table to roughly

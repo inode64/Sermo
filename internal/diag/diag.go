@@ -1,18 +1,16 @@
 // Package diag runs configuration- and host-consistency diagnostics on a loaded
-// Sermo config: it validates the config, checks the state database, flags stored
-// control state for services/watches that no longer exist, warns about
-// per-check intervals that are not aligned with the global resolution, and
-// reports referenced network interfaces, files/directories and mount points that
-// do not exist on the host.
+// Sermo config: it validates the config, warns about per-check intervals that
+// are not aligned with the global resolution, and reports referenced network
+// interfaces, files/directories and mount points that do not exist on the host.
+// Scheduled exports write findings to engine.diagnostics; there is no web UI or
+// CLI surface for on-demand diagnostics.
 //
-// Host and database access go through small interfaces so the diagnostics are
-// testable without a real machine or store.
+// Host access goes through a small interface so the diagnostics are testable
+// without a real machine.
 package diag
 
 import (
 	"fmt"
-	"maps"
-	"slices"
 	"sort"
 	"time"
 
@@ -55,12 +53,6 @@ func (r Result) count(level Level) (count int) {
 	return count
 }
 
-// Store is the database access diagnostics need (implemented by state.Store).
-type Store interface {
-	IntegrityCheck() error
-	TrackedControlStates() ([]string, error)
-}
-
 // Host is the host access diagnostics need (implemented by OSHost).
 type Host interface {
 	PathExists(path string) bool
@@ -69,14 +61,12 @@ type Host interface {
 }
 
 // Diagnose runs every diagnostic and returns the findings, ordered by severity
-// then scope. store may be nil (database checks become informational); host must
-// be non-nil.
-func Diagnose(cfg *config.Config, store Store, host Host) Result {
+// then scope. host must be non-nil.
+func Diagnose(cfg *config.Config, host Host) Result {
 	b := &builder{}
 	gi := config.EngineInterval(cfg, 30*time.Second)
 
 	diagConfig(b, cfg)
-	diagDatabase(b, cfg, store)
 	for _, name := range cfg.SortedServiceNames() {
 		diagService(b, cfg, name, gi, host)
 	}
@@ -117,44 +107,4 @@ func diagConfig(b *builder, cfg *config.Config) {
 	for _, iss := range config.Validate(cfg) {
 		b.add(LevelError, iss.Scope, "%s", iss.Msg)
 	}
-}
-
-func diagDatabase(b *builder, cfg *config.Config, store Store) {
-	if store == nil {
-		b.add(LevelInfo, "database", "no state store available; skipping database checks")
-		return
-	}
-	if err := store.IntegrityCheck(); err != nil {
-		b.add(LevelError, "database", "state database is unhealthy: %v", err)
-	}
-	tracked, err := store.TrackedControlStates()
-	if err != nil {
-		b.add(LevelWarning, "database", "could not list stored control state: %v", err)
-		return
-	}
-	known := map[string]struct{}{}
-	for _, name := range ConfiguredStoredNames(cfg) {
-		known[name] = struct{}{}
-	}
-	for _, name := range tracked {
-		if _, ok := known[name]; !ok {
-			b.add(LevelWarning, "database", "stored control state for target %q which is no longer configured", name)
-		}
-	}
-}
-
-// ConfiguredStoredNames returns the state-store target names currently backed by
-// config: services by name plus host watches under the daemon's `watch:` prefix.
-func ConfiguredStoredNames(cfg *config.Config) []string {
-	if cfg == nil {
-		return nil
-	}
-	services := cfg.SortedServiceNames()
-	watches, _ := cfg.ResolveWatches()
-	names := make([]string, 0, len(services)+len(watches))
-	names = append(names, services...)
-	for _, name := range slices.Sorted(maps.Keys(watches)) {
-		names = append(names, "watch:"+name)
-	}
-	return names
 }

@@ -1,0 +1,76 @@
+// Package logfile provides append-only JSON Lines writers for Sermo audit and
+// export logs configured under engine.access, engine.events and
+// engine.diagnostics.
+package logfile
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+)
+
+// Writer appends one JSON-encoded record per line to a log file.
+type Writer struct {
+	path string
+	f    *os.File
+	mu   sync.Mutex
+	now  func() time.Time
+}
+
+// Open creates parent directories as needed and opens path for append.
+func Open(path string) (*Writer, error) {
+	if path == "" {
+		return nil, fmt.Errorf("log path is empty")
+	}
+	if !filepath.IsAbs(path) {
+		return nil, fmt.Errorf("log path %q must be absolute", path)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return nil, fmt.Errorf("create log directory: %w", err)
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o640) //nolint:gosec // G304: operator-configured audit path
+	if err != nil {
+		return nil, fmt.Errorf("open log %q: %w", path, err)
+	}
+	return &Writer{path: path, f: f, now: time.Now}, nil
+}
+
+// Path returns the configured file path.
+func (w *Writer) Path() string {
+	if w == nil {
+		return ""
+	}
+	return w.path
+}
+
+// Write marshals v as one JSON line and appends it to the log.
+func (w *Writer) Write(v any) error {
+	if w == nil || w.f == nil {
+		return nil
+	}
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	_, err = w.f.Write(data)
+	return err
+}
+
+// Close closes the underlying file.
+func (w *Writer) Close() error {
+	if w == nil || w.f == nil {
+		return nil
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	err := w.f.Close()
+	w.f = nil
+	return err
+}

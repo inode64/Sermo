@@ -206,10 +206,10 @@ func run(args []string) int {
 	interval := config.EngineInterval(cfg, 30*time.Second)
 	runner := execx.CommandRunner{}
 	opGate := app.NewOpGate(app.EngineInt(cfg, "max_parallel_operations", 2), cfg.Global.RuntimeDir())
-	var diagCache *app.DiagnosticCache
-	if config.EngineLogPath(cfg, "diagnostics") != "" {
-		diagCache = app.NewDiagnosticCache(cfg, store, nil, opGate, diagFile, time.Now)
-		go diagCache.Run(ctx, config.EngineDiagnosticsInterval(cfg, time.Hour))
+	var diagnosticLog *app.DiagnosticLog
+	if diagFile != nil {
+		diagnosticLog = app.NewDiagnosticLog(cfg, nil, opGate, diagFile, time.Now)
+		go diagnosticLog.Run(ctx, config.EngineDiagnosticsInterval(cfg, time.Hour))
 	}
 	panicGate := app.NewPanicGate(store)
 	userLookup := app.EngineUserLookup(cfg, runner)
@@ -241,7 +241,7 @@ func run(args []string) int {
 		Remediation:     app.NewRemediationRegistry(),
 		RuleWindows:     app.NewRuleWindowRegistry(),
 		Events:          eventLog,
-		DiagCache:       diagCache,
+		DiagnosticLog:   diagnosticLog,
 		SystemFreshness: interval / 2,
 		OpGate:          opGate,
 		ExecxRunner:     runner,
@@ -330,7 +330,6 @@ func run(args []string) int {
 			Reload: func() error {
 				return syscall.Kill(os.Getpid(), syscall.SIGHUP)
 			},
-			DiagnosticsDisabled: webDiagnosticsDisabled(cfg),
 		}
 		logger.Debug("starting web ui server", "address", addr, "auth", auth.Enabled())
 		go func() {
@@ -466,17 +465,6 @@ func webAuth(cfg *config.Config) web.Auth {
 	auth.GuestPassword, _ = m["guest_password"].(string)
 	auth.AnonymousGuest, _ = m["guest"].(bool)
 	return auth
-}
-
-// webDiagnosticsDisabled reports whether web.disable_diagnostics is set, which
-// hides the Diagnostics panel and makes /api/diagnostics return nothing.
-func webDiagnosticsDisabled(cfg *config.Config) bool {
-	m, _ := cfg.Global.Raw["web"].(map[string]any)
-	if m == nil {
-		return false
-	}
-	disabled, _ := m["disable_diagnostics"].(bool)
-	return disabled
 }
 
 func openEngineLog(logger *slog.Logger, cfg *config.Config, key string) *logfile.Writer {
