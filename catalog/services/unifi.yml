@@ -36,3 +36,16 @@ checks:
     host: ${host}
     port: ${port}
     timeout: 5s
+rules:
+  restart-if-worker-thread-hot:
+    type: remediation
+    if:
+      metric:
+        scope: service
+        name: cpu_thread
+        op: '>'
+        value: 90%
+    for:
+      duration: 6m
+    then:
+      action: restart
