@@ -79,7 +79,7 @@ func TestCLIRejectsMalformedCommands(t *testing.T) {
 		{name: "config validate service arg", args: []string{"config", "validate", "web"}, want: "config validate takes no service name"},
 		{name: "sla extra", args: []string{"sla", "web", "extra"}, want: "sla accepts at most one service name"},
 		{name: "state compact extra", args: []string{"state", "compact", "extra"}, want: "state supports only"},
-		{name: "diagnose clean extra", args: []string{"diagnose", "clean", "extra"}, want: "diagnose supports only"},
+
 		{name: "wizard extra", args: []string{"wizard", "service", "extra"}, want: "wizard accepts at most one assistant name"},
 		{name: "lock acquire extra", args: []string{"lock", "acquire", "web", "extra", "--reason", "test", "--ttl", "1m"}, want: "lock acquire takes exactly one service name"},
 		{name: "lock release extra", args: []string{"lock", "release", "web", "extra"}, want: "lock release takes exactly one service name"},

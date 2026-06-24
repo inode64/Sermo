@@ -304,8 +304,9 @@ Omit a key to leave that channel off.
   Routine GET polling is not logged.
 - `engine.diagnostics` runs scheduled configuration/host diagnostics in the
   background (default interval `1h`, overridable with `engine.diagnostics_interval`)
-  and appends each snapshot to the file. The web UI serves the cached snapshot
-  instead of recomputing diagnostics on every dashboard refresh.
+  and appends each snapshot as one JSON line to the file. Rotate and retain the
+  file with your host's log tooling (for example logrotate); Sermo does not prune
+  it.
 
 `engine.interval` is the default cadence at which every service's checks are
 run. Each service runs all of its checks once per cycle.
@@ -506,7 +507,6 @@ At startup `sermod` logs a warning: "web ui disabled; no port will be opened".
 web:
   address: 127.0.0.1        # optional, default 127.0.0.1 (loopback only)
   port: 9797                # REQUIRED to activate the web UI (9797 recommended)
-  disable_diagnostics: true # optional, default false — hide the Diagnostics panel
 ```
 
 - **Activation rule:** the web UI ("servicio web") is **not started** unless
@@ -517,10 +517,6 @@ web:
   `3000` Grafana, `8080`).
 - **Authentication** is optional but recommended before exposing it. Without it,
   the UI binds to **loopback (`127.0.0.1`) by default** and is fully open.
-- **`disable_diagnostics`** (optional, default `false`) — when `true`, the
-  dashboard hides the **Diagnostics** panel and `GET /api/diagnostics` returns an
-  empty result; `POST /api/diagnostics/clean` returns `404` with `diagnostics are
-  disabled`. The underlying `sermoctl diagnose` command is unaffected.
 
 ### Authentication
 
@@ -645,9 +641,6 @@ Read-only endpoints:
 - `GET /api/monitoring` — monitored vs paused service counts.
 - `GET /api/events?limit=N` — global event feed, newest first. Optional filters:
   `service`, `watch`, `kind`, `status` and `only_errors=1`.
-- `GET /api/diagnostics` — [diagnostics](#diagnostics) findings with `time`
-  (RFC3339), `level`, `scope` and `message`; includes malformed lock files under
-  `<paths.runtime>/locks`.
 - `GET /api/ops` — global operation slot usage: `{in_use, total}` for
   `engine.max_parallel_operations`.
 
@@ -668,9 +661,6 @@ auth is enabled:
 - `POST /api/state/compact?before=TIME` — prune old SLA, measurement, daemon
   metric, service runtime metric and event history, then vacuum the state
   database; matches `sermoctl state compact`.
-- `POST /api/diagnostics/clean` — when diagnostics are enabled, remove stale
-  control state for services/watches no longer configured; metric, SLA and event
-  history is kept. Returns `404` while `web.disable_diagnostics` is `true`.
 - `POST /api/reload` — request a `sermod` configuration reload, equivalent to
   `sermoctl daemon reload`.
 
@@ -2142,24 +2132,15 @@ sermoctl config validate          # whole Sermo configuration
 
 ## Diagnostics
 
-`config validate` checks that the configuration is *well-formed*. `diagnose` goes
-further and checks it against the **live host and state database**:
+`config validate` checks that the configuration is *well-formed*. When
+`engine.diagnostics` is set, `sermod` also runs scheduled checks against the
+**live host** and appends each snapshot to the log file.
 
-```sh
-sermoctl diagnose          # text report
-sermoctl diagnose --json   # machine-readable
-sermoctl diagnose clean    # remove stale control state for unconfigured services/watches
-sermoctl state compact     # prune old history and vacuum the state database
-```
-
-It reports, as `error` / `warning` / `info` findings:
+Each JSON line includes `time` (RFC3339), `errors`, `warnings` and a `findings`
+array. Every finding has `level` (`error` / `warning` / `info`), `scope` and
+`message`. The checks cover:
 
 - **Configuration** — every `config validate` issue (errors).
-- **State database** — that the SQLite store passes `PRAGMA integrity_check`, and
-  flags **stored control state for services/watches no longer in the config**:
-  monitor/unmonitor state, automatic-remediation cooldown/backoff and rule
-  window progress. Use `sermoctl diagnose clean` to prune those orphaned control
-  rows.
 - **Interval alignment** — per-check `interval`s that are **not a multiple of the
   global resolution** (`engine.interval`) or below it, so they will be rounded
   (see [per-check interval](#per-check-interval)).
@@ -2170,21 +2151,14 @@ It reports, as `error` / `warning` / `info` findings:
   `/sys/class/block` entry; `hdparm`/`smart` device paths) and **kernel PSI**
   (a `pressure` check on a kernel without `/proc/pressure` — `CONFIG_PSI=n` —
   which would otherwise silently never fire).
+- **Locks** — malformed lock files under `<paths.runtime>/locks`.
+- **Operation slots** — usage from the running daemon (`info` when some slots are
+  in use, `warning` when saturated); see also `GET /api/ops`.
 
-`diagnose` exits `78` when any **error** finding is present; warnings alone exit
-`0`. The same report is available in the web UI's **Diagnostics** panel and at
-`GET /api/diagnostics`, where each finding is timestamped with the time of the
-last scheduled snapshot when `engine.diagnostics` is configured (otherwise the
-endpoint runs diagnostics inline). When the web UI is enabled, that feed also
-includes **operation slot** usage from the running daemon (`info` when
-some slots are in use, `warning` when saturated); see also `GET /api/ops`. When
-the panel finds stale control-state rows, admins can use **clean stale data**, which
-calls `POST /api/diagnostics/clean` and performs the same bounded cleanup as
-`sermoctl diagnose clean`: it removes only persisted control state for targets
-that are no longer configured. SLA, check
-measurements, events and runtime CPU, memory and IO history are kept.
+Rotate and retain `engine.diagnostics` with your host's log tooling; Sermo does
+not prune that file.
 
-To reclaim old history intentionally, use:
+To reclaim old state-database history intentionally, use:
 
 ```sh
 sermoctl state compact                  # normal 366-day retention, then VACUUM

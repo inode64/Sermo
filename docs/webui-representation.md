@@ -45,7 +45,6 @@ Keep changes concrete:
 | Events | `GET /api/events` | service/watch activity; supports `limit`, `service`, `watch`, `kind`, `status`, `only_errors` |
 | Recent activity | `GET /api/activity` | summary of recent events |
 | Monitoring counts | `GET /api/monitoring` | monitored vs paused service counts |
-| Diagnostics | `GET /api/diagnostics` | backend/runtime diagnostics findings (`time`, `level`, `scope`, `message`), including malformed lock files and operation-slot usage |
 | Live operations | `GET /api/ops` | active operation slots |
 
 ## Action Endpoints
@@ -61,7 +60,6 @@ enabled.
 | Lock release | `POST /api/locks/{service}/release?name=NAME` | releases inactive stale/expired named locks; active locks are refused |
 | Events clear | `POST /api/events/clear?before=TIME` | clears persisted event/activity rows; `before` accepts RFC3339 or duration |
 | State compact | `POST /api/state/compact?before=TIME` | prunes old SLA/metrics/event history and vacuums the state database; matches `sermoctl state compact` |
-| Diagnostics clean | `POST /api/diagnostics/clean` | removes stale control state for unconfigured targets; metric/SLA/event history is kept; returns 404 when diagnostics are disabled |
 | Daemon reload | `POST /api/reload` | requests a `sermod` configuration reload |
 
 ## Top bar
@@ -406,17 +404,6 @@ Safety note: this dialog must not bypass locks, guards, preflight or operation
 timeouts. It only confirms actions that still go through the backend operation
 engine.
 
-## Diagnostics panel
-
-Section id: `diag-section`
-
-| Part | Current representation |
-| --- | --- |
-| Title | `Diagnostics` |
-| Buttons | refresh; clean stale data when admin and stale database findings exist; reload config when admin |
-| Help text | `sermoctl daemon reload`; cleanup warning for stale control state only |
-| Table | diagnostic time, level, scope and message rows |
-
 ## Change template
 
 Copy this section when proposing a Web UI change.
@@ -428,7 +415,7 @@ Copy this section when proposing a Web UI change.
 
 Services / Host watches / Installed applications / Events / Notifiers /
 Daemon settings / Recent activity / Runtime locks / Service detail /
-Action dialog / Diagnostics / Overview
+Action dialog / Overview
 
 ### Title
 
