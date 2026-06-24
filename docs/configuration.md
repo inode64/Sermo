@@ -283,6 +283,7 @@ engine:
   startup_delay: 0            # grace period before the first cycle (0 disables)
   user_lookup: auto           # auto | native | getent | numeric
   user_lookup_timeout: 250ms  # per-getent lookup timeout; cached in-process
+  state_cache_size: 64M       # SQLite page cache for the state database
 ```
 
 `engine.interval` is the default cadence at which every service's checks are
@@ -352,6 +353,16 @@ command for every process every cycle. If a name cannot be resolved, Sermo does
 not guess: process selectors and `kill_only_if.users` using that name do not
 match. For critical stop policies, numeric UIDs/GIDs are the most deterministic
 form.
+
+`engine.state_cache_size` (default `64M`) sets the SQLite page cache for the
+state database (`paths.state`). The state DB accumulates per-minute SLA,
+measurement and metric history, whose indexes grow into the tens of MB; the cache
+keeps those hot pages in memory so a per-cycle write burst does not read them back
+from disk and stall an interactive `monitor`/`unmonitor` (every statement shares
+one connection). Raise it on hosts with a large history and spare RAM (the value
+is a byte size with a `K`/`M`/`G` suffix); it is taken from the running daemon's
+config and applies the next time `sermod` opens the database (a restart, since the
+handle is held open for the daemon's lifetime).
 
 When `sermoctl daemon reload` asks the running daemon to reload, `sermod` reads
 the configuration from the path passed to `sermod run --config` (the same file
@@ -1852,7 +1863,8 @@ Only the per-service parts of `defaults` merge into a service: `stop_policy`,
 `policy`, and `rule_window`. Engine-wide settings (`interval`,
 `max_parallel_checks`, `max_parallel_operations`, `default_timeout`,
 `operation_timeout`, `startup_delay`, `backend`, `user_lookup`,
-`user_lookup_timeout`) are daemon configuration and never merge into a service.
+`user_lookup_timeout`, `state_cache_size`) are daemon configuration and never
+merge into a service.
 
 `defaults.policy.cooldown` is **required and positive**: every resolved service
 inherits a loop-prevention cooldown unless it overrides it.
