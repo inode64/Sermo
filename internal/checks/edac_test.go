@@ -66,3 +66,20 @@ func TestEdacCheck(t *testing.T) {
 		t.Error("absent EDAC must fail the check")
 	}
 }
+
+func TestReadEdacCounterInt64Boundary(t *testing.T) {
+	dir := t.TempDir()
+	var maxInt64 int64 = 1<<63 - 1
+	// Exactly MaxInt64 fits (n > maxEdacCounter, not >=).
+	atMax := filepath.Join(dir, "max")
+	writeFile(t, atMax, "9223372036854775807\n")
+	if n, err := readEdacCounter(atMax); err != nil || n != maxInt64 {
+		t.Fatalf("readEdacCounter(MaxInt64) = %d, %v; want %d, nil", n, err, maxInt64)
+	}
+	// One above MaxInt64 overflows int64 and must error.
+	over := filepath.Join(dir, "over")
+	writeFile(t, over, "9223372036854775808\n")
+	if _, err := readEdacCounter(over); err == nil {
+		t.Fatal("a counter above MaxInt64 must overflow-error")
+	}
+}
