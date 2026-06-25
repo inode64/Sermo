@@ -389,3 +389,12 @@ func TestBuildNetStateRequiresExpectOrOnChange(t *testing.T) {
 		t.Fatalf("net state with expect must not warn, got %q", w)
 	}
 }
+
+func TestBuildNetStateExpectValidated(t *testing.T) {
+	if _, w := buildNetCheck(base{}, map[string]any{"interface": "eth0", "metric": "state", "expect": "sideways"}, Deps{}); !strings.Contains(w, "up or down") {
+		t.Fatalf("invalid expect warning = %q, want it to require up or down", w)
+	}
+	if _, w := buildNetCheck(base{}, map[string]any{"interface": "eth0", "metric": "state", "expect": "up"}, Deps{}); strings.Contains(w, "up or down") {
+		t.Fatalf("valid expect must not warn, got %q", w)
+	}
+}
