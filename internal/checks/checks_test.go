@@ -381,8 +381,8 @@ func TestCommandCheck(t *testing.T) {
 	if res.OK {
 		t.Errorf("exit 1 should fail")
 	}
-	if res.Message == "" {
-		t.Errorf("failure message should include detail")
+	if !strings.Contains(res.Message, "exit 1") || !strings.Contains(res.Message, "boom") {
+		t.Errorf("failure message %q should report the exit code and the stderr detail", res.Message)
 	}
 }
 
