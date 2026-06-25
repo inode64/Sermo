@@ -444,3 +444,17 @@ func TestRecentSamplesZeroDurationKeepsAll(t *testing.T) {
 		t.Fatalf("recentSamples(0 duration) = %d, want 2 (no time filtering)", len(got))
 	}
 }
+
+func TestIsFiringAtDurationBoundary(t *testing.T) {
+	at := time.Unix(1000, 0)
+	r := Rule{For: &ForWindow{Duration: 6 * time.Minute}}
+	s := &WindowState{}
+	s.FiresAt(r, true, at) // prime trueSince
+	// The read-only IsFiringAt fires at exactly the elapsed duration (>=).
+	if !s.IsFiringAt(r, at.Add(6*time.Minute)) {
+		t.Fatal("IsFiringAt must fire at exactly the duration")
+	}
+	if s.IsFiringAt(r, at.Add(5*time.Minute)) {
+		t.Fatal("IsFiringAt must not fire before the duration")
+	}
+}
