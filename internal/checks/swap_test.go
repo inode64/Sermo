@@ -17,6 +17,8 @@ func TestSwapUsageThreshold(t *testing.T) {
 		preds: []levelPred{{field: "used_pct", op: ">=", value: 80}}, sampler: fakeSwap(sample)}
 	if res := breached.Run(context.Background()); !res.OK {
 		t.Fatalf("80%% used should breach >= 80, got %q", res.Message)
+	} else if res.Data["free_pct"].(float64) != 20 {
+		t.Fatalf("free_pct = %v, want 20 (200 free of 1000)", res.Data["free_pct"])
 	}
 	ok := &swapCheck{base: base{name: "s"}, metric: "usage",
 		preds: []levelPred{{field: "used_pct", op: ">=", value: 90}}, sampler: fakeSwap(sample)}
