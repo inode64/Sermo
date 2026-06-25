@@ -423,3 +423,15 @@ func TestFormatWindowDuration(t *testing.T) {
 		}
 	}
 }
+
+func TestParseRuleWindowZeroIsInert(t *testing.T) {
+	// cycles 0 and duration 0 means "no window" even with mode: within — both
+	// thresholds must be non-positive to bail out.
+	if fw, ww := ParseRuleWindow(map[string]any{"cycles": 0, "duration": 0, "mode": "within"}); fw != nil || ww != nil {
+		t.Fatalf("zero cycles+duration must be inert, got fw=%+v ww=%+v", fw, ww)
+	}
+	// A real within window still parses.
+	if _, ww := ParseRuleWindow(map[string]any{"cycles": 3, "mode": "within"}); ww == nil || ww.Cycles != 3 {
+		t.Fatalf("within cycles=3 must parse, got %+v", ww)
+	}
+}
