@@ -223,6 +223,7 @@ func TestIndexAccessibilityBundle(t *testing.T) {
 		"Confirm:",
 		"Start service ",
 		"Monitor watch ",
+		"tile-${t}-gauge",
 	} {
 		if !strings.Contains(script, needle) {
 			t.Errorf("bundled script missing a11y marker %q", needle)
