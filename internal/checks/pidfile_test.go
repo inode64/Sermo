@@ -85,6 +85,11 @@ func TestPidfileCheckDefaultAliveSelf(t *testing.T) {
 	if !live || dead {
 		t.Fatalf("pidAlive self=%v huge=%v, want true/false", live, dead)
 	}
+	// pid <= 0 is never a real process (and 0 would signal the whole group):
+	// pidAlive must reject it without probing.
+	if pidAlive(0) || pidAlive(-1) {
+		t.Fatalf("pidAlive(0)=%v pidAlive(-1)=%v, want both false", pidAlive(0), pidAlive(-1))
+	}
 }
 
 func TestBuildPidfileCheckNeedsPath(t *testing.T) {
