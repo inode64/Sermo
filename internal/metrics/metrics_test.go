@@ -10,6 +10,9 @@ func TestCompare(t *testing.T) {
 	if got, _ := Compare(pct, ">", "40%"); !got {
 		t.Error("45% > 40% should be true")
 	}
+	if got, _ := Compare(pct, ">", "40 %"); !got {
+		t.Error("45% > 40 % should be true")
+	}
 	if got, _ := Compare(pct, "<", "40%"); got {
 		t.Error("45% < 40% should be false")
 	}
