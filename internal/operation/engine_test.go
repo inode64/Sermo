@@ -854,6 +854,32 @@ func TestNewWiresDefaultRuntimeDeps(t *testing.T) {
 	}
 }
 
+func TestNewPreservesExplicitResolveUser(t *testing.T) {
+	dir := t.TempDir()
+	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	engine := New(Config{
+		Service: "mysql-main",
+		Unit:    "mysqld",
+		Backend: "systemd",
+		Tree:    map[string]any{},
+		Manager: &fakeManager{status: servicemgr.StatusActive},
+		Locker:  &locker,
+		Scanner: locks.NewScanner(filepath.Join(dir, "locks")),
+		Discoverer: process.Discoverer{
+			ResolveUser: func(string) (uint32, bool) { return 7, true },
+		},
+		ResolveUser: func(name string) (uint32, bool) {
+			return 42, name == "mysql"
+		},
+		Sleep: func(time.Duration) {},
+	})
+
+	uid, ok := engine.Reaper.ResolveUser("mysql")
+	if !ok || uid != 42 {
+		t.Fatalf("ResolveUser(mysql) = %d, %v; want explicit resolver uid 42", uid, ok)
+	}
+}
+
 func TestRestartStartError(t *testing.T) {
 	h := defaultHarness()
 	h.mgr.startErr = errors.New("boom")
