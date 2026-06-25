@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"regexp"
 	"testing"
 	"time"
 
@@ -247,5 +248,14 @@ func TestBuildProcessCheckStateDefault(t *testing.T) {
 	c2, _ := buildProcessCheck(base{}, map[string]any{"exe": "sshd", "state": "zombie"}, deps)
 	if got := c2.(processCheck).expect; got != "zombie" {
 		t.Fatalf("explicit state = %q, want zombie", got)
+	}
+}
+
+func TestCommandExportValueWholeMatchNoGroup(t *testing.T) {
+	// A regex without a capture group yields a 1-element submatch, so value()
+	// must take match[0] (len > 1, not >= 1, which would index a missing group).
+	e := commandExport{regex: regexp.MustCompile("foo+")}
+	if got := e.value("xx foooo yy", ""); got != "foooo" {
+		t.Fatalf("value = %q, want foooo", got)
 	}
 }
