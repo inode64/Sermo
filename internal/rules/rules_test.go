@@ -449,3 +449,11 @@ func TestParseRulesDropsSystemMetricRemediation(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeKeyIsSortedJSON(t *testing.T) {
+	// normalizeKey marshals to JSON (sorted keys) for a stable cache key, only
+	// falling back to %v formatting on a marshal error.
+	if got := normalizeKey(map[string]any{"b": 2, "a": 1}); got != `{"a":1,"b":2}` {
+		t.Fatalf("normalizeKey = %q, want sorted JSON", got)
+	}
+}
