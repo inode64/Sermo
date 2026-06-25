@@ -331,3 +331,12 @@ func (r *multiResultRunner) Run(_ context.Context, name string, args ...string) 
 	res := r.results[call]
 	return res.result, res.err
 }
+
+func TestActionErrorPrefersRunErrorOnLaunchFailure(t *testing.T) {
+	// ExitCode -1 with a runner error is a launch failure: the message comes from
+	// the run error, not from stale stderr of a process that never ran.
+	err := actionError("systemctl start x", execx.Result{ExitCode: -1, Stderr: "stderr-msg"}, errors.New("boom"))
+	if err == nil || !strings.Contains(err.Error(), "boom") || strings.Contains(err.Error(), "stderr-msg") {
+		t.Fatalf("actionError = %v, want it to surface the run error 'boom', not stderr", err)
+	}
+}
