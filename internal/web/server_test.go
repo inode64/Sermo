@@ -916,3 +916,17 @@ func TestEventLimitParsing(t *testing.T) {
 		t.Errorf("limit=100000 -> %d, want cap %d", got, maxEventLimit)
 	}
 }
+
+func TestSeriesSinceParsing(t *testing.T) {
+	mk := func(q string) *http.Request { return httptest.NewRequest("GET", "/api/series?since="+q, nil) }
+	if got := seriesSince(mk("2h")); got != 2*time.Hour {
+		t.Errorf("since=2h -> %v, want 2h", got)
+	}
+	// A non-positive duration is ignored (d > 0 guard), keeping the default.
+	if got := seriesSince(mk("0s")); got != defaultSeriesWindow {
+		t.Errorf("since=0s -> %v, want default %v", got, defaultSeriesWindow)
+	}
+	if got := seriesSince(mk("100000h")); got != maxSeriesWindow {
+		t.Errorf("since=100000h -> %v, want cap %v", got, maxSeriesWindow)
+	}
+}
