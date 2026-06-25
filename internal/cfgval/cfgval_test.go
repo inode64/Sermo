@@ -40,7 +40,8 @@ func TestString(t *testing.T) {
 		{uint64(9), "9"},
 		{uint64(10), "10"}, // FormatUint decimal base (mutant .13)
 		{3.5, "3.5"},
-		{1.0, "1"}, // trailing zeros trimmed by FormatFloat -1 precision
+		{1.234, "1.234"}, // FormatFloat minimum digits (mutant .14 pin)
+		{1.0, "1"},       // trailing zeros trimmed by FormatFloat -1 precision
 		{true, "true"},
 		{false, "false"},
 		{[]any{1, 2}, "[1 2]"},               // non-scalar falls back to %v
@@ -94,6 +95,13 @@ func TestStringArray(t *testing.T) {
 				t.Errorf("StringArray(%#v) = %#v, want %#v", c.in, got, c.want)
 			}
 		})
+	}
+}
+
+// TestStringArrayBareStringNil pins StringArray !ok -> nil (mutant .19).
+func TestStringArrayBareStringNil(t *testing.T) {
+	if got := StringArray("solo"); got != nil {
+		t.Errorf("StringArray(bare string) = %#v, want nil", got)
 	}
 }
 
