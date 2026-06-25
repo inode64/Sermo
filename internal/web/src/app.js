@@ -4284,6 +4284,7 @@ function updateGroupButtons(prefix, grouped, categories, collapsedGroups, label)
   all.innerHTML = allCollapsed ? "▾" : "▴";
   all.title = allCollapsed ? `Expand all ${label} groups` : `Collapse all ${label} groups`;
   all.setAttribute("aria-label", all.title);
+  all.setAttribute("aria-pressed", grouped && any && !allCollapsed ? "true" : "false");
 }
 
 function closestFrom(event, selector) {
