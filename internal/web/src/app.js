@@ -4350,6 +4350,12 @@ function syncCategorySelect(id, items, fallback, selected) {
   return next;
 }
 
+function groupedPanelId(panel, items) {
+  const first = items && items[0];
+  if (!first || !first.name) return nothing;
+  return `${panel}-row-${first.name}`;
+}
+
 function renderGroupedRows(list, collapsedGroups, panel, fallback, colspan, renderRow, groupDir) {
   const groups = new Map();
   list.forEach((item) => {
@@ -4362,8 +4368,9 @@ function renderGroupedRows(list, collapsedGroups, panel, fallback, colspan, rend
     a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: "base" }) * dir
   ).map(([category, items]) => {
     const collapsed = collapsedGroups.has(category);
+    const panelId = groupedPanelId(panel, items);
     const header = tpl`<tr class="group-row">
-      <td colspan="${colspan}"><button type="button" class="row-toggle group-toggle" data-group-panel="${panel}" data-group-name="${category}" aria-expanded="${collapsed ? "false" : "true"}"><span class="exp" aria-hidden="true">${collapsed ? "▸" : "▾"}</span>${category} <span class="muted">${items.length}</span></button></td>
+      <td colspan="${colspan}"><button type="button" class="row-toggle group-toggle" data-group-panel="${panel}" data-group-name="${category}" aria-expanded="${collapsed ? "false" : "true"}" aria-controls="${panelId}"><span class="exp" aria-hidden="true">${collapsed ? "▸" : "▾"}</span>${category} <span class="muted">${items.length}</span></button></td>
     </tr>`;
     return [header, collapsed ? nothing : items.map(renderRow)];
   });
