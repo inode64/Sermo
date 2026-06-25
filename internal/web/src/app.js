@@ -2246,19 +2246,19 @@ function usageLevel(pct) {
 // (e.g. " usagebar-sm"); ariaLabel, when non-empty, sets the aria-label
 // attribute (omitted otherwise). label/title are bound as text/attribute, so
 // lit-html escapes them — callers pass plain strings.
-function usageBarSpan(p, extraClass, label, title, ariaLabel) {
-  return tpl`<span class="usagebar${extraClass} ${usageLevel(p)}" style="--usage-pct:${p.toFixed(2)}%" title="${title}" aria-label="${ariaLabel || nothing}"><span class="usagebar-fill"></span><span class="usagebar-label">${label}</span></span>`;
+function usageBarSpan(p, extraClass, label, title, ariaLabel, elId) {
+  return tpl`<span id="${elId || nothing}" class="usagebar${extraClass} ${usageLevel(p)}" style="--usage-pct:${p.toFixed(2)}%" title="${title}" aria-label="${ariaLabel || nothing}"><span class="usagebar-fill"></span><span class="usagebar-label">${label}</span></span>`;
 }
 
 // usageBar renders the full-width host gauge. The visible in-bar label defaults
 // to "X% used"; pass `label` to override it (the overview tiles show just the
 // percentage since the tile value already says "used"). The tooltip/aria keep
 // the full "used · free" breakdown regardless.
-function usageBar(pct, label) {
+function usageBar(pct, label, elId) {
   const p = pctClamp(pct);
   const used = fmtPct(p);
   const freeLabel = fmtPct(100 - p);
-  return usageBarSpan(p, "", label != null ? label : used, `${used} used · ${freeLabel} free`, `${used} used, ${freeLabel} free`);
+  return usageBarSpan(p, "", label != null ? label : used, `${used} used · ${freeLabel} free`, `${used} used, ${freeLabel} free`, elId);
 }
 
 // usageBarMini is the compact bar used inside dense tables (the process list).
@@ -3480,6 +3480,10 @@ function tileAriaLabel(label, valueText, sub, target) {
   return parts.join(". ");
 }
 
+function tileGaugeId(key) {
+  return `tile-${key}-gauge`;
+}
+
 // renderOverview fills the at-a-glance tile band under the topbar: one tile per
 // vital sign, colored by health, each clickable to jump to its panel. load()
 // passes the same burst snapshot into renderStatus — no extra requests here.
@@ -3529,7 +3533,7 @@ function renderOverview(ctx) {
         : (settling ? "starting-services" : "watches-section")));
 
   const tile = (opts) => tpl`
-    <button class="tile ${opts.cls || ""}" data-panel-target="${opts.target || "services-section"}" aria-label="${opts.ariaLabel || opts.label}">
+    <button class="tile ${opts.cls || ""}" data-panel-target="${opts.target || "services-section"}" aria-label="${opts.ariaLabel || opts.label}" aria-describedby="${opts.describedBy || nothing}">
       <span class="t-label">${opts.label}</span>
       <div class="t-value">${opts.value}</div>
       <div class="t-sub">${opts.sub || ""}</div>
@@ -3618,25 +3622,31 @@ function renderOverview(ctx) {
     : "";
   if (cpu) {
     const p = pctClamp(cpu.percent || 0);
+    const gaugeId = tileGaugeId("cpu");
     tiles.push(tile({
-      label: "Host CPU", value: tpl`${fmtNum(p, 2)}<small>%</small>`, sub: "", extra: usageBar(p, fmtPct(p)), target: "daemon-section",
+      label: "Host CPU", value: tpl`${fmtNum(p, 2)}<small>%</small>`, sub: "", extra: usageBar(p, fmtPct(p), gaugeId), target: "daemon-section",
       ariaLabel: tileAriaLabel("Host CPU", fmtPct(p), "", "daemon-section"),
+      describedBy: gaugeId,
     }));
   }
   if (mem) {
     const p = pctClamp(mem.percent || 0);
     const memSub = usedFreeSub(mem);
+    const gaugeId = tileGaugeId("mem");
     tiles.push(tile({
-      label: "Host memory", value: tpl`${fmtNum(p, 2)}<small>%</small>`, sub: memSub, extra: usageBar(p, fmtPct(p)), target: "daemon-section",
+      label: "Host memory", value: tpl`${fmtNum(p, 2)}<small>%</small>`, sub: memSub, extra: usageBar(p, fmtPct(p), gaugeId), target: "daemon-section",
       ariaLabel: tileAriaLabel("Host memory", fmtPct(p), memSub, "daemon-section"),
+      describedBy: gaugeId,
     }));
   }
   if (swap && swap.total) {
     const p = pctClamp(swap.percent || 0);
     const swapSub = usedFreeSub(swap);
+    const gaugeId = tileGaugeId("swap");
     tiles.push(tile({
-      label: "Host swap", value: tpl`${fmtNum(p, 2)}<small>%</small>`, sub: swapSub, cls: p >= 90 ? "t-crit" : (p >= 70 ? "t-warn" : ""), extra: usageBar(p, fmtPct(p)), target: "daemon-section",
+      label: "Host swap", value: tpl`${fmtNum(p, 2)}<small>%</small>`, sub: swapSub, cls: p >= 90 ? "t-crit" : (p >= 70 ? "t-warn" : ""), extra: usageBar(p, fmtPct(p), gaugeId), target: "daemon-section",
       ariaLabel: tileAriaLabel("Host swap", fmtPct(p), swapSub, "daemon-section"),
+      describedBy: gaugeId,
     }));
   }
   if (load && load.absolute != null) {
@@ -3646,14 +3656,16 @@ function renderOverview(ctx) {
     const hasCap = load.total > 0;
     const p = hasCap ? pctClamp(load.percent || 0) : 0;
     const loadSub = hasCap ? `${fmtNum(load.total, 0)} CPUs · ${fmtPct(load.percent)}` : (live && fmtUptime(live.uptime_seconds) ? `up ${fmtUptime(live.uptime_seconds)}` : "");
+    const gaugeId = hasCap ? tileGaugeId("load") : nothing;
     tiles.push(tile({
       label: "Load 1m",
       value: fmtNum(load.absolute, 2),
       sub: loadSub,
       cls: hasCap ? (p >= 100 ? "t-crit" : (p >= 80 ? "t-warn" : "")) : "",
-      extra: hasCap ? usageBar(p, fmtPct(p)) : nothing,
+      extra: hasCap ? usageBar(p, fmtPct(p), gaugeId) : nothing,
       target: "daemon-section",
       ariaLabel: tileAriaLabel("Load 1m", fmtNum(load.absolute, 2), loadSub, "daemon-section"),
+      describedBy: gaugeId,
     }));
   }
   litRender(tiles, band);
