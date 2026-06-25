@@ -2133,7 +2133,7 @@ function renderServiceDetail(d) {
       <tbody>${lockRows}</tbody></table>${lockWarns}
     <h2>Rules</h2>
     ${renderRules(d.rules)}
-    <h2>Preflight ${me.can_act ? tpl`<button data-preflight-service="${d.name}">run</button>` : tpl`<span class="muted">admin only</span>`}</h2>
+    <h2>Preflight ${servicePreflightButton(d)}</h2>
     <div id="${detailDomId(d.name, "preflight")}" class="muted">not run yet</div>
     <h2>Recent events</h2>
     <table class="events">
@@ -3844,6 +3844,58 @@ let confirmResolve = null;
 let confirmCtx = null;
 let confirmNoCascade = false;
 
+function confirmPreflightDisabledReason(action, state = {}) {
+  if (state.loading) return "loading service context";
+  if (state.running) return "preflight is running";
+  if (!["start", "stop", "restart"].includes(action)) return "preflight not available for this action";
+  return "";
+}
+
+function syncConfirmPreflightButton(action, state = {}) {
+  const btn = $("#confirm-preflight-btn");
+  const hint = $("#confirm-preflight-hint");
+  if (!btn) return;
+  const reason = confirmPreflightDisabledReason(action, state);
+  const disabled = !!reason;
+  btn.disabled = disabled;
+  if (hint) {
+    hint.textContent = reason;
+    if (reason) {
+      hint.classList.remove("visually-hidden");
+      btn.setAttribute("aria-describedby", "confirm-preflight-hint");
+    } else {
+      hint.textContent = "";
+      hint.classList.add("visually-hidden");
+      btn.removeAttribute("aria-describedby");
+    }
+  }
+}
+
+function servicePreflightDisabled(d) {
+  return !d || !d.enabled;
+}
+
+function servicePreflightDisabledReason(d) {
+  if (d && !d.enabled) return "service is disabled in configuration";
+  return "";
+}
+
+function servicePreflightHintId(name) {
+  return `svc-${name}-preflight-hint`;
+}
+
+function servicePreflightButton(d) {
+  if (!me.can_act) return tpl`<span class="muted">admin only</span>`;
+  const disabled = servicePreflightDisabled(d);
+  const reason = servicePreflightDisabledReason(d);
+  const hintId = servicePreflightHintId(d.name);
+  const hint = disabled && reason
+    ? tpl`<span id="${hintId}" class="visually-hidden">${reason}</span>`
+    : nothing;
+  const describedBy = disabled && reason ? hintId : nothing;
+  return tpl`${hint}<button ?disabled=${disabled} data-preflight-service="${d.name}" aria-describedby="${describedBy}">run</button>`;
+}
+
 async function confirmAction(name, action) {
   const dlg = $("#action-confirm");
   if (!dlg || typeof dlg.showModal !== "function") {
@@ -3860,7 +3912,7 @@ async function confirmAction(name, action) {
   $("#confirm-subtitle").textContent = "Review the current service context before sending the operation.";
   litRender(tpl`<span class="muted">loading…</span>`, $("#confirm-body"));
   $("#confirm-action-btn").textContent = `${action} ${name}`;
-  $("#confirm-preflight-btn").disabled = true;
+  syncConfirmPreflightButton(action, { loading: true });
   const cascadeWrap = $("#confirm-no-cascade-wrap");
   const cascadeBox = $("#confirm-no-cascade");
   if (cascadeWrap) cascadeWrap.style.display = "none";
@@ -3877,7 +3929,7 @@ async function confirmAction(name, action) {
       const events = await eventRes.json();
       confirmCtx.lastEvent = (events || [])[0] || null;
     }
-    $("#confirm-preflight-btn").disabled = !["start", "stop", "restart"].includes(action);
+    syncConfirmPreflightButton(action);
     const alsoApply = (confirmCtx.detail?.also_apply || []);
     const showCascade = alsoApply.length > 0 && (action === "stop" || action === "restart");
     if (cascadeWrap) cascadeWrap.style.display = showCascade ? "block" : "none";
@@ -3962,7 +4014,7 @@ function renderActionConfirm() {
 
 async function runConfirmPreflight() {
   if (!confirmCtx) return;
-  $("#confirm-preflight-btn").disabled = true;
+  syncConfirmPreflightButton(confirmCtx.action, { running: true });
   $("#confirm-preflight-btn").textContent = "running…";
   try {
     const res = await fetch(`api/services/${encodeURIComponent(confirmCtx.name)}/preflight`, {
@@ -3977,7 +4029,7 @@ async function runConfirmPreflight() {
     renderActionConfirm();
   } finally {
     $("#confirm-preflight-btn").textContent = "run preflight";
-    $("#confirm-preflight-btn").disabled = !["start", "stop", "restart"].includes(confirmCtx.action);
+    syncConfirmPreflightButton(confirmCtx.action);
   }
 }
 
