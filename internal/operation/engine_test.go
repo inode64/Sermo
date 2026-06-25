@@ -768,6 +768,55 @@ func TestNewInvalidStopPolicyDurationBlocksBeforeServiceAction(t *testing.T) {
 	}
 }
 
+func TestNewWiresDefaultRuntimeDeps(t *testing.T) {
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "mysqld")
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	reader := &countingPIDReader{
+		ids: map[int]process.Identity{
+			200: {PID: 200, PPID: 1, UID: 1001, Exe: exe, ExeOK: true, State: "S"},
+		},
+	}
+	discoverer := process.Discoverer{
+		Reader:      reader,
+		ResolveUser: func(name string) (uint32, bool) { return 1001, name == "mysql" },
+	}
+	mgr := &fakeManager{status: servicemgr.StatusActive}
+	engine := New(Config{
+		Service: "mysql-main",
+		Unit:    "mysqld",
+		Backend: "systemd",
+		Tree: map[string]any{
+			"preflight": map[string]any{
+				"service": map[string]any{"type": "service", "expect": "active"},
+				"process": map[string]any{"type": "process", "exe": exe, "user": "mysql", "state": "running"},
+			},
+		},
+		Manager:    mgr,
+		Locker:     &locker,
+		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
+		Discoverer: discoverer,
+		Sleep:      func(time.Duration) {},
+	})
+
+	if engine.LockTTL != 5*time.Minute {
+		t.Fatalf("LockTTL = %v, want default 5m", engine.LockTTL)
+	}
+	res := engine.Start(context.Background())
+	if res.Status != ResultOK {
+		t.Fatalf("status = %q (%s), checks=%+v", res.Status, res.Message, res.Checks)
+	}
+	if !mgr.did("start mysqld") {
+		t.Fatalf("start did not reach manager; calls=%v", mgr.calls)
+	}
+	if reader.walks == 0 {
+		t.Fatal("process preflight did not use the Discoverer observer")
+	}
+}
+
 func TestRestartStartError(t *testing.T) {
 	h := defaultHarness()
 	h.mgr.startErr = errors.New("boom")
