@@ -35,3 +35,10 @@ func TestNamedLockNoCollisionWithDottedService(t *testing.T) {
 		t.Fatalf("%q must not be attributed to service web", bareFile)
 	}
 }
+
+func TestNamedLockWithoutNameDoesNotMatch(t *testing.T) {
+	fileName := "web" + lockNameSep + lockSuffix
+	if name, ok := matchService(fileName, "web"); ok || name != "" {
+		t.Fatalf("matchService(%q, web) = %q,%v; want \"\",false", fileName, name, ok)
+	}
+}
