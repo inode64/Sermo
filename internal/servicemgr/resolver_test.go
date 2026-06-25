@@ -201,3 +201,25 @@ func (m resolverManager) Restart(context.Context, string) error                {
 func (m resolverManager) Reload(context.Context, string) error                 { return nil }
 func (m resolverManager) SupportsReload(context.Context, string) (bool, error) { return false, nil }
 func (m resolverManager) ResetState(context.Context, string) error             { return nil }
+
+func TestCgroupPIDsFiltersZeroAndEmpty(t *testing.T) {
+	runner := stdoutRunner{out: "/system.slice/x.service\n"}
+	base := "/sys/fs/cgroup/system.slice/x.service/cgroup.procs"
+	rf := func(content string) func(string) ([]byte, error) {
+		return func(p string) ([]byte, error) {
+			if p == base {
+				return []byte(content), nil
+			}
+			return nil, os.ErrNotExist
+		}
+	}
+	// PID 0 is not a real process and must be excluded.
+	pids, ok := CgroupPIDs(runner, rf("0\n42\n"), BackendSystemd, "x.service")
+	if !ok || len(pids) != 1 || pids[0] != 42 {
+		t.Fatalf("pids = %v ok=%v, want [42]", pids, ok)
+	}
+	// A cgroup with no valid PIDs reports not-found.
+	if _, ok := CgroupPIDs(runner, rf("0\n\n"), BackendSystemd, "x.service"); ok {
+		t.Fatal("a cgroup with only invalid PIDs must report not-found")
+	}
+}
