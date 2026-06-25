@@ -205,6 +205,11 @@
   .daemon-path { font-size: .8rem; }
   .daemon-metrics-section { margin-top: .75rem; }
   .daemon-metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-top: .5rem; }
+  .panel-footnote { font-size: .8rem; }
+  .panel-ops { margin: .6rem 0 0; }
+  .activity-stats { display: flex; gap: 1.25rem; flex-wrap: wrap; font-size: .9rem; }
+  #act-last { flex: 1; min-width: 180px; }
+  section#locks-section { margin-top: 1rem; }
   .panel-controls input { min-width: 13rem; }
   #svc-filters button, #storage-filters button, #watch-filters button, #network-filters button, #app-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
   #svc-filters button:hover, #storage-filters button:hover, #watch-filters button:hover, #network-filters button:hover, #app-filters button:hover { background: var(--panel-2); color: var(--text); }
