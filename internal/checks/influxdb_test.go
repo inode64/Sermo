@@ -58,6 +58,10 @@ func TestInfluxQueryLastColumn(t *testing.T) {
 	if res.Data["result"] != "5" {
 		t.Fatalf("result = %v, want 5", res.Data["result"])
 	}
+	// A configured database is carried into the result data.
+	if res.Data["database"] != "telegraf" {
+		t.Fatalf("data database = %v, want telegraf", res.Data["database"])
+	}
 }
 
 func TestInfluxQueryNamedColumn(t *testing.T) {
