@@ -434,7 +434,7 @@
         ${l.detail?`<div class="attn-detail">${w(l.detail)}</div>`:""}
       </button>
     `).join("")}</div>`}function to(t){return t==="start"||t==="stop"||t==="restart"||t==="reload"||t==="resume"}function eo(t){let e=lt.get(t);return!!e&&!e.finished}function rn(t){let e=t.finished||Date.now();return Math.max(0,Math.floor((e-t.started)/1e3))}function gs(t){return t.finished?t.ok?"completed":"failed":"running"}function no(t,e){lt.set(t,{name:t,action:e,started:Date.now(),finished:0,ok:!1,message:"waiting for operation slot"}),so(),vs(),fe(),Z()}function qn(t,e,n){let s=lt.get(t)||{name:t,action:"operation",started:Date.now()};s.finished=Date.now(),s.ok=!!e,s.message=n||(e?"completed":"failed"),lt.set(t,s),fe(),Z(),setTimeout(()=>{lt.get(t)===s&&s.finished&&(lt.delete(t),fe(),Z(),$s())},8e3)}function so(){de||(de=setInterval(vs,1e3))}function $s(){de&&lt.size===0&&(clearInterval(de),de=null)}async function vs(){K=await tt("api/ops",K||{}),fe(),Z(),lt.size===0&&$s()}function fe(){let t=d("#op-live");if(!t)return;let e=[...lt.values()].sort((s,a)=>a.started-s.started);if(!e.length){t.style.display="none",t.innerHTML="";return}let n=K&&K.total!=null?`<div class="muted" style="margin-bottom:.35rem">Operation slots: <b class="${(K.in_use||0)>=(K.total||1)?"failed":""}">${K.in_use||0}/${K.total||0}</b> in use</div>`:"";t.style.display="block",t.innerHTML=n+e.map(s=>{let a=gs(s),o=s.finished?s.ok?"ok":"failed":"",r=s.finished?`${rn(s)}s total`:`${rn(s)}s elapsed`;return`<div class="op-card">
-      <span class="op-dot ${o}"></span>
+      <span class="op-dot ${o}" aria-hidden="true"></span>
       <b>${w(s.action)}</b>
       <span>${w(s.name)}</span>
       <span class="${o||"inactive"}">${w(a)}</span>
