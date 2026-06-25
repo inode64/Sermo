@@ -9,7 +9,7 @@
     --panel: #ffffff;
     --panel-2: #f2f4f8;
     --text: #1c2430;
-    --text-2: #677283;
+    --text-2: #5b6573; /* AA (>=4.5:1) for muted text on panel/panel-2/bg, incl. small thead labels */
     --line: #dfe4ec;
     --line-2: #cdd4e0;
     --ok: #1a7f37;
