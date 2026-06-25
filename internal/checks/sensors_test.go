@@ -84,3 +84,15 @@ func TestSensorsAggregatesAndThresholds(t *testing.T) {
 		t.Error("no matching inputs must fail")
 	}
 }
+
+func TestSummarizeSensorsCount(t *testing.T) {
+	// Count is the total of every input across kinds (2 temp + 2 fan + 1 volt).
+	readings := []SensorReading{
+		{Kind: "temp", Value: 70}, {Kind: "temp", Value: 85},
+		{Kind: "fan", Value: 1500}, {Kind: "fan", Value: 300},
+		{Kind: "in", Value: 1.1},
+	}
+	if got := SummarizeSensors(readings, "", "").Count; got != 5 {
+		t.Fatalf("Count = %d, want 5 (2 temp + 2 fan + 1 volt)", got)
+	}
+}
