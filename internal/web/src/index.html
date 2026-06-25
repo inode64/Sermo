@@ -43,7 +43,7 @@
 <div id="op-live" role="status" aria-live="polite" aria-atomic="true"></div>
 <details id="storage-section" open style="display:none">
   <summary>Storage <span id="storage-count" class="muted"></span></summary>
-  <div id="storage-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+  <div id="storage-controls" class="panel-controls">
     <label for="storage-search" class="visually-hidden">Filter storage watches</label>
     <input id="storage-search" type="search" placeholder="filter storage watches…">
     <select id="storage-type" title="Filter by type" aria-label="Filter storage watches by type">
@@ -87,7 +87,7 @@
       <button id="svc-groups-toggle" class="icon-btn" title="Collapse service groups" aria-label="Collapse service groups">&#x25BE;</button>
     </span>
   </summary>
-  <div id="svc-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+  <div id="svc-controls" class="panel-controls">
     <label for="svc-search" class="visually-hidden">Filter services</label>
     <input id="svc-search" type="search" placeholder="filter services…  ( / )">
     <select id="svc-category" title="Filter by category" aria-label="Filter services by category">
@@ -127,7 +127,7 @@
 
 <details id="network-section" open style="display:none">
   <summary>Network <span id="network-count" class="muted"></span></summary>
-  <div id="network-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+  <div id="network-controls" class="panel-controls">
     <label for="network-search" class="visually-hidden">Filter network watches</label>
     <input id="network-search" type="search" placeholder="filter network watches…">
     <select id="network-type" title="Filter by type" aria-label="Filter network watches by type">
@@ -171,7 +171,7 @@
       <button id="app-groups-toggle" class="icon-btn" title="Collapse application groups" aria-label="Collapse application groups">&#x25BE;</button>
     </span>
   </summary>
-  <div id="app-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+  <div id="app-controls" class="panel-controls">
     <label for="app-search" class="visually-hidden">Filter applications</label>
     <input id="app-search" type="search" placeholder="filter applications…">
     <select id="app-category" title="Filter by category" aria-label="Filter applications by category">
@@ -201,7 +201,7 @@
 
 <details id="watches-section" open style="display:none">
   <summary>Host watches <span id="watches-count" class="muted"></span></summary>
-  <div id="watch-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+  <div id="watch-controls" class="panel-controls">
     <label for="watch-search" class="visually-hidden">Filter host watches</label>
     <input id="watch-search" type="search" placeholder="filter watches…">
     <select id="watch-type" title="Filter by type" aria-label="Filter watches by type">
