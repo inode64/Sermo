@@ -99,6 +99,11 @@ func TestDiskIOCounterResetClamps(t *testing.T) {
 	if res.OK || res.Data["util_pct"].(float64) != 0 {
 		t.Fatalf("reset counters must clamp to zero, got %v", res.Data)
 	}
+	// No completed ops in the window: await_ms stays 0 (guarded by ops > 0, so
+	// there is no divide-by-zero producing NaN).
+	if got := res.Data["await_ms"].(float64); got != 0 {
+		t.Fatalf("await_ms = %v, want 0 when there are no ops", got)
+	}
 }
 
 func TestDiskIOBuildErrors(t *testing.T) {
