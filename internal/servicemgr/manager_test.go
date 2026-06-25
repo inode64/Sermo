@@ -349,3 +349,11 @@ func TestSystemdManagerStatusEmptyZeroExitNotError(t *testing.T) {
 		t.Fatalf("Status with empty output and exit 0 must not error: %v", err)
 	}
 }
+
+func TestSystemdSupportsReloadZeroExitNotError(t *testing.T) {
+	// Empty output with a zero exit is not a query failure.
+	m := systemdManager{runner: stubRunner{result: execx.Result{Stdout: "", ExitCode: 0}}}
+	if _, err := m.SupportsReload(context.Background(), "nginx"); err != nil {
+		t.Fatalf("SupportsReload with empty output exit 0 must not error: %v", err)
+	}
+}
