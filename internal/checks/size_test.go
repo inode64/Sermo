@@ -166,3 +166,16 @@ func TestHumanizeSigned(t *testing.T) {
 		t.Errorf("humanizeSigned(0) = %q, want 0 B", got)
 	}
 }
+
+func TestSizeGrowthAtExactThreshold(t *testing.T) {
+	// Growth of exactly grow_by trips the check (growth >= growBy, not >).
+	fz := &fakeSizer{sizes: []int64{1 * gib, 2 * gib}, now: time.Unix(0, 0)}
+	c := newSizeCheck(1*gib, time.Hour, fz)
+	if r := c.Run(context.Background()); r.OK {
+		t.Fatalf("baseline cycle must not alert: %s", r.Message)
+	}
+	fz.now = fz.now.Add(20 * time.Minute)
+	if r := c.Run(context.Background()); !r.OK {
+		t.Fatalf("growth of exactly 1GiB == limit must alert: %s", r.Message)
+	}
+}
