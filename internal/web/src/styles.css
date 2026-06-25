@@ -148,6 +148,16 @@
       scroll-behavior: auto !important;
     }
   }
+  /* Windows High Contrast Mode (forced-colors) flattens author backgrounds to
+     system colors, which would erase the graphical meters whose value is carried
+     only by a colored width/segments with no text equivalent (the SLA bars and
+     timeline). Opt those data-viz fills out of color flattening — the sanctioned
+     approach for charts — and give every meter track a visible CanvasText border
+     so the bar stays perceivable even when its surface collapses to Canvas. */
+  @media (forced-colors: active) {
+    .usagebar, .sla-bar, .sla-timeline { border: 1px solid CanvasText; }
+    .usagebar-fill, .sla-fill, .sla-seg { forced-color-adjust: none; }
+  }
   .pill { display: inline-block; padding: .05rem .5rem; border-radius: 1rem; font-size: .8rem; border: 1px solid var(--line-2); }
 
   /* ---- controls ------------------------------------------------------------ */
