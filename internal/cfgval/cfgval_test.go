@@ -140,7 +140,8 @@ func TestInt(t *testing.T) {
 		{uint64(7), 7, true},
 		{uint64(maxInt), maxInt, true}, // largest uint64 that still fits int (boundary)
 		{uint64(maxInt) + 1, 0, false},
-		{8.9, 8, true}, // float truncates
+		{8.9, 8, true},   // float truncates
+		{10.0, 10, true}, // float64Int ParseInt base (mutant .62)
 		{"10", 10, true},
 		{"  12  ", 12, true}, // whitespace trimmed
 		{"nope", 0, false},
