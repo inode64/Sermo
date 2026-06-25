@@ -358,3 +358,14 @@ func TestBuildICMPCheckHostRequired(t *testing.T) {
 		t.Fatalf("present host must not warn about a missing host, got %q", w)
 	}
 }
+
+func TestBuildICMPCheckCountPositive(t *testing.T) {
+	// count == 0 is rejected (v <= 0, not v < 0)...
+	if _, w := buildICMPCheck(base{}, map[string]any{"host": "127.0.0.1", "count": 0, "metric": "state", "expect": "up"}, Deps{}); !strings.Contains(w, "positive integer") {
+		t.Fatalf("count 0 warning = %q, want it to demand a positive integer", w)
+	}
+	// ...a positive count is accepted.
+	if _, w := buildICMPCheck(base{}, map[string]any{"host": "127.0.0.1", "count": 3, "metric": "state", "expect": "up"}, Deps{}); strings.Contains(w, "positive integer") {
+		t.Fatalf("positive count must not warn, got %q", w)
+	}
+}
