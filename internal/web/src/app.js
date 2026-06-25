@@ -3955,7 +3955,7 @@ async function confirmAction(name, action) {
   syncConfirmPreflightButton(action, { loading: true });
   const cascadeWrap = $("#confirm-no-cascade-wrap");
   const cascadeBox = $("#confirm-no-cascade");
-  if (cascadeWrap) cascadeWrap.style.display = "none";
+  if (cascadeWrap) cascadeWrap.classList.add("is-hidden");
   if (cascadeBox) cascadeBox.checked = false;
 
   try {
@@ -3972,7 +3972,7 @@ async function confirmAction(name, action) {
     syncConfirmPreflightButton(action);
     const alsoApply = (confirmCtx.detail?.also_apply || []);
     const showCascade = alsoApply.length > 0 && (action === "stop" || action === "restart");
-    if (cascadeWrap) cascadeWrap.style.display = showCascade ? "block" : "none";
+    if (cascadeWrap) cascadeWrap.classList.toggle("is-hidden", !showCascade);
     renderActionConfirm();
   } catch (e) {
     litRender(tpl`<span class="bad">Failed to load context: ${e.message}</span>`, $("#confirm-body"));
