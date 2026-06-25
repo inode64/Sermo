@@ -340,3 +340,12 @@ func TestActionErrorPrefersRunErrorOnLaunchFailure(t *testing.T) {
 		t.Fatalf("actionError = %v, want it to surface the run error 'boom', not stderr", err)
 	}
 }
+
+func TestSystemdManagerStatusEmptyZeroExitNotError(t *testing.T) {
+	// Empty stdout with a zero exit is not a launch failure (only ExitCode < 0 is),
+	// so Status must not return a query error.
+	m := systemdManager{runner: stubRunner{result: execx.Result{Stdout: "", ExitCode: 0}}}
+	if _, err := m.Status(context.Background(), "nginx"); err != nil {
+		t.Fatalf("Status with empty output and exit 0 must not error: %v", err)
+	}
+}
