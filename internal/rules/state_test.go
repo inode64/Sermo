@@ -186,3 +186,16 @@ func TestCountWithinZeroWindowCountsAll(t *testing.T) {
 		t.Fatalf("countWithin(0 window) = %d, want 2", got)
 	}
 }
+
+func TestPolicyCooldownExactBoundary(t *testing.T) {
+	p := Policy{Cooldown: time.Minute}
+	st := &RemediationState{LastActionAt: t0}
+	// Exactly at the cooldown the window has elapsed (strict <), so it allows.
+	if ok, _ := p.Allow(st, t0.Add(time.Minute)); !ok {
+		t.Fatal("at exactly the cooldown boundary should allow")
+	}
+	// One tick earlier is still suppressed.
+	if ok, _ := p.Allow(st, t0.Add(time.Minute-time.Nanosecond)); ok {
+		t.Fatal("just before the cooldown boundary must suppress")
+	}
+}
