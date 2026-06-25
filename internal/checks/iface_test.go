@@ -13,6 +13,9 @@ func TestParseInterfaces(t *testing.T) {
 	if got := parseInterfaces([]any{"eth0", "192.168.1.2"}); len(got) != 2 || got[1] != "192.168.1.2" {
 		t.Fatalf("list = %v", got)
 	}
+	if got := parseInterfaces([]any{"eth0", "", 7, true}); len(got) != 1 || got[0] != "eth0" {
+		t.Fatalf("mixed list = %v, want [eth0]", got)
+	}
 	if got := parseInterfaces(""); got != nil {
 		t.Fatalf("empty = %v, want nil", got)
 	}
