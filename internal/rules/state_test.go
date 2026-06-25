@@ -212,3 +212,13 @@ func TestRateLimitUntilDisabledGuards(t *testing.T) {
 		t.Fatalf("MaxActionsWindow 0 must disable rate limiting, got %v", got)
 	}
 }
+
+func TestParsePolicyBackoffFactorDefault(t *testing.T) {
+	// A non-positive (or absent) backoff factor defaults to 2x.
+	p := ParsePolicy(map[string]any{"policy": map[string]any{
+		"backoff": map[string]any{"initial": "1m", "factor": 0},
+	}})
+	if p.Backoff == nil || p.Backoff.Factor != 2 {
+		t.Fatalf("backoff = %+v, want factor defaulted to 2", p.Backoff)
+	}
+}
