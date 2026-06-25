@@ -322,3 +322,12 @@ func TestBuildMetricCheckNameRequired(t *testing.T) {
 		t.Fatalf("present name must not warn about a missing name, got %q", w)
 	}
 }
+
+func TestBuildMetricCheckOpRequired(t *testing.T) {
+	if _, w := buildMetricCheck(base{}, map[string]any{"name": "cpu"}, Deps{}); !strings.Contains(w, "requires an op") {
+		t.Fatalf("missing op warning = %q, want it to mention requiring an op", w)
+	}
+	if _, w := buildMetricCheck(base{}, map[string]any{"name": "cpu", "op": ">"}, Deps{}); strings.Contains(w, "requires an op") {
+		t.Fatalf("present op must not warn about a missing op, got %q", w)
+	}
+}
