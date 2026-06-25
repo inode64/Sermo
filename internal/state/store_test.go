@@ -304,3 +304,13 @@ func TestSetRemediationStatePersistsPartialRecords(t *testing.T) {
 		t.Fatal("an empty record must delete the row")
 	}
 }
+
+func TestOpenCreatesParentDir(t *testing.T) {
+	// Open must create a missing parent directory for the DB path.
+	path := filepath.Join(t.TempDir(), "nested", "deeper", Filename)
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open must create the parent dir, got: %v", err)
+	}
+	s.Close()
+}
