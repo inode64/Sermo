@@ -252,9 +252,9 @@
     <label class="muted"><input id="event-group" type="checkbox" checked> group actions</label>
     <button id="event-reset-filters" type="button">reset filters</button>
     <label for="event-before" class="visually-hidden">Clear events before cutoff</label>
-    <input id="event-before" type="text" placeholder="before (e.g. 720h)" title="Optional: clear only events older than this duration or RFC3339 timestamp" aria-describedby="event-before-hint">
+    <input id="event-before" type="text" class="admin-hidden" placeholder="before (e.g. 720h)" title="Optional: clear only events older than this duration or RFC3339 timestamp" aria-describedby="event-before-hint">
     <span id="event-before-hint" class="visually-hidden">Optional duration (e.g. 720h) or RFC3339 timestamp; leave empty to clear all events.</span>
-    <button id="event-clear" class="danger-btn" type="button" style="display:none" aria-label="Clear event log">clear log</button>
+    <button id="event-clear" class="danger-btn admin-hidden" type="button" aria-label="Clear event log">clear log</button>
     <span id="event-count" class="muted"></span>
   </div>
   <table class="events">
@@ -343,7 +343,7 @@
     <div>Watch notifies: <b id="act-notify"></b></div>
     <div>Errors: <b id="act-errors" class="bad"></b></div>
     <div id="act-last" class="muted"></div>
-    <button id="activity-clear" class="danger-btn" type="button" style="display:none" aria-label="Clear activity log">clear log</button>
+    <button id="activity-clear" class="danger-btn admin-hidden" type="button" aria-label="Clear activity log">clear log</button>
   </div>
 </details>
 
@@ -404,11 +404,11 @@
 
 <footer id="app-footer" role="contentinfo">
   <div class="footer-actions">
-    <button id="reload-btn" style="display:none" aria-label="Reload configuration">reload config</button>
-    <button id="state-compact-btn" class="danger-btn" style="display:none" aria-label="Compact persisted state">compact state</button>
-    <button id="panic-btn" class="panic-btn" style="display:none" title="Suspend hooks, alerts and automatic remediation" aria-label="Enter panic mode and suspend hooks, alerts and automatic remediation">panic mode</button>
+    <button id="reload-btn" class="admin-hidden" aria-label="Reload configuration">reload config</button>
+    <button id="state-compact-btn" class="danger-btn admin-hidden" aria-label="Compact persisted state">compact state</button>
+    <button id="panic-btn" class="panic-btn admin-hidden" title="Suspend hooks, alerts and automatic remediation" aria-label="Enter panic mode and suspend hooks, alerts and automatic remediation">panic mode</button>
     <label for="state-before" class="visually-hidden">Compact state before cutoff</label>
-    <input id="state-before" type="text" class="admin-before-input" placeholder="before (e.g. 720h)" title="Optional state compact cutoff: duration or RFC3339 timestamp" aria-describedby="state-before-hint" style="display:none">
+    <input id="state-before" type="text" class="admin-before-input admin-hidden" placeholder="before (e.g. 720h)" title="Optional state compact cutoff: duration or RFC3339 timestamp" aria-describedby="state-before-hint">
     <span id="state-before-hint" class="visually-hidden">Optional duration (e.g. 720h) or RFC3339 timestamp; leave empty for default retention.</span>
     <label class="muted shortcut-toggle" aria-describedby="shortcut-hint-desc"><input id="shortcut-toggle" type="checkbox" checked> keyboard shortcuts</label>
     <span id="shortcut-hint-desc" class="visually-hidden">When enabled, press slash to focus the search box in the open panel.</span>
