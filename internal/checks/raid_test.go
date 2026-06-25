@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 )
@@ -61,5 +62,23 @@ func TestRaidCheck(t *testing.T) {
 	res := raidWith(RaidStatus{Arrays: 1, Recovering: 1}, levelPred{"recovering", ">", 0}).Run(context.Background())
 	if !res.OK {
 		t.Error("recovering>0 predicate should alert")
+	}
+}
+
+func TestRaidDegradedNamesSurfaced(t *testing.T) {
+	// Degraded array names appear in the message and the data only when present.
+	res := raidWith(RaidStatus{Arrays: 2, Degraded: 1, DegradedNames: []string{"md0", "md1"}}).Run(context.Background())
+	if !strings.Contains(res.Message, "md0, md1") {
+		t.Fatalf("message %q must list the degraded arrays", res.Message)
+	}
+	if res.Data["degraded_arrays"] != "md0,md1" {
+		t.Fatalf("degraded_arrays = %v, want md0,md1", res.Data["degraded_arrays"])
+	}
+	res2 := raidWith(RaidStatus{Arrays: 2}).Run(context.Background())
+	if _, has := res2.Data["degraded_arrays"]; has {
+		t.Fatalf("a healthy array must not carry degraded_arrays: %v", res2.Data)
+	}
+	if strings.Contains(res2.Message, "(") {
+		t.Fatalf("a healthy message must not have a names clause: %q", res2.Message)
 	}
 }
