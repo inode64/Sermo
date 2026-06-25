@@ -96,3 +96,15 @@ func TestPressureCheckBuildErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestParsePressureMinimalFields(t *testing.T) {
+	// A PSI line with exactly four fields (no total=) is still valid: the guard
+	// skips lines with fewer than 4 fields, not 4 or fewer.
+	s, err := parsePressure("some avg10=1.50 avg60=0.80 avg300=0.10\n")
+	if err != nil {
+		t.Fatalf("4-field PSI line must parse: %v", err)
+	}
+	if s.Some.Avg10 != 1.5 || s.Some.Avg60 != 0.8 || s.Some.Avg300 != 0.1 {
+		t.Fatalf("some = %+v, want 1.5/0.8/0.1", s.Some)
+	}
+}
