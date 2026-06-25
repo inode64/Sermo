@@ -226,6 +226,23 @@ func TestIndexAccessibilityTargetSize(t *testing.T) {
 	}
 }
 
+// TestIndexAccessibilityForcedColors pins the Windows High Contrast Mode
+// handling: the graphical meters whose value is carried only by colored
+// width/segments must opt out of color flattening and keep a visible track
+// border so they stay perceivable when author backgrounds collapse.
+func TestIndexAccessibilityForcedColors(t *testing.T) {
+	css := strings.ReplaceAll(bundledCSS(t), " ", "")
+	for _, needle := range []string{
+		"@media(forced-colors:active)",
+		"forced-color-adjust:none",
+		"1pxsolidCanvasText",
+	} {
+		if !strings.Contains(css, needle) {
+			t.Errorf("bundled CSS missing forced-colors marker %q", needle)
+		}
+	}
+}
+
 // TestIndexAccessibilityBundle pins a11y string markers that survive esbuild
 // minification in the committed dashboard bundle (attribute names, SR hints,
 // disclosure wiring). It does not execute JS or assert on mangled identifiers.
