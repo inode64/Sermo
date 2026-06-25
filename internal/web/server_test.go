@@ -930,3 +930,16 @@ func TestSeriesSinceParsing(t *testing.T) {
 		t.Errorf("since=100000h -> %v, want cap %v", got, maxSeriesWindow)
 	}
 }
+
+func TestFilterEventsByKind(t *testing.T) {
+	events := []Event{{Kind: "alert"}, {Kind: "recovery"}, {Kind: "alert"}}
+	got := filterEvents(events, eventFilter{Kind: "alert"}, 100)
+	if len(got) != 2 {
+		t.Fatalf("filtered %d events, want 2 alerts", len(got))
+	}
+	for _, e := range got {
+		if e.Kind != "alert" {
+			t.Fatalf("kept a non-alert event: %+v", e)
+		}
+	}
+}
