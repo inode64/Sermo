@@ -243,3 +243,12 @@ type basicRunner struct{}
 func (basicRunner) Run(ctx context.Context, name string, args ...string) (Result, error) {
 	return Result{}, nil
 }
+
+func TestOperatorFailureUsesMeasuredDurationWhenNoTimeout(t *testing.T) {
+	// With no explicit timeout, a deadline-exceeded error falls back to the
+	// measured run duration for the operator message.
+	msg := OperatorFailure(context.DeadlineExceeded, Result{Duration: 5 * time.Millisecond}, 0)
+	if !strings.Contains(msg, "timeout after 5ms") {
+		t.Fatalf("OperatorFailure = %q, want it to mention the 5ms measured duration", msg)
+	}
+}
