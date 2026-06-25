@@ -17,6 +17,10 @@ func TestParsePortSpec(t *testing.T) {
 	if want := []int{80, 443, 1024, 1025, 1026}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("parsePortSpec = %v, want %v (sorted, de-duplicated)", got, want)
 	}
+	// 1 and 65535 are the inclusive bounds of a valid port.
+	if got, err := parsePortSpec("1,65535"); err != nil || !reflect.DeepEqual(got, []int{1, 65535}) {
+		t.Fatalf("parsePortSpec(boundaries) = %v, %v; want [1 65535], nil", got, err)
+	}
 	for _, bad := range []string{"", "0", "70000", "100-50", "abc", "10-"} {
 		if _, err := parsePortSpec(bad); err == nil {
 			t.Errorf("parsePortSpec(%q) should error", bad)
