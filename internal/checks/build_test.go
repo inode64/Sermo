@@ -424,3 +424,10 @@ func TestBuildConfigCheckRequiresCommandOrPath(t *testing.T) {
 		t.Fatalf("path-only config warned: %q", w)
 	}
 }
+
+func TestBuildSensorsCheckRequiresPredicate(t *testing.T) {
+	// No predicate -> the requireLevelPreds warning is surfaced, not swallowed.
+	if _, w := buildSensorsCheck(base{}, map[string]any{"chip": "coretemp"}, Deps{}); !strings.Contains(w, "sensors check") {
+		t.Fatalf("predicate-less sensors warning = %q, want a sensors check warning", w)
+	}
+}
