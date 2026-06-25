@@ -226,3 +226,12 @@ func TestInfluxFluxColumnIndexBounds(t *testing.T) {
 		t.Fatalf("missing value column must fail with not-found, got %q", res2.Message)
 	}
 }
+
+func TestInfluxConnConfigHostDefault(t *testing.T) {
+	if got := influxConnConfig(map[string]any{}).Host; got != "127.0.0.1" {
+		t.Errorf("default host = %q, want 127.0.0.1", got)
+	}
+	if got := influxConnConfig(map[string]any{"host": "tsdb.internal"}).Host; got != "tsdb.internal" {
+		t.Errorf("explicit host = %q, want tsdb.internal", got)
+	}
+}
