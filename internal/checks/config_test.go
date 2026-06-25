@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,6 +40,8 @@ func TestConfigCheckValidity(t *testing.T) {
 	bad := configCheck{base: base{name: "c", timeout: time.Second}, runner: fakeRunner{execx.Result{ExitCode: 1, Stderr: "syntax error on line 7\n"}}, argv: []string{"nginx", "-t"}}
 	if res := bad.Run(context.Background()); res.OK {
 		t.Error("a failing config test must alert")
+	} else if !strings.Contains(res.Message, "syntax error on line 7") {
+		t.Errorf("invalid-config message = %q, want the first stderr line included", res.Message)
 	}
 	good := configCheck{base: base{name: "c", timeout: time.Second}, runner: fakeRunner{execx.Result{ExitCode: 0}}, argv: []string{"nginx", "-t"}}
 	if res := good.Run(context.Background()); !res.OK {
