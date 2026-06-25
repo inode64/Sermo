@@ -246,3 +246,26 @@ func TestNewSlotPoolDefaultsSlots(t *testing.T) {
 		t.Errorf("NewSlotPool(5).Slots = %d, want 5", got)
 	}
 }
+
+func TestSlotPoolInUseDefaultsSlots(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Unix(50_000, 0)
+	proc := fakeProc{alive: map[int]bool{9000: true}, ticks: map[int]uint64{9000: 1}}
+	self := func() (int, uint64) { return 9000, 1 }
+	pool := SlotPool{Dir: dir, Slots: 2, TTL: time.Hour, Proc: proc, Now: func() time.Time { return now }, Self: self, Sleep: time.Sleep}
+	h1, err := pool.Acquire(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h1.Release()
+	h2, err := pool.Acquire(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h2.Release()
+	// A pool view with Slots <= 0 defaults to 2 and still sees both held slots.
+	view := SlotPool{Dir: dir, Slots: 0, TTL: time.Hour, Proc: proc, Now: func() time.Time { return now }, Self: self}
+	if n, err := view.InUse(); err != nil || n != 2 {
+		t.Fatalf("InUse with defaulted slots = %d, %v; want 2", n, err)
+	}
+}
