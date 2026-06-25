@@ -1293,6 +1293,10 @@ function svcActionDescribedBy(s, action, busy) {
   return disabled && reason ? svcActionHintId(s, action) : nothing;
 }
 
+function expandToggleAriaLabel(name, open, subject) {
+  return `${open ? "Collapse" : "Expand"} ${subject} for ${name}`;
+}
+
 function svcActionAriaLabel(s, action) {
   const name = displayName(s) || s.name || "";
   switch (action) {
@@ -1345,7 +1349,7 @@ function serviceRowParts(s) {
   const key = "svc:" + s.name;
   const open = expanded.has(key);
   const chev = tpl`<span class="exp" aria-hidden="true">${open ? '▾' : '▸'}</span>`;
-  const name = tpl`<button type="button" class="name row-toggle" data-service-expand="${s.name}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}">${label}</button>`;
+  const name = tpl`<button type="button" class="name row-toggle" data-service-expand="${s.name}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(label, open, "service details")}">${label}</button>`;
   const rowClass = state === "failed" ? "row-failing" : (state === "warning" ? "row-warning" : "");
   const main = tpl`<tr id="svc-row-${s.name}" class="clickable ${rowClass}" data-exp-key="${key}">
     <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
@@ -2834,7 +2838,7 @@ function watchRowHTML(w) {
     ? tpl`<span class="muted">disabled in config</span>`
     : tpl`${expandBtn} ${monitorBtn}`;
   const row = tpl`<tr id="wat-row-${w.name}" class="clickable" data-exp-key="${key}">
-    <td>${chev}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}">${displayName(w)}</button></td>
+    <td>${chev}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(displayName(w), open, "watch details")}">${displayName(w)}</button></td>
     <td>${w.check_type || ""}</td>
     <td class="watch-summary">${summary}</td>
     <td>${w.interval || ""}</td>
@@ -3066,7 +3070,7 @@ function renderApps(apps) {
     const chev = tpl`<span class="exp" aria-hidden="true">${open ? '▾' : '▸'}</span>`;
     const ver = a.version_short || a.version || "—";
     const row = tpl`<tr id="app-row-${a.name}" class="clickable ${rowClass}" data-exp-key="${key}">
-      <td>${chev}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}">${label}</button></td>
+      <td>${chev}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(label, open, "application details")}">${label}</button></td>
       <td>${categoryBadge(category)}</td>
       ${appStatusCell(a)}
       <td>${ver}</td>
@@ -3941,7 +3945,8 @@ function servicePreflightButton(d) {
     ? tpl`<span id="${hintId}" class="visually-hidden">${reason}</span>`
     : nothing;
   const describedBy = disabled && reason ? hintId : nothing;
-  return tpl`${hint}<button ?disabled=${disabled} data-preflight-service="${d.name}" aria-describedby="${describedBy}">run</button>`;
+  const svcName = displayName(d) || d.name || "";
+  return tpl`${hint}<button ?disabled=${disabled} data-preflight-service="${d.name}" aria-label="Run preflight checks for ${svcName}" aria-describedby="${describedBy}">run</button>`;
 }
 
 async function confirmAction(name, action) {
