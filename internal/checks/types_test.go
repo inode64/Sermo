@@ -29,3 +29,13 @@ func TestStatusMatcherString(t *testing.T) {
 		t.Errorf("code-form String() = %q, want 200,404", got)
 	}
 }
+
+func TestExpectExitText(t *testing.T) {
+	// No expected codes defaults to "0"; multiple codes join with " or ".
+	if got := ExpectExitText(nil); got != "0" {
+		t.Errorf("ExpectExitText(nil) = %q, want 0", got)
+	}
+	if got := ExpectExitText([]int{2, 3}); got != "2 or 3" {
+		t.Errorf("ExpectExitText([2 3]) = %q, want \"2 or 3\"", got)
+	}
+}
