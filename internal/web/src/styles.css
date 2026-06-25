@@ -189,7 +189,10 @@
     border-radius: var(--radius-s); border: 1px solid var(--line-2); background: var(--panel);
   }
   input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible, th.sortable:focus-visible, .skip-link:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+    /* Solid accent (not a 55% tint): the focus ring must clear WCAG 1.4.11's 3:1
+       against the adjacent surface. At 55% alpha it was only ~2.4:1; solid accent
+       is ~5.6-6:1 on panel/bg in both schemes. */
+    outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
   :target, :focus { scroll-margin-top: 5rem; scroll-margin-bottom: 4rem; }
