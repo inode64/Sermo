@@ -211,15 +211,24 @@ preflight:
 uses: apache
 version:
   on_change: { notify: [ops-email] }      # alert when the version changes
+  # on_change: { notify: [ops-email], level: minor }   # …only on major/minor bumps
 config:
   on_change: { notify: [ops-email] }      # alert when the config is invalid…
   path: [/etc/apache2/apache2.conf]       # …or (optional) when this file changes
 ```
 
 - **Version changed** — `version.on_change` runs the catalog service's version command and
-  alerts (notifying the listed notifiers) when its output changes — an unexpected
+  alerts (notifying the listed notifiers) when its version changes — an unexpected
   upgrade/downgrade. Needs `commands.version` (or `preflight.version`) in the
-  catalog service.
+  catalog service. The comparison is on the numeric **`version_short`** (`a.b.c`),
+  so noise in the version banner (build dates, suffixes) does not trigger it. An
+  optional **`level`** chooses the significant granularity:
+  - `major` — only `a` changes fire (`1.4.2 → 1.9.0` is ignored; `1.x → 2.x` fires).
+  - `minor` — `a` or `b` changes fire (patch releases ignored).
+  - `patch` *(default)* — any `a.b.c` change fires.
+
+  When the version output carries no parseable number, the monitor falls back to
+  comparing the raw line so a change is never missed.
 - **Config invalid / changed** — `config.on_change` runs the catalog service's
   `preflight.config` test and alerts when it **fails** (invalid config); with a
   `path` it also alerts when a config file changes. A **custom `preflight:`** on

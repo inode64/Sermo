@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 	"sermo/internal/dockerctl"
 	"sermo/internal/process"
 	"sermo/internal/virt"
@@ -45,6 +46,15 @@ func validateServiceMonitors(tree map[string]any, notifiers map[string]struct{},
 		}
 		if _, present := ocMap["notify"]; present {
 			validateNotifySelection(key+".on_change.notify", cfgval.StringList(ocMap["notify"]), notifiers, add)
+		}
+		// `level` selects version-change granularity and only applies to the
+		// version monitor, which compares version_short at major/minor/patch.
+		if lv, present := ocMap["level"]; present {
+			if key != "version" {
+				add("%s.on_change.level is only supported for the version monitor", key)
+			} else if _, ok := checks.VersionLevel(cfgval.String(lv)); !ok {
+				add("version.on_change.level %q is not one of major, minor, patch", cfgval.String(lv))
+			}
 		}
 	}
 }

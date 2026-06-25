@@ -1322,6 +1322,9 @@ checks, but the **reserved names** are consumed by features:
 - **`version`** (and `version_short`) — run by the `sermoctl apps`/`libs`/
   `services` listings to report a service's version, and **each cycle** by the
   `version.on_change` monitor (see [Service health conditions](rules.md#service-health-conditions-version--state--config)).
+  That monitor compares the numeric `version_short`, and an optional
+  `version.on_change.level` (`major`/`minor`/`patch`, default `patch`) selects at
+  which `a.b.c` granularity a change should alert.
   When both exist, `preflight.version` takes precedence over `commands.version`.
   They also declare `version` and `version_short` variables with empty defaults
   for expansion; linked apps expose them to services as `${app_version}` and

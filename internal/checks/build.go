@@ -569,6 +569,7 @@ func buildCommandCheck(b base, entry map[string]any, runner execx.Runner) (Check
 	}
 	c := commandCheck{base: b, runner: runner, argv: argv, user: cfgval.String(entry["user"]), expectExit: expect, stdout: stdout, stderr: stderr, version: version, exports: exports, analyzer: analyzer}
 	if c.onChange = cfgval.Bool(entry["on_change"]); c.onChange {
+		c.changeLevel, _ = cfgval.Int(entry["change_level"])
 		c.state = &cmdState{}
 	}
 	return c, ""
