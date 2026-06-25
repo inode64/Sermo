@@ -205,3 +205,24 @@ func TestInfluxErrorBody(t *testing.T) {
 		t.Errorf("non-JSON body = %q, want the trimmed raw body", got)
 	}
 }
+
+func TestInfluxFluxColumnIndexBounds(t *testing.T) {
+	// _value at the very first column (index 0) is valid (idx < 0, not <= 0).
+	host, port := serveFlux(t, "#datatype,double,string,long\n_value,result,table\n5,_result,0\n", "t", "o")
+	res := runInflux(t, map[string]any{
+		"type": "influxdb-query", "host": host, "port": port, "language": "flux",
+		"org": "o", "token": "t", "query": "from()", "op": "<", "value": "10",
+	})
+	if !res.OK {
+		t.Fatalf("_value at index 0 must resolve: %q", res.Message)
+	}
+	// A header longer than the data row must error cleanly, not index out of range.
+	host2, port2 := serveFlux(t, "#datatype,string,long,double\n,result,table,_value\n,,0\n", "t", "o")
+	res2 := runInflux(t, map[string]any{
+		"type": "influxdb-query", "host": host2, "port": port2, "language": "flux",
+		"org": "o", "token": "t", "query": "from()", "op": "<", "value": "10",
+	})
+	if res2.OK || !strings.Contains(res2.Message, "not found") {
+		t.Fatalf("missing value column must fail with not-found, got %q", res2.Message)
+	}
+}
