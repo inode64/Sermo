@@ -257,7 +257,7 @@ a name-only authority.
 
 ## Stop and signal escalation
 
-`stop_policy` fields omitted by a daemon or service inherit from
+`stop_policy` fields omitted by a catalog service or service inherit from
 `defaults.stop_policy`. The stop phase of a stop/restart:
 
 1. Backend `Stop`, wait `graceful_timeout`, discover residuals.

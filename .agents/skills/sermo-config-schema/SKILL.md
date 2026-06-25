@@ -20,7 +20,7 @@ You are the Sermo configuration schema designer.
 A document's kind is determined by where it is read from, so files do not carry a
 `kind:` field — it is derived from the location:
 
-- catalog subdirectory: `catalog/services/` → daemon, `catalog/apps/` → app,
+- catalog subdirectory: `catalog/services/` → service, `catalog/apps/` → app,
   `catalog/libs/` → lib, `catalog/patterns/` → patterns;
 - deployed config dirs: `paths.services` → service, `paths.mounts` → mount.
 
@@ -28,7 +28,7 @@ A `kind:` key is optional and redundant; if one is present in a deployed file it
 must match the location, otherwise loading fails. Examples (one per file):
 
 ```yaml
-# catalog/services/apache.yml  → daemon
+# catalog/services/apache.yml  → service
 name: apache
 ```
 
@@ -113,8 +113,8 @@ and matches only whole integers (`python%n` → `python2`, `python3`, not
 `python3.11`). The placeholder may sit anywhere in the name (`db%vsql` →
 `db4.8sql`). Put the matching `${...}` in `variables.binary`, or in
 `versions.from` when an app/lib discovery source is not the runtime executable.
-For `catalog/services` daemon templates, put the tokens in `service:` and let
-active systemd/OpenRC units drive daemon materialization; linked apps keep owning
+For `catalog/services` service templates, put the tokens in `service:` and let
+active systemd/OpenRC units drive service materialization; linked apps keep owning
 binary discovery and validation.
 `versions.from` may be a backend-neutral string/list, or a map with `systemd`
 and `openrc` branches. Map branches are exclusive: Sermo selects only the active
@@ -132,7 +132,7 @@ use `${version}` (`variables.binary`, `display_name`, service candidates,
 commands, etc.).
 When the runtime executable is version-agnostic in an app/lib, point discovery at
 a version-specific path with `versions.from` (discovery-only; stripped from the
-materialized document). A service template may also `uses` a base daemon to inherit
+materialized document). A service template may also `uses` a base catalog service to inherit
 checks/processes/rules and override only `variables.binary`. Simple `%v`/`%n`
 templates may materialize an unversioned active-slot entry by default when the
 marker-less path exists; composite templates with `%i`, `%s` or more than one
@@ -158,7 +158,7 @@ preflight:
 Catalog documents are categorized by the subdirectory under a catalog root:
 `services/`, `apps/`, `libs/`, `patterns/`. Files at the catalog root are
 rejected. Loading recurses; the directory sets both the document's kind (so
-`services/` → daemon) and `Document.Category`. `apps` and
+`services/` → service) and `Document.Category`. `apps` and
 `libs` are minimal catalog documents (name, display_name, description,
 `variables.binary` and preflight/version entries) surfaced by `sermoctl apps` /
 `libs`.
@@ -192,13 +192,13 @@ enabled: false disables inherited item
 delete: true removes inherited item
 ```
 
-Precedence, low to high: `global defaults < daemon (uses)/clone source < service
+Precedence, low to high: `global defaults < catalog service (uses)/clone source < service
 overrides`. The global `defaults` (stop_policy, policy, rule_window) is the base
 layer of every service; engine settings (interval, max_parallel_checks,
 default_timeout, backend) are NOT merged into services. Variables expand once,
 after all merging. See `docs/configuration.md`.
 The effective `defaults.policy.cooldown` is required and must be positive. A
-daemon or service may omit `policy.cooldown` only when it inherits that value;
+catalog service or service may omit `policy.cooldown` only when it inherits that value;
 any explicit override must also be positive.
 `paths.runtime` is the single runtime root. Named runtime locks are derived from
 `<paths.runtime>/locks`, and operation locks from `<paths.runtime>/ops`.
@@ -354,7 +354,7 @@ paths.runtime, if set, is an absolute directory
 paths.locks rejected; locks/ops directories derive from paths.runtime
 /etc/sermo/locks.d not scanned for active locks
 defaults.policy.cooldown present and positive
-resolved service policy.cooldown present and positive; daemon/service omissions are allowed only when inherited
+resolved service policy.cooldown present and positive; catalog service/service omissions are allowed only when inherited
 policy.max_actions requires max_actions_window
 block/alert actions require a message
 postflight entries use the same schema as preflight/checks; optional is boolean

@@ -7,10 +7,10 @@ import (
 	"strings"
 )
 
-// serviceAssistant enables a catalog daemon as a monitored service. It detects
+// serviceAssistant enables a catalog service as a monitored service. It detects
 // the active init system (systemd/openrc) and each candidate's resolved unit,
 // default port (and whether it is listening) and config locations, then writes a
-// `kind: service` file that `uses:` the catalog daemon.
+// `kind: service` file that `uses:` the catalog service.
 type serviceAssistant struct{}
 
 const serviceConfigCheckInterval = "60m"
@@ -24,10 +24,10 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	// Translate an input-closed re-prompt abort into ErrInputClosed even when
 	// Run is driven directly (the CLI also recovers at its own boundary).
 	defer Recover(&err)
-	if env.Daemons == nil {
+	if env.CatalogServices == nil {
 		return Result{}, fmt.Errorf("service detection is unavailable")
 	}
-	cands, err := env.Daemons()
+	cands, err := env.CatalogServices()
 	if err != nil {
 		return Result{}, fmt.Errorf("detect installed services: %w", err)
 	}
@@ -40,7 +40,7 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	}
 
 	// Per-service properties first. Catalog services inherit PID/process
-	// detection from their daemon profile, while generic services still need a
+	// detection from their catalog service profile, while generic services still need a
 	// local PID source because they have no catalog owner. The shared
 	// monitor-state + interval + shadow mode come after, batched.
 	type pending struct {
@@ -48,7 +48,7 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		body map[string]any
 	}
 	services := map[string]any{}
-	addGroup := func(cands []DaemonCandidate, question string, allowNone bool) {
+	addGroup := func(cands []ServiceCandidate, question string, allowNone bool) {
 		if len(cands) == 0 {
 			return
 		}
@@ -132,7 +132,7 @@ func (s serviceSettings) apply(body map[string]any) {
 	}
 }
 
-func splitServiceCandidates(cands []DaemonCandidate) (activeCatalog, generic []DaemonCandidate) {
+func splitServiceCandidates(cands []ServiceCandidate) (activeCatalog, generic []ServiceCandidate) {
 	for _, c := range cands {
 		if !serviceCandidateActive(c) {
 			continue
@@ -146,11 +146,11 @@ func splitServiceCandidates(cands []DaemonCandidate) (activeCatalog, generic []D
 	return activeCatalog, generic
 }
 
-func serviceCandidateActive(c DaemonCandidate) bool {
+func serviceCandidateActive(c ServiceCandidate) bool {
 	return c.Status == "active"
 }
 
-func chooseServices(p *Prompt, question string, cands []DaemonCandidate, allowNone bool) []DaemonCandidate {
+func chooseServices(p *Prompt, question string, cands []ServiceCandidate, allowNone bool) []ServiceCandidate {
 	labels := make([]string, len(cands))
 	for i, c := range cands {
 		labels[i] = serviceLabel(c)
@@ -165,14 +165,14 @@ func chooseServices(p *Prompt, question string, cands []DaemonCandidate, allowNo
 	} else {
 		sel = p.MultiChoose(question, labels)
 	}
-	out := make([]DaemonCandidate, 0, len(sel))
+	out := make([]ServiceCandidate, 0, len(sel))
 	for _, idx := range sel {
 		out = append(out, cands[idx])
 	}
 	return out
 }
 
-func groupHasPortDefaults(cands []DaemonCandidate) bool {
+func groupHasPortDefaults(cands []ServiceCandidate) bool {
 	for _, c := range cands {
 		if c.Port > 0 {
 			return true
@@ -189,7 +189,7 @@ func groupHasPortDefaults(cands []DaemonCandidate) bool {
 // their PID question is prefilled from the init-script analysis: a pidfile path
 // writes `pidfile:`, and if there is none, an exe derived from the unit offers a
 // `command_match` selector.
-func askServiceProps(p *Prompt, env Env, c DaemonCandidate, reviewPort bool) (string, map[string]any) {
+func askServiceProps(p *Prompt, env Env, c ServiceCandidate, reviewPort bool) (string, map[string]any) {
 	if _, exists := env.ServiceNames[c.Name]; exists {
 		p.printf("  %q is already configured; skipping.\n", c.Name)
 		return "", nil
@@ -238,7 +238,7 @@ func mergeServiceVariables(body map[string]any, vars map[string]any) {
 	}
 }
 
-func configCheckQuestion(c DaemonCandidate) string {
+func configCheckQuestion(c ServiceCandidate) string {
 	label := "detected configuration file"
 	if len(c.ConfigPaths) != 1 {
 		label = fmt.Sprintf("%d detected configuration files", len(c.ConfigPaths))
@@ -268,7 +268,7 @@ func stringsToAny(values []string) []any {
 	return out
 }
 
-func askServicePidfile(p *Prompt, c DaemonCandidate) string {
+func askServicePidfile(p *Prompt, c ServiceCandidate) string {
 	for {
 		pidfile := strings.TrimSpace(p.Ask("Pidfile path for "+c.Name+" (blank to skip)", c.Pidfile))
 		if pidfile == "" || filepath.IsAbs(pidfile) {
@@ -278,7 +278,7 @@ func askServicePidfile(p *Prompt, c DaemonCandidate) string {
 	}
 }
 
-func detectedProcessSelector(c DaemonCandidate) (map[string]any, string) {
+func detectedProcessSelector(c ServiceCandidate) (map[string]any, string) {
 	selector := map[string]any{}
 	if c.Cmd != "" {
 		selector["cmd"] = c.Cmd
@@ -298,7 +298,7 @@ func detectedProcessSelector(c DaemonCandidate) (map[string]any, string) {
 }
 
 // serviceLabel renders the candidate's detected facts for the selection menu.
-func serviceLabel(c DaemonCandidate) string {
+func serviceLabel(c ServiceCandidate) string {
 	parts := []string{c.Title}
 	if c.Unit != "" {
 		parts = append(parts, "unit: "+c.Unit)

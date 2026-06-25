@@ -3,7 +3,7 @@ uses: mysql
 
 # EXAMPLE - app-linked override for WAL-G MySQL/MariaDB backups.
 #
-# The base mysql and mariadb catalog daemons already include a conservative
+# The base mysql and mariadb catalog services already include a conservative
 # `backup` process check for common backup tools. Use this shape when you also
 # want WAL-G represented as an app, or when a host needs a different binary/user
 # than the built-in `backup` check. For a MariaDB service, use `uses: mariadb`

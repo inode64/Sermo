@@ -1,8 +1,9 @@
-# Daemons
+# Services
 
-A daemon is a reusable base definition for an application. A service `uses` a
-daemon and overrides only what differs. A service file lives under
-`paths.services`, which is what marks it as a service — no `kind:` is needed (see
+A catalog service is a reusable base definition for an application. A configured
+service `uses` a catalog service and overrides only what differs. A service file
+lives under `paths.services`, which is what marks it as a configured service — no
+`kind:` is needed (see
 [configuration](configuration.md): a document's kind is derived from its
 location).
 
@@ -18,29 +19,29 @@ checks:
 
 The packaged catalog (`catalog/`) covers common service families such as web
 servers, databases, container runtimes, NFS/libvirt helpers and hardware/system
-daemons. They define variables, preflight, processes, checks, stop_policy,
-remediation policy and rules so a service usually only sets a few overrides.
-High-impact daemons such as databases, caches and queues may carry stricter
+services. They define variables, preflight, processes, checks, stop_policy,
+remediation policy and rules so a configured service usually only sets a few
+overrides. High-impact catalog services such as databases, caches and queues may carry stricter
 local `policy` settings than the global defaults, with longer cooldowns,
 rate limits and backoff to avoid restart loops.
 
 ## Categories
 
-Daemons are grouped by the subdirectory they live in under a catalog root:
+Catalog documents are grouped by the subdirectory they live in under a catalog root:
 
 ```
 catalog/
-  services/   # daemon-managed long-running services (apache, nginx, mariadb, ...)
+  services/   # long-running services (apache, nginx, mariadb, ...)
   apps/       # installed tools/runtimes (java, perl, sqlite, go, git, ...)
   libs/       # shared libraries used as restart triggers (glibc, pam)
   patterns/   # output-analysis rule sets referenced by a check's analyze: block
 ```
 
 The directory sets the catalog category (`service` / `app` / `library` /
-`patterns`) and therefore the document's kind (`daemon` / `app` / `lib` /
+`patterns`) and therefore the document's kind (`service` / `app` / `lib` /
 `patterns`), so a top-level `kind:` is redundant and omitted; files placed
 directly in a catalog root are rejected. Use one YAML file per catalog document:
-one daemon, app, lib or pattern in each file.
+one service, app, lib or pattern in each file.
 `sermoctl services`, `sermoctl apps` and `sermoctl libs` list each category,
 showing which are installed, the version their version command reports, and
 whether they resolve without error (add `all` to include the not-installed).
@@ -51,20 +52,20 @@ by the web UI and `GET /api/services`, not by `sermoctl services` — see
 `analyze:` block in [rules.md](rules.md)).
 
 Catalog documents may declare `aliases: [...]` for distro or package names that
-operators naturally type. For example, the canonical daemon `name: apache` can
-carry aliases such as `apache2` and `httpd`, so a service may write
-`uses: apache2` while resolving to the same catalog profile. A configured
-A configured service may also declare aliases; `sermoctl` normalizes those aliases to
+operators naturally type. For example, the canonical catalog service
+`name: apache` can carry aliases such as `apache2` and `httpd`, so a configured
+service may write `uses: apache2` while resolving to the same catalog profile. A
+configured service may also declare aliases; `sermoctl` normalizes those aliases to
 the canonical configured service name before status, start, stop, restart,
 reload, monitor, SLA and process/lock commands. Catalog aliases are also usable
 as service names only in the conservative one-service case where a configured
-service has the same name as the daemon, such as `name: smb`, `uses: smb`,
-with catalog alias `samba`.
+service has the same name as the catalog service, such as `name: smb`,
+`uses: smb`, with catalog alias `samba`.
 
-## Library daemons
+## Library services
 
-A library daemon describes a shared library so services can restart when it is
-upgraded. It only needs identity plus the file to watch:
+A library service describes a shared library so configured services can restart
+when it is upgraded. It only needs identity plus the file to watch:
 
 ```yaml
 name: glibc
@@ -76,7 +77,7 @@ preflight:
   file: { type: file, path: "${binary}" }
 ```
 
-A service (or daemon definition) opts in with `restart_on_change`:
+A configured service (or catalog service definition) opts in with `restart_on_change`:
 
 ```yaml
 restart_on_change:
@@ -96,11 +97,11 @@ rules:
 
 The restart runs through the normal safe engine (guards, cooldown, max_actions),
 and the change is acknowledged once the restart succeeds, so it fires once per
-upgrade rather than every cycle. Referenced names must be `library` daemons.
+upgrade rather than every cycle. Referenced names must be `library` services.
 
 ## Reload on config change (`reload_on_change`)
 
-Many daemons re-read their configuration **without a restart** — systemd
+Many services re-read their configuration **without a restart** — systemd
 (`systemctl daemon-reload`), nginx (`nginx -s reload`), named (`rndc reload`),
 rsyslog, … `reload_on_change` watches config files/directories and, when one
 changes, runs the **reload** action instead of a disruptive restart:
@@ -132,7 +133,7 @@ is blocked by guards that list `reload`, like any other service action.
 
 **What "reload" runs.** By default it is the backend per-unit reload —
 `systemctl reload <unit>` (which runs the unit's `ExecReload`, e.g. `nginx -s
-reload`) or OpenRC's init-script `reload`. A daemon can override this with
+reload`) or OpenRC's init-script `reload`. A catalog service can override this with
 **`reload.command`** when the reload is not a per-unit operation — systemd
 itself reloads with `systemctl daemon-reload`, not `systemctl reload systemd`:
 
@@ -144,9 +145,9 @@ reload:
 
 ### Native reload (`reload:`) — when the init can't, Sermo can
 
-Some daemons reload in place (e.g. `sshd`, `snmpd`, `proftpd`, `prometheus`,
+Some services reload in place (e.g. `sshd`, `snmpd`, `proftpd`, `prometheus`,
 `loki` re-read their config on **`SIGHUP`**) but their **systemd** unit defines
-**no `ExecReload`**, so `systemctl reload <unit>` fails — even though the daemon
+**no `ExecReload`**, so `systemctl reload <unit>` fails — even though the service
 itself supports it (the same service under OpenRC usually does reload, via an
 init-script `reload()` that sends the signal). The `reload:` block closes that
 gap: it declares a **native reload** Sermo performs itself, by signalling the
@@ -167,7 +168,7 @@ reload:
 - **`when: auto`** (default) asks the backend whether it can reload — systemd's
   `CanReload` (the unit has an `ExecReload`), or an OpenRC init script that
   defines `reload`. If it can, the init reload runs; if it can't, Sermo runs the
-  native reload. So the *same* daemon definition reloads correctly on a host
+  native reload. So the *same* catalog service definition reloads correctly on a host
   whose unit exposes reload **and** on one whose unit doesn't.
 - **`when: always`** always runs the native reload and never the init's — the
   right choice for reloads that are not per-unit operations. A bare
@@ -177,7 +178,7 @@ reload:
   any unit with no MainPID — to the PID in the service's `pidfile:`. The pidfile
   fallback is only used when that PID also matches a `processes:` selector with
   exact `exe` and `user`; a stale pidfile must not signal an unrelated process.
-  A signal reload with neither target available fails. Daemons without pidfile
+  A signal reload with neither target available fails. Services without pidfile
   metadata reload by signal only on systemd; on OpenRC they rely on the init
   script's own `reload` (`when: auto`).
 
@@ -215,8 +216,8 @@ systemctl cat <unit>
 systemctl show -p CanReload -p MainPID -p PIDFile -p User <unit>
 sed -n '/^reload()/,/^}/p' /etc/init.d/<unit>
 grep -E '^(command|command_user|pidfile|.*PIDFILE)=' /etc/init.d/<unit> /etc/conf.d/<unit>
-readlink -f /usr/sbin/<daemon>
-namei -l /run/<daemon>.pid
+readlink -f /usr/sbin/<service>
+namei -l /run/<service>.pid
 ```
 
 Useful catalog audit while developing:
@@ -227,9 +228,9 @@ go test ./internal/config -run 'TestRealCatalog(AllDaemonsValidate|ReloadDaemons
 
 The reload that `reload:` produces is what the **`reload` action**,
 `reload_on_change`, the `sermoctl reload <svc>` command and the web UI reload
-button all run. It is a service-control concept: it applies to services and
-daemons, not to host `watches:`, which observe host metrics
-and fire hooks rather than reload a unit.
+button all run. It is a service-control concept: it applies to services, not to
+host `watches:`, which observe host metrics and fire hooks rather than reload a
+unit.
 
 ## App dependencies (`apps`)
 
@@ -263,9 +264,9 @@ App variables are also available to the service. They are always exposed with a
 normalized app-name prefix (`${java_binary}`, `${php_fpm_binary}`, ...). If the
 service links exactly one app, those variables are additionally available without
 the prefix as defaults, so service-specific checks can use `${binary}` while the
-app keeps ownership of the actual path. Local `variables:` entries on the daemon
-or service override either form; when several apps are linked, use the prefixed
-names.
+app keeps ownership of the actual path. Local `variables:` entries on the catalog
+service or configured service override either form; when several apps are linked,
+use the prefixed names.
 
 Because they run in **preflight**, a missing or wrong-version runtime fails the
 service's preflight, which **blocks start/restart/reload/resume** (a preflight-failed
@@ -276,11 +277,11 @@ every service that lists it. Validation reports an `apps:` entry that does not
 resolve to a catalog app, so dangling runtime links are caught before deployment.
 The service keeps its own `variables.binary`,
 `version` and `config` checks (the **config** test is always service-specific,
-never moved to an app). Referenced names must be `app` daemons.
+never moved to an app). Referenced names must be `app` services.
 
 ## Metadata fields
 
-A daemon or service may carry optional human-facing metadata:
+A catalog service or configured service may carry optional human-facing metadata:
 
 ```yaml
 name: mariadb
@@ -314,7 +315,7 @@ validation rejects non-string values.
 ### Built-in variables
 
 The variables in the table below are always available during resolution
-**without being declared** under `variables` — so a daemon can parameterize
+**without being declared** under `variables` — so a catalog service can parameterize
 human-facing strings (and paths) instead of hardcoding them:
 
 ```yaml
@@ -347,7 +348,7 @@ validating config off-host.
 
 | Variable          | Value                                          | Resolved        |
 |-------------------|------------------------------------------------|-----------------|
-| `${name}`         | the resolved service/daemon name              | resolution      |
+| `${name}`         | the resolved service name                     | resolution      |
 | `${display_name}` | the display name (falls back to name)          | resolution      |
 | `${service}`      | the service's primary unit name                | resolution      |
 | `${host}`         | hostname (`SERMO_HOST` override)               | resolution¹     |
@@ -362,20 +363,20 @@ validating config off-host.
 | `${event}`        | the firing rule's name                         | runtime²        |
 | `${action}`       | the action taken (restart/start/stop/reload/resume) | runtime²        |
 
-¹ `${host}` only applies when the daemon does not define a `host` variable (a
+¹ `${host}` only applies when the service does not define a `host` variable (a
 bind address like `127.0.0.1`); an explicit `host` always wins.
 
 ⁵ `${hostname}` is the **short** hostname — the first label before the first dot
 (`radon` on `radon.srvdr.com`) — distinct from `${host}` (which keeps the full
 detected hostname / bind-address fallback). Use it for systemd instance units
 keyed by host identity, e.g. `service: "ceph-mon@${hostname}"` → `ceph-mon@radon`.
-For numeric multi-instance daemons (e.g. one OSD per device) use a `%n` daemon
+For numeric multi-instance services (e.g. one OSD per device) use a `%n` service
 template whose `service:` carries `${n}`. Sermo materializes `ceph-osd0…N` from
 active units such as `ceph-osd@0.service`, then links the generic `ceph-osd` app
 for binary validation. An explicit `hostname` variable (or `SERMO_HOSTNAME`)
 wins.
 
-⁴ `${user}` and `${pidfile}` are fallbacks: a daemon's own `user` (a service
+⁴ `${user}` and `${pidfile}` are fallbacks: a service's own `user` (a service
 account such as `www-data`) or `pidfile` variable always wins. Put the pidfile
 variable in the service-level `pidfile: "${pidfile}"`, and use `user: "${user}"`
 inside any `processes:` selector that should be tied to the service account.
@@ -395,14 +396,14 @@ message, so they belong in `message:` strings — e.g.
 `message: "[${host}] ${service}: ${event} → ${action} at ${date}"`. Elsewhere they
 stay literal.
 
-³ `${port}` mirrors a top-level `port:` field on the service (or daemon), so an
-instance can set its listen port once and have every `${port}` reference resolve
-to it:
+³ `${port}` mirrors a top-level `port:` field on the configured service (or catalog
+service), so an instance can set its listen port once and have every `${port}`
+reference resolve to it:
 
 ```yaml
 name: db-inst2
 uses: dbserver
-port: 3307          # → ${port} everywhere in the daemon
+port: 3307          # → ${port} everywhere in the catalog service
 ```
 
 Unlike the other built-ins it has **no fallback**: declare `port:` (or a
@@ -673,7 +674,7 @@ stop_policy:
 
 - A lingering pidfile or `files_absent` match is a **warning** (the stop still
   succeeds, `ResultOK`) folded into the result message and surfaced in CLI/web —
-  it means the daemon crashed or left junk. Residual *processes* keep their
+  it means the service crashed or left junk. Residual *processes* keep their
   stronger `orphan_processes` (red) handling via the reaper.
 - **`clean_after_stop`** is the single master switch for *all* active deletion
   after a clean stop. It is **opt-in (default `false`)**: with it off the engine
@@ -706,14 +707,14 @@ stop_policy:
 
 ### `pidfile:` and `pidfiles:` shorthand (selectors + health checks)
 
-A daemon can declare a top-level `pidfile: <path>` to wire **both** uses of a
+A catalog service can declare a top-level `pidfile: <path>` to wire **both** uses of a
 pidfile from one line:
 
 ```yaml
 pidfile: /run/named/named.pid
 ```
 
-When a daemon legitimately uses different pidfile names across distributions,
+When a catalog service legitimately uses different pidfile names across distributions,
 declare candidates in preference order:
 
 ```yaml
@@ -723,8 +724,8 @@ pidfile:
 ```
 
 Use `/run` here, not `/var/run`. If a distro init script or service manager
-reports `/var/run/...`, write the equivalent `/run/...` path in the daemon
-definition while preserving Linux/init compatibility. Before committing a new
+reports `/var/run/...`, write the equivalent `/run/...` path in the catalog
+service definition while preserving Linux/init compatibility. Before committing a new
 pidfile or socket path, resolve it with `readlink -f` or inspect it with
 `namei -l`; if any component is a symlink, use the resolved canonical target.
 
@@ -732,10 +733,10 @@ On resolution this creates (a) an internal pidfile discovery selector — so the
 parent process **and its descendants** are discovered and monitored without
 adding a public `processes:` entry — and (b) a `pidfile` health check gated by
 `requires: [service]`. Because of the gate, a missing or stale pidfile is
-reported as an **error only while the service is active** (it means the daemon
+reported as an **error only while the service is active** (it means the service
 died or lost its pidfile without the service manager noticing); a legitimately
 stopped service is skipped, not alarmed. A check already named `pidfile` is
-respected, so a daemon that needs a custom check can still spell it out. Public
+respected, so a catalog service that needs a custom check can still spell it out. Public
 `processes:` entries stay limited to `exe`/`cmd` selectors with optional
 `user`/`group`; do not put `pidfile` under `processes:`. The shorthand path can
 reference variables (e.g. `pidfile: "${pidfile}"`). Candidate lists are tried in
@@ -770,7 +771,7 @@ pidfile."
 
 ### `socket:` shorthand (gated health check)
 
-A daemon can declare a top-level Unix socket path when the active service should
+A catalog service can declare a top-level Unix socket path when the active service should
 leave a socket behind:
 
 ```yaml
@@ -782,12 +783,12 @@ socket: { path: "${socket}", optional: true }
 On resolution this creates a `socket` health check gated by `requires: [service]`
 and removes the top-level key. Like `pidfile:`, `socket:` accepts a scalar path,
 a candidate list, or `{path: ..., optional: true}`. Use it for runtime sockets
-owned by the daemon; protocol checks such as `redis`, `dbus` or `libvirt` still
+owned by the service; protocol checks such as `redis`, `dbus` or `libvirt` still
 use their own `socket` field inside the check body.
 
 ### `lockfile:` shorthand (gated health check)
 
-A daemon can declare one regular lockfile created by the active service:
+A catalog service can declare one regular lockfile created by the active service:
 
 ```yaml
 lockfile: /run/lock/subsys/smb
@@ -800,12 +801,12 @@ only evidence that the service left its own runtime lock artifact; it does not
 block start/stop/restart/reload/resume and must not point under
 `<paths.runtime>/locks`, which is reserved for Sermo operation locks.
 
-## Versioned daemons
+## Versioned services
 
 Some applications ship one binary per version and several can be installed at
 once (php-fpm, postgres, tomcat, erlang/beam, berkeley db). Instead of one file
 per version, write a single **app version template** whose `name:` contains
-`%v`, with `${version}` in the discovery path. A daemon template with the same
+`%v`, with `${version}` in the discovery path. A service template with the same
 token links that app.
 
 ```yaml
@@ -828,11 +829,11 @@ apps: ["postgres-${version}"]
 
 On load, Sermo discovers app versions by globbing the linked app's
 `variables.binary` path with `${version}` wildcarded (here
-`/usr/lib64/postgresql-*/bin/postgres`) and extracting what filled it. Daemon
+`/usr/lib64/postgresql-*/bin/postgres`) and extracting what filled it. Service
 templates in `catalog/services` prefer the active init service as source of
 truth: token-bearing `service:` candidates are matched against active
-systemd/OpenRC units, and only matching daemons materialize. Each match becomes a
-concrete app or daemon with `%v` and `${version}` substituted everywhere (name,
+systemd/OpenRC units, and only matching services materialize. Each match becomes a
+concrete app or service with `%v` and `${version}` substituted everywhere (name,
 display_name, service, app links, ...) — `postgres-14`, `postgres-16`, ... — and
 the templates themselves are dropped. If nothing is installed or no matching
 service is active, the template yields nothing. The YAML filename does not have
@@ -842,10 +843,10 @@ as the catalog identifier. `%v` may sit anywhere in the name (`db%vsql` →
 use `${version}` (e.g. in `service` or `apps`).
 
 Prefer application discovery in `catalog/apps` when the installed binary path
-identifies the version or instance. A versioned or instanced daemon that links a
+identifies the version or instance. A versioned or instanced service that links a
 matching app, such as `apps: ["postgres-${version}"]` or
 `apps: ["php-fpm${version}"]`, uses that app for runtime binary validation. For
-catalog services, put the same tokens in `service:` so the daemon materializes
+catalog services, put the same tokens in `service:` so the service materializes
 from the unit that is actually active on the selected init backend.
 
 `variables.binary` may be a string or a candidate list. Use it when the
@@ -859,17 +860,17 @@ When an app or library cannot discover from its runtime executable, use
 `versions.from` there and link the generic or versioned app that owns the binary:
 
 ```yaml
-name: mydaemon-%i
+name: myservice-%i
 versions:
-  from: "/etc/mydaemon/${instance}.conf"
+  from: "/etc/myservice/${instance}.conf"
 variables:
-  binary: /usr/sbin/mydaemon
+  binary: /usr/sbin/myservice
 preflight:
   binary: { type: binary, path: "${binary}" }
 ```
 
 `versions.from` is discovery-only metadata; it never appears in materialized apps
-or daemons. Matches are de-duplicated by their materialized token tuple.
+or services. Matches are de-duplicated by their materialized token tuple.
 
 A discovered version must start with a digit, so siblings of an unbounded
 trailing placeholder (a bare `php-fpm` symlink, a `php-fpm.conf`) are not mistaken
@@ -955,10 +956,10 @@ example, a legacy OpenRC profile can expose only `service.openrc:
 
 ### Composite names with a separator (`%s`)
 
-Some daemons encode **both** a version and an environment/pool in one name, joined
+Some services encode **both** a version and an environment/pool in one name, joined
 by `-` or `_` — `tomcat-8.5-main`, `tomcat-9-guacamole`, `php-fpm8.4_airbnb`. Use
 `%s`/`${sep}` for that joining separator, which matches an empty string, `-` or
-`_`. A name may carry several tokens (`tomcat-%v%s%i`); for daemon templates they
+`_`. A name may carry several tokens (`tomcat-%v%s%i`); for service templates they
 are discovered together from active service units whose `service:` candidates
 contain the same markers, and bound everywhere at once. A non-final `%v` is
 bounded so it stops at the separator (`8.5`), and the instance may be empty —
@@ -974,16 +975,16 @@ service:
 
 ### Service-owned discovery
 
-A daemon template in `catalog/services` normally discovers from active init
+A service template in `catalog/services` normally discovers from active init
 units. Put every supported service spelling in `service:` and split it by backend
 when systemd/OpenRC names differ. The linked app (generic like `openvpn`, or
 versioned like `php-fpm${version}`) still supplies `${binary}` for preflight and
-process identity. A daemon never discovers from its own *binary*.
+process identity. A service never discovers from its own *binary*.
 
 When discovery comes from init service metadata, let the linked app own runtime
 binary validation when it is versioned. For example, PHP-FPM links
 `php-fpm${version}`; that app already validates `/usr/sbin/php-fpm${version}` or
-`/usr/bin/php-fpm${version}`, so the daemon does not repeat the same candidates
+`/usr/bin/php-fpm${version}`, so the service does not repeat the same candidates
 in `versions.require`:
 
 ```yaml
@@ -1059,7 +1060,7 @@ other safety-affecting sections.
 ### Variables read from a config file (`from_file`)
 
 A variable may take its value from a config file instead of a literal, useful when
-a port or path is defined in the daemon's own config. `directive:` reads the token
+a port or path is defined in the service's own config. `directive:` reads the token
 after a `key value` line (OpenVPN/sshd style); `pattern:` reads capture group 1 of
 a regex; `default:` applies when the file or key is absent:
 
@@ -1144,7 +1145,7 @@ integer-only `version N` token is accepted for projects such as polkit and
 date-coded numad releases. It is empty when the version line carries no
 recognizable number.
 
-A daemon may instead declare a dedicated `version_short` command (under
+A catalog service may instead declare a dedicated `version_short` command (under
 `preflight` or `commands`, alongside `version`) that prints the bare version
 itself, sidestepping the regex when a tool can report it directly. Its first
 non-empty output line is then used verbatim. The packaged interpreter apps do
@@ -1161,9 +1162,9 @@ preflight:
   version_short: { type: command, command: ["${binary}","-r","echo PHP_VERSION;"], timeout: 10s }
 ```
 
-A daemon template may `uses` a base daemon to inherit its checks, processes and
+A service template may `uses` a base service to inherit its checks, processes and
 rules, while a linked app supplies the instance- or version-specific binary. The
-packaged `nebula-%i` daemon builds on the base `nebula` daemon and links the
+packaged `nebula-%i` service builds on the base `nebula` service and links the
 `nebula-${instance}` app:
 
 ```yaml
@@ -1173,11 +1174,11 @@ display_name: "Nebula ${instance}"
 apps: ["nebula-${instance}"]
 ```
 
-A service then targets a concrete instance, e.g. `uses: nebula-vpn0`.
+A configured service then targets a concrete instance, e.g. `uses: nebula-vpn0`.
 
 ## Service unit
 
-The service's identity is the daemon `name`; `service` declares the init-unit
+The service's identity is its `name`; `service` declares the init-unit
 name(s) to operate on. The simplest form is a single name that works on both
 init systems:
 
@@ -1207,7 +1208,7 @@ not use the init-unit fallback.
 
 An enabled instance can override the unit with a scalar (e.g.
 `service: redis-cache`) to run as its own unit, or omit `service` entirely to
-inherit the daemon's candidates.
+inherit the catalog service's candidates.
 
 ## Cloning
 
@@ -1229,9 +1230,9 @@ new value. Clone chains resolve transitively; cycles are rejected.
 
 To run several instances of the same application — same binary, same checks and
 rules, different listen port, pidfile and config file — let each instance `uses`
-the daemon and override only its unique variables.
+the catalog service and override only its unique variables.
 
-The daemon parametrizes everything that varies with `${...}` placeholders and
+The catalog service parametrizes everything that varies with `${...}` placeholders and
 threads each one into the commands and checks that consume it. In particular the
 config-file path should be a variable wired into every command that reads it, so
 two instances never pick up each other's configuration:
@@ -1265,7 +1266,7 @@ A second instance is the same file with its own name/unit and variables (e.g.
 `name: db-inst2`, `service: db-inst2`, `port: 3307`, the `inst2.*` paths).
 
 Prefer `uses` over [`clone`](#cloning) here: every instance derives from the
-*daemon* and only overrides variables. Reach for `clone` only when one instance
+*catalog service* and only overrides variables. Reach for `clone` only when one instance
 should copy *another concrete service* almost verbatim. See [`docs/sermo-all.yml`](sermo-all.yml)
 for a complete worked configuration.
 
@@ -1319,7 +1320,7 @@ checks, but the **reserved names** are consumed by features:
   `version`, but only checks the exit code. When present, it takes precedence
   over `version` for app health; `version` remains display-only.
 - **`version`** (and `version_short`) — run by the `sermoctl apps`/`libs`/
-  `services` listings to report a daemon's version, and **each cycle** by the
+  `services` listings to report a service's version, and **each cycle** by the
   `version.on_change` monitor (see [Service health conditions](rules.md#service-health-conditions-version--state--config)).
   When both exist, `preflight.version` takes precedence over `commands.version`.
   They also declare `version` and `version_short` variables with empty defaults

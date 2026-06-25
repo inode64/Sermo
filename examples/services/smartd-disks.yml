@@ -4,7 +4,7 @@ uses: smartd
 # EXAMPLE — list YOUR drives, then keep it, or delete it.
 #
 # `smart` checks are per-device (which is why they live on an instance, not the
-# smartd daemon, which cannot know the host's drives). They read `smartctl -j`
+# smartd catalog service, which cannot know the host's drives). They read `smartctl -j`
 # (needs smartmontools + root) and complement smartd's own mail alerts with
 # failure-prediction predicates Sermo records and graphs over time.
 

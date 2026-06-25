@@ -25,11 +25,11 @@ import (
 	"github.com/goccy/go-yaml"
 )
 
-// listInstalledDaemons returns active service targets for the wizard: catalog
-// daemons whose init unit exists, plus active backend units not backed by the
+// listInstalledCatalogServices returns active service targets for the wizard: catalog
+// catalog services whose init unit exists, plus active backend units not backed by the
 // catalog. Catalog candidates keep their resolved unit/status/default port and
 // config-file hints; generic candidates write self-contained service checks.
-func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servicemgr.Backend, runner execx.Runner, timeout time.Duration) ([]assist.DaemonCandidate, error) {
+func listInstalledCatalogServices(ctx context.Context, cfg *config.Config, backend servicemgr.Backend, runner execx.Runner, timeout time.Duration) ([]assist.ServiceCandidate, error) {
 	if runner == nil {
 		runner = execx.CommandRunner{}
 	}
@@ -38,26 +38,26 @@ func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servi
 	resolver.Timeout = timeout
 	manager, _ := servicemgr.NewManager(backend)
 	catalogUnits := map[string]struct{}{}
-	var out []assist.DaemonCandidate
-	for _, name := range cfg.DaemonsInCategory(config.CategoryService) {
+	var out []assist.ServiceCandidate
+	for _, name := range cfg.CatalogNamesInCategory(config.CategoryService) {
 		resolved, errs := cfg.ResolveCatalog(config.CategoryService, name)
 		if len(errs) > 0 || resolved.Tree == nil {
 			continue
 		}
 		candidates, _ := config.ServiceCandidates(resolved.Tree, string(backend), name)
 		addWizardCatalogUnits(catalogUnits, backend, candidates...)
-		unit, status, err := resolveWizardDaemonUnit(ctx, resolver, manager, backend, candidates)
+		unit, status, err := resolveWizardServiceUnit(ctx, resolver, manager, backend, candidates)
 		if err != nil {
 			continue // not installed on this backend
 		}
 		addWizardCatalogUnits(catalogUnits, backend, unit)
-		c := assist.DaemonCandidate{
+		c := assist.ServiceCandidate{
 			Name:        name,
-			Title:       daemonTitle(resolved.Tree, name),
+			Title:       serviceTitle(resolved.Tree, name),
 			Unit:        unit,
 			Status:      string(status),
 			UnitPresent: true,
-			Port:        daemonPort(resolved.Tree),
+			Port:        servicePort(resolved.Tree),
 			ConfigPaths: existingConfigFiles(resolved.Tree),
 		}
 		if name == "ceph-mon" {
@@ -71,7 +71,7 @@ func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servi
 		c.Pidfile, c.Exe, c.Cmd, c.User = proc.Pidfile, proc.Exe, proc.Cmd, proc.User
 		if c.Port > 0 {
 			c.PortListening = portListening(c.Port)
-			if host, ok := portListenerHost(c.Port); ok && daemonHasVariable(resolved.Tree, "host") {
+			if host, ok := portListenerHost(c.Port); ok && serviceHasVariable(resolved.Tree, "host") {
 				mergeCandidateVariables(&c, map[string]any{"host": host})
 			}
 		}
@@ -88,7 +88,7 @@ func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servi
 			if name == "" {
 				continue
 			}
-			c := assist.DaemonCandidate{
+			c := assist.ServiceCandidate{
 				Name:        name,
 				Title:       name,
 				Unit:        unit,
@@ -106,7 +106,7 @@ func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servi
 	return out, nil
 }
 
-func dedupeWizardCatalogCandidates(cands []assist.DaemonCandidate, backend servicemgr.Backend) []assist.DaemonCandidate {
+func dedupeWizardCatalogCandidates(cands []assist.ServiceCandidate, backend servicemgr.Backend) []assist.ServiceCandidate {
 	seen := map[string]struct{}{}
 	out := cands[:0]
 	for _, c := range cands {
@@ -168,7 +168,7 @@ func wizardServiceNameForUnit(backend servicemgr.Backend, unit string) string {
 	return name
 }
 
-func resolveWizardDaemonUnit(ctx context.Context, resolver servicemgr.UnitResolver, manager servicemgr.Manager, backend servicemgr.Backend, candidates []string) (string, servicemgr.Status, error) {
+func resolveWizardServiceUnit(ctx context.Context, resolver servicemgr.UnitResolver, manager servicemgr.Manager, backend servicemgr.Backend, candidates []string) (string, servicemgr.Status, error) {
 	var firstUnit string
 	firstStatus := servicemgr.StatusUnknown
 	for _, candidate := range candidates {
@@ -176,7 +176,7 @@ func resolveWizardDaemonUnit(ctx context.Context, resolver servicemgr.UnitResolv
 		if err != nil {
 			continue
 		}
-		status := daemonUnitStatus(ctx, manager, unit)
+		status := serviceUnitStatus(ctx, manager, unit)
 		if firstUnit == "" {
 			firstUnit, firstStatus = unit, status
 		}
@@ -191,10 +191,10 @@ func resolveWizardDaemonUnit(ctx context.Context, resolver servicemgr.UnitResolv
 	if err != nil {
 		return "", servicemgr.StatusUnknown, err
 	}
-	return unit, daemonUnitStatus(ctx, manager, unit), nil
+	return unit, serviceUnitStatus(ctx, manager, unit), nil
 }
 
-func daemonUnitStatus(ctx context.Context, manager servicemgr.Manager, unit string) servicemgr.Status {
+func serviceUnitStatus(ctx context.Context, manager servicemgr.Manager, unit string) servicemgr.Status {
 	if manager == nil {
 		return servicemgr.StatusUnknown
 	}
@@ -205,15 +205,15 @@ func daemonUnitStatus(ctx context.Context, manager servicemgr.Manager, unit stri
 	return status.Status
 }
 
-func daemonTitle(tree map[string]any, fallback string) string {
+func serviceTitle(tree map[string]any, fallback string) string {
 	if s := cfgval.AsString(tree["display_name"]); s != "" {
 		return s
 	}
 	return fallback
 }
 
-// daemonPort reads the daemon's default port from its variables (0 if none).
-func daemonPort(tree map[string]any) int {
+// servicePort reads the catalog service's default port from its variables (0 if none).
+func servicePort(tree map[string]any) int {
 	vars, ok := tree["variables"].(map[string]any)
 	if !ok {
 		return 0
@@ -226,7 +226,7 @@ func daemonPort(tree map[string]any) int {
 	return 0
 }
 
-func daemonHasVariable(tree map[string]any, name string) bool {
+func serviceHasVariable(tree map[string]any, name string) bool {
 	vars, ok := tree["variables"].(map[string]any)
 	if !ok {
 		return false
@@ -235,7 +235,7 @@ func daemonHasVariable(tree map[string]any, name string) bool {
 	return ok
 }
 
-func mergeCandidateVariables(c *assist.DaemonCandidate, vars map[string]any) {
+func mergeCandidateVariables(c *assist.ServiceCandidate, vars map[string]any) {
 	if len(vars) == 0 {
 		return
 	}
@@ -313,7 +313,7 @@ func parseCephAddrVersion(addrs, version string) (string, int, bool) {
 	return host, port, true
 }
 
-// existingConfigFiles returns the daemon's declared `config_files` that exist on
+// existingConfigFiles returns the catalog service's declared `config_files` that exist on
 // the host (a catalog hint; empty when not declared).
 func existingConfigFiles(tree map[string]any) []string {
 	var out []string
@@ -523,7 +523,7 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 		return exitSuccess
 	}
 
-	// Step-9 cleanup: offer to delete managed service files whose catalog daemon
+	// Step-9 cleanup: offer to delete managed service files whose catalog service
 	// is no longer detected on this host (docs/wizards.md).
 	var deletes []string
 	for _, dir := range serviceCleanupDirs(globalPath, cfg) {
@@ -554,7 +554,7 @@ func serviceCleanupDirs(globalPath string, cfg *config.Config) []string {
 }
 
 // planStaleServiceDeletes offers to delete managed `kind: service` files under
-// a services dir whose `uses:` daemon (or name) is no longer in the detected
+// a services dir whose `uses:` catalog service (or name) is no longer in the detected
 // set. Mirrors planWizardWatchDeletes for the service wizard; a no-op when
 // detection is empty so a valid file is never proposed for deletion.
 func planStaleServiceDeletes(p *assist.Prompt, dir string, detected map[string]bool) ([]string, error) {

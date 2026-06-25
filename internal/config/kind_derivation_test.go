@@ -81,3 +81,41 @@ func TestKindConflictingDeclarationRejected(t *testing.T) {
 		t.Fatalf("Load error = %v, want service/mount conflict error", err)
 	}
 }
+
+// TestCatalogServiceAndConfiguredServiceShareName verifies the daemon→service
+// merge: a catalog service template and a configured service that `uses` it may
+// share a name. They live in separate registries (catalog/services vs
+// paths.services), so loading and validation must not flag a duplicate, and
+// `uses:` must resolve the configured service against the catalog template.
+func TestCatalogServiceAndConfiguredServiceShareName(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": kindDerivationGlobal,
+		// catalog service template named "redis"
+		"catalog/services/redis.yml": "name: redis\nvariables:\n  port: 6379\nchecks:\n  tcp:\n    type: tcp\n    host: 127.0.0.1\n    port: \"${port}\"\n",
+		// configured service ALSO named "redis" that uses the template
+		"services/redis.yml": "name: redis\nuses: redis\n",
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if _, ok := cfg.CatalogServices["redis"]; !ok {
+		t.Fatalf("catalog service redis not loaded: %v", cfg.CatalogServiceNames)
+	}
+	if _, ok := cfg.Services["redis"]; !ok {
+		t.Fatalf("configured service redis not loaded: %v", cfg.ServiceNames)
+	}
+	for _, issue := range Validate(cfg) {
+		if strings.Contains(issue.Msg, "duplicate") {
+			t.Fatalf("unexpected duplicate issue: %v", issue)
+		}
+	}
+	// uses: must resolve against the catalog template (inherits its checks).
+	resolved, errs := cfg.Resolve("redis")
+	if len(errs) != 0 {
+		t.Fatalf("resolve configured service: %v", errs)
+	}
+	if _, ok := resolved.Tree["checks"]; !ok {
+		t.Fatalf("configured service did not inherit checks from catalog template: %v", resolved.Tree)
+	}
+}

@@ -1,7 +1,7 @@
 name: cloudflared
 uses: cloudflared
 
-# The packaged daemon assumes the unit is named "cloudflared", the binary is
+# The packaged catalog service assumes the unit is named "cloudflared", the binary is
 # /usr/bin/cloudflared, the process runs as user "cloudflared", and the local
 # metrics endpoint answers on 127.0.0.1:60123. Override these when your
 # distribution or tunnel config differs, for example:

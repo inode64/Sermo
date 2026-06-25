@@ -98,7 +98,7 @@ func TestSpecificListenerHostRequiresOneNonLoopbackAddress(t *testing.T) {
 }
 
 func TestMergeCandidateVariablesPreservesDetectedValues(t *testing.T) {
-	c := assist.DaemonCandidate{Variables: map[string]any{"port": 3300}}
+	c := assist.ServiceCandidate{Variables: map[string]any{"port": 3300}}
 	mergeCandidateVariables(&c, map[string]any{"host": "172.31.27.22"})
 	if c.Variables["port"] != 3300 || c.Variables["host"] != "172.31.27.22" {
 		t.Fatalf("variables = %#v, want existing port and detected host", c.Variables)
@@ -107,20 +107,20 @@ func TestMergeCandidateVariablesPreservesDetectedValues(t *testing.T) {
 
 func TestDaemonHasVariable(t *testing.T) {
 	tree := map[string]any{"variables": map[string]any{"host": "127.0.0.1"}}
-	if !daemonHasVariable(tree, "host") {
-		t.Fatal("daemonHasVariable(host) = false, want true")
+	if !serviceHasVariable(tree, "host") {
+		t.Fatal("serviceHasVariable(host) = false, want true")
 	}
-	if daemonHasVariable(tree, "port") {
-		t.Fatal("daemonHasVariable(port) = true, want false")
+	if serviceHasVariable(tree, "port") {
+		t.Fatal("serviceHasVariable(port) = true, want false")
 	}
 }
 
-func TestResolveWizardDaemonUnitPrefersActiveCandidate(t *testing.T) {
+func TestResolveWizardServiceUnitPrefersActiveCandidate(t *testing.T) {
 	resolver := servicemgr.UnitResolver{Probe: wizardProbe{paths: map[string]bool{
 		"/etc/init.d/php-fpm": true,
 		"/etc/init.d/php8.2":  true,
 	}}}
-	unit, status, err := resolveWizardDaemonUnit(
+	unit, status, err := resolveWizardServiceUnit(
 		context.Background(),
 		resolver,
 		wizardManager{statuses: map[string]servicemgr.Status{"php-fpm": servicemgr.StatusInactive, "php8.2": servicemgr.StatusActive}},
@@ -128,7 +128,7 @@ func TestResolveWizardDaemonUnitPrefersActiveCandidate(t *testing.T) {
 		[]string{"php-fpm", "php8.2"},
 	)
 	if err != nil {
-		t.Fatalf("resolveWizardDaemonUnit: %v", err)
+		t.Fatalf("resolveWizardServiceUnit: %v", err)
 	}
 	if unit != "php8.2" || status != servicemgr.StatusActive {
 		t.Fatalf("unit/status = %s/%s, want php8.2/active", unit, status)
@@ -185,7 +185,7 @@ Dynamic Runlevel: manual
 }
 
 func TestDedupeWizardCatalogCandidatesByUnit(t *testing.T) {
-	cands := []assist.DaemonCandidate{
+	cands := []assist.ServiceCandidate{
 		{Name: "mariadb", Unit: "mysql"},
 		{Name: "mysql", Unit: "mysql"},
 		{Name: "sshd", Unit: "sshd"},
@@ -269,8 +269,8 @@ func TestEnsureConfigPathListRecognizesAbsolutePathForRelativeTarget(t *testing.
 
 func TestDetectedServiceTargetKeysIncludeControlledServices(t *testing.T) {
 	env := assist.Env{
-		Daemons: func() ([]assist.DaemonCandidate, error) {
-			return []assist.DaemonCandidate{{Name: "nginx"}}, nil
+		CatalogServices: func() ([]assist.ServiceCandidate, error) {
+			return []assist.ServiceCandidate{{Name: "nginx"}}, nil
 		},
 		DockerContainers: func() ([]assist.DockerCandidate, error) {
 			return []assist.DockerCandidate{{Name: "docker-web", Container: "web"}}, nil
@@ -340,7 +340,6 @@ func TestWriteServiceFilesRejectsExistingFileBeforeUpdatingConfig(t *testing.T) 
 
 	_, _, err := writeServiceFiles(cfgPath, map[string]map[string]any{
 		"docker-web": {
-			"kind": "service",
 			"name": "docker-web",
 			"control": map[string]any{
 				"type":      "docker",

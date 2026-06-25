@@ -25,16 +25,16 @@ type Iface struct {
 	HasAddress bool
 }
 
-// DaemonCandidate is a service target detected on the host that the service
+// ServiceCandidate is a service target detected on the host that the service
 // assistant can enable, with the facts the wizard shows and confirms. Catalog
 // candidates write `uses: Name`; Generic candidates are active backend units not
-// backed by a catalog daemon and write a self-contained service check.
-type DaemonCandidate struct {
-	Name          string // service name to write; catalog daemon name unless Generic
+// backed by a catalog service and write a self-contained service check.
+type ServiceCandidate struct {
+	Name          string // service name to write; catalog service name unless Generic
 	Title         string // display name
 	Unit          string // resolved init unit for the active backend
 	Status        string // backend status for Unit (active/inactive/failed/unknown)
-	Generic       bool   // active backend unit without a catalog daemon
+	Generic       bool   // active backend unit without a catalog service
 	Port          int    // catalog default port (0 = none)
 	Variables     map[string]any
 	ConfigPaths   []string // config file locations that exist on the host
@@ -70,17 +70,17 @@ type VMCandidate struct {
 // Env carries the host facts and config an assistant needs, injected so the
 // assistants are testable without touching the real host or config.
 type Env struct {
-	Notifiers        []string                          // names from the config's `notifiers:` section
-	DefaultNotify    []string                          // top-level `notify` default; nil = no inherited notification
-	Backend          string                            // active init system: "systemd" | "openrc"
-	Volumes          func() ([]Volume, error)          // candidate disk volumes
-	Mounts           func() ([]MountCandidate, error)  // candidate fstab-backed mount units
-	Ifaces           func() ([]Iface, error)           // host network interfaces
-	DefaultIfaces    []string                          // interfaces with an up default route
-	Daemons          func() ([]DaemonCandidate, error) // catalog daemons detected as installed
-	DockerContainers func() ([]DockerCandidate, error) // Docker containers detected on the host
-	VMs              func() ([]VMCandidate, error)     // libvirt/QEMU domains detected on the host
-	ServiceNames     map[string]struct{}               // already-configured service names (collision check)
+	Notifiers        []string                           // names from the config's `notifiers:` section
+	DefaultNotify    []string                           // top-level `notify` default; nil = no inherited notification
+	Backend          string                             // active init system: "systemd" | "openrc"
+	Volumes          func() ([]Volume, error)           // candidate disk volumes
+	Mounts           func() ([]MountCandidate, error)   // candidate fstab-backed mount units
+	Ifaces           func() ([]Iface, error)            // host network interfaces
+	DefaultIfaces    []string                           // interfaces with an up default route
+	CatalogServices  func() ([]ServiceCandidate, error) // catalog services detected as installed
+	DockerContainers func() ([]DockerCandidate, error)  // Docker containers detected on the host
+	VMs              func() ([]VMCandidate, error)      // libvirt/QEMU domains detected on the host
+	ServiceNames     map[string]struct{}                // already-configured service names (collision check)
 }
 
 // Result is what an assistant produced: a fragment to merge under `watches:`

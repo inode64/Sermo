@@ -85,7 +85,7 @@ avoid SIGKILL unless explicitly allowed
 
 ## Common services
 
-When creating service daemons, consider:
+When creating catalog services, consider:
 
 ```text
 apache/httpd: apachectl configtest, apachectl -v

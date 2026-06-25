@@ -4,8 +4,8 @@ import "strings"
 
 // bindirMarker is the built-in ${bindir} reference. Unlike ${arch}/${os} (a
 // 1:1 token substitution), ${bindir} expands a single path value into the list
-// of candidate paths across the standard binary search directories, so a daemon
-// can write `binary: ${bindir}/mysqld` instead of repeating the same directory
+// of candidate paths across the standard binary search directories, so a catalog
+// service can write `binary: ${bindir}/mysqld` instead of repeating the same directory
 // list by hand. The existing first-existing-path machinery (firstExistingPath)
 // then selects whichever candidate is installed.
 const bindirMarker = "${bindir}"

@@ -18,7 +18,7 @@ import (
 
 func TestMonitorReloadPreservesWorkerState(t *testing.T) {
 	dir := t.TempDir()
-	for _, sub := range []string{"daemons", "services", "run"} {
+	for _, sub := range []string{"catalog", "services", "run"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -33,7 +33,7 @@ paths:
   runtime: %[3]q
 defaults:
   policy: { cooldown: 1m }
-`, filepath.Join(dir, "daemons"), enabled, filepath.Join(dir, "run"))
+`, filepath.Join(dir, "catalog"), enabled, filepath.Join(dir, "run"))
 
 	global := filepath.Join(dir, "sermo.yml")
 	service := func(name string) string {
@@ -121,7 +121,7 @@ checks:
 
 func TestMonitorReloadRejectsInvalidConfig(t *testing.T) {
 	dir := t.TempDir()
-	for _, sub := range []string{"daemons", "services", "run"} {
+	for _, sub := range []string{"catalog", "services", "run"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -136,7 +136,7 @@ paths:
   runtime: %q
 defaults:
   policy: { cooldown: 1m }
-`, filepath.Join(dir, "daemons"), enabled, filepath.Join(dir, "run"))
+`, filepath.Join(dir, "catalog"), enabled, filepath.Join(dir, "run"))
 	if err := os.WriteFile(global, []byte(valid), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ paths:
   runtime: %q
 defaults:
   policy: { cooldown: 1m }
-`, filepath.Join(dir, "daemons"), enabled, filepath.Join(dir, "run"))
+`, filepath.Join(dir, "catalog"), enabled, filepath.Join(dir, "run"))
 	if err := os.WriteFile(global, []byte(invalid), 0o644); err != nil {
 		t.Fatal(err)
 	}

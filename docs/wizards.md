@@ -27,7 +27,7 @@ and the invariants below, and update this file in the same change.
 3. **Per-service properties (service-generating assistants only).** For each
    selected catalog service, ask only the properties that legitimately differ per
    service, such as a port override. PID/process ownership belongs in the catalog
-   daemon under `catalog/services`, so generated catalog service entries should
+   service under `catalog/services`, so generated catalog service entries should
    normally only write `uses:` plus explicit overrides. When configuration files
    are detected, ask whether to add a `checks.config` entry that watches those
    paths; it uses a per-check `interval: 60m` so the service's normal cycle does
@@ -135,8 +135,8 @@ before adding it to `catalog/services` or a generated uncataloged service.
 Before storing a newly detected path, resolve symlinks on the target host
 (`readlink -f <path>` or `namei -l <path>`) and keep the canonical target path.
 
-`listInstalledDaemons` (`internal/cli/wizard_service.go`) fills each
-`DaemonCandidate.Pidfile`/`Exe`/`Cmd`/`User`. Catalog services use those facts to
+`listInstalledCatalogServices` (`internal/cli/wizard_service.go`) fills each
+`ServiceCandidate.Pidfile`/`Exe`/`Cmd`/`User`. Catalog services use those facts to
 improve the catalog service definition, not the generated service entry:
 they write `uses:` and inherit PID/process selectors from `catalog/services`.
 Uncataloged active units write scalar `service: <unit>` plus a basic

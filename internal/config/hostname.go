@@ -12,7 +12,7 @@ import (
 // ${hostname} is the *short* hostname — the first label before the first dot.
 // systemd instance units keyed by host identity use the short form: a Ceph
 // monitor on radon.srvdr.com runs as `ceph-mon@radon`, not `ceph-mon@radon.srvdr.com`.
-// That is why a daemon writes `service: "ceph-mon@${hostname}"`.
+// That is why a catalog service writes `service: "ceph-mon@${hostname}"`.
 var detectedHostname = detectHostname()
 
 func detectHostname() string {

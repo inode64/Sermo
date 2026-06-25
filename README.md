@@ -83,7 +83,7 @@ sermoctl status nginx
 sermoctl is-active nginx
 
 # List catalog inventory, not configured runtime targets
-sermoctl services      # daemon profiles under paths.catalog (nginx, mariadb, ...)
+sermoctl services      # catalog service profiles under paths.catalog (nginx, mariadb, ...)
 sermoctl services all  # include profiles not installed on this host
 sermoctl services --notify ops-email  # email a services inventory report
 sermoctl apps          # tools/runtimes (only installed)
@@ -119,12 +119,12 @@ Daemon flags for development and packaging (`--catalog`, `--verbose`) are in
 
 ## Documentation
 
-- [Configuration](docs/configuration.md) — global config, daemons, services,
+- [Configuration](docs/configuration.md) — global config, catalog services, services,
   merge and variables; [`docs/sermo-all.yml`](docs/sermo-all.yml) is the
   complete annotated example.
 - [Rules](docs/rules.md) — checks, conditions, windows, guards, remediation
   policy.
-- [Daemons](docs/daemons.md) — writing and overriding daemons.
+- [Services](docs/services.md) — writing and overriding services.
 - [CLI](docs/cli.md) — commands, flags and exit codes.
 - [Safety](docs/safety.md) — the invariants that cannot be disabled: no
   unguarded actions, no SIGKILL by default, never kill by name (exact

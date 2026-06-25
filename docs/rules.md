@@ -196,12 +196,12 @@ rules:
 
 A service can enable three standard health monitors with two short
 declarative blocks — **`version:`** and **`config:`** — that **reuse the version
-and config commands the daemon already defines** (`commands.version` and
+and config commands the catalog service already defines** (`commands.version` and
 `preflight.config`). Sermo synthesizes a per-service monitor (a watch, built once
 so change detection persists) from each:
 
 ```yaml
-# daemon (e.g. apache.yml) — already defines these, unchanged:
+# catalog service (e.g. apache.yml) — already defines these, unchanged:
 commands:
   version: { command: [apachectl, -v] }
 preflight:
@@ -216,14 +216,14 @@ config:
   path: [/etc/apache2/apache2.conf]       # …or (optional) when this file changes
 ```
 
-- **Version changed** — `version.on_change` runs the daemon's version command and
+- **Version changed** — `version.on_change` runs the catalog service's version command and
   alerts (notifying the listed notifiers) when its output changes — an unexpected
   upgrade/downgrade. Needs `commands.version` (or `preflight.version`) in the
-  daemon.
-- **Config invalid / changed** — `config.on_change` runs the daemon's
+  catalog service.
+- **Config invalid / changed** — `config.on_change` runs the catalog service's
   `preflight.config` test and alerts when it **fails** (invalid config); with a
   `path` it also alerts when a config file changes. A **custom `preflight:`** on
-  the service replaces the daemon's `preflight.config`, and the monitor then uses
+  the service replaces the catalog service's `preflight.config`, and the monitor then uses
   that command, including its `user` field when present.
 - **State not errored** — the existing `service` check covers this: it alerts when
   the unit is not in the expected state (`failed`/`unknown`) or the backend cannot
@@ -236,7 +236,7 @@ config:
 `on_change.notify` follows the usual notify precedence (omit to inherit the global
 `notify` default, or `none` to suppress). The underlying `command` (`on_change`)
 and `config` check types can also be used directly in `watches:` when you want a
-hook or a non-daemon command.
+hook or a standalone command.
 
 ### Egress interface (`interface`)
 

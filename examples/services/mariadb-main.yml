@@ -1,7 +1,7 @@
 name: mariadb-main
 uses: mariadb
-# Inherits the mariadb daemon's unit candidates (service: systemd/openrc),
+# Inherits the mariadb catalog service's unit candidates (service: systemd/openrc),
 # checks (service/tcp/ping) and remediation rules. Override variables here when
-# the instance differs from the daemon defaults, e.g. a non-standard port.
+# the instance differs from the catalog service defaults, e.g. a non-standard port.
 variables:
   port: 3306

@@ -37,7 +37,7 @@ func WithCatalogDirs(dirs ...string) Option {
 	return func(o *loadOptions) { o.catalogDirs = dirs }
 }
 
-// WithServiceUnits provides active backend units for service-derived daemon
+// WithServiceUnits provides active backend units for service-derived catalog service
 // template materialization. It is mainly used by tests; production loads query
 // the active init backend lazily.
 func WithServiceUnits(backend string, units []string) Option {
@@ -49,7 +49,7 @@ func WithServiceUnits(backend string, units []string) Option {
 	}
 }
 
-// Load reads the global configuration at globalPath and every daemon and
+// Load reads the global configuration at globalPath and every catalog service and
 // service document reachable from its `paths`. Parsing/IO failures abort; the
 // returned Config carries documents in raw, unexpanded form for resolution.
 func Load(globalPath string, opts ...Option) (*Config, error) {
@@ -93,14 +93,14 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	}
 
 	cfg := &Config{
-		Global:       global,
-		Daemons:      map[string]*Document{},
-		Apps:         map[string]*Document{},
-		Libraries:    map[string]*Document{},
-		Patterns:     map[string]*Document{},
-		Services:     map[string]*Document{},
-		Mounts:       map[string]*Document{},
-		serviceUnits: cloneServiceUnits(o.serviceUnits),
+		Global:          global,
+		CatalogServices: map[string]*Document{},
+		Apps:            map[string]*Document{},
+		Libraries:       map[string]*Document{},
+		Patterns:        map[string]*Document{},
+		Services:        map[string]*Document{},
+		Mounts:          map[string]*Document{},
+		serviceUnits:    cloneServiceUnits(o.serviceUnits),
 	}
 
 	for _, spec := range uniquePathSpecs(catalogPaths) {
@@ -645,7 +645,7 @@ func (c *Config) loadCategoryDir(dir, category string, recursive bool) error {
 		}
 		doc.Category = category
 		// Catalog definitions take their kind from the subdirectory
-		// (daemon/app/lib/patterns), so each lives in its own registry; any
+		// (service/app/lib/patterns), so each lives in its own registry; any
 		// `kind:` in the file is redundant and ignored.
 		doc.Kind = kindForCategory(doc.Category)
 		c.add(doc)
@@ -755,9 +755,12 @@ func assignKind(doc *Document, expected string) error {
 // indexing; duplicate-name detection is reported by validation, which sees the
 // later document's path.
 func (c *Config) add(doc *Document) {
-	switch doc.Kind {
-	case kindDaemon:
-		indexDocument(c.Daemons, &c.DaemonNames, doc)
+	// Route by registry namespace, not kind: catalog services and configured
+	// services share kind `service` but live in separate registries, keyed by
+	// catalog category vs configured location.
+	switch doc.registryKey() {
+	case catalogServiceKey:
+		indexDocument(c.CatalogServices, &c.CatalogServiceNames, doc)
 	case kindApp:
 		indexDocument(c.Apps, &c.AppNames, doc)
 	case kindLibrary:
@@ -782,10 +785,10 @@ func indexDocument(reg map[string]*Document, names *[]string, doc *Document) {
 	}
 }
 
-// DaemonsInCategory returns the names of catalog definitions in a category
+// CatalogNamesInCategory returns the names of catalog definitions in a category
 // (service | app | library), sorted, for category-scoped listings such as
 // `apps` and `libs`.
-func (c *Config) DaemonsInCategory(category string) []string {
+func (c *Config) CatalogNamesInCategory(category string) []string {
 	var names []string
 	switch category {
 	case CategoryApp:
@@ -795,7 +798,7 @@ func (c *Config) DaemonsInCategory(category string) []string {
 	case CategoryPatterns:
 		names = append(names, c.PatternNames...)
 	default:
-		names = append(names, c.DaemonNames...)
+		names = append(names, c.CatalogServiceNames...)
 	}
 	sort.Strings(names)
 	return uniqueStrings(names)
