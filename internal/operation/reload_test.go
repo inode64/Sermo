@@ -133,6 +133,13 @@ func TestReloadClosureCommandWithoutRunnerReturnsError(t *testing.T) {
 	}
 }
 
+func TestParseReloadSpecIgnoresEmptyCommand(t *testing.T) {
+	tree := map[string]any{"reload": map[string]any{"command": []any{}}}
+	if spec := parseReloadSpec(tree); spec != nil {
+		t.Fatalf("parseReloadSpec(empty command) = %+v, want nil", spec)
+	}
+}
+
 func TestReloadClosureSignalSentToMainPID(t *testing.T) {
 	// MainPID resolves to this test process; the native reload sends USR1 to it.
 	pid := os.Getpid()
