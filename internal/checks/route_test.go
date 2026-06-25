@@ -82,10 +82,14 @@ func TestRouteCheckRun(t *testing.T) {
 	res := mk([]DefaultRoute{{Iface: "ppp0"}}, nil, "")
 	if r := res.Run(context.Background()); !r.OK || !strings.Contains(r.Message, "via ppp0") {
 		t.Fatalf("present default: %+v", r)
+	} else if _, has := r.Data["gateway"]; has {
+		t.Fatalf("a gateway-less route must not carry a gateway field: %v", r.Data)
 	}
 	res = mk([]DefaultRoute{{Iface: "ppp0", Gateway: "10.0.0.1"}}, nil, "ppp0")
 	if r := res.Run(context.Background()); !r.OK || !strings.Contains(r.Message, "gw 10.0.0.1") {
 		t.Fatalf("interface match: %+v", r)
+	} else if r.Data["gateway"] != "10.0.0.1" {
+		t.Fatalf("data gateway = %v, want 10.0.0.1", r.Data["gateway"])
 	}
 	res = mk([]DefaultRoute{{Iface: "eth0", Gateway: "192.168.1.1"}}, nil, "ppp0")
 	if r := res.Run(context.Background()); r.OK || !strings.Contains(r.Message, "no ipv4 default route via ppp0 (1 elsewhere)") {
