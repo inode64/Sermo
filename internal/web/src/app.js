@@ -595,6 +595,7 @@ const watchPanels = {
 };
 
 const UI_STATE_KEY = "sermo-ui-state";
+const KEYBOARD_SHORTCUTS_KEY = "sermo-keyboard-shortcuts";
 
 function restoreUIState() {
   try {
@@ -3782,7 +3783,7 @@ async function loadMetrics(name, measured) {
     summary.innerHTML = s.count
       ? `avg <b>${fmtNum(s.avg, 2)}</b> ms &middot; min ${fmtNum(s.min, 2)} &middot; max ${fmtNum(s.max, 2)}`
       : '<span class="muted">No latency data yet for this window.</span>';
-    chart.innerHTML = drawMetricChart(body.points || [], body.unit || "ms");
+    chart.innerHTML = drawMetricChart(body.points || [], body.unit || "ms", metricWindow, "Service latency metric chart");
   } catch (e) {
     chart.textContent = "Failed to load latency: " + e.message;
   }
@@ -3813,7 +3814,7 @@ function renderServiceRuntimeMetric(name, suffix, series, label, fallbackUnit) {
   const chart = document.getElementById(detailDomId(name, `runtime-${suffix}-chart`));
   const unit = (series && series.unit) || fallbackUnit || "";
   if (summary) summary.innerHTML = daemonMetricSummary(series, label);
-  if (chart) chart.innerHTML = drawMetricChart((series || {}).points || [], unit, metricWindow);
+  if (chart) chart.innerHTML = drawMetricChart((series || {}).points || [], unit, metricWindow, `${label} runtime metric chart`);
 }
 
 async function loadDaemonMetrics() {
@@ -3849,11 +3850,11 @@ function renderDaemonMetrics(body) {
     ].join(" &middot; ");
   }
   const cpu = $("#daemon-cpu-chart");
-  if (cpu) cpu.innerHTML = drawMetricChart((body.cpu || {}).points || [], (body.cpu || {}).unit || "%", daemonMetricWindow);
+  if (cpu) cpu.innerHTML = drawMetricChart((body.cpu || {}).points || [], (body.cpu || {}).unit || "%", daemonMetricWindow, "Daemon CPU metric chart");
   const memory = $("#daemon-memory-chart");
-  if (memory) memory.innerHTML = drawMetricChart((body.memory || {}).points || [], (body.memory || {}).unit || "bytes", daemonMetricWindow);
+  if (memory) memory.innerHTML = drawMetricChart((body.memory || {}).points || [], (body.memory || {}).unit || "bytes", daemonMetricWindow, "Daemon memory metric chart");
   const io = $("#daemon-io-chart");
-  if (io) io.innerHTML = drawMetricChart((body.io || {}).points || [], (body.io || {}).unit || "B/s", daemonMetricWindow);
+  if (io) io.innerHTML = drawMetricChart((body.io || {}).points || [], (body.io || {}).unit || "B/s", daemonMetricWindow, "Daemon IO metric chart");
 }
 
 function daemonMetricSummary(series, label) {
@@ -3863,7 +3864,7 @@ function daemonMetricSummary(series, label) {
   return `${esc(label)} avg <b>${esc(fmtMetricValue(s.avg, unit))}</b>`;
 }
 
-function drawMetricChart(points, unit, win) {
+function drawMetricChart(points, unit, win, label) {
   unit = unit || "ms";
   const W = 640, H = 160, pad = 34, cols = 120;
   const span = windowMs[win || metricWindow] || 864e5;
@@ -3899,7 +3900,8 @@ function drawMetricChart(points, unit, win) {
     const tip = `${t.toLocaleString()}\navg ${fmtMetricValue(o.b.sum / o.b.n, unit)} · min ${fmtMetricValue(o.b.min, unit)} · max ${fmtMetricValue(o.b.max, unit)}`;
     return `<rect x="${(x(o.i) - bw / 2).toFixed(1)}" y="${pad}" width="${bw.toFixed(1)}" height="${(H - 2 * pad).toFixed(1)}" fill="transparent"><title>${esc(tip)}</title></rect>`;
   }).join("");
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">${axis}${band}${line}${hover}</svg>`;
+  const chartLabel = label || "Metric chart";
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(chartLabel)}" style="max-width:${W}px"><title>${esc(chartLabel)}</title>${axis}${band}${line}${hover}</svg>`;
 }
 
 function fmtMetricValue(v, unit) {
@@ -4108,6 +4110,12 @@ function initStaticHandlers() {
 
   const refreshButton = $("#refresh-now");
   if (refreshButton) refreshButton.addEventListener("click", refreshNow);
+
+  const shortcutToggle = $("#shortcut-toggle");
+  if (shortcutToggle) {
+    shortcutToggle.checked = keyboardShortcutsEnabled();
+    shortcutToggle.addEventListener("change", () => setKeyboardShortcutsEnabled(shortcutToggle.checked));
+  }
 
   const svcSearch = $("#svc-search");
   if (svcSearch) {
@@ -4423,6 +4431,14 @@ function setRefresh(v) {
   applyRefresh(ms);
 })();
 
+function keyboardShortcutsEnabled() {
+  try { return localStorage.getItem(KEYBOARD_SHORTCUTS_KEY) !== "0"; } catch (_) { return true; }
+}
+
+function setKeyboardShortcutsEnabled(enabled) {
+  try { localStorage.setItem(KEYBOARD_SHORTCUTS_KEY, enabled ? "1" : "0"); } catch (_) {}
+}
+
 // activeSearchBox returns the search input for the topmost open data panel.
 function activeSearchBox() {
   const panels = [
@@ -4430,7 +4446,7 @@ function activeSearchBox() {
     ["#storage-section", "#storage-search"],
     ["#network-section", "#network-search"],
     ["#watches-section", "#watch-search"],
-    ["#app-section", "#app-search"],
+    ["#apps-section", "#app-search"],
   ];
   for (const [sectionSel, searchSel] of panels) {
     const section = $(sectionSel);
@@ -4445,6 +4461,7 @@ function activeSearchBox() {
 // "/" focuses the visible panel search (unless already typing in a field).
 document.addEventListener("keydown", (e) => {
   if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (!keyboardShortcutsEnabled()) return;
   const tag = document.activeElement && document.activeElement.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
   const target = activeSearchBox();
