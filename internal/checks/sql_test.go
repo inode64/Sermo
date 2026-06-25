@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -114,6 +115,9 @@ func TestBuildSQLCheckWiring(t *testing.T) {
 	if !ok || cc.driver != "mysql" || cc.engine != "mysql" {
 		t.Fatalf("built = %T %+v", built[0].Check, built[0].Check)
 	}
+	if !strings.Contains(cc.dsn, "@tcp(") {
+		t.Fatalf("mysql dsn = %q, want a go-sql-driver @tcp(...) DSN", cc.dsn)
+	}
 
 	// postgres engine resolves to the postgres driver.
 	built, _ = Build(map[string]any{
@@ -122,8 +126,8 @@ func TestBuildSQLCheckWiring(t *testing.T) {
 			"query": "SELECT 1", "op": ">", "value": "0",
 		},
 	}, Deps{DefaultTimeout: time.Second})
-	if cc := built[0].Check.(sqlCheck); cc.driver != "postgres" {
-		t.Fatalf("driver = %q, want postgres", cc.driver)
+	if cc := built[0].Check.(sqlCheck); cc.driver != "postgres" || !strings.Contains(cc.dsn, "postgres://") {
+		t.Fatalf("driver = %q dsn = %q, want postgres driver and postgres:// DSN", cc.driver, cc.dsn)
 	}
 
 	// Missing user (mysql) warns.
