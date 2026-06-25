@@ -76,7 +76,7 @@
     </tr></thead>
     <tbody id="storage-rows"></tbody>
   </table>
-  <p class="muted" style="font-size:.8rem">Storage host watches monitor volume usage and can grow volumes via <code>then.expand</code>. Other host watches are listed below.</p>
+  <p class="muted panel-footnote">Storage host watches monitor volume usage and can grow volumes via <code>then.expand</code>. Other host watches are listed below.</p>
 </details>
 
 <details id="services-section" open>
@@ -122,7 +122,7 @@
     </thead>
     <tbody id="rows"></tbody>
   </table>
-  <p id="ops" class="muted" style="margin:.6rem 0 0"></p>
+  <p id="ops" class="muted panel-ops"></p>
 </details>
 
 <details id="network-section" open style="display:none">
@@ -160,7 +160,7 @@
     </tr></thead>
     <tbody id="network-rows"></tbody>
   </table>
-  <p class="muted" style="font-size:.8rem">Network host watches (connectivity and reachability). Other host watches are listed below.</p>
+  <p class="muted panel-footnote">Network host watches (connectivity and reachability). Other host watches are listed below.</p>
 </details>
 
 <details id="apps-section" open style="display:none">
@@ -196,7 +196,7 @@
     </tr></thead>
     <tbody id="app-rows"></tbody>
   </table>
-  <p class="muted" style="font-size:.8rem">Applications installed on the host (their binary is present). Click a row for the full version, file location, permissions, user and group.</p>
+  <p class="muted panel-footnote">Applications installed on the host (their binary is present). Click a row for the full version, file location, permissions, user and group.</p>
 </details>
 
 <details id="watches-section" open style="display:none">
@@ -234,7 +234,7 @@
     </tr></thead>
     <tbody id="watch-rows"></tbody>
   </table>
-  <p class="muted" style="font-size:.8rem">Host watches run independently of services and fire hooks/notifiers on thresholds or changes. See the Events log for activity.</p>
+  <p class="muted panel-footnote">Host watches run independently of services and fire hooks/notifiers on thresholds or changes. See the Events log for activity.</p>
 </details>
 
 <details id="events-section" open>
@@ -253,7 +253,7 @@
     <button id="event-reset-filters" type="button">reset filters</button>
     <label for="event-before" class="visually-hidden">Clear events before</label>
     <input id="event-before" type="text" placeholder="before (e.g. 720h)" title="Optional: clear only events older than this duration or RFC3339 timestamp">
-    <button id="event-clear" class="danger-btn" type="button" style="display:none">clear log</button>
+    <button id="event-clear" class="danger-btn" type="button" style="display:none" aria-label="Clear event log">clear log</button>
     <span id="event-count" class="muted"></span>
   </div>
   <table class="events">
@@ -275,7 +275,7 @@
     <thead><tr><th scope="col">Name</th><th scope="col">Path</th><th scope="col">Mounted</th><th scope="col">Refcount</th><th scope="col">Source</th><th scope="col">State</th></tr></thead>
     <tbody id="mount-rows"></tbody>
   </table>
-  <p class="muted" style="font-size:.8rem">Configured fstab-backed mount units managed by Sermo refcounting (<code>sermoctl mount</code> / <code>umount</code>).</p>
+  <p class="muted panel-footnote">Configured fstab-backed mount units managed by Sermo refcounting (<code>sermoctl mount</code> / <code>umount</code>).</p>
 </details>
 
 <details id="notifiers-section" style="display:none">
@@ -285,7 +285,7 @@
     <thead><tr><th scope="col">Name</th><th scope="col">Type</th><th scope="col">Destination</th><th scope="col">Watches</th><th scope="col">State</th></tr></thead>
     <tbody id="notifier-rows"></tbody>
   </table>
-  <p class="muted" style="font-size:.8rem">Named targets that watches can notify (email, slack, ...).</p>
+  <p class="muted panel-footnote">Named targets that watches can notify (email, slack, ...).</p>
 </details>
 
 <details id="daemon-section">
@@ -336,24 +336,24 @@
 
 <details id="activity-section">
   <summary>Recent activity <span class="muted">(last 500 events)</span></summary>
-  <div style="display:flex; gap:1.25rem; flex-wrap:wrap; font-size:.9rem;">
+  <div class="activity-stats">
     <div>Service actions: <b id="act-service"></b></div>
     <div>Watch hooks: <b id="act-hooks"></b></div>
     <div>Watch notifies: <b id="act-notify"></b></div>
     <div>Errors: <b id="act-errors" class="bad"></b></div>
-    <div id="act-last" class="muted" style="flex:1; min-width:180px;"></div>
-    <button id="activity-clear" class="danger-btn" type="button" style="display:none">clear log</button>
+    <div id="act-last" class="muted"></div>
+    <button id="activity-clear" class="danger-btn" type="button" style="display:none" aria-label="Clear activity log">clear log</button>
   </div>
 </details>
 
-<section id="locks-section" style="margin-top:1rem; display:none">
-  <h2 style="font-size:1.05rem">Runtime Locks <span id="locks-count" class="muted"></span></h2>
+<section id="locks-section" style="display:none">
+  <h2>Runtime Locks <span id="locks-count" class="muted"></span></h2>
   <table>
     <caption class="visually-hidden">Runtime locks</caption>
     <thead><tr><th scope="col">Service</th><th scope="col">Name</th><th scope="col">State</th><th scope="col">TTL</th><th scope="col">Owner</th><th scope="col">Created</th><th scope="col">Blocks</th><th scope="col">Reason</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
     <tbody id="locks-rows"></tbody>
   </table>
-  <p class="muted" style="font-size:.8rem">Named runtime locks that can block start/stop/restart/reload/resume (manual or automatic). Stale/expired locks are shown for awareness.</p>
+  <p class="muted panel-footnote">Named runtime locks that can block start/stop/restart/reload/resume (manual or automatic). Stale/expired locks are shown for awareness.</p>
 </section>
 </main>
 
@@ -402,8 +402,8 @@
 
 <footer id="app-footer" role="contentinfo">
   <div class="footer-actions">
-    <button id="reload-btn" style="display:none">reload config</button>
-    <button id="state-compact-btn" class="danger-btn" style="display:none">compact state</button>
+    <button id="reload-btn" style="display:none" aria-label="Reload configuration">reload config</button>
+    <button id="state-compact-btn" class="danger-btn" style="display:none" aria-label="Compact persisted state">compact state</button>
     <button id="panic-btn" class="panic-btn" style="display:none" title="Suspend hooks, alerts and automatic remediation">panic mode</button>
     <label for="state-before" class="visually-hidden">Compact state before</label>
     <input id="state-before" type="text" placeholder="before (e.g. 720h)" title="Optional state compact cutoff: duration or RFC3339 timestamp" style="display:none; max-width:11rem">
