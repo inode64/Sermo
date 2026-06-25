@@ -140,6 +140,20 @@ func TestParseReloadSpecIgnoresEmptyCommand(t *testing.T) {
 	}
 }
 
+func TestReloadClosureCommandDidNotStartWithoutRunnerError(t *testing.T) {
+	mgr := &fakeManager{canReload: false}
+	runner := &scriptedRunner{results: map[string]execx.Result{
+		"reloadctl": {ExitCode: -1},
+	}}
+	tree := map[string]any{"reload": map[string]any{"command": []any{"reloadctl"}, "when": "always"}}
+	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "systemd", "svc")
+
+	err := reload(context.Background())
+	if err == nil || err.Error() != execx.CommandDidNotStart {
+		t.Fatalf("reload err = %v, want %q", err, execx.CommandDidNotStart)
+	}
+}
+
 func TestReloadClosureSignalSentToMainPID(t *testing.T) {
 	// MainPID resolves to this test process; the native reload sends USR1 to it.
 	pid := os.Getpid()
