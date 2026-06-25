@@ -1296,7 +1296,7 @@ function serviceRowParts(s) {
   const op = liveOps.get(s.name);
   const busy = serviceBusy(s.name);
   const busyText = op
-    ? tpl`<div class="${op.finished ? (op.ok ? 'ok' : 'bad') : 'inactive'}" style="margin-left:1.15rem">${op.action} ${opStateText(op)} · ${opElapsed(op)}s${op.message ? tpl` <span class="muted">${op.message}</span>` : nothing}</div>`
+    ? tpl`<div id="svc-${s.name}-busy" class="svc-busy ${op.finished ? (op.ok ? 'ok' : 'bad') : 'inactive'}" role="status" aria-live="polite">${op.action} ${opStateText(op)} · ${opElapsed(op)}s${op.message ? tpl` <span class="muted">${op.message}</span>` : nothing}</div>`
     : nothing;
   let actions;
   if (!s.enabled) {
