@@ -274,3 +274,33 @@ func openTemp(t *testing.T) *Store {
 	t.Cleanup(func() { s.Close() })
 	return s
 }
+
+func TestSetRemediationStatePersistsPartialRecords(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), Filename))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer s.Close()
+	tm := time.Unix(1000, 0)
+	// Only RecentActions set (no LastActionAt, no backoff): must persist, not delete.
+	if err := s.SetRemediationState("a", RemediationRecord{RecentActions: []time.Time{tm}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, _ := s.RemediationState("a"); !found {
+		t.Fatal("a record with only RecentActions must persist")
+	}
+	// Only CurrentBackoff set: must persist.
+	if err := s.SetRemediationState("b", RemediationRecord{CurrentBackoff: time.Minute}); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, _ := s.RemediationState("b"); !found {
+		t.Fatal("a record with only CurrentBackoff must persist")
+	}
+	// A fully-empty record deletes the row.
+	if err := s.SetRemediationState("a", RemediationRecord{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, _ := s.RemediationState("a"); found {
+		t.Fatal("an empty record must delete the row")
+	}
+}
