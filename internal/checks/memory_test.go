@@ -35,6 +35,10 @@ func TestMemoryCheckLevels(t *testing.T) {
 	if res.Data["value"].(float64) != 87.5 || res.Data["available_bytes"].(uint64) != 1<<30 {
 		t.Fatalf("result data = %v", res.Data)
 	}
+	// available_pct is the complement: 1 GiB of 8 GiB == 12.5%.
+	if res.Data["available_pct"].(float64) != 12.5 {
+		t.Fatalf("available_pct = %v, want 12.5", res.Data["available_pct"])
+	}
 	if !strings.Contains(res.Message, "87.5%") {
 		t.Fatalf("message = %q", res.Message)
 	}
