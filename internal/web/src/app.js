@@ -1846,7 +1846,11 @@ function drawSLAChart(points, win) {
     const tip = `${fmtTime(new Date(o.t).toISOString())} · SLA ${fmtNum(o.pct, 2)}% · ${Number(o.p.up || 0)}/${Number(o.p.total || 0)}`;
     return `<circle cx="${tx.toFixed(1)}" cy="${y(o.pct).toFixed(1)}" r="5" fill="transparent"><title>${esc(tip)}</title></circle>`;
   }).join("");
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="SLA timeline">${axis}${areas}${lines}${hover}${markers}</svg>${renderSLAIncidentList(incidents)}`;
+  const latestPct = observed.length ? observed[observed.length - 1].pct : null;
+  const slaAria = latestPct != null
+    ? `SLA timeline: latest ${fmtNum(latestPct, 2)}%, ${incidents.length} incident${incidents.length === 1 ? "" : "s"}`
+    : "SLA timeline";
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(slaAria)}">${axis}${areas}${lines}${hover}${markers}</svg>${renderSLAIncidentList(incidents)}`;
 }
 
 function totalsCpuCell(pt) {
@@ -3901,7 +3905,12 @@ function drawMetricChart(points, unit, win, label) {
     return `<rect x="${(x(o.i) - bw / 2).toFixed(1)}" y="${pad}" width="${bw.toFixed(1)}" height="${(H - 2 * pad).toFixed(1)}" fill="transparent"><title>${esc(tip)}</title></rect>`;
   }).join("");
   const chartLabel = label || "Metric chart";
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(chartLabel)}" style="max-width:${W}px"><title>${esc(chartLabel)}</title>${axis}${band}${line}${hover}</svg>`;
+  // Convey the actual numbers, not just "<metric> chart", to screen readers.
+  const latest = pts.length ? pts[pts.length - 1] : null;
+  const aria = latest
+    ? `${chartLabel}: latest ${fmtMetricValue(latest.b.sum / latest.b.n, unit)}, peak ${fmtMetricValue(maxV, unit)}`
+    : chartLabel;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(aria)}" style="max-width:${W}px"><title>${esc(aria)}</title>${axis}${band}${line}${hover}</svg>`;
 }
 
 function fmtMetricValue(v, unit) {
