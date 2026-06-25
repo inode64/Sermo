@@ -10,7 +10,8 @@
 </style>
 </head>
 <body>
-<div id="topbar">
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<div id="topbar" role="banner">
 <div class="topbar-row">
   <h1><span class="brand-dot" id="brand-dot"></span>SERMO · Service Remediation Monitor<span id="me" class="muted"></span></h1>
   <div class="topbar-tools">
@@ -28,20 +29,22 @@
     <button id="refresh-now" title="Refresh now">&#x27F3;</button>
   </div>
 </div>
-<div id="system-status"></div>
-<div id="statusbar"></div>
+<div id="system-status" role="status" aria-live="polite" aria-atomic="true"></div>
+<div id="statusbar" role="status" aria-live="polite" aria-atomic="true"></div>
 </div><!-- /topbar -->
+<main id="main-content" tabindex="-1">
 <div id="panic-banner" role="alert">
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
   <span>PANIC MODE — hooks, alerts and automatic remediation are suspended.</span>
 </div>
 <div id="overview"></div>
-<div id="err"></div>
+<div id="err" role="status" aria-live="polite" aria-atomic="true"></div>
 <div id="attention"></div>
-<div id="op-live"></div>
+<div id="op-live" role="status" aria-live="polite" aria-atomic="true"></div>
 <details id="storage-section" open style="display:none">
   <summary>Storage <span id="storage-count" class="muted"></span></summary>
   <div id="storage-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+    <label for="storage-search" class="visually-hidden">Filter storage watches</label>
     <input id="storage-search" type="search" placeholder="filter storage watches…">
     <select id="storage-type" title="Filter by type" aria-label="Filter storage watches by type">
       <option value="all">all storage types</option>
@@ -84,6 +87,7 @@
     </span>
   </summary>
   <div id="svc-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+    <label for="svc-search" class="visually-hidden">Filter services</label>
     <input id="svc-search" type="search" placeholder="filter services…  ( / )">
     <select id="svc-category" title="Filter by category" aria-label="Filter services by category">
       <option value="all">all categories</option>
@@ -122,6 +126,7 @@
 <details id="network-section" open style="display:none">
   <summary>Network <span id="network-count" class="muted"></span></summary>
   <div id="network-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+    <label for="network-search" class="visually-hidden">Filter network watches</label>
     <input id="network-search" type="search" placeholder="filter network watches…">
     <select id="network-type" title="Filter by type" aria-label="Filter network watches by type">
       <option value="all">all network types</option>
@@ -164,6 +169,7 @@
     </span>
   </summary>
   <div id="app-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+    <label for="app-search" class="visually-hidden">Filter applications</label>
     <input id="app-search" type="search" placeholder="filter applications…">
     <select id="app-category" title="Filter by category" aria-label="Filter applications by category">
       <option value="all">all categories</option>
@@ -192,6 +198,7 @@
 <details id="watches-section" open style="display:none">
   <summary>Host watches <span id="watches-count" class="muted"></span></summary>
   <div id="watch-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+    <label for="watch-search" class="visually-hidden">Filter host watches</label>
     <input id="watch-search" type="search" placeholder="filter watches…">
     <select id="watch-type" title="Filter by type" aria-label="Filter watches by type">
       <option value="all">all host types</option>
@@ -228,13 +235,18 @@
 <details id="events-section" open>
   <summary>Events <span class="muted">(shadow events appear when a service uses <code>remediation: {shadow: true}</code>)</span></summary>
   <div id="event-controls">
+    <label for="event-service" class="visually-hidden">Filter events by service</label>
     <input id="event-service" type="text" placeholder="service">
+    <label for="event-watch" class="visually-hidden">Filter events by watch</label>
     <input id="event-watch" type="text" placeholder="watch">
+    <label for="event-kind" class="visually-hidden">Filter events by kind</label>
     <input id="event-kind" type="text" placeholder="kind">
+    <label for="event-status" class="visually-hidden">Filter events by status</label>
     <input id="event-status" type="text" placeholder="status">
     <label class="muted"><input id="event-errors" type="checkbox"> only errors</label>
     <label class="muted"><input id="event-group" type="checkbox" checked> group actions</label>
     <button id="event-reset-filters" type="button">reset filters</button>
+    <label for="event-before" class="visually-hidden">Clear events before</label>
     <input id="event-before" type="text" placeholder="before (e.g. 720h)" title="Optional: clear only events older than this duration or RFC3339 timestamp">
     <button id="event-clear" class="danger-btn" type="button" style="display:none">clear log</button>
     <span id="event-count" class="muted"></span>
@@ -334,6 +346,7 @@
   </table>
   <p class="muted" style="font-size:.8rem">Named runtime locks that can block start/stop/restart/reload/resume (manual or automatic). Stale/expired locks are shown for awareness.</p>
 </section>
+</main>
 
 <dialog id="action-confirm">
   <div class="modal-head">
@@ -370,6 +383,7 @@
     <button id="reload-btn" style="display:none">reload config</button>
     <button id="state-compact-btn" class="danger-btn" style="display:none">compact state</button>
     <button id="panic-btn" class="panic-btn" style="display:none" title="Suspend hooks, alerts and automatic remediation">panic mode</button>
+    <label for="state-before" class="visually-hidden">Compact state before</label>
     <input id="state-before" type="text" placeholder="before (e.g. 720h)" title="Optional state compact cutoff: duration or RFC3339 timestamp" style="display:none; max-width:11rem">
   </div>
   <div class="footer-version muted">sermo {{VERSION}}</div>

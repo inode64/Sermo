@@ -430,7 +430,9 @@ const evSortKeys = {
   message: (e) => (e.message || "").toLowerCase(),
 };
 function setEvSort(key) { toggleSort(evSort, key, renderGlobalEvents); }
-function updateEvSortIndicators() { updateSortIndicatorsFor("ei", evSort); }
+function updateEvSortIndicators() {
+  updateSortIndicatorsFor("ei", evSort, ".events th.sortable[data-ev-sort]", "evSort");
+}
 function sortedEvents(events) {
   if (!evSort.key || !evSortKeys[evSort.key]) return events;
   return sortedBy(events.slice(), evSort, evSortKeys, "time");
@@ -1141,13 +1143,24 @@ function setSvcSort(key) { toggleSort(svcSort, key, renderServices); }
 // updateSortIndicatorsFor sets the ▲/▼ arrow on one panel's sortable headers:
 // attr is the data-* key each header carries its sort key in, sort is that
 // panel's {key, dir} state. Shared by the services/watches/apps panels.
-function updateSortIndicatorsFor(attr, sort) {
+function sortAriaValue(sort, key) {
+  if (!key || key !== sort.key) return "none";
+  return sort.dir > 0 ? "ascending" : "descending";
+}
+
+function updateSortIndicatorsFor(attr, sort, headerSelector, headerKey) {
   document.querySelectorAll(`.sort-ind[data-${attr}]`).forEach((el) => {
     el.textContent = el.dataset[attr] === sort.key ? (sort.dir > 0 ? " ▲" : " ▼") : "";
   });
+  if (!headerSelector || !headerKey) return;
+  document.querySelectorAll(headerSelector).forEach((th) => {
+    th.setAttribute("aria-sort", sortAriaValue(sort, th.dataset[headerKey] || ""));
+  });
 }
 
-function updateSortIndicators() { updateSortIndicatorsFor("si", svcSort); }
+function updateSortIndicators() {
+  updateSortIndicatorsFor("si", svcSort, ".services-table th.sortable[data-sort]", "sort");
+}
 
 // renderFilterCounts annotates each status-filter button with how many services
 // match it, for at-a-glance triage.
@@ -2484,6 +2497,9 @@ function updateWatchSortIndicators(panelKey) {
   document.querySelectorAll(`${panel.section} .sort-ind[data-wi]`).forEach((el) => {
     el.textContent = el.dataset.wi === panel.sort.key ? (panel.sort.dir > 0 ? " ▲" : " ▼") : "";
   });
+  document.querySelectorAll(`${panel.section} th.sortable[data-watch-sort]`).forEach((th) => {
+    th.setAttribute("aria-sort", sortAriaValue(panel.sort, th.dataset.watchSort || ""));
+  });
 }
 
 function watchPanelKeyForElement(el) {
@@ -2725,7 +2741,9 @@ function renderAppFilterCounts() {
     failed: a.filter((x) => appStateText(x) === "failed").length,
   });
 }
-function updateAppSortIndicators() { updateSortIndicatorsFor("ai", appSort); }
+function updateAppSortIndicators() {
+  updateSortIndicatorsFor("ai", appSort, ".apps-table th.sortable[data-app-sort]", "appSort");
+}
 function appStateText(a) {
   if (a && a.state === "starting") return "starting";
   const status = String((a && a.status) || "").trim().toLowerCase();
@@ -4070,6 +4088,17 @@ function closestFrom(event, selector) {
   return target && target.closest ? target.closest(selector) : null;
 }
 
+function bindSortHeader(th, action) {
+  th.tabIndex = 0;
+  th.setAttribute("aria-sort", "none");
+  th.addEventListener("click", action);
+  th.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    action();
+  });
+}
+
 function initStaticHandlers() {
   const refreshSelect = $("#refresh-select");
   if (refreshSelect) refreshSelect.addEventListener("change", () => setRefresh(refreshSelect.value));
@@ -4117,11 +4146,11 @@ function initStaticHandlers() {
   }
 
   document.querySelectorAll(".services-table th.sortable[data-sort]").forEach((th) => {
-    th.addEventListener("click", () => setSvcSort(th.dataset.sort || ""));
+    bindSortHeader(th, () => setSvcSort(th.dataset.sort || ""));
   });
 
   document.querySelectorAll(".events th.sortable[data-ev-sort]").forEach((th) => {
-    th.addEventListener("click", () => setEvSort(th.dataset.evSort || ""));
+    bindSortHeader(th, () => setEvSort(th.dataset.evSort || ""));
   });
 
   applyUIStateToControls();
@@ -4153,7 +4182,7 @@ function initStaticHandlers() {
   ["storage", "network", "host"].forEach(bindWatchPanelControls);
 
   document.querySelectorAll(".watch-table th.sortable[data-watch-sort]").forEach((th) => {
-    th.addEventListener("click", () => setWatchSort(watchPanelKeyForElement(th), th.dataset.watchSort || ""));
+    bindSortHeader(th, () => setWatchSort(watchPanelKeyForElement(th), th.dataset.watchSort || ""));
   });
 
   const appSearch = $("#app-search");
@@ -4195,7 +4224,7 @@ function initStaticHandlers() {
   }
 
   document.querySelectorAll(".apps-table th.sortable[data-app-sort]").forEach((th) => {
-    th.addEventListener("click", () => setAppSort(th.dataset.appSort || ""));
+    bindSortHeader(th, () => setAppSort(th.dataset.appSort || ""));
   });
 
   ["event-service", "event-watch", "event-kind", "event-status"].forEach((id) => {
