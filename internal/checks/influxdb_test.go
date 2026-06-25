@@ -192,3 +192,16 @@ func TestBuildInfluxCheckErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestInfluxErrorBody(t *testing.T) {
+	// 1.x reports `error`, 2.x reports `message`; anything else falls back to raw.
+	if got := influxErrorBody([]byte(`{"error":"boom"}`)); got != "boom" {
+		t.Errorf("1.x error = %q, want boom", got)
+	}
+	if got := influxErrorBody([]byte(`{"message":"oops"}`)); got != "oops" {
+		t.Errorf("2.x message = %q, want oops", got)
+	}
+	if got := influxErrorBody([]byte("plain text")); got != "plain text" {
+		t.Errorf("non-JSON body = %q, want the trimmed raw body", got)
+	}
+}
