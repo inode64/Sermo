@@ -408,7 +408,8 @@
     <button id="panic-btn" class="panic-btn" style="display:none" title="Suspend hooks, alerts and automatic remediation">panic mode</button>
     <label for="state-before" class="visually-hidden">Compact state before</label>
     <input id="state-before" type="text" placeholder="before (e.g. 720h)" title="Optional state compact cutoff: duration or RFC3339 timestamp" style="display:none; max-width:11rem">
-    <label class="muted shortcut-toggle"><input id="shortcut-toggle" type="checkbox" checked> keyboard shortcuts</label>
+    <label class="muted shortcut-toggle" aria-describedby="shortcut-hint-desc"><input id="shortcut-toggle" type="checkbox" checked> keyboard shortcuts</label>
+    <span id="shortcut-hint-desc" class="visually-hidden">When enabled, press slash to focus the search box in the open panel.</span>
   </div>
   <div class="footer-version muted">sermo {{VERSION}}</div>
 </footer>
