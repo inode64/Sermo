@@ -259,3 +259,14 @@ func TestCommandExportValueWholeMatchNoGroup(t *testing.T) {
 		t.Fatalf("value = %q, want foooo", got)
 	}
 }
+
+func TestBuildHTTPCheckBodyFromString(t *testing.T) {
+	// A non-empty body string is carried onto the check (s != "").
+	c, w := buildHTTPCheck(base{}, map[string]any{"url": "http://127.0.0.1/", "body": "hello"}, nil)
+	if w != "" {
+		t.Fatalf("unexpected warning: %q", w)
+	}
+	if got := string(c.(*httpCheck).body); got != "hello" {
+		t.Fatalf("body = %q, want hello", got)
+	}
+}
