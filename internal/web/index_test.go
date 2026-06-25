@@ -216,6 +216,8 @@ func TestIndexAccessibilityBundle(t *testing.T) {
 		"Latency check",
 		"chart-data",
 		"Chart data",
+		"lock is still active",
+		"SLA timeline data",
 	} {
 		if !strings.Contains(script, needle) {
 			t.Errorf("bundled script missing a11y marker %q", needle)
@@ -386,5 +388,24 @@ func TestIndexAccessibilityShell(t *testing.T) {
 
 	if nodeByID(doc, "simple-confirm") == nil {
 		t.Error(`shell missing #simple-confirm dialog`)
+	}
+
+	for _, spec := range []struct {
+		id    string
+		label string
+	}{
+		{"event-clear", "Clear event log"},
+		{"activity-clear", "Clear activity log"},
+		{"state-compact-btn", "Compact persisted state"},
+		{"reload-btn", "Reload configuration"},
+	} {
+		el := nodeByID(doc, spec.id)
+		if el == nil {
+			t.Errorf("shell missing admin button id %q", spec.id)
+			continue
+		}
+		if got, ok := attr(el, "aria-label"); !ok || got != spec.label {
+			t.Errorf("#%s aria-label = %q, want %q", spec.id, got, spec.label)
+		}
 	}
 }

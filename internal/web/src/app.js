@@ -1739,6 +1739,22 @@ function renderSLAFill(pct) {
   return tpl`<span class="sla-bar" aria-label="${label}"><span class="sla-fill${empty}" style="--sla-pct:${width.toFixed(2)}%; --sla-color:${slaColor(pct)}"></span></span>`;
 }
 
+function slaTimelineDataRows(segments, window) {
+  const n = segments.length;
+  if (!n) return nothing;
+  const spanMs = slaWindowSpanMs(window);
+  const endMs = Date.now();
+  const startIdx = Math.max(0, n - chartDataTableMaxRows);
+  return segments.slice(startIdx).map((ratio, i) => {
+    const idx = startIdx + i;
+    const segStart = endMs - spanMs + (idx / n) * spanMs;
+    const segEnd = endMs - spanMs + ((idx + 1) / n) * spanMs;
+    const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
+    const pctText = ratio == null ? "no data" : fmtNum(Number(ratio) * 100, 2) + "%";
+    return tpl`<tr><td>${when}</td><td>${pctText}</td></tr>`;
+  });
+}
+
 // renderSLATimeline draws a contiguous status-page style availability band: one
 // colored cell per sub-span (oldest left), hatched where no data was observed.
 function renderSLATimeline(segments, window) {
@@ -1754,7 +1770,8 @@ function renderSLATimeline(segments, window) {
     const pctText = fmtNum(pct, 2) + "%";
     return tpl`<span class="sla-seg" style="--sla-color:${slaColor(pct)}" title="${when + " · " + pctText}" aria-label="${when}: ${pctText} available"></span>`;
   });
-  return tpl`<span class="sla-timeline" role="img" aria-label="SLA availability timeline">${cells}</span>`;
+  const dataRows = slaTimelineDataRows(segments, window);
+  return tpl`<table class="chart-data visually-hidden"><caption>SLA timeline data</caption><thead><tr><th scope="col">Period</th><th scope="col">Availability</th></tr></thead><tbody>${dataRows}</tbody></table><span class="sla-timeline" role="img" aria-label="SLA availability timeline">${cells}</span>`;
 }
 
 function slaWindowSpanMs(window) {
