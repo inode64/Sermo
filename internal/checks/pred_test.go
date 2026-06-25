@@ -69,3 +69,16 @@ func TestDeltaOrZero(t *testing.T) {
 		t.Fatalf("deltaOrZero(40,100) = %d, want 0 (clamped, not wraparound)", got)
 	}
 }
+
+func TestParseLevelPredValuePercentBoundaries(t *testing.T) {
+	// 0 and 100 are the inclusive bounds of a _pct value.
+	for _, v := range []string{"0", "100", "90%"} {
+		if got, err := parseLevelPredValue("used_pct", v); err != nil {
+			t.Errorf("parseLevelPredValue(used_pct, %q) errored: %v (got %v)", v, err, got)
+		}
+	}
+	// Just past the range is rejected.
+	if _, err := parseLevelPredValue("used_pct", "101"); err == nil {
+		t.Error("used_pct 101 must be rejected (> 100)")
+	}
+}
