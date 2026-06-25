@@ -170,6 +170,7 @@
     outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
     outline-offset: 1px;
   }
+  :target, :focus { scroll-margin-top: 5rem; scroll-margin-bottom: 4rem; }
   #svc-controls input, #storage-controls input, #watch-controls input, #network-controls input, #app-controls input { min-width: 13rem; }
   #svc-filters button, #storage-filters button, #watch-filters button, #network-filters button, #app-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
   #svc-filters button:hover, #storage-filters button:hover, #watch-filters button:hover, #network-filters button:hover, #app-filters button:hover { background: var(--panel-2); color: var(--text); }
@@ -182,7 +183,7 @@
   body.disconnected #attention,
   body.disconnected #services-section, body.disconnected #storage-section, body.disconnected #watches-section, body.disconnected #network-section,
   body.disconnected #locks-section, body.disconnected #activity-section, body.disconnected #daemon-section,
-  body.disconnected #notifiers-section, body.disconnected #mounts-section, body.disconnected #app-section { opacity: .5; transition: opacity .2s; }
+  body.disconnected #notifiers-section, body.disconnected #mounts-section, body.disconnected #apps-section { opacity: .5; transition: opacity .2s; }
   .win-btn-active { background: color-mix(in srgb, var(--text-2) 20%, transparent); }
   .muted { color: var(--text-2); font-size: .85rem; }
   td.status-cell { font-weight: 600; }
@@ -253,6 +254,8 @@
     margin-top: 1.5rem; padding-top: .9rem; border-top: 1px solid var(--line);
   }
   #app-footer .footer-actions { display: inline-flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+  .shortcut-toggle { display: inline-flex; align-items: center; gap: .3rem; white-space: nowrap; }
+  .shortcut-toggle input { margin: 0; }
   #app-footer .footer-version { margin-left: auto; font-size: .8rem; white-space: nowrap; }
   section#locks-section { padding-top: .15rem; }
   section#locks-section h2 { font-size: .98rem; margin: .55rem 0 .5rem; }
