@@ -887,3 +887,17 @@ func TestGetOnActionRouteNotAllowed(t *testing.T) {
 		t.Fatalf("GET should not trigger an action: code=%d operated=%v", rec.Code, b.operated)
 	}
 }
+
+func TestParseBeforeQueryDurationIsPast(t *testing.T) {
+	got, err := parseBeforeQuery("1h")
+	if err != nil {
+		t.Fatalf("parseBeforeQuery: %v", err)
+	}
+	// A bare duration means "1h ago": the result is in the past.
+	if !got.Before(time.Now()) {
+		t.Fatalf("parseBeforeQuery(1h) = %v, want a past time", got)
+	}
+	if d := time.Since(got); d < 50*time.Minute || d > 70*time.Minute {
+		t.Fatalf("parseBeforeQuery(1h) is %v ago, want ~1h", d)
+	}
+}
