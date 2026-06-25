@@ -169,3 +169,17 @@ func TestBuildTCPCheckHostDefault(t *testing.T) {
 		t.Fatalf("explicit host = %q, want example.test", got)
 	}
 }
+
+func TestBuildPortsCheckHostDefault(t *testing.T) {
+	c, w := buildPortsCheck(base{}, map[string]any{"ports": "80"})
+	if w != "" {
+		t.Fatalf("unexpected warning: %q", w)
+	}
+	if got := c.(*portsCheck).host; got != "127.0.0.1" {
+		t.Fatalf("default host = %q, want 127.0.0.1", got)
+	}
+	c2, _ := buildPortsCheck(base{}, map[string]any{"ports": "80", "host": "ports.test"})
+	if got := c2.(*portsCheck).host; got != "ports.test" {
+		t.Fatalf("explicit host = %q, want ports.test", got)
+	}
+}
