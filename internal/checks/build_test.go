@@ -221,3 +221,16 @@ func TestBuildFileExistsCheckPathRequired(t *testing.T) {
 		t.Fatal("missing path must warn")
 	}
 }
+
+func TestBuildLibrariesCheckBinaryRequired(t *testing.T) {
+	c, w := buildLibrariesCheck(base{}, map[string]any{"binary": "/usr/bin/ssh"})
+	if w != "" {
+		t.Fatalf("unexpected warning: %q", w)
+	}
+	if got := c.(librariesCheck).binary; got != "/usr/bin/ssh" {
+		t.Fatalf("binary = %q, want /usr/bin/ssh", got)
+	}
+	if _, w := buildLibrariesCheck(base{}, map[string]any{}); w == "" {
+		t.Fatal("missing binary must warn")
+	}
+}
