@@ -255,6 +255,9 @@ function updatePanicView(active) {
     btn.title = panicOn
       ? "Resume hooks, alerts and automatic remediation"
       : "Suspend hooks, alerts and automatic remediation";
+    btn.setAttribute("aria-label", panicOn
+      ? "Exit panic mode and resume hooks, alerts and automatic remediation"
+      : "Enter panic mode and suspend hooks, alerts and automatic remediation");
   }
   const banner = $("#panic-banner");
   if (banner) banner.classList.toggle("active", panicOn);
