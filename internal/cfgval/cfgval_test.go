@@ -170,6 +170,7 @@ func TestByteSize(t *testing.T) {
 		{"1KiB", 1 << 10, true},
 		{"1MiB", 1 << 20, true},
 		{"1MB", 1 << 20, true},
+		{"1M", 1 << 20, true},
 		{"1B", 1, true},
 		{"1.5G", 1536 << 20, true},
 		{"2T", 2 << 40, true},
