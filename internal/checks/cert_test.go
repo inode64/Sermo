@@ -216,3 +216,13 @@ func TestBuildCertCheck(t *testing.T) {
 		t.Fatal("a cert check without a host should warn")
 	}
 }
+
+func TestCertCheckSource(t *testing.T) {
+	// A path-based check reports the path; a host-based one reports the host.
+	if got := (&certCheck{path: "/etc/ssl/cert.pem"}).source(); got != "/etc/ssl/cert.pem" {
+		t.Errorf("source(path) = %q, want the path", got)
+	}
+	if got := (&certCheck{host: "example.com"}).source(); got != "example.com" {
+		t.Errorf("source(host) = %q, want the host", got)
+	}
+}
