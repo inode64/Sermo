@@ -641,3 +641,24 @@ func TestServiceFDsAndThreadsAggregate(t *testing.T) {
 		t.Fatalf("threads = %+v, want ready 8", snap["threads"])
 	}
 }
+
+func TestSampleServiceCPUNoCPUCount(t *testing.T) {
+	clock := time.Unix(0, 0)
+	reader := fakeReader{cpu: map[int]uint64{10: 0}, hz: 100, ncpu: 0}
+	c := New(reader)
+	c.Now = func() time.Time { return clock }
+	c.SampleServiceCPU("svc", []int{10}) // prime
+
+	clock = clock.Add(time.Second)
+	reader.cpu[10] = 100
+	c.Reader = reader
+	sc := c.SampleServiceCPU("svc", []int{10})
+	// With ncpu == 0 the whole-machine CPU% is not computable (ncpu > 0 guard).
+	if sc.CPU.Ready {
+		t.Fatalf("ncpu 0 must leave CPU not ready: %+v", sc.CPU)
+	}
+	// The per-process thread rate is still produced.
+	if !sc.CPUThread.Ready {
+		t.Fatal("CPUThread should still be ready")
+	}
+}
