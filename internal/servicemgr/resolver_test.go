@@ -3,6 +3,7 @@ package servicemgr
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"sermo/internal/execx"
@@ -221,5 +222,17 @@ func TestCgroupPIDsFiltersZeroAndEmpty(t *testing.T) {
 	// A cgroup with no valid PIDs reports not-found.
 	if _, ok := CgroupPIDs(runner, rf("0\n\n"), BackendSystemd, "x.service"); ok {
 		t.Fatal("a cgroup with only invalid PIDs must report not-found")
+	}
+}
+
+func TestResolveEmptyCandidates(t *testing.T) {
+	r := resolver(nil, nil)
+	// trust + no candidates must error (no index-out-of-range on candidates[0]).
+	if _, err := r.Resolve(context.Background(), BackendSystemd, nil, true); err == nil {
+		t.Fatal("empty candidates with trust must error, not panic")
+	}
+	// no candidates without trust yields the 'not available' error.
+	if _, err := r.Resolve(context.Background(), BackendSystemd, nil, false); err == nil || !strings.Contains(err.Error(), "not available") {
+		t.Fatalf("empty candidates error = %v, want 'not available'", err)
 	}
 }
