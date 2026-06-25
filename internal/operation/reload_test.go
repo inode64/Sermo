@@ -2,6 +2,7 @@ package operation
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/signal"
 	"strconv"
@@ -20,6 +21,7 @@ import (
 type scriptedRunner struct {
 	calls          [][]string
 	results        map[string]execx.Result
+	errs           map[string]error
 	respectContext bool
 }
 
@@ -31,9 +33,9 @@ func (r *scriptedRunner) Run(ctx context.Context, name string, args ...string) (
 		}
 	}
 	if res, ok := r.results[name]; ok {
-		return res, nil
+		return res, r.errs[name]
 	}
-	return execx.Result{}, nil
+	return execx.Result{}, r.errs[name]
 }
 
 func (r *scriptedRunner) ran(name string) bool {
@@ -151,6 +153,21 @@ func TestReloadClosureCommandDidNotStartWithoutRunnerError(t *testing.T) {
 	err := reload(context.Background())
 	if err == nil || err.Error() != execx.CommandDidNotStart {
 		t.Fatalf("reload err = %v, want %q", err, execx.CommandDidNotStart)
+	}
+}
+
+func TestReloadClosureCommandStartErrorUsesOperatorMessage(t *testing.T) {
+	mgr := &fakeManager{canReload: false}
+	runner := &scriptedRunner{
+		results: map[string]execx.Result{"reloadctl": {ExitCode: -1}},
+		errs:    map[string]error{"reloadctl": errors.New("run reloadctl: executable file not found")},
+	}
+	tree := map[string]any{"reload": map[string]any{"command": []any{"reloadctl"}, "when": "always"}}
+	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "systemd", "svc")
+
+	err := reload(context.Background())
+	if err == nil || err.Error() != "executable file not found" {
+		t.Fatalf("reload err = %v, want stripped operator message", err)
 	}
 }
 
