@@ -1290,8 +1290,10 @@ func buildSizeCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	if path == "" {
 		return nil, "size check requires a path"
 	}
+	// parseSize already rejects zero, negative and unitless values, so a nil
+	// error guarantees growBy > 0 — no redundant positivity guard needed.
 	growBy, err := parseSize(cfgval.String(entry["grow_by"]))
-	if err != nil || growBy <= 0 {
+	if err != nil {
 		return nil, "size check requires a positive grow_by with a K/M/G/T suffix (e.g. 1G)"
 	}
 	window := cfgval.DurationOr(entry["within"], 0)
