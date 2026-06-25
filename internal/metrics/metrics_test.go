@@ -605,3 +605,28 @@ func TestServiceIOCombinedSumsReadAndWrite(t *testing.T) {
 		t.Fatalf("io = %+v, want 7000 (read+write delta)", snap["io"])
 	}
 }
+
+func TestSystemCPUDeltaWithNonzeroBaseline(t *testing.T) {
+	clock := time.Unix(0, 0)
+	reader := fakeReader{sysBusy: 100, sysTotal: 500, hz: 100, ncpu: 1}
+	c := New(reader)
+	c.Now = func() time.Time { return clock }
+	c.SystemFreshness = 0 // no caching between cycles
+	c.SampleSystem()      // baseline busy=100 total=500
+
+	clock = clock.Add(time.Second)
+	reader.sysBusy, reader.sysTotal = 130, 700
+	c.Reader = reader
+	// Δbusy=30, Δtotal=200 -> 15% (subtraction against the nonzero baseline).
+	if got := c.SampleSystem()["total_cpu"].Percent; got < 14.9 || got > 15.1 {
+		t.Fatalf("total_cpu = %v, want 15", got)
+	}
+
+	clock = clock.Add(time.Second)
+	reader.sysTotal = 900 // busy unchanged at 130, total advances
+	c.Reader = reader
+	// busy unchanged is still a valid 0%% sample (busy >= prev, not strictly >).
+	if got := c.SampleSystem()["total_cpu"]; !got.Ready || got.Percent != 0 {
+		t.Fatalf("idle-system sample = %+v, want ready 0%%", got)
+	}
+}
