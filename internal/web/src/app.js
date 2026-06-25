@@ -1248,7 +1248,7 @@ function serviceRowParts(s) {
   const label = displayName(s);
   const key = "svc:" + s.name;
   const open = expanded.has(key);
-  const chev = tpl`<span class="exp">${open ? '▾' : '▸'}</span>`;
+  const chev = tpl`<span class="exp" aria-hidden="true">${open ? '▾' : '▸'}</span>`;
   const name = tpl`<button type="button" class="name row-toggle" data-service-expand="${s.name}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}">${label}</button>`;
   const rowClass = state === "failed" ? "row-failing" : (state === "warning" ? "row-warning" : "");
   const main = tpl`<tr id="svc-row-${s.name}" class="clickable ${rowClass}" data-exp-key="${key}">
@@ -2640,7 +2640,7 @@ function watchRowHTML(w) {
   }
   const key = "wat:" + w.name;
   const open = expanded.has(key);
-  const chev = tpl`<span class="exp">${open ? '▾' : '▸'}</span>`;
+  const chev = tpl`<span class="exp" aria-hidden="true">${open ? '▾' : '▸'}</span>`;
   const expandBtn = (w.expand && Number(w.expand.by_bytes) > 0 && me.can_act && w.enabled)
     ? tpl`<button data-watch="${w.name}" data-watch-action="expand">expand ${fmtBytes(w.expand.by_bytes)}</button>`
     : nothing;
@@ -2884,7 +2884,7 @@ function renderApps(apps) {
     const label = displayName(a);
     const key = "app:" + a.name;
     const open = expanded.has(key);
-    const chev = tpl`<span class="exp">${open ? '▾' : '▸'}</span>`;
+    const chev = tpl`<span class="exp" aria-hidden="true">${open ? '▾' : '▸'}</span>`;
     const ver = a.version_short || a.version || "—";
     const row = tpl`<tr id="app-row-${a.name}" class="clickable ${rowClass}" data-exp-key="${key}">
       <td>${chev}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}">${label}</button></td>
@@ -3229,6 +3229,30 @@ function renderActivity(sum) {
   renderAttention();
 }
 
+function panelTargetLabel(target) {
+  switch (target) {
+    case "failed-services": return "services panel, failed filter";
+    case "starting-services": return "services panel, starting filter";
+    case "failed-watches": return "watches panel, failed filter";
+    case "starting-watches": return "watches panel, starting filter";
+    case "failed-apps": return "applications panel, failed filter";
+    case "starting-apps": return "applications panel, starting filter";
+    case "locks-section": return "runtime locks panel";
+    case "daemon-section": return "daemon panel";
+    case "activity-section": return "recent activity panel";
+    case "watches-section": return "host watches panel";
+    case "services-section":
+    default: return "services panel";
+  }
+}
+
+function tileAriaLabel(label, valueText, sub, target) {
+  const parts = [`${label}: ${valueText}`];
+  if (sub) parts.push(sub);
+  parts.push(`Open ${panelTargetLabel(target)}`);
+  return parts.join(". ");
+}
+
 // renderOverview fills the at-a-glance tile band under the topbar: one tile per
 // vital sign, colored by health, each clickable to jump to its panel. load()
 // passes the same burst snapshot into renderStatus — no extra requests here.
@@ -3278,7 +3302,7 @@ function renderOverview(ctx) {
         : (settling ? "starting-services" : "watches-section")));
 
   const tile = (opts) => tpl`
-    <button class="tile ${opts.cls || ""}" data-panel-target="${opts.target || "services-section"}">
+    <button class="tile ${opts.cls || ""}" data-panel-target="${opts.target || "services-section"}" aria-label="${opts.ariaLabel || opts.label}">
       <span class="t-label">${opts.label}</span>
       <div class="t-value">${opts.value}</div>
       <div class="t-sub">${opts.sub || ""}</div>
@@ -3286,24 +3310,29 @@ function renderOverview(ctx) {
     </button>`;
 
   const tiles = [];
+  const servicesSub = failedSvcs.length
+    ? `${failedSvcs.length} failed`
+    : (servicesSettlingSub() || (enabled.length === 0 ? "none enabled" : "all healthy"));
   tiles.push(tile({
     label: "Services up",
     value: tpl`${upSvcs.length}<small> / ${enabled.length}</small>`,
     cls: failedSvcs.length ? "t-crit" : (settling ? "" : (enabled.length ? "t-ok" : "")),
-    sub: failedSvcs.length
-      ? `${failedSvcs.length} failed`
-      : (servicesSettlingSub() || (enabled.length === 0 ? "none enabled" : "all healthy")),
+    sub: servicesSub,
     target: servicesTarget,
+    ariaLabel: tileAriaLabel("Services up", `${upSvcs.length} of ${enabled.length}`, servicesSub, servicesTarget),
   }));
   if (watches.length) {
+    const watchesSub = failedWatches.length
+      ? `${failedWatches.length} firing`
+      : (watchesSettlingSub() || "quiet");
+    const watchesUp = enabledWatches.length - failedWatches.length;
     tiles.push(tile({
       label: "Watches",
-      value: tpl`${enabledWatches.length - failedWatches.length}<small> / ${enabledWatches.length}</small>`,
+      value: tpl`${watchesUp}<small> / ${enabledWatches.length}</small>`,
       cls: failedWatches.length ? "t-crit" : (watchesSettling ? "" : "t-ok"),
-      sub: failedWatches.length
-        ? `${failedWatches.length} firing`
-        : (watchesSettlingSub() || "quiet"),
+      sub: watchesSub,
       target: watchesTarget,
+      ariaLabel: tileAriaLabel("Watches", `${watchesUp} of ${enabledWatches.length}`, watchesSub, watchesTarget),
     }));
   }
   const alertsTarget = alerts
@@ -3312,14 +3341,16 @@ function renderOverview(ctx) {
         : (failedApps.length ? "failed-apps"
           : (activeLocks.length ? "locks-section" : "services-section"))))
     : "services-section";
+  const alertsSub = alerts
+    ? [failedSvcs.length && `${failedSvcs.length} svc`, failedWatches.length && `${failedWatches.length} watch`, failedApps.length && `${failedApps.length} app`, activeLocks.length && `${activeLocks.length} lock`].filter(Boolean).join(" · ")
+    : "nothing on fire";
   tiles.push(tile({
     label: "Alerts",
     value: String(alerts),
     cls: alerts ? "t-crit" : "t-ok",
-    sub: alerts
-      ? [failedSvcs.length && `${failedSvcs.length} svc`, failedWatches.length && `${failedWatches.length} watch`, failedApps.length && `${failedApps.length} app`, activeLocks.length && `${activeLocks.length} lock`].filter(Boolean).join(" · ")
-      : "nothing on fire",
+    sub: alertsSub,
     target: alertsTarget,
+    ariaLabel: tileAriaLabel("Alerts", String(alerts), alertsSub, alertsTarget),
   }));
   const monitoredTarget = settling && !failedSvcs.length
     ? servicesTarget
@@ -3334,16 +3365,19 @@ function renderOverview(ctx) {
       cls: (mon.paused || 0) > 0 ? "t-warn" : (settling && !failedSvcs.length ? "" : ""),
       sub: monitoredSub,
       target: monitoredTarget,
+      ariaLabel: tileAriaLabel("Monitored", `${mon.monitored || 0} of ${mon.total || 0}`, monitoredSub, monitoredTarget),
     }));
   }
   if (ops && ops.total) {
     const saturated = (ops.in_use || 0) >= ops.total;
+    const opSub = saturated ? "saturated" : "";
     tiles.push(tile({
       label: "Op slots",
       value: tpl`${ops.in_use || 0}<small> / ${ops.total}</small>`,
       cls: saturated ? "t-warn" : "",
-      sub: saturated ? "saturated" : "",
+      sub: opSub,
       target: "services-section",
+      ariaLabel: tileAriaLabel("Op slots", `${ops.in_use || 0} of ${ops.total}`, opSub, "services-section"),
     }));
   }
   const cpu = (hostMetrics || []).find((m) => m.name === "total_cpu");
@@ -3357,15 +3391,26 @@ function renderOverview(ctx) {
     : "";
   if (cpu) {
     const p = pctClamp(cpu.percent || 0);
-    tiles.push(tile({ label: "Host CPU", value: tpl`${fmtNum(p, 2)}<small>%</small>`, sub: "", extra: usageBar(p, fmtPct(p)), target: "daemon-section" }));
+    tiles.push(tile({
+      label: "Host CPU", value: tpl`${fmtNum(p, 2)}<small>%</small>`, sub: "", extra: usageBar(p, fmtPct(p)), target: "daemon-section",
+      ariaLabel: tileAriaLabel("Host CPU", fmtPct(p), "", "daemon-section"),
+    }));
   }
   if (mem) {
     const p = pctClamp(mem.percent || 0);
-    tiles.push(tile({ label: "Host memory", value: tpl`${fmtNum(p, 2)}<small>%</small>`, sub: usedFreeSub(mem), extra: usageBar(p, fmtPct(p)), target: "daemon-section" }));
+    const memSub = usedFreeSub(mem);
+    tiles.push(tile({
+      label: "Host memory", value: tpl`${fmtNum(p, 2)}<small>%</small>`, sub: memSub, extra: usageBar(p, fmtPct(p)), target: "daemon-section",
+      ariaLabel: tileAriaLabel("Host memory", fmtPct(p), memSub, "daemon-section"),
+    }));
   }
   if (swap && swap.total) {
     const p = pctClamp(swap.percent || 0);
-    tiles.push(tile({ label: "Host swap", value: tpl`${fmtNum(p, 2)}<small>%</small>`, sub: usedFreeSub(swap), cls: p >= 90 ? "t-crit" : (p >= 70 ? "t-warn" : ""), extra: usageBar(p, fmtPct(p)), target: "daemon-section" }));
+    const swapSub = usedFreeSub(swap);
+    tiles.push(tile({
+      label: "Host swap", value: tpl`${fmtNum(p, 2)}<small>%</small>`, sub: swapSub, cls: p >= 90 ? "t-crit" : (p >= 70 ? "t-warn" : ""), extra: usageBar(p, fmtPct(p)), target: "daemon-section",
+      ariaLabel: tileAriaLabel("Host swap", fmtPct(p), swapSub, "daemon-section"),
+    }));
   }
   if (load && load.absolute != null) {
     // load.total carries the logical CPU count and load.percent the saturation
@@ -3373,13 +3418,15 @@ function renderOverview(ctx) {
     // the run queue exceeds the cores.
     const hasCap = load.total > 0;
     const p = hasCap ? pctClamp(load.percent || 0) : 0;
+    const loadSub = hasCap ? `${fmtNum(load.total, 0)} CPUs · ${fmtPct(load.percent)}` : (live && fmtUptime(live.uptime_seconds) ? `up ${fmtUptime(live.uptime_seconds)}` : "");
     tiles.push(tile({
       label: "Load 1m",
       value: fmtNum(load.absolute, 2),
-      sub: hasCap ? `${fmtNum(load.total, 0)} CPUs · ${fmtPct(load.percent)}` : (live && fmtUptime(live.uptime_seconds) ? `up ${fmtUptime(live.uptime_seconds)}` : ""),
+      sub: loadSub,
       cls: hasCap ? (p >= 100 ? "t-crit" : (p >= 80 ? "t-warn" : "")) : "",
       extra: hasCap ? usageBar(p, fmtPct(p)) : nothing,
       target: "daemon-section",
+      ariaLabel: tileAriaLabel("Load 1m", fmtNum(load.absolute, 2), loadSub, "daemon-section"),
     }));
   }
   litRender(tiles, band);
