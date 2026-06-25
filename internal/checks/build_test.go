@@ -369,3 +369,14 @@ func TestBuildICMPCheckCountPositive(t *testing.T) {
 		t.Fatalf("positive count must not warn, got %q", w)
 	}
 }
+
+func TestBuildICMPStateRequiresExpectOrOnChange(t *testing.T) {
+	// metric=state with neither expect nor on:change is rejected.
+	if _, w := buildICMPCheck(base{}, map[string]any{"host": "127.0.0.1", "metric": "state"}, Deps{}); !strings.Contains(w, "requires expect") {
+		t.Fatalf("icmp state w/o expect warning = %q, want it to require expect/on", w)
+	}
+	// With an expect it is accepted.
+	if _, w := buildICMPCheck(base{}, map[string]any{"host": "127.0.0.1", "metric": "state", "expect": "up"}, Deps{}); strings.Contains(w, "requires expect") {
+		t.Fatalf("icmp state with expect must not warn, got %q", w)
+	}
+}
