@@ -213,6 +213,7 @@ func TestIndexAccessibilityBundle(t *testing.T) {
 		"watch is starting",
 		"event-grp-panel",
 		"Graph time window",
+		"Latency check",
 		"chart-data",
 		"Chart data",
 	} {
@@ -268,6 +269,20 @@ func TestIndexAccessibilityShell(t *testing.T) {
 		if got, ok := attr(attention, pair[0]); !ok || got != pair[1] {
 			t.Errorf(`#attention %s = %q, want %q`, pair[0], got, pair[1])
 		}
+	}
+
+	eventControls := nodeByID(doc, "event-controls")
+	if eventControls == nil {
+		t.Fatal(`shell missing #event-controls`)
+	}
+	if role, ok := attr(eventControls, "role"); !ok || role != "group" {
+		t.Errorf(`#event-controls role = %q, want "group"`, role)
+	}
+	if label, ok := attr(eventControls, "aria-label"); !ok || label != "Filter events" {
+		t.Errorf(`#event-controls aria-label = %q, want "Filter events"`, label)
+	}
+	if nodeByID(doc, "search-shortcut-hint") == nil {
+		t.Fatal(`shell missing #search-shortcut-hint`)
 	}
 
 	for _, id := range []string{

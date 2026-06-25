@@ -46,7 +46,7 @@
   <summary>Storage <span id="storage-count" class="muted"></span></summary>
   <div id="storage-controls" class="panel-controls">
     <label for="storage-search" class="visually-hidden">Filter storage watches</label>
-    <input id="storage-search" type="search" placeholder="filter storage watches…">
+    <input id="storage-search" type="search" placeholder="filter storage watches…  ( / )" aria-describedby="search-shortcut-hint">
     <select id="storage-type" title="Filter by type" aria-label="Filter storage watches by type">
       <option value="all">all storage types</option>
     </select>
@@ -90,7 +90,7 @@
   </summary>
   <div id="svc-controls" class="panel-controls">
     <label for="svc-search" class="visually-hidden">Filter services</label>
-    <input id="svc-search" type="search" placeholder="filter services…  ( / )">
+    <input id="svc-search" type="search" placeholder="filter services…  ( / )" aria-describedby="search-shortcut-hint">
     <select id="svc-category" title="Filter by category" aria-label="Filter services by category">
       <option value="all">all categories</option>
     </select>
@@ -130,7 +130,7 @@
   <summary>Network <span id="network-count" class="muted"></span></summary>
   <div id="network-controls" class="panel-controls">
     <label for="network-search" class="visually-hidden">Filter network watches</label>
-    <input id="network-search" type="search" placeholder="filter network watches…">
+    <input id="network-search" type="search" placeholder="filter network watches…  ( / )" aria-describedby="search-shortcut-hint">
     <select id="network-type" title="Filter by type" aria-label="Filter network watches by type">
       <option value="all">all network types</option>
     </select>
@@ -174,7 +174,7 @@
   </summary>
   <div id="app-controls" class="panel-controls">
     <label for="app-search" class="visually-hidden">Filter applications</label>
-    <input id="app-search" type="search" placeholder="filter applications…">
+    <input id="app-search" type="search" placeholder="filter applications…  ( / )" aria-describedby="search-shortcut-hint">
     <select id="app-category" title="Filter by category" aria-label="Filter applications by category">
       <option value="all">all categories</option>
     </select>
@@ -204,7 +204,7 @@
   <summary>Host watches <span id="watches-count" class="muted"></span></summary>
   <div id="watch-controls" class="panel-controls">
     <label for="watch-search" class="visually-hidden">Filter host watches</label>
-    <input id="watch-search" type="search" placeholder="filter watches…">
+    <input id="watch-search" type="search" placeholder="filter host watches…  ( / )" aria-describedby="search-shortcut-hint">
     <select id="watch-type" title="Filter by type" aria-label="Filter watches by type">
       <option value="all">all host types</option>
     </select>
@@ -410,6 +410,7 @@
     <input id="state-before" type="text" placeholder="before (e.g. 720h)" title="Optional state compact cutoff: duration or RFC3339 timestamp" style="display:none; max-width:11rem">
     <label class="muted shortcut-toggle" aria-describedby="shortcut-hint-desc"><input id="shortcut-toggle" type="checkbox" checked> keyboard shortcuts</label>
     <span id="shortcut-hint-desc" class="visually-hidden">When enabled, press slash to focus the search box in the open panel.</span>
+    <span id="search-shortcut-hint" class="visually-hidden">Press slash to focus this search when keyboard shortcuts are enabled.</span>
   </div>
   <div class="footer-version muted">sermo {{VERSION}}</div>
 </footer>
