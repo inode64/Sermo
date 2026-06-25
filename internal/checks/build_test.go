@@ -349,3 +349,12 @@ func TestBuildSmartCheckDeviceRequired(t *testing.T) {
 		t.Fatalf("present device must not warn about a missing device, got %q", w)
 	}
 }
+
+func TestBuildICMPCheckHostRequired(t *testing.T) {
+	if _, w := buildICMPCheck(base{}, map[string]any{"metric": "state", "expect": "up"}, Deps{}); !strings.Contains(w, "requires a host") {
+		t.Fatalf("missing host warning = %q, want it to mention requiring a host", w)
+	}
+	if _, w := buildICMPCheck(base{}, map[string]any{"host": "127.0.0.1", "metric": "state", "expect": "up"}, Deps{}); strings.Contains(w, "requires a host") {
+		t.Fatalf("present host must not warn about a missing host, got %q", w)
+	}
+}
