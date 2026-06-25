@@ -274,7 +274,10 @@ function panicConfirm(enable) {
       ? "Sermo will <b>suspend all hooks, alerts and automatic remediation</b> across the daemon. Monitoring keeps running and manual actions stay available.<br><br>The daemon status will show <b>panic mode</b> until you turn it off."
       : "Sermo will <b>resume normal operation</b>: hooks, alerts and automatic remediation will fire again.";
   }
-  if (okBtn) okBtn.textContent = enable ? "enter panic mode" : "exit panic mode";
+  if (okBtn) {
+    okBtn.textContent = enable ? "enter panic mode" : "exit panic mode";
+    okBtn.setAttribute("aria-label", enable ? "Enter panic mode" : "Exit panic mode");
+  }
   if (!dlg || typeof dlg.showModal !== "function") {
     return promptConfirm({
       title: enable ? "Enter panic mode?" : "Exit panic mode?",
@@ -3822,8 +3825,10 @@ function promptConfirm(opts) {
   if (title) title.textContent = o.title || "Confirm";
   if (msg) msg.textContent = o.message || "";
   if (okBtn) {
-    okBtn.textContent = o.okLabel || "confirm";
+    const okLabel = o.okLabel || "confirm";
+    okBtn.textContent = okLabel;
     okBtn.className = o.danger ? "danger-btn" : "";
+    okBtn.setAttribute("aria-label", okLabel === "confirm" ? "Confirm action" : `Confirm: ${okLabel}`);
   }
   return new Promise((resolve) => {
     promptConfirmResolve = resolve;
