@@ -62,32 +62,44 @@ func NewSlotPool(dir string, slots int) SlotPool {
 	}
 }
 
+// withDefaults returns a copy of p with every unset capacity/dependency filled
+// in with its default, so the hot paths (InUse, Acquire) share one set of guards
+// instead of each repeating the same nil/zero-value checks. The value receiver
+// makes this a non-mutating copy.
+func (p SlotPool) withDefaults() SlotPool {
+	if p.Slots <= 0 {
+		p.Slots = 2
+	}
+	if p.Proc == nil {
+		p.Proc = OSProcessProber{}
+	}
+	if p.Now == nil {
+		p.Now = time.Now
+	}
+	if p.Self == nil {
+		p.Self = selfIdentity
+	}
+	if p.Sleep == nil {
+		p.Sleep = time.Sleep
+	}
+	return p
+}
+
 // InUse reports how many slots are currently held (active lock files).
 func (p SlotPool) InUse() (int, error) {
-	slots := p.Slots
-	if slots <= 0 {
-		slots = 2
-	}
 	if p.Dir == "" {
 		return 0, nil
 	}
-	proc := p.Proc
-	if proc == nil {
-		proc = OSProcessProber{}
-	}
-	now := p.Now
-	if now == nil {
-		now = time.Now
-	}
+	p = p.withDefaults()
 	inUse := 0
-	for i := 0; i < slots; i++ {
+	for i := 0; i < p.Slots; i++ {
 		path := filepath.Join(p.Dir, fmt.Sprintf("%d.slot", i))
 		existing, err := readLockFile(path)
 		if err != nil {
 			// A missing or unreadable slot file is not held.
 			continue
 		}
-		state, _ := classify(existing, now(), proc)
+		state, _ := classify(existing, p.Now(), p.Proc)
 		if state == StateActive {
 			inUse++
 		}
@@ -97,34 +109,15 @@ func (p SlotPool) InUse() (int, error) {
 
 // Acquire waits until a slot is available or ctx is cancelled.
 func (p SlotPool) Acquire(ctx context.Context) (*SlotHandle, error) {
-	slots := p.Slots
-	if slots <= 0 {
-		slots = 2
-	}
-	proc := p.Proc
-	if proc == nil {
-		proc = OSProcessProber{}
-	}
-	now := p.Now
-	if now == nil {
-		now = time.Now
-	}
-	self := p.Self
-	if self == nil {
-		self = selfIdentity
-	}
-	sleep := p.Sleep
-	if sleep == nil {
-		sleep = time.Sleep
-	}
+	p = p.withDefaults()
 	if err := os.MkdirAll(p.Dir, 0o755); err != nil {
 		return nil, fmt.Errorf("create op-slots dir %s: %w", p.Dir, err)
 	}
 
 	for {
-		for i := 0; i < slots; i++ {
+		for i := 0; i < p.Slots; i++ {
 			path := filepath.Join(p.Dir, fmt.Sprintf("%d.slot", i))
-			h, err := p.tryAcquire(path, i, proc, now, self)
+			h, err := p.tryAcquire(path, i, p.Proc, p.Now, p.Self)
 			if err == nil {
 				return h, nil
 			}
@@ -136,7 +129,7 @@ func (p SlotPool) Acquire(ctx context.Context) (*SlotHandle, error) {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		default:
-			sleep(20 * time.Millisecond)
+			p.Sleep(20 * time.Millisecond)
 		}
 	}
 }
