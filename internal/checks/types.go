@@ -308,8 +308,9 @@ func (m statusMatcher) String() string {
 // the check instance across cycles. A config reload/worker rebuild creates a
 // fresh baseline.
 type cmdState struct {
-	primed bool
-	last   string
+	primed  bool
+	last    string // comparison key (raw line, or version_short truncated to a level)
+	lastRaw string // the raw line behind `last`, shown in change messages
 }
 
 // commandCheck runs a command and compares its exit code, and optionally its
@@ -329,7 +330,11 @@ type commandCheck struct {
 	exports    []commandExport
 	analyzer   *outputAnalyzer
 	onChange   bool
-	state      *cmdState
+	// changeLevel selects how on_change compares output: 0 compares the trimmed
+	// raw line; 1/2/3 compare version_short truncated to that many components
+	// (major/minor/patch), with a raw-line fallback when no version is parseable.
+	changeLevel int
+	state       *cmdState
 }
 
 func (c commandCheck) Run(ctx context.Context) Result {
@@ -384,20 +389,36 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		}
 	}
 	if c.onChange && c.state != nil {
-		cur := TrimOutput(res.Stdout)
-		if c.state.primed && cur != c.state.last {
-			r := c.result(false, fmt.Sprintf("output changed (%s -> %s)", FirstNonEmptyLine(c.state.last), FirstNonEmptyLine(cur)), start)
-			r.Data = map[string]any{"old": c.state.last, "new": cur}
-			c.state.last = cur
+		raw := TrimOutput(res.Stdout)
+		key := c.changeKey(raw)
+		if c.state.primed && key != c.state.last {
+			r := c.result(false, fmt.Sprintf("output changed (%s -> %s)", FirstNonEmptyLine(c.state.lastRaw), FirstNonEmptyLine(raw)), start)
+			r.Data = map[string]any{"old": c.state.lastRaw, "new": raw}
+			c.state.last, c.state.lastRaw = key, raw
 			return r
 		}
-		c.state.last, c.state.primed = cur, true
+		c.state.last, c.state.lastRaw, c.state.primed = key, raw, true
 	}
 	r := c.result(true, fmt.Sprintf("exit %d (want %s)", res.ExitCode, ExpectExitText(c.expectExit)), start)
 	if data := c.exportData(res.Stdout, res.Stderr); len(data) > 0 {
 		r.Data = data
 	}
 	return r
+}
+
+// changeKey turns a trimmed command output into the value on_change compares
+// across cycles. With changeLevel==0 the raw line is the key. With a level set
+// (version monitor), the key is version_short truncated to that level so only a
+// change at or above the chosen granularity fires; when no version is parseable
+// it falls back to the raw line so a change is never silently missed.
+func (c commandCheck) changeKey(raw string) string {
+	if c.changeLevel <= 0 {
+		return raw
+	}
+	if short := TruncateVersion(ShortVersion(raw), c.changeLevel); short != "" {
+		return short
+	}
+	return raw
 }
 
 func (c commandCheck) runCommand(ctx context.Context) (execx.Result, error) {

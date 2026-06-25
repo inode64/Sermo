@@ -36,4 +36,31 @@ func TestValidateServiceMonitors(t *testing.T) {
 	if len(shape) == 0 {
 		t.Error("a non-mapping on_change should be reported")
 	}
+
+	// A valid version.on_change.level passes.
+	if got := collect(func(add func(string, ...any)) {
+		validateServiceMonitors(map[string]any{
+			"version": map[string]any{"on_change": map[string]any{"notify": []any{"ops"}, "level": "minor"}},
+		}, defined, add)
+	}); len(got) != 0 {
+		t.Errorf("level: minor should be valid, got: %v", got)
+	}
+
+	// An invalid level value -> issue.
+	if got := collect(func(add func(string, ...any)) {
+		validateServiceMonitors(map[string]any{
+			"version": map[string]any{"on_change": map[string]any{"level": "epoch"}},
+		}, defined, add)
+	}); !strings.Contains(strings.Join(got, "\n"), "level \"epoch\" is not one of major, minor, patch") {
+		t.Errorf("expected invalid-level issue, got: %v", got)
+	}
+
+	// level on the config monitor is rejected (version-only).
+	if got := collect(func(add func(string, ...any)) {
+		validateServiceMonitors(map[string]any{
+			"config": map[string]any{"on_change": map[string]any{"level": "minor"}},
+		}, defined, add)
+	}); !strings.Contains(strings.Join(got, "\n"), "level is only supported for the version monitor") {
+		t.Errorf("expected version-only-level issue, got: %v", got)
+	}
 }

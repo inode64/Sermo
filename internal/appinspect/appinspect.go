@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -395,7 +394,7 @@ func shortVersionFor(ctx context.Context, runner execx.Runner, tree map[string]a
 			}
 		}
 	}
-	return ShortVersion(rawVersion)
+	return checks.ShortVersion(rawVersion)
 }
 
 func runProbeCommand(ctx context.Context, runner execx.Runner, cmd probeCommand) (execx.Result, error) {
@@ -523,68 +522,5 @@ func namespacedReservedCommandEntry(tree map[string]any, key string) map[string]
 	return nil
 }
 
-// shortVersionRE captures the first dotted numeric version in a raw version
-// line: a `major.minor` with an optional `.patch`. The first capture group is
-// the normalized value; the surrounding match may include a non-version prefix
-// character so formats such as `go1.26.2` still parse while suffixes and extra
-// build components are left out.
-var shortVersionRE = regexp.MustCompile(`(?:^|[^0-9.])([0-9]+\.[0-9]+(?:\.[0-9]+)?)`)
-
-var shortVersionSpecificREs = []*regexp.Regexp{
-	regexp.MustCompile(`\bisc-dh(?:client|cpd)-([0-9]+\.[0-9]+\.[0-9]+-P[0-9]+)\b`),
-	regexp.MustCompile(`\bOpenSSH[_ ]([0-9]+\.[0-9]+p[0-9]+)\b`),
-	regexp.MustCompile(`\bNET-SNMP version:\s*([0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+|\.pre[0-9]*)?)\b`),
-	regexp.MustCompile(`\bNetwork UPS Tools (?:upsd|upsmon)\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\b`),
-	regexp.MustCompile(`\bxinetd\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\b`),
-}
-
-var ntpPatchVersionRE = regexp.MustCompile(`^([0-9]+\.[0-9]+\.[0-9]+p[0-9]+)(?:@.*)?$`)
-
-// shortIntegerVersionRE covers projects that publish integer-only releases in
-// version output, such as "pkexec version 126". It only runs after the dotted
-// matcher misses so a line like "systemd 260 (260.1)" still reports "260.1".
-var shortIntegerVersionRE = regexp.MustCompile(`(?i)\b(?:version|v)\s*:?\s*([0-9]+)\b`)
-
-// ShortVersion reduces a raw version line (as captured in Report.Version) to
-// just its numeric version, keeping at most three components
-// (major.minor.patch). It returns the first dotted numeric token found, then a
-// guarded integer-only version token, or "" when the line carries no
-// recognizable version.
-func ShortVersion(s string) string {
-	if v := shortNTPVersion(s); v != "" {
-		return v
-	}
-	for _, re := range shortVersionSpecificREs {
-		if match := re.FindStringSubmatch(s); len(match) > 1 {
-			return match[1]
-		}
-	}
-	if match := shortVersionRE.FindStringSubmatch(s); len(match) > 1 {
-		return match[1]
-	}
-	if match := shortIntegerVersionRE.FindStringSubmatch(s); len(match) > 1 {
-		return match[1]
-	}
-	return ""
-}
-
-func shortNTPVersion(s string) string {
-	const prefix = "ntpd "
-	if !strings.HasPrefix(s, prefix) {
-		return ""
-	}
-	token, _, _ := strings.Cut(strings.TrimSpace(strings.TrimPrefix(s, prefix)), " ")
-	if token == "" {
-		return ""
-	}
-	if match := ntpPatchVersionRE.FindStringSubmatch(token); len(match) > 1 {
-		return match[1]
-	}
-	if strings.Contains(token, "@") {
-		if match := shortVersionRE.FindStringSubmatch(token); len(match) > 1 {
-			return match[1]
-		}
-		return ""
-	}
-	return ""
-}
+// ShortVersion parsing now lives in internal/checks (checks.ShortVersion) so the
+// version-change monitor can reuse it without an import cycle.
