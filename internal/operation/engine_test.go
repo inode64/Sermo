@@ -738,6 +738,43 @@ func TestNewRuntimeDiscoveryWarningWithoutCommandMatchBlocksRestart(t *testing.T
 	}
 }
 
+func TestNewRuntimeDiscoveryWarningWithCommandMatchDoesNotBlockRestart(t *testing.T) {
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "mysqld")
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	mgr := &fakeManager{status: servicemgr.StatusActive}
+	engine := New(Config{
+		Service: "mysql-main",
+		Unit:    "mysqld",
+		Backend: "systemd",
+		Tree: map[string]any{
+			"pidfile": filepath.Join(dir, "missing.pid"),
+			"processes": map[string]any{
+				"main": map[string]any{"exe": exe, "user": "mysql"},
+			},
+		},
+		Manager: mgr,
+		Locker:  &locker,
+		Scanner: locks.NewScanner(filepath.Join(dir, "locks")),
+		Discoverer: process.Discoverer{
+			Reader:      &countingPIDReader{ids: map[int]process.Identity{}},
+			ResolveUser: func(name string) (uint32, bool) { return 1001, name == "mysql" },
+		},
+		Sleep: func(time.Duration) {},
+	})
+
+	res := engine.Restart(context.Background())
+	if res.Status != ResultOK {
+		t.Fatalf("status = %q (%s), want ok", res.Status, res.Message)
+	}
+	if !mgr.did("start mysqld") {
+		t.Fatalf("restart should proceed when an exact process selector can rediscover residuals; calls=%v", mgr.calls)
+	}
+}
+
 func TestNewInvalidStopPolicyDurationBlocksBeforeServiceAction(t *testing.T) {
 	dir := t.TempDir()
 	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
