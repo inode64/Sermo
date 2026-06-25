@@ -139,6 +139,7 @@
   /* ---- controls ------------------------------------------------------------ */
   button {
     font: inherit; font-size: .82rem; padding: .22rem .6rem; cursor: pointer;
+    min-width: 1.5rem; min-height: 1.5rem;
     border-radius: var(--radius-s); border: 1px solid var(--line-2);
     background: var(--panel); color: var(--text);
     transition: background .12s, border-color .12s;
@@ -162,6 +163,7 @@
   .panic-dialog-body svg { flex: none; color: var(--crit); }
   input[type="search"], input[type="text"], select {
     font: inherit; font-size: .85rem; padding: .26rem .55rem; color: var(--text);
+    min-height: 1.5rem;
     border-radius: var(--radius-s); border: 1px solid var(--line-2); background: var(--panel);
   }
   input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible, th.sortable:focus-visible, .skip-link:focus-visible {
