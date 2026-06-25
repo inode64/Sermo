@@ -12,11 +12,14 @@
     --text-2: #5b6573; /* AA (>=4.5:1) for muted text on panel/panel-2/bg, incl. small thead labels */
     --line: #dfe4ec;
     --line-2: #cdd4e0;
-    --ok: #1a7f37;
-    --warn: #9a6700;
-    --crit: #cf222e;
-    --info: #0969da;
-    --accent: #0969da;
+    /* Darkened just enough that the colored status text clears AA (>=4.5:1) on its
+       own 11%/12% tint (the .target-state pills and the active filter chip), not
+       only on the plain panel. Dark mode already passes and keeps its palette. */
+    --ok: #157a32;
+    --warn: #8c5d00;
+    --crit: #c41c28;
+    --info: #0860c8;
+    --accent: #0860c8;
     --radius: 12px;
     --radius-s: 7px;
     --shadow: 0 1px 2px rgb(16 24 40 / .05), 0 1px 3px rgb(16 24 40 / .06);
