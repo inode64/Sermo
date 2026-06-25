@@ -126,6 +126,18 @@ func TestVersionMatcherMatch(t *testing.T) {
 	}
 }
 
+func TestVersionOutput(t *testing.T) {
+	if got := VersionOutput("stdout", ""); got != "stdout" {
+		t.Errorf("VersionOutput(stdout, empty) = %q, want stdout", got)
+	}
+	if got := VersionOutput("", "stderr"); got != "stderr" {
+		t.Errorf("VersionOutput(empty, stderr) = %q, want stderr", got)
+	}
+	if got := VersionOutput("stdout", "stderr"); got != "stdout\nstderr" {
+		t.Errorf("VersionOutput(stdout, stderr) = %q, want newline join", got)
+	}
+}
+
 func TestCommandCheckOutputExpectations(t *testing.T) {
 	mk := func(res execx.Result, expectExit []int, stdout, stderr OutputMatcher) commandCheck {
 		return commandCheck{
