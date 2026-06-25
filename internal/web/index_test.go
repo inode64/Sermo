@@ -288,6 +288,11 @@ func TestIndexAccessibilityShell(t *testing.T) {
 	if nodeByID(doc, "search-shortcut-hint") == nil {
 		t.Fatal(`shell missing #search-shortcut-hint`)
 	}
+	for _, id := range []string{"event-before-hint", "state-before-hint"} {
+		if nodeByID(doc, id) == nil {
+			t.Errorf("shell missing %q", id)
+		}
+	}
 
 	for _, id := range []string{
 		"svc-filters", "storage-filters", "network-filters", "watch-filters", "app-filters",
@@ -411,6 +416,14 @@ func TestIndexAccessibilityShell(t *testing.T) {
 		t.Error(`shell missing #confirm-preflight-btn`)
 	}
 
+	if cancel := nodeByID(doc, "panic-cancel-btn"); cancel != nil {
+		if got, ok := attr(cancel, "aria-label"); !ok || got != "Cancel panic mode change" {
+			t.Errorf(`#panic-cancel-btn aria-label = %q, want "Cancel panic mode change"`, got)
+		}
+	} else {
+		t.Error(`shell missing #panic-cancel-btn`)
+	}
+
 	for _, spec := range []struct {
 		id    string
 		label string
@@ -419,6 +432,7 @@ func TestIndexAccessibilityShell(t *testing.T) {
 		{"activity-clear", "Clear activity log"},
 		{"state-compact-btn", "Compact persisted state"},
 		{"reload-btn", "Reload configuration"},
+		{"simple-confirm-ok", "Confirm action"},
 	} {
 		el := nodeByID(doc, spec.id)
 		if el == nil {
