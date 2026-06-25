@@ -148,6 +148,15 @@
   button:disabled { opacity: .38; cursor: not-allowed; }
   button:disabled:hover { background: var(--panel); border-color: var(--line-2); }
   .actions button { margin-right: .25rem; }
+  /* row-toggle: a real <button> that drives row/cross-ref expansion but reads as
+     inline text, so the disclosure is keyboard-operable (Enter/Space, focusable)
+     and exposes aria-expanded — without looking like a chrome button. */
+  .row-toggle {
+    display: inline; border: 0; background: none; padding: 0; margin: 0;
+    min-width: 0; min-height: 0; font: inherit; color: inherit;
+    text-align: left; cursor: pointer; border-radius: 0;
+  }
+  .row-toggle:hover { background: none; border: 0; }
   .danger-btn { border-color: color-mix(in srgb, var(--crit) 55%, transparent); background: color-mix(in srgb, var(--crit) 12%, transparent); color: var(--crit); }
   .danger-btn:hover { background: color-mix(in srgb, var(--crit) 20%, transparent); }
   @keyframes panic-pulse { 50% { opacity: .6; } }
@@ -190,8 +199,8 @@
   .truncate { display: inline-block; max-width: min(38rem, 48vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
   .process-cmd { font-family: var(--mono); font-size: .82em; }
   .check-message { max-width: min(42rem, 54vw); }
-  a.name { cursor: pointer; text-decoration: none; border-bottom: 1px dotted var(--text-2); color: inherit; }
-  a.name:hover { color: var(--accent); border-bottom-color: var(--accent); }
+  .name { cursor: pointer; text-decoration: none; border-bottom: 1px dotted var(--text-2); color: inherit; }
+  .name:hover { color: var(--accent); border-bottom-color: var(--accent); }
 
   /* ---- top bar + overview tiles --------------------------------------------
      The topbar stays slim and sticky; the overview band underneath is the

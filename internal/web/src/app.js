@@ -1247,7 +1247,7 @@ function serviceRowParts(s) {
   const key = "svc:" + s.name;
   const open = expanded.has(key);
   const chev = tpl`<span class="exp">${open ? '▾' : '▸'}</span>`;
-  const name = tpl`<a class="name" data-service-expand="${s.name}">${label}</a>`;
+  const name = tpl`<button type="button" class="name row-toggle" data-service-expand="${s.name}" aria-expanded="${open}">${label}</button>`;
   const rowClass = state === "failed" ? "row-failing" : (state === "warning" ? "row-warning" : "");
   const main = tpl`<tr id="svc-row-${s.name}" class="clickable ${rowClass}" data-exp-key="${key}">
     <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
@@ -2649,7 +2649,7 @@ function watchRowHTML(w) {
     ? tpl`<span class="muted">disabled in config</span>`
     : tpl`${expandBtn} ${monitorBtn}`;
   const row = tpl`<tr id="wat-row-${w.name}" class="clickable" data-exp-key="${key}">
-    <td>${chev}${displayName(w)}</td>
+    <td>${chev}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}">${displayName(w)}</button></td>
     <td>${w.check_type || ""}</td>
     <td class="watch-summary">${summary}</td>
     <td>${w.interval || ""}</td>
@@ -2881,7 +2881,7 @@ function renderApps(apps) {
     const chev = tpl`<span class="exp">${open ? '▾' : '▸'}</span>`;
     const ver = a.version_short || a.version || "—";
     const row = tpl`<tr id="app-row-${a.name}" class="clickable ${rowClass}" data-exp-key="${key}">
-      <td>${chev}${label}</td>
+      <td>${chev}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}">${label}</button></td>
       <td>${categoryBadge(category)}</td>
       ${appStatusCell(a)}
       <td>${ver}</td>
@@ -3146,7 +3146,7 @@ function lockReleaseButton(l) {
 function lockServiceLink(l) {
   const svc = l.service || "";
   if (!svc) return tpl`<span class="muted">—</span>`;
-  return tpl`<a class="name" data-service-open="${svc}">${svc}</a>`;
+  return tpl`<button type="button" class="name row-toggle" data-service-open="${svc}">${svc}</button>`;
 }
 
 async function releaseLock(service, name) {
@@ -4377,6 +4377,12 @@ function initDelegatedHandlers() {
     const group = closestFrom(e, "[data-group-panel][data-group-name]");
     if (group) {
       toggleCategoryGroup(group.dataset.groupPanel || "", group.dataset.groupName || "");
+      return;
+    }
+
+    const expToggle = closestFrom(e, "[data-exp-toggle]");
+    if (expToggle) {
+      toggleExpand(expToggle.dataset.expToggle || "");
       return;
     }
 
