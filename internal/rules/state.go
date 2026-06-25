@@ -83,10 +83,7 @@ func (p Policy) Report(state *RemediationState, now time.Time) RemediationReport
 // effectiveCooldown is the gate between actions: the configured cooldown, or the
 // grown backoff when it is longer.
 func (p Policy) effectiveCooldown(state *RemediationState) time.Duration {
-	if state.CurrentBackoff > p.Cooldown {
-		return state.CurrentBackoff
-	}
-	return p.Cooldown
+	return max(state.CurrentBackoff, p.Cooldown)
 }
 
 func (p Policy) rateLimitUntil(state *RemediationState, now time.Time) time.Time {
@@ -179,8 +176,8 @@ func (s *RemediationState) growBackoff(b *Backoff) {
 		}
 		s.CurrentBackoff = time.Duration(float64(s.CurrentBackoff) * factor)
 	}
-	if b.Max > 0 && s.CurrentBackoff > b.Max {
-		s.CurrentBackoff = b.Max
+	if b.Max > 0 {
+		s.CurrentBackoff = min(s.CurrentBackoff, b.Max)
 	}
 }
 

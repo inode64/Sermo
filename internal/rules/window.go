@@ -80,9 +80,7 @@ func (s *WindowState) FiresAt(r Rule, conditionTrue bool, at time.Time) bool {
 			return countTimedTrue(s.timedHistory) >= minMatches
 		}
 		s.history = append(s.history, conditionTrue)
-		if len(s.history) > cycles {
-			s.history = s.history[len(s.history)-cycles:]
-		}
+		s.history = s.history[max(len(s.history)-cycles, 0):]
 		return countTrue(s.history) >= minMatches
 	}
 	_, duration := r.forWindow()
@@ -155,10 +153,7 @@ func (s *WindowState) ProgressAt(r Rule, at time.Time) string {
 	}
 	cycles, duration := r.forWindow()
 	if duration > 0 {
-		elapsed := durationElapsed(trueSince, at)
-		if elapsed > duration {
-			elapsed = duration
-		}
+		elapsed := min(durationElapsed(trueSince, at), duration)
 		return fmt.Sprintf("%s/%s", formatWindowDuration(elapsed), formatWindowDuration(duration))
 	}
 	return fmt.Sprintf("%d/%d", consecutive, cycles)
@@ -187,9 +182,7 @@ func (s *WindowState) Snapshot() WindowStateSnapshot {
 
 // WindowStateFromSnapshot restores a window state snapshot.
 func WindowStateFromSnapshot(snapshot WindowStateSnapshot) *WindowState {
-	if snapshot.Consecutive < 0 {
-		snapshot.Consecutive = 0
-	}
+	snapshot.Consecutive = max(snapshot.Consecutive, 0)
 	return &WindowState{
 		consecutive:  snapshot.Consecutive,
 		history:      slices.Clone(snapshot.History),
