@@ -207,3 +207,17 @@ func TestBuildPortsCheckMatchValidation(t *testing.T) {
 		t.Fatal("match \"most\" must be rejected")
 	}
 }
+
+func TestBuildFileExistsCheckPathRequired(t *testing.T) {
+	// A path is required; when present it is carried onto the check.
+	c, w := buildFileExistsCheck(base{}, map[string]any{"path": "/etc/hostname"})
+	if w != "" {
+		t.Fatalf("unexpected warning: %q", w)
+	}
+	if got := c.(fileExistsCheck).path; got != "/etc/hostname" {
+		t.Fatalf("path = %q, want /etc/hostname", got)
+	}
+	if _, w := buildFileExistsCheck(base{}, map[string]any{}); w == "" {
+		t.Fatal("missing path must warn")
+	}
+}
