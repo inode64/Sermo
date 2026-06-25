@@ -115,6 +115,7 @@ func TestVersionMatcherMatch(t *testing.T) {
 		{"all excludes checked", VersionMatcher{Excludes: []string{"Oracle", "MariaDB"}}, "mysqld Ver 11.8.5-MariaDB", false},
 		{"regex passes", VersionMatcher{Regex: []string{`Ver 8\.`}}, "mysqld Ver 8.0.36", true},
 		{"regex fails", VersionMatcher{Regex: []string{`Ver 8\.`}}, "mysqld Ver 11.8.5-MariaDB", false},
+		{"all regexes checked", VersionMatcher{Regex: []string{`mysqld`, `MariaDB`}}, "mysqld Ver 8.0.36", false},
 		{"empty output fails active matcher", VersionMatcher{Excludes: []string{"MariaDB"}}, "", false},
 	}
 	for _, c := range cases {
