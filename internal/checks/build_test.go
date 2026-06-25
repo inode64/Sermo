@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -308,5 +309,16 @@ func TestBuildCertCheckServerNameDefaultsToHost(t *testing.T) {
 	c2, _ := buildCertCheck(base{}, map[string]any{"host": "example.com", "server_name": "sni.example.com"}, Deps{})
 	if got := c2.(*certCheck).serverName; got != "sni.example.com" {
 		t.Fatalf("explicit serverName = %q, want sni.example.com", got)
+	}
+}
+
+func TestBuildMetricCheckNameRequired(t *testing.T) {
+	// Missing name is rejected with a name-specific warning...
+	if _, w := buildMetricCheck(base{}, map[string]any{"op": ">"}, Deps{}); !strings.Contains(w, "requires a name") {
+		t.Fatalf("missing name warning = %q, want it to mention requiring a name", w)
+	}
+	// ...and a present name does not trigger that warning.
+	if _, w := buildMetricCheck(base{}, map[string]any{"name": "cpu", "op": ">"}, Deps{}); strings.Contains(w, "requires a name") {
+		t.Fatalf("present name must not warn about a missing name, got %q", w)
 	}
 }
