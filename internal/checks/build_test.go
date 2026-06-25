@@ -340,3 +340,12 @@ func TestBuildHdparmCheckDeviceRequired(t *testing.T) {
 		t.Fatalf("present device must not warn about a missing device, got %q", w)
 	}
 }
+
+func TestBuildSmartCheckDeviceRequired(t *testing.T) {
+	if _, w := buildSmartCheck(base{}, map[string]any{}, nil); !strings.Contains(w, "requires a device") {
+		t.Fatalf("missing device warning = %q, want it to mention requiring a device", w)
+	}
+	if _, w := buildSmartCheck(base{}, map[string]any{"device": "/dev/sda"}, nil); strings.Contains(w, "requires a device") {
+		t.Fatalf("present device must not warn about a missing device, got %q", w)
+	}
+}
