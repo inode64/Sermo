@@ -194,3 +194,16 @@ func TestBuildPortsCheckMatchDefault(t *testing.T) {
 		t.Fatalf("default match = %q, want all", got)
 	}
 }
+
+func TestBuildPortsCheckMatchValidation(t *testing.T) {
+	// Every supported match value is accepted (no warning)...
+	for _, m := range []string{"all", "any", "none"} {
+		if _, w := buildPortsCheck(base{}, map[string]any{"ports": "80", "match": m}); w != "" {
+			t.Fatalf("match %q rejected: %q", m, w)
+		}
+	}
+	// ...and an unsupported one is rejected.
+	if _, w := buildPortsCheck(base{}, map[string]any{"ports": "80", "match": "most"}); w == "" {
+		t.Fatal("match \"most\" must be rejected")
+	}
+}
