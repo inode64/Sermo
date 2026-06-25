@@ -474,7 +474,8 @@ function renderGlobalEvents() {
 }
 
 function eventRows(events, withService, opts = {}) {
-  if (!events || !events.length) return tpl`<tr><td class="muted">No events yet.</td></tr>`;
+  const cols = withService ? 4 : 3;
+  if (!events || !events.length) return tpl`<tr><td colspan="${cols}" class="muted">No events yet.</td></tr>`;
   const prefix = opts.prefix || "event";
   return events.map((e, i) => {
     const who = e.service || e.watch || e.app || "";
@@ -1945,7 +1946,8 @@ function renderServiceDetail(d) {
     ? nothing
     : procs.length
     ? tpl`<table style="font-size:.85rem;">
-        <thead><tr><th>PID</th><th>CMD</th><th>User</th><th>Role</th><th>CPU</th><th title="CPU used by this process, normalized to one core">Core peak</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
+        <caption class="visually-hidden">Service processes</caption>
+        <thead><tr><th scope="col">PID</th><th scope="col">CMD</th><th scope="col">User</th><th scope="col">Role</th><th scope="col">CPU</th><th scope="col" title="CPU used by this process, normalized to one core">Core peak</th><th scope="col">Mem</th><th scope="col">IO r/w</th><th scope="col">FDs</th><th scope="col">Threads</th></tr></thead>
         <tbody>${procRows.map((row) => { const p = row.p; return tpl`<tr>
           <td>${p.pid}</td>
           <td>${procTreeLabel(row)}</td>
@@ -2031,17 +2033,24 @@ function renderServiceDetail(d) {
     <h2>Processes</h2>
     ${procSummary}${totals}${procWarns}${procTable}
     <h2>Checks</h2>
-    <table><thead><tr><th>Check</th><th>Type</th><th>State</th><th>SLA</th><th>Message</th></tr></thead>
+    <table>
+      <caption class="visually-hidden">Service checks</caption>
+      <thead><tr><th scope="col">Check</th><th scope="col">Type</th><th scope="col">State</th><th scope="col">SLA</th><th scope="col">Message</th></tr></thead>
       <tbody>${checks}</tbody></table>
     <h2>Named locks</h2>
-    <table><thead><tr><th>Name</th><th>State</th><th>TTL</th><th>Owner</th><th>Created</th><th>Blocks</th><th>Reason</th><th></th></tr></thead>
+    <table>
+      <caption class="visually-hidden">Service named locks</caption>
+      <thead><tr><th scope="col">Name</th><th scope="col">State</th><th scope="col">TTL</th><th scope="col">Owner</th><th scope="col">Created</th><th scope="col">Blocks</th><th scope="col">Reason</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
       <tbody>${lockRows}</tbody></table>${lockWarns}
     <h2>Rules</h2>
     ${renderRules(d.rules)}
     <h2>Preflight ${me.can_act ? tpl`<button data-preflight-service="${d.name}">run</button>` : tpl`<span class="muted">admin only</span>`}</h2>
     <div id="${detailDomId(d.name, "preflight")}" class="muted">not run yet</div>
     <h2>Recent events</h2>
-    <table class="events"><tbody id="${detailDomId(d.name, "events")}"><tr><td class="muted">loading…</td></tr></tbody></table>
+    <table class="events">
+      <caption class="visually-hidden">Recent service events</caption>
+      <thead><tr><th scope="col">Time</th><th scope="col">Kind</th><th scope="col">Message</th></tr></thead>
+      <tbody id="${detailDomId(d.name, "events")}"><tr><td colspan="3" class="muted">loading…</td></tr></tbody></table>
   </div>`;
 }
 
@@ -2532,7 +2541,8 @@ function renderConditionRows(conditions) {
   </tr>`);
   return tpl`<div class="muted" style="margin:.15rem 0 .1rem">Check predicates</div>
     <table style="width:auto; font-size:.85rem; margin-bottom:.6rem;">
-      <thead><tr><th>Field</th><th>Op</th><th>Value</th></tr></thead>
+      <caption class="visually-hidden">Check predicates</caption>
+      <thead><tr><th scope="col">Field</th><th scope="col">Op</th><th scope="col">Value</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
@@ -2941,7 +2951,10 @@ function renderAppExpansion(a) {
     <div class="app-sla"><span class="muted">SLA</span><br>${sla}</div>
   </div>
   <h3 style="font-size:.95rem; margin:.8rem 0 .3rem">Recent events</h3>
-  <table class="events"><tbody id="${eventsId}"><tr><td class="muted">loading…</td></tr></tbody></table>`;
+  <table class="events">
+    <caption class="visually-hidden">Recent application events</caption>
+    <thead><tr><th scope="col">Time</th><th scope="col">Kind</th><th scope="col">Message</th></tr></thead>
+    <tbody id="${eventsId}"><tr><td colspan="3" class="muted">loading…</td></tr></tbody></table>`;
 }
 
 // loadAppEvents fills an expanded application's "Recent events" table with its
@@ -2954,7 +2967,7 @@ async function loadAppEvents(name) {
     if (!res.ok) throw new Error("HTTP " + res.status);
     litRender(eventRows(await res.json(), false), target);
   } catch (e) {
-    litRender(tpl`<tr><td class="muted">Failed to load events: ${e.message}</td></tr>`, target);
+    litRender(tpl`<tr><td colspan="3" class="muted">Failed to load events: ${e.message}</td></tr>`, target);
   }
 }
 
@@ -2993,7 +3006,10 @@ function renderWatchExpansion(w, events) {
       <td>${detail ? tpl`<span class="muted">${detail}</span> ` : nothing}${e.message || ""}</td>
     </tr>`;
   });
-  return tpl`${cfg}${live}${conditions}<table class="events" style="width:auto; font-size:.85rem;"><tbody>${rows}</tbody></table>`;
+  return tpl`${cfg}${live}${conditions}<table class="events" style="width:auto; font-size:.85rem;">
+    <caption class="visually-hidden">Recent watch activity</caption>
+    <thead><tr><th scope="col">Time</th><th scope="col">Kind</th><th scope="col">Message</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
 }
 
 function mountStateClass(state, mounted) {
@@ -3740,7 +3756,9 @@ async function runConfirmPreflight() {
 
 function preflightRows(checks) {
   if (!checks || !checks.length) return tpl`<span class="muted">No preflight checks configured.</span>`;
-  return tpl`<table><thead><tr><th>Check</th><th>State</th><th>Message</th></tr></thead><tbody>${
+  return tpl`<table>
+    <caption class="visually-hidden">Preflight checks</caption>
+    <thead><tr><th scope="col">Check</th><th scope="col">State</th><th scope="col">Message</th></tr></thead><tbody>${
     checks.map((c) => {
       const state = c.ok
         ? (c.optional ? tpl`<span class="ok">ok</span> <span class="muted">(optional)</span>` : tpl`<span class="ok">ok</span>`)
@@ -3778,7 +3796,7 @@ async function loadServiceEvents(name) {
     if (!res.ok) throw new Error("HTTP " + res.status);
     litRender(eventRows(await res.json(), false), target);
   } catch (e) {
-    litRender(tpl`<tr><td class="muted">Failed to load events: ${e.message}</td></tr>`, target);
+    litRender(tpl`<tr><td colspan="3" class="muted">Failed to load events: ${e.message}</td></tr>`, target);
   }
 }
 
@@ -4021,8 +4039,10 @@ function renderRules(rules) {
       <td>${cond}</td><td class="muted">${r.window || ""}</td>
       <td>${r.progress || ""}</td><td>${ruleState(r)}</td></tr>`;
   });
-  return tpl`<table><thead><tr>
-    <th>Name</th><th>Type</th><th>Action</th><th>Condition</th><th>Window</th><th>Progress</th><th>State</th>
+  return tpl`<table>
+    <caption class="visually-hidden">Remediation rules</caption>
+    <thead><tr>
+    <th scope="col">Name</th><th scope="col">Type</th><th scope="col">Action</th><th scope="col">Condition</th><th scope="col">Window</th><th scope="col">Progress</th><th scope="col">State</th>
   </tr></thead><tbody>${rows}</tbody></table>`;
 }
 
