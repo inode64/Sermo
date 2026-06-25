@@ -476,6 +476,7 @@
   .confirm-cascade-wrap { font-size: .85rem; margin: .35rem 0 .15rem; }
   .confirm-cascade-wrap.is-hidden { display: none; }
   .admin-hidden { display: none; }
+  .live-hidden { display: none; }
   .modal-head, .modal-foot { padding: .85rem 1rem; border-bottom: 1px solid var(--line); }
   .modal-foot { border-top: 1px solid var(--line); border-bottom: 0; display: flex; justify-content: flex-end; gap: .5rem; flex-wrap: wrap; }
   .modal-body { padding: 1rem; }
