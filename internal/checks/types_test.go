@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -57,5 +58,19 @@ func TestBoundTail(t *testing.T) {
 	exact := strings.Repeat("a", boundedOutputMaxBytes)
 	if strings.HasPrefix(boundTail(exact), "… (truncated)") {
 		t.Errorf("a %d-byte single line must not be truncated", boundedOutputMaxBytes)
+	}
+}
+
+func TestParseLdSoConf(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "ld.so.conf")
+	writeFile(t, path, "/opt/lib\n# a comment\n; also a comment\n\ninclude /etc/foo.conf\n/usr/local/lib\n")
+	got := parseLdSoConf(path)
+	if len(got) != 2 || got[0] != "/opt/lib" || got[1] != "/usr/local/lib" {
+		t.Fatalf("parseLdSoConf = %v, want [/opt/lib /usr/local/lib]", got)
+	}
+	// An unreadable path yields no directories rather than erroring.
+	if got := parseLdSoConf(filepath.Join(dir, "missing")); got != nil {
+		t.Fatalf("missing file = %v, want nil", got)
 	}
 }
