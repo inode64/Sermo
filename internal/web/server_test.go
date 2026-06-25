@@ -901,3 +901,18 @@ func TestParseBeforeQueryDurationIsPast(t *testing.T) {
 		t.Fatalf("parseBeforeQuery(1h) is %v ago, want ~1h", d)
 	}
 }
+
+func TestEventLimitParsing(t *testing.T) {
+	mk := func(q string) *http.Request { return httptest.NewRequest("GET", "/api/events?limit="+q, nil) }
+	if got := eventLimit(mk("5")); got != 5 {
+		t.Errorf("limit=5 -> %d, want 5", got)
+	}
+	// A non-positive limit is ignored (n > 0 guard), keeping the default.
+	if got := eventLimit(mk("0")); got != defaultEventLimit {
+		t.Errorf("limit=0 -> %d, want default %d", got, defaultEventLimit)
+	}
+	// Over the cap is clamped.
+	if got := eventLimit(mk("100000")); got != maxEventLimit {
+		t.Errorf("limit=100000 -> %d, want cap %d", got, maxEventLimit)
+	}
+}
