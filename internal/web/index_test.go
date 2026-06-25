@@ -221,6 +221,8 @@ func TestIndexAccessibilityBundle(t *testing.T) {
 		"preflight not available for this action",
 		"service is disabled in configuration",
 		"Confirm:",
+		"Start service ",
+		"Monitor watch ",
 	} {
 		if !strings.Contains(script, needle) {
 			t.Errorf("bundled script missing a11y marker %q", needle)
