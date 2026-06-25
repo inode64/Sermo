@@ -38,3 +38,22 @@ func TestShortMatchesResolvedVersion(t *testing.T) {
 		t.Errorf("Short() = %q, want %q", got, want)
 	}
 }
+
+func TestStringMatchesResolvedBanner(t *testing.T) {
+	version, revision, date := resolve()
+	line := "sermo " + version
+	var meta []string
+	if revision != "" {
+		meta = append(meta, revision)
+	}
+	if date != "" {
+		meta = append(meta, date)
+	}
+	if len(meta) > 0 {
+		line += " (" + strings.Join(meta, ", ") + ")"
+	}
+	want := line + "\n  " + runtime.Version() + ", " + runtime.GOOS + "/" + runtime.GOARCH
+	if got := String(); got != want {
+		t.Errorf("String() = %q, want %q", got, want)
+	}
+}
