@@ -28,9 +28,7 @@ async function loadMe() {
   else { $("#me").innerHTML = 'read-only &middot; <a href="login">log in</a>'; }
   // Show admin-only controls (reload config, clear event log).
   const reloadBtn = $("#reload-btn");
-  if (reloadBtn) {
-    reloadBtn.style.display = (me.can_act ? "inline-block" : "none");
-  }
+  if (reloadBtn) reloadBtn.classList.toggle("admin-hidden", !me.can_act);
   updateEventAdminControls();
   updateActivityAdminControls();
   updateStateCompactControls();
@@ -223,21 +221,21 @@ function updateEventAdminControls() {
   const show = !!me.can_act;
   const btn = $("#event-clear");
   const before = $("#event-before");
-  if (btn) btn.style.display = show ? "inline-block" : "none";
-  if (before) before.style.display = show ? "inline-block" : "none";
+  if (btn) btn.classList.toggle("admin-hidden", !show);
+  if (before) before.classList.toggle("admin-hidden", !show);
 }
 
 function updateActivityAdminControls() {
   const btn = $("#activity-clear");
-  if (btn) btn.style.display = (me.can_act ? "inline-block" : "none");
+  if (btn) btn.classList.toggle("admin-hidden", !me.can_act);
 }
 
 function updateStateCompactControls() {
   const show = !!me.can_act;
   const btn = $("#state-compact-btn");
   const before = $("#state-before");
-  if (btn) btn.style.display = show ? "inline-block" : "none";
-  if (before) before.style.display = show ? "inline-block" : "none";
+  if (btn) btn.classList.toggle("admin-hidden", !show);
+  if (before) before.classList.toggle("admin-hidden", !show);
 }
 
 // ---- Panic mode ----
@@ -247,7 +245,7 @@ let panicResolve = null;
 // updatePanicControls shows the footer button only to operators who can act.
 function updatePanicControls() {
   const btn = $("#panic-btn");
-  if (btn) btn.style.display = me.can_act ? "inline-block" : "none";
+  if (btn) btn.classList.toggle("admin-hidden", !me.can_act);
 }
 
 // updatePanicView reflects the current panic state in the button, banner and
