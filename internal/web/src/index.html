@@ -13,7 +13,7 @@
 <a href="#main-content" class="skip-link">Skip to main content</a>
 <div id="topbar" role="banner">
 <div class="topbar-row">
-  <h1><span class="brand-dot" id="brand-dot"></span>SERMO · Service Remediation Monitor<span id="me" class="muted"></span></h1>
+  <h1><span class="brand-dot" id="brand-dot" aria-hidden="true"></span>SERMO · Service Remediation Monitor<span id="me" class="muted"></span></h1>
   <div class="topbar-tools">
     <label>Auto-refresh
       <select id="refresh-select">
@@ -33,11 +33,11 @@
 <div id="statusbar" role="status" aria-live="polite" aria-atomic="true"></div>
 </div><!-- /topbar -->
 <main id="main-content" tabindex="-1">
-<div id="panic-banner" role="alert">
+<div id="panic-banner" role="alert" aria-live="assertive" aria-atomic="true">
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
   <span>PANIC MODE — hooks, alerts and automatic remediation are suspended.</span>
 </div>
-<div id="overview"></div>
+<div id="overview" role="region" aria-label="Overview"></div>
 <div id="err" role="status" aria-live="polite" aria-atomic="true"></div>
 <div id="attention" role="alert" aria-live="assertive" aria-atomic="true"></div>
 <div id="op-live" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -387,7 +387,7 @@
   </div>
 </dialog>
 
-<footer id="app-footer">
+<footer id="app-footer" role="contentinfo">
   <div class="footer-actions">
     <button id="reload-btn" style="display:none">reload config</button>
     <button id="state-compact-btn" class="danger-btn" style="display:none">compact state</button>
