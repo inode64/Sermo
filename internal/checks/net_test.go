@@ -171,3 +171,11 @@ func TestSampleNetFromSysfsZeroSpeedKnown(t *testing.T) {
 		t.Fatalf("speed 0 must be known, got %+v", sample)
 	}
 }
+
+func TestSampleNetFromSysfsMissingDirErrors(t *testing.T) {
+	// A nonexistent interface whose sysfs dir is also missing must surface the
+	// lookup error, not fabricate an empty "down" sample.
+	if _, err := sampleNetFromSysfs("sermo-nope0", t.TempDir()); err == nil {
+		t.Fatal("missing interface dir must return an error")
+	}
+}
