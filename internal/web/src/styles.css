@@ -40,6 +40,30 @@
     }
   }
   * { box-sizing: border-box; }
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .skip-link {
+    position: fixed;
+    top: -4rem;
+    left: 1rem;
+    z-index: 20;
+    padding: .45rem .75rem;
+    border: 1px solid var(--line-2);
+    border-radius: var(--radius-s);
+    background: var(--panel);
+    color: var(--text);
+    box-shadow: var(--shadow);
+  }
+  .skip-link:focus { top: .75rem; }
   body {
     font: 15px/1.5 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
     margin: 0 auto; padding: 0 1.4rem 4rem; max-width: 1720px;
@@ -140,7 +164,10 @@
     font: inherit; font-size: .85rem; padding: .26rem .55rem; color: var(--text);
     border-radius: var(--radius-s); border: 1px solid var(--line-2); background: var(--panel);
   }
-  input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
+  input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible, th.sortable:focus-visible, .skip-link:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+    outline-offset: 1px;
+  }
   #svc-controls input, #storage-controls input, #watch-controls input, #network-controls input, #app-controls input { min-width: 13rem; }
   #svc-filters button, #storage-filters button, #watch-filters button, #network-filters button, #app-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
   #svc-filters button:hover, #storage-filters button:hover, #watch-filters button:hover, #network-filters button:hover, #app-filters button:hover { background: var(--panel-2); color: var(--text); }
