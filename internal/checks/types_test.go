@@ -89,3 +89,18 @@ func TestLockfileCheckFailureVsMissing(t *testing.T) {
 		t.Fatalf("missing path: %+v", res2)
 	}
 }
+
+func TestSocketCheckFailureVsMissing(t *testing.T) {
+	dir := t.TempDir()
+	// A regular file where a socket is expected is a failure, distinct from missing.
+	regular := filepath.Join(dir, "not.sock")
+	writeFile(t, regular, "x")
+	res := socketCheck{base: base{name: "s"}, paths: []string{regular}}.Run(context.Background())
+	if res.OK || !strings.Contains(res.Message, "is not a socket") {
+		t.Fatalf("regular file: %+v", res)
+	}
+	res2 := socketCheck{base: base{name: "s"}, paths: []string{filepath.Join(dir, "missing")}}.Run(context.Background())
+	if res2.OK || !strings.Contains(res2.Message, "does not exist") {
+		t.Fatalf("missing path: %+v", res2)
+	}
+}
