@@ -903,7 +903,7 @@ func TestParseBeforeQueryDurationIsPast(t *testing.T) {
 }
 
 func TestEventLimitParsing(t *testing.T) {
-	mk := func(q string) *http.Request { return httptest.NewRequest("GET", "/api/events?limit="+q, nil) }
+	mk := func(q string) *http.Request { return httptest.NewRequest(http.MethodGet, "/api/events?limit="+q, nil) }
 	if got := eventLimit(mk("5")); got != 5 {
 		t.Errorf("limit=5 -> %d, want 5", got)
 	}
@@ -918,7 +918,7 @@ func TestEventLimitParsing(t *testing.T) {
 }
 
 func TestSeriesSinceParsing(t *testing.T) {
-	mk := func(q string) *http.Request { return httptest.NewRequest("GET", "/api/series?since="+q, nil) }
+	mk := func(q string) *http.Request { return httptest.NewRequest(http.MethodGet, "/api/series?since="+q, nil) }
 	if got := seriesSince(mk("2h")); got != 2*time.Hour {
 		t.Errorf("since=2h -> %v, want 2h", got)
 	}
