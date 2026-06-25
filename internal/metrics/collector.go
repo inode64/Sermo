@@ -146,7 +146,7 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 
 	mem := Reading{Absolute: float64(rss), HasAbsolute: true, Ready: measured(present > 0)}
 	totals := readerMemoryTotals(c.Reader, hasSwap)
-	if totals.memoryOK && totals.memoryTotal > 0 {
+	if totals.memoryOK {
 		mem.Percent = float64(rss) / float64(totals.memoryTotal) * 100
 		mem.HasPercent = true
 	}
@@ -288,11 +288,9 @@ func (c *Collector) SampleSystem() Snapshot {
 	totals := readerMemoryTotals(c.Reader, true)
 	if totals.memoryOK {
 		r := Reading{Absolute: float64(totals.memoryUsed), HasAbsolute: true, Ready: true}
-		if totals.memoryTotal > 0 {
-			r.Percent = float64(totals.memoryUsed) / float64(totals.memoryTotal) * 100
-			r.HasPercent = true
-			r.Total, r.HasTotal = float64(totals.memoryTotal), true
-		}
+		r.Percent = float64(totals.memoryUsed) / float64(totals.memoryTotal) * 100
+		r.HasPercent = true
+		r.Total, r.HasTotal = float64(totals.memoryTotal), true
 		snap["total_memory"] = r
 	}
 
