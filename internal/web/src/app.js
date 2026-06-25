@@ -1223,6 +1223,58 @@ function toggleAllSvcGroups() {
   saveUIState();
 }
 
+function serviceActionDisabled(s, action, busy) {
+  const st = (s.status || "unknown").toLowerCase();
+  const paused = st === "paused";
+  const stopped = st === "inactive" || st === "failed";
+  switch (action) {
+    case "start":
+    case "start-only": return !!(busy || st === "active" || paused);
+    case "stop": return !!(busy || stopped);
+    case "restart": return !!busy;
+    case "resume": return !!(busy || !paused);
+    case "reload": return !!(busy || st !== "active");
+    case "monitor":
+    case "unmonitor": return !!busy;
+    default: return false;
+  }
+}
+
+function serviceActionDisabledReason(s, action, busy) {
+  const st = (s.status || "unknown").toLowerCase();
+  if (busy) return "operation in progress";
+  const paused = st === "paused";
+  const stopped = st === "inactive" || st === "failed";
+  switch (action) {
+    case "start":
+    case "start-only":
+      if (paused) return "service is paused";
+      if (st === "active") return "service is already running";
+      return "";
+    case "stop": return stopped ? "service is already stopped" : "";
+    case "resume": return !paused ? "service is not paused" : "";
+    case "reload": return st !== "active" ? "service is not running" : "";
+    default: return "";
+  }
+}
+
+function svcActionHintId(s, action) {
+  return `svc-${s.name}-${action}-hint`;
+}
+
+function svcActionHint(s, action, busy) {
+  const disabled = serviceActionDisabled(s, action, busy);
+  const reason = serviceActionDisabledReason(s, action, busy);
+  if (!disabled || !reason) return nothing;
+  return tpl`<span id="${svcActionHintId(s, action)}" class="visually-hidden">${reason}</span>`;
+}
+
+function svcActionDescribedBy(s, action, busy) {
+  const disabled = serviceActionDisabled(s, action, busy);
+  const reason = serviceActionDisabledReason(s, action, busy);
+  return disabled && reason ? svcActionHintId(s, action) : nothing;
+}
+
 // serviceRowParts builds one service's main and optional expansion <tr> HTML.
 // Shared by the full tbody rebuild and the large-fleet in-place patch path.
 function serviceRowParts(s) {
@@ -1238,19 +1290,22 @@ function serviceRowParts(s) {
   if (!s.enabled) {
     actions = tpl`<span class="muted">disabled in config</span>`;
   } else {
-    const stopped = st === "inactive" || st === "failed";
-    const paused = st === "paused";
     const alsoApply = (s.also_apply || []).length;
     actions = me.can_act ? tpl`
-        <button ?disabled=${!!(busy || st === "active" || paused)} data-service="${s.name}" data-service-action="start" title="${alsoApply ? `also applies to: ${s.also_apply.join(", ")}` : nothing}">start</button>
-        ${alsoApply ? tpl`<button ?disabled=${!!(busy || st === "active" || paused)} data-service="${s.name}" data-service-action="start" data-no-cascade="1" title="start only ${s.name}">start only</button>` : nothing}
-        <button ?disabled=${!!(busy || stopped)} data-service="${s.name}" data-service-action="stop">stop</button>
-        <button ?disabled=${!!busy} data-service="${s.name}" data-service-action="restart">restart</button>
-        <button ?disabled=${!!(busy || !paused)} data-service="${s.name}" data-service-action="resume">resume</button>
-        <button ?disabled=${!!(busy || st !== "active")} data-service="${s.name}" data-service-action="reload">reload</button>
+        ${svcActionHint(s, "start", busy)}
+        <button ?disabled=${serviceActionDisabled(s, "start", busy)} data-service="${s.name}" data-service-action="start" title="${alsoApply ? `also applies to: ${s.also_apply.join(", ")}` : nothing}" aria-describedby="${svcActionDescribedBy(s, "start", busy)}">start</button>
+        ${alsoApply ? tpl`${svcActionHint(s, "start-only", busy)}<button ?disabled=${serviceActionDisabled(s, "start-only", busy)} data-service="${s.name}" data-service-action="start" data-no-cascade="1" title="start only ${s.name}" aria-describedby="${svcActionDescribedBy(s, "start-only", busy)}">start only</button>` : nothing}
+        ${svcActionHint(s, "stop", busy)}
+        <button ?disabled=${serviceActionDisabled(s, "stop", busy)} data-service="${s.name}" data-service-action="stop" aria-describedby="${svcActionDescribedBy(s, "stop", busy)}">stop</button>
+        ${svcActionHint(s, "restart", busy)}
+        <button ?disabled=${serviceActionDisabled(s, "restart", busy)} data-service="${s.name}" data-service-action="restart" aria-describedby="${svcActionDescribedBy(s, "restart", busy)}">restart</button>
+        ${svcActionHint(s, "resume", busy)}
+        <button ?disabled=${serviceActionDisabled(s, "resume", busy)} data-service="${s.name}" data-service-action="resume" aria-describedby="${svcActionDescribedBy(s, "resume", busy)}">resume</button>
+        ${svcActionHint(s, "reload", busy)}
+        <button ?disabled=${serviceActionDisabled(s, "reload", busy)} data-service="${s.name}" data-service-action="reload" aria-describedby="${svcActionDescribedBy(s, "reload", busy)}">reload</button>
         ${s.monitored
-          ? tpl`<button ?disabled=${!!busy} data-service="${s.name}" data-service-action="unmonitor">unmonitor</button>`
-          : tpl`<button ?disabled=${!!busy} data-service="${s.name}" data-service-action="monitor">monitor</button>`}`
+          ? tpl`${svcActionHint(s, "unmonitor", busy)}<button ?disabled=${serviceActionDisabled(s, "unmonitor", busy)} data-service="${s.name}" data-service-action="unmonitor" aria-describedby="${svcActionDescribedBy(s, "unmonitor", busy)}">unmonitor</button>`
+          : tpl`${svcActionHint(s, "monitor", busy)}<button ?disabled=${serviceActionDisabled(s, "monitor", busy)} data-service="${s.name}" data-service-action="monitor" aria-describedby="${svcActionDescribedBy(s, "monitor", busy)}">monitor</button>`}`
       : tpl`<span class="muted">read-only</span>`;
   }
   const label = displayName(s);
