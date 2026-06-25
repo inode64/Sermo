@@ -26,7 +26,7 @@
       </select>
     </label>
     <span id="last-refresh" class="muted"></span>
-    <button id="refresh-now" title="Refresh now">&#x27F3;</button>
+    <button id="refresh-now" title="Refresh now" aria-label="Refresh now">&#x27F3;</button>
   </div>
 </div>
 <div id="system-status" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -50,13 +50,13 @@
       <option value="all">all storage types</option>
     </select>
     <span id="storage-filters">
-      <button data-wf="all" class="f-active">all</button>
-      <button data-wf="disabled">disabled</button>
-      <button data-wf="ok">ok</button>
-      <button data-wf="monitorized">monitorized</button>
-      <button data-wf="unmonitorized">unmonitorized</button>
-      <button data-wf="starting">starting</button>
-      <button data-wf="failed">failed</button>
+      <button data-wf="all" class="f-active" aria-pressed="true">all</button>
+      <button data-wf="disabled" aria-pressed="false">disabled</button>
+      <button data-wf="ok" aria-pressed="false">ok</button>
+      <button data-wf="monitorized" aria-pressed="false">monitorized</button>
+      <button data-wf="unmonitorized" aria-pressed="false">unmonitorized</button>
+      <button data-wf="starting" aria-pressed="false">starting</button>
+      <button data-wf="failed" aria-pressed="false">failed</button>
     </span>
     <span id="storage-filter-count" class="muted"></span>
   </div>
@@ -93,15 +93,15 @@
       <option value="all">all categories</option>
     </select>
     <span id="svc-filters">
-      <button data-f="all" class="f-active">all</button>
-      <button data-f="disabled">disabled</button>
-      <button data-f="running">running</button>
-      <button data-f="paused">paused</button>
-      <button data-f="stopped">stopped</button>
-      <button data-f="unmonitorized">unmonitorized</button>
-      <button data-f="monitorized">monitorized</button>
-      <button data-f="starting">starting</button>
-      <button data-f="failed">failed</button>
+      <button data-f="all" class="f-active" aria-pressed="true">all</button>
+      <button data-f="disabled" aria-pressed="false">disabled</button>
+      <button data-f="running" aria-pressed="false">running</button>
+      <button data-f="paused" aria-pressed="false">paused</button>
+      <button data-f="stopped" aria-pressed="false">stopped</button>
+      <button data-f="unmonitorized" aria-pressed="false">unmonitorized</button>
+      <button data-f="monitorized" aria-pressed="false">monitorized</button>
+      <button data-f="starting" aria-pressed="false">starting</button>
+      <button data-f="failed" aria-pressed="false">failed</button>
     </span>
     <span id="svc-count" class="muted"></span>
   </div>
@@ -132,13 +132,13 @@
       <option value="all">all network types</option>
     </select>
     <span id="network-filters">
-      <button data-wf="all" class="f-active">all</button>
-      <button data-wf="disabled">disabled</button>
-      <button data-wf="ok">ok</button>
-      <button data-wf="monitorized">monitorized</button>
-      <button data-wf="unmonitorized">unmonitorized</button>
-      <button data-wf="starting">starting</button>
-      <button data-wf="failed">failed</button>
+      <button data-wf="all" class="f-active" aria-pressed="true">all</button>
+      <button data-wf="disabled" aria-pressed="false">disabled</button>
+      <button data-wf="ok" aria-pressed="false">ok</button>
+      <button data-wf="monitorized" aria-pressed="false">monitorized</button>
+      <button data-wf="unmonitorized" aria-pressed="false">unmonitorized</button>
+      <button data-wf="starting" aria-pressed="false">starting</button>
+      <button data-wf="failed" aria-pressed="false">failed</button>
     </span>
     <span id="network-filter-count" class="muted"></span>
   </div>
@@ -175,11 +175,11 @@
       <option value="all">all categories</option>
     </select>
     <span id="app-filters">
-      <button data-af="all" class="f-active">all</button>
-      <button data-af="ok">ok</button>
-      <button data-af="starting">starting</button>
-      <button data-af="warning">warning</button>
-      <button data-af="failed">failed</button>
+      <button data-af="all" class="f-active" aria-pressed="true">all</button>
+      <button data-af="ok" aria-pressed="false">ok</button>
+      <button data-af="starting" aria-pressed="false">starting</button>
+      <button data-af="warning" aria-pressed="false">warning</button>
+      <button data-af="failed" aria-pressed="false">failed</button>
     </span>
     <span id="app-count" class="muted"></span>
   </div>
@@ -204,13 +204,13 @@
       <option value="all">all host types</option>
     </select>
     <span id="watch-filters">
-      <button data-wf="all" class="f-active">all</button>
-      <button data-wf="disabled">disabled</button>
-      <button data-wf="ok">ok</button>
-      <button data-wf="monitorized">monitorized</button>
-      <button data-wf="unmonitorized">unmonitorized</button>
-      <button data-wf="starting">starting</button>
-      <button data-wf="failed">failed</button>
+      <button data-wf="all" class="f-active" aria-pressed="true">all</button>
+      <button data-wf="disabled" aria-pressed="false">disabled</button>
+      <button data-wf="ok" aria-pressed="false">ok</button>
+      <button data-wf="monitorized" aria-pressed="false">monitorized</button>
+      <button data-wf="unmonitorized" aria-pressed="false">unmonitorized</button>
+      <button data-wf="starting" aria-pressed="false">starting</button>
+      <button data-wf="failed" aria-pressed="false">failed</button>
     </span>
     <span id="watch-count" class="muted"></span>
   </div>
@@ -348,7 +348,7 @@
 </section>
 </main>
 
-<dialog id="action-confirm">
+<dialog id="action-confirm" aria-labelledby="confirm-title" aria-describedby="confirm-subtitle confirm-body">
   <div class="modal-head">
     <h2 id="confirm-title" style="font-size:1.05rem; margin:0"></h2>
     <div id="confirm-subtitle" class="muted" style="font-size:.85rem; margin-top:.15rem"></div>
@@ -364,7 +364,7 @@
   </div>
 </dialog>
 
-<dialog id="panic-confirm">
+<dialog id="panic-confirm" aria-labelledby="panic-title" aria-describedby="panic-message">
   <div class="modal-head">
     <h2 id="panic-title" style="font-size:1.05rem; margin:0"></h2>
   </div>
