@@ -178,6 +178,7 @@ func TestByteSize(t *testing.T) {
 		{"1TB", 1 << 40, true},
 		{"1TiB", 1 << 40, true}, // TiB suffix (mutant .107)
 		{"1GiB", 1 << 30, true}, // GiB suffix (mutant .113)
+		{"1 GiB", 1 << 30, true},
 		{"0", 0, false},
 		{"0G", 0, true},
 		{"", 0, false},
