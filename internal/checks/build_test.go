@@ -431,3 +431,20 @@ func TestBuildSensorsCheckRequiresPredicate(t *testing.T) {
 		t.Fatalf("predicate-less sensors warning = %q, want a sensors check warning", w)
 	}
 }
+
+func TestBuildNetErrorsCountersDefault(t *testing.T) {
+	// metric=errors with no explicit counters defaults to rx/tx errors.
+	c, w := buildNetCheck(base{}, map[string]any{"interface": "eth0", "metric": "errors", "delta": map[string]any{"op": ">", "value": "5"}}, Deps{})
+	if w != "" {
+		t.Fatalf("unexpected warning: %q", w)
+	}
+	got := c.(*netCheck).counters
+	if len(got) != 2 || got[0] != "rx_errors" || got[1] != "tx_errors" {
+		t.Fatalf("default counters = %v, want [rx_errors tx_errors]", got)
+	}
+	// Explicit counters are honored.
+	c2, _ := buildNetCheck(base{}, map[string]any{"interface": "eth0", "metric": "errors", "counters": []any{"rx_dropped"}, "delta": map[string]any{"op": ">", "value": "5"}}, Deps{})
+	if got := c2.(*netCheck).counters; len(got) != 1 || got[0] != "rx_dropped" {
+		t.Fatalf("explicit counters = %v, want [rx_dropped]", got)
+	}
+}
