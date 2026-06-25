@@ -220,6 +220,8 @@ func TestIndexAccessibilityBundle(t *testing.T) {
 		"SLA timeline data",
 		"preflight not available for this action",
 		"service is disabled in configuration",
+		"Cancel service operation",
+		"Confirm:",
 	} {
 		if !strings.Contains(script, needle) {
 			t.Errorf("bundled script missing a11y marker %q", needle)
@@ -422,6 +424,22 @@ func TestIndexAccessibilityShell(t *testing.T) {
 		}
 	} else {
 		t.Error(`shell missing #panic-cancel-btn`)
+	}
+
+	if cancel := nodeByID(doc, "confirm-cancel-btn"); cancel != nil {
+		if got, ok := attr(cancel, "aria-label"); !ok || got != "Cancel service operation" {
+			t.Errorf(`#confirm-cancel-btn aria-label = %q, want "Cancel service operation"`, got)
+		}
+	} else {
+		t.Error(`shell missing #confirm-cancel-btn`)
+	}
+
+	if actionBtn := nodeByID(doc, "confirm-action-btn"); actionBtn != nil {
+		if got, ok := attr(actionBtn, "aria-label"); !ok || got != "Confirm service operation" {
+			t.Errorf(`#confirm-action-btn aria-label = %q, want "Confirm service operation"`, got)
+		}
+	} else {
+		t.Error(`shell missing #confirm-action-btn`)
 	}
 
 	for _, spec := range []struct {

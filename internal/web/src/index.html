@@ -368,10 +368,10 @@
     <input id="confirm-no-cascade" type="checkbox"> operate only this service (skip <code>also_apply</code>)
   </label>
   <div class="modal-foot">
-    <button data-confirm-result="false">cancel</button>
+    <button id="confirm-cancel-btn" data-confirm-result="false" aria-label="Cancel service operation">cancel</button>
     <span id="confirm-preflight-hint" class="visually-hidden"></span>
     <button id="confirm-preflight-btn" aria-label="Run preflight checks" aria-describedby="confirm-preflight-hint">run preflight</button>
-    <button id="confirm-action-btn" class="danger-btn" data-confirm-result="true">confirm</button>
+    <button id="confirm-action-btn" class="danger-btn" data-confirm-result="true" aria-label="Confirm service operation">confirm</button>
   </div>
 </dialog>
 
