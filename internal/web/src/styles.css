@@ -133,7 +133,17 @@
   .state-failed { color: var(--crit); }
   .state-failed::before { animation: beat 1.2s ease-in-out infinite; }
   @keyframes beat { 50% { transform: scale(1.55); opacity: .55; } }
-  @media (prefers-reduced-motion: reduce) { .state-failed::before, .op-dot.running { animation: none; } }
+  /* Honor the OS "reduce motion" preference across the whole UI: the heartbeat
+     dots (state-failed, op-dot), the panic-button pulse, the summary chevron
+     rotation, usage-bar and button transitions, and smooth scrolling. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
   .pill { display: inline-block; padding: .05rem .5rem; border-radius: 1rem; font-size: .8rem; border: 1px solid var(--line-2); }
 
   /* ---- controls ------------------------------------------------------------ */
