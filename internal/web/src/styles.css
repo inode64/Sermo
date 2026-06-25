@@ -302,6 +302,14 @@
   .service-detail h2:first-child { margin-top: 0; }
   .service-detail table { width: 100%; margin-bottom: .6rem; }
   .detail-compact-table { font-size: .85rem; }
+  .expansion-heading { font-size: .95rem; margin: .8rem 0 .3rem; }
+  .events-compact-table { width: auto; font-size: .85rem; }
+  .condition-empty { margin: .2rem 0 .6rem; }
+  .condition-heading { margin: .15rem 0 .1rem; }
+  .condition-table { margin-bottom: .6rem; }
+  .confirm-lead { margin-top: 0; }
+  .confirm-preflight-block { margin-top: .65rem; }
+  .confirm-cascade-line { margin-top: .5rem; }
   .detail-warn { margin-top: .25rem; }
   .detail-totals { margin: -.1rem 0 .35rem; }
   .detail-summary { margin-top: -.25rem; }
