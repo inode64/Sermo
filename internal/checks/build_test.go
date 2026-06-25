@@ -270,3 +270,14 @@ func TestBuildHTTPCheckBodyFromString(t *testing.T) {
 		t.Fatalf("body = %q, want hello", got)
 	}
 }
+
+func TestParseStatusMatcherClassLowerBoundary(t *testing.T) {
+	// "1xx" is the lowest valid status class (s[0] >= '1', not > '1').
+	m, err := parseStatusMatcher("1xx")
+	if err != nil {
+		t.Fatalf("parseStatusMatcher(1xx): %v", err)
+	}
+	if len(m.classes) != 1 || m.classes[0] != 1 {
+		t.Fatalf("classes = %v, want [1]", m.classes)
+	}
+}
