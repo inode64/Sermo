@@ -675,14 +675,12 @@ function saveUIState() {
 function applyUIStateToControls() {
   const svcSearch = $("#svc-search");
   if (svcSearch) svcSearch.value = svcQuery;
-  document.querySelectorAll("#svc-filters button").forEach((b) =>
-    b.classList.toggle("f-active", b.dataset.f === svcStatus));
+  syncFilterButtons("#svc-filters", "f", svcStatus);
   const svcCategorySelect = $("#svc-category");
   if (svcCategorySelect) svcCategorySelect.value = svcCategory;
   const appSearch = $("#app-search");
   if (appSearch) appSearch.value = appQuery;
-  document.querySelectorAll("#app-filters button").forEach((b) =>
-    b.classList.toggle("f-active", b.dataset.af === appStatus));
+  syncFilterButtons("#app-filters", "af", appStatus);
   for (const key of Object.keys(watchPanels)) {
     const panel = watchPanels[key];
     const search = $(panel.search);
@@ -1120,6 +1118,14 @@ function renderFilterButtonCounts(selector, counts) {
   });
 }
 
+function syncFilterButtons(selector, datasetKey, activeValue) {
+  document.querySelectorAll(`${selector} button`).forEach((b) => {
+    const pressed = b.dataset[datasetKey] === activeValue;
+    b.classList.toggle("f-active", pressed);
+    b.setAttribute("aria-pressed", pressed ? "true" : "false");
+  });
+}
+
 // Column sort: null key keeps the default failing-first order; clicking a header
 // sorts by it (ascending), and clicking the same header again flips direction.
 let svcSort = { key: "", dir: 1 };
@@ -1182,8 +1188,7 @@ function renderFilterCounts() {
 
 function setSvcStatus(v) {
   svcStatus = v;
-  document.querySelectorAll("#svc-filters button").forEach((b) =>
-    b.classList.toggle("f-active", b.dataset.f === v));
+  syncFilterButtons("#svc-filters", "f", svcStatus);
   renderServices();
   saveUIState();
 }
@@ -2382,8 +2387,7 @@ function watchMatches(w, panelKey) {
 
 function syncWatchFilterActive(panelKey) {
   const panel = getWatchPanel(panelKey);
-  document.querySelectorAll(`${panel.filters} button`).forEach((b) =>
-    b.classList.toggle("f-active", b.dataset.wf === panel.status));
+  syncFilterButtons(panel.filters, "wf", panel.status);
 }
 
 function setWatchQuery(panelKey, v) {
@@ -2726,8 +2730,7 @@ function setAppQuery(q) { appQuery = q || ""; renderApps(); saveUIState(); }
 function setAppCategory(v) { appCategory = v || "all"; renderApps(); saveUIState(); }
 function setAppStatus(v) {
   appStatus = v || "all";
-  document.querySelectorAll("#app-filters button").forEach((b) =>
-    b.classList.toggle("f-active", b.dataset.af === appStatus));
+  syncFilterButtons("#app-filters", "af", appStatus);
   renderApps();
   saveUIState();
 }
