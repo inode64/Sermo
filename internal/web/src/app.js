@@ -980,14 +980,14 @@ function renderAttention() {
   } else if (!items.length) {
     setFavicon("ok");
     if (healthIconReady) document.title = "Sermo · services";
-    box.style.display = "none";
+    box.classList.add("live-hidden");
     setHTMLIfChanged(box, "");
     return;
   } else {
     setFavicon(items.some((it) => it.level === "critical") ? "critical" : "warning");
     if (healthIconReady) document.title = `(${items.length}) Sermo · services`;
   }
-  box.style.display = "block";
+  box.classList.remove("live-hidden");
   const html = `
     <div class="attn-head">
       <b>Attention required</b>
@@ -1065,14 +1065,14 @@ function renderOperationLive() {
   if (!box) return;
   const ops = [...liveOps.values()].sort((a, b) => b.started - a.started);
   if (!ops.length) {
-    box.style.display = "none";
+    box.classList.add("live-hidden");
     setHTMLIfChanged(box, "");
     return;
   }
   const slotText = liveOpsSlots && liveOpsSlots.total != null
     ? `<div class="muted op-slots-summary">Operation slots: <b class="${(liveOpsSlots.in_use || 0) >= (liveOpsSlots.total || 1) ? 'failed' : ''}">${liveOpsSlots.in_use || 0}/${liveOpsSlots.total || 0}</b> in use</div>`
     : "";
-  box.style.display = "block";
+  box.classList.remove("live-hidden");
   const html = slotText + ops.map((op) => {
     const state = opStateText(op);
     const cls = op.finished ? (op.ok ? "ok" : "failed") : "";
