@@ -73,6 +73,17 @@ func TestParseAnalyzerErrors(t *testing.T) {
 	}
 }
 
+func TestAnalyzerActiveRequiresRules(t *testing.T) {
+	// A non-nil analyzer with zero rules is inert: Active needs len(rules) > 0,
+	// not >= 0.
+	if (&outputAnalyzer{}).Active() {
+		t.Fatal("analyzer with no rules must not be Active")
+	}
+	if !mustAnalyzer(t, []any{rule("x", "y", "warning")}).Active() {
+		t.Fatal("analyzer with a rule must be Active")
+	}
+}
+
 func TestParseAnalyzerInertWhenAbsent(t *testing.T) {
 	if a, warn := parseAnalyzer(nil); a != nil || warn != "" {
 		t.Fatalf("nil analyze must be inert, got a=%v warn=%q", a, warn)
