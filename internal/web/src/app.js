@@ -386,18 +386,20 @@ function toggleEventMsg(key) {
 
 function eventMessageHTML(e, key) {
   const msg = e.message || "";
-  const truncated = msg.length > 160 && !eventExpanded.has(key);
+  const msgOpen = eventExpanded.has(key);
+  const truncated = msg.length > 160 && !msgOpen;
   const text = truncated
-    ? tpl`<span class="event-msg">${msg.slice(0, 160)}<span class="muted">…</span> <button data-event-toggle="${key}">more</button></span>`
-    : tpl`<span class="event-msg">${msg}${msg.length > 160 ? tpl` <button data-event-toggle="${key}">less</button>` : nothing}</span>`;
+    ? tpl`<span class="event-msg">${msg.slice(0, 160)}<span class="muted">…</span> <button type="button" data-event-toggle="${key}" aria-expanded="false">more</button></span>`
+    : tpl`<span class="event-msg">${msg}${msg.length > 160 ? tpl` <button type="button" data-event-toggle="${key}" aria-expanded="true">less</button>` : nothing}</span>`;
   // Bounded stdout/stderr of the failing command, collapsed behind an "output"
   // toggle so the multi-line blob does not clutter the row by default.
   const out = e.output || "";
   if (!out) return text;
   const okey = key + ":out";
-  return eventExpanded.has(okey)
-    ? tpl`${text} <button data-event-toggle="${okey}">hide output</button><pre class="event-output">${out}</pre>`
-    : tpl`${text} <button data-event-toggle="${okey}">output</button>`;
+  const outOpen = eventExpanded.has(okey);
+  return outOpen
+    ? tpl`${text} <button type="button" data-event-toggle="${okey}" aria-expanded="true">hide output</button><pre class="event-output">${out}</pre>`
+    : tpl`${text} <button type="button" data-event-toggle="${okey}" aria-expanded="false">output</button>`;
 }
 
 function eventSubject(e) {
