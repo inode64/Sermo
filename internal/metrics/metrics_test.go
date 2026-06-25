@@ -61,6 +61,11 @@ func TestCompareFormMismatchErrors(t *testing.T) {
 	if _, err := Compare(r, ">", "10%"); err == nil {
 		t.Fatal("percentage threshold on an absolute-only metric should error")
 	}
+	// An absolute threshold against a percentage-only metric.
+	r = Reading{Percent: 50, HasPercent: true, Ready: true}
+	if _, err := Compare(r, ">", "10"); err == nil {
+		t.Fatal("absolute threshold on a percentage-only metric should error")
+	}
 }
 
 // fakeReader feeds scripted process/system values.
