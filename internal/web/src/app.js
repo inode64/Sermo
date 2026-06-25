@@ -5,9 +5,15 @@ const $ = (s) => document.querySelector(s);
 function setStatus(msg, kind) {
   const el = $("#err");
   if (!el) return;
-  el.textContent = msg || "";
+  const text = msg || "";
+  const statusCls = text ? (kind === "ok" ? "status-ok" : kind === "warn" ? "status-warn" : "status-err") : "";
+  const prevCls = el.classList.contains("status-ok") ? "status-ok"
+    : el.classList.contains("status-warn") ? "status-warn"
+    : el.classList.contains("status-err") ? "status-err" : "";
+  if (el.textContent === text && prevCls === statusCls) return;
+  el.textContent = text;
   el.classList.remove("status-err", "status-ok", "status-warn");
-  if (msg) el.classList.add(kind === "ok" ? "status-ok" : kind === "warn" ? "status-warn" : "status-err");
+  if (statusCls) el.classList.add(statusCls);
 }
 
 let me = { can_act: true, role: "admin", auth: false };
