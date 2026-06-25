@@ -60,8 +60,8 @@ func TestTryInterfaces(t *testing.T) {
 		t.Fatal("any with all failing must error")
 	}
 	// all: every interface must succeed.
-	if _, _, err := tryInterfaces([]string{"a", "b"}, true, func(string) error { return nil }); err != nil {
-		t.Fatalf("all-ok: %v", err)
+	if c, per, err := tryInterfaces([]string{"a", "b"}, true, func(string) error { return nil }); err != nil || c != "b" || per["a"] != "ok" || per["b"] != "ok" {
+		t.Fatalf("all-ok: %q/%v/%v", c, err, per)
 	}
 	// all: first failure loses.
 	if c, _, err := tryInterfaces([]string{"a", "b"}, true, fail("a")); err == nil || c != "a" {
