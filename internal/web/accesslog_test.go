@@ -12,6 +12,9 @@ func TestParseAPIAccessTarget(t *testing.T) {
 		{"/api/watches/storage-root/unmonitor", "storage-root", "unmonitor"},
 		{"/api/locks/mysql/release", "mysql", "release"},
 		{"/api/reload", "", "reload"},
+		// Three-part paths: the target is present even without a trailing action.
+		{"/api/services/web", "web", ""},
+		{"/api/locks/mysql", "mysql", "release"},
 	}
 	for _, tc := range tests {
 		target, action := parseAPIAccessTarget(tc.path)
