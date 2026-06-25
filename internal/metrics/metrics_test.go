@@ -630,3 +630,14 @@ func TestSystemCPUDeltaWithNonzeroBaseline(t *testing.T) {
 		t.Fatalf("idle-system sample = %+v, want ready 0%%", got)
 	}
 }
+
+func TestServiceFDsAndThreadsAggregate(t *testing.T) {
+	reader := fakeReader{fds: map[int]uint64{10: 7, 20: 11}, threads: map[int]uint64{10: 3, 20: 5}, hz: 100, ncpu: 1}
+	snap := New(reader).SampleService("svc", []int{10, 20})
+	if !snap["fds"].Ready || snap["fds"].Absolute != 18 {
+		t.Fatalf("fds = %+v, want ready 18", snap["fds"])
+	}
+	if !snap["threads"].Ready || snap["threads"].Absolute != 8 {
+		t.Fatalf("threads = %+v, want ready 8", snap["threads"])
+	}
+}
