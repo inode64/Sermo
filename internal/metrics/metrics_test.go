@@ -662,3 +662,19 @@ func TestSampleServiceCPUNoCPUCount(t *testing.T) {
 		t.Fatal("CPUThread should still be ready")
 	}
 }
+
+func TestServiceSwapNoPercentWhenZeroTotal(t *testing.T) {
+	// A host with a swap device reporting 0 total (swapOK true, swapTotal 0) must
+	// not compute a percentage (no divide by zero).
+	reader := swapReader{
+		fakeReader: fakeReader{swap: map[int]uint64{10: 50}, hz: 100, ncpu: 1},
+		swapTotal:  0, swapOK: true,
+	}
+	sw := New(reader).SampleService("svc", []int{10})["swap"]
+	if sw.Absolute != 50 {
+		t.Fatalf("swap absolute = %v, want 50", sw.Absolute)
+	}
+	if sw.HasPercent {
+		t.Fatalf("zero swap total must not yield a percent: %+v", sw)
+	}
+}
