@@ -1923,7 +1923,8 @@ function drawSLAChart(points, win) {
   const slaAria = latestPct != null
     ? `SLA timeline: latest ${fmtNum(latestPct, 2)}%, ${incidents.length} incident${incidents.length === 1 ? "" : "s"}`
     : "SLA timeline";
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(slaAria)}">${axis}${areas}${lines}${hover}${markers}</svg>${renderSLAIncidentList(incidents)}`;
+  const dataTable = slaChartDataTable(observed);
+  return `${dataTable}<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(slaAria)}">${axis}${areas}${lines}${hover}${markers}</svg>${renderSLAIncidentList(incidents)}`;
 }
 
 function totalsCpuCell(pt) {
@@ -4114,6 +4115,30 @@ function daemonMetricSummary(series, label) {
   return `${esc(label)} avg <b>${esc(fmtMetricValue(s.avg, unit))}</b>`;
 }
 
+const chartDataTableMaxRows = 30;
+
+function metricChartDataTable(pts, unit, startMs, span, cols) {
+  if (!pts.length) return "";
+  const shown = pts.slice(-chartDataTableMaxRows);
+  const rows = shown.map((o) => {
+    const t = new Date(startMs + (o.i + 0.5) * (span / cols));
+    const b = o.b;
+    return `<tr><td>${esc(t.toLocaleString())}</td><td>${esc(fmtMetricValue(b.sum / b.n, unit))}</td><td>${esc(fmtMetricValue(b.min, unit))}</td><td>${esc(fmtMetricValue(b.max, unit))}</td></tr>`;
+  }).join("");
+  return `<table class="chart-data visually-hidden"><caption>Chart data</caption><thead><tr><th scope="col">Time</th><th scope="col">Avg</th><th scope="col">Min</th><th scope="col">Max</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function slaChartDataTable(observed) {
+  if (!observed.length) return "";
+  const shown = observed.slice(-chartDataTableMaxRows);
+  const rows = shown.map((o) => {
+    const up = Number(o.p.up || 0);
+    const total = Number(o.p.total || 0);
+    return `<tr><td>${esc(fmtTime(new Date(o.t).toISOString()))}</td><td>${esc(fmtNum(o.pct, 2))}%</td><td>${up}/${total}</td></tr>`;
+  }).join("");
+  return `<table class="chart-data visually-hidden"><caption>SLA chart data</caption><thead><tr><th scope="col">Time</th><th scope="col">SLA</th><th scope="col">Up/Total</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
 function drawMetricChart(points, unit, win, label) {
   unit = unit || "ms";
   const W = 640, H = 160, pad = 34, cols = 120;
@@ -4156,7 +4181,8 @@ function drawMetricChart(points, unit, win, label) {
   const aria = latest
     ? `${chartLabel}: latest ${fmtMetricValue(latest.b.sum / latest.b.n, unit)}, peak ${fmtMetricValue(maxV, unit)}`
     : chartLabel;
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(aria)}" style="max-width:${W}px"><title>${esc(aria)}</title>${axis}${band}${line}${hover}</svg>`;
+  const dataTable = metricChartDataTable(pts, unit, startMs, span, cols);
+  return `${dataTable}<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(aria)}" style="max-width:${W}px"><title>${esc(aria)}</title>${axis}${band}${line}${hover}</svg>`;
 }
 
 function fmtMetricValue(v, unit) {
