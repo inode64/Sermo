@@ -586,8 +586,13 @@ func versionMonitor(name string, tree map[string]any, deps Deps, interval time.D
 	if entry == nil {
 		return nil, "service " + name + ": version monitor needs commands.version (or preflight.version) in the daemon"
 	}
+	level, lerr := onChangeVersionLevel(tree["version"])
+	if lerr != "" {
+		return nil, "service " + name + ": version monitor: " + lerr
+	}
 	entry["type"] = "command"
 	entry["on_change"] = true
+	entry["change_level"] = level
 	check, err := checks.BuildInline(name+":version", entry, monitorDeps(deps))
 	if err != nil {
 		return nil, "service " + name + ": version monitor: " + err.Error()
@@ -638,6 +643,29 @@ func onChangeNotify(v any) ([]string, bool) {
 		return nil, false
 	}
 	return cfgval.StringList(oc["notify"]), true
+}
+
+// onChangeVersionLevel reads `version.on_change.level` (major|minor|patch) and
+// returns the component count the version monitor compares at, defaulting to
+// patch (3 — any version_short change fires) when the level is absent.
+func onChangeVersionLevel(v any) (int, string) {
+	block, ok := v.(map[string]any)
+	if !ok {
+		return 3, ""
+	}
+	oc, ok := block["on_change"].(map[string]any)
+	if !ok {
+		return 3, ""
+	}
+	name := cfgval.String(oc["level"])
+	if name == "" {
+		return 3, ""
+	}
+	level, ok := checks.VersionLevel(name)
+	if !ok {
+		return 0, "version.on_change.level " + name + " is not one of major, minor, patch"
+	}
+	return level, ""
 }
 
 // versionCommandEntry returns a copy of the resolved version-command entry

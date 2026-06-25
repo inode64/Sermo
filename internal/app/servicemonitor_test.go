@@ -110,6 +110,56 @@ func TestVersionMonitorPreservesCommandUser(t *testing.T) {
 	}
 }
 
+func TestVersionMonitorLevel(t *testing.T) {
+	build := func(level any, outs ...string) *Watch {
+		t.Helper()
+		on := map[string]any{"notify": []any{"ops"}}
+		if level != nil {
+			on["level"] = level
+		}
+		tree := map[string]any{
+			"commands": map[string]any{"version": map[string]any{"command": []any{"app", "--version"}}},
+			"version":  map[string]any{"on_change": on},
+		}
+		deps := monitorTestDeps()
+		deps.ExecxRunner = &sequenceRunner{stdout: outs}
+		w, warn := versionMonitor("app", tree, deps, time.Minute)
+		if warn != "" || w == nil {
+			t.Fatalf("warn=%q w=%v", warn, w)
+		}
+		return w
+	}
+
+	// minor level: priming cycle, then a patch bump (ignored), then a minor bump
+	// (fires).
+	w := build("minor", "app 1.4.2", "app 1.4.7", "app 1.5.0")
+	if r := w.Check.Run(context.Background()); !r.OK {
+		t.Fatalf("priming cycle should be OK, got %+v", r)
+	}
+	if r := w.Check.Run(context.Background()); !r.OK {
+		t.Fatalf("patch bump must not fire at minor level, got %+v", r)
+	}
+	if r := w.Check.Run(context.Background()); r.OK {
+		t.Fatalf("minor bump must fire at minor level")
+	}
+
+	// default (no level) is patch: any a.b.c change fires.
+	wd := build(nil, "app 1.4.2", "app 1.4.3")
+	wd.Check.Run(context.Background())
+	if r := wd.Check.Run(context.Background()); r.OK {
+		t.Fatalf("patch bump must fire at default (patch) level")
+	}
+
+	// invalid level -> warning, no watch.
+	bad := map[string]any{
+		"commands": map[string]any{"version": map[string]any{"command": []any{"app", "--version"}}},
+		"version":  map[string]any{"on_change": map[string]any{"level": "epoch"}},
+	}
+	if _, warn := versionMonitor("app", bad, monitorTestDeps(), time.Minute); warn == "" {
+		t.Error("an invalid version.on_change.level should warn")
+	}
+}
+
 func TestConfigMonitor(t *testing.T) {
 	tree := map[string]any{
 		"preflight": map[string]any{"config": map[string]any{"type": "command", "command": []any{"apachectl", "configtest"}}},
