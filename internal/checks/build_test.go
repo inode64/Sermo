@@ -409,3 +409,18 @@ func TestBuildAutofsCheckCountValueNumeric(t *testing.T) {
 		t.Fatalf("non-numeric count warning = %q, want it to require numeric", w)
 	}
 }
+
+func TestBuildConfigCheckRequiresCommandOrPath(t *testing.T) {
+	// Neither command nor path -> rejected.
+	if _, w := buildConfigCheck(base{}, map[string]any{}, nil); !strings.Contains(w, "requires a command and/or path") {
+		t.Fatalf("empty config warning = %q, want command/path requirement", w)
+	}
+	// A command alone is enough...
+	if _, w := buildConfigCheck(base{}, map[string]any{"command": []any{"nginx", "-t"}}, nil); w != "" {
+		t.Fatalf("command-only config warned: %q", w)
+	}
+	// ...and a path alone is enough.
+	if _, w := buildConfigCheck(base{}, map[string]any{"path": "/etc/nginx/nginx.conf"}, nil); w != "" {
+		t.Fatalf("path-only config warned: %q", w)
+	}
+}
