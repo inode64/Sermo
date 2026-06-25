@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/metrics"
 	"sermo/internal/servicemgr"
 )
 
@@ -446,5 +447,22 @@ func TestBuildNetErrorsCountersDefault(t *testing.T) {
 	c2, _ := buildNetCheck(base{}, map[string]any{"interface": "eth0", "metric": "errors", "counters": []any{"rx_dropped"}, "delta": map[string]any{"op": ">", "value": "5"}}, Deps{})
 	if got := c2.(*netCheck).counters; len(got) != 1 || got[0] != "rx_dropped" {
 		t.Fatalf("explicit counters = %v, want [rx_dropped]", got)
+	}
+}
+
+func TestBuildMetricCheckScopeDefault(t *testing.T) {
+	reader := func(scope, name string) (metrics.Reading, bool) { return metrics.Reading{}, false }
+	// Absent scope defaults to "service".
+	c, w := buildMetricCheck(base{}, map[string]any{"name": "cpu", "op": ">", "value": "90"}, Deps{Metrics: reader})
+	if w != "" {
+		t.Fatalf("unexpected warning: %q", w)
+	}
+	if got := c.(metricCheck).scope; got != "service" {
+		t.Fatalf("default scope = %q, want service", got)
+	}
+	// An explicit scope is preserved.
+	c2, _ := buildMetricCheck(base{}, map[string]any{"name": "cpu", "op": ">", "value": "90", "scope": "host"}, Deps{Metrics: reader})
+	if got := c2.(metricCheck).scope; got != "host" {
+		t.Fatalf("explicit scope = %q, want host", got)
 	}
 }
