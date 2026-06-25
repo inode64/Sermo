@@ -154,3 +154,17 @@ func TestMountForPathPrefersRealMountOverAutofsPlaceholder(t *testing.T) {
 		t.Fatalf("MountForPath = %+v, want ceph mount", got)
 	}
 }
+
+func TestMountForPathEqualLengthPrefersBetterMount(t *testing.T) {
+	// Two mounts share the same mountpoint length; the longest-prefix tie is
+	// broken by betterMount, which keeps the real (non-autofs) mount already
+	// chosen rather than overwriting it with the equal-length autofs entry.
+	mounts := []Mount{
+		{Device: "/dev/sda1", MountPoint: "/mnt", FSType: "ext4"},
+		{Device: "systemd-1", MountPoint: "/mnt", FSType: "autofs"},
+	}
+	got := MountForPath(mounts, "/mnt/data")
+	if got == nil || got.FSType != "ext4" {
+		t.Fatalf("MountForPath = %+v, want the ext4 mount (betterMount tie-break)", got)
+	}
+}
