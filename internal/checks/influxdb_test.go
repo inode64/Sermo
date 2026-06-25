@@ -148,6 +148,10 @@ func TestInfluxFluxQuery(t *testing.T) {
 	if res.Data["result"] != "42.5" || res.Data["language"] != "flux" {
 		t.Fatalf("data = %v", res.Data)
 	}
+	// A configured org is carried into the result data.
+	if res.Data["org"] != "myorg" {
+		t.Fatalf("data org = %v, want myorg", res.Data["org"])
+	}
 }
 
 func TestInfluxFluxEmptyAndAuth(t *testing.T) {
