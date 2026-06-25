@@ -165,3 +165,116 @@ func TestIndexShellAnchors(t *testing.T) {
 		}
 	}
 }
+
+func nodeByID(doc *html.Node, id string) *html.Node {
+	var found *html.Node
+	walk(doc, func(n *html.Node) {
+		if found != nil || n.Type != html.ElementNode {
+			return
+		}
+		if v, ok := attr(n, "id"); ok && v == id {
+			found = n
+		}
+	})
+	return found
+}
+
+// TestIndexAccessibilityShell pins structural WCAG helpers in the static HTML
+// shell: page language, skip link, live regions, labelled filter groups, and
+// table captions with column scope. Behavioural a11y (keyboard handlers, dynamic
+// aria-expanded) lives in the bundled JS and is not asserted here.
+func TestIndexAccessibilityShell(t *testing.T) {
+	doc, _ := parsedIndex(t)
+
+	var htmlLang string
+	var skipHref string
+	var mainTab string
+	walk(doc, func(n *html.Node) {
+		if n.Type != html.ElementNode {
+			return
+		}
+		switch n.DataAtom {
+		case atom.Html:
+			if lang, ok := attr(n, "lang"); ok {
+				htmlLang = lang
+			}
+		case atom.A:
+			if cls, ok := attr(n, "class"); ok && strings.Contains(cls, "skip-link") {
+				skipHref, _ = attr(n, "href")
+			}
+		case atom.Main:
+			if id, ok := attr(n, "id"); ok && id == "main-content" {
+				mainTab, _ = attr(n, "tabindex")
+			}
+		}
+	})
+	if htmlLang != "en" {
+		t.Errorf(`<html lang> = %q, want "en"`, htmlLang)
+	}
+	if skipHref != "#main-content" {
+		t.Errorf("skip link href = %q, want #main-content", skipHref)
+	}
+	if mainTab != "-1" {
+		t.Errorf(`<main id="main-content"> tabindex = %q, want "-1"`, mainTab)
+	}
+
+	attention := nodeByID(doc, "attention")
+	if attention == nil {
+		t.Fatal(`shell missing #attention`)
+	}
+	for _, pair := range [][2]string{{"role", "alert"}, {"aria-live", "assertive"}, {"aria-atomic", "true"}} {
+		if got, ok := attr(attention, pair[0]); !ok || got != pair[1] {
+			t.Errorf(`#attention %s = %q, want %q`, pair[0], got, pair[1])
+		}
+	}
+
+	for _, id := range []string{
+		"svc-filters", "storage-filters", "network-filters", "watch-filters", "app-filters",
+	} {
+		el := nodeByID(doc, id)
+		if el == nil {
+			t.Errorf("shell missing filter group id %q", id)
+			continue
+		}
+		role, ok := attr(el, "role")
+		if !ok || role != "group" {
+			t.Errorf("#%s role = %q, want group", id, role)
+		}
+		if label, ok := attr(el, "aria-label"); !ok || label == "" {
+			t.Errorf("#%s missing aria-label", id)
+		}
+	}
+
+	captions := 0
+	thMissingScope := 0
+	walk(doc, func(n *html.Node) {
+		if n.Type != html.ElementNode {
+			return
+		}
+		switch n.DataAtom {
+		case atom.Caption:
+			captions++
+		case atom.Th:
+			if scope, ok := attr(n, "scope"); !ok || scope != "col" {
+				thMissingScope++
+			}
+		}
+	})
+	if captions < 9 {
+		t.Errorf("want at least 9 <caption> elements, got %d", captions)
+	}
+	if thMissingScope > 0 {
+		t.Errorf("want scope=col on every shell <th>, %d missing", thMissingScope)
+	}
+
+	for _, id := range []string{"system-status", "statusbar", "err", "op-live"} {
+		el := nodeByID(doc, id)
+		if el == nil {
+			t.Errorf("shell missing live region id %q", id)
+			continue
+		}
+		if live, ok := attr(el, "aria-live"); !ok || live == "" {
+			t.Errorf("#%s missing aria-live", id)
+		}
+	}
+}
