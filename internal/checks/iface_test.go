@@ -97,3 +97,21 @@ func TestICMPSampleAggregation(t *testing.T) {
 		t.Fatalf("all-up: reachable=%v err=%v, want reachable", s.Reachable, err)
 	}
 }
+
+func TestIfaceSuffixAndData(t *testing.T) {
+	// ifaceSuffix annotates only when an interface was selected.
+	if got := ifaceSuffix(""); got != "" {
+		t.Errorf("ifaceSuffix(\"\") = %q, want empty", got)
+	}
+	if got := ifaceSuffix("eth0"); got != " via eth0" {
+		t.Errorf("ifaceSuffix(eth0) = %q, want \" via eth0\"", got)
+	}
+	// ifaceData wraps a non-nil per-interface map, and stays nil otherwise.
+	if got := ifaceData(nil); got != nil {
+		t.Errorf("ifaceData(nil) = %v, want nil", got)
+	}
+	got := ifaceData(map[string]any{"eth0": "ok"})
+	if got == nil || got["interfaces"] == nil {
+		t.Errorf("ifaceData(non-nil) = %v, want an interfaces map", got)
+	}
+}
