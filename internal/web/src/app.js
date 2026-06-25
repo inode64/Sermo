@@ -36,23 +36,25 @@ async function loadMe() {
 // status, instead of silently showing stale data.
 let connOK = true;
 let lastLoadOk = Date.now();
+let loadSeq = 0;
 function showDisconnected() {
   document.body.classList.add("disconnected");
   const age = lastLoadOk ? ` (last update ${fmtSince(Date.now() - lastLoadOk)} ago)` : "";
   setStatus("⚠ Disconnected — retrying…" + age, "warn");
 }
 
-// load refreshes every panel in one parallel burst: the services fetch is the
-// connection signal (failure dims the page), every other endpoint degrades
-// independently to "keep the last render" on a transient error. Status-line and
-// overview inputs (readyz, livez, monitoring, ops, host) share the same burst so
-// renderStatus does not re-fetch locks, daemon or ops that load() already has.
+// load refreshes every panel in parallel: the services fetch is the connection
+// signal (failure dims the page), every other endpoint degrades independently to
+// "keep the last render" on a transient error. Application inspection can be
+// cold and command-heavy, so it renders when ready instead of blocking the first
+// service/status paint.
 async function load() {
+  const seq = ++loadSeq;
   healthIconReady = false;
-  const [services, watches, apps, mounts, notifiers, daemon, daemonMetrics, locks, activity, ready, live, mon, ops, hostMetrics] = await Promise.all([
+  const appsPromise = getJSON("api/applications", null);  // installed applications
+  const [services, watches, mounts, notifiers, daemon, daemonMetrics, locks, activity, ready, live, mon, ops, hostMetrics] = await Promise.all([
     fetch("api/services").then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).catch(() => null),
     getJSON("api/watches", null),       // host watches (visible even when services=0)
-    getJSON("api/applications", null),  // installed applications
     getJSON("api/mounts", null),        // configured mount units
     getJSON("api/notifiers", null),     // what watches can send to
     getJSON("api/daemon", null),        // daemon / engine settings panel
@@ -65,6 +67,7 @@ async function load() {
     getJSON("api/ops", {}),
     getJSON("api/host", []),
   ]);
+  if (seq !== loadSeq) return;
   if (services) {
     render(services);
     connOK = true;
@@ -76,7 +79,6 @@ async function load() {
     showDisconnected();
   }
   if (watches) renderWatches(watches);
-  if (apps) renderApps(apps);
   if (mounts) renderMounts(mounts);
   if (notifiers) renderNotifiers(notifiers);
   if (daemon) renderDaemon(daemon);
@@ -107,6 +109,12 @@ async function load() {
 
   lastRefresh = Date.now();
   tickRefreshAge();
+
+  appsPromise.then((apps) => {
+    if (seq !== loadSeq || !apps) return;
+    renderApps(apps);
+    if (connOK) renderAttention();
+  });
 }
 
 async function reloadConfig() {
@@ -2012,6 +2020,7 @@ function renderServiceDetail(d) {
 
 function hydrateServiceDetail(d) {
   const measured = serviceMeasuredChecks(d);
+  syncWindowButtons("setMetricWin", metricWindow);
   loadServiceSLA(d.name);
   if (measured.length) loadMetrics(d.name, measured);
   loadServiceRuntimeMetrics(d.name);
@@ -3711,12 +3720,31 @@ function setMetricCheck(name, service) {
   else if (service) loadExpansionFor(key);
   else refreshExpandedServiceDetails();
 }
-function setMetricWin(win) { metricWindow = win; saveUIState(); refreshExpandedServiceDetails(); }
-function setDaemonMetricWin(win) { daemonMetricWindow = win; saveUIState(); loadDaemonMetrics(); }
+function setMetricWin(win) {
+  metricWindow = win;
+  saveUIState();
+  syncWindowButtons("setMetricWin", metricWindow);
+  refreshExpandedServiceDetails();
+}
+function setDaemonMetricWin(win) {
+  daemonMetricWindow = win;
+  saveUIState();
+  syncWindowButtons("setDaemonMetricWin", daemonMetricWindow);
+  loadDaemonMetrics();
+}
 
 function winButtons(list, selected, fn) {
   return list.map(([label, val]) =>
-    tpl`<button data-window-kind="${fn}" data-window-value="${val}" class="${val === selected ? "win-btn-active" : nothing}">${label}</button> `);
+    tpl`<button data-window-kind="${fn}" data-window-value="${val}" aria-pressed=${val === selected ? "true" : "false"} class="${val === selected ? "win-btn-active" : nothing}">${label}</button> `);
+}
+
+function syncWindowButtons(kind, selected) {
+  document.querySelectorAll("[data-window-kind][data-window-value]").forEach((btn) => {
+    if (btn.dataset.windowKind !== kind) return;
+    const active = btn.dataset.windowValue === selected;
+    btn.classList.toggle("win-btn-active", active);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+  });
 }
 
 async function loadMetrics(name, measured) {
