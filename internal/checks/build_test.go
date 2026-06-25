@@ -380,3 +380,12 @@ func TestBuildICMPStateRequiresExpectOrOnChange(t *testing.T) {
 		t.Fatalf("icmp state with expect must not warn, got %q", w)
 	}
 }
+
+func TestBuildNetStateRequiresExpectOrOnChange(t *testing.T) {
+	if _, w := buildNetCheck(base{}, map[string]any{"interface": "eth0", "metric": "state"}, Deps{}); !strings.Contains(w, "requires expect") {
+		t.Fatalf("net state w/o expect warning = %q, want it to require expect/on", w)
+	}
+	if _, w := buildNetCheck(base{}, map[string]any{"interface": "eth0", "metric": "state", "expect": "up"}, Deps{}); strings.Contains(w, "requires expect") {
+		t.Fatalf("net state with expect must not warn, got %q", w)
+	}
+}
