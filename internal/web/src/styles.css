@@ -437,6 +437,7 @@
 
   /* ---- transient banners ------------------------------------------------------ */
   #op-live { display: none; margin: .8rem 0 0; padding: .65rem .8rem; border: 1px solid var(--line); border-left: 3px solid var(--info); border-radius: var(--radius-s); background: var(--panel); box-shadow: var(--shadow); }
+  .op-slots-summary { margin-bottom: .35rem; }
   .op-card { display: flex; gap: .6rem 1rem; align-items: baseline; flex-wrap: wrap; }
   .op-card + .op-card { margin-top: .35rem; padding-top: .35rem; border-top: 1px solid var(--line); }
   .op-dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--warn); display: inline-block; animation: beat 1.2s ease-in-out infinite; }

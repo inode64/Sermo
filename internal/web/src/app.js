@@ -1063,7 +1063,7 @@ function renderOperationLive() {
     return;
   }
   const slotText = liveOpsSlots && liveOpsSlots.total != null
-    ? `<div class="muted" style="margin-bottom:.35rem">Operation slots: <b class="${(liveOpsSlots.in_use || 0) >= (liveOpsSlots.total || 1) ? 'failed' : ''}">${liveOpsSlots.in_use || 0}/${liveOpsSlots.total || 0}</b> in use</div>`
+    ? `<div class="muted op-slots-summary">Operation slots: <b class="${(liveOpsSlots.in_use || 0) >= (liveOpsSlots.total || 1) ? 'failed' : ''}">${liveOpsSlots.in_use || 0}/${liveOpsSlots.total || 0}</b> in use</div>`
     : "";
   box.style.display = "block";
   const html = slotText + ops.map((op) => {
