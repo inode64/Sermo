@@ -179,3 +179,30 @@ func TestSampleNetFromSysfsMissingDirErrors(t *testing.T) {
 		t.Fatal("missing interface dir must return an error")
 	}
 }
+
+func TestSysfsIfaceUp(t *testing.T) {
+	mk := func(flags, operstate string) string {
+		d := t.TempDir()
+		if err := os.WriteFile(filepath.Join(d, "flags"), []byte(flags), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(d, "operstate"), []byte(operstate), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	// IFF_UP set: operstate "up" and "unknown" both count as up; "down" does not.
+	if !sysfsIfaceUp(mk("0x1\n", "up\n")) {
+		t.Error("operstate up must be up")
+	}
+	if !sysfsIfaceUp(mk("0x1\n", "unknown\n")) {
+		t.Error("operstate unknown must be up")
+	}
+	if sysfsIfaceUp(mk("0x1\n", "down\n")) {
+		t.Error("operstate down must be down")
+	}
+	// IFF_UP clear is never up.
+	if sysfsIfaceUp(mk("0x0\n", "up\n")) {
+		t.Error("IFF_UP clear must be down")
+	}
+}
