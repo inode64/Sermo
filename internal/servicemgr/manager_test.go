@@ -357,3 +357,11 @@ func TestSystemdSupportsReloadZeroExitNotError(t *testing.T) {
 		t.Fatalf("SupportsReload with empty output exit 0 must not error: %v", err)
 	}
 }
+
+func TestOpenRCManagerStatusZeroExitNotError(t *testing.T) {
+	// Empty output with a zero exit is not a query failure for OpenRC either.
+	m := openrcManager{runner: stubRunner{result: execx.Result{Stdout: "", ExitCode: 0}}}
+	if _, err := m.Status(context.Background(), "nginx"); err != nil {
+		t.Fatalf("OpenRC Status with empty output exit 0 must not error: %v", err)
+	}
+}
