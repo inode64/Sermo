@@ -76,6 +76,12 @@ func TestParseProcMeminfoTotalsNoSwapDevice(t *testing.T) {
 	}
 }
 
+func TestParseMeminfoKBRejectsMissingValue(t *testing.T) {
+	if got, ok := parseMeminfoKB("VmSwap:"); ok || got != 0 {
+		t.Fatalf("parseMeminfoKB(missing value) = (%d, %v), want (0, false)", got, ok)
+	}
+}
+
 // swapReader adds an optional TotalSwap to fakeReader so SampleSystem's swap
 // branch can be exercised deterministically.
 type swapReader struct {
