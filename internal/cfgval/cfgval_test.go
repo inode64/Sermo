@@ -135,6 +135,7 @@ func TestInt(t *testing.T) {
 	}{
 		{5, 5, true},
 		{int64(6), 6, true},
+		{int64(maxInt), maxInt, true}, // int64Value max boundary (mutant .51)
 		{int64(minInt), minInt, true}, // int64Value min boundary (mutant .50)
 		{uint64(7), 7, true},
 		{uint64(maxInt), maxInt, true}, // largest uint64 that still fits int (boundary)
