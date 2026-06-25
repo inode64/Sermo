@@ -3275,9 +3275,39 @@ function lockBlocks(l) {
   return actions.length ? actions.join(" ") : tpl`<span class="muted">none</span>`;
 }
 
+function lockReleaseHintId(l) {
+  const svc = (l.service || "svc").replace(/[^a-zA-Z0-9._-]+/g, "-");
+  const name = (l.name || "default").replace(/[^a-zA-Z0-9._-]+/g, "-");
+  return `lock-${svc}-${name}-release-hint`;
+}
+
+function lockReleaseLabel(l) {
+  const svc = l.service || "";
+  const name = lockName(l);
+  return svc ? `Release lock ${svc}:${name}` : `Release lock ${name}`;
+}
+
+function lockReleaseDisabled(l) {
+  if (!me.can_act || !l) return true;
+  return !l.releaseable;
+}
+
+function lockReleaseDisabledReason(l) {
+  if (!me.can_act) return "";
+  if (l.releaseable) return "";
+  if (l.state === "active") return "lock is still active";
+  return "lock cannot be released";
+}
+
 function lockReleaseButton(l) {
-  if (!me.can_act || !l.releaseable) return nothing;
-  return tpl`<button class="danger-btn" data-lock-release="1" data-lock-service="${l.service || ""}" data-lock-name="${l.name || ""}">release</button>`;
+  if (!me.can_act) return nothing;
+  const disabled = lockReleaseDisabled(l);
+  const reason = lockReleaseDisabledReason(l);
+  const hint = disabled && reason
+    ? tpl`<span id="${lockReleaseHintId(l)}" class="visually-hidden">${reason}</span>`
+    : nothing;
+  const describedBy = disabled && reason ? lockReleaseHintId(l) : nothing;
+  return tpl`${hint}<button class="danger-btn" ?disabled=${disabled} data-lock-release="1" data-lock-service="${l.service || ""}" data-lock-name="${l.name || ""}" aria-label="${lockReleaseLabel(l)}" aria-describedby="${describedBy}">release</button>`;
 }
 
 function lockServiceLink(l) {
