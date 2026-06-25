@@ -408,3 +408,18 @@ func TestWindowStateNilReceiver(t *testing.T) {
 		t.Fatalf("Progress = %q, want 0s/1m", got)
 	}
 }
+
+func TestFormatWindowDuration(t *testing.T) {
+	cases := map[time.Duration]string{
+		0:                       "0s",
+		2 * time.Hour:           "2h",
+		90 * time.Minute:        "90m",
+		45 * time.Second:        "45s",
+		1500 * time.Millisecond: "1.5s",
+	}
+	for d, want := range cases {
+		if got := formatWindowDuration(d); got != want {
+			t.Errorf("formatWindowDuration(%v) = %q, want %q", d, got, want)
+		}
+	}
+}
