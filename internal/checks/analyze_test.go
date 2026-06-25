@@ -30,6 +30,16 @@ func TestAnalyzeMaxSeverityAndFirstMatch(t *testing.T) {
 	}
 }
 
+func TestAnalyzeReportsFirstLineReachingMaxSeverity(t *testing.T) {
+	// Two lines both reach error severity; the reported line must be the first
+	// one to reach it (severity > sev, not >=, so a later equal match never wins).
+	a := mustAnalyzer(t, []any{rule("err", "FAIL", "error")})
+	sev, id, line := a.Analyze("FAIL first\nFAIL second", "")
+	if sev != SevError || id != "err" || line != "FAIL first" {
+		t.Fatalf("sev=%v id=%q line=%q, want error/err/\"FAIL first\"", sev, id, line)
+	}
+}
+
 func TestAnalyzeOkWhitelistsLine(t *testing.T) {
 	// An ok rule earlier in the list suppresses a later warning on the same line.
 	a := mustAnalyzer(t, []any{
