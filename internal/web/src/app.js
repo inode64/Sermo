@@ -3916,7 +3916,11 @@ async function confirmAction(name, action) {
   $("#confirm-title").textContent = `${action.toUpperCase()} ${name}`;
   $("#confirm-subtitle").textContent = "Review the current service context before sending the operation.";
   litRender(tpl`<span class="muted">loading…</span>`, $("#confirm-body"));
-  $("#confirm-action-btn").textContent = `${action} ${name}`;
+  const actionBtn = $("#confirm-action-btn");
+  if (actionBtn) {
+    actionBtn.textContent = `${action} ${name}`;
+    actionBtn.setAttribute("aria-label", `Confirm: ${action} ${name}`);
+  }
   syncConfirmPreflightButton(action, { loading: true });
   const cascadeWrap = $("#confirm-no-cascade-wrap");
   const cascadeBox = $("#confirm-no-cascade");
