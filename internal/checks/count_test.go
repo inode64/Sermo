@@ -118,6 +118,18 @@ func TestCountCheckPredicate(t *testing.T) {
 	}
 }
 
+func TestTallyEntriesEmptyKindDefaultsToAny(t *testing.T) {
+	root := countTree(t)
+	// Empty kind must default to "any" (4 entries: a.txt, b.txt, sub/, link).
+	if n, err := TallyEntries(context.Background(), root, "", false, 0); err != nil || n != 4 {
+		t.Fatalf("TallyEntries(\"\") = %d, %v; want 4, nil", n, err)
+	}
+	// A non-empty kind must be honored, not coerced to "any".
+	if n, err := TallyEntries(context.Background(), root, countFile, false, 0); err != nil || n != 2 {
+		t.Fatalf("TallyEntries(%q) = %d, %v; want 2, nil", countFile, n, err)
+	}
+}
+
 func TestCountCheckMissingPathFails(t *testing.T) {
 	res := countOf(filepath.Join(t.TempDir(), "nope"), countAny, false, ">", 0).Run(context.Background())
 	if res.OK {
