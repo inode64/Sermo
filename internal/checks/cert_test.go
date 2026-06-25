@@ -226,3 +226,18 @@ func TestCertCheckSource(t *testing.T) {
 		t.Errorf("source(host) = %q, want the host", got)
 	}
 }
+
+func TestCertMessageNoExpiry(t *testing.T) {
+	// Public-key material: algorithm and bits are appended when known.
+	if got := certMessage("/k.pem", CertSample{Kind: "public_key", PublicKeyAlgorithm: "RSA", KeyBits: 2048}, 0, false); got != "/k.pem: public_key, RSA 2048 bits" {
+		t.Errorf("full = %q", got)
+	}
+	// No algorithm -> just the kind.
+	if got := certMessage("/k.pem", CertSample{Kind: "private_key"}, 0, false); got != "/k.pem: private_key" {
+		t.Errorf("no-algo = %q", got)
+	}
+	// Algorithm known but bits unknown (0) -> no bits suffix.
+	if got := certMessage("/k.pem", CertSample{Kind: "public_key", PublicKeyAlgorithm: "Ed25519"}, 0, false); got != "/k.pem: public_key, Ed25519" {
+		t.Errorf("no-bits = %q", got)
+	}
+}
