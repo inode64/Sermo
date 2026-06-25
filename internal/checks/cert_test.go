@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"math/big"
+	"strings"
 	"testing"
 	"time"
 )
@@ -257,5 +258,20 @@ func TestCertDataOptionalFields(t *testing.T) {
 		if _, has := m[k]; has {
 			t.Errorf("minimal sample must omit %q, got %v", k, m[k])
 		}
+	}
+}
+
+func TestCertIssuerChangeAlone(t *testing.T) {
+	// Only onIssuerChange is enabled, so the alert must come solely from the
+	// issuer comparison (not a fingerprint change masking it).
+	cur := healthyCert()
+	c := &certCheck{base: base{name: "c"}, host: "x", port: "443", serverName: "x", verify: false,
+		onIssuerChange: true,
+		sampler:        func(context.Context, string, string, string, bool) (CertSample, error) { return cur, nil }}
+	c.Run(context.Background()) // prime
+	cur.Issuer = "CN=Other CA"
+	res := c.Run(context.Background())
+	if res.OK || !strings.Contains(res.Message, "issuer changed") {
+		t.Fatalf("issuer change alone must alert: %+v", res)
 	}
 }
