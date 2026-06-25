@@ -463,8 +463,8 @@ function renderGlobalEvents() {
     const groupKey = `grp:${gi}:${eventGroupKey(head)}`;
     const open = eventExpanded.has(groupKey);
     return [
-      tpl`<tr class="event-group" data-event-toggle="${groupKey}">
-        <td colspan="4"><span class="exp">${open ? "▾" : "▸"}</span>${who} <span class="muted">${action} · ${g.length} event${g.length === 1 ? "" : "s"}${statuses ? " · " + statuses : ""}</span></td>
+      tpl`<tr class="event-group">
+        <td colspan="4"><button type="button" class="row-toggle" data-event-toggle="${groupKey}" aria-expanded="${open ? "true" : "false"}"><span class="exp" aria-hidden="true">${open ? "▾" : "▸"}</span>${who} <span class="muted">${action} · ${g.length} event${g.length === 1 ? "" : "s"}${statuses ? " · " + statuses : ""}</span></button></td>
       </tr>`,
       open ? eventRows(g, true, { prefix: "group" + gi }) : nothing,
     ];
@@ -4072,8 +4072,8 @@ function renderGroupedRows(list, collapsedGroups, panel, fallback, colspan, rend
     a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: "base" }) * dir
   ).map(([category, items]) => {
     const collapsed = collapsedGroups.has(category);
-    const header = tpl`<tr class="group-row" data-group-panel="${panel}" data-group-name="${category}">
-      <td colspan="${colspan}"><span class="exp">${collapsed ? "▸" : "▾"}</span>${category} <span class="muted">${items.length}</span></td>
+    const header = tpl`<tr class="group-row">
+      <td colspan="${colspan}"><button type="button" class="row-toggle group-toggle" data-group-panel="${panel}" data-group-name="${category}" aria-expanded="${collapsed ? "false" : "true"}"><span class="exp" aria-hidden="true">${collapsed ? "▸" : "▾"}</span>${category} <span class="muted">${items.length}</span></button></td>
     </tr>`;
     return [header, collapsed ? nothing : items.map(renderRow)];
   });
