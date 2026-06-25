@@ -296,3 +296,17 @@ func TestParseStatusMatcherClassUpperBoundary(t *testing.T) {
 		t.Fatal("6xx must be rejected")
 	}
 }
+
+func TestBuildCertCheckServerNameDefaultsToHost(t *testing.T) {
+	c, w := buildCertCheck(base{}, map[string]any{"host": "example.com"}, Deps{})
+	if w != "" {
+		t.Fatalf("unexpected warning: %q", w)
+	}
+	if got := c.(*certCheck).serverName; got != "example.com" {
+		t.Fatalf("serverName = %q, want example.com (defaults to host)", got)
+	}
+	c2, _ := buildCertCheck(base{}, map[string]any{"host": "example.com", "server_name": "sni.example.com"}, Deps{})
+	if got := c2.(*certCheck).serverName; got != "sni.example.com" {
+		t.Fatalf("explicit serverName = %q, want sni.example.com", got)
+	}
+}
