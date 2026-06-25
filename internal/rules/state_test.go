@@ -168,3 +168,12 @@ func TestParsePolicy(t *testing.T) {
 		t.Fatalf("policy = %+v", p)
 	}
 }
+
+func TestGrowBackoffDefaultsFactor(t *testing.T) {
+	// A non-positive backoff factor defaults to 2x rather than collapsing to 0.
+	s := &RemediationState{CurrentBackoff: 10 * time.Second}
+	s.growBackoff(&Backoff{}) // Factor 0
+	if s.CurrentBackoff != 20*time.Second {
+		t.Fatalf("backoff = %v, want 20s (factor defaults to 2)", s.CurrentBackoff)
+	}
+}
