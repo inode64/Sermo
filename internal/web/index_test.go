@@ -146,7 +146,7 @@ func TestIndexShellAnchors(t *testing.T) {
 		"storage-controls", "network-controls",
 		"event-clear", "event-before", "event-reset-filters", "activity-clear",
 		"state-compact-btn", "state-before", "app-rows", "locks-rows",
-		"action-confirm", "confirm-no-cascade",
+		"action-confirm", "confirm-no-cascade", "simple-confirm",
 	}
 	for _, id := range wantIDs {
 		if !ids[id] {
@@ -154,9 +154,9 @@ func TestIndexShellAnchors(t *testing.T) {
 		}
 	}
 
-	// The action-confirm and panic-confirm modals.
-	if dialogs != 2 {
-		t.Errorf("want 2 <dialog> elements, got %d", dialogs)
+	// action-confirm, panic-confirm and simple-confirm modals.
+	if dialogs != 3 {
+		t.Errorf("want 3 <dialog> elements, got %d", dialogs)
 	}
 
 	for _, h := range []string{"Uptime", "CPU total", "Memory", "IO R/W", "State", "Type", "Actions"} {
