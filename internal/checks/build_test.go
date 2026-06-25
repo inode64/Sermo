@@ -234,3 +234,18 @@ func TestBuildLibrariesCheckBinaryRequired(t *testing.T) {
 		t.Fatal("missing binary must warn")
 	}
 }
+
+func TestBuildProcessCheckStateDefault(t *testing.T) {
+	deps := Deps{Processes: func(exe, user string) string { return "running" }}
+	c, w := buildProcessCheck(base{}, map[string]any{"exe": "sshd"}, deps)
+	if w != "" {
+		t.Fatalf("unexpected warning: %q", w)
+	}
+	if got := c.(processCheck).expect; got != "running" {
+		t.Fatalf("default state = %q, want running", got)
+	}
+	c2, _ := buildProcessCheck(base{}, map[string]any{"exe": "sshd", "state": "zombie"}, deps)
+	if got := c2.(processCheck).expect; got != "zombie" {
+		t.Fatalf("explicit state = %q, want zombie", got)
+	}
+}
