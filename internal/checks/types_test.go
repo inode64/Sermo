@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestJSONAssertNumericBoundaries(t *testing.T) {
@@ -102,5 +103,19 @@ func TestSocketCheckFailureVsMissing(t *testing.T) {
 	res2 := socketCheck{base: base{name: "s"}, paths: []string{filepath.Join(dir, "missing")}}.Run(context.Background())
 	if res2.OK || !strings.Contains(res2.Message, "does not exist") {
 		t.Fatalf("missing path: %+v", res2)
+	}
+}
+
+func TestLevelCountResultFreeOmittedWhenLimitUnknown(t *testing.T) {
+	now := time.Now()
+	// limit 0 means the kernel max is unknown: free must be omitted entirely.
+	r := levelCountResult(base{name: "x"}, nil, "fds", "fds", "allocated", 5, 0, now)
+	if _, has := r.Data["free"]; has {
+		t.Fatalf("unknown limit must omit free, got %v", r.Data)
+	}
+	// A known limit carries free = limit - count.
+	r2 := levelCountResult(base{name: "x"}, nil, "fds", "fds", "allocated", 4, 10, now)
+	if r2.Data["free"] != uint64(6) {
+		t.Fatalf("free = %v, want 6", r2.Data["free"])
 	}
 }
