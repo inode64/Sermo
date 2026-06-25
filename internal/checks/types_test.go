@@ -1,6 +1,9 @@
 package checks
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestJSONAssertNumericBoundaries(t *testing.T) {
 	// got == want exercises each operator's boundary exactly.
@@ -37,5 +40,22 @@ func TestExpectExitText(t *testing.T) {
 	}
 	if got := ExpectExitText([]int{2, 3}); got != "2 or 3" {
 		t.Errorf("ExpectExitText([2 3]) = %q, want \"2 or 3\"", got)
+	}
+}
+
+func TestBoundTail(t *testing.T) {
+	// Exactly the line limit (40) is kept whole; one more line truncates.
+	forty := strings.Repeat("x\n", 39) + "x"
+	if strings.HasPrefix(boundTail(forty), "… (truncated)") {
+		t.Errorf("exactly %d lines must not be truncated", boundedOutputMaxLines)
+	}
+	fortyOne := strings.Repeat("x\n", 40) + "x"
+	if !strings.HasPrefix(boundTail(fortyOne), "… (truncated)") {
+		t.Errorf("%d lines must be truncated", boundedOutputMaxLines+1)
+	}
+	// Exactly the byte limit (single line) is kept whole.
+	exact := strings.Repeat("a", boundedOutputMaxBytes)
+	if strings.HasPrefix(boundTail(exact), "… (truncated)") {
+		t.Errorf("a %d-byte single line must not be truncated", boundedOutputMaxBytes)
 	}
 }
