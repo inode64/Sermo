@@ -386,3 +386,23 @@ func TestDefaultExprNestedDepth(t *testing.T) {
 		t.Fatalf("defaultExpr(${ABC}) ok = %v, want false", ok)
 	}
 }
+
+func TestOpenRCAssignmentsIfElseFi(t *testing.T) {
+	// X empty -> if-condition false -> the else branch runs.
+	elseVars := openRCAssignments("X=\nif [ -n \"${X}\" ]; then\nINSIDE=a\nelse\nELSEVAL=b\nfi\n", "svc")
+	if elseVars["ELSEVAL"] != "b" {
+		t.Fatalf("else branch must run, ELSEVAL=%q", elseVars["ELSEVAL"])
+	}
+	if _, set := elseVars["INSIDE"]; set {
+		t.Fatalf("if-body must be skipped, INSIDE=%q", elseVars["INSIDE"])
+	}
+	// After a false (no-else) if block, `fi` restores the active state so trailing
+	// lines run again.
+	fiVars := openRCAssignments("X=\nif [ -n \"${X}\" ]; then\nINSIDE=a\nfi\nAFTER=c\n", "svc")
+	if _, set := fiVars["INSIDE"]; set {
+		t.Fatalf("if-body must be skipped, INSIDE=%q", fiVars["INSIDE"])
+	}
+	if fiVars["AFTER"] != "c" {
+		t.Fatalf("AFTER = %q, want c (active restored after fi)", fiVars["AFTER"])
+	}
+}
