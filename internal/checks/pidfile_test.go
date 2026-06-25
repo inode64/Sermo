@@ -98,3 +98,12 @@ func TestBuildPidfileCheckNeedsPath(t *testing.T) {
 		t.Fatalf("valid pidfile candidate list should build: warn=%q", warn)
 	}
 }
+
+func TestPidfileLiveFallbackPIDsFiltersNonPositiveAndDupes(t *testing.T) {
+	c := pidfileCheck{fallbackPIDs: func() []int { return []int{0, -3, 5, 5, 7} }}
+	got := c.liveFallbackPIDs(func(int) bool { return true })
+	// pid <= 0 are dropped, duplicates collapsed: [5, 7].
+	if len(got) != 2 || got[0] != 5 || got[1] != 7 {
+		t.Fatalf("liveFallbackPIDs = %v, want [5 7]", got)
+	}
+}
