@@ -2625,14 +2625,14 @@ function watchPanelKeyForElement(el) {
 
 function renderConditionRows(conditions) {
   const list = conditions || [];
-  if (!list.length) return tpl`<div class="muted" style="margin:.2rem 0 .6rem">No configured predicates.</div>`;
+  if (!list.length) return tpl`<div class="muted condition-empty">No configured predicates.</div>`;
   const rows = list.map((c) => tpl`<tr>
     <td><code>${c.field || ""}</code></td>
     <td>${c.op || ""}</td>
     <td><code>${c.value || ""}</code></td>
   </tr>`);
-  return tpl`<div class="muted" style="margin:.15rem 0 .1rem">Check predicates</div>
-    <table style="width:auto; font-size:.85rem; margin-bottom:.6rem;">
+  return tpl`<div class="muted condition-heading">Check predicates</div>
+    <table class="detail-compact-table condition-table">
       <caption class="visually-hidden">Check predicates</caption>
       <thead><tr><th scope="col">Field</th><th scope="col">Op</th><th scope="col">Value</th></tr></thead>
       <tbody>${rows}</tbody>
@@ -3086,7 +3086,7 @@ function renderAppExpansion(a) {
     <div><span class="muted">Status</span><br>${statusHTML}</div>
     <div class="app-sla"><span class="muted">SLA</span><br>${sla}</div>
   </div>
-  <h3 style="font-size:.95rem; margin:.8rem 0 .3rem">Recent events</h3>
+  <h3 class="expansion-heading">Recent events</h3>
   <table class="events">
     <caption class="visually-hidden">Recent application events</caption>
     <thead><tr><th scope="col">Time</th><th scope="col">Kind</th><th scope="col">Message</th></tr></thead>
@@ -3142,7 +3142,7 @@ function renderWatchExpansion(w, events) {
       <td>${detail ? tpl`<span class="muted">${detail}</span> ` : nothing}${e.message || ""}</td>
     </tr>`;
   });
-  return tpl`${cfg}${live}${conditions}<table class="events" style="width:auto; font-size:.85rem;">
+  return tpl`${cfg}${live}${conditions}<table class="events events-compact-table">
     <caption class="visually-hidden">Recent watch activity</caption>
     <thead><tr><th scope="col">Time</th><th scope="col">Kind</th><th scope="col">Message</th></tr></thead>
     <tbody>${rows}</tbody></table>`;
@@ -3995,17 +3995,17 @@ function renderActionConfirm() {
   const lastEvent = ev
     ? tpl`${fmtTime(ev.time)} · <span class="kind kind-${ev.kind}">${ev.kind || ""}</span> ${[ev.action, ev.status].filter(Boolean).join(" ")} <span class="muted">${ev.message || ""}</span>`
     : tpl`<span class="muted">none recorded</span>`;
-  const preRows = pre ? tpl`<div style="margin-top:.65rem">${preflightRows(pre.checks || [])}</div>` : nothing;
+  const preRows = pre ? tpl`<div class="confirm-preflight-block">${preflightRows(pre.checks || [])}</div>` : nothing;
   const warning = ctx.action === "restart"
     ? "A safe restart stops the unit, verifies residual processes, then starts only if the stop phase is clean."
     : "Stop will run through locks, guards and residual-process handling. It will not start the service again.";
   const cascadeTargets = (d.also_apply || []).filter(Boolean);
   const cascadeLine = cascadeTargets.length
-    ? tpl`<p class="muted" style="margin-top:.5rem">also_apply: <code>${cascadeTargets.join(", ")}</code></p>`
+    ? tpl`<p class="muted confirm-cascade-line">also_apply: <code>${cascadeTargets.join(", ")}</code></p>`
     : nothing;
 
   litRender(tpl`
-    <p style="margin-top:0">${warning}</p>
+    <p class="confirm-lead">${warning}</p>
     ${cascadeLine}
     <div class="modal-grid">
       <div class="muted">Unit</div><div><code>${d.unit || ""}</code></div>
