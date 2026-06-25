@@ -1295,6 +1295,10 @@ function expandToggleAriaLabel(name, open, subject) {
   return `${open ? "Collapse" : "Expand"} ${subject} for ${name}`;
 }
 
+function groupToggleAriaLabel(category, count, collapsed) {
+  return `${collapsed ? "Expand" : "Collapse"} ${category} group (${count} items)`;
+}
+
 function svcActionAriaLabel(s, action) {
   const name = displayName(s) || s.name || "";
   switch (action) {
@@ -3369,7 +3373,7 @@ function lockReleaseButton(l) {
 function lockServiceLink(l) {
   const svc = l.service || "";
   if (!svc) return tpl`<span class="muted">—</span>`;
-  return tpl`<button type="button" class="name row-toggle" data-service-open="${svc}">${svc}</button>`;
+  return tpl`<button type="button" class="name row-toggle" data-service-open="${svc}" aria-label="Open service ${svc}">${svc}</button>`;
 }
 
 async function releaseLock(service, name) {
@@ -4527,7 +4531,7 @@ function renderGroupedRows(list, collapsedGroups, panel, fallback, colspan, rend
     const collapsed = collapsedGroups.has(category);
     const panelId = groupedPanelId(panel, items);
     const header = tpl`<tr class="group-row">
-      <td colspan="${colspan}"><button type="button" class="row-toggle group-toggle" data-group-panel="${panel}" data-group-name="${category}" aria-expanded="${collapsed ? "false" : "true"}" aria-controls="${panelId}"><span class="exp" aria-hidden="true">${collapsed ? "▸" : "▾"}</span>${category} <span class="muted">${items.length}</span></button></td>
+      <td colspan="${colspan}"><button type="button" class="row-toggle group-toggle" data-group-panel="${panel}" data-group-name="${category}" aria-expanded="${collapsed ? "false" : "true"}" aria-controls="${panelId}" aria-label="${groupToggleAriaLabel(category, items.length, collapsed)}"><span class="exp" aria-hidden="true">${collapsed ? "▸" : "▾"}</span>${category} <span class="muted">${items.length}</span></button></td>
     </tr>`;
     return [header, collapsed ? nothing : items.map(renderRow)];
   });
