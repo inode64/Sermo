@@ -263,6 +263,15 @@ func TestResumeUnsupported(t *testing.T) {
 	}
 }
 
+func TestResumeServiceFailedAfterResume(t *testing.T) {
+	h := defaultHarness()
+	h.mgr.status = servicemgr.StatusFailed
+	res := h.engine().Resume(context.Background())
+	if res.Status != ResultFailed || res.Message != "service failed after resume" {
+		t.Fatalf("res = %+v, want failed after resume", res)
+	}
+}
+
 func TestStopReconcilesInitState(t *testing.T) {
 	h := defaultHarness()
 	res := h.engine().Stop(context.Background())
