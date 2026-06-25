@@ -576,3 +576,14 @@ func TestSampleSystemCPUCounterReset(t *testing.T) {
 		t.Fatalf("total_cpu%% = %v, want 0 (no underflow rate)", r.Percent)
 	}
 }
+
+func TestCountCPULinesEdgeLines(t *testing.T) {
+	// A bare "cpu" line (length 3) must be skipped without indexing line[3].
+	if n := countCPULines([]byte("cpu\n")); n != 0 {
+		t.Fatalf("bare cpu line = %d, want 0", n)
+	}
+	// "cpu9" counts: line[3]=='9' is within the inclusive digit range.
+	if n := countCPULines([]byte("cpu9 1 2 3\n")); n != 1 {
+		t.Fatalf("cpu9 = %d, want 1", n)
+	}
+}
