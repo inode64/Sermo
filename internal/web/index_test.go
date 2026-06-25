@@ -227,6 +227,8 @@ func TestIndexAccessibilityBundle(t *testing.T) {
 		"service details",
 		"Run preflight checks for ",
 		"Show full event message",
+		"Open service ",
+		"group (",
 	} {
 		if !strings.Contains(script, needle) {
 			t.Errorf("bundled script missing a11y marker %q", needle)
@@ -461,6 +463,14 @@ func TestIndexAccessibilityShell(t *testing.T) {
 		}
 	} else {
 		t.Error(`shell missing #refresh-now`)
+	}
+
+	if resetFilters := nodeByID(doc, "event-reset-filters"); resetFilters != nil {
+		if got, ok := attr(resetFilters, "aria-label"); !ok || got != "Reset event filters" {
+			t.Errorf(`#event-reset-filters aria-label = %q, want "Reset event filters"`, got)
+		}
+	} else {
+		t.Error(`shell missing #event-reset-filters`)
 	}
 
 	if eventClear := nodeByID(doc, "event-clear"); eventClear != nil {
