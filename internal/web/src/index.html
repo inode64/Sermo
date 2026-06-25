@@ -359,11 +359,11 @@
 
 <dialog id="action-confirm" aria-labelledby="confirm-title" aria-describedby="confirm-subtitle confirm-body">
   <div class="modal-head">
-    <h2 id="confirm-title" style="font-size:1.05rem; margin:0"></h2>
-    <div id="confirm-subtitle" class="muted" style="font-size:.85rem; margin-top:.15rem"></div>
+    <h2 id="confirm-title" class="modal-title"></h2>
+    <div id="confirm-subtitle" class="muted modal-subtitle"></div>
   </div>
   <div id="confirm-body" class="modal-body"></div>
-  <label id="confirm-no-cascade-wrap" class="muted" style="display:none; font-size:.85rem; margin:.35rem 0 .15rem;">
+  <label id="confirm-no-cascade-wrap" class="muted confirm-cascade-wrap" style="display:none">
     <input id="confirm-no-cascade" type="checkbox"> operate only this service (skip <code>also_apply</code>)
   </label>
   <div class="modal-foot">
@@ -375,7 +375,7 @@
 
 <dialog id="panic-confirm" aria-labelledby="panic-title" aria-describedby="panic-message">
   <div class="modal-head">
-    <h2 id="panic-title" style="font-size:1.05rem; margin:0"></h2>
+    <h2 id="panic-title" class="modal-title"></h2>
   </div>
   <div class="modal-body panic-dialog-body">
     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
@@ -389,10 +389,10 @@
 
 <dialog id="simple-confirm" aria-labelledby="simple-confirm-title" aria-describedby="simple-confirm-message">
   <div class="modal-head">
-    <h2 id="simple-confirm-title" style="font-size:1.05rem; margin:0"></h2>
+    <h2 id="simple-confirm-title" class="modal-title"></h2>
   </div>
   <div class="modal-body">
-    <p id="simple-confirm-message" style="margin:0"></p>
+    <p id="simple-confirm-message" class="modal-message"></p>
   </div>
   <div class="modal-foot">
     <button type="button" data-simple-result="false">cancel</button>

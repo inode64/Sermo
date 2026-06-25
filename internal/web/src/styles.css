@@ -455,6 +455,10 @@
   /* ---- dialogs ------------------------------------------------------------- */
   dialog { color: var(--text); background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--radius); padding: 0; max-width: min(44rem, calc(100vw - 2rem)); width: 44rem; box-shadow: 0 12px 40px rgb(0 0 0 / .25); }
   dialog::backdrop { background: rgba(8, 12, 18, .55); backdrop-filter: blur(2px); }
+  .modal-title { font-size: 1.05rem; margin: 0; }
+  .modal-subtitle { font-size: .85rem; margin-top: .15rem; }
+  .modal-message { margin: 0; }
+  .confirm-cascade-wrap { font-size: .85rem; margin: .35rem 0 .15rem; }
   .modal-head, .modal-foot { padding: .85rem 1rem; border-bottom: 1px solid var(--line); }
   .modal-foot { border-top: 1px solid var(--line); border-bottom: 0; display: flex; justify-content: flex-end; gap: .5rem; flex-wrap: wrap; }
   .modal-body { padding: 1rem; }
