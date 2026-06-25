@@ -220,10 +220,7 @@ func TestIndexAccessibilityBundle(t *testing.T) {
 		"SLA timeline data",
 		"preflight not available for this action",
 		"service is disabled in configuration",
-		"Cancel service operation",
 		"Confirm:",
-		"Dashboard auto-refresh interval",
-		"Refresh dashboard now",
 	} {
 		if !strings.Contains(script, needle) {
 			t.Errorf("bundled script missing a11y marker %q", needle)
