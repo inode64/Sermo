@@ -301,6 +301,10 @@
   .service-detail h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); margin: 1.15rem 0 .45rem; }
   .service-detail h2:first-child { margin-top: 0; }
   .service-detail table { width: 100%; margin-bottom: .6rem; }
+  .detail-compact-table { font-size: .85rem; }
+  .detail-warn { margin-top: .25rem; }
+  .detail-totals { margin: -.1rem 0 .35rem; }
+  .detail-summary { margin-top: -.25rem; }
   .proc-tree { display: inline-flex; align-items: center; gap: .28rem; min-width: 0; padding-left: calc(var(--proc-depth, 0) * .9rem); }
   .proc-branch { flex: 0 0 auto; color: var(--text-2); font-family: var(--mono); font-size: .9em; letter-spacing: 0; }
   .proc-branch::before { content: "└─"; }

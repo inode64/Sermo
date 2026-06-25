@@ -2008,7 +2008,7 @@ function renderServiceDetail(d) {
   });
   const lockRows = lockRowsArr.length ? lockRowsArr : tpl`<tr><td colspan="8" class="muted">No named runtime locks.</td></tr>`;
   const lockWarns = (d.lock_warnings || []).map((w) =>
-    tpl`<div class="inactive" style="margin-top:.25rem">warning: ${w}</div>`
+    tpl`<div class="inactive detail-warn">warning: ${w}</div>`
   );
 
   const pt = d.process_totals || (noResidentProcess ? null : {
@@ -2027,17 +2027,17 @@ function renderServiceDetail(d) {
     ? tpl` ${usageBarMini(memPct(pt.rss || 0), fmtPct(memPct(pt.rss || 0)))}`
     : nothing;
   const totals = pt
-    ? tpl`<p class="muted" style="margin:-.1rem 0 .35rem">Service totals (including child processes): memory <b>${fmtBytes(pt.rss || 0)}</b>${totalBar}${cpuTotalsLine(pt)} · IO r/w <b>${fmtBytes(pt.io_read || 0)} / ${fmtBytes(pt.io_write || 0)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? "" : "es"}</p>`
+    ? tpl`<p class="muted detail-totals">Service totals (including child processes): memory <b>${fmtBytes(pt.rss || 0)}</b>${totalBar}${cpuTotalsLine(pt)} · IO r/w <b>${fmtBytes(pt.io_read || 0)} / ${fmtBytes(pt.io_write || 0)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? "" : "es"}</p>`
     : nothing;
-  const procWarns = procWarnings.map((w) => tpl`<div class="bad" style="margin-top:.25rem">discovery warning: ${w}</div>`);
+  const procWarns = procWarnings.map((w) => tpl`<div class="bad detail-warn">discovery warning: ${w}</div>`);
   const procSummary = noResidentProcess
-    ? tpl`<p class="muted" style="margin-top:-.25rem">No resident process expected.</p>`
-    : tpl`<p class="muted" style="margin-top:-.25rem">${procs.length} discovered${procWarnings.length ? ` · ${procWarnings.length} discovery warning${procWarnings.length === 1 ? "" : "s"}` : ""}</p>`;
+    ? tpl`<p class="muted detail-summary">No resident process expected.</p>`
+    : tpl`<p class="muted detail-summary">${procs.length} discovered${procWarnings.length ? ` · ${procWarnings.length} discovery warning${procWarnings.length === 1 ? "" : "s"}` : ""}</p>`;
   const procRows = processRows(procs);
   const procTable = noResidentProcess
     ? nothing
     : procs.length
-    ? tpl`<table style="font-size:.85rem;">
+    ? tpl`<table class="detail-compact-table">
         <caption class="visually-hidden">Service processes</caption>
         <thead><tr><th scope="col">PID</th><th scope="col">CMD</th><th scope="col">User</th><th scope="col">Role</th><th scope="col">CPU</th><th scope="col" title="CPU used by this process, normalized to one core">Core peak</th><th scope="col">Mem</th><th scope="col">IO r/w</th><th scope="col">FDs</th><th scope="col">Threads</th></tr></thead>
         <tbody>${procRows.map((row) => { const p = row.p; return tpl`<tr>
