@@ -47,6 +47,12 @@ func TestConfigCheckValidity(t *testing.T) {
 	if res := good.Run(context.Background()); !res.OK {
 		t.Errorf("a passing config test should be ok: %s", res.Message)
 	}
+	// ExitCode -1 means the command never started: a distinct did-not-start
+	// failure, not an ordinary non-zero exit.
+	notStarted := configCheck{base: base{name: "c", timeout: time.Second}, runner: fakeRunner{execx.Result{ExitCode: -1}}, argv: []string{"nginx", "-t"}}
+	if res := notStarted.Run(context.Background()); res.OK || !strings.Contains(res.Message, execx.CommandDidNotStart) {
+		t.Errorf("did-not-start message = %q, want it to contain %q", res.Message, execx.CommandDidNotStart)
+	}
 }
 
 func TestConfigCheckCommandUser(t *testing.T) {
