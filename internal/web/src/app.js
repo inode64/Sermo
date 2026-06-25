@@ -1666,7 +1666,8 @@ function renderSLAWindows(wins, compact) {
 function renderSLAFill(pct) {
   const width = pct == null ? 0 : pctClamp(pct);
   const empty = pct == null ? " sla-empty" : "";
-  return tpl`<span class="sla-bar"><span class="sla-fill${empty}" style="--sla-pct:${width.toFixed(2)}%; --sla-color:${slaColor(pct)}"></span></span>`;
+  const label = pct == null ? "No SLA data" : `${fmtNum(pct, 2)}% available`;
+  return tpl`<span class="sla-bar" aria-label="${label}"><span class="sla-fill${empty}" style="--sla-pct:${width.toFixed(2)}%; --sla-color:${slaColor(pct)}"></span></span>`;
 }
 
 // renderSLATimeline draws a contiguous status-page style availability band: one
@@ -1680,10 +1681,11 @@ function renderSLATimeline(segments, window) {
     const segStart = endMs - spanMs + (i / n) * spanMs;
     const segEnd = endMs - spanMs + ((i + 1) / n) * spanMs;
     const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
-    if (pct == null) return tpl`<span class="sla-seg sla-gap" title="${when + " · no data"}"></span>`;
-    return tpl`<span class="sla-seg" style="--sla-color:${slaColor(pct)}" title="${when + " · " + fmtNum(pct, 2) + "%"}"></span>`;
+    if (pct == null) return tpl`<span class="sla-seg sla-gap" title="${when + " · no data"}" aria-label="${when}: no data"></span>`;
+    const pctText = fmtNum(pct, 2) + "%";
+    return tpl`<span class="sla-seg" style="--sla-color:${slaColor(pct)}" title="${when + " · " + pctText}" aria-label="${when}: ${pctText} available"></span>`;
   });
-  return tpl`<span class="sla-timeline">${cells}</span>`;
+  return tpl`<span class="sla-timeline" role="img" aria-label="SLA availability timeline">${cells}</span>`;
 }
 
 function slaWindowSpanMs(window) {
