@@ -218,6 +218,8 @@ func TestIndexAccessibilityBundle(t *testing.T) {
 		"Chart data",
 		"lock is still active",
 		"SLA timeline data",
+		"preflight not available for this action",
+		"service is disabled in configuration",
 	} {
 		if !strings.Contains(script, needle) {
 			t.Errorf("bundled script missing a11y marker %q", needle)
@@ -388,6 +390,25 @@ func TestIndexAccessibilityShell(t *testing.T) {
 
 	if nodeByID(doc, "simple-confirm") == nil {
 		t.Error(`shell missing #simple-confirm dialog`)
+	}
+
+	if panicBtn := nodeByID(doc, "panic-btn"); panicBtn != nil {
+		if got, ok := attr(panicBtn, "aria-label"); !ok || !strings.Contains(got, "panic mode") {
+			t.Errorf(`#panic-btn aria-label = %q, want panic mode wording`, got)
+		}
+	} else {
+		t.Error(`shell missing #panic-btn`)
+	}
+
+	if preflightBtn := nodeByID(doc, "confirm-preflight-btn"); preflightBtn != nil {
+		if got, ok := attr(preflightBtn, "aria-label"); !ok || got != "Run preflight checks" {
+			t.Errorf(`#confirm-preflight-btn aria-label = %q, want "Run preflight checks"`, got)
+		}
+		if nodeByID(doc, "confirm-preflight-hint") == nil {
+			t.Error(`shell missing #confirm-preflight-hint`)
+		}
+	} else {
+		t.Error(`shell missing #confirm-preflight-btn`)
 	}
 
 	for _, spec := range []struct {
