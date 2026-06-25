@@ -197,7 +197,8 @@
     outline-offset: 1px;
   }
   :target, :focus { scroll-margin-top: 5rem; scroll-margin-bottom: 4rem; }
-  #svc-controls input, #storage-controls input, #watch-controls input, #network-controls input, #app-controls input { min-width: 13rem; }
+  .panel-controls { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin: .5rem 0 .6rem; }
+  .panel-controls input { min-width: 13rem; }
   #svc-filters button, #storage-filters button, #watch-filters button, #network-filters button, #app-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
   #svc-filters button:hover, #storage-filters button:hover, #watch-filters button:hover, #network-filters button:hover, #app-filters button:hover { background: var(--panel-2); color: var(--text); }
   #svc-filters button.f-active, #storage-filters button.f-active, #watch-filters button.f-active, #network-filters button.f-active, #app-filters button.f-active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
@@ -367,7 +368,7 @@
     details, section#locks-section { padding: 0 .7rem; }
     summary { padding: .6rem .7rem; margin: 0 -.7rem; }
     /* The search field owns its row; filters/count wrap underneath. */
-    #svc-controls input, #storage-controls input, #watch-controls input, #network-controls input, #app-controls input { min-width: 0; flex: 1 1 100%; }
+    .panel-controls input { min-width: 0; flex: 1 1 100%; }
     #event-controls { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
     /* services → Service · State · Actions (also hide CPU/Memory). */
     .services-table th:nth-child(5), .services-table td:nth-child(5),
