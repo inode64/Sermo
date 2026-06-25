@@ -387,6 +387,19 @@
   </div>
 </dialog>
 
+<dialog id="simple-confirm" aria-labelledby="simple-confirm-title" aria-describedby="simple-confirm-message">
+  <div class="modal-head">
+    <h2 id="simple-confirm-title" style="font-size:1.05rem; margin:0"></h2>
+  </div>
+  <div class="modal-body">
+    <p id="simple-confirm-message" style="margin:0"></p>
+  </div>
+  <div class="modal-foot">
+    <button type="button" data-simple-result="false">cancel</button>
+    <button type="button" id="simple-confirm-ok" data-simple-result="true">confirm</button>
+  </div>
+</dialog>
+
 <footer id="app-footer" role="contentinfo">
   <div class="footer-actions">
     <button id="reload-btn" style="display:none">reload config</button>

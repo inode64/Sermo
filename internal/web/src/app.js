@@ -273,7 +273,14 @@ function panicConfirm(enable) {
   }
   if (okBtn) okBtn.textContent = enable ? "enter panic mode" : "exit panic mode";
   if (!dlg || typeof dlg.showModal !== "function") {
-    return Promise.resolve(confirm(enable ? "Enter panic mode?" : "Exit panic mode?"));
+    return promptConfirm({
+      title: enable ? "Enter panic mode?" : "Exit panic mode?",
+      message: enable
+        ? "Suspend all hooks, alerts and automatic remediation?"
+        : "Resume hooks, alerts and automatic remediation?",
+      okLabel: enable ? "enter panic mode" : "exit panic mode",
+      danger: enable,
+    });
   }
   return new Promise((resolve) => {
     panicResolve = resolve;
@@ -320,7 +327,7 @@ async function clearEventLog(beforeValue) {
   const msg = before
     ? `Clear persisted events older than ${before}? This cannot be undone.`
     : "Clear all persisted events from the activity log? This cannot be undone.";
-  if (!confirm(msg)) return;
+  if (!(await promptConfirm({ title: "Clear event log?", message: msg, okLabel: "clear log", danger: true }))) return;
   setStatus("");
   const btn = $("#event-clear");
   if (btn) btn.disabled = true;
@@ -348,7 +355,7 @@ async function compactState() {
   const msg = before
     ? `Compact state history older than ${before} and vacuum the database?`
     : "Compact state history using the normal retention window and vacuum the database?";
-  if (!confirm(msg)) return;
+  if (!(await promptConfirm({ title: "Compact state?", message: msg, okLabel: "compact", danger: true }))) return;
   setStatus("");
   const btn = $("#state-compact-btn");
   if (btn) btn.disabled = true;
@@ -3175,7 +3182,12 @@ function lockServiceLink(l) {
 
 async function releaseLock(service, name) {
   const label = name ? `${service}.${name}` : service;
-  if (!confirm(`release inactive lock "${label}"?`)) return;
+  if (!(await promptConfirm({
+    title: `Release lock ${label}?`,
+    message: `Release inactive lock "${label}"?`,
+    okLabel: "release",
+    danger: true,
+  }))) return;
   setStatus("");
   const qs = name ? `?name=${encodeURIComponent(name)}` : "";
   try {
@@ -3601,7 +3613,7 @@ async function act(name, action, opts = {}) {
 }
 
 async function actWatch(name, action) {
-  if (action === "expand" && !confirmWatchExpand(name)) return;
+  if (action === "expand" && !(await confirmWatchExpand(name))) return;
   setStatus("");
   try {
     const res = await fetch(`api/watches/${encodeURIComponent(name)}/${action}`, {
@@ -3618,11 +3630,51 @@ async function actWatch(name, action) {
   load();
 }
 
-function confirmWatchExpand(name) {
+async function confirmWatchExpand(name) {
   const w = (allWatches || []).find((item) => item && item.name === name) || {};
   const by = w.expand && Number(w.expand.by_bytes) > 0 ? fmtBytes(w.expand.by_bytes) : "the configured amount";
   const path = w.storage && w.storage.path ? ` on ${w.storage.path}` : "";
-  return confirm(`Expand "${name}"${path} by ${by}?`);
+  return promptConfirm({
+    title: `Expand ${name}?`,
+    message: `Expand "${name}"${path} by ${by}?`,
+    okLabel: "expand",
+    danger: true,
+  });
+}
+
+let promptConfirmResolve = null;
+
+// promptConfirm is the shared yes/no dialog for destructive or irreversible
+// actions. Native <dialog> handles focus and Esc; callers await the boolean.
+function promptConfirm(opts) {
+  const dlg = $("#simple-confirm");
+  const title = $("#simple-confirm-title");
+  const msg = $("#simple-confirm-message");
+  const okBtn = $("#simple-confirm-ok");
+  const o = opts || {};
+  if (!dlg || typeof dlg.showModal !== "function") {
+    const text = [o.title, o.message].filter(Boolean).join("\n\n");
+    return Promise.resolve(window.confirm(text || "Continue?"));
+  }
+  if (title) title.textContent = o.title || "Confirm";
+  if (msg) msg.textContent = o.message || "";
+  if (okBtn) {
+    okBtn.textContent = o.okLabel || "confirm";
+    okBtn.className = o.danger ? "danger-btn" : "";
+  }
+  return new Promise((resolve) => {
+    promptConfirmResolve = resolve;
+    dlg.oncancel = () => closePromptConfirm(false);
+    dlg.showModal();
+  });
+}
+
+function closePromptConfirm(ok) {
+  const dlg = $("#simple-confirm");
+  if (dlg && dlg.open) dlg.close();
+  const resolve = promptConfirmResolve;
+  promptConfirmResolve = null;
+  if (resolve) resolve(!!ok);
 }
 
 let confirmResolve = null;
@@ -3632,7 +3684,12 @@ let confirmNoCascade = false;
 async function confirmAction(name, action) {
   const dlg = $("#action-confirm");
   if (!dlg || typeof dlg.showModal !== "function") {
-    return confirm(`${action} "${name}"?`);
+    return promptConfirm({
+      title: `${action} ${name}?`,
+      message: `${action} "${name}"?`,
+      okLabel: action,
+      danger: action === "stop" || action === "restart",
+    });
   }
   confirmCtx = { name, action, detail: null, lastEvent: null, preflight: null };
   confirmNoCascade = false;
@@ -4386,6 +4443,15 @@ function initStaticHandlers() {
       if (b) closePanicConfirm(b.dataset.panicResult === "true");
     });
     panicDlg.addEventListener("close", () => { if (panicResolve) closePanicConfirm(false); });
+  }
+
+  const simpleDlg = $("#simple-confirm");
+  if (simpleDlg) {
+    simpleDlg.addEventListener("click", (e) => {
+      const b = closestFrom(e, "[data-simple-result]");
+      if (b) closePromptConfirm(b.dataset.simpleResult === "true");
+    });
+    simpleDlg.addEventListener("close", () => { if (promptConfirmResolve) closePromptConfirm(false); });
   }
 }
 
