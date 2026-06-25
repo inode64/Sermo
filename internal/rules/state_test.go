@@ -177,3 +177,12 @@ func TestGrowBackoffDefaultsFactor(t *testing.T) {
 		t.Fatalf("backoff = %v, want 20s (factor defaults to 2)", s.CurrentBackoff)
 	}
 }
+
+func TestCountWithinZeroWindowCountsAll(t *testing.T) {
+	now := time.Unix(1000, 0)
+	s := &RemediationState{RecentActions: []time.Time{now.Add(-time.Hour), now.Add(-time.Minute)}}
+	// window <= 0 disables the time window: every recorded action is counted.
+	if got := s.countWithin(now, 0); got != 2 {
+		t.Fatalf("countWithin(0 window) = %d, want 2", got)
+	}
+}
