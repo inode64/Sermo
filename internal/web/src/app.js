@@ -1065,7 +1065,7 @@ function renderOperationLive() {
     const cls = op.finished ? (op.ok ? "ok" : "failed") : "";
     const since = op.finished ? `${opElapsed(op)}s total` : `${opElapsed(op)}s elapsed`;
     return `<div class="op-card">
-      <span class="op-dot ${cls}"></span>
+      <span class="op-dot ${cls}" aria-hidden="true"></span>
       <b>${esc(op.action)}</b>
       <span>${esc(op.name)}</span>
       <span class="${cls || 'inactive'}">${esc(state)}</span>
