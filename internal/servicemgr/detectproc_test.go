@@ -361,3 +361,14 @@ func TestResolveOpenRCValueDefault(t *testing.T) {
 		t.Fatalf("empty var = (%q,%v), want /run/d.pid", got, ok)
 	}
 }
+
+func TestTrimShellPrefixPattern(t *testing.T) {
+	// A wildcard prefix match at index 0 still strips through the suffix.
+	if got := trimShellPrefixPattern("foobar", "*foo"); got != "bar" {
+		t.Errorf("trimShellPrefixPattern(foobar, *foo) = %q, want bar", got)
+	}
+	// A literal prefix is trimmed.
+	if got := trimShellPrefixPattern("/usr/bin", "/usr"); got != "/bin" {
+		t.Errorf("trimShellPrefixPattern(/usr/bin, /usr) = %q, want /bin", got)
+	}
+}
