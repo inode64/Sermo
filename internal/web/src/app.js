@@ -1293,6 +1293,21 @@ function svcActionDescribedBy(s, action, busy) {
   return disabled && reason ? svcActionHintId(s, action) : nothing;
 }
 
+function svcActionAriaLabel(s, action) {
+  const name = displayName(s) || s.name || "";
+  switch (action) {
+    case "start": return `Start service ${name}`;
+    case "start-only": return `Start only service ${name}`;
+    case "stop": return `Stop service ${name}`;
+    case "restart": return `Restart service ${name}`;
+    case "resume": return `Resume service ${name}`;
+    case "reload": return `Reload service ${name}`;
+    case "monitor": return `Monitor service ${name}`;
+    case "unmonitor": return `Unmonitor service ${name}`;
+    default: return `${action} service ${name}`;
+  }
+}
+
 // serviceRowParts builds one service's main and optional expansion <tr> HTML.
 // Shared by the full tbody rebuild and the large-fleet in-place patch path.
 function serviceRowParts(s) {
@@ -1311,19 +1326,19 @@ function serviceRowParts(s) {
     const alsoApply = (s.also_apply || []).length;
     actions = me.can_act ? tpl`
         ${svcActionHint(s, "start", busy)}
-        <button ?disabled=${serviceActionDisabled(s, "start", busy)} data-service="${s.name}" data-service-action="start" title="${alsoApply ? `also applies to: ${s.also_apply.join(", ")}` : nothing}" aria-describedby="${svcActionDescribedBy(s, "start", busy)}">start</button>
-        ${alsoApply ? tpl`${svcActionHint(s, "start-only", busy)}<button ?disabled=${serviceActionDisabled(s, "start-only", busy)} data-service="${s.name}" data-service-action="start" data-no-cascade="1" title="start only ${s.name}" aria-describedby="${svcActionDescribedBy(s, "start-only", busy)}">start only</button>` : nothing}
+        <button ?disabled=${serviceActionDisabled(s, "start", busy)} data-service="${s.name}" data-service-action="start" title="${alsoApply ? `also applies to: ${s.also_apply.join(", ")}` : nothing}" aria-label="${svcActionAriaLabel(s, "start")}" aria-describedby="${svcActionDescribedBy(s, "start", busy)}">start</button>
+        ${alsoApply ? tpl`${svcActionHint(s, "start-only", busy)}<button ?disabled=${serviceActionDisabled(s, "start-only", busy)} data-service="${s.name}" data-service-action="start" data-no-cascade="1" title="start only ${s.name}" aria-label="${svcActionAriaLabel(s, "start-only")}" aria-describedby="${svcActionDescribedBy(s, "start-only", busy)}">start only</button>` : nothing}
         ${svcActionHint(s, "stop", busy)}
-        <button ?disabled=${serviceActionDisabled(s, "stop", busy)} data-service="${s.name}" data-service-action="stop" aria-describedby="${svcActionDescribedBy(s, "stop", busy)}">stop</button>
+        <button ?disabled=${serviceActionDisabled(s, "stop", busy)} data-service="${s.name}" data-service-action="stop" aria-label="${svcActionAriaLabel(s, "stop")}" aria-describedby="${svcActionDescribedBy(s, "stop", busy)}">stop</button>
         ${svcActionHint(s, "restart", busy)}
-        <button ?disabled=${serviceActionDisabled(s, "restart", busy)} data-service="${s.name}" data-service-action="restart" aria-describedby="${svcActionDescribedBy(s, "restart", busy)}">restart</button>
+        <button ?disabled=${serviceActionDisabled(s, "restart", busy)} data-service="${s.name}" data-service-action="restart" aria-label="${svcActionAriaLabel(s, "restart")}" aria-describedby="${svcActionDescribedBy(s, "restart", busy)}">restart</button>
         ${svcActionHint(s, "resume", busy)}
-        <button ?disabled=${serviceActionDisabled(s, "resume", busy)} data-service="${s.name}" data-service-action="resume" aria-describedby="${svcActionDescribedBy(s, "resume", busy)}">resume</button>
+        <button ?disabled=${serviceActionDisabled(s, "resume", busy)} data-service="${s.name}" data-service-action="resume" aria-label="${svcActionAriaLabel(s, "resume")}" aria-describedby="${svcActionDescribedBy(s, "resume", busy)}">resume</button>
         ${svcActionHint(s, "reload", busy)}
-        <button ?disabled=${serviceActionDisabled(s, "reload", busy)} data-service="${s.name}" data-service-action="reload" aria-describedby="${svcActionDescribedBy(s, "reload", busy)}">reload</button>
+        <button ?disabled=${serviceActionDisabled(s, "reload", busy)} data-service="${s.name}" data-service-action="reload" aria-label="${svcActionAriaLabel(s, "reload")}" aria-describedby="${svcActionDescribedBy(s, "reload", busy)}">reload</button>
         ${s.monitored
-          ? tpl`${svcActionHint(s, "unmonitor", busy)}<button ?disabled=${serviceActionDisabled(s, "unmonitor", busy)} data-service="${s.name}" data-service-action="unmonitor" aria-describedby="${svcActionDescribedBy(s, "unmonitor", busy)}">unmonitor</button>`
-          : tpl`${svcActionHint(s, "monitor", busy)}<button ?disabled=${serviceActionDisabled(s, "monitor", busy)} data-service="${s.name}" data-service-action="monitor" aria-describedby="${svcActionDescribedBy(s, "monitor", busy)}">monitor</button>`}`
+          ? tpl`${svcActionHint(s, "unmonitor", busy)}<button ?disabled=${serviceActionDisabled(s, "unmonitor", busy)} data-service="${s.name}" data-service-action="unmonitor" aria-label="${svcActionAriaLabel(s, "unmonitor")}" aria-describedby="${svcActionDescribedBy(s, "unmonitor", busy)}">unmonitor</button>`
+          : tpl`${svcActionHint(s, "monitor", busy)}<button ?disabled=${serviceActionDisabled(s, "monitor", busy)} data-service="${s.name}" data-service-action="monitor" aria-label="${svcActionAriaLabel(s, "monitor")}" aria-describedby="${svcActionDescribedBy(s, "monitor", busy)}">monitor</button>`}`
       : tpl`<span class="muted">read-only</span>`;
   }
   const label = displayName(s);
@@ -2776,6 +2791,16 @@ function watchActionDescribedBy(w, action) {
   return disabled && reason ? watchActionHintId(w, action) : nothing;
 }
 
+function watchActionAriaLabel(w, action) {
+  const name = displayName(w) || w.name || "";
+  switch (action) {
+    case "expand": return `Expand storage for watch ${name}`;
+    case "monitor": return `Monitor watch ${name}`;
+    case "unmonitor": return `Unmonitor watch ${name}`;
+    default: return `${action} watch ${name}`;
+  }
+}
+
 // watchRowHTML builds the table row(s) for one watch — the main row plus its
 // expansion row when open. Shared by the Storage panel and the Host watches
 // table so both render identically (including the expand action).
@@ -2796,14 +2821,14 @@ function watchRowHTML(w) {
   const open = expanded.has(key);
   const chev = tpl`<span class="exp" aria-hidden="true">${open ? '▾' : '▸'}</span>`;
   const expandBtn = (w.expand && Number(w.expand.by_bytes) > 0 && me.can_act && w.enabled)
-    ? tpl`${watchActionHint(w, "expand")}<button ?disabled=${watchActionDisabled(w, "expand")} data-watch="${w.name}" data-watch-action="expand" aria-describedby="${watchActionDescribedBy(w, "expand")}">expand ${fmtBytes(w.expand.by_bytes)}</button>`
+    ? tpl`${watchActionHint(w, "expand")}<button ?disabled=${watchActionDisabled(w, "expand")} data-watch="${w.name}" data-watch-action="expand" aria-label="${watchActionAriaLabel(w, "expand")}" aria-describedby="${watchActionDescribedBy(w, "expand")}">expand ${fmtBytes(w.expand.by_bytes)}</button>`
     : nothing;
   const monitorBtn = !w.enabled
     ? tpl`<span class="muted">disabled in config</span>`
     : (me.can_act
       ? (w.monitored
-        ? tpl`${watchActionHint(w, "unmonitor")}<button ?disabled=${watchActionDisabled(w, "unmonitor")} data-watch="${w.name}" data-watch-action="unmonitor" aria-describedby="${watchActionDescribedBy(w, "unmonitor")}">unmonitor</button>`
-        : tpl`${watchActionHint(w, "monitor")}<button ?disabled=${watchActionDisabled(w, "monitor")} data-watch="${w.name}" data-watch-action="monitor" aria-describedby="${watchActionDescribedBy(w, "monitor")}">monitor</button>`)
+        ? tpl`${watchActionHint(w, "unmonitor")}<button ?disabled=${watchActionDisabled(w, "unmonitor")} data-watch="${w.name}" data-watch-action="unmonitor" aria-label="${watchActionAriaLabel(w, "unmonitor")}" aria-describedby="${watchActionDescribedBy(w, "unmonitor")}">unmonitor</button>`
+        : tpl`${watchActionHint(w, "monitor")}<button ?disabled=${watchActionDisabled(w, "monitor")} data-watch="${w.name}" data-watch-action="monitor" aria-label="${watchActionAriaLabel(w, "monitor")}" aria-describedby="${watchActionDescribedBy(w, "monitor")}">monitor</button>`)
       : tpl`<span class="muted">read-only</span>`);
   const actions = !w.enabled
     ? tpl`<span class="muted">disabled in config</span>`
