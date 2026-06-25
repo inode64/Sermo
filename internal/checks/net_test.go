@@ -149,3 +149,25 @@ func TestSampleNetFromSysfsFallback(t *testing.T) {
 		t.Fatalf("counters = %+v, want rx/tx errors", sample.Counters)
 	}
 }
+
+func TestSampleNetFromSysfsZeroSpeedKnown(t *testing.T) {
+	root := t.TempDir()
+	iface := "sermo-test1"
+	dir := filepath.Join(root, iface)
+	if err := os.MkdirAll(filepath.Join(dir, "statistics"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"flags": "0x1003\n", "operstate": "up\n", "speed": "0\n"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sample, err := sampleNetFromSysfs(iface, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A reported speed of 0 is a known reading (v >= 0), not "unknown".
+	if !sample.SpeedKnown || sample.SpeedMbps != 0 {
+		t.Fatalf("speed 0 must be known, got %+v", sample)
+	}
+}
