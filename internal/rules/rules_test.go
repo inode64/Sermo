@@ -457,3 +457,14 @@ func TestNormalizeKeyIsSortedJSON(t *testing.T) {
 		t.Fatalf("normalizeKey = %q, want sorted JSON", got)
 	}
 }
+
+func TestRulePrimaryAction(t *testing.T) {
+	// No actions: a zero Action with no index-out-of-range on Actions[0].
+	if got := (Rule{}).Primary(); got.Type != "" {
+		t.Fatalf("empty rule Primary = %+v, want zero Action", got)
+	}
+	// A lifecycle action is the primary one.
+	if got := (Rule{Actions: []Action{{Type: ActionRestart}}}).Primary(); got.Type != ActionRestart {
+		t.Fatalf("Primary = %+v, want restart", got)
+	}
+}
