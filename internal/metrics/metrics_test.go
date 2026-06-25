@@ -587,3 +587,21 @@ func TestCountCPULinesEdgeLines(t *testing.T) {
 		t.Fatalf("cpu9 = %d, want 1", n)
 	}
 }
+
+func TestServiceIOCombinedSumsReadAndWrite(t *testing.T) {
+	clock := time.Unix(0, 0)
+	reader := fakeReader{ioRead: map[int]uint64{10: 1000}, ioWrite: map[int]uint64{10: 2000}, hz: 100, ncpu: 1}
+	c := New(reader)
+	c.Now = func() time.Time { return clock }
+	c.SampleService("svc", []int{10}) // prime read+write = 3000
+
+	clock = clock.Add(time.Second)
+	reader.ioRead[10] = 4000
+	reader.ioWrite[10] = 6000
+	c.Reader = reader
+	snap := c.SampleService("svc", []int{10})
+	// io = Δ(read+write) = (4000+6000)-(1000+2000) = 7000 B over 1s.
+	if !snap["io"].Ready || snap["io"].Absolute != 7000 {
+		t.Fatalf("io = %+v, want 7000 (read+write delta)", snap["io"])
+	}
+}
