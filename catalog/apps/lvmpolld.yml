@@ -1,4 +1,3 @@
-kind: app
 name: lvmpolld
 display_name: "LVM poll daemon"
 category: storage

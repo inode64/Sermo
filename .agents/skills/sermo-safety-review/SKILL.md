@@ -30,7 +30,7 @@ Always verify:
     exactly match `kill_only_if` are signaled; any remaining residual yields
     `orphan_processes` and no auto-start.
 12. Every executed or blocked action records exactly one auditable event.
-13. Database catalog daemons default to `force_kill: false`.
+13. Database catalog services default to `force_kill: false`.
 14. Commands do not interpolate untrusted strings through a shell.
 15. External command arguments are passed as argv arrays, not shell strings.
 16. Remediation triggers only on service-scope metrics; a system-scope metric

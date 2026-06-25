@@ -1,4 +1,3 @@
-kind: daemon
 name: virtlockd
 display_name: libvirt Lock Daemon
 category: virtualization

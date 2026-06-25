@@ -1,4 +1,3 @@
-kind: daemon
 name: irqbalance
 category: hardware
 service: irqbalance

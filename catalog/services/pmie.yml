@@ -1,4 +1,3 @@
-kind: daemon
 name: pmie
 display_name: PCP Inference Engine
 category: observability

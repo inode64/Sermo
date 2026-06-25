@@ -1,4 +1,3 @@
-kind: app
 name: cupsd
 display_name: "CUPS"
 category: system

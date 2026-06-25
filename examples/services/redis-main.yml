@@ -1,4 +1,3 @@
-kind: service
 name: redis-main
 uses: redis
 # Inherits the unit candidates from the `redis` daemon (service: systemd/openrc).

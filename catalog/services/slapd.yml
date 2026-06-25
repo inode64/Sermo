@@ -1,4 +1,3 @@
-kind: daemon
 name: slapd
 display_name: OpenLDAP (slapd)
 category: identity

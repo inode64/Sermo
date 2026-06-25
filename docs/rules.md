@@ -168,10 +168,9 @@ checks:
         - { id: zone-ok, match: "(?i)loaded serial", severity: ok }
 ```
 
-A pattern set is `kind: patterns` with an ordered, id'd rule list:
+A pattern set is a `patterns` document (under `catalog/patterns/`) with an ordered, id'd rule list:
 
 ```yaml
-kind: patterns
 name: common
 rules:
   - { id: backup-now, match: "BACK UP DATA NOW",   severity: error }
@@ -195,7 +194,7 @@ rules:
 
 ### Service health conditions (version / state / config)
 
-A `kind: service` can enable three standard health monitors with two short
+A service can enable three standard health monitors with two short
 declarative blocks — **`version:`** and **`config:`** — that **reuse the version
 and config commands the daemon already defines** (`commands.version` and
 `preflight.config`). Sermo synthesizes a per-service monitor (a watch, built once
@@ -209,7 +208,6 @@ preflight:
   config: { type: command, command: [apachectl, configtest] }
 
 # service (services/apache.yml) — opt into the monitors:
-kind: service
 uses: apache
 version:
   on_change: { notify: [ops-email] }      # alert when the version changes
@@ -651,7 +649,7 @@ Protocols, in the order of the table above:
   for). With `resolvconf: true` (instead of `host`, mutually exclusive) the
   probe asks the first `nameserver` of `/etc/resolv.conf` — the server the
   system would ask first; with pppd's `usepeerdns`, the provider's
-  resolver, which is how the `pppd` catalog daemon verifies resolution through
+  resolver, which is how the `pppd` catalog service verifies resolution through
   the uplink. If that resolver is local to the host (loopback such as
   `127.0.0.0/8`/`::1`, or any address assigned to a local interface), an
   `interface` pin is ignored for the DNS packet because the resolver must be
@@ -720,8 +718,8 @@ Protocols, in the order of the table above:
   is a local DHCP client check: `dhclient` receives offers on UDP/68 and does not
   provide a request/response server protocol. The check reads `/proc/net/udp` and
   passes when it finds a local UDP socket bound to `host:port` (`0.0.0.0:68` by
-  default in the packaged catalog daemon). It does not send packets and does not consume
-  a lease. Set `lease_file` (the packaged catalog daemon defaults to
+  default in the packaged catalog service). It does not send packets and does not consume
+  a lease. Set `lease_file` (the packaged catalog service defaults to
   `/var/lib/dhcp/dhclient.leases`; override it when your distribution stores ISC
   dhclient leases elsewhere) to also require an unexpired lease. If `interface`
   is set, the lease must belong to that interface.
@@ -1042,7 +1040,7 @@ Protocols, in the order of the table above:
   when the Raft `Vote` quorum API is, and Produce is not) and the `produce_api` /
   `vote_api` (`yes`/`no`) flags, plus `api_count` and `error_code` — all assertable
   via `expect`. Used by the `kafka-broker` (9092, `expect role=broker`) and
-  `kafka-controller` (9093, `expect role=controller`) catalog daemons.
+  `kafka-controller` (9093, `expect role=controller`) catalog services.
 - `varnish` (alias `varnishadm`) — default port 6082 (TCP, the Varnish `-T`
   management CLI). No auth. On connect varnishd sends a CLI response (a `<status>
   <length>` line and a body); status **200** carries the banner (with the version)
@@ -1435,7 +1433,7 @@ fires when the route disappears.
 It closes the uplink gap the link and ping layers leave: after a failed PPP
 renegotiation the interface can stay `up` with the default route gone, and a
 ping bound to the interface cannot tell "no route" from "provider down". The
-`pppd` catalog daemon layers all three (`net` state, `route`, `icmp`).
+`pppd` catalog service layers all three (`net` state, `route`, `icmp`).
 
 ```yaml
 checks:
@@ -1771,7 +1769,7 @@ block-during-backup:
   then: { action: block, message: "Backup is running" }
 ```
 
-The shipped MySQL, MariaDB and PostgreSQL catalog daemons include a default
+The shipped MySQL, MariaDB and PostgreSQL catalog services include a default
 optional `backup` process check and a
 `block-restart-during-backup` guard. The check matches common local backup
 tools by exact resolved executable path (`exe_any`) and database backup user
@@ -1795,7 +1793,6 @@ daemon and app for the installed version (for example `postgres-16`) and add
 `wal-g-pg`:
 
 ```yaml
-kind: service
 name: postgres-main
 uses: postgres-16
 apps: [postgres-16, wal-g-pg]

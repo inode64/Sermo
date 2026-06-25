@@ -1,4 +1,3 @@
-kind: app
 name: mosquitto
 display_name: "Eclipse Mosquitto"
 category: messaging

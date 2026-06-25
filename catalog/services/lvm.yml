@@ -1,4 +1,3 @@
-kind: daemon
 name: lvm
 display_name: LVM
 category: storage

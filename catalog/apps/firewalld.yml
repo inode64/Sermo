@@ -1,4 +1,3 @@
-kind: app
 name: firewalld
 display_name: "firewalld"
 category: security

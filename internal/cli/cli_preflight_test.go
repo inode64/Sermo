@@ -20,13 +20,12 @@ func writePreflightConfig(t *testing.T, binPath string) string {
 engine:
   default_timeout: 3s
 paths:
-  services: [ `+root+`/enabled ]
+  services: [ `+root+`/services ]
 defaults:
   policy:
     cooldown: 5m
 `)
-	mustWrite(t, filepath.Join(root, "enabled", "apache-main.yml"), `
-kind: service
+	mustWrite(t, filepath.Join(root, "services", "apache-main.yml"), `
 name: apache-main
 service: apache2
 variables:
@@ -86,13 +85,12 @@ func TestPreflightFailsOnRequiredBuildWarning(t *testing.T) {
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
 paths:
-  services: [ `+root+`/enabled ]
+  services: [ `+root+`/services ]
 defaults:
   policy:
     cooldown: 5m
 `)
-	mustWrite(t, filepath.Join(root, "enabled", "apache-main.yml"), `
-kind: service
+	mustWrite(t, filepath.Join(root, "services", "apache-main.yml"), `
 name: apache-main
 service: apache2
 preflight:

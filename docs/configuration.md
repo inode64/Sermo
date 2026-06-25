@@ -1,18 +1,25 @@
 # Configuration
 
-Sermo configuration is split by target type: **catalog daemon/app/lib/pattern
+Sermo configuration is split by target type: **catalog service/app/lib/pattern
 definitions**, **services** as concrete monitored instances, **notifiers** as
 delivery targets, **watches** as host-level monitors, and **mounts** as
 fstab-backed mount units. Watch and notifier files are global fragments with a
 top-level `watches:` or `notifiers:` map; those fragments do not use `kind:`.
 
 New configuration must use one YAML file per target. That means one catalog app,
-daemon, lib or pattern per file; one `kind: service` per file; one `kind: mount`
-per file; one notifier per file; and one host watch per file (`storage`,
-`network`, `uplink`, `load`, and other watch fragments). Global fragment files
-still have the top-level `watches:` or `notifiers:` map, but that map must
-contain exactly one named entry. This keeps generated configuration easy to
-diff, replace and clean up per target.
+daemon, lib or pattern per file; one service per file; one mount per file; one
+notifier per file; and one host watch per file (`storage`, `network`, `uplink`,
+`load`, and other watch fragments). Global fragment files still have the
+top-level `watches:` or `notifiers:` map, but that map must contain exactly one
+named entry. This keeps generated configuration easy to diff, replace and clean
+up per target.
+
+A document's **kind is determined by where it lives** — its catalog subdirectory
+(`services/` → daemon, `apps/` → app, `libs/` → lib, `patterns/` → patterns) or
+the configured path it loads from (`paths.services` → service, `paths.mounts` →
+mount). A top-level `kind:` key is therefore **optional and redundant**; when one
+is present in a deployed file it must match the location, which catches a file
+placed in the wrong directory. Shipped configuration omits it.
 
 > **Complete annotated example.** [`docs/sermo-all.yml`](sermo-all.yml) shows
 > every configuration surface in one place — global config, watches, and one
@@ -219,14 +226,13 @@ notification templates. `make install` creates it and installs
 
 ## Mount units
 
-`kind: mount` defines a named mount target controlled by `sermoctl mount` and
+A mount document defines a named mount target controlled by `sermoctl mount` and
 `sermoctl umount`. Mount units live under `paths.mounts` (default
 `/etc/sermo/mounts`) and deliberately use `/etc/fstab` as the source of truth:
 the YAML contains the mount path and Sermo policy only, not `source`, `fstype`,
 `options` or class metadata.
 
 ```yaml
-kind: mount
 name: mount-backup
 display_name: Backup mount
 category: storage
@@ -433,7 +439,6 @@ with its own top-level `interval`, so cheap services can be checked often and
 expensive ones rarely without changing the global default:
 
 ```yaml
-kind: service
 name: nginx
 interval: 10s            # optional, default engine.interval; positive duration
 checks:
@@ -608,12 +613,12 @@ Read-only endpoints:
   show a **Starting** or **Shutting down** banner while monitoring is not active
   yet.
 - `GET /api/whoami` — caller role, permissions and feature visibility.
-- `GET /api/services` — **configured runtime** service list (the `kind: service`
+- `GET /api/services` — **configured runtime** service list (the service
   files under `paths.services`): name, `state` (`disabled`, `running`,
   `paused`, `stopped`, `monitorized`, `failed`), backend status, `check_health`,
   `checks_failing`, active locks, monitor state/source/timestamp, backend, unit,
   cooldown, remediation state, next eligible action and last event. This is not
-  `sermoctl services`, which lists catalog daemon profiles — see
+  `sermoctl services`, which lists catalog service profiles — see
   [cli.md](cli.md#catalog-inventory).
 - `GET /api/services/{name}` — service detail: latest checks, rolling SLA, named
   runtime locks, discovered processes, automatic remediation policy state and
@@ -1036,10 +1041,10 @@ a service.
 > watch-type directory such as `/etc/sermo/storages` or
 > `/etc/sermo/networks`; the wizard adds that directory to the matching `paths.*`
 > (writing a `.bak` first). Service assistants (`service`, `docker`, `vm`) write
-> one `kind: service` file per target under `services/` and ensure that
+> one service file per target under `services/` and ensure that
 > `paths.services` loads it; `docker` and `vm` add `control.type: docker` or
 > `control.type: libvirt` plus matching read-only checks. The mount assistant
-> (`mount`) lists `/etc/fstab` mount points and writes safe `kind: mount` files
+> (`mount`) lists `/etc/fstab` mount points and writes safe mount files
 > under `paths.mounts`; it does not mount or unmount while generating config.
 >
 > `sermoctl wizard volume` creates storage checks for mounted local and
@@ -1050,8 +1055,8 @@ a service.
 > for an interface: link state, assigned address, default route, bound ping and
 > DNS resolution through the system resolver; type `default` to use the detected
 > default-route interface.
-> `sermoctl wizard service` detects installed catalog daemons and enables them
-> with `kind: service` files (see [daemons](daemons.md)); when several services
+> `sermoctl wizard service` detects installed catalog services and enables them
+> with service files (see [daemons](daemons.md)); when several services
 > are selected, port overrides are skipped unless explicitly reviewed, and known
 > config files can be added as a periodic `checks.config` entry with a default
 > `60m` interval. Run with no argument to choose from the list.
@@ -1069,7 +1074,7 @@ a service.
 > global `notify` configured) it degrades to a monitor-only watch
 > (`notify: [none]`) with a one-line note — it never re-asks or aborts. The
 > wizard asks monitored entries for monitor state (`enabled`/`disabled`/
-> `previous`) and an optional check interval; `kind: mount` files are not
+> `previous`) and an optional check interval; mount files are not
 > monitored entries, so the mount assistant skips those questions. See
 > [wizards](wizards.md) for the full flow.
 
@@ -1175,7 +1180,6 @@ not action rehearsals.
   `stop` or `reload`. It does not suppress host watch hooks.
 
 ```yaml
-kind: service
 name: apache-main
 uses: apache
 remediation:
@@ -1449,7 +1453,7 @@ The four metrics and their conditions:
   provider-forced renumbering or reconnect, the natural trigger for a dynamic-DNS
   hook — or `expect: present` / `expect: absent` to fire whenever addresses
   **are** in the expected state (a PPP session can be up with IPCP failed and no
-  address assigned; the `pppd` catalog daemon uses `expect: present`).
+  address assigned; the `pppd` catalog service uses `expect: present`).
 
 Hook extras: `SERMO_INTERFACE`, `SERMO_METRIC`, and — for the change metrics
 (`state`/`speed`/`address`) — `SERMO_OLD`/`SERMO_NEW`.
@@ -2006,7 +2010,6 @@ preflight entry for apps, daemons and services. Libraries use the same pattern
 with `type: file`:
 
 ```yaml
-kind: lib
 name: glibc
 variables:
   binary: /lib64/libc.so.6

@@ -1,4 +1,3 @@
-kind: app
 name: beam-%v
 display_name: "Erlang BEAM ${version}"
 category: messaging

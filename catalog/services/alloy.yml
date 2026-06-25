@@ -1,4 +1,3 @@
-kind: daemon
 name: alloy
 display_name: Grafana Alloy
 category: observability

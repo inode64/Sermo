@@ -1,4 +1,3 @@
-kind: app
 name: db%v
 display_name: "Berkeley DB ${version}"
 category: database

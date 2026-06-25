@@ -1,4 +1,3 @@
-kind: daemon
 name: dmeventd
 display_name: Device-mapper event daemon
 category: system

@@ -1,4 +1,3 @@
-kind: daemon
 name: bitbucketrunner
 display_name: Bitbucket Pipelines Runner
 category: vpn

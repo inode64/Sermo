@@ -83,7 +83,6 @@ func TestExpandBindirOnLoad(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/demo.yml": `
-kind: app
 name: demo
 display_name: "Demo"
 variables:

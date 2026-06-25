@@ -1,4 +1,3 @@
-kind: daemon
 name: tuned
 display_name: TuneD
 category: system

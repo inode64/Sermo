@@ -47,7 +47,7 @@ paths:
   services:
     - /etc/sermo/services
   apps:
-    - /etc/sermo/apps  # host-specific kind: app documents
+    - /etc/sermo/apps  # host-specific app documents
   notifiers:
     - /etc/sermo/notifiers
   storages:
@@ -61,7 +61,7 @@ paths:
   # notifications. After adapting thresholds, hooks and notify targets for the
   # host, set each fragment to `monitor: enabled` or `monitor: previous`.
   mounts:
-    - /etc/sermo/mounts  # fstab-backed kind: mount documents
+    - /etc/sermo/mounts  # fstab-backed mount documents
 
   # Volatile runtime data (locks, operation markers) on tmpfs; wiped on reboot.
   runtime: /run/sermo

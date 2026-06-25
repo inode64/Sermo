@@ -1,4 +1,3 @@
-kind: service
 name: mariadb-main
 uses: mariadb
 # Inherits the mariadb daemon's unit candidates (service: systemd/openrc),

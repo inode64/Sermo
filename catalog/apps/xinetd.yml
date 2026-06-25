@@ -1,4 +1,3 @@
-kind: app
 name: xinetd
 category: network
 variables:

@@ -1,4 +1,3 @@
-kind: app
 name: ssh
 display_name: "OpenSSH"
 category: network

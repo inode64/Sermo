@@ -1,4 +1,3 @@
-kind: app
 name: snmpd
 display_name: "Net-SNMP Daemon"
 category: observability

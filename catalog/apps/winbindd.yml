@@ -1,4 +1,3 @@
-kind: app
 name: winbindd
 display_name: "Samba winbindd"
 category: storage

@@ -1,4 +1,3 @@
-kind: app
 name: rpc-statd
 display_name: "NFS Status Monitor"
 category: storage

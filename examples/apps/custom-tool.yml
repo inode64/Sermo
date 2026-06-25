@@ -1,4 +1,3 @@
-kind: app
 name: custom-tool
 display_name: Custom tool
 description: "Host-specific helper that services may link with apps: [custom-tool]."

@@ -1,4 +1,3 @@
-kind: patterns
 name: common
 display_name: "Common output signals"
 description: "Generic command-output signals: escalate a command's output to warning/error even when it exits 0."

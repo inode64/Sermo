@@ -1,4 +1,3 @@
-kind: lib
 name: util-linux
 display_name: "util-linux libblkid"
 description: "util-linux block-device id library (libblkid); a change triggers a restart of dependent services"

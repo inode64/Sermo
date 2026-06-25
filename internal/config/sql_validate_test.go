@@ -4,7 +4,6 @@ import "testing"
 
 func TestValidateSQLCheckValid(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: db
 service: x
 checks:
@@ -32,7 +31,7 @@ func TestValidateSQLCheckErrors(t *testing.T) {
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			mustHave(t, validateService(t, "kind: service\nname: db\nservice: x\nchecks:\n  "+c.body+"\n"), c.want)
+			mustHave(t, validateService(t, "name: db\nservice: x\nchecks:\n  "+c.body+"\n"), c.want)
 		})
 	}
 }

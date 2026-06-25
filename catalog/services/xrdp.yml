@@ -1,4 +1,3 @@
-kind: daemon
 name: xrdp
 display_name: "xrdp"
 category: remote

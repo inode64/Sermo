@@ -1,4 +1,3 @@
-kind: daemon
 name: cups
 display_name: CUPS
 category: system

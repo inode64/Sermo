@@ -1,4 +1,3 @@
-kind: daemon
 name: fail2ban
 display_name: Fail2ban
 category: security

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -27,20 +28,23 @@ func TestDocsSermoAllValidates(t *testing.T) {
 	catalogExtra := filepath.Join(dir, "catalog-extra")
 	servicesDir := filepath.Join(dir, "services")
 	mountsDir := filepath.Join(dir, "mounts")
-	// The loader classifies catalog entries by subdirectory, mirroring the
-	// packaged layout (catalog/{services,apps,libs,patterns}).
-	subdir := map[string]string{"daemon": "services", "app": "apps", "lib": "libs", "patterns": "patterns"}
 	for _, d := range []string{servicesDir, catalogExtra, mountsDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for _, sub := range subdir {
+	// Catalog documents are classified by subdirectory, mirroring the packaged
+	// layout (catalog/{services,apps,libs,patterns}).
+	for _, sub := range []string{"services", "apps", "libs", "patterns"} {
 		if err := os.MkdirAll(filepath.Join(catalogExtra, sub), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
 
+	// Each bundled document carries no `kind:` (it is derived from location, like
+	// real config); a `# location: <dir>` marker says where it would live so the
+	// test can lay it out on disk. The global document has no marker.
+	locMarker := regexp.MustCompile(`(?m)^# location:[[:space:]]*(\S+)`)
 	var globalDoc string
 	var services []string
 	var mounts []string
@@ -49,30 +53,33 @@ func TestDocsSermoAllValidates(t *testing.T) {
 		if err := yaml.Unmarshal([]byte(doc), &body); err != nil {
 			t.Fatalf("document %d does not parse: %v", i+1, err)
 		}
-		kind, _ := body["kind"].(string)
 		name, _ := body["name"].(string)
-		switch kind {
-		case "":
+		m := locMarker.FindStringSubmatch(doc)
+		if m == nil {
 			if globalDoc != "" {
-				t.Fatalf("document %d: second global (kind-less) document", i+1)
+				t.Fatalf("document %d: second location-less (global) document", i+1)
 			}
 			globalDoc = doc
-		case "daemon", "app", "lib", "patterns":
-			if err := os.WriteFile(filepath.Join(catalogExtra, subdir[kind], name+".yml"), []byte(doc), 0o644); err != nil {
+			continue
+		}
+		switch loc := m[1]; loc {
+		case "catalog/services", "catalog/apps", "catalog/libs", "catalog/patterns":
+			sub := strings.TrimPrefix(loc, "catalog/")
+			if err := os.WriteFile(filepath.Join(catalogExtra, sub, name+".yml"), []byte(doc), 0o644); err != nil {
 				t.Fatal(err)
 			}
-		case "service":
+		case "services":
 			services = append(services, name)
 			if err := os.WriteFile(filepath.Join(servicesDir, name+".yml"), []byte(doc), 0o644); err != nil {
 				t.Fatal(err)
 			}
-		case "mount":
+		case "mounts":
 			mounts = append(mounts, name)
 			if err := os.WriteFile(filepath.Join(mountsDir, name+".yml"), []byte(doc), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		default:
-			t.Fatalf("document %d: unknown kind %q", i+1, kind)
+			t.Fatalf("document %d: unknown location marker %q", i+1, loc)
 		}
 	}
 	if globalDoc == "" || len(services) == 0 {

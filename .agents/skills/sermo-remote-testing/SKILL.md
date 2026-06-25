@@ -231,7 +231,7 @@ watches:
   attach the selected notifier or inherit the configured global notify. If the
   run is only validating routing, use `then.dry_run: true`; otherwise keep the
   watch alert-only or monitor-only according to the requested mode.
-- Include `kind: mount` files for network and USB mount targets that are declared
+- Include mount files for network and USB mount targets that are declared
   in `/etc/fstab`, writing one file per target under `paths.mounts`. Detect them
   with read-only probes (`findmnt --fstab`, `/etc/fstab`, `lsblk`, `/dev/disk/by-*`
   and `/proc/self/mountinfo`); never mount or unmount them during discovery.
@@ -241,7 +241,7 @@ watches:
   Keep the mount document fstab-backed and policy-only:
 
 ```yaml
-kind: mount
+# <paths.mounts>/mount-mnt-backup.yml  → mount
 name: mount-mnt-backup
 display_name: Backup mount
 category: storage
@@ -342,7 +342,7 @@ apply to ordinary CLI-only validation.
   configuration generation.
 - Include storage and mount watch results in the observation output. Report any
   filesystem with less than 10% free space, any configured storage watch whose
-  mount condition failed, and any generated network/USB `kind: mount` target
+  mount condition failed, and any generated network/USB mount target
   that was skipped because it was not fstab-backed.
 - Include direct-file `/etc/ssl` certificate watch results and related events in
   the observation output. Report any certificate that is expired, not yet valid,
@@ -359,7 +359,7 @@ apply to ordinary CLI-only validation.
 
 ## Unsupported Active Services
 
-If a remote host has active services that Sermo cannot map to a catalog daemon or generated service:
+If a remote host has active services that Sermo cannot map to a catalog service or generated service:
 
 - Do not create approximate or guessed service definitions on the remote host.
 - Keep testing the supported active services unless the unsupported service blocks the requested scenario.

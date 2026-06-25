@@ -1,4 +1,3 @@
-kind: app
 name: pmlogger_farm
 display_name: "PCP Archive Logger Farm"
 category: observability

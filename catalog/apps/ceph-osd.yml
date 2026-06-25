@@ -1,4 +1,3 @@
-kind: app
 name: ceph-osd
 display_name: "Ceph OSD"
 category: storage

@@ -1,4 +1,3 @@
-kind: daemon
 name: udisks2
 display_name: UDisks2
 category: storage

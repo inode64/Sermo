@@ -1,4 +1,3 @@
-kind: daemon
 name: bacula-sd
 display_name: Bacula Storage Daemon
 category: storage

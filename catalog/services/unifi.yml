@@ -1,4 +1,3 @@
-kind: daemon
 name: unifi
 display_name: UniFi Network Controller
 category: web

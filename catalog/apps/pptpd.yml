@@ -1,4 +1,3 @@
-kind: app
 name: pptpd
 display_name: "PPTP Server"
 category: network

@@ -44,7 +44,6 @@ defaults:
 		t.Fatal(err)
 	}
 	mustWrite(t, filepath.Join(servicesDir, "mysql.yml"), `
-kind: service
 name: mysql
 service: mysql.service
 `)

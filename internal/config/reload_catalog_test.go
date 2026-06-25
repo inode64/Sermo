@@ -37,7 +37,7 @@ func TestRealCatalogReloadDaemonsResolve(t *testing.T) {
 	}
 
 	probeDir := t.TempDir()
-	probeEnabled := filepath.Join(probeDir, "enabled")
+	probeEnabled := filepath.Join(probeDir, "services")
 	if err := os.MkdirAll(probeEnabled, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -51,12 +51,12 @@ func TestRealCatalogReloadDaemonsResolve(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	enabled := filepath.Join(dir, "enabled")
+	enabled := filepath.Join(dir, "services")
 	if err := os.MkdirAll(enabled, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	for _, d := range daemons {
-		svc := "kind: service\nname: " + d.name + "-main\nuses: " + d.name + "\n"
+		svc := "name: " + d.name + "-main\nuses: " + d.name + "\n"
 		if err := os.WriteFile(filepath.Join(enabled, d.name+".yml"), []byte(svc), 0o644); err != nil {
 			t.Fatal(err)
 		}

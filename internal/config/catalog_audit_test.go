@@ -119,7 +119,7 @@ func TestRealCatalogAllDaemonsValidate(t *testing.T) {
 			// Enumerate and validate each backend separately: version-template
 			// materialization may legitimately differ by active init branch.
 			probeDir := t.TempDir()
-			emptyEnabled := filepath.Join(probeDir, "enabled")
+			emptyEnabled := filepath.Join(probeDir, "services")
 			if err := os.MkdirAll(emptyEnabled, 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -129,7 +129,7 @@ func TestRealCatalogAllDaemonsValidate(t *testing.T) {
 			}
 
 			dir := t.TempDir()
-			enabled := filepath.Join(dir, "enabled")
+			enabled := filepath.Join(dir, "services")
 			if err := os.MkdirAll(enabled, 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -138,7 +138,7 @@ func TestRealCatalogAllDaemonsValidate(t *testing.T) {
 				if strings.Contains(name, "%") {
 					continue
 				}
-				svc := "kind: service\nname: " + name + "-audit\nuses: " + name + "\n"
+				svc := "name: " + name + "-audit\nuses: " + name + "\n"
 				if err := os.WriteFile(filepath.Join(enabled, name+".yml"), []byte(svc), 0o644); err != nil {
 					t.Fatal(err)
 				}
@@ -342,7 +342,7 @@ func TestGentooCatalogPidfileOverrides(t *testing.T) {
 
 	root := repoRoot(t)
 	dir := t.TempDir()
-	enabled := filepath.Join(dir, "enabled")
+	enabled := filepath.Join(dir, "services")
 	if err := os.MkdirAll(enabled, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -354,7 +354,7 @@ func TestGentooCatalogPidfileOverrides(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"clamd", "mariadb"} {
-		svc := "kind: service\nname: " + name + "\nuses: " + name + "\n"
+		svc := "name: " + name + "\nuses: " + name + "\n"
 		if err := os.WriteFile(filepath.Join(enabled, name+".yml"), []byte(svc), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -2081,8 +2081,10 @@ func assertExampleDocsHaveKind(t *testing.T, dir, kind string) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if doc.Kind != kind {
-			t.Fatalf("%s must use kind: %s, got %q", doc.Path, kind, doc.Kind)
+		// The kind is derived from the directory; a `kind:` is optional but, when
+		// present, must not contradict the location.
+		if err := assignKind(doc, kind); err != nil {
+			t.Fatalf("%s: %v", doc.Path, err)
 		}
 	}
 }

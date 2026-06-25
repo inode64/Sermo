@@ -4,7 +4,6 @@ import "testing"
 
 func TestValidateHTTPComparisonsValid(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: web
 service: x
 checks:
@@ -27,7 +26,7 @@ checks:
 func TestValidateHTTPMethods(t *testing.T) {
 	// Every standard verb (any case) validates cleanly.
 	for _, m := range []string{"GET", "head", "POST", "Put", "PATCH", "delete", "OPTIONS", "TRACE", "CONNECT"} {
-		issues := validateService(t, "kind: service\nname: web\nservice: x\nchecks:\n  api: { type: http, url: \"http://h/\", method: "+m+" }\n")
+		issues := validateService(t, "name: web\nservice: x\nchecks:\n  api: { type: http, url: \"http://h/\", method: "+m+" }\n")
 		for _, is := range issues {
 			if hasIssue([]Issue{is}, "checks.api") {
 				t.Fatalf("method %q must be valid: %v", m, issues)
@@ -36,7 +35,6 @@ func TestValidateHTTPMethods(t *testing.T) {
 	}
 	// A typo / non-standard verb warns.
 	mustHave(t, validateService(t, `
-kind: service
 name: web
 service: x
 checks:
@@ -47,7 +45,6 @@ checks:
 func TestValidateHTTP3(t *testing.T) {
 	// Valid: http3 over https.
 	issues := validateService(t, `
-kind: service
 name: web
 service: x
 checks:
@@ -60,7 +57,6 @@ checks:
 	}
 	// http3 over http:// is rejected.
 	mustHave(t, validateService(t, `
-kind: service
 name: web
 service: x
 checks:
@@ -68,7 +64,6 @@ checks:
 `), "http3 requires an https url")
 	// http3 + proxy is rejected.
 	mustHave(t, validateService(t, `
-kind: service
 name: web
 service: x
 checks:
@@ -92,7 +87,7 @@ func TestValidateHTTPComparisonErrors(t *testing.T) {
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			yaml := "kind: service\nname: web\nservice: x\nchecks:\n  api:\n    type: http\n    url: \"http://127.0.0.1/h\"\n    " + c.field + "\n"
+			yaml := "name: web\nservice: x\nchecks:\n  api:\n    type: http\n    url: \"http://127.0.0.1/h\"\n    " + c.field + "\n"
 			mustHave(t, validateService(t, yaml), c.want)
 		})
 	}

@@ -1,4 +1,3 @@
-kind: app
 name: upsd
 display_name: "NUT UPS Daemon"
 category: hardware

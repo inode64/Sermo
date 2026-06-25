@@ -1,4 +1,3 @@
-kind: app
 name: erlang
 display_name: "Erlang/OTP"
 category: messaging

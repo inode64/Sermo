@@ -249,11 +249,11 @@ func TestListFiltersMissingBinaries(t *testing.T) {
 	root := t.TempDir()
 	installed := writeBinary(t, 0o755)
 	for dir, content := range map[string]string{
-		"catalog/apps/present.yml": "kind: app\nname: present\nvariables:\n  binary: " + installed + "\n",
-		"catalog/apps/absent.yml":  "kind: app\nname: absent\nvariables:\n  binary: /nonexistent/absent\n",
-		"enabled/.keep":            "",
+		"catalog/apps/present.yml": "name: present\nvariables:\n  binary: " + installed + "\n",
+		"catalog/apps/absent.yml":  "name: absent\nvariables:\n  binary: /nonexistent/absent\n",
+		"services/.keep":           "",
 		"sermo.yml": "engine: { backend: systemd }\n" +
-			"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: [" + filepath.Join(root, "enabled") + "]\n  runtime: /run/sermo\n" +
+			"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: [" + filepath.Join(root, "services") + "]\n  runtime: /run/sermo\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n",
 	} {
 		path := filepath.Join(root, dir)
@@ -331,7 +331,7 @@ func TestListVersionMatchDistinguishesMySQLAndMariaDB(t *testing.T) {
 			}
 
 			files := map[string]string{
-				"catalog/apps/mariadb.yml": fmt.Sprintf(`kind: app
+				"catalog/apps/mariadb.yml": fmt.Sprintf(`
 name: mariadb
 display_name: "MariaDB"
 version_match: { contains: MariaDB }
@@ -341,7 +341,7 @@ preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"] }
 `, pathFor("mariadbd"), pathFor("mysqld")),
-				"catalog/apps/mysql.yml": fmt.Sprintf(`kind: app
+				"catalog/apps/mysql.yml": fmt.Sprintf(`
 name: mysql
 display_name: "MySQL"
 version_match: { excludes: MariaDB }
@@ -351,13 +351,13 @@ preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"] }
 `, pathFor("mysqld")),
-				"catalog/services/mariadb.yml": `kind: daemon
+				"catalog/services/mariadb.yml": `
 name: mariadb
 display_name: "MariaDB"
 service: { systemd: [mariadb] }
 apps: [mariadb]
 `,
-				"catalog/services/mysql.yml": `kind: daemon
+				"catalog/services/mysql.yml": `
 name: mysql
 display_name: "MySQL"
 service: { systemd: [mysql] }
@@ -445,26 +445,26 @@ func TestListAppVersionFromProvider(t *testing.T) {
 	local := write("local")
 
 	for dir, content := range map[string]string{
-		"catalog/apps/rpcbind.yml": fmt.Sprintf(`kind: app
+		"catalog/apps/rpcbind.yml": fmt.Sprintf(`
 name: rpcbind
 variables:
   binary: %q
 version_from: rpc-mountd
 `, rpcbind),
-		"catalog/apps/nfsdcld.yml": fmt.Sprintf(`kind: app
+		"catalog/apps/nfsdcld.yml": fmt.Sprintf(`
 name: nfsdcld
 variables:
   binary: %q
 version_from: rpc-mountd
 `, nfsdcld),
-		"catalog/apps/rpc-mountd.yml": fmt.Sprintf(`kind: app
+		"catalog/apps/rpc-mountd.yml": fmt.Sprintf(`
 name: rpc-mountd
 variables:
   binary: %q
 preflight:
   version: { type: command, command: [%q, "-v"] }
 `, rpcmountd, rpcmountd),
-		"catalog/apps/local.yml": fmt.Sprintf(`kind: app
+		"catalog/apps/local.yml": fmt.Sprintf(`
 name: local
 variables:
   binary: %q
@@ -472,9 +472,9 @@ version_from: rpc-mountd
 preflight:
   version: { type: command, command: [%q, "--version"] }
 `, local, local),
-		"enabled/.keep": "",
+		"services/.keep": "",
 		"sermo.yml": "engine: { backend: systemd }\n" +
-			"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: [" + filepath.Join(root, "enabled") + "]\n  runtime: /run/sermo\n" +
+			"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: [" + filepath.Join(root, "services") + "]\n  runtime: /run/sermo\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n",
 	} {
 		path := filepath.Join(root, dir)
@@ -528,7 +528,7 @@ func TestListIncludesUnversionedTemplateApp(t *testing.T) {
 		}
 	}
 	for dir, content := range map[string]string{
-		"catalog/apps/php.yml": fmt.Sprintf(`kind: app
+		"catalog/apps/php.yml": fmt.Sprintf(`
 name: php%%v
 display_name: "PHP ${version}"
 variables:
@@ -536,9 +536,9 @@ variables:
 preflight:
   binary: { type: binary, path: "${binary}" }
 `, filepath.Join(binDir, "php${version}")),
-		"enabled/.keep": "",
+		"services/.keep": "",
 		"sermo.yml": "engine: { backend: systemd }\n" +
-			"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: [" + filepath.Join(root, "enabled") + "]\n  runtime: /run/sermo\n" +
+			"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: [" + filepath.Join(root, "services") + "]\n  runtime: /run/sermo\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n",
 	} {
 		path := filepath.Join(root, dir)

@@ -1,4 +1,3 @@
-kind: app
 name: certbot
 display_name: "Certbot"
 category: security

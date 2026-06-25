@@ -18,12 +18,12 @@ import (
 
 func TestMonitorReloadPreservesWorkerState(t *testing.T) {
 	dir := t.TempDir()
-	for _, sub := range []string{"daemons", "enabled", "run"} {
+	for _, sub := range []string{"daemons", "services", "run"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	enabled := filepath.Join(dir, "enabled")
+	enabled := filepath.Join(dir, "services")
 
 	baseCfg := fmt.Sprintf(`engine:
   interval: 100ms
@@ -37,7 +37,7 @@ defaults:
 
 	global := filepath.Join(dir, "sermo.yml")
 	service := func(name string) string {
-		return fmt.Sprintf(`kind: service
+		return fmt.Sprintf(`
 name: %s
 checks:
   ping:
@@ -121,12 +121,12 @@ checks:
 
 func TestMonitorReloadRejectsInvalidConfig(t *testing.T) {
 	dir := t.TempDir()
-	for _, sub := range []string{"daemons", "enabled", "run"} {
+	for _, sub := range []string{"daemons", "services", "run"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	enabled := filepath.Join(dir, "enabled")
+	enabled := filepath.Join(dir, "services")
 	global := filepath.Join(dir, "sermo.yml")
 	valid := fmt.Sprintf(`engine:
   interval: 100ms
@@ -140,7 +140,7 @@ defaults:
 	if err := os.WriteFile(global, []byte(valid), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(enabled, "web.yml"), []byte(`kind: service
+	if err := os.WriteFile(filepath.Join(enabled, "web.yml"), []byte(`
 name: web
 checks:
   ping:

@@ -20,7 +20,7 @@ import (
 func writeWebProcessConfig(t *testing.T, pidfile string) *config.Config {
 	t.Helper()
 	root := t.TempDir()
-	enabled := filepath.Join(root, "enabled")
+	enabled := filepath.Join(root, "services")
 	if err := os.MkdirAll(enabled, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,6 @@ defaults:
 	}
 	svcPath := filepath.Join(enabled, "mysql-main.yml")
 	if err := os.WriteFile(svcPath, []byte(`
-kind: service
 name: mysql-main
 service: mysql
 pidfile: `+pidfile+`
@@ -192,7 +191,7 @@ func TestServiceProcessSelectorsExplicitEmptySkipsInitDerivation(t *testing.T) {
 
 func TestWebBackendDetailNoResidentProcess(t *testing.T) {
 	root := t.TempDir()
-	enabled := filepath.Join(root, "enabled")
+	enabled := filepath.Join(root, "services")
 	if err := os.MkdirAll(enabled, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +206,6 @@ defaults:
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(enabled, "firehol.yml"), []byte(`
-kind: service
 name: firehol
 service: firehol
 processes: {}
@@ -378,7 +376,7 @@ func TestServiceRuntimePidfileCheckUsesBackendFallbackWhenSystemdHasNoPIDFile(t 
 
 func TestWebBackendDetailIncludesProcessSelectorWarnings(t *testing.T) {
 	root := t.TempDir()
-	enabled := filepath.Join(root, "enabled")
+	enabled := filepath.Join(root, "services")
 	if err := os.MkdirAll(enabled, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -393,7 +391,6 @@ defaults:
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(enabled, "web.yml"), []byte(`
-kind: service
 name: web
 service: web
 processes:

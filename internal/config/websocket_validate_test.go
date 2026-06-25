@@ -4,7 +4,7 @@ import "testing"
 
 func TestValidateWebsocketCheck(t *testing.T) {
 	for _, u := range []string{"ws://h/s", "wss://h:8443/s", "http://h/s", "https://h/s"} {
-		issues := validateService(t, "kind: service\nname: w\nservice: x\nchecks:\n  ws: { type: websocket, url: \""+u+"\" }\n")
+		issues := validateService(t, "name: w\nservice: x\nchecks:\n  ws: { type: websocket, url: \""+u+"\" }\n")
 		for _, is := range issues {
 			if hasIssue([]Issue{is}, "checks.ws") {
 				t.Fatalf("url %q must be valid: %v", u, issues)
@@ -13,7 +13,6 @@ func TestValidateWebsocketCheck(t *testing.T) {
 	}
 
 	mustHave(t, validateService(t, `
-kind: service
 name: w
 service: x
 checks:
@@ -21,7 +20,6 @@ checks:
 `), "url is required")
 
 	mustHave(t, validateService(t, `
-kind: service
 name: w
 service: x
 checks:

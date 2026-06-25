@@ -1,4 +1,3 @@
-kind: daemon
 name: rasdaemon
 display_name: RAS daemon
 category: hardware

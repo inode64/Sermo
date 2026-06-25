@@ -71,7 +71,6 @@ func TestServicesCommandNotifySendsReport(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(catalogServicesDir, "nginx.yml"), []byte(`
-kind: daemon
 name: nginx
 display_name: "Nginx"
 variables:

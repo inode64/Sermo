@@ -1,4 +1,3 @@
-kind: app
 name: firehol
 display_name: "FireHOL"
 category: security

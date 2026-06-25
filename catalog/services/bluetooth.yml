@@ -1,4 +1,3 @@
-kind: daemon
 name: bluetooth
 display_name: Bluetooth
 category: hardware

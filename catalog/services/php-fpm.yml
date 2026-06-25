@@ -1,4 +1,3 @@
-kind: daemon
 name: php-fpm%v%s%i
 display_name: PHP-FPM ${version} ${instance}
 category: web

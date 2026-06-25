@@ -1,4 +1,3 @@
-kind: daemon
 name: virtlogd
 display_name: libvirt Log Daemon
 category: virtualization

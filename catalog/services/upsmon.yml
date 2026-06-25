@@ -1,4 +1,3 @@
-kind: daemon
 name: upsmon
 display_name: NUT UPS Monitor
 category: hardware

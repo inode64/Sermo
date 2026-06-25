@@ -1,4 +1,3 @@
-kind: daemon
 name: garbd
 display_name: Galera Arbitrator
 category: database

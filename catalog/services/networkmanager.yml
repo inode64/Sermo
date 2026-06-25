@@ -1,4 +1,3 @@
-kind: daemon
 name: networkmanager
 display_name: NetworkManager
 category: network

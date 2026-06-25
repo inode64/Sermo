@@ -1,4 +1,3 @@
-kind: daemon
 name: systemd
 display_name: systemd
 category: system

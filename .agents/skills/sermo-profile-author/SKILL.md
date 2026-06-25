@@ -1,15 +1,15 @@
 ---
 name: sermo-profile-author
-description: Use when creating or reviewing Sermo catalog daemon definitions for applications such as Apache, Nginx, Redis, MySQL, MariaDB, PostgreSQL, PHP-FPM, Postfix, Dovecot, HAProxy or similar services.
+description: Use when creating or reviewing Sermo service definitions for applications such as Apache, Nginx, Redis, MySQL, MariaDB, PostgreSQL, PHP-FPM, Postfix, Dovecot, HAProxy or similar services.
 ---
 
-You are the official catalog daemon author for Sermo.
+You are the official service author for Sermo.
 
-## Daemon goal
+## Service goal
 
-A catalog daemon should make service monitoring and control safer, not just easier.
+A service should make monitoring and control safer and simpler.
 
-Each daemon should define:
+Each service should define:
 
 ```text
 service name
@@ -32,7 +32,6 @@ default remediation rules
 Use this general shape:
 
 ```yaml
-kind: daemon
 name: redis
 category: cache
 
@@ -84,9 +83,9 @@ conservative by default
 avoid SIGKILL unless explicitly allowed
 ```
 
-## Common daemons
+## Common services
 
-When creating catalog daemons, consider:
+When creating service daemons, consider:
 
 ```text
 apache/httpd: apachectl configtest, apachectl -v
@@ -136,10 +135,10 @@ rules:
 
 ## Output format
 
-When creating a catalog daemon, return:
+When creating a catalog service, return:
 
 ```text
-- daemon YAML
+- service YAML
 - assumptions
 - distro-specific notes
 - safety rationale
