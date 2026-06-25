@@ -199,3 +199,16 @@ func TestPolicyCooldownExactBoundary(t *testing.T) {
 		t.Fatal("just before the cooldown boundary must suppress")
 	}
 }
+
+func TestRateLimitUntilDisabledGuards(t *testing.T) {
+	// MaxActions <= 0 disables rate limiting entirely.
+	st := &RemediationState{RecentActions: []time.Time{t0, t0.Add(time.Minute)}}
+	if got := (Policy{MaxActions: 0, MaxActionsWindow: time.Hour}).rateLimitUntil(st, t0.Add(2*time.Minute)); !got.IsZero() {
+		t.Fatalf("MaxActions 0 must disable rate limiting, got %v", got)
+	}
+	// MaxActionsWindow <= 0 likewise disables it.
+	fut := &RemediationState{RecentActions: []time.Time{t0.Add(time.Minute), t0.Add(2 * time.Minute)}}
+	if got := (Policy{MaxActions: 2, MaxActionsWindow: 0}).rateLimitUntil(fut, t0); !got.IsZero() {
+		t.Fatalf("MaxActionsWindow 0 must disable rate limiting, got %v", got)
+	}
+}
