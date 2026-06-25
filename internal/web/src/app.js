@@ -848,8 +848,8 @@ function openPanelTarget(target) {
     setAllWatchStatuses("failed");
     const firing = (w) => isWatchAttention(w);
     let dest = sec;
-    if (storage && storage.style.display !== "none" && (allWatches || []).some((w) => isStorageWatch(w) && firing(w))) dest = storage;
-    else if (network && network.style.display !== "none" && (allWatches || []).some((w) => isNetworkWatch(w) && firing(w))) dest = network;
+    if (storage && panelVisible(storage) && (allWatches || []).some((w) => isStorageWatch(w) && firing(w))) dest = storage;
+    else if (network && panelVisible(network) && (allWatches || []).some((w) => isNetworkWatch(w) && firing(w))) dest = network;
     dest && dest.scrollIntoView({ block: "start", behavior: "smooth" });
     return;
   }
@@ -1538,7 +1538,7 @@ function applyHash() {
     const w = (allWatches || []).find((item) => item && item.name === name);
     if (!w) return;
     const sec = $(watchSectionFor(w));
-    if (sec) { sec.style.display = ""; sec.open = true; }
+    if (sec) { setPanelVisible(sec, true); sec.open = true; }
     if (!expanded.has(h)) { expanded.add(h); renderWatches(); }
     if (!hashScrolled) {
       const el = document.getElementById("wat-row-" + name);
@@ -1551,7 +1551,7 @@ function applyHash() {
     const name = h.slice(4);
     if (!(allApps || []).some((a) => a.name === name)) return;
     const sec = $("#apps-section");
-    if (sec) { sec.style.display = ""; sec.open = true; }
+    if (sec) { setPanelVisible(sec, true); sec.open = true; }
     if (!expanded.has(h)) { expanded.add(h); renderApps(); }
     if (!hashScrolled) {
       const el = document.getElementById("app-row-" + name);
@@ -2879,13 +2879,13 @@ function renderWatchPanel(panelKey, watches) {
   if (!section || !tbody) return;
   const total = (watches || []).length;
   if (total === 0) {
-    section.style.display = "none";
+    setPanelVisible(section, false);
     if (cnt) cnt.textContent = "";
     if (filterCount) filterCount.textContent = "";
     litRender(nothing, tbody);
     return;
   }
-  section.style.display = "block";
+  setPanelVisible(section, true);
   if (cnt) cnt.textContent = `(${total})`;
   renderWatchFilterCounts(panelKey, watches);
   panel.type = syncWatchTypeSelect(panelKey, watches);
@@ -3044,12 +3044,12 @@ function renderApps(apps) {
   if (!section || !tbody) return;
   const total = (allApps || []).length;
   if (total === 0) {
-    section.style.display = "none";
+    setPanelVisible(section, false);
     if (cnt) cnt.textContent = "";
     if (filterCount) filterCount.textContent = "";
     return;
   }
-  section.style.display = "block";
+  setPanelVisible(section, true);
   if (cnt) cnt.textContent = `(${total})`;
   appCategory = syncCategorySelect("#app-category", allApps || [], "app", appCategory);
   renderAppFilterCounts();
@@ -3197,11 +3197,11 @@ function renderMounts(mounts) {
   const cnt = $("#mounts-count");
   if (!section || !tbody) return;
   if (!mounts || mounts.length === 0) {
-    section.style.display = "none";
+    setPanelVisible(section, false);
     if (cnt) cnt.textContent = "";
     return;
   }
-  section.style.display = "block";
+  setPanelVisible(section, true);
   if (cnt) cnt.textContent = `(${mounts.length})`;
   const rows = mounts.map((m) => {
     const label = esc(m.display_name || m.name);
@@ -3227,11 +3227,11 @@ function renderNotifiers(notifiers) {
   const cnt = $("#notifiers-count");
   if (!section || !tbody) return;
   if (!notifiers || notifiers.length === 0) {
-    section.style.display = "none";
+    setPanelVisible(section, false);
     if (cnt) cnt.textContent = "";
     return;
   }
-  section.style.display = "block";
+  setPanelVisible(section, true);
   if (cnt) cnt.textContent = `(${notifiers.length})`;
   const rows = notifiers.map((n) => {
     const enabled = n.enabled !== false;
@@ -3407,12 +3407,12 @@ function renderLocks(locks) {
   const cnt = $("#locks-count");
   if (!section || !tbody) return;
   if (!locks || locks.length === 0) {
-    section.style.display = "none";
+    setPanelVisible(section, false);
     if (cnt) cnt.textContent = "";
     renderAttention();
     return;
   }
-  section.style.display = "block";
+  setPanelVisible(section, true);
   if (cnt) cnt.textContent = `(${locks.length})`;
   const rows = locks.map((l) => {
     return tpl`<tr>
@@ -3707,6 +3707,15 @@ async function fetchReadyReport() {
 function setHTMLIfChanged(el, html) {
   if (!el) return;
   if (el.innerHTML !== html) el.innerHTML = html;
+}
+
+function panelVisible(el) {
+  return el && !el.classList.contains("panel-hidden");
+}
+
+function setPanelVisible(el, show) {
+  if (!el) return;
+  el.classList.toggle("panel-hidden", !show);
 }
 
 function renderStatus(ctx) {
@@ -4935,7 +4944,7 @@ function activeSearchBox() {
   ];
   for (const [sectionSel, searchSel] of panels) {
     const section = $(sectionSel);
-    if (!section || section.style.display === "none" || !section.open) continue;
+    if (!section || !panelVisible(section) || !section.open) continue;
     const box = $(searchSel);
     if (box) return { section, box };
   }

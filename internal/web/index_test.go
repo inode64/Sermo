@@ -473,6 +473,14 @@ func TestIndexAccessibilityShell(t *testing.T) {
 		t.Error(`shell missing #event-reset-filters`)
 	}
 
+	if storage := nodeByID(doc, "storage-section"); storage != nil {
+		if cls, ok := attr(storage, "class"); !ok || !strings.Contains(cls, "panel-hidden") {
+			t.Errorf(`#storage-section class = %q, want panel-hidden`, cls)
+		}
+	} else {
+		t.Error(`shell missing #storage-section`)
+	}
+
 	if eventClear := nodeByID(doc, "event-clear"); eventClear != nil {
 		if cls, ok := attr(eventClear, "class"); !ok || !strings.Contains(cls, "admin-hidden") {
 			t.Errorf(`#event-clear class = %q, want admin-hidden`, cls)

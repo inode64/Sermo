@@ -41,7 +41,7 @@
 <div id="err" role="status" aria-live="polite" aria-atomic="true"></div>
 <div id="attention" role="alert" aria-live="assertive" aria-atomic="true"></div>
 <div id="op-live" role="status" aria-live="polite" aria-atomic="true"></div>
-<details id="storage-section" open style="display:none">
+<details id="storage-section" open class="panel-hidden">
   <summary>Storage <span id="storage-count" class="muted"></span></summary>
   <div id="storage-controls" class="panel-controls">
     <label for="storage-search" class="visually-hidden">Filter storage watches</label>
@@ -125,7 +125,7 @@
   <p id="ops" class="muted panel-ops"></p>
 </details>
 
-<details id="network-section" open style="display:none">
+<details id="network-section" open class="panel-hidden">
   <summary>Network <span id="network-count" class="muted"></span></summary>
   <div id="network-controls" class="panel-controls">
     <label for="network-search" class="visually-hidden">Filter network watches</label>
@@ -163,7 +163,7 @@
   <p class="muted panel-footnote">Network host watches (connectivity and reachability). Other host watches are listed below.</p>
 </details>
 
-<details id="apps-section" open style="display:none">
+<details id="apps-section" open class="panel-hidden">
   <summary>
     <span class="summary-title">Installed applications <span id="apps-count" class="muted"></span></span>
     <span class="panel-tools">
@@ -199,7 +199,7 @@
   <p class="muted panel-footnote">Applications installed on the host (their binary is present). Click a row for the full version, file location, permissions, user and group.</p>
 </details>
 
-<details id="watches-section" open style="display:none">
+<details id="watches-section" open class="panel-hidden">
   <summary>Host watches <span id="watches-count" class="muted"></span></summary>
   <div id="watch-controls" class="panel-controls">
     <label for="watch-search" class="visually-hidden">Filter host watches</label>
@@ -269,7 +269,7 @@
   </table>
 </details>
 
-<details id="mounts-section" style="display:none">
+<details id="mounts-section" class="panel-hidden">
   <summary>Mount units <span id="mounts-count" class="muted"></span></summary>
   <table>
     <caption class="visually-hidden">Mount units</caption>
@@ -279,7 +279,7 @@
   <p class="muted panel-footnote">Configured fstab-backed mount units managed by Sermo refcounting (<code>sermoctl mount</code> / <code>umount</code>).</p>
 </details>
 
-<details id="notifiers-section" style="display:none">
+<details id="notifiers-section" class="panel-hidden">
   <summary>Notifiers <span id="notifiers-count" class="muted"></span></summary>
   <table>
     <caption class="visually-hidden">Notifiers</caption>
@@ -347,7 +347,7 @@
   </div>
 </details>
 
-<section id="locks-section" style="display:none">
+<section id="locks-section" class="panel-hidden">
   <h2>Runtime Locks <span id="locks-count" class="muted"></span></h2>
   <table>
     <caption class="visually-hidden">Runtime locks</caption>
