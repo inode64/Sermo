@@ -194,6 +194,38 @@ func bundledScript(t *testing.T) string {
 	return script
 }
 
+func bundledCSS(t *testing.T) string {
+	t.Helper()
+	doc, _ := parsedIndex(t)
+	var css string
+	walk(doc, func(n *html.Node) {
+		if n.Type == html.ElementNode && n.DataAtom == atom.Style && n.FirstChild != nil {
+			css = n.FirstChild.Data
+		}
+	})
+	if css == "" {
+		t.Fatal("bundled style missing")
+	}
+	return css
+}
+
+// TestIndexAccessibilityTargetSize pins WCAG 2.5.8 minimum hit targets in the
+// committed CSS bundle (row toggles, table action buttons, event more/less).
+func TestIndexAccessibilityTargetSize(t *testing.T) {
+	css := strings.ReplaceAll(bundledCSS(t), " ", "")
+	for _, needle := range []string{
+		".row-toggle{",
+		"min-height:24px",
+		"min-width:24px",
+		".event-msgbutton{",
+		".actionsbutton{",
+	} {
+		if !strings.Contains(css, needle) {
+			t.Errorf("bundled CSS missing target-size marker %q", needle)
+		}
+	}
+}
+
 // TestIndexAccessibilityBundle pins a11y string markers that survive esbuild
 // minification in the committed dashboard bundle (attribute names, SR hints,
 // disclosure wiring). It does not execute JS or assert on mangled identifiers.
