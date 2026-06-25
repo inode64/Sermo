@@ -138,7 +138,7 @@ Section id: `services-section`
 
 Lists **configured** service entries from the loaded config — state,
 checks, remediation and actions for what `sermod` monitors now. This is not
-`sermoctl services`, which inventories **catalog** daemon profiles under
+`sermoctl services`, which inventories **catalog** service profiles under
 `catalog/services`. See [cli.md](cli.md#catalog-inventory).
 
 | Part | Current representation |

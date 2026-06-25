@@ -54,7 +54,7 @@ func (r *countingRunner) Run(_ context.Context, name string, args ...string) (ex
 	return execx.Result{ExitCode: 127, Stderr: "not found"}, fmt.Errorf("%s: not found", name)
 }
 
-// tree builds a resolved daemon tree around one binary path and optional
+// tree builds a resolved service tree around one binary path and optional
 // version-command entry.
 func tree(binary string, version map[string]any) map[string]any {
 	t := map[string]any{"variables": map[string]any{"binary": binary}}

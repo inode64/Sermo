@@ -12,9 +12,9 @@ import (
 
 func TestServicesCommand(t *testing.T) {
 	root := t.TempDir()
-	daemonsDir := filepath.Join(root, "daemons")
-	catalogServicesDir := filepath.Join(daemonsDir, "services")
-	appsDir := filepath.Join(daemonsDir, "apps")
+	catalogDir := filepath.Join(root, "catalog")
+	catalogServicesDir := filepath.Join(catalogDir, "services")
+	appsDir := filepath.Join(catalogDir, "apps")
 	servicesDir := filepath.Join(root, "services")
 	binDir := filepath.Join(root, "bin")
 	for _, d := range []string{catalogServicesDir, appsDir, servicesDir, binDir} {
@@ -34,7 +34,7 @@ func TestServicesCommand(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// A service-category daemon (services/) and an app-category daemon (apps/).
+	// A service-category catalog service (services/) and an app-category catalog service (apps/).
 	write(filepath.Join(catalogServicesDir, "nginx.yml"), fmt.Sprintf(`
 name: nginx
 display_name: "Nginx"
@@ -62,7 +62,7 @@ preflight:
 engine: { backend: auto }
 paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, daemonsDir, servicesDir))
+`, catalogDir, servicesDir))
 	global := filepath.Join(root, "sermo.yml")
 
 	var out bytes.Buffer
@@ -81,6 +81,6 @@ defaults: { policy: { cooldown: 5m } }
 		t.Errorf("services should list app-linked services without failing on version probe errors:\n%s", got)
 	}
 	if strings.Contains(got, "git") {
-		t.Errorf("services must not list app-category daemons:\n%s", got)
+		t.Errorf("services must not list app-category catalog services:\n%s", got)
 	}
 }

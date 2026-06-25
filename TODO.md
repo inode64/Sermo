@@ -18,7 +18,7 @@ exists. Nothing here is committed scope; pick items deliberately.
       from *monitoring* a Prometheus server; log/slog, JSON file, syslog and
       webhook sinks are likewise pending)
 - [ ] Server MCP or gRPC API
-- [ ] PolicyKit (polkit) integration beyond basic catalog daemon
+- [ ] PolicyKit (polkit) integration beyond basic catalog service
 - [ ] Native systemd D-Bus backend for service control (the command-based
       backend works today)
 
@@ -27,14 +27,14 @@ exists. Nothing here is committed scope; pick items deliberately.
 ### D-Bus, storage and desktop
 
 - [x] D-Bus system bus health probe (`type: dbus` in `internal/conn`) and
-      `dbus` catalog daemon (service + native handshake check)
-- [x] UDisks2: native `udisks2` D-Bus probe on the catalog daemon (Manager
+      `dbus` catalog service (service + native handshake check)
+- [x] UDisks2: native `udisks2` D-Bus probe on the catalog service (Manager
       `Peer.Ping` + name-owner check); preflight `config` still pending
-- [x] `libvirt-dbus` catalog daemon (process match; no dedicated bus probe yet)
+- [x] `libvirt-dbus` catalog service (process match; no dedicated bus probe yet)
 
 ### Observability
 
-- [x] Prometheus server catalog daemon (`promtool check config` preflight,
+- [x] Prometheus server catalog service (`promtool check config` preflight,
       native `prometheus` API probe, SIGHUP reload)
 - [x] Prometheus exporters in catalog (`node_exporter`, `mysqld_exporter`,
       `smartctl_exporter`)
@@ -44,13 +44,13 @@ exists. Nothing here is committed scope; pick items deliberately.
 - [x] Grafana Alloy collector daemon (`alloy validate` preflight)
 - [x] Grafana Loki daemon (`-verify-config` preflight)
 - [x] InfluxDB daemon (`influxd config validate` preflight)
-- [x] Grafana server catalog daemon (HTTP `/api/health`; no config preflight yet)
+- [x] Grafana server catalog service (HTTP `/api/health`; no config preflight yet)
 
 ### Process managers and runtimes
 
-- [x] PM2 (Node.js process manager): catalog daemon + `pm2 ping` preflight/
+- [x] PM2 (Node.js process manager): catalog service + `pm2 ping` preflight/
       health/postflight checks
-- [x] Supervisor (`supervisord`) catalog daemon (`supervisorctl status` health,
+- [x] Supervisor (`supervisord`) catalog service (`supervisorctl status` health,
       optional `supervisord check` preflight)
 
 ## Catalog — preflight `config` checks

@@ -12,7 +12,7 @@ import (
 	"sermo/internal/execx"
 )
 
-// TestAppsVersionShortCommand checks how version_short is sourced: a daemon that
+// TestAppsVersionShortCommand checks how version_short is sourced: a catalog service that
 // configures a `version_short` command has its bare output trusted verbatim (no
 // regex), while one without falls back to parsing the raw version line, and a
 // configured command that prints nothing also falls back.
@@ -33,8 +33,8 @@ func TestAppsVersionShortCommand(t *testing.T) {
 		}
 	}
 
-	daemonsDir := filepath.Join(root, "daemons")
-	appsDir := filepath.Join(daemonsDir, "apps")
+	catalogDir := filepath.Join(root, "catalog")
+	appsDir := filepath.Join(catalogDir, "apps")
 	servicesDir := filepath.Join(root, "services")
 	for _, d := range []string{appsDir, servicesDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
@@ -87,7 +87,7 @@ preflight:
 engine: { backend: auto }
 paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, daemonsDir, servicesDir)), 0o644); err != nil {
+`, catalogDir, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -149,8 +149,8 @@ func TestAppsCommand(t *testing.T) {
 		}
 	}
 
-	daemonsDir := filepath.Join(root, "daemons")
-	appsDir := filepath.Join(daemonsDir, "apps") // category derived from the directory
+	catalogDir := filepath.Join(root, "catalog")
+	appsDir := filepath.Join(catalogDir, "apps") // category derived from the directory
 	servicesDir := filepath.Join(root, "services")
 	for _, d := range []string{appsDir, servicesDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
@@ -180,7 +180,7 @@ preflight:
 engine: { backend: auto }
 paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, daemonsDir, servicesDir)), 0o644); err != nil {
+`, catalogDir, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

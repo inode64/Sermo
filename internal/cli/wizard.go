@@ -178,11 +178,11 @@ func (a App) wizardEnv(ctx context.Context, opts options, cfg *config.Config) as
 		Ifaces:        listIfaces,
 		DefaultIfaces: defaultRouteIfaces(),
 		ServiceNames:  serviceNameSet(cfg),
-		Daemons: func() ([]assist.DaemonCandidate, error) {
+		CatalogServices: func() ([]assist.ServiceCandidate, error) {
 			if backend == "" {
 				return nil, nil
 			}
-			return listInstalledDaemons(ctx, cfg, servicemgr.Backend(backend), a.Runner, opts.timeout)
+			return listInstalledCatalogServices(ctx, cfg, servicemgr.Backend(backend), a.Runner, opts.timeout)
 		},
 		DockerContainers: func() ([]assist.DockerCandidate, error) {
 			return listWizardDockerContainers(ctx, opts.timeout)
@@ -517,7 +517,7 @@ func planWizardWatchDeletes(p *assist.Prompt, targetDir string, detected map[str
 
 // staleFile is a managed config file whose target is no longer detected on the
 // host, offered for deletion by the step-9 cleanup. label is the path plus a
-// human hint (the watch names, or the daemon a service uses).
+// human hint (the watch names, or the catalog service a service uses).
 type staleFile struct {
 	path  string
 	label string
@@ -592,8 +592,8 @@ func detectedTargetKeys(env assist.Env, wizard string) map[string]bool {
 			}
 		}
 	case "service":
-		if env.Daemons != nil {
-			if ds, err := env.Daemons(); err == nil {
+		if env.CatalogServices != nil {
+			if ds, err := env.CatalogServices(); err == nil {
 				if len(ds) > 0 {
 					keys[serviceDetectedFamilyKey("service")] = true
 					for _, d := range ds {

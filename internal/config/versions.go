@@ -11,9 +11,9 @@ import (
 	"strings"
 )
 
-// tmplToken is a version-template placeholder. A daemon name carrying one (e.g.
+// tmplToken is a version-template placeholder. A catalog service name carrying one (e.g.
 // `php-fpm%v`, `python%n`) is a template: it materializes into one concrete
-// daemon per discovered value. `placeholder` is replaced in the name; the body
+// catalog service per discovered value. `placeholder` is replaced in the name; the body
 // uses `${variable}`; `capture` is the regex that extracts a value from a globbed
 // path, so different tokens accept different value shapes.
 type tmplToken struct {
@@ -83,24 +83,24 @@ func tokensFor(name string) []tmplToken {
 // concrete document per installed value. Multiple versions of the same
 // application can be installed at once, so a single `name: foo%v` (or `foo%n`)
 // yields `foo1.2`, `foo3.4`, ... with the token's `${...}` wildcarded. Apps and
-// libraries discover from their own `versions.from`/`binary`; daemons first
+// libraries discover from their own `versions.from`/`binary`; catalog services first
 // discover from token-bearing `service:` candidates matched against active init
 // units, then from explicit `versions.from` or a linked app template
 // (`apps: ["php-fpm${version}"]`). `%v` and `%n` may also register an empty
 // active-slot value when the marker-less app binary exists (e.g. `php%v` ->
 // `php`), and any template can declare `versions.current_from` to materialize
 // that active-slot entry explicitly. The template itself is dropped; if nothing
-// is installed and no active slot is declared it yields nothing. A daemon
-// template may `uses` a base daemon (e.g. php-fpm%v uses php-fpm) to inherit its
+// is installed and no active slot is declared it yields nothing. A catalog service
+// template may `uses` a base catalog service (e.g. php-fpm%v uses php-fpm) to inherit its
 // checks, rules and processes.
 func (c *Config) materializeVersionTemplates() {
-	c.materializeRegistry(c.DaemonNames, c.Daemons, kindDaemon)
+	c.materializeRegistry(c.CatalogServiceNames, c.CatalogServices, kindService)
 	c.materializeRegistry(c.AppNames, c.Apps, kindApp)
 	c.materializeRegistry(c.LibraryNames, c.Libraries, kindLibrary)
 }
 
 // materializeRegistry materializes the version templates in one registry (the
-// daemon/app/lib map), tagging each concrete instance with that kind so it is
+// catalog service/app/lib map), tagging each concrete instance with that kind so it is
 // indexed in the same registry as its template.
 func (c *Config) materializeRegistry(names []string, reg map[string]*Document, kind string) {
 	var templates []*Document
@@ -181,7 +181,7 @@ func (c *Config) materializeMultiToken(tmpl *Document, body map[string]any, toks
 // versionsRequire returns the optional `versions.require` candidate paths. When
 // set, a discovered instance materializes only if at least one of them exists on
 // disk (with the captured tokens bound) — so stale service metadata whose
-// runtime binary is not installed does not produce a daemon that would dangle a
+// runtime binary is not installed does not produce a catalog service that would dangle a
 // link to an unmaterialized binary app.
 func versionsRequire(body map[string]any) []string {
 	v, ok := body["versions"].(map[string]any)
@@ -209,11 +209,11 @@ func requireSatisfied(require []string, vals map[string]string, toks []tmplToken
 }
 
 // multiTokenDiscoverySource returns the active-unit matches or globs (carrying
-// all markers) that enumerate a multi-token template's instances. Daemons prefer
+// all markers) that enumerate a multi-token template's instances. CatalogServices prefer
 // token-bearing service candidates; apps and libraries can discover from
 // `versions.from` or their own `variables.binary` candidates.
 func (c *Config) multiTokenDiscoverySource(body map[string]any, toks []tmplToken, kind string) versionDiscovery {
-	if kind == kindDaemon {
+	if kind == kindService {
 		if matches := c.serviceTemplateMatches(body, toks); len(matches) > 0 {
 			return versionDiscovery{matches: matches, options: body}
 		}
@@ -221,7 +221,7 @@ func (c *Config) multiTokenDiscoverySource(body map[string]any, toks []tmplToken
 	if paths := pathsContainingAllMarkers(c.versionsFromPaths(body), toks); len(paths) > 0 {
 		return versionDiscovery{paths: paths, options: body}
 	}
-	if kind != kindDaemon {
+	if kind != kindService {
 		return versionDiscovery{
 			paths:   pathsContainingAllMarkers(documentBinaryCandidates(body), toks),
 			options: body,
@@ -770,8 +770,8 @@ func (c *Config) templateCurrentCandidatePaths(templateName, kind string) []stri
 		doc = c.Apps[baseName]
 	case kindLibrary:
 		doc = c.Libraries[baseName]
-	case kindDaemon:
-		doc = c.Daemons[baseName]
+	case kindService:
+		doc = c.CatalogServices[baseName]
 	}
 	if doc == nil || doc.Name == templateName {
 		return nil
@@ -860,10 +860,10 @@ func (d versionDiscovery) templateMatches(toks []tmplToken) []templateMatch {
 // versionDiscoverySource returns the active service-unit matches or
 // placeholder-bearing filesystem path Sermo uses to find installed values, plus
 // the document whose `versions.unversioned` option controls active-slot
-// behavior. Apps and libraries own their discovery path directly. Daemons prefer
+// behavior. Apps and libraries own their discovery path directly. CatalogServices prefer
 // their active `service:` units; their binary remains owned by linked apps.
 func (c *Config) versionDiscoverySource(body map[string]any, tok tmplToken, kind string) versionDiscovery {
-	if kind != kindDaemon {
+	if kind != kindService {
 		if paths := c.versionsFromPaths(body); len(paths) > 0 {
 			return versionDiscovery{paths: paths, options: body}
 		}
@@ -872,10 +872,10 @@ func (c *Config) versionDiscoverySource(body map[string]any, tok tmplToken, kind
 	if matches := c.serviceTemplateMatches(body, []tmplToken{tok}); len(matches) > 0 {
 		return versionDiscovery{matches: matches, options: body}
 	}
-	// A daemon may own its discovery via an explicit token-bearing
-	// `versions.from`: instance metadata can live on the daemon, not on the
+	// A catalog service may own its discovery via an explicit token-bearing
+	// `versions.from`: instance metadata can live on the catalog service, not on the
 	// version binary the linked app knows about (e.g. tomcat@${version}${sep}
-	// ${instance}.service). Prefer it when present. A daemon still never
+	// ${instance}.service). Prefer it when present. A catalog service still never
 	// discovers from its own *binary* — that remains the linked app's job — so
 	// only an explicit versions.from qualifies, not documentBinaryCandidates.
 	if paths := pathsContainingMarker(c.versionsFromPaths(body), tok.marker()); len(paths) > 0 {
@@ -917,7 +917,7 @@ func pathsContainingMarker(paths []string, marker string) []string {
 // versionsFromPaths returns the explicit `versions.from` discovery globs for the
 // configured init backend. A plain string/list is backend-neutral. A map selects
 // only the active backend branch (`systemd` or `openrc`) so stray unit files from
-// the inactive init system do not materialize daemons.
+// the inactive init system do not materialize catalog services.
 func (c *Config) versionsFromPaths(body map[string]any) []string {
 	return versionsFromPathsForBackend(body, effectiveBackend(c))
 }
@@ -1014,7 +1014,7 @@ func (c *Config) templateBody(tmpl *Document, kind string) map[string]any {
 	body := stripMeta(tmpl.Body)
 	body["kind"] = kind
 	if base := cfgval.String(tmpl.Body["uses"]); base != "" {
-		if src, ok := c.Daemons[base]; ok {
+		if src, ok := c.CatalogServices[base]; ok {
 			body = mergeMaps(stripMeta(src.Body), body)
 			body["kind"] = kind
 		}
@@ -1195,8 +1195,8 @@ func bindTokens(v any, repl *strings.Replacer) any {
 func (c *Config) dropTemplate(name string, reg map[string]*Document, kind string) {
 	delete(reg, name)
 	switch kind {
-	case kindDaemon:
-		c.DaemonNames = withoutString(c.DaemonNames, name)
+	case kindService:
+		c.CatalogServiceNames = withoutString(c.CatalogServiceNames, name)
 	case kindApp:
 		c.AppNames = withoutString(c.AppNames, name)
 	case kindLibrary:

@@ -12,16 +12,16 @@ import (
 
 func cfgvalString(v any) string { return cfgval.AsString(v) }
 
-type reloadSignalDaemon struct {
+type reloadSignalService struct {
 	name   string
 	signal string
 }
 
-// TestRealCatalogReloadDaemonsResolve loads the actual repo catalog and resolves
-// each daemon that ships a native `reload:` block, asserting the block survives
+// TestRealCatalogReloadServicesResolve loads the actual repo catalog and resolves
+// each catalog service that ships a native `reload:` block, asserting the block survives
 // resolution and validates. It guards the catalog YAML against typos in the
 // reload feature and confirms the block reaches the resolved service tree.
-func TestRealCatalogReloadDaemonsResolve(t *testing.T) {
+func TestRealCatalogReloadServicesResolve(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")
 	writeGlobal := func(dir, enabled, backend string) string {
@@ -45,9 +45,9 @@ func TestRealCatalogReloadDaemonsResolve(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load (probe): %v", err)
 	}
-	daemons := catalogReloadSignalDaemons(probe)
-	if len(daemons) == 0 {
-		t.Fatal("no catalog daemons with reload.signal found")
+	services := catalogReloadSignalServices(probe)
+	if len(services) == 0 {
+		t.Fatal("no catalog services with reload.signal found")
 	}
 
 	dir := t.TempDir()
@@ -55,7 +55,7 @@ func TestRealCatalogReloadDaemonsResolve(t *testing.T) {
 	if err := os.MkdirAll(enabled, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, d := range daemons {
+	for _, d := range services {
 		svc := "name: " + d.name + "-main\nuses: " + d.name + "\n"
 		if err := os.WriteFile(filepath.Join(enabled, d.name+".yml"), []byte(svc), 0o644); err != nil {
 			t.Fatal(err)
@@ -70,7 +70,7 @@ func TestRealCatalogReloadDaemonsResolve(t *testing.T) {
 			if issues := Validate(cfg); len(issues) != 0 {
 				t.Fatalf("Validate issues = %v, want none", issues)
 			}
-			for _, d := range daemons {
+			for _, d := range services {
 				resolved, errs := cfg.Resolve(d.name + "-main")
 				if len(errs) != 0 {
 					t.Errorf("%s: resolve errors = %v", d.name, errs)
@@ -94,13 +94,13 @@ func TestRealCatalogReloadDaemonsResolve(t *testing.T) {
 	}
 }
 
-func catalogReloadSignalDaemons(cfg *Config) []reloadSignalDaemon {
-	var out []reloadSignalDaemon
-	for _, name := range cfg.DaemonNames {
+func catalogReloadSignalServices(cfg *Config) []reloadSignalService {
+	var out []reloadSignalService
+	for _, name := range cfg.CatalogServiceNames {
 		if strings.Contains(name, "%") {
 			continue
 		}
-		doc := cfg.Daemons[name]
+		doc := cfg.CatalogServices[name]
 		if doc == nil {
 			continue
 		}
@@ -109,7 +109,7 @@ func catalogReloadSignalDaemons(cfg *Config) []reloadSignalDaemon {
 			continue
 		}
 		if signal := cfgvalString(reload["signal"]); signal != "" {
-			out = append(out, reloadSignalDaemon{name: name, signal: signal})
+			out = append(out, reloadSignalService{name: name, signal: signal})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].name < out[j].name })

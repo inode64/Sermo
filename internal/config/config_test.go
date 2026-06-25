@@ -51,7 +51,7 @@ defaults:
     force_kill: false
 `
 
-func TestResolveMergesDefaultsDaemonOverrides(t *testing.T) {
+func TestResolveMergesDefaultsServiceOverrides(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/services/apache.yml": `
@@ -97,7 +97,7 @@ checks:
 		t.Errorf("cooldown = %v, want default 5m", got)
 	}
 	if got := cfgval.String(policy["max_actions"]); got != "3" {
-		t.Errorf("max_actions = %v, want daemon 3", got)
+		t.Errorf("max_actions = %v, want service 3", got)
 	}
 	stop := nested(t, resolved.Tree, "stop_policy")
 	if got := cfgval.String(stop["graceful_timeout"]); got != "30s" {
@@ -238,7 +238,7 @@ aliases: nope
 		`alias "bad/name" must be a simple name without path separators`,
 		"aliases must not contain empty names",
 		`duplicate alias "alt"`,
-		`alias "alt" is already used by daemon`,
+		`alias "alt" is already used by catalog service`,
 		"aliases must be a list of simple names",
 	} {
 		if !hasIssue(issues, want) {
@@ -281,11 +281,11 @@ variables:
 	}
 }
 
-func TestMultiInstanceDaemonOverridesPerInstance(t *testing.T) {
-	// Two services share one daemon (same binary, checks and rules) but each
+func TestMultiInstanceServiceOverridesPerInstance(t *testing.T) {
+	// Two services share one catalog service (same binary, checks and rules) but each
 	// overrides only the variables that make an instance unique: listen port,
 	// pidfile and config path. This is the supported pattern for running e.g.
-	// two MariaDB or php-fpm instances off a single daemon — no new mechanism
+	// two MariaDB or php-fpm instances off a single catalog service — no new mechanism
 	// is needed beyond `uses` + per-instance `variables`.
 	cfg, err := Load(writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
@@ -457,7 +457,7 @@ uses: dbus
 	if got := fmt.Sprint(configCmd...); got != "/usr/bin/dbus-daemon--check" {
 		t.Fatalf("linked app variable command = %v, want dbus binary", configCmd)
 	}
-	if names := cfg.DaemonsInCategory(CategoryApp); strings.Join(names, ",") != "dbus" {
+	if names := cfg.CatalogNamesInCategory(CategoryApp); strings.Join(names, ",") != "dbus" {
 		t.Fatalf("listed apps = %v, want dbus", names)
 	}
 }
@@ -1008,14 +1008,14 @@ defaults:
   policy: { cooldown: 5m }
 notify: [ops]
 `,
-		"catalog-flat/services/direct-daemon.yml": `
-name: direct-daemon
+		"catalog-flat/services/direct-service.yml": `
+name: direct-service
 `,
-		"catalog-flat/services/deep/skipped-daemon.yml": `
-name: skipped-daemon
+		"catalog-flat/services/deep/skipped-service.yml": `
+name: skipped-service
 `,
-		"catalog-recursive/services/deep/recursive-daemon.yml": `
-name: recursive-daemon
+		"catalog-recursive/services/deep/recursive-service.yml": `
+name: recursive-service
 `,
 		"services-flat/direct-service.yml": `
 name: direct-service
@@ -1141,13 +1141,13 @@ path: /mnt/recursive
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	for _, name := range []string{"direct-daemon", "recursive-daemon"} {
-		if _, ok := cfg.Daemons[name]; !ok {
-			t.Fatalf("daemon %q was not loaded", name)
+	for _, name := range []string{"direct-service", "recursive-service"} {
+		if _, ok := cfg.CatalogServices[name]; !ok {
+			t.Fatalf("catalog service %q was not loaded", name)
 		}
 	}
-	if _, ok := cfg.Daemons["skipped-daemon"]; ok {
-		t.Fatalf("non-recursive catalog path loaded nested daemon")
+	if _, ok := cfg.CatalogServices["skipped-service"]; ok {
+		t.Fatalf("non-recursive catalog path loaded nested catalog service")
 	}
 	for _, name := range []string{"direct-service", "recursive-service"} {
 		if _, ok := cfg.Services[name]; !ok {
@@ -1751,7 +1751,7 @@ rules:
       action: block
       message: "${display_name} backup is running on ${name}"
 `,
-		// Inherits the daemon's display_name; name is its own.
+		// Inherits the catalog service's display_name; name is its own.
 		"services/db-main.yml": `
 name: db-main
 uses: db
@@ -1917,7 +1917,7 @@ name: apache/main
 		t.Fatalf("missing service name issue in %v", issues)
 	}
 	if !hasIssue(issues, `document name "apache/main" must be a simple name without path separators`) {
-		t.Fatalf("missing daemon name issue in %v", issues)
+		t.Fatalf("missing catalog service name issue in %v", issues)
 	}
 }
 
@@ -2216,7 +2216,7 @@ policy:
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	body := cfg.Daemons["apache"].Body
+	body := cfg.CatalogServices["apache"].Body
 
 	// service: the os: block is replaced by the gentoo branch.
 	svc := body["service"].(map[string]any)
@@ -2259,9 +2259,9 @@ pidfile:
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	got, _ := cfg.Daemons["db"].Body["pidfile"].([]any)
+	got, _ := cfg.CatalogServices["db"].Body["pidfile"].([]any)
 	if len(got) != 2 || got[0] != "/run/db1.pid" {
-		t.Errorf("pidfile = %v, want the gentoo candidate list", cfg.Daemons["db"].Body["pidfile"])
+		t.Errorf("pidfile = %v, want the gentoo candidate list", cfg.CatalogServices["db"].Body["pidfile"])
 	}
 }
 
@@ -2282,7 +2282,7 @@ variables:
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got := DocumentBinary(cfg.Daemons["app"].Body); got != "/opt/debian/bin/app" {
+	if got := DocumentBinary(cfg.CatalogServices["app"].Body); got != "/opt/debian/bin/app" {
 		t.Errorf("baked binary = %q, want /opt/debian/bin/app", got)
 	}
 }
@@ -2316,12 +2316,12 @@ preflight:
 	}
 	// ${arch} is baked into the variable value (so the no-nested-variables rule
 	// never sees it) and flows through expansion.
-	if got := DocumentBinary(cfg.Daemons["qemu"].Body); got != "/usr/bin/qemu-system-aarch64" {
+	if got := DocumentBinary(cfg.CatalogServices["qemu"].Body); got != "/usr/bin/qemu-system-aarch64" {
 		t.Errorf("baked binary = %q, want /usr/bin/qemu-system-aarch64", got)
 	}
-	resolved, errs := cfg.ResolveDaemon("qemu")
+	resolved, errs := cfg.ResolveCatalogService("qemu")
 	if len(errs) != 0 {
-		t.Fatalf("ResolveDaemon() errors = %v", errs)
+		t.Fatalf("ResolveCatalogService() errors = %v", errs)
 	}
 	bin := nested(t, resolved.Tree, "preflight", "binary")
 	if cfgval.String(bin["path"]) != "/usr/bin/qemu-system-aarch64" {
@@ -2345,7 +2345,7 @@ func TestCatalogCategoryFromDirectory(t *testing.T) {
 		name, wantCat string
 		reg           map[string]*Document
 	}{
-		{"nginx", CategoryService, cfg.Daemons},
+		{"nginx", CategoryService, cfg.CatalogServices},
 		{"git", CategoryApp, cfg.Apps},
 		{"glibc", CategoryLibrary, cfg.Libraries},
 		{"common", CategoryPatterns, cfg.Patterns},
@@ -2359,8 +2359,8 @@ func TestCatalogCategoryFromDirectory(t *testing.T) {
 			t.Errorf("%s category = %q, want %q", tc.name, doc.Category, tc.wantCat)
 		}
 	}
-	if got := cfg.DaemonsInCategory(CategoryApp); len(got) != 1 || got[0] != "git" {
-		t.Errorf("DaemonsInCategory(app) = %v, want [git]", got)
+	if got := cfg.CatalogNamesInCategory(CategoryApp); len(got) != 1 || got[0] != "git" {
+		t.Errorf("CatalogNamesInCategory(app) = %v, want [git]", got)
 	}
 }
 
@@ -2451,7 +2451,7 @@ restart_on_change:
 func TestRestartOnChangeUnknownLibraryErrors(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		// nginx is a service daemon, not a library: referencing it must error.
+		// nginx is a catalog service, not a library: referencing it must error.
 		"catalog/services/nginx.yml": "name: nginx\nservice: nginx\n",
 		"services/web.yml": `
 name: web
@@ -2706,34 +2706,34 @@ defaults: { policy: { cooldown: 5m } }
 	}
 
 	systemd := load(t, "systemd")
-	if _, ok := systemd.Daemons["svc2.0"]; !ok {
+	if _, ok := systemd.CatalogServices["svc2.0"]; !ok {
 		t.Fatal("systemd discovery missing svc2.0")
 	}
-	if _, ok := systemd.Daemons["svc3.0"]; ok {
+	if _, ok := systemd.CatalogServices["svc3.0"]; ok {
 		t.Fatal("systemd discovery must not use OpenRC versions.from")
 	}
-	if _, ok := systemd.Daemons["svc1.0"]; ok {
+	if _, ok := systemd.CatalogServices["svc1.0"]; ok {
 		t.Fatal("systemd discovery must not use a shared default versions.from branch")
 	}
 
 	openrc := load(t, "openrc")
-	if _, ok := openrc.Daemons["svc3.0"]; !ok {
+	if _, ok := openrc.CatalogServices["svc3.0"]; !ok {
 		t.Fatal("openrc discovery missing svc3.0")
 	}
-	if _, ok := openrc.Daemons["svc2.0"]; ok {
+	if _, ok := openrc.CatalogServices["svc2.0"]; ok {
 		t.Fatal("openrc discovery must not use systemd versions.from")
 	}
-	if _, ok := openrc.Daemons["svc1.0"]; ok {
+	if _, ok := openrc.CatalogServices["svc1.0"]; ok {
 		t.Fatal("openrc discovery must not use a shared default versions.from branch")
 	}
 
 	t.Run("env backend override", func(t *testing.T) {
 		t.Setenv("SERMO_BACKEND", "openrc")
 		cfg := load(t, "auto")
-		if _, ok := cfg.Daemons["svc3.0"]; !ok {
+		if _, ok := cfg.CatalogServices["svc3.0"]; !ok {
 			t.Fatal("SERMO_BACKEND=openrc should select OpenRC versions.from")
 		}
-		if _, ok := cfg.Daemons["svc2.0"]; ok {
+		if _, ok := cfg.CatalogServices["svc2.0"]; ok {
 			t.Fatal("SERMO_BACKEND=openrc must not select systemd versions.from")
 		}
 	})
@@ -2747,10 +2747,10 @@ func templateMatchValues(matches []templateMatch, variable string) []string {
 	return out
 }
 
-// TestDaemonVersionTemplateDiscoversFromLinkedApp covers a daemon template whose
+// TestCatalogServiceVersionTemplateDiscoversFromLinkedApp covers a catalog service template whose
 // monitored binary is generic (no ${version}); installed versions come from the
-// linked app template, and ${version} is baked into the daemon body.
-func TestDaemonVersionTemplateDiscoversFromLinkedApp(t *testing.T) {
+// linked app template, and ${version} is baked into the service body.
+func TestCatalogServiceVersionTemplateDiscoversFromLinkedApp(t *testing.T) {
 	root := t.TempDir()
 	slots := filepath.Join(root, "lib")
 	for _, v := range []string{"7.4", "8.3"} {
@@ -2814,9 +2814,9 @@ defaults: { policy: { cooldown: 5m } }
 		t.Fatalf("Load() error = %v", err)
 	}
 	for _, v := range []string{"7.4", "8.3"} {
-		doc, ok := cfg.Daemons["php-fpm"+v]
+		doc, ok := cfg.CatalogServices["php-fpm"+v]
 		if !ok {
-			t.Fatalf("expected materialized daemon php-fpm%s", v)
+			t.Fatalf("expected materialized service php-fpm%s", v)
 		}
 		// Generic binary is preserved; version did not leak into it.
 		if got := DocumentBinary(doc.Body); got != "/usr/sbin/php-fpm" {
@@ -2827,14 +2827,14 @@ defaults: { policy: { cooldown: 5m } }
 		if got := sysd[0].(string); got != "php"+v+"-fpm" {
 			t.Errorf("php-fpm%s service unit = %q, want php%s-fpm", v, got, v)
 		}
-		// Discovery metadata stripped from the concrete daemon.
+		// Discovery metadata stripped from the concrete service.
 		if _, present := doc.Body["versions"]; present {
 			t.Errorf("php-fpm%s still carries versions block", v)
 		}
 	}
 }
 
-func TestDaemonVersionTemplateRequiresLinkedAppDiscovery(t *testing.T) {
+func TestCatalogServiceVersionTemplateRequiresLinkedAppDiscovery(t *testing.T) {
 	root := t.TempDir()
 	bin := filepath.Join(root, "bin")
 	if err := os.MkdirAll(bin, 0o755); err != nil {
@@ -2856,8 +2856,8 @@ checks: { service: { type: service, expect: active } }
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if _, ok := cfg.Daemons["worker1.0"]; ok {
-		t.Fatalf("daemon template materialized from service binary; expected linked app discovery only")
+	if _, ok := cfg.CatalogServices["worker1.0"]; ok {
+		t.Fatalf("service template materialized from service binary; expected linked app discovery only")
 	}
 }
 
@@ -2935,8 +2935,8 @@ defaults:
 		if _, ok := cfg.Apps["tomcat-"+v]; !ok {
 			t.Fatalf("expected materialized app tomcat-%s", v)
 		}
-		if _, ok := cfg.Daemons["tomcat-"+v]; !ok {
-			t.Fatalf("expected materialized daemon tomcat-%s", v)
+		if _, ok := cfg.CatalogServices["tomcat-"+v]; !ok {
+			t.Fatalf("expected materialized service tomcat-%s", v)
 		}
 	}
 
@@ -3027,11 +3027,11 @@ defaults:
 			t.Fatalf("expected materialized app postgres-%s", v)
 		}
 	}
-	if _, ok := cfg.Daemons["postgres-16"]; !ok {
-		t.Fatal("expected materialized daemon postgres-16 from active service unit")
+	if _, ok := cfg.CatalogServices["postgres-16"]; !ok {
+		t.Fatal("expected materialized service postgres-16 from active service unit")
 	}
-	if _, ok := cfg.Daemons["postgres-15"]; ok {
-		t.Fatal("postgres-15 daemon must not materialize without an active service unit")
+	if _, ok := cfg.CatalogServices["postgres-15"]; ok {
+		t.Fatal("postgres-15 service must not materialize without an active service unit")
 	}
 
 	resolved, errs := cfg.Resolve("pg")
@@ -3114,8 +3114,8 @@ defaults: { policy: { cooldown: 5m } }
 	}
 	for _, version := range []string{"8.2", "8.4"} {
 		name := "php-fpm" + version
-		if _, ok := cfg.Daemons[name]; !ok {
-			t.Fatalf("expected materialized daemon %s", name)
+		if _, ok := cfg.CatalogServices[name]; !ok {
+			t.Fatalf("expected materialized service %s", name)
 		}
 		if _, ok := cfg.Apps[name]; !ok {
 			t.Fatalf("expected materialized app %s", name)
@@ -3191,7 +3191,7 @@ defaults: { policy: { cooldown: 5m } }
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got := strings.Join(cfg.DaemonsInCategory(CategoryApp), ","); got != "php,php8.4,python,python3" {
+	if got := strings.Join(cfg.CatalogNamesInCategory(CategoryApp), ","); got != "php,php8.4,python,python3" {
 		t.Fatalf("app names = %s, want php,php8.4,python,python3", got)
 	}
 	tests := []struct {
@@ -3638,7 +3638,7 @@ variables:
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got := strings.Join(cfg.DaemonsInCategory(CategoryApp), ","); got != "python3" {
+	if got := strings.Join(cfg.CatalogNamesInCategory(CategoryApp), ","); got != "python3" {
 		t.Fatalf("app names = %s, want python3", got)
 	}
 	if got := DisplayName(cfg.Apps["python3"].Body, "python3"); got != "Python Three" {
@@ -3700,14 +3700,14 @@ defaults: { policy: { cooldown: 5m } }
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if _, ok := cfg.Daemons["openvpn-%i"]; ok {
+	if _, ok := cfg.CatalogServices["openvpn-%i"]; ok {
 		t.Fatal("template openvpn-%i should not be registered")
 	}
 	for _, inst := range []string{"client-a", "tun1"} {
 		name := "openvpn-" + inst
-		doc, ok := cfg.Daemons[name]
+		doc, ok := cfg.CatalogServices[name]
 		if !ok {
-			t.Fatalf("expected materialized daemon %q", name)
+			t.Fatalf("expected materialized service %q", name)
 		}
 		if got := ServiceUnit(doc.Body, name); got != "openvpn."+inst {
 			t.Fatalf("%s service unit = %q, want openvpn.%s", name, got, inst)
@@ -3725,8 +3725,8 @@ defaults: { policy: { cooldown: 5m } }
 	}
 }
 
-// TestVersionTemplateMaterialization exercises a `name: foo-%v` daemon template:
-// it must produce one daemon per installed app version, inherit a `uses` base,
+// TestVersionTemplateMaterialization exercises a `name: foo-%v` service template:
+// it must produce one service per installed app version, inherit a `uses` base,
 // and drop the template itself.
 func TestVersionTemplateMaterialization(t *testing.T) {
 	root := t.TempDir()
@@ -3741,8 +3741,8 @@ func TestVersionTemplateMaterialization(t *testing.T) {
 		}
 	}
 
-	daemonsDir := filepath.Join(root, "daemons")
-	catalogServicesDir := filepath.Join(daemonsDir, "services")
+	catalogDir := filepath.Join(root, "catalog")
+	catalogServicesDir := filepath.Join(catalogDir, "services")
 	servicesDir := filepath.Join(root, "services")
 	if err := os.MkdirAll(servicesDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -3775,7 +3775,7 @@ rules:
       action: block
       message: "${display_name} configuration is invalid"
 `)
-	write(filepath.Join(daemonsDir, "apps"), "php-fpm.yml", fmt.Sprintf(`
+	write(filepath.Join(catalogDir, "apps"), "php-fpm.yml", fmt.Sprintf(`
 name: php-fpm-%%v
 display_name: "PHP-FPM ${version}"
 variables:
@@ -3801,7 +3801,7 @@ paths:
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
-`, daemonsDir, servicesDir)), 0o644); err != nil {
+`, catalogDir, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3810,15 +3810,15 @@ defaults:
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	// Template must be gone; one concrete daemon per installed version present.
-	if _, ok := cfg.Daemons["php-fpm-%v"]; ok {
+	// Template must be gone; one concrete service per installed version present.
+	if _, ok := cfg.CatalogServices["php-fpm-%v"]; ok {
 		t.Errorf("template php-fpm-%%v should not be registered")
 	}
 	for _, v := range []string{"7.4", "8.3"} {
 		name := "php-fpm-" + v
-		doc, ok := cfg.Daemons[name]
+		doc, ok := cfg.CatalogServices[name]
 		if !ok {
-			t.Fatalf("expected materialized daemon %q", name)
+			t.Fatalf("expected materialized service %q", name)
 		}
 		// display_name has the version baked in (no literal ${version}).
 		if got := DisplayName(doc.Body, name); got != "PHP-FPM "+v {
@@ -3937,7 +3937,7 @@ checks:
 
 func TestVersionTemplateCephOSD(t *testing.T) {
 	root := t.TempDir()
-	// Catalog files take their kind from the subdirectory (services/ → daemon,
+	// Catalog files take their kind from the subdirectory (services/ → service,
 	// apps/ → app), so the template and its app must live in the right dirs.
 	catalogDir := filepath.Join(root, "catalog")
 	servicesDir := filepath.Join(root, "services")
@@ -3965,7 +3965,7 @@ apps: [ceph-osd]
 variables: { user: ceph }
 checks: { service: { type: service, expect: active } }
 `)
-	// One enabled service per OSD that uses the materialized daemon.
+	// One enabled service per OSD that uses the materialized service.
 	write(servicesDir, "osd0.yml", "name: osd0\nuses: ceph-osd0\n")
 
 	global := filepath.Join(root, "sermo.yml")
@@ -3989,18 +3989,18 @@ defaults:
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	// Template gone; one concrete daemon per active OSD unit; absent id 2 not present.
-	if _, ok := cfg.Daemons["ceph-osd%n"]; ok {
+	// Template gone; one concrete service per active OSD unit; absent id 2 not present.
+	if _, ok := cfg.CatalogServices["ceph-osd%n"]; ok {
 		t.Errorf("template ceph-osd%%n should not be registered")
 	}
-	if _, ok := cfg.Daemons["ceph-osd2"]; ok {
+	if _, ok := cfg.CatalogServices["ceph-osd2"]; ok {
 		t.Errorf("ceph-osd2 must not exist (no active ceph-osd@2.service)")
 	}
 	for _, id := range []string{"0", "1", "3"} {
 		name := "ceph-osd" + id
-		doc, ok := cfg.Daemons[name]
+		doc, ok := cfg.CatalogServices[name]
 		if !ok {
-			t.Fatalf("expected materialized daemon %q", name)
+			t.Fatalf("expected materialized service %q", name)
 		}
 		// ${n} baked into the unit name at materialization.
 		if got := ServiceUnit(doc.Body, name); got != "ceph-osd@"+id {
@@ -4020,15 +4020,15 @@ defaults:
 
 func TestVersionTemplateCephOSDNoMatch(t *testing.T) {
 	root := t.TempDir()
-	daemonsDir := filepath.Join(root, "daemons")
-	catalogServicesDir := filepath.Join(daemonsDir, "services")
+	catalogDir := filepath.Join(root, "catalog")
+	catalogServicesDir := filepath.Join(catalogDir, "services")
 	servicesDir := filepath.Join(root, "services")
 	for _, d := range []string{catalogServicesDir, servicesDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	appsDir := filepath.Join(daemonsDir, "apps")
+	appsDir := filepath.Join(catalogDir, "apps")
 	if err := os.MkdirAll(appsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -4059,16 +4059,16 @@ paths:
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
-`, daemonsDir, servicesDir)), 0o644); err != nil {
+`, catalogDir, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := Load(global, WithServiceUnits("systemd", nil))
 	if err != nil {
 		t.Fatalf("Load() with no OSDs must not error, got %v", err)
 	}
-	for name := range cfg.Daemons {
+	for name := range cfg.CatalogServices {
 		if strings.HasPrefix(name, "ceph-osd") {
-			t.Errorf("no ceph-osd daemons expected with zero discovery matches, got %q", name)
+			t.Errorf("no ceph-osd services expected with zero discovery matches, got %q", name)
 		}
 	}
 }
@@ -4674,10 +4674,10 @@ rules:
 	}
 }
 
-// TestDaemonOwnsDiscovery covers the v2 rule: a daemon template that declares
+// TestCatalogServiceOwnsDiscovery covers the v2 rule: a catalog service template that declares
 // its own token-bearing `versions.from` materializes from that path directly,
 // without needing a linked discovery app.
-func TestDaemonOwnsDiscovery(t *testing.T) {
+func TestCatalogServiceOwnsDiscovery(t *testing.T) {
 	root := t.TempDir()
 	confd := filepath.Join(root, "conf")
 	if err := os.MkdirAll(confd, 0o755); err != nil {
@@ -4723,14 +4723,14 @@ defaults: { policy: { cooldown: 5m } }
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if _, ok := cfg.Daemons["myd-%i"]; ok {
+	if _, ok := cfg.CatalogServices["myd-%i"]; ok {
 		t.Fatal("template myd-%i should not be registered")
 	}
 	for _, inst := range []string{"tun1", "tun2"} {
 		name := "myd-" + inst
-		doc, ok := cfg.Daemons[name]
+		doc, ok := cfg.CatalogServices[name]
 		if !ok {
-			t.Fatalf("expected materialized daemon %q from daemon-owned discovery", name)
+			t.Fatalf("expected materialized service %q from service-owned discovery", name)
 		}
 		if got := ServiceUnit(doc.Body, name); got != "myd."+inst {
 			t.Fatalf("%s service unit = %q, want myd.%s", name, got, inst)
@@ -4786,15 +4786,15 @@ defaults: { policy: { cooldown: 5m } }
 		"tomcat-8.5":         "tomcat-8.5", // no instance -> no trailing separator
 	}
 	for name, unit := range want {
-		doc, ok := cfg.Daemons[name]
+		doc, ok := cfg.CatalogServices[name]
 		if !ok {
-			t.Fatalf("expected materialized daemon %q", name)
+			t.Fatalf("expected materialized service %q", name)
 		}
 		if got := ServiceUnit(doc.Body, name); got != unit {
 			t.Fatalf("%s service unit = %q, want %q", name, got, unit)
 		}
 	}
-	if _, ok := cfg.Daemons["tomcat-8.5-"]; ok {
+	if _, ok := cfg.CatalogServices["tomcat-8.5-"]; ok {
 		t.Fatal("must not materialize a trailing-separator name tomcat-8.5-")
 	}
 }
@@ -4832,8 +4832,8 @@ func TestVariableFromFileExtraction(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	enable := func(name, daemon string) {
-		body := fmt.Sprintf("name: %s\nuses: %s\n", name, daemon)
+	enable := func(name, service string) {
+		body := fmt.Sprintf("name: %s\nuses: %s\n", name, service)
 		if err := os.WriteFile(filepath.Join(servicesDir, name+".yml"), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -4941,7 +4941,7 @@ func TestEnableIfPrunesByConfdFile(t *testing.T) {
 	if err := os.MkdirAll(catalogDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	daemon := func(name, confFile string) {
+	catalogService := func(name, confFile string) {
 		body := fmt.Sprintf(`
 name: %s
 service: %s
@@ -4966,9 +4966,9 @@ checks:
 			t.Fatal(err)
 		}
 	}
-	daemon("sambaon", withWinbind)
-	daemon("sambaoff", withoutWinbind)
-	daemon("sambanone", filepath.Join(root, "missing"))
+	catalogService("sambaon", withWinbind)
+	catalogService("sambaoff", withoutWinbind)
+	catalogService("sambanone", filepath.Join(root, "missing"))
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
@@ -5017,7 +5017,7 @@ defaults: { policy: { cooldown: 5m } }
 // TestMultiTokenDiscoveryRequireGate covers `versions.require`: an instance
 // discovered from config (php-fpm pools, tomcat envs) is materialized only when
 // its required binary also exists, so a stray config directory whose runtime is
-// not installed does not produce a daemon with a dangling app link.
+// not installed does not produce a service with a dangling app link.
 func TestMultiTokenDiscoveryRequireGate(t *testing.T) {
 	root := t.TempDir()
 	etc := filepath.Join(root, "etc")
@@ -5067,11 +5067,11 @@ defaults: { policy: { cooldown: 5m } }
 		t.Fatalf("Load() error = %v", err)
 	}
 	for _, name := range []string{"app8.4", "app8.4_pool"} {
-		if _, ok := cfg.Daemons[name]; !ok {
+		if _, ok := cfg.CatalogServices[name]; !ok {
 			t.Errorf("expected %q to materialize (binary present)", name)
 		}
 	}
-	if _, ok := cfg.Daemons["app5.6"]; ok {
+	if _, ok := cfg.CatalogServices["app5.6"]; ok {
 		t.Error("app5.6 must be gated out: its required binary is absent")
 	}
 }

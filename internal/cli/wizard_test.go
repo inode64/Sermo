@@ -385,7 +385,6 @@ func TestWriteMountFilesRejectsExistingFileBeforeUpdatingConfig(t *testing.T) {
 
 	_, _, err := writeMountFiles(cfgPath, map[string]map[string]any{
 		"mount-mnt-backup": {
-			"kind": "mount",
 			"name": "mount-mnt-backup",
 			"path": "/mnt/backup",
 		},

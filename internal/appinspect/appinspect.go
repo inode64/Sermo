@@ -68,14 +68,14 @@ func WithOptionalVersion() Option {
 
 // List inspects every catalog daemon in the category. When includeMissing is
 // false only installed applications (binary present) are returned. The order
-// follows config.DaemonsInCategory, which sorts by name.
+// follows config.CatalogNamesInCategory, which sorts by name.
 func List(ctx context.Context, runner execx.Runner, cfg *config.Config, category string, includeMissing bool, opts ...Option) []Report {
 	if cfg == nil {
 		return nil
 	}
 	var reports []Report
 	cache := map[string]Report{}
-	for _, name := range cfg.DaemonsInCategory(category) {
+	for _, name := range cfg.CatalogNamesInCategory(category) {
 		r := inspectCatalog(ctx, runner, cfg, category, name, cache, map[string]bool{}, opts...)
 		if !r.Installed && !includeMissing {
 			continue

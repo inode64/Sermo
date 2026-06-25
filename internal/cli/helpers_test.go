@@ -41,26 +41,26 @@ func TestNotifierNamesSorted(t *testing.T) {
 	}
 }
 
-func TestWizardDaemonHelpers(t *testing.T) {
+func TestWizardServiceHelpers(t *testing.T) {
 	tree := map[string]any{
 		"display_name": "MariaDB",
 		"variables":    map[string]any{"port": 3306},
 	}
-	if got := daemonTitle(tree, "mariadb"); got != "MariaDB" {
-		t.Fatalf("daemonTitle = %q", got)
+	if got := serviceTitle(tree, "mariadb"); got != "MariaDB" {
+		t.Fatalf("serviceTitle = %q", got)
 	}
-	if got := daemonTitle(map[string]any{}, "mariadb"); got != "mariadb" {
-		t.Fatalf("daemonTitle fallback = %q", got)
+	if got := serviceTitle(map[string]any{}, "mariadb"); got != "mariadb" {
+		t.Fatalf("serviceTitle fallback = %q", got)
 	}
-	if got := daemonPort(tree); got != 3306 {
-		t.Fatalf("daemonPort = %d", got)
+	if got := servicePort(tree); got != 3306 {
+		t.Fatalf("servicePort = %d", got)
 	}
-	if got := daemonPort(map[string]any{}); got != 0 {
-		t.Fatalf("daemonPort without variables = %d", got)
+	if got := servicePort(map[string]any{}); got != 0 {
+		t.Fatalf("servicePort without variables = %d", got)
 	}
 	for _, port := range []any{0, -1, 65536, "70000", "not-a-port"} {
-		if got := daemonPort(map[string]any{"variables": map[string]any{"port": port}}); got != 0 {
-			t.Fatalf("daemonPort(%v) = %d, want 0", port, got)
+		if got := servicePort(map[string]any{"variables": map[string]any{"port": port}}); got != 0 {
+			t.Fatalf("servicePort(%v) = %d, want 0", port, got)
 		}
 	}
 
@@ -89,7 +89,7 @@ func TestWriteServiceFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	docs := map[string]map[string]any{
-		"web-main": {"kind": "service", "name": "web-main", "uses": "nginx"},
+		"web-main": {"name": "web-main", "uses": "nginx"},
 	}
 
 	target, n, err := writeServiceFiles(global, docs)
@@ -128,7 +128,7 @@ func TestWriteServiceFilesPreservesAppsPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	docs := map[string]map[string]any{
-		"ssh": {"kind": "service", "name": "ssh", "uses": "ssh"},
+		"ssh": {"name": "ssh", "uses": "ssh"},
 	}
 
 	target, _, err := writeServiceFiles(global, docs)

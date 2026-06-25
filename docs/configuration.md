@@ -15,16 +15,19 @@ named entry. This keeps generated configuration easy to diff, replace and clean
 up per target.
 
 A document's **kind is determined by where it lives** — its catalog subdirectory
-(`services/` → daemon, `apps/` → app, `libs/` → lib, `patterns/` → patterns) or
+(`services/` → service, `apps/` → app, `libs/` → lib, `patterns/` → patterns) or
 the configured path it loads from (`paths.services` → service, `paths.mounts` →
-mount). A top-level `kind:` key is therefore **optional and redundant**; when one
+mount). A catalog `services/` definition (a *catalog service*) and a `paths.services`
+instance (a *configured service*) share the kind `service`; they stay distinct by
+location. A top-level `kind:` key is therefore **optional and redundant**; when one
 is present in a deployed file it must match the location, which catches a file
 placed in the wrong directory. Shipped configuration omits it.
 
 > **Complete annotated example.** [`docs/sermo-all.yml`](sermo-all.yml) shows
 > every configuration surface in one place — global config, watches, and one
-> document of each kind (daemon, app, lib, patterns, service, mount), plus a
-> cloned service example — and is validated by the test suite, so it cannot
+> document of each kind (a catalog service, app, lib, pattern, a configured
+> service, and a mount), plus a cloned service example — and is validated by the
+> test suite, so it cannot
 > drift from the schema. It is a reference bundle only; real deployments keep
 > one target per file. The shipped operational config is `examples/sermo.yml`.
 > From a source checkout, use `examples/sermo-dev.yml` to validate the bundled
@@ -183,8 +186,8 @@ as `apache2` for the canonical `apache` profile. Service aliases let
 configured service. Aliases must not duplicate another name or alias of the same
 document kind.
 
-When a daemon or service lists apps, every app variable is also available to that
-daemon/service with a normalized app-name prefix: an app with
+When a catalog service or service lists apps, every app variable is also available to that
+catalog service/service with a normalized app-name prefix: an app with
 `variables: { binary: /usr/bin/cupsd, cups_config: /usr/bin/cups-config }`
 exposes `${cupsd_binary}` and `${cupsd_cups_config}`. Command preflight entries
 named `version` or `version_short` also declare `${cupsd_version}` and
@@ -428,9 +431,9 @@ name — a native scan of `/proc`, no external `pidof`/`pgrep` needed.
 `sermoctl daemon reload` reloads `sermod`'s own configuration (as above).
 `sermoctl reload <service>` is a different operation — it reloads *that service*
 in place through the engine (preflight → reload → health). How a service reloads,
-including the `reload:` block that lets Sermo signal a daemon when its init unit
+including the `reload:` block that lets Sermo signal a service when its init unit
 has no reload, is documented in
-[daemons.md](daemons.md#reload-on-config-change-reload_on_change).
+[services.md](services.md#reload-on-config-change-reload_on_change).
 
 ### Per-service interval
 
@@ -485,7 +488,7 @@ A service normally resolves to a systemd/OpenRC unit. It can instead declare a
 per-service `control:` target for non-init resources: `control.type: libvirt`
 for QEMU/libvirt VMs or `control.type: docker` for Docker containers. Those
 targets still use the same locks, guards, preflight checks and operation
-timeouts; see [daemons](daemons.md#control-docker--docker-containers).
+timeouts; see [services](services.md#control-docker--docker-containers).
 
 Below the services table the dashboard lists the **installed applications** (the
 catalog app daemons whose binary is present), showing each application's name and
@@ -1056,7 +1059,7 @@ a service.
 > DNS resolution through the system resolver; type `default` to use the detected
 > default-route interface.
 > `sermoctl wizard service` detects installed catalog services and enables them
-> with service files (see [daemons](daemons.md)); when several services
+> with service files (see [services](services.md)); when several services
 > are selected, port overrides are skipped unless explicitly reviewed, and known
 > config files can be added as a periodic `checks.config` entry with a default
 > `60m` interval. Run with no argument to choose from the list.
@@ -1903,7 +1906,7 @@ Raise `cycles` (e.g. `3`) or set `duration` (e.g. `6m`) to require a longer
 consecutive window before every window-less rule fires, or use `mode: within`
 with `min_matches` for a sliding window. A rule's own `for`/`within` always
 overrides the fallback, and like the other per-service defaults it can be
-overridden per daemon or service.
+overridden per catalog service or service.
 
 ## Resolution order
 
@@ -1932,9 +1935,9 @@ variable and have every `${var}` reference resolve to the new value.
   `delete: true`.
 
 Worked examples (cloning, disabling, multiple instances) live in
-[daemons](daemons.md#cloning).
+[services](services.md#cloning).
 Catalog templates for installed versions/instances use `%v`, `%n` and `%i`; see
-[versioned daemons](daemons.md#versioned-daemons).
+[versioned services](services.md#versioned-services).
 When simple `%v` or `%n` templates also have an active-slot binary without a
 suffix, such as `php` next to `php8.4` or `python` next to `python3`, Sermo
 materializes that unversioned entry automatically. Composite templates with

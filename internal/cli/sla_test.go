@@ -16,8 +16,8 @@ import (
 
 func TestSLACommandReportsWindows(t *testing.T) {
 	root := t.TempDir()
-	daemonsDir := filepath.Join(root, "daemons")
-	catalogServicesDir := filepath.Join(daemonsDir, "services")
+	catalogDir := filepath.Join(root, "catalog")
+	catalogServicesDir := filepath.Join(catalogDir, "services")
 	servicesDir := filepath.Join(root, "services")
 	runDir := filepath.Join(root, "run")
 	stateDir := filepath.Join(root, "state")
@@ -37,7 +37,7 @@ func TestSLACommandReportsWindows(t *testing.T) {
 engine: { backend: auto }
 paths: { catalog: [ %s ], services: [ %s ], runtime: %s, state: %s }
 defaults: { policy: { cooldown: 5m } }
-`, daemonsDir, servicesDir, runDir, stateDir))
+`, catalogDir, servicesDir, runDir, stateDir))
 	global := filepath.Join(root, "sermo.yml")
 
 	// Seed three recent samples: two up, one down -> ~66.67% across every window.
@@ -101,8 +101,8 @@ defaults: { policy: { cooldown: 5m } }
 
 func TestSLASeriesCommand(t *testing.T) {
 	root := t.TempDir()
-	daemonsDir := filepath.Join(root, "daemons")
-	catalogServicesDir := filepath.Join(daemonsDir, "services")
+	catalogDir := filepath.Join(root, "catalog")
+	catalogServicesDir := filepath.Join(catalogDir, "services")
 	servicesDir := filepath.Join(root, "services")
 	stateDir := filepath.Join(root, "state")
 	for _, d := range []string{catalogServicesDir, servicesDir, stateDir} {
@@ -121,7 +121,7 @@ func TestSLASeriesCommand(t *testing.T) {
 engine: { backend: auto }
 paths: { catalog: [ %s ], services: [ %s ], state: %s }
 defaults: { policy: { cooldown: 5m } }
-`, daemonsDir, servicesDir, stateDir))
+`, catalogDir, servicesDir, stateDir))
 	global := filepath.Join(root, "sermo.yml")
 
 	store, err := state.Open(filepath.Join(stateDir, state.Filename))

@@ -1868,7 +1868,7 @@ func (b *WebBackend) loadApplications(ctx context.Context) []web.Application {
 	if b.cfg == nil {
 		return nil
 	}
-	names := b.cfg.DaemonsInCategory(config.CategoryApp)
+	names := b.cfg.CatalogNamesInCategory(config.CategoryApp)
 	if len(names) == 0 {
 		return nil
 	}
@@ -2781,7 +2781,7 @@ func (b *WebBackend) knownApp(name string) bool {
 	if name == "" || b.cfg == nil {
 		return false
 	}
-	for _, n := range b.cfg.DaemonsInCategory(config.CategoryApp) {
+	for _, n := range b.cfg.CatalogNamesInCategory(config.CategoryApp) {
 		if n == name {
 			return true
 		}

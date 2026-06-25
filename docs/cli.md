@@ -166,7 +166,7 @@ no candidate for the active backend; those are configuration errors.
 
 `sermoctl services`, `sermoctl apps`, `sermoctl libs` and `sermoctl patterns`
 list **catalog definitions** shipped under `paths.catalog` (see
-[daemons.md](daemons.md)): which profiles are installed, the version their
+[services.md](services.md)): which profiles are installed, the version their
 version command reports, and whether they resolve. Add `all` to include entries
 whose binary or library file is not present on the host.
 

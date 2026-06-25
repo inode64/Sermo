@@ -167,7 +167,7 @@ def set_reload_on_change(doc: dict) -> None:
     doc["reload_on_change"] = {"paths": list(paths)}
 
 
-# Per-daemon elevation specs: extra checks, optional preflight, rules, postflight key.
+# Per-catalog-service elevation specs: extra checks, optional preflight, rules, postflight key.
 SPECS: dict[str, dict] = {
     "apcsmart.yml": {
         "checks": {

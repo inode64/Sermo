@@ -14,7 +14,7 @@ import (
 // configuration example — through the real loader and validator, so the
 // reference file cannot drift from the schema. Each `---` document is placed
 // where it would live in a deployment: the global part as sermo.yml, catalog
-// kinds (daemon/app/lib/patterns) in a catalog dir, services in a services dir,
+// kinds (service/app/lib/patterns) in a catalog dir, services in a services dir,
 // mounts in a mounts dir; the example's absolute paths are rewritten to the
 // test sandbox.
 func TestDocsSermoAllValidates(t *testing.T) {
