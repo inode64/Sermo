@@ -103,9 +103,13 @@ func TestCountCheckPredicate(t *testing.T) {
 	if res := countOf(root, countFile, false, "<=", 5).Run(context.Background()); !res.OK {
 		t.Fatalf("expected OK for 2 files <= 5, got %q", res.Message)
 	}
-	// 2 files, threshold ">= 5" does not hold -> not OK.
+	// 2 files, threshold ">= 5" does not hold -> not OK. The "want" value is
+	// rendered with FormatFloat -1 precision, so an integral threshold has no
+	// trailing ".0" (e.g. "5", not "5.0").
 	if res := countOf(root, countFile, false, ">=", 5).Run(context.Background()); res.OK {
 		t.Fatal("expected not OK for 2 files >= 5")
+	} else if want := "2 file entries in"; !strings.Contains(res.Message, want) || !strings.Contains(res.Message, "(want >= 5)") {
+		t.Fatalf("message = %q, want %q and (want >= 5)", res.Message, want)
 	}
 	// Data carries the numeric count under both count and value keys.
 	res := countOf(root, countFile, false, ">=", 1).Run(context.Background())
