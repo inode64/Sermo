@@ -123,3 +123,13 @@ func TestSampleSystemNoSwapDevice(t *testing.T) {
 		t.Error("total_swap should be absent when there is no swap device")
 	}
 }
+
+func TestParseProcMeminfoTotalsAvailableEqualsTotal(t *testing.T) {
+	// MemAvailable == MemTotal is a legitimate fully-free host (0 used), not the
+	// rejected available > total case.
+	data := []byte("MemTotal:       1000 kB\nMemAvailable:   1000 kB\n")
+	totals := parseProcMeminfoTotals(data)
+	if !totals.memoryOK || totals.memoryTotal != 1000*1024 || totals.memoryUsed != 0 {
+		t.Fatalf("equal mem totals = %+v, want valid memory with 0 used", totals)
+	}
+}
