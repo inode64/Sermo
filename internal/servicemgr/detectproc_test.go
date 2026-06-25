@@ -349,3 +349,15 @@ func TestSuffixVarPicksSortedFirstOnMultipleMatches(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveOpenRCValueDefault(t *testing.T) {
+	vars := map[string]string{"PIDFILE": "/run/x.pid", "EMPTY": ""}
+	// ${VAR:-default}: a set, non-empty var uses its own value...
+	if got, ok := resolveOpenRCValue("${PIDFILE:-/run/d.pid}", vars); !ok || got != "/run/x.pid" {
+		t.Fatalf("set var = (%q,%v), want /run/x.pid", got, ok)
+	}
+	// ...an empty (or unset) var falls back to the default.
+	if got, ok := resolveOpenRCValue("${EMPTY:-/run/d.pid}", vars); !ok || got != "/run/d.pid" {
+		t.Fatalf("empty var = (%q,%v), want /run/d.pid", got, ok)
+	}
+}
