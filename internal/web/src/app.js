@@ -2031,7 +2031,7 @@ function renderServiceDetail(d) {
   const measured = serviceMeasuredChecks(d);
   const activeMetricCheck = selectedMetricCheck(measured);
   const checkBtns = measured.length
-    ? measured.map((c) => tpl`<button data-metric-service="${d.name}" data-metric-check="${c.name}" class="${c.name === activeMetricCheck ? "win-btn-active" : nothing}">${c.name}</button> `)
+    ? metricCheckButtons(d.name, measured, activeMetricCheck)
     : tpl`<span class="muted">No latency checks</span>`;
   const latencyPanel = measured.length
     ? tpl`<div id="${detailDomId(d.name, "lat-summary")}" class="muted">loading…</div>
@@ -3986,6 +3986,7 @@ const metricWins = [["1h", "1h"], ["24h", "24h"], ["7d", "168h"], ["30d", "720h"
 
 function setMetricCheck(name, service) {
   metricCheck = name;
+  if (service) syncMetricCheckButtons(service, name);
   const key = service ? "svc:" + service : "";
   const detail = key ? expDetailCache[key] : null;
   if (detail) loadMetrics(service, serviceMeasuredChecks(detail));
@@ -4003,6 +4004,21 @@ function setDaemonMetricWin(win) {
   saveUIState();
   syncWindowButtons("setDaemonMetricWin", daemonMetricWindow);
   loadDaemonMetrics();
+}
+
+function metricCheckButtons(serviceName, measured, selected) {
+  const btns = measured.map((c) =>
+    tpl`<button data-metric-service="${serviceName}" data-metric-check="${c.name}" aria-pressed=${c.name === selected ? "true" : "false"} class="${c.name === selected ? "win-btn-active" : nothing}">${c.name}</button> `);
+  return tpl`<span role="group" aria-label="Latency check">${btns}</span>`;
+}
+
+function syncMetricCheckButtons(serviceName, selected) {
+  document.querySelectorAll("[data-metric-check][data-metric-service]").forEach((btn) => {
+    if (btn.dataset.metricService !== serviceName) return;
+    const active = btn.dataset.metricCheck === selected;
+    btn.classList.toggle("win-btn-active", active);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+  });
 }
 
 function winButtons(list, selected, fn, groupLabel) {
