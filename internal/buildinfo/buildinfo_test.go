@@ -27,3 +27,14 @@ func TestStringVersionOverride(t *testing.T) {
 		t.Errorf("String() = %q, want it to contain %q", got, "sermo 9.9.9")
 	}
 }
+
+func TestShortMatchesResolvedVersion(t *testing.T) {
+	version, revision, _ := resolve()
+	want := version
+	if revision != "" {
+		want += " (" + revision + ")"
+	}
+	if got := Short(); got != want {
+		t.Errorf("Short() = %q, want %q", got, want)
+	}
+}
