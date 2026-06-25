@@ -514,19 +514,18 @@ type lockfileCheck struct {
 }
 
 func (c lockfileCheck) Run(_ context.Context) Result {
-	return runPathCandidateCheck(c.base, c.paths, "lockfile", lockfileCandidate)
+	return pathMatchResult(c.base, c.paths, lockfileCandidate, "lockfile")
 }
 
-type pathCandidateResult struct {
+type pathMatch struct {
 	message string
 	data    map[string]any
 	failure string
 }
 
-func runPathCandidateCheck(b base, paths []string, label string, candidate func(string, os.FileInfo) pathCandidateResult) Result {
-	start := time.Now()
+func firstMatchingPath(paths []string, predicate func(string, os.FileInfo) pathMatch, kindMsg string) pathMatch {
 	if len(paths) == 0 {
-		return b.result(false, label+" check has no path candidates", start)
+		return pathMatch{failure: kindMsg + " check has no path candidates"}
 	}
 	var failures []string
 	for _, path := range paths {
@@ -538,29 +537,38 @@ func runPathCandidateCheck(b base, paths []string, label string, candidate func(
 			failures = append(failures, fmt.Sprintf("%s: %v", path, err))
 			continue
 		}
-		match := candidate(path, info)
+		match := predicate(path, info)
 		if match.failure != "" {
 			failures = append(failures, match.failure)
 			continue
 		}
-		res := b.result(true, match.message, start)
-		res.Data = match.data
-		return res
+		return match
 	}
 	if len(failures) > 0 {
-		return b.result(false, strings.Join(failures, "; "), start)
+		return pathMatch{failure: strings.Join(failures, "; ")}
 	}
 	if len(paths) == 1 {
-		return b.result(false, paths[0]+" does not exist", start)
+		return pathMatch{failure: paths[0] + " does not exist"}
 	}
-	return b.result(false, fmt.Sprintf("none of %s candidates exist (%s)", label, strings.Join(paths, ", ")), start)
+	return pathMatch{failure: fmt.Sprintf("none of %s candidates exist (%s)", kindMsg, strings.Join(paths, ", "))}
 }
 
-func lockfileCandidate(path string, info os.FileInfo) pathCandidateResult {
-	if !info.Mode().IsRegular() {
-		return pathCandidateResult{failure: path + " is not a regular file"}
+func pathMatchResult(b base, paths []string, predicate func(string, os.FileInfo) pathMatch, kindMsg string) Result {
+	start := time.Now()
+	match := firstMatchingPath(paths, predicate, kindMsg)
+	if match.failure != "" {
+		return b.result(false, match.failure, start)
 	}
-	return pathCandidateResult{
+	res := b.result(true, match.message, start)
+	res.Data = match.data
+	return res
+}
+
+func lockfileCandidate(path string, info os.FileInfo) pathMatch {
+	if !info.Mode().IsRegular() {
+		return pathMatch{failure: path + " is not a regular file"}
+	}
+	return pathMatch{
 		message: path + " is a regular lockfile",
 		data:    map[string]any{"path": path, "size": info.Size()},
 	}
@@ -594,14 +602,14 @@ type socketCheck struct {
 }
 
 func (c socketCheck) Run(_ context.Context) Result {
-	return runPathCandidateCheck(c.base, c.paths, "socket", socketCandidate)
+	return pathMatchResult(c.base, c.paths, socketCandidate, "socket")
 }
 
-func socketCandidate(path string, info os.FileInfo) pathCandidateResult {
+func socketCandidate(path string, info os.FileInfo) pathMatch {
 	if info.Mode()&os.ModeSocket == 0 {
-		return pathCandidateResult{failure: path + " is not a socket"}
+		return pathMatch{failure: path + " is not a socket"}
 	}
-	return pathCandidateResult{
+	return pathMatch{
 		message: path + " is a socket",
 		data:    map[string]any{"path": path},
 	}
