@@ -63,6 +63,9 @@ func TestDiskIOCheckRates(t *testing.T) {
 	if got := res.Data["write_bytes"].(float64); got != 4096.0*512/10 {
 		t.Fatalf("write_bytes = %v, want %v", got, 4096.0*512/10)
 	}
+	if got := res.Data["read_bytes"].(float64); got != 2048.0*512/10 {
+		t.Fatalf("read_bytes = %v, want %v", got, 2048.0*512/10)
+	}
 	if got := res.Data["await_ms"].(float64); got != 15 {
 		t.Fatalf("await_ms = %v, want 15", got)
 	}
