@@ -462,6 +462,14 @@ func TestIndexAccessibilityShell(t *testing.T) {
 		t.Error(`shell missing #refresh-now`)
 	}
 
+	if eventClear := nodeByID(doc, "event-clear"); eventClear != nil {
+		if cls, ok := attr(eventClear, "class"); !ok || !strings.Contains(cls, "admin-hidden") {
+			t.Errorf(`#event-clear class = %q, want admin-hidden`, cls)
+		}
+	} else {
+		t.Error(`shell missing #event-clear`)
+	}
+
 	for _, spec := range []struct {
 		id    string
 		label string
