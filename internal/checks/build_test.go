@@ -183,3 +183,14 @@ func TestBuildPortsCheckHostDefault(t *testing.T) {
 		t.Fatalf("explicit host = %q, want ports.test", got)
 	}
 }
+
+func TestBuildPortsCheckMatchDefault(t *testing.T) {
+	// Absent match defaults to "all".
+	c, w := buildPortsCheck(base{}, map[string]any{"ports": "80"})
+	if w != "" {
+		t.Fatalf("unexpected warning: %q", w)
+	}
+	if got := c.(*portsCheck).match; got != "all" {
+		t.Fatalf("default match = %q, want all", got)
+	}
+}
