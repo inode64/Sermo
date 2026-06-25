@@ -8,7 +8,7 @@
 # target lives in its own file:
 #
 #   document 1 (global)           -> /etc/sermo/sermo.yml  (no marker)
-#   # location: catalog/services  -> a daemon under a catalog dir (paths.catalog)
+#   # location: catalog/services  -> a catalog service under a catalog dir (paths.catalog)
 #   # location: catalog/apps      -> an app under a catalog dir
 #   # location: catalog/libs      -> a lib under a catalog dir
 #   # location: catalog/patterns  -> a pattern set under a catalog dir
@@ -20,7 +20,7 @@
 # This file is validated by the test suite (internal/config), so it cannot
 # drift from the real schema. The shipped operational config is
 # examples/sermo.yml; the field-by-field reference is docs/configuration.md,
-# docs/daemons.md and docs/rules.md.
+# docs/services.md and docs/rules.md.
 
 # ---------------------------------------------------------------------------
 # 1. Global configuration (sermo.yml)
@@ -45,7 +45,7 @@ paths:
   # Omitted paths.catalog uses installed catalog defaults. Omitted
   # services/apps/mounts fall back to sibling services/, apps/ and mounts/.
   # Global fragment dirs (notifiers/storages/networks/watches) load only when listed.
-  catalog:  # packaged + admin daemon/app/lib definitions
+  catalog:  # packaged + admin catalog service/app/lib definitions
     - /usr/share/sermo/catalog
     - /etc/sermo/catalog-available
   services:
@@ -368,17 +368,17 @@ watches:
 
 ---
 # ---------------------------------------------------------------------------
-# 2. daemon — a reusable base definition (catalog)
+# 2. catalog service — a reusable base definition (catalog)
 # ---------------------------------------------------------------------------
 # location: catalog/services
 name: demo
 aliases: [demo-server]  # alternate catalog names accepted by uses:
 display_name: "Demo HTTP Server"
-description: "Reference daemon showing every service/catalog section."
+description: "Reference catalog service showing every service/catalog section."
 category: web
 type: webserver
 
-# A daemon name may also be a template:
+# A catalog service name may also be a template:
 #   demo-%v      -> ${version}, discovered from a linked app
 #   demo%n       -> ${n}, numeric only
 #   demo-%i      -> ${instance}, named init instances
@@ -435,7 +435,7 @@ commands:  # informational or reserved names such as version
 
 # pidfile auto-wires internal process-tree monitoring and a requires:[service]
 # health check unless the service already declares an equivalent check. Use a
-# list when a daemon has several distro-specific pidfile candidates.
+# list when a catalog service has several distro-specific pidfile candidates.
 pidfile: [/run/demo.pid, /run/demo/demo.pid]
 # For several required process roles with separate pidfiles, use `pidfiles:`
 # instead of `pidfile:` and mirror each role under `processes:`:
@@ -443,7 +443,7 @@ pidfile: [/run/demo.pid, /run/demo/demo.pid]
 #   workers: /run/demo-workers.pid
 
 # socket auto-wires a requires:[service] health check. It may reference a
-# variable and may be optional for socket-activated or distro-specific daemons.
+# variable and may be optional for socket-activated or distro-specific services.
 socket: { path: "${socket}", optional: true }
 # lockfile is the same idea for a regular lock artifact created by the service;
 # it is not a Sermo operation lock and does not block actions by itself.
@@ -794,7 +794,7 @@ stop_policy:
     - /run/demo/*.tmp
     - { path: /var/cache/demo/runtime, recursive: true, }
 
-policy:  # overrides defaults.policy for this daemon
+policy:  # overrides defaults.policy for this catalog service
   cooldown: 10m
   max_actions: 5
   max_actions_window: 1h
@@ -931,7 +931,7 @@ rules:
 # location: services
 name: demo-main
 aliases: [demo-primary]  # alternate names accepted by sermoctl commands
-uses: demo  # inherit the daemon, then override below
+uses: demo  # inherit the catalog service, then override below
 interval: 15s  # check more often than engine.interval
 monitor: previous  # enabled | disabled | previous
 enabled: true  # false keeps it configured but no worker is built

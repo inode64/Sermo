@@ -17,8 +17,8 @@ import (
 
 func TestMonitorUnmonitorCommand(t *testing.T) {
 	root := t.TempDir()
-	daemonsDir := filepath.Join(root, "daemons")
-	catalogServicesDir := filepath.Join(daemonsDir, "services")
+	catalogDir := filepath.Join(root, "catalog")
+	catalogServicesDir := filepath.Join(catalogDir, "services")
 	servicesDir := filepath.Join(root, "services")
 	runDir := filepath.Join(root, "run")
 	stateDir := filepath.Join(root, "state")
@@ -38,7 +38,7 @@ func TestMonitorUnmonitorCommand(t *testing.T) {
 engine: { backend: auto }
 paths: { catalog: [ %s ], services: [ %s ], runtime: %s, state: %s }
 defaults: { policy: { cooldown: 5m } }
-`, daemonsDir, servicesDir, runDir, stateDir))
+`, catalogDir, servicesDir, runDir, stateDir))
 	global := filepath.Join(root, "sermo.yml")
 
 	run := func(args ...string) int {
@@ -163,8 +163,8 @@ func TestStatusShowsDisabledState(t *testing.T) {
 func monitorTestConfig(t *testing.T) (root, global string) {
 	t.Helper()
 	root = t.TempDir()
-	daemonsDir := filepath.Join(root, "daemons")
-	catalogServicesDir := filepath.Join(daemonsDir, "services")
+	catalogDir := filepath.Join(root, "catalog")
+	catalogServicesDir := filepath.Join(catalogDir, "services")
 	servicesDir := filepath.Join(root, "services")
 	runDir := filepath.Join(root, "run")
 	stateDir := filepath.Join(root, "state")
@@ -184,7 +184,7 @@ func monitorTestConfig(t *testing.T) (root, global string) {
 engine: { backend: auto }
 paths: { catalog: [ %s ], services: [ %s ], runtime: %s, state: %s }
 defaults: { policy: { cooldown: 5m } }
-`, daemonsDir, servicesDir, runDir, stateDir))
+`, catalogDir, servicesDir, runDir, stateDir))
 	return root, filepath.Join(root, "sermo.yml")
 }
 

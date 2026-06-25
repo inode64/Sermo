@@ -12,7 +12,6 @@ func TestMaxOperationTimeoutRaisesForStopPolicy(t *testing.T) {
 	cfg := &config.Config{
 		Services: map[string]*config.Document{
 			"db": {Body: map[string]any{
-				"kind": "service",
 				"name": "db",
 				"stop_policy": map[string]any{
 					"graceful_timeout": "120s",

@@ -396,7 +396,7 @@ func (c *Config) resolveAnalyze(checkName string, analyze map[string]any) ([]any
 // expandReloadOnChange desugars a `reload_on_change: {paths: [...]}` block into
 // one remediation rule per path that *reloads* the service (re-reads its config
 // in place, no restart) when that file changes. It is the non-disruptive analog
-// of restart_on_change, for daemons whose config can be reloaded (udev rules,
+// of restart_on_change, for catalog services whose config can be reloaded (udev rules,
 // nginx vhosts, named zones, …). The block is removed; an empty paths list is a
 // no-op.
 func expandReloadOnChange(tree map[string]any) []string {
@@ -444,7 +444,7 @@ func expandReloadOnChange(tree map[string]any) []string {
 // host-keyed systemd instance units such as ceph-mon@${hostname}), ${init} (the
 // detected init system), ${user} (the Sermo user, a fallback for service
 // accounts), ${pidfile} (the conventional /run/<unit>.pid) and ${port} (the
-// top-level `port:` field, when set). They let daemons parameterize strings — e.g. a tcp check
+// top-level `port:` field, when set). They let catalog services parameterize strings — e.g. a tcp check
 // port: "${port}" or message: "${display_name} backup is running".
 // Injected after validateVariableValues so a display_name carrying its own
 // ${...} is not mistaken for a nested variable; an explicit `variables` entry of
@@ -617,7 +617,7 @@ func (c *Config) ResolveWatches() (map[string]any, []string) {
 // expandRestartOnChange desugars a `restart_on_change: {libraries: [...]}` block
 // into one remediation rule per library that restarts the service when the
 // library file changes. Each named library is resolved to its file via the
-// matching library daemon, so the generated `changed:` condition carries a
+// matching library, so the generated `changed:` condition carries a
 // concrete path. The block is removed; unknown or non-library references error.
 func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 	roc, ok := tree["restart_on_change"].(map[string]any)
@@ -658,7 +658,7 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 	return errs
 }
 
-// libraryPath resolves a library name to the file its library daemon watches
+// libraryPath resolves a library name to the file its library watches
 // (the `binary` variable). known is false when no library has that name; an
 // empty path with known=true means the library declares no binary. Shared by
 // expandRestartOnChange and the `changed: {library: X}` condition rewrite.
@@ -742,7 +742,7 @@ func (c *Config) expandApps(tree map[string]any) []string {
 // already being resolved on this path so a self- or mutually-referential
 // `apps:` linkage (an app document that itself lists `apps:`) fails as a config
 // error instead of recursing until the stack overflows. chain holds app names
-// only — a daemon/service that links an app of the same name is not a cycle.
+// only — a catalog service/service that links an app of the same name is not a cycle.
 func (c *Config) expandAppsChain(tree map[string]any, chain []string) []string {
 	_, present := tree["apps"]
 	names := cfgval.StringList(tree["apps"])
@@ -796,24 +796,24 @@ func (c *Config) expandAppsChain(tree map[string]any, chain []string) []string {
 	return errs
 }
 
-// ResolveDaemon expands a daemon's own body — no service merge — so its
-// concrete values (notably the binary path and preflight commands) can be
-// inspected directly, as the `apps` command does. ${name} and ${display_name}
+// ResolveCatalogService expands a catalog service's own body — no service merge
+// — so its concrete values (notably the binary path and preflight commands) can
+// be inspected directly, as the `apps` command does. ${name} and ${display_name}
 // are available; the returned errors mirror Resolve's.
-func (c *Config) ResolveDaemon(name string) (Resolved, []string) {
+func (c *Config) ResolveCatalogService(name string) (Resolved, []string) {
 	canonicalName, ok := c.CanonicalCatalogName(CategoryService, name)
 	if !ok {
-		return Resolved{Name: name}, []string{fmt.Sprintf("unknown daemon %q", name)}
+		return Resolved{Name: name}, []string{fmt.Sprintf("unknown catalog service %q", name)}
 	}
-	doc, ok := c.Daemons[canonicalName]
+	doc, ok := c.CatalogServices[canonicalName]
 	if !ok {
-		return Resolved{Name: name}, []string{fmt.Sprintf("unknown daemon %q", name)}
+		return Resolved{Name: name}, []string{fmt.Sprintf("unknown catalog service %q", name)}
 	}
 	return c.resolveDoc(doc, canonicalName)
 }
 
 // catalogRegistry returns the registry that holds a given category's
-// definitions (apps, libraries, else the daemon/service definitions).
+// definitions (apps, libraries, patterns, else the catalog services).
 func (c *Config) catalogRegistry(category string) map[string]*Document {
 	switch category {
 	case CategoryApp:
@@ -823,7 +823,7 @@ func (c *Config) catalogRegistry(category string) map[string]*Document {
 	case CategoryPatterns:
 		return c.Patterns
 	default:
-		return c.Daemons
+		return c.CatalogServices
 	}
 }
 
@@ -844,10 +844,10 @@ func (c *Config) ResolveCatalog(category, name string) (Resolved, []string) {
 }
 
 // resolveDoc expands a single catalog document's own body (no service merge),
-// shared by ResolveDaemon and the `apps` linkage (which resolves app documents).
+// shared by ResolveCatalogService and the `apps` linkage (which resolves app documents).
 func (c *Config) resolveDoc(doc *Document, name string) (Resolved, []string) {
-	// Top level (daemon/service/catalog): its apps: links start a fresh app
-	// chain. The top-level name is a different namespace than apps, so a daemon
+	// Top level (catalog service / service): its apps: links start a fresh app
+	// chain. The top-level name is a different namespace than apps, so a catalog service
 	// linking an app of the same name is not a cycle.
 	return c.resolveDocBody(doc, name, nil)
 }
@@ -896,7 +896,7 @@ func (c *Config) mergedService(name string, chain []string) (map[string]any, err
 	var merged map[string]any
 	if clone := cfgval.String(doc.Body["clone"]); clone != "" {
 		// clone and uses are mutually exclusive: the clone branch ignores uses
-		// entirely, so accepting both would silently drop the daemon the author
+		// entirely, so accepting both would silently drop the catalog service the author
 		// asked to inherit. Surface it instead.
 		if uses := cfgval.String(doc.Body["uses"]); uses != "" {
 			return nil, fmt.Errorf("service %q sets both clone and uses, which are mutually exclusive", name)
@@ -909,12 +909,12 @@ func (c *Config) mergedService(name string, chain []string) (map[string]any, err
 	} else {
 		merged = c.defaultsPerService()
 		if uses := cfgval.String(doc.Body["uses"]); uses != "" {
-			daemonName, ok := c.CanonicalCatalogName(CategoryService, uses)
+			catalogName, ok := c.CanonicalCatalogName(CategoryService, uses)
 			if !ok {
-				return nil, fmt.Errorf("service %q uses unknown daemon %q", name, uses)
+				return nil, fmt.Errorf("service %q uses unknown catalog service %q", name, uses)
 			}
-			daemon := c.Daemons[daemonName]
-			merged = mergeMaps(merged, stripMeta(daemon.Body))
+			base := c.CatalogServices[catalogName]
+			merged = mergeMaps(merged, stripMeta(base.Body))
 		}
 	}
 

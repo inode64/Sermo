@@ -8,12 +8,12 @@ import (
 
 // TestResolveRejectsCloneWithUses pins that a service declaring both clone and
 // uses is rejected. The clone branch ignores uses entirely, so without this the
-// daemon the author asked to inherit would be silently dropped.
+// catalog service the author asked to inherit would be silently dropped.
 func TestResolveRejectsCloneWithUses(t *testing.T) {
 	cfg := loadServiceConfig(t, `
 name: svc
 clone: other
-uses: somedaemon
+uses: someservice
 service: x
 `)
 	_, errs := cfg.Resolve("svc")

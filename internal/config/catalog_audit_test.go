@@ -87,7 +87,7 @@ func TestCatalogServicesDoNotDeclareVersionsFrom(t *testing.T) {
 		}
 		versions, _ := body["versions"].(map[string]any)
 		if _, ok := versions["from"]; ok {
-			t.Fatalf("%s declares versions.from; catalog/services must discover daemon templates from service:", path)
+			t.Fatalf("%s declares versions.from; catalog/services must discover service templates from service:", path)
 		}
 		return nil
 	})
@@ -96,10 +96,10 @@ func TestCatalogServicesDoNotDeclareVersionsFrom(t *testing.T) {
 	}
 }
 
-// TestRealCatalogAllDaemonsValidate enables every instantiable catalog daemon
+// TestRealCatalogAllServicesValidate enables every instantiable catalog service
 // as a service and validates the whole set. Version templates (%v/%n/%i) cannot
-// be materialized off-host, so only the concrete daemon names are exercised.
-func TestRealCatalogAllDaemonsValidate(t *testing.T) {
+// be materialized off-host, so only the concrete service names are exercised.
+func TestRealCatalogAllServicesValidate(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")
 
@@ -134,7 +134,7 @@ func TestRealCatalogAllDaemonsValidate(t *testing.T) {
 				t.Fatal(err)
 			}
 			count := 0
-			for _, name := range probe.DaemonNames {
+			for _, name := range probe.CatalogServiceNames {
 				if strings.Contains(name, "%") {
 					continue
 				}
@@ -145,7 +145,7 @@ func TestRealCatalogAllDaemonsValidate(t *testing.T) {
 				count++
 			}
 			if count == 0 {
-				t.Fatal("no instantiable catalog daemons found")
+				t.Fatal("no instantiable catalog services found")
 			}
 
 			cfg, err := Load(writeGlobal(dir, enabled, backend))
@@ -153,7 +153,7 @@ func TestRealCatalogAllDaemonsValidate(t *testing.T) {
 				t.Fatalf("Load: %v", err)
 			}
 			for _, issue := range Validate(cfg) {
-				t.Errorf("catalog daemon fails validation: %s", issue)
+				t.Errorf("catalog service fails validation: %s", issue)
 			}
 		})
 	}
@@ -505,7 +505,7 @@ func TestSMBCatalogUsesPerRolePidfiles(t *testing.T) {
 	}
 }
 
-func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
+func TestCatalogServicesUseCanonicalServiceNames(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
@@ -594,7 +594,7 @@ func TestCatalogAppsDeclareVersionSource(t *testing.T) {
 		"libvirt-dbus": "upstream documents no version option for libvirt-dbus",
 		"udisks2":      "upstream documents no version option for udisksd or udisksctl",
 	}
-	for _, name := range cfg.DaemonsInCategory(CategoryApp) {
+	for _, name := range cfg.CatalogNamesInCategory(CategoryApp) {
 		doc := cfg.Apps[name]
 		if hasVersionProbe(doc.Body) {
 			continue
@@ -630,7 +630,7 @@ func TestCatalogAppsDeclareHealthOrVersionSource(t *testing.T) {
 		"nfsdcld": "upstream documents no help/version option; version comes from rpc-mountd",
 		"rpcbind": "upstream documents version output but no separate help/health option; version comes from rpc-mountd",
 	}
-	for _, name := range cfg.DaemonsInCategory(CategoryApp) {
+	for _, name := range cfg.CatalogNamesInCategory(CategoryApp) {
 		doc := cfg.Apps[name]
 		if hasHealthProbe(doc.Body) || hasVersionProbe(doc.Body) {
 			continue
@@ -660,7 +660,7 @@ func TestCatalogOptionalAppVersionsRequireHealth(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	for _, name := range cfg.DaemonsInCategory(CategoryApp) {
+	for _, name := range cfg.CatalogNamesInCategory(CategoryApp) {
 		doc := cfg.Apps[name]
 		if !versionProbeOptional(doc.Body) {
 			continue
@@ -970,7 +970,7 @@ func TestRequestedHostProfilesExist(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			doc, ok := cfg.Daemons[tc.name]
+			doc, ok := cfg.CatalogServices[tc.name]
 			if !ok {
 				t.Fatalf("service catalog %q not found", tc.name)
 			}
@@ -1173,7 +1173,7 @@ func TestCatalogServiceProcessChecksUseLinkedAppBinaries(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			doc := cfg.Daemons[tt.name]
+			doc := cfg.CatalogServices[tt.name]
 			if doc == nil {
 				t.Fatalf("service catalog %q not found", tt.name)
 			}
@@ -1366,7 +1366,7 @@ func TestCatalogServicesUseAppVariablesForBinaryRefs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			doc, ok := cfg.Daemons[tt.service]
+			doc, ok := cfg.CatalogServices[tt.service]
 			if !ok {
 				t.Fatalf("service %q not found", tt.service)
 			}
@@ -1395,7 +1395,7 @@ func TestCatalogServicesUseAppVariablesForBinaryRefs(t *testing.T) {
 	}
 }
 
-func TestDatabaseCatalogDaemonsBlockRestartDuringBackup(t *testing.T) {
+func TestDatabaseCatalogServicesBlockRestartDuringBackup(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
@@ -1449,7 +1449,7 @@ func TestDatabaseCatalogDaemonsBlockRestartDuringBackup(t *testing.T) {
 		raw := catalogDocByName(t, root, "services", name)
 		assertBackupGuard(name, "raw", raw)
 
-		doc, ok := cfg.Daemons[name]
+		doc, ok := cfg.CatalogServices[name]
 		if !ok {
 			continue
 		}
@@ -1469,7 +1469,7 @@ func TestDatabaseCatalogDaemonsBlockRestartDuringBackup(t *testing.T) {
 	}
 }
 
-func TestHighRiskCatalogDaemonsHaveConservativeRemediationPolicy(t *testing.T) {
+func TestHighRiskCatalogServicesHaveConservativeRemediationPolicy(t *testing.T) {
 	root := repoRoot(t)
 
 	for _, name := range []string{"mysql", "mariadb", "postgres-%v", "redis", "kafka-broker", "kafka-controller"} {
@@ -1480,7 +1480,7 @@ func TestHighRiskCatalogDaemonsHaveConservativeRemediationPolicy(t *testing.T) {
 	}
 }
 
-func TestInstalledAutomationCatalogDaemonsHaveLocalRemediationPolicy(t *testing.T) {
+func TestInstalledAutomationCatalogServicesHaveLocalRemediationPolicy(t *testing.T) {
 	root := repoRoot(t)
 
 	for _, name := range []string{
@@ -1734,8 +1734,8 @@ func TestCatalogServicesReuseLinkedAppBinaries(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	for _, name := range cfg.DaemonNames {
-		doc := cfg.Daemons[name]
+	for _, name := range cfg.CatalogServiceNames {
+		doc := cfg.CatalogServices[name]
 		serviceBinary := catalogBinary(doc)
 		if serviceBinary == "" {
 			continue
@@ -1925,7 +1925,7 @@ func TestCatalogServicePreflightCommandsAvoidInitBackendTools(t *testing.T) {
 			command := strings.Join(cfgval.StringList(entry["command"]), " ")
 			for _, token := range forbidden {
 				if strings.Contains(command, token) {
-					t.Errorf("%s preflight.%s command %q uses init-backend tool %q; use daemon-native validation instead", path, name, command, token)
+					t.Errorf("%s preflight.%s command %q uses init-backend tool %q; use service-native validation instead", path, name, command, token)
 				}
 			}
 		}

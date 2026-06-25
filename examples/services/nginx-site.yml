@@ -4,9 +4,9 @@ uses: nginx
 # EXAMPLE — adapt the values to your host, then keep it, or delete it.
 #
 # This shows the checks that belong on an INSTANCE rather than on the bundled
-# `nginx` daemon: the thresholds and the certificate path are deployment
+# `nginx` catalog service: the thresholds and the certificate path are deployment
 # specific, so baking them into catalog/services/nginx.yml would false-alarm on
-# other hosts. The service inherits everything from the nginx daemon (service /
+# other hosts. The service inherits everything from the nginx catalog service (service /
 # tcp / http / live-endpoint cert checks + the config guard); the blocks below
 # ADD to it.
 
@@ -15,10 +15,10 @@ variables:
   cert_file: /etc/letsencrypt/live/example.com/fullchain.pem
 
 checks:
-  # Certificate expiry read from the cert FILE (complements the daemon's
+  # Certificate expiry read from the cert FILE (complements the catalog service's
   # live-endpoint cert check). Unlike the endpoint form, a missing/unreadable/
   # unparseable file IS an alert here — which is exactly why the path must be
-  # correct and so lives on the instance, not the base daemon.
+  # correct and so lives on the instance, not the base catalog service.
   tls-cert-file:
     type: cert
     path: "${cert_file}"

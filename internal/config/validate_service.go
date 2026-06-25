@@ -27,7 +27,7 @@ func validateMonitorMode(path string, mode any, add addFunc) {
 // validateServiceMonitors validates the per-service `version:`/`config:` monitor
 // blocks: their `on_change.notify` selection must reference defined notifiers (or
 // the `none` sentinel). The version/config commands themselves are reused from
-// the daemon (commands.version / preflight.config) and validated there.
+// the catalog service (commands.version / preflight.config) and validated there.
 func validateServiceMonitors(tree map[string]any, notifiers map[string]struct{}, add addFunc) {
 	for _, key := range []string{"version", "config"} {
 		block, ok := tree[key].(map[string]any)

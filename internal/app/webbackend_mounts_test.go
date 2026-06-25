@@ -19,7 +19,6 @@ func TestWebBackendMounts(t *testing.T) {
 		Mounts: map[string]*config.Document{
 			"mount-backup": {
 				Body: map[string]any{
-					"kind": "mount",
 					"name": "mount-backup",
 					"path": "/mnt/backup",
 				},

@@ -5,7 +5,7 @@ uses: mariadb
 #
 # `sql` checks run a query and compare its scalar result, so they encode
 # deployment-specific policy (which query, which threshold, which credentials)
-# and belong on an instance, not the mariadb daemon. Point them at a read-only
+# and belong on an instance, not the mariadb catalog service. Point them at a read-only
 # user. The password is resolved from the environment via ${env:...}.
 
 variables:

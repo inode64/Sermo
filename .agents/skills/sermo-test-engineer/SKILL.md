@@ -43,8 +43,8 @@ Mock command execution and process tables.
 Create or maintain tests for:
 
 ```text
-config merge; defaults merged as base layer (defaults < daemon < overrides)
-daemon uses resolution
+config merge; defaults merged as base layer (defaults < catalog service < overrides)
+catalog service uses resolution
 clone resolution; clone copies the source unexpanded
 clone cycle detection
 variable expansion; nested variable (value with ${...}) rejected

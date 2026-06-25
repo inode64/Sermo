@@ -1,7 +1,7 @@
 name: redis-cache
 clone: redis-main
 
-# A distinct cache instance runs as its own unit (overrides the redis daemon).
+# A distinct cache instance runs as its own unit (overrides the redis catalog service).
 service: redis-cache
 
 # Cloning copies redis-main BEFORE variable expansion, so overriding the `port`

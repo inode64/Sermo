@@ -1627,7 +1627,7 @@ func TestWebBackendApplicationsStartingUnsettled(t *testing.T) {
 		cfg: &config.Config{
 			AppNames: []string{"git"},
 			Apps: map[string]*config.Document{
-				"git": {Body: map[string]any{"kind": "app", "name": "git", "display_name": "Git"}},
+				"git": {Body: map[string]any{"name": "git", "display_name": "Git"}},
 			},
 		},
 		settling: settling,

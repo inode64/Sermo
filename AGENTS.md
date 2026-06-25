@@ -87,7 +87,7 @@ a helper, parser, validator, runner, builder or web/backend adapter, look for
 existing code that already solves the same problem and extend it when the
 ownership boundary stays clear. Do not duplicate validation, parsing,
 comparison, notification, monitoring or action-dispatch logic across `sermod`,
-`sermoctl`, web, watches and daemons.
+`sermoctl`, web, watches and services.
 
 Use this order of preference:
 
@@ -102,7 +102,7 @@ call site is slightly different. If the new behavior needs a different path,
 document why at the dispatch or validation point.
 
 When a new check, option, monitor flag, notification behavior or web action is
-generally useful to both host `watches:` and service daemons, implement it for
+generally useful to both host `watches:` and services, implement it for
 both surfaces in the same change unless there is a documented reason not to. If
 the feature intentionally applies only to one surface, document that limitation
 where the dispatch/validation decision lives and in the user docs (see
@@ -117,7 +117,7 @@ This is the naming counterpart of "Reuse and shared behavior". Before choosing
 a name, look at the structs that already model the concept (e.g. `config.Service`,
 `process.Selector`, `app.Event`). When in doubt, treat the field name from the
 public struct or API as the single canonical term. Avoid near-synonyms such as
-target/service/daemon, limit/max/cap or notify/notifier unless the code already
+target/service, limit/max/cap or notify/notifier unless the code already
 uses them for distinct concepts.
 
 The one sanctioned exception is a Go builtin collision: a lowercase local or
@@ -153,7 +153,7 @@ shape (never a second runtime parser): `reload_on_change` and
 rules in `internal/config/resolve.go` and are removed from the resolved tree.
 Do not add new dual parsers or migration shims for retired parameters; new sugar
 must follow the same one-way desugar pattern and be documented in
-`docs/daemons.md`.
+`docs/services.md`.
 
 Do not add regression tests that feed a removed YAML field, alias or spelling
 just to assert that it is rejected. Those fixtures keep the retired vocabulary
@@ -182,7 +182,7 @@ duplicate aliases for the same pidfile or socket.
 
 ## Configuration file granularity
 
-Use one YAML file per configured target. Catalog profiles keep one daemon, app,
+Use one YAML file per configured target. Catalog profiles keep one catalog service, app,
 lib or pattern per file. Runtime configuration keeps one service per
 file, one mount per file, one notifier per file and one host watch per
 file (`storage`, `network`, `uplink`, `load`, etc.). A document's kind is
@@ -227,7 +227,7 @@ Before finishing such a change, run the real catalog validation for both
 backends:
 
 ```sh
-go test ./internal/config -run 'TestRealCatalog(AllDaemonsValidate|ReloadDaemonsResolve)$' -count=1
+go test ./internal/config -run 'TestRealCatalog(AllServicesValidate|ReloadServicesResolve)$' -count=1
 ```
 
 ## Service operations
@@ -294,7 +294,7 @@ at the probe when a migration is intentionally not done.
 When you change configuration, add a check type, notifier, rule action or
 observable behavior, update the corresponding documentation, catalog examples
 (when generally useful) and `docs/configuration.md`, `docs/rules.md` and the
-daemon docs in the same change. Keep `examples/sermo.yml` comments current. Code
+service docs in the same change. Keep `examples/sermo.yml` comments current. Code
 and docs must evolve together.
 
 When a user request, implementation finding or runtime behavior contradicts the
@@ -511,7 +511,7 @@ will be written, confirms, and offers to delete managed files whose target is no
 longer detected. Keep `docs/wizards.md`, `docs/configuration.md` and this
 section in step when any of this changes.
 
-## Catalog: instanced systemd daemons
+## Catalog: instanced systemd services
 
 When a catalog service targets a systemd **instance** unit (`unit@instance`), do
 not invent a hand-typed `${id}` variable the operator must remember to set —
@@ -521,18 +521,18 @@ derive the instance from code, reusing existing machinery:
   use the built-in `${hostname}` (the short hostname) — `service:
   "ceph-mon@${hostname}"`. It resolves with zero per-service config; an explicit
   `hostname` variable or `SERMO_HOSTNAME` overrides it. `${hostname}` is the short
-  form, distinct from `${host}` (the bind-address fallback) — see `docs/daemons.md`.
+  form, distinct from `${host}` (the bind-address fallback) — see `docs/services.md`.
 - **Numeric multi-instance** (e.g. one OSD per device, `ceph-osd@0..N`): make the
   app a `%n` template (`name: ceph-osd%n`) with `versions: { from:
-  "/var/lib/ceph/osd/ceph-${n}" }`, then make the daemon a matching `%n` template
+  "/var/lib/ceph/osd/ceph-${n}" }`, then make the catalog service a matching `%n` template
   that links `apps: ["ceph-osd${n}"]`. `internal/config/versions.go` globs the
-  app discovery path on the host and materializes one concrete daemon per
+  app discovery path on the host and materializes one concrete catalog service per
   discovered id, with `${n}` baked into `service: "ceph-osd@${n}"`. Honest
-  limitation: this auto-discovers daemon *definitions*; the operator still
+  limitation: this auto-discovers catalog service *definitions*; the operator still
   enables one service per instance (Sermo monitors services, not catalog
-  daemons).
+  services).
 
-Keep `docs/daemons.md` (built-in variable table) in step when adding a built-in.
+Keep `docs/services.md` (built-in variable table) in step when adding a built-in.
 
 ## Go quality gates
 
@@ -616,7 +616,7 @@ checklist). Match the suite's existing style instead of inventing one.
 ## Security and safety invariants
 
 1. Never kill processes by name only.
-2. Never use `SIGKILL` unless the daemon definition explicitly allows it.
+2. Never use `SIGKILL` unless the catalog service or service definition explicitly allows it.
 3. A `SIGKILL` policy must include a restrictive `kill_only_if` clause.
 4. Process matching must validate at least `exe` and `user`; prefer `pidfile` or `cgroup` as additional evidence. `exe` is the resolved `/proc/<pid>/exe` path matched exactly (never argv[0]/cmdline, never a substring); an unresolvable `exe` never matches. See `docs/safety.md` (process identity).
 5. Never start, stop, restart, reload or resume a service when a matching guard
@@ -635,7 +635,7 @@ checklist). Match the suite's existing style instead of inventing one.
    output for manual operations. Append-only `access.log` / `event.log` export
    is future work ([TODO.md](TODO.md)); do not bypass the existing event/CLI
    paths while adding those sinks.
-10. Database daemons must default to conservative stop policies.
+10. Database services must default to conservative stop policies.
 11. Auto-remediation must use the same safe operation path as manual `sermoctl` commands.
 12. Only residuals that exactly match `kill_only_if` are ever signaled; a residual
     that does not match (or has an unresolvable exe) is reported, never killed. Any

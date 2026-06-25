@@ -15,13 +15,13 @@ import (
 	"slices"
 )
 
-// docKind identifies the document kinds. Catalog definitions carry a kind per
-// subdirectory — `daemon` (services), `app` (tools/runtimes), `lib` (shared
-// libraries) — so they live in separate registries and a service may share a
-// name with the app that owns its binary (e.g. `apache` daemon + `apache` app).
-// `service` is a configured instance under paths.services that `uses` a daemon.
+// docKind identifies the document kinds. A `service` document is either a
+// reusable catalog definition (catalog/services, distinguished by a non-empty
+// Category) or a configured instance under paths.services that `uses` a catalog
+// service. `app` (tools/runtimes) and `lib` (shared libraries) are the other
+// catalog kinds, so a service may share a name with the app that owns its binary
+// (e.g. `apache` catalog service + `apache` app).
 const (
-	kindDaemon   = "daemon"
 	kindApp      = "app"
 	kindLibrary  = "lib"
 	kindService  = "service"
@@ -50,7 +50,7 @@ func kindForCategory(category string) string {
 	case CategoryPatterns:
 		return kindPatterns
 	default:
-		return kindDaemon
+		return kindService
 	}
 }
 
@@ -75,7 +75,6 @@ func categoryFromDir(name string) string {
 // service's merged body.
 var metaKeys = map[string]struct{}{
 	"aliases": {},
-	"kind":    {},
 	"name":    {},
 	"uses":    {},
 	"clone":   {},
@@ -85,16 +84,33 @@ var metaKeys = map[string]struct{}{
 // service. Engine-wide settings never reach individual services.
 var perServiceDefaults = []string{"stop_policy", "policy", "rule_window", "remediation"}
 
-// Document is a single loaded daemon or service in raw, unexpanded form.
+// Document is a single loaded catalog definition or configured target in raw,
+// unexpanded form.
 type Document struct {
 	Kind                 string
 	Name                 string
 	Path                 string
-	Category             string // service | app | library (daemons only; from the directory)
+	Category             string // service | app | library | patterns (catalog only; from the directory)
 	Body                 map[string]any
 	TemplateBaseName     string
 	TemplateCurrentLabel bool
 }
+
+// registryKey is the namespace a document is indexed and de-duplicated under.
+// Catalog services and configured services share kind `service` but must stay
+// separate (a catalog template and the instance that `uses` it can share a
+// name), so a catalog service keys on "catalog/service"; every other document —
+// including catalog vs deployed apps, which do share one registry — keys on its
+// kind.
+func (d *Document) registryKey() string {
+	if d.Category == CategoryService {
+		return catalogServiceKey
+	}
+	return d.Kind
+}
+
+// catalogServiceKey is the registry namespace for catalog service definitions.
+const catalogServiceKey = "catalog/service"
 
 // DocumentAliases returns the alternate public names declared by a catalog or
 // configured document. Aliases identify the document during resolution, but do
@@ -120,9 +136,9 @@ func (c *Config) CanonicalCatalogName(category, name string) (string, bool) {
 
 // CanonicalServiceName returns the configured service name for name, accepting
 // exact service names, configured service aliases, and a conservative catalog
-// alias fallback. The fallback only maps a catalog daemon alias to a configured
-// service when that service uses the daemon and has the same canonical name as
-// the daemon, avoiding surprising alias matches for instance names such as
+// alias fallback. The fallback only maps a catalog service alias to a configured
+// service when that service uses the catalog service and has the same canonical
+// name as it, avoiding surprising alias matches for instance names such as
 // `apache-main`.
 func (c *Config) CanonicalServiceName(name string) (string, bool) {
 	if c == nil || name == "" {
@@ -134,11 +150,11 @@ func (c *Config) CanonicalServiceName(name string) (string, bool) {
 	if canonical, ok := canonicalAlias(c.Services, c.ServiceNames, name); ok {
 		return canonical, true
 	}
-	return c.canonicalServiceNameFromDaemonAlias(name)
+	return c.canonicalServiceNameFromCatalogAlias(name)
 }
 
-func (c *Config) canonicalServiceNameFromDaemonAlias(alias string) (string, bool) {
-	daemonName, ok := c.CanonicalCatalogName(CategoryService, alias)
+func (c *Config) canonicalServiceNameFromCatalogAlias(alias string) (string, bool) {
+	catalogName, ok := c.CanonicalCatalogName(CategoryService, alias)
 	if !ok {
 		return "", false
 	}
@@ -151,7 +167,7 @@ func (c *Config) canonicalServiceNameFromDaemonAlias(alias string) (string, bool
 		seen[serviceName] = true
 		doc := c.Services[serviceName]
 		docName := documentCanonicalName(doc, serviceName)
-		if doc == nil || docName != daemonName {
+		if doc == nil || docName != catalogName {
 			continue
 		}
 		uses := cfgval.String(doc.Body["uses"])
@@ -159,7 +175,7 @@ func (c *Config) canonicalServiceNameFromDaemonAlias(alias string) (string, bool
 			continue
 		}
 		canonicalUses, ok := c.CanonicalCatalogName(CategoryService, uses)
-		if !ok || canonicalUses != daemonName {
+		if !ok || canonicalUses != catalogName {
 			continue
 		}
 		if match != "" && match != docName {
@@ -209,7 +225,7 @@ func (c *Config) catalogNames(category string) []string {
 	case CategoryPatterns:
 		return c.PatternNames
 	default:
-		return c.DaemonNames
+		return c.CatalogServiceNames
 	}
 }
 
@@ -456,26 +472,26 @@ func (c *Config) SortedServiceNames() []string {
 
 // Config is the full loaded configuration set.
 type Config struct {
-	Global    Global
-	Daemons   map[string]*Document // kind daemon (service definitions)
-	Apps      map[string]*Document // kind app (tools/runtimes: binary + version)
-	Libraries map[string]*Document // kind lib (shared libraries)
-	Patterns  map[string]*Document // kind patterns (output-analysis rule sets)
-	Services  map[string]*Document // kind service (enabled instances)
-	Mounts    map[string]*Document // kind mount (fstab-backed mount units)
-	docs      []*Document          // every document in load order
+	Global          Global
+	CatalogServices map[string]*Document // catalog service definitions (catalog/services)
+	Apps            map[string]*Document // kind app (tools/runtimes: binary + version)
+	Libraries       map[string]*Document // kind lib (shared libraries)
+	Patterns        map[string]*Document // kind patterns (output-analysis rule sets)
+	Services        map[string]*Document // kind service (enabled instances)
+	Mounts          map[string]*Document // kind mount (fstab-backed mount units)
+	docs            []*Document          // every document in load order
 
 	materializedNameCollisions []materializedNameCollision
 	validationIssues           []Issue
 	serviceUnits               map[string][]string
 
 	// Load order per registry, for stable reporting.
-	DaemonNames  []string
-	AppNames     []string
-	LibraryNames []string
-	PatternNames []string
-	ServiceNames []string
-	MountNames   []string
+	CatalogServiceNames []string
+	AppNames            []string
+	LibraryNames        []string
+	PatternNames        []string
+	ServiceNames        []string
+	MountNames          []string
 }
 
 type materializedNameCollision struct {

@@ -5,7 +5,7 @@ import "fmt"
 // uplinkAssistant generates the full monitoring set for an internet uplink
 // interface (PPPoE, WAN port, LTE modem): link state, assigned address,
 // default route, a bound ping and resolution through the system resolver —
-// the same layering the pppd catalog daemon uses, as host watches for uplinks
+// the same layering the pppd catalog service uses, as host watches for uplinks
 // that are not a managed service.
 type uplinkAssistant struct{}
 
@@ -58,7 +58,7 @@ type uplinkSettings struct {
 }
 
 // buildUplinkWatches emits the watch set for one uplink interface: the same
-// link / address / route / ping / DNS layering the pppd catalog daemon uses
+// link / address / route / ping / DNS layering the pppd catalog service uses
 // for its service checks. The probe layers (ping, DNS) carry the for-cycles
 // debounce; the local layers (link, address, route) fire immediately.
 func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {

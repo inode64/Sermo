@@ -201,15 +201,29 @@ func validateGlobal(cfg *Config) []Issue {
 	return issues
 }
 
+// registryLabel turns a document's registry namespace (registryKey) into the
+// human term used in validation messages.
+func registryLabel(key string) string {
+	if key == catalogServiceKey {
+		return "catalog service"
+	}
+	return key // "app", "lib", "patterns", "service", "mount"
+}
+
 func validateDocuments(cfg *Config) []Issue {
 	var issues []Issue
-	// Duplicate names are detected per kind, so a daemon and an app may share a
-	// name (e.g. the `apache` service and the `apache` app that owns its binary).
-	counts := map[string]map[string]int{
-		kindDaemon: {}, kindApp: {}, kindLibrary: {}, kindPatterns: {}, kindService: {}, kindMount: {},
+	// Duplicate names are detected per registry namespace, so a catalog service
+	// and an app may share a name (e.g. the `apache` catalog service and the
+	// `apache` app that owns its binary), and a catalog service template and a
+	// configured service may both be named `apache` without colliding.
+	registryKeys := []string{
+		catalogServiceKey, kindApp, kindLibrary, kindPatterns, kindService, kindMount,
 	}
-	aliasOwners := map[string]map[string]string{
-		kindDaemon: {}, kindApp: {}, kindLibrary: {}, kindPatterns: {}, kindService: {}, kindMount: {},
+	counts := map[string]map[string]int{}
+	aliasOwners := map[string]map[string]string{}
+	for _, key := range registryKeys {
+		counts[key] = map[string]int{}
+		aliasOwners[key] = map[string]string{}
 	}
 
 	for _, doc := range cfg.docs {
@@ -241,12 +255,12 @@ func validateDocuments(cfg *Config) []Issue {
 		issues = append(issues, validateAppLinks(cfg, doc, scope)...)
 		issues = append(issues, validateVersionMatch(doc, scope)...)
 		switch doc.Kind {
-		case kindDaemon, kindApp, kindLibrary, kindPatterns, kindService, kindMount:
+		case kindApp, kindLibrary, kindPatterns, kindService, kindMount:
 		case "":
-			issues = append(issues, Issue{Scope: scope, Msg: "document has no kind (expected daemon, app, lib, patterns, service or mount)"})
+			issues = append(issues, Issue{Scope: scope, Msg: "document has no kind (expected app, lib, patterns, service or mount)"})
 			continue
 		default:
-			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected daemon, app, lib, patterns, service or mount)", doc.Kind)})
+			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected app, lib, patterns, service or mount)", doc.Kind)})
 			continue
 		}
 		if doc.Name == "" {
@@ -256,11 +270,11 @@ func validateDocuments(cfg *Config) []Issue {
 		if !validDocumentName(doc.Name) {
 			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("document name %q must be a simple name without path separators", doc.Name)})
 		}
-		counts[doc.Kind][doc.Name]++
+		counts[doc.registryKey()][doc.Name]++
 	}
 
 	for _, doc := range cfg.docs {
-		kindCounts, knownKind := counts[doc.Kind]
+		kindCounts, knownKind := counts[doc.registryKey()]
 		if !knownKind || doc.Name == "" {
 			continue
 		}
@@ -287,25 +301,26 @@ func validateDocuments(cfg *Config) []Issue {
 				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("alias %q duplicates the document name", alias)})
 				continue
 			case kindCounts[alias] > 0:
-				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("alias %q conflicts with a %s name", alias, doc.Kind)})
+				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("alias %q conflicts with a %s name", alias, registryLabel(doc.registryKey()))})
 				continue
 			case seen[alias]:
 				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("duplicate alias %q", alias)})
 				continue
 			}
 			seen[alias] = true
-			if owner := aliasOwners[doc.Kind][alias]; owner != "" && owner != doc.Name {
-				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("alias %q is already used by %s %q", alias, doc.Kind, owner)})
+			if owner := aliasOwners[doc.registryKey()][alias]; owner != "" && owner != doc.Name {
+				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("alias %q is already used by %s %q", alias, registryLabel(doc.registryKey()), owner)})
 				continue
 			}
-			aliasOwners[doc.Kind][alias] = doc.Name
+			aliasOwners[doc.registryKey()][alias] = doc.Name
 		}
 	}
 
-	for _, kind := range []string{kindDaemon, kindApp, kindLibrary, kindPatterns, kindService, kindMount} {
-		for _, name := range slices.Sorted(maps.Keys(counts[kind])) {
-			if counts[kind][name] > 1 {
-				issues = append(issues, Issue{Scope: kind + " " + name, Msg: "duplicate " + kind + " name"})
+	for _, key := range registryKeys {
+		label := registryLabel(key)
+		for _, name := range slices.Sorted(maps.Keys(counts[key])) {
+			if counts[key][name] > 1 {
+				issues = append(issues, Issue{Scope: label + " " + name, Msg: "duplicate " + label + " name"})
 			}
 		}
 	}
@@ -617,7 +632,7 @@ func validateMount(name string, tree map[string]any) []Issue {
 		issues = append(issues, Issue{Scope: "mount " + name, Msg: fmt.Sprintf(format, args...)})
 	}
 
-	allowed := set("kind", "name", "display_name", "description", "category", "path", "refcount", "umount", "stop_policy", "variables", "os")
+	allowed := set("name", "display_name", "description", "category", "path", "refcount", "umount", "stop_policy", "variables", "os")
 	for _, key := range slices.Sorted(maps.Keys(tree)) {
 		if _, ok := allowed[key]; !ok {
 			add("key %q is not supported for kind: mount", key)

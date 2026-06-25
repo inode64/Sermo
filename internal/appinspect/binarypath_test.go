@@ -2,7 +2,7 @@ package appinspect
 
 import "testing"
 
-// binaryPath resolves a daemon's binary by precedence: preflight binary.path,
+// binaryPath resolves a service's binary by precedence: preflight binary.path,
 // then a namespaced preflight binary, then variables.binary. Each "p != ”"
 // guard is a fall-through point; pin them so a weakened guard is caught.
 func TestBinaryPath(t *testing.T) {

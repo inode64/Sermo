@@ -369,7 +369,7 @@ var commandUsages = []commandUsage{
 			"--notify  send an HTML report through selected configured notifiers",
 		},
 		Notes: []string{
-			"Lists catalog daemon profiles under catalog/services, not the configured",
+			"Lists catalog service profiles under catalog/services, not the configured",
 			"runtime services that sermod monitors. For live configured services use",
 			"the web UI Services panel (GET /api/services) or the YAML under",
 			"paths.services; for one service's state use status or is-active.",
