@@ -153,3 +153,19 @@ func TestEvaluate(t *testing.T) {
 		t.Errorf("required failure must make preflight fail")
 	}
 }
+
+func TestBuildTCPCheckHostDefault(t *testing.T) {
+	// No host -> default loopback; an explicit host is preserved (the default
+	// only applies when host == "").
+	c, w := buildTCPCheck(base{}, map[string]any{"port": 80})
+	if w != "" {
+		t.Fatalf("unexpected warning: %q", w)
+	}
+	if got := c.(tcpCheck).host; got != "127.0.0.1" {
+		t.Fatalf("default host = %q, want 127.0.0.1", got)
+	}
+	c2, _ := buildTCPCheck(base{}, map[string]any{"port": 80, "host": "example.test"})
+	if got := c2.(tcpCheck).host; got != "example.test" {
+		t.Fatalf("explicit host = %q, want example.test", got)
+	}
+}
