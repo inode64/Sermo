@@ -198,6 +198,13 @@
   }
   :target, :focus { scroll-margin-top: 5rem; scroll-margin-bottom: 4rem; }
   .panel-controls { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin: .5rem 0 .6rem; }
+  .daemon-cols { display: flex; flex-wrap: wrap; gap: 1.5rem; font-size: .9rem; }
+  .daemon-cols-spaced { margin-top: .75rem; }
+  .daemon-col-title { font-weight: 600; margin-bottom: .25rem; }
+  #daemon-metric-windows { font-weight: 400; }
+  .daemon-path { font-size: .8rem; }
+  .daemon-metrics-section { margin-top: .75rem; }
+  .daemon-metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-top: .5rem; }
   .panel-controls input { min-width: 13rem; }
   #svc-filters button, #storage-filters button, #watch-filters button, #network-filters button, #app-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
   #svc-filters button:hover, #storage-filters button:hover, #watch-filters button:hover, #network-filters button:hover, #app-filters button:hover { background: var(--panel-2); color: var(--text); }

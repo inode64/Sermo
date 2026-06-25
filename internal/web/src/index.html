@@ -290,16 +290,16 @@
 
 <details id="daemon-section">
   <summary>Daemon / Engine settings</summary>
-  <div style="display:flex; flex-wrap:wrap; gap:1.5rem; font-size:.9rem;">
+  <div class="daemon-cols">
     <div>
-      <div style="font-weight:600; margin-bottom:.25rem;">Daemon</div>
+      <div class="daemon-col-title">Daemon</div>
       <div>Backend: <b id="daemon-backend"></b></div>
-      <div>Config: <code id="daemon-config" style="font-size:.8rem;"></code></div>
-      <div>Runtime: <code id="daemon-runtime" style="font-size:.8rem;"></code></div>
-      <div>State: <code id="daemon-state" style="font-size:.8rem;"></code></div>
+      <div>Config: <code id="daemon-config" class="daemon-path"></code></div>
+      <div>Runtime: <code id="daemon-runtime" class="daemon-path"></code></div>
+      <div>State: <code id="daemon-state" class="daemon-path"></code></div>
     </div>
     <div>
-      <div style="font-weight:600; margin-bottom:.25rem;">Engine</div>
+      <div class="daemon-col-title">Engine</div>
       <div>Interval: <b id="engine-interval"></b></div>
       <div>Max parallel checks: <b id="engine-max-checks"></b></div>
       <div>Max parallel ops: <b id="engine-max-ops"></b></div>
@@ -308,14 +308,14 @@
       <div>Startup delay: <b id="engine-startup-delay"></b></div>
     </div>
     <div>
-      <div style="font-weight:600; margin-bottom:.25rem;">Runtime</div>
+      <div class="daemon-col-title">Runtime</div>
       <div>Started: <b id="daemon-started"></b></div>
       <div>Uptime: <b id="daemon-uptime"></b></div>
       <div>Go: <span id="daemon-go" class="muted"></span></div>
       <div>Ready: <span id="daemon-ready"></span></div>
     </div>
   </div>
-  <div style="display:flex; flex-wrap:wrap; gap:1.5rem; font-size:.9rem; margin-top:.75rem;">
+  <div class="daemon-cols daemon-cols-spaced">
     <div>PID: <b id="daemon-pid"></b></div>
     <div>CPU: <b id="daemon-cpu-live"></b></div>
     <div>Memory: <b id="daemon-memory-live"></b></div>
@@ -323,10 +323,10 @@
     <div>FDs: <b id="daemon-fds"></b></div>
     <div>Threads: <b id="daemon-threads"></b></div>
   </div>
-  <div style="margin-top:.75rem;">
-    <div style="font-weight:600; margin-bottom:.25rem;">Process metrics <span id="daemon-metric-windows" class="muted" style="font-weight:400"></span></div>
+  <div class="daemon-metrics-section">
+    <div class="daemon-col-title">Process metrics <span id="daemon-metric-windows" class="muted"></span></div>
     <div class="muted" id="daemon-metric-summary">loading…</div>
-    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:1rem; margin-top:.5rem;">
+    <div class="daemon-metrics-grid">
       <div><div class="muted">CPU</div><div id="daemon-cpu-chart" class="muted chart-box">loading…</div></div>
       <div><div class="muted">Memory</div><div id="daemon-memory-chart" class="muted chart-box">loading…</div></div>
       <div><div class="muted">IO</div><div id="daemon-io-chart" class="muted chart-box">loading…</div></div>
