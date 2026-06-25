@@ -32,6 +32,7 @@ func TestValidateIdentifier(t *testing.T) {
 	}{
 		{"empty disallowed", "", false, true},
 		{"dot segment", ".", false, true},
+		{"parent dot segment", "..", false, true},
 		{"backslash separator", `a\b`, false, true},
 		{"simple name", "deploy", false, false},
 	}
