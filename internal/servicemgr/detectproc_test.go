@@ -372,3 +372,17 @@ func TestTrimShellPrefixPattern(t *testing.T) {
 		t.Errorf("trimShellPrefixPattern(/usr/bin, /usr) = %q, want /bin", got)
 	}
 }
+
+func TestDefaultExprNestedDepth(t *testing.T) {
+	// A ":-" inside a nested ${...} must be skipped; only the outer one (at brace
+	// depth 0) splits name from default.
+	name, def, ok := defaultExpr("${${A:-b}c:-d}")
+	if !ok || name != "${A:-b}c" || def != "d" {
+		t.Fatalf("defaultExpr nested = (%q,%q,%v), want ${A:-b}c / d / true", name, def, ok)
+	}
+	// No separator: scans the whole body (without reading past its end) and yields
+	// no default.
+	if _, _, ok := defaultExpr("${ABC}"); ok {
+		t.Fatalf("defaultExpr(${ABC}) ok = %v, want false", ok)
+	}
+}
