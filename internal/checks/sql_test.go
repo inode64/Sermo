@@ -147,3 +147,13 @@ func TestBuildSQLCheckWiring(t *testing.T) {
 		t.Fatal("bad op should warn")
 	}
 }
+
+func TestSQLConnConfigHostDefault(t *testing.T) {
+	// An unset host defaults to loopback; an explicit host is preserved.
+	if got := sqlConnConfig("mysql", map[string]any{"user": "u"}).Host; got != "127.0.0.1" {
+		t.Errorf("default host = %q, want 127.0.0.1", got)
+	}
+	if got := sqlConnConfig("mysql", map[string]any{"user": "u", "host": "db.internal"}).Host; got != "db.internal" {
+		t.Errorf("explicit host = %q, want db.internal", got)
+	}
+}
