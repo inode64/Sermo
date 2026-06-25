@@ -3475,6 +3475,13 @@ async function fetchReadyReport() {
   }
 }
 
+// setHTMLIfChanged skips DOM writes (and SR re-announcements) when a live
+// region's markup is unchanged — routine auto-refresh cycles often repeat.
+function setHTMLIfChanged(el, html) {
+  if (!el) return;
+  if (el.innerHTML !== html) el.innerHTML = html;
+}
+
 function renderStatus(ctx) {
   const bar = $("#statusbar");
   if (!bar) return;
@@ -3503,7 +3510,7 @@ function renderStatus(ctx) {
       if (mem != null) sp.push(`mem: <b>${esc(mem)}</b>`);
       if (swap != null) sp.push(`swap: <b>${esc(swap)}</b>`);
       if (load != null) sp.push(`load: <b>${esc(load)}</b>`);
-      sys.innerHTML = sp.join(" &middot; ");
+      setHTMLIfChanged(sys, sp.join(" &middot; "));
     }
 
     const parts = [];
@@ -3542,7 +3549,7 @@ function renderStatus(ctx) {
       `status: <span class="${statusCls}">${statusLabel}</span>`,
     ];
     parts.push(`<span class="status-tail">${tail.join(" &middot; ")}</span>`);
-    bar.innerHTML = parts.join(" &middot; ");
+    setHTMLIfChanged(bar, parts.join(" &middot; "));
     updatePanicView(ready.panic);
     renderOverview({ ready, live, mon, ops, locks, hostMetrics });
 
