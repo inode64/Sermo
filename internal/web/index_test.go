@@ -222,6 +222,8 @@ func TestIndexAccessibilityBundle(t *testing.T) {
 		"service is disabled in configuration",
 		"Cancel service operation",
 		"Confirm:",
+		"Dashboard auto-refresh interval",
+		"Refresh dashboard now",
 	} {
 		if !strings.Contains(script, needle) {
 			t.Errorf("bundled script missing a11y marker %q", needle)
@@ -440,6 +442,22 @@ func TestIndexAccessibilityShell(t *testing.T) {
 		}
 	} else {
 		t.Error(`shell missing #confirm-action-btn`)
+	}
+
+	if refreshSel := nodeByID(doc, "refresh-select"); refreshSel != nil {
+		if got, ok := attr(refreshSel, "aria-label"); !ok || got != "Dashboard auto-refresh interval" {
+			t.Errorf(`#refresh-select aria-label = %q, want "Dashboard auto-refresh interval"`, got)
+		}
+	} else {
+		t.Error(`shell missing #refresh-select`)
+	}
+
+	if refreshBtn := nodeByID(doc, "refresh-now"); refreshBtn != nil {
+		if got, ok := attr(refreshBtn, "aria-label"); !ok || got != "Refresh dashboard now" {
+			t.Errorf(`#refresh-now aria-label = %q, want "Refresh dashboard now"`, got)
+		}
+	} else {
+		t.Error(`shell missing #refresh-now`)
 	}
 
 	for _, spec := range []struct {

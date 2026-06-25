@@ -15,8 +15,8 @@
 <div class="topbar-row">
   <h1><span class="brand-dot" id="brand-dot" aria-hidden="true"></span>SERMO · Service Remediation Monitor<span id="me" class="muted"></span></h1>
   <div class="topbar-tools">
-    <label>Auto-refresh
-      <select id="refresh-select">
+    <label for="refresh-select">Auto-refresh
+      <select id="refresh-select" aria-label="Dashboard auto-refresh interval">
         <option value="5000">5s</option>
         <option value="10000">10s</option>
         <option value="30000">30s</option>
@@ -25,8 +25,8 @@
         <option value="0">stop</option>
       </select>
     </label>
-    <span id="last-refresh" class="muted"></span>
-    <button id="refresh-now" title="Refresh now" aria-label="Refresh now">&#x27F3;</button>
+    <span id="last-refresh" class="muted" aria-live="off"></span>
+    <button id="refresh-now" title="Refresh dashboard now" aria-label="Refresh dashboard now">&#x27F3;</button>
   </div>
 </div>
 <div id="system-status" role="status" aria-live="polite" aria-atomic="false"></div>
