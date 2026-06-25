@@ -118,3 +118,16 @@ func TestBuildMongoCheckErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestMongoConnConfigDefaults(t *testing.T) {
+	// Host defaults to loopback; auth_source maps into Params only when set.
+	if got := mongoConnConfig(map[string]any{}).Host; got != "127.0.0.1" {
+		t.Errorf("default host = %q, want 127.0.0.1", got)
+	}
+	if mongoConnConfig(map[string]any{}).Params != nil {
+		t.Error("no auth_source must leave Params nil")
+	}
+	if got := mongoConnConfig(map[string]any{"auth_source": "admin"}).Params["auth_source"]; got != "admin" {
+		t.Errorf("auth_source param = %q, want admin", got)
+	}
+}
