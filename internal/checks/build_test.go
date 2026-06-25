@@ -398,3 +398,14 @@ func TestBuildNetStateExpectValidated(t *testing.T) {
 		t.Fatalf("valid expect must not warn, got %q", w)
 	}
 }
+
+func TestBuildAutofsCheckCountValueNumeric(t *testing.T) {
+	// A numeric count value builds cleanly...
+	if _, w := buildAutofsCheck(base{}, map[string]any{"count": map[string]any{"op": ">", "value": "5"}}, Deps{}); w != "" {
+		t.Fatalf("numeric count value warned: %q", w)
+	}
+	// ...a non-numeric one is rejected.
+	if _, w := buildAutofsCheck(base{}, map[string]any{"count": map[string]any{"op": ">", "value": "abc"}}, Deps{}); !strings.Contains(w, "must be numeric") {
+		t.Fatalf("non-numeric count warning = %q, want it to require numeric", w)
+	}
+}
