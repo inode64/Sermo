@@ -210,6 +210,11 @@ func TestIndexAccessibilityBundle(t *testing.T) {
 		"-msg",
 		"-panel",
 		"visually-hidden",
+		"watch is starting",
+		"event-grp-panel",
+		"Graph time window",
+		"chart-data",
+		"Chart data",
 	} {
 		if !strings.Contains(script, needle) {
 			t.Errorf("bundled script missing a11y marker %q", needle)
