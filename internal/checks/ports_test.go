@@ -154,3 +154,15 @@ func TestBuildPortsCheck(t *testing.T) {
 		t.Fatal("an invalid expect should warn")
 	}
 }
+
+func TestPortsOpenClosedCounts(t *testing.T) {
+	openPort, ln := listenTCP(t)
+	defer ln.Close()
+	closedPort, ln2 := listenTCP(t)
+	ln2.Close() // free the port so it refuses connections
+
+	res := portsCheckFor([]int{openPort, closedPort}, "open", "any").Run(context.Background())
+	if res.Data["open"] != 1 || res.Data["closed"] != 1 {
+		t.Fatalf("open/closed = %v/%v, want 1/1", res.Data["open"], res.Data["closed"])
+	}
+}
