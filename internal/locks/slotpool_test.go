@@ -236,3 +236,13 @@ func TestSlotHandleReleaseLeavesForeignSlot(t *testing.T) {
 		t.Fatalf("nil handle release must be a no-op, got %v", err)
 	}
 }
+
+func TestNewSlotPoolDefaultsSlots(t *testing.T) {
+	// A non-positive slot count defaults to 2; a positive one is preserved.
+	if got := NewSlotPool(t.TempDir(), 0).Slots; got != 2 {
+		t.Errorf("NewSlotPool(0).Slots = %d, want 2", got)
+	}
+	if got := NewSlotPool(t.TempDir(), 5).Slots; got != 5 {
+		t.Errorf("NewSlotPool(5).Slots = %d, want 5", got)
+	}
+}
