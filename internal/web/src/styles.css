@@ -108,8 +108,9 @@
   tr.clickable { cursor: pointer; }
   .exp { color: var(--text-2); margin-right: .35rem; user-select: none; font-size: .9em; display: inline-block; }
   .category-badge { display: inline-block; max-width: 8rem; overflow: hidden; text-overflow: ellipsis; vertical-align: top; color: var(--text-2); }
-  tr.group-row td { background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--text); font-weight: 650; cursor: pointer; }
+  tr.group-row td { background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--text); font-weight: 650; }
   tr.group-row:hover td { background: color-mix(in srgb, var(--accent) 11%, transparent); }
+  .group-toggle { font-weight: 650; }
   tr.group-row .muted { font-weight: 500; margin-left: .35rem; }
   tr.exp-row td { background: color-mix(in srgb, var(--text) 3.5%, transparent); padding: .7rem 1rem .85rem 1.7rem; box-shadow: inset 3px 0 0 var(--line-2); }
 
