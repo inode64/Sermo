@@ -178,3 +178,12 @@ func TestNamedReleaseInactiveRefusesActive(t *testing.T) {
 		t.Fatalf("active lock should remain: %v", statErr)
 	}
 }
+
+func TestNamedReleaseMissingIsNotError(t *testing.T) {
+	// Releasing a lock that was never acquired is a no-op, not an error
+	// (os.Remove's not-exist error is swallowed).
+	l := namedLocker(t.TempDir(), fakeProc{})
+	if err := l.Release("mysql", "deploy"); err != nil {
+		t.Fatalf("Release of a missing lock must not error, got %v", err)
+	}
+}
