@@ -222,3 +222,13 @@ func TestParsePolicyBackoffFactorDefault(t *testing.T) {
 		t.Fatalf("backoff = %+v, want factor defaulted to 2", p.Backoff)
 	}
 }
+
+func TestRecordNoTrimWithoutWindow(t *testing.T) {
+	// With no max_actions_window, Record must not trim the action history.
+	st := &RemediationState{}
+	st.Record(t0, Policy{})
+	st.Record(t0.Add(time.Hour), Policy{})
+	if len(st.RecentActions) != 2 {
+		t.Fatalf("RecentActions = %d, want 2 (no window -> no trim)", len(st.RecentActions))
+	}
+}
