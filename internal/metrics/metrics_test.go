@@ -678,3 +678,21 @@ func TestServiceSwapNoPercentWhenZeroTotal(t *testing.T) {
 		t.Fatalf("zero swap total must not yield a percent: %+v", sw)
 	}
 }
+
+func TestSampleSystemFreshnessBoundary(t *testing.T) {
+	clock := time.Unix(0, 0)
+	reader := fakeReader{memTotal: 1000, memUsed: 250, sysBusy: 0, sysTotal: 0, hz: 100, ncpu: 1}
+	c := New(reader)
+	c.Now = func() time.Time { return clock }
+	c.SampleSystem() // baseline at t0
+
+	clock = clock.Add(c.SystemFreshness) // exactly the freshness window
+	reader.sysBusy, reader.sysTotal = 60, 100
+	c.Reader = reader
+	// The cache is valid for strictly-less-than SystemFreshness, so at exactly the
+	// window it must recompute (fresh 60% rate), not return the stale baseline.
+	got := c.SampleSystem()["total_cpu"]
+	if !got.Ready || got.Percent < 59.9 || got.Percent > 60.1 {
+		t.Fatalf("sample at the freshness boundary must recompute, got %+v", got)
+	}
+}
