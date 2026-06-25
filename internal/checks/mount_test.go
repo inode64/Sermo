@@ -137,6 +137,11 @@ func TestMountForPathReturnsDeepestContainingMount(t *testing.T) {
 	if got = MountForPath(mounts, "var/lib/sermo"); got != nil {
 		t.Fatalf("MountForPath(relative path) = %+v, want nil", got)
 	}
+
+	got = MountForPath([]Mount{{Device: "/dev/var", MountPoint: "/var", FSType: "ext4"}}, "/varnish/cache")
+	if got != nil {
+		t.Fatalf("MountForPath(sibling prefix) = %+v, want nil", got)
+	}
 }
 
 func TestMountForPathPrefersRealMountOverAutofsPlaceholder(t *testing.T) {
