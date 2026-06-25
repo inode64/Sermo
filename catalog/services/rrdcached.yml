@@ -1,4 +1,3 @@
-kind: daemon
 name: rrdcached
 display_name: RRD Cached
 category: observability

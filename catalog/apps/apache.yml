@@ -1,4 +1,3 @@
-kind: app
 name: apache
 display_name: "Apache HTTP Server"
 category: web

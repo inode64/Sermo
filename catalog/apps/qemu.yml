@@ -1,4 +1,3 @@
-kind: app
 name: qemu
 display_name: "QEMU"
 category: virtualization

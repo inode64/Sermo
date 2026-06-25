@@ -16,7 +16,7 @@ func TestStateCompactPrunesOldHistory(t *testing.T) {
 	mustWrite(t, filepath.Join(root, "sermo.yml"), `
 engine: { backend: auto, interval: 30s }
 paths:
-  services: [ `+root+`/enabled ]
+  services: [ `+root+`/services ]
   state: `+root+`/state
 defaults: { policy: { cooldown: 5m } }
 `)

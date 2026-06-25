@@ -1,4 +1,3 @@
-kind: service
 name: mysql-wal-g-backup-guard
 uses: mysql
 

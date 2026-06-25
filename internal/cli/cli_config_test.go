@@ -17,13 +17,12 @@ engine:
   backend: auto
 paths:
   catalog: [ `+root+`/daemons ]
-  services: [ `+root+`/enabled ]
+  services: [ `+root+`/services ]
 defaults:
   policy:
     cooldown: 5m
 `)
-	mustWrite(t, filepath.Join(root, "enabled", "redis-main.yml"), `
-kind: service
+	mustWrite(t, filepath.Join(root, "services", "redis-main.yml"), `
 name: redis-main
 service: redis
 variables:
@@ -62,13 +61,12 @@ func TestConfigValidateReportsErrors(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "sermo.yml"), `
 paths:
-  services: [ `+root+`/enabled ]
+  services: [ `+root+`/services ]
 defaults:
   policy:
     cooldown: 5m
 `)
-	mustWrite(t, filepath.Join(root, "enabled", "bad.yml"), `
-kind: service
+	mustWrite(t, filepath.Join(root, "services", "bad.yml"), `
 name: bad
 checks:
   http: { type: http, url: "http://${missing}/" }

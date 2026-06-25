@@ -1,4 +1,3 @@
-kind: app
 name: fetchmail
 display_name: "Fetchmail"
 category: messaging

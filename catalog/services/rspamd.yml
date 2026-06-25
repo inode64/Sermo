@@ -1,4 +1,3 @@
-kind: daemon
 name: rspamd
 display_name: Rspamd
 category: messaging

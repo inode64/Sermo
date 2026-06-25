@@ -193,7 +193,7 @@ Lifecycle:
 
 ## Mount operations
 
-Mount units (`kind: mount`, loaded from `paths.mounts`, default
+Mount units (loaded from `paths.mounts`, default
 `/etc/sermo/mounts`) are manual operator actions exposed by
 `sermoctl mount|umount`; they are not daemon-cycle remediation. They still use
 the same safety posture:

@@ -1,4 +1,3 @@
-kind: app
 name: kafka
 display_name: "Apache Kafka"
 category: messaging

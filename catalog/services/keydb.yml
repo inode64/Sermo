@@ -1,4 +1,3 @@
-kind: daemon
 name: keydb
 display_name: KeyDB
 category: database

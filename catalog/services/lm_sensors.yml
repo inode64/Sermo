@@ -1,4 +1,3 @@
-kind: daemon
 name: lm_sensors
 display_name: LM Sensors
 category: hardware

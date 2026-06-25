@@ -224,7 +224,6 @@ func TestRunWizardDockerWritesService(t *testing.T) {
 	}
 	text := string(data)
 	for _, want := range []string{
-		"kind: service",
 		"name: docker-web",
 		"type: docker",
 		"container: web",
@@ -234,6 +233,10 @@ func TestRunWizardDockerWritesService(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("service file missing %q:\n%s", want, text)
 		}
+	}
+	// kind is derived from the services directory, so it is no longer written.
+	if strings.Contains(text, "kind:") {
+		t.Fatalf("service file should not write a kind:\n%s", text)
 	}
 	loaded, err := config.Load(cfgPath)
 	if err != nil {
@@ -278,7 +281,6 @@ func TestRunWizardVMWritesService(t *testing.T) {
 	}
 	text := string(data)
 	for _, want := range []string{
-		"kind: service",
 		"name: vm-web01",
 		"type: libvirt",
 		"domain: web01",
@@ -289,6 +291,10 @@ func TestRunWizardVMWritesService(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("service file missing %q:\n%s", want, text)
 		}
+	}
+	// kind is derived from the services directory, so it is no longer written.
+	if strings.Contains(text, "kind:") {
+		t.Fatalf("service file should not write a kind:\n%s", text)
 	}
 	loaded, err := config.Load(cfgPath)
 	if err != nil {
@@ -331,7 +337,6 @@ func TestRunWizardMountWritesMountUnit(t *testing.T) {
 	}
 	text := string(data)
 	for _, want := range []string{
-		"kind: mount",
 		"name: mount-mnt-backup",
 		"path: /mnt/backup",
 		"refcount: true",
@@ -341,6 +346,10 @@ func TestRunWizardMountWritesMountUnit(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("mount file missing %q:\n%s", want, text)
 		}
+	}
+	// kind is derived from the mounts directory, so it is no longer written.
+	if strings.Contains(text, "kind:") {
+		t.Fatalf("mount file should not write a kind:\n%s", text)
 	}
 	merged, err := os.ReadFile(cfgPath)
 	if err != nil {
@@ -370,7 +379,7 @@ func TestWriteMountFilesRejectsExistingFileBeforeUpdatingConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	existing := filepath.Join(mountDir, "mount-mnt-backup.yml")
-	if err := os.WriteFile(existing, []byte("kind: mount\nname: old\npath: /old\n"), 0o644); err != nil {
+	if err := os.WriteFile(existing, []byte("name: old\npath: /old\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -614,11 +623,11 @@ func TestTargetsStale(t *testing.T) {
 func TestPlanStaleMountDeletes(t *testing.T) {
 	dir := t.TempDir()
 	oldFile := filepath.Join(dir, "old.yml")
-	if err := os.WriteFile(oldFile, []byte("kind: mount\nname: mount-old\npath: /old\n"), 0o644); err != nil {
+	if err := os.WriteFile(oldFile, []byte("name: mount-old\npath: /old\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	currentFile := filepath.Join(dir, "current.yml")
-	if err := os.WriteFile(currentFile, []byte("kind: mount\nname: mount-current\npath: /mnt/current\n"), 0o644); err != nil {
+	if err := os.WriteFile(currentFile, []byte("name: mount-current\npath: /mnt/current\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	p := assist.NewPrompt(strings.NewReader("y\ny\n"), &strings.Builder{})
@@ -703,5 +712,25 @@ func TestRunWizardAbortsOnTruncatedInput(t *testing.T) {
 	}
 	if !strings.Contains(errOut.String(), "wizard aborted") {
 		t.Fatalf("stderr = %q, want a wizard-aborted message", errOut.String())
+	}
+}
+
+// TestMountFileTargetOmittedKind verifies a mount file is recognized by its
+// location even without a `kind:`, while a conflicting kind is still ignored.
+func TestMountFileTargetOmittedKind(t *testing.T) {
+	tmp := t.TempDir()
+	noKind := filepath.Join(tmp, "m.yml")
+	if err := os.WriteFile(noKind, []byte("name: mount-demo\npath: /mnt/demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := mountFileTarget(noKind); got != "/mnt/demo" {
+		t.Fatalf("mountFileTarget(no kind) = %q, want /mnt/demo", got)
+	}
+	conflicting := filepath.Join(tmp, "o.yml")
+	if err := os.WriteFile(conflicting, []byte("kind: service\nname: x\npath: /mnt/x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := mountFileTarget(conflicting); got != "" {
+		t.Fatalf("mountFileTarget(non-mount kind) = %q, want empty", got)
 	}
 }

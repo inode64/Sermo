@@ -25,7 +25,7 @@ func (h fakeHost) IsMountPoint(p string) bool    { return h.mounts[p] }
 func loadCfg(t *testing.T, global, svc string) *config.Config {
 	t.Helper()
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "enabled"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "services"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	write := func(rel, body string) {
@@ -35,7 +35,7 @@ func loadCfg(t *testing.T, global, svc string) *config.Config {
 	}
 	write("sermo.yml", global)
 	if svc != "" {
-		write("enabled/svc.yml", svc)
+		write("services/svc.yml", svc)
 	}
 	cfg, err := config.Load(filepath.Join(root, "sermo.yml"))
 	if err != nil {
@@ -55,13 +55,12 @@ func has(r Result, level Level, substr string) bool {
 
 const baseGlobal = `
 engine: { backend: auto, interval: 30s }
-paths: { services: [ @ROOT@/enabled ], state: @ROOT@/state }
+paths: { services: [ @ROOT@/services ], state: @ROOT@/state }
 defaults: { policy: { cooldown: 5m } }
 `
 
 func TestDiagnoseIntervalAlignment(t *testing.T) {
 	cfg := loadCfg(t, baseGlobal, `
-kind: service
 name: web
 service: nginx
 policy: { cooldown: 5m }
@@ -163,7 +162,6 @@ watches:
 func TestDiagnoseServiceCheckDeviceResources(t *testing.T) {
 	// The same probes apply to a service's checks: section (unified types).
 	svc := `
-kind: service
 name: db
 service: db
 checks:

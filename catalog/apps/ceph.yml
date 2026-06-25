@@ -1,4 +1,3 @@
-kind: app
 name: ceph
 display_name: "Ceph CLI"
 category: storage

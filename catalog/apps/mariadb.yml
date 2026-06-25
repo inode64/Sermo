@@ -1,4 +1,3 @@
-kind: app
 name: mariadb
 display_name: "MariaDB"
 category: database

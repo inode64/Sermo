@@ -1,4 +1,3 @@
-kind: daemon
 name: named
 display_name: BIND (named)
 category: network

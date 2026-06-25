@@ -1,4 +1,3 @@
-kind: daemon
 name: loki
 display_name: Grafana Loki
 category: observability

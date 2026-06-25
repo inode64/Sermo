@@ -296,17 +296,17 @@ func TestServiceFileTargetControlledServices(t *testing.T) {
 	}{
 		{
 			name: "docker",
-			body: "kind: service\nname: docker-web\ncontrol: {type: docker, container: web}\n",
+			body: "name: docker-web\ncontrol: {type: docker, container: web}\n",
 			want: "docker:web",
 		},
 		{
 			name: "vm",
-			body: "kind: service\nname: vm-web01\ncontrol: {type: libvirt, domain: web01}\n",
+			body: "name: vm-web01\ncontrol: {type: libvirt, domain: web01}\n",
 			want: "vm:web01",
 		},
 		{
 			name: "catalog",
-			body: "kind: service\nname: nginx-main\nuses: nginx\n",
+			body: "name: nginx-main\nuses: nginx\n",
 			want: "service:nginx",
 		},
 	} {
@@ -334,7 +334,7 @@ func TestWriteServiceFilesRejectsExistingFileBeforeUpdatingConfig(t *testing.T) 
 		t.Fatal(err)
 	}
 	existing := filepath.Join(serviceDir, "docker-web.yml")
-	if err := os.WriteFile(existing, []byte("kind: service\nname: old\n"), 0o644); err != nil {
+	if err := os.WriteFile(existing, []byte("name: old\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

@@ -1,4 +1,3 @@
-kind: daemon
 name: memcached
 display_name: Memcached
 category: database

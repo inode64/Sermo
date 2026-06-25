@@ -10,7 +10,7 @@ engine:
   backend: auto
 paths:
   catalog: [ @ROOT@/catalog ]
-  services: [ @ROOT@/enabled ]
+  services: [ @ROOT@/services ]
   mounts: [ @ROOT@/mounts ]
   runtime: /run/sermo
 defaults:
@@ -22,7 +22,6 @@ func TestLoadMountDocumentsFromMountsPath(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": mountGlobal,
 		"mounts/backup.yml": `
-kind: mount
 name: mount-backup
 display_name: Backup mount
 category: storage
@@ -50,7 +49,6 @@ func TestMountValidationRejectsUnsafeSIGKILLWithoutSelector(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": mountGlobal,
 		"mounts/backup.yml": `
-kind: mount
 name: mount-backup
 path: /mnt/backup
 umount: { allow_sigkill: true }
@@ -75,7 +73,7 @@ name: web
 `,
 	})
 	_, err := Load(global)
-	if err == nil || !strings.Contains(err.Error(), "mount config directories only support kind: mount") {
+	if err == nil || !strings.Contains(err.Error(), "located under a mount directory but declares kind: service") {
 		t.Fatalf("Load error = %v, want mount-only directory error", err)
 	}
 }

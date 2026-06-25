@@ -461,8 +461,8 @@ func (c *Config) loadServiceDirEntries(dir string, recursive bool) error {
 		if err != nil {
 			return err
 		}
-		if doc.Kind != kindService {
-			return fmt.Errorf("%s: service config directories only support kind: service", doc.Path)
+		if err := assignKind(doc, kindService); err != nil {
+			return err
 		}
 		c.add(doc)
 	}
@@ -505,8 +505,8 @@ func (c *Config) loadAppDirEntries(dir string, recursive bool) error {
 		if err != nil {
 			return err
 		}
-		if doc.Kind != kindApp {
-			return fmt.Errorf("%s: app config directories only support kind: app", doc.Path)
+		if err := assignKind(doc, kindApp); err != nil {
+			return err
 		}
 		c.add(doc)
 	}
@@ -596,8 +596,8 @@ func (c *Config) loadMountDirEntries(dir string, recursive bool) error {
 		if err != nil {
 			return err
 		}
-		if doc.Kind != kindMount {
-			return fmt.Errorf("%s: mount config directories only support kind: mount", doc.Path)
+		if err := assignKind(doc, kindMount); err != nil {
+			return err
 		}
 		c.add(doc)
 	}
@@ -645,7 +645,8 @@ func (c *Config) loadCategoryDir(dir, category string, recursive bool) error {
 		}
 		doc.Category = category
 		// Catalog definitions take their kind from the subdirectory
-		// (daemon/app/lib/patterns), so each lives in its own registry.
+		// (daemon/app/lib/patterns), so each lives in its own registry; any
+		// `kind:` in the file is redundant and ignored.
 		doc.Kind = kindForCategory(doc.Category)
 		c.add(doc)
 	}
@@ -728,13 +729,26 @@ func loadDocument(path string) (*Document, error) {
 	if body == nil {
 		body = map[string]any{}
 	}
-	kind := cfgval.String(body["kind"])
+	// Kind is derived from the document's location by the caller (assignKind);
+	// any `kind:` still present in the body is honored there only as an optional
+	// consistency check, so loadDocument leaves Document.Kind unset.
 	return &Document{
-		Kind: kind,
 		Name: cfgval.String(body["name"]),
 		Path: path,
 		Body: body,
 	}, nil
+}
+
+// assignKind sets a document's kind from the location it was read from. The
+// `kind:` key is redundant — the directory already determines the kind — so it
+// may be omitted. When still present it must match, which catches a file dropped
+// into the wrong directory (e.g. a mount under services/).
+func assignKind(doc *Document, expected string) error {
+	if declared := cfgval.String(doc.Body["kind"]); declared != "" && declared != expected {
+		return fmt.Errorf("%s: located under a %s directory but declares kind: %s", doc.Path, expected, declared)
+	}
+	doc.Kind = expected
+	return nil
 }
 
 // add indexes a document by name. The first document under each name wins for

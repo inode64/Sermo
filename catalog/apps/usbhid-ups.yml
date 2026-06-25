@@ -1,4 +1,3 @@
-kind: app
 name: usbhid-ups
 display_name: "USB HID UPS Driver"
 category: hardware

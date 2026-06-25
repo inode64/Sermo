@@ -1,4 +1,3 @@
-kind: daemon
 name: dhclient
 display_name: DHCP Client
 category: network

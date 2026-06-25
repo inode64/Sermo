@@ -1,4 +1,3 @@
-kind: app
 name: spamassassin
 display_name: "SpamAssassin"
 category: messaging

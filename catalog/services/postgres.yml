@@ -1,4 +1,3 @@
-kind: daemon
 name: postgres-%v
 display_name: PostgreSQL ${version}
 category: database

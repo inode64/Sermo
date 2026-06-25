@@ -1,4 +1,3 @@
-kind: lib
 name: nettle
 display_name: "Nettle"
 description: "Nettle low-level cryptography library; a change triggers a restart of dependent services"

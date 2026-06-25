@@ -31,7 +31,7 @@ func writeLocksConfig(t *testing.T, root string) (string, string) {
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
 paths:
-  services: [ `+root+`/enabled ]
+  services: [ `+root+`/services ]
   runtime: `+root+`/run
 defaults:
   policy:

@@ -1,4 +1,3 @@
-kind: app
 name: wal-g-pg
 display_name: "WAL-G PostgreSQL"
 category: database

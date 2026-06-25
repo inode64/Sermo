@@ -16,8 +16,8 @@ and the invariants below, and update this file in the same change.
 1. **Wizard type.** `sermoctl wizard <type>` runs that assistant; with no type,
    the wizard lists them and asks (`selectAssistant`). Never require the type.
 2. **Select detected targets.** Each assistant detects what is targetable
-   (services → active installed catalog daemons first, then optional active
-   units with no catalog daemon; `docker` → containers from the local Docker
+   (services → active installed catalog services first, then optional active
+   units with no catalog service; `docker` → containers from the local Docker
    API; `vm` → libvirt/QEMU domains; `mount` → `/etc/fstab` mount points;
    `volume` → currently mounted storage volumes; `net`/`uplink` → interfaces)
    and offers them with `Prompt.MultiChoose`. **Never ask the
@@ -31,8 +31,8 @@ and the invariants below, and update this file in the same change.
    normally only write `uses:` plus explicit overrides. When configuration files
    are detected, ask whether to add a `checks.config` entry that watches those
    paths; it uses a per-check `interval: 60m` so the service's normal cycle does
-   not need to slow down. For active units with no catalog daemon, ask the
-   **PID source** because there is no catalog daemon to inherit: a pidfile path
+   not need to slow down. For active units with no catalog service, ask the
+   **PID source** because there is no catalog service to inherit: a pidfile path
    writes `pidfile:`; with no pidfile, an executable derived from the unit offers
    a `processes:` selector. Docker and VM service assistants write a
    per-service `control:` block plus a read-only Docker/libvirt check; they do not
@@ -40,7 +40,7 @@ and the invariants below, and update this file in the same change.
 4. **Batch.** When more than one target was selected, ask once whether to apply
    the following shared answers to all of them (`Prompt.Confirm`).
 5. **Monitor state.** `Prompt.AskMonitorState` → `monitor: enabled | disabled |
-   previous`. Mount units are the exception: `kind: mount` is operated by
+   previous`. Mount units are the exception: a mount document is operated by
    `sermoctl mount|umount`, not monitored by `sermod`, so it does not ask or
    write `monitor:`.
 6. **Interval.** `Prompt.AskInterval` → `interval:` (blank inherits the global
@@ -91,7 +91,7 @@ settings in this shared/per-target shape.
   explicit `then` (using `none` / `default` / names as chosen).
 - **Monitor + interval on monitored entries.** Every generated watch/service
   carries the step-5/6 answers via `Monitoring.apply`
-  (`internal/assist/common.go`). `kind: mount` files are not monitored entries
+  (`internal/assist/common.go`). Mount files are not monitored entries
   and must not carry `monitor:` or `interval:`.
 - **Dry-run is watch-local.** Watch assistants ask for `then.dry_run` only when
   the chosen `then` block has a real side effect (`notify`, inherited global
@@ -137,13 +137,13 @@ Before storing a newly detected path, resolve symlinks on the target host
 
 `listInstalledDaemons` (`internal/cli/wizard_service.go`) fills each
 `DaemonCandidate.Pidfile`/`Exe`/`Cmd`/`User`. Catalog services use those facts to
-improve the catalog daemon definition, not the generated `kind: service` entry:
+improve the catalog service definition, not the generated service entry:
 they write `uses:` and inherit PID/process selectors from `catalog/services`.
 Uncataloged active units write scalar `service: <unit>` plus a basic
 `checks.service`, and their PID question is prefilled from detection and only
 accepts absolute pidfile paths.
 
-The service, Docker and VM wizards write new generated `kind: service` files
+The service, Docker and VM wizards write new generated service files
 under a `services/` directory loaded by `paths.services`.
 
 All wizard output is one target per file. The volume wizard generates one
@@ -152,7 +152,7 @@ watch directory, including local block devices and network/distributed
 filesystems such as NFS, Ceph and ZFS. Each fragment keeps the top-level
 `watches:` map but contains only the generated watch for that target.
 First-class mount units are different: `sermoctl wizard mount` reads
-`/etc/fstab`, writes one `kind: mount` file per target under `paths.mounts`
+`/etc/fstab`, writes one mount file per target under `paths.mounts`
 (default `/etc/sermo/mounts`) and they are operated with
 `sermoctl mount|umount`.
 
@@ -162,8 +162,8 @@ First-class mount units are different: `sermoctl wizard mount` reads
 2. Detect targets and select with `MultiChoose` (step 2). No name prompts.
 3. For monitored entries (watches and services), gather monitor + interval with
    `Prompt.AskMonitoring`; inject with `Monitoring.apply` (steps 5–6). Batch
-   them with `Prompt.Confirm` when >1. Non-monitored config such as `kind:
-   mount` must skip these fields because validation rejects them.
+   them with `Prompt.Confirm` when >1. Non-monitored config such as mount
+   documents must skip these fields because validation rejects them.
 4. Ask notifiers (if any) through `chooseNotifiers` (step 7) — never duplicate
    its `none`/`default` handling. If the assistant emits watch actions, use
    `Prompt.AskWatchDryRun` instead of hand-rolling `dry_run`.

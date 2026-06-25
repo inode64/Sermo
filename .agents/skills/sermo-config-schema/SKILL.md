@@ -1,6 +1,6 @@
 ---
 name: sermo-config-schema
-description: Use when designing, editing, validating, merging, rendering, or reviewing Sermo YAML configuration, catalog daemons/apps/libs/patterns, services, mounts, clones, variables, checks, guards, locks, rules, or stop policies.
+description: Use when designing, editing, validating, merging, rendering, or reviewing Sermo YAML configuration, catalog services/apps/libs/patterns, services, mounts, clones, variables, checks, guards, locks, rules, or stop policies.
 ---
 
 You are the Sermo configuration schema designer.
@@ -17,46 +17,53 @@ You are the Sermo configuration schema designer.
 
 ## Document kinds
 
-Support:
+A document's kind is determined by where it is read from, so files do not carry a
+`kind:` field — it is derived from the location:
+
+- catalog subdirectory: `catalog/services/` → daemon, `catalog/apps/` → app,
+  `catalog/libs/` → lib, `catalog/patterns/` → patterns;
+- deployed config dirs: `paths.services` → service, `paths.mounts` → mount.
+
+A `kind:` key is optional and redundant; if one is present in a deployed file it
+must match the location, otherwise loading fails. Examples (one per file):
 
 ```yaml
-kind: daemon
+# catalog/services/apache.yml  → daemon
 name: apache
 ```
 
 ```yaml
-kind: app
+# catalog/apps/openssl.yml  → app
 name: openssl
 ```
 
 ```yaml
-kind: lib
+# catalog/libs/glibc.yml  → lib
 name: glibc
 ```
 
 ```yaml
-kind: service
+# <paths.services>/apache-main.yml  → service
 name: apache-main
 uses: apache
 ```
 
 ```yaml
-kind: service
+# <paths.services>/redis-cache.yml  → service
 name: redis-cache
 clone: redis-main
 ```
 
 ```yaml
-kind: mount
+# <paths.mounts>/mount-backup.yml  → mount
 name: mount-backup
 path: /mnt/backup
 ```
 
-Every document has a `kind` and a `name`. Optional human-facing metadata may
+Every document has a `name`. Optional human-facing metadata may
 accompany them:
 
 ```yaml
-kind: daemon
 name: mariadb
 display_name: "MariaDB"   # optional pretty label
 description: "..."        # optional free-text note
@@ -78,9 +85,9 @@ category: "database"      # optional WebUI grouping/filter label
 
 Always use one YAML file per target:
 
-- one catalog daemon, app, lib or pattern per file;
-- one concrete `kind: service` per file;
-- one `kind: mount` per file;
+- one catalog service, app, lib or pattern per file;
+- one service per file;
+- one mount per file;
 - one notifier per file;
 - one host watch per file for storage, network, uplink, load and other watch
   fragments.
@@ -93,12 +100,12 @@ groups examples so the schema can be validated in one place.
 
 `clone` copies the source service in UNEXPANDED form (its fields and `variables`,
 with `${...}` still literal), so overriding a single variable in the clone changes
-what `${var}` resolves to after expansion. Same for `uses` with a catalog daemon. See
+what `${var}` resolves to after expansion. Same for `uses` with a catalog service. See
 `docs/configuration.md`.
 
 ## Version templates
 
-A catalog daemon or app whose name contains `%v` (free-form version) or `%n`
+A catalog service or app whose name contains `%v` (free-form version) or `%n`
 (plain integer) is a version template: it materializes into one concrete document per installed
 version when several can coexist (php-fpm, postgres, tomcat, beam, db, python).
 `%v` pairs with `${version}` and accepts `8.3`/`12.0.2`; `%n` pairs with `${n}`
@@ -136,7 +143,7 @@ Materialized names must not collide with explicit documents in the same catalog
 category; validation reports those collisions.
 
 ```yaml
-kind: app
+# catalog/apps/postgres.yml  → app
 name: postgres-%v
 display_name: "PostgreSQL ${version}"
 variables:
@@ -150,7 +157,8 @@ preflight:
 
 Catalog documents are categorized by the subdirectory under a catalog root:
 `services/`, `apps/`, `libs/`, `patterns/`. Files at the catalog root are
-rejected. Loading recurses; the directory sets `Document.Category`. `apps` and
+rejected. Loading recurses; the directory sets both the document's kind (so
+`services/` → daemon) and `Document.Category`. `apps` and
 `libs` are minimal catalog documents (name, display_name, description,
 `variables.binary` and preflight/version entries) surfaced by `sermoctl apps` /
 `libs`.
@@ -317,7 +325,7 @@ Validate:
 ```text
 duplicate service names
 materialized version-template names that collide with explicit documents
-missing catalog daemons in uses
+missing catalog services in uses
 apps entries that reference unknown app catalog documents
 missing service targets in clone
 clone cycles

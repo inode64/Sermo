@@ -1,4 +1,3 @@
-kind: app
 name: restic
 display_name: "restic"
 category: storage

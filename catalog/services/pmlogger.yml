@@ -1,4 +1,3 @@
-kind: daemon
 name: pmlogger
 display_name: PCP Archive Logger
 category: observability

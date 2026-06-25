@@ -14,15 +14,14 @@ func TestGlobalBuiltinsBakedInDefaults(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
 paths:
-  services: [ @ROOT@/enabled ]
+  services: [ @ROOT@/services ]
 defaults:
   policy: { cooldown: 5m }
   variables:
     plugindir: /usr/lib/${arch}
     osdir: /etc/${os}
 `,
-		"enabled/svc.yml": `
-kind: service
+		"services/svc.yml": `
 name: svc
 service: svc
 `,

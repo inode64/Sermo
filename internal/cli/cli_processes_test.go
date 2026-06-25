@@ -21,13 +21,12 @@ func writeProcessConfig(t *testing.T, pidfile string) string {
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
 paths:
-  services: [ `+root+`/enabled ]
+  services: [ `+root+`/services ]
 defaults:
   policy:
     cooldown: 5m
 `)
-	mustWrite(t, filepath.Join(root, "enabled", "mysql-main.yml"), `
-kind: service
+	mustWrite(t, filepath.Join(root, "services", "mysql-main.yml"), `
 name: mysql-main
 service: mysql
 pidfile: `+pidfile+`

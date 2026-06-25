@@ -1,4 +1,3 @@
-kind: app
 name: pmcd
 display_name: "PCP Collector (pmcd)"
 category: observability

@@ -1,4 +1,3 @@
-kind: service
 name: cloudflared
 uses: cloudflared
 

@@ -11,7 +11,6 @@ import (
 // daemon the author asked to inherit would be silently dropped.
 func TestResolveRejectsCloneWithUses(t *testing.T) {
 	cfg := loadServiceConfig(t, `
-kind: service
 name: svc
 clone: other
 uses: somedaemon

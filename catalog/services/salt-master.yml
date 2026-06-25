@@ -1,4 +1,3 @@
-kind: daemon
 name: salt-master
 display_name: Salt Master
 category: system

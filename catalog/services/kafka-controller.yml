@@ -1,4 +1,3 @@
-kind: daemon
 name: kafka-controller
 display_name: Apache Kafka Controller
 category: messaging

@@ -4,7 +4,6 @@ import "testing"
 
 func TestValidateMySQLCheckValid(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: db
 service: x
 checks:
@@ -20,7 +19,6 @@ checks:
 func TestValidateMySQLCheckNoUserOK(t *testing.T) {
 	// mysql no longer requires a user: a credential-free greeting probe is valid.
 	issues := validateService(t, `
-kind: service
 name: db
 service: x
 checks:
@@ -35,7 +33,6 @@ checks:
 
 func TestValidatePostgresCheckRequiresUser(t *testing.T) {
 	mustHave(t, validateService(t, `
-kind: service
 name: db
 service: x
 checks:
@@ -45,7 +42,6 @@ checks:
 
 func TestValidatePostgresSSLModeAccepted(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: db
 service: x
 checks:
@@ -60,7 +56,6 @@ checks:
 
 func TestValidateCloudflaredCheckValid(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: tunnel
 service: cloudflared
 checks:
@@ -75,7 +70,6 @@ checks:
 
 func TestValidateDHClientCheckValid(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: dhclient
 service: dhclient
 checks:
@@ -90,7 +84,6 @@ checks:
 
 func TestValidateMySQLCheckBadTLS(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: db
 service: x
 checks:
@@ -101,7 +94,6 @@ checks:
 
 func TestValidateConnExpectValid(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: dns
 service: x
 checks:
@@ -121,7 +113,6 @@ checks:
 
 func TestValidateConnExpectErrors(t *testing.T) {
 	mustHave(t, validateService(t, `
-kind: service
 name: dns
 service: x
 checks:
@@ -131,7 +122,6 @@ checks:
       answers: { op: "~~", value: 0 }
 `), "expect.answers op")
 	mustHave(t, validateService(t, `
-kind: service
 name: dns
 service: x
 checks:
@@ -141,7 +131,6 @@ checks:
       answers: { op: ">", value: "abc" }
 `), "must be numeric")
 	mustHave(t, validateService(t, `
-kind: service
 name: dns
 service: x
 checks:
@@ -153,7 +142,6 @@ checks:
 
 func TestValidateAnalyzeRulesShape(t *testing.T) {
 	mustHave(t, validateService(t, `
-kind: service
 name: db
 service: x
 checks:
@@ -164,7 +152,6 @@ checks:
 `), "invalid regex")
 
 	mustHave(t, validateService(t, `
-kind: service
 name: db
 service: x
 checks:
@@ -176,7 +163,6 @@ checks:
 
 	// A valid analyze block produces no checks.config issue.
 	issues := validateService(t, `
-kind: service
 name: db
 service: x
 checks:
@@ -195,7 +181,6 @@ checks:
 func TestValidateCascadeTargets(t *testing.T) {
 	// also_apply referencing an unknown service errors.
 	mustHave(t, validateService(t, `
-kind: service
 name: web
 service: x
 also_apply: [nope]
@@ -203,7 +188,6 @@ also_apply: [nope]
 
 	// self-reference errors.
 	mustHave(t, validateService(t, `
-kind: service
 name: web
 service: x
 also_apply: [web]
@@ -212,7 +196,6 @@ also_apply: [web]
 
 func TestValidateCleanOnStop(t *testing.T) {
 	bad := validateService(t, `
-kind: service
 name: s
 service: x
 stop_policy:
@@ -226,7 +209,6 @@ stop_policy:
 	mustHave(t, bad, "must not be a glob")
 
 	ok := validateService(t, `
-kind: service
 name: s
 service: x
 stop_policy:

@@ -136,7 +136,7 @@ Session-local for operations started from the current browser; enriched with
 
 Section id: `services-section`
 
-Lists **configured** `kind: service` entries from the loaded config — state,
+Lists **configured** service entries from the loaded config — state,
 checks, remediation and actions for what `sermod` monitors now. This is not
 `sermoctl services`, which inventories **catalog** daemon profiles under
 `catalog/services`. See [cli.md](cli.md#catalog-inventory).

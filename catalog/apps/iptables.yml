@@ -1,4 +1,3 @@
-kind: app
 name: iptables
 display_name: "IPtables"
 category: security

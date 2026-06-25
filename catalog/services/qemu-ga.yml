@@ -1,4 +1,3 @@
-kind: daemon
 name: qemu-ga
 display_name: QEMU Guest Agent
 category: virtualization

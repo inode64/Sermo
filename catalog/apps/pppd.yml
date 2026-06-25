@@ -1,4 +1,3 @@
-kind: app
 name: pppd
 display_name: "PPP Daemon"
 category: network

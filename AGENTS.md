@@ -147,7 +147,7 @@ guidance and tests must not keep the old form alive. Document exceptions
 explicitly at the owner. Examples of valid exceptions are Linux/init
 compatibility such as `/var/run` metadata normalized to `/run`, hard safety
 invariants such as deriving lock directories from `paths.runtime`, and
-**catalog/daemon sugar** that desugars during resolution into the canonical
+**catalog/services sugar** that desugars during resolution into the canonical
 shape (never a second runtime parser): `reload_on_change` and
 `restart_on_change` in catalog profiles and service trees expand to remediation
 rules in `internal/config/resolve.go` and are removed from the resolved tree.
@@ -183,9 +183,11 @@ duplicate aliases for the same pidfile or socket.
 ## Configuration file granularity
 
 Use one YAML file per configured target. Catalog profiles keep one daemon, app,
-lib or pattern per file. Runtime configuration keeps one `kind: service` per
-file, one `kind: mount` per file, one notifier per file and one host watch per
-file (`storage`, `network`, `uplink`, `load`, etc.). Watch and notifier
+lib or pattern per file. Runtime configuration keeps one service per
+file, one mount per file, one notifier per file and one host watch per
+file (`storage`, `network`, `uplink`, `load`, etc.). A document's kind is
+derived from where it lives (catalog subdir / `paths.services` / `paths.mounts`),
+so a top-level `kind:` is optional and omitted. Watch and notifier
 fragments still use a top-level `watches:` or `notifiers:` map, but that map
 must contain exactly one named entry.
 
@@ -201,7 +203,7 @@ tree). `examples/sermo.yml` intentionally targets installed locations.
 
 ## Catalog init and reload fallback verification
 
-When adding or changing a catalog daemon that depends on init metadata or defines
+When adding or changing a catalog service that depends on init metadata or defines
 `reload.signal`, verify every init backend in its `service:` map and every
 fallback Sermo may use. Do not validate only the distro where the profile was
 first written.
@@ -511,7 +513,7 @@ section in step when any of this changes.
 
 ## Catalog: instanced systemd daemons
 
-When a catalog daemon targets a systemd **instance** unit (`unit@instance`), do
+When a catalog service targets a systemd **instance** unit (`unit@instance`), do
 not invent a hand-typed `${id}` variable the operator must remember to set —
 derive the instance from code, reusing existing machinery:
 
@@ -527,7 +529,7 @@ derive the instance from code, reusing existing machinery:
   app discovery path on the host and materializes one concrete daemon per
   discovered id, with `${n}` baked into `service: "ceph-osd@${n}"`. Honest
   limitation: this auto-discovers daemon *definitions*; the operator still
-  enables one `kind: service` per instance (Sermo monitors services, not catalog
+  enables one service per instance (Sermo monitors services, not catalog
   daemons).
 
 Keep `docs/daemons.md` (built-in variable table) in step when adding a built-in.

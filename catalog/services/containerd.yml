@@ -1,4 +1,3 @@
-kind: daemon
 name: containerd
 display_name: containerd
 category: virtualization

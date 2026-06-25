@@ -503,7 +503,8 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 		if _, dup := existing[name]; dup {
 			return a.fail(opts, "service "+name+" is already configured; not overwriting")
 		}
-		doc := map[string]any{"kind": "service", "name": name}
+		// The services directory determines the kind on load, so no `kind:` is written.
+		doc := map[string]any{"name": name}
 		if b, ok := body.(map[string]any); ok {
 			for k, v := range b {
 				doc[k] = v

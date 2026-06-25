@@ -1,4 +1,3 @@
-kind: daemon
 name: cloudflared
 display_name: Cloudflare Tunnel
 category: vpn

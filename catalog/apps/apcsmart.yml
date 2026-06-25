@@ -1,4 +1,3 @@
-kind: app
 name: apcsmart
 display_name: "APC Smart UPS Driver"
 category: hardware

@@ -1,4 +1,3 @@
-kind: service
 name: apache-main
 uses: apache
 

@@ -1,4 +1,3 @@
-kind: app
 name: influxdb
 display_name: "InfluxDB"
 category: database

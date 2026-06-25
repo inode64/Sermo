@@ -140,7 +140,7 @@ accident). The CLI applies the change immediately without a prompt.
 
 ## Service target resolution
 
-For a configured `kind: service`, `sermoctl status`, `is-active` and service
+For a configured service, `sermoctl status`, `is-active` and service
 operations resolve the same control target that `sermod` and the web UI use.
 When `sermod` is running with `web` enabled, `sermoctl status` prefers the
 daemon's computed state (including `starting` during startup settling); if the
@@ -171,12 +171,12 @@ version command reports, and whether they resolve. Add `all` to include entries
 whose binary or library file is not present on the host.
 
 This is **not** the list of **configured runtime targets** that `sermod`
-monitors. Those are the `kind: service` files under `paths.services` (and the
+monitors. Those are the service files under `paths.services` (and the
 matching names in the global config tree).
 
 | Question | Where to look |
 | --- | --- |
-| Which catalog daemon profiles exist / are installed? | `sermoctl services [all]` |
+| Which catalog service profiles exist / are installed? | `sermoctl services [all]` |
 | Which catalog apps / libs / pattern sets exist? | `sermoctl apps`, `sermoctl libs`, `sermoctl patterns` |
 | Which services are enabled in *my* config right now? | YAML under `paths.services`, or the web UI **Services** panel (`GET /api/services`) |
 | One configured service's live state | `sermoctl status SERVICE`, `sermoctl is-active SERVICE` |
@@ -209,11 +209,11 @@ unexpected panic recovered at the top level.
 
 ## Mounts
 
-Mount actions are fstab-backed and use `kind: mount` files from
+Mount actions are fstab-backed and use mount files from
 `/etc/sermo/mounts` by default. A path target that is not configured is still
 accepted, but it uses safe defaults and must exist in `/etc/fstab`. See
 [mount units](configuration.md#mount-units).
 
 `sermoctl wizard mount` lists mount points declared in `/etc/fstab` and writes
-safe `kind: mount` files under `paths.mounts`; it does not execute mount or
+safe mount files under `paths.mounts`; it does not execute mount or
 umount while generating the config.
