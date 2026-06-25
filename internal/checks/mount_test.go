@@ -133,6 +133,10 @@ func TestMountForPathReturnsDeepestContainingMount(t *testing.T) {
 	if got == nil || got.MountPoint != "/var/lib-other" {
 		t.Fatalf("MountForPath boundary path = %+v, want /var/lib-other", got)
 	}
+
+	if got = MountForPath(mounts, "var/lib/sermo"); got != nil {
+		t.Fatalf("MountForPath(relative path) = %+v, want nil", got)
+	}
 }
 
 func TestMountForPathPrefersRealMountOverAutofsPlaceholder(t *testing.T) {
