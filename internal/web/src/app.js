@@ -40,7 +40,7 @@ let loadSeq = 0;
 function showDisconnected() {
   document.body.classList.add("disconnected");
   const age = lastLoadOk ? ` (last update ${fmtSince(Date.now() - lastLoadOk)} ago)` : "";
-  setStatus("⚠ Disconnected — retrying…" + age, "warn");
+  setStatus("Disconnected — retrying…" + age, "warn");
 }
 
 // load refreshes every panel in parallel: the services fetch is the connection
