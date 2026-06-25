@@ -38,6 +38,7 @@ func TestString(t *testing.T) {
 		{int64(-7), "-7"},
 		{int64(10), "10"}, // FormatInt decimal base (mutant .8)
 		{uint64(9), "9"},
+		{uint64(10), "10"}, // FormatUint decimal base (mutant .13)
 		{3.5, "3.5"},
 		{1.0, "1"}, // trailing zeros trimmed by FormatFloat -1 precision
 		{true, "true"},
