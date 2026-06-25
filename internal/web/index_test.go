@@ -243,6 +243,37 @@ func TestIndexAccessibilityForcedColors(t *testing.T) {
 	}
 }
 
+// TestIndexAccessibilitySectionHeadings pins the per-section <h2> headings that
+// let screen-reader users navigate the dashboard by heading. The <details>
+// summaries cannot carry heading semantics (a summary's implicit button role
+// makes its descendants presentational), so each major panel is preceded by a
+// visually-hidden <h2>; the locks panel already ships a visible one.
+func TestIndexAccessibilitySectionHeadings(t *testing.T) {
+	doc, _ := parsedIndex(t)
+	headings := map[string]bool{}
+	walk(doc, func(n *html.Node) {
+		if n.Type != html.ElementNode || n.DataAtom != atom.H2 {
+			return
+		}
+		var sb strings.Builder
+		walk(n, func(c *html.Node) {
+			if c.Type == html.TextNode {
+				sb.WriteString(c.Data)
+			}
+		})
+		headings[strings.TrimSpace(sb.String())] = true
+	})
+	for _, want := range []string{
+		"Storage", "Services", "Network", "Installed applications",
+		"Host watches", "Events", "Mount units", "Notifiers",
+		"Daemon / Engine settings", "Recent activity",
+	} {
+		if !headings[want] {
+			t.Errorf("missing section heading <h2> %q", want)
+		}
+	}
+}
+
 // TestIndexAccessibilityBundle pins a11y string markers that survive esbuild
 // minification in the committed dashboard bundle (attribute names, SR hints,
 // disclosure wiring). It does not execute JS or assert on mangled identifiers.
