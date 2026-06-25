@@ -179,10 +179,47 @@ func nodeByID(doc *html.Node, id string) *html.Node {
 	return found
 }
 
+func bundledScript(t *testing.T) string {
+	t.Helper()
+	doc, _ := parsedIndex(t)
+	var script string
+	walk(doc, func(n *html.Node) {
+		if n.Type == html.ElementNode && n.DataAtom == atom.Script && n.FirstChild != nil {
+			script = n.FirstChild.Data
+		}
+	})
+	if script == "" {
+		t.Fatal("bundled script missing")
+	}
+	return script
+}
+
+// TestIndexAccessibilityBundle pins a11y string markers that survive esbuild
+// minification in the committed dashboard bundle (attribute names, SR hints,
+// disclosure wiring). It does not execute JS or assert on mangled identifiers.
+func TestIndexAccessibilityBundle(t *testing.T) {
+	script := bundledScript(t)
+	for _, needle := range []string{
+		"aria-controls",
+		"aria-describedby",
+		"aria-expanded",
+		"data-event-toggle",
+		"operation in progress",
+		"Disconnected — retrying",
+		"services panel",
+		"-msg",
+		"-panel",
+		"visually-hidden",
+	} {
+		if !strings.Contains(script, needle) {
+			t.Errorf("bundled script missing a11y marker %q", needle)
+		}
+	}
+}
+
 // TestIndexAccessibilityShell pins structural WCAG helpers in the static HTML
 // shell: page language, skip link, live regions, labelled filter groups, and
-// table captions with column scope. Behavioural a11y (keyboard handlers, dynamic
-// aria-expanded) lives in the bundled JS and is not asserted here.
+// table captions with column scope.
 func TestIndexAccessibilityShell(t *testing.T) {
 	doc, _ := parsedIndex(t)
 
@@ -267,14 +304,67 @@ func TestIndexAccessibilityShell(t *testing.T) {
 		t.Errorf("want scope=col on every shell <th>, %d missing", thMissingScope)
 	}
 
-	for _, id := range []string{"system-status", "statusbar", "err", "op-live"} {
-		el := nodeByID(doc, id)
+	for _, spec := range []struct {
+		id     string
+		live   string
+		atomic string
+	}{
+		{"system-status", "polite", "false"},
+		{"statusbar", "polite", "false"},
+		{"err", "polite", ""},
+		{"op-live", "polite", ""},
+	} {
+		el := nodeByID(doc, spec.id)
 		if el == nil {
-			t.Errorf("shell missing live region id %q", id)
+			t.Errorf("shell missing live region id %q", spec.id)
 			continue
 		}
-		if live, ok := attr(el, "aria-live"); !ok || live == "" {
-			t.Errorf("#%s missing aria-live", id)
+		if live, ok := attr(el, "aria-live"); !ok || live != spec.live {
+			t.Errorf("#%s aria-live = %q, want %q", spec.id, live, spec.live)
 		}
+		if spec.atomic != "" {
+			if atomic, ok := attr(el, "aria-atomic"); !ok || atomic != spec.atomic {
+				t.Errorf("#%s aria-atomic = %q, want %q", spec.id, atomic, spec.atomic)
+			}
+		}
+	}
+
+	overview := nodeByID(doc, "overview")
+	if overview == nil {
+		t.Fatal(`shell missing #overview`)
+	}
+	if role, ok := attr(overview, "role"); !ok || role != "region" {
+		t.Errorf(`#overview role = %q, want "region"`, role)
+	}
+	if label, ok := attr(overview, "aria-label"); !ok || label != "Overview" {
+		t.Errorf(`#overview aria-label = %q, want "Overview"`, label)
+	}
+
+	footer := nodeByID(doc, "app-footer")
+	if footer == nil {
+		t.Fatal(`shell missing #app-footer`)
+	}
+	if role, ok := attr(footer, "role"); !ok || role != "contentinfo" {
+		t.Errorf(`#app-footer role = %q, want "contentinfo"`, role)
+	}
+
+	panicBanner := nodeByID(doc, "panic-banner")
+	if panicBanner == nil {
+		t.Fatal(`shell missing #panic-banner`)
+	}
+	if live, ok := attr(panicBanner, "aria-live"); !ok || live != "assertive" {
+		t.Errorf(`#panic-banner aria-live = %q, want "assertive"`, live)
+	}
+
+	brandDot := nodeByID(doc, "brand-dot")
+	if brandDot == nil {
+		t.Fatal(`shell missing #brand-dot`)
+	}
+	if hidden, ok := attr(brandDot, "aria-hidden"); !ok || hidden != "true" {
+		t.Errorf(`#brand-dot aria-hidden = %q, want "true"`, hidden)
+	}
+
+	if nodeByID(doc, "simple-confirm") == nil {
+		t.Error(`shell missing #simple-confirm dialog`)
 	}
 }
