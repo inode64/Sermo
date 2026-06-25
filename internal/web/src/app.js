@@ -4843,7 +4843,9 @@ function tickRefreshAge() {
   if (!connOK) { showDisconnected(); return; } // keep the banner's age fresh
   const el = $("#last-refresh");
   if (!el) return;
-  el.textContent = lastRefresh ? `updated ${fmtSince(Date.now() - lastRefresh)} ago` : "";
+  const text = lastRefresh ? `updated ${fmtSince(Date.now() - lastRefresh)} ago` : "";
+  if (el.textContent === text) return;
+  el.textContent = text;
 }
 setInterval(tickRefreshAge, 1000);
 
