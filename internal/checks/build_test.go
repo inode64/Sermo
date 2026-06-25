@@ -331,3 +331,12 @@ func TestBuildMetricCheckOpRequired(t *testing.T) {
 		t.Fatalf("present op must not warn about a missing op, got %q", w)
 	}
 }
+
+func TestBuildHdparmCheckDeviceRequired(t *testing.T) {
+	if _, w := buildHdparmCheck(base{}, map[string]any{}, nil); !strings.Contains(w, "requires a device") {
+		t.Fatalf("missing device warning = %q, want it to mention requiring a device", w)
+	}
+	if _, w := buildHdparmCheck(base{}, map[string]any{"device": "/dev/sda", "read": map[string]any{"op": "<", "value": 1}}, nil); strings.Contains(w, "requires a device") {
+		t.Fatalf("present device must not warn about a missing device, got %q", w)
+	}
+}
