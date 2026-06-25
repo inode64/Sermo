@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -107,8 +108,8 @@ func TestHdparmCheckError(t *testing.T) {
 	if res.OK {
 		t.Fatal("an hdparm error must fail the check")
 	}
-	if res.Message == "" {
-		t.Error("failure message should carry the hdparm error")
+	if !strings.Contains(res.Message, "Permission denied") {
+		t.Errorf("failure message %q should carry the stderr detail", res.Message)
 	}
 }
 
