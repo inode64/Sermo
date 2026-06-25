@@ -1,6 +1,7 @@
 package checks
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -72,5 +73,19 @@ func TestParseLdSoConf(t *testing.T) {
 	// An unreadable path yields no directories rather than erroring.
 	if got := parseLdSoConf(filepath.Join(dir, "missing")); got != nil {
 		t.Fatalf("missing file = %v, want nil", got)
+	}
+}
+
+func TestLockfileCheckFailureVsMissing(t *testing.T) {
+	dir := t.TempDir()
+	// A path that exists but is not a regular file is a failure, reported
+	// distinctly from a path that is simply missing.
+	res := lockfileCheck{base: base{name: "l"}, paths: []string{dir}}.Run(context.Background())
+	if res.OK || !strings.Contains(res.Message, "not a regular file") {
+		t.Fatalf("directory path: %+v", res)
+	}
+	res2 := lockfileCheck{base: base{name: "l"}, paths: []string{filepath.Join(dir, "missing")}}.Run(context.Background())
+	if res2.OK || !strings.Contains(res2.Message, "does not exist") {
+		t.Fatalf("missing path: %+v", res2)
 	}
 }
