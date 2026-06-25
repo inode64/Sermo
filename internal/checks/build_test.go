@@ -281,3 +281,18 @@ func TestParseStatusMatcherClassLowerBoundary(t *testing.T) {
 		t.Fatalf("classes = %v, want [1]", m.classes)
 	}
 }
+
+func TestParseStatusMatcherClassUpperBoundary(t *testing.T) {
+	// "5xx" is the highest valid status class (s[0] <= '5', not < '5').
+	m, err := parseStatusMatcher("5xx")
+	if err != nil {
+		t.Fatalf("parseStatusMatcher(5xx): %v", err)
+	}
+	if len(m.classes) != 1 || m.classes[0] != 5 {
+		t.Fatalf("classes = %v, want [5]", m.classes)
+	}
+	// "6xx" is out of range and must be rejected.
+	if _, err := parseStatusMatcher("6xx"); err == nil {
+		t.Fatal("6xx must be rejected")
+	}
+}
