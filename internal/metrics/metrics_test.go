@@ -21,6 +21,9 @@ func TestCompare(t *testing.T) {
 	if got, _ := Compare(abs, ">=", "1500"); !got {
 		t.Error("1500 >= 1500 should be true")
 	}
+	if got, _ := Compare(abs, ">=", " 1500 "); !got {
+		t.Error("1500 >= 1500 with spaced threshold should be true")
+	}
 }
 
 func TestCompareOperatorsAndErrors(t *testing.T) {
