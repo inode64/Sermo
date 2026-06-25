@@ -2700,6 +2700,50 @@ function isNetworkWatch(w) {
   return t === "net" || t === "icmp";
 }
 
+function watchActionDisabled(w, action) {
+  if (!w || !w.enabled) return true;
+  if (watchStateText(w) === "starting") return true;
+  switch (action) {
+    case "monitor": return !!w.monitored;
+    case "unmonitor": return !w.monitored;
+    case "expand": return !watchHasExpand(w);
+    default: return false;
+  }
+}
+
+function watchActionDisabledReason(w, action) {
+  if (watchStateText(w) === "starting") return "watch is starting";
+  switch (action) {
+    case "monitor":
+      if (w.monitored) return "watch is already monitored";
+      return "";
+    case "unmonitor":
+      if (!w.monitored) return "watch is paused";
+      return "";
+    case "expand":
+      if (!watchHasExpand(w)) return "expand is not configured";
+      return "";
+    default: return "";
+  }
+}
+
+function watchActionHintId(w, action) {
+  return `wat-${w.name}-${action}-hint`;
+}
+
+function watchActionHint(w, action) {
+  const disabled = watchActionDisabled(w, action);
+  const reason = watchActionDisabledReason(w, action);
+  if (!disabled || !reason) return nothing;
+  return tpl`<span id="${watchActionHintId(w, action)}" class="visually-hidden">${reason}</span>`;
+}
+
+function watchActionDescribedBy(w, action) {
+  const disabled = watchActionDisabled(w, action);
+  const reason = watchActionDisabledReason(w, action);
+  return disabled && reason ? watchActionHintId(w, action) : nothing;
+}
+
 // watchRowHTML builds the table row(s) for one watch — the main row plus its
 // expansion row when open. Shared by the Storage panel and the Host watches
 // table so both render identically (including the expand action).
@@ -2720,14 +2764,14 @@ function watchRowHTML(w) {
   const open = expanded.has(key);
   const chev = tpl`<span class="exp" aria-hidden="true">${open ? '▾' : '▸'}</span>`;
   const expandBtn = (w.expand && Number(w.expand.by_bytes) > 0 && me.can_act && w.enabled)
-    ? tpl`<button data-watch="${w.name}" data-watch-action="expand">expand ${fmtBytes(w.expand.by_bytes)}</button>`
+    ? tpl`${watchActionHint(w, "expand")}<button ?disabled=${watchActionDisabled(w, "expand")} data-watch="${w.name}" data-watch-action="expand" aria-describedby="${watchActionDescribedBy(w, "expand")}">expand ${fmtBytes(w.expand.by_bytes)}</button>`
     : nothing;
   const monitorBtn = !w.enabled
     ? tpl`<span class="muted">disabled in config</span>`
     : (me.can_act
       ? (w.monitored
-        ? tpl`<button data-watch="${w.name}" data-watch-action="unmonitor">unmonitor</button>`
-        : tpl`<button data-watch="${w.name}" data-watch-action="monitor">monitor</button>`)
+        ? tpl`${watchActionHint(w, "unmonitor")}<button ?disabled=${watchActionDisabled(w, "unmonitor")} data-watch="${w.name}" data-watch-action="unmonitor" aria-describedby="${watchActionDescribedBy(w, "unmonitor")}">unmonitor</button>`
+        : tpl`${watchActionHint(w, "monitor")}<button ?disabled=${watchActionDisabled(w, "monitor")} data-watch="${w.name}" data-watch-action="monitor" aria-describedby="${watchActionDescribedBy(w, "monitor")}">monitor</button>`)
       : tpl`<span class="muted">read-only</span>`);
   const actions = !w.enabled
     ? tpl`<span class="muted">disabled in config</span>`
