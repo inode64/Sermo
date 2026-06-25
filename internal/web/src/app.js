@@ -2036,7 +2036,7 @@ function renderServiceDetail(d) {
     ? tpl`<div id="${detailDomId(d.name, "lat-summary")}" class="muted">loading…</div>
       <div id="${detailDomId(d.name, "lat-chart")}" class="muted chart-box"></div>`
     : tpl`<div class="muted">No latency checks configured for this service.</div>`;
-  const graphs = tpl`<h2>Graphs <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>
+  const graphs = tpl`<h2>Graphs <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin", "Graph time window")}</span></h2>
     <div class="metric-grid">
       <div class="metric-panel metric-panel-wide">
         <div class="sla-chart-head">
@@ -4004,9 +4004,10 @@ function setDaemonMetricWin(win) {
   loadDaemonMetrics();
 }
 
-function winButtons(list, selected, fn) {
-  return list.map(([label, val]) =>
+function winButtons(list, selected, fn, groupLabel) {
+  const btns = list.map(([label, val]) =>
     tpl`<button data-window-kind="${fn}" data-window-value="${val}" aria-pressed=${val === selected ? "true" : "false"} class="${val === selected ? "win-btn-active" : nothing}">${label}</button> `);
+  return tpl`<span role="group" aria-label="${groupLabel || "Time window"}">${btns}</span>`;
 }
 
 function syncWindowButtons(kind, selected) {
@@ -4089,7 +4090,7 @@ function renderDaemonMetrics(body) {
   setText("#daemon-io-live", c.io_ready ? `${fmtBytes(c.io || 0)}/s` : "measuring");
 
   const win = $("#daemon-metric-windows");
-  if (win) litRender(winButtons(metricWins, daemonMetricWindow, "setDaemonMetricWin"), win);
+  if (win) litRender(winButtons(metricWins, daemonMetricWindow, "setDaemonMetricWin", "Daemon metrics time window"), win);
   const summary = $("#daemon-metric-summary");
   if (summary) {
     summary.innerHTML = [
