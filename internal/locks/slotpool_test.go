@@ -115,6 +115,45 @@ func TestSlotPoolReclaimsDeadOwner(t *testing.T) {
 	_ = h.Release()
 }
 
+// TestSlotPoolDefaultTTL pins ttl<=0 default and sub-second ttl explicit (mutant slotpool .70).
+func TestSlotPoolDefaultTTL(t *testing.T) {
+	now := time.Unix(50_000, 0)
+	proc := fakeProc{alive: map[int]bool{9000: true}, ticks: map[int]uint64{9000: 1}}
+	self := func() (int, uint64) { return 9000, 1 }
+	t.Run("zero uses default", func(t *testing.T) {
+		dir := t.TempDir()
+		pool := SlotPool{Dir: dir, Slots: 1, TTL: 0, Proc: proc, Now: func() time.Time { return now }, Self: self, Sleep: time.Sleep}
+		h, err := pool.Acquire(context.Background())
+		if err != nil {
+			t.Fatalf("acquire: %v", err)
+		}
+		defer h.Release()
+		got, err := readLockFile(h.path)
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if want := now.Add(time.Hour); !got.ExpiresAt.Equal(want) {
+			t.Fatalf("ExpiresAt = %v want %v", got.ExpiresAt, want)
+		}
+	})
+	t.Run("sub-second ttl stays explicit", func(t *testing.T) {
+		dir := t.TempDir()
+		pool := SlotPool{Dir: dir, Slots: 1, TTL: time.Nanosecond, Proc: proc, Now: func() time.Time { return now }, Self: self, Sleep: time.Sleep}
+		h, err := pool.Acquire(context.Background())
+		if err != nil {
+			t.Fatalf("acquire: %v", err)
+		}
+		defer h.Release()
+		got, err := readLockFile(h.path)
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if want := now.Add(time.Nanosecond); !got.ExpiresAt.Equal(want) {
+			t.Fatalf("ExpiresAt = %v want %v", got.ExpiresAt, want)
+		}
+	})
+}
+
 // TestSlotPoolReclaimsExpiredSlot covers the TTL safety net: a slot whose owner
 // is still alive but whose ExpiresAt has elapsed must be reclaimable, otherwise
 // a wedged owner would hold the slot forever and shrink global concurrency.
