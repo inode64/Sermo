@@ -969,14 +969,14 @@ function renderAttention() {
     setFavicon("ok");
     if (healthIconReady) document.title = "Sermo · services";
     box.style.display = "none";
-    box.innerHTML = "";
+    setHTMLIfChanged(box, "");
     return;
   } else {
     setFavicon(items.some((it) => it.level === "critical") ? "critical" : "warning");
     if (healthIconReady) document.title = `(${items.length}) Sermo · services`;
   }
   box.style.display = "block";
-  box.innerHTML = `
+  const html = `
     <div class="attn-head">
       <b>Attention required</b>
       <span class="muted">${items.length} signal${items.length === 1 ? "" : "s"}</span>
@@ -987,6 +987,7 @@ function renderAttention() {
         ${it.detail ? `<div class="attn-detail">${esc(it.detail)}</div>` : ""}
       </button>
     `).join("")}</div>`;
+  setHTMLIfChanged(box, html);
 }
 function isTrackedOperation(action) { return action === "start" || action === "stop" || action === "restart" || action === "reload" || action === "resume"; }
 function serviceBusy(name) {
@@ -1053,14 +1054,14 @@ function renderOperationLive() {
   const ops = [...liveOps.values()].sort((a, b) => b.started - a.started);
   if (!ops.length) {
     box.style.display = "none";
-    box.innerHTML = "";
+    setHTMLIfChanged(box, "");
     return;
   }
   const slotText = liveOpsSlots && liveOpsSlots.total != null
     ? `<div class="muted" style="margin-bottom:.35rem">Operation slots: <b class="${(liveOpsSlots.in_use || 0) >= (liveOpsSlots.total || 1) ? 'failed' : ''}">${liveOpsSlots.in_use || 0}/${liveOpsSlots.total || 0}</b> in use</div>`
     : "";
   box.style.display = "block";
-  box.innerHTML = slotText + ops.map((op) => {
+  const html = slotText + ops.map((op) => {
     const state = opStateText(op);
     const cls = op.finished ? (op.ok ? "ok" : "failed") : "";
     const since = op.finished ? `${opElapsed(op)}s total` : `${opElapsed(op)}s elapsed`;
@@ -1073,6 +1074,7 @@ function renderOperationLive() {
       ${op.message ? `<span class="muted">${esc(op.message)}</span>` : ""}
     </div>`;
   }).join("");
+  setHTMLIfChanged(box, html);
 }
 
 function serviceMatches(s) {
