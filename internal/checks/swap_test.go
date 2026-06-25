@@ -53,6 +53,12 @@ func TestSwapUsageRejectsFreeAboveTotal(t *testing.T) {
 	if res := c.Run(context.Background()); res.OK {
 		t.Fatalf("invalid free > total sample must not underflow and fire: %+v", res)
 	}
+	// free == total is a legitimate 0%-used host, not the rejected free > total.
+	exact := &swapCheck{base: base{name: "s"}, metric: "usage",
+		preds: []levelPred{{field: "free_pct", op: ">=", value: 100}}, sampler: fakeSwap(SwapSample{TotalBytes: 1000, FreeBytes: 1000})}
+	if res := exact.Run(context.Background()); !res.OK {
+		t.Fatalf("free == total (0%% used) must be valid, got %q", res.Message)
+	}
 }
 
 func TestSwapIODeltaPrimes(t *testing.T) {
