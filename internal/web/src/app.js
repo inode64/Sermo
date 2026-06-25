@@ -472,12 +472,13 @@ function renderGlobalEvents() {
     const action = head.action || head.kind || "event";
     const statuses = [...new Set(g.map((e) => e.status).filter(Boolean))].join(", ");
     const groupKey = `grp:${gi}:${eventGroupKey(head)}`;
+    const panelId = `event-grp-panel-${gi}`;
     const open = eventExpanded.has(groupKey);
     return [
       tpl`<tr class="event-group">
-        <td colspan="4"><button type="button" class="row-toggle" data-event-toggle="${groupKey}" aria-expanded="${open ? "true" : "false"}"><span class="exp" aria-hidden="true">${open ? "▾" : "▸"}</span>${who} <span class="muted">${action} · ${g.length} event${g.length === 1 ? "" : "s"}${statuses ? " · " + statuses : ""}</span></button></td>
+        <td colspan="4"><button type="button" class="row-toggle" data-event-toggle="${groupKey}" aria-expanded="${open ? "true" : "false"}" aria-controls="${panelId}"><span class="exp" aria-hidden="true">${open ? "▾" : "▸"}</span>${who} <span class="muted">${action} · ${g.length} event${g.length === 1 ? "" : "s"}${statuses ? " · " + statuses : ""}</span></button></td>
       </tr>`,
-      open ? eventRows(g, true, { prefix: "group" + gi }) : nothing,
+      open ? eventRows(g, true, { prefix: "group" + gi, panelId }) : nothing,
     ];
   }), tbody);
 }
@@ -490,7 +491,8 @@ function eventRows(events, withService, opts = {}) {
     const who = e.service || e.watch || e.app || "";
     const detail = [e.rule, e.action, e.status].filter(Boolean).join(" ");
     const key = eventKey(prefix, e, i);
-    return tpl`<tr>
+    const rowId = opts.panelId && i === 0 ? opts.panelId : nothing;
+    return tpl`<tr id="${rowId}">
       <td class="t">${fmtTime(e.time)}</td>
       ${withService && who ? tpl`<td>${who}</td>` : nothing}
       <td class="kind kind-${e.kind || ""}">${e.kind}</td>
