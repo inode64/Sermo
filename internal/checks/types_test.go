@@ -19,3 +19,13 @@ func TestJSONAssertNumericBoundaries(t *testing.T) {
 		}
 	}
 }
+
+func TestStatusMatcherString(t *testing.T) {
+	// Operator form renders "op value"; the code/class form is a comma list.
+	if got := (statusMatcher{op: ">", value: "500"}).String(); got != "> 500" {
+		t.Errorf("op-form String() = %q, want \"> 500\"", got)
+	}
+	if got := (statusMatcher{codes: []int{200, 404}}).String(); got != "200,404" {
+		t.Errorf("code-form String() = %q, want 200,404", got)
+	}
+}
