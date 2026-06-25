@@ -982,7 +982,7 @@ function renderAttention() {
       <span class="muted">${items.length} signal${items.length === 1 ? "" : "s"}</span>
     </div>
     <div class="attn-list">${items.map((it) => `
-      <button class="attn-item ${esc(it.level)}" data-panel-target="${esc(it.target)}">
+      <button class="attn-item ${esc(it.level)}" data-panel-target="${esc(it.target)}" aria-label="${esc(attnAriaLabel(it))}">
         <div class="attn-title ${it.level === "critical" ? "bad" : "inactive"}">${esc(it.title)}</div>
         ${it.detail ? `<div class="attn-detail">${esc(it.detail)}</div>` : ""}
       </button>
@@ -3316,6 +3316,13 @@ function renderActivity(sum) {
     }
   }
   renderAttention();
+}
+
+function attnAriaLabel(it) {
+  const parts = [it.title];
+  if (it.detail) parts.push(it.detail);
+  parts.push(`Open ${panelTargetLabel(it.target)}`);
+  return parts.join(". ");
 }
 
 function panelTargetLabel(target) {
