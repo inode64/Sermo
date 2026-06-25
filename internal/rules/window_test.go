@@ -197,6 +197,10 @@ func TestWindowDescription(t *testing.T) {
 	if got := WindowDescription(Rule{For: &ForWindow{Cycles: 3}}); got != "for 3 consecutive" {
 		t.Fatalf("for = %q", got)
 	}
+	// A For window with no positive cycles or duration degrades to immediate.
+	if got := WindowDescription(Rule{For: &ForWindow{}}); got != "immediate" {
+		t.Fatalf("empty For = %q, want immediate", got)
+	}
 	if got := WindowDescription(Rule{Within: &WithinWindow{Cycles: 15, MinMatches: 5}}); got != "within 15 cycles (min 5)" {
 		t.Fatalf("within = %q", got)
 	}
