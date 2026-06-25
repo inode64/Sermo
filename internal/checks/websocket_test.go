@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -109,5 +110,18 @@ func TestWsSkipVerify(t *testing.T) {
 		if wsSkipVerify(v) {
 			t.Errorf("wsSkipVerify(%q) = true, want false (verification must stay on)", v)
 		}
+	}
+}
+
+func TestWebsocketHandshakeRequestHeaders(t *testing.T) {
+	c := &websocketCheck{path: "/chat", host: "h:80", origin: "http://o", subprotocol: "chat"}
+	req := c.handshakeRequest("KEY")
+	if !strings.Contains(req, "Origin: http://o\r\n") || !strings.Contains(req, "Sec-WebSocket-Protocol: chat\r\n") {
+		t.Fatalf("handshake must carry Origin and subprotocol:\n%s", req)
+	}
+	// Omitted when unset.
+	bare := (&websocketCheck{path: "/", host: "h"}).handshakeRequest("KEY")
+	if strings.Contains(bare, "Origin:") || strings.Contains(bare, "Sec-WebSocket-Protocol:") {
+		t.Fatalf("bare handshake must not carry Origin/subprotocol:\n%s", bare)
 	}
 }
