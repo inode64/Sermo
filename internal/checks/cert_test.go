@@ -241,3 +241,21 @@ func TestCertMessageNoExpiry(t *testing.T) {
 		t.Errorf("no-bits = %q", got)
 	}
 }
+
+func TestCertDataOptionalFields(t *testing.T) {
+	full := CertSample{Kind: "certificate", Fingerprint: "fp", KeyBits: 2048, DNSNames: []string{"a.example"}}
+	d := certData("src", "host.example", "/p.pem", full, 5, true)
+	if d["host"] != "host.example" || d["path"] != "/p.pem" || d["key_bits"] != 2048 {
+		t.Fatalf("present optional fields = %v", d)
+	}
+	if sans, ok := d["dns_names"].([]string); !ok || len(sans) != 1 {
+		t.Fatalf("dns_names = %v", d["dns_names"])
+	}
+	// Minimal sample: every optional field is omitted, not emitted as a zero value.
+	m := certData("src", "", "", CertSample{Kind: "certificate", Fingerprint: "fp"}, 0, false)
+	for _, k := range []string{"host", "path", "key_bits", "dns_names", "days_left"} {
+		if _, has := m[k]; has {
+			t.Errorf("minimal sample must omit %q, got %v", k, m[k])
+		}
+	}
+}
