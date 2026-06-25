@@ -1,4 +1,3 @@
-kind: app
 name: mariadb-backup
 display_name: "MariaDB Backup"
 category: database

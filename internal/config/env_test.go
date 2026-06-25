@@ -22,7 +22,6 @@ func TestExpandEnvString(t *testing.T) {
 func TestServiceCheckUsesEnvSecret(t *testing.T) {
 	t.Setenv("API_TOKEN", "tok-123")
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -37,7 +36,6 @@ checks:
 	}
 	// the resolved tree carries the secret from the environment
 	cfg := loadServiceConfig(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -57,7 +55,6 @@ checks:
 func TestEnvSecretMissingDoesNotError(t *testing.T) {
 	// A secret that is not set at validate time must not fail validation.
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -72,7 +69,7 @@ checks:
 func TestGlobalEnvSecret(t *testing.T) {
 	t.Setenv("SMTP_DSN", "smtp://user:pw@mail.example.com:587")
 	global := writeConfig(t, map[string]string{"sermo.yml": `
-paths: { services: [ @ROOT@/enabled ] }
+paths: { services: [ @ROOT@/services ] }
 defaults: { policy: { cooldown: 5m } }
 notifiers:
   ops:
@@ -96,8 +93,8 @@ notifiers:
 func loadServiceConfig(t *testing.T, serviceYAML string) *Config {
 	t.Helper()
 	global := writeConfig(t, map[string]string{
-		"sermo.yml":       baseGlobal,
-		"enabled/svc.yml": serviceYAML,
+		"sermo.yml":        baseGlobal,
+		"services/svc.yml": serviceYAML,
 	})
 	cfg, err := Load(global)
 	if err != nil {

@@ -35,14 +35,14 @@ func TestAppsVersionShortCommand(t *testing.T) {
 
 	daemonsDir := filepath.Join(root, "daemons")
 	appsDir := filepath.Join(daemonsDir, "apps")
-	enabledDir := filepath.Join(root, "enabled")
-	for _, d := range []string{appsDir, enabledDir} {
+	servicesDir := filepath.Join(root, "services")
+	for _, d := range []string{appsDir, servicesDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// nativeapp: a version_short command prints the bare version directly.
-	if err := os.WriteFile(filepath.Join(appsDir, "native.yml"), []byte(fmt.Sprintf(`kind: app
+	if err := os.WriteFile(filepath.Join(appsDir, "native.yml"), []byte(fmt.Sprintf(`
 name: nativeapp
 display_name: "NativeApp"
 variables:
@@ -56,7 +56,7 @@ preflight:
 		t.Fatal(err)
 	}
 	// fallbackapp: no version_short command — parse the raw version line.
-	if err := os.WriteFile(filepath.Join(appsDir, "fallback.yml"), []byte(fmt.Sprintf(`kind: app
+	if err := os.WriteFile(filepath.Join(appsDir, "fallback.yml"), []byte(fmt.Sprintf(`
 name: fallbackapp
 display_name: "FallbackApp"
 variables:
@@ -68,7 +68,7 @@ preflight:
 		t.Fatal(err)
 	}
 	// emptyapp: version_short command runs but prints nothing — fall back.
-	if err := os.WriteFile(filepath.Join(appsDir, "empty.yml"), []byte(fmt.Sprintf(`kind: app
+	if err := os.WriteFile(filepath.Join(appsDir, "empty.yml"), []byte(fmt.Sprintf(`
 name: emptyapp
 display_name: "EmptyApp"
 variables:
@@ -87,7 +87,7 @@ preflight:
 engine: { backend: auto }
 paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, daemonsDir, enabledDir)), 0o644); err != nil {
+`, daemonsDir, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -151,14 +151,14 @@ func TestAppsCommand(t *testing.T) {
 
 	daemonsDir := filepath.Join(root, "daemons")
 	appsDir := filepath.Join(daemonsDir, "apps") // category derived from the directory
-	enabledDir := filepath.Join(root, "enabled")
-	for _, d := range []string{appsDir, enabledDir} {
+	servicesDir := filepath.Join(root, "services")
+	for _, d := range []string{appsDir, servicesDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
 	writeApp := func(file, name, display, binary string) {
-		body := fmt.Sprintf(`kind: app
+		body := fmt.Sprintf(`
 name: %s
 display_name: %q
 variables:
@@ -180,7 +180,7 @@ preflight:
 engine: { backend: auto }
 paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, daemonsDir, enabledDir)), 0o644); err != nil {
+`, daemonsDir, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

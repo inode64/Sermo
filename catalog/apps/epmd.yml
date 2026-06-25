@@ -1,4 +1,3 @@
-kind: app
 name: epmd
 display_name: "EPMD"
 category: messaging

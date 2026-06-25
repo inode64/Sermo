@@ -1,4 +1,3 @@
-kind: app
 name: guacd
 display_name: "Apache Guacamole"
 category: web

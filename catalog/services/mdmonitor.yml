@@ -1,4 +1,3 @@
-kind: daemon
 name: mdmonitor
 display_name: MD array monitor
 category: storage

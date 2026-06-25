@@ -1,4 +1,3 @@
-kind: app
 name: java-%i-%v
 display_name: "Java ${instance} ${version} ${current}"
 category: runtime

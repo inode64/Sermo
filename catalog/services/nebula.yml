@@ -1,4 +1,3 @@
-kind: daemon
 name: nebula-%i
 display_name: Nebula ${instance}
 description: Nebula mesh-VPN node (Slack/Defined Networking).

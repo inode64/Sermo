@@ -1,4 +1,3 @@
-kind: daemon
 name: ceph-mds
 display_name: Ceph Metadata Server
 category: storage

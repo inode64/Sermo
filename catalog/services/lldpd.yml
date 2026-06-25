@@ -1,4 +1,3 @@
-kind: daemon
 name: lldpd
 display_name: LLDP Daemon
 category: network

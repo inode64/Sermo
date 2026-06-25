@@ -1,4 +1,3 @@
-kind: app
 name: rpc-idmapd
 display_name: "NFS idmapd"
 category: storage

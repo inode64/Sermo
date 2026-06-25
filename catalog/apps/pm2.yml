@@ -1,4 +1,3 @@
-kind: app
 name: pm2
 display_name: "PM2"
 category: system

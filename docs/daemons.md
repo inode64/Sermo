@@ -1,10 +1,12 @@
 # Daemons
 
 A daemon is a reusable base definition for an application. A service `uses` a
-daemon and overrides only what differs.
+daemon and overrides only what differs. A service file lives under
+`paths.services`, which is what marks it as a service — no `kind:` is needed (see
+[configuration](configuration.md): a document's kind is derived from its
+location).
 
 ```yaml
-kind: service
 name: apache-main
 uses: apache
 variables:
@@ -35,12 +37,14 @@ catalog/
 ```
 
 The directory sets the catalog category (`service` / `app` / `library` /
-`patterns`); files placed directly in a catalog root are rejected. Use one YAML
-file per catalog document: one daemon, app, lib or pattern in each file.
+`patterns`) and therefore the document's kind (`daemon` / `app` / `lib` /
+`patterns`), so a top-level `kind:` is redundant and omitted; files placed
+directly in a catalog root are rejected. Use one YAML file per catalog document:
+one daemon, app, lib or pattern in each file.
 `sermoctl services`, `sermoctl apps` and `sermoctl libs` list each category,
 showing which are installed, the version their version command reports, and
 whether they resolve without error (add `all` to include the not-installed).
-Configured service instances (`kind: service` under `paths.services`) are listed
+Configured service instances (under `paths.services`) are listed
 by the web UI and `GET /api/services`, not by `sermoctl services` — see
 [cli.md](cli.md#catalog-inventory).
 `sermoctl patterns` lists the pattern sets and their rule counts (see the
@@ -50,7 +54,7 @@ Catalog documents may declare `aliases: [...]` for distro or package names that
 operators naturally type. For example, the canonical daemon `name: apache` can
 carry aliases such as `apache2` and `httpd`, so a service may write
 `uses: apache2` while resolving to the same catalog profile. A configured
-`kind: service` may also declare aliases; `sermoctl` normalizes those aliases to
+A configured service may also declare aliases; `sermoctl` normalizes those aliases to
 the canonical configured service name before status, start, stop, restart,
 reload, monitor, SLA and process/lock commands. Catalog aliases are also usable
 as service names only in the conservative one-service case where a configured
@@ -63,7 +67,6 @@ A library daemon describes a shared library so services can restart when it is
 upgraded. It only needs identity plus the file to watch:
 
 ```yaml
-kind: lib
 name: glibc
 display_name: "GNU C Library"
 description: "Standard C library (libc)"
@@ -180,7 +183,7 @@ reload:
 
 #### Catalog author checklist: init scripts and fallbacks
 
-Before shipping or changing a catalog daemon with `reload.signal`, verify every
+Before shipping or changing a catalog service with `reload.signal`, verify every
 init backend listed in `service:` and every fallback Sermo may use. Do not check
 only the platform where the profile was first written.
 
@@ -224,8 +227,8 @@ go test ./internal/config -run 'TestRealCatalog(AllDaemonsValidate|ReloadDaemons
 
 The reload that `reload:` produces is what the **`reload` action**,
 `reload_on_change`, the `sermoctl reload <svc>` command and the web UI reload
-button all run. It is a service-control concept: it applies to service daemons
-(`kind: service`/`daemon`), not to host `watches:`, which observe host metrics
+button all run. It is a service-control concept: it applies to services and
+daemons, not to host `watches:`, which observe host metrics
 and fire hooks rather than reload a unit.
 
 ## App dependencies (`apps`)
@@ -280,7 +283,6 @@ never moved to an app). Referenced names must be `app` daemons.
 A daemon or service may carry optional human-facing metadata:
 
 ```yaml
-kind: daemon
 name: mariadb
 display_name: "MariaDB"      # pretty label; falls back to name when absent
 description: "..."           # free-text note; shown verbatim, nothing when absent
@@ -379,7 +381,7 @@ variable in the service-level `pidfile: "${pidfile}"`, and use `user: "${user}"`
 inside any `processes:` selector that should be tied to the service account.
 
 Runtime paths in Sermo config use the canonical `/run` spelling. Do not write
-new `/var/run` pidfiles, sockets or lockfiles in catalog daemons, generated
+new `/var/run` pidfiles, sockets or lockfiles in catalog services, generated
 services or examples. Linux keeps `/var/run` as compatibility for `/run`, and
 older init scripts, service managers or packaged configs may still report that
 spelling; detected paths should be normalized to `/run/...` before they are
@@ -398,7 +400,6 @@ instance can set its listen port once and have every `${port}` reference resolve
 to it:
 
 ```yaml
-kind: service
 name: db-inst2
 uses: dbserver
 port: 3307          # → ${port} everywhere in the daemon
@@ -468,7 +469,6 @@ A service can be controlled as a libvirt/QEMU virtual machine instead of a
 systemd/OpenRC unit:
 
 ```yaml
-kind: service
 name: vm-web01
 control:
   type: libvirt
@@ -521,7 +521,7 @@ regex that narrows the shared QEMU binary to the intended domain or UUID. The
 cmdline selector narrows discovery; residual signaling is still
 authorized only by `stop_policy.kill_only_if`.
 
-`sermoctl wizard vm` can generate this `kind: service` shape from domains
+`sermoctl wizard vm` can generate this service shape from domains
 detected through the local libvirt socket. It probes both
 `/run/libvirt/libvirt-sock` and `/run/libvirt/virtqemud-sock` and writes the
 socket it actually used into the generated service and check.
@@ -532,7 +532,6 @@ A service can be controlled as one Docker container instead of a systemd/OpenRC
 unit:
 
 ```yaml
-kind: service
 name: web-container
 control:
   type: docker
@@ -579,7 +578,7 @@ For process metrics and residual-process reporting, Sermo reads the container's
 not need a `processes:` selector for a controlled container. Residual signaling
 is still authorized only by `stop_policy.kill_only_if`.
 
-`sermoctl wizard docker` can generate this `kind: service` shape from containers
+`sermoctl wizard docker` can generate this service shape from containers
 detected through the local Docker socket.
 
 ### `also_service` — auxiliary init units
@@ -810,7 +809,6 @@ per version, write a single **app version template** whose `name:` contains
 token links that app.
 
 ```yaml
-kind: app
 name: postgres-%v
 display_name: "PostgreSQL ${version}"
 variables:
@@ -820,7 +818,6 @@ preflight:
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
 
 ---
-kind: daemon
 name: postgres-%v
 display_name: "PostgreSQL ${version}"
 service:
@@ -862,7 +859,6 @@ When an app or library cannot discover from its runtime executable, use
 `versions.from` there and link the generic or versioned app that owns the binary:
 
 ```yaml
-kind: app
 name: mydaemon-%i
 versions:
   from: "/etc/mydaemon/${instance}.conf"
@@ -888,7 +884,6 @@ precisely.
 numbers, otherwise working exactly like `%v`:
 
 ```yaml
-kind: app
 name: python%n
 display_name: "Python ${n}"
 variables:
@@ -941,7 +936,6 @@ version, which keeps wrappers such as Gentoo Java generic without `from_file`
 catalog metadata.
 
 ```yaml
-kind: app
 name: python%n
 display_name: "Python ${n}"
 versions:
@@ -972,7 +966,6 @@ when it is, the separator collapses too, so a bare `tomcat@8.5.service`
 materializes `tomcat-8.5` with no trailing `-`:
 
 ```yaml
-kind: daemon
 name: tomcat-%v%s%i
 service:
   openrc: ["tomcat-${version}${sep}${instance}"]
@@ -1174,7 +1167,6 @@ packaged `nebula-%i` daemon builds on the base `nebula` daemon and links the
 `nebula-${instance}` app:
 
 ```yaml
-kind: daemon
 name: nebula-%i
 uses: nebula
 display_name: "Nebula ${instance}"
@@ -1222,7 +1214,6 @@ inherit the daemon's candidates.
 A service may `clone` another service to make a second instance:
 
 ```yaml
-kind: service
 name: redis-cache
 clone: redis-main
 variables:
@@ -1246,7 +1237,6 @@ config-file path should be a variable wired into every command that reads it, so
 two instances never pick up each other's configuration:
 
 ```yaml
-kind: daemon
 name: dbserver
 variables:
   port:    3306
@@ -1262,7 +1252,6 @@ Each instance overrides the three variables and gives itself an init unit (a
 systemd template instance or a distinct unit name) with a scalar `service`:
 
 ```yaml
-kind: service
 name: db-inst1
 uses: dbserver
 service: db-inst1
@@ -1296,7 +1285,6 @@ The top-level `monitor` flag sets a service's monitoring behavior when the
 daemon starts:
 
 ```yaml
-kind: service
 name: web
 uses: nginx
 monitor: enabled    # enabled (default) | disabled | previous

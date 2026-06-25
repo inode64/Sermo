@@ -1,4 +1,3 @@
-kind: app
 name: rpc-mountd
 display_name: "NFS Mount Daemon"
 category: storage

@@ -1,4 +1,3 @@
-kind: daemon
 name: listmonk
 display_name: listmonk
 category: web

@@ -1,4 +1,3 @@
-kind: app
 name: supervisord
 display_name: "Supervisor"
 category: system

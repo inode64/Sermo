@@ -99,7 +99,7 @@ func TestListPolkitVersionFromPkexecIntegerOutput(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(catalogDir, "apps", "polkit.yml"), []byte(fmt.Sprintf(`kind: app
+	if err := os.WriteFile(filepath.Join(catalogDir, "apps", "polkit.yml"), []byte(fmt.Sprintf(`
 name: polkit
 display_name: "Polkit"
 category: system
@@ -113,7 +113,7 @@ preflight:
 `, polkitd, pkexec)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(catalogDir, "services", "polkit.yml"), []byte(`kind: daemon
+	if err := os.WriteFile(filepath.Join(catalogDir, "services", "polkit.yml"), []byte(`
 name: polkit
 display_name: "Polkit"
 category: system
@@ -178,7 +178,7 @@ func TestListMarksTemplateCurrentByBaseShortVersion(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(catalogDir, "apps", "java.yml"), []byte(fmt.Sprintf(`kind: app
+	if err := os.WriteFile(filepath.Join(catalogDir, "apps", "java.yml"), []byte(fmt.Sprintf(`
 name: java-%%i-%%v
 display_name: "Java ${instance} ${version} ${current}"
 versions:

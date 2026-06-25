@@ -1,4 +1,3 @@
-kind: daemon
 name: influxdb
 display_name: InfluxDB
 category: database

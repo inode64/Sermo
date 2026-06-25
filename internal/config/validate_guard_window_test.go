@@ -7,7 +7,6 @@ import "testing"
 // so the window would otherwise be silently ignored.
 func TestValidateGuardRejectsWindow(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: x
 service: x
 checks:

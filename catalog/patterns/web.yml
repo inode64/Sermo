@@ -1,4 +1,3 @@
-kind: patterns
 name: web
 display_name: "Web server configtest signals"
 description: "Common nginx/apache configtest failures and warnings."

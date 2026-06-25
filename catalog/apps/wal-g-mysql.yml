@@ -1,4 +1,3 @@
-kind: app
 name: wal-g-mysql
 display_name: "WAL-G MySQL"
 category: database

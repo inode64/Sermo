@@ -7,7 +7,6 @@ import "testing"
 // types): valid shapes must produce no issue for those checks.
 func TestValidateSingleShotNetICMPSwapValid(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 checks:
@@ -54,7 +53,7 @@ func TestValidateSingleShotNetICMPSwapErrors(t *testing.T) {
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			mustHave(t, validateService(t, "kind: service\nname: svc\nservice: x\nchecks:\n  "+c.body+"\n"), c.want)
+			mustHave(t, validateService(t, "name: svc\nservice: x\nchecks:\n  "+c.body+"\n"), c.want)
 		})
 	}
 }

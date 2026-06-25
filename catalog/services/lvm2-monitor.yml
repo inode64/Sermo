@@ -1,4 +1,3 @@
-kind: daemon
 name: lvm2-monitor
 display_name: LVM2 monitor
 category: storage

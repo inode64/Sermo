@@ -1,4 +1,3 @@
-kind: app
 name: bacula-fd
 display_name: "Bacula File Daemon"
 category: storage

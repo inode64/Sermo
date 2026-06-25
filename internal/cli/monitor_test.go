@@ -19,10 +19,10 @@ func TestMonitorUnmonitorCommand(t *testing.T) {
 	root := t.TempDir()
 	daemonsDir := filepath.Join(root, "daemons")
 	catalogServicesDir := filepath.Join(daemonsDir, "services")
-	enabledDir := filepath.Join(root, "enabled")
+	servicesDir := filepath.Join(root, "services")
 	runDir := filepath.Join(root, "run")
 	stateDir := filepath.Join(root, "state")
-	for _, d := range []string{catalogServicesDir, enabledDir, runDir, stateDir} {
+	for _, d := range []string{catalogServicesDir, servicesDir, runDir, stateDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -32,13 +32,13 @@ func TestMonitorUnmonitorCommand(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(catalogServicesDir, "nginx.yml"), "kind: daemon\nname: nginx\nservice: nginx\n")
-	write(filepath.Join(enabledDir, "web.yml"), "kind: service\nname: web\nuses: nginx\n")
+	write(filepath.Join(catalogServicesDir, "nginx.yml"), "name: nginx\nservice: nginx\n")
+	write(filepath.Join(servicesDir, "web.yml"), "name: web\nuses: nginx\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
 paths: { catalog: [ %s ], services: [ %s ], runtime: %s, state: %s }
 defaults: { policy: { cooldown: 5m } }
-`, daemonsDir, enabledDir, runDir, stateDir))
+`, daemonsDir, servicesDir, runDir, stateDir))
 	global := filepath.Join(root, "sermo.yml")
 
 	run := func(args ...string) int {
@@ -133,7 +133,7 @@ func TestStatusShowsPauseSource(t *testing.T) {
 
 func TestStatusShowsDisabledState(t *testing.T) {
 	root, global := monitorTestConfig(t)
-	if err := os.WriteFile(filepath.Join(root, "enabled", "web.yml"), []byte("kind: service\nname: web\nuses: nginx\nenabled: false\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "services", "web.yml"), []byte("name: web\nuses: nginx\nenabled: false\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	app := monitorTestApp(root, nil)
@@ -165,10 +165,10 @@ func monitorTestConfig(t *testing.T) (root, global string) {
 	root = t.TempDir()
 	daemonsDir := filepath.Join(root, "daemons")
 	catalogServicesDir := filepath.Join(daemonsDir, "services")
-	enabledDir := filepath.Join(root, "enabled")
+	servicesDir := filepath.Join(root, "services")
 	runDir := filepath.Join(root, "run")
 	stateDir := filepath.Join(root, "state")
-	for _, d := range []string{catalogServicesDir, enabledDir, runDir, stateDir} {
+	for _, d := range []string{catalogServicesDir, servicesDir, runDir, stateDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -178,13 +178,13 @@ func monitorTestConfig(t *testing.T) (root, global string) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(catalogServicesDir, "nginx.yml"), "kind: daemon\nname: nginx\nservice: nginx\n")
-	write(filepath.Join(enabledDir, "web.yml"), "kind: service\nname: web\nuses: nginx\n")
+	write(filepath.Join(catalogServicesDir, "nginx.yml"), "name: nginx\nservice: nginx\n")
+	write(filepath.Join(servicesDir, "web.yml"), "name: web\nuses: nginx\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
 paths: { catalog: [ %s ], services: [ %s ], runtime: %s, state: %s }
 defaults: { policy: { cooldown: 5m } }
-`, daemonsDir, enabledDir, runDir, stateDir))
+`, daemonsDir, servicesDir, runDir, stateDir))
 	return root, filepath.Join(root, "sermo.yml")
 }
 

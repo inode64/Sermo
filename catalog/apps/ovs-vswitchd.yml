@@ -1,4 +1,3 @@
-kind: app
 name: ovs-vswitchd
 display_name: "Open vSwitch"
 category: virtualization

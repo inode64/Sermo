@@ -1,4 +1,3 @@
-kind: app
 name: freshclam
 display_name: "FreshClam"
 category: security

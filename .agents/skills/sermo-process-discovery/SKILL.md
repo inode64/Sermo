@@ -53,7 +53,7 @@ processes:
 
 For systemd, prefer cgroup/MainPID when available.
 
-For OpenRC, use pidfile and catalog daemon rules. OpenRC may not provide a clean process tree for every service.
+For OpenRC, use pidfile and catalog service rules. OpenRC may not provide a clean process tree for every service.
 
 ## Residual process handling
 

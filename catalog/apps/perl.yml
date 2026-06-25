@@ -1,4 +1,3 @@
-kind: app
 name: perl
 display_name: "Perl"
 category: runtime

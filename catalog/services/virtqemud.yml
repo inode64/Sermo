@@ -1,4 +1,3 @@
-kind: daemon
 name: virtqemud
 display_name: libvirt QEMU Daemon
 category: virtualization

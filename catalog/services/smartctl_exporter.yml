@@ -1,4 +1,3 @@
-kind: daemon
 name: smartctl_exporter
 display_name: Prometheus smartctl Exporter
 category: observability

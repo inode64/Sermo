@@ -1,4 +1,3 @@
-kind: app
 name: memcached
 display_name: "Memcached"
 category: database

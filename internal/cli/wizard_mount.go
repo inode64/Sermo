@@ -26,7 +26,8 @@ func (a App) writeWizardMounts(p *assist.Prompt, opts options, globalPath string
 		if _, dup := cfg.Mounts[name]; dup {
 			return a.fail(opts, "mount "+name+" is already configured; not overwriting")
 		}
-		doc := map[string]any{"kind": "mount", "name": name}
+		// The mounts directory determines the kind on load, so no `kind:` is written.
+		doc := map[string]any{"name": name}
 		if b, ok := body.(map[string]any); ok {
 			for k, v := range b {
 				doc[k] = v
@@ -214,7 +215,9 @@ func mountFileTarget(path string) string {
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return ""
 	}
-	if kind, _ := doc["kind"].(string); kind != "mount" {
+	// Files in the mounts directory are mounts by location; a `kind:` is optional
+	// and only rejected when it explicitly disagrees.
+	if kind, _ := doc["kind"].(string); kind != "" && kind != "mount" {
 		return ""
 	}
 	target := cfgval.String(doc["path"])

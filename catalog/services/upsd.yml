@@ -1,4 +1,3 @@
-kind: daemon
 name: upsd
 display_name: NUT UPS Daemon
 category: hardware

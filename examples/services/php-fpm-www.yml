@@ -1,4 +1,3 @@
-kind: service
 name: php-fpm-www
 # Self-contained php-fpm example. The bundled php-fpm daemon (php-fpm%v) is a
 # version template that materializes only when that PHP version is installed; to

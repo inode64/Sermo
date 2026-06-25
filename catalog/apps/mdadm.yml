@@ -1,4 +1,3 @@
-kind: app
 name: mdadm
 category: storage
 variables:

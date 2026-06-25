@@ -1,4 +1,3 @@
-kind: app
 name: bareos-fd
 display_name: "Bareos File Daemon"
 category: storage

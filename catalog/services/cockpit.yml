@@ -1,4 +1,3 @@
-kind: daemon
 name: cockpit
 display_name: Cockpit
 category: system

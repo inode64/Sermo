@@ -1,4 +1,3 @@
-kind: app
 name: pcp
 display_name: "Performance Co-Pilot"
 category: observability

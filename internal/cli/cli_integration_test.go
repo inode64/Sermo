@@ -117,13 +117,12 @@ func TestIntegrationRestartViaFakeSystemctl(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "sermo.yml"), `
 paths:
-  services: [ `+root+`/enabled ]
+  services: [ `+root+`/services ]
   runtime: `+root+`/run
 defaults:
   policy: { cooldown: 5m }
 `)
-	mustWrite(t, filepath.Join(root, "enabled", "svc.yml"), `
-kind: service
+	mustWrite(t, filepath.Join(root, "services", "svc.yml"), `
 name: svc
 service: svc
 `)
@@ -152,13 +151,12 @@ func TestIntegrationRestartBlockedByGuard(t *testing.T) {
 	}
 	mustWrite(t, filepath.Join(root, "sermo.yml"), `
 paths:
-  services: [ `+root+`/enabled ]
+  services: [ `+root+`/services ]
   runtime: `+root+`/run
 defaults:
   policy: { cooldown: 5m }
 `)
-	mustWrite(t, filepath.Join(root, "enabled", "svc.yml"), `
-kind: service
+	mustWrite(t, filepath.Join(root, "services", "svc.yml"), `
 name: svc
 service: svc
 checks:

@@ -1,4 +1,3 @@
-kind: app
 name: dhcpd
 display_name: "DHCP Server"
 category: network

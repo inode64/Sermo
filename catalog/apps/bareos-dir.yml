@@ -1,4 +1,3 @@
-kind: app
 name: bareos-dir
 display_name: "Bareos Director"
 category: storage

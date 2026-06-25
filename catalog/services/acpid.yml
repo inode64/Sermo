@@ -1,4 +1,3 @@
-kind: daemon
 name: acpid
 display_name: ACPI Daemon
 category: hardware

@@ -1,4 +1,3 @@
-kind: patterns
 name: postgres
 display_name: "PostgreSQL output signals"
 description: "Escalate PostgreSQL command and log output to warning/error."

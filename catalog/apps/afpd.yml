@@ -1,4 +1,3 @@
-kind: app
 name: afpd
 display_name: "Netatalk AFP Daemon"
 category: storage

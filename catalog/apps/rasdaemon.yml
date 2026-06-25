@@ -1,4 +1,3 @@
-kind: app
 name: rasdaemon
 display_name: "RAS daemon"
 category: hardware

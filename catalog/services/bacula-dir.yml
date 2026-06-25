@@ -1,4 +1,3 @@
-kind: daemon
 name: bacula-dir
 display_name: Bacula Director
 category: storage

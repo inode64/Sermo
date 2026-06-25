@@ -1,4 +1,3 @@
-kind: app
 name: virtnetworkd
 display_name: "libvirt Network Daemon"
 category: virtualization

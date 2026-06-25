@@ -1,4 +1,3 @@
-kind: daemon
 name: nfs
 display_name: NFS Server
 category: storage

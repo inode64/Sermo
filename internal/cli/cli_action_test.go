@@ -22,14 +22,13 @@ func writeActionConfig(t *testing.T) string {
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
 paths:
-  services: [ `+root+`/enabled ]
+  services: [ `+root+`/services ]
   runtime: `+root+`/run
 defaults:
   policy:
     cooldown: 5m
 `)
-	mustWrite(t, filepath.Join(root, "enabled", "web.yml"), `
-kind: service
+	mustWrite(t, filepath.Join(root, "services", "web.yml"), `
 name: web
 service: web
 `)
@@ -42,15 +41,14 @@ func writeInvalidActionConfig(t *testing.T) string {
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
 paths:
-  services: [ `+root+`/enabled ]
+  services: [ `+root+`/services ]
   runtime: `+root+`/run
   locks: `+root+`/locks
 defaults:
   policy:
     cooldown: 5m
 `)
-	mustWrite(t, filepath.Join(root, "enabled", "web.yml"), `
-kind: service
+	mustWrite(t, filepath.Join(root, "services", "web.yml"), `
 name: web
 service: web
 `)
@@ -63,14 +61,13 @@ func writeReloadCommandConfig(t *testing.T) string {
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
 paths:
-  services: [ `+root+`/enabled ]
+  services: [ `+root+`/services ]
   runtime: `+root+`/run
 defaults:
   policy:
     cooldown: 5m
 `)
-	mustWrite(t, filepath.Join(root, "enabled", "web.yml"), `
-kind: service
+	mustWrite(t, filepath.Join(root, "services", "web.yml"), `
 name: web
 service: web
 reload:
@@ -118,14 +115,13 @@ func TestRestartUsesCanonicalServiceAlias(t *testing.T) {
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
 paths:
-  services: [ `+root+`/enabled ]
+  services: [ `+root+`/services ]
   runtime: `+root+`/run
 defaults:
   policy:
     cooldown: 5m
 `)
-	mustWrite(t, filepath.Join(root, "enabled", "web.yml"), `
-kind: service
+	mustWrite(t, filepath.Join(root, "services", "web.yml"), `
 name: web
 aliases: [frontend]
 service: web
@@ -246,20 +242,18 @@ func writeCascadeConfig(t *testing.T) string {
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
 paths:
-  services: [ `+root+`/enabled ]
+  services: [ `+root+`/services ]
   runtime: `+root+`/run
 defaults:
   policy:
     cooldown: 5m
 `)
-	mustWrite(t, filepath.Join(root, "enabled", "web.yml"), `
-kind: service
+	mustWrite(t, filepath.Join(root, "services", "web.yml"), `
 name: web
 service: web
 also_apply: [db]
 `)
-	mustWrite(t, filepath.Join(root, "enabled", "db.yml"), `
-kind: service
+	mustWrite(t, filepath.Join(root, "services", "db.yml"), `
 name: db
 service: db
 `)

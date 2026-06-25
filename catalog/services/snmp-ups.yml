@@ -1,4 +1,3 @@
-kind: daemon
 name: snmp-ups
 display_name: SNMP UPS Driver
 category: hardware

@@ -1,4 +1,3 @@
-kind: daemon
 name: numad
 display_name: NUMA Daemon
 category: hardware

@@ -251,7 +251,6 @@ defaults:
   policy: { cooldown: 5m }
 `)
 	mustWrite(t, filepath.Join(root, "catalog", "services", "rpc-mountd.yml"), `
-kind: daemon
 name: rpc-mountd
 service:
   systemd: [nfs-mountd, rpc-mountd]
@@ -259,7 +258,6 @@ checks:
   service: { type: service, expect: active }
 `)
 	mustWrite(t, filepath.Join(root, "services", "rpc-mountd.yml"), `
-kind: service
 name: rpc-mountd
 uses: rpc-mountd
 `)
@@ -317,7 +315,6 @@ defaults:
   policy: { cooldown: 5m }
 `)
 	mustWrite(t, filepath.Join(root, "services", "legacy.yml"), `
-kind: service
 name: legacy
 service:
   systemd: [legacy-daemon]

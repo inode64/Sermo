@@ -1,4 +1,3 @@
-kind: daemon
 name: rpcbind
 display_name: RPC Bind
 category: storage

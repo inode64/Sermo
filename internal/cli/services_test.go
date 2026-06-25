@@ -15,9 +15,9 @@ func TestServicesCommand(t *testing.T) {
 	daemonsDir := filepath.Join(root, "daemons")
 	catalogServicesDir := filepath.Join(daemonsDir, "services")
 	appsDir := filepath.Join(daemonsDir, "apps")
-	enabledDir := filepath.Join(root, "enabled")
+	servicesDir := filepath.Join(root, "services")
 	binDir := filepath.Join(root, "bin")
-	for _, d := range []string{catalogServicesDir, appsDir, enabledDir, binDir} {
+	for _, d := range []string{catalogServicesDir, appsDir, servicesDir, binDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -35,7 +35,7 @@ func TestServicesCommand(t *testing.T) {
 		}
 	}
 	// A service-category daemon (services/) and an app-category daemon (apps/).
-	write(filepath.Join(catalogServicesDir, "nginx.yml"), fmt.Sprintf(`kind: daemon
+	write(filepath.Join(catalogServicesDir, "nginx.yml"), fmt.Sprintf(`
 name: nginx
 display_name: "Nginx"
 service: nginx
@@ -43,13 +43,13 @@ variables:
   binary: %q
 preflight: { binary: { type: binary, path: "${binary}" } }
 `, nginx))
-	write(filepath.Join(catalogServicesDir, "linked.yml"), `kind: daemon
+	write(filepath.Join(catalogServicesDir, "linked.yml"), `
 name: linked
 display_name: "Linked Service"
 service: linked
 apps: [linked]
 `)
-	write(filepath.Join(appsDir, "linked.yml"), fmt.Sprintf(`kind: app
+	write(filepath.Join(appsDir, "linked.yml"), fmt.Sprintf(`
 name: linked
 variables:
   binary: %q
@@ -57,12 +57,12 @@ preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["/definitely-missing-sermo-version-probe"], timeout: 10s }
 `, linked))
-	write(filepath.Join(appsDir, "git.yml"), "kind: app\nname: git\nvariables: { binary: /bin/git }\n")
+	write(filepath.Join(appsDir, "git.yml"), "name: git\nvariables: { binary: /bin/git }\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
 paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, daemonsDir, enabledDir))
+`, daemonsDir, servicesDir))
 	global := filepath.Join(root, "sermo.yml")
 
 	var out bytes.Buffer

@@ -10,8 +10,8 @@ import (
 func validateService(t *testing.T, serviceYAML string) []Issue {
 	t.Helper()
 	global := writeConfig(t, map[string]string{
-		"sermo.yml":       baseGlobal,
-		"enabled/svc.yml": serviceYAML,
+		"sermo.yml":        baseGlobal,
+		"services/svc.yml": serviceYAML,
 	})
 	cfg, err := Load(global)
 	if err != nil {
@@ -36,7 +36,7 @@ engine:
   max_parallel_checks: 0
   max_parallel_operations: -1
 paths:
-  services: [ @ROOT@/enabled ]
+  services: [ @ROOT@/services ]
 defaults:
   policy: { cooldown: 5m }
 `})
@@ -61,7 +61,6 @@ func TestValidateBackoffDurations(t *testing.T) {
 	// implementation left the parsed initial at 0, so any max compared >= 0
 	// and passed.
 	badInitial := validateService(t, `
-kind: service
 name: svc
 service: svc
 policy:
@@ -72,7 +71,6 @@ policy:
 
 	// An omitted max reports its own parse error, not the misleading ">= initial".
 	missingMax := validateService(t, `
-kind: service
 name: svc
 service: svc
 policy:
@@ -83,7 +81,6 @@ policy:
 
 	// max < initial is still rejected with the ordering message.
 	maxBelow := validateService(t, `
-kind: service
 name: svc
 service: svc
 policy:
@@ -94,7 +91,6 @@ policy:
 
 	// A valid pair produces no backoff issue.
 	ok := validateService(t, `
-kind: service
 name: svc
 service: svc
 policy:
@@ -111,7 +107,7 @@ func TestValidateEngineOperationTimeoutAcceptsPositive(t *testing.T) {
 engine:
   operation_timeout: 90s
 paths:
-  services: [ @ROOT@/enabled ]
+  services: [ @ROOT@/services ]
 defaults:
   policy: { cooldown: 5m }
 `})
@@ -133,7 +129,7 @@ engine:
   events: /var/log/sermo/event.log
   diagnostics_interval: 1h
 paths:
-  services: [ @ROOT@/enabled ]
+  services: [ @ROOT@/services ]
 defaults:
   policy: { cooldown: 5m }
 `})
@@ -152,7 +148,7 @@ engine:
   user_lookup: ldap
   user_lookup_timeout: 0s
 paths:
-  services: [ @ROOT@/enabled ]
+  services: [ @ROOT@/services ]
 defaults:
   policy: { cooldown: 5m }
 `})
@@ -173,7 +169,7 @@ engine:
   user_lookup: ` + mode + `
   user_lookup_timeout: 250ms
 paths:
-  services: [ @ROOT@/enabled ]
+  services: [ @ROOT@/services ]
 defaults:
   policy: { cooldown: 5m }
 `})
@@ -192,7 +188,6 @@ defaults:
 
 func TestValidateLibvirtControl(t *testing.T) {
 	valid := validateService(t, `
-kind: service
 name: svc
 control:
   type: libvirt
@@ -205,12 +200,10 @@ control:
 	}
 
 	mustHave(t, validateService(t, `
-kind: service
 name: svc
 control: { type: libvirt }
 `), "control.domain is required")
 	mustHave(t, validateService(t, `
-kind: service
 name: svc
 control:
   type: libvirt
@@ -218,7 +211,7 @@ control:
   uuid: nope
 `), "control.uuid")
 	mustHave(t, validateService(t, `
-kind: service
+kind:
 name: svc
 control:
   type: libvirt
@@ -230,7 +223,6 @@ control:
 
 func TestValidateDockerControl(t *testing.T) {
 	valid := validateService(t, `
-kind: service
 name: svc
 control:
   type: docker
@@ -242,7 +234,6 @@ control:
 	}
 
 	validTCP := validateService(t, `
-kind: service
 name: svc
 control:
   type: docker
@@ -256,12 +247,10 @@ control:
 	}
 
 	mustHave(t, validateService(t, `
-kind: service
 name: svc
 control: { type: docker }
 `), "control.container is required")
 	mustHave(t, validateService(t, `
-kind: service
 name: svc
 control:
   type: docker
@@ -269,7 +258,6 @@ control:
   socket: docker.sock
 `), "control.socket")
 	mustHave(t, validateService(t, `
-kind: service
 name: svc
 control:
   type: docker
@@ -278,7 +266,6 @@ control:
   host: 127.0.0.1
 `), "must not set both socket and host")
 	mustHave(t, validateService(t, `
-kind: service
 name: svc
 control:
   type: docker
@@ -287,7 +274,6 @@ control:
   port: 70000
 `), "control.port")
 	mustHave(t, validateService(t, `
-kind: service
 name: svc
 control:
   type: docker
@@ -295,7 +281,6 @@ control:
   tls: maybe
 `), "control.tls")
 	mustHave(t, validateService(t, `
-kind: service
 name: svc
 control:
   type: docker
@@ -306,7 +291,6 @@ control:
 
 func TestValidateRuleStructure(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 checks:
@@ -339,7 +323,6 @@ rules:
 
 func TestValidateMultiAction(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 checks:
@@ -372,7 +355,6 @@ rules:
 
 func TestValidateRuleWindows(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 checks:
@@ -416,7 +398,6 @@ rules:
 
 func TestValidateRuleDurationWindows(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 checks:
@@ -440,7 +421,6 @@ rules:
 
 func TestValidateUnknownCheckReference(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 checks:
@@ -456,7 +436,6 @@ rules:
 
 func TestValidateConditionExactlyOneOperator(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 checks:
@@ -474,7 +453,6 @@ rules:
 
 func TestValidateInlineCommandConditionNeedsTimeout(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 rules:
@@ -490,7 +468,6 @@ rules:
 
 func TestValidateInlineCommandConditionUser(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 rules:
@@ -508,7 +485,6 @@ rules:
 
 func TestValidateInlineProbeFields(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 rules:
@@ -541,7 +517,6 @@ rules:
 func TestValidateExpectStatusShapes(t *testing.T) {
 	check := func(expect string) []Issue {
 		return validateService(t, `
-kind: service
 name: svc
 service: svc
 policy: { cooldown: 5m }
@@ -562,7 +537,6 @@ checks:
 
 func TestValidateInlineProbeConnectionProtocols(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 rules:
@@ -585,7 +559,6 @@ rules:
 
 func TestValidateSystemMetricOnlyInAlert(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 rules:
@@ -617,7 +590,6 @@ rules:
 
 func TestValidateMetricFormMismatch(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 rules:
@@ -637,7 +609,6 @@ rules:
 func TestValidateMetricFormValidCombinations(t *testing.T) {
 	// memory has both forms; cpu accepts %; load accepts absolute.
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 rules:
@@ -655,7 +626,6 @@ rules:
 
 func TestValidateIndirectSystemMetricInRemediation(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 checks:
@@ -681,7 +651,6 @@ rules:
 
 func TestValidateMetricCatalogAndValue(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 rules:
@@ -697,7 +666,6 @@ rules:
 
 func TestValidateSystemTotalSwapMetric(t *testing.T) {
 	good := validateService(t, `
-kind: service
 name: svc
 service: x
 rules:
@@ -713,7 +681,6 @@ rules:
 
 func TestValidateStopPolicyKillSelector(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 stop_policy:
@@ -726,7 +693,6 @@ stop_policy:
 
 func TestValidateForceKillRequiresSelector(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 stop_policy:
@@ -737,7 +703,6 @@ stop_policy:
 
 func TestValidateStopPolicyDurations(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 stop_policy:
@@ -752,7 +717,6 @@ stop_policy:
 
 func TestValidateCheckEntrySchemas(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 checks:
@@ -780,7 +744,6 @@ preflight:
 
 func TestValidateCountCheck(t *testing.T) {
 	bad := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -798,7 +761,6 @@ checks:
 	mustHave(t, bad, "count recursive must be a boolean")
 
 	good := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -814,7 +776,6 @@ func TestValidateResourceChecksAsServiceChecks(t *testing.T) {
 	// Host-resource checks (storage/load/…) are usable in a service's checks: and
 	// referenceable from rules, just like tcp/http/metric.
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -837,7 +798,6 @@ func TestValidateStorageMountIntegration(t *testing.T) {
 	// A storage check carries space/inode predicates and/or a mounted condition in one
 	// entry (no separate mount type) — including a mount-only storage check.
 	good := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -850,7 +810,6 @@ checks:
 	}
 
 	bad := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -868,7 +827,6 @@ checks:
 
 func TestValidateResourceServiceCheckErrors(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -882,7 +840,6 @@ checks:
 
 func TestValidateCheckInterval(t *testing.T) {
 	good := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -894,7 +851,6 @@ checks:
 	}
 
 	bad := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -906,7 +862,6 @@ checks:
 
 func TestValidateCertCheck(t *testing.T) {
 	good := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -918,7 +873,6 @@ checks:
 	}
 
 	bad := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -936,7 +890,6 @@ checks:
 
 func TestValidateHTTPFields(t *testing.T) {
 	good := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -956,7 +909,6 @@ checks:
 	}
 
 	bad := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -974,7 +926,6 @@ checks:
 
 func TestValidatePortsCheck(t *testing.T) {
 	good := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -986,7 +937,6 @@ checks:
 	}
 
 	bad := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1006,7 +956,6 @@ checks:
 
 func TestValidateCheckGate(t *testing.T) {
 	good := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1019,7 +968,6 @@ checks:
 	}
 
 	bad := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1036,7 +984,6 @@ checks:
 
 func TestValidatePolicyMaxActions(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 policy:
@@ -1048,7 +995,6 @@ policy:
 
 func TestValidateDescriptionMustBeString(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 description: [not, a, string]
 service: x
@@ -1058,7 +1004,6 @@ service: x
 
 func TestValidateDescriptionStringPasses(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 description: "A friendly label"
 service: x
@@ -1072,7 +1017,6 @@ service: x
 
 func TestValidateCategoryMustBeString(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 category: [not, a, string]
 service: x
@@ -1082,7 +1026,6 @@ service: x
 
 func TestValidateCategoryStringPasses(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 category: database
 service: x
@@ -1098,14 +1041,12 @@ func TestValidateAppVersionFrom(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/consumer.yml": `
-kind: app
 name: consumer
 variables:
   binary: /usr/bin/consumer
 version_from: provider
 `,
 		"catalog/apps/provider.yml": `
-kind: app
 name: provider
 variables:
   binary: /usr/bin/provider
@@ -1113,49 +1054,42 @@ preflight:
   version: { type: command, command: ["/usr/bin/provider", "--version"] }
 `,
 		"catalog/apps/missing.yml": `
-kind: app
 name: missing
 variables:
   binary: /usr/bin/missing
 version_from: ghost
 `,
 		"catalog/apps/self.yml": `
-kind: app
 name: self
 variables:
   binary: /usr/bin/self
 version_from: self
 `,
 		"catalog/apps/a.yml": `
-kind: app
 name: a
 variables:
   binary: /usr/bin/a
 version_from: b
 `,
 		"catalog/apps/b.yml": `
-kind: app
 name: b
 variables:
   binary: /usr/bin/b
 version_from: a
 `,
 		"catalog/apps/bad-name.yml": `
-kind: app
 name: bad-name
 variables:
   binary: /usr/bin/bad-name
 version_from: ../provider
 `,
 		"catalog/apps/bad-type.yml": `
-kind: app
 name: bad-type
 variables:
   binary: /usr/bin/bad-type
 version_from: [provider]
 `,
 		"catalog/services/not-app.yml": `
-kind: daemon
 name: not-app
 version_from: provider
 service: not-app
@@ -1183,7 +1117,6 @@ func TestValidateAppVersionMatch(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/mysql.yml": `
-kind: app
 name: mysql
 variables:
   binary: /usr/sbin/mysqld
@@ -1192,7 +1125,6 @@ preflight:
   version: { type: command, command: ["/usr/sbin/mysqld", "--version"] }
 `,
 		"catalog/apps/bad-shape.yml": `
-kind: app
 name: bad-shape
 variables:
   binary: /usr/bin/bad-shape
@@ -1201,7 +1133,6 @@ preflight:
   version: { type: command, command: ["/usr/bin/bad-shape", "--version"] }
 `,
 		"catalog/apps/bad-key.yml": `
-kind: app
 name: bad-key
 variables:
   binary: /usr/bin/bad-key
@@ -1210,7 +1141,6 @@ preflight:
   version: { type: command, command: ["/usr/bin/bad-key", "--version"] }
 `,
 		"catalog/apps/bad-regex.yml": `
-kind: app
 name: bad-regex
 variables:
   binary: /usr/bin/bad-regex
@@ -1219,14 +1149,12 @@ preflight:
   version: { type: command, command: ["/usr/bin/bad-regex", "--version"] }
 `,
 		"catalog/apps/no-version.yml": `
-kind: app
 name: no-version
 variables:
   binary: /usr/bin/no-version
 version_match: { contains: Demo }
 `,
 		"catalog/services/not-app.yml": `
-kind: daemon
 name: not-app
 version_match: { contains: Demo }
 service: not-app
@@ -1251,7 +1179,6 @@ service: not-app
 
 func TestValidateCommandExpectExit(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 preflight:
@@ -1270,7 +1197,6 @@ preflight:
 
 func TestValidateCommands(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 commands:
@@ -1290,7 +1216,6 @@ commands:
 func TestValidateServiceField(t *testing.T) {
 	// Per-init form: an unknown init key and an empty list are flagged.
 	issues := validateService(t, `
-kind: service
 name: svc
 service:
   upstart: [foo]
@@ -1303,7 +1228,6 @@ service:
 
 func TestValidateProcessSelectorsRequireExeOrCmd(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 processes:
@@ -1315,7 +1239,6 @@ processes:
 
 	// exe-only and cmd-only selectors are now valid (user/group optional).
 	ok := validateService(t, `
-kind: service
 name: svc
 service: x
 processes:
@@ -1331,7 +1254,6 @@ processes:
 
 func TestValidateProcessSelectorsRejectUnknownKeys(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 processes:
@@ -1344,7 +1266,6 @@ processes:
 
 func TestValidateEnableIfIsLimitedAndDisabledBranchesStillValidate(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 checks:
@@ -1367,7 +1288,6 @@ rules:
 
 func TestValidateEnableIfSpec(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 checks:
@@ -1390,7 +1310,6 @@ checks:
 
 func TestValidateFromFileVariableSpecs(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 variables:
@@ -1417,7 +1336,6 @@ func TestValidateVersionsCurrentFromSpecs(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/java.yml": `
-kind: app
 name: java-%i-%v
 versions:
   current_from:
@@ -1442,7 +1360,6 @@ func TestValidateVersionsFromInitBranches(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/services/svc.yml": `
-kind: daemon
 name: svc%v
 versions:
   from:
@@ -1469,7 +1386,6 @@ checks:
 
 func TestValidateFromFileVariablePathReferences(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 variables:
@@ -1482,7 +1398,6 @@ checks:
 
 func TestValidateCleanServicePasses(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 variables:
@@ -1527,7 +1442,6 @@ rules:
 
 func TestValidateServiceInterval(t *testing.T) {
 	bad := validateService(t, `
-kind: service
 name: svc
 service: x
 interval: notaduration
@@ -1536,7 +1450,6 @@ policy: { cooldown: 5m }
 	mustHave(t, bad, "interval")
 
 	good := validateService(t, `
-kind: service
 name: svc
 service: x
 interval: 10s
@@ -1549,7 +1462,6 @@ policy: { cooldown: 5m }
 
 func TestValidateCountCheckNestedThreshold(t *testing.T) {
 	good := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1561,7 +1473,6 @@ checks:
 	}
 
 	mixed := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1573,7 +1484,6 @@ checks:
 
 func TestValidatePidfileCheckRequiresPath(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1585,7 +1495,6 @@ checks:
 
 func TestValidateSocketCheckRequiresPath(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1597,7 +1506,6 @@ checks:
 
 func TestValidateLockfileCheckRequiresPath(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1609,7 +1517,6 @@ checks:
 
 func TestValidatePercentBound(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1621,7 +1528,6 @@ checks:
 
 func TestValidateRuleWindowMinMatchesOptional(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1634,7 +1540,6 @@ checks:
 	}
 
 	bad := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1647,7 +1552,6 @@ checks:
 
 func TestValidateRuleWindowDuration(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1660,7 +1564,6 @@ checks:
 	}
 
 	bad := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1673,7 +1576,6 @@ checks:
 
 func TestValidateCertServerNameAndFileScope(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1686,7 +1588,6 @@ checks:
 	mustHave(t, issues, "server_name does not apply to a PEM file path")
 
 	good := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1701,7 +1602,6 @@ checks:
 
 func TestValidateContainsOp(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1716,7 +1616,6 @@ checks:
 
 func TestValidateScalarWindowRejected(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1734,7 +1633,6 @@ rules:
 
 func TestValidateFileConditionExistsBoolean(t *testing.T) {
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1747,7 +1645,6 @@ rules:
 	mustHave(t, issues, "file.exists must be a boolean")
 
 	good := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1765,7 +1662,6 @@ rules:
 func TestValidateMemoryCheckBothSurfaces(t *testing.T) {
 	// In a service's checks: (unified check types — same validator as watches).
 	good := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1777,7 +1673,6 @@ checks:
 	}
 
 	bad := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1791,7 +1686,6 @@ checks:
 
 func TestValidatePressureCheck(t *testing.T) {
 	good := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1803,7 +1697,6 @@ checks:
 	}
 
 	bad := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1817,7 +1710,6 @@ checks:
 
 func TestValidatePidsCheck(t *testing.T) {
 	good := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1829,7 +1721,6 @@ checks:
 	}
 
 	bad := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1841,7 +1732,6 @@ checks:
 
 func TestValidateDiskIOCheck(t *testing.T) {
 	good := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1853,7 +1743,6 @@ checks:
 	}
 
 	bad := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1870,7 +1759,6 @@ checks:
 func TestValidateCleanOnStopDotDotEscape(t *testing.T) {
 	// ".." segments must not sidestep the protected-dir check.
 	issues := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -1887,7 +1775,7 @@ stop_policy:
 // would otherwise validate and then silently not do what it reads like.
 func TestValidateRuleTypeActionCoupling(t *testing.T) {
 	rule := func(rtype, then string) string {
-		return "kind: service\nname: svc\nservice: x\nchecks:\n  c: { type: tcp, host: 127.0.0.1, port: 80 }\nrules:\n  r:\n    type: " + rtype + "\n    if: { failed: { check: c } }\n" + then
+		return "name: svc\nservice: x\nchecks:\n  c: { type: tcp, host: 127.0.0.1, port: 80 }\nrules:\n  r:\n    type: " + rtype + "\n    if: { failed: { check: c } }\n" + then
 	}
 	mustHave(t, validateService(t, rule("remediation", "    then: { action: alert, message: m }\n")),
 		"remediation requires an operation action")

@@ -1,4 +1,3 @@
-kind: app
 name: irqbalance
 category: hardware
 variables:

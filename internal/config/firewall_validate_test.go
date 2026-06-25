@@ -4,7 +4,6 @@ import "testing"
 
 func TestValidateFirewallRulesCheck(t *testing.T) {
 	good := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }
@@ -16,7 +15,6 @@ checks:
 	}
 
 	bad := validateService(t, `
-kind: service
 name: svc
 service: x
 policy: { cooldown: 5m }

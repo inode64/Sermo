@@ -1,4 +1,3 @@
-kind: app
 name: salt-minion
 display_name: "Salt Minion"
 category: system
