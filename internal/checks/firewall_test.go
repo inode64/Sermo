@@ -170,6 +170,14 @@ func TestBuildFirewallRulesCheck(t *testing.T) {
 	if _, warns := Build(map[string]any{"fw": map[string]any{"type": "firewall_rules", "min_rules": 0}}, Deps{}); len(warns) == 0 {
 		t.Fatal("invalid min_rules should warn")
 	}
+	// min_rules=1 is the lowest valid value (the guard rejects n < 1, not n <= 1).
+	if _, warns := Build(map[string]any{
+		"fw": map[string]any{"type": "firewall_rules", "backend": "nft", "min_rules": 1},
+	}, Deps{FirewallRulesSampler: func(context.Context, string, execx.Runner) (FirewallRulesSample, error) {
+		return FirewallRulesSample{Backend: firewallBackendNftables, Rules: 1}, nil
+	}}); len(warns) != 0 {
+		t.Fatalf("min_rules=1 must be valid, got warnings: %v", warns)
+	}
 }
 
 type firewallRun struct {
