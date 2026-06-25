@@ -28,6 +28,19 @@ func TestStringVersionOverride(t *testing.T) {
 	}
 }
 
+func TestResolveDefaultsToDev(t *testing.T) {
+	old := Version
+	t.Cleanup(func() { Version = old })
+	Version = ""
+	version, _, _ := resolve()
+	if version == "" || version == "(devel)" {
+		t.Fatalf("resolve() version = %q, want concrete fallback", version)
+	}
+	if version != "dev" {
+		t.Fatalf("resolve() version = %q, want dev", version)
+	}
+}
+
 func TestShortMatchesResolvedVersion(t *testing.T) {
 	version, revision, _ := resolve()
 	want := version
