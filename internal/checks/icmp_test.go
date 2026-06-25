@@ -124,3 +124,27 @@ func TestICMPSamplerError(t *testing.T) {
 		t.Fatal("sampler error must not fire")
 	}
 }
+
+func TestICMPLatencyChangeBoundaries(t *testing.T) {
+	// A 40ms decrease is |Δ|=40 < 50: measured as a difference (not a sum) and
+	// strictly below the delta, so it must not fire.
+	dec := &icmpCheck{base: base{name: "p"}, host: "h", metric: "latency", hasChange: true, delta: 50,
+		sampler: pinger(
+			PingSample{Reachable: true, RTTms: 100, RTTKnown: true},
+			PingSample{Reachable: true, RTTms: 60, RTTKnown: true},
+		)}
+	dec.Run(context.Background()) // prime 100
+	if dec.Run(context.Background()).OK {
+		t.Fatal("a 40ms decrease must not fire a 50ms-delta change")
+	}
+	// A jump of exactly the delta does not fire (strict >).
+	eq := &icmpCheck{base: base{name: "p"}, host: "h", metric: "latency", hasChange: true, delta: 50,
+		sampler: pinger(
+			PingSample{Reachable: true, RTTms: 100, RTTKnown: true},
+			PingSample{Reachable: true, RTTms: 150, RTTKnown: true},
+		)}
+	eq.Run(context.Background()) // prime 100
+	if eq.Run(context.Background()).OK {
+		t.Fatal("a change of exactly the delta must not fire")
+	}
+}
