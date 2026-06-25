@@ -456,6 +456,15 @@ func TestReloadFailureSurfaces(t *testing.T) {
 	}
 }
 
+func TestReloadServiceFailedAfterReload(t *testing.T) {
+	h := defaultHarness()
+	h.mgr.status = servicemgr.StatusFailed
+	res := h.engine().Reload(context.Background())
+	if res.Status != ResultFailed || res.Message != "service failed after reload" {
+		t.Fatalf("res = %+v, want failed after reload", res)
+	}
+}
+
 func TestRestartPreflightFailed(t *testing.T) {
 	h := defaultHarness()
 	h.preflight = checks.Outcome{OK: false, Results: []checks.Result{{Check: "config", OK: false}}}
