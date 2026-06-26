@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 )
 
 // validateWindow checks an optional for/within firing window at the dotted prefix,
@@ -317,10 +318,46 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 			validateMetric(m, path+".metric", allowSystemMetric, add)
 		}
 	case "changed":
-		if m, ok := node["changed"].(map[string]any); !ok || cfgval.String(m["path"]) == "" {
-			add("%s.changed requires a path", path)
+		validateChanged(node["changed"], path+".changed", treeAppVersionChecks(checkNames), add)
+	}
+}
+
+func validateChanged(v any, path string, appVersionChecks map[string]struct{}, add addFunc) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		add("%s must be a mapping", path)
+		return
+	}
+	filePath := cfgval.String(m["path"])
+	app := cfgval.String(m["app"])
+	switch {
+	case filePath == "" && app == "":
+		add("%s requires a path or app", path)
+	case filePath != "" && app != "":
+		add("%s must use either path or app, not both", path)
+	}
+	if app == "" {
+		return
+	}
+	if level := cfgval.String(m["level"]); level != "" {
+		if _, ok := checks.VersionLevel(level); !ok {
+			add("%s.level %q is not one of major, minor, patch", path, level)
 		}
 	}
+	if _, ok := appVersionChecks[app]; !ok {
+		add("%s app %q has no app version command", path, app)
+	}
+}
+
+func treeAppVersionChecks(checkNames map[string]struct{}) map[string]struct{} {
+	out := map[string]struct{}{}
+	for name := range checkNames {
+		app, ok := strings.CutSuffix(name, "-version")
+		if ok && app != "" {
+			out[app] = struct{}{}
+		}
+	}
+	return out
 }
 
 func validateProbe(v any, path string, checkNames, systemMetricChecks map[string]struct{}, allowSystemMetric bool, add addFunc) {

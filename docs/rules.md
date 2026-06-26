@@ -1733,6 +1733,7 @@ if:
     - process: { exe: /usr/bin/mysqld, user: mysql, state: running }
     - metric: { scope: service, name: cpu, op: ">", value: 30% }
     - changed: { path: /lib64/libc.so.6 }  # the file changed since the last cycle
+    - changed: { app: containerd, level: patch }  # app version changed
 ```
 
 `command` is a direct condition leaf whose truth is the same as a command check:
@@ -1744,9 +1745,12 @@ probe (`tcp`, `command`, ...) instead of a `check:` reference when you need the
 named success/failure polarity.
 
 `changed` is true when the file at `path` differs (size/mtime) from the baseline
-tracked across cycles. The first cycle adopts the current value (a daemon start
-never fires), and a successful `restart`/`start` re-baselines it. It is the
-primitive behind `restart_on_change` (see Daemons → Library daemons).
+tracked across cycles, or when `app` names a linked app whose version command
+changed at the selected `level` (`major`, `minor` or `patch`; default `patch`).
+The first cycle adopts the current value (a daemon start never fires), and a
+successful `restart`/`start` re-baselines it. The `path` form is the primitive
+behind `restart_on_change` (see Daemons → Library daemons); the `app` form is for
+service-owned binaries such as `containerd`.
 
 ### Windows
 

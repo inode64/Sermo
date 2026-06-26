@@ -2473,6 +2473,83 @@ restart_on_change:
 	}
 }
 
+func TestChangedAppVersionRuleValidatesResolvedVersionCommand(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/containerd.yml": `
+name: containerd
+preflight:
+  version:
+    type: command
+    command: ["/usr/bin/containerd", "--version"]
+    timeout: 5s
+`,
+		"services/containerd.yml": `
+name: containerd
+service: containerd
+apps: [containerd]
+rules:
+  restart-if-containerd-version-changed:
+    type: remediation
+    if:
+      changed:
+        app: containerd
+        level: patch
+    then:
+      action: restart
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if issues := Validate(cfg); len(issues) != 0 {
+		t.Fatalf("Validate() issues = %v, want none", issues)
+	}
+	resolved, errs := cfg.Resolve("containerd")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	changed := nested(t, resolved.Tree, "rules", "restart-if-containerd-version-changed", "if", "changed")
+	if got := cfgval.String(changed["app"]); got != "containerd" {
+		t.Fatalf("changed.app = %q, want containerd", got)
+	}
+	if cfgval.String(nested(t, resolved.Tree, "preflight", "containerd-version")["type"]) != "command" {
+		t.Fatal("resolved service must expose containerd-version preflight for changed.app")
+	}
+}
+
+func TestChangedAppVersionRuleRequiresVersionCommand(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/containerd.yml": `
+name: containerd
+preflight:
+  health:
+    type: command
+    command: ["/usr/bin/containerd", "--help"]
+    timeout: 5s
+`,
+		"services/containerd.yml": `
+name: containerd
+service: containerd
+apps: [containerd]
+rules:
+  restart-if-containerd-version-changed:
+    type: remediation
+    if: { changed: { app: containerd, level: patch } }
+    then: { action: restart }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !hasIssue(Validate(cfg), `changed app "containerd" has no app version command`) {
+		t.Fatalf("Validate() did not reject changed.app without a version command")
+	}
+}
+
 func TestDiscoverVersions(t *testing.T) {
 	vtok := *tokenFor("x%v")
 	ntok := *tokenFor("x%n")

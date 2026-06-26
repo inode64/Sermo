@@ -339,6 +339,77 @@ func TestCycleRestartsOnLibraryChange(t *testing.T) {
 	}
 }
 
+// appVersionWorker wires a changed:{app} remediation worker over a sequenceRunner
+// that returns the given version lines, one per cycle.
+func appVersionWorker(h *workerHarness, runner *sequenceRunner, level string) *Worker {
+	changed := map[string]any{"app": "containerd"}
+	if level != "" {
+		changed["level"] = level
+	}
+	tree := map[string]any{"rules": map[string]any{
+		"restart-on-version-change": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"changed": changed},
+			"then": map[string]any{"action": "restart"},
+		},
+	}}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+	w.CheckDeps = checks.Deps{Runner: runner}
+	w.appVersionCmd = map[string]appVersionCmd{"containerd": {argv: []string{"/usr/bin/containerd", "--version"}}}
+	w.appVersions = map[string]string{}
+	w.appVersionsLast = map[string]string{}
+	return w
+}
+
+func TestCycleRestartsOnAppVersionChange(t *testing.T) {
+	runner := &sequenceRunner{stdout: []string{
+		"containerd v1.7.0",
+		"containerd v1.7.1", // patch bump
+		"containerd v1.7.1", // unchanged after the restart
+	}}
+	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
+	w := appVersionWorker(h, runner, "patch")
+
+	// Cycle 1: first observation adopts the baseline; no restart on startup.
+	w.RunCycle(context.Background())
+	if len(h.ops) != 0 {
+		t.Fatalf("first cycle must not restart, ops=%v", h.ops)
+	}
+
+	// Cycle 2: patch bump 1.7.0 -> 1.7.1 fires once, then baseline acknowledged.
+	w.RunCycle(context.Background())
+	if len(h.ops) != 1 || h.ops[0] != "restart" {
+		t.Fatalf("version change should restart once, ops=%v", h.ops)
+	}
+
+	// Cycle 3: version unchanged since the restart → no further restart.
+	w.RunCycle(context.Background())
+	if len(h.ops) != 1 {
+		t.Fatalf("acknowledged version must not refire, ops=%v", h.ops)
+	}
+}
+
+func TestCycleAppVersionChangeRespectsLevel(t *testing.T) {
+	// At minor level a patch bump is ignored; only a minor bump fires.
+	runner := &sequenceRunner{stdout: []string{
+		"containerd v1.7.0",
+		"containerd v1.7.5", // patch bump — ignored at minor level
+		"containerd v1.8.0", // minor bump — fires
+	}}
+	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
+	w := appVersionWorker(h, runner, "minor")
+
+	w.RunCycle(context.Background()) // prime
+	w.RunCycle(context.Background()) // patch bump
+	if len(h.ops) != 0 {
+		t.Fatalf("patch bump must not restart at minor level, ops=%v", h.ops)
+	}
+	w.RunCycle(context.Background()) // minor bump
+	if len(h.ops) != 1 || h.ops[0] != "restart" {
+		t.Fatalf("minor bump must restart, ops=%v", h.ops)
+	}
+}
+
 func TestFailedOperationEmitsErrorEvent(t *testing.T) {
 	h := &workerHarness{
 		cache:    failedCache("http"),
