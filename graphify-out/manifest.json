@@ -65,8 +65,8 @@
     "semantic_hash": "bc8c065af9d56f19f3443123099401c2"
   },
   "internal/app/daemon.go": {
-    "mtime": 1782412805.0429199,
-    "ast_hash": "fbc6f10cc582157e7f80cd3b1c461c7e",
+    "mtime": 1782453285.8716452,
+    "ast_hash": "16fef7a411584209ca5e7f934e27a8d0",
     "semantic_hash": ""
   },
   "internal/app/daemonmetrics.go": {
@@ -445,13 +445,13 @@
     "semantic_hash": ""
   },
   "internal/app/worker.go": {
-    "mtime": 1782254191.4071233,
-    "ast_hash": "c3ab69d5efd01393792faca86f774054",
+    "mtime": 1782453328.8836772,
+    "ast_hash": "bb8e3b456cc6dcd508821bd15af71af3",
     "semantic_hash": ""
   },
   "internal/app/worker_test.go": {
-    "mtime": 1782254196.9153724,
-    "ast_hash": "3a738fe32fd17664733c8847fcab4172",
+    "mtime": 1782453484.001291,
+    "ast_hash": "3cc33fc87d740500296881f997a8184b",
     "semantic_hash": ""
   },
   "internal/appinspect/appinspect.go": {
@@ -1240,13 +1240,13 @@
     "semantic_hash": ""
   },
   "internal/config/catalog_audit_test.go": {
-    "mtime": 1782414558.160242,
-    "ast_hash": "7fd0fa8cc1cb7f0d09539938b3318099",
+    "mtime": 1782453716.619939,
+    "ast_hash": "e5149e63bdd474f7dab460c43e9ae2fa",
     "semantic_hash": ""
   },
   "internal/config/config_test.go": {
-    "mtime": 1782414682.956098,
-    "ast_hash": "f19b6621f824e430f59d9ef20dc4a044",
+    "mtime": 1782453578.745431,
+    "ast_hash": "7a13b264a486e4224e461f6a66fbc41d",
     "semantic_hash": ""
   },
   "internal/config/conn_validate_test.go": {
@@ -1425,8 +1425,8 @@
     "semantic_hash": ""
   },
   "internal/config/validate_rules.go": {
-    "mtime": 1782162742.5777807,
-    "ast_hash": "f9ba9db7823cebb1f669db61735185b6",
+    "mtime": 1782453559.4347835,
+    "ast_hash": "afa6b1a55c77ec2e4cccaa339ca1eb2b",
     "semantic_hash": ""
   },
   "internal/config/validate_service.go": {
@@ -2470,8 +2470,8 @@
     "semantic_hash": "a5f46b3382d770f927be170682eef416"
   },
   "internal/rules/eval.go": {
-    "mtime": 1781949015.2205963,
-    "ast_hash": "cbd07a30602f18b5c3761a31963b38c8",
+    "mtime": 1782453186.4388351,
+    "ast_hash": "617b153875a156eed60d18ccec964d82",
     "semantic_hash": ""
   },
   "internal/rules/model.go": {
@@ -2480,8 +2480,8 @@
     "semantic_hash": ""
   },
   "internal/rules/rules_test.go": {
-    "mtime": 1782402057.8521328,
-    "ast_hash": "3babdf8851e4fe1c76980c684283c7d9",
+    "mtime": 1782453426.936337,
+    "ast_hash": "3e643c368a3408f4c46ad03eeba20167",
     "semantic_hash": ""
   },
   "internal/rules/rulewindow.go": {
@@ -2860,8 +2860,8 @@
     "semantic_hash": ""
   },
   "catalog/apps/cupsd.yml": {
-    "mtime": 1782407373.7148755,
-    "ast_hash": "ac368fd4c11c9e35c433d3eea5c6cdd3",
+    "mtime": 1782452426.695512,
+    "ast_hash": "a5a69ceea133920cc03f3ca46bdaee6a",
     "semantic_hash": ""
   },
   "catalog/apps/dbus.yml": {
@@ -3190,8 +3190,8 @@
     "semantic_hash": ""
   },
   "catalog/apps/pmcd.yml": {
-    "mtime": 1782407373.7138765,
-    "ast_hash": "31acd39884059865aea080dbf2b3ea7e",
+    "mtime": 1782452426.739683,
+    "ast_hash": "35f5bac72fa056c11a4a5044f25172ca",
     "semantic_hash": ""
   },
   "catalog/apps/pmie.yml": {
@@ -3200,8 +3200,8 @@
     "semantic_hash": ""
   },
   "catalog/apps/pmie_farm.yml": {
-    "mtime": 1782407373.7130823,
-    "ast_hash": "faabd35ff386fda1f14111ee966a1323",
+    "mtime": 1782452426.7797744,
+    "ast_hash": "3f7155e430b3f0b59eedde3b9cfe0bf4",
     "semantic_hash": ""
   },
   "catalog/apps/pmlogger.yml": {
@@ -3210,8 +3210,8 @@
     "semantic_hash": ""
   },
   "catalog/apps/pmlogger_farm.yml": {
-    "mtime": 1782407373.7141778,
-    "ast_hash": "db2a3356c5772f52081f0629bbb7b116",
+    "mtime": 1782452426.8209672,
+    "ast_hash": "d419c3029dacafd407f1a38b8db6a948",
     "semantic_hash": ""
   },
   "catalog/apps/polkit.yml": {
@@ -3400,13 +3400,13 @@
     "semantic_hash": ""
   },
   "catalog/apps/upsd.yml": {
-    "mtime": 1782407373.715789,
-    "ast_hash": "6c83bfcf92dfd31c92444a13e0a488ee",
+    "mtime": 1782452426.8654392,
+    "ast_hash": "5bdb5e8eee5f54deb1bcf1b3ffe58b79",
     "semantic_hash": ""
   },
   "catalog/apps/upsmon.yml": {
-    "mtime": 1782407373.7136133,
-    "ast_hash": "587cd0e56d7c4a1835d9291b93028a84",
+    "mtime": 1782452426.9049344,
+    "ast_hash": "5e483614603998b3a8f9072419ca7fba",
     "semantic_hash": ""
   },
   "catalog/apps/usbhid-ups.yml": {
@@ -3640,8 +3640,8 @@
     "semantic_hash": ""
   },
   "catalog/services/containerd.yml": {
-    "mtime": 1782407373.7179687,
-    "ast_hash": "03b75f41baff7dc26c236cef7380cb3c",
+    "mtime": 1782453407.9638398,
+    "ast_hash": "ea853ece66ef741982d7679c499151ee",
     "semantic_hash": ""
   },
   "catalog/services/cups.yml": {
@@ -3660,8 +3660,8 @@
     "semantic_hash": ""
   },
   "catalog/services/dhcpd.yml": {
-    "mtime": 1782407373.7192113,
-    "ast_hash": "ca01618bc072849e0205025a21d8d285",
+    "mtime": 1782452426.9543796,
+    "ast_hash": "53817ee81a1fc7d915ea159ffb60b3b5",
     "semantic_hash": ""
   },
   "catalog/services/dmeventd.yml": {
@@ -3875,8 +3875,8 @@
     "semantic_hash": ""
   },
   "catalog/services/named.yml": {
-    "mtime": 1782407373.717143,
-    "ast_hash": "2e2e2a88d66a09c36c1018a017cb3469",
+    "mtime": 1782452426.9961145,
+    "ast_hash": "97d8641d73cf138cd8810158e034278c",
     "semantic_hash": ""
   },
   "catalog/services/nebula.yml": {
@@ -4085,8 +4085,8 @@
     "semantic_hash": ""
   },
   "catalog/services/smartd.yml": {
-    "mtime": 1782407373.716645,
-    "ast_hash": "751676fbf9b9fd54b2bdd8494334f668",
+    "mtime": 1782452551.0051866,
+    "ast_hash": "a2dc165406ec3394b55bd763f3396a40",
     "semantic_hash": ""
   },
   "catalog/services/smbd.yml": {
@@ -4155,8 +4155,8 @@
     "semantic_hash": ""
   },
   "catalog/services/upsd.yml": {
-    "mtime": 1782407373.7190192,
-    "ast_hash": "71afe63f2a7103e5fc5904e14868891d",
+    "mtime": 1782452427.0388439,
+    "ast_hash": "db20f5fccf784218786c5f62a4ec96a0",
     "semantic_hash": ""
   },
   "catalog/services/upsdrv.yml": {
@@ -4165,8 +4165,8 @@
     "semantic_hash": ""
   },
   "catalog/services/upsmon.yml": {
-    "mtime": 1782407373.7168906,
-    "ast_hash": "bc30286ce810ef8ea7d1d61f6f0b56a2",
+    "mtime": 1782452427.0747118,
+    "ast_hash": "fc88bdbd2f6afb1f8b87a19c661687ab",
     "semantic_hash": ""
   },
   "catalog/services/usbhid-ups.yml": {
@@ -4220,8 +4220,8 @@
     "semantic_hash": ""
   },
   "docs/rules.md": {
-    "mtime": 1782420230.0521522,
-    "ast_hash": "0e80b1446bfb04aefed988dd83fcfcdd",
+    "mtime": 1782453589.0787683,
+    "ast_hash": "81ee2bebe2aa4097966a016c6819bcd9",
     "semantic_hash": ""
   },
   "docs/safety.md": {

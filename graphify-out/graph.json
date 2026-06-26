@@ -257,7 +257,7 @@
       "label": "Windows",
       "file_type": "document",
       "source_file": "docs/rules.md",
-      "source_location": "L1751",
+      "source_location": "L1755",
       "_origin": "ast",
       "id": "docs_rules_windows",
       "community": 187,
@@ -267,7 +267,7 @@
       "label": "Guards",
       "file_type": "document",
       "source_file": "docs/rules.md",
-      "source_location": "L1769",
+      "source_location": "L1773",
       "_origin": "ast",
       "id": "docs_rules_guards",
       "community": 187,
@@ -277,7 +277,7 @@
       "label": "Remediation policy",
       "file_type": "document",
       "source_file": "docs/rules.md",
-      "source_location": "L1836",
+      "source_location": "L1840",
       "_origin": "ast",
       "id": "docs_rules_remediation_policy",
       "community": 187,
@@ -289,9 +289,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "docs_services",
       "community": 214,
-      "norm_label": "services.md"
+      "norm_label": "services.md",
+      "id": "docs_services"
     },
     {
       "label": "Services",
@@ -299,9 +299,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "docs_services_services",
       "community": 4,
-      "norm_label": "services"
+      "norm_label": "services",
+      "id": "docs_services_services"
     },
     {
       "label": "Categories",
@@ -309,9 +309,9 @@
       "source_file": "docs/services.md",
       "source_location": "L28",
       "_origin": "ast",
-      "id": "docs_services_categories",
       "community": 4,
-      "norm_label": "categories"
+      "norm_label": "categories",
+      "id": "docs_services_categories"
     },
     {
       "label": "Library services",
@@ -319,9 +319,9 @@
       "source_file": "docs/services.md",
       "source_location": "L65",
       "_origin": "ast",
-      "id": "docs_services_library_services",
       "community": 4,
-      "norm_label": "library services"
+      "norm_label": "library services",
+      "id": "docs_services_library_services"
     },
     {
       "label": "Reload on config change (`reload_on_change`)",
@@ -329,9 +329,9 @@
       "source_file": "docs/services.md",
       "source_location": "L102",
       "_origin": "ast",
-      "id": "docs_services_reload_on_config_change_reload_on_change",
       "community": 4,
-      "norm_label": "reload on config change (`reload_on_change`)"
+      "norm_label": "reload on config change (`reload_on_change`)",
+      "id": "docs_services_reload_on_config_change_reload_on_change"
     },
     {
       "label": "Native reload (`reload:`) \u2014 when the init can't, Sermo can",
@@ -339,9 +339,9 @@
       "source_file": "docs/services.md",
       "source_location": "L146",
       "_origin": "ast",
-      "id": "docs_services_native_reload_reload_when_the_init_can_t_sermo_can",
       "community": 4,
-      "norm_label": "native reload (`reload:`) \u2014 when the init can't, sermo can"
+      "norm_label": "native reload (`reload:`) \u2014 when the init can't, sermo can",
+      "id": "docs_services_native_reload_reload_when_the_init_can_t_sermo_can"
     },
     {
       "label": "Catalog author checklist: init scripts and fallbacks",
@@ -349,9 +349,9 @@
       "source_file": "docs/services.md",
       "source_location": "L185",
       "_origin": "ast",
-      "id": "docs_services_catalog_author_checklist_init_scripts_and_fallbacks",
       "community": 4,
-      "norm_label": "catalog author checklist: init scripts and fallbacks"
+      "norm_label": "catalog author checklist: init scripts and fallbacks",
+      "id": "docs_services_catalog_author_checklist_init_scripts_and_fallbacks"
     },
     {
       "label": "App dependencies (`apps`)",
@@ -359,9 +359,9 @@
       "source_file": "docs/services.md",
       "source_location": "L235",
       "_origin": "ast",
-      "id": "docs_services_app_dependencies_apps",
       "community": 4,
-      "norm_label": "app dependencies (`apps`)"
+      "norm_label": "app dependencies (`apps`)",
+      "id": "docs_services_app_dependencies_apps"
     },
     {
       "label": "Metadata fields",
@@ -369,9 +369,9 @@
       "source_file": "docs/services.md",
       "source_location": "L282",
       "_origin": "ast",
-      "id": "docs_services_metadata_fields",
       "community": 4,
-      "norm_label": "metadata fields"
+      "norm_label": "metadata fields",
+      "id": "docs_services_metadata_fields"
     },
     {
       "label": "Built-in variables",
@@ -379,9 +379,9 @@
       "source_file": "docs/services.md",
       "source_location": "L315",
       "_origin": "ast",
-      "id": "docs_services_built_in_variables",
       "community": 4,
-      "norm_label": "built-in variables"
+      "norm_label": "built-in variables",
+      "id": "docs_services_built_in_variables"
     },
     {
       "label": "OS-specific blocks (os:)",
@@ -389,9 +389,9 @@
       "source_file": "docs/services.md",
       "source_location": "L414",
       "_origin": "ast",
-      "id": "docs_services_os_specific_blocks_os",
       "community": 4,
-      "norm_label": "os-specific blocks (os:)"
+      "norm_label": "os-specific blocks (os:)",
+      "id": "docs_services_os_specific_blocks_os"
     },
     {
       "label": "`control: libvirt` \u2014 QEMU/libvirt virtual machines",
@@ -399,9 +399,9 @@
       "source_file": "docs/services.md",
       "source_location": "L467",
       "_origin": "ast",
-      "id": "docs_services_control_libvirt_qemu_libvirt_virtual_machines",
       "community": 4,
-      "norm_label": "`control: libvirt` \u2014 qemu/libvirt virtual machines"
+      "norm_label": "`control: libvirt` \u2014 qemu/libvirt virtual machines",
+      "id": "docs_services_control_libvirt_qemu_libvirt_virtual_machines"
     },
     {
       "label": "`control: docker` \u2014 Docker containers",
@@ -409,9 +409,9 @@
       "source_file": "docs/services.md",
       "source_location": "L530",
       "_origin": "ast",
-      "id": "docs_services_control_docker_docker_containers",
       "community": 4,
-      "norm_label": "`control: docker` \u2014 docker containers"
+      "norm_label": "`control: docker` \u2014 docker containers",
+      "id": "docs_services_control_docker_docker_containers"
     },
     {
       "label": "`also_service` \u2014 auxiliary init units",
@@ -419,9 +419,9 @@
       "source_file": "docs/services.md",
       "source_location": "L585",
       "_origin": "ast",
-      "id": "docs_services_also_service_auxiliary_init_units",
       "community": 4,
-      "norm_label": "`also_service` \u2014 auxiliary init units"
+      "norm_label": "`also_service` \u2014 auxiliary init units",
+      "id": "docs_services_also_service_auxiliary_init_units"
     },
     {
       "label": "`also_apply` \u2014 cascade to other services",
@@ -429,9 +429,9 @@
       "source_file": "docs/services.md",
       "source_location": "L609",
       "_origin": "ast",
-      "id": "docs_services_also_apply_cascade_to_other_services",
       "community": 4,
-      "norm_label": "`also_apply` \u2014 cascade to other services"
+      "norm_label": "`also_apply` \u2014 cascade to other services",
+      "id": "docs_services_also_apply_cascade_to_other_services"
     },
     {
       "label": "`processes:` by executable or cmdline",
@@ -439,9 +439,9 @@
       "source_file": "docs/services.md",
       "source_location": "L639",
       "_origin": "ast",
-      "id": "docs_services_processes_by_executable_or_cmdline",
       "community": 4,
-      "norm_label": "`processes:` by executable or cmdline"
+      "norm_label": "`processes:` by executable or cmdline",
+      "id": "docs_services_processes_by_executable_or_cmdline"
     },
     {
       "label": "Stopped-state invariants (`stop_policy`)",
@@ -449,9 +449,9 @@
       "source_file": "docs/services.md",
       "source_location": "L663",
       "_origin": "ast",
-      "id": "docs_services_stopped_state_invariants_stop_policy",
       "community": 4,
-      "norm_label": "stopped-state invariants (`stop_policy`)"
+      "norm_label": "stopped-state invariants (`stop_policy`)",
+      "id": "docs_services_stopped_state_invariants_stop_policy"
     },
     {
       "label": "`pidfile:` and `pidfiles:` shorthand (selectors + health checks)",
@@ -459,9 +459,9 @@
       "source_file": "docs/services.md",
       "source_location": "L708",
       "_origin": "ast",
-      "id": "docs_services_pidfile_and_pidfiles_shorthand_selectors_health_checks",
       "community": 4,
-      "norm_label": "`pidfile:` and `pidfiles:` shorthand (selectors + health checks)"
+      "norm_label": "`pidfile:` and `pidfiles:` shorthand (selectors + health checks)",
+      "id": "docs_services_pidfile_and_pidfiles_shorthand_selectors_health_checks"
     },
     {
       "label": "`socket:` shorthand (gated health check)",
@@ -469,9 +469,9 @@
       "source_file": "docs/services.md",
       "source_location": "L772",
       "_origin": "ast",
-      "id": "docs_services_socket_shorthand_gated_health_check",
       "community": 4,
-      "norm_label": "`socket:` shorthand (gated health check)"
+      "norm_label": "`socket:` shorthand (gated health check)",
+      "id": "docs_services_socket_shorthand_gated_health_check"
     },
     {
       "label": "`lockfile:` shorthand (gated health check)",
@@ -479,9 +479,9 @@
       "source_file": "docs/services.md",
       "source_location": "L789",
       "_origin": "ast",
-      "id": "docs_services_lockfile_shorthand_gated_health_check",
       "community": 4,
-      "norm_label": "`lockfile:` shorthand (gated health check)"
+      "norm_label": "`lockfile:` shorthand (gated health check)",
+      "id": "docs_services_lockfile_shorthand_gated_health_check"
     },
     {
       "label": "Versioned services",
@@ -489,9 +489,9 @@
       "source_file": "docs/services.md",
       "source_location": "L804",
       "_origin": "ast",
-      "id": "docs_services_versioned_services",
       "community": 4,
-      "norm_label": "versioned services"
+      "norm_label": "versioned services",
+      "id": "docs_services_versioned_services"
     },
     {
       "label": "Integer and instance placeholders",
@@ -499,9 +499,9 @@
       "source_file": "docs/services.md",
       "source_location": "L881",
       "_origin": "ast",
-      "id": "docs_services_integer_and_instance_placeholders",
       "community": 4,
-      "norm_label": "integer and instance placeholders"
+      "norm_label": "integer and instance placeholders",
+      "id": "docs_services_integer_and_instance_placeholders"
     },
     {
       "label": "Composite names with a separator (`%s`)",
@@ -509,9 +509,9 @@
       "source_file": "docs/services.md",
       "source_location": "L957",
       "_origin": "ast",
-      "id": "docs_services_composite_names_with_a_separator_s",
       "community": 4,
-      "norm_label": "composite names with a separator (`%s`)"
+      "norm_label": "composite names with a separator (`%s`)",
+      "id": "docs_services_composite_names_with_a_separator_s"
     },
     {
       "label": "Service-owned discovery",
@@ -519,9 +519,9 @@
       "source_file": "docs/services.md",
       "source_location": "L976",
       "_origin": "ast",
-      "id": "docs_services_service_owned_discovery",
       "community": 4,
-      "norm_label": "service-owned discovery"
+      "norm_label": "service-owned discovery",
+      "id": "docs_services_service_owned_discovery"
     },
     {
       "label": "Optional components (`enable_if`)",
@@ -529,9 +529,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1026",
       "_origin": "ast",
-      "id": "docs_services_optional_components_enable_if",
       "community": 4,
-      "norm_label": "optional components (`enable_if`)"
+      "norm_label": "optional components (`enable_if`)",
+      "id": "docs_services_optional_components_enable_if"
     },
     {
       "label": "Variables read from a config file (`from_file`)",
@@ -539,9 +539,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1060",
       "_origin": "ast",
-      "id": "docs_services_variables_read_from_a_config_file_from_file",
       "community": 4,
-      "norm_label": "variables read from a config file (`from_file`)"
+      "norm_label": "variables read from a config file (`from_file`)",
+      "id": "docs_services_variables_read_from_a_config_file_from_file"
     },
     {
       "label": "Listing installed applications",
@@ -549,9 +549,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1084",
       "_origin": "ast",
-      "id": "docs_services_listing_installed_applications",
       "community": 4,
-      "norm_label": "listing installed applications"
+      "norm_label": "listing installed applications",
+      "id": "docs_services_listing_installed_applications"
     },
     {
       "label": "Service unit",
@@ -559,9 +559,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1179",
       "_origin": "ast",
-      "id": "docs_services_service_unit",
       "community": 4,
-      "norm_label": "service unit"
+      "norm_label": "service unit",
+      "id": "docs_services_service_unit"
     },
     {
       "label": "Cloning",
@@ -569,9 +569,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1213",
       "_origin": "ast",
-      "id": "docs_services_cloning",
       "community": 4,
-      "norm_label": "cloning"
+      "norm_label": "cloning",
+      "id": "docs_services_cloning"
     },
     {
       "label": "Multiple instances of one application",
@@ -579,9 +579,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1229",
       "_origin": "ast",
-      "id": "docs_services_multiple_instances_of_one_application",
       "community": 4,
-      "norm_label": "multiple instances of one application"
+      "norm_label": "multiple instances of one application",
+      "id": "docs_services_multiple_instances_of_one_application"
     },
     {
       "label": "Disabling and deleting inherited entries",
@@ -589,9 +589,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1273",
       "_origin": "ast",
-      "id": "docs_services_disabling_and_deleting_inherited_entries",
       "community": 4,
-      "norm_label": "disabling and deleting inherited entries"
+      "norm_label": "disabling and deleting inherited entries",
+      "id": "docs_services_disabling_and_deleting_inherited_entries"
     },
     {
       "label": "Monitoring flag",
@@ -599,9 +599,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1283",
       "_origin": "ast",
-      "id": "docs_services_monitoring_flag",
       "community": 4,
-      "norm_label": "monitoring flag"
+      "norm_label": "monitoring flag",
+      "id": "docs_services_monitoring_flag"
     },
     {
       "label": "Auxiliary commands",
@@ -609,9 +609,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1312",
       "_origin": "ast",
-      "id": "docs_services_auxiliary_commands",
       "community": 4,
-      "norm_label": "auxiliary commands"
+      "norm_label": "auxiliary commands",
+      "id": "docs_services_auxiliary_commands"
     },
     {
       "label": "SKILL.md",
@@ -24426,5 +24426,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "fa5459966269ab8011e975c1419e0df1e3015fa6"
+  "built_at_commit": "40fb5d79a4837fa50c271858729f8a79549b0947"
 }
