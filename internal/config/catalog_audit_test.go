@@ -202,6 +202,47 @@ func TestApacheCatalogRestartsOnHotWorkerThread(t *testing.T) {
 	}
 }
 
+func TestContainerdCatalogRestartsOnVersionChange(t *testing.T) {
+	root := repoRoot(t)
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	resolved, errs := cfg.ResolveCatalog(CategoryService, "containerd")
+	if len(errs) > 0 {
+		t.Fatalf("ResolveCatalog(containerd): %v", errs)
+	}
+	rule := nested(t, resolved.Tree, "rules", "restart-if-containerd-version-changed")
+	if got := cfgval.String(rule["type"]); got != "remediation" {
+		t.Fatalf("rule type = %q, want remediation", got)
+	}
+	changed := nested(t, rule, "if", "changed")
+	if got := cfgval.String(changed["app"]); got != "containerd" {
+		t.Fatalf("changed.app = %q, want containerd", got)
+	}
+	if got := cfgval.String(changed["level"]); got != "patch" {
+		t.Fatalf("changed.level = %q, want patch", got)
+	}
+	if got := cfgval.String(nested(t, rule, "then")["action"]); got != "restart" {
+		t.Fatalf("then.action = %q, want restart", got)
+	}
+	// The named app's version command must be present in the resolved tree as
+	// preflight["containerd-version"] (merged from the app), since that is what
+	// the worker samples for the changed:{app} rule.
+	versionCmd := cfgval.StringList(nested(t, resolved.Tree, "preflight", "containerd-version")["command"])
+	if len(versionCmd) == 0 {
+		t.Fatal("preflight[containerd-version] must carry a command for the changed:{app} rule")
+	}
+}
+
 // TestShippedGlobalConfigValidates validates the installed sample config as an
 // installed config. It deliberately points at /etc/sermo target directories;
 // source-tree examples are covered by TestRepoDevConfigLoadsExampleTree.
@@ -744,15 +785,21 @@ func TestCatalogCupsUsesSingleCupsdApp(t *testing.T) {
 	if got := tool["path"]; got != "/usr/bin/cups-config" {
 		t.Fatalf("cupsd cups-config path = %v, want /usr/bin/cups-config", got)
 	}
+	if got := cfgval.Bool(tool["optional"]); !got {
+		t.Fatalf("cupsd cups-config optional = %v, want true", got)
+	}
 	health := preflight["cupsd-health"].(map[string]any)
 	healthCommand := health["command"].([]any)
-	if len(healthCommand) != 2 || healthCommand[0] != "/usr/bin/cups-config" || healthCommand[1] != "--help" {
-		t.Fatalf("cupsd health command = %v, want /usr/bin/cups-config --help", healthCommand)
+	if len(healthCommand) != 2 || healthCommand[0] != "/usr/bin/cupsd" || healthCommand[1] != "-t" {
+		t.Fatalf("cupsd health command = %v, want /usr/bin/cupsd -t", healthCommand)
 	}
 	version := preflight["cupsd-version"].(map[string]any)
 	versionCommand := version["command"].([]any)
 	if len(versionCommand) != 2 || versionCommand[0] != "/usr/bin/cups-config" || versionCommand[1] != "--version" {
 		t.Fatalf("cupsd version command = %v, want /usr/bin/cups-config --version", versionCommand)
+	}
+	if got := cfgval.Bool(version["optional"]); !got {
+		t.Fatalf("cupsd version optional = %v, want true", got)
 	}
 }
 
@@ -1466,6 +1513,75 @@ func TestDatabaseCatalogServicesBlockRestartDuringBackup(t *testing.T) {
 		} {
 			assertBackupGuard(name, tree.label, tree.body)
 		}
+	}
+}
+
+func TestUbuntuCatalogOverrides(t *testing.T) {
+	old := detectedOS
+	detectedOS = "ubuntu"
+	defer func() { detectedOS = old }()
+
+	root := repoRoot(t)
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "engine: { backend: systemd }\n" +
+		"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: []\n  runtime: /run/sermo\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	assertSystemdUnit := func(service, want string) {
+		t.Helper()
+		body := cfg.CatalogServices[service].Body
+		units := cfgval.StringList(nested(t, body, "service")["systemd"])
+		if !slices.Contains(units, want) {
+			t.Fatalf("%s systemd units = %v, want %s", service, units, want)
+		}
+	}
+	assertSystemdUnit("dhcpd", "isc-dhcp-server")
+	assertSystemdUnit("smartd", "smartmontools")
+	assertSystemdUnit("upsd", "nut-server")
+	assertSystemdUnit("upsmon", "nut-monitor")
+
+	if got := cfgval.String(nested(t, cfg.CatalogServices["dhcpd"].Body, "variables")["user"]); got != "dhcpd" {
+		t.Fatalf("dhcpd user = %q, want dhcpd", got)
+	}
+	if got := cfgval.String(cfg.CatalogServices["dhcpd"].Body["pidfile"]); got != "/run/dhcp-server/dhcpd.pid" {
+		t.Fatalf("dhcpd pidfile = %q, want /run/dhcp-server/dhcpd.pid", got)
+	}
+	if got := cfgval.String(nested(t, cfg.CatalogServices["named"].Body, "variables")["user"]); got != "bind" {
+		t.Fatalf("named user = %q, want bind", got)
+	}
+
+	pmcdBinaries := cfgval.StringList(nested(t, cfg.Apps["pmcd"].Body, "variables")["binary"])
+	if !slices.Contains(pmcdBinaries, "/usr/lib/pcp/bin/pmcd") {
+		t.Fatalf("pmcd binary candidates = %v, want /usr/lib/pcp/bin/pmcd", pmcdBinaries)
+	}
+	for _, tc := range []struct {
+		app  string
+		want string
+	}{
+		{app: "upsd", want: "/usr/lib/nut/upsd"},
+		{app: "upsmon", want: "/usr/lib/nut/upsmon"},
+	} {
+		candidates := cfgval.StringList(nested(t, cfg.Apps[tc.app].Body, "variables")["binary"])
+		if !slices.Contains(candidates, tc.want) {
+			t.Fatalf("%s binary candidates = %v, want %q", tc.app, candidates, tc.want)
+		}
+	}
+
+	cupsPreflight := nested(t, cfg.Apps["cupsd"].Body, "preflight")
+	if !cfgval.Bool(nested(t, cupsPreflight, "cups-config")["optional"]) {
+		t.Fatal("cups-config preflight must be optional for Ubuntu hosts without cups-config")
+	}
+	healthCommand := cfgval.StringList(nested(t, cupsPreflight, "health")["command"])
+	if len(healthCommand) == 0 || healthCommand[0] != "${binary}" {
+		t.Fatalf("cups health command = %v, want ${binary} -t", healthCommand)
 	}
 }
 

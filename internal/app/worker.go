@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/execx"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
@@ -124,6 +126,26 @@ type Worker struct {
 	// libBaseline holds the acknowledged fingerprint of each watched path (a
 	// `changed:` condition target, typically a library .so) across cycles.
 	libBaseline map[string]string
+
+	// appVersionCmd holds the resolved version command of each app the service
+	// declares (keyed by app name), so a `changed: {app}` condition can sample the
+	// app's current version. Built once from the resolved tree's preflight.
+	appVersionCmd map[string]appVersionCmd
+	// appVersions holds the acknowledged version-short of each watched app+level
+	// (key "app:level") across cycles, the version analogue of libBaseline.
+	appVersions map[string]string
+	// appVersionsLast holds the most recently sampled version-short per app+level,
+	// so acknowledgeChanges can adopt the post-restart version without re-running
+	// the command.
+	appVersionsLast map[string]string
+}
+
+// appVersionCmd is a resolved app version probe: the command argv (variables
+// already expanded), an optional user to run it as, and an optional timeout.
+type appVersionCmd struct {
+	argv    []string
+	user    string
+	timeout time.Duration
 }
 
 // RunCycle runs one monitoring cycle for the service: build the
@@ -190,7 +212,7 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	if w.ResolveRefs != nil {
 		resolveRef = w.ResolveRefs()
 	}
-	ev := &rules.Evaluator{Cache: cache, ResolveRef: resolveRef, Deps: deps, Changed: w.changed}
+	ev := &rules.Evaluator{Cache: cache, ResolveRef: resolveRef, Deps: deps, Changed: w.changed, ChangedVersion: w.changedAppVersion}
 	evals := w.ruleEvalCache()
 
 	at := now()
@@ -571,6 +593,76 @@ func (w *Worker) acknowledgeChanges() {
 	for path := range w.libBaseline {
 		w.libBaseline[path] = fileFingerprint(path)
 	}
+	// Adopt the version sampled during this cycle's rule evaluation as the new
+	// baseline. After a successful restart the service runs the upgraded app, so
+	// the last-seen version is the one to acknowledge; this clears the pending
+	// `changed: {app}` signal without re-running the version command.
+	for key, last := range w.appVersionsLast {
+		w.appVersions[key] = last
+	}
+}
+
+// changedAppVersion reports whether the named app's version differs from the
+// acknowledged baseline, reduced to version_short truncated at level (1=major,
+// 2=minor, 3=patch). The first observation adopts the current version (so a
+// daemon start never triggers a restart); thereafter it stays true until
+// acknowledged. When the output carries no parseable version it compares the
+// first non-empty line, so a change is never silently missed.
+func (w *Worker) changedAppVersion(ctx context.Context, app string, level int) (bool, error) {
+	vc, ok := w.appVersionCmd[app]
+	if !ok || len(vc.argv) == 0 {
+		return false, fmt.Errorf("changed condition app %q: service declares no version command for it", app)
+	}
+	raw, err := w.sampleVersion(ctx, vc)
+	if err != nil {
+		return false, err
+	}
+	key := checks.TruncateVersion(checks.ShortVersion(raw), level)
+	if key == "" {
+		key = checks.FirstNonEmptyLine(raw)
+	}
+	if w.appVersions == nil {
+		w.appVersions = map[string]string{}
+	}
+	if w.appVersionsLast == nil {
+		w.appVersionsLast = map[string]string{}
+	}
+	bkey := app + ":" + strconv.Itoa(level)
+	w.appVersionsLast[bkey] = key
+	base, seen := w.appVersions[bkey]
+	if !seen {
+		w.appVersions[bkey] = key
+		return false, nil
+	}
+	return key != base, nil
+}
+
+// sampleVersion runs an app's version command and returns its trimmed stdout.
+func (w *Worker) sampleVersion(ctx context.Context, vc appVersionCmd) (string, error) {
+	runner := w.CheckDeps.Runner
+	if runner == nil {
+		return "", fmt.Errorf("no command runner configured")
+	}
+	timeout := vc.timeout
+	if timeout <= 0 {
+		timeout = w.CheckDeps.DefaultTimeout
+	}
+	var (
+		res execx.Result
+		err error
+	)
+	if vc.user != "" {
+		res, err = execx.RunUser(ctx, runner, timeout, vc.user, vc.argv[0], vc.argv[1:]...)
+	} else {
+		res, err = execx.Run(ctx, runner, timeout, vc.argv[0], vc.argv[1:]...)
+	}
+	if res.ExitCode != 0 {
+		if err != nil {
+			return "", err
+		}
+		return "", fmt.Errorf("version command exit %d", res.ExitCode)
+	}
+	return checks.TrimOutput(res.Stdout), nil
 }
 
 // fileFingerprint summarizes a file's identity for change detection: its size and

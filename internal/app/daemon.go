@@ -6,6 +6,7 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -349,6 +350,42 @@ func wireCascade(workers []*Worker, cascadeMap map[string][]string, deps Deps) {
 	}
 }
 
+// appVersionCmds collects the resolved version command of every app the service
+// declares, so a `changed: {app}` rule can sample the app's version. expandApps
+// merges each app's preflight under "<app>-<check>"; the "<app>-version" entries
+// carry the app version probe with variables already expanded. Keyed by app name.
+func appVersionCmds(tree map[string]any) map[string]appVersionCmd {
+	preflight, ok := tree["preflight"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	const suffix = "-version"
+	cmds := map[string]appVersionCmd{}
+	for key, raw := range preflight {
+		app, ok := strings.CutSuffix(key, suffix)
+		if !ok || app == "" {
+			continue
+		}
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		argv := cfgval.StringList(entry["command"])
+		if len(argv) == 0 {
+			continue
+		}
+		cmds[app] = appVersionCmd{
+			argv:    argv,
+			user:    cfgval.String(entry["user"]),
+			timeout: cfgval.Duration(entry["timeout"]),
+		}
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return cmds
+}
+
 func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *metrics.Collector) (*Worker, []string) {
 	libBaseline := map[string]string{}
 	engine, checkDeps, discoverer := serviceRuntime(name, unit, tree, deps, libBaseline, nil)
@@ -440,6 +477,10 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Emit:         deps.Emit,
 		windows:      windowStates,
 		libBaseline:  libBaseline,
+
+		appVersionCmd:   appVersionCmds(tree),
+		appVersions:     map[string]string{},
+		appVersionsLast: map[string]string{},
 	}
 	worker.Checks = func(ctx context.Context, d checks.Deps) map[string]checks.Result {
 		setCycleMetrics(d.Metrics)
