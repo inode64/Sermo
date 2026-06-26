@@ -95,6 +95,14 @@ rules:
       cycles: 3
     then:
       action: restart
+  restart-if-containerd-version-changed:
+    type: remediation
+    if:
+      changed:
+        app: containerd
+        level: patch
+    then:
+      action: restart
   restart-if-worker-thread-hot:
     type: remediation
     if:

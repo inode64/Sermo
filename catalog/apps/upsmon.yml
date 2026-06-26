@@ -2,7 +2,10 @@ name: upsmon
 display_name: "NUT UPS Monitor"
 category: hardware
 variables:
-  binary: ${bindir}/upsmon
+  binary:
+    - /usr/lib/nut/upsmon
+    - /lib/nut/upsmon
+    - ${bindir}/upsmon
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-V"], timeout: 10s }

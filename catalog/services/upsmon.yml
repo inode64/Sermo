@@ -1,12 +1,21 @@
 name: upsmon
 display_name: NUT UPS Monitor
 category: hardware
-service: upsmon
+service:
+  systemd:
+    - upsmon
+  openrc:
+    - upsmon
 apps:
   - upsmon
 variables:
   user: nut
 pidfile: /run/nut/upsmon.pid
+os:
+  ubuntu:
+    service:
+      systemd:
+        - nut-monitor
 processes:
   main:
     exe: ${upsmon_binary}

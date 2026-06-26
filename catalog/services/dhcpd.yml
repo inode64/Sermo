@@ -25,6 +25,13 @@ preflight:
 os:
   gentoo:
     pidfile: /run/dhcp/dhcpd.pid
+  ubuntu:
+    service:
+      systemd:
+        - isc-dhcp-server
+    variables:
+      user: dhcpd
+    pidfile: /run/dhcp-server/dhcpd.pid
 processes:
   main:
     exe: ${dhcpd_binary}

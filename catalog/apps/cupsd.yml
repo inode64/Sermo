@@ -6,6 +6,6 @@ variables:
   cups_config: ${bindir}/cups-config
 preflight:
   binary: { type: binary, path: "${binary}" }
-  cups-config: { type: binary, path: "${cups_config}" }
-  health: { type: command, command: ["${cups_config}", "--help"], timeout: 10s, expect_exit: 0 }
-  version: { type: command, command: ["${cups_config}", "--version"], timeout: 10s }
+  cups-config: { type: binary, path: "${cups_config}", optional: true }
+  health: { type: command, command: ["${binary}", "-t"], timeout: 10s }
+  version: { type: command, command: ["${cups_config}", "--version"], timeout: 10s, optional: true }

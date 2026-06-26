@@ -2,7 +2,10 @@ name: upsd
 display_name: "NUT UPS Daemon"
 category: hardware
 variables:
-  binary: ${bindir}/upsd
+  binary:
+    - /usr/lib/nut/upsd
+    - /lib/nut/upsd
+    - ${bindir}/upsd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-V"], timeout: 10s }

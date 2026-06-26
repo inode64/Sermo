@@ -3,7 +3,10 @@ display_name: "PCP Archive Logger Farm"
 category: observability
 version_from: pcp
 variables:
-  binary: /usr/libexec/pcp/bin/pmlogger_farm
+  binary:
+    - /usr/lib/pcp/bin/pmlogger_farm
+    - /usr/libexec/pcp/bin/pmlogger_farm
+    - /usr/lib64/pcp/bin/pmlogger_farm
   pmpause_binary:
     - /usr/libexec/pcp/bin/pmpause
     - /usr/lib/pcp/bin/pmpause
