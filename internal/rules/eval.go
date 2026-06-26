@@ -28,6 +28,11 @@ type Evaluator struct {
 	// tracked across cycles. Injected by the
 	// worker; nil makes every `changed:` condition false.
 	Changed func(path string) (bool, error)
+	// ChangedVersion reports whether the named app's version (its version command
+	// output reduced to version_short and truncated to level: 1=major, 2=minor,
+	// 3=patch) differs from a baseline tracked across cycles. Injected by the
+	// worker; nil makes every `changed: {app}` condition false.
+	ChangedVersion func(ctx context.Context, app string, level int) (bool, error)
 
 	memo map[string]checks.Result
 }
@@ -111,7 +116,7 @@ func (e *Evaluator) Eval(ctx context.Context, node map[string]any) (bool, error)
 		return e.evalMetric(v)
 	}
 	if v, ok := node["changed"]; ok {
-		return e.evalChanged(v)
+		return e.evalChanged(ctx, v)
 	}
 	return false, fmt.Errorf("condition has no recognized operator")
 }
@@ -264,17 +269,33 @@ func (e *Evaluator) evalMetric(v any) (bool, error) {
 	return metrics.Compare(reading, cfgval.AsString(m["op"]), cfgval.String(m["value"]))
 }
 
-// evalChanged is true when the watched file's fingerprint differs from the
-// baseline. With no Changed source it is false, so a remediation
-// never fires on an unavailable signal.
-func (e *Evaluator) evalChanged(v any) (bool, error) {
+// evalChanged is true when the watched signal differs from the baseline tracked
+// across cycles. With `app` it compares the app's version (truncated to an
+// optional major/minor/patch level, default patch); otherwise it compares the
+// file fingerprint at `path`. With no corresponding source it is false, so a
+// remediation never fires on an unavailable signal.
+func (e *Evaluator) evalChanged(ctx context.Context, v any) (bool, error) {
 	m, err := condMap(v, "changed condition")
 	if err != nil {
 		return false, err
 	}
+	if app := cfgval.AsString(m["app"]); app != "" {
+		level := 3 // patch: any a.b.c change fires
+		if name := cfgval.AsString(m["level"]); name != "" {
+			lvl, ok := checks.VersionLevel(name)
+			if !ok {
+				return false, fmt.Errorf("changed condition level %q is not one of major, minor, patch", name)
+			}
+			level = lvl
+		}
+		if e.ChangedVersion == nil {
+			return false, nil
+		}
+		return e.ChangedVersion(ctx, app, level)
+	}
 	path := cfgval.AsString(m["path"])
 	if path == "" {
-		return false, fmt.Errorf("changed condition requires a path")
+		return false, fmt.Errorf("changed condition requires a path or app")
 	}
 	if e.Changed == nil {
 		return false, nil

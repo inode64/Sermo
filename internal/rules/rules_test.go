@@ -276,7 +276,40 @@ func TestEvalChangedCondition(t *testing.T) {
 	// A changed condition without a path is a configuration error.
 	if _, err := (&Evaluator{Changed: func(string) (bool, error) { return false, nil }}).
 		Eval(context.Background(), map[string]any{"changed": map[string]any{}}); err == nil {
-		t.Error("changed without a path must error")
+		t.Error("changed without a path or app must error")
+	}
+}
+
+func TestEvalChangedAppCondition(t *testing.T) {
+	var gotApp string
+	var gotLevel int
+	ev := &Evaluator{ChangedVersion: func(_ context.Context, app string, level int) (bool, error) {
+		gotApp, gotLevel = app, level
+		return true, nil
+	}}
+
+	// app with an explicit level dispatches to ChangedVersion with the mapped level.
+	if !evalNode(t, ev, map[string]any{"changed": map[string]any{"app": "containerd", "level": "minor"}}) {
+		t.Error("a changed app version should be true")
+	}
+	if gotApp != "containerd" || gotLevel != 2 {
+		t.Fatalf("ChangedVersion got app=%q level=%d, want containerd/2", gotApp, gotLevel)
+	}
+
+	// No explicit level defaults to patch (3).
+	evalNode(t, ev, map[string]any{"changed": map[string]any{"app": "containerd"}})
+	if gotLevel != 3 {
+		t.Fatalf("default level = %d, want 3 (patch)", gotLevel)
+	}
+
+	// An invalid level name is a configuration error.
+	if _, err := ev.Eval(context.Background(), map[string]any{"changed": map[string]any{"app": "x", "level": "bogus"}}); err == nil {
+		t.Error("an invalid level must error")
+	}
+
+	// No ChangedVersion source: never fire on an unavailable signal.
+	if (&Evaluator{}).mustFalse(t, map[string]any{"changed": map[string]any{"app": "x"}}) {
+		t.Error("absent ChangedVersion source must be false")
 	}
 }
 
