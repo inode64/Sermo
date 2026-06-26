@@ -1,7 +1,16 @@
 name: smartd
 display_name: S.M.A.R.T. Daemon
 category: storage
-service: smartd
+service:
+  systemd:
+    - smartd
+  openrc:
+    - smartd
+os:
+  ubuntu:
+    service:
+      systemd:
+        - smartmontools
 apps:
   - smartd
 pidfile: /run/smartd.pid

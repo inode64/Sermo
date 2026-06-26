@@ -9,6 +9,10 @@ variables:
   port: 53
   user: named
   query: localhost
+os:
+  ubuntu:
+    variables:
+      user: bind
 preflight:
   config:
     type: command

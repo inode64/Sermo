@@ -3,7 +3,10 @@ display_name: "PCP Inference Engine Farm"
 category: observability
 version_from: pcp
 variables:
-  binary: /usr/libexec/pcp/bin/pmie_farm
+  binary:
+    - /usr/lib/pcp/bin/pmie_farm
+    - /usr/libexec/pcp/bin/pmie_farm
+    - /usr/lib64/pcp/bin/pmie_farm
   pmpause_binary:
     - /usr/libexec/pcp/bin/pmpause
     - /usr/lib/pcp/bin/pmpause
