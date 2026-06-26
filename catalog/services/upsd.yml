@@ -1,13 +1,22 @@
 name: upsd
 display_name: NUT UPS Daemon
 category: hardware
-service: upsd
+service:
+  systemd:
+    - upsd
+  openrc:
+    - upsd
 apps:
   - upsd
 variables:
   port: 3493
   user: nut
 pidfile: /run/nut/upsd.pid
+os:
+  ubuntu:
+    service:
+      systemd:
+        - nut-server
 processes:
   main:
     exe: ${upsd_binary}
