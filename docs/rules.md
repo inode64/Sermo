@@ -1378,9 +1378,11 @@ checks:
 **Version-change detection (`on_version_change`).** Set `on_version_change: true`
 on a service check or host watch to alert when the server's version changes
 between cycles — e.g. after a package upgrade. The tracked identity is the
-protocol's reported `version` (mysql, postgres, redis, ssh, snmp, rspamd,
-libvirt, syncthing) or, for protocols that only return a greeting banner
-(`smtp`, `imap`, `pop`, `ftp`), that banner. The first cycle baselines silently;
+protocol's reported `version` — for connection-protocol checks such as `mysql`,
+`postgres`, `redis`, `ssh`, `snmp`, `rspamd`, `libvirt` or `syncthing` — or, for
+protocols that only return a greeting banner (such as `smtp`, `imap`, `pop`,
+`ftp`), that banner. Any registered connection protocol that reports a version or
+banner participates; these names are examples, not the full set. The first cycle baselines silently;
 a later change **fails** the check and the result data carries
 `version`/`version_old`. The baseline lives in the check instance, so it persists
 while the service worker or watch is alive and resets when that worker/watch is
@@ -1409,8 +1411,9 @@ Every type above is a **single-shot check** (`Check.Run → Result`) and is usab
 - a service's `checks:`/`preflight:`/`postflight:` (and referenced from rules), and
 - a host **watch** (`watches:`, firing a hook) — see [configuration](configuration.md#host-watches).
 
-The host-resource checks (`storage`, `load`, `hdparm`, `sensors`, `smart`, `raid`,
-`edac`, `fds`, `conntrack`, `entropy`, `zombies`, `oom`) are
+The host-resource checks (`storage`, `load`, `memory`, `pressure`, `fds`, `pids`,
+`diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`, `entropy`,
+`zombies`, `oom`, among others) are
 condition-style — `OK == true` means there is a problem — so in rules
 `active: {check: x}` fires on it, and as a watch the hook fires on it.
 The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,

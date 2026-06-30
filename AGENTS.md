@@ -182,20 +182,14 @@ duplicate aliases for the same pidfile or socket.
 
 ## Configuration file granularity
 
-Use one YAML file per configured target. Catalog profiles keep one catalog service, app,
-lib or pattern per file. Runtime configuration keeps one service per
-file, one mount per file, one notifier per file and one host watch per
-file (`storage`, `network`, `uplink`, `load`, etc.). A document's kind is
-derived from where it lives (catalog subdir / `paths.services` / `paths.mounts`),
-so a top-level `kind:` is optional and omitted. Watch and notifier
-fragments still use a top-level `watches:` or `notifiers:` map, but that map
-must contain exactly one named entry.
-
-Do not add new examples, wizard output, remote-test config or operational docs
-that group several apps, services, mounts, storage entries, interfaces, VMs,
-containers or other targets into one YAML file. The single exception is a
-clearly labeled reference bundle such as `docs/sermo-all.yml`, whose purpose is
-to validate and demonstrate the full schema in one file.
+Use one YAML file per target — a single document of one kind per file, never
+several targets grouped together. A document's kind is derived from where it
+lives (catalog subdir / `paths.services` / `paths.mounts`), so a top-level
+`kind:` is optional and omitted. Watch and notifier fragments still use a
+top-level `watches:` or `notifiers:` map, but that map must contain exactly one
+named entry. The only exception is a clearly labeled reference bundle such as
+`docs/sermo-all.yml`, which groups examples so the full schema can be validated
+in one place.
 
 For source-tree development and validation without installing under `/etc/sermo`,
 use `examples/sermo-dev.yml` (relative `paths.*` into the bundled `examples/`

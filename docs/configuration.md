@@ -1123,8 +1123,8 @@ again, the next episode notifies afresh. To get a periodic **reminder** while a
 watch stays firing, set `then.notify_interval` to a positive duration: the
 notification is re-sent once that interval elapses. It only affects delivery, so
 it requires `notify` targets. Both the edge-triggered default and
-`notify_interval` apply to the standard watch types (`storage`, the single-shot
-service checks, and the `net`/`icmp`/`swap` metric watches). The
+`notify_interval` apply to the standard watch types (host-resource watches such as
+`storage`, the single-shot service checks, and the `net`/`icmp`/`swap` metric watches). The
 `file` and `process` watches have their own notification model — one event per
 changed path or matching pid — and ignore `notify_interval`.
 
@@ -1309,7 +1309,7 @@ receives.
 
 **Checks and watches share the same check types.** Any single-shot check — the
 host-resource ones below (`storage`, `memory`, `pressure`, `load`, `fds`,
-`pids`, `conntrack`, `entropy`, `zombies`, `oom`) *and* the
+`pids`, `conntrack`, `entropy`, `zombies`, `oom`, among others) *and* the
 service checks (`tcp`, `ports`, `http`, `command`, `file_exists`, `file`,
 `lockfile`, `binary`, `pidfile`, `socket`, `libraries`, `config`, `autofs`, `route`,
 `firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`, `count`, and

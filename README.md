@@ -11,8 +11,7 @@ It ships two binaries:
   validate, locks, processes, preflight, per-service availability/SLA).
 - **`sermod`** — the daemon: one independent worker per service runs checks,
   evaluates rules and drives remediation through the same safe operation engine
-  `sermoctl` uses. It also runs **host watches** (storage, load, memory, swap,
-  network, ICMP, DNS, routes, files, processes, certificates and more — see
+  `sermoctl` uses. It also runs **host watches** (see
   [host watches](docs/configuration.md#host-watches)) that fire hook commands
   and/or **notifications** (email, Slack, Teams), and can serve a **web
   dashboard** (set `web.port`, recommended `9797`) with per-service checks, SLA
