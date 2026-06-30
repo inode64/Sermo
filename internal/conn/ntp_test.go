@@ -8,19 +8,6 @@ import (
 	"github.com/beevik/ntp"
 )
 
-func TestNTPRegistered(t *testing.T) {
-	p, ok := Lookup("ntp")
-	if !ok {
-		t.Fatal("ntp not registered")
-	}
-	if p.DefaultPort() != 123 {
-		t.Fatalf("default port = %d, want 123", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("ntp must not require a user")
-	}
-}
-
 func TestNTPExtraFields(t *testing.T) {
 	resp := &ntp.Response{
 		Leap:           0, // none

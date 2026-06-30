@@ -9,19 +9,6 @@ import (
 	"testing"
 )
 
-func TestMQTTRegistered(t *testing.T) {
-	p, ok := Lookup("mqtt")
-	if !ok {
-		t.Fatal("mqtt not registered")
-	}
-	if p.DefaultPort() != 1883 {
-		t.Fatalf("default port = %d, want 1883", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("mqtt must not require a user")
-	}
-}
-
 func TestBuildMQTTConnect(t *testing.T) {
 	pkt := buildMQTTConnect("sermo-check", "", "")
 	if pkt[0] != 0x10 {

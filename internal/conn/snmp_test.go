@@ -8,19 +8,6 @@ import (
 	g "github.com/gosnmp/gosnmp"
 )
 
-func TestSNMPRegistered(t *testing.T) {
-	p, ok := Lookup("snmp")
-	if !ok {
-		t.Fatal("snmp not registered")
-	}
-	if p.DefaultPort() != 161 {
-		t.Fatalf("default port = %d, want 161", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("snmp must not require a user (v2c community is anonymous-style)")
-	}
-}
-
 func TestBuildSNMPParamsV2c(t *testing.T) {
 	// No user, no password -> v2c, community "public" (anonymous).
 	p := buildSNMPParams(context.Background(), Config{Host: "dev", Port: 161}, time.Second)

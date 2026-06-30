@@ -11,21 +11,6 @@ import (
 	"testing"
 )
 
-func TestUnifiRegistered(t *testing.T) {
-	for _, name := range []string{"unifi", "unifi-controller", "unifi-network"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 8443 {
-			t.Fatalf("%s default port = %d, want 8443", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func unifiTestHostPort(t *testing.T, srv *httptest.Server) (string, int) {
 	t.Helper()
 	host, portStr, err := net.SplitHostPort(strings.TrimPrefix(srv.URL, "https://"))

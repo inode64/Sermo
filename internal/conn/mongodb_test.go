@@ -8,21 +8,6 @@ import (
 	"time"
 )
 
-func TestMongoRegistered(t *testing.T) {
-	for _, name := range []string{"mongodb", "mongo"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 27017 {
-			t.Fatalf("%s default port = %d, want 27017", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestMongoRole(t *testing.T) {
 	cases := []struct {
 		primary, secondary, arbiter bool

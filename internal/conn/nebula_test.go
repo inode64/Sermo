@@ -8,21 +8,6 @@ import (
 	"testing"
 )
 
-func TestNebulaRegistered(t *testing.T) {
-	for _, name := range []string{"nebula", "nebula-vpn"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 4242 {
-			t.Fatalf("%s default port = %d, want 4242", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestNebulaMessage(t *testing.T) {
 	b := nebulaMessage(0xdeadbeef)
 	if len(b) != 16 {

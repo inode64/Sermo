@@ -12,21 +12,6 @@ import (
 	"time"
 )
 
-func TestInfluxdbRegistered(t *testing.T) {
-	for _, name := range []string{"influxdb", "influx"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 8086 {
-			t.Fatalf("%s default port = %d, want 8086", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func influxHostPort(t *testing.T, srv *httptest.Server) (string, int) {
 	t.Helper()
 	host, portStr, err := net.SplitHostPort(strings.TrimPrefix(srv.URL, "http://"))

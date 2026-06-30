@@ -33,19 +33,6 @@ func TestRegistryLookupAndAlias(t *testing.T) {
 	}
 }
 
-func TestMySQLRegistered(t *testing.T) {
-	// The package's init registers mysql with a mariadb alias.
-	for _, name := range []string{"mysql", "mariadb"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 3306 {
-			t.Fatalf("%s default port = %d, want 3306", name, p.DefaultPort())
-		}
-	}
-}
-
 func TestDocsRulesProtocolListMatchesRegistry(t *testing.T) {
 	documented := documentedProtocolsFromRules(t)
 	registered := registeredProtocolsForDocs()

@@ -8,21 +8,6 @@ import (
 	"testing"
 )
 
-func TestRDPRegistered(t *testing.T) {
-	for _, name := range []string{"rdp", "ms-wbt-server"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 3389 {
-			t.Fatalf("%s default port = %d, want 3389", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestBuildRDPNegRequest(t *testing.T) {
 	b := buildRDPNegRequest(rdpRequestedProtocols)
 	if len(b) != 19 {

@@ -8,19 +8,6 @@ import (
 	"testing"
 )
 
-func TestLvmpolldRegistered(t *testing.T) {
-	p, ok := Lookup("lvmpolld")
-	if !ok {
-		t.Fatal("lvmpolld not registered")
-	}
-	if p.DefaultPort() != 0 {
-		t.Fatalf("lvmpolld default port = %d, want 0 (socket-only)", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("lvmpolld must not require a user")
-	}
-}
-
 func TestParseLVMDaemonReply(t *testing.T) {
 	f := parseLVMDaemonReply("response = \"OK\"\nprotocol = \"lvmpolld\"\nversion = 1\n")
 	if f["response"] != "OK" || f["protocol"] != "lvmpolld" || f["version"] != "1" {

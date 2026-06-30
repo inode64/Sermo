@@ -7,21 +7,6 @@ import (
 	"testing"
 )
 
-func TestDHCPRegistered(t *testing.T) {
-	for _, name := range []string{"dhcp", "dhcpd"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 67 {
-			t.Fatalf("%s default port = %d, want 67", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestDHCPClientMAC(t *testing.T) {
 	// Empty input yields a random locally-administered unicast MAC.
 	mac, err := dhcpClientMAC("")

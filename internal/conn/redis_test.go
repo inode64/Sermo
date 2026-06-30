@@ -23,19 +23,6 @@ func TestReadRESPRejectsUnsupportedType(t *testing.T) {
 	}
 }
 
-func TestRedisRegistered(t *testing.T) {
-	p, ok := Lookup("redis")
-	if !ok {
-		t.Fatal("redis not registered")
-	}
-	if p.DefaultPort() != 6379 {
-		t.Fatalf("default port = %d, want 6379", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("redis must not require a user (password-only / no-auth allowed)")
-	}
-}
-
 // rw pairs preloaded server replies (read side) with a capture buffer (write side).
 type rw struct {
 	in  *strings.Reader

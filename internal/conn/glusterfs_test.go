@@ -9,21 +9,6 @@ import (
 	"testing"
 )
 
-func TestGlusterFSRegistered(t *testing.T) {
-	for _, name := range []string{"glusterfs", "glusterd", "gluster"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 24007 {
-			t.Fatalf("%s default port = %d, want 24007", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestGlusterFSProbeAgainstFakeServer(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

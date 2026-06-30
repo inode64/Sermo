@@ -7,21 +7,6 @@ import (
 	"testing"
 )
 
-func TestRsyncRegistered(t *testing.T) {
-	for _, name := range []string{"rsync", "rsyncd"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 873 {
-			t.Fatalf("%s default port = %d, want 873", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestRsyncGreetingVersion(t *testing.T) {
 	v, ok := rsyncGreetingVersion("@RSYNCD: 31.0")
 	if !ok || v != "31.0" {

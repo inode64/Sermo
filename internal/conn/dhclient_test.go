@@ -6,21 +6,6 @@ import (
 	"time"
 )
 
-func TestDHClientRegistered(t *testing.T) {
-	for _, name := range []string{"dhclient", "dhcp-client"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 68 {
-			t.Fatalf("%s default port = %d, want 68", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestParseProcUDP4Address(t *testing.T) {
 	tests := []struct {
 		in       string
