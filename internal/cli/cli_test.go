@@ -601,7 +601,8 @@ func TestEventsList(t *testing.T) {
 func TestEventsClear(t *testing.T) {
 	var stdout bytes.Buffer
 	app := App{
-		Env: func(string) string { return "" },
+		Env:        func(string) string { return "" },
+		LoadConfig: func(string, ...config.Option) (*config.Config, error) { return &config.Config{}, nil },
 		PruneEvents: func(ctx context.Context, opts options, before time.Time) (int, error) {
 			if !before.IsZero() {
 				t.Fatalf("before = %v, want zero time", before)
@@ -625,7 +626,8 @@ func TestActivityClear(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	var called bool
 	app := App{
-		Env: func(string) string { return "" },
+		Env:        func(string) string { return "" },
+		LoadConfig: func(string, ...config.Option) (*config.Config, error) { return &config.Config{}, nil },
 		PruneEvents: func(ctx context.Context, opts options, before time.Time) (int, error) {
 			called = true
 			if !before.IsZero() {
@@ -653,7 +655,8 @@ func TestActivityClearBefore(t *testing.T) {
 	var stdout bytes.Buffer
 	want := time.Date(2026, 6, 13, 10, 30, 0, 0, time.UTC)
 	app := App{
-		Env: func(string) string { return "" },
+		Env:        func(string) string { return "" },
+		LoadConfig: func(string, ...config.Option) (*config.Config, error) { return &config.Config{}, nil },
 		PruneEvents: func(ctx context.Context, opts options, before time.Time) (int, error) {
 			if !before.Equal(want) {
 				t.Fatalf("before = %s, want %s", before.Format(time.RFC3339), want.Format(time.RFC3339))
