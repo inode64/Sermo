@@ -83,20 +83,13 @@ category: "database"      # optional WebUI grouping/filter label
 
 ## File granularity
 
-Always use one YAML file per target:
-
-- one catalog service, app, lib or pattern per file;
-- one service per file;
-- one mount per file;
-- one notifier per file;
-- one host watch per file for storage, network, uplink, load and other watch
-  fragments.
-
-Watch and notifier fragment files still use a top-level `watches:` or
-`notifiers:` map, but the map must contain exactly one named entry. Do not group
-several services, mounts, apps, notifiers or watch targets into a single
-operational file. `docs/sermo-all.yml` is the only reference-style exception: it
-groups examples so the schema can be validated in one place.
+Use one YAML file per target — a single document of one kind per file, never
+several grouped together. A document's kind is derived from where it lives
+(catalog subdir / `paths.services` / `paths.mounts`), so a top-level `kind:` is
+optional. Watch and notifier fragment files still use a top-level `watches:` or
+`notifiers:` map, but the map must contain exactly one named entry.
+`docs/sermo-all.yml` is the only reference-style exception: it groups examples so
+the schema can be validated in one place.
 
 `clone` copies the source service in UNEXPANDED form (its fields and `variables`,
 with `${...}` still literal), so overriding a single variable in the clone changes
