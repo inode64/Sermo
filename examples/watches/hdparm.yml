@@ -1,0 +1,17 @@
+watches:
+  hdparm:
+    # Disk throughput via `hdparm -t/-T` (needs hdparm + root). Per-device:
+    # set `device:` to YOUR disk and copy this file once per disk you care about.
+    # Polled every 12h because `hdparm -t` runs a real buffered-read benchmark.
+    # Switch `monitor: disabled` -> `enabled` once the device is correct.
+    monitor: disabled
+    interval: 12h
+    check:
+      type: hdparm
+      device: /dev/sda  # EXAMPLE — use your real block device (e.g. /dev/nvme0)
+      read: { op: "<", value: 100 }  # MB/s; alert if buffered read degrades
+      # cached: { op: "<", value: 5000 }  # MB/s; cached/memory read speed
+    for: { cycles: 2 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-hdparm-alert.sh]
