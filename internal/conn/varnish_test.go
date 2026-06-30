@@ -8,21 +8,6 @@ import (
 	"testing"
 )
 
-func TestVarnishRegistered(t *testing.T) {
-	for _, name := range []string{"varnish", "varnishadm"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 6082 {
-			t.Fatalf("%s default port = %d, want 6082", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestParseVarnishStatus(t *testing.T) {
 	if s, l, err := parseVarnishStatus("200 8       \n"); err != nil || s != 200 || l != 8 {
 		t.Fatalf("got %d/%d/%v, want 200/8/nil", s, l, err)

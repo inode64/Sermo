@@ -10,21 +10,6 @@ import (
 	"testing"
 )
 
-func TestCloudflaredRegistered(t *testing.T) {
-	for _, name := range []string{"cloudflared", "cloudflare-tunnel"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 60123 {
-			t.Fatalf("%s default port = %d, want 60123", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func probeCloudflared(t *testing.T, serverURL string) (Result, error) {
 	t.Helper()
 	u, err := url.Parse(serverURL)

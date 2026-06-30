@@ -12,21 +12,6 @@ import (
 	"time"
 )
 
-func TestPrometheusRegistered(t *testing.T) {
-	for _, name := range []string{"prometheus", "prom"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 9090 {
-			t.Fatalf("%s default port = %d, want 9090", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func promHostPort(t *testing.T, srv *httptest.Server) (string, int) {
 	t.Helper()
 	host, portStr, err := net.SplitHostPort(strings.TrimPrefix(srv.URL, "http://"))

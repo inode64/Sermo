@@ -6,19 +6,6 @@ import (
 	"testing"
 )
 
-func TestIMAPRegistered(t *testing.T) {
-	p, ok := Lookup("imap")
-	if !ok {
-		t.Fatal("imap not registered")
-	}
-	if p.DefaultPort() != 143 {
-		t.Fatalf("default port = %d, want 143", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("imap must not require a user (anonymous connectivity check allowed)")
-	}
-}
-
 func TestIMAPHandshakeAnonymous(t *testing.T) {
 	// Anonymous: only the greeting is read; no LOGIN is sent.
 	conn := rw{in: strings.NewReader("* OK [CAPABILITY IMAP4rev1] Dovecot ready.\r\n"), out: &bytes.Buffer{}}

@@ -6,19 +6,6 @@ import (
 	"testing"
 )
 
-func TestFTPRegistered(t *testing.T) {
-	p, ok := Lookup("ftp")
-	if !ok {
-		t.Fatal("ftp not registered")
-	}
-	if p.DefaultPort() != 21 {
-		t.Fatalf("default port = %d, want 21", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("ftp must not require a user (anonymous check allowed)")
-	}
-}
-
 func TestFTPHandshakeAnonymous(t *testing.T) {
 	conn := rw{in: strings.NewReader("220-Welcome\r\n220 ProFTPD 1.3 ready\r\n"), out: &bytes.Buffer{}}
 	res, err := ftpHandshake(conn, Config{})

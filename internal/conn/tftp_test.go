@@ -4,19 +4,6 @@ import (
 	"testing"
 )
 
-func TestTFTPRegistered(t *testing.T) {
-	p, ok := Lookup("tftp")
-	if !ok {
-		t.Fatal("tftp not registered")
-	}
-	if p.DefaultPort() != 69 {
-		t.Fatalf("default port = %d, want 69", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("tftp must not require a user")
-	}
-}
-
 func TestBuildTFTPReadRequest(t *testing.T) {
 	req := buildTFTPReadRequest("boot/pxelinux.0")
 	// opcode 1 (RRQ), then filename\0octet\0

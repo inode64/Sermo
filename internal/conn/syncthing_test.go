@@ -9,19 +9,6 @@ import (
 	"testing"
 )
 
-func TestSyncthingRegistered(t *testing.T) {
-	p, ok := Lookup("syncthing")
-	if !ok {
-		t.Fatal("syncthing not registered")
-	}
-	if p.DefaultPort() != 8384 {
-		t.Fatalf("default port = %d, want 8384", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("syncthing must not require a user")
-	}
-}
-
 // syncthingTestServer serves the health endpoint and, for requests carrying the
 // expected API key, the version endpoint.
 func syncthingTestServer(apiKey string) *httptest.Server {

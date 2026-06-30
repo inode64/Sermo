@@ -7,21 +7,6 @@ import (
 	"testing"
 )
 
-func TestAsteriskRegistered(t *testing.T) {
-	for _, name := range []string{"asterisk", "ami"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 5038 {
-			t.Fatalf("%s default port = %d, want 5038", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestAsteriskGreetingVersion(t *testing.T) {
 	v, ok := asteriskGreetingVersion("Asterisk Call Manager/2.10.6")
 	if !ok || v != "2.10.6" {

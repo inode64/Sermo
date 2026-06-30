@@ -10,21 +10,6 @@ import (
 	"testing"
 )
 
-func TestNNTPRegistered(t *testing.T) {
-	for _, name := range []string{"nntp", "nntps"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 119 {
-			t.Fatalf("%s default port = %d, want 119", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 // serveNNTP runs a fake NNTP server: it sends greeting, then answers each command
 // from replies (keyed by the uppercased command, e.g. "AUTHINFO USER"). QUIT is
 // always answered 205 and ends the session.

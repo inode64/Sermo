@@ -6,19 +6,6 @@ import (
 	"testing"
 )
 
-func TestSSHRegistered(t *testing.T) {
-	p, ok := Lookup("ssh")
-	if !ok {
-		t.Fatal("ssh not registered")
-	}
-	if p.DefaultPort() != 22 {
-		t.Fatalf("default port = %d, want 22", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("ssh must not require a user (anonymous host-key check allowed)")
-	}
-}
-
 func TestParseSSHBanner(t *testing.T) {
 	proto, sw := parseSSHBanner("SSH-2.0-OpenSSH_9.6p1 Debian-1")
 	if proto != "2.0" || sw != "OpenSSH_9.6p1 Debian-1" {

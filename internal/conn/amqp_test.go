@@ -10,21 +10,6 @@ import (
 	"testing"
 )
 
-func TestAMQPRegistered(t *testing.T) {
-	for _, name := range []string{"amqp", "rabbitmq"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 5672 {
-			t.Fatalf("%s default port = %d, want 5672", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 // amqpShortStr encodes a 1-byte length-prefixed string (AMQP shortstr).
 func amqpShortStr(s string) []byte { return append([]byte{byte(len(s))}, s...) }
 

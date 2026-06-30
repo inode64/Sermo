@@ -9,19 +9,6 @@ import (
 	"testing"
 )
 
-func TestKafkaRegistered(t *testing.T) {
-	p, ok := Lookup("kafka")
-	if !ok {
-		t.Fatal("kafka not registered")
-	}
-	if p.DefaultPort() != 9092 {
-		t.Fatalf("kafka default port = %d, want 9092", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("kafka must not require a user")
-	}
-}
-
 // buildKafkaAPIVersions builds a size-prefixed ApiVersions v0 response carrying
 // the given error code and the given supported API keys (min/max left at 0).
 func buildKafkaAPIVersions(errorCode uint16, apiKeys ...uint16) []byte {

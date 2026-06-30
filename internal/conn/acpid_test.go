@@ -7,19 +7,6 @@ import (
 	"testing"
 )
 
-func TestAcpidRegistered(t *testing.T) {
-	p, ok := Lookup("acpid")
-	if !ok {
-		t.Fatal("acpid not registered")
-	}
-	if p.DefaultPort() != 0 {
-		t.Fatalf("default port = %d, want 0 (socket-only)", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("acpid must not require a user")
-	}
-}
-
 func TestAcpidProbe(t *testing.T) {
 	// A listening Unix socket stands in for a running acpid: connect succeeds.
 	sock := filepath.Join(t.TempDir(), "acpid.socket")

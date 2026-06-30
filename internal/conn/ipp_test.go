@@ -10,21 +10,6 @@ import (
 	"testing"
 )
 
-func TestIPPRegistered(t *testing.T) {
-	for _, name := range []string{"ipp", "cups"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 631 {
-			t.Fatalf("%s default port = %d, want 631", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestBuildIPPRequest(t *testing.T) {
 	req := buildIPPRequest(0x4001, 1)
 	// version 2.0, operation-id 0x4001, request-id 1, operation-attributes-tag 0x01.

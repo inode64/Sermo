@@ -2,65 +2,89 @@ package app
 
 import "testing"
 
-func TestCheckReadingsCertAndCount(t *testing.T) {
-	cert := checkReadings("cert", map[string]any{
-		"source":    "/etc/ssl/cert.pem",
-		"days_left": 30,
-		"not_after": "2026-12-31T00:00:00Z",
-		"issuer":    "Test CA",
-		"dns_names": []string{"example.com", "www.example.com"},
-	})
-	if len(cert) < 4 {
-		t.Fatalf("cert readings = %+v", cert)
+// TestCheckReadingsForAllTypes consolidates the former per-group checkReadings
+// tests: for each check type it builds the readings and asserts the formatted
+// field values (and, for cert, a minimum reading count).
+func TestCheckReadingsForAllTypes(t *testing.T) {
+	cases := []struct {
+		name     string
+		typ      string
+		data     map[string]any
+		want     map[string]string // field -> formatted Value
+		minCount int               // minimum number of readings (0 = unchecked)
+	}{
+		{
+			name: "cert",
+			typ:  "cert",
+			data: map[string]any{
+				"source":    "/etc/ssl/cert.pem",
+				"days_left": 30,
+				"not_after": "2026-12-31T00:00:00Z",
+				"issuer":    "Test CA",
+				"dns_names": []string{"example.com", "www.example.com"},
+			},
+			minCount: 4,
+		},
+		{
+			name: "count",
+			typ:  "count",
+			data: map[string]any{"path": "/var/log", "of": "file", "count": 12},
+			want: map[string]string{"count": "12"},
+		},
+		{
+			name: "firewall_rules",
+			typ:  "firewall_rules",
+			data: map[string]any{"backend": "nftables", "rules": uint64(99), "min_rules": 1},
+			want: map[string]string{"rules": "99"},
+		},
+		{
+			name: "file",
+			typ:  "file",
+			data: map[string]any{"path": "/etc/hosts", "size": int64(220)},
+			want: map[string]string{"size": "220 B"},
+		},
+		{
+			name: "tcp",
+			typ:  "tcp",
+			data: map[string]any{"host": "127.0.0.1", "port": 443, "latency_ms": int64(12), "protocol": "tcp"},
+			want: map[string]string{"latency_ms": "12 ms"},
+		},
+		{
+			name: "http",
+			typ:  "http",
+			data: map[string]any{"status": 200, "latency_ms": int64(45)},
+			want: map[string]string{"status": "200", "latency_ms": "45 ms"},
+		},
+		{
+			name: "storage",
+			typ:  "storage",
+			data: map[string]any{"path": "/", "used_pct": 88.5, "free_bytes": uint64(1 << 30)},
+			want: map[string]string{"used_pct": "88.50%"},
+		},
+		{
+			name: "pressure",
+			typ:  "pressure",
+			data: map[string]any{"some_avg60": 2.5, "value": 2.5},
+			want: map[string]string{"some_avg60": "2.50%"},
+		},
+		{
+			name: "diskio",
+			typ:  "diskio",
+			data: map[string]any{"device": "sda", "util_pct": 50.0, "read_bytes": 1024.0},
+			want: map[string]string{"util_pct": "50.00%"},
+		},
 	}
-	count := checkReadings("count", map[string]any{
-		"path":  "/var/log",
-		"of":    "file",
-		"count": 12,
-	})
-	if readingByField(count, "count").Value != "12" {
-		t.Fatalf("count reading = %+v", count)
-	}
-}
-
-func TestCheckReadingsFirewallAndFile(t *testing.T) {
-	fw := checkReadings("firewall_rules", map[string]any{
-		"backend":   "nftables",
-		"rules":     uint64(99),
-		"min_rules": 1,
-	})
-	if readingByField(fw, "rules").Value != "99" {
-		t.Fatalf("firewall readings = %+v", fw)
-	}
-	file := checkReadings("file", map[string]any{"path": "/etc/hosts", "size": int64(220)})
-	if readingByField(file, "size").Value != "220 B" {
-		t.Fatalf("file readings = %+v", file)
-	}
-}
-
-func TestCheckReadingsConnHTTPAndResource(t *testing.T) {
-	tcp := checkReadings("tcp", map[string]any{
-		"host": "127.0.0.1", "port": 443, "latency_ms": int64(12), "protocol": "tcp",
-	})
-	if readingByField(tcp, "latency_ms").Value != "12 ms" {
-		t.Fatalf("tcp readings = %+v", tcp)
-	}
-	http := checkReadings("http", map[string]any{"status": 200, "latency_ms": int64(45)})
-	if readingByField(http, "status").Value != "200" || readingByField(http, "latency_ms").Value != "45 ms" {
-		t.Fatalf("http readings = %+v", http)
-	}
-	storage := checkReadings("storage", map[string]any{
-		"path": "/", "used_pct": 88.5, "free_bytes": uint64(1 << 30),
-	})
-	if readingByField(storage, "used_pct").Value != "88.50%" {
-		t.Fatalf("storage readings = %+v", storage)
-	}
-	pressure := checkReadings("pressure", map[string]any{"some_avg60": 2.5, "value": 2.5})
-	if readingByField(pressure, "some_avg60").Value != "2.50%" {
-		t.Fatalf("pressure readings = %+v", pressure)
-	}
-	diskio := checkReadings("diskio", map[string]any{"device": "sda", "util_pct": 50.0, "read_bytes": 1024.0})
-	if readingByField(diskio, "util_pct").Value != "50.00%" {
-		t.Fatalf("diskio readings = %+v", diskio)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			readings := checkReadings(c.typ, c.data)
+			if c.minCount > 0 && len(readings) < c.minCount {
+				t.Fatalf("%s readings = %+v, want at least %d", c.typ, readings, c.minCount)
+			}
+			for field, want := range c.want {
+				if got := readingByField(readings, field).Value; got != want {
+					t.Fatalf("%s reading %q = %q, want %q (%+v)", c.typ, field, got, want, readings)
+				}
+			}
+		})
 	}
 }

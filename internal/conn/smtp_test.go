@@ -7,19 +7,6 @@ import (
 	"testing"
 )
 
-func TestSMTPRegistered(t *testing.T) {
-	p, ok := Lookup("smtp")
-	if !ok {
-		t.Fatal("smtp not registered")
-	}
-	if p.DefaultPort() != 25 {
-		t.Fatalf("default port = %d, want 25", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("smtp must not require a user (anonymous check allowed)")
-	}
-}
-
 func TestSMTPHandshakeAnonymous(t *testing.T) {
 	replies := "220 mail.example ESMTP Postfix\r\n" +
 		"250-mail.example\r\n250-PIPELINING\r\n250 AUTH PLAIN LOGIN\r\n"

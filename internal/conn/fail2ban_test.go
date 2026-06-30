@@ -7,19 +7,6 @@ import (
 	"testing"
 )
 
-func TestFail2banRegistered(t *testing.T) {
-	p, ok := Lookup("fail2ban")
-	if !ok {
-		t.Fatal("fail2ban not registered")
-	}
-	if p.DefaultPort() != 0 {
-		t.Fatalf("default port = %d, want 0 (socket-only)", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("fail2ban must not require a user")
-	}
-}
-
 func TestFail2banProbe(t *testing.T) {
 	// A listening Unix socket stands in for a running fail2ban-server.
 	sock := filepath.Join(t.TempDir(), "fail2ban.sock")

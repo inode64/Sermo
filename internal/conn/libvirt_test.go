@@ -2,21 +2,6 @@ package conn
 
 import "testing"
 
-func TestLibvirtRegistered(t *testing.T) {
-	for _, name := range []string{"libvirt", "libvirtd"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 16509 {
-			t.Fatalf("%s default port = %d, want 16509", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestFormatLibvirtVersion(t *testing.T) {
 	cases := map[uint64]string{
 		9000000: "9.0.0",

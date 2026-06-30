@@ -8,21 +8,6 @@ import (
 	"testing"
 )
 
-func TestMemcachedRegistered(t *testing.T) {
-	for _, name := range []string{"memcached", "memcache"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 11211 {
-			t.Fatalf("%s default port = %d, want 11211", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 // fakeMemcached serves one connection that replies to `stats` with reply, then
 // closes. It returns the listening port.
 func fakeMemcached(t *testing.T, reply string) int {

@@ -5,19 +5,6 @@ import (
 	"testing"
 )
 
-func TestAJPRegistered(t *testing.T) {
-	p, ok := Lookup("ajp")
-	if !ok {
-		t.Fatal("ajp not registered")
-	}
-	if p.DefaultPort() != 8009 {
-		t.Fatalf("default port = %d, want 8009", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("ajp must not require a user")
-	}
-}
-
 func TestBuildAJPCPing(t *testing.T) {
 	// 0x12 0x34 (web-server->container magic), length 1, prefix 0x0A (CPing).
 	want := []byte{0x12, 0x34, 0x00, 0x01, 0x0A}

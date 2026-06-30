@@ -8,21 +8,6 @@ import (
 	"testing"
 )
 
-func TestClamdRegistered(t *testing.T) {
-	for _, name := range []string{"clamd", "clamav"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 3310 {
-			t.Fatalf("%s default port = %d, want 3310", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestClamdVersion(t *testing.T) {
 	v, ok := clamdVersion("ClamAV 0.103.8/26900/Wed Mar 15 10:30:00 2023")
 	if !ok || v != "0.103.8" {

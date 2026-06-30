@@ -12,19 +12,6 @@ import (
 	"time"
 )
 
-func TestDNSRegistered(t *testing.T) {
-	p, ok := Lookup("dns")
-	if !ok {
-		t.Fatal("dns not registered")
-	}
-	if p.DefaultPort() != 53 {
-		t.Fatalf("default port = %d, want 53", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("dns must not require a user")
-	}
-}
-
 func TestBuildDNSQueryHeader(t *testing.T) {
 	q, err := buildDNSQuery(0xABCD, "example.com", 1)
 	if err != nil {

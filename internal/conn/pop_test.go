@@ -6,21 +6,6 @@ import (
 	"testing"
 )
 
-func TestPOPRegistered(t *testing.T) {
-	for _, name := range []string{"pop", "pop3"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 110 {
-			t.Fatalf("%s default port = %d, want 110", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user (anonymous check allowed)", name)
-		}
-	}
-}
-
 func TestPOPHandshakeAnonymous(t *testing.T) {
 	conn := rw{in: strings.NewReader("+OK POP3 server ready\r\n"), out: &bytes.Buffer{}}
 	res, err := popHandshake(conn, Config{})

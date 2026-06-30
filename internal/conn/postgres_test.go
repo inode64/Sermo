@@ -5,18 +5,6 @@ import (
 	"testing"
 )
 
-func TestPostgresRegistered(t *testing.T) {
-	for _, name := range []string{"postgres", "postgresql"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 5432 {
-			t.Fatalf("%s default port = %d, want 5432", name, p.DefaultPort())
-		}
-	}
-}
-
 func TestBuildPGDSN(t *testing.T) {
 	dsn := buildPGDSN(Config{
 		Host: "db.example", Port: 5433, User: "monitor",

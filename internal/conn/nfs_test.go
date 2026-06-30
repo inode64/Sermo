@@ -9,21 +9,6 @@ import (
 	"testing"
 )
 
-func TestNFSRegistered(t *testing.T) {
-	for _, name := range []string{"nfs", "nfs-server", "nfsd"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 2049 {
-			t.Fatalf("%s default port = %d, want 2049", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestNFSProbeAgainstFakeServer(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

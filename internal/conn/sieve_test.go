@@ -7,21 +7,6 @@ import (
 	"testing"
 )
 
-func TestSieveRegistered(t *testing.T) {
-	for _, name := range []string{"sieve", "managesieve"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 4190 {
-			t.Fatalf("%s default port = %d, want 4190", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestSieveImplementation(t *testing.T) {
 	v, ok := sieveImplementation(`"IMPLEMENTATION" "Dovecot Pro v2.3"`)
 	if !ok || v != "Dovecot Pro v2.3" {

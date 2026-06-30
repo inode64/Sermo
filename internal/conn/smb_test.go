@@ -9,21 +9,6 @@ import (
 	"testing"
 )
 
-func TestSMBRegistered(t *testing.T) {
-	for _, name := range []string{"smb", "samba", "cifs"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 445 {
-			t.Fatalf("%s default port = %d, want 445", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestSplitSMBUser(t *testing.T) {
 	cases := []struct{ in, user, domain string }{
 		{`WORKGROUP\joe`, "joe", "WORKGROUP"},

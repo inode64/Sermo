@@ -5,8 +5,8 @@
     "semantic_hash": "d6fc231fafcc5262f43e68cb6b710ecc"
   },
   ".claude/settings.local.json": {
-    "mtime": 1782282365.2887266,
-    "ast_hash": "86b9272073225a16510586da883350b1",
+    "mtime": 1782829590.846033,
+    "ast_hash": "74b09dc57f5cfa9db04af16f779b5ec8",
     "semantic_hash": ""
   },
   "cmd/sermoctl/main.go": {
@@ -35,8 +35,8 @@
     "semantic_hash": ""
   },
   "go.mod": {
-    "mtime": 1782320533.0441067,
-    "ast_hash": "8603911bca70c9c7ae8433aaab8066e8",
+    "mtime": 1782829386.1955903,
+    "ast_hash": "3f613dbb039e5f66c1901bf1473a3954",
     "semantic_hash": ""
   },
   "internal/app/cascade.go": {
@@ -1110,8 +1110,8 @@
     "semantic_hash": ""
   },
   "internal/cli/cli_test.go": {
-    "mtime": 1782412805.016866,
-    "ast_hash": "3b719b79e65e26db48b4db03399e2315",
+    "mtime": 1782829687.2420385,
+    "ast_hash": "3797d58b9edb2144f92f3ec66d062430",
     "semantic_hash": ""
   },
   "internal/cli/daemon.go": {
@@ -1240,8 +1240,8 @@
     "semantic_hash": ""
   },
   "internal/config/catalog_audit_test.go": {
-    "mtime": 1782453716.619939,
-    "ast_hash": "e5149e63bdd474f7dab460c43e9ae2fa",
+    "mtime": 1782829705.1740732,
+    "ast_hash": "2fe339725dd754717d84ba48682ffad7",
     "semantic_hash": ""
   },
   "internal/config/config_test.go": {
@@ -5092,6 +5092,141 @@
   "internal/checks/version_test.go": {
     "mtime": 1782420064.2377877,
     "ast_hash": "502e37d16f1a1b22d3a8ece6c6643972",
+    "semantic_hash": ""
+  },
+  ".agents/skills/accessibility/SKILL.es.md": {
+    "mtime": 1782709324.6483324,
+    "ast_hash": "efff19788a98d48884a778e67bf9f164",
+    "semantic_hash": ""
+  },
+  ".agents/skills/accessibility/references/A11Y-PATTERNS.es.md": {
+    "mtime": 1782709350.0355463,
+    "ast_hash": "a06a91aa40b27b935caa045538d261ce",
+    "semantic_hash": ""
+  },
+  ".agents/skills/accessibility/references/WCAG.es.md": {
+    "mtime": 1782709393.5302105,
+    "ast_hash": "aff7217f8f9d513db72148880d27b568",
+    "semantic_hash": ""
+  },
+  ".agents/skills/golang-patterns/SKILL.es.md": {
+    "mtime": 1782709324.6483324,
+    "ast_hash": "c046f316310369237dc781cedab9aa79",
+    "semantic_hash": ""
+  },
+  ".agents/skills/golang-testing/SKILL.es.md": {
+    "mtime": 1782709324.7403295,
+    "ast_hash": "b89d383f61807fc54fb3f6dd5ed43ab6",
+    "semantic_hash": ""
+  },
+  ".agents/skills/sermo-config-schema/SKILL.es.md": {
+    "mtime": 1782709394.8021717,
+    "ast_hash": "04f45bbc4505fc262a655e306026b8c3",
+    "semantic_hash": ""
+  },
+  ".agents/skills/sermo-docs-writer/SKILL.es.md": {
+    "mtime": 1782709401.9979517,
+    "ast_hash": "e4020474f2004307c91847419b28fa13",
+    "semantic_hash": ""
+  },
+  ".agents/skills/sermo-go-implementation/SKILL.es.md": {
+    "mtime": 1782709423.794486,
+    "ast_hash": "7614f355907bc3e1eeed9764c1ef71f8",
+    "semantic_hash": ""
+  },
+  ".agents/skills/sermo-linux-service/SKILL.es.md": {
+    "mtime": 1782709434.496962,
+    "ast_hash": "56d87392ffddffb675b4bdee8c0b9693",
+    "semantic_hash": ""
+  },
+  ".agents/skills/sermo-packaging/SKILL.es.md": {
+    "mtime": 1782709446.4246,
+    "ast_hash": "53191abb8045c3e54409b0963afff3b6",
+    "semantic_hash": ""
+  },
+  ".agents/skills/sermo-process-discovery/SKILL.es.md": {
+    "mtime": 1782709324.6483324,
+    "ast_hash": "30b48b7156ae3f3bc4db7e4bb4b8d2a3",
+    "semantic_hash": ""
+  },
+  ".agents/skills/sermo-profile-author/SKILL.es.md": {
+    "mtime": 1782709339.3678758,
+    "ast_hash": "c163ede0646ef973ae6cb6c31f499756",
+    "semantic_hash": ""
+  },
+  ".agents/skills/sermo-project-architect/SKILL.es.md": {
+    "mtime": 1782709351.2275095,
+    "ast_hash": "f3dcffe11aa120af33f9ed0f4de063d6",
+    "semantic_hash": ""
+  },
+  ".agents/skills/sermo-remote-testing/SKILL.es.md": {
+    "mtime": 1782709539.3497925,
+    "ast_hash": "26c288e08b65d78125d23eb975082440",
+    "semantic_hash": ""
+  },
+  ".agents/skills/sermo-rule-engine/SKILL.es.md": {
+    "mtime": 1782709375.1787727,
+    "ast_hash": "27043f398f2ddb25da40052b0a1edf92",
+    "semantic_hash": ""
+  },
+  ".agents/skills/sermo-safety-review/SKILL.es.md": {
+    "mtime": 1782709396.914107,
+    "ast_hash": "fb67a2b1b793099830d1f34be6d79e09",
+    "semantic_hash": ""
+  },
+  ".agents/skills/sermo-test-engineer/SKILL.es.md": {
+    "mtime": 1782709412.9349265,
+    "ast_hash": "69da26b337b754711c71e0e06caa7119",
+    "semantic_hash": ""
+  },
+  "AGENTS.es.md": {
+    "mtime": 1782709547.769539,
+    "ast_hash": "75982fdbaaac05042706a24ced68b72b",
+    "semantic_hash": ""
+  },
+  "CLAUDE.es.md": {
+    "mtime": 1782709324.624333,
+    "ast_hash": "e3a34b4ea28b1750b47d798731cd6068",
+    "semantic_hash": ""
+  },
+  "README.es.md": {
+    "mtime": 1782709354.8553977,
+    "ast_hash": "8f838383b7976fd3fa5a03403cf9fd11",
+    "semantic_hash": ""
+  },
+  "TODO.es.md": {
+    "mtime": 1782709324.6763313,
+    "ast_hash": "b577e3416db88fc51324db4138b606c7",
+    "semantic_hash": ""
+  },
+  "docs/cli.es.md": {
+    "mtime": 1782709324.6483324,
+    "ast_hash": "5f537c57b474ebf86aa6c76da5a5e129",
+    "semantic_hash": ""
+  },
+  "docs/configuration.es.md": {
+    "mtime": 1782709662.2238722,
+    "ast_hash": "6afd13d45169f89a48bdedc182bd5bcb",
+    "semantic_hash": ""
+  },
+  "docs/rules.es.md": {
+    "mtime": 1782709683.275663,
+    "ast_hash": "4748a49b94c599f15cf25aa62da83faf",
+    "semantic_hash": ""
+  },
+  "docs/safety.es.md": {
+    "mtime": 1782709324.6483324,
+    "ast_hash": "d8ceb7656801fa5ec970ac09ee092103",
+    "semantic_hash": ""
+  },
+  "docs/services.es.md": {
+    "mtime": 1782709489.672972,
+    "ast_hash": "33837567a5cefbfd5a5504001f498c66",
+    "semantic_hash": ""
+  },
+  "docs/webui-representation.es.md": {
+    "mtime": 1782709324.6483324,
+    "ast_hash": "b55f741e12614189987bd4211dd815c7",
     "semantic_hash": ""
   }
 }

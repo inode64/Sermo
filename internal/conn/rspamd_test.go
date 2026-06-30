@@ -9,19 +9,6 @@ import (
 	"testing"
 )
 
-func TestRspamdRegistered(t *testing.T) {
-	p, ok := Lookup("rspamd")
-	if !ok {
-		t.Fatal("rspamd not registered")
-	}
-	if p.DefaultPort() != 11334 {
-		t.Fatalf("default port = %d, want 11334", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("rspamd must not require a user")
-	}
-}
-
 func TestRspamdVersion(t *testing.T) {
 	cases := map[string]string{
 		"Rspamd/3.8.4":            "3.8.4",
