@@ -43,31 +43,12 @@ Always verify:
     locks live under `<paths.runtime>/locks`; internal operation locks live under
     `<paths.runtime>/ops`; active locks are never loaded from `/etc/sermo`.
 
-## High-risk services
-
-Treat these as high risk by default:
-
-```text
-mysql
-mariadb
-postgresql
-redis
-mongodb
-elasticsearch
-rabbitmq
-kafka
-ceph
-vault
-```
-
-For these, default to conservative stop policies and strong guard checks.
 
 ## Red flags
 
 Flag any code or config that:
 
 ```text
-uses pkill/killall
 matches killable processes by substring, basename, or argv[0]/cmdline
 runs shell commands with unescaped user input
 ignores command errors

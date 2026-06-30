@@ -169,7 +169,7 @@ func TestServiceAssistantCatalogDetectedVariablesAreWritten(t *testing.T) {
 		return []ServiceCandidate{{
 			Name:      "ceph-mon",
 			Title:     "Ceph Monitor",
-			Unit:      "ceph-mon@host58.service",
+			Unit:      "ceph-mon@node1.service",
 			Status:    "active",
 			Port:      3300,
 			Variables: map[string]any{"host": "192.0.2.102", "port": 3300},

@@ -48,7 +48,7 @@ func TestParseProcSocketTableUDP(t *testing.T) {
 
 func TestParseProcSocketTableHostsIPv4(t *testing.T) {
 	const table = `  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
-   0: 161B1FAC:2390 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12345 1 0000000000000000 100 0 0 10 0
+   0: 160200C0:2390 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12345 1 0000000000000000 100 0 0 10 0
    1: 0100007F:2390 00000000:0000 01 00000000:00000000 00:00000000 00000000     0        0 12346 1 0000000000000000 100 0 0 10 0
 `
 	got, err := parseProcSocketTableHosts(strings.NewReader(table), 9104, map[string]bool{"0A": true}, false)
@@ -224,8 +224,8 @@ func TestParseCephMonAddrsIPv6(t *testing.T) {
 }
 
 func TestCephMonIDFromSystemdUnit(t *testing.T) {
-	if got := cephMonID("ceph-mon@host58.service"); got != "host58" {
-		t.Fatalf("cephMonID = %q, want host58", got)
+	if got := cephMonID("ceph-mon@node1.service"); got != "node1" {
+		t.Fatalf("cephMonID = %q, want node1", got)
 	}
 }
 

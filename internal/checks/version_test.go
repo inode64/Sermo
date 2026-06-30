@@ -3,8 +3,7 @@ package checks
 import "testing"
 
 // TestShortVersionRealData exercises ShortVersion against version strings
-// captured live from production hosts (host58, host59, host49, host51, host31 — June 2026)
-// by running each app's configured version command and taking the first
+// captured live by running each app's configured version command and taking the first
 // non-empty line, exactly as Inspect does. Each line must reduce to its numeric
 // version and at most the patchlevel; a miss fails the test so the regex can be
 // tightened against formats it does not yet cover.
