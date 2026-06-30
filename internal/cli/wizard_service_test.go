@@ -48,14 +48,14 @@ func TestParseProcSocketTableUDP(t *testing.T) {
 
 func TestParseProcSocketTableHostsIPv4(t *testing.T) {
 	const table = `  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
-   0: 161B1FAC:2390 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12345 1 0000000000000000 100 0 0 10 0
+   0: 160200C0:2390 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12345 1 0000000000000000 100 0 0 10 0
    1: 0100007F:2390 00000000:0000 01 00000000:00000000 00:00000000 00000000     0        0 12346 1 0000000000000000 100 0 0 10 0
 `
 	got, err := parseProcSocketTableHosts(strings.NewReader(table), 9104, map[string]bool{"0A": true}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"172.31.27.22"}
+	want := []string{"192.0.2.22"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("parseProcSocketTableHosts() = %v, want %v", got, want)
 	}
@@ -82,10 +82,10 @@ func TestSpecificListenerHostRequiresOneNonLoopbackAddress(t *testing.T) {
 		want  string
 		ok    bool
 	}{
-		{name: "specific", hosts: []string{"172.31.27.22"}, want: "172.31.27.22", ok: true},
+		{name: "specific", hosts: []string{"192.0.2.22"}, want: "192.0.2.22", ok: true},
 		{name: "loopback", hosts: []string{"127.0.0.1", "::1"}},
 		{name: "wildcard", hosts: []string{"0.0.0.0", "::"}},
-		{name: "ambiguous", hosts: []string{"172.31.27.22", "172.31.28.22"}},
+		{name: "ambiguous", hosts: []string{"192.0.2.22", "198.51.100.22"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -99,8 +99,8 @@ func TestSpecificListenerHostRequiresOneNonLoopbackAddress(t *testing.T) {
 
 func TestMergeCandidateVariablesPreservesDetectedValues(t *testing.T) {
 	c := assist.ServiceCandidate{Variables: map[string]any{"port": 3300}}
-	mergeCandidateVariables(&c, map[string]any{"host": "172.31.27.22"})
-	if c.Variables["port"] != 3300 || c.Variables["host"] != "172.31.27.22" {
+	mergeCandidateVariables(&c, map[string]any{"host": "192.0.2.22"})
+	if c.Variables["port"] != 3300 || c.Variables["host"] != "192.0.2.22" {
 		t.Fatalf("variables = %#v, want existing port and detected host", c.Variables)
 	}
 }
@@ -203,16 +203,16 @@ func TestDedupeWizardCatalogCandidatesByUnit(t *testing.T) {
 }
 
 func TestParseCephMonAddrsPrefersV2(t *testing.T) {
-	host, port := parseCephMonAddrs("[v2:172.31.27.102:3300/0,v1:172.31.27.102:6789/0]")
-	if host != "172.31.27.102" || port != 3300 {
-		t.Fatalf("endpoint = %s:%d, want 172.31.27.102:3300", host, port)
+	host, port := parseCephMonAddrs("[v2:192.0.2.102:3300/0,v1:192.0.2.102:6789/0]")
+	if host != "192.0.2.102" || port != 3300 {
+		t.Fatalf("endpoint = %s:%d, want 192.0.2.102:3300", host, port)
 	}
 }
 
 func TestParseCephMonAddrsFallsBackToV1(t *testing.T) {
-	host, port := parseCephMonAddrs("[v1:172.31.27.102:6789/0]")
-	if host != "172.31.27.102" || port != 6789 {
-		t.Fatalf("endpoint = %s:%d, want 172.31.27.102:6789", host, port)
+	host, port := parseCephMonAddrs("[v1:192.0.2.102:6789/0]")
+	if host != "192.0.2.102" || port != 6789 {
+		t.Fatalf("endpoint = %s:%d, want 192.0.2.102:6789", host, port)
 	}
 }
 
@@ -224,8 +224,8 @@ func TestParseCephMonAddrsIPv6(t *testing.T) {
 }
 
 func TestCephMonIDFromSystemdUnit(t *testing.T) {
-	if got := cephMonID("ceph-mon@bk1.service"); got != "bk1" {
-		t.Fatalf("cephMonID = %q, want bk1", got)
+	if got := cephMonID("ceph-mon@node1.service"); got != "node1" {
+		t.Fatalf("cephMonID = %q, want node1", got)
 	}
 }
 

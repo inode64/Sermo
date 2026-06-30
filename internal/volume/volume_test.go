@@ -89,10 +89,10 @@ func TestListFiltersPseudoFilesystems(t *testing.T) {
 		Mount{Device: "systemd-1", Mountpoint: "/var/lib/libvirt/images", FSType: "autofs"},
 		Mount{Device: "/dev/sda1", Mountpoint: "/", FSType: "ext4"},
 		Mount{Device: "/dev/mapper/vg0-data", Mountpoint: "/mnt/backup", FSType: "ext4"},
-		Mount{Device: "172.31.27.102:/srv/backup/kvm", Mountpoint: "/srv/backup/kvm", FSType: "nfs4"},
-		Mount{Device: "172.31.27.100:/", Mountpoint: "/var/lib/libvirt/images", FSType: "ceph"},
+		Mount{Device: "192.0.2.102:/srv/backup", Mountpoint: "/srv/backup", FSType: "nfs4"},
+		Mount{Device: "192.0.2.100:/", Mountpoint: "/var/lib/libvirt/images", FSType: "ceph"},
 		Mount{Device: "/dev/sda1", Mountpoint: "/", FSType: "ext4"}, // dup mountpoint
-		Mount{Device: "/dev/sda1", Mountpoint: "/srv/workspace/project", FSType: "ext4"},
+		Mount{Device: "/dev/sda1", Mountpoint: "/srv/workspace", FSType: "ext4"},
 	)
 	got, err := List(src)
 	if err != nil {
@@ -101,7 +101,7 @@ func TestListFiltersPseudoFilesystems(t *testing.T) {
 	if len(got) != 4 {
 		t.Fatalf("got %d mounts, want 4 (real storage mounts, deduped): %+v", len(got), got)
 	}
-	want := []string{"/", "/mnt/backup", "/srv/backup/kvm", "/var/lib/libvirt/images"}
+	want := []string{"/", "/mnt/backup", "/srv/backup", "/var/lib/libvirt/images"}
 	for i := range want {
 		if got[i].Mountpoint != want[i] {
 			t.Fatalf("mount[%d] = %q, want %q; got %+v", i, got[i].Mountpoint, want[i], got)

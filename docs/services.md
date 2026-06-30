@@ -367,9 +367,9 @@ validating config off-host.
 bind address like `127.0.0.1`); an explicit `host` always wins.
 
 ⁵ `${hostname}` is the **short** hostname — the first label before the first dot
-(`radon` on `radon.srvdr.com`) — distinct from `${host}` (which keeps the full
+(`node1` on `node1.example.com`) — distinct from `${host}` (which keeps the full
 detected hostname / bind-address fallback). Use it for systemd instance units
-keyed by host identity, e.g. `service: "ceph-mon@${hostname}"` → `ceph-mon@radon`.
+keyed by host identity, e.g. `service: "ceph-mon@${hostname}"` → `ceph-mon@node1`.
 For numeric multi-instance services (e.g. one OSD per device) use a `%n` service
 template whose `service:` carries `${n}`. Sermo materializes `ceph-osd0…N` from
 active units such as `ceph-osd@0.service`, then links the generic `ceph-osd` app
