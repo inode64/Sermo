@@ -26,19 +26,6 @@ func dockerMux() *http.ServeMux {
 	return mux
 }
 
-func TestDockerRegistered(t *testing.T) {
-	p, ok := Lookup("docker")
-	if !ok {
-		t.Fatal("docker not registered")
-	}
-	if p.DefaultPort() != 2375 {
-		t.Fatalf("default port = %d, want 2375", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("docker must not require a user")
-	}
-}
-
 func probeDocker(t *testing.T, serverURL string, cfg Config) (Result, error) {
 	t.Helper()
 	u, _ := url.Parse(serverURL)

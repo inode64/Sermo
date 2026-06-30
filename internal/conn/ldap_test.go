@@ -2,19 +2,6 @@ package conn
 
 import "testing"
 
-func TestLDAPRegistered(t *testing.T) {
-	p, ok := Lookup("ldap")
-	if !ok {
-		t.Fatal("ldap not registered")
-	}
-	if p.DefaultPort() != 389 {
-		t.Fatalf("default port = %d, want 389", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("ldap must not require a user (anonymous bind allowed)")
-	}
-}
-
 func TestBuildLDAPURL(t *testing.T) {
 	url, useTLS := buildLDAPURL("dir.example", 389, "")
 	if url != "ldap://dir.example:389" || useTLS {

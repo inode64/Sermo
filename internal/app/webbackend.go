@@ -475,8 +475,15 @@ func (b *WebBackend) decorateRemediation(name string, svc *web.Service) {
 	}
 }
 
+// lockProcProber answers lock-owner liveness for the web backend's lock views.
+// Production uses the real /proc-backed prober; tests substitute a deterministic
+// one so lock state does not depend on the host's /proc.
+var lockProcProber locks.ProcessProber = locks.OSProcessProber{}
+
 func locksScanner(cfg *config.Config) locks.Scanner {
-	return locks.NewScanner(filepath.Join(cfg.Global.RuntimeDir(), "locks"))
+	s := locks.NewScanner(filepath.Join(cfg.Global.RuntimeDir(), "locks"))
+	s.Proc = lockProcProber
+	return s
 }
 
 func serviceLocksReport(cfg *config.Config, service string) (locks.Report, error) {
@@ -2175,6 +2182,7 @@ func (b *WebBackend) ReleaseLock(_ context.Context, service, name string) web.Ac
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	locker := locks.NewNamedLocker(filepath.Join(b.cfg.Global.RuntimeDir(), "locks"))
+	locker.Proc = lockProcProber
 	lk, err := locker.ReleaseInactive(service, name)
 	if err != nil {
 		msg := err.Error()

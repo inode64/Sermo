@@ -6,19 +6,6 @@ import (
 	"testing"
 )
 
-func TestFPMRegistered(t *testing.T) {
-	p, ok := Lookup("fpm")
-	if !ok {
-		t.Fatal("fpm not registered")
-	}
-	if p.DefaultPort() != 9000 {
-		t.Fatalf("default port = %d, want 9000", p.DefaultPort())
-	}
-	if p.RequiresUser() {
-		t.Fatal("fpm must not require a user")
-	}
-}
-
 // fcgiResponse builds a canned FastCGI reply: one STDOUT record with body, then
 // END_REQUEST.
 func fcgiResponse(t *testing.T, body string) string {

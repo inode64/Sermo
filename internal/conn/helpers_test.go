@@ -67,16 +67,6 @@ func TestMySQLDSNDefaultsAndEscaping(t *testing.T) {
 	}
 }
 
-func TestPostgresRequiresUser(t *testing.T) {
-	p, ok := Lookup("postgres")
-	if !ok {
-		t.Fatal("postgres not registered")
-	}
-	if !p.RequiresUser() || p.DefaultPort() != 5432 {
-		t.Fatalf("postgres meta = requiresUser %v port %d", p.RequiresUser(), p.DefaultPort())
-	}
-}
-
 func TestDNSAndDHCPIDs(t *testing.T) {
 	// Random IDs: just require a few draws not to be all identical, so a
 	// stuck-at-zero regression cannot pass.

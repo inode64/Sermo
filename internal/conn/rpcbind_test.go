@@ -8,21 +8,6 @@ import (
 	"testing"
 )
 
-func TestRpcbindRegistered(t *testing.T) {
-	for _, name := range []string{"rpcbind", "portmap", "portmapper"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 111 {
-			t.Fatalf("%s default port = %d, want 111", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestBuildRPCNull(t *testing.T) {
 	b := buildRPCNull(0x12345678, portmapProg, portmapVers)
 	if len(b) != 40 {

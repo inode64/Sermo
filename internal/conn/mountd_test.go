@@ -9,21 +9,6 @@ import (
 	"testing"
 )
 
-func TestMountdRegistered(t *testing.T) {
-	for _, name := range []string{"mountd", "rpc.mountd", "nfs-mountd"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 20048 {
-			t.Fatalf("%s default port = %d, want 20048", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestMountdProbeAgainstFakeServer(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

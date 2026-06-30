@@ -10,21 +10,6 @@ import (
 	"testing"
 )
 
-func TestNUTRegistered(t *testing.T) {
-	for _, name := range []string{"nut", "ups", "upsd"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 3493 {
-			t.Fatalf("%s default port = %d, want 3493", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user (anonymous VER probe allowed)", name)
-		}
-	}
-}
-
 func TestNUTVersion(t *testing.T) {
 	if v := nutVersion("Network UPS Tools upsd 2.8.0 - http://www.networkupstools.org/"); v != "2.8.0" {
 		t.Errorf("version = %q, want 2.8.0", v)

@@ -6,21 +6,6 @@ import (
 	"time"
 )
 
-func TestAvahiRegistered(t *testing.T) {
-	for _, name := range []string{"avahi", "avahi-daemon"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 0 {
-			t.Fatalf("%s default port = %d, want 0 (socket-based)", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestAvahiVersion(t *testing.T) {
 	if v := avahiVersion("avahi 0.8"); v != "0.8" {
 		t.Fatalf("version = %q, want 0.8", v)

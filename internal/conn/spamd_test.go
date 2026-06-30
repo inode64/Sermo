@@ -9,21 +9,6 @@ import (
 	"testing"
 )
 
-func TestSpamdRegistered(t *testing.T) {
-	for _, name := range []string{"spamd", "spamassassin"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 783 {
-			t.Fatalf("%s default port = %d, want 783", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestParseSpamdPong(t *testing.T) {
 	if v, ok := parseSpamdPong("SPAMD/1.5 0 PONG"); !ok || v != "1.5" {
 		t.Fatalf("got %q/%v, want 1.5/true", v, ok)

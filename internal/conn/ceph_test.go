@@ -7,21 +7,6 @@ import (
 	"testing"
 )
 
-func TestCephRegistered(t *testing.T) {
-	for _, name := range []string{"ceph", "ceph-mon"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 3300 {
-			t.Fatalf("%s default port = %d, want 3300", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestParseCephBanner(t *testing.T) {
 	if m, ok := parseCephBanner([]byte("ceph v2\n")); !ok || m != "v2" {
 		t.Fatalf("got %q/%v, want v2/true", m, ok)

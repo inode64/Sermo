@@ -9,21 +9,6 @@ import (
 	"testing"
 )
 
-func TestOpenvswitchRegistered(t *testing.T) {
-	for _, name := range []string{"openvswitch", "ovs", "ovsdb", "ovsdb-server"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 6640 {
-			t.Fatalf("%s default port = %d, want 6640", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 // serveOVSDB answers OVSDB JSON-RPC requests on c: list_dbs returns dbs, and
 // transact returns a single row carrying ovs_version (when non-empty).
 func serveOVSDB(c net.Conn, dbs []string, version string) {

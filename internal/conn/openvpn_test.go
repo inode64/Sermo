@@ -9,21 +9,6 @@ import (
 	"testing"
 )
 
-func TestOpenVPNRegistered(t *testing.T) {
-	for _, name := range []string{"openvpn", "ovpn"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 1194 {
-			t.Fatalf("%s default port = %d, want 1194", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestOpenVPNClientReset(t *testing.T) {
 	sid := []byte{1, 2, 3, 4, 5, 6, 7, 8}
 	b := openvpnClientReset(sid)

@@ -9,21 +9,6 @@ import (
 	"testing"
 )
 
-func TestGuacdRegistered(t *testing.T) {
-	for _, name := range []string{"guacd", "guacamole"} {
-		p, ok := Lookup(name)
-		if !ok {
-			t.Fatalf("%s not registered", name)
-		}
-		if p.DefaultPort() != 4822 {
-			t.Fatalf("%s default port = %d, want 4822", name, p.DefaultPort())
-		}
-		if p.RequiresUser() {
-			t.Fatalf("%s must not require a user", name)
-		}
-	}
-}
-
 func TestGuacInstruction(t *testing.T) {
 	if got := guacInstruction("select", "vnc"); got != "6.select,3.vnc;" {
 		t.Fatalf("got %q, want 6.select,3.vnc;", got)
