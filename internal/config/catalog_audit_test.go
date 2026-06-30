@@ -547,6 +547,14 @@ func TestSMBCatalogUsesPerRolePidfiles(t *testing.T) {
 }
 
 func TestCatalogServicesUseCanonicalServiceNames(t *testing.T) {
+	// Pin the OS so the audit is deterministic regardless of the host running
+	// CI: otherwise an Ubuntu runner collapses os: ubuntu overrides (e.g.
+	// dhcpd's systemd unit becomes isc-dhcp-server) and the expectations below,
+	// which assume the un-overridden catalog, would not match.
+	old := detectedOS
+	detectedOS = "gentoo"
+	defer func() { detectedOS = old }()
+
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
