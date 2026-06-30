@@ -3960,7 +3960,7 @@ func TestDetectHostname(t *testing.T) {
 
 func TestBuiltinHostnameVar(t *testing.T) {
 	old := detectedHostname
-	detectedHostname = "radon"
+	detectedHostname = "node1"
 	defer func() { detectedHostname = old }()
 
 	global := writeConfig(t, map[string]string{
@@ -3981,14 +3981,14 @@ checks:
 		t.Fatalf("Resolve() errors = %v", errs)
 	}
 	// ${hostname} fills the instance id from the short hostname.
-	if got := ServiceUnit(resolved.Tree, "mon"); got != "ceph-mon@radon" {
-		t.Errorf("service unit = %q, want ceph-mon@radon", got)
+	if got := ServiceUnit(resolved.Tree, "mon"); got != "ceph-mon@node1" {
+		t.Errorf("service unit = %q, want ceph-mon@node1", got)
 	}
 }
 
 func TestUserHostnameVariableOverridesBuiltin(t *testing.T) {
 	old := detectedHostname
-	detectedHostname = "radon"
+	detectedHostname = "node1"
 	defer func() { detectedHostname = old }()
 
 	global := writeConfig(t, map[string]string{
@@ -4892,7 +4892,7 @@ func TestVariableFromFileExtraction(t *testing.T) {
 	}
 	nebulaConf := filepath.Join(root, "nebula.yml")
 	if err := os.WriteFile(nebulaConf, []byte(`static_host_map:
-  "172.31.18.1": ["178.33.30.216:4243"]
+  "203.0.113.1": ["178.33.30.216:4243"]
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}

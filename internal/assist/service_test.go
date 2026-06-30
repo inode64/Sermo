@@ -169,10 +169,10 @@ func TestServiceAssistantCatalogDetectedVariablesAreWritten(t *testing.T) {
 		return []ServiceCandidate{{
 			Name:      "ceph-mon",
 			Title:     "Ceph Monitor",
-			Unit:      "ceph-mon@bk1.service",
+			Unit:      "ceph-mon@node1.service",
 			Status:    "active",
 			Port:      3300,
-			Variables: map[string]any{"host": "172.31.27.102", "port": 3300},
+			Variables: map[string]any{"host": "192.0.2.102", "port": 3300},
 		}}, nil
 	}}
 	script := strings.Join([]string{"1", "", "1", "", "n"}, "\n") + "\n"
@@ -183,7 +183,7 @@ func TestServiceAssistantCatalogDetectedVariablesAreWritten(t *testing.T) {
 	}
 	svc := res.Services["ceph-mon"].(map[string]any)
 	vars := svc["variables"].(map[string]any)
-	if vars["host"] != "172.31.27.102" || vars["port"] != 3300 {
+	if vars["host"] != "192.0.2.102" || vars["port"] != 3300 {
 		t.Fatalf("variables = %v, want detected ceph endpoint", vars)
 	}
 }
@@ -329,8 +329,8 @@ func TestServiceAssistantBatchSkipsPortPromptsByDefault(t *testing.T) {
 }
 
 func TestServiceLabel(t *testing.T) {
-	got := serviceLabel(ServiceCandidate{Title: "Nginx", Unit: "nginx", Port: 80, PortListening: true, Variables: map[string]any{"host": "172.31.27.22"}, UnitPresent: true, ConfigPaths: []string{"/etc/nginx/nginx.conf"}})
-	for _, want := range []string{"Nginx", "unit: nginx", "port 80 (listening)", "host: 172.31.27.22", "config: /etc/nginx/nginx.conf"} {
+	got := serviceLabel(ServiceCandidate{Title: "Nginx", Unit: "nginx", Port: 80, PortListening: true, Variables: map[string]any{"host": "192.0.2.22"}, UnitPresent: true, ConfigPaths: []string{"/etc/nginx/nginx.conf"}})
+	for _, want := range []string{"Nginx", "unit: nginx", "port 80 (listening)", "host: 192.0.2.22", "config: /etc/nginx/nginx.conf"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("label %q missing %q", got, want)
 		}

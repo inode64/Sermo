@@ -517,7 +517,7 @@ When a catalog service targets a systemd **instance** unit (`unit@instance`), do
 not invent a hand-typed `${id}` variable the operator must remember to set —
 derive the instance from code, reusing existing machinery:
 
-- **Single instance keyed by host** (e.g. `ceph-mon@radon`, `ceph-mds@radon`):
+- **Single instance keyed by host** (e.g. `ceph-mon@node1`, `ceph-mds@node1`):
   use the built-in `${hostname}` (the short hostname) — `service:
   "ceph-mon@${hostname}"`. It resolves with zero per-service config; an explicit
   `hostname` variable or `SERMO_HOSTNAME` overrides it. `${hostname}` is the short
@@ -604,6 +604,25 @@ checklist). Match the suite's existing style instead of inventing one.
   (web). Copy their shape; do not add a mocking framework.
 - **Table-driven subtests.** Express variants as a slice of cases driven by
   `t.Run(tc.name, …)`, the dominant pattern across the suite.
+- **One function per case is boilerplate — fold a family into one table.** When
+  several test functions differ only in their inputs (one `Test<X>Registered`
+  per probe asserting port/user, one `Test<X>TimeoutMessage` per sampler), they
+  belong in a single table-driven test with one row per case: same coverage,
+  less noise, and one obvious place to add the next case. Extend the existing
+  consolidated tests — `TestProbeMetadata` (conn), `TestInterfaceBindingApplied`
+  (conn), `TestSampleTimeouts` (checks) — instead of adding sibling functions.
+- **Pin every input that changes the result, or it fails on a different host.**
+  A test that reads ambient state passes on your box and breaks on CI. Pin the
+  OS with `detectedOS = "gentoo"` (or `SERMO_OS`) *before* `config.Load` when
+  assertions depend on `os:` selectors; inject `LoadConfig` (or pass `--config`)
+  so a command never reads the default `/etc/sermo/sermo.yml`; and when logic
+  touches `/proc`/loopback, install a fake prober (see the lock tests'
+  `fakeAliveProber`) rather than `t.Skip` — a skipped test is not a passing test.
+- **Before deleting a "redundant" test, prove the stricter assertion survives.**
+  A narrow test can pin a distinction a table case hides: a `slices.Equal(got,
+  nil)` row treats `nil` and `[]string{}` as equal, so a dedicated `got != nil`
+  check is *not* redundant. Confirm the precise behaviour is still asserted
+  elsewhere before removing the test.
 - **Split pure logic out of I/O so it is testable directly** (e.g.
   `parseMeminfoKB`, `parseOSReleasePrettyName`, `levelCountResult`). This serves
   the reuse rule too.

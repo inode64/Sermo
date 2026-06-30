@@ -11,7 +11,7 @@ import (
 // Unlike ${host} (a bind-address fallback that keeps the full os.Hostname()),
 // ${hostname} is the *short* hostname — the first label before the first dot.
 // systemd instance units keyed by host identity use the short form: a Ceph
-// monitor on radon.srvdr.com runs as `ceph-mon@radon`, not `ceph-mon@radon.srvdr.com`.
+// monitor on node1.example.com runs as `ceph-mon@node1`, not `ceph-mon@node1.example.com`.
 // That is why a catalog service writes `service: "ceph-mon@${hostname}"`.
 var detectedHostname = detectHostname()
 

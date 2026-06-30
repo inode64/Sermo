@@ -35,14 +35,14 @@ func TestStorageMountedPrefersRealMountOverAutofsPlaceholder(t *testing.T) {
 		mount: mountCond{active: true, expectMount: true},
 		mountSampler: fakeMounts(
 			Mount{Device: "systemd-1", MountPoint: "/var/lib/libvirt/images", FSType: "autofs", Options: []string{"rw"}},
-			Mount{Device: "172.31.27.100:/", MountPoint: "/var/lib/libvirt/images", FSType: "ceph", Options: []string{"rw"}},
+			Mount{Device: "192.0.2.100:/", MountPoint: "/var/lib/libvirt/images", FSType: "ceph", Options: []string{"rw"}},
 		),
 	}
 	res := c.Run(context.Background())
 	if res.OK {
 		t.Fatalf("mounted-as-expected should not alert, got %q", res.Message)
 	}
-	if res.Data["fstype"] != "ceph" || res.Data["device"] != "172.31.27.100:/" {
+	if res.Data["fstype"] != "ceph" || res.Data["device"] != "192.0.2.100:/" {
 		t.Fatalf("unexpected mount data: %+v", res.Data)
 	}
 }
@@ -147,7 +147,7 @@ func TestMountForPathReturnsDeepestContainingMount(t *testing.T) {
 func TestMountForPathPrefersRealMountOverAutofsPlaceholder(t *testing.T) {
 	mounts := []Mount{
 		{Device: "systemd-1", MountPoint: "/var/lib/libvirt/images", FSType: "autofs"},
-		{Device: "172.31.27.100:/", MountPoint: "/var/lib/libvirt/images", FSType: "ceph"},
+		{Device: "192.0.2.100:/", MountPoint: "/var/lib/libvirt/images", FSType: "ceph"},
 	}
 	got := MountForPath(mounts, "/var/lib/libvirt/images/base.qcow2")
 	if got == nil || got.FSType != "ceph" {
