@@ -1,0 +1,20 @@
+watches:
+  smart:
+    # Daily drive SMART health via `smartctl -H -A -j` (needs smartmontools + root).
+    # Per-device: set `device:` and copy once per disk. With no predicates it alerts
+    # on the overall SMART FAILED verdict; uncomment the predicates for early warning.
+    #
+    # NOTE: for a per-drive list tied to the smartd service, see
+    # examples/services/smartd-disks.yml — this watch is the standalone "host watch"
+    # variant. Set `monitor: disabled` -> `enabled` once the device is correct.
+    monitor: disabled
+    interval: 24h
+    check:
+      type: smart
+      device: /dev/sda  # EXAMPLE — use your real block device (e.g. /dev/nvme0)
+      # reallocated: { op: ">", value: 0 }   # any reallocated sector is suspicious
+      # wear: { op: ">", value: 90 }         # SSD/NVMe nearly worn out (%)
+      # temperature: { op: ">", value: 70 }  # drive overheating (°C)
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-smart-alert.sh]

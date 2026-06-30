@@ -1,0 +1,8 @@
+name: hdparm
+display_name: "hdparm"
+category: storage
+variables:
+  binary: ${bindir}/hdparm
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-V"], timeout: 10s }
