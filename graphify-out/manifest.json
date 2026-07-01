@@ -4380,8 +4380,8 @@
     "semantic_hash": ""
   },
   "internal/web/index.html": {
-    "mtime": 1782405826.246316,
-    "ast_hash": "27432b9224d14fa788253b31ccea685e",
+    "mtime": 1782884688.6355915,
+    "ast_hash": "d1d5c9bbf16971db26078f051285deca",
     "semantic_hash": ""
   },
   "templates/default-alert.yml": {
@@ -4920,8 +4920,8 @@
     "semantic_hash": ""
   },
   "internal/web/src/app.js": {
-    "mtime": 1782404473.3314729,
-    "ast_hash": "ad4e3738f6448dd95b32a487886b8f66",
+    "mtime": 1782884676.391588,
+    "ast_hash": "0880d5a2efa9ec7e68cb1a414b2a8d6c",
     "semantic_hash": ""
   },
   "internal/web/src/vendor/lit-html.js": {
@@ -4930,8 +4930,8 @@
     "semantic_hash": ""
   },
   "internal/web/src/index.html": {
-    "mtime": 1782405813.414436,
-    "ast_hash": "61ffa7601c00e1fb391f2a931581c192",
+    "mtime": 1782884650.2715368,
+    "ast_hash": "d1f8f6a0fb573646011e870649876eca",
     "semantic_hash": ""
   },
   "internal/metrics/rates_test.go": {
