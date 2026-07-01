@@ -106,19 +106,25 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 	}
 }
 
+// activeMonitorTargets counts the distinct settling keys the first-cycle
+// readiness gate must wait for. It must dedupe by key, not count objects:
+// metric watches (net/icmp/swap) expand to one Watch per metric that all share
+// a single settling key (SettlingWatchKey(name)), so a target reports observed
+// only once. Counting objects here would arm the gate for more first cycles than
+// can ever fire, wedging the daemon at "starting" (readyz 503) forever.
 func activeMonitorTargets(workers []*Worker, watches []*Watch) int {
-	n := 0
+	keys := make(map[string]struct{})
 	for _, w := range workers {
 		if monitorTargetActive(w) {
-			n++
+			keys[SettlingServiceKey(w.Service)] = struct{}{}
 		}
 	}
 	for _, wt := range watches {
 		if watchTargetActive(wt) {
-			n++
+			keys[settlingKeyForWatch(wt)] = struct{}{}
 		}
 	}
-	return n
+	return len(keys)
 }
 
 func monitorTargetActive(w *Worker) bool {
