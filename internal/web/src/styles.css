@@ -306,7 +306,7 @@
   .icon-btn { width: 1.85rem; height: 1.85rem; display: inline-grid; place-items: center; padding: 0; font-size: .95rem; line-height: 1; }
   .icon-btn[aria-pressed="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line-2)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
   #app-footer {
-    display: flex; align-items: center; flex-wrap: wrap; gap: .5rem 1rem;
+    display: flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: .5rem 1rem;
     margin-top: 1.5rem; padding-top: .9rem; border-top: 1px solid var(--line);
   }
   #app-footer .footer-actions { display: inline-flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
