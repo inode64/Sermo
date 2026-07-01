@@ -209,6 +209,8 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			Runner:         OSHookRunner{Runner: deps.ExecxRunner},
 			Interval:       interval,
 			IsPaused:       monitorPaused(deps.Monitor, watchMonitorKey(name)),
+			InPanic:        deps.Panic.Active,
+			Settling:       deps.Settling,
 			Now:            deps.Now,
 			Emit:           deps.Emit,
 		})
