@@ -156,6 +156,18 @@ type WebBackend struct {
 
 	slaCacheMu sync.Mutex
 	slaCache   map[slaCacheKey]cachedSLATimelines
+
+	liveViewMu    sync.Mutex
+	liveViewCache map[string]cachedLiveView
+}
+
+// cachedLiveView memoizes a watch's dashboard live-probe result for the watch's
+// interval so /api/watches never re-runs an expensive probe on every poll.
+type cachedLiveView struct {
+	at       time.Time
+	meter    *web.WatchMeter
+	readings []web.WatchReading
+	summary  string
 }
 
 type slaCacheKey struct {
@@ -225,6 +237,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		operationTimeout: deps.OperationTimeout,
 		now:              deps.Now,
 		slaCache:         map[slaCacheKey]cachedSLATimelines{},
+		liveViewCache:    map[string]cachedLiveView{},
 	}
 	if wb.serviceMetrics == nil {
 		wb.serviceMetrics = NewServiceMetricSampler()
@@ -630,7 +643,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		var readings []web.WatchReading
 		liveSummary := ""
 		if !w.disabled {
-			meter, readings, liveSummary = b.watchLiveView(w, system)
+			meter, readings, liveSummary = b.cachedWatchLiveView(w, system)
 		}
 		monitorMode := w.monitorMode
 		if monitorMode == "" {
@@ -1050,6 +1063,61 @@ func watchMetricConditions(metrics map[string]any) []web.WatchCondition {
 		}
 	}
 	return out
+}
+
+// heavyLiveViewTypes are the watch check types whose dashboard live view does
+// real work on every /api/watches poll — an external process (hdparm's read
+// benchmark, smartctl, nft/iptables), a network probe (icmp) or a filesystem
+// walk (size/count/recursive file) — plus the moderately expensive /sys and
+// /proc readers (sensors, process). These are cached per watch interval.
+// Deliberately excluded: cheap snapshot/proc gauges (memory/load/net/…, which
+// want to stay live) and rate-based views like diskio, which must sample on
+// every poll to compute deltas and keep their own per-poll state.
+var heavyLiveViewTypes = map[string]bool{
+	"hdparm":         true,
+	"smart":          true,
+	"firewall_rules": true,
+	"icmp":           true,
+	"sensors":        true,
+	"size":           true,
+	"count":          true,
+	"file":           true,
+	"process":        true,
+}
+
+// cachedWatchLiveView memoizes a heavy watch live probe for the watch's own
+// interval so /api/watches never re-runs it on every ~30s dashboard refresh (a
+// 12h hdparm/smart watch is probed at most every 12h from the dashboard, not on
+// every poll). Results are read-only (serialized to JSON, never mutated), so
+// sharing the cached value across concurrent requests is safe; the whole backend
+// is rebuilt on config reload, so the cache starts empty when the config changes.
+func (b *WebBackend) cachedWatchLiveView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
+	if w == nil {
+		return nil, nil, ""
+	}
+	ttl := w.interval
+	if ttl <= 0 || b.liveViewCache == nil || !heavyLiveViewTypes[w.checkType] {
+		return b.watchLiveView(w, system)
+	}
+	now := time.Now
+	if b.now != nil {
+		now = b.now
+	}
+	at := now()
+
+	b.liveViewMu.Lock()
+	if e, ok := b.liveViewCache[w.name]; ok && at.Sub(e.at) < ttl {
+		b.liveViewMu.Unlock()
+		return e.meter, e.readings, e.summary
+	}
+	b.liveViewMu.Unlock()
+
+	meter, readings, summary := b.watchLiveView(w, system)
+
+	b.liveViewMu.Lock()
+	b.liveViewCache[w.name] = cachedLiveView{at: at, meter: meter, readings: readings, summary: summary}
+	b.liveViewMu.Unlock()
+	return meter, readings, summary
 }
 
 func (b *WebBackend) watchLiveView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
