@@ -606,6 +606,7 @@ const watchPanels = {
     // Storage watches all share one check_type, so filter by filesystem type
     // (xfs, ext4, vfat, …) instead — the dropdown lists every distinct filesystem.
     typeOf: (w) => (w.storage && w.storage.filesystem) || "",
+    cols: 7,
     rowHTML: storageRowHTML,
   },
   network: {
@@ -613,6 +614,7 @@ const watchPanels = {
     section: "#network-section", rows: "#network-rows", count: "#network-count",
     filterCount: "#network-filter-count", filters: "#network-filters", search: "#network-search", typeSelect: "#network-type",
     allTypesLabel: "all network types", empty: "No network watches.", emptyFiltered: "No network watches match the filter.",
+    cols: 6,
   },
   cert: {
     query: "", status: "all", type: "all", sort: { key: "", dir: 1 }, defaultSortByName: true,
@@ -622,9 +624,9 @@ const watchPanels = {
     // Certificate watches all share one check_type, so filter by public-key
     // algorithm (RSA, ECDSA, Ed25519, …). The dropdown only appears once more
     // than two distinct key types are present (typeFilterMin), and the panel has
-    // an extra Key type column so cols is 10 for its expansion/empty rows.
+    // an extra Key type column so cols is 8 for its expansion/empty rows.
     typeOf: (w) => readingRaw(w, "public_key_algorithm"),
-    typeFilterMin: 3, cols: 10,
+    typeFilterMin: 3, cols: 8,
     rowHTML: certRowHTML,
   },
   diskio: {
@@ -632,6 +634,7 @@ const watchPanels = {
     section: "#diskio-section", rows: "#diskio-rows", count: "#diskio-count",
     filterCount: "#diskio-filter-count", filters: "#diskio-filters", search: "#diskio-search", typeSelect: "#diskio-type",
     allTypesLabel: "all disk I/O types", empty: "No disk I/O watches.", emptyFiltered: "No disk I/O watches match the filter.",
+    cols: 8,
     rowHTML: diskioRowHTML,
   },
   host: {
@@ -639,6 +642,7 @@ const watchPanels = {
     section: "#watches-section", rows: "#watch-rows", count: "#watches-count",
     filterCount: "#watch-count", filters: "#watch-filters", search: "#watch-search", typeSelect: "#watch-type",
     allTypesLabel: "all host types", empty: "No watches.", emptyFiltered: "No watches match the filter.",
+    cols: 6,
   },
 };
 
@@ -2344,12 +2348,6 @@ function notifierNames(w) {
   return (w && Array.isArray(w.notifiers)) ? w.notifiers.filter(Boolean) : [];
 }
 
-function notifierCell(w) {
-  const names = notifierNames(w);
-  if (names.length) return names.map((n, i) => i ? [" ", tpl`<code>${n}</code>`] : tpl`<code>${n}</code>`);
-  return (w && w.notifier_count > 0) ? String(w.notifier_count) : "—";
-}
-
 // meterParts returns the [title, detail] strings for a generic usage meter
 // (memory/load/fds/pids/conntrack), shared by the summary cell, the search
 // index, and the detail panel so the wording can't drift.
@@ -2941,24 +2939,17 @@ function watchExpansionRow(key, open, cols = 9) {
 // panels so they render identically (including the expand action).
 function watchRowHTML(w) {
   const state = watchStateText(w);
-  const polarity = w.fire_on_fail
-    ? tpl`<span class="muted">on fail</span>`
-    : tpl`<span class="muted">on threshold</span>`;
-  const hook = w.has_hook ? '✓' : '—';
   const key = "wat:" + w.name;
   const open = expanded.has(key);
   const row = tpl`<tr id="wat-row-${w.name}" class="clickable ${watchRowClass(state)}" data-exp-key="${key}">
     ${watchNameCell(w, key, open)}
     <td>${w.check_type || ""}</td>
     <td class="watch-summary">${watchSummaryCell(w)}</td>
-    <td>${polarity}</td>
-    <td>${hook}</td>
-    <td>${notifierCell(w)}</td>
     <td>${watchLastCell(w)}</td>
     <td>${stateBadge(state)}${watchStateHint(w)}</td>
     ${watchActionsCell(w)}
   </tr>`;
-  const expRow = watchExpansionRow(key, open);
+  const expRow = watchExpansionRow(key, open, 6);
   return expRow ? [row, expRow] : [row];
 }
 
@@ -2977,7 +2968,6 @@ function storageUsageCell(w) {
 // filesystem and mount point in place of the generic type/summary columns.
 function storageRowHTML(w) {
   const state = watchStateText(w);
-  const hook = w.has_hook ? '✓' : '—';
   const d = w.storage || {};
   const fs = d.filesystem ? tpl`<code>${d.filesystem}</code>` : tpl`<span class="muted">—</span>`;
   const mount = d.mount_point
@@ -2990,13 +2980,11 @@ function storageRowHTML(w) {
     <td class="watch-summary">${storageUsageCell(w)}</td>
     <td>${fs}</td>
     <td>${mount}</td>
-    <td>${hook}</td>
-    <td>${notifierCell(w)}</td>
     <td>${watchLastCell(w)}</td>
     <td>${stateBadge(state)}${watchStateHint(w)}</td>
     ${watchActionsCell(w)}
   </tr>`;
-  const expRow = watchExpansionRow(key, open);
+  const expRow = watchExpansionRow(key, open, 7);
   return expRow ? [row, expRow] : [row];
 }
 
@@ -3004,7 +2992,6 @@ function storageRowHTML(w) {
 // readings (expiry date, days left, issuer) in place of the generic type/summary.
 function certRowHTML(w) {
   const state = watchStateText(w);
-  const hook = w.has_hook ? '✓' : '—';
   const key = "wat:" + w.name;
   const open = expanded.has(key);
   const algo = readingRaw(w, "public_key_algorithm");
@@ -3018,13 +3005,11 @@ function certRowHTML(w) {
     <td>${readingValue(w, "days_left")}</td>
     <td>${readingValue(w, "issuer")}</td>
     <td>${keyType}</td>
-    <td>${hook}</td>
-    <td>${notifierCell(w)}</td>
     <td>${watchLastCell(w)}</td>
     <td>${stateBadge(state)}${watchStateHint(w)}</td>
     ${watchActionsCell(w)}
   </tr>`;
-  const expRow = watchExpansionRow(key, open, 10);
+  const expRow = watchExpansionRow(key, open, 8);
   return expRow ? [row, expRow] : [row];
 }
 
@@ -3040,12 +3025,11 @@ function diskioRowHTML(w) {
     <td>${readingValue(w, "util_pct")}</td>
     <td>${readingValue(w, "read_bytes")} / ${readingValue(w, "write_bytes")}</td>
     <td>${readingValue(w, "await_ms")}</td>
-    <td>${notifierCell(w)}</td>
     <td>${watchLastCell(w)}</td>
     <td>${stateBadge(state)}${watchStateHint(w)}</td>
     ${watchActionsCell(w)}
   </tr>`;
-  const expRow = watchExpansionRow(key, open);
+  const expRow = watchExpansionRow(key, open, 8);
   return expRow ? [row, expRow] : [row];
 }
 
