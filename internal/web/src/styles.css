@@ -453,6 +453,8 @@
   /* ---- watch widgets --------------------------------------------------------- */
   .watch-table { min-width: 72rem; font-size: .85rem; }
   .watch-table th, .watch-table td { vertical-align: top; }
+  /* Keep the certificate Expires date (RFC3339) on a single line. */
+  .watch-table td.cert-expires { white-space: nowrap; }
   .apps-table { min-width: 28rem; font-size: .88rem; font-variant-numeric: tabular-nums; }
   .apps-table th, .apps-table td { padding: .34rem .5rem; vertical-align: top; }
   .watch-summary { min-width: 18rem; max-width: 30rem; overflow-wrap: anywhere; }
