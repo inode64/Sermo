@@ -99,12 +99,16 @@
   .services-table .actions { min-width: 14rem; }
   #rows tr:hover td, #watch-rows tr:hover td, #app-rows tr:hover td { background: color-mix(in srgb, var(--text) 4%, transparent); }
   #rows tr.group-row:hover td, #app-rows tr.group-row:hover td { background: color-mix(in srgb, var(--accent) 11%, transparent); }
-  #rows tr.row-warning td, #app-rows tr.row-warning td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
-  #rows tr.row-warning td:first-child, #app-rows tr.row-warning td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
-  #rows tr.row-failing td, #app-rows tr.row-failing td { background: color-mix(in srgb, var(--crit) 9%, transparent); }
-  #rows tr.row-failing td:first-child, #app-rows tr.row-failing td:first-child { box-shadow: inset 3px 0 0 var(--crit); }
-  #rows tr.row-warning:hover td, #app-rows tr.row-warning:hover td { background: color-mix(in srgb, var(--warn) 13%, transparent); }
-  #rows tr.row-failing:hover td, #app-rows tr.row-failing:hover td { background: color-mix(in srgb, var(--crit) 13%, transparent); }
+  /* Firing/warning row highlight. Applies to services (#rows), applications
+     (#app-rows) and every watch panel (host #watch-rows, storage, network,
+     cert, diskio) so a firing certificate or host watch paints red like a
+     failing service. */
+  #rows tr.row-warning td, #app-rows tr.row-warning td, #watch-rows tr.row-warning td, #storage-rows tr.row-warning td, #network-rows tr.row-warning td, #cert-rows tr.row-warning td, #diskio-rows tr.row-warning td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
+  #rows tr.row-warning td:first-child, #app-rows tr.row-warning td:first-child, #watch-rows tr.row-warning td:first-child, #storage-rows tr.row-warning td:first-child, #network-rows tr.row-warning td:first-child, #cert-rows tr.row-warning td:first-child, #diskio-rows tr.row-warning td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+  #rows tr.row-failing td, #app-rows tr.row-failing td, #watch-rows tr.row-failing td, #storage-rows tr.row-failing td, #network-rows tr.row-failing td, #cert-rows tr.row-failing td, #diskio-rows tr.row-failing td { background: color-mix(in srgb, var(--crit) 9%, transparent); }
+  #rows tr.row-failing td:first-child, #app-rows tr.row-failing td:first-child, #watch-rows tr.row-failing td:first-child, #storage-rows tr.row-failing td:first-child, #network-rows tr.row-failing td:first-child, #cert-rows tr.row-failing td:first-child, #diskio-rows tr.row-failing td:first-child { box-shadow: inset 3px 0 0 var(--crit); }
+  #rows tr.row-warning:hover td, #app-rows tr.row-warning:hover td, #watch-rows tr.row-warning:hover td, #storage-rows tr.row-warning:hover td, #network-rows tr.row-warning:hover td, #cert-rows tr.row-warning:hover td, #diskio-rows tr.row-warning:hover td { background: color-mix(in srgb, var(--warn) 13%, transparent); }
+  #rows tr.row-failing:hover td, #app-rows tr.row-failing:hover td, #watch-rows tr.row-failing:hover td, #storage-rows tr.row-failing:hover td, #network-rows tr.row-failing:hover td, #cert-rows tr.row-failing:hover td, #diskio-rows tr.row-failing:hover td { background: color-mix(in srgb, var(--crit) 13%, transparent); }
   tr.clickable { cursor: pointer; }
   .exp { color: var(--text-2); margin-right: .35rem; user-select: none; font-size: .9em; display: inline-block; }
   .category-badge { display: inline-block; max-width: 8rem; overflow: hidden; text-overflow: ellipsis; vertical-align: top; color: var(--text-2); }
