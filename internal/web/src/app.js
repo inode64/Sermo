@@ -632,8 +632,9 @@ const watchPanels = {
   diskio: {
     query: "", status: "all", type: "all", sort: { key: "", dir: 1 }, defaultSortByName: true,
     section: "#diskio-section", rows: "#diskio-rows", count: "#diskio-count",
-    filterCount: "#diskio-filter-count", filters: "#diskio-filters", search: "#diskio-search", typeSelect: "#diskio-type",
-    allTypesLabel: "all disk I/O types", empty: "No disk I/O watches.", emptyFiltered: "No disk I/O watches match the filter.",
+    filterCount: "#diskio-filter-count", filters: "#diskio-filters", search: "#diskio-search",
+    // No type dropdown: disk I/O watches only ever have the one check type.
+    empty: "No disk I/O watches.", emptyFiltered: "No disk I/O watches match the filter.",
     cols: 8,
     rowHTML: diskioRowHTML,
   },
