@@ -408,6 +408,40 @@ func TestBuildWatchesExpandsSwap(t *testing.T) {
 	}
 }
 
+// TestBuildWatchesMetricWiresSettling guards against metric watches (net/icmp/
+// swap) being built without deps.Settling: without it their RunCycle never marks
+// the watch observed, so the settling registry keeps the key pending forever —
+// the watch is stuck in state "starting" and the daemon's first-cycle readiness
+// gate never clears (/readyz wedged at 503). The single-shot builders already
+// wire Settling; the metric builder must too.
+func TestBuildWatchesMetricWiresSettling(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"net-eth0": map[string]any{
+			"check": map[string]any{"type": "net", "interface": "eth0"},
+			"metrics": map[string]any{
+				"state": map[string]any{
+					"on":   "change",
+					"then": map[string]any{"hook": map[string]any{"command": []any{"/bin/state.sh"}}},
+				},
+			},
+		},
+	})
+	settling := NewSettling(nil)
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, Settling: settling, Panic: &PanicGate{}}, 30*time.Second)
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(watches) != 1 {
+		t.Fatalf("expected 1 watch, got %d", len(watches))
+	}
+	if watches[0].Settling != settling {
+		t.Fatalf("metric watch must carry deps.Settling so it can settle out of \"starting\"")
+	}
+	if watches[0].InPanic == nil {
+		t.Fatalf("metric watch must carry deps.Panic.Active so panic mode suppresses it")
+	}
+}
+
 func TestBuildWatchesMetricHonorsNotifyInterval(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"swap": map[string]any{
