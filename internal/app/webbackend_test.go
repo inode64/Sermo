@@ -1693,6 +1693,46 @@ func TestWebBackendStartingStateUnsettled(t *testing.T) {
 	}
 }
 
+// TestCachedWatchLiveViewCachesToInterval verifies the dashboard live-probe cache:
+// within a watch's interval the (potentially expensive) probe runs once and is
+// served from cache on subsequent /api/watches calls; past the interval it
+// re-runs. This is what keeps a 12h hdparm/smart watch from benchmarking on every
+// 30s dashboard refresh.
+func TestCachedWatchLiveViewCachesToInterval(t *testing.T) {
+	var calls int
+	now := time.Unix(1_700_000_000, 0)
+	b := &WebBackend{
+		watchOrder: []string{"s"},
+		watches: map[string]*webWatch{
+			// sensors is a heavy (cached) live-view type.
+			"s": {name: "s", checkType: "sensors", interval: time.Hour, check: map[string]any{}},
+		},
+		sensorSampler: func() ([]checks.SensorReading, error) {
+			calls++
+			return []checks.SensorReading{{Chip: "coretemp", Kind: "temp", Value: 40}}, nil
+		},
+		liveViewCache: map[string]cachedLiveView{},
+		now:           func() time.Time { return now },
+	}
+
+	// Two calls within the interval: probe runs once, second is a cache hit.
+	ws := b.Watches(context.Background())
+	if len(ws) != 1 || !strings.Contains(ws[0].Summary, "sensors") {
+		t.Fatalf("first Watches() = %+v, want a sensors summary", ws)
+	}
+	b.Watches(context.Background())
+	if calls != 1 {
+		t.Fatalf("within interval: sensors probe ran %d times, want 1 (cached)", calls)
+	}
+
+	// Past the interval the probe re-runs.
+	now = now.Add(time.Hour + time.Second)
+	b.Watches(context.Background())
+	if calls != 2 {
+		t.Fatalf("after interval: sensors probe ran %d times, want 2 (re-sampled)", calls)
+	}
+}
+
 // fakeEnvRunnerForWeb is used to inject a custom execx runner via Deps.ExecxRunner
 // and verify that hooks in watches built for the web backend receive the expected env.
 type fakeEnvRunnerForWeb struct {
