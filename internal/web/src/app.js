@@ -2903,6 +2903,13 @@ function watchActionsCell(w) {
   return tpl`<td class="actions">${actions}</td>`;
 }
 
+// watchRowClass mirrors the service/app row highlight: a firing watch (state
+// "failed") paints the row red, a warning amber, matching serviceRowParts so
+// certificate and every other host-watch panel follow the same visual line.
+function watchRowClass(state) {
+  return state === "failed" ? "row-failing" : (state === "warning" ? "row-warning" : "");
+}
+
 // watchExpansionRow returns the inline expansion row when open. Its colspan must
 // match the number of columns in every watch table (9, after dropping Interval).
 function watchExpansionRow(key, open) {
@@ -2922,7 +2929,7 @@ function watchRowHTML(w) {
   const hook = w.has_hook ? '✓' : '—';
   const key = "wat:" + w.name;
   const open = expanded.has(key);
-  const row = tpl`<tr id="wat-row-${w.name}" class="clickable" data-exp-key="${key}">
+  const row = tpl`<tr id="wat-row-${w.name}" class="clickable ${watchRowClass(state)}" data-exp-key="${key}">
     ${watchNameCell(w, key, open)}
     <td>${w.check_type || ""}</td>
     <td class="watch-summary">${watchSummaryCell(w)}</td>
@@ -2960,7 +2967,7 @@ function storageRowHTML(w) {
     : (w.storage && w.storage.mounted === false ? tpl`<span class="bad">not found</span>` : tpl`<span class="muted">—</span>`);
   const key = "wat:" + w.name;
   const open = expanded.has(key);
-  const row = tpl`<tr id="wat-row-${w.name}" class="clickable" data-exp-key="${key}">
+  const row = tpl`<tr id="wat-row-${w.name}" class="clickable ${watchRowClass(state)}" data-exp-key="${key}">
     ${watchNameCell(w, key, open)}
     <td class="watch-summary">${storageUsageCell(w)}</td>
     <td>${fs}</td>
@@ -2982,7 +2989,7 @@ function certRowHTML(w) {
   const hook = w.has_hook ? '✓' : '—';
   const key = "wat:" + w.name;
   const open = expanded.has(key);
-  const row = tpl`<tr id="wat-row-${w.name}" class="clickable" data-exp-key="${key}">
+  const row = tpl`<tr id="wat-row-${w.name}" class="clickable ${watchRowClass(state)}" data-exp-key="${key}">
     ${watchNameCell(w, key, open)}
     <td>${readingValue(w, "not_after")}</td>
     <td>${readingValue(w, "days_left")}</td>
@@ -3003,7 +3010,7 @@ function diskioRowHTML(w) {
   const state = watchStateText(w);
   const key = "wat:" + w.name;
   const open = expanded.has(key);
-  const row = tpl`<tr id="wat-row-${w.name}" class="clickable" data-exp-key="${key}">
+  const row = tpl`<tr id="wat-row-${w.name}" class="clickable ${watchRowClass(state)}" data-exp-key="${key}">
     ${watchNameCell(w, key, open)}
     <td>${readingValue(w, "device")}</td>
     <td>${readingValue(w, "util_pct")}</td>
