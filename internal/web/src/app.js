@@ -603,6 +603,7 @@ const watchPanels = {
     section: "#storage-section", rows: "#storage-rows", count: "#storage-count",
     filterCount: "#storage-filter-count", filters: "#storage-filters", search: "#storage-search", typeSelect: "#storage-type",
     allTypesLabel: "all storage types", empty: "No storage watches.", emptyFiltered: "No storage watches match the filter.",
+    rowHTML: storageRowHTML,
   },
   network: {
     query: "", status: "all", type: "all", sort: { key: "", dir: 1 }, defaultSortByName: true,
@@ -2652,6 +2653,10 @@ const watchSortKeys = {
   util: (w) => parseFloat(readingRaw(w, "util_pct")) || 0,
   readwrite: (w) => parseFloat(readingRaw(w, "read_bytes")) || 0,
   await: (w) => parseFloat(readingRaw(w, "await_ms")) || 0,
+  // Storage panel columns.
+  usage: (w) => { const p = w.storage ? storageUsedPct(w.storage) : null; return p == null ? -1 : p; },
+  filesystem: (w) => ((w.storage && w.storage.filesystem) || "").toLowerCase(),
+  mount: (w) => ((w.storage && w.storage.mount_point) || "").toLowerCase(),
 };
 
 function setWatchSort(panelKey, key) { toggleSort(getWatchPanel(panelKey).sort, key, renderWatches); }
@@ -2912,6 +2917,44 @@ function watchRowHTML(w) {
     <td>${w.check_type || ""}</td>
     <td class="watch-summary">${watchSummaryCell(w)}</td>
     <td>${polarity}</td>
+    <td>${hook}</td>
+    <td>${notifierCell(w)}</td>
+    <td>${watchLastCell(w)}</td>
+    <td>${stateBadge(state)}${watchStateHint(w)}</td>
+    ${watchActionsCell(w)}
+  </tr>`;
+  const expRow = watchExpansionRow(key, open);
+  return expRow ? [row, expRow] : [row];
+}
+
+// storageUsageCell renders the occupied-space progress bar (with used/total
+// byte breakdown) for a storage watch, or a clear error/placeholder.
+function storageUsageCell(w) {
+  const d = w.storage;
+  if (!d) return tpl`<span class="muted">—</span>`;
+  if (d.sample_error) return tpl`<span class="bad">${d.sample_error}</span>`;
+  const usedPct = storageUsedPct(d);
+  if (usedPct == null) return tpl`<span class="muted">—</span>`;
+  return tpl`${usageBar(usedPct)} <span class="muted">${fmtBytes(d.used_bytes)} / ${fmtBytes(d.total_bytes)}</span>`;
+}
+
+// storageRowHTML renders a Storage-panel row, surfacing the occupied-space bar,
+// filesystem and mount point in place of the generic type/summary columns.
+function storageRowHTML(w) {
+  const state = watchStateText(w);
+  const hook = w.has_hook ? '✓' : '—';
+  const d = w.storage || {};
+  const fs = d.filesystem ? tpl`<code>${d.filesystem}</code>` : tpl`<span class="muted">—</span>`;
+  const mount = d.mount_point
+    ? (d.mounted === false ? tpl`<span class="bad">${d.mount_point} (not mounted)</span>` : tpl`<code>${d.mount_point}</code>`)
+    : (w.storage && w.storage.mounted === false ? tpl`<span class="bad">not found</span>` : tpl`<span class="muted">—</span>`);
+  const key = "wat:" + w.name;
+  const open = expanded.has(key);
+  const row = tpl`<tr id="wat-row-${w.name}" class="clickable" data-exp-key="${key}">
+    ${watchNameCell(w, key, open)}
+    <td class="watch-summary">${storageUsageCell(w)}</td>
+    <td>${fs}</td>
+    <td>${mount}</td>
     <td>${hook}</td>
     <td>${notifierCell(w)}</td>
     <td>${watchLastCell(w)}</td>
