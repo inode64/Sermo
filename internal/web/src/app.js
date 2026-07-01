@@ -603,6 +603,9 @@ const watchPanels = {
     section: "#storage-section", rows: "#storage-rows", count: "#storage-count",
     filterCount: "#storage-filter-count", filters: "#storage-filters", search: "#storage-search", typeSelect: "#storage-type",
     allTypesLabel: "all storage types", empty: "No storage watches.", emptyFiltered: "No storage watches match the filter.",
+    // Storage watches all share one check_type, so filter by filesystem type
+    // (xfs, ext4, vfat, …) instead — the dropdown lists every distinct filesystem.
+    typeOf: (w) => (w.storage && w.storage.filesystem) || "",
     rowHTML: storageRowHTML,
   },
   network: {
@@ -2522,10 +2525,17 @@ function getWatchPanel(panel) {
   return watchPanels[panel] || watchPanels.host;
 }
 
+// watchTypeValue is the value a panel's type dropdown filters on. Most panels
+// filter by check_type; a panel can override with typeOf (e.g. Storage filters
+// by filesystem type since all its watches share one check_type).
+function watchTypeValue(panel, w) {
+  return (panel.typeOf ? panel.typeOf(w) : w.check_type) || "";
+}
+
 function watchMatches(w, panelKey) {
   const panel = getWatchPanel(panelKey);
   if (panel.query && !watchSearchText(w).includes(panel.query)) return false;
-  if (panel.type !== "all" && (w.check_type || "") !== panel.type) return false;
+  if (panel.type !== "all" && watchTypeValue(panel, w) !== panel.type) return false;
   switch (panel.status) {
     case "disabled":      return watchStateText(w) === "disabled";
     case "ok":            return watchStateText(w) === "ok";
@@ -2583,7 +2593,7 @@ function syncWatchTypeSelect(panelKey, watches) {
   if (!select) return "all";
   const counts = new Map();
   (watches || []).forEach((w) => {
-    const t = w.check_type || "";
+    const t = watchTypeValue(panel, w);
     if (t) counts.set(t, (counts.get(t) || 0) + 1);
   });
   const types = [...counts.keys()].sort((a, b) =>
