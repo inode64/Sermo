@@ -619,6 +619,12 @@ const watchPanels = {
     section: "#cert-section", rows: "#cert-rows", count: "#cert-count",
     filterCount: "#cert-filter-count", filters: "#cert-filters", search: "#cert-search", typeSelect: "#cert-type",
     allTypesLabel: "all certificate types", empty: "No certificate watches.", emptyFiltered: "No certificate watches match the filter.",
+    // Certificate watches all share one check_type, so filter by public-key
+    // algorithm (RSA, ECDSA, Ed25519, …). The dropdown only appears once more
+    // than two distinct key types are present (typeFilterMin), and the panel has
+    // an extra Key type column so cols is 10 for its expansion/empty rows.
+    typeOf: (w) => readingRaw(w, "public_key_algorithm"),
+    typeFilterMin: 3, cols: 10,
     rowHTML: certRowHTML,
   },
   diskio: {
@@ -2598,6 +2604,16 @@ function syncWatchTypeSelect(panelKey, watches) {
   });
   const types = [...counts.keys()].sort((a, b) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+  // Some panels (certificates) only expose the type filter once enough distinct
+  // types exist to be worth choosing between. Below that threshold, hide the
+  // dropdown and force "all" so no stale selection keeps filtering.
+  if (panel.typeFilterMin && types.length < panel.typeFilterMin) {
+    select.hidden = true;
+    select.innerHTML = `<option value="all">${esc(panel.allTypesLabel)}</option>`;
+    select.value = "all";
+    return "all";
+  }
+  select.hidden = false;
   const next = panel.type !== "all" && counts.has(panel.type) ? panel.type : "all";
   select.innerHTML = `<option value="all">${esc(panel.allTypesLabel)}</option>` + types.map((t) =>
     `<option value="${esc(t)}">${esc(t)} (${counts.get(t)})</option>`).join("");
@@ -2659,6 +2675,7 @@ const watchSortKeys = {
   expires: (w) => readingRaw(w, "not_after"),
   days_left: (w) => { const n = parseFloat(readingRaw(w, "days_left")); return Number.isFinite(n) ? n : Infinity; },
   issuer: (w) => readingRaw(w, "issuer").toLowerCase(),
+  keytype: (w) => readingRaw(w, "public_key_algorithm").toLowerCase(),
   device: (w) => readingRaw(w, "device").toLowerCase(),
   util: (w) => parseFloat(readingRaw(w, "util_pct")) || 0,
   readwrite: (w) => parseFloat(readingRaw(w, "read_bytes")) || 0,
@@ -2911,10 +2928,11 @@ function watchRowClass(state) {
 }
 
 // watchExpansionRow returns the inline expansion row when open. Its colspan must
-// match the number of columns in every watch table (9, after dropping Interval).
-function watchExpansionRow(key, open) {
+// match the number of columns in the panel's table — 9 for most, but the
+// Certificate panel passes 10 for its extra Key type column.
+function watchExpansionRow(key, open, cols = 9) {
   return open
-    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="9"></td></tr>`
+    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="${cols}"></td></tr>`
     : null;
 }
 
@@ -2989,18 +3007,24 @@ function certRowHTML(w) {
   const hook = w.has_hook ? '✓' : '—';
   const key = "wat:" + w.name;
   const open = expanded.has(key);
+  const algo = readingRaw(w, "public_key_algorithm");
+  const bits = readingRaw(w, "key_bits");
+  const keyType = algo
+    ? tpl`<code>${bits ? `${algo} ${bits}` : algo}</code>`
+    : tpl`<span class="muted">—</span>`;
   const row = tpl`<tr id="wat-row-${w.name}" class="clickable ${watchRowClass(state)}" data-exp-key="${key}">
     ${watchNameCell(w, key, open)}
-    <td>${readingValue(w, "not_after")}</td>
+    <td class="cert-expires">${readingValue(w, "not_after")}</td>
     <td>${readingValue(w, "days_left")}</td>
     <td>${readingValue(w, "issuer")}</td>
+    <td>${keyType}</td>
     <td>${hook}</td>
     <td>${notifierCell(w)}</td>
     <td>${watchLastCell(w)}</td>
     <td>${stateBadge(state)}${watchStateHint(w)}</td>
     ${watchActionsCell(w)}
   </tr>`;
-  const expRow = watchExpansionRow(key, open);
+  const expRow = watchExpansionRow(key, open, 10);
   return expRow ? [row, expRow] : [row];
 }
 
@@ -3071,7 +3095,7 @@ function renderWatchPanel(panelKey, watches) {
   if (filterCount) filterCount.textContent = filtered ? `showing ${list.length} of ${total}` : "";
   const content = list.length
     ? list.flatMap(panel.rowHTML || watchRowHTML)
-    : tpl`<tr><td colspan="9" class="muted">${filtered ? panel.emptyFiltered : panel.empty}</td></tr>`;
+    : tpl`<tr><td colspan="${panel.cols || 9}" class="muted">${filtered ? panel.emptyFiltered : panel.empty}</td></tr>`;
   litRender(content, tbody);
 }
 
