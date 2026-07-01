@@ -312,7 +312,7 @@
   #app-footer .footer-actions { display: inline-flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
   .shortcut-toggle { display: inline-flex; align-items: center; gap: .3rem; white-space: nowrap; }
   .shortcut-toggle input { margin: 0; }
-  #app-footer .footer-version { margin-left: auto; font-size: .8rem; white-space: nowrap; }
+  #app-footer .footer-version { font-size: .8rem; white-space: nowrap; }
   section#locks-section { padding-top: .15rem; }
   section#locks-section h2 { font-size: .98rem; margin: .55rem 0 .5rem; }
   .service-detail h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); margin: 1.15rem 0 .45rem; }
