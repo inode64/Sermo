@@ -67,7 +67,6 @@
       <th scope="col" class="sortable" data-watch-sort="name">Name<span class="sort-ind" data-wi="name"></span></th>
       <th scope="col" class="sortable" data-watch-sort="type">Type<span class="sort-ind" data-wi="type"></span></th>
       <th scope="col" class="sortable" data-watch-sort="summary">Summary<span class="sort-ind" data-wi="summary"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="interval">Interval<span class="sort-ind" data-wi="interval"></span></th>
       <th scope="col" class="sortable" data-watch-sort="polarity">Polarity<span class="sort-ind" data-wi="polarity"></span></th>
       <th scope="col" class="sortable" data-watch-sort="hook">Hook<span class="sort-ind" data-wi="hook"></span></th>
       <th scope="col" class="sortable" data-watch-sort="notifiers">Notifiers<span class="sort-ind" data-wi="notifiers"></span></th>
@@ -153,7 +152,6 @@
       <th scope="col" class="sortable" data-watch-sort="name">Name<span class="sort-ind" data-wi="name"></span></th>
       <th scope="col" class="sortable" data-watch-sort="type">Type<span class="sort-ind" data-wi="type"></span></th>
       <th scope="col" class="sortable" data-watch-sort="summary">Summary<span class="sort-ind" data-wi="summary"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="interval">Interval<span class="sort-ind" data-wi="interval"></span></th>
       <th scope="col" class="sortable" data-watch-sort="polarity">Polarity<span class="sort-ind" data-wi="polarity"></span></th>
       <th scope="col" class="sortable" data-watch-sort="hook">Hook<span class="sort-ind" data-wi="hook"></span></th>
       <th scope="col" class="sortable" data-watch-sort="notifiers">Notifiers<span class="sort-ind" data-wi="notifiers"></span></th>
@@ -203,6 +201,82 @@
   <p class="muted panel-footnote">Applications installed on the host (their binary is present). Click a row for the full version, file location, permissions, user and group.</p>
 </details>
 
+<h2 class="visually-hidden">Certificate watches</h2>
+<details id="cert-section" open class="panel-hidden">
+  <summary>Certificate watches <span id="cert-count" class="muted"></span></summary>
+  <div id="cert-controls" class="panel-controls">
+    <label for="cert-search" class="visually-hidden">Filter certificate watches</label>
+    <input id="cert-search" type="search" placeholder="filter certificate watches…  ( / )" aria-describedby="search-shortcut-hint">
+    <select id="cert-type" title="Filter by type" aria-label="Filter certificate watches by type">
+      <option value="all">all certificate types</option>
+    </select>
+    <span id="cert-filters" role="group" aria-label="Filter certificate watches by state">
+      <button data-wf="all" class="f-active" aria-pressed="true">all</button>
+      <button data-wf="disabled" aria-pressed="false">disabled</button>
+      <button data-wf="ok" aria-pressed="false">ok</button>
+      <button data-wf="monitorized" aria-pressed="false">monitorized</button>
+      <button data-wf="unmonitorized" aria-pressed="false">unmonitorized</button>
+      <button data-wf="starting" aria-pressed="false">starting</button>
+      <button data-wf="failed" aria-pressed="false">failed</button>
+    </span>
+    <span id="cert-filter-count" class="muted"></span>
+  </div>
+  <table class="watch-table">
+    <caption class="visually-hidden">Certificate watches</caption>
+    <thead><tr>
+      <th scope="col" class="sortable" data-watch-sort="name">Name<span class="sort-ind" data-wi="name"></span></th>
+      <th scope="col" class="sortable" data-watch-sort="expires">Expires<span class="sort-ind" data-wi="expires"></span></th>
+      <th scope="col" class="sortable" data-watch-sort="days_left">Days left<span class="sort-ind" data-wi="days_left"></span></th>
+      <th scope="col" class="sortable" data-watch-sort="issuer">Issuer<span class="sort-ind" data-wi="issuer"></span></th>
+      <th scope="col" class="sortable" data-watch-sort="hook">Hook<span class="sort-ind" data-wi="hook"></span></th>
+      <th scope="col" class="sortable" data-watch-sort="notifiers">Notifiers<span class="sort-ind" data-wi="notifiers"></span></th>
+      <th scope="col" class="sortable" data-watch-sort="last">Last activity<span class="sort-ind" data-wi="last"></span></th>
+      <th scope="col" class="sortable" data-watch-sort="state">State<span class="sort-ind" data-wi="state"></span></th>
+      <th scope="col">Actions</th>
+    </tr></thead>
+    <tbody id="cert-rows"></tbody>
+  </table>
+  <p class="muted panel-footnote">Certificate host watches track expiry and issuer of TLS/PKI material. Other host watches are listed below.</p>
+</details>
+
+<h2 class="visually-hidden">Disk I/O watches</h2>
+<details id="diskio-section" open class="panel-hidden">
+  <summary>Disk I/O watches <span id="diskio-count" class="muted"></span></summary>
+  <div id="diskio-controls" class="panel-controls">
+    <label for="diskio-search" class="visually-hidden">Filter disk I/O watches</label>
+    <input id="diskio-search" type="search" placeholder="filter disk I/O watches…  ( / )" aria-describedby="search-shortcut-hint">
+    <select id="diskio-type" title="Filter by type" aria-label="Filter disk I/O watches by type">
+      <option value="all">all disk I/O types</option>
+    </select>
+    <span id="diskio-filters" role="group" aria-label="Filter disk I/O watches by state">
+      <button data-wf="all" class="f-active" aria-pressed="true">all</button>
+      <button data-wf="disabled" aria-pressed="false">disabled</button>
+      <button data-wf="ok" aria-pressed="false">ok</button>
+      <button data-wf="monitorized" aria-pressed="false">monitorized</button>
+      <button data-wf="unmonitorized" aria-pressed="false">unmonitorized</button>
+      <button data-wf="starting" aria-pressed="false">starting</button>
+      <button data-wf="failed" aria-pressed="false">failed</button>
+    </span>
+    <span id="diskio-filter-count" class="muted"></span>
+  </div>
+  <table class="watch-table">
+    <caption class="visually-hidden">Disk I/O watches</caption>
+    <thead><tr>
+      <th scope="col" class="sortable" data-watch-sort="name">Name<span class="sort-ind" data-wi="name"></span></th>
+      <th scope="col" class="sortable" data-watch-sort="device">Device<span class="sort-ind" data-wi="device"></span></th>
+      <th scope="col" class="sortable" data-watch-sort="util">Util%<span class="sort-ind" data-wi="util"></span></th>
+      <th scope="col" class="sortable" data-watch-sort="readwrite">Read / Write<span class="sort-ind" data-wi="readwrite"></span></th>
+      <th scope="col" class="sortable" data-watch-sort="await">Await<span class="sort-ind" data-wi="await"></span></th>
+      <th scope="col" class="sortable" data-watch-sort="notifiers">Notifiers<span class="sort-ind" data-wi="notifiers"></span></th>
+      <th scope="col" class="sortable" data-watch-sort="last">Last activity<span class="sort-ind" data-wi="last"></span></th>
+      <th scope="col" class="sortable" data-watch-sort="state">State<span class="sort-ind" data-wi="state"></span></th>
+      <th scope="col">Actions</th>
+    </tr></thead>
+    <tbody id="diskio-rows"></tbody>
+  </table>
+  <p class="muted panel-footnote">Disk I/O host watches track per-device utilization, throughput and latency. Other host watches are listed below.</p>
+</details>
+
 <h2 class="visually-hidden">Host watches</h2>
 <details id="watches-section" open class="panel-hidden">
   <summary>Host watches <span id="watches-count" class="muted"></span></summary>
@@ -229,7 +303,6 @@
       <th scope="col" class="sortable" data-watch-sort="name">Name<span class="sort-ind" data-wi="name"></span></th>
       <th scope="col" class="sortable" data-watch-sort="type">Type<span class="sort-ind" data-wi="type"></span></th>
       <th scope="col" class="sortable" data-watch-sort="summary">Summary<span class="sort-ind" data-wi="summary"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="interval">Interval<span class="sort-ind" data-wi="interval"></span></th>
       <th scope="col" class="sortable" data-watch-sort="polarity">Polarity<span class="sort-ind" data-wi="polarity"></span></th>
       <th scope="col" class="sortable" data-watch-sort="hook">Hook<span class="sort-ind" data-wi="hook"></span></th>
       <th scope="col" class="sortable" data-watch-sort="notifiers">Notifiers<span class="sort-ind" data-wi="notifiers"></span></th>

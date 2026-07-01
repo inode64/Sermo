@@ -610,6 +610,20 @@ const watchPanels = {
     filterCount: "#network-filter-count", filters: "#network-filters", search: "#network-search", typeSelect: "#network-type",
     allTypesLabel: "all network types", empty: "No network watches.", emptyFiltered: "No network watches match the filter.",
   },
+  cert: {
+    query: "", status: "all", type: "all", sort: { key: "", dir: 1 }, defaultSortByName: true,
+    section: "#cert-section", rows: "#cert-rows", count: "#cert-count",
+    filterCount: "#cert-filter-count", filters: "#cert-filters", search: "#cert-search", typeSelect: "#cert-type",
+    allTypesLabel: "all certificate types", empty: "No certificate watches.", emptyFiltered: "No certificate watches match the filter.",
+    rowHTML: certRowHTML,
+  },
+  diskio: {
+    query: "", status: "all", type: "all", sort: { key: "", dir: 1 }, defaultSortByName: true,
+    section: "#diskio-section", rows: "#diskio-rows", count: "#diskio-count",
+    filterCount: "#diskio-filter-count", filters: "#diskio-filters", search: "#diskio-search", typeSelect: "#diskio-type",
+    allTypesLabel: "all disk I/O types", empty: "No disk I/O watches.", emptyFiltered: "No disk I/O watches match the filter.",
+    rowHTML: diskioRowHTML,
+  },
   host: {
     query: "", status: "all", type: "all", sort: { key: "", dir: 1 }, defaultSortByName: false,
     section: "#watches-section", rows: "#watch-rows", count: "#watches-count",
@@ -2629,6 +2643,15 @@ const watchSortKeys = {
   notifiers: (w) => notifierNames(w).join(" ").toLowerCase() || Number(w.notifier_count || 0),
   last: (w) => w.last_activity || "",
   state: watchStateRank,
+  // Type-specific columns for the Certificate and Disk I/O panels, read from
+  // the watch's live readings (see readingRaw / checkreadings.go field names).
+  expires: (w) => readingRaw(w, "not_after"),
+  days_left: (w) => { const n = parseFloat(readingRaw(w, "days_left")); return Number.isFinite(n) ? n : Infinity; },
+  issuer: (w) => readingRaw(w, "issuer").toLowerCase(),
+  device: (w) => readingRaw(w, "device").toLowerCase(),
+  util: (w) => parseFloat(readingRaw(w, "util_pct")) || 0,
+  readwrite: (w) => parseFloat(readingRaw(w, "read_bytes")) || 0,
+  await: (w) => parseFloat(readingRaw(w, "await_ms")) || 0,
 };
 
 function setWatchSort(panelKey, key) { toggleSort(getWatchPanel(panelKey).sort, key, renderWatches); }
@@ -2753,6 +2776,17 @@ function isNetworkWatch(w) {
   return t === "net" || t === "icmp";
 }
 
+// isCertWatch / isDiskioWatch report whether a watch is a certificate or disk
+// I/O check. Each gets its own panel (with type-specific columns); every other
+// non-storage/non-network type stays in the Host watches table below.
+function isCertWatch(w) {
+  return ((w && w.check_type) || "").toLowerCase() === "cert";
+}
+
+function isDiskioWatch(w) {
+  return ((w && w.check_type) || "").toLowerCase() === "diskio";
+}
+
 function watchActionDisabled(w, action) {
   if (!w || !w.enabled) return true;
   if (watchStateText(w) === "starting") return true;
@@ -2807,25 +2841,37 @@ function watchActionAriaLabel(w, action) {
   }
 }
 
-// watchRowHTML builds the table row(s) for one watch — the main row plus its
-// expansion row when open. Shared by the Storage panel and the Host watches
-// table so both render identically (including the expand action).
-function watchRowHTML(w) {
-  const state = watchStateText(w);
-  const polarity = w.fire_on_fail
-    ? tpl`<span class="muted">on fail</span>`
-    : tpl`<span class="muted">on threshold</span>`;
-  const hook = w.has_hook ? '✓' : '—';
-  const notif = notifierCell(w);
-  const summary = watchSummaryCell(w);
-  let last = '—';
-  if (w.last_activity) {
-    const kind = w.last_activity_kind ? ` (${w.last_activity_kind})` : '';
-    last = tpl`<span title="${w.last_activity}">${w.last_activity.substring(11,19) + kind}</span>`;
-  }
-  const key = "wat:" + w.name;
-  const open = expanded.has(key);
+// readingValue returns the formatted value of a named live reading (as shipped
+// in /api/watches) for display in a type-specific column, or "—" when absent.
+// Used by the Certificate and Disk I/O panels. Field names match checkreadings.go.
+function readingValue(w, field) {
+  const r = ((w && w.readings) || []).find((x) => x && x.field === field);
+  if (!r) return "—";
+  if (r.error) return tpl`<span class="bad">${r.error}</span>`;
+  return r.value != null && r.value !== "" ? r.value : "—";
+}
+
+// readingRaw returns a reading's raw string value (no error markup) for sorting.
+function readingRaw(w, field) {
+  const r = ((w && w.readings) || []).find((x) => x && x.field === field);
+  return r && r.value != null ? String(r.value) : "";
+}
+
+// watchLastCell renders the shared "Last activity" cell content.
+function watchLastCell(w) {
+  if (!w.last_activity) return '—';
+  const kind = w.last_activity_kind ? ` (${w.last_activity_kind})` : '';
+  return tpl`<span title="${w.last_activity}">${w.last_activity.substring(11,19) + kind}</span>`;
+}
+
+// watchNameCell renders the shared expandable name cell (chevron + toggle).
+function watchNameCell(w, key, open) {
   const chev = tpl`<span class="exp" aria-hidden="true">${open ? '▾' : '▸'}</span>`;
+  return tpl`<td>${chev}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(displayName(w), open, "watch details")}">${displayName(w)}</button></td>`;
+}
+
+// watchActionsCell renders the shared actions cell (expand / monitor / unmonitor).
+function watchActionsCell(w) {
   const expandBtn = (w.expand && Number(w.expand.by_bytes) > 0 && me.can_act && w.enabled)
     ? tpl`${watchActionHint(w, "expand")}<button ?disabled=${watchActionDisabled(w, "expand")} data-watch="${w.name}" data-watch-action="expand" aria-label="${watchActionAriaLabel(w, "expand")}" aria-describedby="${watchActionDescribedBy(w, "expand")}">expand ${fmtBytes(w.expand.by_bytes)}</button>`
     : nothing;
@@ -2839,21 +2885,83 @@ function watchRowHTML(w) {
   const actions = !w.enabled
     ? tpl`<span class="muted">disabled in config</span>`
     : tpl`${expandBtn} ${monitorBtn}`;
+  return tpl`<td class="actions">${actions}</td>`;
+}
+
+// watchExpansionRow returns the inline expansion row when open. Its colspan must
+// match the number of columns in every watch table (9, after dropping Interval).
+function watchExpansionRow(key, open) {
+  return open
+    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="9"></td></tr>`
+    : null;
+}
+
+// watchRowHTML builds the table row(s) for one watch — the main row plus its
+// expansion row when open. Shared by the Storage, Network and Host watches
+// panels so they render identically (including the expand action).
+function watchRowHTML(w) {
+  const state = watchStateText(w);
+  const polarity = w.fire_on_fail
+    ? tpl`<span class="muted">on fail</span>`
+    : tpl`<span class="muted">on threshold</span>`;
+  const hook = w.has_hook ? '✓' : '—';
+  const key = "wat:" + w.name;
+  const open = expanded.has(key);
   const row = tpl`<tr id="wat-row-${w.name}" class="clickable" data-exp-key="${key}">
-    <td>${chev}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(displayName(w), open, "watch details")}">${displayName(w)}</button></td>
+    ${watchNameCell(w, key, open)}
     <td>${w.check_type || ""}</td>
-    <td class="watch-summary">${summary}</td>
-    <td>${w.interval || ""}</td>
+    <td class="watch-summary">${watchSummaryCell(w)}</td>
     <td>${polarity}</td>
     <td>${hook}</td>
-    <td>${notif}</td>
-    <td>${last}</td>
+    <td>${notifierCell(w)}</td>
+    <td>${watchLastCell(w)}</td>
     <td>${stateBadge(state)}${watchStateHint(w)}</td>
-    <td class="actions">${actions}</td>
+    ${watchActionsCell(w)}
   </tr>`;
-  const expRow = open
-    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="10"></td></tr>`
-    : null;
+  const expRow = watchExpansionRow(key, open);
+  return expRow ? [row, expRow] : [row];
+}
+
+// certRowHTML renders a Certificate-panel row, surfacing the most relevant cert
+// readings (expiry date, days left, issuer) in place of the generic type/summary.
+function certRowHTML(w) {
+  const state = watchStateText(w);
+  const hook = w.has_hook ? '✓' : '—';
+  const key = "wat:" + w.name;
+  const open = expanded.has(key);
+  const row = tpl`<tr id="wat-row-${w.name}" class="clickable" data-exp-key="${key}">
+    ${watchNameCell(w, key, open)}
+    <td>${readingValue(w, "not_after")}</td>
+    <td>${readingValue(w, "days_left")}</td>
+    <td>${readingValue(w, "issuer")}</td>
+    <td>${hook}</td>
+    <td>${notifierCell(w)}</td>
+    <td>${watchLastCell(w)}</td>
+    <td>${stateBadge(state)}${watchStateHint(w)}</td>
+    ${watchActionsCell(w)}
+  </tr>`;
+  const expRow = watchExpansionRow(key, open);
+  return expRow ? [row, expRow] : [row];
+}
+
+// diskioRowHTML renders a Disk I/O-panel row, surfacing the most relevant diskio
+// readings (device, utilization, read/write throughput, await latency).
+function diskioRowHTML(w) {
+  const state = watchStateText(w);
+  const key = "wat:" + w.name;
+  const open = expanded.has(key);
+  const row = tpl`<tr id="wat-row-${w.name}" class="clickable" data-exp-key="${key}">
+    ${watchNameCell(w, key, open)}
+    <td>${readingValue(w, "device")}</td>
+    <td>${readingValue(w, "util_pct")}</td>
+    <td>${readingValue(w, "read_bytes")} / ${readingValue(w, "write_bytes")}</td>
+    <td>${readingValue(w, "await_ms")}</td>
+    <td>${notifierCell(w)}</td>
+    <td>${watchLastCell(w)}</td>
+    <td>${stateBadge(state)}${watchStateHint(w)}</td>
+    ${watchActionsCell(w)}
+  </tr>`;
+  const expRow = watchExpansionRow(key, open);
   return expRow ? [row, expRow] : [row];
 }
 
@@ -2862,7 +2970,9 @@ function renderWatches(watches) {
   const all = allWatches || [];
   renderWatchPanel("storage", all.filter(isStorageWatch));
   renderWatchPanel("network", all.filter(isNetworkWatch));
-  renderWatchPanel("host", all.filter((w) => !isStorageWatch(w) && !isNetworkWatch(w)));
+  renderWatchPanel("cert", all.filter(isCertWatch));
+  renderWatchPanel("diskio", all.filter(isDiskioWatch));
+  renderWatchPanel("host", all.filter((w) => !isStorageWatch(w) && !isNetworkWatch(w) && !isCertWatch(w) && !isDiskioWatch(w)));
   expanded.forEach((k) => { if (k.startsWith("wat:")) loadExpansionFor(k); });
   applyHash();
 }
@@ -2900,8 +3010,8 @@ function renderWatchPanel(panelKey, watches) {
   const filtered = watchPanelFilterActive(panel);
   if (filterCount) filterCount.textContent = filtered ? `showing ${list.length} of ${total}` : "";
   const content = list.length
-    ? list.flatMap(watchRowHTML)
-    : tpl`<tr><td colspan="10" class="muted">${filtered ? panel.emptyFiltered : panel.empty}</td></tr>`;
+    ? list.flatMap(panel.rowHTML || watchRowHTML)
+    : tpl`<tr><td colspan="9" class="muted">${filtered ? panel.emptyFiltered : panel.empty}</td></tr>`;
   litRender(content, tbody);
 }
 
@@ -4667,7 +4777,7 @@ function initStaticHandlers() {
       });
     }
   }
-  ["storage", "network", "host"].forEach(bindWatchPanelControls);
+  ["storage", "network", "cert", "diskio", "host"].forEach(bindWatchPanelControls);
 
   document.querySelectorAll(".watch-table th.sortable[data-watch-sort]").forEach((th) => {
     bindSortHeader(th, () => setWatchSort(watchPanelKeyForElement(th), th.dataset.watchSort || ""));
