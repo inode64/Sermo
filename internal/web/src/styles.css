@@ -390,14 +390,14 @@
     .services-table th:nth-child(4), .services-table td:nth-child(4),
     .services-table th:nth-child(7), .services-table td:nth-child(7) { display: none; }
     .services-table .actions { min-width: 0; white-space: normal; }
-    /* watches (1 Name · 2 Type · 3 Summary · 4 Interval · 5 Polarity · 6 Hook ·
-       7 Notifiers · 8 Last · 9 State · 10 Actions): keep Name/Summary/Last/State/
-       Actions. */
-    .watch-table th:nth-child(2), .watch-table td:nth-child(2),
-    .watch-table th:nth-child(4), .watch-table td:nth-child(4),
-    .watch-table th:nth-child(5), .watch-table td:nth-child(5),
-    .watch-table th:nth-child(6), .watch-table td:nth-child(6),
-    .watch-table th:nth-child(7), .watch-table td:nth-child(7) { display: none; }
+    /* watches: every panel's table starts with Name and ends with Last activity ·
+       State · Actions. On tablets keep Name and those trailing three, hiding the
+       type-specific middle columns (the full data stays in each row's expansion).
+       nth-last-child keeps this correct across panels with different column counts
+       (host/network 6 · storage 7 · cert/diskio 8). */
+    .watch-table { min-width: 0; }
+    .watch-table th:not(:first-child):not(:nth-last-child(-n+3)),
+    .watch-table td:not(:first-child):not(:nth-last-child(-n+3)) { display: none; }
   }
   @media (max-width: 760px) { .metric-grid { grid-template-columns: 1fr; } }
   @media (max-width: 640px) {
@@ -418,9 +418,9 @@
     .services-table th:nth-child(6), .services-table td:nth-child(6) { display: none; }
     .services-table td { white-space: normal; }
     .services-table .svc-sub, .services-table .unit-cell, .services-table .event-cell { max-width: 60vw; }
-    /* watches → Name · State · Actions (also hide Summary/Last). */
-    .watch-table th:nth-child(3), .watch-table td:nth-child(3),
-    .watch-table th:nth-child(8), .watch-table td:nth-child(8) { display: none; }
+    /* watches → Name · State · Actions (also drop Last activity). */
+    .watch-table th:not(:first-child):not(:nth-last-child(-n+2)),
+    .watch-table td:not(:first-child):not(:nth-last-child(-n+2)) { display: none; }
     /* apps → Application · Status · Version (hide Category). */
     .apps-table th:nth-child(2), .apps-table td:nth-child(2) { display: none; }
     /* events → Time · Service/watch · Message (hide Kind). */
