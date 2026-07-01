@@ -67,11 +67,15 @@
     box-shadow: var(--shadow);
   }
   .skip-link:focus { top: .75rem; }
+  html { height: 100%; }
   body {
     font: 15px/1.5 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
-    margin: 0 auto; padding: 0 1.4rem 4rem; max-width: 1720px;
+    min-height: 100%;
+    display: flex; flex-direction: column;
+    margin: 0 auto; padding: 0 1.4rem 1.25rem; max-width: 1720px;
     background: var(--bg); color: var(--text);
   }
+  #main-content { flex: 1 0 auto; }
   h1 { font-size: 1.12rem; margin: 0; display: flex; align-items: center; gap: .55rem; letter-spacing: .01em; }
   .brand-dot { width: .95rem; height: .95rem; border-radius: 32%; background: var(--text-2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-2) 22%, transparent); flex: none; }
   code { font-family: var(--mono); background: var(--panel-2); border-radius: 4px; padding: .04rem .3rem; font-size: .86em; }
@@ -306,13 +310,14 @@
   .icon-btn { width: 1.85rem; height: 1.85rem; display: inline-grid; place-items: center; padding: 0; font-size: .95rem; line-height: 1; }
   .icon-btn[aria-pressed="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line-2)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
   #app-footer {
-    display: flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: .5rem 1rem;
-    margin-top: 1.5rem; padding-top: .9rem; border-top: 1px solid var(--line);
+    flex-shrink: 0;
+    display: flex; align-items: center; flex-wrap: wrap; gap: .35rem .75rem;
+    margin-top: 1rem; padding: .55rem 0 .15rem; border-top: 1px solid var(--line);
   }
-  #app-footer .footer-actions { display: inline-flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+  #app-footer .footer-actions { display: inline-flex; align-items: center; gap: .35rem; flex-wrap: wrap; min-width: 0; }
   .shortcut-toggle { display: inline-flex; align-items: center; gap: .3rem; white-space: nowrap; }
   .shortcut-toggle input { margin: 0; }
-  #app-footer .footer-version { font-size: .8rem; white-space: nowrap; }
+  #app-footer .footer-version { margin-left: auto; font-size: .78rem; white-space: nowrap; }
   section#locks-section { padding-top: .15rem; }
   section#locks-section h2 { font-size: .98rem; margin: .55rem 0 .5rem; }
   .service-detail h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); margin: 1.15rem 0 .45rem; }
@@ -370,9 +375,18 @@
      scroll position. Reserving 4:1 keeps the height constant across the loading,
      no-data and rendered states. .chart-box caps at the SVG's own 640px max width;
      .chart-box-wide (the full-width SLA timeline) scales unbounded and may grow a
-     little more for its incident list below the graph. */
-  .chart-box { width: 100%; max-width: 640px; aspect-ratio: 640 / 160; }
-  .chart-box-wide { width: 100%; aspect-ratio: 640 / 160; }
+     little more for its incident list below the graph.
+     position/overflow clip the screen-reader chart-data <table> (visually-hidden
+     is position:absolute but table rows still extend the document without a clipped
+     containing block — visible when Daemon / Engine settings is open). */
+  .chart-box, .chart-box-wide {
+    position: relative; overflow: hidden;
+    width: 100%; aspect-ratio: 640 / 160;
+  }
+  .chart-box { max-width: 640px; }
+  .chart-box > .chart-data.visually-hidden, .chart-box-wide > .chart-data.visually-hidden {
+    left: 0; top: 0; white-space: normal;
+  }
 
 
   /* ---- responsive: tablet & phone ------------------------------------------
@@ -403,7 +417,7 @@
   @media (max-width: 640px) {
     /* Tighten the page chrome: smaller gutters (kept in sync with the sticky
        topbar's negative margin) and denser cards/tiles. */
-    body { padding: 0 .7rem 3rem; }
+    body { padding: 0 .7rem 1rem; }
     #topbar { padding: .7rem .7rem .5rem; margin: 0 -.7rem .35rem; }
     #overview { grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: .5rem; }
     .tile { min-height: 5.4rem; padding: .5rem .6rem .55rem; }
