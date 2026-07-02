@@ -1940,10 +1940,12 @@ contadores agregados RSS/IO.
 #### `then.kill` — terminar el proceso coincidente
 
 Un process watch puede **terminar el PID coincidente de forma nativa**, sin un
-script de hook externo, con una acción `then.kill`. Reutiliza el propio
-señalizador de procesos del daemon (la misma vía `kill(2)` que usan la parada de
-servicios y la política `kill+umount` de los mounts), de modo que la política vive
-enteramente en la configuración:
+script de hook externo, con una acción `then.kill`. Reutiliza el mismo reaper
+protegido de procesos que usan la parada de servicios y la política
+`kill+umount` de los mounts. Como señala procesos reales, `then.kill` requiere
+que `check.name` sea una ruta absoluta del `/proc/<pid>/exe` resuelto y que
+`check.user` esté definido; los process watches por basename pueden seguir
+monitorizando y notificando, pero no pueden matar.
 
 ```yaml
 watches:
@@ -1952,7 +1954,8 @@ watches:
     interval: 1m
     check:
       type: process
-      name: sudo
+      name: /usr/bin/sudo
+      user: root
       for: 120m            # observado vivo al menos 120 minutos
     then:
       kill:
@@ -1965,6 +1968,9 @@ watches:
 - **`signal`** es la señal a enviar, `TERM` (por defecto) o `KILL`. La valida el
   mismo parser que usa el daemon, así que un error tipográfico o una señal
   inapropiada falla en `config validate`.
+- El destino de kill queda protegido por el mismo modelo `kill_only_if` usado en
+  el resto del sistema: el exe resuelto del PID debe ser exactamente `check.name`
+  y su UID real debe resolver desde `check.user`. Un exe irresoluble nunca se mata.
 - **`escalate: true`** convierte la señal única en el modelo TERM→KILL de la
   política de parada: envía la señal, espera `term_timeout` y —tras **re-verificar
   que el PID sigue coincidiendo** con este watch (defensa contra reuso de PID
@@ -1979,8 +1985,8 @@ watches:
 - `kill` puede ir solo (un watch de kill puro) o acompañar a un `hook` y/o
   `notify`. **Solo es válido en un `process` watch** (como `then.expand` es solo de
   storage). Como señala procesos reales, el daemon debe tener permiso para hacerlo
-  (típicamente ejecutándose como root), y `name`/`user` deben acotarse con
-  precisión — una coincidencia amplia mata cada PID coincidente que cruce la
+  (típicamente ejecutándose como root). La pareja absoluta `name` más `user`
+  acota qué PIDs pueden matarse; cada PID coincidente que cruce la
   condición.
 
 Se añadirán otros tipos de recursos como nuevos valores de `type` de comprobación usando

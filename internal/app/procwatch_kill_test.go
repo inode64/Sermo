@@ -6,6 +6,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"sermo/internal/process"
 )
 
 // fakeSignaler records the signals a kill action would deliver instead of
@@ -34,21 +36,32 @@ type fixedSampler struct {
 
 func (f fixedSampler) Sample(ProcMatch) ([]ProcInfo, bool) { return f.infos, f.ok }
 
+func killProcInfo() ProcInfo {
+	return ProcInfo{PID: 42, User: "root", UID: 0, Exe: "/usr/bin/sudo", ExeOK: true}
+}
+
 // killWatcher builds a process watch whose only action is a native kill. The PID
 // is pre-seeded as first-seen an hour ago so a minAge condition fires on the very
 // first cycle, keeping the kill assertions independent of age bookkeeping.
 func killWatcher(h *procHarness, ks *killSpec, sig *fakeSignaler, sampler ProcSampler, onGone, dryRun bool) *procWatcher {
+	ks.selector = process.KillSelector{Users: []string{"root"}, ExeAny: []string{"/usr/bin/sudo"}}
 	w := &procWatcher{
 		name:     "pw",
-		match:    ProcMatch{Name: "sudo"},
+		match:    ProcMatch{Name: "/usr/bin/sudo", User: "root"},
 		cond:     procCond{minAge: time.Second, onGone: onGone},
 		kill:     ks,
 		signaler: sig,
-		sleep:    func(time.Duration) {}, // never wait for real in tests
-		dryRun:   dryRun,
-		emit:     func(e Event) { h.events = append(h.events, e) },
-		now:      func() time.Time { return h.clock },
-		sampler:  sampler,
+		resolve: func(user string) (uint32, bool) {
+			if user == "root" {
+				return 0, true
+			}
+			return 0, false
+		},
+		sleep:   func(time.Duration) {}, // never wait for real in tests
+		dryRun:  dryRun,
+		emit:    func(e Event) { h.events = append(h.events, e) },
+		now:     func() time.Time { return h.clock },
+		sampler: sampler,
 	}
 	w.state = map[int]*procState{42: {firstSeen: h.clock.Add(-time.Hour)}}
 	return w
@@ -68,7 +81,7 @@ func TestProcWatchKillSendsSIGTERM(t *testing.T) {
 	h := &procHarness{clock: time.Unix(1_000_000, 0)}
 	sig := &fakeSignaler{}
 	w := killWatcher(h, &killSpec{signal: syscall.SIGTERM}, sig,
-		fixedSampler{infos: []ProcInfo{{PID: 42}}, ok: true}, false, false)
+		fixedSampler{infos: []ProcInfo{killProcInfo()}, ok: true}, false, false)
 
 	w.runCycle(context.Background())
 
@@ -90,7 +103,7 @@ func TestProcWatchKillGoneDoesNotSignal(t *testing.T) {
 	h := &procHarness{clock: time.Unix(1_000_000, 0)}
 	sig := &fakeSignaler{}
 	// Seen present, then gone. A `gone` fire has nothing to kill.
-	s := &fakeProcSampler{cycles: [][]ProcInfo{{{PID: 42}}, {}}}
+	s := &fakeProcSampler{cycles: [][]ProcInfo{{killProcInfo()}, {}}}
 	w := killWatcher(h, &killSpec{signal: syscall.SIGTERM}, sig, s, true, false)
 	// Reset the pre-seeded state so the PID is genuinely first seen this run.
 	w.state = map[int]*procState{}
@@ -107,7 +120,7 @@ func TestProcWatchKillDryRunDoesNotSignal(t *testing.T) {
 	h := &procHarness{clock: time.Unix(1_000_000, 0)}
 	sig := &fakeSignaler{}
 	w := killWatcher(h, &killSpec{signal: syscall.SIGTERM}, sig,
-		fixedSampler{infos: []ProcInfo{{PID: 42}}, ok: true}, false, true)
+		fixedSampler{infos: []ProcInfo{killProcInfo()}, ok: true}, false, true)
 
 	w.runCycle(context.Background())
 
@@ -130,7 +143,7 @@ func TestProcWatchKillEscalatesToSIGKILL(t *testing.T) {
 	sig := &fakeSignaler{}
 	ks := &killSpec{signal: syscall.SIGTERM, escalate: true, termTimeout: 10 * time.Second, killTimeout: 5 * time.Second}
 	// Present through the cycle and the post-TERM re-check, gone after SIGKILL.
-	s := &fakeProcSampler{cycles: [][]ProcInfo{{{PID: 42}}, {{PID: 42}}, {}}}
+	s := &fakeProcSampler{cycles: [][]ProcInfo{{killProcInfo()}, {killProcInfo()}, {}}}
 	w := killWatcher(h, ks, sig, s, false, false)
 
 	w.runCycle(context.Background())
@@ -151,7 +164,7 @@ func TestProcWatchKillEscalateStopsWhenGone(t *testing.T) {
 	sig := &fakeSignaler{}
 	ks := &killSpec{signal: syscall.SIGTERM, escalate: true, termTimeout: 10 * time.Second}
 	// Cycle sampling sees the PID; the escalation re-sample sees it gone.
-	s := &fakeProcSampler{cycles: [][]ProcInfo{{{PID: 42}}, {}}}
+	s := &fakeProcSampler{cycles: [][]ProcInfo{{killProcInfo()}, {}}}
 	w := killWatcher(h, ks, sig, s, false, false)
 
 	w.runCycle(context.Background())
@@ -165,10 +178,29 @@ func TestProcWatchKillFailedEmitsEvent(t *testing.T) {
 	h := &procHarness{clock: time.Unix(1_000_000, 0)}
 	sig := &fakeSignaler{err: syscall.EPERM}
 	w := killWatcher(h, &killSpec{signal: syscall.SIGTERM}, sig,
-		fixedSampler{infos: []ProcInfo{{PID: 42}}, ok: true}, false, false)
+		fixedSampler{infos: []ProcInfo{killProcInfo()}, ok: true}, false, false)
 
 	w.runCycle(context.Background())
 
+	ev := killEvents(h.events)
+	if len(ev) != 1 || ev[0].Kind != "kill-failed" {
+		t.Fatalf("want a kill-failed event, got %v", h.events)
+	}
+}
+
+func TestProcWatchKillSelectorMismatchDoesNotSignal(t *testing.T) {
+	h := &procHarness{clock: time.Unix(1_000_000, 0)}
+	sig := &fakeSignaler{}
+	info := killProcInfo()
+	info.ExeOK = false
+	w := killWatcher(h, &killSpec{signal: syscall.SIGTERM}, sig,
+		fixedSampler{infos: []ProcInfo{info}, ok: true}, false, false)
+
+	w.runCycle(context.Background())
+
+	if len(sig.sent) != 0 {
+		t.Fatalf("selector mismatch signalled a process: %v", sig.sent)
+	}
 	ev := killEvents(h.events)
 	if len(ev) != 1 || ev[0].Kind != "kill-failed" {
 		t.Fatalf("want a kill-failed event, got %v", h.events)

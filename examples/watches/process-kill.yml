@@ -1,18 +1,19 @@
 watches:
   kill-stale-sudo:
-    # Terminate any `sudo` process that has been alive longer than 120 minutes —
+    # Terminate any root-owned `/usr/bin/sudo` process that has been alive longer than 120 minutes —
     # a stale-privileged-session hygiene policy. The kill is native (no external
     # script): `then.kill` reuses the daemon's own process signaller, the same
     # kill(2) path service-stop and mount kill+umount use.
     #
     # EXAMPLE — enable deliberately: it signals real processes, so the daemon
-    # must run as root and `name`/`user` should be scoped tightly (a broad match
-    # kills every matching PID that crosses the condition).
+    # must run as root. A kill action requires an absolute resolved `name` path
+    # and a `user`, so it cannot kill by process basename alone.
     monitor: disabled
     interval: 1m
     check:
       type: process
-      name: sudo  # exe basename (or full path); add `user:` to scope it
+      name: /usr/bin/sudo  # exact resolved /proc/<pid>/exe path
+      user: root  # required for then.kill; numeric UIDs are accepted
       for: 120m  # observed alive at least 120 minutes
     then:
       kill:
