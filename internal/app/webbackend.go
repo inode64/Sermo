@@ -1082,32 +1082,23 @@ func watchMetricConditions(metrics map[string]any) []web.WatchCondition {
 	return out
 }
 
-// heavyLiveViewTypes are the watch check types whose dashboard live view does
-// real work on every /api/watches poll — an external process (hdparm's read
-// benchmark, smartctl, nft/iptables), a network probe (icmp) or a filesystem
-// walk (size/count/recursive file) — plus the moderately expensive /sys and
-// /proc readers (sensors, process). These are cached per watch interval.
-// Deliberately excluded: cheap snapshot/proc gauges (memory/load/net/…, which
-// want to stay live) and rate-based views like diskio, which must sample on
-// every poll to compute deltas and keep their own per-poll state.
+// heavyLiveViewTypes are the watch check types whose dashboard live view runs
+// an expensive external command. The daemon watch cycle already owns those
+// probes, so /api/watches only serves cached data for them and never starts a
+// fresh disk command just because the panel opened.
+// Deliberately excluded: cheap/proc/sys views (memory/load/net/sensors/process),
+// filesystem state views used by tests and operators, and rate-based diskio,
+// which must sample on every poll to compute deltas.
 var heavyLiveViewTypes = map[string]bool{
-	"hdparm":         true,
-	"smart":          true,
-	"firewall_rules": true,
-	"icmp":           true,
-	"sensors":        true,
-	"size":           true,
-	"count":          true,
-	"file":           true,
-	"process":        true,
+	"hdparm": true,
+	"smart":  true,
 }
 
-// cachedWatchLiveView memoizes a heavy watch live probe for the watch's own
-// interval so /api/watches never re-runs it on every ~30s dashboard refresh (a
-// 12h hdparm/smart watch is probed at most every 12h from the dashboard, not on
-// every poll). Results are read-only (serialized to JSON, never mutated), so
-// sharing the cached value across concurrent requests is safe; the whole backend
-// is rebuilt on config reload, so the cache starts empty when the config changes.
+// cachedWatchLiveView serves cached heavy watch probes without running them from
+// the HTTP handler. Heavy probes already run in the daemon watch cycle; opening
+// the dashboard must not trigger extra hdparm/smart work. Cheap
+// live views still sample on demand because they are bounded and expected to be
+// current on every dashboard refresh.
 func (b *WebBackend) cachedWatchLiveView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
 	if w == nil {
 		return nil, nil, ""
@@ -1128,13 +1119,7 @@ func (b *WebBackend) cachedWatchLiveView(w *webWatch, system metrics.Snapshot) (
 		return e.meter, e.readings, e.summary
 	}
 	b.liveViewMu.Unlock()
-
-	meter, readings, summary := b.watchLiveView(w, system)
-
-	b.liveViewMu.Lock()
-	b.liveViewCache[w.name] = cachedLiveView{at: at, meter: meter, readings: readings, summary: summary}
-	b.liveViewMu.Unlock()
-	return meter, readings, summary
+	return nil, nil, ""
 }
 
 func (b *WebBackend) watchLiveView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
