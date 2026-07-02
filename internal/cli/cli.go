@@ -1648,7 +1648,7 @@ func (a App) runReload(ctx context.Context, opts options) int {
 	}
 
 	// Send SIGHUP. On Linux this is reliable for the daemon's signal handler.
-	if err := syscall.Kill(pid, syscall.SIGHUP); err != nil {
+	if err := (process.OSSignaler{}).Signal(pid, syscall.SIGHUP); err != nil {
 		a.recordAccess(cfg, "daemon reload", "", "error", err.Error())
 		return a.fail(opts, fmt.Sprintf("failed to signal pid %d: %v", pid, err))
 	}
