@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -84,6 +85,17 @@ type procState struct {
 	fired     bool // previous cycle's predicate, for edge detection
 }
 
+// killSpec is a process watch's `then.kill` action: signal the matched PID with
+// the native process signaller (process.OSSignaler). escalate follows the first
+// signal with SIGKILL for a survivor after termTimeout — the same TERM→KILL model
+// the stop policy uses, reusing process.Wait for the (cancellable) grace period.
+type killSpec struct {
+	signal      syscall.Signal // first signal to send (default SIGTERM)
+	escalate    bool           // follow up with SIGKILL if the PID survives
+	termTimeout time.Duration  // grace before the escalated SIGKILL
+	killTimeout time.Duration  // grace after the escalated SIGKILL (verification)
+}
+
 // procWatcher monitors the processes matching a name for a minimum age and/or
 // CPU/memory/IO thresholds, firing the hook once per matching PID when its
 // conditions are newly met (edge-triggered) — one event and one hook per PID.
@@ -92,10 +104,13 @@ type procWatcher struct {
 	match     ProcMatch
 	cond      procCond
 	hook      HookSpec
+	kill      *killSpec
 	notifiers []notify.Notifier
 	dryRun    bool
 	inPanic   func() bool
 	runner    HookRunner
+	signaler  process.Signaler    // nil -> process.OSSignaler{} (real kill(2))
+	sleep     func(time.Duration) // nil -> process.Wait's cancellable timer
 	now       func() time.Time
 	emit      func(Event)
 	sampler   ProcSampler
@@ -141,7 +156,7 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 
 		fire, env, msg := w.evaluate(st, t, s)
 		if fire && !st.fired && !observeOnlyCycle(ctx) {
-			w.fire(ctx, msg, env)
+			w.fire(ctx, s.PID, msg, env)
 		}
 		if !observeOnlyCycle(ctx) {
 			st.fired = fire
@@ -174,7 +189,7 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 			if w.match.User != "" {
 				env["SERMO_USER"] = w.match.User
 			}
-			w.fire(ctx, fmt.Sprintf("%s pid %d is gone", w.match.Name, pid), env)
+			w.fire(ctx, pid, fmt.Sprintf("%s pid %d is gone", w.match.Name, pid), env)
 		}
 		delete(w.state, pid)
 	}
@@ -235,16 +250,19 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 	return ok, env, msg
 }
 
-func (w *procWatcher) fire(ctx context.Context, msg string, env map[string]string) {
+func (w *procWatcher) fire(ctx context.Context, pid int, msg string, env map[string]string) {
 	env["SERMO_WATCH"] = w.name
 	env["SERMO_CHECK_TYPE"] = "process"
 	env["SERMO_MESSAGE"] = msg
+	// The kill action only applies to a presence fire (a matched, still-present
+	// PID); a `gone` fire has nothing to signal.
+	killable := w.kill != nil && env["SERMO_CHANGE"] == "threshold"
 	if w.dryRun {
-		w.emitEvent(Event{Watch: w.name, Kind: "dry-run", Message: watchDryRunMessage(w.hook, w.notifiers, nil) + ": " + msg})
+		w.emitEvent(Event{Watch: w.name, Kind: "dry-run", Message: w.dryRunActions(killable) + ": " + msg})
 		return
 	}
 	if w.inPanic != nil && w.inPanic() {
-		w.emitEvent(Event{Watch: w.name, Kind: "panic-suppressed", Message: "panic mode: hook/notify suppressed: " + msg})
+		w.emitEvent(Event{Watch: w.name, Kind: "panic-suppressed", Message: "panic mode: hook/notify/kill suppressed: " + msg})
 		return
 	}
 
@@ -256,7 +274,102 @@ func (w *procWatcher) fire(ctx context.Context, msg string, env map[string]strin
 			w.emitEvent(Event{Watch: w.name, Kind: "hook", Message: msg})
 		}
 	}
+	if killable {
+		w.doKill(ctx, pid, msg)
+	}
 	dispatchNotify(ctx, w.notifiers, watchMessage(w.name, msg, env), w.name, w.emitEvent)
+}
+
+// dryRunActions describes the actions the watch would take, including the native
+// kill when it applies to this fire — the process-watch analogue of
+// watchDryRunMessage (which does not know about kill).
+func (w *procWatcher) dryRunActions(killable bool) string {
+	base := watchDryRunMessage(w.hook, w.notifiers, nil)
+	if !killable {
+		return base
+	}
+	if base == "dry-run: no configured watch actions" {
+		return "dry-run: would run kill"
+	}
+	return base + ", kill"
+}
+
+// doKill signals a matched PID with the configured kill action, reusing the
+// native process signaller. With escalate it follows the first signal with a
+// SIGKILL after termTimeout, re-verifying the PID's identity first so a recycled
+// PID is never killed.
+func (w *procWatcher) doKill(ctx context.Context, pid int, msg string) {
+	signaler := w.signaler
+	if signaler == nil {
+		signaler = process.OSSignaler{}
+	}
+	// The PID was matched this same cycle, so the first signal goes out directly
+	// (no meaningful reuse window between the sample and here).
+	if err := signaler.Signal(pid, w.kill.signal); err != nil {
+		w.emitEvent(Event{Watch: w.name, Kind: "kill-failed", Message: fmt.Sprintf("%s: %s pid %d: %v", msg, sigName(w.kill.signal), pid, err)})
+		return
+	}
+	w.emitEvent(Event{Watch: w.name, Kind: "kill", Message: fmt.Sprintf("%s: sent %s to pid %d", msg, sigName(w.kill.signal), pid)})
+
+	if !w.kill.escalate || w.kill.signal == syscall.SIGKILL {
+		return
+	}
+	// Wait out the grace period (cancellable), then re-verify the PID still
+	// matches this watch before escalating — over the wait it may have exited and
+	// the number been reused by an unrelated process.
+	if err := process.Wait(ctx, w.sleep, w.kill.termTimeout); err != nil {
+		return
+	}
+	if !w.pidStillMatches(pid) {
+		return
+	}
+	if err := signaler.Signal(pid, syscall.SIGKILL); err != nil {
+		w.emitEvent(Event{Watch: w.name, Kind: "kill-failed", Message: fmt.Sprintf("%s: SIGKILL pid %d: %v", msg, pid, err)})
+		return
+	}
+	w.emitEvent(Event{Watch: w.name, Kind: "kill", Message: fmt.Sprintf("%s: escalated to SIGKILL for pid %d", msg, pid)})
+	// After the kill grace, a PID that still matches is unkillable from here (an
+	// uninterruptible sleep, or a zombie whose parent has not reaped it) — surface
+	// it rather than claim success, mirroring the reaper's final rediscover.
+	if err := process.Wait(ctx, w.sleep, w.kill.killTimeout); err != nil {
+		return
+	}
+	if w.pidStillMatches(pid) {
+		w.emitEvent(Event{Watch: w.name, Kind: "kill-failed", Message: fmt.Sprintf("%s: pid %d survived SIGKILL", msg, pid)})
+	}
+}
+
+// pidStillMatches re-samples the watch's selector and reports whether pid is
+// still among the matches — the identity re-check that defends the escalated
+// SIGKILL against PID reuse. A transient sampling failure fails safe (no kill).
+func (w *procWatcher) pidStillMatches(pid int) bool {
+	sampler := w.sampler
+	if sampler == nil {
+		sampler = osProcSampler{}
+	}
+	samples, ok := sampler.Sample(w.match)
+	if !ok {
+		return false
+	}
+	for _, s := range samples {
+		if s.PID == pid {
+			return true
+		}
+	}
+	return false
+}
+
+// sigName renders the termination signals a kill action can send with their
+// conventional names (Signal.String() would say "terminated"/"killed").
+func sigName(sig syscall.Signal) string {
+	switch sig {
+	case syscall.SIGTERM:
+		return "SIGTERM"
+	case syscall.SIGKILL:
+		return "SIGKILL"
+	default:
+		return sig.String()
+	}
 }
 
 func (w *procWatcher) emitEvent(e Event) {

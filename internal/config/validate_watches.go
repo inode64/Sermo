@@ -7,6 +7,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/process"
 )
 
 func validateWatches(watches map[string]any, locksDir string, notifiers map[string]struct{}, defaultNotify []string, add func(string, ...any)) {
@@ -43,7 +44,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			// The one single-shot type with its own case: a storage watch may carry
 			// a then.expand action, so its hook block allows expand.
 			validateStorageFields(cp, check, add)
-			validateHookBlock("watches."+name, entry, true, defaultNotify, add)
+			validateHookBlock("watches."+name, entry, true, false, defaultNotify, add)
 		case "net":
 			validateNetCheck(name, check, entry, defaultNotify, add)
 		case "icmp":
@@ -61,7 +62,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			// a host watch: validate its fields with the same per-type validators a
 			// checks: section uses and require a hook (section: unified checks).
 			if validateWatchableCheck(cp, cfgval.String(check["type"]), check, locksDir, add) {
-				validateHookBlock("watches."+name, entry, false, defaultNotify, add)
+				validateHookBlock("watches."+name, entry, false, false, defaultNotify, add)
 			} else {
 				add("watches.%s.check.type %q is not supported", name, cfgval.String(check["type"]))
 			}
@@ -74,7 +75,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 // must be a non-empty array with a valid optional timeout. Notifier-name
 // references are checked separately by validateNotifyRefs (which has the
 // configured notifier set).
-func validateHookBlock(prefix string, block map[string]any, allowExpand bool, defaultNotify []string, add func(string, ...any)) {
+func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKill bool, defaultNotify []string, add func(string, ...any)) {
 	rawThen, present := block["then"]
 	if !present {
 		// Absent `then` is valid: the watch is alert/monitor-only. Its `check` +
@@ -120,12 +121,22 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand bool, de
 			add("%s.then.expand.by %q must be a positive size with a K/M/G/T suffix (e.g. 5G)", prefix, cfgval.String(expand["by"]))
 		}
 	}
-	// An explicit `then: { notify: [none] }` (or with a hook/expand too) is a
+	rawKill, killPresent := then["kill"]
+	kill, hasKill := rawKill.(map[string]any)
+	switch {
+	case killPresent && !hasKill:
+		add("%s.then.kill must be a mapping", prefix)
+	case hasKill && !allowKill:
+		add("%s.then.kill is only valid on a process watch", prefix)
+	case hasKill:
+		validateKillAction(prefix, kill, add)
+	}
+	// An explicit `then: { notify: [none] }` (or with a hook/expand/kill too) is a
 	// deliberate monitor-only watch (state in the dashboard and events, no
 	// delivery). A present `then` that selects nothing is rejected. Omitting the
 	// `then` key entirely is another supported way to get alert-only behavior.
-	if !hasHook && !HasEffectiveNotifyAction(notify, defaultNotify) && !hasExpand && !NotifyOptedOut(notify) {
-		add("%s.then requires a hook, notify and/or expand", prefix)
+	if !hasHook && !HasEffectiveNotifyAction(notify, defaultNotify) && !hasExpand && !hasKill && !NotifyOptedOut(notify) {
+		add("%s.then requires a hook, notify, kill and/or expand", prefix)
 		return
 	}
 	if hasHook {
@@ -143,6 +154,28 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand bool, de
 		}
 		validateOutputExpectation(prefix+".then.hook", "expect_stdout", hook["expect_stdout"], add)
 		validateOutputExpectation(prefix+".then.hook", "expect_stderr", hook["expect_stderr"], add)
+	}
+}
+
+// validateKillAction checks a process watch's `then.kill` action: an optional
+// signal (TERM default, or KILL — validated by the same process.ParseKillSignal
+// the daemon uses), an optional boolean `escalate`, and the optional grace
+// durations that only apply when escalating.
+func validateKillAction(prefix string, kill map[string]any, add func(string, ...any)) {
+	if s := cfgval.String(kill["signal"]); s != "" {
+		if _, err := process.ParseKillSignal(s); err != nil {
+			add("%s.then.kill.signal %q must be TERM or KILL", prefix, s)
+		}
+	}
+	if v, present := kill["escalate"]; present {
+		if _, ok := v.(bool); !ok {
+			add("%s.then.kill.escalate must be a boolean", prefix)
+		}
+	}
+	for _, f := range []string{"term_timeout", "kill_timeout"} {
+		if v, present := kill[f]; present && !isPositiveDuration(cfgval.String(v)) {
+			add("%s.then.kill.%s %q must be a valid positive duration", prefix, f, cfgval.String(v))
+		}
 	}
 }
 
@@ -239,7 +272,7 @@ func validateNetCheck(name string, check, entry map[string]any, defaultNotify []
 			continue
 		}
 		validateNetMetricCondition(prefix, key, m, add)
-		validateHookBlock(prefix, m, false, defaultNotify, add)
+		validateHookBlock(prefix, m, false, false, defaultNotify, add)
 		validateWindow(prefix, m, add)
 	}
 }
@@ -310,7 +343,7 @@ func validateSwapCheck(name string, entry map[string]any, defaultNotify []string
 			continue
 		}
 		validateSwapMetricCondition(prefix, key, m, add)
-		validateHookBlock(prefix, m, false, defaultNotify, add)
+		validateHookBlock(prefix, m, false, false, defaultNotify, add)
 		validateWindow(prefix, m, add)
 	}
 }
@@ -373,7 +406,7 @@ func validateICMPCheck(name string, check, entry map[string]any, defaultNotify [
 			continue
 		}
 		validateICMPMetricCondition(prefix, key, m, add)
-		validateHookBlock(prefix, m, false, defaultNotify, add)
+		validateHookBlock(prefix, m, false, false, defaultNotify, add)
 		validateWindow(prefix, m, add)
 	}
 }
@@ -449,7 +482,7 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 		add("watches.%s.check requires at least one of size, permissions, owner, existence", name)
 	}
 
-	validateHookBlock("watches."+name, entry, false, defaultNotify, add)
+	validateHookBlock("watches."+name, entry, false, false, defaultNotify, add)
 }
 
 // validateProcessWatch validates a process watch: a name, an optional user, and
@@ -488,5 +521,6 @@ func validateProcessWatch(name string, check, entry map[string]any, defaultNotif
 		add("watches.%s.check requires at least one of for, cpu, memory, io, gone", name)
 	}
 
-	validateHookBlock("watches."+name, entry, false, defaultNotify, add)
+	// A process watch is the one type that may carry a native `then.kill` action.
+	validateHookBlock("watches."+name, entry, false, true, defaultNotify, add)
 }

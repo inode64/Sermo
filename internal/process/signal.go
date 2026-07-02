@@ -193,3 +193,26 @@ func SignalNames() []string {
 	sort.Strings(out)
 	return out
 }
+
+// killSignalNames are the termination signals a kill action may send. KILL is
+// intentionally absent from signalNames (which lists in-place reload signals);
+// it is valid only where the intent is to terminate a process, such as a host
+// process watch's `then.kill` action.
+var killSignalNames = map[string]syscall.Signal{
+	"TERM": syscall.SIGTERM,
+	"KILL": syscall.SIGKILL,
+}
+
+// ParseKillSignal resolves a termination signal name for a kill action. The name
+// is case-insensitive and an optional `SIG` prefix is accepted (`TERM`, `sigterm`,
+// `SIGKILL` all resolve). Unlike ParseSignal it accepts KILL and rejects every
+// non-termination signal, so a typo or an inappropriate signal fails validation
+// instead of silently sending the wrong thing.
+func ParseKillSignal(name string) (syscall.Signal, error) {
+	key := strings.ToUpper(strings.TrimSpace(name))
+	key = strings.TrimPrefix(key, "SIG")
+	if sig, ok := killSignalNames[key]; ok {
+		return sig, nil
+	}
+	return 0, fmt.Errorf("kill signal %q: only TERM or KILL are valid", name)
+}
