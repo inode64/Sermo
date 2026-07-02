@@ -19,7 +19,11 @@ any `security:` toggle that tries to disable them.
    discovery for shared binaries, but cmdline never authorizes a kill; a process
    whose exe cannot be resolved (permission, or a `(deleted)` binary) is never
    killed — it is reported as a residual instead.
-6. **`force_kill: true` requires `kill_only_if`** with both a `users` selector
+6. **Never send terminating signals to PID 1 or kernel threads.** `SIGTERM`,
+   `SIGKILL`, `SIGINT` and `SIGQUIT` are blocked centrally for PID 1 and for
+   kernel threads (`kthreadd`/children with no userspace exe or cmdline). This is
+   not configurable; protected residuals are reported instead.
+7. **`force_kill: true` requires `kill_only_if`** with both a `users` selector
    and an `exe_any` selector, each non-empty.
 
 ## The operation engine
@@ -245,6 +249,9 @@ Kill decisions depend on how process facts are read, so this is fixed:
   resolves to a `(deleted)` path (binary replaced by an upgrade), the process
   matches no exe selector — it is reported as a residual with exe unknown and
   is never signaled.
+- **PID 1 and kernel threads are protected** from terminating signals even if a
+  future selector or signal path would otherwise target them. Non-terminating
+  reload signals such as `SIGHUP` are not blocked by this guard.
 - **Native signal reloads use the same identity model.** On OpenRC, or any
   service with no backend `MainPID`, the pidfile PID is signaled only after it
   matches a `processes:` selector with exact `exe` and `user`. Catalog authors
@@ -269,7 +276,7 @@ a name-only authority.
    **not** start).
 4. Residuals with `force_kill: true` → classify each one: KILLABLE only when
    every `kill_only_if` field matches (exact resolved exe **and** real UID;
-   unresolvable exe is never killable). SIGTERM the killable set, wait
+   unresolvable exe and protected PIDs are never killable). SIGTERM the killable set, wait
    `term_timeout`, rediscover; SIGKILL what remains of the killable set, wait
    `kill_timeout`, rediscover. A residual that never matched is never signaled.
 5. The result is `ok` only when no residuals remain at all — whether the
