@@ -988,14 +988,11 @@ func TestWebBackendStatefulWatchReadings(t *testing.T) {
 	if got := readingByField(byName["grow"].Readings, "current_bytes").Value; got != "5 B" {
 		t.Fatalf("size = %q, want 5 B", got)
 	}
-	if got := readingByField(byName["disk-speed"].Readings, "read").Value; got != "500.0 MB/s" {
-		t.Fatalf("hdparm read = %q, want 500.0 MB/s", got)
+	if got := readingByField(byName["disk-speed"].Readings, "read").Value; got != "" {
+		t.Fatalf("hdparm read = %q, want no cold web probe", got)
 	}
-	if got := readingByField(byName["disk-health"].Readings, "health").Value; got != "PASSED" {
-		t.Fatalf("smart health = %q, want PASSED", got)
-	}
-	if got := readingByField(byName["disk-health"].Readings, "temperature").Value; got != "41 °C" {
-		t.Fatalf("smart temperature = %q, want 41 °C", got)
+	if got := readingByField(byName["disk-health"].Readings, "health").Value; got != "" {
+		t.Fatalf("smart health = %q, want no cold web probe", got)
 	}
 }
 
@@ -1110,6 +1107,15 @@ func (r webBackendTestRunner) Run(_ context.Context, name string, _ ...string) (
 		return res, nil
 	}
 	return execx.Result{ExitCode: 127}, nil
+}
+
+type countingWebRunner struct {
+	calls int
+}
+
+func (r *countingWebRunner) Run(_ context.Context, _ string, _ ...string) (execx.Result, error) {
+	r.calls++
+	return execx.Result{ExitCode: 0}, nil
 }
 
 func readingByField(readings []web.WatchReading, field string) web.WatchReading {
@@ -1751,43 +1757,56 @@ func TestWebBackendStartingStateUnsettled(t *testing.T) {
 	}
 }
 
-// TestCachedWatchLiveViewCachesToInterval verifies the dashboard live-probe cache:
-// within a watch's interval the (potentially expensive) probe runs once and is
-// served from cache on subsequent /api/watches calls; past the interval it
-// re-runs. This is what keeps a 12h hdparm/smart watch from benchmarking on every
-// 30s dashboard refresh.
-func TestCachedWatchLiveViewCachesToInterval(t *testing.T) {
-	var calls int
+// TestCachedWatchLiveViewDoesNotRunColdHeavyProbe verifies that /api/watches
+// never runs expensive external dashboard probes on a cold cache. Those checks
+// already run in the daemon watch cycle; the web handler may display cached data,
+// but opening the panel must not start extra hdparm/smart work.
+func TestCachedWatchLiveViewDoesNotRunColdHeavyProbe(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
+	runner := &countingWebRunner{}
 	b := &WebBackend{
-		watchOrder: []string{"s"},
+		watchOrder: []string{"disk"},
 		watches: map[string]*webWatch{
-			// sensors is a heavy (cached) live-view type.
-			"s": {name: "s", checkType: "sensors", interval: time.Hour, check: map[string]any{}},
-		},
-		sensorSampler: func() ([]checks.SensorReading, error) {
-			calls++
-			return []checks.SensorReading{{Chip: "coretemp", Kind: "temp", Value: 40}}, nil
+			"disk": {
+				name:      "disk",
+				checkType: "hdparm",
+				interval:  time.Hour,
+				check: map[string]any{
+					"type":   "hdparm",
+					"device": "/dev/sda",
+					"read":   map[string]any{"op": "<", "value": 100},
+				},
+			},
 		},
 		liveViewCache: map[string]cachedLiveView{},
+		execRunner:    runner,
 		now:           func() time.Time { return now },
 	}
 
-	// Two calls within the interval: probe runs once, second is a cache hit.
+	// Cold heavy probes are not run by the web handler.
 	ws := b.Watches(context.Background())
-	if len(ws) != 1 || !strings.Contains(ws[0].Summary, "sensors") {
-		t.Fatalf("first Watches() = %+v, want a sensors summary", ws)
+	if len(ws) != 1 || strings.Contains(ws[0].Summary, "hdparm") {
+		t.Fatalf("cold Watches() = %+v, want no hdparm summary", ws)
 	}
-	b.Watches(context.Background())
-	if calls != 1 {
-		t.Fatalf("within interval: sensors probe ran %d times, want 1 (cached)", calls)
+	if runner.calls != 0 {
+		t.Fatalf("cold heavy probe ran %d commands, want 0", runner.calls)
 	}
 
-	// Past the interval the probe re-runs.
-	now = now.Add(time.Hour + time.Second)
-	b.Watches(context.Background())
-	if calls != 2 {
-		t.Fatalf("after interval: sensors probe ran %d times, want 2 (re-sampled)", calls)
+	b.liveViewMu.Lock()
+	b.liveViewCache["disk"] = cachedLiveView{
+		at:      now,
+		summary: "hdparm /dev/sda read=500.0 MB/s",
+		readings: []web.WatchReading{
+			{Field: "read", Value: "500.0 MB/s"},
+		},
+	}
+	b.liveViewMu.Unlock()
+	ws = b.Watches(context.Background())
+	if len(ws) != 1 || !strings.Contains(ws[0].Summary, "hdparm") || len(ws[0].Readings) != 1 {
+		t.Fatalf("cached Watches() = %+v, want cached hdparm summary/readings", ws)
+	}
+	if runner.calls != 0 {
+		t.Fatalf("cached heavy probe ran %d commands, want 0", runner.calls)
 	}
 }
 
