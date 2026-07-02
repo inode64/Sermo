@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -447,6 +448,70 @@ func TestWebBackendApplicationsCache(t *testing.T) {
 	third := b.Applications(context.Background())
 	if calls != 2 || len(third) != 1 || third[0].Name != "second" {
 		t.Fatalf("expired Applications = %v, calls=%d; want refreshed second", third, calls)
+	}
+}
+
+type concurrentAppRunner struct {
+	delay    time.Duration
+	mu       sync.Mutex
+	inFlight int
+	max      int
+}
+
+func (r *concurrentAppRunner) Run(ctx context.Context, _ string, _ ...string) (execx.Result, error) {
+	r.mu.Lock()
+	r.inFlight++
+	if r.inFlight > r.max {
+		r.max = r.inFlight
+	}
+	r.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+	case <-time.After(r.delay):
+	}
+
+	r.mu.Lock()
+	r.inFlight--
+	r.mu.Unlock()
+	return execx.Result{Stdout: "app 1.2.3\n", ExitCode: 0}, nil
+}
+
+func (r *concurrentAppRunner) Max() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.max
+}
+
+func TestWebBackendApplicationsInspectInParallel(t *testing.T) {
+	root := t.TempDir()
+	names := []string{"app-a", "app-b", "app-c", "app-d"}
+	cfg := &config.Config{AppNames: names, Apps: map[string]*config.Document{}}
+	for _, name := range names {
+		bin := filepath.Join(root, name)
+		if err := os.WriteFile(bin, []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		cfg.Apps[name] = &config.Document{Name: name, Body: map[string]any{
+			"name": name,
+			"preflight": map[string]any{
+				"binary": map[string]any{"type": "binary", "path": bin},
+				"version": map[string]any{
+					"type":    "command",
+					"command": []any{bin, "--version"},
+				},
+			},
+		}}
+	}
+
+	runner := &concurrentAppRunner{delay: 25 * time.Millisecond}
+	b := &WebBackend{cfg: cfg, execRunner: runner}
+	apps := b.loadApplications(context.Background())
+	if len(apps) != len(names) {
+		t.Fatalf("apps = %+v, want %d apps", apps, len(names))
+	}
+	if runner.Max() < 2 {
+		t.Fatalf("max concurrent app probes = %d, want at least 2", runner.Max())
 	}
 }
 
