@@ -28,6 +28,25 @@ func (n typedNotifier) Send(context.Context, notify.Message) error {
 	return nil
 }
 
+func TestBuildWatchesProcessKillAction(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"kill-stale-sudo": map[string]any{
+			"check": map[string]any{"type": "process", "name": "sudo", "for": "120m"},
+			"then":  map[string]any{"kill": map[string]any{"signal": "TERM"}},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
+	if len(warns) != 0 {
+		t.Fatalf("a kill-only process watch should build cleanly, got warnings: %v", warns)
+	}
+	if len(watches) != 1 {
+		t.Fatalf("expected 1 watch, got %d", len(watches))
+	}
+	if watches[0].CheckType != "process" {
+		t.Fatalf("check type = %q, want process", watches[0].CheckType)
+	}
+}
+
 func TestBuildWatchesStorageExpandAction(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"expand-backup": map[string]any{

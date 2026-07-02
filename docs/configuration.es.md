@@ -1130,8 +1130,8 @@ fusionan con un service.
 > preguntas. Consulta [wizards](wizards.md) para el flujo completo.
 
 El bloque `then` de un watch (cuando está presente) declara las acciones tomadas cuando
-se dispara — un `hook`, una lista `notify`, un `expand` (solo storage), o cualquier
-combinación.
+se dispara — un `hook`, una lista `notify`, un `expand` (solo storage), un `kill`
+(solo process), o cualquier combinación.
 
 **Omitir `then` por completo** está soportado y significa *solo-alerta / solo-monitor*:
 el `check` + `for` (o condiciones por métrica) aún se evalúan; cuando la ventana se
@@ -1932,6 +1932,52 @@ condición de IO nunca se dispara. El filtro opcional `user:` se resuelve a trav
 `engine.user_lookup`; los UIDs numéricos se aceptan y evitan la ambigüedad del servicio
 de identidad del host. La WebUI muestra las coincidencias actuales, los PIDs y los
 contadores agregados RSS/IO.
+
+#### `then.kill` — terminar el proceso coincidente
+
+Un process watch puede **terminar el PID coincidente de forma nativa**, sin un
+script de hook externo, con una acción `then.kill`. Reutiliza el propio
+señalizador de procesos del daemon (la misma vía `kill(2)` que usan la parada de
+servicios y la política `kill+umount` de los mounts), de modo que la política vive
+enteramente en la configuración:
+
+```yaml
+watches:
+  kill-stale-sudo:
+    monitor: enabled
+    interval: 1m
+    check:
+      type: process
+      name: sudo
+      for: 120m            # observado vivo al menos 120 minutos
+    then:
+      kill:
+        signal: TERM       # opcional, por defecto TERM; TERM o KILL
+        # escalate: true     # opcional: seguir la señal con SIGKILL para un superviviente
+        # term_timeout: 10s  # opcional (solo escalate): margen antes del SIGKILL
+        # kill_timeout: 5s   # opcional (solo escalate): margen tras el SIGKILL
+```
+
+- **`signal`** es la señal a enviar, `TERM` (por defecto) o `KILL`. La valida el
+  mismo parser que usa el daemon, así que un error tipográfico o una señal
+  inapropiada falla en `config validate`.
+- **`escalate: true`** convierte la señal única en el modelo TERM→KILL de la
+  política de parada: envía la señal, espera `term_timeout` y —tras **re-verificar
+  que el PID sigue coincidiendo** con este watch (defensa contra reuso de PID
+  durante el margen)— envía `SIGKILL` a un superviviente.
+- Se dispara con la misma semántica **edge-triggered, una vez por PID** que el
+  hook, y solo en un disparo de **presencia** (`for`/`cpu`/`memory`/`io`) — nunca
+  en un disparo `gone`, que no tiene nada que señalar. Cada envío de señal se
+  registra como un evento `kill` (o `kill-failed`) visible en la actividad del
+  watch.
+- `then.dry_run: true` y el modo pánico **suprimen** el kill (se emite en su lugar
+  un evento `dry-run` / `panic-suppressed`), igual que el hook y notify.
+- `kill` puede ir solo (un watch de kill puro) o acompañar a un `hook` y/o
+  `notify`. **Solo es válido en un `process` watch** (como `then.expand` es solo de
+  storage). Como señala procesos reales, el daemon debe tener permiso para hacerlo
+  (típicamente ejecutándose como root), y `name`/`user` deben acotarse con
+  precisión — una coincidencia amplia mata cada PID coincidente que cruce la
+  condición.
 
 Se añadirán otros tipos de recursos como nuevos valores de `type` de comprobación usando
 la misma estructura de watch/hook.

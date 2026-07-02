@@ -6,6 +6,7 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"syscall"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -13,6 +14,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/notify"
+	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/volume"
 )
@@ -274,7 +276,9 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	actions, err := resolveWatchActions(entry, deps, watchActionOptions{
-		emptyMessage: "then requires a hook and/or notify",
+		checkType:    "process",
+		parseKill:    true,
+		emptyMessage: "then requires a hook, notify and/or kill",
 	})
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
@@ -284,6 +288,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		match:     ProcMatch{Name: pname, User: cfgval.AsString(checkEntry["user"])},
 		cond:      cond,
 		hook:      actions.hook,
+		kill:      actions.kill,
 		notifiers: resolveNotifiers(actions.effectiveNames, deps.Notifiers),
 		dryRun:    actions.dryRun,
 		inPanic:   deps.Panic.Active,
@@ -461,12 +466,14 @@ type watchActions struct {
 	effectiveNames []string
 	dryRun         bool
 	expand         *ExpandSpec
+	kill           *killSpec
 	notifyInterval time.Duration
 }
 
 type watchActionOptions struct {
 	checkType    string
 	parseExpand  bool
+	parseKill    bool
 	emptyMessage string
 }
 
@@ -486,7 +493,14 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 			return watchActions{}, err
 		}
 	}
-	if !hasWatchAction(hook, names, effectiveNames, expand) {
+	var kill *killSpec
+	if opts.parseKill {
+		kill, err = parseKill(thenBlock)
+		if err != nil {
+			return watchActions{}, err
+		}
+	}
+	if !hasWatchAction(hook, names, effectiveNames, expand) && kill == nil {
 		return watchActions{}, errors.New(opts.emptyMessage)
 	}
 	return watchActions{
@@ -494,8 +508,43 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 		effectiveNames: effectiveNames,
 		dryRun:         dryRunEnabled(thenBlock),
 		expand:         expand,
+		kill:           kill,
 		notifyInterval: cfgval.Duration(thenBlock["notify_interval"]),
 	}, nil
+}
+
+// parseKill reads a `then.kill` action — a native process-signal action for a
+// process watch. It reuses process.ParseKillSignal so the accepted signal set
+// (TERM default, or KILL) is the single source of truth shared with config
+// validation. escalate turns on the TERM→KILL follow-up with sane default grace
+// timeouts.
+func parseKill(then map[string]any) (*killSpec, error) {
+	raw, present := then["kill"]
+	if !present {
+		return nil, nil
+	}
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("then.kill must be a mapping")
+	}
+	ks := &killSpec{signal: syscall.SIGTERM}
+	if s := cfgval.AsString(m["signal"]); s != "" {
+		sig, err := process.ParseKillSignal(s)
+		if err != nil {
+			return nil, fmt.Errorf("then.kill %w", err)
+		}
+		ks.signal = sig
+	}
+	ks.escalate = cfgval.Bool(m["escalate"])
+	ks.termTimeout = cfgval.Duration(m["term_timeout"])
+	ks.killTimeout = cfgval.Duration(m["kill_timeout"])
+	if ks.termTimeout <= 0 {
+		ks.termTimeout = 10 * time.Second
+	}
+	if ks.killTimeout <= 0 {
+		ks.killTimeout = 5 * time.Second
+	}
+	return ks, nil
 }
 
 // parseExpand reads a `then.expand` storage-expansion action. It is only valid on

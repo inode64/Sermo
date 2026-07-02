@@ -1087,8 +1087,8 @@ a service.
 > [wizards](wizards.md) for the full flow.
 
 A watch's `then` block (when present) declares the actions taken when it
-fires — a `hook`, a `notify` list, an `expand` (storage only), or any
-combination.
+fires — a `hook`, a `notify` list, an `expand` (storage only), a `kill`
+(process only), or any combination.
 
 **Omitting `then` entirely** is supported and means *alert-only / monitor-only*:
 the `check` + `for` (or per-metric conditions) are still evaluated; when the
@@ -1876,6 +1876,50 @@ it (typically running as root); when it is unreadable the IO condition never fir
 The optional `user:` filter is resolved through `engine.user_lookup`; numeric
 UIDs are accepted and avoid host identity-service ambiguity. The WebUI shows
 current matches, PIDs and aggregate RSS/IO counters.
+
+#### `then.kill` — terminate the matched process
+
+A process watch can **terminate the matched PID natively**, without an external
+hook script, with a `then.kill` action. It reuses the daemon's own process
+signaller (the same `kill(2)` path the service stop and mount `kill+umount`
+policies use), so the policy lives entirely in configuration:
+
+```yaml
+watches:
+  kill-stale-sudo:
+    monitor: enabled
+    interval: 1m
+    check:
+      type: process
+      name: sudo
+      for: 120m            # observed alive at least 120 minutes
+    then:
+      kill:
+        signal: TERM       # optional, default TERM; TERM or KILL
+        # escalate: true     # optional: follow the signal with SIGKILL for a survivor
+        # term_timeout: 10s  # optional (escalate only): grace before SIGKILL
+        # kill_timeout: 5s   # optional (escalate only): grace after SIGKILL
+```
+
+- **`signal`** is the signal to send, `TERM` (default) or `KILL`. It is validated
+  by the same parser the daemon uses, so a typo or an inappropriate signal fails
+  `config validate`.
+- **`escalate: true`** turns the single signal into the stop-policy TERM→KILL
+  model: send the signal, wait `term_timeout`, and — after **re-verifying the PID
+  still matches this watch** (defending against PID reuse over the grace period) —
+  send `SIGKILL` to a survivor.
+- It fires with the same **edge-triggered, once-per-PID** semantics as the hook,
+  and only on a **presence** fire (`for`/`cpu`/`memory`/`io`) — never on a `gone`
+  fire, which has nothing to signal. Each signal delivery is recorded as a `kill`
+  (or `kill-failed`) event visible in the watch's activity.
+- `then.dry_run: true` and panic mode **suppress** the kill (a `dry-run` /
+  `panic-suppressed` event is emitted instead), exactly like the hook and notify.
+- `kill` can stand alone (a pure kill watch) or accompany a `hook` and/or
+  `notify`. It is **only valid on a `process` watch** (like `then.expand` is
+  storage-only). Because it signals real processes, the daemon must have
+  permission to do so (typically running as root), and `name`/`user` should be
+  scoped tightly — a broad match kills every matching PID that crosses the
+  condition.
 
 Other resource types will be added as new check `type` values using the same
 watch/hook structure.
