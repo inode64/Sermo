@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
+	volumeinfo "sermo/internal/volume"
 )
 
 // volumeAssistant creates `storage` watches: a free/used-space threshold with
@@ -26,6 +27,7 @@ func (volumeAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("list volumes: %w", err)
 	}
+	vols = storageVolumeCandidates(vols)
 	if len(vols) == 0 {
 		return Result{}, fmt.Errorf("no storage volumes found to monitor")
 	}
@@ -58,6 +60,20 @@ func (volumeAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		watches[watchName("storage", v.Mountpoint)] = buildVolWatch(v, *s)
 	}
 	return Result{Watches: watches, Summary: fmt.Sprintf("%d storage watch(es)", len(watches))}, nil
+}
+
+func storageVolumeCandidates(vols []Volume) []Volume {
+	out := make([]Volume, 0, len(vols))
+	for _, v := range vols {
+		if volumeinfo.IsStorageMount(volumeinfo.Mount{
+			Device:     v.Device,
+			Mountpoint: v.Mountpoint,
+			FSType:     v.FSType,
+		}) {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // volSettings are the answers gathered for one (or all) volume(s).
