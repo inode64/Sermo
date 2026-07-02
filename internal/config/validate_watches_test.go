@@ -272,11 +272,11 @@ func TestValidateProcessWatchKillGood(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
 			"kill-stale-sudo": map[string]any{
-				"check": map[string]any{"type": "process", "name": "sudo", "for": "120m"},
+				"check": map[string]any{"type": "process", "name": "/usr/bin/sudo", "user": "root", "for": "120m"},
 				"then":  map[string]any{"kill": map[string]any{"signal": "TERM"}},
 			},
 			"kill-escalate": map[string]any{
-				"check": map[string]any{"type": "process", "name": "sudo", "for": "120m"},
+				"check": map[string]any{"type": "process", "name": "/usr/bin/sudo", "user": "root", "for": "120m"},
 				"then": map[string]any{"kill": map[string]any{
 					"signal":       "KILL",
 					"escalate":     true,
@@ -306,6 +306,14 @@ func TestValidateProcessWatchKillErrors(t *testing.T) {
 				"check": map[string]any{"type": "process", "name": "sudo", "for": "1m"},
 				"then":  map[string]any{"kill": map[string]any{"escalate": true, "term_timeout": "soon"}},
 			},
+			"basename-kill": map[string]any{
+				"check": map[string]any{"type": "process", "name": "sudo", "user": "root", "for": "1m"},
+				"then":  map[string]any{"kill": map[string]any{"signal": "TERM"}},
+			},
+			"missing-user-kill": map[string]any{
+				"check": map[string]any{"type": "process", "name": "/usr/bin/sudo", "for": "1m"},
+				"then":  map[string]any{"kill": map[string]any{"signal": "TERM"}},
+			},
 			// kill is process-only; on a storage watch it must be rejected.
 			"kill-on-storage": map[string]any{
 				"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
@@ -317,6 +325,8 @@ func TestValidateProcessWatchKillErrors(t *testing.T) {
 		"watches.bad-signal.then.kill.signal \"HUP\" must be TERM or KILL",
 		"watches.bad-escalate.then.kill.escalate must be a boolean",
 		"watches.bad-timeout.then.kill.term_timeout \"soon\" must be a valid positive duration",
+		"watches.basename-kill.then.kill requires check.name to be an absolute resolved exe path",
+		"watches.missing-user-kill.then.kill requires check.user",
 		"watches.kill-on-storage.then.kill is only valid on a process watch",
 	}
 	for _, w := range want {

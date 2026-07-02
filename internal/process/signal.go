@@ -29,13 +29,21 @@ func (OSSignaler) Signal(pid int, sig syscall.Signal) error {
 
 // ReapResult is the outcome of signal escalation.
 type ReapResult struct {
-	Remaining []Process // residuals still present at the end (orphans)
-	Signalled []int     // pids that were signalled, sorted
+	Remaining []Process       // residuals still present at the end (orphans)
+	Signalled []int           // pids that were signalled, sorted
+	Failed    []SignalFailure // signal delivery failures, sorted by PID
 }
 
 // OK reports whether no residual processes remain (ok only if none
 // remain at all).
 func (r ReapResult) OK() bool { return len(r.Remaining) == 0 }
+
+// SignalFailure records a signal delivery error for a PID.
+type SignalFailure struct {
+	PID    int            // process ID that could not be signalled
+	Signal syscall.Signal // signal attempted
+	Err    error          // delivery error
+}
 
 // Reaper applies the stop/kill signal escalation policy to residual
 // processes. Rediscover re-reads the current residual set between steps so
@@ -83,32 +91,53 @@ func (r Reaper) Reap(ctx context.Context, residuals []Process, policy KillPolicy
 	}
 
 	signalled := map[int]bool{}
+	var failed []SignalFailure
 	round := func(set []Process, sig syscall.Signal) {
-		for _, p := range set {
-			if policy.KillOnlyIf.Killable(p, resolve) {
-				if err := signaler.Signal(p.PID, sig); err == nil {
-					signalled[p.PID] = true
-				}
-			}
-		}
+		failed = append(failed, signalRound(set, policy.KillOnlyIf, resolve, signaler, sig, signalled)...)
 	}
 
 	round(residuals, syscall.SIGTERM)
 	if err := Wait(ctx, sleep, policy.TermTimeout); err != nil {
-		return ReapResult{Remaining: r.Rediscover(), Signalled: sortedInts(signalled)}
+		return ReapResult{Remaining: r.Rediscover(), Signalled: sortedInts(signalled), Failed: failed}
 	}
 	residuals = r.Rediscover()
 	if len(residuals) == 0 {
-		return ReapResult{Signalled: sortedInts(signalled)}
+		return ReapResult{Signalled: sortedInts(signalled), Failed: failed}
 	}
 
 	round(residuals, syscall.SIGKILL)
 	if err := Wait(ctx, sleep, policy.KillTimeout); err != nil {
-		return ReapResult{Remaining: r.Rediscover(), Signalled: sortedInts(signalled)}
+		return ReapResult{Remaining: r.Rediscover(), Signalled: sortedInts(signalled), Failed: failed}
 	}
 	residuals = r.Rediscover()
 
-	return ReapResult{Remaining: residuals, Signalled: sortedInts(signalled)}
+	return ReapResult{Remaining: residuals, Signalled: sortedInts(signalled), Failed: failed}
+}
+
+// Signal sends one signal to the processes allowed by selector. It shares the
+// same identity gate as Reap, without applying the stop-policy TERM->KILL flow.
+func (r Reaper) Signal(ctx context.Context, procs []Process, selector KillSelector, sig syscall.Signal) ReapResult {
+	if len(procs) == 0 {
+		return ReapResult{}
+	}
+	if err := ctx.Err(); err != nil {
+		return ReapResult{Remaining: procs}
+	}
+	resolve := r.ResolveUser
+	if resolve == nil {
+		resolve = DefaultUserLookup().ResolveUser
+	}
+	signaler := r.Signaler
+	if signaler == nil {
+		signaler = OSSignaler{}
+	}
+	signalled := map[int]bool{}
+	failed := signalRound(procs, selector, resolve, signaler, sig, signalled)
+	remaining := procs
+	if r.Rediscover != nil {
+		remaining = r.Rediscover()
+	}
+	return ReapResult{Remaining: remaining, Signalled: sortedInts(signalled), Failed: failed}
 }
 
 // Wait blocks for d, returning early if ctx is cancelled. A non-positive d is an
@@ -155,6 +184,21 @@ func sortedInts(set map[int]bool) []int {
 	}
 	sort.Ints(out)
 	return out
+}
+
+func signalRound(set []Process, selector KillSelector, resolve UserResolver, signaler Signaler, sig syscall.Signal, signalled map[int]bool) []SignalFailure {
+	var failed []SignalFailure
+	for _, p := range set {
+		if selector.Killable(p, resolve) {
+			if err := signaler.Signal(p.PID, sig); err == nil {
+				signalled[p.PID] = true
+			} else {
+				failed = append(failed, SignalFailure{PID: p.PID, Signal: sig, Err: err})
+			}
+		}
+	}
+	sort.Slice(failed, func(i, j int) bool { return failed[i].PID < failed[j].PID })
+	return failed
 }
 
 // signalNames maps the signal names accepted in configuration to their numbers.

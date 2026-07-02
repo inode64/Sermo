@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"maps"
+	"path/filepath"
 	"slices"
 
 	"sermo/internal/cfgval"
@@ -523,4 +524,21 @@ func validateProcessWatch(name string, check, entry map[string]any, defaultNotif
 
 	// A process watch is the one type that may carry a native `then.kill` action.
 	validateHookBlock("watches."+name, entry, false, true, defaultNotify, add)
+	validateProcessWatchKillSelector(name, check, entry, add)
+}
+
+func validateProcessWatchKillSelector(name string, check, entry map[string]any, add func(string, ...any)) {
+	then, ok := entry["then"].(map[string]any)
+	if !ok {
+		return
+	}
+	if _, present := then["kill"]; !present {
+		return
+	}
+	if !filepath.IsAbs(cfgval.String(check["name"])) {
+		add("watches.%s.then.kill requires check.name to be an absolute resolved exe path", name)
+	}
+	if cfgval.String(check["user"]) == "" {
+		add("watches.%s.then.kill requires check.user", name)
+	}
 }
