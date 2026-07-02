@@ -230,21 +230,21 @@ type Notifier struct {
 // (engine settings and paths). Useful for operators to see effective
 // behavior without reading the config file.
 type DaemonInfo struct {
-	Backend               string `json:"backend,omitempty"`
-	Hostname              string `json:"hostname,omitempty"`
-	OS                    string `json:"os,omitempty"`
+	Backend               string        `json:"backend,omitempty"`
+	Hostname              string        `json:"hostname,omitempty"`
+	OS                    string        `json:"os,omitempty"`
 	HostType              *HostTypeInfo `json:"host_type,omitempty"`
-	HostUptime            string `json:"host_uptime,omitempty"`         // display-ready uptime of the host/server since boot
-	HostUptimeSeconds     int64  `json:"host_uptime_seconds,omitempty"` // host/server uptime in whole seconds
-	ConfigPath            string `json:"config_path,omitempty"`
-	RuntimeDir            string `json:"runtime_dir,omitempty"`
-	StateDir              string `json:"state_dir,omitempty"`
-	Interval              string `json:"interval"`
-	MaxParallelChecks     int    `json:"max_parallel_checks"`
-	MaxParallelOperations int    `json:"max_parallel_operations"`
-	DefaultTimeout        string `json:"default_timeout"`
-	OperationTimeout      string `json:"operation_timeout"`
-	StartupDelay          string `json:"startup_delay"`
+	HostUptime            string        `json:"host_uptime,omitempty"`         // display-ready uptime of the host/server since boot
+	HostUptimeSeconds     int64         `json:"host_uptime_seconds,omitempty"` // host/server uptime in whole seconds
+	ConfigPath            string        `json:"config_path,omitempty"`
+	RuntimeDir            string        `json:"runtime_dir,omitempty"`
+	StateDir              string        `json:"state_dir,omitempty"`
+	Interval              string        `json:"interval"`
+	MaxParallelChecks     int           `json:"max_parallel_checks"`
+	MaxParallelOperations int           `json:"max_parallel_operations"`
+	DefaultTimeout        string        `json:"default_timeout"`
+	OperationTimeout      string        `json:"operation_timeout"`
+	StartupDelay          string        `json:"startup_delay"`
 }
 
 // HostTypeInfo describes the host's virtualization class for the dashboard.
