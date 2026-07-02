@@ -150,6 +150,9 @@ reportándola; Sermo normaliza esas rutas proporcionadas por el host a la grafí
 Usa `pidfile:` para un proceso lógico con rutas candidatas de pidfile, y
 `pidfiles:` para varios roles de proceso requeridos. `pidfiles.<role>` debe tener un
 `processes.<role>` coincidente con `exe` y `user` exactos.
+Cuando un pidfile depende del backend, `pidfile: {path: /run/name.pid,
+optional: true}` conserva la fuente de descubrimiento pero rebaja el health check
+generado a warning.
 Usa `lockfile:` solo para un archivo de runtime regular creado por el propio servicio;
 es un artefacto de salud como `socket:`, no un lock de operación.
 

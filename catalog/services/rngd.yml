@@ -3,7 +3,9 @@ display_name: RNG Daemon
 category: hardware
 description: Feeds kernel entropy from hardware/random sources.
 service: rngd
-pidfile: /run/rngd.pid
+pidfile:
+  path: /run/rngd.pid
+  optional: true
 checks:
   service:
     type: service
@@ -13,6 +15,7 @@ checks:
     exe: ${rngd_binary}
     user: root
     state: running
+    optional: true
     requires:
       - service
 apps:

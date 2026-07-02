@@ -723,6 +723,15 @@ pidfile:
   - /run/mysqld/mysqld.pid
 ```
 
+When the pidfile is useful on one backend but legitimately absent on another
+(for example OpenRC writes one while a systemd unit runs the daemon in the
+foreground), keep the pidfile source for discovery but make the generated health
+check auxiliary:
+
+```yaml
+pidfile: { path: /run/rngd.pid, optional: true }
+```
+
 Use `/run` here, not `/var/run`. If a distro init script or service manager
 reports `/var/run/...`, write the equivalent `/run/...` path in the catalog
 service definition while preserving Linux/init compatibility. Before committing a new
@@ -739,9 +748,11 @@ stopped service is skipped, not alarmed. A check already named `pidfile` is
 respected, so a catalog service that needs a custom check can still spell it out. Public
 `processes:` entries stay limited to `exe`/`cmd` selectors with optional
 `user`/`group`; do not put `pidfile` under `processes:`. The shorthand path can
-reference variables (e.g. `pidfile: "${pidfile}"`). Candidate lists are tried in
+reference variables (e.g. `pidfile: "${pidfile}"`) and accepts a scalar path, a
+candidate list, or `{path: ..., optional: true}`. Candidate lists are tried in
 order and pass on the first live pidfile; if none exists, the backend PID
-fallback can still satisfy the gated health check.
+fallback can still satisfy the gated health check. `optional: true` keeps a
+missing pidfile as a warning instead of making the service unhealthy.
 
 When a single service owns several independent resident processes, use
 `pidfiles:` as a map keyed by process role. Each role must also exist under
