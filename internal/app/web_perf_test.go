@@ -81,6 +81,10 @@ func TestWebBackendListRuntimeUsesPublishedSample(t *testing.T) {
 }
 
 func TestWebBackendBackendStatusCacheTTL(t *testing.T) {
+	if serviceStatusCacheTTL < time.Minute {
+		t.Fatalf("serviceStatusCacheTTL = %s, want at least 1m to cover normal web refreshes", serviceStatusCacheTTL)
+	}
+
 	var calls atomic.Int32
 	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
 	e := &webEntry{
