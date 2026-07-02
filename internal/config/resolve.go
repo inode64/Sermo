@@ -104,9 +104,15 @@ func expandPidfile(tree map[string]any) []string {
 	if !present {
 		return nil
 	}
-	paths := cfgval.StringList(raw)
+	pathRaw := raw
+	optional := false
+	if m, ok := raw.(map[string]any); ok {
+		pathRaw = m["path"]
+		optional = cfgval.Bool(m["optional"])
+	}
+	paths := cfgval.StringList(pathRaw)
 	if len(paths) == 0 {
-		return []string{"pidfile must be a non-empty path string or list"}
+		return []string{"pidfile must be a non-empty path string, list or {path: ...} mapping"}
 	}
 	var errs []string
 	for _, path := range paths {
@@ -123,11 +129,15 @@ func expandPidfile(tree map[string]any) []string {
 		checksMap = map[string]any{}
 	}
 	if _, exists := checksMap["pidfile"]; !exists {
-		checksMap["pidfile"] = map[string]any{
+		entry := map[string]any{
 			"type":     "pidfile",
 			"path":     pathValue,
 			"requires": []any{"service"},
 		}
+		if optional {
+			entry["optional"] = true
+		}
+		checksMap["pidfile"] = entry
 	}
 	tree["checks"] = checksMap
 	return errs

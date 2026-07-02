@@ -145,6 +145,9 @@ normalizes those host-provided paths to the equivalent `/run/...` spelling.
 Use `pidfile:` for one logical process with candidate pidfile paths, and
 `pidfiles:` for several required process roles. `pidfiles.<role>` must have a
 matching `processes.<role>` with exact `exe` and `user`.
+When a pidfile is backend-specific, `pidfile: {path: /run/name.pid,
+optional: true}` keeps the discovery source but downgrades the generated
+health check to a warning.
 Use `lockfile:` only for a regular runtime file created by the service itself;
 it is a health artifact like `socket:`, not an operation lock.
 

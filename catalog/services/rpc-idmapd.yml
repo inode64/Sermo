@@ -24,6 +24,7 @@ checks:
     exe: ${rpc_idmapd_binary}
     user: root
     state: running
+    optional: true
     requires:
       - service
 postflight:

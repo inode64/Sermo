@@ -722,6 +722,15 @@ pidfile:
   - /run/mysqld/mysqld.pid
 ```
 
+Cuando el pidfile es útil en un backend pero está legítimamente ausente en otro
+(por ejemplo OpenRC lo escribe mientras una unidad systemd ejecuta el daemon en
+primer plano), conserve la fuente de pidfile para descubrimiento pero haga auxiliar
+el health check generado:
+
+```yaml
+pidfile: { path: /run/rngd.pid, optional: true }
+```
+
 Use `/run` aquí, no `/var/run`. Si un init script de distro o un gestor de servicios
 reporta `/var/run/...`, escriba el path equivalente `/run/...` en la definición del servicio
 de catálogo preservando la compatibilidad Linux/init. Antes de confirmar un nuevo
@@ -738,9 +747,11 @@ legítimamente parado se omite, no se alarma. Un check ya llamado `pidfile` se
 respeta, de modo que un servicio de catálogo que necesite un check personalizado todavía puede deletrearlo. Las entradas
 `processes:` públicas se mantienen limitadas a selectores `exe`/`cmd` con `user`/`group`
 opcionales; no ponga `pidfile` bajo `processes:`. El path del atajo puede
-referenciar variables (p. ej. `pidfile: "${pidfile}"`). Las listas de candidatos se prueban en
-orden y pasan en el primer pidfile vivo; si ninguno existe, el fallback de PID del
-backend todavía puede satisfacer el health check controlado.
+referenciar variables (p. ej. `pidfile: "${pidfile}"`) y acepta un path escalar,
+una lista de candidatos, o `{path: ..., optional: true}`. Las listas de candidatos
+se prueban en orden y pasan en el primer pidfile vivo; si ninguno existe, el fallback
+de PID del backend todavía puede satisfacer el health check controlado. `optional: true`
+mantiene un pidfile ausente como warning en vez de hacer que el servicio no esté sano.
 
 Cuando un único servicio posee varios procesos residentes independientes, use
 `pidfiles:` como un map indexado por rol de proceso. Cada rol también debe existir bajo

@@ -13,7 +13,9 @@ os:
         - smartmontools
 apps:
   - smartd
-pidfile: /run/smartd.pid
+pidfile:
+  path: /run/smartd.pid
+  optional: true
 processes:
   main:
     exe: ${smartd_binary}
@@ -27,6 +29,7 @@ checks:
     exe: ${smartd_binary}
     user: root
     state: running
+    optional: true
     requires:
       - service
 postflight:
