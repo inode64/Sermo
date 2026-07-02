@@ -37,6 +37,7 @@ Mantén los cambios concretos:
 | Eventos del servicio | `GET /api/services/{name}/events` | feed de eventos por servicio |
 | Watches de host | `GET /api/watches` | watches a nivel de host |
 | Aplicaciones | `GET /api/applications` | aplicaciones de catálogo instaladas |
+| Unidades de montaje | `GET /api/mounts` | unidades de montaje configuradas respaldadas por fstab |
 | Notifiers | `GET /api/notifiers` | destinos de notifiers |
 | Configuración del daemon | `GET /api/daemon` | configuración de engine/runtime |
 | Métricas de proceso del daemon | `GET /api/daemon/metrics` | historial persistido de CPU/memoria/IO de sermod |
@@ -57,6 +58,7 @@ la autenticación web está habilitada.
 | Acción de servicio | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; `no_cascade` omite los objetivos de `also_apply` en start/stop/restart |
 | Preflight de servicio | `POST /api/services/{name}/preflight` | ejecuta los checks de preflight sin cambiar el estado del servicio |
 | Acción de watch | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand` |
+| Acción de montaje | `POST /api/mounts/{name}/{action}[?kill=1]` | `mount`, `umount`, `blockers`, `alert`; `kill=1` habilita señalización de bloqueadores para `umount` solo si la política lo permite |
 | Liberación de lock | `POST /api/locks/{service}/release?name=NAME` | libera locks con nombre inactivos, obsoletos o caducados; los locks activos se rechazan |
 | Limpieza de eventos | `POST /api/events/clear?before=TIME` | borra las filas persistidas de eventos/actividad; `before` acepta RFC3339 o duración |
 | Compactación de estado | `POST /api/state/compact?before=TIME` | poda el historial antiguo de SLA/métricas/eventos y compacta la base de datos de estado; equivale a `sermoctl state compact` |
@@ -220,6 +222,33 @@ Expansión de fila:
 Estado vacío:
 
 - `No applications match the filter.`
+
+## Panel de unidades de montaje
+
+Section id: `mounts-section`
+
+| Parte | Representación actual |
+| --- | --- |
+| Título | `Mount units` más el recuento total |
+| Visibilidad | oculto cuando no se devuelven unidades de montaje configuradas |
+
+Columnas:
+
+| Columna | Significado |
+| --- | --- |
+| Name | nombre para mostrar, con fallback al nombre del mount |
+| Path | ruta de montaje configurada |
+| Mounted | estado de montaje en vivo |
+| Refcount | refcount de runtime de Sermo, o `off` |
+| Source | etiqueta de origen del montaje, actualmente `fstab` |
+| State | insignia active/inactive/error |
+| Actions | `mount` solo para admin; cuando está montado, `umount`, `alert` y `kill+umount` |
+
+Antes de `umount`, `alert` o `kill+umount`, la UI consulta
+`POST /api/mounts/{name}/blockers` y muestra los procesos actuales que usan la
+ruta. `alert` envía un mensaje TTY nativo a los usuarios con sesión que bloquean
+el montaje. `kill+umount` requiere que la política del mount marque al menos un
+bloqueador actual como killable.
 
 ## Paneles de watches de host
 

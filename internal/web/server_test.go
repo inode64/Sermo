@@ -14,6 +14,10 @@ type fakeBackend struct {
 	services        []Service
 	applications    []Application
 	mounts          []Mount
+	mountAction     MountActionResult
+	mountBlockers   MountBlockersResult
+	mountAlert      MountAlertResult
+	mountOperated   []string
 	operated        []string // "name/action"
 	monitored       map[string]bool
 	watchMonitored  map[string]bool
@@ -37,7 +41,30 @@ func (f *fakeBackend) Notifiers(context.Context) []Notifier { return nil }
 func (f *fakeBackend) Applications(context.Context) []Application {
 	return f.applications
 }
-func (f *fakeBackend) Mounts(context.Context) []Mount           { return f.mounts }
+func (f *fakeBackend) Mounts(context.Context) []Mount { return f.mounts }
+func (f *fakeBackend) MountAction(_ context.Context, name, action string, opts MountActionOptions) MountActionResult {
+	suffix := ""
+	if opts.KillBlockers {
+		suffix = "?kill"
+	}
+	f.mountOperated = append(f.mountOperated, name+"/"+action+suffix)
+	if f.mountAction.Message != "" || f.mountAction.Name != "" {
+		return f.mountAction
+	}
+	return MountActionResult{OK: true, Name: name, Action: action, Status: "ok", Message: "ok"}
+}
+func (f *fakeBackend) MountBlockers(_ context.Context, name string) MountBlockersResult {
+	if f.mountBlockers.Name != "" || f.mountBlockers.Message != "" || len(f.mountBlockers.Blockers) > 0 {
+		return f.mountBlockers
+	}
+	return MountBlockersResult{OK: true, Name: name}
+}
+func (f *fakeBackend) AlertMountUsers(_ context.Context, name string) MountAlertResult {
+	if f.mountAlert.Name != "" || f.mountAlert.Message != "" {
+		return f.mountAlert
+	}
+	return MountAlertResult{OK: true, Name: name, Message: "alert sent"}
+}
 func (f *fakeBackend) DaemonInfo(context.Context) DaemonInfo    { return DaemonInfo{} }
 func (f *fakeBackend) HostMetrics(context.Context) []HostMetric { return nil }
 func (f *fakeBackend) DaemonMetrics(context.Context, time.Duration) DaemonMetrics {
@@ -371,6 +398,76 @@ func TestListMounts(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Name != "mount-backup" || !got[0].Mounted || got[0].Refcount != 2 {
 		t.Fatalf("unexpected mounts: %+v", got)
+	}
+}
+
+func TestMountAction(t *testing.T) {
+	b := &fakeBackend{}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, postReq("/api/mounts/mount-backup/umount?kill=1"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	if got := strings.Join(b.mountOperated, ","); got != "mount-backup/umount?kill" {
+		t.Fatalf("mount actions = %q", got)
+	}
+	var res MountActionResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !res.OK || res.Action != "umount" {
+		t.Fatalf("unexpected response: %+v", res)
+	}
+}
+
+func TestMountActionRejectsUnknown(t *testing.T) {
+	rec := httptest.NewRecorder()
+	newServer(&fakeBackend{}).ServeHTTP(rec, postReq("/api/mounts/mount-backup/reboot"))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status %d, want 400", rec.Code)
+	}
+}
+
+func TestMountBlockers(t *testing.T) {
+	b := &fakeBackend{mountBlockers: MountBlockersResult{
+		OK:      true,
+		Name:    "mount-backup",
+		Path:    "/mnt/backup",
+		Mounted: true,
+		CanKill: true,
+		Blockers: []MountBlocker{{
+			PID: 123, User: "backup", UID: 1000, Exe: "/usr/bin/rsync", ExeResolved: true, Killable: true,
+		}},
+	}}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, postReq("/api/mounts/mount-backup/blockers"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	var got MountBlockersResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !got.OK || !got.CanKill || len(got.Blockers) != 1 || !got.Blockers[0].Killable {
+		t.Fatalf("unexpected blockers: %+v", got)
+	}
+}
+
+func TestMountAlert(t *testing.T) {
+	b := &fakeBackend{mountAlert: MountAlertResult{
+		OK: true, Name: "mount-backup", Path: "/mnt/backup", Users: []string{"backup"}, Delivered: 1, Message: "alert sent",
+	}}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, postReq("/api/mounts/mount-backup/alert"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	var got MountAlertResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !got.OK || got.Delivered != 1 || len(got.Users) != 1 || got.Users[0] != "backup" {
+		t.Fatalf("unexpected alert: %+v", got)
 	}
 }
 

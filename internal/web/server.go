@@ -91,6 +91,60 @@ type Mount struct {
 	Message     string `json:"message,omitempty"` // set when status sampling failed
 }
 
+// MountBlocker is one process currently using a mount path.
+type MountBlocker struct {
+	PID         int      `json:"pid"`
+	PPID        int      `json:"ppid"`
+	User        string   `json:"user,omitempty"`
+	UID         uint32   `json:"uid"`
+	Exe         string   `json:"exe,omitempty"`
+	ExeResolved bool     `json:"exe_resolved"`
+	Cmdline     []string `json:"cmdline,omitempty"`
+	Killable    bool     `json:"killable"`
+}
+
+// MountActionOptions controls mount unit operation behavior from the web API.
+type MountActionOptions struct {
+	KillBlockers bool // allow policy-gated SIGTERM/SIGKILL escalation during umount
+}
+
+// MountActionResult is the outcome of a mount or unmount web action.
+type MountActionResult struct {
+	OK        bool           `json:"ok"`
+	Name      string         `json:"name,omitempty"`
+	Path      string         `json:"path,omitempty"`
+	Action    string         `json:"action,omitempty"`
+	Status    string         `json:"status,omitempty"`
+	Message   string         `json:"message,omitempty"`
+	Mounted   bool           `json:"mounted"`
+	Refcount  int            `json:"refcount"`
+	Lazy      bool           `json:"lazy,omitempty"`
+	Signalled []int          `json:"signalled,omitempty"`
+	Blockers  []MountBlocker `json:"blockers,omitempty"`
+}
+
+// MountBlockersResult is a read-only preflight view for a mount unit.
+type MountBlockersResult struct {
+	OK       bool           `json:"ok"`
+	Name     string         `json:"name,omitempty"`
+	Path     string         `json:"path,omitempty"`
+	Mounted  bool           `json:"mounted"`
+	CanKill  bool           `json:"can_kill"`
+	CanAlert bool           `json:"can_alert"`
+	Message  string         `json:"message,omitempty"`
+	Blockers []MountBlocker `json:"blockers,omitempty"`
+}
+
+// MountAlertResult is the outcome of notifying users that block a mount.
+type MountAlertResult struct {
+	OK        bool     `json:"ok"`
+	Name      string   `json:"name,omitempty"`
+	Path      string   `json:"path,omitempty"`
+	Users     []string `json:"users,omitempty"`
+	Delivered int      `json:"delivered"`
+	Message   string   `json:"message,omitempty"`
+}
+
 // Application is a view of one installed application (a catalog app daemon) for
 // the dashboard: its name, version and where its binary lives. It mirrors the
 // sermoctl `apps` report so both surfaces agree.
@@ -611,6 +665,12 @@ type Backend interface {
 	Applications(ctx context.Context) []Application
 	// Mounts returns configured fstab-backed mount units and their runtime status.
 	Mounts(ctx context.Context) []Mount
+	// MountAction runs mount|umount on a configured mount unit.
+	MountAction(ctx context.Context, name, action string, opts MountActionOptions) MountActionResult
+	// MountBlockers reports current processes using a configured mount unit.
+	MountBlockers(ctx context.Context, name string) MountBlockersResult
+	// AlertMountUsers sends a console alert to users blocking a mount unit.
+	AlertMountUsers(ctx context.Context, name string) MountAlertResult
 	// Detail returns one service's checks and SLA; ok is false for unknown names.
 	Detail(ctx context.Context, name string) (Detail, bool)
 	// Series returns a service's per-minute availability history over since; ok is
@@ -730,6 +790,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/notifiers", s.handleNotifiers)
 	mux.HandleFunc("GET /api/applications", s.handleApplications)
 	mux.HandleFunc("GET /api/mounts", s.handleMounts)
+	mux.HandleFunc("POST /api/mounts/{name}/{action}", s.handleMountAction)
 	mux.HandleFunc("GET /api/daemon", s.handleDaemon)
 	mux.HandleFunc("GET /api/daemon/metrics", s.handleDaemonMetrics)
 	mux.HandleFunc("GET /api/host", s.handleHost)
@@ -976,6 +1037,38 @@ func (s *Server) handleApplications(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleMounts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.Mounts(r.Context()))
+}
+
+func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	action := r.PathValue("action")
+	switch action {
+	case "mount", "umount":
+		res := s.Backend.MountAction(s.operateContext(), name, action, MountActionOptions{
+			KillBlockers: queryBool(r, "kill"),
+		})
+		status := http.StatusOK
+		if !res.OK {
+			status = http.StatusConflict
+		}
+		writeJSON(w, status, res)
+	case "blockers":
+		res := s.Backend.MountBlockers(r.Context(), name)
+		status := http.StatusOK
+		if !res.OK {
+			status = http.StatusConflict
+		}
+		writeJSON(w, status, res)
+	case "alert":
+		res := s.Backend.AlertMountUsers(s.operateContext(), name)
+		status := http.StatusOK
+		if !res.OK {
+			status = http.StatusConflict
+		}
+		writeJSON(w, status, res)
+	default:
+		writeError(w, http.StatusBadRequest, "unknown mount action "+action)
+	}
 }
 
 func (s *Server) handleDaemon(w http.ResponseWriter, r *http.Request) {

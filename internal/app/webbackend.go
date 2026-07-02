@@ -142,6 +142,9 @@ type WebBackend struct {
 	execRunner       execx.Runner
 	expander         VolumeExpander
 	userLookup       *process.UserLookup
+	mountUsers       func(string) ([]process.Process, error)
+	mountSignaler    process.Signaler
+	mountAlerter     MountUserAlerter
 	emit             func(Event)
 	opGate           *OpGate
 	defaultTimeout   time.Duration
@@ -239,6 +242,9 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		execRunner:       deps.ExecxRunner,
 		expander:         configuredVolumeExpander(deps),
 		userLookup:       deps.UserLookup,
+		mountUsers:       deps.MountDiscoverUsers,
+		mountSignaler:    deps.MountSignaler,
+		mountAlerter:     deps.MountUserAlerter,
 		emit:             deps.Emit,
 		opGate:           deps.OpGate,
 		defaultTimeout:   deps.DefaultTimeout,

@@ -261,6 +261,11 @@ sermoctl mount status mount-backup
 sermoctl mount list
 ```
 
+The Web UI's **Mount units** panel exposes configured mount names to admins.
+It can mount/unmount, show the same busy-process blockers before unmounting,
+send a native TTY alert to logged-in users who are blocking the mount, and run
+`kill+umount` only through the explicit mount kill policy below.
+
 With `refcount: true` (the default), every successful `mount` increments
 Sermo's runtime counter and `umount` decrements it. The real `umount` only runs
 when the counter reaches zero; if the path is not mounted yet, the first

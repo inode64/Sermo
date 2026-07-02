@@ -3392,6 +3392,8 @@ function renderMounts(mounts) {
     const state = m.state || (mounted ? "active" : "inactive");
     const detail = m.message ? ` title="${esc(m.message)}"` : "";
     const refcount = m.refcounted === false ? '<span class="muted">off</span>' : String(Number(m.refcount || 0));
+    const name = esc(m.name || "");
+    const actions = mountActionButtons(m, mounted);
     return `<tr${detail}>
       <td>${label}</td>
       <td><code>${esc(m.path || "")}</code></td>
@@ -3399,9 +3401,22 @@ function renderMounts(mounts) {
       <td>${refcount}</td>
       <td class="muted">${esc(m.source || "—")}</td>
       <td><span class="target-state ${mountStateClass(state, mounted)}">${esc(state)}</span></td>
+      <td class="actions" data-mount-row="${name}">${actions}</td>
     </tr>`;
   });
-  tbody.innerHTML = rows.join("") || `<tr><td colspan="6" class="muted">No mount units.</td></tr>`;
+  tbody.innerHTML = rows.join("") || `<tr><td colspan="7" class="muted">No mount units.</td></tr>`;
+}
+
+function mountActionButtons(m, mounted) {
+  if (!me.can_act) return '<span class="muted">read-only</span>';
+  const name = esc(m.name || "");
+  const label = esc(m.display_name || m.name || m.path || "mount");
+  if (!mounted) {
+    return `<button data-mount="${name}" data-mount-action="mount" aria-label="Mount ${label}">mount</button>`;
+  }
+  return `<button data-mount="${name}" data-mount-action="umount" aria-label="Unmount ${label}">umount</button>` +
+    `<button data-mount="${name}" data-mount-action="alert" aria-label="Alert users blocking ${label}">alert</button>` +
+    `<button class="danger-btn" data-mount="${name}" data-mount-action="kill-umount" aria-label="Kill blockers and unmount ${label}">kill+umount</button>`;
 }
 
 function renderNotifiers(notifiers) {
@@ -4053,6 +4068,120 @@ async function actWatch(name, action) {
     }
   } catch (e) {
     setStatus(`${action} watch ${name}: ${e.message}`, "err");
+  }
+  load();
+}
+
+async function fetchMountBlockers(name) {
+  const res = await fetch(`api/mounts/${encodeURIComponent(name)}/blockers`, {
+    method: "POST",
+    headers: { "X-Sermo-CSRF": "1" },
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || body.ok === false) {
+    throw new Error(body.message || ("HTTP " + res.status));
+  }
+  return body;
+}
+
+function mountBlockerSummary(blockers) {
+  const rows = (blockers || []).slice(0, 5).map((p) => {
+    const user = p.user || `uid ${p.uid}`;
+    const exe = p.exe || ((p.cmdline || [])[0]) || "unknown exe";
+    const kill = p.killable ? ", killable by policy" : "";
+    return `pid ${p.pid} ${user} ${exe}${kill}`;
+  });
+  const extra = (blockers || []).length > rows.length ? `\n… plus ${(blockers || []).length - rows.length} more` : "";
+  return rows.join("\n") + extra;
+}
+
+async function confirmMountUnmount(name) {
+  const info = await fetchMountBlockers(name);
+  const blockers = info.blockers || [];
+  const message = blockers.length
+    ? `Mount "${name}" is currently used by:\n${mountBlockerSummary(blockers)}\n\nThis will try a normal unmount only. Use alert first to message users, or kill+umount for policy-gated signal escalation.`
+    : `Unmount "${name}"?`;
+  return promptConfirm({
+    title: `Unmount ${name}?`,
+    message,
+    okLabel: "umount",
+    danger: true,
+  });
+}
+
+async function confirmMountKillUnmount(name) {
+  const info = await fetchMountBlockers(name);
+  const blockers = info.blockers || [];
+  if (!blockers.length) {
+    return promptConfirm({
+      title: `Unmount ${name}?`,
+      message: `No blocking processes are using "${name}" right now. Unmount normally?`,
+      okLabel: "umount",
+      danger: true,
+    });
+  }
+  if (!info.can_kill) {
+    setStatus(`kill+umount ${name}: no current blocker is killable by this mount policy`, "warn");
+    return false;
+  }
+  return promptConfirm({
+    title: `Kill blockers and unmount ${name}?`,
+    message: `Sermo will send TERM/KILL only to blockers allowed by stop_policy.kill_only_if, then retry umount.\n\n${mountBlockerSummary(blockers)}`,
+    okLabel: "kill+umount",
+    danger: true,
+  });
+}
+
+async function confirmMountAlert(name) {
+  const info = await fetchMountBlockers(name);
+  const blockers = info.blockers || [];
+  if (!blockers.length) {
+    setStatus(`alert ${name}: no blocking processes found`, "warn");
+    return false;
+  }
+  if (!info.can_alert) {
+    setStatus(`alert ${name}: blockers have no resolved login user`, "warn");
+    return false;
+  }
+  return promptConfirm({
+    title: `Alert users for ${name}?`,
+    message: `Send a console message to users currently blocking "${name}"?\n\n${mountBlockerSummary(blockers)}`,
+    okLabel: "alert",
+    danger: false,
+  });
+}
+
+async function actMount(name, action) {
+  if (!name) return;
+  let postAction = action;
+  let query = "";
+  try {
+    if (action === "umount" && !(await confirmMountUnmount(name))) return;
+    if (action === "kill-umount") {
+      if (!(await confirmMountKillUnmount(name))) return;
+      postAction = "umount";
+      query = "?kill=1";
+    }
+    if (action === "alert" && !(await confirmMountAlert(name))) return;
+  } catch (e) {
+    setStatus(`${action} ${name}: ${e.message}`, "err");
+    return;
+  }
+
+  setStatus("");
+  try {
+    const res = await fetch(`api/mounts/${encodeURIComponent(name)}/${postAction}${query}`, {
+      method: "POST",
+      headers: { "X-Sermo-CSRF": "1" },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.ok === false) {
+      const blockers = body.blockers && body.blockers.length ? `; blockers: ${mountBlockerSummary(body.blockers)}` : "";
+      throw new Error((body.message || ("HTTP " + res.status)) + blockers);
+    }
+    setStatus(`${action} ${name}: ${body.message || "ok"}`, "ok");
+  } catch (e) {
+    setStatus(`${action} ${name}: ${e.message}`, "err");
   }
   load();
 }
@@ -5016,6 +5145,12 @@ function initDelegatedHandlers() {
     const watchAction = closestFrom(e, "[data-watch-action][data-watch]");
     if (watchAction) {
       actWatch(watchAction.dataset.watch || "", watchAction.dataset.watchAction || "");
+      return;
+    }
+
+    const mountAction = closestFrom(e, "[data-mount-action][data-mount]");
+    if (mountAction) {
+      actMount(mountAction.dataset.mount || "", mountAction.dataset.mountAction || "");
       return;
     }
 
