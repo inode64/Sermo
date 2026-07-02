@@ -32,6 +32,42 @@ func TestParseSignal(t *testing.T) {
 	}
 }
 
+func TestProtectedSignalTarget(t *testing.T) {
+	probe := func(pid int) (Identity, bool) {
+		switch pid {
+		case 2:
+			return Identity{PID: 2, ExeOK: false}, true
+		case 22:
+			return Identity{PID: 22, PPID: 2, ExeOK: false}, true
+		case 23:
+			return Identity{PID: 23, PPID: 2, Exe: "/usr/bin/app", ExeOK: true, Cmdline: []string{"/usr/bin/app"}}, true
+		default:
+			return Identity{}, false
+		}
+	}
+	tests := []struct {
+		name    string
+		pid     int
+		sig     syscall.Signal
+		wantErr bool
+	}{
+		{name: "pid 1 term", pid: 1, sig: syscall.SIGTERM, wantErr: true},
+		{name: "pid 1 hup allowed", pid: 1, sig: syscall.SIGHUP},
+		{name: "pid 2 kernel root", pid: 2, sig: syscall.SIGTERM, wantErr: true},
+		{name: "kernel child", pid: 22, sig: syscall.SIGKILL, wantErr: true},
+		{name: "normal pid with ppid 2", pid: 23, sig: syscall.SIGTERM},
+		{name: "non terminating signal to kernel child", pid: 22, sig: syscall.SIGHUP},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := protectedSignalTarget(tc.pid, tc.sig, probe)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("protectedSignalTarget(%d, %v) err = %v, wantErr %v", tc.pid, tc.sig, err, tc.wantErr)
+			}
+		})
+	}
+}
+
 type sigCall struct {
 	pid int
 	sig syscall.Signal
@@ -165,6 +201,21 @@ func TestReapNeverSignalsNonKillable(t *testing.T) {
 	}
 	if res.OK() || len(res.Remaining) != 1 {
 		t.Fatalf("non-killable residual must be reported: %+v", res)
+	}
+}
+
+func TestReapNeverSignalsProtectedPID1(t *testing.T) {
+	sig := &recSignaler{}
+	pid1 := killableProc(1)
+	r := newReaper(sig, [][]Process{{pid1}, {pid1}})
+
+	res := r.Reap(context.Background(), []Process{pid1}, killPolicy)
+
+	if len(sig.calls) != 0 {
+		t.Fatalf("protected pid 1 must never be signalled, got %v", sig.calls)
+	}
+	if res.OK() || len(res.Remaining) != 1 || res.Remaining[0].PID != 1 {
+		t.Fatalf("protected pid 1 must remain as orphan, got %+v", res)
 	}
 }
 

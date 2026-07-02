@@ -16,10 +16,12 @@ func TestKillSelectorKillable(t *testing.T) {
 		proc Process
 		want bool
 	}{
-		{"exe and user match", Process{UID: 110, Exe: testExe, ExeOK: true}, true},
-		{"wrong exe", Process{UID: 110, Exe: "/opt/sermo-test/other", ExeOK: true}, false},
-		{"wrong user", Process{UID: 999, Exe: testExe, ExeOK: true}, false},
-		{"unresolvable exe", Process{UID: 110, Exe: "", ExeOK: false}, false},
+		{"exe and user match", Process{PID: 100, UID: 110, Exe: testExe, ExeOK: true}, true},
+		{"wrong exe", Process{PID: 100, UID: 110, Exe: "/opt/sermo-test/other", ExeOK: true}, false},
+		{"wrong user", Process{PID: 100, UID: 999, Exe: testExe, ExeOK: true}, false},
+		{"unresolvable exe", Process{PID: 100, UID: 110, Exe: "", ExeOK: false}, false},
+		{"pid 1 protected", Process{PID: 1, UID: 110, Exe: testExe, ExeOK: true}, false},
+		{"kernel thread protected", Process{PID: 22, PPID: 2, UID: 0, Exe: "", ExeOK: false}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -36,17 +38,17 @@ func TestKillSelectorKillable(t *testing.T) {
 		Users:  []string{"nope", "mysql"},
 		ExeAny: []string{"/no", "/opt//sermo-test/./mysqld"},
 	}
-	if !multi.Killable(Process{UID: 110, Exe: testExe, ExeOK: true}, resolve) {
+	if !multi.Killable(Process{PID: 100, UID: 110, Exe: testExe, ExeOK: true}, resolve) {
 		t.Error("multi selector should match on second user+exe (canonicalized)")
 	}
-	if multi.Killable(Process{UID: 110, Exe: "/different", ExeOK: true}, resolve) {
+	if multi.Killable(Process{PID: 100, UID: 110, Exe: "/different", ExeOK: true}, resolve) {
 		t.Error("multi selector must not match when exe misses all exe_any")
 	}
 }
 
 func TestKillSelectorEmptyMatchesNothing(t *testing.T) {
 	resolve := fakeUsers(map[string]uint32{"mysql": 110})
-	p := Process{UID: 110, Exe: testExe, ExeOK: true}
+	p := Process{PID: 100, UID: 110, Exe: testExe, ExeOK: true}
 
 	if (KillSelector{ExeAny: []string{testExe}}).Killable(p, resolve) {
 		t.Error("selector with no users must not be killable")
