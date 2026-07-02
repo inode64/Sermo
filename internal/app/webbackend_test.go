@@ -1244,6 +1244,60 @@ func TestWebBackendWatchesShareSystemSnapshot(t *testing.T) {
 	}
 }
 
+func TestWebBackendStorageOpenFiles(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"storage-data": map[string]any{
+				"interval": "45s",
+				"check":    map[string]any{"type": "storage", "path": "/data/app"},
+			},
+		},
+	}}}
+	scans := 0
+	now := time.Unix(1000, 0)
+	b, warns := NewWebBackend(cfg, Deps{
+		Now: func() time.Time { return now },
+		StorageUsage: func(string) (checks.StorageStats, error) {
+			return checks.StorageStats{TotalBytes: 1000, FreeBytes: 500, UsedPct: 50}, nil
+		},
+		MountSampler: func() ([]checks.Mount, error) {
+			return []checks.Mount{
+				{Device: "/dev/root", MountPoint: "/", FSType: "ext4"},
+				{Device: "/dev/data", MountPoint: "/data", FSType: "xfs"},
+			}, nil
+		},
+		OpenFilesByMount: func([]checks.Mount) map[string]int64 {
+			scans++
+			return map[string]int64{"/data": 4242, "/": 7}
+		},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	get := func() *web.StorageWatchInfo {
+		ws := b.Watches(context.Background())
+		if len(ws) != 1 || ws[0].Storage == nil {
+			t.Fatalf("want 1 storage watch with storage info, got %+v", ws)
+		}
+		return ws[0].Storage
+	}
+	// /data/app resolves to the /data mount (longest prefix), so it reports /data's tally.
+	if si := get(); si.OpenFiles != 4242 {
+		t.Fatalf("OpenFiles = %d, want 4242 (from the /data mount tally)", si.OpenFiles)
+	}
+	// A second call within the TTL reuses the cached tally (no re-scan).
+	_ = get()
+	if scans != 1 {
+		t.Fatalf("open-files scanned %d times within TTL, want 1", scans)
+	}
+	// Once the TTL elapses, the next call re-scans.
+	now = now.Add(openFilesTallyTTL + time.Second)
+	_ = get()
+	if scans != 2 {
+		t.Fatalf("open-files scans after TTL = %d, want 2", scans)
+	}
+}
+
 func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{
