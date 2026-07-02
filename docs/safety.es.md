@@ -19,7 +19,11 @@ cualquier conmutador `security:` que intente desactivarlas.
    descubrimiento de procesos para binarios compartidos, pero el cmdline nunca autoriza un kill; un proceso
    cuyo exe no se puede resolver (permisos, o un binario `(deleted)`) nunca se
    mata — en su lugar se reporta como un residual.
-6. **`force_kill: true` requiere `kill_only_if`** con tanto un selector `users`
+6. **Nunca enviar señales terminadoras a PID 1 ni a procesos del kernel.**
+   `SIGTERM`, `SIGKILL`, `SIGINT` y `SIGQUIT` se bloquean centralmente para PID 1
+   y para kernel threads (`kthreadd`/hijos sin exe de userspace ni cmdline). Esto
+   no es configurable; los residuales protegidos se reportan en su lugar.
+7. **`force_kill: true` requiere `kill_only_if`** con tanto un selector `users`
    como un selector `exe_any`, cada uno no vacío.
 
 ## El motor de operaciones
@@ -244,6 +248,9 @@ Las decisiones de kill dependen de cómo se leen los hechos del proceso, así qu
   se resuelve a una ruta `(deleted)` (binario reemplazado por una actualización), el proceso
   no coincide con ningún selector de exe — se reporta como un residual con exe desconocido y
   nunca se señaliza.
+- **PID 1 y los kernel threads están protegidos** frente a señales terminadoras
+  aunque un selector o camino de señal futuro los alcanzara. Las señales de
+  reload no terminadoras como `SIGHUP` no se bloquean por esta protección.
 - **Los reloads por señal nativa usan el mismo modelo de identidad.** En OpenRC, o cualquier
   servicio sin `MainPID` del backend, el PID del pidfile se señaliza solo después de que
   coincida con un selector `processes:` con `exe` y `user` exactos. Los autores de catálogo
@@ -268,7 +275,7 @@ Los campos de `stop_policy` omitidos por un servicio de catálogo o servicio her
    inicia).
 4. Residuales con `force_kill: true` → clasificar cada uno: MATABLE solo cuando
    cada campo de `kill_only_if` coincide (exe resuelto exacto **y** UID real;
-   un exe irresoluble nunca es matable). SIGTERM al conjunto matable, esperar
+   un exe irresoluble y los PIDs protegidos nunca son matables). SIGTERM al conjunto matable, esperar
    `term_timeout`, redescubrir; SIGKILL a lo que quede del conjunto matable, esperar
    `kill_timeout`, redescubrir. Un residual que nunca coincidió nunca se señaliza.
 5. El resultado es `ok` solo cuando no queda ningún residual — ya sea que el

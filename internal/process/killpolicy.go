@@ -27,10 +27,21 @@ type KillPolicy struct {
 // process with an unresolvable exe is never killable, and an empty selector
 // (no users or no exe) matches nothing — both fail-safe.
 func (s KillSelector) Killable(p Process, resolve UserResolver) bool {
+	if protectedKillProcess(p) {
+		return false
+	}
 	if !p.ExeOK {
 		return false
 	}
 	return s.exeMatches(p.Exe) && s.userMatches(p.UID, resolve)
+}
+
+func protectedKillProcess(p Process) bool {
+	return p.PID <= 1 || protectedKernelProcess(p.PID, p.PPID, p.ExeOK, p.Cmdline)
+}
+
+func protectedKernelProcess(pid, ppid int, exeOK bool, cmdline []string) bool {
+	return (pid == 2 || ppid == 2) && !exeOK && len(cmdline) == 0
 }
 
 func (s KillSelector) exeMatches(exe string) bool {
