@@ -32,7 +32,10 @@ import (
 )
 
 const (
-	applicationsCacheTTL = 30 * time.Second
+	// applicationsCacheTTL keeps the web app inventory from running version and
+	// health commands on ordinary dashboard refreshes. Apps change rarely, and
+	// app watches use a 5m default cadence for the same probes.
+	applicationsCacheTTL = 5 * time.Minute
 	// serviceStatusCacheTTL bounds how often the web list re-queries systemd/OpenRC.
 	serviceStatusCacheTTL = 10 * time.Second
 	// slaTimelineCacheTTL caches SLA timeline strips for detail/expansion views.
