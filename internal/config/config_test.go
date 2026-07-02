@@ -4304,6 +4304,36 @@ checks:
 	}
 }
 
+func TestExpandPidfileOptionalMapDesugars(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/services/svc.yml": `
+name: svc
+pidfile:
+  path: /run/svc.pid
+  optional: true
+checks:
+  service: { type: service, expect: active }
+`,
+		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("svc-main")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	if got := cfgval.String(resolved.Tree["pidfile"]); got != "/run/svc.pid" {
+		t.Fatalf("pidfile = %q, want /run/svc.pid", got)
+	}
+	chk := nested(t, resolved.Tree, "checks", "pidfile")
+	if optional, _ := chk["optional"].(bool); !optional {
+		t.Fatalf("pidfile check optional = %v, want true", chk["optional"])
+	}
+}
+
 func TestExpandPidfilesDesugarsByRole(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,

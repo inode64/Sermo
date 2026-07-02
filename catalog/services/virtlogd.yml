@@ -13,15 +13,10 @@ checks:
   service:
     type: service
     expect: active
-  libvirt:
-    type: libvirt
-    socket: /run/libvirt/virtlogd-sock
-    timeout: 5s
 postflight:
-  libvirt:
-    type: libvirt
-    socket: /run/libvirt/virtlogd-sock
-    timeout: 5s
+  socket:
+    type: socket
+    path: /run/libvirt/virtlogd-sock
 policy:
   cooldown: 15m
   max_actions: 2
@@ -30,11 +25,11 @@ policy:
     initial: 15m
     max: 1h
 rules:
-  restart-if-libvirt-failed:
+  restart-if-socket-missing:
     type: remediation
     if:
       failed:
-        check: libvirt
+        check: socket
     for:
       cycles: 3
     then:

@@ -9,25 +9,16 @@ checks:
   service:
     type: service
     expect: active
-  tcp:
-    type: tcp
-    host: 127.0.0.1
-    port: ${port}
-    timeout: 3s
-variables:
-  port: 42217
 postflight:
-  tcp:
-    type: tcp
-    host: 127.0.0.1
-    port: ${port}
-    timeout: 3s
+  socket:
+    type: socket
+    path: /run/rrdcached.sock
 rules:
-  restart-if-tcp-failed:
+  restart-if-socket-missing:
     type: remediation
     if:
       failed:
-        check: tcp
+        check: socket
     for:
       cycles: 3
     then:

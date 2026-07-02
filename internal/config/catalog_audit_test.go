@@ -1347,6 +1347,123 @@ func TestCatalogVarnishAdminChecksAreOptional(t *testing.T) {
 	}
 }
 
+func TestCatalogDaemonProcessChecksAreAuxiliary(t *testing.T) {
+	root := repoRoot(t)
+	for _, service := range []string{"lldpd", "rngd", "rpc-idmapd", "smartd"} {
+		body := catalogDocByName(t, root, "services", service)
+		process := nested(t, body, "checks", "process")
+		if !cfgval.Bool(process["optional"]) {
+			t.Fatalf("%s process check optional = %v, want true", service, process["optional"])
+		}
+	}
+}
+
+func TestCatalogForegroundPidfilesAreOptional(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for _, service := range []string{"rngd", "smartd"} {
+		resolved, errs := cfg.ResolveCatalog(CategoryService, service)
+		if len(errs) > 0 {
+			t.Fatalf("ResolveCatalog(%s): %v", service, errs)
+		}
+		pidfile := nested(t, resolved.Tree, "checks", "pidfile")
+		if !cfgval.Bool(pidfile["optional"]) {
+			t.Fatalf("%s pidfile check optional = %v, want true", service, pidfile["optional"])
+		}
+	}
+}
+
+func TestCatalogRRDCachedUsesUnixSocketHealth(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	resolved, errs := cfg.ResolveCatalog(CategoryService, "rrdcached")
+	if len(errs) > 0 {
+		t.Fatalf("ResolveCatalog(rrdcached): %v", errs)
+	}
+	checks := nested(t, resolved.Tree, "checks")
+	if _, ok := checks["tcp"]; ok {
+		t.Fatalf("rrdcached must not require a TCP listener by default: %v", checks["tcp"])
+	}
+	socket := nested(t, checks, "socket")
+	if got := cfgval.String(socket["path"]); got != "/run/rrdcached.sock" {
+		t.Fatalf("rrdcached socket check path = %q, want /run/rrdcached.sock", got)
+	}
+	rule := nested(t, resolved.Tree, "rules", "restart-if-socket-missing", "if", "failed")
+	if got := cfgval.String(rule["check"]); got != "socket" {
+		t.Fatalf("rrdcached remediation check = %q, want socket", got)
+	}
+}
+
+func TestCatalogPMLFarmUsesResidentHelperProcessHealth(t *testing.T) {
+	root := repoRoot(t)
+	body := catalogDocByName(t, root, "services", "pmlogger_farm")
+	for _, section := range []string{"checks", "postflight"} {
+		process := nested(t, body, section, "process")
+		exes := cfgval.StringList(process["exe_any"])
+		want := []string{"${pmlogger_farm_pmpause_binary}", "${pmlogger_farm_pmsleep_binary}"}
+		if !slices.Equal(exes, want) {
+			t.Fatalf("pmlogger_farm %s.process.exe_any = %v, want %v", section, exes, want)
+		}
+		if got := cfgval.String(process["exe"]); got != "" {
+			t.Fatalf("pmlogger_farm %s.process.exe = %q, want empty", section, got)
+		}
+	}
+}
+
+func TestCatalogVirtlogdUsesSocketHealth(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	resolved, errs := cfg.ResolveCatalog(CategoryService, "virtlogd")
+	if len(errs) > 0 {
+		t.Fatalf("ResolveCatalog(virtlogd): %v", errs)
+	}
+	checks := nested(t, resolved.Tree, "checks")
+	if _, ok := checks["libvirt"]; ok {
+		t.Fatalf("virtlogd must not run libvirt protocol checks against its log socket: %v", checks["libvirt"])
+	}
+	socket := nested(t, checks, "socket")
+	if got := cfgval.String(socket["path"]); got != "/run/libvirt/virtlogd-sock" {
+		t.Fatalf("virtlogd socket check path = %q, want /run/libvirt/virtlogd-sock", got)
+	}
+	rule := nested(t, resolved.Tree, "rules", "restart-if-socket-missing", "if", "failed")
+	if got := cfgval.String(rule["check"]); got != "socket" {
+		t.Fatalf("virtlogd remediation check = %q, want socket", got)
+	}
+}
+
 func TestCatalogServicesUseAppVariablesForBinaryRefs(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")

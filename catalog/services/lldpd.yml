@@ -22,6 +22,7 @@ checks:
     exe: ${lldpd_binary}
     user: ${user}
     state: running
+    optional: true
     requires:
       - service
 postflight:

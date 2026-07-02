@@ -25,7 +25,9 @@ checks:
     expect: active
   process:
     type: process
-    exe: ${pmlogger_farm_binary}
+    exe_any:
+      - ${pmlogger_farm_pmpause_binary}
+      - ${pmlogger_farm_pmsleep_binary}
     user: ${user}
     state: running
     requires:
@@ -33,7 +35,9 @@ checks:
 postflight:
   process:
     type: process
-    exe: ${pmlogger_farm_binary}
+    exe_any:
+      - ${pmlogger_farm_pmpause_binary}
+      - ${pmlogger_farm_pmsleep_binary}
     user: ${user}
     state: running
 rules:
