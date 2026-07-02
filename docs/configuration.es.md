@@ -1098,10 +1098,11 @@ fusionan con un service.
 >
 > `sermoctl wizard volume` crea comprobaciones de almacenamiento para sistemas de
 > archivos locales y de red/distribuidos montados (umbral como porcentaje o tamaño,
-> auto-expansión opcional para sistemas de archivos respaldados por LVM). `sermoctl
-> wizard net` cubre el estado de la interfaz, errores, velocidad y dirección; escribe
-> `active` para elegir las interfaces no-loopback actualmente activas. `sermoctl wizard
-> uplink` genera el conjunto de uplink de internet por capas para una interfaz: estado
+> auto-expansión opcional para sistemas de archivos respaldados por LVM), excluyendo
+> sistemas de archivos pseudo/de control como `rpc_pipefs`. `sermoctl wizard net`
+> cubre el estado de la interfaz, errores, velocidad y dirección; escribe `active`
+> para elegir las interfaces no-loopback actualmente activas. `sermoctl wizard uplink`
+> genera el conjunto de uplink de internet por capas para una interfaz: estado
 > del enlace, dirección asignada, ruta por defecto, ping enlazado y resolución DNS a
 > través del resolver del sistema; escribe `default` para usar la interfaz de ruta por
 > defecto detectada.

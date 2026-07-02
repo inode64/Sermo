@@ -242,7 +242,7 @@ func List(mounts MountSource) ([]Mount, error) {
 	seen := map[string]bool{}
 	var out []Mount
 	for _, m := range all {
-		if !isStorageMount(m) || seen[m.Mountpoint] {
+		if !IsStorageMount(m) || seen[m.Mountpoint] {
 			continue
 		}
 		seen[m.Mountpoint] = true
@@ -251,7 +251,9 @@ func List(mounts MountSource) ([]Mount, error) {
 	return pruneNestedSameDeviceMounts(out), nil
 }
 
-func isStorageMount(m Mount) bool {
+// IsStorageMount reports whether a mount table entry is a real storage
+// filesystem candidate for generated storage watches.
+func IsStorageMount(m Mount) bool {
 	if m.Mountpoint == "" || m.FSType == "" {
 		return false
 	}

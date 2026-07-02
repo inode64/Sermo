@@ -1057,8 +1057,9 @@ a service.
 >
 > `sermoctl wizard volume` creates storage checks for mounted local and
 > network/distributed filesystems (threshold as a percent or size, optional
-> auto-expand for LVM-backed filesystems). `sermoctl wizard net` covers interface state,
-> errors, speed and address; type `active` to pick currently up non-loopback
+> auto-expand for LVM-backed filesystems), excluding pseudo/control filesystems
+> such as `rpc_pipefs`. `sermoctl wizard net` covers interface state, errors,
+> speed and address; type `active` to pick currently up non-loopback
 > interfaces. `sermoctl wizard uplink` generates the layered internet-uplink set
 > for an interface: link state, assigned address, default route, bound ping and
 > DNS resolution through the system resolver; type `default` to use the detected
