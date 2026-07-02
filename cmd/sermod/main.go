@@ -328,7 +328,7 @@ func run(args []string) int {
 			// Trigger reload by signalling ourself with SIGHUP. This re-uses the
 			// exact same Monitor.Reload path as sermoctl daemon reload.
 			Reload: func() error {
-				return syscall.Kill(os.Getpid(), syscall.SIGHUP)
+				return (process.OSSignaler{}).Signal(os.Getpid(), syscall.SIGHUP)
 			},
 		}
 		logger.Debug("starting web ui server", "address", addr, "auth", auth.Enabled())
