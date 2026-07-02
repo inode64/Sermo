@@ -1884,9 +1884,11 @@ current matches, PIDs and aggregate RSS/IO counters.
 #### `then.kill` — terminate the matched process
 
 A process watch can **terminate the matched PID natively**, without an external
-hook script, with a `then.kill` action. It reuses the daemon's own process
-signaller (the same `kill(2)` path the service stop and mount `kill+umount`
-policies use), so the policy lives entirely in configuration:
+hook script, with a `then.kill` action. It reuses the same guarded process
+reaper as service stop and mount `kill+umount` policies. Because it signals real
+processes, `then.kill` requires `check.name` to be an absolute resolved
+`/proc/<pid>/exe` path and `check.user` to be set; basename-only process watches
+may still monitor and notify, but cannot kill.
 
 ```yaml
 watches:
@@ -1895,7 +1897,8 @@ watches:
     interval: 1m
     check:
       type: process
-      name: sudo
+      name: /usr/bin/sudo
+      user: root
       for: 120m            # observed alive at least 120 minutes
     then:
       kill:
@@ -1908,6 +1911,9 @@ watches:
 - **`signal`** is the signal to send, `TERM` (default) or `KILL`. It is validated
   by the same parser the daemon uses, so a typo or an inappropriate signal fails
   `config validate`.
+- The kill target is gated by the same `kill_only_if` model used elsewhere:
+  the matched PID's resolved exe must exactly equal `check.name`, and its real
+  UID must resolve from `check.user`. An unresolvable exe is never killed.
 - **`escalate: true`** turns the single signal into the stop-policy TERM→KILL
   model: send the signal, wait `term_timeout`, and — after **re-verifying the PID
   still matches this watch** (defending against PID reuse over the grace period) —
@@ -1921,8 +1927,8 @@ watches:
 - `kill` can stand alone (a pure kill watch) or accompany a `hook` and/or
   `notify`. It is **only valid on a `process` watch** (like `then.expand` is
   storage-only). Because it signals real processes, the daemon must have
-  permission to do so (typically running as root), and `name`/`user` should be
-  scoped tightly — a broad match kills every matching PID that crosses the
+  permission to do so (typically running as root). The absolute `name` plus
+  `user` pair scopes which PIDs can be killed; every matching PID that crosses the
   condition.
 
 Other resource types will be added as new check `type` values using the same

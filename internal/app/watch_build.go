@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"path/filepath"
 	"slices"
 	"syscall"
 	"time"
@@ -275,6 +276,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
+	match := ProcMatch{Name: pname, User: cfgval.AsString(checkEntry["user"])}
 	actions, err := resolveWatchActions(entry, deps, watchActionOptions{
 		checkType:    "process",
 		parseKill:    true,
@@ -283,9 +285,20 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
+	if actions.kill != nil {
+		selector, err := processWatchKillSelector(match)
+		if err != nil {
+			return nil, "watch " + name + ": " + err.Error()
+		}
+		actions.kill.selector = selector
+	}
+	var resolve process.UserResolver
+	if deps.UserLookup != nil {
+		resolve = deps.UserLookup.ResolveUser
+	}
 	pw := &procWatcher{
 		name:      name,
-		match:     ProcMatch{Name: pname, User: cfgval.AsString(checkEntry["user"])},
+		match:     match,
 		cond:      cond,
 		hook:      actions.hook,
 		kill:      actions.kill,
@@ -293,6 +306,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		dryRun:    actions.dryRun,
 		inPanic:   deps.Panic.Active,
 		runner:    OSHookRunner{Runner: deps.ExecxRunner},
+		resolve:   resolve,
 		now:       deps.Now,
 		emit:      deps.Emit,
 		sampler:   procSamplerFromDeps(deps),
@@ -309,6 +323,16 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		Emit:      deps.Emit,
 		Cycle:     pw.runCycle,
 	}, ""
+}
+
+func processWatchKillSelector(match ProcMatch) (process.KillSelector, error) {
+	if match.Name == "" || !filepath.IsAbs(match.Name) {
+		return process.KillSelector{}, errors.New("then.kill requires check.name to be an absolute resolved exe path")
+	}
+	if match.User == "" {
+		return process.KillSelector{}, errors.New("then.kill requires check.user")
+	}
+	return process.KillSelector{Users: []string{match.User}, ExeAny: []string{match.Name}}, nil
 }
 
 // parseProcCond reads the for/cpu/memory/io conditions from a process check

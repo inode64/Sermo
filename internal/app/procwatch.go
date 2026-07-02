@@ -33,6 +33,10 @@ type ProcMatch struct {
 // cumulative; the watch derives rates from successive samples.
 type ProcInfo struct {
 	PID      int
+	User     string
+	UID      uint32
+	Exe      string
+	ExeOK    bool
 	CPUTicks uint64 // accumulated CPU jiffies (utime+stime)
 	RSS      uint64 // resident memory bytes
 	IOBytes  uint64 // cumulative read+write bytes (/proc/<pid>/io)
@@ -94,6 +98,7 @@ type killSpec struct {
 	escalate    bool           // follow up with SIGKILL if the PID survives
 	termTimeout time.Duration  // grace before the escalated SIGKILL
 	killTimeout time.Duration  // grace after the escalated SIGKILL (verification)
+	selector    process.KillSelector
 }
 
 // procWatcher monitors the processes matching a name for a minimum age and/or
@@ -109,8 +114,9 @@ type procWatcher struct {
 	dryRun    bool
 	inPanic   func() bool
 	runner    HookRunner
-	signaler  process.Signaler    // nil -> process.OSSignaler{} (real kill(2))
-	sleep     func(time.Duration) // nil -> process.Wait's cancellable timer
+	signaler  process.Signaler     // nil -> process.OSSignaler{} (real kill(2))
+	resolve   process.UserResolver // nil -> process.DefaultUserLookup().ResolveUser
+	sleep     func(time.Duration)  // nil -> process.Wait's cancellable timer
 	now       func() time.Time
 	emit      func(Event)
 	sampler   ProcSampler
@@ -156,7 +162,7 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 
 		fire, env, msg := w.evaluate(st, t, s)
 		if fire && !st.fired && !observeOnlyCycle(ctx) {
-			w.fire(ctx, s.PID, msg, env)
+			w.fire(ctx, s, msg, env)
 		}
 		if !observeOnlyCycle(ctx) {
 			st.fired = fire
@@ -189,7 +195,7 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 			if w.match.User != "" {
 				env["SERMO_USER"] = w.match.User
 			}
-			w.fire(ctx, pid, fmt.Sprintf("%s pid %d is gone", w.match.Name, pid), env)
+			w.fire(ctx, ProcInfo{PID: pid}, fmt.Sprintf("%s pid %d is gone", w.match.Name, pid), env)
 		}
 		delete(w.state, pid)
 	}
@@ -250,7 +256,7 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 	return ok, env, msg
 }
 
-func (w *procWatcher) fire(ctx context.Context, pid int, msg string, env map[string]string) {
+func (w *procWatcher) fire(ctx context.Context, info ProcInfo, msg string, env map[string]string) {
 	env["SERMO_WATCH"] = w.name
 	env["SERMO_CHECK_TYPE"] = "process"
 	env["SERMO_MESSAGE"] = msg
@@ -275,7 +281,7 @@ func (w *procWatcher) fire(ctx context.Context, pid int, msg string, env map[str
 		}
 	}
 	if killable {
-		w.doKill(ctx, pid, msg)
+		w.doKill(ctx, info, msg)
 	}
 	dispatchNotify(ctx, w.notifiers, watchMessage(w.name, msg, env), w.name, w.emitEvent)
 }
@@ -294,22 +300,14 @@ func (w *procWatcher) dryRunActions(killable bool) string {
 	return base + ", kill"
 }
 
-// doKill signals a matched PID with the configured kill action, reusing the
-// native process signaller. With escalate it follows the first signal with a
-// SIGKILL after termTimeout, re-verifying the PID's identity first so a recycled
-// PID is never killed.
-func (w *procWatcher) doKill(ctx context.Context, pid int, msg string) {
-	signaler := w.signaler
-	if signaler == nil {
-		signaler = process.OSSignaler{}
-	}
-	// The PID was matched this same cycle, so the first signal goes out directly
-	// (no meaningful reuse window between the sample and here).
-	if err := signaler.Signal(pid, w.kill.signal); err != nil {
-		w.emitEvent(Event{Watch: w.name, Kind: "kill-failed", Message: fmt.Sprintf("%s: %s pid %d: %v", msg, sigName(w.kill.signal), pid, err)})
+// doKill signals a matched PID through process.Reaper and process.KillSelector.
+// With escalate it follows the first signal with SIGKILL after termTimeout,
+// re-verifying the PID's identity first so a recycled PID is never killed.
+func (w *procWatcher) doKill(ctx context.Context, info ProcInfo, msg string) {
+	first := w.reaper().Signal(ctx, []process.Process{info.asProcess()}, w.kill.selector, w.kill.signal)
+	if !w.emitSignalResult(msg, w.kill.signal, first) {
 		return
 	}
-	w.emitEvent(Event{Watch: w.name, Kind: "kill", Message: fmt.Sprintf("%s: sent %s to pid %d", msg, sigName(w.kill.signal), pid)})
 
 	if !w.kill.escalate || w.kill.signal == syscall.SIGKILL {
 		return
@@ -320,43 +318,80 @@ func (w *procWatcher) doKill(ctx context.Context, pid int, msg string) {
 	if err := process.Wait(ctx, w.sleep, w.kill.termTimeout); err != nil {
 		return
 	}
-	if !w.pidStillMatches(pid) {
+	current, ok := w.matchingProcess(info.PID)
+	if !ok {
 		return
 	}
-	if err := signaler.Signal(pid, syscall.SIGKILL); err != nil {
-		w.emitEvent(Event{Watch: w.name, Kind: "kill-failed", Message: fmt.Sprintf("%s: SIGKILL pid %d: %v", msg, pid, err)})
+	kill := w.reaper().Signal(ctx, []process.Process{current}, w.kill.selector, syscall.SIGKILL)
+	if !w.emitSignalResult(msg, syscall.SIGKILL, kill) {
 		return
 	}
-	w.emitEvent(Event{Watch: w.name, Kind: "kill", Message: fmt.Sprintf("%s: escalated to SIGKILL for pid %d", msg, pid)})
 	// After the kill grace, a PID that still matches is unkillable from here (an
 	// uninterruptible sleep, or a zombie whose parent has not reaped it) — surface
 	// it rather than claim success, mirroring the reaper's final rediscover.
 	if err := process.Wait(ctx, w.sleep, w.kill.killTimeout); err != nil {
 		return
 	}
-	if w.pidStillMatches(pid) {
-		w.emitEvent(Event{Watch: w.name, Kind: "kill-failed", Message: fmt.Sprintf("%s: pid %d survived SIGKILL", msg, pid)})
+	if _, ok := w.matchingProcess(info.PID); ok {
+		w.emitEvent(Event{Watch: w.name, Kind: "kill-failed", Message: fmt.Sprintf("%s: pid %d survived SIGKILL", msg, info.PID)})
 	}
 }
 
-// pidStillMatches re-samples the watch's selector and reports whether pid is
+func (w *procWatcher) reaper() process.Reaper {
+	return process.Reaper{
+		Signaler:    w.signaler,
+		ResolveUser: w.resolve,
+		Sleep:       w.sleep,
+	}
+}
+
+func (w *procWatcher) emitSignalResult(msg string, sig syscall.Signal, result process.ReapResult) bool {
+	if len(result.Signalled) > 0 {
+		pid := result.Signalled[0]
+		if sig == syscall.SIGKILL && w.kill.signal != syscall.SIGKILL {
+			w.emitEvent(Event{Watch: w.name, Kind: "kill", Message: fmt.Sprintf("%s: escalated to SIGKILL for pid %d", msg, pid)})
+		} else {
+			w.emitEvent(Event{Watch: w.name, Kind: "kill", Message: fmt.Sprintf("%s: sent %s to pid %d", msg, sigName(sig), pid)})
+		}
+		return true
+	}
+	if len(result.Failed) > 0 {
+		failure := result.Failed[0]
+		w.emitEvent(Event{Watch: w.name, Kind: "kill-failed", Message: fmt.Sprintf("%s: %s pid %d: %v", msg, sigName(sig), failure.PID, failure.Err)})
+		return false
+	}
+	w.emitEvent(Event{Watch: w.name, Kind: "kill-failed", Message: fmt.Sprintf("%s: pid did not match kill selector", msg)})
+	return false
+}
+
+// matchingProcess re-samples the watch's selector and reports whether pid is
 // still among the matches — the identity re-check that defends the escalated
 // SIGKILL against PID reuse. A transient sampling failure fails safe (no kill).
-func (w *procWatcher) pidStillMatches(pid int) bool {
+func (w *procWatcher) matchingProcess(pid int) (process.Process, bool) {
 	sampler := w.sampler
 	if sampler == nil {
 		sampler = osProcSampler{}
 	}
 	samples, ok := sampler.Sample(w.match)
 	if !ok {
-		return false
+		return process.Process{}, false
 	}
 	for _, s := range samples {
 		if s.PID == pid {
-			return true
+			return s.asProcess(), true
 		}
 	}
-	return false
+	return process.Process{}, false
+}
+
+func (s ProcInfo) asProcess() process.Process {
+	return process.Process{
+		PID:   s.PID,
+		User:  s.User,
+		UID:   s.UID,
+		Exe:   s.Exe,
+		ExeOK: s.ExeOK,
+	}
 }
 
 // sigName renders the termination signals a kill action can send with their
@@ -429,7 +464,7 @@ func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 		if !ok || !procMatchesWithLookup(m, id, lookup) {
 			continue
 		}
-		info := ProcInfo{PID: pid}
+		info := ProcInfo{PID: pid, User: id.User, UID: id.UID, Exe: id.Exe, ExeOK: id.ExeOK}
 		if v, ok := mr.ProcessCPU(pid); ok {
 			info.CPUTicks = v
 		}

@@ -31,7 +31,7 @@ func (n typedNotifier) Send(context.Context, notify.Message) error {
 func TestBuildWatchesProcessKillAction(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"kill-stale-sudo": map[string]any{
-			"check": map[string]any{"type": "process", "name": "sudo", "for": "120m"},
+			"check": map[string]any{"type": "process", "name": "/usr/bin/sudo", "user": "root", "for": "120m"},
 			"then":  map[string]any{"kill": map[string]any{"signal": "TERM"}},
 		},
 	})
@@ -44,6 +44,22 @@ func TestBuildWatchesProcessKillAction(t *testing.T) {
 	}
 	if watches[0].CheckType != "process" {
 		t.Fatalf("check type = %q, want process", watches[0].CheckType)
+	}
+}
+
+func TestBuildWatchesProcessKillActionRejectsUnsafeSelector(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"kill-stale-sudo": map[string]any{
+			"check": map[string]any{"type": "process", "name": "sudo", "for": "120m"},
+			"then":  map[string]any{"kill": map[string]any{"signal": "TERM"}},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
+	if len(watches) != 0 {
+		t.Fatalf("unsafe kill watch should not build, got %d watches", len(watches))
+	}
+	if len(warns) != 1 || warns[0] != "watch kill-stale-sudo: then.kill requires check.name to be an absolute resolved exe path" {
+		t.Fatalf("warnings = %v", warns)
 	}
 }
 
