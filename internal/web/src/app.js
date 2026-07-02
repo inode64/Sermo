@@ -3434,7 +3434,11 @@ function renderDaemon(info) {
     const el = $(id);
     if (el) el.textContent = val || "—";
   };
+  const hostType = hostTypeDisplay(info.host_type);
   set("#daemon-backend", info.backend);
+  set("#daemon-host-type", hostType.label);
+  const hostTypeEl = $("#daemon-host-type");
+  if (hostTypeEl) hostTypeEl.title = hostType.title;
   set("#daemon-config", info.config_path);
   set("#daemon-runtime", info.runtime_dir);
   set("#daemon-state", info.state_dir);
@@ -3444,6 +3448,17 @@ function renderDaemon(info) {
   set("#engine-default-timeout", info.default_timeout);
   set("#engine-op-timeout", info.operation_timeout);
   set("#engine-startup-delay", info.startup_delay);
+}
+
+function hostTypeDisplay(hostType) {
+  if (!hostType) return { label: "", title: "" };
+  const kind = (hostType.kind || "").replace(/_/g, " ");
+  const label = hostType.label || hostType.platform || kind;
+  const detail = [];
+  if (kind) detail.push(kind);
+  if (hostType.platform) detail.push(hostType.platform);
+  if (hostType.detail) detail.push(hostType.detail);
+  return { label, title: detail.join(" · ") };
 }
 
 // hostMetricVal finds a single host metric by name and formats its value
@@ -3916,6 +3931,11 @@ function renderStatus(ctx) {
     if (sys) {
       const sp = [];
       if (daemon.hostname) sp.push(`host: <b>${esc(daemon.hostname)}</b>`);
+      const hostType = hostTypeDisplay(daemon.host_type);
+      if (hostType.label) {
+        const title = hostType.title ? ` title="${esc(hostType.title)}"` : "";
+        sp.push(`type: <b${title}>${esc(hostType.label)}</b>`);
+      }
       if (ready.backend) sp.push(`backend: <b>${esc(ready.backend)}</b>`);
       if (daemon.os) sp.push(`OS: <b>${esc(daemon.os)}</b>`);
       // cpu/mem/swap are percent-type: show 0.0% when present-but-zero instead

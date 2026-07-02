@@ -249,7 +249,16 @@ func TestContainerdCatalogRestartsOnVersionChange(t *testing.T) {
 func TestShippedGlobalConfigValidates(t *testing.T) {
 	root := repoRoot(t)
 
-	cfg, err := Load(filepath.Join(root, "examples", "sermo.yml"), WithCatalogDirs(filepath.Join(root, "catalog")))
+	cfg, err := Load(filepath.Join(root, "examples", "sermo.yml"),
+		WithCatalogDirs(filepath.Join(root, "catalog")),
+		withPathDirs("services"),
+		withPathDirs("apps"),
+		withPathDirs("notifiers"),
+		withPathDirs("storages"),
+		withPathDirs("networks"),
+		withPathDirs("watches"),
+		withPathDirs("mounts"),
+	)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
