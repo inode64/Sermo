@@ -114,6 +114,7 @@ type WebBackend struct {
 	remediation      *RemediationRegistry
 	ruleWindows      *RuleWindowRegistry
 	cfg              *config.Config
+	hostType         *web.HostTypeInfo
 	measure          MeasurementReader
 	collector        *metrics.Collector
 	daemonMetrics    *daemonMetricSampler
@@ -211,6 +212,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		remediation:      deps.Remediation,
 		ruleWindows:      deps.RuleWindows,
 		cfg:              cfg,
+		hostType:         hostTypeInfo(),
 		collector:        deps.Collector,
 		daemonMetrics:    newDaemonMetricSampler(deps.Collector, deps.Now, deps.DaemonMetrics),
 		serviceMetrics:   deps.ServiceMetrics,
@@ -2027,6 +2029,11 @@ func (b *WebBackend) DaemonInfo(ctx context.Context) web.DaemonInfo {
 		info.Hostname = h
 	}
 	info.OS = osPrettyName()
+	if b.hostType != nil {
+		info.HostType = b.hostType
+	} else {
+		info.HostType = hostTypeInfo()
+	}
 	if up, ok := hostUptime(); ok {
 		info.HostUptimeSeconds = int64(up.Seconds())
 		info.HostUptime = formatInterval(up.Round(time.Second))

@@ -23,6 +23,7 @@ type Option func(*loadOptions)
 
 type loadOptions struct {
 	catalogDirs  []string
+	pathDirs     map[string][]string
 	serviceUnits map[string][]string
 }
 
@@ -35,6 +36,15 @@ type loadOptions struct {
 // source tree.
 func WithCatalogDirs(dirs ...string) Option {
 	return func(o *loadOptions) { o.catalogDirs = dirs }
+}
+
+func withPathDirs(kind string, dirs ...string) Option {
+	return func(o *loadOptions) {
+		if o.pathDirs == nil {
+			o.pathDirs = map[string][]string{}
+		}
+		o.pathDirs[kind] = dirs
+	}
 }
 
 // WithServiceUnits provides active backend units for service-derived catalog service
@@ -63,30 +73,34 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		return nil, err
 	}
 	if len(o.catalogDirs) > 0 {
-		global.Catalog = absCatalogDirs(o.catalogDirs)
+		global.Catalog = absOverrideDirs(o.catalogDirs)
 		global.CatalogPaths = pathSpecsFromPaths(global.Catalog)
 	}
+	applyPathDirOverride(&global, o.pathDirs)
 
 	catalogPaths := global.CatalogPaths
 	if len(catalogPaths) == 0 {
 		catalogPaths = pathSpecsFromPaths([]string{"/usr/share/sermo/catalog", "/etc/sermo/catalog-available"})
 	}
+	_, servicePathsOverridden := o.pathDirs["services"]
 	servicePaths := global.ServicePaths
-	if len(servicePaths) == 0 {
+	if len(servicePaths) == 0 && !servicePathsOverridden {
 		servicePaths = pathSpecsFromPaths(defaultConfigDirs(globalPath, defaultServiceDirs))
 		global.Services = pathsFromSpecs(servicePaths)
 		global.ServicePaths = append([]PathSpec(nil), servicePaths...)
 	}
+	_, appPathsOverridden := o.pathDirs["apps"]
 	appPaths := global.AppPaths
-	if len(appPaths) == 0 {
+	if len(appPaths) == 0 && !appPathsOverridden {
 		appPaths = pathSpecsFromPaths(defaultConfigDirs(globalPath, defaultAppDirs))
 		global.Apps = pathsFromSpecs(appPaths)
 		global.AppPaths = append([]PathSpec(nil), appPaths...)
 	}
 	notifierPaths := global.NotifierPaths
 	watchPaths := appendPathSpecLists(global.StoragePaths, global.NetworkPaths, global.WatchPaths)
+	_, mountPathsOverridden := o.pathDirs["mounts"]
 	mountPaths := global.MountPaths
-	if len(mountPaths) == 0 {
+	if len(mountPaths) == 0 && !mountPathsOverridden {
 		mountPaths = pathSpecsFromPaths(defaultConfigDirs(globalPath, defaultMountDirs))
 		global.Mounts = pathsFromSpecs(mountPaths)
 		global.MountPaths = append([]PathSpec(nil), mountPaths...)
@@ -203,9 +217,30 @@ func loadGlobal(path string) (Global, error) {
 	return g, nil
 }
 
-// absCatalogDirs cleans an override list, making relative entries absolute
+func applyPathDirOverride(g *Global, overrides map[string][]string) {
+	if len(overrides) == 0 {
+		return
+	}
+	apply := func(kind string, paths *[]string, specs *[]PathSpec) {
+		dirs, ok := overrides[kind]
+		if !ok {
+			return
+		}
+		*paths = absOverrideDirs(dirs)
+		*specs = pathSpecsFromPaths(*paths)
+	}
+	apply("services", &g.Services, &g.ServicePaths)
+	apply("apps", &g.Apps, &g.AppPaths)
+	apply("notifiers", &g.Notifiers, &g.NotifierPaths)
+	apply("storages", &g.Storages, &g.StoragePaths)
+	apply("networks", &g.Networks, &g.NetworkPaths)
+	apply("watches", &g.Watches, &g.WatchPaths)
+	apply("mounts", &g.Mounts, &g.MountPaths)
+}
+
+// absOverrideDirs cleans an override list, making relative entries absolute
 // against the current working directory and dropping empty ones.
-func absCatalogDirs(dirs []string) []string {
+func absOverrideDirs(dirs []string) []string {
 	out := make([]string, 0, len(dirs))
 	for _, d := range dirs {
 		if d == "" {

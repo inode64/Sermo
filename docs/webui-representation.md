@@ -70,7 +70,7 @@ enabled.
 | Role | admin / read-only label |
 | Refresh | select with refresh interval, manual refresh button |
 | Status | last refresh age, connection errors; `#statusbar` ends with host `uptime:` then daemon `status:` (`ok` / `starting` / …) as a paired tail |
-| System status | daemon/backend/runtime summary |
+| System status | host identity, host type, daemon/backend/runtime summary |
 
 Editable notes:
 
@@ -325,7 +325,7 @@ Section id: `daemon-section`
 
 | Block | Fields |
 | --- | --- |
-| Daemon | Backend, Config, Runtime, State |
+| Daemon | Backend, Host type, Config, Runtime, State |
 | Engine | Interval, Max parallel checks, Max parallel ops, Default timeout, Operation timeout, Startup delay |
 | Runtime | Started, Uptime, Go version, Ready |
 | Process counters | PID, live CPU, memory, IO, FDs, threads |

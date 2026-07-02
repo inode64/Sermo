@@ -70,7 +70,7 @@ la autenticación web está habilitada.
 | Rol | etiqueta admin / solo lectura |
 | Refresco | selector con intervalo de refresco, botón de refresco manual |
 | Estado | antigüedad del último refresco, errores de conexión; `#statusbar` termina con el `uptime:` del host y luego el `status:` del daemon (`ok` / `starting` / …) como una cola emparejada |
-| Estado del sistema | resumen de daemon/backend/runtime |
+| Estado del sistema | identidad del host, tipo de host, resumen de daemon/backend/runtime |
 
 Notas editables:
 
@@ -317,7 +317,7 @@ Section id: `daemon-section`
 
 | Bloque | Campos |
 | --- | --- |
-| Daemon | Backend, Config, Runtime, State |
+| Daemon | Backend, Host type, Config, Runtime, State |
 | Engine | Interval, Max parallel checks, Max parallel ops, Default timeout, Operation timeout, Startup delay |
 | Runtime | Started, Uptime, Go version, Ready |
 | Contadores de proceso | PID, CPU en vivo, memoria, IO, FDs, threads |
