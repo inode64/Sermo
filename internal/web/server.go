@@ -193,23 +193,28 @@ type WatchMeter struct {
 
 // StorageWatchInfo is live filesystem data for a storage host watch.
 type StorageWatchInfo struct {
-	Path             string   `json:"path"`
-	Mounted          bool     `json:"mounted"`
-	MountPoint       string   `json:"mount_point,omitempty"`
-	Device           string   `json:"device,omitempty"`
-	FileSystem       string   `json:"filesystem,omitempty"`
-	Options          []string `json:"options,omitempty"`
-	TotalBytes       uint64   `json:"total_bytes,omitempty"`
-	UsedBytes        uint64   `json:"used_bytes,omitempty"`
-	FreeBytes        uint64   `json:"free_bytes,omitempty"`
-	UsedPct          float64  `json:"used_pct,omitempty"`
-	FreePct          float64  `json:"free_pct,omitempty"`
-	InodesTotal      uint64   `json:"inodes_total,omitempty"`
-	InodesFree       uint64   `json:"inodes_free,omitempty"`
-	InodesUsedPct    float64  `json:"inodes_used_pct,omitempty"`
-	InodesFreePct    float64  `json:"inodes_free_pct,omitempty"`
-	SampleError      string   `json:"sample_error,omitempty"`
-	MountSampleError string   `json:"mount_sample_error,omitempty"`
+	Path          string   `json:"path"`
+	Mounted       bool     `json:"mounted"`
+	MountPoint    string   `json:"mount_point,omitempty"`
+	Device        string   `json:"device,omitempty"`
+	FileSystem    string   `json:"filesystem,omitempty"`
+	Options       []string `json:"options,omitempty"`
+	TotalBytes    uint64   `json:"total_bytes,omitempty"`
+	UsedBytes     uint64   `json:"used_bytes,omitempty"`
+	FreeBytes     uint64   `json:"free_bytes,omitempty"`
+	UsedPct       float64  `json:"used_pct,omitempty"`
+	FreePct       float64  `json:"free_pct,omitempty"`
+	InodesTotal   uint64   `json:"inodes_total,omitempty"`
+	InodesFree    uint64   `json:"inodes_free,omitempty"`
+	InodesUsedPct float64  `json:"inodes_used_pct,omitempty"`
+	InodesFreePct float64  `json:"inodes_free_pct,omitempty"`
+	// OpenFiles is the number of open file descriptors on this mount's
+	// filesystem (fds whose target resolves to an absolute path under the mount).
+	// Display only; computed by a cached host-wide /proc scan, so 0 may mean
+	// "none" or "not yet sampled".
+	OpenFiles        int64  `json:"open_files,omitempty"`
+	SampleError      string `json:"sample_error,omitempty"`
+	MountSampleError string `json:"mount_sample_error,omitempty"`
 }
 
 // Notifier is a configured notification target referenced by watches.
@@ -228,6 +233,7 @@ type DaemonInfo struct {
 	Backend               string `json:"backend,omitempty"`
 	Hostname              string `json:"hostname,omitempty"`
 	OS                    string `json:"os,omitempty"`
+	HostType              *HostTypeInfo `json:"host_type,omitempty"`
 	HostUptime            string `json:"host_uptime,omitempty"`         // display-ready uptime of the host/server since boot
 	HostUptimeSeconds     int64  `json:"host_uptime_seconds,omitempty"` // host/server uptime in whole seconds
 	ConfigPath            string `json:"config_path,omitempty"`
@@ -239,6 +245,14 @@ type DaemonInfo struct {
 	DefaultTimeout        string `json:"default_timeout"`
 	OperationTimeout      string `json:"operation_timeout"`
 	StartupDelay          string `json:"startup_delay"`
+}
+
+// HostTypeInfo describes the host's virtualization class for the dashboard.
+type HostTypeInfo struct {
+	Kind     string `json:"kind,omitempty"`     // bare_metal | virtual_machine | unknown
+	Platform string `json:"platform,omitempty"` // kvm | hyperv | vmware | virtualbox | xen | ...
+	Label    string `json:"label,omitempty"`    // display-ready summary, e.g. "KVM/QEMU VM"
+	Detail   string `json:"detail,omitempty"`   // source detail such as DMI vendor/product
 }
 
 // DaemonRuntime is the latest resource sample for the running sermod process.

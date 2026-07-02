@@ -228,6 +228,14 @@ Section ids: `storage-section`, `network-section`, `watches-section`
 `Storage` contains `storage` watches, `Network` contains `net`/`icmp` watches,
 and `Host watches` contains the remaining host watch types.
 
+A `storage` watch summary shows the path, filesystem, mount point and used/free
+space, plus — when any exist — the count of **open files** on that filesystem
+(fds whose target resolves under the mount). That count comes from a cached
+host-wide `/proc/<pid>/fd` scan shared by all storage watches and refreshed at
+most once per minute; it is display only (no threshold/alert). The service list
+row likewise shows a service's open file-descriptor count (`fds`) beside its
+memory, from the same per-process totals already in the service detail.
+
 | Part | Current representation |
 | --- | --- |
 | Title | Panel name plus total count for that panel's watch subset |
