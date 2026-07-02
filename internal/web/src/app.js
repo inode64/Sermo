@@ -81,7 +81,6 @@ async function load() {
     connOK = false;
     showDisconnected();
   }
-  if (watches) renderWatches(watches);
   if (mounts) renderMounts(mounts);
   if (notifiers) renderNotifiers(notifiers);
   if (daemon) renderDaemon(daemon);
