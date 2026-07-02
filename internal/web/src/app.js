@@ -47,18 +47,17 @@ function showDisconnected() {
   setStatus("Disconnected — retrying…" + age, "warn");
 }
 
-// load refreshes every panel in parallel: the services fetch is the connection
-// signal (failure dims the page), every other endpoint degrades independently to
-// "keep the last render" on a transient error. Application inspection can be
-// cold and command-heavy, so it renders when ready instead of blocking the first
-// service/status paint.
+// load refreshes the dashboard in two phases: first the lightweight status and
+// service panels, then the panels that can be cold and probe-heavy. This keeps a
+// first visit after daemon start from waiting on /api/watches before showing the
+// operator the main service/status view. Each endpoint still degrades
+// independently to "keep the last render" on a transient error.
 async function load() {
   const seq = ++loadSeq;
   healthIconReady = false;
-  const appsPromise = getJSON("api/applications", null);  // installed applications
-  const [services, watches, mounts, notifiers, daemon, daemonMetrics, locks, activity, ready, live, mon, ops, hostMetrics] = await Promise.all([
+  const sameLoad = () => seq === loadSeq;
+  const [services, mounts, notifiers, daemon, daemonMetrics, locks, activity, ready, live, mon, ops, hostMetrics] = await Promise.all([
     fetch("api/services").then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).catch(() => null),
-    getJSON("api/watches", null),       // host watches (visible even when services=0)
     getJSON("api/mounts", null),        // configured mount units
     getJSON("api/notifiers", null),     // what watches can send to
     getJSON("api/daemon", null),        // daemon / engine settings panel
@@ -71,7 +70,7 @@ async function load() {
     getJSON("api/ops", {}),
     getJSON("api/host", []),
   ]);
-  if (seq !== loadSeq) return;
+  if (!sameLoad()) return;
   if (services) {
     render(services);
     connOK = true;
@@ -114,8 +113,14 @@ async function load() {
   lastRefresh = Date.now();
   tickRefreshAge();
 
-  appsPromise.then((apps) => {
-    if (seq !== loadSeq || !apps) return;
+  getJSON("api/watches", null).then((watches) => {
+    if (!sameLoad() || !watches) return;
+    renderWatches(watches);
+    if (connOK) renderAttention();
+  });
+
+  getJSON("api/applications", null).then((apps) => {
+    if (!sameLoad() || !apps) return;
     renderApps(apps);
     if (connOK) renderAttention();
   });
