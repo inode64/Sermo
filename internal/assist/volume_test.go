@@ -106,6 +106,33 @@ func TestVolumeAssistantUsedPctNoExpand(t *testing.T) {
 	}
 }
 
+func TestVolumeAssistantSkipsRPCPipeFS(t *testing.T) {
+	env := testEnv()
+	env.Volumes = func() ([]Volume, error) {
+		return []Volume{
+			{Mountpoint: "/var/lib/nfs/rpc_pipefs", FSType: "rpc_pipefs", Device: "rpc_pipefs"},
+			{Mountpoint: "/srv/data", FSType: "ext4", Device: "/dev/sdb1"},
+		}, nil
+	}
+
+	script := strings.Join([]string{"1", "1", "", "1", "10", "3", "none", "n"}, "\n") + "\n"
+	var out strings.Builder
+	p := NewPrompt(strings.NewReader(script), &out)
+	res, err := volumeAssistant{}.Run(p, env)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if strings.Contains(out.String(), "rpc_pipefs") {
+		t.Fatalf("rpc_pipefs should not be offered by the wizard:\n%s", out.String())
+	}
+	if _, ok := res.Watches["storage-srv-data"]; !ok {
+		t.Fatalf("expected storage-srv-data watch, got %v", res.Watches)
+	}
+	if _, ok := res.Watches["storage-var-lib-nfs-rpc-pipefs"]; ok {
+		t.Fatalf("rpc_pipefs watch must not be generated: %v", res.Watches)
+	}
+}
+
 func TestVolumeAssistantPercentSuffix(t *testing.T) {
 	// Select volume 2 (/), used-space condition 90%, for 1, notifier team-slack, no expand.
 	script := strings.Join([]string{"2", "1", "", "2", "90%", "1", "2", "n", "n"}, "\n") + "\n"

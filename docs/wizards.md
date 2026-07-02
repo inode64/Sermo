@@ -149,8 +149,9 @@ under a `services/` directory loaded by `paths.services`.
 All wizard output is one target per file. The volume wizard generates one
 storage **watch fragment** per mounted storage filesystem under the `storages/`
 watch directory, including local block devices and network/distributed
-filesystems such as NFS, Ceph and ZFS. Each fragment keeps the top-level
-`watches:` map but contains only the generated watch for that target.
+filesystems such as NFS, Ceph and ZFS. It does not offer pseudo/control
+filesystems such as `rpc_pipefs`. Each fragment keeps the top-level `watches:`
+map but contains only the generated watch for that target.
 First-class mount units are different: `sermoctl wizard mount` reads
 `/etc/fstab`, writes one mount file per target under `paths.mounts`
 (default `/etc/sermo/mounts`) and they are operated with
