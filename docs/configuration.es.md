@@ -272,6 +272,12 @@ sermoctl mount status mount-backup
 sermoctl mount list
 ```
 
+El panel **Mount units** de la interfaz web expone los nombres de mount
+configurados a los administradores. Puede montar/desmontar, mostrar los mismos
+procesos bloqueadores antes de desmontar, enviar una alerta TTY nativa a los
+usuarios con sesión que estén bloqueando el montaje, y ejecutar `kill+umount`
+solo mediante la política explícita de kill de montaje descrita abajo.
+
 Con `refcount: true` (el valor por defecto), cada `mount` exitoso incrementa el
 contador de runtime de Sermo y `umount` lo decrementa. El `umount` real solo se ejecuta
 cuando el contador llega a cero; si la ruta aún no está montada, el primer `mount`
