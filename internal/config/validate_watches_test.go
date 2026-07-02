@@ -268,6 +268,64 @@ func TestValidateProcessWatchErrors(t *testing.T) {
 	}
 }
 
+func TestValidateProcessWatchKillGood(t *testing.T) {
+	issues := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"kill-stale-sudo": map[string]any{
+				"check": map[string]any{"type": "process", "name": "sudo", "for": "120m"},
+				"then":  map[string]any{"kill": map[string]any{"signal": "TERM"}},
+			},
+			"kill-escalate": map[string]any{
+				"check": map[string]any{"type": "process", "name": "sudo", "for": "120m"},
+				"then": map[string]any{"kill": map[string]any{
+					"signal":       "KILL",
+					"escalate":     true,
+					"term_timeout": "10s",
+					"kill_timeout": "5s",
+				}},
+			},
+		},
+	})
+	if w := watchIssues(issues); len(w) != 0 {
+		t.Fatalf("a kill-only process watch should be valid, got %v", w)
+	}
+}
+
+func TestValidateProcessWatchKillErrors(t *testing.T) {
+	issues := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"bad-signal": map[string]any{
+				"check": map[string]any{"type": "process", "name": "sudo", "for": "1m"},
+				"then":  map[string]any{"kill": map[string]any{"signal": "HUP"}},
+			},
+			"bad-escalate": map[string]any{
+				"check": map[string]any{"type": "process", "name": "sudo", "for": "1m"},
+				"then":  map[string]any{"kill": map[string]any{"escalate": "yes"}},
+			},
+			"bad-timeout": map[string]any{
+				"check": map[string]any{"type": "process", "name": "sudo", "for": "1m"},
+				"then":  map[string]any{"kill": map[string]any{"escalate": true, "term_timeout": "soon"}},
+			},
+			// kill is process-only; on a storage watch it must be rejected.
+			"kill-on-storage": map[string]any{
+				"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
+				"then":  map[string]any{"kill": map[string]any{"signal": "TERM"}},
+			},
+		},
+	})
+	want := []string{
+		"watches.bad-signal.then.kill.signal \"HUP\" must be TERM or KILL",
+		"watches.bad-escalate.then.kill.escalate must be a boolean",
+		"watches.bad-timeout.then.kill.term_timeout \"soon\" must be a valid positive duration",
+		"watches.kill-on-storage.then.kill is only valid on a process watch",
+	}
+	for _, w := range want {
+		if !hasIssue(issues, w) {
+			t.Fatalf("missing issue %q in %v", w, watchIssues(issues))
+		}
+	}
+}
+
 func TestValidateStorageInodesWatch(t *testing.T) {
 	good := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
@@ -511,10 +569,10 @@ func TestValidateNotifyReferences(t *testing.T) {
 			},
 		},
 	})
-	if !hasIssue(noDefault, "watches.no-action.then requires a hook, notify and/or expand") {
+	if !hasIssue(noDefault, "watches.no-action.then requires a hook, notify, kill and/or expand") {
 		t.Fatalf("expected empty then without global notify to fail, got %v", noDefault)
 	}
-	if !hasIssue(noDefault, "watches.dry-run-only.then requires a hook, notify and/or expand") {
+	if !hasIssue(noDefault, "watches.dry-run-only.then requires a hook, notify, kill and/or expand") {
 		t.Fatalf("expected dry_run alone without an action to fail, got %v", noDefault)
 	}
 
