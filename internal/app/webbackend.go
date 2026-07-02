@@ -37,7 +37,9 @@ const (
 	// app watches use a 5m default cadence for the same probes.
 	applicationsCacheTTL = 5 * time.Minute
 	// serviceStatusCacheTTL bounds how often the web list re-queries systemd/OpenRC.
-	serviceStatusCacheTTL = 10 * time.Second
+	// The dashboard refreshes every 30s by default, so keep status warm across
+	// ordinary refreshes instead of running one init status probe per service.
+	serviceStatusCacheTTL = 2 * time.Minute
 	// slaTimelineCacheTTL caches SLA timeline strips for detail/expansion views.
 	slaTimelineCacheTTL = 45 * time.Second
 )
