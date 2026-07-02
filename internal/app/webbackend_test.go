@@ -416,6 +416,10 @@ func TestWatchViewFailedIgnoresActivityBeforeMonitorChange(t *testing.T) {
 }
 
 func TestWebBackendApplicationsCache(t *testing.T) {
+	if applicationsCacheTTL < 5*time.Minute {
+		t.Fatalf("applicationsCacheTTL = %s, want at least 5m to avoid frequent version probes", applicationsCacheTTL)
+	}
+
 	calls := 0
 	b := &WebBackend{
 		applicationsList: func(context.Context) []web.Application {
