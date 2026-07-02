@@ -1,6 +1,7 @@
 package web
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -207,6 +208,20 @@ func bundledCSS(t *testing.T) string {
 		t.Fatal("bundled style missing")
 	}
 	return css
+}
+
+func TestSourceLoadDefersWatchesWithoutStaleFastPathReference(t *testing.T) {
+	src, err := os.ReadFile("src/app.js")
+	if err != nil {
+		t.Fatalf("read src/app.js: %v", err)
+	}
+	text := string(src)
+	if !strings.Contains(text, `getJSON("api/watches", null).then`) {
+		t.Fatalf("load() no longer defers api/watches")
+	}
+	if strings.Contains(text, "if (watches) renderWatches(watches);") {
+		t.Fatalf("load() references stale watches binding before deferred fetch")
+	}
 }
 
 // TestIndexAccessibilityTargetSize pins WCAG 2.5.8 minimum hit targets in the
