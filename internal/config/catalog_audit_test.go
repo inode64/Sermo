@@ -1429,6 +1429,13 @@ func TestCatalogPMLFarmUsesResidentHelperProcessHealth(t *testing.T) {
 		if got := cfgval.String(process["exe"]); got != "" {
 			t.Fatalf("pmlogger_farm %s.process.exe = %q, want empty", section, got)
 		}
+		optional := cfgval.Bool(process["optional"])
+		if section == "checks" && !optional {
+			t.Fatalf("pmlogger_farm checks.process must be optional for long-lived pmpause after PCP upgrades")
+		}
+		if section == "postflight" && optional {
+			t.Fatalf("pmlogger_farm postflight.process must stay required")
+		}
 	}
 }
 

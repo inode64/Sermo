@@ -25,6 +25,7 @@ checks:
     expect: active
   process:
     type: process
+    optional: true  # Long-lived pmpause may show as pmsleep (deleted) after PCP upgrades.
     exe_any:
       - ${pmlogger_farm_pmpause_binary}
       - ${pmlogger_farm_pmsleep_binary}
