@@ -193,8 +193,9 @@ Ciclo de vida:
 
 Las unidades de montaje (cargadas desde `paths.mounts`, por defecto
 `/etc/sermo/mounts`) son acciones manuales del operador expuestas por
-`sermoctl mount|umount`; no son remediación del ciclo del daemon. Aun así usan
-la misma postura de seguridad:
+`sermoctl mount|umount` y por el panel **Mount units** de la interfaz web; no
+son remediación del ciclo del daemon. Aun así usan la misma postura de
+seguridad:
 
 - El origen, tipo y opciones de montaje provienen solo de `/etc/fstab`. Sermo ejecuta
   `mount <path>` / `umount <path>` con argv directamente y un timeout; nunca
@@ -207,6 +208,9 @@ la misma postura de seguridad:
 - Los desmontajes ocupados se reportan con los procesos que usan el montaje. Sermo no los
   señaliza a menos que `umount.allow_sigkill: true` o `stop_policy.force_kill:
   true` esté configurado explícitamente.
+- La interfaz web puede enviar una alerta TTY nativa a los usuarios con sesión
+  que sean propietarios de bloqueadores actuales. Usa el mismo notifier TTY en
+  Go que las notificaciones normales; no ejecuta `wall`, `write` ni un shell.
 - Cualquier política de montaje que pueda enviar SIGKILL debe definir
   `stop_policy.kill_only_if` con selectores `users` y `exe_any` restrictivos.
   La acotación por cmdline puede ayudar al descubrimiento, pero nunca autoriza un kill por

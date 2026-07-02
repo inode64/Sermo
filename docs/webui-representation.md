@@ -37,6 +37,7 @@ Keep changes concrete:
 | Service events | `GET /api/services/{name}/events` | per-service event feed |
 | Host watches | `GET /api/watches` | host-level watches |
 | Applications | `GET /api/applications` | installed catalog apps |
+| Mount units | `GET /api/mounts` | configured fstab-backed mount units |
 | Notifiers | `GET /api/notifiers` | notifier targets |
 | Daemon settings | `GET /api/daemon` | engine/runtime config |
 | Daemon process metrics | `GET /api/daemon/metrics` | persisted sermod CPU/memory/IO history |
@@ -57,6 +58,7 @@ enabled.
 | Service action | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; `no_cascade` skips `also_apply` targets on start/stop/restart |
 | Service preflight | `POST /api/services/{name}/preflight` | run preflight checks without changing service state |
 | Watch action | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand` |
+| Mount action | `POST /api/mounts/{name}/{action}[?kill=1]` | `mount`, `umount`, `blockers`, `alert`; `kill=1` enables policy-gated blocker signalling for `umount` |
 | Lock release | `POST /api/locks/{service}/release?name=NAME` | releases inactive stale/expired named locks; active locks are refused |
 | Events clear | `POST /api/events/clear?before=TIME` | clears persisted event/activity rows; `before` accepts RFC3339 or duration |
 | State compact | `POST /api/state/compact?before=TIME` | prunes old SLA/metrics/event history and vacuums the state database; matches `sermoctl state compact` |
@@ -220,6 +222,33 @@ Row expansion:
 Empty state:
 
 - `No applications match the filter.`
+
+## Mount units panel
+
+Section id: `mounts-section`
+
+| Part | Current representation |
+| --- | --- |
+| Title | `Mount units` plus total count |
+| Visibility | hidden when no configured mount units are returned |
+
+Columns:
+
+| Column | Meaning |
+| --- | --- |
+| Name | display name, falling back to mount name |
+| Path | configured mount path |
+| Mounted | live mount state |
+| Refcount | Sermo runtime refcount, or `off` |
+| Source | mount source label, currently `fstab` |
+| State | active/inactive/error pill |
+| Actions | admin-only `mount`; when mounted, `umount`, `alert`, and `kill+umount` |
+
+Before `umount`, `alert` or `kill+umount`, the UI asks
+`POST /api/mounts/{name}/blockers` and shows current processes using the path.
+`alert` sends a native TTY message to logged-in blocking users. `kill+umount`
+requires the configured mount policy to mark at least one current blocker
+killable.
 
 ## Host watch panels
 

@@ -195,8 +195,8 @@ Lifecycle:
 
 Mount units (loaded from `paths.mounts`, default
 `/etc/sermo/mounts`) are manual operator actions exposed by
-`sermoctl mount|umount`; they are not daemon-cycle remediation. They still use
-the same safety posture:
+`sermoctl mount|umount` and the Web UI **Mount units** panel; they are not
+daemon-cycle remediation. They still use the same safety posture:
 
 - Mount source, type and options come only from `/etc/fstab`. Sermo runs
   `mount <path>` / `umount <path>` with argv directly and a timeout; it never
@@ -209,6 +209,9 @@ the same safety posture:
 - Busy unmounts are reported with the processes using the mount. Sermo does not
   signal them unless `umount.allow_sigkill: true` or `stop_policy.force_kill:
   true` is explicitly configured.
+- The Web UI can send a native TTY alert to logged-in users that own current
+  blockers. This uses the same Go TTY notifier as normal notifications; it does
+  not run `wall`, `write` or a shell.
 - Any mount policy that can send SIGKILL must define
   `stop_policy.kill_only_if` with restrictive `users` and `exe_any` selectors.
   Cmdline narrowing may help discovery, but it never authorizes a kill by

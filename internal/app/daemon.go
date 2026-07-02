@@ -259,6 +259,15 @@ type Deps struct {
 	// UserLookup resolves users/groups for process discovery, kill policies and
 	// owner display. Optional: nil uses process.DefaultUserLookup.
 	UserLookup *process.UserLookup
+	// MountDiscoverUsers reports processes using a configured mount path for web
+	// mount blockers and unmount escalation. Optional: nil scans /proc.
+	MountDiscoverUsers func(string) ([]process.Process, error)
+	// MountSignaler sends TERM/KILL during policy-gated web umount escalation.
+	// Optional: nil uses process.OSSignaler.
+	MountSignaler process.Signaler
+	// MountUserAlerter sends a console alert to users blocking a web mount
+	// operation. Optional: nil uses the native tty notifier.
+	MountUserAlerter MountUserAlerter
 	// VolumeExpander grows storage-watch filesystems for `then.expand`. Optional:
 	// nil uses volume.Expander with ExecxRunner. Tests inject a fake so no real
 	// LVM/filesystem commands run.

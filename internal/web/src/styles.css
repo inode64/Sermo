@@ -100,8 +100,8 @@
   .services-table .unit-cell { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; }
   .services-table .event-cell { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; }
   .services-table .policy-cell { max-width: 11rem; }
-  .services-table .actions { min-width: 14rem; }
-  #rows tr:hover td, #watch-rows tr:hover td, #app-rows tr:hover td { background: color-mix(in srgb, var(--text) 4%, transparent); }
+  .services-table .actions, .mount-table .actions { min-width: 14rem; }
+  #rows tr:hover td, #watch-rows tr:hover td, #app-rows tr:hover td, #mount-rows tr:hover td { background: color-mix(in srgb, var(--text) 4%, transparent); }
   #rows tr.group-row:hover td, #app-rows tr.group-row:hover td { background: color-mix(in srgb, var(--accent) 11%, transparent); }
   /* Firing/warning row highlight. Applies to services (#rows), applications
      (#app-rows) and every watch panel (host #watch-rows, storage, network,
@@ -403,7 +403,7 @@
     .services-table th:nth-child(2), .services-table td:nth-child(2),
     .services-table th:nth-child(4), .services-table td:nth-child(4),
     .services-table th:nth-child(7), .services-table td:nth-child(7) { display: none; }
-    .services-table .actions { min-width: 0; white-space: normal; }
+    .services-table .actions, .mount-table .actions { min-width: 0; white-space: normal; }
     /* watches: every panel's table starts with Name and ends with Last activity ·
        State · Actions. On tablets keep Name and those trailing three, hiding the
        type-specific middle columns (the full data stays in each row's expansion).

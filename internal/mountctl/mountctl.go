@@ -282,6 +282,19 @@ func (c Controller) ReadStatus(spec Spec) (Status, error) {
 	return Status{Name: spec.Name, Path: spec.Path, Mounted: mounted, Refcount: state.Refcount, Source: "fstab", State: st}, nil
 }
 
+// Blockers reports processes currently using the mount path. An unmounted path
+// has no live blockers, so it returns an empty list without scanning /proc.
+func (c Controller) Blockers(ctx context.Context, spec Spec) ([]process.Process, error) {
+	mounted, err := c.isMounted(spec.Path)
+	if err != nil {
+		return nil, err
+	}
+	if !mounted {
+		return nil, nil
+	}
+	return c.discoverUsers(ctx, spec.Path)
+}
+
 func (c Controller) withLock(spec Spec, fn func() (Result, error)) (Result, error) {
 	ttl := c.LockTTL
 	if ttl <= 0 {

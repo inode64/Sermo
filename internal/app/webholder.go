@@ -85,6 +85,30 @@ func (h *WebBackendHolder) Mounts(ctx context.Context) []web.Mount {
 	return nil
 }
 
+// MountAction runs mount or umount through the active backend.
+func (h *WebBackendHolder) MountAction(ctx context.Context, name, action string, opts web.MountActionOptions) web.MountActionResult {
+	if b := h.backend(); b != nil {
+		return b.MountAction(ctx, name, action, opts)
+	}
+	return web.MountActionResult{OK: false, Name: name, Action: action, Message: "web backend unavailable"}
+}
+
+// MountBlockers reports current mount blockers through the active backend.
+func (h *WebBackendHolder) MountBlockers(ctx context.Context, name string) web.MountBlockersResult {
+	if b := h.backend(); b != nil {
+		return b.MountBlockers(ctx, name)
+	}
+	return web.MountBlockersResult{OK: false, Name: name, Message: "web backend unavailable"}
+}
+
+// AlertMountUsers sends a console alert through the active backend.
+func (h *WebBackendHolder) AlertMountUsers(ctx context.Context, name string) web.MountAlertResult {
+	if b := h.backend(); b != nil {
+		return b.AlertMountUsers(ctx, name)
+	}
+	return web.MountAlertResult{OK: false, Name: name, Message: "web backend unavailable"}
+}
+
 // DaemonInfo returns daemon and engine info from the active backend.
 func (h *WebBackendHolder) DaemonInfo(ctx context.Context) web.DaemonInfo {
 	if b := h.backend(); b != nil {

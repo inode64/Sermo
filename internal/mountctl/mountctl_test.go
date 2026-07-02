@@ -198,6 +198,35 @@ func TestReleaseBusyWithoutLazyReportsBlockers(t *testing.T) {
 	}
 }
 
+func TestBlockersScansOnlyWhenMounted(t *testing.T) {
+	mounted := false
+	runner := &fakeRunner{mounted: &mounted}
+	c := testController(t, &mounted, runner)
+	scans := 0
+	c.DiscoverUsers = func(string) ([]process.Process, error) {
+		scans++
+		return []process.Process{{PID: 123, User: "backup"}}, nil
+	}
+	spec := EphemeralSpec("/mnt/backup")
+
+	blockers, err := c.Blockers(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Blockers unmounted: %v", err)
+	}
+	if len(blockers) != 0 || scans != 0 {
+		t.Fatalf("unmounted blockers=%+v scans=%d, want no scan", blockers, scans)
+	}
+
+	mounted = true
+	blockers, err = c.Blockers(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Blockers mounted: %v", err)
+	}
+	if len(blockers) != 1 || blockers[0].PID != 123 || scans != 1 {
+		t.Fatalf("mounted blockers=%+v scans=%d", blockers, scans)
+	}
+}
+
 func TestReleaseBusySurfacesCanceledDiscoveryError(t *testing.T) {
 	mounted := true
 	runner := &fakeRunner{mounted: &mounted, busy: true}
