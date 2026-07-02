@@ -155,6 +155,10 @@ type Deps struct {
 	// MountSampler reads the mount table for storage/autofs checks and web watch
 	// summaries. Optional: nil reads /proc/mounts.
 	MountSampler checks.MountSamplerFunc
+	// OpenFilesByMount counts open file descriptors per mount point for the
+	// storage watch web display (display only). Optional: nil uses a
+	// self-contained /proc scan.
+	OpenFilesByMount func(mounts []checks.Mount) map[string]int64
 	// NetSampler reads one interface for net checks and web watch summaries.
 	// Optional: nil reads net.Interfaces and /sys/class/net.
 	NetSampler checks.NetSamplerFunc

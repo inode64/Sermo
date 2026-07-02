@@ -121,6 +121,7 @@ type WebBackend struct {
 	live             *LiveMetrics
 	storageUsage     checks.StorageUsageFunc
 	mountSampler     checks.MountSamplerFunc
+	openFilesSampler func(mounts []checks.Mount) map[string]int64
 	netSampler       checks.NetSamplerFunc
 	pingSampler      checks.PingSamplerFunc
 	oomSampler       checks.OomSamplerFunc
@@ -159,6 +160,10 @@ type WebBackend struct {
 
 	liveViewMu    sync.Mutex
 	liveViewCache map[string]cachedLiveView
+
+	openFilesMu      sync.Mutex
+	openFilesTally   map[string]int64
+	openFilesTallyAt time.Time
 }
 
 // cachedLiveView memoizes a watch's dashboard live-probe result for the watch's
@@ -212,6 +217,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		live:             deps.Live,
 		storageUsage:     deps.StorageUsage,
 		mountSampler:     deps.MountSampler,
+		openFilesSampler: deps.OpenFilesByMount,
 		netSampler:       deps.NetSampler,
 		pingSampler:      deps.PingSampler,
 		oomSampler:       deps.OomSampler,
@@ -1885,6 +1891,7 @@ func storageWatchInfo(w *webWatch, b *WebBackend) *web.StorageWatchInfo {
 		info.Device = mount.Device
 		info.FileSystem = mount.FSType
 		info.Options = slices.Clone(mount.Options)
+		info.OpenFiles = b.openFilesByMountCached(mounts)[mount.MountPoint]
 	}
 	return info
 }

@@ -1739,7 +1739,10 @@ function memoryInline(rss) {
 }
 
 function serviceMemCell(s) {
-  return memoryInline(s && s.rss);
+  const fds = s && s.fds
+    ? tpl` <span class="muted" title="open file descriptors">· ${Number(s.fds).toLocaleString()} fds</span>`
+    : nothing;
+  return tpl`${memoryInline(s && s.rss)}${fds}`;
 }
 
 function ioRWInline(read, write) {
@@ -2425,8 +2428,9 @@ function watchSummaryCell(w) {
     const mount = d.mount_point && d.mount_point !== d.path ? ` · ${d.mount_point}` : "";
     const usedPct = storageUsedPct(d);
     const bar = usedPct == null ? tpl`<span class="muted">—</span>` : usageBar(usedPct);
+    const openFiles = d.open_files ? tpl` · <span title="open files on this filesystem">${Number(d.open_files).toLocaleString()} open files</span>` : nothing;
     return tpl`<div>${d.path || ""}<span class="muted">${fs}${mount}</span></div>
-      <div>${bar} <span class="muted">· ${fmtBytes(d.used_bytes)} used · ${fmtBytes(d.free_bytes)} free</span></div>`;
+      <div>${bar} <span class="muted">· ${fmtBytes(d.used_bytes)} used · ${fmtBytes(d.free_bytes)} free${openFiles}</span></div>`;
   }
   return w.summary ? w.summary : "—";
 }
