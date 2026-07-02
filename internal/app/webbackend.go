@@ -36,6 +36,10 @@ const (
 	// health commands on ordinary dashboard refreshes. Apps change rarely, and
 	// app watches use a 5m default cadence for the same probes.
 	applicationsCacheTTL = 5 * time.Minute
+	// appInspectionParallelism bounds concurrent version/health probes for
+	// /api/applications so a cold dashboard load is faster without spawning one
+	// command per catalog app at once.
+	appInspectionParallelism = 4
 	// serviceStatusCacheTTL bounds how often the web list re-queries systemd/OpenRC.
 	// The dashboard refreshes every 30s by default, so keep status warm across
 	// ordinary refreshes instead of running one init status probe per service.
@@ -1952,25 +1956,50 @@ func (b *WebBackend) loadApplications(ctx context.Context) []web.Application {
 	if len(names) == 0 {
 		return nil
 	}
-	runner := execx.CommandRunner{}
+	runner := b.execRunner
+	if runner == nil {
+		runner = execx.CommandRunner{}
+	}
 	opts := appinspect.WithUserLookup(b.userLookup)
-	out := make([]web.Application, 0, len(names))
-	for _, name := range names {
+	type appResult struct {
+		app web.Application
+		ok  bool
+	}
+	results := make([]appResult, len(names))
+	sem := make(chan struct{}, appInspectionParallelism)
+	var wg sync.WaitGroup
+	for i, name := range names {
 		if b.settling != nil && !b.settling.Observed(SettlingAppKey(name)) {
 			resolved, _ := b.cfg.ResolveCatalog(config.CategoryApp, name)
-			out = append(out, web.Application{
+			results[i] = appResult{ok: true, app: web.Application{
 				Name:        name,
 				DisplayName: config.DisplayName(resolved.Tree, name),
 				Category:    config.CategoryLabel(resolved.Tree, config.CategoryApp),
 				State:       TargetStateStarting,
-			})
+			}}
 			continue
 		}
-		r := appinspect.InspectOne(ctx, runner, b.cfg, name, opts)
-		if !r.Installed {
-			continue
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				return
+			}
+			r := appinspect.InspectOne(ctx, runner, b.cfg, name, opts)
+			if r.Installed {
+				results[i] = appResult{app: applicationFromReport(r), ok: true}
+			}
+		}()
+	}
+	wg.Wait()
+	out := make([]web.Application, 0, len(names))
+	for _, result := range results {
+		if result.ok {
+			out = append(out, result.app)
 		}
-		out = append(out, applicationFromReport(r))
 	}
 	return b.withApplicationSLA(out)
 }
