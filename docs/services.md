@@ -1091,11 +1091,13 @@ variables:
 ```
 
 It is evaluated during resolution (so it can reference other variables such as
-`${config}`) and re-evaluated on every config reload. The variable spec must
-define `from_file`, `default`, and exactly one of `directive` or `pattern`.
-`pattern` must compile and include a capture group. A missing file or unmatched
-key uses `default`; malformed specs or unknown variables in `from_file` are
-validation errors.
+`${config}`) and re-evaluated on every config reload. `pattern` may also
+reference variables such as `${instance}`; those values are escaped as regex
+literals before the file is read. The variable spec must define `from_file`,
+`default`, and exactly one of `directive` or `pattern`. `pattern` must compile
+and include a capture group. A missing file or unmatched key uses `default`;
+malformed specs or unknown variables in `from_file` / `pattern` are validation
+errors.
 
 ### Listing installed applications
 

@@ -1,21 +1,17 @@
-name: upsdrv
-display_name: NUT UPS Drivers
+name: upsdrv.%i
+display_name: NUT UPS Driver ${instance}
 category: hardware
-description: Network UPS Tools driver supervisor.
+description: Network UPS Tools driver instance.
 service:
   systemd:
-    - nut-driver.target
+    - nut-driver@${instance}
   openrc:
-    - upsdrv
+    - upsdrv.${instance}
 variables:
   config: /etc/nut/ups.conf
-  instance:
-    from_file: ${config}
-    pattern: (?m)^\s*\[([A-Za-z0-9_.-]+)\]\s*$
-    default: ""
   driver:
     from_file: ${config}
-    pattern: (?m)^\s*driver\s*=\s*([A-Za-z0-9_.-]+)\s*$
+    pattern: (?ms)^\s*\[${instance}\]\s*$.*?^\s*driver\s*=\s*([A-Za-z0-9_.-]+)\s*$
     default: usbhid-ups
   user: nut
 config_files:
