@@ -144,9 +144,10 @@ func TestIndexShellAnchors(t *testing.T) {
 	wantIDs := []string{
 		"topbar", "favicon", "attention", "events",
 		"services-section", "apps-section", "watches-section", "events-section",
-		"storage-controls", "network-controls",
+		"storage-controls", "network-controls", "mount-controls",
 		"event-clear", "event-before", "event-reset-filters", "activity-clear",
 		"state-compact-btn", "state-before", "app-rows", "locks-rows",
+		"mount-search", "mount-category", "mount-filters", "mount-filter-count",
 		"action-confirm", "confirm-no-cascade", "simple-confirm",
 	}
 	for _, id := range wantIDs {
@@ -160,10 +161,13 @@ func TestIndexShellAnchors(t *testing.T) {
 		t.Errorf("want 3 <dialog> elements, got %d", dialogs)
 	}
 
-	for _, h := range []string{"Uptime", "CPU total", "Memory", "FDs", "IO R/W", "State", "Type", "Actions"} {
+	for _, h := range []string{"Uptime", "CPU total", "Memory", "FDs", "IO R/W", "State", "Type", "Group", "Processes", "Users", "Actions"} {
 		if !headers[h] {
 			t.Errorf("shell missing static <th> %q", h)
 		}
+	}
+	if headers["Source"] {
+		t.Errorf("shell still exposes static <th> Source")
 	}
 }
 

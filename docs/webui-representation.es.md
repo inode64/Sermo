@@ -232,21 +232,23 @@ Section id: `mounts-section`
 | --- | --- |
 | Título | `Mount units` más el recuento total |
 | Visibilidad | oculto cuando no se devuelven unidades de montaje configuradas |
+| Controles | búsqueda por texto del mount, selector de grupo cuando hay más de uno, filtros de estado (`all`, `active`, `inactive`) |
 
 Columnas:
 
 | Columna | Significado |
 | --- | --- |
 | Name | nombre para mostrar, con fallback al nombre del mount |
+| Group | etiqueta de categoría/grupo del mount |
 | Path | ruta de montaje configurada |
 | Mounted | estado de montaje en vivo |
 | Refcount | refcount de runtime de Sermo, o `off` |
 | Processes | lista compacta de procesos que usan actualmente la ruta de montaje |
 | Users | usuarios únicos de esos procesos |
-| Source | etiqueta de origen del montaje, actualmente `fstab` |
 | State | insignia active/inactive/error |
 | Actions | `mount` solo para admin; cuando está montado, `umount`, `alert` y `kill+umount` |
 
+Todas las cabeceras salvo Actions son ordenables.
 `GET /api/mounts` incluye un resumen read-only cacheado de blockers para la tabla.
 Antes de `umount`, `alert` o `kill+umount`, la UI consulta
 `POST /api/mounts/{name}/blockers` y muestra una lista fresca de procesos para la
