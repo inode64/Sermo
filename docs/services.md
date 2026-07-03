@@ -838,6 +838,9 @@ service:
   systemd: ["postgresql-${version}", "postgres-${version}"]
   openrc: ["postgresql-${version}", "postgres-${version}"]
 apps: ["postgres-${version}"]
+variables:
+  data_dir: /var/lib/postgresql/${version}/data
+pidfile: "${data_dir}/postmaster.pid"
 ```
 
 On load, Sermo discovers app versions by globbing the linked app's
