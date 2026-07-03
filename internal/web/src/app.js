@@ -617,6 +617,11 @@ let svcStatus = "all"; // all | disabled | stopped | started | starting | collec
 let svcCategory = "all";
 let svcGrouped = false;
 let svcCollapsedGroups = new Set();
+let allMounts = [];
+let mountQuery = "";
+let mountStatus = "all";
+let mountCategory = "all";
+let mountSort = { key: "", dir: 1 };
 let expanded = new Set(); // open expansions, keyed "svc:<name>" / "wat:<name>" / "app:<name>"
 let appGrouped = false;
 let appCollapsedGroups = new Set();
@@ -688,6 +693,12 @@ function restoreUIState() {
     if (s.svcSort && typeof s.svcSort.key === "string") {
       svcSort = { key: s.svcSort.key, dir: s.svcSort.dir === -1 ? -1 : 1 };
     }
+    if (typeof s.mountQuery === "string") mountQuery = s.mountQuery;
+    if (typeof s.mountStatus === "string") mountStatus = normalizeMountStatusFilter(s.mountStatus);
+    if (typeof s.mountCategory === "string") mountCategory = s.mountCategory;
+    if (s.mountSort && typeof s.mountSort.key === "string") {
+      mountSort = { key: s.mountSort.key, dir: s.mountSort.dir === -1 ? -1 : 1 };
+    }
     if (typeof s.appQuery === "string") appQuery = s.appQuery;
     if (typeof s.appStatus === "string") appStatus = s.appStatus;
     if (s.appSort && typeof s.appSort.key === "string") {
@@ -732,6 +743,7 @@ function saveUIState() {
   try {
     localStorage.setItem(UI_STATE_KEY, JSON.stringify({
       svcQuery, svcStatus, svcCategory, svcGrouped, svcSort,
+      mountQuery, mountStatus, mountCategory, mountSort,
       appQuery, appStatus, appSort, appGrouped,
       metricWindow, daemonMetricWindow,
       expanded: [...expanded],
@@ -758,6 +770,11 @@ function applyUIStateToControls() {
   syncFilterButtons("#svc-filters", "f", svcStatus);
   const svcCategorySelect = $("#svc-category");
   if (svcCategorySelect) svcCategorySelect.value = svcCategory;
+  const mountSearch = $("#mount-search");
+  if (mountSearch) mountSearch.value = mountQuery;
+  syncFilterButtons("#mount-filters", "mf", mountStatus);
+  const mountCategorySelect = $("#mount-category");
+  if (mountCategorySelect) mountCategorySelect.value = mountCategory;
   const appSearch = $("#app-search");
   if (appSearch) appSearch.value = appQuery;
   syncFilterButtons("#app-filters", "af", appStatus);
@@ -1259,7 +1276,7 @@ function sortedBy(list, sort, sortKeys, fallbackKey) {
 
 function renderFilterButtonCounts(selector, counts) {
   document.querySelectorAll(`${selector} button`).forEach((b) => {
-    const key = b.dataset.f || b.dataset.wf || b.dataset.af;
+    const key = b.dataset.f || b.dataset.wf || b.dataset.af || b.dataset.mf;
     if (counts[key] !== undefined) b.innerHTML = `${filterButtonLabel(key)} <span class="muted">${counts[key]}</span>`;
   });
 }
@@ -1294,6 +1311,16 @@ function normalizeWatchStatusFilter(v) {
       return "all";
     default:
       return v || "all";
+  }
+}
+
+function normalizeMountStatusFilter(v) {
+  switch (v) {
+    case "active":
+    case "inactive":
+      return v;
+    default:
+      return "all";
   }
 }
 
@@ -3519,6 +3546,22 @@ function mountStateClass(state, mounted) {
   return "state-stopped";
 }
 
+function mountStateText(m) {
+  const state = String((m && m.state) || "").toLowerCase();
+  if (state === "error") return "error";
+  if ((m && m.mounted) || state === "active") return "active";
+  return "inactive";
+}
+
+function mountStateRank(m) {
+  switch (mountStateText(m)) {
+    case "active": return 0;
+    case "inactive": return 1;
+    case "error": return 2;
+    default: return 3;
+  }
+}
+
 function mountBlockers(m) {
   return Array.isArray(m.blockers) ? m.blockers : [];
 }
@@ -3543,6 +3586,10 @@ function mountProcessesCell(m) {
 
 function mountUsersCell(m) {
   if (m.blocker_error) return '<span class="muted">—</span>';
+  return mountUsageCell(mountUserNames(m));
+}
+
+function mountUserNames(m) {
   const seen = new Set();
   const users = [];
   for (const p of mountBlockers(m)) {
@@ -3551,23 +3598,102 @@ function mountUsersCell(m) {
     seen.add(user);
     users.push(user);
   }
-  return mountUsageCell(users);
+  return users;
+}
+
+function mountCategoryCell(category) {
+  return `<span class="category-badge" title="${esc(category)}">${esc(category)}</span>`;
+}
+
+const mountSortKeys = {
+  name: (m) => displayName(m).toLowerCase(),
+  category: (m) => categoryOf(m, "storage").toLowerCase(),
+  path: (m) => (m.path || "").toLowerCase(),
+  mounted: (m) => mountStateRank(m),
+  refcount: (m) => numericSortValue(m && m.refcount),
+  processes: (m) => mountBlockers(m).length,
+  users: (m) => mountUserNames(m).length,
+  state: (m) => mountStateRank(m),
+};
+
+function setMountSort(key) { toggleSort(mountSort, key, renderMounts); }
+function setMountQuery(v) { mountQuery = (v || "").trim().toLowerCase(); renderMounts(); saveUIState(); }
+function setMountCategory(v) { mountCategory = v || "all"; renderMounts(); saveUIState(); }
+function setMountStatus(v) {
+  mountStatus = normalizeMountStatusFilter(v);
+  syncFilterButtons("#mount-filters", "mf", mountStatus);
+  renderMounts();
+  saveUIState();
+}
+
+function mountMatches(m) {
+  const category = categoryOf(m, "storage");
+  if (mountCategory !== "all" && category !== mountCategory) return false;
+  if (mountStatus !== "all" && mountStateText(m) !== mountStatus) return false;
+  if (!mountQuery) return true;
+  const hay = [
+    displayName(m), m.name || "", m.display_name || "", category, m.path || "",
+    mountStateText(m), ...mountBlockers(m).map(mountProcessLabel), ...mountUserNames(m),
+  ].join(" ").toLowerCase();
+  return hay.includes(mountQuery);
+}
+
+function renderMountFilterCounts() {
+  const mounts = allMounts || [];
+  renderFilterButtonCounts("#mount-filters", {
+    all: mounts.length,
+    active: mounts.filter((m) => mountStateText(m) === "active").length,
+    inactive: mounts.filter((m) => mountStateText(m) === "inactive").length,
+  });
+}
+
+function syncMountCategorySelect() {
+  const select = $("#mount-category");
+  if (!select) return mountCategory || "all";
+  const categories = sortedCategories(allMounts || [], "storage");
+  const counts = categoryCounts(allMounts || [], "storage");
+  const visible = categories.length > 1;
+  select.classList.toggle("panel-hidden", !visible);
+  select.disabled = !visible;
+  const next = visible && mountCategory !== "all" && categories.includes(mountCategory) ? mountCategory : "all";
+  select.innerHTML = `<option value="all">all groups</option>` + categories.map((category) =>
+    `<option value="${esc(category)}">${esc(category)} (${counts.get(category) || 0})</option>`
+  ).join("");
+  select.value = next;
+  return next;
+}
+
+function updateMountSortIndicators() {
+  updateSortIndicatorsFor("mi", mountSort, ".mount-table th.sortable[data-mount-sort]", "mountSort");
 }
 
 function renderMounts(mounts) {
+  if (mounts) allMounts = mounts;
   const section = $("#mounts-section");
   const tbody = $("#mount-rows");
   const cnt = $("#mounts-count");
+  const filterCount = $("#mount-filter-count");
   if (!section || !tbody) return;
-  if (!mounts || mounts.length === 0) {
+  const total = (allMounts || []).length;
+  if (total === 0) {
     setPanelVisible(section, false);
     if (cnt) cnt.textContent = "";
+    if (filterCount) filterCount.textContent = "";
     return;
   }
   setPanelVisible(section, true);
-  if (cnt) cnt.textContent = `(${mounts.length})`;
-  const rows = mounts.map((m) => {
+  if (cnt) cnt.textContent = `(${total})`;
+  mountCategory = syncMountCategorySelect();
+  renderMountFilterCounts();
+  const list = (allMounts || []).filter(mountMatches);
+  if (mountSort.key && mountSortKeys[mountSort.key]) {
+    sortedBy(list, mountSort, mountSortKeys, "name");
+  }
+  updateMountSortIndicators();
+  if (filterCount) filterCount.textContent = (mountQuery || mountStatus !== "all" || mountCategory !== "all") ? `showing ${list.length} of ${total}` : "";
+  const rows = list.map((m) => {
     const label = esc(m.display_name || m.name);
+    const category = categoryOf(m, "storage");
     const mounted = !!m.mounted;
     const state = m.state || (mounted ? "active" : "inactive");
     const detail = m.message ? ` title="${esc(m.message)}"` : "";
@@ -3576,17 +3702,17 @@ function renderMounts(mounts) {
     const actions = mountActionButtons(m, mounted);
     return `<tr${detail}>
       <td>${label}</td>
+      <td>${mountCategoryCell(category)}</td>
       <td><code>${esc(m.path || "")}</code></td>
       <td>${mounted ? '<span class="ok">yes</span>' : '<span class="muted">no</span>'}</td>
       <td>${refcount}</td>
       <td class="mount-processes">${mountProcessesCell(m)}</td>
       <td class="mount-users">${mountUsersCell(m)}</td>
-      <td class="muted">${esc(m.source || "—")}</td>
       <td><span class="target-state ${mountStateClass(state, mounted)}">${esc(state)}</span></td>
       <td class="actions" data-mount-row="${name}">${actions}</td>
     </tr>`;
   });
-  tbody.innerHTML = rows.join("") || `<tr><td colspan="9" class="muted">No mount units.</td></tr>`;
+  tbody.innerHTML = rows.join("") || `<tr><td colspan="9" class="muted">No mount units match the filter.</td></tr>`;
 }
 
 function mountActionButtons(m, mounted) {
@@ -5194,6 +5320,32 @@ function initStaticHandlers() {
 
   document.querySelectorAll(".watch-table th.sortable[data-watch-sort]").forEach((th) => {
     bindSortHeader(th, () => setWatchSort(watchPanelKeyForElement(th), th.dataset.watchSort || ""));
+  });
+
+  const mountSearch = $("#mount-search");
+  if (mountSearch) {
+    mountSearch.addEventListener("input", () => setMountQuery(mountSearch.value));
+    mountSearch.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        mountSearch.value = "";
+        setMountQuery("");
+      }
+    });
+  }
+
+  const mountCategorySelect = $("#mount-category");
+  if (mountCategorySelect) mountCategorySelect.addEventListener("change", () => setMountCategory(mountCategorySelect.value));
+
+  const mountFilters = $("#mount-filters");
+  if (mountFilters) {
+    mountFilters.addEventListener("click", (e) => {
+      const btn = closestFrom(e, "button[data-mf]");
+      if (btn) setMountStatus(btn.dataset.mf || "all");
+    });
+  }
+
+  document.querySelectorAll(".mount-table th.sortable[data-mount-sort]").forEach((th) => {
+    bindSortHeader(th, () => setMountSort(th.dataset.mountSort || ""));
   });
 
   const appSearch = $("#app-search");

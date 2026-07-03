@@ -240,9 +240,9 @@
   #act-last { flex: 1; min-width: 180px; }
   section#locks-section { margin-top: 1rem; }
   .panel-controls input { min-width: 13rem; }
-  #svc-filters button, #storage-filters button, #watch-filters button, #network-filters button, #app-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
-  #svc-filters button:hover, #storage-filters button:hover, #watch-filters button:hover, #network-filters button:hover, #app-filters button:hover { background: var(--panel-2); color: var(--text); }
-  #svc-filters button.f-active, #storage-filters button.f-active, #watch-filters button.f-active, #network-filters button.f-active, #app-filters button.f-active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
+  #svc-filters button, #storage-filters button, #watch-filters button, #network-filters button, #mount-filters button, #app-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
+  #svc-filters button:hover, #storage-filters button:hover, #watch-filters button:hover, #network-filters button:hover, #mount-filters button:hover, #app-filters button:hover { background: var(--panel-2); color: var(--text); }
+  #svc-filters button.f-active, #storage-filters button.f-active, #watch-filters button.f-active, #network-filters button.f-active, #mount-filters button.f-active, #app-filters button.f-active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
   #err { min-height: 1.2rem; }
   #err.status-err { color: var(--crit); }
   #err.status-ok { color: var(--ok); }
@@ -483,8 +483,8 @@
     /* watches: keep Name and the trailing Last activity · State · Actions. */
     .watch-table th:not(:first-child):not(:nth-last-child(-n+3)),
     .watch-table td:not(:first-child):not(:nth-last-child(-n+3)) { display: none; }
-    /* mount units: hide Source first; usage remains visible on tablet widths. */
-    .mount-table th:nth-child(7), .mount-table td:nth-child(7) { display: none; }
+    /* mount units: hide Refcount first; usage remains visible on tablet widths. */
+    .mount-table th:nth-child(5), .mount-table td:nth-child(5) { display: none; }
   }
   @media (max-width: 760px) { .metric-grid { grid-template-columns: 1fr; } }
   @media (max-width: 640px) {
@@ -514,9 +514,10 @@
     /* apps -> Application · Status · Version · Last activity. */
     .apps-table th:nth-child(2), .apps-table td:nth-child(2) { display: none; }
     /* mount units -> Name · Path · Mounted · State · Actions. */
-    .mount-table th:nth-child(4), .mount-table td:nth-child(4),
+    .mount-table th:nth-child(2), .mount-table td:nth-child(2),
     .mount-table th:nth-child(5), .mount-table td:nth-child(5),
-    .mount-table th:nth-child(6), .mount-table td:nth-child(6) { display: none; }
+    .mount-table th:nth-child(6), .mount-table td:nth-child(6),
+    .mount-table th:nth-child(7), .mount-table td:nth-child(7) { display: none; }
     /* events -> Time · Service/watch · Message. */
     .events th:nth-child(3), .events td:nth-child(3) { display: none; }
     /* notifiers -> Name · Type · State. */
