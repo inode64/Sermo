@@ -100,7 +100,8 @@
   .services-table .unit-cell { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; }
   .services-table .event-cell, .apps-table .event-cell { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; }
   .services-table .policy-cell { max-width: 11rem; }
-  .services-table .actions, .mount-table .actions { min-width: 14rem; }
+  .services-table .actions { min-width: 14rem; max-width: 22rem; white-space: normal; }
+  .mount-table .actions { min-width: 14rem; }
   #rows tr:hover > td, #watch-rows tr:hover > td, #app-rows tr:hover > td, #mount-rows tr:hover > td { background: color-mix(in srgb, var(--text) 4%, transparent); }
   #rows tr.group-row:hover > td, #app-rows tr.group-row:hover > td { background: color-mix(in srgb, var(--accent) 11%, transparent); }
   /* Firing/warning row highlight. Applies to services (#rows), applications
@@ -177,7 +178,7 @@
   button:hover { background: var(--panel-2); border-color: var(--text-2); }
   button:disabled { opacity: .38; cursor: not-allowed; }
   button:disabled:hover { background: var(--panel); border-color: var(--line-2); }
-  .actions button { margin-right: .25rem; min-width: 24px; min-height: 24px; }
+  .actions button { margin-right: .25rem; margin-bottom: .25rem; min-width: 24px; min-height: 24px; }
   /* row-toggle: a real <button> that drives row/cross-ref expansion but reads as
      inline text, so the disclosure is keyboard-operable (Enter/Space, focusable)
      and exposes aria-expanded — without looking like a chrome button.
@@ -386,61 +387,6 @@
     left: 0; top: 0; white-space: normal;
   }
 
-
-  /* ---- responsive: tablet & phone ------------------------------------------
-     The layout is fluid by default (auto-fit tiles, 100%-width tables). Below
-     these breakpoints the wide data tables drop their desktop min-width and shed
-     secondary columns progressively — the full data stays one tap away in each
-     row's expansion. The :nth-child indices map to each table's <thead> order;
-     colspan group/expansion rows have a single cell so they are never hidden. */
-  @media (max-width: 1024px) {
-    /* services (1 Service · 2 Category · 3 State · 4 Uptime · 5 CPU · 6 Memory ·
-       7 FDs · 8 IO · 9 Last activity · 10 Actions): drop the desktop min-width,
-       hide Category/Uptime/IO and let the action buttons wrap instead of
-       reserving a wide column. */
-    .services-table { min-width: 0; }
-    .services-table th:nth-child(2), .services-table td:nth-child(2),
-    .services-table th:nth-child(4), .services-table td:nth-child(4),
-    .services-table th:nth-child(8), .services-table td:nth-child(8) { display: none; }
-    .services-table .actions, .mount-table .actions { min-width: 0; white-space: normal; }
-    /* watches: every panel's table starts with Name and ends with Last activity ·
-       State · Actions. On tablets keep Name and those trailing three, hiding the
-       type-specific middle columns (the full data stays in each row's expansion).
-       nth-last-child keeps this correct across panels with different column counts
-       (host/network 6 · storage 7 · cert/diskio 8). */
-    .watch-table { min-width: 0; }
-    .watch-table th:not(:first-child):not(:nth-last-child(-n+3)),
-    .watch-table td:not(:first-child):not(:nth-last-child(-n+3)) { display: none; }
-  }
-  @media (max-width: 760px) { .metric-grid { grid-template-columns: 1fr; } }
-  @media (max-width: 640px) {
-    /* Tighten the page chrome: smaller gutters (kept in sync with the sticky
-       topbar's negative margin) and denser cards/tiles. */
-    body { padding: 0 .7rem 1rem; }
-    #topbar { padding: .7rem .7rem .5rem; margin: 0 -.7rem .35rem; }
-    #overview { grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: .5rem; }
-    .tile { min-height: 5.4rem; padding: .5rem .6rem .55rem; }
-    .tile .t-value { font-size: 1.2rem; }
-    details, section#locks-section { padding: 0 .7rem; }
-    summary { padding: .6rem .7rem; margin: 0 -.7rem; }
-    /* The search field owns its row; filters/count wrap underneath. */
-    .panel-controls input { min-width: 0; flex: 1 1 100%; }
-    #event-controls { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
-    /* services → Service · State · Last activity · Actions (also hide CPU/Memory/FDs). */
-    .services-table th:nth-child(5), .services-table td:nth-child(5),
-    .services-table th:nth-child(6), .services-table td:nth-child(6),
-    .services-table th:nth-child(7), .services-table td:nth-child(7) { display: none; }
-    .services-table td { white-space: normal; }
-    .services-table .svc-sub, .services-table .unit-cell, .services-table .event-cell, .apps-table .event-cell { max-width: 60vw; }
-    /* watches → Name · State · Actions (also drop Last activity). */
-    .watch-table th:not(:first-child):not(:nth-last-child(-n+2)),
-    .watch-table td:not(:first-child):not(:nth-last-child(-n+2)) { display: none; }
-    /* apps → Application · Status · Version · Last activity (hide Category). */
-    .apps-table th:nth-child(2), .apps-table td:nth-child(2) { display: none; }
-    /* events → Time · Service/watch · Message (hide Kind). */
-    .events th:nth-child(3), .events td:nth-child(3) { display: none; }
-  }
-
   /* ---- events ---------------------------------------------------------------- */
   .events { width: 100%; font-size: .88rem; }
   .events td { vertical-align: top; }
@@ -488,6 +434,80 @@
   .usagebar.usagebar-sm .usagebar-label { font-size: .58rem; }
   .watch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .35rem 1rem; margin: .2rem 0 .65rem; font-size: .9rem; }
   .watch-grid div { min-width: 0; overflow-wrap: anywhere; }
+
+  /* ---- responsive: tablet & phone ------------------------------------------
+     Keep the document itself fluid: wide data tables shed secondary columns and
+     let action buttons wrap inside their cells instead of forcing page-wide
+     horizontal scroll. The full data remains available in each row expansion.
+     This block intentionally lives after the base table min-width rules. */
+  @media (max-width: 1024px) {
+    .services-table, .watch-table, .apps-table {
+      min-width: 0;
+      max-width: 100%;
+    }
+    .services-table .actions, .watch-table .actions, .mount-table .actions {
+      min-width: 0;
+      white-space: normal;
+    }
+    /* services (1 Service · 2 Category · 3 State · 4 Uptime · 5 CPU · 6 Memory ·
+       7 FDs · 8 IO · 9 Last activity · 10 Actions): keep the operator-critical
+       identity/state/activity/action columns and move metrics to expansion. */
+    .services-table th:nth-child(2), .services-table td:nth-child(2),
+    .services-table th:nth-child(4), .services-table td:nth-child(4),
+    .services-table th:nth-child(5), .services-table td:nth-child(5),
+    .services-table th:nth-child(6), .services-table td:nth-child(6),
+    .services-table th:nth-child(7), .services-table td:nth-child(7),
+    .services-table th:nth-child(8), .services-table td:nth-child(8) { display: none; }
+    .services-table .svc-main {
+      min-width: 0;
+    }
+    .services-table .row-toggle {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    /* watches: keep Name and the trailing Last activity · State · Actions. */
+    .watch-table th:not(:first-child):not(:nth-last-child(-n+3)),
+    .watch-table td:not(:first-child):not(:nth-last-child(-n+3)) { display: none; }
+  }
+  @media (max-width: 760px) { .metric-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 640px) {
+    body { padding: 0 .7rem 1rem; }
+    #topbar { padding: .7rem .7rem .5rem; margin: 0 -.7rem .35rem; }
+    #overview { grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: .5rem; }
+    .tile { min-height: 5.4rem; padding: .5rem .6rem .55rem; }
+    .tile .t-value { font-size: 1.2rem; }
+    details, section#locks-section { padding: 0 .7rem; }
+    summary { padding: .6rem .7rem; margin: 0 -.7rem; }
+    .panel-controls input { min-width: 0; flex: 1 1 100%; }
+    #event-controls { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+    .services-table th, .services-table td,
+    .watch-table th, .watch-table td,
+    .apps-table th, .apps-table td,
+    .events th, .events td {
+      padding: .34rem .38rem;
+    }
+    /* services -> Service · State · Actions. */
+    .services-table th:nth-child(9), .services-table td:nth-child(9) { display: none; }
+    .services-table td { white-space: normal; }
+    .services-table .svc-sub, .services-table .unit-cell, .services-table .event-cell, .apps-table .event-cell { max-width: 60vw; }
+    /* watches -> Name · State · Actions. */
+    .watch-table th:not(:first-child):not(:nth-last-child(-n+2)),
+    .watch-table td:not(:first-child):not(:nth-last-child(-n+2)) { display: none; }
+    /* apps -> Application · Status · Version · Last activity. */
+    .apps-table th:nth-child(2), .apps-table td:nth-child(2) { display: none; }
+    /* events -> Time · Service/watch · Message. */
+    .events th:nth-child(3), .events td:nth-child(3) { display: none; }
+    /* notifiers -> Name · Type · State. */
+    #notifiers-section th:nth-child(3), #notifiers-section td:nth-child(3),
+    #notifiers-section th:nth-child(4), #notifiers-section td:nth-child(4) { display: none; }
+    #app-footer .footer-version {
+      margin-left: 0;
+      flex-basis: 100%;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      text-align: center;
+    }
+  }
 
   /* ---- transient banners ------------------------------------------------------ */
   #op-live { display: none; margin: .8rem 0 0; padding: .65rem .8rem; border: 1px solid var(--line); border-left: 3px solid var(--info); border-radius: var(--radius-s); background: var(--panel); box-shadow: var(--shadow); }
