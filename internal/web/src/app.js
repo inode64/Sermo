@@ -1750,7 +1750,7 @@ function procCpuCells(p) {
   return tpl`<td>${fmtNum(cpu, 2)}%</td><td>${cpuBarMini(cpu)}</td>`;
 }
 function procIoFdThreadCells(p) {
-  const io = (p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—';
+  const io = p && p.has_io ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—';
   return tpl`<td>${io}</td><td class="muted">${p.fds || '—'}</td><td class="muted">${p.threads || '—'}</td>`;
 }
 function procCmd(p) {
@@ -1845,16 +1845,16 @@ function serviceFDsCell(s) {
   return tpl`<span title="open file descriptors">${fmtNum(s.fds, 0)}</span>`;
 }
 
-function ioRWInline(read, write) {
+function ioRWInline(read, write, hasIO) {
   read = Number(read) || 0;
   write = Number(write) || 0;
-  if (!read && !write) return tpl`<span class="muted">—</span>`;
+  if (!hasIO && !read && !write) return tpl`<span class="muted">—</span>`;
   return tpl`<span title="read / write">${fmtBytes(read)} / ${fmtBytes(write)}</span>`;
 }
 
 function serviceIoCell(s) {
   if (serviceHasNoResidentProcess(s)) return tpl`<span class="muted">—</span>`;
-  return ioRWInline(s && s.io_read, s && s.io_write);
+  return ioRWInline(s && s.io_read, s && s.io_write, !!(s && s.has_io));
 }
 
 function slaWindowLabel(window) {
@@ -2175,6 +2175,7 @@ function renderServiceDetail(d) {
     rss: procs.reduce((a, p) => a + (p.rss || 0), 0),
     io_read: procs.reduce((a, p) => a + (p.io_read || 0), 0),
     io_write: procs.reduce((a, p) => a + (p.io_write || 0), 0),
+    has_io: procs.some((p) => p.has_io),
     fds: procs.reduce((a, p) => a + (p.fds || 0), 0),
     threads: procs.reduce((a, p) => a + (p.threads || 0), 0),
     count: procs.length,
@@ -2187,7 +2188,7 @@ function renderServiceDetail(d) {
     ? tpl` ${usageBarMini(memPct(pt.rss || 0), fmtPct(memPct(pt.rss || 0)))}`
     : nothing;
   const totals = pt
-    ? tpl`<p class="muted detail-totals">Service totals (including child processes): memory <b>${fmtBytes(pt.rss || 0)}</b>${totalBar}${cpuTotalsLine(pt)} · IO r/w <b>${fmtBytes(pt.io_read || 0)} / ${fmtBytes(pt.io_write || 0)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? "" : "es"}</p>`
+    ? tpl`<p class="muted detail-totals">Service totals (including child processes): memory <b>${fmtBytes(pt.rss || 0)}</b>${totalBar}${cpuTotalsLine(pt)} · IO r/w <b>${ioRWInline(pt.io_read, pt.io_write, !!pt.has_io)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? "" : "es"}</p>`
     : nothing;
   const procWarns = procWarnings.map((w) => tpl`<div class="bad detail-warn">discovery warning: ${w}</div>`);
   const procSummary = tpl`<p class="muted detail-summary">${procs.length} discovered${procWarnings.length ? ` · ${procWarnings.length} discovery warning${procWarnings.length === 1 ? "" : "s"}` : ""}</p>`;
@@ -2261,7 +2262,7 @@ function renderServiceDetail(d) {
     : tpl`<div><span class="muted">Processes</span><br>${pt ? `${pt.count} process${pt.count === 1 ? "" : "es"}` : tpl`<span class="muted">—</span>`}</div>
       <div><span class="muted">CPU total</span><br>${totalsCpuCell(pt)}</div>
       <div><span class="muted">Memory</span><br>${memoryInline(pt && pt.rss)}</div>
-      <div><span class="muted">IO R/W</span><br>${ioRWInline(pt && pt.io_read, pt && pt.io_write)}</div>
+      <div><span class="muted">IO R/W</span><br>${ioRWInline(pt && pt.io_read, pt && pt.io_write, !!(pt && pt.has_io))}</div>
       <div><span class="muted">FDs / Threads</span><br>${pt ? `${pt.fds || 0} / ${pt.threads || 0}` : tpl`<span class="muted">—</span>`}</div>`;
   const general = tpl`<h2>General data</h2>
     <div class="runtime-grid">

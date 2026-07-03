@@ -163,7 +163,7 @@ Columnas:
 | CPU total | último uso de CPU de todo el árbol de procesos; vacío para servicios `no_resident_process` |
 | Memory | última memoria residente del árbol de procesos; vacío para servicios `no_resident_process` |
 | FDs | recuento de descriptores de archivo abiertos del árbol de procesos; vacío para servicios `no_resident_process` |
-| IO R/W | bytes acumulados de lectura/escritura en disco del árbol de procesos; vacío para servicios `no_resident_process` |
+| IO R/W | bytes acumulados de lectura/escritura en disco del árbol de procesos; muestra `0 B / 0 B` cuando `/proc/<pid>/io` es legible y ambos contadores son cero; vacío significa `no_resident_process` o contadores ilegibles |
 | Actions | un botón start/stop según el estado, restart, reload, resume, monitor/unmonitor; reload se desactiva cuando `can_reload` es false; el diálogo de confirmación de start/stop/restart ofrece **skip also_apply** cuando `also_apply` está definido |
 
 Expansión de fila:
