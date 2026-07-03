@@ -2,7 +2,11 @@ name: apcsmart
 display_name: "APC Smart UPS Driver"
 category: hardware
 variables:
-  binary: "/lib/nut/apcsmart"
+  binary:
+    - /usr/lib64/nut/apcsmart
+    - /lib64/nut/apcsmart
+    - /usr/lib/nut/apcsmart
+    - /lib/nut/apcsmart
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-V"], timeout: 10s }

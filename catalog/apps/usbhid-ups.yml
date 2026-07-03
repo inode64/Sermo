@@ -2,7 +2,11 @@ name: usbhid-ups
 display_name: "USB HID UPS Driver"
 category: hardware
 variables:
-  binary: "/lib/nut/usbhid-ups"
+  binary:
+    - /usr/lib64/nut/usbhid-ups
+    - /lib64/nut/usbhid-ups
+    - /usr/lib/nut/usbhid-ups
+    - /lib/nut/usbhid-ups
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-V"], timeout: 10s }
