@@ -101,8 +101,9 @@ func TestWebBackendOperateStopStartSyncsMonitoring(t *testing.T) {
 		entries: map[string]*webEntry{
 			"web": {engine: engine},
 		},
-		store: store,
-		emit:  func(e Event) { events = append(events, e) },
+		store:             store,
+		operationSettling: store,
+		emit:              func(e Event) { events = append(events, e) },
 	}
 
 	res := b.Operate(context.Background(), "web", "stop", web.OperateOpts{})
@@ -111,6 +112,9 @@ func TestWebBackendOperateStopStartSyncsMonitoring(t *testing.T) {
 	}
 	if store.active["web"] || store.source["web"] != state.SourceWebManualStop {
 		t.Fatalf("store after stop active=%v source=%q", store.active["web"], store.source["web"])
+	}
+	if _, found, _ := store.OperationSettling("web"); found {
+		t.Fatal("stop should clear operation settling after pausing monitoring")
 	}
 	if len(events) != 1 || events[0].Action != "unmonitor" || events[0].Message != "monitoring paused after manual stop" {
 		t.Fatalf("stop events = %+v", events)
@@ -122,6 +126,13 @@ func TestWebBackendOperateStopStartSyncsMonitoring(t *testing.T) {
 	}
 	if !store.active["web"] || store.source["web"] != state.SourceWeb {
 		t.Fatalf("store after start active=%v source=%q", store.active["web"], store.source["web"])
+	}
+	rec, found, err := store.OperationSettling("web")
+	if err != nil || !found {
+		t.Fatalf("start should leave post-operation settling: found=%v err=%v", found, err)
+	}
+	if rec.Action != "start" || rec.Phase != state.OperationSettlingSettling || rec.Source != state.SourceWeb {
+		t.Fatalf("start settling = %+v", rec)
 	}
 	if len(events) != 2 || events[1].Action != "monitor" || events[1].Message != "monitoring resumed after manual start" {
 		t.Fatalf("start events = %+v", events)

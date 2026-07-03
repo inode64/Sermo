@@ -14,6 +14,7 @@ import (
 	"sermo/internal/operation"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
+	"sermo/internal/state"
 )
 
 var t0 = time.Date(2026, 6, 6, 12, 0, 0, 0, time.UTC)
@@ -89,6 +90,84 @@ func TestWorkerStartupObserveOnlySuppressesAlerts(t *testing.T) {
 	w.RunCycle(context.Background())
 	if _, ok := h.eventOf("alert"); !ok {
 		t.Fatal("second cycle should fire the alert")
+	}
+}
+
+func TestWorkerOperationRunningSkipsChecksAndAlerts(t *testing.T) {
+	store := newFakeStore()
+	store.now = func() time.Time { return t0 }
+	if err := store.SetOperationSettling("web", "restart", state.OperationSettlingRunning, state.SourceCLI); err != nil {
+		t.Fatalf("SetOperationSettling: %v", err)
+	}
+	h := &workerHarness{cache: failedCache("http")}
+	w := h.worker(alertRuleTree(nil), rules.Policy{}, nil)
+	w.OperationSettling = store
+	var checksRun int
+	w.Checks = func(context.Context, checks.Deps) map[string]checks.Result {
+		checksRun++
+		return h.cache
+	}
+
+	w.RunCycle(context.Background())
+	if checksRun != 0 {
+		t.Fatalf("operation running must skip checks, ran %d", checksRun)
+	}
+	if _, ok := h.eventOf("alert"); ok {
+		t.Fatal("operation running must suppress alerts")
+	}
+	if _, found, _ := store.OperationSettling("web"); !found {
+		t.Fatal("running marker must remain until the operation result is known")
+	}
+}
+
+func TestWorkerOperationSettlingObserveOnlySuppressesSideEffects(t *testing.T) {
+	store := newFakeStore()
+	store.now = func() time.Time { return t0 }
+	if err := store.SetOperationSettling("web", "restart", state.OperationSettlingSettling, state.SourceCLI); err != nil {
+		t.Fatalf("SetOperationSettling: %v", err)
+	}
+	h := &workerHarness{cache: failedCache("http")}
+	w := h.worker(alertRuleTree(nil), rules.Policy{}, nil)
+	w.OperationSettling = store
+	var recorded bool
+	w.RecordHealth = func(bool) { recorded = true }
+
+	w.RunCycle(context.Background())
+	if _, ok := h.eventOf("alert"); ok {
+		t.Fatal("post-operation observe-only cycle must suppress alerts")
+	}
+	if recorded {
+		t.Fatal("post-operation observe-only cycle must not record SLA")
+	}
+	if _, found, _ := store.OperationSettling("web"); found {
+		t.Fatal("post-operation observe-only cycle must clear the marker")
+	}
+
+	w.RunCycle(context.Background())
+	if _, ok := h.eventOf("alert"); !ok {
+		t.Fatal("next cycle should alert when the check is still failing")
+	}
+}
+
+func TestWorkerOperationSettlingWaitsForActiveBackend(t *testing.T) {
+	store := newFakeStore()
+	store.now = func() time.Time { return t0 }
+	if err := store.SetOperationSettling("web", "start", state.OperationSettlingSettling, state.SourceCLI); err != nil {
+		t.Fatalf("SetOperationSettling: %v", err)
+	}
+	h := &workerHarness{cache: failedCache("http")}
+	w := h.worker(alertRuleTree(nil), rules.Policy{}, nil)
+	w.OperationSettling = store
+	w.CheckDeps.Status = func(context.Context) (servicemgr.Status, error) {
+		return servicemgr.StatusInactive, nil
+	}
+
+	w.RunCycle(context.Background())
+	if _, ok := h.eventOf("alert"); ok {
+		t.Fatal("inactive backend while settling must suppress alerts")
+	}
+	if _, found, _ := store.OperationSettling("web"); !found {
+		t.Fatal("settling marker must remain until the backend becomes active")
 	}
 }
 

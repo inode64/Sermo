@@ -20,11 +20,21 @@ type ManualMonitorChange struct {
 // and restores it after a successful manual start when the stop created the
 // pause. Existing manual unmonitor state is preserved.
 func SyncManualActionMonitoring(store MonitorStore, service, action string, result operation.Result, stopSource, restoreSource string) (ManualMonitorChange, error) {
-	if store == nil || !result.OK() {
+	return SyncManualActionMonitoringWithActive(store, service, action, result, stopSource, restoreSource, false)
+}
+
+// SyncManualActionMonitoringWithActive is SyncManualActionMonitoring plus an
+// explicit post-operation active signal for starts that reached the backend but
+// failed postflight. It restores monitoring only when the service is active.
+func SyncManualActionMonitoringWithActive(store MonitorStore, service, action string, result operation.Result, stopSource, restoreSource string, activeAfterStart bool) (ManualMonitorChange, error) {
+	if store == nil {
 		return ManualMonitorChange{}, nil
 	}
 	switch action {
 	case "stop":
+		if !result.OK() {
+			return ManualMonitorChange{}, nil
+		}
 		active, found, err := store.Active(service)
 		if err != nil {
 			return ManualMonitorChange{}, fmt.Errorf("read monitoring state for %s: %w", service, err)
@@ -41,7 +51,10 @@ func SyncManualActionMonitoring(store MonitorStore, service, action string, resu
 			Action:    "unmonitor",
 			Message:   "monitoring paused after manual stop",
 		}, nil
-	case "start":
+	case "start", "restart", "resume":
+		if !result.OK() && !activeAfterStart {
+			return ManualMonitorChange{}, nil
+		}
 		rec, found, err := store.MonitorState(service)
 		if err != nil {
 			return ManualMonitorChange{}, fmt.Errorf("read monitoring state for %s: %w", service, err)

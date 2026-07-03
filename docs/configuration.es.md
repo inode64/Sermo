@@ -775,6 +775,14 @@ claves de asentamiento separadas, de modo que un service y una app del catálogo
 comparten un nombre (por ejemplo `redis`) cuentan ambos hacia la readiness de forma
 independiente.
 
+Las operaciones de service usan el mismo asentamiento de solo observación tras el
+arranque: `start`, `restart`, `reload` y `resume` desde remediación automática, la web UI
+o `sermoctl` suprimen alertas de service, notificaciones, remediación automática y
+muestras SLA hasta que la operación haya terminado y el worker haya observado un ciclo
+activo con datos frescos. `stop` suprime ciclos mientras la operación está en curso; un
+stop manual correcto pausa después la monitorización como se describe abajo. Este
+asentamiento por service no vuelve a bloquear `/readyz`.
+
 Los eventos son la actividad del daemon — acciones, alertas, supresiones, resultados de
 hook/notify y errores — mantenidos en un anillo en memoria (los últimos 1000); también
 van al log del daemon. `limit` por defecto es 100 (máx 1000). El panel muestra un feed
@@ -831,7 +839,10 @@ watch desmonitorizado muestre quién lo pausó y cuándo. Los host watches no ti
 estados `running` o `stopped` del gestor de servicios; el panel los filtra como
 `ok`, `failed`, `unmonitorized` o `disabled`.
 Las operaciones toman el lock de operación por service, de modo que nunca se solapan con
-la acción de un worker sobre el mismo service.
+la acción de un worker sobre el mismo service. El almacén de estado también conserva una
+marca corta de asentamiento de operación, de modo que las acciones iniciadas por
+`sermoctl` y por la web retienen las alertas de service hasta que el daemon tiene una
+muestra posterior a la operación.
 
 Como el daemon se ejecuta como root, la interfaz está endurecida: se enlaza a loopback
 por defecto, soporta autenticación (arriba), establece timeouts HTTP y requiere una

@@ -191,6 +191,17 @@ var migrations = []string{
 	// command (app probe or service `command` check) behind the event, so the
 	// dashboard can show why it failed.
 	`ALTER TABLE event_log ADD COLUMN output TEXT NOT NULL DEFAULT '';`,
+	// operation_settling suppresses service rules/alerts around manual or
+	// automatic service operations. A row starts in phase "running" while the
+	// operation is in progress, then moves to "settling" after a successful
+	// relaunch until the worker has observed one active check cycle.
+	`CREATE TABLE operation_settling (
+		service    TEXT PRIMARY KEY,
+		action     TEXT NOT NULL,
+		phase      TEXT NOT NULL,
+		source     TEXT NOT NULL,
+		updated_at TEXT NOT NULL
+	);`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -319,6 +330,20 @@ type MonitorRecord struct {
 	UpdatedAt time.Time
 }
 
+// Operation settling phases.
+const (
+	OperationSettlingRunning  = "running"
+	OperationSettlingSettling = "settling"
+)
+
+// OperationSettlingRecord is one persisted service-operation settling row.
+type OperationSettlingRecord struct {
+	Action    string
+	Phase     string
+	Source    string
+	UpdatedAt time.Time
+}
+
 // MonitorState returns a persisted monitoring row. found is false when the entry
 // has no recorded state yet.
 func (s *Store) MonitorState(service string) (MonitorRecord, bool, error) {
@@ -373,6 +398,46 @@ func (s *Store) SetActive(service string, active bool, source string) error {
 		   updated_at = excluded.updated_at;`,
 		service, v, source, s.now().UTC().Format(time.RFC3339),
 	)
+	return err
+}
+
+// SetOperationSettling records that a service operation is running or awaiting
+// its first post-operation observation cycle.
+func (s *Store) SetOperationSettling(service, action, phase, source string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO operation_settling (service, action, phase, source, updated_at)
+		 VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(service) DO UPDATE SET
+		   action     = excluded.action,
+		   phase      = excluded.phase,
+		   source     = excluded.source,
+		   updated_at = excluded.updated_at;`,
+		service, action, phase, source, s.now().UTC().Format(time.RFC3339),
+	)
+	return err
+}
+
+// OperationSettling returns a service's current operation-settling row.
+func (s *Store) OperationSettling(service string) (OperationSettlingRecord, bool, error) {
+	var action, phase, source, updated string
+	err := s.db.QueryRow(
+		`SELECT action, phase, source, updated_at FROM operation_settling WHERE service = ?;`,
+		service,
+	).Scan(&action, &phase, &source, &updated)
+	switch {
+	case err == sql.ErrNoRows:
+		return OperationSettlingRecord{}, false, nil
+	case err != nil:
+		return OperationSettlingRecord{}, false, err
+	default:
+		at, _ := time.Parse(time.RFC3339, updated)
+		return OperationSettlingRecord{Action: action, Phase: phase, Source: source, UpdatedAt: at}, true, nil
+	}
+}
+
+// ClearOperationSettling removes a service's operation-settling row.
+func (s *Store) ClearOperationSettling(service string) error {
+	_, err := s.db.Exec(`DELETE FROM operation_settling WHERE service = ?;`, service)
 	return err
 }
 

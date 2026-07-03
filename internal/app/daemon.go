@@ -39,6 +39,14 @@ type MonitorStore interface {
 	SetPanic(on bool, source string) error
 }
 
+// OperationSettlingStore persists short-lived service operation transitions so
+// workers suppress alerts/remediation until one post-operation cycle has data.
+type OperationSettlingStore interface {
+	SetOperationSettling(service, action, phase, source string) error
+	OperationSettling(service string) (state.OperationSettlingRecord, bool, error)
+	ClearOperationSettling(service string) error
+}
+
 // SLARecorder persists one availability sample per observed monitoring cycle, so
 // availability can be reported over rolling windows. Implemented by
 // internal/state.Store; nil disables SLA tracking.
@@ -128,6 +136,9 @@ type Deps struct {
 	// restarts and reboots. Optional: nil means every service/watch is always
 	// monitored.
 	Monitor MonitorStore
+	// OperationSettling suppresses checks' side effects while a service operation
+	// is running and through the first active post-operation cycle.
+	OperationSettling OperationSettlingStore
 	// Panic gates the daemon-wide panic mode (hooks, alerts and automatic
 	// remediation suppressed). Optional: nil means panic mode is never on.
 	Panic *PanicGate
@@ -346,7 +357,7 @@ func wireCascade(workers []*Worker, cascadeMap map[string][]string, deps Deps) {
 	}
 	op := func(ctx context.Context, svc, action string) operation.Result {
 		if tw := byName[svc]; tw != nil {
-			return tw.Operate(ctx, action)
+			return tw.operateForRemediation(ctx, action)
 		}
 		return operation.Result{Service: svc, Action: action, Status: operation.ResultFailed, Message: "cascade target not configured"}
 	}
@@ -477,19 +488,20 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Operate: func(ctx context.Context, action string) operation.Result {
 			return engine.Do(ctx, action)
 		},
-		IsPaused:     monitorPaused(deps.Monitor, name),
-		InPanic:      deps.Panic.Active,
-		Settling:     deps.Settling,
-		Shadow:       shadow,
-		ResolveRefs:  func() rules.RefResolver { return rules.NewCheckResolver(preflightBuilt, maxParallel) },
-		RecordHealth: healthRecorder(deps, name),
-		RecordChecks: checkSLARecorder(deps, name),
-		Publish:      publishSnapshots(deps.Snapshots, name),
-		PersistState: ruleStatePersister(deps.RuleState, deps.Emit, name, ruleSet),
-		Now:          deps.Now,
-		Emit:         deps.Emit,
-		windows:      windowStates,
-		libBaseline:  libBaseline,
+		IsPaused:          monitorPaused(deps.Monitor, name),
+		InPanic:           deps.Panic.Active,
+		Settling:          deps.Settling,
+		OperationSettling: deps.OperationSettling,
+		Shadow:            shadow,
+		ResolveRefs:       func() rules.RefResolver { return rules.NewCheckResolver(preflightBuilt, maxParallel) },
+		RecordHealth:      healthRecorder(deps, name),
+		RecordChecks:      checkSLARecorder(deps, name),
+		Publish:           publishSnapshots(deps.Snapshots, name),
+		PersistState:      ruleStatePersister(deps.RuleState, deps.Emit, name, ruleSet),
+		Now:               deps.Now,
+		Emit:              deps.Emit,
+		windows:           windowStates,
+		libBaseline:       libBaseline,
 
 		appVersionCmd:   appVersionCmds(tree),
 		appVersions:     map[string]string{},

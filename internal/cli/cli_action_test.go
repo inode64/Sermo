@@ -121,6 +121,24 @@ func readMonitorRecord(t *testing.T, global, service string) state.MonitorRecord
 	return rec
 }
 
+func readOperationSettling(t *testing.T, global, service string) (state.OperationSettlingRecord, bool) {
+	t.Helper()
+	cfg, err := config.Load(global)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	if err != nil {
+		t.Fatalf("open state: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	rec, found, err := store.OperationSettling(service)
+	if err != nil {
+		t.Fatalf("operation settling: %v", err)
+	}
+	return rec, found
+}
+
 func writeMonitorRecord(t *testing.T, global, service string, active bool, source string) {
 	t.Helper()
 	cfg, err := config.Load(global)
@@ -148,6 +166,10 @@ func TestRestartOKThroughEngine(t *testing.T) {
 	}
 	if got := strings.TrimSpace(stdout.String()); got != "web restart ok" {
 		t.Fatalf("stdout = %q", got)
+	}
+	rec, found := readOperationSettling(t, global, "web")
+	if !found || rec.Action != "restart" || rec.Phase != state.OperationSettlingSettling || rec.Source != state.SourceCLI {
+		t.Fatalf("restart settling = %+v found=%v", rec, found)
 	}
 }
 
@@ -291,6 +313,9 @@ func TestStopPausesMonitoringAndStartRestores(t *testing.T) {
 	if rec.Active || rec.Source != state.SourceCLIManualStop {
 		t.Fatalf("record after stop = %+v", rec)
 	}
+	if op, found := readOperationSettling(t, global, "web"); found {
+		t.Fatalf("stop should clear operation settling, got %+v", op)
+	}
 
 	if code := app.Run(context.Background(), []string{"--config", global, "start", "web"}); code != exitSuccess {
 		t.Fatalf("start exit = %d, want %d", code, exitSuccess)
@@ -298,6 +323,10 @@ func TestStopPausesMonitoringAndStartRestores(t *testing.T) {
 	rec = readMonitorRecord(t, global, "web")
 	if !rec.Active || rec.Source != state.SourceCLI {
 		t.Fatalf("record after start = %+v", rec)
+	}
+	op, found := readOperationSettling(t, global, "web")
+	if !found || op.Action != "start" || op.Phase != state.OperationSettlingSettling || op.Source != state.SourceCLI {
+		t.Fatalf("start settling = %+v found=%v", op, found)
 	}
 }
 

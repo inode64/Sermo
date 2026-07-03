@@ -113,56 +113,57 @@ type stateMaintainer interface {
 // the shared snapshots, and start/stop/restart/reload/resume through the same safe operation
 // engine the workers use.
 type WebBackend struct {
-	order            []string
-	entries          map[string]*webEntry
-	watchOrder       []string
-	watches          map[string]*webWatch
-	notifierOrder    []string
-	notifiers        map[string]*webNotifier
-	store            MonitorStore
-	snapshots        *Snapshots
-	settling         *Settling
-	sla              SLAReader
-	events           *EventLog
-	remediation      *RemediationRegistry
-	ruleWindows      *RuleWindowRegistry
-	cfg              *config.Config
-	hostType         *web.HostTypeInfo
-	measure          MeasurementReader
-	collector        *metrics.Collector
-	daemonMetrics    *daemonMetricSampler
-	serviceMetrics   *ServiceMetricSampler
-	live             *LiveMetrics
-	storageUsage     checks.StorageUsageFunc
-	mountSampler     checks.MountSamplerFunc
-	openFilesSampler func(mounts []checks.Mount) map[string]int64
-	netSampler       checks.NetSamplerFunc
-	pingSampler      checks.PingSamplerFunc
-	oomSampler       checks.OomSamplerFunc
-	fdsSampler       checks.FdsSamplerFunc
-	pidsSampler      checks.PidsSamplerFunc
-	pressureSampler  checks.PressureSamplerFunc
-	conntrackSampler checks.ConntrackSamplerFunc
-	entropySampler   checks.EntropySamplerFunc
-	zombieSampler    checks.ZombieSamplerFunc
-	procSampler      ProcSampler
-	diskIOSampler    checks.DiskIOSamplerFunc
-	sensorSampler    checks.SensorSamplerFunc
-	raidSampler      checks.RaidSamplerFunc
-	edacSampler      checks.EdacSamplerFunc
-	routeSampler     checks.RouteSamplerFunc
-	firewallSampler  checks.FirewallRulesSamplerFunc
-	execRunner       execx.Runner
-	expander         VolumeExpander
-	userLookup       *process.UserLookup
-	mountUsers       func(string) ([]process.Process, error)
-	mountSignaler    process.Signaler
-	mountAlerter     MountUserAlerter
-	emit             func(Event)
-	opGate           *OpGate
-	defaultTimeout   time.Duration
-	operationTimeout time.Duration
-	now              func() time.Time
+	order             []string
+	entries           map[string]*webEntry
+	watchOrder        []string
+	watches           map[string]*webWatch
+	notifierOrder     []string
+	notifiers         map[string]*webNotifier
+	store             MonitorStore
+	operationSettling OperationSettlingStore
+	snapshots         *Snapshots
+	settling          *Settling
+	sla               SLAReader
+	events            *EventLog
+	remediation       *RemediationRegistry
+	ruleWindows       *RuleWindowRegistry
+	cfg               *config.Config
+	hostType          *web.HostTypeInfo
+	measure           MeasurementReader
+	collector         *metrics.Collector
+	daemonMetrics     *daemonMetricSampler
+	serviceMetrics    *ServiceMetricSampler
+	live              *LiveMetrics
+	storageUsage      checks.StorageUsageFunc
+	mountSampler      checks.MountSamplerFunc
+	openFilesSampler  func(mounts []checks.Mount) map[string]int64
+	netSampler        checks.NetSamplerFunc
+	pingSampler       checks.PingSamplerFunc
+	oomSampler        checks.OomSamplerFunc
+	fdsSampler        checks.FdsSamplerFunc
+	pidsSampler       checks.PidsSamplerFunc
+	pressureSampler   checks.PressureSamplerFunc
+	conntrackSampler  checks.ConntrackSamplerFunc
+	entropySampler    checks.EntropySamplerFunc
+	zombieSampler     checks.ZombieSamplerFunc
+	procSampler       ProcSampler
+	diskIOSampler     checks.DiskIOSamplerFunc
+	sensorSampler     checks.SensorSamplerFunc
+	raidSampler       checks.RaidSamplerFunc
+	edacSampler       checks.EdacSamplerFunc
+	routeSampler      checks.RouteSamplerFunc
+	firewallSampler   checks.FirewallRulesSamplerFunc
+	execRunner        execx.Runner
+	expander          VolumeExpander
+	userLookup        *process.UserLookup
+	mountUsers        func(string) ([]process.Process, error)
+	mountSignaler     process.Signaler
+	mountAlerter      MountUserAlerter
+	emit              func(Event)
+	opGate            *OpGate
+	defaultTimeout    time.Duration
+	operationTimeout  time.Duration
+	now               func() time.Time
 
 	diskIOMu    sync.Mutex
 	diskIOState map[string]webDiskIOState
@@ -217,54 +218,61 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	if deps.UserLookup == nil {
 		deps.UserLookup = EngineUserLookup(cfg, deps.ExecxRunner)
 	}
+	operationSettling := deps.OperationSettling
+	if operationSettling == nil {
+		if store, ok := deps.Monitor.(OperationSettlingStore); ok {
+			operationSettling = store
+		}
+	}
 	wb := &WebBackend{
-		entries:          map[string]*webEntry{},
-		watches:          map[string]*webWatch{},
-		notifiers:        map[string]*webNotifier{},
-		store:            deps.Monitor,
-		snapshots:        deps.Snapshots,
-		settling:         deps.Settling,
-		events:           deps.Events,
-		remediation:      deps.Remediation,
-		ruleWindows:      deps.RuleWindows,
-		cfg:              cfg,
-		hostType:         hostTypeInfo(),
-		collector:        deps.Collector,
-		daemonMetrics:    newDaemonMetricSampler(deps.Collector, deps.Now, deps.DaemonMetrics),
-		serviceMetrics:   deps.ServiceMetrics,
-		live:             deps.Live,
-		storageUsage:     deps.StorageUsage,
-		mountSampler:     deps.MountSampler,
-		openFilesSampler: deps.OpenFilesByMount,
-		netSampler:       deps.NetSampler,
-		pingSampler:      deps.PingSampler,
-		oomSampler:       deps.OomSampler,
-		fdsSampler:       deps.FdsSampler,
-		pidsSampler:      deps.PidsSampler,
-		pressureSampler:  deps.PressureSampler,
-		conntrackSampler: deps.ConntrackSampler,
-		entropySampler:   deps.EntropySampler,
-		zombieSampler:    deps.ZombieSampler,
-		procSampler:      deps.ProcSampler,
-		diskIOSampler:    deps.DiskIOSampler,
-		sensorSampler:    deps.SensorSampler,
-		raidSampler:      deps.RaidSampler,
-		edacSampler:      deps.EdacSampler,
-		routeSampler:     deps.RouteSampler,
-		firewallSampler:  deps.FirewallRulesSampler,
-		execRunner:       deps.ExecxRunner,
-		expander:         configuredVolumeExpander(deps),
-		userLookup:       deps.UserLookup,
-		mountUsers:       deps.MountDiscoverUsers,
-		mountSignaler:    deps.MountSignaler,
-		mountAlerter:     deps.MountUserAlerter,
-		emit:             deps.Emit,
-		opGate:           deps.OpGate,
-		defaultTimeout:   deps.DefaultTimeout,
-		operationTimeout: deps.OperationTimeout,
-		now:              deps.Now,
-		slaCache:         map[slaCacheKey]cachedSLATimelines{},
-		liveViewCache:    map[string]cachedLiveView{},
+		entries:           map[string]*webEntry{},
+		watches:           map[string]*webWatch{},
+		notifiers:         map[string]*webNotifier{},
+		store:             deps.Monitor,
+		operationSettling: operationSettling,
+		snapshots:         deps.Snapshots,
+		settling:          deps.Settling,
+		events:            deps.Events,
+		remediation:       deps.Remediation,
+		ruleWindows:       deps.RuleWindows,
+		cfg:               cfg,
+		hostType:          hostTypeInfo(),
+		collector:         deps.Collector,
+		daemonMetrics:     newDaemonMetricSampler(deps.Collector, deps.Now, deps.DaemonMetrics),
+		serviceMetrics:    deps.ServiceMetrics,
+		live:              deps.Live,
+		storageUsage:      deps.StorageUsage,
+		mountSampler:      deps.MountSampler,
+		openFilesSampler:  deps.OpenFilesByMount,
+		netSampler:        deps.NetSampler,
+		pingSampler:       deps.PingSampler,
+		oomSampler:        deps.OomSampler,
+		fdsSampler:        deps.FdsSampler,
+		pidsSampler:       deps.PidsSampler,
+		pressureSampler:   deps.PressureSampler,
+		conntrackSampler:  deps.ConntrackSampler,
+		entropySampler:    deps.EntropySampler,
+		zombieSampler:     deps.ZombieSampler,
+		procSampler:       deps.ProcSampler,
+		diskIOSampler:     deps.DiskIOSampler,
+		sensorSampler:     deps.SensorSampler,
+		raidSampler:       deps.RaidSampler,
+		edacSampler:       deps.EdacSampler,
+		routeSampler:      deps.RouteSampler,
+		firewallSampler:   deps.FirewallRulesSampler,
+		execRunner:        deps.ExecxRunner,
+		expander:          configuredVolumeExpander(deps),
+		userLookup:        deps.UserLookup,
+		mountUsers:        deps.MountDiscoverUsers,
+		mountSignaler:     deps.MountSignaler,
+		mountAlerter:      deps.MountUserAlerter,
+		emit:              deps.Emit,
+		opGate:            deps.OpGate,
+		defaultTimeout:    deps.DefaultTimeout,
+		operationTimeout:  deps.OperationTimeout,
+		now:               deps.Now,
+		slaCache:          map[slaCacheKey]cachedSLATimelines{},
+		liveViewCache:     map[string]cachedLiveView{},
 	}
 	if wb.serviceMetrics == nil {
 		wb.serviceMetrics = NewServiceMetricSampler()
@@ -505,7 +513,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		svc.ActiveLocks = activeLocks
 	}
 	b.decorateRemediation(name, &svc)
-	observed := b.settling == nil || b.settling.Observed(SettlingServiceKey(name))
+	observed := (b.settling == nil || b.settling.Observed(SettlingServiceKey(name))) && !b.operationSettlingPending(name)
 	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth, observed)
 	if len(e.alsoApply) > 0 {
 		svc.AlsoApply = slices.Clone(e.alsoApply)
@@ -541,6 +549,27 @@ func (b *WebBackend) decorateRemediation(name string, svc *web.Service) {
 	if !rep.NextEligibleAt.IsZero() {
 		svc.NextEligibleAt = rep.NextEligibleAt.UTC().Format(time.RFC3339)
 	}
+}
+
+func (b *WebBackend) operationSettlingPending(name string) bool {
+	if b.operationSettling == nil {
+		return false
+	}
+	rec, found, err := b.operationSettling.OperationSettling(name)
+	if err != nil {
+		b.emitMonitorEvent(name, "operation-settling", "error", "", err.Error())
+		return false
+	}
+	if !found {
+		return false
+	}
+	if !rec.UpdatedAt.IsZero() && b.webNow().Sub(rec.UpdatedAt) > operationSettlingMaxAge {
+		if err := b.operationSettling.ClearOperationSettling(name); err != nil {
+			b.emitMonitorEvent(name, "operation-settling", "error", "", err.Error())
+		}
+		return false
+	}
+	return rec.Phase == state.OperationSettlingRunning || rec.Phase == state.OperationSettlingSettling
 }
 
 // lockProcProber answers lock-owner liveness for the web backend's lock views.
@@ -3057,16 +3086,32 @@ func webActionResultFrom(r operation.Result, name, action string) web.ActionResu
 }
 
 func (b *WebBackend) operationResultWithMonitor(ctx context.Context, name, action string) operation.Result {
+	if err := beginOperationSettling(b.operationSettling, name, action, state.SourceWeb); err != nil {
+		b.emitMonitorEvent(name, action, "error", "", err.Error())
+	}
 	r := b.operationResult(ctx, name, action)
-	change, err := SyncManualActionMonitoring(b.store, name, action, r, state.SourceWebManualStop, state.SourceWeb)
+	activeAfterStart := b.manualActionActiveAfterStart(ctx, name, action, r)
+	change, err := SyncManualActionMonitoringWithActive(b.store, name, action, r, state.SourceWebManualStop, state.SourceWeb, activeAfterStart)
 	if err != nil {
 		b.emitMonitorEvent(name, action, "error", "", err.Error())
-		return r
-	}
-	if change.Changed {
+	} else if change.Changed {
 		b.emitMonitorEvent(name, change.Action, "action", "ok", change.Message)
 	}
+	if err := finishOperationSettlingWithActive(b.operationSettling, name, action, state.SourceWeb, r, nil, activeAfterStart); err != nil {
+		b.emitMonitorEvent(name, action, "error", "", err.Error())
+	}
 	return r
+}
+
+func (b *WebBackend) manualActionActiveAfterStart(ctx context.Context, name, action string, result operation.Result) bool {
+	if result.Status != operation.ResultPostflightFailed || !manualStartLikeAction(action) {
+		return false
+	}
+	e := b.entries[name]
+	if e == nil {
+		return false
+	}
+	return e.backendStatus(ctx, b.webNow()) == string(servicemgr.StatusActive)
 }
 
 func (b *WebBackend) operationResult(ctx context.Context, name, action string) operation.Result {
