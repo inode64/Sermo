@@ -626,7 +626,7 @@ Read-only endpoints:
 - `GET /api/whoami` — caller role, permissions and feature visibility.
 - `GET /api/services` — **configured runtime** service list (the service
   files under `paths.services`): name, `state` (`disabled`, `running`,
-  `paused`, `stopped`, `monitorized`, `failed`), backend status, `check_health`,
+  `paused`, `stopped`, `starting`, `failed`), backend status, `check_health`,
   `checks_failing`, active locks, monitor state/source/timestamp, backend, unit,
   cooldown, remediation state, next eligible action and last event. This is not
   `sermoctl services`, which lists catalog service profiles — see
@@ -801,11 +801,13 @@ pruned to the same 366-day (~1 year) retention window.
 Web-triggered monitor changes are recorded with source `web` in the state store;
 manual stops from the web UI or CLI use `web-manual-stop` / `cli-manual-stop`
 until a later successful start restores the previous monitored state. The dashboard and
-`GET /api/services` / `GET /api/watches` expose `state`, `monitor_source` and
-`monitor_changed_at` so a running/paused/stopped unmonitored service or an
-unmonitorized watch shows who paused it and when. Host watches do not have
-service-manager `running` or `stopped` states; the dashboard filters them as
-`ok`, `failed`, `unmonitorized` or `disabled`.
+`GET /api/services` / `GET /api/watches` expose `state`, `monitored`,
+`monitor_source` and `monitor_changed_at` separately, so a service can show
+`running`, `paused`, `stopped` or `failed` while also showing whether monitoring
+is paused and who changed it. Host watches do not have service-manager
+`running` or `stopped` states; their `state` is health (`ok`, `failed`,
+`starting` or `disabled`) and the dashboard filters monitored/unmonitored
+watches from the separate monitor flag.
 Operations take the per-service operation lock, so they never overlap a worker's
 action on the same service. The state store also carries a short-lived
 operation-settling marker so `sermoctl`-initiated actions and web actions both

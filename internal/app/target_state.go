@@ -2,8 +2,8 @@ package app
 
 import "strings"
 
-// Operator-facing target states a service or watch can be reported in, as shown
-// by sermoctl and the web dashboard.
+// Operator-facing target states and monitor-filter values shown by sermoctl and
+// the web dashboard.
 const (
 	TargetStateDisabled      = "disabled"
 	TargetStateRunning       = "running"
@@ -17,7 +17,9 @@ const (
 )
 
 // ServiceState folds config, backend status and monitoring health into the
-// single operator-facing state shown by sermoctl and the web dashboard.
+// operator-facing activity state shown by sermoctl and the web dashboard. The
+// monitor flag is a separate axis; a paused monitor can still have a running,
+// stopped, paused or failed backend state.
 func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, observed bool) string {
 	if !enabled {
 		return TargetStateDisabled
@@ -27,30 +29,32 @@ func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, ob
 	}
 	active := strings.EqualFold(backendStatus, "active")
 	paused := strings.EqualFold(backendStatus, "paused")
+	failed := strings.EqualFold(backendStatus, "failed")
 	if paused {
 		return TargetStatePaused
 	}
-	if !monitored {
-		if active {
-			return TargetStateRunning
+	if failed {
+		return TargetStateFailed
+	}
+	if !active {
+		if monitored {
+			return TargetStateFailed
 		}
 		return TargetStateStopped
 	}
-	if !active || checkHealth == "failing" {
+	if monitored && checkHealth == "failing" {
 		return TargetStateFailed
 	}
-	return TargetStateMonitorized
+	return TargetStateRunning
 }
 
 // WatchState folds config, monitor state and the last known watch error into the
-// operator-facing state shown for host watches. Watches are not service-manager
-// units, so they do not have running/stopped states.
+// operator-facing health state shown for host watches. Watches are not
+// service-manager units, so they do not have running/stopped states; monitored
+// versus unmonitored is reported separately.
 func WatchState(enabled, monitored, failed bool, observed bool) string {
 	if !enabled {
 		return TargetStateDisabled
-	}
-	if !monitored {
-		return TargetStateUnmonitorized
 	}
 	if monitored && !observed {
 		return TargetStateStarting
