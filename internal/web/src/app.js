@@ -568,15 +568,34 @@ function locksCell(s) {
 }
 
 function lastEventCell(s) {
-  const e = s.last_event;
-  if (!e) return tpl`<span class="muted">—</span>`;
-  const detail = [e.kind, e.action, e.status].filter(Boolean).join(" ");
-  const title = [fmtTime(e.time), e.message || ""].filter(Boolean).join(" · ");
-  return tpl`<div class="event-cell" title="${title}"><span class="muted">${fmtAge(e.time)}</span> ${detail ? tpl`<span class="kind kind-${e.kind || ""}">${detail}</span>` : nothing}</div>`;
+  return activityDateCell(s && s.last_event);
 }
 
 function lastEventTime(item) {
   return (item && item.last_event && item.last_event.time) || "";
+}
+
+function activitySeverity(kind, status) {
+  const k = String(kind || "").toLowerCase();
+  const st = String(status || "").toLowerCase();
+  if (["failed", "error", "preflight_failed", "postflight_failed", "orphan_processes"].includes(st)) return "crit";
+  if (st === "blocked") return "warn";
+  if (["error", "hook-failed", "notify-failed", "expand-failed", "kill-failed"].includes(k)) return "crit";
+  if (["alert", "firing", "suppressed", "panic-suppressed", "notify-suppressed", "expand-skipped"].includes(k)) return "warn";
+  if (["action", "cascade", "hook", "notify", "recovered", "expand", "kill"].includes(k)) return "ok";
+  if (["shadow", "dry-run"].includes(k)) return "info";
+  return "muted";
+}
+
+function activityDateCell(e) {
+  const time = e && e.time;
+  if (!time) return tpl`<span class="muted">—</span>`;
+  const kind = e.kind || "";
+  const detail = [kind, e.action, e.status].filter(Boolean).join(" ");
+  const title = [fmtTime(time), detail, e.message || ""].filter(Boolean).join(" · ");
+  const cls = "activity-time activity-" + activitySeverity(kind, e.status);
+  const label = [fmtTime(time), detail || "activity"].filter(Boolean).join(" · ");
+  return tpl`<div class="event-cell" title="${title}"><span class="${cls}" aria-label="${label}">${fmtTime(time)}</span></div>`;
 }
 
 function nextRemediationCell(s) {
@@ -2941,9 +2960,10 @@ function readingRaw(w, field) {
 
 // watchLastCell renders the shared "Last activity" cell content.
 function watchLastCell(w) {
-  if (!w.last_activity) return '—';
-  const kind = w.last_activity_kind ? ` (${w.last_activity_kind})` : '';
-  return tpl`<span title="${w.last_activity}">${w.last_activity.substring(11,19) + kind}</span>`;
+  return activityDateCell({
+    time: w && w.last_activity,
+    kind: w && w.last_activity_kind,
+  });
 }
 
 // watchNameCell renders the shared expandable name cell (chevron + toggle).
