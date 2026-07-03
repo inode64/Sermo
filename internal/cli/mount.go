@@ -97,8 +97,8 @@ func (a App) runMountStatus(opts options, target string) int {
 		writeJSON(a.Stdout, status)
 		return exitSuccess
 	}
-	fmt.Fprintf(a.Stdout, "name: %s\npath: %s\nmounted: %t\nrefcount: %d\nsource: %s\nstate: %s\n",
-		status.Name, status.Path, status.Mounted, status.Refcount, status.Source, status.State)
+	fmt.Fprintf(a.Stdout, "name: %s\npath: %s\nmounted: %t\nrefcount: %d\nstate: %s\n",
+		status.Name, status.Path, status.Mounted, status.Refcount, status.State)
 	return exitSuccess
 }
 

@@ -448,11 +448,11 @@ func TestMergeWizardWatchesRejectsExistingFile(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(tmp, "storages"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(tmp, "storages", "storage-root.yml"), []byte("watches: {}\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "storages", "storage-root.yml"), []byte("name: storage-root\npath: /\ncapacity:\n  used_pct: { op: \">=\", value: 90 }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := mergeWizardWatches(cfgPath, "volume", map[string]any{"storage-root": map[string]any{"check": map[string]any{"type": "storage", "path": "/"}}}); err == nil {
-		t.Fatal("existing watch file must not be overwritten")
+		t.Fatal("existing storage file must not be overwritten")
 	}
 }
 
@@ -500,6 +500,14 @@ func TestWizardConfigDirNameUsesWatchType(t *testing.T) {
 				"net-eth0": map[string]any{"check": map[string]any{"type": "net"}},
 			},
 			want: "networks",
+		},
+		{
+			name:   "custom storage watch writes generic watches directory",
+			wizard: "custom wizard",
+			fragment: map[string]any{
+				"storage-root": map[string]any{"check": map[string]any{"type": "storage"}},
+			},
+			want: "watches",
 		},
 		{
 			name:   "missing type falls back to watches directory",
@@ -555,7 +563,7 @@ func TestWizardCleanupDirsUsesCurrentOutputDirOnly(t *testing.T) {
 	}
 }
 
-func TestRunWizardVolumeCanDeleteExistingWatchFilesIndividually(t *testing.T) {
+func TestRunWizardVolumeCanDeleteExistingStorageFilesIndividually(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
 	storageDir := filepath.Join(tmp, "storages")
@@ -565,10 +573,11 @@ func TestRunWizardVolumeCanDeleteExistingWatchFilesIndividually(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte("paths:\n  storages: [storages]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// An existing managed watch for /old — a mountpoint the env no longer detects
-	// (fakeWizardEnv only reports /mnt/backup), so it is offered as stale.
+	// An existing managed storage target for /old — a mountpoint the env no
+	// longer detects (fakeWizardEnv only reports /mnt/backup), so it is offered
+	// as stale.
 	oldFile := filepath.Join(storageDir, "storage-old.yml")
-	if err := os.WriteFile(oldFile, []byte("watches:\n  storage-old:\n    check: { type: storage, path: /old, free_pct: { op: \"<\", value: 5 } }\n    then: { notify: [ops-email] }\n"), 0o644); err != nil {
+	if err := os.WriteFile(oldFile, []byte("name: storage-old\npath: /old\ncapacity:\n  free_pct: { op: \"<\", value: 5 }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -589,13 +598,13 @@ func TestRunWizardVolumeCanDeleteExistingWatchFilesIndividually(t *testing.T) {
 		t.Fatalf("exit = %d, want success; out=%s", code, out.String())
 	}
 	if _, err := os.Stat(oldFile); !os.IsNotExist(err) {
-		t.Fatalf("old watch file should be deleted, stat err=%v", err)
+		t.Fatalf("old storage file should be deleted, stat err=%v", err)
 	}
 	newFile := filepath.Join(tmp, "storages", "storage-mnt-backup.yml")
 	if _, err := os.Stat(newFile); err != nil {
-		t.Fatalf("new watch file not written: %v", err)
+		t.Fatalf("new storage file not written: %v", err)
 	}
-	if !strings.Contains(out.String(), "Deleted 1 existing watch file(s)") {
+	if !strings.Contains(out.String(), "Deleted 1 existing storage file(s)") {
 		t.Fatalf("delete summary not shown: %s", out.String())
 	}
 }
@@ -626,11 +635,15 @@ func TestTargetsStale(t *testing.T) {
 func TestPlanStaleMountDeletes(t *testing.T) {
 	dir := t.TempDir()
 	oldFile := filepath.Join(dir, "old.yml")
-	if err := os.WriteFile(oldFile, []byte("name: mount-old\npath: /old\n"), 0o644); err != nil {
+	if err := os.WriteFile(oldFile, []byte("name: mount-old\npath: /old\nmount: {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	currentFile := filepath.Join(dir, "current.yml")
-	if err := os.WriteFile(currentFile, []byte("name: mount-current\npath: /mnt/current\n"), 0o644); err != nil {
+	if err := os.WriteFile(currentFile, []byte("name: mount-current\npath: /mnt/current\nmount: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	capacityOnly := filepath.Join(dir, "capacity.yml")
+	if err := os.WriteFile(capacityOnly, []byte("name: storage-old\npath: /old\ncapacity:\n  free_pct: { op: \"<\", value: 10 }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	p := assist.NewPrompt(strings.NewReader("y\ny\n"), &strings.Builder{})
@@ -640,6 +653,9 @@ func TestPlanStaleMountDeletes(t *testing.T) {
 	}
 	if len(deletes) != 1 || deletes[0] != oldFile {
 		t.Fatalf("deletes = %v, want [%s]", deletes, oldFile)
+	}
+	if _, err := os.Stat(capacityOnly); err != nil {
+		t.Fatalf("capacity-only storage file should not be touched, stat err=%v", err)
 	}
 }
 
@@ -723,7 +739,7 @@ func TestRunWizardAbortsOnTruncatedInput(t *testing.T) {
 func TestStorageMountTargetOmittedKind(t *testing.T) {
 	tmp := t.TempDir()
 	noKind := filepath.Join(tmp, "m.yml")
-	if err := os.WriteFile(noKind, []byte("name: mount-demo\npath: /mnt/demo\n"), 0o644); err != nil {
+	if err := os.WriteFile(noKind, []byte("name: mount-demo\npath: /mnt/demo\nmount: {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if got := mountFileTarget(noKind); got != "/mnt/demo" {
@@ -735,5 +751,12 @@ func TestStorageMountTargetOmittedKind(t *testing.T) {
 	}
 	if got := mountFileTarget(conflicting); got != "" {
 		t.Fatalf("mountFileTarget(non-mount kind) = %q, want empty", got)
+	}
+	capacityOnly := filepath.Join(tmp, "capacity.yml")
+	if err := os.WriteFile(capacityOnly, []byte("name: storage-demo\npath: /mnt/demo\ncapacity:\n  free_pct: { op: \"<\", value: 10 }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := mountFileTarget(capacityOnly); got != "" {
+		t.Fatalf("mountFileTarget(capacity-only storage) = %q, want empty", got)
 	}
 }

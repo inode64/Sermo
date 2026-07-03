@@ -15,7 +15,7 @@
 #   # location: services          -> a service under paths.services
 #   # location: storages          -> a storage target under paths.storages
 #   each notifiers.<name> entry   -> one notifier fragment under paths.notifiers
-#   each watches.<name> entry     -> one watch fragment under paths.storages/networks/watches
+#   each watches.<name> entry     -> one watch fragment under paths.networks/watches
 #
 # This file is validated by the test suite (internal/config), so it cannot
 # drift from the real schema. The shipped operational config is
@@ -132,30 +132,10 @@ notify: [ops-email]
 
 # Host watches: one entry per concern. This reference groups several examples
 # only to keep the schema readable; real config stores each watch in its own
-# watch fragment file. `enabled: false` omits the watch entirely, while
-# `monitor: disabled` builds it paused. `monitor: previous` restores the
-# persisted state from paths.state.
+# watch fragment file. Storage capacity targets live in storage documents below.
+# `enabled: false` omits the watch entirely, while `monitor: disabled` builds it
+# paused. `monitor: previous` restores the persisted state from paths.state.
 watches:
-  # -- storage with auto-expand (LVM) ---------------------------------------
-  data-space:
-    monitor: disabled
-    interval: 1m
-    check:
-      type: storage
-      path: /var/lib/data
-      mounted: true
-      free_pct: { op: "<", value: "10%" }  # *_bytes need a K/M/G/T suffix
-    for: { cycles: 3 }  # debounce: N consecutive cycles
-    then:
-      notify: [team-slack]
-      notify_interval: 2h  # re-send a reminder while it stays firing
-      expand: { by: 5G }  # storage-only action
-    policy:  # pace the expand action (full policy extras)
-      cooldown: 30m
-      max_actions: 3
-      max_actions_window: 24h
-      backoff: { initial: 1h, factor: 2, max: 12h }
-
   # -- single-shot checks as host watches -----------------------------------
   webapp-health:
     monitor: disabled
@@ -1047,3 +1027,28 @@ mount:
       exe_any: [/usr/bin/rsync]
 os:  # per-OS umount tuning, merged for the detected os-release ID
   default: { mount: { umount: { allow_lazy: true } } }
+
+---
+# ---------------------------------------------------------------------------
+# 12. storage — capacity monitor with auto-expand (LVM)
+# ---------------------------------------------------------------------------
+# location: storages
+name: data-space
+display_name: Data volume
+category: storage
+path: /var/lib/data
+monitor: disabled
+interval: 1m
+capacity:
+  mounted: true
+  free_pct: { op: "<", value: "10%" }  # *_bytes need a K/M/G/T suffix
+  for: { cycles: 3 }  # debounce: N consecutive cycles
+  then:
+    notify: [team-slack]
+    notify_interval: 2h  # re-send a reminder while it stays firing
+    expand: { by: 5G }  # grow by up to 5G, capped to VG free
+  policy:  # pace the expand action (full policy extras)
+    cooldown: 30m
+    max_actions: 3
+    max_actions_window: 24h
+    backoff: { initial: 1h, factor: 2, max: 12h }

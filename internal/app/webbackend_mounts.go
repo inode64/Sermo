@@ -179,7 +179,6 @@ func (b *WebBackend) Mounts(ctx context.Context) []web.Mount {
 			Path:         row.status.Path,
 			Mounted:      row.status.Mounted,
 			Refcount:     row.status.Refcount,
-			Source:       row.status.Source,
 			State:        row.status.State,
 			Refcounted:   row.spec.Refcount,
 			Blockers:     b.mountBlockers(row.spec, usage[row.spec.Path]),

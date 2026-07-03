@@ -85,7 +85,7 @@ paths:
 ```
 
 Directory lists under `paths.catalog`, `paths.services`, `paths.apps`,
-`paths.notifiers`, `paths.storages`, `paths.networks`, `paths.watches` and
+`paths.notifiers`, `paths.storages`, `paths.networks` and `paths.watches`
 accept either a path string or an explicit mapping:
 
 ```yaml
@@ -1080,11 +1080,13 @@ when a threshold is crossed. They are daemon configuration; they never merge int
 a service.
 
 > **Tip — generate configuration interactively.** `sermoctl wizard` can write
-> three different surfaces. Watch assistants (`volume`, `net`, `uplink`) print a
-> `watches:` preview and, if accepted, write one watch per file under a
-> watch-type directory such as `/etc/sermo/storages` or
-> `/etc/sermo/networks`; the wizard adds that directory to the matching `paths.*`
-> (writing a `.bak` first). Service assistants (`service`, `docker`, `vm`) write
+> three different surfaces. The storage assistant (`volume`) prints storage
+> documents with `capacity:` and writes one file per target under
+> `/etc/sermo/storages`. Watch assistants (`net`, `uplink`) print a `watches:`
+> preview and, if accepted, write one watch per file under a watch-type
+> directory such as `/etc/sermo/networks` or `/etc/sermo/watches`; the wizard
+> adds that directory to the matching `paths.*` (writing a `.bak` first).
+> Service assistants (`service`, `docker`, `vm`) write
 > one service file per target under `services/` and ensure that
 > `paths.services` loads it; `docker` and `vm` add `control.type: docker` or
 > `control.type: libvirt` plus matching read-only checks. The mount assistant
@@ -1166,23 +1168,22 @@ again, the next episode notifies afresh. To get a periodic **reminder** while a
 watch stays firing, set `then.notify_interval` to a positive duration: the
 notification is re-sent once that interval elapses. It only affects delivery, so
 it requires `notify` targets. Both the edge-triggered default and
-`notify_interval` apply to the standard watch types (host-resource watches such as
-`storage`, the single-shot service checks, and the `net`/`icmp`/`swap` metric watches). The
+`notify_interval` apply to generated storage capacity watches, the standard
+single-shot service checks, and the `net`/`icmp`/`swap` metric watches. The
 `file` and `process` watches have their own notification model — one event per
 changed path or matching pid — and ignore `notify_interval`.
 
 ```yaml
-watches:
-  storage-root:
-    monitor: previous
-    check:
-      type: storage
-      path: /
-      used_pct: { op: ">=", value: "90%" }
-    for: { cycles: 3 }
-    then:
-      notify: [ops-email]
-      notify_interval: 30m     # re-notify every 30m while still firing
+# /etc/sermo/storages/storage-root.yml
+name: storage-root
+path: /
+monitor: previous
+capacity:
+  used_pct: { op: ">=", value: "90%" }
+  for: { cycles: 3 }
+  then:
+    notify: [ops-email]
+    notify_interval: 30m     # re-notify every 30m while still firing
 ```
 
 Use `then.dry_run: true` when you want to keep the watch and its actions wired
@@ -1245,22 +1246,36 @@ entry structurally and no runtime watch is built. Use `monitor: disabled` when
 you want the watch visible in the web UI and available for an admin to resume
 with **monitor**.
 
-Watch directories (`paths.storages`, `paths.networks` and `paths.watches`) contain
-watch fragments. A watch fragment is a normal YAML file with a top-level
-`watches:` map and exactly one watch:
+Storage monitors live in storage documents under `paths.storages`; their
+`capacity:` block generates the runtime storage watch. Network and generic watch
+directories (`paths.networks` and `paths.watches`) contain watch fragments. A
+watch fragment is a normal YAML file with a top-level `watches:` map and exactly
+one watch:
 
 ```yaml
 # /etc/sermo/storages/storage-root.yml
+name: storage-root
+category: storage
+path: /
+monitor: previous
+capacity:
+  used_pct: { op: ">=", value: "90%" }
+  then:
+    notify: [ops-email]
+```
+
+```yaml
+# /etc/sermo/watches/memory.yml
 watches:
-  storage-root:
+  memory:
     monitor: previous
-    check: { type: storage, path: /, used_pct: { op: ">=", value: "90%" } }
+    check: { type: memory, used_pct: { op: ">=", value: "90%" } }
     then:
       notify: [ops-email]
 ```
 
 Keeping wizard output in separate files makes it easy to remove or review one
-watch without rewriting the whole global config. Notifier fragments follow the
+target without rewriting the whole global config. Notifier fragments follow the
 same one-entry rule under a top-level `notifiers:` map in `paths.notifiers`.
 
 These conventions keep the per-type sections below short:
@@ -1308,22 +1323,25 @@ These conventions keep the per-type sections below short:
   against a baseline carried across cycles: the **first cycle primes the baseline
   and never fires**, and a counter reset clamps the per-cycle delta to zero.
 
-### `then.expand` — volume growth (storage watches)
+### `then.expand` — volume growth (storage capacity)
 
-A `storage` watch can grow the LVM-backed filesystem under the checked path
-automatically when it runs low. The expansion is native (Sermo orchestrates it
-in Go, invoking only `lvs`/`vgs`/`lvextend` and the filesystem grow tool —
-`resize2fs`, `xfs_growfs` or `btrfs` — which have no Go API):
+A storage target's `capacity:` block can grow the LVM-backed filesystem under
+the checked path automatically when it runs low. The expansion is native (Sermo
+orchestrates it in Go, invoking only `lvs`/`vgs`/`lvextend` and the filesystem
+grow tool — `resize2fs`, `xfs_growfs` or `btrfs` — which have no Go API):
 
 ```yaml
-watches:
-  expand-backup:
-    check: { type: storage, path: /mnt/backup, free_pct: { op: "<", value: "10%" } }
-    for: { cycles: 3 }                    # confirm low for 3 cycles first
-    policy: { cooldown: 30m }             # at most one expansion per 30m (see below)
-    then:
-      expand: { by: 5G }                  # grow by up to 5G (capped to VG free)
-      notify: [ops-email]                 # optional: report the outcome
+# /etc/sermo/storages/expand-backup.yml
+name: expand-backup
+path: /mnt/backup
+monitor: previous
+capacity:
+  free_pct: { op: "<", value: "10%" }
+  for: { cycles: 3 }                    # confirm low for 3 cycles first
+  policy: { cooldown: 30m }             # at most one expansion per 30m (see below)
+  then:
+    expand: { by: 5G }                  # grow by up to 5G (capped to VG free)
+    notify: [ops-email]                 # optional: report the outcome
 ```
 
 `expand.by` is the amount to grow by (`K`/`M`/`G`/`T`, binary units). It is
@@ -1373,23 +1391,22 @@ The WebUI shows live readings only for cheap local probes; command/network-heavy
 checks rely on their normal watch events.
 
 ```yaml
-watches:
-  storage-root:
-    enabled: true          # optional, default true
-    interval: 1m           # optional, default engine.interval
-    check:
-      type: storage
-      path: /
-      used_pct: { op: ">=", value: "90%" } # check fires when crossed
-    for: { cycles: 3 }     # optional window; reuses the rules engine
-    then:
-      hook:
-        command: [/usr/local/bin/alert-storage.sh, "/"]
-        timeout: 10s       # optional, default engine.default_timeout
+# /etc/sermo/storages/storage-root.yml
+name: storage-root
+path: /
+monitor: enabled       # optional, default enabled
+interval: 1m           # optional, default engine.interval
+capacity:
+  used_pct: { op: ">=", value: "90%" } # check fires when crossed
+  for: { cycles: 3 }     # optional window; reuses the rules engine
+  then:
+    hook:
+      command: [/usr/local/bin/alert-storage.sh, "/"]
+      timeout: 10s       # optional, default engine.default_timeout
 ```
 
-The `storage` check reads filesystem usage for `path` and is true when every present
-predicate holds (`op ∈ >=,>,<=,<,==,!=`). Predicates cover **block space** —
+The generated `storage` check reads filesystem usage for `path` and is true when
+every present predicate holds (`op ∈ >=,>,<=,<,==,!=`). Predicates cover **block space** —
 `used_pct`, `free_pct`, `used_bytes`, `free_bytes` — and **inodes** —
 `inodes_used_pct`, `inodes_free_pct`, `inodes_free` (absolute count).
 `*_pct.value` accepts a number or an explicit `%` suffix in 0–100, e.g. `90` or `90%`.
@@ -1398,16 +1415,15 @@ predicate holds (`op ∈ >=,>,<=,<,==,!=`). Predicates cover **block space** —
 Inode predicates catch the "disk full" that `df` hides: a filesystem out of
 inodes (millions of tiny files) rejects new files while bytes are still free.
 ```yaml
-watches:
-  storage-root:
-    check:
-      type: storage
-      path: /
-      used_pct: { op: ">=", value: "90%" }     # block space
-      free_bytes: { op: "<", value: 10G }       # absolute free space
-      inodes_used_pct: { op: ">=", value: "90%" } # inode table
-    then:
-      hook: { command: [/usr/local/bin/alert-storage.sh, "/"] }
+# /etc/sermo/storages/storage-root.yml
+name: storage-root
+path: /
+capacity:
+  used_pct: { op: ">=", value: "90%" }       # block space
+  free_bytes: { op: "<", value: 10G }        # absolute free space
+  inodes_used_pct: { op: ">=", value: "90%" } # inode table
+  then:
+    hook: { command: [/usr/local/bin/alert-storage.sh, "/"] }
 ```
 
 A filesystem that does not report inodes (`inodes_total == 0`, e.g. btrfs) never
@@ -1422,15 +1438,14 @@ otherwise make `statfs` silently report the *parent* filesystem. Add `mounted`
 when you want to assert the path's mount state:
 
 ```yaml
-watches:
-  data:
-    check:
-      type: storage
-      path: /data
-      mounted: true            # require it to be a mount point (set false to require NOT mounted)
-      used_pct: { op: ">=", value: "90%" } # space predicate(s), optional alongside mount
-    then:
-      hook: { command: [/usr/local/bin/alert-storage.sh, "/data"] }
+# /etc/sermo/storages/data.yml
+name: data
+path: /data
+capacity:
+  mounted: true            # require it to be a mount point (set false to require NOT mounted)
+  used_pct: { op: ">=", value: "90%" } # space predicate(s), optional alongside mount
+  then:
+    hook: { command: [/usr/local/bin/alert-storage.sh, "/data"] }
 ```
 
 A storage check needs **at least one** of a space/inode predicate or a mount

@@ -211,12 +211,13 @@ this skill before remote installation runs start considering it.
   remote host exposes the required source data read-only; otherwise record the
   skip reason. Skip pseudo filesystems, bind mounts and transient
   container/runtime mounts unless the user explicitly asks for them.
-- Every generated storage watch must alert when free space is below 10%. Use
-  `free_pct: { op: "<", value: "10%" }` rather than an inverted `used_pct`
-  threshold. For paths that are expected mount points, include `mounted: true`
-  in the same `type: storage` watch so an unmounted network or USB path alerts
-  before `statfs` can report the parent filesystem. Do not configure `fstype`,
-  `device` or `options` as predicates; they are result data only.
+- Every generated storage target must alert when free space is below 10%. Put
+  `free_pct: { op: "<", value: "10%" }` in the storage document's `capacity:`
+  block rather than an inverted `used_pct` threshold. For paths that are
+  expected mount points, include `mounted: true` in that same `capacity:` block
+  so an unmounted network or USB path alerts before `statfs` can report the
+  parent filesystem. Do not configure `fstype`, `device` or `options` as
+  predicates; they are result data only.
 
 ```yaml
 name: storage-mnt-backup
@@ -229,7 +230,7 @@ capacity:
   If real notification delivery is part of the requested remote installation,
   attach the selected notifier or inherit the configured global notify. If the
   run is only validating routing, use `then.dry_run: true`; otherwise keep the
-  watch alert-only or monitor-only according to the requested mode.
+  storage target alert-only or monitor-only according to the requested mode.
 - Include `mount:` blocks for network and USB mount targets that are declared
   in `/etc/fstab`, writing one storage file per target under `paths.storages`. Detect them
   with read-only probes (`findmnt --fstab`, `/etc/fstab`, `lsblk`, `/dev/disk/by-*`

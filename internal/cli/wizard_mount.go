@@ -67,7 +67,7 @@ func (a App) writeWizardMounts(p *assist.Prompt, opts options, globalPath string
 	if err != nil {
 		return a.fail(opts, err.Error())
 	}
-	if err := deleteWizardWatchFiles(deletes); err != nil {
+	if err := deleteWizardConfigFiles(deletes); err != nil {
 		return a.fail(opts, err.Error())
 	}
 
@@ -245,6 +245,9 @@ func mountFileTarget(path string) string {
 	// Files in the storages directory are storage targets by location; a `kind:` is optional
 	// and only rejected when it explicitly disagrees.
 	if kind, _ := doc["kind"].(string); kind != "" && kind != "storage" {
+		return ""
+	}
+	if _, ok := doc["mount"].(map[string]any); !ok {
 		return ""
 	}
 	target := cfgval.String(doc["path"])

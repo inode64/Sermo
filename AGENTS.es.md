@@ -185,7 +185,7 @@ alias duplicados para el mismo pidfile o socket.
 
 Usa un archivo YAML por target — un único documento de un solo kind por archivo,
 nunca varios targets agrupados. El kind de un documento se deriva de dónde vive
-(subdir del catálogo / `paths.services` / `paths.mounts`), así que un `kind:` de
+(subdir del catálogo / `paths.services` / `paths.storages`), así que un `kind:` de
 nivel superior es opcional y se omite. Los fragmentos de watch y notifier siguen
 usando un mapa `watches:` o `notifiers:` de nivel superior, pero ese mapa debe
 contener exactamente una entrada con nombre. La única excepción es un bundle de
