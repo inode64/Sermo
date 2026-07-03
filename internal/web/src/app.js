@@ -515,6 +515,12 @@ function eventRows(events, withService, opts = {}) {
   });
 }
 
+function renderEventsLoading(target, cols = 3) {
+  if (target && !target.childNodes.length) {
+    litRender(tpl`<tr><td colspan="${cols}" class="muted">loading…</td></tr>`, target);
+  }
+}
+
 function fmtMonitorSource(src) {
   switch (src) {
     case "cli": return "via sermoctl";
@@ -2208,7 +2214,7 @@ function renderServiceDetail(d) {
     <table class="events">
       <caption class="visually-hidden">Recent service events</caption>
       <thead><tr><th scope="col">Time</th><th scope="col">Kind</th><th scope="col">Message</th></tr></thead>
-      <tbody id="${detailDomId(d.name, "events")}"><tr><td colspan="3" class="muted">loading…</td></tr></tbody></table>
+      <tbody id="${detailDomId(d.name, "events")}"></tbody></table>
   </div>`;
 }
 
@@ -3317,7 +3323,7 @@ function renderAppExpansion(a) {
   <table class="events">
     <caption class="visually-hidden">Recent application events</caption>
     <thead><tr><th scope="col">Time</th><th scope="col">Kind</th><th scope="col">Message</th></tr></thead>
-    <tbody id="${eventsId}"><tr><td colspan="3" class="muted">loading…</td></tr></tbody></table>`;
+    <tbody id="${eventsId}"></tbody></table>`;
 }
 
 // loadAppEvents fills an expanded application's "Recent events" table with its
@@ -3325,6 +3331,7 @@ function renderAppExpansion(a) {
 async function loadAppEvents(name) {
   const target = document.getElementById(detailDomId(name, "app-events"));
   if (!target) return;
+  renderEventsLoading(target);
   try {
     const res = await fetch(`api/applications/${encodeURIComponent(name)}/events?limit=50`);
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -4477,6 +4484,7 @@ async function runPreflight(name) {
 async function loadServiceEvents(name) {
   const target = document.getElementById(detailDomId(name, "events"));
   if (!target) return;
+  renderEventsLoading(target);
   try {
     const res = await fetch(`api/services/${encodeURIComponent(name)}/events?limit=50`);
     if (!res.ok) throw new Error("HTTP " + res.status);
