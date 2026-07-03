@@ -163,7 +163,7 @@ Columns:
 | CPU total | latest whole process-tree CPU usage; blank for `no_resident_process` services |
 | Memory | latest process-tree resident memory; blank for `no_resident_process` services |
 | FDs | open file-descriptor count from the process tree; blank for `no_resident_process` services |
-| IO R/W | cumulative process-tree disk read/write bytes; blank for `no_resident_process` services |
+| IO R/W | cumulative process-tree disk read/write bytes; shows `0 B / 0 B` when `/proc/<pid>/io` is readable and both counters are zero; blank means `no_resident_process` or unreadable counters |
 | Actions | one state-aware start/stop button, restart, reload, resume, monitor/unmonitor; reload is disabled when `can_reload` is false; the start/stop/restart confirm dialog offers **skip also_apply** when `also_apply` is set |
 
 Row expansion:
