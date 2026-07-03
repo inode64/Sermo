@@ -55,7 +55,7 @@ la autenticación web está habilitada.
 
 | Área | Endpoint | Notas |
 | --- | --- | --- |
-| Acción de servicio | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; `no_cascade` omite los objetivos de `also_apply` en start/stop/restart |
+| Acción de servicio | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; `reload` se ofrece solo cuando el servicio informa `can_reload` desde un bloque `reload:` declarado o una regla de remediación reload; `no_cascade` omite los objetivos de `also_apply` en start/stop/restart |
 | Preflight de servicio | `POST /api/services/{name}/preflight` | ejecuta los checks de preflight sin cambiar el estado del servicio |
 | Acción de watch | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand` |
 | Acción de montaje | `POST /api/mounts/{name}/{action}[?kill=1]` | `mount`, `umount`, `blockers`, `alert`; `kill=1` habilita señalización de bloqueadores para `umount` solo si la política lo permite |
@@ -164,7 +164,7 @@ Columnas:
 | Memory | última memoria residente del árbol de procesos |
 | FDs | recuento de descriptores de archivo abiertos del árbol de procesos |
 | IO R/W | bytes acumulados de lectura/escritura en disco del árbol de procesos |
-| Actions | un botón start/stop según el estado, restart, reload, resume, monitor/unmonitor; el diálogo de confirmación de start/stop/restart ofrece **skip also_apply** cuando `also_apply` está definido |
+| Actions | un botón start/stop según el estado, restart, reload, resume, monitor/unmonitor; reload se desactiva cuando `can_reload` es false; el diálogo de confirmación de start/stop/restart ofrece **skip also_apply** cuando `also_apply` está definido |
 
 Expansión de fila:
 
