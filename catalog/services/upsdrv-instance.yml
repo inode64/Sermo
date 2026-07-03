@@ -1,0 +1,50 @@
+name: upsdrv.%i
+display_name: NUT UPS Driver ${instance}
+category: hardware
+description: Network UPS Tools driver instance.
+service:
+  systemd:
+    - nut-driver@${instance}
+  openrc:
+    - upsdrv.${instance}
+variables:
+  config: /etc/nut/ups.conf
+  driver:
+    from_file: ${config}
+    pattern: (?ms)^\s*\[${instance}\]\s*$.*?^\s*driver\s*=\s*([A-Za-z0-9_.-]+)\s*$
+    default: usbhid-ups
+  user: nut
+config_files:
+  - ${config}
+pidfile: /run/nut/${driver}-${instance}.pid
+processes:
+  main:
+    cmd: (?:^|\s)(?:/usr/lib64/nut|/lib64/nut|/usr/lib/nut|/lib/nut)/${driver}(?:\s|$)
+    user: ${user}
+checks:
+  service:
+    type: service
+    expect: active
+  process:
+    type: process
+    exe_any:
+      - /usr/lib64/nut/${driver}
+      - /lib64/nut/${driver}
+      - /usr/lib/nut/${driver}
+      - /lib/nut/${driver}
+    user: ${user}
+    state: running
+    requires:
+      - service
+    optional: true
+postflight:
+  process:
+    type: process
+    exe_any:
+      - /usr/lib64/nut/${driver}
+      - /lib64/nut/${driver}
+      - /usr/lib/nut/${driver}
+      - /lib/nut/${driver}
+    user: ${user}
+    state: running
+    optional: true

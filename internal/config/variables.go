@@ -131,7 +131,12 @@ func resolveFileVars(vars map[string]string, tree map[string]any) []string {
 		if len(pathErrs) > 0 {
 			continue
 		}
-		val, found, err := extractFileValue(path, spec)
+		resolvedSpec, specErrs := resolveFromFileSpecVars(name, spec, vars)
+		errs = append(errs, specErrs...)
+		if len(specErrs) > 0 {
+			continue
+		}
+		val, found, err := extractFileValue(path, resolvedSpec)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("variables.%s: %v", name, err))
 			continue
@@ -141,6 +146,20 @@ func resolveFileVars(vars map[string]string, tree map[string]any) []string {
 		}
 	}
 	return errs
+}
+
+func resolveFromFileSpecVars(name string, spec map[string]any, vars map[string]string) (map[string]any, []string) {
+	out := maps.Clone(spec)
+	pat := cfgval.String(spec["pattern"])
+	if pat == "" {
+		return out, nil
+	}
+	resolved, errs := substitutePatternVars(pat, vars, "variables."+name+".pattern")
+	if len(errs) > 0 {
+		return out, errs
+	}
+	out["pattern"] = resolved
+	return out, nil
 }
 
 // substituteVars replaces ${name} references in s using vars. Unknown
@@ -155,6 +174,22 @@ func substituteVars(s string, vars map[string]string, path string) (string, []st
 		}
 		if val, ok := vars[name]; ok {
 			return val
+		}
+		errs = append(errs, fmt.Sprintf("variable ${%s} used in %s but not defined", name, path))
+		return ref
+	})
+	return out, errs
+}
+
+func substitutePatternVars(s string, vars map[string]string, path string) (string, []string) {
+	var errs []string
+	out := varRef.ReplaceAllStringFunc(s, func(ref string) string {
+		name := strings.TrimSpace(varRef.FindStringSubmatch(ref)[1])
+		if rest, ok := strings.CutPrefix(name, "env:"); ok {
+			return regexp.QuoteMeta(resolveEnvRef(rest))
+		}
+		if val, ok := vars[name]; ok {
+			return regexp.QuoteMeta(val)
 		}
 		errs = append(errs, fmt.Sprintf("variable ${%s} used in %s but not defined", name, path))
 		return ref
@@ -213,11 +248,12 @@ func validateFromFileSpec(path string, spec map[string]any, add addFunc) {
 	if _, has := spec["pattern"]; has {
 		readers++
 		pat := cfgval.String(spec["pattern"])
+		patForValidation := patternWithVariablePlaceholders(pat)
 		switch {
 		case pat == "":
 			add("%s.pattern must be non-empty", path)
 		default:
-			re, err := regexp.Compile(pat)
+			re, err := regexp.Compile(patForValidation)
 			if err != nil {
 				add("%s.pattern is not a valid regex: %v", path, err)
 			} else if re.NumSubexp() < 1 {
@@ -228,6 +264,10 @@ func validateFromFileSpec(path string, spec map[string]any, add addFunc) {
 	if readers != 1 {
 		add("%s must define exactly one of directive or pattern", path)
 	}
+}
+
+func patternWithVariablePlaceholders(pat string) string {
+	return varRef.ReplaceAllString(pat, "sample")
 }
 
 // expandTree substitutes ${var} references across every string in the tree,
