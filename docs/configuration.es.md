@@ -89,7 +89,7 @@ paths:
 ```
 
 Las listas de directorios bajo `paths.catalog`, `paths.services`, `paths.apps`,
-`paths.notifiers`, `paths.storages`, `paths.networks`, `paths.watches` y
+`paths.notifiers`, `paths.storages`, `paths.networks` y `paths.watches`
 aceptan o bien una cadena de ruta o un mapeo explícito:
 
 ```yaml
@@ -1126,11 +1126,13 @@ service y ejecutan un **hook** (un comando local) y/o envían **notificaciones**
 fusionan con un service.
 
 > **Consejo — genera la configuración interactivamente.** `sermoctl wizard` puede
-> escribir tres superficies diferentes. Los asistentes de watch (`volume`, `net`,
-> `uplink`) imprimen una previsualización y, si se acepta, escriben un target por
-> archivo bajo un directorio de tipo como `/etc/sermo/storages` o
-> `/etc/sermo/networks`; el asistente añade ese directorio al `paths.*` coincidente
-> (escribiendo primero un `.bak`). Los asistentes de service (`service`, `docker`, `vm`)
+> escribir tres superficies diferentes. El asistente de storage (`volume`) imprime
+> documentos de storage con `capacity:` y escribe un archivo por target bajo
+> `/etc/sermo/storages`. Los asistentes de watch (`net`, `uplink`) imprimen una
+> previsualización `watches:` y, si se acepta, escriben un watch por archivo bajo un
+> directorio de tipo como `/etc/sermo/networks` o `/etc/sermo/watches`; el asistente
+> añade ese directorio al `paths.*` coincidente (escribiendo primero un `.bak`). Los
+> asistentes de service (`service`, `docker`, `vm`)
 > escriben un archivo de service por destino bajo `services/` y aseguran que
 > `paths.services` lo cargue; `docker` y `vm` añaden `control.type: docker` o
 > `control.type: libvirt` más comprobaciones de solo lectura coincidentes. El asistente
@@ -1214,24 +1216,23 @@ nuevo, el siguiente episodio notifica de nuevo. Para obtener un **recordatorio**
 mientras un watch permanece disparado, establece `then.notify_interval` a una duración
 positiva: la notificación se reenvía una vez que ese intervalo transcurre. Solo afecta a
 la entrega, por lo que requiere destinos `notify`. Tanto el valor por defecto disparado
-por flancos como `notify_interval` se aplican a los tipos de watch estándar (watches de
-recursos de host como `storage`, las comprobaciones de service de un solo disparo, y los
-watches de métrica `net`/`icmp`/`swap`). Los watches `file` y `process` tienen su propio modelo de
+por flancos como `notify_interval` se aplican a las watches de capacidad generadas para
+storage, las comprobaciones de service de un solo disparo y los watches de métrica
+`net`/`icmp`/`swap`. Los watches `file` y `process` tienen su propio modelo de
 notificación — un evento por ruta cambiada o pid coincidente — e ignoran
 `notify_interval`.
 
 ```yaml
-watches:
-  storage-root:
-    monitor: previous
-    check:
-      type: storage
-      path: /
-      used_pct: { op: ">=", value: "90%" }
-    for: { cycles: 3 }
-    then:
-      notify: [ops-email]
-      notify_interval: 30m     # re-notify every 30m while still firing
+# /etc/sermo/storages/storage-root.yml
+name: storage-root
+path: /
+monitor: previous
+capacity:
+  used_pct: { op: ">=", value: "90%" }
+  for: { cycles: 3 }
+  then:
+    notify: [ops-email]
+    notify_interval: 30m     # re-notify every 30m while still firing
 ```
 
 Usa `then.dry_run: true` cuando quieras mantener el watch y sus acciones cableados para
@@ -1294,22 +1295,36 @@ deshabilita la entrada de watch estructuralmente y no se construye ningún watch
 runtime. Usa `monitor: disabled` cuando quieras que el watch sea visible en la interfaz
 web y disponible para que un admin lo reanude con **monitor**.
 
-Los directorios de watch (`paths.storages`, `paths.networks` y `paths.watches`) contienen
-fragmentos de watch. Un fragmento de watch es un archivo YAML normal con un mapa de nivel
-superior `watches:` y exactamente un watch:
+Los monitores de storage viven en documentos de storage bajo `paths.storages`; su bloque
+`capacity:` genera la watch de storage en runtime. Los directorios de watch de red y
+genéricos (`paths.networks` y `paths.watches`) contienen fragmentos de watch. Un fragmento
+de watch es un archivo YAML normal con un mapa de nivel superior `watches:` y exactamente
+un watch:
 
 ```yaml
 # /etc/sermo/storages/storage-root.yml
+name: storage-root
+category: storage
+path: /
+monitor: previous
+capacity:
+  used_pct: { op: ">=", value: "90%" }
+  then:
+    notify: [ops-email]
+```
+
+```yaml
+# /etc/sermo/watches/memory.yml
 watches:
-  storage-root:
+  memory:
     monitor: previous
-    check: { type: storage, path: /, used_pct: { op: ">=", value: "90%" } }
+    check: { type: memory, used_pct: { op: ">=", value: "90%" } }
     then:
       notify: [ops-email]
 ```
 
 Mantener la salida del asistente en archivos separados facilita eliminar o revisar un
-watch sin reescribir toda la config global. Los fragmentos de notifier siguen la misma
+target sin reescribir toda la config global. Los fragmentos de notifier siguen la misma
 regla de una entrada bajo un mapa de nivel superior `notifiers:` en `paths.notifiers`.
 
 Estas convenciones mantienen cortas las secciones por tipo a continuación:
@@ -1359,22 +1374,26 @@ Estas convenciones mantienen cortas las secciones por tipo a continuación:
   línea base y nunca se dispara**, y un reset de contador limita el delta por ciclo a
   cero.
 
-### `then.expand` — crecimiento de volumen (watches de storage)
+### `then.expand` — crecimiento de volumen (capacidad de storage)
 
-Un watch `storage` puede hacer crecer automáticamente el sistema de archivos respaldado
-por LVM bajo la ruta comprobada cuando se queda bajo. La expansión es nativa (Sermo la
-orquesta en Go, invocando solo `lvs`/`vgs`/`lvextend` y la herramienta de crecimiento del
-sistema de archivos — `resize2fs`, `xfs_growfs` o `btrfs` — que no tienen API de Go):
+El bloque `capacity:` de un target de storage puede hacer crecer automáticamente
+el sistema de archivos respaldado por LVM bajo la ruta comprobada cuando se
+queda bajo. La expansión es nativa (Sermo la orquesta en Go, invocando solo
+`lvs`/`vgs`/`lvextend` y la herramienta de crecimiento del sistema de archivos —
+`resize2fs`, `xfs_growfs` o `btrfs` — que no tienen API de Go):
 
 ```yaml
-watches:
-  expand-backup:
-    check: { type: storage, path: /mnt/backup, free_pct: { op: "<", value: "10%" } }
-    for: { cycles: 3 }                    # confirm low for 3 cycles first
-    policy: { cooldown: 30m }             # at most one expansion per 30m (see below)
-    then:
-      expand: { by: 5G }                  # grow by up to 5G (capped to VG free)
-      notify: [ops-email]                 # optional: report the outcome
+# /etc/sermo/storages/expand-backup.yml
+name: expand-backup
+path: /mnt/backup
+monitor: previous
+capacity:
+  free_pct: { op: "<", value: "10%" }
+  for: { cycles: 3 }                    # confirm low for 3 cycles first
+  policy: { cooldown: 30m }             # at most one expansion per 30m (see below)
+  then:
+    expand: { by: 5G }                  # grow by up to 5G (capped to VG free)
+    notify: [ops-email]                 # optional: report the outcome
 ```
 
 `expand.by` es la cantidad por la que crecer (`K`/`M`/`G`/`T`, unidades binarias). Está
@@ -1423,24 +1442,23 @@ La WebUI muestra lecturas en vivo solo para sondas locales baratas; las comproba
 intensivas en comando/red dependen de sus eventos de watch normales.
 
 ```yaml
-watches:
-  storage-root:
-    enabled: true          # optional, default true
-    interval: 1m           # optional, default engine.interval
-    check:
-      type: storage
-      path: /
-      used_pct: { op: ">=", value: "90%" } # check fires when crossed
-    for: { cycles: 3 }     # optional window; reuses the rules engine
-    then:
-      hook:
-        command: [/usr/local/bin/alert-storage.sh, "/"]
-        timeout: 10s       # optional, default engine.default_timeout
+# /etc/sermo/storages/storage-root.yml
+name: storage-root
+path: /
+monitor: enabled       # optional, default enabled
+interval: 1m           # optional, default engine.interval
+capacity:
+  used_pct: { op: ">=", value: "90%" } # check fires when crossed
+  for: { cycles: 3 }     # optional window; reuses the rules engine
+  then:
+    hook:
+      command: [/usr/local/bin/alert-storage.sh, "/"]
+      timeout: 10s       # optional, default engine.default_timeout
 ```
 
-La comprobación `storage` lee el uso del sistema de archivos para `path` y es verdadera
-cuando todos los predicados presentes se cumplen (`op ∈ >=,>,<=,<,==,!=`). Los predicados
-cubren el **espacio de bloques** —
+La comprobación `storage` generada lee el uso del sistema de archivos para `path`
+y es verdadera cuando todos los predicados presentes se cumplen (`op ∈
+>=,>,<=,<,==,!=`). Los predicados cubren el **espacio de bloques** —
 `used_pct`, `free_pct`, `used_bytes`, `free_bytes` — y los **inodos** —
 `inodes_used_pct`, `inodes_free_pct`, `inodes_free` (recuento absoluto).
 `*_pct.value` acepta un número o un sufijo `%` explícito en 0–100, p. ej. `90` o `90%`.
@@ -1450,16 +1468,15 @@ Los predicados de inodo detectan el "disco lleno" que `df` oculta: un sistema de
 sin inodos (millones de archivos diminutos) rechaza nuevos archivos mientras los bytes
 aún están libres.
 ```yaml
-watches:
-  storage-root:
-    check:
-      type: storage
-      path: /
-      used_pct: { op: ">=", value: "90%" }     # block space
-      free_bytes: { op: "<", value: 10G }       # absolute free space
-      inodes_used_pct: { op: ">=", value: "90%" } # inode table
-    then:
-      hook: { command: [/usr/local/bin/alert-storage.sh, "/"] }
+# /etc/sermo/storages/storage-root.yml
+name: storage-root
+path: /
+capacity:
+  used_pct: { op: ">=", value: "90%" }       # block space
+  free_bytes: { op: "<", value: 10G }        # absolute free space
+  inodes_used_pct: { op: ">=", value: "90%" } # inode table
+  then:
+    hook: { command: [/usr/local/bin/alert-storage.sh, "/"] }
 ```
 
 Un sistema de archivos que no reporta inodos (`inodes_total == 0`, p. ej. btrfs) nunca
@@ -1475,15 +1492,14 @@ silenciosamente el sistema de archivos *padre*. Añade `mounted` cuando quieras 
 estado de montaje de la ruta:
 
 ```yaml
-watches:
-  data:
-    check:
-      type: storage
-      path: /data
-      mounted: true            # require it to be a mount point (set false to require NOT mounted)
-      used_pct: { op: ">=", value: "90%" } # space predicate(s), optional alongside mount
-    then:
-      hook: { command: [/usr/local/bin/alert-storage.sh, "/data"] }
+# /etc/sermo/storages/data.yml
+name: data
+path: /data
+capacity:
+  mounted: true            # require it to be a mount point (set false to require NOT mounted)
+  used_pct: { op: ">=", value: "90%" } # space predicate(s), optional alongside mount
+  then:
+    hook: { command: [/usr/local/bin/alert-storage.sh, "/data"] }
 ```
 
 Una comprobación de storage necesita **al menos uno** de un predicado de espacio/inodo o

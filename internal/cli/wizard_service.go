@@ -533,7 +533,7 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 		}
 		deletes = append(deletes, more...)
 	}
-	if err := deleteWizardWatchFiles(deletes); err != nil {
+	if err := deleteWizardConfigFiles(deletes); err != nil {
 		return a.fail(opts, err.Error())
 	}
 

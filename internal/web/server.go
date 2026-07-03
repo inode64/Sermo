@@ -89,7 +89,6 @@ type Mount struct {
 	Path         string         `json:"path"`
 	Mounted      bool           `json:"mounted"`
 	Refcount     int            `json:"refcount"`
-	Source       string         `json:"source,omitempty"`
 	State        string         `json:"state"`
 	Refcounted   bool           `json:"refcounted"`
 	Message      string         `json:"message,omitempty"` // set when status sampling failed

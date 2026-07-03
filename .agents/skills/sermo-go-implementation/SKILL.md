@@ -104,7 +104,7 @@ internal/buildinfo    build/version metadata
 internal/cfgval       typed config value parsing and validation helpers
 internal/checks       check implementations and central check builders
 internal/cli          sermoctl command implementations
-internal/config       YAML model, catalog loading, services/mounts/clones, merge, render, variables, validation
+internal/config       YAML model, catalog loading, services/storages/clones, merge, render, variables, validation
 internal/conn         protocol probes used by connection checks
 internal/control      daemon control socket/client helpers
 internal/diag         diagnostics assembly
