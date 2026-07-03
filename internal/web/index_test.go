@@ -271,7 +271,6 @@ func TestIndexWatchReadingLongValuesWrap(t *testing.T) {
 	script := bundledScript(t)
 	for _, needle := range []string{
 		"issuer",
-		"subject",
 		"watch-reading-long",
 		"watch-reading-value",
 	} {

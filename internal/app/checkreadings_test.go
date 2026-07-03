@@ -91,3 +91,26 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 		})
 	}
 }
+
+func TestCertCheckReadingsOmitSubjectAndEndWithIssuer(t *testing.T) {
+	readings := certCheckReadings(map[string]any{
+		"source":               "/etc/ssl/cert.pem",
+		"days_left":            30,
+		"not_after":            "2026-12-31T00:00:00Z",
+		"issuer":               "Test CA",
+		"public_key_algorithm": "ECDSA",
+		"key_bits":             256,
+		"subject":              "CN=example.com",
+		"dns_names":            []string{"example.com", "www.example.com"},
+	})
+	if got := readingByField(readings, "subject").Value; got != "" {
+		t.Fatalf("subject reading = %q, want omitted (%+v)", got, readings)
+	}
+	if len(readings) == 0 {
+		t.Fatal("cert readings are empty")
+	}
+	last := readings[len(readings)-1]
+	if last.Field != "issuer" || last.Value != "Test CA" {
+		t.Fatalf("last reading = %+v, want issuer Test CA (%+v)", last, readings)
+	}
+}
