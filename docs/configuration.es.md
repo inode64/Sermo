@@ -822,7 +822,9 @@ muestra de proceso. Los buckets de métricas de runtime se podan a la misma vent
 retención de 366 días (~1 año).
 
 Los cambios de monitor disparados desde la web se registran con la fuente `web` en el
-almacén de estado (`cli`, `config` y `daemon` son los otros valores). El panel y
+almacén de estado; los stops manuales desde la web UI o la CLI usan
+`web-manual-stop` / `cli-manual-stop` hasta que un start correcto posterior restaura el
+estado monitorizado anterior. El panel y
 `GET /api/services` / `GET /api/watches` exponen `state`, `monitor_source` y
 `monitor_changed_at` de modo que un service running/paused/stopped no monitorizado o un
 watch desmonitorizado muestre quién lo pausó y cuándo. Los host watches no tienen los

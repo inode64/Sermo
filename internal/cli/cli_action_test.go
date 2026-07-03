@@ -14,6 +14,7 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/operation"
 	"sermo/internal/servicemgr"
+	"sermo/internal/state"
 )
 
 func writeActionConfig(t *testing.T) string {
@@ -24,6 +25,7 @@ func writeActionConfig(t *testing.T) string {
 paths:
   services: [ `+root+`/services ]
   runtime: `+root+`/run
+  state: `+root+`/state
 defaults:
   policy:
     cooldown: 5m
@@ -44,6 +46,7 @@ paths:
   services: [ `+root+`/services ]
   runtime: `+root+`/run
   locks: `+root+`/locks
+  state: `+root+`/state
 defaults:
   policy:
     cooldown: 5m
@@ -63,6 +66,7 @@ func writeReloadCommandConfig(t *testing.T) string {
 paths:
   services: [ `+root+`/services ]
   runtime: `+root+`/run
+  state: `+root+`/state
 defaults:
   policy:
     cooldown: 5m
@@ -96,6 +100,43 @@ func actionApp(result operation.Result, opErr error, stdout, stderr *bytes.Buffe
 	}
 }
 
+func readMonitorRecord(t *testing.T, global, service string) state.MonitorRecord {
+	t.Helper()
+	cfg, err := config.Load(global)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	if err != nil {
+		t.Fatalf("open state: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	rec, found, err := store.MonitorState(service)
+	if err != nil {
+		t.Fatalf("monitor state: %v", err)
+	}
+	if !found {
+		t.Fatalf("monitor state for %s not found", service)
+	}
+	return rec
+}
+
+func writeMonitorRecord(t *testing.T, global, service string, active bool, source string) {
+	t.Helper()
+	cfg, err := config.Load(global)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	if err != nil {
+		t.Fatalf("open state: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	if err := store.SetActive(service, active, source); err != nil {
+		t.Fatalf("set active: %v", err)
+	}
+}
+
 func TestRestartOKThroughEngine(t *testing.T) {
 	global := writeActionConfig(t)
 	var stdout bytes.Buffer
@@ -117,6 +158,7 @@ func TestRestartUsesCanonicalServiceAlias(t *testing.T) {
 paths:
   services: [ `+root+`/services ]
   runtime: `+root+`/run
+  state: `+root+`/state
 defaults:
   policy:
     cooldown: 5m
@@ -234,6 +276,51 @@ func TestActionFailedExit2(t *testing.T) {
 	}
 }
 
+func TestStopPausesMonitoringAndStartRestores(t *testing.T) {
+	global := writeActionConfig(t)
+	var stdout bytes.Buffer
+	app := actionApp(operation.Result{}, nil, &stdout, nil)
+	app.Operate = func(_ context.Context, _ options, _ *config.Config, _ config.Resolved, service, action string) (operation.Result, error) {
+		return operation.Result{Service: service, Action: action, Status: operation.ResultOK}, nil
+	}
+
+	if code := app.Run(context.Background(), []string{"--config", global, "stop", "web"}); code != exitSuccess {
+		t.Fatalf("stop exit = %d, want %d", code, exitSuccess)
+	}
+	rec := readMonitorRecord(t, global, "web")
+	if rec.Active || rec.Source != state.SourceCLIManualStop {
+		t.Fatalf("record after stop = %+v", rec)
+	}
+
+	if code := app.Run(context.Background(), []string{"--config", global, "start", "web"}); code != exitSuccess {
+		t.Fatalf("start exit = %d, want %d", code, exitSuccess)
+	}
+	rec = readMonitorRecord(t, global, "web")
+	if !rec.Active || rec.Source != state.SourceCLI {
+		t.Fatalf("record after start = %+v", rec)
+	}
+}
+
+func TestStopStartPreservesExistingUnmonitor(t *testing.T) {
+	global := writeActionConfig(t)
+	writeMonitorRecord(t, global, "web", false, state.SourceCLI)
+	app := actionApp(operation.Result{}, nil, nil, nil)
+	app.Operate = func(_ context.Context, _ options, _ *config.Config, _ config.Resolved, service, action string) (operation.Result, error) {
+		return operation.Result{Service: service, Action: action, Status: operation.ResultOK}, nil
+	}
+
+	if code := app.Run(context.Background(), []string{"--config", global, "stop", "web"}); code != exitSuccess {
+		t.Fatalf("stop exit = %d, want %d", code, exitSuccess)
+	}
+	if code := app.Run(context.Background(), []string{"--config", global, "start", "web"}); code != exitSuccess {
+		t.Fatalf("start exit = %d, want %d", code, exitSuccess)
+	}
+	rec := readMonitorRecord(t, global, "web")
+	if rec.Active || rec.Source != state.SourceCLI {
+		t.Fatalf("record after preserved unmonitor = %+v", rec)
+	}
+}
+
 // writeCascadeConfig sets up a primary `web` that cascades to `db` via
 // also_apply, so restart web runs both services through Operate.
 func writeCascadeConfig(t *testing.T) string {
@@ -244,6 +331,7 @@ func writeCascadeConfig(t *testing.T) string {
 paths:
   services: [ `+root+`/services ]
   runtime: `+root+`/run
+  state: `+root+`/state
 defaults:
   policy:
     cooldown: 5m
