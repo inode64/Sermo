@@ -200,7 +200,7 @@ func TestStatusCommandText(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
 	}
-	if got := strings.TrimSpace(stdout.String()); got != "mysql state=running backend=systemd service=mysql.service" {
+	if got := strings.TrimSpace(stdout.String()); got != "mysql state=started backend=systemd service=mysql.service" {
 		t.Fatalf("stdout = %q", got)
 	}
 }
@@ -224,6 +224,30 @@ func TestStatusUsesDaemonStateWhenAvailable(t *testing.T) {
 	}
 }
 
+func TestStatusUsesRequestedServiceForDaemonState(t *testing.T) {
+	var stdout bytes.Buffer
+	app := statusApp(servicemgr.ServiceStatus{
+		Service: "sshd", Backend: servicemgr.BackendOpenRC,
+		Unit: "sshd", Status: servicemgr.StatusActive,
+	}, nil, &stdout, nil)
+	var requested string
+	app.FetchDaemonServiceState = func(_ context.Context, _ options, service string) (string, bool) {
+		requested = service
+		return "monitored", true
+	}
+
+	code := app.Run(context.Background(), []string{"status", "ssh-temp"})
+	if code != exitSuccess {
+		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+	}
+	if requested != "ssh-temp" {
+		t.Fatalf("daemon state requested for %q, want ssh-temp", requested)
+	}
+	if got := strings.TrimSpace(stdout.String()); got != "sshd state=monitored backend=openrc service=sshd" {
+		t.Fatalf("stdout = %q", got)
+	}
+}
+
 func TestStatusCommandJSON(t *testing.T) {
 	var stdout bytes.Buffer
 	app := statusApp(servicemgr.ServiceStatus{
@@ -235,7 +259,7 @@ func TestStatusCommandJSON(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
 	}
-	want := `{"service":"mysql","state":"running","backend":"systemd","status":"active","unit":"mysql.service","paused":false}`
+	want := `{"service":"mysql","state":"started","backend":"systemd","status":"active","unit":"mysql.service","paused":false}`
 	if got := strings.TrimSpace(stdout.String()); got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}

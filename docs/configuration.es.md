@@ -650,9 +650,10 @@ Endpoints de solo lectura:
   activa.
 - `GET /api/whoami` — rol del llamante, permisos y visibilidad de funciones.
 - `GET /api/services` — lista de services de **runtime configurado** (los archivos de
-  service bajo `paths.services`): name, `state` (`disabled`, `running`,
-  `paused`, `stopped`, `starting`, `failed`), estado del backend, `check_health`,
-  `checks_failing`, locks activos, estado/fuente/marca de tiempo de monitor, backend,
+  service bajo `paths.services`): name, `state` (`disabled`, `stopped`,
+  `started`, `starting`, `collecting`, `monitored`, `failed`), estado del backend,
+  `check_health`, `checks_failing`, `observability_ready`,
+  `observability_missing`, locks activos, estado/fuente/marca de tiempo de monitor, backend,
   unidad, cooldown, estado de remediación, próxima acción elegible y último evento. Esto
   no es `sermoctl services`, que lista los perfiles de service del catálogo — consulta
   [cli.md](cli.es.md#catalog-inventory).
@@ -679,7 +680,8 @@ Endpoints de solo lectura:
 - `GET /api/locks` — locks de runtime con nombre con TTL, estado del propietario, edad,
   acciones bloqueadas y elegibilidad de liberación.
 - `GET /api/activity` — resumen de actividad reciente usado por la cabecera del panel.
-- `GET /api/monitoring` — recuentos de services monitorizados frente a pausados.
+- `GET /api/monitoring` — recuentos de monitorización activa frente a pausada
+  para services no deshabilitados.
 - `GET /api/events?limit=N` — feed global de eventos, los más nuevos primero. Filtros
   opcionales: `service`, `watch`, `kind`, `status` y `only_errors=1`.
 - `GET /api/ops` — uso global de slots de operación: `{in_use, total}` para
@@ -836,12 +838,14 @@ almacén de estado; los stops manuales desde la web UI o la CLI usan
 `web-manual-stop` / `cli-manual-stop` hasta que un start correcto posterior restaura el
 estado monitorizado anterior. El panel y
 `GET /api/services` / `GET /api/watches` exponen `state`, `monitored`,
-`monitor_source` y `monitor_changed_at` por separado, de modo que un service pueda
-mostrar `running`, `paused`, `stopped` o `failed` y, a la vez, si la monitorización
-está pausada y quién la cambió. Los host watches no tienen los estados `running` o
+`monitor_source` y `monitor_changed_at` por separado. Un service puede mostrar
+`started` cuando el backend está activo pero la monitorización está pausada,
+`collecting` mientras la monitorización está activa pero los indicadores de
+runtime/check/SLA todavía se están llenando, y `monitored` solo cuando esos
+indicadores están listos. Los host watches no tienen estados `started` o
 `stopped` del gestor de servicios; su `state` es salud (`ok`, `failed`, `starting` o
-`disabled`) y el panel filtra watches monitorizados/no monitorizados desde el flag de
-monitorización separado.
+`disabled`), mientras su flag de monitorización separado se usa para acciones y
+metadatos, no como una insignia de estado adicional.
 Las operaciones toman el lock de operación por service, de modo que nunca se solapan con
 la acción de un worker sobre el mismo service. El almacén de estado también conserva una
 marca corta de asentamiento de operación, de modo que las acciones iniciadas por

@@ -264,6 +264,9 @@ type Deps struct {
 	// ServiceMetrics stores per-cycle service CPU, memory and IO samples for the
 	// web detail graphs. Optional: nil means the web backend samples on demand.
 	ServiceMetrics *ServiceMetricSampler
+	// Observability tracks when a service has completed a normal observed cycle
+	// and has fresh indicators available for the web/CLI state view.
+	Observability *ObservabilityRegistry
 	// ExecxRunner is used for executing hook commands from watches (file, process,
 	// and generic watches). If nil, OSHookRunner will use execx.CommandRunner{}.
 	ExecxRunner execx.Runner
@@ -492,6 +495,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		InPanic:           deps.Panic.Active,
 		Settling:          deps.Settling,
 		OperationSettling: deps.OperationSettling,
+		Observability:     deps.Observability,
 		Shadow:            shadow,
 		ResolveRefs:       func() rules.RefResolver { return rules.NewCheckResolver(preflightBuilt, maxParallel) },
 		RecordHealth:      healthRecorder(deps, name),

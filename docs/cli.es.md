@@ -150,7 +150,14 @@ de servicio resuelven el mismo destino de control que usan `sermod` y la web UI.
 Cuando `sermod` se ejecuta con `web` habilitado, `sermoctl status` prefiere el
 estado calculado por el daemon (incluyendo `starting` durante el asentamiento de
 arranque); si la API web es inalcanzable, recurre al backend de init más los
-metadatos locales de monitorización, como antes. **`sermoctl is-active` es
+metadatos locales de monitorización, como antes. Los estados de servicio son:
+`disabled`, `stopped`, `started` (backend activo pero no monitorizado),
+`starting` (asentamiento de arranque/operación), `collecting` (activo y
+monitorizado, pero las gráficas/indicadores aún no están completos),
+`monitored` (activo, monitorizado y con observabilidad lista) y `failed`. Sin la
+vista del daemon, un servicio configurado activo y monitorizado cae a
+`collecting`; un servicio activo que no consta como monitorizado cae a
+`started`. **`sermoctl is-active` es
 diferente:** siempre sondea el backend de init (`active` / `inactive` /
 `paused`) para obtener el código de salida y la salida en texto plano. Por tanto,
 un servicio monitorizado que aún se está asentando con un backend inactivo

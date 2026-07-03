@@ -613,7 +613,7 @@ function nextRemediationCell(s) {
 // so typing or switching a filter re-renders from cache without a refetch.
 let allServices = [];
 let svcQuery = "";
-let svcStatus = "all"; // all | disabled | running | paused | stopped | unmonitorized | monitorized | starting | failed
+let svcStatus = "all"; // all | disabled | stopped | started | starting | collecting | monitored | failed
 let svcCategory = "all";
 let svcGrouped = false;
 let svcCollapsedGroups = new Set();
@@ -682,7 +682,7 @@ function restoreUIState() {
     if (!raw) return;
     const s = JSON.parse(raw);
     if (typeof s.svcQuery === "string") svcQuery = s.svcQuery;
-    if (typeof s.svcStatus === "string") svcStatus = s.svcStatus;
+    if (typeof s.svcStatus === "string") svcStatus = normalizeServiceStatusFilter(s.svcStatus);
     if (typeof s.svcCategory === "string") svcCategory = s.svcCategory;
     if (typeof s.svcGrouped === "boolean") svcGrouped = s.svcGrouped;
     if (s.svcSort && typeof s.svcSort.key === "string") {
@@ -698,7 +698,7 @@ function restoreUIState() {
         const panel = watchPanels[key];
         if (!panel || !saved) continue;
         if (typeof saved.query === "string") panel.query = saved.query;
-        if (typeof saved.status === "string") panel.status = saved.status;
+        if (typeof saved.status === "string") panel.status = normalizeWatchStatusFilter(saved.status);
         if (typeof saved.type === "string") panel.type = saved.type;
         if (saved.sort && typeof saved.sort.key === "string") {
           panel.sort = { key: saved.sort.key, dir: saved.sort.dir === -1 ? -1 : 1 };
@@ -794,12 +794,15 @@ function targetStateClass(state) {
   switch (state) {
     case "disabled": return "state-disabled";
     case "running": return "state-running";
+    case "started": return "state-started";
     case "paused": return "state-paused";
     case "stopped": return "state-stopped";
     case "warning": return "state-warning";
     case "ok": return "state-ok";
     case "monitorized": return "state-monitorized";
+    case "monitored": return "state-monitored";
     case "unmonitorized": return "state-unmonitorized";
+    case "collecting": return "state-collecting";
     case "failed": return "state-failed";
     case "starting": return "state-starting";
     case "stopping":
@@ -823,15 +826,18 @@ function stateBadgeLabel(state, label) {
 function stateRank(state) {
   switch (state) {
     case "disabled": return 0;
+    case "stopped": return 1;
+    case "starting": return 2;
+    case "collecting": return 3;
+    case "started": return 4;
+    case "monitored": return 5;
+    case "failed": return 7;
     case "unmonitorized": return 1;
     case "running": return 2;
     case "paused": return 3;
-    case "stopped": return 4;
     case "ok": return 5;
     case "warning": return 6;
     case "monitorized": return 6;
-    case "failed": return 7;
-    case "starting": return 1;
     case "stopping": return 1;
     case "restarting": return 1;
     case "resuming": return 1;
@@ -889,11 +895,15 @@ function serviceMonitorBadge(s) {
 }
 
 function serviceStateBadge(s) {
-  return stateBadge(serviceDisplayState(s));
+  const st = serviceDisplayState(s);
+  const missing = (st === "collecting" && s && Array.isArray(s.observability_missing) && s.observability_missing.length)
+    ? `Collecting ${s.observability_missing.join(", ")}`
+    : "";
+  return missing ? tpl`<span title="${missing}">${stateBadge(st)}</span>` : stateBadge(st);
 }
 
 function serviceStateCell(s) {
-  return tpl`${serviceStateBadge(s)}${serviceMonitorBadge(s)}`;
+  return serviceStateBadge(s);
 }
 
 function isFailing(s) { return serviceState(s) === "failed"; }
@@ -917,6 +927,13 @@ function openPanelTarget(target) {
     const sec = $("#services-section");
     if (sec) sec.open = true;
     setSvcStatus("starting");
+    sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
+    return;
+  }
+  if (target === "collecting-services") {
+    const sec = $("#services-section");
+    if (sec) sec.open = true;
+    setSvcStatus("collecting");
     sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
     return;
   }
@@ -1190,17 +1207,17 @@ function serviceMatches(s) {
   const category = categoryOf(s, "service");
   if (svcCategory !== "all" && category !== svcCategory) return false;
   if (svcQuery) {
-    const hay = `${displayName(s)} ${s.name || ""} ${s.display_name || ""} ${category} ${s.unit || ""} ${serviceDisplayState(s)} ${serviceMonitorized(s) ? "monitorized monitored" : ""} ${serviceUnmonitorized(s) ? "unmonitorized unmonitored" : ""}`.toLowerCase();
+    const monitorText = s && s.monitored ? "monitoring enabled" : "monitoring paused";
+    const missing = Array.isArray(s && s.observability_missing) ? s.observability_missing.join(" ") : "";
+    const hay = `${displayName(s)} ${s.name || ""} ${s.display_name || ""} ${category} ${s.unit || ""} ${serviceDisplayState(s)} ${monitorText} ${missing}`.toLowerCase();
     if (!hay.includes(svcQuery)) return false;
   }
   switch (svcStatus) {
-    case "unmonitorized": return serviceUnmonitorized(s);
-    case "monitorized":   return serviceMonitorized(s);
     case "disabled":
-    case "running":
-    case "paused":
     case "stopped":
+    case "started":
     case "starting":
+    case "collecting":
     case "failed":      return serviceDisplayState(s) === svcStatus;
     default:            return true; // "all"
   }
@@ -1252,6 +1269,31 @@ function filterButtonLabel(key) {
     case "monitorized": return "monitored";
     case "unmonitorized": return "unmonitored";
     default: return key;
+  }
+}
+
+function normalizeServiceStatusFilter(v) {
+  switch (v) {
+    case "running":
+    case "monitorized":
+    case "monitored":
+      return "all";
+    case "unmonitorized":
+      return "started";
+    case "paused":
+      return "stopped";
+    default:
+      return v || "all";
+  }
+}
+
+function normalizeWatchStatusFilter(v) {
+  switch (v) {
+    case "monitorized":
+    case "unmonitorized":
+      return "all";
+    default:
+      return v || "all";
   }
 }
 
@@ -1317,19 +1359,17 @@ function renderFilterCounts() {
   const c = {
     all: s.length,
     disabled: s.filter((x) => serviceDisplayState(x) === "disabled").length,
-    running: s.filter((x) => serviceDisplayState(x) === "running").length,
-    paused: s.filter((x) => serviceDisplayState(x) === "paused").length,
     stopped: s.filter((x) => serviceDisplayState(x) === "stopped").length,
-    unmonitorized: s.filter(serviceUnmonitorized).length,
-    monitorized: s.filter(serviceMonitorized).length,
+    started: s.filter((x) => serviceDisplayState(x) === "started").length,
     starting: s.filter((x) => serviceDisplayState(x) === "starting").length,
+    collecting: s.filter((x) => serviceDisplayState(x) === "collecting").length,
     failed: s.filter((x) => serviceDisplayState(x) === "failed").length,
   };
   renderFilterButtonCounts("#svc-filters", c);
 }
 
 function setSvcStatus(v) {
-  svcStatus = v;
+  svcStatus = normalizeServiceStatusFilter(v);
   syncFilterButtons("#svc-filters", "f", svcStatus);
   renderServices();
   saveUIState();
@@ -2562,8 +2602,8 @@ function watchHasExpand(w) {
 }
 
 // watchStateText reads the server-computed health state (app.WatchState:
-// disabled, starting, failed or ok). The monitor flag is rendered separately so
-// unmonitored watches can still surface their last known health.
+// disabled, starting, failed or ok). Monitor state remains available to actions
+// and search, but the State column renders one state badge.
 function watchStateText(w) {
   return (w && w.state) || "unknown";
 }
@@ -2580,13 +2620,8 @@ function watchUnmonitorized(w) {
   return !!(w && w.enabled && !w.monitored);
 }
 
-function watchMonitorBadge(w) {
-  if (!w || !w.enabled) return nothing;
-  return tpl`${monitorStateBadge(!!w.monitored)}${watchUnmonitorized(w) ? watchMonitorHint(w) : nothing}`;
-}
-
 function watchStateCell(w) {
-  return tpl`${stateBadge(watchStateText(w))}${watchMonitorBadge(w)}`;
+  return stateBadge(watchStateText(w));
 }
 
 function watchSummaryText(w) {
@@ -2633,8 +2668,7 @@ function watchSearchText(w) {
     watchHasExpand(w) ? "expand" : "",
     w.dry_run ? "dry run dry-run" : "",
     watchStateText(w),
-    watchMonitorized(w) ? "monitorized" : "",
-    watchUnmonitorized(w) ? "unmonitorized" : "",
+    w && w.monitored ? "monitoring enabled" : "monitoring paused",
     watchMonitorMode(w),
     w.last_activity_kind,
     conditions,
@@ -2659,8 +2693,6 @@ function watchMatches(w, panelKey) {
   switch (panel.status) {
     case "disabled":      return watchStateText(w) === "disabled";
     case "ok":            return watchStateText(w) === "ok";
-    case "monitorized":   return watchMonitorized(w);
-    case "unmonitorized": return watchUnmonitorized(w);
     case "starting":      return watchStateText(w) === "starting";
     case "failed":        return watchStateText(w) === "failed";
     default:           return true;
@@ -2681,7 +2713,7 @@ function setWatchQuery(panelKey, v) {
 
 function setWatchStatus(panelKey, v) {
   const panel = getWatchPanel(panelKey);
-  panel.status = v || "all";
+  panel.status = normalizeWatchStatusFilter(v);
   syncWatchFilterActive(panelKey);
   renderWatches();
   saveUIState();
@@ -2741,8 +2773,6 @@ function renderWatchFilterCounts(panelKey, watches) {
     all: w.length,
     disabled: w.filter((x) => watchStateText(x) === "disabled").length,
     ok: w.filter((x) => watchStateText(x) === "ok").length,
-    monitorized: w.filter(watchMonitorized).length,
-    unmonitorized: w.filter(watchUnmonitorized).length,
     starting: w.filter((x) => watchStateText(x) === "starting").length,
     failed: w.filter((x) => watchStateText(x) === "failed").length,
   });
@@ -3794,6 +3824,7 @@ function panelTargetLabel(target) {
   switch (target) {
     case "failed-services": return "services panel, failed filter";
     case "starting-services": return "services panel, starting filter";
+    case "collecting-services": return "services panel, collecting filter";
     case "failed-watches": return "watches panel, failed filter";
     case "starting-watches": return "watches panel, starting filter";
     case "failed-apps": return "applications panel, failed filter";
@@ -3827,9 +3858,11 @@ function renderOverview(ctx) {
   const { ready, live, mon, ops, locks, hostMetrics } = ctx;
   const svcs = allServices || [];
   const enabled = svcs.filter((s) => s.enabled);
-  const failedSvcs = svcs.filter((s) => serviceState(s) === "failed");
-  const startingSvcs = svcs.filter((s) => serviceState(s) === "starting");
-  const upSvcs = enabled.filter((s) => serviceState(s) === "running");
+  const failedSvcs = svcs.filter((s) => serviceDisplayState(s) === "failed");
+  const startingSvcs = svcs.filter((s) => serviceDisplayState(s) === "starting");
+  const collectingSvcs = svcs.filter((s) => serviceDisplayState(s) === "collecting");
+  const activeSvcs = enabled.filter((s) => ["started", "collecting", "monitored"].includes(serviceDisplayState(s)));
+  const monitoredSvcs = enabled.filter((s) => serviceDisplayState(s) === "monitored");
   const watches = allWatches || [];
   const enabledWatches = watches.filter((w) => w && w.enabled);
   const failedWatches = watches.filter((w) => watchStateText(w) === "failed");
@@ -3859,8 +3892,9 @@ function renderOverview(ctx) {
   const watchesSettling = settling && !failedWatches.length;
   const servicesTarget = failedSvcs.length ? "failed-services"
     : (startingSvcs.length || daemonStarting ? "starting-services"
-      : (startingWatches.length ? "starting-watches"
-        : (startingApps.length ? "starting-apps" : "services-section")));
+      : (collectingSvcs.length ? "collecting-services"
+        : (startingWatches.length ? "starting-watches"
+          : (startingApps.length ? "starting-apps" : "services-section"))));
   const watchesTarget = failedWatches.length ? "failed-watches"
     : (startingWatches.length ? "starting-watches"
       : (startingApps.length && !startingSvcs.length && !daemonStarting ? "starting-apps"
@@ -3877,14 +3911,14 @@ function renderOverview(ctx) {
   const tiles = [];
   const servicesSub = failedSvcs.length
     ? `${failedSvcs.length} failed`
-    : (servicesSettlingSub() || (enabled.length === 0 ? "none enabled" : "all healthy"));
+    : (servicesSettlingSub() || (collectingSvcs.length ? `${collectingSvcs.length} collecting` : (enabled.length === 0 ? "none enabled" : "all active")));
   tiles.push(tile({
-    label: "Services up",
-    value: tpl`${upSvcs.length}<small> / ${enabled.length}</small>`,
-    cls: failedSvcs.length ? "t-crit" : (settling ? "" : (enabled.length ? "t-ok" : "")),
+    label: "Services active",
+    value: tpl`${activeSvcs.length}<small> / ${enabled.length}</small>`,
+    cls: failedSvcs.length ? "t-crit" : (collectingSvcs.length ? "t-warn" : (settling ? "" : (enabled.length ? "t-ok" : ""))),
     sub: servicesSub,
     target: servicesTarget,
-    ariaLabel: tileAriaLabel("Services up", `${upSvcs.length} of ${enabled.length}`, servicesSub, servicesTarget),
+    ariaLabel: tileAriaLabel("Services active", `${activeSvcs.length} of ${enabled.length}`, servicesSub, servicesTarget),
   }));
   if (watches.length) {
     const watchesSub = failedWatches.length
@@ -3917,20 +3951,22 @@ function renderOverview(ctx) {
     target: alertsTarget,
     ariaLabel: tileAriaLabel("Alerts", String(alerts), alertsSub, alertsTarget),
   }));
-  const monitoredTarget = settling && !failedSvcs.length
+  const monitoredTarget = collectingSvcs.length && !failedSvcs.length
+    ? "collecting-services"
+    : (settling && !failedSvcs.length
     ? servicesTarget
-    : "services-section";
-  const monitoredSub = (mon && (mon.paused || 0) > 0)
-    ? `${mon.paused} paused`
+    : "services-section");
+  const monitoredSub = collectingSvcs.length
+    ? `${collectingSvcs.length} collecting`
     : (settling && !failedSvcs.length ? (servicesSettlingSub() || "settling") : "");
-  if (mon && mon.total != null) {
+  if (enabled.length || (mon && mon.total != null)) {
     tiles.push(tile({
       label: "Monitored",
-      value: tpl`${mon.monitored || 0}<small> / ${mon.total || 0}</small>`,
-      cls: (mon.paused || 0) > 0 ? "t-warn" : (settling && !failedSvcs.length ? "" : ""),
+      value: tpl`${monitoredSvcs.length}<small> / ${enabled.length}</small>`,
+      cls: collectingSvcs.length ? "t-warn" : (settling && !failedSvcs.length ? "" : (enabled.length && monitoredSvcs.length === enabled.length ? "t-ok" : "")),
       sub: monitoredSub,
       target: monitoredTarget,
-      ariaLabel: tileAriaLabel("Monitored", `${mon.monitored || 0} of ${mon.total || 0}`, monitoredSub, monitoredTarget),
+      ariaLabel: tileAriaLabel("Monitored", `${monitoredSvcs.length} of ${enabled.length}`, monitoredSub, monitoredTarget),
     }));
   }
   if (ops && ops.total) {
@@ -4086,7 +4122,7 @@ function renderStatus(ctx) {
     parts.push(`services: <b>${ready.services || 0}</b>`);
     parts.push(`watches: <b>${ready.watches || 0}</b>`);
     if (mon.total != null) {
-      let monStr = `monitored: <b>${mon.monitored || 0}/${mon.total || 0}</b>`;
+      let monStr = `monitoring: <b>${mon.monitored || 0}/${mon.total || 0}</b>`;
       if (mon.paused > 0) monStr += ` <span class="muted">(${mon.paused} paused)</span>`;
       parts.push(monStr);
     }

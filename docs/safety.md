@@ -80,8 +80,8 @@ service — useful during maintenance so a deliberate stop is not "remediated" b
 automatic restart. The pause is recorded in the persistent state store under
 `paths.state` (the `monitor_state` table), so it persists across daemon
 restarts and reboots until cleared. `sermoctl status SERVICE` shows
-the single operator state `running` or `stopped` while monitoring is paused
-(`"state": "running"`/`"stopped"` and `"paused": true` in `--json`). Pausing only
+the single operator state `started` or `stopped` while monitoring is paused
+(`"state": "started"`/`"stopped"` and `"paused": true` in `--json`). Pausing only
 affects Sermo's monitoring; it does not stop the service itself, and manual
 `sermoctl` actions still work.
 
