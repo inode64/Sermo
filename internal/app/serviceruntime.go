@@ -86,7 +86,7 @@ func (s *ServiceMetricSampler) Record(name string, cur web.ServiceRuntime) web.S
 
 func (s *ServiceMetricSampler) recordLocked(name string, cur web.ServiceRuntime, at time.Time) web.ServiceRuntime {
 	prev := s.prev[name]
-	if prev.ok && cur.Count > 0 && cur.IORead >= prev.ioRead && cur.IOWrite >= prev.ioWrite {
+	if prev.ok && cur.HasIO && cur.IORead >= prev.ioRead && cur.IOWrite >= prev.ioWrite {
 		wall := at.Sub(prev.at).Seconds()
 		if wall > 0 {
 			cur.IOReadRate = float64(cur.IORead-prev.ioRead) / wall
@@ -95,7 +95,7 @@ func (s *ServiceMetricSampler) recordLocked(name string, cur web.ServiceRuntime,
 			cur.IOReady = true
 		}
 	}
-	s.prev[name] = serviceMetricCounters{at: at, ioRead: cur.IORead, ioWrite: cur.IOWrite, ok: cur.Count > 0}
+	s.prev[name] = serviceMetricCounters{at: at, ioRead: cur.IORead, ioWrite: cur.IOWrite, ok: cur.HasIO}
 	s.samples[name] = append(s.samples[name], serviceMetricSample{at: at, current: cur})
 	s.trimLocked(name, at.Add(-daemonMetricRetention))
 	return cur
@@ -314,6 +314,7 @@ func applyServiceRuntimeFields(svc *web.Service, cur web.ServiceRuntime) {
 	svc.RSS = cur.RSS
 	svc.IORead = cur.IORead
 	svc.IOWrite = cur.IOWrite
+	svc.HasIO = cur.HasIO
 	svc.FDs = cur.FDs
 	svc.Threads = cur.Threads
 	svc.CPU = cur.CPU
