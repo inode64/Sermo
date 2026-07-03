@@ -1937,12 +1937,12 @@ func (b *WebBackend) Applications(ctx context.Context) []web.Application {
 	defer b.applicationsMu.Unlock()
 
 	if !b.applicationsAt.IsZero() && time.Since(b.applicationsAt) < applicationsCacheTTL {
-		return slices.Clone(b.applicationsCache)
+		return b.withApplicationLastEvents(slices.Clone(b.applicationsCache))
 	}
 	apps := b.loadApplications(ctx)
 	b.applicationsAt = time.Now()
 	b.applicationsCache = slices.Clone(apps)
-	return apps
+	return b.withApplicationLastEvents(apps)
 }
 
 func (b *WebBackend) loadApplications(ctx context.Context) []web.Application {
@@ -2042,6 +2042,22 @@ func (b *WebBackend) withApplicationSLA(apps []web.Application) []web.Applicatio
 		if b.entries[out[i].Name] != nil {
 			out[i].SLA = b.serviceSLAWindows(out[i].Name, now)
 		}
+	}
+	return out
+}
+
+func (b *WebBackend) withApplicationLastEvents(apps []web.Application) []web.Application {
+	if len(apps) == 0 || b.events == nil {
+		return apps
+	}
+	out := slices.Clone(apps)
+	for i := range out {
+		ev, ok := b.events.LastApp(out[i].Name)
+		if !ok {
+			continue
+		}
+		webEv := loggedEventToWeb(ev)
+		out[i].LastEvent = &webEv
 	}
 	return out
 }
