@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -290,10 +291,19 @@ func (b *WebBackend) ServiceRuntime(_ context.Context, name string, since time.D
 }
 
 func (b *WebBackend) decorateServiceRuntime(name string, e *webEntry, svc *web.Service) {
-	if svc == nil || e == nil || e.disabled {
+	if svc == nil || e == nil || e.disabled || !serviceRuntimeVisible(svc.Status) {
 		return
 	}
 	applyServiceRuntimeFields(svc, b.listServiceRuntime(name, e))
+}
+
+func serviceRuntimeVisible(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "active", "paused":
+		return true
+	default:
+		return false
+	}
 }
 
 func applyServiceRuntimeFields(svc *web.Service, cur web.ServiceRuntime) {
