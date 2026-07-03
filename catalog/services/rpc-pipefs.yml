@@ -8,6 +8,7 @@ service:
   openrc:
     - rpc.pipefs
     - rpc-pipefs
+processes: { }
 checks:
   service:
     type: service

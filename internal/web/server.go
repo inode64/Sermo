@@ -62,20 +62,21 @@ type Service struct {
 	// Current process-tree runtime summary. These fields intentionally mirror
 	// ProcessTotals so the service list and detail expansion use the same
 	// semantics: matched processes plus their child/descendant processes.
-	StartedAt     string   `json:"started_at,omitempty"` // oldest discovered process start time, RFC3339
-	Uptime        string   `json:"uptime,omitempty"`     // display-ready age of StartedAt
-	UptimeSeconds int64    `json:"uptime_seconds,omitempty"`
-	ProcessCount  int      `json:"process_count,omitempty"`
-	RSS           int64    `json:"rss,omitempty"`
-	IORead        int64    `json:"io_read,omitempty"`  // cumulative disk read bytes
-	IOWrite       int64    `json:"io_write,omitempty"` // cumulative disk write bytes
-	FDs           int64    `json:"fds,omitempty"`
-	Threads       int64    `json:"threads,omitempty"`
-	CPU           float64  `json:"cpu,omitempty"`        // live CPU %, all host CPUs
-	CPUThread     float64  `json:"cpu_thread,omitempty"` // busiest process, single-core normalized
-	NumCPU        int      `json:"num_cpu,omitempty"`
-	CPUReady      bool     `json:"cpu_ready,omitempty"`
-	AlsoApply     []string `json:"also_apply,omitempty"` // also_apply cascade targets
+	NoResidentProcess bool     `json:"no_resident_process,omitempty"` // true for oneshot/helper services with no resident process tree
+	StartedAt         string   `json:"started_at,omitempty"`          // oldest discovered process start time, RFC3339
+	Uptime            string   `json:"uptime,omitempty"`              // display-ready age of StartedAt
+	UptimeSeconds     int64    `json:"uptime_seconds,omitempty"`
+	ProcessCount      int      `json:"process_count,omitempty"`
+	RSS               int64    `json:"rss,omitempty"`
+	IORead            int64    `json:"io_read,omitempty"`  // cumulative disk read bytes
+	IOWrite           int64    `json:"io_write,omitempty"` // cumulative disk write bytes
+	FDs               int64    `json:"fds,omitempty"`
+	Threads           int64    `json:"threads,omitempty"`
+	CPU               float64  `json:"cpu,omitempty"`        // live CPU %, all host CPUs
+	CPUThread         float64  `json:"cpu_thread,omitempty"` // busiest process, single-core normalized
+	NumCPU            int      `json:"num_cpu,omitempty"`
+	CPUReady          bool     `json:"cpu_ready,omitempty"`
+	AlsoApply         []string `json:"also_apply,omitempty"` // also_apply cascade targets
 }
 
 // Mount is a view of one configured fstab-backed mount unit for the dashboard.
