@@ -99,6 +99,7 @@ async function load() {
     daemon: daemon || {},
     hostMetrics: hostMetrics || [],
   });
+  applyHash();
   if (connOK) {
     renderOpsPanel(ops);
     loadEvents();
@@ -1700,7 +1701,8 @@ async function refreshServiceExpansionLight(key) {
   } catch (_) { /* keep charts/events on a transient error */ }
 }
 
-// applyHash opens/scrolls to the target named in a #svc:|#wat:|#app: URL fragment.
+// applyHash opens/scrolls to the target named in a #svc:|#wat:|#app: URL fragment
+// or a section id such as #services-section.
 // Runs after each render and on hashchange.
 let hashScrolled = false;
 function watchSectionFor(w) {
@@ -1711,6 +1713,16 @@ function watchSectionFor(w) {
 function applyHash() {
   const h = decodeURIComponent(location.hash.slice(1));
   if (!h) return;
+  const section = document.getElementById(h);
+  if (section && (section.tagName === "DETAILS" || section.tagName === "SECTION")) {
+    if (section.classList.contains("panel-hidden")) return;
+    if (section.tagName === "DETAILS") section.open = true;
+    if (!hashScrolled) {
+      section.scrollIntoView({ block: "start" });
+      hashScrolled = true;
+    }
+    return;
+  }
   if (h.startsWith("svc:")) {
     const name = h.slice(4);
     if (!(allServices || []).some((s) => s.name === name)) return;
