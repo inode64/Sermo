@@ -123,6 +123,7 @@ func TestIndexShellAnchors(t *testing.T) {
 
 	ids := map[string]bool{}
 	headers := map[string]bool{}
+	sectionLinks := map[string]string{}
 	dialogs := 0
 	walk(doc, func(n *html.Node) {
 		if n.Type != html.ElementNode {
@@ -137,6 +138,16 @@ func TestIndexShellAnchors(t *testing.T) {
 		case atom.Th:
 			if n.FirstChild != nil && n.FirstChild.Type == html.TextNode {
 				headers[strings.TrimSpace(n.FirstChild.Data)] = true
+			}
+		case atom.A:
+			className, hasClass := attr(n, "class")
+			if !hasClass || !strings.Contains(" "+className+" ", " section-jump ") {
+				break
+			}
+			target, hasTarget := attr(n, "data-panel-target")
+			href, hasHref := attr(n, "href")
+			if hasTarget && hasHref {
+				sectionLinks[target] = href
 			}
 		}
 	})
@@ -153,6 +164,16 @@ func TestIndexShellAnchors(t *testing.T) {
 	for _, id := range wantIDs {
 		if !ids[id] {
 			t.Errorf("shell missing element id %q", id)
+		}
+	}
+	for _, id := range []string{
+		"services-section", "storage-section", "network-section", "mounts-section",
+		"apps-section", "cert-section", "diskio-section", "watches-section",
+		"events-section", "locks-section", "notifiers-section", "daemon-section",
+		"activity-section",
+	} {
+		if sectionLinks[id] != "#"+id {
+			t.Errorf("section nav link %q href = %q, want %q", id, sectionLinks[id], "#"+id)
 		}
 	}
 
