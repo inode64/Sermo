@@ -183,6 +183,11 @@ type WebBackend struct {
 	openFilesMu      sync.Mutex
 	openFilesTally   map[string]int64
 	openFilesTallyAt time.Time
+
+	mountUsageMu     sync.Mutex
+	mountUsageAt     time.Time
+	mountUsage       map[string][]process.Process
+	mountUsageErrors map[string]string
 }
 
 // cachedLiveView memoizes a watch's dashboard live-probe result for the watch's

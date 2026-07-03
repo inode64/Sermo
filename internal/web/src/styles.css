@@ -101,7 +101,13 @@
   .services-table .event-cell, .apps-table .event-cell { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; }
   .services-table .policy-cell { max-width: 11rem; }
   .services-table .actions { min-width: 14rem; max-width: 22rem; white-space: normal; }
+  .mount-table { min-width: 64rem; font-size: .85rem; }
+  .mount-table th, .mount-table td { vertical-align: top; }
   .mount-table .actions { min-width: 14rem; }
+  .mount-table .mount-processes { min-width: 12rem; max-width: 24rem; }
+  .mount-table .mount-users { min-width: 8rem; max-width: 16rem; }
+  .mount-usage-item, .mount-usage-extra { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mount-processes .mount-usage-item { font-family: var(--mono); font-size: .82em; }
   #rows tr:hover > td, #watch-rows tr:hover > td, #app-rows tr:hover > td, #mount-rows tr:hover > td { background: color-mix(in srgb, var(--text) 4%, transparent); }
   #rows tr.group-row:hover > td, #app-rows tr.group-row:hover > td { background: color-mix(in srgb, var(--accent) 11%, transparent); }
   /* Firing/warning row highlight. Applies to services (#rows), applications
@@ -450,7 +456,7 @@
      horizontal scroll. The full data remains available in each row expansion.
      This block intentionally lives after the base table min-width rules. */
   @media (max-width: 1024px) {
-    .services-table, .watch-table, .apps-table {
+    .services-table, .watch-table, .apps-table, .mount-table {
       min-width: 0;
       max-width: 100%;
     }
@@ -477,6 +483,8 @@
     /* watches: keep Name and the trailing Last activity · State · Actions. */
     .watch-table th:not(:first-child):not(:nth-last-child(-n+3)),
     .watch-table td:not(:first-child):not(:nth-last-child(-n+3)) { display: none; }
+    /* mount units: hide Source first; usage remains visible on tablet widths. */
+    .mount-table th:nth-child(7), .mount-table td:nth-child(7) { display: none; }
   }
   @media (max-width: 760px) { .metric-grid { grid-template-columns: 1fr; } }
   @media (max-width: 640px) {
@@ -491,6 +499,7 @@
     #event-controls { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
     .services-table th, .services-table td,
     .watch-table th, .watch-table td,
+    .mount-table th, .mount-table td,
     .apps-table th, .apps-table td,
     .events th, .events td {
       padding: .34rem .38rem;
@@ -504,6 +513,10 @@
     .watch-table td:not(:first-child):not(:nth-last-child(-n+2)) { display: none; }
     /* apps -> Application · Status · Version · Last activity. */
     .apps-table th:nth-child(2), .apps-table td:nth-child(2) { display: none; }
+    /* mount units -> Name · Path · Mounted · State · Actions. */
+    .mount-table th:nth-child(4), .mount-table td:nth-child(4),
+    .mount-table th:nth-child(5), .mount-table td:nth-child(5),
+    .mount-table th:nth-child(6), .mount-table td:nth-child(6) { display: none; }
     /* events -> Time · Service/watch · Message. */
     .events th:nth-child(3), .events td:nth-child(3) { display: none; }
     /* notifiers -> Name · Type · State. */

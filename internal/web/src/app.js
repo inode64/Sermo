@@ -3519,6 +3519,41 @@ function mountStateClass(state, mounted) {
   return "state-stopped";
 }
 
+function mountBlockers(m) {
+  return Array.isArray(m.blockers) ? m.blockers : [];
+}
+
+function mountProcessLabel(p) {
+  const pid = Number(p.pid || 0);
+  const exe = p.exe || ((p.cmdline || [])[0]) || "unknown";
+  return `pid ${pid || "?"} ${exe}`;
+}
+
+function mountUsageCell(items, maxRows = 3) {
+  if (!items.length) return '<span class="muted">—</span>';
+  const shown = items.slice(0, maxRows).map((item) => `<span class="mount-usage-item">${esc(item)}</span>`).join("");
+  const extra = items.length > maxRows ? `<span class="muted mount-usage-extra">+${items.length - maxRows} more</span>` : "";
+  return `<span title="${esc(items.join("\n"))}">${shown}${extra}</span>`;
+}
+
+function mountProcessesCell(m) {
+  if (m.blocker_error) return `<span class="bad" title="${esc(m.blocker_error)}">error</span>`;
+  return mountUsageCell(mountBlockers(m).map(mountProcessLabel));
+}
+
+function mountUsersCell(m) {
+  if (m.blocker_error) return '<span class="muted">—</span>';
+  const seen = new Set();
+  const users = [];
+  for (const p of mountBlockers(m)) {
+    const user = p.user || `uid ${p.uid ?? "?"}`;
+    if (seen.has(user)) continue;
+    seen.add(user);
+    users.push(user);
+  }
+  return mountUsageCell(users);
+}
+
 function renderMounts(mounts) {
   const section = $("#mounts-section");
   const tbody = $("#mount-rows");
@@ -3544,12 +3579,14 @@ function renderMounts(mounts) {
       <td><code>${esc(m.path || "")}</code></td>
       <td>${mounted ? '<span class="ok">yes</span>' : '<span class="muted">no</span>'}</td>
       <td>${refcount}</td>
+      <td class="mount-processes">${mountProcessesCell(m)}</td>
+      <td class="mount-users">${mountUsersCell(m)}</td>
       <td class="muted">${esc(m.source || "—")}</td>
       <td><span class="target-state ${mountStateClass(state, mounted)}">${esc(state)}</span></td>
       <td class="actions" data-mount-row="${name}">${actions}</td>
     </tr>`;
   });
-  tbody.innerHTML = rows.join("") || `<tr><td colspan="7" class="muted">No mount units.</td></tr>`;
+  tbody.innerHTML = rows.join("") || `<tr><td colspan="9" class="muted">No mount units.</td></tr>`;
 }
 
 function mountActionButtons(m, mounted) {

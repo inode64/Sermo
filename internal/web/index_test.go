@@ -283,7 +283,7 @@ func TestIndexWatchReadingLongValuesWrap(t *testing.T) {
 func TestIndexResponsiveTablesDoNotKeepDesktopMinWidth(t *testing.T) {
 	css := strings.ReplaceAll(bundledCSS(t), " ", "")
 	base := strings.Index(css, ".watch-table{min-width:72rem")
-	responsive := strings.LastIndex(css, "@media(max-width:1024px){.services-table,.watch-table,.apps-table{min-width:0;max-width:100%}")
+	responsive := strings.LastIndex(css, "@media(max-width:1024px){.services-table,.watch-table,.apps-table,.mount-table{min-width:0;max-width:100%}")
 	if base < 0 {
 		t.Fatal("bundled CSS missing watch-table desktop min-width")
 	}
