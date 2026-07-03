@@ -20,11 +20,11 @@ func TestServiceMetricSamplerReadsPersistedHistory(t *testing.T) {
 	first := NewServiceMetricSampler(store)
 	first.Record("web", web.ServiceRuntime{
 		At:            base.UTC().Format(time.RFC3339),
-		ProcessTotals: web.ProcessTotals{Count: 1, RSS: 1024, IORead: 1000, IOWrite: 2000, HasIO: true, CPU: 10, HasCPU: true},
+		ProcessTotals: web.ProcessTotals{Count: 1, RSS: 1024, IORead: 1000, IOWrite: 2000, CPU: 10, HasCPU: true},
 	})
 	first.Record("web", web.ServiceRuntime{
 		At:            base.Add(time.Minute).UTC().Format(time.RFC3339),
-		ProcessTotals: web.ProcessTotals{Count: 1, RSS: 2048, IORead: 7000, IOWrite: 5000, HasIO: true, CPU: 20, HasCPU: true},
+		ProcessTotals: web.ProcessTotals{Count: 1, RSS: 2048, IORead: 7000, IOWrite: 5000, CPU: 20, HasCPU: true},
 	})
 
 	second := NewServiceMetricSampler(store)
@@ -44,21 +44,5 @@ func TestServiceMetricSamplerReadsPersistedHistory(t *testing.T) {
 	}
 	if afterRestart.Current.IOReady {
 		t.Fatalf("fresh sampler current IO should be measuring, got %+v", afterRestart.Current)
-	}
-}
-
-func TestServiceMetricSamplerSkipsIORateWhenCountersUnavailable(t *testing.T) {
-	base := time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC)
-	sampler := NewServiceMetricSampler()
-	sampler.Record("web", web.ServiceRuntime{
-		At:            base.UTC().Format(time.RFC3339),
-		ProcessTotals: web.ProcessTotals{Count: 1, IORead: 1000, IOWrite: 2000, HasIO: true},
-	})
-	got := sampler.Record("web", web.ServiceRuntime{
-		At:            base.Add(time.Minute).UTC().Format(time.RFC3339),
-		ProcessTotals: web.ProcessTotals{Count: 1},
-	})
-	if got.IOReady || got.IORate != 0 || got.IOReadRate != 0 || got.IOWriteRate != 0 {
-		t.Fatalf("IO rate with unavailable counters = %+v, want not ready and zero rates", got)
 	}
 }

@@ -17,9 +17,7 @@ type fakeProcMetrics struct {
 
 func (f fakeProcMetrics) ProcessRSS(pid int) (uint64, bool) { v, ok := f.rss[pid]; return v, ok }
 func (f fakeProcMetrics) ProcessIO(pid int) (uint64, uint64, bool) {
-	rd, rok := f.ioRead[pid]
-	wr, wok := f.ioWrite[pid]
-	return rd, wr, rok || wok
+	return f.ioRead[pid], f.ioWrite[pid], true
 }
 func (f fakeProcMetrics) ProcessFDs(pid int) (uint64, bool) { v, ok := f.fds[pid]; return v, ok }
 func (f fakeProcMetrics) ProcessThreads(pid int) (uint64, bool) {
@@ -54,43 +52,12 @@ func TestAggregateProcessesSumsTree(t *testing.T) {
 	if totals.IORead != 15 || totals.IOWrite != 27 {
 		t.Fatalf("io = %d/%d, want 15/27 (parent+child)", totals.IORead, totals.IOWrite)
 	}
-	if !totals.HasIO || !rows[0].HasIO || !rows[1].HasIO {
-		t.Fatalf("has_io = totals:%v rows:%v/%v, want all true", totals.HasIO, rows[0].HasIO, rows[1].HasIO)
-	}
 	if totals.FDs != 11 || totals.Threads != 6 {
 		t.Fatalf("fds/threads = %d/%d, want 11/6", totals.FDs, totals.Threads)
 	}
 	// Per-row values still present (the child carries its own).
 	if rows[1].RSS != 500 || rows[1].FDs != 3 {
 		t.Fatalf("child row = %+v", rows[1])
-	}
-}
-
-func TestAggregateProcessesPreservesZeroIOAvailability(t *testing.T) {
-	procs := []process.Process{{PID: 100, Source: "pidfile"}}
-	rows, totals := aggregateProcesses(procs, fakeProcMetrics{
-		ioRead:  map[int]uint64{100: 0},
-		ioWrite: map[int]uint64{100: 0},
-	})
-	if len(rows) != 1 || totals == nil {
-		t.Fatalf("aggregateProcesses() rows=%d totals=%+v, want one row and totals", len(rows), totals)
-	}
-	if !rows[0].HasIO || !totals.HasIO {
-		t.Fatalf("has_io = row:%v totals:%v, want true even for 0/0 counters", rows[0].HasIO, totals.HasIO)
-	}
-	if rows[0].IORead != 0 || rows[0].IOWrite != 0 || totals.IORead != 0 || totals.IOWrite != 0 {
-		t.Fatalf("io counters = row %d/%d totals %d/%d, want all zero", rows[0].IORead, rows[0].IOWrite, totals.IORead, totals.IOWrite)
-	}
-}
-
-func TestAggregateProcessesLeavesIOUnavailableWhenUnreadable(t *testing.T) {
-	procs := []process.Process{{PID: 100, Source: "pidfile"}}
-	rows, totals := aggregateProcesses(procs, fakeProcMetrics{})
-	if len(rows) != 1 || totals == nil {
-		t.Fatalf("aggregateProcesses() rows=%d totals=%+v, want one row and totals", len(rows), totals)
-	}
-	if rows[0].HasIO || totals.HasIO {
-		t.Fatalf("has_io = row:%v totals:%v, want false for unreadable counters", rows[0].HasIO, totals.HasIO)
 	}
 }
 
