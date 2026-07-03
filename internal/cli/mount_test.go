@@ -105,6 +105,8 @@ func TestMountStatusByPathUsesConfiguredMount(t *testing.T) {
 	}
 	if got := out.String(); !strings.Contains(got, "name: mount-backup") || !strings.Contains(got, "mounted: true") {
 		t.Fatalf("stdout = %q", got)
+	} else if strings.Contains(got, "source:") {
+		t.Fatalf("stdout should not expose mount source: %q", got)
 	}
 }
 

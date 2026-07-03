@@ -89,27 +89,32 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 	fmt.Fprintf(a.Stdout, "\nGenerated configuration (%s):\n\n%s\n", res.Summary, data)
 
 	if !p.Confirm("Merge this into "+globalPath+"?", false) {
-		fmt.Fprintln(a.Stdout, "Not written — paste the block above into a YAML file loaded from paths.watches/storages/networks.")
+		if wizardWritesStorageDocs(as.Name()) {
+			fmt.Fprintln(a.Stdout, "Not written — paste the blocks above into files under a paths.storages directory.")
+		} else {
+			fmt.Fprintln(a.Stdout, "Not written — paste the block above into a YAML file loaded from paths.networks or paths.watches.")
+		}
 		return exitSuccess, nil
 	}
 	var deletes []string
 	detected := detectedTargetKeys(env, as.Name())
+	noun := wizardOutputNoun(as.Name())
 	for _, dir := range wizardCleanupDirs(globalPath, as.Name(), res.Watches) {
-		more, err := planWizardWatchDeletes(p, dir, detected)
+		more, err := planWizardWatchDeletes(p, dir, detected, noun)
 		if err != nil {
 			a.reportError(opts, err.Error())
 			return exitRuntimeError, nil
 		}
 		deletes = append(deletes, more...)
 	}
-	if err := deleteWizardWatchFiles(deletes); err != nil {
+	if err := deleteWizardConfigFiles(deletes); err != nil {
 		a.reportError(opts, err.Error())
 		return exitRuntimeError, nil
 	}
 	if len(deletes) > 0 {
 		cfg, err = a.LoadConfig(globalPath)
 		if err != nil {
-			a.reportError(opts, fmt.Sprintf("reload config after deleting old watches failed: %v", err))
+			a.reportError(opts, fmt.Sprintf("reload config after deleting old %s files failed: %v", noun, err))
 			return exitRuntimeError, nil
 		}
 	}
@@ -126,9 +131,9 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 		fmt.Fprintf(a.Stdout, "Updated %s paths.%s (backup: %s).\n", globalPath, merged.PathKey, merged.Backup)
 	}
 	if len(deletes) > 0 {
-		fmt.Fprintf(a.Stdout, "Deleted %d existing watch file(s).\n", len(deletes))
+		fmt.Fprintf(a.Stdout, "Deleted %d existing %s file(s).\n", len(deletes), noun)
 	}
-	fmt.Fprintf(a.Stdout, "Wrote %d watch file(s) under %s. Run `sermoctl daemon reload` to apply.\n", len(merged.Files), merged.Dir)
+	fmt.Fprintf(a.Stdout, "Wrote %d %s file(s) under %s. Run `sermoctl daemon reload` to apply.\n", len(merged.Files), noun, merged.Dir)
 	return exitSuccess, nil
 }
 
@@ -386,11 +391,11 @@ func ensureNoWatchCollisions(cfg *config.Config, fragment map[string]any) error 
 	return nil
 }
 
-// mergeWizardWatches writes one generated watch per YAML file under a typed
-// watch directory, then ensures that directory is listed in paths.storages,
-// paths.networks or paths.watches. Watch fragments contain a top-level watches
-// map, so the loader can merge them into global watch configuration without
-// rewriting sermo.yml on every generated watch.
+// mergeWizardWatches writes one generated target per YAML file. Volume output
+// is converted to storage documents under paths.storages; other watch
+// assistants write top-level watches fragments under paths.networks or
+// paths.watches so the loader can merge them without rewriting sermo.yml on
+// every generated watch.
 func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMergeResult, error) {
 	if wizardWritesStorageDocs(wizard) {
 		docs, err := storageDocsFromVolumeWatches(fragment)
@@ -436,6 +441,13 @@ func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMer
 
 func wizardWritesStorageDocs(wizard string) bool {
 	return wizard == "volume"
+}
+
+func wizardOutputNoun(wizard string) string {
+	if wizardWritesStorageDocs(wizard) {
+		return "storage"
+	}
+	return "watch"
 }
 
 func storageDocsFromVolumeWatches(fragment map[string]any) (map[string]map[string]any, error) {
@@ -540,6 +552,9 @@ func wizardCleanupDirs(path, wizard string, fragment map[string]any) []string {
 }
 
 func wizardConfigDirName(wizard string, fragment map[string]any) string {
+	if wizardWritesStorageDocs(wizard) {
+		return storagesConfigDir
+	}
 	dirName := ""
 	for _, name := range slices.Sorted(maps.Keys(fragment)) {
 		checkType := watchFragmentCheckType(fragment[name])
@@ -577,8 +592,6 @@ func watchFragmentCheckType(v any) string {
 
 func watchTypeDirName(checkType string) string {
 	switch strings.ToLower(checkType) {
-	case "storage", "mount":
-		return "storages"
 	case "net", "network", "icmp":
 		return "networks"
 	default:
@@ -592,14 +605,15 @@ type wizardWatchFile struct {
 	Targets []string // host targets monitored (storage paths, interface names)
 }
 
-// planWizardWatchDeletes offers to delete managed watch files whose target is no
-// longer present on the host — the step-9 cleanup of docs/wizards.md ("delete
-// the files whose target we no longer detect"). detected is the set of currently
-// detected target keys (mountpoints / interface names); a file is offered only
-// when every target it monitors is absent from that set. When detection is
-// empty (unavailable, or an assistant without host targets) nothing is offered,
-// so a valid file is never proposed for deletion.
-func planWizardWatchDeletes(p *assist.Prompt, targetDir string, detected map[string]bool) ([]string, error) {
+// planWizardWatchDeletes offers to delete managed wizard output files whose
+// target is no longer present on the host — the step-9 cleanup of
+// docs/wizards.md ("delete the files whose target we no longer detect").
+// detected is the set of currently detected target keys (mountpoints /
+// interface names); a file is offered only when every target it monitors is
+// absent from that set. When detection is empty (unavailable, or an assistant
+// without host targets) nothing is offered, so a valid file is never proposed
+// for deletion.
+func planWizardWatchDeletes(p *assist.Prompt, targetDir string, detected map[string]bool, noun string) ([]string, error) {
 	files, err := existingWizardWatchFiles(targetDir)
 	if err != nil {
 		return nil, err
@@ -615,7 +629,7 @@ func planWizardWatchDeletes(p *assist.Prompt, targetDir string, detected map[str
 		}
 		stale = append(stale, staleFile{path: f.Path, label: label})
 	}
-	return confirmStaleDeletes(p, targetDir, "watch", stale), nil
+	return confirmStaleDeletes(p, targetDir, noun, stale), nil
 }
 
 // staleFile is a managed config file whose target is no longer detected on the
@@ -754,10 +768,11 @@ func existingWizardWatchFiles(targetDir string) ([]wizardWatchFile, error) {
 	return files, nil
 }
 
-// parseWatchFile reads a managed watch fragment once and returns both the watch
-// names it declares and the host targets they monitor (the `check.path` of
-// storage watches and the `check.interface` of net/route/icmp/dns watches —
-// keys that match detectedTargetKeys). nil/nil on any read or parse error.
+// parseWatchFile reads a managed watch fragment or storage document once and
+// returns both the names it declares and the host targets they monitor (the
+// storage `path`, the `check.path` of storage watches and the `check.interface`
+// of net/route/icmp/dns watches — keys that match detectedTargetKeys). nil/nil
+// on any read or parse error.
 func parseWatchFile(path string) (names, targets []string) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -797,10 +812,10 @@ func parseWatchFile(path string) (names, targets []string) {
 	return names, targets
 }
 
-func deleteWizardWatchFiles(files []string) error {
+func deleteWizardConfigFiles(files []string) error {
 	for _, file := range files {
 		if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("delete existing watch file %s: %w", file, err)
+			return fmt.Errorf("delete existing config file %s: %w", file, err)
 		}
 	}
 	return nil

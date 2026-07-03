@@ -77,7 +77,6 @@ type Status struct {
 	Path     string `json:"path"`
 	Mounted  bool   `json:"mounted"`
 	Refcount int    `json:"refcount"`
-	Source   string `json:"source"`
 	State    string `json:"state"`
 }
 
@@ -280,7 +279,7 @@ func (c Controller) ReadStatus(spec Spec) (Status, error) {
 	if mounted {
 		st = "active"
 	}
-	return Status{Name: spec.Name, Path: spec.Path, Mounted: mounted, Refcount: state.Refcount, Source: "fstab", State: st}, nil
+	return Status{Name: spec.Name, Path: spec.Path, Mounted: mounted, Refcount: state.Refcount, State: st}, nil
 }
 
 // Blockers reports processes currently using the mount path. An unmounted path

@@ -385,7 +385,7 @@ func TestListApplications(t *testing.T) {
 
 func TestListMounts(t *testing.T) {
 	b := &fakeBackend{mounts: []Mount{{
-		Name: "mount-backup", Path: "/mnt/backup", Mounted: true, Refcount: 2, Source: "fstab", State: "active", Refcounted: true,
+		Name: "mount-backup", Path: "/mnt/backup", Mounted: true, Refcount: 2, State: "active", Refcounted: true,
 	}}}
 	rec := httptest.NewRecorder()
 	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/mounts", nil))
@@ -395,6 +395,9 @@ func TestListMounts(t *testing.T) {
 	var got []Mount
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
+	}
+	if strings.Contains(rec.Body.String(), `"source"`) {
+		t.Fatalf("mount response should not expose source: %s", rec.Body.String())
 	}
 	if len(got) != 1 || got[0].Name != "mount-backup" || !got[0].Mounted || got[0].Refcount != 2 {
 		t.Fatalf("unexpected mounts: %+v", got)

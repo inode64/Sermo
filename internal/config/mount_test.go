@@ -18,7 +18,7 @@ defaults:
     cooldown: 5m
 `
 
-func TestLoadMountDocumentsFromMountsPath(t *testing.T) {
+func TestLoadMountDocumentsFromStoragesPath(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": mountGlobal,
 		"storages/backup.yml": `

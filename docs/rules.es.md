@@ -117,7 +117,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `websocket` | un endpoint WebSocket completa el handshake de apertura de RFC 6455 (ver WebSocket) |
 
 La comprobación `storage` también verifica el **montaje** de su `path` — ver
-[almacenamiento y montaje](configuration.es.md#host-watches).
+[storage y unidades de montaje](configuration.es.md#storage-y-unidades-de-montaje).
 
 Las comprobaciones `process` y las hojas de condición de proceso coinciden con los valores reales de UID/GID leídos
 de `/proc/<pid>/status`. Un nombre `user:` o `group:` configurado se resuelve

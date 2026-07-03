@@ -117,7 +117,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `websocket` | a WebSocket endpoint completes the RFC 6455 opening handshake (see WebSocket) |
 
 The `storage` check also verifies the **mount** of its `path` — see
-[storage and mount](configuration.md#host-watches).
+[storage and mount units](configuration.md#storage-and-mount-units).
 
 `process` checks and process condition leaves match real UID/GID values read
 from `/proc/<pid>/status`. A configured `user:` or `group:` name is resolved
