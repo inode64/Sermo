@@ -314,6 +314,8 @@ func TestIndexServiceActionsUseSinglePowerButton(t *testing.T) {
 	}
 	for _, needle := range []string{
 		"also applies to:",
+		"can_reload",
+		"service does not support reload",
 		"service is already running",
 		"service is already stopped",
 		"Start service ",

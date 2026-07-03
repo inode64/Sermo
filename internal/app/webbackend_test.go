@@ -1775,6 +1775,91 @@ func TestWebBackendIncludesDisabledServices(t *testing.T) {
 	}
 }
 
+func TestWebBackendReloadUnsupportedIsExposedAndBlocked(t *testing.T) {
+	var events []Event
+	b := &WebBackend{
+		order: []string{"acpid"},
+		entries: map[string]*webEntry{
+			"acpid": {
+				displayName: "ACPI Daemon",
+				category:    "hardware",
+				unit:        "acpid",
+				backend:     "openrc",
+				status:      func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
+				canReload:   false,
+			},
+		},
+		emit: func(e Event) { events = append(events, e) },
+	}
+
+	svcs := b.Services(context.Background())
+	if len(svcs) != 1 {
+		t.Fatalf("services = %+v, want one", svcs)
+	}
+	if svcs[0].Name != "acpid" || svcs[0].CanReload {
+		t.Fatalf("service reload support = %+v, want acpid CanReload=false", svcs[0])
+	}
+
+	res := b.Operate(context.Background(), "acpid", "reload", web.OperateOpts{})
+	if res.OK || !strings.Contains(res.Message, "does not support reload") {
+		t.Fatalf("reload result = %+v, want unsupported reload error", res)
+	}
+	if len(events) != 1 || events[0].Kind != "error" || events[0].Action != "reload" {
+		t.Fatalf("events = %+v, want one reload error event", events)
+	}
+}
+
+func TestServiceDeclaresReload(t *testing.T) {
+	cases := []struct {
+		name string
+		tree map[string]any
+		want bool
+	}{
+		{
+			name: "native reload",
+			tree: map[string]any{"reload": map[string]any{"signal": "HUP"}},
+			want: true,
+		},
+		{
+			name: "reload remediation",
+			tree: map[string]any{"rules": map[string]any{
+				"reload-on-change": map[string]any{
+					"type": "remediation",
+					"then": map[string]any{"action": "reload"},
+				},
+			}},
+			want: true,
+		},
+		{
+			name: "backend-only reload is not an intent",
+			tree: map[string]any{"rules": map[string]any{
+				"restart-if-down": map[string]any{
+					"type": "remediation",
+					"then": map[string]any{"action": "restart"},
+				},
+			}},
+			want: false,
+		},
+		{
+			name: "alert reload action ignored",
+			tree: map[string]any{"rules": map[string]any{
+				"bad-alert": map[string]any{
+					"type": "alert",
+					"then": map[string]any{"action": "reload"},
+				},
+			}},
+			want: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := serviceDeclaresReload(tc.tree); got != tc.want {
+				t.Fatalf("serviceDeclaresReload = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestWebBackendApplicationsStartingUnsettled(t *testing.T) {
 	settling := NewSettling(nil)
 	settling.Reset([]string{SettlingAppKey("git")})

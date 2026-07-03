@@ -1302,7 +1302,7 @@ function serviceActionDisabled(s, action, busy) {
     case "stop": return !!(busy || stopped);
     case "restart": return !!busy;
     case "resume": return !!(busy || !paused);
-    case "reload": return !!(busy || st !== "active");
+    case "reload": return !!(busy || st !== "active" || !s.can_reload);
     case "monitor":
     case "unmonitor": return !!busy;
     default: return false;
@@ -1321,7 +1321,9 @@ function serviceActionDisabledReason(s, action, busy) {
       return "";
     case "stop": return stopped ? "service is already stopped" : "";
     case "resume": return !paused ? "service is not paused" : "";
-    case "reload": return st !== "active" ? "service is not running" : "";
+    case "reload":
+      if (!s.can_reload) return "service does not support reload";
+      return st !== "active" ? "service is not running" : "";
     default: return "";
   }
 }

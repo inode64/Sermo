@@ -415,6 +415,38 @@ func TestReloadRunsPreflightThenReload(t *testing.T) {
 	}
 }
 
+func TestReloadSupportedUsesNativeOrBackendCapability(t *testing.T) {
+	ctx := context.Background()
+
+	native, err := ReloadSupported(ctx, map[string]any{
+		"reload": map[string]any{"command": []any{"/bin/true"}},
+	}, &fakeManager{}, "acpid")
+	if err != nil || !native {
+		t.Fatalf("native reload support = %v, %v; want true, nil", native, err)
+	}
+
+	mgr := &fakeManager{canReload: true}
+	backend, err := ReloadSupported(ctx, map[string]any{}, mgr, "nginx")
+	if err != nil || !backend {
+		t.Fatalf("backend reload support = %v, %v; want true, nil", backend, err)
+	}
+	if !mgr.did("supports-reload nginx") {
+		t.Fatalf("manager calls = %v, want supports-reload nginx", mgr.calls)
+	}
+
+	unsupported, err := ReloadSupported(ctx, map[string]any{}, &fakeManager{}, "acpid")
+	if err != nil || unsupported {
+		t.Fatalf("unsupported reload = %v, %v; want false, nil", unsupported, err)
+	}
+
+	invalid, err := ReloadSupported(ctx, map[string]any{
+		"reload": map[string]any{"signal": "NOPE"},
+	}, &fakeManager{}, "bad")
+	if err == nil || invalid {
+		t.Fatalf("invalid reload = %v, %v; want false with error", invalid, err)
+	}
+}
+
 func TestReloadPreflightFailedDoesNotReload(t *testing.T) {
 	h := defaultHarness()
 	h.preflight = checks.Outcome{OK: false, Results: []checks.Result{{Check: "config", OK: false}}}
