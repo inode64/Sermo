@@ -162,6 +162,7 @@ type Application struct {
 	Status        string      `json:"status"`                   // ok, or an error description
 	State         string      `json:"state,omitempty"`          // starting | ok | failed | warning
 	SLA           []SLAWindow `json:"sla,omitempty"`            // service SLA when this app maps to a monitored service
+	LastEvent     *Event      `json:"last_event,omitempty"`     // newest application event, when retained
 }
 
 // Watch is a view of a host watch for the dashboard (when services=0

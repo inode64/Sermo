@@ -87,7 +87,7 @@
   th { font-weight: 600; }
   thead th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); }
   tbody tr:last-child td { border-bottom: 0; }
-  .services-table { min-width: 80rem; font-size: .82rem; line-height: 1.3; font-variant-numeric: tabular-nums; }
+  .services-table { min-width: 86rem; font-size: .82rem; line-height: 1.3; font-variant-numeric: tabular-nums; }
   .services-table th, .services-table td { padding: .34rem .5rem; vertical-align: top; }
   .services-table th { white-space: nowrap; }
   .services-table thead th, .watch-table thead th, .apps-table thead th { position: sticky; top: 0; background: var(--panel); z-index: 4; white-space: nowrap; box-shadow: 0 1px 0 var(--line); }
@@ -98,29 +98,27 @@
   .services-table .svc-main { display: flex; align-items: baseline; gap: .25rem; min-width: 11rem; font-weight: 500; }
   .services-table .svc-sub { margin-left: 1.15rem; max-width: 13rem; overflow: hidden; text-overflow: ellipsis; }
   .services-table .unit-cell { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; }
-  .services-table .event-cell { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; }
+  .services-table .event-cell, .apps-table .event-cell { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; }
   .services-table .policy-cell { max-width: 11rem; }
   .services-table .actions, .mount-table .actions { min-width: 14rem; }
-  #rows tr:hover td, #watch-rows tr:hover td, #app-rows tr:hover td, #mount-rows tr:hover td { background: color-mix(in srgb, var(--text) 4%, transparent); }
-  #rows tr.group-row:hover td, #app-rows tr.group-row:hover td { background: color-mix(in srgb, var(--accent) 11%, transparent); }
+  #rows tr:hover > td, #watch-rows tr:hover > td, #app-rows tr:hover > td, #mount-rows tr:hover > td { background: color-mix(in srgb, var(--text) 4%, transparent); }
+  #rows tr.group-row:hover > td, #app-rows tr.group-row:hover > td { background: color-mix(in srgb, var(--accent) 11%, transparent); }
   /* Firing/warning row highlight. Applies to services (#rows), applications
      (#app-rows) and every watch panel (host #watch-rows, storage, network,
      cert, diskio) so a firing certificate or host watch paints red like a
      failing service. */
-  #rows tr.row-warning td, #app-rows tr.row-warning td, #watch-rows tr.row-warning td, #storage-rows tr.row-warning td, #network-rows tr.row-warning td, #cert-rows tr.row-warning td, #diskio-rows tr.row-warning td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
-  #rows tr.row-warning td:first-child, #app-rows tr.row-warning td:first-child, #watch-rows tr.row-warning td:first-child, #storage-rows tr.row-warning td:first-child, #network-rows tr.row-warning td:first-child, #cert-rows tr.row-warning td:first-child, #diskio-rows tr.row-warning td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
-  #rows tr.row-failing td, #app-rows tr.row-failing td, #watch-rows tr.row-failing td, #storage-rows tr.row-failing td, #network-rows tr.row-failing td, #cert-rows tr.row-failing td, #diskio-rows tr.row-failing td { background: color-mix(in srgb, var(--crit) 9%, transparent); }
-  #rows tr.row-failing td:first-child, #app-rows tr.row-failing td:first-child, #watch-rows tr.row-failing td:first-child, #storage-rows tr.row-failing td:first-child, #network-rows tr.row-failing td:first-child, #cert-rows tr.row-failing td:first-child, #diskio-rows tr.row-failing td:first-child { box-shadow: inset 3px 0 0 var(--crit); }
-  #rows tr.row-warning:hover td, #app-rows tr.row-warning:hover td, #watch-rows tr.row-warning:hover td, #storage-rows tr.row-warning:hover td, #network-rows tr.row-warning:hover td, #cert-rows tr.row-warning:hover td, #diskio-rows tr.row-warning:hover td { background: color-mix(in srgb, var(--warn) 13%, transparent); }
-  #rows tr.row-failing:hover td, #app-rows tr.row-failing:hover td, #watch-rows tr.row-failing:hover td, #storage-rows tr.row-failing:hover td, #network-rows tr.row-failing:hover td, #cert-rows tr.row-failing:hover td, #diskio-rows tr.row-failing:hover td { background: color-mix(in srgb, var(--crit) 13%, transparent); }
+  #rows tr.row-warning > td, #app-rows tr.row-warning > td, #watch-rows tr.row-warning > td, #storage-rows tr.row-warning > td, #network-rows tr.row-warning > td, #cert-rows tr.row-warning > td, #diskio-rows tr.row-warning > td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
+  #rows tr.row-failing > td, #app-rows tr.row-failing > td, #watch-rows tr.row-failing > td, #storage-rows tr.row-failing > td, #network-rows tr.row-failing > td, #cert-rows tr.row-failing > td, #diskio-rows tr.row-failing > td { background: color-mix(in srgb, var(--crit) 9%, transparent); }
+  #rows tr.row-warning:hover > td, #app-rows tr.row-warning:hover > td, #watch-rows tr.row-warning:hover > td, #storage-rows tr.row-warning:hover > td, #network-rows tr.row-warning:hover > td, #cert-rows tr.row-warning:hover > td, #diskio-rows tr.row-warning:hover > td { background: color-mix(in srgb, var(--warn) 13%, transparent); }
+  #rows tr.row-failing:hover > td, #app-rows tr.row-failing:hover > td, #watch-rows tr.row-failing:hover > td, #storage-rows tr.row-failing:hover > td, #network-rows tr.row-failing:hover > td, #cert-rows tr.row-failing:hover > td, #diskio-rows tr.row-failing:hover > td { background: color-mix(in srgb, var(--crit) 13%, transparent); }
   tr.clickable { cursor: pointer; }
   .exp { color: var(--text-2); margin-right: .35rem; user-select: none; font-size: .9em; display: inline-block; }
   .category-badge { display: inline-block; max-width: 8rem; overflow: hidden; text-overflow: ellipsis; vertical-align: top; color: var(--text-2); }
-  tr.group-row td { background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--text); font-weight: 650; }
-  tr.group-row:hover td { background: color-mix(in srgb, var(--accent) 11%, transparent); }
+  tr.group-row > td { background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--text); font-weight: 650; }
+  tr.group-row:hover > td { background: color-mix(in srgb, var(--accent) 11%, transparent); }
   .group-toggle { font-weight: 650; }
   tr.group-row .muted { font-weight: 500; margin-left: .35rem; }
-  tr.exp-row td { background: color-mix(in srgb, var(--text) 3.5%, transparent); padding: .7rem 1rem .85rem 1.7rem; box-shadow: inset 3px 0 0 var(--line-2); }
+  tr.exp-row > td { background: color-mix(in srgb, var(--text) 3.5%, transparent); padding: .7rem 1rem .85rem 1.7rem; }
 
   /* ---- status language ------------------------------------------------------
      Pills carry a colored dot via ::before and a tint of the same color, so
@@ -397,8 +395,9 @@
      colspan group/expansion rows have a single cell so they are never hidden. */
   @media (max-width: 1024px) {
     /* services (1 Service · 2 Category · 3 State · 4 Uptime · 5 CPU · 6 Memory ·
-       7 FDs · 8 IO · 9 Actions): drop the desktop min-width, hide Category/Uptime/IO and
-       let the action buttons wrap instead of reserving a wide column. */
+       7 FDs · 8 IO · 9 Last activity · 10 Actions): drop the desktop min-width,
+       hide Category/Uptime/IO and let the action buttons wrap instead of
+       reserving a wide column. */
     .services-table { min-width: 0; }
     .services-table th:nth-child(2), .services-table td:nth-child(2),
     .services-table th:nth-child(4), .services-table td:nth-child(4),
@@ -427,16 +426,16 @@
     /* The search field owns its row; filters/count wrap underneath. */
     .panel-controls input { min-width: 0; flex: 1 1 100%; }
     #event-controls { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
-    /* services → Service · State · Actions (also hide CPU/Memory/FDs). */
+    /* services → Service · State · Last activity · Actions (also hide CPU/Memory/FDs). */
     .services-table th:nth-child(5), .services-table td:nth-child(5),
     .services-table th:nth-child(6), .services-table td:nth-child(6),
     .services-table th:nth-child(7), .services-table td:nth-child(7) { display: none; }
     .services-table td { white-space: normal; }
-    .services-table .svc-sub, .services-table .unit-cell, .services-table .event-cell { max-width: 60vw; }
+    .services-table .svc-sub, .services-table .unit-cell, .services-table .event-cell, .apps-table .event-cell { max-width: 60vw; }
     /* watches → Name · State · Actions (also drop Last activity). */
     .watch-table th:not(:first-child):not(:nth-last-child(-n+2)),
     .watch-table td:not(:first-child):not(:nth-last-child(-n+2)) { display: none; }
-    /* apps → Application · Status · Version (hide Category). */
+    /* apps → Application · Status · Version · Last activity (hide Category). */
     .apps-table th:nth-child(2), .apps-table td:nth-child(2) { display: none; }
     /* events → Time · Service/watch · Message (hide Kind). */
     .events th:nth-child(3), .events td:nth-child(3) { display: none; }
@@ -470,9 +469,12 @@
   .watch-table th, .watch-table td { vertical-align: top; }
   /* Keep the certificate Expires date (RFC3339) on a single line. */
   .watch-table td.cert-expires { white-space: nowrap; }
-  .apps-table { min-width: 28rem; font-size: .88rem; font-variant-numeric: tabular-nums; }
+  .apps-table { min-width: 36rem; font-size: .88rem; font-variant-numeric: tabular-nums; }
   .apps-table th, .apps-table td { padding: .34rem .5rem; vertical-align: top; }
   .watch-summary { min-width: 18rem; max-width: 30rem; overflow-wrap: anywhere; }
+  .watch-reading { min-width: 0; }
+  .watch-reading-long { grid-column: 1 / -1; }
+  .watch-reading-value { overflow-wrap: anywhere; word-break: break-word; white-space: normal; }
   .usagebar { --usage-pct: 0%; --usage-color: var(--ok); position: relative; display: inline-grid; place-items: center; width: 10.5rem; height: 1.05rem; background: var(--line); border: 1px solid var(--line-2); border-radius: 999px; overflow: hidden; vertical-align: middle; }
   .usagebar-fill { position: absolute; left: 0; top: 0; bottom: 0; width: var(--usage-pct); min-width: .18rem; transition: width .2s ease, background-color .2s ease; background: var(--usage-color); }
   .usagebar-fill::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, #fff5, #fff0 48%, #0001); }

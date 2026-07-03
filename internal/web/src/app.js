@@ -582,6 +582,10 @@ function lastEventCell(s) {
   return tpl`<div class="event-cell" title="${title}"><span class="muted">${fmtAge(e.time)}</span> ${detail ? tpl`<span class="kind kind-${e.kind || ""}">${detail}</span>` : nothing}</div>`;
 }
 
+function lastEventTime(item) {
+  return (item && item.last_event && item.last_event.time) || "";
+}
+
 function nextRemediationCell(s) {
   if (!s.enabled) return tpl`<span class="muted">disabled</span>`;
   const state = s.remediation_state || "";
@@ -1165,6 +1169,11 @@ function compareSortValues(a, b) {
   return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
 }
 
+function numericSortValue(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
 function sortedBy(list, sort, sortKeys, fallbackKey) {
   const f = sortKeys[sort.key];
   if (!sort.key || !f) return list;
@@ -1199,7 +1208,12 @@ const svcSortKeys = {
   name: (s) => displayName(s).toLowerCase(),
   category: (s) => categoryOf(s, "service").toLowerCase(),
   state: (s) => stateRank(serviceState(s)),
-  last: (s) => (s.last_event && s.last_event.time) || "",
+  uptime: (s) => numericSortValue(s && s.uptime_seconds),
+  cpu: (s) => (s && s.cpu_ready) ? numericSortValue(s.cpu) : 0,
+  memory: (s) => numericSortValue(s && s.rss),
+  fds: (s) => numericSortValue(s && s.fds),
+  io: (s) => numericSortValue(s && s.io_read) + numericSortValue(s && s.io_write),
+  last: lastEventTime,
 };
 // toggleSort flips the direction when the same column is re-selected, otherwise
 // selects the new column ascending, then re-renders. Shared by every sortable
@@ -1401,10 +1415,11 @@ function serviceRowParts(s) {
     <td>${serviceMemCell(s)}</td>
     <td>${serviceFDsCell(s)}</td>
     <td>${serviceIoCell(s)}</td>
+    <td>${lastEventCell(s)}</td>
     <td class="actions">${actions}</td>
   </tr>`;
   const exp = open
-    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="9"></td></tr>`
+    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="10"></td></tr>`
     : null;
   return { main, exp };
 }
@@ -1449,11 +1464,11 @@ function renderServices() {
   let content;
   if (!list.length) {
     content = (allServices || []).length
-      ? tpl`<tr><td colspan="9" class="muted">No services match the filter.</td></tr>`
-      : tpl`<tr><td colspan="9" class="muted">No services.</td></tr>`;
+      ? tpl`<tr><td colspan="10" class="muted">No services match the filter.</td></tr>`
+      : tpl`<tr><td colspan="10" class="muted">No services.</td></tr>`;
   } else {
     content = svcGrouped
-      ? renderGroupedRows(list, svcCollapsedGroups, "svc", "service", 9, serviceRowHTML, svcSort.key === "category" ? svcSort.dir : 1)
+      ? renderGroupedRows(list, svcCollapsedGroups, "svc", "service", 10, serviceRowHTML, svcSort.key === "category" ? svcSort.dir : 1)
       : list.flatMap(serviceRowHTML);
   }
   litRender(content, $("#rows"));
@@ -2800,10 +2815,11 @@ function renderWatchReadings(readings) {
   if (!list.length) return nothing;
   const cells = list.map((r) => {
     const label = r.label || r.field || "Sample";
+    const longValue = ["issuer", "subject", "dns_names"].includes(r.field || "");
     const value = r.error
-      ? tpl`<span class="bad">${r.error}</span>`
-      : tpl`<b>${r.value || "—"}</b>`;
-    return tpl`<div><span class="muted">${label}</span><br>${value}</div>`;
+      ? tpl`<span class="watch-reading-value bad">${r.error}</span>`
+      : tpl`<b class="watch-reading-value">${r.value || "—"}</b>`;
+    return tpl`<div class="watch-reading${longValue ? " watch-reading-long" : ""}"><span class="muted">${label}</span><br>${value}</div>`;
   });
   return tpl`<div class="watch-grid">${cells}</div>`;
 }
@@ -3112,6 +3128,7 @@ const appSortKeys = {
   category: (a) => categoryOf(a, "app").toLowerCase(),
   state: appStateRank,
   version: (a) => (a.version_short || a.version || "").toLowerCase(),
+  last: lastEventTime,
 };
 function setAppSort(key) { toggleSort(appSort, key, renderApps); }
 function setAppQuery(q) { appQuery = q || ""; renderApps(); saveUIState(); }
@@ -3272,17 +3289,18 @@ function renderApps(apps) {
       <td>${categoryBadge(category)}</td>
       ${appStatusCell(a)}
       <td>${ver}</td>
+      <td>${lastEventCell(a)}</td>
     </tr>`;
     const expRow = open
-      ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="4">${renderAppExpansion(a)}</td></tr>`
+      ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="5">${renderAppExpansion(a)}</td></tr>`
       : null;
     return expRow ? [row, expRow] : [row];
   };
   const content = list.length
     ? (appGrouped
-      ? renderGroupedRows(list, appCollapsedGroups, "app", "app", 4, appRow, appSort.key === "category" ? appSort.dir : 1)
+      ? renderGroupedRows(list, appCollapsedGroups, "app", "app", 5, appRow, appSort.key === "category" ? appSort.dir : 1)
       : list.flatMap(appRow))
-    : tpl`<tr><td colspan="4" class="muted">No applications match the filter.</td></tr>`;
+    : tpl`<tr><td colspan="5" class="muted">No applications match the filter.</td></tr>`;
   litRender(content, tbody);
   // Fill the recent-events table of each expanded app (async), mirroring how
   // expanded services load their events.

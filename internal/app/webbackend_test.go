@@ -217,6 +217,33 @@ func TestWebBackendApplicationsIncludeServiceSLA(t *testing.T) {
 	}
 }
 
+func TestWebBackendApplicationsIncludeLastEvent(t *testing.T) {
+	events := NewEventLog(10)
+	t0 := time.Date(2026, 6, 7, 14, 0, 0, 0, time.UTC)
+	events.now = func() time.Time { return t0 }
+	events.Add(Event{App: "nginx", Kind: "firing", Message: "version changed"})
+	events.now = func() time.Time { return t0.Add(time.Minute) }
+	events.Add(Event{App: "nginx", Kind: "recovered", Message: "ok"})
+
+	b := &WebBackend{
+		events: events,
+		applicationsList: func(context.Context) []web.Application {
+			return []web.Application{{Name: "nginx", Status: "ok"}, {Name: "orphan", Status: "ok"}}
+		},
+	}
+
+	apps := b.Applications(context.Background())
+	if len(apps) != 2 {
+		t.Fatalf("apps = %+v", apps)
+	}
+	if apps[0].LastEvent == nil || apps[0].LastEvent.Kind != "recovered" || apps[0].LastEvent.Message != "ok" {
+		t.Fatalf("nginx LastEvent = %+v, want recovered ok", apps[0].LastEvent)
+	}
+	if apps[1].LastEvent != nil {
+		t.Fatalf("orphan LastEvent = %+v, want nil", apps[1].LastEvent)
+	}
+}
+
 func TestWebBackendViewMonitorSource(t *testing.T) {
 	at := time.Date(2026, 6, 7, 14, 0, 0, 0, time.UTC)
 	store := newFakeStore()

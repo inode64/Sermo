@@ -258,6 +258,29 @@ func TestIndexAccessibilityForcedColors(t *testing.T) {
 	}
 }
 
+func TestIndexWatchReadingLongValuesWrap(t *testing.T) {
+	css := strings.ReplaceAll(bundledCSS(t), " ", "")
+	for _, needle := range []string{
+		".watch-reading-long{grid-column:1/-1}",
+		".watch-reading-value{overflow-wrap:anywhere;word-break:break-word;white-space:normal}",
+	} {
+		if !strings.Contains(css, needle) {
+			t.Errorf("bundled CSS missing long-reading wrap marker %q", needle)
+		}
+	}
+	script := bundledScript(t)
+	for _, needle := range []string{
+		"issuer",
+		"subject",
+		"watch-reading-long",
+		"watch-reading-value",
+	} {
+		if !strings.Contains(script, needle) {
+			t.Errorf("bundled script missing long-reading marker %q", needle)
+		}
+	}
+}
+
 // TestIndexAccessibilitySectionHeadings pins the per-section <h2> headings that
 // let screen-reader users navigate the dashboard by heading. The <details>
 // summaries cannot carry heading semantics (a summary's implicit button role
