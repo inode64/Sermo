@@ -10,23 +10,25 @@ func TestServiceState(t *testing.T) {
 		backendStatus string
 		checkHealth   string
 		observed      bool
+		ready         bool
 		want          string
 	}{
 		{name: "disabled", enabled: false, monitored: false, backendStatus: "active", observed: true, want: TargetStateDisabled},
 		{name: "starting monitored", enabled: true, monitored: true, backendStatus: "inactive", observed: false, want: TargetStateStarting},
-		{name: "running unmonitored", enabled: true, monitored: false, backendStatus: "active", observed: true, want: TargetStateRunning},
-		{name: "paused unmonitored", enabled: true, monitored: false, backendStatus: "paused", observed: true, want: TargetStatePaused},
+		{name: "started unmonitored", enabled: true, monitored: false, backendStatus: "active", observed: true, want: TargetStateStarted},
+		{name: "paused unmonitored", enabled: true, monitored: false, backendStatus: "paused", observed: true, want: TargetStateStopped},
 		{name: "stopped unmonitored", enabled: true, monitored: false, backendStatus: "inactive", observed: true, want: TargetStateStopped},
-		{name: "failed unmonitored", enabled: true, monitored: false, backendStatus: "failed", observed: true, want: TargetStateFailed},
-		{name: "running active healthy", enabled: true, monitored: true, backendStatus: "active", checkHealth: "ok", observed: true, want: TargetStateRunning},
-		{name: "paused monitored", enabled: true, monitored: true, backendStatus: "paused", checkHealth: "ok", observed: true, want: TargetStatePaused},
-		{name: "running active unknown checks", enabled: true, monitored: true, backendStatus: "active", checkHealth: "unknown", observed: true, want: TargetStateRunning},
+		{name: "failed unmonitored", enabled: true, monitored: false, backendStatus: "failed", observed: true, want: TargetStateStopped},
+		{name: "collecting active healthy without observability", enabled: true, monitored: true, backendStatus: "active", checkHealth: "ok", observed: true, want: TargetStateCollecting},
+		{name: "monitored active healthy", enabled: true, monitored: true, backendStatus: "active", checkHealth: "ok", observed: true, ready: true, want: TargetStateMonitored},
+		{name: "paused monitored", enabled: true, monitored: true, backendStatus: "paused", checkHealth: "ok", observed: true, want: TargetStateFailed},
+		{name: "collecting active unknown checks", enabled: true, monitored: true, backendStatus: "active", checkHealth: "unknown", observed: true, ready: true, want: TargetStateCollecting},
 		{name: "failed backend", enabled: true, monitored: true, backendStatus: "failed", observed: true, want: TargetStateFailed},
-		{name: "failed checks", enabled: true, monitored: true, backendStatus: "active", checkHealth: "failing", observed: true, want: TargetStateFailed},
+		{name: "failed checks", enabled: true, monitored: true, backendStatus: "active", checkHealth: "failing", observed: true, ready: true, want: TargetStateFailed},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := ServiceState(tt.enabled, tt.monitored, tt.backendStatus, tt.checkHealth, tt.observed); got != tt.want {
+			if got := ServiceState(tt.enabled, tt.monitored, tt.backendStatus, tt.checkHealth, tt.observed, tt.ready); got != tt.want {
 				t.Fatalf("ServiceState() = %q, want %q", got, tt.want)
 			}
 		})

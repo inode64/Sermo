@@ -79,8 +79,8 @@ servicio — útil durante el mantenimiento para que una parada deliberada no se
 restart automático. La pausa se registra en el almacén de estado persistente bajo
 `paths.state` (la tabla `monitor_state`), de modo que persiste entre reinicios del daemon
 y reboots hasta que se limpie. `sermoctl status SERVICE` muestra
-el único estado de operador `running` o `stopped` mientras la monitorización está pausada
-(`"state": "running"`/`"stopped"` y `"paused": true` en `--json`). Pausar solo
+el único estado de operador `started` o `stopped` mientras la monitorización está pausada
+(`"state": "started"`/`"stopped"` y `"paused": true` en `--json`). Pausar solo
 afecta a la monitorización de Sermo; no detiene el servicio en sí, y las acciones manuales
 de `sermoctl` siguen funcionando.
 

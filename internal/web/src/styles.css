@@ -137,10 +137,11 @@
   }
   .target-state::before { content: ""; width: .52em; height: .52em; border-radius: 50%; background: currentColor; flex: none; }
   .state-disabled, .state-stopped, .state-unmonitorized, .state-starting { color: var(--text-2); }
-  .state-running { color: var(--info); }
+  .state-running, .state-started { color: var(--info); }
   .state-paused { color: var(--warn); }
   .state-warning { color: var(--warn); }
-  .state-ok, .state-monitorized { color: var(--ok); }
+  .state-collecting { color: var(--warn); }
+  .state-ok, .state-monitorized, .state-monitored { color: var(--ok); }
   .state-failed { color: var(--crit); }
   .state-failed::before { animation: beat 1.2s ease-in-out infinite; }
   .monitor-state { display: inline-block; margin-left: .25rem; }

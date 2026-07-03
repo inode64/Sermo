@@ -111,7 +111,7 @@ func TestStatusShowsPauseSource(t *testing.T) {
 		t.Fatalf("status exit = %d", code)
 	}
 	line := strings.TrimSpace(out.String())
-	if !strings.Contains(line, "state=running") || !strings.Contains(line, "source="+state.SourceCLI) {
+	if !strings.Contains(line, "state=started") || !strings.Contains(line, "source="+state.SourceCLI) {
 		t.Fatalf("status line = %q", line)
 	}
 	if !strings.Contains(line, "changed=") {
@@ -126,7 +126,7 @@ func TestStatusShowsPauseSource(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &st); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if st.State != sermoapp.TargetStateRunning || !st.Paused || st.MonitorSource != state.SourceCLI || st.MonitorChangedAt == "" {
+	if st.State != sermoapp.TargetStateStarted || !st.Paused || st.MonitorSource != state.SourceCLI || st.MonitorChangedAt == "" {
 		t.Fatalf("status json = %+v", st)
 	}
 }

@@ -86,6 +86,9 @@ type Worker struct {
 	// awaiting one post-operation observation cycle. While active, checks may
 	// publish fresh data but must not drive SLA, alerts or remediation.
 	OperationSettling OperationSettlingStore
+	// Observability marks the service ready only after a normal observed cycle has
+	// published data and recorded availability side effects.
+	Observability *ObservabilityRegistry
 
 	// Shadow when true causes the worker to fully evaluate remediation rules,
 	// advance their for/within windows, consult guards and the remediation policy,
@@ -163,6 +166,7 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	defer w.publishRemediation()
 	settleKey := SettlingServiceKey(w.Service)
 	if w.IsPaused != nil && w.IsPaused() {
+		w.clearObservability()
 		if w.Settling != nil && !w.Settling.Observed(settleKey) {
 			w.Settling.MarkObserved(settleKey)
 		}
@@ -177,6 +181,7 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	startupObserveOnly := w.Settling != nil && !w.Settling.Observed(settleKey)
 	operationObserveOnly, operationRunning := w.operationSettlingState(now())
 	if operationRunning {
+		w.clearObservability()
 		if startupObserveOnly && w.Settling != nil {
 			w.Settling.MarkObserved(settleKey)
 		}
@@ -191,6 +196,7 @@ func (w *Worker) RunCycle(ctx context.Context) {
 		if startupObserveOnly && w.Settling != nil {
 			w.Settling.MarkObserved(settleKey)
 		}
+		w.clearObservability()
 		return
 	}
 
@@ -222,8 +228,11 @@ func (w *Worker) RunCycle(ctx context.Context) {
 		if operationObserveOnly {
 			w.clearOperationSettling()
 		}
+		w.clearObservability()
 		return // first active cycle: publish data only, no rules or SLA side effects
 	}
+	at := now()
+	w.markObservabilityReady(at)
 	var resolveRef rules.RefResolver
 	if w.ResolveRefs != nil {
 		resolveRef = w.ResolveRefs()
@@ -231,7 +240,6 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	ev := &rules.Evaluator{Cache: cache, ResolveRef: resolveRef, Deps: deps, Changed: w.changed, ChangedVersion: w.changedAppVersion}
 	evals := w.ruleEvalCache()
 
-	at := now()
 	w.runRemediation(ctx, ev, now, at, evals)
 	w.runAlerts(ctx, ev, at, evals)
 	w.publishRuleWindows(ctx, ev, at, evals)
@@ -272,6 +280,18 @@ func (w *Worker) clearOperationSettling() {
 	}
 	if err := w.OperationSettling.ClearOperationSettling(w.Service); err != nil {
 		w.emit(Event{Kind: "error", Message: "operation settling: " + err.Error()})
+	}
+}
+
+func (w *Worker) clearObservability() {
+	if w.Observability != nil {
+		w.Observability.Clear(w.Service)
+	}
+}
+
+func (w *Worker) markObservabilityReady(at time.Time) {
+	if w.Observability != nil {
+		w.Observability.MarkReady(w.Service, at)
 	}
 }
 

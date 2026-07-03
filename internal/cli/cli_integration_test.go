@@ -90,7 +90,7 @@ func TestIntegrationStatusViaFakeRCService(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
 	}
-	if !strings.Contains(stdout.String(), "nginx state=running backend=openrc service=nginx") {
+	if !strings.Contains(stdout.String(), "nginx state=started backend=openrc service=nginx") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 }
@@ -107,7 +107,7 @@ func TestIntegrationStatusViaFakeSystemctl(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
 	}
-	if !strings.Contains(stdout.String(), "nginx state=running backend=systemd") {
+	if !strings.Contains(stdout.String(), "nginx state=started backend=systemd") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 }

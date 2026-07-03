@@ -625,11 +625,12 @@ Read-only endpoints:
   yet.
 - `GET /api/whoami` — caller role, permissions and feature visibility.
 - `GET /api/services` — **configured runtime** service list (the service
-  files under `paths.services`): name, `state` (`disabled`, `running`,
-  `paused`, `stopped`, `starting`, `failed`), backend status, `check_health`,
-  `checks_failing`, active locks, monitor state/source/timestamp, backend, unit,
-  cooldown, remediation state, next eligible action and last event. This is not
-  `sermoctl services`, which lists catalog service profiles — see
+  files under `paths.services`): name, `state` (`disabled`, `stopped`,
+  `started`, `starting`, `collecting`, `monitored`, `failed`), backend status,
+  `check_health`, `checks_failing`, `observability_ready`,
+  `observability_missing`, active locks, monitor state/source/timestamp,
+  backend, unit, cooldown, remediation state, next eligible action and last
+  event. This is not `sermoctl services`, which lists catalog service profiles — see
   [cli.md](cli.md#catalog-inventory).
 - `GET /api/services/{name}` — service detail: latest checks, rolling SLA, named
   runtime locks, discovered processes, automatic remediation policy state and
@@ -654,7 +655,8 @@ Read-only endpoints:
 - `GET /api/locks` — named runtime locks with TTL, owner status, age, blocked
   actions and release eligibility.
 - `GET /api/activity` — recent activity summary used by the dashboard header.
-- `GET /api/monitoring` — monitored vs paused service counts.
+- `GET /api/monitoring` — monitoring-enabled vs paused counts for non-disabled
+  services.
 - `GET /api/events?limit=N` — global event feed, newest first. Optional filters:
   `service`, `watch`, `kind`, `status` and `only_errors=1`.
 - `GET /api/ops` — global operation slot usage: `{in_use, total}` for
@@ -804,12 +806,13 @@ Web-triggered monitor changes are recorded with source `web` in the state store;
 manual stops from the web UI or CLI use `web-manual-stop` / `cli-manual-stop`
 until a later successful start restores the previous monitored state. The dashboard and
 `GET /api/services` / `GET /api/watches` expose `state`, `monitored`,
-`monitor_source` and `monitor_changed_at` separately, so a service can show
-`running`, `paused`, `stopped` or `failed` while also showing whether monitoring
-is paused and who changed it. Host watches do not have service-manager
-`running` or `stopped` states; their `state` is health (`ok`, `failed`,
-`starting` or `disabled`) and the dashboard filters monitored/unmonitored
-watches from the separate monitor flag.
+`monitor_source` and `monitor_changed_at` separately. A service can show
+`started` while its backend is active but monitoring is paused, `collecting`
+while monitoring is active but runtime/check/SLA indicators are still filling,
+and `monitored` only once those indicators are ready. Host watches do not have
+service-manager `started` or `stopped` states; their `state` is health (`ok`, `failed`,
+`starting` or `disabled`), while their separate monitor flag is used by actions
+and metadata rather than as an additional state badge.
 Operations take the per-service operation lock, so they never overlap a worker's
 action on the same service. The state store also carries a short-lived
 operation-settling marker so `sermoctl`-initiated actions and web actions both

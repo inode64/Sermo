@@ -90,10 +90,10 @@ Renderizadas por `renderOverview` a partir del estado ya cargado, sin solicitude
 
 | Tipo de tarjeta | Contenido actual |
 | --- | --- |
-| Servicios activos | recuento / total; crítico cuando algún servicio está `failed`, neutral mientras algún objetivo se está asentando, en caso contrario saludable; al hacer clic abre el filtro de servicios `failed` o `starting` cuando corresponde |
+| Servicios activos | recuento / total para servicios en `started`, `collecting` o `monitored`; crítico cuando algún servicio está `failed`, aviso mientras algún servicio está `collecting`, neutral mientras algún objetivo se está asentando, en caso contrario activo; al hacer clic abre el filtro de servicios `failed`, `starting` o `collecting` cuando corresponde |
 | Watches | recuento / total; crítico cuando algún watch está `failed`, neutral mientras algún objetivo se está asentando (el subtítulo nombra los watches, servicios o aplicaciones que están iniciando), en caso contrario silencioso; al hacer clic abre el filtro `starting`/`failed` correspondiente |
 | Alertas | recuento de servicios en fallo, watches disparados, aplicaciones instaladas en fallo y locks activos, con un desglose por tipo; al hacer clic dirige a `failed-services`, `failed-watches`, `failed-apps` o `locks-section` por orden de prioridad |
-| Monitorizado | servicios monitorizados frente a no monitorizados; neutral con subtítulo de asentamiento durante el arranque, al hacer clic abre el mismo filtro `starting`/`failed` que Servicios activos cuando corresponde |
+| Monitorizado | servicios en estado `monitored` frente a servicios habilitados; aviso mientras haya servicios en `collecting`, neutral con subtítulo de asentamiento durante el arranque, al hacer clic abre el filtro de servicio relevante |
 | Indicadores de host | memoria, carga, fds, pids, conntrack, etc. cuando están presentes |
 | Volúmenes | un indicador por cada watch de almacenamiento montado, crítico cuando su watch está disparado |
 
@@ -148,7 +148,7 @@ checks, remediación y acciones de lo que `sermod` monitoriza actualmente. Esto 
 | Título | `Services` más el recuento total |
 | Iconos del título | agrupar por categoría, contraer/expandir todos los grupos |
 | Controles | búsqueda, selector de categoría, filtros de estado, recuento mostrado |
-| Filtros de estado | all, disabled, running, paused, stopped, starting, failed, monitored, unmonitored |
+| Filtros de estado | all, disabled, stopped, started, starting, collecting, monitored, failed |
 | Ordenación | Service, Category, State |
 | Agrupación | filas de grupo por categoría, contraíbles |
 
@@ -158,7 +158,7 @@ Columnas:
 | --- | --- |
 | Service | nombre para mostrar, con fallback al nombre, capitalizado |
 | Category | categoría YAML o fallback |
-| State | estado de actividad normalizado más una insignia separada **monitored** / **unmonitored** cuando el servicio está habilitado |
+| State | estado de servicio normalizado único: `disabled`, `stopped`, `started`, `starting`, `collecting`, `monitored` o `failed` |
 | Uptime | antigüedad del proceso de servicio más antiguo descubierto, cuando está disponible |
 | CPU total | último uso de CPU de todo el árbol de procesos; vacío para servicios `no_resident_process` |
 | Memory | última memoria residente del árbol de procesos; vacío para servicios `no_resident_process` |
@@ -273,7 +273,7 @@ aparecen en el detalle del servicio.
 | Título | nombre del panel más el recuento total del subconjunto de watches de ese panel |
 | Controles | búsqueda, filtro de tipo, filtros de estado, recuento mostrado |
 | Filtro de tipo | `all ... types` específico del panel más los distintos tipos de check presentes actualmente en ese panel |
-| Filtros de estado | all, disabled, ok, starting, failed, monitored, unmonitored |
+| Filtros de estado | all, disabled, ok, starting, failed |
 | Ordenación | Name, Type, Summary, Interval, Polarity, Hook, Notifiers, Last activity, State |
 | Visibilidad | oculto cuando no hay watches configurados para el subconjunto de ese panel |
 
@@ -289,7 +289,7 @@ Columnas:
 | Hook | estado del hook configurado |
 | Notifiers | recuento/lista de notifiers configurados |
 | Last activity | última actividad de hook/notify |
-| State | salud normalizada del watch más una insignia separada **monitored** / **unmonitored** cuando el watch está habilitado |
+| State | estado de salud normalizado único del watch: `disabled`, `ok`, `starting` o `failed` |
 | Actions | monitor/unmonitor y acciones admitidas |
 
 Expansión de fila:

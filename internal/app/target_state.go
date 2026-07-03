@@ -6,21 +6,24 @@ import "strings"
 // the web dashboard.
 const (
 	TargetStateDisabled      = "disabled"
-	TargetStateRunning       = "running"
+	TargetStateStarted       = "started"
 	TargetStatePaused        = "paused"
 	TargetStateStopped       = "stopped"
 	TargetStateStarting      = "starting"
+	TargetStateCollecting    = "collecting"
 	TargetStateOK            = "ok"
 	TargetStateMonitorized   = "monitorized"
 	TargetStateUnmonitorized = "unmonitorized"
+	TargetStateMonitored     = "monitored"
 	TargetStateFailed        = "failed"
 )
 
 // ServiceState folds config, backend status and monitoring health into the
 // operator-facing activity state shown by sermoctl and the web dashboard. The
-// monitor flag is a separate axis; a paused monitor can still have a running,
-// stopped, paused or failed backend state.
-func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, observed bool) string {
+// state is intentionally a single service-axis value: "monitored" means the
+// service is active, monitoring is active and the current daemon generation has
+// the indicators needed to show it as observed.
+func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, observed, observabilityReady bool) string {
 	if !enabled {
 		return TargetStateDisabled
 	}
@@ -28,12 +31,11 @@ func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, ob
 		return TargetStateStarting
 	}
 	active := strings.EqualFold(backendStatus, "active")
-	paused := strings.EqualFold(backendStatus, "paused")
 	failed := strings.EqualFold(backendStatus, "failed")
-	if paused {
-		return TargetStatePaused
-	}
 	if failed {
+		if !monitored {
+			return TargetStateStopped
+		}
 		return TargetStateFailed
 	}
 	if !active {
@@ -42,10 +44,19 @@ func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, ob
 		}
 		return TargetStateStopped
 	}
-	if monitored && checkHealth == "failing" {
-		return TargetStateFailed
+	if !monitored {
+		return TargetStateStarted
 	}
-	return TargetStateRunning
+	switch checkHealth {
+	case "failing":
+		return TargetStateFailed
+	case "unknown":
+		return TargetStateCollecting
+	}
+	if !observabilityReady {
+		return TargetStateCollecting
+	}
+	return TargetStateMonitored
 }
 
 // WatchState folds config, monitor state and the last known watch error into the

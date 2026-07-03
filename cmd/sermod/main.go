@@ -239,6 +239,7 @@ func run(args []string) int {
 		Snapshots:         app.NewSnapshots(),
 		Live:              app.NewLiveMetrics(),
 		ServiceMetrics:    app.NewServiceMetricSampler(store),
+		Observability:     app.NewObservabilityRegistry(),
 		Remediation:       app.NewRemediationRegistry(),
 		RuleWindows:       app.NewRuleWindowRegistry(),
 		Events:            eventLog,
