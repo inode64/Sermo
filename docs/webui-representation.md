@@ -37,7 +37,7 @@ Keep changes concrete:
 | Service events | `GET /api/services/{name}/events` | per-service event feed |
 | Host watches | `GET /api/watches` | host-level watches |
 | Applications | `GET /api/applications` | installed catalog apps |
-| Mount units | `GET /api/mounts` | configured fstab-backed mount units |
+| Mount units | `GET /api/mounts` | storage targets with `mount:` backed by fstab |
 | Notifiers | `GET /api/notifiers` | notifier targets |
 | Daemon settings | `GET /api/daemon` | engine/runtime config |
 | Daemon process metrics | `GET /api/daemon/metrics` | persisted sermod CPU/memory/IO history |
@@ -292,7 +292,7 @@ Columns:
 | Hook | configured hook state |
 | Notifiers | configured notifier count/list |
 | Last activity | latest hook/notify activity |
-| State | single normalized watch health state: `disabled`, `ok`, `starting` or `failed` |
+| State | single normalized watch state: `disabled` when config/monitor state excludes it from active checks, `starting` before the first monitored sample, `failed` for an active failure, otherwise `ok` |
 | Actions | monitor/unmonitor and supported actions |
 
 Row expansion:

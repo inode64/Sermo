@@ -67,10 +67,12 @@ func buildMountUnit(c MountCandidate, s mountSettings) map[string]any {
 	return map[string]any{
 		"category": "storage",
 		"path":     filepath.Clean(c.Path),
-		"refcount": s.refcount,
-		"umount": map[string]any{
-			"allow_sigkill": false,
-			"allow_lazy":    false,
+		"mount": map[string]any{
+			"refcount": s.refcount,
+			"umount": map[string]any{
+				"allow_sigkill": false,
+				"allow_lazy":    false,
+			},
 		},
 	}
 }

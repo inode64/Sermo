@@ -22,7 +22,7 @@ A document's kind is determined by where it is read from, so files do not carry 
 
 - catalog subdirectory: `catalog/services/` → service, `catalog/apps/` → app,
   `catalog/libs/` → lib, `catalog/patterns/` → patterns;
-- deployed config dirs: `paths.services` → service, `paths.mounts` → mount.
+- deployed config dirs: `paths.services` → service, `paths.storages` → storage.
 
 A `kind:` key is optional and redundant; if one is present in a deployed file it
 must match the location, otherwise loading fails. Examples (one per file):
@@ -55,9 +55,14 @@ clone: redis-main
 ```
 
 ```yaml
-# <paths.mounts>/mount-backup.yml  → mount
-name: mount-backup
+# <paths.storages>/backup.yml  → storage
+name: storage-backup
 path: /mnt/backup
+capacity:
+  mounted: true
+  free_pct: { op: "<", value: "10%" }
+mount:
+  refcount: true
 ```
 
 Every document has a `name`. Optional human-facing metadata may
@@ -85,7 +90,7 @@ category: "database"      # optional WebUI grouping/filter label
 
 Use one YAML file per target — a single document of one kind per file, never
 several grouped together. A document's kind is derived from where it lives
-(catalog subdir / `paths.services` / `paths.mounts`), so a top-level `kind:` is
+(catalog subdir / `paths.services` / `paths.storages`), so a top-level `kind:` is
 optional. Watch and notifier fragment files still use a top-level `watches:` or
 `notifiers:` map, but the map must contain exactly one named entry.
 `docs/sermo-all.yml` is the only reference-style exception: it groups examples so

@@ -203,8 +203,8 @@ Lifecycle:
 
 ## Mount operations
 
-Mount units (loaded from `paths.mounts`, default
-`/etc/sermo/mounts`) are manual operator actions exposed by
+Mount units (loaded from storage documents under `paths.storages`, default
+`/etc/sermo/storages`, when they define `mount:`) are manual operator actions exposed by
 `sermoctl mount|umount` and the Web UI **Mount units** panel; they are not
 daemon-cycle remediation. They still use the same safety posture:
 
@@ -213,12 +213,12 @@ daemon-cycle remediation. They still use the same safety posture:
   builds a shell command from YAML.
 - Each target has an operation lock under `<paths.runtime>/mounts/ops`, so two
   callers cannot race the same mount.
-- With `refcount: true` (the default), `mount` increments a runtime counter and
+- With `mount.refcount: true` (the default), `mount` increments a runtime counter and
   `umount` decrements it; the real unmount is attempted only when the counter
   reaches zero.
 - Busy unmounts are reported with the processes using the mount. Sermo does not
-  signal them unless `umount.allow_sigkill: true` or `stop_policy.force_kill:
-  true` is explicitly configured.
+  signal them unless `mount.umount.allow_sigkill: true` or
+  `mount.stop_policy.force_kill: true` is explicitly configured.
 - The Web UI can send a native TTY alert to logged-in users that own current
   blockers. This uses the same Go TTY notifier as normal notifications; it does
   not run `wall`, `write` or a shell.

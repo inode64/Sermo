@@ -2,13 +2,14 @@
 
 Sermo configuration is split by target type: **catalog service/app/lib/pattern
 definitions**, **services** as concrete monitored instances, **notifiers** as
-delivery targets, **watches** as host-level monitors, and **mounts** as
-fstab-backed mount units. Watch and notifier files are global fragments with a
-top-level `watches:` or `notifiers:` map; those fragments do not use `kind:`.
+delivery targets, **storages** as filesystem capacity targets with optional
+fstab-backed mount operations, and **watches** as host-level monitors. Watch and
+notifier files are global fragments with a top-level `watches:` or `notifiers:`
+map; those fragments do not use `kind:`.
 
 New configuration must use one YAML file per target. That means one catalog app,
-daemon, lib or pattern per file; one service per file; one mount per file; one
-notifier per file; and one host watch per file (`storage`, `network`, `uplink`,
+daemon, lib or pattern per file; one service per file; one storage per file; one
+notifier per file; and one host watch per file (`network`, `uplink`,
 `load`, and other watch fragments). Global fragment files still have the
 top-level `watches:` or `notifiers:` map, but that map must contain exactly one
 named entry. This keeps generated configuration easy to diff, replace and clean
@@ -16,8 +17,8 @@ up per target.
 
 A document's **kind is determined by where it lives** — its catalog subdirectory
 (`services/` → service, `apps/` → app, `libs/` → lib, `patterns/` → patterns) or
-the configured path it loads from (`paths.services` → service, `paths.mounts` →
-mount). A catalog `services/` definition (a *catalog service*) and a `paths.services`
+the configured path it loads from (`paths.services` → service, `paths.storages` →
+storage). A catalog `services/` definition (a *catalog service*) and a `paths.services`
 instance (a *configured service*) share the kind `service`; they stay distinct by
 location. A top-level `kind:` key is therefore **optional and redundant**; when one
 is present in a deployed file it must match the location, which catches a file
@@ -26,7 +27,7 @@ placed in the wrong directory. Shipped configuration omits it.
 > **Complete annotated example.** [`docs/sermo-all.yml`](sermo-all.yml) shows
 > every configuration surface in one place — global config, watches, and one
 > document of each kind (a catalog service, app, lib, pattern, a configured
-> service, and a mount), plus a cloned service example — and is validated by the
+> service, and a storage), plus a cloned service example — and is validated by the
 > test suite, so it cannot
 > drift from the schema. It is a reference bundle only; real deployments keep
 > one target per file. The shipped operational config is `examples/sermo.yml`.
@@ -52,9 +53,8 @@ normalized to `/run`, must be documented as explicit exceptions at the owner.
 /etc/sermo/catalog-available/{services,apps,libs,patterns}/*.yml   user catalog definitions
 /etc/sermo/services/*.yml concrete service documents
 /etc/sermo/apps/*.yml     host-specific app documents
-/etc/sermo/mounts/*.yml   fstab-backed mount documents
 /etc/sermo/notifiers/*.yml notifier fragments
-/etc/sermo/storages/*.yml storage watch fragments
+/etc/sermo/storages/*.yml storage documents (capacity and optional mount operations)
 /etc/sermo/networks/*.yml network watch fragments
 /etc/sermo/watches/*.yml  generic host watch fragments
 /etc/sermo/templates/*.yml notification templates
@@ -79,8 +79,6 @@ paths:
     - /etc/sermo/networks
   watches:
     - /etc/sermo/watches
-  mounts:
-    - /etc/sermo/mounts
   runtime: /run/sermo
   state: /var/lib/sermo
   templates: /etc/sermo/templates
@@ -88,7 +86,7 @@ paths:
 
 Directory lists under `paths.catalog`, `paths.services`, `paths.apps`,
 `paths.notifiers`, `paths.storages`, `paths.networks`, `paths.watches` and
-`paths.mounts` accept either a path string or an explicit mapping:
+accept either a path string or an explicit mapping:
 
 ```yaml
 paths:
@@ -118,23 +116,22 @@ stale-reclaim semantics.
 If `paths.catalog` is omitted, Sermo reads the installed catalog defaults:
 `/usr/share/sermo/catalog` and `/etc/sermo/catalog-available`.
 
-Only service, app and mount document directories have config-relative fallbacks.
-If `paths.services`, `paths.apps` or `paths.mounts` is omitted, Sermo falls back
-to `services/`, `apps/` or `mounts/` next to the loaded `sermo.yml` file. With
+Only service, app and storage document directories have config-relative fallbacks.
+If `paths.services`, `paths.apps` or `paths.storages` is omitted, Sermo falls back
+to `services/`, `apps/` or `storages/` next to the loaded `sermo.yml` file. With
 the standard `/etc/sermo/sermo.yml` this means `/etc/sermo/services`,
-`/etc/sermo/apps` and `/etc/sermo/mounts`.
+`/etc/sermo/apps` and `/etc/sermo/storages`.
 
 Global fragment directories have no implicit fallback. If `paths.notifiers`,
-`paths.storages`, `paths.networks` or `paths.watches` is omitted or empty, Sermo
-loads no fragments of that type; a sibling `notifiers/`, `storages/`,
-`networks/` or `watches/` directory next to `sermo.yml` is ignored until listed
+`paths.networks` or `paths.watches` is omitted or empty, Sermo loads no fragments
+of that type; a sibling `notifiers/`, `networks/` or `watches/` directory next to `sermo.yml` is ignored until listed
 explicitly under `paths`.
 
-Every new service, mount, notifier or watch fragment under configured
+Every new service, storage, notifier or watch fragment under configured
 directories should be isolated in its own `.yml` file, even when several targets
-are generated in the same wizard run. Mount documents are intentionally separate
-from service documents and watch fragments because they are operator actions,
-not monitored services.
+are generated in the same wizard run. Storage documents may expose mount
+operations with a `mount:` block while keeping capacity monitoring in the same
+target.
 
 Use `/run` for runtime paths in Sermo configuration and examples. Do not write
 new `/var/run` pidfiles, sockets, lockfiles or runtime directories in
@@ -230,13 +227,16 @@ mode holds even outside the packaging.
 notification templates. `make install` creates it and installs
 `default-alert.yml`.
 
-## Mount units
+## Storage and mount units
 
-A mount document defines a named mount target controlled by `sermoctl mount` and
-`sermoctl umount`. Mount units live under `paths.mounts` (default
-`/etc/sermo/mounts`) and deliberately use `/etc/fstab` as the source of truth:
-the YAML contains the mount path and Sermo policy only, not `source`, `fstype`,
-`options` or class metadata.
+A storage document defines a named filesystem target under `paths.storages`
+(default `/etc/sermo/storages`). It may declare `capacity:` for monitoring,
+`mount:` for `sermoctl mount`/`sermoctl umount`, or both. Mount operations
+deliberately use `/etc/fstab` as the source of truth: the YAML contains the mount
+path and Sermo policy only, not `source`, `fstype`, `options` or class metadata.
+When a storage has both `capacity:` and `mount:`, the generated capacity watch
+requires the storage `path` to be the mounted mountpoint (`mounted: true`) unless
+`capacity.mounted` is explicitly set.
 
 ```yaml
 name: mount-backup
@@ -244,16 +244,26 @@ display_name: Backup mount
 category: storage
 
 path: /mnt/backup
-refcount: true
+monitor: previous
+interval: 30s
 
-umount:
-  term_timeout: 12s
-  kill_timeout: 5s
-  allow_sigkill: false
-  allow_lazy: false
+capacity:
+  mounted: true
+  used_pct: { op: ">=", value: "90%" }
+  for: { cycles: 3 }
+  then:
+    notify: default
+
+mount:
+  refcount: true
+  umount:
+    term_timeout: 12s
+    kill_timeout: 5s
+    allow_sigkill: false
+    allow_lazy: false
 ```
 
-The CLI accepts either the configured name or the absolute mount path:
+The CLI accepts either the configured storage name or the absolute mount path:
 
 ```sh
 sermoctl mount mount-backup
@@ -264,12 +274,12 @@ sermoctl mount status mount-backup
 sermoctl mount list
 ```
 
-The Web UI's **Mount units** panel exposes configured mount names to admins.
-It can mount/unmount, show the same busy-process blockers before unmounting,
-send a native TTY alert to logged-in users who are blocking the mount, and run
-`kill+umount` only through the explicit mount kill policy below.
+The Web UI's **Mount units** panel exposes storage targets that have a `mount:`
+block. It can mount/unmount, show the same busy-process blockers before
+unmounting, send a native TTY alert to logged-in users who are blocking the
+mount, and run `kill+umount` only through the explicit mount kill policy below.
 
-With `refcount: true` (the default), every successful `mount` increments
+With `mount.refcount: true` (the default), every successful `mount` increments
 Sermo's runtime counter and `umount` decrements it. The real `umount` only runs
 when the counter reaches zero; if the path is not mounted yet, the first
 `mount` runs `mount <path>` and requires a matching `/etc/fstab` entry. The
@@ -278,10 +288,10 @@ uses a per-target lock under `<paths.runtime>/mounts/ops`.
 
 Normal unmount is conservative: Sermo first runs `umount <path>`. If the mount
 is busy, it reports the processes using the path. It only signals blockers when
-`umount.allow_sigkill: true` or `stop_policy.force_kill: true` is explicitly
-set, and validation then requires a restrictive `stop_policy.kill_only_if`
-selector. Lazy unmount (`umount -l`) is also off by default and only used when
-`umount.allow_lazy: true`.
+`mount.umount.allow_sigkill: true` or `mount.stop_policy.force_kill: true` is
+explicitly set, and validation then requires a restrictive
+`mount.stop_policy.kill_only_if` selector. Lazy unmount (`umount -l`) is also off
+by default and only used when `mount.umount.allow_lazy: true`.
 
 ## Engine settings
 
@@ -804,15 +814,20 @@ their process table and latency/CPU/memory/IO charts.
 
 Web-triggered monitor changes are recorded with source `web` in the state store;
 manual stops from the web UI or CLI use `web-manual-stop` / `cli-manual-stop`
-until a later successful start restores the previous monitored state. The dashboard and
+until a later successful start restores the previous monitored state. A successful
+storage `umount` pauses that storage capacity watch with `web-mount-umount` or
+`cli-mount-umount`; a later successful `mount` restores it only when that umount
+created the pause. The dashboard and
 `GET /api/services` / `GET /api/watches` expose `state`, `monitored`,
 `monitor_source` and `monitor_changed_at` separately. A service can show
 `started` while its backend is active but monitoring is paused, `collecting`
 while monitoring is active but runtime/check/SLA indicators are still filling,
 and `monitored` only once those indicators are ready. Host watches do not have
-service-manager `started` or `stopped` states; their `state` is health (`ok`, `failed`,
-`starting` or `disabled`), while their separate monitor flag is used by actions
-and metadata rather than as an additional state badge.
+service-manager `started` or `stopped` states; their `state` is `disabled` when
+configuration or monitor state excludes them from active checks, `starting`
+before the first monitored sample, `failed` for an active failing condition, and
+`ok` otherwise. Their separate monitor flag is still exposed for actions and
+metadata.
 Operations take the per-service operation lock, so they never overlap a worker's
 action on the same service. The state store also carries a short-lived
 operation-settling marker so `sermoctl`-initiated actions and web actions both
@@ -1073,8 +1088,9 @@ a service.
 > one service file per target under `services/` and ensure that
 > `paths.services` loads it; `docker` and `vm` add `control.type: docker` or
 > `control.type: libvirt` plus matching read-only checks. The mount assistant
-> (`mount`) lists `/etc/fstab` mount points and writes safe mount files
-> under `paths.mounts`; it does not mount or unmount while generating config.
+> (`mount`) lists `/etc/fstab` mount points and writes safe storage files with
+> a `mount:` block under `paths.storages`; it does not mount or unmount while
+> generating config.
 >
 > `sermoctl wizard volume` creates storage checks for mounted local and
 > network/distributed filesystems (threshold as a percent or size, optional
@@ -1104,8 +1120,8 @@ a service.
 > global `notify` configured) it degrades to a monitor-only watch
 > (`notify: [none]`) with a one-line note — it never re-asks or aborts. The
 > wizard asks monitored entries for monitor state (`enabled`/`disabled`/
-> `previous`) and an optional check interval; mount files are not
-> monitored entries, so the mount assistant skips those questions. See
+> `previous`) and an optional check interval; storage files generated only for
+> mount operations are not monitored entries, so the mount assistant skips those questions. See
 > [wizards](wizards.md) for the full flow.
 
 A watch's `then` block (when present) declares the actions taken when it

@@ -1,15 +1,13 @@
-watches:
-  storage-root:
-    # Watch the root filesystem. Copy this file per filesystem and adjust the
-    # watch name/path.
-    monitor: disabled
-    interval: 30s
-    check:
-      type: storage
-      path: /
-      used_pct: { op: ">=", value: "90%" }
-      mounted: true
-    for: { cycles: 3 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-storage-alert.sh, /]
+name: storage-root
+display_name: Root filesystem
+category: storage
+path: /
+monitor: disabled
+interval: 30s
+capacity:
+  used_pct: { op: ">=", value: "90%" }
+  mounted: true
+  for: { cycles: 3 }
+  then:
+    hook:
+      command: [/usr/local/bin/sermo-storage-alert.sh, /]

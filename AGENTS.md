@@ -184,7 +184,7 @@ duplicate aliases for the same pidfile or socket.
 
 Use one YAML file per target — a single document of one kind per file, never
 several targets grouped together. A document's kind is derived from where it
-lives (catalog subdir / `paths.services` / `paths.mounts`), so a top-level
+lives (catalog subdir / `paths.services` / `paths.storages`), so a top-level
 `kind:` is optional and omitted. Watch and notifier fragments still use a
 top-level `watches:` or `notifiers:` map, but that map must contain exactly one
 named entry. The only exception is a clearly labeled reference bundle such as
