@@ -746,6 +746,14 @@ Service workers, host watches and installed-app monitors use separate settling
 keys, so a service and a catalog app that share a name (for example `redis`)
 both count toward readiness independently.
 
+Service operations use the same observation-only settling after startup:
+`start`, `restart`, `reload` and `resume` from automatic remediation, the web UI
+or `sermoctl` suppress service alerts, notifications, automatic remediation and
+SLA samples until the operation has finished and the worker has observed one
+active cycle with fresh data. `stop` suppresses cycles while the operation is
+running; a successful manual stop then pauses monitoring as described below.
+This per-service settling does not re-gate `/readyz`.
+
 Events are the daemon's activity — actions, alerts, suppressions, hook/notify
 results and errors — kept in an in-memory ring (the last 1000); they also go to
 the daemon log. `limit` defaults to 100 (max 1000). The dashboard shows a global
@@ -799,7 +807,9 @@ unmonitorized watch shows who paused it and when. Host watches do not have
 service-manager `running` or `stopped` states; the dashboard filters them as
 `ok`, `failed`, `unmonitorized` or `disabled`.
 Operations take the per-service operation lock, so they never overlap a worker's
-action on the same service.
+action on the same service. The state store also carries a short-lived
+operation-settling marker so `sermoctl`-initiated actions and web actions both
+hold back service alerts until the daemon has a post-operation sample.
 
 Because the daemon runs as root, the UI is hardened: it binds to loopback by
 default, supports auth (above), sets HTTP timeouts, and requires an

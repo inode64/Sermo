@@ -537,11 +537,11 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 		return code
 	}
 
-	monitorStore := a.openManualActionMonitorStore(cfg, action)
-	if monitorStore != nil {
-		defer func() { _ = monitorStore.Close() }()
+	actionStore := a.openManualActionStore(cfg, action)
+	if actionStore != nil {
+		defer func() { _ = actionStore.Close() }()
 	}
-	result, err := a.operateWithCascade(ctx, opts, cfg, resolved, service, action, monitorStore)
+	result, err := a.operateWithCascade(ctx, opts, cfg, resolved, service, action, actionStore)
 	if err != nil {
 		a.recordAccess(cfg, action, service, "error", err.Error())
 		return a.fail(opts, err.Error())
@@ -567,12 +567,15 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 // (start/restart: primary first; stop: additionals first). Targets run through
 // their own guarded operation; each target's result is printed. The primary's
 // result is returned and drives the exit code.
-func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, monitorStore app.MonitorStore) (operation.Result, error) {
+func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, actionStore *state.Store) (operation.Result, error) {
 	targets := config.CascadeTargets(resolved.Tree)
 	// also_apply cascades only start/stop/restart, not reload/resume.
 	if opts.noCascade || action == "reload" || action == "resume" || len(targets) == 0 {
+		a.beginManualOperationSettling(cfg, actionStore, service, action)
 		out, err := a.Operate(ctx, opts, cfg, resolved, service, action)
-		a.syncManualActionMonitoring(cfg, monitorStore, service, action, out, err)
+		activeAfterStart := a.manualActionActiveAfterStart(ctx, opts, cfg, resolved, service, action, out, err)
+		a.syncManualActionMonitoring(cfg, actionStore, service, action, out, err, activeAfterStart)
+		a.finishManualOperationSettling(cfg, actionStore, service, action, out, err, activeAfterStart)
 		return out, err
 	}
 	lookup := func(svc string) []string {
@@ -596,8 +599,11 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 			}
 			res = r
 		}
+		a.beginManualOperationSettling(cfg, actionStore, svc, action)
 		out, err := a.Operate(ctx, opts, cfg, res, svc, action)
-		a.syncManualActionMonitoring(cfg, monitorStore, svc, action, out, err)
+		activeAfterStart := a.manualActionActiveAfterStart(ctx, opts, cfg, res, svc, action, out, err)
+		a.syncManualActionMonitoring(cfg, actionStore, svc, action, out, err, activeAfterStart)
+		a.finishManualOperationSettling(cfg, actionStore, svc, action, out, err, activeAfterStart)
 		if svc == service {
 			primary, primaryErr = out, err
 			continue
@@ -620,23 +626,49 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 	return app.DowngradePrimaryOnCascadeFailure(primary, cascadeFailed), primaryErr
 }
 
-func (a App) openManualActionMonitorStore(cfg *config.Config, action string) *state.Store {
-	if action != "start" && action != "stop" {
+func (a App) openManualActionStore(cfg *config.Config, action string) *state.Store {
+	if !operationActionUsesState(action) {
 		return nil
 	}
 	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
-		fmt.Fprintf(a.Stderr, "warning: monitoring state unavailable: %v\n", err)
+		fmt.Fprintf(a.Stderr, "warning: operation state unavailable: %v\n", err)
 		return nil
 	}
 	return store
 }
 
-func (a App) syncManualActionMonitoring(cfg *config.Config, store app.MonitorStore, service, action string, result operation.Result, opErr error) {
+func operationActionUsesState(action string) bool {
+	return action == "start" || action == "stop" || action == "restart" || action == "reload" || action == "resume"
+}
+
+func (a App) beginManualOperationSettling(cfg *config.Config, store *state.Store, service, action string) {
+	if store == nil {
+		return
+	}
+	if err := app.BeginOperationSettlingForCLI(store, service, action); err != nil {
+		msg := err.Error()
+		fmt.Fprintf(a.Stderr, "warning: %s\n", msg)
+		a.recordAccess(cfg, action+"-settling", service, "error", msg)
+	}
+}
+
+func (a App) finishManualOperationSettling(cfg *config.Config, store *state.Store, service, action string, result operation.Result, opErr error, activeAfterStart bool) {
+	if store == nil {
+		return
+	}
+	if err := app.FinishOperationSettlingForCLIWithActive(store, service, action, result, opErr, activeAfterStart); err != nil {
+		msg := err.Error()
+		fmt.Fprintf(a.Stderr, "warning: %s\n", msg)
+		a.recordAccess(cfg, action+"-settling", service, "error", msg)
+	}
+}
+
+func (a App) syncManualActionMonitoring(cfg *config.Config, store *state.Store, service, action string, result operation.Result, opErr error, activeAfterStart bool) {
 	if store == nil || opErr != nil {
 		return
 	}
-	change, err := app.SyncManualActionMonitoring(store, service, action, result, state.SourceCLIManualStop, state.SourceCLI)
+	change, err := app.SyncManualActionMonitoringWithActive(store, service, action, result, state.SourceCLIManualStop, state.SourceCLI, activeAfterStart)
 	if err != nil {
 		msg := err.Error()
 		fmt.Fprintf(a.Stderr, "warning: %s\n", msg)
@@ -646,6 +678,35 @@ func (a App) syncManualActionMonitoring(cfg *config.Config, store app.MonitorSto
 	if change.Changed {
 		a.recordAccess(cfg, change.Action, service, "ok", change.Message)
 	}
+}
+
+func (a App) manualActionActiveAfterStart(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, result operation.Result, opErr error) bool {
+	if opErr != nil || result.Status != operation.ResultPostflightFailed || !cliManualStartLikeAction(action) {
+		return false
+	}
+	if a.Detector == nil || a.NewManager == nil {
+		return false
+	}
+	detection, err := a.Detector.Detect(ctx, opts.backend)
+	if err != nil {
+		return false
+	}
+	manager, err := a.NewManager(detection.Backend)
+	if err != nil {
+		return false
+	}
+	resolver := servicemgr.NewUnitResolver()
+	resolver.Manager = manager
+	target, err := a.resolveControlTarget(ctx, options{quiet: true, backend: opts.backend}, service, resolved.Tree, detection.Backend, manager, resolver)
+	if err != nil {
+		return false
+	}
+	st, err := target.Manager.Status(ctx, target.Unit)
+	return err == nil && st.Status == servicemgr.StatusActive
+}
+
+func cliManualStartLikeAction(action string) bool {
+	return action == "start" || action == "restart" || action == "resume"
 }
 
 // defaultOperate wires the real operation engine from a resolved service and

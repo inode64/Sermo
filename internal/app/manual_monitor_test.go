@@ -77,3 +77,31 @@ func TestSyncManualActionMonitoringIgnoresFailedOperation(t *testing.T) {
 		t.Fatal("failed op should not write monitoring state")
 	}
 }
+
+func TestSyncManualActionMonitoringRestoresPostflightFailedActiveStart(t *testing.T) {
+	store := newFakeStore()
+	store.active["web"] = false
+	store.source["web"] = state.SourceCLIManualStop
+
+	result := operation.Result{Service: "web", Action: "start", Status: operation.ResultPostflightFailed}
+	change, err := SyncManualActionMonitoringWithActive(store, "web", "start", result, state.SourceCLIManualStop, state.SourceCLI, true)
+	if err != nil {
+		t.Fatalf("active postflight sync: %v", err)
+	}
+	if !change.Changed || !change.Monitored || change.Action != "monitor" {
+		t.Fatalf("active postflight change = %+v", change)
+	}
+	if !store.active["web"] || store.source["web"] != state.SourceCLI {
+		t.Fatalf("store after active postflight start active=%v source=%q", store.active["web"], store.source["web"])
+	}
+
+	store.active["web"] = false
+	store.source["web"] = state.SourceCLIManualStop
+	change, err = SyncManualActionMonitoringWithActive(store, "web", "start", result, state.SourceCLIManualStop, state.SourceCLI, false)
+	if err != nil {
+		t.Fatalf("inactive postflight sync: %v", err)
+	}
+	if change.Changed || store.active["web"] || store.source["web"] != state.SourceCLIManualStop {
+		t.Fatalf("inactive postflight should not restore, change=%+v active=%v source=%q", change, store.active["web"], store.source["web"])
+	}
+}

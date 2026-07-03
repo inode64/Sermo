@@ -34,6 +34,41 @@ func TestStoreMonitorStateRoundTrip(t *testing.T) {
 	}
 }
 
+func TestStoreOperationSettlingRoundTrip(t *testing.T) {
+	s := openTemp(t)
+	s.now = func() time.Time { return time.Date(2026, 6, 7, 9, 0, 0, 0, time.UTC) }
+
+	if err := s.SetOperationSettling("web", "restart", OperationSettlingRunning, SourceCLI); err != nil {
+		t.Fatalf("SetOperationSettling: %v", err)
+	}
+	rec, found, err := s.OperationSettling("web")
+	if err != nil || !found {
+		t.Fatalf("OperationSettling: found=%v err=%v", found, err)
+	}
+	if rec.Action != "restart" || rec.Phase != OperationSettlingRunning || rec.Source != SourceCLI || !rec.UpdatedAt.Equal(s.now()) {
+		t.Fatalf("record = %+v", rec)
+	}
+
+	s.now = func() time.Time { return time.Date(2026, 6, 7, 9, 1, 0, 0, time.UTC) }
+	if err := s.SetOperationSettling("web", "restart", OperationSettlingSettling, SourceWeb); err != nil {
+		t.Fatalf("SetOperationSettling update: %v", err)
+	}
+	rec, found, err = s.OperationSettling("web")
+	if err != nil || !found {
+		t.Fatalf("OperationSettling after update: found=%v err=%v", found, err)
+	}
+	if rec.Phase != OperationSettlingSettling || rec.Source != SourceWeb || !rec.UpdatedAt.Equal(s.now()) {
+		t.Fatalf("updated record = %+v", rec)
+	}
+
+	if err := s.ClearOperationSettling("web"); err != nil {
+		t.Fatalf("ClearOperationSettling: %v", err)
+	}
+	if _, found, err = s.OperationSettling("web"); err != nil || found {
+		t.Fatalf("after clear found=%v err=%v", found, err)
+	}
+}
+
 func TestStoreEventAppDimensionRoundTrip(t *testing.T) {
 	s := openTemp(t)
 	if err := s.RecordEvent(EventRecord{Service: "web", Kind: "action", Message: "restart"}); err != nil {
@@ -156,6 +191,9 @@ func TestStorePersistsAcrossReopen(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("SetRuleWindowStates: %v", err)
 	}
+	if err := first.SetOperationSettling("db", "restart", OperationSettlingSettling, SourceDaemon); err != nil {
+		t.Fatalf("SetOperationSettling: %v", err)
+	}
 	if err := first.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
@@ -188,6 +226,13 @@ func TestStorePersistsAcrossReopen(t *testing.T) {
 		t.Fatalf("rule window state = %+v", windows)
 	} else if !rec.TrueSince.Equal(t0.Add(-5*time.Minute)) || len(rec.TimedHistory) != 2 || rec.TimedHistory[0].Match != true || !rec.TimedHistory[1].At.Equal(t0.Add(-2*time.Minute)) {
 		t.Fatalf("duration rule window state = %+v", rec)
+	}
+	op, found, err := second.OperationSettling("db")
+	if err != nil || !found {
+		t.Fatalf("OperationSettling after reopen: found=%v err=%v", found, err)
+	}
+	if op.Action != "restart" || op.Phase != OperationSettlingSettling || op.Source != SourceDaemon {
+		t.Fatalf("operation settling state = %+v", op)
 	}
 }
 
