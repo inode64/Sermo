@@ -242,6 +242,20 @@ func TestDiscoverPidfile(t *testing.T) {
 	}
 }
 
+func TestReadPidfilePostgresFormat(t *testing.T) {
+	pidfile := filepath.Join(t.TempDir(), "postmaster.pid")
+	if err := os.WriteFile(pidfile, []byte("4991\n/var/lib/postgresql/18/data\n1780913194\n5432\n/run/postgresql\n*\nready\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadPidfile(pidfile)
+	if err != nil {
+		t.Fatalf("ReadPidfile() error = %v", err)
+	}
+	if got != 4991 {
+		t.Fatalf("ReadPidfile() = %d, want 4991", got)
+	}
+}
+
 func TestDiscoverPidfileDeadPIDWarns(t *testing.T) {
 	dir := t.TempDir()
 	pidfile := filepath.Join(dir, "mysqld.pid")

@@ -160,10 +160,10 @@ Columnas:
 | Category | categoría YAML o fallback |
 | State | estado de actividad normalizado más una insignia separada **monitored** / **unmonitored** cuando el servicio está habilitado |
 | Uptime | antigüedad del proceso de servicio más antiguo descubierto, cuando está disponible |
-| CPU total | último uso de CPU de todo el árbol de procesos |
-| Memory | última memoria residente del árbol de procesos |
-| FDs | recuento de descriptores de archivo abiertos del árbol de procesos |
-| IO R/W | bytes acumulados de lectura/escritura en disco del árbol de procesos |
+| CPU total | último uso de CPU de todo el árbol de procesos; vacío para servicios `no_resident_process` |
+| Memory | última memoria residente del árbol de procesos; vacío para servicios `no_resident_process` |
+| FDs | recuento de descriptores de archivo abiertos del árbol de procesos; vacío para servicios `no_resident_process` |
+| IO R/W | bytes acumulados de lectura/escritura en disco del árbol de procesos; vacío para servicios `no_resident_process` |
 | Actions | un botón start/stop según el estado, restart, reload, resume, monitor/unmonitor; reload se desactiva cuando `can_reload` es false; el diálogo de confirmación de start/stop/restart ofrece **skip also_apply** cuando `also_apply` está definido |
 
 Expansión de fila:
@@ -171,7 +171,7 @@ Expansión de fila:
 | Área | Contenido |
 | --- | --- |
 | Datos generales | estado, categoría, unidad/backend, uptime, intervalo, política, locks, último evento, próxima remediación, estado de remediación y totales del proceso; mientras la insignia de la fila sea `starting`, la expansión puede mostrar todavía el backend de init en bruto (`inactive`) y muestras de check en curso del ciclo de solo observación |
-| Gráficos | línea temporal de SLA a ancho completo seguida de gráficos de latencia, CPU, memoria e IO; todos usan el selector de ventana compartido `1h`, `24h`, `7d`, `30d`, `1y` |
+| Gráficos | línea temporal de SLA a ancho completo seguida de gráficos de latencia, CPU, memoria e IO; los servicios `no_resident_process` muestran solo SLA porque no tienen runtime de procesos para graficar |
 | Procesos | tabla del árbol de procesos detectado a ancho completo, con los procesos hijos marcados en CMD y mantenidos bajo su padre; se omite cuando `no_resident_process` es true |
 | Checks | checks configurados y resultado actual |
 | Locks con nombre | estado de los locks de runtime |

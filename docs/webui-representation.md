@@ -160,10 +160,10 @@ Columns:
 | Category | YAML category or fallback |
 | State | normalized activity state plus a separate **monitored** / **unmonitored** badge when the service is enabled |
 | Uptime | age of the oldest discovered service process, when available |
-| CPU total | latest whole process-tree CPU usage |
-| Memory | latest process-tree resident memory |
-| FDs | open file-descriptor count from the process tree |
-| IO R/W | cumulative process-tree disk read/write bytes |
+| CPU total | latest whole process-tree CPU usage; blank for `no_resident_process` services |
+| Memory | latest process-tree resident memory; blank for `no_resident_process` services |
+| FDs | open file-descriptor count from the process tree; blank for `no_resident_process` services |
+| IO R/W | cumulative process-tree disk read/write bytes; blank for `no_resident_process` services |
 | Actions | one state-aware start/stop button, restart, reload, resume, monitor/unmonitor; reload is disabled when `can_reload` is false; the start/stop/restart confirm dialog offers **skip also_apply** when `also_apply` is set |
 
 Row expansion:
@@ -171,7 +171,7 @@ Row expansion:
 | Area | Content |
 | --- | --- |
 | General data | state, category, unit/backend, uptime, interval, policy, locks, last event, next remediation, remediation state and process totals; while the row badge is `starting`, expansion may still show the raw init backend (`inactive`) and in-flight check samples from the observe-only cycle |
-| Graphs | full-width SLA timeline followed by latency, CPU, memory and IO charts; all use the shared `1h`, `24h`, `7d`, `30d`, `1y` window selector |
+| Graphs | full-width SLA timeline followed by latency, CPU, memory and IO charts; `no_resident_process` services show only SLA because they have no process runtime to chart |
 | Processes | full-width detected process tree table, with child processes marked in CMD and kept under their parent; omitted when `no_resident_process` is true |
 | Checks | configured checks and current result |
 | Named locks | runtime lock state |

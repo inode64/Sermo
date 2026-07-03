@@ -796,7 +796,9 @@ database for each service process tree, so those graphs also survive a daemon
 restart or host reboot. They start filling as soon as the service is monitored;
 CPU and IO rates need two cycles before the first rate point exists, while
 memory can render from the first process sample. Runtime metric buckets are
-pruned to the same 366-day (~1 year) retention window.
+pruned to the same 366-day (~1 year) retention window. Services that declare an
+empty `processes: { }` map have no resident process tree; the dashboard omits
+their process table and latency/CPU/memory/IO charts.
 
 Web-triggered monitor changes are recorded with source `web` in the state store;
 manual stops from the web UI or CLI use `web-manual-stop` / `cli-manual-stop`

@@ -827,7 +827,9 @@ también sobreviven a un reinicio del daemon o del host. Empiezan a llenarse en 
 service se monitoriza; las tasas de CPU e IO necesitan dos ciclos antes de que exista el
 primer punto de tasa, mientras que la memoria puede renderizarse desde la primera
 muestra de proceso. Los buckets de métricas de runtime se podan a la misma ventana de
-retención de 366 días (~1 año).
+retención de 366 días (~1 año). Los services que declaran un mapa vacío
+`processes: { }` no tienen árbol de procesos residente; el panel omite su tabla de
+procesos y los gráficos de latencia/CPU/memoria/IO.
 
 Los cambios de monitor disparados desde la web se registran con la fuente `web` en el
 almacén de estado; los stops manuales desde la web UI o la CLI usan

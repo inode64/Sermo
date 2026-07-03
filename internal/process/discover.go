@@ -424,18 +424,20 @@ func sortedPIDs(snapshot map[int]Identity) []int {
 	return pids
 }
 
-// ReadPidfile reads a PID from a pidfile, accepting a trailing newline. It is
-// exported so the pidfile check can reuse the same parsing (and its accepted
-// gosec exception for reading an operator-configured path).
+// ReadPidfile reads the first PID line from a pidfile. Most pidfiles contain
+// only that line; PostgreSQL's postmaster.pid keeps the PID on line one and
+// cluster metadata below it.
 func ReadPidfile(path string) (int, error) {
 	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return 0, err
 	}
 	text := strings.TrimSpace(string(data))
-	pid, err := strconv.Atoi(text)
+	line, _, _ := strings.Cut(text, "\n")
+	line = strings.TrimSpace(line)
+	pid, err := strconv.Atoi(line)
 	if err != nil {
-		return 0, fmt.Errorf("invalid pid %q", text)
+		return 0, fmt.Errorf("invalid pid %q", line)
 	}
 	if pid <= 0 {
 		return 0, fmt.Errorf("invalid pid %d", pid)

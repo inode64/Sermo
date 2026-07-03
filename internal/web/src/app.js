@@ -1817,7 +1817,12 @@ function cpuInline(cpu, ready, numCPU) {
   return usageBarMini(pctClamp(v), fmtPct(v), `${fmtNum(v, 2)}% of ${numCPU || "?"} host CPUs`);
 }
 
+function serviceHasNoResidentProcess(s) {
+  return !!(s && s.no_resident_process);
+}
+
 function serviceCpuCell(s) {
+  if (serviceHasNoResidentProcess(s)) return tpl`<span class="muted">—</span>`;
   return cpuInline(s && s.cpu, !!(s && s.cpu_ready), s && s.num_cpu);
 }
 
@@ -1830,10 +1835,12 @@ function memoryInline(rss) {
 }
 
 function serviceMemCell(s) {
+  if (serviceHasNoResidentProcess(s)) return tpl`<span class="muted">—</span>`;
   return memoryInline(s && s.rss);
 }
 
 function serviceFDsCell(s) {
+  if (serviceHasNoResidentProcess(s)) return tpl`<span class="muted">—</span>`;
   if (!(s && s.fds)) return tpl`<span class="muted">—</span>`;
   return tpl`<span title="open file descriptors">${fmtNum(s.fds, 0)}</span>`;
 }
@@ -1846,6 +1853,7 @@ function ioRWInline(read, write) {
 }
 
 function serviceIoCell(s) {
+  if (serviceHasNoResidentProcess(s)) return tpl`<span class="muted">—</span>`;
   return ioRWInline(s && s.io_read, s && s.io_write);
 }
 
@@ -2182,13 +2190,9 @@ function renderServiceDetail(d) {
     ? tpl`<p class="muted detail-totals">Service totals (including child processes): memory <b>${fmtBytes(pt.rss || 0)}</b>${totalBar}${cpuTotalsLine(pt)} · IO r/w <b>${fmtBytes(pt.io_read || 0)} / ${fmtBytes(pt.io_write || 0)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? "" : "es"}</p>`
     : nothing;
   const procWarns = procWarnings.map((w) => tpl`<div class="bad detail-warn">discovery warning: ${w}</div>`);
-  const procSummary = noResidentProcess
-    ? tpl`<p class="muted detail-summary">No resident process expected.</p>`
-    : tpl`<p class="muted detail-summary">${procs.length} discovered${procWarnings.length ? ` · ${procWarnings.length} discovery warning${procWarnings.length === 1 ? "" : "s"}` : ""}</p>`;
+  const procSummary = tpl`<p class="muted detail-summary">${procs.length} discovered${procWarnings.length ? ` · ${procWarnings.length} discovery warning${procWarnings.length === 1 ? "" : "s"}` : ""}</p>`;
   const procRows = processRows(procs);
-  const procTable = noResidentProcess
-    ? nothing
-    : procs.length
+  const procTable = procs.length
     ? tpl`<table class="detail-compact-table">
         <caption class="visually-hidden">Service processes</caption>
         <thead><tr><th scope="col">PID</th><th scope="col">CMD</th><th scope="col">User</th><th scope="col">Role</th><th scope="col">CPU</th><th scope="col" title="CPU used by this process, normalized to one core">Core peak</th><th scope="col">Mem</th><th scope="col">IO r/w</th><th scope="col">FDs</th><th scope="col">Threads</th></tr></thead>
@@ -2212,20 +2216,9 @@ function renderServiceDetail(d) {
     ? tpl`<div id="${detailDomId(d.name, "lat-summary")}" class="muted">loading…</div>
       <div id="${detailDomId(d.name, "lat-chart")}" class="muted chart-box"></div>`
     : tpl`<div class="muted">No latency checks configured for this service.</div>`;
-  const graphs = tpl`<h2>Graphs <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin", "Graph time window")}</span></h2>
-    <div class="metric-grid">
-      <div class="metric-panel metric-panel-wide">
-        <div class="sla-chart-head">
-          <span class="metric-title">SLA timeline</span>
-          <span id="${detailDomId(d.name, "sla-summary")}" class="muted">loading...</span>
-        </div>
-        <div class="sla-panel">
-          <div class="sla-chart-panel">
-            <div id="${detailDomId(d.name, "sla-chart")}" class="muted chart-box-wide"></div>
-          </div>
-        </div>
-      </div>
-      <div class="metric-panel">
+  const runtimeGraphPanels = noResidentProcess
+    ? nothing
+    : tpl`<div class="metric-panel">
         <div class="metric-title">Latency <span class="muted">${checkBtns}</span></div>
         ${latencyPanel}
       </div>
@@ -2243,12 +2236,33 @@ function renderServiceDetail(d) {
         <div class="metric-title">IO</div>
         <div id="${detailDomId(d.name, "runtime-io-summary")}" class="muted">loading…</div>
         <div id="${detailDomId(d.name, "runtime-io-chart")}" class="muted chart-box"></div>
+      </div>`;
+  const graphs = tpl`<h2>Graphs <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin", "Graph time window")}</span></h2>
+    <div class="metric-grid">
+      <div class="metric-panel metric-panel-wide">
+        <div class="sla-chart-head">
+          <span class="metric-title">SLA timeline</span>
+          <span id="${detailDomId(d.name, "sla-summary")}" class="muted">loading...</span>
+        </div>
+        <div class="sla-panel">
+          <div class="sla-chart-panel">
+            <div id="${detailDomId(d.name, "sla-chart")}" class="muted chart-box-wide"></div>
+          </div>
+        </div>
       </div>
+      ${runtimeGraphPanels}
     </div>`;
 
   const disabledNote = !d.enabled
     ? tpl`<p class="muted bad">This service is disabled in configuration (enabled: false). Edit its YAML file and reload the daemon to activate it.</p>`
     : nothing;
+  const processGeneral = noResidentProcess
+    ? nothing
+    : tpl`<div><span class="muted">Processes</span><br>${pt ? `${pt.count} process${pt.count === 1 ? "" : "es"}` : tpl`<span class="muted">—</span>`}</div>
+      <div><span class="muted">CPU total</span><br>${totalsCpuCell(pt)}</div>
+      <div><span class="muted">Memory</span><br>${memoryInline(pt && pt.rss)}</div>
+      <div><span class="muted">IO R/W</span><br>${ioRWInline(pt && pt.io_read, pt && pt.io_write)}</div>
+      <div><span class="muted">FDs / Threads</span><br>${pt ? `${pt.fds || 0} / ${pt.threads || 0}` : tpl`<span class="muted">—</span>`}</div>`;
   const general = tpl`<h2>General data</h2>
     <div class="runtime-grid">
       <div><span class="muted">State</span><br>${serviceStateCell(d)}</div>
@@ -2262,19 +2276,18 @@ function renderServiceDetail(d) {
       <div><span class="muted">Last event</span><br>${lastEventCell(d)}</div>
       <div><span class="muted">Next remediation</span><br>${nextRemediationCell(d)}</div>
       <div><span class="muted">Remediation</span><br>${renderRemediation(d.remediation)}</div>
-      <div><span class="muted">Processes</span><br>${pt ? `${pt.count} process${pt.count === 1 ? "" : "es"}` : (noResidentProcess ? "not expected" : tpl`<span class="muted">—</span>`)}</div>
-      <div><span class="muted">CPU total</span><br>${totalsCpuCell(pt)}</div>
-      <div><span class="muted">Memory</span><br>${memoryInline(pt && pt.rss)}</div>
-      <div><span class="muted">IO R/W</span><br>${ioRWInline(pt && pt.io_read, pt && pt.io_write)}</div>
-      <div><span class="muted">FDs / Threads</span><br>${pt ? `${pt.fds || 0} / ${pt.threads || 0}` : tpl`<span class="muted">—</span>`}</div>
+      ${processGeneral}
     </div>`;
+  const processSection = noResidentProcess
+    ? nothing
+    : tpl`<h2>Processes</h2>
+      ${procSummary}${totals}${procWarns}${procTable}`;
   return tpl`<div class="service-detail" data-service-detail="${d.name}">
     <h2>${displayName(d)} <span class="muted">${d.unit || ""}</span></h2>
     ${disabledNote}
     ${general}
     ${graphs}
-    <h2>Processes</h2>
-    ${procSummary}${totals}${procWarns}${procTable}
+    ${processSection}
     <h2>Checks</h2>
     <table>
       <caption class="visually-hidden">Service checks</caption>
@@ -2301,8 +2314,10 @@ function hydrateServiceDetail(d) {
   const measured = serviceMeasuredChecks(d);
   syncWindowButtons("setMetricWin", metricWindow);
   loadServiceSLA(d.name);
-  if (measured.length) loadMetrics(d.name, measured);
-  loadServiceRuntimeMetrics(d.name);
+  if (!d.no_resident_process) {
+    if (measured.length) loadMetrics(d.name, measured);
+    loadServiceRuntimeMetrics(d.name);
+  }
   loadServiceEvents(d.name);
 }
 

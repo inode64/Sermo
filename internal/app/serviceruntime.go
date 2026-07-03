@@ -280,7 +280,7 @@ func serviceMetricSeries(metric, unit string, since time.Duration, samples []ser
 // ServiceRuntime returns current and historical process-tree metrics for one service.
 func (b *WebBackend) ServiceRuntime(_ context.Context, name string, since time.Duration) (web.ServiceRuntimeMetrics, bool) {
 	e := b.entries[name]
-	if e == nil {
+	if e == nil || e.noResidentProcess {
 		return web.ServiceRuntimeMetrics{}, false
 	}
 	cur := b.probeServiceRuntime(name, e)
@@ -291,7 +291,7 @@ func (b *WebBackend) ServiceRuntime(_ context.Context, name string, since time.D
 }
 
 func (b *WebBackend) decorateServiceRuntime(name string, e *webEntry, svc *web.Service) {
-	if svc == nil || e == nil || e.disabled || !serviceRuntimeVisible(svc.Status) {
+	if svc == nil || e == nil || e.disabled || e.noResidentProcess || !serviceRuntimeVisible(svc.Status) {
 		return
 	}
 	applyServiceRuntimeFields(svc, b.listServiceRuntime(name, e))
