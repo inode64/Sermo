@@ -164,7 +164,7 @@ Columnas:
 | Memory | última memoria residente del árbol de procesos |
 | FDs | recuento de descriptores de archivo abiertos del árbol de procesos |
 | IO R/W | bytes acumulados de lectura/escritura en disco del árbol de procesos |
-| Actions | start, **start only** (cuando `also_apply` está definido), stop, restart, reload, resume, monitor/unmonitor; el diálogo de confirmación de stop/restart ofrece **skip also_apply** |
+| Actions | un botón start/stop según el estado, restart, reload, resume, monitor/unmonitor; el diálogo de confirmación de start/stop/restart ofrece **skip also_apply** cuando `also_apply` está definido |
 
 Expansión de fila:
 

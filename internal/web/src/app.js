@@ -1298,7 +1298,7 @@ function serviceActionDisabled(s, action, busy) {
   const stopped = st === "inactive" || st === "failed";
   switch (action) {
     case "start":
-    case "start-only": return !!(busy || st === "active" || paused);
+      return !!(busy || st === "active" || paused);
     case "stop": return !!(busy || stopped);
     case "restart": return !!busy;
     case "resume": return !!(busy || !paused);
@@ -1316,7 +1316,6 @@ function serviceActionDisabledReason(s, action, busy) {
   const stopped = st === "inactive" || st === "failed";
   switch (action) {
     case "start":
-    case "start-only":
       if (paused) return "service is paused";
       if (st === "active") return "service is already running";
       return "";
@@ -1344,6 +1343,11 @@ function svcActionDescribedBy(s, action, busy) {
   return disabled && reason ? svcActionHintId(s, action) : nothing;
 }
 
+function servicePowerAction(s) {
+  const st = (s.status || "unknown").toLowerCase();
+  return st === "active" || st === "paused" ? "stop" : "start";
+}
+
 function expandToggleAriaLabel(name, open, subject) {
   return `${open ? "Collapse" : "Expand"} ${subject} for ${name}`;
 }
@@ -1356,7 +1360,6 @@ function svcActionAriaLabel(s, action) {
   const name = displayName(s) || s.name || "";
   switch (action) {
     case "start": return `Start service ${name}`;
-    case "start-only": return `Start only service ${name}`;
     case "stop": return `Stop service ${name}`;
     case "restart": return `Restart service ${name}`;
     case "resume": return `Resume service ${name}`;
@@ -1382,13 +1385,11 @@ function serviceRowParts(s) {
   if (!s.enabled) {
     actions = tpl`<span class="muted">disabled in config</span>`;
   } else {
+    const powerAction = servicePowerAction(s);
     const alsoApply = (s.also_apply || []).length;
     actions = me.can_act ? tpl`
-        ${svcActionHint(s, "start", busy)}
-        <button ?disabled=${serviceActionDisabled(s, "start", busy)} data-service="${s.name}" data-service-action="start" title="${alsoApply ? `also applies to: ${s.also_apply.join(", ")}` : nothing}" aria-label="${svcActionAriaLabel(s, "start")}" aria-describedby="${svcActionDescribedBy(s, "start", busy)}">start</button>
-        ${alsoApply ? tpl`${svcActionHint(s, "start-only", busy)}<button ?disabled=${serviceActionDisabled(s, "start-only", busy)} data-service="${s.name}" data-service-action="start" data-no-cascade="1" title="start only ${s.name}" aria-label="${svcActionAriaLabel(s, "start-only")}" aria-describedby="${svcActionDescribedBy(s, "start-only", busy)}">start only</button>` : nothing}
-        ${svcActionHint(s, "stop", busy)}
-        <button ?disabled=${serviceActionDisabled(s, "stop", busy)} data-service="${s.name}" data-service-action="stop" aria-label="${svcActionAriaLabel(s, "stop")}" aria-describedby="${svcActionDescribedBy(s, "stop", busy)}">stop</button>
+        ${svcActionHint(s, powerAction, busy)}
+        <button ?disabled=${serviceActionDisabled(s, powerAction, busy)} data-service="${s.name}" data-service-action="${powerAction}" title="${alsoApply ? `also applies to: ${s.also_apply.join(", ")}` : nothing}" aria-label="${svcActionAriaLabel(s, powerAction)}" aria-describedby="${svcActionDescribedBy(s, powerAction, busy)}">${powerAction}</button>
         ${svcActionHint(s, "restart", busy)}
         <button ?disabled=${serviceActionDisabled(s, "restart", busy)} data-service="${s.name}" data-service-action="restart" aria-label="${svcActionAriaLabel(s, "restart")}" aria-describedby="${svcActionDescribedBy(s, "restart", busy)}">restart</button>
         ${svcActionHint(s, "resume", busy)}
@@ -4058,10 +4059,10 @@ function renderStatus(ctx) {
   }
 }
 
-async function act(name, action, opts = {}) {
-  let noCascade = !!opts.noCascade;
+async function act(name, action) {
+  let noCascade = false;
   if ((action === "start" || action === "stop" || action === "restart") && !(await confirmAction(name, action))) return;
-  if (!opts.noCascade && (action === "stop" || action === "restart")) {
+  if (action === "start" || action === "stop" || action === "restart") {
     noCascade = confirmNoCascade;
     confirmNoCascade = false;
   }
@@ -4363,7 +4364,7 @@ async function confirmAction(name, action) {
     }
     syncConfirmPreflightButton(action);
     const alsoApply = (confirmCtx.detail?.also_apply || []);
-    const showCascade = alsoApply.length > 0 && (action === "stop" || action === "restart");
+    const showCascade = alsoApply.length > 0 && (action === "start" || action === "stop" || action === "restart");
     if (cascadeWrap) cascadeWrap.classList.toggle("is-hidden", !showCascade);
     renderActionConfirm();
   } catch (e) {
@@ -4403,9 +4404,9 @@ function renderActionConfirm() {
   const noResidentProcess = !!d.no_resident_process;
   const ev = ctx.lastEvent;
   const pre = ctx.preflight;
-  const preState = ctx.action === "restart"
+  const preState = ["start", "stop", "restart"].includes(ctx.action)
     ? pre ? (pre.ok ? tpl`<span class="ok">OK</span>` : tpl`<span class="bad">FAIL</span>`) : tpl`<span class="inactive">not run in this dialog</span>`
-    : tpl`<span class="muted">not required for stop</span>`;
+    : tpl`<span class="muted">not available for this action</span>`;
   const lockLine = activeLocks.length
     ? tpl`<span class="bad">${activeLocks.length} active</span> <span class="muted">(${activeLocks.map((l) => l.name || "default").join(", ")})</span>`
     : tpl`<span class="ok">none active</span>`;
@@ -4421,7 +4422,9 @@ function renderActionConfirm() {
   const preRows = pre ? tpl`<div class="confirm-preflight-block">${preflightRows(pre.checks || [])}</div>` : nothing;
   const warning = ctx.action === "restart"
     ? "A safe restart stops the unit, verifies residual processes, then starts only if the stop phase is clean."
-    : "Stop will run through locks, guards and residual-process handling. It will not start the service again.";
+    : ctx.action === "start"
+      ? "Start will run through locks, guards and configured checks before the service is started."
+      : "Stop will run through locks, guards and residual-process handling. It will not start the service again.";
   const cascadeTargets = (d.also_apply || []).filter(Boolean);
   const cascadeLine = cascadeTargets.length
     ? tpl`<p class="muted confirm-cascade-line">also_apply: <code>${cascadeTargets.join(", ")}</code></p>`
@@ -5169,9 +5172,7 @@ function initDelegatedHandlers() {
 
     const serviceAction = closestFrom(e, "[data-service-action][data-service]");
     if (serviceAction) {
-      act(serviceAction.dataset.service || "", serviceAction.dataset.serviceAction || "", {
-        noCascade: serviceAction.dataset.noCascade === "1",
-      });
+      act(serviceAction.dataset.service || "", serviceAction.dataset.serviceAction || "");
       return;
     }
 

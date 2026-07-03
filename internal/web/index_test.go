@@ -305,6 +305,26 @@ func TestIndexResponsiveTablesDoNotKeepDesktopMinWidth(t *testing.T) {
 	}
 }
 
+func TestIndexServiceActionsUseSinglePowerButton(t *testing.T) {
+	script := bundledScript(t)
+	for _, bad := range []string{"start-only", "start only", "data-no-cascade"} {
+		if strings.Contains(script, bad) {
+			t.Errorf("bundled script still contains removed service action marker %q", bad)
+		}
+	}
+	for _, needle := range []string{
+		"also applies to:",
+		"service is already running",
+		"service is already stopped",
+		"Start service ",
+		"Stop service ",
+	} {
+		if !strings.Contains(script, needle) {
+			t.Errorf("bundled script missing service action marker %q", needle)
+		}
+	}
+}
+
 // TestIndexAccessibilitySectionHeadings pins the per-section <h2> headings that
 // let screen-reader users navigate the dashboard by heading. The <details>
 // summaries cannot carry heading semantics (a summary's implicit button role
