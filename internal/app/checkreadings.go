@@ -58,20 +58,17 @@ func certCheckReadings(data map[string]any) []web.WatchReading {
 	if v := cfgval.String(data["not_after"]); v != "" {
 		out = append(out, web.WatchReading{Field: "not_after", Label: "Expires", Value: v})
 	}
-	if v := cfgval.String(data["issuer"]); v != "" {
-		out = append(out, web.WatchReading{Field: "issuer", Label: "Issuer", Value: v})
-	}
 	if v := cfgval.String(data["public_key_algorithm"]); v != "" {
 		out = append(out, web.WatchReading{Field: "public_key_algorithm", Label: "Key type", Value: v})
 	}
 	if v, ok := cfgval.Int(data["key_bits"]); ok {
 		out = append(out, web.WatchReading{Field: "key_bits", Label: "Key bits", Value: strconv.Itoa(v)})
 	}
-	if v := cfgval.String(data["subject"]); v != "" {
-		out = append(out, web.WatchReading{Field: "subject", Label: "Subject", Value: v})
-	}
 	if names, ok := data["dns_names"].([]string); ok && len(names) > 0 {
 		out = append(out, web.WatchReading{Field: "dns_names", Label: "DNS names", Value: strings.Join(names, ", ")})
+	}
+	if v := cfgval.String(data["issuer"]); v != "" {
+		out = append(out, web.WatchReading{Field: "issuer", Label: "Issuer", Value: v})
 	}
 	return out
 }
