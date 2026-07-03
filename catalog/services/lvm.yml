@@ -4,6 +4,7 @@ category: storage
 service: lvm
 apps:
   - lvm
+processes: { }
 checks:
   service:
     type: service

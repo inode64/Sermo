@@ -473,14 +473,15 @@ func (b *WebBackend) viewWithEvent(ctx context.Context, name string, e *webEntry
 
 func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEntry, lastEvent *web.Event, activeLocks []string, activeLocksReady bool) web.Service {
 	svc := web.Service{
-		Name:        name,
-		DisplayName: e.displayName,
-		Category:    e.category,
-		Backend:     e.backend,
-		Unit:        e.unit,
-		Enabled:     !e.disabled,
-		Monitored:   true, // no recorded state defaults to monitored
-		CanReload:   e.canReload,
+		Name:              name,
+		DisplayName:       e.displayName,
+		Category:          e.category,
+		Backend:           e.backend,
+		Unit:              e.unit,
+		Enabled:           !e.disabled,
+		Monitored:         true, // no recorded state defaults to monitored
+		CanReload:         e.canReload,
+		NoResidentProcess: e.noResidentProcess,
 	}
 	if e.interval > 0 {
 		svc.Interval = formatInterval(e.interval)
