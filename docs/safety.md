@@ -85,6 +85,12 @@ the single operator state `running` or `stopped` while monitoring is paused
 affects Sermo's monitoring; it does not stop the service itself, and manual
 `sermoctl` actions still work.
 
+A successful manual `stop` from `sermoctl` or the web UI also pauses monitoring
+when the service was monitored. The state row records that the pause came from a
+manual stop, so a later successful manual `start` restores monitoring only in
+that case. If the service was already unmonitored before the stop, the later
+start preserves that operator choice.
+
 ## System metrics
 
 A `scope: system` metric ("is the machine under pressure?") is **not** a sound

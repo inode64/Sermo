@@ -84,6 +84,12 @@ el único estado de operador `running` o `stopped` mientras la monitorización e
 afecta a la monitorización de Sermo; no detiene el servicio en sí, y las acciones manuales
 de `sermoctl` siguen funcionando.
 
+Un `stop` manual correcto desde `sermoctl` o la web UI también pausa la monitorización
+cuando el service estaba monitorizado. La fila de estado registra que la pausa vino de
+un stop manual, de modo que un `start` manual correcto posterior restaura la
+monitorización solo en ese caso. Si el service ya estaba desmonitorizado antes del stop,
+el start posterior conserva esa decisión del operador.
+
 ## Métricas del sistema
 
 Una métrica `scope: system` ("¿está la máquina bajo presión?") **no** es un disparador

@@ -537,7 +537,11 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 		return code
 	}
 
-	result, err := a.operateWithCascade(ctx, opts, cfg, resolved, service, action)
+	monitorStore := a.openManualActionMonitorStore(cfg, action)
+	if monitorStore != nil {
+		defer func() { _ = monitorStore.Close() }()
+	}
+	result, err := a.operateWithCascade(ctx, opts, cfg, resolved, service, action, monitorStore)
 	if err != nil {
 		a.recordAccess(cfg, action, service, "error", err.Error())
 		return a.fail(opts, err.Error())
@@ -563,11 +567,13 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 // (start/restart: primary first; stop: additionals first). Targets run through
 // their own guarded operation; each target's result is printed. The primary's
 // result is returned and drives the exit code.
-func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string) (operation.Result, error) {
+func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, monitorStore app.MonitorStore) (operation.Result, error) {
 	targets := config.CascadeTargets(resolved.Tree)
 	// also_apply cascades only start/stop/restart, not reload/resume.
 	if opts.noCascade || action == "reload" || action == "resume" || len(targets) == 0 {
-		return a.Operate(ctx, opts, cfg, resolved, service, action)
+		out, err := a.Operate(ctx, opts, cfg, resolved, service, action)
+		a.syncManualActionMonitoring(cfg, monitorStore, service, action, out, err)
+		return out, err
 	}
 	lookup := func(svc string) []string {
 		r, errs := cfg.Resolve(svc)
@@ -591,6 +597,7 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 			res = r
 		}
 		out, err := a.Operate(ctx, opts, cfg, res, svc, action)
+		a.syncManualActionMonitoring(cfg, monitorStore, svc, action, out, err)
 		if svc == service {
 			primary, primaryErr = out, err
 			continue
@@ -611,6 +618,34 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 		}
 	}
 	return app.DowngradePrimaryOnCascadeFailure(primary, cascadeFailed), primaryErr
+}
+
+func (a App) openManualActionMonitorStore(cfg *config.Config, action string) *state.Store {
+	if action != "start" && action != "stop" {
+		return nil
+	}
+	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	if err != nil {
+		fmt.Fprintf(a.Stderr, "warning: monitoring state unavailable: %v\n", err)
+		return nil
+	}
+	return store
+}
+
+func (a App) syncManualActionMonitoring(cfg *config.Config, store app.MonitorStore, service, action string, result operation.Result, opErr error) {
+	if store == nil || opErr != nil {
+		return
+	}
+	change, err := app.SyncManualActionMonitoring(store, service, action, result, state.SourceCLIManualStop, state.SourceCLI)
+	if err != nil {
+		msg := err.Error()
+		fmt.Fprintf(a.Stderr, "warning: %s\n", msg)
+		a.recordAccess(cfg, action+"-monitor", service, "error", msg)
+		return
+	}
+	if change.Changed {
+		a.recordAccess(cfg, change.Action, service, "ok", change.Message)
+	}
 }
 
 // defaultOperate wires the real operation engine from a resolved service and
