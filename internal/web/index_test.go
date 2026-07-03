@@ -280,6 +280,31 @@ func TestIndexWatchReadingLongValuesWrap(t *testing.T) {
 	}
 }
 
+func TestIndexResponsiveTablesDoNotKeepDesktopMinWidth(t *testing.T) {
+	css := strings.ReplaceAll(bundledCSS(t), " ", "")
+	base := strings.Index(css, ".watch-table{min-width:72rem")
+	responsive := strings.LastIndex(css, "@media(max-width:1024px){.services-table,.watch-table,.apps-table{min-width:0;max-width:100%}")
+	if base < 0 {
+		t.Fatal("bundled CSS missing watch-table desktop min-width")
+	}
+	if responsive < 0 {
+		t.Fatal("bundled CSS missing responsive table min-width override")
+	}
+	if responsive < base {
+		t.Fatal("responsive table override appears before desktop min-width and can be overridden")
+	}
+	for _, needle := range []string{
+		".services-table.actions{min-width:14rem;max-width:22rem;white-space:normal}",
+		".actionsbutton{margin-right:.25rem;margin-bottom:.25rem;",
+		"#notifiers-sectionth:nth-child(3)",
+		"#app-footer.footer-version{margin-left:0;flex-basis:100%;white-space:normal;overflow-wrap:anywhere;text-align:center}",
+	} {
+		if !strings.Contains(css, needle) {
+			t.Errorf("bundled CSS missing responsive action marker %q", needle)
+		}
+	}
+}
+
 // TestIndexAccessibilitySectionHeadings pins the per-section <h2> headings that
 // let screen-reader users navigate the dashboard by heading. The <details>
 // summaries cannot carry heading semantics (a summary's implicit button role
