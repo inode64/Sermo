@@ -87,7 +87,7 @@
   th { font-weight: 600; }
   thead th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); }
   tbody tr:last-child td { border-bottom: 0; }
-  .services-table { min-width: 76rem; font-size: .82rem; line-height: 1.3; font-variant-numeric: tabular-nums; }
+  .services-table { min-width: 80rem; font-size: .82rem; line-height: 1.3; font-variant-numeric: tabular-nums; }
   .services-table th, .services-table td { padding: .34rem .5rem; vertical-align: top; }
   .services-table th { white-space: nowrap; }
   .services-table thead th, .watch-table thead th, .apps-table thead th { position: sticky; top: 0; background: var(--panel); z-index: 4; white-space: nowrap; box-shadow: 0 1px 0 var(--line); }
@@ -397,12 +397,12 @@
      colspan group/expansion rows have a single cell so they are never hidden. */
   @media (max-width: 1024px) {
     /* services (1 Service · 2 Category · 3 State · 4 Uptime · 5 CPU · 6 Memory ·
-       7 IO · 8 Actions): drop the desktop min-width, hide Category/Uptime/IO and
+       7 FDs · 8 IO · 9 Actions): drop the desktop min-width, hide Category/Uptime/IO and
        let the action buttons wrap instead of reserving a wide column. */
     .services-table { min-width: 0; }
     .services-table th:nth-child(2), .services-table td:nth-child(2),
     .services-table th:nth-child(4), .services-table td:nth-child(4),
-    .services-table th:nth-child(7), .services-table td:nth-child(7) { display: none; }
+    .services-table th:nth-child(8), .services-table td:nth-child(8) { display: none; }
     .services-table .actions, .mount-table .actions { min-width: 0; white-space: normal; }
     /* watches: every panel's table starts with Name and ends with Last activity ·
        State · Actions. On tablets keep Name and those trailing three, hiding the
@@ -427,9 +427,10 @@
     /* The search field owns its row; filters/count wrap underneath. */
     .panel-controls input { min-width: 0; flex: 1 1 100%; }
     #event-controls { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
-    /* services → Service · State · Actions (also hide CPU/Memory). */
+    /* services → Service · State · Actions (also hide CPU/Memory/FDs). */
     .services-table th:nth-child(5), .services-table td:nth-child(5),
-    .services-table th:nth-child(6), .services-table td:nth-child(6) { display: none; }
+    .services-table th:nth-child(6), .services-table td:nth-child(6),
+    .services-table th:nth-child(7), .services-table td:nth-child(7) { display: none; }
     .services-table td { white-space: normal; }
     .services-table .svc-sub, .services-table .unit-cell, .services-table .event-cell { max-width: 60vw; }
     /* watches → Name · State · Actions (also drop Last activity). */

@@ -1393,11 +1393,12 @@ function serviceRowParts(s) {
     <td>${serviceUptimeCell(s)}</td>
     <td>${serviceCpuCell(s)}</td>
     <td>${serviceMemCell(s)}</td>
+    <td>${serviceFDsCell(s)}</td>
     <td>${serviceIoCell(s)}</td>
     <td class="actions">${actions}</td>
   </tr>`;
   const exp = open
-    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="8"></td></tr>`
+    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="9"></td></tr>`
     : null;
   return { main, exp };
 }
@@ -1442,11 +1443,11 @@ function renderServices() {
   let content;
   if (!list.length) {
     content = (allServices || []).length
-      ? tpl`<tr><td colspan="8" class="muted">No services match the filter.</td></tr>`
-      : tpl`<tr><td colspan="8" class="muted">No services.</td></tr>`;
+      ? tpl`<tr><td colspan="9" class="muted">No services match the filter.</td></tr>`
+      : tpl`<tr><td colspan="9" class="muted">No services.</td></tr>`;
   } else {
     content = svcGrouped
-      ? renderGroupedRows(list, svcCollapsedGroups, "svc", "service", 8, serviceRowHTML, svcSort.key === "category" ? svcSort.dir : 1)
+      ? renderGroupedRows(list, svcCollapsedGroups, "svc", "service", 9, serviceRowHTML, svcSort.key === "category" ? svcSort.dir : 1)
       : list.flatMap(serviceRowHTML);
   }
   litRender(content, $("#rows"));
@@ -1743,10 +1744,12 @@ function memoryInline(rss) {
 }
 
 function serviceMemCell(s) {
-  const fds = s && s.fds
-    ? tpl` <span class="muted" title="open file descriptors">· ${Number(s.fds).toLocaleString()} fds</span>`
-    : nothing;
-  return tpl`${memoryInline(s && s.rss)}${fds}`;
+  return memoryInline(s && s.rss);
+}
+
+function serviceFDsCell(s) {
+  if (!(s && s.fds)) return tpl`<span class="muted">—</span>`;
+  return tpl`<span title="open file descriptors">${fmtNum(s.fds, 0)}</span>`;
 }
 
 function ioRWInline(read, write) {

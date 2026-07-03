@@ -162,6 +162,7 @@ Columnas:
 | Uptime | antigüedad del proceso de servicio más antiguo descubierto, cuando está disponible |
 | CPU total | último uso de CPU de todo el árbol de procesos |
 | Memory | última memoria residente del árbol de procesos |
+| FDs | recuento de descriptores de archivo abiertos del árbol de procesos |
 | IO R/W | bytes acumulados de lectura/escritura en disco del árbol de procesos |
 | Actions | start, **start only** (cuando `also_apply` está definido), stop, restart, reload, resume, monitor/unmonitor; el diálogo de confirmación de stop/restart ofrece **skip also_apply** |
 
@@ -256,6 +257,16 @@ Section ids: `storage-section`, `network-section`, `watches-section`
 
 `Storage` contiene los watches de `storage`, `Network` contiene los watches `net`/`icmp`,
 y `Host watches` contiene los tipos restantes de watch de host.
+
+El resumen de un watch `storage` muestra la ruta, el sistema de archivos, el
+punto de montaje y el espacio usado/libre, además del recuento de **archivos
+abiertos** en ese sistema de archivos cuando existe (fds cuyo destino resuelve
+bajo el montaje). Ese recuento viene de un escaneo `/proc/<pid>/fd` de todo el
+host, compartido por todos los watches de storage y refrescado como máximo una
+vez por minuto; es solo visual (sin umbral/alerta). La fila del listado de
+servicios también muestra el recuento de descriptores abiertos (`fds`) de un
+servicio en su propia columna, desde los mismos totales por proceso que ya
+aparecen en el detalle del servicio.
 
 | Parte | Representación actual |
 | --- | --- |
