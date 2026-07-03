@@ -33,6 +33,7 @@ os:
       config_dir: /etc/postgresql-${version}
 config_files:
   - ${config_dir}
+pidfile: ${data_dir}/postmaster.pid
 preflight:
   config:
     type: command

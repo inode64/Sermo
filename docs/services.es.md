@@ -837,6 +837,9 @@ service:
   systemd: ["postgresql-${version}", "postgres-${version}"]
   openrc: ["postgresql-${version}", "postgres-${version}"]
 apps: ["postgres-${version}"]
+variables:
+  data_dir: /var/lib/postgresql/${version}/data
+pidfile: "${data_dir}/postmaster.pid"
 ```
 
 Al cargar, Sermo descubre versiones de app haciendo glob del path `variables.binary` de la
