@@ -395,11 +395,15 @@ func (a App) runStatus(ctx context.Context, opts options) int {
 // otherwise it derives state from the local backend query only.
 func (a App) serviceDisplayState(ctx context.Context, opts options, status servicemgr.ServiceStatus, mon monitorView) string {
 	if a.FetchDaemonServiceState != nil {
-		if st, ok := a.FetchDaemonServiceState(ctx, opts, status.Service); ok && st != "" {
+		service := opts.service()
+		if service == "" {
+			service = status.Service
+		}
+		if st, ok := a.FetchDaemonServiceState(ctx, opts, service); ok && st != "" {
 			return st
 		}
 	}
-	return app.ServiceState(mon.Enabled, mon.Monitored(), string(status.Status), "", true)
+	return app.ServiceState(mon.Enabled, mon.Monitored(), string(status.Status), "", true, false)
 }
 
 // monitorView is the persisted monitoring metadata shown by status and monitor.

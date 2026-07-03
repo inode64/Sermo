@@ -310,8 +310,8 @@ func TestWebBackendMonitoringStatusAvoidsServiceViewWork(t *testing.T) {
 	}
 
 	got := b.MonitoringStatus(context.Background())
-	if got.Total != 3 || got.Monitored != 1 || got.Paused != 2 {
-		t.Fatalf("MonitoringStatus = %+v, want total=3 monitored=1 paused=2", got)
+	if got.Total != 2 || got.Monitored != 1 || got.Paused != 1 {
+		t.Fatalf("MonitoringStatus = %+v, want total=2 monitored=1 paused=1", got)
 	}
 	if statusCalls != 0 {
 		t.Fatalf("MonitoringStatus called service status %d times, want 0", statusCalls)
@@ -1744,8 +1744,8 @@ func TestWebBackendIncludesDisabledServices(t *testing.T) {
 	}
 
 	en := byName["web"]
-	if !en.Enabled || en.Status == "disabled" || en.State != TargetStateRunning || !en.Monitored {
-		t.Fatalf("normal service = %+v, want Enabled=true, State=running, Monitored=true", en)
+	if !en.Enabled || en.Status == "disabled" || en.State != TargetStateMonitored || !en.Monitored {
+		t.Fatalf("normal service = %+v, want Enabled=true, State=monitored, Monitored=true", en)
 	}
 	if en.Category != "frontend" {
 		t.Fatalf("normal service category = %q, want frontend", en.Category)

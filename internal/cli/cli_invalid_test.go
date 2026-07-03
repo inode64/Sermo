@@ -181,7 +181,7 @@ func TestStatusStillAllowsDirectUnitWhenNoConfigLoads(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("status nginx exit = %d, want %d", code, exitSuccess)
 	}
-	if got := stdout.String(); !strings.Contains(got, "nginx state=running") {
-		t.Fatalf("stdout = %q, want running status", got)
+	if got := stdout.String(); !strings.Contains(got, "nginx state=started") {
+		t.Fatalf("stdout = %q, want started status", got)
 	}
 }

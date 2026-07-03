@@ -106,3 +106,48 @@ func TestWebBackendViewCheckHealthPaused(t *testing.T) {
 		t.Fatalf("paused service = %+v, want check_health=paused", svc)
 	}
 }
+
+func TestWebBackendServiceStateStartupCollectingMonitored(t *testing.T) {
+	settling := NewSettling(nil)
+	settling.Reset([]string{SettlingServiceKey("web")})
+	observability := NewObservabilityRegistry()
+	snaps := NewSnapshots()
+	b := &WebBackend{
+		order: []string{"web"},
+		entries: map[string]*webEntry{
+			"web": {
+				checkNames:        []string{"http"},
+				noResidentProcess: true,
+				status:            func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
+			},
+		},
+		snapshots:     snaps,
+		settling:      settling,
+		observability: observability,
+	}
+
+	svc := b.view(context.Background(), "web", b.entries["web"])
+	if svc.State != TargetStateStarting || svc.ObservabilityReady || len(svc.ObservabilityMissing) == 0 {
+		t.Fatalf("starting service = %+v, want starting with missing observability", svc)
+	}
+
+	settling.MarkObserved(SettlingServiceKey("web"))
+	svc = b.view(context.Background(), "web", b.entries["web"])
+	if svc.State != TargetStateCollecting || svc.ObservabilityReady {
+		t.Fatalf("collecting service without snapshots = %+v, want collecting", svc)
+	}
+
+	snaps.Publish("web", map[string]checks.Result{
+		"http": {Check: "http", OK: true},
+	}, map[string]bool{"http": true})
+	svc = b.view(context.Background(), "web", b.entries["web"])
+	if svc.State != TargetStateCollecting || svc.ObservabilityReady {
+		t.Fatalf("collecting service without availability history = %+v, want collecting", svc)
+	}
+
+	observability.MarkReady("web", time.Now())
+	svc = b.view(context.Background(), "web", b.entries["web"])
+	if svc.State != TargetStateMonitored || !svc.ObservabilityReady || len(svc.ObservabilityMissing) != 0 {
+		t.Fatalf("monitored service = %+v, want monitored with observability ready", svc)
+	}
+}

@@ -123,6 +123,7 @@ type WebBackend struct {
 	operationSettling OperationSettlingStore
 	snapshots         *Snapshots
 	settling          *Settling
+	observability     *ObservabilityRegistry
 	sla               SLAReader
 	events            *EventLog
 	remediation       *RemediationRegistry
@@ -232,6 +233,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		operationSettling: operationSettling,
 		snapshots:         deps.Snapshots,
 		settling:          deps.Settling,
+		observability:     deps.Observability,
 		events:            deps.Events,
 		remediation:       deps.Remediation,
 		ruleWindows:       deps.RuleWindows,
@@ -492,7 +494,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	svc.LastEvent = lastEvent
 	if e.disabled {
 		svc.Status = "disabled"
-		svc.State = ServiceState(false, false, svc.Status, "", true)
+		svc.State = ServiceState(false, false, svc.Status, "", true, false)
 		svc.Monitored = false
 		svc.CheckHealth = ""
 		svc.RemediationState = "disabled"
@@ -515,12 +517,71 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	}
 	b.decorateRemediation(name, &svc)
 	observed := (b.settling == nil || b.settling.Observed(SettlingServiceKey(name))) && !b.operationSettlingPending(name)
-	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth, observed)
+	svc.ObservabilityReady, svc.ObservabilityMissing = b.serviceObservability(name, e, svc.Status, svc.CheckHealth, svc.Monitored, observed)
+	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth, observed, svc.ObservabilityReady)
 	if len(e.alsoApply) > 0 {
 		svc.AlsoApply = slices.Clone(e.alsoApply)
 	}
 	b.decorateServiceRuntime(name, e, &svc)
 	return svc
+}
+
+func (b *WebBackend) serviceObservability(name string, e *webEntry, status, checkHealth string, monitored, observed bool) (bool, []string) {
+	if e == nil || e.disabled {
+		return false, nil
+	}
+	active := strings.EqualFold(status, "active")
+	if !active || !monitored || !observed {
+		if b.observability != nil {
+			b.observability.Clear(name)
+		}
+		if monitored && !observed {
+			return false, []string{"startup observation"}
+		}
+		return false, nil
+	}
+
+	missing := make([]string, 0, 3)
+	addMissing := func(label string) {
+		if !slices.Contains(missing, label) {
+			missing = append(missing, label)
+		}
+	}
+	if len(e.checkNames) > 0 {
+		snap := b.snapshots.Get(name)
+		for _, check := range e.checkNames {
+			if _, ok := snap[check]; !ok {
+				addMissing("checks")
+				break
+			}
+		}
+		if checkHealth == "unknown" {
+			addMissing("checks")
+		}
+	}
+	if b.observability != nil {
+		if _, ready := b.observability.Ready(name); !ready {
+			addMissing("availability history")
+		}
+		if !e.noResidentProcess && !b.serviceRuntimeObservabilityReady(name, e) {
+			addMissing("runtime metrics")
+		}
+	}
+	if len(missing) > 0 {
+		return false, missing
+	}
+	return true, nil
+}
+
+func (b *WebBackend) serviceRuntimeObservabilityReady(name string, e *webEntry) bool {
+	if e == nil || e.noResidentProcess || b.serviceMetrics == nil {
+		return true
+	}
+	cur, at, ok := b.serviceMetrics.LatestWithAt(name)
+	if !ok || b.webNow().Sub(at) > runtimePublishMaxAge(e.interval) {
+		return false
+	}
+	return cur.Count > 0 && cur.HasCPU && cur.IOReady
 }
 
 func (b *WebBackend) decorateRemediation(name string, svc *web.Service) {
@@ -2456,13 +2517,14 @@ func (b *WebBackend) ActivitySummary(ctx context.Context) web.ActivitySummary {
 
 // MonitoringStatus returns how many services are monitored versus paused.
 func (b *WebBackend) MonitoringStatus(_ context.Context) web.MonitoringStatus {
-	total := len(b.order)
+	total := 0
 	monitored := 0
 	for _, name := range b.order {
 		e := b.entries[name]
 		if e == nil || e.disabled {
 			continue
 		}
+		total++
 		active := true
 		if monitoredState, _, _, ok := b.monitorView(name); ok {
 			active = monitoredState

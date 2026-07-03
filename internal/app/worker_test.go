@@ -93,6 +93,30 @@ func TestWorkerStartupObserveOnlySuppressesAlerts(t *testing.T) {
 	}
 }
 
+func TestWorkerMarksObservabilityReadyAfterNormalStartupCycle(t *testing.T) {
+	h := &workerHarness{cache: map[string]checks.Result{}}
+	w := h.worker(nil, rules.Policy{}, nil)
+	settling := NewSettling(nil)
+	settling.Reset([]string{SettlingServiceKey("web")})
+	observability := NewObservabilityRegistry()
+	now := t0
+	w.Settling = settling
+	w.Observability = observability
+	w.Now = func() time.Time { return now }
+
+	w.RunCycle(context.Background())
+	if _, ready := observability.Ready("web"); ready {
+		t.Fatal("startup observe-only cycle must not mark observability ready")
+	}
+
+	now = now.Add(time.Second)
+	w.RunCycle(context.Background())
+	at, ready := observability.Ready("web")
+	if !ready || !at.Equal(now) {
+		t.Fatalf("observability ready = %v at %s, want ready at %s", ready, at, now)
+	}
+}
+
 func TestWorkerOperationRunningSkipsChecksAndAlerts(t *testing.T) {
 	store := newFakeStore()
 	store.now = func() time.Time { return t0 }

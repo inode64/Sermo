@@ -512,8 +512,9 @@ operaciones libvirt:
 
 El status de libvirt mapea al status de Sermo así: running/blocked → `active`,
 paused/pmsuspended → `paused`, shutoff/shutdown/nostate → `inactive`, crashed →
-`failed`. La CLI y la web UI muestran una VM pausada por libvirt como `paused`, distinta
-de la pausa de monitor de Sermo (`unmonitor`).
+`failed`. La CLI y la web UI siguen exponiendo `status=paused` del backend; el
+estado agregado del service es `failed` mientras la monitorización está activa, o
+`stopped` cuando la monitorización de Sermo está pausada.
 
 El descubrimiento de procesos es intencionalmente explícito en esta primera integración de VM. Si
 quiere métricas de proceso o reporte de procesos residuales para el proceso QEMU, añada un
@@ -570,8 +571,9 @@ operaciones de la Docker Engine API:
 
 El status de Docker mapea al status de Sermo así: running -> `active`, paused ->
 `paused`, created/exited -> `inactive`, restarting/dead/removing -> `failed`.
-La CLI y la web UI muestran un contenedor pausado por Docker como `paused`, distinto de
-la pausa de monitor de Sermo (`unmonitor`).
+La CLI y la web UI siguen exponiendo `status=paused` del backend; el estado
+agregado del service es `failed` mientras la monitorización está activa, o
+`stopped` cuando la monitorización de Sermo está pausada.
 
 Para métricas de proceso y reporte de procesos residuales, Sermo lee el
 `State.Pid` del contenedor de Docker inspect y descubre ese árbol de procesos. Normalmente no

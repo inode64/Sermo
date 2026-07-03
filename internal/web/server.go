@@ -38,26 +38,28 @@ var assets embed.FS
 // in their configuration are still listed (with Enabled=false) so operators can
 // see the full fleet and know what to activate by editing config + reloading.
 type Service struct {
-	Name             string   `json:"name"`
-	DisplayName      string   `json:"display_name"`
-	Category         string   `json:"category,omitempty"`
-	Backend          string   `json:"backend"`
-	Unit             string   `json:"unit"`
-	State            string   `json:"state"`
-	Status           string   `json:"status"`
-	Interval         string   `json:"interval,omitempty"` // resolved per-service cycle cadence (own interval or engine default)
-	Enabled          bool     `json:"enabled"`            // false when service document has `enabled: false`
-	Monitored        bool     `json:"monitored"`
-	MonitorSource    string   `json:"monitor_source,omitempty"`     // cli | web | config | daemon
-	MonitorChangedAt string   `json:"monitor_changed_at,omitempty"` // RFC3339 when monitoring state last changed
-	CheckHealth      string   `json:"check_health,omitempty"`       // ok | failing | unknown | paused | disabled
-	ChecksFailing    int      `json:"checks_failing,omitempty"`     // required checks currently failing
-	ActiveLocks      []string `json:"active_locks,omitempty"`       // named runtime locks blocking actions
-	PolicyCooldown   string   `json:"policy_cooldown,omitempty"`    // resolved automatic remediation cooldown
-	RemediationState string   `json:"remediation_state,omitempty"`  // eligible | cooldown | rate limit | paused | pending | disabled
-	NextEligibleAt   string   `json:"next_eligible_at,omitempty"`   // RFC3339 when automatic remediation is next eligible
-	CanReload        bool     `json:"can_reload"`                   // true when init or native reload support is available
-	LastEvent        *Event   `json:"last_event,omitempty"`         // newest service event, when retained
+	Name                 string   `json:"name"`
+	DisplayName          string   `json:"display_name"`
+	Category             string   `json:"category,omitempty"`
+	Backend              string   `json:"backend"`
+	Unit                 string   `json:"unit"`
+	State                string   `json:"state"`
+	Status               string   `json:"status"`
+	Interval             string   `json:"interval,omitempty"` // resolved per-service cycle cadence (own interval or engine default)
+	Enabled              bool     `json:"enabled"`            // false when service document has `enabled: false`
+	Monitored            bool     `json:"monitored"`
+	MonitorSource        string   `json:"monitor_source,omitempty"`        // cli | web | config | daemon
+	MonitorChangedAt     string   `json:"monitor_changed_at,omitempty"`    // RFC3339 when monitoring state last changed
+	CheckHealth          string   `json:"check_health,omitempty"`          // ok | failing | unknown | paused | disabled
+	ChecksFailing        int      `json:"checks_failing,omitempty"`        // required checks currently failing
+	ObservabilityReady   bool     `json:"observability_ready"`             // true when monitored service has fresh visible indicators
+	ObservabilityMissing []string `json:"observability_missing,omitempty"` // indicator groups still collecting
+	ActiveLocks          []string `json:"active_locks,omitempty"`          // named runtime locks blocking actions
+	PolicyCooldown       string   `json:"policy_cooldown,omitempty"`       // resolved automatic remediation cooldown
+	RemediationState     string   `json:"remediation_state,omitempty"`     // eligible | cooldown | rate limit | paused | pending | disabled
+	NextEligibleAt       string   `json:"next_eligible_at,omitempty"`      // RFC3339 when automatic remediation is next eligible
+	CanReload            bool     `json:"can_reload"`                      // true when init or native reload support is available
+	LastEvent            *Event   `json:"last_event,omitempty"`            // newest service event, when retained
 
 	// Current process-tree runtime summary. These fields intentionally mirror
 	// ProcessTotals so the service list and detail expansion use the same

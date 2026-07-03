@@ -145,7 +145,13 @@ operations resolve the same control target that `sermod` and the web UI use.
 When `sermod` is running with `web` enabled, `sermoctl status` prefers the
 daemon's computed state (including `starting` during startup settling); if the
 web API is unreachable it falls back to the init backend plus local monitor
-metadata, as before. **`sermoctl is-active` is different:** it always probes the
+metadata, as before. Service states are: `disabled`, `stopped`, `started`
+(backend active but not monitored), `starting` (startup/operation settling),
+`collecting` (active and monitored, but graphs/indicators are not complete yet),
+`monitored` (active, monitored and observability-ready) and `failed`. Without
+the daemon view, a configured active monitored service falls back to
+`collecting`; an active service that is not known to be monitored falls back to
+`started`. **`sermoctl is-active` is different:** it always probes the
 init backend (`active` / `inactive` / `paused`) for the exit code and plain-text
 output. A monitored service still settling with an inactive backend therefore
 shows `state=starting` in `status` but exits **1** from `is-active` until the

@@ -90,16 +90,16 @@ Rendered by `renderOverview` from already-loaded state, without extra requests.
 
 | Tile kind | Current content |
 | --- | --- |
-| Services up | count / total; critical when any service is `failed`, neutral while any target is settling, otherwise healthy; click opens `failed` or `starting` service filter when applicable |
+| Services active | count / total for services in `started`, `collecting` or `monitored`; critical when any service is `failed`, warning while any service is `collecting`, neutral while any target is settling, otherwise active; click opens the matching `failed`, `starting` or `collecting` service filter when applicable |
 | Watches | count / total; critical when any watch is `failed`, neutral while any target is settling (subtitle names starting watches, services or apps), otherwise quiet; click opens the matching `starting`/`failed` filter |
 | Alerts | count of failing services, firing watches, failed installed apps and active locks, with a per-kind breakdown; click routes to `failed-services`, `failed-watches`, `failed-apps` or `locks-section` in priority order |
-| Monitored | monitored vs unmonitored services; neutral with settling subtitle during startup, click opens the same `starting`/`failed` filter as Services up when applicable |
+| Monitored | services in state `monitored` vs enabled services; warning while services are `collecting`, neutral with settling subtitle during startup, click opens the relevant service filter |
 | Host gauges | memory, load, fds, pids, conntrack, etc. when present |
 | Volumes | one gauge per mounted storage watch, crit when its watch is firing |
 
 Editable notes:
 
-- Tiles should jump to the related panel. During startup settling, Services up and
+- Tiles should jump to the related panel. During startup settling, Services active and
   Watches tiles open the `starting` filter on the panel that still has unsettled
   targets (`starting-services`, `starting-watches` or `starting-apps`). After a
   config reload the daemon header stays `ok` (no grey favicon) even when
@@ -148,7 +148,7 @@ checks, remediation and actions for what `sermod` monitors now. This is not
 | Title | `Services` plus total count |
 | Title icons | group by category, collapse/expand all groups |
 | Controls | search, category select, status filters, showing count |
-| Status filters | all, disabled, running, paused, stopped, starting, failed, monitored, unmonitored |
+| Status filters | all, disabled, stopped, started, starting, collecting, monitored, failed |
 | Sorting | Service, Category, State |
 | Grouping | category group rows, collapsible |
 
@@ -158,7 +158,7 @@ Columns:
 | --- | --- |
 | Service | display name, falling back to name, capitalized |
 | Category | YAML category or fallback |
-| State | normalized activity state plus a separate **monitored** / **unmonitored** badge when the service is enabled |
+| State | single normalized service state: `disabled`, `stopped`, `started`, `starting`, `collecting`, `monitored` or `failed` |
 | Uptime | age of the oldest discovered service process, when available |
 | CPU total | latest whole process-tree CPU usage; blank for `no_resident_process` services |
 | Memory | latest process-tree resident memory; blank for `no_resident_process` services |
@@ -271,7 +271,7 @@ column, from the same per-process totals already in the service detail.
 | Title | Panel name plus total count for that panel's watch subset |
 | Controls | search, type filter, state filters, showing count |
 | Type filter | panel-specific `all ... types` plus the distinct check types currently present in that panel |
-| State filters | all, disabled, ok, starting, failed, monitored, unmonitored |
+| State filters | all, disabled, ok, starting, failed |
 | Sorting | Name, Type, Summary, Interval, Polarity, Hook, Notifiers, Last activity, State |
 | Visibility | hidden when no watches are configured for that panel's subset |
 
@@ -287,7 +287,7 @@ Columns:
 | Hook | configured hook state |
 | Notifiers | configured notifier count/list |
 | Last activity | latest hook/notify activity |
-| State | normalized watch health plus a separate **monitored** / **unmonitored** badge when the watch is enabled |
+| State | single normalized watch health state: `disabled`, `ok`, `starting` or `failed` |
 | Actions | monitor/unmonitor and supported actions |
 
 Row expansion:
