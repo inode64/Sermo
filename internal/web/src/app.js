@@ -2815,7 +2815,7 @@ function renderWatchReadings(readings) {
   if (!list.length) return nothing;
   const cells = list.map((r) => {
     const label = r.label || r.field || "Sample";
-    const longValue = ["issuer", "subject", "dns_names"].includes(r.field || "");
+    const longValue = ["issuer", "dns_names"].includes(r.field || "");
     const value = r.error
       ? tpl`<span class="watch-reading-value bad">${r.error}</span>`
       : tpl`<b class="watch-reading-value">${r.value || "—"}</b>`;
