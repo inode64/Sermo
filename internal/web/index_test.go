@@ -142,7 +142,7 @@ func TestIndexShellAnchors(t *testing.T) {
 	})
 
 	wantIDs := []string{
-		"topbar", "favicon", "attention", "events",
+		"topbar", "section-nav", "favicon", "attention", "events",
 		"services-section", "apps-section", "watches-section", "events-section",
 		"storage-controls", "network-controls", "mount-controls",
 		"event-clear", "event-before", "event-reset-filters", "activity-clear",

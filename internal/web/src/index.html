@@ -31,6 +31,21 @@
 </div>
 <div id="system-status" role="status" aria-live="polite" aria-atomic="false"></div>
 <div id="statusbar" role="status" aria-live="polite" aria-atomic="false"></div>
+<nav id="section-nav" aria-label="Dashboard sections">
+  <button type="button" class="section-jump" data-panel-target="services-section" data-count-source="services-count">Services <span class="nav-count" data-nav-count></span></button>
+  <button type="button" class="section-jump" data-panel-target="storage-section" data-count-source="storage-count">Storage <span class="nav-count" data-nav-count></span></button>
+  <button type="button" class="section-jump" data-panel-target="network-section" data-count-source="network-count">Network <span class="nav-count" data-nav-count></span></button>
+  <button type="button" class="section-jump" data-panel-target="mounts-section" data-count-source="mounts-count">Mounts <span class="nav-count" data-nav-count></span></button>
+  <button type="button" class="section-jump" data-panel-target="apps-section" data-count-source="apps-count">Apps <span class="nav-count" data-nav-count></span></button>
+  <button type="button" class="section-jump" data-panel-target="cert-section" data-count-source="cert-count">Certs <span class="nav-count" data-nav-count></span></button>
+  <button type="button" class="section-jump" data-panel-target="diskio-section" data-count-source="diskio-count">Disk I/O <span class="nav-count" data-nav-count></span></button>
+  <button type="button" class="section-jump" data-panel-target="watches-section" data-count-source="watches-count">Watches <span class="nav-count" data-nav-count></span></button>
+  <button type="button" class="section-jump" data-panel-target="events-section" data-count-source="event-count">Events <span class="nav-count" data-nav-count></span></button>
+  <button type="button" class="section-jump" data-panel-target="locks-section" data-count-source="locks-count">Locks <span class="nav-count" data-nav-count></span></button>
+  <button type="button" class="section-jump" data-panel-target="notifiers-section" data-count-source="notifiers-count">Notifiers <span class="nav-count" data-nav-count></span></button>
+  <button type="button" class="section-jump" data-panel-target="daemon-section">Daemon</button>
+  <button type="button" class="section-jump" data-panel-target="activity-section">Activity</button>
+</nav>
 </div><!-- /topbar -->
 <main id="main-content" tabindex="-1">
 <div id="panic-banner" role="alert" aria-live="assertive" aria-atomic="true">

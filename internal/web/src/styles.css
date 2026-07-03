@@ -279,6 +279,20 @@
   #system-status, #statusbar { margin: .25rem 0 0; font-size: .82rem; display: flex; gap: .4rem 1.1rem; flex-wrap: wrap; align-items: center; color: var(--text-2); }
   #system-status b, #statusbar b { color: var(--text); font-weight: 600; }
   .status-tail { display: inline-flex; align-items: center; gap: 1.1rem; flex-wrap: nowrap; }
+  #section-nav {
+    display: flex; align-items: center; gap: .35rem;
+    margin: .45rem 0 0; padding-bottom: .08rem;
+    overflow-x: auto; scrollbar-width: thin;
+  }
+  .section-jump {
+    flex: 0 0 auto; display: inline-flex; align-items: baseline; gap: .25rem;
+    min-height: 1.8rem; padding: .2rem .55rem; white-space: nowrap;
+    border-color: var(--line); color: var(--text-2);
+    background: color-mix(in srgb, var(--panel) 88%, transparent);
+    font-size: .78rem; line-height: 1.2;
+  }
+  .section-jump:hover { color: var(--text); border-color: var(--line-2); background: var(--panel-2); }
+  .section-jump .nav-count { color: var(--text); font-size: .74rem; font-variant-numeric: tabular-nums; }
   #overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); gap: .65rem; margin: .8rem 0 .15rem; }
   .tile {
     background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
@@ -301,6 +315,7 @@
   details, section#locks-section {
     background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
     box-shadow: var(--shadow); margin-top: .9rem; padding: 0 1.05rem;
+    scroll-margin-top: 8rem;
   }
   details[open], section#locks-section { padding-bottom: .95rem; }
   summary {
@@ -561,6 +576,7 @@
   .admin-hidden { display: none; }
   .live-hidden { display: none; }
   .panel-hidden { display: none; }
+  .nav-hidden { display: none !important; }
   .modal-head, .modal-foot { padding: .85rem 1rem; border-bottom: 1px solid var(--line); }
   .modal-foot { border-top: 1px solid var(--line); border-bottom: 0; display: flex; justify-content: flex-end; gap: .5rem; flex-wrap: wrap; }
   .modal-body { padding: 1rem; }
