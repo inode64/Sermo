@@ -2699,10 +2699,8 @@ func aggregateProcesses(procs []process.Process, r procMetricReader) ([]web.Proc
 		}
 		if rd, wr, ok := r.ProcessIO(p.PID); ok {
 			wp.IORead, wp.IOWrite = int64(rd), int64(wr)
-			wp.HasIO = true
 			totals.IORead += int64(rd)
 			totals.IOWrite += int64(wr)
-			totals.HasIO = true
 		}
 		if n, ok := r.ProcessFDs(p.PID); ok {
 			wp.FDs = int64(n)

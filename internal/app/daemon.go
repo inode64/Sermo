@@ -963,7 +963,6 @@ func processTotalsFromPIDs(pids []int, r procMetricReader) *web.ProcessTotals {
 		if rd, wr, ok := r.ProcessIO(pid); ok {
 			totals.IORead += uintToInt64(rd)
 			totals.IOWrite += uintToInt64(wr)
-			totals.HasIO = true
 		}
 		if n, ok := r.ProcessFDs(pid); ok {
 			totals.FDs += uintToInt64(n)
