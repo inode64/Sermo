@@ -200,6 +200,24 @@ func reloadClosure(tree map[string]any, deps checks.Deps, mgr Manager, backend, 
 	}
 }
 
+// ReloadSupported reports whether the resolved service can perform a reload
+// action without waiting for the operation to fail at execution time.
+func ReloadSupported(ctx context.Context, tree map[string]any, mgr Manager, unit string) (bool, error) {
+	if err := reloadConfigError(tree); err != nil {
+		return false, err
+	}
+	if parseReloadSpec(tree) != nil {
+		return true, nil
+	}
+	if mgr == nil {
+		return false, errors.New("reload support unavailable: no service manager")
+	}
+	if unit == "" {
+		return false, errors.New("reload support unavailable: empty unit")
+	}
+	return mgr.SupportsReload(ctx, unit)
+}
+
 // reloadSpec is the parsed native-reload declaration: exactly one of command or
 // signal, plus whether it always replaces the backend reload (`when: always`) or
 // only fills in when the init cannot.

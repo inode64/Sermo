@@ -630,7 +630,9 @@ also_apply: [nginx, varnish]
 - `sermoctl reload <svc>` y `sermoctl resume <svc>` actúan solo sobre la principal
   (sin cascada). Use `sermoctl daemon reload` para recargar la configuración del `sermod`
   en ejecución. En la web UI el botón **reload** por servicio se habilita solo
-  mientras el servicio está `active`, y **resume** solo mientras está `paused`.
+  cuando el servicio está `active`, tiene un bloque `reload:` declarado o una regla
+  de remediación reload, y esa ruta de reload está soportada; **resume** solo
+  mientras está `paused`.
 
 `also_apply` (otros servicios) y `also_service` (las unidades init de este servicio) son
 complementarios; un servicio puede usar ambos.

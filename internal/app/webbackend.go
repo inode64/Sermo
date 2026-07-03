@@ -44,6 +44,9 @@ const (
 	// The dashboard refreshes every 30s by default, so keep status warm across
 	// ordinary refreshes instead of running one init status probe per service.
 	serviceStatusCacheTTL = 2 * time.Minute
+	// serviceReloadCapabilityTimeout bounds init metadata checks used only to
+	// decide whether the dashboard should offer a per-service reload action.
+	serviceReloadCapabilityTimeout = 2 * time.Second
 	// slaTimelineCacheTTL caches SLA timeline strips for detail/expansion views.
 	slaTimelineCacheTTL = 45 * time.Second
 )
@@ -65,6 +68,7 @@ type webEntry struct {
 	processWarnings   []string
 	noResidentProcess bool
 	alsoApply         []string
+	canReload         bool
 	disabled          bool // true when the service had `enabled: false` (still listed for visibility)
 
 	statusMu     sync.Mutex
@@ -320,6 +324,15 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			entry.discoverer = discoverer
 			entry.selectors = selectors
 			entry.processWarnings = processWarnings
+			if serviceDeclaresReload(resolved.Tree) {
+				reloadCtx, cancel := context.WithTimeout(context.Background(), serviceReloadCapabilityTimeout)
+				canReload, reloadErr := operation.ReloadSupported(reloadCtx, resolved.Tree, target.Manager, target.Unit)
+				cancel()
+				entry.canReload = canReload
+				if reloadErr != nil {
+					warnings = append(warnings, "service "+name+": reload support unavailable: "+reloadErr.Error())
+				}
+			}
 		}
 		wb.entries[name] = entry
 		wb.order = append(wb.order, name)
@@ -403,6 +416,24 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	return wb, warnings
 }
 
+func serviceDeclaresReload(tree map[string]any) bool {
+	if _, ok := tree["reload"].(map[string]any); ok {
+		return true
+	}
+	rules, _ := tree["rules"].(map[string]any)
+	for _, raw := range rules {
+		rule, ok := raw.(map[string]any)
+		if !ok || cfgval.AsString(rule["type"]) != "remediation" {
+			continue
+		}
+		then, _ := rule["then"].(map[string]any)
+		if cfgval.AsString(then["action"]) == "reload" {
+			return true
+		}
+	}
+	return false
+}
+
 // checkCatalog returns a service's check names (sorted) and their types, from the
 // resolved `checks` section.
 func checkCatalog(tree map[string]any) ([]string, map[string]string) {
@@ -441,6 +472,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		Unit:        e.unit,
 		Enabled:     !e.disabled,
 		Monitored:   true, // no recorded state defaults to monitored
+		CanReload:   e.canReload,
 	}
 	if e.interval > 0 {
 		svc.Interval = formatInterval(e.interval)
@@ -2975,6 +3007,13 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.
 	}
 	if e.disabled {
 		msg := "service " + name + " is disabled in configuration"
+		if b.emit != nil {
+			b.emit(Event{Service: name, Kind: "error", Action: action, Message: msg})
+		}
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	if action == "reload" && !e.canReload {
+		msg := "service " + name + " does not support reload"
 		if b.emit != nil {
 			b.emit(Event{Service: name, Kind: "error", Action: action, Message: msg})
 		}
