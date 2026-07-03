@@ -15,6 +15,7 @@ import (
 	"sermo/internal/operation"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
+	"sermo/internal/state"
 )
 
 // Worker monitors one service. A cycle runs the service's checks, evaluates its
@@ -81,6 +82,10 @@ type Worker struct {
 	// worker waits for an active backend, runs one observe-only check cycle, and
 	// suppresses alerts and remediation.
 	Settling *Settling
+	// OperationSettling tracks manual/automatic service operations in progress or
+	// awaiting one post-operation observation cycle. While active, checks may
+	// publish fresh data but must not drive SLA, alerts or remediation.
+	OperationSettling OperationSettlingStore
 
 	// Shadow when true causes the worker to fully evaluate remediation rules,
 	// advance their for/within windows, consult guards and the remediation policy,
@@ -164,21 +169,29 @@ func (w *Worker) RunCycle(ctx context.Context) {
 		return // monitoring paused for this service
 	}
 
-	observeOnly := w.Settling != nil && !w.Settling.Observed(settleKey)
+	now := w.Now
+	if now == nil {
+		now = time.Now
+	}
+
+	startupObserveOnly := w.Settling != nil && !w.Settling.Observed(settleKey)
+	operationObserveOnly, operationRunning := w.operationSettlingState(now())
+	if operationRunning {
+		if startupObserveOnly && w.Settling != nil {
+			w.Settling.MarkObserved(settleKey)
+		}
+		return
+	}
+	observeOnly := startupObserveOnly || operationObserveOnly
 	if observeOnly && !w.backendActive(ctx) {
 		// The init backend is inactive: complete startup observation without
 		// running checks so stopped services do not block daemon readiness or
 		// stay in state "starting" forever. The web/CLI surface the inactive
 		// backend as failed once observed.
-		if w.Settling != nil {
+		if startupObserveOnly && w.Settling != nil {
 			w.Settling.MarkObserved(settleKey)
 		}
 		return
-	}
-
-	now := w.Now
-	if now == nil {
-		now = time.Now
 	}
 
 	deps := w.CheckDeps
@@ -203,8 +216,11 @@ func (w *Worker) RunCycle(ctx context.Context) {
 		w.Publish(cache, w.cycleRan)
 	}
 	if observeOnly {
-		if w.Settling != nil {
+		if startupObserveOnly && w.Settling != nil {
 			w.Settling.MarkObserved(settleKey)
+		}
+		if operationObserveOnly {
+			w.clearOperationSettling()
 		}
 		return // first active cycle: publish data only, no rules or SLA side effects
 	}
@@ -220,6 +236,43 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	w.runAlerts(ctx, ev, at, evals)
 	w.publishRuleWindows(ctx, ev, at, evals)
 	w.persistRuleState()
+}
+
+func (w *Worker) operationSettlingState(now time.Time) (observeOnly, running bool) {
+	if w.OperationSettling == nil {
+		return false, false
+	}
+	rec, found, err := w.OperationSettling.OperationSettling(w.Service)
+	if err != nil {
+		w.emit(Event{Kind: "error", Message: "operation settling: " + err.Error()})
+		return false, false
+	}
+	if !found {
+		return false, false
+	}
+	if !rec.UpdatedAt.IsZero() && now.Sub(rec.UpdatedAt) > operationSettlingMaxAge {
+		w.clearOperationSettling()
+		return false, false
+	}
+	switch rec.Phase {
+	case state.OperationSettlingRunning:
+		return false, true
+	case state.OperationSettlingSettling:
+		return true, false
+	default:
+		w.emit(Event{Kind: "error", Message: fmt.Sprintf("operation settling: unknown phase %q", rec.Phase)})
+		w.clearOperationSettling()
+		return false, false
+	}
+}
+
+func (w *Worker) clearOperationSettling() {
+	if w.OperationSettling == nil {
+		return
+	}
+	if err := w.OperationSettling.ClearOperationSettling(w.Service); err != nil {
+		w.emit(Event{Kind: "error", Message: "operation settling: " + err.Error()})
+	}
 }
 
 func (w *Worker) backendActive(ctx context.Context) bool {
@@ -453,7 +506,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		// Cascade owns the primary's placement when also_apply is set (so stop can
 		// take additionals down first); it returns this service's own Result, which
 		// drives the bookkeeping below exactly as a bare Operate would.
-		operate := w.Operate
+		operate := w.operateForRemediation
 		if w.Cascade != nil && (action == "start" || action == "stop" || action == "restart") {
 			operate = w.Cascade
 		}
@@ -470,6 +523,17 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		w.emit(Event{Kind: eventKindForResult(result), Rule: r.Name, Action: action, Status: string(result.Status), Message: result.Message})
 		return // at most one remediation action per cycle
 	}
+}
+
+func (w *Worker) operateForRemediation(ctx context.Context, action string) operation.Result {
+	if err := beginOperationSettling(w.OperationSettling, w.Service, action, state.SourceDaemon); err != nil {
+		w.emit(Event{Kind: "error", Action: action, Message: err.Error()})
+	}
+	result := w.Operate(ctx, action)
+	if err := finishOperationSettling(w.OperationSettling, w.Service, action, state.SourceDaemon, result, nil); err != nil {
+		w.emit(Event{Kind: "error", Action: action, Message: err.Error()})
+	}
+	return result
 }
 
 func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Time, evals map[string]ruleEvalResult) {

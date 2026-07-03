@@ -16,14 +16,16 @@ type fakeStore struct {
 	panicOn    bool
 	panicFound bool
 	panicSrc   string
+	settling   map[string]state.OperationSettlingRecord
 }
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{
-		active:  map[string]bool{},
-		source:  map[string]string{},
-		updated: map[string]time.Time{},
-		now:     time.Now,
+		active:   map[string]bool{},
+		source:   map[string]string{},
+		updated:  map[string]time.Time{},
+		now:      time.Now,
+		settling: map[string]state.OperationSettlingRecord{},
 	}
 }
 
@@ -81,4 +83,39 @@ func (f *fakeStore) MonitorState(service string) (state.MonitorRecord, bool, err
 		Source:    f.source[service],
 		UpdatedAt: f.updated[service],
 	}, true, nil
+}
+
+func (f *fakeStore) SetOperationSettling(service, action, phase, source string) error {
+	if f == nil {
+		return nil
+	}
+	if f.failSet {
+		return fmt.Errorf("set operation settling failed")
+	}
+	f.settling[service] = state.OperationSettlingRecord{
+		Action:    action,
+		Phase:     phase,
+		Source:    source,
+		UpdatedAt: f.now(),
+	}
+	return nil
+}
+
+func (f *fakeStore) OperationSettling(service string) (state.OperationSettlingRecord, bool, error) {
+	if f == nil {
+		return state.OperationSettlingRecord{}, false, nil
+	}
+	rec, found := f.settling[service]
+	return rec, found, nil
+}
+
+func (f *fakeStore) ClearOperationSettling(service string) error {
+	if f == nil {
+		return nil
+	}
+	if f.failSet {
+		return fmt.Errorf("clear operation settling failed")
+	}
+	delete(f.settling, service)
+	return nil
 }
