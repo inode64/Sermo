@@ -164,7 +164,7 @@ Columns:
 | Memory | latest process-tree resident memory |
 | FDs | open file-descriptor count from the process tree |
 | IO R/W | cumulative process-tree disk read/write bytes |
-| Actions | start, **start only** (when `also_apply` is set), stop, restart, reload, resume, monitor/unmonitor; stop/restart confirm dialog offers **skip also_apply** |
+| Actions | one state-aware start/stop button, restart, reload, resume, monitor/unmonitor; the start/stop/restart confirm dialog offers **skip also_apply** when `also_apply` is set |
 
 Row expansion:
 
