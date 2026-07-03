@@ -3074,7 +3074,10 @@ name: postgres-%v
 display_name: "PostgreSQL ${version}"
 service: "postgresql-${version}"
 apps: ["postgres-${version}"]
-variables: { port: 5432 }
+variables:
+  port: 5432
+  data_dir: /var/lib/postgresql/${version}/data
+pidfile: "${data_dir}/postmaster.pid"
 checks: { service: { type: service, expect: active } }
 `)
 	write(servicesDir, "pg.yml", "name: pg\nuses: postgres-16\n")
@@ -3128,6 +3131,9 @@ defaults:
 	command, _ := versionCheck["command"].([]any)
 	if len(command) != 2 || command[0] != wantBinary || command[1] != "--version" {
 		t.Fatalf("postgres-16-version command = %v, want [%s --version]", command, wantBinary)
+	}
+	if got := cfgval.String(resolved.Tree["pidfile"]); got != "/var/lib/postgresql/16/data/postmaster.pid" {
+		t.Fatalf("postgres-16 pidfile = %q, want /var/lib/postgresql/16/data/postmaster.pid", got)
 	}
 }
 

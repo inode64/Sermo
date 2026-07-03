@@ -1657,6 +1657,13 @@ func TestDatabaseCatalogServicesBlockRestartDuringBackup(t *testing.T) {
 	}
 }
 
+func TestPostgresCatalogDeclaresPostmasterPidfile(t *testing.T) {
+	body := catalogDocByName(t, repoRoot(t), "services", "postgres-%v")
+	if got := cfgval.String(body["pidfile"]); got != "${data_dir}/postmaster.pid" {
+		t.Fatalf("postgres pidfile = %q, want ${data_dir}/postmaster.pid", got)
+	}
+}
+
 func TestUbuntuCatalogOverrides(t *testing.T) {
 	old := detectedOS
 	detectedOS = "ubuntu"
