@@ -470,6 +470,7 @@ function renderGlobalEvents() {
   const events = sortedEvents(allEvents || []);
   const cnt = $("#event-count");
   if (cnt) cnt.textContent = events.length ? `${events.length} shown` : "";
+  updateSectionNav();
   const grouped = $("#event-group") && $("#event-group").checked;
   if (!grouped) {
     litRender(eventRows(events, true, { prefix: "global" }), tbody);
@@ -1605,6 +1606,7 @@ function renderServices() {
   }
   litRender(content, $("#rows"));
   finishSvcRender();
+  updateSectionNav();
 }
 
 // toggleExpand / loadExpansionFor drive inline expansion, shared by services and
@@ -3218,6 +3220,7 @@ function renderWatches(watches) {
   renderWatchPanel("host", all.filter((w) => !isStorageWatch(w) && !isNetworkWatch(w) && !isCertWatch(w) && !isDiskioWatch(w)));
   expanded.forEach((k) => { if (k.startsWith("wat:")) loadExpansionFor(k); });
   applyHash();
+  updateSectionNav();
 }
 
 // renderWatchPanel fills one watch table (Storage, Network, or Host watches)
@@ -3401,6 +3404,7 @@ function renderApps(apps) {
     setPanelVisible(section, false);
     if (cnt) cnt.textContent = "";
     if (filterCount) filterCount.textContent = "";
+    updateSectionNav();
     return;
   }
   setPanelVisible(section, true);
@@ -3447,6 +3451,7 @@ function renderApps(apps) {
   // expanded services load their events.
   (allApps || []).forEach((a) => { if (expanded.has("app:" + a.name)) loadAppEvents(a.name); });
   applyHash();
+  updateSectionNav();
 }
 
 // renderAppExpansion shows one application's full version, binary location and
@@ -3679,6 +3684,7 @@ function renderMounts(mounts) {
     setPanelVisible(section, false);
     if (cnt) cnt.textContent = "";
     if (filterCount) filterCount.textContent = "";
+    updateSectionNav();
     return;
   }
   setPanelVisible(section, true);
@@ -3713,6 +3719,7 @@ function renderMounts(mounts) {
     </tr>`;
   });
   tbody.innerHTML = rows.join("") || `<tr><td colspan="9" class="muted">No mount units match the filter.</td></tr>`;
+  updateSectionNav();
 }
 
 function mountActionButtons(m, mounted) {
@@ -3735,6 +3742,7 @@ function renderNotifiers(notifiers) {
   if (!notifiers || notifiers.length === 0) {
     setPanelVisible(section, false);
     if (cnt) cnt.textContent = "";
+    updateSectionNav();
     return;
   }
   setPanelVisible(section, true);
@@ -3749,6 +3757,7 @@ function renderNotifiers(notifiers) {
     return `<tr><td>${esc(n.name)}</td><td>${esc(n.type)}</td><td class="muted">${dest}</td><td>${watches}</td><td class="${cls}">${state}</td></tr>`;
   });
   tbody.innerHTML = rows.join("") || `<tr><td colspan="5" class="muted">No notifiers.</td></tr>`;
+  updateSectionNav();
 }
 
 function renderDaemon(info) {
@@ -3931,6 +3940,7 @@ function renderLocks(locks) {
     setPanelVisible(section, false);
     if (cnt) cnt.textContent = "";
     renderAttention();
+    updateSectionNav();
     return;
   }
   setPanelVisible(section, true);
@@ -3950,6 +3960,7 @@ function renderLocks(locks) {
   });
   litRender(rows, tbody);
   renderAttention();
+  updateSectionNav();
 }
 
 function renderActivity(sum) {
@@ -4245,6 +4256,36 @@ function setPanelVisible(el, show) {
   el.classList.toggle("panel-hidden", !show);
 }
 
+function sectionNavCountText(text) {
+  const trimmed = (text || "").trim();
+  if (!trimmed) return "";
+  const paren = trimmed.match(/^\(([^)]+)\)$/);
+  if (paren) return paren[1];
+  const leading = trimmed.match(/^(\d+)/);
+  if (leading) return leading[1];
+  return trimmed;
+}
+
+function updateSectionNav() {
+  const nav = $("#section-nav");
+  if (!nav) return;
+  let visible = 0;
+  nav.querySelectorAll("[data-panel-target]").forEach((btn) => {
+    const target = btn.getAttribute("data-panel-target") || "";
+    const panel = target ? document.getElementById(target) : null;
+    const hidden = !panel || panel.classList.contains("panel-hidden");
+    btn.classList.toggle("nav-hidden", hidden);
+    if (!hidden) visible++;
+
+    const countID = btn.getAttribute("data-count-source") || "";
+    const countSource = countID ? document.getElementById(countID) : null;
+    const count = countSource ? sectionNavCountText(countSource.textContent) : "";
+    const countEl = btn.querySelector("[data-nav-count]");
+    if (countEl) countEl.textContent = count;
+  });
+  nav.classList.toggle("nav-hidden", visible === 0);
+}
+
 function renderStatus(ctx) {
   const bar = $("#statusbar");
   if (!bar) return;
@@ -4320,6 +4361,7 @@ function renderStatus(ctx) {
     setHTMLIfChanged(bar, parts.join(" &middot; "));
     updatePanicView(ready.panic);
     renderOverview({ ready, live, mon, ops, locks, hostMetrics });
+    updateSectionNav();
 
     // Also populate the runtime part of the Daemon info panel
     const set = (id, val) => { const el = $(id); if (el) el.textContent = val || "—"; };
