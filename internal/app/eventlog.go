@@ -39,6 +39,7 @@ type EventLog struct {
 	count         int
 	lastByService map[string]LoggedEvent
 	lastByWatch   map[string]LoggedEvent
+	lastByApp     map[string]LoggedEvent
 }
 
 // NewEventLog returns a log retaining the last size events (min 1).
@@ -199,6 +200,17 @@ func (l *EventLog) LastWatchActivity(watch string) (LoggedEvent, bool) {
 	return ev, ok
 }
 
+// LastApp returns the newest retained event for an installed application.
+func (l *EventLog) LastApp(app string) (LoggedEvent, bool) {
+	if l == nil || app == "" {
+		return LoggedEvent{}, false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	ev, ok := l.lastByApp[app]
+	return ev, ok
+}
+
 func (l *EventLog) orderedLocked() []LoggedEvent {
 	out := make([]LoggedEvent, 0, l.count)
 	if l.count < l.size {
@@ -232,11 +244,18 @@ func (l *EventLog) indexLocked(e LoggedEvent) {
 		}
 		l.lastByWatch[e.Watch] = e
 	}
+	if e.App != "" {
+		if l.lastByApp == nil {
+			l.lastByApp = map[string]LoggedEvent{}
+		}
+		l.lastByApp[e.App] = e
+	}
 }
 
 func (l *EventLog) rebuildIndexesLocked() {
 	l.lastByService = map[string]LoggedEvent{}
 	l.lastByWatch = map[string]LoggedEvent{}
+	l.lastByApp = map[string]LoggedEvent{}
 	for _, e := range l.orderedLocked() {
 		l.indexLocked(e)
 	}
