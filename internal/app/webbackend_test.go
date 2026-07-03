@@ -1744,8 +1744,8 @@ func TestWebBackendIncludesDisabledServices(t *testing.T) {
 	}
 
 	en := byName["web"]
-	if !en.Enabled || en.Status == "disabled" || en.State != TargetStateMonitorized {
-		t.Fatalf("normal service = %+v, want Enabled=true", en)
+	if !en.Enabled || en.Status == "disabled" || en.State != TargetStateRunning || !en.Monitored {
+		t.Fatalf("normal service = %+v, want Enabled=true, State=running, Monitored=true", en)
 	}
 	if en.Category != "frontend" {
 		t.Fatalf("normal service category = %q, want frontend", en.Category)
