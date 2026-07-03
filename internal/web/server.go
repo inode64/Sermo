@@ -70,7 +70,6 @@ type Service struct {
 	RSS               int64    `json:"rss,omitempty"`
 	IORead            int64    `json:"io_read,omitempty"`  // cumulative disk read bytes
 	IOWrite           int64    `json:"io_write,omitempty"` // cumulative disk write bytes
-	HasIO             bool     `json:"has_io,omitempty"`   // true when cumulative disk IO counters are readable
 	FDs               int64    `json:"fds,omitempty"`
 	Threads           int64    `json:"threads,omitempty"`
 	CPU               float64  `json:"cpu,omitempty"`        // live CPU %, all host CPUs
@@ -471,7 +470,6 @@ type Process struct {
 	RSS         int64    `json:"rss,omitempty"`      // resident memory, bytes
 	IORead      int64    `json:"io_read,omitempty"`  // cumulative disk read, bytes
 	IOWrite     int64    `json:"io_write,omitempty"` // cumulative disk write, bytes
-	HasIO       bool     `json:"has_io,omitempty"`   // true when cumulative disk IO counters are readable
 	FDs         int64    `json:"fds,omitempty"`      // open file descriptors
 	Threads     int64    `json:"threads,omitempty"`  // thread count
 	CPU         float64  `json:"cpu,omitempty"`      // live CPU %, single-core normalized (100% = one core)
@@ -486,7 +484,6 @@ type ProcessTotals struct {
 	RSS     int64 `json:"rss,omitempty"`
 	IORead  int64 `json:"io_read,omitempty"`
 	IOWrite int64 `json:"io_write,omitempty"`
-	HasIO   bool  `json:"has_io,omitempty"`
 	FDs     int64 `json:"fds,omitempty"`
 	Threads int64 `json:"threads,omitempty"`
 	// Live CPU for the whole tree: CPU is the whole-machine rate (% of all
