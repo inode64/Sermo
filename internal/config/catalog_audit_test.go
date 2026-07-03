@@ -257,7 +257,6 @@ func TestShippedGlobalConfigValidates(t *testing.T) {
 		withPathDirs("storages"),
 		withPathDirs("networks"),
 		withPathDirs("watches"),
-		withPathDirs("mounts"),
 	)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -286,14 +285,17 @@ func TestRepoDevConfigLoadsExampleTree(t *testing.T) {
 	if _, ok := cfg.Apps["custom-tool"]; !ok {
 		t.Fatalf("dev config did not load examples/apps: %v", cfg.AppNames)
 	}
-	if _, ok := cfg.Mounts["mount-backup"]; !ok {
-		t.Fatalf("dev config did not load examples/mounts: %v", cfg.MountNames)
+	if _, ok := cfg.Storages["mount-backup"]; !ok {
+		t.Fatalf("dev config did not load examples/storages: %v", cfg.StorageNames)
 	}
 	notifiers, _ := cfg.Global.Raw["notifiers"].(map[string]any)
 	if _, ok := notifiers["ops-email"]; !ok {
 		t.Fatalf("dev config did not load examples/notifiers: %v", notifiers)
 	}
-	watches, _ := cfg.Global.Raw["watches"].(map[string]any)
+	watches, errs := cfg.ResolveWatches()
+	if len(errs) != 0 {
+		t.Fatalf("dev config watch resolution failed: %v", errs)
+	}
 	for _, name := range []string{"storage-root", "ping-gw", "load"} {
 		if _, ok := watches[name]; !ok {
 			t.Fatalf("dev config did not load watch %q from example dirs: %v", name, watches)
@@ -316,7 +318,7 @@ func TestShippedServiceConfigsLiveUnderServices(t *testing.T) {
 	}
 
 	assertExampleDocsHaveKind(t, filepath.Join(root, "examples", "apps"), kindApp)
-	assertExampleDocsHaveKind(t, filepath.Join(root, "examples", "mounts"), kindMount)
+	assertExampleDocsHaveKind(t, filepath.Join(root, "examples", "storages"), kindStorage)
 }
 
 func TestShippedServiceConfigExamplesValidate(t *testing.T) {

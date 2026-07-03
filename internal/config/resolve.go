@@ -10,6 +10,7 @@ import (
 	"unicode"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 )
 
 // Resolved is a fully flattened, variable-expanded service definition.
@@ -57,13 +58,14 @@ func (c *Config) resolveService(name string, pruneOptional bool) (Resolved, []st
 	return Resolved{Name: canonicalName, Tree: expanded}, errs
 }
 
-// ResolveMount expands one configured mount document. Mounts do not merge catalog
-// defaults or service catalog documents: each file under paths.mounts is the
-// complete declaration for one fstab-backed mount unit.
-func (c *Config) ResolveMount(name string) (Resolved, []string) {
-	doc, ok := c.Mounts[name]
+// ResolveStorage expands one configured storage document. Storage targets do
+// not merge catalog defaults or service catalog documents: each file under
+// paths.storages is the complete declaration for one storage target and its
+// optional fstab-backed mount operations.
+func (c *Config) ResolveStorage(name string) (Resolved, []string) {
+	doc, ok := c.Storages[name]
 	if !ok {
-		return Resolved{Name: name}, []string{fmt.Sprintf("unknown mount %q", name)}
+		return Resolved{Name: name}, []string{fmt.Sprintf("unknown storage %q", name)}
 	}
 	body := stripMeta(doc.Body)
 	vars, errs := c.expansionVariables(body, name)
@@ -72,12 +74,12 @@ func (c *Config) ResolveMount(name string) (Resolved, []string) {
 	return Resolved{Name: name, Tree: expanded}, errs
 }
 
-// MountNameByPath returns the configured mount name whose resolved path matches
-// path. Empty means no configured mount currently owns that path.
-func (c *Config) MountNameByPath(path string) string {
+// StorageNameByPath returns the configured storage name whose resolved path
+// matches path. Empty means no configured storage currently owns that path.
+func (c *Config) StorageNameByPath(path string) string {
 	cleanPath := cleanMountPath(path)
-	for _, name := range c.MountNames {
-		resolved, errs := c.ResolveMount(name)
+	for _, name := range c.StorageNames {
+		resolved, errs := c.ResolveStorage(name)
 		if len(errs) > 0 {
 			continue
 		}
@@ -93,6 +95,24 @@ func cleanMountPath(path string) string {
 		return ""
 	}
 	return filepath.Clean(path)
+}
+
+// StorageMountNames returns the storage targets that expose mount operations.
+func (c *Config) StorageMountNames() []string {
+	if c == nil {
+		return nil
+	}
+	out := make([]string, 0, len(c.StorageNames))
+	for _, name := range c.StorageNames {
+		resolved, errs := c.ResolveStorage(name)
+		if len(errs) > 0 {
+			continue
+		}
+		if _, ok := resolved.Tree["mount"].(map[string]any); ok {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 // expandPidfile validates a top-level `pidfile: <path>` or candidate list and
@@ -611,17 +631,83 @@ func appVariablePrefix(name string) string {
 	return strings.TrimRight(b.String(), "_")
 }
 
-// ResolveWatches returns the global `watches` section with ${var} expanded
-// against the custom global variables and the host-level builtins. Watches have
-// no per-watch builtins (name/port/pidfile). nil when no watches are configured.
+// ResolveWatches returns the global `watches` section plus storage capacity
+// watches with ${var} expanded against the custom global variables and the
+// host-level builtins. Watches have no per-watch builtins (name/port/pidfile).
+// nil when no watches are configured.
 func (c *Config) ResolveWatches() (map[string]any, []string) {
-	raw, ok := c.Global.Raw["watches"].(map[string]any)
-	if !ok || len(raw) == 0 {
-		return nil, nil
+	raw := map[string]any{}
+	if configured, ok := c.Global.Raw["watches"].(map[string]any); ok {
+		maps.Copy(raw, configured)
+	}
+	errs := c.addStorageCapacityWatches(raw)
+	if len(raw) == 0 {
+		return nil, errs
 	}
 	vars := c.globalVars()
 	injectHostBuiltins(vars)
-	return expandTree(raw, vars)
+	expanded, expErrs := expandTree(raw, vars)
+	errs = append(errs, expErrs...)
+	return expanded, errs
+}
+
+func (c *Config) addStorageCapacityWatches(dst map[string]any) []string {
+	if c == nil {
+		return nil
+	}
+	var errs []string
+	for _, name := range c.StorageNames {
+		resolved, resErrs := c.ResolveStorage(name)
+		for _, err := range resErrs {
+			errs = append(errs, "storage "+name+": "+err)
+		}
+		if len(resErrs) > 0 || resolved.Tree == nil {
+			continue
+		}
+		entry, ok := storageCapacityWatch(resolved.Tree)
+		if !ok {
+			continue
+		}
+		if _, exists := dst[name]; exists {
+			errs = append(errs, fmt.Sprintf("storage %q capacity watch would overwrite existing watch %q", name, name))
+			continue
+		}
+		dst[name] = entry
+	}
+	return errs
+}
+
+func storageCapacityWatch(tree map[string]any) (map[string]any, bool) {
+	capacity, ok := tree["capacity"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	check := map[string]any{
+		"type": "storage",
+		"path": tree["path"],
+	}
+	if _, hasMount := tree["mount"].(map[string]any); hasMount {
+		if _, explicit := capacity["mounted"]; !explicit {
+			check["mounted"] = true
+		}
+	}
+	for _, key := range append([]string{"mounted"}, checks.StoragePredFields...) {
+		if v, present := capacity[key]; present {
+			check[key] = v
+		}
+	}
+	entry := map[string]any{"check": check}
+	for _, key := range []string{"monitor", "interval"} {
+		if v, present := tree[key]; present {
+			entry[key] = v
+		}
+	}
+	for _, key := range []string{"for", "within", "then", "policy"} {
+		if v, present := capacity[key]; present {
+			entry[key] = v
+		}
+	}
+	return entry, true
 }
 
 // expandRestartOnChange desugars a `restart_on_change: {libraries: [...]}` block

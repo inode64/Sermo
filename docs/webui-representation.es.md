@@ -37,7 +37,7 @@ Mantén los cambios concretos:
 | Eventos del servicio | `GET /api/services/{name}/events` | feed de eventos por servicio |
 | Watches de host | `GET /api/watches` | watches a nivel de host |
 | Aplicaciones | `GET /api/applications` | aplicaciones de catálogo instaladas |
-| Unidades de montaje | `GET /api/mounts` | unidades de montaje configuradas respaldadas por fstab |
+| Unidades de montaje | `GET /api/mounts` | storages con `mount:` respaldados por fstab |
 | Notifiers | `GET /api/notifiers` | destinos de notifiers |
 | Configuración del daemon | `GET /api/daemon` | configuración de engine/runtime |
 | Métricas de proceso del daemon | `GET /api/daemon/metrics` | historial persistido de CPU/memoria/IO de sermod |
@@ -294,7 +294,7 @@ Columnas:
 | Hook | estado del hook configurado |
 | Notifiers | recuento/lista de notifiers configurados |
 | Last activity | última actividad de hook/notify |
-| State | estado de salud normalizado único del watch: `disabled`, `ok`, `starting` o `failed` |
+| State | estado normalizado único del watch: `disabled` cuando config/monitor state lo excluye de comprobaciones activas, `starting` antes de la primera muestra monitorizada, `failed` para un fallo activo y `ok` en el resto |
 | Actions | monitor/unmonitor y acciones admitidas |
 
 Expansión de fila:

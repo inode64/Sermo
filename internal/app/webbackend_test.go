@@ -1407,7 +1407,7 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 				"interval": "45s",
 				"check": map[string]any{
 					"type":     "storage",
-					"path":     "/data/app",
+					"path":     "/data",
 					"mounted":  true,
 					"free_pct": map[string]any{"op": "<", "value": 15},
 					"free_bytes": map[string]any{
@@ -1420,7 +1420,7 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 					"notify":  []any{"ops", "pager"},
 					"expand":  map[string]any{"by": "5G"},
 					"hook": map[string]any{
-						"command": []any{"/usr/local/bin/sermo-disk-alert", "--path", "/data/app"},
+						"command": []any{"/usr/local/bin/sermo-disk-alert", "--path", "/data"},
 					},
 				},
 			},
@@ -1459,7 +1459,7 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 		t.Fatalf("got %d watches, want 1: %+v", len(watches), watches)
 	}
 	w := watches[0]
-	if usagePath != "/data/app" || !mountSampled {
+	if usagePath != "/data" || !mountSampled {
 		t.Fatalf("samplers not called as expected: usagePath=%q mountSampled=%v", usagePath, mountSampled)
 	}
 	if w.Name != "storage-data" || w.Interval != "45s" || w.CheckType != "storage" {
@@ -1471,10 +1471,10 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 	if !w.DryRun {
 		t.Fatal("dry_run flag not exposed")
 	}
-	if !slices.Equal(w.HookCommand, []string{"/usr/local/bin/sermo-disk-alert", "--path", "/data/app"}) {
+	if !slices.Equal(w.HookCommand, []string{"/usr/local/bin/sermo-disk-alert", "--path", "/data"}) {
 		t.Fatalf("hook command = %v", w.HookCommand)
 	}
-	if w.Summary == "" || !strings.Contains(w.Summary, "/data/app") || !strings.Contains(w.Summary, "xfs") {
+	if w.Summary == "" || !strings.Contains(w.Summary, "/data") || !strings.Contains(w.Summary, "xfs") {
 		t.Fatalf("summary = %q, want path and filesystem", w.Summary)
 	}
 	if len(w.Conditions) != 3 {
@@ -1504,6 +1504,55 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 	}
 	if w.Expand == nil || w.Expand.ByBytes != 5<<30 {
 		t.Fatalf("expand info = %+v, want 5G", w.Expand)
+	}
+}
+
+func TestWebBackendStorageMountedExpectationDoesNotUseParentMount(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"storage-boot-desktop": map[string]any{
+				"check": map[string]any{
+					"type":     "storage",
+					"path":     "/var/spool/boot_desktop",
+					"mounted":  true,
+					"free_pct": map[string]any{"op": "<", "value": 10},
+				},
+			},
+		},
+	}}}
+	usageCalled := false
+	b, warns := NewWebBackend(cfg, Deps{
+		StorageUsage: func(string) (checks.StorageStats, error) {
+			usageCalled = true
+			return checks.StorageStats{TotalBytes: 1000, FreeBytes: 900, FreePct: 90}, nil
+		},
+		MountSampler: func() ([]checks.Mount, error) {
+			return []checks.Mount{{Device: "/dev/root", MountPoint: "/", FSType: "ext4"}}, nil
+		},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	watches := b.Watches(context.Background())
+	if len(watches) != 1 {
+		t.Fatalf("got %d watches, want 1: %+v", len(watches), watches)
+	}
+	w := watches[0]
+	if usageCalled {
+		t.Fatal("storage usage must not read parent filesystem when expected mountpoint is absent")
+	}
+	if w.State != TargetStateFailed {
+		t.Fatalf("state = %q, want failed", w.State)
+	}
+	if w.Summary != "/var/spool/boot_desktop: not mounted" {
+		t.Fatalf("summary = %q", w.Summary)
+	}
+	if w.Storage == nil {
+		t.Fatal("storage info missing")
+	}
+	if w.Storage.Mounted || w.Storage.MountPoint != "" || w.Storage.Device != "" {
+		t.Fatalf("storage info = %+v, want not mounted with no parent mount", w.Storage)
 	}
 }
 

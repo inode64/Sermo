@@ -922,7 +922,27 @@ func watchViewFailed(w web.Watch) bool {
 	if WatchActivityFailed(w.LastActivityKind) && watchActivityCurrent(w.LastActivity, w.MonitorChangedAt) {
 		return true
 	}
+	if watchStorageMountFailed(w) {
+		return true
+	}
 	return (w.Storage != nil && (w.Storage.SampleError != "" || w.Storage.MountSampleError != "")) || watchReadingsFailed(w.Readings)
+}
+
+func watchStorageMountFailed(w web.Watch) bool {
+	if w.Storage == nil {
+		return false
+	}
+	for _, cond := range w.Conditions {
+		if cond.Field != "mounted" || cond.Op != "==" {
+			continue
+		}
+		expect, err := strconv.ParseBool(cond.Value)
+		if err != nil {
+			continue
+		}
+		return w.Storage.Mounted != expect
+	}
+	return false
 }
 
 func watchActivityCurrent(activity, changed string) bool {
@@ -975,6 +995,12 @@ func watchSummary(w *webWatch, storage *web.StorageWatchInfo, liveSummary string
 	if isStorageCheckType(w.checkType) && storage != nil {
 		if storage.SampleError != "" {
 			return storage.Path + ": " + storage.SampleError
+		}
+		if expect, ok := storageMountExpectation(w.check); ok && storage.Mounted != expect {
+			if expect {
+				return storage.Path + ": not mounted"
+			}
+			return storage.Path + ": mounted"
 		}
 		fs := storage.FileSystem
 		if fs == "" {
@@ -1985,6 +2011,31 @@ func storageWatchInfo(w *webWatch, b *WebBackend) *web.StorageWatchInfo {
 	}
 	info := &web.StorageWatchInfo{Path: path}
 
+	mountSampler := b.mountSampler
+	if mountSampler == nil {
+		mountSampler = checks.DefaultMounts
+	}
+	mounts, err := mountSampler()
+	if err != nil {
+		info.MountSampleError = err.Error()
+	} else {
+		mount := checks.MountForPath(mounts, path)
+		if _, ok := storageMountExpectation(w.check); ok {
+			mount = checks.MountAtPath(mounts, path)
+		}
+		if mount != nil {
+			info.Mounted = true
+			info.MountPoint = mount.MountPoint
+			info.Device = mount.Device
+			info.FileSystem = mount.FSType
+			info.Options = slices.Clone(mount.Options)
+			info.OpenFiles = b.openFilesByMountCached(mounts)[mount.MountPoint]
+		}
+		if _, ok := storageMountExpectation(w.check); ok && !info.Mounted {
+			return info
+		}
+	}
+
 	usage := b.storageUsage
 	if usage == nil {
 		usage = checks.DefaultStorageUsage
@@ -2005,25 +2056,12 @@ func storageWatchInfo(w *webWatch, b *WebBackend) *web.StorageWatchInfo {
 		info.InodesUsedPct = st.InodesUsedPct
 		info.InodesFreePct = st.InodesFreePct
 	}
-
-	mountSampler := b.mountSampler
-	if mountSampler == nil {
-		mountSampler = checks.DefaultMounts
-	}
-	mounts, err := mountSampler()
-	if err != nil {
-		info.MountSampleError = err.Error()
-		return info
-	}
-	if mount := checks.MountForPath(mounts, path); mount != nil {
-		info.Mounted = true
-		info.MountPoint = mount.MountPoint
-		info.Device = mount.Device
-		info.FileSystem = mount.FSType
-		info.Options = slices.Clone(mount.Options)
-		info.OpenFiles = b.openFilesByMountCached(mounts)[mount.MountPoint]
-	}
 	return info
+}
+
+func storageMountExpectation(check map[string]any) (bool, bool) {
+	v, ok := check["mounted"].(bool)
+	return v, ok
 }
 
 // Notifiers returns the configured notification targets.

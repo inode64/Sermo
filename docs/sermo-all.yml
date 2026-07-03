@@ -13,7 +13,7 @@
 #   # location: catalog/libs      -> a lib under a catalog dir
 #   # location: catalog/patterns  -> a pattern set under a catalog dir
 #   # location: services          -> a service under paths.services
-#   # location: mounts            -> a mount under paths.mounts
+#   # location: storages          -> a storage target under paths.storages
 #   each notifiers.<name> entry   -> one notifier fragment under paths.notifiers
 #   each watches.<name> entry     -> one watch fragment under paths.storages/networks/watches
 #
@@ -43,8 +43,8 @@ paths:
   # `{ path: ..., recursive: true }`. Catalog documents must live under
   # immediate services/apps/libs/patterns category directories.
   # Omitted paths.catalog uses installed catalog defaults. Omitted
-  # services/apps/mounts fall back to sibling services/, apps/ and mounts/.
-  # Global fragment dirs (notifiers/storages/networks/watches) load only when listed.
+  # services/apps/storages fall back to sibling services/, apps/ and storages/.
+  # Global fragment dirs (notifiers/networks/watches) load only when listed.
   catalog:  # packaged + admin catalog service/app/lib definitions
     - /usr/share/sermo/catalog
     - /etc/sermo/catalog-available
@@ -55,13 +55,11 @@ paths:
   notifiers:
     - notifiers  # one top-level notifiers.<name> entry per file
   storages:
-    - storages  # storage watch fragments
+    - storages  # storage capacity and optional mount-operation documents
   networks:
     - networks  # network/uplink watch fragments
   watches:
     - watches  # generic host watch fragments
-  mounts:  # mount files, separated from services/watches
-    - /etc/sermo/mounts
   runtime: /run/sermo  # volatile: locks, op slots (tmpfs)
   state: /var/lib/sermo  # persistent: monitor state, SLA, measurements, runtime metrics
   templates: /etc/sermo/templates  # notification templates, e.g. default-alert.yml
@@ -1019,24 +1017,33 @@ control:
 
 ---
 # ---------------------------------------------------------------------------
-# 11. mount — fstab-backed mount unit (paths.mounts)
+# 11. storage — capacity monitor with fstab-backed mount operations
 # ---------------------------------------------------------------------------
-# location: mounts
+# location: storages
 name: mount-backup
 display_name: Backup mount
 category: storage
 path: /mnt/backup  # must exist in /etc/fstab; no source/fstype/options here
-refcount: true  # default: only unmount when all Sermo users released it
+monitor: previous
+interval: 30s
 variables:  # mount-scoped custom variables
   owner: backup
-umount:
-  term_timeout: 12s  # wait after SIGTERM when signalling is enabled
-  kill_timeout: 5s  # wait after SIGKILL when signalling is enabled
-  allow_sigkill: true  # escalate to SIGKILL; requires stop_policy.kill_only_if below
-  allow_lazy: false  # default; true allows umount -l as the last fallback
-stop_policy:
-  kill_only_if:  # restrict which processes a SIGKILL may target
-    users: [root]
-    exe_any: [/usr/bin/rsync]
+capacity:
+  mounted: true
+  used_pct: { op: ">=", value: "90%" }
+  for: { cycles: 3 }
+  then:
+    notify: [ops-email]
+mount:
+  refcount: true  # default: only unmount when all Sermo users released it
+  umount:
+    term_timeout: 12s  # wait after SIGTERM when signalling is enabled
+    kill_timeout: 5s  # wait after SIGKILL when signalling is enabled
+    allow_sigkill: true  # escalate to SIGKILL; requires stop_policy.kill_only_if below
+    allow_lazy: false  # default; true allows umount -l as the last fallback
+  stop_policy:
+    kill_only_if:  # restrict which processes a SIGKILL may target
+      users: [root]
+      exe_any: [/usr/bin/rsync]
 os:  # per-OS umount tuning, merged for the detected os-release ID
-  default: { umount: { allow_lazy: true } }
+  default: { mount: { umount: { allow_lazy: true } } }

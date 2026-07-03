@@ -16,7 +16,7 @@ const DefaultGlobalPath = "/etc/sermo/sermo.yml"
 
 var defaultServiceDirs = []string{"services"}
 var defaultAppDirs = []string{"apps"}
-var defaultMountDirs = []string{"mounts"}
+var defaultStorageDirs = []string{"storages"}
 
 // Option customizes Load.
 type Option func(*loadOptions)
@@ -96,15 +96,15 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		global.Apps = pathsFromSpecs(appPaths)
 		global.AppPaths = append([]PathSpec(nil), appPaths...)
 	}
-	notifierPaths := global.NotifierPaths
-	watchPaths := appendPathSpecLists(global.StoragePaths, global.NetworkPaths, global.WatchPaths)
-	_, mountPathsOverridden := o.pathDirs["mounts"]
-	mountPaths := global.MountPaths
-	if len(mountPaths) == 0 && !mountPathsOverridden {
-		mountPaths = pathSpecsFromPaths(defaultConfigDirs(globalPath, defaultMountDirs))
-		global.Mounts = pathsFromSpecs(mountPaths)
-		global.MountPaths = append([]PathSpec(nil), mountPaths...)
+	_, storagePathsOverridden := o.pathDirs["storages"]
+	storagePaths := global.StoragePaths
+	if len(storagePaths) == 0 && !storagePathsOverridden {
+		storagePaths = pathSpecsFromPaths(defaultConfigDirs(globalPath, defaultStorageDirs))
+		global.Storages = pathsFromSpecs(storagePaths)
+		global.StoragePaths = append([]PathSpec(nil), storagePaths...)
 	}
+	notifierPaths := global.NotifierPaths
+	watchPaths := appendPathSpecLists(global.NetworkPaths, global.WatchPaths)
 
 	cfg := &Config{
 		Global:          global,
@@ -113,7 +113,7 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		Libraries:       map[string]*Document{},
 		Patterns:        map[string]*Document{},
 		Services:        map[string]*Document{},
-		Mounts:          map[string]*Document{},
+		Storages:        map[string]*Document{},
 		serviceUnits:    cloneServiceUnits(o.serviceUnits),
 	}
 
@@ -137,13 +137,13 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 			return nil, err
 		}
 	}
-	for _, spec := range uniquePathSpecs(watchPaths) {
-		if err := cfg.loadGlobalFragmentDir(spec.Path, "watches", spec.Recursive); err != nil {
+	for _, spec := range uniquePathSpecs(storagePaths) {
+		if err := cfg.loadStorageDir(spec.Path, spec.Recursive); err != nil {
 			return nil, err
 		}
 	}
-	for _, spec := range uniquePathSpecs(mountPaths) {
-		if err := cfg.loadMountDir(spec.Path, spec.Recursive); err != nil {
+	for _, spec := range uniquePathSpecs(watchPaths) {
+		if err := cfg.loadGlobalFragmentDir(spec.Path, "watches", spec.Recursive); err != nil {
 			return nil, err
 		}
 	}
@@ -198,9 +198,6 @@ func loadGlobal(path string) (Global, error) {
 		if g.WatchPaths, err = pathSpecList(paths["watches"], "paths.watches"); err != nil {
 			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
 		}
-		if g.MountPaths, err = pathSpecList(paths["mounts"], "paths.mounts"); err != nil {
-			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
-		}
 		g.Catalog = pathsFromSpecs(g.CatalogPaths)
 		g.Services = pathsFromSpecs(g.ServicePaths)
 		g.Apps = pathsFromSpecs(g.AppPaths)
@@ -208,7 +205,6 @@ func loadGlobal(path string) (Global, error) {
 		g.Storages = pathsFromSpecs(g.StoragePaths)
 		g.Networks = pathsFromSpecs(g.NetworkPaths)
 		g.Watches = pathsFromSpecs(g.WatchPaths)
-		g.Mounts = pathsFromSpecs(g.MountPaths)
 		g.Runtime = cfgval.String(paths["runtime"])
 		g.State = cfgval.String(paths["state"])
 		g.Templates = cfgval.String(paths["templates"])
@@ -235,7 +231,6 @@ func applyPathDirOverride(g *Global, overrides map[string][]string) {
 	apply("storages", &g.Storages, &g.StoragePaths)
 	apply("networks", &g.Networks, &g.NetworkPaths)
 	apply("watches", &g.Watches, &g.WatchPaths)
-	apply("mounts", &g.Mounts, &g.MountPaths)
 }
 
 // absOverrideDirs cleans an override list, making relative entries absolute
@@ -268,7 +263,6 @@ func resolveConfigPaths(globalPath string, g *Global) {
 	g.Storages = resolvePathList(base, g.Storages)
 	g.Networks = resolvePathList(base, g.Networks)
 	g.Watches = resolvePathList(base, g.Watches)
-	g.Mounts = resolvePathList(base, g.Mounts)
 	g.CatalogPaths = resolvePathSpecs(base, g.CatalogPaths)
 	g.ServicePaths = resolvePathSpecs(base, g.ServicePaths)
 	g.AppPaths = resolvePathSpecs(base, g.AppPaths)
@@ -276,7 +270,6 @@ func resolveConfigPaths(globalPath string, g *Global) {
 	g.StoragePaths = resolvePathSpecs(base, g.StoragePaths)
 	g.NetworkPaths = resolvePathSpecs(base, g.NetworkPaths)
 	g.WatchPaths = resolvePathSpecs(base, g.WatchPaths)
-	g.MountPaths = resolvePathSpecs(base, g.MountPaths)
 	if g.Runtime != "" {
 		g.Runtime = resolveConfigPath(base, g.Runtime)
 	}
@@ -464,8 +457,8 @@ func (c *Config) loadGlobalFragmentDir(dir string, section string, recursive boo
 	return c.loadGlobalFragmentDirEntries(dir, section, recursive)
 }
 
-func (c *Config) loadMountDir(dir string, recursive bool) error {
-	return c.loadMountDirEntries(dir, recursive)
+func (c *Config) loadStorageDir(dir string, recursive bool) error {
+	return c.loadStorageDirEntries(dir, recursive)
 }
 
 func (c *Config) loadServiceDirEntries(dir string, recursive bool) error {
@@ -603,13 +596,13 @@ func (c *Config) loadGlobalFragmentDirEntries(dir string, section string, recurs
 	return nil
 }
 
-func (c *Config) loadMountDirEntries(dir string, recursive bool) error {
+func (c *Config) loadStorageDirEntries(dir string, recursive bool) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return fmt.Errorf("read mount config dir %s: %w", dir, err)
+		return fmt.Errorf("read storage config dir %s: %w", dir, err)
 	}
 
 	var names []string
@@ -631,7 +624,7 @@ func (c *Config) loadMountDirEntries(dir string, recursive bool) error {
 		if err != nil {
 			return err
 		}
-		if err := assignKind(doc, kindMount); err != nil {
+		if err := assignKind(doc, kindStorage); err != nil {
 			return err
 		}
 		c.add(doc)
@@ -640,7 +633,7 @@ func (c *Config) loadMountDirEntries(dir string, recursive bool) error {
 		return nil
 	}
 	for _, name := range subdirs {
-		if err := c.loadMountDirEntries(filepath.Join(dir, name), recursive); err != nil {
+		if err := c.loadStorageDirEntries(filepath.Join(dir, name), recursive); err != nil {
 			return err
 		}
 	}
@@ -804,8 +797,8 @@ func (c *Config) add(doc *Document) {
 		indexDocument(c.Patterns, &c.PatternNames, doc)
 	case kindService:
 		indexDocument(c.Services, &c.ServiceNames, doc)
-	case kindMount:
-		indexDocument(c.Mounts, &c.MountNames, doc)
+	case kindStorage:
+		indexDocument(c.Storages, &c.StorageNames, doc)
 	}
 	c.docs = append(c.docs, doc)
 }

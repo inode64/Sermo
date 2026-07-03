@@ -36,8 +36,6 @@ paths:
     - networks
   watches:
     - watches
-  mounts:
-    - mounts
 
   # Keep local runs out of /run and /var/lib.
   runtime: /tmp/sermo-dev/run

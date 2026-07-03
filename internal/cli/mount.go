@@ -8,9 +8,11 @@ import (
 	"sort"
 
 	"sermo/internal/app"
+	"sermo/internal/cfgval"
 	"sermo/internal/config"
 	"sermo/internal/locks"
 	"sermo/internal/mountctl"
+	"sermo/internal/state"
 )
 
 func (a App) runMount(ctx context.Context, opts options) int {
@@ -53,6 +55,7 @@ func (a App) runUmount(ctx context.Context, opts options) int {
 	}
 	controller := a.mountController(cfg, opts)
 	res, err := controller.Release(ctx, spec)
+	a.syncStorageMountMonitoring(opts, cfg, spec.Name, "umount", err == nil && res.Status == "ok")
 	if err != nil {
 		return a.printMountResult(opts, res, err)
 	}
@@ -70,6 +73,7 @@ func (a App) runMountAcquire(ctx context.Context, opts options, target string) i
 	}
 	controller := a.mountController(cfg, opts)
 	res, err := controller.Acquire(ctx, spec)
+	a.syncStorageMountMonitoring(opts, cfg, spec.Name, "mount", err == nil && res.Status == "ok")
 	if err != nil {
 		return a.printMountResult(opts, res, err)
 	}
@@ -104,15 +108,15 @@ func (a App) runMountList(opts options) int {
 		return code
 	}
 	controller := a.mountController(cfg, opts)
-	names := append([]string(nil), cfg.MountNames...)
+	names := cfg.StorageMountNames()
 	sort.Strings(names)
 	var statuses []mountctl.Status
 	for _, name := range names {
-		resolved, errs := cfg.ResolveMount(name)
+		resolved, errs := cfg.ResolveStorage(name)
 		if len(errs) > 0 {
 			continue
 		}
-		status, err := controller.ReadStatus(mountctl.SpecFromTree(name, resolved.Tree))
+		status, err := controller.ReadStatus(mountctl.SpecFromStorageTree(name, resolved.Tree))
 		if err == nil {
 			statuses = append(statuses, status)
 		}
@@ -133,7 +137,7 @@ func (a App) runMountList(opts options) int {
 
 func (a App) mountSpec(opts options, cfg *config.Config, target string) (mountctl.Spec, int) {
 	if filepath.IsAbs(target) {
-		if name := cfg.MountNameByPath(target); name != "" {
+		if name := cfg.StorageNameByPath(target); name != "" {
 			return a.configuredMountSpec(opts, cfg, name)
 		}
 		return mountctl.EphemeralSpec(target), exitSuccess
@@ -142,16 +146,20 @@ func (a App) mountSpec(opts options, cfg *config.Config, target string) (mountct
 }
 
 func (a App) configuredMountSpec(opts options, cfg *config.Config, name string) (mountctl.Spec, int) {
-	if _, ok := cfg.Mounts[name]; !ok {
+	if _, ok := cfg.Storages[name]; !ok {
 		a.reportError(opts, fmt.Sprintf("unknown mount %q", name))
 		return mountctl.Spec{}, exitRuntimeError
 	}
-	resolved, errs := cfg.ResolveMount(name)
+	resolved, errs := cfg.ResolveStorage(name)
 	if len(errs) > 0 {
-		a.printIssues(opts, scopedIssues("mount "+name, errs))
+		a.printIssues(opts, scopedIssues("storage "+name, errs))
 		return mountctl.Spec{}, exitConfigInvalid
 	}
-	return mountctl.SpecFromTree(name, resolved.Tree), exitSuccess
+	if _, ok := resolved.Tree["mount"].(map[string]any); !ok {
+		a.reportError(opts, fmt.Sprintf("storage %q has no mount block", name))
+		return mountctl.Spec{}, exitRuntimeError
+	}
+	return mountctl.SpecFromStorageTree(name, resolved.Tree), exitSuccess
 }
 
 func (a App) mountController(cfg *config.Config, opts options) mountctl.Controller {
@@ -170,6 +178,54 @@ func (a App) mountController(cfg *config.Config, opts options) mountctl.Controll
 		return c
 	}
 	return mountctl.Controller{Runtime: cfg.Global.RuntimeDir(), Runner: a.Runner, ResolveUser: lookup.ResolveUser, UserLookup: lookup, CommandTimeout: opts.timeout}
+}
+
+func (a App) syncStorageMountMonitoring(opts options, cfg *config.Config, storage, action string, resultOK bool) {
+	monitorMode, disabled, ok := storageMountWatchConfig(cfg, storage)
+	if !ok {
+		return
+	}
+	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	if err != nil {
+		msg := fmt.Sprintf("storage mount monitoring unavailable: %v", err)
+		fmt.Fprintf(a.Stderr, "warning: %s\n", msg)
+		a.recordAccess(cfg, action+"-monitor", storage, "error", msg)
+		return
+	}
+	defer store.Close()
+	change, err := app.SyncStorageMountMonitoring(store, storage, action, resultOK, monitorMode, disabled, state.SourceCLIMountUmount, state.SourceCLI)
+	if err != nil {
+		msg := err.Error()
+		fmt.Fprintf(a.Stderr, "warning: %s\n", msg)
+		a.recordAccess(cfg, action+"-monitor", storage, "error", msg)
+		return
+	}
+	if change.Changed {
+		a.recordAccess(cfg, change.Action, storage, "ok", change.Message)
+	}
+}
+
+func storageMountWatchConfig(cfg *config.Config, storage string) (monitorMode string, disabled bool, ok bool) {
+	if cfg == nil {
+		return "", false, false
+	}
+	resolved, errs := cfg.ResolveStorage(storage)
+	if len(errs) > 0 || resolved.Tree == nil {
+		return "", false, false
+	}
+	if _, hasCapacity := resolved.Tree["capacity"].(map[string]any); !hasCapacity {
+		return "", false, false
+	}
+	watches, _ := cfg.ResolveWatches()
+	entry, _ := watches[storage].(map[string]any)
+	if entry == nil {
+		return "", false, false
+	}
+	check, _ := entry["check"].(map[string]any)
+	if cfgval.AsString(check["type"]) != "storage" {
+		return "", false, false
+	}
+	return config.MonitorMode(entry), cfgval.Disabled(entry), true
 }
 
 func (a App) printMountResult(opts options, res mountctl.Result, err error) int {

@@ -40,9 +40,8 @@ and the invariants below, and update this file in the same change.
 4. **Batch.** When more than one target was selected, ask once whether to apply
    the following shared answers to all of them (`Prompt.Confirm`).
 5. **Monitor state.** `Prompt.AskMonitorState` → `monitor: enabled | disabled |
-   previous`. Mount units are the exception: a mount document is operated by
-   `sermoctl mount|umount`, not monitored by `sermod`, so it does not ask or
-   write `monitor:`.
+   previous`. Mount-only storage entries are operated by `sermoctl mount|umount`;
+   when they do not declare `capacity:`, they do not ask or write `monitor:`.
 6. **Interval.** `Prompt.AskInterval` → `interval:` (blank inherits the global
    engine interval). Steps 5–6 are `Prompt.AskMonitoring`; mount units skip this
    for the same reason.
@@ -147,15 +146,14 @@ The service, Docker and VM wizards write new generated service files
 under a `services/` directory loaded by `paths.services`.
 
 All wizard output is one target per file. The volume wizard generates one
-storage **watch fragment** per mounted storage filesystem under the `storages/`
-watch directory, including local block devices and network/distributed
-filesystems such as NFS, Ceph and ZFS. It does not offer pseudo/control
-filesystems such as `rpc_pipefs`. Each fragment keeps the top-level `watches:`
-map but contains only the generated watch for that target.
-First-class mount units are different: `sermoctl wizard mount` reads
-`/etc/fstab`, writes one mount file per target under `paths.mounts`
-(default `/etc/sermo/mounts`) and they are operated with
-`sermoctl mount|umount`.
+storage document per mounted storage filesystem under the `storages/` directory,
+including local block devices and network/distributed filesystems such as NFS,
+Ceph and ZFS. It does not offer pseudo/control filesystems such as `rpc_pipefs`.
+Each document uses `capacity:` for the generated storage check.
+First-class mount units use the same storage surface: `sermoctl wizard mount`
+reads `/etc/fstab`, writes one storage file with a `mount:` block per target
+under `paths.storages` (default `/etc/sermo/storages`) and they are operated
+with `sermoctl mount|umount`.
 
 ## Adding a new wizard
 
@@ -163,14 +161,15 @@ First-class mount units are different: `sermoctl wizard mount` reads
 2. Detect targets and select with `MultiChoose` (step 2). No name prompts.
 3. For monitored entries (watches and services), gather monitor + interval with
    `Prompt.AskMonitoring`; inject with `Monitoring.apply` (steps 5–6). Batch
-   them with `Prompt.Confirm` when >1. Non-monitored config such as mount
-   documents must skip these fields because validation rejects them.
+   them with `Prompt.Confirm` when >1. Non-monitored config such as
+   storage documents with only a `mount:` block must skip these fields because
+   validation rejects them.
 4. Ask notifiers (if any) through `chooseNotifiers` (step 7) — never duplicate
    its `none`/`default` handling. If the assistant emits watch actions, use
    `Prompt.AskWatchDryRun` instead of hand-rolling `dry_run`.
 5. Register it in `registry` (`internal/assist/assist.go`).
 6. If it has host targets, extend `detectedTargetKeys` and the cleanup path for
    its output type (`parseWatchFile`/`planWizardWatchDeletes` for watch
-   fragments, `planStaleMountDeletes` for mount files, or the service cleanup
-   target helpers for service files) so step-9 cleanup works.
+   fragments, `planStaleMountDeletes` for storage files with a `mount:` block,
+   or the service cleanup target helpers for service files) so step-9 cleanup works.
 7. Add an assistant test plus a case in `contract_test.go`.

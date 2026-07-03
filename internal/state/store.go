@@ -32,12 +32,14 @@ const Filename = "sermo.db"
 
 // Sources record who last changed a monitoring state row, for inspection.
 const (
-	SourceConfig        = "config"          // daemon applied an entry's `monitor` flag
-	SourceCLI           = "cli"             // operator ran monitor/unmonitor
-	SourceDaemon        = "daemon"          // daemon changed it autonomously
-	SourceWeb           = "web"             // operator used the web UI
-	SourceCLIManualStop = "cli-manual-stop" // CLI stop paused monitoring for later restore
-	SourceWebManualStop = "web-manual-stop" // Web UI stop paused monitoring for later restore
+	SourceConfig         = "config"           // daemon applied an entry's `monitor` flag
+	SourceCLI            = "cli"              // operator ran monitor/unmonitor
+	SourceDaemon         = "daemon"           // daemon changed it autonomously
+	SourceWeb            = "web"              // operator used the web UI
+	SourceCLIManualStop  = "cli-manual-stop"  // CLI stop paused monitoring for later restore
+	SourceWebManualStop  = "web-manual-stop"  // Web UI stop paused monitoring for later restore
+	SourceCLIMountUmount = "cli-mount-umount" // CLI umount paused a storage watch for later mount restore
+	SourceWebMountUmount = "web-mount-umount" // Web UI umount paused a storage watch for later mount restore
 )
 
 // IsManualStopSource reports whether a paused monitoring row was created by a
@@ -45,6 +47,18 @@ const (
 func IsManualStopSource(source string) bool {
 	switch source {
 	case SourceCLIManualStop, SourceWebManualStop:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsMountUmountSource reports whether a paused watch row was created by a
+// successful storage umount and should be restored after a later successful
+// mount.
+func IsMountUmountSource(source string) bool {
+	switch source {
+	case SourceCLIMountUmount, SourceWebMountUmount:
 		return true
 	default:
 		return false

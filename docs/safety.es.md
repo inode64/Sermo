@@ -201,8 +201,9 @@ Ciclo de vida:
 
 ## Operaciones de montaje
 
-Las unidades de montaje (cargadas desde `paths.mounts`, por defecto
-`/etc/sermo/mounts`) son acciones manuales del operador expuestas por
+Las unidades de montaje (cargadas desde documentos de storage bajo
+`paths.storages`, por defecto `/etc/sermo/storages`, cuando definen `mount:`)
+son acciones manuales del operador expuestas por
 `sermoctl mount|umount` y por el panel **Mount units** de la interfaz web; no
 son remediación del ciclo del daemon. Aun así usan la misma postura de
 seguridad:
@@ -212,12 +213,12 @@ seguridad:
   construye un comando de shell a partir de YAML.
 - Cada objetivo tiene un lock de operación bajo `<paths.runtime>/mounts/ops`, de modo que dos
   llamadores no puedan competir por el mismo montaje.
-- Con `refcount: true` (el valor por defecto), `mount` incrementa un contador de runtime y
+- Con `mount.refcount: true` (el valor por defecto), `mount` incrementa un contador de runtime y
   `umount` lo decrementa; el desmontaje real se intenta solo cuando el contador
   llega a cero.
 - Los desmontajes ocupados se reportan con los procesos que usan el montaje. Sermo no los
-  señaliza a menos que `umount.allow_sigkill: true` o `stop_policy.force_kill:
-  true` esté configurado explícitamente.
+  señaliza a menos que `mount.umount.allow_sigkill: true` o
+  `mount.stop_policy.force_kill: true` esté configurado explícitamente.
 - La interfaz web puede enviar una alerta TTY nativa a los usuarios con sesión
   que sean propietarios de bloqueadores actuales. Usa el mismo notifier TTY en
   Go que las notificaciones normales; no ejecuta `wall`, `write` ni un shell.

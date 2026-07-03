@@ -11,6 +11,7 @@ import (
 	"sermo/internal/mountctl"
 	"sermo/internal/notify"
 	"sermo/internal/process"
+	"sermo/internal/state"
 	"sermo/internal/web"
 )
 
@@ -110,20 +111,26 @@ func (b *WebBackend) mountSpec(name string) (mountctl.Spec, bool, string) {
 	if b.cfg == nil {
 		return mountctl.Spec{}, false, "no configuration loaded"
 	}
-	resolved, errs := b.cfg.ResolveMount(name)
+	resolved, errs := b.cfg.ResolveStorage(name)
 	if len(errs) > 0 {
 		return mountctl.Spec{}, false, errs[0]
 	}
-	return mountctl.SpecFromTree(name, resolved.Tree), true, ""
+	if _, ok := resolved.Tree["mount"].(map[string]any); !ok {
+		return mountctl.Spec{}, false, "storage " + name + " has no mount block"
+	}
+	return mountctl.SpecFromStorageTree(name, resolved.Tree), true, ""
 }
 
 // Mounts returns configured fstab-backed mount units with live mount/refcount status.
 func (b *WebBackend) Mounts(ctx context.Context) []web.Mount {
-	if b.cfg == nil || len(b.cfg.MountNames) == 0 {
+	if b.cfg == nil {
 		return nil
 	}
 	ctrl := b.mountController()
-	names := append([]string(nil), b.cfg.MountNames...)
+	names := b.cfg.StorageMountNames()
+	if len(names) == 0 {
+		return nil
+	}
 	sort.Strings(names)
 	type mountRow struct {
 		name   string
@@ -135,11 +142,11 @@ func (b *WebBackend) Mounts(ctx context.Context) []web.Mount {
 	specs := make([]mountctl.Spec, 0, len(names))
 	mounted := map[string]bool{}
 	for _, name := range names {
-		resolved, errs := b.cfg.ResolveMount(name)
+		resolved, errs := b.cfg.ResolveStorage(name)
 		if len(errs) > 0 {
 			continue
 		}
-		spec := mountctl.SpecFromTree(name, resolved.Tree)
+		spec := mountctl.SpecFromStorageTree(name, resolved.Tree)
 		status, err := ctrl.ReadStatus(spec)
 		rows = append(rows, mountRow{name: name, spec: spec, status: status, err: err})
 		if err != nil {
@@ -346,7 +353,45 @@ func (b *WebBackend) MountAction(ctx context.Context, name, action string, opts 
 		return web.MountActionResult{OK: false, Name: spec.Name, Path: spec.Path, Action: action, Message: "unknown mount action " + action}
 	}
 	b.invalidateMountUsage()
-	return b.mountActionResult(spec, res, err)
+	out := b.mountActionResult(spec, res, err)
+	b.syncStorageMountMonitoring(spec.Name, action, out.OK)
+	return out
+}
+
+func (b *WebBackend) syncStorageMountMonitoring(storage, action string, resultOK bool) {
+	w, ok := b.watches[storage]
+	if !ok || w.checkType != "storage" || !b.storageHasCapacity(storage) {
+		return
+	}
+	change, err := SyncStorageMountMonitoring(
+		b.store,
+		storage,
+		action,
+		resultOK,
+		w.monitorMode,
+		w.disabled,
+		state.SourceWebMountUmount,
+		state.SourceWeb,
+	)
+	if err != nil {
+		b.emitWatchMonitorEvent(storage, action, "error", "", err.Error())
+		return
+	}
+	if change.Changed {
+		b.emitWatchMonitorEvent(storage, change.Action, "action", "ok", change.Message)
+	}
+}
+
+func (b *WebBackend) storageHasCapacity(name string) bool {
+	if b.cfg == nil {
+		return false
+	}
+	resolved, errs := b.cfg.ResolveStorage(name)
+	if len(errs) > 0 || resolved.Tree == nil {
+		return false
+	}
+	_, ok := resolved.Tree["capacity"].(map[string]any)
+	return ok
 }
 
 // AlertMountUsers sends a native TTY warning to users currently blocking a mount.

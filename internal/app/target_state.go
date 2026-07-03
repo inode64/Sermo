@@ -61,10 +61,10 @@ func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, ob
 
 // WatchState folds config, monitor state and the last known watch error into the
 // operator-facing health state shown for host watches. Watches are not
-// service-manager units, so they do not have running/stopped states; monitored
-// versus unmonitored is reported separately.
+// service-manager units, so a paused watch is disabled from the active checking
+// set rather than started/stopped.
 func WatchState(enabled, monitored, failed bool, observed bool) string {
-	if !enabled {
+	if !enabled || !monitored {
 		return TargetStateDisabled
 	}
 	if monitored && !observed {

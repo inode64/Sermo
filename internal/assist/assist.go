@@ -8,7 +8,7 @@ type Volume struct {
 }
 
 // MountCandidate is an fstab-backed mount target the mount assistant can
-// register as a first-class kind: mount unit.
+// register as a storage target with a mount block.
 type MountCandidate struct {
 	Path    string
 	Source  string

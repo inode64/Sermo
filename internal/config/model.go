@@ -26,7 +26,7 @@ const (
 	kindLibrary  = "lib"
 	kindService  = "service"
 	kindPatterns = "patterns"
-	kindMount    = "mount"
+	kindStorage  = "storage"
 )
 
 // Catalog categories mirror the catalog subdirectory a definition is loaded
@@ -272,7 +272,6 @@ type Global struct {
 	Storages      []string
 	Networks      []string
 	Watches       []string
-	Mounts        []string
 	CatalogPaths  []PathSpec
 	ServicePaths  []PathSpec
 	AppPaths      []PathSpec
@@ -280,7 +279,6 @@ type Global struct {
 	StoragePaths  []PathSpec
 	NetworkPaths  []PathSpec
 	WatchPaths    []PathSpec
-	MountPaths    []PathSpec
 	Runtime       string
 	State         string
 	Templates     string
@@ -478,7 +476,7 @@ type Config struct {
 	Libraries       map[string]*Document // kind lib (shared libraries)
 	Patterns        map[string]*Document // kind patterns (output-analysis rule sets)
 	Services        map[string]*Document // kind service (enabled instances)
-	Mounts          map[string]*Document // kind mount (fstab-backed mount units)
+	Storages        map[string]*Document // kind storage (capacity and optional fstab-backed mount unit)
 	docs            []*Document          // every document in load order
 
 	materializedNameCollisions []materializedNameCollision
@@ -491,7 +489,7 @@ type Config struct {
 	LibraryNames        []string
 	PatternNames        []string
 	ServiceNames        []string
-	MountNames          []string
+	StorageNames        []string
 }
 
 type materializedNameCollision struct {
