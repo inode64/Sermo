@@ -232,21 +232,23 @@ Section id: `mounts-section`
 | --- | --- |
 | Title | `Mount units` plus total count |
 | Visibility | hidden when no configured mount units are returned |
+| Controls | search by mount text, group dropdown when more than one group exists, state filters (`all`, `active`, `inactive`) |
 
 Columns:
 
 | Column | Meaning |
 | --- | --- |
 | Name | display name, falling back to mount name |
+| Group | mount category/group label |
 | Path | configured mount path |
 | Mounted | live mount state |
 | Refcount | Sermo runtime refcount, or `off` |
 | Processes | compact list of processes currently using the mount path |
 | Users | unique users for those processes |
-| Source | mount source label, currently `fstab` |
 | State | active/inactive/error pill |
 | Actions | admin-only `mount`; when mounted, `umount`, `alert`, and `kill+umount` |
 
+The column headers except Actions are sortable.
 `GET /api/mounts` includes a cached read-only blocker summary for the table.
 Before `umount`, `alert` or `kill+umount`, the UI asks
 `POST /api/mounts/{name}/blockers` and shows a fresh process list for the path.
