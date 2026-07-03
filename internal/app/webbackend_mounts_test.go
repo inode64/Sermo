@@ -94,6 +94,74 @@ func TestWebBackendMounts(t *testing.T) {
 	}
 }
 
+func TestWebBackendMountsIncludesUsageAndCaches(t *testing.T) {
+	now := time.Unix(100, 0)
+	calls := 0
+	cfg := mountTestConfig(t)
+	b, warns := NewWebBackend(cfg, Deps{
+		Now: func() time.Time { return now },
+		MountSampler: func() ([]checks.Mount, error) {
+			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
+		},
+		MountDiscoverUsers: func(path string) ([]process.Process, error) {
+			calls++
+			if path != "/mnt/backup" {
+				t.Fatalf("MountDiscoverUsers path = %q, want /mnt/backup", path)
+			}
+			return []process.Process{{
+				PID: 123, User: "backup", UID: 1000, Exe: "/usr/bin/rsync", ExeOK: true, Source: "mount",
+			}}, nil
+		},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	mounts := b.Mounts(context.Background())
+	if calls != 1 {
+		t.Fatalf("usage discovery calls = %d, want 1", calls)
+	}
+	if len(mounts) != 1 || len(mounts[0].Blockers) != 1 {
+		t.Fatalf("mounts = %+v, want one blocker", mounts)
+	}
+	if !mounts[0].Blockers[0].Killable || mounts[0].Blockers[0].User != "backup" {
+		t.Fatalf("blocker = %+v, want policy-killable backup user", mounts[0].Blockers[0])
+	}
+
+	mounts = b.Mounts(context.Background())
+	if calls != 1 || len(mounts) != 1 || len(mounts[0].Blockers) != 1 {
+		t.Fatalf("cached mounts = %+v calls=%d, want cache hit with one blocker", mounts, calls)
+	}
+	now = now.Add(mountUsageTTL + time.Nanosecond)
+	_ = b.Mounts(context.Background())
+	if calls != 2 {
+		t.Fatalf("usage discovery calls after ttl = %d, want 2", calls)
+	}
+}
+
+func TestWebBackendMountsReportsUsageError(t *testing.T) {
+	cfg := mountTestConfig(t)
+	b, warns := NewWebBackend(cfg, Deps{
+		MountSampler: func() ([]checks.Mount, error) {
+			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
+		},
+		MountDiscoverUsers: func(string) ([]process.Process, error) {
+			return nil, fmt.Errorf("proc scan failed")
+		},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	mounts := b.Mounts(context.Background())
+	if len(mounts) != 1 {
+		t.Fatalf("mounts = %+v, want one entry", mounts)
+	}
+	if mounts[0].State != "active" || mounts[0].BlockerError != "proc scan failed" {
+		t.Fatalf("mount = %+v, want active mount with blocker error", mounts[0])
+	}
+}
+
 func TestWebBackendMountBlockersMarksPolicyKillable(t *testing.T) {
 	cfg := mountTestConfig(t)
 	b, warns := NewWebBackend(cfg, Deps{

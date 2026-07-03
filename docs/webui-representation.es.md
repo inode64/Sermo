@@ -241,12 +241,15 @@ Columnas:
 | Path | ruta de montaje configurada |
 | Mounted | estado de montaje en vivo |
 | Refcount | refcount de runtime de Sermo, o `off` |
+| Processes | lista compacta de procesos que usan actualmente la ruta de montaje |
+| Users | usuarios únicos de esos procesos |
 | Source | etiqueta de origen del montaje, actualmente `fstab` |
 | State | insignia active/inactive/error |
 | Actions | `mount` solo para admin; cuando está montado, `umount`, `alert` y `kill+umount` |
 
+`GET /api/mounts` incluye un resumen read-only cacheado de blockers para la tabla.
 Antes de `umount`, `alert` o `kill+umount`, la UI consulta
-`POST /api/mounts/{name}/blockers` y muestra los procesos actuales que usan la
+`POST /api/mounts/{name}/blockers` y muestra una lista fresca de procesos para la
 ruta. `alert` envía un mensaje TTY nativo a los usuarios con sesión que bloquean
 el montaje. `kill+umount` requiere que la política del mount marque al menos un
 bloqueador actual como killable.

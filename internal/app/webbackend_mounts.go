@@ -14,6 +14,12 @@ import (
 	"sermo/internal/web"
 )
 
+// mountUsageTTL bounds the dashboard's process-usage scan for mount units. The
+// scan walks /proc/cwd, /proc/root and /proc/fd for every process, so dashboard
+// refreshes share one sample for a short window while still updating quickly
+// after users leave a mount.
+const mountUsageTTL = 15 * time.Second
+
 // MountAlertDelivery reports which mount-blocking users were targeted by a
 // console alert.
 type MountAlertDelivery struct {
@@ -113,14 +119,21 @@ func (b *WebBackend) mountSpec(name string) (mountctl.Spec, bool, string) {
 
 // Mounts returns configured fstab-backed mount units with live mount/refcount status.
 func (b *WebBackend) Mounts(ctx context.Context) []web.Mount {
-	_ = ctx
 	if b.cfg == nil || len(b.cfg.MountNames) == 0 {
 		return nil
 	}
 	ctrl := b.mountController()
 	names := append([]string(nil), b.cfg.MountNames...)
 	sort.Strings(names)
-	out := make([]web.Mount, 0, len(names))
+	type mountRow struct {
+		name   string
+		spec   mountctl.Spec
+		status mountctl.Status
+		err    error
+	}
+	rows := make([]mountRow, 0, len(names))
+	specs := make([]mountctl.Spec, 0, len(names))
+	mounted := map[string]bool{}
 	for _, name := range names {
 		resolved, errs := b.cfg.ResolveMount(name)
 		if len(errs) > 0 {
@@ -128,31 +141,135 @@ func (b *WebBackend) Mounts(ctx context.Context) []web.Mount {
 		}
 		spec := mountctl.SpecFromTree(name, resolved.Tree)
 		status, err := ctrl.ReadStatus(spec)
+		rows = append(rows, mountRow{name: name, spec: spec, status: status, err: err})
 		if err != nil {
+			continue
+		}
+		specs = append(specs, spec)
+		if status.Mounted {
+			mounted[spec.Path] = true
+		}
+	}
+	usage, usageErrors := b.mountUsageCached(ctx, specs, mounted)
+	out := make([]web.Mount, 0, len(rows))
+	for _, row := range rows {
+		if row.err != nil {
 			out = append(out, web.Mount{
-				Name:        name,
-				DisplayName: spec.DisplayName,
-				Category:    spec.Category,
-				Path:        spec.Path,
+				Name:        row.name,
+				DisplayName: row.spec.DisplayName,
+				Category:    row.spec.Category,
+				Path:        row.spec.Path,
 				State:       "error",
-				Refcounted:  spec.Refcount,
-				Message:     err.Error(),
+				Refcounted:  row.spec.Refcount,
+				Message:     row.err.Error(),
 			})
 			continue
 		}
 		out = append(out, web.Mount{
-			Name:        status.Name,
-			DisplayName: spec.DisplayName,
-			Category:    spec.Category,
-			Path:        status.Path,
-			Mounted:     status.Mounted,
-			Refcount:    status.Refcount,
-			Source:      status.Source,
-			State:       status.State,
-			Refcounted:  spec.Refcount,
+			Name:         row.status.Name,
+			DisplayName:  row.spec.DisplayName,
+			Category:     row.spec.Category,
+			Path:         row.status.Path,
+			Mounted:      row.status.Mounted,
+			Refcount:     row.status.Refcount,
+			Source:       row.status.Source,
+			State:        row.status.State,
+			Refcounted:   row.spec.Refcount,
+			Blockers:     b.mountBlockers(row.spec, usage[row.spec.Path]),
+			BlockerError: usageErrors[row.spec.Path],
 		})
 	}
 	return out
+}
+
+func (b *WebBackend) mountUsageCached(ctx context.Context, specs []mountctl.Spec, mounted map[string]bool) (map[string][]process.Process, map[string]string) {
+	paths := mountedMountPaths(specs, mounted)
+	if len(paths) == 0 {
+		return nil, nil
+	}
+	now := b.webNow()
+	b.mountUsageMu.Lock()
+	defer b.mountUsageMu.Unlock()
+	if b.mountUsage != nil && now.Sub(b.mountUsageAt) < mountUsageTTL && mountUsageCovers(b.mountUsage, paths) {
+		return b.mountUsage, b.mountUsageErrors
+	}
+	usage := map[string][]process.Process{}
+	usageErrors := map[string]string{}
+	opCtx, cancel := b.mountContext(ctx)
+	defer cancel()
+	if b.mountUsers == nil {
+		byMount, err := mountctl.ProcessesByMount(opCtx, paths, b.userLookup)
+		if err != nil {
+			for _, path := range paths {
+				usageErrors[path] = err.Error()
+			}
+		}
+		usage = byMount
+	} else {
+		for _, path := range paths {
+			if err := opCtx.Err(); err != nil {
+				usageErrors[path] = err.Error()
+				continue
+			}
+			blockers, err := b.mountUsers(path)
+			if err != nil {
+				usageErrors[path] = err.Error()
+				continue
+			}
+			usage[path] = blockers
+		}
+	}
+	usage = ensureMountUsagePaths(usage, paths)
+	b.mountUsage = usage
+	b.mountUsageErrors = usageErrors
+	b.mountUsageAt = now
+	return usage, usageErrors
+}
+
+func ensureMountUsagePaths(usage map[string][]process.Process, paths []string) map[string][]process.Process {
+	if usage == nil {
+		usage = map[string][]process.Process{}
+	}
+	for _, path := range paths {
+		if _, ok := usage[path]; !ok {
+			usage[path] = nil
+		}
+	}
+	return usage
+}
+
+func mountedMountPaths(specs []mountctl.Spec, mounted map[string]bool) []string {
+	seen := map[string]struct{}{}
+	paths := make([]string, 0, len(specs))
+	for _, spec := range specs {
+		if !mounted[spec.Path] {
+			continue
+		}
+		if _, ok := seen[spec.Path]; ok {
+			continue
+		}
+		seen[spec.Path] = struct{}{}
+		paths = append(paths, spec.Path)
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+func mountUsageCovers(usage map[string][]process.Process, paths []string) bool {
+	for _, path := range paths {
+		if _, ok := usage[path]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func (b *WebBackend) invalidateMountUsage() {
+	b.mountUsageMu.Lock()
+	b.mountUsage = nil
+	b.mountUsageErrors = nil
+	b.mountUsageAt = time.Time{}
+	b.mountUsageMu.Unlock()
 }
 
 // MountBlockers reports processes currently using a configured mount unit.
@@ -228,6 +345,7 @@ func (b *WebBackend) MountAction(ctx context.Context, name, action string, opts 
 	default:
 		return web.MountActionResult{OK: false, Name: spec.Name, Path: spec.Path, Action: action, Message: "unknown mount action " + action}
 	}
+	b.invalidateMountUsage()
 	return b.mountActionResult(spec, res, err)
 }
 

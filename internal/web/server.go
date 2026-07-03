@@ -83,16 +83,18 @@ type Service struct {
 
 // Mount is a view of one configured fstab-backed mount unit for the dashboard.
 type Mount struct {
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name,omitempty"`
-	Category    string `json:"category,omitempty"`
-	Path        string `json:"path"`
-	Mounted     bool   `json:"mounted"`
-	Refcount    int    `json:"refcount"`
-	Source      string `json:"source,omitempty"`
-	State       string `json:"state"`
-	Refcounted  bool   `json:"refcounted"`
-	Message     string `json:"message,omitempty"` // set when status sampling failed
+	Name         string         `json:"name"`
+	DisplayName  string         `json:"display_name,omitempty"`
+	Category     string         `json:"category,omitempty"`
+	Path         string         `json:"path"`
+	Mounted      bool           `json:"mounted"`
+	Refcount     int            `json:"refcount"`
+	Source       string         `json:"source,omitempty"`
+	State        string         `json:"state"`
+	Refcounted   bool           `json:"refcounted"`
+	Message      string         `json:"message,omitempty"` // set when status sampling failed
+	Blockers     []MountBlocker `json:"blockers,omitempty"`
+	BlockerError string         `json:"blocker_error,omitempty"`
 }
 
 // MountBlocker is one process currently using a mount path.
