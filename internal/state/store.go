@@ -32,11 +32,24 @@ const Filename = "sermo.db"
 
 // Sources record who last changed a monitoring state row, for inspection.
 const (
-	SourceConfig = "config" // daemon applied an entry's `monitor` flag
-	SourceCLI    = "cli"    // operator ran monitor/unmonitor
-	SourceDaemon = "daemon" // daemon changed it autonomously
-	SourceWeb    = "web"    // operator used the web UI
+	SourceConfig        = "config"          // daemon applied an entry's `monitor` flag
+	SourceCLI           = "cli"             // operator ran monitor/unmonitor
+	SourceDaemon        = "daemon"          // daemon changed it autonomously
+	SourceWeb           = "web"             // operator used the web UI
+	SourceCLIManualStop = "cli-manual-stop" // CLI stop paused monitoring for later restore
+	SourceWebManualStop = "web-manual-stop" // Web UI stop paused monitoring for later restore
 )
+
+// IsManualStopSource reports whether a paused monitoring row was created by a
+// successful manual stop and should be restored after a later successful start.
+func IsManualStopSource(source string) bool {
+	switch source {
+	case SourceCLIManualStop, SourceWebManualStop:
+		return true
+	default:
+		return false
+	}
+}
 
 // migrations are applied in order; index i upgrades the schema from version i to
 // i+1. Never edit or reorder an existing entry once released — only append.

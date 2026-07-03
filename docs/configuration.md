@@ -790,8 +790,9 @@ CPU and IO rates need two cycles before the first rate point exists, while
 memory can render from the first process sample. Runtime metric buckets are
 pruned to the same 366-day (~1 year) retention window.
 
-Web-triggered monitor changes are recorded with source `web` in the state store
-(`cli`, `config` and `daemon` are the other values). The dashboard and
+Web-triggered monitor changes are recorded with source `web` in the state store;
+manual stops from the web UI or CLI use `web-manual-stop` / `cli-manual-stop`
+until a later successful start restores the previous monitored state. The dashboard and
 `GET /api/services` / `GET /api/watches` expose `state`, `monitor_source` and
 `monitor_changed_at` so a running/paused/stopped unmonitored service or an
 unmonitorized watch shows who paused it and when. Host watches do not have

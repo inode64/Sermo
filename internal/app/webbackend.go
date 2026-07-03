@@ -3022,7 +3022,7 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.
 
 	var r operation.Result
 	if opts.NoCascade || action == "reload" || action == "resume" || len(e.alsoApply) == 0 {
-		r = b.operationResult(ctx, name, action)
+		r = b.operationResultWithMonitor(ctx, name, action)
 	} else {
 		lookup := func(svc string) []string {
 			ent := b.entries[svc]
@@ -3032,7 +3032,7 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.
 			return ent.alsoApply
 		}
 		c := cascader{
-			op:     b.operationResult,
+			op:     b.operationResultWithMonitor,
 			lookup: lookup,
 			emit:   b.emit,
 			sleep:  time.Sleep,
@@ -3054,6 +3054,19 @@ func webActionResultFrom(r operation.Result, name, action string) web.ActionResu
 		msg = string(r.Status)
 	}
 	return web.ActionResult{OK: r.OK(), Message: msg}
+}
+
+func (b *WebBackend) operationResultWithMonitor(ctx context.Context, name, action string) operation.Result {
+	r := b.operationResult(ctx, name, action)
+	change, err := SyncManualActionMonitoring(b.store, name, action, r, state.SourceWebManualStop, state.SourceWeb)
+	if err != nil {
+		b.emitMonitorEvent(name, action, "error", "", err.Error())
+		return r
+	}
+	if change.Changed {
+		b.emitMonitorEvent(name, change.Action, "action", "ok", change.Message)
+	}
+	return r
 }
 
 func (b *WebBackend) operationResult(ctx context.Context, name, action string) operation.Result {
