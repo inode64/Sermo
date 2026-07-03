@@ -139,7 +139,7 @@ Use Sermo wizards and tools for configuration generation:
 
 - Prefer `sermoctl wizard service` for active services, and the matching Sermo wizard/tool for other explicitly requested target types.
 - Do not hand-write the initial service set when a Sermo wizard can generate it.
-- Keep generated config granular: one file per service, mount, notifier, storage watch, network watch, interface, VM, container, app or other target. Watch and notifier fragment files may contain `watches:` or `notifiers:`, but only one named entry.
+- Keep generated config granular: one file per service, storage target, notifier, network watch, interface, VM, container, app or other target. Storage files under `paths.storages` are storage documents; watch and notifier fragment files may contain `watches:` or `notifiers:`, but only one named entry.
 - If the wizard output needs adjustment, edit only the generated files under the remote `/tmp/sermo-remote-test-*` directory, then run `sermoctl config validate` again.
 - If an adjustment reveals a project/catalog bug, fix the local project and redeploy new `/tmp` artifacts instead of patching permanent remote host files.
 
@@ -201,9 +201,10 @@ Discover host resources with read-only probes chosen from the run-time inventory
 and the corresponding docs/schema. The discovery script must be data-driven from
 that inventory: adding a new host watch type to Sermo should require no edit to
 this skill before remote installation runs start considering it.
-- Generate one fragment per host watch under the matching temporary directory
-  loaded by `paths.storages`, `paths.networks` or `paths.watches`; every fragment
-  must contain a top-level `watches:` map with exactly one entry.
+- Generate one file per host watch under the matching temporary directory.
+  Storage targets loaded by `paths.storages` are storage documents with
+  `capacity:`; network and generic watch directories still contain a top-level
+  `watches:` map with exactly one entry.
 - Include baseline watches for every safely discoverable host resource on every
   complete config according to the run-time inventory. Do not use a hardcoded
   allow-list. For feature-dependent watches, generate entries only when the
@@ -218,38 +219,37 @@ this skill before remote installation runs start considering it.
   `device` or `options` as predicates; they are result data only.
 
 ```yaml
-watches:
-  storage-mnt-backup:
-    check:
-      type: storage
-      path: /mnt/backup
-      mounted: true
-      free_pct: { op: "<", value: "10%" }
+name: storage-mnt-backup
+path: /mnt/backup
+capacity:
+  mounted: true
+  free_pct: { op: "<", value: "10%" }
 ```
 
   If real notification delivery is part of the requested remote installation,
   attach the selected notifier or inherit the configured global notify. If the
   run is only validating routing, use `then.dry_run: true`; otherwise keep the
   watch alert-only or monitor-only according to the requested mode.
-- Include mount files for network and USB mount targets that are declared
-  in `/etc/fstab`, writing one file per target under `paths.mounts`. Detect them
+- Include `mount:` blocks for network and USB mount targets that are declared
+  in `/etc/fstab`, writing one storage file per target under `paths.storages`. Detect them
   with read-only probes (`findmnt --fstab`, `/etc/fstab`, `lsblk`, `/dev/disk/by-*`
   and `/proc/self/mountinfo`); never mount or unmount them during discovery.
   Network candidates include NFS/NFS4, CIFS/SMB, SSHFS/fuse.sshfs, Ceph,
   GlusterFS and similar remote storage. USB candidates include removable devices
   or filesystems whose source resolves through USB/removable block devices.
-  Keep the mount document fstab-backed and policy-only:
+  Keep the storage document fstab-backed and policy-only for mount operations:
 
 ```yaml
-# <paths.mounts>/mount-mnt-backup.yml  → mount
+# <paths.storages>/mount-mnt-backup.yml  → storage
 name: mount-mnt-backup
 display_name: Backup mount
 category: storage
 path: /mnt/backup
-refcount: true
-umount:
-  allow_sigkill: false
-  allow_lazy: false
+mount:
+  refcount: true
+  umount:
+    allow_sigkill: false
+    allow_lazy: false
 ```
 
   Do not write `source`, `fstype`, `options` or class metadata into the mount

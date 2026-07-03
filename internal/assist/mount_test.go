@@ -25,12 +25,16 @@ func TestMountAssistantGeneratesMountUnit(t *testing.T) {
 	if !ok {
 		t.Fatalf("mount-mnt-backup missing: %+v", res.Mounts)
 	}
-	if body["path"] != "/mnt/backup" || body["refcount"] != true {
+	mount, ok := body["mount"].(map[string]any)
+	if !ok {
+		t.Fatalf("mount block missing: %+v", body)
+	}
+	if body["path"] != "/mnt/backup" || mount["refcount"] != true {
 		t.Fatalf("mount body = %+v, want path/refcount", body)
 	}
-	umount, ok := body["umount"].(map[string]any)
+	umount, ok := mount["umount"].(map[string]any)
 	if !ok || umount["allow_sigkill"] != false || umount["allow_lazy"] != false {
-		t.Fatalf("umount policy = %+v, want safe defaults", body["umount"])
+		t.Fatalf("umount policy = %+v, want safe defaults", mount["umount"])
 	}
 }
 
@@ -53,8 +57,9 @@ func TestMountAssistantBatchSettings(t *testing.T) {
 	}
 	for name, raw := range res.Mounts {
 		body := raw.(map[string]any)
-		if body["refcount"] != false {
-			t.Fatalf("%s refcount = %v, want false", name, body["refcount"])
+		mount := body["mount"].(map[string]any)
+		if mount["refcount"] != false {
+			t.Fatalf("%s refcount = %v, want false", name, mount["refcount"])
 		}
 	}
 }

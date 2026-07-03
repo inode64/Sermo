@@ -15,30 +15,35 @@ import (
 	"sermo/internal/config"
 )
 
-const mountsConfigDir = "mounts"
+const storagesConfigDir = "storages"
 
-// writeWizardMounts renders generated kind: mount files under paths.mounts and
-// ensures that directory is loaded as a mount config directory.
+// writeWizardMounts renders generated storage files under paths.storages and
+// ensures that directory is loaded as a storage config directory.
 func (a App) writeWizardMounts(p *assist.Prompt, opts options, globalPath string, cfg *config.Config, res assist.Result, env assist.Env) int {
 	docs := map[string]map[string]any{}
 	paths := map[string]string{}
 	for name, body := range res.Mounts {
-		if _, dup := cfg.Mounts[name]; dup {
-			return a.fail(opts, "mount "+name+" is already configured; not overwriting")
+		if _, dup := cfg.Storages[name]; dup {
+			return a.fail(opts, "storage "+name+" is already configured; not overwriting")
 		}
-		// The mounts directory determines the kind on load, so no `kind:` is written.
-		doc := map[string]any{"name": name}
+		// The storages directory determines the kind on load, so no `kind:` is written.
+		doc := wizardMountStorageDoc(name, body)
 		if b, ok := body.(map[string]any); ok {
 			for k, v := range b {
-				doc[k] = v
+				switch k {
+				case "refcount", "umount", "stop_policy", "mount":
+					// Moved into mount: below.
+				default:
+					doc[k] = v
+				}
 			}
 		}
 		path := filepath.Clean(cfgval.String(doc["path"]))
 		if path == "." || path == "" {
 			return a.fail(opts, "mount "+name+" has no path; not writing")
 		}
-		if existing := cfg.MountNameByPath(path); existing != "" {
-			return a.fail(opts, fmt.Sprintf("mount path %s is already configured by %s; not overwriting", path, existing))
+		if existing := cfg.StorageNameByPath(path); existing != "" {
+			return a.fail(opts, fmt.Sprintf("storage path %s is already configured by %s; not overwriting", path, existing))
 		}
 		if prev := paths[path]; prev != "" {
 			return a.fail(opts, fmt.Sprintf("mount path %s selected more than once (%s and %s)", path, prev, name))
@@ -51,9 +56,9 @@ func (a App) writeWizardMounts(p *assist.Prompt, opts options, globalPath string
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("render mounts: %v", err))
 	}
-	fmt.Fprintf(a.Stdout, "\nGenerated mount units (%s):\n\n%s\n", res.Summary, preview)
-	if !p.Confirm("Write these mount files and enable them?", false) {
-		fmt.Fprintln(a.Stdout, "Not written — paste the blocks above into files under a paths.mounts directory.")
+	fmt.Fprintf(a.Stdout, "\nGenerated storage mount units (%s):\n\n%s\n", res.Summary, preview)
+	if !p.Confirm("Write these storage files and enable them?", false) {
+		fmt.Fprintln(a.Stdout, "Not written — paste the blocks above into files under a paths.storages directory.")
 		return exitSuccess
 	}
 
@@ -71,14 +76,36 @@ func (a App) writeWizardMounts(p *assist.Prompt, opts options, globalPath string
 		return a.fail(opts, err.Error())
 	}
 	if len(deletes) > 0 {
-		fmt.Fprintf(a.Stdout, "Deleted %d stale mount file(s).\n", len(deletes))
+		fmt.Fprintf(a.Stdout, "Deleted %d stale storage file(s).\n", len(deletes))
 	}
-	fmt.Fprintf(a.Stdout, "Wrote %d mount file(s) under %s. Run `sermoctl daemon reload` to apply.\n", written, dir)
+	fmt.Fprintf(a.Stdout, "Wrote %d storage file(s) under %s. Run `sermoctl daemon reload` to apply.\n", written, dir)
 	return exitSuccess
 }
 
+func wizardMountStorageDoc(name string, body any) map[string]any {
+	doc := map[string]any{"name": name}
+	mount := map[string]any{}
+	if b, ok := body.(map[string]any); ok {
+		for _, key := range []string{"refcount", "umount", "stop_policy"} {
+			if v, present := b[key]; present {
+				mount[key] = v
+			}
+		}
+		if existing, ok := b["mount"].(map[string]any); ok {
+			for k, v := range existing {
+				mount[k] = v
+			}
+		}
+	}
+	if len(mount) == 0 {
+		mount["refcount"] = true
+	}
+	doc["mount"] = mount
+	return doc
+}
+
 func wizardMountTargetDir(globalPath string) string {
-	return filepath.Join(filepath.Dir(filepath.Clean(globalPath)), mountsConfigDir)
+	return filepath.Join(filepath.Dir(filepath.Clean(globalPath)), storagesConfigDir)
 }
 
 func writeMountFiles(globalPath string, docs map[string]map[string]any) (string, int, error) {
@@ -87,7 +114,7 @@ func writeMountFiles(globalPath string, docs map[string]map[string]any) (string,
 	if err != nil {
 		return "", 0, err
 	}
-	if _, err := ensureMountDir(globalPath, mountsConfigDir, targetDir); err != nil {
+	if _, err := ensureStorageDir(globalPath, storagesConfigDir, targetDir); err != nil {
 		return "", 0, err
 	}
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
@@ -111,7 +138,7 @@ func planMountFiles(targetDir string, docs map[string]map[string]any) ([]planned
 	for _, name := range slices.Sorted(maps.Keys(docs)) {
 		file := filepath.Join(targetDir, watchConfigFileName(name))
 		if _, err := os.Stat(file); err == nil {
-			return nil, fmt.Errorf("mount file %s already exists; not overwriting", file)
+			return nil, fmt.Errorf("storage file %s already exists; not overwriting", file)
 		} else if !os.IsNotExist(err) {
 			return nil, fmt.Errorf("stat %s: %w", file, err)
 		}
@@ -124,7 +151,7 @@ func planMountFiles(targetDir string, docs map[string]map[string]any) ([]planned
 	return files, nil
 }
 
-func ensureMountDir(globalPath, relDir, targetDir string) (string, error) {
+func ensureStorageDir(globalPath, relDir, targetDir string) (string, error) {
 	orig, err := os.ReadFile(globalPath)
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", globalPath, err)
@@ -136,7 +163,7 @@ func ensureMountDir(globalPath, relDir, targetDir string) (string, error) {
 	if root == nil {
 		root = map[string]any{}
 	}
-	changed, err := ensureMountsPath(root, filepath.Dir(filepath.Clean(globalPath)), relDir, targetDir)
+	changed, err := ensureStoragesPath(root, filepath.Dir(filepath.Clean(globalPath)), relDir, targetDir)
 	if err != nil {
 		return "", err
 	}
@@ -157,22 +184,22 @@ func ensureMountDir(globalPath, relDir, targetDir string) (string, error) {
 	return bak, nil
 }
 
-func ensureMountsPath(root map[string]any, base, relDir, targetDir string) (bool, error) {
+func ensureStoragesPath(root map[string]any, base, relDir, targetDir string) (bool, error) {
 	paths, _ := root["paths"].(map[string]any)
 	if paths == nil {
 		paths = map[string]any{}
 		root["paths"] = paths
 	}
-	list, err := yamlStringList(paths["mounts"])
+	list, err := yamlStringList(paths["storages"])
 	if err != nil {
-		return false, fmt.Errorf("paths.mounts must be a string or list before wizard can append")
+		return false, fmt.Errorf("paths.storages must be a string or list before wizard can append")
 	}
 	for _, item := range list {
 		if sameConfigPath(base, item, targetDir) {
 			return false, nil
 		}
 	}
-	paths["mounts"] = appendUniqueStrings(list, relDir)
+	paths["storages"] = appendUniqueStrings(list, relDir)
 	return true, nil
 }
 
@@ -185,7 +212,7 @@ func planStaleMountDeletes(p *assist.Prompt, dir string, detected map[string]boo
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read mounts directory %s: %w", dir, err)
+		return nil, fmt.Errorf("read storages directory %s: %w", dir, err)
 	}
 	var stale []staleFile
 	for _, e := range entries {
@@ -215,9 +242,9 @@ func mountFileTarget(path string) string {
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return ""
 	}
-	// Files in the mounts directory are mounts by location; a `kind:` is optional
+	// Files in the storages directory are storage targets by location; a `kind:` is optional
 	// and only rejected when it explicitly disagrees.
-	if kind, _ := doc["kind"].(string); kind != "" && kind != "mount" {
+	if kind, _ := doc["kind"].(string); kind != "" && kind != "storage" {
 		return ""
 	}
 	target := cfgval.String(doc["path"])

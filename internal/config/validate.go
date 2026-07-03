@@ -33,7 +33,6 @@ var rejectedSecurityToggles = []string{
 var validGlobalPathKeys = set(
 	"apps",
 	"catalog",
-	"mounts",
 	"networks",
 	"notifiers",
 	"runtime",
@@ -52,7 +51,7 @@ func Validate(cfg *Config) []Issue {
 	issues = append(issues, cfg.validationIssues...)
 	issues = append(issues, validateDocuments(cfg)...)
 	issues = append(issues, validateServices(cfg)...)
-	issues = append(issues, validateMounts(cfg)...)
+	issues = append(issues, validateStorages(cfg)...)
 	return issues
 }
 
@@ -139,7 +138,6 @@ func validateGlobal(cfg *Config) []Issue {
 		pathLists := map[string][]string{
 			"apps":      cfg.Global.Apps,
 			"catalog":   cfg.Global.Catalog,
-			"mounts":    cfg.Global.Mounts,
 			"networks":  cfg.Global.Networks,
 			"notifiers": cfg.Global.Notifiers,
 			"services":  cfg.Global.Services,
@@ -174,10 +172,6 @@ func validateGlobal(cfg *Config) []Issue {
 		validateNotifySelection("notify", cfgval.StringList(raw["notify"]), notifierNames(notifiers), add)
 	}
 
-	if watches, ok := raw["watches"].(map[string]any); ok {
-		validateWatches(watches, filepath.Join(cfg.Global.RuntimeDir(), "locks"), notifierNames(notifiers), NotifyDefault(raw), add)
-	}
-
 	cooldown, present := defaultsCooldown(cfg.Global.Defaults)
 	switch {
 	case !present:
@@ -192,10 +186,14 @@ func validateGlobal(cfg *Config) []Issue {
 	for _, e := range validateVariableValues(cfg.globalVars()) {
 		add("defaults.variables: %s", e)
 	}
-	if _, errs := cfg.ResolveWatches(); len(errs) > 0 {
-		for _, e := range errs {
+	watches, watchErrs := cfg.ResolveWatches()
+	if len(watchErrs) > 0 {
+		for _, e := range watchErrs {
 			add("watches: %s", e)
 		}
+	}
+	if len(watches) > 0 {
+		validateWatches(watches, filepath.Join(cfg.Global.RuntimeDir(), "locks"), notifierNames(notifiers), NotifyDefault(raw), add)
 	}
 
 	return issues
@@ -207,7 +205,7 @@ func registryLabel(key string) string {
 	if key == catalogServiceKey {
 		return "catalog service"
 	}
-	return key // "app", "lib", "patterns", "service", "mount"
+	return key // "app", "lib", "patterns", "service", "storage"
 }
 
 func validateDocuments(cfg *Config) []Issue {
@@ -217,7 +215,7 @@ func validateDocuments(cfg *Config) []Issue {
 	// `apache` app that owns its binary), and a catalog service template and a
 	// configured service may both be named `apache` without colliding.
 	registryKeys := []string{
-		catalogServiceKey, kindApp, kindLibrary, kindPatterns, kindService, kindMount,
+		catalogServiceKey, kindApp, kindLibrary, kindPatterns, kindService, kindStorage,
 	}
 	counts := map[string]map[string]int{}
 	aliasOwners := map[string]map[string]string{}
@@ -255,12 +253,12 @@ func validateDocuments(cfg *Config) []Issue {
 		issues = append(issues, validateAppLinks(cfg, doc, scope)...)
 		issues = append(issues, validateVersionMatch(doc, scope)...)
 		switch doc.Kind {
-		case kindApp, kindLibrary, kindPatterns, kindService, kindMount:
+		case kindApp, kindLibrary, kindPatterns, kindService, kindStorage:
 		case "":
-			issues = append(issues, Issue{Scope: scope, Msg: "document has no kind (expected app, lib, patterns, service or mount)"})
+			issues = append(issues, Issue{Scope: scope, Msg: "document has no kind (expected app, lib, patterns, service or storage)"})
 			continue
 		default:
-			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected app, lib, patterns, service or mount)", doc.Kind)})
+			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected app, lib, patterns, service or storage)", doc.Kind)})
 			continue
 		}
 		if doc.Name == "" {
@@ -599,25 +597,27 @@ func validateServices(cfg *Config) []Issue {
 	return issues
 }
 
-func validateMounts(cfg *Config) []Issue {
+func validateStorages(cfg *Config) []Issue {
 	var issues []Issue
 	paths := map[string]string{}
-	for _, name := range cfg.MountNames {
+	notifiers := notifierNames(cfg.Notifiers())
+	defaultNotify := NotifyDefault(cfg.Global.Raw)
+	for _, name := range cfg.StorageNames {
 		if name == "" {
 			continue
 		}
-		resolved, errs := cfg.ResolveMount(name)
+		resolved, errs := cfg.ResolveStorage(name)
 		for _, e := range errs {
-			issues = append(issues, Issue{Scope: "mount " + name, Msg: e})
+			issues = append(issues, Issue{Scope: "storage " + name, Msg: e})
 		}
 		if resolved.Tree == nil {
 			continue
 		}
-		issues = append(issues, validateMount(name, resolved.Tree)...)
+		issues = append(issues, validateStorage(name, resolved.Tree, notifiers, defaultNotify)...)
 		path := filepath.Clean(cfgval.String(resolved.Tree["path"]))
 		if path != "." && path != "" {
 			if prev := paths[path]; prev != "" && prev != name {
-				issues = append(issues, Issue{Scope: "mount " + name, Msg: fmt.Sprintf("path %q is already used by mount %q", path, prev)})
+				issues = append(issues, Issue{Scope: "storage " + name, Msg: fmt.Sprintf("path %q is already used by storage %q", path, prev)})
 			} else {
 				paths[path] = name
 			}
@@ -626,16 +626,16 @@ func validateMounts(cfg *Config) []Issue {
 	return issues
 }
 
-func validateMount(name string, tree map[string]any) []Issue {
+func validateStorage(name string, tree map[string]any, notifiers map[string]struct{}, defaultNotify []string) []Issue {
 	var issues []Issue
 	add := func(format string, args ...any) {
-		issues = append(issues, Issue{Scope: "mount " + name, Msg: fmt.Sprintf(format, args...)})
+		issues = append(issues, Issue{Scope: "storage " + name, Msg: fmt.Sprintf(format, args...)})
 	}
 
-	allowed := set("name", "display_name", "description", "category", "path", "refcount", "umount", "stop_policy", "variables", "os")
+	allowed := set("name", "display_name", "description", "category", "path", "monitor", "interval", "capacity", "usage", "mount", "variables", "os")
 	for _, key := range slices.Sorted(maps.Keys(tree)) {
 		if _, ok := allowed[key]; !ok {
-			add("key %q is not supported for kind: mount", key)
+			add("key %q is not supported for kind: storage", key)
 		}
 	}
 
@@ -645,34 +645,134 @@ func validateMount(name string, tree map[string]any) []Issue {
 	} else if !filepath.IsAbs(path) {
 		add("path %q must be an absolute path", path)
 	}
-	if v, present := tree["refcount"]; present {
+	if mode, present := tree["monitor"]; present {
+		validateMonitorMode("monitor", mode, add)
+	}
+	if v, present := tree["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
+		add("interval %q must be a valid positive duration", cfgval.String(v))
+	}
+	if capacity, ok := tree["capacity"].(map[string]any); ok {
+		validateStorageCapacity(name, path, tree, capacity, notifiers, defaultNotify, add)
+	} else if _, present := tree["capacity"]; present {
+		add("capacity must be a mapping")
+	}
+	if usage, ok := tree["usage"].(map[string]any); ok {
+		validateStorageUsage(usage, notifiers, add)
+	} else if _, present := tree["usage"]; present {
+		add("usage must be a mapping")
+	}
+	if mount, ok := tree["mount"].(map[string]any); ok {
+		validateStorageMount(mount, add)
+	} else if _, present := tree["mount"]; present {
+		add("mount must be a mapping")
+	}
+
+	for _, e := range validateVariableValues(collectVariables(tree)) {
+		add("variables: %s", e)
+	}
+	return issues
+}
+
+func validateStorageCapacity(name, path string, tree, capacity map[string]any, notifiers map[string]struct{}, defaultNotify []string, add addFunc) {
+	allowed := set("mounted", "for", "within", "then", "policy")
+	for _, field := range checks.StoragePredFields {
+		allowed[field] = struct{}{}
+	}
+	for _, key := range slices.Sorted(maps.Keys(capacity)) {
+		if _, ok := allowed[key]; !ok {
+			add("capacity key %q is not supported", key)
+		}
+	}
+	check := map[string]any{"type": "storage", "path": path}
+	for _, key := range append([]string{"mounted"}, checks.StoragePredFields...) {
+		if v, present := capacity[key]; present {
+			check[key] = v
+		}
+	}
+	entry := map[string]any{"check": check}
+	for _, key := range []string{"monitor", "interval"} {
+		if v, present := tree[key]; present {
+			entry[key] = v
+		}
+	}
+	for _, key := range []string{"for", "within", "then", "policy"} {
+		if v, present := capacity[key]; present {
+			entry[key] = v
+		}
+	}
+	validateWatches(map[string]any{name: entry}, "", notifiers, defaultNotify, func(format string, args ...any) {
+		add(strings.Replace(fmt.Sprintf(format, args...), "watches."+name, "capacity", 1))
+	})
+}
+
+func validateStorageUsage(usage map[string]any, notifiers map[string]struct{}, add addFunc) {
+	allowed := set("processes", "users", "observed_for", "for", "within", "then")
+	for _, key := range slices.Sorted(maps.Keys(usage)) {
+		if _, ok := allowed[key]; !ok {
+			add("usage key %q is not supported", key)
+		}
+	}
+	for _, key := range []string{"processes", "users"} {
+		raw, present := usage[key]
+		if !present {
+			continue
+		}
+		m, ok := raw.(map[string]any)
+		if !ok {
+			add("usage.%s must be a mapping {op, value}", key)
+			continue
+		}
+		validateOpNumeric("usage."+key, m, add)
+	}
+	if v, present := usage["observed_for"]; present && !isPositiveDuration(cfgval.String(v)) {
+		add("usage.observed_for %q must be a valid positive duration", cfgval.String(v))
+	}
+	validateWindow("usage", usage, add)
+	if rawThen, present := usage["then"]; present {
+		then, ok := rawThen.(map[string]any)
+		if !ok {
+			add("usage.then must be a mapping")
+		} else if _, present := then["notify"]; present {
+			validateNotifySelection("usage.then.notify", cfgval.StringList(then["notify"]), notifiers, add)
+		}
+	}
+}
+
+func validateStorageMount(mount map[string]any, add addFunc) {
+	allowed := set("refcount", "umount", "stop_policy")
+	for _, key := range slices.Sorted(maps.Keys(mount)) {
+		if _, ok := allowed[key]; !ok {
+			add("mount key %q is not supported", key)
+		}
+	}
+	if v, present := mount["refcount"]; present {
 		if _, ok := v.(bool); !ok {
-			add("refcount must be true or false")
+			add("mount.refcount must be true or false")
 		}
 	}
 
-	umount, _ := tree["umount"].(map[string]any)
-	if _, present := tree["umount"]; present && umount == nil {
-		add("umount must be a mapping")
+	umount, _ := mount["umount"].(map[string]any)
+	if _, present := mount["umount"]; present && umount == nil {
+		add("mount.umount must be a mapping")
 	}
 	allowSIGKILL := false
 	if umount != nil {
 		allowedUmount := set("term_timeout", "kill_timeout", "allow_sigkill", "allow_lazy")
 		for _, key := range slices.Sorted(maps.Keys(umount)) {
 			if _, ok := allowedUmount[key]; !ok {
-				add("umount key %q is not one of term_timeout, kill_timeout, allow_sigkill, allow_lazy", key)
+				add("mount.umount key %q is not one of term_timeout, kill_timeout, allow_sigkill, allow_lazy", key)
 			}
 		}
 		for _, field := range []string{"term_timeout", "kill_timeout"} {
 			if v, present := umount[field]; present && !isPositiveDuration(cfgval.String(v)) {
-				add("umount.%s %q must be a valid positive duration", field, cfgval.String(v))
+				add("mount.umount.%s %q must be a valid positive duration", field, cfgval.String(v))
 			}
 		}
 		for _, field := range []string{"allow_sigkill", "allow_lazy"} {
 			if v, present := umount[field]; present {
 				b, ok := v.(bool)
 				if !ok {
-					add("umount.%s must be true or false", field)
+					add("mount.umount.%s must be true or false", field)
 				}
 				if field == "allow_sigkill" && ok && b {
 					allowSIGKILL = true
@@ -681,27 +781,24 @@ func validateMount(name string, tree map[string]any) []Issue {
 		}
 	}
 
-	if sp, ok := tree["stop_policy"].(map[string]any); ok {
+	if sp, ok := mount["stop_policy"].(map[string]any); ok {
 		force, _ := sp["force_kill"].(bool)
 		if force {
 			allowSIGKILL = true
 		}
-	} else if _, present := tree["stop_policy"]; present {
-		add("stop_policy must be a mapping")
+	} else if _, present := mount["stop_policy"]; present {
+		add("mount.stop_policy must be a mapping")
 	}
-	validateStopPolicy(tree, add)
+	validateStopPolicy(map[string]any{"stop_policy": mount["stop_policy"]}, func(format string, args ...any) {
+		add("mount." + fmt.Sprintf(format, args...))
+	})
 	if allowSIGKILL {
-		sp, _ := tree["stop_policy"].(map[string]any)
+		sp, _ := mount["stop_policy"].(map[string]any)
 		_, hasKoi := sp["kill_only_if"].(map[string]any)
 		if !hasKoi {
-			add("umount.allow_sigkill=true requires stop_policy.kill_only_if")
+			add("mount.umount.allow_sigkill=true requires mount.stop_policy.kill_only_if")
 		}
 	}
-
-	for _, e := range validateVariableValues(collectVariables(tree)) {
-		add("variables: %s", e)
-	}
-	return issues
 }
 
 // effectiveBackend returns the init backend validation should assume:

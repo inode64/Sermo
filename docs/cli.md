@@ -215,11 +215,11 @@ unexpected panic recovered at the top level.
 
 ## Mounts
 
-Mount actions are fstab-backed and use mount files from
-`/etc/sermo/mounts` by default. A path target that is not configured is still
+Mount actions are fstab-backed and use storage files with a `mount:` block from
+`/etc/sermo/storages` by default. A path target that is not configured is still
 accepted, but it uses safe defaults and must exist in `/etc/fstab`. See
-[mount units](configuration.md#mount-units).
+[storage and mount units](configuration.md#storage-and-mount-units).
 
 `sermoctl wizard mount` lists mount points declared in `/etc/fstab` and writes
-safe mount files under `paths.mounts`; it does not execute mount or
-umount while generating the config.
+safe storage files under `paths.storages`; it does not execute mount or umount
+while generating the config.

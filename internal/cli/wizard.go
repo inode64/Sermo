@@ -25,7 +25,7 @@ import (
 	"sermo/internal/volume"
 )
 
-// runWizard drives the interactive assistant that generates `watches:` config.
+// runWizard drives the interactive assistant that generates target config.
 // `sermoctl wizard [name]` runs the named assistant, or lists them to choose.
 func (a App) runWizard(ctx context.Context, opts options) int {
 	if len(opts.args) > 1 {
@@ -81,7 +81,7 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 		return exitSuccess, nil
 	}
 
-	data, err := yaml.Marshal(map[string]any{"watches": res.Watches})
+	data, err := renderWizardWatchPreview(as.Name(), res.Watches)
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("render config: %v", err))
 		return exitRuntimeError, nil
@@ -130,6 +130,17 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 	}
 	fmt.Fprintf(a.Stdout, "Wrote %d watch file(s) under %s. Run `sermoctl daemon reload` to apply.\n", len(merged.Files), merged.Dir)
 	return exitSuccess, nil
+}
+
+func renderWizardWatchPreview(wizard string, fragment map[string]any) ([]byte, error) {
+	if wizardWritesStorageDocs(wizard) {
+		docs, err := storageDocsFromVolumeWatches(fragment)
+		if err != nil {
+			return nil, err
+		}
+		return yaml.Marshal(docsPreview(docs))
+	}
+	return yaml.Marshal(map[string]any{"watches": fragment})
 }
 
 // selectAssistant resolves the assistant from the first positional argument, or
@@ -363,8 +374,11 @@ func ensureNoWatchCollisions(cfg *config.Config, fragment map[string]any) error 
 	if cfg == nil {
 		return nil
 	}
-	watches, _ := cfg.Global.Raw["watches"].(map[string]any)
+	watches, _ := cfg.ResolveWatches()
 	for name := range fragment {
+		if _, exists := cfg.Storages[name]; exists {
+			return fmt.Errorf("storage %q already exists in loaded config; not overwriting", name)
+		}
 		if _, exists := watches[name]; exists {
 			return fmt.Errorf("watch %q already exists in loaded config; not overwriting", name)
 		}
@@ -378,6 +392,13 @@ func ensureNoWatchCollisions(cfg *config.Config, fragment map[string]any) error 
 // map, so the loader can merge them into global watch configuration without
 // rewriting sermo.yml on every generated watch.
 func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMergeResult, error) {
+	if wizardWritesStorageDocs(wizard) {
+		docs, err := storageDocsFromVolumeWatches(fragment)
+		if err != nil {
+			return wizardMergeResult{}, err
+		}
+		return mergeWizardStorageDocs(path, docs)
+	}
 	relDir, targetDir := wizardTargetDir(path, wizard, fragment)
 	pathKey := wizardPathKey(wizard, fragment)
 
@@ -403,6 +424,88 @@ func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMer
 	for _, name := range slices.Sorted(maps.Keys(fragment)) {
 		file := filepath.Join(targetDir, watchConfigFileName(name))
 		data, err := yaml.Marshal(map[string]any{"watches": map[string]any{name: fragment[name]}})
+		if err != nil {
+			return wizardMergeResult{}, fmt.Errorf("render %s: %w", file, err)
+		}
+		if err := os.WriteFile(file, data, 0o644); err != nil { //nolint:gosec // config is world-readable by design
+			return wizardMergeResult{}, fmt.Errorf("write %s: %w", file, err)
+		}
+	}
+	return wizardMergeResult{Backup: bak, Dir: targetDir, Files: files, PathKey: pathKey}, nil
+}
+
+func wizardWritesStorageDocs(wizard string) bool {
+	return wizard == "volume"
+}
+
+func storageDocsFromVolumeWatches(fragment map[string]any) (map[string]map[string]any, error) {
+	docs := make(map[string]map[string]any, len(fragment))
+	for _, name := range slices.Sorted(maps.Keys(fragment)) {
+		entry, ok := fragment[name].(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("watch %q is not a mapping", name)
+		}
+		check, ok := entry["check"].(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("watch %q has no check mapping", name)
+		}
+		path, _ := check["path"].(string)
+		if path == "" {
+			return nil, fmt.Errorf("watch %q has no storage path", name)
+		}
+		doc := map[string]any{
+			"name":     name,
+			"category": "storage",
+			"path":     path,
+		}
+		for _, key := range []string{"monitor", "interval"} {
+			if v, present := entry[key]; present {
+				doc[key] = v
+			}
+		}
+		capacity := map[string]any{}
+		for key, value := range check {
+			switch key {
+			case "type", "path":
+			default:
+				capacity[key] = value
+			}
+		}
+		for _, key := range []string{"for", "within", "then", "policy"} {
+			if v, present := entry[key]; present {
+				capacity[key] = v
+			}
+		}
+		doc["capacity"] = capacity
+		docs[name] = doc
+	}
+	return docs, nil
+}
+
+func mergeWizardStorageDocs(path string, docs map[string]map[string]any) (wizardMergeResult, error) {
+	relDir := storagesConfigDir
+	targetDir := filepath.Join(filepath.Dir(filepath.Clean(path)), relDir)
+	pathKey := "storages"
+	files := make([]string, 0, len(docs))
+	for _, name := range slices.Sorted(maps.Keys(docs)) {
+		file := filepath.Join(targetDir, watchConfigFileName(name))
+		if _, err := os.Stat(file); err == nil {
+			return wizardMergeResult{}, fmt.Errorf("storage file %s already exists; not overwriting", file)
+		} else if !os.IsNotExist(err) {
+			return wizardMergeResult{}, fmt.Errorf("stat %s: %w", file, err)
+		}
+		files = append(files, file)
+	}
+	bak, err := ensureConfigPathDir(path, pathKey, relDir, targetDir)
+	if err != nil {
+		return wizardMergeResult{}, err
+	}
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return wizardMergeResult{}, fmt.Errorf("create %s: %w", targetDir, err)
+	}
+	for _, name := range slices.Sorted(maps.Keys(docs)) {
+		file := filepath.Join(targetDir, watchConfigFileName(name))
+		data, err := yaml.Marshal(docs[name])
 		if err != nil {
 			return wizardMergeResult{}, fmt.Errorf("render %s: %w", file, err)
 		}
@@ -663,6 +766,13 @@ func parseWatchFile(path string) (names, targets []string) {
 	var root map[string]any
 	if err := yaml.Unmarshal(data, &root); err != nil {
 		return nil, nil
+	}
+	if name, _ := root["name"].(string); name != "" {
+		names = []string{name}
+		if path, _ := root["path"].(string); path != "" {
+			targets = append(targets, filepath.Clean(path))
+		}
+		return names, targets
 	}
 	watches, _ := root["watches"].(map[string]any)
 	for _, v := range watches {

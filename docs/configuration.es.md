@@ -2,15 +2,16 @@
 
 La configuración de Sermo se divide por tipo de destino: **definiciones de
 service/app/lib/pattern del catálogo**, **services** como instancias concretas
-monitorizadas, **notifiers** como destinos de entrega, **watches** como monitores
-a nivel de host, y **mounts** como unidades de montaje respaldadas por fstab. Los
+monitorizadas, **notifiers** como destinos de entrega, **storages** como destinos
+de filesystem con monitorización de capacidad y montaje opcional, y **watches**
+como monitores a nivel de host. Los
 archivos de watch y notifier son fragmentos globales con un mapa de nivel superior
 `watches:` o `notifiers:`; esos fragmentos no usan `kind:`.
 
 La nueva configuración debe usar un archivo YAML por destino. Esto significa una
 app, daemon, lib o pattern del catálogo por archivo; un service por archivo; un
-mount por archivo; un notifier por archivo; y un host watch por archivo (`storage`,
-`network`, `uplink`, `load` y otros fragmentos de watch). Los archivos de fragmentos
+storage por archivo; un notifier por archivo; y un host watch por archivo (`network`,
+`uplink`, `load` y otros fragmentos de watch). Los archivos de fragmentos
 globales siguen teniendo el mapa de nivel superior `watches:` o `notifiers:`, pero
 ese mapa debe contener exactamente una entrada con nombre. Esto mantiene la
 configuración generada fácil de comparar, reemplazar y limpiar por destino.
@@ -18,7 +19,7 @@ configuración generada fácil de comparar, reemplazar y limpiar por destino.
 El **kind de un documento se determina por dónde reside** — su subdirectorio de
 catálogo (`services/` → service, `apps/` → app, `libs/` → lib, `patterns/` →
 patterns) o la ruta configurada desde la que se carga (`paths.services` → service,
-`paths.mounts` → mount). Una definición `services/` del catálogo (un *catalog
+`paths.storages` → storage). Una definición `services/` del catálogo (un *catalog
 service*) y una instancia de `paths.services` (un *configured service*) comparten el
 kind `service`; se mantienen distintos por ubicación. Por tanto, una clave de nivel
 superior `kind:` es **opcional y redundante**; cuando está presente en un archivo
@@ -28,7 +29,7 @@ directorio equivocado. La configuración distribuida la omite.
 > **Ejemplo completo anotado.** [`docs/sermo-all.yml`](sermo-all.yml) muestra
 > cada superficie de configuración en un solo lugar — configuración global, watches y
 > un documento de cada kind (un service, app, lib, pattern del catálogo, un service
-> configurado y un mount), más un ejemplo de service clonado — y está validado por la
+> configurado y un storage), más un ejemplo de service clonado — y está validado por la
 > suite de pruebas, por lo que no puede
 > desviarse del esquema. Es solo un paquete de referencia; los despliegues reales
 > mantienen un destino por archivo. La configuración operativa distribuida es
@@ -56,9 +57,8 @@ excepciones explícitas en el propietario.
 /etc/sermo/catalog-available/{services,apps,libs,patterns}/*.yml   user catalog definitions
 /etc/sermo/services/*.yml concrete service documents
 /etc/sermo/apps/*.yml     host-specific app documents
-/etc/sermo/mounts/*.yml   fstab-backed mount documents
 /etc/sermo/notifiers/*.yml notifier fragments
-/etc/sermo/storages/*.yml storage watch fragments
+/etc/sermo/storages/*.yml storage documents (capacity and optional mount operations)
 /etc/sermo/networks/*.yml network watch fragments
 /etc/sermo/watches/*.yml  generic host watch fragments
 /etc/sermo/templates/*.yml notification templates
@@ -83,8 +83,6 @@ paths:
     - /etc/sermo/networks
   watches:
     - /etc/sermo/watches
-  mounts:
-    - /etc/sermo/mounts
   runtime: /run/sermo
   state: /var/lib/sermo
   templates: /etc/sermo/templates
@@ -92,7 +90,7 @@ paths:
 
 Las listas de directorios bajo `paths.catalog`, `paths.services`, `paths.apps`,
 `paths.notifiers`, `paths.storages`, `paths.networks`, `paths.watches` y
-`paths.mounts` aceptan o bien una cadena de ruta o un mapeo explícito:
+aceptan o bien una cadena de ruta o un mapeo explícito:
 
 ```yaml
 paths:
@@ -122,23 +120,23 @@ semántica de TTL y de reclamación de locks obsoletos.
 Si se omite `paths.catalog`, Sermo lee los valores por defecto del catálogo
 instalado: `/usr/share/sermo/catalog` y `/etc/sermo/catalog-available`.
 
-Solo los directorios de documentos de service, app y mount tienen alternativas
+Solo los directorios de documentos de service, app y storage tienen alternativas
 relativas a la configuración. Si se omite `paths.services`, `paths.apps` o
-`paths.mounts`, Sermo recurre a `services/`, `apps/` o `mounts/` junto al archivo
+`paths.storages`, Sermo recurre a `services/`, `apps/` o `storages/` junto al archivo
 `sermo.yml` cargado. Con el estándar `/etc/sermo/sermo.yml` esto significa
-`/etc/sermo/services`, `/etc/sermo/apps` y `/etc/sermo/mounts`.
+`/etc/sermo/services`, `/etc/sermo/apps` y `/etc/sermo/storages`.
 
 Los directorios de fragmentos globales no tienen alternativa implícita. Si se omite o
-está vacío `paths.notifiers`, `paths.storages`, `paths.networks` o `paths.watches`,
+está vacío `paths.notifiers`, `paths.networks` o `paths.watches`,
 Sermo no carga ningún fragmento de ese tipo; un directorio hermano `notifiers/`,
-`storages/`, `networks/` o `watches/` junto a `sermo.yml` se ignora hasta que se
+`networks/` o `watches/` junto a `sermo.yml` se ignora hasta que se
 liste explícitamente bajo `paths`.
 
-Cada nuevo fragmento de service, mount, notifier o watch bajo directorios configurados
-debe aislarse en su propio archivo `.yml`, incluso cuando varios destinos se generan
-en la misma ejecución del asistente. Los documentos de mount son intencionadamente
-distintos de los documentos de service y los fragmentos de watch porque son acciones
-del operador, no services monitorizados.
+Cada nuevo fragmento de service, storage, notifier o watch bajo directorios
+configurados debe aislarse en su propio archivo `.yml`, incluso cuando varios
+destinos se generan en la misma ejecución del asistente. Los documentos de
+storage pueden exponer operaciones de montaje con un bloque `mount:` mientras
+mantienen la monitorización de capacidad en el mismo destino.
 
 Usa `/run` para las rutas de runtime en la configuración y los ejemplos de Sermo. No
 escribas nuevos pidfiles, sockets, lockfiles ni directorios de runtime en `/var/run`
@@ -241,13 +239,17 @@ empaquetado.
 plantillas de notificación. `make install` lo crea e instala
 `default-alert.yml`.
 
-## Unidades de montaje
+## Storage y unidades de montaje
 
-Un documento de mount define un destino de montaje con nombre controlado por
-`sermoctl mount` y `sermoctl umount`. Las unidades de montaje residen bajo
-`paths.mounts` (por defecto `/etc/sermo/mounts`) y usan deliberadamente `/etc/fstab`
-como fuente de verdad: el YAML contiene la ruta de montaje y solo la política de Sermo,
-no `source`, `fstype`, `options` ni metadatos de clase.
+Un documento de storage define un destino de filesystem bajo `paths.storages`
+(por defecto `/etc/sermo/storages`). Puede declarar `capacity:` para
+monitorización, `mount:` para `sermoctl mount`/`sermoctl umount`, o ambas cosas.
+Las operaciones de montaje usan deliberadamente `/etc/fstab` como fuente de
+verdad: el YAML contiene la ruta de montaje y solo la política de Sermo, no
+`source`, `fstype`, `options` ni metadatos de clase.
+Cuando un storage tiene `capacity:` y `mount:`, la watch de capacidad generada
+requiere que el `path` del storage sea el mountpoint montado (`mounted: true`) salvo
+que `capacity.mounted` se declare explícitamente.
 
 ```yaml
 name: mount-backup
@@ -255,16 +257,26 @@ display_name: Backup mount
 category: storage
 
 path: /mnt/backup
-refcount: true
+monitor: previous
+interval: 30s
 
-umount:
-  term_timeout: 12s
-  kill_timeout: 5s
-  allow_sigkill: false
-  allow_lazy: false
+capacity:
+  mounted: true
+  used_pct: { op: ">=", value: "90%" }
+  for: { cycles: 3 }
+  then:
+    notify: default
+
+mount:
+  refcount: true
+  umount:
+    term_timeout: 12s
+    kill_timeout: 5s
+    allow_sigkill: false
+    allow_lazy: false
 ```
 
-La CLI acepta o bien el nombre configurado o la ruta de montaje absoluta:
+La CLI acepta o bien el nombre del storage configurado o la ruta de montaje absoluta:
 
 ```sh
 sermoctl mount mount-backup
@@ -275,13 +287,13 @@ sermoctl mount status mount-backup
 sermoctl mount list
 ```
 
-El panel **Mount units** de la interfaz web expone los nombres de mount
-configurados a los administradores. Puede montar/desmontar, mostrar los mismos
-procesos bloqueadores antes de desmontar, enviar una alerta TTY nativa a los
-usuarios con sesión que estén bloqueando el montaje, y ejecutar `kill+umount`
-solo mediante la política explícita de kill de montaje descrita abajo.
+El panel **Mount units** de la interfaz web expone los storages que tienen un
+bloque `mount:`. Puede montar/desmontar, mostrar los mismos procesos bloqueadores
+antes de desmontar, enviar una alerta TTY nativa a los usuarios con sesión que
+estén bloqueando el montaje, y ejecutar `kill+umount` solo mediante la política
+explícita de kill de montaje descrita abajo.
 
-Con `refcount: true` (el valor por defecto), cada `mount` exitoso incrementa el
+Con `mount.refcount: true` (el valor por defecto), cada `mount` exitoso incrementa el
 contador de runtime de Sermo y `umount` lo decrementa. El `umount` real solo se ejecuta
 cuando el contador llega a cero; si la ruta aún no está montada, el primer `mount`
 ejecuta `mount <path>` y requiere una entrada `/etc/fstab` coincidente. El contador se
@@ -290,10 +302,11 @@ por destino bajo `<paths.runtime>/mounts/ops`.
 
 El desmontaje normal es conservador: Sermo primero ejecuta `umount <path>`. Si el
 montaje está ocupado, reporta los procesos que usan la ruta. Solo envía señales a los
-bloqueadores cuando `umount.allow_sigkill: true` o `stop_policy.force_kill: true` está
-explícitamente establecido, y la validación entonces requiere un selector restrictivo
-`stop_policy.kill_only_if`. El desmontaje perezoso (`umount -l`) también está
-desactivado por defecto y solo se usa cuando `umount.allow_lazy: true`.
+bloqueadores cuando `mount.umount.allow_sigkill: true` o
+`mount.stop_policy.force_kill: true` está explícitamente establecido, y la
+validación entonces requiere un selector restrictivo
+`mount.stop_policy.kill_only_if`. El desmontaje perezoso (`umount -l`) también está
+desactivado por defecto y solo se usa cuando `mount.umount.allow_lazy: true`.
 
 ## Ajustes del motor
 
@@ -836,16 +849,20 @@ procesos y los gráficos de latencia/CPU/memoria/IO.
 Los cambios de monitor disparados desde la web se registran con la fuente `web` en el
 almacén de estado; los stops manuales desde la web UI o la CLI usan
 `web-manual-stop` / `cli-manual-stop` hasta que un start correcto posterior restaura el
-estado monitorizado anterior. El panel y
+estado monitorizado anterior. Un `umount` correcto de storage pausa la watch de
+capacidad de ese storage con `web-mount-umount` o `cli-mount-umount`; un `mount`
+correcto posterior la restaura solo cuando ese umount creó la pausa. El panel y
 `GET /api/services` / `GET /api/watches` exponen `state`, `monitored`,
 `monitor_source` y `monitor_changed_at` por separado. Un service puede mostrar
 `started` cuando el backend está activo pero la monitorización está pausada,
 `collecting` mientras la monitorización está activa pero los indicadores de
 runtime/check/SLA todavía se están llenando, y `monitored` solo cuando esos
 indicadores están listos. Los host watches no tienen estados `started` o
-`stopped` del gestor de servicios; su `state` es salud (`ok`, `failed`, `starting` o
-`disabled`), mientras su flag de monitorización separado se usa para acciones y
-metadatos, no como una insignia de estado adicional.
+`stopped` del gestor de servicios; su `state` es `disabled` cuando la
+configuración o el estado de monitorización los excluye de las comprobaciones
+activas, `starting` antes de la primera muestra monitorizada, `failed` para una
+condición activa fallida y `ok` en el resto de casos. Su flag de monitorización
+separado sigue expuesto para acciones y metadatos.
 Las operaciones toman el lock de operación por service, de modo que nunca se solapan con
 la acción de un worker sobre el mismo service. El almacén de estado también conserva una
 marca corta de asentamiento de operación, de modo que las acciones iniciadas por
@@ -1110,15 +1127,16 @@ fusionan con un service.
 
 > **Consejo — genera la configuración interactivamente.** `sermoctl wizard` puede
 > escribir tres superficies diferentes. Los asistentes de watch (`volume`, `net`,
-> `uplink`) imprimen una previsualización `watches:` y, si se acepta, escriben un watch
-> por archivo bajo un directorio de tipo de watch como `/etc/sermo/storages` o
+> `uplink`) imprimen una previsualización y, si se acepta, escriben un target por
+> archivo bajo un directorio de tipo como `/etc/sermo/storages` o
 > `/etc/sermo/networks`; el asistente añade ese directorio al `paths.*` coincidente
 > (escribiendo primero un `.bak`). Los asistentes de service (`service`, `docker`, `vm`)
 > escriben un archivo de service por destino bajo `services/` y aseguran que
 > `paths.services` lo cargue; `docker` y `vm` añaden `control.type: docker` o
 > `control.type: libvirt` más comprobaciones de solo lectura coincidentes. El asistente
 > de mount (`mount`) lista los puntos de montaje de `/etc/fstab` y escribe archivos de
-> montaje seguros bajo `paths.mounts`; no monta ni desmonta mientras genera la config.
+> storage seguros con un bloque `mount:` bajo `paths.storages`; no monta ni desmonta
+> mientras genera la config.
 >
 > `sermoctl wizard volume` crea comprobaciones de almacenamiento para sistemas de
 > archivos locales y de red/distribuidos montados (umbral como porcentaje o tamaño,

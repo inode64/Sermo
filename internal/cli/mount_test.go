@@ -11,6 +11,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/mountctl"
+	"sermo/internal/state"
 )
 
 func writeMountConfig(t *testing.T) string {
@@ -20,15 +21,19 @@ func writeMountConfig(t *testing.T) string {
 	mustWrite(t, global, `
 paths:
   services: [ `+root+`/services ]
-  mounts: [ `+root+`/mounts ]
+  storages: [ `+root+`/storages ]
   runtime: `+root+`/run
+  state: `+root+`/state
 defaults:
   policy:
     cooldown: 5m
 `)
-	mustWrite(t, filepath.Join(root, "mounts", "backup.yml"), `
+	mustWrite(t, filepath.Join(root, "storages", "backup.yml"), `
 name: mount-backup
 path: /mnt/backup
+capacity:
+  mounted: true
+mount: {}
 `)
 	return global
 }
@@ -100,5 +105,44 @@ func TestMountStatusByPathUsesConfiguredMount(t *testing.T) {
 	}
 	if got := out.String(); !strings.Contains(got, "name: mount-backup") || !strings.Contains(got, "mounted: true") {
 		t.Fatalf("stdout = %q", got)
+	}
+}
+
+func TestUmountCommandPausesStorageWatch(t *testing.T) {
+	global := writeMountConfig(t)
+	root := filepath.Dir(global)
+	mounted := true
+	var out bytes.Buffer
+	app := mountApp(t, &mounted, &out)
+
+	code := app.Run(context.Background(), []string{"--config", global, "umount", "mount-backup"})
+	if code != exitSuccess {
+		t.Fatalf("umount exit = %d, want success", code)
+	}
+	store, err := state.Open(filepath.Join(root, "state", state.Filename))
+	if err != nil {
+		t.Fatalf("open state: %v", err)
+	}
+	rec, found, err := store.MonitorState("watch:mount-backup")
+	if err != nil || !found || rec.Active || rec.Source != state.SourceCLIMountUmount {
+		t.Fatalf("state after umount = %+v found=%v err=%v", rec, found, err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("close state: %v", err)
+	}
+
+	out.Reset()
+	code = app.Run(context.Background(), []string{"--config", global, "mount", "mount-backup"})
+	if code != exitSuccess {
+		t.Fatalf("mount exit = %d, want success", code)
+	}
+	store, err = state.Open(filepath.Join(root, "state", state.Filename))
+	if err != nil {
+		t.Fatalf("reopen state: %v", err)
+	}
+	defer store.Close()
+	rec, found, err = store.MonitorState("watch:mount-backup")
+	if err != nil || !found || !rec.Active || rec.Source != state.SourceCLI {
+		t.Fatalf("state after mount = %+v found=%v err=%v", rec, found, err)
 	}
 }

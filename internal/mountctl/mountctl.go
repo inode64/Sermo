@@ -105,9 +105,10 @@ type Controller struct {
 	LockTTL        time.Duration
 }
 
-// SpecFromTree reads a resolved kind: mount body.
-func SpecFromTree(name string, tree map[string]any) Spec {
-	umount, _ := tree["umount"].(map[string]any)
+// SpecFromStorageTree reads a resolved kind: storage body with a mount block.
+func SpecFromStorageTree(name string, tree map[string]any) Spec {
+	mount, _ := tree["mount"].(map[string]any)
+	umount, _ := mount["umount"].(map[string]any)
 	spec := Spec{
 		Name:        name,
 		DisplayName: cfgval.String(tree["display_name"]),
@@ -119,7 +120,7 @@ func SpecFromTree(name string, tree map[string]any) Spec {
 			KillTimeout: DefaultKillTimeout,
 		},
 	}
-	if ref, ok := tree["refcount"].(bool); ok {
+	if ref, ok := mount["refcount"].(bool); ok {
 		spec.Refcount = ref
 	}
 	if d := cfgval.Duration(umount["term_timeout"]); d > 0 {
@@ -134,7 +135,7 @@ func SpecFromTree(name string, tree map[string]any) Spec {
 	if b, ok := umount["allow_lazy"].(bool); ok {
 		spec.Umount.AllowLazy = b
 	}
-	if sp, ok := tree["stop_policy"].(map[string]any); ok {
+	if sp, ok := mount["stop_policy"].(map[string]any); ok {
 		if force, _ := sp["force_kill"].(bool); force {
 			spec.Umount.AllowSIGKILL = true
 		}

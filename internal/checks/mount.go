@@ -41,11 +41,7 @@ func parseMountCond(entry map[string]any) mountCond {
 // true when the expectation is violated; info is the matching mount entry (nil
 // when not mounted).
 func (m mountCond) evaluate(mounts []Mount, path string) (mounted, problem bool, reason string, info *Mount) {
-	for i := range mounts {
-		if mounts[i].MountPoint == path {
-			info = betterMount(info, &mounts[i])
-		}
-	}
+	info = MountAtPath(mounts, path)
 	mounted = info != nil
 
 	if !m.expectMount {
@@ -103,6 +99,22 @@ func MountForPath(mounts []Mount, path string) *Mount {
 			continue
 		}
 		if len(mp) == len(filepath.Clean(best.MountPoint)) {
+			best = betterMount(best, &mounts[i])
+		}
+	}
+	return best
+}
+
+// MountAtPath returns the mount whose mountpoint exactly matches path, preferring
+// a real filesystem over an autofs placeholder when both entries share the path.
+func MountAtPath(mounts []Mount, path string) *Mount {
+	cleanPath := filepath.Clean(path)
+	if !filepath.IsAbs(cleanPath) {
+		return nil
+	}
+	var best *Mount
+	for i := range mounts {
+		if filepath.Clean(mounts[i].MountPoint) == cleanPath {
 			best = betterMount(best, &mounts[i])
 		}
 	}

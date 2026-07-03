@@ -14,6 +14,7 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/mountctl"
 	"sermo/internal/process"
+	"sermo/internal/state"
 	"sermo/internal/web"
 )
 
@@ -27,6 +28,9 @@ type webMountRunner struct {
 func (r *webMountRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
 	r.calls = append(r.calls, strings.Join(append([]string{name}, args...), " "))
 	switch name {
+	case "mount":
+		*r.mounted = true
+		return execx.Result{}, nil
 	case "umount":
 		if r.busy && (r.signalled == nil || *r.signalled == 0) {
 			return execx.Result{ExitCode: 32}, fmt.Errorf("run umount: exit code 32")
@@ -64,15 +68,16 @@ func TestWebBackendMounts(t *testing.T) {
 		Global: config.Global{Runtime: runtime, Raw: map[string]any{
 			"paths": map[string]any{"runtime": runtime},
 		}},
-		Mounts: map[string]*config.Document{
+		Storages: map[string]*config.Document{
 			"mount-backup": {
 				Body: map[string]any{
-					"name": "mount-backup",
-					"path": "/mnt/backup",
+					"name":  "mount-backup",
+					"path":  "/mnt/backup",
+					"mount": map[string]any{},
 				},
 			},
 		},
-		MountNames: []string{"mount-backup"},
+		StorageNames: []string{"mount-backup"},
 	}
 	b, warns := NewWebBackend(cfg, Deps{
 		MountSampler: func() ([]checks.Mount, error) {
@@ -224,6 +229,78 @@ func TestWebBackendUnmountDoesNotSignalUnlessRequested(t *testing.T) {
 	}
 }
 
+func TestWebBackendMountActionSyncsStorageWatchMonitoring(t *testing.T) {
+	mounted := true
+	store := newFakeStore()
+	store.active[watchMonitorKey("mount-backup")] = true
+	var events []Event
+	cfg := mountTestConfig(t)
+	b, warns := NewWebBackend(cfg, Deps{
+		Monitor:     store,
+		ExecxRunner: &webMountRunner{mounted: &mounted},
+		MountSampler: func() ([]checks.Mount, error) {
+			if mounted {
+				return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
+			}
+			return nil, nil
+		},
+		Emit: func(e Event) { events = append(events, e) },
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	res := b.MountAction(context.Background(), "mount-backup", "umount", web.MountActionOptions{})
+	if !res.OK || mounted {
+		t.Fatalf("umount = %+v mounted=%t", res, mounted)
+	}
+	if store.active[watchMonitorKey("mount-backup")] || store.source[watchMonitorKey("mount-backup")] != state.SourceWebMountUmount {
+		t.Fatalf("watch after umount active=%v source=%q", store.active[watchMonitorKey("mount-backup")], store.source[watchMonitorKey("mount-backup")])
+	}
+	watches := b.Watches(context.Background())
+	if len(watches) != 1 || watches[0].State != TargetStateDisabled || watches[0].Storage == nil || watches[0].Storage.Mounted {
+		t.Fatalf("watch view after umount = %+v", watches)
+	}
+
+	mounted = true // already-mounted path avoids using the host /etc/fstab in the test.
+	res = b.MountAction(context.Background(), "mount-backup", "mount", web.MountActionOptions{})
+	if !res.OK {
+		t.Fatalf("mount = %+v", res)
+	}
+	if !store.active[watchMonitorKey("mount-backup")] || store.source[watchMonitorKey("mount-backup")] != state.SourceWeb {
+		t.Fatalf("watch after mount active=%v source=%q", store.active[watchMonitorKey("mount-backup")], store.source[watchMonitorKey("mount-backup")])
+	}
+	if len(events) != 2 || events[0].Action != "unmonitor" || events[1].Action != "monitor" {
+		t.Fatalf("monitor events = %+v", events)
+	}
+}
+
+func TestWebBackendMountActionPreservesManualUnmonitor(t *testing.T) {
+	mounted := true
+	store := newFakeStore()
+	store.active[watchMonitorKey("mount-backup")] = false
+	store.source[watchMonitorKey("mount-backup")] = state.SourceWeb
+	cfg := mountTestConfig(t)
+	b, warns := NewWebBackend(cfg, Deps{
+		Monitor:     store,
+		ExecxRunner: &webMountRunner{mounted: &mounted},
+		MountSampler: func() ([]checks.Mount, error) {
+			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
+		},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	res := b.MountAction(context.Background(), "mount-backup", "mount", web.MountActionOptions{})
+	if !res.OK {
+		t.Fatalf("mount = %+v", res)
+	}
+	if store.active[watchMonitorKey("mount-backup")] || store.source[watchMonitorKey("mount-backup")] != state.SourceWeb {
+		t.Fatalf("manual unmonitor was not preserved: active=%v source=%q", store.active[watchMonitorKey("mount-backup")], store.source[watchMonitorKey("mount-backup")])
+	}
+}
+
 func TestWebBackendAlertMountUsers(t *testing.T) {
 	cfg := mountTestConfig(t)
 	alerter := &fakeMountAlerter{}
@@ -254,26 +331,31 @@ func mountTestConfig(t *testing.T) *config.Config {
 		Global: config.Global{Runtime: runtime, Raw: map[string]any{
 			"paths": map[string]any{"runtime": runtime},
 		}},
-		Mounts: map[string]*config.Document{
+		Storages: map[string]*config.Document{
 			"mount-backup": {
 				Body: map[string]any{
-					"name":     "mount-backup",
-					"path":     "/mnt/backup",
-					"refcount": false,
-					"umount": map[string]any{
-						"allow_sigkill": true,
-						"term_timeout":  time.Nanosecond.String(),
-						"kill_timeout":  time.Nanosecond.String(),
+					"name": "mount-backup",
+					"path": "/mnt/backup",
+					"capacity": map[string]any{
+						"mounted": true,
 					},
-					"stop_policy": map[string]any{
-						"kill_only_if": map[string]any{
-							"users":   []any{"1000"},
-							"exe_any": []any{"/usr/bin/rsync"},
+					"mount": map[string]any{
+						"refcount": false,
+						"umount": map[string]any{
+							"allow_sigkill": true,
+							"term_timeout":  time.Nanosecond.String(),
+							"kill_timeout":  time.Nanosecond.String(),
+						},
+						"stop_policy": map[string]any{
+							"kill_only_if": map[string]any{
+								"users":   []any{"1000"},
+								"exe_any": []any{"/usr/bin/rsync"},
+							},
 						},
 					},
 				},
 			},
 		},
-		MountNames: []string{"mount-backup"},
+		StorageNames: []string{"mount-backup"},
 	}
 }

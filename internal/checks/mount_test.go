@@ -168,3 +168,21 @@ func TestMountForPathEqualLengthPrefersBetterMount(t *testing.T) {
 		t.Fatalf("MountForPath = %+v, want the ext4 mount (betterMount tie-break)", got)
 	}
 }
+
+func TestMountAtPathRequiresExactMountPoint(t *testing.T) {
+	mounts := []Mount{
+		{Device: "/dev/root", MountPoint: "/", FSType: "ext4"},
+		{Device: "systemd-1", MountPoint: "/data", FSType: "autofs"},
+		{Device: "/dev/data", MountPoint: "/data", FSType: "xfs"},
+	}
+	if got := MountAtPath(mounts, "/data/app"); got != nil {
+		t.Fatalf("MountAtPath child = %+v, want nil", got)
+	}
+	got := MountAtPath(mounts, "/data")
+	if got == nil || got.FSType != "xfs" {
+		t.Fatalf("MountAtPath exact = %+v, want xfs", got)
+	}
+	if got := MountAtPath(mounts, "data"); got != nil {
+		t.Fatalf("MountAtPath relative = %+v, want nil", got)
+	}
+}
