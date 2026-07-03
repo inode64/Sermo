@@ -143,6 +143,8 @@
   .state-ok, .state-monitorized { color: var(--ok); }
   .state-failed { color: var(--crit); }
   .state-failed::before { animation: beat 1.2s ease-in-out infinite; }
+  .monitor-state { display: inline-block; margin-left: .25rem; }
+  .monitor-state .target-state { font-weight: 600; opacity: .82; }
   @keyframes beat { 50% { transform: scale(1.55); opacity: .55; } }
   /* Honor the OS "reduce motion" preference across the whole UI: the heartbeat
      dots (state-failed, op-dot), the panic-button pulse, the summary chevron

@@ -613,7 +613,7 @@ function nextRemediationCell(s) {
 // so typing or switching a filter re-renders from cache without a refetch.
 let allServices = [];
 let svcQuery = "";
-let svcStatus = "all"; // all | disabled | running | paused | stopped | unmonitorized | monitorized | failed
+let svcStatus = "all"; // all | disabled | running | paused | stopped | unmonitorized | monitorized | starting | failed
 let svcCategory = "all";
 let svcGrouped = false;
 let svcCollapsedGroups = new Set();
@@ -868,13 +868,32 @@ function serviceUnmonitorized(s) {
   return !!(s && s.enabled && !s.monitored);
 }
 
+function serviceMonitorized(s) {
+  return !!(s && s.enabled && s.monitored);
+}
+
+function monitorStateBadge(monitored) {
+  return tpl`<span class="monitor-state">${stateBadgeLabel(monitored ? "monitorized" : "unmonitorized", monitored ? "monitored" : "unmonitored")}</span>`;
+}
+
+function serviceMonitorHint(s) {
+  const bits = [];
+  if (s && s.monitor_source) bits.push(fmtMonitorSource(s.monitor_source));
+  if (s && s.monitor_changed_at) bits.push(fmtAge(s.monitor_changed_at));
+  return bits.length ? tpl` <span class="muted">${bits.join(" · ")}</span>` : nothing;
+}
+
+function serviceMonitorBadge(s) {
+  if (!s || !s.enabled) return nothing;
+  return tpl`${monitorStateBadge(!!s.monitored)}${serviceUnmonitorized(s) ? serviceMonitorHint(s) : nothing}`;
+}
+
 function serviceStateBadge(s) {
-  const state = serviceDisplayState(s);
-  if (serviceUnmonitorized(s)) {
-    if (state === "running" || state === "stopped" || state === "paused") return stateBadge(state);
-    return stateBadge("unmonitorized");
-  }
-  return stateBadge(state);
+  return stateBadge(serviceDisplayState(s));
+}
+
+function serviceStateCell(s) {
+  return tpl`${serviceStateBadge(s)}${serviceMonitorBadge(s)}`;
 }
 
 function isFailing(s) { return serviceState(s) === "failed"; }
@@ -1038,7 +1057,7 @@ function renderAttention() {
   // Recent errors are an advisory, not a critical signal: the rollup counts every
   // error event in the rolling activity window — including stale reload/config
   // failures and errors from now-unmonitored targets — so it must never drive the
-  // overall status red. A currently-failing *monitored* target turns the favicon
+  // overall status red. A currently-failing target turns the favicon
   // red through its own path (failed services/watches/apps, hook-failed/firing).
   if (latestActivity && (latestActivity.errors || 0) > 0) {
     items.push({
@@ -1171,16 +1190,16 @@ function serviceMatches(s) {
   const category = categoryOf(s, "service");
   if (svcCategory !== "all" && category !== svcCategory) return false;
   if (svcQuery) {
-    const hay = `${displayName(s)} ${s.name || ""} ${s.display_name || ""} ${category} ${s.unit || ""} ${serviceDisplayState(s)} ${serviceUnmonitorized(s) ? "unmonitorized" : ""}`.toLowerCase();
+    const hay = `${displayName(s)} ${s.name || ""} ${s.display_name || ""} ${category} ${s.unit || ""} ${serviceDisplayState(s)} ${serviceMonitorized(s) ? "monitorized monitored" : ""} ${serviceUnmonitorized(s) ? "unmonitorized unmonitored" : ""}`.toLowerCase();
     if (!hay.includes(svcQuery)) return false;
   }
   switch (svcStatus) {
     case "unmonitorized": return serviceUnmonitorized(s);
+    case "monitorized":   return serviceMonitorized(s);
     case "disabled":
     case "running":
     case "paused":
     case "stopped":
-    case "monitorized":
     case "starting":
     case "failed":      return serviceDisplayState(s) === svcStatus;
     default:            return true; // "all"
@@ -1224,8 +1243,16 @@ function sortedBy(list, sort, sortKeys, fallbackKey) {
 function renderFilterButtonCounts(selector, counts) {
   document.querySelectorAll(`${selector} button`).forEach((b) => {
     const key = b.dataset.f || b.dataset.wf || b.dataset.af;
-    if (counts[key] !== undefined) b.innerHTML = `${key} <span class="muted">${counts[key]}</span>`;
+    if (counts[key] !== undefined) b.innerHTML = `${filterButtonLabel(key)} <span class="muted">${counts[key]}</span>`;
   });
+}
+
+function filterButtonLabel(key) {
+  switch (key) {
+    case "monitorized": return "monitored";
+    case "unmonitorized": return "unmonitored";
+    default: return key;
+  }
 }
 
 function syncFilterButtons(selector, datasetKey, activeValue) {
@@ -1294,7 +1321,7 @@ function renderFilterCounts() {
     paused: s.filter((x) => serviceDisplayState(x) === "paused").length,
     stopped: s.filter((x) => serviceDisplayState(x) === "stopped").length,
     unmonitorized: s.filter(serviceUnmonitorized).length,
-    monitorized: s.filter((x) => serviceDisplayState(x) === "monitorized").length,
+    monitorized: s.filter(serviceMonitorized).length,
     starting: s.filter((x) => serviceDisplayState(x) === "starting").length,
     failed: s.filter((x) => serviceDisplayState(x) === "failed").length,
   };
@@ -1447,7 +1474,7 @@ function serviceRowParts(s) {
   const main = tpl`<tr id="svc-row-${s.name}" class="clickable ${rowClass}" data-exp-key="${key}">
     <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
     <td>${categoryBadge(category)}</td>
-    <td>${serviceStateBadge(s)}</td>
+    <td>${serviceStateCell(s)}</td>
     <td>${serviceUptimeCell(s)}</td>
     <td>${serviceCpuCell(s)}</td>
     <td>${serviceMemCell(s)}</td>
@@ -2224,7 +2251,7 @@ function renderServiceDetail(d) {
     : nothing;
   const general = tpl`<h2>General data</h2>
     <div class="runtime-grid">
-      <div><span class="muted">State</span><br>${serviceStateBadge(d)}</div>
+      <div><span class="muted">State</span><br>${serviceStateCell(d)}</div>
       <div><span class="muted">Category</span><br>${categoryBadge(categoryOf(d, "service"))}</div>
       <div><span class="muted">Unit</span><br>${unitCell(d)}</div>
       <div><span class="muted">Backend</span><br>${d.backend || "—"}</div>
@@ -2519,10 +2546,9 @@ function watchHasExpand(w) {
   return !!(w && w.expand && Number(w.expand.by_bytes) > 0);
 }
 
-// watchStateText reads the server-computed state (app.WatchState: disabled,
-// unmonitorized, failed or ok). The UI ships embedded in the same binary, so
-// the field is always present; re-deriving it here would duplicate the Go
-// logic (see watchViewFailed) and could only drift.
+// watchStateText reads the server-computed health state (app.WatchState:
+// disabled, starting, failed or ok). The monitor flag is rendered separately so
+// unmonitored watches can still surface their last known health.
 function watchStateText(w) {
   return (w && w.state) || "unknown";
 }
@@ -2539,8 +2565,13 @@ function watchUnmonitorized(w) {
   return !!(w && w.enabled && !w.monitored);
 }
 
-function watchStateHint(w) {
-  return watchUnmonitorized(w) ? watchMonitorHint(w) : nothing;
+function watchMonitorBadge(w) {
+  if (!w || !w.enabled) return nothing;
+  return tpl`${monitorStateBadge(!!w.monitored)}${watchUnmonitorized(w) ? watchMonitorHint(w) : nothing}`;
+}
+
+function watchStateCell(w) {
+  return tpl`${stateBadge(watchStateText(w))}${watchMonitorBadge(w)}`;
 }
 
 function watchSummaryText(w) {
@@ -3018,7 +3049,7 @@ function watchRowHTML(w) {
     <td>${w.check_type || ""}</td>
     <td class="watch-summary">${watchSummaryCell(w)}</td>
     <td>${watchLastCell(w)}</td>
-    <td>${stateBadge(state)}${watchStateHint(w)}</td>
+    <td>${watchStateCell(w)}</td>
     ${watchActionsCell(w)}
   </tr>`;
   const expRow = watchExpansionRow(key, open, 6);
@@ -3053,7 +3084,7 @@ function storageRowHTML(w) {
     <td>${fs}</td>
     <td>${mount}</td>
     <td>${watchLastCell(w)}</td>
-    <td>${stateBadge(state)}${watchStateHint(w)}</td>
+    <td>${watchStateCell(w)}</td>
     ${watchActionsCell(w)}
   </tr>`;
   const expRow = watchExpansionRow(key, open, 7);
@@ -3078,7 +3109,7 @@ function certRowHTML(w) {
     <td>${readingValue(w, "issuer")}</td>
     <td>${keyType}</td>
     <td>${watchLastCell(w)}</td>
-    <td>${stateBadge(state)}${watchStateHint(w)}</td>
+    <td>${watchStateCell(w)}</td>
     ${watchActionsCell(w)}
   </tr>`;
   const expRow = watchExpansionRow(key, open, 8);
@@ -3098,7 +3129,7 @@ function diskioRowHTML(w) {
     <td>${readingValue(w, "read_bytes")} / ${readingValue(w, "write_bytes")}</td>
     <td>${readingValue(w, "await_ms")}</td>
     <td>${watchLastCell(w)}</td>
-    <td>${stateBadge(state)}${watchStateHint(w)}</td>
+    <td>${watchStateCell(w)}</td>
     ${watchActionsCell(w)}
   </tr>`;
   const expRow = watchExpansionRow(key, open, 8);
@@ -3402,7 +3433,6 @@ async function loadAppEvents(name) {
 function renderWatchExpansion(w, events) {
   w = w || {};
   const mode = watchMonitorMode(w);
-  const state = watchStateText(w);
   const polarity = w.fire_on_fail ? "on fail" : "on threshold";
   const names = notifierNames(w);
   const notifiers = names.length
@@ -3415,7 +3445,7 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">Type</span><br><b>${w.check_type || ""}</b></div>
     <div><span class="muted">Interval</span><br><b>${w.interval || ""}</b></div>
     <div><span class="muted">Fires</span><br><b>${polarity}</b></div>
-    <div><span class="muted">State</span><br>${stateBadge(state)}${watchStateHint(w)}</div>
+    <div><span class="muted">State</span><br>${watchStateCell(w)}</div>
     <div><span class="muted">Monitor flag</span><br><code>${mode}</code></div>
     <div><span class="muted">Hook</span><br>${hook}</div>
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
@@ -3784,7 +3814,7 @@ function renderOverview(ctx) {
   const enabled = svcs.filter((s) => s.enabled);
   const failedSvcs = svcs.filter((s) => serviceState(s) === "failed");
   const startingSvcs = svcs.filter((s) => serviceState(s) === "starting");
-  const upSvcs = enabled.filter((s) => ["monitorized", "running", "ok"].includes(serviceState(s)));
+  const upSvcs = enabled.filter((s) => serviceState(s) === "running");
   const watches = allWatches || [];
   const enabledWatches = watches.filter((w) => w && w.enabled);
   const failedWatches = watches.filter((w) => watchStateText(w) === "failed");
@@ -4472,7 +4502,7 @@ function renderActionConfirm() {
     ${cascadeLine}
     <div class="modal-grid">
       <div class="muted">Unit</div><div><code>${d.unit || ""}</code></div>
-      <div class="muted">State</div><div>${stateBadge(serviceState(d))}</div>
+      <div class="muted">State</div><div>${serviceStateCell(d)}</div>
       <div class="muted">Named locks</div><div>${lockLine}</div>
       <div class="muted">Guards</div><div><span class="muted">evaluated by the operation engine before ${ctx.action || "action"}</span></div>
       <div class="muted">Preflight</div><div>${preState}</div>

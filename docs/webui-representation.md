@@ -148,7 +148,7 @@ checks, remediation and actions for what `sermod` monitors now. This is not
 | Title | `Services` plus total count |
 | Title icons | group by category, collapse/expand all groups |
 | Controls | search, category select, status filters, showing count |
-| Status filters | all, disabled, running, paused, stopped, unmonitorized, monitorized, starting, failed |
+| Status filters | all, disabled, running, paused, stopped, starting, failed, monitored, unmonitored |
 | Sorting | Service, Category, State |
 | Grouping | category group rows, collapsible |
 
@@ -158,7 +158,7 @@ Columns:
 | --- | --- |
 | Service | display name, falling back to name, capitalized |
 | Category | YAML category or fallback |
-| State | normalized state; enabled-but-unmonitored services show an **unmonitored** badge (with running/stopped hint when the unit is active/inactive) plus monitor hint |
+| State | normalized activity state plus a separate **monitored** / **unmonitored** badge when the service is enabled |
 | Uptime | age of the oldest discovered service process, when available |
 | CPU total | latest whole process-tree CPU usage |
 | Memory | latest process-tree resident memory |
@@ -271,7 +271,7 @@ column, from the same per-process totals already in the service detail.
 | Title | Panel name plus total count for that panel's watch subset |
 | Controls | search, type filter, state filters, showing count |
 | Type filter | panel-specific `all ... types` plus the distinct check types currently present in that panel |
-| State filters | all, disabled, ok, monitorized, unmonitorized, starting, failed |
+| State filters | all, disabled, ok, starting, failed, monitored, unmonitored |
 | Sorting | Name, Type, Summary, Interval, Polarity, Hook, Notifiers, Last activity, State |
 | Visibility | hidden when no watches are configured for that panel's subset |
 
@@ -287,7 +287,7 @@ Columns:
 | Hook | configured hook state |
 | Notifiers | configured notifier count/list |
 | Last activity | latest hook/notify activity |
-| State | normalized watch state |
+| State | normalized watch health plus a separate **monitored** / **unmonitored** badge when the watch is enabled |
 | Actions | monitor/unmonitor and supported actions |
 
 Row expansion:

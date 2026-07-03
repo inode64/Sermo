@@ -148,7 +148,7 @@ checks, remediación y acciones de lo que `sermod` monitoriza actualmente. Esto 
 | Título | `Services` más el recuento total |
 | Iconos del título | agrupar por categoría, contraer/expandir todos los grupos |
 | Controles | búsqueda, selector de categoría, filtros de estado, recuento mostrado |
-| Filtros de estado | all, disabled, running, paused, stopped, unmonitorized, monitorized, starting, failed |
+| Filtros de estado | all, disabled, running, paused, stopped, starting, failed, monitored, unmonitored |
 | Ordenación | Service, Category, State |
 | Agrupación | filas de grupo por categoría, contraíbles |
 
@@ -158,7 +158,7 @@ Columnas:
 | --- | --- |
 | Service | nombre para mostrar, con fallback al nombre, capitalizado |
 | Category | categoría YAML o fallback |
-| State | estado normalizado; los servicios habilitados pero no monitorizados muestran una insignia de **unmonitored** (con pista de running/stopped cuando la unidad está activa/inactiva) más una pista de monitorización |
+| State | estado de actividad normalizado más una insignia separada **monitored** / **unmonitored** cuando el servicio está habilitado |
 | Uptime | antigüedad del proceso de servicio más antiguo descubierto, cuando está disponible |
 | CPU total | último uso de CPU de todo el árbol de procesos |
 | Memory | última memoria residente del árbol de procesos |
@@ -273,7 +273,7 @@ aparecen en el detalle del servicio.
 | Título | nombre del panel más el recuento total del subconjunto de watches de ese panel |
 | Controles | búsqueda, filtro de tipo, filtros de estado, recuento mostrado |
 | Filtro de tipo | `all ... types` específico del panel más los distintos tipos de check presentes actualmente en ese panel |
-| Filtros de estado | all, disabled, ok, monitorized, unmonitorized, starting, failed |
+| Filtros de estado | all, disabled, ok, starting, failed, monitored, unmonitored |
 | Ordenación | Name, Type, Summary, Interval, Polarity, Hook, Notifiers, Last activity, State |
 | Visibilidad | oculto cuando no hay watches configurados para el subconjunto de ese panel |
 
@@ -289,7 +289,7 @@ Columnas:
 | Hook | estado del hook configurado |
 | Notifiers | recuento/lista de notifiers configurados |
 | Last activity | última actividad de hook/notify |
-| State | estado normalizado del watch |
+| State | salud normalizada del watch más una insignia separada **monitored** / **unmonitored** cuando el watch está habilitado |
 | Actions | monitor/unmonitor y acciones admitidas |
 
 Expansión de fila:

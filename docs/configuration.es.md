@@ -651,7 +651,7 @@ Endpoints de solo lectura:
 - `GET /api/whoami` — rol del llamante, permisos y visibilidad de funciones.
 - `GET /api/services` — lista de services de **runtime configurado** (los archivos de
   service bajo `paths.services`): name, `state` (`disabled`, `running`,
-  `paused`, `stopped`, `monitorized`, `failed`), estado del backend, `check_health`,
+  `paused`, `stopped`, `starting`, `failed`), estado del backend, `check_health`,
   `checks_failing`, locks activos, estado/fuente/marca de tiempo de monitor, backend,
   unidad, cooldown, estado de remediación, próxima acción elegible y último evento. Esto
   no es `sermoctl services`, que lista los perfiles de service del catálogo — consulta
@@ -833,11 +833,13 @@ Los cambios de monitor disparados desde la web se registran con la fuente `web` 
 almacén de estado; los stops manuales desde la web UI o la CLI usan
 `web-manual-stop` / `cli-manual-stop` hasta que un start correcto posterior restaura el
 estado monitorizado anterior. El panel y
-`GET /api/services` / `GET /api/watches` exponen `state`, `monitor_source` y
-`monitor_changed_at` de modo que un service running/paused/stopped no monitorizado o un
-watch desmonitorizado muestre quién lo pausó y cuándo. Los host watches no tienen los
-estados `running` o `stopped` del gestor de servicios; el panel los filtra como
-`ok`, `failed`, `unmonitorized` o `disabled`.
+`GET /api/services` / `GET /api/watches` exponen `state`, `monitored`,
+`monitor_source` y `monitor_changed_at` por separado, de modo que un service pueda
+mostrar `running`, `paused`, `stopped` o `failed` y, a la vez, si la monitorización
+está pausada y quién la cambió. Los host watches no tienen los estados `running` o
+`stopped` del gestor de servicios; su `state` es salud (`ok`, `failed`, `starting` o
+`disabled`) y el panel filtra watches monitorizados/no monitorizados desde el flag de
+monitorización separado.
 Las operaciones toman el lock de operación por service, de modo que nunca se solapan con
 la acción de un worker sobre el mismo service. El almacén de estado también conserva una
 marca corta de asentamiento de operación, de modo que las acciones iniciadas por

@@ -17,9 +17,10 @@ func TestServiceState(t *testing.T) {
 		{name: "running unmonitored", enabled: true, monitored: false, backendStatus: "active", observed: true, want: TargetStateRunning},
 		{name: "paused unmonitored", enabled: true, monitored: false, backendStatus: "paused", observed: true, want: TargetStatePaused},
 		{name: "stopped unmonitored", enabled: true, monitored: false, backendStatus: "inactive", observed: true, want: TargetStateStopped},
-		{name: "monitorized active healthy", enabled: true, monitored: true, backendStatus: "active", checkHealth: "ok", observed: true, want: TargetStateMonitorized},
+		{name: "failed unmonitored", enabled: true, monitored: false, backendStatus: "failed", observed: true, want: TargetStateFailed},
+		{name: "running active healthy", enabled: true, monitored: true, backendStatus: "active", checkHealth: "ok", observed: true, want: TargetStateRunning},
 		{name: "paused monitored", enabled: true, monitored: true, backendStatus: "paused", checkHealth: "ok", observed: true, want: TargetStatePaused},
-		{name: "monitorized active unknown checks", enabled: true, monitored: true, backendStatus: "active", checkHealth: "unknown", observed: true, want: TargetStateMonitorized},
+		{name: "running active unknown checks", enabled: true, monitored: true, backendStatus: "active", checkHealth: "unknown", observed: true, want: TargetStateRunning},
 		{name: "failed backend", enabled: true, monitored: true, backendStatus: "failed", observed: true, want: TargetStateFailed},
 		{name: "failed checks", enabled: true, monitored: true, backendStatus: "active", checkHealth: "failing", observed: true, want: TargetStateFailed},
 	}
@@ -43,7 +44,8 @@ func TestWatchState(t *testing.T) {
 	}{
 		{name: "disabled", enabled: false, observed: true, want: TargetStateDisabled},
 		{name: "starting monitored", enabled: true, monitored: true, observed: false, want: TargetStateStarting},
-		{name: "unmonitorized", enabled: true, monitored: false, observed: true, want: TargetStateUnmonitorized},
+		{name: "unmonitorized ok", enabled: true, monitored: false, observed: true, want: TargetStateOK},
+		{name: "unmonitorized failed", enabled: true, monitored: false, failed: true, observed: true, want: TargetStateFailed},
 		{name: "ok", enabled: true, monitored: true, observed: true, want: TargetStateOK},
 		{name: "failed", enabled: true, monitored: true, failed: true, observed: true, want: TargetStateFailed},
 	}
