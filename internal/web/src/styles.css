@@ -218,7 +218,7 @@
     min-height: 1.5rem;
     border-radius: var(--radius-s); border: 1px solid var(--line-2); background: var(--panel);
   }
-  input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible, th.sortable:focus-visible, .skip-link:focus-visible {
+  input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible, th.sortable:focus-visible, .skip-link:focus-visible, .section-jump:focus-visible {
     /* Solid accent (not a 55% tint): the focus ring must clear WCAG 1.4.11's 3:1
        against the adjacent surface. At 55% alpha it was only ~2.4:1; solid accent
        is ~5.6-6:1 on panel/bg in both schemes. */
@@ -287,7 +287,8 @@
   .section-jump {
     flex: 0 0 auto; display: inline-flex; align-items: baseline; gap: .25rem;
     min-height: 1.8rem; padding: .2rem .55rem; white-space: nowrap;
-    border-color: var(--line); color: var(--text-2);
+    border: 1px solid var(--line); border-radius: var(--radius-s);
+    color: var(--text-2); text-decoration: none;
     background: color-mix(in srgb, var(--panel) 88%, transparent);
     font-size: .78rem; line-height: 1.2;
   }
