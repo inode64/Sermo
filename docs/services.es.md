@@ -1090,11 +1090,13 @@ variables:
 ```
 
 Se evalúa durante la resolución (de modo que puede referenciar otras variables como
-`${config}`) y se reevalúa en cada recarga de config. La spec de variable debe
-definir `from_file`, `default`, y exactamente uno de `directive` o `pattern`.
-`pattern` debe compilar e incluir un grupo de captura. Un fichero ausente o una clave no coincidente
-usa `default`; specs malformadas o variables desconocidas en `from_file` son
-errores de validación.
+`${config}`) y se reevalúa en cada recarga de config. `pattern` también puede
+referenciar variables como `${instance}`; esos valores se escapan como literales
+de regex antes de leer el fichero. La spec de variable debe definir `from_file`,
+`default`, y exactamente uno de `directive` o `pattern`. `pattern` debe compilar
+e incluir un grupo de captura. Un fichero ausente o una clave no coincidente usa
+`default`; specs malformadas o variables desconocidas en `from_file` / `pattern`
+son errores de validación.
 
 ### Listar aplicaciones instaladas
 

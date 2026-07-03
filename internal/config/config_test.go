@@ -5032,6 +5032,131 @@ defaults: { policy: { cooldown: 5m } }
 	}
 }
 
+func TestNUTDriverServiceResolvesUPSConfigDriver(t *testing.T) {
+	root := t.TempDir()
+	upsConf := filepath.Join(root, "ups.conf")
+	if err := os.WriteFile(upsConf, []byte(`
+[sai1]
+  driver = usbhid-ups
+  port = auto
+
+[rack.snmp]
+  driver = snmp-ups
+  port = 192.0.2.10
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalogDir := filepath.Join(root, "catalog", "services")
+	servicesDir := filepath.Join(root, "services")
+	if err := os.MkdirAll(catalogDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(servicesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(path, content string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	nutBody := fmt.Sprintf(`
+display_name: NUT UPS Drivers
+category: hardware
+service:
+  systemd:
+    - nut-driver.target
+  openrc:
+    - upsdrv
+variables:
+  config: %s
+  instance:
+    from_file: ${config}
+    pattern: (?m)^\s*\[([A-Za-z0-9_.-]+)\]\s*$
+    default: ""
+  driver:
+    from_file: ${config}
+    pattern: (?m)^\s*driver\s*=\s*([A-Za-z0-9_.-]+)\s*$
+    default: usbhid-ups
+pidfile: /run/nut/${driver}-${instance}.pid
+processes:
+  main:
+    cmd: /nut/${driver}(?:\s|$)
+checks:
+  process:
+    type: process
+    exe_any:
+      - /usr/lib64/nut/${driver}
+      - /lib64/nut/${driver}
+`, upsConf)
+	write(filepath.Join(catalogDir, "upsdrv.yml"), "name: upsdrv\n"+nutBody)
+	write(filepath.Join(catalogDir, "upsdrv-instance.yml"), fmt.Sprintf(`name: upsdrv.%%i
+display_name: NUT UPS Driver ${instance}
+category: hardware
+service:
+  systemd:
+    - nut-driver@${instance}
+  openrc:
+    - upsdrv.${instance}
+variables:
+  config: %s
+  driver:
+    from_file: ${config}
+    pattern: (?ms)^\s*\[${instance}\]\s*$.*?^\s*driver\s*=\s*([A-Za-z0-9_.-]+)\s*$
+    default: usbhid-ups
+pidfile: /run/nut/${driver}-${instance}.pid
+checks:
+  process:
+    type: process
+    exe_any:
+      - /usr/lib64/nut/${driver}
+      - /lib64/nut/${driver}
+`, upsConf))
+	write(filepath.Join(servicesDir, "upsdrv.yml"), "name: upsdrv-main\nuses: upsdrv\n")
+	write(filepath.Join(servicesDir, "rack.yml"), "name: rack\nuses: upsdrv.rack.snmp\n")
+	global := filepath.Join(root, "sermo.yml")
+	write(global, fmt.Sprintf(`
+engine: { backend: systemd }
+paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, filepath.Join(root, "catalog"), servicesDir))
+
+	cfg, err := Load(global, WithServiceUnits("systemd", []string{"nut-driver@rack.snmp.service"}))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if _, ok := cfg.CatalogServices["upsdrv.rack.snmp"]; !ok {
+		t.Fatal("expected materialized upsdrv.rack.snmp catalog service")
+	}
+
+	base, errs := cfg.Resolve("upsdrv-main")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve(upsdrv-main) errors = %v", errs)
+	}
+	if got := cfgval.String(base.Tree["pidfile"]); got != "/run/nut/usbhid-ups-sai1.pid" {
+		t.Fatalf("base pidfile = %q, want /run/nut/usbhid-ups-sai1.pid", got)
+	}
+	baseExes := cfgval.StringList(nested(t, base.Tree, "checks", "process")["exe_any"])
+	if !slices.Contains(baseExes, "/usr/lib64/nut/usbhid-ups") {
+		t.Fatalf("base process exe_any = %v, want usbhid-ups path", baseExes)
+	}
+
+	inst, errs := cfg.Resolve("rack")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve(rack) errors = %v", errs)
+	}
+	if got := ServiceUnit(inst.Tree, "rack"); got != "nut-driver@rack.snmp" {
+		t.Fatalf("instance service = %q, want nut-driver@rack.snmp", got)
+	}
+	if got := cfgval.String(inst.Tree["pidfile"]); got != "/run/nut/snmp-ups-rack.snmp.pid" {
+		t.Fatalf("instance pidfile = %q, want /run/nut/snmp-ups-rack.snmp.pid", got)
+	}
+	instExes := cfgval.StringList(nested(t, inst.Tree, "checks", "process")["exe_any"])
+	if !slices.Contains(instExes, "/usr/lib64/nut/snmp-ups") {
+		t.Fatalf("instance process exe_any = %v, want snmp-ups path", instExes)
+	}
+}
+
 // TestEnableIfPrunesByConfdFile covers the enable_if directive: a process branch
 // is kept only when a key in a distro conf file satisfies the predicate (e.g.
 // winbindd present in /etc/conf.d/samba's daemon_list). An absent file or
