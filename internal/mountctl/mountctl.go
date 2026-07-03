@@ -568,6 +568,14 @@ func PathInFstab(path string) (bool, error) {
 // ctx is cancelled, so a hung mount (e.g. a dead NFS server stalling readlink on
 // a /proc fd) cannot block umount escalation past the operation deadline.
 func usersWithLookup(ctx context.Context, mountPath string, lookup *process.UserLookup) ([]process.Process, error) {
+	byMount, err := ProcessesByMount(ctx, []string{mountPath}, lookup)
+	return byMount[filepath.Clean(mountPath)], err
+}
+
+// ProcessesByMount reports processes currently using each mount path. It walks
+// /proc once for all paths and uses the same cwd/root/fd path-prefix semantics
+// as the single-mount blocker scan.
+func ProcessesByMount(ctx context.Context, mountPaths []string, lookup *process.UserLookup) (map[string][]process.Process, error) {
 	if lookup == nil {
 		lookup = process.DefaultUserLookup()
 	}
@@ -576,17 +584,24 @@ func usersWithLookup(ctx context.Context, mountPath string, lookup *process.User
 	if err != nil {
 		return nil, err
 	}
-	cleanMount := filepath.Clean(mountPath)
-	var out []process.Process
+	cleanMounts := cleanMountPaths(mountPaths)
+	out := make(map[string][]process.Process, len(cleanMounts))
+	if len(cleanMounts) == 0 {
+		return out, nil
+	}
 	for _, pid := range pids {
 		if err := ctx.Err(); err != nil {
 			return out, err
 		}
-		if !pidUsesPath(ctx, pid, cleanMount) {
+		matches, err := pidUsesMounts(ctx, pid, cleanMounts)
+		if err != nil {
+			return out, err
+		}
+		if len(matches) == 0 {
 			continue
 		}
 		if id, ok := reader.Identity(pid); ok {
-			out = append(out, process.Process{
+			proc := process.Process{
 				PID:     id.PID,
 				PPID:    id.PPID,
 				User:    id.User,
@@ -596,11 +611,83 @@ func usersWithLookup(ctx context.Context, mountPath string, lookup *process.User
 				Cmdline: id.Cmdline,
 				Role:    "mount-user",
 				Source:  "mount",
-			})
+			}
+			for _, mountPath := range matches {
+				out[mountPath] = append(out[mountPath], proc)
+			}
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].PID < out[j].PID })
+	for mountPath := range out {
+		sort.Slice(out[mountPath], func(i, j int) bool { return out[mountPath][i].PID < out[mountPath][j].PID })
+	}
 	return out, nil
+}
+
+func cleanMountPaths(mountPaths []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(mountPaths))
+	for _, mountPath := range mountPaths {
+		clean := filepath.Clean(mountPath)
+		if !filepath.IsAbs(clean) {
+			continue
+		}
+		if _, ok := seen[clean]; ok {
+			continue
+		}
+		seen[clean] = struct{}{}
+		out = append(out, clean)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func pidUsesMounts(ctx context.Context, pid int, mountPaths []string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	base := filepath.Join("/proc", fmt.Sprint(pid))
+	matches := map[string]struct{}{}
+	for _, name := range []string{"cwd", "root"} {
+		if err := linkMountMatches(ctx, filepath.Join(base, name), mountPaths, matches); err != nil {
+			return nil, err
+		}
+	}
+	fdDir := filepath.Join(base, "fd")
+	entries, err := os.ReadDir(fdDir)
+	if err == nil {
+		for _, entry := range entries {
+			if err := linkMountMatches(ctx, filepath.Join(fdDir, entry.Name()), mountPaths, matches); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return sortedMountMatches(matches), nil
+}
+
+func linkMountMatches(ctx context.Context, link string, mountPaths []string, matches map[string]struct{}) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	target, err := os.Readlink(link)
+	if err == nil && filepath.IsAbs(target) {
+		target = strings.TrimSuffix(target, " (deleted)")
+		cleanTarget := filepath.Clean(target)
+		for _, mountPath := range mountPaths {
+			if pathUnderMount(cleanTarget, mountPath) {
+				matches[mountPath] = struct{}{}
+			}
+		}
+	}
+	return nil
+}
+
+func sortedMountMatches(matches map[string]struct{}) []string {
+	out := make([]string, 0, len(matches))
+	for mountPath := range matches {
+		out = append(out, mountPath)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func pidUsesPath(ctx context.Context, pid int, mountPath string) bool {
