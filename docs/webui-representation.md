@@ -162,6 +162,7 @@ Columns:
 | Uptime | age of the oldest discovered service process, when available |
 | CPU total | latest whole process-tree CPU usage |
 | Memory | latest process-tree resident memory |
+| FDs | open file-descriptor count from the process tree |
 | IO R/W | cumulative process-tree disk read/write bytes |
 | Actions | start, **start only** (when `also_apply` is set), stop, restart, reload, resume, monitor/unmonitor; stop/restart confirm dialog offers **skip also_apply** |
 
@@ -262,8 +263,8 @@ space, plus — when any exist — the count of **open files** on that filesyste
 (fds whose target resolves under the mount). That count comes from a cached
 host-wide `/proc/<pid>/fd` scan shared by all storage watches and refreshed at
 most once per minute; it is display only (no threshold/alert). The service list
-row likewise shows a service's open file-descriptor count (`fds`) beside its
-memory, from the same per-process totals already in the service detail.
+row likewise shows a service's open file-descriptor count (`fds`) in its own
+column, from the same per-process totals already in the service detail.
 
 | Part | Current representation |
 | --- | --- |

@@ -160,7 +160,7 @@ func TestIndexShellAnchors(t *testing.T) {
 		t.Errorf("want 3 <dialog> elements, got %d", dialogs)
 	}
 
-	for _, h := range []string{"Uptime", "CPU total", "Memory", "IO R/W", "State", "Type", "Actions"} {
+	for _, h := range []string{"Uptime", "CPU total", "Memory", "FDs", "IO R/W", "State", "Type", "Actions"} {
 		if !headers[h] {
 			t.Errorf("shell missing static <th> %q", h)
 		}
