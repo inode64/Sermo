@@ -531,13 +531,6 @@ function fmtMonitorSource(src) {
   }
 }
 
-function monitorHint(s) {
-  if (!s.monitor_source) return nothing;
-  let hint = fmtMonitorSource(s.monitor_source);
-  if (s.monitor_changed_at) hint += " · " + fmtAge(s.monitor_changed_at);
-  return hint ? tpl` <span class="muted">${hint}</span>` : nothing;
-}
-
 function unitCell(s) {
   // The init backend is system-wide (shown once in the daemon status), so the
   // per-row cell shows only the unit.
@@ -790,6 +783,11 @@ function targetStateClass(state) {
     case "unmonitorized": return "state-unmonitorized";
     case "failed": return "state-failed";
     case "starting": return "state-starting";
+    case "stopping":
+    case "restarting":
+    case "resuming":
+    case "reloading":
+      return "state-starting";
     default: return "muted";
   }
 }
@@ -815,6 +813,10 @@ function stateRank(state) {
     case "monitorized": return 6;
     case "failed": return 7;
     case "starting": return 1;
+    case "stopping": return 1;
+    case "restarting": return 1;
+    case "resuming": return 1;
+    case "reloading": return 1;
     default: return 5;
   }
 }
@@ -826,20 +828,34 @@ function serviceState(s) {
   return (s && s.state) || "unknown";
 }
 
+function operationState(action) {
+  switch (action) {
+    case "start": return "starting";
+    case "stop": return "stopping";
+    case "restart": return "restarting";
+    case "resume": return "resuming";
+    case "reload": return "reloading";
+    default: return "working";
+  }
+}
+
+function serviceDisplayState(s) {
+  const op = s && liveOps.get(s.name);
+  if (op && !op.finished) return operationState(op.action);
+  return serviceState(s);
+}
+
 function serviceUnmonitorized(s) {
   return !!(s && s.enabled && !s.monitored);
 }
 
 function serviceStateBadge(s) {
+  const state = serviceDisplayState(s);
   if (serviceUnmonitorized(s)) {
-    const backend = serviceState(s);
-    let label = "unmonitored";
-    if (backend === "running") label += " · running";
-    else if (backend === "stopped") label += " · stopped";
-    else if (backend === "paused") label += " · paused";
-    return stateBadgeLabel("unmonitorized", label);
+    if (state === "running" || state === "stopped" || state === "paused") return stateBadge(state);
+    return stateBadge("unmonitorized");
   }
-  return stateBadge(serviceState(s));
+  return stateBadge(state);
 }
 
 function isFailing(s) { return serviceState(s) === "failed"; }
@@ -1136,7 +1152,7 @@ function serviceMatches(s) {
   const category = categoryOf(s, "service");
   if (svcCategory !== "all" && category !== svcCategory) return false;
   if (svcQuery) {
-    const hay = `${displayName(s)} ${s.name || ""} ${s.display_name || ""} ${category} ${s.unit || ""} ${serviceState(s)} ${serviceUnmonitorized(s) ? "unmonitorized" : ""}`.toLowerCase();
+    const hay = `${displayName(s)} ${s.name || ""} ${s.display_name || ""} ${category} ${s.unit || ""} ${serviceDisplayState(s)} ${serviceUnmonitorized(s) ? "unmonitorized" : ""}`.toLowerCase();
     if (!hay.includes(svcQuery)) return false;
   }
   switch (svcStatus) {
@@ -1147,7 +1163,7 @@ function serviceMatches(s) {
     case "stopped":
     case "monitorized":
     case "starting":
-    case "failed":      return serviceState(s) === svcStatus;
+    case "failed":      return serviceDisplayState(s) === svcStatus;
     default:            return true; // "all"
   }
 }
@@ -1207,7 +1223,7 @@ let svcSort = { key: "", dir: 1 };
 const svcSortKeys = {
   name: (s) => displayName(s).toLowerCase(),
   category: (s) => categoryOf(s, "service").toLowerCase(),
-  state: (s) => stateRank(serviceState(s)),
+  state: (s) => stateRank(serviceDisplayState(s)),
   uptime: (s) => numericSortValue(s && s.uptime_seconds),
   cpu: (s) => (s && s.cpu_ready) ? numericSortValue(s.cpu) : 0,
   memory: (s) => numericSortValue(s && s.rss),
@@ -1254,14 +1270,14 @@ function renderFilterCounts() {
   const s = allServices || [];
   const c = {
     all: s.length,
-    disabled: s.filter((x) => serviceState(x) === "disabled").length,
-    running: s.filter((x) => serviceState(x) === "running").length,
-    paused: s.filter((x) => serviceState(x) === "paused").length,
-    stopped: s.filter((x) => serviceState(x) === "stopped").length,
+    disabled: s.filter((x) => serviceDisplayState(x) === "disabled").length,
+    running: s.filter((x) => serviceDisplayState(x) === "running").length,
+    paused: s.filter((x) => serviceDisplayState(x) === "paused").length,
+    stopped: s.filter((x) => serviceDisplayState(x) === "stopped").length,
     unmonitorized: s.filter(serviceUnmonitorized).length,
-    monitorized: s.filter((x) => serviceState(x) === "monitorized").length,
-    starting: s.filter((x) => serviceState(x) === "starting").length,
-    failed: s.filter((x) => serviceState(x) === "failed").length,
+    monitorized: s.filter((x) => serviceDisplayState(x) === "monitorized").length,
+    starting: s.filter((x) => serviceDisplayState(x) === "starting").length,
+    failed: s.filter((x) => serviceDisplayState(x) === "failed").length,
   };
   renderFilterButtonCounts("#svc-filters", c);
 }
@@ -1412,7 +1428,7 @@ function serviceRowParts(s) {
   const main = tpl`<tr id="svc-row-${s.name}" class="clickable ${rowClass}" data-exp-key="${key}">
     <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
     <td>${categoryBadge(category)}</td>
-    <td>${serviceStateBadge(s)}${state === "running" || state === "paused" || state === "stopped" ? monitorHint(s) : nothing}</td>
+    <td>${serviceStateBadge(s)}</td>
     <td>${serviceUptimeCell(s)}</td>
     <td>${serviceCpuCell(s)}</td>
     <td>${serviceMemCell(s)}</td>
@@ -2184,13 +2200,12 @@ function renderServiceDetail(d) {
       </div>
     </div>`;
 
-  const st = serviceState(d);
   const disabledNote = !d.enabled
     ? tpl`<p class="muted bad">This service is disabled in configuration (enabled: false). Edit its YAML file and reload the daemon to activate it.</p>`
     : nothing;
   const general = tpl`<h2>General data</h2>
     <div class="runtime-grid">
-      <div><span class="muted">State</span><br>${serviceStateBadge(d)}${st === "running" || st === "stopped" ? monitorHint(d) : nothing}</div>
+      <div><span class="muted">State</span><br>${serviceStateBadge(d)}</div>
       <div><span class="muted">Category</span><br>${categoryBadge(categoryOf(d, "service"))}</div>
       <div><span class="muted">Unit</span><br>${unitCell(d)}</div>
       <div><span class="muted">Backend</span><br>${d.backend || "—"}</div>

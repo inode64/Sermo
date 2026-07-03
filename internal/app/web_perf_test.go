@@ -80,6 +80,40 @@ func TestWebBackendListRuntimeUsesPublishedSample(t *testing.T) {
 	}
 }
 
+func TestWebBackendListRuntimeHiddenWhenServiceStopped(t *testing.T) {
+	t0 := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+	now := t0.Add(5 * time.Second)
+	metrics := NewServiceMetricSampler()
+	metrics.Record("lldpd", web.ServiceRuntime{
+		At:            t0.UTC().Format(time.RFC3339),
+		StartedAt:     t0.Add(-time.Hour).UTC().Format(time.RFC3339),
+		Uptime:        "1h",
+		UptimeSeconds: 3600,
+		ProcessTotals: web.ProcessTotals{Count: 2, RSS: 8192, CPU: 12.5, HasCPU: true},
+	})
+	b := &WebBackend{
+		order: []string{"lldpd"},
+		entries: map[string]*webEntry{
+			"lldpd": {
+				interval: 30 * time.Second,
+				status: func(context.Context) (servicemgr.Status, error) {
+					return servicemgr.StatusInactive, nil
+				},
+			},
+		},
+		serviceMetrics: metrics,
+		now:            func() time.Time { return now },
+	}
+
+	svc := b.viewWithRuntime(context.Background(), "lldpd", b.entries["lldpd"], nil, nil, true)
+	if svc.State != TargetStateFailed || svc.Status != "inactive" {
+		t.Fatalf("state = %q status=%q, want failed/inactive", svc.State, svc.Status)
+	}
+	if svc.ProcessCount != 0 || svc.RSS != 0 || svc.CPUReady || svc.CPU != 0 {
+		t.Fatalf("stopped service should not expose runtime fields: %+v", svc)
+	}
+}
+
 func TestWebBackendBackendStatusCacheTTL(t *testing.T) {
 	if serviceStatusCacheTTL < time.Minute {
 		t.Fatalf("serviceStatusCacheTTL = %s, want at least 1m to cover normal web refreshes", serviceStatusCacheTTL)
