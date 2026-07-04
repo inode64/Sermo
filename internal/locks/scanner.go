@@ -70,21 +70,10 @@ func (s Scanner) ScanServices(services []string) (map[string]Report, error) {
 		reports[service] = Report{Service: service}
 	}
 
-	entries, err := os.ReadDir(s.Dir)
+	names, err := s.lockFileNames()
 	if err != nil {
-		if os.IsNotExist(err) {
-			return reports, nil
-		}
-		return reports, fmt.Errorf("read locks dir %s: %w", s.Dir, err)
+		return reports, err
 	}
-
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), lockSuffix) {
-			names = append(names, e.Name())
-		}
-	}
-	sort.Strings(names)
 
 	for _, fileName := range names {
 		matches := lockServiceMatches(fileName, services)
@@ -126,6 +115,22 @@ func (s Scanner) ScanServices(services []string) (map[string]Report, error) {
 // ScanDir returns a warning for every lock file under Dir that cannot be read or
 // parsed. A missing directory yields no warnings.
 func (s Scanner) ScanDir() ([]string, error) {
+	names, err := s.lockFileNames()
+	if err != nil {
+		return nil, err
+	}
+
+	var warnings []string
+	for _, fileName := range names {
+		path := filepath.Join(s.Dir, fileName)
+		if _, err := readLockFile(path); err != nil {
+			warnings = append(warnings, err.Error())
+		}
+	}
+	return warnings, nil
+}
+
+func (s Scanner) lockFileNames() ([]string, error) {
 	entries, err := os.ReadDir(s.Dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -141,15 +146,7 @@ func (s Scanner) ScanDir() ([]string, error) {
 		}
 	}
 	sort.Strings(names)
-
-	var warnings []string
-	for _, fileName := range names {
-		path := filepath.Join(s.Dir, fileName)
-		if _, err := readLockFile(path); err != nil {
-			warnings = append(warnings, err.Error())
-		}
-	}
-	return warnings, nil
+	return names, nil
 }
 
 // matchService reports whether fileName is a lock for service, returning the
