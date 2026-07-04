@@ -932,6 +932,7 @@ Notifier types:
     fields) follows in a code block.
 
 ```yaml
+# /etc/sermo/notifiers/team-slack.yml
 notifiers:
   team-slack:
     type: slack
@@ -945,6 +946,7 @@ notifiers:
     `SERMO_*` fields) in a monospace block.
 
 ```yaml
+# /etc/sermo/notifiers/ops-teams.yml
 notifiers:
   ops-teams:
     type: teams
@@ -963,6 +965,7 @@ notify: [tty]      # optional global default: notify logged-in terminal users
   To customize or disable it, define a normal notifier with the same name:
 
 ```yaml
+# /etc/sermo/notifiers/tty.yml
 notifiers:
   tty:
     type: tty
