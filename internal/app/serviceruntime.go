@@ -9,6 +9,7 @@ import (
 
 	"sermo/internal/metrics"
 	"sermo/internal/process"
+	"sermo/internal/servicemgr"
 	"sermo/internal/web"
 )
 
@@ -299,7 +300,7 @@ func (b *WebBackend) decorateServiceRuntime(name string, e *webEntry, svc *web.S
 
 func serviceRuntimeVisible(status string) bool {
 	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "active", "paused":
+	case string(servicemgr.StatusActive), string(servicemgr.StatusPaused):
 		return true
 	default:
 		return false
