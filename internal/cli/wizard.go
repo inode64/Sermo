@@ -409,41 +409,15 @@ func mergeWizardWatches(path, wizard string, entries map[string]any) (wizardMerg
 	}
 	relDir, targetDir := wizardTargetDir(path, wizard, entries)
 	pathKey := wizardPathKey(wizard, entries)
-
-	var files []string
-	for _, name := range slices.Sorted(maps.Keys(entries)) {
-		file := filepath.Join(targetDir, watchConfigFileName(name))
-		if _, err := os.Stat(file); err == nil {
-			return wizardMergeResult{}, fmt.Errorf("watch file %s already exists; not overwriting", file)
-		} else if !os.IsNotExist(err) {
-			return wizardMergeResult{}, fmt.Errorf("stat %s: %w", file, err)
-		}
-		files = append(files, file)
-	}
-
-	bak, err := ensureConfigPathDir(path, pathKey, relDir, targetDir)
+	docs, err := watchDocsFromEntries(entries)
 	if err != nil {
 		return wizardMergeResult{}, err
 	}
-
-	if err := os.MkdirAll(targetDir, 0o755); err != nil {
-		return wizardMergeResult{}, fmt.Errorf("create %s: %w", targetDir, err)
+	files, bak, err := writeConfigDocs(path, pathKey, relDir, targetDir, "watch", docs)
+	if err != nil {
+		return wizardMergeResult{}, err
 	}
-	for _, name := range slices.Sorted(maps.Keys(entries)) {
-		file := filepath.Join(targetDir, watchConfigFileName(name))
-		doc, err := watchDocFromEntry(name, entries[name])
-		if err != nil {
-			return wizardMergeResult{}, err
-		}
-		data, err := yaml.Marshal(doc)
-		if err != nil {
-			return wizardMergeResult{}, fmt.Errorf("render %s: %w", file, err)
-		}
-		if err := os.WriteFile(file, data, 0o644); err != nil { //nolint:gosec // config is world-readable by design
-			return wizardMergeResult{}, fmt.Errorf("write %s: %w", file, err)
-		}
-	}
-	return wizardMergeResult{Backup: bak, Dir: targetDir, Files: files, PathKey: pathKey}, nil
+	return wizardMergeResult{Backup: bak, Dir: targetDir, Files: plannedConfigFilePaths(files), PathKey: pathKey}, nil
 }
 
 func watchDocsFromEntries(entries map[string]any) (map[string]map[string]any, error) {
