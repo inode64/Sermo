@@ -1408,6 +1408,26 @@ check: { type: load, load5: { op: ">", value: 3 } }
 	}
 }
 
+func TestLoadIncludedWatchDocumentRejectsGroupedWatchesMap(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+paths:
+  watches: [ @ROOT@/watches ]
+defaults:
+  policy: { cooldown: 5m }
+`,
+		"watches/load.yml": `
+watches:
+  load:
+    check: { type: load, load5: { op: ">", value: 3 } }
+`,
+	})
+
+	if _, err := Load(global); err == nil || !strings.Contains(err.Error(), "watch documents use top-level name/check fields, not a watches map") {
+		t.Fatalf("Load() error = %v, want grouped watches map rejection", err)
+	}
+}
+
 func TestStorageMountCapacityDefaultsMounted(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
