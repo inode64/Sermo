@@ -1,9 +1,6 @@
 package assist
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 type dockerAssistant struct{}
 
@@ -202,23 +199,9 @@ func controlledService(control map[string]any, checkName string, check map[strin
 }
 
 func dockerLabel(c DockerCandidate) string {
-	parts := []string{c.Title}
-	if c.Container != "" {
-		parts = append(parts, "container: "+c.Container)
-	}
-	if c.Status != "" {
-		parts = append(parts, "status: "+c.Status)
-	}
-	return strings.Join(parts, " · ")
+	return detailLabel(c.Title, labelField("container", c.Container), labelField("status", c.Status))
 }
 
 func vmLabel(c VMCandidate) string {
-	parts := []string{c.Title}
-	if c.Domain != "" {
-		parts = append(parts, "domain: "+c.Domain)
-	}
-	if c.Status != "" {
-		parts = append(parts, "status: "+c.Status)
-	}
-	return strings.Join(parts, " · ")
+	return detailLabel(c.Title, labelField("domain", c.Domain), labelField("status", c.Status))
 }
