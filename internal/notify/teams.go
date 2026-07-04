@@ -2,7 +2,6 @@ package notify
 
 import (
 	"context"
-	"encoding/json"
 )
 
 // Teams posts notifications to a Microsoft Teams incoming webhook (a Teams
@@ -38,14 +37,13 @@ func buildTeams(name string, entry map[string]any) (Notifier, error) {
 // Card: the subject as the bold lead line and the detail (the SERMO_* fields)
 // in a monospace block — the same layout as the slack payload.
 func teamsPayload(msg Message) []byte {
-	b, _ := json.Marshal(map[string]any{
+	return webhookPayload(map[string]any{
 		"type": "message",
 		"attachments": []any{map[string]any{
 			"contentType": "application/vnd.microsoft.card.adaptive",
 			"content":     teamsCard(msg),
 		}},
 	})
-	return b
 }
 
 func teamsCard(msg Message) map[string]any {
