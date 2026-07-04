@@ -457,8 +457,8 @@ func (c *Config) Notifiers() map[string]any {
 		return nil
 	}
 	out := map[string]any{
-		"tty":  map[string]any{"type": "tty"},
-		"wall": map[string]any{"type": "wall"},
+		notifierTypeTTY:  map[string]any{"type": notifierTypeTTY},
+		notifierTypeWall: map[string]any{"type": notifierTypeWall},
 	}
 	m, _ := c.Global.Raw[pathKeyNotifiers].(map[string]any)
 	for name, entry := range m {
