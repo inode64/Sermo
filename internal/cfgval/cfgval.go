@@ -126,6 +126,13 @@ func IsStringOrStringList(v any) bool {
 	return ok && hasOnlyStrings(list)
 }
 
+// IsNonEmptyStringList reports whether v is a YAML string or string list with
+// at least one non-empty string and no non-string list items.
+func IsNonEmptyStringList(v any) bool {
+	list, err := StrictStringList(v)
+	return err == nil && len(list) > 0
+}
+
 // IsNonEmptyStringArray reports whether v is a non-empty YAML list whose items
 // are all strings.
 func IsNonEmptyStringArray(v any) bool {
