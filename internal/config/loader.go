@@ -669,10 +669,11 @@ func (c *Config) mergeNotifierFragment(doc *Document) (bool, error) {
 			return true, fmt.Errorf("%s: %s fragments only support top-level %s, got %q", doc.Path, section, section, key)
 		}
 	}
-	return c.mergeGlobalMap(doc, section)
+	return c.mergeNotifierMap(doc)
 }
 
-func (c *Config) mergeGlobalMap(doc *Document, section string) (bool, error) {
+func (c *Config) mergeNotifierMap(doc *Document) (bool, error) {
+	const section = "notifiers"
 	raw := expandEnvTree(doc.Body[section])
 	entries, ok := raw.(map[string]any)
 	if !ok {
@@ -685,24 +686,14 @@ func (c *Config) mergeGlobalMap(doc *Document, section string) (bool, error) {
 	if dst == nil {
 		dst = map[string]any{}
 	}
-	label := includedGlobalSectionLabel(section)
 	for name, entry := range entries {
 		if _, exists := dst[name]; exists {
-			return true, fmt.Errorf("%s: %s %q is already defined", doc.Path, label, name)
+			return true, fmt.Errorf("%s: notifier %q is already defined", doc.Path, name)
 		}
 		dst[name] = entry
 	}
 	c.Global.Raw[section] = dst
 	return true, nil
-}
-
-func includedGlobalSectionLabel(section string) string {
-	switch section {
-	case "notifiers":
-		return "notifier"
-	default:
-		return strings.TrimSuffix(section, "s")
-	}
 }
 
 func loadDocument(path string) (*Document, error) {
