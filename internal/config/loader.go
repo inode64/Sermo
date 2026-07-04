@@ -658,9 +658,6 @@ func (c *Config) mergeWatchDocument(doc *Document) error {
 
 func (c *Config) mergeNotifierFragment(doc *Document) (bool, error) {
 	const section = "notifiers"
-	if doc.Kind != "" {
-		return false, nil
-	}
 	if _, present := doc.Body[section]; !present {
 		return false, nil
 	}
