@@ -644,20 +644,9 @@ func docsPreview(docs map[string]map[string]any) []any {
 // dir, ensuring that dir is in paths.services.
 func writeServiceFiles(globalPath string, docs map[string]map[string]any) (string, int, error) {
 	targetDir := filepath.Join(filepath.Dir(filepath.Clean(globalPath)), servicesIncludeDir)
-	files, err := planConfigFiles(targetDir, "service", docs)
+	files, _, err := writeConfigDocs(globalPath, "services", servicesIncludeDir, targetDir, "service", docs)
 	if err != nil {
 		return "", 0, err
-	}
-	if _, err := ensureConfigPathDir(globalPath, "services", servicesIncludeDir, targetDir); err != nil {
-		return "", 0, err
-	}
-	if err := os.MkdirAll(targetDir, 0o755); err != nil {
-		return "", 0, fmt.Errorf("create %s: %w", targetDir, err)
-	}
-	for _, file := range files {
-		if err := os.WriteFile(file.path, file.data, 0o644); err != nil { //nolint:gosec // config is world-readable by design
-			return "", 0, fmt.Errorf("write %s: %w", file.path, err)
-		}
 	}
 	return targetDir, len(files), nil
 }
