@@ -974,6 +974,7 @@ Tipos de notifier:
     `SERMO_*`) sigue en un bloque de código.
 
 ```yaml
+# /etc/sermo/notifiers/team-slack.yml
 notifiers:
   team-slack:
     type: slack
@@ -987,6 +988,7 @@ notifiers:
     `SERMO_*`) en un bloque monoespaciado.
 
 ```yaml
+# /etc/sermo/notifiers/ops-teams.yml
 notifiers:
   ops-teams:
     type: teams
@@ -1005,6 +1007,7 @@ notify: [tty]      # optional global default: notify logged-in terminal users
   Para personalizarlo o deshabilitarlo, define un notifier normal con el mismo nombre:
 
 ```yaml
+# /etc/sermo/notifiers/tty.yml
 notifiers:
   tty:
     type: tty
