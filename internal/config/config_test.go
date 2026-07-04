@@ -1409,22 +1409,33 @@ check: { type: load, load5: { op: ">", value: 3 } }
 }
 
 func TestLoadIncludedWatchDocumentRejectsGroupedWatchesMap(t *testing.T) {
-	global := writeConfig(t, map[string]string{
-		"sermo.yml": `
+	for _, tc := range []struct {
+		name string
+		path string
+		dir  string
+	}{
+		{name: "watch-dir", path: "watches", dir: "watches"},
+		{name: "network-dir", path: "networks", dir: "networks"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			global := writeConfig(t, map[string]string{
+				"sermo.yml": `
 paths:
-  watches: [ @ROOT@/watches ]
+  ` + tc.path + `: [ @ROOT@/` + tc.dir + ` ]
 defaults:
   policy: { cooldown: 5m }
 `,
-		"watches/load.yml": `
+				tc.dir + "/load.yml": `
 watches:
   load:
     check: { type: load, load5: { op: ">", value: 3 } }
 `,
-	})
+			})
 
-	if _, err := Load(global); err == nil || !strings.Contains(err.Error(), "watch documents use top-level name/check fields, not a watches map") {
-		t.Fatalf("Load() error = %v, want grouped watches map rejection", err)
+			if _, err := Load(global); err == nil || !strings.Contains(err.Error(), "watch documents use top-level name/check fields, not a watches map") {
+				t.Fatalf("Load() error = %v, want grouped watches map rejection", err)
+			}
+		})
 	}
 }
 
