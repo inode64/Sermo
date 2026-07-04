@@ -19,7 +19,7 @@ type Issue struct {
 	Msg   string
 }
 
-var validBackends = map[string]struct{}{"": {}, "auto": {}, "systemd": {}, "openrc": {}}
+var validBackends = map[string]struct{}{"": {}, backendAuto: {}, backendSystemd: {}, backendOpenRC: {}}
 
 // rejectedSecurityToggles are keys under `security:` that try to disable hard
 // safety invariants and must never be honored.
@@ -31,16 +31,16 @@ var rejectedSecurityToggles = []string{
 }
 
 var validGlobalPathKeys = set(
-	"apps",
-	"catalog",
-	"networks",
-	"notifiers",
-	"runtime",
-	"services",
-	"state",
-	"storages",
-	"templates",
-	"watches",
+	pathKeyApps,
+	pathKeyCatalog,
+	pathKeyNetworks,
+	pathKeyNotifiers,
+	pathKeyRuntime,
+	pathKeyServices,
+	pathKeyState,
+	pathKeyStorages,
+	pathKeyTemplates,
+	pathKeyWatches,
 )
 
 var validDefaultsKeys = set(
@@ -134,23 +134,23 @@ func validateGlobal(cfg *Config) []Issue {
 				add("paths.%s is not supported", key)
 			}
 		}
-		if runtime := cfgval.String(paths["runtime"]); runtime != "" && !filepath.IsAbs(runtime) {
+		if runtime := cfgval.String(paths[pathKeyRuntime]); runtime != "" && !filepath.IsAbs(runtime) {
 			add("paths.runtime %q must be an absolute directory", runtime)
 		}
-		if stateDir := cfgval.String(paths["state"]); stateDir != "" && !filepath.IsAbs(stateDir) {
+		if stateDir := cfgval.String(paths[pathKeyState]); stateDir != "" && !filepath.IsAbs(stateDir) {
 			add("paths.state %q must be an absolute directory", stateDir)
 		}
-		if templateDir := cfgval.String(paths["templates"]); templateDir != "" && !filepath.IsAbs(templateDir) {
+		if templateDir := cfgval.String(paths[pathKeyTemplates]); templateDir != "" && !filepath.IsAbs(templateDir) {
 			add("paths.templates %q must be an absolute directory", templateDir)
 		}
 		pathLists := map[string][]string{
-			"apps":      cfg.Global.Apps,
-			"catalog":   cfg.Global.Catalog,
-			"networks":  cfg.Global.Networks,
-			"notifiers": cfg.Global.Notifiers,
-			"services":  cfg.Global.Services,
-			"storages":  cfg.Global.Storages,
-			"watches":   cfg.Global.Watches,
+			pathKeyApps:      cfg.Global.Apps,
+			pathKeyCatalog:   cfg.Global.Catalog,
+			pathKeyNetworks:  cfg.Global.Networks,
+			pathKeyNotifiers: cfg.Global.Notifiers,
+			pathKeyServices:  cfg.Global.Services,
+			pathKeyStorages:  cfg.Global.Storages,
+			pathKeyWatches:   cfg.Global.Watches,
 		}
 		for name, dirs := range pathLists {
 			for _, dir := range dirs {
@@ -486,7 +486,7 @@ func validateVersionsFromValue(path string, raw any, add addFunc) {
 		}
 	case map[string]any:
 		for _, key := range slices.Sorted(maps.Keys(v)) {
-			if key != "systemd" && key != "openrc" {
+			if key != backendSystemd && key != backendOpenRC {
 				add("%s.%s is not supported; use systemd or openrc", path, key)
 				continue
 			}
@@ -821,11 +821,11 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 // effectiveBackend returns the init backend validation should assume:
 // SERMO_BACKEND, then explicit engine.backend, otherwise host-detected init.
 func effectiveBackend(cfg *Config) string {
-	if backend := strings.ToLower(envOverride("SERMO_BACKEND")); backend == "systemd" || backend == "openrc" {
+	if backend := strings.ToLower(envOverride("SERMO_BACKEND")); backend == backendSystemd || backend == backendOpenRC {
 		return backend
 	}
 	if engine, ok := cfg.Global.Raw["engine"].(map[string]any); ok {
-		if backend := cfgval.String(engine["backend"]); backend != "" && backend != "auto" {
+		if backend := cfgval.String(engine["backend"]); backend != "" && backend != backendAuto {
 			return backend
 		}
 	}

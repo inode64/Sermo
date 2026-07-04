@@ -58,9 +58,9 @@ func kindForCategory(category string) string {
 // directory is not a recognized category (its files inherit the default).
 func categoryFromDir(name string) string {
 	switch name {
-	case "services":
+	case pathKeyServices:
 		return CategoryService
-	case "apps":
+	case pathKeyApps:
 		return CategoryApp
 	case "libs":
 		return CategoryLibrary
@@ -336,7 +336,7 @@ func ServiceUnit(tree map[string]any, fallback string) string {
 			return s
 		}
 	case map[string]any:
-		for _, backend := range []string{"systemd", "openrc"} {
+		for _, backend := range []string{backendSystemd, backendOpenRC} {
 			if list := cfgval.StringList(s[backend]); len(list) > 0 {
 				return list[0]
 			}
@@ -360,10 +360,10 @@ func ServiceCandidates(tree map[string]any, backend, fallback string) (candidate
 			return []string{s}, true
 		}
 	case map[string]any:
-		if _, ok := s["systemd"]; ok {
+		if _, ok := s[backendSystemd]; ok {
 			return cfgval.StringList(s[backend]), false
 		}
-		if _, ok := s["openrc"]; ok {
+		if _, ok := s[backendOpenRC]; ok {
 			return cfgval.StringList(s[backend]), false
 		}
 	}
@@ -460,7 +460,7 @@ func (c *Config) Notifiers() map[string]any {
 		"tty":  map[string]any{"type": "tty"},
 		"wall": map[string]any{"type": "wall"},
 	}
-	m, _ := c.Global.Raw["notifiers"].(map[string]any)
+	m, _ := c.Global.Raw[pathKeyNotifiers].(map[string]any)
 	for name, entry := range m {
 		out[name] = entry
 	}

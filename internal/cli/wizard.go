@@ -26,6 +26,37 @@ import (
 	"sermo/internal/volume"
 )
 
+const (
+	networksConfigDir = "networks"
+	watchesConfigDir  = "watches"
+
+	yamlFileExt     = ".yml"
+	yamlLongFileExt = ".yaml"
+
+	wizardAssistantMount   = "mount"
+	wizardAssistantNet     = "net"
+	wizardAssistantService = "service"
+	wizardAssistantUplink  = "uplink"
+	wizardAssistantVolume  = "volume"
+
+	serviceFamilyDocker = "docker"
+	serviceFamilyVM     = "vm"
+
+	wizardNounMount   = wizardAssistantMount
+	wizardNounService = wizardAssistantService
+	wizardNounStorage = "storage"
+	wizardNounWatch   = "watch"
+
+	wizardFieldCheck     = "check"
+	wizardFieldInterface = "interface"
+	wizardFieldKind      = "kind"
+	wizardFieldName      = "name"
+	wizardFieldPath      = "path"
+	wizardFieldType      = "type"
+
+	serviceTargetSeparator = ":"
+)
+
 // runWizard drives the interactive assistant that generates target config.
 // `sermoctl wizard [name]` runs the named assistant, or lists them to choose.
 func (a App) runWizard(ctx context.Context, opts options) int {
@@ -414,7 +445,7 @@ func mergeWizardWatches(path, wizard string, entries map[string]any) (wizardMerg
 	if err != nil {
 		return wizardMergeResult{}, err
 	}
-	files, bak, err := writeConfigDocs(path, pathKey, relDir, targetDir, "watch", docs)
+	files, bak, err := writeConfigDocs(path, pathKey, relDir, targetDir, wizardNounWatch, docs)
 	if err != nil {
 		return wizardMergeResult{}, err
 	}
@@ -439,19 +470,19 @@ func watchDocFromEntry(name string, raw any) (map[string]any, error) {
 		return nil, fmt.Errorf("watch %q is not a mapping", name)
 	}
 	doc := maps.Clone(entry)
-	doc["name"] = name
+	doc[wizardFieldName] = name
 	return doc, nil
 }
 
 func wizardWritesStorageDocs(wizard string) bool {
-	return wizard == "volume"
+	return wizard == wizardAssistantVolume
 }
 
 func wizardOutputNoun(wizard string) string {
 	if wizardWritesStorageDocs(wizard) {
-		return "storage"
+		return wizardNounStorage
 	}
-	return "watch"
+	return wizardNounWatch
 }
 
 func storageDocsFromVolumeWatches(entries map[string]any) (map[string]map[string]any, error) {
@@ -461,18 +492,18 @@ func storageDocsFromVolumeWatches(entries map[string]any) (map[string]map[string
 		if !ok {
 			return nil, fmt.Errorf("watch %q is not a mapping", name)
 		}
-		check, ok := entry["check"].(map[string]any)
+		check, ok := entry[wizardFieldCheck].(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("watch %q has no check mapping", name)
 		}
-		path, _ := check["path"].(string)
+		path, _ := check[wizardFieldPath].(string)
 		if path == "" {
 			return nil, fmt.Errorf("watch %q has no storage path", name)
 		}
 		doc := map[string]any{
-			"name":     name,
-			"category": "storage",
-			"path":     path,
+			wizardFieldName: name,
+			"category":      wizardNounStorage,
+			wizardFieldPath: path,
 		}
 		for _, key := range []string{"monitor", "interval"} {
 			if v, present := entry[key]; present {
@@ -482,7 +513,7 @@ func storageDocsFromVolumeWatches(entries map[string]any) (map[string]map[string
 		capacity := map[string]any{}
 		for key, value := range check {
 			switch key {
-			case "type", "path":
+			case wizardFieldType, wizardFieldPath:
 			default:
 				capacity[key] = value
 			}
@@ -501,8 +532,8 @@ func storageDocsFromVolumeWatches(entries map[string]any) (map[string]map[string
 func mergeWizardStorageDocs(path string, docs map[string]map[string]any) (wizardMergeResult, error) {
 	relDir := storagesConfigDir
 	targetDir := filepath.Join(filepath.Dir(filepath.Clean(path)), relDir)
-	pathKey := "storages"
-	files, bak, err := writeConfigDocs(path, pathKey, relDir, targetDir, "storage", docs)
+	pathKey := storagesConfigDir
+	files, bak, err := writeConfigDocs(path, pathKey, relDir, targetDir, wizardNounStorage, docs)
 	if err != nil {
 		return wizardMergeResult{}, err
 	}
@@ -518,12 +549,12 @@ func wizardTargetDir(path, wizard string, entries map[string]any) (string, strin
 func wizardPathKey(wizard string, entries map[string]any) string {
 	dirName := wizardConfigDirName(wizard, entries)
 	switch dirName {
-	case "storages":
-		return "storages"
-	case "networks":
-		return "networks"
+	case storagesConfigDir:
+		return storagesConfigDir
+	case networksConfigDir:
+		return networksConfigDir
 	default:
-		return "watches"
+		return watchesConfigDir
 	}
 }
 
@@ -553,7 +584,7 @@ func wizardConfigDirName(wizard string, entries map[string]any) string {
 		}
 	}
 	if dirName == "" {
-		dirName = "watches"
+		dirName = watchesConfigDir
 	}
 	return dirName
 }
@@ -563,20 +594,20 @@ func watchEntryCheckType(v any) string {
 	if !ok {
 		return ""
 	}
-	check, ok := entry["check"].(map[string]any)
+	check, ok := entry[wizardFieldCheck].(map[string]any)
 	if !ok {
 		return ""
 	}
-	s, _ := check["type"].(string)
+	s, _ := check[wizardFieldType].(string)
 	return s
 }
 
 func watchTypeDirName(checkType string) string {
 	switch strings.ToLower(checkType) {
-	case "net", "network", "icmp":
-		return "networks"
+	case wizardAssistantNet, "network", "icmp":
+		return networksConfigDir
 	default:
-		return "watches"
+		return watchesConfigDir
 	}
 }
 
@@ -665,7 +696,7 @@ func targetsStale(targets []string, detected map[string]bool) bool {
 func detectedTargetKeys(env assist.Env, wizard string) map[string]bool {
 	keys := map[string]bool{}
 	switch wizard {
-	case "volume":
+	case wizardAssistantVolume:
 		if env.Volumes != nil {
 			if vols, err := env.Volumes(); err == nil {
 				for _, v := range vols {
@@ -673,7 +704,7 @@ func detectedTargetKeys(env assist.Env, wizard string) map[string]bool {
 				}
 			}
 		}
-	case "mount":
+	case wizardAssistantMount:
 		if env.Mounts != nil {
 			if mounts, err := env.Mounts(); err == nil {
 				for _, m := range mounts {
@@ -681,7 +712,7 @@ func detectedTargetKeys(env assist.Env, wizard string) map[string]bool {
 				}
 			}
 		}
-	case "net", "uplink":
+	case wizardAssistantNet, wizardAssistantUplink:
 		if env.Ifaces != nil {
 			if ifs, err := env.Ifaces(); err == nil {
 				for _, i := range ifs {
@@ -689,13 +720,13 @@ func detectedTargetKeys(env assist.Env, wizard string) map[string]bool {
 				}
 			}
 		}
-	case "service":
+	case wizardAssistantService:
 		if env.CatalogServices != nil {
 			if ds, err := env.CatalogServices(); err == nil {
 				if len(ds) > 0 {
-					keys[serviceDetectedFamilyKey("service")] = true
+					keys[serviceDetectedFamilyKey(wizardNounService)] = true
 					for _, d := range ds {
-						keys[serviceTargetKey("service", d.Name)] = true
+						keys[serviceTargetKey(wizardNounService, d.Name)] = true
 					}
 				}
 			}
@@ -703,9 +734,9 @@ func detectedTargetKeys(env assist.Env, wizard string) map[string]bool {
 		if env.DockerContainers != nil {
 			if containers, err := env.DockerContainers(); err == nil {
 				if len(containers) > 0 {
-					keys[serviceDetectedFamilyKey("docker")] = true
+					keys[serviceDetectedFamilyKey(serviceFamilyDocker)] = true
 					for _, c := range containers {
-						keys[serviceTargetKey("docker", c.Container)] = true
+						keys[serviceTargetKey(serviceFamilyDocker, c.Container)] = true
 					}
 				}
 			}
@@ -713,9 +744,9 @@ func detectedTargetKeys(env assist.Env, wizard string) map[string]bool {
 		if env.VMs != nil {
 			if vms, err := env.VMs(); err == nil {
 				if len(vms) > 0 {
-					keys[serviceDetectedFamilyKey("vm")] = true
+					keys[serviceDetectedFamilyKey(serviceFamilyVM)] = true
 					for _, vm := range vms {
-						keys[serviceTargetKey("vm", vm.Domain)] = true
+						keys[serviceTargetKey(serviceFamilyVM, vm.Domain)] = true
 					}
 				}
 			}
@@ -738,7 +769,7 @@ func existingWizardWatchFiles(targetDir string) ([]wizardWatchFile, error) {
 			continue
 		}
 		name := entry.Name()
-		if !strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml") {
+		if !strings.HasSuffix(name, yamlFileExt) && !strings.HasSuffix(name, yamlLongFileExt) {
 			continue
 		}
 		path := filepath.Join(targetDir, name)
@@ -763,17 +794,17 @@ func parseWatchFile(path string) (names, targets []string) {
 	if err := yaml.Unmarshal(data, &root); err != nil {
 		return nil, nil
 	}
-	if name, _ := root["name"].(string); name != "" {
+	if name, _ := root[wizardFieldName].(string); name != "" {
 		names = []string{name}
-		if path, _ := root["path"].(string); path != "" {
+		if path, _ := root[wizardFieldPath].(string); path != "" {
 			targets = append(targets, filepath.Clean(path))
 			return names, targets
 		}
-		check, _ := root["check"].(map[string]any)
-		if s, _ := check["path"].(string); s != "" {
+		check, _ := root[wizardFieldCheck].(map[string]any)
+		if s, _ := check[wizardFieldPath].(string); s != "" {
 			targets = append(targets, s)
 		}
-		if s, _ := check["interface"].(string); s != "" {
+		if s, _ := check[wizardFieldInterface].(string); s != "" {
 			targets = append(targets, s)
 		}
 		return names, targets
@@ -793,9 +824,9 @@ func deleteWizardConfigFiles(files []string) error {
 func watchConfigFileName(name string) string {
 	base := safeConfigPathName(name)
 	if base == "" {
-		base = "watch"
+		base = wizardNounWatch
 	}
-	return base + ".yml"
+	return base + yamlFileExt
 }
 
 type plannedConfigFile struct {

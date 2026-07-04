@@ -15,13 +15,13 @@ func detectInit() string {
 		return strings.ToLower(v)
 	}
 	if _, err := os.Stat("/run/systemd/system"); err == nil {
-		return "systemd"
+		return backendSystemd
 	}
 	if _, err := os.Stat("/run/openrc"); err == nil {
-		return "openrc"
+		return backendOpenRC
 	}
 	if _, err := os.Stat("/sbin/openrc"); err == nil {
-		return "openrc"
+		return backendOpenRC
 	}
-	return "systemd"
+	return backendSystemd
 }

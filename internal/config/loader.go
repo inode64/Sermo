@@ -14,14 +14,9 @@ import (
 // DefaultGlobalPath is the standard location of the global configuration.
 const DefaultGlobalPath = "/etc/sermo/sermo.yml"
 
-const (
-	notifiersSection = "notifiers"
-	watchesSection   = "watches"
-)
-
-var defaultServiceDirs = []string{"services"}
-var defaultAppDirs = []string{"apps"}
-var defaultStorageDirs = []string{"storages"}
+var defaultServiceDirs = []string{pathKeyServices}
+var defaultAppDirs = []string{pathKeyApps}
+var defaultStorageDirs = []string{pathKeyStorages}
 
 // Option customizes Load.
 type Option func(*loadOptions)
@@ -87,21 +82,21 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	if len(catalogPaths) == 0 {
 		catalogPaths = pathSpecsFromPaths([]string{"/usr/share/sermo/catalog", "/etc/sermo/catalog-available"})
 	}
-	_, servicePathsOverridden := o.pathDirs["services"]
+	_, servicePathsOverridden := o.pathDirs[pathKeyServices]
 	servicePaths := global.ServicePaths
 	if len(servicePaths) == 0 && !servicePathsOverridden {
 		servicePaths = pathSpecsFromPaths(defaultConfigDirs(globalPath, defaultServiceDirs))
 		global.Services = pathsFromSpecs(servicePaths)
 		global.ServicePaths = append([]PathSpec(nil), servicePaths...)
 	}
-	_, appPathsOverridden := o.pathDirs["apps"]
+	_, appPathsOverridden := o.pathDirs[pathKeyApps]
 	appPaths := global.AppPaths
 	if len(appPaths) == 0 && !appPathsOverridden {
 		appPaths = pathSpecsFromPaths(defaultConfigDirs(globalPath, defaultAppDirs))
 		global.Apps = pathsFromSpecs(appPaths)
 		global.AppPaths = append([]PathSpec(nil), appPaths...)
 	}
-	_, storagePathsOverridden := o.pathDirs["storages"]
+	_, storagePathsOverridden := o.pathDirs[pathKeyStorages]
 	storagePaths := global.StoragePaths
 	if len(storagePaths) == 0 && !storagePathsOverridden {
 		storagePaths = pathSpecsFromPaths(defaultConfigDirs(globalPath, defaultStorageDirs))
@@ -166,7 +161,7 @@ func loadGlobal(path string) (Global, error) {
 	}
 	var raw map[string]any
 	if err := yaml.Unmarshal(data, &raw); err != nil {
-		return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
+		return Global{}, parseGlobalConfigError(path, err)
 	}
 	if raw == nil {
 		raw = map[string]any{}
@@ -182,26 +177,26 @@ func loadGlobal(path string) (Global, error) {
 		g.Defaults = map[string]any{}
 	}
 	if paths, ok := raw["paths"].(map[string]any); ok {
-		if g.CatalogPaths, err = pathSpecList(paths["catalog"], "paths.catalog"); err != nil {
-			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
+		if g.CatalogPaths, err = pathSpecList(paths[pathKeyCatalog], "paths.catalog"); err != nil {
+			return Global{}, parseGlobalConfigError(path, err)
 		}
-		if g.ServicePaths, err = pathSpecList(paths["services"], "paths.services"); err != nil {
-			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
+		if g.ServicePaths, err = pathSpecList(paths[pathKeyServices], "paths.services"); err != nil {
+			return Global{}, parseGlobalConfigError(path, err)
 		}
-		if g.AppPaths, err = pathSpecList(paths["apps"], "paths.apps"); err != nil {
-			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
+		if g.AppPaths, err = pathSpecList(paths[pathKeyApps], "paths.apps"); err != nil {
+			return Global{}, parseGlobalConfigError(path, err)
 		}
-		if g.NotifierPaths, err = pathSpecList(paths[notifiersSection], "paths.notifiers"); err != nil {
-			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
+		if g.NotifierPaths, err = pathSpecList(paths[pathKeyNotifiers], "paths.notifiers"); err != nil {
+			return Global{}, parseGlobalConfigError(path, err)
 		}
-		if g.StoragePaths, err = pathSpecList(paths["storages"], "paths.storages"); err != nil {
-			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
+		if g.StoragePaths, err = pathSpecList(paths[pathKeyStorages], "paths.storages"); err != nil {
+			return Global{}, parseGlobalConfigError(path, err)
 		}
-		if g.NetworkPaths, err = pathSpecList(paths["networks"], "paths.networks"); err != nil {
-			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
+		if g.NetworkPaths, err = pathSpecList(paths[pathKeyNetworks], "paths.networks"); err != nil {
+			return Global{}, parseGlobalConfigError(path, err)
 		}
-		if g.WatchPaths, err = pathSpecList(paths[watchesSection], "paths.watches"); err != nil {
-			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
+		if g.WatchPaths, err = pathSpecList(paths[pathKeyWatches], "paths.watches"); err != nil {
+			return Global{}, parseGlobalConfigError(path, err)
 		}
 		g.Catalog = pathsFromSpecs(g.CatalogPaths)
 		g.Services = pathsFromSpecs(g.ServicePaths)
@@ -210,12 +205,16 @@ func loadGlobal(path string) (Global, error) {
 		g.Storages = pathsFromSpecs(g.StoragePaths)
 		g.Networks = pathsFromSpecs(g.NetworkPaths)
 		g.Watches = pathsFromSpecs(g.WatchPaths)
-		g.Runtime = cfgval.String(paths["runtime"])
-		g.State = cfgval.String(paths["state"])
-		g.Templates = cfgval.String(paths["templates"])
+		g.Runtime = cfgval.String(paths[pathKeyRuntime])
+		g.State = cfgval.String(paths[pathKeyState])
+		g.Templates = cfgval.String(paths[pathKeyTemplates])
 	}
 	resolveConfigPaths(path, &g)
 	return g, nil
+}
+
+func parseGlobalConfigError(path string, err error) error {
+	return fmt.Errorf("parse global config %s: %w", path, err)
 }
 
 func applyPathDirOverride(g *Global, overrides map[string][]string) {
@@ -230,12 +229,12 @@ func applyPathDirOverride(g *Global, overrides map[string][]string) {
 		*paths = absOverrideDirs(dirs)
 		*specs = pathSpecsFromPaths(*paths)
 	}
-	apply("services", &g.Services, &g.ServicePaths)
-	apply("apps", &g.Apps, &g.AppPaths)
-	apply(notifiersSection, &g.Notifiers, &g.NotifierPaths)
-	apply("storages", &g.Storages, &g.StoragePaths)
-	apply("networks", &g.Networks, &g.NetworkPaths)
-	apply(watchesSection, &g.Watches, &g.WatchPaths)
+	apply(pathKeyServices, &g.Services, &g.ServicePaths)
+	apply(pathKeyApps, &g.Apps, &g.AppPaths)
+	apply(pathKeyNotifiers, &g.Notifiers, &g.NotifierPaths)
+	apply(pathKeyStorages, &g.Storages, &g.StoragePaths)
+	apply(pathKeyNetworks, &g.Networks, &g.NetworkPaths)
+	apply(pathKeyWatches, &g.Watches, &g.WatchPaths)
 }
 
 // absOverrideDirs cleans an override list, making relative entries absolute
@@ -479,7 +478,7 @@ func (c *Config) loadAppDirEntries(dir string, recursive bool) error {
 }
 
 func (c *Config) loadNotifierDirEntries(dir string, recursive bool) error {
-	const section = notifiersSection
+	const section = pathKeyNotifiers
 	names, subdirs, err := configDirEntries(dir, section)
 	if err != nil {
 		return err
@@ -510,7 +509,7 @@ func (c *Config) loadNotifierDirEntries(dir string, recursive bool) error {
 }
 
 func (c *Config) loadWatchDirEntries(dir string, recursive bool) error {
-	names, subdirs, err := configDirEntries(dir, watchesSection)
+	names, subdirs, err := configDirEntries(dir, pathKeyWatches)
 	if err != nil {
 		return err
 	}
@@ -632,7 +631,7 @@ func configDirEntries(dir, label string) (names, subdirs []string, err error) {
 }
 
 func (c *Config) mergeWatchDocument(doc *Document) error {
-	if _, present := doc.Body[watchesSection]; present {
+	if _, present := doc.Body[pathKeyWatches]; present {
 		return fmt.Errorf("%s: watch documents use top-level name/check fields, not a watches map", doc.Path)
 	}
 	if declared := cfgval.String(doc.Body["kind"]); declared != "" && declared != "watch" {
@@ -649,7 +648,7 @@ func (c *Config) mergeWatchDocument(doc *Document) error {
 	delete(entry, "name")
 	expandEnvTree(entry)
 
-	dst, _ := c.Global.Raw[watchesSection].(map[string]any)
+	dst, _ := c.Global.Raw[pathKeyWatches].(map[string]any)
 	if dst == nil {
 		dst = map[string]any{}
 	}
@@ -657,12 +656,12 @@ func (c *Config) mergeWatchDocument(doc *Document) error {
 		return fmt.Errorf("%s: watch %q is already defined", doc.Path, doc.Name)
 	}
 	dst[doc.Name] = entry
-	c.Global.Raw[watchesSection] = dst
+	c.Global.Raw[pathKeyWatches] = dst
 	return nil
 }
 
 func (c *Config) mergeNotifierFragment(doc *Document) (bool, error) {
-	const section = notifiersSection
+	const section = pathKeyNotifiers
 	if _, present := doc.Body[section]; !present {
 		return false, nil
 	}
@@ -675,7 +674,7 @@ func (c *Config) mergeNotifierFragment(doc *Document) (bool, error) {
 }
 
 func (c *Config) mergeNotifierMap(doc *Document) (bool, error) {
-	const section = notifiersSection
+	const section = pathKeyNotifiers
 	raw := expandEnvTree(doc.Body[section])
 	entries, ok := raw.(map[string]any)
 	if !ok {
