@@ -805,8 +805,13 @@ type plannedConfigFile struct {
 
 func planConfigFiles(targetDir, noun string, docs map[string]map[string]any) ([]plannedConfigFile, error) {
 	files := make([]plannedConfigFile, 0, len(docs))
+	plannedPaths := map[string]string{}
 	for _, name := range slices.Sorted(maps.Keys(docs)) {
 		file := filepath.Join(targetDir, watchConfigFileName(name))
+		if previous, exists := plannedPaths[file]; exists {
+			return nil, fmt.Errorf("%s files %q and %q both map to %s; not overwriting", noun, previous, name, file)
+		}
+		plannedPaths[file] = name
 		if _, err := os.Stat(file); err == nil {
 			return nil, fmt.Errorf("%s file %s already exists; not overwriting", noun, file)
 		} else if !os.IsNotExist(err) {
