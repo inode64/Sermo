@@ -2,10 +2,8 @@ package cli
 
 import (
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/goccy/go-yaml"
@@ -110,7 +108,7 @@ func wizardMountTargetDir(globalPath string) string {
 
 func writeMountFiles(globalPath string, docs map[string]map[string]any) (string, int, error) {
 	targetDir := wizardMountTargetDir(globalPath)
-	files, err := planMountFiles(targetDir, docs)
+	files, err := planConfigFiles(targetDir, "storage", docs)
 	if err != nil {
 		return "", 0, err
 	}
@@ -126,29 +124,6 @@ func writeMountFiles(globalPath string, docs map[string]map[string]any) (string,
 		}
 	}
 	return targetDir, len(files), nil
-}
-
-type plannedMountFile struct {
-	path string
-	data []byte
-}
-
-func planMountFiles(targetDir string, docs map[string]map[string]any) ([]plannedMountFile, error) {
-	files := make([]plannedMountFile, 0, len(docs))
-	for _, name := range slices.Sorted(maps.Keys(docs)) {
-		file := filepath.Join(targetDir, watchConfigFileName(name))
-		if _, err := os.Stat(file); err == nil {
-			return nil, fmt.Errorf("storage file %s already exists; not overwriting", file)
-		} else if !os.IsNotExist(err) {
-			return nil, fmt.Errorf("stat %s: %w", file, err)
-		}
-		data, err := yaml.Marshal(docs[name])
-		if err != nil {
-			return nil, fmt.Errorf("render %s: %w", file, err)
-		}
-		files = append(files, plannedMountFile{path: file, data: data})
-	}
-	return files, nil
 }
 
 func planStaleMountDeletes(p *assist.Prompt, dir string, detected map[string]bool) ([]string, error) {
