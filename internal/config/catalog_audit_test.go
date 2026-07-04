@@ -303,6 +303,37 @@ func TestRepoDevConfigLoadsExampleTree(t *testing.T) {
 	}
 }
 
+func TestExampleWatchDocsUseOneTargetPerFile(t *testing.T) {
+	root := repoRoot(t)
+	for _, relDir := range []string{"examples/watches", "examples/networks"} {
+		dir := filepath.Join(root, relDir)
+		files, err := yamlFiles(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(files) == 0 {
+			t.Fatalf("%s has no watch examples", relDir)
+		}
+		for _, name := range files {
+			path := filepath.Join(dir, name)
+			data, err := os.ReadFile(path) //nolint:gosec // test reads YAML examples under the repository root.
+			if err != nil {
+				t.Fatal(err)
+			}
+			var body map[string]any
+			if err := yaml.Unmarshal(data, &body); err != nil {
+				t.Fatalf("parse %s: %v", path, err)
+			}
+			if _, grouped := body["watches"]; grouped {
+				t.Fatalf("%s must be a single watch document, not a grouped watches map", path)
+			}
+			if cfgval.String(body["name"]) == "" {
+				t.Fatalf("%s must declare top-level name", path)
+			}
+		}
+	}
+}
+
 func TestShippedServiceConfigsLiveUnderServices(t *testing.T) {
 	root := repoRoot(t)
 	servicesDir := filepath.Join(root, "examples", "services")
