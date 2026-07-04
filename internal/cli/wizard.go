@@ -527,34 +527,11 @@ func mergeWizardStorageDocs(path string, docs map[string]map[string]any) (wizard
 	relDir := storagesConfigDir
 	targetDir := filepath.Join(filepath.Dir(filepath.Clean(path)), relDir)
 	pathKey := "storages"
-	files := make([]string, 0, len(docs))
-	for _, name := range slices.Sorted(maps.Keys(docs)) {
-		file := filepath.Join(targetDir, watchConfigFileName(name))
-		if _, err := os.Stat(file); err == nil {
-			return wizardMergeResult{}, fmt.Errorf("storage file %s already exists; not overwriting", file)
-		} else if !os.IsNotExist(err) {
-			return wizardMergeResult{}, fmt.Errorf("stat %s: %w", file, err)
-		}
-		files = append(files, file)
-	}
-	bak, err := ensureConfigPathDir(path, pathKey, relDir, targetDir)
+	files, bak, err := writeConfigDocs(path, pathKey, relDir, targetDir, "storage", docs)
 	if err != nil {
 		return wizardMergeResult{}, err
 	}
-	if err := os.MkdirAll(targetDir, 0o755); err != nil {
-		return wizardMergeResult{}, fmt.Errorf("create %s: %w", targetDir, err)
-	}
-	for _, name := range slices.Sorted(maps.Keys(docs)) {
-		file := filepath.Join(targetDir, watchConfigFileName(name))
-		data, err := yaml.Marshal(docs[name])
-		if err != nil {
-			return wizardMergeResult{}, fmt.Errorf("render %s: %w", file, err)
-		}
-		if err := os.WriteFile(file, data, 0o644); err != nil { //nolint:gosec // config is world-readable by design
-			return wizardMergeResult{}, fmt.Errorf("write %s: %w", file, err)
-		}
-	}
-	return wizardMergeResult{Backup: bak, Dir: targetDir, Files: files, PathKey: pathKey}, nil
+	return wizardMergeResult{Backup: bak, Dir: targetDir, Files: plannedConfigFilePaths(files), PathKey: pathKey}, nil
 }
 
 func wizardTargetDir(path, wizard string, entries map[string]any) (string, string) {
@@ -867,6 +844,34 @@ func planConfigFiles(targetDir, noun string, docs map[string]map[string]any) ([]
 		files = append(files, plannedConfigFile{path: file, data: data})
 	}
 	return files, nil
+}
+
+func writeConfigDocs(globalPath, pathKey, relDir, targetDir, noun string, docs map[string]map[string]any) ([]plannedConfigFile, string, error) {
+	files, err := planConfigFiles(targetDir, noun, docs)
+	if err != nil {
+		return nil, "", err
+	}
+	bak, err := ensureConfigPathDir(globalPath, pathKey, relDir, targetDir)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return nil, "", fmt.Errorf("create %s: %w", targetDir, err)
+	}
+	for _, file := range files {
+		if err := os.WriteFile(file.path, file.data, 0o644); err != nil { //nolint:gosec // config is world-readable by design
+			return nil, "", fmt.Errorf("write %s: %w", file.path, err)
+		}
+	}
+	return files, bak, nil
+}
+
+func plannedConfigFilePaths(files []plannedConfigFile) []string {
+	paths := make([]string, 0, len(files))
+	for _, file := range files {
+		paths = append(paths, file.path)
+	}
+	return paths
 }
 
 // ensureConfigPathDir makes sure targetDir (whose path relative to the config
