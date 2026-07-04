@@ -644,7 +644,7 @@ func docsPreview(docs map[string]map[string]any) []any {
 // dir, ensuring that dir is in paths.services.
 func writeServiceFiles(globalPath string, docs map[string]map[string]any) (string, int, error) {
 	targetDir := filepath.Join(filepath.Dir(filepath.Clean(globalPath)), servicesIncludeDir)
-	files, err := planServiceFiles(targetDir, docs)
+	files, err := planConfigFiles(targetDir, "service", docs)
 	if err != nil {
 		return "", 0, err
 	}
@@ -660,30 +660,6 @@ func writeServiceFiles(globalPath string, docs map[string]map[string]any) (strin
 		}
 	}
 	return targetDir, len(files), nil
-}
-
-type plannedServiceFile struct {
-	path string
-	data []byte
-}
-
-func planServiceFiles(targetDir string, docs map[string]map[string]any) ([]plannedServiceFile, error) {
-	files := make([]plannedServiceFile, 0, len(docs))
-	for _, name := range slices.Sorted(maps.Keys(docs)) {
-		doc := docs[name]
-		file := filepath.Join(targetDir, watchConfigFileName(name))
-		if _, err := os.Stat(file); err == nil {
-			return nil, fmt.Errorf("service file %s already exists; not overwriting", file)
-		} else if !os.IsNotExist(err) {
-			return nil, fmt.Errorf("stat %s: %w", file, err)
-		}
-		data, err := yaml.Marshal(doc)
-		if err != nil {
-			return nil, fmt.Errorf("render %s: %w", file, err)
-		}
-		files = append(files, plannedServiceFile{path: file, data: data})
-	}
-	return files, nil
 }
 
 func serviceNameSet(cfg *config.Config) map[string]struct{} {
