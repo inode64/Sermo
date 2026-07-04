@@ -58,16 +58,16 @@ func (c *Config) resolveService(name string, pruneOptional bool) (Resolved, []st
 	return Resolved{Name: canonicalName, Tree: expanded}, errs
 }
 
-// ResolveStorage expands one configured storage document. Storage targets do
-// not merge catalog defaults or service catalog documents: each file under
-// paths.storages is the complete declaration for one storage target and its
-// optional fstab-backed mount operations.
+// ResolveStorage expands one configured storage document. Storage targets only
+// merge the storage-safe subset of global defaults; each file under
+// paths.storages is otherwise the complete declaration for one storage target
+// and its optional fstab-backed mount operations.
 func (c *Config) ResolveStorage(name string) (Resolved, []string) {
 	doc, ok := c.Storages[name]
 	if !ok {
 		return Resolved{Name: name}, []string{fmt.Sprintf("unknown storage %q", name)}
 	}
-	body := stripMeta(doc.Body)
+	body := mergeMaps(c.defaultsPerStorage(), stripMeta(doc.Body))
 	vars, errs := c.expansionVariables(body, name)
 	expanded, expErrs := expandTree(body, vars)
 	errs = append(errs, expErrs...)
@@ -638,12 +638,15 @@ func appVariablePrefix(name string) string {
 func (c *Config) ResolveWatches() (map[string]any, []string) {
 	raw := map[string]any{}
 	if configured, ok := c.Global.Raw["watches"].(map[string]any); ok {
-		maps.Copy(raw, configured)
+		for name, entry := range configured {
+			raw[name] = deepCopy(entry)
+		}
 	}
 	errs := c.addStorageCapacityWatches(raw)
 	if len(raw) == 0 {
 		return nil, errs
 	}
+	c.applyWatchDefaults(raw)
 	vars := c.globalVars()
 	injectHostBuiltins(vars)
 	expanded, expErrs := expandTree(raw, vars)
@@ -697,7 +700,7 @@ func storageCapacityWatch(tree map[string]any) (map[string]any, bool) {
 		}
 	}
 	entry := map[string]any{"check": check}
-	for _, key := range []string{"monitor", "interval"} {
+	for _, key := range []string{"dry_run", "monitor", "interval"} {
 		if v, present := tree[key]; present {
 			entry[key] = v
 		}
@@ -1019,8 +1022,8 @@ func (c *Config) mergedService(name string, chain []string) (map[string]any, err
 	return merged, nil
 }
 
-// defaultsPerService returns a fresh copy of just the per-service parts of the
-// global defaults.
+// defaultsPerService returns a fresh copy of global defaults that apply to
+// services.
 func (c *Config) defaultsPerService() map[string]any {
 	out := map[string]any{}
 	for _, key := range perServiceDefaults {
@@ -1029,6 +1032,34 @@ func (c *Config) defaultsPerService() map[string]any {
 		}
 	}
 	return out
+}
+
+// defaultsPerStorage returns a fresh copy of global defaults that apply to
+// storages.
+func (c *Config) defaultsPerStorage() map[string]any {
+	out := map[string]any{}
+	for _, key := range perStorageDefaults {
+		if v, ok := c.Global.Defaults[key]; ok {
+			out[key] = deepCopy(v)
+		}
+	}
+	return out
+}
+
+func (c *Config) applyWatchDefaults(raw map[string]any) {
+	v, ok := c.Global.Defaults["dry_run"]
+	if !ok {
+		return
+	}
+	for _, entry := range raw {
+		watch, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, present := watch["dry_run"]; !present {
+			watch["dry_run"] = deepCopy(v)
+		}
+	}
 }
 
 // stripMeta returns a copy of a document body without the resolution-control

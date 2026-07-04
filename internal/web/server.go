@@ -46,6 +46,7 @@ type Service struct {
 	State                string   `json:"state"`
 	Status               string   `json:"status"`
 	Interval             string   `json:"interval,omitempty"` // resolved per-service cycle cadence (own interval or engine default)
+	DryRun               bool     `json:"dry_run,omitempty"`  // true when automatic actions are simulated
 	Enabled              bool     `json:"enabled"`            // false when service document has `enabled: false`
 	Monitored            bool     `json:"monitored"`
 	MonitorSource        string   `json:"monitor_source,omitempty"`        // cli | web | config | daemon

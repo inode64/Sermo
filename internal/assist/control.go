@@ -79,7 +79,7 @@ func applyControlledSettings(p *Prompt, names []string, apply func(string, servi
 		return
 	}
 	var shared *serviceSettings
-	if len(names) > 1 && p.Confirm("Apply the same monitor state, interval and shadow mode to all selected services?", true) {
+	if len(names) > 1 && p.Confirm("Apply the same monitor state, interval and dry-run mode to all selected services?", true) {
 		s := askServiceSettings(p, "all selected services")
 		shared = &s
 	}

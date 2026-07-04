@@ -27,7 +27,7 @@ func TestServiceAssistant(t *testing.T) {
 		"y",    // add detected configuration check
 		"1",    // monitor state: enabled
 		"",     // interval: inherit
-		"y",    // remediation shadow mode
+		"y",    // dry-run automatic actions
 	}, "\n") + "\n"
 
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
@@ -45,9 +45,8 @@ func TestServiceAssistant(t *testing.T) {
 	if svc["monitor"] != "enabled" {
 		t.Fatalf("monitor = %v, want enabled", svc["monitor"])
 	}
-	remediation := svc["remediation"].(map[string]any)
-	if remediation["shadow"] != true {
-		t.Fatalf("remediation = %v, want shadow true", remediation)
+	if svc["dry_run"] != true {
+		t.Fatalf("dry_run = %v, want true", svc["dry_run"])
 	}
 	vars, _ := svc["variables"].(map[string]any)
 	if vars == nil || vars["port"] != 8080 {
@@ -77,13 +76,13 @@ func TestServiceAssistantCatalogThenGenericServices(t *testing.T) {
 		"",  // keep catalog port
 		"1", // monitor nginx
 		"",  // interval inherit
-		"n", // remediation shadow
+		"n", // dry-run automatic actions
 		"y", // review active units without catalog profiles
 		"1", // choose customd
 		"",  // accept detected pidfile
 		"1", // monitor customd
 		"",  // interval inherit
-		"n", // remediation shadow
+		"n", // dry-run automatic actions
 	}, "\n") + "\n"
 	var out strings.Builder
 	p := NewPrompt(strings.NewReader(script), &out)
@@ -149,7 +148,7 @@ func TestServiceAssistantCatalogDetectedPidfileIsInherited(t *testing.T) {
 	env := Env{CatalogServices: func() ([]ServiceCandidate, error) {
 		return []ServiceCandidate{{Name: "nginx", Title: "Nginx", Unit: "nginx", Status: "active", Pidfile: "/run/nginx.pid"}}, nil
 	}}
-	script := strings.Join([]string{"1", "1", "", "n"}, "\n") + "\n" // select; monitor enabled; interval inherit; no shadow
+	script := strings.Join([]string{"1", "1", "", "n"}, "\n") + "\n" // select; monitor enabled; interval inherit; no dry-run
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := serviceAssistant{}.Run(p, env)
 	if err != nil {
@@ -194,7 +193,7 @@ func TestServiceAssistantGenericDetectedPidfile(t *testing.T) {
 	env := Env{CatalogServices: func() ([]ServiceCandidate, error) {
 		return []ServiceCandidate{{Name: "customd", Title: "customd", Unit: "customd", Status: "active", Generic: true, Pidfile: "/run/customd.pid"}}, nil
 	}}
-	script := strings.Join([]string{"y", "1", "", "1", "", "n"}, "\n") + "\n" // review generic; select; pidfile=default; monitor enabled; interval inherit; no shadow
+	script := strings.Join([]string{"y", "1", "", "1", "", "n"}, "\n") + "\n" // review generic; select; pidfile=default; monitor enabled; interval inherit; no dry-run
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := serviceAssistant{}.Run(p, env)
 	if err != nil {
@@ -225,7 +224,7 @@ func TestServiceAssistantRejectsNonAbsolutePidfile(t *testing.T) {
 	env := Env{CatalogServices: func() ([]ServiceCandidate, error) {
 		return []ServiceCandidate{{Name: "customd", Title: "customd", Unit: "customd", Status: "active", Generic: true, Pidfile: "/run/customd.pid"}}, nil
 	}}
-	script := strings.Join([]string{"y", "1", "y", "", "1", "", "n"}, "\n") + "\n" // review generic; invalid pidfile; accept default; monitor enabled; inherit interval; no shadow
+	script := strings.Join([]string{"y", "1", "y", "", "1", "", "n"}, "\n") + "\n" // review generic; invalid pidfile; accept default; monitor enabled; inherit interval; no dry-run
 	var out strings.Builder
 	p := NewPrompt(strings.NewReader(script), &out)
 	res, err := serviceAssistant{}.Run(p, env)
@@ -247,7 +246,7 @@ func TestServiceAssistantCommandMatchFallback(t *testing.T) {
 	env := Env{CatalogServices: func() ([]ServiceCandidate, error) {
 		return []ServiceCandidate{{Name: "sshd", Title: "OpenSSH", Unit: "sshd", Status: "active", Generic: true, Exe: "/usr/sbin/sshd"}}, nil
 	}}
-	script := strings.Join([]string{"y", "1", "", "y", "1", "", "n"}, "\n") + "\n" // review generic; select; pidfile skip; match-by-exe yes; monitor enabled; interval inherit; no shadow
+	script := strings.Join([]string{"y", "1", "", "y", "1", "", "n"}, "\n") + "\n" // review generic; select; pidfile skip; match-by-exe yes; monitor enabled; interval inherit; no dry-run
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := serviceAssistant{}.Run(p, env)
 	if err != nil {
@@ -266,7 +265,7 @@ func TestServiceAssistantCommandPatternFallback(t *testing.T) {
 	env := Env{CatalogServices: func() ([]ServiceCandidate, error) {
 		return []ServiceCandidate{{Name: "homeassistant", Title: "Home Assistant", Unit: "homeassistant", Status: "active", Generic: true, Cmd: `(^|[[:space:]])/usr/bin/hass($|[[:space:]])`, User: "homeassistant"}}, nil
 	}}
-	script := strings.Join([]string{"y", "1", "", "y", "1", "", "n"}, "\n") + "\n" // review generic; select; pidfile skip; match-by-cmd yes; monitor enabled; interval inherit; no shadow
+	script := strings.Join([]string{"y", "1", "", "y", "1", "", "n"}, "\n") + "\n" // review generic; select; pidfile skip; match-by-cmd yes; monitor enabled; interval inherit; no dry-run
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := serviceAssistant{}.Run(p, env)
 	if err != nil {
@@ -285,7 +284,7 @@ func TestServiceAssistantBatchMonitoring(t *testing.T) {
 	env := Env{CatalogServices: func() ([]ServiceCandidate, error) {
 		return []ServiceCandidate{{Name: "nginx", Unit: "nginx", Status: "active"}, {Name: "sshd", Unit: "sshd", Status: "active"}}, nil
 	}}
-	// select 1,2; batch=yes; monitor disabled; interval 30s; shadow=no.
+	// select 1,2; batch=yes; monitor disabled; interval 30s; dry-run=no.
 	script := strings.Join([]string{"1,2", "y", "2", "30s", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := serviceAssistant{}.Run(p, env)
@@ -308,7 +307,7 @@ func TestServiceAssistantBatchSkipsPortPromptsByDefault(t *testing.T) {
 		}, nil
 	}}
 	// select all; do not review port overrides; batch=yes; monitor enabled;
-	// inherit interval; shadow=yes. The script deliberately has no blank lines
+	// inherit interval; dry-run=yes. The script deliberately has no blank lines
 	// for individual port prompts.
 	script := strings.Join([]string{"all", "n", "y", "1", "", "y"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
@@ -321,9 +320,8 @@ func TestServiceAssistantBatchSkipsPortPromptsByDefault(t *testing.T) {
 		if _, hasVars := svc["variables"]; hasVars {
 			t.Fatalf("%s should not have port override variables when review is skipped: %v", name, svc)
 		}
-		remediation := svc["remediation"].(map[string]any)
-		if remediation["shadow"] != true {
-			t.Fatalf("%s remediation = %v, want shadow true", name, remediation)
+		if svc["dry_run"] != true {
+			t.Fatalf("%s dry_run = %v, want true", name, svc["dry_run"])
 		}
 	}
 }

@@ -11,12 +11,11 @@ uses: mariadb
 # Rename this service, or copy the apps/checks/rules blocks into the concrete
 # database service you already enable, before using it on a host.
 #
-# Gradual rollout: uncomment this block to evaluate the inherited MariaDB
-# remediation rules and this backup guard without executing service operations.
-# Sermo will emit shadow events that show what would have happened.
+# Gradual rollout: uncomment this key to evaluate the inherited MariaDB
+# remediation rules and this backup guard without executing service operations
+# or non-console notifications. Manual operations are unaffected.
 #
-# remediation:
-#   shadow: true
+# dry_run: true
 
 apps: [mariadb, mariadb-backup]
 

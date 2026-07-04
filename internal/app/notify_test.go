@@ -10,12 +10,18 @@ import (
 // fakeNotifier records the messages it is asked to send (and can fail on demand).
 type fakeNotifier struct {
 	name string
+	typ  string
 	fail bool
 	msgs []notify.Message
 }
 
 func (f *fakeNotifier) Name() string { return f.name }
-func (f *fakeNotifier) Type() string { return "fake" }
+func (f *fakeNotifier) Type() string {
+	if f.typ != "" {
+		return f.typ
+	}
+	return "fake"
+}
 func (f *fakeNotifier) Send(_ context.Context, m notify.Message) error {
 	f.msgs = append(f.msgs, m)
 	if f.fail {

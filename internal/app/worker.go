@@ -90,13 +90,13 @@ type Worker struct {
 	// published data and recorded availability side effects.
 	Observability *ObservabilityRegistry
 
-	// Shadow when true causes the worker to fully evaluate remediation rules,
-	// advance their for/within windows, consult guards and the remediation policy,
-	// and emit events, but never perform any Operate/Cascade action and never
-	// Record against the real cooldown/backoff state. This lets operators observe
-	// what Sermo *would* do before enabling live auto-remediation.
-	// Shadow is independent of IsPaused (paused services skip evaluation entirely).
-	Shadow bool
+	// DryRun causes the worker to fully evaluate automatic rules, advance their
+	// for/within windows, consult guards and the remediation policy, and emit
+	// events, but never perform any Operate/Cascade action and never Record
+	// against the real cooldown/backoff state. Non-console notifications are also
+	// suppressed; wall notifications are still delivered. DryRun is independent
+	// of IsPaused (paused services skip evaluation entirely).
+	DryRun bool
 	// RecordHealth persists this cycle's availability sample for SLA tracking:
 	// up is true when no required check failed. Nil disables recording (tests, or
 	// when no store is wired). Only observed (non-paused) cycles are recorded.
@@ -463,9 +463,12 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		}
 	}
 
-	// A healthy cycle (no remediation rule fired) decays the backoff.
+	// A healthy cycle (no remediation rule fired) decays the backoff. Dry-run
+	// cycles must not mutate the real remediation policy state.
 	if len(firing) == 0 {
-		w.State.Recover()
+		if !w.DryRun {
+			w.State.Recover()
+		}
 		return
 	}
 
@@ -475,7 +478,11 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 			// Validation rejects operation-less remediation rules; tolerate one
 			// that bypassed it (hand-built Rule) by at least delivering its
 			// alerts instead of silently doing nothing.
-			w.emitAlerts(ctx, r)
+			if w.DryRun {
+				w.emitDryRunAlerts(ctx, r)
+			} else {
+				w.emitAlerts(ctx, r)
+			}
 			continue
 		}
 		action := string(op)
@@ -494,19 +501,22 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 			suppress = why
 		}
 
-		if w.Shadow {
-			// Full evaluation + window advance + guard + policy happened.
-			// Emit rich "shadow" event so the operator sees exactly what Sermo
-			// would have done (and why it would have been suppressed, if at all).
-			// Never execute the action and never Record (real cooldowns unaffected).
+		if w.DryRun {
+			// Full evaluation + window advance + guard + policy happened. Emit a
+			// rich dry-run event so the operator sees exactly what Sermo would have
+			// done (and why it would have been suppressed, if at all). Never execute
+			// the action and never Record (real cooldowns unaffected).
 			msg := "would " + action
 			if suppress != "" {
 				msg += " (suppressed: " + suppress + ")"
 			} else {
 				msg += " (would execute)"
 			}
-			w.emit(Event{Kind: "shadow", Rule: r.Name, Action: action, Message: msg})
-			// Report all firing rules in shadow mode for maximum observability.
+			w.emit(Event{Kind: "dry-run", Rule: r.Name, Action: action, Message: msg})
+			if suppress == "" {
+				w.emitDryRunAlerts(ctx, r)
+			}
+			// Report all firing rules in dry-run mode for maximum observability.
 			continue
 		}
 
@@ -562,7 +572,11 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 			continue
 		}
 		if w.fires(ctx, ev, r, at, evals) {
-			w.emitAlerts(ctx, r)
+			if w.DryRun {
+				w.emitDryRunAlerts(ctx, r)
+			} else {
+				w.emitAlerts(ctx, r)
+			}
 		}
 	}
 }
@@ -572,6 +586,14 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 // default it inherits, unless suppressed with `none`), delivers each message to
 // them best-effort.
 func (w *Worker) emitAlerts(ctx context.Context, r rules.Rule) {
+	w.emitAlertsFiltered(ctx, r, nil)
+}
+
+func (w *Worker) emitDryRunAlerts(ctx context.Context, r rules.Rule) {
+	w.emitAlertsFiltered(ctx, r, dryRunConsoleNotifier)
+}
+
+func (w *Worker) emitAlertsFiltered(ctx context.Context, r rules.Rule, allow func(notify.Notifier) bool) {
 	notifiers := resolveNotifiers(effectiveNotify(r.Notify, w.GlobalNotify), w.Notifiers)
 	panicking := w.InPanic != nil && w.InPanic()
 	output := w.cycleFailOutput
@@ -585,6 +607,9 @@ func (w *Worker) emitAlerts(ctx context.Context, r rules.Rule) {
 			continue
 		}
 		for _, n := range notifiers {
+			if allow != nil && !allow(n) {
+				continue
+			}
 			if err := n.Send(ctx, alertMessage(w.Service, r.Name, msg, output)); err != nil {
 				w.emit(Event{Kind: "notify-failed", Rule: r.Name, Message: n.Name() + ": " + err.Error()})
 			} else {

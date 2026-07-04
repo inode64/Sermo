@@ -98,7 +98,11 @@ func bundleJS(entry string) (string, error) {
 		LogLevel:          api.LogLevelSilent,
 		Write:             false,
 	})
-	return single(res)
+	js, err := single(res)
+	if err != nil {
+		return "", err
+	}
+	return normalizeVendoredJSLiterals(js), nil
 }
 
 func bundleCSS(entry string) (string, error) {
@@ -124,4 +128,13 @@ func single(res api.BuildResult) (string, error) {
 		return "", fmt.Errorf("expected 1 output file, got %d", len(res.OutputFiles))
 	}
 	return string(res.OutputFiles[0].Contents), nil
+}
+
+func normalizeVendoredJSLiterals(js string) string {
+	// The pinned lit-html bundle carries regex whitespace sets with literal tabs
+	// before newlines. Escaped forms keep the same runtime regex and avoid
+	// trailing whitespace in the committed generated HTML.
+	js = strings.ReplaceAll(js, "`[ \t\n\\f\\r]`", `"[ \t\n\f\r]"`)
+	js = strings.ReplaceAll(js, "(?:[^ \t\n\\f\\r\"'\\`<>=]|", "(?:[^ \\t\\n\\f\\r\"'\\`<>=]|")
+	return js
 }

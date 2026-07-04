@@ -1,7 +1,8 @@
 # Sermo minimal installed configuration.
 #
-# Engine-wide settings are not merged into individual services; only the
-# per-service parts of `defaults` (stop_policy, policy, rule_window) are.
+# Engine-wide settings are not merged into individual targets. Only the
+# target-safe parts of `defaults` are: dry_run for services, storages and
+# watches; stop_policy, policy and rule_window for services.
 # For source-tree development and local validation, use examples/sermo-dev.yml;
 # this file intentionally points at installed /etc/sermo and /usr/share/sermo
 # locations.

@@ -243,9 +243,11 @@ config:
   ```
 
 `on_change.notify` follows the usual notify precedence (omit to inherit the global
-`notify` default, or `none` to suppress). The underlying `command` (`on_change`)
-and `config` check types can also be used directly in `watches:` when you want a
-hook or a standalone command.
+`notify` default, or `none` to suppress). A service-level `dry_run: true`
+suppresses non-console notification delivery for these service-owned monitors;
+`wall` still delivers. The underlying `command` (`on_change`) and `config` check
+types can also be used directly in `watches:` when you want a hook or a
+standalone command.
 
 ### Egress interface (`interface`)
 
@@ -1864,9 +1866,10 @@ recent action timestamps used by `max_actions`, and the current backoff survive 
 `sermod` restart, so restarting the daemon does not bypass cooldown or rate
 limits.
 
-Use `remediation.shadow: true` when you want these service remediation rules to
-evaluate windows, guards and policy without executing the resulting
-start/stop/restart/reload/resume operation. It emits `shadow` events and does not
-advance live remediation cooldown state. Host watch `then.dry_run: true` is
-separate: it skips watch `hook`, `notify` and `expand` actions;
-see [configuration](configuration.md#host-watches) for examples.
+Use `dry_run: true` on a service (or in `defaults`) when you want remediation
+rules to evaluate windows, guards and policy without executing the resulting
+start/stop/restart/reload/resume operation. It emits `dry-run` events and does
+not advance live remediation cooldown state. Dry-run also suppresses automatic
+rule notifications except `wall`; manual operator actions are unaffected. See
+[configuration](configuration.md#host-watches) for examples covering watches and
+global defaults.

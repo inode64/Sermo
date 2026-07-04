@@ -142,16 +142,14 @@
     background: color-mix(in srgb, currentColor 11%, transparent);
   }
   .target-state::before { content: ""; width: .52em; height: .52em; border-radius: 50%; background: currentColor; flex: none; }
-  .state-disabled, .state-stopped, .state-unmonitorized, .state-starting { color: var(--text-2); }
+  .state-disabled, .state-stopped, .state-starting { color: var(--text-2); }
   .state-running, .state-started { color: var(--info); }
   .state-paused { color: var(--warn); }
   .state-warning { color: var(--warn); }
   .state-collecting { color: var(--warn); }
-  .state-ok, .state-monitorized, .state-monitored { color: var(--ok); }
+  .state-ok, .state-monitored { color: var(--ok); }
   .state-failed { color: var(--crit); }
   .state-failed::before { animation: beat 1.2s ease-in-out infinite; }
-  .monitor-state { display: inline-block; margin-left: .25rem; }
-  .monitor-state .target-state { font-weight: 600; opacity: .82; }
   @keyframes beat { 50% { transform: scale(1.55); opacity: .55; } }
   /* Honor the OS "reduce motion" preference across the whole UI: the heartbeat
      dots (state-failed, op-dot), the panic-button pulse, the summary chevron
@@ -420,7 +418,7 @@
   .kind-error, .kind-hook-failed, .kind-notify-failed { color: var(--crit); }
   .kind-alert, .kind-suppressed { color: var(--warn); }
   .kind-action, .kind-hook, .kind-notify, .kind-cascade { color: var(--ok); }
-  .kind-shadow, .kind-dry-run { color: var(--info); }
+  .kind-dry-run { color: var(--info); }
   .activity-time { font-weight: 600; font-variant-numeric: tabular-nums; }
   .activity-crit { color: var(--crit); }
   .activity-warn { color: var(--warn); }

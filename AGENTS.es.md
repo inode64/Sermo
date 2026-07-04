@@ -647,7 +647,7 @@ checklist). Imita el estilo existente de la suite en lugar de inventar uno.
    antes de que el engine compartido corra. Los comandos manuales del operador están exentos del
    cooldown pero siguen sujetos a locks, guards y preflight.
 9. Siempre registra si una acción fue ejecutada o bloqueada, y por qué. Hoy eso
-   significa eventos del daemon (`action`, `blocked`, `shadow`, `suppressed`, …) vía el
+   significa eventos del daemon (`action`, `blocked`, `dry-run`, `suppressed`, …) vía el
    log de eventos in-process (web UI / `sermoctl activity`) y salida explícita de status de CLI
    para operaciones manuales. La exportación append-only de `access.log` / `event.log`
    es trabajo futuro ([TODO.es.md](TODO.es.md)); no saltes las rutas existentes de evento/CLI

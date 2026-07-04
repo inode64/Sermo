@@ -20,7 +20,7 @@ func TestDockerAssistant(t *testing.T) {
 		"y",   // shared settings
 		"1",   // monitor enabled
 		"",    // interval inherit
-		"n",   // no shadow
+		"n",   // no dry-run
 	}, "\n") + "\n"
 	var out strings.Builder
 	p := NewPrompt(strings.NewReader(script), &out)
@@ -59,7 +59,7 @@ func TestVMAssistant(t *testing.T) {
 		"1", // select web01
 		"3", // restore previous state
 		"1m",
-		"y", // shadow
+		"y", // dry-run
 	}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := vmAssistant{}.Run(p, env)
@@ -70,9 +70,8 @@ func TestVMAssistant(t *testing.T) {
 	if svc["monitor"] != "previous" || svc["interval"] != "1m" {
 		t.Fatalf("monitor/interval = %v/%v, want previous/1m", svc["monitor"], svc["interval"])
 	}
-	remediation := svc["remediation"].(map[string]any)
-	if remediation["shadow"] != true {
-		t.Fatalf("remediation = %v, want shadow", remediation)
+	if svc["dry_run"] != true {
+		t.Fatalf("dry_run = %v, want true", svc["dry_run"])
 	}
 	control := svc["control"].(map[string]any)
 	if control["type"] != "libvirt" || control["domain"] != "web01" || control["uri"] != "qemu:///system" {
