@@ -286,6 +286,15 @@ func validateCommandFields(path string, entry map[string]any, validateAnalyzeFie
 		add("%s command must be an array, not a shell string", path)
 	}
 	validateCommandUser(path, entry, add)
+	validateCommandExpectations(path, entry, add)
+	validateVersionMatcherField(path, entry["version_match"], add)
+	if validateAnalyzeFields {
+		validateAnalyze(path, entry, add)
+	}
+	validateCommandExport(path, entry, add)
+}
+
+func validateCommandExpectations(path string, entry map[string]any, add addFunc) {
 	if v, present := entry["expect_exit"]; present {
 		if !isExpectExit(v) {
 			add("%s expect_exit must be an integer or a non-empty list of integers", path)
@@ -293,11 +302,6 @@ func validateCommandFields(path string, entry map[string]any, validateAnalyzeFie
 	}
 	validateOutputExpectation(path, "expect_stdout", entry["expect_stdout"], add)
 	validateOutputExpectation(path, "expect_stderr", entry["expect_stderr"], add)
-	validateVersionMatcherField(path, entry["version_match"], add)
-	if validateAnalyzeFields {
-		validateAnalyze(path, entry, add)
-	}
-	validateCommandExport(path, entry, add)
 }
 
 func isExpectExit(raw any) bool {
