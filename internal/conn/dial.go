@@ -59,13 +59,13 @@ func dialConn(ctx context.Context, cfg Config, port int) (net.Conn, error) {
 	d := BindDialer(cfg.Interface)
 	switch normalizeTLS(cfg.TLS) {
 	case "":
-		return d.DialContext(ctx, "tcp", addr)
+		return d.DialContext(ctx, networkTCP, addr)
 	case tlsSkipVerify:
 		tc := tlsClientConfig(host)
 		tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
-		return (&tls.Dialer{NetDialer: d, Config: tc}).DialContext(ctx, "tcp", addr)
+		return (&tls.Dialer{NetDialer: d, Config: tc}).DialContext(ctx, networkTCP, addr)
 	default:
-		return (&tls.Dialer{NetDialer: d, Config: tlsClientConfig(host)}).DialContext(ctx, "tcp", addr)
+		return (&tls.Dialer{NetDialer: d, Config: tlsClientConfig(host)}).DialContext(ctx, networkTCP, addr)
 	}
 }
 

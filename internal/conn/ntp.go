@@ -39,7 +39,7 @@ func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		// Route the UDP query through the shared dialer so interface binding works
 		// identically to the other probes; beevik would otherwise dial directly.
 		Dialer: func(_, remote string) (net.Conn, error) {
-			return BindDialer(cfg.Interface).DialContext(ctx, "udp", remote)
+			return BindDialer(cfg.Interface).DialContext(ctx, networkUDP, remote)
 		},
 	}
 	resp, err := ntp.QueryWithOptions(net.JoinHostPort(host, strconv.Itoa(port)), opt)
