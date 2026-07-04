@@ -298,6 +298,25 @@ func validateVersionMatcherField(prefix string, v any, add addFunc) {
 	}
 }
 
+func validateCommandFields(path string, entry map[string]any, validateAnalyzeFields bool, add addFunc) {
+	if !cfgval.IsNonEmptyStringArray(entry["command"]) {
+		add("%s command must be an array, not a shell string", path)
+	}
+	validateCommandUser(path, entry, add)
+	if v, present := entry["expect_exit"]; present {
+		if !isExpectExit(v) {
+			add("%s expect_exit must be an integer or a non-empty list of integers", path)
+		}
+	}
+	validateOutputExpectation(path, "expect_stdout", entry["expect_stdout"], add)
+	validateOutputExpectation(path, "expect_stderr", entry["expect_stderr"], add)
+	validateVersionMatcherField(path, entry["version_match"], add)
+	if validateAnalyzeFields {
+		validateAnalyze(path, entry, add)
+	}
+	validateCommandExport(path, entry, add)
+}
+
 func isExpectExit(raw any) bool {
 	_, ok := cfgval.IntList(raw)
 	return ok
@@ -660,20 +679,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 	case "ports":
 		validatePortsFields(path, entry, add)
 	case "command":
-		if !cfgval.IsNonEmptyStringArray(entry["command"]) {
-			add("%s command must be an array, not a shell string", path)
-		}
-		validateCommandUser(path, entry, add)
-		if v, present := entry["expect_exit"]; present {
-			if !isExpectExit(v) {
-				add("%s expect_exit must be an integer or a non-empty list of integers", path)
-			}
-		}
-		validateOutputExpectation(path, "expect_stdout", entry["expect_stdout"], add)
-		validateOutputExpectation(path, "expect_stderr", entry["expect_stderr"], add)
-		validateVersionMatcherField(path, entry["version_match"], add)
-		validateAnalyze(path, entry, add)
-		validateCommandExport(path, entry, add)
+		validateCommandFields(path, entry, true, add)
 	case "service":
 		st := cfgval.String(entry["expect"])
 		if st == "" {

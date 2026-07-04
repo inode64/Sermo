@@ -455,22 +455,11 @@ func validateCommands(tree map[string]any, add addFunc) {
 			add("commands.%s must be a mapping", name)
 			continue
 		}
-		if !cfgval.IsNonEmptyStringArray(entry["command"]) {
-			add("commands.%s command must be an array, not a shell string", name)
-		}
-		validateCommandUser("commands."+name, entry, add)
+		path := "commands." + name
+		validateCommandFields(path, entry, false, add)
 		if v, present := entry["timeout"]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("commands.%s timeout %q must be a valid positive duration", name, cfgval.String(v))
 		}
-		if v, present := entry["expect_exit"]; present {
-			if !isExpectExit(v) {
-				add("commands.%s expect_exit must be an integer or a non-empty list of integers", name)
-			}
-		}
-		validateOutputExpectation("commands."+name, "expect_stdout", entry["expect_stdout"], add)
-		validateOutputExpectation("commands."+name, "expect_stderr", entry["expect_stderr"], add)
-		validateVersionMatcherField("commands."+name, entry["version_match"], add)
-		validateCommandExport("commands."+name, entry, add)
 	}
 }
 
