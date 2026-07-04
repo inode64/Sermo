@@ -1688,6 +1688,49 @@ notifiers:
 	}
 }
 
+func TestLoadIncludedNotifierFragmentRejectsInvalidShape(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "not-mapping",
+			body: `
+notifiers: [ops]
+`,
+			want: "notifiers must be a mapping",
+		},
+		{
+			name: "extra-top-level-key",
+			body: `
+notifiers:
+  ops:
+    enabled: false
+    type: email
+notify: [ops]
+`,
+			want: `notifiers fragments only support top-level notifiers, got "notify"`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			global := writeConfig(t, map[string]string{
+				"sermo.yml": `
+paths:
+  notifiers: [ @ROOT@/notifiers ]
+defaults:
+  policy: { cooldown: 5m }
+`,
+				"notifiers/ops.yml": tc.body,
+			})
+
+			if _, err := Load(global); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Load() error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestLoadExplicitTargetDirectories(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
