@@ -123,7 +123,13 @@ func validateCleanOnStop(raw any, add addFunc) {
 			path = e
 		case map[string]any:
 			path = cfgval.AsString(e["path"])
-			recursive, _ = e["recursive"].(bool)
+			if rawRecursive, present := e["recursive"]; present {
+				var ok bool
+				recursive, ok = rawRecursive.(bool)
+				if !ok {
+					add("stop_policy.clean_on_stop[%d].recursive must be a boolean", i)
+				}
+			}
 		default:
 			add("stop_policy.clean_on_stop[%d] must be a path or a {path, recursive} mapping", i)
 			continue
