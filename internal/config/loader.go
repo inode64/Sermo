@@ -143,7 +143,7 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		}
 	}
 	for _, spec := range uniquePathSpecs(watchPaths) {
-		if err := cfg.loadGlobalFragmentDir(spec.Path, "watches", spec.Recursive); err != nil {
+		if err := cfg.loadWatchDir(spec.Path, spec.Recursive); err != nil {
 			return nil, err
 		}
 	}
@@ -461,6 +461,10 @@ func (c *Config) loadStorageDir(dir string, recursive bool) error {
 	return c.loadStorageDirEntries(dir, recursive)
 }
 
+func (c *Config) loadWatchDir(dir string, recursive bool) error {
+	return c.loadWatchDirEntries(dir, recursive)
+}
+
 func (c *Config) loadServiceDirEntries(dir string, recursive bool) error {
 	return c.loadKindDirEntries(dir, "service", kindService, recursive)
 }
@@ -480,12 +484,6 @@ func (c *Config) loadGlobalFragmentDirEntries(dir string, section string, recurs
 		if err != nil {
 			return err
 		}
-		if section == "watches" {
-			if err := c.mergeWatchDocument(doc); err != nil {
-				return err
-			}
-			continue
-		}
 		handled, err := c.mergeGlobalFragmentSection(doc, section)
 		if err != nil {
 			return err
@@ -499,6 +497,32 @@ func (c *Config) loadGlobalFragmentDirEntries(dir string, section string, recurs
 	}
 	for _, name := range subdirs {
 		if err := c.loadGlobalFragmentDirEntries(filepath.Join(dir, name), section, recursive); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Config) loadWatchDirEntries(dir string, recursive bool) error {
+	names, subdirs, err := configDirEntries(dir, "watches")
+	if err != nil {
+		return err
+	}
+
+	for _, name := range names {
+		doc, err := loadDocument(filepath.Join(dir, name))
+		if err != nil {
+			return err
+		}
+		if err := c.mergeWatchDocument(doc); err != nil {
+			return err
+		}
+	}
+	if !recursive {
+		return nil
+	}
+	for _, name := range subdirs {
+		if err := c.loadWatchDirEntries(filepath.Join(dir, name), recursive); err != nil {
 			return err
 		}
 	}
