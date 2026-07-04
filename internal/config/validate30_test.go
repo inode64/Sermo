@@ -976,10 +976,14 @@ checks:
   self:  { type: tcp, host: 127.0.0.1, port: 80, requires: [self] }
   ghost: { type: tcp, host: 127.0.0.1, port: 80, requires: [missing] }
   badsk: { type: tcp, host: 127.0.0.1, port: 80, skip_when_changed: 5 }
+  badreqlist: { type: tcp, host: 127.0.0.1, port: 80, requires: [123] }
+  badsklist: { type: tcp, host: 127.0.0.1, port: 80, skip_when_changed: [123] }
 `)
 	mustHave(t, bad, "checks.self.requires cannot reference itself")
 	mustHave(t, bad, `checks.ghost.requires references unknown check "missing"`)
 	mustHave(t, bad, "checks.badsk.skip_when_changed must be a file path or a list")
+	mustHave(t, bad, "checks.badreqlist.requires must be a check name or a list of check names")
+	mustHave(t, bad, "checks.badsklist.skip_when_changed must be a file path or a list")
 }
 
 func TestValidatePolicyMaxActions(t *testing.T) {
