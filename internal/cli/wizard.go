@@ -846,6 +846,29 @@ func watchConfigFileName(name string) string {
 	return base + ".yml"
 }
 
+type plannedConfigFile struct {
+	path string
+	data []byte
+}
+
+func planConfigFiles(targetDir, noun string, docs map[string]map[string]any) ([]plannedConfigFile, error) {
+	files := make([]plannedConfigFile, 0, len(docs))
+	for _, name := range slices.Sorted(maps.Keys(docs)) {
+		file := filepath.Join(targetDir, watchConfigFileName(name))
+		if _, err := os.Stat(file); err == nil {
+			return nil, fmt.Errorf("%s file %s already exists; not overwriting", noun, file)
+		} else if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("stat %s: %w", file, err)
+		}
+		data, err := yaml.Marshal(docs[name])
+		if err != nil {
+			return nil, fmt.Errorf("render %s: %w", file, err)
+		}
+		files = append(files, plannedConfigFile{path: file, data: data})
+	}
+	return files, nil
+}
+
 // ensureConfigPathDir makes sure targetDir (whose path relative to the config
 // dir is relDir) is listed in paths.<pathKey> of the global config, rewriting
 // the file — keeping a .bak of the original — only when a change is needed. It
