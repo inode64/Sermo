@@ -46,8 +46,8 @@ func TestWatchState(t *testing.T) {
 	}{
 		{name: "disabled", enabled: false, observed: true, want: TargetStateDisabled},
 		{name: "starting monitored", enabled: true, monitored: true, observed: false, want: TargetStateStarting},
-		{name: "unmonitorized ok", enabled: true, monitored: false, observed: true, want: TargetStateDisabled},
-		{name: "unmonitorized failed", enabled: true, monitored: false, failed: true, observed: true, want: TargetStateDisabled},
+		{name: "unmonitored ok", enabled: true, monitored: false, observed: true, want: TargetStateDisabled},
+		{name: "unmonitored failed", enabled: true, monitored: false, failed: true, observed: true, want: TargetStateDisabled},
 		{name: "ok", enabled: true, monitored: true, observed: true, want: TargetStateOK},
 		{name: "failed", enabled: true, monitored: true, failed: true, observed: true, want: TargetStateFailed},
 	}

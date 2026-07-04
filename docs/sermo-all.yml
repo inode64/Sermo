@@ -68,7 +68,8 @@ paths:
   # normalize any host-reported value to the canonical /run target.
   # paths.locks is intentionally unsupported: lock dirs derive from runtime.
 
-defaults:  # merged into every service as the base layer
+defaults:  # shared defaults for services, storages and watches where applicable
+  dry_run: false  # simulate automatic actions; manual operations still run
   variables:  # global custom vars; services may override them
     owner: ops
     region: local
@@ -88,8 +89,6 @@ defaults:  # merged into every service as the base layer
     # duration: 6m
     mode: consecutive  # consecutive | within
     # min_matches: 1           # only meaningful with mode: within
-  remediation:
-    shadow: false  # service remediation shadow; watch actions use then.dry_run
 
 # Security invariants are hard-coded. Config keys such as
 # security.allow_sigkill_by_default are rejected rather than honored.
@@ -317,6 +316,7 @@ watches:
   # -- file watch: one event per changed path -------------------------------
   app-data:
     monitor: disabled
+    dry_run: true  # emit dry-run events; skip hook until removed
     check:
       type: file
       path: /var/lib/myapp
@@ -326,7 +326,6 @@ watches:
       owner: { on: change }
       existence: { on: delete }
     then:
-      dry_run: true  # emit dry-run events; skip hook until removed
       hook: { command: [/usr/local/bin/file-change.sh], timeout: 10s }
 
   # -- process watch: per-PID thresholds, edge-triggered ---------------------
@@ -779,8 +778,7 @@ policy:  # overrides defaults.policy for this catalog service
   max_actions_window: 1h
   backoff: { initial: 1m, factor: 2, max: 30m }
 
-remediation:
-  shadow: true  # observe service remediation without executing operations
+dry_run: true  # observe automatic remediation without executing operations
 
 rule_window:
   cycles: 3

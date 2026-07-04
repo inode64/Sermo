@@ -509,8 +509,9 @@ func TestValidateNotifyReferences(t *testing.T) {
 				"then":  map[string]any{"notify": []any{"none"}, "expand": map[string]any{"by": "5G"}},
 			},
 			"storage-dry-run": map[string]any{
-				"check": storageCheck,
-				"then":  map[string]any{"dry_run": true, "notify": []any{"ops-email"}},
+				"dry_run": true,
+				"check":   storageCheck,
+				"then":    map[string]any{"notify": []any{"ops-email"}},
 			},
 			"storage-inherit": map[string]any{
 				"check": storageCheck,
@@ -546,15 +547,16 @@ func TestValidateNotifyReferences(t *testing.T) {
 				"then":  "notify me",
 			},
 			"bad-dry-run": map[string]any{
-				"check": storageCheck,
-				"then":  map[string]any{"dry_run": "yes", "notify": []any{"none"}},
+				"dry_run": "yes",
+				"check":   storageCheck,
+				"then":    map[string]any{"notify": []any{"none"}},
 			},
 		},
 	})
 	for _, w := range []string{
 		"watches.storage-root.then.notify references unknown notifier \"ghost\"",
 		"watches.bad-then.then must be a mapping",
-		"watches.bad-dry-run.then.dry_run must be a boolean",
+		"watches.bad-dry-run.dry_run must be a boolean",
 	} {
 		if !hasIssue(bad, w) {
 			t.Fatalf("missing issue %q in %v", w, bad)
@@ -574,16 +576,16 @@ func TestValidateNotifyReferences(t *testing.T) {
 				"then":  map[string]any{},
 			},
 			"dry-run-only": map[string]any{
-				"check": storageCheck,
-				"then":  map[string]any{"dry_run": true},
+				"dry_run": true,
+				"check":   storageCheck,
 			},
 		},
 	})
 	if !hasIssue(noDefault, "watches.no-action.then requires a hook, notify, kill and/or expand") {
 		t.Fatalf("expected empty then without global notify to fail, got %v", noDefault)
 	}
-	if !hasIssue(noDefault, "watches.dry-run-only.then requires a hook, notify, kill and/or expand") {
-		t.Fatalf("expected dry_run alone without an action to fail, got %v", noDefault)
+	if hasIssue(noDefault, "watches.dry-run-only") {
+		t.Fatalf("dry_run top-level must be valid without actions, got %v", noDefault)
 	}
 
 	// Bare watch (no "then" key at all) with check+for is valid as alert-only:

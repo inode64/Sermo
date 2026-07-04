@@ -120,7 +120,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		Hook:           actions.hook,
 		Notifiers:      resolveNotifiers(actions.effectiveNames, deps.Notifiers),
 		NotifyInterval: actions.notifyInterval,
-		DryRun:         actions.dryRun,
+		DryRun:         config.DryRun(entry),
 		Runner:         OSHookRunner{Runner: deps.ExecxRunner},
 		Interval:       interval,
 		IsPaused:       monitorPaused(deps.Monitor, watchMonitorKey(name)),
@@ -151,10 +151,6 @@ func configuredVolumeExpander(deps Deps) VolumeExpander {
 
 func hasWatchAction(hook HookSpec, names, effectiveNames []string, expand *ExpandSpec) bool {
 	return len(hook.Command) > 0 || config.HasNotifyAction(effectiveNames) || expand != nil || config.NotifyOptedOut(names)
-}
-
-func dryRunEnabled(then map[string]any) bool {
-	return then != nil && cfgval.Bool(then["dry_run"])
 }
 
 // buildMetricWatches expands one multi-metric watch entry (net/icmp/swap) into
@@ -208,7 +204,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			Hook:           actions.hook,
 			Notifiers:      resolveNotifiers(actions.effectiveNames, deps.Notifiers),
 			NotifyInterval: actions.notifyInterval,
-			DryRun:         actions.dryRun,
+			DryRun:         config.DryRun(entry),
 			Runner:         OSHookRunner{Runner: deps.ExecxRunner},
 			Interval:       interval,
 			IsPaused:       monitorPaused(deps.Monitor, watchMonitorKey(name)),
@@ -245,7 +241,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		cond:      cond,
 		hook:      actions.hook,
 		notifiers: resolveNotifiers(actions.effectiveNames, deps.Notifiers),
-		dryRun:    actions.dryRun,
+		dryRun:    config.DryRun(entry),
 		inPanic:   deps.Panic.Active,
 		runner:    OSHookRunner{Runner: deps.ExecxRunner},
 		emit:      deps.Emit,
@@ -257,7 +253,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		IsPaused:  monitorPaused(deps.Monitor, watchMonitorKey(name)),
 		InPanic:   deps.Panic.Active,
 		Settling:  deps.Settling,
-		DryRun:    actions.dryRun,
+		DryRun:    config.DryRun(entry),
 		Now:       deps.Now,
 		Emit:      deps.Emit,
 		Cycle:     fw.runCycle,
@@ -303,7 +299,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		hook:      actions.hook,
 		kill:      actions.kill,
 		notifiers: resolveNotifiers(actions.effectiveNames, deps.Notifiers),
-		dryRun:    actions.dryRun,
+		dryRun:    config.DryRun(entry),
 		inPanic:   deps.Panic.Active,
 		runner:    OSHookRunner{Runner: deps.ExecxRunner},
 		resolve:   resolve,
@@ -318,7 +314,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		IsPaused:  monitorPaused(deps.Monitor, watchMonitorKey(name)),
 		InPanic:   deps.Panic.Active,
 		Settling:  deps.Settling,
-		DryRun:    actions.dryRun,
+		DryRun:    config.DryRun(entry),
 		Now:       deps.Now,
 		Emit:      deps.Emit,
 		Cycle:     pw.runCycle,
@@ -488,7 +484,6 @@ func parseActions(then map[string]any) (HookSpec, []string, error) {
 type watchActions struct {
 	hook           HookSpec
 	effectiveNames []string
-	dryRun         bool
 	expand         *ExpandSpec
 	kill           *killSpec
 	notifyInterval time.Duration
@@ -530,7 +525,6 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 	return watchActions{
 		hook:           hook,
 		effectiveNames: effectiveNames,
-		dryRun:         dryRunEnabled(thenBlock),
 		expand:         expand,
 		kill:           kill,
 		notifyInterval: cfgval.Duration(thenBlock["notify_interval"]),
@@ -672,7 +666,7 @@ func versionMonitor(name string, tree map[string]any, deps Deps, interval time.D
 	if err != nil {
 		return nil, "service " + name + ": version monitor: " + err.Error()
 	}
-	return monitorWatch(name+":version", "command", check, notify, deps, interval), ""
+	return monitorWatch(name+":version", "command", check, notify, config.DryRun(tree), deps, interval), ""
 }
 
 // configMonitor synthesizes a watch that alerts when the service's config is
@@ -703,7 +697,7 @@ func configMonitor(name string, tree map[string]any, deps Deps, interval time.Du
 	if err != nil {
 		return nil, "service " + name + ": config monitor: " + err.Error()
 	}
-	return monitorWatch(name+":config", "config", check, notify, deps, interval), ""
+	return monitorWatch(name+":config", "config", check, notify, config.DryRun(tree), deps, interval), ""
 }
 
 // onChangeNotify reads an `{on_change: {notify: [...]}}` block, returning the
@@ -780,12 +774,13 @@ func monitorDeps(deps Deps) checks.Deps {
 }
 
 // monitorWatch assembles a notify-only watch around a synthesized check.
-func monitorWatch(name, checkType string, check checks.Check, notify []string, deps Deps, interval time.Duration) *Watch {
+func monitorWatch(name, checkType string, check checks.Check, notify []string, dryRun bool, deps Deps, interval time.Duration) *Watch {
 	return &Watch{
 		Name:       name,
 		CheckType:  checkType,
 		Check:      check,
 		Notifiers:  resolveNotifiers(effectiveNotify(notify, deps.GlobalNotify), deps.Notifiers),
+		DryRun:     dryRun,
 		Runner:     OSHookRunner{Runner: deps.ExecxRunner},
 		Interval:   interval,
 		IsPaused:   monitorPaused(deps.Monitor, watchMonitorKey(name)),

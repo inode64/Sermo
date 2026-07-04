@@ -265,6 +265,7 @@ func (w *procWatcher) fire(ctx context.Context, info ProcInfo, msg string, env m
 	killable := w.kill != nil && env["SERMO_CHANGE"] == "threshold"
 	if w.dryRun {
 		w.emitEvent(Event{Watch: w.name, Kind: "dry-run", Message: w.dryRunActions(killable) + ": " + msg})
+		dispatchDryRunNotify(ctx, w.notifiers, watchMessage(w.name, msg, env), w.name, w.emitEvent)
 		return
 	}
 	if w.inPanic != nil && w.inPanic() {

@@ -30,6 +30,11 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		if v, present := entry["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("watches.%s.interval %q must be a valid positive duration", name, cfgval.String(v))
 		}
+		if v, present := entry["dry_run"]; present {
+			if _, ok := v.(bool); !ok {
+				add("watches.%s.dry_run must be a boolean", name)
+			}
+		}
 		validateNotifyRefs(name, entry, notifiers, add)
 		validateWindow("watches."+name, entry, add)
 		validateWatchPolicy("watches."+name, entry, add)
@@ -91,13 +96,14 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKi
 		add("%s.then must be a mapping", prefix)
 		return
 	}
-	hook, hasHook := then["hook"].(map[string]any)
-	notify := cfgval.StringList(then["notify"])
-	if v, present := then["dry_run"]; present {
-		if _, ok := v.(bool); !ok {
-			add("%s.then.dry_run must be a boolean", prefix)
+	allowed := set("hook", "notify", "notify_interval", "expand", "kill")
+	for _, key := range slices.Sorted(maps.Keys(then)) {
+		if _, ok := allowed[key]; !ok {
+			add("%s.then.%s is not supported", prefix, key)
 		}
 	}
+	hook, hasHook := then["hook"].(map[string]any)
+	notify := cfgval.StringList(then["notify"])
 	if v, present := then["notify_interval"]; present {
 		// notify_interval re-sends the notification as a reminder while the watch
 		// stays firing; absent means notify once on the rising edge. It only

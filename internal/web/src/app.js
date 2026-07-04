@@ -585,7 +585,7 @@ function activitySeverity(kind, status) {
   if (["error", "hook-failed", "notify-failed", "expand-failed", "kill-failed"].includes(k)) return "crit";
   if (["alert", "firing", "suppressed", "panic-suppressed", "notify-suppressed", "expand-skipped"].includes(k)) return "warn";
   if (["action", "cascade", "hook", "notify", "recovered", "expand", "kill"].includes(k)) return "ok";
-  if (["shadow", "dry-run"].includes(k)) return "info";
+  if (k === "dry-run") return "info";
   return "muted";
 }
 
@@ -818,9 +818,7 @@ function targetStateClass(state) {
     case "stopped": return "state-stopped";
     case "warning": return "state-warning";
     case "ok": return "state-ok";
-    case "monitorized": return "state-monitorized";
     case "monitored": return "state-monitored";
-    case "unmonitorized": return "state-unmonitorized";
     case "collecting": return "state-collecting";
     case "failed": return "state-failed";
     case "starting": return "state-starting";
@@ -851,12 +849,10 @@ function stateRank(state) {
     case "started": return 4;
     case "monitored": return 5;
     case "failed": return 7;
-    case "unmonitorized": return 1;
     case "running": return 2;
     case "paused": return 3;
     case "ok": return 5;
     case "warning": return 6;
-    case "monitorized": return 6;
     case "stopping": return 1;
     case "restarting": return 1;
     case "resuming": return 1;
@@ -887,30 +883,6 @@ function serviceDisplayState(s) {
   const op = s && liveOps.get(s.name);
   if (op && !op.finished) return operationState(op.action);
   return serviceState(s);
-}
-
-function serviceUnmonitorized(s) {
-  return !!(s && s.enabled && !s.monitored);
-}
-
-function serviceMonitorized(s) {
-  return !!(s && s.enabled && s.monitored);
-}
-
-function monitorStateBadge(monitored) {
-  return tpl`<span class="monitor-state">${stateBadgeLabel(monitored ? "monitorized" : "unmonitorized", monitored ? "monitored" : "unmonitored")}</span>`;
-}
-
-function serviceMonitorHint(s) {
-  const bits = [];
-  if (s && s.monitor_source) bits.push(fmtMonitorSource(s.monitor_source));
-  if (s && s.monitor_changed_at) bits.push(fmtAge(s.monitor_changed_at));
-  return bits.length ? tpl` <span class="muted">${bits.join(" · ")}</span>` : nothing;
-}
-
-function serviceMonitorBadge(s) {
-  if (!s || !s.enabled) return nothing;
-  return tpl`${monitorStateBadge(!!s.monitored)}${serviceUnmonitorized(s) ? serviceMonitorHint(s) : nothing}`;
 }
 
 function serviceStateBadge(s) {
@@ -953,6 +925,13 @@ function openPanelTarget(target) {
     const sec = $("#services-section");
     if (sec) sec.open = true;
     setSvcStatus("collecting");
+    sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
+    return;
+  }
+  if (target === "monitored-services") {
+    const sec = $("#services-section");
+    if (sec) sec.open = true;
+    setSvcStatus("monitored");
     sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
     return;
   }
@@ -1237,6 +1216,7 @@ function serviceMatches(s) {
     case "started":
     case "starting":
     case "collecting":
+    case "monitored":
     case "failed":      return serviceDisplayState(s) === svcStatus;
     default:            return true; // "all"
   }
@@ -1279,26 +1259,14 @@ function sortedBy(list, sort, sortKeys, fallbackKey) {
 function renderFilterButtonCounts(selector, counts) {
   document.querySelectorAll(`${selector} button`).forEach((b) => {
     const key = b.dataset.f || b.dataset.wf || b.dataset.af || b.dataset.mf;
-    if (counts[key] !== undefined) b.innerHTML = `${filterButtonLabel(key)} <span class="muted">${counts[key]}</span>`;
+    if (counts[key] !== undefined) b.innerHTML = `${key} <span class="muted">${counts[key]}</span>`;
   });
-}
-
-function filterButtonLabel(key) {
-  switch (key) {
-    case "monitorized": return "monitored";
-    case "unmonitorized": return "unmonitored";
-    default: return key;
-  }
 }
 
 function normalizeServiceStatusFilter(v) {
   switch (v) {
     case "running":
-    case "monitorized":
-    case "monitored":
       return "all";
-    case "unmonitorized":
-      return "started";
     case "paused":
       return "stopped";
     default:
@@ -1307,13 +1275,7 @@ function normalizeServiceStatusFilter(v) {
 }
 
 function normalizeWatchStatusFilter(v) {
-  switch (v) {
-    case "monitorized":
-    case "unmonitorized":
-      return "all";
-    default:
-      return v || "all";
-  }
+  return v || "all";
 }
 
 function normalizeMountStatusFilter(v) {
@@ -1392,6 +1354,7 @@ function renderFilterCounts() {
     started: s.filter((x) => serviceDisplayState(x) === "started").length,
     starting: s.filter((x) => serviceDisplayState(x) === "starting").length,
     collecting: s.filter((x) => serviceDisplayState(x) === "collecting").length,
+    monitored: s.filter((x) => serviceDisplayState(x) === "monitored").length,
     failed: s.filter((x) => serviceDisplayState(x) === "failed").length,
   };
   renderFilterButtonCounts("#svc-filters", c);
@@ -2352,6 +2315,7 @@ function renderServiceDetail(d) {
       <div><span class="muted">Backend</span><br>${d.backend || "—"}</div>
       <div><span class="muted">Uptime</span><br>${serviceUptimeCell(d)}</div>
       <div><span class="muted">Interval</span><br>${d.interval ? d.interval : tpl`<span class="muted">—</span>`}</div>
+      <div><span class="muted">Dry run</span><br><b>${d.dry_run ? "yes" : "no"}</b></div>
       <div><span class="muted">Policy</span><br>${policyCell(d)}</div>
       <div><span class="muted">Locks</span><br>${locksCell(d)}</div>
       <div><span class="muted">Last event</span><br>${lastEventCell(d)}</div>
@@ -2651,14 +2615,6 @@ function watchStateText(w) {
 
 function watchStateRank(w) {
   return stateRank(watchStateText(w));
-}
-
-function watchMonitorized(w) {
-  return !!(w && w.enabled && w.monitored);
-}
-
-function watchUnmonitorized(w) {
-  return !!(w && w.enabled && !w.monitored);
 }
 
 function watchStateCell(w) {
@@ -3762,7 +3718,7 @@ function renderNotifiers(notifiers) {
   const rows = notifiers.map((n) => {
     const enabled = n.enabled !== false;
     const state = enabled ? "enabled" : "disabled";
-    const cls = enabled ? "state-monitorized" : "state-disabled";
+    const cls = enabled ? "state-monitored" : "state-disabled";
     const dest = n.summary ? esc(n.summary) : '<span class="muted">—</span>';
     const used = Number(n.used_by || 0);
     const watches = used ? String(used) : '<span class="muted">—</span>';
@@ -4011,6 +3967,7 @@ function panelTargetLabel(target) {
     case "failed-services": return "services panel, failed filter";
     case "starting-services": return "services panel, starting filter";
     case "collecting-services": return "services panel, collecting filter";
+    case "monitored-services": return "services panel, monitored filter";
     case "failed-watches": return "watches panel, failed filter";
     case "starting-watches": return "watches panel, starting filter";
     case "failed-apps": return "applications panel, failed filter";
@@ -4141,7 +4098,7 @@ function renderOverview(ctx) {
     ? "collecting-services"
     : (settling && !failedSvcs.length
     ? servicesTarget
-    : "services-section");
+    : (monitoredSvcs.length ? "monitored-services" : "services-section"));
   const monitoredSub = collectingSvcs.length
     ? `${collectingSvcs.length} collecting`
     : (settling && !failedSvcs.length ? (servicesSettlingSub() || "settling") : "");

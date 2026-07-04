@@ -1026,61 +1026,101 @@ func TestWorkerRemediationReloadOperates(t *testing.T) {
 	}
 }
 
-// TestWorkerShadowModeEvaluatesButDoesNotAct verifies the core of the shadow
-// remediation feature: conditions/windows/guards/policy are all evaluated and
-// appropriate events are emitted, but no Operate is called and real
-// RemediationState is not mutated.
-func TestWorkerShadowModeEvaluatesButDoesNotAct(t *testing.T) {
+// TestWorkerDryRunEvaluatesButDoesNotAct verifies the core dry-run remediation
+// behavior: conditions/windows/guards/policy are all evaluated and appropriate
+// events are emitted, but no Operate is called and real RemediationState is not
+// mutated.
+func TestWorkerDryRunEvaluatesButDoesNotAct(t *testing.T) {
 	h := &workerHarness{cache: failedCache("http")}
 	tree := remediationTree("restart-if-down", "http", "restart")
 	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
-	w.Shadow = true
+	w.DryRun = true
 
 	w.RunCycle(context.Background())
 
 	if len(h.ops) != 0 {
-		t.Fatalf("shadow mode executed ops=%v; must not call Operate", h.ops)
+		t.Fatalf("dry-run mode executed ops=%v; must not call Operate", h.ops)
 	}
-	ev, ok := h.eventOf("shadow")
+	ev, ok := h.eventOf("dry-run")
 	if !ok {
-		t.Fatalf("no shadow event emitted; events=%+v", h.events)
+		t.Fatalf("no dry-run event emitted; events=%+v", h.events)
 	}
 	if ev.Action != "restart" || !strings.Contains(ev.Message, "would") {
-		t.Fatalf("shadow event = %+v, want action=restart and 'would' in message", ev)
+		t.Fatalf("dry-run event = %+v, want action=restart and 'would' in message", ev)
 	}
 	if !w.State.LastActionAt.IsZero() || len(w.State.RecentActions) != 0 {
-		t.Error("shadow must not Record remediation state (no pollution of real cooldown)")
+		t.Error("dry-run must not Record remediation state (no pollution of real cooldown)")
 	}
 }
 
-// TestWorkerShadowModeReportsSuppression verifies that when a firing rule would
-// be blocked (here by the cooldown policy), shadow mode still emits a shadow
-// event whose message records *why* the action would have been suppressed, and
+// TestWorkerDryRunReportsSuppression verifies that when a firing rule would be
+// blocked (here by the cooldown policy), dry-run mode still emits a dry-run
+// event whose message records why the action would have been suppressed, and
 // that the seeded cooldown state is left untouched.
-func TestWorkerShadowModeReportsSuppression(t *testing.T) {
+func TestWorkerDryRunReportsSuppression(t *testing.T) {
 	h := &workerHarness{cache: failedCache("http")}
 	state := &rules.RemediationState{LastActionAt: t0.Add(-30 * time.Second)} // within a 1m cooldown
 	tree := remediationTree("restart-if-down", "http", "restart")
 	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, state)
-	w.Shadow = true
+	w.DryRun = true
 
 	w.RunCycle(context.Background())
 
 	if len(h.ops) != 0 {
-		t.Fatalf("shadow mode executed ops=%v; must not call Operate", h.ops)
+		t.Fatalf("dry-run mode executed ops=%v; must not call Operate", h.ops)
 	}
 	if _, ok := h.eventOf("suppressed"); ok {
-		t.Fatalf("shadow mode must report via a shadow event, not a plain suppressed one; events=%+v", h.events)
+		t.Fatalf("dry-run mode must report via a dry-run event, not a plain suppressed one; events=%+v", h.events)
 	}
-	ev, ok := h.eventOf("shadow")
+	ev, ok := h.eventOf("dry-run")
 	if !ok {
-		t.Fatalf("no shadow event emitted; events=%+v", h.events)
+		t.Fatalf("no dry-run event emitted; events=%+v", h.events)
 	}
 	if ev.Action != "restart" || !strings.Contains(ev.Message, "suppressed: cooldown") {
-		t.Fatalf("shadow event = %+v, want action=restart and 'suppressed: cooldown' in message", ev)
+		t.Fatalf("dry-run event = %+v, want action=restart and 'suppressed: cooldown' in message", ev)
 	}
 	if !w.State.LastActionAt.Equal(t0.Add(-30 * time.Second)) {
-		t.Errorf("shadow must not mutate the seeded cooldown state, LastActionAt=%v", w.State.LastActionAt)
+		t.Errorf("dry-run must not mutate the seeded cooldown state, LastActionAt=%v", w.State.LastActionAt)
+	}
+}
+
+func TestWorkerDryRunHealthyCycleDoesNotRecoverBackoff(t *testing.T) {
+	h := &workerHarness{cache: map[string]checks.Result{"http": {Check: "http", OK: true}}}
+	state := &rules.RemediationState{CurrentBackoff: 5 * time.Minute}
+	tree := remediationTree("restart-if-down", "http", "restart")
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, state)
+	w.DryRun = true
+
+	w.RunCycle(context.Background())
+
+	if w.State.CurrentBackoff != 5*time.Minute {
+		t.Fatalf("dry-run healthy cycle mutated backoff = %s, want 5m", w.State.CurrentBackoff)
+	}
+}
+
+func TestWorkerDryRunSendsOnlyWallAlerts(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http")}
+	tree := alertRuleTree(nil)
+	w := h.worker(tree, rules.Policy{}, nil)
+	email := &fakeNotifier{name: "ops-email", typ: "email"}
+	wall := &fakeNotifier{name: "wall", typ: "wall"}
+	w.Notifiers = map[string]notify.Notifier{"ops-email": email, "wall": wall}
+	w.GlobalNotify = []string{"ops-email", "wall"}
+	w.DryRun = true
+
+	w.RunCycle(context.Background())
+
+	if len(email.msgs) != 0 {
+		t.Fatalf("dry-run must suppress non-console notifications, got %d", len(email.msgs))
+	}
+	if len(wall.msgs) != 1 {
+		t.Fatalf("dry-run must still send wall notification, got %d", len(wall.msgs))
+	}
+	if _, ok := h.eventOf("alert"); !ok {
+		t.Fatalf("dry-run alert rule should still emit alert event: %+v", h.events)
+	}
+	if _, ok := h.eventOf("notify"); !ok {
+		t.Fatalf("dry-run wall notification should emit notify event: %+v", h.events)
 	}
 }
 

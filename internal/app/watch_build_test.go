@@ -17,6 +17,10 @@ func cfgWithWatches(raw map[string]any) *config.Config {
 	return &config.Config{Global: config.Global{Raw: map[string]any{"watches": raw}}}
 }
 
+func cfgWithWatchDefaults(raw, defaults map[string]any) *config.Config {
+	return &config.Config{Global: config.Global{Raw: map[string]any{"watches": raw}, Defaults: defaults}}
+}
+
 type typedNotifier struct {
 	name string
 	typ  string
@@ -66,13 +70,14 @@ func TestBuildWatchesProcessKillActionRejectsUnsafeSelector(t *testing.T) {
 func TestBuildWatchesStorageExpandAction(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"expand-backup": map[string]any{
+			"dry_run": true,
 			"check": map[string]any{
 				"type":     "storage",
 				"path":     "/mnt/backup",
 				"free_pct": map[string]any{"op": "<", "value": 10},
 			},
 			"policy": map[string]any{"cooldown": "30m"},
-			"then":   map[string]any{"dry_run": true, "expand": map[string]any{"by": "5G"}},
+			"then":   map[string]any{"expand": map[string]any{"by": "5G"}},
 		},
 	})
 	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
@@ -97,6 +102,36 @@ func TestBuildWatchesStorageExpandAction(t *testing.T) {
 	}
 	if w.CheckType != "storage" {
 		t.Fatalf("check type = %q, want storage", w.CheckType)
+	}
+}
+
+func TestBuildWatchesDryRunFromDefaultsCanBeOverridden(t *testing.T) {
+	cfg := cfgWithWatchDefaults(map[string]any{
+		"inherited": map[string]any{
+			"check": map[string]any{"type": "load", "load1": map[string]any{"op": ">", "value": 10}},
+			"then":  map[string]any{"notify": []any{"ops"}},
+		},
+		"live": map[string]any{
+			"dry_run": false,
+			"check":   map[string]any{"type": "load", "load1": map[string]any{"op": ">", "value": 20}},
+			"then":    map[string]any{"notify": []any{"ops"}},
+		},
+	}, map[string]any{"dry_run": true})
+	watches, warns := BuildWatches(cfg, Deps{
+		Notifiers: map[string]notify.Notifier{"ops": &fakeNotifier{name: "ops"}},
+	}, 30*time.Second)
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	byName := map[string]*Watch{}
+	for _, w := range watches {
+		byName[w.Name] = w
+	}
+	if !byName["inherited"].DryRun {
+		t.Fatal("defaults.dry_run should enable dry-run for watches")
+	}
+	if byName["live"].DryRun {
+		t.Fatal("watch dry_run false should override defaults.dry_run")
 	}
 }
 

@@ -94,9 +94,7 @@ func TestGeneratedGenericServicePassesConfigValidation(t *testing.T) {
 						},
 					},
 					"pidfile": "/run/customd.pid",
-					"remediation": map[string]any{
-						"shadow": true,
-					},
+					"dry_run": true,
 				},
 			},
 		},

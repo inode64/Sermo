@@ -48,8 +48,8 @@ func TestUplinkAssistant(t *testing.T) {
 	if notify := state["then"].(map[string]any)["notify"].([]string); len(notify) != 1 || notify[0] != "ops-email" {
 		t.Fatalf("ping notify = %v, want [ops-email]", notify)
 	}
-	if state["then"].(map[string]any)["dry_run"] != true {
-		t.Fatalf("ping dry_run = %v, want true", state["then"])
+	if ping["dry_run"] != true {
+		t.Fatalf("ping dry_run = %v, want true", ping["dry_run"])
 	}
 
 	dns := res.Watches["uplink-eth0-dns"].(map[string]any)

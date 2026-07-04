@@ -5,17 +5,15 @@ import "strings"
 // Operator-facing target states and monitor-filter values shown by sermoctl and
 // the web dashboard.
 const (
-	TargetStateDisabled      = "disabled"
-	TargetStateStarted       = "started"
-	TargetStatePaused        = "paused"
-	TargetStateStopped       = "stopped"
-	TargetStateStarting      = "starting"
-	TargetStateCollecting    = "collecting"
-	TargetStateOK            = "ok"
-	TargetStateMonitorized   = "monitorized"
-	TargetStateUnmonitorized = "unmonitorized"
-	TargetStateMonitored     = "monitored"
-	TargetStateFailed        = "failed"
+	TargetStateDisabled   = "disabled"
+	TargetStateStarted    = "started"
+	TargetStatePaused     = "paused"
+	TargetStateStopped    = "stopped"
+	TargetStateStarting   = "starting"
+	TargetStateCollecting = "collecting"
+	TargetStateOK         = "ok"
+	TargetStateMonitored  = "monitored"
+	TargetStateFailed     = "failed"
 )
 
 // ServiceState folds config, backend status and monitoring health into the

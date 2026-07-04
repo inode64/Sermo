@@ -15,7 +15,7 @@ type Event struct {
 	Service string
 	Watch   string // set for host-watch events (instead of Service)
 	App     string // set for installed-application monitoring events (instead of Service/Watch)
-	Kind    string // cycle | action | suppressed | shadow | alert | error | firing | recovered | dry-run | hook | hook-failed | notify | notify-failed | cascade
+	Kind    string // cycle | action | suppressed | alert | error | firing | recovered | dry-run | hook | hook-failed | notify | notify-failed | cascade
 	Rule    string
 	Action  string
 	Status  string
@@ -100,7 +100,7 @@ func SlogEmitter(logger *slog.Logger) func(Event) {
 		switch e.Kind {
 		case "error", "hook-failed", "notify-failed":
 			logger.Error("sermod", attrs...)
-		case "action", "alert", "suppressed", "shadow", "firing", "recovered", "dry-run", "hook", "notify", "cascade":
+		case "action", "alert", "suppressed", "firing", "recovered", "dry-run", "hook", "notify", "cascade":
 			logger.Info("sermod", attrs...)
 		default:
 			logger.Debug("sermod", attrs...)

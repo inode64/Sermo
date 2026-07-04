@@ -71,15 +71,15 @@ func (m Monitoring) apply(entry map[string]any) {
 	}
 }
 
-// AskWatchDryRun asks whether a generated watch should rehearse its `then`
+// AskWatchDryRun asks whether a generated watch should simulate its automatic
 // actions without executing them. It is only asked when the watch has an actual
 // side effect to skip: a real notifier target, an inherited global notifier, or
-// a native action such as then.expand.
+// a native action such as then.expand/then.kill.
 func (p *Prompt) AskWatchDryRun(label string, env Env, notifiers []string, hasNativeAction bool) bool {
 	if !watchHasSideEffect(env, notifiers, hasNativeAction) {
 		return false
 	}
-	return p.Confirm("Dry-run "+label+" actions first (evaluate but skip hook/notify/expand)?", false)
+	return p.Confirm("Dry-run "+label+" actions first (evaluate but skip hook/non-console notify/native actions)?", false)
 }
 
 func watchHasSideEffect(env Env, notifiers []string, hasNativeAction bool) bool {
@@ -95,17 +95,16 @@ func watchHasSideEffect(env Env, notifiers []string, hasNativeAction bool) bool 
 	return config.HasNotifyAction(notifiers)
 }
 
-func applyDryRun(then map[string]any, dryRun bool) {
+func applyDryRun(entry map[string]any, dryRun bool) {
 	if dryRun {
-		then["dry_run"] = true
+		entry["dry_run"] = true
 	}
 }
 
-func watchThen(notifiers []string, dryRun bool) map[string]any {
+func watchThen(notifiers []string) map[string]any {
 	then := map[string]any{}
 	if len(notifiers) > 0 {
 		then["notify"] = notifiers
 	}
-	applyDryRun(then, dryRun)
 	return then
 }

@@ -439,16 +439,6 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		liveSample = nil
 	}
 
-	// remediation.shadow allows full rule+window+guard+policy evaluation and
-	// event emission without ever executing operations. It merges from defaults
-	// via perServiceDefaults.
-	shadow := false
-	if r, ok := tree["remediation"].(map[string]any); ok {
-		if cfgval.Bool(r["shadow"]) {
-			shadow = true
-		}
-	}
-
 	// A per-check `interval` runs that check every N cycles (N rounded from
 	// interval/resolution); skipped cycles reuse its last result so the cache and
 	// rule windows stay complete. resolution is the service's own interval, or the
@@ -496,7 +486,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Settling:          deps.Settling,
 		OperationSettling: deps.OperationSettling,
 		Observability:     deps.Observability,
-		Shadow:            shadow,
+		DryRun:            config.DryRun(tree),
 		ResolveRefs:       func() rules.RefResolver { return rules.NewCheckResolver(preflightBuilt, maxParallel) },
 		RecordHealth:      healthRecorder(deps, name),
 		RecordChecks:      checkSLARecorder(deps, name),

@@ -82,7 +82,11 @@ var metaKeys = map[string]struct{}{
 
 // perServiceDefaults are the only parts of global `defaults` that merge into a
 // service. Engine-wide settings never reach individual services.
-var perServiceDefaults = []string{"stop_policy", "policy", "rule_window", "remediation"}
+var perServiceDefaults = []string{"dry_run", "stop_policy", "policy", "rule_window"}
+
+// perStorageDefaults are the only parts of global `defaults` that merge into a
+// storage target.
+var perStorageDefaults = []string{"dry_run"}
 
 // Document is a single loaded catalog definition or configured target in raw,
 // unexpanded form.
@@ -257,6 +261,11 @@ func MonitorMode(tree map[string]any) string {
 		return v
 	}
 	return MonitorEnabled
+}
+
+// DryRun reports whether automatic actions for this configured target are simulated.
+func DryRun(tree map[string]any) bool {
+	return cfgval.Bool(tree["dry_run"])
 }
 
 // Global is the effective global configuration (sermo.yml plus conf.d), kept

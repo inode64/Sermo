@@ -112,6 +112,7 @@
         <button data-f="started" aria-pressed="false">started</button>
         <button data-f="starting" aria-pressed="false">starting</button>
         <button data-f="collecting" aria-pressed="false">collecting</button>
+        <button data-f="monitored" aria-pressed="false">monitored</button>
         <button data-f="failed" aria-pressed="false">failed</button>
       </span>
     <span id="svc-count" class="muted"></span>
@@ -310,7 +311,7 @@
 
 <h2 class="visually-hidden">Events</h2>
 <details id="events-section" open>
-  <summary>Events <span class="muted">(shadow events appear when a service uses <code>remediation: {shadow: true}</code>)</span></summary>
+  <summary>Events <span class="muted">(dry-run events appear when automatic actions are simulated)</span></summary>
   <div id="event-controls" role="group" aria-label="Filter events">
     <label for="event-service" class="visually-hidden">Filter events by service</label>
     <input id="event-service" type="text" placeholder="service">

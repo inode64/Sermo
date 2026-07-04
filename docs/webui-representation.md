@@ -319,7 +319,7 @@ Section id: `events-section`
 
 | Part | Current representation |
 | --- | --- |
-| Title | `Events` plus shadow-event note |
+| Title | `Events` plus dry-run note |
 | Controls | service, watch, kind, status, only errors, group actions, reset filters, optional `before` cutoff, clear log (admin) |
 | Table | event rows grouped by action when enabled |
 | Limit | latest matching events |
@@ -335,7 +335,7 @@ Editable notes:
   matching `sermoctl events clear`. An optional **before** field passes
   `?before=TIME` (duration or RFC3339) to prune only older rows.
 - The `kind` filter covers the emitted event kinds: `cycle`, `action`,
-  `suppressed`, `shadow`, `alert`, `error`, `firing`, `recovered`, `dry-run`,
+  `suppressed`, `alert`, `error`, `firing`, `recovered`, `dry-run`,
   `reload` (a successful config reload of the running daemon),
   `hook`/`hook-failed`, `notify`/`notify-failed`, `expand`/`expand-skipped`/`expand-failed`,
   and `cascade` (a service operation triggered through a cascade action).

@@ -190,11 +190,12 @@ enabled: false disables inherited item
 delete: true removes inherited item
 ```
 
-Precedence, low to high: `global defaults < catalog service (uses)/clone source < service
-overrides`. The global `defaults` (stop_policy, policy, rule_window) is the base
-layer of every service; engine settings (interval, max_parallel_checks,
-default_timeout, backend) are NOT merged into services. Variables expand once,
-after all merging. See `docs/configuration.md`.
+Precedence, low to high for services: `global defaults < catalog service (uses)/clone
+source < service overrides`. Only target-safe parts of global `defaults` merge
+into configured targets: `dry_run` applies to services, storages and watches;
+`stop_policy`, `policy` and `rule_window` apply to services. Engine settings
+(interval, max_parallel_checks, default_timeout, backend) are NOT merged into
+targets. Variables expand once, after all merging. See `docs/configuration.md`.
 The effective `defaults.policy.cooldown` is required and must be positive. A
 catalog service or service may omit `policy.cooldown` only when it inherits that value;
 any explicit override must also be positive.

@@ -206,3 +206,31 @@ func TestConfigMonitorPreservesCommandUser(t *testing.T) {
 		t.Fatalf("RunUser call = user=%q name=%q args=%v", runner.user, runner.name, runner.args)
 	}
 }
+
+func TestServiceChangeMonitorsInheritDryRun(t *testing.T) {
+	tree := map[string]any{
+		"dry_run":  true,
+		"commands": map[string]any{"version": map[string]any{"command": []any{"app", "--version"}}},
+		"version":  map[string]any{"on_change": map[string]any{"notify": []any{"ops"}}},
+		"preflight": map[string]any{
+			"config": map[string]any{"type": "command", "command": []any{"app", "--check"}},
+		},
+		"config": map[string]any{"on_change": map[string]any{"notify": []any{"ops"}}},
+	}
+
+	versionWatch, warn := versionMonitor("app", tree, monitorTestDeps(), time.Minute)
+	if warn != "" || versionWatch == nil {
+		t.Fatalf("version monitor warn=%q watch=%v", warn, versionWatch)
+	}
+	if !versionWatch.DryRun {
+		t.Fatal("version monitor should inherit service dry_run")
+	}
+
+	configWatch, warn := configMonitor("app", tree, monitorTestDeps(), time.Minute)
+	if warn != "" || configWatch == nil {
+		t.Fatalf("config monitor warn=%q watch=%v", warn, configWatch)
+	}
+	if !configWatch.DryRun {
+		t.Fatal("config monitor should inherit service dry_run")
+	}
+}

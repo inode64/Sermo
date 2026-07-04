@@ -1186,57 +1186,63 @@ capacity:
     notify_interval: 30m     # re-notify every 30m while still firing
 ```
 
-Use `then.dry_run: true` when you want to keep the watch and its actions wired
-for a trial run, but you do not want any side effects yet. The watch still runs
-its check and window, emits the normal `firing` event when it would fire, then
-emits a `dry-run` event describing the actions it would run. It does **not**
-execute `hook`, send `notify`, or run `expand`. `dry_run` is a modifier on an
-explicit action block, so it must be paired with a real `hook`, `notify`, or
-`expand` action; by itself it is not an action.
+Use `dry_run: true` when you want automatic actions wired for a trial run, but
+you do not want non-console side effects yet. It is available in `defaults`, in
+each service, in each storage target, and in each watch entry. A target-level
+setting overrides `defaults.dry_run`.
+
+Dry-run applies only to automatic actions driven by monitoring/rules:
+
+- service remediation operations (`start`, `stop`, `restart`, `reload`,
+  `resume`) are evaluated but not executed;
+- service-owned `version.on_change` / `config.on_change` monitors inherit the
+  service's `dry_run` flag, so their non-console notifications are suppressed;
+- watch actions (`hook`, `expand`, `kill`) are evaluated but not executed;
+- notifications are suppressed except `wall`, which is still delivered for local
+  console visibility.
+
+Manual operator actions are not dry-run gated: CLI/Web start, stop, restart,
+reload, resume, monitor/unmonitor, mount/umount and other explicit operations
+still execute normally.
+
+A dry-run watch still runs its check and window, emits the normal `firing` event
+when it would fire, then emits a `dry-run` event describing the actions it would
+run. If an expansion or remediation would currently be blocked by policy, the
+`dry-run` event reports the suppression, but dry-run does not advance
+cooldown/backoff state.
 
 ```yaml
+defaults:
+  dry_run: true
+
+name: apache-main
+uses: apache
+dry_run: false  # override the global default for this service
+rules:
+  restart-http:
+    type: remediation
+    if: { failed: { check: http } }
+    then: { action: restart }
+
 watches:
   load:
     monitor: previous
+    dry_run: true
     check:
       type: load
       per_cpu: true
       load5: { op: ">", value: 1.5 }
     for: { cycles: 3 }
     then:
-      dry_run: true
       hook: { command: [/usr/local/bin/sermo-load-alert.sh] }
       notify: [ops-email]
 ```
 
 Use `dry_run` for host watches while you are proving thresholds, hook argv/env,
-notifier routing or `then.expand` policy gating. If an expansion would currently
-be blocked by policy, the `dry-run` event reports the suppression, but dry-run
-does not advance cooldown/backoff state. Remove it when the action should
-actually execute. If you only want a long-term dashboard/log signal, omit
-`then` entirely or use `notify: [none]`; those are monitor-only configurations,
-not action rehearsals.
-
-`dry_run` and remediation `shadow` are intentionally separate:
-
-- `then.dry_run` belongs to a host watch under `watches:`. It skips watch
-  side effects: `hook`, `notify` and `expand`.
-- `remediation.shadow` belongs to service remediation. It evaluates service
-  remediation rules, `for`/`within` windows, guards and policy, then emits
-  `shadow` events without running service operations such as `restart`, `start`,
-  `stop` or `reload`. It does not suppress host watch hooks.
-
-```yaml
-name: apache-main
-uses: apache
-remediation:
-  shadow: true
-rules:
-  restart-http:
-    type: remediation
-    if: { failed: { check: http } }
-    then: { action: restart }
-```
+notifier routing or `then.expand` / `then.kill` policy gating. Remove it when
+automatic actions should actually execute. If you only want a long-term
+dashboard/log signal, omit `then` entirely or use `notify: [none]`; those are
+monitor-only configurations, not action rehearsals.
 
 A watch supports the same top-level `monitor` flag as a service/daemon:
 `enabled` (the default) forces monitoring on at daemon start/reload, `disabled`
@@ -1971,8 +1977,9 @@ watches:
   and only on a **presence** fire (`for`/`cpu`/`memory`/`io`) — never on a `gone`
   fire, which has nothing to signal. Each signal delivery is recorded as a `kill`
   (or `kill-failed`) event visible in the watch's activity.
-- `then.dry_run: true` and panic mode **suppress** the kill (a `dry-run` /
-  `panic-suppressed` event is emitted instead), exactly like the hook and notify.
+- `dry_run: true` and panic mode **suppress** the kill (a `dry-run` /
+  `panic-suppressed` event is emitted instead), like hooks and non-console
+  notifications.
 - `kill` can stand alone (a pure kill watch) or accompany a `hook` and/or
   `notify`. It is **only valid on a `process` watch** (like `then.expand` is
   storage-only). Because it signals real processes, the daemon must have
@@ -1985,12 +1992,16 @@ watch/hook structure.
 
 ## Global defaults
 
-Only the per-service parts of `defaults` merge into a service: `stop_policy`,
-`policy`, and `rule_window`. Engine-wide settings (`interval`,
+Only target-safe parts of `defaults` merge into configured targets:
+`dry_run` applies to services, storages and watches; `stop_policy`, `policy`
+and `rule_window` apply to services. Engine-wide settings (`interval`,
 `max_parallel_checks`, `max_parallel_operations`, `default_timeout`,
 `operation_timeout`, `startup_delay`, `backend`, `user_lookup`,
 `user_lookup_timeout`, `state_cache_size`) are daemon configuration and never
 merge into a service.
+
+`defaults.dry_run` is optional and defaults to `false`; a service, storage or
+watch may override it with its own top-level `dry_run`.
 
 `defaults.policy.cooldown` is **required and positive**: every resolved service
 inherits a loop-prevention cooldown unless it overrides it.
@@ -2020,7 +2031,7 @@ overridden per catalog service or service.
 
 A service is resolved into a flat definition, lowest precedence first:
 
-1. The effective global `defaults` (per-service parts).
+1. The effective global `defaults` (target-safe parts).
 2. The `uses` daemon, or the `clone` chain, merged on top.
 3. The service's own fields (highest precedence).
 4. `${var}` expansion, once, over the merged result.
@@ -2174,17 +2185,11 @@ entry:
 ```yaml
 defaults:
   policy: { cooldown: 5m }
-  # remediation.shadow puts the service's remediation rules into observation-only
-  # mode: full condition evaluation, window tracking (for/within), guard
-  # evaluation and policy checks (cooldown, max_actions, backoff) still occur and
-  # produce "shadow" events with rich detail about what Sermo would have done and
-  # why (including suppressions). No operations are executed and the live
-  # RemediationState is not advanced. Perfect for safely tuning rules before
-  # going live. This does not affect host watches; put dry_run: true inside a
-  # watch's then block to rehearse hooks/notifies/expand without executing them.
-  # A per-service setting overrides the default.
-  #   remediation: { shadow: true }
-  remediation: { shadow: false }
+  # dry_run simulates automatic service, storage and watch actions without
+  # executing service operations, hook/expand/kill actions, or non-console
+  # notifications. Manual operator actions are unaffected. A target-level
+  # dry_run setting overrides the default.
+  dry_run: false
 
   variables:
     custom_var1: /opt/myapp

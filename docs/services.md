@@ -1345,6 +1345,8 @@ checks, but the **reserved names** are consumed by features:
   That monitor compares the numeric `version_short`, and an optional
   `version.on_change.level` (`major`/`minor`/`patch`, default `patch`) selects at
   which `a.b.c` granularity a change should alert.
+  The monitor inherits the service's `dry_run` flag, so non-console notification
+  delivery is suppressed while the service is in dry-run mode.
   When both exist, `preflight.version` takes precedence over `commands.version`.
   They also declare `version` and `version_short` variables with empty defaults
   for expansion; linked apps expose them to services as `${app_version}` and
