@@ -114,7 +114,7 @@ func writeMountFiles(globalPath string, docs map[string]map[string]any) (string,
 	if err != nil {
 		return "", 0, err
 	}
-	if _, err := ensureStorageDir(globalPath, storagesConfigDir, targetDir); err != nil {
+	if _, err := ensureConfigPathDir(globalPath, "storages", storagesConfigDir, targetDir); err != nil {
 		return "", 0, err
 	}
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
@@ -149,58 +149,6 @@ func planMountFiles(targetDir string, docs map[string]map[string]any) ([]planned
 		files = append(files, plannedMountFile{path: file, data: data})
 	}
 	return files, nil
-}
-
-func ensureStorageDir(globalPath, relDir, targetDir string) (string, error) {
-	orig, err := os.ReadFile(globalPath)
-	if err != nil {
-		return "", fmt.Errorf("read %s: %w", globalPath, err)
-	}
-	var root map[string]any
-	if err := yaml.Unmarshal(orig, &root); err != nil {
-		return "", fmt.Errorf("parse %s: %w", globalPath, err)
-	}
-	if root == nil {
-		root = map[string]any{}
-	}
-	changed, err := ensureStoragesPath(root, filepath.Dir(filepath.Clean(globalPath)), relDir, targetDir)
-	if err != nil {
-		return "", err
-	}
-	if !changed {
-		return "", nil
-	}
-	out, err := yaml.Marshal(root)
-	if err != nil {
-		return "", fmt.Errorf("render %s: %w", globalPath, err)
-	}
-	bak := globalPath + ".bak"
-	if err := os.WriteFile(bak, orig, 0o644); err != nil { //nolint:gosec // config is world-readable by design
-		return "", fmt.Errorf("write backup %s: %w", bak, err)
-	}
-	if err := os.WriteFile(globalPath, out, 0o644); err != nil { //nolint:gosec // config is world-readable by design
-		return "", fmt.Errorf("write %s: %w", globalPath, err)
-	}
-	return bak, nil
-}
-
-func ensureStoragesPath(root map[string]any, base, relDir, targetDir string) (bool, error) {
-	paths, _ := root["paths"].(map[string]any)
-	if paths == nil {
-		paths = map[string]any{}
-		root["paths"] = paths
-	}
-	list, err := yamlStringList(paths["storages"])
-	if err != nil {
-		return false, fmt.Errorf("paths.storages must be a string or list before wizard can append")
-	}
-	for _, item := range list {
-		if sameConfigPath(base, item, targetDir) {
-			return false, nil
-		}
-	}
-	paths["storages"] = appendUniqueStrings(list, relDir)
-	return true, nil
 }
 
 func planStaleMountDeletes(p *assist.Prompt, dir string, detected map[string]bool) ([]string, error) {
