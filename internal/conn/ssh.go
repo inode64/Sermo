@@ -40,7 +40,7 @@ func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, "tcp", addr)
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, addr)
 	if err != nil {
 		return Result{}, err
 	}

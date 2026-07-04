@@ -63,7 +63,7 @@ func (smbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 func smbSession(ctx context.Context, addr string, cfg Config, extra map[string]string) error {
 	user, domain := splitSMBUser(cfg.User)
 	d := &smb2.Dialer{Initiator: &smb2.NTLMInitiator{User: user, Password: cfg.Password, Domain: domain}}
-	tcp, err := BindDialer(cfg.Interface).DialContext(ctx, "tcp", addr)
+	tcp, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, addr)
 	if err != nil {
 		return fmt.Errorf("smb auth: %w", err)
 	}
@@ -104,7 +104,7 @@ func splitSMBUser(s string) (user, domain string) {
 // smbNegotiate sends a native SMB2 NEGOTIATE and returns the negotiated dialect
 // and whether the server requires signing.
 func smbNegotiate(ctx context.Context, addr, iface string) (dialect uint16, signingRequired bool, err error) {
-	c, err := BindDialer(iface).DialContext(ctx, "tcp", addr)
+	c, err := BindDialer(iface).DialContext(ctx, networkTCP, addr)
 	if err != nil {
 		return 0, false, err
 	}
