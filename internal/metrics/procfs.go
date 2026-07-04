@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -15,12 +16,22 @@ const clockTicks = 100.0
 // pageSize is used to convert statm resident pages to bytes.
 var pageSize = uint64(os.Getpagesize())
 
+const procRoot = "/proc"
+
+func procPath(name string) string {
+	return filepath.Join(procRoot, name)
+}
+
+func procPIDPath(pid int, name string) string {
+	return procPath(filepath.Join(strconv.Itoa(pid), name))
+}
+
 // OSReader reads metrics from the host /proc filesystem.
 type OSReader struct{}
 
 // ProcessCPU sums utime (field 14) and stime (field 15) of /proc/<pid>/stat.
 func (OSReader) ProcessCPU(pid int) (uint64, bool) {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	data, err := os.ReadFile(procPIDPath(pid, "stat"))
 	if err != nil {
 		return 0, false
 	}
@@ -46,7 +57,7 @@ func (OSReader) ProcessCPU(pid int) (uint64, bool) {
 // ProcessStartTime reads field 22 of /proc/<pid>/stat and converts it to a wall
 // clock timestamp using the system boot time from /proc/stat.
 func (OSReader) ProcessStartTime(pid int) (time.Time, bool) {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	data, err := os.ReadFile(procPIDPath(pid, "stat"))
 	if err != nil {
 		return time.Time{}, false
 	}
@@ -80,7 +91,7 @@ func parseProcStartTicks(stat string) (uint64, bool) {
 }
 
 func procBootTime() (int64, bool) {
-	data, err := os.ReadFile("/proc/stat")
+	data, err := os.ReadFile(procPath("stat"))
 	if err != nil {
 		return 0, false
 	}
@@ -95,7 +106,7 @@ func procBootTime() (int64, bool) {
 
 // ProcessRSS reads resident pages (field 2 of /proc/<pid>/statm) as bytes.
 func (OSReader) ProcessRSS(pid int) (uint64, bool) {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/statm")
+	data, err := os.ReadFile(procPIDPath(pid, "statm"))
 	if err != nil {
 		return 0, false
 	}
@@ -115,7 +126,7 @@ func (OSReader) ProcessRSS(pid int) (uint64, bool) {
 // process without a VmSwap line (e.g. a kernel thread) also reports 0, true. ok
 // is false only when the file cannot be read.
 func (OSReader) ProcessSwap(pid int) (uint64, bool) {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/status")
+	data, err := os.ReadFile(procPIDPath(pid, "status"))
 	if err != nil {
 		return 0, false
 	}
@@ -131,7 +142,7 @@ func (OSReader) ProcessSwap(pid int) (uint64, bool) {
 // /proc/<pid>/io. Reading another user's io requires privilege, so ok is false
 // when the file cannot be read.
 func (OSReader) ProcessIO(pid int) (read, write uint64, ok bool) {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/io")
+	data, err := os.ReadFile(procPIDPath(pid, "io"))
 	if err != nil {
 		return 0, 0, false
 	}
@@ -154,7 +165,7 @@ func (OSReader) ProcessIO(pid int) (read, write uint64, ok bool) {
 // Reading another user's fd dir requires privilege, so ok is false when it
 // cannot be read.
 func (OSReader) ProcessFDs(pid int) (uint64, bool) {
-	entries, err := os.ReadDir("/proc/" + strconv.Itoa(pid) + "/fd")
+	entries, err := os.ReadDir(procPIDPath(pid, "fd"))
 	if err != nil {
 		return 0, false
 	}
@@ -163,7 +174,7 @@ func (OSReader) ProcessFDs(pid int) (uint64, bool) {
 
 // ProcessThreads counts the entries in /proc/<pid>/task (the process's threads).
 func (OSReader) ProcessThreads(pid int) (uint64, bool) {
-	entries, err := os.ReadDir("/proc/" + strconv.Itoa(pid) + "/task")
+	entries, err := os.ReadDir(procPIDPath(pid, "task"))
 	if err != nil {
 		return 0, false
 	}
@@ -206,7 +217,7 @@ type procMeminfoTotals struct {
 }
 
 func readProcMeminfoTotals() procMeminfoTotals {
-	data, err := os.ReadFile("/proc/meminfo")
+	data, err := os.ReadFile(procPath("meminfo"))
 	if err != nil {
 		return procMeminfoTotals{}
 	}
@@ -247,7 +258,7 @@ func parseProcMeminfoTotals(data []byte) procMeminfoTotals {
 // SystemCPU reads the aggregate cpu line of /proc/stat. busy excludes idle and
 // iowait; total is the sum of all fields.
 func (OSReader) SystemCPU() (busy, total uint64, ok bool) {
-	data, err := os.ReadFile("/proc/stat")
+	data, err := os.ReadFile(procPath("stat"))
 	if err != nil {
 		return 0, 0, false
 	}
@@ -275,7 +286,7 @@ func (OSReader) SystemCPU() (busy, total uint64, ok bool) {
 
 // LoadAverages reads the first three fields of /proc/loadavg.
 func (OSReader) LoadAverages() (l1, l5, l15 float64, ok bool) {
-	data, err := os.ReadFile("/proc/loadavg")
+	data, err := os.ReadFile(procPath("loadavg"))
 	if err != nil {
 		return 0, 0, 0, false
 	}
@@ -308,7 +319,7 @@ func (OSReader) NumCPU() int {
 // procStatCPUCount counts the per-CPU "cpuN" lines in /proc/stat. Returns 0 when
 // /proc/stat cannot be read.
 func procStatCPUCount() int {
-	data, err := os.ReadFile("/proc/stat")
+	data, err := os.ReadFile(procPath("stat"))
 	if err != nil {
 		return 0
 	}
