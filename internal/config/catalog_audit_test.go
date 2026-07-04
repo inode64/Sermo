@@ -334,6 +334,36 @@ func TestExampleWatchDocsUseOneTargetPerFile(t *testing.T) {
 	}
 }
 
+func TestExampleNotifierFragmentsUseOneTargetPerFile(t *testing.T) {
+	root := repoRoot(t)
+	dir := filepath.Join(root, "examples", "notifiers")
+	files, err := yamlFiles(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) == 0 {
+		t.Fatal("examples/notifiers has no notifier examples")
+	}
+	for _, name := range files {
+		path := filepath.Join(dir, name)
+		data, err := os.ReadFile(path) //nolint:gosec // test reads YAML examples under the repository root.
+		if err != nil {
+			t.Fatal(err)
+		}
+		var body map[string]any
+		if err := yaml.Unmarshal(data, &body); err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		notifiers, ok := body["notifiers"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s must declare top-level notifiers map", path)
+		}
+		if len(notifiers) != 1 {
+			t.Fatalf("%s must contain exactly one notifier entry, got %d", path, len(notifiers))
+		}
+	}
+}
+
 func TestShippedServiceConfigsLiveUnderServices(t *testing.T) {
 	root := repoRoot(t)
 	servicesDir := filepath.Join(root, "examples", "services")
