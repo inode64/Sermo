@@ -1,6 +1,10 @@
 package app
 
-import "strings"
+import (
+	"strings"
+
+	"sermo/internal/servicemgr"
+)
 
 // Operator-facing target states and monitor-filter values shown by sermoctl and
 // the web dashboard.
@@ -28,8 +32,8 @@ func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, ob
 	if monitored && !observed {
 		return TargetStateStarting
 	}
-	active := strings.EqualFold(backendStatus, "active")
-	failed := strings.EqualFold(backendStatus, "failed")
+	active := strings.EqualFold(backendStatus, string(servicemgr.StatusActive))
+	failed := strings.EqualFold(backendStatus, string(servicemgr.StatusFailed))
 	if failed {
 		if !monitored {
 			return TargetStateStopped
