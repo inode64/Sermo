@@ -689,6 +689,16 @@ stop_policy:
     users: [mysql]
 `)
 	mustHave(t, issues, "kill_only_if must define both users and exe_any")
+
+	invalidList := validateService(t, `
+name: svc
+service: x
+stop_policy:
+  kill_only_if:
+    users: [mysql, 7]
+    exe_any: [/usr/sbin/mysqld]
+`)
+	mustHave(t, invalidList, "kill_only_if must define both users and exe_any")
 }
 
 func TestValidateForceKillRequiresSelector(t *testing.T) {
@@ -713,6 +723,16 @@ stop_policy:
 	mustHave(t, issues, `stop_policy.graceful_timeout "nope" must be a valid positive duration`)
 	mustHave(t, issues, `stop_policy.term_timeout "0s" must be a valid positive duration`)
 	mustHave(t, issues, `stop_policy.kill_timeout "-1s" must be a valid positive duration`)
+}
+
+func TestValidateStopPolicyFilesAbsentStrictList(t *testing.T) {
+	issues := validateService(t, `
+name: svc
+service: x
+stop_policy:
+  files_absent: [/run/svc.sock, 7]
+`)
+	mustHave(t, issues, "stop_policy.files_absent must be a non-empty list of paths/globs")
 }
 
 func TestValidateCheckEntrySchemas(t *testing.T) {

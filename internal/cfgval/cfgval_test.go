@@ -181,6 +181,30 @@ func TestIsStringOrStringList(t *testing.T) {
 	}
 }
 
+func TestIsNonEmptyStringList(t *testing.T) {
+	cases := []struct {
+		name string
+		in   any
+		want bool
+	}{
+		{"string", "solo", true},
+		{"empty string", "", false},
+		{"list of strings", []any{"a", ""}, true},
+		{"empty list", []any{}, false},
+		{"list with only empties", []any{"", ""}, false},
+		{"list with non-string", []any{"a", 1}, false},
+		{"nil", nil, false},
+		{"integer", 1, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := IsNonEmptyStringList(c.in); got != c.want {
+				t.Errorf("IsNonEmptyStringList(%#v) = %v, want %v", c.in, got, c.want)
+			}
+		})
+	}
+}
+
 func TestIsNonEmptyStringArray(t *testing.T) {
 	cases := []struct {
 		name string
