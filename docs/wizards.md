@@ -91,6 +91,9 @@ settings in this shared/per-target shape.
   carries the step-5/6 answers via `Monitoring.apply`
   (`internal/assist/common.go`). Mount files are not monitored entries
   and must not carry `monitor:` or `interval:`.
+- **Watch category metadata.** Watch assistants emit a top-level `category`
+  matching the generated target family (`network`, `storage`, …) so the Web UI
+  can group/filter wizard-created watches the same way as hand-written docs.
 - **Dry-run is target-level.** Watch assistants ask for `dry_run: true` only when
   the generated watch has a real automatic side effect (`notify`, inherited
   global notify, native `expand`, or native `kill`). Service assistants ask the
@@ -167,6 +170,6 @@ with `sermoctl mount|umount`.
 5. Register it in `registry` (`internal/assist/assist.go`).
 6. If it has host targets, extend `detectedTargetKeys` and the cleanup path for
    its output type (`parseWatchFile`/`planWizardWatchDeletes` for watch
-   fragments, `planStaleMountDeletes` for storage files with a `mount:` block,
+   documents, `planStaleMountDeletes` for storage files with a `mount:` block,
    or the service cleanup target helpers for service files) so step-9 cleanup works.
 7. Add an assistant test plus a case in `contract_test.go`.

@@ -577,6 +577,12 @@ func (c *Config) loadGlobalFragmentDirEntries(dir string, section string, recurs
 		if err != nil {
 			return err
 		}
+		if section == "watches" {
+			if err := c.mergeWatchDocument(doc); err != nil {
+				return err
+			}
+			continue
+		}
 		handled, err := c.mergeGlobalFragmentSection(doc, section)
 		if err != nil {
 			return err
@@ -692,6 +698,36 @@ func (c *Config) loadCategoryDir(dir, category string, recursive bool) error {
 			return err
 		}
 	}
+	return nil
+}
+
+func (c *Config) mergeWatchDocument(doc *Document) error {
+	if _, present := doc.Body["watches"]; present {
+		return fmt.Errorf("%s: watch documents use top-level name/check fields, not a watches map", doc.Path)
+	}
+	if declared := cfgval.String(doc.Body["kind"]); declared != "" && declared != "watch" {
+		return fmt.Errorf("%s: located under a watches directory but declares kind: %s", doc.Path, declared)
+	}
+	if doc.Name == "" {
+		return fmt.Errorf("%s: watch documents must define name", doc.Path)
+	}
+	if !validDocumentName(doc.Name) {
+		return fmt.Errorf("%s: watch name %q must be a simple name without path separators", doc.Path, doc.Name)
+	}
+	entry := cloneMap(doc.Body)
+	delete(entry, "kind")
+	delete(entry, "name")
+	expandEnvTree(entry)
+
+	dst, _ := c.Global.Raw["watches"].(map[string]any)
+	if dst == nil {
+		dst = map[string]any{}
+	}
+	if _, exists := dst[doc.Name]; exists {
+		return fmt.Errorf("%s: watch %q is already defined", doc.Path, doc.Name)
+	}
+	dst[doc.Name] = entry
+	c.Global.Raw["watches"] = dst
 	return nil
 }
 

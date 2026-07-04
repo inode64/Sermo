@@ -1,15 +1,15 @@
-watches:
-  raid:
-    # Linux md software RAID health from /proc/mdstat (no device, no root).
-    # Portable: enable as-is on any host with md arrays. With only `degraded` it
-    # fires when any array is degraded; add `recovering` to track resync windows.
-    monitor: disabled
-    interval: 5m
-    check:
-      type: raid
-      degraded: { op: ">", value: 0 }  # any degraded array
-      # recovering: { op: ">", value: 0 }  # array rebuilding/resyncing
-    for: { cycles: 2 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-raid-alert.sh]
+name: raid
+category: storage
+# Linux md software RAID health from /proc/mdstat (no device, no root).
+# Portable: enable as-is on any host with md arrays. With only `degraded` it
+# fires when any array is degraded; add `recovering` to track resync windows.
+monitor: disabled
+interval: 5m
+check:
+  type: raid
+  degraded: { op: ">", value: 0 }  # any degraded array
+  # recovering: { op: ">", value: 0 }  # array rebuilding/resyncing
+for: { cycles: 2 }
+then:
+  hook:
+    command: [/usr/local/bin/sermo-raid-alert.sh]

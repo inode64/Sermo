@@ -18,9 +18,11 @@ Mantén los cambios concretos:
 - La interfaz web es un único documento embebido: `internal/web/index.html`.
 - Los paneles de datos son tarjetas `<details>`. La página se desplaza como un todo; no añadas
   barras de desplazamiento locales por panel.
-- Los servicios y las aplicaciones se pueden filtrar, ordenar y agrupar por `category`.
+- Los servicios, aplicaciones, storages y watches pueden usar `category` para
+  agrupar, filtrar o buscar según el panel.
 - Un campo YAML `category` de nivel superior es la fuente de la categoría. Si está ausente,
-  los servicios recurren a `service` y las aplicaciones recurren a `app`.
+  los servicios recurren a `service`, las aplicaciones a `app`, los storages a
+  `storage` y los watches a `watch`.
 - Los botones que cambian de estado usan la misma ruta segura de backend que `sermoctl`.
 
 ## Fuentes de datos
@@ -279,6 +281,7 @@ aparecen en el detalle del servicio.
 | Controles | búsqueda, filtro de tipo, filtros de estado, recuento mostrado |
 | Filtro de tipo | `all ... types` específico del panel más los distintos tipos de check presentes actualmente en ese panel |
 | Filtros de estado | all, disabled, ok, starting, failed |
+| Búsqueda | display name, nombre crudo, categoría, tipo, resumen, intervalo, estado de hook/notify y condiciones |
 | Ordenación | Name, Type, Summary, Interval, Polarity, Hook, Notifiers, Last activity, State |
 | Visibilidad | oculto cuando no hay watches configurados para el subconjunto de ese panel |
 
@@ -301,7 +304,7 @@ Expansión de fila:
 
 | Área | Contenido |
 | --- | --- |
-| Config | condiciones y umbrales del check |
+| Config | categoría, condiciones y umbrales del check |
 | Readings | lecturas actuales del host |
 | Activity | eventos recientes del watch |
 | Expand | acción de expansión de almacenamiento cuando está configurada |

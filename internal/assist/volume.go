@@ -136,7 +136,7 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 	if s.expand {
 		then["expand"] = map[string]any{"by": s.expandBy}
 	}
-	entry := map[string]any{"check": check, "then": then}
+	entry := map[string]any{"category": "storage", "check": check, "then": then}
 	if s.forCycles > 0 {
 		entry["for"] = map[string]any{"cycles": s.forCycles}
 	}

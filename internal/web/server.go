@@ -177,6 +177,7 @@ type Application struct {
 type Watch struct {
 	Name             string            `json:"name"`
 	DisplayName      string            `json:"display_name,omitempty"`
+	Category         string            `json:"category,omitempty"`
 	CheckType        string            `json:"check_type,omitempty"`
 	Summary          string            `json:"summary,omitempty"`
 	Interval         string            `json:"interval,omitempty"`

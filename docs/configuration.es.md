@@ -4,22 +4,22 @@ La configuración de Sermo se divide por tipo de destino: **definiciones de
 service/app/lib/pattern del catálogo**, **services** como instancias concretas
 monitorizadas, **notifiers** como destinos de entrega, **storages** como destinos
 de filesystem con monitorización de capacidad y montaje opcional, y **watches**
-como monitores a nivel de host. Los
-archivos de watch y notifier son fragmentos globales con un mapa de nivel superior
-`watches:` o `notifiers:`; esos fragmentos no usan `kind:`.
+como monitores a nivel de host. Los archivos de watch son documentos de un solo
+watch con `name:`; los archivos de notifier siguen siendo fragmentos globales con
+un mapa de nivel superior `notifiers:`.
 
 La nueva configuración debe usar un archivo YAML por destino. Esto significa una
 app, daemon, lib o pattern del catálogo por archivo; un service por archivo; un
 storage por archivo; un notifier por archivo; y un host watch por archivo (`network`,
-`uplink`, `load` y otros fragmentos de watch). Los archivos de fragmentos
-globales siguen teniendo el mapa de nivel superior `watches:` o `notifiers:`, pero
-ese mapa debe contener exactamente una entrada con nombre. Esto mantiene la
-configuración generada fácil de comparar, reemplazar y limpiar por destino.
+`uplink`, `load` y otros documentos de watch). Los fragmentos de notifier siguen
+teniendo el mapa de nivel superior `notifiers:`, pero ese mapa debe contener
+exactamente una entrada con nombre. Esto mantiene la configuración generada fácil
+de comparar, reemplazar y limpiar por destino.
 
 El **kind de un documento se determina por dónde reside** — su subdirectorio de
 catálogo (`services/` → service, `apps/` → app, `libs/` → lib, `patterns/` →
 patterns) o la ruta configurada desde la que se carga (`paths.services` → service,
-`paths.storages` → storage). Una definición `services/` del catálogo (un *catalog
+`paths.storages` → storage, `paths.networks` / `paths.watches` → watch). Una definición `services/` del catálogo (un *catalog
 service*) y una instancia de `paths.services` (un *configured service*) comparten el
 kind `service`; se mantienen distintos por ubicación. Por tanto, una clave de nivel
 superior `kind:` es **opcional y redundante**; cuando está presente en un archivo
@@ -59,8 +59,8 @@ excepciones explícitas en el propietario.
 /etc/sermo/apps/*.yml     host-specific app documents
 /etc/sermo/notifiers/*.yml notifier fragments
 /etc/sermo/storages/*.yml storage documents (capacity and optional mount operations)
-/etc/sermo/networks/*.yml network watch fragments
-/etc/sermo/watches/*.yml  generic host watch fragments
+/etc/sermo/networks/*.yml network watch documents
+/etc/sermo/watches/*.yml  generic host watch documents
 /etc/sermo/templates/*.yml notification templates
 ```
 
@@ -126,15 +126,15 @@ relativas a la configuración. Si se omite `paths.services`, `paths.apps` o
 `sermo.yml` cargado. Con el estándar `/etc/sermo/sermo.yml` esto significa
 `/etc/sermo/services`, `/etc/sermo/apps` y `/etc/sermo/storages`.
 
-Los directorios de fragmentos globales no tienen alternativa implícita. Si se omite o
+Los directorios de inclusión opcionales no tienen alternativa implícita. Si se omite o
 está vacío `paths.notifiers`, `paths.networks` o `paths.watches`,
-Sermo no carga ningún fragmento de ese tipo; un directorio hermano `notifiers/`,
+Sermo no carga notifiers ni documentos de watch de ese tipo; un directorio hermano `notifiers/`,
 `networks/` o `watches/` junto a `sermo.yml` se ignora hasta que se
 liste explícitamente bajo `paths`.
 
-Cada nuevo fragmento de service, storage, notifier o watch bajo directorios
-configurados debe aislarse en su propio archivo `.yml`, incluso cuando varios
-destinos se generan en la misma ejecución del asistente. Los documentos de
+Cada nuevo documento de service, documento de storage, fragmento de notifier o
+documento de watch bajo directorios configurados debe aislarse en su propio
+archivo `.yml`, incluso cuando varios destinos se generan en la misma ejecución del asistente. Los documentos de
 storage pueden exponer operaciones de montaje con un bloque `mount:` mientras
 mantienen la monitorización de capacidad en el mismo destino.
 
@@ -1128,8 +1128,8 @@ fusionan con un service.
 > **Consejo — genera la configuración interactivamente.** `sermoctl wizard` puede
 > escribir tres superficies diferentes. El asistente de storage (`volume`) imprime
 > documentos de storage con `capacity:` y escribe un archivo por target bajo
-> `/etc/sermo/storages`. Los asistentes de watch (`net`, `uplink`) imprimen una
-> previsualización `watches:` y, si se acepta, escriben un watch por archivo bajo un
+> `/etc/sermo/storages`. Los asistentes de watch (`net`, `uplink`) imprimen
+> previsualizaciones de documentos de watch y, si se acepta, escriben un watch por archivo bajo un
 > directorio de tipo como `/etc/sermo/networks` o `/etc/sermo/watches`; el asistente
 > añade ese directorio al `paths.*` coincidente (escribiendo primero un `.bak`). Los
 > asistentes de service (`service`, `docker`, `vm`)
@@ -1302,10 +1302,11 @@ runtime. Usa `monitor: disabled` cuando quieras que el watch sea visible en la i
 web y disponible para que un admin lo reanude con **monitor**.
 
 Los monitores de storage viven en documentos de storage bajo `paths.storages`; su bloque
-`capacity:` genera la watch de storage en runtime. Los directorios de watch de red y
-genéricos (`paths.networks` y `paths.watches`) contienen fragmentos de watch. Un fragmento
-de watch es un archivo YAML normal con un mapa de nivel superior `watches:` y exactamente
-un watch:
+`capacity:` genera la watch de storage en runtime y conserva los metadatos
+`display_name` / `category`. Los directorios de watch de red y genéricos
+(`paths.networks` y `paths.watches`) contienen documentos de watch. Un documento
+de watch es un archivo YAML normal con `name` de nivel superior, `display_name` /
+`category` opcionales y los campos del watch:
 
 ```yaml
 # /etc/sermo/storages/storage-root.yml
@@ -1321,17 +1322,21 @@ capacity:
 
 ```yaml
 # /etc/sermo/watches/memory.yml
-watches:
-  memory:
-    monitor: previous
-    check: { type: memory, used_pct: { op: ">=", value: "90%" } }
-    then:
-      notify: [ops-email]
+name: memory
+category: host
+monitor: previous
+check: { type: memory, used_pct: { op: ">=", value: "90%" } }
+then:
+  notify: [ops-email]
 ```
 
 Mantener la salida del asistente en archivos separados facilita eliminar o revisar un
 target sin reescribir toda la config global. Los fragmentos de notifier siguen la misma
 regla de una entrada bajo un mapa de nivel superior `notifiers:` en `paths.notifiers`.
+Los ejemplos compactos de referencia a continuación siguen usando mapas globales
+`watches:`; cuando guardes el mismo watch bajo `paths.networks` o `paths.watches`,
+mueve el nombre de la entrada a `name:` de nivel superior y deja los campos internos
+en el nivel superior.
 
 Estas convenciones mantienen cortas las secciones por tipo a continuación:
 
@@ -1693,7 +1698,7 @@ buffers reclamables nunca se leen como "usados". Detecta la fuga lenta o el host
 sobrecargado antes de que lo haga el OOM killer.
 
 ```yaml
-check:                                   # in a watches: entry like `load` above
+check:                                   # in a watch body like `load` above
   type: memory
   used_pct: { op: ">=", value: "90%" }   # (total - available) / total
   # available_bytes: { op: "<", value: 1G }   # absolute headroom, alternatively
@@ -1715,7 +1720,7 @@ y `memory` (headroom) con el stall realmente experimentado: un host puede verse 
 ambos y aún estar con thrashing.
 
 ```yaml
-check:                                   # in a watches: entry like `load` above
+check:                                   # in a watch body like `load` above
   type: pressure
   resource: memory                       # required: cpu | memory | io
   some_avg10: { op: ">", value: 10 }     # % of time SOME tasks stalled (10s avg)
@@ -1756,7 +1761,7 @@ hace que cada `open()`/`socket()`/`accept()` falle con `EMFILE`/`ENFILE`, por lo
 la pena detectarlo pronto.
 
 ```yaml
-check:                                   # in a watches: entry like `load` above
+check:                                   # in a watch body like `load` above
   type: fds
   used_pct: { op: ">=", value: 85 }      # allocated / file-max
   # free: { op: "<", value: 10000 }      # absolute headroom, alternatively
@@ -1808,7 +1813,7 @@ bucle de fork descontrolado o un pool de hilos con fugas, y donde la advertencia
 crecimiento de [`zombies`](#zombies--defunct-processes) termina llegando.
 
 ```yaml
-check:                                   # in a watches: entry like `load` above
+check:                                   # in a watch body like `load` above
   type: pids
   used_pct: { op: ">=", value: 90 }      # threads / kernel.pid_max
   # free: { op: "<", value: 5000 }       # absolute headroom, alternatively
@@ -1828,7 +1833,7 @@ por lo que vale la pena detectarlo en gateways, proxies y cajas NAT ocupadas ant
 se sature.
 
 ```yaml
-check:                                   # in a watches: entry like `load` above
+check:                                   # in a watch body like `load` above
   type: conntrack
   used_pct: { op: ">=", value: 90 }      # count / nf_conntrack_max
   # free: { op: "<", value: 20000 }      # absolute headroom, alternatively
@@ -1863,7 +1868,7 @@ lecturas de `/dev/random` se bloqueen y ralentiza la criptografía y los handsha
 más visible en VMs y hosts headless/embebidos sin un RNG por hardware.
 
 ```yaml
-check:                                   # in a watches: entry like `load` above
+check:                                   # in a watch body like `load` above
   type: entropy
   avail: { op: "<", value: 200 }         # fire when available entropy drops below 200 bits
 ```
@@ -1880,7 +1885,7 @@ transitorios y normales; un recuento creciente significa que un padre está perd
 slots de hijos y eventualmente agotará la tabla de PID.
 
 ```yaml
-check:                                   # in a watches: entry like `load` above
+check:                                   # in a watch body like `load` above
   type: zombies
   count: { op: ">", value: 20 }          # fire when more than 20 zombies persist
 ```

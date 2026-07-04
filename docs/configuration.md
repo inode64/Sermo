@@ -3,22 +3,21 @@
 Sermo configuration is split by target type: **catalog service/app/lib/pattern
 definitions**, **services** as concrete monitored instances, **notifiers** as
 delivery targets, **storages** as filesystem capacity targets with optional
-fstab-backed mount operations, and **watches** as host-level monitors. Watch and
-notifier files are global fragments with a top-level `watches:` or `notifiers:`
-map; those fragments do not use `kind:`.
+fstab-backed mount operations, and **watches** as host-level monitors. Watch
+files are single-watch documents with `name:`; notifier files remain global
+fragments with a top-level `notifiers:` map.
 
 New configuration must use one YAML file per target. That means one catalog app,
 daemon, lib or pattern per file; one service per file; one storage per file; one
-notifier per file; and one host watch per file (`network`, `uplink`,
-`load`, and other watch fragments). Global fragment files still have the
-top-level `watches:` or `notifiers:` map, but that map must contain exactly one
-named entry. This keeps generated configuration easy to diff, replace and clean
-up per target.
+notifier per file; and one host watch per file (`network`, `uplink`, `load`,
+and other watch documents). Notifier fragment files still have the top-level
+`notifiers:` map, but that map must contain exactly one named entry. This keeps
+generated configuration easy to diff, replace and clean up per target.
 
 A document's **kind is determined by where it lives** — its catalog subdirectory
 (`services/` → service, `apps/` → app, `libs/` → lib, `patterns/` → patterns) or
 the configured path it loads from (`paths.services` → service, `paths.storages` →
-storage). A catalog `services/` definition (a *catalog service*) and a `paths.services`
+storage, `paths.networks` / `paths.watches` → watch). A catalog `services/` definition (a *catalog service*) and a `paths.services`
 instance (a *configured service*) share the kind `service`; they stay distinct by
 location. A top-level `kind:` key is therefore **optional and redundant**; when one
 is present in a deployed file it must match the location, which catches a file
@@ -55,8 +54,8 @@ normalized to `/run`, must be documented as explicit exceptions at the owner.
 /etc/sermo/apps/*.yml     host-specific app documents
 /etc/sermo/notifiers/*.yml notifier fragments
 /etc/sermo/storages/*.yml storage documents (capacity and optional mount operations)
-/etc/sermo/networks/*.yml network watch fragments
-/etc/sermo/watches/*.yml  generic host watch fragments
+/etc/sermo/networks/*.yml network watch documents
+/etc/sermo/watches/*.yml  generic host watch documents
 /etc/sermo/templates/*.yml notification templates
 ```
 
@@ -122,14 +121,15 @@ to `services/`, `apps/` or `storages/` next to the loaded `sermo.yml` file. With
 the standard `/etc/sermo/sermo.yml` this means `/etc/sermo/services`,
 `/etc/sermo/apps` and `/etc/sermo/storages`.
 
-Global fragment directories have no implicit fallback. If `paths.notifiers`,
-`paths.networks` or `paths.watches` is omitted or empty, Sermo loads no fragments
-of that type; a sibling `notifiers/`, `networks/` or `watches/` directory next to `sermo.yml` is ignored until listed
+Optional include directories have no implicit fallback. If `paths.notifiers`,
+`paths.networks` or `paths.watches` is omitted or empty, Sermo loads no
+notifiers or watch documents of that type; a sibling `notifiers/`, `networks/`
+or `watches/` directory next to `sermo.yml` is ignored until listed
 explicitly under `paths`.
 
-Every new service, storage, notifier or watch fragment under configured
-directories should be isolated in its own `.yml` file, even when several targets
-are generated in the same wizard run. Storage documents may expose mount
+Every new service document, storage document, notifier fragment or watch
+document under configured directories should be isolated in its own `.yml` file,
+even when several targets are generated in the same wizard run. Storage documents may expose mount
 operations with a `mount:` block while keeping capacity monitoring in the same
 target.
 
@@ -1082,8 +1082,8 @@ a service.
 > **Tip — generate configuration interactively.** `sermoctl wizard` can write
 > three different surfaces. The storage assistant (`volume`) prints storage
 > documents with `capacity:` and writes one file per target under
-> `/etc/sermo/storages`. Watch assistants (`net`, `uplink`) print a `watches:`
-> preview and, if accepted, write one watch per file under a watch-type
+> `/etc/sermo/storages`. Watch assistants (`net`, `uplink`) print watch
+> document previews and, if accepted, write one watch per file under a watch-type
 > directory such as `/etc/sermo/networks` or `/etc/sermo/watches`; the wizard
 > adds that directory to the matching `paths.*` (writing a `.bak` first).
 > Service assistants (`service`, `docker`, `vm`) write
@@ -1253,10 +1253,11 @@ you want the watch visible in the web UI and available for an admin to resume
 with **monitor**.
 
 Storage monitors live in storage documents under `paths.storages`; their
-`capacity:` block generates the runtime storage watch. Network and generic watch
-directories (`paths.networks` and `paths.watches`) contain watch fragments. A
-watch fragment is a normal YAML file with a top-level `watches:` map and exactly
-one watch:
+`capacity:` block generates the runtime storage watch and carries over
+`display_name` / `category` metadata. Network and generic watch directories
+(`paths.networks` and `paths.watches`) contain watch documents. A watch document
+is a normal YAML file with top-level `name`, optional `display_name` /
+`category`, and the watch fields:
 
 ```yaml
 # /etc/sermo/storages/storage-root.yml
@@ -1272,17 +1273,20 @@ capacity:
 
 ```yaml
 # /etc/sermo/watches/memory.yml
-watches:
-  memory:
-    monitor: previous
-    check: { type: memory, used_pct: { op: ">=", value: "90%" } }
-    then:
-      notify: [ops-email]
+name: memory
+category: host
+monitor: previous
+check: { type: memory, used_pct: { op: ">=", value: "90%" } }
+then:
+  notify: [ops-email]
 ```
 
 Keeping wizard output in separate files makes it easy to remove or review one
 target without rewriting the whole global config. Notifier fragments follow the
 same one-entry rule under a top-level `notifiers:` map in `paths.notifiers`.
+The compact reference examples below still use global `watches:` maps; when you
+store the same watch under `paths.networks` or `paths.watches`, move the entry
+name to top-level `name:` and keep the inner fields at the top level.
 
 These conventions keep the per-type sections below short:
 
@@ -1636,7 +1640,7 @@ never read as "used". Catches the slow leak or over-packed host before the OOM
 killer does.
 
 ```yaml
-check:                                   # in a watches: entry like `load` above
+check:                                   # in a watch body like `load` above
   type: memory
   used_pct: { op: ">=", value: "90%" }   # (total - available) / total
   # available_bytes: { op: "<", value: 1G }   # absolute headroom, alternatively
@@ -1658,7 +1662,7 @@ wall time tasks spent **stalled** waiting on the resource — the kernel's own
 and still be thrashing.
 
 ```yaml
-check:                                   # in a watches: entry like `load` above
+check:                                   # in a watch body like `load` above
   type: pressure
   resource: memory                       # required: cpu | memory | io
   some_avg10: { op: ">", value: 10 }     # % of time SOME tasks stalled (10s avg)
@@ -1698,7 +1702,7 @@ maximum (`fs.file-max`, from `/proc/sys/fs/file-nr`). Fd exhaustion makes every
 catching early.
 
 ```yaml
-check:                                   # in a watches: entry like `load` above
+check:                                   # in a watch body like `load` above
   type: fds
   used_pct: { op: ">=", value: 85 }      # allocated / file-max
   # free: { op: "<", value: 10000 }      # absolute headroom, alternatively
@@ -1750,7 +1754,7 @@ reaches, and where the [`zombies`](#zombies--defunct-processes) growth warning
 ultimately lands.
 
 ```yaml
-check:                                   # in a watches: entry like `load` above
+check:                                   # in a watch body like `load` above
   type: pids
   used_pct: { op: ">=", value: 90 }      # threads / kernel.pid_max
   # free: { op: "<", value: 5000 }       # absolute headroom, alternatively
@@ -1769,7 +1773,7 @@ silently **drops new connections** (and logs `nf_conntrack: table full`), so it 
 worth catching on busy gateways, proxies and NAT boxes before it saturates.
 
 ```yaml
-check:                                   # in a watches: entry like `load` above
+check:                                   # in a watch body like `load` above
   type: conntrack
   used_pct: { op: ">=", value: 90 }      # count / nf_conntrack_max
   # free: { op: "<", value: 20000 }      # absolute headroom, alternatively
@@ -1804,7 +1808,7 @@ An `entropy` watch checks the available kernel entropy (bits) from
 VMs and headless/embedded hosts without a hardware RNG.
 
 ```yaml
-check:                                   # in a watches: entry like `load` above
+check:                                   # in a watch body like `load` above
   type: entropy
   avail: { op: "<", value: 200 }         # fire when available entropy drops below 200 bits
 ```
@@ -1821,7 +1825,7 @@ transient and normal; a growing count means a parent is leaking child slots and
 will eventually exhaust the PID table.
 
 ```yaml
-check:                                   # in a watches: entry like `load` above
+check:                                   # in a watch body like `load` above
   type: zombies
   count: { op: ">", value: 20 }          # fire when more than 20 zombies persist
 ```

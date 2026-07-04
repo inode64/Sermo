@@ -31,6 +31,9 @@ func TestNetAssistantStateAndErrors(t *testing.T) {
 	if entry["check"].(map[string]any)["interface"] != "eth0" {
 		t.Fatalf("check = %v", entry["check"])
 	}
+	if entry["category"] != "network" {
+		t.Fatalf("category = %v, want network", entry["category"])
+	}
 	if entry["monitor"] != "enabled" || entry["interval"] != "10s" {
 		t.Fatalf("monitor/interval = %v / %v, want enabled / 10s", entry["monitor"], entry["interval"])
 	}

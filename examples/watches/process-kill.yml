@@ -1,23 +1,23 @@
-watches:
-  kill-stale-sudo:
-    # Terminate any root-owned `/usr/bin/sudo` process that has been alive longer than 120 minutes —
-    # a stale-privileged-session hygiene policy. The kill is native (no external
-    # script): `then.kill` reuses the daemon's own process signaller, the same
-    # kill(2) path service-stop and mount kill+umount use.
-    #
-    # EXAMPLE — enable deliberately: it signals real processes, so the daemon
-    # must run as root. A kill action requires an absolute resolved `name` path
-    # and a `user`, so it cannot kill by process basename alone.
-    monitor: disabled
-    interval: 1m
-    check:
-      type: process
-      name: /usr/bin/sudo  # exact resolved /proc/<pid>/exe path
-      user: root  # required for then.kill; numeric UIDs are accepted
-      for: 120m  # observed alive at least 120 minutes
-    then:
-      kill:
-        signal: TERM  # TERM (default) or KILL
-        # escalate: true   # follow TERM with SIGKILL for a survivor
-        # term_timeout: 10s
-        # kill_timeout: 5s
+name: kill-stale-sudo
+category: process
+# Terminate any root-owned `/usr/bin/sudo` process that has been alive longer than 120 minutes —
+# a stale-privileged-session hygiene policy. The kill is native (no external
+# script): `then.kill` reuses the daemon's own process signaller, the same
+# kill(2) path service-stop and mount kill+umount use.
+#
+# EXAMPLE — enable deliberately: it signals real processes, so the daemon
+# must run as root. A kill action requires an absolute resolved `name` path
+# and a `user`, so it cannot kill by process basename alone.
+monitor: disabled
+interval: 1m
+check:
+  type: process
+  name: /usr/bin/sudo  # exact resolved /proc/<pid>/exe path
+  user: root  # required for then.kill; numeric UIDs are accepted
+  for: 120m  # observed alive at least 120 minutes
+then:
+  kill:
+    signal: TERM  # TERM (default) or KILL
+    # escalate: true   # follow TERM with SIGKILL for a survivor
+    # term_timeout: 10s
+    # kill_timeout: 5s

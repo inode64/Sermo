@@ -22,7 +22,8 @@ A document's kind is determined by where it is read from, so files do not carry 
 
 - catalog subdirectory: `catalog/services/` → service, `catalog/apps/` → app,
   `catalog/libs/` → lib, `catalog/patterns/` → patterns;
-- deployed config dirs: `paths.services` → service, `paths.storages` → storage.
+- deployed config dirs: `paths.services` → service, `paths.storages` → storage,
+  `paths.networks` / `paths.watches` → watch.
 
 A `kind:` key is optional and redundant; if one is present in a deployed file it
 must match the location, otherwise loading fails. Examples (one per file):
@@ -76,23 +77,25 @@ category: "database"      # optional WebUI grouping/filter label
 ```
 
 - `display_name` is the label shown to humans in catalog inventory
-  (`sermoctl services` / `apps` / `libs`) and the Web UI service/application
-  lists.
+  (`sermoctl services` / `apps` / `libs`) and the Web UI service/application/
+  storage/watch lists.
   When absent or blank it falls back to `name`. Omit it when it would just repeat
   `name`.
 - `description` is optional free text with NO fallback: when absent, nothing is
   shown — never substitute `name`.
-- `category` groups/filters Services and Apps in the WebUI; when absent,
-  services fall back to `service` and apps to `app`. All three must be strings
-  if present.
+- `category` groups/filters services, installed apps, storages and watches in
+  the Web UI; when absent, they fall back to `service`, `app`, `storage` or
+  `watch`. All three metadata fields must be strings if present.
 
 ## File granularity
 
 Use one YAML file per target — a single document of one kind per file, never
 several grouped together. A document's kind is derived from where it lives
-(catalog subdir / `paths.services` / `paths.storages`), so a top-level `kind:` is
-optional. Watch and notifier fragment files still use a top-level `watches:` or
-`notifiers:` map, but the map must contain exactly one named entry.
+(catalog subdir / `paths.services` / `paths.storages` / `paths.networks` /
+`paths.watches`), so a top-level `kind:` is optional. Watch documents under
+`paths.networks` and `paths.watches` use top-level `name:` plus the watch fields.
+Notifier fragment files still use a
+top-level `notifiers:` map, but the map must contain exactly one named entry.
 `docs/sermo-all.yml` is the only reference-style exception: it groups examples so
 the schema can be validated in one place.
 
@@ -343,7 +346,7 @@ kill_only_if without both exe_any and users
 SIGKILL without explicit permission
 rules with both for and within if unsupported
 guards without blocks
-display_name, description and category, if present, are strings (all optional; display_name falls back to name, description has no fallback, category groups WebUI services/apps)
+display_name, description and category, if present, are strings (all optional; display_name falls back to name, description has no fallback, category groups WebUI services/apps/storages/watches)
 service must be scalar `service: <unit>` or a per-init map
 service expect/state in {active, inactive, failed, unknown}; process state in {running, zombie, absent}
 metric scope is service or system, and name exists in that scope's catalog

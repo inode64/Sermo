@@ -246,8 +246,8 @@ config:
 default global `notify`, o `none` para suprimir). Un `dry_run: true` de service suprime
 la entrega de notificaciones no-console para estos monitores del service; `wall` sigue
 entregándose. Los tipos de comprobación subyacentes `command` (`on_change`) y `config`
-también pueden usarse directamente en `watches:` cuando quieras un hook o un comando
-independiente.
+también pueden usarse como documentos de watch de host cuando quieras un hook o un
+comando independiente.
 
 ### Interfaz de salida (`interface`)
 
@@ -1275,6 +1275,10 @@ watches:
       notify: [ops-email]      # and/or a hook
 ```
 
+(Los ejemplos de este archivo usan mapas globales `watches:` compactos. En un archivo
+bajo `paths.watches`, escribe el mismo watch como documento `name: log-runaway` y deja
+los campos internos en el nivel superior.)
+
 (Nota: `within` aquí es el **campo propio** de la comprobación de tamaño — la duración de su
 ventana de crecimiento — no la ventana de disparo `within: {cycles|duration, min_matches}` a
 nivel de watch, que un watch de tamaño normalmente no necesita.)
@@ -1410,7 +1414,7 @@ Cada tipo de arriba es una **comprobación de un solo disparo** (`Check.Run → 
 **ambos** lugares:
 
 - los `checks:`/`preflight:`/`postflight:` de un servicio (y referenciado desde reglas), y
-- un **watch** de host (`watches:`, disparando un hook) — ver [configuración](configuration.es.md#host-watches).
+- un documento de **watch** de host (o entrada global `watches:`, disparando un hook) — ver [configuración](configuration.es.md#host-watches).
 
 Las comprobaciones de recursos del host (`storage`, `load`, `memory`, `pressure`, `fds`, `pids`,
 `diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`, `entropy`,

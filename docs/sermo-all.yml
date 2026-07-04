@@ -15,7 +15,7 @@
 #   # location: services          -> a service under paths.services
 #   # location: storages          -> a storage target under paths.storages
 #   each notifiers.<name> entry   -> one notifier fragment under paths.notifiers
-#   each watches.<name> entry     -> one watch fragment under paths.networks/watches
+#   each watches.<name> entry     -> one watch document under paths.networks/watches
 #
 # This file is validated by the test suite (internal/config), so it cannot
 # drift from the real schema. The shipped operational config is
@@ -44,7 +44,7 @@ paths:
   # immediate services/apps/libs/patterns category directories.
   # Omitted paths.catalog uses installed catalog defaults. Omitted
   # services/apps/storages fall back to sibling services/, apps/ and storages/.
-  # Global fragment dirs (notifiers/networks/watches) load only when listed.
+  # Optional include dirs (notifiers/networks/watches) load only when listed.
   catalog:  # packaged + admin catalog service/app/lib definitions
     - /usr/share/sermo/catalog
     - /etc/sermo/catalog-available
@@ -57,9 +57,9 @@ paths:
   storages:
     - storages  # storage capacity and optional mount-operation documents
   networks:
-    - networks  # network/uplink watch fragments
+    - networks  # network/uplink watch documents
   watches:
-    - watches  # generic host watch fragments
+    - watches  # generic host watch documents
   runtime: /run/sermo  # volatile: locks, op slots (tmpfs)
   state: /var/lib/sermo  # persistent: monitor state, SLA, measurements, runtime metrics
   templates: /etc/sermo/templates  # notification templates, e.g. default-alert.yml
@@ -130,8 +130,9 @@ notifiers:
 notify: [ops-email]
 
 # Host watches: one entry per concern. This reference groups several examples
-# only to keep the schema readable; real config stores each watch in its own
-# watch fragment file. Storage capacity targets live in storage documents below.
+# only to keep the schema readable; real config stores each watch as its own
+# `name:` document under paths.networks or paths.watches. Storage capacity
+# targets live in storage documents below.
 # `enabled: false` omits the watch entirely, while `monitor: disabled` builds it
 # paused. `monitor: previous` restores the persisted state from paths.state.
 watches:

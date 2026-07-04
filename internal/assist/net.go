@@ -189,8 +189,9 @@ func buildNetWatch(iface Iface, s netSettings) map[string]any {
 		}
 	}
 	entry := map[string]any{
-		"check":   map[string]any{"type": "net", "interface": iface.Name},
-		"metrics": metrics,
+		"category": "network",
+		"check":    map[string]any{"type": "net", "interface": iface.Name},
+		"metrics":  metrics,
 	}
 	s.Monitoring.apply(entry)
 	applyDryRun(entry, s.dryRun)
