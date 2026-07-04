@@ -702,7 +702,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 			add("%s.path is required for a file check", path)
 		}
 	case "lockfile":
-		if len(cfgval.StringList(entry["path"])) == 0 {
+		if !cfgval.IsNonEmptyStringList(entry["path"]) {
 			add("%s.path is required for a lockfile check", path)
 		} else {
 			for _, p := range cfgval.StringList(entry["path"]) {
@@ -717,11 +717,11 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 			add("%s.path is required for a binary check", path)
 		}
 	case "pidfile":
-		if len(cfgval.StringList(entry["path"])) == 0 {
+		if !cfgval.IsNonEmptyStringList(entry["path"]) {
 			add("%s.path is required for a pidfile check", path)
 		}
 	case "socket":
-		if len(cfgval.StringList(entry["path"])) == 0 {
+		if !cfgval.IsNonEmptyStringList(entry["path"]) {
 			add("%s.path is required for a socket check", path)
 		}
 	case "libraries":
