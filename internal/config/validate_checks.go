@@ -169,25 +169,8 @@ func validateCheckGate(path, name string, entry, section map[string]any, add add
 // gateStrings accepts a scalar string or a list of strings, returning the values
 // and whether the shape is valid.
 func gateStrings(v any) ([]string, bool) {
-	switch t := v.(type) {
-	case nil:
-		return nil, true
-	case string:
-		if t == "" {
-			return nil, true
-		}
-		return []string{t}, true
-	case []any:
-		out := make([]string, 0, len(t))
-		for _, e := range t {
-			if s := cfgval.String(e); s != "" {
-				out = append(out, s)
-			}
-		}
-		return out, true
-	default:
-		return nil, false
-	}
+	list, err := cfgval.StrictStringList(v)
+	return list, err == nil
 }
 
 // validateHTTPFields validates an http check at prefix: a required url, and the
