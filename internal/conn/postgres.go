@@ -106,7 +106,7 @@ func sslMode(tls string) string {
 		return "disable"
 	case "true", "yes", "on", "require":
 		return "require"
-	case "skip-verify":
+	case tlsSkipVerify:
 		return "require"
 	case "prefer":
 		return "prefer"

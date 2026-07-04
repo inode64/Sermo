@@ -112,7 +112,7 @@ func MongoConnect(cfg Config) (*mongo.Client, error) {
 	}
 	if mode := normalizeTLS(cfg.TLS); mode != "" {
 		tc := tlsClientConfig(host)
-		if mode == "skip-verify" {
+		if mode == tlsSkipVerify {
 			tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
 		}
 		opts.SetTLSConfig(tc)

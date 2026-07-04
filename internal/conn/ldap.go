@@ -42,7 +42,7 @@ func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	opts := []ldap.DialOpt{ldap.DialWithDialer(probeDialer(cfg.Interface, timeout))}
 	if useTLS {
 		tc := tlsClientConfig(host)
-		if normalizeTLS(cfg.TLS) == "skip-verify" {
+		if normalizeTLS(cfg.TLS) == tlsSkipVerify {
 			tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
 		}
 		opts = append(opts, ldap.DialWithTLSConfig(tc))

@@ -65,7 +65,7 @@ func cloudflaredClient(cfg Config) (*http.Client, string) {
 	if mode != "" {
 		scheme = "https"
 		tlsConfig := tlsClientConfig(host)
-		if mode == "skip-verify" {
+		if mode == tlsSkipVerify {
 			tlsConfig.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
 		}
 		client = httpProbeClient(cfg.Interface, tlsConfig)
