@@ -116,3 +116,20 @@ func resultSummary(noun string, entries map[string]any) string {
 	names := slices.Sorted(maps.Keys(entries))
 	return fmt.Sprintf("%d %s(s): %s", len(names), noun, strings.Join(names, ", "))
 }
+
+func detailLabel(title string, details ...string) string {
+	parts := []string{title}
+	for _, detail := range details {
+		if detail != "" {
+			parts = append(parts, detail)
+		}
+	}
+	return strings.Join(parts, " · ")
+}
+
+func labelField(name, value string) string {
+	if value == "" {
+		return ""
+	}
+	return name + ": " + value
+}
