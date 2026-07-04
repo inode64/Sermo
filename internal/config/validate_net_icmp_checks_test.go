@@ -39,6 +39,8 @@ func TestValidateSingleShotNetICMPSwapErrors(t *testing.T) {
 		"net bad metric":               {`c: { type: net, interface: ppp0, metric: nope }`, "not a supported net metric"},
 		"net state missing condition":  {`c: { type: net, interface: ppp0, metric: state }`, "requires expect: up|down or on: change"},
 		"net errors missing delta":     {`c: { type: net, interface: eth0, metric: errors }`, "delta {op, value} is required"},
+		"net errors empty counters":    {`c: { type: net, interface: eth0, metric: errors, delta: { op: ">", value: 1 }, counters: [] }`, "counters must be a non-empty list"},
+		"net errors invalid counters":  {`c: { type: net, interface: eth0, metric: errors, delta: { op: ">", value: 1 }, counters: [rx_errors, 7] }`, "counters must be a non-empty list"},
 		"icmp missing host":            {`c: { type: icmp, metric: state, expect: up }`, "host is required"},
 		"icmp bad count":               {`c: { type: icmp, host: 1.1.1.1, count: 0, metric: state, expect: up }`, "count must be a positive integer"},
 		"icmp bad metric":              {`c: { type: icmp, host: 1.1.1.1, metric: nope }`, "not a supported icmp metric"},

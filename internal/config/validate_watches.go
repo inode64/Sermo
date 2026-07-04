@@ -308,7 +308,7 @@ func validateNetMetricCondition(prefix, metric string, m map[string]any, add add
 			validateOpNumeric(prefix+".delta", delta, add)
 		}
 		if c, present := m["counters"]; present {
-			if list, ok := c.([]any); !ok || len(list) == 0 {
+			if !cfgval.IsNonEmptyStringArray(c) {
 				add("%s.counters must be a non-empty list", prefix)
 			}
 		}
