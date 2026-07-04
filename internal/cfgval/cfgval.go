@@ -65,6 +65,36 @@ func StringList(v any) []string {
 	return nil
 }
 
+// StrictStringList reads a scalar-or-list YAML field as non-empty strings and
+// reports an error when the field is neither a string nor a string list.
+func StrictStringList(v any) ([]string, error) {
+	switch t := v.(type) {
+	case nil:
+		return nil, nil
+	case string:
+		if t == "" {
+			return nil, nil
+		}
+		return []string{t}, nil
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, item := range t {
+			s, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("non-string item")
+			}
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return out, nil
+	case []string:
+		return append([]string(nil), t...), nil
+	default:
+		return nil, fmt.Errorf("unsupported")
+	}
+}
+
 // StringArray coerces a list YAML field into a slice of non-empty strings.
 // Unlike StringList it does not accept a bare string, so it suits fields that
 // must be a list (a command's argv, a check's metric counters).
