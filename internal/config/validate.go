@@ -303,8 +303,8 @@ func validateDocuments(cfg *Config) []Issue {
 		if !present {
 			continue
 		}
-		aliases, ok := documentAliasList(raw)
-		if !ok {
+		aliases, err := cfgval.StrictStringArray(raw)
+		if err != nil {
 			issues = append(issues, Issue{Scope: scope, Msg: "aliases must be a list of simple names"})
 			continue
 		}
@@ -363,25 +363,6 @@ func validateMaterializedNameCollisions(cfg *Config) []Issue {
 		issues = append(issues, Issue{Scope: scope, Msg: msg})
 	}
 	return issues
-}
-
-func documentAliasList(raw any) ([]string, bool) {
-	switch v := raw.(type) {
-	case []any:
-		out := make([]string, 0, len(v))
-		for _, item := range v {
-			s, ok := item.(string)
-			if !ok {
-				return nil, false
-			}
-			out = append(out, s)
-		}
-		return out, true
-	case []string:
-		return append([]string(nil), v...), true
-	default:
-		return nil, false
-	}
 }
 
 func validateVersionMatch(doc *Document, scope string) []Issue {

@@ -118,6 +118,45 @@ func TestStrictStringListStringSliceIsCopied(t *testing.T) {
 	}
 }
 
+func TestStrictStringArray(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      any
+		want    []string
+		wantErr bool
+	}{
+		{"list of strings", []any{"a", "b"}, []string{"a", "b"}, false},
+		{"preserves empties", []any{"a", "", "b"}, []string{"a", "", "b"}, false},
+		{"native string slice is copied", []string{"a", "b"}, []string{"a", "b"}, false},
+		{"rejects non-string item", []any{"a", 7}, nil, true},
+		{"rejects bare string", "solo", nil, true},
+		{"rejects nil", nil, nil, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := StrictStringArray(c.in)
+			if (err != nil) != c.wantErr {
+				t.Fatalf("StrictStringArray(%#v) error = %v, wantErr %v", c.in, err, c.wantErr)
+			}
+			if !slices.Equal(got, c.want) {
+				t.Errorf("StrictStringArray(%#v) = %#v, want %#v", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+func TestStrictStringArrayStringSliceIsCopied(t *testing.T) {
+	in := []string{"a"}
+	got, err := StrictStringArray(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got[0] = "changed"
+	if in[0] != "a" {
+		t.Fatalf("StrictStringArray reused input slice, got source %#v", in)
+	}
+}
+
 func TestIsStringOrStringList(t *testing.T) {
 	cases := []struct {
 		name string

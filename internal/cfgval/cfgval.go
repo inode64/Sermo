@@ -95,6 +95,27 @@ func StrictStringList(v any) ([]string, error) {
 	}
 }
 
+// StrictStringArray reads a YAML list as strings, preserving empty strings and
+// reporting an error for non-list values or non-string list items.
+func StrictStringArray(v any) ([]string, error) {
+	switch t := v.(type) {
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, item := range t {
+			s, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("non-string item")
+			}
+			out = append(out, s)
+		}
+		return out, nil
+	case []string:
+		return append([]string(nil), t...), nil
+	default:
+		return nil, fmt.Errorf("unsupported")
+	}
+}
+
 // IsStringOrStringList reports whether v is a YAML string or a YAML list whose
 // items are all strings.
 func IsStringOrStringList(v any) bool {
