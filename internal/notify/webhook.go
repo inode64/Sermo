@@ -25,15 +25,11 @@ func webhookPayload(v any) []byte {
 	return b
 }
 
-func webhookPost(post, fallback webhookPoster) webhookPoster {
-	if post != nil {
-		return post
-	}
-	return fallback
-}
-
 func sendWebhook(ctx context.Context, post, fallback webhookPoster, webhook string, payload []byte) error {
-	return webhookPost(post, fallback)(ctx, webhook, payload)
+	if post != nil {
+		return post(ctx, webhook, payload)
+	}
+	return fallback(ctx, webhook, payload)
 }
 
 // postWebhook POSTs a JSON payload and fails on a non-2xx answer; label names
