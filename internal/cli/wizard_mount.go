@@ -13,7 +13,10 @@ import (
 	"sermo/internal/config"
 )
 
-const storagesConfigDir = "storages"
+const (
+	mountSectionKey   = "mount"
+	storagesConfigDir = "storages"
+)
 
 // writeWizardMounts renders generated storage files under paths.storages and
 // ensures that directory is loaded as a storage config directory.
@@ -29,14 +32,14 @@ func (a App) writeWizardMounts(p *assist.Prompt, opts options, globalPath string
 		if b, ok := body.(map[string]any); ok {
 			for k, v := range b {
 				switch k {
-				case "refcount", "umount", "stop_policy", "mount":
+				case "refcount", "umount", "stop_policy", mountSectionKey:
 					// Moved into mount: below.
 				default:
 					doc[k] = v
 				}
 			}
 		}
-		path := filepath.Clean(cfgval.String(doc["path"]))
+		path := filepath.Clean(cfgval.String(doc[wizardFieldPath]))
 		if path == "." || path == "" {
 			return a.fail(opts, "mount "+name+" has no path; not writing")
 		}
@@ -61,7 +64,7 @@ func (a App) writeWizardMounts(p *assist.Prompt, opts options, globalPath string
 	}
 
 	targetDir := wizardMountTargetDir(globalPath)
-	deletes, err := planStaleMountDeletes(p, targetDir, detectedTargetKeys(env, "mount"))
+	deletes, err := planStaleMountDeletes(p, targetDir, detectedTargetKeys(env, wizardAssistantMount))
 	if err != nil {
 		return a.fail(opts, err.Error())
 	}
@@ -81,7 +84,7 @@ func (a App) writeWizardMounts(p *assist.Prompt, opts options, globalPath string
 }
 
 func wizardMountStorageDoc(name string, body any) map[string]any {
-	doc := map[string]any{"name": name}
+	doc := map[string]any{wizardFieldName: name}
 	mount := map[string]any{}
 	if b, ok := body.(map[string]any); ok {
 		for _, key := range []string{"refcount", "umount", "stop_policy"} {
@@ -89,7 +92,7 @@ func wizardMountStorageDoc(name string, body any) map[string]any {
 				mount[key] = v
 			}
 		}
-		if existing, ok := b["mount"].(map[string]any); ok {
+		if existing, ok := b[mountSectionKey].(map[string]any); ok {
 			for k, v := range existing {
 				mount[k] = v
 			}
@@ -98,7 +101,7 @@ func wizardMountStorageDoc(name string, body any) map[string]any {
 	if len(mount) == 0 {
 		mount["refcount"] = true
 	}
-	doc["mount"] = mount
+	doc[mountSectionKey] = mount
 	return doc
 }
 
@@ -108,7 +111,7 @@ func wizardMountTargetDir(globalPath string) string {
 
 func writeMountFiles(globalPath string, docs map[string]map[string]any) (string, int, error) {
 	targetDir := wizardMountTargetDir(globalPath)
-	files, _, err := writeConfigDocs(globalPath, "storages", storagesConfigDir, targetDir, "storage", docs)
+	files, _, err := writeConfigDocs(globalPath, storagesConfigDir, storagesConfigDir, targetDir, wizardNounStorage, docs)
 	if err != nil {
 		return "", 0, err
 	}
@@ -132,7 +135,7 @@ func planStaleMountDeletes(p *assist.Prompt, dir string, detected map[string]boo
 			continue
 		}
 		name := e.Name()
-		if !strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml") {
+		if !strings.HasSuffix(name, yamlFileExt) && !strings.HasSuffix(name, yamlLongFileExt) {
 			continue
 		}
 		path := filepath.Join(dir, name)
@@ -142,7 +145,7 @@ func planStaleMountDeletes(p *assist.Prompt, dir string, detected map[string]boo
 		}
 		stale = append(stale, staleFile{path: path, label: path + " (" + target + ")"})
 	}
-	return confirmStaleDeletes(p, dir, "mount", stale), nil
+	return confirmStaleDeletes(p, dir, wizardNounMount, stale), nil
 }
 
 func mountFileTarget(path string) string {
@@ -156,13 +159,13 @@ func mountFileTarget(path string) string {
 	}
 	// Files in the storages directory are storage targets by location; a `kind:` is optional
 	// and only rejected when it explicitly disagrees.
-	if kind, _ := doc["kind"].(string); kind != "" && kind != "storage" {
+	if kind, _ := doc[wizardFieldKind].(string); kind != "" && kind != wizardNounStorage {
 		return ""
 	}
-	if _, ok := doc["mount"].(map[string]any); !ok {
+	if _, ok := doc[mountSectionKey].(map[string]any); !ok {
 		return ""
 	}
-	target := cfgval.String(doc["path"])
+	target := cfgval.String(doc[wizardFieldPath])
 	if target == "" {
 		return ""
 	}

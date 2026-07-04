@@ -25,6 +25,8 @@ import (
 	"github.com/goccy/go-yaml"
 )
 
+const systemdServiceUnitExt = ".service"
+
 // listInstalledCatalogServices returns active service targets for the wizard: catalog
 // catalog services whose init unit exists, plus active backend units not backed by the
 // catalog. Catalog candidates keep their resolved unit/status/default port and
@@ -132,9 +134,9 @@ func addWizardCatalogUnits(keys map[string]struct{}, backend servicemgr.Backend,
 		keys[unit] = struct{}{}
 		if backend == servicemgr.BackendSystemd {
 			if !strings.Contains(unit, ".") {
-				keys[unit+".service"] = struct{}{}
+				keys[unit+systemdServiceUnitExt] = struct{}{}
 			}
-			if name := strings.TrimSuffix(unit, ".service"); name != unit {
+			if name := strings.TrimSuffix(unit, systemdServiceUnitExt); name != unit {
 				keys[name] = struct{}{}
 			}
 		}
@@ -150,11 +152,11 @@ func wizardUnitKnown(keys map[string]struct{}, backend servicemgr.Backend, unit 
 		return true
 	}
 	if backend == servicemgr.BackendSystemd {
-		if strings.HasSuffix(unit, ".service") {
-			_, ok := keys[strings.TrimSuffix(unit, ".service")]
+		if strings.HasSuffix(unit, systemdServiceUnitExt) {
+			_, ok := keys[strings.TrimSuffix(unit, systemdServiceUnitExt)]
 			return ok
 		}
-		_, ok := keys[unit+".service"]
+		_, ok := keys[unit+systemdServiceUnitExt]
 		return ok
 	}
 	return false
@@ -163,7 +165,7 @@ func wizardUnitKnown(keys map[string]struct{}, backend servicemgr.Backend, unit 
 func wizardServiceNameForUnit(backend servicemgr.Backend, unit string) string {
 	name := strings.TrimSpace(unit)
 	if backend == servicemgr.BackendSystemd {
-		name = strings.TrimSuffix(name, ".service")
+		name = strings.TrimSuffix(name, systemdServiceUnitExt)
 	}
 	return name
 }
@@ -268,7 +270,7 @@ func detectCephMonEndpoint(ctx context.Context, runner execx.Runner, timeout tim
 }
 
 func cephMonID(unit string) string {
-	unit = strings.TrimSuffix(strings.TrimSpace(unit), ".service")
+	unit = strings.TrimSuffix(strings.TrimSpace(unit), systemdServiceUnitExt)
 	_, id, ok := strings.Cut(unit, "@")
 	if !ok {
 		return ""
@@ -504,7 +506,7 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 			return a.fail(opts, "service "+name+" is already configured; not overwriting")
 		}
 		// The services directory determines the kind on load, so no `kind:` is written.
-		doc := map[string]any{"name": name}
+		doc := map[string]any{wizardFieldName: name}
 		if b, ok := body.(map[string]any); ok {
 			for k, v := range b {
 				doc[k] = v
@@ -527,7 +529,7 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 	// is no longer detected on this host (docs/wizards.md).
 	var deletes []string
 	for _, dir := range serviceCleanupDirs(globalPath, cfg) {
-		more, err := planStaleServiceDeletes(p, dir, detectedTargetKeys(env, "service"))
+		more, err := planStaleServiceDeletes(p, dir, detectedTargetKeys(env, wizardAssistantService))
 		if err != nil {
 			return a.fail(opts, err.Error())
 		}
@@ -574,7 +576,7 @@ func planStaleServiceDeletes(p *assist.Prompt, dir string, detected map[string]b
 			continue
 		}
 		name := e.Name()
-		if !strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml") {
+		if !strings.HasSuffix(name, yamlFileExt) && !strings.HasSuffix(name, yamlLongFileExt) {
 			continue
 		}
 		path := filepath.Join(dir, name)
@@ -584,7 +586,7 @@ func planStaleServiceDeletes(p *assist.Prompt, dir string, detected map[string]b
 		}
 		stale = append(stale, staleFile{path: path, label: path + " (" + target + ")"})
 	}
-	return confirmStaleDeletes(p, dir, "service", stale), nil
+	return confirmStaleDeletes(p, dir, wizardNounService, stale), nil
 }
 
 // serviceFileTarget returns the typed target a managed service file controls.
@@ -601,18 +603,18 @@ func serviceFileTarget(path string) string {
 		return ""
 	}
 	if control, ok := doc["control"].(map[string]any); ok {
-		switch cfgval.AsString(control["type"]) {
-		case "docker":
-			return serviceTargetKey("docker", cfgval.AsString(control["container"]))
+		switch cfgval.AsString(control[wizardFieldType]) {
+		case serviceFamilyDocker:
+			return serviceTargetKey(serviceFamilyDocker, cfgval.AsString(control["container"]))
 		case "libvirt":
-			return serviceTargetKey("vm", cfgval.AsString(control["domain"]))
+			return serviceTargetKey(serviceFamilyVM, cfgval.AsString(control["domain"]))
 		}
 	}
 	if s, _ := doc["uses"].(string); s != "" {
-		return serviceTargetKey("service", s)
+		return serviceTargetKey(wizardNounService, s)
 	}
-	s, _ := doc["name"].(string)
-	return serviceTargetKey("service", s)
+	s, _ := doc[wizardFieldName].(string)
+	return serviceTargetKey(wizardNounService, s)
 }
 
 func serviceTargetKey(family, name string) string {
@@ -620,7 +622,7 @@ func serviceTargetKey(family, name string) string {
 	if name == "" {
 		return ""
 	}
-	return family + ":" + name
+	return family + serviceTargetSeparator + name
 }
 
 func serviceDetectedFamilyKey(family string) string {
@@ -628,7 +630,7 @@ func serviceDetectedFamilyKey(family string) string {
 }
 
 func serviceTargetFamilyDetected(target string, detected map[string]bool) bool {
-	family, _, ok := strings.Cut(target, ":")
+	family, _, ok := strings.Cut(target, serviceTargetSeparator)
 	return ok && detected[serviceDetectedFamilyKey(family)]
 }
 
@@ -644,7 +646,7 @@ func docsPreview(docs map[string]map[string]any) []any {
 // dir, ensuring that dir is in paths.services.
 func writeServiceFiles(globalPath string, docs map[string]map[string]any) (string, int, error) {
 	targetDir := filepath.Join(filepath.Dir(filepath.Clean(globalPath)), servicesIncludeDir)
-	files, _, err := writeConfigDocs(globalPath, "services", servicesIncludeDir, targetDir, "service", docs)
+	files, _, err := writeConfigDocs(globalPath, servicesIncludeDir, servicesIncludeDir, targetDir, wizardNounService, docs)
 	if err != nil {
 		return "", 0, err
 	}
