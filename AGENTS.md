@@ -108,6 +108,24 @@ the feature intentionally applies only to one surface, document that limitation
 where the dispatch/validation decision lives and in the user docs (see
 Documentation lockstep).
 
+## Constants and repeated values
+
+Avoid magic literals in production code. Before adding a numeric or string
+literal, look for an existing constant, typed enum, configuration value or
+owner-level helper and reuse it, especially when editing a `switch`, map, slice
+or array that already uses constants for the same concept.
+
+Create or reuse constants for values that appear more than three times, and for
+concept-bearing values even when they appear fewer times: states, kinds,
+categories, modes, backend names, file suffixes, config/YAML keys, protocol
+names, metric units, timeout/interval defaults, thresholds, math/physical
+conversion factors and similar calculations. Prefer existing public typed
+constants from the owning package over duplicating string constants locally.
+
+Do not hide one-off literals, test fixture data, realistic YAML examples or
+local error text behind constants unless it improves correctness or removes real
+duplication.
+
 ## Naming and terminology
 
 Names are vocabulary. Use exactly the same name for a given concept across
