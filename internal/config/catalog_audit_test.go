@@ -33,6 +33,19 @@ func repoRoot(t *testing.T) string {
 	return root
 }
 
+func readYAMLMap(t *testing.T, path string) map[string]any {
+	t.Helper()
+	data, err := os.ReadFile(path) //nolint:gosec // tests read YAML artifacts under the repository root.
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	if err := yaml.Unmarshal(data, &body); err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+	return body
+}
+
 func catalogDocByName(t *testing.T, root, category, name string) map[string]any {
 	t.Helper()
 	dir := filepath.Join(root, "catalog", category)
@@ -44,14 +57,7 @@ func catalogDocByName(t *testing.T, root, category, name string) map[string]any 
 		if entry.IsDir() || !isYAML(entry.Name()) {
 			return nil
 		}
-		data, err := os.ReadFile(path) //nolint:gosec // test walks YAML files under the repository catalog root.
-		if err != nil {
-			return err
-		}
-		var body map[string]any
-		if err := yaml.Unmarshal(data, &body); err != nil {
-			t.Fatalf("parse %s: %v", path, err)
-		}
+		body := readYAMLMap(t, path)
 		if cfgval.String(body["name"]) == name {
 			found = body
 			return filepath.SkipAll
@@ -77,14 +83,7 @@ func TestCatalogServicesDoNotDeclareVersionsFrom(t *testing.T) {
 		if entry.IsDir() || !isYAML(entry.Name()) {
 			return nil
 		}
-		data, err := os.ReadFile(path) //nolint:gosec // test walks YAML files under the repository catalog root.
-		if err != nil {
-			return err
-		}
-		var body map[string]any
-		if err := yaml.Unmarshal(data, &body); err != nil {
-			t.Fatalf("parse %s: %v", path, err)
-		}
+		body := readYAMLMap(t, path)
 		versions, _ := body["versions"].(map[string]any)
 		if _, ok := versions["from"]; ok {
 			t.Fatalf("%s declares versions.from; catalog/services must discover service templates from service:", path)
@@ -316,14 +315,7 @@ func TestExampleWatchDocsUseOneTargetPerFile(t *testing.T) {
 		}
 		for _, name := range files {
 			path := filepath.Join(dir, name)
-			data, err := os.ReadFile(path) //nolint:gosec // test reads YAML examples under the repository root.
-			if err != nil {
-				t.Fatal(err)
-			}
-			var body map[string]any
-			if err := yaml.Unmarshal(data, &body); err != nil {
-				t.Fatalf("parse %s: %v", path, err)
-			}
+			body := readYAMLMap(t, path)
 			if _, grouped := body["watches"]; grouped {
 				t.Fatalf("%s must be a single watch document, not a grouped watches map", path)
 			}
@@ -346,14 +338,7 @@ func TestExampleNotifierFragmentsUseOneTargetPerFile(t *testing.T) {
 	}
 	for _, name := range files {
 		path := filepath.Join(dir, name)
-		data, err := os.ReadFile(path) //nolint:gosec // test reads YAML examples under the repository root.
-		if err != nil {
-			t.Fatal(err)
-		}
-		var body map[string]any
-		if err := yaml.Unmarshal(data, &body); err != nil {
-			t.Fatalf("parse %s: %v", path, err)
-		}
+		body := readYAMLMap(t, path)
 		notifiers, ok := body["notifiers"].(map[string]any)
 		if !ok {
 			t.Fatalf("%s must declare top-level notifiers map", path)
@@ -385,14 +370,7 @@ func TestExampleTargetDocsUseOneTargetPerFile(t *testing.T) {
 			}
 			for _, name := range files {
 				path := filepath.Join(dir, name)
-				data, err := os.ReadFile(path) //nolint:gosec // test reads YAML examples under the repository root.
-				if err != nil {
-					t.Fatal(err)
-				}
-				var body map[string]any
-				if err := yaml.Unmarshal(data, &body); err != nil {
-					t.Fatalf("parse %s: %v", path, err)
-				}
+				body := readYAMLMap(t, path)
 				if _, grouped := body[tc.groupedKey]; grouped {
 					t.Fatalf("%s must be a single target document, not a grouped %s map", path, tc.groupedKey)
 				}
@@ -553,14 +531,7 @@ func TestCatalogAppsDoNotDeclareServiceProcessSelectors(t *testing.T) {
 			continue
 		}
 		path := filepath.Join(dir, entry.Name())
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var doc map[string]any
-		if err := yaml.Unmarshal(data, &doc); err != nil {
-			t.Fatalf("parse %s: %v", path, err)
-		}
+		doc := readYAMLMap(t, path)
 		var found []string
 		collectForbiddenKeys(doc, "", map[string]struct{}{"pidfile": {}, "processes": {}}, &found)
 		if len(found) > 0 {
@@ -2131,14 +2102,7 @@ func TestCatalogServicesDoNotOwnRuntimeResourcePreflight(t *testing.T) {
 	}
 	for _, file := range files {
 		path := filepath.Join(root, "catalog", "services", file)
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var doc map[string]any
-		if err := yaml.Unmarshal(data, &doc); err != nil {
-			t.Fatalf("parse %s: %v", path, err)
-		}
+		doc := readYAMLMap(t, path)
 		preflight, _ := doc["preflight"].(map[string]any)
 		for name, raw := range preflight {
 			entry, _ := raw.(map[string]any)
@@ -2161,14 +2125,7 @@ func TestCatalogVersionedServicesHaveDiscoverySource(t *testing.T) {
 	}
 	for _, file := range appFiles {
 		path := filepath.Join(catalogDir, "apps", file)
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var doc map[string]any
-		if err := yaml.Unmarshal(data, &doc); err != nil {
-			t.Fatalf("parse %s: %v", path, err)
-		}
+		doc := readYAMLMap(t, path)
 		if name := cfgval.String(doc["name"]); name != "" {
 			apps[name] = doc
 		}
@@ -2180,14 +2137,7 @@ func TestCatalogVersionedServicesHaveDiscoverySource(t *testing.T) {
 	}
 	for _, file := range serviceFiles {
 		path := filepath.Join(catalogDir, "services", file)
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var doc map[string]any
-		if err := yaml.Unmarshal(data, &doc); err != nil {
-			t.Fatalf("parse %s: %v", path, err)
-		}
+		doc := readYAMLMap(t, path)
 		toks := tokensFor(cfgval.String(doc["name"]))
 		if len(toks) == 0 {
 			if _, hasVersions := doc["versions"]; hasVersions {
@@ -2247,14 +2197,7 @@ func TestCatalogCommandEntriesDoNotUseArgumentKeys(t *testing.T) {
 		if entry.IsDir() || !isYAML(entry.Name()) {
 			return nil
 		}
-		data, err := os.ReadFile(path) //nolint:gosec // test walks YAML files under the repository catalog root.
-		if err != nil {
-			return err
-		}
-		var doc map[string]any
-		if err := yaml.Unmarshal(data, &doc); err != nil {
-			t.Fatalf("parse %s: %v", path, err)
-		}
+		doc := readYAMLMap(t, path)
 		checkCommandArgumentKeys(t, path, doc, "")
 		return nil
 	})
@@ -2275,14 +2218,7 @@ func TestCatalogServicePreflightCommandsAvoidInitBackendTools(t *testing.T) {
 		if entry.IsDir() || !isYAML(entry.Name()) {
 			return nil
 		}
-		data, err := os.ReadFile(path) //nolint:gosec // test walks YAML files under the repository catalog services root.
-		if err != nil {
-			return err
-		}
-		var doc map[string]any
-		if err := yaml.Unmarshal(data, &doc); err != nil {
-			t.Fatalf("parse %s: %v", path, err)
-		}
+		doc := readYAMLMap(t, path)
 		preflight, _ := doc["preflight"].(map[string]any)
 		for name, raw := range preflight {
 			entry, _ := raw.(map[string]any)
