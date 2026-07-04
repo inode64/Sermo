@@ -158,8 +158,7 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKi
 		return
 	}
 	if hasHook {
-		list, ok := hook["command"].([]any)
-		if !ok || len(list) == 0 {
+		if !cfgval.IsNonEmptyStringArray(hook["command"]) {
 			add("%s.then.hook.command must be a non-empty array", prefix)
 		}
 		if v, present := hook["timeout"]; present && !isPositiveDuration(cfgval.String(v)) {
