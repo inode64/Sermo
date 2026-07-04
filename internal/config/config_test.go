@@ -4830,6 +4830,12 @@ name: s
 service: { systemd: [docker] }
 also_service: { foo: [x] }
 `), "not one of systemd, openrc")
+
+	mustHave(t, validateService(t, `
+name: s
+service: { systemd: [docker] }
+also_service: { systemd: [docker.socket, 7] }
+`), "also_service.systemd must be a non-empty list")
 }
 
 func TestStopInvariants(t *testing.T) {
