@@ -209,10 +209,12 @@ stop_policy:
     - relative/path
     - { path: /var, recursive: true }
     - { path: "/var/cache/*", recursive: true }
+    - { path: /var/cache/svc, recursive: yes }
 `)
 	mustHave(t, bad, "must be absolute")
 	mustHave(t, bad, "refuses to recursively delete")
 	mustHave(t, bad, "must not be a glob")
+	mustHave(t, bad, "recursive must be a boolean")
 
 	ok := validateService(t, `
 name: s
