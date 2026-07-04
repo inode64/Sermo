@@ -1224,9 +1224,11 @@ name: svc
 service:
   upstart: [foo]
   systemd: []
+  openrc: [svc, 7]
 `)
 	mustHave(t, issues, `service key "upstart" is not one of systemd, openrc`)
 	mustHave(t, issues, "service.systemd must be a non-empty list")
+	mustHave(t, issues, "service.openrc must be a non-empty list")
 
 }
 

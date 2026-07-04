@@ -482,7 +482,7 @@ func validateServiceField(tree map[string]any, add addFunc) {
 		for _, k := range slices.Sorted(maps.Keys(v)) {
 			switch k {
 			case "systemd", "openrc":
-				if len(cfgval.StringList(v[k])) == 0 {
+				if !cfgval.IsNonEmptyStringArray(v[k]) {
 					add("service.%s must be a non-empty list", k)
 				}
 			default:
@@ -515,7 +515,7 @@ func validateAlsoService(tree map[string]any, add addFunc) {
 			continue
 		}
 		units := cfgval.StringList(m[k])
-		if len(units) == 0 {
+		if !cfgval.IsNonEmptyStringArray(m[k]) {
 			add("also_service.%s must be a non-empty list", k)
 		}
 		primary := map[string]bool{}
