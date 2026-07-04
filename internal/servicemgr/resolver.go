@@ -39,7 +39,7 @@ func (r UnitResolver) Resolve(ctx context.Context, backend Backend, candidates [
 		probe = OSProbe{}
 	}
 
-	candidates = dedupe(candidates)
+	candidates = uniqueStrings(nil, candidates...)
 	var tried []string
 	var known []string
 	seenUnits := map[string]struct{}{}
@@ -108,20 +108,4 @@ func (r UnitResolver) timeout() time.Duration {
 		return defaultDetectTimeout
 	}
 	return r.Timeout
-}
-
-func dedupe(in []string) []string {
-	seen := map[string]struct{}{}
-	var out []string
-	for _, c := range in {
-		if c == "" {
-			continue
-		}
-		if _, ok := seen[c]; ok {
-			continue
-		}
-		seen[c] = struct{}{}
-		out = append(out, c)
-	}
-	return out
 }
