@@ -32,16 +32,7 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 	for _, p := range c.preds {
 		want[p.field] = true
 	}
-	args := make([]string, 0, 3)
-	if want["cached"] {
-		args = append(args, "-T")
-	}
-	if want["read"] {
-		args = append(args, "-t")
-	}
-	args = append(args, c.device)
-
-	res, runErr := c.runner.Run(ctx, "hdparm", args...)
+	res, runErr := c.runner.Run(ctx, "hdparm", hdparmArgs(c.device, want["cached"], want["read"])...)
 	if res.ExitCode == -1 {
 		msg := execx.OperatorFailure(runErr, res, c.timeout)
 		if msg == "" {
@@ -77,15 +68,7 @@ func SampleHdparm(ctx context.Context, runner execx.Runner, device string, wantC
 	if !wantCached && !wantRead {
 		wantCached, wantRead = true, true
 	}
-	args := make([]string, 0, 3)
-	if wantCached {
-		args = append(args, "-T")
-	}
-	if wantRead {
-		args = append(args, "-t")
-	}
-	args = append(args, device)
-	res, runErr := runner.Run(ctx, "hdparm", args...)
+	res, runErr := runner.Run(ctx, "hdparm", hdparmArgs(device, wantCached, wantRead)...)
 	if res.ExitCode == -1 {
 		msg := execx.OperatorFailure(runErr, res, timeout)
 		if msg == "" {
@@ -101,6 +84,17 @@ func SampleHdparm(ctx context.Context, runner execx.Runner, device string, wantC
 		return nil, err
 	}
 	return values, nil
+}
+
+func hdparmArgs(device string, wantCached, wantRead bool) []string {
+	args := make([]string, 0, 3)
+	if wantCached {
+		args = append(args, "-T")
+	}
+	if wantRead {
+		args = append(args, "-t")
+	}
+	return append(args, device)
 }
 
 // parseHdparm extracts the MB/sec rate from hdparm's timing lines: the
