@@ -462,6 +462,7 @@ func TestValidateNotifiers(t *testing.T) {
 		"notifiers": map[string]any{
 			"no-dsn":      map[string]any{"type": "email", "from": "x@y", "to": []any{"a@b"}},
 			"no-to":       map[string]any{"type": "email", "dsn": "smtp://x", "from": "x@y"},
+			"bad-to":      map[string]any{"type": "email", "dsn": "smtp://x", "from": "x@y", "to": []any{"a@b", 7}},
 			"bad-dsn":     map[string]any{"type": "email", "dsn": "http://x", "from": "x@y", "to": []any{"a@b"}},
 			"no-webhook":  map[string]any{"type": "slack"},
 			"bad-webhook": map[string]any{"type": "slack", "webhook": "ftp://x"},
@@ -475,6 +476,7 @@ func TestValidateNotifiers(t *testing.T) {
 	for _, w := range []string{
 		"notifiers.no-dsn.dsn is required for an email notifier",
 		"notifiers.no-to.to must list at least one address",
+		"notifiers.bad-to.to must list at least one address",
 		"notifiers.bad-dsn.dsn must be an smtp:// or smtps:// URL",
 		"notifiers.no-webhook.webhook is required for a slack notifier",
 		"notifiers.bad-webhook.webhook must be an http(s) URL",
