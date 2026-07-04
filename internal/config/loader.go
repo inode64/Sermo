@@ -133,7 +133,7 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		}
 	}
 	for _, spec := range uniquePathSpecs(notifierPaths) {
-		if err := cfg.loadGlobalFragmentDir(spec.Path, "notifiers", spec.Recursive); err != nil {
+		if err := cfg.loadNotifierDir(spec.Path, spec.Recursive); err != nil {
 			return nil, err
 		}
 	}
@@ -453,8 +453,8 @@ func (c *Config) loadAppDir(dir string, recursive bool) error {
 	return c.loadAppDirEntries(dir, recursive)
 }
 
-func (c *Config) loadGlobalFragmentDir(dir string, section string, recursive bool) error {
-	return c.loadGlobalFragmentDirEntries(dir, section, recursive)
+func (c *Config) loadNotifierDir(dir string, recursive bool) error {
+	return c.loadGlobalFragmentDirEntries(dir, "notifiers", recursive)
 }
 
 func (c *Config) loadStorageDir(dir string, recursive bool) error {
