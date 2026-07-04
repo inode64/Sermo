@@ -14,6 +14,11 @@ import (
 // DefaultGlobalPath is the standard location of the global configuration.
 const DefaultGlobalPath = "/etc/sermo/sermo.yml"
 
+const (
+	notifiersSection = "notifiers"
+	watchesSection   = "watches"
+)
+
 var defaultServiceDirs = []string{"services"}
 var defaultAppDirs = []string{"apps"}
 var defaultStorageDirs = []string{"storages"}
@@ -186,7 +191,7 @@ func loadGlobal(path string) (Global, error) {
 		if g.AppPaths, err = pathSpecList(paths["apps"], "paths.apps"); err != nil {
 			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
 		}
-		if g.NotifierPaths, err = pathSpecList(paths["notifiers"], "paths.notifiers"); err != nil {
+		if g.NotifierPaths, err = pathSpecList(paths[notifiersSection], "paths.notifiers"); err != nil {
 			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
 		}
 		if g.StoragePaths, err = pathSpecList(paths["storages"], "paths.storages"); err != nil {
@@ -195,7 +200,7 @@ func loadGlobal(path string) (Global, error) {
 		if g.NetworkPaths, err = pathSpecList(paths["networks"], "paths.networks"); err != nil {
 			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
 		}
-		if g.WatchPaths, err = pathSpecList(paths["watches"], "paths.watches"); err != nil {
+		if g.WatchPaths, err = pathSpecList(paths[watchesSection], "paths.watches"); err != nil {
 			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
 		}
 		g.Catalog = pathsFromSpecs(g.CatalogPaths)
@@ -227,10 +232,10 @@ func applyPathDirOverride(g *Global, overrides map[string][]string) {
 	}
 	apply("services", &g.Services, &g.ServicePaths)
 	apply("apps", &g.Apps, &g.AppPaths)
-	apply("notifiers", &g.Notifiers, &g.NotifierPaths)
+	apply(notifiersSection, &g.Notifiers, &g.NotifierPaths)
 	apply("storages", &g.Storages, &g.StoragePaths)
 	apply("networks", &g.Networks, &g.NetworkPaths)
-	apply("watches", &g.Watches, &g.WatchPaths)
+	apply(watchesSection, &g.Watches, &g.WatchPaths)
 }
 
 // absOverrideDirs cleans an override list, making relative entries absolute
@@ -474,7 +479,7 @@ func (c *Config) loadAppDirEntries(dir string, recursive bool) error {
 }
 
 func (c *Config) loadNotifierDirEntries(dir string, recursive bool) error {
-	const section = "notifiers"
+	const section = notifiersSection
 	names, subdirs, err := configDirEntries(dir, section)
 	if err != nil {
 		return err
@@ -505,7 +510,7 @@ func (c *Config) loadNotifierDirEntries(dir string, recursive bool) error {
 }
 
 func (c *Config) loadWatchDirEntries(dir string, recursive bool) error {
-	names, subdirs, err := configDirEntries(dir, "watches")
+	names, subdirs, err := configDirEntries(dir, watchesSection)
 	if err != nil {
 		return err
 	}
@@ -627,7 +632,7 @@ func configDirEntries(dir, label string) (names, subdirs []string, err error) {
 }
 
 func (c *Config) mergeWatchDocument(doc *Document) error {
-	if _, present := doc.Body["watches"]; present {
+	if _, present := doc.Body[watchesSection]; present {
 		return fmt.Errorf("%s: watch documents use top-level name/check fields, not a watches map", doc.Path)
 	}
 	if declared := cfgval.String(doc.Body["kind"]); declared != "" && declared != "watch" {
@@ -644,7 +649,7 @@ func (c *Config) mergeWatchDocument(doc *Document) error {
 	delete(entry, "name")
 	expandEnvTree(entry)
 
-	dst, _ := c.Global.Raw["watches"].(map[string]any)
+	dst, _ := c.Global.Raw[watchesSection].(map[string]any)
 	if dst == nil {
 		dst = map[string]any{}
 	}
@@ -652,12 +657,12 @@ func (c *Config) mergeWatchDocument(doc *Document) error {
 		return fmt.Errorf("%s: watch %q is already defined", doc.Path, doc.Name)
 	}
 	dst[doc.Name] = entry
-	c.Global.Raw["watches"] = dst
+	c.Global.Raw[watchesSection] = dst
 	return nil
 }
 
 func (c *Config) mergeNotifierFragment(doc *Document) (bool, error) {
-	const section = "notifiers"
+	const section = notifiersSection
 	if _, present := doc.Body[section]; !present {
 		return false, nil
 	}
@@ -670,7 +675,7 @@ func (c *Config) mergeNotifierFragment(doc *Document) (bool, error) {
 }
 
 func (c *Config) mergeNotifierMap(doc *Document) (bool, error) {
-	const section = "notifiers"
+	const section = notifiersSection
 	raw := expandEnvTree(doc.Body[section])
 	entries, ok := raw.(map[string]any)
 	if !ok {
