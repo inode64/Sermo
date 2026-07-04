@@ -485,7 +485,7 @@ func (c *Config) loadNotifierDirEntries(dir string, recursive bool) error {
 		if err != nil {
 			return err
 		}
-		handled, err := c.mergeGlobalFragmentSection(doc, section)
+		handled, err := c.mergeNotifierFragment(doc)
 		if err != nil {
 			return err
 		}
@@ -656,7 +656,8 @@ func (c *Config) mergeWatchDocument(doc *Document) error {
 	return nil
 }
 
-func (c *Config) mergeGlobalFragmentSection(doc *Document, section string) (bool, error) {
+func (c *Config) mergeNotifierFragment(doc *Document) (bool, error) {
+	const section = "notifiers"
 	if doc.Kind != "" {
 		return false, nil
 	}
