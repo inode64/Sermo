@@ -696,8 +696,6 @@ func (c *Config) mergeGlobalMap(doc *Document, section string) (bool, error) {
 
 func includedGlobalSectionLabel(section string) string {
 	switch section {
-	case "watches":
-		return "watch"
 	case "notifiers":
 		return "notifier"
 	default:
