@@ -78,7 +78,7 @@ func validateNotifiers(notifiers map[string]any, templateDir string, add func(st
 			if cfgval.String(entry["from"]) == "" {
 				add("notifiers.%s.from is required for an email notifier", name)
 			}
-			if len(cfgval.StringList(entry["to"])) == 0 {
+			if !cfgval.IsNonEmptyStringList(entry["to"]) {
 				add("notifiers.%s.to must list at least one address", name)
 			}
 		case "slack", "teams":
