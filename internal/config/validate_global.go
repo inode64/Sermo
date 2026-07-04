@@ -68,7 +68,7 @@ func validateNotifiers(notifiers map[string]any, templateDir string, add func(st
 		}
 		validateNotifierTemplate(name, entry, templateDir, add)
 		switch typ := cfgval.String(entry["type"]); typ {
-		case "email":
+		case notifierTypeEmail:
 			dsn := cfgval.String(entry["dsn"])
 			if dsn == "" {
 				add("notifiers.%s.dsn is required for an email notifier", name)
@@ -81,18 +81,18 @@ func validateNotifiers(notifiers map[string]any, templateDir string, add func(st
 			if !cfgval.IsNonEmptyStringList(entry["to"]) {
 				add("notifiers.%s.to must list at least one address", name)
 			}
-		case "slack", "teams":
+		case notifierTypeSlack, notifierTypeTeams:
 			wh := cfgval.String(entry["webhook"])
 			if wh == "" {
 				add("notifiers.%s.webhook is required for a %s notifier", name, typ)
 			} else if !strings.HasPrefix(wh, "http://") && !strings.HasPrefix(wh, "https://") {
 				add("notifiers.%s.webhook must be an http(s) URL", name)
 			}
-		case "tty":
+		case notifierTypeTTY:
 			if users, present := entry["users"]; present && !cfgval.IsStringOrStringList(users) {
 				add("notifiers.%s.users must be a string or list of strings", name)
 			}
-		case "wall":
+		case notifierTypeWall:
 			if _, present := entry["users"]; present {
 				add("notifiers.%s.users is not supported for a wall notifier; use type tty to target specific users", name)
 			}
