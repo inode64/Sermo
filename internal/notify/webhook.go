@@ -3,6 +3,7 @@ package notify
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -18,6 +19,11 @@ const webhookTimeout = 15 * time.Second
 // webhookPoster delivers a JSON payload to a webhook; injected so tests do not
 // hit the network. Shared by every webhook transport (slack, teams).
 type webhookPoster func(ctx context.Context, webhook string, payload []byte) error
+
+func webhookPayload(v any) []byte {
+	b, _ := json.Marshal(v)
+	return b
+}
 
 func webhookPost(post, fallback webhookPoster) webhookPoster {
 	if post != nil {
