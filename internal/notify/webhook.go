@@ -32,6 +32,10 @@ func webhookPost(post, fallback webhookPoster) webhookPoster {
 	return fallback
 }
 
+func sendWebhook(ctx context.Context, post, fallback webhookPoster, webhook string, payload []byte) error {
+	return webhookPost(post, fallback)(ctx, webhook, payload)
+}
+
 // postWebhook POSTs a JSON payload and fails on a non-2xx answer; label names
 // the transport in error messages.
 func postWebhook(ctx context.Context, label, webhook string, payload []byte) error {
