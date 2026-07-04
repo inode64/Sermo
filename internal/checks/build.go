@@ -24,6 +24,8 @@ import (
 	"sermo/internal/servicemgr"
 )
 
+const onModeChange = "change"
+
 // MetricReader returns a sampled metric for a scope. The daemon
 // supplies the per-cycle sample; nil means no metric source (metric checks then
 // report unavailable).
@@ -892,7 +894,7 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	switch metric {
 	case "state":
 		expect := cfgval.AsString(entry["expect"])
-		onChange := cfgval.AsString(entry["on"]) == "change"
+		onChange := cfgval.AsString(entry["on"]) == onModeChange
 		if expect == "" && !onChange {
 			return nil, "net state requires expect: up|down or on: change"
 		}
@@ -905,7 +907,7 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 			c.onChange = true
 		}
 	case "speed":
-		if cfgval.AsString(entry["on"]) != "change" {
+		if cfgval.AsString(entry["on"]) != onModeChange {
 			return nil, "net speed requires on: change"
 		}
 		c.onChange = true
@@ -921,7 +923,7 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		c.op, c.value = op, v
 	case "address":
 		expect := cfgval.AsString(entry["expect"])
-		onChange := cfgval.AsString(entry["on"]) == "change"
+		onChange := cfgval.AsString(entry["on"]) == onModeChange
 		if expect == "" && !onChange {
 			return nil, "net address requires expect: present|absent or on: change"
 		}
@@ -1231,7 +1233,7 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	switch metric {
 	case "state":
 		expect := cfgval.AsString(entry["expect"])
-		onChange := cfgval.AsString(entry["on"]) == "change"
+		onChange := cfgval.AsString(entry["on"]) == onModeChange
 		if expect == "" && !onChange {
 			return nil, "icmp state requires expect: up|down or on: change"
 		}
