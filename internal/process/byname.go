@@ -19,7 +19,7 @@ import (
 // truncates comm to 15 characters (TASK_COMM_LEN-1), so name must be the
 // (possibly truncated) comm value, not a longer binary path.
 func PIDsByComm(name string) ([]int, error) {
-	entries, err := os.ReadDir("/proc")
+	entries, err := os.ReadDir(procRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +32,7 @@ func PIDsByComm(name string) ([]int, error) {
 		if err != nil {
 			continue // not a pid directory (e.g. "self", "net")
 		}
-		data, err := os.ReadFile(filepath.Join("/proc", e.Name(), "comm"))
+		data, err := os.ReadFile(filepath.Join(procRoot, e.Name(), "comm"))
 		if err != nil {
 			continue // process gone or comm unreadable
 		}

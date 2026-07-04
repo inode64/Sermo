@@ -7,6 +7,12 @@ import (
 	"strings"
 )
 
+const procRoot = "/proc"
+
+func procPIDPath(pid int, name string) string {
+	return filepath.Join(procRoot, strconv.Itoa(pid), name)
+}
+
 // Reader reads process identities from a /proc-like source. It is an interface
 // so discovery can be tested without real processes.
 type Reader interface {
@@ -28,7 +34,7 @@ type OSReader struct {
 
 // PIDs lists numeric entries under /proc.
 func (OSReader) PIDs() ([]int, error) {
-	entries, err := os.ReadDir("/proc")
+	entries, err := os.ReadDir(procRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +80,7 @@ func (r OSReader) userName(uid uint32) string {
 }
 
 func readStatus(pid int) (ppid int, uid, gid uint32, state string, ok bool) {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/status")
+	data, err := os.ReadFile(procPIDPath(pid, "status"))
 	if err != nil {
 		return 0, 0, 0, "", false
 	}
@@ -113,7 +119,7 @@ func readStatus(pid int) (ppid int, uid, gid uint32, state string, ok bool) {
 // read or points at a deleted binary, so such a process never matches an exe
 // selector.
 func readExe(pid int) (string, bool) {
-	target, err := os.Readlink("/proc/" + strconv.Itoa(pid) + "/exe")
+	target, err := os.Readlink(procPIDPath(pid, "exe"))
 	if err != nil {
 		return "", false
 	}
@@ -124,7 +130,7 @@ func readExe(pid int) (string, bool) {
 }
 
 func readCmdline(pid int) []string {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline")
+	data, err := os.ReadFile(procPIDPath(pid, "cmdline"))
 	if err != nil || len(data) == 0 {
 		return nil
 	}
