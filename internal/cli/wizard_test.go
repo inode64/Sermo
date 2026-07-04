@@ -408,6 +408,20 @@ func TestWriteMountFilesRejectsExistingFileBeforeUpdatingConfig(t *testing.T) {
 	}
 }
 
+func TestPlanConfigFilesRejectsBatchFilenameCollision(t *testing.T) {
+	tmp := t.TempDir()
+	_, err := planConfigFiles(tmp, "watch", map[string]map[string]any{
+		"net eth0": {"name": "net eth0"},
+		"net:eth0": {"name": "net:eth0"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "both map to") {
+		t.Fatalf("planConfigFiles error = %v, want batch filename collision", err)
+	}
+	if entries, err := os.ReadDir(tmp); err != nil || len(entries) != 0 {
+		t.Fatalf("planConfigFiles should not write files, entries=%v err=%v", entries, err)
+	}
+}
+
 func TestRunWizardUnknownAssistant(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
