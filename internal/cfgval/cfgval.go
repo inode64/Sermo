@@ -134,10 +134,10 @@ func IsNonEmptyStringList(v any) bool {
 }
 
 // IsNonEmptyStringArray reports whether v is a non-empty YAML list whose items
-// are all strings.
+// are all non-empty strings.
 func IsNonEmptyStringArray(v any) bool {
 	list, ok := v.([]any)
-	return ok && len(list) > 0 && hasOnlyStrings(list)
+	return ok && len(nonEmptyStrings(list)) == len(list) && len(list) > 0
 }
 
 func hasOnlyStrings(list []any) bool {
