@@ -81,14 +81,9 @@ func mountResult(mounts map[string]any) (Result, error) {
 	if len(mounts) == 0 {
 		return Result{}, nil
 	}
-	names := make([]string, 0, len(mounts))
-	for name := range mounts {
-		names = append(names, name)
-	}
-	sort.Strings(names)
 	return Result{
 		Mounts:  mounts,
-		Summary: fmt.Sprintf("%d mount unit(s): %s", len(names), strings.Join(names, ", ")),
+		Summary: resultSummary("mount unit", mounts),
 	}, nil
 }
 

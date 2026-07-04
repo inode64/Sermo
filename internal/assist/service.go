@@ -3,7 +3,6 @@ package assist
 import (
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -102,14 +101,9 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		return Result{}, nil
 	}
 
-	names := make([]string, 0, len(services))
-	for n := range services {
-		names = append(names, n)
-	}
-	sort.Strings(names)
 	return Result{
 		Services: services,
-		Summary:  fmt.Sprintf("%d service(s): %s", len(names), strings.Join(names, ", ")),
+		Summary:  resultSummary("service", services),
 	}, nil
 }
 
