@@ -1,8 +1,8 @@
-watches:
-  oom:
-    monitor: disabled
-    interval: 30s
-    check: { type: oom }  # no delta -> fires on any kill (> 0)
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-oom-alert.sh]
+name: oom
+category: host
+monitor: disabled
+interval: 30s
+check: { type: oom }  # no delta -> fires on any kill (> 0)
+then:
+  hook:
+    command: [/usr/local/bin/sermo-oom-alert.sh]

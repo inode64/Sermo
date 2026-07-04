@@ -185,12 +185,13 @@ alias duplicados para el mismo pidfile o socket.
 
 Usa un archivo YAML por target — un único documento de un solo kind por archivo,
 nunca varios targets agrupados. El kind de un documento se deriva de dónde vive
-(subdir del catálogo / `paths.services` / `paths.storages`), así que un `kind:` de
-nivel superior es opcional y se omite. Los fragmentos de watch y notifier siguen
-usando un mapa `watches:` o `notifiers:` de nivel superior, pero ese mapa debe
-contener exactamente una entrada con nombre. La única excepción es un bundle de
-referencia claramente etiquetado como `docs/sermo-all.yml`, que agrupa ejemplos
-para validar el esquema completo en un único lugar.
+(subdir del catálogo / `paths.services` / `paths.storages` / `paths.networks` /
+`paths.watches`), así que un `kind:` de nivel superior es opcional y se omite.
+Los documentos de watch bajo `paths.networks` y `paths.watches` usan `name:` de nivel superior más los campos
+del watch; los fragmentos de notifier siguen usando un mapa `notifiers:` de nivel
+superior, pero ese mapa debe contener exactamente una entrada con nombre. La única
+excepción es un bundle de referencia claramente etiquetado como `docs/sermo-all.yml`,
+que agrupa ejemplos para validar el esquema completo en un único lugar.
 
 Para desarrollo y validación en el árbol de fuentes sin instalar bajo `/etc/sermo`,
 usa `examples/sermo-dev.yml` (`paths.*` relativos al árbol `examples/` incluido).

@@ -92,7 +92,7 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 		if wizardWritesStorageDocs(as.Name()) {
 			fmt.Fprintln(a.Stdout, "Not written — paste the blocks above into files under a paths.storages directory.")
 		} else {
-			fmt.Fprintln(a.Stdout, "Not written — paste the block above into a YAML file loaded from paths.networks or paths.watches.")
+			fmt.Fprintln(a.Stdout, "Not written — paste each block above into its own YAML file loaded from paths.networks or paths.watches.")
 		}
 		return exitSuccess, nil
 	}
@@ -137,15 +137,19 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 	return exitSuccess, nil
 }
 
-func renderWizardWatchPreview(wizard string, fragment map[string]any) ([]byte, error) {
+func renderWizardWatchPreview(wizard string, entries map[string]any) ([]byte, error) {
 	if wizardWritesStorageDocs(wizard) {
-		docs, err := storageDocsFromVolumeWatches(fragment)
+		docs, err := storageDocsFromVolumeWatches(entries)
 		if err != nil {
 			return nil, err
 		}
 		return yaml.Marshal(docsPreview(docs))
 	}
-	return yaml.Marshal(map[string]any{"watches": fragment})
+	docs, err := watchDocsFromEntries(entries)
+	if err != nil {
+		return nil, err
+	}
+	return yaml.Marshal(docsPreview(docs))
 }
 
 // selectAssistant resolves the assistant from the first positional argument, or
@@ -375,12 +379,12 @@ type wizardMergeResult struct {
 	PathKey string
 }
 
-func ensureNoWatchCollisions(cfg *config.Config, fragment map[string]any) error {
+func ensureNoWatchCollisions(cfg *config.Config, entries map[string]any) error {
 	if cfg == nil {
 		return nil
 	}
 	watches, _ := cfg.ResolveWatches()
-	for name := range fragment {
+	for name := range entries {
 		if _, exists := cfg.Storages[name]; exists {
 			return fmt.Errorf("storage %q already exists in loaded config; not overwriting", name)
 		}
@@ -393,22 +397,21 @@ func ensureNoWatchCollisions(cfg *config.Config, fragment map[string]any) error 
 
 // mergeWizardWatches writes one generated target per YAML file. Volume output
 // is converted to storage documents under paths.storages; other watch
-// assistants write top-level watches fragments under paths.networks or
-// paths.watches so the loader can merge them without rewriting sermo.yml on
-// every generated watch.
-func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMergeResult, error) {
+// assistants write watch documents under paths.networks or paths.watches so the
+// loader can merge them without rewriting sermo.yml on every generated watch.
+func mergeWizardWatches(path, wizard string, entries map[string]any) (wizardMergeResult, error) {
 	if wizardWritesStorageDocs(wizard) {
-		docs, err := storageDocsFromVolumeWatches(fragment)
+		docs, err := storageDocsFromVolumeWatches(entries)
 		if err != nil {
 			return wizardMergeResult{}, err
 		}
 		return mergeWizardStorageDocs(path, docs)
 	}
-	relDir, targetDir := wizardTargetDir(path, wizard, fragment)
-	pathKey := wizardPathKey(wizard, fragment)
+	relDir, targetDir := wizardTargetDir(path, wizard, entries)
+	pathKey := wizardPathKey(wizard, entries)
 
 	var files []string
-	for _, name := range slices.Sorted(maps.Keys(fragment)) {
+	for _, name := range slices.Sorted(maps.Keys(entries)) {
 		file := filepath.Join(targetDir, watchConfigFileName(name))
 		if _, err := os.Stat(file); err == nil {
 			return wizardMergeResult{}, fmt.Errorf("watch file %s already exists; not overwriting", file)
@@ -426,9 +429,13 @@ func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMer
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return wizardMergeResult{}, fmt.Errorf("create %s: %w", targetDir, err)
 	}
-	for _, name := range slices.Sorted(maps.Keys(fragment)) {
+	for _, name := range slices.Sorted(maps.Keys(entries)) {
 		file := filepath.Join(targetDir, watchConfigFileName(name))
-		data, err := yaml.Marshal(map[string]any{"watches": map[string]any{name: fragment[name]}})
+		doc, err := watchDocFromEntry(name, entries[name])
+		if err != nil {
+			return wizardMergeResult{}, err
+		}
+		data, err := yaml.Marshal(doc)
 		if err != nil {
 			return wizardMergeResult{}, fmt.Errorf("render %s: %w", file, err)
 		}
@@ -437,6 +444,28 @@ func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMer
 		}
 	}
 	return wizardMergeResult{Backup: bak, Dir: targetDir, Files: files, PathKey: pathKey}, nil
+}
+
+func watchDocsFromEntries(entries map[string]any) (map[string]map[string]any, error) {
+	out := make(map[string]map[string]any, len(entries))
+	for _, name := range slices.Sorted(maps.Keys(entries)) {
+		doc, err := watchDocFromEntry(name, entries[name])
+		if err != nil {
+			return nil, err
+		}
+		out[name] = doc
+	}
+	return out, nil
+}
+
+func watchDocFromEntry(name string, raw any) (map[string]any, error) {
+	entry, ok := raw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("watch %q is not a mapping", name)
+	}
+	doc := maps.Clone(entry)
+	doc["name"] = name
+	return doc, nil
 }
 
 func wizardWritesStorageDocs(wizard string) bool {
@@ -450,10 +479,10 @@ func wizardOutputNoun(wizard string) string {
 	return "watch"
 }
 
-func storageDocsFromVolumeWatches(fragment map[string]any) (map[string]map[string]any, error) {
-	docs := make(map[string]map[string]any, len(fragment))
-	for _, name := range slices.Sorted(maps.Keys(fragment)) {
-		entry, ok := fragment[name].(map[string]any)
+func storageDocsFromVolumeWatches(entries map[string]any) (map[string]map[string]any, error) {
+	docs := make(map[string]map[string]any, len(entries))
+	for _, name := range slices.Sorted(maps.Keys(entries)) {
+		entry, ok := entries[name].(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("watch %q is not a mapping", name)
 		}
@@ -528,14 +557,14 @@ func mergeWizardStorageDocs(path string, docs map[string]map[string]any) (wizard
 	return wizardMergeResult{Backup: bak, Dir: targetDir, Files: files, PathKey: pathKey}, nil
 }
 
-func wizardTargetDir(path, wizard string, fragment map[string]any) (string, string) {
-	dirName := wizardConfigDirName(wizard, fragment)
+func wizardTargetDir(path, wizard string, entries map[string]any) (string, string) {
+	dirName := wizardConfigDirName(wizard, entries)
 	base := filepath.Dir(filepath.Clean(path))
 	return dirName, filepath.Join(base, dirName)
 }
 
-func wizardPathKey(wizard string, fragment map[string]any) string {
-	dirName := wizardConfigDirName(wizard, fragment)
+func wizardPathKey(wizard string, entries map[string]any) string {
+	dirName := wizardConfigDirName(wizard, entries)
 	switch dirName {
 	case "storages":
 		return "storages"
@@ -546,18 +575,18 @@ func wizardPathKey(wizard string, fragment map[string]any) string {
 	}
 }
 
-func wizardCleanupDirs(path, wizard string, fragment map[string]any) []string {
-	_, targetDir := wizardTargetDir(path, wizard, fragment)
+func wizardCleanupDirs(path, wizard string, entries map[string]any) []string {
+	_, targetDir := wizardTargetDir(path, wizard, entries)
 	return []string{targetDir}
 }
 
-func wizardConfigDirName(wizard string, fragment map[string]any) string {
+func wizardConfigDirName(wizard string, entries map[string]any) string {
 	if wizardWritesStorageDocs(wizard) {
 		return storagesConfigDir
 	}
 	dirName := ""
-	for _, name := range slices.Sorted(maps.Keys(fragment)) {
-		checkType := watchFragmentCheckType(fragment[name])
+	for _, name := range slices.Sorted(maps.Keys(entries)) {
+		checkType := watchEntryCheckType(entries[name])
 		if checkType == "" {
 			continue
 		}
@@ -577,7 +606,7 @@ func wizardConfigDirName(wizard string, fragment map[string]any) string {
 	return dirName
 }
 
-func watchFragmentCheckType(v any) string {
+func watchEntryCheckType(v any) string {
 	entry, ok := v.(map[string]any)
 	if !ok {
 		return ""
@@ -768,7 +797,7 @@ func existingWizardWatchFiles(targetDir string) ([]wizardWatchFile, error) {
 	return files, nil
 }
 
-// parseWatchFile reads a managed watch fragment or storage document once and
+// parseWatchFile reads a managed watch document or storage document once and
 // returns both the names it declares and the host targets they monitor (the
 // storage `path`, the `check.path` of storage watches and the `check.interface`
 // of net/route/icmp/dns watches — keys that match detectedTargetKeys). nil/nil
@@ -786,28 +815,16 @@ func parseWatchFile(path string) (names, targets []string) {
 		names = []string{name}
 		if path, _ := root["path"].(string); path != "" {
 			targets = append(targets, filepath.Clean(path))
+			return names, targets
 		}
-		return names, targets
-	}
-	watches, _ := root["watches"].(map[string]any)
-	for _, v := range watches {
-		entry, ok := v.(map[string]any)
-		if !ok {
-			continue
-		}
-		check, ok := entry["check"].(map[string]any)
-		if !ok {
-			continue
-		}
+		check, _ := root["check"].(map[string]any)
 		if s, _ := check["path"].(string); s != "" {
 			targets = append(targets, s)
 		}
 		if s, _ := check["interface"].(string); s != "" {
 			targets = append(targets, s)
 		}
-	}
-	if len(watches) > 0 {
-		names = slices.Sorted(maps.Keys(watches))
+		return names, targets
 	}
 	return names, targets
 }

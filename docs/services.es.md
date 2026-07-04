@@ -229,7 +229,7 @@ go test ./internal/config -run 'TestRealCatalog(AllDaemonsValidate|ReloadDaemons
 El reload que `reload:` produce es lo que la **acción `reload`**,
 `reload_on_change`, el comando `sermoctl reload <svc>` y el botón de reload de la web UI
 ejecutan todos. Es un concepto de control de servicios: se aplica a servicios, no a
-los `watches:` de host, que observan métricas de host y disparan hooks en lugar de recargar
+los watches de host, que observan métricas de host y disparan hooks en lugar de recargar
 una unidad.
 
 ## Dependencias de app (`apps`)
@@ -1325,8 +1325,9 @@ El estado vivo se conmuta en runtime con `sermoctl monitor <svc>` /
 sobrevive reboots, un servicio `previous` vuelve a subir en el estado en que un
 operador lo dejó por última vez.
 
-Los watches de host usan los mismos valores `monitor: enabled | disabled | previous` bajo
-la sección global `watches:`; véase [configuration](configuration.es.md#host-watches).
+Los documentos de watch de host usan los mismos valores de nivel superior
+`monitor: enabled | disabled | previous`; véase
+[configuration](configuration.es.md#host-watches).
 
 ## Comandos auxiliares
 

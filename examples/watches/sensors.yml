@@ -1,18 +1,18 @@
-watches:
-  sensors:
-    # Hardware sensors via hwmon/lm_sensors (temperature, fan RPM, voltage).
-    # Target a chip + label (run `sensors` to discover yours). No root required.
-    # Adjust `chip`/`label` and thresholds to your hardware, then enable.
-    monitor: disabled
-    interval: 1m
-    check:
-      type: sensors
-      chip: coretemp  # EXAMPLE — your hwmon chip (e.g. coretemp, k10temp)
-      label: Package  # EXAMPLE — sensor label within the chip
-      temp: { op: ">", value: 80 }  # °C
-      # fan: { op: "<", value: 500 }      # RPM
-      # voltage: { op: "<", value: 11.4 }  # volts
-    for: { cycles: 2 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-sensors-alert.sh]
+name: sensors
+category: hardware
+# Hardware sensors via hwmon/lm_sensors (temperature, fan RPM, voltage).
+# Target a chip + label (run `sensors` to discover yours). No root required.
+# Adjust `chip`/`label` and thresholds to your hardware, then enable.
+monitor: disabled
+interval: 1m
+check:
+  type: sensors
+  chip: coretemp  # EXAMPLE — your hwmon chip (e.g. coretemp, k10temp)
+  label: Package  # EXAMPLE — sensor label within the chip
+  temp: { op: ">", value: 80 }  # °C
+  # fan: { op: "<", value: 500 }      # RPM
+  # voltage: { op: "<", value: 11.4 }  # volts
+for: { cycles: 2 }
+then:
+  hook:
+    command: [/usr/local/bin/sermo-sensors-alert.sh]

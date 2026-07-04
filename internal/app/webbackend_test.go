@@ -580,6 +580,7 @@ func TestWebBackendWatchesExposeMonitorMode(t *testing.T) {
 		"watches": map[string]any{
 			"storage-root": map[string]any{
 				"display_name": "Root disk",
+				"category":     "storage",
 				"monitor":      config.MonitorDisabled,
 				"check":        map[string]any{"type": "storage", "path": "/"},
 			},
@@ -594,7 +595,7 @@ func TestWebBackendWatchesExposeMonitorMode(t *testing.T) {
 	if len(watches) != 1 {
 		t.Fatalf("got %d watches", len(watches))
 	}
-	if watches[0].DisplayName != "Root disk" || watches[0].Monitor != config.MonitorDisabled || watches[0].Monitored {
+	if watches[0].DisplayName != "Root disk" || watches[0].Category != "storage" || watches[0].Monitor != config.MonitorDisabled || watches[0].Monitored {
 		t.Fatalf("watch monitor view = %+v", watches[0])
 	}
 }

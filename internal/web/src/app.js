@@ -2651,9 +2651,11 @@ function watchSummaryText(w) {
 
 function watchSearchText(w) {
   const conditions = (w.conditions || []).map((c) => `${c.field || ""} ${c.op || ""} ${c.value || ""}`).join(" ");
+  const category = categoryOf(w, "watch");
   return [
     displayName(w),
     w.name,
+    category,
     w.check_type,
     watchSummaryText(w),
     w.interval,
@@ -3486,8 +3488,10 @@ function renderWatchExpansion(w, events) {
   const hook = (w.hook_command || []).length
     ? tpl`<code>${(w.hook_command || []).join(" ")}</code>`
     : (w.has_hook ? tpl`<span class="muted">configured</span>` : tpl`<span class="muted">none</span>`);
+  const category = categoryOf(w, "watch");
   const cfg = tpl`<div class="watch-grid">
     <div><span class="muted">Type</span><br><b>${w.check_type || ""}</b></div>
+    <div><span class="muted">Category</span><br>${categoryBadge(category)}</div>
     <div><span class="muted">Interval</span><br><b>${w.interval || ""}</b></div>
     <div><span class="muted">Fires</span><br><b>${polarity}</b></div>
     <div><span class="muted">State</span><br>${watchStateCell(w)}</div>

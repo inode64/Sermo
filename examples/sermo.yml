@@ -54,9 +54,9 @@ paths:
   storages:
     - /etc/sermo/storages  # storage docs: capacity and optional mount ops
   networks:
-    - /etc/sermo/networks  # network/uplink watch fragments
+    - /etc/sermo/networks  # network/uplink watch documents
   watches:
-    - /etc/sermo/watches  # generic host watch fragments
+    - /etc/sermo/watches  # generic host watch documents
   # The shipped examples under storages/, networks/ and watches/ use
   # `monitor: disabled` so copying them cannot immediately run hooks or send
   # notifications. After adapting thresholds, hooks and notify targets for the

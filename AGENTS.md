@@ -184,9 +184,10 @@ duplicate aliases for the same pidfile or socket.
 
 Use one YAML file per target — a single document of one kind per file, never
 several targets grouped together. A document's kind is derived from where it
-lives (catalog subdir / `paths.services` / `paths.storages`), so a top-level
-`kind:` is optional and omitted. Watch and notifier fragments still use a
-top-level `watches:` or `notifiers:` map, but that map must contain exactly one
+lives (catalog subdir / `paths.services` / `paths.storages` / `paths.networks` /
+`paths.watches`), so a top-level `kind:` is optional and omitted. Watch documents
+under `paths.networks` and `paths.watches` use top-level `name:` plus the watch fields; notifier fragments
+still use a top-level `notifiers:` map, but that map must contain exactly one
 named entry. The only exception is a clearly labeled reference bundle such as
 `docs/sermo-all.yml`, which groups examples so the full schema can be validated
 in one place.

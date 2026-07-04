@@ -18,6 +18,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			add("watches.%s must be a mapping", name)
 			continue
 		}
+		validateWatchMetadata(name, entry, add)
 		if mode, present := entry["monitor"]; present {
 			validateMonitorMode("watches."+name+".monitor", mode, add)
 		}
@@ -71,6 +72,16 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 				validateHookBlock("watches."+name, entry, false, false, defaultNotify, add)
 			} else {
 				add("watches.%s.check.type %q is not supported", name, cfgval.String(check["type"]))
+			}
+		}
+	}
+}
+
+func validateWatchMetadata(name string, entry map[string]any, add func(string, ...any)) {
+	for _, key := range []string{"display_name", "description", "category"} {
+		if v, present := entry[key]; present {
+			if _, ok := v.(string); !ok {
+				add("watches.%s.%s must be a string", name, key)
 			}
 		}
 	}

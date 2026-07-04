@@ -81,6 +81,7 @@ type webEntry struct {
 type webWatch struct {
 	name          string
 	displayName   string
+	category      string
 	checkType     string
 	interval      time.Duration
 	disabled      bool
@@ -393,6 +394,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			ww := &webWatch{
 				name:          name,
 				displayName:   config.DisplayName(entry, name),
+				category:      config.CategoryLabel(entry, "watch"),
 				checkType:     ctype,
 				interval:      iv,
 				disabled:      disabled,
@@ -804,6 +806,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		ww := web.Watch{
 			Name:          w.name,
 			DisplayName:   w.displayName,
+			Category:      w.category,
 			CheckType:     w.checkType,
 			Summary:       watchSummary(w, storage, liveSummary),
 			Interval:      iv,

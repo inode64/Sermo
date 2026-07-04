@@ -478,17 +478,46 @@ func TestMergeWizardWatchesAddsStoragesPath(t *testing.T) {
 	}
 }
 
+func TestMergeWizardWatchesWritesWatchDocuments(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "sermo.yml")
+	if err := os.WriteFile(cfgPath, []byte("engine:\n  interval: 30s\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	merged, err := mergeWizardWatches(cfgPath, "net", map[string]any{
+		"net-eth0": map[string]any{
+			"category": "network",
+			"check":    map[string]any{"type": "net", "interface": "eth0"},
+			"metrics":  map[string]any{"state": map[string]any{"expect": "up"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("mergeWizardWatches: %v", err)
+	}
+	if merged.PathKey != "networks" || len(merged.Files) != 1 {
+		t.Fatalf("merge result = %+v, want one networks file", merged)
+	}
+	data, err := os.ReadFile(filepath.Join(tmp, "networks", "net-eth0.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if strings.Contains(text, "watches:") || !strings.Contains(text, "name: net-eth0") || !strings.Contains(text, "category: network") {
+		t.Fatalf("watch document wrong: %s", text)
+	}
+}
+
 func TestWizardConfigDirNameUsesWatchType(t *testing.T) {
 	tests := []struct {
-		name     string
-		wizard   string
-		fragment map[string]any
-		want     string
+		name    string
+		wizard  string
+		entries map[string]any
+		want    string
 	}{
 		{
 			name:   "volume assistant writes storages directory",
 			wizard: "volume",
-			fragment: map[string]any{
+			entries: map[string]any{
 				"storage-root": map[string]any{"check": map[string]any{"type": "storage"}},
 			},
 			want: "storages",
@@ -496,7 +525,7 @@ func TestWizardConfigDirNameUsesWatchType(t *testing.T) {
 		{
 			name:   "net assistant writes networks directory",
 			wizard: "net",
-			fragment: map[string]any{
+			entries: map[string]any{
 				"net-eth0": map[string]any{"check": map[string]any{"type": "net"}},
 			},
 			want: "networks",
@@ -504,7 +533,7 @@ func TestWizardConfigDirNameUsesWatchType(t *testing.T) {
 		{
 			name:   "custom storage watch writes generic watches directory",
 			wizard: "custom wizard",
-			fragment: map[string]any{
+			entries: map[string]any{
 				"storage-root": map[string]any{"check": map[string]any{"type": "storage"}},
 			},
 			want: "watches",
@@ -512,7 +541,7 @@ func TestWizardConfigDirNameUsesWatchType(t *testing.T) {
 		{
 			name:   "missing type falls back to watches directory",
 			wizard: "custom wizard",
-			fragment: map[string]any{
+			entries: map[string]any{
 				"watch": map[string]any{},
 			},
 			want: "watches",
@@ -520,7 +549,7 @@ func TestWizardConfigDirNameUsesWatchType(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := wizardConfigDirName(tt.wizard, tt.fragment); got != tt.want {
+			if got := wizardConfigDirName(tt.wizard, tt.entries); got != tt.want {
 				t.Fatalf("wizardConfigDirName() = %q, want %q", got, tt.want)
 			}
 		})
@@ -531,15 +560,15 @@ func TestWizardCleanupDirsUsesCurrentOutputDirOnly(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
 	tests := []struct {
-		name     string
-		wizard   string
-		fragment map[string]any
-		want     []string
+		name    string
+		wizard  string
+		entries map[string]any
+		want    []string
 	}{
 		{
 			name:   "volume checks storages dir",
 			wizard: "volume",
-			fragment: map[string]any{
+			entries: map[string]any{
 				"storage-root": map[string]any{"check": map[string]any{"type": "storage"}},
 			},
 			want: []string{filepath.Join(tmp, "storages")},
@@ -547,7 +576,7 @@ func TestWizardCleanupDirsUsesCurrentOutputDirOnly(t *testing.T) {
 		{
 			name:   "net checks networks dir",
 			wizard: "net",
-			fragment: map[string]any{
+			entries: map[string]any{
 				"net-eth0": map[string]any{"check": map[string]any{"type": "net"}},
 			},
 			want: []string{filepath.Join(tmp, "networks")},
@@ -555,7 +584,7 @@ func TestWizardCleanupDirsUsesCurrentOutputDirOnly(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := wizardCleanupDirs(cfgPath, tt.wizard, tt.fragment)
+			got := wizardCleanupDirs(cfgPath, tt.wizard, tt.entries)
 			if strings.Join(got, "\n") != strings.Join(tt.want, "\n") {
 				t.Fatalf("wizardCleanupDirs() = %v, want %v", got, tt.want)
 			}
@@ -661,23 +690,30 @@ func TestPlanStaleMountDeletes(t *testing.T) {
 
 func TestParseWatchFile(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "w.yml")
-	body := "watches:\n" +
-		"  storage-data:\n    check: { type: storage, path: /data }\n" +
-		"  net-eth0:\n    check: { type: net, interface: eth0 }\n"
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+	storagePath := filepath.Join(dir, "storage.yml")
+	storageBody := "name: storage-data\ncheck: { type: storage, path: /data }\n"
+	if err := os.WriteFile(storagePath, []byte(storageBody), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	names, targets := parseWatchFile(path)
-	if strings.Join(names, ",") != "net-eth0,storage-data" {
-		t.Fatalf("names = %v, want sorted [net-eth0 storage-data]", names)
+	names, targets := parseWatchFile(storagePath)
+	if strings.Join(names, ",") != "storage-data" {
+		t.Fatalf("names = %v, want [storage-data]", names)
 	}
-	gotTargets := map[string]bool{}
-	for _, x := range targets {
-		gotTargets[x] = true
+	if len(targets) != 1 || targets[0] != "/data" {
+		t.Fatalf("targets = %v, want /data", targets)
 	}
-	if !gotTargets["/data"] || !gotTargets["eth0"] || len(targets) != 2 {
-		t.Fatalf("targets = %v, want /data and eth0", targets)
+
+	netPath := filepath.Join(dir, "net.yml")
+	netBody := "name: net-eth0\ncheck: { type: net, interface: eth0 }\n"
+	if err := os.WriteFile(netPath, []byte(netBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	names, targets = parseWatchFile(netPath)
+	if strings.Join(names, ",") != "net-eth0" {
+		t.Fatalf("names = %v, want [net-eth0]", names)
+	}
+	if len(targets) != 1 || targets[0] != "eth0" {
+		t.Fatalf("targets = %v, want eth0", targets)
 	}
 	// A missing file yields no names/targets rather than erroring.
 	if n, tg := parseWatchFile(filepath.Join(dir, "absent.yml")); n != nil || tg != nil {

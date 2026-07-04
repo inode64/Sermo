@@ -83,9 +83,9 @@ type Env struct {
 	ServiceNames     map[string]struct{}                // already-configured service names (collision check)
 }
 
-// Result is what an assistant produced: a fragment to merge under `watches:`
-// (watch name -> entry) and/or as kind:service files (`Services`: service name
-// -> body), plus a short human summary.
+// Result is what an assistant produced: watch entries that the CLI renders as
+// watch or storage documents, kind:service files (`Services`: service name ->
+// body), mount documents, plus a short human summary.
 type Result struct {
 	Watches  map[string]any
 	Services map[string]any
