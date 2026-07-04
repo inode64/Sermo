@@ -118,6 +118,52 @@ func TestStrictStringListStringSliceIsCopied(t *testing.T) {
 	}
 }
 
+func TestIsStringOrStringList(t *testing.T) {
+	cases := []struct {
+		name string
+		in   any
+		want bool
+	}{
+		{"string", "solo", true},
+		{"empty string", "", true},
+		{"list of strings", []any{"a", ""}, true},
+		{"empty list", []any{}, true},
+		{"list with non-string", []any{"a", 1}, false},
+		{"nil", nil, false},
+		{"integer", 1, false},
+		{"native string slice", []string{"a"}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := IsStringOrStringList(c.in); got != c.want {
+				t.Errorf("IsStringOrStringList(%#v) = %v, want %v", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+func TestIsNonEmptyStringArray(t *testing.T) {
+	cases := []struct {
+		name string
+		in   any
+		want bool
+	}{
+		{"list of strings", []any{"a", ""}, true},
+		{"empty list", []any{}, false},
+		{"list with non-string", []any{"a", 1}, false},
+		{"string", "solo", false},
+		{"nil", nil, false},
+		{"native string slice", []string{"a"}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := IsNonEmptyStringArray(c.in); got != c.want {
+				t.Errorf("IsNonEmptyStringArray(%#v) = %v, want %v", c.in, got, c.want)
+			}
+		})
+	}
+}
+
 func TestStringArray(t *testing.T) {
 	cases := []struct {
 		name string

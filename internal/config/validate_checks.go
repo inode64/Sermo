@@ -660,7 +660,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 	case "ports":
 		validatePortsFields(path, entry, add)
 	case "command":
-		if !isStringArray(entry["command"]) {
+		if !cfgval.IsNonEmptyStringArray(entry["command"]) {
 			add("%s command must be an array, not a shell string", path)
 		}
 		validateCommandUser(path, entry, add)
@@ -772,7 +772,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		if !hasCmd && !hasPath {
 			add("%s requires a command and/or path", path)
 		}
-		if hasCmd && !isStringArray(entry["command"]) {
+		if hasCmd && !cfgval.IsNonEmptyStringArray(entry["command"]) {
 			add("%s command must be an array, not a shell string", path)
 		}
 		if hasCmd {

@@ -395,7 +395,7 @@ func validateReload(tree map[string]any, backend string, add addFunc) {
 			}
 		}
 	case hasCmd:
-		if !isStringArray(r["command"]) {
+		if !cfgval.IsNonEmptyStringArray(r["command"]) {
 			add("reload.command must be an array, not a shell string")
 		} else if len(cfgval.StringArray(r["command"])) == 0 {
 			add("reload.command must not be empty")
@@ -455,7 +455,7 @@ func validateCommands(tree map[string]any, add addFunc) {
 			add("commands.%s must be a mapping", name)
 			continue
 		}
-		if !isStringArray(entry["command"]) {
+		if !cfgval.IsNonEmptyStringArray(entry["command"]) {
 			add("commands.%s command must be an array, not a shell string", name)
 		}
 		validateCommandUser("commands."+name, entry, add)

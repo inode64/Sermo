@@ -16,19 +16,6 @@ func underDir(path, dir string) bool {
 	return clean == dir || strings.HasPrefix(clean, dir+string(filepath.Separator))
 }
 
-func isStringArray(v any) bool {
-	list, ok := v.([]any)
-	if !ok || len(list) == 0 {
-		return false
-	}
-	for _, e := range list {
-		if _, ok := e.(string); !ok {
-			return false
-		}
-	}
-	return true
-}
-
 func set(values ...string) map[string]struct{} {
 	out := make(map[string]struct{}, len(values))
 	for _, v := range values {
