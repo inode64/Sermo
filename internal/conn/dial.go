@@ -60,7 +60,7 @@ func dialConn(ctx context.Context, cfg Config, port int) (net.Conn, error) {
 	switch normalizeTLS(cfg.TLS) {
 	case "":
 		return d.DialContext(ctx, "tcp", addr)
-	case "skip-verify":
+	case tlsSkipVerify:
 		tc := tlsClientConfig(host)
 		tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
 		return (&tls.Dialer{NetDialer: d, Config: tc}).DialContext(ctx, "tcp", addr)

@@ -161,8 +161,8 @@ func normalizeTLS(s string) string {
 		return ""
 	case "true", "yes", "on", "required":
 		return "true"
-	case "skip-verify":
-		return "skip-verify"
+	case tlsSkipVerify:
+		return tlsSkipVerify
 	default:
 		return s // allow a custom registered tls config name
 	}
