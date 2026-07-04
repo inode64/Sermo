@@ -523,7 +523,15 @@ func validateVersionsCurrentFromValue(path string, raw any, add addFunc) {
 
 func validateAppLinks(cfg *Config, doc *Document, scope string) []Issue {
 	var issues []Issue
-	for _, name := range cfgval.StringList(doc.Body["apps"]) {
+	raw, present := doc.Body["apps"]
+	if !present {
+		return issues
+	}
+	names, err := cfgval.StrictStringList(raw)
+	if err != nil {
+		return append(issues, Issue{Scope: scope, Msg: "apps must be a string or list of strings"})
+	}
+	for _, name := range names {
 		if name == "" || strings.Contains(name, "${") {
 			continue
 		}
