@@ -95,6 +95,32 @@ func StrictStringList(v any) ([]string, error) {
 	}
 }
 
+// IsStringOrStringList reports whether v is a YAML string or a YAML list whose
+// items are all strings.
+func IsStringOrStringList(v any) bool {
+	if _, ok := v.(string); ok {
+		return true
+	}
+	list, ok := v.([]any)
+	return ok && hasOnlyStrings(list)
+}
+
+// IsNonEmptyStringArray reports whether v is a non-empty YAML list whose items
+// are all strings.
+func IsNonEmptyStringArray(v any) bool {
+	list, ok := v.([]any)
+	return ok && len(list) > 0 && hasOnlyStrings(list)
+}
+
+func hasOnlyStrings(list []any) bool {
+	for _, item := range list {
+		if _, ok := item.(string); !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // StringArray coerces a list YAML field into a slice of non-empty strings.
 // Unlike StringList it does not accept a bare string, so it suits fields that
 // must be a list (a command's argv, a check's metric counters).
