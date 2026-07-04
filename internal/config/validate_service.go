@@ -138,7 +138,7 @@ func validateCleanOnStop(raw any, add addFunc) {
 			add("stop_policy.clean_on_stop[%d] has an empty path", i)
 			continue
 		}
-		if !strings.HasPrefix(path, "/") {
+		if !filepath.IsAbs(path) {
 			add("stop_policy.clean_on_stop[%d] path %q must be absolute", i, path)
 			continue
 		}
