@@ -454,7 +454,7 @@ func (c *Config) loadAppDir(dir string, recursive bool) error {
 }
 
 func (c *Config) loadNotifierDir(dir string, recursive bool) error {
-	return c.loadGlobalFragmentDirEntries(dir, "notifiers", recursive)
+	return c.loadNotifierDirEntries(dir, recursive)
 }
 
 func (c *Config) loadStorageDir(dir string, recursive bool) error {
@@ -473,7 +473,8 @@ func (c *Config) loadAppDirEntries(dir string, recursive bool) error {
 	return c.loadKindDirEntries(dir, "app", kindApp, recursive)
 }
 
-func (c *Config) loadGlobalFragmentDirEntries(dir string, section string, recursive bool) error {
+func (c *Config) loadNotifierDirEntries(dir string, recursive bool) error {
+	const section = "notifiers"
 	names, subdirs, err := configDirEntries(dir, section)
 	if err != nil {
 		return err
@@ -496,7 +497,7 @@ func (c *Config) loadGlobalFragmentDirEntries(dir string, section string, recurs
 		return nil
 	}
 	for _, name := range subdirs {
-		if err := c.loadGlobalFragmentDirEntries(filepath.Join(dir, name), section, recursive); err != nil {
+		if err := c.loadNotifierDirEntries(filepath.Join(dir, name), recursive); err != nil {
 			return err
 		}
 	}
