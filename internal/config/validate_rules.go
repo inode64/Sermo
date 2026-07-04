@@ -163,7 +163,7 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 		}
 
 		if _, present := entry["notify"]; present {
-			validateNotifySelection(path+".notify", cfgval.StringList(entry["notify"]), notifiers, add)
+			validateNotifySelection(path+".notify", entry["notify"], notifiers, add)
 		}
 
 		rtype := cfgval.String(entry["type"])

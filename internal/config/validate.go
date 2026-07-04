@@ -177,7 +177,7 @@ func validateGlobal(cfg *Config) []Issue {
 	validateNotifiers(notifiers, cfg.Global.TemplateDir(), add)
 
 	if _, present := raw["notify"]; present {
-		validateNotifySelection("notify", cfgval.StringList(raw["notify"]), notifierNames(notifiers), add)
+		validateNotifySelection("notify", raw["notify"], notifierNames(notifiers), add)
 	}
 
 	cooldown, present := defaultsCooldown(cfg.Global.Defaults)
@@ -741,7 +741,7 @@ func validateStorageUsage(usage map[string]any, notifiers map[string]struct{}, a
 		if !ok {
 			add("usage.then must be a mapping")
 		} else if _, present := then["notify"]; present {
-			validateNotifySelection("usage.then.notify", cfgval.StringList(then["notify"]), notifiers, add)
+			validateNotifySelection("usage.then.notify", then["notify"], notifiers, add)
 		}
 	}
 }

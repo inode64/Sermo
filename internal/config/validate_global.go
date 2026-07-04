@@ -145,9 +145,15 @@ func NotifyDefault(raw map[string]any) []string {
 }
 
 // validateNotifySelection validates a notify selection (a global `notify`, a
-// watch `then.notify`, or a rule `notify`): every name must be a defined notifier
-// or the `none` sentinel, and `none` cannot be combined with real names.
-func validateNotifySelection(prefix string, names []string, defined map[string]struct{}, add func(string, ...any)) {
+// watch `then.notify`, or a rule `notify`): it must be a string or string list,
+// every name must be a defined notifier or the `none` sentinel, and `none`
+// cannot be combined with real names.
+func validateNotifySelection(prefix string, raw any, defined map[string]struct{}, add func(string, ...any)) {
+	names, err := cfgval.StrictStringList(raw)
+	if err != nil {
+		add("%s must be a string or list of strings", prefix)
+		return
+	}
 	if slices.Contains(names, NotifyNone) && len(names) > 1 {
 		add("%s: %q cannot be combined with notifier names", prefix, NotifyNone)
 	}
@@ -170,7 +176,7 @@ func validateNotifyRefs(name string, entry map[string]any, notifiers map[string]
 			return
 		}
 		if _, present := t["notify"]; present {
-			validateNotifySelection(prefix+".then.notify", cfgval.StringList(t["notify"]), notifiers, add)
+			validateNotifySelection(prefix+".then.notify", t["notify"], notifiers, add)
 		}
 	}
 	check("watches."+name, entry["then"])

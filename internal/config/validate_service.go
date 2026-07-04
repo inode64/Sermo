@@ -45,7 +45,7 @@ func validateServiceMonitors(tree map[string]any, notifiers map[string]struct{},
 			continue
 		}
 		if _, present := ocMap["notify"]; present {
-			validateNotifySelection(key+".on_change.notify", cfgval.StringList(ocMap["notify"]), notifiers, add)
+			validateNotifySelection(key+".on_change.notify", ocMap["notify"], notifiers, add)
 		}
 		// `level` selects version-change granularity and only applies to the
 		// version monitor, which compares version_short at major/minor/patch.

@@ -44,18 +44,20 @@ func TestValidateNotifySelection(t *testing.T) {
 	defined := map[string]struct{}{"ops": {}, "oncall": {}}
 	cases := []struct {
 		name    string
-		names   []string
+		raw     any
 		wantSub string // "" = expect no issue
 	}{
 		{"valid names", []string{"ops", "oncall"}, ""},
+		{"scalar name", "ops", ""},
 		{"none alone", []string{"none"}, ""},
 		{"unknown", []string{"ghost"}, "references unknown notifier"},
 		{"none mixed", []string{"none", "ops"}, "cannot be combined with notifier names"},
+		{"invalid list item", []any{"ops", 7}, "must be a string or list of strings"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			issues := collect(func(add func(string, ...any)) {
-				validateNotifySelection("notify", c.names, defined, add)
+				validateNotifySelection("notify", c.raw, defined, add)
 			})
 			joined := strings.Join(issues, "\n")
 			if c.wantSub == "" {
