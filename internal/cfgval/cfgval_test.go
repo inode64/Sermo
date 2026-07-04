@@ -211,7 +211,9 @@ func TestIsNonEmptyStringArray(t *testing.T) {
 		in   any
 		want bool
 	}{
-		{"list of strings", []any{"a", ""}, true},
+		{"list of strings", []any{"a", "b"}, true},
+		{"list with empty string", []any{"a", ""}, false},
+		{"list with only empty string", []any{""}, false},
 		{"empty list", []any{}, false},
 		{"list with non-string", []any{"a", 1}, false},
 		{"string", "solo", false},
