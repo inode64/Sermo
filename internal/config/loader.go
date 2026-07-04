@@ -462,27 +462,10 @@ func (c *Config) loadStorageDir(dir string, recursive bool) error {
 }
 
 func (c *Config) loadServiceDirEntries(dir string, recursive bool) error {
-	entries, err := os.ReadDir(dir)
+	names, subdirs, err := configDirEntries(dir, "service")
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("read service config dir %s: %w", dir, err)
+		return err
 	}
-
-	var names []string
-	var subdirs []string
-	for _, e := range entries {
-		if e.IsDir() {
-			subdirs = append(subdirs, e.Name())
-			continue
-		}
-		if isYAML(e.Name()) {
-			names = append(names, e.Name())
-		}
-	}
-	sort.Strings(names)
-	sort.Strings(subdirs)
 
 	for _, name := range names {
 		doc, err := loadDocument(filepath.Join(dir, name))
@@ -506,27 +489,10 @@ func (c *Config) loadServiceDirEntries(dir string, recursive bool) error {
 }
 
 func (c *Config) loadAppDirEntries(dir string, recursive bool) error {
-	entries, err := os.ReadDir(dir)
+	names, subdirs, err := configDirEntries(dir, "app")
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("read app config dir %s: %w", dir, err)
+		return err
 	}
-
-	var names []string
-	var subdirs []string
-	for _, e := range entries {
-		if e.IsDir() {
-			subdirs = append(subdirs, e.Name())
-			continue
-		}
-		if isYAML(e.Name()) {
-			names = append(names, e.Name())
-		}
-	}
-	sort.Strings(names)
-	sort.Strings(subdirs)
 
 	for _, name := range names {
 		doc, err := loadDocument(filepath.Join(dir, name))
@@ -550,27 +516,10 @@ func (c *Config) loadAppDirEntries(dir string, recursive bool) error {
 }
 
 func (c *Config) loadGlobalFragmentDirEntries(dir string, section string, recursive bool) error {
-	entries, err := os.ReadDir(dir)
+	names, subdirs, err := configDirEntries(dir, section)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("read %s config dir %s: %w", section, dir, err)
+		return err
 	}
-
-	var names []string
-	var subdirs []string
-	for _, e := range entries {
-		if e.IsDir() {
-			subdirs = append(subdirs, e.Name())
-			continue
-		}
-		if isYAML(e.Name()) {
-			names = append(names, e.Name())
-		}
-	}
-	sort.Strings(names)
-	sort.Strings(subdirs)
 
 	for _, name := range names {
 		doc, err := loadDocument(filepath.Join(dir, name))
@@ -603,27 +552,10 @@ func (c *Config) loadGlobalFragmentDirEntries(dir string, section string, recurs
 }
 
 func (c *Config) loadStorageDirEntries(dir string, recursive bool) error {
-	entries, err := os.ReadDir(dir)
+	names, subdirs, err := configDirEntries(dir, "storage")
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("read storage config dir %s: %w", dir, err)
+		return err
 	}
-
-	var names []string
-	var subdirs []string
-	for _, e := range entries {
-		if e.IsDir() {
-			subdirs = append(subdirs, e.Name())
-			continue
-		}
-		if isYAML(e.Name()) {
-			names = append(names, e.Name())
-		}
-	}
-	sort.Strings(names)
-	sort.Strings(subdirs)
 
 	for _, name := range names {
 		doc, err := loadDocument(filepath.Join(dir, name))
@@ -647,27 +579,10 @@ func (c *Config) loadStorageDirEntries(dir string, recursive bool) error {
 }
 
 func (c *Config) loadCategoryDir(dir, category string, recursive bool) error {
-	entries, err := os.ReadDir(dir)
+	names, subdirs, err := configDirEntries(dir, "")
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("read config dir %s: %w", dir, err)
+		return err
 	}
-
-	names := make([]string, 0, len(entries))
-	var subdirs []string
-	for _, e := range entries {
-		if e.IsDir() {
-			subdirs = append(subdirs, e.Name())
-			continue
-		}
-		if isYAML(e.Name()) {
-			names = append(names, e.Name())
-		}
-	}
-	sort.Strings(names)
-	sort.Strings(subdirs)
 
 	if category == "" && len(names) > 0 {
 		return fmt.Errorf("%s: catalog documents must live under services, apps, libs, or patterns", filepath.Join(dir, names[0]))
@@ -699,6 +614,33 @@ func (c *Config) loadCategoryDir(dir, category string, recursive bool) error {
 		}
 	}
 	return nil
+}
+
+func configDirEntries(dir, label string) (names, subdirs []string, err error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil, nil
+		}
+		if label == "" {
+			return nil, nil, fmt.Errorf("read config dir %s: %w", dir, err)
+		}
+		return nil, nil, fmt.Errorf("read %s config dir %s: %w", label, dir, err)
+	}
+
+	names = make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			subdirs = append(subdirs, e.Name())
+			continue
+		}
+		if isYAML(e.Name()) {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	sort.Strings(subdirs)
+	return names, subdirs, nil
 }
 
 func (c *Config) mergeWatchDocument(doc *Document) error {
