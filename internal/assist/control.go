@@ -2,7 +2,6 @@ package assist
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -111,14 +110,9 @@ func controlledResult(services map[string]any) (Result, error) {
 	if len(services) == 0 {
 		return Result{}, nil
 	}
-	names := make([]string, 0, len(services))
-	for name := range services {
-		names = append(names, name)
-	}
-	sort.Strings(names)
 	return Result{
 		Services: services,
-		Summary:  fmt.Sprintf("%d service(s): %s", len(names), strings.Join(names, ", ")),
+		Summary:  resultSummary("service", services),
 	}, nil
 }
 

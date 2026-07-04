@@ -1,6 +1,9 @@
 package assist
 
 import (
+	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -107,4 +110,9 @@ func watchThen(notifiers []string) map[string]any {
 		then["notify"] = notifiers
 	}
 	return then
+}
+
+func resultSummary(noun string, entries map[string]any) string {
+	names := slices.Sorted(maps.Keys(entries))
+	return fmt.Sprintf("%d %s(s): %s", len(names), noun, strings.Join(names, ", "))
 }
