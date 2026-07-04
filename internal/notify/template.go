@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -46,11 +47,7 @@ func (d templateData) Field(name string) string {
 
 // SortedFields returns structured fields in stable order.
 func (d templateData) SortedFields() []TemplateField {
-	names := make([]string, 0, len(d.fields))
-	for name := range d.fields {
-		names = append(names, name)
-	}
-	slices.Sort(names)
+	names := slices.Sorted(maps.Keys(d.fields))
 	out := make([]TemplateField, 0, len(names))
 	for _, name := range names {
 		out = append(out, TemplateField{Name: name, Value: d.fields[name]})
