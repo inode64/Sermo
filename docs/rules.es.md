@@ -243,9 +243,11 @@ config:
   ```
 
 `on_change.notify` sigue la precedencia de notificación habitual (omítelo para heredar el
-default global `notify`, o `none` para suprimir). Los tipos de comprobación subyacentes `command` (`on_change`)
-y `config` también pueden usarse directamente en `watches:` cuando quieras un
-hook o un comando independiente.
+default global `notify`, o `none` para suprimir). Un `dry_run: true` de service suprime
+la entrega de notificaciones no-console para estos monitores del service; `wall` sigue
+entregándose. Los tipos de comprobación subyacentes `command` (`on_change`) y `config`
+también pueden usarse directamente en `watches:` cuando quieras un hook o un comando
+independiente.
 
 ### Interfaz de salida (`interface`)
 
@@ -1861,9 +1863,10 @@ los timestamps de acciones recientes usados por `max_actions`, y el backoff actu
 reinicio de `sermod`, así que reiniciar el daemon no evita el cooldown ni los límites de
 tasa.
 
-Usa `remediation.shadow: true` cuando quieras que estas reglas de remediación de servicio
-evalúen ventanas, guards y política sin ejecutar la operación
-start/stop/restart/reload/resume resultante. Emite eventos `shadow` y no
-avanza el estado de cooldown de remediación en vivo. El `then.dry_run: true` del watch de host es
-separado: omite las acciones `hook`, `notify` y `expand` del watch;
-ver [configuración](configuration.es.md#host-watches) para ejemplos.
+Usa `dry_run: true` en un service (o en `defaults`) cuando quieras que las reglas
+de remediación evalúen ventanas, guards y política sin ejecutar la operación
+start/stop/restart/reload/resume resultante. Emite eventos `dry-run` y no avanza
+el estado de cooldown de remediación en vivo. Dry-run también suprime las
+notificaciones automáticas de reglas salvo `wall`; las acciones manuales del
+operador no se ven afectadas. Ver [configuración](configuration.es.md#host-watches)
+para ejemplos de watches y defaults globales.

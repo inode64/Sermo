@@ -1344,6 +1344,8 @@ genéricos, pero los **nombres reservados** son consumidos por features:
   Ese monitor compara el `version_short` numérico, y un opcional
   `version.on_change.level` (`major`/`minor`/`patch`, por defecto `patch`) selecciona en
   qué granularidad `a.b.c` debería alertar un cambio.
+  El monitor hereda el `dry_run` del service, por lo que la entrega de notificaciones
+  no-console se suprime mientras el service esté en dry-run.
   Cuando ambos existen, `preflight.version` tiene precedencia sobre `commands.version`.
   También declaran variables `version` y `version_short` con valores por defecto vacíos
   para expansión; las apps enlazadas las exponen a los servicios como `${app_version}` y

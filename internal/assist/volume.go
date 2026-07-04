@@ -132,7 +132,7 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 			"value": s.value,
 		},
 	}
-	then := watchThen(s.notifiers, s.dryRun)
+	then := watchThen(s.notifiers)
 	if s.expand {
 		then["expand"] = map[string]any{"by": s.expandBy}
 	}
@@ -144,6 +144,7 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 		entry["policy"] = map[string]any{"cooldown": s.cooldown}
 	}
 	s.Monitoring.apply(entry)
+	applyDryRun(entry, s.dryRun)
 	return entry
 }
 

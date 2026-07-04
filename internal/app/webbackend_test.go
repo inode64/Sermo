@@ -1405,6 +1405,7 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 		"watches": map[string]any{
 			"storage-data": map[string]any{
 				"interval": "45s",
+				"dry_run":  true,
 				"check": map[string]any{
 					"type":     "storage",
 					"path":     "/data",
@@ -1416,9 +1417,8 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 					},
 				},
 				"then": map[string]any{
-					"dry_run": true,
-					"notify":  []any{"ops", "pager"},
-					"expand":  map[string]any{"by": "5G"},
+					"notify": []any{"ops", "pager"},
+					"expand": map[string]any{"by": "5G"},
 					"hook": map[string]any{
 						"command": []any{"/usr/local/bin/sermo-disk-alert", "--path", "/data"},
 					},

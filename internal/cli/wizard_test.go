@@ -204,7 +204,7 @@ func TestRunWizardDockerWritesService(t *testing.T) {
 		"1", // select docker-web
 		"1", // monitor enabled
 		"",  // interval inherit
-		"n", // no shadow
+		"n", // no dry-run
 		"y", // write service file
 	}, "\n") + "\n"
 
@@ -261,7 +261,7 @@ func TestRunWizardVMWritesService(t *testing.T) {
 		"1", // select vm-web01
 		"1", // monitor enabled
 		"",  // interval inherit
-		"n", // no shadow
+		"n", // no dry-run
 		"y", // write service file
 	}, "\n") + "\n"
 

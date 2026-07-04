@@ -47,11 +47,10 @@ and the invariants below, and update this file in the same change.
    for the same reason.
 7. **Wizard-specific options.** For watches: thresholds (`volume`), metrics
    (`net`), probes (`uplink`), the **notifier** question (`chooseNotifiers`),
-   and the optional `then.dry_run` rehearsal flag when the generated `then`
-   block has a real action to skip. For services: ask whether service
-   remediation should start in `shadow` mode (`remediation.shadow: true`) after
-   the shared monitor/interval answers. For mounts: ask only mount-specific
-   safety options such as whether Sermo should use refcounting; the wizard keeps
+   and the optional target-level `dry_run` flag when the generated watch has a
+   real automatic action to skip. For services: ask whether automatic actions
+   should start in dry-run mode after the shared monitor/interval answers. For
+   mounts: ask only mount-specific safety options such as whether Sermo should use refcounting; the wizard keeps
    `allow_sigkill` and lazy unmount disabled.
 8. **Preview & accept.** Render the YAML that will be written and confirm.
 9. **Cleanup.** Offer to delete managed files whose target is **no longer
@@ -92,17 +91,15 @@ settings in this shared/per-target shape.
   carries the step-5/6 answers via `Monitoring.apply`
   (`internal/assist/common.go`). Mount files are not monitored entries
   and must not carry `monitor:` or `interval:`.
-- **Dry-run is watch-local.** Watch assistants ask for `then.dry_run` only when
-  the chosen `then` block has a real side effect (`notify`, inherited global
-  notify, or native `expand`). `dry_run` never stands alone as the only action.
-- **Shadow is service-local.** The service assistant asks whether to write
-  `remediation: {shadow: true}` for each generated service (or once for the
-  selected batch). This rehearses service remediation rules and operations; it
-  does not suppress host watch actions.
+- **Dry-run is target-level.** Watch assistants ask for `dry_run: true` only when
+  the generated watch has a real automatic side effect (`notify`, inherited
+  global notify, native `expand`, or native `kill`). Service assistants ask the
+  same question for automatic service actions. The flag is written on the
+  service or watch entry itself, never inside `then`.
 - **Batch service setup avoids port noise.** When several catalog services are
   selected, the service assistant asks whether to review per-service port
   overrides. The default is no: generated services inherit catalog ports and the
-  wizard moves straight to the shared monitor/interval/shadow questions. Select
+  wizard moves straight to the shared monitor/interval/dry-run questions. Select
   review only when the host runs a service on a non-catalog port.
 - **Interface shortcuts.** Network assistants accept the keyword `active` at the
   interface multi-select prompt to pick only currently up non-loopback

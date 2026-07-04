@@ -643,7 +643,7 @@ checklist). Match the suite's existing style instead of inventing one.
    before the shared engine runs. Manual operator commands are exempt from
    cooldown but still subject to locks, guards and preflight.
 9. Always log whether an action was executed or blocked, and why. Today that
-   means daemon events (`action`, `blocked`, `shadow`, `suppressed`, …) via the
+   means daemon events (`action`, `blocked`, `dry-run`, `suppressed`, …) via the
    in-process event log (web UI / `sermoctl activity`) and explicit CLI status
    output for manual operations. Append-only `access.log` / `event.log` export
    is future work ([TODO.md](TODO.md)); do not bypass the existing event/CLI

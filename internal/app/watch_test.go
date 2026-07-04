@@ -254,6 +254,32 @@ func TestWatchDryRunSkipsHookNotifyAndExpand(t *testing.T) {
 	}
 }
 
+func TestWatchDryRunSendsOnlyWallNotify(t *testing.T) {
+	email := &fakeNotifier{name: "ops-email", typ: "email"}
+	wall := &fakeNotifier{name: "wall", typ: "wall"}
+	var events []Event
+	w := &Watch{
+		Name:      "dry-storage",
+		CheckType: "storage",
+		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/data"}},
+		Notifiers: []notify.Notifier{email, wall},
+		DryRun:    true,
+		Emit:      func(e Event) { events = append(events, e) },
+	}
+
+	w.RunCycle(context.Background())
+
+	if len(email.msgs) != 0 {
+		t.Fatalf("dry-run must suppress non-console notifications, got %d", len(email.msgs))
+	}
+	if len(wall.msgs) != 1 {
+		t.Fatalf("dry-run must still send wall notification, got %d", len(wall.msgs))
+	}
+	if !hasEventKind(events, "notify") {
+		t.Fatalf("wall notification should emit notify event, got %v", events)
+	}
+}
+
 func TestWatchStartupObserveOnlySkipsFiring(t *testing.T) {
 	n := &fakeNotifier{name: "ops"}
 	var events []Event

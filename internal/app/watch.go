@@ -51,7 +51,7 @@ type Watch struct {
 	// the notification as a reminder once that interval elapses.
 	NotifyInterval time.Duration
 	// DryRun keeps watch evaluation and firing events active, but reports the
-	// configured actions without executing hook, notify or expand side effects.
+	// configured actions without executing hook, non-console notify or expand side effects.
 	DryRun   bool
 	Interval time.Duration
 	Now      func() time.Time
@@ -133,8 +133,12 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	// Alerts/Watches counts, failed filter) and in the event log even for
 	// bare watches that have no `then` (pure monitor-only / alert-only case).
 	w.emit(Event{Watch: w.Name, Kind: "firing", Message: res.Message, Output: resultOutput(res)})
+	env := hookEnv(w.Name, w.CheckType, res)
 	if w.DryRun {
 		w.emit(Event{Watch: w.Name, Kind: "dry-run", Message: w.dryRunMessage()})
+		if w.shouldNotify(wasFiring) {
+			dispatchDryRunNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
+		}
 		return
 	}
 	if w.InPanic != nil && w.InPanic() {
@@ -145,7 +149,6 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	if w.Expand != nil && w.Expander != nil {
 		w.runExpand(ctx, res)
 	}
-	env := hookEnv(w.Name, w.CheckType, res)
 	if len(w.Hook.Command) > 0 {
 		runner := defaultHookRunner(w.Runner)
 		if err := w.Hook.Run(ctx, runner, env); err != nil {
@@ -284,13 +287,28 @@ func (w *Watch) emit(e Event) {
 // failed delivery is reported but never aborts the cycle (other targets and the
 // hook still run) — notifications are best-effort.
 func dispatchNotify(ctx context.Context, notifiers []notify.Notifier, msg notify.Message, watch string, emit func(Event)) {
+	dispatchNotifyFiltered(ctx, notifiers, msg, watch, emit, nil)
+}
+
+func dispatchDryRunNotify(ctx context.Context, notifiers []notify.Notifier, msg notify.Message, watch string, emit func(Event)) {
+	dispatchNotifyFiltered(ctx, notifiers, msg, watch, emit, dryRunConsoleNotifier)
+}
+
+func dispatchNotifyFiltered(ctx context.Context, notifiers []notify.Notifier, msg notify.Message, watch string, emit func(Event), allow func(notify.Notifier) bool) {
 	for _, n := range notifiers {
+		if allow != nil && !allow(n) {
+			continue
+		}
 		if err := n.Send(ctx, msg); err != nil {
 			emit(Event{Watch: watch, Kind: "notify-failed", Message: n.Name() + ": " + err.Error()})
 		} else {
 			emit(Event{Watch: watch, Kind: "notify", Message: "notified " + n.Name()})
 		}
 	}
+}
+
+func dryRunConsoleNotifier(n notify.Notifier) bool {
+	return n != nil && n.Type() == "wall"
 }
 
 // watchMessage builds a notification from a fired watch's message and hook env.

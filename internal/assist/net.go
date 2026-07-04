@@ -155,7 +155,7 @@ func askNetSettings(p *Prompt, env Env, label string) (netSettings, error) {
 
 func buildNetWatch(iface Iface, s netSettings) map[string]any {
 	newThen := func() map[string]any {
-		return watchThen(s.notifiers, s.dryRun)
+		return watchThen(s.notifiers)
 	}
 	metrics := map[string]any{}
 	for _, m := range s.metrics {
@@ -193,5 +193,6 @@ func buildNetWatch(iface Iface, s netSettings) map[string]any {
 		"metrics": metrics,
 	}
 	s.Monitoring.apply(entry)
+	applyDryRun(entry, s.dryRun)
 	return entry
 }

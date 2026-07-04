@@ -43,6 +43,14 @@ var validGlobalPathKeys = set(
 	"watches",
 )
 
+var validDefaultsKeys = set(
+	"dry_run",
+	"policy",
+	"rule_window",
+	"stop_policy",
+	"variables",
+)
+
 // Validate returns all schema and safety issues for a loaded config. An empty
 // slice means the current validators accept the configuration.
 func Validate(cfg *Config) []Issue {
@@ -180,7 +188,13 @@ func validateGlobal(cfg *Config) []Issue {
 		add("defaults.policy.cooldown %q must be a valid positive duration", cooldown)
 	}
 
+	validateDefaultsKeys(cfg.Global.Defaults, add)
 	validateDefaultsVariables(cfg.Global.Defaults, add)
+	if v, present := cfg.Global.Defaults["dry_run"]; present {
+		if _, ok := v.(bool); !ok {
+			add("defaults.dry_run must be a boolean")
+		}
+	}
 	// Nested-${} in a custom variable value, and any undefined ${var} used in a
 	// watch, surface here (services get this via validateServices->Resolve).
 	for _, e := range validateVariableValues(cfg.globalVars()) {
@@ -197,6 +211,14 @@ func validateGlobal(cfg *Config) []Issue {
 	}
 
 	return issues
+}
+
+func validateDefaultsKeys(defaults map[string]any, add func(string, ...any)) {
+	for _, key := range slices.Sorted(maps.Keys(defaults)) {
+		if _, ok := validDefaultsKeys[key]; !ok {
+			add("defaults.%s is not supported", key)
+		}
+	}
 }
 
 // registryLabel turns a document's registry namespace (registryKey) into the
@@ -632,7 +654,7 @@ func validateStorage(name string, tree map[string]any, notifiers map[string]stru
 		issues = append(issues, Issue{Scope: "storage " + name, Msg: fmt.Sprintf(format, args...)})
 	}
 
-	allowed := set("name", "display_name", "description", "category", "path", "monitor", "interval", "capacity", "usage", "mount", "variables", "os")
+	allowed := set("name", "display_name", "description", "category", "path", "dry_run", "monitor", "interval", "capacity", "usage", "mount", "variables", "os")
 	for _, key := range slices.Sorted(maps.Keys(tree)) {
 		if _, ok := allowed[key]; !ok {
 			add("key %q is not supported for kind: storage", key)
@@ -647,6 +669,11 @@ func validateStorage(name string, tree map[string]any, notifiers map[string]stru
 	}
 	if mode, present := tree["monitor"]; present {
 		validateMonitorMode("monitor", mode, add)
+	}
+	if v, present := tree["dry_run"]; present {
+		if _, ok := v.(bool); !ok {
+			add("dry_run must be a boolean")
+		}
 	}
 	if v, present := tree["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
 		add("interval %q must be a valid positive duration", cfgval.String(v))
@@ -690,7 +717,7 @@ func validateStorageCapacity(name, path string, tree, capacity map[string]any, n
 		}
 	}
 	entry := map[string]any{"check": check}
-	for _, key := range []string{"monitor", "interval"} {
+	for _, key := range []string{"dry_run", "monitor", "interval"} {
 		if v, present := tree[key]; present {
 			entry[key] = v
 		}
@@ -827,6 +854,14 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 
 	if mode, present := tree["monitor"]; present {
 		validateMonitorMode("monitor", mode, add)
+	}
+	if v, present := tree["dry_run"]; present {
+		if _, ok := v.(bool); !ok {
+			add("dry_run must be a boolean")
+		}
+	}
+	if _, present := tree["remediation"]; present {
+		add("remediation is not supported; use top-level dry_run")
 	}
 
 	cooldown, present := policyCooldown(tree)

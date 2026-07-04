@@ -105,6 +105,81 @@ checks:
 	}
 }
 
+func TestResolveDryRunDefaultsTargets(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+engine:
+  backend: auto
+paths:
+  catalog: [ @ROOT@/catalog ]
+  services: [ @ROOT@/services ]
+  storages: [ @ROOT@/storages ]
+  runtime: /run/sermo
+defaults:
+  dry_run: true
+  policy: { cooldown: 5m }
+watches:
+  load-live:
+    dry_run: false
+    check:
+      type: load
+      load1: { op: ">", value: 10 }
+    then: { notify: [none] }
+`,
+		"catalog/services/demo.yml": `
+name: demo
+service: demo
+`,
+		"services/demo.yml": `
+name: demo
+uses: demo
+`,
+		"storages/data.yml": `
+name: data
+path: /data
+capacity:
+  used_pct: { op: ">=", value: "90%" }
+`,
+	})
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	svc, errs := cfg.Resolve("demo")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	if !DryRun(svc.Tree) {
+		t.Fatal("service should inherit defaults.dry_run")
+	}
+	storage, errs := cfg.ResolveStorage("data")
+	if len(errs) != 0 {
+		t.Fatalf("ResolveStorage() errors = %v", errs)
+	}
+	if !DryRun(storage.Tree) {
+		t.Fatal("storage should inherit defaults.dry_run")
+	}
+	watches, errs := cfg.ResolveWatches()
+	if len(errs) != 0 {
+		t.Fatalf("ResolveWatches() errors = %v", errs)
+	}
+	watch, ok := watches["load-live"].(map[string]any)
+	if !ok {
+		t.Fatalf("watch not resolved: %v", watches)
+	}
+	if DryRun(watch) {
+		t.Fatal("watch dry_run false should override defaults.dry_run")
+	}
+	capacity, ok := watches["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("storage capacity watch not resolved: %v", watches)
+	}
+	if !DryRun(capacity) {
+		t.Fatal("storage capacity watch should inherit storage/defaults dry_run")
+	}
+}
+
 func TestCatalogAliasResolvesUsesAndCatalogLookup(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
@@ -1510,6 +1585,7 @@ paths:
   templates: relative/templates
   unexpected: /tmp/sermo
 defaults:
+  mystery: true
   policy:
     cooldown: 0s
 security:
@@ -1528,6 +1604,7 @@ security:
 		"paths.templates",
 		"paths.unexpected is not supported",
 		"security.allow_sigkill_by_default",
+		"defaults.mystery is not supported",
 		"defaults.policy.cooldown",
 	}
 	for _, want := range wantSubstrings {

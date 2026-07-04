@@ -321,7 +321,7 @@ Section id: `events-section`
 
 | Parte | Representación actual |
 | --- | --- |
-| Título | `Events` más nota de eventos shadow |
+| Título | `Events` más nota de eventos dry-run |
 | Controles | service, watch, kind, status, only errors, acciones de grupo, restablecer filtros, corte `before` opcional, limpiar log (admin) |
 | Tabla | filas de evento agrupadas por acción cuando está habilitado |
 | Límite | últimos eventos coincidentes |
@@ -337,7 +337,7 @@ Notas editables:
   igual que `sermoctl events clear`. Un campo opcional **before** pasa
   `?before=TIME` (duración o RFC3339) para podar solo las filas más antiguas.
 - El filtro `kind` cubre los tipos de evento emitidos: `cycle`, `action`,
-  `suppressed`, `shadow`, `alert`, `error`, `firing`, `recovered`, `dry-run`,
+  `suppressed`, `alert`, `error`, `firing`, `recovered`, `dry-run`,
   `reload` (una recarga de configuración correcta del daemon en ejecución),
   `hook`/`hook-failed`, `notify`/`notify-failed`, `expand`/`expand-skipped`/`expand-failed`,
   y `cascade` (una operación de servicio activada mediante una acción en cascada).

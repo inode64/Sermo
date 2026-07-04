@@ -58,6 +58,7 @@ type webEntry struct {
 	unit              string
 	backend           string
 	interval          time.Duration // resolved per-service cycle cadence (own interval or engine default)
+	dryRun            bool
 	policyCooldown    time.Duration
 	engine            operation.Engine
 	status            func(context.Context) (servicemgr.Status, error)
@@ -318,6 +319,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			unit:              target.Unit,
 			backend:           string(target.Backend),
 			interval:          iv,
+			dryRun:            config.DryRun(resolved.Tree),
 			policyCooldown:    rules.ParsePolicy(resolved.Tree).Cooldown,
 			noResidentProcess: noResidentProcess(resolved.Tree),
 			alsoApply:         config.CascadeTargets(resolved.Tree),
@@ -374,7 +376,6 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			var hookCommand []string
 			var notifierNames []string
 			var expand *ExpandSpec
-			dryRun := false
 			if then, ok := entry["then"].(map[string]any); ok {
 				if h, ok := then["hook"].(map[string]any); ok && len(h) > 0 {
 					if cmd := h["command"]; cmd != nil {
@@ -383,7 +384,6 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 					}
 				}
 				notifierNames = effectiveNotify(cfgval.StringList(then["notify"]), deps.GlobalNotify)
-				dryRun = cfgval.Bool(then["dry_run"])
 				if parsed, err := parseExpand(then, ctype); err != nil {
 					warnings = append(warnings, "watch "+name+": "+err.Error())
 				} else {
@@ -401,7 +401,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 				hasHook:       hasHook,
 				hookCommand:   hookCommand,
 				notifiers:     notifierNames,
-				dryRun:        dryRun,
+				dryRun:        config.DryRun(entry),
 				notifierCount: len(notifierNames),
 				check:         checkMap(entry),
 				metrics:       metricsMap(entry),
@@ -486,6 +486,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		Backend:           e.backend,
 		Unit:              e.unit,
 		Enabled:           !e.disabled,
+		DryRun:            e.dryRun,
 		Monitored:         true, // no recorded state defaults to monitored
 		CanReload:         e.canReload,
 		NoResidentProcess: e.noResidentProcess,

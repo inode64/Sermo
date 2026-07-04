@@ -34,7 +34,7 @@ unverified listener.
 - If a serious error appears, stop the run, do not continue with the next destructive or state-changing step, and report the actions already performed.
 - Treat broken basic commands (`cp`, `cat`, `ls`), failed remote shell startup, or an unexpected SSH disconnect during setup/validation as critical errors. Stop immediately and report what was already done.
 - Never configure or execute `then.hook` during remote tests. Hooks can alter the server.
-- To verify alert triggering without side effects, prefer alert-only watches or `then.dry_run: true` with a `notify` selection. Dry run logs/events what would happen and skips hook, notify delivery, and expand.
+- To verify alert triggering without non-console side effects, prefer alert-only watches or target-level `dry_run: true` with a `notify` selection. Dry run logs/events what would happen and skips hook, expand, kill and non-wall notify delivery.
 
 ## Local Preparation
 
@@ -229,7 +229,7 @@ capacity:
 
   If real notification delivery is part of the requested remote installation,
   attach the selected notifier or inherit the configured global notify. If the
-  run is only validating routing, use `then.dry_run: true`; otherwise keep the
+  run is only validating routing, use target-level `dry_run: true`; otherwise keep the
   storage target alert-only or monitor-only according to the requested mode.
 - Include `mount:` blocks for network and USB mount targets that are declared
   in `/etc/fstab`, writing one storage file per target under `paths.storages`. Detect them
@@ -289,12 +289,12 @@ watches:
   configured global notify, only when real delivery is part of the requested
   remote installation. If real notification delivery was not explicitly
   requested, keep these watches alert-only, `then.notify: [none]`, or
-  `then.dry_run: true` with the selected notifier.
+  target-level `dry_run: true` with the selected notifier.
 - Prefer portable, conservative thresholds suitable for validation, not
   remediation, across every generated watch type. Choose the predicate names and
   event semantics from the run-time inventory, docs and validation code for that
   exact checkout. Do not add hooks. If notifications are requested only to test
-  routing, use `then.dry_run: true`.
+  routing, use target-level `dry_run: true`.
 - For complete configs that will be run under `sermod`, add monitor-only
   sustained host checks for the validation window across all discovered watch
   types that represent pressure, depletion or saturation. Apply `for: { cycles:
@@ -400,13 +400,13 @@ watches:
 
 ```yaml
 # Notification-route rehearsal: replace ops-email with an existing notifier.
-# Logs/events show the dry-run action; no hook, notifier delivery, or expand runs.
+# Logs/events show the dry-run action; no hook, non-wall notify, expand or kill runs.
 watches:
   sample:
+    dry_run: true
     check: { type: load, load1: { op: ">", value: 0 } }
     then:
       notify: [ops-email]
-      dry_run: true
 ```
 
 Rules:

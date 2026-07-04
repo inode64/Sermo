@@ -1235,57 +1235,63 @@ capacity:
     notify_interval: 30m     # re-notify every 30m while still firing
 ```
 
-Usa `then.dry_run: true` cuando quieras mantener el watch y sus acciones cableados para
-una ejecución de prueba, pero aún no quieras ningún efecto secundario. El watch aún
-ejecuta su comprobación y ventana, emite el evento `firing` normal cuando se dispararía,
-luego emite un evento `dry-run` describiendo las acciones que ejecutaría. **No** ejecuta
-`hook`, envía `notify`, ni ejecuta `expand`. `dry_run` es un modificador en un bloque de
-acción explícito, por lo que debe emparejarse con una acción real `hook`, `notify` o
-`expand`; por sí solo no es una acción.
+Usa `dry_run: true` cuando quieras mantener acciones automáticas cableadas para una
+ejecución de prueba, pero aún no quieras efectos secundarios no-console. Está disponible
+en `defaults`, en cada service, en cada storage y en cada entrada de watch. El ajuste del
+target sobrescribe `defaults.dry_run`.
+
+Dry-run solo afecta a acciones automáticas disparadas por monitorización/reglas:
+
+- las remediaciones de service (`start`, `stop`, `restart`, `reload`, `resume`) se
+  evalúan pero no se ejecutan;
+- los monitores de service `version.on_change` / `config.on_change` heredan el
+  `dry_run` del service, por lo que se suprimen sus notificaciones no-console;
+- las acciones de watch (`hook`, `expand`, `kill`) se evalúan pero no se ejecutan;
+- las notificaciones se suprimen salvo `wall`, que sigue entregándose para visibilidad
+  local en consola.
+
+Las acciones manuales del operador no pasan por dry-run: start, stop, restart, reload,
+resume, monitor/unmonitor, mount/umount y otras operaciones explícitas desde CLI/Web se
+ejecutan normalmente.
+
+Un watch en dry-run aún ejecuta su comprobación y ventana, emite el evento `firing`
+normal cuando se dispararía y luego emite un evento `dry-run` describiendo las acciones
+que ejecutaría. Si una expansión o remediación estuviera bloqueada por política, el
+evento `dry-run` reporta la supresión, pero dry-run no avanza el estado de
+cooldown/backoff.
 
 ```yaml
+defaults:
+  dry_run: true
+
+name: apache-main
+uses: apache
+dry_run: false  # sobrescribe el default global para este service
+rules:
+  restart-http:
+    type: remediation
+    if: { failed: { check: http } }
+    then: { action: restart }
+
 watches:
   load:
     monitor: previous
+    dry_run: true
     check:
       type: load
       per_cpu: true
       load5: { op: ">", value: 1.5 }
     for: { cycles: 3 }
     then:
-      dry_run: true
       hook: { command: [/usr/local/bin/sermo-load-alert.sh] }
       notify: [ops-email]
 ```
 
 Usa `dry_run` para host watches mientras pruebas umbrales, argv/env de hook, enrutamiento
-de notifier o el gating de política de `then.expand`. Si una expansión estuviera
-actualmente bloqueada por política, el evento `dry-run` reporta la supresión, pero el
-dry-run no avanza el estado de cooldown/backoff. Quítalo cuando la acción deba ejecutarse
-realmente. Si solo quieres una señal de panel/log a largo plazo, omite `then` por
-completo o usa `notify: [none]`; esas son configuraciones solo-monitor, no ensayos de
-acción.
-
-`dry_run` y el `shadow` de remediación son intencionadamente separados:
-
-- `then.dry_run` pertenece a un host watch bajo `watches:`. Omite los efectos
-  secundarios del watch: `hook`, `notify` y `expand`.
-- `remediation.shadow` pertenece a la remediación de service. Evalúa las reglas de
-  remediación de service, las ventanas `for`/`within`, los guards y la política, luego
-  emite eventos `shadow` sin ejecutar operaciones de service como `restart`, `start`,
-  `stop` o `reload`. No suprime los hooks de host watch.
-
-```yaml
-name: apache-main
-uses: apache
-remediation:
-  shadow: true
-rules:
-  restart-http:
-    type: remediation
-    if: { failed: { check: http } }
-    then: { action: restart }
-```
+de notifier o el gating de política de `then.expand` / `then.kill`. Quítalo cuando las
+acciones automáticas deban ejecutarse realmente. Si solo quieres una señal de panel/log a
+largo plazo, omite `then` por completo o usa `notify: [none]`; esas son configuraciones
+solo-monitor, no ensayos de acción.
 
 Un watch soporta el mismo flag `monitor` de nivel superior que un service/daemon:
 `enabled` (el valor por defecto) fuerza la monitorización activa al iniciar/recargar el
@@ -2035,8 +2041,9 @@ watches:
   en un disparo `gone`, que no tiene nada que señalar. Cada envío de señal se
   registra como un evento `kill` (o `kill-failed`) visible en la actividad del
   watch.
-- `then.dry_run: true` y el modo pánico **suprimen** el kill (se emite en su lugar
-  un evento `dry-run` / `panic-suppressed`), igual que el hook y notify.
+- `dry_run: true` y el modo pánico **suprimen** el kill (se emite en su lugar
+  un evento `dry-run` / `panic-suppressed`), igual que hooks y notificaciones
+  no-console.
 - `kill` puede ir solo (un watch de kill puro) o acompañar a un `hook` y/o
   `notify`. **Solo es válido en un `process` watch** (como `then.expand` es solo de
   storage). Como señala procesos reales, el daemon debe tener permiso para hacerlo
@@ -2049,12 +2056,16 @@ la misma estructura de watch/hook.
 
 ## Valores por defecto globales
 
-Solo las partes por service de `defaults` se fusionan con un service: `stop_policy`,
-`policy`, y `rule_window`. Los ajustes de ámbito de motor (`interval`,
+Solo las partes seguras por target de `defaults` se fusionan con targets
+configurados: `dry_run` aplica a services, storages y watches; `stop_policy`,
+`policy` y `rule_window` aplican a services. Los ajustes de ámbito de motor (`interval`,
 `max_parallel_checks`, `max_parallel_operations`, `default_timeout`,
 `operation_timeout`, `startup_delay`, `backend`, `user_lookup`,
 `user_lookup_timeout`, `state_cache_size`) son configuración del daemon y nunca se
 fusionan con un service.
+
+`defaults.dry_run` es opcional y por defecto es `false`; cada service, storage o
+watch puede sobrescribirlo con su propio `dry_run` de nivel superior.
 
 `defaults.policy.cooldown` es **requerido y positivo**: cada service resuelto hereda un
 cooldown de prevención de bucles a menos que lo sustituya.
@@ -2084,7 +2095,7 @@ service puede sustituirse por catalog service o service.
 
 Un service se resuelve en una definición plana, de menor precedencia primero:
 
-1. Los `defaults` globales efectivos (partes por service).
+1. Los `defaults` globales efectivos (partes seguras por target).
 2. El daemon `uses`, o la cadena `clone`, fusionado por encima.
 3. Los campos propios del service (mayor precedencia).
 4. Expansión de `${var}`, una vez, sobre el resultado fusionado.
@@ -2238,17 +2249,11 @@ cualquier lugar** donde se expandan valores — cada service, daemon y entrada d
 ```yaml
 defaults:
   policy: { cooldown: 5m }
-  # remediation.shadow puts the service's remediation rules into observation-only
-  # mode: full condition evaluation, window tracking (for/within), guard
-  # evaluation and policy checks (cooldown, max_actions, backoff) still occur and
-  # produce "shadow" events with rich detail about what Sermo would have done and
-  # why (including suppressions). No operations are executed and the live
-  # RemediationState is not advanced. Perfect for safely tuning rules before
-  # going live. This does not affect host watches; put dry_run: true inside a
-  # watch's then block to rehearse hooks/notifies/expand without executing them.
-  # A per-service setting overrides the default.
-  #   remediation: { shadow: true }
-  remediation: { shadow: false }
+  # dry_run simula acciones automáticas de services, storages y watches sin
+  # ejecutar operaciones de service, acciones hook/expand/kill ni notificaciones
+  # no-console. Las acciones manuales del operador no se ven afectadas. Un
+  # dry_run definido en el target sobrescribe este default.
+  dry_run: false
 
   variables:
     custom_var1: /opt/myapp

@@ -42,8 +42,8 @@ func TestNetAssistantStateAndErrors(t *testing.T) {
 	if state["then"].(map[string]any)["notify"].([]string)[0] != "ops-email" {
 		t.Fatalf("state.then = %v", state["then"])
 	}
-	if state["then"].(map[string]any)["dry_run"] != true {
-		t.Fatalf("state.then dry_run = %v, want true", state["then"])
+	if entry["dry_run"] != true {
+		t.Fatalf("dry_run = %v, want true", entry["dry_run"])
 	}
 	errs := metrics["errors"].(map[string]any)
 	delta := errs["delta"].(map[string]any)

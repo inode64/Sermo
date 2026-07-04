@@ -42,7 +42,7 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	// Per-service properties first. Catalog services inherit PID/process
 	// detection from their catalog service profile, while generic services still need a
 	// local PID source because they have no catalog owner. The shared
-	// monitor-state + interval + shadow mode come after, batched.
+	// monitor-state + interval + dry-run mode come after, batched.
 	type pending struct {
 		name string
 		body map[string]any
@@ -74,7 +74,7 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		// Batch: when more than one service was selected, offer to answer the shared
 		// service questions once and apply them to all (docs/wizards.md step 4).
 		var shared *serviceSettings
-		if len(items) > 1 && p.Confirm("Apply the same monitor state, interval and shadow mode to all selected services?", true) {
+		if len(items) > 1 && p.Confirm("Apply the same monitor state, interval and dry-run mode to all selected services?", true) {
 			s := askServiceSettings(p, "all selected services")
 			shared = &s
 		}
@@ -115,20 +115,20 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 
 type serviceSettings struct {
 	Monitoring
-	Shadow bool
+	DryRun bool
 }
 
 func askServiceSettings(p *Prompt, label string) serviceSettings {
 	return serviceSettings{
 		Monitoring: p.AskMonitoring(label),
-		Shadow:     p.Confirm("Start "+label+" remediation in shadow mode (evaluate rules but skip service actions)?", false),
+		DryRun:     p.Confirm("Dry-run "+label+" automatic actions (evaluate but skip service actions and non-console notifications)?", false),
 	}
 }
 
 func (s serviceSettings) apply(body map[string]any) {
 	s.Monitoring.apply(body)
-	if s.Shadow {
-		body["remediation"] = map[string]any{"shadow": true}
+	if s.DryRun {
+		body["dry_run"] = true
 	}
 }
 

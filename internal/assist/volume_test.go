@@ -72,8 +72,8 @@ func TestVolumeAssistantFreePctWithExpand(t *testing.T) {
 	if exp["by"] != "5G" {
 		t.Fatalf("expand by = %v", exp["by"])
 	}
-	if then["dry_run"] != true {
-		t.Fatalf("dry_run = %v, want true", then["dry_run"])
+	if entry["dry_run"] != true {
+		t.Fatalf("dry_run = %v, want true", entry["dry_run"])
 	}
 	if entry["policy"].(map[string]any)["cooldown"] != "30m" {
 		t.Fatalf("policy = %v", entry["policy"])

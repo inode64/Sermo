@@ -63,7 +63,7 @@ type uplinkSettings struct {
 // debounce; the local layers (link, address, route) fire immediately.
 func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {
 	newThen := func() map[string]any {
-		return watchThen(s.notifiers, s.dryRun)
+		return watchThen(s.notifiers)
 	}
 	debounce := func(entry map[string]any) map[string]any {
 		if s.forCycles > 0 {
@@ -103,6 +103,7 @@ func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {
 	for _, entry := range watches {
 		if m, ok := entry.(map[string]any); ok {
 			s.Monitoring.apply(m)
+			applyDryRun(m, s.dryRun)
 		}
 	}
 	return watches

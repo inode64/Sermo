@@ -205,6 +205,19 @@ func nodeByID(doc *html.Node, id string) *html.Node {
 	return found
 }
 
+func hasDescendantAttr(root *html.Node, atomName atom.Atom, key, value string) bool {
+	found := false
+	walk(root, func(n *html.Node) {
+		if found || n.Type != html.ElementNode || n.DataAtom != atomName {
+			return
+		}
+		if got, ok := attr(n, key); ok && got == value {
+			found = true
+		}
+	})
+	return found
+}
+
 func bundledScript(t *testing.T) string {
 	t.Helper()
 	doc, _ := parsedIndex(t)
@@ -507,6 +520,11 @@ func TestIndexAccessibilityShell(t *testing.T) {
 		if label, ok := attr(el, "aria-label"); !ok || label == "" {
 			t.Errorf("#%s missing aria-label", id)
 		}
+	}
+	if svcFilters := nodeByID(doc, "svc-filters"); svcFilters == nil {
+		t.Fatal("shell missing #svc-filters")
+	} else if !hasDescendantAttr(svcFilters, atom.Button, "data-f", "monitored") {
+		t.Fatal(`#svc-filters missing monitored state button`)
 	}
 
 	captions := 0
