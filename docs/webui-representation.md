@@ -18,9 +18,11 @@ Keep changes concrete:
 - The Web UI is one embedded document: `internal/web/index.html`.
 - Data panels are `<details>` cards. The page scrolls as a whole; do not add
   panel-local scrollbars.
-- Services and Applications can be filtered, sorted and grouped by `category`.
+- Services, applications, storages and watches can use `category` for grouping,
+  filtering or search depending on the panel.
 - A top-level YAML `category` field is the category source. If it is absent,
-  services fall back to `service` and applications fall back to `app`.
+  services fall back to `service`, applications to `app`, storages to `storage`
+  and watches to `watch`.
 - State-changing buttons use the same safe backend path as `sermoctl`.
 
 ## Data sources
@@ -277,6 +279,7 @@ column, from the same per-process totals already in the service detail.
 | Controls | search, type filter, state filters, showing count |
 | Type filter | panel-specific `all ... types` plus the distinct check types currently present in that panel |
 | State filters | all, disabled, ok, starting, failed |
+| Search | display name, raw name, category, type, summary, interval, hook/notify state and conditions |
 | Sorting | Name, Type, Summary, Interval, Polarity, Hook, Notifiers, Last activity, State |
 | Visibility | hidden when no watches are configured for that panel's subset |
 
@@ -299,7 +302,7 @@ Row expansion:
 
 | Area | Content |
 | --- | --- |
-| Config | check conditions and thresholds |
+| Config | category, check conditions and thresholds |
 | Readings | current host readings |
 | Activity | recent watch events |
 | Expand | storage expansion action when configured |

@@ -102,6 +102,7 @@ func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {
 	}
 	for _, entry := range watches {
 		if m, ok := entry.(map[string]any); ok {
+			m["category"] = "network"
 			s.Monitoring.apply(m)
 			applyDryRun(m, s.dryRun)
 		}

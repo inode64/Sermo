@@ -246,7 +246,7 @@ config:
 `notify` default, or `none` to suppress). A service-level `dry_run: true`
 suppresses non-console notification delivery for these service-owned monitors;
 `wall` still delivers. The underlying `command` (`on_change`) and `config` check
-types can also be used directly in `watches:` when you want a hook or a
+types can also be used as host watch documents when you want a hook or a
 standalone command.
 
 ### Egress interface (`interface`)
@@ -1275,6 +1275,10 @@ watches:
       notify: [ops-email]      # and/or a hook
 ```
 
+(The examples in this file use compact global `watches:` maps. In a file under
+`paths.watches`, write the same watch as a `name: log-runaway` document and keep
+the inner fields at the top level.)
+
 (Note `within` here is the size check's **own field** — the duration of its
 growth window — not the watch-level `within: {cycles|duration, min_matches}`
 firing window, which a size watch normally does not need.)
@@ -1411,7 +1415,7 @@ Every type above is a **single-shot check** (`Check.Run → Result`) and is usab
 **both** places:
 
 - a service's `checks:`/`preflight:`/`postflight:` (and referenced from rules), and
-- a host **watch** (`watches:`, firing a hook) — see [configuration](configuration.md#host-watches).
+- a host **watch** document (or global `watches:` entry, firing a hook) — see [configuration](configuration.md#host-watches).
 
 The host-resource checks (`storage`, `load`, `memory`, `pressure`, `fds`, `pids`,
 `diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`, `entropy`,

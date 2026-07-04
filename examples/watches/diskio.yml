@@ -1,18 +1,18 @@
-watches:
-  diskio:
-    # Block-device I/O rates from /proc/diskstats (stateful: needs >=2 cycles to
-    # establish a baseline; first cycle never fires). Per-device: set `device:` to
-    # a kernel device NAME (e.g. sda, nvme0n1) — not a /dev path.
-    monitor: disabled
-    interval: 30s
-    check:
-      type: diskio
-      device: sda  # EXAMPLE — kernel device name (sda, nvme0n1)
-      util_pct: { op: ">=", value: "90%" }  # disk busy %
-      # read_bytes: { op: ">", value: "200M" }   # bytes/s, K/M/G/T suffix
-      # write_bytes: { op: ">", value: "200M" }  # bytes/s
-      # await_ms: { op: ">", value: 20 }         # avg I/O latency (ms)
-    for: { cycles: 3 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-diskio-alert.sh]
+name: diskio
+category: storage
+# Block-device I/O rates from /proc/diskstats (stateful: needs >=2 cycles to
+# establish a baseline; first cycle never fires). Per-device: set `device:` to
+# a kernel device NAME (e.g. sda, nvme0n1) — not a /dev path.
+monitor: disabled
+interval: 30s
+check:
+  type: diskio
+  device: sda  # EXAMPLE — kernel device name (sda, nvme0n1)
+  util_pct: { op: ">=", value: "90%" }  # disk busy %
+  # read_bytes: { op: ">", value: "200M" }   # bytes/s, K/M/G/T suffix
+  # write_bytes: { op: ">", value: "200M" }  # bytes/s
+  # await_ms: { op: ">", value: 20 }         # avg I/O latency (ms)
+for: { cycles: 3 }
+then:
+  hook:
+    command: [/usr/local/bin/sermo-diskio-alert.sh]

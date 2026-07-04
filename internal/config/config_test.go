@@ -1153,49 +1153,44 @@ capacity:
   then: { notify: [ops] }
 `,
 		"networks-flat/ping.yml": `
-watches:
-  network-direct:
-    check: { type: icmp, host: 192.0.2.1 }
-    metrics:
-      state:
-        expect: up
-        then: { notify: [ops] }
+name: network-direct
+category: network
+check: { type: icmp, host: 192.0.2.1 }
+metrics:
+  state:
+    expect: up
+    then: { notify: [ops] }
 `,
 		"networks-flat/deep/skipped.yml": `
-watches:
-  network-skipped:
-    check: { type: icmp, host: 192.0.2.2 }
-    metrics:
-      state:
-        expect: up
-        then: { notify: [ops] }
+name: network-skipped
+check: { type: icmp, host: 192.0.2.2 }
+metrics:
+  state:
+    expect: up
+    then: { notify: [ops] }
 `,
 		"networks-recursive/deep/ping.yml": `
-watches:
-  network-recursive:
-    check: { type: icmp, host: 192.0.2.3 }
-    metrics:
-      state:
-        expect: up
-        then: { notify: [ops] }
+name: network-recursive
+check: { type: icmp, host: 192.0.2.3 }
+metrics:
+  state:
+    expect: up
+    then: { notify: [ops] }
 `,
 		"watches-flat/load.yml": `
-watches:
-  load-direct:
-    check: { type: load, load5: { op: ">", value: 2 } }
-    then: { notify: [ops] }
+name: load-direct
+check: { type: load, load5: { op: ">", value: 2 } }
+then: { notify: [ops] }
 `,
 		"watches-flat/deep/skipped.yml": `
-watches:
-  load-skipped:
-    check: { type: load, load5: { op: ">", value: 3 } }
-    then: { notify: [ops] }
+name: load-skipped
+check: { type: load, load5: { op: ">", value: 3 } }
+then: { notify: [ops] }
 `,
 		"watches-recursive/deep/load.yml": `
-watches:
-  load-recursive:
-    check: { type: load, load5: { op: ">", value: 4 } }
-    then: { notify: [ops] }
+name: load-recursive
+check: { type: load, load5: { op: ">", value: 4 } }
+then: { notify: [ops] }
 `,
 		"storages-flat/direct-mount.yml": `
 name: direct-mount
@@ -1261,6 +1256,9 @@ mount: {}
 			t.Fatalf("watch %q was not loaded: %v", name, watches)
 		}
 	}
+	if got := watches["network-direct"].(map[string]any)["category"]; got != "network" {
+		t.Fatalf("included network watch category = %v, want network", got)
+	}
 	for _, name := range []string{"storage-skipped", "network-skipped", "load-skipped"} {
 		if _, ok := watches[name]; ok {
 			t.Fatalf("non-recursive watch path loaded nested watch %q", name)
@@ -1314,7 +1312,7 @@ service: web
 	}
 }
 
-func TestLoadIncludedWatchFragmentRejectsDuplicate(t *testing.T) {
+func TestStorageCapacityWatchRejectsDuplicate(t *testing.T) {
 	root := t.TempDir()
 	storages := filepath.Join(root, "storages")
 	if err := os.MkdirAll(storages, 0o755); err != nil {
@@ -1349,6 +1347,46 @@ capacity:
 	}
 	if issues := Validate(cfg); !hasIssue(issues, `capacity watch would overwrite existing watch "storage-root"`) {
 		t.Fatalf("Validate issues = %v, want duplicate generated watch", issues)
+	}
+}
+
+func TestLoadIncludedWatchDocumentRejectsDuplicate(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+paths:
+  watches: [ @ROOT@/watches ]
+defaults:
+  policy: { cooldown: 5m }
+watches:
+  load:
+    check: { type: load, load5: { op: ">", value: 2 } }
+`,
+		"watches/load.yml": `
+name: load
+check: { type: load, load5: { op: ">", value: 3 } }
+`,
+	})
+
+	if _, err := Load(global); err == nil || !strings.Contains(err.Error(), `watch "load" is already defined`) {
+		t.Fatalf("Load() error = %v, want duplicate watch", err)
+	}
+}
+
+func TestLoadIncludedWatchDocumentRequiresName(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+paths:
+  watches: [ @ROOT@/watches ]
+defaults:
+  policy: { cooldown: 5m }
+`,
+		"watches/load.yml": `
+check: { type: load, load5: { op: ">", value: 3 } }
+`,
+	})
+
+	if _, err := Load(global); err == nil || !strings.Contains(err.Error(), "watch documents must define name") {
+		t.Fatalf("Load() error = %v, want missing watch name", err)
 	}
 }
 
@@ -1390,6 +1428,48 @@ mount:
 	archive := watches["storage-archive"].(map[string]any)["check"].(map[string]any)
 	if archive["mounted"] != false {
 		t.Fatalf("storage-archive mounted = %v, want explicit false", archive["mounted"])
+	}
+}
+
+func TestStorageCapacityWatchKeepsMetadata(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+paths:
+  storages: [ @ROOT@/storages ]
+defaults:
+  policy: { cooldown: 5m }
+`,
+		"storages/root.yml": `
+name: storage-root
+display_name: Root filesystem
+description: System volume
+category: storage
+path: /
+capacity:
+  used_pct: { op: ">=", value: 90 }
+`,
+	})
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	watches, errs := cfg.ResolveWatches()
+	if len(errs) != 0 {
+		t.Fatalf("ResolveWatches() errors = %v", errs)
+	}
+	entry, ok := watches["storage-root"].(map[string]any)
+	if !ok {
+		t.Fatalf("storage-root watch = %v, want mapping", watches["storage-root"])
+	}
+	if got := cfgval.String(entry["display_name"]); got != "Root filesystem" {
+		t.Fatalf("display_name = %q, want Root filesystem", got)
+	}
+	if got := cfgval.String(entry["description"]); got != "System volume" {
+		t.Fatalf("description = %q, want System volume", got)
+	}
+	if got := cfgval.String(entry["category"]); got != "storage" {
+		t.Fatalf("category = %q, want storage", got)
 	}
 }
 
@@ -1529,19 +1609,19 @@ path: /mnt/backup
 mount: {}
 `,
 		"networks/ping.yml": `
-watches:
-  ping-gw:
-    check: { type: icmp, host: 8.8.8.8 }
-    metrics:
-      state:
-        expect: up
-        then: { notify: [ops] }
+name: ping-gw
+category: network
+check: { type: icmp, host: 8.8.8.8 }
+metrics:
+  state:
+    expect: up
+    then: { notify: [ops] }
 `,
 		"watches/load.yml": `
-watches:
-  load:
-    check: { type: load, load5: { op: ">", value: 2 } }
-    then: { notify: [ops] }
+name: load
+category: host
+check: { type: load, load5: { op: ">", value: 2 } }
+then: { notify: [ops] }
 `,
 	})
 
@@ -1563,6 +1643,9 @@ watches:
 		if _, ok := watches[name]; !ok {
 			t.Fatalf("watch %q was not loaded from explicit directories: %v", name, watches)
 		}
+	}
+	if got := cfgval.String(watches["ping-gw"].(map[string]any)["category"]); got != "network" {
+		t.Fatalf("included watch category = %q, want network", got)
 	}
 	if _, ok := cfg.Storages["backup"]; !ok {
 		t.Fatalf("mount-capable storage directory was not loaded: %v", cfg.StorageNames)

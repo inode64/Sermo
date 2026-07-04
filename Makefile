@@ -180,7 +180,7 @@ install-examples:
 
 # Install the global config (kept if one already exists) and create the
 # configured directories for user catalog entries, services, host-specific apps,
-# storage documents, notifier fragments and watch fragments.
+# storage documents, notifier fragments and watch documents.
 install-config:
 	$(call install_dirs,$(DESTDIR)$(SERMO_CONFDIR)/catalog-available/services $(DESTDIR)$(SERMO_CONFDIR)/catalog-available/apps $(DESTDIR)$(SERMO_CONFDIR)/catalog-available/libs $(DESTDIR)$(SERMO_CONFDIR)/catalog-available/patterns $(DESTDIR)$(SERMO_CONFDIR)/services $(DESTDIR)$(SERMO_CONFDIR)/apps $(DESTDIR)$(SERMO_CONFDIR)/notifiers $(DESTDIR)$(SERMO_CONFDIR)/storages $(DESTDIR)$(SERMO_CONFDIR)/networks $(DESTDIR)$(SERMO_CONFDIR)/watches)
 	@if [ -f "$(DESTDIR)$(SERMO_CONFDIR)/sermo.yml" ]; then \

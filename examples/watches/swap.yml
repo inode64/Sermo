@@ -1,17 +1,17 @@
-watches:
-  swap:
-    # Watch system swap: usage filling up and/or heavy paging (thrashing).
-    monitor: disabled
-    interval: 30s
-    check: { type: swap }
-    metrics:
-      usage:
-        used_pct: { op: ">=", value: 80 }
-        then:
-          hook:
-            command: [/usr/local/bin/sermo-swap-usage.sh]
-      io:
-        delta: { op: ">", value: 1000 }  # pages swapped in+out per cycle
-        then:
-          hook:
-            command: [/usr/local/bin/sermo-swap-io.sh]
+name: swap
+category: host
+# Watch system swap: usage filling up and/or heavy paging (thrashing).
+monitor: disabled
+interval: 30s
+check: { type: swap }
+metrics:
+  usage:
+    used_pct: { op: ">=", value: 80 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-swap-usage.sh]
+  io:
+    delta: { op: ">", value: 1000 }  # pages swapped in+out per cycle
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-swap-io.sh]

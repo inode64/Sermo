@@ -35,7 +35,7 @@ func TestGeneratedWatchesPassConfigValidation(t *testing.T) {
 		notifiers: []string{"ops"},
 	})
 
-	// Round-trip through YAML, exactly like the wizard's written fragments are
+	// Round-trip through YAML, exactly like the wizard's written documents are
 	// read back by the loader — the validator sees parsed-YAML shapes, not the
 	// builder's Go values.
 	generated := map[string]any{

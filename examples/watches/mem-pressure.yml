@@ -1,14 +1,14 @@
-watches:
-  mem-pressure:
-    # Watch kernel PSI: % of wall time tasks stalled waiting on memory. The
-    # kernel's own pressure signal catches thrashing load/memory can miss.
-    monitor: disabled
-    interval: 30s
-    check:
-      type: pressure
-      resource: memory
-      some_avg60: { op: ">", value: 10 }
-    for: { cycles: 3 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-pressure-alert.sh]
+name: mem-pressure
+category: host
+# Watch kernel PSI: % of wall time tasks stalled waiting on memory. The
+# kernel's own pressure signal catches thrashing load/memory can miss.
+monitor: disabled
+interval: 30s
+check:
+  type: pressure
+  resource: memory
+  some_avg60: { op: ">", value: 10 }
+for: { cycles: 3 }
+then:
+  hook:
+    command: [/usr/local/bin/sermo-pressure-alert.sh]

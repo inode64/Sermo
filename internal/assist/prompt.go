@@ -1,7 +1,7 @@
 // Package assist provides an interactive, extensible assistant for generating
 // Sermo watch configuration (the `sermoctl wizard` command). The Prompt type is
 // the reusable question/answer layer; each Assistant turns answers into a
-// `watches:` config fragment.
+// set of watch, storage, mount or service document bodies.
 package assist
 
 import (

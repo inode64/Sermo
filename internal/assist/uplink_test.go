@@ -15,8 +15,12 @@ func TestUplinkAssistant(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	for _, name := range []string{"uplink-eth0", "uplink-eth0-route", "uplink-eth0-ping", "uplink-eth0-dns"} {
-		if _, ok := res.Watches[name]; !ok {
+		entry, ok := res.Watches[name].(map[string]any)
+		if !ok {
 			t.Fatalf("missing watch %s in %v", name, res.Watches)
+		}
+		if entry["category"] != "network" {
+			t.Fatalf("%s category = %v, want network", name, entry["category"])
 		}
 	}
 

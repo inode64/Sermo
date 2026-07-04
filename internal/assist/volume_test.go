@@ -59,6 +59,9 @@ func TestVolumeAssistantFreePctWithExpand(t *testing.T) {
 	if check["type"] != "storage" || check["path"] != "/mnt/backup" {
 		t.Fatalf("check = %v", check)
 	}
+	if entry["category"] != "storage" {
+		t.Fatalf("category = %v, want storage", entry["category"])
+	}
 	fp := check["free_pct"].(map[string]any)
 	if fp["op"] != "<" || fp["value"] != 10 {
 		t.Fatalf("free_pct = %v, want op< value10", fp)

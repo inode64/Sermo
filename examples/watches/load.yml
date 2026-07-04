@@ -1,14 +1,14 @@
-watches:
-  load:
-    # Watch system load average (per-core, so the thresholds are machine-agnostic).
-    monitor: disabled
-    interval: 30s
-    check:
-      type: load
-      per_cpu: true
-      load5: { op: ">", value: 1.5 }
-      load15: { op: ">", value: 1.0 }
-    for: { cycles: 3 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-load-alert.sh]
+name: load
+category: host
+# Watch system load average (per-core, so the thresholds are machine-agnostic).
+monitor: disabled
+interval: 30s
+check:
+  type: load
+  per_cpu: true
+  load5: { op: ">", value: 1.5 }
+  load15: { op: ">", value: 1.0 }
+for: { cycles: 3 }
+then:
+  hook:
+    command: [/usr/local/bin/sermo-load-alert.sh]

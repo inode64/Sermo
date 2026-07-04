@@ -139,7 +139,7 @@ Use Sermo wizards and tools for configuration generation:
 
 - Prefer `sermoctl wizard service` for active services, and the matching Sermo wizard/tool for other explicitly requested target types.
 - Do not hand-write the initial service set when a Sermo wizard can generate it.
-- Keep generated config granular: one file per service, storage target, notifier, network watch, interface, VM, container, app or other target. Storage files under `paths.storages` are storage documents; watch and notifier fragment files may contain `watches:` or `notifiers:`, but only one named entry.
+- Keep generated config granular: one file per service, storage target, notifier, network watch, interface, VM, container, app or other target. Storage files under `paths.storages` are storage documents; watch files under `paths.networks` and `paths.watches` are watch documents with top-level `name:`; notifier fragment files contain `notifiers:` with one named entry.
 - If the wizard output needs adjustment, edit only the generated files under the remote `/tmp/sermo-remote-test-*` directory, then run `sermoctl config validate` again.
 - If an adjustment reveals a project/catalog bug, fix the local project and redeploy new `/tmp` artifacts instead of patching permanent remote host files.
 
@@ -203,8 +203,8 @@ that inventory: adding a new host watch type to Sermo should require no edit to
 this skill before remote installation runs start considering it.
 - Generate one file per host watch under the matching temporary directory.
   Storage targets loaded by `paths.storages` are storage documents with
-  `capacity:`; network and generic watch directories still contain a top-level
-  `watches:` map with exactly one entry.
+  `capacity:`; network and generic watch directories contain watch documents
+  with top-level `name:` plus the watch fields.
 - Include baseline watches for every safely discoverable host resource on every
   complete config according to the run-time inventory. Do not use a hardcoded
   allow-list. For feature-dependent watches, generate entries only when the
@@ -273,15 +273,14 @@ mount:
   checks:
 
 ```yaml
-watches:
-  cert-etc-ssl-example:
-    interval: 12h
-    check:
-      type: cert
-      path: /etc/ssl/example.pem
-      expires_in_days: 15
-      on_algorithm_change: true
-      on_issuer_change: true
+name: cert-etc-ssl-example
+interval: 12h
+check:
+  type: cert
+  path: /etc/ssl/example.pem
+  expires_in_days: 15
+  on_algorithm_change: true
+  on_issuer_change: true
 ```
 
   Do not set `host`, `port`, `server_name` or `verify` for file-based certificate
@@ -393,20 +392,18 @@ Use one of these safe modes:
 
 ```yaml
 # Alert-only: visible in web/events/logs, no hook and no notification delivery.
-watches:
-  sample:
-    check: { type: load, load1: { op: ">", value: 0 } }
+name: sample
+check: { type: load, load1: { op: ">", value: 0 } }
 ```
 
 ```yaml
 # Notification-route rehearsal: replace ops-email with an existing notifier.
 # Logs/events show the dry-run action; no hook, non-wall notify, expand or kill runs.
-watches:
-  sample:
-    dry_run: true
-    check: { type: load, load1: { op: ">", value: 0 } }
-    then:
-      notify: [ops-email]
+name: sample
+dry_run: true
+check: { type: load, load1: { op: ">", value: 0 } }
+then:
+  notify: [ops-email]
 ```
 
 Rules:
