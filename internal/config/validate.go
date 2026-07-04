@@ -553,9 +553,10 @@ func validateBinaryVariables(doc *Document, scope string) []Issue {
 		if raw == nil {
 			return issues
 		}
-		candidates := cfgval.StringList(raw)
-		if len(candidates) == 0 {
+		candidates, err := cfgval.StrictStringList(raw)
+		if err != nil || len(candidates) == 0 {
 			issues = append(issues, Issue{Scope: scope, Msg: "variables.binary must be a non-empty path string or list"})
+			return issues
 		}
 		for _, path := range candidates {
 			if !filepath.IsAbs(path) {
