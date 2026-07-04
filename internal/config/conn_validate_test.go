@@ -192,6 +192,12 @@ name: web
 service: x
 also_apply: [web]
 `), "the service itself")
+
+	mustHave(t, validateService(t, `
+name: web
+service: x
+also_apply: [api, 7]
+`), "also_apply must be a string or list of strings")
 }
 
 func TestValidateCleanOnStop(t *testing.T) {

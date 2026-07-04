@@ -538,7 +538,12 @@ func validateAlsoService(tree map[string]any, add addFunc) {
 // validateCascade checks `also_apply`: each entry must be a known service and not
 // the service itself. Targets receive the same action via their own operation.
 func validateCascade(name string, tree map[string]any, services map[string]struct{}, add addFunc) {
-	for _, target := range cfgval.StringList(tree["also_apply"]) {
+	targets, err := cfgval.StrictStringList(tree["also_apply"])
+	if _, present := tree["also_apply"]; present && err != nil {
+		add("also_apply must be a string or list of strings")
+		return
+	}
+	for _, target := range targets {
 		if target == "" {
 			add("also_apply contains an empty service name")
 			continue
