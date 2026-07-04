@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"sermo/internal/assist"
+	"sermo/internal/cfgval"
 	"sermo/internal/config"
 	"sermo/internal/servicemgr"
 )
@@ -257,7 +258,7 @@ func TestEnsureConfigPathListRecognizesAbsolutePathForRelativeTarget(t *testing.
 		t.Fatal("ensureConfigPathList changed config despite existing absolute path")
 	}
 	paths := root["paths"].(map[string]any)
-	got, err := yamlStringList(paths["services"])
+	got, err := cfgval.StrictStringList(paths["services"])
 	if err != nil {
 		t.Fatal(err)
 	}
