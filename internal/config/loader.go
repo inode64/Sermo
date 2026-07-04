@@ -462,57 +462,11 @@ func (c *Config) loadStorageDir(dir string, recursive bool) error {
 }
 
 func (c *Config) loadServiceDirEntries(dir string, recursive bool) error {
-	names, subdirs, err := configDirEntries(dir, "service")
-	if err != nil {
-		return err
-	}
-
-	for _, name := range names {
-		doc, err := loadDocument(filepath.Join(dir, name))
-		if err != nil {
-			return err
-		}
-		if err := assignKind(doc, kindService); err != nil {
-			return err
-		}
-		c.add(doc)
-	}
-	if !recursive {
-		return nil
-	}
-	for _, name := range subdirs {
-		if err := c.loadServiceDirEntries(filepath.Join(dir, name), recursive); err != nil {
-			return err
-		}
-	}
-	return nil
+	return c.loadKindDirEntries(dir, "service", kindService, recursive)
 }
 
 func (c *Config) loadAppDirEntries(dir string, recursive bool) error {
-	names, subdirs, err := configDirEntries(dir, "app")
-	if err != nil {
-		return err
-	}
-
-	for _, name := range names {
-		doc, err := loadDocument(filepath.Join(dir, name))
-		if err != nil {
-			return err
-		}
-		if err := assignKind(doc, kindApp); err != nil {
-			return err
-		}
-		c.add(doc)
-	}
-	if !recursive {
-		return nil
-	}
-	for _, name := range subdirs {
-		if err := c.loadAppDirEntries(filepath.Join(dir, name), recursive); err != nil {
-			return err
-		}
-	}
-	return nil
+	return c.loadKindDirEntries(dir, "app", kindApp, recursive)
 }
 
 func (c *Config) loadGlobalFragmentDirEntries(dir string, section string, recursive bool) error {
@@ -552,7 +506,11 @@ func (c *Config) loadGlobalFragmentDirEntries(dir string, section string, recurs
 }
 
 func (c *Config) loadStorageDirEntries(dir string, recursive bool) error {
-	names, subdirs, err := configDirEntries(dir, "storage")
+	return c.loadKindDirEntries(dir, "storage", kindStorage, recursive)
+}
+
+func (c *Config) loadKindDirEntries(dir, label, kind string, recursive bool) error {
+	names, subdirs, err := configDirEntries(dir, label)
 	if err != nil {
 		return err
 	}
@@ -562,7 +520,7 @@ func (c *Config) loadStorageDirEntries(dir string, recursive bool) error {
 		if err != nil {
 			return err
 		}
-		if err := assignKind(doc, kindStorage); err != nil {
+		if err := assignKind(doc, kind); err != nil {
 			return err
 		}
 		c.add(doc)
@@ -571,7 +529,7 @@ func (c *Config) loadStorageDirEntries(dir string, recursive bool) error {
 		return nil
 	}
 	for _, name := range subdirs {
-		if err := c.loadStorageDirEntries(filepath.Join(dir, name), recursive); err != nil {
+		if err := c.loadKindDirEntries(filepath.Join(dir, name), label, kind, recursive); err != nil {
 			return err
 		}
 	}
