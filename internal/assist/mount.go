@@ -105,12 +105,13 @@ func mountCandidateLabel(c MountCandidate) string {
 		state = "mounted"
 	}
 	parts := []string{c.Path}
-	if c.FSType != "" || c.Source != "" {
-		detail := strings.TrimSpace(strings.Join(nonEmpty(c.FSType, c.Source), " on "))
-		if detail != "" {
-			parts = append(parts, "("+detail+")")
-		}
+	if detail := mountSourceDetail(c); detail != "" {
+		parts = append(parts, "("+detail+")")
 	}
 	parts = append(parts, "["+state+"]")
 	return strings.Join(parts, " ")
+}
+
+func mountSourceDetail(c MountCandidate) string {
+	return strings.TrimSpace(strings.Join(nonEmpty(c.FSType, c.Source), " on "))
 }
