@@ -99,7 +99,7 @@ func buildSNMPParams(ctx context.Context, cfg Config, timeout time.Duration) *g.
 	p := &g.GoSNMP{
 		Target:    host,
 		Port:      uint16(port),
-		Transport: "udp",
+		Transport: networkUDP,
 		Context:   ctx,
 		Timeout:   timeout,
 		Retries:   1,

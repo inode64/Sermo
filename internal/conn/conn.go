@@ -15,7 +15,11 @@ import (
 	"sync"
 )
 
-const tlsSkipVerify = "skip-verify"
+const (
+	networkTCP    = "tcp"
+	networkUDP    = "udp"
+	tlsSkipVerify = "skip-verify"
+)
 
 // Config is the connection target for a protocol probe. Fields that do not apply
 // to a protocol are ignored by it.

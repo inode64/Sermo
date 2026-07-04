@@ -126,7 +126,7 @@ func buildMySQLConfig(cfg Config) *mysql.Config {
 		port = 3306
 	}
 	c := mysql.NewConfig()
-	c.Net = "tcp"
+	c.Net = networkTCP
 	c.Addr = net.JoinHostPort(host, strconv.Itoa(port))
 	c.User = cfg.User
 	c.Passwd = cfg.Password

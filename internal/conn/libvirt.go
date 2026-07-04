@@ -80,7 +80,7 @@ type libvirtRemoteDialer struct {
 
 func (d libvirtRemoteDialer) Dial() (net.Conn, error) {
 	dialer := libvirtRemoteNetDialer(d.iface, d.timeout)
-	return dialer.Dial("tcp", d.addr)
+	return dialer.Dial(networkTCP, d.addr)
 }
 
 func libvirtRemoteNetDialer(iface string, timeout time.Duration) *net.Dialer {
@@ -182,7 +182,7 @@ func libvirtTransport(cfg Config) (mode, addr, uri string) {
 	if port == 0 {
 		port = 16509
 	}
-	return "tcp", net.JoinHostPort(host, strconv.Itoa(port)), uri
+	return networkTCP, net.JoinHostPort(host, strconv.Itoa(port)), uri
 }
 
 // libvirtTimeout derives a dialer timeout from the context deadline, falling

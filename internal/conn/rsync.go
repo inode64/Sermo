@@ -29,7 +29,7 @@ func (rsyncProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if port == 0 {
 		port = 873
 	}
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return Result{}, err
 	}

@@ -50,9 +50,9 @@ func (openvpnProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if port == 0 {
 		port = 1194
 	}
-	transport := "udp"
-	if cfg.Params["transport"] == "tcp" {
-		transport = "tcp"
+	transport := networkUDP
+	if cfg.Params["transport"] == networkTCP {
+		transport = networkTCP
 	}
 
 	sid := openvpnSessionID()
@@ -97,7 +97,7 @@ func openvpnClientReset(sid []byte) []byte {
 // openvpnExchange sends packet and reads one reply, applying TCP's 2-byte
 // big-endian length framing when transport is "tcp" (UDP is unframed).
 func openvpnExchange(c net.Conn, transport string, packet []byte) ([]byte, error) {
-	if transport == "tcp" {
+	if transport == networkTCP {
 		frame := make([]byte, 2+len(packet))
 		binary.BigEndian.PutUint16(frame[:2], uint16(len(packet)))
 		copy(frame[2:], packet)
