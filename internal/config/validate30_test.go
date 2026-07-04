@@ -1517,6 +1517,15 @@ checks:
   pid: { type: pidfile }
 `)
 	mustHave(t, issues, "path is required for a pidfile check")
+
+	invalidList := validateService(t, `
+name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  pid: { type: pidfile, path: [/run/svc.pid, 7] }
+`)
+	mustHave(t, invalidList, "path is required for a pidfile check")
 }
 
 func TestValidateSocketCheckRequiresPath(t *testing.T) {
@@ -1528,6 +1537,15 @@ checks:
   sock: { type: socket }
 `)
 	mustHave(t, issues, "path is required for a socket check")
+
+	invalidList := validateService(t, `
+name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  sock: { type: socket, path: [/run/svc.sock, 7] }
+`)
+	mustHave(t, invalidList, "path is required for a socket check")
 }
 
 func TestValidateLockfileCheckRequiresPath(t *testing.T) {
@@ -1539,6 +1557,15 @@ checks:
   lock: { type: lockfile }
 `)
 	mustHave(t, issues, "path is required for a lockfile check")
+
+	invalidList := validateService(t, `
+name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  lock: { type: lockfile, path: [/run/svc.lock, 7] }
+`)
+	mustHave(t, invalidList, "path is required for a lockfile check")
 }
 
 func TestValidatePercentBound(t *testing.T) {
