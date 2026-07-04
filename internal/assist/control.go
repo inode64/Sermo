@@ -117,25 +117,20 @@ func controlledResult(services map[string]any) (Result, error) {
 }
 
 func chooseDockerContainers(p *Prompt, question string, cands []DockerCandidate) []DockerCandidate {
-	labels := make([]string, len(cands))
-	for i, c := range cands {
-		labels[i] = dockerLabel(c)
-	}
-	sel := p.MultiChoose(question, labels)
-	out := make([]DockerCandidate, 0, len(sel))
-	for _, idx := range sel {
-		out = append(out, cands[idx])
-	}
-	return out
+	return chooseCandidates(p, question, cands, dockerLabel)
 }
 
 func chooseVMs(p *Prompt, question string, cands []VMCandidate) []VMCandidate {
+	return chooseCandidates(p, question, cands, vmLabel)
+}
+
+func chooseCandidates[T any](p *Prompt, question string, cands []T, label func(T) string) []T {
 	labels := make([]string, len(cands))
 	for i, c := range cands {
-		labels[i] = vmLabel(c)
+		labels[i] = label(c)
 	}
 	sel := p.MultiChoose(question, labels)
-	out := make([]VMCandidate, 0, len(sel))
+	out := make([]T, 0, len(sel))
 	for _, idx := range sel {
 		out = append(out, cands[idx])
 	}
@@ -143,17 +138,17 @@ func chooseVMs(p *Prompt, question string, cands []VMCandidate) []VMCandidate {
 }
 
 func selectedNames(cands []DockerCandidate) []string {
-	out := make([]string, len(cands))
-	for i, c := range cands {
-		out[i] = c.Name
-	}
-	return out
+	return candidateNames(cands, func(c DockerCandidate) string { return c.Name })
 }
 
 func selectedVMNames(cands []VMCandidate) []string {
+	return candidateNames(cands, func(c VMCandidate) string { return c.Name })
+}
+
+func candidateNames[T any](cands []T, name func(T) string) []string {
 	out := make([]string, len(cands))
 	for i, c := range cands {
-		out[i] = c.Name
+		out[i] = name(c)
 	}
 	return out
 }
