@@ -34,6 +34,13 @@ import (
 //go:embed index.html
 var assets embed.FS
 
+const (
+	headerContentType   = "Content-Type"
+	contentTypeHTMLUTF8 = "text/html; charset=utf-8"
+	contentTypeJSON     = "application/json"
+	contentTypeTextUTF8 = "text/plain; charset=utf-8"
+)
+
 // Service is the web view of one configured service. Services with `enabled: false`
 // in their configuration are still listed (with Enabled=false) so operators can
 // see the full fleet and know what to activate by editing config + reloading.
@@ -1017,7 +1024,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 	html := strings.ReplaceAll(string(page), "{{CSP_NONCE}}", cspNonceFrom(r.Context()))
 	page = []byte(strings.ReplaceAll(html, "{{VERSION}}", htmlpkg.EscapeString(buildinfo.Short())))
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set(headerContentType, contentTypeHTMLUTF8)
 	// The dashboard markup/JS is embedded in the binary and changes across
 	// versions (new sections like host watches are added over time). Without a
 	// cache directive a browser may keep serving a stale copy after an upgrade,
@@ -1272,7 +1279,7 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusServiceUnavailable
 	}
 	if !r.URL.Query().Has("verbose") {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set(headerContentType, contentTypeTextUTF8)
 		w.WriteHeader(status)
 		if rep.Ready {
 			_, _ = io.WriteString(w, "ok\n")
@@ -1290,7 +1297,7 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 // served without authentication (see withAuth) so probes need no credentials.
 func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 	if !r.URL.Query().Has("verbose") {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set(headerContentType, contentTypeTextUTF8)
 		_, _ = io.WriteString(w, "ok\n")
 		return
 	}
@@ -1395,7 +1402,7 @@ func (s *Server) handleReload(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(headerContentType, contentTypeJSON)
 	w.WriteHeader(status)
 	enc := json.NewEncoder(w)
 	enc.SetEscapeHTML(false)
