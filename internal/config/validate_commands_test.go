@@ -62,6 +62,21 @@ func TestValidateCommandsValid(t *testing.T) {
 	}
 }
 
+func TestValidateCommandRejectsEmptyArgvItem(t *testing.T) {
+	var issues []string
+	add := func(format string, args ...any) { issues = append(issues, fmt.Sprintf(format, args...)) }
+
+	tree := map[string]any{"checks": map[string]any{
+		"version": map[string]any{"type": "command", "command": []any{""}},
+	}}
+	validateCheckSection(tree, "checks", "/run/sermo/locks", add)
+
+	joined := strings.Join(issues, "\n")
+	if !strings.Contains(joined, "checks.version command must be an array, not a shell string") {
+		t.Fatalf("missing empty command issue in:\n%s", joined)
+	}
+}
+
 func TestValidateCommandCheckUser(t *testing.T) {
 	var issues []string
 	add := func(format string, args ...any) { issues = append(issues, fmt.Sprintf(format, args...)) }
