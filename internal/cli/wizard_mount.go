@@ -108,20 +108,9 @@ func wizardMountTargetDir(globalPath string) string {
 
 func writeMountFiles(globalPath string, docs map[string]map[string]any) (string, int, error) {
 	targetDir := wizardMountTargetDir(globalPath)
-	files, err := planConfigFiles(targetDir, "storage", docs)
+	files, _, err := writeConfigDocs(globalPath, "storages", storagesConfigDir, targetDir, "storage", docs)
 	if err != nil {
 		return "", 0, err
-	}
-	if _, err := ensureConfigPathDir(globalPath, "storages", storagesConfigDir, targetDir); err != nil {
-		return "", 0, err
-	}
-	if err := os.MkdirAll(targetDir, 0o755); err != nil {
-		return "", 0, fmt.Errorf("create %s: %w", targetDir, err)
-	}
-	for _, file := range files {
-		if err := os.WriteFile(file.path, file.data, 0o644); err != nil { //nolint:gosec // config is world-readable by design
-			return "", 0, fmt.Errorf("write %s: %w", file.path, err)
-		}
 	}
 	return targetDir, len(files), nil
 }
