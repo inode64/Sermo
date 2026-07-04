@@ -167,13 +167,7 @@ func buildDockerService(c DockerCandidate) map[string]any {
 		control["socket"] = c.Socket
 		check["socket"] = c.Socket
 	}
-	return map[string]any{
-		"enabled": true,
-		"control": control,
-		"checks": map[string]any{
-			"docker": check,
-		},
-	}
+	return controlledService(control, "docker", check)
 }
 
 func buildVMService(c VMCandidate) map[string]any {
@@ -194,11 +188,15 @@ func buildVMService(c VMCandidate) map[string]any {
 		control["socket"] = c.Socket
 		check["socket"] = c.Socket
 	}
+	return controlledService(control, "vm", check)
+}
+
+func controlledService(control map[string]any, checkName string, check map[string]any) map[string]any {
 	return map[string]any{
 		"enabled": true,
 		"control": control,
 		"checks": map[string]any{
-			"vm": check,
+			checkName: check,
 		},
 	}
 }
