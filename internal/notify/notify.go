@@ -45,6 +45,14 @@ type buildOptions struct {
 	templatesDisabled bool
 }
 
+const (
+	notifierTypeEmail = "email"
+	notifierTypeSlack = "slack"
+	notifierTypeTeams = "teams"
+	notifierTypeTTY   = "tty"
+	notifierTypeWall  = "wall"
+)
+
 // WithTemplateDir configures where named notification templates are loaded
 // from.
 func WithTemplateDir(dir string) Option {
@@ -71,11 +79,11 @@ func Enabled(entry map[string]any) bool {
 // builders maps a notifier `type` to its constructor. Register new transports
 // here (e.g. a future "discord").
 var builders = map[string]func(name string, entry map[string]any) (Notifier, error){
-	"email": buildEmail,
-	"slack": buildSlack,
-	"teams": buildTeams,
-	"tty":   buildTTY,
-	"wall":  buildWall,
+	notifierTypeEmail: buildEmail,
+	notifierTypeSlack: buildSlack,
+	notifierTypeTeams: buildTeams,
+	notifierTypeTTY:   buildTTY,
+	notifierTypeWall:  buildWall,
 }
 
 // Build constructs global notifiers. Malformed or unknown-type entries become
