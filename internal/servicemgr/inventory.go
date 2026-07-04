@@ -100,9 +100,15 @@ func openRCServiceRunlevel(name string) bool {
 func uniqueStrings(list []string, values ...string) []string {
 	seen := make(map[string]struct{}, len(list)+len(values))
 	for _, value := range list {
+		if value == "" {
+			continue
+		}
 		seen[value] = struct{}{}
 	}
 	for _, value := range values {
+		if value == "" {
+			continue
+		}
 		if _, ok := seen[value]; ok {
 			continue
 		}
