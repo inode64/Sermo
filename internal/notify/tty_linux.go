@@ -35,7 +35,7 @@ type ttyNotifier struct {
 func buildTTY(name string, entry map[string]any) (Notifier, error) {
 	return &ttyNotifier{
 		name:      name,
-		typ:       "tty",
+		typ:       notifierTypeTTY,
 		users:     stringSet(cfgval.StringList(entry["users"])),
 		utmpPaths: []string{"/run/utmp", "/var/run/utmp"},
 		devRoot:   "/dev",
@@ -48,7 +48,7 @@ func buildTTY(name string, entry map[string]any) (Notifier, error) {
 func buildWall(name string, entry map[string]any) (Notifier, error) {
 	return &ttyNotifier{
 		name:      name,
-		typ:       "wall",
+		typ:       notifierTypeWall,
 		utmpPaths: []string{"/run/utmp", "/var/run/utmp"},
 		devRoot:   "/dev",
 		writeTTY:  writeTTYLinux,
@@ -61,7 +61,7 @@ func (n *ttyNotifier) Name() string { return n.name }
 
 func (n *ttyNotifier) Type() string {
 	if n.typ == "" {
-		return "tty"
+		return notifierTypeTTY
 	}
 	return n.typ
 }

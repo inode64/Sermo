@@ -10,7 +10,7 @@ import (
 // ConfigSummary returns a non-secret destination hint for operator dashboards.
 func ConfigSummary(typ string, entry map[string]any) string {
 	switch typ {
-	case "email":
+	case notifierTypeEmail:
 		to := cfgval.StringList(entry["to"])
 		if len(to) == 0 {
 			return ""
@@ -19,7 +19,7 @@ func ConfigSummary(typ string, entry map[string]any) string {
 			return to[0]
 		}
 		return fmt.Sprintf("%s (+%d)", to[0], len(to)-1)
-	case "slack", "teams":
+	case notifierTypeSlack, notifierTypeTeams:
 		webhook := cfgval.AsString(entry["webhook"])
 		if webhook == "" {
 			return ""
@@ -29,7 +29,7 @@ func ConfigSummary(typ string, entry map[string]any) string {
 			return ""
 		}
 		return u.Host
-	case "tty":
+	case notifierTypeTTY:
 		users := cfgval.StringList(entry["users"])
 		if len(users) == 0 {
 			return "all active terminals"
@@ -38,7 +38,7 @@ func ConfigSummary(typ string, entry map[string]any) string {
 			return users[0]
 		}
 		return fmt.Sprintf("%s (+%d)", users[0], len(users)-1)
-	case "wall":
+	case notifierTypeWall:
 		return "all active terminals"
 	default:
 		return ""
