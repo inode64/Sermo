@@ -118,12 +118,7 @@ func resultSummary(noun string, entries map[string]any) string {
 }
 
 func detailLabel(title string, details ...string) string {
-	parts := []string{title}
-	for _, detail := range details {
-		if detail != "" {
-			parts = append(parts, detail)
-		}
-	}
+	parts := append([]string{title}, nonEmpty(details...)...)
 	return strings.Join(parts, " · ")
 }
 
@@ -132,4 +127,14 @@ func labelField(name, value string) string {
 		return ""
 	}
 	return name + ": " + value
+}
+
+func nonEmpty(values ...string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }

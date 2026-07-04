@@ -114,13 +114,3 @@ func mountCandidateLabel(c MountCandidate) string {
 	parts = append(parts, "["+state+"]")
 	return strings.Join(parts, " ")
 }
-
-func nonEmpty(values ...string) []string {
-	out := make([]string, 0, len(values))
-	for _, value := range values {
-		if value != "" {
-			out = append(out, value)
-		}
-	}
-	return out
-}
