@@ -1439,6 +1439,48 @@ watches:
 	}
 }
 
+func TestLoadIncludedWatchDocumentRejectsInvalidMetadata(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "wrong-kind",
+			body: `
+kind: service
+name: load
+check: { type: load, load5: { op: ">", value: 3 } }
+`,
+			want: "located under a watches directory but declares kind: service",
+		},
+		{
+			name: "path-name",
+			body: `
+name: "../load"
+check: { type: load, load5: { op: ">", value: 3 } }
+`,
+			want: `watch name "../load" must be a simple name without path separators`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			global := writeConfig(t, map[string]string{
+				"sermo.yml": `
+paths:
+  watches: [ @ROOT@/watches ]
+defaults:
+  policy: { cooldown: 5m }
+`,
+				"watches/load.yml": tc.body,
+			})
+
+			if _, err := Load(global); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Load() error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestStorageMountCapacityDefaultsMounted(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
