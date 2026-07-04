@@ -314,11 +314,17 @@ rules:
     blocks: [restart]
     if: { failed: { check: http } }
     then: { action: block }
+  guard-bad-blocks:
+    type: guard
+    blocks: [restart, 7]
+    if: { failed: { check: http } }
+    then: { action: block, message: "x" }
 `)
 	mustHave(t, issues, "then.action \"explode\" is not one of")
 	mustHave(t, issues, "guard requires a non-empty blocks list")
 	mustHave(t, issues, "only guard rules may set blocks")
 	mustHave(t, issues, "action block requires a non-empty message")
+	mustHave(t, issues, "blocks must be a string or list of strings")
 }
 
 func TestValidateMultiAction(t *testing.T) {

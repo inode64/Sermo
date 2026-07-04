@@ -183,7 +183,10 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 		}
 		actions := ruleActions(then)
 		isGuard := rtype == "guard"
-		blocks := cfgval.StringList(entry["blocks"])
+		blocks, blocksErr := cfgval.StrictStringList(entry["blocks"])
+		if _, present := entry["blocks"]; present && blocksErr != nil {
+			add("%s.blocks must be a string or list of strings", path)
+		}
 		hasBlock := false
 		for _, act := range actions {
 			if act.typ != "" {
@@ -202,7 +205,7 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 			}
 		}
 		if isGuard {
-			if len(blocks) == 0 {
+			if blocksErr != nil || len(blocks) == 0 {
 				add("%s guard requires a non-empty blocks list", path)
 			}
 			if !hasBlock {
