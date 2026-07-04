@@ -75,7 +75,7 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 		add("stop_policy.force_kill=true requires kill_only_if")
 	}
 	if hasKoi {
-		if len(cfgval.StringList(koi["users"])) == 0 || len(cfgval.StringList(koi["exe_any"])) == 0 {
+		if !cfgval.IsNonEmptyStringList(koi["users"]) || !cfgval.IsNonEmptyStringList(koi["exe_any"]) {
 			add("stop_policy.kill_only_if must define both users and exe_any, each non-empty")
 		}
 	}
@@ -89,7 +89,7 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 			}
 		}
 	}
-	if v, present := sp["files_absent"]; present && len(cfgval.StringList(v)) == 0 {
+	if v, present := sp["files_absent"]; present && !cfgval.IsNonEmptyStringList(v) {
 		add("stop_policy.files_absent must be a non-empty list of paths/globs")
 	}
 	validateCleanOnStop(sp["clean_on_stop"], add)
