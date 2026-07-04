@@ -1712,6 +1712,14 @@ notify: [ops]
 `,
 			want: `notifiers fragments only support top-level notifiers, got "notify"`,
 		},
+		{
+			name: "document-shape",
+			body: `
+name: ops-email
+type: email
+`,
+			want: "notifiers config directories only support top-level notifiers",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			global := writeConfig(t, map[string]string{
