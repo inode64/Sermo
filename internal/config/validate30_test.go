@@ -1430,6 +1430,16 @@ checks:
 	mustHave(t, issues, "variable ${missing_config} used in variables.port.from_file but not defined")
 }
 
+func TestValidateBinaryVariableStrictList(t *testing.T) {
+	issues := validateService(t, `
+name: svc
+service: x
+variables:
+  binary: [/usr/sbin/svc, 7]
+`)
+	mustHave(t, issues, "variables.binary must be a non-empty path string or list")
+}
+
 func TestValidateCleanServicePasses(t *testing.T) {
 	issues := validateService(t, `
 name: svc
