@@ -415,15 +415,15 @@ func validateReload(tree map[string]any, backend string, add addFunc) {
 // pidfile-identity verification: always for an OpenRC backend, and for a service
 // that declares an `openrc` block without a `systemd` one.
 func reloadSignalNeedsPidfileIdentity(tree map[string]any, backend string) bool {
-	if backend == "openrc" {
+	if backend == backendOpenRC {
 		return true
 	}
 	svc, ok := tree["service"].(map[string]any)
 	if !ok {
 		return false
 	}
-	_, hasSystemd := svc["systemd"]
-	_, hasOpenrc := svc["openrc"]
+	_, hasSystemd := svc[backendSystemd]
+	_, hasOpenrc := svc[backendOpenRC]
 	return hasOpenrc && !hasSystemd
 }
 
@@ -487,7 +487,7 @@ func validateServiceField(tree map[string]any, add addFunc) {
 		}
 		for _, k := range slices.Sorted(maps.Keys(v)) {
 			switch k {
-			case "systemd", "openrc":
+			case backendSystemd, backendOpenRC:
 				if !cfgval.IsNonEmptyStringArray(v[k]) {
 					add("service.%s must be a non-empty list", k)
 				}
@@ -516,7 +516,7 @@ func validateAlsoService(tree map[string]any, add addFunc) {
 	}
 	svc, _ := tree["service"].(map[string]any)
 	for _, k := range slices.Sorted(maps.Keys(m)) {
-		if k != "systemd" && k != "openrc" {
+		if k != backendSystemd && k != backendOpenRC {
 			add("also_service key %q is not one of systemd, openrc", k)
 			continue
 		}
