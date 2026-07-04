@@ -765,6 +765,24 @@ service: web
 	}
 }
 
+func TestValidateServiceAppsLinkInvalidShape(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"services/web-main.yml": `
+name: web-main
+apps: [app, 7]
+service: web
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !hasIssue(Validate(cfg), "apps must be a string or list of strings") {
+		t.Fatalf("Validate() did not report invalid apps shape")
+	}
+}
+
 func TestAppsLinkPreflightKeyCollisionErrors(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
