@@ -21,7 +21,7 @@ func (t *Teams) Type() string { return "teams" }
 
 // Send posts the message to the configured Teams webhook.
 func (t *Teams) Send(ctx context.Context, msg Message) error {
-	return webhookPost(t.post, teamsPost)(ctx, t.webhook, teamsPayload(msg))
+	return sendWebhook(ctx, t.post, teamsPost, t.webhook, teamsPayload(msg))
 }
 
 // buildTeams constructs a Teams notifier from a config entry.
