@@ -1390,6 +1390,32 @@ check: { type: load, load5: { op: ">", value: 3 } }
 	}
 }
 
+func TestLoadIncludedWatchDocumentRejectsDuplicateAcrossWatchDirs(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+paths:
+  networks: [ @ROOT@/networks ]
+  watches: [ @ROOT@/watches ]
+defaults:
+  policy: { cooldown: 5m }
+`,
+		"networks/ping-gw.yml": `
+name: ping-gw
+category: network
+check: { type: icmp, host: 192.0.2.1 }
+`,
+		"watches/ping-gw.yml": `
+name: ping-gw
+category: host
+check: { type: load, load5: { op: ">", value: 3 } }
+`,
+	})
+
+	if _, err := Load(global); err == nil || !strings.Contains(err.Error(), `watch "ping-gw" is already defined`) {
+		t.Fatalf("Load() error = %v, want duplicate watch across watch dirs", err)
+	}
+}
+
 func TestLoadIncludedWatchDocumentRequiresName(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
