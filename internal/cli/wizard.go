@@ -18,6 +18,7 @@ import (
 	"github.com/goccy/go-yaml"
 
 	"sermo/internal/assist"
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/mountctl"
@@ -891,7 +892,7 @@ func ensureConfigPathList(root map[string]any, base, pathKey, relDir, targetDir 
 		paths = map[string]any{}
 		root["paths"] = paths
 	}
-	list, err := yamlStringList(paths[pathKey])
+	list, err := cfgval.StrictStringList(paths[pathKey])
 	if err != nil {
 		return false, fmt.Errorf("paths.%s must be a string or list before wizard can append", pathKey)
 	}
@@ -918,34 +919,6 @@ func appendUniqueStrings(list []string, values ...string) []string {
 		out = append(out, item)
 	}
 	return out
-}
-
-func yamlStringList(v any) ([]string, error) {
-	switch x := v.(type) {
-	case nil:
-		return nil, nil
-	case string:
-		if x == "" {
-			return nil, nil
-		}
-		return []string{x}, nil
-	case []any:
-		out := make([]string, 0, len(x))
-		for _, item := range x {
-			s, ok := item.(string)
-			if !ok {
-				return nil, fmt.Errorf("non-string item")
-			}
-			if s != "" {
-				out = append(out, s)
-			}
-		}
-		return out, nil
-	case []string:
-		return append([]string(nil), x...), nil
-	default:
-		return nil, fmt.Errorf("unsupported")
-	}
 }
 
 func sameConfigPath(base, item, target string) bool {
