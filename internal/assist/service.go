@@ -293,38 +293,32 @@ func detectedProcessSelector(c ServiceCandidate) (map[string]any, string) {
 
 // serviceLabel renders the candidate's detected facts for the selection menu.
 func serviceLabel(c ServiceCandidate) string {
-	parts := []string{c.Title}
-	if c.Unit != "" {
-		parts = append(parts, "unit: "+c.Unit)
-	}
-	if c.Status != "" {
-		parts = append(parts, "status: "+c.Status)
-	}
+	details := []string{labelField("unit", c.Unit), labelField("status", c.Status)}
 	if c.Generic {
-		parts = append(parts, "not in catalog")
+		details = append(details, "not in catalog")
 	}
 	if c.Port > 0 {
 		port := fmt.Sprintf("port %d", c.Port)
 		if c.PortListening {
 			port += " (listening)"
 		}
-		parts = append(parts, port)
+		details = append(details, port)
 	}
 	if host, _ := c.Variables["host"].(string); host != "" {
-		parts = append(parts, "host: "+host)
+		details = append(details, labelField("host", host))
 	}
 	if len(c.ConfigPaths) > 0 {
-		parts = append(parts, "config: "+c.ConfigPaths[0])
+		details = append(details, labelField("config", c.ConfigPaths[0]))
 	}
 	if c.Pidfile != "" {
-		parts = append(parts, "pidfile: "+c.Pidfile)
+		details = append(details, labelField("pidfile", c.Pidfile))
 	} else if c.Cmd != "" {
-		parts = append(parts, "cmd match")
+		details = append(details, "cmd match")
 	} else if c.Exe != "" {
-		parts = append(parts, "exe: "+c.Exe)
+		details = append(details, labelField("exe", c.Exe))
 	}
 	if !c.UnitPresent {
-		parts = append(parts, "unit not found")
+		details = append(details, "unit not found")
 	}
-	return strings.Join(parts, " · ")
+	return detailLabel(c.Title, details...)
 }
