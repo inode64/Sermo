@@ -364,6 +364,46 @@ func TestExampleNotifierFragmentsUseOneTargetPerFile(t *testing.T) {
 	}
 }
 
+func TestExampleTargetDocsUseOneTargetPerFile(t *testing.T) {
+	root := repoRoot(t)
+	for _, tc := range []struct {
+		relDir     string
+		groupedKey string
+	}{
+		{relDir: "examples/services", groupedKey: "services"},
+		{relDir: "examples/apps", groupedKey: "apps"},
+		{relDir: "examples/storages", groupedKey: "storages"},
+	} {
+		t.Run(tc.relDir, func(t *testing.T) {
+			dir := filepath.Join(root, tc.relDir)
+			files, err := yamlFiles(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(files) == 0 {
+				t.Fatalf("%s has no examples", tc.relDir)
+			}
+			for _, name := range files {
+				path := filepath.Join(dir, name)
+				data, err := os.ReadFile(path) //nolint:gosec // test reads YAML examples under the repository root.
+				if err != nil {
+					t.Fatal(err)
+				}
+				var body map[string]any
+				if err := yaml.Unmarshal(data, &body); err != nil {
+					t.Fatalf("parse %s: %v", path, err)
+				}
+				if _, grouped := body[tc.groupedKey]; grouped {
+					t.Fatalf("%s must be a single target document, not a grouped %s map", path, tc.groupedKey)
+				}
+				if cfgval.String(body["name"]) == "" {
+					t.Fatalf("%s must declare top-level name", path)
+				}
+			}
+		})
+	}
+}
+
 func TestShippedServiceConfigsLiveUnderServices(t *testing.T) {
 	root := repoRoot(t)
 	servicesDir := filepath.Join(root, "examples", "services")
