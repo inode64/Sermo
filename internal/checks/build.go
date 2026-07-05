@@ -638,7 +638,11 @@ func parseCommandExports(checkName string, raw any) ([]commandExport, string) {
 			e.defaultValue = cfgval.String(rawDefault)
 		}
 		if rawRegex, present := spec["regex"]; present {
-			re, err := regexp.Compile(cfgval.String(rawRegex))
+			pattern := cfgval.String(rawRegex)
+			if pattern == "" {
+				return nil, "export." + name + ".regex must be non-empty"
+			}
+			re, err := regexp.Compile(pattern)
 			if err != nil {
 				return nil, "export." + name + ".regex is invalid: " + err.Error()
 			}
