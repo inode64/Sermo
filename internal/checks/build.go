@@ -26,6 +26,10 @@ import (
 
 const onModeChange = "change"
 
+// keyInterface is the check-entry field naming the egress network interface(s) a
+// tcp/http/ports/icmp/route probe binds to.
+const keyInterface = "interface"
+
 // net/icmp check metric names (the `metric:` selector of a net or icmp check).
 const (
 	netMetricState    = "state"
@@ -409,7 +413,7 @@ func buildTCPCheck(b base, entry map[string]any) (Check, string) {
 	if iwarn != "" {
 		return nil, "tcp check: " + iwarn
 	}
-	return tcpCheck{base: b, host: host, ifaces: parseInterfaces(entry["interface"]), ifaceAll: all, port: port}, ""
+	return tcpCheck{base: b, host: host, ifaces: parseInterfaces(entry[keyInterface]), ifaceAll: all, port: port}, ""
 }
 
 // buildPortsCheck builds a multi-port open/closed check.
@@ -443,7 +447,7 @@ func buildPortsCheck(b base, entry map[string]any) (Check, string) {
 	return &portsCheck{
 		base:           b,
 		host:           host,
-		ifaces:         parseInterfaces(entry["interface"]),
+		ifaces:         parseInterfaces(entry[keyInterface]),
 		ifaceAll:       allIf,
 		ports:          ports,
 		expect:         expect,
@@ -503,7 +507,7 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 	// interface: egress the HTTP request (and any proxy connection) through a
 	// specific interface by binding the transport's dialer. The http client has
 	// one fixed transport, so it honors a single interface (the first listed).
-	if ifaces := parseInterfaces(entry["interface"]); len(ifaces) > 0 {
+	if ifaces := parseInterfaces(entry[keyInterface]); len(ifaces) > 0 {
 		if cfgval.Bool(entry["http3"]) {
 			return nil, "http check: http3 and interface are mutually exclusive"
 		}
@@ -939,7 +943,7 @@ func buildAutofsCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 
 // buildNetCheck builds a network-interface state/speed/errors check.
 func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	iface := cfgval.AsString(entry["interface"])
+	iface := cfgval.AsString(entry[keyInterface])
 	if iface == "" {
 		return nil, "net check requires an interface"
 	}
@@ -1283,7 +1287,7 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	if iwarn != "" {
 		return nil, "icmp check: " + iwarn
 	}
-	c := &icmpCheck{base: b, host: host, ifaces: parseInterfaces(entry["interface"]), ifaceAll: allIf, count: count, metric: metric, sampler: deps.PingSampler}
+	c := &icmpCheck{base: b, host: host, ifaces: parseInterfaces(entry[keyInterface]), ifaceAll: allIf, count: count, metric: metric, sampler: deps.PingSampler}
 	switch metric {
 	case netMetricState:
 		expect := cfgval.AsString(entry["expect"])
@@ -1338,7 +1342,7 @@ func buildRouteCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	default:
 		return nil, "route family must be ipv4 or ipv6"
 	}
-	return routeCheck{base: b, family: family, iface: cfgval.AsString(entry["interface"]), sampler: deps.RouteSampler}, ""
+	return routeCheck{base: b, family: family, iface: cfgval.AsString(entry[keyInterface]), sampler: deps.RouteSampler}, ""
 }
 
 // buildSizeCheck builds a path-growth check over a time window.
