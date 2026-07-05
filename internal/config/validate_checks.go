@@ -550,7 +550,7 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 // flat `rules` list remains (unknown-set/silence errors are raised during
 // resolution). It checks each rule's id (present, unique), severity
 // (error|warning|ok), stream (stdout|stderr|both or empty), and that `match`
-// compiles as a regular expression.
+// is a non-empty regular expression.
 func validateAnalyze(path string, entry map[string]any, add addFunc) {
 	analyze, ok := entry["analyze"].(map[string]any)
 	if !ok {
@@ -590,7 +590,12 @@ func validateAnalyze(path string, entry map[string]any, add addFunc) {
 		default:
 			add("%s.analyze rule %q stream must be stdout, stderr or both", path, id)
 		}
-		if _, err := regexp.Compile(cfgval.AsString(rm["match"])); err != nil {
+		match := cfgval.AsString(rm["match"])
+		if match == "" {
+			add("%s.analyze rule %q is missing a match", path, id)
+			continue
+		}
+		if _, err := regexp.Compile(match); err != nil {
 			add("%s.analyze rule %q has an invalid regex: %v", path, id, err)
 		}
 	}
