@@ -36,21 +36,17 @@ policy:
   backoff:
     initial: 15m
     max: 1h
-rules:
+watches:
   restart-if-rsync-failed:
-    type: remediation
-    if:
-      failed:
-        check: rsync
+    check:
+      ref: rsync
     for:
       cycles: 3
     then:
       action: restart
   restart-if-port-failed:
-    type: remediation
-    if:
-      failed:
-        check: port
+    check:
+      ref: port
     for:
       cycles: 3
     then:

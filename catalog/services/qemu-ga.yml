@@ -27,12 +27,10 @@ checks:
       - --version
     timeout: 5s
     verify: true
-rules:
+watches:
   restart-if-version-failed:
-    type: remediation
-    if:
-      failed:
-        check: version
+    check:
+      ref: version
     for:
       cycles: 3
     then:

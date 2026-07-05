@@ -176,11 +176,17 @@ func TestApacheCatalogRestartsOnHotWorkerThread(t *testing.T) {
 	if len(errs) > 0 {
 		t.Fatalf("ResolveCatalog(apache): %v", errs)
 	}
+	// The unified watch desugars into a remediation rule referencing an embedded
+	// optional cpu_thread metric check (a non-optional metric check would mark the
+	// service unavailable when breached).
 	rule := nested(t, resolved.Tree, "rules", "restart-if-worker-thread-hot")
 	if got := cfgval.String(rule["type"]); got != "remediation" {
 		t.Fatalf("rule type = %q, want remediation", got)
 	}
-	metric := nested(t, rule, "if", "metric")
+	if got := cfgval.String(nested(t, rule, "if", "active")["check"]); got != "restart-if-worker-thread-hot" {
+		t.Fatalf("rule if.active.check = %q, want restart-if-worker-thread-hot", got)
+	}
+	metric := nested(t, resolved.Tree, "checks", "restart-if-worker-thread-hot")
 	if got := cfgval.String(metric["scope"]); got != "service" {
 		t.Fatalf("metric scope = %q, want service", got)
 	}
@@ -192,6 +198,9 @@ func TestApacheCatalogRestartsOnHotWorkerThread(t *testing.T) {
 	}
 	if got := cfgval.String(metric["value"]); got != "90%" {
 		t.Fatalf("metric value = %q, want 90%%", got)
+	}
+	if !cfgval.Bool(metric["optional"]) {
+		t.Fatalf("embedded metric check must be optional to preserve SLA")
 	}
 	if got := cfgval.String(nested(t, rule, "for")["duration"]); got != "6m" {
 		t.Fatalf("for.duration = %q, want 6m", got)
@@ -1248,9 +1257,15 @@ func TestCatalogNetworkManagerStatusIsAuxiliary(t *testing.T) {
 	if !slices.Equal(command, want) {
 		t.Fatalf("networkmanager checks.status command = %v, want %v", command, want)
 	}
-	rules := nested(t, body, "rules")
-	if _, ok := rules["restart-if-status-failed"]; ok {
-		t.Fatal("networkmanager must not remediate on the auxiliary nmcli status check")
+	if rules, ok := body["rules"].(map[string]any); ok {
+		if _, ok := rules["restart-if-status-failed"]; ok {
+			t.Fatal("networkmanager must not remediate on the auxiliary nmcli status check")
+		}
+	}
+	if watches, ok := body["watches"].(map[string]any); ok {
+		if _, ok := watches["restart-if-status-failed"]; ok {
+			t.Fatal("networkmanager must not remediate on the auxiliary nmcli status check")
+		}
 	}
 }
 
@@ -1987,17 +2002,14 @@ func TestRedisCatalogAlertsOnPersistenceFailure(t *testing.T) {
 	if _, ok := nested(t, body, "checks")["persistence"]; !ok {
 		t.Fatal("redis missing persistence check")
 	}
-	rule := nested(t, body, "rules", "alert-if-persistence-failed")
-	if got := cfgval.String(rule["type"]); got != "alert" {
-		t.Fatalf("redis persistence rule type = %q, want alert", got)
+	// The alert is now a unified watch referencing the shared persistence check.
+	watch := nested(t, body, "watches", "alert-if-persistence-failed")
+	if got := cfgval.String(nested(t, watch, "check")["ref"]); got != "persistence" {
+		t.Fatalf("redis persistence watch check = %v, want ref: persistence", watch["check"])
 	}
-	failed := nested(t, rule, "if", "failed")
-	if got := cfgval.String(failed["check"]); got != "persistence" {
-		t.Fatalf("redis persistence rule check = %q, want persistence", got)
-	}
-	then := nested(t, rule, "then")
+	then := nested(t, watch, "then")
 	if got := cfgval.String(then["action"]); got != "alert" {
-		t.Fatalf("redis persistence rule action = %q, want alert", got)
+		t.Fatalf("redis persistence watch action = %q, want alert", got)
 	}
 }
 

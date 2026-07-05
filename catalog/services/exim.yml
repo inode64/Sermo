@@ -41,15 +41,15 @@ checks:
     cert_verify: false
     expires_in_days: 21
     timeout: 5s
-rules:
+watches:
   restart-if-worker-thread-hot:
-    type: remediation
-    if:
-      metric:
-        scope: service
-        name: cpu_thread
-        op: '>'
-        value: 90%
+    check:
+      type: metric
+      scope: service
+      name: cpu_thread
+      op: '>'
+      value: 90%
+      optional: true
     for:
       duration: 6m
     then:

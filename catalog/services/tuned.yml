@@ -30,12 +30,10 @@ policy:
   backoff:
     initial: 15m
     max: 1h
-rules:
+watches:
   restart-if-active-failed:
-    type: remediation
-    if:
-      failed:
-        check: active
+    check:
+      ref: active
     for:
       cycles: 3
     then:

@@ -23,20 +23,17 @@ checks:
     timeout: 5s
 
     verify: true
-rules:
+watches:
   restart-if-rdp-failed:
-    type: remediation
-    if:
-      failed: { check: rdp }
+    check:
+      ref: rdp
     for:
       cycles: 3
     then:
       action: restart
-
   restart-if-port-failed:
-    type: remediation
-    if:
-      failed: { check: port }
+    check:
+      ref: port
     for:
       cycles: 3
     then:

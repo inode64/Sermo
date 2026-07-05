@@ -46,21 +46,17 @@ stop_policy:
       - ${user}
     exe_any:
       - ${cloudflared_binary}
-rules:
+watches:
   restart-if-inactive:
-    type: remediation
-    if:
-      failed:
-        check: service
+    check:
+      ref: service
     for:
       cycles: 3
     then:
       action: restart
   restart-if-protocol-failed:
-    type: remediation
-    if:
-      failed:
-        check: protocol
+    check:
+      ref: protocol
     for:
       cycles: 3
     then:

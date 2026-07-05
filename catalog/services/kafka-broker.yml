@@ -39,12 +39,10 @@ policy:
   backoff:
     initial: 15m
     max: 1h
-rules:
+watches:
   restart-if-protocol-failed:
-    type: remediation
-    if:
-      failed:
-        check: protocol
+    check:
+      ref: protocol
     for:
       cycles: 3
     then:

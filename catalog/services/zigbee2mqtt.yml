@@ -34,39 +34,38 @@ rules:
         path: ${node_binary}
     then:
       action: restart
+variables:
+  port: 8080
+watches:
   restart-if-http-failed:
-    type: remediation
-    if:
-      failed:
-        check: http
+    check:
+      ref: http
     for:
       cycles: 3
     then:
       action: restart
   restart-if-worker-thread-hot:
-    type: remediation
-    if:
-      metric:
-        scope: service
-        name: cpu_thread
-        op: '>'
-        value: 90%
+    check:
+      type: metric
+      scope: service
+      name: cpu_thread
+      op: '>'
+      value: 90%
+      optional: true
     for:
       duration: 6m
     then:
       action: restart
   alert-if-memory-high:
-    type: alert
-    if:
-      metric:
-        scope: service
-        name: memory
-        op: '>'
-        value: 60%
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 60%
+      optional: true
     for:
       duration: 10m
     then:
       action: alert
       message: ${display_name} memory usage is high
-variables:
-  port: 8080

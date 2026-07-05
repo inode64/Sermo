@@ -87,11 +87,10 @@ checks:
     expires_in_days: 21
     timeout: 5s
 
-rules:
+watches:
   restart-if-imap-failed:
-    type: remediation
-    if:
-      failed: { check: imap }
+    check:
+      ref: imap
     for:
       cycles: 3
     then:
