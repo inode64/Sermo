@@ -55,7 +55,7 @@ func (c memoryCheck) Run(_ context.Context) Result {
 
 	res := c.result(ok, fmt.Sprintf("memory used %.1f%% available %.1f%% (%d bytes)", usedPct, availPct, avail), start)
 	res.Data = map[string]any{
-		"total_bytes":       s.TotalBytes,
+		fieldTotalBytes:     s.TotalBytes,
 		fieldAvailableBytes: avail,
 		fieldUsedPct:        usedPct,
 		fieldAvailablePct:   availPct,
