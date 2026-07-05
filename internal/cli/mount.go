@@ -15,24 +15,27 @@ import (
 	"sermo/internal/state"
 )
 
+// mountCommand is the command name reported in mount usage errors.
+const mountCommand = "mount"
+
 func (a App) runMount(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.commandUsageError("mount", "mount requires a target, or subcommand status/list")
+		return a.commandUsageError(mountCommand, "mount requires a target, or subcommand status/list")
 	}
 	switch opts.args[0] {
 	case "list":
 		if len(opts.args) > 1 {
-			return a.commandUsageError("mount", "mount list takes no arguments")
+			return a.commandUsageError(mountCommand, "mount list takes no arguments")
 		}
 		return a.runMountList(opts)
 	case "status":
 		if len(opts.args) != 2 {
-			return a.commandUsageError("mount", "mount status requires exactly one mount name or path")
+			return a.commandUsageError(mountCommand, "mount status requires exactly one mount name or path")
 		}
 		return a.runMountStatus(opts, opts.args[1])
 	default:
 		if len(opts.args) > 1 {
-			return a.commandUsageError("mount", "mount takes exactly one target")
+			return a.commandUsageError(mountCommand, "mount takes exactly one target")
 		}
 		return a.runMountAcquire(ctx, opts, opts.args[0])
 	}
