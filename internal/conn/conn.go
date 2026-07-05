@@ -35,6 +35,9 @@ const (
 	// the ping/pong health probes (php-fpm, rspamd, spamd).
 	extraPing = "ping"
 	respPong  = "pong"
+	// extraProtocol is the Result.Extra key carrying a negotiated protocol
+	// version/dialect (ssh, smb, rsync, spamd, dhclient).
+	extraProtocol = "protocol"
 )
 
 // Config is the connection target for a protocol probe. Fields that do not apply

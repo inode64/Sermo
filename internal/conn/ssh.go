@@ -105,7 +105,7 @@ func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 			"fingerprint":    ssh.FingerprintSHA256(hostKey),
 			"host_key_algo":  hostKey.Type(),
 			"server_version": banner,
-			"protocol":       proto,
+			extraProtocol:    proto,
 		},
 	}, nil
 }

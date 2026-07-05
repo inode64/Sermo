@@ -39,7 +39,7 @@ func (dhclientProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 	extra := map[string]string{
-		"protocol":      networkUDP,
+		extraProtocol:   networkUDP,
 		"local_address": sock.localAddress,
 		"port":          strconv.Itoa(sock.port),
 		"state":         sock.state,
