@@ -12,6 +12,12 @@ import (
 	"time"
 )
 
+// Link-state values reported and expected by net/icmp state checks.
+const (
+	netStateUp   = "up"
+	netStateDown = "down"
+)
+
 // NetSample is one observation of a network interface.
 type NetSample struct {
 	State      string // "up" | "down"
@@ -189,12 +195,12 @@ func sampleNetFromSysfs(iface, root string) (NetSample, error) {
 			return NetSample{}, err
 		}
 	}
-	state := "down"
+	state := netStateDown
 	if err == nil && ifi.Flags&net.FlagUp != 0 && ifi.Flags&net.FlagRunning != 0 {
-		state = "up"
+		state = netStateUp
 	}
 	if err != nil && sysfsIfaceUp(dir) {
-		state = "up"
+		state = netStateUp
 	}
 	sample := NetSample{State: state, Counters: map[string]uint64{}}
 
@@ -239,7 +245,7 @@ func sysfsIfaceDir(root, iface string) string {
 func sysfsIfaceUp(dir string) bool {
 	flags := sysfsIfaceFlagBits(filepath.Join(dir, "flags"))
 	operstate := strings.TrimSpace(readTextFile(filepath.Join(dir, "operstate")))
-	return flags&0x1 != 0 && (flags&0x40 != 0 || operstate == "up" || operstate == "unknown")
+	return flags&0x1 != 0 && (flags&0x40 != 0 || operstate == netStateUp || operstate == "unknown")
 }
 
 func sysfsIfaceFlagBits(path string) uint64 {
