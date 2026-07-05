@@ -41,7 +41,7 @@ func (c loadCheck) Run(_ context.Context) Result {
 		return c.result(false, "load: "+err.Error(), start)
 	}
 
-	values := map[string]float64{"load1": s.Load1, "load5": s.Load5, "load15": s.Load15}
+	values := map[string]float64{fieldLoad1: s.Load1, fieldLoad5: s.Load5, fieldLoad15: s.Load15}
 	if c.perCPU {
 		if s.NumCPU <= 0 {
 			return c.result(false, "load: cpu count unknown", start)
@@ -59,10 +59,10 @@ func (c loadCheck) Run(_ context.Context) Result {
 	}
 	res := c.result(ok, fmt.Sprintf("load %.2f %.2f %.2f%s", s.Load1, s.Load5, s.Load15, suffix), start)
 	res.Data = map[string]any{
-		"load1": s.Load1, "load5": s.Load5, "load15": s.Load15,
+		fieldLoad1: s.Load1, fieldLoad5: s.Load5, fieldLoad15: s.Load15,
 		"num_cpu": s.NumCPU, "per_cpu": c.perCPU,
 	}
-	res.Data["value"] = firstPredValue(c.preds, values, values["load1"])
+	res.Data["value"] = firstPredValue(c.preds, values, values[fieldLoad1])
 	return res
 }
 

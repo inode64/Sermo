@@ -33,6 +33,10 @@ const (
 	fieldAvailablePct = "available_pct"
 	// fieldAvailableBytes is the "available bytes" field of a memory check.
 	fieldAvailableBytes = "available_bytes"
+	// fieldLoad1, fieldLoad5 and fieldLoad15 are the load-average fields of a load check.
+	fieldLoad1  = "load1"
+	fieldLoad5  = "load5"
+	fieldLoad15 = "load15"
 )
 
 // Predicate field lists, one per level check. They are exported so config
@@ -58,7 +62,7 @@ var (
 	// ConntrackPredFields are the predicates of a conntrack check.
 	ConntrackPredFields = []string{fieldUsedPct, fieldFree, "count"}
 	// LoadPredFields are the predicates of a load check.
-	LoadPredFields = []string{"load1", "load5", "load15"}
+	LoadPredFields = []string{fieldLoad1, fieldLoad5, fieldLoad15}
 	// UsersPredFields is the single required predicate of a users check.
 	UsersPredFields = []string{"count"}
 	// ProcessCountPredFields is the single required predicate of a process_count check.
