@@ -9,6 +9,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/execx"
+	"sermo/internal/output"
 )
 
 const (
@@ -186,9 +187,9 @@ func commandResultError(command string, res execx.Result, err error) error {
 		}
 		return fmt.Errorf("%s: %s", command, msg)
 	}
-	msg := FirstNonEmptyLine(res.Stderr)
+	msg := output.FirstNonEmptyLine(res.Stderr)
 	if msg == "" {
-		msg = FirstNonEmptyLine(res.Stdout)
+		msg = output.FirstNonEmptyLine(res.Stdout)
 	}
 	if msg != "" {
 		return fmt.Errorf("%s: %s", command, msg)

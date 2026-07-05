@@ -46,23 +46,6 @@ func TestExpectExitText(t *testing.T) {
 	}
 }
 
-func TestBoundTail(t *testing.T) {
-	// Exactly the line limit (40) is kept whole; one more line truncates.
-	forty := strings.Repeat("x\n", 39) + "x"
-	if strings.HasPrefix(boundTail(forty), "… (truncated)") {
-		t.Errorf("exactly %d lines must not be truncated", boundedOutputMaxLines)
-	}
-	fortyOne := strings.Repeat("x\n", 40) + "x"
-	if !strings.HasPrefix(boundTail(fortyOne), "… (truncated)") {
-		t.Errorf("%d lines must be truncated", boundedOutputMaxLines+1)
-	}
-	// Exactly the byte limit (single line) is kept whole.
-	exact := strings.Repeat("a", boundedOutputMaxBytes)
-	if strings.HasPrefix(boundTail(exact), "… (truncated)") {
-		t.Errorf("a %d-byte single line must not be truncated", boundedOutputMaxBytes)
-	}
-}
-
 func TestParseLdSoConf(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "ld.so.conf")

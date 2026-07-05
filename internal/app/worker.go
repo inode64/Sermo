@@ -13,6 +13,7 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
+	"sermo/internal/output"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
@@ -728,7 +729,7 @@ func (w *Worker) changedAppVersion(ctx context.Context, app string, level int) (
 	}
 	key := checks.TruncateVersion(checks.ShortVersion(raw), level)
 	if key == "" {
-		key = checks.FirstNonEmptyLine(raw)
+		key = output.FirstNonEmptyLine(raw)
 	}
 	if w.appVersions == nil {
 		w.appVersions = map[string]string{}
@@ -771,7 +772,7 @@ func (w *Worker) sampleVersion(ctx context.Context, vc appVersionCmd) (string, e
 		}
 		return "", fmt.Errorf("version command exit %d", res.ExitCode)
 	}
-	return checks.TrimOutput(res.Stdout), nil
+	return output.Trim(res.Stdout), nil
 }
 
 // fileFingerprint summarizes a file's identity for change detection: its size and

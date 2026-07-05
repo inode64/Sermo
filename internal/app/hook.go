@@ -9,6 +9,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/execx"
+	"sermo/internal/output"
 )
 
 // HookSpec is a watch's hook action: a local command (argv, never a shell) run
@@ -56,7 +57,7 @@ func (h HookSpec) Run(ctx context.Context, runner HookRunner, env map[string]str
 	}
 	if !checks.ExitCodeExpected(res.ExitCode, h.ExpectExit) {
 		detail := fmt.Sprintf("exit %d (want %s)", res.ExitCode, checks.ExpectExitText(h.ExpectExit))
-		if s := checks.FirstNonEmptyLine(res.Stderr); s != "" {
+		if s := output.FirstNonEmptyLine(res.Stderr); s != "" {
 			detail += ": " + s
 		}
 		return errors.New(detail)

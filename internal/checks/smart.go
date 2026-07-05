@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/output"
 )
 
 // smartCheck reads a drive's SMART health and attributes via `smartctl -j`. With
@@ -38,7 +39,7 @@ func (c smartCheck) Run(ctx context.Context) Result {
 	}
 	data, err := parseSmart(res.Stdout)
 	if err != nil {
-		if s := FirstNonEmptyLine(res.Stderr); s != "" {
+		if s := output.FirstNonEmptyLine(res.Stderr); s != "" {
 			return c.result(false, "smart "+c.device+": "+s, start)
 		}
 		return c.result(false, "smart "+c.device+": "+err.Error(), start)
@@ -89,7 +90,7 @@ func SampleSmart(ctx context.Context, runner execx.Runner, device string, timeou
 	}
 	data, err := parseSmart(res.Stdout)
 	if err != nil {
-		if s := FirstNonEmptyLine(res.Stderr); s != "" {
+		if s := output.FirstNonEmptyLine(res.Stderr); s != "" {
 			return SmartSample{}, fmt.Errorf("%s", s)
 		}
 		return SmartSample{}, err

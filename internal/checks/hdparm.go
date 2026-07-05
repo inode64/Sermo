@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/output"
 )
 
 // hdparmCheck compares configured hdparm timing rates with thresholds. It is
@@ -42,7 +43,7 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 	}
 	values, err := parseHdparm(res.Stdout)
 	if err != nil {
-		if s := FirstNonEmptyLine(res.Stderr); s != "" {
+		if s := output.FirstNonEmptyLine(res.Stderr); s != "" {
 			return c.result(false, "hdparm "+c.device+": "+s, start)
 		}
 		return c.result(false, "hdparm "+c.device+": "+err.Error(), start)
@@ -78,7 +79,7 @@ func SampleHdparm(ctx context.Context, runner execx.Runner, device string, wantC
 	}
 	values, err := parseHdparm(res.Stdout)
 	if err != nil {
-		if s := FirstNonEmptyLine(res.Stderr); s != "" {
+		if s := output.FirstNonEmptyLine(res.Stderr); s != "" {
 			return nil, fmt.Errorf("%s", s)
 		}
 		return nil, err

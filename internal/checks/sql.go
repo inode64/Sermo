@@ -10,6 +10,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
+	"sermo/internal/output"
 )
 
 // sqlCheck is condition-style: OK means the scalar query result matches
@@ -84,11 +85,11 @@ func sqlValueString(v any) string {
 	case nil:
 		return ""
 	case []byte:
-		return TrimOutput(string(t))
+		return output.Trim(string(t))
 	case string:
-		return TrimOutput(t)
+		return output.Trim(t)
 	default:
-		return TrimOutput(fmt.Sprintf("%v", t))
+		return output.Trim(fmt.Sprintf("%v", t))
 	}
 }
 
