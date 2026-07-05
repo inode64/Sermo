@@ -569,6 +569,17 @@ optional `interval` to run it less often than the worker cycle — every
 `round(interval / resolution)` cycles, reusing its last result in between (see
 [per-check interval](configuration.md#per-check-interval)).
 
+A health check (`tcp`/`http`/`service`/`command`/`cert`/…) may also set
+`verify: true` to double as the **post-operation start verification**: after a
+successful start/restart/reload/resume the engine runs every `verify: true`
+check once and fails the operation (`postflight_failed`) if a required one is
+not OK — its `for`/`within` window and any remediation are ignored, only the
+immediate result counts, and `optional: true` makes a failure a warning. This
+replaces the retired `postflight:` section, so the health probe is defined once
+and serves both periodic monitoring and start verification. `verify: true` is
+rejected on condition checks (`metric`/`storage`/`load`/`fds`/…) whose OK does
+not confirm a successful start.
+
 ### Database connection (`mysql` / `mariadb`)
 
 A connection-protocol check connects to a server over its wire protocol and

@@ -44,7 +44,7 @@ rules
 guards
 locks
 preflight
-postflight
+start verification (verify: true checks)
 process discovery
 safe restart behavior
 systemd/OpenRC detection

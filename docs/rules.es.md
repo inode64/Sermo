@@ -569,6 +569,17 @@ Cada comprobación tiene un `timeout` opcional (si no `engine.default_timeout`) 
 `round(interval / resolution)` ciclos, reutilizando su último resultado entre tanto (ver
 [intervalo por comprobación](configuration.es.md#per-check-interval)).
 
+Una comprobación de salud (`tcp`/`http`/`service`/`command`/`cert`/…) puede además
+marcar `verify: true` para servir como **verificación de arranque tras la operación**:
+tras un start/restart/reload/resume correcto el motor ejecuta una vez cada comprobación
+`verify: true` y falla la operación (`postflight_failed`) si una requerida no está OK —
+se ignoran su ventana `for`/`within` y cualquier remediación, solo cuenta el resultado
+inmediato, y `optional: true` convierte el fallo en aviso. Esto reemplaza la retirada
+sección `postflight:`, así el sondeo de salud se define una sola vez y sirve tanto para
+la monitorización periódica como para la verificación de arranque. `verify: true` se
+rechaza en comprobaciones de condición (`metric`/`storage`/`load`/`fds`/…) cuyo OK no
+confirma un arranque correcto.
+
 ### Conexión a base de datos (`mysql` / `mariadb`)
 
 Una comprobación de protocolo de conexión se conecta a un servidor sobre su protocolo de cable y

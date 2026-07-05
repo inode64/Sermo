@@ -188,7 +188,7 @@ Use these rules:
 scalars: override
 maps: recursive merge
 arrays: replace unless documented otherwise
-checks/preflight/postflight/processes/rules: maps keyed by name
+checks/preflight/processes/rules: maps keyed by name
 enabled: false disables inherited item
 delete: true removes inherited item
 ```
@@ -359,7 +359,7 @@ defaults.policy.cooldown present and positive
 resolved service policy.cooldown present and positive; catalog service/service omissions are allowed only when inherited
 policy.max_actions requires max_actions_window
 block/alert actions require a message
-postflight entries use the same schema as preflight/checks; optional is boolean
+a checks/preflight entry flagged verify:true also runs as post-operation start verification (health-type checks only); optional and verify are booleans; cert checks use cert_verify for TLS chain verification
 file_exists checks do not point under <paths.runtime>/locks; Sermo named runtime locks are checked by the engine
 ```
 
