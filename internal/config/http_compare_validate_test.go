@@ -25,7 +25,7 @@ checks:
 
 func TestValidateHTTPMethods(t *testing.T) {
 	// Every standard verb (any case) validates cleanly.
-	for _, m := range []string{"GET", "head", "POST", "Put", "PATCH", "delete", "OPTIONS", "TRACE", "CONNECT"} {
+	for _, m := range []string{"GET", "head", "POST", "Put", "PATCH", "delete", "OPTIONS", "TRACE", "CONNECT", `" patch "`} {
 		issues := validateService(t, "name: web\nservice: x\nchecks:\n  api: { type: http, url: \"http://h/\", method: "+m+" }\n")
 		for _, is := range issues {
 			if hasIssue([]Issue{is}, "checks.api") {

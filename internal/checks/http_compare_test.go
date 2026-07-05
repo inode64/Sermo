@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -63,6 +64,13 @@ func TestHTTPMethods(t *testing.T) {
 	res := runHTTP(t, srv, map[string]any{"url": srv.URL, "method": "delete"})
 	if !res.OK || got != "DELETE" {
 		t.Fatalf("lowercase method should normalize to DELETE: got %q ok=%v", got, res.OK)
+	}
+	res = runHTTP(t, srv, map[string]any{"url": srv.URL, "method": " patch "})
+	if !res.OK || got != "PATCH" {
+		t.Fatalf("spaced method should normalize to PATCH: got %q ok=%v", got, res.OK)
+	}
+	if _, warn := buildHTTP(t, srv, map[string]any{"type": "http", "url": srv.URL, "method": "GTE"}); !strings.Contains(warn, "not a standard HTTP method") {
+		t.Fatalf("invalid method warning = %q", warn)
 	}
 
 	// A PUT carrying a body still works (the body is sent for any method).
