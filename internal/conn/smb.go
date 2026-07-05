@@ -47,7 +47,7 @@ func (smbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 	extra := map[string]string{
-		"protocol":         smbProtocolName(dialect),
+		extraProtocol:      smbProtocolName(dialect),
 		"signing_required": strconv.FormatBool(signingRequired),
 	}
 
