@@ -18,6 +18,13 @@ const (
 	SevError                   // maps to a required failure
 )
 
+// Analyze stream identifiers accepted by command output analysis rules.
+const (
+	AnalyzeStreamBoth   = "both"
+	AnalyzeStreamStdout = "stdout"
+	AnalyzeStreamStderr = "stderr"
+)
+
 func (s Severity) String() string {
 	switch s {
 	case SevError:
@@ -47,7 +54,7 @@ type analyzeRule struct {
 	id       string
 	re       *regexp.Regexp
 	severity Severity
-	stream   string // "stdout" | "stderr" | "both"
+	stream   string
 }
 
 // outputAnalyzer holds a check's resolved, compiled rule list.
@@ -80,8 +87,8 @@ func (a *outputAnalyzer) Analyze(stdout, stderr string) (sev Severity, id, line 
 			}
 		}
 	}
-	scan(stdout, "stdout")
-	scan(stderr, "stderr")
+	scan(stdout, AnalyzeStreamStdout)
+	scan(stderr, AnalyzeStreamStderr)
 	return sev, id, line
 }
 
@@ -122,9 +129,9 @@ func parseAnalyzer(v any) (*outputAnalyzer, string) {
 		}
 		stream := cfgval.AsString(rm["stream"])
 		if stream == "" {
-			stream = "both"
+			stream = AnalyzeStreamBoth
 		}
-		if stream != "both" && stream != "stdout" && stream != "stderr" {
+		if stream != AnalyzeStreamBoth && stream != AnalyzeStreamStdout && stream != AnalyzeStreamStderr {
 			return nil, fmt.Sprintf("analyze rule %q stream must be stdout, stderr or both", id)
 		}
 		re, err := regexp.Compile(cfgval.AsString(rm["match"]))

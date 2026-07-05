@@ -586,7 +586,7 @@ func validateAnalyze(path string, entry map[string]any, add addFunc) {
 			add("%s.analyze rule %q severity must be error, warning or ok", path, id)
 		}
 		switch cfgval.AsString(rm["stream"]) {
-		case "", "both", "stdout", "stderr":
+		case "", checks.AnalyzeStreamBoth, checks.AnalyzeStreamStdout, checks.AnalyzeStreamStderr:
 		default:
 			add("%s.analyze rule %q stream must be stdout, stderr or both", path, id)
 		}
