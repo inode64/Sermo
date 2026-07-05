@@ -290,6 +290,11 @@ func validateCommandFields(path string, entry map[string]any, validateAnalyzeFie
 	}
 	validateCommandUser(path, entry, add)
 	validateCommandExpectations(path, entry, add)
+	if v, present := entry["on_change"]; present {
+		if _, ok := v.(bool); !ok {
+			add("%s.on_change must be a boolean", path)
+		}
+	}
 	validateVersionMatcherField(path, entry["version_match"], add)
 	if validateAnalyzeFields {
 		validateAnalyze(path, entry, add)
