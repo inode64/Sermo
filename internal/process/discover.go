@@ -85,7 +85,7 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	// 0. backend-provided PIDs (systemd cgroup + MainPID).
 	for _, pid := range backendPIDs {
 		if id, ok := snapshot[pid]; ok {
-			add(id, "main", sourceBackend)
+			add(id, roleMain, sourceBackend)
 			hasBackendProcess = true
 		}
 	}
@@ -132,7 +132,7 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 
 	// 3. descendants from the process tree.
 	for _, pid := range descendants(snapshot, order) {
-		add(snapshot[pid], "child", sourceChild)
+		add(snapshot[pid], roleChild, sourceChild)
 	}
 
 	result := make([]Process, 0, len(order))
