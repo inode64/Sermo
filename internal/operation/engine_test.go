@@ -241,6 +241,36 @@ func TestVerifyRunnerSourcesOnlyVerifyChecks(t *testing.T) {
 	}
 }
 
+// TestNewWiresVerifyChecksAsPostflight locks the wiring: operation.New must build
+// the engine's Postflight closure from verify:true checks (not a postflight section).
+func TestNewWiresVerifyChecksAsPostflight(t *testing.T) {
+	dir := t.TempDir()
+	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	missing := "/nonexistent-verify-wiring-xyz"
+	engine := New(Config{
+		Service: "web",
+		Unit:    "nginx",
+		Backend: "systemd",
+		Tree: map[string]any{"checks": map[string]any{
+			"health":    map[string]any{"type": "file_exists", "path": missing, "verify": true},
+			"monitored": map[string]any{"type": "file_exists", "path": missing}, // no verify → not run
+		}},
+		CheckDeps:  checks.Deps{DefaultTimeout: time.Second},
+		Manager:    &fakeManager{status: servicemgr.StatusActive},
+		Locker:     &locker,
+		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
+		Discoverer: process.NewDiscovererWithUserLookup(nil),
+		Sleep:      func(time.Duration) {},
+	})
+	out := engine.Postflight(context.Background())
+	if out.OK {
+		t.Fatalf("Postflight must fail when a required verify check fails: %+v", out)
+	}
+	if len(out.Results) != 1 || out.Results[0].Check != "health" {
+		t.Fatalf("Postflight must source ONLY verify:true checks, got %+v", out.Results)
+	}
+}
+
 func TestSectionRunnerMetricSampleEnablesMetricPreflight(t *testing.T) {
 	tree := map[string]any{
 		"preflight": map[string]any{
