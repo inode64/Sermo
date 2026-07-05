@@ -5,6 +5,21 @@ import (
 	"time"
 )
 
+// Service metric names: the per-service Snapshot keys the collector emits and
+// that checks/rules reference. Centralized so the vocabulary cannot drift.
+const (
+	metricMemory       = "memory"
+	metricSwap         = "swap"
+	metricProcessCount = "process_count"
+	metricFds          = "fds"
+	metricThreads      = "threads"
+	metricCPU          = "cpu"
+	metricCPUThread    = "cpu_thread"
+	metricIORead       = "io_read"
+	metricIOWrite      = "io_write"
+	metricIO           = "io"
+)
+
 // Reader abstracts the /proc and /sys reads the collector needs, so rate and
 // percentage math can be tested without real processes.
 type Reader interface {
@@ -150,7 +165,7 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 		mem.Percent = float64(rss) / float64(totals.memoryTotal) * 100
 		mem.HasPercent = true
 	}
-	snap["memory"] = mem
+	snap[metricMemory] = mem
 
 	// Per-service swap: total swapped-out memory of the process tree (bytes), and
 	// — when a swap device exists — its share of total swap.
@@ -160,14 +175,14 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 			sw.Percent = float64(swap) / float64(totals.swapTotal) * 100
 			sw.HasPercent = true
 		}
-		snap["swap"] = sw
+		snap[metricSwap] = sw
 	}
 
 	// process_count is the number of processes actually found alive this sample,
 	// not the count of PIDs handed in (some may have exited since discovery).
-	snap["process_count"] = Reading{Absolute: float64(present), HasAbsolute: true, Ready: measured(present > 0)}
-	snap["fds"] = Reading{Absolute: float64(fds), HasAbsolute: true, Ready: measured(fdsOK > 0)}
-	snap["threads"] = Reading{Absolute: float64(threads), HasAbsolute: true, Ready: measured(threadsOK > 0)}
+	snap[metricProcessCount] = Reading{Absolute: float64(present), HasAbsolute: true, Ready: measured(present > 0)}
+	snap[metricFds] = Reading{Absolute: float64(fds), HasAbsolute: true, Ready: measured(fdsOK > 0)}
+	snap[metricThreads] = Reading{Absolute: float64(threads), HasAbsolute: true, Ready: measured(threadsOK > 0)}
 
 	cur := cpuSample{ticks: ticks, at: now}
 	cpu := Reading{HasPercent: true}
@@ -175,24 +190,24 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 		cpu = cpuRate(prev, cur, c.Reader.ClockTicks(), c.Reader.NumCPU())
 	}
 	c.prevService[service] = cur
-	snap["cpu"] = cpu
+	snap[metricCPU] = cpu
 
 	// cpu_thread: the highest single-process CPU rate in the tree, normalized to a
 	// single CPU thread (100% = one process saturating one core). Unlike `cpu`
 	// (whole-machine), this catches a single-threaded process pegging its one
 	// thread, which the machine-wide percentage would dilute across all cores.
 	curProcs := procCPUSample{ticks: curTicks, at: now}
-	snap["cpu_thread"] = maxProcCPURate(c.prevServiceProcs[service], curProcs, c.Reader.ClockTicks())
+	snap[metricCPUThread] = maxProcCPURate(c.prevServiceProcs[service], curProcs, c.Reader.ClockTicks())
 	c.prevServiceProcs[service] = curProcs
 
 	curIO := ioSample{read: ioRead, write: ioWrite, at: now}
 	if prev, ok := c.prevServiceIO[service]; ok {
-		snap["io_read"] = ioRate(prev.read, curIO.read, prev.at, curIO.at)
-		snap["io_write"] = ioRate(prev.write, curIO.write, prev.at, curIO.at)
-		snap["io"] = ioRate(prev.read+prev.write, curIO.read+curIO.write, prev.at, curIO.at)
+		snap[metricIORead] = ioRate(prev.read, curIO.read, prev.at, curIO.at)
+		snap[metricIOWrite] = ioRate(prev.write, curIO.write, prev.at, curIO.at)
+		snap[metricIO] = ioRate(prev.read+prev.write, curIO.read+curIO.write, prev.at, curIO.at)
 	} else {
 		notReady := Reading{HasAbsolute: true}
-		snap["io_read"], snap["io_write"], snap["io"] = notReady, notReady, notReady
+		snap[metricIORead], snap[metricIOWrite], snap[metricIO] = notReady, notReady, notReady
 	}
 	c.prevServiceIO[service] = curIO
 
