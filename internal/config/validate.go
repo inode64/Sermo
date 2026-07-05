@@ -47,7 +47,7 @@ var validDefaultsKeys = set(
 	"dry_run",
 	"policy",
 	"rule_window",
-	"stop_policy",
+	sectionStopPolicy,
 	"variables",
 )
 
@@ -756,7 +756,7 @@ func validateStorageUsage(usage map[string]any, notifiers map[string]struct{}, a
 }
 
 func validateStorageMount(mount map[string]any, add addFunc) {
-	allowed := set("refcount", "umount", "stop_policy")
+	allowed := set("refcount", "umount", sectionStopPolicy)
 	for _, key := range slices.Sorted(maps.Keys(mount)) {
 		if _, ok := allowed[key]; !ok {
 			add("mount key %q is not supported", key)
@@ -798,19 +798,19 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 		}
 	}
 
-	if sp, ok := mount["stop_policy"].(map[string]any); ok {
+	if sp, ok := mount[sectionStopPolicy].(map[string]any); ok {
 		force, _ := sp["force_kill"].(bool)
 		if force {
 			allowSIGKILL = true
 		}
-	} else if _, present := mount["stop_policy"]; present {
+	} else if _, present := mount[sectionStopPolicy]; present {
 		add("mount.stop_policy must be a mapping")
 	}
-	validateStopPolicy(map[string]any{"stop_policy": mount["stop_policy"]}, func(format string, args ...any) {
+	validateStopPolicy(map[string]any{sectionStopPolicy: mount[sectionStopPolicy]}, func(format string, args ...any) {
 		add("mount." + fmt.Sprintf(format, args...))
 	})
 	if allowSIGKILL {
-		sp, _ := mount["stop_policy"].(map[string]any)
+		sp, _ := mount[sectionStopPolicy].(map[string]any)
 		_, hasKoi := sp["kill_only_if"].(map[string]any)
 		if !hasKoi {
 			add("mount.umount.allow_sigkill=true requires mount.stop_policy.kill_only_if")
