@@ -127,6 +127,21 @@ func TestHTTPBodyStringExpectationRejected(t *testing.T) {
 	}
 }
 
+func TestHTTPBodyAndJSONRejected(t *testing.T) {
+	srv := httpCompareServer(t)
+	defer srv.Close()
+
+	_, warn := buildHTTP(t, srv, map[string]any{
+		"type": "http",
+		"url":  srv.URL + "/ver",
+		"body": "raw",
+		"json": map[string]any{"probe": true},
+	})
+	if !strings.Contains(warn, "body and json are mutually exclusive") {
+		t.Fatalf("warn = %q, want mutually exclusive body/json", warn)
+	}
+}
+
 func TestHTTPStatusOperator(t *testing.T) {
 	srv := httpCompareServer(t)
 	defer srv.Close()

@@ -96,6 +96,8 @@ func TestValidateHTTPComparisonErrors(t *testing.T) {
 		"non-numeric body": {`expect_body: { op: ">", value: "abc" }`, "must be numeric"},
 		"bad body regex":   {`expect_body: { op: "=~", value: "[" }`, "valid regexp"},
 		"body string":      {`expect_body: "ok"`, "expect_body must be an"},
+		"body and json": {`body: raw
+    json: { probe: true }`, "body and json are mutually exclusive"},
 		"bad status op":    {`expect_status: { op: "between", value: "1" }`, "expect_status op"},
 		"non-numeric stat": {`expect_status: { op: "<", value: "abc" }`, "must be numeric"},
 		"latency not map":  {`expect_latency: "fast"`, "expect_latency must be an"},
