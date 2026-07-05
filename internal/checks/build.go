@@ -1319,6 +1319,20 @@ func buildSizeCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	return &sizeCheck{base: b, path: path, growBy: growBy, window: window, sampler: deps.SizeSampler, clock: time.Now, state: &sizeState{}}, ""
 }
 
+// HTTPProxySchemeList is the user-facing list of accepted HTTP check proxy
+// schemes.
+const HTTPProxySchemeList = "http, https, socks5 or socks5h"
+
+// IsHTTPProxyScheme reports whether scheme is accepted for an HTTP check proxy.
+func IsHTTPProxyScheme(scheme string) bool {
+	switch scheme {
+	case "http", "https", "socks5", "socks5h":
+		return true
+	default:
+		return false
+	}
+}
+
 // parseProxyURL reads the optional `proxy` field of an http check (e.g. a Squid
 // proxy, "http://[user:pass@]squid:3128"). It returns the parsed URL, or a
 // warning when the value is malformed. A nil URL with no warning means no proxy.
@@ -1331,12 +1345,10 @@ func parseProxyURL(entry map[string]any) (*url.URL, string) {
 	if err != nil || u.Host == "" {
 		return nil, "http check: invalid proxy url " + strconv.Quote(s)
 	}
-	switch u.Scheme {
-	case "http", "https", "socks5", "socks5h":
+	if IsHTTPProxyScheme(u.Scheme) {
 		return u, ""
-	default:
-		return nil, "http check: proxy scheme must be http, https or socks5"
 	}
+	return nil, "http check: proxy scheme must be " + HTTPProxySchemeList
 }
 
 // httpCertKeys are the optional certificate-inspection keys on the http check.
