@@ -1043,7 +1043,7 @@ optional because some systemd units publish `MainPID` even when the declared
 
 ### Optional components (`enable_if`)
 
-An entry under `processes`, `checks`, `preflight` or `postflight` may carry an
+An entry under `processes`, `checks` or `preflight` may carry an
 `enable_if` guard that keeps it only when a key in a distro config file satisfies
 a predicate; otherwise the entry is dropped during service resolution. This
 models components that are optional per host — e.g. a Samba profile that links a

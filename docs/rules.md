@@ -2,8 +2,9 @@
 
 ## Checks
 
-Checks are single-shot probes under `checks` (and `preflight`/`postflight`,
-which reuse the same schema). Supported types:
+Checks are single-shot probes under `checks` (and `preflight`, which reuses
+the same schema). A `checks` entry flagged `verify: true` also runs as the
+post-operation start verification. Supported types:
 
 The complete set of single-shot check types is defined centrally. Tests lock that list against the builder dispatch and configuration validation, and lock the connection-protocol list below against the `conn` registry, so advertised check types cannot drift from the code. (Multi-metric watch forms such as `net`/`icmp`/`swap` and `file`/`process` watches expand on these primitives.)
 
@@ -1414,7 +1415,7 @@ are protocol-agnostic, so a new protocol only registers itself.
 Every type above is a **single-shot check** (`Check.Run → Result`) and is usable in
 **both** places:
 
-- a service's `checks:`/`preflight:`/`postflight:` (and referenced from rules),
+- a service's `checks:`/`preflight:` (and referenced from rules),
 - a host **watch** document (or global `watches:` entry, firing a hook) — see [configuration](configuration.md#host-watches), and
 - a service's own embedded `watches:` block (firing a hook scoped to the service, including the service-scoped `service`/`metric` types and the PID-tree-scoped `process_count`) — see [Service watches](configuration.md#service-watches-scoped-to-a-service).
 
