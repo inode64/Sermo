@@ -278,7 +278,7 @@ func (w *procWatcher) fire(ctx context.Context, info ProcInfo, msg string, env m
 		if err := w.hook.Run(ctx, runner, env); err != nil {
 			w.emitEvent(Event{Watch: w.name, Kind: eventKindHookFail, Message: msg + ": " + err.Error()})
 		} else {
-			w.emitEvent(Event{Watch: w.name, Kind: "hook", Message: msg})
+			w.emitEvent(Event{Watch: w.name, Kind: eventKindHook, Message: msg})
 		}
 	}
 	if killable {
