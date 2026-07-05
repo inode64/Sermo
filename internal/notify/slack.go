@@ -20,7 +20,7 @@ func (s *Slack) Type() string { return notifierTypeSlack }
 
 // Send posts the message to the configured Slack webhook.
 func (s *Slack) Send(ctx context.Context, msg Message) error {
-	return sendWebhook(ctx, s.post, slackPost, s.webhook, slackPayload(msg))
+	return sendWebhook(ctx, s.post, notifierTypeSlack, s.webhook, slackPayload(msg))
 }
 
 // buildSlack constructs a Slack notifier from a config entry.
@@ -29,7 +29,7 @@ func buildSlack(name string, entry map[string]any) (Notifier, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Slack{name: name, webhook: webhook, post: slackPost}, nil
+	return &Slack{name: name, webhook: webhook}, nil
 }
 
 // slackPayload renders the Slack incoming-webhook body: the subject as the lead
@@ -43,8 +43,4 @@ func slackText(msg Message) string {
 		return msg.Subject + "\n```\n" + msg.Body + "\n```"
 	}
 	return msg.Subject
-}
-
-func slackPost(ctx context.Context, webhook string, payload []byte) error {
-	return postWebhook(ctx, notifierTypeSlack, webhook, payload)
 }
