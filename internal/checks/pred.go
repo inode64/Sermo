@@ -65,6 +65,9 @@ const (
 	fieldReallocated  = "reallocated"
 	fieldWear         = "wear"
 	fieldPowerOnHours = "power_on_hours"
+	// edac ECC error-count fields (correctable / uncorrectable).
+	fieldCE = "ce"
+	fieldUE = "ue"
 )
 
 // Predicate field lists, one per level check. They are exported so config
@@ -104,7 +107,7 @@ var (
 	// RaidPredFields are the optional predicates of a raid check.
 	RaidPredFields = []string{fieldDegraded, fieldRecovering, fieldArrays}
 	// EdacPredFields are the optional predicates of an edac check.
-	EdacPredFields = []string{"ce", "ue"}
+	EdacPredFields = []string{fieldCE, fieldUE}
 	// EntropyPredFields is the single required predicate of an entropy check.
 	EntropyPredFields = []string{"avail"}
 	// ZombiePredFields is the single required predicate of a zombies check.
