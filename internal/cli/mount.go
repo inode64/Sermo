@@ -15,8 +15,11 @@ import (
 	"sermo/internal/state"
 )
 
-// mountCommand is the command name reported in mount usage errors.
-const mountCommand = "mount"
+// mountCommand and umountCommand are the command names reported in usage errors.
+const (
+	mountCommand  = "mount"
+	umountCommand = "umount"
+)
 
 func (a App) runMount(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
@@ -43,10 +46,10 @@ func (a App) runMount(ctx context.Context, opts options) int {
 
 func (a App) runUmount(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.commandUsageError("umount", "umount requires a mount name or path")
+		return a.commandUsageError(umountCommand, "umount requires a mount name or path")
 	}
 	if len(opts.args) > 1 {
-		return a.commandUsageError("umount", "umount takes exactly one mount name or path")
+		return a.commandUsageError(umountCommand, "umount takes exactly one mount name or path")
 	}
 	cfg, code := a.loadConfig(opts)
 	if cfg == nil {
