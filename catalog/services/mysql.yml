@@ -52,6 +52,7 @@ checks:
     host: ${host}
     port: ${port}
     timeout: 5s
+    verify: true
   fds:
     type: metric
     scope: service
@@ -162,9 +163,3 @@ rules:
     within:
       cycles: 10
       min_matches: 3
-postflight:
-  ping:
-    type: mysql
-    host: ${host}
-    port: ${port}
-    timeout: 5s

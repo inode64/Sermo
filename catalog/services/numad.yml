@@ -15,12 +15,7 @@ checks:
     state: running
     requires:
       - service
-postflight:
-  process:
-    type: process
-    exe: ${numad_binary}
-    user: root
-    state: running
+    verify: true
 rules:
   alert-if-memory-high:
     type: alert

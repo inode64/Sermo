@@ -18,10 +18,7 @@ checks:
   udisks2:
     type: udisks2
     timeout: 5s
-postflight:
-  udisks2:
-    type: udisks2
-    timeout: 5s
+    verify: true
 policy:
   cooldown: 15m
   max_actions: 2

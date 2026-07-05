@@ -878,7 +878,6 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	locksDir := filepath.Join(runtime, "locks")
 	validateCheckSection(tree, "checks", locksDir, add)
 	validateCheckSection(tree, "preflight", locksDir, add)
-	validateCheckSection(tree, "postflight", locksDir, add)
 	validateProcesses(tree, add)
 	validatePidfiles(tree, add)
 	validateStopPolicy(tree, add)

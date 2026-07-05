@@ -18,13 +18,7 @@ checks:
     requires:
       - service
     optional: true
-postflight:
-  process:
-    type: process
-    exe: ${salt_minion_binary}
-    user: root
-    state: running
-    optional: true
+    verify: true
 rules:
   alert-if-memory-high:
     type: alert

@@ -17,6 +17,7 @@ checks:
   service:
     type: service
     expect: active
+    verify: true
   process:
     type: process
     exe: ${lldpd_binary}
@@ -25,12 +26,6 @@ checks:
     optional: true
     requires:
       - service
-postflight:
-  process:
-    type: process
-    exe: ${lldpd_binary}
-    user: ${user}
-    state: running
 rules:
   alert-if-memory-high:
     type: alert

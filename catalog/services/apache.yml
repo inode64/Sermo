@@ -53,6 +53,7 @@ checks:
       op: <
       value: 500
     timeout: 5s
+    verify: true
   cert:
     type: cert
     optional: true
@@ -151,14 +152,6 @@ rules:
     then:
       action: alert
       message: ${display_name} memory usage is high
-postflight:
-  http:
-    type: http
-    url: http://${host}:${port}${health_path}
-    expect_status:
-      op: <
-      value: 500
-    timeout: 5s
 reload_on_change:
   paths:
     - /etc/apache2/httpd.conf

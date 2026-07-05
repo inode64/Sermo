@@ -22,13 +22,7 @@ checks:
       - tuned-adm
       - active
     timeout: 10s
-postflight:
-  active:
-    type: command
-    command:
-      - tuned-adm
-      - active
-    timeout: 10s
+    verify: true
 policy:
   cooldown: 15m
   max_actions: 2

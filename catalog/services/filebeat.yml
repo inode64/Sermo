@@ -34,6 +34,7 @@ checks:
       - ${config}
     timeout: 30s
     optional: true
+    verify: true
   fds:
     type: metric
     scope: service
@@ -47,17 +48,6 @@ checks:
     name: memory
     op: '>'
     value: 60%
-    optional: true
-postflight:
-  config-output:
-    type: command
-    command:
-      - ${filebeat_binary}
-      - test
-      - output
-      - -c
-      - ${config}
-    timeout: 30s
     optional: true
 reload_on_change:
   paths:

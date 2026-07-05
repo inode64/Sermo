@@ -194,7 +194,7 @@ func (w BuildWarning) String() string { return w.Text }
 
 // Result returns a failed check result for this build warning. Optional malformed
 // checks remain optional warnings; required malformed checks block preflight and
-// postflight like any other required check failure.
+// start-verification like any other required check failure.
 func (w BuildWarning) Result() Result {
 	return Result{Service: w.Service, Check: w.Check, OK: false, Optional: w.Optional, Message: w.Text}
 }
@@ -211,7 +211,7 @@ func BuildWarningResults(warnings []BuildWarning) []Result {
 	return results
 }
 
-// Build turns a checks/preflight/postflight section (a map keyed by check name)
+// Build turns a checks/preflight section (a map keyed by check name)
 // into runnable checks, skipping `enabled: false` entries and reporting unusable
 // ones as warnings. Entries are built in name order for stable output.
 func Build(section map[string]any, deps Deps) ([]Built, []string) {
@@ -1421,7 +1421,7 @@ func BuildInline(name string, entry map[string]any, deps Deps) (Check, error) {
 	return check, nil
 }
 
-// Outcome summarizes a preflight/postflight run.
+// Outcome summarizes a preflight or verification run.
 type Outcome struct {
 	OK      bool // every required check passed
 	Results []Result

@@ -25,18 +25,7 @@ checks:
     analyze:
       use:
         - ceph
-postflight:
-  status:
-    type: command
-    command:
-      - ${ceph_binary}
-      - --admin-daemon
-      - /run/ceph/ceph-osd.${n}.asok
-      - status
-    timeout: 5s
-    analyze:
-      use:
-        - ceph
+    verify: true
 rules:
   restart-if-status-failed:
     type: remediation

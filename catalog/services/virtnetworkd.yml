@@ -28,11 +28,7 @@ checks:
     type: libvirt
     socket: /run/libvirt/virtnetworkd-sock
     timeout: 5s
-postflight:
-  libvirt:
-    type: libvirt
-    socket: /run/libvirt/virtnetworkd-sock
-    timeout: 5s
+    verify: true
 policy:
   cooldown: 15m
   max_actions: 2

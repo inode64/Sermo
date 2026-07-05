@@ -23,11 +23,4 @@ checks:
       - -A
     timeout: 10s
     optional: true
-postflight:
-  sensors:
-    type: command
-    command:
-      - ${lm_sensors_binary}
-      - -A
-    timeout: 10s
-    optional: true
+    verify: true

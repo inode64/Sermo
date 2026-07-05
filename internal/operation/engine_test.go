@@ -199,6 +199,48 @@ func TestSectionRunnerBuildWarningBlocksRequiredPreflight(t *testing.T) {
 	}
 }
 
+func TestVerifyRunnerSourcesOnlyVerifyChecks(t *testing.T) {
+	deps := checks.Deps{Service: "web", DefaultTimeout: time.Second}
+	missing := "/nonexistent-verify-probe-xyz"
+
+	// Only the verify-flagged check counts; a plain monitoring check is ignored.
+	tree := map[string]any{"checks": map[string]any{
+		"present":   map[string]any{"type": "file_exists", "path": "/", "verify": true},
+		"monitored": map[string]any{"type": "file_exists", "path": missing},
+	}}
+	out := verifyRunner(tree, deps, nil)(context.Background())
+	if !out.OK {
+		t.Fatalf("outcome OK = false; only the passing verify check should count: %+v", out)
+	}
+	if len(out.Results) != 1 || out.Results[0].Check != "present" {
+		t.Fatalf("results = %+v, want only the verify check", out.Results)
+	}
+
+	// A required verify check that fails blocks the outcome (postflight_failed).
+	bad := map[string]any{"checks": map[string]any{
+		"health": map[string]any{"type": "file_exists", "path": missing, "verify": true},
+	}}
+	if verifyRunner(bad, deps, nil)(context.Background()).OK {
+		t.Fatalf("a failing required verify check must fail the outcome")
+	}
+
+	// An optional verify failure is a warning, not a failure.
+	opt := map[string]any{"checks": map[string]any{
+		"health": map[string]any{"type": "file_exists", "path": missing, "verify": true, "optional": true},
+	}}
+	if !verifyRunner(opt, deps, nil)(context.Background()).OK {
+		t.Fatalf("a failing OPTIONAL verify check is a warning, not a failure")
+	}
+
+	// No verify checks at all is a trivial pass (as a missing postflight was).
+	none := map[string]any{"checks": map[string]any{
+		"mon": map[string]any{"type": "file_exists", "path": missing},
+	}}
+	if !verifyRunner(none, deps, nil)(context.Background()).OK {
+		t.Fatalf("no verify checks should be a trivial pass")
+	}
+}
+
 func TestSectionRunnerMetricSampleEnablesMetricPreflight(t *testing.T) {
 	tree := map[string]any{
 		"preflight": map[string]any{

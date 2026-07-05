@@ -1233,16 +1233,19 @@ func TestCatalogNetworkManagerStatusIsAuxiliary(t *testing.T) {
 		t.Fatalf("networkmanager nmcli preflight optional = %v, want true", nmcliPreflight["optional"])
 	}
 
-	for _, section := range []string{"checks", "postflight"} {
-		status := nested(t, body, section, "status")
-		if !cfgval.Bool(status["optional"]) {
-			t.Fatalf("networkmanager %s.status optional = %v, want true", section, status["optional"])
-		}
-		command := cfgval.StringList(status["command"])
-		want := []string{"${networkmanager_nmcli}", "general", "status"}
-		if !slices.Equal(command, want) {
-			t.Fatalf("networkmanager %s.status command = %v, want %v", section, command, want)
-		}
+	status := nested(t, body, "checks", "status")
+	if !cfgval.Bool(status["optional"]) {
+		t.Fatalf("networkmanager checks.status optional = %v, want true", status["optional"])
+	}
+	// The status check doubles as the post-operation verification (verify: true),
+	// replacing the old duplicated postflight.status entry.
+	if !cfgval.Bool(status["verify"]) {
+		t.Fatalf("networkmanager checks.status verify = %v, want true", status["verify"])
+	}
+	command := cfgval.StringList(status["command"])
+	want := []string{"${networkmanager_nmcli}", "general", "status"}
+	if !slices.Equal(command, want) {
+		t.Fatalf("networkmanager checks.status command = %v, want %v", command, want)
 	}
 	rules := nested(t, body, "rules")
 	if _, ok := rules["restart-if-status-failed"]; ok {
@@ -1282,7 +1285,6 @@ func TestCatalogServiceProcessChecksUseLinkedAppBinaries(t *testing.T) {
 			resolved:  "/usr/bin/salt-minion",
 			rawPaths: [][]any{
 				{"checks", "process", "exe"},
-				{"postflight", "process", "exe"},
 			},
 			resolvedPath: []any{"checks", "process", "exe"},
 		},
@@ -1294,7 +1296,6 @@ func TestCatalogServiceProcessChecksUseLinkedAppBinaries(t *testing.T) {
 			resolved:  "/usr/libexec/bluetooth/bluetoothd",
 			rawPaths: [][]any{
 				{"checks", "process", "exe"},
-				{"postflight", "process", "exe"},
 			},
 			resolvedPath: []any{"checks", "process", "exe"},
 		},
@@ -1493,22 +1494,48 @@ func TestCatalogRRDCachedUsesUnixSocketHealth(t *testing.T) {
 func TestCatalogPMLFarmUsesResidentHelperProcessHealth(t *testing.T) {
 	root := repoRoot(t)
 	body := catalogDocByName(t, root, "services", "pmlogger_farm")
-	for _, section := range []string{"checks", "postflight"} {
-		process := nested(t, body, section, "process")
-		exes := cfgval.StringList(process["exe_any"])
-		want := []string{"${pmlogger_farm_pmpause_binary}", "${pmlogger_farm_pmsleep_binary}"}
-		if !slices.Equal(exes, want) {
-			t.Fatalf("pmlogger_farm %s.process.exe_any = %v, want %v", section, exes, want)
-		}
-		if got := cfgval.String(process["exe"]); got != "" {
-			t.Fatalf("pmlogger_farm %s.process.exe = %q, want empty", section, got)
-		}
-		optional := cfgval.Bool(process["optional"])
-		if section == "checks" && !optional {
-			t.Fatalf("pmlogger_farm checks.process must be optional for long-lived pmpause after PCP upgrades")
-		}
-		if section == "postflight" && optional {
-			t.Fatalf("pmlogger_farm postflight.process must stay required")
+	process := nested(t, body, "checks", "process")
+	exes := cfgval.StringList(process["exe_any"])
+	want := []string{"${pmlogger_farm_pmpause_binary}", "${pmlogger_farm_pmsleep_binary}"}
+	if !slices.Equal(exes, want) {
+		t.Fatalf("pmlogger_farm checks.process.exe_any = %v, want %v", exes, want)
+	}
+	if got := cfgval.String(process["exe"]); got != "" {
+		t.Fatalf("pmlogger_farm checks.process.exe = %q, want empty", got)
+	}
+	// The helper process is optionally monitored (long-lived pmpause may show as
+	// pmsleep after PCP upgrades). Since it can legitimately be absent, it cannot be
+	// a required start-verification; that role is the service check (verify: true).
+	if !cfgval.Bool(process["optional"]) {
+		t.Fatalf("pmlogger_farm checks.process must be optional for long-lived pmpause after PCP upgrades")
+	}
+	svc := nested(t, body, "checks", "service")
+	if !cfgval.Bool(svc["verify"]) {
+		t.Fatalf("pmlogger_farm start-verification must be on checks.service (verify: true), not the optional helper process")
+	}
+}
+
+// TestNoPostflightSectionRemains asserts the retired postflight: section is gone
+// from every catalog and example document. Post-operation start-verification now
+// lives on checks flagged verify: true, so a stray postflight: block would be
+// silently ignored — this catches it.
+func TestNoPostflightSectionRemains(t *testing.T) {
+	root := repoRoot(t)
+	for _, base := range []string{"catalog", "examples"} {
+		err := filepath.WalkDir(filepath.Join(root, base), func(path string, entry os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() || !isYAML(entry.Name()) {
+				return nil
+			}
+			if _, ok := readYAMLMap(t, path)["postflight"]; ok {
+				t.Errorf("%s still has a postflight: section — migrate its check to verify: true", path)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
 	}
 }

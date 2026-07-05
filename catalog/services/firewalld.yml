@@ -30,13 +30,7 @@ checks:
       - firewall-cmd
       - state
     timeout: 10s
-postflight:
-  state:
-    type: command
-    command:
-      - firewall-cmd
-      - state
-    timeout: 10s
+    verify: true
 reload_on_change:
   paths:
     - ${config_dir}

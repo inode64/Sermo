@@ -66,6 +66,7 @@ checks:
     port: ${port}
     user: ${user}
     timeout: 5s
+    verify: true
   fds:
     type: metric
     scope: service
@@ -95,13 +96,6 @@ checks:
       - /usr/local/bin/wal-g
     user: ${backup_user}
     state: running
-postflight:
-  ready:
-    type: postgres
-    host: 127.0.0.1
-    port: ${port}
-    user: ${user}
-    timeout: 5s
 stop_policy:
   graceful_timeout: 120s
   term_timeout: 60s

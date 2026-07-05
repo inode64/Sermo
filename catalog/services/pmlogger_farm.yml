@@ -23,6 +23,7 @@ checks:
   service:
     type: service
     expect: active
+    verify: true
   process:
     type: process
     optional: true  # Long-lived pmpause may show as pmsleep (deleted) after PCP upgrades.
@@ -33,14 +34,6 @@ checks:
     state: running
     requires:
       - service
-postflight:
-  process:
-    type: process
-    exe_any:
-      - ${pmlogger_farm_pmpause_binary}
-      - ${pmlogger_farm_pmsleep_binary}
-    user: ${user}
-    state: running
 rules:
   alert-if-memory-high:
     type: alert
