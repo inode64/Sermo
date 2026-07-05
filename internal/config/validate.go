@@ -441,7 +441,7 @@ func versionFromCycle(cfg *Config, start string) []string {
 }
 
 func validateVersionsCurrentFrom(doc *Document, scope string) []Issue {
-	versions, ok := doc.Body["versions"].(map[string]any)
+	versions, ok := doc.Body[keyVersions].(map[string]any)
 	if !ok {
 		return nil
 	}
@@ -458,7 +458,7 @@ func validateVersionsCurrentFrom(doc *Document, scope string) []Issue {
 }
 
 func validateVersionsFrom(doc *Document, scope string) []Issue {
-	versions, ok := doc.Body["versions"].(map[string]any)
+	versions, ok := doc.Body[keyVersions].(map[string]any)
 	if !ok {
 		return nil
 	}
