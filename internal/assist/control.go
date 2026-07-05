@@ -23,7 +23,8 @@ func (dockerAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	}
 	selected := chooseDockerContainers(p, "Which Docker containers do you want Sermo to monitor and manage?", cands)
 	services := map[string]any{}
-	applyControlledSettings(p, selectedNames(selected), func(name string, settings serviceSettings) {
+	names := candidateNames(selected, func(c DockerCandidate) string { return c.Name })
+	applyControlledSettings(p, names, func(name string, settings serviceSettings) {
 		for _, c := range selected {
 			if c.Name != name {
 				continue
@@ -57,7 +58,8 @@ func (vmAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	}
 	selected := chooseVMs(p, "Which virtual machines do you want Sermo to monitor and manage?", cands)
 	services := map[string]any{}
-	applyControlledSettings(p, selectedVMNames(selected), func(name string, settings serviceSettings) {
+	names := candidateNames(selected, func(c VMCandidate) string { return c.Name })
+	applyControlledSettings(p, names, func(name string, settings serviceSettings) {
 		for _, c := range selected {
 			if c.Name != name {
 				continue
@@ -132,14 +134,6 @@ func chooseCandidates[T any](p *Prompt, question string, cands []T, label func(T
 		out = append(out, cands[idx])
 	}
 	return out
-}
-
-func selectedNames(cands []DockerCandidate) []string {
-	return candidateNames(cands, func(c DockerCandidate) string { return c.Name })
-}
-
-func selectedVMNames(cands []VMCandidate) []string {
-	return candidateNames(cands, func(c VMCandidate) string { return c.Name })
 }
 
 func candidateNames[T any](cands []T, name func(T) string) []string {
