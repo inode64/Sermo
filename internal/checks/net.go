@@ -18,6 +18,12 @@ const (
 	netStateDown = "down"
 )
 
+// Address-presence expect values for a net address check.
+const (
+	netAddrPresent = "present"
+	netAddrAbsent  = "absent"
+)
+
 // NetSample is one observation of a network interface.
 type NetSample struct {
 	State      string // "up" | "down"
@@ -139,7 +145,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 		if c.expect != "" {
 			present := len(s.Addrs) > 0
 			data["value"] = len(s.Addrs)
-			ok := (c.expect == "present") == present
+			ok := (c.expect == netAddrPresent) == present
 			res := c.result(ok, fmt.Sprintf("%s address %s (want %s)", c.iface, display, c.expect), start)
 			res.Data = data
 			return res
