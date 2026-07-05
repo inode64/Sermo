@@ -142,12 +142,7 @@ watches:
       action: restart
   alert-if-memory-high:
     check:
-      type: metric
-      scope: service
-      name: memory
-      op: '>'
-      value: 60%
-      optional: true
+      ref: memory
     for:
       duration: 10m
     then:

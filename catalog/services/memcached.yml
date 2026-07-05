@@ -71,12 +71,7 @@ watches:
       action: restart
   alert-if-fds-high:
     check:
-      type: metric
-      scope: service
-      name: fds
-      op: '>'
-      value: 50000
-      optional: true
+      ref: fds
     within:
       cycles: 10
       min_matches: 3
