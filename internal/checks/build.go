@@ -539,7 +539,11 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 		if !validCompareOp(op) {
 			return nil, "http expect_body op must be one of ==, !=, >, >=, <, <=, contains, =~"
 		}
-		hc.bodyOp, hc.bodyValue = op, cfgval.String(bodyMatch["value"])
+		value := cfgval.String(bodyMatch["value"])
+		if err := ValidateAssertionValue("expect_body", op, value); err != nil {
+			return nil, "http " + err.Error()
+		}
+		hc.bodyOp, hc.bodyValue = op, value
 	}
 	lop, lval, lwarn := parseExpectLatency(entry)
 	if lwarn != "" {

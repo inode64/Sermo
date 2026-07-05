@@ -105,6 +105,12 @@ func TestHTTPBodyOperators(t *testing.T) {
 	if res := runHTTP(t, srv, map[string]any{"url": srv.URL + "/ver", "expect_body": map[string]any{"op": "contains", "value": "1.2"}}); !res.OK {
 		t.Fatalf("contains expect_body should pass: %s", res.Message)
 	}
+	if _, warn := buildHTTP(t, srv, map[string]any{"type": "http", "url": srv.URL + "/text", "expect_body": map[string]any{"op": ">", "value": "abc"}}); !strings.Contains(warn, "must be numeric") {
+		t.Fatalf("invalid body numeric warning = %q", warn)
+	}
+	if _, warn := buildHTTP(t, srv, map[string]any{"type": "http", "url": srv.URL + "/text", "expect_body": map[string]any{"op": "=~", "value": "["}}); !strings.Contains(warn, "not a valid regexp") {
+		t.Fatalf("invalid body regex warning = %q", warn)
+	}
 }
 
 func TestHTTPBodyStringExpectationRejected(t *testing.T) {
