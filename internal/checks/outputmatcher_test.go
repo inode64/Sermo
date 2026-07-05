@@ -23,6 +23,8 @@ func TestParseOutputMatcher(t *testing.T) {
 		{name: "empty substring inactive", in: "", notActive: true},
 		{name: "op value", in: map[string]any{"op": ">", "value": 5}, wantOp: ">", wantVal: "5"},
 		{name: "invalid op", in: map[string]any{"op": "=>", "value": "1"}, wantWarn: true, notActive: true},
+		{name: "invalid numeric value", in: map[string]any{"op": ">", "value": "abc"}, wantWarn: true, notActive: true},
+		{name: "invalid regex value", in: map[string]any{"op": "=~", "value": "["}, wantWarn: true, notActive: true},
 		{name: "wrong type", in: 42, wantWarn: true, notActive: true},
 	}
 	for _, c := range cases {

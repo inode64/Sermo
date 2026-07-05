@@ -92,7 +92,11 @@ func ParseOutputMatcher(v any) (OutputMatcher, string) {
 		if !validCompareOp(op) {
 			return OutputMatcher{}, "op must be one of ==, !=, >, >=, <, <=, contains, =~"
 		}
-		return OutputMatcher{Op: op, Value: cfgval.String(t["value"])}, ""
+		value := cfgval.String(t["value"])
+		if err := validateAssertionValue("", op, value); err != nil {
+			return OutputMatcher{}, err.Error()
+		}
+		return OutputMatcher{Op: op, Value: value}, ""
 	default:
 		return OutputMatcher{}, "must be a string substring or an {op, value} mapping"
 	}
@@ -246,14 +250,18 @@ func parseExpectLatency(entry map[string]any) (op, value, warn string) {
 }
 
 func validateAssertionValue(label, op, value string) error {
+	valueLabel := "value"
+	if label != "" {
+		valueLabel = label + " value"
+	}
 	switch op {
 	case ">", ">=", "<", "<=":
 		if _, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err != nil {
-			return fmt.Errorf("%s value %q must be numeric for op %s", label, value, op)
+			return fmt.Errorf("%s %q must be numeric for op %s", valueLabel, value, op)
 		}
 	case "=~":
 		if _, err := regexp.Compile(value); err != nil {
-			return fmt.Errorf("%s value is not a valid regexp: %w", label, err)
+			return fmt.Errorf("%s is not a valid regexp: %w", valueLabel, err)
 		}
 	}
 	return nil
