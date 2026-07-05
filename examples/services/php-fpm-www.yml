@@ -22,12 +22,10 @@ checks:
     exe: "${binary}"
     state: running
 
-rules:
+watches:
   restart-if-inactive:
-    type: remediation
-    if:
-      failed:
-        check: service
+    check:
+      ref: service
     for:
       cycles: 3
     then:

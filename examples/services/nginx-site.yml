@@ -25,36 +25,28 @@ checks:
     expires_in_days: 21
     on_issuer_change: true  # alert on a CA change / re-issue between cycles
 
-rules:
-  # Sustained high resident memory across the whole nginx process tree (workers
-  # + helpers) → restart, to recover from a worker/module leak. The percentage
-  # is of total RAM; `within` counts this service's own cycles (5 of the last 15
-  # over the limit), so a brief spike does not trip it. Tune to the box.
+watches:
   restart-if-memory-high:
-    type: remediation
-    if:
-      metric:
-        scope: service
-        name: memory
-        op: ">"
-        value: 25%
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: ">"
+      value: 25%
+      optional: true
     within:
       cycles: 15
       min_matches: 5
     then:
       action: restart
-
-  # File-descriptor pressure: nginx under load can approach its ulimit and start
-  # dropping connections. This only alerts (no restart) — a heads-up to raise the
-  # limit. `fds` is the open-fd count summed over the process tree.
   alert-if-fds-high:
-    type: alert
-    if:
-      metric:
-        scope: service
-        name: fds
-        op: ">"
-        value: 50000
+    check:
+      type: metric
+      scope: service
+      name: fds
+      op: ">"
+      value: 50000
+      optional: true
     within:
       cycles: 10
       min_matches: 3

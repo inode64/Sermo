@@ -26,24 +26,22 @@ checks:
       use:
         - ceph
     verify: true
-rules:
+watches:
   restart-if-status-failed:
-    type: remediation
-    if:
-      failed:
-        check: status
+    check:
+      ref: status
     for:
       cycles: 3
     then:
       action: restart
   alert-if-memory-high:
-    type: alert
-    if:
-      metric:
-        scope: service
-        name: memory
-        op: '>'
-        value: 60%
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 60%
+      optional: true
     for:
       duration: 10m
     then:

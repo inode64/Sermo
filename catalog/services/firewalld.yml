@@ -41,24 +41,22 @@ policy:
   backoff:
     initial: 15m
     max: 1h
-rules:
+watches:
   restart-if-state-failed:
-    type: remediation
-    if:
-      failed:
-        check: state
+    check:
+      ref: state
     for:
       cycles: 3
     then:
       action: restart
   alert-if-memory-high:
-    type: alert
-    if:
-      metric:
-        scope: service
-        name: memory
-        op: '>'
-        value: 60%
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 60%
+      optional: true
     for:
       duration: 10m
     then:

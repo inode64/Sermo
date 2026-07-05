@@ -36,27 +36,25 @@ policy:
   backoff:
     initial: 15m
     max: 1h
-rules:
+watches:
   restart-if-libvirt-failed:
-    type: remediation
-    if:
-      failed:
-        check: libvirt
+    check:
+      ref: libvirt
     for:
       cycles: 3
     then:
       action: restart
   alert-if-fds-high:
-    type: alert
-    if:
-      metric:
-        scope: service
-        name: fds
-        op: '>'
-        value: 50000
-    then:
-      action: alert
-      message: ${display_name} file descriptor usage is high
+    check:
+      type: metric
+      scope: service
+      name: fds
+      op: '>'
+      value: 50000
+      optional: true
     within:
       cycles: 10
       min_matches: 3
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high

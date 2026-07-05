@@ -33,12 +33,10 @@ stop_policy:
       - ${user}
     exe_any:
       - ${rabbitmq_binary}
-rules:
+watches:
   restart-if-amqp-failed:
-    type: remediation
-    if:
-      failed:
-        check: amqp
+    check:
+      ref: amqp
     for:
       cycles: 3
     then:

@@ -20,12 +20,10 @@ policy:
   backoff:
     initial: 15m
     max: 1h
-rules:
+watches:
   restart-if-libvirt-failed:
-    type: remediation
-    if:
-      failed:
-        check: libvirt
+    check:
+      ref: libvirt
     for:
       cycles: 3
     then:

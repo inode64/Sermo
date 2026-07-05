@@ -56,21 +56,17 @@ preflight:
       - -c
       - /etc/mosquitto/mosquitto.conf
     timeout: 15s
-rules:
+watches:
   restart-if-mqtt-failed:
-    type: remediation
-    if:
-      failed:
-        check: mqtt
+    check:
+      ref: mqtt
     for:
       cycles: 3
     then:
       action: restart
   restart-if-port-failed:
-    type: remediation
-    if:
-      failed:
-        check: port
+    check:
+      ref: port
     for:
       cycles: 3
     then:

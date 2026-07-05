@@ -41,21 +41,17 @@ checks:
     analyze:
       use:
         - ceph
-rules:
+watches:
   restart-if-messenger-failed:
-    type: remediation
-    if:
-      failed:
-        check: messenger
+    check:
+      ref: messenger
     for:
       cycles: 3
     then:
       action: restart
   restart-if-status-failed:
-    type: remediation
-    if:
-      failed:
-        check: status
+    check:
+      ref: status
     for:
       cycles: 3
     then:

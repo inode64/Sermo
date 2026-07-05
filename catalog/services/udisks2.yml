@@ -26,24 +26,22 @@ policy:
   backoff:
     initial: 15m
     max: 1h
-rules:
+watches:
   restart-if-udisks2-failed:
-    type: remediation
-    if:
-      failed:
-        check: udisks2
+    check:
+      ref: udisks2
     for:
       cycles: 3
     then:
       action: restart
   alert-if-memory-high:
-    type: alert
-    if:
-      metric:
-        scope: service
-        name: memory
-        op: '>'
-        value: 60%
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 60%
+      optional: true
     for:
       duration: 10m
     then:

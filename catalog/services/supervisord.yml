@@ -23,39 +23,37 @@ preflight:
       - ${supervisord_binary}
       - check
     timeout: 30s
-rules:
+watches:
   restart-if-ping-failed:
-    type: remediation
-    if:
-      failed:
-        check: ping
+    check:
+      ref: ping
     for:
       cycles: 3
     then:
       action: restart
   restart-if-worker-thread-hot:
-    type: remediation
-    if:
-      metric:
-        scope: service
-        name: cpu_thread
-        op: '>'
-        value: 90%
+    check:
+      type: metric
+      scope: service
+      name: cpu_thread
+      op: '>'
+      value: 90%
+      optional: true
     for:
       duration: 6m
     then:
       action: restart
   alert-if-fds-high:
-    type: alert
-    if:
-      metric:
-        scope: service
-        name: fds
-        op: '>'
-        value: 50000
-    then:
-      action: alert
-      message: ${display_name} file descriptor usage is high
+    check:
+      type: metric
+      scope: service
+      name: fds
+      op: '>'
+      value: 50000
+      optional: true
     within:
       cycles: 10
       min_matches: 3
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high

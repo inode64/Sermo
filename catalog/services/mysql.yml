@@ -107,48 +107,45 @@ rules:
     then:
       action: block
       message: ${display_name} backup is running; restart denied
+watches:
   restart-if-tcp-failed:
-    type: remediation
-    if:
-      failed:
-        check: tcp
+    check:
+      ref: tcp
     for:
       cycles: 3
     then:
       action: restart
   restart-if-ping-failed:
-    type: remediation
-    if:
-      failed:
-        check: ping
+    check:
+      ref: ping
     for:
       cycles: 3
     then:
       action: restart
   restart-if-memory-high:
-    type: remediation
-    if:
-      metric:
-        scope: service
-        name: memory
-        op: '>'
-        value: 40%
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 40%
+      optional: true
     within:
       cycles: 15
       min_matches: 5
     then:
       action: restart
   alert-if-fds-high:
-    type: alert
-    if:
-      metric:
-        scope: service
-        name: fds
-        op: '>'
-        value: 50000
-    then:
-      action: alert
-      message: ${display_name} file descriptor usage is high
+    check:
+      type: metric
+      scope: service
+      name: fds
+      op: '>'
+      value: 50000
+      optional: true
     within:
       cycles: 10
       min_matches: 3
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
