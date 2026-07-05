@@ -124,6 +124,14 @@ type Deps struct {
 	Runtime          string
 	DefaultTimeout   time.Duration
 	OperationTimeout time.Duration
+	// WatchCheckDeps, when set, is the checks.Deps used to build a watch's inline
+	// check instead of the host-global sampler subset. It carries per-service
+	// context (backend status, PID-tree-scoped process counting) so a watch
+	// declared inside a service (`watches:` in the service tree) is scoped to that
+	// service's processes. nil for host watches. A `metric` check's source is
+	// injected per watch by serviceWatches (a dedicated collector), not carried
+	// here.
+	WatchCheckDeps *checks.Deps
 	// Interval is the global resolution (engine.interval). It is the base cycle
 	// rate and the unit a per-check `interval` is rounded to (a check runs every
 	// round(interval/resolution) cycles). A service's own `interval` overrides it.
@@ -294,8 +302,9 @@ type Deps struct {
 // BuildWorkers resolves every enabled service and wires a Worker for it: a check
 // cache producer and an operation-engine Operate closure. Services
 // that are disabled or fail to resolve are skipped with a warning.
-func BuildWorkers(cfg *config.Config, deps Deps, collector *metrics.Collector) ([]*Worker, []string) {
+func BuildWorkers(cfg *config.Config, deps Deps, collector *metrics.Collector) ([]*Worker, []*Watch, []string) {
 	var workers []*Worker
+	var serviceWatchList []*Watch
 	var warnings []string
 	cascadeMap := map[string][]string{}
 	if collector == nil {
@@ -333,7 +342,7 @@ func BuildWorkers(cfg *config.Config, deps Deps, collector *metrics.Collector) (
 		serviceDeps.Backend = target.Backend
 		serviceDeps.Manager = target.Manager
 		serviceDeps.BackendPIDs = target.BackendPIDs
-		w, warns := buildWorker(name, target.Unit, resolved.Tree, serviceDeps, collector)
+		w, svcWatches, warns := buildWorker(name, target.Unit, resolved.Tree, serviceDeps, collector)
 		for _, x := range warns {
 			warnings = append(warnings, "service "+name+": "+x)
 		}
@@ -341,9 +350,10 @@ func BuildWorkers(cfg *config.Config, deps Deps, collector *metrics.Collector) (
 			cascadeMap[name] = t
 		}
 		workers = append(workers, w)
+		serviceWatchList = append(serviceWatchList, svcWatches...)
 	}
 	wireCascade(workers, cascadeMap, deps)
-	return workers, warnings
+	return workers, serviceWatchList, warnings
 }
 
 // wireCascade gives every worker whose service declares also_apply a Cascade
@@ -413,7 +423,7 @@ func appVersionCmds(tree map[string]any) map[string]appVersionCmd {
 	return cmds
 }
 
-func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *metrics.Collector) (*Worker, []string) {
+func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *metrics.Collector) (*Worker, []*Watch, []string) {
 	libBaseline := map[string]string{}
 	engine, checkDeps, discoverer := serviceRuntime(name, unit, tree, deps, libBaseline, nil)
 
@@ -528,7 +538,52 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		}
 		return cache
 	}
-	return worker, warnings
+	watchDeps := serviceWatchCheckDeps(checkDeps, discoverer, selectors)
+	newMetricSource := watchMetricSourceFactory(name, discoverer, selectors, deps.SystemFreshness)
+	watches, watchWarnings := serviceWatches(name, tree, watchDeps, newMetricSource, deps, resolution)
+	warnings = append(warnings, watchWarnings...)
+	return worker, watches, warnings
+}
+
+// serviceWatchCheckDeps derives the check deps a service's embedded watches use
+// from the worker's deps. It scopes the process-counting closure to the
+// service's PID tree (its selector matches plus descendants) so a
+// process_count watch counts only the service's own processes, parent and
+// children — not unrelated host processes that share a user or exe.
+func serviceWatchCheckDeps(base checks.Deps, discoverer process.Discoverer, selectors []process.Selector) checks.Deps {
+	base.ProcessCount = func(user, exe, exeDir string) int {
+		return discoverer.CountInTree(selectors, user, exe, exeDir)
+	}
+	return base
+}
+
+// watchMetricSourceFactory returns a builder for the metric source a service
+// watch's `metric` check reads. Each call builds a fresh, dedicated collector so
+// a watch's rate metrics (cpu/cpu_thread/io) never collide with the engine's
+// per-cycle sampling or with another watch — mirroring the dedicated
+// LiveCollector the web live view uses. Service-scope samples the service's PID
+// tree (parent + children); system-scope reads the host. metricCheck.Run samples
+// once per cycle, so successive cycles of one watch yield correct rate deltas.
+func watchMetricSourceFactory(service string, discoverer process.Discoverer, selectors []process.Selector, freshness time.Duration) func() checks.MetricReader {
+	return func() checks.MetricReader {
+		wc := metrics.New(metrics.OSReader{})
+		if freshness > 0 {
+			wc.SystemFreshness = freshness
+		}
+		return func(scope, metric string) (metrics.Reading, bool) {
+			var snap metrics.Snapshot
+			if scope == "system" {
+				snap = wc.SampleSystem()
+			} else {
+				snap = wc.SampleService(service, discoverPIDs(discoverer, selectors))
+			}
+			if snap == nil {
+				return metrics.Reading{}, false
+			}
+			r, ok := snap[metric]
+			return r, ok
+		}
+	}
 }
 
 func buildWorkerCheckSet(section map[string]any, deps checks.Deps, dynamicMetrics bool) ([]checks.Built, []string, func(checks.MetricReader)) {
@@ -820,6 +875,13 @@ func monitorPaused(store MonitorStore, name string) func() bool {
 }
 
 func watchMonitorKey(name string) string {
+	return WatchMonitorKey(name)
+}
+
+// WatchMonitorKey is the persistent monitor-state key for a watch (host or
+// service-embedded, "<service>:<watch>"), distinct from a service's bare-name
+// key. The CLI and web use it to pause/resume a watch independently of any service.
+func WatchMonitorKey(name string) string {
 	return "watch:" + name
 }
 

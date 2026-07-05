@@ -1330,6 +1330,11 @@ Host watch documents use the same top-level
 `monitor: enabled | disabled | previous` values; see
 [configuration](configuration.md#host-watches).
 
+A service may also carry its own `watches:` block — per-service watches that fire
+a hook/notification scoped to the service (and can use the service-scoped
+`service`/`process` check types). See
+[Service watches](configuration.md#service-watches-scoped-to-a-service).
+
 ## Auxiliary commands
 
 `commands` declares named auxiliary commands. Sermo never runs them as generic

@@ -79,6 +79,87 @@ defaults: { policy: { cooldown: 5m } }
 	}
 }
 
+func TestWatchMonitorUnmonitorCommand(t *testing.T) {
+	root := t.TempDir()
+	servicesDir := filepath.Join(root, "services")
+	runDir := filepath.Join(root, "run")
+	stateDir := filepath.Join(root, "state")
+	for _, d := range []string{servicesDir, runDir, stateDir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A service that declares the embedded watch, so the CLI's known-watch check
+	// accepts "mail-queue:deferred-backlog".
+	if err := os.WriteFile(filepath.Join(servicesDir, "mail-queue.yml"), []byte(
+		"name: mail-queue\nservice: mail-queue\npolicy: { cooldown: 5m }\n"+
+			"watches:\n  deferred-backlog:\n    check: { type: count, path: /tmp, of: file, count: { op: \">=\", value: 0 } }\n"+
+			"    then: { hook: { command: [\"/bin/true\"] } }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sermo.yml"), []byte(fmt.Sprintf(`
+engine: { backend: auto }
+paths: { catalog: [], services: [ %s ], runtime: %s, state: %s }
+defaults: { policy: { cooldown: 5m } }
+`, servicesDir, runDir, stateDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+
+	run := func(args ...string) int {
+		var out bytes.Buffer
+		app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}}
+		return app.Run(context.Background(), append([]string{"--config", global}, args...))
+	}
+	watchPaused := func(name string) bool {
+		store, err := state.Open(filepath.Join(stateDir, state.Filename))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer store.Close()
+		active, found, err := store.Active(sermoapp.WatchMonitorKey(name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return found && !active
+	}
+
+	// A service-embedded watch name uses the "<service>:<watch>" form.
+	const name = "mail-queue:deferred-backlog"
+	if code := run("watch", "unmonitor", name); code != exitSuccess {
+		t.Fatalf("watch unmonitor exit = %d", code)
+	}
+	if !watchPaused(name) {
+		t.Error("watch should be paused after unmonitor")
+	}
+	if code := run("watch", "monitor", name); code != exitSuccess {
+		t.Fatalf("watch monitor exit = %d", code)
+	}
+	if watchPaused(name) {
+		t.Error("watch should be resumed after monitor")
+	}
+
+	// Unmonitoring the watch's service must NOT touch the watch's own state.
+	if code := run("watch", "unmonitor", name); code != exitSuccess {
+		t.Fatalf("watch unmonitor exit = %d", code)
+	}
+	// The service key is the bare name, independent of the watch key.
+	store, err := state.Open(filepath.Join(stateDir, state.Filename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, serviceFound, _ := store.Active("mail-queue")
+	store.Close()
+	if serviceFound {
+		t.Error("watch unmonitor must not write the service's monitor state")
+	}
+
+	// A typo'd/unknown watch name is rejected (mirrors the web "unknown watch").
+	if code := run("watch", "unmonitor", "mail-queue:ghost"); code == exitSuccess {
+		t.Error("unmonitor of an unknown watch should fail")
+	}
+}
+
 func TestMonitorJSONIncludesSource(t *testing.T) {
 	root, global := monitorTestConfig(t)
 	var out bytes.Buffer

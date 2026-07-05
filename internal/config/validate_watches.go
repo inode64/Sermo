@@ -8,6 +8,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/conn"
 	"sermo/internal/process"
 )
 
@@ -75,6 +76,96 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			}
 		}
 	}
+}
+
+// validateServiceWatches validates a service tree's embedded `watches:` section.
+// These run the host-watch runtime with the service's scoped check deps, so the
+// process- and status-scoped types (process, service) are permitted here that a
+// host watch rejects — but a metric check is not (the scoped deps carry no metric
+// source; use a rule) and net/icmp/swap belong in the global watches: section.
+// The per-type field grammar is shared with host watches and enforced at build
+// time; this pass covers the structural contract (mapping, recognized type, an
+// action, valid notifier refs, window and policy) with service-qualified scopes.
+func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[string]struct{}, defaultNotify []string, add func(string, ...any)) {
+	watches, ok := tree["watches"].(map[string]any)
+	if !ok {
+		if _, present := tree["watches"]; present {
+			add("watches must be a mapping of named watches")
+		}
+		return
+	}
+	for _, name := range slices.Sorted(maps.Keys(watches)) {
+		entry, ok := watches[name].(map[string]any)
+		if !ok {
+			add("watches.%s must be a mapping", name)
+			continue
+		}
+		if name == "version" || name == "config" {
+			add("watches.%s name is reserved for the version/config monitor; rename it", name)
+			continue
+		}
+		if v, ok := entry["enabled"].(bool); ok && !v {
+			continue
+		}
+		prefix := "watches." + name
+		validateWatchMetadata(name, entry, add)
+		if mode, present := entry["monitor"]; present {
+			validateMonitorMode(prefix+".monitor", mode, add)
+		}
+		if v, present := entry["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
+			add("%s.interval %q must be a valid positive duration", prefix, cfgval.String(v))
+		}
+		if v, present := entry["dry_run"]; present {
+			if _, ok := v.(bool); !ok {
+				add("%s.dry_run must be a boolean", prefix)
+			}
+		}
+		if then, ok := entry["then"].(map[string]any); ok {
+			if _, present := then["notify"]; present {
+				validateNotifySelection(prefix+".then.notify", then["notify"], notifiers, add)
+			}
+		}
+		validateWindow(prefix, entry, add)
+		validateWatchPolicy(prefix, entry, add)
+
+		check, ok := entry["check"].(map[string]any)
+		if !ok {
+			add("%s.check is required", prefix)
+			continue
+		}
+		typ := cfgval.String(check["type"])
+		switch {
+		case typ == "":
+			add("%s.check.type is required", prefix)
+			continue
+		case typ == "net" || typ == "icmp" || typ == "swap":
+			add("%s.check.type %q is host-scoped; declare it under the global watches: section", prefix, typ)
+			continue
+		case typ == "process":
+			add("%s.check.type \"process\" matches host-wide (and can kill); use process_count or metric for service-scoped process monitoring, or a host watch", prefix)
+			continue
+		case !serviceWatchableType(typ):
+			add("%s.check.type %q is not supported", prefix, typ)
+			continue
+		}
+		validateSingleShotCheckFields(prefix+".check", typ, check, locksDir, add)
+		// A service watch has no kill action (the process watch is rejected above);
+		// a storage watch may still carry a then.expand.
+		validateHookBlock(prefix, entry, typ == "storage", false, defaultNotify, add)
+	}
+}
+
+// serviceWatchableType reports whether typ can back a service-embedded watch: any
+// built-in single-shot type (including the service-scoped service/metric types,
+// which have per-service deps here) or a connection protocol. The host-scoped
+// multi-metric types (net/icmp/swap) and the host-wide `process` watch are
+// rejected by the caller before this is reached.
+func serviceWatchableType(typ string) bool {
+	if checks.IsSingleShotType(typ) {
+		return true
+	}
+	_, ok := conn.Lookup(typ)
+	return ok
 }
 
 func validateWatchMetadata(name string, entry map[string]any, add func(string, ...any)) {

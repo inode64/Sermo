@@ -106,21 +106,28 @@ var commandUsages = []commandUsage{
 	},
 	{
 		Name:    "watch",
-		Summary: "Query host-watch state from the running daemon.",
+		Summary: "Query or pause/resume a watch (host watch or service watch).",
 		Usage: []string{
 			"sermoctl watch status WATCH",
+			"sermoctl watch monitor WATCH",
+			"sermoctl watch unmonitor WATCH",
 		},
 		Flags: []string{
-			"--json  print the watch state as JSON",
+			"--json  print the result as JSON",
 		},
 		Notes: []string{
 			"When sermod is running with web enabled, watch status prefers the",
 			"daemon's computed state (including starting during startup settling).",
 			"Otherwise it reports ok.",
+			"monitor/unmonitor pause or resume a single watch, persisted under",
+			"paths.state and read live by the daemon. WATCH is a host watch name or",
+			"a service watch \"<service>:<watch>\"; a watch's monitor state is",
+			"independent of its service's.",
 		},
 		Examples: []string{
 			"sermoctl watch status storage-root",
 			"sermoctl --json watch status load",
+			"sermoctl watch unmonitor mail-queue:deferred-backlog",
 		},
 	},
 	{

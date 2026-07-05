@@ -117,9 +117,10 @@ func (m *Monitor) Reload() {
 
 	m.applyConfig(newCfg)
 
-	workers, warnings := BuildWorkers(newCfg, m.deps, m.collector)
+	workers, svcWatches, warnings := BuildWorkers(newCfg, m.deps, m.collector)
 	watches, watchWarnings := BuildWatches(newCfg, m.deps, m.deps.Interval)
 	hostWatches := len(watches)
+	watches = append(watches, svcWatches...)
 	watches = append(watches, BuildAppWatches(newCfg, m.deps)...)
 	if len(workers) == 0 && hostWatches == 0 && !HasConfiguredTargets(newCfg) {
 		// Rollback: restore previous generation and restart it (we stopped above).

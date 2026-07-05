@@ -60,6 +60,8 @@ sermoctl version
 sermoctl status SERVICE
 sermoctl is-active SERVICE
 sermoctl watch status WATCH
+sermoctl watch monitor WATCH
+sermoctl watch unmonitor WATCH
 sermoctl start SERVICE [--no-cascade]
 sermoctl stop SERVICE [--no-cascade]
 sermoctl restart SERVICE [--no-cascade]
@@ -166,6 +168,12 @@ la unidad reporta active. La misma preferencia se aplica a `sermoctl watch statu
 WATCH` y a la columna STATUS de `sermoctl apps` para las aplicaciones instaladas
 monitorizadas por el daemon. Las apps de catálogo cuyo binario no está instalado
 se omiten de `sermoctl apps` y no participan en el asentamiento de arranque.
+
+`sermoctl watch monitor|unmonitor WATCH` pausa o reanuda un watch concreto,
+persistido bajo `paths.state` y leído en vivo por el daemon. `WATCH` es el nombre
+de un host watch o de un watch de servicio `"<servicio>:<watch>"`; el estado de
+monitorización de un watch es independiente del de su servicio, así que
+`unmonitor` sobre un servicio nunca pausa sus watches.
 Sermo lee los candidatos `service:` del servicio, elige la primera unidad
 conocida por el backend activo, y normaliza los nombres de systemd con `.service`
 cuando es necesario.

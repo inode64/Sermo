@@ -44,54 +44,141 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 			warnings = append(warnings, "watch "+name+" is not a mapping")
 			continue
 		}
-		if cfgval.Disabled(entry) {
-			continue
-		}
-
-		checkEntry, ok := entry["check"].(map[string]any)
-		if !ok {
-			warnings = append(warnings, "watch "+name+": missing check")
-			continue
-		}
-
-		interval := defaultInterval
-		if d := cfgval.Duration(entry["interval"]); d > 0 {
-			interval = d
-		}
-
-		if w := applyWatchMonitorMode(deps.Monitor, name, config.MonitorMode(entry)); w != "" {
-			warnings = append(warnings, w)
-		}
-
-		switch cfgval.AsString(checkEntry["type"]) {
-		case "net", "icmp", "swap":
-			expanded, warns := buildMetricWatches(name, entry, checkEntry, deps, interval)
-			watches = append(watches, expanded...)
-			warnings = append(warnings, warns...)
-		case "file":
-			w, warn := buildFileWatch(name, entry, checkEntry, deps, interval)
-			if warn != "" {
-				warnings = append(warnings, warn)
-				continue
-			}
-			watches = append(watches, w)
-		case "process":
-			w, warn := buildProcWatch(name, entry, checkEntry, deps, interval)
-			if warn != "" {
-				warnings = append(warnings, warn)
-				continue
-			}
-			watches = append(watches, w)
-		default:
-			w, warn := buildSingleWatch(name, entry, checkEntry, deps, interval)
-			if warn != "" {
-				warnings = append(warnings, warn)
-				continue
-			}
-			watches = append(watches, w)
-		}
+		ws, warns := buildWatchEntry(name, entry, deps, defaultInterval)
+		watches = append(watches, ws...)
+		warnings = append(warnings, warns...)
 	}
 	return watches, warnings
+}
+
+// buildWatchEntry builds the Watch(es) for one watch entry, shared by host
+// watches (BuildWatches) and service-embedded watches (serviceWatches). It skips
+// a disabled entry, resolves the interval and monitor mode, then dispatches on
+// the check type: net/icmp/swap expand to one Watch per metric, file/process are
+// stateful watchers, and everything else is a single check-backed Watch. The
+// inline check is scoped by deps.WatchCheckDeps when set (service watches).
+func buildWatchEntry(name string, entry map[string]any, deps Deps, defaultInterval time.Duration) ([]*Watch, []string) {
+	if cfgval.Disabled(entry) {
+		return nil, nil
+	}
+	checkEntry, ok := entry["check"].(map[string]any)
+	if !ok {
+		return nil, []string{"watch " + name + ": missing check"}
+	}
+	interval := defaultInterval
+	if d := cfgval.Duration(entry["interval"]); d > 0 {
+		interval = d
+	}
+	var warnings []string
+	if w := applyWatchMonitorMode(deps.Monitor, name, config.MonitorMode(entry)); w != "" {
+		warnings = append(warnings, w)
+	}
+	switch cfgval.AsString(checkEntry["type"]) {
+	case "net", "icmp", "swap":
+		expanded, warns := buildMetricWatches(name, entry, checkEntry, deps, interval)
+		return expanded, append(warnings, warns...)
+	case "file":
+		return watchOrWarn(buildFileWatch(name, entry, checkEntry, deps, interval))(warnings)
+	case "process":
+		return watchOrWarn(buildProcWatch(name, entry, checkEntry, deps, interval))(warnings)
+	default:
+		return watchOrWarn(buildSingleWatch(name, entry, checkEntry, deps, interval))(warnings)
+	}
+}
+
+// watchOrWarn folds a single-watch builder's (watch, warn) result into the
+// ([]*Watch, []string) shape buildWatchEntry returns, appending to the entry's
+// accumulated warnings.
+func watchOrWarn(w *Watch, warn string) func([]string) ([]*Watch, []string) {
+	return func(warnings []string) ([]*Watch, []string) {
+		if warn != "" {
+			return nil, append(warnings, warn)
+		}
+		return []*Watch{w}, warnings
+	}
+}
+
+// serviceWatches builds the watches declared inside a service tree's `watches:`
+// section. Each runs the host-watch runtime (hook/notify/for-within/dry-run) with
+// the service's scoped check deps, so process-scoped checks count only the
+// service's PID tree and a `metric` check reads a dedicated per-watch collector
+// (newMetricSource) scoped to that tree. Watches are named "<service>:<watch>".
+// The host-scoped multi-metric (net/icmp/swap) and kill-capable `process` watch
+// types are rejected here (see unsupportedServiceWatchType).
+func serviceWatches(service string, tree map[string]any, checkDeps checks.Deps, newMetricSource func() checks.MetricReader, deps Deps, defaultInterval time.Duration) ([]*Watch, []string) {
+	section, ok := tree["watches"].(map[string]any)
+	if !ok || len(section) == 0 {
+		return nil, nil
+	}
+	interval := defaultInterval
+	if d := cfgval.Duration(tree["interval"]); d > 0 {
+		interval = d
+	}
+	var watches []*Watch
+	var warnings []string
+	for _, wn := range slices.Sorted(maps.Keys(section)) {
+		entry, ok := section[wn].(map[string]any)
+		if !ok {
+			warnings = append(warnings, "service "+service+": watch "+wn+" is not a mapping")
+			continue
+		}
+		if reservedServiceWatchName(wn) {
+			warnings = append(warnings, "service "+service+": watch "+wn+": name is reserved for the version/config monitor; rename it")
+			continue
+		}
+		if warn := unsupportedServiceWatchType(entry); warn != "" {
+			warnings = append(warnings, "service "+service+": watch "+wn+": "+warn)
+			continue
+		}
+		// A metric check reads a dedicated per-watch collector so its rate deltas
+		// stay isolated from the engine's sampling and from other watches.
+		entryDeps := checkDeps
+		if isMetricWatch(entry) {
+			if newMetricSource == nil {
+				warnings = append(warnings, "service "+service+": watch "+wn+": metric source unavailable")
+				continue
+			}
+			entryDeps.Metrics = newMetricSource()
+		}
+		sd := deps
+		sd.WatchCheckDeps = &entryDeps
+		ws, warns := buildWatchEntry(service+":"+wn, entry, sd, interval)
+		watches = append(watches, ws...)
+		warnings = append(warnings, warns...)
+	}
+	return watches, warnings
+}
+
+// isMetricWatch reports whether a watch entry's check is a metric check.
+func isMetricWatch(entry map[string]any) bool {
+	checkEntry, _ := entry["check"].(map[string]any)
+	return cfgval.AsString(checkEntry["type"]) == "metric"
+}
+
+// reservedServiceWatchName reports whether a service watch name collides with a
+// synthesized per-service monitor ("<service>:version" / "<service>:config").
+// Sharing the name would share the settling and monitor-pause keys, so those
+// names are reserved.
+func reservedServiceWatchName(name string) bool {
+	return name == "version" || name == "config"
+}
+
+// unsupportedServiceWatchType reports why a check type cannot back a service
+// watch, or "" when it can. net/icmp/swap are host/network multi-metric watches
+// that belong in the global watches: section. The `process` watch matches
+// processes host-wide by name/user and can kill them, which is unsafe from a
+// service scope — use the PID-tree-scoped `process_count`/`metric` types (or a
+// host watch) instead. (metric IS supported: it reads a dedicated per-watch
+// collector scoped to the service PID tree.)
+func unsupportedServiceWatchType(entry map[string]any) string {
+	checkEntry, _ := entry["check"].(map[string]any)
+	switch cfgval.AsString(checkEntry["type"]) {
+	case "net", "icmp", "swap":
+		return "net/icmp/swap watches are host-scoped; declare them under the global watches: section"
+	case "process":
+		return "the process watch matches host-wide (and can kill); use process_count or metric for service-scoped process monitoring, or declare a host watch"
+	}
+	return ""
 }
 
 // buildSingleWatch builds the standard one-Watch-per-entry shape: an inline check
@@ -762,6 +849,9 @@ func configTestCommandEntry(tree map[string]any) map[string]any {
 // (buildSingleWatch, buildMetricWatches). It forwards every sampler that host
 // resource checks and multi-metric watches may use.
 func watchInlineDeps(deps Deps) checks.Deps {
+	if deps.WatchCheckDeps != nil {
+		return *deps.WatchCheckDeps
+	}
 	return checkDepsFromAppDeps(deps, checks.Deps{
 		DefaultTimeout: deps.DefaultTimeout,
 		Runner:         deps.ExecxRunner,

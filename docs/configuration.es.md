@@ -1455,6 +1455,40 @@ funciona en los `checks:` de un service (ver [Checks](rules.es.md#checks)).
 La WebUI muestra lecturas en vivo solo para sondas locales baratas; las comprobaciones
 intensivas en comando/red dependen de sus eventos de watch normales.
 
+### Watches de servicio (acotados a un servicio)
+
+Un servicio puede llevar su propio bloque `watches:` — la misma forma que un watch
+de host (un `check:`, una ventana `for`/`within` opcional y un bloque `then` con
+`hook`, `notify`, `expand` o `kill`) — declarado **dentro del documento del
+servicio**. Los eventos se etiquetan `<servicio>:<watch>` y reutiliza todo el
+runtime de host-watch (ventanas firing/recovered, hooks, notifiers, dry-run).
+
+Lo que "dentro de un servicio" añade es el **contexto de comprobación** del
+servicio, acotado a su **árbol de PIDs** (los procesos que casan más sus
+descendientes — padre e hijos — derivados de los selectores `processes:` /
+identidad del init):
+
+- `process_count` cuenta solo ese árbol, inmune a procesos ajenos del host que
+  compartan usuario o exe. Un `user`/`exe`/`exe_dir` opcional afina *dentro* del árbol.
+- `metric` (`cpu`, `cpu_thread`, `memory`, `io`, …) lee el **scope de servicio**
+  por defecto — la lectura sumada sobre ese árbol — desde un collector dedicado
+  por watch, así que sus deltas de rate nunca chocan con el muestreo del engine.
+- `service` se ata a la unidad de este servicio.
+
+Las comprobaciones host-globales (`fds`, `storage`, `count`, `load`, `http`, …)
+leen el mismo recurso del host en ambas superficies.
+
+Los tipos **no** disponibles aquí son `net`/`icmp`/`swap` (watches multimétricos
+de host/red — usa la sección global `watches:`) y el **watch `process`** (casa
+procesos host-wide y puede hacer `kill`, inseguro desde un scope de servicio — usa
+`process_count`/`metric`, o un watch de host). El nombre del watch no puede ser
+`version` ni `config` (reservados para los monitores version/config del servicio).
+
+Un watch de servicio es visible y pausable como un watch global: aparece en el
+panel Watches de la Web UI y responde a
+`sermoctl watch monitor|unmonitor <servicio>:<watch>`. Desmonitorizar el
+**servicio** no toca sus watches — su estado de monitorización es independiente.
+
 ```yaml
 # /etc/sermo/storages/storage-root.yml
 name: storage-root

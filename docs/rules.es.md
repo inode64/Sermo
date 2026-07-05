@@ -1413,8 +1413,9 @@ son agnósticos al protocolo, así que un nuevo protocolo solo se registra a sí
 Cada tipo de arriba es una **comprobación de un solo disparo** (`Check.Run → Result`) y es usable en
 **ambos** lugares:
 
-- los `checks:`/`preflight:`/`postflight:` de un servicio (y referenciado desde reglas), y
-- un documento de **watch** de host (o entrada global `watches:`, disparando un hook) — ver [configuración](configuration.es.md#host-watches).
+- los `checks:`/`preflight:`/`postflight:` de un servicio (y referenciado desde reglas),
+- un documento de **watch** de host (o entrada global `watches:`, disparando un hook) — ver [configuración](configuration.es.md#host-watches), y
+- el propio bloque `watches:` embebido de un servicio (disparando un hook acotado al servicio, incluidos los tipos `service`/`metric` y el `process_count` acotado por PIDs) — ver [Watches de servicio](configuration.es.md#watches-de-servicio-acotados-a-un-servicio).
 
 Las comprobaciones de recursos del host (`storage`, `load`, `memory`, `pressure`, `fds`, `pids`,
 `diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`, `entropy`,
