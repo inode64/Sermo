@@ -1042,7 +1042,7 @@ opcional porque algunas unidades systemd publican `MainPID` incluso cuando el
 
 ### Componentes opcionales (`enable_if`)
 
-Una entrada bajo `processes`, `checks`, `preflight` o `postflight` puede llevar un
+Una entrada bajo `processes`, `checks` o `preflight` puede llevar un
 guard `enable_if` que la mantiene solo cuando una clave en un fichero de config de distro satisface
 un predicado; de lo contrario la entrada se descarta durante la resolución del servicio. Esto
 modela componentes que son opcionales por host — p. ej. un perfil de Samba que enlaza un

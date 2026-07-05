@@ -2130,7 +2130,7 @@ variable and have every `${var}` reference resolve to the new value.
 
 - Scalars and lists overwrite.
 - Maps merge recursively.
-- Named sections (`checks`, `preflight`, `postflight`, `processes`, `rules`)
+- Named sections (`checks`, `preflight`, `processes`, `rules`)
   are maps keyed by name, so a child can override one field of one entry.
 - Disable an inherited entry with `enabled: false`; delete it with
   `delete: true`.

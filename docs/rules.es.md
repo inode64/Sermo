@@ -2,8 +2,9 @@
 
 ## Comprobaciones
 
-Las comprobaciones son sondas de un solo disparo bajo `checks` (y `preflight`/`postflight`,
-que reutilizan el mismo esquema). Tipos admitidos:
+Las comprobaciones son sondas de un solo disparo bajo `checks` (y `preflight`,
+que reutiliza el mismo esquema). Una entrada de `checks` marcada con `verify: true`
+se ejecuta además como verificación de arranque tras la operación. Tipos admitidos:
 
 El conjunto completo de tipos de comprobación de un solo disparo está definido de forma centralizada. Las pruebas fijan esa lista contra el despacho del constructor y la validación de configuración, y fijan la lista de protocolos de conexión de más abajo contra el registro `conn`, de modo que los tipos de comprobación anunciados no puedan divergir del código. (Las formas de watch multi-métrica como los watches `net`/`icmp`/`swap` y `file`/`process` se construyen sobre estas primitivas.)
 
@@ -1413,7 +1414,7 @@ son agnósticos al protocolo, así que un nuevo protocolo solo se registra a sí
 Cada tipo de arriba es una **comprobación de un solo disparo** (`Check.Run → Result`) y es usable en
 **ambos** lugares:
 
-- los `checks:`/`preflight:`/`postflight:` de un servicio (y referenciado desde reglas),
+- los `checks:`/`preflight:` de un servicio (y referenciado desde reglas),
 - un documento de **watch** de host (o entrada global `watches:`, disparando un hook) — ver [configuración](configuration.es.md#host-watches), y
 - el propio bloque `watches:` embebido de un servicio (disparando un hook acotado al servicio, incluidos los tipos `service`/`metric` y el `process_count` acotado por PIDs) — ver [Watches de servicio](configuration.es.md#watches-de-servicio-acotados-a-un-servicio).
 

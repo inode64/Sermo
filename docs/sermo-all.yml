@@ -444,17 +444,6 @@ preflight:  # gate start/restart/reload/resume
     binary: "${binary}"
     optional: true  # best-effort: warns, never blocks
 
-postflight:  # assert health after start/restart/reload/resume
-  http:
-    type: http
-    url: "http://${host}:${port}${health_path}"
-    expect_status: 200
-    timeout: 5s
-  pidfile:
-    type: pidfile
-    path: /run/demo.pid
-    requires: [http]
-
 processes:  # discovery selectors (used by metrics/reaper)
   workers:
     exe: "${binary}"  # exact resolved /proc/<pid>/exe
@@ -516,6 +505,7 @@ checks:
     on_change: true
   http:
     type: http
+    verify: true  # also run after start/restart/reload/resume to confirm health (replaces the old postflight: section)
     url: "http://${host}:${port}${health_path}"
     proxy: "http://127.0.0.1:3128"  # route the probe via http/https/socks5 proxy
     body: "ping"  # raw request body (string; alternative to json:)
