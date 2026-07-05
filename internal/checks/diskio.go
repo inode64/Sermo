@@ -78,10 +78,10 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 	st.t, st.last = now, s
 
 	values := map[string]float64{
-		"util_pct":    rates.UtilPct,
-		"read_bytes":  rates.ReadBytes,
-		"write_bytes": rates.WriteBytes,
-		"await_ms":    rates.AwaitMs,
+		fieldUtilPct:    rates.UtilPct,
+		fieldReadBytes:  rates.ReadBytes,
+		fieldWriteBytes: rates.WriteBytes,
+		fieldAwaitMs:    rates.AwaitMs,
 	}
 
 	ok := levelPredsHold(c.preds, values)
@@ -89,11 +89,11 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 	res := c.result(ok, fmt.Sprintf("diskio %s util %.1f%% read %.0fB/s write %.0fB/s await %.1fms",
 		c.device, rates.UtilPct, rates.ReadBytes, rates.WriteBytes, rates.AwaitMs), start)
 	res.Data = map[string]any{
-		"device":      c.device,
-		"util_pct":    rates.UtilPct,
-		"read_bytes":  rates.ReadBytes,
-		"write_bytes": rates.WriteBytes,
-		"await_ms":    rates.AwaitMs,
+		"device":        c.device,
+		fieldUtilPct:    rates.UtilPct,
+		fieldReadBytes:  rates.ReadBytes,
+		fieldWriteBytes: rates.WriteBytes,
+		fieldAwaitMs:    rates.AwaitMs,
 	}
 	res.Data["value"] = firstPredValue(c.preds, values, rates.UtilPct)
 	return res
