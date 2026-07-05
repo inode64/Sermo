@@ -210,6 +210,43 @@ func TestApacheCatalogRestartsOnHotWorkerThread(t *testing.T) {
 	}
 }
 
+// TestAllCatalogServicesDesugarInPreview locks that the catalog-preview path
+// (ResolveCatalog → resolveDocBody) runs the watch desugar like the daemon path,
+// so no rule-class watch survives unexpanded and remediation stays wired for
+// every catalog service reachable via the wizard/appinspect/web preview.
+func TestAllCatalogServicesDesugarInPreview(t *testing.T) {
+	root := repoRoot(t)
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for _, name := range cfg.CatalogServiceNames {
+		if strings.Contains(name, "%") {
+			continue // version templates materialize per instance elsewhere
+		}
+		resolved, errs := cfg.ResolveCatalog(CategoryService, name)
+		if len(errs) > 0 {
+			t.Errorf("ResolveCatalog(%s): %v", name, errs)
+			continue
+		}
+		watches, _ := resolved.Tree["watches"].(map[string]any)
+		for wn, raw := range watches {
+			w, _ := raw.(map[string]any)
+			then, _ := w["then"].(map[string]any)
+			if then != nil && cfgval.String(then["action"]) != "" {
+				t.Errorf("%s: watch %q keeps a rule-class action after preview resolve; resolveDocBody must run the desugar", name, wn)
+			}
+		}
+	}
+}
+
 func TestContainerdCatalogRestartsOnVersionChange(t *testing.T) {
 	root := repoRoot(t)
 	dir := t.TempDir()
