@@ -12,18 +12,6 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 SERVICES = ROOT / "catalog" / "services"
 
-GUARD_CONFIG = {
-    "block-restart-if-config-invalid": {
-        "type": "guard",
-        "blocks": ["restart", "start"],
-        "if": {"failed": {"check": "config"}},
-        "then": {
-            "action": "block",
-            "message": "${display_name} configuration is invalid",
-        },
-    }
-}
-
 RESTART_TCP = {
     "restart-if-tcp-failed": {
         "type": "remediation",
@@ -246,7 +234,7 @@ SPECS: dict[str, dict] = {
             }
         },
         "verify": "version",
-        "rules": [GUARD_CONFIG, restart_failed("version"), CPU_THREAD, ALERT_FDS, ALERT_MEMORY],
+        "rules": [restart_failed("version"), CPU_THREAD, ALERT_FDS, ALERT_MEMORY],
         "reload": True,
         "metric_checks": True,
     },
@@ -301,7 +289,7 @@ SPECS: dict[str, dict] = {
             }
         },
         "verify": "process",
-        "rules": [GUARD_CONFIG, ALERT_MEMORY],
+        "rules": [ALERT_MEMORY],
         "reload": True,
     },
     "filebeat.yml": {
@@ -314,7 +302,7 @@ SPECS: dict[str, dict] = {
             }
         },
         "verify": "config-output",
-        "rules": [GUARD_CONFIG, ALERT_FDS, ALERT_MEMORY],
+        "rules": [ALERT_FDS, ALERT_MEMORY],
         "reload": True,
         "metric_checks": True,
     },
@@ -327,7 +315,7 @@ SPECS: dict[str, dict] = {
             }
         },
         "verify": "state",
-        "rules": [GUARD_CONFIG, restart_failed("state"), ALERT_MEMORY],
+        "rules": [restart_failed("state"), ALERT_MEMORY],
         "reload": True,
     },
     "freshclam.yml": {
@@ -430,7 +418,7 @@ SPECS: dict[str, dict] = {
             "smb": {"type": "smb", "port": 445, "timeout": "3s", "optional": True},
         },
         "verify": "netbios",
-        "rules": [GUARD_CONFIG, ALERT_MEMORY],
+        "rules": [ALERT_MEMORY],
     },
     "node.yml": {
         "checks": {
@@ -657,7 +645,7 @@ SPECS: dict[str, dict] = {
             }
         },
         "verify": "ping",
-        "rules": [GUARD_CONFIG, restart_failed("ping"), CPU_THREAD, ALERT_FDS],
+        "rules": [restart_failed("ping"), CPU_THREAD, ALERT_FDS],
     },
     "syslog-ng.yml": {
         "checks": {
@@ -669,7 +657,7 @@ SPECS: dict[str, dict] = {
             }
         },
         "verify": "ctl",
-        "rules": [GUARD_CONFIG, CPU_THREAD, ALERT_FDS],
+        "rules": [CPU_THREAD, ALERT_FDS],
         "reload": True,
         "metric_checks": True,
     },
@@ -810,7 +798,7 @@ ENRICH: dict[str, dict] = {
             }
         },
         "verify": "ready",
-        "rules": [GUARD_CONFIG, restart_failed("ready"), RESTART_PORT, ALERT_MEMORY],
+        "rules": [restart_failed("ready"), RESTART_PORT, ALERT_MEMORY],
         "reload": True,
         "metric_checks": True,
     },
@@ -829,7 +817,7 @@ ENRICH: dict[str, dict] = {
     "nginx.yml": {
         "preflight_analyze": ["web"],
         "verify": "http",
-        "rules_extra": [GUARD_CONFIG, ALERT_FDS, ALERT_MEMORY],
+        "rules_extra": [ALERT_FDS, ALERT_MEMORY],
         "reload": True,
         "metric_checks": True,
     },
@@ -852,7 +840,7 @@ ENRICH: dict[str, dict] = {
             }
         },
         "verify": "mqtt",
-        "rules": [GUARD_CONFIG, restart_failed("mqtt"), RESTART_PORT],
+        "rules": [restart_failed("mqtt"), RESTART_PORT],
         "reload": True,
         "metric_checks": True,
     },
@@ -879,14 +867,14 @@ ENRICH: dict[str, dict] = {
         "verify": "rsync",
         "rules": [restart_failed("rsync"), RESTART_TCP],
     },
-    "docker.yml": {"verify": "engine", "rules_extra": [GUARD_CONFIG, ALERT_FDS], "reload": True},
+    "docker.yml": {"verify": "engine", "rules_extra": [ALERT_FDS], "reload": True},
     "libvirtd.yml": {
         "verify": "libvirt",
         "rules": [restart_failed("libvirt"), ALERT_FDS],
     },
-    "prometheus.yml": {"verify": "prometheus", "rules_extra": [GUARD_CONFIG, ALERT_FDS], "reload": True},
+    "prometheus.yml": {"verify": "prometheus", "rules_extra": [ALERT_FDS], "reload": True},
     "grafana.yml": {"verify": "http", "rules_extra": [ALERT_FDS], "reload": True},
-    "loki.yml": {"verify": "http", "rules_extra": [GUARD_CONFIG, ALERT_FDS], "reload": True},
+    "loki.yml": {"verify": "http", "rules_extra": [ALERT_FDS], "reload": True},
     "ceph-mon.yml": {
         "apps_add": ["ceph"],
         "checks": {

@@ -1213,9 +1213,10 @@ func TestCatalogPHPFPMVersionedConfigTestUsesConfigFile(t *testing.T) {
 			t.Fatalf("php-fpm config command = %v, want %v", command, want)
 		}
 	}
-	rules := nested(t, body, "rules")
-	if _, ok := rules["restart-if-tcp-failed"]; ok {
-		t.Fatal("php-fpm must not remediate on the optional tcp check by default")
+	if rules, ok := body["rules"].(map[string]any); ok {
+		if _, ok := rules["restart-if-tcp-failed"]; ok {
+			t.Fatal("php-fpm must not remediate on the optional tcp check by default")
+		}
 	}
 }
 
@@ -1898,60 +1899,55 @@ func assertConservativeRemediationPolicy(t *testing.T, name string, body map[str
 	}
 }
 
-func TestCatalogConfigPreflightGuardsStartRestart(t *testing.T) {
+// TestCatalogConfigInvalidHandledByPreflight asserts config validity is enforced
+// by a REQUIRED config preflight (which aborts start/restart/reload/resume on an
+// invalid config) — not by the retired block-restart-if-config-invalid guard,
+// which was redundant with and unreachable behind that preflight.
+func TestCatalogConfigInvalidHandledByPreflight(t *testing.T) {
 	root := repoRoot(t)
 
 	for _, name := range []string{
 		"mysql", "mariadb", "postgres-%v", "dnsmasq", "monit", "nebula-%i",
 		"named", "nginx", "cloudflared", "influxdb", "mongod", "slapd",
+		"mosquitto", "supervisord",
 	} {
 		t.Run(name, func(t *testing.T) {
 			body := catalogDocByName(t, root, "services", name)
-			if _, ok := nested(t, body, "preflight")["config"]; !ok {
+			cfg, ok := nested(t, body, "preflight")["config"]
+			if !ok {
 				t.Fatalf("%s missing config preflight", name)
 			}
-			rule := nested(t, body, "rules", "block-restart-if-config-invalid")
-			if got := cfgval.String(rule["type"]); got != "guard" {
-				t.Fatalf("%s config guard type = %q, want guard", name, got)
+			if m, ok := cfg.(map[string]any); ok && cfgval.Bool(m["optional"]) {
+				t.Fatalf("%s config preflight must be required (it replaces the removed guard)", name)
 			}
-			blocks := cfgval.StringList(rule["blocks"])
-			if !slices.Contains(blocks, "restart") || !slices.Contains(blocks, "start") {
-				t.Fatalf("%s config guard blocks = %v, want restart and start", name, blocks)
-			}
-			if !conditionReferencesFailedCheck(rule["if"], "config") {
-				t.Fatalf("%s config guard if = %v, want failed config check", name, rule["if"])
-			}
-			then := nested(t, rule, "then")
-			if got := cfgval.String(then["action"]); got != "block" {
-				t.Fatalf("%s config guard action = %q, want block", name, got)
-			}
-			if cfgval.String(then["message"]) == "" {
-				t.Fatalf("%s config guard message is empty", name)
+			if rules, ok := body["rules"].(map[string]any); ok {
+				if _, present := rules["block-restart-if-config-invalid"]; present {
+					t.Fatalf("%s still carries the redundant block-restart-if-config-invalid guard", name)
+				}
 			}
 		})
 	}
 }
 
-func conditionReferencesFailedCheck(node any, check string) bool {
-	m, ok := node.(map[string]any)
-	if !ok {
-		return false
-	}
-	if failed, ok := m["failed"].(map[string]any); ok && cfgval.String(failed["check"]) == check {
-		return true
-	}
-	for _, key := range []string{"and", "or"} {
-		children, _ := m[key].([]any)
-		for _, child := range children {
-			if conditionReferencesFailedCheck(child, check) {
-				return true
+// TestCatalogHasNoConfigInvalidGuard asserts the redundant guard is gone from the
+// whole catalog, not just the representative services above.
+func TestCatalogHasNoConfigInvalidGuard(t *testing.T) {
+	root := repoRoot(t)
+	err := filepath.WalkDir(filepath.Join(root, "catalog", "services"), func(path string, entry os.DirEntry, err error) error {
+		if err != nil || entry.IsDir() || !isYAML(entry.Name()) {
+			return err
+		}
+		body := readYAMLMap(t, path)
+		if rules, ok := body["rules"].(map[string]any); ok {
+			if _, present := rules["block-restart-if-config-invalid"]; present {
+				t.Errorf("%s still carries block-restart-if-config-invalid (redundant with required config preflight)", path)
 			}
 		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if child, ok := m["not"]; ok {
-		return conditionReferencesFailedCheck(child, check)
-	}
-	return false
 }
 
 func TestNamedCatalogUsesBackendNeutralConfigPreflight(t *testing.T) {
@@ -1981,10 +1977,6 @@ func TestNamedCatalogUsesBackendNeutralConfigPreflight(t *testing.T) {
 	}
 	if _, ok := nested(t, body, "preflight")["zones"]; ok {
 		t.Fatalf("named service should use named-checkconf -z instead of an init-specific zones check")
-	}
-	rule := nested(t, body, "rules", "block-restart-if-config-invalid")
-	if !conditionReferencesFailedCheck(rule["if"], "config") {
-		t.Fatalf("named config guard if = %v, want failed config check", rule["if"])
 	}
 }
 

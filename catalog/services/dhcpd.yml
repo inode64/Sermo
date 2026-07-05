@@ -44,15 +44,3 @@ checks:
     type: dhcp
     optional: true
     port: ${port}
-rules:
-  block-restart-if-config-invalid:
-    type: guard
-    blocks:
-      - restart
-      - start
-    if:
-      failed:
-        check: config
-    then:
-      action: block
-      message: ${display_name} configuration is invalid
