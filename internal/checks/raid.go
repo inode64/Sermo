@@ -44,9 +44,9 @@ func (c raidCheck) Run(_ context.Context) Result {
 	}
 
 	values := map[string]float64{
-		"degraded":   float64(st.Degraded),
-		"recovering": float64(st.Recovering),
-		"arrays":     float64(st.Arrays),
+		fieldDegraded:   float64(st.Degraded),
+		fieldRecovering: float64(st.Recovering),
+		fieldArrays:     float64(st.Arrays),
 	}
 	ok := st.Degraded > 0 // default alert condition
 	if len(c.preds) > 0 {
@@ -58,7 +58,7 @@ func (c raidCheck) Run(_ context.Context) Result {
 		msg += " (" + strings.Join(st.DegradedNames, ", ") + ")"
 	}
 	r := c.result(ok, msg, start)
-	r.Data = map[string]any{"arrays": st.Arrays, "degraded": st.Degraded, "recovering": st.Recovering}
+	r.Data = map[string]any{fieldArrays: st.Arrays, fieldDegraded: st.Degraded, fieldRecovering: st.Recovering}
 	if len(st.DegradedNames) > 0 {
 		r.Data["degraded_arrays"] = strings.Join(st.DegradedNames, ",")
 	}
