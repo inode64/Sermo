@@ -29,6 +29,10 @@ const (
 	fieldFreeBytes = "free_bytes"
 	// fieldFree is the "free slots" field of the count checks (fds, pids, conntrack).
 	fieldFree = "free"
+	// fieldAvailablePct is the "% available" field of a memory check.
+	fieldAvailablePct = "available_pct"
+	// fieldAvailableBytes is the "available bytes" field of a memory check.
+	fieldAvailableBytes = "available_bytes"
 )
 
 // Predicate field lists, one per level check. They are exported so config
@@ -39,7 +43,7 @@ var (
 	// SwapUsageFields are the predicates of a swap usage metric.
 	SwapUsageFields = []string{fieldUsedPct, fieldFreePct, fieldFreeBytes}
 	// MemoryPredFields are the predicates of a memory check.
-	MemoryPredFields = []string{fieldUsedPct, "available_pct", "available_bytes"}
+	MemoryPredFields = []string{fieldUsedPct, fieldAvailablePct, fieldAvailableBytes}
 	// PressurePredFields are the predicates of a pressure (PSI) check: the
 	// rolling stall percentages of the some/full lines.
 	PressurePredFields = []string{"some_avg10", "some_avg60", "some_avg300", "full_avg10", "full_avg60", "full_avg300"}
