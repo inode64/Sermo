@@ -12,6 +12,10 @@ import (
 	"sermo/internal/process"
 )
 
+// onModeChange is the `on:` field value selecting change-detection (fire when the
+// probed value differs between cycles) rather than threshold matching.
+const onModeChange = "change"
+
 func validateWatches(watches map[string]any, locksDir string, notifiers map[string]struct{}, defaultNotify []string, add func(string, ...any)) {
 	for _, name := range slices.Sorted(maps.Keys(watches)) {
 		entry, ok := watches[name].(map[string]any)
@@ -388,7 +392,7 @@ func validateNetMetricCondition(prefix, metric string, m map[string]any, add add
 	case "state":
 		validateStateMetric(prefix, m, add)
 	case "speed":
-		if cfgval.String(m["on"]) != "change" {
+		if cfgval.String(m["on"]) != onModeChange {
 			add("%s requires on: change", prefix)
 		}
 	case "errors":
@@ -405,7 +409,7 @@ func validateNetMetricCondition(prefix, metric string, m map[string]any, add add
 		}
 	case "address":
 		exp := cfgval.String(m["expect"])
-		onChange := cfgval.String(m["on"]) == "change"
+		onChange := cfgval.String(m["on"]) == onModeChange
 		if exp == "" && !onChange {
 			add("%s requires expect: present|absent or on: change", prefix)
 		} else if exp != "" && exp != "present" && exp != "absent" {
@@ -474,7 +478,7 @@ func validateSwapMetricCondition(prefix, metric string, m map[string]any, add ad
 // expect up|down OR on: change.
 func validateStateMetric(prefix string, m map[string]any, add func(string, ...any)) {
 	exp := cfgval.String(m["expect"])
-	onChange := cfgval.String(m["on"]) == "change"
+	onChange := cfgval.String(m["on"]) == onModeChange
 	if exp == "" && !onChange {
 		add("%s requires expect: up|down or on: change", prefix)
 	} else if exp != "" && exp != "up" && exp != "down" {
@@ -560,7 +564,7 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 	conds := 0
 	if sz, ok := check["size"].(map[string]any); ok {
 		conds++
-		if cfgval.String(sz["on"]) != "change" {
+		if cfgval.String(sz["on"]) != onModeChange {
 			if !isValidCompareOp(cfgval.String(sz["op"])) || !isNumeric(cfgval.String(sz["value"])) {
 				add("watches.%s.check.size requires on: change or {op, value} with a numeric value", name)
 			}
@@ -569,7 +573,7 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 	for _, attr := range []string{"permissions", "owner"} {
 		if m, ok := check[attr].(map[string]any); ok {
 			conds++
-			if cfgval.String(m["on"]) != "change" {
+			if cfgval.String(m["on"]) != onModeChange {
 				add("watches.%s.check.%s requires on: change", name, attr)
 			}
 		}
