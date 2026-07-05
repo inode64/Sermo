@@ -32,7 +32,7 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 	for _, p := range c.preds {
 		want[p.field] = true
 	}
-	res, runErr := c.runner.Run(ctx, "hdparm", hdparmArgs(c.device, want["cached"], want["read"])...)
+	res, runErr := c.runner.Run(ctx, "hdparm", hdparmArgs(c.device, want[fieldCached], want[fieldRead])...)
 	if res.ExitCode == -1 {
 		msg := execx.OperatorFailure(runErr, res, c.timeout)
 		if msg == "" {
@@ -115,9 +115,9 @@ func parseHdparm(out string) (map[string]float64, error) {
 		}
 		switch {
 		case strings.Contains(line, "cached reads"):
-			values["cached"] = v
+			values[fieldCached] = v
 		case strings.Contains(line, "buffered disk reads"):
-			values["read"] = v
+			values[fieldRead] = v
 		}
 	}
 	if len(values) == 0 {
@@ -129,7 +129,7 @@ func parseHdparm(out string) (map[string]float64, error) {
 // hdparmMessage renders the measured rates in a stable order.
 func hdparmMessage(device string, values map[string]float64) string {
 	parts := make([]string, 0, 2)
-	for _, f := range []string{"read", "cached"} {
+	for _, f := range []string{fieldRead, fieldCached} {
 		if v, ok := values[f]; ok {
 			parts = append(parts, fmt.Sprintf("%s=%.1f", f, v))
 		}

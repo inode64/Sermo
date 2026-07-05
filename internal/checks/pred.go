@@ -68,6 +68,9 @@ const (
 	// edac ECC error-count fields (correctable / uncorrectable).
 	fieldCE = "ce"
 	fieldUE = "ue"
+	// hdparm timing fields (buffered disk read / cached read).
+	fieldRead   = "read"
+	fieldCached = "cached"
 )
 
 // Predicate field lists, one per level check. They are exported so config
@@ -101,7 +104,7 @@ var (
 	// SensorPredFields are the predicates of a sensors check.
 	SensorPredFields = []string{"temp", "fan", "voltage"}
 	// HdparmPredFields are the predicates of an hdparm check.
-	HdparmPredFields = []string{"read", "cached"}
+	HdparmPredFields = []string{fieldRead, fieldCached}
 	// SmartPredFields are the optional attribute predicates of a smart check.
 	SmartPredFields = []string{fieldTemperature, fieldReallocated, fieldWear, fieldPowerOnHours}
 	// RaidPredFields are the optional predicates of a raid check.
