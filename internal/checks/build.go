@@ -472,6 +472,11 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 	if err != nil {
 		return nil, "http check: " + err.Error()
 	}
+	if j, hasJSON := entry["json"]; hasJSON && j != nil {
+		if _, hasBody := entry["body"]; hasBody {
+			return nil, "http check: body and json are mutually exclusive"
+		}
+	}
 	var body []byte
 	contentType := ""
 	if j, ok := entry["json"]; ok && j != nil {
