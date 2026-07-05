@@ -81,7 +81,7 @@ func MainPIDContext(ctx context.Context, runner execx.Runner, backend Backend, u
 	if runner == nil {
 		runner = execx.CommandRunner{}
 	}
-	res, err := execx.Run(ctx, runner, defaultDetectTimeout, "systemctl", "show", "-p", "MainPID", "--value", "--", unit)
+	res, err := execx.Run(ctx, runner, defaultDetectTimeout, cmdSystemctl, "show", "-p", "MainPID", "--value", "--", unit)
 	if err != nil {
 		return 0, false
 	}
@@ -106,7 +106,7 @@ func CgroupPIDs(runner execx.Runner, readFile func(string) ([]byte, error), back
 	if readFile == nil {
 		readFile = os.ReadFile
 	}
-	res, err := execx.Run(context.Background(), runner, defaultDetectTimeout, "systemctl", "show", "-p", "ControlGroup", "--value", "--", unit)
+	res, err := execx.Run(context.Background(), runner, defaultDetectTimeout, cmdSystemctl, "show", "-p", "ControlGroup", "--value", "--", unit)
 	if err != nil {
 		return nil, false
 	}
@@ -163,7 +163,7 @@ func (m systemdManager) Status(ctx context.Context, service string) (ServiceStat
 	unit := systemdUnit(service)
 	// `systemctl is-active` exits non-zero when the unit is not active but still
 	// prints the state, so a non-zero exit is not a failure to query.
-	result, err := m.runner.Run(ctx, "systemctl", "is-active", "--", unit)
+	result, err := m.runner.Run(ctx, cmdSystemctl, "is-active", "--", unit)
 	state := strings.TrimSpace(result.Stdout)
 	if state == "" && result.ExitCode < 0 {
 		return ServiceStatus{}, fmt.Errorf("query systemd status for %s: %s", unit, execx.OperatorFailure(err, result, 0))
@@ -200,7 +200,7 @@ func (m systemdManager) ResetState(ctx context.Context, service string) error {
 // the unit defines an ExecReload (so `systemctl reload` is applicable).
 func (m systemdManager) SupportsReload(ctx context.Context, service string) (bool, error) {
 	unit := systemdUnit(service)
-	result, err := m.runner.Run(ctx, "systemctl", "show", "-p", "CanReload", "--value", "--", unit)
+	result, err := m.runner.Run(ctx, cmdSystemctl, "show", "-p", "CanReload", "--value", "--", unit)
 	if result.ExitCode < 0 && strings.TrimSpace(result.Stdout) == "" {
 		return false, fmt.Errorf("query CanReload for %s: %s", unit, execx.OperatorFailure(err, result, 0))
 	}
@@ -209,7 +209,7 @@ func (m systemdManager) SupportsReload(ctx context.Context, service string) (boo
 
 func (m systemdManager) action(ctx context.Context, verb, service string) error {
 	unit := systemdUnit(service)
-	result, err := m.runner.Run(ctx, "systemctl", verb, "--", unit)
+	result, err := m.runner.Run(ctx, cmdSystemctl, verb, "--", unit)
 	if err != nil {
 		return actionError(fmt.Sprintf("systemctl %s %s", verb, unit), result, err)
 	}
@@ -225,7 +225,7 @@ type openrcManager struct {
 func (m openrcManager) Status(ctx context.Context, service string) (ServiceStatus, error) {
 	// `rc-service SERVICE status` exits non-zero when stopped/crashed but reports
 	// the state on stdout, so a non-zero exit is not a failure to query.
-	result, err := m.runner.Run(ctx, "rc-service", service, "status")
+	result, err := m.runner.Run(ctx, cmdRcService, service, "status")
 	if result.ExitCode < 0 && strings.TrimSpace(result.Stdout) == "" {
 		return ServiceStatus{}, fmt.Errorf("query openrc status for %s: %s", service, execx.OperatorFailure(err, result, 0))
 	}
@@ -244,7 +244,7 @@ func (m openrcManager) Status(ctx context.Context, service string) (ServiceStatu
 }
 
 func (m openrcManager) rcStatus(ctx context.Context, service string) (Status, bool) {
-	result, _ := m.runner.Run(ctx, "rc-status", "-a")
+	result, _ := m.runner.Run(ctx, cmdRcStatus, "-a")
 	if strings.TrimSpace(result.Stdout) == "" {
 		return StatusUnknown, false
 	}
@@ -300,7 +300,7 @@ func (m openrcManager) SupportsReload(_ context.Context, service string) (bool, 
 }
 
 func (m openrcManager) action(ctx context.Context, verb, service string) error {
-	result, err := m.runner.Run(ctx, "rc-service", service, verb)
+	result, err := m.runner.Run(ctx, cmdRcService, service, verb)
 	if err != nil {
 		return actionError(fmt.Sprintf("rc-service %s %s", service, verb), result, err)
 	}
