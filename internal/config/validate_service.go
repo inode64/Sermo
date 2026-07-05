@@ -60,7 +60,7 @@ func validateServiceMonitors(tree map[string]any, notifiers map[string]struct{},
 }
 
 func validateStopPolicy(tree map[string]any, add addFunc) {
-	sp, ok := tree["stop_policy"].(map[string]any)
+	sp, ok := tree[sectionStopPolicy].(map[string]any)
 	if !ok {
 		return
 	}
