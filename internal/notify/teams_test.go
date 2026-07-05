@@ -31,7 +31,10 @@ func TestTeamsSendPostsAdaptiveCard(t *testing.T) {
 	n := &Teams{
 		name:    "ops",
 		webhook: "https://prod-01.westeurope.logic.azure.com/workflows/x",
-		post: func(_ context.Context, url string, payload []byte) error {
+		post: func(_ context.Context, label, url string, payload []byte) error {
+			if label != notifierTypeTeams {
+				t.Fatalf("label = %q, want teams", label)
+			}
 			gotURL, gotPayload = url, payload
 			return nil
 		},
