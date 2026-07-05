@@ -68,9 +68,9 @@ func (c *swapCheck) Run(_ context.Context) Result {
 		used := s.TotalBytes - s.FreeBytes
 		usedPct := float64(used) / float64(s.TotalBytes) * 100
 		freePct := float64(s.FreeBytes) / float64(s.TotalBytes) * 100
-		values := map[string]float64{fieldUsedPct: usedPct, "free_pct": freePct, "free_bytes": float64(s.FreeBytes)}
+		values := map[string]float64{fieldUsedPct: usedPct, fieldFreePct: freePct, "free_bytes": float64(s.FreeBytes)}
 		ok := levelPredsHold(c.preds, values)
-		data[fieldUsedPct], data["free_pct"] = usedPct, freePct
+		data[fieldUsedPct], data[fieldFreePct] = usedPct, freePct
 		data["value"] = firstPredValue(c.preds, values, usedPct)
 		res := c.result(ok, fmt.Sprintf("swap used %.1f%% free %.1f%% (%d bytes free)", usedPct, freePct, s.FreeBytes), start)
 		res.Data = data
