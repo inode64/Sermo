@@ -105,6 +105,7 @@ func TestValidateCommandsExport(t *testing.T) {
 				"trim":     map[string]any{"trim": "yes"},
 				"regex":    map[string]any{"regex": "["},
 				"shape":    "stdout",
+				"nil":      nil,
 			},
 		},
 	}}
@@ -117,6 +118,7 @@ func TestValidateCommandsExport(t *testing.T) {
 		"commands.version.export.trim.trim must be a boolean",
 		"commands.version.export.regex.regex is invalid",
 		"commands.version.export.shape must be a mapping",
+		"commands.version.export.nil must be a mapping",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("missing issue %q in:\n%s", want, joined)

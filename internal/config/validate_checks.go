@@ -616,7 +616,6 @@ func validateCommandExport(path string, entry map[string]any, add addFunc) {
 			add("%s.export variable %q must be a simple variable name", path, name)
 		}
 		switch spec := exports[name].(type) {
-		case nil:
 		case map[string]any:
 			if from := cfgval.String(spec["from"]); from != "" && from != "stdout" && from != "stderr" {
 				add("%s.export.%s.from must be stdout or stderr", path, name)
