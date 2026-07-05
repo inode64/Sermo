@@ -69,6 +69,13 @@ service: x
 checks:
   h3: { type: http, url: "https://h/", http3: true, proxy: "http://squid:3128" }
 `), "mutually exclusive")
+	// http3 + interface is rejected; the builder cannot bind HTTP/3 egress.
+	mustHave(t, validateService(t, `
+name: web
+service: x
+checks:
+  h3: { type: http, url: "https://h/", http3: true, interface: eth0 }
+`), "http3 and interface are mutually exclusive")
 }
 
 func TestValidateHTTPProxySchemeMessageIncludesSocks5h(t *testing.T) {
