@@ -37,6 +37,11 @@ const (
 	fieldLoad1  = "load1"
 	fieldLoad5  = "load5"
 	fieldLoad15 = "load15"
+	// diskio per-cycle rate fields.
+	fieldUtilPct    = "util_pct"
+	fieldReadBytes  = "read_bytes"
+	fieldWriteBytes = "write_bytes"
+	fieldAwaitMs    = "await_ms"
 )
 
 // Predicate field lists, one per level check. They are exported so config
@@ -54,7 +59,7 @@ var (
 	// DiskIOPredFields are the predicates of a diskio check: per-cycle rates
 	// (read_bytes/write_bytes are bytes per second, so the size-suffix grammar
 	// reads naturally, e.g. "50M").
-	DiskIOPredFields = []string{"util_pct", "read_bytes", "write_bytes", "await_ms"}
+	DiskIOPredFields = []string{fieldUtilPct, fieldReadBytes, fieldWriteBytes, fieldAwaitMs}
 	// FdsPredFields are the predicates of an fds check.
 	FdsPredFields = []string{fieldUsedPct, fieldFree, "allocated"}
 	// PidsPredFields are the predicates of a pids check.
