@@ -891,6 +891,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	validateReload(tree, backend, add)
 	validateRuleWindow(tree, add)
 	validateServiceMonitors(tree, notifiers, add)
+	validateServiceWatches(tree, locksDir, notifiers, NotifyDefault(tree), add)
 	validateRules(tree, notifiers, add)
 
 	return issues

@@ -109,6 +109,35 @@ func TestDiscoverCommandMatchExeAndUser(t *testing.T) {
 	}
 }
 
+func TestCountInTree(t *testing.T) {
+	// Service root (100) with a child (101) and grandchild (102) worker, plus an
+	// unrelated process (200) that shares the worker exe/user but is NOT in the
+	// tree. Tree-scoped counting must exclude 200; host-wide CountMatching includes it.
+	reader := fakeReader{ids: map[int]Identity{
+		100: {PID: 100, PPID: 1, UID: 500, Exe: "/opt/app/svc", ExeOK: true},
+		101: {PID: 101, PPID: 100, UID: 600, Exe: "/opt/app/worker", ExeOK: true},
+		102: {PID: 102, PPID: 101, UID: 600, Exe: "/opt/app/worker", ExeOK: true},
+		200: {PID: 200, PPID: 1, UID: 600, Exe: "/opt/app/worker", ExeOK: true},
+	}}
+	d := Discoverer{Reader: reader, ResolveUser: fakeUsers(map[string]uint32{"svc": 500})}
+	sel := []Selector{{Name: "main", Type: SelectorCommandMatch, Exe: "/opt/app/svc", User: "svc"}}
+
+	if got := d.CountInTree(sel, "", "", ""); got != 3 {
+		t.Errorf("CountInTree whole tree = %d, want 3 (100,101,102)", got)
+	}
+	if got := d.CountInTree(sel, "", "/opt/app/worker", ""); got != 2 {
+		t.Errorf("CountInTree workers = %d, want 2 (101,102; excludes unrelated 200)", got)
+	}
+	// Host-wide count sees the stray worker too — the distinction the scoping fixes.
+	if got := d.CountMatching("", "/opt/app/worker", ""); got != 3 {
+		t.Errorf("CountMatching workers = %d, want 3 (host-wide includes 200)", got)
+	}
+	// Unknown user still yields zero.
+	if got := d.CountInTree(sel, "ghost", "", ""); got != 0 {
+		t.Errorf("CountInTree unknown user = %d, want 0", got)
+	}
+}
+
 func TestDiscoverEmptyInputsAvoidSnapshot(t *testing.T) {
 	reader := &countingReader{fakeReader: fakeReader{ids: map[int]Identity{100: {PID: 100}}}}
 	d := Discoverer{Reader: reader}

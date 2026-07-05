@@ -59,7 +59,7 @@ checks:
 	ready := NewReadiness("systemd", 1, 0)
 	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: execx.CommandRunner{}, Settling: NewSettling(ready)}
 	collector := metrics.New(metrics.OSReader{})
-	workers, _ := BuildWorkers(cfg, deps, collector)
+	workers, _, _ := BuildWorkers(cfg, deps, collector)
 	if len(workers) != 1 {
 		t.Fatalf("workers = %d, want 1", len(workers))
 	}
@@ -157,7 +157,7 @@ checks:
 	ready := NewReadiness("systemd", 1, 0)
 	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: execx.CommandRunner{}, Settling: NewSettling(ready)}
 	collector := metrics.New(metrics.OSReader{})
-	workers, _ := BuildWorkers(cfg, deps, collector)
+	workers, _, _ := BuildWorkers(cfg, deps, collector)
 	forceWorkerBackendActive(workers)
 	workers[0].cycle = 5
 

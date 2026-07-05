@@ -263,7 +263,7 @@ func TestWorkerLiveCPUUsesInitDerivedProcessSelectors(t *testing.T) {
 	collector.Now = func() time.Time { return clock }
 	live := NewLiveMetrics()
 
-	w, warnings := buildWorker("web", "web.service", map[string]any{}, Deps{
+	w, _, warnings := buildWorker("web", "web.service", map[string]any{}, Deps{
 		Backend:          servicemgr.BackendSystemd,
 		Manager:          fakeManager{},
 		Runtime:          t.TempDir(),
@@ -330,7 +330,7 @@ func TestWorkerRecordsServiceRuntimeMetricsForWebHistory(t *testing.T) {
 		Now:              func() time.Time { return clock },
 		Emit:             func(Event) {},
 	}
-	workers, warnings := BuildWorkers(cfg, deps, collector)
+	workers, _, warnings := BuildWorkers(cfg, deps, collector)
 	if len(warnings) != 0 {
 		t.Fatalf("BuildWorkers warnings = %v, want none", warnings)
 	}

@@ -1,0 +1,64 @@
+name: mail-queue
+uses: postfix
+
+# EXAMPLE — adapt the paths/thresholds to your host, then keep it or delete it.
+#
+# This shows a service that carries its own `watches:` section. Its checks run
+# scoped to the service: `process_count` counts only the service's PID tree
+# (parent + children) and `metric` reads that tree from a dedicated collector.
+# Each watch is reported as "mail-queue:<name>". Use a service watch for a
+# hook/notification tied to a service-local signal that is NOT a remediation
+# (remediations belong in `rules:`).
+#
+# The types NOT available here are the host-scoped `net`/`icmp`/`swap` watches
+# and the `process` watch (it matches host-wide and can kill) — declare those
+# under a global `watches:` document. For service-scoped process monitoring use
+# `process_count` and `metric`, as below.
+
+watches:
+  # Deferred-queue backlog: too many spooled messages means delivery is stuck.
+  # A condition check fires when the threshold is crossed; the hook can page or
+  # kick off a drain. `for` reuses the shared firing-window engine.
+  deferred-backlog:
+    interval: 1m
+    check:
+      type: count
+      path: /var/spool/postfix/deferred
+      of: file
+      recursive: true
+      count: { op: ">=", value: 5000 }
+    for: { cycles: 3 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-mail-drain.sh]
+        timeout: 30s
+
+  # Runaway worker count. Inside a service, process_count is scoped to this
+  # service's PID tree (its processes plus their descendants), so a fork storm in
+  # postfix trips it while unrelated host processes are never counted — no user/
+  # exe filter needed. Add user:/exe: only to narrow further WITHIN the tree.
+  worker-runaway:
+    check:
+      type: process_count
+      count: { op: ">", value: 40 }
+    for: { cycles: 5 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-mail-worker-alert.sh]
+
+  # A hot worker thread: cpu_thread is the busiest single process in the service
+  # tree (single-core normalized). The metric reads a dedicated per-watch
+  # collector scoped to this service, so it never disturbs the engine's sampling.
+  # Sustained (6m) high thread CPU -> notify. Remediation would go in `rules:`.
+  worker-thread-hot:
+    interval: 30s
+    check:
+      type: metric
+      scope: service
+      name: cpu_thread
+      op: ">"
+      value: "90%"
+    for: { duration: 6m }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-mail-thread-alert.sh]

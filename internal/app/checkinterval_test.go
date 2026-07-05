@@ -138,7 +138,7 @@ func TestWorkerChecksPreserveStateAcrossCycles(t *testing.T) {
 			},
 		},
 	}
-	w, warnings := buildWorker("svc", "svc.service", tree, Deps{
+	w, _, warnings := buildWorker("svc", "svc.service", tree, Deps{
 		Manager:        fakeManager{},
 		Runtime:        t.TempDir(),
 		DefaultTimeout: time.Second,

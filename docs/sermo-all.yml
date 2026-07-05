@@ -480,6 +480,20 @@ version:
 config:
   on_change: { notify: [ops-email] }  # reuses preflight.config/config_files
 
+# Per-service watches: a hook/notification scoped to THIS service. process_count
+# counts only the service PID tree; metric reads that tree from a dedicated
+# collector. Reported as "demo:<name>"; pausable via `sermoctl watch unmonitor`.
+watches:
+  worker-runaway:
+    check: { type: process_count, count: { op: ">", value: 40 } }
+    for: { cycles: 5 }
+    then: { notify: [ops-email] }
+  thread-hot:
+    interval: 30s
+    check: { type: metric, scope: service, name: cpu_thread, op: ">", value: "90%" }
+    for: { duration: 6m }
+    then: { notify: [ops-email] }
+
 checks:
   # Check-level common fields: enabled, optional, interval, timeout, requires and
   # skip_when_changed. Disable inherited entries with enabled:false; delete:true
