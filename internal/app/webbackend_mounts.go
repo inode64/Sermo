@@ -373,7 +373,7 @@ func (b *WebBackend) syncStorageMountMonitoring(storage, action string, resultOK
 		state.SourceWeb,
 	)
 	if err != nil {
-		b.emitWatchMonitorEvent(storage, action, "error", "", err.Error())
+		b.emitWatchMonitorEvent(storage, action, eventKindError, "", err.Error())
 		return
 	}
 	if change.Changed {
