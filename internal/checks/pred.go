@@ -120,7 +120,7 @@ var (
 	// ProcessCountPredFields is the single required predicate of a process_count check.
 	ProcessCountPredFields = []string{"count"}
 	// SensorPredFields are the predicates of a sensors check.
-	SensorPredFields = []string{"temp", "fan", "voltage"}
+	SensorPredFields = []string{sensorTemp, sensorFan, sensorVoltage}
 	// HdparmPredFields are the predicates of an hdparm check.
 	HdparmPredFields = []string{fieldRead, fieldCached}
 	// SmartPredFields are the optional attribute predicates of a smart check.
