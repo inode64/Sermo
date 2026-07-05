@@ -49,13 +49,20 @@ const (
 	fieldFullAvg10  = "full_avg10"
 	fieldFullAvg60  = "full_avg60"
 	fieldFullAvg300 = "full_avg300"
+	// storage space/inode fields.
+	fieldUsedBytes     = "used_bytes"
+	fieldInodesUsedPct = "inodes_used_pct"
+	fieldInodesFreePct = "inodes_free_pct"
+	fieldInodesFree    = "inodes_free"
+	// fieldTotalBytes is the total-size field shared by storage, memory and swap.
+	fieldTotalBytes = "total_bytes"
 )
 
 // Predicate field lists, one per level check. They are exported so config
 // validation walks the same lists and both layers stay in step by construction.
 var (
 	// StoragePredFields are the space/inode predicates of a storage check.
-	StoragePredFields = []string{fieldUsedPct, fieldFreePct, "used_bytes", fieldFreeBytes, "inodes_used_pct", "inodes_free_pct", "inodes_free"}
+	StoragePredFields = []string{fieldUsedPct, fieldFreePct, fieldUsedBytes, fieldFreeBytes, fieldInodesUsedPct, fieldInodesFreePct, fieldInodesFree}
 	// SwapUsageFields are the predicates of a swap usage metric.
 	SwapUsageFields = []string{fieldUsedPct, fieldFreePct, fieldFreeBytes}
 	// MemoryPredFields are the predicates of a memory check.
