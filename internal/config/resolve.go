@@ -529,6 +529,13 @@ func expandServiceWatches(tree map[string]any) []string {
 				add("watches.%s.check.ref %q does not name a checks: or preflight: entry", name, ref)
 				continue
 			}
+			// Entry-level check fields belong on the referenced check, not the
+			// referencing watch — reject them rather than drop them silently.
+			for _, k := range []string{"verify", "requires", "optional", "interval"} {
+				if _, has := entry[k]; has {
+					add("watches.%s.%s is not supported with check.ref; set it on the referenced check %q", name, k, ref)
+				}
+			}
 		} else {
 			if _, exists := checksMap[name]; exists {
 				add("watches.%s would overwrite existing check %q; rename the watch", name, name)

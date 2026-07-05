@@ -482,6 +482,15 @@ watches:
     check: { type: metric, scope: service, name: cpu_thread, op: ">", value: "90%" }
     for: { duration: 6m }
     then: { notify: [ops-email] }
+  # A watch may instead carry a `then.action` (restart/start/stop/reload/resume,
+  # block, alert), folding a check + its remediation/guard/alert into one entry
+  # that desugars to checks:+rules: (the safe operation-engine path). Reference a
+  # shared check with { ref: name } so it is not probed twice, or embed a fresh probe.
+  # The catalog expresses its simple remediation this way.
+  restart-if-tcp-down:
+    check: { ref: tcp }  # reuse the tcp check above — no duplicate probe
+    for: { cycles: 3 }
+    then: { action: restart }
 
 checks:
   # Check-level common fields: enabled, optional, interval, timeout, requires and
