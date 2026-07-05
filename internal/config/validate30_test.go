@@ -894,7 +894,7 @@ name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
-  api: { type: cert, host: api.example.com, port: 443, expires_in_days: 14, on_algorithm_change: true, verify: true }
+  api: { type: cert, host: api.example.com, port: 443, expires_in_days: 14, on_algorithm_change: true, cert_verify: true }
 `)
 	if hasIssue(good, "checks.api") {
 		t.Fatalf("a valid cert check was flagged: %v", good)
@@ -908,12 +908,12 @@ checks:
   no-host: { type: cert }
   bad-days: { type: cert, host: x, expires_in_days: 0 }
   bad-port: { type: cert, host: x, port: 70000 }
-  bad-bool: { type: cert, host: x, verify: "yes" }
+  bad-bool: { type: cert, host: x, cert_verify: "yes" }
 `)
 	mustHave(t, bad, "checks.no-host requires a host or a path")
 	mustHave(t, bad, "checks.bad-days.expires_in_days must be a positive integer")
 	mustHave(t, bad, "checks.bad-port.port must be an integer in 1..65535")
-	mustHave(t, bad, "checks.bad-bool.verify must be a boolean")
+	mustHave(t, bad, "checks.bad-bool.cert_verify must be a boolean")
 }
 
 func TestValidateHTTPFields(t *testing.T) {

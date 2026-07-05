@@ -517,7 +517,7 @@ checks:
     port: 443                  # optional, default 443
     server_name: api.example.com   # optional SNI + hostname to verify (default = host)
     expires_in_days: 14        # optional: warn this many days before expiry
-    verify: true               # optional, default true: chain + hostname + validity
+    cert_verify: true          # optional, default true: chain + hostname + validity
     on_algorithm_change: true  # optional: alert when the signature algorithm changes
     on_issuer_change: true     # optional: alert when the issuer (CA) changes / re-issue
     on_change: false           # optional: alert on any certificate rotation (fingerprint)
@@ -538,7 +538,7 @@ rules:
 
 **Fuente host.** Falla cuando el certificado está **caducado o aún no es válido**,
 **caduca dentro de `expires_in_days`**, falla la **verificación** de cadena/hostname
-(`verify`, activa por defecto — detecta autofirmados, host equivocado, cadenas caducadas), o —
+(`cert_verify`, activa por defecto — detecta autofirmados, host equivocado, cadenas caducadas), o —
 entre ciclos — su **algoritmo de firma**, **emisor** o **fingerprint** cambia.
 Un error de red/TLS al obtener el cert **no** es un fallo de `cert` (usa una
 comprobación `tcp`/`http` para alcanzabilidad).
@@ -550,7 +550,7 @@ PKCS#1 / EC / PKCS#8, **clave pública** PKIX, clave privada **OpenSSH**, y **cl
 arriba; el material que no caduca (claves, CSRs) falla solo con
 `on_change`/`on_algorithm_change`. Un **archivo ausente, ilegible o no parseable hace
 fallar la comprobación** (un problema de configuración local, a diferencia de un error de red
-transitorio). `verify`, `port` y `server_name` no aplican a archivos.
+transitorio). `cert_verify`, `port` y `server_name` no aplican a archivos.
 
 **Los datos del resultado** exponen `kind` (certificate / certificate_request / private_key /
 public_key / openssh_private_key / openssh_public_key / …), `source`,

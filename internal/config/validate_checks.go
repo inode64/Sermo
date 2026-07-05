@@ -1121,7 +1121,7 @@ func validateCertFields(prefix string, fields map[string]any, add addFunc) {
 			add("%s.expires_in_days must be a positive integer", prefix)
 		}
 	}
-	for _, key := range []string{"on_algorithm_change", "on_issuer_change", "on_change", "verify"} {
+	for _, key := range []string{"on_algorithm_change", "on_issuer_change", "on_change", "cert_verify"} {
 		if v, present := fields[key]; present {
 			if _, ok := v.(bool); !ok {
 				add("%s.%s must be a boolean", prefix, key)

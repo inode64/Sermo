@@ -58,7 +58,7 @@ checks:
     optional: true
     host: ${host}
     port: ${tls_port}
-    verify: false
+    cert_verify: false
     expires_in_days: 21
     timeout: 5s
   fds:
