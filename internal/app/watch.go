@@ -302,7 +302,7 @@ func dispatchNotifyFiltered(ctx context.Context, notifiers []notify.Notifier, ms
 		if err := n.Send(ctx, msg); err != nil {
 			emit(Event{Watch: watch, Kind: eventKindNotifyFail, Message: n.Name() + ": " + err.Error()})
 		} else {
-			emit(Event{Watch: watch, Kind: "notify", Message: "notified " + n.Name()})
+			emit(Event{Watch: watch, Kind: eventKindNotify, Message: "notified " + n.Name()})
 		}
 	}
 }
