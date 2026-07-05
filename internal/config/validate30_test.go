@@ -997,12 +997,14 @@ checks:
   no-ports:   { type: ports, host: x }
   bad-range:  { type: ports, ports: "100-50" }
   bad-port:   { type: ports, ports: "70000" }
+  too-many:   { type: ports, ports: "1-20000" }
   bad-expect: { type: ports, ports: "80", expect: weird }
   bad-match:  { type: ports, ports: "80", match: most }
 `)
 	mustHave(t, bad, "checks.no-ports.ports is required")
 	mustHave(t, bad, `checks.bad-range.ports range "100-50" is out of 1..65535`)
 	mustHave(t, bad, `checks.bad-port.ports range "70000" is out of 1..65535`)
+	mustHave(t, bad, "checks.too-many.ports too many ports")
 	mustHave(t, bad, "checks.bad-expect.expect must be open, closed or any")
 	mustHave(t, bad, "checks.bad-match.match must be all, any or none")
 }

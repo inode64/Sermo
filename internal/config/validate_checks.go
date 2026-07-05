@@ -2,7 +2,6 @@ package config
 
 import (
 	"encoding/json"
-	"fmt"
 	"maps"
 	"net/url"
 	"path/filepath"
@@ -356,31 +355,18 @@ func validatePortSpec(spec string) string {
 	if strings.TrimSpace(spec) == "" {
 		return "is required (e.g. \"80,443,1024-4000\")"
 	}
-	found := false
-	for _, tok := range strings.Split(spec, ",") {
-		tok = strings.TrimSpace(tok)
-		if tok == "" {
-			continue
+	if _, err := checks.ParsePortSpec(spec); err != nil {
+		msg := strings.TrimPrefix(err.Error(), "port ")
+		switch {
+		case strings.HasPrefix(msg, "invalid port range "):
+			return "has an invalid range " + strings.TrimPrefix(msg, "invalid port range ")
+		case strings.HasPrefix(msg, "invalid port "):
+			return "has an invalid port " + strings.TrimPrefix(msg, "invalid port ")
 		}
-		lo, hi, isRange := strings.Cut(tok, "-")
-		start, err := strconv.Atoi(strings.TrimSpace(lo))
-		if err != nil {
-			return fmt.Sprintf("has an invalid port %q", tok)
+		if msg == "no ports specified" {
+			return "is required (e.g. \"80,443,1024-4000\")"
 		}
-		end := start
-		if isRange {
-			end, err = strconv.Atoi(strings.TrimSpace(hi))
-			if err != nil {
-				return fmt.Sprintf("has an invalid range %q", tok)
-			}
-		}
-		if start < 1 || end > 65535 || start > end {
-			return fmt.Sprintf("range %q is out of 1..65535", tok)
-		}
-		found = true
-	}
-	if !found {
-		return "is required (e.g. \"80,443,1024-4000\")"
+		return msg
 	}
 	return ""
 }

@@ -418,7 +418,7 @@ func buildPortsCheck(b base, entry map[string]any) (Check, string) {
 	if host == "" {
 		host = "127.0.0.1"
 	}
-	ports, err := parsePortSpec(cfgval.AsString(entry["ports"]))
+	ports, err := ParsePortSpec(cfgval.AsString(entry["ports"]))
 	if err != nil {
 		return nil, "ports check: " + err.Error()
 	}
