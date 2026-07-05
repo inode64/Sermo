@@ -135,7 +135,7 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	w.emit(Event{Watch: w.Name, Kind: "firing", Message: res.Message, Output: resultOutput(res)})
 	env := hookEnv(w.Name, w.CheckType, res)
 	if w.DryRun {
-		w.emit(Event{Watch: w.Name, Kind: "dry-run", Message: w.dryRunMessage()})
+		w.emit(Event{Watch: w.Name, Kind: eventKindDryRun, Message: w.dryRunMessage()})
 		if w.shouldNotify(wasFiring) {
 			dispatchDryRunNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
 		}

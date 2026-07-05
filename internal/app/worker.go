@@ -512,7 +512,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 			} else {
 				msg += " (would execute)"
 			}
-			w.emit(Event{Kind: "dry-run", Rule: r.Name, Action: action, Message: msg})
+			w.emit(Event{Kind: eventKindDryRun, Rule: r.Name, Action: action, Message: msg})
 			if suppress == "" {
 				w.emitDryRunAlerts(ctx, r)
 			}
