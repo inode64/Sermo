@@ -209,7 +209,7 @@ func (w *fileWatcher) fire(ctx context.Context, path, change, msg string, extra 
 		if err := w.hook.Run(ctx, runner, env); err != nil {
 			w.emitEvent(Event{Watch: w.name, Kind: eventKindHookFail, Message: msg + ": " + err.Error()})
 		} else {
-			w.emitEvent(Event{Watch: w.name, Kind: "hook", Message: msg})
+			w.emitEvent(Event{Watch: w.name, Kind: eventKindHook, Message: msg})
 		}
 	}
 	dispatchNotify(ctx, w.notifiers, watchMessage(w.name, msg, env), w.name, w.emitEvent)

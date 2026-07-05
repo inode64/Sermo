@@ -975,7 +975,7 @@ func watchReadingsFailed(readings []web.WatchReading) bool {
 
 func isWatchActivityKind(kind string) bool {
 	switch kind {
-	case eventKindFiring, eventKindRecovered, eventKindDryRun, "hook", "notify", eventKindHookFail, eventKindNotifyFail, "expand", "expand-skipped", "expand-failed":
+	case eventKindFiring, eventKindRecovered, eventKindDryRun, eventKindHook, "notify", eventKindHookFail, eventKindNotifyFail, "expand", "expand-skipped", "expand-failed":
 		return true
 	default:
 		return false
@@ -2550,7 +2550,7 @@ func (b *WebBackend) ActivitySummary(ctx context.Context) web.ActivitySummary {
 		switch {
 		case e.Kind == eventKindAction && isServiceOperationAction(e.Action):
 			summary.ServiceActions++
-		case e.Kind == "hook" || e.Kind == eventKindHookFail:
+		case e.Kind == eventKindHook || e.Kind == eventKindHookFail:
 			summary.WatchHooks++
 		case e.Kind == "notify" || e.Kind == eventKindNotifyFail:
 			summary.WatchNotifies++

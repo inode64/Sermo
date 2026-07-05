@@ -154,7 +154,7 @@ func (w *Watch) RunCycle(ctx context.Context) {
 		if err := w.Hook.Run(ctx, runner, env); err != nil {
 			w.emit(Event{Watch: w.Name, Kind: eventKindHookFail, Message: err.Error()})
 		} else {
-			w.emit(Event{Watch: w.Name, Kind: "hook", Message: res.Message})
+			w.emit(Event{Watch: w.Name, Kind: eventKindHook, Message: res.Message})
 		}
 	}
 	if w.shouldNotify(wasFiring) {
