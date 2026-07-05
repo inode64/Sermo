@@ -837,6 +837,11 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		if cfgval.String(entry["path"]) == "" {
 			add("%s.path is required for a sqlite check", path)
 		}
+		if v, present := entry["quick"]; present {
+			if _, ok := v.(bool); !ok {
+				add("%s.quick must be a boolean", path)
+			}
+		}
 	case "sql":
 		validateSQLFields(path, entry, add)
 	case "mongodb-query":
