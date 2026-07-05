@@ -8,6 +8,13 @@ import (
 	"sermo/internal/cfgval"
 )
 
+// Window config keys parsed from a rule's for/within block.
+const (
+	windowKeyCycles     = "cycles"
+	windowKeyDuration   = "duration"
+	windowKeyMinMatches = "min_matches"
+)
+
 // WindowSample is one observed condition result in a duration-based within
 // window.
 type WindowSample struct {
@@ -278,8 +285,8 @@ func ParseForWindow(v any) *ForWindow {
 	if !ok {
 		return nil
 	}
-	cycles, _ := cfgval.Int(m["cycles"])
-	return &ForWindow{Cycles: cycles, Duration: cfgval.Duration(m["duration"])}
+	cycles, _ := cfgval.Int(m[windowKeyCycles])
+	return &ForWindow{Cycles: cycles, Duration: cfgval.Duration(m[windowKeyDuration])}
 }
 
 // ParseWithinWindow parses a `within` window ({cycles, min_matches}) from a config
@@ -291,8 +298,8 @@ func ParseWithinWindow(v any) *WithinWindow {
 	if !ok {
 		return nil
 	}
-	cycles, _ := cfgval.Int(m["cycles"])
-	return &WithinWindow{Cycles: cycles, Duration: cfgval.Duration(m["duration"]), MinMatches: minMatches(m)}
+	cycles, _ := cfgval.Int(m[windowKeyCycles])
+	return &WithinWindow{Cycles: cycles, Duration: cfgval.Duration(m[windowKeyDuration]), MinMatches: minMatches(m)}
 }
 
 // ParseWindow parses an entry's `for`/`within` sub-blocks into their windows.
@@ -322,8 +329,8 @@ func ParseRuleWindow(v any) (*ForWindow, *WithinWindow) {
 	if !ok {
 		return nil, nil
 	}
-	cycles, _ := cfgval.Int(m["cycles"])
-	duration := cfgval.Duration(m["duration"])
+	cycles, _ := cfgval.Int(m[windowKeyCycles])
+	duration := cfgval.Duration(m[windowKeyDuration])
 	if cycles <= 0 && duration <= 0 {
 		return nil, nil
 	}
@@ -342,7 +349,7 @@ func ParseRuleWindow(v any) (*ForWindow, *WithinWindow) {
 }
 
 func minMatches(m map[string]any) int {
-	matches, _ := cfgval.Int(m["min_matches"])
+	matches, _ := cfgval.Int(m[windowKeyMinMatches])
 	if matches <= 0 {
 		return 1
 	}
