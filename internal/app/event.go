@@ -34,6 +34,8 @@ const (
 	eventKindRecovered  = "recovered"
 	eventKindHookFail   = "hook-failed"
 	eventKindNotifyFail = "notify-failed"
+	eventKindSuppressed = "suppressed"
+	eventKindCascade    = "cascade"
 )
 
 // resultOutput extracts the bounded command output a check stored under
@@ -76,7 +78,7 @@ func eventKindForResult(r operation.Result) string {
 	case operation.ResultOK:
 		return "action"
 	case operation.ResultBlocked:
-		return "suppressed"
+		return eventKindSuppressed
 	default:
 		return "error"
 	}
@@ -110,7 +112,7 @@ func SlogEmitter(logger *slog.Logger) func(Event) {
 		switch e.Kind {
 		case "error", eventKindHookFail, eventKindNotifyFail:
 			logger.Error("sermod", attrs...)
-		case "action", "alert", "suppressed", eventKindFiring, eventKindRecovered, eventKindDryRun, "hook", "notify", "cascade":
+		case "action", "alert", eventKindSuppressed, eventKindFiring, eventKindRecovered, eventKindDryRun, "hook", "notify", eventKindCascade:
 			logger.Info("sermod", attrs...)
 		default:
 			logger.Debug("sermod", attrs...)
