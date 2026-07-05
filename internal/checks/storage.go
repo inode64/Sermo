@@ -89,27 +89,27 @@ func (c storageCheck) Run(_ context.Context) Result {
 	values := map[string]float64{
 		fieldUsedPct:   st.UsedPct,
 		fieldFreePct:   st.FreePct,
-		"used_bytes":   float64(usedBytes),
+		fieldUsedBytes: float64(usedBytes),
 		fieldFreeBytes: float64(st.FreeBytes),
 	}
 	// Inode fields are only comparable when the filesystem reports inodes; on a
 	// 0-inode filesystem an inode predicate is "unknown" and so cannot hold (the
 	// level check is an AND), which keeps it from misfiring.
 	if st.InodesTotal > 0 {
-		values["inodes_used_pct"] = st.InodesUsedPct
-		values["inodes_free_pct"] = st.InodesFreePct
-		values["inodes_free"] = float64(st.InodesFree)
+		values[fieldInodesUsedPct] = st.InodesUsedPct
+		values[fieldInodesFreePct] = st.InodesFreePct
+		values[fieldInodesFree] = float64(st.InodesFree)
 	}
 	ok := levelPredsHold(c.preds, values)
 	res := c.result(ok, fmt.Sprintf("%s used %.1f%% free %.1f%% inodes %.1f%% used", c.path, st.UsedPct, st.FreePct, st.InodesUsedPct), start)
 	data[fieldUsedPct] = st.UsedPct
 	data[fieldFreePct] = st.FreePct
-	data["used_bytes"] = usedBytes
+	data[fieldUsedBytes] = usedBytes
 	data[fieldFreeBytes] = st.FreeBytes
-	data["total_bytes"] = st.TotalBytes
-	data["inodes_used_pct"] = st.InodesUsedPct
-	data["inodes_free_pct"] = st.InodesFreePct
-	data["inodes_free"] = st.InodesFree
+	data[fieldTotalBytes] = st.TotalBytes
+	data[fieldInodesUsedPct] = st.InodesUsedPct
+	data[fieldInodesFreePct] = st.InodesFreePct
+	data[fieldInodesFree] = st.InodesFree
 	data["inodes_total"] = st.InodesTotal
 	data["value"] = firstPredValue(c.preds, values, st.UsedPct)
 	res.Data = data
