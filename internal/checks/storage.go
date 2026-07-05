@@ -87,10 +87,10 @@ func (c storageCheck) Run(_ context.Context) Result {
 	}
 	usedBytes := storageUsedBytes(st)
 	values := map[string]float64{
-		fieldUsedPct: st.UsedPct,
-		fieldFreePct: st.FreePct,
-		"used_bytes": float64(usedBytes),
-		"free_bytes": float64(st.FreeBytes),
+		fieldUsedPct:   st.UsedPct,
+		fieldFreePct:   st.FreePct,
+		"used_bytes":   float64(usedBytes),
+		fieldFreeBytes: float64(st.FreeBytes),
 	}
 	// Inode fields are only comparable when the filesystem reports inodes; on a
 	// 0-inode filesystem an inode predicate is "unknown" and so cannot hold (the
@@ -105,7 +105,7 @@ func (c storageCheck) Run(_ context.Context) Result {
 	data[fieldUsedPct] = st.UsedPct
 	data[fieldFreePct] = st.FreePct
 	data["used_bytes"] = usedBytes
-	data["free_bytes"] = st.FreeBytes
+	data[fieldFreeBytes] = st.FreeBytes
 	data["total_bytes"] = st.TotalBytes
 	data["inodes_used_pct"] = st.InodesUsedPct
 	data["inodes_free_pct"] = st.InodesFreePct
