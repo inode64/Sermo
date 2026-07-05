@@ -18,6 +18,13 @@ var pageSize = uint64(os.Getpagesize())
 
 const procRoot = "/proc"
 
+// procfs file names read under /proc and /proc/<pid>.
+const (
+	procFileStat   = "stat"
+	procFileStatm  = "statm"
+	procFileStatus = "status"
+)
+
 func procPath(name string) string {
 	return filepath.Join(procRoot, name)
 }
@@ -31,7 +38,7 @@ type OSReader struct{}
 
 // ProcessCPU sums utime (field 14) and stime (field 15) of /proc/<pid>/stat.
 func (OSReader) ProcessCPU(pid int) (uint64, bool) {
-	data, err := os.ReadFile(procPIDPath(pid, "stat"))
+	data, err := os.ReadFile(procPIDPath(pid, procFileStat))
 	if err != nil {
 		return 0, false
 	}
@@ -57,7 +64,7 @@ func (OSReader) ProcessCPU(pid int) (uint64, bool) {
 // ProcessStartTime reads field 22 of /proc/<pid>/stat and converts it to a wall
 // clock timestamp using the system boot time from /proc/stat.
 func (OSReader) ProcessStartTime(pid int) (time.Time, bool) {
-	data, err := os.ReadFile(procPIDPath(pid, "stat"))
+	data, err := os.ReadFile(procPIDPath(pid, procFileStat))
 	if err != nil {
 		return time.Time{}, false
 	}
@@ -91,7 +98,7 @@ func parseProcStartTicks(stat string) (uint64, bool) {
 }
 
 func procBootTime() (int64, bool) {
-	data, err := os.ReadFile(procPath("stat"))
+	data, err := os.ReadFile(procPath(procFileStat))
 	if err != nil {
 		return 0, false
 	}
@@ -106,7 +113,7 @@ func procBootTime() (int64, bool) {
 
 // ProcessRSS reads resident pages (field 2 of /proc/<pid>/statm) as bytes.
 func (OSReader) ProcessRSS(pid int) (uint64, bool) {
-	data, err := os.ReadFile(procPIDPath(pid, "statm"))
+	data, err := os.ReadFile(procPIDPath(pid, procFileStatm))
 	if err != nil {
 		return 0, false
 	}
@@ -126,7 +133,7 @@ func (OSReader) ProcessRSS(pid int) (uint64, bool) {
 // process without a VmSwap line (e.g. a kernel thread) also reports 0, true. ok
 // is false only when the file cannot be read.
 func (OSReader) ProcessSwap(pid int) (uint64, bool) {
-	data, err := os.ReadFile(procPIDPath(pid, "status"))
+	data, err := os.ReadFile(procPIDPath(pid, procFileStatus))
 	if err != nil {
 		return 0, false
 	}
@@ -258,7 +265,7 @@ func parseProcMeminfoTotals(data []byte) procMeminfoTotals {
 // SystemCPU reads the aggregate cpu line of /proc/stat. busy excludes idle and
 // iowait; total is the sum of all fields.
 func (OSReader) SystemCPU() (busy, total uint64, ok bool) {
-	data, err := os.ReadFile(procPath("stat"))
+	data, err := os.ReadFile(procPath(procFileStat))
 	if err != nil {
 		return 0, 0, false
 	}
@@ -319,7 +326,7 @@ func (OSReader) NumCPU() int {
 // procStatCPUCount counts the per-CPU "cpuN" lines in /proc/stat. Returns 0 when
 // /proc/stat cannot be read.
 func procStatCPUCount() int {
-	data, err := os.ReadFile(procPath("stat"))
+	data, err := os.ReadFile(procPath(procFileStat))
 	if err != nil {
 		return 0
 	}
