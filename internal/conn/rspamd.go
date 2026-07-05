@@ -32,10 +32,10 @@ func (rspamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if port == 0 {
 		port = 11334
 	}
-	scheme := "http"
+	scheme := schemeHTTP
 	client := httpProbeClient(cfg.Interface, nil)
 	if mode := normalizeTLS(cfg.TLS); mode != "" {
-		scheme = "https"
+		scheme = schemeHTTPS
 		tlsConfig := tlsClientConfig(host)
 		if mode == tlsSkipVerify {
 			tlsConfig.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify

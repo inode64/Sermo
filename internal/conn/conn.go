@@ -19,6 +19,10 @@ const (
 	networkTCP    = "tcp"
 	networkUDP    = "udp"
 	tlsSkipVerify = "skip-verify"
+	// schemeHTTP and schemeHTTPS are the URL schemes an HTTP-based probe selects
+	// by whether TLS is in use.
+	schemeHTTP  = "http"
+	schemeHTTPS = "https"
 )
 
 // Config is the connection target for a protocol probe. Fields that do not apply
