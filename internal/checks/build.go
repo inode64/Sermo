@@ -28,10 +28,11 @@ const onModeChange = "change"
 
 // net/icmp check metric names (the `metric:` selector of a net or icmp check).
 const (
-	netMetricState   = "state"
-	netMetricSpeed   = "speed"
-	netMetricErrors  = "errors"
-	netMetricAddress = "address"
+	netMetricState    = "state"
+	netMetricSpeed    = "speed"
+	netMetricErrors   = "errors"
+	netMetricAddress  = "address"
+	icmpMetricLatency = "latency"
 )
 
 // MetricReader returns a sampled metric for a scope. The daemon
@@ -1253,7 +1254,7 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		} else if onChange {
 			c.onChange = true
 		}
-	case "latency":
+	case icmpMetricLatency:
 		th, hasTh := entry["threshold"].(map[string]any)
 		ch, hasCh := entry["change"].(map[string]any)
 		if !hasTh && !hasCh {
