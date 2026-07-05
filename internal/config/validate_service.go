@@ -16,7 +16,7 @@ import (
 )
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
-var validProcessSelectorKeys = set("exe", "cmd", "user", "group", "delete", "enable_if")
+var validProcessSelectorKeys = set("exe", "cmd", "user", "group", "delete", keyEnableIf)
 
 func validateMonitorMode(path string, mode any, add addFunc) {
 	s, isStr := mode.(string)
