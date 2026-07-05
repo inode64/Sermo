@@ -1117,6 +1117,7 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string) (
 	errs = append(errs, expandPidfiles(expanded)...)
 	errs = append(errs, expandSocket(expanded)...)
 	errs = append(errs, expandLockfile(expanded)...)
+	errs = append(errs, expandServiceWatches(expanded)...)
 	return Resolved{Name: name, Tree: expanded}, errs
 }
 

@@ -42,48 +42,44 @@ checks:
     op: '>'
     value: 60%
     optional: true
-rules:
+watches:
   restart-if-worker-thread-hot:
-    type: remediation
-    if:
-      metric:
-        scope: service
-        name: cpu_thread
-        op: '>'
-        value: 90%
+    check:
+      type: metric
+      scope: service
+      name: cpu_thread
+      op: '>'
+      value: 90%
+      optional: true
     for:
       duration: 6m
     then:
       action: restart
   restart-if-memcached-failed:
-    type: remediation
-    if:
-      failed:
-        check: stats
+    check:
+      ref: stats
     for:
       cycles: 3
     then:
       action: restart
   restart-if-tcp-failed:
-    type: remediation
-    if:
-      failed:
-        check: port
+    check:
+      ref: port
     for:
       cycles: 3
     then:
       action: restart
   alert-if-fds-high:
-    type: alert
-    if:
-      metric:
-        scope: service
-        name: fds
-        op: '>'
-        value: 50000
-    then:
-      action: alert
-      message: ${display_name} file descriptor usage is high
+    check:
+      type: metric
+      scope: service
+      name: fds
+      op: '>'
+      value: 50000
+      optional: true
     within:
       cycles: 10
       min_matches: 3
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high

@@ -13,12 +13,10 @@ checks:
     expect_status: 200
     timeout: 5s
 
-rules:
+watches:
   restart-if-http-failed:
-    type: remediation
-    if:
-      failed:
-        check: http
+    check:
+      ref: http
     for:
       cycles: 3
     then:

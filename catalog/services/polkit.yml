@@ -28,12 +28,10 @@ policy:
   backoff:
     initial: 15m
     max: 1h
-rules:
+watches:
   restart-if-dbus-failed:
-    type: remediation
-    if:
-      failed:
-        check: dbus
+    check:
+      ref: dbus
     for:
       cycles: 3
     then:

@@ -25,41 +25,41 @@ policy:
   backoff:
     initial: 15m
     max: 1h
-rules:
+watches:
   restart-if-worker-thread-hot:
-    type: remediation
-    if:
-      metric:
-        scope: service
-        name: cpu_thread
-        op: '>'
-        value: 90%
+    check:
+      type: metric
+      scope: service
+      name: cpu_thread
+      op: '>'
+      value: 90%
+      optional: true
     for:
       duration: 6m
     then:
       action: restart
   alert-if-fds-high:
-    type: alert
-    if:
-      metric:
-        scope: service
-        name: fds
-        op: '>'
-        value: 50000
-    then:
-      action: alert
-      message: ${display_name} file descriptor usage is high
+    check:
+      type: metric
+      scope: service
+      name: fds
+      op: '>'
+      value: 50000
+      optional: true
     within:
       cycles: 10
       min_matches: 3
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
   alert-if-memory-high:
-    type: alert
-    if:
-      metric:
-        scope: service
-        name: memory
-        op: '>'
-        value: 60%
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 60%
+      optional: true
     for:
       duration: 10m
     then:

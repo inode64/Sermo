@@ -13,12 +13,10 @@ checks:
     url: "http://${host}:${port}${health_path}"
     expect_status: 200
 
-rules:
+watches:
   restart-if-http-failed:
-    type: remediation
-    if:
-      failed:
-        check: http
+    check:
+      ref: http
     for:
       cycles: 5
     then:

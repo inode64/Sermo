@@ -17,15 +17,15 @@ checks:
     type: asterisk
     port: ${port}
     timeout: 3s
-rules:
+watches:
   restart-if-worker-thread-hot:
-    type: remediation
-    if:
-      metric:
-        scope: service
-        name: cpu_thread
-        op: '>'
-        value: 90%
+    check:
+      type: metric
+      scope: service
+      name: cpu_thread
+      op: '>'
+      value: 90%
+      optional: true
     for:
       duration: 6m
     then:

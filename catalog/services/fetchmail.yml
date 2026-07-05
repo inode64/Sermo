@@ -36,15 +36,15 @@ checks:
 reload_on_change:
   paths:
     - ${config}
-rules:
+watches:
   alert-if-memory-high:
-    type: alert
-    if:
-      metric:
-        scope: service
-        name: memory
-        op: '>'
-        value: 60%
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 60%
+      optional: true
     for:
       duration: 10m
     then:
