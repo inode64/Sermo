@@ -601,7 +601,7 @@ func (w *Worker) emitAlertsFiltered(ctx context.Context, r rules.Rule, allow fun
 		// The alert event is always emitted so the condition stays visible; panic
 		// mode only suppresses the outbound notifications. Output carries the failing
 		// command's stdout/stderr so the operator can see why the rule fired.
-		w.emit(Event{Kind: "alert", Rule: r.Name, Message: msg, Output: output})
+		w.emit(Event{Kind: eventKindAlert, Rule: r.Name, Message: msg, Output: output})
 		if panicking {
 			w.emit(Event{Kind: "notify-suppressed", Rule: r.Name, Message: "panic mode: alert notification suppressed"})
 			continue
