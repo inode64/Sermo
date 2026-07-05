@@ -419,7 +419,7 @@ en cualquier caja (se normaliza a mayúsculas); un verbo desconocido se rechaza 
 validación de configuración. Un `body`/`json` de petición se envía para cualquier método que lleve
 uno (`POST`/`PUT`/`PATCH`/…). **`http3: true`** envía la petición sobre **HTTP/3
 (QUIC)** en lugar de TCP — ver más abajo. **`proxy`** enruta la petición a través de un forward proxy como
-**Squid** (`http://[user:pass@]host:port`; esquemas `http`, `https` o `socks5` —
+**Squid** (`http://[user:pass@]host:port`; esquemas `http`, `https`, `socks5` o `socks5h` —
 las credenciales, cuando están presentes, van en la URL). Esto monitoriza tanto que el proxy
 reenvía correctamente como que el destino es alcanzable a través de él; para un destino `https://`
 el proxy se usa vía `CONNECT`, y la inspección de certificado (más abajo) todavía
