@@ -175,6 +175,12 @@ func TestHTTPJSONRegex(t *testing.T) {
 	}); res.OK {
 		t.Fatalf("json regex that does not match should fail")
 	}
+	if _, warn := buildHTTP(t, srv, map[string]any{"type": "http", "url": srv.URL + "/json", "expect_json": map[string]any{"version": map[string]any{"op": "=~", "value": `[`}}}); !strings.Contains(warn, "not a valid regexp") {
+		t.Fatalf("invalid json regex warning = %q", warn)
+	}
+	if _, warn := buildHTTP(t, srv, map[string]any{"type": "http", "url": srv.URL + "/json", "expect_json": map[string]any{"count": map[string]any{"op": ">", "value": "abc"}}}); !strings.Contains(warn, "must be numeric") {
+		t.Fatalf("invalid json numeric warning = %q", warn)
+	}
 	// Sanity: the JSON document really is what we expect.
 	var doc map[string]any
 	resp, _ := srv.Client().Get(srv.URL + "/json")

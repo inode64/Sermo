@@ -514,6 +514,10 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 		tr.DialContext = conn.BindDialer(ifaces[0]).DialContext
 		reqClient = &http.Client{Transport: tr}
 	}
+	expectJSON, warn := parseJSONAssertions(entry["expect_json"], "expect_json")
+	if warn != "" {
+		return nil, "http check: " + warn
+	}
 	hc := &httpCheck{
 		base:        b,
 		client:      reqClient,
@@ -523,7 +527,7 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 		body:        body,
 		contentType: contentType,
 		expect:      expect,
-		expectJSON:  parseJSONAssertions(entry["expect_json"]),
+		expectJSON:  expectJSON,
 	}
 	// expect_body is an {op, value} operator comparison against the trimmed body.
 	if eb, present := entry["expect_body"]; present {
@@ -1490,10 +1494,16 @@ func Evaluate(results []Result) Outcome {
 
 // parseJSONAssertions reads the expect_json mapping into ordered assertions: a
 // scalar value is an equality check; a {op, value} mapping is an operator check.
-func parseJSONAssertions(v any) []jsonAssertion {
+func parseJSONAssertions(v any, field string) ([]jsonAssertion, string) {
+	if v == nil {
+		return nil, ""
+	}
 	m, ok := v.(map[string]any)
-	if !ok || len(m) == 0 {
-		return nil
+	if !ok {
+		return nil, field + " must be a mapping"
+	}
+	if len(m) == 0 {
+		return nil, ""
 	}
 	out := make([]jsonAssertion, 0, len(m))
 	for _, path := range slices.Sorted(maps.Keys(m)) {
@@ -1503,12 +1513,19 @@ func parseJSONAssertions(v any) []jsonAssertion {
 			if op == "" {
 				op = "=="
 			}
-			out = append(out, jsonAssertion{path: path, op: op, value: cfgval.String(cond["value"])})
+			if !validCompareOp(op) {
+				return nil, fmt.Sprintf("%s.%s op must be one of ==, !=, >, >=, <, <=, contains, =~", field, path)
+			}
+			value := cfgval.String(cond["value"])
+			if err := ValidateAssertionValue(field+"."+path, op, value); err != nil {
+				return nil, err.Error()
+			}
+			out = append(out, jsonAssertion{path: path, op: op, value: value})
 		} else {
 			out = append(out, jsonAssertion{path: path, op: "==", value: cfgval.String(raw)})
 		}
 	}
-	return out
+	return out, ""
 }
 
 // parseStatusMatcher parses an expect_status field: a single code, a class

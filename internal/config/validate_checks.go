@@ -241,8 +241,16 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 		} else {
 			for _, path := range slices.Sorted(maps.Keys(m)) {
 				if cond, ok := m[path].(map[string]any); ok {
-					if op := cfgval.String(cond["op"]); op != "" && !cfgval.IsAssertOp(op) {
+					op := cfgval.String(cond["op"])
+					if op == "" {
+						op = "=="
+					}
+					if !cfgval.IsAssertOp(op) {
 						add("%s.expect_json.%s op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, path, op)
+						continue
+					}
+					if err := checks.ValidateAssertionValue(prefix+".expect_json."+path, op, cfgval.String(cond["value"])); err != nil {
+						add("%s", err)
 					}
 				}
 			}

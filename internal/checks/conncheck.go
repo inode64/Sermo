@@ -335,11 +335,9 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	c := connCheck{base: b, proto: proto, cfg: cfg, probe: proto.Probe}
 	// Optional response assertions: a mapping of field -> value | {op, value},
 	// compared against the probe Result (version / Extra) — works for any protocol.
-	expect := parseJSONAssertions(entry["expect"])
-	for _, a := range expect {
-		if !validCompareOp(a.op) {
-			return nil, proto.Name() + " check: expect." + a.path + " op must be one of ==, !=, >, >=, <, <=, =~"
-		}
+	expect, ewarn := parseJSONAssertions(entry["expect"], "expect")
+	if ewarn != "" {
+		return nil, proto.Name() + " check: " + ewarn
 	}
 	c.expect = expect
 	lop, lval, lwarn := parseExpectLatency(entry)

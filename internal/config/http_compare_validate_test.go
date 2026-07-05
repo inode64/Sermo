@@ -93,6 +93,8 @@ func TestValidateHTTPComparisonErrors(t *testing.T) {
 		"non-numeric stat": {`expect_status: { op: "<", value: "abc" }`, "must be numeric"},
 		"latency not map":  {`expect_latency: "fast"`, "expect_latency must be an"},
 		"bad json op":      {"expect_json:\n      v: { op: \"~~\", value: \"1\" }", "op"},
+		"bad json regex":   {"expect_json:\n      v: { op: \"=~\", value: \"[\" }", "not a valid regexp"},
+		"bad json numeric": {"expect_json:\n      v: { op: \">\", value: \"abc\" }", "must be numeric"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
