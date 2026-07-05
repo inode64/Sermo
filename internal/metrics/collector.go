@@ -20,6 +20,17 @@ const (
 	metricIO           = "io"
 )
 
+// System metric names: the host-scope Snapshot keys (whole-machine totals and
+// load averages).
+const (
+	metricTotalCPU    = "total_cpu"
+	metricTotalMemory = "total_memory"
+	metricTotalSwap   = "total_swap"
+	metricLoad1       = "load1"
+	metricLoad5       = "load5"
+	metricLoad15      = "load15"
+)
+
 // Reader abstracts the /proc and /sys reads the collector needs, so rate and
 // percentage math can be tested without real processes.
 type Reader interface {
@@ -306,7 +317,7 @@ func (c *Collector) SampleSystem() Snapshot {
 		r.Percent = float64(totals.memoryUsed) / float64(totals.memoryTotal) * 100
 		r.HasPercent = true
 		r.Total, r.HasTotal = float64(totals.memoryTotal), true
-		snap["total_memory"] = r
+		snap[metricTotalMemory] = r
 	}
 
 	if busy, total, ok := c.Reader.SystemCPU(); ok {
@@ -322,20 +333,20 @@ func (c *Collector) SampleSystem() Snapshot {
 			cpu.Ready = true
 		}
 		c.prevSystem = &sysSample{busy: busy, total: total}
-		snap["total_cpu"] = cpu
+		snap[metricTotalCPU] = cpu
 	}
 
 	if l1, l5, l15, ok := c.Reader.LoadAverages(); ok {
-		snap["load1"] = Reading{Absolute: l1, HasAbsolute: true, Ready: true}
-		snap["load5"] = Reading{Absolute: l5, HasAbsolute: true, Ready: true}
-		snap["load15"] = Reading{Absolute: l15, HasAbsolute: true, Ready: true}
+		snap[metricLoad1] = Reading{Absolute: l1, HasAbsolute: true, Ready: true}
+		snap[metricLoad5] = Reading{Absolute: l5, HasAbsolute: true, Ready: true}
+		snap[metricLoad15] = Reading{Absolute: l15, HasAbsolute: true, Ready: true}
 	}
 
 	// Swap is optional: only readers that implement TotalSwap contribute it, and
 	// only when a swap device exists (total > 0). Percent is always computed so a
 	// 0%-used swap still reports a value.
 	if totals.swapOK && totals.swapTotal > 0 {
-		snap["total_swap"] = Reading{
+		snap[metricTotalSwap] = Reading{
 			Absolute:    float64(totals.swapUsed),
 			HasAbsolute: true,
 			Percent:     float64(totals.swapUsed) / float64(totals.swapTotal) * 100,
