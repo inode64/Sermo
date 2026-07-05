@@ -47,17 +47,6 @@ stop_policy:
     exe_any:
       - ${cloudflared_binary}
 rules:
-  block-restart-if-config-invalid:
-    type: guard
-    blocks:
-      - restart
-      - start
-    if:
-      failed:
-        check: config
-    then:
-      action: block
-      message: ${display_name} configuration is invalid
   restart-if-inactive:
     type: remediation
     if:

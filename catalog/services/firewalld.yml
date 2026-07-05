@@ -42,17 +42,6 @@ policy:
     initial: 15m
     max: 1h
 rules:
-  block-restart-if-config-invalid:
-    type: guard
-    blocks:
-      - restart
-      - start
-    if:
-      failed:
-        check: config
-    then:
-      action: block
-      message: ${display_name} configuration is invalid
   restart-if-state-failed:
     type: remediation
     if:
