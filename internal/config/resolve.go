@@ -11,6 +11,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/rules"
 )
 
 // Resolved is a fully flattened, variable-expanded service definition.
@@ -54,6 +55,7 @@ func (c *Config) resolveService(name string, pruneOptional bool) (Resolved, []st
 	errs = append(errs, expandPidfiles(expanded)...)
 	errs = append(errs, expandSocket(expanded)...)
 	errs = append(errs, expandLockfile(expanded)...)
+	errs = append(errs, expandServiceWatches(expanded)...)
 
 	return Resolved{Name: canonicalName, Tree: expanded}, errs
 }
@@ -463,6 +465,126 @@ func expandReloadOnChange(tree map[string]any) []string {
 	}
 	if len(rules) > 0 {
 		tree["rules"] = rules
+	}
+	return errs
+}
+
+// expandServiceWatches desugars unified service watches whose `then` declares a
+// rule-class action (restart/start/stop/reload/resume → remediation, block → guard,
+// alert → alert) into a generated `checks:` probe plus the equivalent `rules:` entry,
+// then removes them from `watches:`. What remains under `watches:` is only the
+// fire-and-forget entries (hook/notify/expand/kill), built by the Watch runtime.
+//
+// The generated check embeds the watch's `check:` block verbatim (accepting probe
+// duplication when two watches share an endpoint) and carries verify/requires/
+// optional/interval when present. The rule's condition polarity follows the check
+// type: a health check fires on failure (`failed`), a condition check on its
+// threshold (`active`), matching checks.IsHealthType. The check and rule take the
+// watch's name; a collision with an existing check/rule is an error.
+func expandServiceWatches(tree map[string]any) []string {
+	watches, ok := tree["watches"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	checksMap, _ := tree["checks"].(map[string]any)
+	if checksMap == nil {
+		checksMap = map[string]any{}
+	}
+	rulesMap, _ := tree["rules"].(map[string]any)
+	if rulesMap == nil {
+		rulesMap = map[string]any{}
+	}
+	var errs []string
+	add := func(format string, args ...any) { errs = append(errs, fmt.Sprintf(format, args...)) }
+	for _, name := range slices.Sorted(maps.Keys(watches)) {
+		entry, ok := watches[name].(map[string]any)
+		if !ok {
+			continue
+		}
+		then, _ := entry["then"].(map[string]any)
+		action := cfgval.String(then["action"])
+		if action == "" || !isRuleClassAction(action) {
+			continue // fire-and-forget watch (or invalid action): left for validateServiceWatches
+		}
+		// Validate the action grammar here (this entry is removed before the
+		// resolved-tree validators run, so they never see it).
+		validateWatchThenAction("watches."+name, action, then, add)
+		check, ok := entry["check"].(map[string]any)
+		if !ok {
+			errs = append(errs, fmt.Sprintf("watches.%s.check is required", name))
+			continue
+		}
+		if _, exists := checksMap[name]; exists {
+			errs = append(errs, fmt.Sprintf("watches.%s would overwrite existing check %q; rename the watch", name, name))
+			continue
+		}
+		if _, exists := rulesMap[name]; exists {
+			errs = append(errs, fmt.Sprintf("watches.%s would overwrite existing rule %q; rename the watch", name, name))
+			continue
+		}
+
+		// 1. generated check: the embedded probe plus any check-level fields.
+		genCheck := cloneMap(check)
+		for _, k := range []string{"verify", "requires", "optional", "interval"} {
+			if v, has := entry[k]; has {
+				genCheck[k] = v
+			}
+		}
+		checksMap[name] = genCheck
+
+		// 2. condition polarity from the check type.
+		operand := map[string]any{"check": name}
+		var cond map[string]any
+		if checks.IsHealthType(cfgval.String(check["type"])) {
+			cond = map[string]any{"failed": operand}
+		} else {
+			cond = map[string]any{"active": operand}
+		}
+
+		// 3. generated rule.
+		rule := map[string]any{"if": cond}
+		if w, has := entry["for"]; has {
+			rule["for"] = w
+		}
+		if w, has := entry["within"]; has {
+			rule["within"] = w
+		}
+		thenOut := map[string]any{"action": action}
+		if msg := cfgval.String(then["message"]); msg != "" {
+			thenOut["message"] = msg
+		}
+		switch rules.ActionType(action) {
+		case rules.ActionBlock:
+			rule["type"] = string(rules.RuleGuard)
+			if b := cfgval.StringList(then["blocks"]); len(b) > 0 {
+				rule["blocks"] = then["blocks"]
+			}
+		case rules.ActionAlert:
+			rule["type"] = string(rules.RuleAlert)
+		default:
+			rule["type"] = string(rules.RuleRemediation)
+		}
+		// A rule's notify is an entry-level field (ParseRules reads entry["notify"]),
+		// not part of then; a guard never notifies.
+		if action != string(rules.ActionBlock) {
+			if n, has := then["notify"]; has {
+				rule["notify"] = n
+			}
+		}
+		rule["then"] = thenOut
+		rulesMap[name] = rule
+
+		delete(watches, name)
+	}
+
+	if len(checksMap) > 0 {
+		tree["checks"] = checksMap
+	}
+	if len(rulesMap) > 0 {
+		tree["rules"] = rulesMap
+	}
+	if len(watches) == 0 {
+		delete(tree, "watches")
 	}
 	return errs
 }
