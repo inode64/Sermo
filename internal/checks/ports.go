@@ -97,7 +97,7 @@ func (c *portsCheck) Run(ctx context.Context) Result {
 
 	res := c.result(ok, msg, start)
 	res.Data = map[string]any{
-		"host":     c.host,
+		fieldHost:  c.host,
 		"total":    len(c.ports),
 		"open":     open,
 		"closed":   closed,

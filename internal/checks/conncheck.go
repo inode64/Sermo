@@ -134,7 +134,7 @@ func (c connCheck) Run(ctx context.Context) Result {
 		c.state.primed = true
 		if primed && len(problems) > 0 {
 			r := c.result(false, fmt.Sprintf("%s %s: %s", c.proto.Name(), addr, strings.Join(problems, "; ")), start)
-			r.Data = map[string]any{"protocol": c.proto.Name(), "host": c.cfg.Host, "port": c.cfg.Port, "latency_ms": elapsed.Milliseconds()}
+			r.Data = map[string]any{"protocol": c.proto.Name(), fieldHost: c.cfg.Host, fieldPort: c.cfg.Port, "latency_ms": elapsed.Milliseconds()}
 			for k, v := range extra {
 				r.Data[k] = v
 			}
@@ -164,7 +164,7 @@ func (c connCheck) Run(ctx context.Context) Result {
 	if c.cfg.Socket != "" {
 		r.Data["socket"] = c.cfg.Socket
 	} else {
-		r.Data["host"], r.Data["port"] = c.cfg.Host, c.cfg.Port
+		r.Data[fieldHost], r.Data[fieldPort] = c.cfg.Host, c.cfg.Port
 	}
 	if perIface != nil {
 		r.Data["interfaces"] = perIface
