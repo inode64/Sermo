@@ -152,7 +152,7 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	if len(w.Hook.Command) > 0 {
 		runner := defaultHookRunner(w.Runner)
 		if err := w.Hook.Run(ctx, runner, env); err != nil {
-			w.emit(Event{Watch: w.Name, Kind: "hook-failed", Message: err.Error()})
+			w.emit(Event{Watch: w.Name, Kind: eventKindHookFail, Message: err.Error()})
 		} else {
 			w.emit(Event{Watch: w.Name, Kind: "hook", Message: res.Message})
 		}
@@ -300,7 +300,7 @@ func dispatchNotifyFiltered(ctx context.Context, notifiers []notify.Notifier, ms
 			continue
 		}
 		if err := n.Send(ctx, msg); err != nil {
-			emit(Event{Watch: watch, Kind: "notify-failed", Message: n.Name() + ": " + err.Error()})
+			emit(Event{Watch: watch, Kind: eventKindNotifyFail, Message: n.Name() + ": " + err.Error()})
 		} else {
 			emit(Event{Watch: watch, Kind: "notify", Message: "notified " + n.Name()})
 		}

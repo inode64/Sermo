@@ -611,7 +611,7 @@ func (w *Worker) emitAlertsFiltered(ctx context.Context, r rules.Rule, allow fun
 				continue
 			}
 			if err := n.Send(ctx, alertMessage(w.Service, r.Name, msg, output)); err != nil {
-				w.emit(Event{Kind: "notify-failed", Rule: r.Name, Message: n.Name() + ": " + err.Error()})
+				w.emit(Event{Kind: eventKindNotifyFail, Rule: r.Name, Message: n.Name() + ": " + err.Error()})
 			} else {
 				w.emit(Event{Kind: "notify", Rule: r.Name, Message: "notified " + n.Name()})
 			}
