@@ -754,6 +754,7 @@ checks:
   proc-bad-exe-any: { type: process, exe_any: [/y, 7] }
   proc: { type: process, exe: /x, state: weird }
   opt: { type: binary, path: /x, optional: "yes" }
+  timeout: { type: binary, path: /x, timeout: slow }
 preflight:
   config-path: { type: config, path: [7] }
   config-change: { type: config, path: /etc/app.conf, on_change: "yes" }
@@ -768,6 +769,7 @@ preflight:
 	mustHave(t, issues, "exe_any must be a string or non-empty list of strings")
 	mustHave(t, issues, `state "weird" is not one of`)
 	mustHave(t, issues, "optional must be a boolean")
+	mustHave(t, issues, `checks.timeout.timeout "slow" must be a valid positive duration`)
 	mustHave(t, issues, "config-path.path must be a string or non-empty list of strings")
 	mustHave(t, issues, "config-change.on_change must be a boolean")
 	mustHave(t, issues, "must not point under the runtime lock dir")

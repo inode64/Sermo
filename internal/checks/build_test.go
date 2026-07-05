@@ -89,6 +89,11 @@ func TestBuildTimeoutPerCheck(t *testing.T) {
 	if got["default"] != 7*time.Second {
 		t.Errorf("default timeout = %v, want engine default 7s", got["default"])
 	}
+	if _, warnings := Build(map[string]any{
+		"bad": map[string]any{"type": "binary", "path": "/x", "timeout": "slow"},
+	}, Deps{DefaultTimeout: 7 * time.Second}); len(warnings) == 0 {
+		t.Fatal("invalid timeout should warn")
+	}
 }
 
 func TestIsHealthType(t *testing.T) {
