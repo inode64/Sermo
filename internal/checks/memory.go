@@ -46,7 +46,7 @@ func (c memoryCheck) Run(_ context.Context) Result {
 	usedPct := float64(s.TotalBytes-avail) / float64(s.TotalBytes) * 100
 	availPct := float64(avail) / float64(s.TotalBytes) * 100
 	values := map[string]float64{
-		"used_pct":        usedPct,
+		fieldUsedPct:      usedPct,
 		"available_pct":   availPct,
 		"available_bytes": float64(avail),
 	}
@@ -57,7 +57,7 @@ func (c memoryCheck) Run(_ context.Context) Result {
 	res.Data = map[string]any{
 		"total_bytes":     s.TotalBytes,
 		"available_bytes": avail,
-		"used_pct":        usedPct,
+		fieldUsedPct:      usedPct,
 		"available_pct":   availPct,
 	}
 	res.Data["value"] = firstPredValue(c.preds, values, usedPct)
