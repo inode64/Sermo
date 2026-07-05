@@ -460,9 +460,9 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 	if rawURL == "" {
 		return nil, "http check requires a url"
 	}
-	method := strings.ToUpper(cfgval.AsString(entry["method"]))
-	if method == "" {
-		method = http.MethodGet
+	method, warn := ParseHTTPMethod(entry["method"])
+	if warn != "" {
+		return nil, "http check: " + warn
 	}
 	expect, err := parseStatusMatcher(entry["expect_status"])
 	if err != nil {
@@ -546,6 +546,39 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 		return nil, warn
 	}
 	return hc, ""
+}
+
+// HTTPMethodList is the user-facing list of standard HTTP methods accepted by
+// HTTP checks.
+const HTTPMethodList = "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS, TRACE, CONNECT"
+
+var standardHTTPMethods = map[string]struct{}{
+	http.MethodGet:     {},
+	http.MethodHead:    {},
+	http.MethodPost:    {},
+	http.MethodPut:     {},
+	http.MethodPatch:   {},
+	http.MethodDelete:  {},
+	http.MethodOptions: {},
+	http.MethodTrace:   {},
+	http.MethodConnect: {},
+}
+
+// ParseHTTPMethod returns the normalized standard HTTP method for a check
+// config value.
+func ParseHTTPMethod(raw any) (string, string) {
+	if raw == nil {
+		return http.MethodGet, ""
+	}
+	s, ok := raw.(string)
+	if !ok {
+		return "", "method must be a string"
+	}
+	method := strings.ToUpper(strings.TrimSpace(s))
+	if _, known := standardHTTPMethods[method]; !known {
+		return "", fmt.Sprintf("method %q is not a standard HTTP method (%s)", s, HTTPMethodList)
+	}
+	return method, ""
 }
 
 // buildCommandCheck builds a check that runs a command and asserts its exit code.
