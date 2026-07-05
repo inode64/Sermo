@@ -157,10 +157,19 @@ func (e Expander) Expand(ctx context.Context, t Target, by int64) (Result, error
 	return Result{VG: t.VG, LV: t.LV, FSType: t.FSType, GrewBytes: grow}, nil
 }
 
+// Filesystem types Expand can grow.
+const (
+	fsExt2  = "ext2"
+	fsExt3  = "ext3"
+	fsExt4  = "ext4"
+	fsXFS   = "xfs"
+	fsBtrfs = "btrfs"
+)
+
 // growableFS reports whether Expand can grow a filesystem of this type.
 func growableFS(fstype string) bool {
 	switch fstype {
-	case "ext2", "ext3", "ext4", "xfs", "btrfs":
+	case fsExt2, fsExt3, fsExt4, fsXFS, fsBtrfs:
 		return true
 	default:
 		return false
@@ -177,11 +186,11 @@ func (e Expander) growFS(ctx context.Context, t Target) error {
 		err error
 	)
 	switch t.FSType {
-	case "ext2", "ext3", "ext4":
+	case fsExt2, fsExt3, fsExt4:
 		res, err = execx.Run(ctx, e.Runner, to, "resize2fs", lv)
-	case "xfs":
+	case fsXFS:
 		res, err = execx.Run(ctx, e.Runner, to, "xfs_growfs", t.Mountpoint)
-	case "btrfs":
+	case fsBtrfs:
 		res, err = execx.Run(ctx, e.Runner, to, "btrfs", "filesystem", "resize", "max", t.Mountpoint)
 	}
 	if err != nil {
