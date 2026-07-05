@@ -12,6 +12,9 @@ import (
 	"sermo/internal/locks"
 )
 
+// lockCommand is the command name reported in lock usage errors.
+const lockCommand = "lock"
+
 // runLock dispatches the named-lock commands ():
 //
 //	lock SERVICE [--name N] --reason R --ttl D -- COMMAND...   (hold for COMMAND)
@@ -19,7 +22,7 @@ import (
 //	lock release SERVICE [--name N]
 func (a App) runLock(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.commandUsageError("lock", "lock requires a service or subcommand")
+		return a.commandUsageError(lockCommand, "lock requires a service or subcommand")
 	}
 
 	cfg, code := a.loadConfig(opts)
@@ -40,10 +43,10 @@ func (a App) runLock(ctx context.Context, opts options) int {
 
 func (a App) runLockAcquire(opts options, cfg *config.Config, locker locks.NamedLocker, args []string) int {
 	if len(args) == 0 {
-		return a.commandUsageError("lock", "lock acquire requires a service name")
+		return a.commandUsageError(lockCommand, "lock acquire requires a service name")
 	}
 	if len(args) > 1 {
-		return a.commandUsageError("lock", "lock acquire takes exactly one service name")
+		return a.commandUsageError(lockCommand, "lock acquire takes exactly one service name")
 	}
 	if code := requireLockMeta(a, opts); code != exitSuccess {
 		return code
@@ -62,10 +65,10 @@ func (a App) runLockAcquire(opts options, cfg *config.Config, locker locks.Named
 
 func (a App) runLockRelease(opts options, cfg *config.Config, locker locks.NamedLocker, args []string) int {
 	if len(args) == 0 {
-		return a.commandUsageError("lock", "lock release requires a service name")
+		return a.commandUsageError(lockCommand, "lock release requires a service name")
 	}
 	if len(args) > 1 {
-		return a.commandUsageError("lock", "lock release takes exactly one service name")
+		return a.commandUsageError(lockCommand, "lock release takes exactly one service name")
 	}
 	service := canonicalServiceIfKnown(cfg, args[0])
 	if err := locker.Release(service, opts.name); err != nil {
@@ -79,10 +82,10 @@ func (a App) runLockRelease(opts options, cfg *config.Config, locker locks.Named
 
 func (a App) runLockWrap(ctx context.Context, opts options, cfg *config.Config, locker locks.NamedLocker, service string) int {
 	if len(opts.args) > 1 {
-		return a.commandUsageError("lock", "lock wrap takes exactly one service name before --")
+		return a.commandUsageError(lockCommand, "lock wrap takes exactly one service name before --")
 	}
 	if len(opts.commandArgs) == 0 {
-		return a.commandUsageError("lock", "lock SERVICE ... -- COMMAND requires a command after --")
+		return a.commandUsageError(lockCommand, "lock SERVICE ... -- COMMAND requires a command after --")
 	}
 	if code := requireLockMeta(a, opts); code != exitSuccess {
 		return code
@@ -115,10 +118,10 @@ func (a App) runLockWrap(ctx context.Context, opts options, cfg *config.Config, 
 
 func requireLockMeta(a App, opts options) int {
 	if opts.reason == "" {
-		return a.commandUsageError("lock", "--reason is required")
+		return a.commandUsageError(lockCommand, "--reason is required")
 	}
 	if opts.ttl <= 0 {
-		return a.commandUsageError("lock", "--ttl is required and must be positive")
+		return a.commandUsageError(lockCommand, "--ttl is required and must be positive")
 	}
 	return exitSuccess
 }
