@@ -46,19 +46,19 @@ func (c memoryCheck) Run(_ context.Context) Result {
 	usedPct := float64(s.TotalBytes-avail) / float64(s.TotalBytes) * 100
 	availPct := float64(avail) / float64(s.TotalBytes) * 100
 	values := map[string]float64{
-		fieldUsedPct:      usedPct,
-		"available_pct":   availPct,
-		"available_bytes": float64(avail),
+		fieldUsedPct:        usedPct,
+		fieldAvailablePct:   availPct,
+		fieldAvailableBytes: float64(avail),
 	}
 
 	ok := levelPredsHold(c.preds, values)
 
 	res := c.result(ok, fmt.Sprintf("memory used %.1f%% available %.1f%% (%d bytes)", usedPct, availPct, avail), start)
 	res.Data = map[string]any{
-		"total_bytes":     s.TotalBytes,
-		"available_bytes": avail,
-		fieldUsedPct:      usedPct,
-		"available_pct":   availPct,
+		"total_bytes":       s.TotalBytes,
+		fieldAvailableBytes: avail,
+		fieldUsedPct:        usedPct,
+		fieldAvailablePct:   availPct,
 	}
 	res.Data["value"] = firstPredValue(c.preds, values, usedPct)
 	return res
