@@ -16,6 +16,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/execx"
 	"sermo/internal/locks"
+	"sermo/internal/mounts"
 	"sermo/internal/process"
 )
 
@@ -546,8 +547,8 @@ func FstabEntries(fstabPath string) ([]FstabEntry, error) {
 			continue
 		}
 		entry := FstabEntry{
-			Source: unescapeFstab(fields[0]),
-			Path:   filepath.Clean(unescapeFstab(fields[1])),
+			Source: mounts.UnescapeField(fields[0]),
+			Path:   filepath.Clean(mounts.UnescapeField(fields[1])),
 		}
 		if len(fields) > 2 {
 			entry.FSType = fields[2]
@@ -684,7 +685,7 @@ func linkMountMatches(ctx context.Context, link string, mountPaths []string, mat
 		target = strings.TrimSuffix(target, " (deleted)")
 		cleanTarget := filepath.Clean(target)
 		for _, mountPath := range mountPaths {
-			if pathUnderMount(cleanTarget, mountPath) {
+			if mounts.PathUnder(cleanTarget, mountPath) {
 				matches[mountPath] = struct{}{}
 			}
 		}
@@ -739,16 +740,5 @@ func linkUnderMount(ctx context.Context, link, mountPath string) bool {
 		return false
 	}
 	target = strings.TrimSuffix(target, " (deleted)")
-	return pathUnderMount(filepath.Clean(target), mountPath)
-}
-
-func pathUnderMount(path, mountPath string) bool {
-	if mountPath == "/" {
-		return strings.HasPrefix(path, "/")
-	}
-	return path == mountPath || strings.HasPrefix(path, mountPath+"/")
-}
-
-func unescapeFstab(s string) string {
-	return strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`).Replace(s)
+	return mounts.PathUnder(filepath.Clean(target), mountPath)
 }

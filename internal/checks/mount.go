@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"sermo/internal/mounts"
 )
 
 // Mount is one entry of the mount table.
@@ -69,8 +71,8 @@ func defaultMountSampler() ([]Mount, error) {
 			continue
 		}
 		out = append(out, Mount{
-			Device:     unescapeMount(fields[0]),
-			MountPoint: unescapeMount(fields[1]),
+			Device:     mounts.UnescapeField(fields[0]),
+			MountPoint: mounts.UnescapeField(fields[1]),
 			FSType:     fields[2],
 			Options:    strings.Split(fields[3], ","),
 		})
@@ -86,20 +88,20 @@ func DefaultMounts() ([]Mount, error) {
 // MountForPath returns the deepest mount containing path, or nil when none is
 // known. It is useful for operator views where a storage check points at a
 // directory below the actual mountpoint.
-func MountForPath(mounts []Mount, path string) *Mount {
+func MountForPath(table []Mount, path string) *Mount {
 	cleanPath := filepath.Clean(path)
 	var best *Mount
-	for i := range mounts {
-		mp := filepath.Clean(mounts[i].MountPoint)
-		if !pathUnderMount(cleanPath, mp) {
+	for i := range table {
+		mp := filepath.Clean(table[i].MountPoint)
+		if !mounts.PathUnder(cleanPath, mp) {
 			continue
 		}
 		if best == nil || len(mp) > len(filepath.Clean(best.MountPoint)) {
-			best = &mounts[i]
+			best = &table[i]
 			continue
 		}
 		if len(mp) == len(filepath.Clean(best.MountPoint)) {
-			best = betterMount(best, &mounts[i])
+			best = betterMount(best, &table[i])
 		}
 	}
 	return best
@@ -129,24 +131,4 @@ func betterMount(current, candidate *Mount) *Mount {
 		return candidate
 	}
 	return current
-}
-
-func pathUnderMount(path, mountPoint string) bool {
-	if mountPoint == "." || path == "." {
-		return false
-	}
-	if mountPoint == "/" {
-		return strings.HasPrefix(path, "/")
-	}
-	return path == mountPoint || strings.HasPrefix(path, mountPoint+"/")
-}
-
-// unescapeMount decodes the octal escapes /proc/mounts uses for space, tab,
-// newline and backslash in device and mount-point fields.
-func unescapeMount(s string) string {
-	if !strings.Contains(s, `\`) {
-		return s
-	}
-	r := strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`)
-	return r.Replace(s)
 }
