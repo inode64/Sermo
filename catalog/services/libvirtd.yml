@@ -11,10 +11,7 @@ checks:
   libvirt:
     type: libvirt
     timeout: 5s
-postflight:
-  libvirt:
-    type: libvirt
-    timeout: 5s
+    verify: true
 policy:
   cooldown: 15m
   max_actions: 2

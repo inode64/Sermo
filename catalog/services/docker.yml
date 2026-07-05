@@ -44,11 +44,7 @@ checks:
     type: docker
     socket: ${socket}
     timeout: 3s
-postflight:
-  engine:
-    type: docker
-    socket: ${socket}
-    timeout: 3s
+    verify: true
 policy:
   cooldown: 15m
   max_actions: 2

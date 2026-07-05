@@ -13,9 +13,4 @@ checks:
     socket: /run/openvswitch/db.sock
     timeout: 5s
     optional: true
-postflight:
-  openvswitch:
-    type: openvswitch
-    socket: /run/openvswitch/db.sock
-    timeout: 5s
-    optional: true
+    verify: true

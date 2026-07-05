@@ -4,7 +4,7 @@ import "sermo/internal/cfgval"
 
 // namedSections are maps keyed by entry name where `enabled:false`/`delete:true`
 // apply.
-var namedSections = []string{"checks", "preflight", "postflight", "processes", "rules"}
+var namedSections = []string{"checks", "preflight", "processes", "rules"}
 
 // mergeMaps merges src on top of dst and returns a new map. Scalars and lists
 // overwrite; nested maps merge recursively. Inputs are not mutated.

@@ -38,8 +38,9 @@ checks:
       value: 500
     timeout: 5s
 
-  # AJP13 CPing/CPong — proves the AJP connector answers, not only HTTP.
-  # optional: many installs disable AJP and terminate TLS at a reverse proxy.
+    # AJP13 CPing/CPong — proves the AJP connector answers, not only HTTP.
+    # optional: many installs disable AJP and terminate TLS at a reverse proxy.
+    verify: true
   ajp:
     type: ajp
     host: 127.0.0.1
@@ -47,14 +48,6 @@ checks:
     timeout: 3s
     optional: true
 
-postflight:
-  http:
-    type: http
-    url: http://127.0.0.1:${port}/
-    expect_status:
-      op: <
-      value: 500
-    timeout: 5s
 reload_on_change:
   paths:
     - ${config}

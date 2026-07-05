@@ -37,13 +37,7 @@ checks:
       - ${pm2_binary}
       - ping
     timeout: 10s
-postflight:
-  ping:
-    type: command
-    command:
-      - ${pm2_binary}
-      - ping
-    timeout: 10s
+    verify: true
 policy:
   cooldown: 15m
   max_actions: 2

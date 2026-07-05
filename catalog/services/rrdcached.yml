@@ -9,10 +9,12 @@ checks:
   service:
     type: service
     expect: active
-postflight:
   socket:
     type: socket
     path: /run/rrdcached.sock
+    requires:
+      - service
+    verify: true
 rules:
   restart-if-socket-missing:
     type: remediation

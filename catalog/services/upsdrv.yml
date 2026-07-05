@@ -41,14 +41,4 @@ checks:
     requires:
       - service
     optional: true
-postflight:
-  process:
-    type: process
-    exe_any:
-      - /usr/lib64/nut/${driver}
-      - /lib64/nut/${driver}
-      - /usr/lib/nut/${driver}
-      - /lib/nut/${driver}
-    user: ${user}
-    state: running
-    optional: true
+    verify: true

@@ -10,6 +10,7 @@ checks:
   service:
     type: service
     expect: active
+    verify: true
   process:
     type: process
     exe: ${rngd_binary}
@@ -20,9 +21,3 @@ checks:
       - service
 apps:
   - rngd
-postflight:
-  process:
-    type: process
-    exe: ${rngd_binary}
-    user: root
-    state: running

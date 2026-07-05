@@ -22,13 +22,7 @@ checks:
     port: "${port}"
     timeout: 5s
 
-postflight:
-  rdp:
-    type: rdp
-    host: "${host}"
-    port: "${port}"
-    timeout: 5s
-
+    verify: true
 rules:
   restart-if-rdp-failed:
     type: remediation

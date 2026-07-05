@@ -1040,7 +1040,7 @@ func usesMetrics(tree map[string]any) (service, system bool) {
 			service = true
 		}
 	}
-	for _, section := range []string{"checks", "preflight", "postflight"} {
+	for _, section := range []string{"checks", "preflight"} {
 		entries, ok := tree[section].(map[string]any)
 		if !ok {
 			continue

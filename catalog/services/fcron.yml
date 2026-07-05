@@ -21,12 +21,7 @@ checks:
     state: running
     requires:
       - service
-postflight:
-  process:
-    type: process
-    exe: ${fcron_binary}
-    user: root
-    state: running
+    verify: true
 rules:
   alert-if-memory-high:
     type: alert

@@ -916,6 +916,31 @@ checks:
 	mustHave(t, bad, "checks.bad-bool.cert_verify must be a boolean")
 }
 
+func TestValidateVerifyFlag(t *testing.T) {
+	// verify: true on a health check (http) is valid.
+	good := validateService(t, `
+name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  http: { type: http, url: "http://x/", verify: true }
+`)
+	if hasIssue(good, "checks.http") {
+		t.Fatalf("verify:true on a health check was flagged: %v", good)
+	}
+
+	bad := validateService(t, `
+name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  cond: { type: memory, used_pct: { op: ">", value: 90 }, verify: true }
+  notbool: { type: http, url: "http://x/", verify: "yes" }
+`)
+	mustHave(t, bad, "checks.cond.verify is only valid on a health check")
+	mustHave(t, bad, "checks.notbool.verify must be a boolean")
+}
+
 func TestValidateHTTPFields(t *testing.T) {
 	good := validateService(t, `
 name: svc

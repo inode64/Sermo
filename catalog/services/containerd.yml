@@ -43,6 +43,7 @@ checks:
       - ${containerd_binary}
       - --version
     timeout: 5s
+    verify: true
   fds:
     type: metric
     scope: service
@@ -57,13 +58,6 @@ checks:
     op: '>'
     value: 60%
     optional: true
-postflight:
-  version:
-    type: command
-    command:
-      - ${containerd_binary}
-      - --version
-    timeout: 5s
 reload_on_change:
   paths:
     - ${config}

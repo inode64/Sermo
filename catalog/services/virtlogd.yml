@@ -13,10 +13,12 @@ checks:
   service:
     type: service
     expect: active
-postflight:
   socket:
     type: socket
     path: /run/libvirt/virtlogd-sock
+    requires:
+      - service
+    verify: true
 policy:
   cooldown: 15m
   max_actions: 2

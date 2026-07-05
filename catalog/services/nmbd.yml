@@ -27,15 +27,10 @@ checks:
     port: 137
     timeout: 3s
     optional: true
+    verify: true
   smb:
     type: smb
     port: 445
-    timeout: 3s
-    optional: true
-postflight:
-  netbios:
-    type: tcp
-    port: 137
     timeout: 3s
     optional: true
 rules:

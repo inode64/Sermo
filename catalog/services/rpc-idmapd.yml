@@ -19,6 +19,7 @@ checks:
   service:
     type: service
     expect: active
+    verify: true
   process:
     type: process
     exe: ${rpc_idmapd_binary}
@@ -27,12 +28,6 @@ checks:
     optional: true
     requires:
       - service
-postflight:
-  process:
-    type: process
-    exe: ${rpc_idmapd_binary}
-    user: root
-    state: running
 rules:
   alert-if-memory-high:
     type: alert

@@ -13,7 +13,7 @@ processes:
   ceph-mgr:
     exe: ${ceph_mgr_binary}
     user: ${user}
-restart_on_change: null
+restart_on_change:
 checks:
   service:
     type: service
@@ -29,18 +29,7 @@ checks:
     analyze:
       use:
         - ceph
-postflight:
-  status:
-    type: command
-    command:
-      - ${ceph_binary}
-      - --admin-daemon
-      - /run/ceph/ceph-mgr.${hostname}.asok
-      - status
-    timeout: 5s
-    analyze:
-      use:
-        - ceph
+    verify: true
 rules:
   restart-if-status-failed:
     type: remediation
