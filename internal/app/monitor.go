@@ -246,7 +246,7 @@ func (m *Monitor) stopGenerationLocked(final bool) {
 func (m *Monitor) emitReloadError(msg string) {
 	m.Logger.Warn("config reload rejected", "error", msg)
 	if m.deps.Emit != nil {
-		m.deps.Emit(Event{Kind: "error", Action: "reload", Message: msg})
+		m.deps.Emit(Event{Kind: eventKindError, Action: "reload", Message: msg})
 	}
 }
 

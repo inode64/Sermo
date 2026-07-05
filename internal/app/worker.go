@@ -252,7 +252,7 @@ func (w *Worker) operationSettlingState(now time.Time) (observeOnly, running boo
 	}
 	rec, found, err := w.OperationSettling.OperationSettling(w.Service)
 	if err != nil {
-		w.emit(Event{Kind: "error", Message: "operation settling: " + err.Error()})
+		w.emit(Event{Kind: eventKindError, Message: "operation settling: " + err.Error()})
 		return false, false
 	}
 	if !found {
@@ -268,7 +268,7 @@ func (w *Worker) operationSettlingState(now time.Time) (observeOnly, running boo
 	case state.OperationSettlingSettling:
 		return true, false
 	default:
-		w.emit(Event{Kind: "error", Message: fmt.Sprintf("operation settling: unknown phase %q", rec.Phase)})
+		w.emit(Event{Kind: eventKindError, Message: fmt.Sprintf("operation settling: unknown phase %q", rec.Phase)})
 		w.clearOperationSettling()
 		return false, false
 	}
@@ -279,7 +279,7 @@ func (w *Worker) clearOperationSettling() {
 		return
 	}
 	if err := w.OperationSettling.ClearOperationSettling(w.Service); err != nil {
-		w.emit(Event{Kind: "error", Message: "operation settling: " + err.Error()})
+		w.emit(Event{Kind: eventKindError, Message: "operation settling: " + err.Error()})
 	}
 }
 
@@ -490,7 +490,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		// blocks this action, try the next firing rule (first non-blocked wins).
 		blocked, reason, err := rules.Guard(ctx, w.Rules, action, ev)
 		if err != nil {
-			w.emit(Event{Kind: "error", Rule: r.Name, Action: action, Message: "guard: " + err.Error()})
+			w.emit(Event{Kind: eventKindError, Rule: r.Name, Action: action, Message: "guard: " + err.Error()})
 			continue
 		}
 
@@ -557,11 +557,11 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 
 func (w *Worker) operateForRemediation(ctx context.Context, action string) operation.Result {
 	if err := beginOperationSettling(w.OperationSettling, w.Service, action, state.SourceDaemon); err != nil {
-		w.emit(Event{Kind: "error", Action: action, Message: err.Error()})
+		w.emit(Event{Kind: eventKindError, Action: action, Message: err.Error()})
 	}
 	result := w.Operate(ctx, action)
 	if err := finishOperationSettling(w.OperationSettling, w.Service, action, state.SourceDaemon, result, nil); err != nil {
-		w.emit(Event{Kind: "error", Action: action, Message: err.Error()})
+		w.emit(Event{Kind: eventKindError, Action: action, Message: err.Error()})
 	}
 	return result
 }
@@ -640,12 +640,12 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, a
 	// never trigger anything but an alert. ParseRules already drops such
 	// rules; this catches one that bypassed parsing entirely.
 	if r.Type != rules.RuleAlert && rules.ConditionUsesSystemMetric(r.If, w.MetricChecks) {
-		w.emit(Event{Kind: "error", Rule: r.Name, Message: "scope: system metric may only drive alert rules; rule suppressed"})
+		w.emit(Event{Kind: eventKindError, Rule: r.Name, Message: "scope: system metric may only drive alert rules; rule suppressed"})
 		return false
 	}
 	cond, err := w.evalRule(ctx, ev, r, evals)
 	if err != nil {
-		w.emit(Event{Kind: "error", Rule: r.Name, Message: "evaluate: " + err.Error()})
+		w.emit(Event{Kind: eventKindError, Rule: r.Name, Message: "evaluate: " + err.Error()})
 		cond = false
 	}
 	return w.windowState(r.Name).FiresAt(r, cond, at)

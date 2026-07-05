@@ -627,7 +627,7 @@ func (b *WebBackend) operationSettlingPending(name string) bool {
 	}
 	rec, found, err := b.operationSettling.OperationSettling(name)
 	if err != nil {
-		b.emitMonitorEvent(name, "operation-settling", "error", "", err.Error())
+		b.emitMonitorEvent(name, "operation-settling", eventKindError, "", err.Error())
 		return false
 	}
 	if !found {
@@ -635,7 +635,7 @@ func (b *WebBackend) operationSettlingPending(name string) bool {
 	}
 	if !rec.UpdatedAt.IsZero() && b.webNow().Sub(rec.UpdatedAt) > operationSettlingMaxAge {
 		if err := b.operationSettling.ClearOperationSettling(name); err != nil {
-			b.emitMonitorEvent(name, "operation-settling", "error", "", err.Error())
+			b.emitMonitorEvent(name, "operation-settling", eventKindError, "", err.Error())
 		}
 		return false
 	}
@@ -2466,12 +2466,12 @@ func (b *WebBackend) Locks(_ context.Context) []web.Lock {
 func (b *WebBackend) ReleaseLock(_ context.Context, service, name string) web.ActionResult {
 	if _, ok := b.entries[service]; !ok {
 		msg := "unknown service " + service
-		b.emitLockReleaseEvent(service, name, "error", "failed", msg)
+		b.emitLockReleaseEvent(service, name, eventKindError, "failed", msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	if b.cfg == nil {
 		msg := "runtime locks are unavailable"
-		b.emitLockReleaseEvent(service, name, "error", "failed", msg)
+		b.emitLockReleaseEvent(service, name, eventKindError, "failed", msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	locker := locks.NewNamedLocker(filepath.Join(b.cfg.Global.RuntimeDir(), "locks"))
@@ -2482,7 +2482,7 @@ func (b *WebBackend) ReleaseLock(_ context.Context, service, name string) web.Ac
 		if lk.State == locks.StateActive {
 			b.emitLockReleaseEvent(service, name, eventKindSuppressed, "blocked", msg)
 		} else {
-			b.emitLockReleaseEvent(service, name, "error", "failed", msg)
+			b.emitLockReleaseEvent(service, name, eventKindError, "failed", msg)
 		}
 		return web.ActionResult{OK: false, Message: msg}
 	}
@@ -2554,7 +2554,7 @@ func (b *WebBackend) ActivitySummary(ctx context.Context) web.ActivitySummary {
 			summary.WatchHooks++
 		case e.Kind == "notify" || e.Kind == eventKindNotifyFail:
 			summary.WatchNotifies++
-		case e.Kind == "error":
+		case e.Kind == eventKindError:
 			summary.Errors++
 		}
 	}
@@ -2950,18 +2950,18 @@ func (b *WebBackend) SetPanic(_ context.Context, on bool) web.ActionResult {
 	}
 	if b.store == nil {
 		msg := "panic mode state is unavailable"
-		b.emitMonitorEvent("", action, "error", "", msg)
+		b.emitMonitorEvent("", action, eventKindError, "", msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	prior, found, err := b.store.Panic()
 	if err != nil {
 		msg := fmt.Sprintf("panic mode failed: %v", err)
-		b.emitMonitorEvent("", action, "error", "", msg)
+		b.emitMonitorEvent("", action, eventKindError, "", msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	if err := b.store.SetPanic(on, state.SourceWeb); err != nil {
 		msg := fmt.Sprintf("panic mode failed: %v", err)
-		b.emitMonitorEvent("", action, "error", "", msg)
+		b.emitMonitorEvent("", action, eventKindError, "", msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	if found && prior.On == on {
@@ -3140,21 +3140,21 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.
 	if e == nil {
 		msg := "unknown service " + name
 		if b.emit != nil {
-			b.emit(Event{Service: name, Kind: "error", Action: action, Message: msg})
+			b.emit(Event{Service: name, Kind: eventKindError, Action: action, Message: msg})
 		}
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	if e.disabled {
 		msg := "service " + name + " is disabled in configuration"
 		if b.emit != nil {
-			b.emit(Event{Service: name, Kind: "error", Action: action, Message: msg})
+			b.emit(Event{Service: name, Kind: eventKindError, Action: action, Message: msg})
 		}
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	if action == "reload" && !e.canReload {
 		msg := "service " + name + " does not support reload"
 		if b.emit != nil {
-			b.emit(Event{Service: name, Kind: "error", Action: action, Message: msg})
+			b.emit(Event{Service: name, Kind: eventKindError, Action: action, Message: msg})
 		}
 		return web.ActionResult{OK: false, Message: msg}
 	}
@@ -3197,18 +3197,18 @@ func webActionResultFrom(r operation.Result, name, action string) web.ActionResu
 
 func (b *WebBackend) operationResultWithMonitor(ctx context.Context, name, action string) operation.Result {
 	if err := beginOperationSettling(b.operationSettling, name, action, state.SourceWeb); err != nil {
-		b.emitMonitorEvent(name, action, "error", "", err.Error())
+		b.emitMonitorEvent(name, action, eventKindError, "", err.Error())
 	}
 	r := b.operationResult(ctx, name, action)
 	activeAfterStart := b.manualActionActiveAfterStart(ctx, name, action, r)
 	change, err := SyncManualActionMonitoringWithActive(b.store, name, action, r, state.SourceWebManualStop, state.SourceWeb, activeAfterStart)
 	if err != nil {
-		b.emitMonitorEvent(name, action, "error", "", err.Error())
+		b.emitMonitorEvent(name, action, eventKindError, "", err.Error())
 	} else if change.Changed {
 		b.emitMonitorEvent(name, change.Action, eventKindAction, "ok", change.Message)
 	}
 	if err := finishOperationSettlingWithActive(b.operationSettling, name, action, state.SourceWeb, r, nil, activeAfterStart); err != nil {
-		b.emitMonitorEvent(name, action, "error", "", err.Error())
+		b.emitMonitorEvent(name, action, eventKindError, "", err.Error())
 	}
 	return r
 }
@@ -3360,23 +3360,23 @@ func (b *WebBackend) SetMonitored(_ context.Context, name string, monitored bool
 	}
 	if _, ok := b.entries[name]; !ok {
 		msg := fmt.Sprintf("unknown service %q", name)
-		b.emitMonitorEvent(name, action, "error", "", msg)
+		b.emitMonitorEvent(name, action, eventKindError, "", msg)
 		return fmt.Errorf("%s", msg)
 	}
 	if b.store == nil {
 		msg := "monitoring state is unavailable"
-		b.emitMonitorEvent(name, action, "error", "", msg)
+		b.emitMonitorEvent(name, action, eventKindError, "", msg)
 		return fmt.Errorf("%s", msg)
 	}
 	priorActive, found, err := b.store.Active(name)
 	if err != nil {
 		msg := fmt.Sprintf("%s failed: %v", action, err)
-		b.emitMonitorEvent(name, action, "error", "", msg)
+		b.emitMonitorEvent(name, action, eventKindError, "", msg)
 		return fmt.Errorf("%s", msg)
 	}
 	if err := b.store.SetActive(name, monitored, state.SourceWeb); err != nil {
 		msg := fmt.Sprintf("%s failed: %v", action, err)
-		b.emitMonitorEvent(name, action, "error", "", msg)
+		b.emitMonitorEvent(name, action, eventKindError, "", msg)
 		return fmt.Errorf("%s", msg)
 	}
 	if found && priorActive == monitored {
@@ -3403,24 +3403,24 @@ func (b *WebBackend) SetWatchMonitored(_ context.Context, name string, monitored
 	}
 	if _, ok := b.watches[name]; !ok {
 		msg := fmt.Sprintf("unknown watch %q", name)
-		b.emitWatchMonitorEvent(name, action, "error", "", msg)
+		b.emitWatchMonitorEvent(name, action, eventKindError, "", msg)
 		return fmt.Errorf("%s", msg)
 	}
 	if b.store == nil {
 		msg := "monitoring state is unavailable"
-		b.emitWatchMonitorEvent(name, action, "error", "", msg)
+		b.emitWatchMonitorEvent(name, action, eventKindError, "", msg)
 		return fmt.Errorf("%s", msg)
 	}
 	key := watchMonitorKey(name)
 	priorActive, found, err := b.store.Active(key)
 	if err != nil {
 		msg := fmt.Sprintf("%s failed: %v", action, err)
-		b.emitWatchMonitorEvent(name, action, "error", "", msg)
+		b.emitWatchMonitorEvent(name, action, eventKindError, "", msg)
 		return fmt.Errorf("%s", msg)
 	}
 	if err := b.store.SetActive(key, monitored, state.SourceWeb); err != nil {
 		msg := fmt.Sprintf("%s failed: %v", action, err)
-		b.emitWatchMonitorEvent(name, action, "error", "", msg)
+		b.emitWatchMonitorEvent(name, action, eventKindError, "", msg)
 		return fmt.Errorf("%s", msg)
 	}
 	if found && priorActive == monitored {

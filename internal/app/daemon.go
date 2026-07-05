@@ -636,7 +636,7 @@ func measurementRecorder(deps Deps, name string, tree map[string]any) func(check
 	}
 	fail := func(err error) {
 		if err != nil && deps.Emit != nil {
-			deps.Emit(Event{Service: name, Kind: "error", Message: "record measurement: " + err.Error()})
+			deps.Emit(Event{Service: name, Kind: eventKindError, Message: "record measurement: " + err.Error()})
 		}
 	}
 	return func(r checks.Result) {
@@ -669,7 +669,7 @@ func checkSLARecorder(deps Deps, name string) func(map[string]checks.Result, map
 				continue
 			}
 			if err := deps.SLA.RecordCheckSLA(name, check, r.Healthy(), now()); err != nil && deps.Emit != nil {
-				deps.Emit(Event{Service: name, Kind: "error", Message: "record check sla: " + err.Error()})
+				deps.Emit(Event{Service: name, Kind: eventKindError, Message: "record check sla: " + err.Error()})
 			}
 		}
 	}
@@ -761,7 +761,7 @@ func healthRecorder(deps Deps, name string) func(up bool) {
 	}
 	return func(up bool) {
 		if err := deps.SLA.RecordSLA(name, up, now()); err != nil && deps.Emit != nil {
-			deps.Emit(Event{Service: name, Kind: "error", Message: "record sla: " + err.Error()})
+			deps.Emit(Event{Service: name, Kind: eventKindError, Message: "record sla: " + err.Error()})
 		}
 	}
 }
