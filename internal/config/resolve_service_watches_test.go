@@ -279,6 +279,70 @@ func TestValidateUnifiedWatchActions(t *testing.T) {
 	}
 }
 
+// TestUnifiedWatchRefEquivalence proves a ref watch desugars to exactly the
+// hand-written rule referencing the same shared check — the dominant migration form.
+func TestUnifiedWatchRefEquivalence(t *testing.T) {
+	unified, errs := resolveWatchService(t, `
+checks:
+  tcp: { type: tcp, host: 127.0.0.1, port: 80 }
+watches:
+  restart-if-tcp-failed:
+    check: { ref: tcp }
+    for: { cycles: 3 }
+    then: { action: restart }
+`)
+	if len(errs) != 0 {
+		t.Fatalf("unified resolve errors = %v", errs)
+	}
+	explicit, errs := resolveWatchService(t, `
+checks:
+  tcp: { type: tcp, host: 127.0.0.1, port: 80 }
+rules:
+  restart-if-tcp-failed:
+    type: remediation
+    if: { failed: { check: tcp } }
+    for: { cycles: 3 }
+    then: { action: restart }
+`)
+	if len(errs) != 0 {
+		t.Fatalf("explicit resolve errors = %v", errs)
+	}
+	if !reflect.DeepEqual(unified["checks"], explicit["checks"]) {
+		t.Fatalf("checks differ:\n unified=%#v\n explicit=%#v", unified["checks"], explicit["checks"])
+	}
+	if !reflect.DeepEqual(unified["rules"], explicit["rules"]) {
+		t.Fatalf("rules differ:\n unified=%#v\n explicit=%#v", unified["rules"], explicit["rules"])
+	}
+}
+
+// TestUnifiedWatchCoexistsWithRules covers a service carrying both a kept rule
+// (a shape the desugar does not migrate) and a migrated watch: the desugar must
+// append to the existing rules map, not clobber it.
+func TestUnifiedWatchCoexistsWithRules(t *testing.T) {
+	tree, errs := resolveWatchService(t, `
+rules:
+  restart-if-lib-changed:
+    type: remediation
+    if: { changed: { path: /usr/lib/x.so } }
+    then: { action: restart }
+watches:
+  restart-if-tcp-failed:
+    check: { type: tcp, host: 127.0.0.1, port: 80 }
+    for: { cycles: 3 }
+    then: { action: restart }
+`)
+	if len(errs) != 0 {
+		t.Fatalf("resolve errors = %v", errs)
+	}
+	rules := nested(t, tree, "rules")
+	if _, ok := rules["restart-if-lib-changed"]; !ok {
+		t.Fatalf("the kept changed-rule must survive, got %v", rules)
+	}
+	if _, ok := rules["restart-if-tcp-failed"]; !ok {
+		t.Fatalf("the migrated watch must desugar into the same rules map, got %v", rules)
+	}
+}
+
 func hasIssueSubstr(errs []string, sub string) bool {
 	for _, e := range errs {
 		if strings.Contains(e, sub) {
