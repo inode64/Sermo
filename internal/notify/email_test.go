@@ -315,6 +315,27 @@ func TestBuildMailMessageHeadersAndInjectionGuard(t *testing.T) {
 	}
 }
 
+func TestCRLFBodyNormalizesLineEndings(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "line feeds", body: "line1\nline2", want: "line1\r\nline2\r\n"},
+		{name: "existing crlf", body: "line1\r\nline2\r\n", want: "line1\r\nline2\r\n"},
+		{name: "carriage returns", body: "line1\rline2", want: "line1\r\nline2\r\n"},
+		{name: "empty", body: "", want: "\r\n"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := crlfBody(tc.body); got != tc.want {
+				t.Fatalf("crlfBody(%q) = %q, want %q", tc.body, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestBuildMailMessageEncodesNonASCIISubject(t *testing.T) {
 	raw := renderMailMessage(t, "sermo@example.com", []string{"a@example.com"}, Message{
 		Subject: "Alerta de memoria: 95% en café",

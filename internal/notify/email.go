@@ -255,6 +255,8 @@ func buildMailMessage(from string, to []string, msg Message) (*gomail.Msg, error
 }
 
 func crlfBody(body string) string {
+	body = strings.ReplaceAll(body, "\r\n", "\n")
+	body = strings.ReplaceAll(body, "\r", "\n")
 	body = strings.ReplaceAll(body, "\n", "\r\n")
 	if !strings.HasSuffix(body, "\r\n") {
 		body += "\r\n"
