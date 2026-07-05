@@ -29,6 +29,10 @@ const (
 	kindStorage  = "storage"
 )
 
+// sectionStopPolicy is the per-service/mount block declaring the stopped-state
+// invariants (pidfile/file cleanup) the engine enforces.
+const sectionStopPolicy = "stop_policy"
+
 // Catalog categories mirror the catalog subdirectory a definition is loaded
 // from (catalog/services, catalog/apps, catalog/libs, catalog/patterns). The
 // category tracks the kind for display and category-scoped listings.
@@ -82,7 +86,7 @@ var metaKeys = map[string]struct{}{
 
 // perServiceDefaults are the only parts of global `defaults` that merge into a
 // service. Engine-wide settings never reach individual services.
-var perServiceDefaults = []string{"dry_run", "stop_policy", "policy", "rule_window"}
+var perServiceDefaults = []string{"dry_run", sectionStopPolicy, "policy", "rule_window"}
 
 // perStorageDefaults are the only parts of global `defaults` that merge into a
 // storage target.
@@ -402,7 +406,7 @@ type CleanPath struct {
 // deleting the `clean_on_stop` list; with it off the invariants are verified and
 // warned about but nothing is deleted. All zero when absent.
 func StopInvariants(tree map[string]any) (pidfilePaths, files []string, clean bool, cleanPaths []CleanPath) {
-	sp, ok := tree["stop_policy"].(map[string]any)
+	sp, ok := tree[sectionStopPolicy].(map[string]any)
 	if !ok {
 		return nil, nil, false, nil
 	}
