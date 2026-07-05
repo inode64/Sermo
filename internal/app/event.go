@@ -29,9 +29,11 @@ type Event struct {
 // Event kind values for Event.Kind. Centralized kinds live here; the full
 // vocabulary is listed on the Kind field doc.
 const (
-	eventKindDryRun    = "dry-run"
-	eventKindFiring    = "firing"
-	eventKindRecovered = "recovered"
+	eventKindDryRun     = "dry-run"
+	eventKindFiring     = "firing"
+	eventKindRecovered  = "recovered"
+	eventKindHookFail   = "hook-failed"
+	eventKindNotifyFail = "notify-failed"
 )
 
 // resultOutput extracts the bounded command output a check stored under
@@ -106,7 +108,7 @@ func SlogEmitter(logger *slog.Logger) func(Event) {
 			attrs = append(attrs, "message", e.Message)
 		}
 		switch e.Kind {
-		case "error", "hook-failed", "notify-failed":
+		case "error", eventKindHookFail, eventKindNotifyFail:
 			logger.Error("sermod", attrs...)
 		case "action", "alert", "suppressed", eventKindFiring, eventKindRecovered, eventKindDryRun, "hook", "notify", "cascade":
 			logger.Info("sermod", attrs...)
