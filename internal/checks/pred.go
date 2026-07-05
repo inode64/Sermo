@@ -75,6 +75,9 @@ const (
 	// (net/icmp state/speed/address, command on_change) reports in its data map.
 	fieldOld = "old"
 	fieldNew = "new"
+	// fieldMetric is the result data-map key naming the sub-metric a multi-metric
+	// check (net/icmp/swap) reported.
+	fieldMetric = "metric"
 )
 
 // Predicate field lists, one per level check. They are exported so config
