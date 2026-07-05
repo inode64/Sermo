@@ -1039,6 +1039,10 @@ func validateInfluxFields(prefix string, fields map[string]any, add addFunc) {
 	}
 	if cfgval.String(fields["value"]) == "" {
 		add("%s.value is required for an influxdb-query check", prefix)
+	} else if cfgval.IsAssertOp(op) {
+		if err := checks.ValidateAssertionValue(prefix, op, cfgval.String(fields["value"])); err != nil {
+			add("%s", err)
+		}
 	}
 	language := cfgval.String(fields["language"])
 	if language == "" {

@@ -182,6 +182,8 @@ func TestBuildInfluxCheckErrors(t *testing.T) {
 		{"type": "influxdb-query", "database": "d", "query": "SELECT 1", "value": "1"},                           // no/blank op
 		{"type": "influxdb-query", "database": "d", "query": "SELECT 1", "op": "~~", "value": "1"},               // bad op
 		{"type": "influxdb-query", "database": "d", "query": "SELECT 1", "op": "<"},                              // no value
+		{"type": "influxdb-query", "database": "d", "query": "SELECT 1", "op": "<", "value": "many"},             // non-numeric ordering value
+		{"type": "influxdb-query", "database": "d", "query": "SELECT 1", "op": "=~", "value": "["},               // bad regex
 		{"type": "influxdb-query", "language": "flux", "token": "t", "query": "from()", "op": "<", "value": "1"}, // flux without org
 		{"type": "influxdb-query", "language": "flux", "org": "o", "query": "from()", "op": "<", "value": "1"},   // flux without token
 		{"type": "influxdb-query", "language": "promql", "database": "d", "query": "x", "op": "<", "value": "1"}, // bad language

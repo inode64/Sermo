@@ -229,11 +229,14 @@ func buildInfluxCheck(b base, entry map[string]any) (Check, string) {
 	}
 	op := cfgval.AsString(entry["op"])
 	if !validCompareOp(op) {
-		return nil, "influxdb-query check op must be one of ==, !=, >, >=, <, <=, =~"
+		return nil, "influxdb-query check op must be one of ==, !=, >, >=, <, <=, contains, =~"
 	}
 	value := cfgval.String(entry["value"])
 	if value == "" {
 		return nil, "influxdb-query check requires a value"
+	}
+	if err := ValidateAssertionValue("value", op, value); err != nil {
+		return nil, "influxdb-query check " + err.Error()
 	}
 	language := cfgval.AsString(entry["language"])
 	if language == "" {
