@@ -68,7 +68,7 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 			state = netStateUp
 		}
 		if c.expect != "" {
-			data["value"] = state
+			data[fieldValue] = state
 			res := c.result(state == c.expect, fmt.Sprintf("%s %s (want %s)", c.host, state, c.expect), start)
 			res.Data = data
 			return res
@@ -80,7 +80,7 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 			return res
 		}
 		changed := state != c.lastState
-		data[fieldOld], data[fieldNew], data["value"] = c.lastState, state, state
+		data[fieldOld], data[fieldNew], data[fieldValue] = c.lastState, state, state
 		msg := fmt.Sprintf("%s state %s->%s", c.host, c.lastState, state)
 		c.lastState = state
 		res := c.result(changed, msg, start)
@@ -94,7 +94,7 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 			return res
 		}
 		if c.hasThreshold {
-			data["value"] = s.RTTms
+			data[fieldValue] = s.RTTms
 			met := compareFloat(s.RTTms, c.op, c.value)
 			res := c.result(met, fmt.Sprintf("%s rtt %.1fms %s %.1f", c.host, s.RTTms, c.op, c.value), start)
 			res.Data = data
@@ -112,7 +112,7 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 			diff = -diff
 		}
 		changed := diff > c.delta
-		data[fieldOld], data[fieldNew], data["value"] = c.lastRTT, s.RTTms, s.RTTms
+		data[fieldOld], data[fieldNew], data[fieldValue] = c.lastRTT, s.RTTms, s.RTTms
 		msg := fmt.Sprintf("%s rtt %.1f->%.1fms (|Δ|=%.1f > %.1f)", c.host, c.lastRTT, s.RTTms, diff, c.delta)
 		c.lastRTT = s.RTTms
 		res := c.result(changed, msg, start)

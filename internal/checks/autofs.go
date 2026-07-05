@@ -42,7 +42,7 @@ func (c autofsCheck) Run(_ context.Context) Result {
 			points = append(points, mounts[i].MountPoint)
 		}
 	}
-	data := map[string]any{"count": len(points), "value": len(points), "mountpoints": strings.Join(points, ",")}
+	data := map[string]any{"count": len(points), fieldValue: len(points), "mountpoints": strings.Join(points, ",")}
 
 	if c.path != "" {
 		ok := slices.Contains(points, c.path)

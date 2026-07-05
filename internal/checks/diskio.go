@@ -95,7 +95,7 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 		fieldWriteBytes: rates.WriteBytes,
 		fieldAwaitMs:    rates.AwaitMs,
 	}
-	res.Data["value"] = firstPredValue(c.preds, values, rates.UtilPct)
+	res.Data[fieldValue] = firstPredValue(c.preds, values, rates.UtilPct)
 	return res
 }
 

@@ -77,7 +77,7 @@ func (c *swapCheck) Run(_ context.Context) Result {
 		values := map[string]float64{fieldUsedPct: usedPct, fieldFreePct: freePct, fieldFreeBytes: float64(s.FreeBytes)}
 		ok := levelPredsHold(c.preds, values)
 		data[fieldUsedPct], data[fieldFreePct] = usedPct, freePct
-		data["value"] = firstPredValue(c.preds, values, usedPct)
+		data[fieldValue] = firstPredValue(c.preds, values, usedPct)
 		res := c.result(ok, fmt.Sprintf("swap used %.1f%% free %.1f%% (%d bytes free)", usedPct, freePct, s.FreeBytes), start)
 		res.Data = data
 		return res
@@ -92,7 +92,7 @@ func (c *swapCheck) Run(_ context.Context) Result {
 		}
 		delta := deltaOrZero(total, c.lastIO)
 		c.lastIO = total
-		data["value"], data["pages"] = delta, total
+		data[fieldValue], data["pages"] = delta, total
 		met := compareFloat(float64(delta), c.op, c.value)
 		res := c.result(met, fmt.Sprintf("swap io +%d pages/cycle (total %d)", delta, total), start)
 		res.Data = data

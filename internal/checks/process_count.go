@@ -38,7 +38,7 @@ func (c processCountCheck) Run(_ context.Context) Result {
 	values := map[string]float64{"count": float64(n)}
 	ok := levelPredsHold(c.preds, values)
 	res := c.result(ok, fmt.Sprintf("%d process(es)%s", n, c.scope()), start)
-	res.Data = map[string]any{"count": n, "value": float64(n)}
+	res.Data = map[string]any{"count": n, fieldValue: float64(n)}
 	return res
 }
 

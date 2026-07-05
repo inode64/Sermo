@@ -62,7 +62,7 @@ func (c firewallRulesCheck) Run(ctx context.Context) Result {
 		"backend":   sample.Backend,
 		"rules":     sample.Rules,
 		"min_rules": c.minRules,
-		"value":     sample.Rules,
+		fieldValue:  sample.Rules,
 	}
 	return res
 }
