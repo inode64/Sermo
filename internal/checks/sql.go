@@ -122,9 +122,15 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 	}
 	op := cfgval.AsString(entry["op"])
 	if !validCompareOp(op) {
-		return nil, "sql check op must be one of ==, !=, >, >=, <, <=, =~"
+		return nil, "sql check op must be one of ==, !=, >, >=, <, <=, contains, =~"
 	}
 	value := cfgval.String(entry["value"])
+	if value == "" {
+		return nil, "sql check requires a value"
+	}
+	if err := ValidateAssertionValue("value", op, value); err != nil {
+		return nil, "sql check " + err.Error()
+	}
 
 	var dsn string
 	switch driver {
