@@ -1550,17 +1550,3 @@ func parseStatusMatcher(v any) (statusMatcher, error) {
 	}
 	return m, nil
 }
-
-func validateAssertionValue(label, op, value string) error {
-	switch op {
-	case ">", ">=", "<", "<=":
-		if _, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err != nil {
-			return fmt.Errorf("%s value %q must be numeric for op %s", label, value, op)
-		}
-	case "=~":
-		if _, err := regexp.Compile(value); err != nil {
-			return fmt.Errorf("%s value is not a valid regexp: %w", label, err)
-		}
-	}
-	return nil
-}

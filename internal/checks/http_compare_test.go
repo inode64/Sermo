@@ -154,6 +154,9 @@ func TestHTTPLatency(t *testing.T) {
 	if res := runHTTP(t, srv, map[string]any{"url": srv.URL + "/text", "expect_latency": map[string]any{"op": "<", "value": "0"}}); res.OK {
 		t.Fatalf("latency < 0 must fail")
 	}
+	if _, warn := buildHTTP(t, srv, map[string]any{"type": "http", "url": srv.URL + "/text", "expect_latency": map[string]any{"op": "<", "value": "abc"}}); !strings.Contains(warn, "must be numeric") {
+		t.Fatalf("invalid latency warning = %q", warn)
+	}
 }
 
 func TestHTTPJSONRegex(t *testing.T) {
