@@ -87,7 +87,7 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 		res.Data = data
 		return res
 
-	case "latency":
+	case icmpMetricLatency:
 		if !s.RTTKnown {
 			res := c.result(false, fmt.Sprintf("%s unreachable (no rtt)", c.host), start)
 			res.Data = data
