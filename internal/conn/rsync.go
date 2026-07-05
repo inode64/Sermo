@@ -46,7 +46,7 @@ func (rsyncProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	return Result{
 		Version: version,
-		Extra:   map[string]string{"greeting": line, "protocol": version},
+		Extra:   map[string]string{extraGreeting: line, "protocol": version},
 	}, nil
 }
 

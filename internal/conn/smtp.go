@@ -33,7 +33,7 @@ func smtpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	res := Result{Extra: map[string]string{"greeting": greeting}}
+	res := Result{Extra: map[string]string{extraGreeting: greeting}}
 	if code != 220 {
 		return Result{}, fmt.Errorf("unexpected greeting: %d %s", code, greeting)
 	}

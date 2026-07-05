@@ -23,6 +23,9 @@ const (
 	// by whether TLS is in use.
 	schemeHTTP  = "http"
 	schemeHTTPS = "https"
+	// extraGreeting is the Result.Extra key carrying a text-protocol server's
+	// greeting/banner line (ftp, imap, pop, nntp, rsync, sieve, …).
+	extraGreeting = "greeting"
 )
 
 // Config is the connection target for a protocol probe. Fields that do not apply

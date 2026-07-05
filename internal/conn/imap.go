@@ -33,7 +33,7 @@ func imapHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	res := Result{Extra: map[string]string{"greeting": strings.TrimSpace(greeting)}}
+	res := Result{Extra: map[string]string{extraGreeting: strings.TrimSpace(greeting)}}
 
 	preauth := strings.HasPrefix(greeting, "* PREAUTH")
 	if !strings.HasPrefix(greeting, "* OK") && !preauth {

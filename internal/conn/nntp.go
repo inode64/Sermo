@@ -38,7 +38,7 @@ func nntpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 		return Result{}, fmt.Errorf("unexpected greeting: %d %s", code, greeting)
 	}
 	res := Result{Extra: map[string]string{
-		"greeting":        greeting,
+		extraGreeting:     greeting,
 		"posting_allowed": strconv.FormatBool(code == 200),
 	}}
 
