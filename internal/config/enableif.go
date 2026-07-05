@@ -8,6 +8,9 @@ import (
 	"strings"
 )
 
+// keyEnableIf is the per-entry gate key (and its label/path prefix in diagnostics).
+const keyEnableIf = "enable_if"
+
 var (
 	enableIfSections = set("checks", "preflight", "processes")
 	enableIfKeys     = set("file", "key", "contains", "equals", "matches")
@@ -20,7 +23,7 @@ func pruneEnableIf(v any, path []string) any {
 		for k, e := range t {
 			childPath := appendPath(path, k)
 			if child, ok := e.(map[string]any); ok {
-				if spec, has := child["enable_if"]; has {
+				if spec, has := child[keyEnableIf]; has {
 					if !enableIfAllowedAt(childPath) {
 						out[k] = pruneEnableIf(child, childPath)
 						continue
@@ -29,7 +32,7 @@ func pruneEnableIf(v any, path []string) any {
 						continue // predicate failed: drop the optional branch
 					}
 					child = cloneMap(child)
-					delete(child, "enable_if")
+					delete(child, keyEnableIf)
 					out[k] = pruneEnableIf(child, childPath)
 					continue
 				}
@@ -69,10 +72,10 @@ func validateEnableIfTree(tree map[string]any, add addFunc) {
 func walkEnableIf(v any, path []string, add addFunc) {
 	switch t := v.(type) {
 	case map[string]any:
-		if spec, has := t["enable_if"]; has {
+		if spec, has := t[keyEnableIf]; has {
 			label := strings.Join(path, ".")
 			if label == "" {
-				label = "enable_if"
+				label = keyEnableIf
 			}
 			if !enableIfAllowedAt(path) {
 				add("%s.enable_if is only supported on entries under checks, preflight or processes", label)
@@ -143,7 +146,7 @@ func enableIfHolds(spec any) bool {
 		return false
 	}
 	valid := true
-	validateEnableIfSpec("enable_if", spec, func(string, ...any) {
+	validateEnableIfSpec(keyEnableIf, spec, func(string, ...any) {
 		valid = false
 	})
 	if !valid {
