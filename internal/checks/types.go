@@ -19,6 +19,7 @@ import (
 	"sermo/internal/conn"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
+	"sermo/internal/output"
 	"sermo/internal/servicemgr"
 )
 
@@ -347,7 +348,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	// emitted event can show WHY the command failed.
 	fail := func(msg string) Result {
 		r := c.result(false, msg, start)
-		if out := BoundedOutput(res.Stdout, res.Stderr); out != "" {
+		if out := output.Bounded(res.Stdout, res.Stderr); out != "" {
 			r.Data = map[string]any{DataKeyOutput: out}
 		}
 		return r
@@ -361,7 +362,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	}
 	if !ExitCodeExpected(res.ExitCode, c.expectExit) {
 		msg := fmt.Sprintf("exit %d (want %s)", res.ExitCode, ExpectExitText(c.expectExit))
-		if stderr := FirstNonEmptyLine(res.Stderr); stderr != "" {
+		if stderr := output.FirstNonEmptyLine(res.Stderr); stderr != "" {
 			msg += ": " + stderr
 		} else if err != nil {
 			msg += ": " + err.Error()
@@ -379,20 +380,20 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	}
 	if c.analyzer.Active() {
 		if sev, id, line := c.analyzer.Analyze(res.Stdout, res.Stderr); sev != SevOK {
-			r := c.result(false, fmt.Sprintf("exit %d; %s pattern %q: %s", res.ExitCode, sev, id, FirstNonEmptyLine(line)), start)
+			r := c.result(false, fmt.Sprintf("exit %d; %s pattern %q: %s", res.ExitCode, sev, id, output.FirstNonEmptyLine(line)), start)
 			r.Optional = sev == SevWarning
 			r.Data = map[string]any{"pattern_id": id, "pattern_severity": sev.String(), "pattern_line": line}
-			if out := BoundedOutput(res.Stdout, res.Stderr); out != "" {
+			if out := output.Bounded(res.Stdout, res.Stderr); out != "" {
 				r.Data[DataKeyOutput] = out
 			}
 			return r
 		}
 	}
 	if c.onChange && c.state != nil {
-		raw := TrimOutput(res.Stdout)
+		raw := output.Trim(res.Stdout)
 		key := c.changeKey(raw)
 		if c.state.primed && key != c.state.last {
-			r := c.result(false, fmt.Sprintf("output changed (%s -> %s)", FirstNonEmptyLine(c.state.lastRaw), FirstNonEmptyLine(raw)), start)
+			r := c.result(false, fmt.Sprintf("output changed (%s -> %s)", output.FirstNonEmptyLine(c.state.lastRaw), output.FirstNonEmptyLine(raw)), start)
 			r.Data = map[string]any{fieldOld: c.state.lastRaw, fieldNew: raw}
 			c.state.last, c.state.lastRaw = key, raw
 			return r
@@ -905,73 +906,4 @@ func dedupPreserveOrder(dirs []string) []string {
 		}
 	}
 	return out
-}
-
-// TrimOutput removes surrounding whitespace from captured command, SQL,
-// protocol and hook text while preserving meaningful internal line breaks.
-func TrimOutput(s string) string {
-	return strings.TrimSpace(s)
-}
-
-// FirstNonEmptyLine returns the first non-empty line of s, trimmed — the
-// compact one-line form used in check, hook and version messages. Shared so
-// app and appinspect do not carry their own copies.
-func FirstNonEmptyLine(s string) string {
-	clean := TrimOutput(s)
-	for _, line := range strings.Split(clean, "\n") {
-		if t := strings.TrimSpace(line); t != "" {
-			return t
-		}
-	}
-	return ""
-}
-
-// Bounds for BoundedOutput: command output kept in an event is capped so a
-// chatty command cannot bloat the event log or the dashboard.
-const (
-	boundedOutputMaxLines = 40
-	boundedOutputMaxBytes = 4096
-)
-
-// BoundedOutput combines a failing command's stdout and stderr into the diagnostic
-// blob stored on an event's Output field. It keeps the TAIL (errors usually print
-// last) within ~40 lines / ~4 KB, labelling each stream, and prefixes a
-// "… (truncated)" marker when anything was dropped. Returns "" when both streams
-// are empty.
-func BoundedOutput(stdout, stderr string) string {
-	var parts []string
-	if s := TrimOutput(stdout); s != "" {
-		parts = append(parts, "stdout:\n"+s)
-	}
-	if s := TrimOutput(stderr); s != "" {
-		parts = append(parts, "stderr:\n"+s)
-	}
-	if len(parts) == 0 {
-		return ""
-	}
-	return boundTail(strings.Join(parts, "\n"))
-}
-
-// boundTail trims s to the last boundedOutputMaxLines lines and boundedOutputMaxBytes
-// bytes, marking the cut with a leading "… (truncated)" line.
-func boundTail(s string) string {
-	truncated := false
-	lines := strings.Split(s, "\n")
-	if len(lines) > boundedOutputMaxLines {
-		lines = lines[len(lines)-boundedOutputMaxLines:]
-		truncated = true
-	}
-	s = strings.Join(lines, "\n")
-	if len(s) > boundedOutputMaxBytes {
-		s = s[len(s)-boundedOutputMaxBytes:]
-		// Drop a partial first line left by the byte cut.
-		if i := strings.IndexByte(s, '\n'); i >= 0 {
-			s = s[i+1:]
-		}
-		truncated = true
-	}
-	if truncated {
-		return "… (truncated)\n" + s
-	}
-	return s
 }

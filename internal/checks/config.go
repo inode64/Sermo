@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/output"
 )
 
 // configCheck verifies a service/app's configuration: it runs an optional
@@ -44,9 +45,9 @@ func (c configCheck) Run(ctx context.Context) Result {
 		}
 		if res.ExitCode != 0 {
 			msg := "config invalid"
-			if s := FirstNonEmptyLine(res.Stderr); s != "" {
+			if s := output.FirstNonEmptyLine(res.Stderr); s != "" {
 				msg += ": " + s
-			} else if s := FirstNonEmptyLine(res.Stdout); s != "" {
+			} else if s := output.FirstNonEmptyLine(res.Stdout); s != "" {
 				msg += ": " + s
 			} else if err != nil {
 				msg += ": " + err.Error()
