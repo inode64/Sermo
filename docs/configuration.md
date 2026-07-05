@@ -1446,6 +1446,44 @@ watch: it appears in the web UI Watches panel and responds to
 `sermoctl watch monitor|unmonitor <service>:<watch>`. Unmonitoring the **service**
 does not touch its watches — their monitor state is independent.
 
+#### Unified `then.action` (operation / guard / alert)
+
+A service watch's `then` may declare an **`action`** instead of the fire-and-forget
+`hook`/`expand`/`kill`, so one `watches:` entry expresses a check **and** its
+remediation/guard/alert together:
+
+- `action: restart | start | stop | reload | resume` — a **remediation** that runs
+  through the operation engine (service lock, guards, cooldown/backoff/rate-limit,
+  post-operation settling, panic mode) exactly like a `rules:` remediation.
+- `action: block` with `blocks: [restart, start, …]` — a **guard** evaluated
+  *during* an operation that refuses the listed actions while the check fails.
+- `action: alert` (with an optional `message`/`notify`) — an **alert**.
+
+Such an entry is **desugared** to a generated `checks:` probe (named after the
+watch, embedding its `check:` — so two watches sharing an endpoint probe it twice)
+plus the equivalent `rules:` entry, so it is exactly equivalent to writing that
+check + rule by hand and inherits every safety gate (including the rule that a
+`scope: system` metric can never drive a service action). The condition polarity
+follows the check: a **health** check (tcp/http/service/command/cert/…) fires on
+**failure**; a **condition** check (metric/storage/load/…) fires when its
+**threshold** is met.
+
+A watch is **either** an operation/alert (it has `then.action`) **or** a
+fire-and-forget side effect (`hook`/`expand`/`kill`) — not both. This is
+**additive**: the classic `checks:` + `rules:` sections remain fully valid, and the
+catalog still uses them.
+
+```yaml
+watches:
+  restart-if-tcp-failed:       # desugars to checks.restart-if-tcp-failed + a remediation rule
+    check: { type: tcp, host: "${host}", port: "${port}" }
+    for: { cycles: 3 }
+    then: { action: restart }
+  block-restart-during-backup: # a guard: refuse restart while the backup process runs
+    check: { type: process_count, exe: "${backup_binary}", count: { op: ">", value: 0 } }
+    then: { action: block, blocks: [restart] }
+```
+
 ```yaml
 # services/mail-queue.yml — a watch scoped to this service
 name: mail-queue
