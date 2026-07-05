@@ -1414,8 +1414,9 @@ are protocol-agnostic, so a new protocol only registers itself.
 Every type above is a **single-shot check** (`Check.Run → Result`) and is usable in
 **both** places:
 
-- a service's `checks:`/`preflight:`/`postflight:` (and referenced from rules), and
-- a host **watch** document (or global `watches:` entry, firing a hook) — see [configuration](configuration.md#host-watches).
+- a service's `checks:`/`preflight:`/`postflight:` (and referenced from rules),
+- a host **watch** document (or global `watches:` entry, firing a hook) — see [configuration](configuration.md#host-watches), and
+- a service's own embedded `watches:` block (firing a hook scoped to the service, including the service-scoped `service`/`metric` types and the PID-tree-scoped `process_count`) — see [Service watches](configuration.md#service-watches-scoped-to-a-service).
 
 The host-resource checks (`storage`, `load`, `memory`, `pressure`, `fds`, `pids`,
 `diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`, `entropy`,

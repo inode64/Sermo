@@ -1079,8 +1079,10 @@ bare `check` + `for` example.
 
 `watches` monitor host-level resources independently of any service and run a
 **hook** (a local command) and/or send **notifications** (to named `notifiers`)
-when a threshold is crossed. They are daemon configuration; they never merge into
-a service.
+when a threshold is crossed. They are daemon configuration; a global `watches`
+document never merges into a service. (A service can also declare its own
+`watches:` block scoped to that service — see
+[Service watches](#service-watches-scoped-to-a-service) below.)
 
 > **Tip — generate configuration interactively.** `sermoctl wizard` can write
 > three different surfaces. The storage assistant (`volume`) prints storage
@@ -1402,6 +1404,79 @@ the single-metric form of `net`/`icmp`/`swap` (an explicit `metric:` field) also
 works in a service's `checks:` (see [Checks](rules.md#checks)).
 The WebUI shows live readings only for cheap local probes; command/network-heavy
 checks rely on their normal watch events.
+
+### Service watches (scoped to a service)
+
+A service can carry its own `watches:` block — the same entry shape as a host
+watch (a `check:`, an optional `for`/`within` window, and a `then` block with a
+`hook`, `notify`, `expand` or `kill`) — declared **inside the service document**.
+Events are labelled `<service>:<watch>`, and it reuses the whole host-watch
+runtime — firing/recovered windows, hooks, notifiers, dry-run — so the action
+vocabulary is identical.
+
+What "inside a service" adds over a host watch is the service's **check
+context**, scoped to the service's **PID tree** (its matched processes plus their
+descendants — parent and children — derived from the service's `processes:`
+selectors / init identity):
+
+- `process_count` counts only that tree, so it is immune to unrelated host
+  processes that share a user or exe. An optional `user`/`exe`/`exe_dir` narrows
+  *within* the tree.
+- `metric` (`cpu`, `cpu_thread`, `memory`, `io`, …) reads the **service scope**
+  by default — the summed reading over that same tree — from a dedicated per-watch
+  collector, so its rate deltas never collide with the engine's metric sampling.
+- `service` binds to this service's unit.
+
+Host-global checks (`fds`, `storage`, `count`, `load`, `http`, …) read the same
+host resource on either surface — a service watch does not per-service-clamp them.
+
+Use it when you want a **hook/notification** tied to a service-local signal that
+is not a remediation (which belongs in `rules:`): a growing spool directory, a
+CPU-hot worker thread, a backlog of files. The check kinds **not** available here
+are `net`/`icmp`/`swap` (host/network multi-metric watches — use the global
+`watches:` section) and the **`process` watch** (it matches processes host-wide
+and can `kill`, which is unsafe from a service scope — use `process_count`/
+`metric` for service-scoped process monitoring, or a host watch). (A system-scope
+metric, `scope: system`, is allowed but only ever alerts — it must never drive a
+service action; that safety rule is why remediation stays in `rules:`.)
+
+The watch name must not be `version` or `config` (reserved for the service's
+version/config monitors). A service watch is visible and pausable like a global
+watch: it appears in the web UI Watches panel and responds to
+`sermoctl watch monitor|unmonitor <service>:<watch>`. Unmonitoring the **service**
+does not touch its watches — their monitor state is independent.
+
+```yaml
+# services/mail-queue.yml — a watch scoped to this service
+name: mail-queue
+uses: postfix
+
+watches:
+  deferred-backlog:            # emitted as "mail-queue:deferred-backlog"
+    interval: 1m
+    check:
+      type: count
+      path: /var/spool/postfix/deferred
+      of: file
+      recursive: true
+      count: { op: ">=", value: 5000 }
+    for: { cycles: 3 }
+    then:
+      hook: { command: [/usr/local/bin/drain-queue.sh] }
+      notify: [ops-email]
+  worker-runaway:              # process_count over the service's PID tree
+    check:
+      type: process_count      # no user/exe needed — counts only this service's tree
+      count: { op: ">", value: 40 }
+    then:
+      notify: [ops-email]
+  thread-hot:                  # cpu_thread of the service tree, from a dedicated collector
+    interval: 30s
+    check: { type: metric, scope: service, name: cpu_thread, op: ">", value: "90%" }
+    for: { duration: 6m }
+    then:
+      notify: [ops-email]
+```
 
 ```yaml
 # /etc/sermo/storages/storage-root.yml

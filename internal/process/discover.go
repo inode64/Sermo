@@ -218,42 +218,87 @@ func (d Discoverer) ObserveAnyState(exes []string, user string) string {
 // under that directory. Reuses the Discoverer's process snapshot (shared cache
 // in the daemon).
 func (d Discoverer) CountMatching(user, exe, exeDir string) int {
-	reader := d.reader()
+	f, ok := d.buildProcessFilter(user, exe, exeDir)
+	if !ok {
+		return 0 // unknown user: nothing can match
+	}
+	n := 0
+	for _, id := range snapshotIdentities(d.reader()) {
+		if f.matchesIdentity(id) {
+			n++
+		}
+	}
+	return n
+}
 
-	var (
-		uid     uint32
-		haveUID bool
-	)
+// CountInTree counts the service's OWN processes — its selector matches plus
+// their descendants (the PID tree, parent and children) — that also pass the
+// optional user/exe/exe_dir filter. An all-empty filter counts the whole tree.
+// This scopes a process_count check to the service's PID set instead of the
+// whole host, so it is safe against unrelated same-user/same-exe processes.
+func (d Discoverer) CountInTree(selectors []Selector, user, exe, exeDir string) int {
+	f, ok := d.buildProcessFilter(user, exe, exeDir)
+	if !ok {
+		return 0
+	}
+	procs, _ := d.Discover(selectors)
+	n := 0
+	for _, p := range procs {
+		if f.matchesProcess(p) {
+			n++
+		}
+	}
+	return n
+}
+
+// processFilter is the resolved user/exe/exe_dir predicate shared by the
+// host-wide CountMatching and the tree-scoped CountInTree.
+type processFilter struct {
+	uid     uint32
+	haveUID bool
+	exePath string
+	dir     string
+}
+
+// buildProcessFilter resolves the filter fields once; ok is false when the user
+// name is unknown (nothing can match).
+func (d Discoverer) buildProcessFilter(user, exe, exeDir string) (processFilter, bool) {
+	var f processFilter
 	if user != "" {
 		u, ok := d.resolveUser()(user)
 		if !ok {
-			return 0 // unknown user: nothing can match
+			return f, false
 		}
-		uid, haveUID = u, true
+		f.uid, f.haveUID = u, true
 	}
-	exePath := ""
 	if exe != "" {
-		exePath = canonicalizePath(exe)
+		f.exePath = canonicalizePath(exe)
 	}
-	dir := ""
 	if exeDir != "" {
-		dir = canonicalizePath(exeDir)
+		f.dir = canonicalizePath(exeDir)
 	}
+	return f, true
+}
 
-	n := 0
-	for _, id := range snapshotIdentities(reader) {
-		if haveUID && id.UID != uid {
-			continue
-		}
-		if exePath != "" && (!id.ExeOK || id.Exe != exePath) {
-			continue
-		}
-		if dir != "" && (!id.ExeOK || !pathUnder(id.Exe, dir)) {
-			continue
-		}
-		n++
+func (f processFilter) match(uid uint32, exeOK bool, exe string) bool {
+	if f.haveUID && uid != f.uid {
+		return false
 	}
-	return n
+	if f.exePath != "" && (!exeOK || exe != f.exePath) {
+		return false
+	}
+	if f.dir != "" && (!exeOK || !pathUnder(exe, f.dir)) {
+		return false
+	}
+	return true
+}
+
+func (f processFilter) matchesIdentity(id Identity) bool {
+	return f.match(id.UID, id.ExeOK, id.Exe)
+}
+
+func (f processFilter) matchesProcess(p Process) bool {
+	return f.match(p.UID, p.ExeOK, p.Exe)
 }
 
 // pathUnder reports whether p lies under directory dir (a strict descendant), so

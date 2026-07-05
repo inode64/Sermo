@@ -1329,6 +1329,11 @@ Los documentos de watch de host usan los mismos valores de nivel superior
 `monitor: enabled | disabled | previous`; véase
 [configuration](configuration.es.md#host-watches).
 
+Un servicio también puede llevar su propio bloque `watches:` — watches por
+servicio que disparan un hook/notificación acotados al servicio (y pueden usar
+los tipos `service`/`metric` y el `process_count` acotado por PIDs). Véase
+[Watches de servicio](configuration.es.md#watches-de-servicio-acotados-a-un-servicio).
+
 ## Comandos auxiliares
 
 `commands` declara comandos auxiliares con nombre. Sermo nunca los ejecuta como checks

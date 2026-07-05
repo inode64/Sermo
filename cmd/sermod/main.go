@@ -266,7 +266,7 @@ func run(args []string) int {
 	// separate from the engine's so their rate deltas never corrupt each other.
 	deps.LiveCollector = metrics.New(metrics.OSReader{})
 
-	workers, warnings := app.BuildWorkers(cfg, deps, collector)
+	workers, svcWatches, warnings := app.BuildWorkers(cfg, deps, collector)
 	for _, w := range warnings {
 		logger.Warn("build workers", "warning", w)
 	}
@@ -276,11 +276,16 @@ func run(args []string) int {
 		logger.Warn("build watches", "warning", w)
 	}
 	hostWatches := len(watches)
+	// Service-embedded watches (a service's `watches:` section) run the host-watch
+	// runtime with per-service scoped check deps; they share the scheduler and
+	// readiness settling like host watches.
+	watches = append(watches, svcWatches...)
 	// App-watches monitor installed applications for errors on a slower cadence.
 	// They share the scheduler/generation machinery and count toward readiness
 	// first-cycle settling alongside host watches.
-	watches = append(watches, app.BuildAppWatches(cfg, deps)...)
-	logger.Debug("built monitor targets", "enabled_services", len(workers), "enabled_watches", hostWatches, "enabled_apps", len(watches)-hostWatches, "configured", app.HasConfiguredTargets(cfg))
+	appWatches := app.BuildAppWatches(cfg, deps)
+	watches = append(watches, appWatches...)
+	logger.Debug("built monitor targets", "enabled_services", len(workers), "enabled_watches", hostWatches, "enabled_service_watches", len(svcWatches), "enabled_apps", len(appWatches), "configured", app.HasConfiguredTargets(cfg))
 
 	if len(workers) == 0 && len(watches) == 0 {
 		if !app.HasConfiguredTargets(cfg) {

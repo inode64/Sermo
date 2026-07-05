@@ -95,6 +95,11 @@ type webWatch struct {
 	check         map[string]any
 	metrics       map[string]any
 	expand        *ExpandSpec
+	// serviceScoped marks a watch declared inside a service's `watches:` section
+	// (named "<service>:<watch>"). It is listed and controllable like any watch,
+	// but its live meter/readings are omitted: its checks are scoped to the
+	// service's PID tree, which the host-scoped web live-view path does not model.
+	serviceScoped bool
 }
 
 // webNotifier is a configured notification target (used by watches).
@@ -354,6 +359,26 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		}
 		wb.entries[name] = entry
 		wb.order = append(wb.order, name)
+
+		// Surface this service's embedded watches ("<service>:<watch>") so they are
+		// listed and controllable (monitor/unmonitor) in the web UI like host
+		// watches. Their live meter is omitted — the checks are scoped to the
+		// service PID tree, which the host-scoped web live-view path does not model.
+		if watchesSection, ok := resolved.Tree["watches"].(map[string]any); ok {
+			for _, wn := range slices.Sorted(maps.Keys(watchesSection)) {
+				wentry, ok := watchesSection[wn].(map[string]any)
+				if !ok || reservedServiceWatchName(wn) || unsupportedServiceWatchType(wentry) != "" {
+					continue
+				}
+				full := name + ":" + wn
+				ww, _ := newWebWatch(full, wentry, deps.GlobalNotify, iv, true)
+				if disabled {
+					ww.disabled = true
+				}
+				wb.watches[full] = ww
+				wb.watchOrder = append(wb.watchOrder, full)
+			}
+		}
 	}
 
 	// Also surface host watches in the web UI (including disabled ones). This is
@@ -363,51 +388,9 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	if raw, _ := cfg.ResolveWatches(); len(raw) > 0 {
 		for _, name := range slices.Sorted(maps.Keys(raw)) {
 			entry, _ := raw[name].(map[string]any)
-			disabled := cfgval.Disabled(entry)
-			ctype := ""
-			if ce, ok := entry["check"].(map[string]any); ok {
-				ctype = cfgval.AsString(ce["type"])
-			}
-			fireOnFail := checks.IsHealthType(ctype)
-			iv := cfgval.Duration(entry["interval"])
-			if iv <= 0 {
-				iv = 30 * time.Second
-			}
-			hasHook := false
-			var hookCommand []string
-			var notifierNames []string
-			var expand *ExpandSpec
-			if then, ok := entry["then"].(map[string]any); ok {
-				if h, ok := then["hook"].(map[string]any); ok && len(h) > 0 {
-					if cmd := h["command"]; cmd != nil {
-						hookCommand = cfgval.StringArray(cmd)
-						hasHook = len(hookCommand) > 0
-					}
-				}
-				notifierNames = effectiveNotify(cfgval.StringList(then["notify"]), deps.GlobalNotify)
-				if parsed, err := parseExpand(then, ctype); err != nil {
-					warnings = append(warnings, "watch "+name+": "+err.Error())
-				} else {
-					expand = parsed
-				}
-			}
-			ww := &webWatch{
-				name:          name,
-				displayName:   config.DisplayName(entry, name),
-				category:      config.CategoryLabel(entry, "watch"),
-				checkType:     ctype,
-				interval:      iv,
-				disabled:      disabled,
-				monitorMode:   config.MonitorMode(entry),
-				fireOnFail:    fireOnFail,
-				hasHook:       hasHook,
-				hookCommand:   hookCommand,
-				notifiers:     notifierNames,
-				dryRun:        config.DryRun(entry),
-				notifierCount: len(notifierNames),
-				check:         checkMap(entry),
-				metrics:       metricsMap(entry),
-				expand:        expand,
+			ww, warn := newWebWatch(name, entry, deps.GlobalNotify, 30*time.Second, false)
+			if warn != "" {
+				warnings = append(warnings, "watch "+name+": "+warn)
 			}
 			wb.watches[name] = ww
 			wb.watchOrder = append(wb.watchOrder, name)
@@ -431,6 +414,59 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	}
 
 	return wb, warnings
+}
+
+// newWebWatch builds the web-listing model for one watch entry, shared by host
+// watches and service-embedded watches. defaultInterval is used when the entry
+// sets no interval; serviceScoped marks it as a service watch (live view
+// omitted). warn is a non-empty message when the expand action is malformed.
+func newWebWatch(name string, entry map[string]any, globalNotify []string, defaultInterval time.Duration, serviceScoped bool) (*webWatch, string) {
+	ctype := ""
+	if ce, ok := entry["check"].(map[string]any); ok {
+		ctype = cfgval.AsString(ce["type"])
+	}
+	iv := cfgval.Duration(entry["interval"])
+	if iv <= 0 {
+		iv = defaultInterval
+	}
+	hasHook := false
+	var hookCommand []string
+	var notifierNames []string
+	var expand *ExpandSpec
+	var warn string
+	if then, ok := entry["then"].(map[string]any); ok {
+		if h, ok := then["hook"].(map[string]any); ok && len(h) > 0 {
+			if cmd := h["command"]; cmd != nil {
+				hookCommand = cfgval.StringArray(cmd)
+				hasHook = len(hookCommand) > 0
+			}
+		}
+		notifierNames = effectiveNotify(cfgval.StringList(then["notify"]), globalNotify)
+		if parsed, err := parseExpand(then, ctype); err != nil {
+			warn = err.Error()
+		} else {
+			expand = parsed
+		}
+	}
+	return &webWatch{
+		name:          name,
+		displayName:   config.DisplayName(entry, name),
+		category:      config.CategoryLabel(entry, "watch"),
+		checkType:     ctype,
+		interval:      iv,
+		disabled:      cfgval.Disabled(entry),
+		monitorMode:   config.MonitorMode(entry),
+		fireOnFail:    checks.IsHealthType(ctype),
+		hasHook:       hasHook,
+		hookCommand:   hookCommand,
+		notifiers:     notifierNames,
+		dryRun:        config.DryRun(entry),
+		notifierCount: len(notifierNames),
+		check:         checkMap(entry),
+		metrics:       metricsMap(entry),
+		expand:        expand,
+		serviceScoped: serviceScoped,
+	}, warn
 }
 
 func serviceDeclaresReload(tree map[string]any) bool {
@@ -796,7 +832,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		var meter *web.WatchMeter
 		var readings []web.WatchReading
 		liveSummary := ""
-		if !w.disabled {
+		if !w.disabled && !w.serviceScoped {
 			meter, readings, liveSummary = b.cachedWatchLiveView(w, system)
 		}
 		monitorMode := w.monitorMode
