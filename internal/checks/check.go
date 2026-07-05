@@ -20,6 +20,11 @@ import (
 	"sermo/internal/conn"
 )
 
+// DataKeyOutput is the Result.Data key under which a command check or app probe
+// stores its bounded stdout/stderr on failure. The daemon reads it to thread
+// command output into an event, so writer (checks) and reader (app) share it.
+const DataKeyOutput = "output"
+
 // Result is the observable outcome of one check.
 type Result struct {
 	Service   string         `json:"service,omitempty"`
