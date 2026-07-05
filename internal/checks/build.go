@@ -1524,7 +1524,7 @@ func parseStatusMatcher(v any) (statusMatcher, error) {
 			return statusMatcher{}, fmt.Errorf("expect_status op must be one of ==, !=, >, >=, <, <=, contains, =~")
 		}
 		value := cfgval.String(cond["value"])
-		if err := validateAssertionValue("expect_status", op, value); err != nil {
+		if err := ValidateAssertionValue("expect_status", op, value); err != nil {
 			return statusMatcher{}, err
 		}
 		return statusMatcher{op: op, value: value}, nil

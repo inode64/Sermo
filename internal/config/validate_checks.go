@@ -311,15 +311,8 @@ func validateOpValue(prefix, label string, m map[string]any, add addFunc) {
 		return
 	}
 	value := cfgval.String(m["value"])
-	switch op {
-	case ">", ">=", "<", "<=":
-		if !isNumeric(value) {
-			add("%s.%s value %q must be numeric for op %s", prefix, label, value, op)
-		}
-	case "=~":
-		if _, err := regexp.Compile(value); err != nil {
-			add("%s.%s value is not a valid regexp: %v", prefix, label, err)
-		}
+	if err := checks.ValidateAssertionValue(prefix+"."+label, op, value); err != nil {
+		add("%s", err)
 	}
 }
 

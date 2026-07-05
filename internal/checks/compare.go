@@ -93,7 +93,7 @@ func ParseOutputMatcher(v any) (OutputMatcher, string) {
 			return OutputMatcher{}, "op must be one of ==, !=, >, >=, <, <=, contains, =~"
 		}
 		value := cfgval.String(t["value"])
-		if err := validateAssertionValue("", op, value); err != nil {
+		if err := ValidateAssertionValue("", op, value); err != nil {
 			return OutputMatcher{}, err.Error()
 		}
 		return OutputMatcher{Op: op, Value: value}, ""
@@ -243,13 +243,14 @@ func parseExpectLatency(entry map[string]any) (op, value, warn string) {
 		return "", "", "expect_latency op must be one of ==, !=, >, >=, <, <=, contains, =~"
 	}
 	value = cfgval.String(lat["value"])
-	if err := validateAssertionValue("expect_latency", op, value); err != nil {
+	if err := ValidateAssertionValue("expect_latency", op, value); err != nil {
 		return "", "", err.Error()
 	}
 	return op, value, ""
 }
 
-func validateAssertionValue(label, op, value string) error {
+// ValidateAssertionValue checks the value side of response assertion operators.
+func ValidateAssertionValue(label, op, value string) error {
 	valueLabel := "value"
 	if label != "" {
 		valueLabel = label + " value"
