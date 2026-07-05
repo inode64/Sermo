@@ -975,7 +975,7 @@ func watchReadingsFailed(readings []web.WatchReading) bool {
 
 func isWatchActivityKind(kind string) bool {
 	switch kind {
-	case "firing", "recovered", eventKindDryRun, "hook", "notify", "hook-failed", "notify-failed", "expand", "expand-skipped", "expand-failed":
+	case eventKindFiring, eventKindRecovered, eventKindDryRun, "hook", "notify", "hook-failed", "notify-failed", "expand", "expand-skipped", "expand-failed":
 		return true
 	default:
 		return false
