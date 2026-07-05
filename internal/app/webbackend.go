@@ -2491,7 +2491,7 @@ func (b *WebBackend) ReleaseLock(_ context.Context, service, name string) web.Ac
 		id += "." + name
 	}
 	msg := "released inactive runtime lock " + id
-	b.emitLockReleaseEvent(service, name, "action", "ok", msg)
+	b.emitLockReleaseEvent(service, name, eventKindAction, "ok", msg)
 	return web.ActionResult{OK: true, Message: msg}
 }
 
@@ -2548,7 +2548,7 @@ func (b *WebBackend) ActivitySummary(ctx context.Context) web.ActivitySummary {
 
 	for _, e := range events {
 		switch {
-		case e.Kind == "action" && isServiceOperationAction(e.Action):
+		case e.Kind == eventKindAction && isServiceOperationAction(e.Action):
 			summary.ServiceActions++
 		case e.Kind == "hook" || e.Kind == eventKindHookFail:
 			summary.WatchHooks++
@@ -2976,7 +2976,7 @@ func (b *WebBackend) SetPanic(_ context.Context, on bool) web.ActionResult {
 	if !on {
 		msg = "panic mode disabled: normal operation resumed"
 	}
-	b.emitMonitorEvent("", action, "action", "ok", msg)
+	b.emitMonitorEvent("", action, eventKindAction, "ok", msg)
 	return web.ActionResult{OK: true, Message: msg}
 }
 
@@ -3205,7 +3205,7 @@ func (b *WebBackend) operationResultWithMonitor(ctx context.Context, name, actio
 	if err != nil {
 		b.emitMonitorEvent(name, action, "error", "", err.Error())
 	} else if change.Changed {
-		b.emitMonitorEvent(name, change.Action, "action", "ok", change.Message)
+		b.emitMonitorEvent(name, change.Action, eventKindAction, "ok", change.Message)
 	}
 	if err := finishOperationSettlingWithActive(b.operationSettling, name, action, state.SourceWeb, r, nil, activeAfterStart); err != nil {
 		b.emitMonitorEvent(name, action, "error", "", err.Error())
@@ -3391,7 +3391,7 @@ func (b *WebBackend) SetMonitored(_ context.Context, name string, monitored bool
 	if !monitored {
 		msg = "monitoring paused"
 	}
-	b.emitMonitorEvent(name, action, "action", "ok", msg)
+	b.emitMonitorEvent(name, action, eventKindAction, "ok", msg)
 	return nil
 }
 
@@ -3435,7 +3435,7 @@ func (b *WebBackend) SetWatchMonitored(_ context.Context, name string, monitored
 	if !monitored {
 		msg = "monitoring paused"
 	}
-	b.emitWatchMonitorEvent(name, action, "action", "ok", msg)
+	b.emitWatchMonitorEvent(name, action, eventKindAction, "ok", msg)
 	return nil
 }
 
