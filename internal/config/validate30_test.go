@@ -987,7 +987,7 @@ name: svc
 service: x
 policy: { cooldown: 5m }
 checks:
-  scan: { type: ports, host: 127.0.0.1, ports: "80,443,1024-4000", expect: open, match: any, on_change: true }
+  scan: { type: ports, host: 127.0.0.1, ports: "80,443,1024-4000", expect: open, match: any, on_change: true, connect_timeout: 500ms }
 `)
 	if hasIssue(good, "checks.scan") {
 		t.Fatalf("a valid ports check was flagged: %v", good)
@@ -1004,6 +1004,7 @@ checks:
   too-many:   { type: ports, ports: "1-20000" }
   bad-expect: { type: ports, ports: "80", expect: weird }
   bad-match:  { type: ports, ports: "80", match: most }
+  bad-timeout: { type: ports, ports: "80", connect_timeout: fast }
 `)
 	mustHave(t, bad, "checks.no-ports.ports is required")
 	mustHave(t, bad, `checks.bad-range.ports range "100-50" is out of 1..65535`)
@@ -1011,6 +1012,7 @@ checks:
 	mustHave(t, bad, "checks.too-many.ports too many ports")
 	mustHave(t, bad, "checks.bad-expect.expect must be open, closed or any")
 	mustHave(t, bad, "checks.bad-match.match must be all, any or none")
+	mustHave(t, bad, "checks.bad-timeout.connect_timeout must be a valid positive duration")
 }
 
 func TestValidateCheckGate(t *testing.T) {
