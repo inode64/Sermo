@@ -393,7 +393,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		key := c.changeKey(raw)
 		if c.state.primed && key != c.state.last {
 			r := c.result(false, fmt.Sprintf("output changed (%s -> %s)", FirstNonEmptyLine(c.state.lastRaw), FirstNonEmptyLine(raw)), start)
-			r.Data = map[string]any{"old": c.state.lastRaw, "new": raw}
+			r.Data = map[string]any{fieldOld: c.state.lastRaw, fieldNew: raw}
 			c.state.last, c.state.lastRaw = key, raw
 			return r
 		}

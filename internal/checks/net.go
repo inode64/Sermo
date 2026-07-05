@@ -89,7 +89,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 			return res
 		}
 		changed := s.State != c.lastState
-		data["old"], data["new"], data["value"] = c.lastState, s.State, s.State
+		data[fieldOld], data[fieldNew], data["value"] = c.lastState, s.State, s.State
 		msg := fmt.Sprintf("%s state %s->%s", c.iface, c.lastState, s.State)
 		c.lastState = s.State
 		res := c.result(changed, msg, start)
@@ -109,7 +109,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 			return res
 		}
 		changed := s.SpeedMbps != c.lastSpeed
-		data["old"], data["new"], data["value"] = c.lastSpeed, s.SpeedMbps, s.SpeedMbps
+		data[fieldOld], data[fieldNew], data["value"] = c.lastSpeed, s.SpeedMbps, s.SpeedMbps
 		msg := fmt.Sprintf("%s speed %d->%d", c.iface, c.lastSpeed, s.SpeedMbps)
 		c.lastSpeed = s.SpeedMbps
 		res := c.result(changed, msg, start)
@@ -157,7 +157,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 			return res
 		}
 		changed := joined != c.lastAddrs
-		data["old"], data["new"], data["value"] = c.lastAddrs, joined, joined
+		data[fieldOld], data[fieldNew], data["value"] = c.lastAddrs, joined, joined
 		msg := fmt.Sprintf("%s address %s->%s", c.iface, c.lastAddrs, joined)
 		c.lastAddrs = joined
 		res := c.result(changed, msg, start)
