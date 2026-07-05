@@ -196,7 +196,7 @@ func (w *fileWatcher) fire(ctx context.Context, path, change, msg string, extra 
 		env[k] = v
 	}
 	if w.dryRun {
-		w.emitEvent(Event{Watch: w.name, Kind: "dry-run", Message: watchDryRunMessage(w.hook, w.notifiers, nil) + ": " + msg})
+		w.emitEvent(Event{Watch: w.name, Kind: eventKindDryRun, Message: watchDryRunMessage(w.hook, w.notifiers, nil) + ": " + msg})
 		dispatchDryRunNotify(ctx, w.notifiers, watchMessage(w.name, msg, env), w.name, w.emitEvent)
 		return
 	}
