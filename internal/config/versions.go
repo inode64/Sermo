@@ -40,6 +40,9 @@ var tmplTokens = []tmplToken{
 const (
 	templateCurrentMarker = "${current}"
 	templateCurrentLabel  = "current"
+	// keyVersions is the discovery-metadata map key holding the version instances
+	// a service exposes; it is stripped from a concrete resolved definition.
+	keyVersions = "versions"
 )
 
 // tokenFor returns the template token a name carries, or nil if it is not a
@@ -184,7 +187,7 @@ func (c *Config) materializeMultiToken(tmpl *Document, body map[string]any, toks
 // runtime binary is not installed does not produce a catalog service that would dangle a
 // link to an unmaterialized binary app.
 func versionsRequire(body map[string]any) []string {
-	v, ok := body["versions"].(map[string]any)
+	v, ok := body[keyVersions].(map[string]any)
 	if !ok {
 		return nil
 	}
@@ -450,7 +453,7 @@ func instantiateMulti(body map[string]any, templateName string, match templateMa
 	out["kind"] = kind
 	out["name"] = name
 	trimMaterializedMetadata(out)
-	delete(out, "versions")
+	delete(out, keyVersions)
 	return &Document{
 		Kind:                 kind,
 		Name:                 name,
@@ -923,14 +926,14 @@ func (c *Config) versionsFromPaths(body map[string]any) []string {
 }
 
 func versionsFromPathsForBackend(body map[string]any, backend string) []string {
-	if v, ok := body["versions"].(map[string]any); ok {
+	if v, ok := body[keyVersions].(map[string]any); ok {
 		return versionFromPaths(v["from"], backend)
 	}
 	return nil
 }
 
 func allVersionsFromPaths(body map[string]any) []string {
-	if v, ok := body["versions"].(map[string]any); ok {
+	if v, ok := body[keyVersions].(map[string]any); ok {
 		return allVersionFromPaths(v["from"])
 	}
 	return nil
@@ -955,7 +958,7 @@ func allVersionFromPaths(raw any) []string {
 }
 
 func versionsCurrentFromCandidates(body map[string]any) []string {
-	v, ok := body["versions"].(map[string]any)
+	v, ok := body[keyVersions].(map[string]any)
 	if !ok {
 		return nil
 	}
@@ -976,7 +979,7 @@ func linkedAppTemplateName(name string, tok tmplToken) string {
 }
 
 func versionUnversionedEnabled(body map[string]any, tok tmplToken) bool {
-	versions, ok := body["versions"].(map[string]any)
+	versions, ok := body[keyVersions].(map[string]any)
 	if !ok {
 		return tok.allowEmpty
 	}
@@ -1070,7 +1073,7 @@ func instantiateVersion(body map[string]any, templateName string, match template
 	out["kind"] = kind
 	out["name"] = name
 	trimMaterializedMetadata(out)
-	delete(out, "versions") // discovery metadata, not part of the concrete definition
+	delete(out, keyVersions) // discovery metadata, not part of the concrete definition
 	return &Document{
 		Kind:                 kind,
 		Name:                 name,
@@ -1150,7 +1153,7 @@ func trimMaterializedMetadata(out map[string]any) {
 }
 
 func applyUnversionedOverrides(out map[string]any) {
-	versions, ok := out["versions"].(map[string]any)
+	versions, ok := out[keyVersions].(map[string]any)
 	if !ok {
 		return
 	}
