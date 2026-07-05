@@ -1170,7 +1170,7 @@ func buildCertCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		days = v
 	}
 	verify := true
-	if v, ok := entry["verify"].(bool); ok {
+	if v, ok := entry["cert_verify"].(bool); ok {
 		verify = v
 	}
 	return &certCheck{

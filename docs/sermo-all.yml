@@ -641,7 +641,7 @@ checks:
     host: example.com
     port: 443
     server_name: example.com
-    verify: true  # false skips chain verification (self-signed certs)
+    cert_verify: true  # false skips chain verification (self-signed certs)
     on_algorithm_change: true
     on_issuer_change: true
   sqlite: { type: sqlite, path: /var/lib/demo/demo.db, quick: true }

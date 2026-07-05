@@ -517,7 +517,7 @@ checks:
     port: 443                  # optional, default 443
     server_name: api.example.com   # optional SNI + hostname to verify (default = host)
     expires_in_days: 14        # optional: warn this many days before expiry
-    verify: true               # optional, default true: chain + hostname + validity
+    cert_verify: true          # optional, default true: chain + hostname + validity
     on_algorithm_change: true  # optional: alert when the signature algorithm changes
     on_issuer_change: true     # optional: alert when the issuer (CA) changes / re-issue
     on_change: false           # optional: alert on any certificate rotation (fingerprint)
@@ -538,7 +538,7 @@ rules:
 
 **Host source.** It fails when the certificate is **expired or not yet valid**,
 **expires within `expires_in_days`**, fails chain/hostname **verification**
-(`verify`, on by default — catches self-signed, wrong host, expired chains), or —
+(`cert_verify`, on by default — catches self-signed, wrong host, expired chains), or —
 between cycles — its **signature algorithm**, **issuer** or **fingerprint** changes.
 A network/TLS error fetching the cert is **not** a `cert` failure (use a
 `tcp`/`http` check for reachability).
@@ -550,7 +550,7 @@ public key (`authorized_keys` line). Certificates are checked for expiry/validit
 above; material that does not expire (keys, CSRs) fails only on
 `on_change`/`on_algorithm_change`. A **missing, unreadable or unparseable file makes
 the check fail** (a local configuration problem, unlike a transient network
-error). `verify`, `port` and `server_name` do not apply to files.
+error). `cert_verify`, `port` and `server_name` do not apply to files.
 
 **Result data** exposes `kind` (certificate / certificate_request / private_key /
 public_key / openssh_private_key / openssh_public_key / …), `source`,
