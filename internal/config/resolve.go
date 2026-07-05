@@ -511,31 +511,44 @@ func expandServiceWatches(tree map[string]any) []string {
 		validateWatchThenAction("watches."+name, action, then, add)
 		check, ok := entry["check"].(map[string]any)
 		if !ok {
-			errs = append(errs, fmt.Sprintf("watches.%s.check is required", name))
-			continue
-		}
-		if _, exists := checksMap[name]; exists {
-			errs = append(errs, fmt.Sprintf("watches.%s would overwrite existing check %q; rename the watch", name, name))
+			add("watches.%s.check is required", name)
 			continue
 		}
 		if _, exists := rulesMap[name]; exists {
-			errs = append(errs, fmt.Sprintf("watches.%s would overwrite existing rule %q; rename the watch", name, name))
+			add("watches.%s would overwrite existing rule %q; rename the watch", name, name)
 			continue
 		}
 
-		// 1. generated check: the embedded probe plus any check-level fields.
-		genCheck := cloneMap(check)
-		for _, k := range []string{"verify", "requires", "optional", "interval"} {
-			if v, has := entry[k]; has {
-				genCheck[k] = v
+		// The rule references either an existing named check (`check: {ref: name}`,
+		// so a shared health/verify probe is not duplicated) or a probe embedded in
+		// the watch, generated as a check named after the watch.
+		var refName, refType string
+		if ref := cfgval.String(check["ref"]); ref != "" {
+			refName, refType = ref, lookupCheckType(tree, ref)
+			if refType == "" {
+				add("watches.%s.check.ref %q does not name a checks: or preflight: entry", name, ref)
+				continue
 			}
+		} else {
+			if _, exists := checksMap[name]; exists {
+				add("watches.%s would overwrite existing check %q; rename the watch", name, name)
+				continue
+			}
+			genCheck := cloneMap(check)
+			for _, k := range []string{"verify", "requires", "optional", "interval"} {
+				if v, has := entry[k]; has {
+					genCheck[k] = v
+				}
+			}
+			checksMap[name] = genCheck
+			refName, refType = name, cfgval.String(check["type"])
 		}
-		checksMap[name] = genCheck
 
-		// 2. condition polarity from the check type.
-		operand := map[string]any{"check": name}
+		// Condition polarity from the check type: health fires on failure, a
+		// condition (metric/storage/…) on its threshold.
+		operand := map[string]any{"check": refName}
 		var cond map[string]any
-		if checks.IsHealthType(cfgval.String(check["type"])) {
+		if checks.IsHealthType(refType) {
 			cond = map[string]any{"failed": operand}
 		} else {
 			cond = map[string]any{"active": operand}
@@ -587,6 +600,20 @@ func expandServiceWatches(tree map[string]any) []string {
 		delete(tree, "watches")
 	}
 	return errs
+}
+
+// lookupCheckType returns the type of a named check in the checks: or preflight:
+// section, or "" when no such check exists. Used to resolve the polarity of a
+// watch that references a shared check by name (check: {ref: …}).
+func lookupCheckType(tree map[string]any, name string) string {
+	for _, section := range []string{"checks", "preflight"} {
+		if m, ok := tree[section].(map[string]any); ok {
+			if c, ok := m[name].(map[string]any); ok {
+				return cfgval.String(c["type"])
+			}
+		}
+	}
+	return ""
 }
 
 // injectBuiltinVariables makes the document's identity available for ${...}

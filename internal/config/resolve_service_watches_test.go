@@ -132,6 +132,48 @@ watches:
 	}
 }
 
+func TestExpandServiceWatchesRefSharedCheck(t *testing.T) {
+	// A watch may reference an existing shared check by name instead of embedding a
+	// probe, so a verify:true/display check is not duplicated.
+	tree, errs := resolveWatchService(t, `
+checks:
+  http: { type: http, url: "http://x/", verify: true }
+watches:
+  restart-if-http-failed:
+    check: { ref: http }
+    for: { cycles: 3 }
+    then: { action: restart }
+`)
+	if len(errs) != 0 {
+		t.Fatalf("resolve errors = %v", errs)
+	}
+	// The shared http check stays; no duplicate is generated.
+	if _, ok := tree["checks"].(map[string]any)["restart-if-http-failed"]; ok {
+		t.Fatalf("ref must not generate a duplicate check")
+	}
+	http := nested(t, tree, "checks", "http")
+	if !cfgval.Bool(http["verify"]) {
+		t.Fatalf("shared check must be preserved intact, got %v", http)
+	}
+	rule := nested(t, tree, "rules", "restart-if-http-failed")
+	failed := nested(t, rule, "if", "failed")
+	if got := cfgval.String(failed["check"]); got != "http" {
+		t.Fatalf("rule must reference the shared check, if.failed.check = %q, want http", got)
+	}
+}
+
+func TestExpandServiceWatchesRefUnknown(t *testing.T) {
+	_, errs := resolveWatchService(t, `
+watches:
+  restart-if-x:
+    check: { ref: nonexistent }
+    then: { action: restart }
+`)
+	if !hasIssueSubstr(errs, "does not name a checks: or preflight: entry") {
+		t.Fatalf("ref to a missing check should error, got %v", errs)
+	}
+}
+
 func TestExpandServiceWatchesLeavesFireAndForget(t *testing.T) {
 	// A watch with a fire-and-forget then (hook/notify) is NOT desugared.
 	tree, errs := resolveWatchService(t, `
