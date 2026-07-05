@@ -140,11 +140,11 @@ func levelCountResult(b base, preds []levelPred, label, unit, countField string,
 	usedPct := 0.0
 	if limit > 0 {
 		usedPct = float64(count) / float64(limit) * 100
-		values["used_pct"] = usedPct
+		values[fieldUsedPct] = usedPct
 		values["free"] = float64(limit - min(count, limit))
 	}
 	res := b.result(levelPredsHold(preds, values), fmt.Sprintf("%s %d/%d %s (%.1f%%)", label, count, limit, unit, usedPct), start)
-	res.Data = map[string]any{countField: count, "max": limit, "used_pct": usedPct}
+	res.Data = map[string]any{countField: count, "max": limit, fieldUsedPct: usedPct}
 	if limit > 0 {
 		res.Data["free"] = limit - min(count, limit)
 	}
