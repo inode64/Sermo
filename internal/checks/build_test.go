@@ -308,6 +308,18 @@ func TestParseStatusMatcherClassUpperBoundary(t *testing.T) {
 	}
 }
 
+func TestParseStatusMatcherRejectsInvalidOperatorValues(t *testing.T) {
+	if _, err := parseStatusMatcher(map[string]any{"op": "<", "value": "abc"}); err == nil {
+		t.Fatal("non-numeric ordering value must be rejected")
+	}
+	if _, err := parseStatusMatcher(map[string]any{"op": "=~", "value": "["}); err == nil {
+		t.Fatal("invalid regex value must be rejected")
+	}
+	if _, err := parseStatusMatcher(map[string]any{"op": "contains", "value": "2"}); err != nil {
+		t.Fatalf("contains value should remain valid: %v", err)
+	}
+}
+
 func TestBuildCertCheckServerNameDefaultsToHost(t *testing.T) {
 	c, w := buildCertCheck(base{}, map[string]any{"host": "example.com"}, Deps{})
 	if w != "" {
