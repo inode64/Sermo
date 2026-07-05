@@ -18,18 +18,22 @@ type levelPred struct {
 	value float64
 }
 
-// fieldUsedPct is the shared "% used" predicate/reading field name every level
-// check exposes (storage, swap, memory, fds, pids, conntrack) in both its
-// predicate lists and its result data map.
-const fieldUsedPct = "used_pct"
+// Shared metric field names reused across level checks in both their predicate
+// lists and their result data maps.
+const (
+	// fieldUsedPct is the "% used" field (storage, swap, memory, fds, pids, conntrack).
+	fieldUsedPct = "used_pct"
+	// fieldFreePct is the "% free" field (storage, swap).
+	fieldFreePct = "free_pct"
+)
 
 // Predicate field lists, one per level check. They are exported so config
 // validation walks the same lists and both layers stay in step by construction.
 var (
 	// StoragePredFields are the space/inode predicates of a storage check.
-	StoragePredFields = []string{fieldUsedPct, "free_pct", "used_bytes", "free_bytes", "inodes_used_pct", "inodes_free_pct", "inodes_free"}
+	StoragePredFields = []string{fieldUsedPct, fieldFreePct, "used_bytes", "free_bytes", "inodes_used_pct", "inodes_free_pct", "inodes_free"}
 	// SwapUsageFields are the predicates of a swap usage metric.
-	SwapUsageFields = []string{fieldUsedPct, "free_pct", "free_bytes"}
+	SwapUsageFields = []string{fieldUsedPct, fieldFreePct, "free_bytes"}
 	// MemoryPredFields are the predicates of a memory check.
 	MemoryPredFields = []string{fieldUsedPct, "available_pct", "available_bytes"}
 	// PressurePredFields are the predicates of a pressure (PSI) check: the
