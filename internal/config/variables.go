@@ -14,7 +14,16 @@ import (
 // `${` always begins a reference.
 var varRef = regexp.MustCompile(`\$\{([^}]*)\}`)
 
-var fromFileVariableKeys = set("from_file", "directive", "pattern", "default")
+// Keys of a from_file variable spec: the source file, an optional directive to
+// scope the search, the capture pattern and a fallback default value.
+const (
+	varKeyFromFile  = "from_file"
+	varKeyDirective = "directive"
+	varKeyPattern   = "pattern"
+	varKeyDefault   = "default"
+)
+
+var fromFileVariableKeys = set(varKeyFromFile, varKeyDirective, varKeyPattern, varKeyDefault)
 
 // collectVariables reads the merged `variables` section into a flat string map.
 // Values are stringified (a YAML int like `port: 8080` becomes "8080"). A
@@ -41,8 +50,8 @@ func collectVariablesForKind(tree map[string]any, _ string) map[string]string {
 			// resolves to its `default` here; resolveFileVars overrides it once
 			// the other variables it references (e.g. ${config}) are known.
 			if m, ok := v.(map[string]any); ok {
-				if _, isFile := m["from_file"]; isFile {
-					vars[k] = expandEnvString(cfgval.String(m["default"]))
+				if _, isFile := m[varKeyFromFile]; isFile {
+					vars[k] = expandEnvString(cfgval.String(m[varKeyDefault]))
 					continue
 				}
 			}
@@ -114,7 +123,7 @@ func resolveFileVars(vars map[string]string, tree map[string]any) []string {
 		if !ok {
 			continue
 		}
-		from, ok := spec["from_file"]
+		from, ok := spec[varKeyFromFile]
 		if !ok {
 			continue
 		}
@@ -150,7 +159,7 @@ func resolveFileVars(vars map[string]string, tree map[string]any) []string {
 
 func resolveFromFileSpecVars(name string, spec map[string]any, vars map[string]string) (map[string]any, []string) {
 	out := maps.Clone(spec)
-	pat := cfgval.String(spec["pattern"])
+	pat := cfgval.String(spec[varKeyPattern])
 	if pat == "" {
 		return out, nil
 	}
@@ -158,7 +167,7 @@ func resolveFromFileSpecVars(name string, spec map[string]any, vars map[string]s
 	if len(errs) > 0 {
 		return out, errs
 	}
-	out["pattern"] = resolved
+	out[varKeyPattern] = resolved
 	return out, nil
 }
 
@@ -219,7 +228,7 @@ func validateFromFileVariables(prefix string, raw any, add addFunc) {
 		if !ok {
 			continue
 		}
-		if _, has := spec["from_file"]; !has {
+		if _, has := spec[varKeyFromFile]; !has {
 			continue
 		}
 		validateFromFileSpec(prefix+"."+name, spec, add)
@@ -232,22 +241,22 @@ func validateFromFileSpec(path string, spec map[string]any, add addFunc) {
 			add("%s.%s is not supported; from_file variables accept from_file, directive, pattern and default", path, key)
 		}
 	}
-	if cfgval.String(spec["from_file"]) == "" {
+	if cfgval.String(spec[varKeyFromFile]) == "" {
 		add("%s.from_file is required", path)
 	}
-	if _, has := spec["default"]; !has {
+	if _, has := spec[varKeyDefault]; !has {
 		add("%s.default is required", path)
 	}
 	readers := 0
-	if _, has := spec["directive"]; has {
+	if _, has := spec[varKeyDirective]; has {
 		readers++
-		if cfgval.String(spec["directive"]) == "" {
+		if cfgval.String(spec[varKeyDirective]) == "" {
 			add("%s.directive must be non-empty", path)
 		}
 	}
-	if _, has := spec["pattern"]; has {
+	if _, has := spec[varKeyPattern]; has {
 		readers++
-		pat := cfgval.String(spec["pattern"])
+		pat := cfgval.String(spec[varKeyPattern])
 		patForValidation := patternWithVariablePlaceholders(pat)
 		switch {
 		case pat == "":
