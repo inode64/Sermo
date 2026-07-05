@@ -626,7 +626,10 @@ func validateCommandExport(path string, entry map[string]any, add addFunc) {
 				}
 			}
 			if rawRegex, present := spec["regex"]; present {
-				if _, err := regexp.Compile(cfgval.String(rawRegex)); err != nil {
+				pattern := cfgval.String(rawRegex)
+				if pattern == "" {
+					add("%s.export.%s.regex must be non-empty", path, name)
+				} else if _, err := regexp.Compile(pattern); err != nil {
 					add("%s.export.%s.regex is invalid: %v", path, name, err)
 				}
 			}
