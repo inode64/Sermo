@@ -220,17 +220,17 @@ func (w *Watch) runExpand(ctx context.Context, res checks.Result) {
 	}
 	at := now()
 	if allowed, reason := w.Policy.Allow(&w.policyState, at); !allowed {
-		w.emit(Event{Watch: w.Name, Kind: "expand-skipped", Message: reason})
+		w.emit(Event{Watch: w.Name, Kind: eventKindExpandSkipped, Message: reason})
 		return
 	}
 	path := cfgval.String(res.Data["path"])
 	r, err := w.Expander.ExpandPath(ctx, path, w.Expand.By)
 	w.policyState.Record(at, w.Policy)
 	if err != nil {
-		w.emit(Event{Watch: w.Name, Kind: "expand-failed", Message: err.Error()})
+		w.emit(Event{Watch: w.Name, Kind: eventKindExpandFailed, Message: err.Error()})
 		return
 	}
-	w.emit(Event{Watch: w.Name, Kind: "expand", Message: expandSuccessMessage(path, r)})
+	w.emit(Event{Watch: w.Name, Kind: eventKindExpand, Message: expandSuccessMessage(path, r)})
 }
 
 func expandSuccessMessage(path string, r volume.Result) string {

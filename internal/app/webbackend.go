@@ -975,7 +975,7 @@ func watchReadingsFailed(readings []web.WatchReading) bool {
 
 func isWatchActivityKind(kind string) bool {
 	switch kind {
-	case eventKindFiring, eventKindRecovered, eventKindDryRun, eventKindHook, eventKindNotify, eventKindHookFail, eventKindNotifyFail, "expand", "expand-skipped", "expand-failed":
+	case eventKindFiring, eventKindRecovered, eventKindDryRun, eventKindHook, eventKindNotify, eventKindHookFail, eventKindNotifyFail, eventKindExpand, eventKindExpandSkipped, eventKindExpandFailed:
 		return true
 	default:
 		return false
@@ -3304,34 +3304,34 @@ func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionRes
 	w := b.watches[name]
 	if w == nil {
 		msg := fmt.Sprintf("unknown watch %q", name)
-		b.emitWatchExpandEvent(name, "expand-failed", "failed", msg)
+		b.emitWatchExpandEvent(name, eventKindExpandFailed, "failed", msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	if w.disabled {
 		msg := fmt.Sprintf("watch %q is disabled in configuration", name)
-		b.emitWatchExpandEvent(name, "expand-skipped", "blocked", msg)
+		b.emitWatchExpandEvent(name, eventKindExpandSkipped, "blocked", msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	if !isStorageCheckType(w.checkType) {
 		msg := fmt.Sprintf("watch %q is %q, not storage", name, w.checkType)
-		b.emitWatchExpandEvent(name, "expand-skipped", "blocked", msg)
+		b.emitWatchExpandEvent(name, eventKindExpandSkipped, "blocked", msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	if w.expand == nil {
 		msg := fmt.Sprintf("watch %q has no then.expand action configured", name)
-		b.emitWatchExpandEvent(name, "expand-skipped", "blocked", msg)
+		b.emitWatchExpandEvent(name, eventKindExpandSkipped, "blocked", msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	path := cfgval.AsString(w.check["path"])
 	if path == "" {
 		msg := fmt.Sprintf("watch %q storage check has no path", name)
-		b.emitWatchExpandEvent(name, "expand-failed", "failed", msg)
+		b.emitWatchExpandEvent(name, eventKindExpandFailed, "failed", msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	expander := b.expander
 	if expander == nil {
 		msg := "volume expander is unavailable"
-		b.emitWatchExpandEvent(name, "expand-failed", "failed", msg)
+		b.emitWatchExpandEvent(name, eventKindExpandFailed, "failed", msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 
@@ -3344,11 +3344,11 @@ func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionRes
 	res, err := expander.ExpandPath(opCtx, path, w.expand.By)
 	if err != nil {
 		msg := err.Error()
-		b.emitWatchExpandEvent(name, "expand-failed", "failed", msg)
+		b.emitWatchExpandEvent(name, eventKindExpandFailed, "failed", msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	msg := expandSuccessMessage(path, res)
-	b.emitWatchExpandEvent(name, "expand", "ok", msg)
+	b.emitWatchExpandEvent(name, eventKindExpand, "ok", msg)
 	return web.ActionResult{OK: true, Message: msg}
 }
 

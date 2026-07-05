@@ -41,6 +41,10 @@ const (
 	eventKindNotifyFail = "notify-failed"
 	eventKindSuppressed = "suppressed"
 	eventKindCascade    = "cascade"
+
+	eventKindExpand        = "expand"
+	eventKindExpandSkipped = "expand-skipped"
+	eventKindExpandFailed  = "expand-failed"
 )
 
 // resultOutput extracts the bounded command output a check stored under
