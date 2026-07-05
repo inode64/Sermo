@@ -774,6 +774,14 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		if hasCmd && !cfgval.IsNonEmptyStringArray(entry["command"]) {
 			add("%s command must be an array, not a shell string", path)
 		}
+		if hasPath && !cfgval.IsNonEmptyStringList(entry["path"]) {
+			add("%s.path must be a string or non-empty list of strings", path)
+		}
+		if v, present := entry["on_change"]; present {
+			if _, ok := v.(bool); !ok {
+				add("%s.on_change must be a boolean", path)
+			}
+		}
 		if hasCmd {
 			validateCommandUser(path, entry, add)
 		}
