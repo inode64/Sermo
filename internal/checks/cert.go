@@ -202,7 +202,7 @@ func certData(source, host, path string, s CertSample, daysLeft int, hasExpiry b
 		"fingerprint": s.Fingerprint,
 	}
 	if host != "" {
-		data["host"] = host
+		data[fieldHost] = host
 	}
 	if path != "" {
 		data["path"] = path
