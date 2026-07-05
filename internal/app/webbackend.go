@@ -2480,7 +2480,7 @@ func (b *WebBackend) ReleaseLock(_ context.Context, service, name string) web.Ac
 	if err != nil {
 		msg := err.Error()
 		if lk.State == locks.StateActive {
-			b.emitLockReleaseEvent(service, name, "suppressed", "blocked", msg)
+			b.emitLockReleaseEvent(service, name, eventKindSuppressed, "blocked", msg)
 		} else {
 			b.emitLockReleaseEvent(service, name, "error", "failed", msg)
 		}
@@ -2969,7 +2969,7 @@ func (b *WebBackend) SetPanic(_ context.Context, on bool) web.ActionResult {
 		if !on {
 			msg = "panic mode already off"
 		}
-		b.emitMonitorEvent("", action, "suppressed", "", msg)
+		b.emitMonitorEvent("", action, eventKindSuppressed, "", msg)
 		return web.ActionResult{OK: true, Message: msg}
 	}
 	msg := "panic mode enabled: hooks, alerts and automatic remediation suspended"
@@ -3384,7 +3384,7 @@ func (b *WebBackend) SetMonitored(_ context.Context, name string, monitored bool
 		if !monitored {
 			msg = "already paused"
 		}
-		b.emitMonitorEvent(name, action, "suppressed", "", msg)
+		b.emitMonitorEvent(name, action, eventKindSuppressed, "", msg)
 		return nil
 	}
 	msg := "monitoring resumed"
@@ -3428,7 +3428,7 @@ func (b *WebBackend) SetWatchMonitored(_ context.Context, name string, monitored
 		if !monitored {
 			msg = "already paused"
 		}
-		b.emitWatchMonitorEvent(name, action, "suppressed", "", msg)
+		b.emitWatchMonitorEvent(name, action, eventKindSuppressed, "", msg)
 		return nil
 	}
 	msg := "monitoring resumed"

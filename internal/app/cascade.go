@@ -48,7 +48,7 @@ func (c cascader) run(ctx context.Context, root, action string) operation.Result
 			cascadeFailed = true
 		}
 		if c.emit != nil {
-			c.emit(Event{Service: svc, Kind: "cascade", Action: action,
+			c.emit(Event{Service: svc, Kind: eventKindCascade, Action: action,
 				Status: string(res.Status), Message: "cascade from " + root})
 		}
 	}
