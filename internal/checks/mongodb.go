@@ -62,7 +62,7 @@ func (c mongoCheck) Run(ctx context.Context) Result {
 	res := c.result(ok, fmt.Sprintf("mongodb: %q %s %q = %t", result, c.op, c.value, ok), start)
 	data := map[string]any{"op": c.op, "threshold": c.value, "result": result, "mode": c.mode}
 	if f, perr := strconv.ParseFloat(strings.TrimSpace(result), 64); perr == nil {
-		data["value"] = f
+		data[fieldValue] = f
 	}
 	res.Data = data
 	return res

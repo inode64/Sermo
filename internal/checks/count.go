@@ -53,7 +53,7 @@ func (c countCheck) Run(ctx context.Context) Result {
 		"of":        c.kind,
 		"recursive": c.recursive,
 		"count":     n,
-		"value":     n,
+		fieldValue:  n,
 	}
 	return res
 }

@@ -60,7 +60,7 @@ func (c memoryCheck) Run(_ context.Context) Result {
 		fieldUsedPct:        usedPct,
 		fieldAvailablePct:   availPct,
 	}
-	res.Data["value"] = firstPredValue(c.preds, values, usedPct)
+	res.Data[fieldValue] = firstPredValue(c.preds, values, usedPct)
 	return res
 }
 

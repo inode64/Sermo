@@ -65,7 +65,7 @@ func (c pressureCheck) Run(_ context.Context) Result {
 		fieldFullAvg60:  s.Full.Avg60,
 		fieldFullAvg300: s.Full.Avg300,
 	}
-	res.Data["value"] = firstPredValue(c.preds, values, s.Some.Avg10)
+	res.Data[fieldValue] = firstPredValue(c.preds, values, s.Some.Avg10)
 	return res
 }
 

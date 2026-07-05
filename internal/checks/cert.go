@@ -230,7 +230,7 @@ func certData(source, host, path string, s CertSample, daysLeft int, hasExpiry b
 	}
 	if hasExpiry {
 		data["days_left"] = daysLeft
-		data["value"] = daysLeft
+		data[fieldValue] = daysLeft
 		data["not_before"] = s.NotBefore.Format(time.RFC3339)
 		data["not_after"] = s.NotAfter.Format(time.RFC3339)
 	}

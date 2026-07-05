@@ -85,7 +85,7 @@ func (c *sizeCheck) Run(ctx context.Context) Result {
 		"baseline_bytes": baseline.size,
 		"growth_bytes":   growth,
 		"window":         c.window.String(),
-		"value":          growth,
+		fieldValue:       growth,
 	}
 	return res
 }

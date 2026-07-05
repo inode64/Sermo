@@ -111,7 +111,7 @@ func (c storageCheck) Run(_ context.Context) Result {
 	data[fieldInodesFreePct] = st.InodesFreePct
 	data[fieldInodesFree] = st.InodesFree
 	data["inodes_total"] = st.InodesTotal
-	data["value"] = firstPredValue(c.preds, values, st.UsedPct)
+	data[fieldValue] = firstPredValue(c.preds, values, st.UsedPct)
 	res.Data = data
 	return res
 }

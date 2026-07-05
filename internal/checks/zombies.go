@@ -33,7 +33,7 @@ func (c zombieCheck) Run(_ context.Context) Result {
 	}
 	met := compareFloat(float64(count), c.op, c.value)
 	res := c.result(met, fmt.Sprintf("%d zombie processes", count), start)
-	res.Data = map[string]any{"zombies": count, "value": count}
+	res.Data = map[string]any{"zombies": count, fieldValue: count}
 	return res
 }
 
