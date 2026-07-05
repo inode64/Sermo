@@ -146,14 +146,13 @@ def merge_checks(doc: dict, extra: dict) -> None:
             checks[name] = copy.deepcopy(chk)
 
 
-def set_postflight(doc: dict, check_name: str) -> None:
+def set_verify(doc: dict, check_name: str) -> None:
+    # Flag the named health check to also run as post-operation start
+    # verification (verify: true). This replaces the retired postflight: section,
+    # which used to be a duplicate of the same check.
     chk = doc.get("checks", {}).get(check_name)
-    if not chk:
-        return
-    pf = copy.deepcopy(chk)
-    if isinstance(pf, dict):
-        pf.pop("requires", None)
-    doc.setdefault("postflight", {})[check_name] = pf
+    if isinstance(chk, dict):
+        chk["verify"] = True
 
 
 def set_reload_on_change(doc: dict) -> None:
@@ -167,7 +166,7 @@ def set_reload_on_change(doc: dict) -> None:
     doc["reload_on_change"] = {"paths": list(paths)}
 
 
-# Per-catalog-service elevation specs: extra checks, optional preflight, rules, postflight key.
+# Per-catalog-service elevation specs: extra checks, optional preflight, rules, verify key.
 SPECS: dict[str, dict] = {
     "apcsmart.yml": {
         "checks": {
@@ -179,7 +178,7 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [ALERT_MEMORY],
     },
     "bitbucketrunner.yml": {
@@ -196,7 +195,7 @@ SPECS: dict[str, dict] = {
                 "optional": True,
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [ALERT_MEMORY],
     },
     "ceph-mds.yml": {
@@ -209,7 +208,7 @@ SPECS: dict[str, dict] = {
                 "analyze": {"use": ["ceph"]},
             }
         },
-        "postflight": "status",
+        "verify": "status",
         "rules": [restart_failed("status"), ALERT_MEMORY],
     },
     "ceph-mgr.yml": {
@@ -222,7 +221,7 @@ SPECS: dict[str, dict] = {
                 "analyze": {"use": ["ceph"]},
             }
         },
-        "postflight": "status",
+        "verify": "status",
         "rules": [restart_failed("status"), ALERT_MEMORY],
     },
     "ceph-osd.yml": {
@@ -235,7 +234,7 @@ SPECS: dict[str, dict] = {
                 "analyze": {"use": ["ceph"]},
             }
         },
-        "postflight": "status",
+        "verify": "status",
         "rules": [restart_failed("status"), ALERT_MEMORY],
     },
     "containerd.yml": {
@@ -246,7 +245,7 @@ SPECS: dict[str, dict] = {
                 "timeout": "5s",
             }
         },
-        "postflight": "version",
+        "verify": "version",
         "rules": [GUARD_CONFIG, restart_failed("version"), CPU_THREAD, ALERT_FDS, ALERT_MEMORY],
         "reload": True,
         "metric_checks": True,
@@ -261,7 +260,7 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [CPU_THREAD, ALERT_FDS],
     },
     "dmeventd.yml": {
@@ -274,7 +273,7 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [ALERT_MEMORY],
     },
     "fcron.yml": {
@@ -287,7 +286,7 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [ALERT_MEMORY],
     },
     "fetchmail.yml": {
@@ -301,7 +300,7 @@ SPECS: dict[str, dict] = {
                 "optional": True,
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [GUARD_CONFIG, ALERT_MEMORY],
         "reload": True,
     },
@@ -314,7 +313,7 @@ SPECS: dict[str, dict] = {
                 "optional": True,
             }
         },
-        "postflight": "config-output",
+        "verify": "config-output",
         "rules": [GUARD_CONFIG, ALERT_FDS, ALERT_MEMORY],
         "reload": True,
         "metric_checks": True,
@@ -327,7 +326,7 @@ SPECS: dict[str, dict] = {
                 "timeout": "10s",
             }
         },
-        "postflight": "state",
+        "verify": "state",
         "rules": [GUARD_CONFIG, restart_failed("state"), ALERT_MEMORY],
         "reload": True,
     },
@@ -341,7 +340,7 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [ALERT_MEMORY],
     },
     "garbd.yml": {
@@ -354,7 +353,7 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [ALERT_MEMORY],
     },
     "irqbalance.yml": {
@@ -367,12 +366,12 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [ALERT_MEMORY],
     },
     "libvirt-dbus.yml": {
         "checks": {"dbus": {"type": "dbus", "timeout": "5s"}},
-        "postflight": "dbus",
+        "verify": "dbus",
         "rules": [restart_failed("dbus"), ALERT_FDS],
     },
     "lldpd.yml": {
@@ -385,7 +384,7 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [ALERT_MEMORY],
     },
     "lm_sensors.yml": {
@@ -397,7 +396,7 @@ SPECS: dict[str, dict] = {
                 "optional": True,
             }
         },
-        "postflight": "sensors",
+        "verify": "sensors",
     },
     "lvm.yml": {},
     "lvm2-monitor.yml": {},
@@ -409,7 +408,7 @@ SPECS: dict[str, dict] = {
                 "timeout": "10s",
             }
         },
-        "postflight": "status",
+        "verify": "status",
         "rules": [restart_failed("status"), CPU_THREAD, ALERT_FDS],
     },
     "nfsdcld.yml": {
@@ -422,7 +421,7 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [ALERT_MEMORY],
     },
     "nmbd.yml": {
@@ -430,7 +429,7 @@ SPECS: dict[str, dict] = {
             "netbios": {"type": "tcp", "port": 137, "timeout": "3s", "optional": True},
             "smb": {"type": "smb", "port": 445, "timeout": "3s", "optional": True},
         },
-        "postflight": "netbios",
+        "verify": "netbios",
         "rules": [GUARD_CONFIG, ALERT_MEMORY],
     },
     "node.yml": {
@@ -444,7 +443,7 @@ SPECS: dict[str, dict] = {
                 "optional": True,
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [CPU_THREAD, ALERT_FDS, ALERT_MEMORY],
     },
     "numad.yml": {
@@ -457,7 +456,7 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [ALERT_MEMORY],
     },
     "ovsdb-client.yml": {
@@ -469,7 +468,7 @@ SPECS: dict[str, dict] = {
                 "optional": True,
             }
         },
-        "postflight": "openvswitch",
+        "verify": "openvswitch",
     },
     "pmie.yml": {
         "checks": {
@@ -481,7 +480,7 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [ALERT_MEMORY],
     },
     "pmie_farm.yml": {
@@ -494,7 +493,7 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [ALERT_MEMORY],
     },
     "pmlogger_farm.yml": {
@@ -507,12 +506,12 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [ALERT_MEMORY],
     },
     "polkit.yml": {
         "checks": {"dbus": {"type": "dbus", "timeout": "5s"}},
-        "postflight": "dbus",
+        "verify": "dbus",
         "rules": [restart_failed("dbus")],
     },
     "qemu-ga.yml": {
@@ -523,7 +522,7 @@ SPECS: dict[str, dict] = {
                 "timeout": "5s",
             }
         },
-        "postflight": "version",
+        "verify": "version",
         "rules": [restart_failed("version")],
     },
     "rasdaemon.yml": {
@@ -536,7 +535,7 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [ALERT_MEMORY],
     },
     "rngd.yml": {
@@ -550,7 +549,7 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
     },
     "rpc-idmapd.yml": {
         "checks": {
@@ -562,7 +561,7 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [ALERT_MEMORY],
     },
     "rpc-mountd.yml": {
@@ -575,7 +574,7 @@ SPECS: dict[str, dict] = {
                 "optional": True,
             }
         },
-        "postflight": "mountd",
+        "verify": "mountd",
         "rules": [ALERT_MEMORY],
     },
     "rpc-pipefs.yml": {},
@@ -589,7 +588,7 @@ SPECS: dict[str, dict] = {
                 "optional": True,
             }
         },
-        "postflight": "statd",
+        "verify": "statd",
         "rules": [ALERT_MEMORY],
     },
     "rrdcached.yml": {
@@ -597,7 +596,7 @@ SPECS: dict[str, dict] = {
         "checks": {
             "tcp": {"type": "tcp", "host": "127.0.0.1", "port": "${port}", "timeout": "3s"}
         },
-        "postflight": "tcp",
+        "verify": "tcp",
         "rules": [RESTART_TCP, ALERT_FDS],
     },
     "salt-minion.yml": {
@@ -611,7 +610,7 @@ SPECS: dict[str, dict] = {
                 "optional": True,
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [ALERT_MEMORY],
     },
     "smartd.yml": {
@@ -624,7 +623,7 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [ALERT_MEMORY],
     },
     "snmp-ups.yml": {
@@ -638,7 +637,7 @@ SPECS: dict[str, dict] = {
                 "optional": True,
             }
         },
-        "postflight": "process",
+        "verify": "process",
     },
     "supervisord.yml": {
         "preflight": {
@@ -657,7 +656,7 @@ SPECS: dict[str, dict] = {
                 "optional": True,
             }
         },
-        "postflight": "ping",
+        "verify": "ping",
         "rules": [GUARD_CONFIG, restart_failed("ping"), CPU_THREAD, ALERT_FDS],
     },
     "syslog-ng.yml": {
@@ -669,7 +668,7 @@ SPECS: dict[str, dict] = {
                 "optional": True,
             }
         },
-        "postflight": "ctl",
+        "verify": "ctl",
         "rules": [GUARD_CONFIG, CPU_THREAD, ALERT_FDS],
         "reload": True,
         "metric_checks": True,
@@ -682,17 +681,17 @@ SPECS: dict[str, dict] = {
                 "timeout": "10s",
             }
         },
-        "postflight": "active",
+        "verify": "active",
         "rules": [restart_failed("active")],
     },
     "udisks2.yml": {
         "checks": {"udisks2": {"type": "udisks2", "timeout": "5s"}},
-        "postflight": "udisks2",
+        "verify": "udisks2",
         "rules": [restart_failed("udisks2"), ALERT_MEMORY],
     },
     "upower.yml": {
         "checks": {"dbus": {"type": "dbus", "timeout": "5s"}},
-        "postflight": "dbus",
+        "verify": "dbus",
         "rules": [restart_failed("dbus")],
     },
     "upsdrv.yml": {
@@ -706,7 +705,7 @@ SPECS: dict[str, dict] = {
                 "optional": True,
             }
         },
-        "postflight": "process",
+        "verify": "process",
     },
     "upsmon.yml": {
         "checks": {
@@ -718,7 +717,7 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [ALERT_MEMORY],
     },
     "usbhid-ups.yml": {
@@ -732,7 +731,7 @@ SPECS: dict[str, dict] = {
                 "optional": True,
             }
         },
-        "postflight": "process",
+        "verify": "process",
     },
     "virtlockd.yml": {
         "checks": {
@@ -742,7 +741,7 @@ SPECS: dict[str, dict] = {
                 "timeout": "5s",
             }
         },
-        "postflight": "libvirt",
+        "verify": "libvirt",
         "rules": [restart_failed("libvirt")],
     },
     "virtlogd.yml": {
@@ -753,7 +752,7 @@ SPECS: dict[str, dict] = {
                 "timeout": "5s",
             }
         },
-        "postflight": "libvirt",
+        "verify": "libvirt",
         "rules": [restart_failed("libvirt")],
     },
     "virtnetworkd.yml": {
@@ -764,7 +763,7 @@ SPECS: dict[str, dict] = {
                 "timeout": "5s",
             }
         },
-        "postflight": "libvirt",
+        "verify": "libvirt",
         "rules": [restart_failed("libvirt"), ALERT_FDS],
     },
     "xinetd.yml": {
@@ -777,7 +776,7 @@ SPECS: dict[str, dict] = {
                 "requires": ["service"],
             }
         },
-        "postflight": "process",
+        "verify": "process",
         "rules": [CPU_THREAD, ALERT_FDS],
     },
     "zigbee2mqtt.yml": {
@@ -791,7 +790,7 @@ SPECS: dict[str, dict] = {
                 "optional": True,
             }
         },
-        "postflight": "http",
+        "verify": "http",
         "rules": [restart_failed("http"), CPU_THREAD, ALERT_MEMORY],
     },
 }
@@ -810,39 +809,39 @@ ENRICH: dict[str, dict] = {
                 "timeout": "5s",
             }
         },
-        "postflight": "ready",
+        "verify": "ready",
         "rules": [GUARD_CONFIG, restart_failed("ready"), RESTART_PORT, ALERT_MEMORY],
         "reload": True,
         "metric_checks": True,
     },
     "redis.yml": {
-        "postflight": "ping",
+        "verify": "ping",
         "rules_extra": [ALERT_FDS, ALERT_MEMORY],
         "reload": True,
         "metric_checks": True,
     },
     "keydb.yml": {
-        "postflight": "ping",
+        "verify": "ping",
         "rules_extra": [ALERT_FDS, ALERT_MEMORY],
         "reload": True,
         "metric_checks": True,
     },
     "nginx.yml": {
         "preflight_analyze": ["web"],
-        "postflight": "http",
+        "verify": "http",
         "rules_extra": [GUARD_CONFIG, ALERT_FDS, ALERT_MEMORY],
         "reload": True,
         "metric_checks": True,
     },
     "apache.yml": {
         "preflight_analyze": ["web"],
-        "postflight": "http",
+        "verify": "http",
         "rules_extra": [ALERT_FDS, ALERT_MEMORY],
         "reload": True,
         "metric_checks": True,
     },
-    "mysql.yml": {"postflight": "ping", "rules_extra": [ALERT_FDS], "metric_checks": True},
-    "mariadb.yml": {"postflight": "ping", "rules_extra": [ALERT_FDS], "metric_checks": True},
+    "mysql.yml": {"verify": "ping", "rules_extra": [ALERT_FDS], "metric_checks": True},
+    "mariadb.yml": {"verify": "ping", "rules_extra": [ALERT_FDS], "metric_checks": True},
     "mosquitto.yml": {
         "preflight": {
             "config": {
@@ -852,13 +851,13 @@ ENRICH: dict[str, dict] = {
                 "optional": True,
             }
         },
-        "postflight": "mqtt",
+        "verify": "mqtt",
         "rules": [GUARD_CONFIG, restart_failed("mqtt"), RESTART_PORT],
         "reload": True,
         "metric_checks": True,
     },
     "memcached.yml": {
-        "postflight": "memcached",
+        "verify": "memcached",
         "rules": [restart_failed("memcached"), RESTART_TCP, ALERT_FDS],
         "metric_checks": True,
     },
@@ -871,23 +870,23 @@ ENRICH: dict[str, dict] = {
                 "timeout": "5s",
             }
         },
-        "postflight": "http",
+        "verify": "http",
         "rules": [restart_failed("http"), RESTART_PORT, CPU_THREAD, ALERT_FDS],
         "reload": True,
     },
     "rsync.yml": {
         "checks": {"rsync": {"type": "rsync", "host": "127.0.0.1", "port": "${port}", "timeout": "3s"}},
-        "postflight": "rsync",
+        "verify": "rsync",
         "rules": [restart_failed("rsync"), RESTART_TCP],
     },
-    "docker.yml": {"postflight": "engine", "rules_extra": [GUARD_CONFIG, ALERT_FDS], "reload": True},
+    "docker.yml": {"verify": "engine", "rules_extra": [GUARD_CONFIG, ALERT_FDS], "reload": True},
     "libvirtd.yml": {
-        "postflight": "libvirt",
+        "verify": "libvirt",
         "rules": [restart_failed("libvirt"), ALERT_FDS],
     },
-    "prometheus.yml": {"postflight": "prometheus", "rules_extra": [GUARD_CONFIG, ALERT_FDS], "reload": True},
-    "grafana.yml": {"postflight": "http", "rules_extra": [ALERT_FDS], "reload": True},
-    "loki.yml": {"postflight": "http", "rules_extra": [GUARD_CONFIG, ALERT_FDS], "reload": True},
+    "prometheus.yml": {"verify": "prometheus", "rules_extra": [GUARD_CONFIG, ALERT_FDS], "reload": True},
+    "grafana.yml": {"verify": "http", "rules_extra": [ALERT_FDS], "reload": True},
+    "loki.yml": {"verify": "http", "rules_extra": [GUARD_CONFIG, ALERT_FDS], "reload": True},
     "ceph-mon.yml": {
         "apps_add": ["ceph"],
         "checks": {
@@ -898,7 +897,7 @@ ENRICH: dict[str, dict] = {
                 "analyze": {"use": ["ceph"]},
             }
         },
-        "postflight": "messenger",
+        "verify": "messenger",
         "rules_extra": [restart_failed("messenger"), restart_failed("status")],
     },
 }
@@ -931,8 +930,8 @@ def apply_spec(path: Path, spec: dict) -> None:
     if checks := spec.get("checks"):
         merge_checks(doc, checks)
 
-    if pf := spec.get("postflight"):
-        set_postflight(doc, pf)
+    if pf := spec.get("verify"):  # spec value names the check to verify after start
+        set_verify(doc, pf)
 
     if spec.get("reload"):
         set_reload_on_change(doc)

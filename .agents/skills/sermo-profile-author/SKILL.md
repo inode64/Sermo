@@ -17,10 +17,9 @@ per-init service candidates
 variables
 version command
 config/preflight checks
-postflight health checks
 library checks if applicable
 process discovery
-health checks
+health checks (flag one verify: true for start verification)
 locks
 guards
 stop_policy
@@ -45,8 +44,6 @@ commands:
   version: {}
 
 preflight: {}
-
-postflight: {}
 
 processes: {}
 
