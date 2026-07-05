@@ -521,7 +521,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		}
 
 		if suppress != "" {
-			w.emit(Event{Kind: "suppressed", Rule: r.Name, Action: action, Message: suppress})
+			w.emit(Event{Kind: eventKindSuppressed, Rule: r.Name, Action: action, Message: suppress})
 			continue
 		}
 
@@ -530,7 +530,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		// Panic mode keeps the alert visible (emitAlerts above) but never performs
 		// the automatic action; the operator drives services manually instead.
 		if w.InPanic != nil && w.InPanic() {
-			w.emit(Event{Kind: "suppressed", Rule: r.Name, Action: action, Message: "panic mode: remediation suppressed"})
+			w.emit(Event{Kind: eventKindSuppressed, Rule: r.Name, Action: action, Message: "panic mode: remediation suppressed"})
 			continue
 		}
 		// Cascade owns the primary's placement when also_apply is set (so stop can
