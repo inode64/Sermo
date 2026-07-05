@@ -129,7 +129,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 		}
 		delta := deltaOrZero(total, c.lastErrTotal)
 		c.lastErrTotal = total
-		data[fieldValue], data["total"] = delta, total
+		data[fieldValue], data[fieldTotal] = delta, total
 		met := compareFloat(float64(delta), c.op, c.value)
 		res := c.result(met, fmt.Sprintf("%s errors +%d (total %d)", c.iface, delta, total), start)
 		res.Data = data

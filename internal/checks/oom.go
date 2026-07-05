@@ -41,14 +41,14 @@ func (c *oomCheck) Run(_ context.Context) Result {
 	if !c.primed {
 		c.primed, c.lastCount = true, count
 		res := c.result(false, fmt.Sprintf("oom baseline %d kills", count), start)
-		res.Data = map[string]any{fieldValue: uint64(0), "total": count}
+		res.Data = map[string]any{fieldValue: uint64(0), fieldTotal: count}
 		return res
 	}
 	delta := deltaOrZero(count, c.lastCount)
 	c.lastCount = count
 	met := compareFloat(float64(delta), c.op, c.value)
 	res := c.result(met, fmt.Sprintf("oom kills +%d (total %d)", delta, count), start)
-	res.Data = map[string]any{fieldValue: delta, "total": count}
+	res.Data = map[string]any{fieldValue: delta, fieldTotal: count}
 	return res
 }
 
