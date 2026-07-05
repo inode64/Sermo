@@ -71,6 +71,10 @@ const (
 	// hdparm timing fields (buffered disk read / cached read).
 	fieldRead   = "read"
 	fieldCached = "cached"
+	// fieldOld and fieldNew are the before/after values a change-detection check
+	// (net/icmp state/speed/address, command on_change) reports in its data map.
+	fieldOld = "old"
+	fieldNew = "new"
 )
 
 // Predicate field lists, one per level check. They are exported so config
