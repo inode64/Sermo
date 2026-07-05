@@ -936,7 +936,7 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 			return nil, "net address requires expect: present|absent or on: change"
 		}
 		if expect != "" {
-			if expect != "present" && expect != "absent" {
+			if expect != netAddrPresent && expect != netAddrAbsent {
 				return nil, "net address expect must be present or absent"
 			}
 			c.expect = expect
