@@ -755,6 +755,8 @@ checks:
   proc: { type: process, exe: /x, state: weird }
   opt: { type: binary, path: /x, optional: "yes" }
 preflight:
+  config-path: { type: config, path: [7] }
+  config-change: { type: config, path: /etc/app.conf, on_change: "yes" }
   lockfile: { type: file_exists, path: /run/sermo/locks/x.lock }
   owned-lockfile: { type: lockfile, path: /run/sermo/locks/service.lock }
 `)
@@ -766,6 +768,8 @@ preflight:
 	mustHave(t, issues, "exe_any must be a string or non-empty list of strings")
 	mustHave(t, issues, `state "weird" is not one of`)
 	mustHave(t, issues, "optional must be a boolean")
+	mustHave(t, issues, "config-path.path must be a string or non-empty list of strings")
+	mustHave(t, issues, "config-change.on_change must be a boolean")
 	mustHave(t, issues, "must not point under the runtime lock dir")
 	mustHave(t, issues, "owned-lockfile lockfile must not point under the runtime lock dir")
 }
