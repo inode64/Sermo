@@ -25,6 +25,10 @@ import (
 // never responds could block a watch cycle indefinitely.
 const defaultTimeout = 10 * time.Second
 
+// tlsModeSkipVerify is the tls: mode that dials without verifying the daemon's
+// certificate chain.
+const tlsModeSkipVerify = "skip-verify"
+
 // ensureDeadline returns ctx unchanged when it already carries a deadline,
 // otherwise a child bounded by defaultTimeout. The returned cancel must be
 // called.
@@ -140,7 +144,7 @@ func NewClient(spec Spec) (*Client, error) {
 	if mode := NormalizeTLS(spec.TLS); mode != "" {
 		scheme = "https"
 		tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
-		if mode == "skip-verify" {
+		if mode == tlsModeSkipVerify {
 			tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
 		}
 		tr.TLSClientConfig = tc
@@ -320,8 +324,8 @@ func NormalizeTLS(s string) string {
 		return ""
 	case "true", "yes", "on", "required":
 		return "true"
-	case "skip-verify":
-		return "skip-verify"
+	case tlsModeSkipVerify:
+		return tlsModeSkipVerify
 	default:
 		return s
 	}
@@ -336,7 +340,7 @@ func ValidTLSValue(v any) bool {
 		return true
 	case string:
 		switch strings.ToLower(strings.TrimSpace(t)) {
-		case "true", "false", "yes", "no", "on", "off", "required", "skip-verify":
+		case "true", "false", "yes", "no", "on", "off", "required", tlsModeSkipVerify:
 			return true
 		default:
 			return false
