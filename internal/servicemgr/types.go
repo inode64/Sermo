@@ -17,6 +17,13 @@ const (
 	BackendDocker  Backend = "docker"
 )
 
+// Init-system command binaries invoked through the execx runner.
+const (
+	cmdSystemctl = "systemctl"
+	cmdRcService = "rc-service"
+	cmdRcStatus  = "rc-status"
+)
+
 // ParseBackend parses a backend name used by CLI flags and environment values.
 func ParseBackend(value string) (Backend, error) {
 	switch Backend(strings.TrimSpace(strings.ToLower(value))) {
