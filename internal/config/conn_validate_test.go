@@ -161,6 +161,16 @@ checks:
     analyze: { rules: [ { id: a, match: "x", severity: fatal } ] }
 `), "severity must be")
 
+	mustHave(t, validateService(t, `
+name: db
+service: x
+checks:
+  config:
+    type: command
+    command: ["true"]
+    analyze: { rules: [ { id: a, severity: warning } ] }
+`), "missing a match")
+
 	// A valid analyze block produces no checks.config issue.
 	issues := validateService(t, `
 name: db

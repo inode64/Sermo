@@ -76,6 +76,7 @@ func TestParseAnalyzerErrors(t *testing.T) {
 		{"bad-stream", []any{rule("x", "y", "warning", "syslog")}, "stream"},
 		{"dup-id", []any{rule("x", "a", "warning"), rule("x", "b", "error")}, "duplicate"},
 		{"missing-id", []any{map[string]any{"match": "y", "severity": "warning"}}, "id"},
+		{"missing-match", []any{map[string]any{"id": "x", "severity": "warning"}}, "match"},
 	} {
 		if _, warn := parseAnalyzer(map[string]any{"rules": tc.rules}); warn == "" {
 			t.Errorf("%s: expected a warning containing %q", tc.name, tc.want)
