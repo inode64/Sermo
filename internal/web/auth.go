@@ -28,21 +28,28 @@ func (a Auth) Enabled() bool {
 	return a.AdminPassword != "" || a.GuestPassword != "" || a.AnonymousGuest
 }
 
-// role resolves a request to "admin", "guest", or "" (unauthenticated).
+// Role values returned by role() and surfaced in the whoami response. The empty
+// string means unauthenticated.
+const (
+	roleAdmin = "admin"
+	roleGuest = "guest"
+)
+
+// role resolves a request to roleAdmin, roleGuest, or "" (unauthenticated).
 func (a Auth) role(r *http.Request) string {
 	if !a.Enabled() {
-		return "admin"
+		return roleAdmin
 	}
 	if _, pass, ok := r.BasicAuth(); ok {
 		if a.AdminPassword != "" && secureEqual(pass, a.AdminPassword) {
-			return "admin"
+			return roleAdmin
 		}
 		if a.GuestPassword != "" && secureEqual(pass, a.GuestPassword) {
-			return "guest"
+			return roleGuest
 		}
 	}
 	if a.AnonymousGuest {
-		return "guest"
+		return roleGuest
 	}
 	return ""
 }
@@ -70,7 +77,7 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 		role := s.Auth.role(r)
 
 		if r.URL.Path == "/login" {
-			if role == "admin" {
+			if role == roleAdmin {
 				http.Redirect(w, r, "/", http.StatusSeeOther)
 			} else {
 				s.challenge(w)
@@ -88,7 +95,7 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 			s.challenge(w)
 			return
 		}
-		if r.Method == http.MethodPost && role != "admin" {
+		if r.Method == http.MethodPost && role != roleAdmin {
 			writeJSON(w, http.StatusForbidden, ActionResult{OK: false, Message: "read-only access"})
 			return
 		}
@@ -104,11 +111,11 @@ func (s *Server) challenge(w http.ResponseWriter) {
 func (s *Server) handleWhoami(w http.ResponseWriter, r *http.Request) {
 	role := roleFrom(r.Context())
 	if role == "" {
-		role = "admin"
+		role = roleAdmin
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"role":    role,
-		"can_act": role == "admin",
+		"can_act": role == roleAdmin,
 		"auth":    s.Auth.Enabled(),
 	})
 }
