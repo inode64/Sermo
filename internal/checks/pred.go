@@ -86,6 +86,9 @@ const (
 	// endpoint checks (icmp, ports, cert, connection-protocol probes).
 	fieldHost = "host"
 	fieldPort = "port"
+	// fieldTotal is the result data-map key holding a cumulative counter total
+	// (oom kills, net errors) or a target-set size (ports).
+	fieldTotal = "total"
 )
 
 // Predicate field lists, one per level check. They are exported so config
