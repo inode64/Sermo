@@ -767,8 +767,12 @@ func TestParseProxyURL(t *testing.T) {
 	if w != "" || u == nil || u.Host != "squid:3128" {
 		t.Fatalf("valid proxy: %v / %q", u, w)
 	}
-	if _, w := parseProxyURL(map[string]any{"proxy": "ftp://x:1"}); w == "" {
-		t.Fatal("a non-http/socks scheme must warn")
+	u, w = parseProxyURL(map[string]any{"proxy": "socks5h://proxy.local:1080"})
+	if w != "" || u == nil || u.Scheme != "socks5h" {
+		t.Fatalf("socks5h proxy should be valid: %v / %q", u, w)
+	}
+	if _, w := parseProxyURL(map[string]any{"proxy": "ftp://x:1"}); !strings.Contains(w, "socks5h") {
+		t.Fatalf("a non-http/socks scheme must warn with full scheme list, got %q", w)
 	}
 	if _, w := parseProxyURL(map[string]any{"proxy": "://nope"}); w == "" {
 		t.Fatal("a malformed proxy url must warn")

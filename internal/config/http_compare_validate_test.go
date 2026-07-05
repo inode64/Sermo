@@ -71,6 +71,15 @@ checks:
 `), "mutually exclusive")
 }
 
+func TestValidateHTTPProxySchemeMessageIncludesSocks5h(t *testing.T) {
+	mustHave(t, validateService(t, `
+name: web
+service: x
+checks:
+  proxy: { type: http, url: "http://h/", proxy: "ftp://proxy:21" }
+`), "http, https, socks5 or socks5h")
+}
+
 func TestValidateHTTPComparisonErrors(t *testing.T) {
 	cases := map[string]struct {
 		field string

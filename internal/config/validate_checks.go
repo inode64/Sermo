@@ -206,12 +206,8 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 		u, err := url.Parse(p)
 		if err != nil || u.Host == "" {
 			add("%s.proxy %q is not a valid URL", prefix, p)
-		} else {
-			switch u.Scheme {
-			case "http", "https", "socks5", "socks5h":
-			default:
-				add("%s.proxy scheme must be http, https or socks5", prefix)
-			}
+		} else if !checks.IsHTTPProxyScheme(u.Scheme) {
+			add("%s.proxy scheme must be %s", prefix, checks.HTTPProxySchemeList)
 		}
 	}
 	if v, present := fields["body"]; present {
