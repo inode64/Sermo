@@ -88,7 +88,7 @@ func (c storageCheck) Run(_ context.Context) Result {
 	usedBytes := storageUsedBytes(st)
 	values := map[string]float64{
 		fieldUsedPct: st.UsedPct,
-		"free_pct":   st.FreePct,
+		fieldFreePct: st.FreePct,
 		"used_bytes": float64(usedBytes),
 		"free_bytes": float64(st.FreeBytes),
 	}
@@ -103,7 +103,7 @@ func (c storageCheck) Run(_ context.Context) Result {
 	ok := levelPredsHold(c.preds, values)
 	res := c.result(ok, fmt.Sprintf("%s used %.1f%% free %.1f%% inodes %.1f%% used", c.path, st.UsedPct, st.FreePct, st.InodesUsedPct), start)
 	data[fieldUsedPct] = st.UsedPct
-	data["free_pct"] = st.FreePct
+	data[fieldFreePct] = st.FreePct
 	data["used_bytes"] = usedBytes
 	data["free_bytes"] = st.FreeBytes
 	data["total_bytes"] = st.TotalBytes
