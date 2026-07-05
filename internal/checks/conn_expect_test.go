@@ -120,6 +120,14 @@ func TestBuildConnCheckExpect(t *testing.T) {
 	if len(warns) == 0 {
 		t.Fatal("invalid expect op should warn")
 	}
+	_, warns = Build(map[string]any{
+		"resolver": map[string]any{
+			"type": "dns", "expect": map[string]any{"answers": map[string]any{"op": ">", "value": "abc"}},
+		},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) == 0 {
+		t.Fatal("invalid expect value should warn")
+	}
 
 	// expect_latency is parsed onto the connCheck.
 	built, warns = Build(map[string]any{
