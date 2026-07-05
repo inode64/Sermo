@@ -153,6 +153,9 @@ func TestBuildPortsCheck(t *testing.T) {
 	if _, warns := Build(map[string]any{"bad": map[string]any{"type": "ports", "ports": "80", "expect": "weird"}}, Deps{}); len(warns) == 0 {
 		t.Fatal("an invalid expect should warn")
 	}
+	if _, warns := Build(map[string]any{"bad": map[string]any{"type": "ports", "ports": "80", "connect_timeout": "fast"}}, Deps{}); len(warns) == 0 {
+		t.Fatal("an invalid connect_timeout should warn")
+	}
 }
 
 func TestPortsOpenClosedCounts(t *testing.T) {

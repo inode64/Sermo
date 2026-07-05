@@ -440,6 +440,13 @@ func buildPortsCheck(b base, entry map[string]any) (Check, string) {
 	if match != "all" && match != "any" && match != "none" {
 		return nil, "ports check: match must be all, any or none"
 	}
+	connectTimeout := time.Duration(0)
+	if raw, present := entry["connect_timeout"]; present {
+		connectTimeout = cfgval.Duration(raw)
+		if connectTimeout <= 0 {
+			return nil, "ports check: connect_timeout must be a valid positive duration"
+		}
+	}
 	allIf, iwarn := parseInterfaceMatch(entry)
 	if iwarn != "" {
 		return nil, "ports check: " + iwarn
@@ -453,7 +460,7 @@ func buildPortsCheck(b base, entry map[string]any) (Check, string) {
 		expect:         expect,
 		match:          match,
 		onChange:       cfgval.Bool(entry["on_change"]),
-		connectTimeout: cfgval.DurationOr(entry["connect_timeout"], 0),
+		connectTimeout: connectTimeout,
 	}, ""
 }
 
