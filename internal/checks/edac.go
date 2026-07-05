@@ -44,14 +44,14 @@ func (c edacCheck) Run(_ context.Context) Result {
 		return c.result(false, "edac: no EDAC controllers (ECC reporting unavailable)", start)
 	}
 
-	values := map[string]float64{"ce": float64(st.CE), "ue": float64(st.UE)}
+	values := map[string]float64{fieldCE: float64(st.CE), fieldUE: float64(st.UE)}
 	ok := st.UE > 0 // default alert condition
 	if len(c.preds) > 0 {
 		ok = levelPredsHold(c.preds, values)
 	}
 
 	r := c.result(ok, fmt.Sprintf("edac: %d correctable, %d uncorrectable", st.CE, st.UE), start)
-	r.Data = map[string]any{"ce": float64(st.CE), "ue": float64(st.UE)}
+	r.Data = map[string]any{fieldCE: float64(st.CE), fieldUE: float64(st.UE)}
 	return r
 }
 
