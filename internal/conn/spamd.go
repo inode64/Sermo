@@ -37,7 +37,7 @@ func (spamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if !ok {
 		return Result{}, fmt.Errorf("not a spamd PONG reply: %q", line)
 	}
-	return Result{Extra: map[string]string{"protocol": version, "ping": "pong"}}, nil
+	return Result{Extra: map[string]string{"protocol": version, extraPing: respPong}}, nil
 }
 
 // parseSpamdPong validates a spamd PING reply ("SPAMD/1.5 0 PONG") and returns

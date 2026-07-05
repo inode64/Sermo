@@ -58,12 +58,12 @@ func (rspamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, fmt.Errorf("rspamd: HTTP status %d", resp.StatusCode)
 	}
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-	if !strings.EqualFold(strings.TrimSpace(string(body)), "pong") {
+	if !strings.EqualFold(strings.TrimSpace(string(body)), respPong) {
 		return Result{}, fmt.Errorf("rspamd: /ping returned %q, want pong", strings.TrimSpace(string(body)))
 	}
 
 	server := resp.Header.Get("Server")
-	extra := map[string]string{"ping": "pong"}
+	extra := map[string]string{extraPing: respPong}
 	if server != "" {
 		extra["server"] = server
 	}

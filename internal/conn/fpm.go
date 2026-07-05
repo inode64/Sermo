@@ -68,14 +68,14 @@ func fpmHandshake(rw io.ReadWriter, pingPath string) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	if !strings.Contains(stdout, "pong") {
+	if !strings.Contains(stdout, respPong) {
 		detail := strings.TrimSpace(stdout)
 		if detail == "" {
 			detail = strings.TrimSpace(stderr)
 		}
 		return Result{}, fmt.Errorf("php-fpm did not answer pong on %s (enable ping.path): %s", pingPath, detail)
 	}
-	return Result{Extra: map[string]string{"ping": "pong"}}, nil
+	return Result{Extra: map[string]string{extraPing: respPong}}, nil
 }
 
 // fpmRequest performs one FastCGI GET for script (with an optional query string)

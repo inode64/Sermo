@@ -31,6 +31,10 @@ const (
 	// number and the portmapper/RPC status.
 	extraProgram   = "program"
 	extraRPCStatus = "rpc_status"
+	// extraPing is the Result.Extra key and respPong the expected reply body of
+	// the ping/pong health probes (php-fpm, rspamd, spamd).
+	extraPing = "ping"
+	respPong  = "pong"
 )
 
 // Config is the connection target for a protocol probe. Fields that do not apply
