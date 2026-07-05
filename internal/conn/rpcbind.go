@@ -62,7 +62,7 @@ func (rpcbindProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Extra: map[string]string{"program": "100000", "rpc_status": status}}, nil
+	return Result{Extra: map[string]string{extraProgram: "100000", extraRPCStatus: status}}, nil
 }
 
 // buildRPCNull builds an ONC RPC CALL for the NULL procedure of program prog

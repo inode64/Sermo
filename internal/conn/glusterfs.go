@@ -56,5 +56,5 @@ func (glusterfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) 
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Extra: map[string]string{"program": "glusterfs-handshake", "rpc_status": status}}, nil
+	return Result{Extra: map[string]string{extraProgram: "glusterfs-handshake", extraRPCStatus: status}}, nil
 }

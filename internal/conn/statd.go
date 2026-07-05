@@ -55,5 +55,5 @@ func (statdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Extra: map[string]string{"program": "100024", "rpc_status": status}}, nil
+	return Result{Extra: map[string]string{extraProgram: "100024", extraRPCStatus: status}}, nil
 }

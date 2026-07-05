@@ -54,5 +54,5 @@ func (mountdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Extra: map[string]string{"program": "100005", "rpc_status": status}}, nil
+	return Result{Extra: map[string]string{extraProgram: "100005", extraRPCStatus: status}}, nil
 }
