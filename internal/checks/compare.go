@@ -249,7 +249,7 @@ func parseExpectLatency(entry map[string]any) (op, value, warn string) {
 	return op, value, ""
 }
 
-// ValidateAssertionValue checks the value side of response assertion operators.
+// ValidateAssertionValue checks the value side of assertion operators.
 func ValidateAssertionValue(label, op, value string) error {
 	valueLabel := "value"
 	if label != "" {
