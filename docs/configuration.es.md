@@ -2154,7 +2154,7 @@ variable y hacer que cada referencia `${var}` se resuelva al nuevo valor.
 
 - Los escalares y las listas sobrescriben.
 - Los mapas se fusionan recursivamente.
-- Las secciones con nombre (`checks`, `preflight`, `postflight`, `processes`, `rules`)
+- Las secciones con nombre (`checks`, `preflight`, `processes`, `rules`)
   son mapas indexados por nombre, de modo que un hijo puede sustituir un campo de una
   entrada.
 - Deshabilita una entrada heredada con `enabled: false`; elimínala con
