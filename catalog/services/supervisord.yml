@@ -15,6 +15,7 @@ checks:
       - status
     timeout: 15s
     optional: true
+    verify: true
 preflight:
   config:
     type: command
@@ -22,14 +23,6 @@ preflight:
       - ${supervisord_binary}
       - check
     timeout: 30s
-    optional: true
-postflight:
-  ping:
-    type: command
-    command:
-      - supervisorctl
-      - status
-    timeout: 15s
     optional: true
 rules:
   block-restart-if-config-invalid:

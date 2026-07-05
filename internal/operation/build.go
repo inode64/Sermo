@@ -32,7 +32,7 @@ type Config struct {
 	Discoverer  process.Discoverer
 	ResolveUser process.UserResolver
 	CheckDeps   checks.Deps // Runner/HTTPClient/DefaultTimeout; Status is filled in
-	// MetricSample supplies fresh metric readings for preflight/postflight/guard
+	// MetricSample supplies fresh metric readings for preflight/verification/guard
 	// evaluation when CheckDeps.Metrics is unset. Optional.
 	MetricSample func(context.Context) checks.MetricReader
 	// Changed reports whether a watched library/config path differs from its
@@ -44,7 +44,7 @@ type Config struct {
 	Emit             func(Result)
 }
 
-// New builds an Engine from real components, deriving preflight/postflight/guard
+// New builds an Engine from real components, deriving preflight/verification/guard
 // closures, residual discovery, the kill policy and the reaper from the resolved
 // config tree.
 func New(c Config) Engine {
@@ -139,7 +139,7 @@ func New(c Config) Engine {
 		},
 		Guard:            guardClosure(tree, deps, c.MetricSample, c.Changed),
 		Preflight:        sectionRunner(tree, "preflight", deps, c.MetricSample),
-		Postflight:       sectionRunner(tree, "postflight", deps, c.MetricSample),
+		Postflight:       verifyRunner(tree, deps, c.MetricSample),
 		ReloadFunc:       reloadClosure(tree, deps, c.Manager, c.Backend, c.Unit, c.Discoverer, selectors),
 		ResumeFunc:       resumeClosure(c.Manager, c.Unit),
 		Discover:         discover,
@@ -401,8 +401,8 @@ func checkDepsForEval(ctx context.Context, deps checks.Deps, sample func(context
 	return deps
 }
 
-// sectionRunner builds and runs a checks/preflight/postflight section, returning
-// its evaluated outcome. A missing section is a trivial pass.
+// sectionRunner builds and runs a checks/preflight section, returning its
+// evaluated outcome. A missing section is a trivial pass.
 func sectionRunner(tree map[string]any, section string, deps checks.Deps, sample func(context.Context) checks.MetricReader) func(context.Context) checks.Outcome {
 	return func(ctx context.Context) checks.Outcome {
 		entries, _ := tree[section].(map[string]any)
@@ -411,6 +411,38 @@ func sectionRunner(tree map[string]any, section string, deps checks.Deps, sample
 		results = append(results, checks.Run(ctx, built, 0)...)
 		return checks.Evaluate(results)
 	}
+}
+
+// verifyRunner builds the post-operation verification outcome from every check
+// flagged `verify: true`, run once. It replaces the dedicated postflight: section:
+// the same health probe used for periodic monitoring doubles as the
+// start-verification, run immediately with the standard required/optional model
+// (a check's for/within window and then action are irrelevant here — only
+// Result.OK counts). A service with no verify checks is a trivial pass, exactly
+// as a missing postflight section was.
+func verifyRunner(tree map[string]any, deps checks.Deps, sample func(context.Context) checks.MetricReader) func(context.Context) checks.Outcome {
+	return func(ctx context.Context) checks.Outcome {
+		section := collectVerifyChecks(tree)
+		built, warnings := checks.BuildWithWarnings(section, checkDepsForEval(ctx, deps, sample))
+		results := checks.BuildWarningResults(warnings)
+		results = append(results, checks.Run(ctx, built, 0)...)
+		return checks.Evaluate(results)
+	}
+}
+
+// collectVerifyChecks returns the service's checks flagged `verify: true` — the
+// post-operation health verifiers — as a fresh section map. Sourced from the
+// checks: section today; the future checks→watches unification will extend this
+// to the watches: section.
+func collectVerifyChecks(tree map[string]any) map[string]any {
+	out := map[string]any{}
+	section, _ := tree["checks"].(map[string]any)
+	for name, raw := range section {
+		if entry, ok := raw.(map[string]any); ok && cfgval.Bool(entry["verify"]) {
+			out[name] = entry
+		}
+	}
+	return out
 }
 
 // guardClosure runs the service's named checks once, caches them, and evaluates

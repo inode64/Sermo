@@ -33,6 +33,7 @@ checks:
       - stats
     timeout: 10s
     optional: true
+    verify: true
   fds:
     type: metric
     scope: service
@@ -85,14 +86,6 @@ rules:
     within:
       cycles: 10
       min_matches: 3
-postflight:
-  ctl:
-    type: command
-    command:
-      - ${syslog_ng_binary}
-      - stats
-    timeout: 10s
-    optional: true
 reload_on_change:
   paths:
     - ${config}

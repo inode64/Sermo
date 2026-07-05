@@ -26,13 +26,7 @@ checks:
     port: 20048
     timeout: 3s
     optional: true
-postflight:
-  mountd:
-    type: mountd
-    host: 127.0.0.1
-    port: 20048
-    timeout: 3s
-    optional: true
+    verify: true
 rules:
   alert-if-memory-high:
     type: alert

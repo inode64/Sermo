@@ -17,13 +17,7 @@ checks:
     requires:
       - service
     optional: true
-postflight:
-  process:
-    type: process
-    exe: ${node_binary}
-    user: root
-    state: running
-    optional: true
+    verify: true
 policy:
   cooldown: 15m
   max_actions: 2

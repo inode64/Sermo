@@ -26,12 +26,7 @@ checks:
     state: running
     requires:
       - service
-postflight:
-  process:
-    type: process
-    exe: ${nfsdcld_binary}
-    user: ${user}
-    state: running
+    verify: true
 rules:
   alert-if-memory-high:
     type: alert

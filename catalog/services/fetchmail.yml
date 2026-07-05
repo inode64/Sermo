@@ -32,13 +32,7 @@ checks:
     requires:
       - service
     optional: true
-postflight:
-  process:
-    type: process
-    exe: ${fetchmail_binary}
-    user: root
-    state: running
-    optional: true
+    verify: true
 reload_on_change:
   paths:
     - ${config}

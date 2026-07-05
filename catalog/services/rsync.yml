@@ -28,12 +28,7 @@ checks:
     host: 127.0.0.1
     port: ${port}
     timeout: 3s
-postflight:
-  rsync:
-    type: rsync
-    host: 127.0.0.1
-    port: ${port}
-    timeout: 3s
+    verify: true
 policy:
   cooldown: 15m
   max_actions: 2

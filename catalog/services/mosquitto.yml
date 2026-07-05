@@ -33,6 +33,7 @@ checks:
     host: ${host}
     port: ${port}
     timeout: 3s
+    verify: true
   fds:
     type: metric
     scope: service
@@ -56,12 +57,6 @@ preflight:
       - /etc/mosquitto/mosquitto.conf
     timeout: 15s
     optional: true
-postflight:
-  mqtt:
-    type: mqtt
-    host: ${host}
-    port: ${port}
-    timeout: 3s
 rules:
   block-restart-if-config-invalid:
     type: guard

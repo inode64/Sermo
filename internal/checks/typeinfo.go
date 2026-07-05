@@ -63,7 +63,7 @@ var typeInfos = []TypeInfo{
 var typeInfoByName = indexTypeInfos(typeInfos)
 
 // SingleShotCheckTypes are the check types valid in a service's
-// checks:/preflight:/postflight: sections and (minus service-scoped types) as
+// checks:/preflight: sections and (minus service-scoped types) as
 // host watches. Config validation consumes this list directly and
 // TestSingleShotCheckTypesAreBuildable locks it against the buildCheck dispatch,
 // so the two can never drift. Connection-protocol types (mysql, smtp, ...) are

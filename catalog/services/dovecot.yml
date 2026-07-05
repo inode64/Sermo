@@ -64,7 +64,8 @@ checks:
     port: ${port}
     timeout: 3s
 
-  # POP3 liveness (plain). optional: hosts without pop3 enabled stay quiet.
+    # POP3 liveness (plain). optional: hosts without pop3 enabled stay quiet.
+    verify: true
   pop:
     type: pop
     port: ${pop_port}
@@ -85,12 +86,6 @@ checks:
     cert_verify: false
     expires_in_days: 21
     timeout: 5s
-
-postflight:
-  imap:
-    type: imap
-    port: ${port}
-    timeout: 3s
 
 rules:
   restart-if-imap-failed:

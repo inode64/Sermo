@@ -39,6 +39,7 @@ checks:
     host: ${host}
     port: ${port}
     timeout: 3s
+    verify: true
   persistence:
     type: redis
     host: ${host}
@@ -141,12 +142,6 @@ rules:
     then:
       action: alert
       message: ${display_name} memory usage is high
-postflight:
-  ping:
-    type: redis
-    host: ${host}
-    port: ${port}
-    timeout: 3s
 reload_on_change:
   paths:
     - /etc/redis/redis.conf

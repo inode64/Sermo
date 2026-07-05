@@ -528,6 +528,16 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			add("%s has no type", path)
 			continue
 		}
+		// verify: true marks a check as a post-operation start-verification probe.
+		// Only health checks (OK == the service is up) can confirm a start; a
+		// condition check's OK means a threshold fired, which is not verification.
+		if v, present := entry["verify"]; present {
+			if b, ok := v.(bool); !ok {
+				add("%s.verify must be a boolean", path)
+			} else if b && !checks.IsHealthType(typ) {
+				add("%s.verify is only valid on a health check (tcp/http/service/command/cert/…); %q is a condition check whose OK does not confirm a successful start", path, typ)
+			}
+		}
 		if !validateSingleShotCheckFields(path, typ, entry, locksDir, add) {
 			add("%s has unknown type %q", path, typ)
 			continue

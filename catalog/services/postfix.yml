@@ -28,6 +28,7 @@ checks:
     host: "${host}"
     port: "${port}"
     timeout: 3s
+    verify: true
   cert:
     type: cert
     optional: true
@@ -36,13 +37,6 @@ checks:
     cert_verify: false
     expires_in_days: 21
     timeout: 5s
-
-postflight:
-  smtp:
-    type: smtp
-    host: "${host}"
-    port: "${port}"
-    timeout: 3s
 
 reload_on_change:
   paths: [/etc/postfix/main.cf, /etc/postfix/master.cf]

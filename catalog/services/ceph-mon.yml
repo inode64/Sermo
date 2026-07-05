@@ -29,6 +29,7 @@ checks:
     host: ${host}
     port: ${port}
     timeout: 3s
+    verify: true
   status:
     type: command
     command:
@@ -40,12 +41,6 @@ checks:
     analyze:
       use:
         - ceph
-postflight:
-  messenger:
-    type: ceph
-    host: ${host}
-    port: ${port}
-    timeout: 3s
 rules:
   restart-if-messenger-failed:
     type: remediation

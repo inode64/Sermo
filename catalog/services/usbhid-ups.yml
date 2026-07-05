@@ -16,10 +16,4 @@ checks:
     requires:
       - service
     optional: true
-postflight:
-  process:
-    type: process
-    exe: ${usbhid_ups_binary}
-    user: root
-    state: running
-    optional: true
+    verify: true

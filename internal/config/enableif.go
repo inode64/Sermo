@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	enableIfSections = set("checks", "preflight", "postflight", "processes")
+	enableIfSections = set("checks", "preflight", "processes")
 	enableIfKeys     = set("file", "key", "contains", "equals", "matches")
 )
 
@@ -75,7 +75,7 @@ func walkEnableIf(v any, path []string, add addFunc) {
 				label = "enable_if"
 			}
 			if !enableIfAllowedAt(path) {
-				add("%s.enable_if is only supported on entries under checks, preflight, postflight or processes", label)
+				add("%s.enable_if is only supported on entries under checks, preflight or processes", label)
 			}
 			validateEnableIfSpec(label+".enable_if", spec, add)
 		}

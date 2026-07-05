@@ -26,13 +26,7 @@ checks:
       - ${qemu_ga_binary}
       - --version
     timeout: 5s
-postflight:
-  version:
-    type: command
-    command:
-      - ${qemu_ga_binary}
-      - --version
-    timeout: 5s
+    verify: true
 rules:
   restart-if-version-failed:
     type: remediation

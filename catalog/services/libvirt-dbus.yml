@@ -22,10 +22,7 @@ checks:
   dbus:
     type: dbus
     timeout: 5s
-postflight:
-  dbus:
-    type: dbus
-    timeout: 5s
+    verify: true
 rules:
   restart-if-dbus-failed:
     type: remediation

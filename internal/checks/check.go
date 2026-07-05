@@ -1,9 +1,9 @@
-// Package checks runs a service's monitoring/preflight/postflight checks.
+// Package checks runs a service's monitoring/preflight checks.
 // Each Run invocation is single-shot; checks that track
 // change over time keep their state in the built check instance. The runner
 // executes a set concurrently and returns one Result per check.
 //
-// Service checks/preflight/postflight support tcp, ports, http, command, service,
+// Service checks/preflight support tcp, ports, http, command, service,
 // file_exists, file, lockfile, binary, process, metric (via the daemon's stateful collector),
 // libraries, count, and host-resource probes (storage, autofs, load, fds, conntrack,
 // firewall_rules, entropy, zombies, oom, cert). The multi-target watch types

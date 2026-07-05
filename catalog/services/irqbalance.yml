@@ -14,12 +14,7 @@ checks:
     state: running
     requires:
       - service
-postflight:
-  process:
-    type: process
-    exe: ${irqbalance_binary}
-    user: root
-    state: running
+    verify: true
 rules:
   alert-if-memory-high:
     type: alert
