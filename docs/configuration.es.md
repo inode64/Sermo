@@ -1502,18 +1502,28 @@ un check **y** su remediación/guard/alerta juntos:
   *durante* una operación que rechaza las acciones listadas mientras el check falla.
 - `action: alert` (con `message`/`notify` opcionales) — una **alerta**.
 
-Esa entrada se **desugariza** a un `checks:` generado (con el nombre del watch,
-embebiendo su `check:` — así dos watches que compartan endpoint lo sondean dos
-veces) más el `rules:` equivalente, por lo que es exactamente igual que escribir ese
-check + regla a mano y hereda cada barrera de seguridad (incluida la regla de que
-una métrica `scope: system` nunca puede disparar una acción de servicio). La
-polaridad de la condición sigue al check: uno de **salud** (tcp/http/service/…)
+Esa entrada se **desugariza** al `checks:` + `rules:` equivalente, por lo que es
+exactamente igual que escribir ese check + regla a mano y hereda cada barrera de
+seguridad (incluida la regla de que una métrica `scope: system` nunca puede
+disparar una acción de servicio). El `check:` es o bien:
+
+- **embebido** (`check: { type: http, … }`) — una sonda generada como check con el
+  nombre del watch. Dos watches que embeban el mismo endpoint lo sondean dos veces.
+- una **referencia** (`check: { ref: nombre }`) — apunta a un `checks:`/`preflight:`
+  existente, así una sonda de salud/`verify: true` compartida **no** se duplica. Así
+  se expresa como watch una remediación sobre un check compartido.
+
+La polaridad de la condición sigue al check: uno de **salud** (tcp/http/service/…)
 dispara al **fallar**; uno de **condición** (metric/storage/load/…) dispara cuando
-se cumple su **umbral**.
+se cumple su **umbral** (marca un check de condición embebido `optional: true` para
+que no afecte a la disponibilidad/SLA del servicio).
 
 Un watch es **o** una operación/alerta (tiene `then.action`) **o** un efecto
-fire-and-forget (`hook`/`expand`/`kill`) — no ambos. Es **aditivo**: las secciones
-clásicas `checks:` + `rules:` siguen siendo válidas y el catálogo las sigue usando.
+fire-and-forget (`hook`/`expand`/`kill`) — no ambos. Las secciones clásicas
+`checks:` + `rules:` siguen siendo válidas; el catálogo expresa su
+remediación/alertas como `watches:` unificados (un `check: {ref:}` al check de
+salud compartido, o una métrica opcional embebida), manteniendo `checks:` como el
+registro de sondas compartidas.
 
 ```yaml
 watches:

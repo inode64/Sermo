@@ -1459,19 +1459,28 @@ remediation/guard/alert together:
   *during* an operation that refuses the listed actions while the check fails.
 - `action: alert` (with an optional `message`/`notify`) — an **alert**.
 
-Such an entry is **desugared** to a generated `checks:` probe (named after the
-watch, embedding its `check:` — so two watches sharing an endpoint probe it twice)
-plus the equivalent `rules:` entry, so it is exactly equivalent to writing that
-check + rule by hand and inherits every safety gate (including the rule that a
-`scope: system` metric can never drive a service action). The condition polarity
-follows the check: a **health** check (tcp/http/service/command/cert/…) fires on
-**failure**; a **condition** check (metric/storage/load/…) fires when its
-**threshold** is met.
+Such an entry is **desugared** to the equivalent `checks:` + `rules:` entry, so it
+is exactly equivalent to writing that check + rule by hand and inherits every
+safety gate (including the rule that a `scope: system` metric can never drive a
+service action). The `check:` is either:
+
+- **embedded** (`check: { type: http, … }`) — a probe generated as a check named
+  after the watch. Two watches embedding the same endpoint probe it twice.
+- a **reference** (`check: { ref: name }`) — points at an existing `checks:`/
+  `preflight:` entry, so a shared health/`verify: true` probe is **not** duplicated.
+  This is how a remediation on a shared check is expressed as a watch.
+
+The condition polarity follows the check: a **health** check (tcp/http/service/
+command/cert/…) fires on **failure**; a **condition** check (metric/storage/load/…)
+fires when its **threshold** is met (mark an embedded condition check
+`optional: true` so it does not affect the service's availability/SLA).
 
 A watch is **either** an operation/alert (it has `then.action`) **or** a
-fire-and-forget side effect (`hook`/`expand`/`kill`) — not both. This is
-**additive**: the classic `checks:` + `rules:` sections remain fully valid, and the
-catalog still uses them.
+fire-and-forget side effect (`hook`/`expand`/`kill`) — not both. The classic
+`checks:` + `rules:` sections remain fully valid; the catalog expresses its
+remediation/alerts as unified `watches:` (a `check: {ref:}` to the shared health
+check, or an embedded optional metric), keeping `checks:` as the shared-probe
+registry.
 
 ```yaml
 watches:
