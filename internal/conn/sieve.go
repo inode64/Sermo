@@ -38,7 +38,7 @@ func (sieveProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 			upper := strings.ToUpper(line)
 			switch {
 			case strings.HasPrefix(upper, "OK"):
-				extra := map[string]string{"greeting": line}
+				extra := map[string]string{extraGreeting: line}
 				if impl != "" {
 					extra["implementation"] = impl
 				}

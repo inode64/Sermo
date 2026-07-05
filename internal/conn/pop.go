@@ -34,7 +34,7 @@ func popHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("greeting: %w", err)
 	}
-	res := Result{Extra: map[string]string{"greeting": greeting}}
+	res := Result{Extra: map[string]string{extraGreeting: greeting}}
 
 	if cfg.User != "" {
 		if _, err := fmt.Fprintf(rw, "USER %s\r\n", cfg.User); err != nil {
