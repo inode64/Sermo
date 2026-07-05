@@ -30,6 +30,7 @@ type Event struct {
 // vocabulary is listed on the Kind field doc.
 const (
 	eventKindAction     = "action"
+	eventKindAlert      = "alert"
 	eventKindError      = "error"
 	eventKindDryRun     = "dry-run"
 	eventKindFiring     = "firing"
@@ -114,7 +115,7 @@ func SlogEmitter(logger *slog.Logger) func(Event) {
 		switch e.Kind {
 		case eventKindError, eventKindHookFail, eventKindNotifyFail:
 			logger.Error("sermod", attrs...)
-		case eventKindAction, "alert", eventKindSuppressed, eventKindFiring, eventKindRecovered, eventKindDryRun, "hook", "notify", eventKindCascade:
+		case eventKindAction, eventKindAlert, eventKindSuppressed, eventKindFiring, eventKindRecovered, eventKindDryRun, "hook", "notify", eventKindCascade:
 			logger.Info("sermod", attrs...)
 		default:
 			logger.Debug("sermod", attrs...)
