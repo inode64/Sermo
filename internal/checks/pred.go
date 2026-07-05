@@ -82,6 +82,10 @@ const (
 	// sees as SERMO_VALUE. Every level/stateful check publishes it. (This is the
 	// output key; the config-input threshold is entry["value"], left as-is.)
 	fieldValue = "value"
+	// fieldHost and fieldPort are the target-identity result data-map keys of the
+	// endpoint checks (icmp, ports, cert, connection-protocol probes).
+	fieldHost = "host"
+	fieldPort = "port"
 )
 
 // Predicate field lists, one per level check. They are exported so config
