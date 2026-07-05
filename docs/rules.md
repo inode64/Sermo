@@ -419,7 +419,7 @@ in any case (it is normalized to upper-case); an unknown verb is rejected at
 config validation. A request `body`/`json` is sent for any method that carries
 one (`POST`/`PUT`/`PATCH`/…). **`http3: true`** sends the request over **HTTP/3
 (QUIC)** instead of TCP — see below. **`proxy`** routes the request through a forward proxy such as
-**Squid** (`http://[user:pass@]host:port`; `http`, `https` or `socks5` schemes —
+**Squid** (`http://[user:pass@]host:port`; `http`, `https`, `socks5` or `socks5h` schemes —
 credentials, when present, go in the URL). This both monitors that the proxy
 forwards correctly and that the target is reachable through it; for an `https://`
 target the proxy is used via `CONNECT`, and certificate inspection (below) still
