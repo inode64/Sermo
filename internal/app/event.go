@@ -47,6 +47,14 @@ const (
 	eventKindExpandFailed  = "expand-failed"
 )
 
+// Event status values for Event.Status — the outcome of an emitted action:
+// succeeded, blocked by a guard/lock/cooldown, or failed.
+const (
+	eventStatusOK      = "ok"
+	eventStatusBlocked = "blocked"
+	eventStatusFailed  = "failed"
+)
+
 // resultOutput extracts the bounded command output a check stored under
 // Data["output"] (set by `command` checks and app probes on failure), for
 // threading into an event's Output field. Empty when absent.
