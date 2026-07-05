@@ -62,7 +62,7 @@ func resultOutput(r checks.Result) string {
 	if r.Data == nil {
 		return ""
 	}
-	if s, ok := r.Data["output"].(string); ok {
+	if s, ok := r.Data[checks.DataKeyOutput].(string); ok {
 		return s
 	}
 	return ""

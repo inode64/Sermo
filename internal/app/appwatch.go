@@ -27,7 +27,7 @@ func (c appCheck) Run(ctx context.Context) checks.Result {
 		Message: rep.Status,
 	}
 	if !res.OK && rep.Output != "" {
-		res.Data = map[string]any{"output": rep.Output}
+		res.Data = map[string]any{checks.DataKeyOutput: rep.Output}
 	}
 	return res
 }

@@ -348,7 +348,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	fail := func(msg string) Result {
 		r := c.result(false, msg, start)
 		if out := BoundedOutput(res.Stdout, res.Stderr); out != "" {
-			r.Data = map[string]any{"output": out}
+			r.Data = map[string]any{DataKeyOutput: out}
 		}
 		return r
 	}
@@ -383,7 +383,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 			r.Optional = sev == SevWarning
 			r.Data = map[string]any{"pattern_id": id, "pattern_severity": sev.String(), "pattern_line": line}
 			if out := BoundedOutput(res.Stdout, res.Stderr); out != "" {
-				r.Data["output"] = out
+				r.Data[DataKeyOutput] = out
 			}
 			return r
 		}
