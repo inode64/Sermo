@@ -238,5 +238,23 @@ func parseExpectLatency(entry map[string]any) (op, value, warn string) {
 	if !validCompareOp(op) {
 		return "", "", "expect_latency op must be one of ==, !=, >, >=, <, <=, contains, =~"
 	}
-	return op, cfgval.String(lat["value"]), ""
+	value = cfgval.String(lat["value"])
+	if err := validateAssertionValue("expect_latency", op, value); err != nil {
+		return "", "", err.Error()
+	}
+	return op, value, ""
+}
+
+func validateAssertionValue(label, op, value string) error {
+	switch op {
+	case ">", ">=", "<", "<=":
+		if _, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err != nil {
+			return fmt.Errorf("%s value %q must be numeric for op %s", label, value, op)
+		}
+	case "=~":
+		if _, err := regexp.Compile(value); err != nil {
+			return fmt.Errorf("%s value is not a valid regexp: %w", label, err)
+		}
+	}
+	return nil
 }
