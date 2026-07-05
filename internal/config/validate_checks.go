@@ -354,6 +354,9 @@ func validatePortsFields(prefix string, fields map[string]any, add addFunc) {
 			add("%s.on_change must be a boolean", prefix)
 		}
 	}
+	if v, present := fields["connect_timeout"]; present && !isPositiveDuration(cfgval.String(v)) {
+		add("%s.connect_timeout must be a valid positive duration", prefix)
+	}
 }
 
 // validatePortSpec returns "" when spec is a valid comma-separated list of ports
