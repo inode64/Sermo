@@ -26,6 +26,11 @@ const (
 	// extraGreeting is the Result.Extra key carrying a text-protocol server's
 	// greeting/banner line (ftp, imap, pop, nntp, rsync, sieve, …).
 	extraGreeting = "greeting"
+	// extraProgram and extraRPCStatus are the Result.Extra keys of the
+	// Sun-RPC probes (rpcbind, nfs, mountd, glusterfs): the queried program
+	// number and the portmapper/RPC status.
+	extraProgram   = "program"
+	extraRPCStatus = "rpc_status"
 )
 
 // Config is the connection target for a protocol probe. Fields that do not apply

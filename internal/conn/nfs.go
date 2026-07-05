@@ -54,7 +54,7 @@ func (nfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Extra: map[string]string{"program": "100003", "rpc_status": status}}, nil
+	return Result{Extra: map[string]string{extraProgram: "100003", extraRPCStatus: status}}, nil
 }
 
 // rpcCallTCP sends an RPC message over a TCP connection using record marking
