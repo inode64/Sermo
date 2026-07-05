@@ -10,6 +10,13 @@ import (
 	"time"
 )
 
+// Sensor categories: the predicate fields and reported data keys of a sensors check.
+const (
+	sensorTemp    = "temp"
+	sensorFan     = "fan"
+	sensorVoltage = "voltage"
+)
+
 // SensorReading is one hwmon input: the chip name, the kind (temp/fan/in), a
 // label and the value in its natural unit (°C, RPM, V).
 type SensorReading struct {
@@ -74,9 +81,9 @@ func (c sensorsCheck) Run(_ context.Context) Result {
 			parts = append(parts, fmt.Sprintf("%s=%.1f", field, value))
 		}
 	}
-	appendSensorPart("temp", summary.Temp, summary.HasTemp)
-	appendSensorPart("fan", summary.Fan, summary.HasFan)
-	appendSensorPart("voltage", summary.Voltage, summary.HasVoltage)
+	appendSensorPart(sensorTemp, summary.Temp, summary.HasTemp)
+	appendSensorPart(sensorFan, summary.Fan, summary.HasFan)
+	appendSensorPart(sensorVoltage, summary.Voltage, summary.HasVoltage)
 	r := c.result(ok, "sensors "+strings.Join(parts, " "), start)
 	r.Data = map[string]any{}
 	for k, v := range values {
@@ -99,9 +106,9 @@ func SummarizeSensors(readings []SensorReading, chip, label string) SensorValues
 			continue
 		}
 		switch r.Kind {
-		case "temp":
+		case sensorTemp:
 			temps = append(temps, r.Value)
-		case "fan":
+		case sensorFan:
 			fans = append(fans, r.Value)
 		case "in":
 			volts = append(volts, r.Value)
@@ -123,13 +130,13 @@ func SummarizeSensors(readings []SensorReading, chip, label string) SensorValues
 func sensorValueMap(summary SensorValues) map[string]float64 {
 	values := map[string]float64{}
 	if summary.HasTemp {
-		values["temp"] = summary.Temp
+		values[sensorTemp] = summary.Temp
 	}
 	if summary.HasFan {
-		values["fan"] = summary.Fan
+		values[sensorFan] = summary.Fan
 	}
 	if summary.HasVoltage {
-		values["voltage"] = summary.Voltage
+		values[sensorVoltage] = summary.Voltage
 	}
 	return values
 }
@@ -151,8 +158,8 @@ func readHwmon(root string) ([]SensorReading, error) {
 	var out []SensorReading
 	for _, d := range dirs {
 		chip := readTrim(filepath.Join(d, "name"))
-		out = append(out, readSensorKind(d, chip, "temp", 1000)...)
-		out = append(out, readSensorKind(d, chip, "fan", 1)...)
+		out = append(out, readSensorKind(d, chip, sensorTemp, 1000)...)
+		out = append(out, readSensorKind(d, chip, sensorFan, 1)...)
 		out = append(out, readSensorKind(d, chip, "in", 1000)...)
 	}
 	return out, nil
