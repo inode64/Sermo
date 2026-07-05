@@ -134,7 +134,11 @@ func parseAnalyzer(v any) (*outputAnalyzer, string) {
 		if stream != AnalyzeStreamBoth && stream != AnalyzeStreamStdout && stream != AnalyzeStreamStderr {
 			return nil, fmt.Sprintf("analyze rule %q stream must be stdout, stderr or both", id)
 		}
-		re, err := regexp.Compile(cfgval.AsString(rm["match"]))
+		match := cfgval.AsString(rm["match"])
+		if match == "" {
+			return nil, fmt.Sprintf("analyze rule %q is missing a match", id)
+		}
+		re, err := regexp.Compile(match)
 		if err != nil {
 			return nil, fmt.Sprintf("analyze rule %q has an invalid regex: %v", id, err)
 		}
