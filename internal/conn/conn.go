@@ -38,6 +38,12 @@ const (
 	// extraProtocol is the Result.Extra key carrying a negotiated protocol
 	// version/dialect (ssh, smb, rsync, spamd, dhclient).
 	extraProtocol = "protocol"
+	// extraReply is the Result.Extra key carrying a probe's decoded reply token
+	// (ajp cpong, openvpn/nebula reset, tftp op).
+	extraReply = "reply"
+	// extraTransport is the Result.Extra key carrying the transport a probe used
+	// (openvpn udp/tcp, libvirt connection mode).
+	extraTransport = "transport"
 )
 
 // Config is the connection target for a protocol probe. Fields that do not apply

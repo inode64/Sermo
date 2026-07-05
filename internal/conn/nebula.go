@@ -69,7 +69,7 @@ func (nebulaProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err := parseNebulaRecvError(buf[:n], index); err != nil {
 		return Result{}, err
 	}
-	return Result{Extra: map[string]string{"reply": "recv_error"}}, nil
+	return Result{Extra: map[string]string{extraReply: "recv_error"}}, nil
 }
 
 // nebulaMessage builds a 16-byte Nebula Message header (type 1) with the given

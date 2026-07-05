@@ -102,7 +102,7 @@ func libvirtProbe(l *libvirt.Libvirt, uri, mode, domain string) (Result, error) 
 		return Result{}, err
 	}
 	version := formatLibvirtVersion(ver)
-	extra := map[string]string{"uri": uri, "lib_version": version, "transport": mode}
+	extra := map[string]string{"uri": uri, "lib_version": version, extraTransport: mode}
 	if hostname, err := l.ConnectGetHostname(); err == nil && hostname != "" {
 		extra["hostname"] = hostname
 	}
