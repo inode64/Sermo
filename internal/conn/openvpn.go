@@ -70,7 +70,7 @@ func (openvpnProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err := parseOpenVPNReset(reply, sid); err != nil {
 		return Result{}, err
 	}
-	return Result{Extra: map[string]string{"transport": transport, "reply": "hard_reset_server"}}, nil
+	return Result{Extra: map[string]string{extraTransport: transport, extraReply: "hard_reset_server"}}, nil
 }
 
 // openvpnSessionID returns a random 8-byte OpenVPN session id.

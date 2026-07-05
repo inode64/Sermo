@@ -73,7 +73,7 @@ func (tftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, fmt.Errorf("unexpected TFTP opcode %d", opcode)
 	}
 
-	extra := map[string]string{"query": filename, "reply": tftpOpName(opcode)}
+	extra := map[string]string{"query": filename, extraReply: tftpOpName(opcode)}
 	if opcode == tftpERROR {
 		extra["tftp_error_code"] = strconv.Itoa(errCode)
 		extra["tftp_error"] = msg
