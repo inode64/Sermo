@@ -197,6 +197,9 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 			if cfgval.String(fields["proxy"]) != "" {
 				add("%s.http3 and proxy are mutually exclusive", prefix)
 			}
+			if len(cfgval.StringList(fields["interface"])) > 0 {
+				add("%s.http3 and interface are mutually exclusive", prefix)
+			}
 		}
 	}
 	if p := cfgval.String(fields["proxy"]); p != "" {
