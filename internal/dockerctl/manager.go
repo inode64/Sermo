@@ -152,17 +152,27 @@ func (m Manager) client() (DockerClient, error) {
 	return NewClient(m.Spec)
 }
 
+// Docker container status strings (the `.State.Status` of docker inspect).
+const (
+	dockerStatusPaused     = "paused"
+	dockerStatusCreated    = "created"
+	dockerStatusExited     = "exited"
+	dockerStatusRestarting = "restarting"
+	dockerStatusDead       = "dead"
+	dockerStatusRemoving   = "removing"
+)
+
 func statusFromContainer(c Container) servicemgr.Status {
 	state := c.State
 	status := strings.ToLower(strings.TrimSpace(state.Status))
 	switch {
-	case state.Paused || status == "paused":
+	case state.Paused || status == dockerStatusPaused:
 		return servicemgr.StatusPaused
 	case state.Running && !state.Restarting && !state.Dead:
 		return servicemgr.StatusActive
-	case status == "created" || status == "exited":
+	case status == dockerStatusCreated || status == dockerStatusExited:
 		return servicemgr.StatusInactive
-	case state.Restarting || state.Dead || status == "restarting" || status == "dead" || status == "removing":
+	case state.Restarting || state.Dead || status == dockerStatusRestarting || status == dockerStatusDead || status == dockerStatusRemoving:
 		return servicemgr.StatusFailed
 	default:
 		return servicemgr.StatusUnknown
