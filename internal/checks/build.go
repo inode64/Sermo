@@ -26,6 +26,14 @@ import (
 
 const onModeChange = "change"
 
+// net/icmp check metric names (the `metric:` selector of a net or icmp check).
+const (
+	netMetricState   = "state"
+	netMetricSpeed   = "speed"
+	netMetricErrors  = "errors"
+	netMetricAddress = "address"
+)
+
 // MetricReader returns a sampled metric for a scope. The daemon
 // supplies the per-cycle sample; nil means no metric source (metric checks then
 // report unavailable).
@@ -892,7 +900,7 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	metric := cfgval.AsString(entry["metric"])
 	c := &netCheck{base: b, iface: iface, metric: metric, sampler: deps.NetSampler}
 	switch metric {
-	case "state":
+	case netMetricState:
 		expect := cfgval.AsString(entry["expect"])
 		onChange := cfgval.AsString(entry["on"]) == onModeChange
 		if expect == "" && !onChange {
@@ -906,12 +914,12 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		} else if onChange {
 			c.onChange = true
 		}
-	case "speed":
+	case netMetricSpeed:
 		if cfgval.AsString(entry["on"]) != onModeChange {
 			return nil, "net speed requires on: change"
 		}
 		c.onChange = true
-	case "errors":
+	case netMetricErrors:
 		c.counters = cfgval.StringArray(entry["counters"])
 		if len(c.counters) == 0 {
 			c.counters = []string{"rx_errors", "tx_errors"}
@@ -921,7 +929,7 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 			return nil, errs
 		}
 		c.op, c.value = op, v
-	case "address":
+	case netMetricAddress:
 		expect := cfgval.AsString(entry["expect"])
 		onChange := cfgval.AsString(entry["on"]) == onModeChange
 		if expect == "" && !onChange {
@@ -1231,7 +1239,7 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	}
 	c := &icmpCheck{base: b, host: host, ifaces: parseInterfaces(entry["interface"]), ifaceAll: allIf, count: count, metric: metric, sampler: deps.PingSampler}
 	switch metric {
-	case "state":
+	case netMetricState:
 		expect := cfgval.AsString(entry["expect"])
 		onChange := cfgval.AsString(entry["on"]) == onModeChange
 		if expect == "" && !onChange {
