@@ -134,11 +134,11 @@ func (d Detector) Detect(ctx context.Context, requested Backend) (Detection, err
 }
 
 func (d Detector) probeSystemd(ctx context.Context) BackendProbe {
-	if !d.Probe.CommandExists("systemctl") || !d.Probe.PathExists("/run/systemd/system") {
+	if !d.Probe.CommandExists(cmdSystemctl) || !d.Probe.PathExists("/run/systemd/system") {
 		return BackendProbe{}
 	}
 
-	result, _ := d.run(ctx, "systemctl", "is-system-running")
+	result, _ := d.run(ctx, cmdSystemctl, "is-system-running")
 	state := strings.TrimSpace(result.Stdout)
 	if state == "" {
 		state = strings.TrimSpace(result.Stderr)
@@ -153,15 +153,15 @@ func (d Detector) probeSystemd(ctx context.Context) BackendProbe {
 }
 
 func (d Detector) probeOpenRC(ctx context.Context) BackendProbe {
-	if !d.Probe.CommandExists("rc-service") {
+	if !d.Probe.CommandExists(cmdRcService) {
 		return BackendProbe{}
 	}
 
 	hasRunDir := d.Probe.PathExists("/run/openrc")
 	rcStatusWorks := false
 	state := ""
-	if d.Probe.CommandExists("rc-status") {
-		result, err := d.run(ctx, "rc-status")
+	if d.Probe.CommandExists(cmdRcStatus) {
+		result, err := d.run(ctx, cmdRcStatus)
 		state = strings.TrimSpace(result.Stdout)
 		rcStatusWorks = err == nil
 	}

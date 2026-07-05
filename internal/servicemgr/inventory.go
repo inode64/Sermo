@@ -17,13 +17,13 @@ func ListActiveUnits(ctx context.Context, backend Backend, runner execx.Runner, 
 	}
 	switch backend {
 	case BackendSystemd:
-		res, err := execx.Run(ctx, runner, timeout, "systemctl", "list-units", "--type=service", "--state=active", "--no-legend", "--no-pager")
+		res, err := execx.Run(ctx, runner, timeout, cmdSystemctl, "list-units", "--type=service", "--state=active", "--no-legend", "--no-pager")
 		if err != nil && strings.TrimSpace(res.Stdout) == "" {
 			return nil, err
 		}
 		return ParseSystemdActiveUnits(res.Stdout), nil
 	case BackendOpenRC:
-		res, err := execx.Run(ctx, runner, timeout, "rc-status", "--all")
+		res, err := execx.Run(ctx, runner, timeout, cmdRcStatus, "--all")
 		if err != nil && strings.TrimSpace(res.Stdout) == "" {
 			return nil, err
 		}

@@ -80,12 +80,12 @@ func DetectProcInfo(ctx context.Context, runner execx.Runner, readFile func(stri
 
 func detectSystemdProc(ctx context.Context, runner execx.Runner, unit string) ProcInfo {
 	var info ProcInfo
-	if res, err := execx.Run(ctx, runner, defaultDetectTimeout, "systemctl", "show", "-p", "PIDFile", "--value", "--", unit); err == nil {
+	if res, err := execx.Run(ctx, runner, defaultDetectTimeout, cmdSystemctl, "show", "-p", "PIDFile", "--value", "--", unit); err == nil {
 		if v := strings.TrimSpace(res.Stdout); v != "" {
 			info.Pidfile = cleanProcPath(v)
 		}
 	}
-	if res, err := execx.Run(ctx, runner, defaultDetectTimeout, "systemctl", "show", "-p", "ExecStart", "--value", "--", unit); err == nil {
+	if res, err := execx.Run(ctx, runner, defaultDetectTimeout, cmdSystemctl, "show", "-p", "ExecStart", "--value", "--", unit); err == nil {
 		if m := systemdExecPath.FindStringSubmatch(res.Stdout); m != nil {
 			info.Exe = cleanProcPath(m[1])
 		}
