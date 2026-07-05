@@ -24,6 +24,7 @@ func TestValidateSQLCheckErrors(t *testing.T) {
 		"unknown engine": {`q: { type: sql, engine: oracle, query: "SELECT 1", op: "==", value: "1" }`, "engine"},
 		"missing query":  {`q: { type: sql, engine: sqlite, path: /a.db, op: ">", value: "0" }`, "query is required"},
 		"bad op":         {`q: { type: sql, engine: sqlite, path: /a.db, query: "SELECT 1", op: "~~", value: "1" }`, "op"},
+		"missing value":  {`q: { type: sql, engine: sqlite, path: /a.db, query: "SELECT 1", op: ">" }`, "value is required"},
 		"non-numeric":    {`q: { type: sql, engine: sqlite, path: /a.db, query: "SELECT 1", op: ">", value: "abc" }`, "must be numeric"},
 		"bad regex":      {`q: { type: sql, engine: sqlite, path: /a.db, query: "SELECT 1", op: "=~", value: "[" }`, "valid regexp"},
 		"sqlite no path": {`q: { type: sql, engine: sqlite, query: "SELECT 1", op: ">", value: "0" }`, "path is required"},
