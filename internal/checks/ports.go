@@ -14,6 +14,13 @@ import (
 	"sermo/internal/execx"
 )
 
+// Port expect selectors and reported per-port states.
+const (
+	portStateOpen   = "open"
+	portStateClosed = "closed"
+	portExpectAny   = "any"
+)
+
 // maxPorts caps a single ports check to keep a scan bounded.
 const maxPorts = 16384
 
@@ -97,12 +104,12 @@ func (c *portsCheck) Run(ctx context.Context) Result {
 
 	res := c.result(ok, msg, start)
 	res.Data = map[string]any{
-		fieldHost:  c.host,
-		fieldTotal: len(c.ports),
-		"open":     open,
-		"closed":   closed,
-		fieldValue: open,
-		"changed":  strings.Join(changes, ","),
+		fieldHost:       c.host,
+		fieldTotal:      len(c.ports),
+		portStateOpen:   open,
+		portStateClosed: closed,
+		fieldValue:      open,
+		"changed":       strings.Join(changes, ","),
 	}
 	return res
 }
@@ -110,10 +117,10 @@ func (c *portsCheck) Run(ctx context.Context) Result {
 // evaluateMatch applies the quantifier `match` over the ports whose state equals
 // `expect`. expect=any always holds (only change detection matters then).
 func (c *portsCheck) evaluateMatch(states map[int]bool) bool {
-	if c.expect == "any" {
+	if c.expect == portExpectAny {
 		return true
 	}
-	want := c.expect == "open"
+	want := c.expect == portStateOpen
 	matched := 0
 	for _, p := range c.ports {
 		if states[p] == want {
@@ -121,7 +128,7 @@ func (c *portsCheck) evaluateMatch(states map[int]bool) bool {
 		}
 	}
 	switch c.match {
-	case "any":
+	case portExpectAny:
 		return matched >= 1
 	case "none":
 		return matched == 0
@@ -186,9 +193,9 @@ func (c *portsCheck) probe(ctx context.Context, port int) bool {
 
 func portState(open bool) string {
 	if open {
-		return "open"
+		return portStateOpen
 	}
-	return "closed"
+	return portStateClosed
 }
 
 // ParsePortSpec parses a ports specification of comma-separated single ports and
