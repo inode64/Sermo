@@ -31,10 +31,10 @@ func (t tmplToken) marker() string { return "${" + t.variable + "}" }
 // matches `python3` but not `python3.11`; `%v` and `%n` may additionally
 // materialize one empty active-slot value when the marker-less binary exists.
 var tmplTokens = []tmplToken{
-	{placeholder: "%v", variable: "version", capture: "[0-9][^/]*", allowEmpty: true},
-	{placeholder: "%n", variable: "n", capture: "[0-9]+", allowEmpty: true},
-	{placeholder: "%s", variable: "sep", capture: "[-_]?"},
-	{placeholder: "%i", variable: "instance", capture: "(?:[A-Za-z0-9][A-Za-z0-9_.-]*)?"},
+	{placeholder: "%v", variable: varVersion, capture: "[0-9][^/]*", allowEmpty: true},
+	{placeholder: "%n", variable: varN, capture: "[0-9]+", allowEmpty: true},
+	{placeholder: "%s", variable: varSep, capture: "[-_]?"},
+	{placeholder: "%i", variable: varInstance, capture: "(?:[A-Za-z0-9][A-Za-z0-9_.-]*)?"},
 }
 
 const (
@@ -43,6 +43,12 @@ const (
 	// keyVersions is the discovery-metadata map key holding the version instances
 	// a service exposes; it is stripped from a concrete resolved definition.
 	keyVersions = "versions"
+	// Template token variable names: the ${...} body variable each placeholder
+	// binds, and the key its captured value is stored under in a match.
+	varVersion  = "version"
+	varN        = "n"
+	varSep      = "sep"
+	varInstance = "instance"
 )
 
 // tokenFor returns the template token a name carries, or nil if it is not a
@@ -262,7 +268,7 @@ func containsAllMarkers(path string, toks []tmplToken) bool {
 		return false
 	}
 	for _, t := range toks {
-		if t.variable == "sep" {
+		if t.variable == varSep {
 			continue
 		}
 		if !strings.Contains(path, t.marker()) {
@@ -309,9 +315,9 @@ func containsServiceDiscoveryMarkers(candidate string, toks []tmplToken) bool {
 			hasAnyMarker = true
 		}
 		switch tok.variable {
-		case "sep":
+		case varSep:
 			continue
-		case "instance":
+		case varInstance:
 			if hasNumericTemplateToken(toks) {
 				continue
 			}
@@ -327,7 +333,7 @@ func containsServiceDiscoveryMarkers(candidate string, toks []tmplToken) bool {
 
 func hasNumericTemplateToken(toks []tmplToken) bool {
 	for _, tok := range toks {
-		if tok.variable == "version" || tok.variable == "n" {
+		if tok.variable == varVersion || tok.variable == varN {
 			return true
 		}
 	}
@@ -575,15 +581,15 @@ func addImplicitTokenValues(values map[string]string, toks []tmplToken) {
 		if _, ok := values[tok.variable]; ok {
 			continue
 		}
-		if tok.variable == "sep" || tok.variable == "instance" {
+		if tok.variable == varSep || tok.variable == varInstance {
 			values[tok.variable] = ""
 		}
 	}
 }
 
 func normalizeOptionalTupleValues(values map[string]string) {
-	if values["instance"] == "" {
-		values["sep"] = ""
+	if values[varInstance] == "" {
+		values[varSep] = ""
 	}
 }
 
@@ -631,7 +637,7 @@ func splitCleanPath(path string) []string {
 }
 
 func refineJavaReleaseVersion(values map[string]string, realPath string) map[string]string {
-	current := values["version"]
+	current := values[varVersion]
 	if current == "" || filepath.Base(realPath) != "java" || filepath.Base(filepath.Dir(realPath)) != "bin" {
 		return values
 	}
@@ -645,7 +651,7 @@ func refineJavaReleaseVersion(values map[string]string, realPath string) map[str
 		return values
 	}
 	out := cloneStringMap(values)
-	out["version"] = version
+	out[varVersion] = version
 	return out
 }
 
@@ -700,14 +706,14 @@ func dedupeTemplateMatches(matches []templateMatch, toks []tmplToken) []template
 
 func sortTemplateMatches(matches []templateMatch) {
 	sort.Slice(matches, func(i, j int) bool {
-		if matches[i].values["version"] != matches[j].values["version"] {
-			return versionLess(matches[i].values["version"], matches[j].values["version"])
+		if matches[i].values[varVersion] != matches[j].values[varVersion] {
+			return versionLess(matches[i].values[varVersion], matches[j].values[varVersion])
 		}
-		if matches[i].values["n"] != matches[j].values["n"] {
-			return versionLess(matches[i].values["n"], matches[j].values["n"])
+		if matches[i].values[varN] != matches[j].values[varN] {
+			return versionLess(matches[i].values[varN], matches[j].values[varN])
 		}
-		if matches[i].values["instance"] != matches[j].values["instance"] {
-			return matches[i].values["instance"] < matches[j].values["instance"]
+		if matches[i].values[varInstance] != matches[j].values[varInstance] {
+			return matches[i].values[varInstance] < matches[j].values[varInstance]
 		}
 		return matches[i].matchedPath < matches[j].matchedPath
 	})
@@ -755,7 +761,7 @@ func currentPathsFromUnversionedMatches(matches []templateMatch, toks []tmplToke
 
 func templateMatchHasEmptyValue(match templateMatch, toks []tmplToken) bool {
 	for _, tok := range toks {
-		if (tok.variable == "version" || tok.variable == "n") && match.values[tok.variable] == "" {
+		if (tok.variable == varVersion || tok.variable == varN) && match.values[tok.variable] == "" {
 			return true
 		}
 	}
