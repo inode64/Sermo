@@ -27,6 +27,8 @@ const (
 	fieldFreePct = "free_pct"
 	// fieldFreeBytes is the "free bytes" field (storage, swap).
 	fieldFreeBytes = "free_bytes"
+	// fieldFree is the "free slots" field of the count checks (fds, pids, conntrack).
+	fieldFree = "free"
 )
 
 // Predicate field lists, one per level check. They are exported so config
@@ -46,11 +48,11 @@ var (
 	// reads naturally, e.g. "50M").
 	DiskIOPredFields = []string{"util_pct", "read_bytes", "write_bytes", "await_ms"}
 	// FdsPredFields are the predicates of an fds check.
-	FdsPredFields = []string{fieldUsedPct, "free", "allocated"}
+	FdsPredFields = []string{fieldUsedPct, fieldFree, "allocated"}
 	// PidsPredFields are the predicates of a pids check.
-	PidsPredFields = []string{fieldUsedPct, "free", "count"}
+	PidsPredFields = []string{fieldUsedPct, fieldFree, "count"}
 	// ConntrackPredFields are the predicates of a conntrack check.
-	ConntrackPredFields = []string{fieldUsedPct, "free", "count"}
+	ConntrackPredFields = []string{fieldUsedPct, fieldFree, "count"}
 	// LoadPredFields are the predicates of a load check.
 	LoadPredFields = []string{"load1", "load5", "load15"}
 	// UsersPredFields is the single required predicate of a users check.
