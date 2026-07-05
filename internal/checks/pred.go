@@ -60,6 +60,11 @@ const (
 	fieldDegraded   = "degraded"
 	fieldRecovering = "recovering"
 	fieldArrays     = "arrays"
+	// smart attribute fields.
+	fieldTemperature  = "temperature"
+	fieldReallocated  = "reallocated"
+	fieldWear         = "wear"
+	fieldPowerOnHours = "power_on_hours"
 )
 
 // Predicate field lists, one per level check. They are exported so config
@@ -95,7 +100,7 @@ var (
 	// HdparmPredFields are the predicates of an hdparm check.
 	HdparmPredFields = []string{"read", "cached"}
 	// SmartPredFields are the optional attribute predicates of a smart check.
-	SmartPredFields = []string{"temperature", "reallocated", "wear", "power_on_hours"}
+	SmartPredFields = []string{fieldTemperature, fieldReallocated, fieldWear, fieldPowerOnHours}
 	// RaidPredFields are the optional predicates of a raid check.
 	RaidPredFields = []string{fieldDegraded, fieldRecovering, fieldArrays}
 	// EdacPredFields are the optional predicates of an edac check.

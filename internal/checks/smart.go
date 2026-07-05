@@ -155,18 +155,18 @@ func parseSmart(out string) (smartData, error) {
 		d.passed, d.healthKnown = j.SmartStatus.Passed, true
 	}
 	if j.Temperature.Current != nil {
-		d.values["temperature"] = *j.Temperature.Current
+		d.values[fieldTemperature] = *j.Temperature.Current
 	}
 	if j.PowerOnTime.Hours != nil {
-		d.values["power_on_hours"] = *j.PowerOnTime.Hours
+		d.values[fieldPowerOnHours] = *j.PowerOnTime.Hours
 	}
 	for _, a := range j.AtaAttrs.Table {
 		if a.ID == 5 && a.Raw.Value != nil { // Reallocated_Sector_Ct
-			d.values["reallocated"] = *a.Raw.Value
+			d.values[fieldReallocated] = *a.Raw.Value
 		}
 	}
 	if j.NVMe.PercentageUsed != nil {
-		d.values["wear"] = *j.NVMe.PercentageUsed
+		d.values[fieldWear] = *j.NVMe.PercentageUsed
 	}
 	return d, nil
 }
