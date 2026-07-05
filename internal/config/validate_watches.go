@@ -10,6 +10,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/conn"
 	"sermo/internal/process"
+	"sermo/internal/rules"
 )
 
 // onModeChange is the `on:` field value selecting change-detection (fire when the
@@ -153,9 +154,75 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 			continue
 		}
 		validateSingleShotCheckFields(prefix+".check", typ, check, locksDir, add)
-		// A service watch has no kill action (the process watch is rejected above);
-		// a storage watch may still carry a then.expand.
-		validateHookBlock(prefix, entry, typ == "storage", false, defaultNotify, add)
+		then, _ := entry["then"].(map[string]any)
+		if action := cfgval.String(then["action"]); action != "" {
+			// A rule-class action (restart/…/block/alert) makes this watch a
+			// checks:+rules: desugar target (see expandServiceWatches); validate the
+			// action semantics instead of the fire-and-forget hook block.
+			validateWatchThenAction(prefix, action, then, add)
+		} else {
+			// A service watch has no kill action (the process watch is rejected above);
+			// a storage watch may still carry a then.expand.
+			validateHookBlock(prefix, entry, typ == "storage", false, defaultNotify, add)
+		}
+	}
+}
+
+// isRuleClassAction reports whether a then.action turns a service watch into a
+// checks:+rules: desugar target — an operation (restart/start/stop/reload/resume),
+// a guard (block) or an alert — rather than a fire-and-forget hook/notify/expand/kill
+// watch.
+func isRuleClassAction(action string) bool {
+	switch rules.ActionType(action) {
+	case rules.ActionRestart, rules.ActionStart, rules.ActionStop, rules.ActionReload,
+		rules.ActionResume, rules.ActionAlert, rules.ActionBlock:
+		return true
+	}
+	return false
+}
+
+// isOperationAction reports whether an action drives the operation engine (the
+// actions a guard may block).
+func isOperationAction(action string) bool {
+	switch rules.ActionType(action) {
+	case rules.ActionRestart, rules.ActionStart, rules.ActionStop, rules.ActionReload, rules.ActionResume:
+		return true
+	}
+	return false
+}
+
+// validateWatchThenAction validates a unified service watch whose then declares a
+// rule-class action. It desugars to a generated check + rule, so its then accepts
+// action/message/blocks/notify(/notify_interval) but not the fire-and-forget
+// hook/expand/kill side effects.
+func validateWatchThenAction(prefix, action string, then map[string]any, add func(string, ...any)) {
+	if !isRuleClassAction(action) {
+		add("%s.then.action %q is not one of restart, start, stop, reload, resume, alert, block", prefix, action)
+		return
+	}
+	for _, k := range []string{"hook", "expand", "kill"} {
+		if _, has := then[k]; has {
+			add("%s.then.%s cannot be combined with an action (a watch is either an operation/alert or a fire-and-forget %s)", prefix, k, k)
+		}
+	}
+	allowed := set("action", "message", "blocks", "notify", "notify_interval")
+	for _, k := range slices.Sorted(maps.Keys(then)) {
+		if _, ok := allowed[k]; !ok {
+			add("%s.then.%s is not supported with an action", prefix, k)
+		}
+	}
+	if action == string(rules.ActionBlock) {
+		blocks := cfgval.StringList(then["blocks"])
+		if len(blocks) == 0 {
+			add("%s.then requires a non-empty blocks: [list of actions] for a block (guard) action", prefix)
+		}
+		for _, b := range blocks {
+			if !isOperationAction(b) {
+				add("%s.then.blocks entry %q must be an operation action (restart/start/stop/reload/resume)", prefix, b)
+			}
+		}
+	} else if _, hasBlocks := then["blocks"]; hasBlocks {
+		add("%s.then.blocks is only valid with action: block", prefix)
 	}
 }
 

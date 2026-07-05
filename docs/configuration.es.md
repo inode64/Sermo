@@ -1489,6 +1489,43 @@ panel Watches de la Web UI y responde a
 `sermoctl watch monitor|unmonitor <servicio>:<watch>`. Desmonitorizar el
 **servicio** no toca sus watches — su estado de monitorización es independiente.
 
+#### `then.action` unificado (operación / guard / alerta)
+
+El `then` de un watch de servicio puede declarar una **`action`** en lugar del
+`hook`/`expand`/`kill` fire-and-forget, de modo que una entrada `watches:` expresa
+un check **y** su remediación/guard/alerta juntos:
+
+- `action: restart | start | stop | reload | resume` — una **remediación** que
+  recorre el motor de operación (lock de servicio, guards, cooldown/backoff/rate-limit,
+  op-settling posterior, modo pánico) igual que una remediación de `rules:`.
+- `action: block` con `blocks: [restart, start, …]` — un **guard** evaluado
+  *durante* una operación que rechaza las acciones listadas mientras el check falla.
+- `action: alert` (con `message`/`notify` opcionales) — una **alerta**.
+
+Esa entrada se **desugariza** a un `checks:` generado (con el nombre del watch,
+embebiendo su `check:` — así dos watches que compartan endpoint lo sondean dos
+veces) más el `rules:` equivalente, por lo que es exactamente igual que escribir ese
+check + regla a mano y hereda cada barrera de seguridad (incluida la regla de que
+una métrica `scope: system` nunca puede disparar una acción de servicio). La
+polaridad de la condición sigue al check: uno de **salud** (tcp/http/service/…)
+dispara al **fallar**; uno de **condición** (metric/storage/load/…) dispara cuando
+se cumple su **umbral**.
+
+Un watch es **o** una operación/alerta (tiene `then.action`) **o** un efecto
+fire-and-forget (`hook`/`expand`/`kill`) — no ambos. Es **aditivo**: las secciones
+clásicas `checks:` + `rules:` siguen siendo válidas y el catálogo las sigue usando.
+
+```yaml
+watches:
+  restart-if-tcp-failed:       # desugariza a checks.restart-if-tcp-failed + una regla de remediación
+    check: { type: tcp, host: "${host}", port: "${port}" }
+    for: { cycles: 3 }
+    then: { action: restart }
+  block-restart-during-backup: # un guard: rechaza restart mientras corre el backup
+    check: { type: process_count, exe: "${backup_binary}", count: { op: ">", value: 0 } }
+    then: { action: block, blocks: [restart] }
+```
+
 ```yaml
 # /etc/sermo/storages/storage-root.yml
 name: storage-root
