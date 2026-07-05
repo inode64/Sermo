@@ -191,10 +191,10 @@ func portState(open bool) string {
 	return "closed"
 }
 
-// parsePortSpec parses a ports specification of comma-separated single ports and
+// ParsePortSpec parses a ports specification of comma-separated single ports and
 // inclusive ranges, e.g. "80,443,1024-4000". Ports are de-duplicated and sorted;
 // each must be 1..65535 and a range must be ascending.
-func parsePortSpec(spec string) ([]int, error) {
+func ParsePortSpec(spec string) ([]int, error) {
 	seen := map[int]bool{}
 	for _, tok := range strings.Split(spec, ",") {
 		tok = strings.TrimSpace(tok)

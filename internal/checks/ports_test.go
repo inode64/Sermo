@@ -10,7 +10,7 @@ import (
 )
 
 func TestParsePortSpec(t *testing.T) {
-	got, err := parsePortSpec("443,80,1024-1026,80")
+	got, err := ParsePortSpec("443,80,1024-1026,80")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -18,11 +18,11 @@ func TestParsePortSpec(t *testing.T) {
 		t.Fatalf("parsePortSpec = %v, want %v (sorted, de-duplicated)", got, want)
 	}
 	// 1 and 65535 are the inclusive bounds of a valid port.
-	if got, err := parsePortSpec("1,65535"); err != nil || !reflect.DeepEqual(got, []int{1, 65535}) {
+	if got, err := ParsePortSpec("1,65535"); err != nil || !reflect.DeepEqual(got, []int{1, 65535}) {
 		t.Fatalf("parsePortSpec(boundaries) = %v, %v; want [1 65535], nil", got, err)
 	}
 	for _, bad := range []string{"", "0", "70000", "100-50", "abc", "10-"} {
-		if _, err := parsePortSpec(bad); err == nil {
+		if _, err := ParsePortSpec(bad); err == nil {
 			t.Errorf("parsePortSpec(%q) should error", bad)
 		}
 	}
