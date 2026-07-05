@@ -25,7 +25,7 @@ func operationLockReclaimEvent(emit func(Event)) func(service, reason string) {
 	return func(service, reason string) {
 		emit(Event{
 			Service: service,
-			Kind:    "alert",
+			Kind:    eventKindAlert,
 			Message: fmt.Sprintf("reclaimed stale operation lock (%s)", reason),
 		})
 	}
