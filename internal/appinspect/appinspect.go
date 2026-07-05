@@ -18,6 +18,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/output"
 	"sermo/internal/process"
 )
 
@@ -312,11 +313,11 @@ func runExitProbe(ctx context.Context, runner execx.Runner, cmd probeCommand) (b
 		if msg == "" {
 			msg = execx.CommandDidNotStart
 		}
-		return false, "error: " + msg, checks.BoundedOutput(res.Stdout, res.Stderr)
+		return false, "error: " + msg, output.Bounded(res.Stdout, res.Stderr)
 	case err != nil && res.ExitCode == 0:
-		return false, "error: " + err.Error(), checks.BoundedOutput(res.Stdout, res.Stderr)
+		return false, "error: " + err.Error(), output.Bounded(res.Stdout, res.Stderr)
 	case !checks.ExitCodeExpected(res.ExitCode, cmd.expectExit):
-		return false, fmt.Sprintf("error: exit %d (want %s)", res.ExitCode, checks.ExpectExitText(cmd.expectExit)), checks.BoundedOutput(res.Stdout, res.Stderr)
+		return false, fmt.Sprintf("error: exit %d (want %s)", res.ExitCode, checks.ExpectExitText(cmd.expectExit)), output.Bounded(res.Stdout, res.Stderr)
 	default:
 		return true, "ok", ""
 	}
@@ -334,7 +335,7 @@ type versionProbeResult struct {
 func runVersionProbe(ctx context.Context, runner execx.Runner, tree map[string]any, cmd probeCommand) versionProbeResult {
 	res, err := runProbeCommand(ctx, runner, cmd)
 	fail := func(status string) versionProbeResult {
-		return versionProbeResult{status: status, output: checks.BoundedOutput(res.Stdout, res.Stderr)}
+		return versionProbeResult{status: status, output: output.Bounded(res.Stdout, res.Stderr)}
 	}
 	switch {
 	case res.ExitCode == -1:
@@ -347,7 +348,7 @@ func runVersionProbe(ctx context.Context, runner execx.Runner, tree map[string]a
 		return fail("error: " + err.Error())
 	case !checks.ExitCodeExpected(res.ExitCode, cmd.expectExit):
 		status := fmt.Sprintf("error: exit %d (want %s)", res.ExitCode, checks.ExpectExitText(cmd.expectExit))
-		if line := checks.FirstNonEmptyLine(res.Stderr); line != "" {
+		if line := output.FirstNonEmptyLine(res.Stderr); line != "" {
 			status += ": " + line
 		}
 		return fail(status)
@@ -362,11 +363,11 @@ func runVersionProbe(ctx context.Context, runner execx.Runner, tree map[string]a
 		return fail("error: version_match " + cmd.versionMatchWarn)
 	}
 	if ok, detail := cmd.versionMatch.Match(checks.VersionOutput(res.Stdout, res.Stderr)); !ok {
-		return versionProbeResult{identityMismatch: true, status: "not installed: version " + detail, output: checks.BoundedOutput(res.Stdout, res.Stderr)}
+		return versionProbeResult{identityMismatch: true, status: "not installed: version " + detail, output: output.Bounded(res.Stdout, res.Stderr)}
 	}
-	raw := checks.FirstNonEmptyLine(res.Stdout)
+	raw := output.FirstNonEmptyLine(res.Stdout)
 	if raw == "" {
-		raw = checks.FirstNonEmptyLine(res.Stderr)
+		raw = output.FirstNonEmptyLine(res.Stderr)
 	}
 	return versionProbeResult{ok: true, status: "ok", raw: raw, short: shortVersionFor(ctx, runner, tree, raw)}
 }
@@ -386,10 +387,10 @@ func shortVersionFor(ctx context.Context, runner execx.Runner, tree map[string]a
 	if vc := probeCommandFor(tree, "version_short"); len(vc.argv) > 0 {
 		res, err := runProbeCommand(ctx, runner, vc)
 		if err == nil && res.ExitCode == 0 {
-			if line := checks.FirstNonEmptyLine(res.Stdout); line != "" {
+			if line := output.FirstNonEmptyLine(res.Stdout); line != "" {
 				return line
 			}
-			if line := checks.FirstNonEmptyLine(res.Stderr); line != "" {
+			if line := output.FirstNonEmptyLine(res.Stderr); line != "" {
 				return line
 			}
 		}
