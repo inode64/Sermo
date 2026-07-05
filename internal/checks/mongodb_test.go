@@ -106,6 +106,8 @@ func TestBuildMongoCheckErrors(t *testing.T) {
 	cases := []map[string]any{
 		{"type": "mongodb-query", "collection": "j", "database": "app", "op": "<"},                                                    // no value
 		{"type": "mongodb-query", "collection": "j", "database": "app", "op": "~~", "value": "1"},                                     // bad op
+		{"type": "mongodb-query", "collection": "j", "database": "app", "op": "<", "value": "many"},                                   // non-numeric ordering value
+		{"type": "mongodb-query", "collection": "j", "database": "app", "op": "=~", "value": "["},                                     // bad regex
 		{"type": "mongodb-query", "collection": "j", "op": "<", "value": "1"},                                                         // collection without database
 		{"type": "mongodb-query", "command": `{"x":1}`, "collection": "j", "database": "app", "op": "<", "value": "1", "result": "x"}, // command + collection
 		{"type": "mongodb-query", "database": "app", "collection": "j", "pipeline": `[{"$count":"n"}]`, "op": ">", "value": "0"},      // pipeline without result
