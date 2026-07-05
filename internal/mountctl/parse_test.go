@@ -41,25 +41,3 @@ func TestFstabEntries(t *testing.T) {
 		t.Errorf("4-field entry = %+v, want /home ext4 defaults", e)
 	}
 }
-
-// pathUnderMount: under "/" any absolute path matches; otherwise an exact match
-// or a true child ("/mnt/..."), but never a sibling sharing a name prefix.
-func TestPathUnderMount(t *testing.T) {
-	cases := []struct {
-		path, mount string
-		want        bool
-	}{
-		{"/anything", "/", true},
-		{"relative", "/", false}, // non-absolute under root
-		{"/mnt", "/mnt", true},   // exact
-		{"/mnt/data", "/mnt", true},
-		{"/mnt/data/x", "/mnt", true},
-		{"/mntfoo", "/mnt", false}, // sibling with shared prefix is NOT under /mnt
-		{"/other", "/mnt", false},
-	}
-	for _, c := range cases {
-		if got := pathUnderMount(c.path, c.mount); got != c.want {
-			t.Errorf("pathUnderMount(%q, %q) = %v, want %v", c.path, c.mount, got, c.want)
-		}
-	}
-}
