@@ -56,6 +56,10 @@ const (
 	fieldInodesFree    = "inodes_free"
 	// fieldTotalBytes is the total-size field shared by storage, memory and swap.
 	fieldTotalBytes = "total_bytes"
+	// raid array-health fields.
+	fieldDegraded   = "degraded"
+	fieldRecovering = "recovering"
+	fieldArrays     = "arrays"
 )
 
 // Predicate field lists, one per level check. They are exported so config
@@ -93,7 +97,7 @@ var (
 	// SmartPredFields are the optional attribute predicates of a smart check.
 	SmartPredFields = []string{"temperature", "reallocated", "wear", "power_on_hours"}
 	// RaidPredFields are the optional predicates of a raid check.
-	RaidPredFields = []string{"degraded", "recovering", "arrays"}
+	RaidPredFields = []string{fieldDegraded, fieldRecovering, fieldArrays}
 	// EdacPredFields are the optional predicates of an edac check.
 	EdacPredFields = []string{"ce", "ue"}
 	// EntropyPredFields is the single required predicate of an entropy check.
