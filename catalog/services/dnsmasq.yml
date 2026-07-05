@@ -48,15 +48,3 @@ checks:
     port: ${port}
     query: ${query}
     timeout: 3s
-rules:
-  block-restart-if-config-invalid:
-    type: guard
-    blocks:
-      - restart
-      - start
-    if:
-      failed:
-        check: config
-    then:
-      action: block
-      message: ${display_name} configuration is invalid
