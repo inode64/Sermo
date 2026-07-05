@@ -55,7 +55,7 @@ func (c *swapCheck) Run(_ context.Context) Result {
 	if err != nil {
 		return c.result(false, "swap: "+err.Error(), start)
 	}
-	data := map[string]any{"metric": c.metric, fieldTotalBytes: s.TotalBytes, fieldFreeBytes: s.FreeBytes}
+	data := map[string]any{fieldMetric: c.metric, fieldTotalBytes: s.TotalBytes, fieldFreeBytes: s.FreeBytes}
 
 	switch c.metric {
 	case swapMetricUsage:

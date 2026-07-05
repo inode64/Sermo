@@ -59,7 +59,7 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 	if err != nil {
 		return c.result(false, fmt.Sprintf("icmp %s: %v", c.host, err), start)
 	}
-	data := map[string]any{"host": c.host, "metric": c.metric}
+	data := map[string]any{"host": c.host, fieldMetric: c.metric}
 
 	switch c.metric {
 	case "state":

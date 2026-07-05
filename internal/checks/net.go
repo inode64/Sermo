@@ -72,7 +72,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 	if err != nil {
 		return c.result(false, fmt.Sprintf("net %s: %v", c.iface, err), start)
 	}
-	data := map[string]any{"interface": c.iface, "metric": c.metric}
+	data := map[string]any{"interface": c.iface, fieldMetric: c.metric}
 
 	switch c.metric {
 	case "state":
