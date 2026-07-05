@@ -25,15 +25,17 @@ const (
 	fieldUsedPct = "used_pct"
 	// fieldFreePct is the "% free" field (storage, swap).
 	fieldFreePct = "free_pct"
+	// fieldFreeBytes is the "free bytes" field (storage, swap).
+	fieldFreeBytes = "free_bytes"
 )
 
 // Predicate field lists, one per level check. They are exported so config
 // validation walks the same lists and both layers stay in step by construction.
 var (
 	// StoragePredFields are the space/inode predicates of a storage check.
-	StoragePredFields = []string{fieldUsedPct, fieldFreePct, "used_bytes", "free_bytes", "inodes_used_pct", "inodes_free_pct", "inodes_free"}
+	StoragePredFields = []string{fieldUsedPct, fieldFreePct, "used_bytes", fieldFreeBytes, "inodes_used_pct", "inodes_free_pct", "inodes_free"}
 	// SwapUsageFields are the predicates of a swap usage metric.
-	SwapUsageFields = []string{fieldUsedPct, fieldFreePct, "free_bytes"}
+	SwapUsageFields = []string{fieldUsedPct, fieldFreePct, fieldFreeBytes}
 	// MemoryPredFields are the predicates of a memory check.
 	MemoryPredFields = []string{fieldUsedPct, "available_pct", "available_bytes"}
 	// PressurePredFields are the predicates of a pressure (PSI) check: the

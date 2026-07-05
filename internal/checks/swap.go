@@ -49,7 +49,7 @@ func (c *swapCheck) Run(_ context.Context) Result {
 	if err != nil {
 		return c.result(false, "swap: "+err.Error(), start)
 	}
-	data := map[string]any{"metric": c.metric, "total_bytes": s.TotalBytes, "free_bytes": s.FreeBytes}
+	data := map[string]any{"metric": c.metric, "total_bytes": s.TotalBytes, fieldFreeBytes: s.FreeBytes}
 
 	switch c.metric {
 	case "usage":
@@ -68,7 +68,7 @@ func (c *swapCheck) Run(_ context.Context) Result {
 		used := s.TotalBytes - s.FreeBytes
 		usedPct := float64(used) / float64(s.TotalBytes) * 100
 		freePct := float64(s.FreeBytes) / float64(s.TotalBytes) * 100
-		values := map[string]float64{fieldUsedPct: usedPct, fieldFreePct: freePct, "free_bytes": float64(s.FreeBytes)}
+		values := map[string]float64{fieldUsedPct: usedPct, fieldFreePct: freePct, fieldFreeBytes: float64(s.FreeBytes)}
 		ok := levelPredsHold(c.preds, values)
 		data[fieldUsedPct], data[fieldFreePct] = usedPct, freePct
 		data["value"] = firstPredValue(c.preds, values, usedPct)
