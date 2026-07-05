@@ -73,6 +73,31 @@ func TestOutputMatcherMatch(t *testing.T) {
 	}
 }
 
+func TestValidateAssertionValue(t *testing.T) {
+	cases := []struct {
+		name    string
+		label   string
+		op      string
+		value   string
+		wantErr bool
+	}{
+		{name: "numeric ordering", label: "expect_body", op: ">", value: "10"},
+		{name: "invalid numeric", label: "expect_body", op: ">", value: "abc", wantErr: true},
+		{name: "valid regex", label: "expect_json.version", op: "=~", value: `^v[0-9]+`},
+		{name: "invalid regex", label: "expect_json.version", op: "=~", value: `[`, wantErr: true},
+		{name: "contains does not constrain value", op: "contains", value: "["},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateAssertionValue(tc.label, tc.op, tc.value)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("ValidateAssertionValue() err = %v, wantErr %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestParseVersionMatcher(t *testing.T) {
 	cases := []struct {
 		name      string
