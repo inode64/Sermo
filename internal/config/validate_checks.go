@@ -515,6 +515,9 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 		if v, present := entry["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("%s.interval %q must be a valid positive duration", path, cfgval.String(v))
 		}
+		if v, present := entry["timeout"]; present && !isPositiveDuration(cfgval.String(v)) {
+			add("%s.timeout %q must be a valid positive duration", path, cfgval.String(v))
+		}
 		validateCheckGate(path, name, entry, entries, add)
 		typ := cfgval.String(entry["type"])
 		if typ == "" {

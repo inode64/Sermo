@@ -268,10 +268,23 @@ func BuildWithWarnings(section map[string]any, deps Deps) ([]Built, []BuildWarni
 		}
 
 		typ := cfgval.AsString(entry["type"])
+		timeout := deps.DefaultTimeout
+		if raw, present := entry["timeout"]; present {
+			timeout = cfgval.Duration(raw)
+			if timeout <= 0 {
+				warnings = append(warnings, BuildWarning{
+					Service:  deps.Service,
+					Check:    name,
+					Text:     fmt.Sprintf("check %q: timeout must be a valid positive duration", name),
+					Optional: cfgval.Bool(entry["optional"]),
+				})
+				continue
+			}
+		}
 		b := base{
 			name:      name,
 			service:   deps.Service,
-			timeout:   cfgval.DurationOr(entry["timeout"], deps.DefaultTimeout),
+			timeout:   timeout,
 			condition: !IsHealthType(typ),
 		}
 
