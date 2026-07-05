@@ -19,15 +19,14 @@ func TestPostWebhookDeliversJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// Through the transport wrappers so both stay covered.
-	if err := slackPost(context.Background(), srv.URL, []byte(`{"text":"hi"}`)); err != nil {
-		t.Fatalf("slackPost: %v", err)
+	if err := sendWebhook(context.Background(), nil, notifierTypeSlack, srv.URL, []byte(`{"text":"hi"}`)); err != nil {
+		t.Fatalf("slack webhook: %v", err)
 	}
 	if gotContentType != "application/json" || string(gotBody) != `{"text":"hi"}` {
 		t.Fatalf("got Content-Type %q body %q", gotContentType, gotBody)
 	}
-	if err := teamsPost(context.Background(), srv.URL, []byte(`{}`)); err != nil {
-		t.Fatalf("teamsPost: %v", err)
+	if err := sendWebhook(context.Background(), nil, notifierTypeTeams, srv.URL, []byte(`{}`)); err != nil {
+		t.Fatalf("teams webhook: %v", err)
 	}
 }
 

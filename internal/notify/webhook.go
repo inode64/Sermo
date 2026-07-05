@@ -17,19 +17,19 @@ import (
 const webhookTimeout = 15 * time.Second
 
 // webhookPoster delivers a JSON payload to a webhook; injected so tests do not
-// hit the network. Shared by every webhook transport (slack, teams).
-type webhookPoster func(ctx context.Context, webhook string, payload []byte) error
+// hit the network. label names the transport in error messages.
+type webhookPoster func(ctx context.Context, label, webhook string, payload []byte) error
 
 func webhookPayload(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
 }
 
-func sendWebhook(ctx context.Context, post, fallback webhookPoster, webhook string, payload []byte) error {
-	if post != nil {
-		return post(ctx, webhook, payload)
+func sendWebhook(ctx context.Context, post webhookPoster, label, webhook string, payload []byte) error {
+	if post == nil {
+		post = postWebhook
 	}
-	return fallback(ctx, webhook, payload)
+	return post(ctx, label, webhook, payload)
 }
 
 // postWebhook POSTs a JSON payload and fails on a non-2xx answer; label names

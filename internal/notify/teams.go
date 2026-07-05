@@ -21,7 +21,7 @@ func (t *Teams) Type() string { return notifierTypeTeams }
 
 // Send posts the message to the configured Teams webhook.
 func (t *Teams) Send(ctx context.Context, msg Message) error {
-	return sendWebhook(ctx, t.post, teamsPost, t.webhook, teamsPayload(msg))
+	return sendWebhook(ctx, t.post, notifierTypeTeams, t.webhook, teamsPayload(msg))
 }
 
 // buildTeams constructs a Teams notifier from a config entry.
@@ -30,7 +30,7 @@ func buildTeams(name string, entry map[string]any) (Notifier, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Teams{name: name, webhook: webhook, post: teamsPost}, nil
+	return &Teams{name: name, webhook: webhook}, nil
 }
 
 // teamsPayload renders the Teams webhook body as a message with one Adaptive
@@ -66,8 +66,4 @@ func teamsCardBody(msg Message) []map[string]any {
 		})
 	}
 	return body
-}
-
-func teamsPost(ctx context.Context, webhook string, payload []byte) error {
-	return postWebhook(ctx, notifierTypeTeams, webhook, payload)
 }
