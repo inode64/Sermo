@@ -496,8 +496,8 @@ var countKinds = set("any", "file", "dir", "symlink")
 var httpMethods = set("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE", "CONNECT")
 var sqlEngines = set("mysql", "mariadb", "postgres", "postgresql", "sqlite", "sqlite3")
 
-// validateCheckSection validates a checks/preflight/postflight section: known
-// types, optional booleans, command array form, valid service/process states,
+// validateCheckSection validates a checks/preflight section: known types,
+// optional/verify booleans, command array form, valid service/process states,
 // metric grammar, and that file_exists never points at Sermo's own lock dir.
 func validateCheckSection(tree map[string]any, section, locksDir string, add addFunc) {
 	entries, ok := tree[section].(map[string]any)

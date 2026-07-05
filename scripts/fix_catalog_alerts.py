@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fix alert rules, fds thresholds, postflight copies and ceph socket paths."""
+"""Fix alert rules, fds thresholds and ceph socket paths."""
 
 from __future__ import annotations
 
@@ -52,20 +52,18 @@ def fix_doc(path: Path, doc: dict) -> None:
         fix_checks(checks)
     if rules := doc.get("rules"):
         fix_rules(rules)
-    if pf := doc.get("postflight"):
-        strip_requires(pf)
 
     name = path.name
     if name in CEPH_STATUS_CMD and CEPH_STATUS_CMD[name]:
         cmd = CEPH_STATUS_CMD[name]
-        for section in ("checks", "postflight"):
+        for section in ("checks",):
             sec = doc.get(section, {})
             st = sec.get("status")
             if isinstance(st, dict) and st.get("type") == "command":
                 st["command"] = list(cmd)
 
     if name == "ceph-osd.yml":
-        for section in ("checks", "postflight"):
+        for section in ("checks",):
             sec = doc.get(section, {})
             st = sec.get("status")
             if isinstance(st, dict) and st.get("type") == "command":
