@@ -2502,12 +2502,12 @@ func (b *WebBackend) Locks(_ context.Context) []web.Lock {
 func (b *WebBackend) ReleaseLock(_ context.Context, service, name string) web.ActionResult {
 	if _, ok := b.entries[service]; !ok {
 		msg := "unknown service " + service
-		b.emitLockReleaseEvent(service, name, eventKindError, "failed", msg)
+		b.emitLockReleaseEvent(service, name, eventKindError, eventStatusFailed, msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	if b.cfg == nil {
 		msg := "runtime locks are unavailable"
-		b.emitLockReleaseEvent(service, name, eventKindError, "failed", msg)
+		b.emitLockReleaseEvent(service, name, eventKindError, eventStatusFailed, msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	locker := locks.NewNamedLocker(filepath.Join(b.cfg.Global.RuntimeDir(), "locks"))
@@ -2516,9 +2516,9 @@ func (b *WebBackend) ReleaseLock(_ context.Context, service, name string) web.Ac
 	if err != nil {
 		msg := err.Error()
 		if lk.State == locks.StateActive {
-			b.emitLockReleaseEvent(service, name, eventKindSuppressed, "blocked", msg)
+			b.emitLockReleaseEvent(service, name, eventKindSuppressed, eventStatusBlocked, msg)
 		} else {
-			b.emitLockReleaseEvent(service, name, eventKindError, "failed", msg)
+			b.emitLockReleaseEvent(service, name, eventKindError, eventStatusFailed, msg)
 		}
 		return web.ActionResult{OK: false, Message: msg}
 	}
@@ -2527,7 +2527,7 @@ func (b *WebBackend) ReleaseLock(_ context.Context, service, name string) web.Ac
 		id += "." + name
 	}
 	msg := "released inactive runtime lock " + id
-	b.emitLockReleaseEvent(service, name, eventKindAction, "ok", msg)
+	b.emitLockReleaseEvent(service, name, eventKindAction, eventStatusOK, msg)
 	return web.ActionResult{OK: true, Message: msg}
 }
 
@@ -3012,7 +3012,7 @@ func (b *WebBackend) SetPanic(_ context.Context, on bool) web.ActionResult {
 	if !on {
 		msg = "panic mode disabled: normal operation resumed"
 	}
-	b.emitMonitorEvent("", action, eventKindAction, "ok", msg)
+	b.emitMonitorEvent("", action, eventKindAction, eventStatusOK, msg)
 	return web.ActionResult{OK: true, Message: msg}
 }
 
@@ -3241,7 +3241,7 @@ func (b *WebBackend) operationResultWithMonitor(ctx context.Context, name, actio
 	if err != nil {
 		b.emitMonitorEvent(name, action, eventKindError, "", err.Error())
 	} else if change.Changed {
-		b.emitMonitorEvent(name, change.Action, eventKindAction, "ok", change.Message)
+		b.emitMonitorEvent(name, change.Action, eventKindAction, eventStatusOK, change.Message)
 	}
 	if err := finishOperationSettlingWithActive(b.operationSettling, name, action, state.SourceWeb, r, nil, activeAfterStart); err != nil {
 		b.emitMonitorEvent(name, action, eventKindError, "", err.Error())
@@ -3340,34 +3340,34 @@ func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionRes
 	w := b.watches[name]
 	if w == nil {
 		msg := fmt.Sprintf("unknown watch %q", name)
-		b.emitWatchExpandEvent(name, eventKindExpandFailed, "failed", msg)
+		b.emitWatchExpandEvent(name, eventKindExpandFailed, eventStatusFailed, msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	if w.disabled {
 		msg := fmt.Sprintf("watch %q is disabled in configuration", name)
-		b.emitWatchExpandEvent(name, eventKindExpandSkipped, "blocked", msg)
+		b.emitWatchExpandEvent(name, eventKindExpandSkipped, eventStatusBlocked, msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	if !isStorageCheckType(w.checkType) {
 		msg := fmt.Sprintf("watch %q is %q, not storage", name, w.checkType)
-		b.emitWatchExpandEvent(name, eventKindExpandSkipped, "blocked", msg)
+		b.emitWatchExpandEvent(name, eventKindExpandSkipped, eventStatusBlocked, msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	if w.expand == nil {
 		msg := fmt.Sprintf("watch %q has no then.expand action configured", name)
-		b.emitWatchExpandEvent(name, eventKindExpandSkipped, "blocked", msg)
+		b.emitWatchExpandEvent(name, eventKindExpandSkipped, eventStatusBlocked, msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	path := cfgval.AsString(w.check["path"])
 	if path == "" {
 		msg := fmt.Sprintf("watch %q storage check has no path", name)
-		b.emitWatchExpandEvent(name, eventKindExpandFailed, "failed", msg)
+		b.emitWatchExpandEvent(name, eventKindExpandFailed, eventStatusFailed, msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	expander := b.expander
 	if expander == nil {
 		msg := "volume expander is unavailable"
-		b.emitWatchExpandEvent(name, eventKindExpandFailed, "failed", msg)
+		b.emitWatchExpandEvent(name, eventKindExpandFailed, eventStatusFailed, msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 
@@ -3380,11 +3380,11 @@ func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionRes
 	res, err := expander.ExpandPath(opCtx, path, w.expand.By)
 	if err != nil {
 		msg := err.Error()
-		b.emitWatchExpandEvent(name, eventKindExpandFailed, "failed", msg)
+		b.emitWatchExpandEvent(name, eventKindExpandFailed, eventStatusFailed, msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	msg := expandSuccessMessage(path, res)
-	b.emitWatchExpandEvent(name, eventKindExpand, "ok", msg)
+	b.emitWatchExpandEvent(name, eventKindExpand, eventStatusOK, msg)
 	return web.ActionResult{OK: true, Message: msg}
 }
 
@@ -3427,7 +3427,7 @@ func (b *WebBackend) SetMonitored(_ context.Context, name string, monitored bool
 	if !monitored {
 		msg = "monitoring paused"
 	}
-	b.emitMonitorEvent(name, action, eventKindAction, "ok", msg)
+	b.emitMonitorEvent(name, action, eventKindAction, eventStatusOK, msg)
 	return nil
 }
 
@@ -3471,7 +3471,7 @@ func (b *WebBackend) SetWatchMonitored(_ context.Context, name string, monitored
 	if !monitored {
 		msg = "monitoring paused"
 	}
-	b.emitWatchMonitorEvent(name, action, eventKindAction, "ok", msg)
+	b.emitWatchMonitorEvent(name, action, eventKindAction, eventStatusOK, msg)
 	return nil
 }
 
