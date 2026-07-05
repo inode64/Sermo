@@ -41,6 +41,13 @@ const (
 	sourceChild   = "child"
 )
 
+// Process Role labels for non-selector members: backend seeds are the service's
+// main process, and tree members discovered via PPID are children.
+const (
+	roleMain  = "main"
+	roleChild = "child"
+)
+
 // Selector is one internal process discovery source. Public `processes` entries
 // are command-match selectors; pidfile selectors are derived from top-level
 // service `pidfile:` or per-role `pidfiles:`.
