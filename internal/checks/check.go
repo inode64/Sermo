@@ -153,6 +153,6 @@ func levelCountResult(b base, preds []levelPred, label, unit, countField string,
 	if limit > 0 {
 		res.Data[fieldFree] = limit - min(count, limit)
 	}
-	res.Data["value"] = firstPredValue(preds, values, usedPct)
+	res.Data[fieldValue] = firstPredValue(preds, values, usedPct)
 	return res
 }

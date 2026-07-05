@@ -78,6 +78,10 @@ const (
 	// fieldMetric is the result data-map key naming the sub-metric a multi-metric
 	// check (net/icmp/swap) reported.
 	fieldMetric = "metric"
+	// fieldValue is the result data-map key holding the breaching number a hook
+	// sees as SERMO_VALUE. Every level/stateful check publishes it. (This is the
+	// output key; the config-input threshold is entry["value"], left as-is.)
+	fieldValue = "value"
 )
 
 // Predicate field lists, one per level check. They are exported so config

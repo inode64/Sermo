@@ -77,7 +77,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 	switch c.metric {
 	case "state":
 		if c.expect != "" {
-			data["value"] = s.State
+			data[fieldValue] = s.State
 			res := c.result(s.State == c.expect, fmt.Sprintf("%s state %s (want %s)", c.iface, s.State, c.expect), start)
 			res.Data = data
 			return res
@@ -89,7 +89,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 			return res
 		}
 		changed := s.State != c.lastState
-		data[fieldOld], data[fieldNew], data["value"] = c.lastState, s.State, s.State
+		data[fieldOld], data[fieldNew], data[fieldValue] = c.lastState, s.State, s.State
 		msg := fmt.Sprintf("%s state %s->%s", c.iface, c.lastState, s.State)
 		c.lastState = s.State
 		res := c.result(changed, msg, start)
@@ -109,7 +109,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 			return res
 		}
 		changed := s.SpeedMbps != c.lastSpeed
-		data[fieldOld], data[fieldNew], data["value"] = c.lastSpeed, s.SpeedMbps, s.SpeedMbps
+		data[fieldOld], data[fieldNew], data[fieldValue] = c.lastSpeed, s.SpeedMbps, s.SpeedMbps
 		msg := fmt.Sprintf("%s speed %d->%d", c.iface, c.lastSpeed, s.SpeedMbps)
 		c.lastSpeed = s.SpeedMbps
 		res := c.result(changed, msg, start)
@@ -129,7 +129,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 		}
 		delta := deltaOrZero(total, c.lastErrTotal)
 		c.lastErrTotal = total
-		data["value"], data["total"] = delta, total
+		data[fieldValue], data["total"] = delta, total
 		met := compareFloat(float64(delta), c.op, c.value)
 		res := c.result(met, fmt.Sprintf("%s errors +%d (total %d)", c.iface, delta, total), start)
 		res.Data = data
@@ -144,7 +144,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 		data["addresses"] = s.Addrs
 		if c.expect != "" {
 			present := len(s.Addrs) > 0
-			data["value"] = len(s.Addrs)
+			data[fieldValue] = len(s.Addrs)
 			ok := (c.expect == netAddrPresent) == present
 			res := c.result(ok, fmt.Sprintf("%s address %s (want %s)", c.iface, display, c.expect), start)
 			res.Data = data
@@ -157,7 +157,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 			return res
 		}
 		changed := joined != c.lastAddrs
-		data[fieldOld], data[fieldNew], data["value"] = c.lastAddrs, joined, joined
+		data[fieldOld], data[fieldNew], data[fieldValue] = c.lastAddrs, joined, joined
 		msg := fmt.Sprintf("%s address %s->%s", c.iface, c.lastAddrs, joined)
 		c.lastAddrs = joined
 		res := c.result(changed, msg, start)

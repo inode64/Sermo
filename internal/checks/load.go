@@ -62,7 +62,7 @@ func (c loadCheck) Run(_ context.Context) Result {
 		fieldLoad1: s.Load1, fieldLoad5: s.Load5, fieldLoad15: s.Load15,
 		"num_cpu": s.NumCPU, "per_cpu": c.perCPU,
 	}
-	res.Data["value"] = firstPredValue(c.preds, values, values[fieldLoad1])
+	res.Data[fieldValue] = firstPredValue(c.preds, values, values[fieldLoad1])
 	return res
 }
 

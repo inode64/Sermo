@@ -51,7 +51,7 @@ func (c sqlCheck) Run(ctx context.Context) Result {
 		"result":    result,
 	}
 	if f, perr := strconv.ParseFloat(strings.TrimSpace(result), 64); perr == nil {
-		data["value"] = f
+		data[fieldValue] = f
 	}
 	res.Data = data
 	return res

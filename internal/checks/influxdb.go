@@ -62,7 +62,7 @@ func (c influxCheck) Run(ctx context.Context) Result {
 		data["org"] = c.org
 	}
 	if f, perr := strconv.ParseFloat(strings.TrimSpace(result), 64); perr == nil {
-		data["value"] = f
+		data[fieldValue] = f
 	}
 	res.Data = data
 	return res
