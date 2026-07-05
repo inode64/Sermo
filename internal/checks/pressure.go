@@ -48,8 +48,8 @@ func (c pressureCheck) Run(_ context.Context) Result {
 		return c.result(false, "pressure "+c.resource+": "+err.Error(), start)
 	}
 	values := map[string]float64{
-		"some_avg10": s.Some.Avg10, "some_avg60": s.Some.Avg60, "some_avg300": s.Some.Avg300,
-		"full_avg10": s.Full.Avg10, "full_avg60": s.Full.Avg60, "full_avg300": s.Full.Avg300,
+		fieldSomeAvg10: s.Some.Avg10, fieldSomeAvg60: s.Some.Avg60, fieldSomeAvg300: s.Some.Avg300,
+		fieldFullAvg10: s.Full.Avg10, fieldFullAvg60: s.Full.Avg60, fieldFullAvg300: s.Full.Avg300,
 	}
 
 	ok := levelPredsHold(c.preds, values)
@@ -57,13 +57,13 @@ func (c pressureCheck) Run(_ context.Context) Result {
 	res := c.result(ok, fmt.Sprintf("pressure %s some %.2f/%.2f/%.2f full %.2f/%.2f/%.2f",
 		c.resource, s.Some.Avg10, s.Some.Avg60, s.Some.Avg300, s.Full.Avg10, s.Full.Avg60, s.Full.Avg300), start)
 	res.Data = map[string]any{
-		"resource":    c.resource,
-		"some_avg10":  s.Some.Avg10,
-		"some_avg60":  s.Some.Avg60,
-		"some_avg300": s.Some.Avg300,
-		"full_avg10":  s.Full.Avg10,
-		"full_avg60":  s.Full.Avg60,
-		"full_avg300": s.Full.Avg300,
+		"resource":      c.resource,
+		fieldSomeAvg10:  s.Some.Avg10,
+		fieldSomeAvg60:  s.Some.Avg60,
+		fieldSomeAvg300: s.Some.Avg300,
+		fieldFullAvg10:  s.Full.Avg10,
+		fieldFullAvg60:  s.Full.Avg60,
+		fieldFullAvg300: s.Full.Avg300,
 	}
 	res.Data["value"] = firstPredValue(c.preds, values, s.Some.Avg10)
 	return res
