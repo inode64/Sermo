@@ -104,6 +104,7 @@ func TestValidateCommandsExport(t *testing.T) {
 				"stderr":   map[string]any{"from": "log"},
 				"trim":     map[string]any{"trim": "yes"},
 				"regex":    map[string]any{"regex": "["},
+				"empty_re": map[string]any{"regex": ""},
 				"shape":    "stdout",
 				"nil":      nil,
 			},
@@ -117,6 +118,7 @@ func TestValidateCommandsExport(t *testing.T) {
 		"commands.version.export.stderr.from must be stdout or stderr",
 		"commands.version.export.trim.trim must be a boolean",
 		"commands.version.export.regex.regex is invalid",
+		"commands.version.export.empty_re.regex must be non-empty",
 		"commands.version.export.shape must be a mapping",
 		"commands.version.export.nil must be a mapping",
 	} {
