@@ -13,7 +13,18 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/locks"
 	"sermo/internal/process"
+	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
+)
+
+// Operation action names, derived from the canonical rule action vocabulary so
+// the dispatch cannot drift from the actions rules emit.
+const (
+	actionStart   = string(rules.ActionStart)
+	actionStop    = string(rules.ActionStop)
+	actionRestart = string(rules.ActionRestart)
+	actionReload  = string(rules.ActionReload)
+	actionResume  = string(rules.ActionResume)
 )
 
 // Manager is the subset of servicemgr.Manager the engine uses. Restart is built
@@ -103,30 +114,30 @@ type plan struct {
 // Restart stops the service, clears residuals, starts it again and verifies
 // health.
 func (e Engine) Restart(ctx context.Context) Result {
-	return e.run(ctx, plan{action: "restart", preflight: true, stop: true, start: true, postflight: true})
+	return e.run(ctx, plan{action: actionRestart, preflight: true, stop: true, start: true, postflight: true})
 }
 
 // Start runs preflight, starts the service and verifies health.
 func (e Engine) Start(ctx context.Context) Result {
-	return e.run(ctx, plan{action: "start", preflight: true, start: true, postflight: true})
+	return e.run(ctx, plan{action: actionStart, preflight: true, start: true, postflight: true})
 }
 
 // Stop stops the service and clears residuals. Stop runs no preflight or
 // postflight but still honors locks and guards.
 func (e Engine) Stop(ctx context.Context) Result {
-	return e.run(ctx, plan{action: "stop", stop: true})
+	return e.run(ctx, plan{action: actionStop, stop: true})
 }
 
 // Reload runs preflight (the config check), asks the init system to reload the
 // service's configuration in place (no stop/start), and verifies health. It is
 // the non-disruptive remediation for daemons that reload rather than restart.
 func (e Engine) Reload(ctx context.Context) Result {
-	return e.run(ctx, plan{action: "reload", preflight: true, reload: true, postflight: true})
+	return e.run(ctx, plan{action: actionReload, preflight: true, reload: true, postflight: true})
 }
 
 // Resume runs preflight, resumes a paused service and verifies health.
 func (e Engine) Resume(ctx context.Context) Result {
-	return e.run(ctx, plan{action: "resume", preflight: true, resume: true, postflight: true})
+	return e.run(ctx, plan{action: actionResume, preflight: true, resume: true, postflight: true})
 }
 
 // Do dispatches one action name to the matching operation, returning its Result.
@@ -135,15 +146,15 @@ func (e Engine) Resume(ctx context.Context) Result {
 // anything.
 func (e Engine) Do(ctx context.Context, action string) Result {
 	switch action {
-	case "start":
+	case actionStart:
 		return e.Start(ctx)
-	case "stop":
+	case actionStop:
 		return e.Stop(ctx)
-	case "restart":
+	case actionRestart:
 		return e.Restart(ctx)
-	case "reload":
+	case actionReload:
 		return e.Reload(ctx)
-	case "resume":
+	case actionResume:
 		return e.Resume(ctx)
 	default:
 		return Result{Service: e.Service, Action: action, Status: ResultFailed, Message: "unknown action " + action}
