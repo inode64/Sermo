@@ -46,6 +46,15 @@ const (
 	exitConfigInvalid = 78
 )
 
+// Service action names dispatched by the CLI (each routes through the operation engine).
+const (
+	actionStart   = "start"
+	actionStop    = "stop"
+	actionRestart = "restart"
+	actionReload  = "reload"
+	actionResume  = "resume"
+)
+
 // BackendDetector detects the service manager backend.
 type BackendDetector interface {
 	Detect(ctx context.Context, requested servicemgr.Backend) (servicemgr.Detection, error)
@@ -279,7 +288,7 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runStatus(ctx, opts)
 	case "is-active":
 		return a.runIsActive(ctx, opts)
-	case "start", "stop", "restart", "resume":
+	case actionStart, actionStop, actionRestart, actionResume:
 		return a.runAction(ctx, opts, opts.command)
 	case "mount":
 		return a.runMount(ctx, opts)
@@ -321,11 +330,11 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runPanic(opts)
 	case "sla":
 		return a.runSLA(opts)
-	case "reload":
+	case actionReload:
 		if opts.service() == "" {
-			return a.commandUsageError("reload", "reload requires a service name; use `sermoctl daemon reload` to reload sermod config")
+			return a.commandUsageError(actionReload, "reload requires a service name; use `sermoctl daemon reload` to reload sermod config")
 		}
-		return a.runAction(ctx, opts, "reload")
+		return a.runAction(ctx, opts, actionReload)
 	case "wizard":
 		return a.runWizard(ctx, opts)
 	case "":
@@ -530,7 +539,7 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	if code != exitSuccess {
 		return code
 	}
-	if action == "reload" {
+	if action == actionReload {
 		if issues := config.Validate(cfg); len(issues) > 0 {
 			a.printIssues(opts, issues)
 			return exitConfigInvalid
@@ -574,7 +583,7 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, actionStore *state.Store) (operation.Result, error) {
 	targets := config.CascadeTargets(resolved.Tree)
 	// also_apply cascades only start/stop/restart, not reload/resume.
-	if opts.noCascade || action == "reload" || action == "resume" || len(targets) == 0 {
+	if opts.noCascade || action == actionReload || action == actionResume || len(targets) == 0 {
 		a.beginManualOperationSettling(cfg, actionStore, service, action)
 		out, err := a.Operate(ctx, opts, cfg, resolved, service, action)
 		activeAfterStart := a.manualActionActiveAfterStart(ctx, opts, cfg, resolved, service, action, out, err)
@@ -643,7 +652,7 @@ func (a App) openManualActionStore(cfg *config.Config, action string) *state.Sto
 }
 
 func operationActionUsesState(action string) bool {
-	return action == "start" || action == "stop" || action == "restart" || action == "reload" || action == "resume"
+	return action == actionStart || action == actionStop || action == actionRestart || action == actionReload || action == actionResume
 }
 
 func (a App) beginManualOperationSettling(cfg *config.Config, store *state.Store, service, action string) {
@@ -710,7 +719,7 @@ func (a App) manualActionActiveAfterStart(ctx context.Context, opts options, cfg
 }
 
 func cliManualStartLikeAction(action string) bool {
-	return action == "start" || action == "restart" || action == "resume"
+	return action == actionStart || action == actionRestart || action == actionResume
 }
 
 // defaultOperate wires the real operation engine from a resolved service and
@@ -1287,7 +1296,7 @@ type statusJSON struct {
 // not given. Backend actions can legitimately take much longer than a probe.
 func defaultTimeout(command string) time.Duration {
 	switch command {
-	case "start", "stop", "restart", "reload", "resume", "mount", "umount", "state":
+	case actionStart, actionStop, actionRestart, actionReload, actionResume, "mount", "umount", "state":
 		return 90 * time.Second
 	case "services":
 		return 30 * time.Second
