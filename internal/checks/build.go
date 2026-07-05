@@ -1521,9 +1521,13 @@ func parseStatusMatcher(v any) (statusMatcher, error) {
 	if cond, ok := v.(map[string]any); ok {
 		op := cfgval.AsString(cond["op"])
 		if !validCompareOp(op) {
-			return statusMatcher{}, fmt.Errorf("expect_status op must be one of ==, !=, >, >=, <, <=, =~")
+			return statusMatcher{}, fmt.Errorf("expect_status op must be one of ==, !=, >, >=, <, <=, contains, =~")
 		}
-		return statusMatcher{op: op, value: cfgval.String(cond["value"])}, nil
+		value := cfgval.String(cond["value"])
+		if err := validateAssertionValue("expect_status", op, value); err != nil {
+			return statusMatcher{}, err
+		}
+		return statusMatcher{op: op, value: value}, nil
 	}
 	var m statusMatcher
 	var items []any
@@ -1545,4 +1549,18 @@ func parseStatusMatcher(v any) (statusMatcher, error) {
 		return statusMatcher{}, fmt.Errorf("invalid expect_status %q", s)
 	}
 	return m, nil
+}
+
+func validateAssertionValue(label, op, value string) error {
+	switch op {
+	case ">", ">=", "<", "<=":
+		if _, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err != nil {
+			return fmt.Errorf("%s value %q must be numeric for op %s", label, value, op)
+		}
+	case "=~":
+		if _, err := regexp.Compile(value); err != nil {
+			return fmt.Errorf("%s value is not a valid regexp: %w", label, err)
+		}
+	}
+	return nil
 }
