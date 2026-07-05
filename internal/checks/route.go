@@ -9,6 +9,12 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
+// Address family selectors for a route check.
+const (
+	familyIPv4 = "ipv4"
+	familyIPv6 = "ipv6"
+)
+
 // DefaultRoute is one up default-route entry: the egress interface and the
 // gateway address ("" when the route has no gateway, as on point-to-point
 // links like PPP, where the device itself is the next hop).
@@ -110,9 +116,9 @@ func SampleRoutes(family string) ([]DefaultRoute, error) { return defaultRouteSa
 
 func netlinkFamily(family string) (int, error) {
 	switch family {
-	case "ipv4", "":
+	case familyIPv4, "":
 		return netlink.FAMILY_V4, nil
-	case "ipv6":
+	case familyIPv6:
 		return netlink.FAMILY_V6, nil
 	default:
 		return 0, fmt.Errorf("unknown route family %q", family)
@@ -157,11 +163,11 @@ func isDefaultNetlinkRoute(family string, route netlink.Route) bool {
 	if ones != 0 {
 		return false
 	}
-	return (family == "ipv6" && bits == 128) || (family != "ipv6" && bits == 32)
+	return (family == familyIPv6 && bits == 128) || (family != familyIPv6 && bits == 32)
 }
 
 func appendDefaultRoute(routes []DefaultRoute, family, iface string, gateway net.IP) []DefaultRoute {
-	if iface == "" || (family == "ipv6" && iface == "lo") {
+	if iface == "" || (family == familyIPv6 && iface == "lo") {
 		return routes
 	}
 	gw := ""
