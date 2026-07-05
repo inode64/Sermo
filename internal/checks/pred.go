@@ -18,15 +18,20 @@ type levelPred struct {
 	value float64
 }
 
+// fieldUsedPct is the shared "% used" predicate/reading field name every level
+// check exposes (storage, swap, memory, fds, pids, conntrack) in both its
+// predicate lists and its result data map.
+const fieldUsedPct = "used_pct"
+
 // Predicate field lists, one per level check. They are exported so config
 // validation walks the same lists and both layers stay in step by construction.
 var (
 	// StoragePredFields are the space/inode predicates of a storage check.
-	StoragePredFields = []string{"used_pct", "free_pct", "used_bytes", "free_bytes", "inodes_used_pct", "inodes_free_pct", "inodes_free"}
+	StoragePredFields = []string{fieldUsedPct, "free_pct", "used_bytes", "free_bytes", "inodes_used_pct", "inodes_free_pct", "inodes_free"}
 	// SwapUsageFields are the predicates of a swap usage metric.
-	SwapUsageFields = []string{"used_pct", "free_pct", "free_bytes"}
+	SwapUsageFields = []string{fieldUsedPct, "free_pct", "free_bytes"}
 	// MemoryPredFields are the predicates of a memory check.
-	MemoryPredFields = []string{"used_pct", "available_pct", "available_bytes"}
+	MemoryPredFields = []string{fieldUsedPct, "available_pct", "available_bytes"}
 	// PressurePredFields are the predicates of a pressure (PSI) check: the
 	// rolling stall percentages of the some/full lines.
 	PressurePredFields = []string{"some_avg10", "some_avg60", "some_avg300", "full_avg10", "full_avg60", "full_avg300"}
@@ -35,11 +40,11 @@ var (
 	// reads naturally, e.g. "50M").
 	DiskIOPredFields = []string{"util_pct", "read_bytes", "write_bytes", "await_ms"}
 	// FdsPredFields are the predicates of an fds check.
-	FdsPredFields = []string{"used_pct", "free", "allocated"}
+	FdsPredFields = []string{fieldUsedPct, "free", "allocated"}
 	// PidsPredFields are the predicates of a pids check.
-	PidsPredFields = []string{"used_pct", "free", "count"}
+	PidsPredFields = []string{fieldUsedPct, "free", "count"}
 	// ConntrackPredFields are the predicates of a conntrack check.
-	ConntrackPredFields = []string{"used_pct", "free", "count"}
+	ConntrackPredFields = []string{fieldUsedPct, "free", "count"}
 	// LoadPredFields are the predicates of a load check.
 	LoadPredFields = []string{"load1", "load5", "load15"}
 	// UsersPredFields is the single required predicate of a users check.
