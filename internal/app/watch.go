@@ -122,7 +122,7 @@ func (w *Watch) RunCycle(ctx context.Context) {
 		if w.firing {
 			w.firing = false
 			w.lastNotifyAt = time.Time{}
-			w.emit(Event{Watch: w.Name, Kind: "recovered", Message: res.Message})
+			w.emit(Event{Watch: w.Name, Kind: eventKindRecovered, Message: res.Message})
 		}
 		return
 	}
@@ -132,7 +132,7 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	// satisfied. This makes the alert visible in the web UI (state=failed,
 	// Alerts/Watches counts, failed filter) and in the event log even for
 	// bare watches that have no `then` (pure monitor-only / alert-only case).
-	w.emit(Event{Watch: w.Name, Kind: "firing", Message: res.Message, Output: resultOutput(res)})
+	w.emit(Event{Watch: w.Name, Kind: eventKindFiring, Message: res.Message, Output: resultOutput(res)})
 	env := hookEnv(w.Name, w.CheckType, res)
 	if w.DryRun {
 		w.emit(Event{Watch: w.Name, Kind: eventKindDryRun, Message: w.dryRunMessage()})

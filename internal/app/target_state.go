@@ -84,7 +84,7 @@ func WatchState(enabled, monitored, failed bool, observed bool) string {
 // check snapshots services do). "firing" is emitted for any watch (including
 // bare ones without a `then`) when its `for` window is satisfied.
 func WatchActivityFailed(kind string) bool {
-	if kind == "firing" {
+	if kind == eventKindFiring {
 		return true
 	}
 	return strings.HasSuffix(kind, "-failed")
