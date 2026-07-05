@@ -215,6 +215,11 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 			add("%s.body must be a string", prefix)
 		}
 	}
+	if j, hasJSON := fields["json"]; hasJSON && j != nil {
+		if _, hasBody := fields["body"]; hasBody {
+			add("%s.body and json are mutually exclusive", prefix)
+		}
+	}
 	if v, present := fields["headers"]; present {
 		if _, ok := v.(map[string]any); !ok {
 			add("%s.headers must be a mapping", prefix)
