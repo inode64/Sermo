@@ -42,6 +42,13 @@ const (
 	fieldReadBytes  = "read_bytes"
 	fieldWriteBytes = "write_bytes"
 	fieldAwaitMs    = "await_ms"
+	// pressure (PSI) stall-percentage fields for the some/full lines.
+	fieldSomeAvg10  = "some_avg10"
+	fieldSomeAvg60  = "some_avg60"
+	fieldSomeAvg300 = "some_avg300"
+	fieldFullAvg10  = "full_avg10"
+	fieldFullAvg60  = "full_avg60"
+	fieldFullAvg300 = "full_avg300"
 )
 
 // Predicate field lists, one per level check. They are exported so config
@@ -55,7 +62,7 @@ var (
 	MemoryPredFields = []string{fieldUsedPct, fieldAvailablePct, fieldAvailableBytes}
 	// PressurePredFields are the predicates of a pressure (PSI) check: the
 	// rolling stall percentages of the some/full lines.
-	PressurePredFields = []string{"some_avg10", "some_avg60", "some_avg300", "full_avg10", "full_avg60", "full_avg300"}
+	PressurePredFields = []string{fieldSomeAvg10, fieldSomeAvg60, fieldSomeAvg300, fieldFullAvg10, fieldFullAvg60, fieldFullAvg300}
 	// DiskIOPredFields are the predicates of a diskio check: per-cycle rates
 	// (read_bytes/write_bytes are bytes per second, so the size-suffix grammar
 	// reads naturally, e.g. "50M").
