@@ -44,6 +44,9 @@ const (
 	// extraTransport is the Result.Extra key carrying the transport a probe used
 	// (openvpn udp/tcp, libvirt connection mode).
 	extraTransport = "transport"
+	// extraSocket is the Result.Extra key carrying the unix socket path a probe
+	// connected to (acpid, fail2ban, lvmpolld).
+	extraSocket = "socket"
 )
 
 // Config is the connection target for a protocol probe. Fields that do not apply

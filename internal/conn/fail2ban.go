@@ -31,5 +31,5 @@ func (fail2banProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 	_ = c.Close()
-	return Result{Extra: map[string]string{"socket": socket}}, nil
+	return Result{Extra: map[string]string{extraSocket: socket}}, nil
 }

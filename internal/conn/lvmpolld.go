@@ -60,7 +60,7 @@ func (lvmpolldProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if p := fields["protocol"]; p != "" && p != "lvmpolld" {
 		return Result{}, fmt.Errorf("lvmpolld hello: protocol = %q, not lvmpolld", p)
 	}
-	extra := map[string]string{"socket": socket}
+	extra := map[string]string{extraSocket: socket}
 	if p := fields["protocol"]; p != "" {
 		extra["protocol"] = p
 	}
