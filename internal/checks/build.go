@@ -514,7 +514,7 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 		tr.DialContext = conn.BindDialer(ifaces[0]).DialContext
 		reqClient = &http.Client{Transport: tr}
 	}
-	expectJSON, warn := parseJSONAssertions(entry["expect_json"], "expect_json")
+	expectJSON, warn := parseAssertionMap(entry["expect_json"], "expect_json")
 	if warn != "" {
 		return nil, "http check: " + warn
 	}
@@ -1496,9 +1496,9 @@ func Evaluate(results []Result) Outcome {
 	return Outcome{OK: ok, Results: results}
 }
 
-// parseJSONAssertions reads the expect_json mapping into ordered assertions: a
-// scalar value is an equality check; a {op, value} mapping is an operator check.
-func parseJSONAssertions(v any, field string) ([]jsonAssertion, string) {
+// parseAssertionMap reads a field -> value/{op,value} mapping into ordered
+// assertions.
+func parseAssertionMap(v any, field string) ([]jsonAssertion, string) {
 	if v == nil {
 		return nil, ""
 	}
