@@ -377,7 +377,7 @@ func (b *WebBackend) syncStorageMountMonitoring(storage, action string, resultOK
 		return
 	}
 	if change.Changed {
-		b.emitWatchMonitorEvent(storage, change.Action, "action", "ok", change.Message)
+		b.emitWatchMonitorEvent(storage, change.Action, eventKindAction, "ok", change.Message)
 	}
 }
 
