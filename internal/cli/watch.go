@@ -10,10 +10,13 @@ import (
 	"sermo/internal/state"
 )
 
+// watchCommand is the command name reported in watch usage errors.
+const watchCommand = "watch"
+
 // runWatch dispatches host-watch queries against the running daemon.
 func (a App) runWatch(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.commandUsageError("watch", "watch requires subcommand status, monitor or unmonitor")
+		return a.commandUsageError(watchCommand, "watch requires subcommand status, monitor or unmonitor")
 	}
 	switch opts.args[0] {
 	case "status":
@@ -23,7 +26,7 @@ func (a App) runWatch(ctx context.Context, opts options) int {
 	case "unmonitor":
 		return a.runWatchMonitor(opts, true)
 	default:
-		return a.commandUsageError("watch", fmt.Sprintf("unknown watch subcommand %q", opts.args[0]))
+		return a.commandUsageError(watchCommand, fmt.Sprintf("unknown watch subcommand %q", opts.args[0]))
 	}
 }
 
@@ -38,7 +41,7 @@ func (a App) runWatchMonitor(opts options, pause bool) int {
 		verb = "unmonitor"
 	}
 	if len(opts.args) != 2 {
-		return a.commandUsageError("watch", fmt.Sprintf("watch %s requires exactly one watch name", verb))
+		return a.commandUsageError(watchCommand, fmt.Sprintf("watch %s requires exactly one watch name", verb))
 	}
 	name := opts.args[1]
 
@@ -115,7 +118,7 @@ func knownWatchName(cfg *config.Config, name string) bool {
 
 func (a App) runWatchStatus(ctx context.Context, opts options) int {
 	if len(opts.args) != 2 {
-		return a.commandUsageError("watch", "watch status requires exactly one watch name")
+		return a.commandUsageError(watchCommand, "watch status requires exactly one watch name")
 	}
 	name := opts.args[1]
 	state := app.TargetStateOK
