@@ -955,7 +955,7 @@ func versionFromPaths(raw any, backend string) []string {
 func allVersionFromPaths(raw any) []string {
 	if m, ok := raw.(map[string]any); ok {
 		var out []string
-		for _, key := range []string{"systemd", "openrc"} {
+		for _, key := range []string{backendSystemd, backendOpenRC} {
 			out = append(out, cfgval.StringList(m[key])...)
 		}
 		return out
