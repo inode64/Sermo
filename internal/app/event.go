@@ -32,6 +32,7 @@ const (
 	eventKindAction     = "action"
 	eventKindAlert      = "alert"
 	eventKindError      = "error"
+	eventKindHook       = "hook"
 	eventKindDryRun     = "dry-run"
 	eventKindFiring     = "firing"
 	eventKindRecovered  = "recovered"
@@ -115,7 +116,7 @@ func SlogEmitter(logger *slog.Logger) func(Event) {
 		switch e.Kind {
 		case eventKindError, eventKindHookFail, eventKindNotifyFail:
 			logger.Error("sermod", attrs...)
-		case eventKindAction, eventKindAlert, eventKindSuppressed, eventKindFiring, eventKindRecovered, eventKindDryRun, "hook", "notify", eventKindCascade:
+		case eventKindAction, eventKindAlert, eventKindSuppressed, eventKindFiring, eventKindRecovered, eventKindDryRun, eventKindHook, "notify", eventKindCascade:
 			logger.Info("sermod", attrs...)
 		default:
 			logger.Debug("sermod", attrs...)
