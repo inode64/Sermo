@@ -70,7 +70,7 @@ func (ajpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if !ajpIsCPong(prefix) {
 		return Result{}, fmt.Errorf("unexpected AJP reply prefix %#x (want CPong)", prefix)
 	}
-	return Result{Extra: map[string]string{"reply": "cpong"}}, nil
+	return Result{Extra: map[string]string{extraReply: "cpong"}}, nil
 }
 
 // buildAJPCPing builds an AJP13 CPing packet (web-server-to-container magic
