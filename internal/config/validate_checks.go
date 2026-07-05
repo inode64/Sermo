@@ -1082,8 +1082,7 @@ func isJSONArray(s string) bool {
 }
 
 // validateSQLFields validates a sql check: a known engine, a query, a valid op
-// and a value. For numeric ops the value must be numeric; for =~ it must be a
-// valid regexp. mysql/postgres require a user; sqlite requires a path.
+// and value, plus engine-specific connection requirements.
 func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 	engine := cfgval.String(fields["engine"])
 	if _, ok := sqlEngines[engine]; !ok {
@@ -1097,14 +1096,11 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 		add("%s.op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, op)
 	}
 	value := cfgval.String(fields["value"])
-	switch op {
-	case ">", ">=", "<", "<=":
-		if !isNumeric(value) {
-			add("%s.value %q must be numeric for op %s", prefix, value, op)
-		}
-	case "=~":
-		if _, err := regexp.Compile(value); err != nil {
-			add("%s.value is not a valid regexp: %v", prefix, err)
+	if value == "" {
+		add("%s.value is required for a sql check", prefix)
+	} else if cfgval.IsAssertOp(op) {
+		if err := checks.ValidateAssertionValue(prefix, op, value); err != nil {
+			add("%s", err)
 		}
 	}
 	switch engine {

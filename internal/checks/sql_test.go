@@ -150,6 +150,21 @@ func TestBuildSQLCheckWiring(t *testing.T) {
 	}, Deps{DefaultTimeout: time.Second}); len(warns) == 0 {
 		t.Fatal("bad op should warn")
 	}
+	if _, warns := Build(map[string]any{
+		"q": map[string]any{"type": "sql", "engine": "sqlite", "path": "/x.db", "query": "SELECT 1", "op": ">"},
+	}, Deps{DefaultTimeout: time.Second}); len(warns) == 0 {
+		t.Fatal("missing value should warn")
+	}
+	if _, warns := Build(map[string]any{
+		"q": map[string]any{"type": "sql", "engine": "sqlite", "path": "/x.db", "query": "SELECT 1", "op": ">", "value": "many"},
+	}, Deps{DefaultTimeout: time.Second}); len(warns) == 0 {
+		t.Fatal("non-numeric ordering value should warn")
+	}
+	if _, warns := Build(map[string]any{
+		"q": map[string]any{"type": "sql", "engine": "sqlite", "path": "/x.db", "query": "SELECT 1", "op": "=~", "value": "["},
+	}, Deps{DefaultTimeout: time.Second}); len(warns) == 0 {
+		t.Fatal("bad regex value should warn")
+	}
 }
 
 func TestSQLConnConfigHostDefault(t *testing.T) {
