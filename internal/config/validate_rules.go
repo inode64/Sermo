@@ -189,7 +189,7 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 
 		rtype := cfgval.String(entry["type"])
 		switch rtype {
-		case "remediation", "guard", "alert":
+		case string(rules.RuleRemediation), string(rules.RuleGuard), string(rules.RuleAlert):
 		default:
 			add("%s type %q is not one of remediation, guard, alert", path, rtype)
 		}
@@ -203,7 +203,7 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 			add("%s has no then action", path)
 		}
 		actions := ruleActions(then)
-		isGuard := rtype == "guard"
+		isGuard := rtype == string(rules.RuleGuard)
 		blocks, blocksErr := cfgval.StrictStringList(entry["blocks"])
 		if _, present := entry["blocks"]; present && blocksErr != nil {
 			add("%s.blocks must be a string or list of strings", path)
@@ -253,19 +253,19 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 			switch act.typ {
 			case "restart", "start", "stop", "reload", "resume":
 				hasOperation = true
-				if rtype != "remediation" {
+				if rtype != string(rules.RuleRemediation) {
 					add("%s only remediation rules may use action %s", path, act.typ)
 				}
 			}
 		}
-		if rtype == "remediation" && hasThen && !hasOperation {
+		if rtype == string(rules.RuleRemediation) && hasThen && !hasOperation {
 			add("%s remediation requires an operation action (restart, start, stop, reload, resume); use type: alert for notify-only rules", path)
 		}
 
 		validateWindow(path, entry, add)
 
 		if hasIf {
-			validateCondition(ifNode, path+".if", checkNames, systemMetricChecks, rtype == "alert", add)
+			validateCondition(ifNode, path+".if", checkNames, systemMetricChecks, rtype == string(rules.RuleAlert), add)
 		}
 	}
 }
