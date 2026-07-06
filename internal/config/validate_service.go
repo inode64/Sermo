@@ -166,7 +166,7 @@ func pathDepth(p string) int {
 }
 
 func validateProcesses(tree map[string]any, add addFunc) {
-	processes, ok := tree["processes"].(map[string]any)
+	processes, ok := tree[sectionProcesses].(map[string]any)
 	if !ok {
 		return
 	}
@@ -207,7 +207,7 @@ func validatePidfiles(tree map[string]any, add addFunc) {
 		add("pidfiles must be a mapping of process role to path string or candidate list")
 		return
 	}
-	processes, _ := tree["processes"].(map[string]any)
+	processes, _ := tree[sectionProcesses].(map[string]any)
 	for _, role := range slices.Sorted(maps.Keys(pidfiles)) {
 		if !validDocumentName(role) {
 			add("pidfiles.%s role must be a simple name without path separators", role)
@@ -430,7 +430,7 @@ func reloadSignalNeedsPidfileIdentity(tree map[string]any, backend string) bool 
 
 func reloadSignalPidfileIdentity(tree map[string]any) (pidfile, identity bool) {
 	pidfile = len(cfgval.StringList(tree["pidfile"])) > 0
-	procs, ok := tree["processes"].(map[string]any)
+	procs, ok := tree[sectionProcesses].(map[string]any)
 	if !ok {
 		return pidfile, false
 	}
