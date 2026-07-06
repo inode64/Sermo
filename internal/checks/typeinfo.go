@@ -9,55 +9,109 @@ type TypeInfo struct {
 	ServiceScoped bool
 }
 
+// Built-in check type names (the `type:` selector of a check). This is the
+// canonical spelling reused by the typeInfos registry and the buildCheck
+// dispatch, so a new type is named once.
+const (
+	checkTypeTCP           = "tcp"
+	checkTypePorts         = "ports"
+	checkTypeHTTP          = "http"
+	checkTypeCommand       = "command"
+	checkTypeService       = "service"
+	checkTypeFileExists    = "file_exists"
+	checkTypeFile          = "file"
+	checkTypeLockfile      = "lockfile"
+	checkTypeBinary        = "binary"
+	checkTypePidfile       = "pidfile"
+	checkTypeSocket        = "socket"
+	checkTypeProcess       = "process"
+	checkTypeMetric        = "metric"
+	checkTypeLibraries     = "libraries"
+	checkTypeCount         = "count"
+	checkTypeStorage       = "storage"
+	checkTypeAutofs        = "autofs"
+	checkTypeLoad          = "load"
+	checkTypeUsers         = "users"
+	checkTypeProcessCount  = "process_count"
+	checkTypeHdparm        = "hdparm"
+	checkTypeSensors       = "sensors"
+	checkTypeSmart         = "smart"
+	checkTypeRAID          = "raid"
+	checkTypeEDAC          = "edac"
+	checkTypeConfig        = "config"
+	checkTypeFDS           = "fds"
+	checkTypeMemory        = "memory"
+	checkTypePressure      = "pressure"
+	checkTypePIDs          = "pids"
+	checkTypeDiskIO        = "diskio"
+	checkTypeConntrack     = "conntrack"
+	checkTypeEntropy       = "entropy"
+	checkTypeZombies       = "zombies"
+	checkTypeOOM           = "oom"
+	checkTypeCert          = "cert"
+	checkTypeSQLite        = "sqlite"
+	checkTypeSQLite3       = "sqlite3"
+	checkTypeSQL           = "sql"
+	checkTypeMongoDBQuery  = "mongodb-query"
+	checkTypeInfluxDBQuery = "influxdb-query"
+	checkTypeSize          = "size"
+	checkTypeWebsocket     = "websocket"
+	checkTypeNet           = "net"
+	checkTypeICMP          = "icmp"
+	checkTypeSwap          = "swap"
+	checkTypeRoute         = "route"
+	checkTypeFirewallRules = "firewall_rules"
+)
+
 var typeInfos = []TypeInfo{
-	{Name: "tcp", Health: true},
-	{Name: "ports", Health: true},
-	{Name: "http", Health: true},
-	{Name: "command", Health: true},
-	{Name: "service", Health: true, ServiceScoped: true},
-	{Name: "file_exists", Health: true},
-	{Name: "file", Health: true},
-	{Name: "lockfile", Health: true},
-	{Name: "binary", Health: true},
-	{Name: "pidfile", Health: true},
-	{Name: "socket", Health: true},
-	{Name: "process", Health: true, ServiceScoped: true},
-	{Name: "metric", ServiceScoped: true},
-	{Name: "libraries", Health: true},
-	{Name: "count"},
-	{Name: "storage"},
-	{Name: "autofs", Health: true},
-	{Name: "load"},
-	{Name: "users"},
-	{Name: "process_count"},
-	{Name: "hdparm"},
-	{Name: "sensors"},
-	{Name: "smart"},
-	{Name: "raid"},
-	{Name: "edac"},
-	{Name: "config", Health: true},
-	{Name: "fds"},
-	{Name: "memory"},
-	{Name: "pressure"},
-	{Name: "pids"},
-	{Name: "diskio"},
-	{Name: "conntrack"},
-	{Name: "entropy"},
-	{Name: "zombies"},
-	{Name: "oom"},
-	{Name: "cert", Health: true},
-	{Name: "sqlite", Health: true},
-	{Name: "sqlite3", Health: true},
-	{Name: "sql"},
-	{Name: "mongodb-query"},
-	{Name: "influxdb-query"},
-	{Name: "size"},
-	{Name: "websocket", Health: true},
-	{Name: "net"},
-	{Name: "icmp"},
-	{Name: "swap"},
-	{Name: "route", Health: true},
-	{Name: "firewall_rules", Health: true},
+	{Name: checkTypeTCP, Health: true},
+	{Name: checkTypePorts, Health: true},
+	{Name: checkTypeHTTP, Health: true},
+	{Name: checkTypeCommand, Health: true},
+	{Name: checkTypeService, Health: true, ServiceScoped: true},
+	{Name: checkTypeFileExists, Health: true},
+	{Name: checkTypeFile, Health: true},
+	{Name: checkTypeLockfile, Health: true},
+	{Name: checkTypeBinary, Health: true},
+	{Name: checkTypePidfile, Health: true},
+	{Name: checkTypeSocket, Health: true},
+	{Name: checkTypeProcess, Health: true, ServiceScoped: true},
+	{Name: checkTypeMetric, ServiceScoped: true},
+	{Name: checkTypeLibraries, Health: true},
+	{Name: checkTypeCount},
+	{Name: checkTypeStorage},
+	{Name: checkTypeAutofs, Health: true},
+	{Name: checkTypeLoad},
+	{Name: checkTypeUsers},
+	{Name: checkTypeProcessCount},
+	{Name: checkTypeHdparm},
+	{Name: checkTypeSensors},
+	{Name: checkTypeSmart},
+	{Name: checkTypeRAID},
+	{Name: checkTypeEDAC},
+	{Name: checkTypeConfig, Health: true},
+	{Name: checkTypeFDS},
+	{Name: checkTypeMemory},
+	{Name: checkTypePressure},
+	{Name: checkTypePIDs},
+	{Name: checkTypeDiskIO},
+	{Name: checkTypeConntrack},
+	{Name: checkTypeEntropy},
+	{Name: checkTypeZombies},
+	{Name: checkTypeOOM},
+	{Name: checkTypeCert, Health: true},
+	{Name: checkTypeSQLite, Health: true},
+	{Name: checkTypeSQLite3, Health: true},
+	{Name: checkTypeSQL},
+	{Name: checkTypeMongoDBQuery},
+	{Name: checkTypeInfluxDBQuery},
+	{Name: checkTypeSize},
+	{Name: checkTypeWebsocket, Health: true},
+	{Name: checkTypeNet},
+	{Name: checkTypeICMP},
+	{Name: checkTypeSwap},
+	{Name: checkTypeRoute, Health: true},
+	{Name: checkTypeFirewallRules, Health: true},
 }
 
 var typeInfoByName = indexTypeInfos(typeInfos)
