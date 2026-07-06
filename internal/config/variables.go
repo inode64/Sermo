@@ -37,7 +37,7 @@ func collectVariables(tree map[string]any) map[string]string {
 }
 
 func collectVariablesForKind(tree map[string]any, _ string) map[string]string {
-	raw, ok := tree["variables"].(map[string]any)
+	raw, ok := tree[sectionVariables].(map[string]any)
 	vars := map[string]string{}
 	if ok {
 		vars = make(map[string]string, len(raw))
@@ -99,7 +99,7 @@ func DocumentBinary(tree map[string]any) string {
 }
 
 func documentBinaryCandidates(tree map[string]any) []string {
-	vars, _ := tree["variables"].(map[string]any)
+	vars, _ := tree[sectionVariables].(map[string]any)
 	if vars == nil {
 		return nil
 	}
@@ -113,7 +113,7 @@ func documentBinaryCandidates(tree map[string]any) []string {
 // collectVariablesForKind in place. Malformed specs and unresolved path
 // variables are configuration errors.
 func resolveFileVars(vars map[string]string, tree map[string]any) []string {
-	raw, ok := tree["variables"].(map[string]any)
+	raw, ok := tree[sectionVariables].(map[string]any)
 	if !ok {
 		return nil
 	}
@@ -287,7 +287,7 @@ func expandTree(tree map[string]any, vars map[string]string) (map[string]any, []
 	var errs []string
 	out := make(map[string]any, len(tree))
 	for k, v := range tree {
-		if k == "variables" {
+		if k == sectionVariables {
 			out[k] = v
 			continue
 		}

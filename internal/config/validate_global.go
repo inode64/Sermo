@@ -200,7 +200,7 @@ var reservedVarNames = set("all", "none", "default", "date", "event", "action")
 // a mapping; each value must be a scalar or a list (not a nested mapping); and no
 // name may be reserved.
 func validateDefaultsVariables(defaults map[string]any, add addFunc) {
-	v, present := defaults["variables"]
+	v, present := defaults[sectionVariables]
 	if !present {
 		return
 	}

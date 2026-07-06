@@ -49,6 +49,10 @@ const sectionPreflight = "preflight"
 // used for discovery and kill matching.
 const sectionProcesses = "processes"
 
+// sectionVariables is the ${var} definition block (on defaults, a service, a
+// storage doc or an app) expanded during resolution.
+const sectionVariables = "variables"
+
 // Catalog categories mirror the catalog subdirectory a definition is loaded
 // from (catalog/services, catalog/apps, catalog/libs, catalog/patterns). The
 // category tracks the kind for display and category-scoped listings.
