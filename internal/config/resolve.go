@@ -116,24 +116,34 @@ func (c *Config) StorageMountNames() []string {
 	return out
 }
 
+// Service-artifact kinds. Each top-level artifact declaration desugars into an
+// auto-generated health check whose name and type are the kind string; the kind
+// is also the tree key the declaration is read from (and, for socket/lockfile,
+// removed at). A watches.<kind> entry collides with the generated check.
+const (
+	artifactPidfile  = "pidfile"
+	artifactSocket   = "socket"
+	artifactLockfile = "lockfile"
+)
+
 // expandPidfile validates a top-level `pidfile: <path>` or candidate list and
 // adds a gated `pidfile` health check. The top-level declaration remains in the
 // resolved tree as the service's single pidfile source; process discovery and
 // OpenRC signal reload derive their internal pidfile selector from it.
 func expandPidfile(tree map[string]any) []string {
-	raw, present := tree["pidfile"]
+	raw, present := tree[artifactPidfile]
 	if !present {
 		return nil
 	}
-	decl, errs := parseServiceArtifactPaths("pidfile", raw)
+	decl, errs := parseServiceArtifactPaths(artifactPidfile, raw)
 	if len(decl.paths) == 0 {
 		return errs
 	}
 	pathValue := serviceArtifactPathValue(decl.paths)
-	tree["pidfile"] = pathValue
+	tree[artifactPidfile] = pathValue
 
 	// Gated health check, unless the service already defines one.
-	ensureServiceArtifactCheck(tree, "pidfile", "pidfile", pathValue, decl.optional)
+	ensureServiceArtifactCheck(tree, artifactPidfile, artifactPidfile, pathValue, decl.optional)
 	return errs
 }
 
@@ -147,7 +157,7 @@ func expandPidfiles(tree map[string]any) []string {
 		return nil
 	}
 	var errs []string
-	if _, hasPidfile := tree["pidfile"]; hasPidfile {
+	if _, hasPidfile := tree[artifactPidfile]; hasPidfile {
 		errs = append(errs, "pidfile and pidfiles are mutually exclusive")
 	}
 	pidfiles, ok := raw.(map[string]any)
@@ -177,10 +187,10 @@ func expandPidfiles(tree map[string]any) []string {
 		}
 		pathValue := serviceArtifactPathValue(paths)
 		normalized[role] = pathValue
-		checkName := "pidfile-" + role
+		checkName := artifactPidfile + "-" + role
 		if _, exists := checksMap[checkName]; !exists {
 			checksMap[checkName] = map[string]any{
-				"type":     "pidfile",
+				"type":     artifactPidfile,
 				"path":     pathValue,
 				"requires": []any{"service"},
 			}
@@ -195,15 +205,15 @@ func expandPidfiles(tree map[string]any) []string {
 // check. A service-created runtime socket should not block start/restart
 // preflight: it is checked while the service is active, like pidfiles.
 func expandSocket(tree map[string]any) []string {
-	raw, present := tree["socket"]
+	raw, present := tree[artifactSocket]
 	if !present {
 		return nil
 	}
-	delete(tree, "socket")
+	delete(tree, artifactSocket)
 
-	decl, errs := parseServiceArtifactPaths("socket", raw)
+	decl, errs := parseServiceArtifactPaths(artifactSocket, raw)
 	if len(decl.paths) > 0 {
-		ensureServiceArtifactCheck(tree, "socket", "socket", serviceArtifactPathValue(decl.paths), decl.optional)
+		ensureServiceArtifactCheck(tree, artifactSocket, artifactSocket, serviceArtifactPathValue(decl.paths), decl.optional)
 	}
 	return errs
 }
@@ -212,15 +222,15 @@ func expandSocket(tree map[string]any) []string {
 // health check. It is for service-owned runtime lock artifacts, not Sermo
 // operation locks.
 func expandLockfile(tree map[string]any) []string {
-	raw, present := tree["lockfile"]
+	raw, present := tree[artifactLockfile]
 	if !present {
 		return nil
 	}
-	delete(tree, "lockfile")
+	delete(tree, artifactLockfile)
 
-	decl, errs := parseServiceArtifactPaths("lockfile", raw)
+	decl, errs := parseServiceArtifactPaths(artifactLockfile, raw)
 	if len(decl.paths) > 0 {
-		ensureServiceArtifactCheck(tree, "lockfile", "lockfile", serviceArtifactPathValue(decl.paths), decl.optional)
+		ensureServiceArtifactCheck(tree, artifactLockfile, artifactLockfile, serviceArtifactPathValue(decl.paths), decl.optional)
 	}
 	return errs
 }
