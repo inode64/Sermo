@@ -45,6 +45,13 @@ const (
 // keyDryRun is the per-target flag that simulates automatic actions.
 const keyDryRun = "dry_run"
 
+// Check-gate / check-entry field keys.
+const (
+	keyRequires = "requires"
+	keyOptional = "optional"
+	keyVerify   = "verify"
+)
+
 // Storage document block keys.
 const (
 	keyCapacity = "capacity"

@@ -190,9 +190,9 @@ func expandPidfiles(tree map[string]any) []string {
 		checkName := artifactPidfile + "-" + role
 		if _, exists := checksMap[checkName]; !exists {
 			checksMap[checkName] = map[string]any{
-				"type":     artifactPidfile,
-				"path":     pathValue,
-				"requires": []any{"service"},
+				"type":      artifactPidfile,
+				"path":      pathValue,
+				keyRequires: []any{"service"},
 			}
 		}
 	}
@@ -245,7 +245,7 @@ func parseServiceArtifactPaths(kind string, raw any) (serviceArtifactPaths, []st
 	optional := false
 	if m, ok := raw.(map[string]any); ok {
 		pathRaw = m["path"]
-		optional = cfgval.Bool(m["optional"])
+		optional = cfgval.Bool(m[keyOptional])
 	}
 	paths := cfgval.StringList(pathRaw)
 	if len(paths) == 0 {
@@ -267,12 +267,12 @@ func ensureServiceArtifactCheck(tree map[string]any, name, checkType string, pat
 	}
 	if _, exists := checksMap[name]; !exists {
 		entry := map[string]any{
-			"type":     checkType,
-			"path":     pathValue,
-			"requires": []any{"service"},
+			"type":      checkType,
+			"path":      pathValue,
+			keyRequires: []any{"service"},
 		}
 		if optional {
-			entry["optional"] = true
+			entry[keyOptional] = true
 		}
 		checksMap[name] = entry
 	}
@@ -545,7 +545,7 @@ type serviceWatchRuleTarget struct {
 	checkType string
 }
 
-var serviceWatchCheckEntryFields = [...]string{keyEnabled, "verify", "requires", "optional", keyInterval}
+var serviceWatchCheckEntryFields = [...]string{keyEnabled, keyVerify, keyRequires, keyOptional, keyInterval}
 
 // promoteServiceWatchCheck promotes an embedded watch check to checks.<watch-name>,
 // returning the generated rule target.
