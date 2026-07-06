@@ -119,13 +119,18 @@ func CgroupPIDs(runner execx.Runner, readFile func(string) ([]byte, error), back
 	if err != nil {
 		return nil, false
 	}
+	pids := parseCgroupProcs(data)
+	return pids, len(pids) > 0
+}
+
+func parseCgroupProcs(data []byte) []int {
 	var pids []int
 	for _, line := range strings.Split(string(data), "\n") {
 		if pid, err := strconv.Atoi(strings.TrimSpace(line)); err == nil && pid > 0 {
 			pids = append(pids, pid)
 		}
 	}
-	return pids, len(pids) > 0
+	return pids
 }
 
 // BackendPIDsFuncWithRunner returns a process.Discoverer.BackendPIDs closure for
