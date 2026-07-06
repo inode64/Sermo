@@ -1239,6 +1239,7 @@ func TestCatalogPHPFPMVersionedConfigTestUsesConfigFile(t *testing.T) {
 		t.Fatalf("php-fpm config variable = %q", got)
 	}
 	wantPidfiles := []string{
+		"/run/php-fpm-${version}${sep}${instance}.pid",
 		"/run/php-fpm/php-fpm-${version}${sep}${instance}.pid",
 		"/run/php-fpm/php-fpm-php${version}${sep}${instance}.pid",
 		"/run/php-fpm-php${version}${sep}${instance}.pid",

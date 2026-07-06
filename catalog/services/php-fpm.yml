@@ -27,6 +27,7 @@ variables:
   config: /etc/php/fpm-php${version}${sep}${instance}/php-fpm.conf
   status_path: /status
 pidfile:
+  - /run/php-fpm-${version}${sep}${instance}.pid
   - /run/php-fpm/php-fpm-${version}${sep}${instance}.pid
   - /run/php-fpm/php-fpm-php${version}${sep}${instance}.pid
   - /run/php-fpm-php${version}${sep}${instance}.pid
@@ -48,12 +49,15 @@ processes:
   workers:
     exe: ${binary}
     user: ${user}
+reload:
+  signal: USR2
 watches:
   pidfile:
     check:
       type: pidfile
       optional: true
       path:
+        - /run/php-fpm-${version}${sep}${instance}.pid
         - /run/php-fpm/php-fpm-${version}${sep}${instance}.pid
         - /run/php-fpm/php-fpm-php${version}${sep}${instance}.pid
         - /run/php-fpm-php${version}${sep}${instance}.pid

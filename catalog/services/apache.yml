@@ -38,6 +38,11 @@ processes:
     exe: ${apache_binary}
     user: ${user}
 pidfile: /run/apache2.pid
+reload:
+  command:
+    - ${apache_binary}
+    - -k
+    - graceful
 config_files:
   - /etc/apache2/httpd.conf
   - /etc/apache2/apache2.conf

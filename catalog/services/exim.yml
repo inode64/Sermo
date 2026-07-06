@@ -22,6 +22,8 @@ processes:
   main:
     exe: ${exim_binary}
     user: ${user}
+reload:
+  signal: HUP
 watches:
   service:
     check:

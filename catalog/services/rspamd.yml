@@ -25,6 +25,8 @@ processes:
   worker:
     exe: ${rspamd_binary}
     user: ${user}
+reload:
+  signal: HUP
 watches:
   service:
     check:
