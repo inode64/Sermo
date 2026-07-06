@@ -1691,14 +1691,14 @@ func (b *WebBackend) icmpWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 	}
 	readings := []web.WatchReading{
 		{Field: "host", Label: "Host", Value: host},
-		{Field: "state", Label: "State", Value: state},
+		{Field: checks.NetMetricState, Label: "State", Value: state},
 	}
 	parts := []string{host + " " + state}
 	if s.RTTKnown {
-		readings = append(readings, web.WatchReading{Field: "latency", Label: "RTT", Value: fmt.Sprintf("%.1f ms", s.RTTms)})
+		readings = append(readings, web.WatchReading{Field: checks.IcmpMetricLatency, Label: "RTT", Value: fmt.Sprintf("%.1f ms", s.RTTms)})
 		parts = append(parts, fmt.Sprintf("rtt %.1f ms", s.RTTms))
-	} else if watchMetricEnabled(w.metrics, "latency") {
-		readings = append(readings, web.WatchReading{Field: "latency", Label: "RTT", Value: "unknown"})
+	} else if watchMetricEnabled(w.metrics, checks.IcmpMetricLatency) {
+		readings = append(readings, web.WatchReading{Field: checks.IcmpMetricLatency, Label: "RTT", Value: "unknown"})
 		parts = append(parts, "rtt unknown")
 	}
 	return nil, readings, strings.Join(parts, " · ")
