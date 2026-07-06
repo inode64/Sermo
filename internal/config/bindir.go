@@ -55,25 +55,33 @@ func expandBindirValue(v any) any {
 		if cands == nil {
 			return t
 		}
-		out := make([]any, len(cands))
-		for i, c := range cands {
-			out[i] = c
-		}
-		return out
+		return bindirCandidateValues(cands)
 	case []any:
-		out := make([]any, 0, len(t))
-		for _, e := range t {
-			switch ev := expandBindirValue(e).(type) {
-			case []any:
-				out = append(out, ev...)
-			default:
-				out = append(out, ev)
-			}
-		}
-		return out
+		return expandBindirList(t)
 	default:
 		return t
 	}
+}
+
+func bindirCandidateValues(cands []string) []any {
+	out := make([]any, len(cands))
+	for i, c := range cands {
+		out[i] = c
+	}
+	return out
+}
+
+func expandBindirList(values []any) []any {
+	out := make([]any, 0, len(values))
+	for _, value := range values {
+		switch expanded := expandBindirValue(value).(type) {
+		case []any:
+			out = append(out, expanded...)
+		default:
+			out = append(out, expanded)
+		}
+	}
+	return out
 }
 
 // bindirCandidates returns one candidate path per binDirSearch entry, replacing
