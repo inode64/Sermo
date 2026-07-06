@@ -1142,10 +1142,10 @@ func injectMaterializedBinary(out map[string]any, binary string) {
 	if binary == "" {
 		return
 	}
-	vars, _ := out["variables"].(map[string]any)
+	vars, _ := out[sectionVariables].(map[string]any)
 	if vars == nil {
 		vars = map[string]any{}
-		out["variables"] = vars
+		out[sectionVariables] = vars
 	}
 	vars["binary"] = binary
 }

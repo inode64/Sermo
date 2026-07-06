@@ -675,7 +675,7 @@ func injectHostBuiltins(vars map[string]string) {
 // list-first-existing handling as per-service variables. They form the lowest
 // explicit layer (a service's own variables override them; builtins fill gaps).
 func (c *Config) globalVars() map[string]string {
-	return collectVariables(map[string]any{"variables": c.Global.Defaults["variables"]})
+	return collectVariables(map[string]any{sectionVariables: c.Global.Defaults[sectionVariables]})
 }
 
 func (c *Config) expansionVariables(tree map[string]any, name string) (map[string]string, []string) {
