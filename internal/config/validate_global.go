@@ -180,7 +180,7 @@ func validateNotifyRefs(name string, entry map[string]any, notifiers map[string]
 		}
 	}
 	check("watches."+name, entry["then"])
-	if metrics, ok := entry["metrics"].(map[string]any); ok {
+	if metrics, ok := entry[sectionMetrics].(map[string]any); ok {
 		for _, key := range slices.Sorted(maps.Keys(metrics)) {
 			if m, ok := metrics[key].(map[string]any); ok {
 				check(fmt.Sprintf("watches.%s.metrics.%s", name, key), m["then"])

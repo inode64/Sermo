@@ -451,7 +451,7 @@ func validateNetCheck(name string, check, entry map[string]any, defaultNotify []
 	if cfgval.String(check["interface"]) == "" {
 		add("watches.%s.check.interface is required for a net check", name)
 	}
-	metrics, ok := entry["metrics"].(map[string]any)
+	metrics, ok := entry[sectionMetrics].(map[string]any)
 	if !ok || len(metrics) == 0 {
 		add("watches.%s.metrics is required and must be non-empty for a net check", name)
 		return
@@ -522,7 +522,7 @@ func validateWatchableCheck(prefix, typ string, fields map[string]any, locksDir 
 // with its own hook (mirrors validateNetCheck).
 func validateSwapCheck(name string, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
 	validateMetricWatchEntry(name, entry, add)
-	metrics, ok := entry["metrics"].(map[string]any)
+	metrics, ok := entry[sectionMetrics].(map[string]any)
 	if !ok || len(metrics) == 0 {
 		add("watches.%s.metrics is required and must be non-empty for a swap check", name)
 		return
@@ -585,7 +585,7 @@ func validateICMPCheck(name string, check, entry map[string]any, defaultNotify [
 			add("watches.%s.check.count must be a positive integer", name)
 		}
 	}
-	metrics, ok := entry["metrics"].(map[string]any)
+	metrics, ok := entry[sectionMetrics].(map[string]any)
 	if !ok || len(metrics) == 0 {
 		add("watches.%s.metrics is required and must be non-empty for an icmp check", name)
 		return
