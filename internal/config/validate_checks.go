@@ -145,7 +145,7 @@ func validateOomFields(prefix string, fields map[string]any, add addFunc) {
 // list of other check names in the same section (a check may not require itself or
 // an unknown check), and `skip_when_changed` is a list of file paths.
 func validateCheckGate(path, name string, entry, section map[string]any, add addFunc) {
-	if v, present := entry["requires"]; present {
+	if v, present := entry[keyRequires]; present {
 		reqs, ok := gateStrings(v)
 		if !ok {
 			add("%s.requires must be a check name or a list of check names", path)
