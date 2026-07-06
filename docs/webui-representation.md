@@ -140,9 +140,10 @@ Session-local for operations started from the current browser; enriched with
 
 Section id: `services-section`
 
-Lists **configured** service entries from the loaded config — state,
-checks, remediation and actions for what `sermod` monitors now. This is not
-`sermoctl services`, which inventories **catalog** service profiles under
+Lists **configured** service entries from the loaded config, excluding Docker
+containers (`category: docker`) and virtual machines (`category:
+virtual-machine`), which render in their own panels. This is not `sermoctl
+services`, which inventories **catalog** service profiles under
 `catalog/services`. See [cli.md](cli.md#catalog-inventory).
 
 | Part | Current representation |
@@ -166,9 +167,25 @@ Columns:
 | Memory | latest process-tree resident memory; blank for `no_resident_process` services |
 | FDs | open file-descriptor count from the process tree; blank for `no_resident_process` services |
 | IO R/W | cumulative process-tree disk read/write bytes; blank for `no_resident_process` services |
-| Actions | one state-aware start/stop button, restart, reload, resume, monitor/unmonitor; reload is disabled when `can_reload` is false; the start/stop/restart confirm dialog offers **skip also_apply** when `also_apply` is set |
+| Actions | one state-aware start/stop button, restart, reload, monitor/unmonitor; reload is disabled when `can_reload` is false; the start/stop/restart confirm dialog offers **skip also_apply** when `also_apply` is set |
 
-Row expansion:
+## Containers and virtual machines panels
+
+Section ids: `containers-section`, `vms-section`
+
+Docker container services and libvirt virtual machine services use the same
+service API and row expansion as the Services panel, but are separated by
+category for operators. These panels keep the `resume` action because paused
+containers and paused VMs can be resumed through the service operation path.
+
+| Panel | Source category | Extra action |
+| --- | --- | --- |
+| Containers | `docker` | `resume` when the container backend reports `paused` |
+| Virtual machines | `virtual-machine` | `resume` when the VM backend reports `paused` |
+
+## Service row expansion
+
+Shared by the Services, Containers and Virtual machines panels.
 
 | Area | Content |
 | --- | --- |
