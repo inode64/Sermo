@@ -63,10 +63,18 @@ type Detector struct {
 // Detection describes the selected backend and how it was selected.
 type Detection struct {
 	Backend Backend
-	Source  string
+	Source  string // how Backend was chosen: SourceRequested or SourceAuto
 	Systemd BackendProbe
 	OpenRC  BackendProbe
 }
+
+// Detection source values for Detection.Source.
+const (
+	// SourceRequested: the backend was explicitly requested (config/flag).
+	SourceRequested = "requested"
+	// SourceAuto: the backend was chosen by auto-detection.
+	SourceAuto = "auto"
+)
 
 // BackendProbe contains probe data for one backend.
 type BackendProbe struct {
@@ -104,12 +112,12 @@ func (d Detector) Detect(ctx context.Context, requested Backend) (Detection, err
 		if !systemd.Available {
 			return Detection{}, fmt.Errorf("requested backend systemd is not available")
 		}
-		return Detection{Backend: BackendSystemd, Source: "requested", Systemd: systemd, OpenRC: openrc}, nil
+		return Detection{Backend: BackendSystemd, Source: SourceRequested, Systemd: systemd, OpenRC: openrc}, nil
 	case BackendOpenRC:
 		if !openrc.Available {
 			return Detection{}, fmt.Errorf("requested backend openrc is not available")
 		}
-		return Detection{Backend: BackendOpenRC, Source: "requested", Systemd: systemd, OpenRC: openrc}, nil
+		return Detection{Backend: BackendOpenRC, Source: SourceRequested, Systemd: systemd, OpenRC: openrc}, nil
 	case BackendAuto:
 	default:
 		return Detection{}, fmt.Errorf("unsupported backend %q", requested)
@@ -117,15 +125,15 @@ func (d Detector) Detect(ctx context.Context, requested Backend) (Detection, err
 
 	switch {
 	case systemd.Available && !openrc.Available:
-		return Detection{Backend: BackendSystemd, Source: "auto", Systemd: systemd, OpenRC: openrc}, nil
+		return Detection{Backend: BackendSystemd, Source: SourceAuto, Systemd: systemd, OpenRC: openrc}, nil
 	case openrc.Available && !systemd.Available:
-		return Detection{Backend: BackendOpenRC, Source: "auto", Systemd: systemd, OpenRC: openrc}, nil
+		return Detection{Backend: BackendOpenRC, Source: SourceAuto, Systemd: systemd, OpenRC: openrc}, nil
 	case systemd.Available && openrc.Available:
 		if systemd.Active {
-			return Detection{Backend: BackendSystemd, Source: "auto", Systemd: systemd, OpenRC: openrc}, nil
+			return Detection{Backend: BackendSystemd, Source: SourceAuto, Systemd: systemd, OpenRC: openrc}, nil
 		}
 		if openrc.Active {
-			return Detection{Backend: BackendOpenRC, Source: "auto", Systemd: systemd, OpenRC: openrc}, nil
+			return Detection{Backend: BackendOpenRC, Source: SourceAuto, Systemd: systemd, OpenRC: openrc}, nil
 		}
 		return Detection{}, errors.New("ambiguous backend: both systemd and openrc appear available; set --backend, SERMO_BACKEND or engine.backend")
 	default:
