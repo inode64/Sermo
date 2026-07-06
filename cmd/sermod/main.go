@@ -170,7 +170,7 @@ func run(args []string) int {
 
 	// Bound persisted history to roughly a year of data before hydrating the
 	// recent-event ring.
-	cutoff := time.Now().Add(-366 * 24 * time.Hour)
+	cutoff := time.Now().Add(-state.DefaultHistoryRetention)
 	for _, p := range []struct {
 		what  string
 		prune func(time.Time) (int64, error)
