@@ -45,6 +45,13 @@ const (
 // keyDryRun is the per-target flag that simulates automatic actions.
 const keyDryRun = "dry_run"
 
+// Per-target monitoring metadata keys.
+const (
+	keyMonitor  = "monitor"
+	keyInterval = "interval"
+	keyEnabled  = "enabled"
+)
+
 // storage mount / umount block field keys.
 const (
 	keyMount        = "mount"
@@ -302,7 +309,7 @@ const (
 // MonitorMode returns a resolved entry's `monitor` flag, defaulting to
 // MonitorEnabled so services/watches are monitored unless told otherwise.
 func MonitorMode(tree map[string]any) string {
-	if v, ok := tree["monitor"].(string); ok && v != "" {
+	if v, ok := tree[keyMonitor].(string); ok && v != "" {
 		return v
 	}
 	return MonitorEnabled

@@ -21,7 +21,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			continue
 		}
 		validateWatchMetadata(name, entry, add)
-		if mode, present := entry["monitor"]; present {
+		if mode, present := entry[keyMonitor]; present {
 			validateMonitorMode("watches."+name+".monitor", mode, add)
 		}
 		if v, ok := entry["enabled"].(bool); ok && !v {
@@ -110,7 +110,7 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 		}
 		prefix := "watches." + name
 		validateWatchMetadata(name, entry, add)
-		if mode, present := entry["monitor"]; present {
+		if mode, present := entry[keyMonitor]; present {
 			validateMonitorMode(prefix+".monitor", mode, add)
 		}
 		if v, present := entry["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
