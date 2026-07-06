@@ -42,6 +42,9 @@ const (
 	keyKillOnlyIf      = "kill_only_if"
 )
 
+// keyDryRun is the per-target flag that simulates automatic actions.
+const keyDryRun = "dry_run"
+
 // storage mount / umount block field keys.
 const (
 	keyMount        = "mount"
@@ -124,11 +127,11 @@ var metaKeys = map[string]struct{}{
 
 // perServiceDefaults are the only parts of global `defaults` that merge into a
 // service. Engine-wide settings never reach individual services.
-var perServiceDefaults = []string{"dry_run", sectionStopPolicy, "policy", "rule_window"}
+var perServiceDefaults = []string{keyDryRun, sectionStopPolicy, "policy", "rule_window"}
 
 // perStorageDefaults are the only parts of global `defaults` that merge into a
 // storage target.
-var perStorageDefaults = []string{"dry_run"}
+var perStorageDefaults = []string{keyDryRun}
 
 // Document is a single loaded catalog definition or configured target in raw,
 // unexpanded form.
@@ -307,7 +310,7 @@ func MonitorMode(tree map[string]any) string {
 
 // DryRun reports whether automatic actions for this configured target are simulated.
 func DryRun(tree map[string]any) bool {
-	return cfgval.Bool(tree["dry_run"])
+	return cfgval.Bool(tree[keyDryRun])
 }
 
 // Global is the effective global configuration (sermo.yml plus conf.d), kept

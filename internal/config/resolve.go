@@ -847,7 +847,7 @@ func storageCapacityWatch(tree map[string]any) (map[string]any, bool) {
 		}
 	}
 	entry := map[string]any{"check": check}
-	for _, key := range []string{"display_name", "description", "category", "dry_run", "monitor", "interval"} {
+	for _, key := range []string{"display_name", "description", "category", keyDryRun, "monitor", "interval"} {
 		if v, present := tree[key]; present {
 			entry[key] = v
 		}
@@ -1195,7 +1195,7 @@ func (c *Config) defaultsPerStorage() map[string]any {
 }
 
 func (c *Config) applyWatchDefaults(raw map[string]any) {
-	v, ok := c.Global.Defaults["dry_run"]
+	v, ok := c.Global.Defaults[keyDryRun]
 	if !ok {
 		return
 	}
@@ -1204,8 +1204,8 @@ func (c *Config) applyWatchDefaults(raw map[string]any) {
 		if !ok {
 			continue
 		}
-		if _, present := watch["dry_run"]; !present {
-			watch["dry_run"] = deepCopy(v)
+		if _, present := watch[keyDryRun]; !present {
+			watch[keyDryRun] = deepCopy(v)
 		}
 	}
 }
