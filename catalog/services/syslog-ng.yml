@@ -22,6 +22,8 @@ processes:
   main:
     exe: ${syslog_ng_binary}
     user: root
+reload:
+  signal: HUP
 reload_on_change:
   paths:
     - ${config}

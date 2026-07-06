@@ -53,6 +53,8 @@ processes:
   postgres:
     exe: ${binary}
     user: ${user}
+reload:
+  signal: HUP
 stop_policy:
   graceful_timeout: 120s
   term_timeout: 60s

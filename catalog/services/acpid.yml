@@ -9,6 +9,8 @@ processes:
   main:
     exe: ${acpid_binary}
     user: root
+reload:
+  signal: HUP
 watches:
   service:
     check:

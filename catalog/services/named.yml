@@ -31,6 +31,8 @@ processes:
   main:
     exe: ${named_binary}
     user: ${user}
+reload:
+  signal: HUP
 watches:
   service:
     check:
