@@ -45,8 +45,8 @@ var validGlobalPathKeys = set(
 
 var validDefaultsKeys = set(
 	keyDryRun,
-	"policy",
-	"rule_window",
+	sectionPolicy,
+	sectionRuleWindow,
 	sectionStopPolicy,
 	sectionVariables,
 )
@@ -691,7 +691,7 @@ func validateStorage(name string, tree map[string]any, notifiers map[string]stru
 }
 
 func validateStorageCapacity(name, path string, tree, capacity map[string]any, notifiers map[string]struct{}, defaultNotify []string, add addFunc) {
-	allowed := set("mounted", "for", "within", "then", "policy")
+	allowed := set("mounted", "for", "within", "then", sectionPolicy)
 	for _, field := range checks.StoragePredFields {
 		allowed[field] = struct{}{}
 	}
@@ -712,7 +712,7 @@ func validateStorageCapacity(name, path string, tree, capacity map[string]any, n
 			entry[key] = v
 		}
 	}
-	for _, key := range []string{"for", "within", "then", "policy"} {
+	for _, key := range []string{"for", "within", "then", sectionPolicy} {
 		if v, present := capacity[key]; present {
 			entry[key] = v
 		}

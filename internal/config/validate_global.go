@@ -220,7 +220,7 @@ func validateDefaultsVariables(defaults map[string]any, add addFunc) {
 }
 
 func defaultsCooldown(defaults map[string]any) (string, bool) {
-	policy, ok := defaults["policy"].(map[string]any)
+	policy, ok := defaults[sectionPolicy].(map[string]any)
 	if !ok {
 		return "", false
 	}

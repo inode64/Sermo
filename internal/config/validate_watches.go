@@ -372,7 +372,7 @@ func validateKillAction(prefix string, kill map[string]any, add func(string, ...
 // plus the same max_actions/backoff extras a service policy allows. Unlike a
 // service, a watch does not require a cooldown; absent means "fire every cycle".
 func validateWatchPolicy(prefix string, entry map[string]any, add addFunc) {
-	raw, present := entry["policy"]
+	raw, present := entry[sectionPolicy]
 	if !present {
 		return
 	}
