@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"sermo/internal/operation"
+	"sermo/internal/rules"
 	"sermo/internal/state"
 )
 
@@ -30,8 +31,8 @@ func SyncManualActionMonitoringWithActive(store MonitorStore, service, action st
 	if store == nil {
 		return ManualMonitorChange{}, nil
 	}
-	switch action {
-	case "stop":
+	switch rules.ActionType(action) {
+	case rules.ActionStop:
 		if !result.OK() {
 			return ManualMonitorChange{}, nil
 		}
@@ -51,7 +52,7 @@ func SyncManualActionMonitoringWithActive(store MonitorStore, service, action st
 			Action:    "unmonitor",
 			Message:   "monitoring paused after manual stop",
 		}, nil
-	case "start", "restart", "resume":
+	case rules.ActionStart, rules.ActionRestart, rules.ActionResume:
 		if !result.OK() && !activeAfterStart {
 			return ManualMonitorChange{}, nil
 		}

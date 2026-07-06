@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"sermo/internal/operation"
+	"sermo/internal/rules"
 )
 
 // cascadeMaxDepth backstops pathological (but acyclic) also_apply chains; the
@@ -106,7 +107,7 @@ func OrderedGroup(root, action string, lookup func(string) []string, visited map
 		return nil
 	}
 	visited[root] = true
-	stop := action == "stop"
+	stop := action == string(rules.ActionStop)
 	var out []string
 	if !stop {
 		out = append(out, root)
