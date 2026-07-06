@@ -13,7 +13,7 @@ type GraphMetric struct {
 // this is reusable by any check (and service).
 var graphMetrics = map[string][]GraphMetric{
 	"hdparm":        {{Key: "read", Unit: "MB/s"}, {Key: "cached", Unit: "MB/s"}},
-	"sensors":       {{Key: "temp", Unit: "°C"}, {Key: "fan", Unit: "RPM"}},
+	"sensors":       {{Key: sensorTemp, Unit: "°C"}, {Key: sensorFan, Unit: "RPM"}},
 	"smart":         {{Key: "temperature", Unit: "°C"}, {Key: "reallocated", Unit: ""}, {Key: "wear", Unit: "%"}, {Key: "power_on_hours", Unit: "h"}},
 	"edac":          {{Key: "ce", Unit: ""}, {Key: "ue", Unit: ""}},
 	"users":         {{Key: "count", Unit: "users"}},
