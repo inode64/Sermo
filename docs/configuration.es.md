@@ -501,7 +501,9 @@ Una comprobación individual puede ejecutarse **con menos frecuencia** que el ci
 worker con `interval`. El worker sigue tickeando a su resolución; la comprobación se
 ejecuta cada `round(interval / resolution)` ciclos y **reutiliza su último resultado**
 entre ejecuciones, manteniendo completas las cachés de comprobación y las ventanas de
-reglas.
+reglas. Al arrancar, recargar o aplicar un cambio de configuración que introduce un
+check, Sermo lo ejecuta una vez inmediatamente si aún no hay resultado cacheado, y
+después aplica la cadencia configurada.
 
 ```yaml
 interval: 30s            # the service resolution (or engine.interval)
