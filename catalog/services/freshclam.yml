@@ -12,7 +12,14 @@ apps:
   - freshclam
 variables:
   user: clamav
-pidfile: /run/clamav/freshclam.pid
+pidfile:
+  # Path varies by distro/init (systemd clamav-freshclam vs OpenRC
+  # `freshclam -p /run/freshclam.pid`); optional because the `process` check
+  # below is the authoritative liveness signal.
+  optional: true
+  path:
+    - /run/clamav/freshclam.pid
+    - /run/freshclam.pid
 processes:
   main:
     exe: ${freshclam_binary}
