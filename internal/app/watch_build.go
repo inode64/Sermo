@@ -14,6 +14,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/process"
 	"sermo/internal/rules"
@@ -435,9 +436,9 @@ func parseProcCond(check map[string]any) (procCond, error) {
 		val *float64
 	}
 	for _, t := range []thr{
-		{"cpu", &c.cpuOp, &c.cpuValue},
-		{"memory", &c.memOp, &c.memValue},
-		{"io", &c.ioOp, &c.ioValue},
+		{metrics.MetricCPU, &c.cpuOp, &c.cpuValue},
+		{metrics.MetricMemory, &c.memOp, &c.memValue},
+		{metrics.MetricIO, &c.ioOp, &c.ioValue},
 	} {
 		m, ok := check[t.key].(map[string]any)
 		if !ok {

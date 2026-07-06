@@ -221,7 +221,7 @@ func (b *WebBackend) smartWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRe
 			case "temperature":
 				unit = " °C"
 			case "wear":
-				unit = "%"
+				unit = metricUnitPercent
 			}
 			readings = append(readings, web.WatchReading{
 				Field: field, Label: label, Value: fmt.Sprintf("%.0f%s", v, unit),

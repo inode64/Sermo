@@ -91,9 +91,9 @@ func (s *daemonMetricSampler) Series(since time.Duration) web.DaemonMetrics {
 	return web.DaemonMetrics{
 		Since:   since.String(),
 		Current: daemonRuntime(sample),
-		CPU:     daemonMetricSeries("cpu", "%", since, samples, func(p daemonMetricSample) (float64, bool) { return p.cpu, p.cpuReady }),
-		Memory:  daemonMetricSeries("memory", "bytes", since, samples, func(p daemonMetricSample) (float64, bool) { return float64(p.rss), p.rssOK }),
-		IO:      daemonMetricSeries("io", "B/s", since, samples, func(p daemonMetricSample) (float64, bool) { return p.io, p.ioReady }),
+		CPU:     daemonMetricSeries(metrics.MetricCPU, metricUnitPercent, since, samples, func(p daemonMetricSample) (float64, bool) { return p.cpu, p.cpuReady }),
+		Memory:  daemonMetricSeries(metrics.MetricMemory, metricUnitBytes, since, samples, func(p daemonMetricSample) (float64, bool) { return float64(p.rss), p.rssOK }),
+		IO:      daemonMetricSeries(metrics.MetricIO, metricUnitBytesPerSecond, since, samples, func(p daemonMetricSample) (float64, bool) { return p.io, p.ioReady }),
 	}
 }
 
@@ -151,13 +151,13 @@ func (s *daemonMetricSampler) recordPersistent(sample daemonMetricSample) {
 		return
 	}
 	if sample.rssOK {
-		_ = s.store.RecordDaemonMetric("memory", float64(sample.rss), sample.at)
+		_ = s.store.RecordDaemonMetric(metrics.MetricMemory, float64(sample.rss), sample.at)
 	}
 	if sample.cpuReady {
-		_ = s.store.RecordDaemonMetric("cpu", sample.cpu, sample.at)
+		_ = s.store.RecordDaemonMetric(metrics.MetricCPU, sample.cpu, sample.at)
 	}
 	if sample.ioReady {
-		_ = s.store.RecordDaemonMetric("io", sample.io, sample.at)
+		_ = s.store.RecordDaemonMetric(metrics.MetricIO, sample.io, sample.at)
 	}
 }
 
@@ -176,7 +176,7 @@ func (s *daemonMetricSampler) persistentSeries(sample daemonMetricSample, since 
 			return web.MetricSeries{}, false
 		}
 		return web.MetricSeries{
-			Check:   "sermod",
+			Check:   daemonMetricCheck,
 			Metric:  metric,
 			Since:   since.String(),
 			Unit:    unit,
@@ -184,15 +184,15 @@ func (s *daemonMetricSampler) persistentSeries(sample daemonMetricSample, since 
 			Points:  measurementPoints(points),
 		}, true
 	}
-	cpu, ok := series("cpu", "%")
+	cpu, ok := series(metrics.MetricCPU, metricUnitPercent)
 	if !ok {
 		return web.DaemonMetrics{}, false
 	}
-	memory, ok := series("memory", "bytes")
+	memory, ok := series(metrics.MetricMemory, metricUnitBytes)
 	if !ok {
 		return web.DaemonMetrics{}, false
 	}
-	io, ok := series("io", "B/s")
+	io, ok := series(metrics.MetricIO, metricUnitBytesPerSecond)
 	if !ok {
 		return web.DaemonMetrics{}, false
 	}

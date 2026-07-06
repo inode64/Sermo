@@ -2,6 +2,23 @@ import { html as tpl, render as litRender, nothing } from "./vendor/lit-html.js"
 
 const $ = (s) => document.querySelector(s);
 
+const metricNameCPU = "cpu";
+const metricNameMemory = "memory";
+const metricNameIO = "io";
+const metricUnitPercent = "%";
+const metricUnitBytes = "bytes";
+const metricUnitBytesPerSecond = "B/s";
+const metricUnitMilliseconds = "ms";
+const hostMetricTotalCPU = "total_cpu";
+const hostMetricTotalMemory = "total_memory";
+const hostMetricTotalSwap = "total_swap";
+const hostMetricLoad1 = "load1";
+const runtimeMetricDefs = [
+  { key: metricNameCPU, label: "CPU", unit: metricUnitPercent, chartLabel: "Daemon CPU metric chart" },
+  { key: metricNameMemory, label: "memory", unit: metricUnitBytes, chartLabel: "Daemon memory metric chart" },
+  { key: metricNameIO, label: "IO", unit: metricUnitBytesPerSecond, chartLabel: "Daemon IO metric chart" },
+];
+
 function setStatus(msg, kind) {
   const el = $("#err");
   if (!el) return;
@@ -2000,7 +2017,7 @@ function bucketize(points, span, cols, makeBucket, fold) {
 function procCpuCells(p) {
   if (!p.has_cpu) return tpl`<td>—</td><td>—</td>`;
   const cpu = Number(p.cpu) || 0;
-  return tpl`<td>${fmtNum(cpu, 2)}%</td><td>${cpuBarMini(cpu)}</td>`;
+  return tpl`<td>${fmtPct(cpu)}</td><td>${cpuBarMini(cpu)}</td>`;
 }
 function procIoFdThreadCells(p) {
   const io = (p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—';
@@ -2067,7 +2084,7 @@ function cpuInline(cpu, ready, numCPU) {
   const v = Number(cpu) || 0;
   // Same shape as every other CPU bar (cpuBarMini): the percentage lives inside
   // the bar and the precise value in the tooltip — no separate label prefix.
-  return usageBarMini(pctClamp(v), fmtPct(v), `${fmtNum(v, 2)}% of ${numCPU || "?"} host CPUs`);
+  return usageBarMini(pctClamp(v), fmtPct(v), `${fmtPct(v)} of ${numCPU || "?"} host CPUs`);
 }
 
 function serviceHasNoResidentProcess(s) {
@@ -2134,7 +2151,7 @@ function renderSLAWindows(wins, compact) {
   const rows = wins.map((w) => {
     const pct = w.ratio == null ? null : Number(w.ratio) * 100;
     const label = slaWindowLabel(w.window);
-    const pctText = pct == null ? "—" : fmtNum(pct, 2) + "%";
+    const pctText = pct == null ? "—" : fmtPct(pct);
     const count = `${Number(w.up || 0)}/${Number(w.total || 0)}`;
     const title = `${label} · ${pctText} · ${count}`;
     const track = Array.isArray(w.segments) && w.segments.length
@@ -2154,7 +2171,7 @@ function renderSLAWindows(wins, compact) {
 function renderSLAFill(pct) {
   const width = pct == null ? 0 : pctClamp(pct);
   const empty = pct == null ? " sla-empty" : "";
-  const label = pct == null ? "No SLA data" : `${fmtNum(pct, 2)}% available`;
+  const label = pct == null ? "No SLA data" : `${fmtPct(pct)} available`;
   return tpl`<span class="sla-bar" aria-label="${label}"><span class="sla-fill${empty}" style="--sla-pct:${width.toFixed(2)}%; --sla-color:${slaColor(pct)}"></span></span>`;
 }
 
@@ -2169,7 +2186,7 @@ function slaTimelineDataRows(segments, window) {
     const segStart = endMs - spanMs + (idx / n) * spanMs;
     const segEnd = endMs - spanMs + ((idx + 1) / n) * spanMs;
     const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
-    const pctText = ratio == null ? "no data" : fmtNum(Number(ratio) * 100, 2) + "%";
+    const pctText = ratio == null ? "no data" : fmtPct(Number(ratio) * 100);
     return tpl`<tr><td>${when}</td><td>${pctText}</td></tr>`;
   });
 }
@@ -2186,7 +2203,7 @@ function renderSLATimeline(segments, window) {
     const segEnd = endMs - spanMs + ((i + 1) / n) * spanMs;
     const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
     if (pct == null) return tpl`<span class="sla-seg sla-gap" title="${when + " · no data"}" aria-label="${when}: no data"></span>`;
-    const pctText = fmtNum(pct, 2) + "%";
+    const pctText = fmtPct(pct);
     return tpl`<span class="sla-seg" style="--sla-color:${slaColor(pct)}" title="${when + " · " + pctText}" aria-label="${when}: ${pctText} available"></span>`;
   });
   const dataRows = slaTimelineDataRows(segments, window);
@@ -2237,7 +2254,7 @@ function slaTimelineSummary(points) {
   const head = incidentCount
     ? `<span class="bad">${incidentCount} incident${incidentCount === 1 ? "" : "s"}</span>`
     : '<span class="ok">No incidents</span>';
-  return `${head} &middot; ${fmtNum(pct, 2)}%`;
+  return `${head} &middot; ${fmtPct(pct)}`;
 }
 
 function renderSLAIncidentList(incidents) {
@@ -2245,7 +2262,7 @@ function renderSLAIncidentList(incidents) {
   const shown = incidents.slice(-10);
   const hidden = incidents.length - shown.length;
   const chips = shown.map((o) => {
-    const tip = `Incident ${fmtTime(new Date(o.t).toISOString())} · ${fmtNum(o.pct, 2)}% · ${Number(o.p.up || 0)}/${Number(o.p.total || 0)}`;
+    const tip = `Incident ${fmtTime(new Date(o.t).toISOString())} · ${fmtPct(o.pct)} · ${Number(o.p.up || 0)}/${Number(o.p.total || 0)}`;
     return `<span class="sla-incident" title="${esc(tip)}">${esc(slaIncidentTime(o.t))}</span>`;
   }).join("");
   const more = hidden > 0 ? `<span class="muted">+${hidden} earlier</span>` : "";
@@ -2335,7 +2352,7 @@ function drawSLAChart(points, win) {
   const lines = segments.map((s) => {
     if (s.length === 1) {
       const o = s[0];
-      return `<circle cx="${x(o.t).toFixed(1)}" cy="${y(o.pct).toFixed(1)}" r="2.6" fill="${slaColor(o.pct)}"><title>${esc(fmtTime(new Date(o.t).toISOString()) + " · " + fmtNum(o.pct, 2) + "%")}</title></circle>`;
+      return `<circle cx="${x(o.t).toFixed(1)}" cy="${y(o.pct).toFixed(1)}" r="2.6" fill="${slaColor(o.pct)}"><title>${esc(fmtTime(new Date(o.t).toISOString()) + " · " + fmtPct(o.pct))}</title></circle>`;
     }
     const pts = s.map((o) => `${x(o.t).toFixed(1)},${y(o.pct).toFixed(1)}`).join(" ");
     return `<polyline points="${pts}" fill="none" stroke="#1a7f37" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"></polyline>`;
@@ -2344,7 +2361,7 @@ function drawSLAChart(points, win) {
   const markers = incidents.map((o) => {
     const tx = x(o.t);
     const ty = y(o.pct);
-    const tip = `Incident ${fmtTime(new Date(o.t).toISOString())} · ${fmtNum(o.pct, 2)}% · ${Number(o.p.up || 0)}/${Number(o.p.total || 0)}`;
+    const tip = `Incident ${fmtTime(new Date(o.t).toISOString())} · ${fmtPct(o.pct)} · ${Number(o.p.up || 0)}/${Number(o.p.total || 0)}`;
     return `<g>
       <title>${esc(tip)}</title>
       <circle cx="${tx.toFixed(1)}" cy="${ty.toFixed(1)}" r="3.4" fill="#cf222e"></circle>
@@ -2352,12 +2369,12 @@ function drawSLAChart(points, win) {
   }).join("");
   const hover = observed.map((o) => {
     const tx = x(o.t);
-    const tip = `${fmtTime(new Date(o.t).toISOString())} · SLA ${fmtNum(o.pct, 2)}% · ${Number(o.p.up || 0)}/${Number(o.p.total || 0)}`;
+    const tip = `${fmtTime(new Date(o.t).toISOString())} · SLA ${fmtPct(o.pct)} · ${Number(o.p.up || 0)}/${Number(o.p.total || 0)}`;
     return `<circle cx="${tx.toFixed(1)}" cy="${y(o.pct).toFixed(1)}" r="5" fill="transparent"><title>${esc(tip)}</title></circle>`;
   }).join("");
   const latestPct = observed.length ? observed[observed.length - 1].pct : null;
   const slaAria = latestPct != null
-    ? `SLA timeline: latest ${fmtNum(latestPct, 2)}%, ${incidents.length} incident${incidents.length === 1 ? "" : "s"}`
+    ? `SLA timeline: latest ${fmtPct(latestPct)}, ${incidents.length} incident${incidents.length === 1 ? "" : "s"}`
     : "SLA timeline";
   const dataTable = slaChartDataTable(observed);
   return `${dataTable}<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(slaAria)}">${axis}${areas}${lines}${hover}${markers}</svg>${renderSLAIncidentList(incidents)}`;
@@ -2622,7 +2639,7 @@ function fmtBytes(n) {
 
 function fmtPct(n) {
   n = Number(n);
-  return Number.isFinite(n) ? fmtNum(n, 2) + "%" : "—";
+  return Number.isFinite(n) ? fmtNum(n, 2) + metricUnitPercent : "—";
 }
 
 function pctClamp(n) {
@@ -2673,7 +2690,7 @@ function usageBarMini(pct, label, title) {
 // hostMemTotalBytes returns the host's total RAM in bytes from the last
 // /api/host snapshot, or 0 when unknown (so callers can skip the bar).
 function hostMemTotalBytes() {
-  const m = (latestHostMetrics || []).find((x) => x.name === "total_memory");
+  const m = (latestHostMetrics || []).find((x) => x.name === hostMetricTotalMemory);
   return m && m.total > 0 ? Number(m.total) : 0;
 }
 
@@ -2682,7 +2699,7 @@ function hostMemTotalBytes() {
 // the label keeps the true value.
 function cpuBarMini(pct) {
   const v = Number(pct) || 0;
-  return usageBarMini(pctClamp(v), fmtPct(v), `${fmtNum(v, 2)}% of one core used by this process`);
+  return usageBarMini(pctClamp(v), fmtPct(v), `${fmtPct(v)} of one core used by this process`);
 }
 
 // cpuTotalsLine renders the whole-tree CPU summary (whole-machine %) for a
@@ -2692,7 +2709,7 @@ function cpuTotalsLine(pt) {
   if (!pt) return nothing;
   if (!pt.has_cpu) return pt.num_cpu ? tpl` · cpu <span class="muted">measuring…</span>` : nothing;
   const machine = Number(pt.cpu) || 0;
-  const machineBar = usageBarMini(pctClamp(machine), fmtPct(machine), `${fmtNum(machine, 2)}% of ${pt.num_cpu || "?"} cores`);
+  const machineBar = usageBarMini(pctClamp(machine), fmtPct(machine), `${fmtPct(machine)} of ${pt.num_cpu || "?"} cores`);
   return tpl` · cpu <b>${fmtPct(machine)}</b> ${machineBar}`;
 }
 
@@ -2719,7 +2736,7 @@ function notifierNames(w) {
 function meterParts(m) {
   if (!m) return null;
   switch (m.kind) {
-    case "memory":
+    case metricNameMemory:
       return [`${fmtBytes(m.total_bytes)} total`,
         `${fmtBytes(m.used_bytes)} used · ${fmtBytes(m.free_bytes)} free`];
     case "load":
@@ -3110,7 +3127,7 @@ function renderMeterWatch(m) {
   if (!m) return nothing;
   const usedPct = pctClamp(m.used_pct || 0);
   const cells = [];
-  if (m.kind === "memory") {
+  if (m.kind === metricNameMemory) {
     cells.push(
       tpl`<div><span class="muted">Total</span><br><b>${fmtBytes(m.total_bytes)}</b></div>`,
       tpl`<div><span class="muted">Used</span><br>${usageBar(usedPct)} <b>${fmtBytes(m.used_bytes)}</b></div>`,
@@ -3986,7 +4003,7 @@ function hostMetricVal(metrics, name) {
   const m = (metrics || []).find((x) => x.name === name);
   if (!m) return null;
   let val;
-  if (m.percent != null) val = fmtNum(m.percent, 2) + "%";
+  if (m.percent != null) val = fmtPct(m.percent);
   else if (m.absolute != null) { val = fmtNum(m.absolute, 2) + (m.unit ? " " + m.unit : ""); }
   else return null;
   if (!m.ready) val += " (stale)";
@@ -4000,7 +4017,7 @@ function hostMetricVal(metrics, name) {
 function pctVal(metrics, name) {
   const m = (metrics || []).find((x) => x.name === name);
   if (!m) return null;
-  const v = fmtNum(m.percent != null ? m.percent : 0, 2) + "%";
+  const v = fmtPct(m.percent != null ? m.percent : 0);
   return m.ready === false ? v + " (stale)" : v;
 }
 
@@ -4345,10 +4362,10 @@ function renderOverview(ctx) {
       ariaLabel: tileAriaLabel("Op slots", `${ops.in_use || 0} of ${ops.total}`, opSub, defaultServiceTarget),
     }));
   }
-  const cpu = (hostMetrics || []).find((m) => m.name === "total_cpu");
-  const mem = (hostMetrics || []).find((m) => m.name === "total_memory");
-  const swap = (hostMetrics || []).find((m) => m.name === "total_swap");
-  const load = (hostMetrics || []).find((m) => m.name === "load1");
+  const cpu = (hostMetrics || []).find((m) => m.name === hostMetricTotalCPU);
+  const mem = (hostMetrics || []).find((m) => m.name === hostMetricTotalMemory);
+  const swap = (hostMetrics || []).find((m) => m.name === hostMetricTotalSwap);
+  const load = (hostMetrics || []).find((m) => m.name === hostMetricLoad1);
   // usedFreeSub renders the volume-style "X used · Y free" line for a usage
   // metric carrying its capacity (total bytes).
   const usedFreeSub = (m) => m.total
@@ -4356,9 +4373,9 @@ function renderOverview(ctx) {
     : "";
   if (cpu) {
     const p = pctClamp(cpu.percent || 0);
-    const gaugeId = tileGaugeId("cpu");
+    const gaugeId = tileGaugeId(metricNameCPU);
     tiles.push(tile({
-      label: "Host CPU", value: tpl`${fmtNum(p, 2)}<small>%</small>`, sub: "", extra: usageBar(p, fmtPct(p), gaugeId), target: "daemon-section",
+      label: "Host CPU", value: tpl`${fmtNum(p, 2)}<small>${metricUnitPercent}</small>`, sub: "", extra: usageBar(p, fmtPct(p), gaugeId), target: "daemon-section",
       ariaLabel: tileAriaLabel("Host CPU", fmtPct(p), "", "daemon-section"),
       describedBy: gaugeId,
     }));
@@ -4368,7 +4385,7 @@ function renderOverview(ctx) {
     const memSub = usedFreeSub(mem);
     const gaugeId = tileGaugeId("mem");
     tiles.push(tile({
-      label: "Host memory", value: tpl`${fmtNum(p, 2)}<small>%</small>`, sub: memSub, extra: usageBar(p, fmtPct(p), gaugeId), target: "daemon-section",
+      label: "Host memory", value: tpl`${fmtNum(p, 2)}<small>${metricUnitPercent}</small>`, sub: memSub, extra: usageBar(p, fmtPct(p), gaugeId), target: "daemon-section",
       ariaLabel: tileAriaLabel("Host memory", fmtPct(p), memSub, "daemon-section"),
       describedBy: gaugeId,
     }));
@@ -4378,7 +4395,7 @@ function renderOverview(ctx) {
     const swapSub = usedFreeSub(swap);
     const gaugeId = tileGaugeId("swap");
     tiles.push(tile({
-      label: "Host swap", value: tpl`${fmtNum(p, 2)}<small>%</small>`, sub: swapSub, cls: p >= 90 ? "t-crit" : (p >= 70 ? "t-warn" : ""), extra: usageBar(p, fmtPct(p), gaugeId), target: "daemon-section",
+      label: "Host swap", value: tpl`${fmtNum(p, 2)}<small>${metricUnitPercent}</small>`, sub: swapSub, cls: p >= 90 ? "t-crit" : (p >= 70 ? "t-warn" : ""), extra: usageBar(p, fmtPct(p), gaugeId), target: "daemon-section",
       ariaLabel: tileAriaLabel("Host swap", fmtPct(p), swapSub, "daemon-section"),
       describedBy: gaugeId,
     }));
@@ -4501,10 +4518,10 @@ function renderStatus(ctx) {
       // cpu/mem/swap are percent-type: show 0.0% when present-but-zero instead
       // of hiding them (omitempty drops an exact 0 from the JSON). load is an
       // absolute reading, so it keeps the generic formatter.
-      const cpu = pctVal(hostMetrics, "total_cpu");
-      const mem = pctVal(hostMetrics, "total_memory");
-      const swap = pctVal(hostMetrics, "total_swap");
-      const load = hostMetricVal(hostMetrics, "load1");
+      const cpu = pctVal(hostMetrics, hostMetricTotalCPU);
+      const mem = pctVal(hostMetrics, hostMetricTotalMemory);
+      const swap = pctVal(hostMetrics, hostMetricTotalSwap);
+      const load = hostMetricVal(hostMetrics, hostMetricLoad1);
       if (cpu != null) sp.push(`cpu: <b>${esc(cpu)}</b>`);
       if (mem != null) sp.push(`mem: <b>${esc(mem)}</b>`);
       if (swap != null) sp.push(`swap: <b>${esc(swap)}</b>`);
@@ -5111,17 +5128,17 @@ async function loadMetrics(name, measured) {
     const body = await res.json();
     const s = body.summary || {};
     summary.innerHTML = s.count
-      ? `avg <b>${fmtNum(s.avg, 2)}</b> ms &middot; min ${fmtNum(s.min, 2)} &middot; max ${fmtNum(s.max, 2)}`
+      ? `avg <b>${fmtNum(s.avg, 2)}</b> ${metricUnitMilliseconds} &middot; min ${fmtNum(s.min, 2)} &middot; max ${fmtNum(s.max, 2)}`
       : '<span class="muted">No latency data yet for this window.</span>';
-    chart.innerHTML = drawMetricChart(body.points || [], body.unit || "ms", metricWindow, "Service latency metric chart");
+    chart.innerHTML = drawMetricChart(body.points || [], body.unit || metricUnitMilliseconds, metricWindow, "Service latency metric chart");
   } catch (e) {
     chart.textContent = "Failed to load latency: " + e.message;
   }
 }
 
 async function loadServiceRuntimeMetrics(name) {
-  const ids = ["cpu", "memory", "io"];
-  const setAll = (msg) => ids.forEach((id) => {
+  const setAll = (msg) => runtimeMetricDefs.forEach(({ key }) => {
+    const id = key;
     const summary = document.getElementById(detailDomId(name, `runtime-${id}-summary`));
     const chart = document.getElementById(detailDomId(name, `runtime-${id}-chart`));
     if (summary) summary.innerHTML = `<span class="muted">${esc(msg)}</span>`;
@@ -5131,9 +5148,9 @@ async function loadServiceRuntimeMetrics(name) {
     const res = await fetch(`api/services/${encodeURIComponent(name)}/runtime?since=${metricWindow}`);
     if (!res.ok) throw new Error("HTTP " + res.status);
     const body = await res.json();
-    renderServiceRuntimeMetric(name, "cpu", body.cpu, "CPU", "%");
-    renderServiceRuntimeMetric(name, "memory", body.memory, "memory", "bytes");
-    renderServiceRuntimeMetric(name, "io", body.io, "IO", "B/s");
+    runtimeMetricDefs.forEach(({ key, label, unit }) => {
+      renderServiceRuntimeMetric(name, key, body[key], label, unit);
+    });
   } catch (e) {
     setAll("Failed to load runtime metrics: " + e.message);
   }
@@ -5163,9 +5180,9 @@ function renderDaemonMetrics(body) {
   setText("#daemon-pid", c.pid);
   setText("#daemon-fds", c.fds);
   setText("#daemon-threads", c.threads);
-  setText("#daemon-cpu-live", c.cpu_ready ? `${fmtNum(c.cpu || 0, 2)}%` : "measuring");
+  setText("#daemon-cpu-live", c.cpu_ready ? `${fmtNum(c.cpu || 0, 2)}${metricUnitPercent}` : "measuring");
   const mem = c.rss ? fmtBytes(c.rss) : "";
-  const memPct = (c.memory_percent === 0 || c.memory_percent) ? ` (${fmtNum(c.memory_percent, 2)}%)` : "";
+  const memPct = (c.memory_percent === 0 || c.memory_percent) ? ` (${fmtNum(c.memory_percent, 2)}${metricUnitPercent})` : "";
   setText("#daemon-memory-live", mem ? mem + memPct : "");
   setText("#daemon-io-live", c.io_ready ? `${fmtBytes(c.io || 0)}/s` : "measuring");
 
@@ -5173,18 +5190,14 @@ function renderDaemonMetrics(body) {
   if (win) litRender(winButtons(metricWins, daemonMetricWindow, "setDaemonMetricWin", "Daemon metrics time window"), win);
   const summary = $("#daemon-metric-summary");
   if (summary) {
-    summary.innerHTML = [
-      daemonMetricSummary(body.cpu, "CPU"),
-      daemonMetricSummary(body.memory, "memory"),
-      daemonMetricSummary(body.io, "IO"),
-    ].join(" &middot; ");
+    summary.innerHTML = runtimeMetricDefs.map(({ key, label }) =>
+      daemonMetricSummary(body[key], label)).join(" &middot; ");
   }
-  const cpu = $("#daemon-cpu-chart");
-  if (cpu) cpu.innerHTML = drawMetricChart((body.cpu || {}).points || [], (body.cpu || {}).unit || "%", daemonMetricWindow, "Daemon CPU metric chart");
-  const memory = $("#daemon-memory-chart");
-  if (memory) memory.innerHTML = drawMetricChart((body.memory || {}).points || [], (body.memory || {}).unit || "bytes", daemonMetricWindow, "Daemon memory metric chart");
-  const io = $("#daemon-io-chart");
-  if (io) io.innerHTML = drawMetricChart((body.io || {}).points || [], (body.io || {}).unit || "B/s", daemonMetricWindow, "Daemon IO metric chart");
+  runtimeMetricDefs.forEach(({ key, unit, chartLabel }) => {
+    const el = $(`#daemon-${key}-chart`);
+    const series = body[key] || {};
+    if (el) el.innerHTML = drawMetricChart(series.points || [], series.unit || unit, daemonMetricWindow, chartLabel);
+  });
 }
 
 function daemonMetricSummary(series, label) {
@@ -5213,13 +5226,13 @@ function slaChartDataTable(observed) {
   const rows = shown.map((o) => {
     const up = Number(o.p.up || 0);
     const total = Number(o.p.total || 0);
-    return `<tr><td>${esc(fmtTime(new Date(o.t).toISOString()))}</td><td>${esc(fmtNum(o.pct, 2))}%</td><td>${up}/${total}</td></tr>`;
+    return `<tr><td>${esc(fmtTime(new Date(o.t).toISOString()))}</td><td>${esc(fmtPct(o.pct))}</td><td>${up}/${total}</td></tr>`;
   }).join("");
   return `<table class="chart-data visually-hidden"><caption>SLA chart data</caption><thead><tr><th scope="col">Time</th><th scope="col">SLA</th><th scope="col">Up/Total</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function drawMetricChart(points, unit, win, label) {
-  unit = unit || "ms";
+  unit = unit || metricUnitMilliseconds;
   const W = 640, H = 160, pad = 34, cols = 120;
   const span = windowMs[win || metricWindow] || 864e5;
   const { buckets, startMs } = bucketize(points, span, cols,
@@ -5268,14 +5281,14 @@ function drawMetricChart(points, unit, win, label) {
 function fmtMetricValue(v, unit) {
   const n = Number(v || 0);
   switch (unit) {
-    case "bytes":
+    case metricUnitBytes:
       return fmtBytes(n);
-    case "B/s":
+    case metricUnitBytesPerSecond:
       return fmtBytes(n) + "/s";
-    case "%":
-      return fmtNum(n, 2) + "%";
-    case "ms":
-      return fmtNum(n, 2) + "ms";
+    case metricUnitPercent:
+      return fmtNum(n, 2) + metricUnitPercent;
+    case metricUnitMilliseconds:
+      return fmtNum(n, 2) + metricUnitMilliseconds;
     default:
       return fmtNum(n, 2) + (unit || "");
   }
