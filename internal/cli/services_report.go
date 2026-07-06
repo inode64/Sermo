@@ -57,20 +57,11 @@ func selectServicesReportNotifiers(selection []string, registry map[string]notif
 	if len(selection) == 0 {
 		return nil, nil, nil
 	}
-	names := selection
-	if slices.Contains(selection, "all") {
-		names = slices.Sorted(maps.Keys(registry))
-	}
+	names := servicesReportNotifierNames(selection, registry)
+	hasWall := servicesReportHasNotifierType(names, registry, "wall")
 	seen := map[string]struct{}{}
 	selected := make([]notify.Notifier, 0, len(names))
 	outNames := make([]string, 0, len(names))
-	hasWall := false
-	for _, name := range names {
-		if n, ok := registry[name]; ok && n.Type() == "wall" {
-			hasWall = true
-			break
-		}
-	}
 	for _, name := range names {
 		if name == "" {
 			continue
@@ -90,6 +81,22 @@ func selectServicesReportNotifiers(selection []string, registry map[string]notif
 		outNames = append(outNames, name)
 	}
 	return selected, outNames, nil
+}
+
+func servicesReportNotifierNames(selection []string, registry map[string]notify.Notifier) []string {
+	if slices.Contains(selection, "all") {
+		return slices.Sorted(maps.Keys(registry))
+	}
+	return selection
+}
+
+func servicesReportHasNotifierType(names []string, registry map[string]notify.Notifier, typ string) bool {
+	for _, name := range names {
+		if n, ok := registry[name]; ok && n.Type() == typ {
+			return true
+		}
+	}
+	return false
 }
 
 func servicesReportMessage(reports []appinspect.Report, includeMissing bool, now time.Time) notify.Message {
