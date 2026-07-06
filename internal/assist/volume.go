@@ -31,14 +31,10 @@ func (volumeAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	if len(vols) == 0 {
 		return Result{}, fmt.Errorf("no storage volumes found to monitor")
 	}
-	labels := make([]string, len(vols))
-	for i, v := range vols {
-		labels[i] = fmt.Sprintf("%s (%s, %s)", v.Mountpoint, v.FSType, v.Device)
-	}
-	sel := p.MultiChoose("Which volumes do you want to monitor?", labels)
+	selected := chooseCandidates(p, "Which volumes do you want to monitor?", vols, volumeLabel)
 
 	var shared *volSettings
-	if len(sel) > 1 && p.Confirm("Apply the same settings to all selected volumes?", true) {
+	if len(selected) > 1 && p.Confirm("Apply the same settings to all selected volumes?", true) {
 		s, err := askVolSettings(p, env, "the selected volumes")
 		if err != nil {
 			return Result{}, err
@@ -47,8 +43,7 @@ func (volumeAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	}
 
 	watches := map[string]any{}
-	for _, i := range sel {
-		v := vols[i]
+	for _, v := range selected {
 		s := shared
 		if s == nil {
 			t, err := askVolSettings(p, env, v.Mountpoint)
@@ -74,6 +69,10 @@ func storageVolumeCandidates(vols []Volume) []Volume {
 		}
 	}
 	return out
+}
+
+func volumeLabel(v Volume) string {
+	return fmt.Sprintf("%s (%s, %s)", v.Mountpoint, v.FSType, v.Device)
 }
 
 // volSettings are the answers gathered for one (or all) volume(s).
