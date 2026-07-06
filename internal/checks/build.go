@@ -864,6 +864,13 @@ func buildLibrariesCheck(b base, entry map[string]any) (Check, string) {
 }
 
 // buildMetricCheck builds a check comparing a sampled metric to a threshold.
+// Metric-check scopes (the `scope:` selector of a metric check). Exported so
+// config validation checks the same scope vocabulary the builder accepts.
+const (
+	MetricScopeService = "service"
+	MetricScopeSystem  = "system"
+)
+
 func buildMetricCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	name := cfgval.AsString(entry["name"])
 	if name == "" {
@@ -871,7 +878,7 @@ func buildMetricCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	}
 	scope := cfgval.AsString(entry["scope"])
 	if scope == "" {
-		scope = "service"
+		scope = MetricScopeService
 	}
 	op := cfgval.AsString(entry["op"])
 	if op == "" {
