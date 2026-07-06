@@ -45,6 +45,10 @@ const sectionChecks = "checks"
 // start/restart/reload operation runs.
 const sectionPreflight = "preflight"
 
+// sectionProcesses is the service block of named process selectors (exe/user)
+// used for discovery and kill matching.
+const sectionProcesses = "processes"
+
 // Catalog categories mirror the catalog subdirectory a definition is loaded
 // from (catalog/services, catalog/apps, catalog/libs, catalog/patterns). The
 // category tracks the kind for display and category-scoped listings.
