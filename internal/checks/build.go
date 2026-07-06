@@ -1282,13 +1282,13 @@ func buildSwapCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	metric := cfgval.AsString(entry["metric"])
 	c := &swapCheck{base: b, metric: metric, sampler: deps.SwapSampler}
 	switch metric {
-	case swapMetricUsage:
+	case SwapMetricUsage:
 		preds, errs := requireLevelPreds(entry, SwapUsageFields, "swap usage")
 		if errs != "" {
 			return nil, errs
 		}
 		c.preds = preds
-	case swapMetricIO:
+	case SwapMetricIO:
 		op, v, errs := parseDeltaThreshold(entry["delta"], "swap io")
 		if errs != "" {
 			return nil, errs
