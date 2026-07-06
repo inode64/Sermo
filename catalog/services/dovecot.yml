@@ -52,6 +52,8 @@ processes:
   imap:
     exe: ${dovecot_imap_binary}
     user: ${mail_user}
+reload:
+  signal: HUP
 watches:
   service:
     check:

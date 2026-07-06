@@ -26,6 +26,11 @@ processes:
   main:
     exe: ${nginx_binary}
     user: root
+reload:
+  command:
+    - ${nginx_binary}
+    - -s
+    - reload
 reload_on_change:
   paths:
     - /etc/nginx/nginx.conf

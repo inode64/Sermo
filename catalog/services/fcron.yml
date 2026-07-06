@@ -10,6 +10,8 @@ processes:
   main:
     exe: ${fcron_binary}
     user: root
+reload:
+  signal: HUP
 watches:
   service:
     check:

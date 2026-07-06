@@ -29,6 +29,11 @@ processes:
   security-file-certgen:
     exe: ${squid_security_file_certgen_binary}
     user: ${user}
+reload:
+  command:
+    - ${squid_binary}
+    - -k
+    - reconfigure
 watches:
   service:
     check:
