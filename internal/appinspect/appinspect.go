@@ -217,23 +217,7 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 	}
 	r.Installed = true
 
-	// Resolve the binary's owner user/group from the stat info (Linux *syscall.Stat_t).
-	if info != nil {
-		if sys, ok := info.Sys().(*syscall.Stat_t); ok {
-			if name := lookup.Username(sys.Uid); name != "" {
-				r.User = name
-			}
-			if r.User == "" {
-				r.User = fmt.Sprintf("%d", sys.Uid)
-			}
-			if name := lookup.GroupName(sys.Gid); name != "" {
-				r.Group = name
-			}
-			if r.Group == "" {
-				r.Group = fmt.Sprintf("%d", sys.Gid)
-			}
-		}
-	}
+	setReportOwner(&r, info, lookup)
 
 	health := probeCommandFor(resolved.Tree, "health")
 	version := probeCommandFor(resolved.Tree, "version")
@@ -295,6 +279,28 @@ func versionIdentityStatus(status string) string {
 		return status
 	}
 	return "not installed: version " + strings.TrimPrefix(status, "error: ")
+}
+
+func setReportOwner(r *Report, info os.FileInfo, lookup *process.UserLookup) {
+	if info == nil || lookup == nil {
+		return
+	}
+	sys, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return
+	}
+	if name := lookup.Username(sys.Uid); name != "" {
+		r.User = name
+	}
+	if r.User == "" {
+		r.User = fmt.Sprintf("%d", sys.Uid)
+	}
+	if name := lookup.GroupName(sys.Gid); name != "" {
+		r.Group = name
+	}
+	if r.Group == "" {
+		r.Group = fmt.Sprintf("%d", sys.Gid)
+	}
 }
 
 func inspectOptions(opts []Option) options {
