@@ -64,7 +64,7 @@ func TestDueChecks(t *testing.T) {
 
 	dueNames := func(cycle int) []string {
 		var out []string
-		for _, b := range dueChecks(cycle, built, every) {
+		for _, b := range dueChecks(cycle, built, every, nil) {
 			out = append(out, b.Check.Name())
 		}
 		return out
@@ -85,6 +85,25 @@ func TestDueChecks(t *testing.T) {
 	}
 }
 
+func TestDueChecksRunsUncachedIntervalCheck(t *testing.T) {
+	built := []checks.Built{
+		{Check: stubCheck{name: "fast"}},
+		{Check: stubCheck{name: "slow"}},
+	}
+	every := map[string]int{"slow": 60}
+	cache := map[string]checks.Result{
+		"fast": {Check: "fast", OK: true},
+	}
+
+	var got []string
+	for _, b := range dueChecks(42, built, every, cache) {
+		got = append(got, b.Check.Name())
+	}
+	if len(got) != 2 || got[0] != "fast" || got[1] != "slow" {
+		t.Fatalf("due checks on cold cache = %v, want [fast slow]", got)
+	}
+}
+
 func TestPausedCyclesAdvanceCheckInterval(t *testing.T) {
 	built := []checks.Built{
 		{Check: stubCheck{name: "fast"}},
@@ -97,7 +116,7 @@ func TestPausedCyclesAdvanceCheckInterval(t *testing.T) {
 	var slowRan bool
 	w := &Worker{IsPaused: func() bool { return paused }}
 	w.Checks = func(_ context.Context, _ checks.Deps) map[string]checks.Result {
-		for _, b := range dueChecks(w.cycle, built, every) {
+		for _, b := range dueChecks(w.cycle, built, every, nil) {
 			if b.Check.Name() == "slow" {
 				slowRan = true
 			}
