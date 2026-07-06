@@ -48,7 +48,7 @@ var validDefaultsKeys = set(
 	"policy",
 	"rule_window",
 	sectionStopPolicy,
-	"variables",
+	sectionVariables,
 )
 
 // Validate returns all schema and safety issues for a loaded config. An empty
@@ -267,7 +267,7 @@ func validateDocuments(cfg *Config) []Issue {
 			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf(format, args...)})
 		}
 		validateEnableIfTree(doc.Body, addDoc)
-		validateFromFileVariables("variables", doc.Body["variables"], addDoc)
+		validateFromFileVariables(sectionVariables, doc.Body[sectionVariables], addDoc)
 		issues = append(issues, validateBinaryVariables(doc, scope)...)
 		issues = append(issues, validateVersionFrom(cfg, doc, scope)...)
 		issues = append(issues, validateVersionsFrom(doc, scope)...)
@@ -548,7 +548,7 @@ func validateAppLinks(cfg *Config, doc *Document, scope string) []Issue {
 
 func validateBinaryVariables(doc *Document, scope string) []Issue {
 	var issues []Issue
-	if vars, ok := doc.Body["variables"].(map[string]any); ok {
+	if vars, ok := doc.Body[sectionVariables].(map[string]any); ok {
 		raw := vars["binary"]
 		if raw == nil {
 			return issues
@@ -644,7 +644,7 @@ func validateStorage(name string, tree map[string]any, notifiers map[string]stru
 		issues = append(issues, Issue{Scope: "storage " + name, Msg: fmt.Sprintf(format, args...)})
 	}
 
-	allowed := set("name", "display_name", "description", "category", "path", "dry_run", "monitor", "interval", "capacity", "usage", "mount", "variables", "os")
+	allowed := set("name", "display_name", "description", "category", "path", "dry_run", "monitor", "interval", "capacity", "usage", "mount", sectionVariables, "os")
 	for _, key := range slices.Sorted(maps.Keys(tree)) {
 		if _, ok := allowed[key]; !ok {
 			add("key %q is not supported for kind: storage", key)

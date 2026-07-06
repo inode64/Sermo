@@ -63,10 +63,10 @@ func resolvePreflightResourceVariables(tree map[string]any) []string {
 }
 
 func ensureVariables(tree map[string]any) map[string]any {
-	vars, _ := tree["variables"].(map[string]any)
+	vars, _ := tree[sectionVariables].(map[string]any)
 	if vars == nil {
 		vars = map[string]any{}
-		tree["variables"] = vars
+		tree[sectionVariables] = vars
 	}
 	return vars
 }

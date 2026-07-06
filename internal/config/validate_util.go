@@ -29,7 +29,7 @@ func set(values ...string) map[string]struct{} {
 // path, the leaf key and its stringified value.
 func walkScalars(tree map[string]any, visit func(path, key, value string)) {
 	for k, v := range tree {
-		if k == "variables" {
+		if k == sectionVariables {
 			continue
 		}
 		walkScalarValue(k, k, v, visit)

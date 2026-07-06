@@ -36,7 +36,7 @@ func (c *Config) expandBindir() {
 // binaries are declared and from where the rest of a document references them
 // via ${binary}.
 func expandBindirVariables(body map[string]any) {
-	vars, ok := body["variables"].(map[string]any)
+	vars, ok := body[sectionVariables].(map[string]any)
 	if !ok {
 		return
 	}
