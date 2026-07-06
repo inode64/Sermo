@@ -116,27 +116,6 @@ func chooseVMs(p *Prompt, question string, cands []VMCandidate) []VMCandidate {
 	return chooseCandidates(p, question, cands, vmLabel)
 }
 
-func chooseCandidates[T any](p *Prompt, question string, cands []T, label func(T) string) []T {
-	labels := make([]string, len(cands))
-	for i, c := range cands {
-		labels[i] = label(c)
-	}
-	sel := p.MultiChoose(question, labels)
-	out := make([]T, 0, len(sel))
-	for _, idx := range sel {
-		out = append(out, cands[idx])
-	}
-	return out
-}
-
-func candidateNames[T any](cands []T, name func(T) string) []string {
-	out := make([]string, len(cands))
-	for i, c := range cands {
-		out[i] = name(c)
-	}
-	return out
-}
-
 func buildDockerService(c DockerCandidate) map[string]any {
 	control := map[string]any{"type": "docker", "container": c.Container}
 	check := map[string]any{
