@@ -545,7 +545,7 @@ type serviceWatchRuleTarget struct {
 	checkType string
 }
 
-var serviceWatchCheckEntryFields = [...]string{"enabled", "verify", "requires", "optional", "interval"}
+var serviceWatchCheckEntryFields = [...]string{"enabled", "verify", "requires", "optional", keyInterval}
 
 // promoteServiceWatchCheck promotes an embedded watch check to checks.<watch-name>,
 // returning the generated rule target.
@@ -847,7 +847,7 @@ func storageCapacityWatch(tree map[string]any) (map[string]any, bool) {
 		}
 	}
 	entry := map[string]any{"check": check}
-	for _, key := range []string{"display_name", "description", "category", keyDryRun, keyMonitor, "interval"} {
+	for _, key := range []string{"display_name", "description", "category", keyDryRun, keyMonitor, keyInterval} {
 		if v, present := tree[key]; present {
 			entry[key] = v
 		}
