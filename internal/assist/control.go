@@ -22,19 +22,7 @@ func (dockerAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		return Result{}, fmt.Errorf("no Docker containers were detected on this host")
 	}
 	selected := chooseDockerContainers(p, "Which Docker containers do you want Sermo to monitor and manage?", cands)
-	services := map[string]any{}
-	names := candidateNames(selected, func(c DockerCandidate) string { return c.Name })
-	applyControlledSettings(p, names, func(name string, settings serviceSettings) {
-		for _, c := range selected {
-			if c.Name != name {
-				continue
-			}
-			if addControlledService(p, env, services, c.Name, buildDockerService(c), settings) {
-				break
-			}
-		}
-	})
-	return controlledResult(services)
+	return controlledResult(buildControlledServices(p, env, selected, dockerName, buildDockerService))
 }
 
 type vmAssistant struct{}
@@ -57,19 +45,24 @@ func (vmAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		return Result{}, fmt.Errorf("no libvirt/QEMU domains were detected on this host")
 	}
 	selected := chooseVMs(p, "Which virtual machines do you want Sermo to monitor and manage?", cands)
+	return controlledResult(buildControlledServices(p, env, selected, vmName, buildVMService))
+}
+
+func buildControlledServices[T any](p *Prompt, env Env, selected []T, name func(T) string, build func(T) map[string]any) map[string]any {
 	services := map[string]any{}
-	names := candidateNames(selected, func(c VMCandidate) string { return c.Name })
-	applyControlledSettings(p, names, func(name string, settings serviceSettings) {
-		for _, c := range selected {
-			if c.Name != name {
+	names := candidateNames(selected, name)
+	applyControlledSettings(p, names, func(target string, settings serviceSettings) {
+		for _, candidate := range selected {
+			candidateName := name(candidate)
+			if candidateName != target {
 				continue
 			}
-			if addControlledService(p, env, services, c.Name, buildVMService(c), settings) {
+			if addControlledService(p, env, services, candidateName, build(candidate), settings) {
 				break
 			}
 		}
 	})
-	return controlledResult(services)
+	return services
 }
 
 func applyControlledSettings(p *Prompt, names []string, apply func(string, serviceSettings)) {
@@ -180,6 +173,14 @@ func buildVMService(c VMCandidate) map[string]any {
 		check["socket"] = c.Socket
 	}
 	return controlledService(control, "vm", check)
+}
+
+func dockerName(c DockerCandidate) string {
+	return c.Name
+}
+
+func vmName(c VMCandidate) string {
+	return c.Name
 }
 
 func controlledService(control map[string]any, checkName string, check map[string]any) map[string]any {
