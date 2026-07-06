@@ -5,7 +5,6 @@ import (
 	"maps"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"unicode"
 
@@ -290,32 +289,13 @@ func serviceArtifactPathValue(paths []string) any {
 // Check-only service watches are processed before they desugar into `checks:`.
 func (c *Config) expandAnalyze(tree map[string]any) []string {
 	var errs []string
-	checks, ok := tree["checks"].(map[string]any)
-	if ok {
-		names := make([]string, 0, len(checks))
-		for name := range checks {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-
-		for _, name := range names {
-			entry, ok := checks[name].(map[string]any)
-			if !ok {
-				continue
-			}
-			errs = append(errs, c.expandAnalyzeEntry("checks."+name, entry)...)
-		}
+	if checks, ok := tree["checks"].(map[string]any); ok {
+		errs = append(errs, c.expandAnalyzeSection("checks", checks)...)
 	}
 
 	watches, ok := tree["watches"].(map[string]any)
 	if ok {
-		names := make([]string, 0, len(watches))
-		for name := range watches {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-
-		for _, name := range names {
+		for _, name := range slices.Sorted(maps.Keys(watches)) {
 			entry, ok := watches[name].(map[string]any)
 			if !ok {
 				continue
@@ -328,6 +308,18 @@ func (c *Config) expandAnalyze(tree map[string]any) []string {
 		}
 	}
 
+	return errs
+}
+
+func (c *Config) expandAnalyzeSection(section string, entries map[string]any) []string {
+	var errs []string
+	for _, name := range slices.Sorted(maps.Keys(entries)) {
+		entry, ok := entries[name].(map[string]any)
+		if !ok {
+			continue
+		}
+		errs = append(errs, c.expandAnalyzeEntry(section+"."+name, entry)...)
+	}
 	return errs
 }
 
