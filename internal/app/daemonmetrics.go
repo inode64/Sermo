@@ -11,7 +11,7 @@ import (
 	"sermo/internal/web"
 )
 
-const daemonMetricRetention = 366 * 24 * time.Hour
+const daemonMetricRetention = state.DefaultHistoryRetention
 
 type daemonMetricSampler struct {
 	reader metrics.Reader
