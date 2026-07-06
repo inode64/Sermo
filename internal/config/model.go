@@ -42,6 +42,15 @@ const (
 	keyKillOnlyIf      = "kill_only_if"
 )
 
+// storage mount / umount block field keys.
+const (
+	keyMount        = "mount"
+	keyRefcount     = "refcount"
+	keyUmount       = "umount"
+	keyAllowSIGKILL = "allow_sigkill"
+	keyAllowLazy    = "allow_lazy"
+)
+
 // sectionMetrics is the multi-metric watch block: a map of metric name to its
 // per-metric condition/action (used by net/swap/icmp watches).
 const sectionMetrics = "metrics"
