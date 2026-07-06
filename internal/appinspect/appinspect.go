@@ -289,18 +289,15 @@ func setReportOwner(r *Report, info os.FileInfo, lookup *process.UserLookup) {
 	if !ok {
 		return
 	}
-	if name := lookup.Username(sys.Uid); name != "" {
-		r.User = name
+	r.User = lookupIDName(sys.Uid, lookup.Username)
+	r.Group = lookupIDName(sys.Gid, lookup.GroupName)
+}
+
+func lookupIDName(id uint32, lookup func(uint32) string) string {
+	if name := lookup(id); name != "" {
+		return name
 	}
-	if r.User == "" {
-		r.User = fmt.Sprintf("%d", sys.Uid)
-	}
-	if name := lookup.GroupName(sys.Gid); name != "" {
-		r.Group = name
-	}
-	if r.Group == "" {
-		r.Group = fmt.Sprintf("%d", sys.Gid)
-	}
+	return fmt.Sprintf("%d", id)
 }
 
 func inspectOptions(opts []Option) options {
