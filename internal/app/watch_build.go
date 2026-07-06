@@ -75,12 +75,12 @@ func buildWatchEntry(name string, entry map[string]any, deps Deps, defaultInterv
 		warnings = append(warnings, w)
 	}
 	switch cfgval.AsString(checkEntry["type"]) {
-	case "net", "icmp", "swap":
+	case checks.CheckTypeNet, checks.CheckTypeICMP, checks.CheckTypeSwap:
 		expanded, warns := buildMetricWatches(name, entry, checkEntry, deps, interval)
 		return expanded, append(warnings, warns...)
-	case "file":
+	case checks.CheckTypeFile:
 		return watchOrWarn(buildFileWatch(name, entry, checkEntry, deps, interval))(warnings)
-	case "process":
+	case checks.CheckTypeProcess:
 		return watchOrWarn(buildProcWatch(name, entry, checkEntry, deps, interval))(warnings)
 	default:
 		return watchOrWarn(buildSingleWatch(name, entry, checkEntry, deps, interval))(warnings)
@@ -174,9 +174,9 @@ func reservedServiceWatchName(name string) bool {
 func unsupportedServiceWatchType(entry map[string]any) string {
 	checkEntry, _ := entry["check"].(map[string]any)
 	switch cfgval.AsString(checkEntry["type"]) {
-	case "net", "icmp", "swap":
+	case checks.CheckTypeNet, checks.CheckTypeICMP, checks.CheckTypeSwap:
 		return "net/icmp/swap watches are host-scoped; declare them under the global watches: section"
-	case "process":
+	case checks.CheckTypeProcess:
 		return "the process watch matches host-wide (and can kill); use process_count or metric for service-scoped process monitoring, or declare a host watch"
 	}
 	return ""
