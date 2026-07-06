@@ -1462,7 +1462,8 @@ remediation/guard/alert together:
 Such an entry is **desugared** to the equivalent `checks:` + `rules:` entry, so it
 is exactly equivalent to writing that check + rule by hand and inherits every
 safety gate (including the rule that a `scope: system` metric can never drive a
-service action). The `check:` is either:
+service action). Because the result is a rule, not a watch-runtime notifier,
+`then.notify_interval` is not supported with `then.action`. The `check:` is either:
 
 - **embedded** (`check: { type: http, … }`) — a probe generated as a check named
   after the watch. Two watches embedding the same endpoint probe it twice.

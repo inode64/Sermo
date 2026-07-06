@@ -193,8 +193,8 @@ func isOperationAction(action string) bool {
 
 // validateWatchThenAction validates a unified service watch whose then declares a
 // rule-class action. It desugars to a generated check + rule, so its then accepts
-// action/message/blocks/notify(/notify_interval) but not the fire-and-forget
-// hook/expand/kill side effects.
+// action/message/blocks/notify but not fire-and-forget hook/expand/kill side
+// effects or watch-only notification cadence.
 func validateWatchThenAction(prefix, action string, then map[string]any, add func(string, ...any)) {
 	if !isRuleClassAction(action) {
 		add("%s.then.action %q is not one of restart, start, stop, reload, resume, alert, block", prefix, action)
@@ -205,7 +205,7 @@ func validateWatchThenAction(prefix, action string, then map[string]any, add fun
 			add("%s.then.%s cannot be combined with an action (a watch is either an operation/alert or a fire-and-forget %s)", prefix, k, k)
 		}
 	}
-	allowed := set("action", "message", "blocks", "notify", "notify_interval")
+	allowed := set("action", "message", "blocks", "notify")
 	for _, k := range slices.Sorted(maps.Keys(then)) {
 		if _, ok := allowed[k]; !ok {
 			add("%s.then.%s is not supported with an action", prefix, k)
