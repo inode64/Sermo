@@ -144,6 +144,11 @@ reload:
   when: always
 ```
 
+If the init backend reports no reload support and the service has no valid
+`reload.command` or `reload.signal` fallback, Sermo rejects the `reload` action
+before execution. The CLI reports the unsupported reload and the web UI disables
+the reload button through `can_reload=false`.
+
 ### Native reload (`reload:`) — when the init can't, Sermo can
 
 Some services reload in place (e.g. `sshd`, `snmpd`, `proftpd`, `prometheus`,
@@ -224,14 +229,14 @@ namei -l /run/<service>.pid
 Useful catalog audit while developing:
 
 ```bash
-go test ./internal/config -run 'TestRealCatalog(AllDaemonsValidate|ReloadDaemonsResolve)$' -count=1
+go test ./internal/config -run 'TestRealCatalog(AllServicesValidate|ReloadServicesResolve)$' -count=1
 ```
 
-The reload that `reload:` produces is what the **`reload` action**,
-`reload_on_change`, the `sermoctl reload <svc>` command and the web UI reload
-button all run. It is a service-control concept: it applies to services, not to
-host watches, which observe host metrics and fire hooks rather than reload a
-unit.
+The reload path chosen by the backend or by `reload:` is what the **`reload`
+action**, `reload_on_change`, the `sermoctl reload <svc>` command and the web UI
+reload button all run. It is a service-control concept: it applies to services,
+not to host watches, which observe host metrics and fire hooks rather than
+reload a unit.
 
 ## App dependencies (`apps`)
 
@@ -637,9 +642,9 @@ also_apply: [nginx, varnish]
 - `sermoctl reload <svc>` and `sermoctl resume <svc>` act on the primary only
   (no cascade). Use `sermoctl daemon reload` to reload the running `sermod`
   configuration. In the web UI the per-service **reload** button is enabled only
-  when the service is `active`, has a declared `reload:` block or reload
-  remediation rule, and that reload path is supported; **resume** is enabled only
-  while it is `paused`.
+  when the service is `active` and Sermo reports `can_reload=true` from either
+  the init backend (`ExecReload`/OpenRC `reload`) or a valid `reload:` fallback;
+  **resume** is enabled only while it is `paused`.
 
 `also_apply` (other services) and `also_service` (this service's init units) are
 complementary; a service may use both.

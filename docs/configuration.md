@@ -452,6 +452,9 @@ in place through the engine (preflight → reload → health). How a service rel
 including the `reload:` block that lets Sermo signal a service when its init unit
 has no reload, is documented in
 [services.md](services.md#reload-on-config-change-reload_on_change).
+If neither the init backend nor a valid `reload.command`/`reload.signal`
+fallback can reload the service, `sermoctl reload <service>` is rejected before
+execution.
 
 ### Per-service interval
 

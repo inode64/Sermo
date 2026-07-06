@@ -1859,54 +1859,30 @@ func TestWebBackendReloadUnsupportedIsExposedAndBlocked(t *testing.T) {
 	}
 }
 
-func TestServiceDeclaresReload(t *testing.T) {
-	cases := []struct {
-		name string
-		tree map[string]any
-		want bool
-	}{
-		{
-			name: "native reload",
-			tree: map[string]any{"reload": map[string]any{"signal": "HUP"}},
-			want: true,
-		},
-		{
-			name: "reload remediation",
-			tree: map[string]any{"rules": map[string]any{
-				"reload-on-change": map[string]any{
-					"type": "remediation",
-					"then": map[string]any{"action": "reload"},
-				},
+func TestWebBackendReloadSupportedByInitBackend(t *testing.T) {
+	cfg := &config.Config{
+		ServiceNames: []string{"nginx"},
+		Services: map[string]*config.Document{
+			"nginx": {Name: "nginx", Body: map[string]any{
+				"name":    "nginx",
+				"service": "nginx",
 			}},
-			want: true,
-		},
-		{
-			name: "backend-only reload is not an intent",
-			tree: map[string]any{"rules": map[string]any{
-				"restart-if-down": map[string]any{
-					"type": "remediation",
-					"then": map[string]any{"action": "restart"},
-				},
-			}},
-			want: false,
-		},
-		{
-			name: "alert reload action ignored",
-			tree: map[string]any{"rules": map[string]any{
-				"bad-alert": map[string]any{
-					"type": "alert",
-					"then": map[string]any{"action": "reload"},
-				},
-			}},
-			want: false,
 		},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := serviceDeclaresReload(tc.tree); got != tc.want {
-				t.Fatalf("serviceDeclaresReload = %v, want %v", got, tc.want)
-			}
-		})
+
+	b, warns := NewWebBackend(cfg, Deps{
+		Backend: servicemgr.BackendOpenRC,
+		Manager: fakeManager{},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("NewWebBackend warnings = %v, want none", warns)
+	}
+	svcs := b.Services(context.Background())
+	if len(svcs) != 1 {
+		t.Fatalf("services = %+v, want one", svcs)
+	}
+	if svcs[0].Name != "nginx" || !svcs[0].CanReload {
+		t.Fatalf("service reload support = %+v, want nginx CanReload=true from init backend", svcs[0])
 	}
 }
 

@@ -55,6 +55,8 @@ const (
 	actionResume  = "resume"
 )
 
+const reloadCapabilityTimeout = 3 * time.Second
+
 // BackendDetector detects the service manager backend.
 type BackendDetector interface {
 	Detect(ctx context.Context, requested servicemgr.Backend) (servicemgr.Detection, error)
@@ -549,6 +551,11 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	if code != exitSuccess {
 		return code
 	}
+	if action == actionReload {
+		if code := a.requireReloadSupported(ctx, opts, resolved, service); code != exitSuccess {
+			return code
+		}
+	}
 
 	actionStore := a.openManualActionStore(cfg, action)
 	if actionStore != nil {
@@ -573,6 +580,36 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 		a.printOperation(result)
 	}
 	return operationExit(result.Status)
+}
+
+func (a App) requireReloadSupported(ctx context.Context, opts options, resolved config.Resolved, service string) int {
+	detection, err := a.Detector.Detect(ctx, opts.backend)
+	if err != nil {
+		return a.fail(opts, fmt.Sprintf("backend detection failed: %v", err))
+	}
+	manager, err := a.NewManager(detection.Backend)
+	if err != nil {
+		return a.fail(opts, fmt.Sprintf("service manager unavailable: %v", err))
+	}
+	resolver := servicemgr.NewUnitResolver()
+	resolver.Runner = a.Runner
+	resolver.Manager = manager
+	supportOpts := opts
+	supportOpts.quiet = true
+	target, err := a.resolveControlTarget(ctx, supportOpts, service, resolved.Tree, detection.Backend, manager, resolver)
+	if err != nil {
+		return a.fail(opts, fmt.Sprintf("control target failed: %v", err))
+	}
+	reloadCtx, cancel := context.WithTimeout(ctx, reloadCapabilityTimeout)
+	defer cancel()
+	canReload, err := operation.ReloadSupported(reloadCtx, resolved.Tree, target.Manager, target.Unit)
+	if err != nil {
+		return a.fail(opts, fmt.Sprintf("reload support unavailable: %v", err))
+	}
+	if !canReload {
+		return a.fail(opts, operation.UnsupportedReloadError(target.Unit).Error())
+	}
+	return exitSuccess
 }
 
 // operateWithCascade runs the action on the primary service, and — unless

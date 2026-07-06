@@ -144,10 +144,15 @@ reload:
   when: always
 ```
 
+Si el backend de init informa que no soporta reload y el servicio no tiene un
+fallback válido con `reload.command` o `reload.signal`, Sermo rechaza la acción
+`reload` antes de ejecutarla. La CLI avisa de que el reload no está soportado y
+la web UI desactiva el botón mediante `can_reload=false`.
+
 ### Reload nativo (`reload:`) — cuando el init no puede, Sermo sí
 
 Algunos servicios recargan en sitio (p. ej. `sshd`, `snmpd`, `proftpd`, `prometheus`,
-`loki` releen su configuración al recibir **`SIGHUP`**) pero su unidad **systemd** define
+`loki` releen su configuración al recibir **`SIGHUP`**) pero su unidad **systemd** no define
 **ningún `ExecReload`**, así que `systemctl reload <unit>` falla — aunque el propio servicio
 lo soporte (el mismo servicio bajo OpenRC normalmente sí recarga, vía un
 `reload()` de init-script que envía la señal). El bloque `reload:` cierra esa
@@ -224,14 +229,14 @@ namei -l /run/<service>.pid
 Auditoría de catálogo útil mientras se desarrolla:
 
 ```bash
-go test ./internal/config -run 'TestRealCatalog(AllDaemonsValidate|ReloadDaemonsResolve)$' -count=1
+go test ./internal/config -run 'TestRealCatalog(AllServicesValidate|ReloadServicesResolve)$' -count=1
 ```
 
-El reload que `reload:` produce es lo que la **acción `reload`**,
-`reload_on_change`, el comando `sermoctl reload <svc>` y el botón de reload de la web UI
-ejecutan todos. Es un concepto de control de servicios: se aplica a servicios, no a
-los watches de host, que observan métricas de host y disparan hooks en lugar de recargar
-una unidad.
+El reload elegido por el backend o por `reload:` es lo que la **acción
+`reload`**, `reload_on_change`, el comando `sermoctl reload <svc>` y el botón de
+reload de la web UI ejecutan todos. Es un concepto de control de servicios: se
+aplica a servicios, no a los watches de host, que observan métricas de host y
+disparan hooks en lugar de recargar una unidad.
 
 ## Dependencias de app (`apps`)
 
@@ -636,9 +641,9 @@ also_apply: [nginx, varnish]
 - `sermoctl reload <svc>` y `sermoctl resume <svc>` actúan solo sobre la principal
   (sin cascada). Use `sermoctl daemon reload` para recargar la configuración del `sermod`
   en ejecución. En la web UI el botón **reload** por servicio se habilita solo
-  cuando el servicio está `active`, tiene un bloque `reload:` declarado o una regla
-  de remediación reload, y esa ruta de reload está soportada; **resume** solo
-  mientras está `paused`.
+  cuando el servicio está `active` y Sermo informa `can_reload=true` desde el
+  backend de init (`ExecReload`/OpenRC `reload`) o desde un fallback `reload:`
+  válido; **resume** solo mientras está `paused`.
 
 `also_apply` (otros servicios) y `also_service` (las unidades init de este servicio) son
 complementarios; un servicio puede usar ambos.
