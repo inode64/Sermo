@@ -361,7 +361,7 @@ func (b *WebBackend) MountAction(ctx context.Context, name, action string, opts 
 				Name:    spec.Name,
 				Path:    spec.Path,
 				Action:  action,
-				Status:  "failed",
+				Status:  mountctl.ResultFailed,
 				Message: reason,
 				Mounted: true,
 			}
@@ -372,7 +372,7 @@ func (b *WebBackend) MountAction(ctx context.Context, name, action string, opts 
 				Name:    spec.Name,
 				Path:    spec.Path,
 				Action:  action,
-				Status:  "failed",
+				Status:  mountctl.ResultFailed,
 				Message: "kill blockers is not allowed by this mount policy",
 			}
 		}

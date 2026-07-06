@@ -39,8 +39,11 @@ const (
 	rootMountPath             = "/"
 	rootUmountDisabledMessage = "root filesystem cannot be unmounted"
 
-	mountResultFailed = "failed"
-	mountResultOK     = "ok"
+	// ResultFailed and ResultOK are the Result.Status values a mount/umount
+	// action reports; exported so callers building the same result out-of-band
+	// (e.g. the web backend's early-return errors) use one spelling.
+	ResultFailed = "failed"
+	ResultOK     = "ok"
 
 	mountStateActive   = "active"
 	mountStateInactive = "inactive"
@@ -258,7 +261,7 @@ func (c Controller) Acquire(ctx context.Context, spec Spec) (Result, error) {
 		if mounted && prev > 0 {
 			msg = "acquired, already mounted"
 		}
-		return Result{Name: spec.Name, Path: spec.Path, Action: mountActionMount, Status: mountResultOK, Message: msg, Mounted: mounted, Refcount: state.Refcount}, nil
+		return Result{Name: spec.Name, Path: spec.Path, Action: mountActionMount, Status: ResultOK, Message: msg, Mounted: mounted, Refcount: state.Refcount}, nil
 	})
 }
 
@@ -280,7 +283,7 @@ func (c Controller) Release(ctx context.Context, spec Spec) (Result, error) {
 				return Result{}, err
 			}
 			mounted, _ := c.isMounted(spec.Path)
-			return Result{Name: spec.Name, Path: spec.Path, Action: mountActionUmount, Status: mountResultOK, Message: "released, still in use", Mounted: mounted, Refcount: state.Refcount}, nil
+			return Result{Name: spec.Name, Path: spec.Path, Action: mountActionUmount, Status: ResultOK, Message: "released, still in use", Mounted: mounted, Refcount: state.Refcount}, nil
 		}
 
 		unmount, err := c.unmount(ctx, spec)
@@ -289,7 +292,7 @@ func (c Controller) Release(ctx context.Context, spec Spec) (Result, error) {
 			err = werr
 		}
 		if err != nil {
-			unmount.Status = mountResultFailed
+			unmount.Status = ResultFailed
 			unmount.Refcount = state.Refcount
 			return unmount, err
 		}
@@ -351,19 +354,19 @@ func (c Controller) unmount(ctx context.Context, spec Spec) (Result, error) {
 		return Result{}, err
 	}
 	if !mounted {
-		return Result{Name: spec.Name, Path: spec.Path, Action: mountActionUmount, Status: mountResultOK, Message: "already unmounted", Mounted: false}, nil
+		return Result{Name: spec.Name, Path: spec.Path, Action: mountActionUmount, Status: ResultOK, Message: "already unmounted", Mounted: false}, nil
 	}
 	if err := c.run(ctx, mountActionUmount, spec.Path); err == nil {
-		return Result{Name: spec.Name, Path: spec.Path, Action: mountActionUmount, Status: mountResultOK, Message: "unmounted", Mounted: false}, nil
+		return Result{Name: spec.Name, Path: spec.Path, Action: mountActionUmount, Status: ResultOK, Message: "unmounted", Mounted: false}, nil
 	}
 	// Only treat the path as unmounted when the recheck succeeds and reports so;
 	// a read failure must not be mistaken for "unmounted" and skip escalation.
 	if ok, rerr := c.isMounted(spec.Path); rerr == nil && !ok {
-		return Result{Name: spec.Name, Path: spec.Path, Action: mountActionUmount, Status: mountResultOK, Message: "unmounted", Mounted: false}, nil
+		return Result{Name: spec.Name, Path: spec.Path, Action: mountActionUmount, Status: ResultOK, Message: "unmounted", Mounted: false}, nil
 	}
 
 	blockers, derr := c.discoverUsers(ctx, spec.Path)
-	result := Result{Name: spec.Name, Path: spec.Path, Action: mountActionUmount, Status: mountResultFailed, Message: "mount is busy", Mounted: true, Blockers: blockers}
+	result := Result{Name: spec.Name, Path: spec.Path, Action: mountActionUmount, Status: ResultFailed, Message: "mount is busy", Mounted: true, Blockers: blockers}
 	if derr != nil {
 		// A discovery failure must not masquerade as "no blockers": surface it so
 		// the operator knows escalation could not be attempted, rather than
@@ -393,12 +396,12 @@ func (c Controller) unmount(ctx context.Context, spec Spec) (Result, error) {
 		result.Signalled = reaped.Signalled
 		result.Blockers = reaped.Remaining
 		if err := c.run(ctx, mountActionUmount, spec.Path); err == nil {
-			return Result{Name: spec.Name, Path: spec.Path, Action: mountActionUmount, Status: mountResultOK, Message: "unmounted after signalling blockers", Mounted: false, Signalled: reaped.Signalled}, nil
+			return Result{Name: spec.Name, Path: spec.Path, Action: mountActionUmount, Status: ResultOK, Message: "unmounted after signalling blockers", Mounted: false, Signalled: reaped.Signalled}, nil
 		}
 	}
 	if spec.Umount.AllowLazy {
 		if err := c.run(ctx, mountActionUmount, "-l", spec.Path); err == nil {
-			result.Status = mountResultOK
+			result.Status = ResultOK
 			result.Message = "lazy unmounted"
 			result.Mounted = false
 			result.Lazy = true
@@ -413,7 +416,7 @@ func disabledUmountResult(spec Spec, message string) Result {
 		Name:    spec.Name,
 		Path:    spec.Path,
 		Action:  mountActionUmount,
-		Status:  mountResultFailed,
+		Status:  ResultFailed,
 		Message: message,
 		Mounted: true,
 	}
