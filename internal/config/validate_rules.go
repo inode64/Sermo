@@ -10,6 +10,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/process"
+	"sermo/internal/servicemgr"
 )
 
 // validateWindow checks an optional for/within firing window at the dotted prefix,
@@ -84,7 +85,13 @@ func validateWindowLength(prefix string, m map[string]any, add addFunc) (cycles 
 	return cycles, hasCycles
 }
 
-var serviceStates = set("active", "inactive", "paused", "failed", "unknown")
+var serviceStates = set(
+	string(servicemgr.StatusActive),
+	string(servicemgr.StatusInactive),
+	string(servicemgr.StatusPaused),
+	string(servicemgr.StatusFailed),
+	string(servicemgr.StatusUnknown),
+)
 var processStates = set(process.StateRunning, process.StateZombie, process.StateAbsent)
 var validActions = set("restart", "start", "stop", "reload", "resume", "alert", "block")
 var metricCatalog = map[string]map[string]struct{}{
