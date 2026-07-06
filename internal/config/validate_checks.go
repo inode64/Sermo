@@ -670,17 +670,17 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 	}
 	validateInterfaceFields(path, entry, add)
 	switch typ {
-	case "tcp":
+	case checks.CheckTypeTCP:
 		if n, ok := cfgval.Int(entry["port"]); !ok || n < 1 || n > 65535 {
 			add("%s.port is required and must be a port in 1..65535 for a tcp check", path)
 		}
-	case "http":
+	case checks.CheckTypeHTTP:
 		validateHTTPFields(path, entry, add)
-	case "ports":
+	case checks.CheckTypePorts:
 		validatePortsFields(path, entry, add)
-	case "command":
+	case checks.CheckTypeCommand:
 		validateCommandFields(path, entry, true, add)
-	case "service":
+	case checks.CheckTypeService:
 		st := cfgval.String(entry["expect"])
 		if st == "" {
 			add("%s.expect is required for a service check", path)
@@ -689,7 +689,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 				add("%s expect %q is not one of active, inactive, paused, failed, unknown", path, st)
 			}
 		}
-	case "process":
+	case checks.CheckTypeProcess:
 		hasExe := cfgval.String(entry["exe"]) != ""
 		exeAny, hasExeAnyField := entry["exe_any"]
 		hasExeAny := cfgval.IsNonEmptyStringList(exeAny)
@@ -707,18 +707,18 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 				add("%s state %q is not one of running, zombie, absent", path, st)
 			}
 		}
-	case "file_exists":
+	case checks.CheckTypeFileExists:
 		p := cfgval.String(entry["path"])
 		if p == "" {
 			add("%s.path is required for a file_exists check", path)
 		} else if underDir(p, locksDir) {
 			add("%s file_exists must not point under the runtime lock dir %s", path, locksDir)
 		}
-	case "file":
+	case checks.CheckTypeFile:
 		if cfgval.String(entry["path"]) == "" {
 			add("%s.path is required for a file check", path)
 		}
-	case "lockfile":
+	case checks.CheckTypeLockfile:
 		if !cfgval.IsNonEmptyStringList(entry["path"]) {
 			add("%s.path is required for a lockfile check", path)
 		} else {
@@ -729,54 +729,54 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 				}
 			}
 		}
-	case "binary":
+	case checks.CheckTypeBinary:
 		if cfgval.String(entry["path"]) == "" {
 			add("%s.path is required for a binary check", path)
 		}
-	case "pidfile":
+	case checks.CheckTypePidfile:
 		if !cfgval.IsNonEmptyStringList(entry["path"]) {
 			add("%s.path is required for a pidfile check", path)
 		}
-	case "socket":
+	case checks.CheckTypeSocket:
 		if !cfgval.IsNonEmptyStringList(entry["path"]) {
 			add("%s.path is required for a socket check", path)
 		}
-	case "libraries":
+	case checks.CheckTypeLibraries:
 		if cfgval.String(entry["binary"]) == "" {
 			add("%s.binary is required for a libraries check", path)
 		}
-	case "metric":
+	case checks.CheckTypeMetric:
 		validateMetric(entry, path, true, add)
-	case "count":
+	case checks.CheckTypeCount:
 		validateCount(entry, path, add)
-	case "storage":
+	case checks.CheckTypeStorage:
 		validateStorageFields(path, entry, add)
-	case "autofs":
+	case checks.CheckTypeAutofs:
 		validateAutofsFields(path, entry, add)
-	case "load":
+	case checks.CheckTypeLoad:
 		validateLoadFields(path, entry, add)
-	case "users":
+	case checks.CheckTypeUsers:
 		validateThresholdPreds(path, entry, checks.UsersPredFields, add)
-	case "process_count":
+	case checks.CheckTypeProcessCount:
 		validateThresholdPreds(path, entry, checks.ProcessCountPredFields, add)
 		for _, f := range []string{"exe", "exe_dir"} {
 			if p := cfgval.String(entry[f]); p != "" && !filepath.IsAbs(p) {
 				add("%s.%s must be an absolute path", path, f)
 			}
 		}
-	case "hdparm":
+	case checks.CheckTypeHdparm:
 		validateHdparmFields(path, entry, add)
-	case "sensors":
+	case checks.CheckTypeSensors:
 		if validatePresentThresholds(path, entry, checks.SensorPredFields, add) == 0 {
 			add("%s requires at least one of temp/fan/voltage {op, value}", path)
 		}
-	case "smart":
+	case checks.CheckTypeSmart:
 		validateSmartFields(path, entry, add)
-	case "raid":
+	case checks.CheckTypeRAID:
 		validatePresentThresholds(path, entry, checks.RaidPredFields, add)
-	case "edac":
+	case checks.CheckTypeEDAC:
 		validatePresentThresholds(path, entry, checks.EdacPredFields, add)
-	case "config":
+	case checks.CheckTypeConfig:
 		_, hasCmd := entry["command"]
 		_, hasPath := entry["path"]
 		if !hasCmd && !hasPath {
@@ -796,26 +796,26 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		if hasCmd {
 			validateCommandUser(path, entry, add)
 		}
-	case "fds":
+	case checks.CheckTypeFDS:
 		validateThresholdPreds(path, entry, checks.FdsPredFields, add)
-	case "memory":
+	case checks.CheckTypeMemory:
 		validateThresholdPreds(path, entry, checks.MemoryPredFields, add)
-	case "pressure":
+	case checks.CheckTypePressure:
 		validatePressureFields(path, entry, add)
-	case "pids":
+	case checks.CheckTypePIDs:
 		validateThresholdPreds(path, entry, checks.PidsPredFields, add)
-	case "diskio":
+	case checks.CheckTypeDiskIO:
 		validateDiskIOFields(path, entry, add)
-	case "conntrack":
+	case checks.CheckTypeConntrack:
 		validateThresholdPreds(path, entry, checks.ConntrackPredFields, add)
-	case "firewall_rules":
+	case checks.CheckTypeFirewallRules:
 		validateFirewallRulesFields(path, entry, add)
-	case "net":
+	case checks.CheckTypeNet:
 		if cfgval.String(entry["interface"]) == "" {
 			add("%s.interface is required for a net check", path)
 		}
 		validateNetMetricCondition(path, cfgval.String(entry["metric"]), entry, add)
-	case "icmp":
+	case checks.CheckTypeICMP:
 		if cfgval.String(entry["host"]) == "" {
 			add("%s.host is required for an icmp check", path)
 		}
@@ -825,9 +825,9 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 			}
 		}
 		validateICMPMetricCondition(path, cfgval.String(entry["metric"]), entry, add)
-	case "swap":
+	case checks.CheckTypeSwap:
 		validateSwapMetricCondition(path, cfgval.String(entry["metric"]), entry, add)
-	case "route":
+	case checks.CheckTypeRoute:
 		if f := cfgval.String(entry["family"]); f != "" && f != checks.FamilyIPv4 && f != checks.FamilyIPv6 {
 			add("%s.family must be ipv4 or ipv6", path)
 		}
@@ -836,15 +836,15 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 				add("%s.interface must be a single interface name for a route check", path)
 			}
 		}
-	case "entropy":
+	case checks.CheckTypeEntropy:
 		validateThresholdPreds(path, entry, checks.EntropyPredFields, add)
-	case "zombies":
+	case checks.CheckTypeZombies:
 		validateThresholdPreds(path, entry, checks.ZombiePredFields, add)
-	case "oom":
+	case checks.CheckTypeOOM:
 		validateOomFields(path, entry, add)
-	case "cert":
+	case checks.CheckTypeCert:
 		validateCertFields(path, entry, add)
-	case "sqlite", "sqlite3":
+	case checks.CheckTypeSQLite, checks.CheckTypeSQLite3:
 		if cfgval.String(entry["path"]) == "" {
 			add("%s.path is required for a sqlite check", path)
 		}
@@ -853,15 +853,15 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 				add("%s.quick must be a boolean", path)
 			}
 		}
-	case "sql":
+	case checks.CheckTypeSQL:
 		validateSQLFields(path, entry, add)
-	case "mongodb-query":
+	case checks.CheckTypeMongoDBQuery:
 		validateMongoFields(path, entry, add)
-	case "influxdb-query":
+	case checks.CheckTypeInfluxDBQuery:
 		validateInfluxFields(path, entry, add)
-	case "size":
+	case checks.CheckTypeSize:
 		validateSizeFields(path, entry, add)
-	case "websocket":
+	case checks.CheckTypeWebsocket:
 		validateWebsocketFields(path, entry, add)
 	}
 	return true
