@@ -42,7 +42,7 @@ const (
 	NetMetricSpeed    = "speed"
 	NetMetricErrors   = "errors"
 	NetMetricAddress  = "address"
-	icmpMetricLatency = "latency"
+	IcmpMetricLatency = "latency" // exported for the web backend's icmp-watch readings
 )
 
 // MetricReader returns a sampled metric for a scope. The daemon
@@ -1334,7 +1334,7 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		} else if onChange {
 			c.onChange = true
 		}
-	case icmpMetricLatency:
+	case IcmpMetricLatency:
 		th, hasTh := entry["threshold"].(map[string]any)
 		ch, hasCh := entry["change"].(map[string]any)
 		if !hasTh && !hasCh {
