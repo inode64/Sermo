@@ -1734,7 +1734,7 @@ func (b *WebBackend) fdsWatchView() (*web.WatchMeter, []web.WatchReading, string
 		usedPct := float64(s.Allocated) / float64(s.Max) * 100
 		summary = fmt.Sprintf("fds %d/%d allocated (%.1f%%)", s.Allocated, s.Max, usedPct)
 	}
-	if meter := countMeter("fds", s.Allocated, s.Max); meter != nil {
+	if meter := countMeter(checks.CheckTypeFDS, s.Allocated, s.Max); meter != nil {
 		return meter, nil, summary
 	}
 	return nil, []web.WatchReading{{Field: "count", Label: "Allocated", Value: fmt.Sprintf("%d", s.Allocated)}}, summary
@@ -1755,7 +1755,7 @@ func (b *WebBackend) pidsWatchView() (*web.WatchMeter, []web.WatchReading, strin
 		usedPct := float64(s.Threads) / float64(s.Max) * 100
 		summary = fmt.Sprintf("pids %d/%d in use (%.1f%%)", s.Threads, s.Max, usedPct)
 	}
-	if meter := countMeter("pids", s.Threads, s.Max); meter != nil {
+	if meter := countMeter(checks.CheckTypePIDs, s.Threads, s.Max); meter != nil {
 		return meter, nil, summary
 	}
 	return nil, []web.WatchReading{{Field: "count", Label: "In use", Value: fmt.Sprintf("%d", s.Threads)}}, summary
@@ -1805,7 +1805,7 @@ func (b *WebBackend) conntrackWatchView() (*web.WatchMeter, []web.WatchReading, 
 		usedPct := float64(s.Count) / float64(s.Max) * 100
 		summary = fmt.Sprintf("conntrack %d/%d entries (%.1f%%)", s.Count, s.Max, usedPct)
 	}
-	if meter := countMeter("conntrack", s.Count, s.Max); meter != nil {
+	if meter := countMeter(checks.CheckTypeConntrack, s.Count, s.Max); meter != nil {
 		return meter, nil, summary
 	}
 	return nil, []web.WatchReading{{Field: "count", Label: "Count", Value: fmt.Sprintf("%d entries", s.Count)}}, summary
