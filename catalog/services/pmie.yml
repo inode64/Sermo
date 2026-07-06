@@ -21,10 +21,15 @@ watches:
       expect: active
   process:
     check:
+      # Best-effort: after a PCP package update the running pmie's exe reads as
+      # "(deleted)" until restart and cannot match by exact exe (a deliberate
+      # kill-safety rule), so this must not hard-fail. service + pidfile are the
+      # authoritative liveness signals.
       type: process
       exe: ${pmie_binary}
       user: ${user}
       state: running
+      optional: true
       requires:
         - service
       verify: true

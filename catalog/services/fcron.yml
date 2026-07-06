@@ -19,10 +19,13 @@ watches:
       expect: active
   process:
     check:
+      # Best-effort: the fcron binary path/identity varies by build; service +
+      # pidfile are the authoritative liveness signals.
       type: process
       exe: ${fcron_binary}
       user: root
       state: running
+      optional: true
       requires:
         - service
       verify: true

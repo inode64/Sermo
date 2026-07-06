@@ -7,7 +7,12 @@ apps:
   - dcc
 variables:
   user: root
-pidfile: /run/dcc/dccifd.pid
+pidfile:
+  # dccifd's pidfile is unreliable across distros (Gentoo has been observed
+  # writing an invalid PID); the socket check below is the authoritative signal.
+  optional: true
+  path:
+    - /run/dcc/dccifd.pid
 socket: /var/lib/dcc/dccifd
 processes:
   main:
@@ -20,10 +25,13 @@ watches:
       expect: active
   process:
     check:
+      # Best-effort: the dccifd identity is not reliably matchable across distros;
+      # service + socket are the authoritative liveness signals.
       type: process
       exe: ${dcc_binary}
       user: ${user}
       state: running
+      optional: true
       requires:
         - service
       verify: true

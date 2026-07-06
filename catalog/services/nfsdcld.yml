@@ -22,10 +22,13 @@ watches:
       expect: active
   process:
     check:
+      # Best-effort: nfsdcld is socket-activated/short-lived, so the process may
+      # legitimately be absent while the unit is active. service is authoritative.
       type: process
       exe: ${nfsdcld_binary}
       user: ${user}
       state: running
+      optional: true
       requires:
         - service
       verify: true
