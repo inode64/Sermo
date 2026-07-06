@@ -20,15 +20,18 @@ preflight:
     timeout: 15s
 config_files:
   - ${config}
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   port:
-    type: tcp
-    port: ${port}
+    check:
+      type: tcp
+      port: ${port}
   mongodb:
-    type: mongodb
-    host: ${host}
-    port: ${port}
-    timeout: 3s
+    check:
+      type: mongodb
+      host: ${host}
+      port: ${port}
+      timeout: 3s

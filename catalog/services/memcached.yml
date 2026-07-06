@@ -14,35 +14,19 @@ processes:
   main:
     exe: ${memcached_binary}
     user: ${user}
-checks:
-  service:
-    type: service
-    expect: active
-  port:
-    type: tcp
-    host: ${host}
-    port: ${port}
-    timeout: 2s
-  stats:
-    type: memcached
-    host: ${host}
-    port: ${port}
-    timeout: 3s
-  fds:
-    type: metric
-    scope: service
-    name: fds
-    op: '>'
-    value: 50000
-    optional: true
-  memory:
-    type: metric
-    scope: service
-    name: memory
-    op: '>'
-    value: 60%
-    optional: true
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  memory:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 60%
+      optional: true
   restart-if-worker-thread-hot:
     check:
       type: metric
@@ -57,21 +41,32 @@ watches:
       action: restart
   restart-if-memcached-failed:
     check:
-      ref: stats
+      type: memcached
+      host: ${host}
+      port: ${port}
+      timeout: 3s
     for:
       cycles: 3
     then:
       action: restart
   restart-if-tcp-failed:
     check:
-      ref: port
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 2s
     for:
       cycles: 3
     then:
       action: restart
   alert-if-fds-high:
     check:
-      ref: fds
+      type: metric
+      scope: service
+      name: fds
+      op: '>'
+      value: 50000
+      optional: true
     within:
       cycles: 10
       min_matches: 3

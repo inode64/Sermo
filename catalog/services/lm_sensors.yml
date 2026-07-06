@@ -12,15 +12,17 @@ service:
 apps:
   - lm_sensors
 processes: { }
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   sensors:
-    type: command
-    command:
-      - ${lm_sensors_binary}
-      - -A
-    timeout: 10s
-    optional: true
-    verify: true
+    check:
+      type: command
+      command:
+        - ${lm_sensors_binary}
+        - -A
+      timeout: 10s
+      optional: true
+      verify: true

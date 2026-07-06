@@ -5,19 +5,20 @@ description: Synchronous multi-master replication engine that provides the wsrep
 service: garbd
 apps:
   - garbd
-checks:
-  service:
-    type: service
-    expect: active
-  process:
-    type: process
-    exe: ${garbd_binary}
-    user: root
-    state: running
-    requires:
-      - service
-    verify: true
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  process:
+    check:
+      type: process
+      exe: ${garbd_binary}
+      user: root
+      state: running
+      requires:
+        - service
+      verify: true
   alert-if-memory-high:
     check:
       type: metric

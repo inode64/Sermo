@@ -18,19 +18,22 @@ processes:
   main:
     exe: ${backrest_binary}
     user: root
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   port:
-    type: tcp
-    host: ${host}
-    port: ${port}
-    timeout: 2s
+    check:
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 2s
   http:
-    type: http
-    url: http://${host}:${port}/
-    expect_status:
-      op: <
-      value: 500
-    timeout: 5s
+    check:
+      type: http
+      url: http://${host}:${port}/
+      expect_status:
+        op: <
+        value: 500
+      timeout: 5s

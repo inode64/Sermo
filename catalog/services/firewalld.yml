@@ -20,17 +20,6 @@ preflight:
       - --system-config
       - ${config_dir}
     timeout: 30s
-checks:
-  service:
-    type: service
-    expect: active
-  state:
-    type: command
-    command:
-      - firewall-cmd
-      - state
-    timeout: 10s
-    verify: true
 reload_on_change:
   paths:
     - ${config_dir}
@@ -42,9 +31,18 @@ policy:
     initial: 15m
     max: 1h
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   restart-if-state-failed:
     check:
-      ref: state
+      type: command
+      command:
+        - firewall-cmd
+        - state
+      timeout: 10s
+      verify: true
     for:
       cycles: 3
     then:

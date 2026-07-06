@@ -31,24 +31,26 @@ processes:
     user: ${user}
 reload:
   signal: HUP
-checks:
-  service:
-    type: service
-    expect: active
-  port:
-    type: tcp
-    host: ${host}
-    port: ${port}
-    timeout: 2s
-  ready:
-    type: http
-    url: http://${host}:${port}/ready
-    expect_status: 200
-    timeout: 5s
 reload_on_change:
   paths:
     - ${config}
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  port:
+    check:
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 2s
+  ready:
+    check:
+      type: http
+      url: http://${host}:${port}/ready
+      expect_status: 200
+      timeout: 5s
   alert-if-fds-high:
     check:
       type: metric

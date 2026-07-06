@@ -10,19 +10,20 @@ processes:
   main:
     exe: ${fcron_binary}
     user: root
-checks:
-  service:
-    type: service
-    expect: active
-  process:
-    type: process
-    exe: ${fcron_binary}
-    user: root
-    state: running
-    requires:
-      - service
-    verify: true
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  process:
+    check:
+      type: process
+      exe: ${fcron_binary}
+      user: root
+      state: running
+      requires:
+        - service
+      verify: true
   alert-if-memory-high:
     check:
       type: metric

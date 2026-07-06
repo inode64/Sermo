@@ -4,15 +4,6 @@ category: virtualization
 service: virtlockd
 apps:
   - virtlockd
-checks:
-  service:
-    type: service
-    expect: active
-  libvirt:
-    type: libvirt
-    socket: /run/libvirt/virtlockd-sock
-    timeout: 5s
-    verify: true
 policy:
   cooldown: 15m
   max_actions: 2
@@ -21,9 +12,16 @@ policy:
     initial: 15m
     max: 1h
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   restart-if-libvirt-failed:
     check:
-      ref: libvirt
+      type: libvirt
+      socket: /run/libvirt/virtlockd-sock
+      timeout: 5s
+      verify: true
     for:
       cycles: 3
     then:

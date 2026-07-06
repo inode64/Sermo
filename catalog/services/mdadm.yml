@@ -8,12 +8,14 @@ processes:
   main:
     exe: ${mdadm_binary}
     user: root
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   raid:
-    type: raid
-    degraded:
-      op: '>'
-      value: 0
+    check:
+      type: raid
+      degraded:
+        op: '>'
+        value: 0

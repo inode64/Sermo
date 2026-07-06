@@ -12,14 +12,15 @@ name: apache-main
 uses: apache
 variables:
   health_path: /health
-checks:
-  http:
-    url: "http://${host}:${port}${health_path}"
+watches:
+  restart-if-http-failed:
+    check:
+      url: "http://${host}:${port}${health_path}"
 ```
 
 El catálogo empaquetado (`catalog/`) cubre familias de servicios comunes como servidores
 web, bases de datos, runtimes de contenedores, ayudantes NFS/libvirt y servicios de
-hardware/sistema. Definen variables, preflight, procesos, checks, stop_policy,
+hardware/sistema. Definen variables, preflight, procesos, watches, stop_policy,
 política de remediación y reglas, de modo que un servicio configurado normalmente solo
 establece unos pocos overrides. Los servicios de catálogo de alto impacto como bases de datos, cachés y colas pueden llevar ajustes
 de `policy` locales más estrictos que los valores por defecto globales, con cooldowns más largos,
@@ -424,13 +425,14 @@ service:
     gentoo: { systemd: [apache],  openrc: [apache]  }
     debian: { systemd: [apache2], openrc: [apache2] }
 
-checks:
+watches:
   http:
-    type: http
-    timeout: 5s          # kept for every OS
-    os:
-      gentoo: { url: "http://localhost/gentoo-health" }
-      debian: { url: "http://localhost/debian-health" }
+    check:
+      type: http
+      timeout: 5s          # kept for every OS
+      os:
+        gentoo: { url: "http://localhost/gentoo-health" }
+        debian: { url: "http://localhost/debian-health" }
 
 policy:
   os:
@@ -477,12 +479,13 @@ control:
   domain: web01
   socket: /run/libvirt/libvirt-sock     # or /run/libvirt/virtqemud-sock on modular libvirt
 
-checks:
+watches:
   vm:
-    type: libvirt
-    socket: /run/libvirt/libvirt-sock
-    query: qemu:///system
-    params: { domain: web01 }
+    check:
+      type: libvirt
+      socket: /run/libvirt/libvirt-sock
+      query: qemu:///system
+      params: { domain: web01 }
 
 processes:
   qemu:
@@ -539,15 +542,16 @@ control:
   container: web
   socket: /run/docker.sock
 
-checks:
+watches:
   docker:
-    type: docker
-    socket: /run/docker.sock
-    container: web
-    on_change: true
-    expect:
-      container.status: { op: "==", value: running }
-      container.health: { op: "==", value: healthy }
+    check:
+      type: docker
+      socket: /run/docker.sock
+      container: web
+      on_change: true
+      expect:
+        container.status: { op: "==", value: running }
+        container.health: { op: "==", value: healthy }
 ```
 
 `control.container` es el nombre o id del contenedor Docker que Sermo opera. Sin
@@ -1022,15 +1026,16 @@ pidfile:
   - "/run/php-fpm/php-fpm-${version}${sep}${instance}.pid"
   - "/run/php-fpm/php-fpm-php${version}${sep}${instance}.pid"
   - "/run/php-fpm-php${version}${sep}${instance}.pid"
-checks:
+watches:
   pidfile:
-    type: pidfile
-    optional: true
-    path:
-      - "/run/php-fpm/php-fpm-${version}${sep}${instance}.pid"
-      - "/run/php-fpm/php-fpm-php${version}${sep}${instance}.pid"
-      - "/run/php-fpm-php${version}${sep}${instance}.pid"
-    requires: [service]
+    check:
+      type: pidfile
+      optional: true
+      path:
+        - "/run/php-fpm/php-fpm-${version}${sep}${instance}.pid"
+        - "/run/php-fpm/php-fpm-php${version}${sep}${instance}.pid"
+        - "/run/php-fpm-php${version}${sep}${instance}.pid"
+      requires: [service]
 ```
 
 Ponga la instancia systemd exacta primero en `service.systemd`, p. ej.
@@ -1042,7 +1047,7 @@ opcional porque algunas unidades systemd publican `MainPID` incluso cuando el
 
 ### Componentes opcionales (`enable_if`)
 
-Una entrada bajo `processes`, `checks` o `preflight` puede llevar un
+Una entrada bajo `processes`, `watches` o `preflight` puede llevar un
 guard `enable_if` que la mantiene solo cuando una clave en un fichero de config de distro satisface
 un predicado; de lo contrario la entrada se descarta durante la resolución del servicio. Esto
 modela componentes que son opcionales por host — p. ej. un perfil de Samba que enlaza un
@@ -1057,15 +1062,16 @@ processes:
       file: /etc/conf.d/samba
       key: daemon_list
       contains: winbindd          # or: equals: <value> | matches: <regex>
-checks:
+watches:
   winbindd:
-    type: process
-    exe: ${winbindd_binary}
-    state: running
     enable_if:
       file: /etc/conf.d/samba
       key: daemon_list
       contains: winbindd
+    check:
+      type: process
+      exe: ${winbindd_binary}
+      state: running
 ```
 
 Un fichero ausente o una clave ausente poda la entrada (fail-safe). El guard se elimina
@@ -1263,9 +1269,11 @@ variables:
   pidfile: /run/dbserver/main.pid
   config:  /etc/dbserver/main.cnf
 pidfile: "${pidfile}"
-checks:
-  tcp:    { type: tcp, port: "${port}" }
-  config: { type: command, command: ["dbserverd", "--defaults-file=${config}", "--help"] }
+watches:
+  tcp:
+    check: { type: tcp, port: "${port}" }
+  config:
+    check: { type: command, command: ["dbserverd", "--defaults-file=${config}", "--help"] }
 ```
 
 Cada instancia sobrescribe las tres variables y se da a sí misma una unidad init (una
@@ -1292,7 +1300,7 @@ para una configuración trabajada completa.
 ## Deshabilitar y borrar entradas heredadas
 
 ```yaml
-checks:
+watches:
   http:
     enabled: false   # keep but disable
   ping:
@@ -1330,8 +1338,8 @@ Los documentos de watch de host usan los mismos valores de nivel superior
 [configuration](configuration.es.md#host-watches).
 
 Un servicio también puede llevar su propio bloque `watches:` — watches por
-servicio que disparan un hook/notificación acotados al servicio (y pueden usar
-los tipos `service`/`metric` y el `process_count` acotado por PIDs). Véase
+servicio que pueden disparar un hook/notificación o un `then.action` compacto,
+y pueden usar los tipos `service`/`metric` y el `process_count` acotado por PIDs. Véase
 [Watches de servicio](configuration.es.md#watches-de-servicio-acotados-a-un-servicio).
 
 ## Comandos auxiliares

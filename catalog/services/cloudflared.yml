@@ -31,15 +31,6 @@ processes:
   main:
     exe: ${cloudflared_binary}
     user: ${user}
-checks:
-  service:
-    type: service
-    expect: active
-  protocol:
-    type: cloudflared
-    host: ${host}
-    port: ${port}
-    timeout: 3s
 stop_policy:
   kill_only_if:
     users:
@@ -49,14 +40,18 @@ stop_policy:
 watches:
   restart-if-inactive:
     check:
-      ref: service
+      type: service
+      expect: active
     for:
       cycles: 3
     then:
       action: restart
   restart-if-protocol-failed:
     check:
-      ref: protocol
+      type: cloudflared
+      host: ${host}
+      port: ${port}
+      timeout: 3s
     for:
       cycles: 3
     then:

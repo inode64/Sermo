@@ -9,10 +9,12 @@ processes:
   main:
     exe: ${acpid_binary}
     user: root
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   acpid:
-    type: acpid
-    timeout: 3s
+    check:
+      type: acpid
+      timeout: 3s

@@ -4,14 +4,6 @@ category: virtualization
 service: libvirtd
 apps:
   - libvirtd
-checks:
-  service:
-    type: service
-    expect: active
-  libvirt:
-    type: libvirt
-    timeout: 5s
-    verify: true
 policy:
   cooldown: 15m
   max_actions: 2
@@ -20,9 +12,15 @@ policy:
     initial: 15m
     max: 1h
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   restart-if-libvirt-failed:
     check:
-      ref: libvirt
+      type: libvirt
+      timeout: 5s
+      verify: true
     for:
       cycles: 3
     then:

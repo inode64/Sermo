@@ -38,13 +38,15 @@ restart_on_change:
 config_files:
   - ${config}
   - /etc/dnsmasq.d
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   dns:
-    type: dns
-    host: ${host}
-    port: ${port}
-    query: ${query}
-    timeout: 3s
+    check:
+      type: dns
+      host: ${host}
+      port: ${port}
+      query: ${query}
+      timeout: 3s

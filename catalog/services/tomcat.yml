@@ -23,45 +23,42 @@ variables:
 config_files:
   - ${config}
 pidfile: /run/tomcat-${version}${sep}${instance}.pid
-checks:
-  service:
-    type: service
-    expect: active
-  port:
-    type: tcp
-    port: ${port}
-  http:
-    type: http
-    url: http://127.0.0.1:${port}/
-    expect_status:
-      op: <
-      value: 500
-    timeout: 5s
-
-    # AJP13 CPing/CPong — proves the AJP connector answers, not only HTTP.
-    # optional: many installs disable AJP and terminate TLS at a reverse proxy.
-    verify: true
-  ajp:
-    type: ajp
-    host: 127.0.0.1
-    port: ${ajp_port}
-    timeout: 3s
-    optional: true
-
 reload_on_change:
   paths:
     - ${config}
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  ajp:
+    check:
+      type: ajp
+      host: 127.0.0.1
+      port: ${ajp_port}
+      timeout: 3s
+      optional: true
+
   restart-if-http-failed:
     check:
-      ref: http
+      type: http
+      url: http://127.0.0.1:${port}/
+      expect_status:
+        op: <
+        value: 500
+      timeout: 5s
+
+      # AJP13 CPing/CPong — proves the AJP connector answers, not only HTTP.
+      # optional: many installs disable AJP and terminate TLS at a reverse proxy.
+      verify: true
     for:
       cycles: 3
     then:
       action: restart
   restart-if-port-failed:
     check:
-      ref: port
+      type: tcp
+      port: ${port}
     for:
       cycles: 3
     then:

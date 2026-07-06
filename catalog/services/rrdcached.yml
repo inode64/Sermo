@@ -5,20 +5,18 @@ description: RRDTool data caching daemon.
 service: rrdcached
 pidfile: /run/rrdcached.pid
 socket: /run/rrdcached.sock
-checks:
-  service:
-    type: service
-    expect: active
-  socket:
-    type: socket
-    path: /run/rrdcached.sock
-    requires:
-      - service
-    verify: true
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   restart-if-socket-missing:
     check:
-      ref: socket
+      type: socket
+      path: /run/rrdcached.sock
+      requires:
+        - service
+      verify: true
     for:
       cycles: 3
     then:

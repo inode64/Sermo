@@ -13,14 +13,6 @@ processes:
   main:
     exe: ${polkit_binary}
     user: ${user}
-checks:
-  service:
-    type: service
-    expect: active
-  dbus:
-    type: dbus
-    timeout: 5s
-    verify: true
 policy:
   cooldown: 15m
   max_actions: 2
@@ -29,9 +21,15 @@ policy:
     initial: 15m
     max: 1h
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   restart-if-dbus-failed:
     check:
-      ref: dbus
+      type: dbus
+      timeout: 5s
+      verify: true
     for:
       cycles: 3
     then:

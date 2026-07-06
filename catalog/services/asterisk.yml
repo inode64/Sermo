@@ -6,18 +6,20 @@ apps:
   - asterisk
 variables:
   port: 5038
-checks:
-  service:
-    type: service
-    expect: active
-  port:
-    type: tcp
-    port: ${port}
-  asterisk:
-    type: asterisk
-    port: ${port}
-    timeout: 3s
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  port:
+    check:
+      type: tcp
+      port: ${port}
+  asterisk:
+    check:
+      type: asterisk
+      port: ${port}
+      timeout: 3s
   restart-if-worker-thread-hot:
     check:
       type: metric

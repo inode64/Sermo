@@ -14,26 +14,24 @@ processes:
     exe: ${ceph_mgr_binary}
     user: ${user}
 restart_on_change:
-checks:
-  service:
-    type: service
-    expect: active
-  status:
-    type: command
-    command:
-      - ${ceph_binary}
-      - --admin-daemon
-      - /run/ceph/ceph-mgr.${hostname}.asok
-      - status
-    timeout: 5s
-    analyze:
-      use:
-        - ceph
-    verify: true
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   restart-if-status-failed:
     check:
-      ref: status
+      type: command
+      command:
+        - ${ceph_binary}
+        - --admin-daemon
+        - /run/ceph/ceph-mgr.${hostname}.asok
+        - status
+      timeout: 5s
+      analyze:
+        use:
+          - ceph
+      verify: true
     for:
       cycles: 3
     then:

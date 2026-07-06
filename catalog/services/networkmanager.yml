@@ -14,19 +14,6 @@ processes:
   main:
     exe: ${networkmanager_binary}
     user: root
-checks:
-  service:
-    type: service
-    expect: active
-  status:
-    type: command
-    optional: true
-    command:
-      - ${networkmanager_nmcli}
-      - general
-      - status
-    timeout: 10s
-    verify: true
 policy:
   cooldown: 15m
   max_actions: 2
@@ -35,6 +22,20 @@ policy:
     initial: 15m
     max: 1h
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  status:
+    check:
+      type: command
+      optional: true
+      command:
+        - ${networkmanager_nmcli}
+        - general
+        - status
+      timeout: 10s
+      verify: true
   restart-if-worker-thread-hot:
     check:
       type: metric

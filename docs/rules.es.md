@@ -1348,8 +1348,8 @@ checks:
 Pasa (estilo salud, `OK == true`) cuando conecta, autentica como
 `user`, y el servidor responde a un ping. Los datos del resultado exponen `protocol`, `host`,
 `port` y la `version` del servidor. Un fallo de red/auth hace fallar la comprobación con el
-error. Esto está pensado para añadirse a los `checks:` de un servicio de base de datos de modo que un
-restart/alerta pueda dispararse cuando deja de aceptar conexiones.
+error. En perfiles de service/catálogo, añádelo como entrada `watches:` solo-check;
+usa `checks:` explícito cuando una regla escrita a mano deba compartir la misma sonda.
 
 **Comparaciones de respuesta (`expect`).** Cualquier comprobación de protocolo puede afirmar los valores
 que su sonda devuelve — la `version` del servidor o cualquier campo que el protocolo ponga en sus
@@ -1425,9 +1425,9 @@ son agnósticos al protocolo, así que un nuevo protocolo solo se registra a sí
 Cada tipo de arriba es una **comprobación de un solo disparo** (`Check.Run → Result`) y es usable en
 **ambos** lugares:
 
-- los `checks:`/`preflight:` de un servicio (y referenciado desde reglas),
+- entradas `watches:` solo-check de un servicio, o `checks:`/`preflight:` explícitos referenciados desde reglas,
 - un documento de **watch** de host (o entrada global `watches:`, disparando un hook) — ver [configuración](configuration.es.md#host-watches), y
-- el propio bloque `watches:` embebido de un servicio (disparando un hook acotado al servicio, incluidos los tipos `service`/`metric` y el `process_count` acotado por PIDs) — ver [Watches de servicio](configuration.es.md#watches-de-servicio-acotados-a-un-servicio).
+- el propio bloque `watches:` embebido de un servicio (entradas hook/notificación acotadas al servicio, o `then.action` compacto, incluidos los tipos `service`/`metric` y el `process_count` acotado por PIDs) — ver [Watches de servicio](configuration.es.md#watches-de-servicio-acotados-a-un-servicio).
 
 Las comprobaciones de recursos del host (`storage`, `load`, `memory`, `pressure`, `fds`, `pids`,
 `diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`, `entropy`,
@@ -1445,7 +1445,7 @@ Los watches multi-métrica (`net`, `icmp`, `swap`) mantienen la forma de su mapa
 (un hook por métrica) solo como watch, pero su **forma de métrica única** — un
 campo `metric:` explícito que produce un resultado, p. ej. `{type: net, interface: ppp0, metric:
 state, expect: up}` o `{type: icmp, host: 1.1.1.1, metric: state, expect: up}` —
-funciona en los `checks:` de un servicio como cualquier otra comprobación (usado por el daemon de catálogo
+funciona como watch solo-check de service o como entrada explícita `checks:` (usado por el daemon de catálogo
 `pppd` para observar su uplink). Los watches multi-objetivo (`file`, `process`, un
 evento/hook por ruta cambiada o pid coincidente) se mantienen solo como watch.
 Las comprobaciones `service`/`metric`/`process` necesitan contexto por servicio (estado del backend, un

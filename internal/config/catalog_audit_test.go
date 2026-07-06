@@ -73,6 +73,11 @@ func catalogDocByName(t *testing.T, root, category, name string) map[string]any 
 	return found
 }
 
+func catalogWatchCheck(t *testing.T, body map[string]any, name string) map[string]any {
+	t.Helper()
+	return nested(t, body, "watches", name, "check")
+}
+
 func TestCatalogServicesDoNotDeclareVersionsFrom(t *testing.T) {
 	root := repoRoot(t)
 	dir := filepath.Join(root, "catalog", "services")
@@ -1091,7 +1096,7 @@ func TestCatalogNamedDNSCheckIsHostOverrideFriendly(t *testing.T) {
 			t.Fatalf("named variables must include %q so host-specific listeners can be overridden: %v", key, vars)
 		}
 	}
-	check := nested(t, body, "checks", "port")
+	check := catalogWatchCheck(t, body, "port")
 	if got := cfgval.String(check["host"]); got != "${host}" {
 		t.Fatalf("named DNS check host = %q, want ${host}", got)
 	}
@@ -1108,7 +1113,7 @@ func TestCatalogRAIDChecksAlertOnDegradedArrays(t *testing.T) {
 	for _, name := range []string{"mdadm", "mdmonitor"} {
 		t.Run(name, func(t *testing.T) {
 			body := catalogDocByName(t, root, "services", name)
-			degraded := nested(t, body, "checks", "raid", "degraded")
+			degraded := nested(t, catalogWatchCheck(t, body, "raid"), "degraded")
 			if got := cfgval.String(degraded["op"]); got != ">" {
 				t.Fatalf("%s raid degraded op = %q, want >", name, got)
 			}
@@ -1241,7 +1246,7 @@ func TestCatalogPHPFPMVersionedConfigTestUsesConfigFile(t *testing.T) {
 	if got := cfgval.StringList(body["pidfile"]); !slices.Equal(got, wantPidfiles) {
 		t.Fatalf("php-fpm pidfile candidates = %v, want %v", got, wantPidfiles)
 	}
-	pidfileCheck := nested(t, body, "checks", "pidfile")
+	pidfileCheck := catalogWatchCheck(t, body, "pidfile")
 	if !cfgval.Bool(pidfileCheck["optional"]) {
 		t.Fatalf("php-fpm pidfile check optional = %v, want true", pidfileCheck["optional"])
 	}
@@ -1280,7 +1285,7 @@ func TestCatalogNetworkManagerStatusIsAuxiliary(t *testing.T) {
 		t.Fatalf("networkmanager nmcli preflight optional = %v, want true", nmcliPreflight["optional"])
 	}
 
-	status := nested(t, body, "checks", "status")
+	status := catalogWatchCheck(t, body, "status")
 	if !cfgval.Bool(status["optional"]) {
 		t.Fatalf("networkmanager checks.status optional = %v, want true", status["optional"])
 	}
@@ -1337,7 +1342,7 @@ func TestCatalogServiceProcessChecksUseLinkedAppBinaries(t *testing.T) {
 			raw:       "${salt_minion_binary}",
 			resolved:  "/usr/bin/salt-minion",
 			rawPaths: [][]any{
-				{"checks", "process", "exe"},
+				{"watches", "process", "check", "exe"},
 			},
 			resolvedPath: []any{"checks", "process", "exe"},
 		},
@@ -1348,7 +1353,7 @@ func TestCatalogServiceProcessChecksUseLinkedAppBinaries(t *testing.T) {
 			raw:       "${bluetoothd_binary}",
 			resolved:  "/usr/libexec/bluetooth/bluetoothd",
 			rawPaths: [][]any{
-				{"checks", "process", "exe"},
+				{"watches", "process", "check", "exe"},
 			},
 			resolvedPath: []any{"checks", "process", "exe"},
 		},
@@ -1359,7 +1364,7 @@ func TestCatalogServiceProcessChecksUseLinkedAppBinaries(t *testing.T) {
 			raw:       "${winbindd_binary}",
 			rawPaths: [][]any{
 				{"processes", "winbindd", "exe"},
-				{"checks", "winbindd", "exe"},
+				{"watches", "winbindd", "check", "exe"},
 			},
 		},
 	}
@@ -1466,9 +1471,8 @@ func TestCatalogTomcatVersionDiscoveryUsesServiceCandidates(t *testing.T) {
 func TestCatalogVarnishAdminChecksAreOptional(t *testing.T) {
 	root := repoRoot(t)
 	body := catalogDocByName(t, root, "services", "varnishd")
-	checks := nested(t, body, "checks")
 	for _, name := range []string{"port", "varnish"} {
-		check, _ := checks[name].(map[string]any)
+		check := catalogWatchCheck(t, body, name)
 		if !cfgval.Bool(check["optional"]) {
 			t.Fatalf("varnishd check %q optional = %v, want true", name, check["optional"])
 		}
@@ -1479,7 +1483,7 @@ func TestCatalogDaemonProcessChecksAreAuxiliary(t *testing.T) {
 	root := repoRoot(t)
 	for _, service := range []string{"lldpd", "rngd", "rpc-idmapd", "smartd"} {
 		body := catalogDocByName(t, root, "services", service)
-		process := nested(t, body, "checks", "process")
+		process := catalogWatchCheck(t, body, "process")
 		if !cfgval.Bool(process["optional"]) {
 			t.Fatalf("%s process check optional = %v, want true", service, process["optional"])
 		}
@@ -1534,37 +1538,37 @@ func TestCatalogRRDCachedUsesUnixSocketHealth(t *testing.T) {
 	if _, ok := checks["tcp"]; ok {
 		t.Fatalf("rrdcached must not require a TCP listener by default: %v", checks["tcp"])
 	}
-	socket := nested(t, checks, "socket")
+	socket := nested(t, checks, "restart-if-socket-missing")
 	if got := cfgval.String(socket["path"]); got != "/run/rrdcached.sock" {
 		t.Fatalf("rrdcached socket check path = %q, want /run/rrdcached.sock", got)
 	}
 	rule := nested(t, resolved.Tree, "rules", "restart-if-socket-missing", "if", "failed")
-	if got := cfgval.String(rule["check"]); got != "socket" {
-		t.Fatalf("rrdcached remediation check = %q, want socket", got)
+	if got := cfgval.String(rule["check"]); got != "restart-if-socket-missing" {
+		t.Fatalf("rrdcached remediation check = %q, want restart-if-socket-missing", got)
 	}
 }
 
 func TestCatalogPMLFarmUsesResidentHelperProcessHealth(t *testing.T) {
 	root := repoRoot(t)
 	body := catalogDocByName(t, root, "services", "pmlogger_farm")
-	process := nested(t, body, "checks", "process")
+	process := catalogWatchCheck(t, body, "process")
 	exes := cfgval.StringList(process["exe_any"])
 	want := []string{"${pmlogger_farm_pmpause_binary}", "${pmlogger_farm_pmsleep_binary}"}
 	if !slices.Equal(exes, want) {
-		t.Fatalf("pmlogger_farm checks.process.exe_any = %v, want %v", exes, want)
+		t.Fatalf("pmlogger_farm resolved checks.process.exe_any = %v, want %v", exes, want)
 	}
 	if got := cfgval.String(process["exe"]); got != "" {
-		t.Fatalf("pmlogger_farm checks.process.exe = %q, want empty", got)
+		t.Fatalf("pmlogger_farm resolved checks.process.exe = %q, want empty", got)
 	}
 	// The helper process is optionally monitored (long-lived pmpause may show as
 	// pmsleep after PCP upgrades). Since it can legitimately be absent, it cannot be
 	// a required start-verification; that role is the service check (verify: true).
 	if !cfgval.Bool(process["optional"]) {
-		t.Fatalf("pmlogger_farm checks.process must be optional for long-lived pmpause after PCP upgrades")
+		t.Fatalf("pmlogger_farm resolved checks.process must be optional for long-lived pmpause after PCP upgrades")
 	}
-	svc := nested(t, body, "checks", "service")
+	svc := catalogWatchCheck(t, body, "service")
 	if !cfgval.Bool(svc["verify"]) {
-		t.Fatalf("pmlogger_farm start-verification must be on checks.service (verify: true), not the optional helper process")
+		t.Fatalf("pmlogger_farm start-verification must be on resolved checks.service (verify: true), not the optional helper process")
 	}
 }
 
@@ -1615,13 +1619,13 @@ func TestCatalogVirtlogdUsesSocketHealth(t *testing.T) {
 	if _, ok := checks["libvirt"]; ok {
 		t.Fatalf("virtlogd must not run libvirt protocol checks against its log socket: %v", checks["libvirt"])
 	}
-	socket := nested(t, checks, "socket")
+	socket := nested(t, checks, "restart-if-socket-missing")
 	if got := cfgval.String(socket["path"]); got != "/run/libvirt/virtlogd-sock" {
 		t.Fatalf("virtlogd socket check path = %q, want /run/libvirt/virtlogd-sock", got)
 	}
 	rule := nested(t, resolved.Tree, "rules", "restart-if-socket-missing", "if", "failed")
-	if got := cfgval.String(rule["check"]); got != "socket" {
-		t.Fatalf("virtlogd remediation check = %q, want socket", got)
+	if got := cfgval.String(rule["check"]); got != "restart-if-socket-missing" {
+		t.Fatalf("virtlogd remediation check = %q, want restart-if-socket-missing", got)
 	}
 }
 
@@ -1763,6 +1767,11 @@ func TestDatabaseCatalogServicesBlockRestartDuringBackup(t *testing.T) {
 			t.Fatalf("%s links mariadb-backup by default: %v", name, apps)
 		}
 		backup, ok := section(body, "checks")["backup"].(map[string]any)
+		if !ok {
+			if watch, hasWatch := section(body, "watches")["backup"].(map[string]any); hasWatch {
+				backup, ok = watch["check"].(map[string]any)
+			}
+		}
 		if !ok {
 			t.Fatalf("%s %s catalog must define backup process check", name, label)
 		}
@@ -2036,13 +2045,16 @@ func TestRedisCatalogAlertsOnPersistenceFailure(t *testing.T) {
 	root := repoRoot(t)
 	body := catalogDocByName(t, root, "services", "redis")
 
-	if _, ok := nested(t, body, "checks")["persistence"]; !ok {
-		t.Fatal("redis missing persistence check")
+	if _, ok := nested(t, body, "watches")["persistence"]; ok {
+		t.Fatal("redis persistence check should be embedded in the alert watch, not a standalone watch")
 	}
-	// The alert is now a unified watch referencing the shared persistence check.
 	watch := nested(t, body, "watches", "alert-if-persistence-failed")
-	if got := cfgval.String(nested(t, watch, "check")["ref"]); got != "persistence" {
-		t.Fatalf("redis persistence watch check = %v, want ref: persistence", watch["check"])
+	check := nested(t, watch, "check")
+	if got := cfgval.String(check["type"]); got != "redis" {
+		t.Fatalf("redis persistence watch check type = %q, want redis", got)
+	}
+	if got := cfgval.String(nested(t, check, "expect")["rdb_last_bgsave_status"]); got != "ok" {
+		t.Fatalf("redis persistence watch expectation = %q, want ok", got)
 	}
 	then := nested(t, watch, "then")
 	if got := cfgval.String(then["action"]); got != "alert" {

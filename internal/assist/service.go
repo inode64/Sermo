@@ -12,7 +12,8 @@ import (
 // `kind: service` file that `uses:` the catalog service.
 type serviceAssistant struct{}
 
-const serviceConfigCheckInterval = "60m"
+const serviceConfigWatchInterval = "60m"
+const serviceConfigWatchName = "config-files"
 
 func (serviceAssistant) Name() string { return "service" }
 func (serviceAssistant) Title() string {
@@ -195,7 +196,7 @@ func askServiceProps(p *Prompt, env Env, c ServiceCandidate, reviewPort bool) (s
 			unit = c.Name
 		}
 		body["service"] = unit
-		body["checks"] = map[string]any{"service": map[string]any{"type": "service", "expect": "active"}}
+		addCheckOnlyWatch(body, "service", map[string]any{"type": "service", "expect": "active"})
 	} else {
 		body["uses"] = c.Name
 	}
@@ -205,8 +206,8 @@ func askServiceProps(p *Prompt, env Env, c ServiceCandidate, reviewPort bool) (s
 			mergeServiceVariables(body, map[string]any{"port": n})
 		}
 	}
-	if len(c.ConfigPaths) > 0 && p.Confirm(configCheckQuestion(c), true) {
-		addConfigCheck(body, c.ConfigPaths)
+	if len(c.ConfigPaths) > 0 && p.Confirm(configWatchQuestion(c), true) {
+		addConfigWatch(body, c.ConfigPaths)
 	}
 	if c.Generic {
 		if pidfile := askServicePidfile(p, c); pidfile != "" {
@@ -232,26 +233,35 @@ func mergeServiceVariables(body map[string]any, vars map[string]any) {
 	}
 }
 
-func configCheckQuestion(c ServiceCandidate) string {
+func configWatchQuestion(c ServiceCandidate) string {
 	label := "detected configuration file"
 	if len(c.ConfigPaths) != 1 {
 		label = fmt.Sprintf("%d detected configuration files", len(c.ConfigPaths))
 	}
-	return fmt.Sprintf("Add configuration check for %s (%s, every %s)?", c.Name, label, serviceConfigCheckInterval)
+	return fmt.Sprintf("Add configuration watch for %s (%s, every %s)?", c.Name, label, serviceConfigWatchInterval)
 }
 
-func addConfigCheck(body map[string]any, paths []string) {
-	checks, _ := body["checks"].(map[string]any)
-	if checks == nil {
-		checks = map[string]any{}
-		body["checks"] = checks
-	}
-	checks["config"] = map[string]any{
+func addConfigWatch(body map[string]any, paths []string) {
+	addCheckOnlyWatch(body, serviceConfigWatchName, map[string]any{
 		"type":      "config",
 		"path":      stringsToAny(paths),
 		"on_change": true,
-		"interval":  serviceConfigCheckInterval,
+	}, map[string]any{"interval": serviceConfigWatchInterval})
+}
+
+func addCheckOnlyWatch(body map[string]any, name string, check map[string]any, fields ...map[string]any) {
+	watches, _ := body["watches"].(map[string]any)
+	if watches == nil {
+		watches = map[string]any{}
+		body["watches"] = watches
 	}
+	entry := map[string]any{"check": check}
+	for _, fieldSet := range fields {
+		for key, value := range fieldSet {
+			entry[key] = value
+		}
+	}
+	watches[name] = entry
 }
 
 func stringsToAny(values []string) []any {

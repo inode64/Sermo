@@ -8,11 +8,13 @@ processes:
   main:
     exe: ${ovs_vswitchd_binary}
     user: root
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   openvswitch:
-    type: openvswitch
-    socket: /run/openvswitch/db.sock
-    timeout: 3s
+    check:
+      type: openvswitch
+      socket: /run/openvswitch/db.sock
+      timeout: 3s

@@ -91,7 +91,7 @@ func TestCatalogServiceAndConfiguredServiceShareName(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": kindDerivationGlobal,
 		// catalog service template named "redis"
-		"catalog/services/redis.yml": "name: redis\nvariables:\n  port: 6379\nchecks:\n  tcp:\n    type: tcp\n    host: 127.0.0.1\n    port: \"${port}\"\n",
+		"catalog/services/redis.yml": "name: redis\nvariables:\n  port: 6379\nwatches:\n  tcp:\n    check:\n      type: tcp\n      host: 127.0.0.1\n      port: \"${port}\"\n",
 		// configured service ALSO named "redis" that uses the template
 		"services/redis.yml": "name: redis\nuses: redis\n",
 	})
@@ -110,7 +110,8 @@ func TestCatalogServiceAndConfiguredServiceShareName(t *testing.T) {
 			t.Fatalf("unexpected duplicate issue: %v", issue)
 		}
 	}
-	// uses: must resolve against the catalog template (inherits its checks).
+	// uses: must resolve against the catalog template (inheriting the checks
+	// generated from its check-only watches).
 	resolved, errs := cfg.Resolve("redis")
 	if len(errs) != 0 {
 		t.Fatalf("resolve configured service: %v", errs)

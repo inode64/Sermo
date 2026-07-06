@@ -20,37 +20,38 @@ preflight:
 
 config_files: [/etc/postfix/main.cf, /etc/postfix/master.cf]
 
-checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, host: "${host}", port: "${port}", timeout: 3s }
-  smtp:
-    type: smtp
-    host: "${host}"
-    port: "${port}"
-    timeout: 3s
-    verify: true
-  cert:
-    type: cert
-    optional: true
-    host: "${host}"
-    port: "${tls_port}"
-    cert_verify: false
-    expires_in_days: 21
-    timeout: 5s
-
 reload_on_change:
   paths: [/etc/postfix/main.cf, /etc/postfix/master.cf]
 watches:
+  service:
+    check: { type: service, expect: active }
+  cert:
+    check:
+      type: cert
+      optional: true
+      host: "${host}"
+      port: "${tls_port}"
+      cert_verify: false
+      expires_in_days: 21
+      timeout: 5s
+
   restart-if-smtp-failed:
     check:
-      ref: smtp
+      type: smtp
+      host: "${host}"
+      port: "${port}"
+      timeout: 3s
+      verify: true
     for:
       cycles: 3
     then:
       action: restart
   restart-if-port-failed:
     check:
-      ref: port
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 3s
     for:
       cycles: 3
     then:

@@ -11,10 +11,12 @@ service:
     - avahi-daemon
 apps:
   - avahi
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   avahi:
-    type: avahi
-    timeout: 3s
+    check:
+      type: avahi
+      timeout: 3s

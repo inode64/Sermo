@@ -36,11 +36,13 @@ processes:
   main:
     exe: ${dhcpd_binary}
     user: ${user}
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   port:
-    type: dhcp
-    optional: true
-    port: ${port}
+    check:
+      type: dhcp
+      optional: true
+      port: ${port}

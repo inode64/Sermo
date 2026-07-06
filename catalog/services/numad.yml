@@ -4,19 +4,20 @@ category: hardware
 service: numad
 apps:
   - numad
-checks:
-  service:
-    type: service
-    expect: active
-  process:
-    type: process
-    exe: ${numad_binary}
-    user: root
-    state: running
-    requires:
-      - service
-    verify: true
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  process:
+    check:
+      type: process
+      exe: ${numad_binary}
+      user: root
+      state: running
+      requires:
+        - service
+      verify: true
   alert-if-memory-high:
     check:
       type: metric

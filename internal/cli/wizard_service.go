@@ -30,7 +30,8 @@ const systemdServiceUnitExt = ".service"
 // listInstalledCatalogServices returns active service targets for the wizard: catalog
 // catalog services whose init unit exists, plus active backend units not backed by the
 // catalog. Catalog candidates keep their resolved unit/status/default port and
-// config-file hints; generic candidates write self-contained service checks.
+// config-file hints; generic candidates write self-contained check-only service
+// watches.
 func listInstalledCatalogServices(ctx context.Context, cfg *config.Config, backend servicemgr.Backend, runner execx.Runner, timeout time.Duration) ([]assist.ServiceCandidate, error) {
 	if runner == nil {
 		runner = execx.CommandRunner{}

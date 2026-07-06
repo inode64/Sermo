@@ -13,18 +13,20 @@ processes:
   main:
     exe: ${guacd_binary}
     user: ${user}
-checks:
-  service:
-    type: service
-    expect: active
-  port:
-    type: tcp
-    port: ${port}
-  guacd:
-    type: guacd
-    port: ${port}
-    timeout: 3s
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  port:
+    check:
+      type: tcp
+      port: ${port}
+  guacd:
+    check:
+      type: guacd
+      port: ${port}
+      timeout: 3s
   restart-if-worker-thread-hot:
     check:
       type: metric

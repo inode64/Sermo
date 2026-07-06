@@ -8,7 +8,8 @@ service:
 apps:
   - lvm
 processes: { }
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active

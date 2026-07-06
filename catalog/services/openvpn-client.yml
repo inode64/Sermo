@@ -14,11 +14,13 @@ variables:
     default: 1194
 config_files:
   - ${config}
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   port:
-    type: openvpn
-    optional: true
-    port: ${port}
+    check:
+      type: openvpn
+      optional: true
+      port: ${port}

@@ -20,20 +20,21 @@ processes:
   main:
     exe: ${smartd_binary}
     user: root
-checks:
-  service:
-    type: service
-    expect: active
-    verify: true
-  process:
-    type: process
-    exe: ${smartd_binary}
-    user: root
-    state: running
-    optional: true
-    requires:
-      - service
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: ${smartd_binary}
+      user: root
+      state: running
+      optional: true
+      requires:
+        - service
   alert-if-memory-high:
     check:
       type: metric

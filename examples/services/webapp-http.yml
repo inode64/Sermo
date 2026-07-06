@@ -6,17 +6,13 @@ service: my-webapp
 variables:
   health_url: "http://127.0.0.1:8080/health"
 
-checks:
-  http:
-    type: http
-    url: "${health_url}"
-    expect_status: 200
-    timeout: 5s
-
 watches:
   restart-if-http-failed:
     check:
-      ref: http
+      type: http
+      url: "${health_url}"
+      expect_status: 200
+      timeout: 5s
     for:
       cycles: 3
     then:

@@ -13,20 +13,21 @@ processes:
   main:
     exe: ${lldpd_binary}
     user: ${user}
-checks:
-  service:
-    type: service
-    expect: active
-    verify: true
-  process:
-    type: process
-    exe: ${lldpd_binary}
-    user: ${user}
-    state: running
-    optional: true
-    requires:
-      - service
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: ${lldpd_binary}
+      user: ${user}
+      state: running
+      optional: true
+      requires:
+        - service
   alert-if-memory-high:
     check:
       type: metric

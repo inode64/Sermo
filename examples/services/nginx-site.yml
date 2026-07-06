@@ -14,18 +14,18 @@ variables:
   # The TLS certificate this vhost serves on disk. Adjust to your site.
   cert_file: /etc/letsencrypt/live/example.com/fullchain.pem
 
-checks:
+watches:
   # Certificate expiry read from the cert FILE (complements the catalog service's
   # live-endpoint cert check). Unlike the endpoint form, a missing/unreadable/
   # unparseable file IS an alert here — which is exactly why the path must be
   # correct and so lives on the instance, not the base catalog service.
   tls-cert-file:
-    type: cert
-    path: "${cert_file}"
-    expires_in_days: 21
-    on_issuer_change: true  # alert on a CA change / re-issue between cycles
+    check:
+      type: cert
+      path: "${cert_file}"
+      expires_in_days: 21
+      on_issuer_change: true  # alert on a CA change / re-issue between cycles
 
-watches:
   restart-if-memory-high:
     check:
       type: metric

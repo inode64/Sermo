@@ -21,14 +21,17 @@ processes:
   main:
     exe: ${upsd_binary}
     user: ${user}
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   port:
-    type: tcp
-    port: ${port}
+    check:
+      type: tcp
+      port: ${port}
   nut:
-    type: nut
-    port: ${port}
-    timeout: 3s
+    check:
+      type: nut
+      port: ${port}
+      timeout: 3s

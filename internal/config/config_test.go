@@ -4557,15 +4557,16 @@ rules:
 name: svc
 variables:
   binary: /bin/true
-checks:
-  config:
-    type: command
-    command: ["${binary}"]
-    analyze:
-      use: [common]
-      silence: [dep]
-      rules:
-        - { id: local, match: "(?i)ok", severity: ok }
+watches:
+  config-files:
+    check:
+      type: command
+      command: ["${binary}"]
+      analyze:
+        use: [common]
+        silence: [dep]
+        rules:
+          - { id: local, match: "(?i)ok", severity: ok }
 `,
 		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
 	})
@@ -4578,7 +4579,7 @@ checks:
 		t.Fatalf("Resolve() errors = %v", errs)
 	}
 	checks := resolved.Tree["checks"].(map[string]any)
-	analyze := checks["config"].(map[string]any)["analyze"].(map[string]any)
+	analyze := checks["config-files"].(map[string]any)["analyze"].(map[string]any)
 	rules := analyze["rules"].([]any)
 	if len(rules) != 2 {
 		t.Fatalf("want 2 resolved rules (note + local), got %d: %v", len(rules), rules)
@@ -4602,7 +4603,7 @@ func TestExpandAnalyzeUnknownSetAndBadSilence(t *testing.T) {
 		global := writeConfig(t, map[string]string{
 			"sermo.yml":                   baseGlobal,
 			"catalog/patterns/common.yml": "name: common\nrules:\n  - { id: dep, match: x, severity: warning }\n",
-			"catalog/services/svc.yml":    "name: svc\nbinary: /bin/true\nchecks:\n  config:\n    type: command\n    command: [\"${binary}\"]\n    analyze:\n" + analyze,
+			"catalog/services/svc.yml":    "name: svc\nvariables:\n  binary: /bin/true\nwatches:\n  config-files:\n    check:\n      type: command\n      command: [\"${binary}\"]\n      analyze:\n" + analyze,
 			"services/svc-main.yml":       "name: svc-main\nuses: svc\n",
 		})
 		cfg, err := Load(global)
@@ -4612,10 +4613,10 @@ func TestExpandAnalyzeUnknownSetAndBadSilence(t *testing.T) {
 		_, errs := cfg.Resolve("svc-main")
 		return errs
 	}
-	if errs := mk("      use: [nope]\n"); !hasSub(errs, "not a patterns set") {
+	if errs := mk("        use: [nope]\n"); !hasSub(errs, "not a patterns set") {
 		t.Errorf("unknown set should error, got %v", errs)
 	}
-	if errs := mk("      use: [common]\n      silence: [ghost]\n"); !hasSub(errs, "not present in the inherited sets") {
+	if errs := mk("        use: [common]\n        silence: [ghost]\n"); !hasSub(errs, "not present in the inherited sets") {
 		t.Errorf("bad silence id should error, got %v", errs)
 	}
 }

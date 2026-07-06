@@ -49,32 +49,6 @@ processes:
       file: /etc/conf.d/samba
       key: daemon_list
       contains: winbindd
-checks:
-  service:
-    type: service
-    expect: active
-  port:
-    type: tcp
-    port: ${port}
-  smb:
-    type: smb
-    port: ${port}
-    timeout: 3s
-  netbios:
-    type: tcp
-    port: ${netbios_port}
-    optional: true
-  winbindd:
-    type: process
-    exe: ${winbindd_binary}
-    user: ${user}
-    state: running
-    requires:
-      - service
-    enable_if:
-      file: /etc/conf.d/samba
-      key: daemon_list
-      contains: winbindd
 policy:
   cooldown: 15m
   max_actions: 2
@@ -83,6 +57,36 @@ policy:
     initial: 15m
     max: 1h
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  port:
+    check:
+      type: tcp
+      port: ${port}
+  smb:
+    check:
+      type: smb
+      port: ${port}
+      timeout: 3s
+  netbios:
+    check:
+      type: tcp
+      port: ${netbios_port}
+      optional: true
+  winbindd:
+    enable_if:
+      file: /etc/conf.d/samba
+      key: daemon_list
+      contains: winbindd
+    check:
+      type: process
+      exe: ${winbindd_binary}
+      user: ${user}
+      state: running
+      requires:
+        - service
   restart-if-worker-thread-hot:
     check:
       type: metric
