@@ -2538,8 +2538,8 @@ func (b *WebBackend) emitLockReleaseEvent(service, name, kind, status, message s
 }
 
 func isServiceOperationAction(action string) bool {
-	switch action {
-	case "start", "stop", "restart", "reload", "resume":
+	switch rules.ActionType(action) {
+	case rules.ActionStart, rules.ActionStop, rules.ActionRestart, rules.ActionReload, rules.ActionResume:
 		return true
 	default:
 		return false
@@ -3175,7 +3175,7 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.
 		}
 		return web.ActionResult{OK: false, Message: msg}
 	}
-	if action == "reload" && !e.canReload {
+	if action == string(rules.ActionReload) && !e.canReload {
 		msg := "service " + name + " does not support reload"
 		if b.emit != nil {
 			b.emit(Event{Service: name, Kind: eventKindError, Action: action, Message: msg})
@@ -3184,7 +3184,7 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.
 	}
 
 	var r operation.Result
-	if opts.NoCascade || action == "reload" || action == "resume" || len(e.alsoApply) == 0 {
+	if opts.NoCascade || action == string(rules.ActionReload) || action == string(rules.ActionResume) || len(e.alsoApply) == 0 {
 		r = b.operationResultWithMonitor(ctx, name, action)
 	} else {
 		lookup := func(svc string) []string {
