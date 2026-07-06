@@ -59,22 +59,32 @@ func streamSection(label, text string) string {
 
 func boundTail(s string) string {
 	truncated := false
-	lines := strings.Split(s, "\n")
-	if len(lines) > boundedMaxLines {
-		lines = lines[len(lines)-boundedMaxLines:]
-		truncated = true
-	}
-	s = strings.Join(lines, "\n")
-	if len(s) > boundedMaxBytes {
-		s = s[len(s)-boundedMaxBytes:]
-		// Drop a partial first line left by the byte cut.
-		if i := strings.IndexByte(s, '\n'); i >= 0 {
-			s = s[i+1:]
-		}
-		truncated = true
-	}
+	s, cut := tailLines(s, boundedMaxLines)
+	truncated = truncated || cut
+	s, cut = tailBytes(s, boundedMaxBytes)
+	truncated = truncated || cut
 	if truncated {
 		return "… (truncated)\n" + s
 	}
 	return s
+}
+
+func tailLines(s string, limit int) (string, bool) {
+	lines := strings.Split(s, "\n")
+	if len(lines) > limit {
+		return strings.Join(lines[len(lines)-limit:], "\n"), true
+	}
+	return s, false
+}
+
+func tailBytes(s string, limit int) (string, bool) {
+	if len(s) <= limit {
+		return s, false
+	}
+	s = s[len(s)-limit:]
+	// Drop a partial first line left by the byte cut.
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[i+1:]
+	}
+	return s, true
 }
