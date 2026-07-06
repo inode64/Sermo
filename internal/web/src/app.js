@@ -5230,10 +5230,11 @@ function drawMetricChart(points, unit, win, label) {
     });
   let maxV = 0;
   buckets.forEach((b) => { if (b.n) maxV = Math.max(maxV, b.max); });
-  if (maxV <= 0) return '<span class="muted">No data yet for this window.</span>';
-  const x = (i) => pad + (i + 0.5) * ((W - 2 * pad) / cols);
-  const y = (v) => H - pad - (v / maxV) * (H - 2 * pad);
   const pts = buckets.map((b, i) => ({ i, b })).filter((o) => o.b.n > 0);
+  if (!pts.length) return '<span class="muted">No data yet for this window.</span>';
+  const scaleMax = maxV > 0 ? maxV : 1;
+  const x = (i) => pad + (i + 0.5) * ((W - 2 * pad) / cols);
+  const y = (v) => H - pad - (v / scaleMax) * (H - 2 * pad);
   const upper = pts.map((o) => `${x(o.i).toFixed(1)},${y(o.b.max).toFixed(1)}`);
   const lower = pts.slice().reverse().map((o) => `${x(o.i).toFixed(1)},${y(o.b.min).toFixed(1)}`);
   const band = pts.length > 1 ? `<polygon points="${upper.concat(lower).join(" ")}" fill="#1f6feb33"></polygon>` : "";
