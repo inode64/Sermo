@@ -12,6 +12,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/dockerctl"
 	"sermo/internal/process"
+	"sermo/internal/servicemgr"
 	"sermo/internal/virt"
 )
 
@@ -289,10 +290,10 @@ func validateControl(tree map[string]any, add addFunc) {
 	}
 	typ := cfgval.String(control["type"])
 	switch typ {
-	case "libvirt":
+	case string(servicemgr.BackendLibvirt):
 		validateControlKeys(control, set("type", "uri", "domain", "uuid", "socket", "host", "port"), "type, uri, domain, uuid, socket, host, port", add)
 		validateLibvirtControl(control, add)
-	case "docker":
+	case string(servicemgr.BackendDocker):
 		validateControlKeys(control, set("type", "socket", "host", "port", "tls", "container"), "type, socket, host, port, tls, container", add)
 		validateDockerControl(control, add)
 	default:
