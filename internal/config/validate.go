@@ -774,13 +774,13 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 	}
 	allowSIGKILL := false
 	if umount != nil {
-		allowedUmount := set("term_timeout", "kill_timeout", "allow_sigkill", "allow_lazy")
+		allowedUmount := set(keyTermTimeout, keyKillTimeout, "allow_sigkill", "allow_lazy")
 		for _, key := range slices.Sorted(maps.Keys(umount)) {
 			if _, ok := allowedUmount[key]; !ok {
 				add("mount.umount key %q is not one of term_timeout, kill_timeout, allow_sigkill, allow_lazy", key)
 			}
 		}
-		for _, field := range []string{"term_timeout", "kill_timeout"} {
+		for _, field := range []string{keyTermTimeout, keyKillTimeout} {
 			if v, present := umount[field]; present && !isPositiveDuration(cfgval.String(v)) {
 				add("mount.umount.%s %q must be a valid positive duration", field, cfgval.String(v))
 			}
@@ -799,7 +799,7 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 	}
 
 	if sp, ok := mount[sectionStopPolicy].(map[string]any); ok {
-		force, _ := sp["force_kill"].(bool)
+		force, _ := sp[keyForceKill].(bool)
 		if force {
 			allowSIGKILL = true
 		}
@@ -811,7 +811,7 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 	})
 	if allowSIGKILL {
 		sp, _ := mount[sectionStopPolicy].(map[string]any)
-		_, hasKoi := sp["kill_only_if"].(map[string]any)
+		_, hasKoi := sp[keyKillOnlyIf].(map[string]any)
 		if !hasKoi {
 			add("mount.umount.allow_sigkill=true requires mount.stop_policy.kill_only_if")
 		}
