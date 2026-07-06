@@ -124,6 +124,7 @@ func TestIndexShellAnchors(t *testing.T) {
 	ids := map[string]bool{}
 	headers := map[string]bool{}
 	sectionLinks := map[string]string{}
+	sectionLinkLabels := map[string]string{}
 	dialogs := 0
 	walk(doc, func(n *html.Node) {
 		if n.Type != html.ElementNode {
@@ -148,6 +149,13 @@ func TestIndexShellAnchors(t *testing.T) {
 			href, hasHref := attr(n, "href")
 			if hasTarget && hasHref {
 				sectionLinks[target] = href
+				var sb strings.Builder
+				walk(n, func(c *html.Node) {
+					if c.Type == html.TextNode {
+						sb.WriteString(c.Data)
+					}
+				})
+				sectionLinkLabels[target] = strings.TrimSpace(sb.String())
 			}
 		}
 	})
@@ -176,6 +184,9 @@ func TestIndexShellAnchors(t *testing.T) {
 		if sectionLinks[id] != "#"+id {
 			t.Errorf("section nav link %q href = %q, want %q", id, sectionLinks[id], "#"+id)
 		}
+	}
+	if sectionLinkLabels["mounts-section"] != "Mount units" {
+		t.Errorf("mount section nav label = %q, want Mount units", sectionLinkLabels["mounts-section"])
 	}
 
 	// action-confirm, panic-confirm and simple-confirm modals.

@@ -555,7 +555,7 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, status, chec
 	if e == nil || e.disabled {
 		return false, nil
 	}
-	active := strings.EqualFold(status, "active")
+	active := strings.EqualFold(status, string(servicemgr.StatusActive))
 	if !active || !monitored || !observed {
 		if b.observability != nil {
 			b.observability.Clear(name)
@@ -1146,7 +1146,7 @@ func watchConditionFields(check map[string]any) []string {
 	switch checkType {
 	case "storage":
 		return checks.StoragePredFields
-	case "memory":
+	case metrics.MetricMemory:
 		return checks.MemoryPredFields
 	case "pressure":
 		return checks.PressurePredFields
@@ -1165,7 +1165,7 @@ func watchConditionFields(check map[string]any) []string {
 	case "oom":
 		return []string{"delta"}
 	case "process":
-		return []string{"cpu", "memory", "io"}
+		return []string{metrics.MetricCPU, metrics.MetricMemory, metrics.MetricIO}
 	case "diskio":
 		return checks.DiskIOPredFields
 	case "sensors":
@@ -1397,11 +1397,11 @@ func (b *WebBackend) processWatchView(w *webWatch) (*web.WatchMeter, []web.Watch
 	if len(samples) > 0 {
 		readings = append(readings,
 			web.WatchReading{Field: "pids", Label: "PIDs", Value: processPIDList(samples)},
-			web.WatchReading{Field: "rss", Label: "RSS total", Value: fmt.Sprintf("%d bytes", rssTotal)},
+			web.WatchReading{Field: "rss", Label: "RSS total", Value: fmt.Sprintf("%d %s", rssTotal, metricUnitBytes)},
 			web.WatchReading{Field: "cpu_ticks", Label: "CPU ticks", Value: fmt.Sprintf("%d", cpuTicksTotal)},
 		)
 		if ioKnown {
-			readings = append(readings, web.WatchReading{Field: "io", Label: "IO total", Value: fmt.Sprintf("%d bytes", ioTotal)})
+			readings = append(readings, web.WatchReading{Field: metrics.MetricIO, Label: "IO total", Value: fmt.Sprintf("%d %s", ioTotal, metricUnitBytes)})
 		}
 	}
 
@@ -1931,7 +1931,7 @@ func matchingDefaultRoutes(routes []checks.DefaultRoute, iface string) []checks.
 // snapshot (shared with the overview tiles, no extra probe). nil when the host
 // has no swap or no collector is wired.
 func swapWatchInfo(system metrics.Snapshot) *web.SwapWatchInfo {
-	r := system["total_swap"]
+	r := system[metrics.MetricTotalSwap]
 	used, total, free, ok := byteUsage(r)
 	if !ok {
 		return nil
@@ -1961,21 +1961,21 @@ func byteUsage(r metrics.Reading) (used, total, free uint64, ok bool) {
 // no extra probe). nil for any other type, or when the needed data is unavailable.
 func watchMeter(checkType string, system metrics.Snapshot) *web.WatchMeter {
 	switch checkType {
-	case "memory":
-		r := system["total_memory"]
+	case metrics.MetricMemory:
+		r := system[metrics.MetricTotalMemory]
 		used, total, free, ok := byteUsage(r)
 		if !ok {
 			return nil
 		}
 		return &web.WatchMeter{
-			Kind:       "memory",
+			Kind:       metrics.MetricMemory,
 			UsedPct:    r.Percent,
 			TotalBytes: total,
 			UsedBytes:  used,
 			FreeBytes:  free,
 		}
 	case "load":
-		r, ok := system["load1"]
+		r, ok := system[metrics.MetricLoad1]
 		if !ok || !r.HasAbsolute {
 			return nil
 		}
@@ -2411,7 +2411,14 @@ func (b *WebBackend) HostMetrics(ctx context.Context) []web.HostMetric {
 	}
 
 	out := make([]web.HostMetric, 0, len(snap))
-	order := []string{"load1", "load5", "load15", "total_cpu", "total_memory", "total_swap"} // nice display order
+	order := []string{
+		metrics.MetricLoad1,
+		metrics.MetricLoad5,
+		metrics.MetricLoad15,
+		metrics.MetricTotalCPU,
+		metrics.MetricTotalMemory,
+		metrics.MetricTotalSwap,
+	} // nice display order
 	seen := map[string]bool{}
 	for _, k := range order {
 		if r, ok := snap[k]; ok {
@@ -2443,9 +2450,9 @@ func hostMetric(name string, r metrics.Reading) web.HostMetric {
 		m.Total = r.Total
 	}
 	switch name {
-	case "total_memory", "total_swap":
-		m.Unit = "bytes"
-	case "load1":
+	case metrics.MetricTotalMemory, metrics.MetricTotalSwap:
+		m.Unit = metricUnitBytes
+	case metrics.MetricLoad1:
 		// Only derive the per-CPU percentage from a real reading; guarding on
 		// HasAbsolute (as watchMeter does) avoids fabricating Total/Percent when
 		// load1 has no absolute value.
@@ -3025,7 +3032,7 @@ func (b *WebBackend) Metrics(_ context.Context, name, check, metric string, sinc
 		if !measuredCheckTypes[typ] {
 			return web.MetricSeries{}, false
 		}
-		out := web.MetricSeries{Check: check, Since: since.String(), Unit: "ms"}
+		out := web.MetricSeries{Check: check, Since: since.String(), Unit: metricUnitMilliseconds}
 		if b.measure == nil {
 			return out, true
 		}

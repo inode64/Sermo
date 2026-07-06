@@ -146,9 +146,9 @@ func (s *ServiceMetricSampler) Series(name string, cur web.ServiceRuntime, since
 	return web.ServiceRuntimeMetrics{
 		Since:   since.String(),
 		Current: cur,
-		CPU:     serviceMetricSeries("cpu", "%", since, samples, func(p serviceMetricSample) (float64, bool) { return p.current.CPU, p.current.HasCPU }),
-		Memory:  serviceMetricSeries("memory", "bytes", since, samples, func(p serviceMetricSample) (float64, bool) { return float64(p.current.RSS), p.current.Count > 0 }),
-		IO:      serviceMetricSeries("io", "B/s", since, samples, func(p serviceMetricSample) (float64, bool) { return p.current.IORate, p.current.IOReady }),
+		CPU:     serviceMetricSeries(metrics.MetricCPU, metricUnitPercent, since, samples, func(p serviceMetricSample) (float64, bool) { return p.current.CPU, p.current.HasCPU }),
+		Memory:  serviceMetricSeries(metrics.MetricMemory, metricUnitBytes, since, samples, func(p serviceMetricSample) (float64, bool) { return float64(p.current.RSS), p.current.Count > 0 }),
+		IO:      serviceMetricSeries(metrics.MetricIO, metricUnitBytesPerSecond, since, samples, func(p serviceMetricSample) (float64, bool) { return p.current.IORate, p.current.IOReady }),
 	}
 }
 
@@ -157,13 +157,13 @@ func (s *ServiceMetricSampler) recordPersistent(name string, cur web.ServiceRunt
 		return
 	}
 	if cur.HasCPU {
-		_ = s.store.RecordServiceMetric(name, "cpu", cur.CPU, at)
+		_ = s.store.RecordServiceMetric(name, metrics.MetricCPU, cur.CPU, at)
 	}
 	if cur.Count > 0 {
-		_ = s.store.RecordServiceMetric(name, "memory", float64(cur.RSS), at)
+		_ = s.store.RecordServiceMetric(name, metrics.MetricMemory, float64(cur.RSS), at)
 	}
 	if cur.IOReady {
-		_ = s.store.RecordServiceMetric(name, "io", cur.IORate, at)
+		_ = s.store.RecordServiceMetric(name, metrics.MetricIO, cur.IORate, at)
 	}
 }
 
@@ -182,7 +182,7 @@ func (s *ServiceMetricSampler) persistentSeries(name string, cur web.ServiceRunt
 			return web.MetricSeries{}, false
 		}
 		return web.MetricSeries{
-			Check:   "runtime",
+			Check:   runtimeMetricCheck,
 			Metric:  metric,
 			Since:   since.String(),
 			Unit:    unit,
@@ -190,15 +190,15 @@ func (s *ServiceMetricSampler) persistentSeries(name string, cur web.ServiceRunt
 			Points:  measurementPoints(points),
 		}, true
 	}
-	cpu, ok := series("cpu", "%")
+	cpu, ok := series(metrics.MetricCPU, metricUnitPercent)
 	if !ok {
 		return web.ServiceRuntimeMetrics{}, false
 	}
-	memory, ok := series("memory", "bytes")
+	memory, ok := series(metrics.MetricMemory, metricUnitBytes)
 	if !ok {
 		return web.ServiceRuntimeMetrics{}, false
 	}
-	io, ok := series("io", "B/s")
+	io, ok := series(metrics.MetricIO, metricUnitBytesPerSecond)
 	if !ok {
 		return web.ServiceRuntimeMetrics{}, false
 	}
@@ -269,7 +269,7 @@ func serviceMetricSeries(metric, unit string, since time.Duration, samples []ser
 		})
 	}
 	return web.MetricSeries{
-		Check:   "runtime",
+		Check:   runtimeMetricCheck,
 		Metric:  metric,
 		Since:   since.String(),
 		Unit:    unit,

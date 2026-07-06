@@ -8,27 +8,27 @@ import (
 // Service metric names: the per-service Snapshot keys the collector emits and
 // that checks/rules reference. Centralized so the vocabulary cannot drift.
 const (
-	metricMemory       = "memory"
-	metricSwap         = "swap"
-	metricProcessCount = "process_count"
-	metricFds          = "fds"
-	metricThreads      = "threads"
-	metricCPU          = "cpu"
-	metricCPUThread    = "cpu_thread"
-	metricIORead       = "io_read"
-	metricIOWrite      = "io_write"
-	metricIO           = "io"
+	MetricMemory       = "memory"
+	MetricSwap         = "swap"
+	MetricProcessCount = "process_count"
+	MetricFds          = "fds"
+	MetricThreads      = "threads"
+	MetricCPU          = "cpu"
+	MetricCPUThread    = "cpu_thread"
+	MetricIORead       = "io_read"
+	MetricIOWrite      = "io_write"
+	MetricIO           = "io"
 )
 
 // System metric names: the host-scope Snapshot keys (whole-machine totals and
 // load averages).
 const (
-	metricTotalCPU    = "total_cpu"
-	metricTotalMemory = "total_memory"
-	metricTotalSwap   = "total_swap"
-	metricLoad1       = "load1"
-	metricLoad5       = "load5"
-	metricLoad15      = "load15"
+	MetricTotalCPU    = "total_cpu"
+	MetricTotalMemory = "total_memory"
+	MetricTotalSwap   = "total_swap"
+	MetricLoad1       = "load1"
+	MetricLoad5       = "load5"
+	MetricLoad15      = "load15"
 )
 
 // Reader abstracts the /proc and /sys reads the collector needs, so rate and
@@ -176,7 +176,7 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 		mem.Percent = float64(rss) / float64(totals.memoryTotal) * 100
 		mem.HasPercent = true
 	}
-	snap[metricMemory] = mem
+	snap[MetricMemory] = mem
 
 	// Per-service swap: total swapped-out memory of the process tree (bytes), and
 	// — when a swap device exists — its share of total swap.
@@ -186,14 +186,14 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 			sw.Percent = float64(swap) / float64(totals.swapTotal) * 100
 			sw.HasPercent = true
 		}
-		snap[metricSwap] = sw
+		snap[MetricSwap] = sw
 	}
 
 	// process_count is the number of processes actually found alive this sample,
 	// not the count of PIDs handed in (some may have exited since discovery).
-	snap[metricProcessCount] = Reading{Absolute: float64(present), HasAbsolute: true, Ready: measured(present > 0)}
-	snap[metricFds] = Reading{Absolute: float64(fds), HasAbsolute: true, Ready: measured(fdsOK > 0)}
-	snap[metricThreads] = Reading{Absolute: float64(threads), HasAbsolute: true, Ready: measured(threadsOK > 0)}
+	snap[MetricProcessCount] = Reading{Absolute: float64(present), HasAbsolute: true, Ready: measured(present > 0)}
+	snap[MetricFds] = Reading{Absolute: float64(fds), HasAbsolute: true, Ready: measured(fdsOK > 0)}
+	snap[MetricThreads] = Reading{Absolute: float64(threads), HasAbsolute: true, Ready: measured(threadsOK > 0)}
 
 	cur := cpuSample{ticks: ticks, at: now}
 	cpu := Reading{HasPercent: true}
@@ -201,24 +201,24 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 		cpu = cpuRate(prev, cur, c.Reader.ClockTicks(), c.Reader.NumCPU())
 	}
 	c.prevService[service] = cur
-	snap[metricCPU] = cpu
+	snap[MetricCPU] = cpu
 
 	// cpu_thread: the highest single-process CPU rate in the tree, normalized to a
 	// single CPU thread (100% = one process saturating one core). Unlike `cpu`
 	// (whole-machine), this catches a single-threaded process pegging its one
 	// thread, which the machine-wide percentage would dilute across all cores.
 	curProcs := procCPUSample{ticks: curTicks, at: now}
-	snap[metricCPUThread] = maxProcCPURate(c.prevServiceProcs[service], curProcs, c.Reader.ClockTicks())
+	snap[MetricCPUThread] = maxProcCPURate(c.prevServiceProcs[service], curProcs, c.Reader.ClockTicks())
 	c.prevServiceProcs[service] = curProcs
 
 	curIO := ioSample{read: ioRead, write: ioWrite, at: now}
 	if prev, ok := c.prevServiceIO[service]; ok {
-		snap[metricIORead] = ioRate(prev.read, curIO.read, prev.at, curIO.at)
-		snap[metricIOWrite] = ioRate(prev.write, curIO.write, prev.at, curIO.at)
-		snap[metricIO] = ioRate(prev.read+prev.write, curIO.read+curIO.write, prev.at, curIO.at)
+		snap[MetricIORead] = ioRate(prev.read, curIO.read, prev.at, curIO.at)
+		snap[MetricIOWrite] = ioRate(prev.write, curIO.write, prev.at, curIO.at)
+		snap[MetricIO] = ioRate(prev.read+prev.write, curIO.read+curIO.write, prev.at, curIO.at)
 	} else {
 		notReady := Reading{HasAbsolute: true}
-		snap[metricIORead], snap[metricIOWrite], snap[metricIO] = notReady, notReady, notReady
+		snap[MetricIORead], snap[MetricIOWrite], snap[MetricIO] = notReady, notReady, notReady
 	}
 	c.prevServiceIO[service] = curIO
 
@@ -317,7 +317,7 @@ func (c *Collector) SampleSystem() Snapshot {
 		r.Percent = float64(totals.memoryUsed) / float64(totals.memoryTotal) * 100
 		r.HasPercent = true
 		r.Total, r.HasTotal = float64(totals.memoryTotal), true
-		snap[metricTotalMemory] = r
+		snap[MetricTotalMemory] = r
 	}
 
 	if busy, total, ok := c.Reader.SystemCPU(); ok {
@@ -333,20 +333,20 @@ func (c *Collector) SampleSystem() Snapshot {
 			cpu.Ready = true
 		}
 		c.prevSystem = &sysSample{busy: busy, total: total}
-		snap[metricTotalCPU] = cpu
+		snap[MetricTotalCPU] = cpu
 	}
 
 	if l1, l5, l15, ok := c.Reader.LoadAverages(); ok {
-		snap[metricLoad1] = Reading{Absolute: l1, HasAbsolute: true, Ready: true}
-		snap[metricLoad5] = Reading{Absolute: l5, HasAbsolute: true, Ready: true}
-		snap[metricLoad15] = Reading{Absolute: l15, HasAbsolute: true, Ready: true}
+		snap[MetricLoad1] = Reading{Absolute: l1, HasAbsolute: true, Ready: true}
+		snap[MetricLoad5] = Reading{Absolute: l5, HasAbsolute: true, Ready: true}
+		snap[MetricLoad15] = Reading{Absolute: l15, HasAbsolute: true, Ready: true}
 	}
 
 	// Swap is optional: only readers that implement TotalSwap contribute it, and
 	// only when a swap device exists (total > 0). Percent is always computed so a
 	// 0%-used swap still reports a value.
 	if totals.swapOK && totals.swapTotal > 0 {
-		snap[metricTotalSwap] = Reading{
+		snap[MetricTotalSwap] = Reading{
 			Absolute:    float64(totals.swapUsed),
 			HasAbsolute: true,
 			Percent:     float64(totals.swapUsed) / float64(totals.swapTotal) * 100,
