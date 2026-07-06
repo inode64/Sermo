@@ -12,10 +12,12 @@ import (
 	"sermo/internal/output"
 )
 
+// Firewall-backend selectors for the `firewall_rules` check's `backend:` field.
+// Exported so config validation checks the same vocabulary this owner enforces.
 const (
-	firewallBackendAuto     = "auto"
-	firewallBackendNftables = "nftables"
-	firewallBackendIptables = "iptables"
+	FirewallBackendAuto     = "auto"
+	FirewallBackendNftables = "nftables"
+	FirewallBackendIptables = "iptables"
 )
 
 // FirewallRulesSample is one observation of loaded packet-filter rules.
@@ -71,10 +73,10 @@ func (c firewallRulesCheck) Run(ctx context.Context) Result {
 func buildFirewallRulesCheck(b base, entry map[string]any, runner execx.Runner, deps Deps) (Check, string) {
 	backend := cfgval.AsString(entry["backend"])
 	if backend == "" {
-		backend = firewallBackendAuto
+		backend = FirewallBackendAuto
 	}
 	if backend == "nft" {
-		backend = firewallBackendNftables
+		backend = FirewallBackendNftables
 	}
 	if !validFirewallBackend(backend) {
 		return nil, "firewall_rules check backend must be auto, nftables or iptables"
@@ -98,7 +100,7 @@ func buildFirewallRulesCheck(b base, entry map[string]any, runner execx.Runner, 
 
 func validFirewallBackend(backend string) bool {
 	switch backend {
-	case firewallBackendAuto, firewallBackendNftables, firewallBackendIptables:
+	case FirewallBackendAuto, FirewallBackendNftables, FirewallBackendIptables:
 		return true
 	default:
 		return false
@@ -113,7 +115,7 @@ func defaultFirewallRulesSampler(ctx context.Context, backend string, runner exe
 		runner = execx.CommandRunner{}
 	}
 	switch backend {
-	case firewallBackendAuto:
+	case FirewallBackendAuto:
 		var errs []error
 		nft, err := sampleNftablesRules(ctx, runner)
 		nftOK := err == nil
@@ -132,9 +134,9 @@ func defaultFirewallRulesSampler(ctx context.Context, backend string, runner exe
 			return nft, nil
 		}
 		return FirewallRulesSample{}, joinFirewallErrors(errs)
-	case firewallBackendNftables:
+	case FirewallBackendNftables:
 		return sampleNftablesRules(ctx, runner)
-	case firewallBackendIptables:
+	case FirewallBackendIptables:
 		return sampleIptablesRules(ctx, runner)
 	default:
 		return FirewallRulesSample{}, fmt.Errorf("unknown backend %q", backend)
@@ -146,7 +148,7 @@ func sampleNftablesRules(ctx context.Context, _ execx.Runner) (FirewallRulesSamp
 	if err != nil {
 		return FirewallRulesSample{}, fmt.Errorf("nftables: %w", err)
 	}
-	return FirewallRulesSample{Backend: firewallBackendNftables, Rules: rules}, nil
+	return FirewallRulesSample{Backend: FirewallBackendNftables, Rules: rules}, nil
 }
 
 func sampleIptablesRules(ctx context.Context, runner execx.Runner) (FirewallRulesSample, error) {
@@ -163,7 +165,7 @@ func sampleIptablesRules(ctx context.Context, runner execx.Runner) (FirewallRule
 	if len(errs) == 2 {
 		return FirewallRulesSample{}, joinFirewallErrors(errs)
 	}
-	return FirewallRulesSample{Backend: firewallBackendIptables, Rules: rules}, nil
+	return FirewallRulesSample{Backend: FirewallBackendIptables, Rules: rules}, nil
 }
 
 func joinFirewallErrors(errs []error) error {
