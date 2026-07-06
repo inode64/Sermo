@@ -110,6 +110,24 @@ func TestMountStatusByPathUsesConfiguredMount(t *testing.T) {
 	}
 }
 
+func TestUmountRootIsRejected(t *testing.T) {
+	global := writeMountConfig(t)
+	mounted := true
+	var out bytes.Buffer
+	app := mountApp(t, &mounted, &out)
+
+	code := app.Run(context.Background(), []string{"--config", global, "umount", "/"})
+	if code != exitRuntimeError {
+		t.Fatalf("umount / exit = %d, want runtime error", code)
+	}
+	if got := out.String(); !strings.Contains(got, "root filesystem cannot be unmounted") {
+		t.Fatalf("stdout = %q, want root protection message", got)
+	}
+	if !mounted {
+		t.Fatal("umount / changed mounted state")
+	}
+}
+
 func TestUmountCommandPausesStorageWatch(t *testing.T) {
 	global := writeMountConfig(t)
 	root := filepath.Dir(global)

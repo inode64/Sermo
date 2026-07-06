@@ -216,6 +216,9 @@ seguridad:
 - Con `mount.refcount: true` (el valor por defecto), `mount` incrementa un contador de runtime y
   `umount` lo decrementa; el desmontaje real se intenta solo cuando el contador
   llega a cero.
+- Sermo nunca desmonta el filesystem raíz (`/`). CLI y Web/API rechazan
+  `umount`, las alertas de blockers y `kill+umount` para `/` antes de intentar
+  cualquier `umount`, discovery de procesos o señal.
 - Los desmontajes ocupados se reportan con los procesos que usan el montaje. Sermo no los
   señaliza a menos que `mount.umount.allow_sigkill: true` o
   `mount.stop_policy.force_kill: true` esté configurado explícitamente.
