@@ -35,6 +35,18 @@ import (
 const (
 	exitConfigInvalid  = 78
 	exitAlreadyRunning = 1
+	exitUsage          = 64
+)
+
+const (
+	commandRun     = "run"
+	commandVersion = "version"
+	flagCatalog    = "catalog"
+	flagConfig     = "config"
+	flagVerbose    = "verbose"
+	flagVersion    = "--version"
+	flagVersionAlt = "-V"
+	shortVerbose   = "v"
 )
 
 func main() {
@@ -45,12 +57,12 @@ func run(args []string) int {
 	// `version` is a subcommand: honor it only as the first argument, never when
 	// it appears as a flag value (e.g. `--config version`). The flag forms may
 	// appear anywhere.
-	if len(args) > 0 && args[0] == "version" {
+	if len(args) > 0 && args[0] == commandVersion {
 		fmt.Println(buildinfo.String())
 		return 0
 	}
 	for _, a := range args {
-		if a == "--version" || a == "-V" {
+		if a == flagVersion || a == flagVersionAlt {
 			fmt.Println(buildinfo.String())
 			return 0
 		}
@@ -60,11 +72,11 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "usage error: %v\n", err)
 		fmt.Fprintln(os.Stderr, "usage: sermod run [--config /etc/sermo/sermo.yml] [--catalog DIR ...] [--verbose|-v]")
 		fmt.Fprintln(os.Stderr, "       sermod version")
-		return 64
+		return exitUsage
 	}
-	if parsed.command != "run" {
+	if parsed.command != commandRun {
 		fmt.Fprintf(os.Stderr, "usage error: unknown command %q\n", parsed.command)
-		return 64
+		return exitUsage
 	}
 	globalPath := parsed.globalPath
 
@@ -405,9 +417,9 @@ func parseArgs(args []string) (cliArgs, error) {
 	fs := pflag.NewFlagSet("sermod", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.SetInterspersed(true)
-	fs.StringVar(&parsed.globalPath, "config", config.DefaultGlobalPath, "")
-	fs.StringArrayVar(&parsed.catalog, "catalog", nil, "")
-	fs.BoolVarP(&parsed.verbose, "verbose", "v", false, "")
+	fs.StringVar(&parsed.globalPath, flagConfig, config.DefaultGlobalPath, "")
+	fs.StringArrayVar(&parsed.catalog, flagCatalog, nil, "")
+	fs.BoolVarP(&parsed.verbose, flagVerbose, shortVerbose, false, "")
 	if err := fs.Parse(args); err != nil {
 		return cliArgs{}, normalizePflagError(err)
 	}
