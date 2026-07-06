@@ -28,7 +28,7 @@ func (a App) notifyInteractiveBlockedAction(ctx context.Context, result operatio
 
 func shouldNotifyInteractiveBlockedAction(result operation.Result) bool {
 	return result.Status == operation.ResultBlocked &&
-		result.Action == "restart" &&
+		result.Action == actionRestart &&
 		strings.Contains(strings.ToLower(result.Message), "backup")
 }
 
