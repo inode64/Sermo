@@ -261,6 +261,16 @@ func TestValidateUnifiedWatchActions(t *testing.T) {
     check: { type: tcp, host: 127.0.0.1, port: 80 }
     then: { action: restart, blocks: [restart] }
 `, "blocks is only valid with action: block"},
+		{"block without message", `watches:
+  w:
+    check: { type: tcp, host: 127.0.0.1, port: 80 }
+    then: { action: block, blocks: [restart] }
+`, "message is required with action: block"},
+		{"alert without message", `watches:
+  w:
+    check: { type: tcp, host: 127.0.0.1, port: 80 }
+    then: { action: alert }
+`, "message is required with action: alert"},
 		{"invalid action", `watches:
   w:
     check: { type: tcp, host: 127.0.0.1, port: 80 }
