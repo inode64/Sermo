@@ -828,7 +828,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 	case "swap":
 		validateSwapMetricCondition(path, cfgval.String(entry["metric"]), entry, add)
 	case "route":
-		if f := cfgval.String(entry["family"]); f != "" && f != "ipv4" && f != "ipv6" {
+		if f := cfgval.String(entry["family"]); f != "" && f != checks.FamilyIPv4 && f != checks.FamilyIPv6 {
 			add("%s.family must be ipv4 or ipv6", path)
 		}
 		if v, present := entry["interface"]; present {

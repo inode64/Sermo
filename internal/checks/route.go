@@ -11,8 +11,10 @@ import (
 
 // Address family selectors for a route check.
 const (
-	familyIPv4 = "ipv4"
-	familyIPv6 = "ipv6"
+	// FamilyIPv4 and FamilyIPv6 are the `family:` values of a route check;
+	// exported so config validation checks the same set the check accepts.
+	FamilyIPv4 = "ipv4"
+	FamilyIPv6 = "ipv6"
 )
 
 // DefaultRoute is one up default-route entry: the egress interface and the
@@ -116,9 +118,9 @@ func SampleRoutes(family string) ([]DefaultRoute, error) { return defaultRouteSa
 
 func netlinkFamily(family string) (int, error) {
 	switch family {
-	case familyIPv4, "":
+	case FamilyIPv4, "":
 		return netlink.FAMILY_V4, nil
-	case familyIPv6:
+	case FamilyIPv6:
 		return netlink.FAMILY_V6, nil
 	default:
 		return 0, fmt.Errorf("unknown route family %q", family)
@@ -163,11 +165,11 @@ func isDefaultNetlinkRoute(family string, route netlink.Route) bool {
 	if ones != 0 {
 		return false
 	}
-	return (family == familyIPv6 && bits == 128) || (family != familyIPv6 && bits == 32)
+	return (family == FamilyIPv6 && bits == 128) || (family != FamilyIPv6 && bits == 32)
 }
 
 func appendDefaultRoute(routes []DefaultRoute, family, iface string, gateway net.IP) []DefaultRoute {
-	if iface == "" || (family == familyIPv6 && iface == "lo") {
+	if iface == "" || (family == FamilyIPv6 && iface == "lo") {
 		return routes
 	}
 	gw := ""
