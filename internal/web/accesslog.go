@@ -51,39 +51,39 @@ func (s *Server) recordWebAccess(r *http.Request, status int) {
 
 func parseAPIAccessTarget(path string) (target, action string) {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
-	if len(parts) < 2 || parts[0] != "api" {
+	if len(parts) < 2 || parts[0] != apiSegmentRoot {
 		return "", ""
 	}
 	switch parts[1] {
-	case "services", "watches":
+	case apiSegmentServices, apiSegmentWatches:
 		if len(parts) >= 3 {
 			target = parts[2]
 		}
 		if len(parts) >= 4 {
 			action = parts[3]
 		}
-	case "locks":
+	case apiSegmentLocks:
 		if len(parts) >= 3 {
 			target = parts[2]
 			action = apiActionRelease
 		}
-	case "events":
+	case apiSegmentEvents:
 		if len(parts) >= 3 {
 			action = parts[2]
 		} else {
 			action = apiActionClear
 		}
-	case "state":
+	case apiSegmentState:
 		if len(parts) >= 3 {
 			action = parts[2]
 		} else {
 			action = apiActionCompact
 		}
-	case "panic":
+	case apiSegmentPanic:
 		if len(parts) >= 3 {
 			action = parts[2]
 		}
-	case "reload":
+	case apiSegmentReload:
 		action = apiActionReload
 	default:
 		if len(parts) >= 3 {

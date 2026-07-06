@@ -43,6 +43,18 @@ const (
 	contentTypeTextUTF8 = "text/plain; charset=utf-8"
 )
 
+// API path segment names used by routing and access-log classification.
+const (
+	apiSegmentRoot     = "api"
+	apiSegmentServices = "services"
+	apiSegmentWatches  = "watches"
+	apiSegmentLocks    = "locks"
+	apiSegmentEvents   = "events"
+	apiSegmentState    = "state"
+	apiSegmentPanic    = "panic"
+	apiSegmentReload   = "reload"
+)
+
 // HTTP action names accepted by the dashboard API.
 const (
 	apiActionStart     = "start"
