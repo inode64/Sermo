@@ -20,18 +20,24 @@ watches:
     check:
       type: service
       expect: active
+  # A mon binds its msgr v2 port to the cluster/public network address, not
+  # loopback, so these ${host}=127.0.0.1 probes are optional and off by default;
+  # the admin-socket mon_status command below is the authoritative health signal.
+  # Set `host` to the mon's bind address on an instance to enable an active probe.
   tcp:
     check:
       type: tcp
       host: ${host}
       port: ${port}
       timeout: 2s
+      optional: true
   restart-if-messenger-failed:
     check:
       type: ceph
       host: ${host}
       port: ${port}
       timeout: 3s
+      optional: true
       verify: true
     for:
       cycles: 3
