@@ -45,6 +45,12 @@ const (
 // keyDryRun is the per-target flag that simulates automatic actions.
 const keyDryRun = "dry_run"
 
+// Storage document block keys.
+const (
+	keyCapacity = "capacity"
+	keyUsage    = "usage"
+)
+
 // Per-target monitoring metadata keys.
 const (
 	keyMonitor  = "monitor"
