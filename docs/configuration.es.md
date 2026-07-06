@@ -1498,10 +1498,10 @@ un check **y** su remediación/guard/alerta juntos:
 - `action: restart | start | stop | reload | resume` — una **remediación** que
   recorre el motor de operación (lock de servicio, guards, cooldown/backoff/rate-limit,
   op-settling posterior, modo pánico) igual que una remediación de `rules:`.
-- `action: block` con `blocks: [restart, start, …]` — un **guard** evaluado
-  *durante* una operación que rechaza las acciones listadas mientras el check falla.
-  Los guards no notifican.
-- `action: alert` (con `message`/`notify` opcionales) — una **alerta**.
+- `action: block` con `blocks: [restart, start, …]` y `message` — un **guard**
+  evaluado *durante* una operación que rechaza las acciones listadas mientras el
+  check falla. Los guards no notifican.
+- `action: alert` con `message` y `notify` opcional — una **alerta**.
 
 Esa entrada se **desugariza** al `checks:` + `rules:` equivalente, por lo que es
 exactamente igual que escribir ese check + regla a mano y hereda cada barrera de
@@ -1536,7 +1536,7 @@ watches:
     then: { action: restart }
   block-restart-during-backup: # un guard: rechaza restart mientras corre el backup
     check: { type: process_count, exe: "${backup_binary}", count: { op: ">", value: 0 } }
-    then: { action: block, blocks: [restart] }
+    then: { action: block, blocks: [restart], message: "backup en ejecucion" }
 ```
 
 ```yaml

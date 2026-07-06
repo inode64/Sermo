@@ -1455,10 +1455,10 @@ remediation/guard/alert together:
 - `action: restart | start | stop | reload | resume` — a **remediation** that runs
   through the operation engine (service lock, guards, cooldown/backoff/rate-limit,
   post-operation settling, panic mode) exactly like a `rules:` remediation.
-- `action: block` with `blocks: [restart, start, …]` — a **guard** evaluated
-  *during* an operation that refuses the listed actions while the check fails.
-  Guards do not notify.
-- `action: alert` (with an optional `message`/`notify`) — an **alert**.
+- `action: block` with `blocks: [restart, start, …]` and `message` — a **guard**
+  evaluated *during* an operation that refuses the listed actions while the check
+  fails. Guards do not notify.
+- `action: alert` with `message` and optional `notify` — an **alert**.
 
 Such an entry is **desugared** to the equivalent `checks:` + `rules:` entry, so it
 is exactly equivalent to writing that check + rule by hand and inherits every
@@ -1492,7 +1492,7 @@ watches:
     then: { action: restart }
   block-restart-during-backup: # a guard: refuse restart while the backup process runs
     check: { type: process_count, exe: "${backup_binary}", count: { op: ">", value: 0 } }
-    then: { action: block, blocks: [restart] }
+    then: { action: block, blocks: [restart], message: "backup running" }
 ```
 
 ```yaml

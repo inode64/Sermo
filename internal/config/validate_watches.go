@@ -215,6 +215,9 @@ func validateWatchThenAction(prefix, action string, then map[string]any, add fun
 		if _, hasNotify := then["notify"]; hasNotify {
 			add("%s.then.notify is not supported with action: block; guard rules do not notify", prefix)
 		}
+		if cfgval.String(then["message"]) == "" {
+			add("%s.then.message is required with action: block", prefix)
+		}
 		blocks := cfgval.StringList(then["blocks"])
 		if len(blocks) == 0 {
 			add("%s.then requires a non-empty blocks: [list of actions] for a block (guard) action", prefix)
@@ -223,6 +226,10 @@ func validateWatchThenAction(prefix, action string, then map[string]any, add fun
 			if !isOperationAction(b) {
 				add("%s.then.blocks entry %q must be an operation action (restart/start/stop/reload/resume)", prefix, b)
 			}
+		}
+	} else if action == string(rules.ActionAlert) {
+		if cfgval.String(then["message"]) == "" {
+			add("%s.then.message is required with action: alert", prefix)
 		}
 	} else if _, hasBlocks := then["blocks"]; hasBlocks {
 		add("%s.then.blocks is only valid with action: block", prefix)
