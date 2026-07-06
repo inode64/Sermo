@@ -804,7 +804,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 			storage = storageWatchInfo(w, b)
 		}
 		var swap *web.SwapWatchInfo
-		if w.checkType == "swap" && !w.disabled {
+		if w.checkType == checks.CheckTypeSwap && !w.disabled {
 			swap = swapWatchInfo(system)
 		}
 		// memory/load/fds/pids carry a natural capacity, so render them with the
@@ -1066,13 +1066,13 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 		})
 	}
 	switch cfgval.AsString(check["type"]) {
-	case "autofs":
+	case checks.CheckTypeAutofs:
 		if path := cfgval.AsString(check["path"]); path != "" {
 			out = append(out, web.WatchCondition{Field: "path", Op: "==", Value: path})
 		} else if _, ok := check["count"].(map[string]any); !ok {
 			out = append(out, web.WatchCondition{Field: "count", Op: ">=", Value: "1"})
 		}
-	case "count":
+	case checks.CheckTypeCount:
 		if path := cfgval.AsString(check["path"]); path != "" {
 			out = append(out, web.WatchCondition{Field: "path", Value: path})
 		}
@@ -1087,16 +1087,16 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 		} else if op := cfgval.AsString(check["op"]); op != "" {
 			out = append(out, web.WatchCondition{Field: "count", Op: op, Value: cfgval.String(check["value"])})
 		}
-	case "file":
+	case checks.CheckTypeFile:
 		out = append(out, fileWatchConditions(check)...)
-	case "process":
+	case checks.CheckTypeProcess:
 		if value := cfgval.String(check["for"]); value != "" {
 			out = append(out, web.WatchCondition{Field: "for", Op: ">=", Value: value})
 		}
 		if gone, ok := check["gone"].(bool); ok && gone {
 			out = append(out, web.WatchCondition{Field: "gone", Op: "==", Value: "true"})
 		}
-	case "route":
+	case checks.CheckTypeRoute:
 		family := cfgval.AsString(check["family"])
 		if family == "" {
 			family = "ipv4"
@@ -1105,7 +1105,7 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 		if iface := cfgval.AsString(check["interface"]); iface != "" {
 			out = append(out, web.WatchCondition{Field: "interface", Op: "==", Value: iface})
 		}
-	case "firewall_rules":
+	case checks.CheckTypeFirewallRules:
 		backend := cfgval.AsString(check["backend"])
 		if backend == "" {
 			backend = "auto"
@@ -1118,7 +1118,7 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 			web.WatchCondition{Field: "backend", Op: "==", Value: backend},
 			web.WatchCondition{Field: "rules", Op: ">=", Value: minRules},
 		)
-	case "size":
+	case checks.CheckTypeSize:
 		if path := cfgval.AsString(check["path"]); path != "" {
 			out = append(out, web.WatchCondition{Field: "path", Value: path})
 		}
@@ -1144,41 +1144,41 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 func watchConditionFields(check map[string]any) []string {
 	checkType := cfgval.AsString(check["type"])
 	switch checkType {
-	case "storage":
+	case checks.CheckTypeStorage:
 		return checks.StoragePredFields
 	case metrics.MetricMemory:
 		return checks.MemoryPredFields
-	case "pressure":
+	case checks.CheckTypePressure:
 		return checks.PressurePredFields
-	case "load":
+	case checks.CheckTypeLoad:
 		return checks.LoadPredFields
-	case "fds":
+	case checks.CheckTypeFDS:
 		return checks.FdsPredFields
-	case "pids":
+	case checks.CheckTypePIDs:
 		return checks.PidsPredFields
-	case "conntrack":
+	case checks.CheckTypeConntrack:
 		return checks.ConntrackPredFields
-	case "entropy":
+	case checks.CheckTypeEntropy:
 		return checks.EntropyPredFields
-	case "zombies":
+	case checks.CheckTypeZombies:
 		return checks.ZombiePredFields
-	case "oom":
+	case checks.CheckTypeOOM:
 		return []string{"delta"}
-	case "process":
+	case checks.CheckTypeProcess:
 		return []string{metrics.MetricCPU, metrics.MetricMemory, metrics.MetricIO}
-	case "diskio":
+	case checks.CheckTypeDiskIO:
 		return checks.DiskIOPredFields
-	case "sensors":
+	case checks.CheckTypeSensors:
 		return checks.SensorPredFields
-	case "hdparm":
+	case checks.CheckTypeHdparm:
 		return checks.HdparmPredFields
-	case "smart":
+	case checks.CheckTypeSmart:
 		return checks.SmartPredFields
-	case "raid":
+	case checks.CheckTypeRAID:
 		return checks.RaidPredFields
-	case "edac":
+	case checks.CheckTypeEDAC:
 		return checks.EdacPredFields
-	case "autofs":
+	case checks.CheckTypeAutofs:
 		return []string{"count"}
 	default:
 		return nil
@@ -1308,51 +1308,51 @@ func (b *WebBackend) watchLiveView(w *webWatch, system metrics.Snapshot) (*web.W
 		return nil, nil, ""
 	}
 	switch w.checkType {
-	case "net":
+	case checks.CheckTypeNet:
 		return b.netWatchView(w)
-	case "icmp":
+	case checks.CheckTypeICMP:
 		return b.icmpWatchView(w)
-	case "swap":
+	case checks.CheckTypeSwap:
 		return nil, nil, ""
-	case "oom":
+	case checks.CheckTypeOOM:
 		return b.oomWatchView()
-	case "fds":
+	case checks.CheckTypeFDS:
 		return b.fdsWatchView()
-	case "pids":
+	case checks.CheckTypePIDs:
 		return b.pidsWatchView()
-	case "pressure":
+	case checks.CheckTypePressure:
 		return b.pressureWatchView(w)
-	case "conntrack":
+	case checks.CheckTypeConntrack:
 		return b.conntrackWatchView()
-	case "entropy":
+	case checks.CheckTypeEntropy:
 		return b.entropyWatchView()
-	case "zombies":
+	case checks.CheckTypeZombies:
 		return b.zombieWatchView()
-	case "process":
+	case checks.CheckTypeProcess:
 		return b.processWatchView(w)
-	case "autofs":
+	case checks.CheckTypeAutofs:
 		return b.autofsWatchView(w)
-	case "diskio":
+	case checks.CheckTypeDiskIO:
 		return b.diskIOWatchView(w)
-	case "sensors":
+	case checks.CheckTypeSensors:
 		return b.sensorsWatchView(w)
-	case "raid":
+	case checks.CheckTypeRAID:
 		return b.raidWatchView()
-	case "edac":
+	case checks.CheckTypeEDAC:
 		return b.edacWatchView()
-	case "route":
+	case checks.CheckTypeRoute:
 		return b.routeWatchView(w)
-	case "file":
+	case checks.CheckTypeFile:
 		return b.fileWatchView(w)
-	case "count":
+	case checks.CheckTypeCount:
 		return b.countWatchView(w)
-	case "firewall_rules":
+	case checks.CheckTypeFirewallRules:
 		return b.firewallRulesWatchView(w)
-	case "size":
+	case checks.CheckTypeSize:
 		return b.sizeWatchView(w)
-	case "hdparm":
+	case checks.CheckTypeHdparm:
 		return b.hdparmWatchView(w)
-	case "smart":
+	case checks.CheckTypeSmart:
 		return b.smartWatchView(w)
 	default:
 		if m := watchMeter(w.checkType, system); m != nil {
