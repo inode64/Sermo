@@ -605,9 +605,9 @@ func validateICMPCheck(name string, check, entry map[string]any, defaultNotify [
 // grammar cannot drift between the two surfaces.
 func validateICMPMetricCondition(prefix, metric string, m map[string]any, add addFunc) {
 	switch metric {
-	case "state":
+	case checks.NetMetricState:
 		validateStateMetric(prefix, m, add)
-	case "latency":
+	case checks.IcmpMetricLatency:
 		th, hasT := m["threshold"].(map[string]any)
 		ch, hasC := m["change"].(map[string]any)
 		if !hasT && !hasC {
