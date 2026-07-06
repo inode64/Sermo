@@ -33,7 +33,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		if v, present := entry["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("watches.%s.interval %q must be a valid positive duration", name, cfgval.String(v))
 		}
-		if v, present := entry["dry_run"]; present {
+		if v, present := entry[keyDryRun]; present {
 			if _, ok := v.(bool); !ok {
 				add("watches.%s.dry_run must be a boolean", name)
 			}
@@ -116,7 +116,7 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 		if v, present := entry["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("%s.interval %q must be a valid positive duration", prefix, cfgval.String(v))
 		}
-		if v, present := entry["dry_run"]; present {
+		if v, present := entry[keyDryRun]; present {
 			if _, ok := v.(bool); !ok {
 				add("%s.dry_run must be a boolean", prefix)
 			}

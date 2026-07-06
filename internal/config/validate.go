@@ -44,7 +44,7 @@ var validGlobalPathKeys = set(
 )
 
 var validDefaultsKeys = set(
-	"dry_run",
+	keyDryRun,
 	"policy",
 	"rule_window",
 	sectionStopPolicy,
@@ -190,7 +190,7 @@ func validateGlobal(cfg *Config) []Issue {
 
 	validateDefaultsKeys(cfg.Global.Defaults, add)
 	validateDefaultsVariables(cfg.Global.Defaults, add)
-	if v, present := cfg.Global.Defaults["dry_run"]; present {
+	if v, present := cfg.Global.Defaults[keyDryRun]; present {
 		if _, ok := v.(bool); !ok {
 			add("defaults.dry_run must be a boolean")
 		}
@@ -644,7 +644,7 @@ func validateStorage(name string, tree map[string]any, notifiers map[string]stru
 		issues = append(issues, Issue{Scope: "storage " + name, Msg: fmt.Sprintf(format, args...)})
 	}
 
-	allowed := set("name", "display_name", "description", "category", "path", "dry_run", "monitor", "interval", "capacity", "usage", keyMount, sectionVariables, "os")
+	allowed := set("name", "display_name", "description", "category", "path", keyDryRun, "monitor", "interval", "capacity", "usage", keyMount, sectionVariables, "os")
 	for _, key := range slices.Sorted(maps.Keys(tree)) {
 		if _, ok := allowed[key]; !ok {
 			add("key %q is not supported for kind: storage", key)
@@ -660,7 +660,7 @@ func validateStorage(name string, tree map[string]any, notifiers map[string]stru
 	if mode, present := tree["monitor"]; present {
 		validateMonitorMode("monitor", mode, add)
 	}
-	if v, present := tree["dry_run"]; present {
+	if v, present := tree[keyDryRun]; present {
 		if _, ok := v.(bool); !ok {
 			add("dry_run must be a boolean")
 		}
@@ -707,7 +707,7 @@ func validateStorageCapacity(name, path string, tree, capacity map[string]any, n
 		}
 	}
 	entry := map[string]any{"check": check}
-	for _, key := range []string{"dry_run", "monitor", "interval"} {
+	for _, key := range []string{keyDryRun, "monitor", "interval"} {
 		if v, present := tree[key]; present {
 			entry[key] = v
 		}
@@ -845,7 +845,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	if mode, present := tree["monitor"]; present {
 		validateMonitorMode("monitor", mode, add)
 	}
-	if v, present := tree["dry_run"]; present {
+	if v, present := tree[keyDryRun]; present {
 		if _, ok := v.(bool); !ok {
 			add("dry_run must be a boolean")
 		}
