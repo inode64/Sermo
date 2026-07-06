@@ -124,7 +124,7 @@ func validateGlobal(cfg *Config) []Issue {
 		}
 	}
 
-	if paths, ok := raw["paths"].(map[string]any); ok {
+	if paths, ok := raw[sectionPaths].(map[string]any); ok {
 		for _, key := range slices.Sorted(maps.Keys(paths)) {
 			if key == "locks" {
 				add("paths.locks is not supported; runtime locks derive from paths.runtime")
@@ -161,7 +161,7 @@ func validateGlobal(cfg *Config) []Issue {
 		}
 	}
 
-	if security, ok := raw["security"].(map[string]any); ok {
+	if security, ok := raw[sectionSecurity].(map[string]any); ok {
 		for _, key := range rejectedSecurityToggles {
 			if _, present := security[key]; present {
 				add("security.%s is a hard safety invariant and cannot be configured", key)
@@ -176,8 +176,8 @@ func validateGlobal(cfg *Config) []Issue {
 	notifiers := cfg.Notifiers()
 	validateNotifiers(notifiers, cfg.Global.TemplateDir(), add)
 
-	if _, present := raw["notify"]; present {
-		validateNotifySelection("notify", raw["notify"], notifierNames(notifiers), add)
+	if _, present := raw[sectionNotify]; present {
+		validateNotifySelection(sectionNotify, raw[sectionNotify], notifierNames(notifiers), add)
 	}
 
 	cooldown, present := defaultsCooldown(cfg.Global.Defaults)

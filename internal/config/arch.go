@@ -62,7 +62,7 @@ func (c *Config) bakeBuiltins() {
 		c.Global.Raw = bindTokens(c.Global.Raw, repl).(map[string]any)
 		// collapseOS/bindTokens build fresh maps, so re-point the extracted
 		// Defaults view (it aliased the pre-bake Raw["defaults"] sub-map).
-		if defaults, ok := c.Global.Raw["defaults"].(map[string]any); ok {
+		if defaults, ok := c.Global.Raw[sectionDefaults].(map[string]any); ok {
 			c.Global.Defaults = defaults
 		}
 	}
