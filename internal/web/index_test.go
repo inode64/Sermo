@@ -154,8 +154,9 @@ func TestIndexShellAnchors(t *testing.T) {
 
 	wantIDs := []string{
 		"topbar", "section-nav", "favicon", "attention", "events",
-		"services-section", "apps-section", "watches-section", "events-section",
+		"services-section", "containers-section", "vms-section", "apps-section", "watches-section", "events-section",
 		"storage-controls", "network-controls", "mount-controls",
+		"container-controls", "vm-controls", "container-rows", "vm-rows",
 		"event-clear", "event-before", "event-reset-filters", "activity-clear",
 		"state-compact-btn", "state-before", "app-rows", "locks-rows",
 		"mount-search", "mount-category", "mount-filters", "mount-filter-count",
@@ -167,7 +168,7 @@ func TestIndexShellAnchors(t *testing.T) {
 		}
 	}
 	for _, id := range []string{
-		"services-section", "storage-section", "network-section", "mounts-section",
+		"services-section", "containers-section", "vms-section", "storage-section", "network-section", "mounts-section",
 		"apps-section", "cert-section", "diskio-section", "watches-section",
 		"events-section", "locks-section", "notifiers-section", "daemon-section",
 		"activity-section",
@@ -386,7 +387,7 @@ func TestIndexAccessibilitySectionHeadings(t *testing.T) {
 		headings[strings.TrimSpace(sb.String())] = true
 	})
 	for _, want := range []string{
-		"Storage", "Services", "Network", "Installed applications",
+		"Storage", "Services", "Containers", "Virtual machines", "Network", "Installed applications",
 		"Host watches", "Events", "Mount units", "Notifiers",
 		"Daemon / Engine settings", "Recent activity",
 	} {
@@ -506,7 +507,7 @@ func TestIndexAccessibilityShell(t *testing.T) {
 	}
 
 	for _, id := range []string{
-		"svc-filters", "storage-filters", "network-filters", "watch-filters", "app-filters",
+		"svc-filters", "container-filters", "vm-filters", "storage-filters", "network-filters", "watch-filters", "app-filters",
 	} {
 		el := nodeByID(doc, id)
 		if el == nil {
@@ -542,8 +543,8 @@ func TestIndexAccessibilityShell(t *testing.T) {
 			}
 		}
 	})
-	if captions < 9 {
-		t.Errorf("want at least 9 <caption> elements, got %d", captions)
+	if captions < 11 {
+		t.Errorf("want at least 11 <caption> elements, got %d", captions)
 	}
 	if thMissingScope > 0 {
 		t.Errorf("want scope=col on every shell <th>, %d missing", thMissingScope)

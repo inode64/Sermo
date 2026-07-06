@@ -140,10 +140,11 @@ Local de la sesión para operaciones iniciadas desde el navegador actual; enriqu
 
 Section id: `services-section`
 
-Lista las entradas de servicio **configuradas** desde la configuración cargada — estado,
-checks, remediación y acciones de lo que `sermod` monitoriza actualmente. Esto no es
-`sermoctl services`, que inventaría los perfiles de servicio del **catálogo** bajo
-`catalog/services`. Consulta [cli.md](cli.es.md#catalog-inventory).
+Lista las entradas de servicio **configuradas** desde la configuración cargada,
+excluyendo contenedores Docker (`category: docker`) y máquinas virtuales
+(`category: virtual-machine`), que se muestran en paneles propios. Esto no es
+`sermoctl services`, que inventaría los perfiles de servicio del **catálogo**
+bajo `catalog/services`. Consulta [cli.md](cli.es.md#catalog-inventory).
 
 | Parte | Representación actual |
 | --- | --- |
@@ -166,9 +167,26 @@ Columnas:
 | Memory | última memoria residente del árbol de procesos; vacío para servicios `no_resident_process` |
 | FDs | recuento de descriptores de archivo abiertos del árbol de procesos; vacío para servicios `no_resident_process` |
 | IO R/W | bytes acumulados de lectura/escritura en disco del árbol de procesos; vacío para servicios `no_resident_process` |
-| Actions | un botón start/stop según el estado, restart, reload, resume, monitor/unmonitor; reload se desactiva cuando `can_reload` es false; el diálogo de confirmación de start/stop/restart ofrece **skip also_apply** cuando `also_apply` está definido |
+| Actions | un botón start/stop según el estado, restart, reload, monitor/unmonitor; reload se desactiva cuando `can_reload` es false; el diálogo de confirmación de start/stop/restart ofrece **skip also_apply** cuando `also_apply` está definido |
 
-Expansión de fila:
+## Paneles de contenedores y máquinas virtuales
+
+Section ids: `containers-section`, `vms-section`
+
+Los servicios de contenedores Docker y máquinas virtuales libvirt usan la misma
+API de servicios y la misma expansión de fila que el panel Services, pero se
+separan por categoría para el operador. Estos paneles mantienen la acción
+`resume` porque los contenedores y VMs pausados pueden reanudarse mediante la
+ruta de operación de servicios.
+
+| Panel | Categoría origen | Acción extra |
+| --- | --- | --- |
+| Containers | `docker` | `resume` cuando el backend del contenedor informa `paused` |
+| Virtual machines | `virtual-machine` | `resume` cuando el backend de VM informa `paused` |
+
+## Expansión de fila de servicio
+
+Compartida por los paneles Services, Containers y Virtual machines:
 
 | Área | Contenido |
 | --- | --- |

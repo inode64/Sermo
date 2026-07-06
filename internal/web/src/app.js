@@ -619,14 +619,36 @@ let svcStatus = "all"; // all | disabled | stopped | started | starting | collec
 let svcCategory = "all";
 let svcGrouped = false;
 let svcCollapsedGroups = new Set();
+let svcSort = { key: "", dir: 1 };
+const splitServicePanels = {
+  container: {
+    query: "", status: "all", sort: { key: "", dir: 1 },
+    surface: "container", section: "#containers-section", rows: "#container-rows", count: "#containers-count",
+    filterCount: "#container-count", filters: "#container-filters", search: "#container-search",
+    filterDataset: "cf", sortIndicator: "ci", sortAttr: "container-sort", sortDataset: "containerSort",
+    label: "containers", empty: "No containers.", emptyFiltered: "No containers match the filter.",
+  },
+  vm: {
+    query: "", status: "all", sort: { key: "", dir: 1 },
+    surface: "vm", section: "#vms-section", rows: "#vm-rows", count: "#vms-count",
+    filterCount: "#vm-count", filters: "#vm-filters", search: "#vm-search",
+    filterDataset: "vf", sortIndicator: "vi", sortAttr: "vm-sort", sortDataset: "vmSort",
+    label: "virtual machines", empty: "No virtual machines.", emptyFiltered: "No virtual machines match the filter.",
+  },
+};
 let allMounts = [];
 let mountQuery = "";
 let mountStatus = "all";
 let mountCategory = "all";
 let mountSort = { key: "", dir: 1 };
 let expanded = new Set(); // open expansions, keyed "svc:<name>" / "wat:<name>" / "app:<name>"
+let allApps = [];
+let appQuery = "";
+let appCategory = "all";
+let appStatus = "all";
 let appGrouped = false;
 let appCollapsedGroups = new Set();
+let appSort = { key: "", dir: 1 };
 let metricWindow = "24h";
 let daemonMetricWindow = "24h";
 let allWatches = [];
@@ -695,6 +717,17 @@ function restoreUIState() {
     if (s.svcSort && typeof s.svcSort.key === "string") {
       svcSort = { key: s.svcSort.key, dir: s.svcSort.dir === -1 ? -1 : 1 };
     }
+    if (s.splitServicePanels && typeof s.splitServicePanels === "object") {
+      for (const [key, saved] of Object.entries(s.splitServicePanels)) {
+        const panel = splitServicePanels[key];
+        if (!panel || !saved) continue;
+        if (typeof saved.query === "string") panel.query = saved.query;
+        if (typeof saved.status === "string") panel.status = normalizeServiceStatusFilter(saved.status);
+        if (saved.sort && typeof saved.sort.key === "string") {
+          panel.sort = { key: saved.sort.key, dir: saved.sort.dir === -1 ? -1 : 1 };
+        }
+      }
+    }
     if (typeof s.mountQuery === "string") mountQuery = s.mountQuery;
     if (typeof s.mountStatus === "string") mountStatus = normalizeMountStatusFilter(s.mountStatus);
     if (typeof s.mountCategory === "string") mountCategory = s.mountCategory;
@@ -762,6 +795,9 @@ function saveUIState() {
       watchPanels: Object.fromEntries(Object.entries(watchPanels).map(([k, p]) => [k, {
         query: p.query, status: p.status, type: p.type, sort: p.sort,
       }])),
+      splitServicePanels: Object.fromEntries(Object.entries(splitServicePanels).map(([k, p]) => [k, {
+        query: p.query, status: p.status, sort: p.sort,
+      }])),
     }));
   } catch (_) {}
 }
@@ -772,6 +808,7 @@ function applyUIStateToControls() {
   syncFilterButtons("#svc-filters", "f", svcStatus);
   const svcCategorySelect = $("#svc-category");
   if (svcCategorySelect) svcCategorySelect.value = svcCategory;
+  for (const key of Object.keys(splitServicePanels)) syncSplitServicePanelControls(key);
   const mountSearch = $("#mount-search");
   if (mountSearch) mountSearch.value = mountQuery;
   syncFilterButtons("#mount-filters", "mf", mountStatus);
@@ -897,6 +934,61 @@ function serviceStateCell(s) {
   return serviceStateBadge(s);
 }
 
+const serviceSurfaceRegular = "service";
+const serviceSurfaceContainer = "container";
+const serviceSurfaceVM = "vm";
+const dockerServiceCategory = "docker";
+const vmServiceCategory = "virtual-machine";
+
+function serviceSurfaceOf(s) {
+  const category = categoryOf(s, "service").toLowerCase();
+  if (category === dockerServiceCategory) return serviceSurfaceContainer;
+  if (category === vmServiceCategory) return serviceSurfaceVM;
+  return serviceSurfaceRegular;
+}
+
+function servicesForSurface(surface) {
+  return (allServices || []).filter((s) => serviceSurfaceOf(s) === surface);
+}
+
+function defaultServicePanelTarget() {
+  if (servicesForSurface(serviceSurfaceRegular).length) return "services-section";
+  if (servicesForSurface(serviceSurfaceContainer).length) return "containers-section";
+  if (servicesForSurface(serviceSurfaceVM).length) return "vms-section";
+  return "services-section";
+}
+
+function splitServicePanelBySurface(surface) {
+  return Object.values(splitServicePanels).find((panel) => panel.surface === surface) || null;
+}
+
+function serviceSectionFor(s) {
+  const surface = serviceSurfaceOf(s);
+  if (surface === serviceSurfaceRegular) return "#services-section";
+  const panel = splitServicePanelBySurface(surface);
+  return panel ? panel.section : "#services-section";
+}
+
+function openSectionForService(name) {
+  const service = (allServices || []).find((s) => s && s.name === name);
+  const sec = service ? $(serviceSectionFor(service)) : $("#services-section");
+  if (sec) {
+    setPanelVisible(sec, true);
+    sec.open = true;
+  }
+  return sec;
+}
+
+function serviceSurfaceWithStatus(status) {
+  for (const surface of [serviceSurfaceRegular, serviceSurfaceContainer, serviceSurfaceVM]) {
+    if (servicesForSurface(surface).some((s) => serviceDisplayState(s) === status)) return surface;
+  }
+  for (const surface of [serviceSurfaceRegular, serviceSurfaceContainer, serviceSurfaceVM]) {
+    if (servicesForSurface(surface).length) return surface;
+  }
+  return serviceSurfaceRegular;
+}
+
 function isFailing(s) { return serviceState(s) === "failed"; }
 function isServiceAttention(s) {
   const st = serviceState(s);
@@ -906,33 +998,39 @@ function isWatchAttention(w) {
   const st = watchStateText(w);
   return st === "failed";
 }
+
+function openServiceStatusTarget(status) {
+  const normalized = normalizeServiceStatusFilter(status);
+  const surface = serviceSurfaceWithStatus(normalized);
+  const panel = surface === serviceSurfaceRegular ? null : splitServicePanelBySurface(surface);
+  if (panel) {
+    setSplitServiceStatus(surface, normalized);
+  } else {
+    setSvcStatus(normalized);
+  }
+  const sec = panel ? $(panel.section) : $("#services-section");
+  if (sec) {
+    setPanelVisible(sec, true);
+    sec.open = true;
+    sec.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+}
+
 function openPanelTarget(target) {
   if (target === "failed-services") {
-    const sec = $("#services-section");
-    if (sec) sec.open = true;
-    setSvcStatus("failed");
-    sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
+    openServiceStatusTarget("failed");
     return;
   }
   if (target === "starting-services") {
-    const sec = $("#services-section");
-    if (sec) sec.open = true;
-    setSvcStatus("starting");
-    sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
+    openServiceStatusTarget("starting");
     return;
   }
   if (target === "collecting-services") {
-    const sec = $("#services-section");
-    if (sec) sec.open = true;
-    setSvcStatus("collecting");
-    sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
+    openServiceStatusTarget("collecting");
     return;
   }
   if (target === "monitored-services") {
-    const sec = $("#services-section");
-    if (sec) sec.open = true;
-    setSvcStatus("monitored");
-    sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
+    openServiceStatusTarget("monitored");
     return;
   }
 
@@ -1201,29 +1299,78 @@ function renderOperationLive() {
   setHTMLIfChanged(box, html);
 }
 
-function serviceMatches(s) {
-  const category = categoryOf(s, "service");
-  if (svcCategory !== "all" && category !== svcCategory) return false;
-  if (svcQuery) {
-    const monitorText = s && s.monitored ? "monitoring enabled" : "monitoring paused";
-    const missing = Array.isArray(s && s.observability_missing) ? s.observability_missing.join(" ") : "";
-    const hay = `${displayName(s)} ${s.name || ""} ${s.display_name || ""} ${category} ${s.unit || ""} ${serviceDisplayState(s)} ${monitorText} ${missing}`.toLowerCase();
-    if (!hay.includes(svcQuery)) return false;
-  }
-  switch (svcStatus) {
+function serviceStatusMatches(s, status) {
+  switch (status) {
     case "disabled":
     case "stopped":
     case "started":
     case "starting":
     case "collecting":
     case "monitored":
-    case "failed":      return serviceDisplayState(s) === svcStatus;
-    default:            return true; // "all"
+    case "failed":
+      return serviceDisplayState(s) === status;
+    default:
+      return true; // "all"
   }
+}
+
+function serviceQueryMatches(s, query, category) {
+  if (!query) return true;
+  const monitorText = s && s.monitored ? "monitoring enabled" : "monitoring paused";
+  const missing = Array.isArray(s && s.observability_missing) ? s.observability_missing.join(" ") : "";
+  const hay = `${displayName(s)} ${s.name || ""} ${s.display_name || ""} ${category} ${s.unit || ""} ${serviceDisplayState(s)} ${monitorText} ${missing}`.toLowerCase();
+  return hay.includes(query);
+}
+
+function serviceMatches(s) {
+  if (serviceSurfaceOf(s) !== serviceSurfaceRegular) return false;
+  const category = categoryOf(s, "service");
+  if (svcCategory !== "all" && category !== svcCategory) return false;
+  return serviceQueryMatches(s, svcQuery, category) && serviceStatusMatches(s, svcStatus);
 }
 
 function setSvcQuery(v) { svcQuery = (v || "").trim().toLowerCase(); renderServices(); saveUIState(); }
 function setSvcCategory(v) { svcCategory = v || "all"; renderServices(); saveUIState(); }
+
+function getSplitServicePanel(panelKey) {
+  return splitServicePanels[panelKey] || splitServicePanelBySurface(panelKey);
+}
+
+function splitServiceMatches(s, panel) {
+  const category = categoryOf(s, "service");
+  return serviceQueryMatches(s, panel.query, category) && serviceStatusMatches(s, panel.status);
+}
+
+function syncSplitServicePanelControls(panelKey) {
+  const panel = getSplitServicePanel(panelKey);
+  if (!panel) return;
+  const search = $(panel.search);
+  if (search) search.value = panel.query;
+  syncFilterButtons(panel.filters, panel.filterDataset, panel.status);
+}
+
+function setSplitServiceQuery(panelKey, value) {
+  const panel = getSplitServicePanel(panelKey);
+  if (!panel) return;
+  panel.query = (value || "").trim().toLowerCase();
+  renderServices();
+  saveUIState();
+}
+
+function setSplitServiceStatus(panelKey, value) {
+  const panel = getSplitServicePanel(panelKey);
+  if (!panel) return;
+  panel.status = normalizeServiceStatusFilter(value);
+  syncFilterButtons(panel.filters, panel.filterDataset, panel.status);
+  renderServices();
+  saveUIState();
+}
+
+function setSplitServiceSort(panelKey, key) {
+  const panel = getSplitServicePanel(panelKey);
+  if (!panel) return;
+  toggleSort(panel.sort, key, renderServices);
+}
 
 function compareSortValues(a, b) {
   if (a == null) a = "";
@@ -1258,7 +1405,7 @@ function sortedBy(list, sort, sortKeys, fallbackKey) {
 
 function renderFilterButtonCounts(selector, counts) {
   document.querySelectorAll(`${selector} button`).forEach((b) => {
-    const key = b.dataset.f || b.dataset.wf || b.dataset.af || b.dataset.mf;
+    const key = b.dataset.f || b.dataset.cf || b.dataset.vf || b.dataset.wf || b.dataset.af || b.dataset.mf;
     if (counts[key] !== undefined) b.innerHTML = `${key} <span class="muted">${counts[key]}</span>`;
   });
 }
@@ -1298,7 +1445,6 @@ function syncFilterButtons(selector, datasetKey, activeValue) {
 
 // Column sort: null key keeps the default failing-first order; clicking a header
 // sorts by it (ascending), and clicking the same header again flips direction.
-let svcSort = { key: "", dir: 1 };
 const svcSortKeys = {
   name: (s) => displayName(s).toLowerCase(),
   category: (s) => categoryOf(s, "service").toLowerCase(),
@@ -1340,14 +1486,15 @@ function updateSortIndicatorsFor(attr, sort, headerSelector, headerKey) {
 }
 
 function updateSortIndicators() {
-  updateSortIndicatorsFor("si", svcSort, ".services-table th.sortable[data-sort]", "sort");
+  updateSortIndicatorsFor("si", svcSort, "#services-section .services-table th.sortable[data-sort]", "sort");
+  for (const panel of Object.values(splitServicePanels)) {
+    updateSortIndicatorsFor(panel.sortIndicator, panel.sort, `${panel.section} .services-table th.sortable[data-${panel.sortAttr}]`, panel.sortDataset);
+  }
 }
 
-// renderFilterCounts annotates each status-filter button with how many services
-// match it, for at-a-glance triage.
-function renderFilterCounts() {
-  const s = allServices || [];
-  const c = {
+function serviceStatusCounts(services) {
+  const s = services || [];
+  return {
     all: s.length,
     disabled: s.filter((x) => serviceDisplayState(x) === "disabled").length,
     stopped: s.filter((x) => serviceDisplayState(x) === "stopped").length,
@@ -1357,7 +1504,12 @@ function renderFilterCounts() {
     monitored: s.filter((x) => serviceDisplayState(x) === "monitored").length,
     failed: s.filter((x) => serviceDisplayState(x) === "failed").length,
   };
-  renderFilterButtonCounts("#svc-filters", c);
+}
+
+// renderFilterCounts annotates each status-filter button with how many services
+// match it, for at-a-glance triage.
+function renderFilterCounts(services) {
+  renderFilterButtonCounts("#svc-filters", serviceStatusCounts(services));
 }
 
 function setSvcStatus(v) {
@@ -1468,12 +1620,13 @@ function svcActionAriaLabel(s, action) {
 
 // serviceRowParts builds one service's main and optional expansion <tr> HTML.
 // Shared by the full tbody rebuild and the large-fleet in-place patch path.
-function serviceRowParts(s) {
+function serviceRowParts(s, opts = {}) {
   const st = (s.status || "unknown").toLowerCase();
   const state = serviceState(s);
   const category = categoryOf(s, "service");
   const op = liveOps.get(s.name);
   const busy = serviceBusy(s.name);
+  const showResume = !!opts.showResume;
   const busyText = op
     ? tpl`<div id="svc-${s.name}-busy" class="svc-busy ${op.finished ? (op.ok ? 'ok' : 'bad') : 'inactive'}" role="status" aria-live="polite">${op.action} ${opStateText(op)} · ${opElapsed(op)}s${op.message ? tpl` <span class="muted">${op.message}</span>` : nothing}</div>`
     : nothing;
@@ -1488,8 +1641,7 @@ function serviceRowParts(s) {
         <button ?disabled=${serviceActionDisabled(s, powerAction, busy)} data-service="${s.name}" data-service-action="${powerAction}" title="${alsoApply ? `also applies to: ${s.also_apply.join(", ")}` : nothing}" aria-label="${svcActionAriaLabel(s, powerAction)}" aria-describedby="${svcActionDescribedBy(s, powerAction, busy)}">${powerAction}</button>
         ${svcActionHint(s, "restart", busy)}
         <button ?disabled=${serviceActionDisabled(s, "restart", busy)} data-service="${s.name}" data-service-action="restart" aria-label="${svcActionAriaLabel(s, "restart")}" aria-describedby="${svcActionDescribedBy(s, "restart", busy)}">restart</button>
-        ${svcActionHint(s, "resume", busy)}
-        <button ?disabled=${serviceActionDisabled(s, "resume", busy)} data-service="${s.name}" data-service-action="resume" aria-label="${svcActionAriaLabel(s, "resume")}" aria-describedby="${svcActionDescribedBy(s, "resume", busy)}">resume</button>
+        ${showResume ? tpl`${svcActionHint(s, "resume", busy)}<button ?disabled=${serviceActionDisabled(s, "resume", busy)} data-service="${s.name}" data-service-action="resume" aria-label="${svcActionAriaLabel(s, "resume")}" aria-describedby="${svcActionDescribedBy(s, "resume", busy)}">resume</button>` : nothing}
         ${svcActionHint(s, "reload", busy)}
         <button ?disabled=${serviceActionDisabled(s, "reload", busy)} data-service="${s.name}" data-service-action="reload" aria-label="${svcActionAriaLabel(s, "reload")}" aria-describedby="${svcActionDescribedBy(s, "reload", busy)}">reload</button>
         ${s.monitored
@@ -1521,8 +1673,8 @@ function serviceRowParts(s) {
   return { main, exp };
 }
 
-function serviceRowHTML(s) {
-  const parts = serviceRowParts(s);
+function serviceRowHTML(s, opts = {}) {
+  const parts = serviceRowParts(s, opts);
   return parts.exp ? [parts.main, parts.exp] : [parts.main];
 }
 
@@ -1539,36 +1691,91 @@ function render(services) {
   applyHash();
 }
 
-function renderServices() {
-  const total = (allServices || []).length;
-  const headCount = $("#services-count");
-  if (headCount) headCount.textContent = total ? `(${total})` : "";
-  svcCategory = syncCategorySelect("#svc-category", allServices || [], "service", svcCategory);
-  renderFilterCounts();
-  const list = (allServices || []).filter(serviceMatches);
-  if (svcSort.key && svcSortKeys[svcSort.key]) {
-    sortedBy(list, svcSort, svcSortKeys, "name");
+function servicePanelFilterActive(query, status, category) {
+  return !!query || status !== "all" || (category !== undefined && category !== "all");
+}
+
+function sortServiceList(list, sort) {
+  if (sort.key && svcSortKeys[sort.key]) {
+    sortedBy(list, sort, svcSortKeys, "name");
   } else {
     // Default: failing services first (stable sort keeps backend order in groups).
     list.sort((a, b) => (isFailing(b) ? 1 : 0) - (isFailing(a) ? 1 : 0));
   }
+}
+
+function renderPrimaryServices() {
+  const source = servicesForSurface(serviceSurfaceRegular);
+  const total = source.length;
+  const section = $("#services-section");
+  const rows = $("#rows");
+  setPanelVisible(section, total > 0);
+  const headCount = $("#services-count");
+  if (headCount) headCount.textContent = total ? `(${total})` : "";
+  if (!rows) return;
+  if (!total) {
+    litRender(nothing, rows);
+    const cnt = $("#svc-count");
+    if (cnt) cnt.textContent = "";
+    return;
+  }
+  svcCategory = syncCategorySelect("#svc-category", source, "service", svcCategory);
+  renderFilterCounts(source);
+  const list = source.filter(serviceMatches);
+  sortServiceList(list, svcSort);
   updateSortIndicators();
   const visibleCategories = sortedCategories(list, "service");
   svcCollapsedGroups.forEach((category) => { if (!visibleCategories.includes(category)) svcCollapsedGroups.delete(category); });
   updateGroupButtons("svc", svcGrouped, visibleCategories, svcCollapsedGroups, "services");
   const cnt = $("#svc-count");
-  if (cnt) cnt.textContent = (svcQuery || svcStatus !== "all" || svcCategory !== "all") ? `showing ${list.length} of ${total}` : "";
+  if (cnt) cnt.textContent = servicePanelFilterActive(svcQuery, svcStatus, svcCategory) ? `showing ${list.length} of ${total}` : "";
   let content;
   if (!list.length) {
-    content = (allServices || []).length
+    content = source.length
       ? tpl`<tr><td colspan="10" class="muted">No services match the filter.</td></tr>`
       : tpl`<tr><td colspan="10" class="muted">No services.</td></tr>`;
   } else {
     content = svcGrouped
-      ? renderGroupedRows(list, svcCollapsedGroups, "svc", "service", 10, serviceRowHTML, svcSort.key === "category" ? svcSort.dir : 1)
-      : list.flatMap(serviceRowHTML);
+      ? renderGroupedRows(list, svcCollapsedGroups, "svc", "service", 10, (s) => serviceRowHTML(s), svcSort.key === "category" ? svcSort.dir : 1)
+      : list.flatMap((s) => serviceRowHTML(s));
   }
-  litRender(content, $("#rows"));
+  litRender(content, rows);
+}
+
+function renderSplitServicePanel(panelKey) {
+  const panel = getSplitServicePanel(panelKey);
+  if (!panel) return;
+  const source = servicesForSurface(panel.surface);
+  const total = source.length;
+  const section = $(panel.section);
+  const rows = $(panel.rows);
+  const headCount = $(panel.count);
+  const cnt = $(panel.filterCount);
+  setPanelVisible(section, total > 0);
+  if (headCount) headCount.textContent = total ? `(${total})` : "";
+  if (!rows) return;
+  if (!total) {
+    litRender(nothing, rows);
+    if (cnt) cnt.textContent = "";
+    return;
+  }
+  renderFilterButtonCounts(panel.filters, serviceStatusCounts(source));
+  syncSplitServicePanelControls(panelKey);
+  const list = source.filter((s) => splitServiceMatches(s, panel));
+  sortServiceList(list, panel.sort);
+  updateSortIndicatorsFor(panel.sortIndicator, panel.sort, `${panel.section} .services-table th.sortable[data-${panel.sortAttr}]`, panel.sortDataset);
+  if (cnt) cnt.textContent = servicePanelFilterActive(panel.query, panel.status) ? `showing ${list.length} of ${total}` : "";
+  const filtered = servicePanelFilterActive(panel.query, panel.status);
+  const content = list.length
+    ? list.flatMap((s) => serviceRowHTML(s, { showResume: true }))
+    : tpl`<tr><td colspan="10" class="muted">${filtered ? panel.emptyFiltered : panel.empty}</td></tr>`;
+  litRender(content, rows);
+}
+
+function renderServices() {
+  renderPrimaryServices();
+  renderSplitServicePanel("container");
+  renderSplitServicePanel("vm");
   finishSvcRender();
   updateSectionNav();
 }
@@ -1599,6 +1806,7 @@ function openServiceExpansion(name, scroll) {
   const key = "svc:" + name;
   if (!expanded.has(key)) expanded.add(key);
   history.replaceState(null, "", "#" + key);
+  openSectionForService(name);
   renderServices();
   if (scroll) {
     const el = document.getElementById("svc-row-" + name);
@@ -1689,6 +1897,7 @@ function applyHash() {
   if (h.startsWith("svc:")) {
     const name = h.slice(4);
     if (!(allServices || []).some((s) => s.name === name)) return;
+    openSectionForService(name);
     if (!expanded.has(h)) { expanded.add(h); renderServices(); }
     if (!hashScrolled) {
       const el = document.getElementById("svc-row-" + name);
@@ -3232,11 +3441,6 @@ function renderWatchPanel(panelKey, watches) {
 }
 
 // ---- Installed applications ----------------------------------------------
-let allApps = [];
-let appQuery = "";
-let appCategory = "all";
-let appStatus = "all";
-let appSort = { key: "", dir: 1 };
 const appSortKeys = {
   name: (a) => displayName(a).toLowerCase(),
   category: (a) => categoryOf(a, "app").toLowerCase(),
@@ -3968,15 +4172,17 @@ function attnAriaLabel(it) {
 
 function panelTargetLabel(target) {
   switch (target) {
-    case "failed-services": return "services panel, failed filter";
-    case "starting-services": return "services panel, starting filter";
-    case "collecting-services": return "services panel, collecting filter";
-    case "monitored-services": return "services panel, monitored filter";
+    case "failed-services": return "service targets panel, failed filter";
+    case "starting-services": return "service targets panel, starting filter";
+    case "collecting-services": return "service targets panel, collecting filter";
+    case "monitored-services": return "service targets panel, monitored filter";
     case "failed-watches": return "watches panel, failed filter";
     case "starting-watches": return "watches panel, starting filter";
     case "failed-apps": return "applications panel, failed filter";
     case "starting-apps": return "applications panel, starting filter";
     case "locks-section": return "runtime locks panel";
+    case "containers-section": return "containers panel";
+    case "vms-section": return "virtual machines panel";
     case "daemon-section": return "daemon panel";
     case "activity-section": return "recent activity panel";
     case "watches-section": return "host watches panel";
@@ -4037,18 +4243,19 @@ function renderOverview(ctx) {
     return parts.length ? parts.join(" · ") : "";
   };
   const watchesSettling = settling && !failedWatches.length;
+  const defaultServiceTarget = defaultServicePanelTarget();
   const servicesTarget = failedSvcs.length ? "failed-services"
     : (startingSvcs.length || daemonStarting ? "starting-services"
       : (collectingSvcs.length ? "collecting-services"
         : (startingWatches.length ? "starting-watches"
-          : (startingApps.length ? "starting-apps" : "services-section"))));
+          : (startingApps.length ? "starting-apps" : defaultServiceTarget))));
   const watchesTarget = failedWatches.length ? "failed-watches"
     : (startingWatches.length ? "starting-watches"
       : (startingApps.length && !startingSvcs.length && !daemonStarting ? "starting-apps"
         : (settling ? "starting-services" : "watches-section")));
 
   const tile = (opts) => tpl`
-    <button class="tile ${opts.cls || ""}" data-panel-target="${opts.target || "services-section"}" aria-label="${opts.ariaLabel || opts.label}" aria-describedby="${opts.describedBy || nothing}">
+    <button class="tile ${opts.cls || ""}" data-panel-target="${opts.target || defaultServiceTarget}" aria-label="${opts.ariaLabel || opts.label}" aria-describedby="${opts.describedBy || nothing}">
       <span class="t-label">${opts.label}</span>
       <div class="t-value">${opts.value}</div>
       <div class="t-sub">${opts.sub || ""}</div>
@@ -4085,8 +4292,8 @@ function renderOverview(ctx) {
     ? (failedSvcs.length ? "failed-services"
       : (failedWatches.length ? "failed-watches"
         : (failedApps.length ? "failed-apps"
-          : (activeLocks.length ? "locks-section" : "services-section"))))
-    : "services-section";
+          : (activeLocks.length ? "locks-section" : defaultServiceTarget))))
+    : defaultServiceTarget;
   const alertsSub = alerts
     ? [failedSvcs.length && `${failedSvcs.length} svc`, failedWatches.length && `${failedWatches.length} watch`, failedApps.length && `${failedApps.length} app`, activeLocks.length && `${activeLocks.length} lock`].filter(Boolean).join(" · ")
     : "nothing on fire";
@@ -4102,7 +4309,7 @@ function renderOverview(ctx) {
     ? "collecting-services"
     : (settling && !failedSvcs.length
     ? servicesTarget
-    : (monitoredSvcs.length ? "monitored-services" : "services-section"));
+    : (monitoredSvcs.length ? "monitored-services" : defaultServiceTarget));
   const monitoredSub = collectingSvcs.length
     ? `${collectingSvcs.length} collecting`
     : (settling && !failedSvcs.length ? (servicesSettlingSub() || "settling") : "");
@@ -4124,8 +4331,8 @@ function renderOverview(ctx) {
       value: tpl`${ops.in_use || 0}<small> / ${ops.total}</small>`,
       cls: saturated ? "t-warn" : "",
       sub: opSub,
-      target: "services-section",
-      ariaLabel: tileAriaLabel("Op slots", `${ops.in_use || 0} of ${ops.total}`, opSub, "services-section"),
+      target: defaultServiceTarget,
+      ariaLabel: tileAriaLabel("Op slots", `${ops.in_use || 0} of ${ops.total}`, opSub, defaultServiceTarget),
     }));
   }
   const cpu = (hostMetrics || []).find((m) => m.name === "total_cpu");
@@ -5297,6 +5504,32 @@ function initStaticHandlers() {
     });
   }
 
+  function bindSplitServicePanelControls(panelKey) {
+    const panel = getSplitServicePanel(panelKey);
+    if (!panel) return;
+    const search = $(panel.search);
+    if (search) {
+      search.addEventListener("input", () => setSplitServiceQuery(panelKey, search.value));
+      search.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          search.value = "";
+          setSplitServiceQuery(panelKey, "");
+        }
+      });
+    }
+    const filters = $(panel.filters);
+    if (filters) {
+      filters.addEventListener("click", (e) => {
+        const btn = closestFrom(e, `button[data-${panel.filterDataset}]`);
+        if (btn) setSplitServiceStatus(panelKey, btn.dataset[panel.filterDataset] || "all");
+      });
+    }
+    document.querySelectorAll(`${panel.section} .services-table th.sortable[data-${panel.sortAttr}]`).forEach((th) => {
+      bindSortHeader(th, () => setSplitServiceSort(panelKey, th.dataset[panel.sortDataset] || ""));
+    });
+  }
+  Object.keys(splitServicePanels).forEach(bindSplitServicePanelControls);
+
   document.querySelectorAll(".services-table th.sortable[data-sort]").forEach((th) => {
     bindSortHeader(th, () => setSvcSort(th.dataset.sort || ""));
   });
@@ -5631,6 +5864,8 @@ function setKeyboardShortcutsEnabled(enabled) {
 function activeSearchBox() {
   const panels = [
     ["#services-section", "#svc-search"],
+    ["#containers-section", "#container-search"],
+    ["#vms-section", "#vm-search"],
     ["#storage-section", "#storage-search"],
     ["#network-section", "#network-search"],
     ["#watches-section", "#watch-search"],
@@ -5642,8 +5877,8 @@ function activeSearchBox() {
     const box = $(searchSel);
     if (box) return { section, box };
   }
-  const fallback = $("#svc-search");
-  return fallback ? { section: $("#services-section"), box: fallback } : null;
+  const fallback = $("#svc-search") || $("#container-search") || $("#vm-search");
+  return fallback ? { section: $("#" + defaultServicePanelTarget()), box: fallback } : null;
 }
 
 // "/" focuses the visible panel search (unless already typing in a field).
