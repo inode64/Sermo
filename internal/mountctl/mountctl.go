@@ -5,6 +5,7 @@ package mountctl
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,6 +35,9 @@ const (
 const (
 	mountActionMount  = "mount"
 	mountActionUmount = "umount"
+
+	rootMountPath             = "/"
+	rootUmountDisabledMessage = "root filesystem cannot be unmounted"
 
 	mountResultFailed = "failed"
 	mountResultOK     = "ok"
@@ -173,6 +177,19 @@ func defaultUmountSpec() UmountSpec {
 	}
 }
 
+// CanUmountPath reports whether Sermo is allowed to unmount path.
+func CanUmountPath(path string) bool {
+	return filepath.Clean(path) != rootMountPath
+}
+
+// UmountDisabledReason reports why path cannot be unmounted, or an empty string.
+func UmountDisabledReason(path string) string {
+	if CanUmountPath(path) {
+		return ""
+	}
+	return rootUmountDisabledMessage
+}
+
 // IDForPath derives a simple stable identifier from a mount path.
 func IDForPath(path string) string {
 	clean := strings.Trim(filepath.Clean(path), "/")
@@ -247,6 +264,9 @@ func (c Controller) Acquire(ctx context.Context, spec Spec) (Result, error) {
 
 // Release decrements the mount refcount and unmounts the path when it reaches 0.
 func (c Controller) Release(ctx context.Context, spec Spec) (Result, error) {
+	if reason := UmountDisabledReason(spec.Path); reason != "" {
+		return disabledUmountResult(spec, reason), errors.New(reason)
+	}
 	return c.withLock(spec, func() (Result, error) {
 		state, err := c.readState(spec)
 		if err != nil {
@@ -323,6 +343,9 @@ func (c Controller) withLock(spec Spec, fn func() (Result, error)) (Result, erro
 }
 
 func (c Controller) unmount(ctx context.Context, spec Spec) (Result, error) {
+	if reason := UmountDisabledReason(spec.Path); reason != "" {
+		return disabledUmountResult(spec, reason), errors.New(reason)
+	}
 	mounted, err := c.isMounted(spec.Path)
 	if err != nil {
 		return Result{}, err
@@ -383,6 +406,17 @@ func (c Controller) unmount(ctx context.Context, spec Spec) (Result, error) {
 		}
 	}
 	return result, fmt.Errorf("%s", result.Message)
+}
+
+func disabledUmountResult(spec Spec, message string) Result {
+	return Result{
+		Name:    spec.Name,
+		Path:    spec.Path,
+		Action:  mountActionUmount,
+		Status:  mountResultFailed,
+		Message: message,
+		Mounted: true,
+	}
 }
 
 func (c Controller) readState(spec Spec) (State, error) {

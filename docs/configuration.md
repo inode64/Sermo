@@ -278,6 +278,9 @@ The Web UI's **Mount units** panel exposes storage targets that have a `mount:`
 block. It can mount/unmount, show the same busy-process blockers before
 unmounting, send a native TTY alert to logged-in users who are blocking the
 mount, and run `kill+umount` only through the explicit mount kill policy below.
+The root filesystem (`path: /`) is read-only from mount operations: Sermo will
+show it as mounted, but CLI and Web/API `umount`, blocker alerts and
+`kill+umount` are rejected.
 
 With `mount.refcount: true` (the default), every successful `mount` increments
 Sermo's runtime counter and `umount` decrements it. The real `umount` only runs

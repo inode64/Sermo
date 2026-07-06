@@ -160,6 +160,33 @@ func TestReleaseUnmountsOnlyWhenRefcountReachesZero(t *testing.T) {
 	}
 }
 
+func TestReleaseRefusesRootMount(t *testing.T) {
+	mounted := true
+	runner := &fakeRunner{mounted: &mounted}
+	c := testController(t, &mounted, runner)
+	discovered := 0
+	c.DiscoverUsers = func(string) ([]process.Process, error) {
+		discovered++
+		return []process.Process{{PID: 123}}, nil
+	}
+	spec := EphemeralSpec("/")
+	spec.Umount.AllowSIGKILL = true
+
+	res, err := c.Release(context.Background(), spec)
+	if err == nil {
+		t.Fatal("Release / succeeded")
+	}
+	if res.Status != mountResultFailed || res.Action != mountActionUmount || !res.Mounted {
+		t.Fatalf("Release / = %+v, want failed mounted umount result", res)
+	}
+	if !strings.Contains(res.Message, "root filesystem cannot be unmounted") {
+		t.Fatalf("Release / message = %q", res.Message)
+	}
+	if len(runner.calls) != 0 || discovered != 0 {
+		t.Fatalf("commands=%v discovered=%d, want no umount, blockers or signals", runner.calls, discovered)
+	}
+}
+
 func TestAcquireRequiresFstabWhenMounting(t *testing.T) {
 	mounted := false
 	runner := &fakeRunner{mounted: &mounted}

@@ -60,7 +60,7 @@ enabled.
 | Service action | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; `reload` is offered only when the service reports `can_reload` from init backend reload support or a valid `reload:` fallback; `no_cascade` skips `also_apply` targets on start/stop/restart |
 | Service preflight | `POST /api/services/{name}/preflight` | run preflight checks without changing service state |
 | Watch action | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand` |
-| Mount action | `POST /api/mounts/{name}/{action}[?kill=1]` | `mount`, `umount`, `blockers`, `alert`; `kill=1` enables policy-gated blocker signalling for `umount` |
+| Mount action | `POST /api/mounts/{name}/{action}[?kill=1]` | `mount`, `umount`, `blockers`, `alert`; `kill=1` enables policy-gated blocker signalling for `umount`; `/` rejects unmount paths |
 | Lock release | `POST /api/locks/{service}/release?name=NAME` | releases inactive stale/expired named locks; active locks are refused |
 | Events clear | `POST /api/events/clear?before=TIME` | clears persisted event/activity rows; `before` accepts RFC3339 or duration |
 | State compact | `POST /api/state/compact?before=TIME` | prunes old SLA/metrics/event history and vacuums the state database; matches `sermoctl state compact` |
@@ -265,7 +265,7 @@ Columns:
 | Processes | compact list of processes currently using the mount path |
 | Users | unique users for those processes |
 | State | active/inactive/error pill |
-| Actions | admin-only `mount`; when mounted, `umount`, `alert`, and `kill+umount` |
+| Actions | admin-only `mount`; when mounted, `umount`, `alert`, and `kill+umount`; `/` renders these unmount-flow buttons disabled |
 
 The column headers except Actions are sortable.
 `GET /api/mounts` includes a cached read-only blocker summary for the table.
@@ -273,7 +273,9 @@ Before `umount`, `alert` or `kill+umount`, the UI asks
 `POST /api/mounts/{name}/blockers` and shows a fresh process list for the path.
 `alert` sends a native TTY message to logged-in blocking users. `kill+umount`
 requires the configured mount policy to mark at least one current blocker
-killable.
+killable. For `path: /`, `GET /api/mounts` returns `can_umount: false`; the
+Web UI disables the unmount-flow buttons and the API rejects `umount?kill=1`
+without scanning blockers or sending signals.
 
 ## Host watch panels
 

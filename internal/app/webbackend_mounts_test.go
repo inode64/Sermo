@@ -94,7 +94,7 @@ func TestWebBackendMounts(t *testing.T) {
 	if mounts[0].Name != "mount-backup" || mounts[0].Path != "/mnt/backup" || !mounts[0].Mounted {
 		t.Fatalf("mount = %+v", mounts[0])
 	}
-	if mounts[0].State != "active" || mounts[0].Refcount != 0 {
+	if mounts[0].State != "active" || mounts[0].Refcount != 0 || !mounts[0].CanUmount {
 		t.Fatalf("mount state/refcount = %+v", mounts[0])
 	}
 }
@@ -167,6 +167,58 @@ func TestWebBackendMountsReportsUsageError(t *testing.T) {
 	}
 }
 
+func TestWebBackendRootMountCannotUnmountOrScanBlockers(t *testing.T) {
+	mounted := true
+	signalled := 0
+	scans := 0
+	runner := &webMountRunner{mounted: &mounted}
+	cfg := rootMountTestConfig(t)
+	b, warns := NewWebBackend(cfg, Deps{
+		ExecxRunner: runner,
+		MountSampler: func() ([]checks.Mount, error) {
+			return []checks.Mount{{MountPoint: "/", Device: "/dev/sda1"}}, nil
+		},
+		MountDiscoverUsers: func(string) ([]process.Process, error) {
+			scans++
+			return []process.Process{{
+				PID: 1, User: "root", UID: 0, Exe: "/sbin/init", ExeOK: true, Source: "mount",
+			}}, nil
+		},
+		MountSignaler: webMountSignaler{signalled: &signalled},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	reason := mountctl.UmountDisabledReason("/")
+
+	mounts := b.Mounts(context.Background())
+	if len(mounts) != 1 {
+		t.Fatalf("mounts = %+v, want one root mount", mounts)
+	}
+	if mounts[0].CanUmount || mounts[0].UmountReason != reason || len(mounts[0].Blockers) != 0 {
+		t.Fatalf("root mount = %+v, want unmount disabled without blockers", mounts[0])
+	}
+	if scans != 0 {
+		t.Fatalf("root mount usage scans = %d, want none", scans)
+	}
+
+	blockers := b.MountBlockers(context.Background(), "mount-root")
+	if !blockers.OK || blockers.CanUmount || blockers.CanKill || blockers.CanAlert || blockers.Message != reason || len(blockers.Blockers) != 0 {
+		t.Fatalf("root blockers = %+v, want read-only disabled response", blockers)
+	}
+	res := b.MountAction(context.Background(), "mount-root", "umount", web.MountActionOptions{KillBlockers: true})
+	if res.OK || res.Message != reason || !res.Mounted {
+		t.Fatalf("root kill umount = %+v, want blocked mounted result", res)
+	}
+	alert := b.AlertMountUsers(context.Background(), "mount-root")
+	if alert.OK || alert.Message != reason {
+		t.Fatalf("root alert = %+v, want blocked alert", alert)
+	}
+	if len(runner.calls) != 0 || signalled != 0 || scans != 0 || !mounted {
+		t.Fatalf("commands=%v signals=%d scans=%d mounted=%t, want no host action", runner.calls, signalled, scans, mounted)
+	}
+}
+
 func TestWebBackendMountBlockersMarksPolicyKillable(t *testing.T) {
 	cfg := mountTestConfig(t)
 	b, warns := NewWebBackend(cfg, Deps{
@@ -183,7 +235,7 @@ func TestWebBackendMountBlockersMarksPolicyKillable(t *testing.T) {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
 	res := b.MountBlockers(context.Background(), "mount-backup")
-	if !res.OK || !res.CanKill || !res.CanAlert || len(res.Blockers) != 1 {
+	if !res.OK || !res.CanUmount || !res.CanKill || !res.CanAlert || len(res.Blockers) != 1 {
 		t.Fatalf("MountBlockers = %+v", res)
 	}
 	if !res.Blockers[0].Killable || res.Blockers[0].User != "backup" {
@@ -357,5 +409,40 @@ func mountTestConfig(t *testing.T) *config.Config {
 			},
 		},
 		StorageNames: []string{"mount-backup"},
+	}
+}
+
+func rootMountTestConfig(t *testing.T) *config.Config {
+	t.Helper()
+	root := t.TempDir()
+	runtime := filepath.Join(root, "run")
+	return &config.Config{
+		Global: config.Global{Runtime: runtime, Raw: map[string]any{
+			"paths": map[string]any{"runtime": runtime},
+		}},
+		Storages: map[string]*config.Document{
+			"mount-root": {
+				Body: map[string]any{
+					"name": "mount-root",
+					"path": "/",
+					"capacity": map[string]any{
+						"mounted": true,
+					},
+					"mount": map[string]any{
+						"refcount": false,
+						"umount": map[string]any{
+							"allow_sigkill": true,
+						},
+						"stop_policy": map[string]any{
+							"kill_only_if": map[string]any{
+								"users":   []any{"root"},
+								"exe_any": []any{"/sbin/init"},
+							},
+						},
+					},
+				},
+			},
+		},
+		StorageNames: []string{"mount-root"},
 	}
 }

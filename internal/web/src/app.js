@@ -3905,9 +3905,19 @@ function mountActionButtons(m, mounted) {
   if (!mounted) {
     return `<button data-mount="${name}" data-mount-action="mount" aria-label="Mount ${label}">mount</button>`;
   }
-  return `<button data-mount="${name}" data-mount-action="umount" aria-label="Unmount ${label}">umount</button>` +
-    `<button data-mount="${name}" data-mount-action="alert" aria-label="Alert users blocking ${label}">alert</button>` +
-    `<button class="danger-btn" data-mount="${name}" data-mount-action="kill-umount" aria-label="Kill blockers and unmount ${label}">kill+umount</button>`;
+  const disabledReason = mountUmountDisabledReason(m);
+  const hintId = `mount-${detailDomKey(m.name || m.path || "mount")}-umount-hint`;
+  const hint = disabledReason ? `<span id="${hintId}" class="visually-hidden">${esc(disabledReason)}</span>` : "";
+  const disabledAttrs = disabledReason ? ` disabled aria-describedby="${hintId}" title="${esc(disabledReason)}"` : "";
+  return hint +
+    `<button data-mount="${name}" data-mount-action="umount" aria-label="Unmount ${label}"${disabledAttrs}>umount</button>` +
+    `<button data-mount="${name}" data-mount-action="alert" aria-label="Alert users blocking ${label}"${disabledAttrs}>alert</button>` +
+    `<button class="danger-btn" data-mount="${name}" data-mount-action="kill-umount" aria-label="Kill blockers and unmount ${label}"${disabledAttrs}>kill+umount</button>`;
+}
+
+function mountUmountDisabledReason(m) {
+  if (!m || m.can_umount !== false) return "";
+  return m.umount_disabled_reason || "root filesystem cannot be unmounted";
 }
 
 function renderNotifiers(notifiers) {
@@ -4633,6 +4643,10 @@ function mountBlockerSummary(blockers) {
 
 async function confirmMountUnmount(name) {
   const info = await fetchMountBlockers(name);
+  if (info.can_umount === false) {
+    setStatus(`umount ${name}: ${info.umount_disabled_reason || info.message || "unmount is disabled"}`, "warn");
+    return false;
+  }
   const blockers = info.blockers || [];
   const message = blockers.length
     ? `Mount "${name}" is currently used by:\n${mountBlockerSummary(blockers)}\n\nThis will try a normal unmount only. Use alert first to message users, or kill+umount for policy-gated signal escalation.`
@@ -4647,6 +4661,10 @@ async function confirmMountUnmount(name) {
 
 async function confirmMountKillUnmount(name) {
   const info = await fetchMountBlockers(name);
+  if (info.can_umount === false) {
+    setStatus(`kill+umount ${name}: ${info.umount_disabled_reason || info.message || "unmount is disabled"}`, "warn");
+    return false;
+  }
   const blockers = info.blockers || [];
   if (!blockers.length) {
     return promptConfirm({
@@ -4670,6 +4688,10 @@ async function confirmMountKillUnmount(name) {
 
 async function confirmMountAlert(name) {
   const info = await fetchMountBlockers(name);
+  if (info.can_umount === false) {
+    setStatus(`alert ${name}: ${info.umount_disabled_reason || info.message || "unmount is disabled"}`, "warn");
+    return false;
+  }
   const blockers = info.blockers || [];
   if (!blockers.length) {
     setStatus(`alert ${name}: no blocking processes found`, "warn");
