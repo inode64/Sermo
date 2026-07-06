@@ -13,6 +13,8 @@ import (
 
 func init() { Register(libvirtProtocol{}, "libvirtd") }
 
+const defaultLibvirtTimeout = 10 * time.Second
+
 // libvirtProtocol probes a libvirt daemon (libvirtd) natively over its RPC
 // protocol using the pure-Go github.com/digitalocean/go-libvirt client. It opens
 // a connection (CONNECT_OPEN) to a driver URI and reads the daemon's libvirt
@@ -190,7 +192,7 @@ func libvirtTransport(cfg Config) (mode, addr, uri string) {
 func libvirtTimeout(ctx context.Context) time.Duration {
 	dl, ok := ctx.Deadline()
 	if !ok {
-		return 10 * time.Second
+		return defaultLibvirtTimeout
 	}
 	if d := time.Until(dl); d > 0 {
 		return d

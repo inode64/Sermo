@@ -458,7 +458,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		resolution = deps.Interval
 	}
 	if resolution <= 0 {
-		resolution = 30 * time.Second
+		resolution = config.DefaultEngineInterval
 	}
 	every, warnings := checkIntervals(tree, resolution)
 

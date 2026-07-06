@@ -21,6 +21,11 @@ import (
 	"sermo/internal/volume"
 )
 
+const (
+	defaultWatchKillTermTimeout = 10 * time.Second
+	defaultWatchKillTimeout     = 5 * time.Second
+)
+
 // BuildWatches resolves the global `watches` section into runnable Watches, plus
 // the per-service version/config monitors synthesized from each service's
 // `version:`/`config:` blocks. Disabled or malformed entries are skipped with a
@@ -645,10 +650,10 @@ func parseKill(then map[string]any) (*killSpec, error) {
 	ks.termTimeout = cfgval.Duration(m["term_timeout"])
 	ks.killTimeout = cfgval.Duration(m["kill_timeout"])
 	if ks.termTimeout <= 0 {
-		ks.termTimeout = 10 * time.Second
+		ks.termTimeout = defaultWatchKillTermTimeout
 	}
 	if ks.killTimeout <= 0 {
-		ks.killTimeout = 5 * time.Second
+		ks.killTimeout = defaultWatchKillTimeout
 	}
 	return ks, nil
 }

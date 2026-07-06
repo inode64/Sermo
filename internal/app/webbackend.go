@@ -2531,7 +2531,7 @@ func (b *WebBackend) emitLockReleaseEvent(service, name, kind, status, message s
 		Service: service,
 		Kind:    kind,
 		Rule:    rule,
-		Action:  "release-lock",
+		Action:  eventActionReleaseLock,
 		Status:  status,
 		Message: message,
 	})
@@ -2547,7 +2547,13 @@ func isServiceOperationAction(action string) bool {
 }
 
 func serviceOperationActionList() []string {
-	return []string{"start", "stop", "restart", "reload", "resume"}
+	return []string{
+		string(rules.ActionStart),
+		string(rules.ActionStop),
+		string(rules.ActionRestart),
+		string(rules.ActionReload),
+		string(rules.ActionResume),
+	}
 }
 
 // ActivitySummary returns a rollup of recent events for the dashboard.
@@ -3378,9 +3384,9 @@ func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionRes
 
 // SetMonitored enables or disables monitoring for a service.
 func (b *WebBackend) SetMonitored(_ context.Context, name string, monitored bool) error {
-	action := "monitor"
+	action := eventActionMonitor
 	if !monitored {
-		action = "unmonitor"
+		action = eventActionUnmonitor
 	}
 	if _, ok := b.entries[name]; !ok {
 		msg := fmt.Sprintf("unknown service %q", name)
@@ -3421,9 +3427,9 @@ func (b *WebBackend) SetMonitored(_ context.Context, name string, monitored bool
 
 // SetWatchMonitored enables or disables monitoring for a host watch.
 func (b *WebBackend) SetWatchMonitored(_ context.Context, name string, monitored bool) error {
-	action := "monitor"
+	action := eventActionMonitor
 	if !monitored {
-		action = "unmonitor"
+		action = eventActionUnmonitor
 	}
 	if _, ok := b.watches[name]; !ok {
 		msg := fmt.Sprintf("unknown watch %q", name)
@@ -3496,7 +3502,7 @@ func (b *WebBackend) emitWatchExpandEvent(watch, kind, status, message string) {
 	b.emit(Event{
 		Watch:   watch,
 		Kind:    kind,
-		Action:  "expand",
+		Action:  eventActionExpand,
 		Status:  status,
 		Message: message,
 	})

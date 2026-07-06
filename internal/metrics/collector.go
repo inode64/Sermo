@@ -31,6 +31,8 @@ const (
 	MetricLoad15      = "load15"
 )
 
+const defaultSystemFreshness = 2 * time.Second
+
 // Reader abstracts the /proc and /sys reads the collector needs, so rate and
 // percentage math can be tested without real processes.
 type Reader interface {
@@ -102,7 +104,7 @@ func New(reader Reader) *Collector {
 	return &Collector{
 		Reader:           reader,
 		Now:              time.Now,
-		SystemFreshness:  2 * time.Second,
+		SystemFreshness:  defaultSystemFreshness,
 		prevService:      map[string]cpuSample{},
 		prevServiceProcs: map[string]procCPUSample{},
 		prevServiceIO:    map[string]ioSample{},

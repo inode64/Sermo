@@ -8,14 +8,16 @@ import (
 	"sermo/internal/web"
 )
 
+const preflightDeadlineMargin = 5 * time.Second
+
 // PreflightDeadline bounds a preflight run generously above a single check's
 // timeout so concurrent checks each get their full per-check budget. Shared by
 // the daemon's web preflight and the sermoctl preflight command.
 func PreflightDeadline(perCheck time.Duration) time.Duration {
 	if perCheck <= 0 {
-		perCheck = 10 * time.Second
+		perCheck = DefaultEngineCheckTimeout
 	}
-	return perCheck + 5*time.Second
+	return perCheck + preflightDeadlineMargin
 }
 
 func preflightToWeb(out checks.Outcome) web.PreflightResult {
