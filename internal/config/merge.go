@@ -11,17 +11,19 @@ var namedSections = []string{"checks", "preflight", "processes", "rules", "watch
 func mergeMaps(dst, src map[string]any) map[string]any {
 	out := cloneMap(dst)
 	for k, sv := range src {
-		if dv, ok := out[k]; ok {
-			dm, dIsMap := dv.(map[string]any)
-			sm, sIsMap := sv.(map[string]any)
-			if dIsMap && sIsMap {
-				out[k] = mergeMaps(dm, sm)
-				continue
-			}
+		if dm, sm, ok := mergeableMaps(out[k], sv); ok {
+			out[k] = mergeMaps(dm, sm)
+			continue
 		}
 		out[k] = deepCopy(sv)
 	}
 	return out
+}
+
+func mergeableMaps(dst, src any) (map[string]any, map[string]any, bool) {
+	dm, dIsMap := dst.(map[string]any)
+	sm, sIsMap := src.(map[string]any)
+	return dm, sm, dIsMap && sIsMap
 }
 
 // applyDeletes drops entries marked `delete: true` from named sections after a
