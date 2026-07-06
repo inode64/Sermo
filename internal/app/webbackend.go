@@ -320,18 +320,18 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			iv = config.EngineInterval(cfg, 30*time.Second)
 		}
 		entry := &webEntry{
-			displayName:       config.DisplayName(resolved.Tree, name),
-			category:          config.CategoryLabel(resolved.Tree, config.CategoryService),
-			unit:              target.Unit,
-			backend:           string(target.Backend),
-			interval:          iv,
-			dryRun:            config.DryRun(resolved.Tree),
-			policyCooldown:    rules.ParsePolicy(resolved.Tree).Cooldown,
-			noResidentProcess: noResidentProcess(resolved.Tree),
-			alsoApply:         config.CascadeTargets(resolved.Tree),
+			displayName:    config.DisplayName(resolved.Tree, name),
+			category:       config.CategoryLabel(resolved.Tree, config.CategoryService),
+			unit:           target.Unit,
+			backend:        string(target.Backend),
+			interval:       iv,
+			dryRun:         config.DryRun(resolved.Tree),
+			policyCooldown: rules.ParsePolicy(resolved.Tree).Cooldown,
+			alsoApply:      config.CascadeTargets(resolved.Tree),
 		}
 		if disabled {
 			entry.disabled = true
+			entry.noResidentProcess = noResidentProcess(resolved.Tree)
 		} else {
 			serviceDeps := deps
 			serviceDeps.Backend = target.Backend
@@ -340,6 +340,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			engine, checkDeps, discoverer := serviceRuntime(name, target.Unit, resolved.Tree, serviceDeps, map[string]string{}, operationEventEmitter(deps.Emit))
 			selectors, processWarnings := serviceProcessSelectors(context.Background(), resolved.Tree, serviceDeps, target.Unit)
 			names, types := checkCatalog(resolved.Tree)
+			entry.noResidentProcess = serviceNoResidentProcess(resolved.Tree, selectors, serviceBackendPIDs(serviceDeps, target.Unit))
 			entry.engine = engine
 			entry.status = checkDeps.Status
 			entry.checkNames = names

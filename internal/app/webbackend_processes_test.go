@@ -189,6 +189,36 @@ func TestServiceProcessSelectorsExplicitEmptySkipsInitDerivation(t *testing.T) {
 	}
 }
 
+func TestServiceNoResidentProcessInfersInitServiceWithoutPIDs(t *testing.T) {
+	deps := Deps{
+		Backend:     servicemgr.BackendSystemd,
+		ExecxRunner: procInfoRunner{},
+	}
+	tree := map[string]any{}
+
+	selectors, warnings := serviceProcessSelectors(context.Background(), tree, deps, "wait-online.service")
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %v, want none", warnings)
+	}
+	if len(selectors) != 0 {
+		t.Fatalf("selectors = %+v, want none", selectors)
+	}
+	if !serviceNoResidentProcess(tree, selectors, serviceBackendPIDs(deps, "wait-online.service")) {
+		t.Fatal("service without selectors or backend PIDs must be treated as no resident process")
+	}
+}
+
+func TestServiceNoResidentProcessKeepsBackendPIDServiceResident(t *testing.T) {
+	deps := Deps{
+		Backend:     servicemgr.BackendSystemd,
+		ExecxRunner: systemdPIDRunner{pid: os.Getpid()},
+	}
+
+	if serviceNoResidentProcess(map[string]any{}, nil, serviceBackendPIDs(deps, "web.service")) {
+		t.Fatal("service with backend PIDs must not be treated as no resident process")
+	}
+}
+
 func TestWebBackendDetailNoResidentProcess(t *testing.T) {
 	root := t.TempDir()
 	enabled := filepath.Join(root, "services")
@@ -247,6 +277,65 @@ processes: {}
 	}
 	if runtime, ok := wb.ServiceRuntime(context.Background(), "firehol", time.Hour); ok {
 		t.Fatalf("ServiceRuntime returned %+v for no resident process service", runtime)
+	}
+}
+
+func TestWebBackendInitHelperWithoutPIDsDoesNotWaitForRuntimeMetrics(t *testing.T) {
+	root := t.TempDir()
+	enabled := filepath.Join(root, "services")
+	if err := os.MkdirAll(enabled, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	globalPath := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(globalPath, []byte(`
+paths:
+  services: [`+enabled+`]
+defaults:
+  policy:
+    cooldown: 5m
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(enabled, "wait-online.yml"), []byte(`
+name: wait-online
+service: NetworkManager-wait-online
+checks:
+  state:
+    type: service
+    expect: active
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(globalPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	snaps := NewSnapshots()
+	snaps.Publish("wait-online", map[string]checks.Result{
+		"state": {Check: "state", OK: true},
+	}, map[string]bool{"state": true})
+	observability := NewObservabilityRegistry()
+	observability.MarkReady("wait-online", time.Now())
+	wb, warnings := NewWebBackend(cfg, Deps{
+		Backend:       servicemgr.BackendSystemd,
+		Manager:       fakeManager{},
+		ExecxRunner:   procInfoRunner{},
+		Snapshots:     snaps,
+		Observability: observability,
+	})
+	if len(warnings) > 0 {
+		t.Fatalf("NewWebBackend warnings: %v", warnings)
+	}
+
+	services := wb.Services(context.Background())
+	if len(services) != 1 {
+		t.Fatalf("Services returned %d entries, want 1", len(services))
+	}
+	if !services[0].NoResidentProcess {
+		t.Fatal("service without process selectors or backend PIDs should be marked no resident process")
+	}
+	if services[0].State != TargetStateMonitored || !services[0].ObservabilityReady || len(services[0].ObservabilityMissing) != 0 {
+		t.Fatalf("service = %+v, want monitored without missing runtime metrics", services[0])
 	}
 }
 

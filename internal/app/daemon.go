@@ -430,7 +430,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	maxParallel := deps.MaxParallel
 	ruleSet, _ := rules.ParseRules(tree)
 	selectors, _ := serviceProcessSelectors(context.Background(), tree, deps, unit)
-	noResident := noResidentProcess(tree)
+	noResident := serviceNoResidentProcess(tree, selectors, serviceBackendPIDs(deps, unit))
 	var worker *Worker
 	pidsForCycle := cyclePIDSource(func() []int {
 		if noResident {
