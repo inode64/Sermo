@@ -311,99 +311,99 @@ func BuildWithWarnings(section map[string]any, deps Deps) ([]Built, []BuildWarni
 
 func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, client *http.Client, deps Deps) (Check, string) {
 	switch typ {
-	case "tcp":
+	case checkTypeTCP:
 		return buildTCPCheck(b, entry)
-	case "ports":
+	case checkTypePorts:
 		return buildPortsCheck(b, entry)
-	case "http":
+	case checkTypeHTTP:
 		return buildHTTPCheck(b, entry, client)
-	case "command":
+	case checkTypeCommand:
 		return buildCommandCheck(b, entry, runner)
-	case "service":
+	case checkTypeService:
 		return buildServiceCheck(b, entry, deps)
-	case "file_exists":
+	case checkTypeFileExists:
 		return buildFileExistsCheck(b, entry)
-	case "file":
+	case checkTypeFile:
 		return buildFileCheck(b, entry)
-	case "lockfile":
+	case checkTypeLockfile:
 		return buildLockfileCheck(b, entry)
-	case "binary":
+	case checkTypeBinary:
 		return buildBinaryCheck(b, entry)
-	case "pidfile":
+	case checkTypePidfile:
 		return buildPidfileCheck(b, entry, deps)
-	case "socket":
+	case checkTypeSocket:
 		return buildSocketCheck(b, entry)
-	case "libraries":
+	case checkTypeLibraries:
 		return buildLibrariesCheck(b, entry)
-	case "metric":
+	case checkTypeMetric:
 		return buildMetricCheck(b, entry, deps)
-	case "process":
+	case checkTypeProcess:
 		return buildProcessCheck(b, entry, deps)
-	case "count":
+	case checkTypeCount:
 		return buildCountCheck(b, entry)
-	case "storage":
+	case checkTypeStorage:
 		return buildStorageCheck(b, entry, deps)
-	case "autofs":
+	case checkTypeAutofs:
 		return buildAutofsCheck(b, entry, deps)
-	case "net":
+	case checkTypeNet:
 		return buildNetCheck(b, entry, deps)
-	case "load":
+	case checkTypeLoad:
 		return buildLoadCheck(b, entry, deps)
-	case "users":
+	case checkTypeUsers:
 		return buildUsersCheck(b, entry, deps)
-	case "process_count":
+	case checkTypeProcessCount:
 		return buildProcessCountCheck(b, entry, deps)
-	case "hdparm":
+	case checkTypeHdparm:
 		return buildHdparmCheck(b, entry, runner)
-	case "sensors":
+	case checkTypeSensors:
 		return buildSensorsCheck(b, entry, deps)
-	case "smart":
+	case checkTypeSmart:
 		return buildSmartCheck(b, entry, runner)
-	case "raid":
+	case checkTypeRAID:
 		return buildRaidCheck(b, entry, deps)
-	case "edac":
+	case checkTypeEDAC:
 		return buildEdacCheck(b, entry, deps)
-	case "config":
+	case checkTypeConfig:
 		return buildConfigCheck(b, entry, runner)
-	case "fds":
+	case checkTypeFDS:
 		return buildFdsCheck(b, entry, deps)
-	case "memory":
+	case checkTypeMemory:
 		return buildMemoryCheck(b, entry, deps)
-	case "pressure":
+	case checkTypePressure:
 		return buildPressureCheck(b, entry, deps)
-	case "pids":
+	case checkTypePIDs:
 		return buildPidsCheck(b, entry, deps)
-	case "diskio":
+	case checkTypeDiskIO:
 		return buildDiskIOCheck(b, entry, deps)
-	case "conntrack":
+	case checkTypeConntrack:
 		return buildConntrackCheck(b, entry, deps)
-	case "firewall_rules":
+	case checkTypeFirewallRules:
 		return buildFirewallRulesCheck(b, entry, runner, deps)
-	case "entropy":
+	case checkTypeEntropy:
 		return buildEntropyCheck(b, entry, deps)
-	case "zombies":
+	case checkTypeZombies:
 		return buildZombieCheck(b, entry, deps)
-	case "oom":
+	case checkTypeOOM:
 		return buildOomCheck(b, entry, deps)
-	case "cert":
+	case checkTypeCert:
 		return buildCertCheck(b, entry, deps)
-	case "sqlite", "sqlite3":
+	case checkTypeSQLite, checkTypeSQLite3:
 		return buildSqliteCheck(b, entry)
-	case "swap":
+	case checkTypeSwap:
 		return buildSwapCheck(b, entry, deps)
-	case "icmp":
+	case checkTypeICMP:
 		return buildICMPCheck(b, entry, deps)
-	case "route":
+	case checkTypeRoute:
 		return buildRouteCheck(b, entry, deps)
-	case "sql":
+	case checkTypeSQL:
 		return buildSQLCheck(b, entry)
-	case "mongodb-query":
+	case checkTypeMongoDBQuery:
 		return buildMongoCheck(b, entry)
-	case "influxdb-query":
+	case checkTypeInfluxDBQuery:
 		return buildInfluxCheck(b, entry)
-	case "websocket":
+	case checkTypeWebsocket:
 		return buildWebsocketCheck(b, entry)
-	case "size":
+	case checkTypeSize:
 		return buildSizeCheck(b, entry, deps)
 	case "":
 		return nil, "missing type"
