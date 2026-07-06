@@ -55,6 +55,15 @@ const (
 	eventStatusFailed  = "failed"
 )
 
+// Event action values emitted by daemon-side monitoring adjustments and web
+// actions that are not service operation rule actions.
+const (
+	eventActionMonitor     = "monitor"
+	eventActionUnmonitor   = "unmonitor"
+	eventActionExpand      = "expand"
+	eventActionReleaseLock = "release-lock"
+)
+
 // resultOutput extracts the bounded command output a check stored under
 // Data["output"] (set by `command` checks and app probes on failure), for
 // threading into an event's Output field. Empty when absent.

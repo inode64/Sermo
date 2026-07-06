@@ -33,6 +33,7 @@ import (
 	"sermo/internal/notify"
 	"sermo/internal/operation"
 	"sermo/internal/process"
+	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 )
@@ -48,14 +49,19 @@ const (
 
 // Service action names dispatched by the CLI (each routes through the operation engine).
 const (
-	actionStart   = "start"
-	actionStop    = "stop"
-	actionRestart = "restart"
-	actionReload  = "reload"
-	actionResume  = "resume"
+	actionStart   = string(rules.ActionStart)
+	actionStop    = string(rules.ActionStop)
+	actionRestart = string(rules.ActionRestart)
+	actionReload  = string(rules.ActionReload)
+	actionResume  = string(rules.ActionResume)
 )
 
-const reloadCapabilityTimeout = 3 * time.Second
+const (
+	reloadCapabilityTimeout    = 3 * time.Second
+	defaultProbeCommandTimeout = 2 * time.Second
+	defaultListCommandTimeout  = 30 * time.Second
+	daemonWebClientTimeout     = 10 * time.Second
+)
 
 // BackendDetector detects the service manager backend.
 type BackendDetector interface {
@@ -1327,11 +1333,11 @@ type statusJSON struct {
 func defaultTimeout(command string) time.Duration {
 	switch command {
 	case actionStart, actionStop, actionRestart, actionReload, actionResume, mountctl.ActionMount, mountctl.ActionUmount, "state":
-		return 90 * time.Second
+		return app.DefaultEngineOperationTimeout
 	case "services":
-		return 30 * time.Second
+		return defaultListCommandTimeout
 	default:
-		return 2 * time.Second
+		return defaultProbeCommandTimeout
 	}
 }
 
@@ -1525,7 +1531,7 @@ func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Ti
 		}
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: daemonWebClientTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return 0, fmt.Errorf("talking to daemon web UI: %w (is sermod running with web.port set?)", err)
@@ -1579,7 +1585,7 @@ func (a App) fetchEvents(ctx context.Context, opts options, service string, limi
 		}
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: daemonWebClientTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("talking to daemon web UI: %w (is sermod running with web.port set?)", err)
@@ -1622,7 +1628,7 @@ func (a App) daemonAPIGet(ctx context.Context, opts options, path string) ([]byt
 		return nil, 0, err
 	}
 	applyDaemonWebAuth(req, cfg)
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: daemonWebClientTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, 0, err

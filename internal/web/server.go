@@ -30,6 +30,7 @@ import (
 	"sermo/internal/buildinfo"
 	"sermo/internal/logfile"
 	"sermo/internal/mountctl"
+	"sermo/internal/operation"
 )
 
 //go:embed index.html
@@ -40,6 +41,23 @@ const (
 	contentTypeHTMLUTF8 = "text/html; charset=utf-8"
 	contentTypeJSON     = "application/json"
 	contentTypeTextUTF8 = "text/plain; charset=utf-8"
+)
+
+// HTTP action names accepted by the dashboard API.
+const (
+	apiActionStart     = "start"
+	apiActionStop      = "stop"
+	apiActionRestart   = "restart"
+	apiActionReload    = "reload"
+	apiActionResume    = "resume"
+	apiActionMonitor   = "monitor"
+	apiActionUnmonitor = "unmonitor"
+	apiActionExpand    = "expand"
+	apiActionPanicOn   = "on"
+	apiActionPanicOff  = "off"
+	apiActionRelease   = "release"
+	apiActionClear     = "clear"
+	apiActionCompact   = "compact"
 )
 
 // Service is the web view of one configured service. Services with `enabled: false`
@@ -751,17 +769,30 @@ type Backend interface {
 }
 
 // operateActions, monitorActions and watchOperateActions are the action verbs the API accepts.
-var operateActions = map[string]bool{"start": true, "stop": true, "restart": true, "reload": true, "resume": true}
-var monitorActions = map[string]bool{"monitor": true, "unmonitor": true}
-var watchOperateActions = map[string]bool{"expand": true}
+var operateActions = map[string]bool{
+	apiActionStart:   true,
+	apiActionStop:    true,
+	apiActionRestart: true,
+	apiActionReload:  true,
+	apiActionResume:  true,
+}
+var monitorActions = map[string]bool{apiActionMonitor: true, apiActionUnmonitor: true}
+var watchOperateActions = map[string]bool{apiActionExpand: true}
 
 // defaultOperationTimeout matches operation.DefaultOperationTimeout when sermod
 // does not set OperationTimeout on the server.
-const defaultOperationTimeout = 90 * time.Second
+const defaultOperationTimeout = operation.DefaultOperationTimeout
 
 // writeTimeoutMargin is added to OperationTimeout so the handler can finish
 // writing the JSON response after a long operation completes.
 const writeTimeoutMargin = 5 * time.Second
+
+const (
+	serverReadHeaderTimeout = 5 * time.Second
+	serverReadTimeout       = 15 * time.Second
+	serverIdleTimeout       = 60 * time.Second
+	serverShutdownTimeout   = 5 * time.Second
+)
 
 // minWriteTimeout keeps short read-only requests bounded when OperationTimeout
 // is unusually small.
@@ -1000,14 +1031,14 @@ func (s *Server) Run(ctx context.Context) error {
 	srv := &http.Server{
 		Addr:              s.Addr,
 		Handler:           s.Handler(),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
+		ReadHeaderTimeout: serverReadHeaderTimeout,
+		ReadTimeout:       serverReadTimeout,
 		WriteTimeout:      serverWriteTimeout(s.OperationTimeout),
-		IdleTimeout:       60 * time.Second,
+		IdleTimeout:       serverIdleTimeout,
 	}
 	go func() { //nolint:gosec // G118: the shutdown deadline must NOT derive from ctx — it is already cancelled here
 		<-ctx.Done()
-		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout)
 		defer cancel()
 		_ = srv.Shutdown(shutCtx)
 	}()
@@ -1245,9 +1276,9 @@ func (s *Server) handleStateCompact(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handlePanic(w http.ResponseWriter, r *http.Request) {
 	var on bool
 	switch r.PathValue("action") {
-	case "on":
+	case apiActionPanicOn:
 		on = true
-	case "off":
+	case apiActionPanicOff:
 		on = false
 	default:
 		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: "panic action must be on or off"})
@@ -1360,7 +1391,7 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, status, res)
 	case monitorActions[action]:
-		err := s.Backend.SetMonitored(r.Context(), name, action == "monitor")
+		err := s.Backend.SetMonitored(r.Context(), name, action == apiActionMonitor)
 		if err != nil {
 			writeError(w, http.StatusConflict, err.Error())
 			return
@@ -1387,7 +1418,7 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "unknown action "+action)
 		return
 	}
-	if err := s.Backend.SetWatchMonitored(r.Context(), name, action == "monitor"); err != nil {
+	if err := s.Backend.SetWatchMonitored(r.Context(), name, action == apiActionMonitor); err != nil {
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	}

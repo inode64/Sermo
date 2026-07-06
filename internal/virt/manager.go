@@ -30,6 +30,8 @@ const (
 	DefaultPort = 16509
 )
 
+const defaultLibvirtTimeout = 10 * time.Second
+
 // Domain action labels used in operator-facing errors.
 const (
 	domainActionStart  = "start"
@@ -326,7 +328,7 @@ func (m Manager) client(timeout time.Duration) (Client, error) {
 func timeoutFromContext(ctx context.Context) time.Duration {
 	dl, ok := ctx.Deadline()
 	if !ok {
-		return 10 * time.Second
+		return defaultLibvirtTimeout
 	}
 	if d := time.Until(dl); d > 0 {
 		return d
