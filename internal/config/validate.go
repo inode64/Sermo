@@ -644,7 +644,7 @@ func validateStorage(name string, tree map[string]any, notifiers map[string]stru
 		issues = append(issues, Issue{Scope: "storage " + name, Msg: fmt.Sprintf(format, args...)})
 	}
 
-	allowed := set("name", "display_name", "description", "category", "path", keyDryRun, "monitor", "interval", "capacity", "usage", keyMount, sectionVariables, "os")
+	allowed := set("name", "display_name", "description", "category", "path", keyDryRun, keyMonitor, "interval", "capacity", "usage", keyMount, sectionVariables, "os")
 	for _, key := range slices.Sorted(maps.Keys(tree)) {
 		if _, ok := allowed[key]; !ok {
 			add("key %q is not supported for kind: storage", key)
@@ -657,8 +657,8 @@ func validateStorage(name string, tree map[string]any, notifiers map[string]stru
 	} else if !filepath.IsAbs(path) {
 		add("path %q must be an absolute path", path)
 	}
-	if mode, present := tree["monitor"]; present {
-		validateMonitorMode("monitor", mode, add)
+	if mode, present := tree[keyMonitor]; present {
+		validateMonitorMode(keyMonitor, mode, add)
 	}
 	if v, present := tree[keyDryRun]; present {
 		if _, ok := v.(bool); !ok {
@@ -707,7 +707,7 @@ func validateStorageCapacity(name, path string, tree, capacity map[string]any, n
 		}
 	}
 	entry := map[string]any{"check": check}
-	for _, key := range []string{keyDryRun, "monitor", "interval"} {
+	for _, key := range []string{keyDryRun, keyMonitor, "interval"} {
 		if v, present := tree[key]; present {
 			entry[key] = v
 		}
@@ -842,8 +842,8 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 		add("interval %q must be a valid positive duration", cfgval.String(v))
 	}
 
-	if mode, present := tree["monitor"]; present {
-		validateMonitorMode("monitor", mode, add)
+	if mode, present := tree[keyMonitor]; present {
+		validateMonitorMode(keyMonitor, mode, add)
 	}
 	if v, present := tree[keyDryRun]; present {
 		if _, ok := v.(bool); !ok {
