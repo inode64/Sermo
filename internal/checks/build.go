@@ -1176,7 +1176,7 @@ func buildDiskIOCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 func buildPressureCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	resource := cfgval.AsString(entry["resource"])
 	switch resource {
-	case "cpu", "memory", "io":
+	case PressureResourceCPU, PressureResourceMemory, PressureResourceIO:
 	default:
 		return nil, "pressure check requires resource: cpu, memory or io"
 	}
