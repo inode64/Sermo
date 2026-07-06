@@ -12,12 +12,12 @@ type GraphMetric struct {
 // Result.Data under Key — the recorder, store and web graph it generically, so
 // this is reusable by any check (and service).
 var graphMetrics = map[string][]GraphMetric{
-	"hdparm":        {{Key: "read", Unit: "MB/s"}, {Key: "cached", Unit: "MB/s"}},
-	"sensors":       {{Key: sensorTemp, Unit: "°C"}, {Key: sensorFan, Unit: "RPM"}},
-	"smart":         {{Key: "temperature", Unit: "°C"}, {Key: "reallocated", Unit: ""}, {Key: "wear", Unit: "%"}, {Key: "power_on_hours", Unit: "h"}},
-	"edac":          {{Key: "ce", Unit: ""}, {Key: "ue", Unit: ""}},
-	"users":         {{Key: "count", Unit: "users"}},
-	"process_count": {{Key: "count", Unit: "processes"}},
+	checkTypeHdparm:       {{Key: "read", Unit: "MB/s"}, {Key: "cached", Unit: "MB/s"}},
+	checkTypeSensors:      {{Key: sensorTemp, Unit: "°C"}, {Key: sensorFan, Unit: "RPM"}},
+	checkTypeSmart:        {{Key: "temperature", Unit: "°C"}, {Key: "reallocated", Unit: ""}, {Key: "wear", Unit: "%"}, {Key: "power_on_hours", Unit: "h"}},
+	checkTypeEDAC:         {{Key: "ce", Unit: ""}, {Key: "ue", Unit: ""}},
+	checkTypeUsers:        {{Key: "count", Unit: "users"}},
+	checkTypeProcessCount: {{Key: "count", Unit: "processes"}},
 }
 
 // GraphMetrics returns the graphable metrics declared for a check type, or nil
