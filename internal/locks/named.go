@@ -63,14 +63,7 @@ func (l NamedLocker) ReleaseInactive(service, name string) (Lock, error) {
 	if err := validateLockIDs(service, name); err != nil {
 		return Lock{}, err
 	}
-	proc := l.Proc
-	if proc == nil {
-		proc = OSProcessProber{}
-	}
-	now := l.Now
-	if now == nil {
-		now = time.Now
-	}
+	proc, now := l.dependencies()
 	path := l.path(service, name)
 	existing, err := readLockFile(path)
 	if err != nil {
@@ -126,11 +119,7 @@ func (l NamedLocker) identity() (int, uint64) {
 	return selfIdentity()
 }
 
-func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ownerPID int, ownerTicks uint64) (*Handle, error) {
-	if err := validateLockIDs(service, name); err != nil {
-		return nil, err
-	}
-
+func (l NamedLocker) dependencies() (ProcessProber, func() time.Time) {
 	proc := l.Proc
 	if proc == nil {
 		proc = OSProcessProber{}
@@ -139,6 +128,15 @@ func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ow
 	if now == nil {
 		now = time.Now
 	}
+	return proc, now
+}
+
+func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ownerPID int, ownerTicks uint64) (*Handle, error) {
+	if err := validateLockIDs(service, name); err != nil {
+		return nil, err
+	}
+
+	proc, now := l.dependencies()
 	if err := os.MkdirAll(l.Dir, 0o755); err != nil {
 		return nil, fmt.Errorf("create locks dir %s: %w", l.Dir, err)
 	}
