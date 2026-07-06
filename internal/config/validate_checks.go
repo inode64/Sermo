@@ -880,7 +880,7 @@ func validateCommandUser(path string, entry map[string]any, add addFunc) {
 
 func validateFirewallRulesFields(prefix string, fields map[string]any, add addFunc) {
 	backend := cfgval.String(fields["backend"])
-	if backend == "nft" {
+	if backend == checks.FirewallBackendNftAlias {
 		backend = checks.FirewallBackendNftables
 	}
 	switch backend {

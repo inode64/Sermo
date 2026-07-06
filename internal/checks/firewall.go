@@ -18,6 +18,8 @@ const (
 	FirewallBackendAuto     = "auto"
 	FirewallBackendNftables = "nftables"
 	FirewallBackendIptables = "iptables"
+	// FirewallBackendNftAlias is the accepted shorthand for the nftables backend.
+	FirewallBackendNftAlias = "nft"
 )
 
 // FirewallRulesSample is one observation of loaded packet-filter rules.
@@ -75,7 +77,7 @@ func buildFirewallRulesCheck(b base, entry map[string]any, runner execx.Runner, 
 	if backend == "" {
 		backend = FirewallBackendAuto
 	}
-	if backend == "nft" {
+	if backend == FirewallBackendNftAlias {
 		backend = FirewallBackendNftables
 	}
 	if !validFirewallBackend(backend) {
