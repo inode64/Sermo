@@ -7,9 +7,11 @@ package rules
 
 import (
 	"maps"
-	"sermo/internal/cfgval"
 	"slices"
 	"time"
+
+	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 )
 
 // RuleType classifies a rule.
@@ -133,7 +135,7 @@ func parseActions(then map[string]any) []Action {
 // Runtime defense-in-depth for safety invariant 13: a system-wide metric may
 // only drive alert rules, never remediation, even if a rule slips past static
 // validation (catalog bug, partial reload, hand-built Rule).
-func ConditionUsesSystemMetric(node map[string]any, checks map[string]any) bool {
+func ConditionUsesSystemMetric(node map[string]any, refChecks map[string]any) bool {
 	for key, v := range node {
 		switch key {
 		case "and", "or":
@@ -142,16 +144,16 @@ func ConditionUsesSystemMetric(node map[string]any, checks map[string]any) bool 
 				continue
 			}
 			for _, c := range list {
-				if m, ok := c.(map[string]any); ok && ConditionUsesSystemMetric(m, checks) {
+				if m, ok := c.(map[string]any); ok && ConditionUsesSystemMetric(m, refChecks) {
 					return true
 				}
 			}
 		case "not":
-			if m, ok := v.(map[string]any); ok && ConditionUsesSystemMetric(m, checks) {
+			if m, ok := v.(map[string]any); ok && ConditionUsesSystemMetric(m, refChecks) {
 				return true
 			}
 		case "metric":
-			if m, ok := v.(map[string]any); ok && cfgval.AsString(m["scope"]) == "system" {
+			if m, ok := v.(map[string]any); ok && cfgval.AsString(m["scope"]) == checks.MetricScopeSystem {
 				return true
 			}
 		case "failed", "active":
@@ -160,16 +162,16 @@ func ConditionUsesSystemMetric(node map[string]any, checks map[string]any) bool 
 				continue
 			}
 			if ref := cfgval.AsString(m["check"]); ref != "" {
-				if checks == nil {
+				if refChecks == nil {
 					continue
 				}
-				if c, ok := checks[ref].(map[string]any); ok &&
-					cfgval.AsString(c["type"]) == "metric" && cfgval.AsString(c["scope"]) == "system" {
+				if c, ok := refChecks[ref].(map[string]any); ok &&
+					cfgval.AsString(c["type"]) == checks.CheckTypeMetric && cfgval.AsString(c["scope"]) == checks.MetricScopeSystem {
 					return true
 				}
 				continue
 			}
-			if c, ok := m["metric"].(map[string]any); ok && cfgval.AsString(c["scope"]) == "system" {
+			if c, ok := m["metric"].(map[string]any); ok && cfgval.AsString(c["scope"]) == checks.MetricScopeSystem {
 				return true
 			}
 		}
