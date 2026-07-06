@@ -36,15 +36,18 @@ const (
 	btrfsSubcommandResize     = "resize"
 	btrfsResizeMax            = "max"
 
-	lvmFlagNoHeadings = "--noheadings"
-	lvmFlagOutput     = "-o"
-	lvmFlagSeparator  = "--separator"
-	lvmFlagUnits      = "--units"
-	lvmFlagNoSuffix   = "--nosuffix"
-	lvmLVFields       = "vg_name,lv_name"
-	lvmVGFreeField    = "vg_free"
-	lvmCSVSeparator   = ","
-	lvmByteUnit       = "b"
+	lvmFlagNoHeadings     = "--noheadings"
+	lvmFlagOutput         = "-o"
+	lvmFlagSeparator      = "--separator"
+	lvmFlagUnits          = "--units"
+	lvmFlagNoSuffix       = "--nosuffix"
+	lvmLVFields           = "vg_name,lv_name"
+	lvmVGFreeField        = "vg_free"
+	lvmCSVSeparator       = ","
+	lvmByteUnit           = "b"
+	devPathPrefix         = "/dev/"
+	lvmLVPathFormat       = devPathPrefix + "%s/%s"
+	lvExtendSizeArgFormat = "-L+%db"
 )
 
 // Mount is one entry of the mount table.
@@ -124,7 +127,7 @@ func (e Expander) Resolve(ctx context.Context, path string) (Target, error) {
 	to := e.timeout()
 	res, err := execx.Run(ctx, e.Runner, to, cmdLVS, lvmFlagNoHeadings, lvmFlagOutput, lvmLVFields, lvmFlagSeparator, lvmCSVSeparator, m.Device)
 	if err != nil {
-		return Target{}, commandFailure(fmt.Sprintf("%q is not an LVM volume (lvs %s)", path, m.Device), err, res, to)
+		return Target{}, commandFailure(fmt.Sprintf("%q is not an LVM volume (%s %s)", path, cmdLVS, m.Device), err, res, to)
 	}
 	vg, lv, ok := strings.Cut(strings.TrimSpace(res.Stdout), ",")
 	if !ok || vg == "" || lv == "" {
@@ -171,11 +174,11 @@ func (e Expander) Expand(ctx context.Context, t Target, by int64) (Result, error
 		return Result{}, fmt.Errorf("expand size must be positive, got %d bytes for %s", by, t.Mountpoint)
 	}
 
-	lv := fmt.Sprintf("/dev/%s/%s", t.VG, t.LV)
+	lv := fmt.Sprintf(lvmLVPathFormat, t.VG, t.LV)
 	to := e.timeout()
-	res, err := execx.Run(ctx, e.Runner, to, cmdLVExtend, fmt.Sprintf("-L+%db", grow), lv)
+	res, err := execx.Run(ctx, e.Runner, to, cmdLVExtend, fmt.Sprintf(lvExtendSizeArgFormat, grow), lv)
 	if err != nil {
-		return Result{}, commandFailure("lvextend "+lv, err, res, to)
+		return Result{}, commandFailure(cmdLVExtend+" "+lv, err, res, to)
 	}
 	if err := e.growFS(ctx, t); err != nil {
 		return Result{}, err
@@ -205,7 +208,7 @@ func growableFS(fstype string) bool {
 // growFS grows the filesystem onto the newly extended volume. ext* resize by
 // device; xfs and btrfs resize by mount point.
 func (e Expander) growFS(ctx context.Context, t Target) error {
-	lv := fmt.Sprintf("/dev/%s/%s", t.VG, t.LV)
+	lv := fmt.Sprintf(lvmLVPathFormat, t.VG, t.LV)
 	to := e.timeout()
 	var (
 		res execx.Result
@@ -230,7 +233,7 @@ func (e Expander) vgFreeBytes(ctx context.Context, vg string) (int64, error) {
 	to := e.timeout()
 	res, err := execx.Run(ctx, e.Runner, to, cmdVGS, lvmFlagNoHeadings, lvmFlagOutput, lvmVGFreeField, lvmFlagUnits, lvmByteUnit, lvmFlagNoSuffix, vg)
 	if err != nil {
-		return 0, commandFailure("vgs "+vg, err, res, to)
+		return 0, commandFailure(cmdVGS+" "+vg, err, res, to)
 	}
 	free, err := parseInt(res.Stdout)
 	if err != nil {
@@ -289,7 +292,7 @@ func IsStorageMount(m Mount) bool {
 	if pseudoFilesystem(m.FSType) {
 		return false
 	}
-	if strings.HasPrefix(m.Device, "/dev/") {
+	if strings.HasPrefix(m.Device, devPathPrefix) {
 		return true
 	}
 	return storageFilesystem(m.FSType)
