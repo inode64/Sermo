@@ -513,7 +513,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	}
 	worker.Checks = func(ctx context.Context, d checks.Deps) map[string]checks.Result {
 		setCycleMetrics(d.Metrics)
-		due := dueChecks(worker.cycle, built, every)
+		due := dueChecks(worker.cycle, built, every, cache)
 		ran := make(map[string]bool, len(due))
 		for _, b := range due {
 			ran[b.Check.Name()] = true
@@ -657,10 +657,19 @@ func checkIntervals(tree map[string]any, resolution time.Duration) (map[string]i
 
 // dueChecks selects the checks to run on a given cycle: a check with `every` N
 // runs on cycles 1, N+1, 2N+1, … Skipped checks keep their cached result.
-func dueChecks(cycle int, built []checks.Built, every map[string]int) []checks.Built {
+// A check with no cached result always runs so a reload or config change cannot
+// leave long-interval checks unobserved until their next scheduled modulo.
+func dueChecks(cycle int, built []checks.Built, every map[string]int, cache map[string]checks.Result) []checks.Built {
 	due := make([]checks.Built, 0, len(built))
 	for _, b := range built {
-		n := every[b.Check.Name()]
+		name := b.Check.Name()
+		if cache != nil {
+			if _, ok := cache[name]; !ok {
+				due = append(due, b)
+				continue
+			}
+		}
+		n := every[name]
 		if n < 1 {
 			n = 1
 		}

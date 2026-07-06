@@ -479,7 +479,9 @@ fleet of services does not all probe on the same tick.
 An individual check may run **less often** than the worker cycle with
 `interval`. The worker keeps ticking at its resolution; the check runs every
 `round(interval / resolution)` cycles and **reuses its last result** between
-runs, keeping check caches and rule windows complete.
+runs, keeping check caches and rule windows complete. On startup, reload or any
+config change that introduces a check, Sermo runs it once immediately when no
+cached result exists, then applies the configured cadence.
 
 ```yaml
 interval: 30s            # the service resolution (or engine.interval)
