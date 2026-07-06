@@ -831,15 +831,34 @@ type SLAWindow struct {
 	Segments int
 }
 
+const (
+	slaWindowHour  = "hour"
+	slaWindowDay   = "day"
+	slaWindowWeek  = "week"
+	slaWindowMonth = "month"
+	slaWindowYear  = "year"
+
+	slaSpanDay   = 24 * time.Hour
+	slaSpanWeek  = 7 * slaSpanDay
+	slaSpanMonth = 30 * slaSpanDay
+	slaSpanYear  = 365 * slaSpanDay
+
+	slaSegmentsHour  = 12
+	slaSegmentsDay   = 24
+	slaSegmentsWeek  = 28
+	slaSegmentsMonth = 30
+	slaSegmentsYear  = 12
+)
+
 // SLAWindows are the reported rolling windows, shortest first. Segment counts
 // pick a natural human sub-span per window (5-minute, hourly, 6-hourly, daily,
 // monthly) so each timeline cell reads as a meaningful slice of time.
 var SLAWindows = []SLAWindow{
-	{"hour", time.Hour, 12},
-	{"day", 24 * time.Hour, 24},
-	{"week", 7 * 24 * time.Hour, 28},
-	{"month", 30 * 24 * time.Hour, 30},
-	{"year", 365 * 24 * time.Hour, 12},
+	{slaWindowHour, time.Hour, slaSegmentsHour},
+	{slaWindowDay, slaSpanDay, slaSegmentsDay},
+	{slaWindowWeek, slaSpanWeek, slaSegmentsWeek},
+	{slaWindowMonth, slaSpanMonth, slaSegmentsMonth},
+	{slaWindowYear, slaSpanYear, slaSegmentsYear},
 }
 
 // SLAValue is the availability of one service over one window: the up and total
