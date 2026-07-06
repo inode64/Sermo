@@ -360,7 +360,7 @@ func validateKillAction(prefix string, kill map[string]any, add func(string, ...
 			add("%s.then.kill.escalate must be a boolean", prefix)
 		}
 	}
-	for _, f := range []string{"term_timeout", "kill_timeout"} {
+	for _, f := range []string{keyTermTimeout, keyKillTimeout} {
 		if v, present := kill[f]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("%s.then.kill.%s %q must be a valid positive duration", prefix, f, cfgval.String(v))
 		}

@@ -65,13 +65,13 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 	if !ok {
 		return
 	}
-	for _, field := range []string{"graceful_timeout", "term_timeout", "kill_timeout"} {
+	for _, field := range []string{keyGracefulTimeout, keyTermTimeout, keyKillTimeout} {
 		if v, present := sp[field]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("stop_policy.%s %q must be a valid positive duration", field, cfgval.String(v))
 		}
 	}
-	force, _ := sp["force_kill"].(bool)
-	koi, hasKoi := sp["kill_only_if"].(map[string]any)
+	force, _ := sp[keyForceKill].(bool)
+	koi, hasKoi := sp[keyKillOnlyIf].(map[string]any)
 	if force && !hasKoi {
 		add("stop_policy.force_kill=true requires kill_only_if")
 	}

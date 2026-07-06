@@ -33,6 +33,15 @@ const (
 // invariants (pidfile/file cleanup) the engine enforces.
 const sectionStopPolicy = "stop_policy"
 
+// stop_policy timeout and kill-guard field keys.
+const (
+	keyGracefulTimeout = "graceful_timeout"
+	keyTermTimeout     = "term_timeout"
+	keyKillTimeout     = "kill_timeout"
+	keyForceKill       = "force_kill"
+	keyKillOnlyIf      = "kill_only_if"
+)
+
 // sectionMetrics is the multi-metric watch block: a map of metric name to its
 // per-metric condition/action (used by net/swap/icmp watches).
 const sectionMetrics = "metrics"
