@@ -196,12 +196,12 @@ func run(args []string) int {
 		logger.Warn("load persisted events failed", "error", err)
 	}
 
-	accessLog := openEngineLog(logger, cfg, "access")
-	eventFile := openEngineLog(logger, cfg, "events")
+	accessLog := openEngineLog(logger, cfg, config.EngineKeyAccess)
+	eventFile := openEngineLog(logger, cfg, config.EngineKeyEvents)
 	if eventFile != nil {
 		eventLog.SetEventFile(eventFile)
 	}
-	diagFile := openEngineLog(logger, cfg, "diagnostics")
+	diagFile := openEngineLog(logger, cfg, config.EngineKeyDiagnostics)
 
 	interval := config.EngineInterval(cfg, config.DefaultEngineInterval)
 	runner := execx.CommandRunner{}

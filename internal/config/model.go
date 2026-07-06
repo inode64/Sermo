@@ -52,6 +52,8 @@ const (
 const (
 	// SectionEngine is the top-level engine configuration block.
 	SectionEngine = "engine"
+	// EngineKeyAccess is engine.access.
+	EngineKeyAccess = "access"
 	// EngineKeyAppInterval is engine.app_interval.
 	EngineKeyAppInterval = "app_interval"
 	// EngineKeyBackend is engine.backend.
@@ -62,6 +64,8 @@ const (
 	EngineKeyDiagnostics = "diagnostics"
 	// EngineKeyDiagnosticsInterval is engine.diagnostics_interval.
 	EngineKeyDiagnosticsInterval = "diagnostics_interval"
+	// EngineKeyEvents is engine.events.
+	EngineKeyEvents = "events"
 	// EngineKeyMaxParallelChecks is engine.max_parallel_checks.
 	EngineKeyMaxParallelChecks = "max_parallel_checks"
 	// EngineKeyMaxParallelOperations is engine.max_parallel_operations.
