@@ -852,7 +852,7 @@ func storageCapacityWatch(tree map[string]any) (map[string]any, bool) {
 			entry[key] = v
 		}
 	}
-	for _, key := range []string{"for", "within", "then", "policy"} {
+	for _, key := range []string{"for", "within", "then", sectionPolicy} {
 		if v, present := capacity[key]; present {
 			entry[key] = v
 		}
