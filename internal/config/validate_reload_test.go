@@ -89,6 +89,17 @@ func TestValidateReloadSignalRequiresPidfileIdentityOnOpenRC(t *testing.T) {
 		t.Fatalf("valid OpenRC signal reload flagged: %v", ok)
 	}
 
+	systemdOnly := reloadTreeIssues(t, "openrc", map[string]any{
+		"service": map[string]any{"systemd": []any{"patroni"}},
+		"reload":  map[string]any{"signal": "HUP"},
+		"processes": map[string]any{
+			"main": map[string]any{"exe": "/bin/patroni", "user": "postgres"},
+		},
+	})
+	if len(systemdOnly) != 0 {
+		t.Fatalf("systemd-only signal reload should not require OpenRC pidfile, got %v", systemdOnly)
+	}
+
 	systemd := reloadIssues(t, "systemd", map[string]any{"signal": "HUP"})
 	if len(systemd) != 0 {
 		t.Fatalf("systemd signal reload without pidfile should be valid, got %v", systemd)

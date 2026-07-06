@@ -1,0 +1,10 @@
+name: patroni
+display_name: "Patroni"
+category: database
+variables:
+  binary:
+    - ${bindir}/patroni
+    - /bin/patroni
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

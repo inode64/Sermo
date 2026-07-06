@@ -1,0 +1,100 @@
+name: etcd
+display_name: "etcd"
+category: database
+description: Distributed key-value store used for cluster coordination.
+service:
+  systemd:
+    - etcd
+  openrc:
+    - etcd
+apps:
+  - etcd
+variables:
+  user: etcd
+  host: 127.0.0.1
+  scheme: http
+  client_port: 2379
+  peer_port: 2380
+  config: /etc/etcd/etcd.conf.yml
+  data_dir: /var/lib/etcd
+config_files:
+  - ${config}
+preflight:
+  config:
+    type: file
+    path: ${config}
+processes:
+  main:
+    exe: ${etcd_binary}
+    user: ${user}
+stop_policy:
+  graceful_timeout: 60s
+  term_timeout: 30s
+  kill_only_if:
+    users:
+      - ${user}
+    exe_any:
+      - ${etcd_binary}
+policy:
+  cooldown: 15m
+  max_actions: 2
+  max_actions_window: 1h
+  backoff:
+    initial: 15m
+    max: 1h
+restart_on_change:
+  paths:
+    - ${config}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  client-port:
+    check:
+      type: tcp
+      host: ${host}
+      port: ${client_port}
+      timeout: 2s
+      verify: true
+  health:
+    check:
+      type: http
+      url: ${scheme}://${host}:${client_port}/health
+      expect_status: 200
+      timeout: 3s
+      optional: true
+  peer-port:
+    check:
+      type: tcp
+      host: ${host}
+      port: ${peer_port}
+      timeout: 2s
+      optional: true
+  alert-if-fds-high:
+    check:
+      type: metric
+      scope: service
+      name: fds
+      op: '>'
+      value: 50000
+      optional: true
+    within:
+      cycles: 10
+      min_matches: 3
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+  alert-if-memory-high:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 60%
+      optional: true
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high
