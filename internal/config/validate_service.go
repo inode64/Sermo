@@ -17,7 +17,16 @@ import (
 )
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
-var validProcessSelectorKeys = set("exe", "cmd", "user", "group", "delete", keyEnableIf)
+
+// Process-selector field keys (exe/cmd/user/group identity).
+const (
+	keyExe   = "exe"
+	keyCmd   = "cmd"
+	keyUser  = "user"
+	keyGroup = "group"
+)
+
+var validProcessSelectorKeys = set(keyExe, keyCmd, keyUser, keyGroup, "delete", keyEnableIf)
 
 func validateMonitorMode(path string, mode any, add addFunc) {
 	s, isStr := mode.(string)
@@ -183,7 +192,7 @@ func validateProcesses(tree map[string]any, add addFunc) {
 				add("%s.%s is not supported; processes entries accept exe, cmd, user, group and enable_if", path, key)
 			}
 		}
-		exe, cmd := cfgval.String(entry["exe"]), cfgval.String(entry["cmd"])
+		exe, cmd := cfgval.String(entry[keyExe]), cfgval.String(entry[keyCmd])
 		if exe == "" && cmd == "" {
 			add("%s requires exe or cmd", path)
 		}
@@ -229,10 +238,10 @@ func validatePidfiles(tree map[string]any, add addFunc) {
 			add("pidfiles.%s requires matching processes.%s", role, role)
 			continue
 		}
-		if cfgval.String(entry["exe"]) == "" {
+		if cfgval.String(entry[keyExe]) == "" {
 			add("pidfiles.%s requires processes.%s.exe for exact pidfile identity", role, role)
 		}
-		if cfgval.String(entry["user"]) == "" {
+		if cfgval.String(entry[keyUser]) == "" {
 			add("pidfiles.%s requires processes.%s.user for exact pidfile identity", role, role)
 		}
 	}
@@ -440,7 +449,7 @@ func reloadSignalPidfileIdentity(tree map[string]any) (pidfile, identity bool) {
 		if !ok {
 			continue
 		}
-		if cfgval.String(entry["exe"]) != "" && cfgval.String(entry["user"]) != "" {
+		if cfgval.String(entry[keyExe]) != "" && cfgval.String(entry[keyUser]) != "" {
 			identity = true
 		}
 	}
