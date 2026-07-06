@@ -644,7 +644,7 @@ func validateStorage(name string, tree map[string]any, notifiers map[string]stru
 		issues = append(issues, Issue{Scope: "storage " + name, Msg: fmt.Sprintf(format, args...)})
 	}
 
-	allowed := set("name", "display_name", "description", "category", "path", "dry_run", "monitor", "interval", "capacity", "usage", "mount", sectionVariables, "os")
+	allowed := set("name", "display_name", "description", "category", "path", "dry_run", "monitor", "interval", "capacity", "usage", keyMount, sectionVariables, "os")
 	for _, key := range slices.Sorted(maps.Keys(tree)) {
 		if _, ok := allowed[key]; !ok {
 			add("key %q is not supported for kind: storage", key)
@@ -678,9 +678,9 @@ func validateStorage(name string, tree map[string]any, notifiers map[string]stru
 	} else if _, present := tree["usage"]; present {
 		add("usage must be a mapping")
 	}
-	if mount, ok := tree["mount"].(map[string]any); ok {
+	if mount, ok := tree[keyMount].(map[string]any); ok {
 		validateStorageMount(mount, add)
-	} else if _, present := tree["mount"]; present {
+	} else if _, present := tree[keyMount]; present {
 		add("mount must be a mapping")
 	}
 
@@ -756,25 +756,25 @@ func validateStorageUsage(usage map[string]any, notifiers map[string]struct{}, a
 }
 
 func validateStorageMount(mount map[string]any, add addFunc) {
-	allowed := set("refcount", "umount", sectionStopPolicy)
+	allowed := set(keyRefcount, keyUmount, sectionStopPolicy)
 	for _, key := range slices.Sorted(maps.Keys(mount)) {
 		if _, ok := allowed[key]; !ok {
 			add("mount key %q is not supported", key)
 		}
 	}
-	if v, present := mount["refcount"]; present {
+	if v, present := mount[keyRefcount]; present {
 		if _, ok := v.(bool); !ok {
 			add("mount.refcount must be true or false")
 		}
 	}
 
-	umount, _ := mount["umount"].(map[string]any)
-	if _, present := mount["umount"]; present && umount == nil {
+	umount, _ := mount[keyUmount].(map[string]any)
+	if _, present := mount[keyUmount]; present && umount == nil {
 		add("mount.umount must be a mapping")
 	}
 	allowSIGKILL := false
 	if umount != nil {
-		allowedUmount := set(keyTermTimeout, keyKillTimeout, "allow_sigkill", "allow_lazy")
+		allowedUmount := set(keyTermTimeout, keyKillTimeout, keyAllowSIGKILL, keyAllowLazy)
 		for _, key := range slices.Sorted(maps.Keys(umount)) {
 			if _, ok := allowedUmount[key]; !ok {
 				add("mount.umount key %q is not one of term_timeout, kill_timeout, allow_sigkill, allow_lazy", key)
@@ -785,13 +785,13 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 				add("mount.umount.%s %q must be a valid positive duration", field, cfgval.String(v))
 			}
 		}
-		for _, field := range []string{"allow_sigkill", "allow_lazy"} {
+		for _, field := range []string{keyAllowSIGKILL, keyAllowLazy} {
 			if v, present := umount[field]; present {
 				b, ok := v.(bool)
 				if !ok {
 					add("mount.umount.%s must be true or false", field)
 				}
-				if field == "allow_sigkill" && ok && b {
+				if field == keyAllowSIGKILL && ok && b {
 					allowSIGKILL = true
 				}
 			}
