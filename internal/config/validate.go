@@ -644,7 +644,7 @@ func validateStorage(name string, tree map[string]any, notifiers map[string]stru
 		issues = append(issues, Issue{Scope: "storage " + name, Msg: fmt.Sprintf(format, args...)})
 	}
 
-	allowed := set("name", "display_name", "description", "category", "path", keyDryRun, keyMonitor, keyInterval, "capacity", "usage", keyMount, sectionVariables, "os")
+	allowed := set("name", "display_name", "description", "category", "path", keyDryRun, keyMonitor, keyInterval, keyCapacity, keyUsage, keyMount, sectionVariables, "os")
 	for _, key := range slices.Sorted(maps.Keys(tree)) {
 		if _, ok := allowed[key]; !ok {
 			add("key %q is not supported for kind: storage", key)
@@ -668,14 +668,14 @@ func validateStorage(name string, tree map[string]any, notifiers map[string]stru
 	if v, present := tree[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
 		add("interval %q must be a valid positive duration", cfgval.String(v))
 	}
-	if capacity, ok := tree["capacity"].(map[string]any); ok {
+	if capacity, ok := tree[keyCapacity].(map[string]any); ok {
 		validateStorageCapacity(name, path, tree, capacity, notifiers, defaultNotify, add)
-	} else if _, present := tree["capacity"]; present {
+	} else if _, present := tree[keyCapacity]; present {
 		add("capacity must be a mapping")
 	}
-	if usage, ok := tree["usage"].(map[string]any); ok {
+	if usage, ok := tree[keyUsage].(map[string]any); ok {
 		validateStorageUsage(usage, notifiers, add)
-	} else if _, present := tree["usage"]; present {
+	} else if _, present := tree[keyUsage]; present {
 		add("usage must be a mapping")
 	}
 	if mount, ok := tree[keyMount].(map[string]any); ok {
@@ -718,7 +718,7 @@ func validateStorageCapacity(name, path string, tree, capacity map[string]any, n
 		}
 	}
 	validateWatches(map[string]any{name: entry}, "", notifiers, defaultNotify, func(format string, args ...any) {
-		add(strings.Replace(fmt.Sprintf(format, args...), "watches."+name, "capacity", 1))
+		add(strings.Replace(fmt.Sprintf(format, args...), "watches."+name, keyCapacity, 1))
 	})
 }
 
@@ -744,7 +744,7 @@ func validateStorageUsage(usage map[string]any, notifiers map[string]struct{}, a
 	if v, present := usage["observed_for"]; present && !isPositiveDuration(cfgval.String(v)) {
 		add("usage.observed_for %q must be a valid positive duration", cfgval.String(v))
 	}
-	validateWindow("usage", usage, add)
+	validateWindow(keyUsage, usage, add)
 	if rawThen, present := usage["then"]; present {
 		then, ok := rawThen.(map[string]any)
 		if !ok {
