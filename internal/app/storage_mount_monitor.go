@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"sermo/internal/config"
+	"sermo/internal/mountctl"
 	"sermo/internal/state"
 )
 
@@ -16,7 +17,7 @@ func SyncStorageMountMonitoring(store MonitorStore, storage, action string, resu
 	}
 	key := watchMonitorKey(storage)
 	switch action {
-	case "umount":
+	case mountctl.ActionUmount:
 		active, found, err := store.Active(key)
 		if err != nil {
 			return ManualMonitorChange{}, fmt.Errorf("read monitoring state for watch %s: %w", storage, err)
@@ -33,7 +34,7 @@ func SyncStorageMountMonitoring(store MonitorStore, storage, action string, resu
 			Action:    "unmonitor",
 			Message:   "monitoring paused after storage umount",
 		}, nil
-	case "mount":
+	case mountctl.ActionMount:
 		rec, found, err := store.MonitorState(key)
 		if err != nil {
 			return ManualMonitorChange{}, fmt.Errorf("read monitoring state for watch %s: %w", storage, err)

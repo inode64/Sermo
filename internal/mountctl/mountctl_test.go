@@ -176,7 +176,7 @@ func TestReleaseRefusesRootMount(t *testing.T) {
 	if err == nil {
 		t.Fatal("Release / succeeded")
 	}
-	if res.Status != ResultFailed || res.Action != mountActionUmount || !res.Mounted {
+	if res.Status != ResultFailed || res.Action != ActionUmount || !res.Mounted {
 		t.Fatalf("Release / = %+v, want failed mounted umount result", res)
 	}
 	if !strings.Contains(res.Message, "root filesystem cannot be unmounted") {
