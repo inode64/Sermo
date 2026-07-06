@@ -30,7 +30,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 
 		// Entry-level fields are validated before the check so a watch with a
 		// missing/invalid check still reports every other problem in one pass.
-		if v, present := entry["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
+		if v, present := entry[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("watches.%s.interval %q must be a valid positive duration", name, cfgval.String(v))
 		}
 		if v, present := entry[keyDryRun]; present {
@@ -113,7 +113,7 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 		if mode, present := entry[keyMonitor]; present {
 			validateMonitorMode(prefix+".monitor", mode, add)
 		}
-		if v, present := entry["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
+		if v, present := entry[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("%s.interval %q must be a valid positive duration", prefix, cfgval.String(v))
 		}
 		if v, present := entry[keyDryRun]; present {
