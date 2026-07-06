@@ -39,7 +39,7 @@ const appStatusOK = "ok"
 // errors (engine.app_interval, default 5m). Apps change rarely and each check
 // runs the app's version/health binary, so the default is slow.
 func appWatchInterval(cfg *config.Config) time.Duration {
-	return EngineDuration(cfg, "app_interval", 5*time.Minute)
+	return EngineDuration(cfg, config.EngineKeyAppInterval, DefaultEngineAppInterval)
 }
 
 // BuildAppWatches builds one app-watch per installed catalog application. Each

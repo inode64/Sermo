@@ -23,7 +23,7 @@ type OpGate struct {
 // in-memory semaphore is used (unit tests).
 func NewOpGate(slots int, runtimeDir string) *OpGate {
 	if slots <= 0 {
-		slots = 2
+		slots = DefaultEngineMaxParallelOperations
 	}
 	if runtimeDir != "" {
 		return &OpGate{pool: locks.NewSlotPool(filepath.Join(runtimeDir, "op-slots"), slots)}
@@ -34,13 +34,13 @@ func NewOpGate(slots int, runtimeDir string) *OpGate {
 // OpSlotsFromConfig reads engine.max_parallel_operations from the loaded config.
 func OpSlotsFromConfig(cfg *config.Config) int {
 	if cfg == nil {
-		return 2
+		return DefaultEngineMaxParallelOperations
 	}
-	engine, ok := cfg.Global.Raw["engine"].(map[string]any)
-	if !ok {
-		return 2
+	engine := engineMap(cfg)
+	if engine == nil {
+		return DefaultEngineMaxParallelOperations
 	}
-	switch v := engine["max_parallel_operations"].(type) {
+	switch v := engine[config.EngineKeyMaxParallelOperations].(type) {
 	case int:
 		if v > 0 {
 			return v
@@ -54,7 +54,7 @@ func OpSlotsFromConfig(cfg *config.Config) int {
 			return int(v)
 		}
 	}
-	return 2
+	return DefaultEngineMaxParallelOperations
 }
 
 // Usage reports how many global operation slots are in use and the pool capacity.
@@ -67,7 +67,7 @@ func (g *OpGate) Usage() (inUse, total int) {
 	}
 	total = g.pool.Slots
 	if total <= 0 {
-		total = 2
+		total = DefaultEngineMaxParallelOperations
 	}
 	n, err := g.pool.InUse()
 	if err != nil {

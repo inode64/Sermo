@@ -12,7 +12,6 @@ package diag
 import (
 	"fmt"
 	"sort"
-	"time"
 
 	"sermo/internal/config"
 )
@@ -64,7 +63,7 @@ type Host interface {
 // then scope. host must be non-nil.
 func Diagnose(cfg *config.Config, host Host) Result {
 	b := &builder{}
-	gi := config.EngineInterval(cfg, 30*time.Second)
+	gi := config.EngineInterval(cfg, config.DefaultEngineInterval)
 
 	diagConfig(b, cfg)
 	for _, name := range cfg.SortedServiceNames() {
