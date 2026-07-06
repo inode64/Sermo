@@ -479,6 +479,59 @@ func TestReloadValidatesConfigBeforeOperate(t *testing.T) {
 	}
 }
 
+func TestReloadUnsupportedDoesNotOperate(t *testing.T) {
+	global := writeActionConfig(t)
+	var stderr bytes.Buffer
+	called := false
+	noReload := false
+	app := actionApp(operation.Result{Service: "web", Action: "reload", Status: operation.ResultOK}, nil, nil, &stderr)
+	app.Detector = fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendOpenRC}}
+	app.NewManager = func(servicemgr.Backend) (servicemgr.Manager, error) {
+		return fakeManager{supportsReload: &noReload}, nil
+	}
+	app.Operate = func(context.Context, options, *config.Config, config.Resolved, string, string) (operation.Result, error) {
+		called = true
+		return operation.Result{}, nil
+	}
+
+	code := app.Run(context.Background(), []string{"--config", global, "reload", "web"})
+	if code != exitRuntimeError {
+		t.Fatalf("Run() exit = %d, want %d", code, exitRuntimeError)
+	}
+	if called {
+		t.Fatal("unsupported reload called the operation engine")
+	}
+	if got := stderr.String(); !strings.Contains(got, "does not support reload") || !strings.Contains(got, "reload.command") {
+		t.Fatalf("stderr = %q", got)
+	}
+}
+
+func TestReloadSupportErrorDoesNotOperate(t *testing.T) {
+	global := writeActionConfig(t)
+	var stderr bytes.Buffer
+	called := false
+	app := actionApp(operation.Result{Service: "web", Action: "reload", Status: operation.ResultOK}, nil, nil, &stderr)
+	app.Detector = fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendOpenRC}}
+	app.NewManager = func(servicemgr.Backend) (servicemgr.Manager, error) {
+		return fakeManager{supportsReloadErr: errors.New("init query failed")}, nil
+	}
+	app.Operate = func(context.Context, options, *config.Config, config.Resolved, string, string) (operation.Result, error) {
+		called = true
+		return operation.Result{}, nil
+	}
+
+	code := app.Run(context.Background(), []string{"--config", global, "reload", "web"})
+	if code != exitRuntimeError {
+		t.Fatalf("Run() exit = %d, want %d", code, exitRuntimeError)
+	}
+	if called {
+		t.Fatal("reload with support error called the operation engine")
+	}
+	if got := stderr.String(); !strings.Contains(got, "reload support unavailable") || !strings.Contains(got, "init query failed") {
+		t.Fatalf("stderr = %q", got)
+	}
+}
+
 func TestActionUnknownService(t *testing.T) {
 	global := writeActionConfig(t)
 	var stderr bytes.Buffer
@@ -516,11 +569,12 @@ func TestReloadNativeCommandUsesAppRunner(t *testing.T) {
 	runner := &reloadRecordingRunner{}
 	var actions []string
 	var stdout bytes.Buffer
+	noReload := false
 	app := App{
 		LoadConfig: config.Load,
 		Detector:   fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendOpenRC}},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
-			return fakeManager{actions: &actions}, nil
+			return fakeManager{actions: &actions, supportsReload: &noReload}, nil
 		},
 		Runner: runner,
 		Env:    func(string) string { return "" },

@@ -348,14 +348,12 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			entry.discoverer = discoverer
 			entry.selectors = selectors
 			entry.processWarnings = processWarnings
-			if serviceDeclaresReload(resolved.Tree) {
-				reloadCtx, cancel := context.WithTimeout(context.Background(), serviceReloadCapabilityTimeout)
-				canReload, reloadErr := operation.ReloadSupported(reloadCtx, resolved.Tree, target.Manager, target.Unit)
-				cancel()
-				entry.canReload = canReload
-				if reloadErr != nil {
-					warnings = append(warnings, "service "+name+": reload support unavailable: "+reloadErr.Error())
-				}
+			reloadCtx, cancel := context.WithTimeout(context.Background(), serviceReloadCapabilityTimeout)
+			canReload, reloadErr := operation.ReloadSupported(reloadCtx, resolved.Tree, target.Manager, target.Unit)
+			cancel()
+			entry.canReload = canReload
+			if reloadErr != nil {
+				warnings = append(warnings, "service "+name+": reload support unavailable: "+reloadErr.Error())
 			}
 		}
 		wb.entries[name] = entry
@@ -468,24 +466,6 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 		expand:        expand,
 		serviceScoped: serviceScoped,
 	}, warn
-}
-
-func serviceDeclaresReload(tree map[string]any) bool {
-	if _, ok := tree["reload"].(map[string]any); ok {
-		return true
-	}
-	rules, _ := tree["rules"].(map[string]any)
-	for _, raw := range rules {
-		rule, ok := raw.(map[string]any)
-		if !ok || cfgval.AsString(rule["type"]) != "remediation" {
-			continue
-		}
-		then, _ := rule["then"].(map[string]any)
-		if cfgval.AsString(then["action"]) == "reload" {
-			return true
-		}
-	}
-	return false
 }
 
 // checkCatalog returns a service's check names (sorted) and their types, from the

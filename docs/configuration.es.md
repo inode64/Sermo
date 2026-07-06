@@ -471,6 +471,9 @@ en su sitio a través del motor (preflight → reload → health). Cómo recarga
 incluyendo el bloque `reload:` que permite a Sermo enviar una señal a un service cuando
 su unidad de init no tiene recarga, está documentado en
 [services.md](services.es.md#reload-on-config-change-reload_on_change).
+Si ni el backend de init ni un fallback válido `reload.command`/`reload.signal`
+pueden recargar el service, `sermoctl reload <service>` se rechaza antes de
+ejecutarse.
 
 ### Intervalo por service
 
