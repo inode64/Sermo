@@ -472,7 +472,7 @@ func parseProcCond(check map[string]any) (procCond, error) {
 func parseFileCond(check map[string]any) (fileCond, error) {
 	var c fileCond
 	if sz, ok := check["size"].(map[string]any); ok {
-		if cfgval.AsString(sz["on"]) == "change" {
+		if cfgval.AsString(sz["on"]) == checks.OnModeChange {
 			c.sizeChange = true
 		} else {
 			op := cfgval.AsString(sz["op"])
@@ -487,13 +487,13 @@ func parseFileCond(check map[string]any) (fileCond, error) {
 		}
 	}
 	if p, ok := check["permissions"].(map[string]any); ok {
-		if cfgval.AsString(p["on"]) != "change" {
+		if cfgval.AsString(p["on"]) != checks.OnModeChange {
 			return c, fmt.Errorf("file permissions requires on: change")
 		}
 		c.permChange = true
 	}
 	if o, ok := check["owner"].(map[string]any); ok {
-		if cfgval.AsString(o["on"]) != "change" {
+		if cfgval.AsString(o["on"]) != checks.OnModeChange {
 			return c, fmt.Errorf("file owner requires on: change")
 		}
 		c.ownerChange = true

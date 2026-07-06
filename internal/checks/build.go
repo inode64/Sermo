@@ -25,7 +25,10 @@ import (
 	"sermo/internal/servicemgr"
 )
 
-const onModeChange = "change"
+// OnModeChange is the `on: change` metric/field mode: fire when the observed
+// value changes between cycles rather than comparing it to a threshold. Shared
+// with the host-watch builder so both read the mode the same way.
+const OnModeChange = "change"
 
 // keyInterface is the check-entry field naming the egress network interface(s) a
 // tcp/http/ports/icmp/route probe binds to.
@@ -978,7 +981,7 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	switch metric {
 	case netMetricState:
 		expect := cfgval.AsString(entry["expect"])
-		onChange := cfgval.AsString(entry["on"]) == onModeChange
+		onChange := cfgval.AsString(entry["on"]) == OnModeChange
 		if expect == "" && !onChange {
 			return nil, "net state requires expect: up|down or on: change"
 		}
@@ -991,7 +994,7 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 			c.onChange = true
 		}
 	case netMetricSpeed:
-		if cfgval.AsString(entry["on"]) != onModeChange {
+		if cfgval.AsString(entry["on"]) != OnModeChange {
 			return nil, "net speed requires on: change"
 		}
 		c.onChange = true
@@ -1007,7 +1010,7 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		c.op, c.value = op, v
 	case netMetricAddress:
 		expect := cfgval.AsString(entry["expect"])
-		onChange := cfgval.AsString(entry["on"]) == onModeChange
+		onChange := cfgval.AsString(entry["on"]) == OnModeChange
 		if expect == "" && !onChange {
 			return nil, "net address requires expect: present|absent or on: change"
 		}
@@ -1317,7 +1320,7 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	switch metric {
 	case netMetricState:
 		expect := cfgval.AsString(entry["expect"])
-		onChange := cfgval.AsString(entry["on"]) == onModeChange
+		onChange := cfgval.AsString(entry["on"]) == OnModeChange
 		if expect == "" && !onChange {
 			return nil, "icmp state requires expect: up|down or on: change"
 		}
