@@ -248,7 +248,7 @@ func validatePidfiles(tree map[string]any, add addFunc) {
 }
 
 func validatePolicyExtras(tree map[string]any, add addFunc) {
-	policy, ok := tree["policy"].(map[string]any)
+	policy, ok := tree[sectionPolicy].(map[string]any)
 	if !ok {
 		return
 	}
@@ -576,7 +576,7 @@ func validateCascade(name string, tree map[string]any, services map[string]struc
 }
 
 func policyCooldown(tree map[string]any) (string, bool) {
-	policy, ok := tree["policy"].(map[string]any)
+	policy, ok := tree[sectionPolicy].(map[string]any)
 	if !ok {
 		return "", false
 	}

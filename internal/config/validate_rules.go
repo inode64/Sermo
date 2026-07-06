@@ -140,7 +140,7 @@ var metricForms = map[string]metricForm{
 // optional min_matches (default 1) that is positive and no larger than cycles
 // when cycles are used.
 func validateRuleWindow(tree map[string]any, add addFunc) {
-	rw, present := tree["rule_window"]
+	rw, present := tree[sectionRuleWindow]
 	if !present {
 		return
 	}
@@ -149,7 +149,7 @@ func validateRuleWindow(tree map[string]any, add addFunc) {
 		add("rule_window must be a mapping")
 		return
 	}
-	cycles, hasCycles := validateWindowLength("rule_window", m, add)
+	cycles, hasCycles := validateWindowLength(sectionRuleWindow, m, add)
 	switch mode := cfgval.String(m["mode"]); mode {
 	case "", "consecutive":
 	case "within":

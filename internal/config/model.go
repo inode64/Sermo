@@ -33,6 +33,13 @@ const (
 // invariants (pidfile/file cleanup) the engine enforces.
 const sectionStopPolicy = "stop_policy"
 
+// sectionPolicy is the remediation policy block; sectionRuleWindow is the
+// firing-window fallback block.
+const (
+	sectionPolicy     = "policy"
+	sectionRuleWindow = "rule_window"
+)
+
 // stop_policy timeout and kill-guard field keys.
 const (
 	keyGracefulTimeout = "graceful_timeout"
@@ -147,7 +154,7 @@ var metaKeys = map[string]struct{}{
 
 // perServiceDefaults are the only parts of global `defaults` that merge into a
 // service. Engine-wide settings never reach individual services.
-var perServiceDefaults = []string{keyDryRun, sectionStopPolicy, "policy", "rule_window"}
+var perServiceDefaults = []string{keyDryRun, sectionStopPolicy, sectionPolicy, sectionRuleWindow}
 
 // perStorageDefaults are the only parts of global `defaults` that merge into a
 // storage target.
