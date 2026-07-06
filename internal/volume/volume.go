@@ -216,17 +216,11 @@ func (e Expander) vgFreeBytes(ctx context.Context, vg string) (int64, error) {
 // containingMount returns the mount whose mount point is the longest prefix of
 // path (an exact match, a parent directory, or "/" as the fallback).
 func containingMount(mounts []Mount, path string) (Mount, bool) {
-	path = strings.TrimRight(path, "/")
-	if path == "" {
-		path = "/"
-	}
+	path = cleanMountpoint(path)
 	var best Mount
 	bestLen := -1 // every mount point normalizes to at least "/" (len 1), so -1 means "none yet"
 	for _, m := range mounts {
-		mp := strings.TrimRight(m.Mountpoint, "/")
-		if mp == "" {
-			mp = "/"
-		}
+		mp := cleanMountpoint(m.Mountpoint)
 		if mp == path || mp == "/" || strings.HasPrefix(path, mp+"/") {
 			if len(mp) > bestLen {
 				best, bestLen = m, len(mp)
