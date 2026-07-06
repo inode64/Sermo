@@ -697,7 +697,7 @@ func parseCommandExports(checkName string, raw any) ([]commandExport, string) {
 			e.from = from
 		}
 		switch e.from {
-		case "stdout", "stderr":
+		case AnalyzeStreamStdout, AnalyzeStreamStderr:
 		default:
 			return nil, "export." + name + ".from must be stdout or stderr"
 		}
@@ -728,7 +728,7 @@ func parseCommandExports(checkName string, raw any) ([]commandExport, string) {
 }
 
 func defaultCommandExport(name string) commandExport {
-	return commandExport{name: name, from: "stdout", trim: true}
+	return commandExport{name: name, from: AnalyzeStreamStdout, trim: true}
 }
 
 var commandShortVersionRE = regexp.MustCompile(`[0-9]+\.[0-9]+(?:\.[0-9]+)?`)
@@ -757,7 +757,7 @@ func sortedCommandExports(exports map[string]commandExport) []commandExport {
 
 func (e commandExport) value(stdout, stderr string) string {
 	source := stdout
-	if e.from == "stderr" {
+	if e.from == AnalyzeStreamStderr {
 		source = stderr
 	}
 	value := source
