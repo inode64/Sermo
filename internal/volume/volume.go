@@ -24,6 +24,29 @@ import (
 // DefaultCommandTimeout bounds each LVM/filesystem command the expander runs.
 const DefaultCommandTimeout = 30 * time.Second
 
+const (
+	cmdBtrfs     = "btrfs"
+	cmdLVExtend  = "lvextend"
+	cmdLVS       = "lvs"
+	cmdResize2FS = "resize2fs"
+	cmdVGS       = "vgs"
+	cmdXFSGrowFS = "xfs_growfs"
+
+	btrfsSubcommandFilesystem = "filesystem"
+	btrfsSubcommandResize     = "resize"
+	btrfsResizeMax            = "max"
+
+	lvmFlagNoHeadings = "--noheadings"
+	lvmFlagOutput     = "-o"
+	lvmFlagSeparator  = "--separator"
+	lvmFlagUnits      = "--units"
+	lvmFlagNoSuffix   = "--nosuffix"
+	lvmLVFields       = "vg_name,lv_name"
+	lvmVGFreeField    = "vg_free"
+	lvmCSVSeparator   = ","
+	lvmByteUnit       = "b"
+)
+
 // Mount is one entry of the mount table.
 type Mount struct {
 	Device     string
@@ -99,7 +122,7 @@ func (e Expander) Resolve(ctx context.Context, path string) (Target, error) {
 	t := Target{Path: path, Mountpoint: m.Mountpoint, FSType: m.FSType, Device: m.Device}
 
 	to := e.timeout()
-	res, err := execx.Run(ctx, e.Runner, to, "lvs", "--noheadings", "-o", "vg_name,lv_name", "--separator", ",", m.Device)
+	res, err := execx.Run(ctx, e.Runner, to, cmdLVS, lvmFlagNoHeadings, lvmFlagOutput, lvmLVFields, lvmFlagSeparator, lvmCSVSeparator, m.Device)
 	if err != nil {
 		return Target{}, commandFailure(fmt.Sprintf("%q is not an LVM volume (lvs %s)", path, m.Device), err, res, to)
 	}
@@ -150,7 +173,7 @@ func (e Expander) Expand(ctx context.Context, t Target, by int64) (Result, error
 
 	lv := fmt.Sprintf("/dev/%s/%s", t.VG, t.LV)
 	to := e.timeout()
-	res, err := execx.Run(ctx, e.Runner, to, "lvextend", fmt.Sprintf("-L+%db", grow), lv)
+	res, err := execx.Run(ctx, e.Runner, to, cmdLVExtend, fmt.Sprintf("-L+%db", grow), lv)
 	if err != nil {
 		return Result{}, commandFailure("lvextend "+lv, err, res, to)
 	}
@@ -190,11 +213,11 @@ func (e Expander) growFS(ctx context.Context, t Target) error {
 	)
 	switch t.FSType {
 	case fsExt2, fsExt3, fsExt4:
-		res, err = execx.Run(ctx, e.Runner, to, "resize2fs", lv)
+		res, err = execx.Run(ctx, e.Runner, to, cmdResize2FS, lv)
 	case fsXFS:
-		res, err = execx.Run(ctx, e.Runner, to, "xfs_growfs", t.Mountpoint)
+		res, err = execx.Run(ctx, e.Runner, to, cmdXFSGrowFS, t.Mountpoint)
 	case fsBtrfs:
-		res, err = execx.Run(ctx, e.Runner, to, "btrfs", "filesystem", "resize", "max", t.Mountpoint)
+		res, err = execx.Run(ctx, e.Runner, to, cmdBtrfs, btrfsSubcommandFilesystem, btrfsSubcommandResize, btrfsResizeMax, t.Mountpoint)
 	}
 	if err != nil {
 		return commandFailure(fmt.Sprintf("grow %s filesystem on %s", t.FSType, t.Mountpoint), err, res, to)
@@ -205,7 +228,7 @@ func (e Expander) growFS(ctx context.Context, t Target) error {
 // vgFreeBytes reports the free space of volume group vg in bytes.
 func (e Expander) vgFreeBytes(ctx context.Context, vg string) (int64, error) {
 	to := e.timeout()
-	res, err := execx.Run(ctx, e.Runner, to, "vgs", "--noheadings", "-o", "vg_free", "--units", "b", "--nosuffix", vg)
+	res, err := execx.Run(ctx, e.Runner, to, cmdVGS, lvmFlagNoHeadings, lvmFlagOutput, lvmVGFreeField, lvmFlagUnits, lvmByteUnit, lvmFlagNoSuffix, vg)
 	if err != nil {
 		return 0, commandFailure("vgs "+vg, err, res, to)
 	}
