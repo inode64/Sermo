@@ -117,22 +117,22 @@ var metricCatalog = map[string]map[string]struct{}{
 type metricForm struct{ absolute, percent bool }
 
 var metricForms = map[string]metricForm{
-	"memory":        {absolute: true, percent: true},
-	"swap":          {absolute: true, percent: true},
-	"cpu":           {percent: true},
-	"cpu_thread":    {percent: true},
-	"process_count": {absolute: true},
-	"io":            {absolute: true},
-	"io_read":       {absolute: true},
-	"io_write":      {absolute: true},
-	"fds":           {absolute: true},
-	"threads":       {absolute: true},
-	"total_memory":  {absolute: true, percent: true},
-	"total_swap":    {absolute: true, percent: true},
-	"total_cpu":     {percent: true},
-	"load1":         {absolute: true},
-	"load5":         {absolute: true},
-	"load15":        {absolute: true},
+	metrics.MetricMemory:       {absolute: true, percent: true},
+	metrics.MetricSwap:         {absolute: true, percent: true},
+	metrics.MetricCPU:          {percent: true},
+	metrics.MetricCPUThread:    {percent: true},
+	metrics.MetricProcessCount: {absolute: true},
+	metrics.MetricIO:           {absolute: true},
+	metrics.MetricIORead:       {absolute: true},
+	metrics.MetricIOWrite:      {absolute: true},
+	metrics.MetricFds:          {absolute: true},
+	metrics.MetricThreads:      {absolute: true},
+	metrics.MetricTotalMemory:  {absolute: true, percent: true},
+	metrics.MetricTotalSwap:    {absolute: true, percent: true},
+	metrics.MetricTotalCPU:     {percent: true},
+	metrics.MetricLoad1:        {absolute: true},
+	metrics.MetricLoad5:        {absolute: true},
+	metrics.MetricLoad15:       {absolute: true},
 }
 
 // validateRuleWindow checks the merged `rule_window` fallback block: a positive
