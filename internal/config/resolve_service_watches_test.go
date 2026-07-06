@@ -271,6 +271,11 @@ func TestValidateUnifiedWatchActions(t *testing.T) {
     check: { type: tcp, host: 127.0.0.1, port: 80 }
     then: { action: block, blocks: [alert] }
 `, "must be an operation action"},
+		{"notify interval on rule action", `watches:
+  w:
+    check: { type: tcp, host: 127.0.0.1, port: 80 }
+    then: { action: alert, notify: [ops], notify_interval: 30m }
+`, "then.notify_interval is not supported with an action"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
