@@ -76,7 +76,7 @@ func validateGlobal(cfg *Config) []Issue {
 		if backend := cfgval.String(engine["backend"]); !isValidBackend(backend) {
 			add("engine.backend %q is not one of auto, systemd, openrc", backend)
 		}
-		for _, field := range []string{"interval", "default_timeout", "operation_timeout"} {
+		for _, field := range []string{keyInterval, "default_timeout", "operation_timeout"} {
 			if v, present := engine[field]; present && !isPositiveDuration(cfgval.String(v)) {
 				add("engine.%s %q must be a valid positive duration", field, cfgval.String(v))
 			}
@@ -644,7 +644,7 @@ func validateStorage(name string, tree map[string]any, notifiers map[string]stru
 		issues = append(issues, Issue{Scope: "storage " + name, Msg: fmt.Sprintf(format, args...)})
 	}
 
-	allowed := set("name", "display_name", "description", "category", "path", keyDryRun, keyMonitor, "interval", "capacity", "usage", keyMount, sectionVariables, "os")
+	allowed := set("name", "display_name", "description", "category", "path", keyDryRun, keyMonitor, keyInterval, "capacity", "usage", keyMount, sectionVariables, "os")
 	for _, key := range slices.Sorted(maps.Keys(tree)) {
 		if _, ok := allowed[key]; !ok {
 			add("key %q is not supported for kind: storage", key)
@@ -665,7 +665,7 @@ func validateStorage(name string, tree map[string]any, notifiers map[string]stru
 			add("dry_run must be a boolean")
 		}
 	}
-	if v, present := tree["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
+	if v, present := tree[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
 		add("interval %q must be a valid positive duration", cfgval.String(v))
 	}
 	if capacity, ok := tree["capacity"].(map[string]any); ok {
@@ -707,7 +707,7 @@ func validateStorageCapacity(name, path string, tree, capacity map[string]any, n
 		}
 	}
 	entry := map[string]any{"check": check}
-	for _, key := range []string{keyDryRun, keyMonitor, "interval"} {
+	for _, key := range []string{keyDryRun, keyMonitor, keyInterval} {
 		if v, present := tree[key]; present {
 			entry[key] = v
 		}
@@ -838,7 +838,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 		issues = append(issues, Issue{Scope: name, Msg: fmt.Sprintf(format, args...)})
 	}
 
-	if v, present := tree["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
+	if v, present := tree[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
 		add("interval %q must be a valid positive duration", cfgval.String(v))
 	}
 

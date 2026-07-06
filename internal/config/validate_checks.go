@@ -512,7 +512,7 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 		// A per-check interval runs the check every N cycles (N rounded from
 		// interval/resolution). It must be a positive duration; the daemon warns at
 		// startup if it is below the resolution or not an exact multiple.
-		if v, present := entry["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
+		if v, present := entry[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("%s.interval %q must be a valid positive duration", path, cfgval.String(v))
 		}
 		if v, present := entry["timeout"]; present && !isPositiveDuration(cfgval.String(v)) {
