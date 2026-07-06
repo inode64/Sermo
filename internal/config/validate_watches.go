@@ -542,9 +542,9 @@ func validateSwapCheck(name string, entry map[string]any, defaultNotify []string
 // drift between the two surfaces.
 func validateSwapMetricCondition(prefix, metric string, m map[string]any, add addFunc) {
 	switch metric {
-	case "usage":
+	case checks.SwapMetricUsage:
 		validateThresholdPreds(prefix, m, checks.SwapUsageFields, add)
-	case "io":
+	case checks.SwapMetricIO:
 		delta, ok := m["delta"].(map[string]any)
 		if !ok {
 			add("%s.delta {op, value} is required", prefix)

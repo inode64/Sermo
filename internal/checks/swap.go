@@ -22,10 +22,11 @@ type SwapSample struct {
 // reads /proc/meminfo and /proc/vmstat.
 type SwapSamplerFunc func() (SwapSample, error)
 
-// swap check metric names (the `metric:` selector of a swap check).
+// swap check metric names (the `metric:` selector of a swap check). Exported so
+// config validation checks the same metric names the swap check evaluates.
 const (
-	swapMetricUsage = "usage"
-	swapMetricIO    = "io"
+	SwapMetricUsage = "usage"
+	SwapMetricIO    = "io"
 )
 
 // swapCheck watches one swap metric. `usage` is a level check over
@@ -58,7 +59,7 @@ func (c *swapCheck) Run(_ context.Context) Result {
 	data := map[string]any{fieldMetric: c.metric, fieldTotalBytes: s.TotalBytes, fieldFreeBytes: s.FreeBytes}
 
 	switch c.metric {
-	case swapMetricUsage:
+	case SwapMetricUsage:
 		// A swapless host can never "run out of swap": never fire, so a
 		// free_bytes/free_pct predicate does not misfire on total == 0.
 		if s.TotalBytes == 0 {
@@ -82,7 +83,7 @@ func (c *swapCheck) Run(_ context.Context) Result {
 		res.Data = data
 		return res
 
-	case swapMetricIO:
+	case SwapMetricIO:
 		total := s.PagesIn + s.PagesOut
 		if !c.primed {
 			c.primed, c.lastIO = true, total
