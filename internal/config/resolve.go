@@ -126,42 +126,15 @@ func expandPidfile(tree map[string]any) []string {
 	if !present {
 		return nil
 	}
-	pathRaw := raw
-	optional := false
-	if m, ok := raw.(map[string]any); ok {
-		pathRaw = m["path"]
-		optional = cfgval.Bool(m["optional"])
+	decl, errs := parseServiceArtifactPaths("pidfile", raw)
+	if len(decl.paths) == 0 {
+		return errs
 	}
-	paths := cfgval.StringList(pathRaw)
-	if len(paths) == 0 {
-		return []string{"pidfile must be a non-empty path string, list or {path: ...} mapping"}
-	}
-	var errs []string
-	for _, path := range paths {
-		if !filepath.IsAbs(path) {
-			errs = append(errs, fmt.Sprintf("pidfile path %q must be absolute", path))
-		}
-	}
-	pathValue := pidfilePathValue(paths)
+	pathValue := serviceArtifactPathValue(decl.paths)
 	tree["pidfile"] = pathValue
 
 	// Gated health check, unless the service already defines one.
-	checksMap, _ := tree["checks"].(map[string]any)
-	if checksMap == nil {
-		checksMap = map[string]any{}
-	}
-	if _, exists := checksMap["pidfile"]; !exists {
-		entry := map[string]any{
-			"type":     "pidfile",
-			"path":     pathValue,
-			"requires": []any{"service"},
-		}
-		if optional {
-			entry["optional"] = true
-		}
-		checksMap["pidfile"] = entry
-	}
-	tree["checks"] = checksMap
+	ensureServiceArtifactCheck(tree, "pidfile", "pidfile", pathValue, decl.optional)
 	return errs
 }
 
@@ -203,7 +176,7 @@ func expandPidfiles(tree map[string]any) []string {
 				errs = append(errs, fmt.Sprintf("pidfiles.%s path %q must be absolute", role, path))
 			}
 		}
-		pathValue := pidfilePathValue(paths)
+		pathValue := serviceArtifactPathValue(paths)
 		normalized[role] = pathValue
 		checkName := "pidfile-" + role
 		if _, exists := checksMap[checkName]; !exists {
@@ -229,39 +202,10 @@ func expandSocket(tree map[string]any) []string {
 	}
 	delete(tree, "socket")
 
-	pathRaw := raw
-	optional := false
-	if m, ok := raw.(map[string]any); ok {
-		pathRaw = m["path"]
-		optional = cfgval.Bool(m["optional"])
+	decl, errs := parseServiceArtifactPaths("socket", raw)
+	if len(decl.paths) > 0 {
+		ensureServiceArtifactCheck(tree, "socket", "socket", serviceArtifactPathValue(decl.paths), decl.optional)
 	}
-	paths := cfgval.StringList(pathRaw)
-	if len(paths) == 0 {
-		return []string{"socket must be a non-empty path string, list or {path: ...} mapping"}
-	}
-	var errs []string
-	for _, path := range paths {
-		if !filepath.IsAbs(path) {
-			errs = append(errs, fmt.Sprintf("socket path %q must be absolute", path))
-		}
-	}
-
-	checksMap, _ := tree["checks"].(map[string]any)
-	if checksMap == nil {
-		checksMap = map[string]any{}
-	}
-	if _, exists := checksMap["socket"]; !exists {
-		entry := map[string]any{
-			"type":     "socket",
-			"path":     pidfilePathValue(paths),
-			"requires": []any{"service"},
-		}
-		if optional {
-			entry["optional"] = true
-		}
-		checksMap["socket"] = entry
-	}
-	tree["checks"] = checksMap
 	return errs
 }
 
@@ -275,6 +219,19 @@ func expandLockfile(tree map[string]any) []string {
 	}
 	delete(tree, "lockfile")
 
+	decl, errs := parseServiceArtifactPaths("lockfile", raw)
+	if len(decl.paths) > 0 {
+		ensureServiceArtifactCheck(tree, "lockfile", "lockfile", serviceArtifactPathValue(decl.paths), decl.optional)
+	}
+	return errs
+}
+
+type serviceArtifactPaths struct {
+	paths    []string
+	optional bool
+}
+
+func parseServiceArtifactPaths(kind string, raw any) (serviceArtifactPaths, []string) {
 	pathRaw := raw
 	optional := false
 	if m, ok := raw.(map[string]any); ok {
@@ -283,35 +240,37 @@ func expandLockfile(tree map[string]any) []string {
 	}
 	paths := cfgval.StringList(pathRaw)
 	if len(paths) == 0 {
-		return []string{"lockfile must be a non-empty path string, list or {path: ...} mapping"}
+		return serviceArtifactPaths{}, []string{fmt.Sprintf("%s must be a non-empty path string, list or {path: ...} mapping", kind)}
 	}
 	var errs []string
 	for _, path := range paths {
 		if !filepath.IsAbs(path) {
-			errs = append(errs, fmt.Sprintf("lockfile path %q must be absolute", path))
+			errs = append(errs, fmt.Sprintf("%s path %q must be absolute", kind, path))
 		}
 	}
+	return serviceArtifactPaths{paths: paths, optional: optional}, errs
+}
 
+func ensureServiceArtifactCheck(tree map[string]any, name, checkType string, pathValue any, optional bool) {
 	checksMap, _ := tree["checks"].(map[string]any)
 	if checksMap == nil {
 		checksMap = map[string]any{}
 	}
-	if _, exists := checksMap["lockfile"]; !exists {
+	if _, exists := checksMap[name]; !exists {
 		entry := map[string]any{
-			"type":     "lockfile",
-			"path":     pidfilePathValue(paths),
+			"type":     checkType,
+			"path":     pathValue,
 			"requires": []any{"service"},
 		}
 		if optional {
 			entry["optional"] = true
 		}
-		checksMap["lockfile"] = entry
+		checksMap[name] = entry
 	}
 	tree["checks"] = checksMap
-	return errs
 }
 
-func pidfilePathValue(paths []string) any {
+func serviceArtifactPathValue(paths []string) any {
 	if len(paths) == 1 {
 		return paths[0]
 	}
