@@ -15,30 +15,24 @@ import (
 	"sermo/internal/state"
 )
 
-// mountCommand and umountCommand are the command names reported in usage errors.
-const (
-	mountCommand  = "mount"
-	umountCommand = "umount"
-)
-
 func (a App) runMount(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.commandUsageError(mountCommand, "mount requires a target, or subcommand status/list")
+		return a.commandUsageError(mountctl.ActionMount, "mount requires a target, or subcommand status/list")
 	}
 	switch opts.args[0] {
 	case "list":
 		if len(opts.args) > 1 {
-			return a.commandUsageError(mountCommand, "mount list takes no arguments")
+			return a.commandUsageError(mountctl.ActionMount, "mount list takes no arguments")
 		}
 		return a.runMountList(opts)
 	case "status":
 		if len(opts.args) != 2 {
-			return a.commandUsageError(mountCommand, "mount status requires exactly one mount name or path")
+			return a.commandUsageError(mountctl.ActionMount, "mount status requires exactly one mount name or path")
 		}
 		return a.runMountStatus(opts, opts.args[1])
 	default:
 		if len(opts.args) > 1 {
-			return a.commandUsageError(mountCommand, "mount takes exactly one target")
+			return a.commandUsageError(mountctl.ActionMount, "mount takes exactly one target")
 		}
 		return a.runMountAcquire(ctx, opts, opts.args[0])
 	}
@@ -46,10 +40,10 @@ func (a App) runMount(ctx context.Context, opts options) int {
 
 func (a App) runUmount(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.commandUsageError(umountCommand, "umount requires a mount name or path")
+		return a.commandUsageError(mountctl.ActionUmount, "umount requires a mount name or path")
 	}
 	if len(opts.args) > 1 {
-		return a.commandUsageError(umountCommand, "umount takes exactly one mount name or path")
+		return a.commandUsageError(mountctl.ActionUmount, "umount takes exactly one mount name or path")
 	}
 	cfg, code := a.loadConfig(opts)
 	if cfg == nil {
@@ -61,7 +55,7 @@ func (a App) runUmount(ctx context.Context, opts options) int {
 	}
 	controller := a.mountController(cfg, opts)
 	res, err := controller.Release(ctx, spec)
-	a.syncStorageMountMonitoring(opts, cfg, spec.Name, "umount", err == nil && res.Status == "ok")
+	a.syncStorageMountMonitoring(opts, cfg, spec.Name, mountctl.ActionUmount, err == nil && res.Status == mountctl.ResultOK)
 	if err != nil {
 		return a.printMountResult(opts, res, err)
 	}
@@ -79,7 +73,7 @@ func (a App) runMountAcquire(ctx context.Context, opts options, target string) i
 	}
 	controller := a.mountController(cfg, opts)
 	res, err := controller.Acquire(ctx, spec)
-	a.syncStorageMountMonitoring(opts, cfg, spec.Name, "mount", err == nil && res.Status == "ok")
+	a.syncStorageMountMonitoring(opts, cfg, spec.Name, mountctl.ActionMount, err == nil && res.Status == mountctl.ResultOK)
 	if err != nil {
 		return a.printMountResult(opts, res, err)
 	}
@@ -207,7 +201,7 @@ func (a App) syncStorageMountMonitoring(opts options, cfg *config.Config, storag
 		return
 	}
 	if change.Changed {
-		a.recordAccess(cfg, change.Action, storage, "ok", change.Message)
+		a.recordAccess(cfg, change.Action, storage, mountctl.ResultOK, change.Message)
 	}
 }
 

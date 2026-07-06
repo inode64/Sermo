@@ -26,10 +26,10 @@ type fakeRunner struct {
 func (r *fakeRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
 	r.calls = append(r.calls, strings.Join(append([]string{name}, args...), " "))
 	switch name {
-	case "mount":
+	case ActionMount:
 		*r.mounted = true
 		return execx.Result{}, nil
-	case "umount":
+	case ActionUmount:
 		if len(args) > 0 && args[0] == "-l" {
 			*r.mounted = false
 			return execx.Result{}, nil
@@ -352,7 +352,7 @@ func (slowMountRunner) Run(ctx context.Context, name string, _ ...string) (execx
 
 func TestControllerRunTimeoutMessage(t *testing.T) {
 	c := Controller{Runner: slowMountRunner{}, CommandTimeout: time.Millisecond}
-	err := c.run(context.Background(), "umount", "/mnt/backup")
+	err := c.run(context.Background(), ActionUmount, "/mnt/backup")
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}

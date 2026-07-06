@@ -66,11 +66,11 @@ type fakeMountRunner struct{ mounted *bool }
 
 func (r *fakeMountRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
 	switch name {
-	case "mount":
+	case mountctl.ActionMount:
 		if len(args) == 1 && args[0] == "/mnt/backup" {
 			*r.mounted = true
 		}
-	case "umount":
+	case mountctl.ActionUmount:
 		if len(args) == 1 && args[0] == "/mnt/backup" {
 			*r.mounted = false
 		}

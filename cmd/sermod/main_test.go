@@ -227,10 +227,10 @@ func TestWebAuthFromConfig(t *testing.T) {
 
 func TestEngineAndNotifierAccessors(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"engine":    map[string]any{"backend": "openrc", "interval": "30s"},
-		"notifiers": map[string]any{"ops": map[string]any{"type": "slack"}},
+		config.SectionEngine: map[string]any{config.EngineKeyBackend: "openrc", "interval": "30s"},
+		"notifiers":          map[string]any{"ops": map[string]any{"type": "slack"}},
 	}}}
-	if got := app.EngineString(cfg, "backend"); got != "openrc" {
+	if got := app.EngineString(cfg, config.EngineKeyBackend); got != "openrc" {
 		t.Fatalf("engineString(backend) = %q, want openrc", got)
 	}
 	if got := app.EngineString(cfg, "missing"); got != "" {
@@ -241,7 +241,7 @@ func TestEngineAndNotifierAccessors(t *testing.T) {
 	}
 
 	bare := &config.Config{Global: config.Global{Raw: map[string]any{}}}
-	if app.EngineString(bare, "backend") != "" {
+	if app.EngineString(bare, config.EngineKeyBackend) != "" {
 		t.Fatal("engine accessor on an empty config must return zero value")
 	}
 	if raw := bare.Notifiers(); len(raw) != 2 || raw["tty"] == nil || raw["wall"] == nil {
@@ -251,19 +251,19 @@ func TestEngineAndNotifierAccessors(t *testing.T) {
 	// Exercise improved coercion (now via cfgval): string forms for ints and durations are accepted
 	// (previously engineInt only accepted bare numeric types; durations already string-only).
 	cfg2 := &config.Config{Global: config.Global{Raw: map[string]any{
-		"engine": map[string]any{
-			"max_parallel_checks":     "16", // string form (e.g. from some expansions)
-			"default_timeout":         "45s",
-			"max_parallel_operations": 4, // int form
+		config.SectionEngine: map[string]any{
+			config.EngineKeyMaxParallelChecks:     "16", // string form (e.g. from some expansions)
+			config.EngineKeyDefaultTimeout:        "45s",
+			config.EngineKeyMaxParallelOperations: 4, // int form
 		},
 	}}}
-	if got := app.EngineInt(cfg2, "max_parallel_checks", 8); got != 16 {
+	if got := app.EngineInt(cfg2, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks); got != 16 {
 		t.Fatalf("EngineInt string-num = %d, want 16", got)
 	}
-	if got := app.EngineInt(cfg2, "max_parallel_operations", 2); got != 4 {
+	if got := app.EngineInt(cfg2, config.EngineKeyMaxParallelOperations, app.DefaultEngineMaxParallelOperations); got != 4 {
 		t.Fatalf("EngineInt bare-int = %d, want 4", got)
 	}
-	if got := app.EngineDuration(cfg2, "default_timeout", 10*time.Second); got != 45*time.Second {
+	if got := app.EngineDuration(cfg2, config.EngineKeyDefaultTimeout, app.DefaultEngineCheckTimeout); got != 45*time.Second {
 		t.Fatalf("EngineDuration = %v, want 45s", got)
 	}
 	if got := app.EngineDuration(cfg2, "missing_dur", 99*time.Second); got != 99*time.Second {

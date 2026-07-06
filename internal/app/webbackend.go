@@ -317,7 +317,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		}
 		iv := cfgval.Duration(resolved.Tree["interval"])
 		if iv <= 0 {
-			iv = config.EngineInterval(cfg, 30*time.Second)
+			iv = config.EngineInterval(cfg, config.DefaultEngineInterval)
 		}
 		entry := &webEntry{
 			displayName:    config.DisplayName(resolved.Tree, name),
@@ -387,7 +387,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	if raw, _ := cfg.ResolveWatches(); len(raw) > 0 {
 		for _, name := range slices.Sorted(maps.Keys(raw)) {
 			entry, _ := raw[name].(map[string]any)
-			ww, warn := newWebWatch(name, entry, deps.GlobalNotify, 30*time.Second, false)
+			ww, warn := newWebWatch(name, entry, deps.GlobalNotify, config.DefaultEngineInterval, false)
 			if warn != "" {
 				warnings = append(warnings, "watch "+name+": "+warn)
 			}
@@ -2274,15 +2274,15 @@ func (b *WebBackend) DaemonInfo(ctx context.Context) web.DaemonInfo {
 		info.StateDir = g.StateDir()
 
 		// Engine block (effective values with documented fallbacks)
-		info.Interval = formatInterval(config.EngineInterval(b.cfg, 30*time.Second))
-		info.MaxParallelChecks = EngineInt(b.cfg, "max_parallel_checks", 8)
-		info.MaxParallelOperations = EngineInt(b.cfg, "max_parallel_operations", 2)
-		info.DefaultTimeout = formatInterval(EngineDuration(b.cfg, "default_timeout", 10*time.Second))
-		info.OperationTimeout = formatInterval(EngineDuration(b.cfg, "operation_timeout", 90*time.Second))
-		info.StartupDelay = formatInterval(EngineDuration(b.cfg, "startup_delay", 0))
+		info.Interval = formatInterval(config.EngineInterval(b.cfg, config.DefaultEngineInterval))
+		info.MaxParallelChecks = EngineInt(b.cfg, config.EngineKeyMaxParallelChecks, DefaultEngineMaxParallelChecks)
+		info.MaxParallelOperations = EngineInt(b.cfg, config.EngineKeyMaxParallelOperations, DefaultEngineMaxParallelOperations)
+		info.DefaultTimeout = formatInterval(EngineDuration(b.cfg, config.EngineKeyDefaultTimeout, DefaultEngineCheckTimeout))
+		info.OperationTimeout = formatInterval(EngineDuration(b.cfg, config.EngineKeyOperationTimeout, DefaultEngineOperationTimeout))
+		info.StartupDelay = formatInterval(EngineDuration(b.cfg, config.EngineKeyStartupDelay, 0))
 
 		if em := engineMap(b.cfg); em != nil {
-			if be, ok := em["backend"].(string); ok && be != "" {
+			if be, ok := em[config.EngineKeyBackend].(string); ok && be != "" {
 				info.Backend = be
 			}
 		}

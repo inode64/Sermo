@@ -30,6 +30,13 @@ const (
 	DefaultPort = 16509
 )
 
+// Domain action labels used in operator-facing errors.
+const (
+	domainActionStart  = "start"
+	domainActionStop   = "stop"
+	domainActionResume = "resume"
+)
+
 // Spec describes one libvirt-controlled VM target.
 type Spec struct {
 	URI    string
@@ -160,14 +167,14 @@ func listDomains(ctx context.Context, m Manager) ([]DomainSummary, error) {
 
 // Start boots a defined, inactive libvirt domain.
 func (m Manager) Start(ctx context.Context, _ string) error {
-	return m.withDomainAction(ctx, "start", func(c Client, dom libvirt.Domain) error {
+	return m.withDomainAction(ctx, domainActionStart, func(c Client, dom libvirt.Domain) error {
 		return c.DomainCreate(dom)
 	})
 }
 
 // Stop requests a graceful ACPI shutdown for the libvirt domain.
 func (m Manager) Stop(ctx context.Context, _ string) error {
-	return m.withDomainAction(ctx, "stop", func(c Client, dom libvirt.Domain) error {
+	return m.withDomainAction(ctx, domainActionStop, func(c Client, dom libvirt.Domain) error {
 		return c.DomainShutdown(dom)
 	})
 }
@@ -195,7 +202,7 @@ func (m Manager) ResetState(context.Context, string) error {
 
 // Resume unpauses a paused libvirt domain.
 func (m Manager) Resume(ctx context.Context, _ string) error {
-	return m.withDomainAction(ctx, "resume", func(c Client, dom libvirt.Domain) error {
+	return m.withDomainAction(ctx, domainActionResume, func(c Client, dom libvirt.Domain) error {
 		return c.DomainResume(dom)
 	})
 }

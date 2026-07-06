@@ -109,7 +109,7 @@ func run(args []string) int {
 	defer stop()
 
 	detector := servicemgr.NewDetector()
-	backend, err := servicemgr.ParseBackend(app.EngineString(cfg, "backend"))
+	backend, err := servicemgr.ParseBackend(app.EngineString(cfg, config.EngineKeyBackend))
 	if err != nil {
 		logger.Error("backend", "error", err)
 		return 2
@@ -155,7 +155,7 @@ func run(args []string) int {
 
 	store, err := state.OpenWith(
 		filepath.Join(cfg.Global.StateDir(), state.Filename),
-		state.Options{CacheBytes: app.EngineByteSize(cfg, "state_cache_size", state.DefaultCacheBytes)},
+		state.Options{CacheBytes: app.EngineByteSize(cfg, config.EngineKeyStateCacheSize, state.DefaultCacheBytes)},
 	)
 	if err != nil {
 		logger.Error("open state store", "error", err)
@@ -203,13 +203,13 @@ func run(args []string) int {
 	}
 	diagFile := openEngineLog(logger, cfg, "diagnostics")
 
-	interval := config.EngineInterval(cfg, 30*time.Second)
+	interval := config.EngineInterval(cfg, config.DefaultEngineInterval)
 	runner := execx.CommandRunner{}
-	opGate := app.NewOpGate(app.EngineInt(cfg, "max_parallel_operations", 2), cfg.Global.RuntimeDir())
+	opGate := app.NewOpGate(app.EngineInt(cfg, config.EngineKeyMaxParallelOperations, app.DefaultEngineMaxParallelOperations), cfg.Global.RuntimeDir())
 	var diagnosticLog *app.DiagnosticLog
 	if diagFile != nil {
 		diagnosticLog = app.NewDiagnosticLog(cfg, nil, opGate, diagFile, time.Now)
-		go diagnosticLog.Run(ctx, config.EngineDiagnosticsInterval(cfg, time.Hour))
+		go diagnosticLog.Run(ctx, config.EngineDiagnosticsInterval(cfg, config.DefaultEngineDiagnosticsInterval))
 	}
 	panicGate := app.NewPanicGate(store)
 	userLookup := app.EngineUserLookup(cfg, runner)
@@ -221,9 +221,9 @@ func run(args []string) int {
 		Manager:          manager,
 		Runtime:          cfg.Global.RuntimeDir(),
 		Interval:         interval,
-		DefaultTimeout:   app.EngineDuration(cfg, "default_timeout", 10*time.Second),
-		OperationTimeout: app.EngineDuration(cfg, "operation_timeout", 90*time.Second),
-		MaxParallel:      app.EngineInt(cfg, "max_parallel_checks", 8),
+		DefaultTimeout:   app.EngineDuration(cfg, config.EngineKeyDefaultTimeout, app.DefaultEngineCheckTimeout),
+		OperationTimeout: app.EngineDuration(cfg, config.EngineKeyOperationTimeout, app.DefaultEngineOperationTimeout),
+		MaxParallel:      app.EngineInt(cfg, config.EngineKeyMaxParallelChecks, app.DefaultEngineMaxParallelChecks),
 		Sleep:            time.Sleep,
 		Now:              time.Now,
 		// Events go to slog and to the persisted ring the web UI reads.
@@ -295,9 +295,9 @@ func run(args []string) int {
 		logger.Warn("all services and watches are disabled; starting with nothing to monitor")
 	}
 
-	startupDelay := app.EngineDuration(cfg, "startup_delay", 0)
+	startupDelay := app.EngineDuration(cfg, config.EngineKeyStartupDelay, 0)
 	if startupDelay > 0 {
-		logger.Info("sermod waiting before first checks", "startup_delay", startupDelay)
+		logger.Info("sermod waiting before first checks", config.EngineKeyStartupDelay, startupDelay)
 	}
 	readiness.UpdateCounts(len(workers), len(watches))
 
@@ -357,7 +357,7 @@ func run(args []string) int {
 
 	monitor := app.NewMonitor(cfg, deps, app.Scheduler{
 		Interval:     interval,
-		OpSlots:      app.EngineInt(cfg, "max_parallel_operations", 2),
+		OpSlots:      app.EngineInt(cfg, config.EngineKeyMaxParallelOperations, app.DefaultEngineMaxParallelOperations),
 		StartupDelay: startupDelay,
 	}, readiness, collector, webHolder)
 	monitor.ConfigPath = globalPath

@@ -29,6 +29,7 @@ import (
 
 	"sermo/internal/buildinfo"
 	"sermo/internal/logfile"
+	"sermo/internal/mountctl"
 )
 
 //go:embed index.html
@@ -1062,7 +1063,7 @@ func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	action := r.PathValue("action")
 	switch action {
-	case "mount", "umount":
+	case mountctl.ActionMount, mountctl.ActionUmount:
 		res := s.Backend.MountAction(s.operateContext(), name, action, MountActionOptions{
 			KillBlockers: queryBool(r, "kill"),
 		})

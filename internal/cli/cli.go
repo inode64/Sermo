@@ -292,9 +292,9 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runIsActive(ctx, opts)
 	case actionStart, actionStop, actionRestart, actionResume:
 		return a.runAction(ctx, opts, opts.command)
-	case "mount":
+	case mountctl.ActionMount:
 		return a.runMount(ctx, opts)
-	case "umount":
+	case mountctl.ActionUmount:
 		return a.runUmount(ctx, opts)
 	case "config":
 		return a.runConfig(opts)
@@ -1050,14 +1050,7 @@ func (a App) statusFunc(opts options, tree map[string]any, base string) func(con
 }
 
 func engineDefaultTimeout(cfg *config.Config) time.Duration {
-	if engine, ok := cfg.Global.Raw["engine"].(map[string]any); ok {
-		if s, _ := engine["default_timeout"].(string); s != "" {
-			if d, err := time.ParseDuration(s); err == nil && d > 0 {
-				return d
-			}
-		}
-	}
-	return 10 * time.Second
+	return app.EngineDuration(cfg, config.EngineKeyDefaultTimeout, app.DefaultEngineCheckTimeout)
 }
 
 // runLocks reports the named runtime locks for a service (active, expired and
@@ -1333,7 +1326,7 @@ type statusJSON struct {
 // not given. Backend actions can legitimately take much longer than a probe.
 func defaultTimeout(command string) time.Duration {
 	switch command {
-	case actionStart, actionStop, actionRestart, actionReload, actionResume, "mount", "umount", "state":
+	case actionStart, actionStop, actionRestart, actionReload, actionResume, mountctl.ActionMount, mountctl.ActionUmount, "state":
 		return 90 * time.Second
 	case "services":
 		return 30 * time.Second
