@@ -373,14 +373,8 @@ func systemdStatus(state string) Status {
 }
 
 func openrcStatus(result execx.Result) Status {
-	out := strings.ToLower(result.Stdout)
-	switch {
-	case strings.Contains(out, "crashed"):
-		return StatusFailed
-	case strings.Contains(out, "stopped"), strings.Contains(out, "not started"):
-		return StatusInactive
-	case strings.Contains(out, "started"):
-		return StatusActive
+	if status := openrcStateTextStatus(result.Stdout, false); status != StatusUnknown {
+		return status
 	}
 	switch result.ExitCode {
 	case 0:
@@ -402,17 +396,23 @@ func openrcStatusLine(out, service string) (Status, bool) {
 		if strings.TrimSpace(line[:open]) != service {
 			continue
 		}
-		state := strings.ToLower(strings.TrimSpace(line[open+1 : closeIdx]))
-		switch {
-		case strings.Contains(state, "crashed"):
-			return StatusFailed, true
-		case strings.Contains(state, "stopped"), strings.Contains(state, "not started"), strings.Contains(state, "inactive"):
-			return StatusInactive, true
-		case strings.Contains(state, "started"):
-			return StatusActive, true
-		default:
-			return StatusUnknown, true
-		}
+		return openrcStateTextStatus(line[open+1:closeIdx], true), true
 	}
 	return StatusUnknown, false
+}
+
+func openrcStateTextStatus(text string, includeInactive bool) Status {
+	state := strings.ToLower(strings.TrimSpace(text))
+	switch {
+	case strings.Contains(state, openRCStateCrashed):
+		return StatusFailed
+	case strings.Contains(state, openRCStateStopped),
+		strings.Contains(state, openRCStateNotStarted),
+		includeInactive && strings.Contains(state, "inactive"):
+		return StatusInactive
+	case strings.Contains(state, openRCStateStarted):
+		return StatusActive
+	default:
+		return StatusUnknown
+	}
 }
