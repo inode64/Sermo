@@ -18,11 +18,13 @@ processes:
   main:
     exe: ${clamd_binary}
     user: ${user}
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   clamd:
-    type: clamd
-    socket: /run/clamav/clamd.sock
-    timeout: 3s
+    check:
+      type: clamd
+      socket: /run/clamav/clamd.sock
+      timeout: 3s

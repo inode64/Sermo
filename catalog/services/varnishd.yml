@@ -16,20 +16,22 @@ preflight:
       - -f
       - /etc/varnish/default.vcl
     timeout: 30s
-checks:
-  service:
-    type: service
-    expect: active
-  port:
-    type: tcp
-    port: ${port}
-    optional: true
-  varnish:
-    type: varnish
-    port: ${port}
-    timeout: 3s
-    optional: true
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  port:
+    check:
+      type: tcp
+      port: ${port}
+      optional: true
+  varnish:
+    check:
+      type: varnish
+      port: ${port}
+      timeout: 3s
+      optional: true
   restart-if-worker-thread-hot:
     check:
       type: metric

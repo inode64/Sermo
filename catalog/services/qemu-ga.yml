@@ -16,21 +16,19 @@ processes:
   main:
     exe: ${qemu_ga_binary}
     user: ${user}
-checks:
-  service:
-    type: service
-    expect: active
-  version:
-    type: command
-    command:
-      - ${qemu_ga_binary}
-      - --version
-    timeout: 5s
-    verify: true
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   restart-if-version-failed:
     check:
-      ref: version
+      type: command
+      command:
+        - ${qemu_ga_binary}
+        - --version
+      timeout: 5s
+      verify: true
     for:
       cycles: 3
     then:

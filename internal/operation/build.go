@@ -430,10 +430,10 @@ func verifyRunner(tree map[string]any, deps checks.Deps, sample func(context.Con
 	}
 }
 
-// collectVerifyChecks returns the service's checks flagged `verify: true` — the
-// post-operation health verifiers — as a fresh section map. Sourced from the
-// checks: section today; the future checks→watches unification will extend this
-// to the watches: section.
+// collectVerifyChecks returns the resolved service checks flagged `verify: true`
+// — the post-operation health verifiers — as a fresh section map. Check-only
+// service watches have already been desugared into `checks:` by config
+// resolution.
 func collectVerifyChecks(tree map[string]any) map[string]any {
 	out := map[string]any{}
 	section, _ := tree["checks"].(map[string]any)

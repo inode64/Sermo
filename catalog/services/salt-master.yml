@@ -14,10 +14,12 @@ socket:
     - /run/salt/master/master_event_pub.ipc
     - /run/salt/master/master_event_pull.ipc
   optional: true
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   port:
-    type: tcp
-    port: ${port}
+    check:
+      type: tcp
+      port: ${port}

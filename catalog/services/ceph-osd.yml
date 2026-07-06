@@ -10,26 +10,24 @@ apps:
 variables:
   user: ceph
 socket: /run/ceph/ceph-osd.${n}.asok
-checks:
-  service:
-    type: service
-    expect: active
-  status:
-    type: command
-    command:
-      - ${ceph_binary}
-      - --admin-daemon
-      - /run/ceph/ceph-osd.${n}.asok
-      - status
-    timeout: 5s
-    analyze:
-      use:
-        - ceph
-    verify: true
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   restart-if-status-failed:
     check:
-      ref: status
+      type: command
+      command:
+        - ${ceph_binary}
+        - --admin-daemon
+        - /run/ceph/ceph-osd.${n}.asok
+        - status
+      timeout: 5s
+      analyze:
+        use:
+          - ceph
+      verify: true
     for:
       cycles: 3
     then:

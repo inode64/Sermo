@@ -1348,8 +1348,8 @@ checks:
 It passes (health-style, `OK == true`) when it connects, authenticates as
 `user`, and the server answers a ping. Result data exposes `protocol`, `host`,
 `port` and the server `version`. A network/auth failure fails the check with the
-error. This is meant to be added to a database service's `checks:` so a
-restart/alert can fire when it stops accepting connections.
+error. In service/catalog profiles, add it as a check-only `watches:` entry; use
+explicit `checks:` when a hand-written rule must share the same probe.
 
 **Response comparisons (`expect`).** Any protocol check can assert the values
 its probe returns — the server `version` or any field the protocol puts in its
@@ -1426,9 +1426,9 @@ are protocol-agnostic, so a new protocol only registers itself.
 Every type above is a **single-shot check** (`Check.Run → Result`) and is usable in
 **both** places:
 
-- a service's `checks:`/`preflight:` (and referenced from rules),
+- a service's check-only `watches:` entries, or explicit `checks:`/`preflight:` referenced from rules,
 - a host **watch** document (or global `watches:` entry, firing a hook) — see [configuration](configuration.md#host-watches), and
-- a service's own embedded `watches:` block (firing a hook scoped to the service, including the service-scoped `service`/`metric` types and the PID-tree-scoped `process_count`) — see [Service watches](configuration.md#service-watches-scoped-to-a-service).
+- a service's own embedded `watches:` block (hook/notification entries scoped to the service, or compact `then.action`, including the service-scoped `service`/`metric` types and the PID-tree-scoped `process_count`) — see [Service watches](configuration.md#service-watches-scoped-to-a-service).
 
 The host-resource checks (`storage`, `load`, `memory`, `pressure`, `fds`, `pids`,
 `diskio`, `hdparm`, `sensors`, `smart`, `raid`, `edac`, `conntrack`, `entropy`,
@@ -1446,8 +1446,8 @@ The multi-metric watches (`net`, `icmp`, `swap`) keep their `metrics:` map shape
 (one hook per metric) watch-only, but their **single-metric form** — an explicit
 `metric:` field producing one result, e.g. `{type: net, interface: ppp0, metric:
 state, expect: up}` or `{type: icmp, host: 1.1.1.1, metric: state, expect: up}` —
-works in a service's `checks:` like any other check (used by the `pppd` catalog
-daemon to watch its uplink). The multi-target watches (`file`, `process`, one
+works as a service check-only watch or explicit `checks:` entry (used by the
+`pppd` catalog daemon to watch its uplink). The multi-target watches (`file`, `process`, one
 event/hook per changed path or matching pid) stay watch-only.
 `service`/`metric`/`process` checks need per-service context (backend status, a
 metric sampler, process discovery) and so are not available as standalone

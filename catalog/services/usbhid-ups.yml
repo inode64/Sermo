@@ -4,16 +4,18 @@ category: hardware
 service: usbhid-ups
 apps:
   - usbhid-ups
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   process:
-    type: process
-    exe: ${usbhid_ups_binary}
-    user: root
-    state: running
-    requires:
-      - service
-    optional: true
-    verify: true
+    check:
+      type: process
+      exe: ${usbhid_ups_binary}
+      user: root
+      state: running
+      requires:
+        - service
+      optional: true
+      verify: true

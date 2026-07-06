@@ -462,8 +462,9 @@ expensive ones rarely without changing the global default:
 ```yaml
 name: nginx
 interval: 10s            # optional, default engine.interval; positive duration
-checks:
-  http: { type: http, url: "http://127.0.0.1/health", expect_status: 200 }
+watches:
+  http:
+    check: { type: http, url: "http://127.0.0.1/health", expect_status: 200 }
 ```
 
 The override governs the whole worker cycle for that service (its checks, rules
@@ -482,14 +483,16 @@ runs, keeping check caches and rule windows complete.
 
 ```yaml
 interval: 30s            # the service resolution (or engine.interval)
-checks:
+watches:
   http:
-    type: http
-    url: "http://127.0.0.1/health"   # runs every cycle (30s)
+    check:
+      type: http
+      url: "http://127.0.0.1/health"   # runs every cycle (30s)
   version:
-    type: command
-    command: ["/usr/bin/nginx", "-v"]
-    interval: 30m                     # runs every 60 cycles (30m / 30s)
+    check:
+      type: command
+      command: ["/usr/bin/nginx", "-v"]
+      interval: 30m                     # runs every 60 cycles (30m / 30s)
 ```
 
 A per-check `interval` **cannot be shorter than the resolution** and should be a
@@ -1094,7 +1097,7 @@ document never merges into a service. (A service can also declare its own
 > Service assistants (`service`, `docker`, `vm`) write
 > one service file per target under `services/` and ensure that
 > `paths.services` loads it; `docker` and `vm` add `control.type: docker` or
-> `control.type: libvirt` plus matching read-only checks. The mount assistant
+> `control.type: libvirt` plus matching check-only watches. The mount assistant
 > (`mount`) lists `/etc/fstab` mount points and writes safe storage files with
 > a `mount:` block under `paths.storages`; it does not mount or unmount while
 > generating config.
@@ -1111,8 +1114,8 @@ document never merges into a service. (A service can also declare its own
 > `sermoctl wizard service` detects installed catalog services and enables them
 > with service files (see [services](services.md)); when several services
 > are selected, port overrides are skipped unless explicitly reviewed, and known
-> config files can be added as a periodic `checks.config` entry with a default
-> `60m` interval. Run with no argument to choose from the list.
+> config files can be added as a periodic `watches.config-files` check-only entry
+> with a default `60m` interval. Run with no argument to choose from the list.
 >
 > On finishing, the wizard offers to delete managed files whose target is no
 > longer detected from the current generated output directories. New assistant
@@ -1391,8 +1394,9 @@ service checks (`tcp`, `ports`, `http`, `command`, `file_exists`, `file`,
 `firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`, `count`, and
 connection-protocol checks such as `mysql`/`smtp`) — can be used as a watch
 here, and
-the host-resource ones can equally be used in a service's `checks:`/rules (see
-[Checks](rules.md#checks)). A watch fires its hook on the check's **alert**
+the host-resource ones can equally be used in a service's check-only `watches:`
+entries or explicit `checks:`/rules (see [Checks](rules.md#checks)). A watch fires
+its hook on the check's **alert**
 outcome: threshold crossed for condition checks, **failure** for health checks
 (`tcp`/`http`/`firewall_rules`/`cert`/…), so e.g. an `http` watch alerts when
 the endpoint is down, a `firewall_rules` watch alerts when the loaded rule count
@@ -1401,7 +1405,8 @@ or expiring. The
 multi-metric (`net`, `icmp`, `swap`) watch shape below (a `metrics:` map, one
 hook per metric) and the multi-target (`file`, `process`) types are watch-only;
 the single-metric form of `net`/`icmp`/`swap` (an explicit `metric:` field) also
-works in a service's `checks:` (see [Checks](rules.md#checks)).
+works as a service check-only watch or explicit `checks:` entry (see
+[Checks](rules.md#checks)).
 The WebUI shows live readings only for cheap local probes; command/network-heavy
 checks rely on their normal watch events.
 
@@ -1409,10 +1414,11 @@ checks rely on their normal watch events.
 
 A service can carry its own `watches:` block — the same entry shape as a host
 watch (a `check:`, an optional `for`/`within` window, and a `then` block with a
-`hook`, `notify`, `expand` or `kill`) — declared **inside the service document**.
-Events are labelled `<service>:<watch>`, and it reuses the whole host-watch
-runtime — firing/recovered windows, hooks, notifiers, dry-run — so the action
-vocabulary is identical.
+fire-and-forget `hook`, `notify`, `expand` or `kill`, or a service `action`) —
+declared **inside the service document**. Events are labelled
+`<service>:<watch>`. Fire-and-forget entries reuse the host-watch runtime
+(firing/recovered windows, hooks, notifiers, dry-run); entries with
+`then.action` are desugared to `checks:` + `rules:`.
 
 What "inside a service" adds over a host watch is the service's **check
 context**, scoped to the service's **PID tree** (its matched processes plus their
@@ -1430,15 +1436,15 @@ selectors / init identity):
 Host-global checks (`fds`, `storage`, `count`, `load`, `http`, …) read the same
 host resource on either surface — a service watch does not per-service-clamp them.
 
-Use it when you want a **hook/notification** tied to a service-local signal that
-is not a remediation (which belongs in `rules:`): a growing spool directory, a
-CPU-hot worker thread, a backlog of files. The check kinds **not** available here
-are `net`/`icmp`/`swap` (host/network multi-metric watches — use the global
-`watches:` section) and the **`process` watch** (it matches processes host-wide
-and can `kill`, which is unsafe from a service scope — use `process_count`/
-`metric` for service-scoped process monitoring, or a host watch). (A system-scope
-metric, `scope: system`, is allowed but only ever alerts — it must never drive a
-service action; that safety rule is why remediation stays in `rules:`.)
+Use fire-and-forget entries for a **hook/notification** tied to a service-local
+signal: a growing spool directory, a CPU-hot worker thread, a backlog of files.
+Use `then.action` for the compact operation/guard/alert form described below.
+The check kinds **not** available here are `net`/`icmp`/`swap` (host/network
+multi-metric watches — use the global `watches:` section) and the **`process`
+watch** (it matches processes host-wide and can `kill`, which is unsafe from a
+service scope — use `process_count`/`metric` for service-scoped process
+monitoring, or a host watch). A system-scope metric, `scope: system`, is allowed
+but only ever alerts — it must never drive a service operation action.
 
 The watch name must not be `version` or `config` (reserved for the service's
 version/config monitors). A service watch is visible and pausable like a global
@@ -1464,25 +1470,24 @@ Such an entry is **desugared** to the equivalent `checks:` + `rules:` entry, so 
 is exactly equivalent to writing that check + rule by hand and inherits every
 safety gate (including the rule that a `scope: system` metric can never drive a
 service action). Because the result is a rule, not a watch-runtime notifier,
-`then.notify_interval` is not supported with `then.action`. The `check:` is either:
-
-- **embedded** (`check: { type: http, … }`) — a probe generated as a check named
-  after the watch. Two watches embedding the same endpoint probe it twice.
-- a **reference** (`check: { ref: name }`) — points at an existing `checks:`/
-  `preflight:` entry, so a shared health/`verify: true` probe is **not** duplicated.
-  This is how a remediation on a shared check is expressed as a watch.
+`then.notify_interval` is not supported with `then.action`. The `check:` is always
+**embedded** (`check: { type: http, … }`) and is generated as a check named after
+the watch. Two watches embedding the same endpoint probe it twice. If a
+remediation must reuse an existing shared health/`verify: true` check without a
+second probe, write the classic `checks:` + `rules:` form explicitly.
 
 The condition polarity follows the check: a **health** check (tcp/http/service/
 command/cert/…) fires on **failure**; a **condition** check (metric/storage/load/…)
 fires when its **threshold** is met (mark an embedded condition check
 `optional: true` so it does not affect the service's availability/SLA).
 
-A watch is **either** an operation/alert (it has `then.action`) **or** a
-fire-and-forget side effect (`hook`/`expand`/`kill`) — not both. The classic
-`checks:` + `rules:` sections remain fully valid; the catalog expresses its
-remediation/alerts as unified `watches:` (a `check: {ref:}` to the shared health
-check, or an embedded optional metric), keeping `checks:` as the shared-probe
-registry.
+A service watch with no `then` is a check-only entry: on resolution it becomes
+`checks.<watch>` and participates in service health/SLA/post-operation
+verification exactly like a hand-written check. A watch with `then` is **either**
+an operation/alert (`then.action`) **or** a fire-and-forget side effect
+(`hook`/`expand`/`kill`) — not both. The classic `checks:` + `rules:` sections
+remain fully valid for hand-written sharing, but catalog service profiles use
+`watches:` with embedded checks for standalone checks and compact actions.
 
 ```yaml
 watches:
@@ -2292,10 +2297,11 @@ preflight:
 variables:
   host: 127.0.0.1
   port: 8080
-checks:
+watches:
   http:
-    type: http
-    url: "http://${host}:${port}/health"
+    check:
+      type: http
+      url: "http://${host}:${port}/health"
 ```
 
 - Variables are flat literal strings; a value must not itself contain another
@@ -2348,12 +2354,13 @@ config — service fields *and* the global blocks (notifier DSNs/webhooks, the w
 password, …) — so secrets are never written in the file:
 
 ```yaml
-checks:
+watches:
   api:
-    type: http
-    url: "https://api.example.com/health"
-    headers:
-      Authorization: "Bearer ${env:API_TOKEN}"   # read from the daemon's env
+    check:
+      type: http
+      url: "https://api.example.com/health"
+      headers:
+        Authorization: "Bearer ${env:API_TOKEN}"   # read from the daemon's env
 
 notifiers:
   ops:

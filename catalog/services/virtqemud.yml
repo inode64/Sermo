@@ -11,11 +11,13 @@ processes:
   main:
     exe: ${virtqemud_binary}
     user: root
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   libvirt:
-    type: libvirt
-    socket: /run/libvirt/virtqemud-sock
-    timeout: 5s
+    check:
+      type: libvirt
+      socket: /run/libvirt/virtqemud-sock
+      timeout: 5s

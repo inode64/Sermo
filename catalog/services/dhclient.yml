@@ -9,14 +9,16 @@ variables:
   port: 68
   interface: ''
   lease_file: /var/lib/dhcp/dhclient.leases
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   protocol:
-    type: dhclient
-    host: ${host}
-    port: ${port}
-    interface: ${interface}
-    lease_file: ${lease_file}
-    timeout: 3s
+    check:
+      type: dhclient
+      host: ${host}
+      port: ${port}
+      interface: ${interface}
+      lease_file: ${lease_file}
+      timeout: 3s

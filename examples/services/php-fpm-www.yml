@@ -12,20 +12,17 @@ variables:
 preflight:
   binary: { type: binary, path: "${binary}" }
 
-checks:
-  service:
-    type: service
-    expect: active
-
-  master:
-    type: process
-    exe: "${binary}"
-    state: running
-
 watches:
+  master:
+    check:
+      type: process
+      exe: "${binary}"
+      state: running
+
   restart-if-inactive:
     check:
-      ref: service
+      type: service
+      expect: active
     for:
       cycles: 3
     then:

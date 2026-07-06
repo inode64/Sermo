@@ -16,19 +16,6 @@ processes:
   main:
     exe: ${rsync_binary}
     user: root
-checks:
-  service:
-    type: service
-    expect: active
-  port:
-    type: tcp
-    port: ${port}
-  rsync:
-    type: rsync
-    host: 127.0.0.1
-    port: ${port}
-    timeout: 3s
-    verify: true
 policy:
   cooldown: 15m
   max_actions: 2
@@ -37,16 +24,25 @@ policy:
     initial: 15m
     max: 1h
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   restart-if-rsync-failed:
     check:
-      ref: rsync
+      type: rsync
+      host: 127.0.0.1
+      port: ${port}
+      timeout: 3s
+      verify: true
     for:
       cycles: 3
     then:
       action: restart
   restart-if-port-failed:
     check:
-      ref: port
+      type: tcp
+      port: ${port}
     for:
       cycles: 3
     then:

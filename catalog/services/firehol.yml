@@ -11,13 +11,15 @@ apps:
   - firehol
   - iptables
 processes: { }
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   firewall:
-    type: firewall_rules
-    backend: auto
-    min_rules: 1
-    requires:
-      - service
+    check:
+      type: firewall_rules
+      backend: auto
+      min_rules: 1
+      requires:
+        - service

@@ -59,8 +59,8 @@ type uplinkSettings struct {
 
 // buildUplinkWatches emits the watch set for one uplink interface: the same
 // link / address / route / ping / DNS layering the pppd catalog service uses
-// for its service checks. The probe layers (ping, DNS) carry the for-cycles
-// debounce; the local layers (link, address, route) fire immediately.
+// for its check-only service watches. The probe layers (ping, DNS) carry the
+// for-cycles debounce; the local layers (link, address, route) fire immediately.
 func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {
 	newThen := func() map[string]any {
 		return watchThen(s.notifiers)

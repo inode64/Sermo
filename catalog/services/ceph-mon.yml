@@ -15,43 +15,40 @@ processes:
   ceph-mon:
     exe: ${ceph_mon_binary}
     user: ${user}
-checks:
-  service:
-    type: service
-    expect: active
-  tcp:
-    type: tcp
-    host: ${host}
-    port: ${port}
-    timeout: 2s
-  messenger:
-    type: ceph
-    host: ${host}
-    port: ${port}
-    timeout: 3s
-    verify: true
-  status:
-    type: command
-    command:
-      - ${ceph_binary}
-      - --admin-daemon
-      - /run/ceph/ceph-mon.${hostname}.asok
-      - mon_status
-    timeout: 5s
-    analyze:
-      use:
-        - ceph
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  tcp:
+    check:
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 2s
   restart-if-messenger-failed:
     check:
-      ref: messenger
+      type: ceph
+      host: ${host}
+      port: ${port}
+      timeout: 3s
+      verify: true
     for:
       cycles: 3
     then:
       action: restart
   restart-if-status-failed:
     check:
-      ref: status
+      type: command
+      command:
+        - ${ceph_binary}
+        - --admin-daemon
+        - /run/ceph/ceph-mon.${hostname}.asok
+        - mon_status
+      timeout: 5s
+      analyze:
+        use:
+          - ceph
     for:
       cycles: 3
     then:

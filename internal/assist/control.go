@@ -186,8 +186,8 @@ func controlledService(control map[string]any, checkName string, check map[strin
 	return map[string]any{
 		"enabled": true,
 		"control": control,
-		"checks": map[string]any{
-			checkName: check,
+		"watches": map[string]any{
+			checkName: map[string]any{"check": check},
 		},
 	}
 }

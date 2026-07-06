@@ -25,42 +25,6 @@ processes:
 config_files:
   - /etc/redis/redis.conf
   - /etc/redis.conf
-checks:
-  service:
-    type: service
-    expect: active
-  tcp:
-    type: tcp
-    host: ${host}
-    port: ${port}
-    timeout: 2s
-  ping:
-    type: redis
-    host: ${host}
-    port: ${port}
-    timeout: 3s
-    verify: true
-  persistence:
-    type: redis
-    host: ${host}
-    port: ${port}
-    timeout: 3s
-    expect:
-      rdb_last_bgsave_status: ok
-  fds:
-    type: metric
-    scope: service
-    name: fds
-    op: '>'
-    value: 50000
-    optional: true
-  memory:
-    type: metric
-    scope: service
-    name: memory
-    op: '>'
-    value: 60%
-    optional: true
 stop_policy:
   graceful_timeout: 90s
   term_timeout: 60s
@@ -81,6 +45,10 @@ reload_on_change:
     - /etc/redis/redis.conf
     - /etc/redis.conf
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   restart-if-worker-thread-hot:
     check:
       type: metric
@@ -95,21 +63,33 @@ watches:
       action: restart
   restart-if-tcp-failed:
     check:
-      ref: tcp
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 2s
     for:
       cycles: 3
     then:
       action: restart
   restart-if-ping-failed:
     check:
-      ref: ping
+      type: redis
+      host: ${host}
+      port: ${port}
+      timeout: 3s
+      verify: true
     for:
       cycles: 3
     then:
       action: restart
   alert-if-fds-high:
     check:
-      ref: fds
+      type: metric
+      scope: service
+      name: fds
+      op: '>'
+      value: 50000
+      optional: true
     within:
       cycles: 10
       min_matches: 3
@@ -118,13 +98,23 @@ watches:
       message: ${display_name} file descriptor usage is high
   alert-if-persistence-failed:
     check:
-      ref: persistence
+      type: redis
+      host: ${host}
+      port: ${port}
+      timeout: 3s
+      expect:
+        rdb_last_bgsave_status: ok
     then:
       action: alert
       message: ${display_name} persistence status is not ok
   alert-if-memory-high:
     check:
-      ref: memory
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 60%
+      optional: true
     for:
       duration: 10m
     then:

@@ -20,14 +20,17 @@ preflight:
       - ${cupsd_binary}
       - -t
     timeout: 30s
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   port:
-    type: tcp
-    port: ${port}
+    check:
+      type: tcp
+      port: ${port}
   ipp:
-    type: ipp
-    port: ${port}
-    timeout: 3s
+    check:
+      type: ipp
+      port: ${port}
+      timeout: 3s

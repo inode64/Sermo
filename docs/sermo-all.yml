@@ -469,10 +469,352 @@ version:
 config:
   on_change: { notify: [ops-email] }  # reuses preflight.config/config_files
 
-# Per-service watches: a hook/notification scoped to THIS service. process_count
-# counts only the service PID tree; metric reads that tree from a dedicated
-# collector. Reported as "demo:<name>"; pausable via `sermoctl watch unmonitor`.
+# Per-service watches: no `then` means a normal service check (desugared to
+# checks.<name> for health/SLA/verify); a compact then.action desugars to
+# checks:+rules:; hook/notification entries stay scoped to THIS service.
+# process_count counts only the service PID tree; metric reads that tree from a
+# dedicated collector. Runtime watch entries are reported as "demo:<name>" and
+# pausable via `sermoctl watch unmonitor`.
 watches:
+  # Check-level common fields: enabled, optional, interval, timeout, requires and
+  # skip_when_changed. Disable inherited entries with enabled:false; delete:true
+  # removes an inherited map entry during merge.
+  service:
+    check: { type: service, expect: active }
+  tcp:
+    check:
+      type: tcp
+      host: "${host}"
+      port: "${port}"
+      timeout: 3s
+      interface: [eth0, 192.168.1.10]  # bind the probe to an egress NIC: name | IP | MAC
+      interface_match: any  # any | all (shared by tcp/http/ports/icmp)
+  ports:
+    check:
+      type: ports
+      host: "${host}"
+      ports: "80,443,8000-8010"
+      expect: open  # open | closed | any
+      match: any  # any | all | none
+      connect_timeout: 500ms
+      on_change: true
+  http:
+    check:
+      type: http
+      verify: true  # also run after start/restart/reload/resume to confirm health (replaces the old postflight: section)
+      url: "http://${host}:${port}${health_path}"
+      proxy: "http://127.0.0.1:3128"  # route the probe via http/https/socks5/socks5h proxy
+      body: "ping"  # raw request body (string; alternative to json:)
+      expect_status: 2xx
+      expect_body: { op: "=~", value: "ok|ready" }
+      expect_latency: { op: "<", value: 250 }
+      timeout: 5s
+  http-json:
+    check:
+      type: http
+      method: POST
+      url: "http://${host}:${port}/api/health"
+      headers: { X-Token: demo }
+      json: { probe: true }
+      expect_status: { op: "==", value: 200 }
+      expect_json:
+        status: ok
+        uptime: { op: ">", value: 0 }
+  http-cert:
+    check:
+      type: http
+      url: "https://example.com/health"
+      expect_status: 2xx
+      cert_expires_in_days: 21
+      cert_verify: true
+      cert_on_change: true
+      cert_on_issuer_change: true
+      cert_on_algorithm_change: true
+  command-output:
+    check:
+      type: command
+      command: ["${binary}", "doctor"]
+      timeout: 20s
+      expect_exit: 0
+      expect_stdout: { op: "contains", value: ok }
+      expect_stderr: ""
+      on_change: false
+      analyze:
+        use: [demo-patterns]
+        silence: [degraded]
+        rules:
+          - { id: benign, match: '(?i)known benign warning', severity: ok, stream: both }
+  file-present:
+    check: { type: file_exists, path: /etc/demo/demo.conf }
+  binary:
+    check: { type: binary, path: "${binary}" }
+  lockfile-probe:
+    check: { type: lockfile, path: /run/lock/demo.lock, requires: [service] }
+  pidfile-probe:
+    check: { type: pidfile, path: /run/demo.pid, requires: [service] }
+  process:
+    check: { type: process, exe: "${binary}", user: "${user}", state: running }
+  service-memory:
+    check:
+      type: metric
+      scope: service
+      name: memory  # service: memory/swap/cpu/cpu_thread/process_count/io/io_read/io_write/fds/threads
+      op: ">"
+      value: 40%
+  system-load:
+    check:
+      type: metric
+      scope: system  # system metrics may only drive alert rules
+      name: load5  # system: total_memory/total_cpu/load1/load5/load15
+      op: ">"
+      value: 4
+      optional: true
+  libraries:
+    check: { type: libraries, binary: "${binary}", optional: true }
+  count:
+    check:
+      type: count
+      path: /var/spool/demo
+      of: any  # any | file | dir | symlink
+      recursive: true
+      count: { op: ">", value: 1000 }
+  storage:
+    check:
+      type: storage
+      path: "${data_dir}"
+      mounted: true
+      free_pct: { op: "<", value: "10%" }
+      inodes_free: { op: "<", value: 1000 }
+  storage-bytes:
+    check:
+      type: storage
+      path: /var/log
+      used_bytes: { op: ">", value: 10G }
+  autofs:
+    check:
+      type: autofs
+      count: { op: ">=", value: 1 }
+      optional: true
+  load:
+    check: { type: load, per_cpu: true, load1: { op: ">", value: 2 } }
+  hdparm:
+    check: { type: hdparm, device: /dev/sda, read: { op: "<", value: 100 }, cached: { op: "<", value: 5000 } }
+  sensors:
+    check:
+      type: sensors
+      chip: coretemp
+      label: Package
+      temp: { op: ">", value: 80 }
+      fan: { op: "<", value: 500 }  # RPM
+      voltage: { op: "<", value: 11.4 }  # volts
+  smart:
+    check:
+      type: smart
+      device: /dev/sda
+      temperature: { op: ">", value: 50 }
+      reallocated: { op: ">", value: 0 }  # reallocated sectors
+      wear: { op: ">", value: 90 }  # SSD wear-level %
+      power_on_hours: { op: ">", value: 50000 }
+  raid:
+    check:
+      type: raid
+      degraded: { op: ">", value: 0 }
+      recovering: { op: ">", value: 0 }
+      arrays: { op: "<", value: 1 }
+  edac:
+    check: { type: edac, ue: { op: ">", value: 0 }, ce: { op: ">", value: 100 } }
+  config-watch:
+    check:
+      type: config
+      user: "${user}"
+      command: ["${binary}", "--test-config"]
+      path: [/etc/demo/demo.conf, /etc/demo/conf.d]
+      on_change: true
+  fds:
+    check: { type: fds, used_pct: { op: ">", value: "80%" } }
+  memory:
+    check: { type: memory, available_pct: { op: "<", value: "10%" } }
+  pressure:
+    check: { type: pressure, resource: io, some_avg60: { op: ">", value: 20 } }
+  pids:
+    check: { type: pids, used_pct: { op: ">", value: "80%" } }
+  diskio:
+    check: { type: diskio, device: nvme0n1, util_pct: { op: ">", value: "80%" } }
+  conntrack:
+    check: { type: conntrack, used_pct: { op: ">", value: "80%" } }
+  entropy:
+    check: { type: entropy, avail: { op: "<", value: 256 } }
+  zombies:
+    check: { type: zombies, count: { op: ">", value: 0 } }
+  oom:
+    check: { type: oom, delta: { op: ">", value: 0 } }
+  cert-file:
+    check:
+      type: cert
+      path: /etc/ssl/certs/demo.pem
+      expires_in_days: 21
+      on_change: true
+  cert-host:
+    check:
+      type: cert
+      host: example.com
+      port: 443
+      server_name: example.com
+      cert_verify: true  # false skips chain verification (self-signed certs)
+      on_algorithm_change: true
+      on_issuer_change: true
+  sqlite:
+    check: { type: sqlite, path: /var/lib/demo/demo.db, quick: true }
+  sqlite3:
+    check: { type: sqlite3, path: /var/lib/demo/demo.db }
+  sql-sqlite:
+    check:
+      type: sql
+      engine: sqlite
+      path: /var/lib/demo/demo.db
+      query: "select count(*) from sqlite_master"
+      op: ">="
+      value: 0
+  sql-mysql:
+    check:
+      type: sql
+      engine: mysql  # mysql|mariadb|postgres|postgresql|sqlite|sqlite3
+      host: 127.0.0.1
+      port: 3306
+      user: monitor
+      password: "${env:DEMO_DB_PASSWORD:-secret}"
+      database: demo
+      tls: false
+      query: "select 1"
+      op: "=="
+      value: 1
+  mongo-command:
+    check:
+      type: mongodb-query
+      host: 127.0.0.1
+      database: admin
+      command: '{ "ping": 1 }'
+      result: ok
+      op: "=="
+      value: 1
+  mongo-count:
+    check:
+      type: mongodb-query
+      host: 127.0.0.1
+      database: demo
+      collection: jobs
+      filter: '{ "state": "queued" }'
+      op: "<"
+      value: 1000
+  mongo-aggregate:
+    check:
+      type: mongodb-query
+      host: 127.0.0.1
+      database: demo
+      collection: jobs
+      pipeline: '[{ "$group":{ "_id":null, "n":{ "$sum":1 } } }]'
+      result: "0.n"
+      op: "<"
+      value: 1000
+  influxql:
+    check:
+      type: influxdb-query
+      host: 127.0.0.1
+      database: demo
+      query: "select last(value) from health"
+      op: "=="
+      value: 1
+  flux:
+    check:
+      type: influxdb-query
+      host: 127.0.0.1
+      language: flux
+      org: demo
+      token: "${env:INFLUX_TOKEN:-token}"
+      query: 'from(bucket:"demo") |> range(start:-5m) |> count()'
+      op: ">="
+      value: 0
+  size:
+    check: { type: size, path: /var/log/demo/demo.log, grow_by: 500M, within: 1h }
+  websocket:
+    check:
+      type: websocket
+      url: "ws://127.0.0.1:8080/ws"
+      origin: "https://example.com"
+      subprotocol: "chat"
+      headers: { X-Probe: sermo }
+  net-state:
+    check: { type: net, interface: eth0, metric: state, expect: up }
+  net-speed:
+    check: { type: net, interface: eth0, metric: speed, on: change }
+  net-errors:
+    check:
+      type: net
+      interface: eth0
+      metric: errors
+      delta: { op: ">", value: 100 }
+      counters: [rx_errors, tx_errors]
+  net-address:
+    check: { type: net, interface: eth0, metric: address, on: change }
+  icmp-state:
+    check: { type: icmp, host: 1.1.1.1, count: 3, metric: state, expect: up }
+  icmp-latency:
+    check:
+      type: icmp
+      host: 1.1.1.1
+      metric: latency
+      threshold: { op: "<", value: 100 }
+  swap-usage:
+    check: { type: swap, metric: usage, used_pct: { op: ">", value: 80 } }
+  swap-io:
+    check: { type: swap, metric: io, delta: { op: ">", value: 1000 } }
+  route:
+    check: { type: route, family: ipv4, interface: eth0 }
+  firewall:
+    check: { type: firewall_rules, backend: auto, min_rules: 1 }
+  mysql:
+    check:
+      type: mysql
+      host: 127.0.0.1
+      port: 3306
+      user: monitor
+      password: "${env:DEMO_DB_PASSWORD:-secret}"
+      database: demo
+      tls: false
+      expect: { version: { op: "=~", value: "^[0-9]" } }
+      expect_latency: { op: "<", value: 50 }
+      on_version_change: true
+  redis:
+    check:
+      type: redis
+      host: 127.0.0.1
+      password: "${env:REDIS_PASS:-}"
+      on_version_change: true
+  docker:
+    check:
+      type: docker
+      socket: /run/docker.sock
+      container: demo
+      on_change: true
+  dns:
+    check:
+      type: dns
+      host: 1.1.1.1
+      query: example.com
+      expect: { rcode: NOERROR, answers: { op: ">", value: 0 } }
+      # Other registered connection-protocol check types:
+      # acpid, ajp, amqp/rabbitmq, asterisk/ami, avahi, ceph/ceph-mon, clamd/clamav,
+      # cloudflared/cloudflare-tunnel, dbus, dhclient/dhcp-client, dhcp, docker,
+      # fail2ban, fpm/php-fpm, ftp, glusterfs/glusterd/gluster, guacd/guacamole,
+      # imap, influxdb/influx, ipp/cups, kafka, ldap, libvirt/libvirtd, lvmpolld,
+      # memcached/memcache, mongodb/mongo, mountd/rpc.mountd/nfs-mountd, mqtt,
+      # nebula/nebula-vpn, nfs/nfs-server/nfsd, nntp/nntps, ntp, nut/ups/upsd,
+      # openvpn/ovpn, openvswitch/ovs/ovsdb/ovsdb-server, pop/pop3, postgres/postgresql,
+      # prometheus/prom, rdp/ms-wbt-server, redis/valkey, rpcbind/portmap/portmapper,
+      # rsync/rsyncd, rspamd, sieve/managesieve, smb/samba/cifs, smtp, snmp,
+      # spamd/spamassassin, ssh, statd/rpc.statd/nsm/nfs-statd, syncthing, tftp,
+      # unifi/unifi-controller/unifi-network, varnish/varnishadm.
+
   worker-runaway:
     check: { type: process_count, count: { op: ">", value: 40 } }
     for: { cycles: 5 }
@@ -484,291 +826,13 @@ watches:
     then: { notify: [ops-email] }
   # A watch may instead carry a `then.action` (restart/start/stop/reload/resume,
   # block, alert), folding a check + its remediation/guard/alert into one entry
-  # that desugars to checks:+rules: (the safe operation-engine path). Reference a
-  # shared check with { ref: name } so it is not probed twice, or embed a fresh probe.
-  # The catalog expresses its simple remediation this way.
+  # that desugars to checks:+rules: (the safe operation-engine path). The check is
+  # embedded; use explicit checks:+rules: when a remediation must reuse a shared
+  # check without a second probe.
   restart-if-tcp-down:
-    check: { ref: tcp }  # reuse the tcp check above — no duplicate probe
+    check: { type: tcp, host: "${host}", port: "${port}", timeout: 3s }
     for: { cycles: 3 }
     then: { action: restart }
-
-checks:
-  # Check-level common fields: enabled, optional, interval, timeout, requires and
-  # skip_when_changed. Disable inherited entries with enabled:false; delete:true
-  # removes an inherited map entry during merge.
-  service: { type: service, expect: active }
-  tcp:
-    type: tcp
-    host: "${host}"
-    port: "${port}"
-    timeout: 3s
-    interface: [eth0, 192.168.1.10]  # bind the probe to an egress NIC: name | IP | MAC
-    interface_match: any  # any | all (shared by tcp/http/ports/icmp)
-  ports:
-    type: ports
-    host: "${host}"
-    ports: "80,443,8000-8010"
-    expect: open  # open | closed | any
-    match: any  # any | all | none
-    connect_timeout: 500ms
-    on_change: true
-  http:
-    type: http
-    verify: true  # also run after start/restart/reload/resume to confirm health (replaces the old postflight: section)
-    url: "http://${host}:${port}${health_path}"
-    proxy: "http://127.0.0.1:3128"  # route the probe via http/https/socks5/socks5h proxy
-    body: "ping"  # raw request body (string; alternative to json:)
-    expect_status: 2xx
-    expect_body: { op: "=~", value: "ok|ready" }
-    expect_latency: { op: "<", value: 250 }
-    timeout: 5s
-  http-json:
-    type: http
-    method: POST
-    url: "http://${host}:${port}/api/health"
-    headers: { X-Token: demo }
-    json: { probe: true }
-    expect_status: { op: "==", value: 200 }
-    expect_json:
-      status: ok
-      uptime: { op: ">", value: 0 }
-  http-cert:
-    type: http
-    url: "https://example.com/health"
-    expect_status: 2xx
-    cert_expires_in_days: 21
-    cert_verify: true
-    cert_on_change: true
-    cert_on_issuer_change: true
-    cert_on_algorithm_change: true
-  command-output:
-    type: command
-    command: ["${binary}", "doctor"]
-    timeout: 20s
-    expect_exit: 0
-    expect_stdout: { op: "contains", value: ok }
-    expect_stderr: ""
-    on_change: false
-    analyze:
-      use: [demo-patterns]
-      silence: [degraded]
-      rules:
-        - { id: benign, match: '(?i)known benign warning', severity: ok, stream: both }
-  file-present: { type: file_exists, path: /etc/demo/demo.conf }
-  binary: { type: binary, path: "${binary}" }
-  lockfile: { type: lockfile, path: /run/lock/demo.lock, requires: [service] }
-  pidfile: { type: pidfile, path: /run/demo.pid, requires: [service] }
-  process: { type: process, exe: "${binary}", user: "${user}", state: running }
-  service-memory:
-    type: metric
-    scope: service
-    name: memory  # service: memory/swap/cpu/cpu_thread/process_count/io/io_read/io_write/fds/threads
-    op: ">"
-    value: 40%
-  system-load:
-    type: metric
-    scope: system  # system metrics may only drive alert rules
-    name: load5  # system: total_memory/total_cpu/load1/load5/load15
-    op: ">"
-    value: 4
-    optional: true
-  libraries: { type: libraries, binary: "${binary}", optional: true }
-  count:
-    type: count
-    path: /var/spool/demo
-    of: any  # any | file | dir | symlink
-    recursive: true
-    count: { op: ">", value: 1000 }
-  storage:
-    type: storage
-    path: "${data_dir}"
-    mounted: true
-    free_pct: { op: "<", value: "10%" }
-    inodes_free: { op: "<", value: 1000 }
-  storage-bytes:
-    type: storage
-    path: /var/log
-    used_bytes: { op: ">", value: 10G }
-  autofs:
-    type: autofs
-    count: { op: ">=", value: 1 }
-    optional: true
-  load: { type: load, per_cpu: true, load1: { op: ">", value: 2 } }
-  hdparm: { type: hdparm, device: /dev/sda, read: { op: "<", value: 100 }, cached: { op: "<", value: 5000 } }
-  sensors:
-    type: sensors
-    chip: coretemp
-    label: Package
-    temp: { op: ">", value: 80 }
-    fan: { op: "<", value: 500 }  # RPM
-    voltage: { op: "<", value: 11.4 }  # volts
-  smart:
-    type: smart
-    device: /dev/sda
-    temperature: { op: ">", value: 50 }
-    reallocated: { op: ">", value: 0 }  # reallocated sectors
-    wear: { op: ">", value: 90 }  # SSD wear-level %
-    power_on_hours: { op: ">", value: 50000 }
-  raid:
-    type: raid
-    degraded: { op: ">", value: 0 }
-    recovering: { op: ">", value: 0 }
-    arrays: { op: "<", value: 1 }
-  edac: { type: edac, ue: { op: ">", value: 0 }, ce: { op: ">", value: 100 } }
-  config-watch:
-    type: config
-    user: "${user}"
-    command: ["${binary}", "--test-config"]
-    path: [/etc/demo/demo.conf, /etc/demo/conf.d]
-    on_change: true
-  fds: { type: fds, used_pct: { op: ">", value: "80%" } }
-  memory: { type: memory, available_pct: { op: "<", value: "10%" } }
-  pressure: { type: pressure, resource: io, some_avg60: { op: ">", value: 20 } }
-  pids: { type: pids, used_pct: { op: ">", value: "80%" } }
-  diskio: { type: diskio, device: nvme0n1, util_pct: { op: ">", value: "80%" } }
-  conntrack: { type: conntrack, used_pct: { op: ">", value: "80%" } }
-  entropy: { type: entropy, avail: { op: "<", value: 256 } }
-  zombies: { type: zombies, count: { op: ">", value: 0 } }
-  oom: { type: oom, delta: { op: ">", value: 0 } }
-  cert-file:
-    type: cert
-    path: /etc/ssl/certs/demo.pem
-    expires_in_days: 21
-    on_change: true
-  cert-host:
-    type: cert
-    host: example.com
-    port: 443
-    server_name: example.com
-    cert_verify: true  # false skips chain verification (self-signed certs)
-    on_algorithm_change: true
-    on_issuer_change: true
-  sqlite: { type: sqlite, path: /var/lib/demo/demo.db, quick: true }
-  sqlite3: { type: sqlite3, path: /var/lib/demo/demo.db }
-  sql-sqlite:
-    type: sql
-    engine: sqlite
-    path: /var/lib/demo/demo.db
-    query: "select count(*) from sqlite_master"
-    op: ">="
-    value: 0
-  sql-mysql:
-    type: sql
-    engine: mysql  # mysql|mariadb|postgres|postgresql|sqlite|sqlite3
-    host: 127.0.0.1
-    port: 3306
-    user: monitor
-    password: "${env:DEMO_DB_PASSWORD:-secret}"
-    database: demo
-    tls: false
-    query: "select 1"
-    op: "=="
-    value: 1
-  mongo-command:
-    type: mongodb-query
-    host: 127.0.0.1
-    database: admin
-    command: '{ "ping": 1 }'
-    result: ok
-    op: "=="
-    value: 1
-  mongo-count:
-    type: mongodb-query
-    host: 127.0.0.1
-    database: demo
-    collection: jobs
-    filter: '{ "state": "queued" }'
-    op: "<"
-    value: 1000
-  mongo-aggregate:
-    type: mongodb-query
-    host: 127.0.0.1
-    database: demo
-    collection: jobs
-    pipeline: '[{ "$group":{ "_id":null, "n":{ "$sum":1 } } }]'
-    result: "0.n"
-    op: "<"
-    value: 1000
-  influxql:
-    type: influxdb-query
-    host: 127.0.0.1
-    database: demo
-    query: "select last(value) from health"
-    op: "=="
-    value: 1
-  flux:
-    type: influxdb-query
-    host: 127.0.0.1
-    language: flux
-    org: demo
-    token: "${env:INFLUX_TOKEN:-token}"
-    query: 'from(bucket:"demo") |> range(start:-5m) |> count()'
-    op: ">="
-    value: 0
-  size: { type: size, path: /var/log/demo/demo.log, grow_by: 500M, within: 1h }
-  websocket:
-    type: websocket
-    url: "ws://127.0.0.1:8080/ws"
-    origin: "https://example.com"
-    subprotocol: "chat"
-    headers: { X-Probe: sermo }
-  net-state: { type: net, interface: eth0, metric: state, expect: up }
-  net-speed: { type: net, interface: eth0, metric: speed, on: change }
-  net-errors:
-    type: net
-    interface: eth0
-    metric: errors
-    delta: { op: ">", value: 100 }
-    counters: [rx_errors, tx_errors]
-  net-address: { type: net, interface: eth0, metric: address, on: change }
-  icmp-state: { type: icmp, host: 1.1.1.1, count: 3, metric: state, expect: up }
-  icmp-latency:
-    type: icmp
-    host: 1.1.1.1
-    metric: latency
-    threshold: { op: "<", value: 100 }
-  swap-usage: { type: swap, metric: usage, used_pct: { op: ">", value: 80 } }
-  swap-io: { type: swap, metric: io, delta: { op: ">", value: 1000 } }
-  route: { type: route, family: ipv4, interface: eth0 }
-  firewall: { type: firewall_rules, backend: auto, min_rules: 1 }
-  mysql:
-    type: mysql
-    host: 127.0.0.1
-    port: 3306
-    user: monitor
-    password: "${env:DEMO_DB_PASSWORD:-secret}"
-    database: demo
-    tls: false
-    expect: { version: { op: "=~", value: "^[0-9]" } }
-    expect_latency: { op: "<", value: 50 }
-    on_version_change: true
-  redis:
-    type: redis
-    host: 127.0.0.1
-    password: "${env:REDIS_PASS:-}"
-    on_version_change: true
-  docker:
-    type: docker
-    socket: /run/docker.sock
-    container: demo
-    on_change: true
-  dns:
-    type: dns
-    host: 1.1.1.1
-    query: example.com
-    expect: { rcode: NOERROR, answers: { op: ">", value: 0 } }
-    # Other registered connection-protocol check types:
-    # acpid, ajp, amqp/rabbitmq, asterisk/ami, avahi, ceph/ceph-mon, clamd/clamav,
-    # cloudflared/cloudflare-tunnel, dbus, dhclient/dhcp-client, dhcp, docker,
-    # fail2ban, fpm/php-fpm, ftp, glusterfs/glusterd/gluster, guacd/guacamole,
-    # imap, influxdb/influx, ipp/cups, kafka, ldap, libvirt/libvirtd, lvmpolld,
-    # memcached/memcache, mongodb/mongo, mountd/rpc.mountd/nfs-mountd, mqtt,
-    # nebula/nebula-vpn, nfs/nfs-server/nfsd, nntp/nntps, ntp, nut/ups/upsd,
-    # openvpn/ovpn, openvswitch/ovs/ovsdb/ovsdb-server, pop/pop3, postgres/postgresql,
-    # prometheus/prom, rdp/ms-wbt-server, redis/valkey, rpcbind/portmap/portmapper,
-    # rsync/rsyncd, rspamd, sieve/managesieve, smb/samba/cifs, smtp, snmp,
-    # spamd/spamassassin, ssh, statd/rpc.statd/nsm/nfs-statd, syncthing, tftp,
-    # unifi/unifi-controller/unifi-network, varnish/varnishadm.
 
 stop_policy:
   graceful_timeout: 30s
@@ -939,11 +1003,12 @@ version:
 config:
   on_change: { notify: [ops-email] }
 
-checks:
+watches:
   cert-host: { enabled: false }  # disable one inherited check
   redis: { delete: true }  # remove one inherited map entry during merge
   http:
-    expect_status: [200, 204]  # override one field of an inherited check
+    check:
+      expect_status: [200, 204]  # override one field of an inherited check
 
 rules:
   restart-if-http-failed:  # override one inherited rule field
@@ -962,9 +1027,10 @@ monitor: disabled
 variables:
   port: 8082
   health_path: /sidecar-health
-checks:
+watches:
   http:
-    url: "http://${host}:${port}${health_path}"
+    check:
+      url: "http://${host}:${port}${health_path}"
 
 ---
 # ---------------------------------------------------------------------------

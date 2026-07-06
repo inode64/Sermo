@@ -14,19 +14,20 @@ processes:
   main:
     exe: ${pmie_binary}
     user: ${user}
-checks:
-  service:
-    type: service
-    expect: active
-  process:
-    type: process
-    exe: ${pmie_binary}
-    user: ${user}
-    state: running
-    requires:
-      - service
-    verify: true
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  process:
+    check:
+      type: process
+      exe: ${pmie_binary}
+      user: ${user}
+      state: running
+      requires:
+        - service
+      verify: true
   alert-if-memory-high:
     check:
       type: metric

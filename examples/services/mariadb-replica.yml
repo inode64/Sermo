@@ -12,30 +12,32 @@ variables:
   monitor_user: monitor
   monitor_pass: "${env:SERMO_DB_MONITOR_PASS}"
 
-checks:
+watches:
   # A replica must stay read-only; if it flips writable, replication topology is
   # broken (e.g. a stray failover). Condition-style: OK while read_only == 1.
   read-only:
-    type: sql
-    engine: mariadb
-    host: "${host}"
-    port: "${port}"
-    user: "${monitor_user}"
-    password: "${monitor_pass}"
-    query: "SELECT @@global.read_only"
-    op: "=="
-    value: "1"
+    check:
+      type: sql
+      engine: mariadb
+      host: "${host}"
+      port: "${port}"
+      user: "${monitor_user}"
+      password: "${monitor_pass}"
+      query: "SELECT @@global.read_only"
+      op: "=="
+      value: "1"
 
-  # Replication lag in seconds (from a monitoring view the DBA exposes to the
-  # read-only user). Alert when it falls behind.
+    # Replication lag in seconds (from a monitoring view the DBA exposes to the
+    # read-only user). Alert when it falls behind.
   replication-lag:
-    type: sql
-    engine: mariadb
-    host: "${host}"
-    port: "${port}"
-    user: "${monitor_user}"
-    password: "${monitor_pass}"
-    query: "SELECT COALESCE(MAX(seconds_behind_master), 0) FROM sys.replication_status"
-    op: "<"
-    value: "30"
-    interval: 30s
+    check:
+      type: sql
+      engine: mariadb
+      host: "${host}"
+      port: "${port}"
+      user: "${monitor_user}"
+      password: "${monitor_pass}"
+      query: "SELECT COALESCE(MAX(seconds_behind_master), 0) FROM sys.replication_status"
+      op: "<"
+      value: "30"
+      interval: 30s

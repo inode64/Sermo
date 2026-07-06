@@ -12,17 +12,6 @@ apps:
 pidfile:
   - /run/tuned/tuned.pid
   - /run/tuned.pid
-checks:
-  service:
-    type: service
-    expect: active
-  active:
-    type: command
-    command:
-      - tuned-adm
-      - active
-    timeout: 10s
-    verify: true
 policy:
   cooldown: 15m
   max_actions: 2
@@ -31,9 +20,18 @@ policy:
     initial: 15m
     max: 1h
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   restart-if-active-failed:
     check:
-      ref: active
+      type: command
+      command:
+        - tuned-adm
+        - active
+      timeout: 10s
+      verify: true
     for:
       cycles: 3
     then:

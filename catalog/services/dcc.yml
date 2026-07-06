@@ -13,19 +13,20 @@ processes:
   main:
     exe: ${dcc_binary}
     user: ${user}
-checks:
-  service:
-    type: service
-    expect: active
-  process:
-    type: process
-    exe: ${dcc_binary}
-    user: ${user}
-    state: running
-    requires:
-      - service
-    verify: true
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  process:
+    check:
+      type: process
+      exe: ${dcc_binary}
+      user: ${user}
+      state: running
+      requires:
+        - service
+      verify: true
   restart-if-worker-thread-hot:
     check:
       type: metric

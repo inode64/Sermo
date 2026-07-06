@@ -9,7 +9,8 @@ service:
     - rpc.pipefs
     - rpc-pipefs
 processes: { }
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active

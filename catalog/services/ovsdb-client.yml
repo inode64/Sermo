@@ -4,13 +4,15 @@ category: virtualization
 service: ovsdb-client
 apps:
   - ovsdb-client
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   openvswitch:
-    type: openvswitch
-    socket: /run/openvswitch/db.sock
-    timeout: 5s
-    optional: true
-    verify: true
+    check:
+      type: openvswitch
+      socket: /run/openvswitch/db.sock
+      timeout: 5s
+      optional: true
+      verify: true

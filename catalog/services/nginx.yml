@@ -26,46 +26,35 @@ processes:
   main:
     exe: ${nginx_binary}
     user: root
-checks:
-  service:
-    type: service
-    expect: active
-  port:
-    type: tcp
-    port: ${port}
-  http:
-    type: http
-    url: http://${host}:${port}/
-    expect_status:
-      op: <
-      value: 500
-    timeout: 5s
-    verify: true
-  cert:
-    type: cert
-    host: ${host}
-    port: ${tls_port}
-    cert_verify: false
-    expires_in_days: 21
-    timeout: 5s
-  fds:
-    type: metric
-    scope: service
-    name: fds
-    op: '>'
-    value: 50000
-    optional: true
-  memory:
-    type: metric
-    scope: service
-    name: memory
-    op: '>'
-    value: 60%
-    optional: true
 reload_on_change:
   paths:
     - /etc/nginx/nginx.conf
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  port:
+    check:
+      type: tcp
+      port: ${port}
+  http:
+    check:
+      type: http
+      url: http://${host}:${port}/
+      expect_status:
+        op: <
+        value: 500
+      timeout: 5s
+      verify: true
+  cert:
+    check:
+      type: cert
+      host: ${host}
+      port: ${tls_port}
+      cert_verify: false
+      expires_in_days: 21
+      timeout: 5s
   restart-if-worker-thread-hot:
     check:
       type: metric
@@ -80,7 +69,12 @@ watches:
       action: restart
   alert-if-fds-high:
     check:
-      ref: fds
+      type: metric
+      scope: service
+      name: fds
+      op: '>'
+      value: 50000
+      optional: true
     within:
       cycles: 10
       min_matches: 3
@@ -89,7 +83,12 @@ watches:
       message: ${display_name} file descriptor usage is high
   alert-if-memory-high:
     check:
-      ref: memory
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 60%
+      optional: true
     for:
       duration: 10m
     then:

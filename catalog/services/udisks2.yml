@@ -11,14 +11,6 @@ processes:
   main:
     exe: ${udisks2_binary}
     user: root
-checks:
-  service:
-    type: service
-    expect: active
-  udisks2:
-    type: udisks2
-    timeout: 5s
-    verify: true
 policy:
   cooldown: 15m
   max_actions: 2
@@ -27,9 +19,15 @@ policy:
     initial: 15m
     max: 1h
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   restart-if-udisks2-failed:
     check:
-      ref: udisks2
+      type: udisks2
+      timeout: 5s
+      verify: true
     for:
       cycles: 3
     then:

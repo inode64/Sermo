@@ -22,26 +22,29 @@ processes:
   main:
     exe: ${exim_binary}
     user: ${user}
-checks:
-  service:
-    type: service
-    expect: active
-  port:
-    type: tcp
-    port: ${port}
-  smtp:
-    type: smtp
-    port: ${port}
-    timeout: 3s
-  cert:
-    type: cert
-    optional: true
-    host: ${host}
-    port: ${tls_port}
-    cert_verify: false
-    expires_in_days: 21
-    timeout: 5s
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  port:
+    check:
+      type: tcp
+      port: ${port}
+  smtp:
+    check:
+      type: smtp
+      port: ${port}
+      timeout: 3s
+  cert:
+    check:
+      type: cert
+      optional: true
+      host: ${host}
+      port: ${tls_port}
+      cert_verify: false
+      expires_in_days: 21
+      timeout: 5s
   restart-if-worker-thread-hot:
     check:
       type: metric

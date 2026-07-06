@@ -16,22 +16,6 @@ apps:
 variables:
   host: 127.0.0.1
   port: 9092
-checks:
-  service:
-    type: service
-    expect: active
-  port:
-    type: tcp
-    host: ${host}
-    port: ${port}
-    timeout: 2s
-  protocol:
-    type: kafka
-    host: ${host}
-    port: ${port}
-    timeout: 3s
-    expect:
-      role: broker
 policy:
   cooldown: 15m
   max_actions: 2
@@ -40,9 +24,24 @@ policy:
     initial: 15m
     max: 1h
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  port:
+    check:
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 2s
   restart-if-protocol-failed:
     check:
-      ref: protocol
+      type: kafka
+      host: ${host}
+      port: ${port}
+      timeout: 3s
+      expect:
+        role: broker
     for:
       cycles: 3
     then:

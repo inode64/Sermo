@@ -287,41 +287,66 @@ func serviceArtifactPathValue(paths []string) any {
 // check's local `rules:`, and replaces the block with `{rules: [...]}`. An
 // unknown set name, a `silence` id absent from the inherited sets, or a duplicate
 // id in the resolved list is an error. Checks without `analyze` are untouched.
+// Check-only service watches are processed before they desugar into `checks:`.
 func (c *Config) expandAnalyze(tree map[string]any) []string {
+	var errs []string
 	checks, ok := tree["checks"].(map[string]any)
+	if ok {
+		names := make([]string, 0, len(checks))
+		for name := range checks {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+
+		for _, name := range names {
+			entry, ok := checks[name].(map[string]any)
+			if !ok {
+				continue
+			}
+			errs = append(errs, c.expandAnalyzeEntry("checks."+name, entry)...)
+		}
+	}
+
+	watches, ok := tree["watches"].(map[string]any)
+	if ok {
+		names := make([]string, 0, len(watches))
+		for name := range watches {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+
+		for _, name := range names {
+			entry, ok := watches[name].(map[string]any)
+			if !ok {
+				continue
+			}
+			check, ok := entry["check"].(map[string]any)
+			if !ok {
+				continue
+			}
+			errs = append(errs, c.expandAnalyzeEntry("watches."+name+".check", check)...)
+		}
+	}
+
+	return errs
+}
+
+func (c *Config) expandAnalyzeEntry(scope string, entry map[string]any) []string {
+	analyze, ok := entry["analyze"].(map[string]any)
 	if !ok {
+		if _, present := entry["analyze"]; present {
+			return []string{scope + ".analyze must be a mapping"}
+		}
 		return nil
 	}
-	names := make([]string, 0, len(checks))
-	for name := range checks {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	var errs []string
-	for _, name := range names {
-		entry, ok := checks[name].(map[string]any)
-		if !ok {
-			continue
-		}
-		analyze, ok := entry["analyze"].(map[string]any)
-		if !ok {
-			if _, present := entry["analyze"]; present {
-				errs = append(errs, "checks."+name+".analyze must be a mapping")
-			}
-			continue
-		}
-		rules, rerrs := c.resolveAnalyze(name, analyze)
-		errs = append(errs, rerrs...)
-		entry["analyze"] = map[string]any{"rules": rules}
-	}
+	rules, errs := c.resolveAnalyze(scope+".analyze", analyze)
+	entry["analyze"] = map[string]any{"rules": rules}
 	return errs
 }
 
 // resolveAnalyze builds the flat, ordered rule list for one check's analyze block.
-func (c *Config) resolveAnalyze(checkName string, analyze map[string]any) ([]any, []string) {
+func (c *Config) resolveAnalyze(scope string, analyze map[string]any) ([]any, []string) {
 	var errs []string
-	scope := "checks." + checkName + ".analyze"
 
 	silence := map[string]bool{}
 	for _, id := range cfgval.StringList(analyze["silence"]) {
@@ -428,18 +453,19 @@ func expandReloadOnChange(tree map[string]any) []string {
 	return errs
 }
 
-// expandServiceWatches desugars unified service watches whose `then` declares a
-// rule-class action (restart/start/stop/reload/resume → remediation, block → guard,
-// alert → alert) into a generated `checks:` probe plus the equivalent `rules:` entry,
-// then removes them from `watches:`. What remains under `watches:` is only the
-// fire-and-forget entries (hook/notify/expand/kill), built by the Watch runtime.
+// expandServiceWatches desugars service watches that are not runtime side effects:
+// check-only entries become a generated `checks:` probe, and entries whose `then`
+// declares a rule-class action (restart/start/stop/reload/resume → remediation,
+// block → guard, alert → alert) become that check plus the equivalent `rules:`
+// entry. What remains under `watches:` is only the fire-and-forget entries
+// (hook/notify/expand/kill), built by the Watch runtime.
 //
-// The generated check embeds the watch's `check:` block verbatim (accepting probe
-// duplication when two watches share an endpoint) and carries verify/requires/
-// optional/interval when present. The rule's condition polarity follows the check
-// type: a health check fires on failure (`failed`), a condition check on its
-// threshold (`active`), matching checks.IsHealthType. The check and rule take the
-// watch's name; a collision with an existing check/rule is an error.
+// The generated check embeds the watch's `check:` block verbatim and carries
+// verify/requires/optional/interval when present. The rule's condition polarity
+// follows the check type: a health check fires on failure (`failed`), a condition
+// check on its threshold (`active`), matching checks.IsHealthType. The check and
+// rule take the watch's name; a collision with an existing check/rule is an
+// error. Reusing an existing check is expressed with an explicit rules: entry.
 func expandServiceWatches(tree map[string]any) []string {
 	watches, ok := tree["watches"].(map[string]any)
 	if !ok {
@@ -460,8 +486,21 @@ func expandServiceWatches(tree map[string]any) []string {
 		if !ok {
 			continue
 		}
-		then, _ := entry["then"].(map[string]any)
+		rawThen, hasThen := entry["then"]
+		then, _ := rawThen.(map[string]any)
 		action := cfgval.String(then["action"])
+		if !hasThen {
+			check, ok := entry["check"].(map[string]any)
+			if !ok {
+				add("watches.%s.check is required", name)
+				continue
+			}
+			if _, ok := promoteServiceWatchCheck(checksMap, name, entry, check, add); !ok {
+				continue
+			}
+			delete(watches, name)
+			continue
+		}
 		if action == "" || !isRuleClassAction(action) {
 			continue // fire-and-forget watch (or invalid action): left for validateServiceWatches
 		}
@@ -478,7 +517,7 @@ func expandServiceWatches(tree map[string]any) []string {
 			continue
 		}
 
-		target, ok := resolveServiceWatchRuleTarget(tree, checksMap, name, entry, check, add)
+		target, ok := promoteServiceWatchCheck(checksMap, name, entry, check, add)
 		if !ok {
 			continue
 		}
@@ -504,30 +543,18 @@ type serviceWatchRuleTarget struct {
 	checkType string
 }
 
-var serviceWatchCheckEntryFields = [...]string{"verify", "requires", "optional", "interval"}
+var serviceWatchCheckEntryFields = [...]string{"enabled", "verify", "requires", "optional", "interval"}
 
-// resolveServiceWatchRuleTarget returns the check a generated rule should read.
-// A watch can reference an existing check/preflight entry, or it can embed a
-// check block that is promoted to checks.<watch-name>.
-func resolveServiceWatchRuleTarget(tree, checksMap map[string]any, name string, entry, check map[string]any, add func(string, ...any)) (serviceWatchRuleTarget, bool) {
-	if ref := cfgval.String(check["ref"]); ref != "" {
-		checkType := lookupCheckType(tree, ref)
-		if checkType == "" {
-			add("watches.%s.check.ref %q does not name a checks: or preflight: entry", name, ref)
-			return serviceWatchRuleTarget{}, false
-		}
-		// Entry-level check fields belong on the referenced check, not the
-		// referencing watch — reject them rather than drop them silently.
-		for _, k := range serviceWatchCheckEntryFields {
-			if _, has := entry[k]; has {
-				add("watches.%s.%s is not supported with check.ref; set it on the referenced check %q", name, k, ref)
-			}
-		}
-		return serviceWatchRuleTarget{checkName: ref, checkType: checkType}, true
-	}
-
+// promoteServiceWatchCheck promotes an embedded watch check to checks.<watch-name>,
+// returning the generated rule target.
+func promoteServiceWatchCheck(checksMap map[string]any, name string, entry, check map[string]any, add func(string, ...any)) (serviceWatchRuleTarget, bool) {
 	if _, exists := checksMap[name]; exists {
 		add("watches.%s would overwrite existing check %q; rename the watch", name, name)
+		return serviceWatchRuleTarget{}, false
+	}
+	checkType := cfgval.String(check["type"])
+	if checkType == "" {
+		add("watches.%s.check.type is required", name)
 		return serviceWatchRuleTarget{}, false
 	}
 	genCheck := cloneMap(check)
@@ -537,7 +564,7 @@ func resolveServiceWatchRuleTarget(tree, checksMap map[string]any, name string, 
 		}
 	}
 	checksMap[name] = genCheck
-	return serviceWatchRuleTarget{checkName: name, checkType: cfgval.String(check["type"])}, true
+	return serviceWatchRuleTarget{checkName: name, checkType: checkType}, true
 }
 
 func buildServiceWatchRule(entry, then map[string]any, action string, target serviceWatchRuleTarget) map[string]any {
@@ -583,20 +610,6 @@ func serviceWatchRuleCondition(target serviceWatchRuleTarget) map[string]any {
 		return map[string]any{"failed": operand}
 	}
 	return map[string]any{"active": operand}
-}
-
-// lookupCheckType returns the type of a named check in the checks: or preflight:
-// section, or "" when no such check exists. Used to resolve the polarity of a
-// watch that references a shared check by name (check: {ref: …}).
-func lookupCheckType(tree map[string]any, name string) string {
-	for _, section := range []string{"checks", "preflight"} {
-		if m, ok := tree[section].(map[string]any); ok {
-			if c, ok := m[name].(map[string]any); ok {
-				return cfgval.String(c["type"])
-			}
-		}
-	}
-	return ""
 }
 
 // injectBuiltinVariables makes the document's identity available for ${...}

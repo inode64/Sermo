@@ -6,20 +6,21 @@ service: bluetooth
 apps:
   - bluetoothd
 pidfile: /run/bluetoothd.pid
-checks:
-  service:
-    type: service
-    expect: active
-  process:
-    type: process
-    exe: ${bluetoothd_binary}
-    user: root
-    state: running
-    requires:
-      - service
-    optional: true
-    verify: true
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  process:
+    check:
+      type: process
+      exe: ${bluetoothd_binary}
+      user: root
+      state: running
+      requires:
+        - service
+      optional: true
+      verify: true
   alert-if-memory-high:
     check:
       type: metric

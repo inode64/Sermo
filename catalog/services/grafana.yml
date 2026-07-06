@@ -20,23 +20,25 @@ processes:
   main:
     exe: ${grafana_binary}
     user: ${user}
-checks:
-  service:
-    type: service
-    expect: active
-  port:
-    type: tcp
-    host: ${host}
-    port: ${port}
-    timeout: 2s
-  health:
-    type: http
-    url: http://${host}:${port}/api/health
-    expect_status:
-      op: <
-      value: 500
-    timeout: 5s
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  port:
+    check:
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 2s
+  health:
+    check:
+      type: http
+      url: http://${host}:${port}/api/health
+      expect_status:
+        op: <
+        value: 500
+      timeout: 5s
   alert-if-fds-high:
     check:
       type: metric

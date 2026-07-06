@@ -29,14 +29,15 @@ processes:
   security-file-certgen:
     exe: ${squid_security_file_certgen_binary}
     user: ${user}
-checks:
-  service:
-    type: service
-    expect: active
-  port:
-    type: tcp
-    port: ${port}
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  port:
+    check:
+      type: tcp
+      port: ${port}
   restart-if-worker-thread-hot:
     check:
       type: metric

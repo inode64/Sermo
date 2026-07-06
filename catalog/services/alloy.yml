@@ -24,22 +24,26 @@ preflight:
       - --stability.level=${stability_level}
       - ${config}
     timeout: 30s
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   port:
-    type: tcp
-    host: ${host}
-    port: ${port}
-    timeout: 2s
+    check:
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 2s
   ready:
-    type: http
-    url: http://${host}:${port}/-/ready
-    expect_status: 200
-    timeout: 5s
+    check:
+      type: http
+      url: http://${host}:${port}/-/ready
+      expect_status: 200
+      timeout: 5s
   metrics:
-    type: http
-    url: http://${host}:${port}/metrics
-    expect_status: 200
-    timeout: 5s
+    check:
+      type: http
+      url: http://${host}:${port}/metrics
+      expect_status: 200
+      timeout: 5s

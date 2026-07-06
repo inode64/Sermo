@@ -53,49 +53,6 @@ processes:
   postgres:
     exe: ${binary}
     user: ${user}
-checks:
-  service:
-    type: service
-    expect: active
-  port:
-    type: tcp
-    port: ${port}
-  ready:
-    type: postgres
-    host: 127.0.0.1
-    port: ${port}
-    user: ${user}
-    timeout: 5s
-    verify: true
-  fds:
-    type: metric
-    scope: service
-    name: fds
-    op: '>'
-    value: 50000
-    optional: true
-  memory:
-    type: metric
-    scope: service
-    name: memory
-    op: '>'
-    value: 60%
-    optional: true
-  backup:
-    type: process
-    optional: true
-    exe_any:
-      - /usr/bin/pg_basebackup
-      - /usr/bin/pg_dump
-      - /usr/bin/pg_dumpall
-      - /usr/bin/pgbackrest
-      - /usr/local/bin/pgbackrest
-      - /usr/bin/wal-g-pg
-      - /usr/local/bin/wal-g-pg
-      - /usr/bin/wal-g
-      - /usr/local/bin/wal-g
-    user: ${backup_user}
-    state: running
 stop_policy:
   graceful_timeout: 120s
   term_timeout: 60s
@@ -126,23 +83,62 @@ reload_on_change:
   paths:
     - ${config_dir}
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  fds:
+    check:
+      type: metric
+      scope: service
+      name: fds
+      op: '>'
+      value: 50000
+      optional: true
+  backup:
+    check:
+      type: process
+      optional: true
+      exe_any:
+        - /usr/bin/pg_basebackup
+        - /usr/bin/pg_dump
+        - /usr/bin/pg_dumpall
+        - /usr/bin/pgbackrest
+        - /usr/local/bin/pgbackrest
+        - /usr/bin/wal-g-pg
+        - /usr/local/bin/wal-g-pg
+        - /usr/bin/wal-g
+        - /usr/local/bin/wal-g
+      user: ${backup_user}
+      state: running
   restart-if-ready-failed:
     check:
-      ref: ready
+      type: postgres
+      host: 127.0.0.1
+      port: ${port}
+      user: ${user}
+      timeout: 5s
+      verify: true
     for:
       cycles: 3
     then:
       action: restart
   restart-if-port-failed:
     check:
-      ref: port
+      type: tcp
+      port: ${port}
     for:
       cycles: 3
     then:
       action: restart
   alert-if-memory-high:
     check:
-      ref: memory
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 60%
+      optional: true
     for:
       duration: 10m
     then:

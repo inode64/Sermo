@@ -84,13 +84,13 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 }
 
 // validateServiceWatches validates a service tree's embedded `watches:` section.
-// These run the host-watch runtime with the service's scoped check deps, so the
-// process- and status-scoped types (process, service) are permitted here that a
-// host watch rejects — but a metric check is not (the scoped deps carry no metric
-// source; use a rule) and net/icmp/swap belong in the global watches: section.
-// The per-type field grammar is shared with host watches and enforced at build
-// time; this pass covers the structural contract (mapping, recognized type, an
-// action, valid notifier refs, window and policy) with service-qualified scopes.
+// Fire-and-forget entries run the host-watch runtime with the service's scoped
+// check deps, so service-scoped service/metric/process_count checks are permitted
+// here while the host-wide process watch and net/icmp/swap multi-metric watches
+// are rejected. Entries without then are desugared to checks:, and entries with
+// then.action are desugared to checks:+rules:, by expandServiceWatches; this pass
+// still validates their grammar when it sees an unexpanded tree. Per-type field
+// grammar is shared with host watches.
 func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[string]struct{}, defaultNotify []string, add func(string, ...any)) {
 	watches, ok := tree["watches"].(map[string]any)
 	if !ok {
@@ -143,6 +143,16 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 		case typ == "":
 			add("%s.check.type is required", prefix)
 			continue
+		}
+		rawThen, hasThen := entry["then"]
+		then, _ := rawThen.(map[string]any)
+		if !hasThen {
+			if !validateSingleShotCheckFields(prefix+".check", typ, check, locksDir, add) {
+				add("%s.check.type %q is not supported", prefix, typ)
+			}
+			continue
+		}
+		switch {
 		case typ == "net" || typ == "icmp" || typ == "swap":
 			add("%s.check.type %q is host-scoped; declare it under the global watches: section", prefix, typ)
 			continue
@@ -154,7 +164,6 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 			continue
 		}
 		validateSingleShotCheckFields(prefix+".check", typ, check, locksDir, add)
-		then, _ := entry["then"].(map[string]any)
 		if action := cfgval.String(then["action"]); action != "" {
 			// A rule-class action (restart/…/block/alert) makes this watch a
 			// checks:+rules: desugar target (see expandServiceWatches); validate the

@@ -132,48 +132,6 @@ watches:
 	}
 }
 
-func TestExpandServiceWatchesRefSharedCheck(t *testing.T) {
-	// A watch may reference an existing shared check by name instead of embedding a
-	// probe, so a verify:true/display check is not duplicated.
-	tree, errs := resolveWatchService(t, `
-checks:
-  http: { type: http, url: "http://x/", verify: true }
-watches:
-  restart-if-http-failed:
-    check: { ref: http }
-    for: { cycles: 3 }
-    then: { action: restart }
-`)
-	if len(errs) != 0 {
-		t.Fatalf("resolve errors = %v", errs)
-	}
-	// The shared http check stays; no duplicate is generated.
-	if _, ok := tree["checks"].(map[string]any)["restart-if-http-failed"]; ok {
-		t.Fatalf("ref must not generate a duplicate check")
-	}
-	http := nested(t, tree, "checks", "http")
-	if !cfgval.Bool(http["verify"]) {
-		t.Fatalf("shared check must be preserved intact, got %v", http)
-	}
-	rule := nested(t, tree, "rules", "restart-if-http-failed")
-	failed := nested(t, rule, "if", "failed")
-	if got := cfgval.String(failed["check"]); got != "http" {
-		t.Fatalf("rule must reference the shared check, if.failed.check = %q, want http", got)
-	}
-}
-
-func TestExpandServiceWatchesRefUnknown(t *testing.T) {
-	_, errs := resolveWatchService(t, `
-watches:
-  restart-if-x:
-    check: { ref: nonexistent }
-    then: { action: restart }
-`)
-	if !hasIssueSubstr(errs, "does not name a checks: or preflight: entry") {
-		t.Fatalf("ref to a missing check should error, got %v", errs)
-	}
-}
-
 func TestExpandServiceWatchesLeavesFireAndForget(t *testing.T) {
 	// A watch with a fire-and-forget then (hook/notify) is NOT desugared.
 	tree, errs := resolveWatchService(t, `
@@ -194,6 +152,34 @@ watches:
 	}
 }
 
+func TestExpandServiceWatchesCheckOnly(t *testing.T) {
+	tree, errs := resolveWatchService(t, `
+watches:
+  service:
+    verify: true
+    check: { type: service, expect: active }
+`)
+	if len(errs) != 0 {
+		t.Fatalf("resolve errors = %v", errs)
+	}
+	if _, ok := tree["watches"]; ok {
+		t.Fatalf("check-only watch should be removed after desugar, got %v", tree["watches"])
+	}
+	chk := nested(t, tree, "checks", "service")
+	if got := cfgval.String(chk["type"]); got != "service" {
+		t.Fatalf("generated check type = %q, want service", got)
+	}
+	if got := cfgval.String(chk["expect"]); got != "active" {
+		t.Fatalf("generated check expect = %q, want active", got)
+	}
+	if !cfgval.Bool(chk["verify"]) {
+		t.Fatalf("generated check verify = %v, want true", chk["verify"])
+	}
+	if _, ok := tree["rules"]; ok {
+		t.Fatalf("check-only watch must not generate rules, got %v", tree["rules"])
+	}
+}
+
 func TestExpandServiceWatchesNameCollision(t *testing.T) {
 	_, errs := resolveWatchService(t, `
 checks:
@@ -205,6 +191,53 @@ watches:
 `)
 	if !hasIssueSubstr(errs, "would overwrite existing check") {
 		t.Fatalf("collision with an existing check should error, got %v", errs)
+	}
+}
+
+func TestExpandServiceWatchesCopiesCheckEntryFields(t *testing.T) {
+	tree, errs := resolveWatchService(t, `
+watches:
+  restart-if-http-failed:
+    enabled: false
+    interval: 15s
+    optional: true
+    verify: true
+    check: { type: http, url: "http://x/" }
+    then: { action: restart }
+`)
+	if len(errs) != 0 {
+		t.Fatalf("resolve errors = %v", errs)
+	}
+	chk := nested(t, tree, "checks", "restart-if-http-failed")
+	if got := cfgval.String(chk["interval"]); got != "15s" {
+		t.Fatalf("generated check interval = %q, want 15s", got)
+	}
+	if got, ok := chk["enabled"]; !ok || cfgval.Bool(got) {
+		t.Fatalf("generated check enabled = %v (present %v), want false", got, ok)
+	}
+	if !cfgval.Bool(chk["optional"]) {
+		t.Fatalf("generated check optional = %v, want true", chk["optional"])
+	}
+	if !cfgval.Bool(chk["verify"]) {
+		t.Fatalf("generated check verify = %v, want true", chk["verify"])
+	}
+}
+
+func TestExpandServiceWatchesDelete(t *testing.T) {
+	tree, errs := resolveWatchService(t, `
+watches:
+  service:
+    delete: true
+    check: { type: service, expect: active }
+`)
+	if len(errs) != 0 {
+		t.Fatalf("resolve errors = %v", errs)
+	}
+	if _, ok := tree["checks"]; ok {
+		t.Fatalf("deleted check-only watch should not generate checks, got %v", tree["checks"])
+	}
+	if _, ok := tree["watches"]; ok {
+		t.Fatalf("deleted check-only watch should not survive, got %v", tree["watches"])
 	}
 }
 
@@ -291,47 +324,16 @@ func TestValidateUnifiedWatchActions(t *testing.T) {
     check: { type: tcp, host: 127.0.0.1, port: 80 }
     then: { action: alert, notify: [ops], notify_interval: 30m }
 `, "then.notify_interval is not supported with an action"},
+		{"missing check type", `watches:
+  w:
+    check: {}
+    then: { action: restart }
+`, "check.type is required"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			mustHave(t, validateService(t, base+tc.body), tc.want)
 		})
-	}
-}
-
-// TestUnifiedWatchRefEquivalence proves a ref watch desugars to exactly the
-// hand-written rule referencing the same shared check — the dominant migration form.
-func TestUnifiedWatchRefEquivalence(t *testing.T) {
-	unified, errs := resolveWatchService(t, `
-checks:
-  tcp: { type: tcp, host: 127.0.0.1, port: 80 }
-watches:
-  restart-if-tcp-failed:
-    check: { ref: tcp }
-    for: { cycles: 3 }
-    then: { action: restart }
-`)
-	if len(errs) != 0 {
-		t.Fatalf("unified resolve errors = %v", errs)
-	}
-	explicit, errs := resolveWatchService(t, `
-checks:
-  tcp: { type: tcp, host: 127.0.0.1, port: 80 }
-rules:
-  restart-if-tcp-failed:
-    type: remediation
-    if: { failed: { check: tcp } }
-    for: { cycles: 3 }
-    then: { action: restart }
-`)
-	if len(errs) != 0 {
-		t.Fatalf("explicit resolve errors = %v", errs)
-	}
-	if !reflect.DeepEqual(unified["checks"], explicit["checks"]) {
-		t.Fatalf("checks differ:\n unified=%#v\n explicit=%#v", unified["checks"], explicit["checks"])
-	}
-	if !reflect.DeepEqual(unified["rules"], explicit["rules"]) {
-		t.Fatalf("rules differ:\n unified=%#v\n explicit=%#v", unified["rules"], explicit["rules"])
 	}
 }
 

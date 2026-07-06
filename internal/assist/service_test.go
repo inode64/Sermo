@@ -24,7 +24,7 @@ func TestServiceAssistant(t *testing.T) {
 	script := strings.Join([]string{
 		"1",    // MultiChoose -> nginx
 		"8080", // port override
-		"y",    // add detected configuration check
+		"y",    // add detected configuration watch
 		"1",    // monitor state: enabled
 		"",     // interval: inherit
 		"y",    // dry-run automatic actions
@@ -52,10 +52,14 @@ func TestServiceAssistant(t *testing.T) {
 	if vars == nil || vars["port"] != 8080 {
 		t.Fatalf("expected port override 8080, got %v", svc["variables"])
 	}
-	checks := svc["checks"].(map[string]any)
-	configCheck := checks["config"].(map[string]any)
-	if configCheck["type"] != "config" || configCheck["on_change"] != true || configCheck["interval"] != serviceConfigCheckInterval {
-		t.Fatalf("config check = %v, want config/on_change/%s", configCheck, serviceConfigCheckInterval)
+	watches := svc["watches"].(map[string]any)
+	configWatch := watches[serviceConfigWatchName].(map[string]any)
+	if configWatch["interval"] != serviceConfigWatchInterval {
+		t.Fatalf("config watch interval = %v, want %s", configWatch["interval"], serviceConfigWatchInterval)
+	}
+	configCheck := configWatch["check"].(map[string]any)
+	if configCheck["type"] != "config" || configCheck["on_change"] != true {
+		t.Fatalf("config check = %v, want config/on_change", configCheck)
 	}
 	paths := configCheck["path"].([]any)
 	if len(paths) != 1 || paths[0] != "/etc/nginx/nginx.conf" {
@@ -110,8 +114,8 @@ func TestServiceAssistantCatalogThenGenericServices(t *testing.T) {
 	if custom["service"] != "customd" {
 		t.Fatalf("generic service = %v, want customd", custom["service"])
 	}
-	checks := custom["checks"].(map[string]any)
-	serviceCheck := checks["service"].(map[string]any)
+	watches := custom["watches"].(map[string]any)
+	serviceCheck := watches["service"].(map[string]any)["check"].(map[string]any)
 	if serviceCheck["type"] != "service" || serviceCheck["expect"] != "active" {
 		t.Fatalf("generic service check = %v, want service/active", serviceCheck)
 	}

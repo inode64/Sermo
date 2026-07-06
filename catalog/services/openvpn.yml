@@ -15,11 +15,13 @@ variables:
 config_files:
   - ${config}
 pidfile: /run/openvpn.${instance}.pid
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   port:
-    type: openvpn
-    optional: true
-    port: ${port}
+    check:
+      type: openvpn
+      optional: true
+      port: ${port}

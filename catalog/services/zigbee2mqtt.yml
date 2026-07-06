@@ -6,19 +6,6 @@ service: zigbee2mqtt
 apps:
   - node
 pidfile: /run/zigbee2mqtt.pid
-checks:
-  service:
-    type: service
-    expect: active
-  http:
-    type: http
-    url: http://127.0.0.1:${port}/
-    expect_status:
-      op: <
-      value: 500
-    timeout: 5s
-    optional: true
-    verify: true
 policy:
   cooldown: 15m
   max_actions: 2
@@ -37,9 +24,20 @@ rules:
 variables:
   port: 8080
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   restart-if-http-failed:
     check:
-      ref: http
+      type: http
+      url: http://127.0.0.1:${port}/
+      expect_status:
+        op: <
+        value: 500
+      timeout: 5s
+      optional: true
+      verify: true
     for:
       cycles: 3
     then:
