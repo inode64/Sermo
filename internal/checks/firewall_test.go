@@ -46,13 +46,13 @@ func TestFirewallRulesCheckRun(t *testing.T) {
 	}{
 		{
 			name:    "enough rules",
-			sample:  FirewallRulesSample{Backend: firewallBackendNftables, Rules: 2},
+			sample:  FirewallRulesSample{Backend: FirewallBackendNftables, Rules: 2},
 			wantOK:  true,
 			wantMsg: "has 2 rules",
 		},
 		{
 			name:    "no rules",
-			sample:  FirewallRulesSample{Backend: firewallBackendNftables, Rules: 0},
+			sample:  FirewallRulesSample{Backend: FirewallBackendNftables, Rules: 0},
 			wantOK:  false,
 			wantMsg: "below min 1",
 		},
@@ -67,7 +67,7 @@ func TestFirewallRulesCheckRun(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := firewallRulesCheck{
 				base:     base{name: "fw", timeout: time.Second},
-				backend:  firewallBackendAuto,
+				backend:  FirewallBackendAuto,
 				minRules: 1,
 				sampler: func(context.Context, string, execx.Runner) (FirewallRulesSample, error) {
 					return tc.sample, tc.err
@@ -98,29 +98,29 @@ func TestDefaultFirewallRulesSampler(t *testing.T) {
 	}{
 		{
 			name:    "auto prefers nftables when rules exist",
-			backend: firewallBackendAuto,
+			backend: FirewallBackendAuto,
 			nft:     func(context.Context) (uint64, error) { return 1, nil },
-			want:    FirewallRulesSample{Backend: firewallBackendNftables, Rules: 1},
+			want:    FirewallRulesSample{Backend: FirewallBackendNftables, Rules: 1},
 		},
 		{
 			name:    "auto falls back to iptables when nftables has no rules",
-			backend: firewallBackendAuto,
+			backend: FirewallBackendAuto,
 			nft:     func(context.Context) (uint64, error) { return 0, nil },
 			runner: firewallRunner{
 				"iptables-save":  {result: execx.Result{Stdout: "-A INPUT -j ACCEPT\n-A OUTPUT -j ACCEPT\n"}},
 				"ip6tables-save": {result: execx.Result{Stdout: "-A INPUT -j ACCEPT\n"}},
 			},
-			want: FirewallRulesSample{Backend: firewallBackendIptables, Rules: 3},
+			want: FirewallRulesSample{Backend: FirewallBackendIptables, Rules: 3},
 		},
 		{
 			name:    "auto returns nftables zero when legacy tools are unavailable",
-			backend: firewallBackendAuto,
+			backend: FirewallBackendAuto,
 			nft:     func(context.Context) (uint64, error) { return 0, nil },
-			want:    FirewallRulesSample{Backend: firewallBackendNftables, Rules: 0},
+			want:    FirewallRulesSample{Backend: FirewallBackendNftables, Rules: 0},
 		},
 		{
 			name:    "explicit nftables netlink error",
-			backend: firewallBackendNftables,
+			backend: FirewallBackendNftables,
 			nft:     func(context.Context) (uint64, error) { return 0, fmt.Errorf("permission denied") },
 			wantErr: "nftables: permission denied",
 		},
@@ -155,7 +155,7 @@ func TestBuildFirewallRulesCheck(t *testing.T) {
 	built, warns := Build(map[string]any{
 		"fw": map[string]any{"type": "firewall_rules", "backend": "nft", "min_rules": 2},
 	}, Deps{FirewallRulesSampler: func(context.Context, string, execx.Runner) (FirewallRulesSample, error) {
-		return FirewallRulesSample{Backend: firewallBackendNftables, Rules: 2}, nil
+		return FirewallRulesSample{Backend: FirewallBackendNftables, Rules: 2}, nil
 	}})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
@@ -174,7 +174,7 @@ func TestBuildFirewallRulesCheck(t *testing.T) {
 	if _, warns := Build(map[string]any{
 		"fw": map[string]any{"type": "firewall_rules", "backend": "nft", "min_rules": 1},
 	}, Deps{FirewallRulesSampler: func(context.Context, string, execx.Runner) (FirewallRulesSample, error) {
-		return FirewallRulesSample{Backend: firewallBackendNftables, Rules: 1}, nil
+		return FirewallRulesSample{Backend: FirewallBackendNftables, Rules: 1}, nil
 	}}); len(warns) != 0 {
 		t.Fatalf("min_rules=1 must be valid, got warnings: %v", warns)
 	}
@@ -190,7 +190,7 @@ func TestFirewallRulesCheckCanceledSampler(t *testing.T) {
 	cancel()
 	c := firewallRulesCheck{
 		base:    base{name: "fw", timeout: time.Millisecond},
-		backend: firewallBackendNftables,
+		backend: FirewallBackendNftables,
 		sampler: func(context.Context, string, execx.Runner) (FirewallRulesSample, error) {
 			return FirewallRulesSample{}, context.Canceled
 		},
