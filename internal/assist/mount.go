@@ -28,21 +28,16 @@ func (mountAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		return Result{}, fmt.Errorf("no fstab mount points were detected on this host")
 	}
 
-	labels := make([]string, len(cands))
-	for i, c := range cands {
-		labels[i] = mountCandidateLabel(c)
-	}
-	sel := p.MultiChoose("Which fstab mount points do you want Sermo to manage?", labels)
+	selected := chooseCandidates(p, "Which fstab mount points do you want Sermo to manage?", cands, mountCandidateLabel)
 
 	var shared *mountSettings
-	if len(sel) > 1 && p.Confirm("Apply the same mount settings to all selected mount points?", true) {
+	if len(selected) > 1 && p.Confirm("Apply the same mount settings to all selected mount points?", true) {
 		s := askMountSettings(p, "the selected mount points")
 		shared = &s
 	}
 
 	mounts := map[string]any{}
-	for _, idx := range sel {
-		c := cands[idx]
+	for _, c := range selected {
 		settings := shared
 		if settings == nil {
 			s := askMountSettings(p, c.Path)
