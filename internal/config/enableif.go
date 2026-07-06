@@ -12,7 +12,7 @@ import (
 const keyEnableIf = "enable_if"
 
 var (
-	enableIfSections = set("checks", "preflight", "processes", "watches")
+	enableIfSections = set(sectionChecks, "preflight", "processes", "watches")
 	enableIfKeys     = set("file", "key", "contains", "equals", "matches")
 )
 
