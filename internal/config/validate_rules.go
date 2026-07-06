@@ -10,6 +10,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/process"
+	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 )
 
@@ -93,7 +94,15 @@ var serviceStates = set(
 	string(servicemgr.StatusUnknown),
 )
 var processStates = set(process.StateRunning, process.StateZombie, process.StateAbsent)
-var validActions = set("restart", "start", "stop", "reload", "resume", "alert", "block")
+var validActions = set(
+	string(rules.ActionRestart),
+	string(rules.ActionStart),
+	string(rules.ActionStop),
+	string(rules.ActionReload),
+	string(rules.ActionResume),
+	string(rules.ActionAlert),
+	string(rules.ActionBlock),
+)
 var metricCatalog = map[string]map[string]struct{}{
 	"service": set("memory", "swap", "cpu", "cpu_thread", "process_count", "io", "io_read", "io_write", "fds", "threads"),
 	"system":  set("total_memory", "total_swap", "total_cpu", "load1", "load5", "load15"),
