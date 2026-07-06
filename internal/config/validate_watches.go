@@ -471,13 +471,13 @@ func validateNetCheck(name string, check, entry map[string]any, defaultNotify []
 // condition grammar cannot drift between the two surfaces.
 func validateNetMetricCondition(prefix, metric string, m map[string]any, add addFunc) {
 	switch metric {
-	case "state":
+	case checks.NetMetricState:
 		validateStateMetric(prefix, m, add)
-	case "speed":
+	case checks.NetMetricSpeed:
 		if cfgval.String(m["on"]) != checks.OnModeChange {
 			add("%s requires on: change", prefix)
 		}
-	case "errors":
+	case checks.NetMetricErrors:
 		delta, ok := m["delta"].(map[string]any)
 		if !ok {
 			add("%s.delta {op, value} is required", prefix)
@@ -489,7 +489,7 @@ func validateNetMetricCondition(prefix, metric string, m map[string]any, add add
 				add("%s.counters must be a non-empty list", prefix)
 			}
 		}
-	case "address":
+	case checks.NetMetricAddress:
 		exp := cfgval.String(m["expect"])
 		onChange := cfgval.String(m["on"]) == checks.OnModeChange
 		if exp == "" && !onChange {
