@@ -5,14 +5,15 @@ import (
 	"time"
 
 	"sermo/internal/operation"
+	"sermo/internal/rules"
 	"sermo/internal/state"
 )
 
 const operationSettlingMaxAge = 15 * time.Minute
 
 func operationActionTracked(action string) bool {
-	switch action {
-	case "start", "stop", "restart", "reload", "resume":
+	switch rules.ActionType(action) {
+	case rules.ActionStart, rules.ActionStop, rules.ActionRestart, rules.ActionReload, rules.ActionResume:
 		return true
 	default:
 		return false
@@ -20,8 +21,8 @@ func operationActionTracked(action string) bool {
 }
 
 func operationActionSettlesAfter(action string) bool {
-	switch action {
-	case "start", "restart", "reload", "resume":
+	switch rules.ActionType(action) {
+	case rules.ActionStart, rules.ActionRestart, rules.ActionReload, rules.ActionResume:
 		return true
 	default:
 		return false
@@ -29,8 +30,8 @@ func operationActionSettlesAfter(action string) bool {
 }
 
 func manualStartLikeAction(action string) bool {
-	switch action {
-	case "start", "restart", "resume":
+	switch rules.ActionType(action) {
+	case rules.ActionStart, rules.ActionRestart, rules.ActionResume:
 		return true
 	default:
 		return false
