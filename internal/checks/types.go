@@ -20,6 +20,7 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/output"
+	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 )
 
@@ -697,16 +698,16 @@ func (c processCheck) observedState() string {
 	matchedZombie := false
 	for _, exe := range c.exes {
 		switch c.observe(exe, c.user) {
-		case "running":
-			return "running"
-		case "zombie":
+		case process.StateRunning:
+			return process.StateRunning
+		case process.StateZombie:
 			matchedZombie = true
 		}
 	}
 	if matchedZombie {
-		return "zombie"
+		return process.StateZombie
 	}
-	return "absent"
+	return process.StateAbsent
 }
 
 // librariesCheck verifies that all DT_NEEDED shared libraries for a binary

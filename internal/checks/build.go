@@ -21,6 +21,7 @@ import (
 	"sermo/internal/conn"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
+	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 )
 
@@ -893,7 +894,7 @@ func buildProcessCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 	}
 	expect := cfgval.AsString(entry["state"])
 	if expect == "" {
-		expect = "running"
+		expect = process.StateRunning
 	}
 	return processCheck{base: b, exes: exes, user: user, expect: expect, observe: deps.Processes, observeAny: deps.ProcessesAny}, ""
 }
