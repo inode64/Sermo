@@ -58,12 +58,12 @@ func validateNotifiers(notifiers map[string]any, templateDir string, add func(st
 			add("notifiers.%s must be a mapping", name)
 			continue
 		}
-		if v, present := entry["enabled"]; present {
+		if v, present := entry[keyEnabled]; present {
 			if _, ok := v.(bool); !ok {
 				add("notifiers.%s.enabled must be a boolean", name)
 			}
 		}
-		if enabled, ok := entry["enabled"].(bool); ok && !enabled {
+		if enabled, ok := entry[keyEnabled].(bool); ok && !enabled {
 			continue
 		}
 		validateNotifierTemplate(name, entry, templateDir, add)
