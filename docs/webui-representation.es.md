@@ -60,7 +60,7 @@ la autenticación web está habilitada.
 | Acción de servicio | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; `reload` se ofrece solo cuando el servicio informa `can_reload` desde soporte de reload del backend de init o desde un fallback `reload:` válido; `no_cascade` omite los objetivos de `also_apply` en start/stop/restart |
 | Preflight de servicio | `POST /api/services/{name}/preflight` | ejecuta los checks de preflight sin cambiar el estado del servicio |
 | Acción de watch | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand` |
-| Acción de montaje | `POST /api/mounts/{name}/{action}[?kill=1]` | `mount`, `umount`, `blockers`, `alert`; `kill=1` habilita señalización de bloqueadores para `umount` solo si la política lo permite |
+| Acción de montaje | `POST /api/mounts/{name}/{action}[?kill=1]` | `mount`, `umount`, `blockers`, `alert`; `kill=1` habilita señalización de bloqueadores para `umount` solo si la política lo permite; `/` rechaza las rutas de desmontaje |
 | Liberación de lock | `POST /api/locks/{service}/release?name=NAME` | libera locks con nombre inactivos, obsoletos o caducados; los locks activos se rechazan |
 | Limpieza de eventos | `POST /api/events/clear?before=TIME` | borra las filas persistidas de eventos/actividad; `before` acepta RFC3339 o duración |
 | Compactación de estado | `POST /api/state/compact?before=TIME` | poda el historial antiguo de SLA/métricas/eventos y compacta la base de datos de estado; equivale a `sermoctl state compact` |
@@ -266,7 +266,7 @@ Columnas:
 | Processes | lista compacta de procesos que usan actualmente la ruta de montaje |
 | Users | usuarios únicos de esos procesos |
 | State | insignia active/inactive/error |
-| Actions | `mount` solo para admin; cuando está montado, `umount`, `alert` y `kill+umount` |
+| Actions | `mount` solo para admin; cuando está montado, `umount`, `alert` y `kill+umount`; `/` renderiza estos botones del flujo de desmontaje deshabilitados |
 
 Todas las cabeceras salvo Actions son ordenables.
 `GET /api/mounts` incluye un resumen read-only cacheado de blockers para la tabla.
@@ -274,7 +274,9 @@ Antes de `umount`, `alert` o `kill+umount`, la UI consulta
 `POST /api/mounts/{name}/blockers` y muestra una lista fresca de procesos para la
 ruta. `alert` envía un mensaje TTY nativo a los usuarios con sesión que bloquean
 el montaje. `kill+umount` requiere que la política del mount marque al menos un
-bloqueador actual como killable.
+bloqueador actual como killable. Para `path: /`, `GET /api/mounts` devuelve
+`can_umount: false`; la Web UI deshabilita los botones del flujo de desmontaje y
+la API rechaza `umount?kill=1` sin escanear blockers ni enviar señales.
 
 ## Paneles de watches de host
 

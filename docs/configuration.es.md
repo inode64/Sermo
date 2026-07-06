@@ -292,6 +292,9 @@ bloque `mount:`. Puede montar/desmontar, mostrar los mismos procesos bloqueadore
 antes de desmontar, enviar una alerta TTY nativa a los usuarios con sesión que
 estén bloqueando el montaje, y ejecutar `kill+umount` solo mediante la política
 explícita de kill de montaje descrita abajo.
+El filesystem raíz (`path: /`) es de solo lectura para operaciones de montaje:
+Sermo lo muestra como montado, pero rechaza `umount`, las alertas de blockers y
+`kill+umount` desde CLI y Web/API.
 
 Con `mount.refcount: true` (el valor por defecto), cada `mount` exitoso incrementa el
 contador de runtime de Sermo y `umount` lo decrementa. El `umount` real solo se ejecuta

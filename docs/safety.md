@@ -216,6 +216,9 @@ daemon-cycle remediation. They still use the same safety posture:
 - With `mount.refcount: true` (the default), `mount` increments a runtime counter and
   `umount` decrements it; the real unmount is attempted only when the counter
   reaches zero.
+- The root filesystem (`/`) is never unmounted by Sermo. CLI and Web/API
+  `umount`, blocker alerts and `kill+umount` for `/` are rejected before any
+  `umount`, process discovery or signal is attempted.
 - Busy unmounts are reported with the processes using the mount. Sermo does not
   signal them unless `mount.umount.allow_sigkill: true` or
   `mount.stop_policy.force_kill: true` is explicitly configured.

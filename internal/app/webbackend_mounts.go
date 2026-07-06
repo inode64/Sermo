@@ -161,17 +161,21 @@ func (b *WebBackend) Mounts(ctx context.Context) []web.Mount {
 	out := make([]web.Mount, 0, len(rows))
 	for _, row := range rows {
 		if row.err != nil {
+			umountReason := mountctl.UmountDisabledReason(row.spec.Path)
 			out = append(out, web.Mount{
-				Name:        row.name,
-				DisplayName: row.spec.DisplayName,
-				Category:    row.spec.Category,
-				Path:        row.spec.Path,
-				State:       "error",
-				Refcounted:  row.spec.Refcount,
-				Message:     row.err.Error(),
+				Name:         row.name,
+				DisplayName:  row.spec.DisplayName,
+				Category:     row.spec.Category,
+				Path:         row.spec.Path,
+				State:        "error",
+				Refcounted:   row.spec.Refcount,
+				CanUmount:    umountReason == "",
+				UmountReason: umountReason,
+				Message:      row.err.Error(),
 			})
 			continue
 		}
+		umountReason := mountctl.UmountDisabledReason(row.spec.Path)
 		out = append(out, web.Mount{
 			Name:         row.status.Name,
 			DisplayName:  row.spec.DisplayName,
@@ -181,6 +185,8 @@ func (b *WebBackend) Mounts(ctx context.Context) []web.Mount {
 			Refcount:     row.status.Refcount,
 			State:        row.status.State,
 			Refcounted:   row.spec.Refcount,
+			CanUmount:    umountReason == "",
+			UmountReason: umountReason,
 			Blockers:     b.mountBlockers(row.spec, usage[row.spec.Path]),
 			BlockerError: usageErrors[row.spec.Path],
 		})
@@ -248,6 +254,9 @@ func mountedMountPaths(specs []mountctl.Spec, mounted map[string]bool) []string 
 	seen := map[string]struct{}{}
 	paths := make([]string, 0, len(specs))
 	for _, spec := range specs {
+		if !mountctl.CanUmountPath(spec.Path) {
+			continue
+		}
 		if !mounted[spec.Path] {
 			continue
 		}
@@ -284,6 +293,17 @@ func (b *WebBackend) MountBlockers(ctx context.Context, name string) web.MountBl
 	if !ok {
 		return web.MountBlockersResult{OK: false, Name: name, Message: msg}
 	}
+	if reason := mountctl.UmountDisabledReason(spec.Path); reason != "" {
+		return web.MountBlockersResult{
+			OK:           true,
+			Name:         spec.Name,
+			Path:         spec.Path,
+			Mounted:      true,
+			CanUmount:    false,
+			UmountReason: reason,
+			Message:      reason,
+		}
+	}
 	opCtx, cancel := b.mountContext(ctx)
 	defer cancel()
 	ctrl := b.mountController()
@@ -293,11 +313,12 @@ func (b *WebBackend) MountBlockers(ctx context.Context, name string) web.MountBl
 	}
 	if !status.Mounted {
 		return web.MountBlockersResult{
-			OK:      true,
-			Name:    spec.Name,
-			Path:    spec.Path,
-			Mounted: false,
-			Message: "not mounted",
+			OK:        true,
+			Name:      spec.Name,
+			Path:      spec.Path,
+			Mounted:   false,
+			CanUmount: true,
+			Message:   "not mounted",
 		}
 	}
 	blockers, err := ctrl.Blockers(opCtx, spec)
@@ -306,13 +327,14 @@ func (b *WebBackend) MountBlockers(ctx context.Context, name string) web.MountBl
 	}
 	webBlockers := b.mountBlockers(spec, blockers)
 	return web.MountBlockersResult{
-		OK:       true,
-		Name:     spec.Name,
-		Path:     spec.Path,
-		Mounted:  true,
-		CanKill:  mountCanKill(webBlockers),
-		CanAlert: len(uniqueBlockerUsers(blockers)) > 0,
-		Blockers: webBlockers,
+		OK:        true,
+		Name:      spec.Name,
+		Path:      spec.Path,
+		Mounted:   true,
+		CanUmount: true,
+		CanKill:   mountCanKill(webBlockers),
+		CanAlert:  len(uniqueBlockerUsers(blockers)) > 0,
+		Blockers:  webBlockers,
 	}
 }
 
@@ -333,6 +355,17 @@ func (b *WebBackend) MountAction(ctx context.Context, name, action string, opts 
 	case "mount":
 		res, err = ctrl.Acquire(opCtx, spec)
 	case "umount":
+		if reason := mountctl.UmountDisabledReason(spec.Path); reason != "" {
+			return web.MountActionResult{
+				OK:      false,
+				Name:    spec.Name,
+				Path:    spec.Path,
+				Action:  action,
+				Status:  "failed",
+				Message: reason,
+				Mounted: true,
+			}
+		}
 		if opts.KillBlockers && !spec.Umount.AllowSIGKILL {
 			return web.MountActionResult{
 				OK:      false,
@@ -398,6 +431,9 @@ func (b *WebBackend) AlertMountUsers(ctx context.Context, name string) web.Mount
 	spec, ok, msg := b.mountSpec(name)
 	if !ok {
 		return web.MountAlertResult{OK: false, Name: name, Message: msg}
+	}
+	if reason := mountctl.UmountDisabledReason(spec.Path); reason != "" {
+		return web.MountAlertResult{OK: false, Name: spec.Name, Path: spec.Path, Message: reason}
 	}
 	opCtx, cancel := b.mountContext(ctx)
 	defer cancel()
@@ -476,7 +512,7 @@ func (b *WebBackend) mountBlockers(spec mountctl.Spec, blockers []process.Proces
 			Exe:         p.Exe,
 			ExeResolved: p.ExeOK,
 			Cmdline:     p.Cmdline,
-			Killable:    spec.Umount.AllowSIGKILL && spec.KillOnlyIf.Killable(p, resolve),
+			Killable:    mountctl.CanUmountPath(spec.Path) && spec.Umount.AllowSIGKILL && spec.KillOnlyIf.Killable(p, resolve),
 		})
 	}
 	return out

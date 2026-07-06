@@ -99,6 +99,8 @@ type Mount struct {
 	Refcount     int            `json:"refcount"`
 	State        string         `json:"state"`
 	Refcounted   bool           `json:"refcounted"`
+	CanUmount    bool           `json:"can_umount"`
+	UmountReason string         `json:"umount_disabled_reason,omitempty"`
 	Message      string         `json:"message,omitempty"` // set when status sampling failed
 	Blockers     []MountBlocker `json:"blockers,omitempty"`
 	BlockerError string         `json:"blocker_error,omitempty"`
@@ -138,14 +140,16 @@ type MountActionResult struct {
 
 // MountBlockersResult is a read-only preflight view for a mount unit.
 type MountBlockersResult struct {
-	OK       bool           `json:"ok"`
-	Name     string         `json:"name,omitempty"`
-	Path     string         `json:"path,omitempty"`
-	Mounted  bool           `json:"mounted"`
-	CanKill  bool           `json:"can_kill"`
-	CanAlert bool           `json:"can_alert"`
-	Message  string         `json:"message,omitempty"`
-	Blockers []MountBlocker `json:"blockers,omitempty"`
+	OK           bool           `json:"ok"`
+	Name         string         `json:"name,omitempty"`
+	Path         string         `json:"path,omitempty"`
+	Mounted      bool           `json:"mounted"`
+	CanUmount    bool           `json:"can_umount"`
+	UmountReason string         `json:"umount_disabled_reason,omitempty"`
+	CanKill      bool           `json:"can_kill"`
+	CanAlert     bool           `json:"can_alert"`
+	Message      string         `json:"message,omitempty"`
+	Blockers     []MountBlocker `json:"blockers,omitempty"`
 }
 
 // MountAlertResult is the outcome of notifying users that block a mount.
