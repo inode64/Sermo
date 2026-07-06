@@ -6,13 +6,20 @@ import (
 	"sermo/internal/cfgval"
 )
 
+const (
+	// DefaultEngineInterval is the fallback for engine.interval.
+	DefaultEngineInterval = 30 * time.Second
+	// DefaultEngineDiagnosticsInterval is the fallback for engine.diagnostics_interval.
+	DefaultEngineDiagnosticsInterval = time.Hour
+)
+
 // EngineLogPath returns an engine log file path (access, events, diagnostics).
 // An empty string means that log channel is disabled.
 func EngineLogPath(cfg *Config, key string) string {
 	if cfg == nil {
 		return ""
 	}
-	engine, _ := cfg.Global.Raw["engine"].(map[string]any)
+	engine, _ := cfg.Global.Raw[SectionEngine].(map[string]any)
 	return cfgval.AsString(engine[key])
 }
 
@@ -22,8 +29,8 @@ func EngineDiagnosticsInterval(cfg *Config, fallback time.Duration) time.Duratio
 	if cfg == nil {
 		return fallback
 	}
-	engine, _ := cfg.Global.Raw["engine"].(map[string]any)
-	if d := cfgval.Duration(engine["diagnostics_interval"]); d > 0 {
+	engine, _ := cfg.Global.Raw[SectionEngine].(map[string]any)
+	if d := cfgval.Duration(engine[EngineKeyDiagnosticsInterval]); d > 0 {
 		return d
 	}
 	return fallback
@@ -34,7 +41,7 @@ func EngineInterval(cfg *Config, fallback time.Duration) time.Duration {
 	if cfg == nil {
 		return fallback
 	}
-	engine, _ := cfg.Global.Raw["engine"].(map[string]any)
+	engine, _ := cfg.Global.Raw[SectionEngine].(map[string]any)
 	if d := cfgval.Duration(engine[keyInterval]); d > 0 {
 		return d
 	}

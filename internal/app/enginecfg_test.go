@@ -8,9 +8,9 @@ import (
 
 func TestEngineByteSize(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"engine": map[string]any{"state_cache_size": "32M"},
+		config.SectionEngine: map[string]any{config.EngineKeyStateCacheSize: "32M"},
 	}}}
-	if got := EngineByteSize(cfg, "state_cache_size", 64<<20); got != 32<<20 {
+	if got := EngineByteSize(cfg, config.EngineKeyStateCacheSize, 64<<20); got != 32<<20 {
 		t.Fatalf("EngineByteSize = %d, want %d", got, 32<<20)
 	}
 
@@ -19,9 +19,9 @@ func TestEngineByteSize(t *testing.T) {
 		t.Fatalf("EngineByteSize(missing) = %d, want fallback %d", got, 64<<20)
 	}
 	bad := &config.Config{Global: config.Global{Raw: map[string]any{
-		"engine": map[string]any{"state_cache_size": "lots"}, // no unit suffix
+		config.SectionEngine: map[string]any{config.EngineKeyStateCacheSize: "lots"}, // no unit suffix
 	}}}
-	if got := EngineByteSize(bad, "state_cache_size", 64<<20); got != 64<<20 {
+	if got := EngineByteSize(bad, config.EngineKeyStateCacheSize, 64<<20); got != 64<<20 {
 		t.Fatalf("EngineByteSize(bad) = %d, want fallback %d", got, 64<<20)
 	}
 }

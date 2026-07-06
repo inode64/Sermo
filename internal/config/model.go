@@ -40,6 +40,36 @@ const (
 	sectionRuleWindow = "rule_window"
 )
 
+// Engine block and field keys.
+const (
+	// SectionEngine is the top-level engine configuration block.
+	SectionEngine = "engine"
+	// EngineKeyAppInterval is engine.app_interval.
+	EngineKeyAppInterval = "app_interval"
+	// EngineKeyBackend is engine.backend.
+	EngineKeyBackend = "backend"
+	// EngineKeyDefaultTimeout is engine.default_timeout.
+	EngineKeyDefaultTimeout = "default_timeout"
+	// EngineKeyDiagnostics is engine.diagnostics.
+	EngineKeyDiagnostics = "diagnostics"
+	// EngineKeyDiagnosticsInterval is engine.diagnostics_interval.
+	EngineKeyDiagnosticsInterval = "diagnostics_interval"
+	// EngineKeyMaxParallelChecks is engine.max_parallel_checks.
+	EngineKeyMaxParallelChecks = "max_parallel_checks"
+	// EngineKeyMaxParallelOperations is engine.max_parallel_operations.
+	EngineKeyMaxParallelOperations = "max_parallel_operations"
+	// EngineKeyOperationTimeout is engine.operation_timeout.
+	EngineKeyOperationTimeout = "operation_timeout"
+	// EngineKeyStartupDelay is engine.startup_delay.
+	EngineKeyStartupDelay = "startup_delay"
+	// EngineKeyStateCacheSize is engine.state_cache_size.
+	EngineKeyStateCacheSize = "state_cache_size"
+	// EngineKeyUserLookup is engine.user_lookup.
+	EngineKeyUserLookup = "user_lookup"
+	// EngineKeyUserLookupTimeout is engine.user_lookup_timeout.
+	EngineKeyUserLookupTimeout = "user_lookup_timeout"
+)
+
 // stop_policy timeout and kill-guard field keys.
 const (
 	keyGracefulTimeout = "graceful_timeout"

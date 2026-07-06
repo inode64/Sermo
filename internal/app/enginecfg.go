@@ -9,11 +9,24 @@ import (
 	"sermo/internal/process"
 )
 
+const (
+	// DefaultEngineAppInterval is the application inspection cadence fallback.
+	DefaultEngineAppInterval = 5 * time.Minute
+	// DefaultEngineCheckTimeout is the fallback for engine.default_timeout.
+	DefaultEngineCheckTimeout = 10 * time.Second
+	// DefaultEngineOperationTimeout is the fallback for engine.operation_timeout.
+	DefaultEngineOperationTimeout = 90 * time.Second
+	// DefaultEngineMaxParallelChecks is the fallback check worker limit.
+	DefaultEngineMaxParallelChecks = 8
+	// DefaultEngineMaxParallelOperations is the fallback operation slot limit.
+	DefaultEngineMaxParallelOperations = 2
+)
+
 func engineMap(cfg *config.Config) map[string]any {
 	if cfg == nil {
 		return nil
 	}
-	m, _ := cfg.Global.Raw["engine"].(map[string]any)
+	m, _ := cfg.Global.Raw[config.SectionEngine].(map[string]any)
 	return m
 }
 
@@ -48,8 +61,8 @@ func EngineByteSize(cfg *config.Config, key string, fallback int64) int64 {
 // EngineUserLookup builds the user/group resolver configured under engine.
 func EngineUserLookup(cfg *config.Config, runner execx.Runner) *process.UserLookup {
 	return process.NewUserLookup(process.UserLookupConfig{
-		Mode:    EngineString(cfg, "user_lookup"),
-		Timeout: EngineDuration(cfg, "user_lookup_timeout", process.DefaultUserLookupTimeout),
+		Mode:    EngineString(cfg, config.EngineKeyUserLookup),
+		Timeout: EngineDuration(cfg, config.EngineKeyUserLookupTimeout, process.DefaultUserLookupTimeout),
 		Runner:  runner,
 	})
 }

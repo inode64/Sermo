@@ -72,40 +72,40 @@ func validateGlobal(cfg *Config) []Issue {
 
 	validateEnableIfTree(raw, add)
 
-	if engine, ok := raw["engine"].(map[string]any); ok {
-		if backend := cfgval.String(engine["backend"]); !isValidBackend(backend) {
+	if engine, ok := raw[SectionEngine].(map[string]any); ok {
+		if backend := cfgval.String(engine[EngineKeyBackend]); !isValidBackend(backend) {
 			add("engine.backend %q is not one of auto, systemd, openrc", backend)
 		}
-		for _, field := range []string{keyInterval, "default_timeout", "operation_timeout"} {
+		for _, field := range []string{keyInterval, EngineKeyDefaultTimeout, EngineKeyOperationTimeout} {
 			if v, present := engine[field]; present && !isPositiveDuration(cfgval.String(v)) {
 				add("engine.%s %q must be a valid positive duration", field, cfgval.String(v))
 			}
 		}
-		if v, present := engine["startup_delay"]; present && !isNonNegativeDuration(cfgval.String(v)) {
+		if v, present := engine[EngineKeyStartupDelay]; present && !isNonNegativeDuration(cfgval.String(v)) {
 			add("engine.startup_delay %q must be a valid non-negative duration (0 disables the wait)", cfgval.String(v))
 		}
-		if mode := cfgval.String(engine["user_lookup"]); !process.ValidUserLookupMode(mode) {
+		if mode := cfgval.String(engine[EngineKeyUserLookup]); !process.ValidUserLookupMode(mode) {
 			add("engine.user_lookup %q is not one of auto, native, getent, numeric", mode)
 		}
-		if v, present := engine["user_lookup_timeout"]; present && !isPositiveDuration(cfgval.String(v)) {
+		if v, present := engine[EngineKeyUserLookupTimeout]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("engine.user_lookup_timeout %q must be a valid positive duration", cfgval.String(v))
 		}
-		if v, present := engine["max_parallel_checks"]; present {
+		if v, present := engine[EngineKeyMaxParallelChecks]; present {
 			if n, ok := cfgval.Int(v); !ok || n <= 0 {
 				add("engine.max_parallel_checks must be an integer > 0")
 			}
 		}
-		if v, present := engine["max_parallel_operations"]; present {
+		if v, present := engine[EngineKeyMaxParallelOperations]; present {
 			if n, ok := cfgval.Int(v); !ok || n <= 0 {
 				add("engine.max_parallel_operations must be an integer > 0")
 			}
 		}
-		if v, present := engine["state_cache_size"]; present {
+		if v, present := engine[EngineKeyStateCacheSize]; present {
 			if n, ok := cfgval.ByteSize(v); !ok || n == 0 {
 				add("engine.state_cache_size must be a positive size with a K/M/G suffix (e.g. 64M)")
 			}
 		}
-		for _, key := range []string{"access", "events", "diagnostics"} {
+		for _, key := range []string{"access", "events", EngineKeyDiagnostics} {
 			if v, present := engine[key]; present {
 				path := cfgval.AsString(v)
 				if path == "" {
@@ -115,8 +115,8 @@ func validateGlobal(cfg *Config) []Issue {
 				}
 			}
 		}
-		if v, present := engine["diagnostics_interval"]; present {
-			if cfgval.String(engine["diagnostics"]) == "" {
+		if v, present := engine[EngineKeyDiagnosticsInterval]; present {
+			if cfgval.String(engine[EngineKeyDiagnostics]) == "" {
 				add("engine.diagnostics_interval is set but engine.diagnostics is not configured")
 			} else if !isPositiveDuration(cfgval.String(v)) {
 				add("engine.diagnostics_interval %q must be a valid positive duration", cfgval.String(v))
@@ -824,8 +824,8 @@ func effectiveBackend(cfg *Config) string {
 	if backend := strings.ToLower(envOverride("SERMO_BACKEND")); backend == backendSystemd || backend == backendOpenRC {
 		return backend
 	}
-	if engine, ok := cfg.Global.Raw["engine"].(map[string]any); ok {
-		if backend := cfgval.String(engine["backend"]); backend != "" && backend != backendAuto {
+	if engine, ok := cfg.Global.Raw[SectionEngine].(map[string]any); ok {
+		if backend := cfgval.String(engine[EngineKeyBackend]); backend != "" && backend != backendAuto {
 			return backend
 		}
 	}

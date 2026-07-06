@@ -24,6 +24,16 @@ const (
 	cmdRcStatus  = "rc-status"
 )
 
+// Service-manager action verbs passed to init backend commands.
+const (
+	actionStart       = "start"
+	actionStop        = "stop"
+	actionRestart     = "restart"
+	actionReload      = "reload"
+	actionResetFailed = "reset-failed"
+	actionZap         = "zap"
+)
+
 // ParseBackend parses a backend name used by CLI flags and environment values.
 func ParseBackend(value string) (Backend, error) {
 	switch Backend(strings.TrimSpace(strings.ToLower(value))) {

@@ -479,7 +479,7 @@ func (b *WebBackend) mountActionResult(spec mountctl.Spec, res mountctl.Result, 
 		res.Path = spec.Path
 	}
 	out := web.MountActionResult{
-		OK:        err == nil && res.Status == "ok",
+		OK:        err == nil && res.Status == mountctl.ResultOK,
 		Name:      res.Name,
 		Path:      res.Path,
 		Action:    res.Action,

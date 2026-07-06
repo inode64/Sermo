@@ -182,23 +182,23 @@ func (m systemdManager) Status(ctx context.Context, service string) (ServiceStat
 }
 
 func (m systemdManager) Start(ctx context.Context, service string) error {
-	return m.action(ctx, "start", service)
+	return m.action(ctx, actionStart, service)
 }
 
 func (m systemdManager) Stop(ctx context.Context, service string) error {
-	return m.action(ctx, "stop", service)
+	return m.action(ctx, actionStop, service)
 }
 
 func (m systemdManager) Restart(ctx context.Context, service string) error {
-	return m.action(ctx, "restart", service)
+	return m.action(ctx, actionRestart, service)
 }
 
 func (m systemdManager) Reload(ctx context.Context, service string) error {
-	return m.action(ctx, "reload", service)
+	return m.action(ctx, actionReload, service)
 }
 
 func (m systemdManager) ResetState(ctx context.Context, service string) error {
-	return m.action(ctx, "reset-failed", service)
+	return m.action(ctx, actionResetFailed, service)
 }
 
 // SupportsReload queries systemd's CanReload property, which is true exactly when
@@ -257,23 +257,23 @@ func (m openrcManager) rcStatus(ctx context.Context, service string) (Status, bo
 }
 
 func (m openrcManager) Start(ctx context.Context, service string) error {
-	return m.action(ctx, "start", service)
+	return m.action(ctx, actionStart, service)
 }
 
 func (m openrcManager) Stop(ctx context.Context, service string) error {
-	return m.action(ctx, "stop", service)
+	return m.action(ctx, actionStop, service)
 }
 
 func (m openrcManager) Restart(ctx context.Context, service string) error {
-	return m.action(ctx, "restart", service)
+	return m.action(ctx, actionRestart, service)
 }
 
 func (m openrcManager) Reload(ctx context.Context, service string) error {
-	return m.action(ctx, "reload", service)
+	return m.action(ctx, actionReload, service)
 }
 
 func (m openrcManager) ResetState(ctx context.Context, service string) error {
-	return m.action(ctx, "zap", service)
+	return m.action(ctx, actionZap, service)
 }
 
 // openrcReloadDef matches an OpenRC init script that defines a reload command:

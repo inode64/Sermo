@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	"sermo/internal/config"
 	"sermo/internal/metrics"
@@ -168,10 +167,10 @@ func (m *Monitor) Reload() {
 func (m *Monitor) applyConfig(cfg *config.Config) {
 	m.cfg = cfg
 	m.deps.Runtime = cfg.Global.RuntimeDir()
-	m.deps.Interval = config.EngineInterval(cfg, 30*time.Second)
-	m.deps.DefaultTimeout = EngineDuration(cfg, "default_timeout", 10*time.Second)
-	m.deps.OperationTimeout = EngineDuration(cfg, "operation_timeout", 90*time.Second)
-	m.deps.MaxParallel = EngineInt(cfg, "max_parallel_checks", 8)
+	m.deps.Interval = config.EngineInterval(cfg, config.DefaultEngineInterval)
+	m.deps.DefaultTimeout = EngineDuration(cfg, config.EngineKeyDefaultTimeout, DefaultEngineCheckTimeout)
+	m.deps.OperationTimeout = EngineDuration(cfg, config.EngineKeyOperationTimeout, DefaultEngineOperationTimeout)
+	m.deps.MaxParallel = EngineInt(cfg, config.EngineKeyMaxParallelChecks, DefaultEngineMaxParallelChecks)
 	m.deps.UserLookup = EngineUserLookup(cfg, m.deps.ExecxRunner)
 	m.deps.SystemFreshness = m.deps.Interval / 2
 	if m.collector != nil && m.deps.SystemFreshness > 0 {

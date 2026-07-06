@@ -33,20 +33,18 @@ const (
 )
 
 const (
-	// ActionMount and ActionUmount are the Result.Action values (and the mount(8)
-	// / umount(8) subcommands) a mount operation reports; exported so callers that
-	// dispatch on the action use one spelling.
-	ActionMount  = "mount"
+	// ActionMount is the Result.Action value and mount(8) subcommand for mounting.
+	ActionMount = "mount"
+	// ActionUmount is the Result.Action value and umount(8) subcommand for unmounting.
 	ActionUmount = "umount"
 
 	rootMountPath             = "/"
 	rootUmountDisabledMessage = "root filesystem cannot be unmounted"
 
-	// ResultFailed and ResultOK are the Result.Status values a mount/umount
-	// action reports; exported so callers building the same result out-of-band
-	// (e.g. the web backend's early-return errors) use one spelling.
+	// ResultFailed is the Result.Status value for a failed mount/umount action.
 	ResultFailed = "failed"
-	ResultOK     = "ok"
+	// ResultOK is the Result.Status value for a successful mount/umount action.
+	ResultOK = "ok"
 
 	mountStateActive   = "active"
 	mountStateInactive = "inactive"
