@@ -1500,6 +1500,7 @@ un check **y** su remediación/guard/alerta juntos:
   op-settling posterior, modo pánico) igual que una remediación de `rules:`.
 - `action: block` con `blocks: [restart, start, …]` — un **guard** evaluado
   *durante* una operación que rechaza las acciones listadas mientras el check falla.
+  Los guards no notifican.
 - `action: alert` (con `message`/`notify` opcionales) — una **alerta**.
 
 Esa entrada se **desugariza** al `checks:` + `rules:` equivalente, por lo que es
