@@ -11,10 +11,10 @@ import (
 func ConfigSummary(typ string, entry map[string]any) string {
 	switch typ {
 	case notifierTypeEmail:
-		to := cfgval.StringList(entry["to"])
+		to := cfgval.StringList(entry[keyTo])
 		return listSummary(to, "")
 	case notifierTypeSlack, notifierTypeTeams:
-		webhook := cfgval.AsString(entry["webhook"])
+		webhook := cfgval.AsString(entry[keyWebhook])
 		if webhook == "" {
 			return ""
 		}
@@ -24,7 +24,7 @@ func ConfigSummary(typ string, entry map[string]any) string {
 		}
 		return u.Host
 	case notifierTypeTTY:
-		users := cfgval.StringList(entry["users"])
+		users := cfgval.StringList(entry[keyUsers])
 		return listSummary(users, "all active terminals")
 	case notifierTypeWall:
 		return "all active terminals"
