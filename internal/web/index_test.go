@@ -263,6 +263,28 @@ func TestSourceLoadDefersWatchesWithoutStaleFastPathReference(t *testing.T) {
 	}
 }
 
+func TestSourceMetricChartRendersZeroValuedSeries(t *testing.T) {
+	src, err := os.ReadFile("src/app.js")
+	if err != nil {
+		t.Fatalf("read src/app.js: %v", err)
+	}
+	text := string(src)
+	if strings.Contains(text, "if (maxV <= 0) return") {
+		t.Fatalf("metric chart still treats all-zero samples as no data")
+	}
+	for _, needle := range []string{
+		"if (!pts.length) return '<span class=\"muted\">No data yet for this window.</span>';",
+		"const scaleMax = maxV > 0 ? maxV : 1;",
+		"Service latency metric chart",
+		"${label} runtime metric chart",
+		"Daemon IO metric chart",
+	} {
+		if !strings.Contains(text, needle) {
+			t.Fatalf("metric chart missing zero-valued-series marker %q", needle)
+		}
+	}
+}
+
 // TestIndexAccessibilityTargetSize pins WCAG 2.5.8 minimum hit targets in the
 // committed CSS bundle (row toggles, table action buttons, event more/less).
 func TestIndexAccessibilityTargetSize(t *testing.T) {
