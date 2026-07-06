@@ -1637,29 +1637,29 @@ func (b *WebBackend) netWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRead
 
 	readings := []web.WatchReading{
 		{Field: "interface", Label: "Interface", Value: iface},
-		{Field: "state", Label: "State", Value: s.State},
+		{Field: checks.NetMetricState, Label: "State", Value: s.State},
 	}
 	parts := []string{iface + " state " + s.State}
-	if watchMetricEnabled(w.metrics, "speed") {
+	if watchMetricEnabled(w.metrics, checks.NetMetricSpeed) {
 		if s.SpeedKnown {
-			readings = append(readings, web.WatchReading{Field: "speed", Label: "Speed", Value: fmt.Sprintf("%d Mbps", s.SpeedMbps)})
+			readings = append(readings, web.WatchReading{Field: checks.NetMetricSpeed, Label: "Speed", Value: fmt.Sprintf("%d Mbps", s.SpeedMbps)})
 			parts = append(parts, fmt.Sprintf("speed %d Mbps", s.SpeedMbps))
 		} else {
-			readings = append(readings, web.WatchReading{Field: "speed", Label: "Speed", Value: "unknown"})
+			readings = append(readings, web.WatchReading{Field: checks.NetMetricSpeed, Label: "Speed", Value: "unknown"})
 			parts = append(parts, "speed unknown")
 		}
 	}
-	if watchMetricEnabled(w.metrics, "errors") {
+	if watchMetricEnabled(w.metrics, checks.NetMetricErrors) {
 		total := netErrorTotal(w.metrics, s.Counters)
-		readings = append(readings, web.WatchReading{Field: "errors", Label: "Errors total", Value: fmt.Sprintf("%d", total)})
+		readings = append(readings, web.WatchReading{Field: checks.NetMetricErrors, Label: "Errors total", Value: fmt.Sprintf("%d", total)})
 		parts = append(parts, fmt.Sprintf("errors %d", total))
 	}
-	if watchMetricEnabled(w.metrics, "address") {
+	if watchMetricEnabled(w.metrics, checks.NetMetricAddress) {
 		value := strings.Join(s.Addrs, ", ")
 		if value == "" {
 			value = "none"
 		}
-		readings = append(readings, web.WatchReading{Field: "address", Label: "Addresses", Value: value})
+		readings = append(readings, web.WatchReading{Field: checks.NetMetricAddress, Label: "Addresses", Value: value})
 		parts = append(parts, fmt.Sprintf("%d address%s", len(s.Addrs), pluralSuffix(len(s.Addrs), "address")))
 	}
 	return nil, readings, strings.Join(parts, " · ")

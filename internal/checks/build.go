@@ -35,11 +35,13 @@ const OnModeChange = "change"
 const keyInterface = "interface"
 
 // net/icmp check metric names (the `metric:` selector of a net or icmp check).
+// The net ones are exported so the web backend labels its net-watch readings
+// with the same names the check evaluates.
 const (
-	netMetricState    = "state"
-	netMetricSpeed    = "speed"
-	netMetricErrors   = "errors"
-	netMetricAddress  = "address"
+	NetMetricState    = "state"
+	NetMetricSpeed    = "speed"
+	NetMetricErrors   = "errors"
+	NetMetricAddress  = "address"
 	icmpMetricLatency = "latency"
 )
 
@@ -979,7 +981,7 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	metric := cfgval.AsString(entry["metric"])
 	c := &netCheck{base: b, iface: iface, metric: metric, sampler: deps.NetSampler}
 	switch metric {
-	case netMetricState:
+	case NetMetricState:
 		expect := cfgval.AsString(entry["expect"])
 		onChange := cfgval.AsString(entry["on"]) == OnModeChange
 		if expect == "" && !onChange {
@@ -993,12 +995,12 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		} else if onChange {
 			c.onChange = true
 		}
-	case netMetricSpeed:
+	case NetMetricSpeed:
 		if cfgval.AsString(entry["on"]) != OnModeChange {
 			return nil, "net speed requires on: change"
 		}
 		c.onChange = true
-	case netMetricErrors:
+	case NetMetricErrors:
 		c.counters = cfgval.StringArray(entry["counters"])
 		if len(c.counters) == 0 {
 			c.counters = []string{"rx_errors", "tx_errors"}
@@ -1008,7 +1010,7 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 			return nil, errs
 		}
 		c.op, c.value = op, v
-	case netMetricAddress:
+	case NetMetricAddress:
 		expect := cfgval.AsString(entry["expect"])
 		onChange := cfgval.AsString(entry["on"]) == OnModeChange
 		if expect == "" && !onChange {
@@ -1318,7 +1320,7 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	}
 	c := &icmpCheck{base: b, host: host, ifaces: parseInterfaces(entry[keyInterface]), ifaceAll: allIf, count: count, metric: metric, sampler: deps.PingSampler}
 	switch metric {
-	case netMetricState:
+	case NetMetricState:
 		expect := cfgval.AsString(entry["expect"])
 		onChange := cfgval.AsString(entry["on"]) == OnModeChange
 		if expect == "" && !onChange {
