@@ -112,7 +112,7 @@ func validateGlobal(cfg *Config) []Issue {
 				add("engine.state_cache_size must be a positive size with a K/M/G suffix (e.g. 64M)")
 			}
 		}
-		for _, key := range []string{"access", "events", EngineKeyDiagnostics} {
+		for _, key := range []string{EngineKeyAccess, EngineKeyEvents, EngineKeyDiagnostics} {
 			if v, present := engine[key]; present {
 				path := cfgval.AsString(v)
 				if path == "" {
