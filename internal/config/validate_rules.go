@@ -9,6 +9,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/metrics"
 	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
@@ -104,8 +105,11 @@ var validActions = set(
 	string(rules.ActionBlock),
 )
 var metricCatalog = map[string]map[string]struct{}{
-	"service": set("memory", "swap", "cpu", "cpu_thread", "process_count", "io", "io_read", "io_write", "fds", "threads"),
-	"system":  set("total_memory", "total_swap", "total_cpu", "load1", "load5", "load15"),
+	"service": set(metrics.MetricMemory, metrics.MetricSwap, metrics.MetricCPU, metrics.MetricCPUThread,
+		metrics.MetricProcessCount, metrics.MetricIO, metrics.MetricIORead, metrics.MetricIOWrite,
+		metrics.MetricFds, metrics.MetricThreads),
+	"system": set(metrics.MetricTotalMemory, metrics.MetricTotalSwap, metrics.MetricTotalCPU,
+		metrics.MetricLoad1, metrics.MetricLoad5, metrics.MetricLoad15),
 }
 
 // metricForms records which value forms each metric exposes, so
