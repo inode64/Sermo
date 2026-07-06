@@ -881,10 +881,10 @@ func validateCommandUser(path string, entry map[string]any, add addFunc) {
 func validateFirewallRulesFields(prefix string, fields map[string]any, add addFunc) {
 	backend := cfgval.String(fields["backend"])
 	if backend == "nft" {
-		backend = "nftables"
+		backend = checks.FirewallBackendNftables
 	}
 	switch backend {
-	case "", "auto", "nftables", "iptables":
+	case "", checks.FirewallBackendAuto, checks.FirewallBackendNftables, checks.FirewallBackendIptables:
 	default:
 		add("%s.backend must be auto, nftables or iptables", prefix)
 	}
