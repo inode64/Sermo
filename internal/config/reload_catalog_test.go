@@ -36,33 +36,34 @@ func TestRealCatalogReloadServicesResolve(t *testing.T) {
 		return global
 	}
 
-	probeDir := t.TempDir()
-	probeEnabled := filepath.Join(probeDir, "services")
-	if err := os.MkdirAll(probeEnabled, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	probe, err := Load(writeGlobal(probeDir, probeEnabled, "systemd"))
-	if err != nil {
-		t.Fatalf("Load (probe): %v", err)
-	}
-	services := catalogReloadSignalServices(probe)
-	if len(services) == 0 {
-		t.Fatal("no catalog services with reload.signal found")
-	}
-
-	dir := t.TempDir()
-	enabled := filepath.Join(dir, "services")
-	if err := os.MkdirAll(enabled, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for _, d := range services {
-		svc := "name: " + d.name + "-main\nuses: " + d.name + "\n"
-		if err := os.WriteFile(filepath.Join(enabled, d.name+".yml"), []byte(svc), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
 	for _, backend := range []string{"systemd", "openrc"} {
 		t.Run(backend, func(t *testing.T) {
+			probeDir := t.TempDir()
+			probeEnabled := filepath.Join(probeDir, "services")
+			if err := os.MkdirAll(probeEnabled, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			probe, err := Load(writeGlobal(probeDir, probeEnabled, backend))
+			if err != nil {
+				t.Fatalf("Load (probe): %v", err)
+			}
+			services := catalogReloadSignalServices(probe)
+			if len(services) == 0 {
+				t.Fatal("no catalog services with reload.signal found")
+			}
+
+			dir := t.TempDir()
+			enabled := filepath.Join(dir, "services")
+			if err := os.MkdirAll(enabled, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			for _, d := range services {
+				svc := "name: " + d.name + "-main\nuses: " + d.name + "\n"
+				if err := os.WriteFile(filepath.Join(enabled, d.name+".yml"), []byte(svc), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
 			cfg, err := Load(writeGlobal(dir, enabled, backend))
 			if err != nil {
 				t.Fatalf("Load: %v", err)
