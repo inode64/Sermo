@@ -63,9 +63,9 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 
 	switch c.metric {
 	case "state":
-		state := netStateDown
+		state := NetStateDown
 		if s.Reachable {
-			state = netStateUp
+			state = NetStateUp
 		}
 		if c.expect != "" {
 			data[fieldValue] = state
