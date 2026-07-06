@@ -828,7 +828,7 @@ func (c *Config) addStorageCapacityWatches(dst map[string]any) []string {
 }
 
 func storageCapacityWatch(tree map[string]any) (map[string]any, bool) {
-	capacity, ok := tree["capacity"].(map[string]any)
+	capacity, ok := tree[keyCapacity].(map[string]any)
 	if !ok {
 		return nil, false
 	}
