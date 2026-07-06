@@ -847,7 +847,7 @@ func storageCapacityWatch(tree map[string]any) (map[string]any, bool) {
 		}
 	}
 	entry := map[string]any{"check": check}
-	for _, key := range []string{"display_name", "description", "category", keyDryRun, "monitor", "interval"} {
+	for _, key := range []string{"display_name", "description", "category", keyDryRun, keyMonitor, "interval"} {
 		if v, present := tree[key]; present {
 			entry[key] = v
 		}
