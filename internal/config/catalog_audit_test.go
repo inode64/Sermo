@@ -100,6 +100,54 @@ func TestCatalogServicesDoNotDeclareVersionsFrom(t *testing.T) {
 	}
 }
 
+// TestCatalogServicesNoArtifactCheckCollision guards, host-independently, against
+// a service that declares both a top-level artifact (pidfile/socket/lockfile, or
+// a pidfiles role) — each of which resolution turns into an auto-generated check
+// of that name — and a watches.<same-name> entry, which resolution promotes to
+// the same check name and then rejects with "would overwrite existing check".
+//
+// TestRealCatalogAllServicesValidate only materializes version templates for the
+// runtimes installed on the test host, so it missed exactly this collision in the
+// php-fpm%v%s%i template on hosts without PHP. This static scan catches it on
+// every host and CI run.
+func TestCatalogServicesNoArtifactCheckCollision(t *testing.T) {
+	root := repoRoot(t)
+	dir := filepath.Join(root, "catalog", "services")
+	err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || !isYAML(entry.Name()) {
+			return nil
+		}
+		body := readYAMLMap(t, path)
+		watches, _ := body["watches"].(map[string]any)
+		if len(watches) == 0 {
+			return nil
+		}
+		reserved := map[string]struct{}{}
+		for _, key := range []string{"pidfile", "socket", "lockfile"} {
+			if _, ok := body[key]; ok {
+				reserved[key] = struct{}{}
+			}
+		}
+		if pidfiles, ok := body["pidfiles"].(map[string]any); ok {
+			for role := range pidfiles {
+				reserved[role] = struct{}{}
+			}
+		}
+		for name := range watches {
+			if _, clash := reserved[name]; clash {
+				t.Errorf("%s: watches.%s collides with the auto-generated %q check from the top-level artifact; rename the watch or drop the redundant one", filepath.Base(path), name, name)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestRealCatalogAllServicesValidate enables every instantiable catalog service
 // as a service and validates the whole set. Version templates (%v/%n/%i) cannot
 // be materialized off-host, so only the concrete service names are exercised.
