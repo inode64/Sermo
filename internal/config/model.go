@@ -33,6 +33,10 @@ const (
 // invariants (pidfile/file cleanup) the engine enforces.
 const sectionStopPolicy = "stop_policy"
 
+// sectionMetrics is the multi-metric watch block: a map of metric name to its
+// per-metric condition/action (used by net/swap/icmp watches).
+const sectionMetrics = "metrics"
+
 // Catalog categories mirror the catalog subdirectory a definition is loaded
 // from (catalog/services, catalog/apps, catalog/libs, catalog/patterns). The
 // category tracks the kind for display and category-scoped listings.
