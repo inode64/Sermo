@@ -24,7 +24,7 @@ func prepareExpansionInputs(tree map[string]any) []string {
 }
 
 func resolvePreflightResourceVariables(tree map[string]any) []string {
-	preflight, ok := tree["preflight"].(map[string]any)
+	preflight, ok := tree[sectionPreflight].(map[string]any)
 	if !ok {
 		return nil
 	}
@@ -134,7 +134,7 @@ func resourceCandidateMatches(typ, path string) bool {
 }
 
 func applyCommandExportDefaults(tree map[string]any) {
-	for _, sectionName := range []string{"commands", "preflight"} {
+	for _, sectionName := range []string{"commands", sectionPreflight} {
 		section, ok := tree[sectionName].(map[string]any)
 		if !ok {
 			continue

@@ -41,6 +41,10 @@ const sectionMetrics = "metrics"
 // its check definition. Distinct from the paths.* keys (no paths.checks exists).
 const sectionChecks = "checks"
 
+// sectionPreflight is the service block of gating checks that must pass before a
+// start/restart/reload operation runs.
+const sectionPreflight = "preflight"
+
 // Catalog categories mirror the catalog subdirectory a definition is loaded
 // from (catalog/services, catalog/apps, catalog/libs, catalog/patterns). The
 // category tracks the kind for display and category-scoped listings.
