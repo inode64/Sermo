@@ -166,7 +166,7 @@ func expandPidfiles(tree map[string]any) []string {
 	}
 
 	normalized := make(map[string]any, len(pidfiles))
-	checksMap, _ := tree["checks"].(map[string]any)
+	checksMap, _ := tree[sectionChecks].(map[string]any)
 	if checksMap == nil {
 		checksMap = map[string]any{}
 	}
@@ -197,7 +197,7 @@ func expandPidfiles(tree map[string]any) []string {
 		}
 	}
 	tree["pidfiles"] = normalized
-	tree["checks"] = checksMap
+	tree[sectionChecks] = checksMap
 	return errs
 }
 
@@ -261,7 +261,7 @@ func parseServiceArtifactPaths(kind string, raw any) (serviceArtifactPaths, []st
 }
 
 func ensureServiceArtifactCheck(tree map[string]any, name, checkType string, pathValue any, optional bool) {
-	checksMap, _ := tree["checks"].(map[string]any)
+	checksMap, _ := tree[sectionChecks].(map[string]any)
 	if checksMap == nil {
 		checksMap = map[string]any{}
 	}
@@ -276,7 +276,7 @@ func ensureServiceArtifactCheck(tree map[string]any, name, checkType string, pat
 		}
 		checksMap[name] = entry
 	}
-	tree["checks"] = checksMap
+	tree[sectionChecks] = checksMap
 }
 
 func serviceArtifactPathValue(paths []string) any {
@@ -299,8 +299,8 @@ func serviceArtifactPathValue(paths []string) any {
 // Check-only service watches are processed before they desugar into `checks:`.
 func (c *Config) expandAnalyze(tree map[string]any) []string {
 	var errs []string
-	if checks, ok := tree["checks"].(map[string]any); ok {
-		errs = append(errs, c.expandAnalyzeSection("checks", checks)...)
+	if checks, ok := tree[sectionChecks].(map[string]any); ok {
+		errs = append(errs, c.expandAnalyzeSection(sectionChecks, checks)...)
 	}
 
 	watches, ok := tree["watches"].(map[string]any)
@@ -473,7 +473,7 @@ func expandServiceWatches(tree map[string]any) []string {
 	if !ok {
 		return nil
 	}
-	checksMap, _ := tree["checks"].(map[string]any)
+	checksMap, _ := tree[sectionChecks].(map[string]any)
 	if checksMap == nil {
 		checksMap = map[string]any{}
 	}
@@ -529,7 +529,7 @@ func expandServiceWatches(tree map[string]any) []string {
 	}
 
 	if len(checksMap) > 0 {
-		tree["checks"] = checksMap
+		tree[sectionChecks] = checksMap
 	}
 	if len(rulesMap) > 0 {
 		tree["rules"] = rulesMap

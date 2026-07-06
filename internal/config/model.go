@@ -37,6 +37,10 @@ const sectionStopPolicy = "stop_policy"
 // per-metric condition/action (used by net/swap/icmp watches).
 const sectionMetrics = "metrics"
 
+// sectionChecks is the service/watch health-check block: a map of check name to
+// its check definition. Distinct from the paths.* keys (no paths.checks exists).
+const sectionChecks = "checks"
+
 // Catalog categories mirror the catalog subdirectory a definition is loaded
 // from (catalog/services, catalog/apps, catalog/libs, catalog/patterns). The
 // category tracks the kind for display and category-scoped listings.
