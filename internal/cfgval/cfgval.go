@@ -77,17 +77,7 @@ func StrictStringList(v any) ([]string, error) {
 		}
 		return []string{t}, nil
 	case []any:
-		out := make([]string, 0, len(t))
-		for _, item := range t {
-			s, ok := item.(string)
-			if !ok {
-				return nil, fmt.Errorf("non-string item")
-			}
-			if s != "" {
-				out = append(out, s)
-			}
-		}
-		return out, nil
+		return strictStrings(t, false)
 	case []string:
 		return append([]string(nil), t...), nil
 	default:
@@ -100,20 +90,26 @@ func StrictStringList(v any) ([]string, error) {
 func StrictStringArray(v any) ([]string, error) {
 	switch t := v.(type) {
 	case []any:
-		out := make([]string, 0, len(t))
-		for _, item := range t {
-			s, ok := item.(string)
-			if !ok {
-				return nil, fmt.Errorf("non-string item")
-			}
-			out = append(out, s)
-		}
-		return out, nil
+		return strictStrings(t, true)
 	case []string:
 		return append([]string(nil), t...), nil
 	default:
 		return nil, fmt.Errorf("unsupported")
 	}
+}
+
+func strictStrings(list []any, keepEmpty bool) ([]string, error) {
+	out := make([]string, 0, len(list))
+	for _, item := range list {
+		s, ok := item.(string)
+		if !ok {
+			return nil, fmt.Errorf("non-string item")
+		}
+		if s != "" || keepEmpty {
+			out = append(out, s)
+		}
+	}
+	return out, nil
 }
 
 // IsStringOrStringList reports whether v is a YAML string or a YAML list whose
