@@ -17,27 +17,27 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 		return nil
 	}
 	switch checkType {
-	case "cert":
+	case checks.CheckTypeCert:
 		return certCheckReadings(data)
-	case "count":
+	case checks.CheckTypeCount:
 		return countCheckReadings(data)
-	case "firewall_rules":
+	case checks.CheckTypeFirewallRules:
 		return firewallCheckReadings(data)
-	case "file", "file_exists":
+	case checks.CheckTypeFile, checks.CheckTypeFileExists:
 		return fileCheckReadings(data)
-	case "size":
+	case checks.CheckTypeSize:
 		return sizeCheckReadings(data)
-	case "tcp", "ports":
+	case checks.CheckTypeTCP, checks.CheckTypePorts:
 		return connCheckReadings(data)
-	case "http", "https":
+	case checks.CheckTypeHTTP, "https":
 		return httpCheckReadings(data)
-	case "storage", "swap", "memory", "load":
+	case checks.CheckTypeStorage, checks.CheckTypeSwap, checks.CheckTypeMemory, checks.CheckTypeLoad:
 		return resourceCheckReadings(checkType, data)
-	case "pressure":
+	case checks.CheckTypePressure:
 		return pressureCheckReadings(data)
-	case "diskio":
+	case checks.CheckTypeDiskIO:
 		return diskioCheckReadings(data)
-	case "hdparm", "smart", "sensors", "edac":
+	case checks.CheckTypeHdparm, checks.CheckTypeSmart, checks.CheckTypeSensors, checks.CheckTypeEDAC:
 		return metricCheckReadings(checkType, data)
 	default:
 		if metrics := checks.GraphMetrics(checkType); len(metrics) > 0 {
@@ -174,11 +174,11 @@ func resourceCheckReadings(checkType string, data map[string]any) []web.WatchRea
 	if v, ok := cfgval.Float(data["value"]); ok {
 		label := "Value"
 		switch checkType {
-		case "load":
+		case checks.CheckTypeLoad:
 			label = "Load"
-		case "memory":
+		case checks.CheckTypeMemory:
 			label = "Used"
-		case "swap":
+		case checks.CheckTypeSwap:
 			label = "Free"
 		}
 		out = append(out, web.WatchReading{Field: "value", Label: label, Value: fmt.Sprintf("%.2f", v)})
