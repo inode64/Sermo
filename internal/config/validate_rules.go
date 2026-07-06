@@ -105,10 +105,10 @@ var validActions = set(
 	string(rules.ActionBlock),
 )
 var metricCatalog = map[string]map[string]struct{}{
-	"service": set(metrics.MetricMemory, metrics.MetricSwap, metrics.MetricCPU, metrics.MetricCPUThread,
+	checks.MetricScopeService: set(metrics.MetricMemory, metrics.MetricSwap, metrics.MetricCPU, metrics.MetricCPUThread,
 		metrics.MetricProcessCount, metrics.MetricIO, metrics.MetricIORead, metrics.MetricIOWrite,
 		metrics.MetricFds, metrics.MetricThreads),
-	"system": set(metrics.MetricTotalMemory, metrics.MetricTotalSwap, metrics.MetricTotalCPU,
+	checks.MetricScopeSystem: set(metrics.MetricTotalMemory, metrics.MetricTotalSwap, metrics.MetricTotalCPU,
 		metrics.MetricLoad1, metrics.MetricLoad5, metrics.MetricLoad15),
 }
 
@@ -438,7 +438,7 @@ func validateState(v any, field string, valid map[string]struct{}, list, path st
 func validateMetric(entry map[string]any, path string, allowSystem bool, add addFunc) {
 	scope := cfgval.String(entry["scope"])
 	if scope == "" {
-		scope = "service"
+		scope = checks.MetricScopeService
 	}
 	catalog, ok := metricCatalog[scope]
 	if !ok {
@@ -474,7 +474,7 @@ func validateMetric(entry map[string]any, path string, allowSystem bool, add add
 			add("%s uses an absolute threshold but metric %q has no absolute form", path, name)
 		}
 	}
-	if scope == "system" && !allowSystem {
+	if scope == checks.MetricScopeSystem && !allowSystem {
 		add("%s scope: system metric is only allowed in alert rules", path)
 	}
 }
@@ -522,7 +522,7 @@ func collectSystemMetricChecks(tree map[string]any) map[string]struct{} {
 			continue
 		}
 		for name, raw := range entries {
-			if e, ok := raw.(map[string]any); ok && cfgval.String(e["type"]) == "metric" && cfgval.String(e["scope"]) == "system" {
+			if e, ok := raw.(map[string]any); ok && cfgval.String(e["type"]) == checks.CheckTypeMetric && cfgval.String(e["scope"]) == checks.MetricScopeSystem {
 				names[name] = struct{}{}
 			}
 		}
