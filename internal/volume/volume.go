@@ -21,6 +21,9 @@ import (
 	"sermo/internal/execx"
 )
 
+// DefaultCommandTimeout bounds each LVM/filesystem command the expander runs.
+const DefaultCommandTimeout = 30 * time.Second
+
 // Mount is one entry of the mount table.
 type Mount struct {
 	Device     string
@@ -55,14 +58,14 @@ type Result struct {
 type Expander struct {
 	Runner  execx.Runner
 	Mounts  MountSource   // nil -> /proc/mounts
-	Timeout time.Duration // per command; 0 -> 30s
+	Timeout time.Duration // per command; 0 -> DefaultCommandTimeout
 }
 
 func (e Expander) timeout() time.Duration {
 	if e.Timeout > 0 {
 		return e.Timeout
 	}
-	return 30 * time.Second
+	return DefaultCommandTimeout
 }
 
 func commandFailure(prefix string, err error, res execx.Result, timeout time.Duration) error {

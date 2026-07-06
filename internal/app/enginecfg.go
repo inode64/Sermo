@@ -6,6 +6,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/operation"
 	"sermo/internal/process"
 )
 
@@ -15,7 +16,7 @@ const (
 	// DefaultEngineCheckTimeout is the fallback for engine.default_timeout.
 	DefaultEngineCheckTimeout = 10 * time.Second
 	// DefaultEngineOperationTimeout is the fallback for engine.operation_timeout.
-	DefaultEngineOperationTimeout = 90 * time.Second
+	DefaultEngineOperationTimeout = operation.DefaultOperationTimeout
 	// DefaultEngineMaxParallelChecks is the fallback check worker limit.
 	DefaultEngineMaxParallelChecks = 8
 	// DefaultEngineMaxParallelOperations is the fallback operation slot limit.

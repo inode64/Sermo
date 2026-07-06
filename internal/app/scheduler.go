@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"sermo/internal/config"
 )
 
 // Scheduler runs each worker on its own goroutine with an independent interval
@@ -12,7 +14,7 @@ import (
 // across all services with a global semaphore.
 type Scheduler struct {
 	// Interval is the global default cycle interval (engine.interval) used by
-	// every worker and watch that does not set its own. <=0 means 30s.
+	// every worker and watch that does not set its own.
 	Interval time.Duration
 	OpSlots  int // global operation semaphore; <=0 means a default of 2
 	// StartupDelay holds the daemon for this long before starting any worker,
@@ -38,7 +40,7 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 
 	interval := s.Interval
 	if interval <= 0 {
-		interval = 30 * time.Second
+		interval = config.DefaultEngineInterval
 	}
 
 	// Grace period before the first cycle so a still-booting host can settle.

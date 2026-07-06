@@ -65,26 +65,26 @@ func parseAPIAccessTarget(path string) (target, action string) {
 	case "locks":
 		if len(parts) >= 3 {
 			target = parts[2]
-			action = "release"
+			action = apiActionRelease
 		}
 	case "events":
 		if len(parts) >= 3 {
 			action = parts[2]
 		} else {
-			action = "clear"
+			action = apiActionClear
 		}
 	case "state":
 		if len(parts) >= 3 {
 			action = parts[2]
 		} else {
-			action = "compact"
+			action = apiActionCompact
 		}
 	case "panic":
 		if len(parts) >= 3 {
 			action = parts[2]
 		}
 	case "reload":
-		action = "reload"
+		action = apiActionReload
 	default:
 		if len(parts) >= 3 {
 			action = parts[2]

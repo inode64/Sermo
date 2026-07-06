@@ -241,7 +241,7 @@ func expandSuccessMessage(path string, r volume.Result) string {
 func watchDryRunMessage(hook HookSpec, notifiers []notify.Notifier, expand *ExpandSpec) string {
 	actions := make([]string, 0, 3)
 	if expand != nil {
-		actions = append(actions, "expand")
+		actions = append(actions, eventActionExpand)
 	}
 	if len(hook.Command) > 0 {
 		actions = append(actions, "hook")

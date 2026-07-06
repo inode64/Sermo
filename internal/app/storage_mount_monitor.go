@@ -31,7 +31,7 @@ func SyncStorageMountMonitoring(store MonitorStore, storage, action string, resu
 		return ManualMonitorChange{
 			Changed:   true,
 			Monitored: false,
-			Action:    "unmonitor",
+			Action:    eventActionUnmonitor,
 			Message:   "monitoring paused after storage umount",
 		}, nil
 	case mountctl.ActionMount:
@@ -48,7 +48,7 @@ func SyncStorageMountMonitoring(store MonitorStore, storage, action string, resu
 		return ManualMonitorChange{
 			Changed:   true,
 			Monitored: true,
-			Action:    "monitor",
+			Action:    eventActionMonitor,
 			Message:   "monitoring resumed after storage mount",
 		}, nil
 	default:
