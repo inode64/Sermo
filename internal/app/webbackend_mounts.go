@@ -352,9 +352,9 @@ func (b *WebBackend) MountAction(ctx context.Context, name, action string, opts 
 		err error
 	)
 	switch action {
-	case "mount":
+	case mountctl.ActionMount:
 		res, err = ctrl.Acquire(opCtx, spec)
-	case "umount":
+	case mountctl.ActionUmount:
 		if reason := mountctl.UmountDisabledReason(spec.Path); reason != "" {
 			return web.MountActionResult{
 				OK:      false,
