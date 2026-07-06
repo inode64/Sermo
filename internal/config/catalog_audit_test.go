@@ -1244,15 +1244,15 @@ func TestCatalogPHPFPMVersionedConfigTestUsesConfigFile(t *testing.T) {
 		"/run/php-fpm/php-fpm-php${version}${sep}${instance}.pid",
 		"/run/php-fpm-php${version}${sep}${instance}.pid",
 	}
-	if got := cfgval.StringList(body["pidfile"]); !slices.Equal(got, wantPidfiles) {
-		t.Fatalf("php-fpm pidfile candidates = %v, want %v", got, wantPidfiles)
+	// The top-level pidfile uses the optional mapping form so its auto-generated
+	// service-gated pidfile check does not hard-fail php-fpm setups without a
+	// pidfile, and does not collide with a separate watches.pidfile.
+	pidfile := nested(t, body, "pidfile")
+	if !cfgval.Bool(pidfile["optional"]) {
+		t.Fatalf("php-fpm pidfile optional = %v, want true", pidfile["optional"])
 	}
-	pidfileCheck := catalogWatchCheck(t, body, "pidfile")
-	if !cfgval.Bool(pidfileCheck["optional"]) {
-		t.Fatalf("php-fpm pidfile check optional = %v, want true", pidfileCheck["optional"])
-	}
-	if got := cfgval.StringList(pidfileCheck["path"]); !slices.Equal(got, wantPidfiles) {
-		t.Fatalf("php-fpm pidfile check paths = %v, want %v", got, wantPidfiles)
+	if got := cfgval.StringList(pidfile["path"]); !slices.Equal(got, wantPidfiles) {
+		t.Fatalf("php-fpm pidfile paths = %v, want %v", got, wantPidfiles)
 	}
 	config := nested(t, body, "preflight", "config")
 	command, _ := config["command"].([]any)

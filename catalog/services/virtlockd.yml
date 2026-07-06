@@ -16,10 +16,12 @@ watches:
     check:
       type: service
       expect: active
-  restart-if-libvirt-failed:
+  restart-if-socket-failed:
     check:
-      type: libvirt
-      socket: /run/libvirt/virtlockd-sock
+      # virtlockd's socket is the lock-manager transport, not a libvirt
+      # hypervisor RPC endpoint, so probe it as a plain socket, not `libvirt`.
+      type: socket
+      path: /run/libvirt/virtlockd-sock
       timeout: 5s
       verify: true
     for:

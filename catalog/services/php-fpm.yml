@@ -27,10 +27,12 @@ variables:
   config: /etc/php/fpm-php${version}${sep}${instance}/php-fpm.conf
   status_path: /status
 pidfile:
-  - /run/php-fpm-${version}${sep}${instance}.pid
-  - /run/php-fpm/php-fpm-${version}${sep}${instance}.pid
-  - /run/php-fpm/php-fpm-php${version}${sep}${instance}.pid
-  - /run/php-fpm-php${version}${sep}${instance}.pid
+  optional: true
+  path:
+    - /run/php-fpm-${version}${sep}${instance}.pid
+    - /run/php-fpm/php-fpm-${version}${sep}${instance}.pid
+    - /run/php-fpm/php-fpm-php${version}${sep}${instance}.pid
+    - /run/php-fpm-php${version}${sep}${instance}.pid
 preflight:
   config:
     type: command
@@ -52,17 +54,8 @@ processes:
 reload:
   signal: USR2
 watches:
-  pidfile:
-    check:
-      type: pidfile
-      optional: true
-      path:
-        - /run/php-fpm-${version}${sep}${instance}.pid
-        - /run/php-fpm/php-fpm-${version}${sep}${instance}.pid
-        - /run/php-fpm/php-fpm-php${version}${sep}${instance}.pid
-        - /run/php-fpm-php${version}${sep}${instance}.pid
-      requires:
-        - service
+  # The top-level `pidfile:` above already generates a service-gated (optional)
+  # pidfile health check; a separate watches.pidfile would collide with it.
   service:
     check:
       type: service

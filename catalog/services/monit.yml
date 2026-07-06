@@ -54,7 +54,10 @@ watches:
       expect: active
   port:
     check:
+      # Monit's HTTP interface (2812) is opt-in; many hosts run monit without it,
+      # so a closed port must not flip an otherwise-active service to failed.
       type: tcp
       host: ${host}
       port: ${port}
       timeout: 2s
+      optional: true

@@ -23,10 +23,14 @@ watches:
       expect: active
   process:
     check:
+      # pmie_farm's active unit runs as a shell wrapper (the farm loop), not the
+      # pmie_farm binary itself, so an exact-exe match cannot see it. Keep the
+      # check as a best-effort signal, not a hard failure that flips the service.
       type: process
       exe: ${pmie_farm_binary}
       user: ${user}
       state: running
+      optional: true
       requires:
         - service
       verify: true
