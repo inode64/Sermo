@@ -49,20 +49,20 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		}
 		cp := "watches." + name + ".check"
 		switch cfgval.String(check["type"]) {
-		case "storage":
+		case checks.CheckTypeStorage:
 			// The one single-shot type with its own case: a storage watch may carry
 			// a then.expand action, so its hook block allows expand.
 			validateStorageFields(cp, check, add)
 			validateHookBlock("watches."+name, entry, true, false, defaultNotify, add)
-		case "net":
+		case checks.CheckTypeNet:
 			validateNetCheck(name, check, entry, defaultNotify, add)
-		case "icmp":
+		case checks.CheckTypeICMP:
 			validateICMPCheck(name, check, entry, defaultNotify, add)
-		case "swap":
+		case checks.CheckTypeSwap:
 			validateSwapCheck(name, entry, defaultNotify, add)
-		case "file":
+		case checks.CheckTypeFile:
 			validateFileCheck(name, check, entry, defaultNotify, add)
-		case "process":
+		case checks.CheckTypeProcess:
 			validateProcessWatch(name, check, entry, defaultNotify, add)
 		case "":
 			add("watches.%s.check.type is required", name)
@@ -149,10 +149,10 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 			continue
 		}
 		switch {
-		case typ == "net" || typ == "icmp" || typ == "swap":
+		case typ == checks.CheckTypeNet || typ == checks.CheckTypeICMP || typ == checks.CheckTypeSwap:
 			add("%s.check.type %q is host-scoped; declare it under the global watches: section", prefix, typ)
 			continue
-		case typ == "process":
+		case typ == checks.CheckTypeProcess:
 			add("%s.check.type \"process\" matches host-wide (and can kill); use process_count or metric for service-scoped process monitoring, or a host watch", prefix)
 			continue
 		case !serviceWatchableType(typ):
@@ -168,7 +168,7 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 		} else {
 			// A service watch has no kill action (the process watch is rejected above);
 			// a storage watch may still carry a then.expand.
-			validateHookBlock(prefix, entry, typ == "storage", false, defaultNotify, add)
+			validateHookBlock(prefix, entry, typ == checks.CheckTypeStorage, false, defaultNotify, add)
 		}
 	}
 }
