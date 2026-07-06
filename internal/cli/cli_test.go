@@ -495,11 +495,13 @@ func (d fakeBackendDetector) Detect(context.Context, servicemgr.Backend) (servic
 }
 
 type fakeManager struct {
-	status      servicemgr.ServiceStatus
-	err         error
-	actionErr   error
-	actions     *[]string
-	statusCalls *[]string
+	status            servicemgr.ServiceStatus
+	err               error
+	actionErr         error
+	actions           *[]string
+	statusCalls       *[]string
+	supportsReload    *bool
+	supportsReloadErr error
 }
 
 func (m fakeManager) Status(_ context.Context, service string) (servicemgr.ServiceStatus, error) {
@@ -526,7 +528,10 @@ func (m fakeManager) Reload(_ context.Context, service string) error {
 }
 
 func (m fakeManager) SupportsReload(_ context.Context, _ string) (bool, error) {
-	return true, nil
+	if m.supportsReload != nil {
+		return *m.supportsReload, m.supportsReloadErr
+	}
+	return true, m.supportsReloadErr
 }
 
 func (m fakeManager) ResetState(_ context.Context, service string) error {

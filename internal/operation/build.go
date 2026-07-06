@@ -180,7 +180,17 @@ func stopArtifactsFromTree(tree map[string]any) StopArtifacts {
 // (`when: always`) or stands in for it only when the init backend cannot reload
 // the unit itself (`when: auto`, the default).
 func reloadClosure(tree map[string]any, deps checks.Deps, mgr Manager, backend, unit string, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) error {
-	initReload := func(ctx context.Context) error { return mgr.Reload(ctx, unit) }
+	backendReload := func(ctx context.Context) error { return mgr.Reload(ctx, unit) }
+	initReload := func(ctx context.Context) error {
+		ok, err := mgr.SupportsReload(ctx, unit)
+		if err != nil {
+			return fmt.Errorf("reload support: %w", err)
+		}
+		if !ok {
+			return UnsupportedReloadError(unit)
+		}
+		return backendReload(ctx)
+	}
 
 	spec := parseReloadSpec(tree)
 	if spec == nil {
@@ -193,11 +203,21 @@ func reloadClosure(tree map[string]any, deps checks.Deps, mgr Manager, backend, 
 	// `when: auto` — prefer the backend reload, fall back to the native reload only
 	// when the unit/script exposes no reload of its own.
 	return func(ctx context.Context) error {
-		if ok, _ := mgr.SupportsReload(ctx, unit); ok {
-			return initReload(ctx)
+		ok, err := mgr.SupportsReload(ctx, unit)
+		if err != nil {
+			return fmt.Errorf("reload support: %w", err)
+		}
+		if ok {
+			return backendReload(ctx)
 		}
 		return native(ctx)
 	}
+}
+
+// UnsupportedReloadError reports a reload action rejected before execution
+// because neither the init backend nor a native fallback can reload the unit.
+func UnsupportedReloadError(unit string) error {
+	return fmt.Errorf("service %s does not support reload: init backend reports no reload and no reload.command or reload.signal is configured", unit)
 }
 
 // ReloadSupported reports whether the resolved service can perform a reload

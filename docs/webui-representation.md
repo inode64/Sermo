@@ -57,7 +57,7 @@ enabled.
 
 | Area | Endpoint | Notes |
 | --- | --- | --- |
-| Service action | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; `reload` is offered only when the service reports `can_reload` from a declared `reload:` block or reload remediation rule; `no_cascade` skips `also_apply` targets on start/stop/restart |
+| Service action | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; `reload` is offered only when the service reports `can_reload` from init backend reload support or a valid `reload:` fallback; `no_cascade` skips `also_apply` targets on start/stop/restart |
 | Service preflight | `POST /api/services/{name}/preflight` | run preflight checks without changing service state |
 | Watch action | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand` |
 | Mount action | `POST /api/mounts/{name}/{action}[?kill=1]` | `mount`, `umount`, `blockers`, `alert`; `kill=1` enables policy-gated blocker signalling for `umount` |

@@ -93,6 +93,22 @@ func TestReloadClosureNoSpecUsesBackendReload(t *testing.T) {
 	}
 }
 
+func TestReloadClosureNoSpecRejectsUnsupportedBackendReload(t *testing.T) {
+	mgr := &fakeManager{canReload: false}
+	reload := reloadClosureForTest(map[string]any{}, depsWith(&scriptedRunner{}), mgr, "systemd", "mysqld")
+
+	err := reload(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "does not support reload") {
+		t.Fatalf("reload err = %v, want unsupported reload", err)
+	}
+	if mgr.did("reload mysqld") {
+		t.Fatalf("unsupported reload called backend reload; calls=%v", mgr.calls)
+	}
+	if !mgr.did("supports-reload mysqld") {
+		t.Fatalf("unsupported reload did not check backend support; calls=%v", mgr.calls)
+	}
+}
+
 func TestReloadClosureAutoCommandPrefersBackendWhenSupported(t *testing.T) {
 	mgr := &fakeManager{canReload: true}
 	runner := &scriptedRunner{}
@@ -122,6 +138,21 @@ func TestReloadClosureAutoCommandFallsBackWhenUnsupported(t *testing.T) {
 	}
 	if !runner.ran("nginx") {
 		t.Errorf("auto reload must run the native command when the init cannot reload; calls=%v", runner.calls)
+	}
+}
+
+func TestReloadClosureAutoCommandReportsBackendSupportError(t *testing.T) {
+	mgr := &fakeManager{reloadSupportErr: errors.New("systemctl unavailable")}
+	runner := &scriptedRunner{}
+	tree := map[string]any{"reload": map[string]any{"command": []any{"nginx", "-s", "reload"}}}
+	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "systemd", "nginx")
+
+	err := reload(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "reload support: systemctl unavailable") {
+		t.Fatalf("reload err = %v, want backend support error", err)
+	}
+	if runner.ran("nginx") {
+		t.Fatalf("reload fell back after support error; calls=%v", runner.calls)
 	}
 }
 
