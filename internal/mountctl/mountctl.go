@@ -126,10 +126,7 @@ func SpecFromStorageTree(name string, tree map[string]any) Spec {
 		Category:    cfgval.String(tree["category"]),
 		Path:        filepath.Clean(cfgval.String(tree["path"])),
 		Refcount:    true,
-		Umount: UmountSpec{
-			TermTimeout: DefaultTermTimeout,
-			KillTimeout: DefaultKillTimeout,
-		},
+		Umount:      defaultUmountSpec(),
 	}
 	if ref, ok := mount["refcount"].(bool); ok {
 		spec.Refcount = ref
@@ -165,10 +162,14 @@ func EphemeralSpec(path string) Spec {
 		Name:     IDForPath(clean),
 		Path:     clean,
 		Refcount: true,
-		Umount: UmountSpec{
-			TermTimeout: DefaultTermTimeout,
-			KillTimeout: DefaultKillTimeout,
-		},
+		Umount:   defaultUmountSpec(),
+	}
+}
+
+func defaultUmountSpec() UmountSpec {
+	return UmountSpec{
+		TermTimeout: DefaultTermTimeout,
+		KillTimeout: DefaultKillTimeout,
 	}
 }
 
