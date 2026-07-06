@@ -56,19 +56,8 @@ func (s Scanner) Scan(service string) (Report, error) {
 // the locks directory once. Reports are keyed by service and always include every
 // requested service, even when it has no locks.
 func (s Scanner) ScanServices(services []string) (map[string]Report, error) {
-	proc := s.Proc
-	if proc == nil {
-		proc = OSProcessProber{}
-	}
-	now := time.Now
-	if s.Now != nil {
-		now = s.Now
-	}
-
-	reports := make(map[string]Report, len(services))
-	for _, service := range services {
-		reports[service] = Report{Service: service}
-	}
+	proc, now := s.dependencies()
+	reports := reportsForServices(services)
 
 	names, err := s.lockFileNames()
 	if err != nil {
@@ -94,22 +83,46 @@ func (s Scanner) ScanServices(services []string) (map[string]Report, error) {
 
 		for _, match := range matches {
 			report := reports[match.service]
-			report.Locks = append(report.Locks, Lock{
-				Service:         orDefault(lf.Service, match.service),
-				Name:            orDefault(lf.Name, match.lockName),
-				Reason:          lf.Reason,
-				OwnerPID:        lf.OwnerPID,
-				OwnerStartTicks: lf.OwnerStartTicks,
-				CreatedAt:       lf.CreatedAt,
-				ExpiresAt:       lf.ExpiresAt,
-				Path:            path,
-				State:           state,
-				StaleReason:     staleReason,
-			})
+			report.Locks = append(report.Locks, scannedLock(lf, path, match, state, staleReason))
 			reports[match.service] = report
 		}
 	}
 	return reports, nil
+}
+
+func (s Scanner) dependencies() (ProcessProber, func() time.Time) {
+	proc := s.Proc
+	if proc == nil {
+		proc = OSProcessProber{}
+	}
+	now := time.Now
+	if s.Now != nil {
+		now = s.Now
+	}
+	return proc, now
+}
+
+func reportsForServices(services []string) map[string]Report {
+	reports := make(map[string]Report, len(services))
+	for _, service := range services {
+		reports[service] = Report{Service: service}
+	}
+	return reports
+}
+
+func scannedLock(lf lockFile, path string, match lockServiceMatch, state State, staleReason string) Lock {
+	return Lock{
+		Service:         orDefault(lf.Service, match.service),
+		Name:            orDefault(lf.Name, match.lockName),
+		Reason:          lf.Reason,
+		OwnerPID:        lf.OwnerPID,
+		OwnerStartTicks: lf.OwnerStartTicks,
+		CreatedAt:       lf.CreatedAt,
+		ExpiresAt:       lf.ExpiresAt,
+		Path:            path,
+		State:           state,
+		StaleReason:     staleReason,
+	}
 }
 
 // ScanDir returns a warning for every lock file under Dir that cannot be read or
