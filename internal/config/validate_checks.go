@@ -1173,7 +1173,7 @@ func validateDiskIOFields(prefix string, fields map[string]any, add addFunc) {
 // (cpu, memory or io) and at least one some_*/full_* stall predicate.
 func validatePressureFields(prefix string, fields map[string]any, add addFunc) {
 	switch cfgval.String(fields["resource"]) {
-	case "cpu", "memory", "io":
+	case checks.PressureResourceCPU, checks.PressureResourceMemory, checks.PressureResourceIO:
 	default:
 		add("%s.resource must be cpu, memory or io for a pressure check", prefix)
 	}
