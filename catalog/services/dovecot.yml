@@ -59,10 +59,14 @@ watches:
     check:
       type: service
       expect: active
+  # Plain IMAP (143) is deployment-specific: IMAPS-only hosts do not listen on
+  # it, so this must not flip an active, TLS-serving server to failed. The `cert`
+  # check on ${tls_port} stays required as the authoritative TLS health signal.
   port:
     check:
       type: tcp
       port: ${port}
+      optional: true
   pop:
     check:
       type: pop
@@ -87,13 +91,14 @@ watches:
       expires_in_days: 21
       timeout: 5s
 
+  # Plain-IMAP liveness/remediation, optional for the same reason as `port`:
+  # IMAPS-only hosts do not serve 143, so this must not drive a restart there.
   restart-if-imap-failed:
     check:
       type: imap
       port: ${port}
       timeout: 3s
-
-      # POP3 liveness (plain). optional: hosts without pop3 enabled stay quiet.
+      optional: true
       verify: true
     for:
       cycles: 3
