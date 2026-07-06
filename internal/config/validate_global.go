@@ -16,25 +16,25 @@ import (
 // is set to an integer in 1..65535; a `web` block without `port` (or with port
 // omitted) is valid and leaves the dashboard disabled, matching sermod.
 func validateWeb(webCfg map[string]any, add func(string, ...any)) {
-	if portRaw, present := webCfg["port"]; present {
+	if portRaw, present := webCfg[WebKeyPort]; present {
 		port, ok := cfgval.Int(portRaw)
 		if !ok || port < 1 || port > 65535 {
 			add("web.port must be an integer in 1..65535")
 		}
 	}
-	if v, present := webCfg["address"]; present {
+	if v, present := webCfg[WebKeyAddress]; present {
 		if _, isStr := v.(string); !isStr {
 			add("web.address must be a string")
 		}
 	}
-	for _, key := range []string{"password", "guest_password"} {
+	for _, key := range []string{WebKeyPassword, WebKeyGuestPassword} {
 		if v, present := webCfg[key]; present {
 			if _, isStr := v.(string); !isStr {
 				add("web.%s must be a string", key)
 			}
 		}
 	}
-	if v, present := webCfg["guest"]; present {
+	if v, present := webCfg[WebKeyGuest]; present {
 		if _, isBool := v.(bool); !isBool {
 			add("web.guest must be a boolean (allow anonymous read-only access)")
 		}
