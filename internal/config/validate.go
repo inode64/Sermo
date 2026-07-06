@@ -133,7 +133,7 @@ func validateGlobal(cfg *Config) []Issue {
 
 	if paths, ok := raw[sectionPaths].(map[string]any); ok {
 		for _, key := range slices.Sorted(maps.Keys(paths)) {
-			if key == "locks" {
+			if key == pathKeyLocks {
 				add("paths.locks is not supported; runtime locks derive from paths.runtime")
 				continue
 			}
@@ -214,7 +214,7 @@ func validateGlobal(cfg *Config) []Issue {
 		}
 	}
 	if len(watches) > 0 {
-		validateWatches(watches, filepath.Join(cfg.Global.RuntimeDir(), "locks"), notifierNames(notifiers), NotifyDefault(raw), add)
+		validateWatches(watches, filepath.Join(cfg.Global.RuntimeDir(), pathKeyLocks), notifierNames(notifiers), NotifyDefault(raw), add)
 	}
 
 	return issues
@@ -882,7 +882,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 		}
 	})
 
-	locksDir := filepath.Join(runtime, "locks")
+	locksDir := filepath.Join(runtime, pathKeyLocks)
 	validateCheckSection(tree, sectionChecks, locksDir, add)
 	validateCheckSection(tree, sectionPreflight, locksDir, add)
 	validateProcesses(tree, add)
