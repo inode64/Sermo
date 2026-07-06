@@ -1368,8 +1368,8 @@ func buildRouteCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	family := cfgval.AsString(entry["family"])
 	switch family {
 	case "":
-		family = "ipv4"
-	case "ipv4", "ipv6":
+		family = FamilyIPv4
+	case FamilyIPv4, FamilyIPv6:
 	default:
 		return nil, "route family must be ipv4 or ipv6"
 	}
