@@ -40,6 +40,14 @@ const (
 	sectionRuleWindow = "rule_window"
 )
 
+// Global section keys.
+const (
+	sectionDefaults = "defaults"
+	sectionNotify   = "notify"
+	sectionPaths    = "paths"
+	sectionSecurity = "security"
+)
+
 // Engine block and field keys.
 const (
 	// SectionEngine is the top-level engine configuration block.

@@ -137,7 +137,7 @@ func notifierNames(notifiers map[string]any) map[string]struct{} {
 // `none` sentinel. It is the fallback for any notify site that declares no
 // selection of its own.
 func NotifyDefault(raw map[string]any) []string {
-	names := cfgval.StringList(raw["notify"])
+	names := cfgval.StringList(raw[sectionNotify])
 	if slices.Contains(names, NotifyNone) {
 		return nil
 	}

@@ -171,12 +171,12 @@ func loadGlobal(path string) (Global, error) {
 	expandEnvTree(raw)
 
 	g := Global{Path: path, Raw: raw}
-	if defaults, ok := raw["defaults"].(map[string]any); ok {
+	if defaults, ok := raw[sectionDefaults].(map[string]any); ok {
 		g.Defaults = defaults
 	} else {
 		g.Defaults = map[string]any{}
 	}
-	if paths, ok := raw["paths"].(map[string]any); ok {
+	if paths, ok := raw[sectionPaths].(map[string]any); ok {
 		if g.CatalogPaths, err = pathSpecList(paths[pathKeyCatalog], "paths.catalog"); err != nil {
 			return Global{}, parseGlobalConfigError(path, err)
 		}

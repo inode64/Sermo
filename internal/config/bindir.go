@@ -25,7 +25,7 @@ func (c *Config) expandBindir() {
 		expandBindirVariables(doc.Body)
 	}
 	if c.Global.Raw != nil {
-		if defaults, ok := c.Global.Raw["defaults"].(map[string]any); ok {
+		if defaults, ok := c.Global.Raw[sectionDefaults].(map[string]any); ok {
 			expandBindirVariables(defaults)
 		}
 	}
