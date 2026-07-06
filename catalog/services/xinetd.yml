@@ -21,11 +21,14 @@ watches:
       type: service
       expect: active
   process:
+    # Best-effort: xinetd's pidfile/exe identity is not reliably matchable across
+    # builds (it may run without a pidfile); service is authoritative.
     check:
       type: process
       exe: ${xinetd_binary}
       user: root
       state: running
+      optional: true
       requires:
         - service
       verify: true
