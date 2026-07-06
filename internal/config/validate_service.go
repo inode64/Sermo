@@ -367,9 +367,9 @@ func validateDockerControl(control map[string]any, add addFunc) {
 // when the init backend cannot (`when: auto`) or instead of it (`when: always`).
 // Exactly one of `signal` (a known signal name) or `command` (an array) is
 // required; `when`, when present, must be `auto` or `always`. A signal reload
-// on OpenRC (or a service with only OpenRC units) also needs top-level pidfile:
-// plus a process selector with exact exe and user so the signal target can
-// be verified before signaling.
+// for a backend without a MainPID source also needs top-level pidfile: plus a
+// process selector with exact exe and user so the signal target can be verified
+// before signaling.
 func validateReload(tree map[string]any, backend string, add addFunc) {
 	raw, present := tree["reload"]
 	if !present {
@@ -411,19 +411,20 @@ func validateReload(tree map[string]any, backend string, add addFunc) {
 	}
 }
 
-// reloadSignalNeedsPidfileIdentity reports whether a signal-based reload requires
-// pidfile-identity verification: always for an OpenRC backend, and for a service
-// that declares an `openrc` block without a `systemd` one.
+// reloadSignalNeedsPidfileIdentity reports whether a signal-based reload
+// requires pidfile-identity verification: OpenRC-capable or backend-neutral
+// services need it because OpenRC has no MainPID source. Systemd-only services
+// can rely on the backend MainPID path instead.
 func reloadSignalNeedsPidfileIdentity(tree map[string]any, backend string) bool {
-	if backend == backendOpenRC {
-		return true
-	}
 	svc, ok := tree["service"].(map[string]any)
 	if !ok {
-		return false
+		return backend == backendOpenRC
 	}
 	_, hasSystemd := svc[backendSystemd]
 	_, hasOpenrc := svc[backendOpenRC]
+	if backend == backendOpenRC {
+		return hasOpenrc || !hasSystemd
+	}
 	return hasOpenrc && !hasSystemd
 }
 
