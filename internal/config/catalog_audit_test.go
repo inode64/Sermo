@@ -126,7 +126,7 @@ func TestCatalogServicesNoArtifactCheckCollision(t *testing.T) {
 			return nil
 		}
 		reserved := map[string]struct{}{}
-		for _, key := range []string{"pidfile", "socket", "lockfile"} {
+		for _, key := range []string{artifactPidfile, artifactSocket, artifactLockfile} {
 			if _, ok := body[key]; ok {
 				reserved[key] = struct{}{}
 			}
