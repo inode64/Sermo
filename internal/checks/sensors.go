@@ -17,6 +17,11 @@ const (
 	sensorVoltage = "voltage"
 )
 
+// sensorKindIn is the hwmon input-name prefix for voltage rails (inN_input).
+// Unlike temp/fan, the hwmon kind ("in") differs from its predicate field and
+// data key (sensorVoltage).
+const sensorKindIn = "in"
+
 // SensorReading is one hwmon input: the chip name, the kind (temp/fan/in), a
 // label and the value in its natural unit (°C, RPM, V).
 type SensorReading struct {
@@ -110,7 +115,7 @@ func SummarizeSensors(readings []SensorReading, chip, label string) SensorValues
 			temps = append(temps, r.Value)
 		case sensorFan:
 			fans = append(fans, r.Value)
-		case "in":
+		case sensorKindIn:
 			volts = append(volts, r.Value)
 		}
 	}
@@ -160,7 +165,7 @@ func readHwmon(root string) ([]SensorReading, error) {
 		chip := readTrim(filepath.Join(d, "name"))
 		out = append(out, readSensorKind(d, chip, sensorTemp, 1000)...)
 		out = append(out, readSensorKind(d, chip, sensorFan, 1)...)
-		out = append(out, readSensorKind(d, chip, "in", 1000)...)
+		out = append(out, readSensorKind(d, chip, sensorKindIn, 1000)...)
 	}
 	return out, nil
 }
