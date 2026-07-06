@@ -49,6 +49,12 @@ const (
 	shortVerbose   = "v"
 )
 
+const (
+	defaultRuntimeDir    = "/run/sermo"
+	daemonPIDFilename    = "sermod.pid"
+	instanceLockFilename = "sermod.lock"
+)
+
 func main() {
 	os.Exit(run(os.Args[1:]))
 }
@@ -143,7 +149,7 @@ func run(args []string) int {
 	// (tmpfiles.d / OpenRC) has not pre-created it. Best-effort.
 	rt := cfg.Global.RuntimeDir()
 	if rt == "" {
-		rt = "/run/sermo"
+		rt = defaultRuntimeDir
 	}
 	if err := os.MkdirAll(rt, 0o700); err != nil {
 		logger.Warn("create runtime dir failed", "path", rt, "error", err)
@@ -318,7 +324,7 @@ func run(args []string) int {
 	// This augments the pidfile managed by OpenRC (/run/sermod.pid) and
 	// systemd's $MAINPID. Best-effort; failure is only logged.
 	{
-		pidPath := filepath.Join(rt, "sermod.pid")
+		pidPath := filepath.Join(rt, daemonPIDFilename)
 		if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644); err != nil { //nolint:gosec // G306: pidfile is intentionally world-readable (0644)
 			logger.Warn("write pidfile failed (daemon reload via sermoctl may need to fall back)", "path", pidPath, "error", err)
 		} else {
