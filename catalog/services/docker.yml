@@ -36,6 +36,9 @@ processes:
   proxy:
     exe: ${docker_proxy_binary}
     user: root
+pidfile: /run/docker.pid
+reload:
+  signal: HUP
 policy:
   cooldown: 15m
   max_actions: 2

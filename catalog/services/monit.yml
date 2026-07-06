@@ -22,6 +22,10 @@ preflight:
       - -c
       - ${config}
     timeout: 30s
+reload:
+  command:
+    - ${monit_binary}
+    - reload
 policy:
   cooldown: 15m
   max_actions: 2

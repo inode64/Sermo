@@ -18,6 +18,11 @@ preflight:
         - id: dir-artifact
           match: (?i)(lock|pid) directory .* does not exist
           severity: ok
+reload:
+  command:
+    - ${nmbd_smbcontrol}
+    - nmbd
+    - reload-config
 watches:
   service:
     check:

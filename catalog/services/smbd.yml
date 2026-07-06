@@ -20,6 +20,11 @@ preflight:
         - id: dir-artifact
           match: (?i)(lock|pid) directory .* does not exist
           severity: ok
+reload:
+  command:
+    - ${smbd_smbcontrol}
+    - smbd
+    - reload-config
 policy:
   cooldown: 15m
   max_actions: 2

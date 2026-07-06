@@ -13,20 +13,36 @@ apps:
 variables:
   host: 127.0.0.1
   port: 1883
+  config: /etc/mosquitto/mosquitto.conf
+  user: mosquitto
+config_files:
+  - ${config}
+  - /etc/mosquitto/conf.d
 restart_on_change:
   libraries:
     - glibc
     - openssl
     - systemd-libs
 pidfile: /run/mosquitto.pid
+processes:
+  main:
+    exe: ${mosquitto_binary}
+    user: ${user}
 preflight:
   config:
     type: command
     command:
       - ${mosquitto_binary}
+      - --test-config
       - -c
-      - /etc/mosquitto/mosquitto.conf
+      - ${config}
     timeout: 15s
+reload:
+  signal: HUP
+reload_on_change:
+  paths:
+    - ${config}
+    - /etc/mosquitto/conf.d
 watches:
   service:
     check:

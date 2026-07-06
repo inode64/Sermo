@@ -3,10 +3,12 @@ display_name: "Samba NMB"
 category: storage
 variables:
   binary: ${bindir}/nmbd
+  smbcontrol: ${bindir}/smbcontrol
   testparm:
     - /usr/bin/testparm
     - /usr/sbin/testparm
 preflight:
   binary: { type: binary, path: "${binary}" }
+  smbcontrol: { type: binary, path: "${smbcontrol}" }
   testparm: { type: binary, path: "${testparm}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
