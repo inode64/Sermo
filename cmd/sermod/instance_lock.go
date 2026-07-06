@@ -27,9 +27,9 @@ func (e *alreadyRunningError) Error() string {
 // process; closing it releases the lock.
 func acquireInstanceLock(runtimeDir string) (*os.File, error) {
 	if runtimeDir == "" {
-		runtimeDir = "/run/sermo"
+		runtimeDir = defaultRuntimeDir
 	}
-	path := filepath.Join(runtimeDir, "sermod.lock")
+	path := filepath.Join(runtimeDir, instanceLockFilename)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open instance lock %s: %w", path, err)
@@ -44,7 +44,7 @@ func acquireInstanceLock(runtimeDir string) (*os.File, error) {
 // readDaemonPID returns the PID from <runtime>/sermod.pid when present and
 // parseable. It is best-effort context for an already-running warning.
 func readDaemonPID(runtimeDir string) int {
-	data, err := os.ReadFile(filepath.Join(runtimeDir, "sermod.pid"))
+	data, err := os.ReadFile(filepath.Join(runtimeDir, daemonPIDFilename))
 	if err != nil {
 		return 0
 	}
