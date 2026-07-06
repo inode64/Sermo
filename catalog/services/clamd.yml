@@ -11,6 +11,9 @@ apps:
   - clamd
 variables:
   user: root
+  # clamd's LocalSocket path is deployment-specific; this default matches the
+  # common /run/clamav/clamd.ctl. Override on an instance for other layouts.
+  clamd_socket: /run/clamav/clamd.ctl
 pidfile:
   - /run/clamd.pid
   - /run/clamav/clamd.pid
@@ -24,7 +27,10 @@ watches:
       type: service
       expect: active
   clamd:
+    # Optional: the socket path varies by config (LocalSocket), so a mismatch
+    # must not flip an active clamd to failed; service + pidfile are authoritative.
     check:
       type: clamd
-      socket: /run/clamav/clamd.sock
+      socket: ${clamd_socket}
       timeout: 3s
+      optional: true
