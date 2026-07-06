@@ -30,32 +30,7 @@ func Resolve(ctx context.Context, name string, tree map[string]any, backend serv
 		return Target{}, err
 	}
 	if controlled {
-		switch typ {
-		case "libvirt":
-			spec, _, err := virt.SpecFromTree(tree)
-			if err != nil {
-				return Target{}, err
-			}
-			return Target{
-				Unit:    spec.Domain,
-				Backend: servicemgr.BackendLibvirt,
-				Manager: virt.NewManager(spec),
-			}, nil
-		case "docker":
-			spec, _, err := dockerctl.SpecFromTree(tree)
-			if err != nil {
-				return Target{}, err
-			}
-			manager := dockerctl.NewManager(spec)
-			return Target{
-				Unit:        spec.Container,
-				Backend:     servicemgr.BackendDocker,
-				Manager:     manager,
-				BackendPIDs: manager.BackendPIDs(),
-			}, nil
-		default:
-			return Target{}, fmt.Errorf("control.type %q is not one of libvirt, docker", typ)
-		}
+		return resolveControlledTarget(typ, tree)
 	}
 	candidates, trust := config.ServiceCandidates(tree, string(backend), name)
 	unit, err := resolver.Resolve(ctx, backend, candidates, trust)
@@ -63,6 +38,35 @@ func Resolve(ctx context.Context, name string, tree map[string]any, backend serv
 		return Target{}, err
 	}
 	return Target{Unit: unit, Backend: backend, Manager: manager}, nil
+}
+
+func resolveControlledTarget(typ string, tree map[string]any) (Target, error) {
+	switch typ {
+	case "libvirt":
+		spec, _, err := virt.SpecFromTree(tree)
+		if err != nil {
+			return Target{}, err
+		}
+		return Target{
+			Unit:    spec.Domain,
+			Backend: servicemgr.BackendLibvirt,
+			Manager: virt.NewManager(spec),
+		}, nil
+	case "docker":
+		spec, _, err := dockerctl.SpecFromTree(tree)
+		if err != nil {
+			return Target{}, err
+		}
+		manager := dockerctl.NewManager(spec)
+		return Target{
+			Unit:        spec.Container,
+			Backend:     servicemgr.BackendDocker,
+			Manager:     manager,
+			BackendPIDs: manager.BackendPIDs(),
+		}, nil
+	default:
+		return Target{}, fmt.Errorf("control.type %q is not one of libvirt, docker", typ)
+	}
 }
 
 // ResolveWithFallback mirrors the historic init-service behavior: if probing the
