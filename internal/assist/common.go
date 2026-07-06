@@ -123,8 +123,12 @@ func chooseCandidates[T any](p *Prompt, question string, cands []T, label func(T
 		labels[i] = label(c)
 	}
 	sel := p.MultiChoose(question, labels)
-	out := make([]T, 0, len(sel))
-	for _, idx := range sel {
+	return candidatesByIndexes(cands, sel)
+}
+
+func candidatesByIndexes[T any](cands []T, indexes []int) []T {
+	out := make([]T, 0, len(indexes))
+	for _, idx := range indexes {
 		out = append(out, cands[idx])
 	}
 	return out

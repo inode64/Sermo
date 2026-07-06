@@ -82,11 +82,7 @@ func chooseIfaces(p *Prompt, question string, cands []Iface, defaultIfaces []str
 	case "default":
 		return filterIfaces(cands, func(c Iface) bool { return defaults[c.Name] })
 	default:
-		out := make([]Iface, 0, len(sel))
-		for _, idx := range sel {
-			out = append(out, cands[idx])
-		}
-		return out
+		return candidatesByIndexes(cands, sel)
 	}
 }
 
