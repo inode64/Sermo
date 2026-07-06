@@ -271,6 +271,11 @@ func TestValidateUnifiedWatchActions(t *testing.T) {
     check: { type: tcp, host: 127.0.0.1, port: 80 }
     then: { action: block, blocks: [alert] }
 `, "must be an operation action"},
+		{"block with notify", `watches:
+  w:
+    check: { type: tcp, host: 127.0.0.1, port: 80 }
+    then: { action: block, blocks: [restart], notify: [ops] }
+`, "guard rules do not notify"},
 		{"notify interval on rule action", `watches:
   w:
     check: { type: tcp, host: 127.0.0.1, port: 80 }

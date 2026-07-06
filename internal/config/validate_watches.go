@@ -212,6 +212,9 @@ func validateWatchThenAction(prefix, action string, then map[string]any, add fun
 		}
 	}
 	if action == string(rules.ActionBlock) {
+		if _, hasNotify := then["notify"]; hasNotify {
+			add("%s.then.notify is not supported with action: block; guard rules do not notify", prefix)
+		}
 		blocks := cfgval.StringList(then["blocks"])
 		if len(blocks) == 0 {
 			add("%s.then requires a non-empty blocks: [list of actions] for a block (guard) action", prefix)

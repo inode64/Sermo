@@ -1457,6 +1457,7 @@ remediation/guard/alert together:
   post-operation settling, panic mode) exactly like a `rules:` remediation.
 - `action: block` with `blocks: [restart, start, …]` — a **guard** evaluated
   *during* an operation that refuses the listed actions while the check fails.
+  Guards do not notify.
 - `action: alert` (with an optional `message`/`notify`) — an **alert**.
 
 Such an entry is **desugared** to the equivalent `checks:` + `rules:` entry, so it
