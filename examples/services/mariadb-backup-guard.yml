@@ -8,7 +8,7 @@ uses: mariadb
 # want the backup tool represented as an app, or when a host needs a different
 # binary/user than the built-in `backup` check. For a MySQL service, use
 # `uses: mysql` and `apps: [mysql, mariadb-backup]`.
-# Rename this service, or copy the apps/checks/rules blocks into the concrete
+# Rename this service, or copy the apps/watches/rules blocks into the concrete
 # database service you already enable, before using it on a host.
 #
 # Gradual rollout: uncomment this key to evaluate the inherited MariaDB
@@ -19,13 +19,14 @@ uses: mariadb
 
 apps: [mariadb, mariadb-backup]
 
-checks:
+watches:
   mariadb-backup:
-    type: process
-    optional: true
-    exe: "${mariadb_backup_binary}"
-    user: "${user}"
-    state: running
+    check:
+      type: process
+      optional: true
+      exe: "${mariadb_backup_binary}"
+      user: "${user}"
+      state: running
 
 rules:
   block-restart-during-mariadb-backup:

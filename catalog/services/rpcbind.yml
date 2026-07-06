@@ -13,12 +13,14 @@ processes:
   main:
     exe: ${rpcbind_binary}
     user: root
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   rpcbind:
-    type: rpcbind
-    host: ${host}
-    port: ${port}
-    timeout: 3s
+    check:
+      type: rpcbind
+      host: ${host}
+      port: ${port}
+      timeout: 3s

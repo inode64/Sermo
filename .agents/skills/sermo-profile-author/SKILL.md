@@ -19,7 +19,7 @@ version command
 config/preflight checks
 library checks if applicable
 process discovery
-health checks (flag one verify: true for start verification)
+health watches (flag one verify: true for start verification)
 locks
 guards
 stop_policy
@@ -47,7 +47,7 @@ preflight: {}
 
 processes: {}
 
-checks: {}
+watches: {}
 
 rules: {}
 
@@ -113,10 +113,11 @@ created by another tool. Do not point a `file_exists` check at
 Example:
 
 ```yaml
-checks:
+watches:
   backup-flag:
-    type: file_exists
-    path: /run/mysql-backup/in-progress
+    check:
+      type: file_exists
+      path: /run/mysql-backup/in-progress
 
 rules:
   block-restart-during-backup:

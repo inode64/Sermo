@@ -19,22 +19,23 @@ processes:
   pmsleep:
     exe: ${pmlogger_farm_pmsleep_binary}
     user: ${user}
-checks:
-  service:
-    type: service
-    expect: active
-    verify: true
-  process:
-    type: process
-    optional: true  # Long-lived pmpause may show as pmsleep (deleted) after PCP upgrades.
-    exe_any:
-      - ${pmlogger_farm_pmpause_binary}
-      - ${pmlogger_farm_pmsleep_binary}
-    user: ${user}
-    state: running
-    requires:
-      - service
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      optional: true  # Long-lived pmpause may show as pmsleep (deleted) after PCP upgrades.
+      exe_any:
+        - ${pmlogger_farm_pmpause_binary}
+        - ${pmlogger_farm_pmsleep_binary}
+      user: ${user}
+      state: running
+      requires:
+        - service
   alert-if-memory-high:
     check:
       type: metric

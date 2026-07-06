@@ -8,14 +8,17 @@ apps:
 variables:
   port: 24007
 socket: /run/glusterd.socket
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   port:
-    type: tcp
-    port: ${port}
+    check:
+      type: tcp
+      port: ${port}
   glusterfs:
-    type: glusterfs
-    port: ${port}
-    timeout: 3s
+    check:
+      type: glusterfs
+      port: ${port}
+      timeout: 3s

@@ -21,37 +21,43 @@ policy:
 restart_on_change:
   libraries:
     - glibc
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   link:
-    type: net
-    interface: ${ppp_iface}
-    metric: state
-    expect: up
+    check:
+      type: net
+      interface: ${ppp_iface}
+      metric: state
+      expect: up
   ip:
-    type: net
-    interface: ${ppp_iface}
-    metric: address
-    expect: present
+    check:
+      type: net
+      interface: ${ppp_iface}
+      metric: address
+      expect: present
   route:
-    type: route
-    interface: ${ppp_iface}
+    check:
+      type: route
+      interface: ${ppp_iface}
   internet:
-    type: icmp
-    host: ${probe_host}
-    interface: ${ppp_iface}
-    metric: state
-    expect: up
-    timeout: 5s
+    check:
+      type: icmp
+      host: ${probe_host}
+      interface: ${ppp_iface}
+      metric: state
+      expect: up
+      timeout: 5s
   dns:
-    type: dns
-    resolvconf: true
-    query: ${probe_name}
-    expect:
-      rcode: NOERROR
-      answers:
-        op: '>'
-        value: 0
-    timeout: 5s
+    check:
+      type: dns
+      resolvconf: true
+      query: ${probe_name}
+      expect:
+        rcode: NOERROR
+        answers:
+          op: '>'
+          value: 0
+      timeout: 5s

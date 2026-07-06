@@ -10,9 +10,11 @@ service:
     - automount
 apps:
   - automount
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   autofs:
-    type: autofs
+    check:
+      type: autofs

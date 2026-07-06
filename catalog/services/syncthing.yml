@@ -25,17 +25,20 @@ restart_on_change:
     - glibc
     - zlib
     - sqlite3
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   port:
-    type: tcp
-    host: ${host}
-    port: ${port}
-    timeout: 2s
+    check:
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 2s
   health:
-    type: syncthing
-    host: ${host}
-    port: ${port}
-    timeout: 3s
+    check:
+      type: syncthing
+      host: ${host}
+      port: ${port}
+      timeout: 3s

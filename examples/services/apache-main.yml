@@ -8,15 +8,12 @@ interval: 15s
 variables:
   health_path: /health
 
-checks:
-  http:
-    url: "http://${host}:${port}${health_path}"
-    expect_status: 200
-
 watches:
   restart-if-http-failed:
     check:
-      ref: http
+      type: http
+      url: "http://${host}:${port}${health_path}"
+      expect_status: 200
     for:
       cycles: 5
     then:

@@ -13,27 +13,27 @@ variables:
 
 pidfile: /run/xrdp.pid
 
-checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, host: "${host}", port: "${port}", timeout: 3s }
-  rdp:
-    type: rdp
-    host: "${host}"
-    port: "${port}"
-    timeout: 5s
-
-    verify: true
 watches:
+  service:
+    check: { type: service, expect: active }
   restart-if-rdp-failed:
     check:
-      ref: rdp
+      type: rdp
+      host: "${host}"
+      port: "${port}"
+      timeout: 5s
+
+      verify: true
     for:
       cycles: 3
     then:
       action: restart
   restart-if-port-failed:
     check:
-      ref: port
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 3s
     for:
       cycles: 3
     then:

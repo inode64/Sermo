@@ -19,10 +19,12 @@ preflight:
       - -t
     timeout: 30s
 pidfile: /run/fail2ban/fail2ban.pid
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   fail2ban:
-    type: fail2ban
-    timeout: 3s
+    check:
+      type: fail2ban
+      timeout: 3s

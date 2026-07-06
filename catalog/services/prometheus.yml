@@ -34,26 +34,28 @@ processes:
     user: ${user}
 reload:
   signal: HUP
-checks:
-  service:
-    type: service
-    expect: active
-  port:
-    type: tcp
-    host: ${host}
-    port: ${port}
-    timeout: 2s
-  health:
-    type: prometheus
-    host: ${host}
-    port: ${port}
-    timeout: 3s
 reload_on_change:
   paths:
     - ${config}
     - /etc/prometheus/rules
     - /etc/prometheus/rules.d
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  port:
+    check:
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 2s
+  health:
+    check:
+      type: prometheus
+      host: ${host}
+      port: ${port}
+      timeout: 3s
   alert-if-fds-high:
     check:
       type: metric

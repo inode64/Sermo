@@ -20,23 +20,24 @@ preflight:
       - ${fetchmail_binary}
       - ${config}
     timeout: 30s
-checks:
-  service:
-    type: service
-    expect: active
-  process:
-    type: process
-    exe: ${fetchmail_binary}
-    user: root
-    state: running
-    requires:
-      - service
-    optional: true
-    verify: true
 reload_on_change:
   paths:
     - ${config}
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  process:
+    check:
+      type: process
+      exe: ${fetchmail_binary}
+      user: root
+      state: running
+      requires:
+        - service
+      optional: true
+      verify: true
   alert-if-memory-high:
     check:
       type: metric

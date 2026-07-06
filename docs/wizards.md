@@ -29,13 +29,13 @@ and the invariants below, and update this file in the same change.
    service, such as a port override. PID/process ownership belongs in the catalog
    service under `catalog/services`, so generated catalog service entries should
    normally only write `uses:` plus explicit overrides. When configuration files
-   are detected, ask whether to add a `checks.config` entry that watches those
-   paths; it uses a per-check `interval: 60m` so the service's normal cycle does
-   not need to slow down. For active units with no catalog service, ask the
+   are detected, ask whether to add a `watches.config-files` check-only entry
+   that watches those paths; it uses an entry `interval: 60m` so the service's
+   normal cycle does not need to slow down. For active units with no catalog service, ask the
    **PID source** because there is no catalog service to inherit: a pidfile path
    writes `pidfile:`; with no pidfile, an executable derived from the unit offers
    a `processes:` selector. Docker and VM service assistants write a
-   per-service `control:` block plus a read-only Docker/libvirt check; they do not
+   per-service `control:` block plus a read-only Docker/libvirt check-only watch; they do not
    ask for process selectors because control backends provide the identity.
 4. **Batch.** When more than one target was selected, ask once whether to apply
    the following shared answers to all of them (`Prompt.Confirm`).
@@ -139,7 +139,7 @@ Before storing a newly detected path, resolve symlinks on the target host
 improve the catalog service definition, not the generated service entry:
 they write `uses:` and inherit PID/process selectors from `catalog/services`.
 Uncataloged active units write scalar `service: <unit>` plus a basic
-`checks.service`, and their PID question is prefilled from detection and only
+`watches.service` check-only entry, and their PID question is prefilled from detection and only
 accepts absolute pidfile paths.
 
 The service, Docker and VM wizards write new generated service files

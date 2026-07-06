@@ -18,22 +18,24 @@ preflight:
         - id: dir-artifact
           match: (?i)(lock|pid) directory .* does not exist
           severity: ok
-checks:
-  service:
-    type: service
-    expect: active
-  netbios:
-    type: tcp
-    port: 137
-    timeout: 3s
-    optional: true
-    verify: true
-  smb:
-    type: smb
-    port: 445
-    timeout: 3s
-    optional: true
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  netbios:
+    check:
+      type: tcp
+      port: 137
+      timeout: 3s
+      optional: true
+      verify: true
+  smb:
+    check:
+      type: smb
+      port: 445
+      timeout: 3s
+      optional: true
   alert-if-memory-high:
     check:
       type: metric

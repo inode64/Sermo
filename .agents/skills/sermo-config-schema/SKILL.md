@@ -134,7 +134,7 @@ commands, etc.).
 When the runtime executable is version-agnostic in an app/lib, point discovery at
 a version-specific path with `versions.from` (discovery-only; stripped from the
 materialized document). A service template may also `uses` a base catalog service to inherit
-checks/processes/rules and override only `variables.binary`. Simple `%v`/`%n`
+watches/processes/rules and override only `variables.binary`. Simple `%v`/`%n`
 templates may materialize an unversioned active-slot entry by default when the
 marker-less path exists; composite templates with `%i`, `%s` or more than one
 token do not infer that entry from `versions.from`, but can declare
@@ -188,7 +188,7 @@ Use these rules:
 scalars: override
 maps: recursive merge
 arrays: replace unless documented otherwise
-checks/preflight/processes/rules: maps keyed by name
+watches/checks/preflight/processes/rules: maps keyed by name
 enabled: false disables inherited item
 delete: true removes inherited item
 ```
@@ -206,21 +206,23 @@ any explicit override must also be positive.
 `<paths.runtime>/locks`, and operation locks from `<paths.runtime>/ops`.
 `paths.locks` and `/etc/sermo/locks.d` are not supported.
 
-Prefer this:
+For service/catalog standalone health checks, prefer check-only watches:
 
 ```yaml
-checks:
+watches:
   http:
-    type: http
-    url: http://127.0.0.1/health
+    check:
+      type: http
+      url: http://127.0.0.1/health
 ```
 
 Avoid this for mergeable items:
 
 ```yaml
-checks:
+watches:
   - name: http
-    type: http
+    check:
+      type: http
 ```
 
 ## Variables
@@ -233,11 +235,12 @@ variables:
   host: 127.0.0.1
   port: 6379
 
-checks:
+watches:
   tcp:
-    type: tcp
-    host: "${host}"
-    port: "${port}"
+    check:
+      type: tcp
+      host: "${host}"
+      port: "${port}"
 ```
 
 Do not introduce complex templating unless requested.
@@ -300,13 +303,14 @@ These are all valid and equivalent: `port: 783`, `port: "783"`, `port: "${port}"
 Metric checks and metric conditions carry a `scope`:
 
 ```yaml
-checks:
+watches:
   memory:
-    type: metric
-    scope: service        # service (default) | system
-    name: memory
-    op: ">"
-    value: 40%
+    check:
+      type: metric
+      scope: service        # service (default) | system
+      name: memory
+      op: ">"
+      value: 40%
 ```
 
 ```text
@@ -359,7 +363,7 @@ defaults.policy.cooldown present and positive
 resolved service policy.cooldown present and positive; catalog service/service omissions are allowed only when inherited
 policy.max_actions requires max_actions_window
 block/alert actions require a message
-a checks/preflight entry flagged verify:true also runs as post-operation start verification (health-type checks only); optional and verify are booleans; cert checks use cert_verify for TLS chain verification
+a check-only service watch or checks/preflight entry flagged verify:true also runs as post-operation start verification (health-type checks only); optional and verify are booleans; cert checks use cert_verify for TLS chain verification
 file_exists checks do not point under <paths.runtime>/locks; Sermo named runtime locks are checked by the engine
 ```
 

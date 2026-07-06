@@ -21,14 +21,17 @@ preflight:
       - ${spamassassin_binary}
       - --lint
     timeout: 30s
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   port:
-    type: tcp
-    port: ${port}
+    check:
+      type: tcp
+      port: ${port}
   spamd:
-    type: spamd
-    port: ${port}
-    timeout: 3s
+    check:
+      type: spamd
+      port: ${port}
+      timeout: 3s

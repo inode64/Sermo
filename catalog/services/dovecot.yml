@@ -52,45 +52,47 @@ processes:
   imap:
     exe: ${dovecot_imap_binary}
     user: ${mail_user}
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   port:
-    type: tcp
-    port: ${port}
-  imap:
-    type: imap
-    port: ${port}
-    timeout: 3s
-
-    # POP3 liveness (plain). optional: hosts without pop3 enabled stay quiet.
-    verify: true
+    check:
+      type: tcp
+      port: ${port}
   pop:
-    type: pop
-    port: ${pop_port}
-    timeout: 3s
-    optional: true
+    check:
+      type: pop
+      port: ${pop_port}
+      timeout: 3s
+      optional: true
 
-  # ManageSieve (RFC 5804 greeting). optional when the sieve service is disabled.
+    # ManageSieve (RFC 5804 greeting). optional when the sieve service is disabled.
   sieve:
-    type: sieve
-    port: ${sieve_port}
-    timeout: 3s
-    optional: true
+    check:
+      type: sieve
+      port: ${sieve_port}
+      timeout: 3s
+      optional: true
 
   cert:
-    type: cert
-    host: ${host}
-    port: ${tls_port}
-    cert_verify: false
-    expires_in_days: 21
-    timeout: 5s
+    check:
+      type: cert
+      host: ${host}
+      port: ${tls_port}
+      cert_verify: false
+      expires_in_days: 21
+      timeout: 5s
 
-watches:
   restart-if-imap-failed:
     check:
-      ref: imap
+      type: imap
+      port: ${port}
+      timeout: 3s
+
+      # POP3 liveness (plain). optional: hosts without pop3 enabled stay quiet.
+      verify: true
     for:
       cycles: 3
     then:

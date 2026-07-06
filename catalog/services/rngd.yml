@@ -6,18 +6,20 @@ service: rngd
 pidfile:
   path: /run/rngd.pid
   optional: true
-checks:
+watches:
   service:
-    type: service
-    expect: active
-    verify: true
+    check:
+      type: service
+      expect: active
+      verify: true
   process:
-    type: process
-    exe: ${rngd_binary}
-    user: root
-    state: running
-    optional: true
-    requires:
-      - service
+    check:
+      type: process
+      exe: ${rngd_binary}
+      user: root
+      state: running
+      optional: true
+      requires:
+        - service
 apps:
   - rngd

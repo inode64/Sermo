@@ -482,8 +482,9 @@ global:
 ```yaml
 name: nginx
 interval: 10s            # optional, default engine.interval; positive duration
-checks:
-  http: { type: http, url: "http://127.0.0.1/health", expect_status: 200 }
+watches:
+  http:
+    check: { type: http, url: "http://127.0.0.1/health", expect_status: 200 }
 ```
 
 La sustitución rige todo el ciclo del worker para ese service (sus comprobaciones,
@@ -504,14 +505,16 @@ reglas.
 
 ```yaml
 interval: 30s            # the service resolution (or engine.interval)
-checks:
+watches:
   http:
-    type: http
-    url: "http://127.0.0.1/health"   # runs every cycle (30s)
+    check:
+      type: http
+      url: "http://127.0.0.1/health"   # runs every cycle (30s)
   version:
-    type: command
-    command: ["/usr/bin/nginx", "-v"]
-    interval: 30m                     # runs every 60 cycles (30m / 30s)
+    check:
+      type: command
+      command: ["/usr/bin/nginx", "-v"]
+      interval: 30m                     # runs every 60 cycles (30m / 30s)
 ```
 
 Un `interval` por comprobación **no puede ser más corto que la resolución** y debería
@@ -1138,7 +1141,7 @@ fusionan con un service.
 > asistentes de service (`service`, `docker`, `vm`)
 > escriben un archivo de service por destino bajo `services/` y aseguran que
 > `paths.services` lo cargue; `docker` y `vm` añaden `control.type: docker` o
-> `control.type: libvirt` más comprobaciones de solo lectura coincidentes. El asistente
+> `control.type: libvirt` más watches solo-check de solo lectura coincidentes. El asistente
 > de mount (`mount`) lista los puntos de montaje de `/etc/fstab` y escribe archivos de
 > storage seguros con un bloque `mount:` bajo `paths.storages`; no monta ni desmonta
 > mientras genera la config.
@@ -1157,7 +1160,7 @@ fusionan con un service.
 > con archivos de service (ver [services](services.es.md)); cuando se seleccionan varios
 > services, las sustituciones de puerto se omiten a menos que se revisen explícitamente,
 > y los archivos de config conocidos pueden añadirse como una entrada periódica
-> `checks.config` con un intervalo por defecto de `60m`. Ejecuta sin argumento para
+> `watches.config-files` solo-check con un intervalo por defecto de `60m`. Ejecuta sin argumento para
 > elegir de la lista.
 >
 > Al finalizar, el asistente ofrece eliminar los archivos gestionados cuyo destino ya no
@@ -1441,8 +1444,9 @@ comprobaciones de service (`tcp`, `ports`, `http`, `command`, `file_exists`, `fi
 `lockfile`, `binary`, `pidfile`, `socket`, `libraries`, `config`, `autofs`, `route`,
 `firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`, `count`, y las comprobaciones
 de protocolo de conexión como `mysql`/`smtp`) — pueden usarse como un watch
-aquí, y las de recursos de host pueden igualmente usarse en los `checks:`/reglas de un
-service (ver [Checks](rules.es.md#checks)). Un watch dispara su hook con el resultado de
+aquí, y las de recursos de host pueden igualmente usarse como entradas `watches:`
+solo-check de un service o como `checks:`/reglas explícitas (ver
+[Checks](rules.es.md#checks)). Un watch dispara su hook con el resultado de
 **alerta** de la comprobación: umbral cruzado para comprobaciones de condición, **fallo**
 para comprobaciones de salud (`tcp`/`http`/`firewall_rules`/`cert`/…), de modo que p. ej.
 un watch `http` alerta cuando el endpoint está caído, un watch `firewall_rules` alerta
@@ -1451,7 +1455,8 @@ alerta cuando el certificado es inválido o está caducando. La
 forma de watch multimétrica (`net`, `icmp`, `swap`) de abajo (un mapa `metrics:`, un hook
 por métrica) y los tipos multidestino (`file`, `process`) son solo-watch;
 la forma de métrica única de `net`/`icmp`/`swap` (un campo `metric:` explícito) también
-funciona en los `checks:` de un service (ver [Checks](rules.es.md#checks)).
+funciona como watch solo-check de service o como entrada explícita `checks:` (ver
+[Checks](rules.es.md#checks)).
 La WebUI muestra lecturas en vivo solo para sondas locales baratas; las comprobaciones
 intensivas en comando/red dependen de sus eventos de watch normales.
 
@@ -1459,9 +1464,11 @@ intensivas en comando/red dependen de sus eventos de watch normales.
 
 Un servicio puede llevar su propio bloque `watches:` — la misma forma que un watch
 de host (un `check:`, una ventana `for`/`within` opcional y un bloque `then` con
-`hook`, `notify`, `expand` o `kill`) — declarado **dentro del documento del
-servicio**. Los eventos se etiquetan `<servicio>:<watch>` y reutiliza todo el
-runtime de host-watch (ventanas firing/recovered, hooks, notifiers, dry-run).
+`hook`, `notify`, `expand` o `kill` fire-and-forget, o una `action` de servicio)
+— declarado **dentro del documento del servicio**. Los eventos se etiquetan
+`<servicio>:<watch>`. Las entradas fire-and-forget reutilizan el runtime de
+host-watch (ventanas firing/recovered, hooks, notifiers, dry-run); las entradas
+con `then.action` se desugarizan a `checks:` + `rules:`.
 
 Lo que "dentro de un servicio" añade es el **contexto de comprobación** del
 servicio, acotado a su **árbol de PIDs** (los procesos que casan más sus
@@ -1478,11 +1485,15 @@ identidad del init):
 Las comprobaciones host-globales (`fds`, `storage`, `count`, `load`, `http`, …)
 leen el mismo recurso del host en ambas superficies.
 
-Los tipos **no** disponibles aquí son `net`/`icmp`/`swap` (watches multimétricos
-de host/red — usa la sección global `watches:`) y el **watch `process`** (casa
-procesos host-wide y puede hacer `kill`, inseguro desde un scope de servicio — usa
-`process_count`/`metric`, o un watch de host). El nombre del watch no puede ser
-`version` ni `config` (reservados para los monitores version/config del servicio).
+Usa entradas fire-and-forget para un **hook/notificación** ligado a una señal local
+del servicio. Usa `then.action` para la forma compacta de operación/guard/alerta
+descrita abajo. Los tipos **no** disponibles aquí son `net`/`icmp`/`swap` (watches
+multimétricos de host/red — usa la sección global `watches:`) y el **watch
+`process`** (casa procesos host-wide y puede hacer `kill`, inseguro desde un
+scope de servicio — usa `process_count`/`metric`, o un watch de host). Una métrica
+`scope: system` está permitida, pero solo puede alertar; nunca debe disparar una
+acción de operación sobre un servicio. El nombre del watch no puede ser `version`
+ni `config` (reservados para los monitores version/config del servicio).
 
 Un watch de servicio es visible y pausable como un watch global: aparece en el
 panel Watches de la Web UI y responde a
@@ -1508,25 +1519,24 @@ exactamente igual que escribir ese check + regla a mano y hereda cada barrera de
 seguridad (incluida la regla de que una métrica `scope: system` nunca puede
 disparar una acción de servicio). Como el resultado es una regla, no un notificador
 del runtime de watches, `then.notify_interval` no está soportado con
-`then.action`. El `check:` es o bien:
-
-- **embebido** (`check: { type: http, … }`) — una sonda generada como check con el
-  nombre del watch. Dos watches que embeban el mismo endpoint lo sondean dos veces.
-- una **referencia** (`check: { ref: nombre }`) — apunta a un `checks:`/`preflight:`
-  existente, así una sonda de salud/`verify: true` compartida **no** se duplica. Así
-  se expresa como watch una remediación sobre un check compartido.
+`then.action`. El `check:` siempre va **embebido** (`check: { type: http, … }`) y
+se genera como check con el nombre del watch. Dos watches que embeban el mismo
+endpoint lo sondean dos veces. Si una remediación necesita reutilizar un check de
+salud/`verify: true` compartido sin una segunda sonda, escribe explícitamente la
+forma clásica `checks:` + `rules:`.
 
 La polaridad de la condición sigue al check: uno de **salud** (tcp/http/service/…)
 dispara al **fallar**; uno de **condición** (metric/storage/load/…) dispara cuando
 se cumple su **umbral** (marca un check de condición embebido `optional: true` para
 que no afecte a la disponibilidad/SLA del servicio).
 
-Un watch es **o** una operación/alerta (tiene `then.action`) **o** un efecto
-fire-and-forget (`hook`/`expand`/`kill`) — no ambos. Las secciones clásicas
-`checks:` + `rules:` siguen siendo válidas; el catálogo expresa su
-remediación/alertas como `watches:` unificados (un `check: {ref:}` al check de
-salud compartido, o una métrica opcional embebida), manteniendo `checks:` como el
-registro de sondas compartidas.
+Un watch de servicio sin `then` es una entrada solo-check: al resolver se convierte
+en `checks.<watch>` y participa en salud/SLA/verificación post-operación igual que
+un check escrito a mano. Un watch con `then` es **o** una operación/alerta
+(`then.action`) **o** un efecto fire-and-forget (`hook`/`expand`/`kill`) — no
+ambos. Las secciones clásicas `checks:` + `rules:` siguen siendo válidas para
+compartición escrita a mano, pero los perfiles de catálogo usan `watches:` con
+checks embebidos para checks independientes y acciones compactas.
 
 ```yaml
 watches:
@@ -2317,10 +2327,11 @@ preflight:
 variables:
   host: 127.0.0.1
   port: 8080
-checks:
+watches:
   http:
-    type: http
-    url: "http://${host}:${port}/health"
+    check:
+      type: http
+      url: "http://${host}:${port}/health"
 ```
 
 - Las variables son cadenas literales planas; un valor no debe contener a su vez otra
@@ -2375,12 +2386,13 @@ config — campos de service *y* los bloques globales (DSNs/webhooks de notifier
 contraseña web, …) — de modo que los secretos nunca se escriben en el archivo:
 
 ```yaml
-checks:
+watches:
   api:
-    type: http
-    url: "https://api.example.com/health"
-    headers:
-      Authorization: "Bearer ${env:API_TOKEN}"   # read from the daemon's env
+    check:
+      type: http
+      url: "https://api.example.com/health"
+      headers:
+        Authorization: "Bearer ${env:API_TOKEN}"   # read from the daemon's env
 
 notifiers:
   ops:

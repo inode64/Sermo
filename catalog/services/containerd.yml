@@ -33,31 +33,6 @@ processes:
   shim:
     exe: ${containerd_shim_binary}
     user: ${user}
-checks:
-  service:
-    type: service
-    expect: active
-  version:
-    type: command
-    command:
-      - ${containerd_binary}
-      - --version
-    timeout: 5s
-    verify: true
-  fds:
-    type: metric
-    scope: service
-    name: fds
-    op: '>'
-    value: 50000
-    optional: true
-  memory:
-    type: metric
-    scope: service
-    name: memory
-    op: '>'
-    value: 60%
-    optional: true
 reload_on_change:
   paths:
     - ${config}
@@ -78,9 +53,18 @@ rules:
     then:
       action: restart
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   restart-if-version-failed:
     check:
-      ref: version
+      type: command
+      command:
+        - ${containerd_binary}
+        - --version
+      timeout: 5s
+      verify: true
     for:
       cycles: 3
     then:
@@ -99,7 +83,12 @@ watches:
       action: restart
   alert-if-fds-high:
     check:
-      ref: fds
+      type: metric
+      scope: service
+      name: fds
+      op: '>'
+      value: 50000
+      optional: true
     within:
       cycles: 10
       min_matches: 3
@@ -108,7 +97,12 @@ watches:
       message: ${display_name} file descriptor usage is high
   alert-if-memory-high:
     check:
-      ref: memory
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 60%
+      optional: true
     for:
       duration: 10m
     then:

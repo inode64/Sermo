@@ -26,14 +26,17 @@ processes:
     user: ${user}
 reload:
   signal: HUP
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   port:
-    type: tcp
-    port: ${port}
+    check:
+      type: tcp
+      port: ${port}
   ssh:
-    type: ssh
-    port: ${port}
-    timeout: 3s
+    check:
+      type: ssh
+      port: ${port}
+      timeout: 3s

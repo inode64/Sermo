@@ -17,12 +17,14 @@ processes:
   mountd:
     exe: ${rpc_mountd_binary}
     user: root
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   nfs:
-    type: nfs
-    host: ${host}
-    port: ${port}
-    timeout: 3s
+    check:
+      type: nfs
+      host: ${host}
+      port: ${port}
+      timeout: 3s

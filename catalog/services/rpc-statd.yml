@@ -16,18 +16,19 @@ processes:
   main:
     exe: ${rpc_statd_binary}
     user: ${user}
-checks:
-  service:
-    type: service
-    expect: active
-  statd:
-    type: statd
-    host: 127.0.0.1
-    port: 662
-    timeout: 3s
-    optional: true
-    verify: true
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  statd:
+    check:
+      type: statd
+      host: 127.0.0.1
+      port: 662
+      timeout: 3s
+      optional: true
+      verify: true
   alert-if-memory-high:
     check:
       type: metric

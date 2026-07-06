@@ -4,10 +4,12 @@ category: storage
 service: lvmpolld
 apps:
   - lvmpolld
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   lvmpolld:
-    type: lvmpolld
-    timeout: 3s
+    check:
+      type: lvmpolld
+      timeout: 3s

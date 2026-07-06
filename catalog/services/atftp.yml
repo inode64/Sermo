@@ -16,10 +16,12 @@ processes:
   main:
     exe: ${atftp_binary}
     user: ${user}
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   port:
-    type: tftp
-    port: ${port}
+    check:
+      type: tftp
+      port: ${port}

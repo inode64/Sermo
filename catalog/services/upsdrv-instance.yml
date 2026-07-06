@@ -21,20 +21,22 @@ processes:
   main:
     cmd: (?:^|\s)(?:/usr/lib64/nut|/lib64/nut|/usr/lib/nut|/lib/nut)/${driver}(?:\s|$)
     user: ${user}
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   process:
-    type: process
-    exe_any:
-      - /usr/lib64/nut/${driver}
-      - /lib64/nut/${driver}
-      - /usr/lib/nut/${driver}
-      - /lib/nut/${driver}
-    user: ${user}
-    state: running
-    requires:
-      - service
-    optional: true
-    verify: true
+    check:
+      type: process
+      exe_any:
+        - /usr/lib64/nut/${driver}
+        - /lib64/nut/${driver}
+        - /usr/lib/nut/${driver}
+        - /lib/nut/${driver}
+      user: ${user}
+      state: running
+      requires:
+        - service
+      optional: true
+      verify: true

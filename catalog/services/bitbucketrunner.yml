@@ -7,11 +7,11 @@ service:
     - bitbucketrunner
   openrc:
     - bitbucketrunner
-checks:
-  service:
-    type: service
-    expect: active
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   alert-if-memory-high:
     check:
       type: metric

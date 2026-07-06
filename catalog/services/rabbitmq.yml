@@ -16,15 +16,6 @@ variables:
   host: 127.0.0.1
   port: 5672
 pidfile: /run/rabbitmq.pid
-checks:
-  service:
-    type: service
-    expect: active
-  amqp:
-    type: amqp
-    host: ${host}
-    port: ${port}
-    timeout: 3s
 stop_policy:
   graceful_timeout: 60s
   term_timeout: 30s
@@ -34,9 +25,16 @@ stop_policy:
     exe_any:
       - ${rabbitmq_binary}
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   restart-if-amqp-failed:
     check:
-      ref: amqp
+      type: amqp
+      host: ${host}
+      port: ${port}
+      timeout: 3s
     for:
       cycles: 3
     then:

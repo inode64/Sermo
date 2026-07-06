@@ -39,50 +39,6 @@ processes:
     user: ${user}
 config_files:
   - ${config}
-checks:
-  service:
-    type: service
-    expect: active
-  tcp:
-    type: tcp
-    host: ${host}
-    port: ${port}
-    timeout: 3s
-  ping:
-    type: mysql
-    host: ${host}
-    port: ${port}
-    timeout: 5s
-    verify: true
-  fds:
-    type: metric
-    scope: service
-    name: fds
-    op: '>'
-    value: 50000
-    optional: true
-  memory:
-    type: metric
-    scope: service
-    name: memory
-    op: '>'
-    value: 60%
-    optional: true
-  backup:
-    type: process
-    optional: true
-    exe_any:
-      - /usr/bin/mariadb-dump
-      - /usr/bin/mysqldump
-      - /usr/bin/mariadb-backup
-      - /usr/bin/mariadbbackup
-      - /usr/bin/xtrabackup
-      - /usr/bin/wal-g-mysql
-      - /usr/local/bin/wal-g-mysql
-      - /usr/bin/wal-g
-      - /usr/local/bin/wal-g
-    user: ${backup_user}
-    state: running
 stop_policy:
   graceful_timeout: 120s
   term_timeout: 60s
@@ -110,9 +66,47 @@ rules:
       action: block
       message: ${display_name} backup is running; restart denied
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  ping:
+    check:
+      type: mysql
+      host: ${host}
+      port: ${port}
+      timeout: 5s
+      verify: true
+  memory:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 60%
+      optional: true
+  backup:
+    check:
+      type: process
+      optional: true
+      exe_any:
+        - /usr/bin/mariadb-dump
+        - /usr/bin/mysqldump
+        - /usr/bin/mariadb-backup
+        - /usr/bin/mariadbbackup
+        - /usr/bin/xtrabackup
+        - /usr/bin/wal-g-mysql
+        - /usr/local/bin/wal-g-mysql
+        - /usr/bin/wal-g
+        - /usr/local/bin/wal-g
+      user: ${backup_user}
+      state: running
   restart-if-tcp-failed:
     check:
-      ref: tcp
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 3s
     for:
       cycles: 3
     then:
@@ -132,7 +126,12 @@ watches:
       action: restart
   alert-if-fds-high:
     check:
-      ref: fds
+      type: metric
+      scope: service
+      name: fds
+      op: '>'
+      value: 50000
+      optional: true
     within:
       cycles: 10
       min_matches: 3

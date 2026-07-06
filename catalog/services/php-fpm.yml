@@ -48,32 +48,36 @@ processes:
   workers:
     exe: ${binary}
     user: ${user}
-checks:
+watches:
   pidfile:
-    type: pidfile
-    optional: true
-    path:
-      - /run/php-fpm/php-fpm-${version}${sep}${instance}.pid
-      - /run/php-fpm/php-fpm-php${version}${sep}${instance}.pid
-      - /run/php-fpm-php${version}${sep}${instance}.pid
-    requires:
-      - service
+    check:
+      type: pidfile
+      optional: true
+      path:
+        - /run/php-fpm/php-fpm-${version}${sep}${instance}.pid
+        - /run/php-fpm/php-fpm-php${version}${sep}${instance}.pid
+        - /run/php-fpm-php${version}${sep}${instance}.pid
+      requires:
+        - service
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   tcp:
-    type: tcp
-    optional: true
-    host: ${host}
-    port: ${port}
-    timeout: 3s
+    check:
+      type: tcp
+      optional: true
+      host: ${host}
+      port: ${port}
+      timeout: 3s
   fpm:
-    type: fpm
-    optional: true
-    host: ${host}
-    port: ${port}
-    status_path: ${status_path}
-    timeout: 3s
+    check:
+      type: fpm
+      optional: true
+      host: ${host}
+      port: ${port}
+      status_path: ${status_path}
+      timeout: 3s
 stop_policy:
   term_timeout: 10s
   force_kill: true

@@ -38,13 +38,15 @@ processes:
   main:
     exe: ${binary}
     user: ${user}
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   handshake:
-    type: nebula
-    optional: true
-    host: ${host}
-    port: ${port}
-    timeout: 3s
+    check:
+      type: nebula
+      optional: true
+      host: ${host}
+      port: ${port}
+      timeout: 3s

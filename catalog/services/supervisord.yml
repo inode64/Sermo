@@ -4,18 +4,6 @@ category: system
 service: supervisord
 apps:
   - supervisord
-checks:
-  service:
-    type: service
-    expect: active
-  ping:
-    type: command
-    command:
-      - supervisorctl
-      - status
-    timeout: 15s
-    optional: true
-    verify: true
 preflight:
   config:
     type: command
@@ -24,9 +12,19 @@ preflight:
       - check
     timeout: 30s
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   restart-if-ping-failed:
     check:
-      ref: ping
+      type: command
+      command:
+        - supervisorctl
+        - status
+      timeout: 15s
+      optional: true
+      verify: true
     for:
       cycles: 3
     then:

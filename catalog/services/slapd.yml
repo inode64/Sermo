@@ -28,21 +28,25 @@ preflight:
       - ${config_dir}
       - ${config}
     timeout: 30s
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   port:
-    type: tcp
-    port: ${port}
+    check:
+      type: tcp
+      port: ${port}
   ldap:
-    type: ldap
-    port: ${port}
-    timeout: 3s
+    check:
+      type: ldap
+      port: ${port}
+      timeout: 3s
   cert:
-    type: cert
-    host: ${host}
-    port: ${tls_port}
-    cert_verify: false
-    expires_in_days: 21
-    timeout: 5s
+    check:
+      type: cert
+      host: ${host}
+      port: ${tls_port}
+      cert_verify: false
+      expires_in_days: 21
+      timeout: 5s

@@ -36,7 +36,7 @@ func TestDockerAssistant(t *testing.T) {
 	if control["type"] != "docker" || control["container"] != "web" || control["socket"] != "/run/docker.sock" {
 		t.Fatalf("control = %v, want docker/web socket", control)
 	}
-	check := svc["checks"].(map[string]any)["docker"].(map[string]any)
+	check := svc["watches"].(map[string]any)["docker"].(map[string]any)["check"].(map[string]any)
 	if check["type"] != "docker" || check["container"] != "web" || check["on_change"] != true {
 		t.Fatalf("docker check = %v", check)
 	}
@@ -77,7 +77,7 @@ func TestVMAssistant(t *testing.T) {
 	if control["type"] != "libvirt" || control["domain"] != "web01" || control["uri"] != "qemu:///system" {
 		t.Fatalf("control = %v, want libvirt web01", control)
 	}
-	check := svc["checks"].(map[string]any)["vm"].(map[string]any)
+	check := svc["watches"].(map[string]any)["vm"].(map[string]any)["check"].(map[string]any)
 	if check["type"] != "libvirt" || check["domain"] != "web01" || check["query"] != "qemu:///system" {
 		t.Fatalf("vm check = %v", check)
 	}

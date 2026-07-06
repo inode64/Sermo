@@ -15,18 +15,16 @@ processes:
   main:
     exe: ${libvirt_dbus_binary}
     user: ${user}
-checks:
-  service:
-    type: service
-    expect: active
-  dbus:
-    type: dbus
-    timeout: 5s
-    verify: true
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   restart-if-dbus-failed:
     check:
-      ref: dbus
+      type: dbus
+      timeout: 5s
+      verify: true
     for:
       cycles: 3
     then:

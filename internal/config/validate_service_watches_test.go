@@ -55,7 +55,27 @@ func TestValidateServiceWatches(t *testing.T) {
 		t.Errorf("valid count watch should have no issues, got: %v", got)
 	}
 
-	// A process watch (service-scoped) is permitted here (unlike a host watch).
+	// A watch without then is a check-only entry that resolves to checks.<name>.
+	if got := run(map[string]any{
+		"service": map[string]any{
+			"check": map[string]any{"type": "service", "expect": "active"},
+		},
+	}); len(got) != 0 {
+		t.Errorf("check-only service watch should have no issues, got: %v", got)
+	}
+
+	// A check-only entry uses the normal service checks grammar, so process checks
+	// remain valid even though the process watch runtime is host-wide and rejected
+	// below when a then block is present.
+	if got := run(map[string]any{
+		"backup": map[string]any{
+			"check": map[string]any{"type": "process", "exe": "/usr/bin/backup", "state": "running", "optional": true},
+		},
+	}); len(got) != 0 {
+		t.Errorf("check-only process check should have no issues, got: %v", got)
+	}
+
+	// A process_count watch is service-scoped here, unlike a host process watch.
 	if got := run(map[string]any{
 		"workers": map[string]any{
 			"check": map[string]any{"type": "process_count", "user": "mail", "count": map[string]any{"op": ">", "value": 3}},

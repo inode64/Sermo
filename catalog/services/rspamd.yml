@@ -25,14 +25,17 @@ processes:
   worker:
     exe: ${rspamd_binary}
     user: ${user}
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   port:
-    type: tcp
-    port: ${port}
+    check:
+      type: tcp
+      port: ${port}
   rspamd:
-    type: rspamd
-    port: ${port}
-    timeout: 3s
+    check:
+      type: rspamd
+      port: ${port}
+      timeout: 3s

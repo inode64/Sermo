@@ -27,17 +27,6 @@ preflight:
       - ${pm2_binary}
       - ping
     timeout: 15s
-checks:
-  service:
-    type: service
-    expect: active
-  ping:
-    type: command
-    command:
-      - ${pm2_binary}
-      - ping
-    timeout: 10s
-    verify: true
 policy:
   cooldown: 15m
   max_actions: 2
@@ -46,9 +35,18 @@ policy:
     initial: 15m
     max: 1h
 watches:
+  service:
+    check:
+      type: service
+      expect: active
   restart-if-ping-failed:
     check:
-      ref: ping
+      type: command
+      command:
+        - ${pm2_binary}
+        - ping
+      timeout: 10s
+      verify: true
     for:
       cycles: 3
     then:

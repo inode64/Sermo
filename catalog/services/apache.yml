@@ -42,40 +42,6 @@ config_files:
   - /etc/apache2/httpd.conf
   - /etc/apache2/apache2.conf
   - /etc/httpd/conf/httpd.conf
-checks:
-  service:
-    type: service
-    expect: active
-  http:
-    type: http
-    url: http://${host}:${port}${health_path}
-    expect_status:
-      op: <
-      value: 500
-    timeout: 5s
-    verify: true
-  cert:
-    type: cert
-    optional: true
-    host: ${host}
-    port: ${tls_port}
-    cert_verify: false
-    expires_in_days: 21
-    timeout: 5s
-  fds:
-    type: metric
-    scope: service
-    name: fds
-    op: '>'
-    value: 50000
-    optional: true
-  memory:
-    type: metric
-    scope: service
-    name: memory
-    op: '>'
-    value: 60%
-    optional: true
 stop_policy:
   term_timeout: 10s
   force_kill: true
@@ -98,9 +64,28 @@ reload_on_change:
     - /etc/apache2/apache2.conf
     - /etc/httpd/conf/httpd.conf
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  cert:
+    check:
+      type: cert
+      optional: true
+      host: ${host}
+      port: ${tls_port}
+      cert_verify: false
+      expires_in_days: 21
+      timeout: 5s
   restart-if-http-failed:
     check:
-      ref: http
+      type: http
+      url: http://${host}:${port}${health_path}
+      expect_status:
+        op: <
+        value: 500
+      timeout: 5s
+      verify: true
     for:
       cycles: 3
     then:
@@ -119,7 +104,12 @@ watches:
       action: restart
   alert-if-fds-high:
     check:
-      ref: fds
+      type: metric
+      scope: service
+      name: fds
+      op: '>'
+      value: 50000
+      optional: true
     within:
       cycles: 10
       min_matches: 3
@@ -128,7 +118,12 @@ watches:
       message: ${display_name} file descriptor usage is high
   alert-if-memory-high:
     check:
-      ref: memory
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 60%
+      optional: true
     for:
       duration: 10m
     then:

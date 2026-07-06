@@ -19,35 +19,6 @@ restart_on_change:
     - openssl
     - systemd-libs
 pidfile: /run/mosquitto.pid
-checks:
-  service:
-    type: service
-    expect: active
-  port:
-    type: tcp
-    host: ${host}
-    port: ${port}
-    timeout: 2s
-  mqtt:
-    type: mqtt
-    host: ${host}
-    port: ${port}
-    timeout: 3s
-    verify: true
-  fds:
-    type: metric
-    scope: service
-    name: fds
-    op: '>'
-    value: 50000
-    optional: true
-  memory:
-    type: metric
-    scope: service
-    name: memory
-    op: '>'
-    value: 60%
-    optional: true
 preflight:
   config:
     type: command
@@ -57,16 +28,43 @@ preflight:
       - /etc/mosquitto/mosquitto.conf
     timeout: 15s
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  fds:
+    check:
+      type: metric
+      scope: service
+      name: fds
+      op: '>'
+      value: 50000
+      optional: true
+  memory:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 60%
+      optional: true
   restart-if-mqtt-failed:
     check:
-      ref: mqtt
+      type: mqtt
+      host: ${host}
+      port: ${port}
+      timeout: 3s
+      verify: true
     for:
       cycles: 3
     then:
       action: restart
   restart-if-port-failed:
     check:
-      ref: port
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 2s
     for:
       cycles: 3
     then:

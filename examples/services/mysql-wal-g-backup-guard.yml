@@ -8,18 +8,19 @@ uses: mysql
 # want WAL-G represented as an app, or when a host needs a different binary/user
 # than the built-in `backup` check. For a MariaDB service, use `uses: mariadb`
 # and `apps: [mariadb, wal-g-mysql]`.
-# Rename this service, or copy the apps/checks/rules blocks into the concrete
+# Rename this service, or copy the apps/watches/rules blocks into the concrete
 # database service you already enable, before using it on a host.
 
 apps: [mysql, wal-g-mysql]
 
-checks:
+watches:
   wal-g-mysql:
-    type: process
-    optional: true
-    exe: "${wal_g_mysql_binary}"
-    user: "${user}"
-    state: running
+    check:
+      type: process
+      optional: true
+      exe: "${wal_g_mysql_binary}"
+      user: "${user}"
+      state: running
 
 rules:
   block-restart-during-wal-g-mysql:

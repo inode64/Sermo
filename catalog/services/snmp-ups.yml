@@ -4,16 +4,18 @@ category: hardware
 service: snmp-ups
 apps:
   - snmp-ups
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   process:
-    type: process
-    exe: ${snmp_ups_binary}
-    user: root
-    state: running
-    requires:
-      - service
-    optional: true
-    verify: true
+    check:
+      type: process
+      exe: ${snmp_ups_binary}
+      user: root
+      state: running
+      requires:
+        - service
+      optional: true
+      verify: true

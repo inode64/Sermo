@@ -14,14 +14,15 @@ processes:
     user: ${user}
 reload:
   signal: HUP
-checks:
-  service:
-    type: service
-    expect: active
-  port:
-    type: snmp
-    port: ${port}
 watches:
+  service:
+    check:
+      type: service
+      expect: active
+  port:
+    check:
+      type: snmp
+      port: ${port}
   restart-if-worker-thread-hot:
     check:
       type: metric

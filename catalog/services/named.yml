@@ -31,12 +31,14 @@ processes:
   main:
     exe: ${named_binary}
     user: ${user}
-checks:
+watches:
   service:
-    type: service
-    expect: active
+    check:
+      type: service
+      expect: active
   port:
-    type: dns
-    host: ${host}
-    port: ${port}
-    query: ${query}
+    check:
+      type: dns
+      host: ${host}
+      port: ${port}
+      query: ${query}
