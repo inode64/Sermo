@@ -108,7 +108,7 @@
   .mount-table .mount-users { min-width: 8rem; max-width: 16rem; }
   .mount-usage-item, .mount-usage-extra { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mount-processes .mount-usage-item { font-family: var(--mono); font-size: .82em; }
-  #rows tr:hover > td, #watch-rows tr:hover > td, #app-rows tr:hover > td, #mount-rows tr:hover > td { background: color-mix(in srgb, var(--text) 4%, transparent); }
+  #rows tr:hover > td, #container-rows tr:hover > td, #vm-rows tr:hover > td, #watch-rows tr:hover > td, #app-rows tr:hover > td, #mount-rows tr:hover > td { background: color-mix(in srgb, var(--text) 4%, transparent); }
   #rows tr.group-row:hover > td, #app-rows tr.group-row:hover > td { background: color-mix(in srgb, var(--accent) 11%, transparent); }
   /* Firing/warning row highlight. Applies to services (#rows), applications
      (#app-rows) and every watch panel (host #watch-rows, storage, network,
@@ -238,16 +238,16 @@
   #act-last { flex: 1; min-width: 180px; }
   section#locks-section { margin-top: 1rem; }
   .panel-controls input { min-width: 13rem; }
-  #svc-filters button, #storage-filters button, #watch-filters button, #network-filters button, #mount-filters button, #app-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
-  #svc-filters button:hover, #storage-filters button:hover, #watch-filters button:hover, #network-filters button:hover, #mount-filters button:hover, #app-filters button:hover { background: var(--panel-2); color: var(--text); }
-  #svc-filters button.f-active, #storage-filters button.f-active, #watch-filters button.f-active, #network-filters button.f-active, #mount-filters button.f-active, #app-filters button.f-active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
+  #svc-filters button, #container-filters button, #vm-filters button, #storage-filters button, #watch-filters button, #network-filters button, #mount-filters button, #app-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
+  #svc-filters button:hover, #container-filters button:hover, #vm-filters button:hover, #storage-filters button:hover, #watch-filters button:hover, #network-filters button:hover, #mount-filters button:hover, #app-filters button:hover { background: var(--panel-2); color: var(--text); }
+  #svc-filters button.f-active, #container-filters button.f-active, #vm-filters button.f-active, #storage-filters button.f-active, #watch-filters button.f-active, #network-filters button.f-active, #mount-filters button.f-active, #app-filters button.f-active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
   #err { min-height: 1.2rem; }
   #err.status-err { color: var(--crit); }
   #err.status-ok { color: var(--ok); }
   #err.status-warn { color: var(--warn); }
   body.disconnected #overview,
   body.disconnected #attention,
-  body.disconnected #services-section, body.disconnected #storage-section, body.disconnected #watches-section, body.disconnected #network-section,
+  body.disconnected #services-section, body.disconnected #containers-section, body.disconnected #vms-section, body.disconnected #storage-section, body.disconnected #watches-section, body.disconnected #network-section,
   body.disconnected #locks-section, body.disconnected #activity-section, body.disconnected #daemon-section,
   body.disconnected #notifiers-section, body.disconnected #mounts-section, body.disconnected #apps-section { opacity: .5; transition: opacity .2s; }
   .win-btn-active { background: color-mix(in srgb, var(--text-2) 20%, transparent); }
