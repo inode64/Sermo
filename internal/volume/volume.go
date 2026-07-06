@@ -129,7 +129,7 @@ func (e Expander) Resolve(ctx context.Context, path string) (Target, error) {
 	if err != nil {
 		return Target{}, commandFailure(fmt.Sprintf("%q is not an LVM volume (%s %s)", path, cmdLVS, m.Device), err, res, to)
 	}
-	vg, lv, ok := strings.Cut(strings.TrimSpace(res.Stdout), ",")
+	vg, lv, ok := strings.Cut(strings.TrimSpace(res.Stdout), lvmCSVSeparator)
 	if !ok || vg == "" || lv == "" {
 		return Target{}, fmt.Errorf("%q is not an LVM volume", path)
 	}
