@@ -169,7 +169,7 @@ func validateGlobal(cfg *Config) []Issue {
 		}
 	}
 
-	if webCfg, ok := raw["web"].(map[string]any); ok {
+	if webCfg, ok := raw[SectionWeb].(map[string]any); ok {
 		validateWeb(webCfg, add)
 	}
 

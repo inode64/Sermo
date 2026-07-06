@@ -437,23 +437,23 @@ func normalizePflagError(err error) error {
 // reason when disabled) so `--verbose` can surface why no port was opened.
 // Address defaults to loopback.
 func webListenAddr(cfg *config.Config) (addr, reason string) {
-	m, _ := cfg.Global.Raw["web"].(map[string]any)
+	m, _ := cfg.Global.Raw[config.SectionWeb].(map[string]any)
 	if m == nil {
 		return "", "no [web] section in config"
 	}
-	if _, present := m["port"]; !present {
+	if _, present := m[config.WebKeyPort]; !present {
 		return "", "web.port is not set"
 	}
 	// cfgval.Int accepts the same shapes config validation does (including a
 	// quoted "9797"), so a config that validates never silently disables the UI.
-	port, ok := cfgval.Int(m["port"])
+	port, ok := cfgval.Int(m[config.WebKeyPort])
 	if !ok {
-		return "", fmt.Sprintf("web.port is not a number (%T)", m["port"])
+		return "", fmt.Sprintf("web.port is not a number (%T)", m[config.WebKeyPort])
 	}
 	if port < 1 || port > 65535 {
 		return "", fmt.Sprintf("web.port must be in 1..65535 (got %d)", port)
 	}
-	address, _ := m["address"].(string)
+	address, _ := m[config.WebKeyAddress].(string)
 	if address == "" {
 		address = "127.0.0.1"
 	}
@@ -463,14 +463,14 @@ func webListenAddr(cfg *config.Config) (addr, reason string) {
 // webAuth builds the web access control from the `web` block (admin password,
 // optional guest password, optional anonymous guest read access).
 func webAuth(cfg *config.Config) web.Auth {
-	m, _ := cfg.Global.Raw["web"].(map[string]any)
+	m, _ := cfg.Global.Raw[config.SectionWeb].(map[string]any)
 	if m == nil {
 		return web.Auth{}
 	}
 	auth := web.Auth{}
-	auth.AdminPassword, _ = m["password"].(string)
-	auth.GuestPassword, _ = m["guest_password"].(string)
-	auth.AnonymousGuest, _ = m["guest"].(bool)
+	auth.AdminPassword, _ = m[config.WebKeyPassword].(string)
+	auth.GuestPassword, _ = m[config.WebKeyGuestPassword].(string)
+	auth.AnonymousGuest, _ = m[config.WebKeyGuest].(bool)
 	return auth
 }
 

@@ -70,6 +70,22 @@ const (
 	EngineKeyUserLookupTimeout = "user_lookup_timeout"
 )
 
+// Web block and field keys.
+const (
+	// SectionWeb is the top-level web dashboard configuration block.
+	SectionWeb = "web"
+	// WebKeyAddress is web.address.
+	WebKeyAddress = "address"
+	// WebKeyGuest is web.guest.
+	WebKeyGuest = "guest"
+	// WebKeyGuestPassword is web.guest_password.
+	WebKeyGuestPassword = "guest_password"
+	// WebKeyPassword is web.password.
+	WebKeyPassword = "password"
+	// WebKeyPort is web.port.
+	WebKeyPort = "port"
+)
+
 // stop_policy timeout and kill-guard field keys.
 const (
 	keyGracefulTimeout = "graceful_timeout"
