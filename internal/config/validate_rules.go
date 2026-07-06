@@ -215,13 +215,13 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 					add("%s then.action %q is not one of restart, start, stop, reload, resume, alert, block", path, act.typ)
 				}
 			}
-			if act.typ == "block" {
+			if act.typ == string(rules.ActionBlock) {
 				hasBlock = true
 				if !isGuard {
 					add("%s only guard rules may use action block", path)
 				}
 			}
-			if (act.typ == "block" || act.typ == "alert") && act.message == "" {
+			if (act.typ == string(rules.ActionBlock) || act.typ == string(rules.ActionAlert)) && act.message == "" {
 				add("%s action %s requires a non-empty message", path, act.typ)
 			}
 		}
