@@ -37,15 +37,16 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, libBaseli
 	if deps.ProcReader != nil {
 		discoverer.Reader = deps.ProcReader
 	}
-	backendPIDs := deps.BackendPIDs
-	if backendPIDs == nil && deps.Backend != servicemgr.BackendLibvirt && deps.Backend != servicemgr.BackendDocker {
-		backendPIDs = servicemgr.BackendPIDsFuncWithRunner(deps.Backend, unit, deps.ExecxRunner, nil)
-	}
+	backendPIDs := serviceBackendPIDs(deps, unit)
 	if backendPIDs != nil {
 		discoverer.BackendPIDs = backendPIDs
 	}
 	selectors, _ := serviceProcessSelectors(context.Background(), tree, deps, unit)
+	noResident := serviceNoResidentProcess(tree, selectors, backendPIDs)
 	metricSample := MetricSampleForOperation(name, tree, deps.Collector, discoverer, selectors)
+	if noResident {
+		metricSample = nil
+	}
 	checkDeps := checkDepsFromAppDeps(deps, checks.Deps{
 		Service:        name,
 		DefaultTimeout: deps.DefaultTimeout,
@@ -94,6 +95,16 @@ func pidfileFallbackPIDs(ctx context.Context, deps Deps, unit string, backendPID
 	return backendPIDs
 }
 
+func serviceBackendPIDs(deps Deps, unit string) func() []int {
+	if deps.BackendPIDs != nil {
+		return deps.BackendPIDs
+	}
+	if deps.Backend == servicemgr.BackendLibvirt || deps.Backend == servicemgr.BackendDocker {
+		return nil
+	}
+	return servicemgr.BackendPIDsFuncWithRunner(deps.Backend, unit, deps.ExecxRunner, nil)
+}
+
 // serviceProcessSelectors returns the process selectors a service should use
 // for both monitoring workers and web detail. Explicit `processes:` entries win;
 // otherwise we derive the safest init-provided identity we can detect.
@@ -108,6 +119,31 @@ func serviceProcessSelectors(ctx context.Context, tree map[string]any, deps Deps
 func noResidentProcess(tree map[string]any) bool {
 	processes, ok := tree["processes"].(map[string]any)
 	return ok && len(processes) == 0 && len(cfgval.StringList(tree["pidfile"])) == 0
+}
+
+func serviceNoResidentProcess(tree map[string]any, selectors []process.Selector, backendPIDs func() []int) bool {
+	if noResidentProcess(tree) {
+		return true
+	}
+	if processes, configured := tree["processes"].(map[string]any); configured && len(processes) > 0 && len(selectors) == 0 {
+		return false
+	}
+	if len(selectors) > 0 || len(cfgval.StringList(tree["pidfile"])) > 0 {
+		return false
+	}
+	return !hasBackendPIDs(backendPIDs)
+}
+
+func hasBackendPIDs(backendPIDs func() []int) bool {
+	if backendPIDs == nil {
+		return false
+	}
+	for _, pid := range backendPIDs() {
+		if pid > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func initDerivedProcessSelectors(info servicemgr.ProcInfo) []process.Selector {
