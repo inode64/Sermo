@@ -248,20 +248,27 @@ type reloadSpec struct {
 	always  bool
 }
 
+// Reload-block keys: the `reload:` service block and its signal/command fields.
+const (
+	reloadBlockKey   = "reload"
+	reloadSignalKey  = "signal"
+	reloadCommandKey = "command"
+)
+
 // reloadConfigError reports an invalid native reload declaration that validation
 // should have rejected but must not be silently ignored at runtime.
 func reloadConfigError(tree map[string]any) error {
-	r, ok := tree["reload"].(map[string]any)
+	r, ok := tree[reloadBlockKey].(map[string]any)
 	if !ok {
 		return nil
 	}
-	if name := cfgval.AsString(r["signal"]); name != "" {
+	if name := cfgval.AsString(r[reloadSignalKey]); name != "" {
 		if _, err := process.ParseSignal(name); err != nil {
 			return fmt.Errorf("reload.signal: %w", err)
 		}
 		return nil
 	}
-	if argv := cfgval.StringArray(r["command"]); len(argv) > 0 {
+	if argv := cfgval.StringArray(r[reloadCommandKey]); len(argv) > 0 {
 		return nil
 	}
 	return fmt.Errorf("reload: block declares no command or signal")
@@ -271,9 +278,9 @@ func reloadConfigError(tree map[string]any) error {
 // nil when the block is absent or empty/invalid; the engine then uses the plain
 // backend reload.
 func parseReloadSpec(tree map[string]any) *reloadSpec {
-	if r, ok := tree["reload"].(map[string]any); ok {
+	if r, ok := tree[reloadBlockKey].(map[string]any); ok {
 		spec := &reloadSpec{always: cfgval.AsString(r["when"]) == "always"}
-		if name := cfgval.AsString(r["signal"]); name != "" {
+		if name := cfgval.AsString(r[reloadSignalKey]); name != "" {
 			sig, err := process.ParseSignal(name)
 			if err != nil {
 				return nil
@@ -281,7 +288,7 @@ func parseReloadSpec(tree map[string]any) *reloadSpec {
 			spec.signal, spec.hasSig = sig, true
 			return spec
 		}
-		if argv := cfgval.StringArray(r["command"]); len(argv) > 0 {
+		if argv := cfgval.StringArray(r[reloadCommandKey]); len(argv) > 0 {
 			spec.command = argv
 			return spec
 		}
