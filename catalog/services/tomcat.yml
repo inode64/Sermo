@@ -23,7 +23,7 @@ variables:
 config_files:
   - ${config}
 pidfile: /run/tomcat-${version}${sep}${instance}.pid
-reload_on_change:
+restart_on_change:
   paths:
     - ${config}
 watches:

@@ -3,6 +3,8 @@ display_name: "Fail2ban"
 category: security
 variables:
   binary: ${bindir}/fail2ban-server
+  client: ${bindir}/fail2ban-client
 preflight:
   binary: { type: binary, path: "${binary}" }
+  client: { type: binary, path: "${client}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

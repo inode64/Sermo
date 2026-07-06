@@ -19,6 +19,10 @@ preflight:
       - -t
     timeout: 30s
 pidfile: /run/fail2ban/fail2ban.pid
+reload:
+  command:
+    - ${fail2ban_client}
+    - reload
 watches:
   service:
     check:

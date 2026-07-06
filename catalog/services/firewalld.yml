@@ -20,6 +20,10 @@ preflight:
       - --system-config
       - ${config_dir}
     timeout: 30s
+reload:
+  command:
+    - ${firewalld_cmd}
+    - --reload
 reload_on_change:
   paths:
     - ${config_dir}
@@ -39,7 +43,7 @@ watches:
     check:
       type: command
       command:
-        - firewall-cmd
+        - ${firewalld_cmd}
         - state
       timeout: 10s
       verify: true

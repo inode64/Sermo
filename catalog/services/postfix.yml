@@ -20,6 +20,9 @@ preflight:
 
 config_files: [/etc/postfix/main.cf, /etc/postfix/master.cf]
 
+reload:
+  command: ["${postfix_binary}", "reload"]
+
 reload_on_change:
   paths: [/etc/postfix/main.cf, /etc/postfix/master.cf]
 watches:

@@ -33,7 +33,7 @@ processes:
   shim:
     exe: ${containerd_shim_binary}
     user: ${user}
-reload_on_change:
+restart_on_change:
   paths:
     - ${config}
 policy:

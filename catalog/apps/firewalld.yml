@@ -4,7 +4,9 @@ category: security
 variables:
   binary: ${bindir}/firewalld
   binary_offline: ${bindir}/firewall-offline-cmd
+  cmd: ${bindir}/firewall-cmd
 preflight:
   binary: { type: binary, path: "${binary}" }
   binary_offline: { type: binary, path: "${binary_offline}" }
+  cmd: { type: binary, path: "${cmd}" }
   version: { type: command, command: ["${binary_offline}", "--version"], timeout: 10s }
