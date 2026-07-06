@@ -9,6 +9,14 @@ import (
 	"time"
 )
 
+// PSI pressure resources (the `resource:` selector of a pressure check).
+// Exported so config validation checks the same set the check accepts.
+const (
+	PressureResourceCPU    = "cpu"
+	PressureResourceMemory = "memory"
+	PressureResourceIO     = "io"
+)
+
 // PressureAverages are one PSI line's rolling stall percentages (10s/60s/300s
 // windows).
 type PressureAverages struct {
