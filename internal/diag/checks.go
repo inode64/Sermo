@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 	"sermo/internal/config"
 )
 
@@ -66,9 +67,9 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 			continue
 		}
 		switch cfgval.AsString(check["type"]) {
-		case "net":
+		case checks.CheckTypeNet:
 			warnMissingInterface(b, scope, check, host)
-		case "file":
+		case checks.CheckTypeFile:
 			if p := cfgval.AsString(check["path"]); p != "" && !host.PathExists(p) {
 				b.add(LevelWarning, scope, "path %q does not exist", p)
 			}
@@ -84,23 +85,23 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 // that do not exist on this host. Shared by service checks and host watches.
 func diagCheckResources(b *builder, scope string, entry map[string]any, host Host) {
 	switch cfgval.AsString(entry["type"]) {
-	case "storage":
+	case checks.CheckTypeStorage:
 		diagStorageResources(b, scope, entry, host)
-	case "count":
+	case checks.CheckTypeCount:
 		if p := cfgval.AsString(entry["path"]); p != "" && !host.PathExists(p) {
 			b.add(LevelWarning, scope, "directory %q does not exist", p)
 		}
-	case "diskio":
+	case checks.CheckTypeDiskIO:
 		if dev := cfgval.AsString(entry["device"]); dev != "" && !host.PathExists("/sys/class/block/"+dev) {
 			b.add(LevelWarning, scope, "block device %q does not exist (no /sys/class/block entry)", dev)
 		}
-	case "hdparm", "smart":
+	case checks.CheckTypeHdparm, checks.CheckTypeSmart:
 		if dev := cfgval.AsString(entry["device"]); dev != "" && !host.PathExists(dev) {
 			b.add(LevelWarning, scope, "device %q does not exist", dev)
 		}
-	case "route":
+	case checks.CheckTypeRoute:
 		warnMissingInterface(b, scope, entry, host)
-	case "pressure":
+	case checks.CheckTypePressure:
 		if res := cfgval.AsString(entry["resource"]); res != "" && !host.PathExists("/proc/pressure/"+res) {
 			b.add(LevelWarning, scope, "kernel exposes no /proc/pressure/%s (CONFIG_PSI off?); this check will never fire", res)
 		}
