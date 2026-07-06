@@ -44,15 +44,19 @@ func normalizeServiceUnits(units []string) []string {
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(units))
 	for _, unit := range units {
-		unit = strings.TrimSpace(unit)
-		if unit == "" {
-			continue
-		}
-		if _, ok := seen[unit]; ok {
-			continue
-		}
-		seen[unit] = struct{}{}
-		out = append(out, unit)
+		out = appendServiceUnit(out, seen, unit)
 	}
 	return out
+}
+
+func appendServiceUnit(out []string, seen map[string]struct{}, unit string) []string {
+	unit = strings.TrimSpace(unit)
+	if unit == "" {
+		return out
+	}
+	if _, ok := seen[unit]; ok {
+		return out
+	}
+	seen[unit] = struct{}{}
+	return append(out, unit)
 }
