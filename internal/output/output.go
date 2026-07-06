@@ -33,16 +33,28 @@ const (
 // usually print, and prefixes a truncation marker when anything was dropped.
 func Bounded(stdout, stderr string) string {
 	var parts []string
-	if s := Trim(stdout); s != "" {
-		parts = append(parts, "stdout:\n"+s)
-	}
-	if s := Trim(stderr); s != "" {
-		parts = append(parts, "stderr:\n"+s)
+	for _, stream := range []struct {
+		label string
+		text  string
+	}{
+		{label: "stdout", text: stdout},
+		{label: "stderr", text: stderr},
+	} {
+		if section := streamSection(stream.label, stream.text); section != "" {
+			parts = append(parts, section)
+		}
 	}
 	if len(parts) == 0 {
 		return ""
 	}
 	return boundTail(strings.Join(parts, "\n"))
+}
+
+func streamSection(label, text string) string {
+	if s := Trim(text); s != "" {
+		return label + ":\n" + s
+	}
+	return ""
 }
 
 func boundTail(s string) string {
