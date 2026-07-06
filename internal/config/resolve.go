@@ -998,7 +998,7 @@ func (c *Config) expandAppsChain(tree map[string]any, chain []string) []string {
 	}
 
 	var errs []string
-	preflight, _ := tree["preflight"].(map[string]any)
+	preflight, _ := tree[sectionPreflight].(map[string]any)
 	if preflight == nil {
 		preflight = map[string]any{}
 	}
@@ -1018,7 +1018,7 @@ func (c *Config) expandAppsChain(tree map[string]any, chain []string) []string {
 			errs = append(errs, rerrs...)
 			continue
 		}
-		appPre, _ := resolved.Tree["preflight"].(map[string]any)
+		appPre, _ := resolved.Tree[sectionPreflight].(map[string]any)
 		for checkName, check := range appPre {
 			key := fmt.Sprintf("%s-%s", name, checkName)
 			if _, exists := preflight[key]; exists {
@@ -1037,7 +1037,7 @@ func (c *Config) expandAppsChain(tree map[string]any, chain []string) []string {
 		}
 	}
 	if len(preflight) > 0 {
-		tree["preflight"] = preflight
+		tree[sectionPreflight] = preflight
 	}
 	return errs
 }

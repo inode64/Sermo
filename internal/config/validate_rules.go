@@ -480,7 +480,7 @@ func ruleActions(then map[string]any) []valAction {
 
 func collectCheckNames(tree map[string]any) map[string]struct{} {
 	names := map[string]struct{}{}
-	for _, section := range []string{sectionChecks, "preflight"} {
+	for _, section := range []string{sectionChecks, sectionPreflight} {
 		if entries, ok := tree[section].(map[string]any); ok {
 			for name := range entries {
 				names[name] = struct{}{}
@@ -495,7 +495,7 @@ func collectCheckNames(tree map[string]any) map[string]struct{} {
 // flagged.
 func collectSystemMetricChecks(tree map[string]any) map[string]struct{} {
 	names := map[string]struct{}{}
-	for _, section := range []string{sectionChecks, "preflight"} {
+	for _, section := range []string{sectionChecks, sectionPreflight} {
 		entries, ok := tree[section].(map[string]any)
 		if !ok {
 			continue
