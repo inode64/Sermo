@@ -24,7 +24,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		if mode, present := entry[keyMonitor]; present {
 			validateMonitorMode("watches."+name+".monitor", mode, add)
 		}
-		if v, ok := entry["enabled"].(bool); ok && !v {
+		if v, ok := entry[keyEnabled].(bool); ok && !v {
 			continue
 		}
 
@@ -105,7 +105,7 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 			add("watches.%s name is reserved for the version/config monitor; rename it", name)
 			continue
 		}
-		if v, ok := entry["enabled"].(bool); ok && !v {
+		if v, ok := entry[keyEnabled].(bool); ok && !v {
 			continue
 		}
 		prefix := "watches." + name

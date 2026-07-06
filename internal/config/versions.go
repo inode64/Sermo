@@ -1000,7 +1000,7 @@ func versionUnversionedEnabled(body map[string]any, tok tmplToken) bool {
 	if !ok {
 		return false
 	}
-	if enabled, present := opts["enabled"]; present {
+	if enabled, present := opts[keyEnabled]; present {
 		return cfgval.Bool(enabled)
 	}
 	return true
@@ -1168,7 +1168,7 @@ func applyUnversionedOverrides(out map[string]any) {
 		return
 	}
 	for key, value := range overrides {
-		if key == "enabled" {
+		if key == keyEnabled {
 			continue
 		}
 		out[key] = value

@@ -545,7 +545,7 @@ type serviceWatchRuleTarget struct {
 	checkType string
 }
 
-var serviceWatchCheckEntryFields = [...]string{"enabled", "verify", "requires", "optional", keyInterval}
+var serviceWatchCheckEntryFields = [...]string{keyEnabled, "verify", "requires", "optional", keyInterval}
 
 // promoteServiceWatchCheck promotes an embedded watch check to checks.<watch-name>,
 // returning the generated rule target.
