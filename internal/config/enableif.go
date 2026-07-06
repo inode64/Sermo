@@ -112,6 +112,12 @@ func validateEnableIfSpec(path string, spec any, add addFunc) {
 	if cfgval.String(m["key"]) == "" {
 		add("%s.key is required", path)
 	}
+	if predicates := validateEnableIfPredicates(path, m, add); predicates != 1 {
+		add("%s must define exactly one of contains, equals or matches", path)
+	}
+}
+
+func validateEnableIfPredicates(path string, m map[string]any, add addFunc) int {
 	predicates := 0
 	if _, has := m["contains"]; has {
 		predicates++
@@ -131,9 +137,7 @@ func validateEnableIfSpec(path string, spec any, add addFunc) {
 			add("%s.matches is not a valid regex: %v", path, err)
 		}
 	}
-	if predicates != 1 {
-		add("%s must define exactly one of contains, equals or matches", path)
-	}
+	return predicates
 }
 
 // enableIfHolds evaluates an enable_if predicate against a distro config file.
@@ -160,6 +164,10 @@ func enableIfHolds(spec any) bool {
 	if !ok {
 		return false
 	}
+	return enableIfPredicateMatches(m, val)
+}
+
+func enableIfPredicateMatches(m map[string]any, val string) bool {
 	if want := cfgval.String(m["contains"]); want != "" {
 		return strings.Contains(val, want)
 	}
