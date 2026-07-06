@@ -10,6 +10,15 @@ import (
 	"sermo/internal/execx"
 )
 
+const (
+	openRCRunlevelPrefix        = "runlevel:"
+	openRCDynamicRunlevelPrefix = "dynamic runlevel:"
+	openRCStateStarted          = "started"
+	openRCStateNotStarted       = "not started"
+	openRCStateStopped          = "stopped"
+	openRCStateCrashed          = "crashed"
+)
+
 // ListActiveUnits returns active service units for the selected init backend.
 func ListActiveUnits(ctx context.Context, backend Backend, runner execx.Runner, timeout time.Duration) ([]string, error) {
 	if runner == nil {
@@ -56,36 +65,31 @@ func ParseOpenRCActiveUnits(stdout string) []string {
 	sc := bufio.NewScanner(strings.NewReader(stdout))
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
-		lower := strings.ToLower(line)
-		switch {
-		case strings.HasPrefix(lower, "runlevel:"):
-			name := strings.TrimSpace(strings.TrimPrefix(lower, "runlevel:"))
-			inServiceRunlevel = openRCServiceRunlevel(name)
-			continue
-		case strings.HasPrefix(lower, "dynamic runlevel:"):
-			name := strings.TrimSpace(strings.TrimPrefix(lower, "dynamic runlevel:"))
+		if name, ok := openRCRunlevel(line); ok {
 			inServiceRunlevel = openRCServiceRunlevel(name)
 			continue
 		}
-		if !inServiceRunlevel || !strings.Contains(lower, "started") {
+		if !inServiceRunlevel {
 			continue
 		}
-		if strings.Contains(lower, "not started") || strings.Contains(lower, "stopped") || strings.Contains(lower, "crashed") {
-			continue
+		if service := openRCStartedService(line); service != "" {
+			out = append(out, service)
 		}
-		beforeState := line
-		if i := strings.Index(beforeState, "["); i >= 0 {
-			beforeState = beforeState[:i]
-		}
-		fields := strings.Fields(beforeState)
-		if len(fields) == 0 {
-			continue
-		}
-		out = append(out, fields[0])
 	}
 	// A service can appear in more than one matched runlevel, and duplicates are
 	// not guaranteed to be adjacent.
 	return uniqueStrings(nil, out...)
+}
+
+func openRCRunlevel(line string) (string, bool) {
+	lower := strings.ToLower(line)
+	if name, ok := strings.CutPrefix(lower, openRCRunlevelPrefix); ok {
+		return strings.TrimSpace(name), true
+	}
+	if name, ok := strings.CutPrefix(lower, openRCDynamicRunlevelPrefix); ok {
+		return strings.TrimSpace(name), true
+	}
+	return "", false
 }
 
 func openRCServiceRunlevel(name string) bool {
@@ -95,6 +99,24 @@ func openRCServiceRunlevel(name string) bool {
 	default:
 		return false
 	}
+}
+
+func openRCStartedService(line string) string {
+	lower := strings.ToLower(line)
+	if !strings.Contains(lower, openRCStateStarted) {
+		return ""
+	}
+	if strings.Contains(lower, openRCStateNotStarted) ||
+		strings.Contains(lower, openRCStateStopped) ||
+		strings.Contains(lower, openRCStateCrashed) {
+		return ""
+	}
+	beforeState, _, _ := strings.Cut(line, "[")
+	fields := strings.Fields(beforeState)
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
 }
 
 func uniqueStrings(list []string, values ...string) []string {
