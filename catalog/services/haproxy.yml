@@ -1,0 +1,91 @@
+name: haproxy
+display_name: "HAProxy"
+category: web
+description: HAProxy load balancer and reverse proxy.
+service:
+  systemd:
+    - haproxy
+  openrc:
+    - haproxy
+apps:
+  - haproxy
+variables:
+  user: root
+  host: 127.0.0.1
+  port: 80
+  config: /etc/haproxy/haproxy.cfg
+  pidfile: /run/haproxy.pid
+  master_socket: /run/haproxy-master.sock
+config_files:
+  - ${config}
+  - /etc/haproxy
+pidfile: ${pidfile}
+socket:
+  path: ${master_socket}
+  optional: true
+preflight:
+  config:
+    type: command
+    command:
+      - ${haproxy_binary}
+      - -c
+      - -f
+      - ${config}
+    timeout: 30s
+processes:
+  main:
+    exe: ${haproxy_binary}
+    user: ${user}
+reload:
+  signal: USR2
+reload_on_change:
+  paths:
+    - ${config}
+    - /etc/haproxy
+policy:
+  cooldown: 15m
+  max_actions: 2
+  max_actions_window: 1h
+  backoff:
+    initial: 15m
+    max: 1h
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+  frontend:
+    check:
+      type: tcp
+      host: ${host}
+      port: ${port}
+      timeout: 2s
+      optional: true
+      verify: true
+  alert-if-fds-high:
+    check:
+      type: metric
+      scope: service
+      name: fds
+      op: '>'
+      value: 50000
+      optional: true
+    within:
+      cycles: 10
+      min_matches: 3
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+  alert-if-memory-high:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 60%
+      optional: true
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

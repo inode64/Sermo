@@ -1,0 +1,12 @@
+name: etcd
+display_name: "etcd"
+category: database
+variables:
+  binary: ${bindir}/etcd
+  ctl: ${bindir}/etcdctl
+  utl: ${bindir}/etcdutl
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  ctl: { type: binary, path: "${ctl}", optional: true }
+  utl: { type: binary, path: "${utl}", optional: true }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

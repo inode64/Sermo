@@ -1,0 +1,9 @@
+name: haproxy
+display_name: "HAProxy"
+category: web
+variables:
+  binary: ${bindir}/haproxy
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-v"], timeout: 10s }
+  libraries: { type: libraries, binary: "${binary}", optional: true }
