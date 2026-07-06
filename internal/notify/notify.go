@@ -37,6 +37,15 @@ type Notifier interface {
 	Send(ctx context.Context, msg Message) error
 }
 
+const (
+	keyDSN     = "dsn"
+	keyFrom    = "from"
+	keyTo      = "to"
+	keyType    = "type"
+	keyUsers   = "users"
+	keyWebhook = "webhook"
+)
+
 // Option customizes notifier construction.
 type Option func(*buildOptions)
 
@@ -107,7 +116,7 @@ func Build(raw map[string]any, opts ...Option) (map[string]Notifier, []string) {
 		if !Enabled(entry) {
 			continue
 		}
-		typ, _ := entry["type"].(string)
+		typ, _ := entry[keyType].(string)
 		build, ok := builders[typ]
 		if !ok {
 			warnings = append(warnings, fmt.Sprintf("notifier %s: unsupported type %q", name, typ))

@@ -36,7 +36,7 @@ func buildTTY(name string, entry map[string]any) (Notifier, error) {
 	return &ttyNotifier{
 		name:      name,
 		typ:       notifierTypeTTY,
-		users:     stringSet(cfgval.StringList(entry["users"])),
+		users:     stringSet(cfgval.StringList(entry[keyUsers])),
 		utmpPaths: []string{"/run/utmp", "/var/run/utmp"},
 		devRoot:   "/dev",
 		writeTTY:  writeTTYLinux,
