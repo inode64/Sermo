@@ -24,6 +24,13 @@ const dialTimeout = 15 * time.Second
 
 const minSMTPTimeout = time.Nanosecond
 
+const (
+	schemeSMTP       = "smtp"
+	schemeSMTPS      = "smtps"
+	smtpDefaultPort  = "587"
+	smtpsDefaultPort = "465"
+)
+
 // emailDSN is a parsed SMTP DSN: smtp://[user:pass@]host[:port] (STARTTLS) or
 // smtps://… (implicit TLS, default port 465).
 type emailDSN struct {
@@ -93,12 +100,12 @@ func parseEmailDSN(s string) (emailDSN, error) {
 	}
 	var d emailDSN
 	switch u.Scheme {
-	case "smtp":
+	case schemeSMTP:
 		d.implicitTLS = false
-	case "smtps":
+	case schemeSMTPS:
 		d.implicitTLS = true
 	default:
-		return emailDSN{}, fmt.Errorf("dsn scheme %q must be smtp or smtps", u.Scheme)
+		return emailDSN{}, fmt.Errorf("dsn scheme %q must be %s or %s", u.Scheme, schemeSMTP, schemeSMTPS)
 	}
 	d.host = u.Hostname()
 	if d.host == "" {
@@ -117,9 +124,9 @@ func parseEmailDSN(s string) (emailDSN, error) {
 
 func (d emailDSN) defaultPort() string {
 	if d.implicitTLS {
-		return "465"
+		return smtpsDefaultPort
 	}
-	return "587"
+	return smtpDefaultPort
 }
 
 // smtpSend connects per the DSN (implicit TLS or opportunistic STARTTLS),
