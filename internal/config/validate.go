@@ -21,13 +21,20 @@ type Issue struct {
 
 var validBackends = map[string]struct{}{"": {}, backendAuto: {}, backendSystemd: {}, backendOpenRC: {}}
 
+const (
+	securityKeyAllowSIGKILLByDefault         = "allow_sigkill_by_default"
+	securityKeyBlockRestartOnActiveLock      = "block_restart_on_active_lock"
+	securityKeyRequireKillSelector           = "require_kill_selector"
+	securityKeyRequirePreflightBeforeRestart = "require_preflight_before_restart"
+)
+
 // rejectedSecurityToggles are keys under `security:` that try to disable hard
 // safety invariants and must never be honored.
 var rejectedSecurityToggles = []string{
-	"require_preflight_before_restart",
-	"block_restart_on_active_lock",
-	"allow_sigkill_by_default",
-	"require_kill_selector",
+	securityKeyRequirePreflightBeforeRestart,
+	securityKeyBlockRestartOnActiveLock,
+	securityKeyAllowSIGKILLByDefault,
+	securityKeyRequireKillSelector,
 }
 
 var validGlobalPathKeys = set(
