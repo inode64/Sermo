@@ -519,80 +519,11 @@ func expandServiceWatches(tree map[string]any) []string {
 			continue
 		}
 
-		// The rule references either an existing named check (`check: {ref: name}`,
-		// so a shared health/verify probe is not duplicated) or a probe embedded in
-		// the watch, generated as a check named after the watch.
-		var refName, refType string
-		if ref := cfgval.String(check["ref"]); ref != "" {
-			refName, refType = ref, lookupCheckType(tree, ref)
-			if refType == "" {
-				add("watches.%s.check.ref %q does not name a checks: or preflight: entry", name, ref)
-				continue
-			}
-			// Entry-level check fields belong on the referenced check, not the
-			// referencing watch — reject them rather than drop them silently.
-			for _, k := range []string{"verify", "requires", "optional", "interval"} {
-				if _, has := entry[k]; has {
-					add("watches.%s.%s is not supported with check.ref; set it on the referenced check %q", name, k, ref)
-				}
-			}
-		} else {
-			if _, exists := checksMap[name]; exists {
-				add("watches.%s would overwrite existing check %q; rename the watch", name, name)
-				continue
-			}
-			genCheck := cloneMap(check)
-			for _, k := range []string{"verify", "requires", "optional", "interval"} {
-				if v, has := entry[k]; has {
-					genCheck[k] = v
-				}
-			}
-			checksMap[name] = genCheck
-			refName, refType = name, cfgval.String(check["type"])
+		target, ok := resolveServiceWatchRuleTarget(tree, checksMap, name, entry, check, add)
+		if !ok {
+			continue
 		}
-
-		// Condition polarity from the check type: health fires on failure, a
-		// condition (metric/storage/…) on its threshold.
-		operand := map[string]any{"check": refName}
-		var cond map[string]any
-		if checks.IsHealthType(refType) {
-			cond = map[string]any{"failed": operand}
-		} else {
-			cond = map[string]any{"active": operand}
-		}
-
-		// 3. generated rule.
-		rule := map[string]any{"if": cond}
-		if w, has := entry["for"]; has {
-			rule["for"] = w
-		}
-		if w, has := entry["within"]; has {
-			rule["within"] = w
-		}
-		thenOut := map[string]any{"action": action}
-		if msg := cfgval.String(then["message"]); msg != "" {
-			thenOut["message"] = msg
-		}
-		switch rules.ActionType(action) {
-		case rules.ActionBlock:
-			rule["type"] = string(rules.RuleGuard)
-			if b := cfgval.StringList(then["blocks"]); len(b) > 0 {
-				rule["blocks"] = then["blocks"]
-			}
-		case rules.ActionAlert:
-			rule["type"] = string(rules.RuleAlert)
-		default:
-			rule["type"] = string(rules.RuleRemediation)
-		}
-		// A rule's notify is an entry-level field (ParseRules reads entry["notify"]),
-		// not part of then; a guard never notifies.
-		if action != string(rules.ActionBlock) {
-			if n, has := then["notify"]; has {
-				rule["notify"] = n
-			}
-		}
-		rule["then"] = thenOut
-		rulesMap[name] = rule
+		rulesMap[name] = buildServiceWatchRule(entry, then, action, target)
 
 		delete(watches, name)
 	}
@@ -607,6 +538,92 @@ func expandServiceWatches(tree map[string]any) []string {
 		delete(tree, "watches")
 	}
 	return errs
+}
+
+type serviceWatchRuleTarget struct {
+	checkName string
+	checkType string
+}
+
+var serviceWatchCheckEntryFields = [...]string{"verify", "requires", "optional", "interval"}
+
+// resolveServiceWatchRuleTarget returns the check a generated rule should read.
+// A watch can reference an existing check/preflight entry, or it can embed a
+// check block that is promoted to checks.<watch-name>.
+func resolveServiceWatchRuleTarget(tree, checksMap map[string]any, name string, entry, check map[string]any, add func(string, ...any)) (serviceWatchRuleTarget, bool) {
+	if ref := cfgval.String(check["ref"]); ref != "" {
+		checkType := lookupCheckType(tree, ref)
+		if checkType == "" {
+			add("watches.%s.check.ref %q does not name a checks: or preflight: entry", name, ref)
+			return serviceWatchRuleTarget{}, false
+		}
+		// Entry-level check fields belong on the referenced check, not the
+		// referencing watch — reject them rather than drop them silently.
+		for _, k := range serviceWatchCheckEntryFields {
+			if _, has := entry[k]; has {
+				add("watches.%s.%s is not supported with check.ref; set it on the referenced check %q", name, k, ref)
+			}
+		}
+		return serviceWatchRuleTarget{checkName: ref, checkType: checkType}, true
+	}
+
+	if _, exists := checksMap[name]; exists {
+		add("watches.%s would overwrite existing check %q; rename the watch", name, name)
+		return serviceWatchRuleTarget{}, false
+	}
+	genCheck := cloneMap(check)
+	for _, k := range serviceWatchCheckEntryFields {
+		if v, has := entry[k]; has {
+			genCheck[k] = v
+		}
+	}
+	checksMap[name] = genCheck
+	return serviceWatchRuleTarget{checkName: name, checkType: cfgval.String(check["type"])}, true
+}
+
+func buildServiceWatchRule(entry, then map[string]any, action string, target serviceWatchRuleTarget) map[string]any {
+	rule := map[string]any{"if": serviceWatchRuleCondition(target)}
+	if w, has := entry["for"]; has {
+		rule["for"] = w
+	}
+	if w, has := entry["within"]; has {
+		rule["within"] = w
+	}
+
+	thenOut := map[string]any{"action": action}
+	if msg := cfgval.String(then["message"]); msg != "" {
+		thenOut["message"] = msg
+	}
+	switch rules.ActionType(action) {
+	case rules.ActionBlock:
+		rule["type"] = string(rules.RuleGuard)
+		if b := cfgval.StringList(then["blocks"]); len(b) > 0 {
+			rule["blocks"] = then["blocks"]
+		}
+	case rules.ActionAlert:
+		rule["type"] = string(rules.RuleAlert)
+	default:
+		rule["type"] = string(rules.RuleRemediation)
+	}
+	// A rule's notify is an entry-level field (ParseRules reads entry["notify"]),
+	// not part of then; a guard never notifies.
+	if action != string(rules.ActionBlock) {
+		if n, has := then["notify"]; has {
+			rule["notify"] = n
+		}
+	}
+	rule["then"] = thenOut
+	return rule
+}
+
+// serviceWatchRuleCondition preserves watch polarity: health checks fire on
+// failure, while condition checks fire when their threshold is active.
+func serviceWatchRuleCondition(target serviceWatchRuleTarget) map[string]any {
+	operand := map[string]any{"check": target.checkName}
+	if checks.IsHealthType(target.checkType) {
+		return map[string]any{"failed": operand}
+	}
+	return map[string]any{"active": operand}
 }
 
 // lookupCheckType returns the type of a named check in the checks: or preflight:

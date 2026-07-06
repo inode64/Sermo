@@ -1505,7 +1505,9 @@ un check **y** su remediación/guard/alerta juntos:
 Esa entrada se **desugariza** al `checks:` + `rules:` equivalente, por lo que es
 exactamente igual que escribir ese check + regla a mano y hereda cada barrera de
 seguridad (incluida la regla de que una métrica `scope: system` nunca puede
-disparar una acción de servicio). El `check:` es o bien:
+disparar una acción de servicio). Como el resultado es una regla, no un notificador
+del runtime de watches, `then.notify_interval` no está soportado con
+`then.action`. El `check:` es o bien:
 
 - **embebido** (`check: { type: http, … }`) — una sonda generada como check con el
   nombre del watch. Dos watches que embeban el mismo endpoint lo sondean dos veces.
