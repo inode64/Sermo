@@ -988,7 +988,7 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 			return nil, "net state requires expect: up|down or on: change"
 		}
 		if expect != "" {
-			if expect != netStateUp && expect != netStateDown {
+			if expect != NetStateUp && expect != NetStateDown {
 				return nil, "net state expect must be up or down"
 			}
 			c.expect = expect
@@ -1017,7 +1017,7 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 			return nil, "net address requires expect: present|absent or on: change"
 		}
 		if expect != "" {
-			if expect != netAddrPresent && expect != netAddrAbsent {
+			if expect != NetAddrPresent && expect != NetAddrAbsent {
 				return nil, "net address expect must be present or absent"
 			}
 			c.expect = expect
@@ -1327,7 +1327,7 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 			return nil, "icmp state requires expect: up|down or on: change"
 		}
 		if expect != "" {
-			if expect != netStateUp && expect != netStateDown {
+			if expect != NetStateUp && expect != NetStateDown {
 				return nil, "icmp state expect must be up or down"
 			}
 			c.expect = expect

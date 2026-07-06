@@ -494,7 +494,7 @@ func validateNetMetricCondition(prefix, metric string, m map[string]any, add add
 		onChange := cfgval.String(m["on"]) == checks.OnModeChange
 		if exp == "" && !onChange {
 			add("%s requires expect: present|absent or on: change", prefix)
-		} else if exp != "" && exp != "present" && exp != "absent" {
+		} else if exp != "" && exp != checks.NetAddrPresent && exp != checks.NetAddrAbsent {
 			add("%s.expect must be present or absent", prefix)
 		}
 	default:
@@ -563,7 +563,7 @@ func validateStateMetric(prefix string, m map[string]any, add func(string, ...an
 	onChange := cfgval.String(m["on"]) == checks.OnModeChange
 	if exp == "" && !onChange {
 		add("%s requires expect: up|down or on: change", prefix)
-	} else if exp != "" && exp != "up" && exp != "down" {
+	} else if exp != "" && exp != checks.NetStateUp && exp != checks.NetStateDown {
 		add("%s.expect must be up or down", prefix)
 	}
 }

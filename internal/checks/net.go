@@ -12,16 +12,18 @@ import (
 	"time"
 )
 
-// Link-state values reported and expected by net/icmp state checks.
+// Link-state values reported and expected by net/icmp state checks. Exported so
+// config validation checks the same expect vocabulary the check evaluates.
 const (
-	netStateUp   = "up"
-	netStateDown = "down"
+	NetStateUp   = "up"
+	NetStateDown = "down"
 )
 
-// Address-presence expect values for a net address check.
+// Address-presence expect values for a net address check. Exported for the same
+// reason as the link-state values.
 const (
-	netAddrPresent = "present"
-	netAddrAbsent  = "absent"
+	NetAddrPresent = "present"
+	NetAddrAbsent  = "absent"
 )
 
 // NetSample is one observation of a network interface.
@@ -145,7 +147,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 		if c.expect != "" {
 			present := len(s.Addrs) > 0
 			data[fieldValue] = len(s.Addrs)
-			ok := (c.expect == netAddrPresent) == present
+			ok := (c.expect == NetAddrPresent) == present
 			res := c.result(ok, fmt.Sprintf("%s address %s (want %s)", c.iface, display, c.expect), start)
 			res.Data = data
 			return res
@@ -201,12 +203,12 @@ func sampleNetFromSysfs(iface, root string) (NetSample, error) {
 			return NetSample{}, err
 		}
 	}
-	state := netStateDown
+	state := NetStateDown
 	if err == nil && ifi.Flags&net.FlagUp != 0 && ifi.Flags&net.FlagRunning != 0 {
-		state = netStateUp
+		state = NetStateUp
 	}
 	if err != nil && sysfsIfaceUp(dir) {
-		state = netStateUp
+		state = NetStateUp
 	}
 	sample := NetSample{State: state, Counters: map[string]uint64{}}
 
@@ -251,7 +253,7 @@ func sysfsIfaceDir(root, iface string) string {
 func sysfsIfaceUp(dir string) bool {
 	flags := sysfsIfaceFlagBits(filepath.Join(dir, "flags"))
 	operstate := strings.TrimSpace(readTextFile(filepath.Join(dir, "operstate")))
-	return flags&0x1 != 0 && (flags&0x40 != 0 || operstate == netStateUp || operstate == "unknown")
+	return flags&0x1 != 0 && (flags&0x40 != 0 || operstate == NetStateUp || operstate == "unknown")
 }
 
 func sysfsIfaceFlagBits(path string) uint64 {
