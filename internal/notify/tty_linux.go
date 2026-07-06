@@ -32,13 +32,24 @@ type ttyNotifier struct {
 	now       func() time.Time
 }
 
+const (
+	defaultTTYDevRoot = "/dev"
+	defaultTTYHost    = "localhost"
+	utmpPathRun       = "/run/utmp"
+	utmpPathVarRun    = "/var/run/utmp"
+)
+
+func defaultUTMPPaths() []string {
+	return []string{utmpPathRun, utmpPathVarRun}
+}
+
 func buildTTY(name string, entry map[string]any) (Notifier, error) {
 	return &ttyNotifier{
 		name:      name,
 		typ:       notifierTypeTTY,
 		users:     stringSet(cfgval.StringList(entry[keyUsers])),
-		utmpPaths: []string{"/run/utmp", "/var/run/utmp"},
-		devRoot:   "/dev",
+		utmpPaths: defaultUTMPPaths(),
+		devRoot:   defaultTTYDevRoot,
 		writeTTY:  writeTTYLinux,
 		hostname:  os.Hostname,
 		now:       time.Now,
@@ -49,8 +60,8 @@ func buildWall(name string, entry map[string]any) (Notifier, error) {
 	return &ttyNotifier{
 		name:      name,
 		typ:       notifierTypeWall,
-		utmpPaths: []string{"/run/utmp", "/var/run/utmp"},
-		devRoot:   "/dev",
+		utmpPaths: defaultUTMPPaths(),
+		devRoot:   defaultTTYDevRoot,
 		writeTTY:  writeTTYLinux,
 		hostname:  os.Hostname,
 		now:       time.Now,
@@ -81,7 +92,7 @@ func (n *ttyNotifier) Send(ctx context.Context, msg Message) error {
 func (n *ttyNotifier) sendToTargets(ctx context.Context, targets []string, msg Message) error {
 	host, err := n.hostname()
 	if err != nil || strings.TrimSpace(host) == "" {
-		host = "localhost"
+		host = defaultTTYHost
 	}
 	now := time.Now
 	if n.now != nil {
@@ -117,7 +128,7 @@ func (n *ttyNotifier) sendToTargets(ctx context.Context, targets []string, msg M
 func (n *ttyNotifier) targetTTYs(sessions []ttySession) []string {
 	devRoot := n.devRoot
 	if devRoot == "" {
-		devRoot = "/dev"
+		devRoot = defaultTTYDevRoot
 	}
 	seen := map[string]struct{}{}
 	var out []string
