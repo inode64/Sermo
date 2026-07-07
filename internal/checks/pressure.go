@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -86,7 +87,7 @@ func SamplePressure(resource string) (PressureSample, error) {
 
 // defaultPressureSampler reads and parses /proc/pressure/<resource>.
 func defaultPressureSampler(resource string) (PressureSample, error) {
-	data, err := os.ReadFile("/proc/pressure/" + resource)
+	data, err := os.ReadFile(filepath.Join(procPressureRootPath, resource))
 	if err != nil {
 		return PressureSample{}, err
 	}

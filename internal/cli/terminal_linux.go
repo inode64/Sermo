@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+const procSelfFDPath = "/proc/self/fd"
+
 func stdinIsTerminal(r io.Reader) bool {
 	f, ok := r.(*os.File)
 	if !ok {
@@ -19,7 +21,7 @@ func stdinIsTerminal(r io.Reader) bool {
 	if err != nil || info.Mode()&os.ModeCharDevice == 0 {
 		return false
 	}
-	target, err := os.Readlink(filepath.Join("/proc/self/fd", strconv.Itoa(int(f.Fd()))))
+	target, err := os.Readlink(filepath.Join(procSelfFDPath, strconv.Itoa(int(f.Fd()))))
 	if err != nil {
 		return false
 	}
