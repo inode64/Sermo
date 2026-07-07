@@ -86,14 +86,13 @@ func TestDocsSermoAllValidates(t *testing.T) {
 		t.Fatalf("expected a global document and services, got global=%v services=%v", globalDoc != "", services)
 	}
 
-	// Re-point the example's deployment paths at the sandbox (and the repo
-	// catalog, so cross-references to packaged definitions keep working).
+	// Re-point the example's deployment paths at the sandbox. Catalog documents
+	// are loaded through the internal test override below, not YAML.
 	var global map[string]any
 	if err := yaml.Unmarshal([]byte(globalDoc), &global); err != nil {
 		t.Fatalf("global document: %v", err)
 	}
 	global["paths"] = map[string]any{
-		"catalog":  []any{filepath.Join(root, "catalog"), catalogExtra},
 		"services": []any{servicesDir},
 		"storages": []any{storagesDir},
 		"runtime":  filepath.Join(dir, "runtime"),
@@ -108,7 +107,7 @@ func TestDocsSermoAllValidates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(globalPath)
+	cfg, err := Load(globalPath, WithCatalogDirs(filepath.Join(root, "catalog"), catalogExtra))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

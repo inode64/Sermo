@@ -35,9 +35,9 @@ func TestSLACommandReportsWindows(t *testing.T) {
 	write(filepath.Join(servicesDir, "web.yml"), "name: web\nuses: nginx\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], services: [ %s ], runtime: %s, state: %s }
+paths: { services: [ %s ], runtime: %s, state: %s }
 defaults: { policy: { cooldown: 5m } }
-`, catalogDir, servicesDir, runDir, stateDir))
+`, servicesDir, runDir, stateDir))
 	global := filepath.Join(root, "sermo.yml")
 
 	// Seed three recent samples: two up, one down -> ~66.67% across every window.
@@ -55,7 +55,7 @@ defaults: { policy: { cooldown: 5m } }
 
 	run := func(args ...string) (string, int) {
 		var out bytes.Buffer
-		app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}}
+		app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}, LoadConfig: testLoadConfigWithCatalog(catalogDir)}
 		code := app.Run(context.Background(), append([]string{"--config", global}, args...))
 		return out.String(), code
 	}
@@ -119,9 +119,9 @@ func TestSLASeriesCommand(t *testing.T) {
 	write(filepath.Join(servicesDir, "web.yml"), "name: web\nuses: nginx\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], services: [ %s ], state: %s }
+paths: { services: [ %s ], state: %s }
 defaults: { policy: { cooldown: 5m } }
-`, catalogDir, servicesDir, stateDir))
+`, servicesDir, stateDir))
 	global := filepath.Join(root, "sermo.yml")
 
 	store, err := state.Open(filepath.Join(stateDir, state.Filename))
@@ -139,7 +139,7 @@ defaults: { policy: { cooldown: 5m } }
 
 	run := func(args ...string) (string, int) {
 		var out bytes.Buffer
-		app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}}
+		app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}, LoadConfig: testLoadConfigWithCatalog(catalogDir)}
 		code := app.Run(context.Background(), append([]string{"--config", global}, args...))
 		return out.String(), code
 	}

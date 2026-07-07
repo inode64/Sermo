@@ -36,7 +36,7 @@ flowchart TB
     end
   end
 
-  subgraph cfg["Config + Catálogo"]
+  subgraph cfg["Config + Catálogo empaquetado"]
     CAT[("catalog/<br/>services · apps · libs · patterns")]
     USR[("/etc/sermo/<br/>sermo.yml + services")]
     RES["Resolve → Resolved.Tree"]
@@ -79,11 +79,12 @@ flowchart TB
 
 ## 2. Resolución del catálogo (services / apps / libs / patterns)
 
-El catálogo integrado y la config de usuario se combinan en tres etapas: **Load**
-(registra todos los documentos), **applyOSSelectors** (colapsa los bloques `os:`
-según el SO detectado) y **Resolve** (fusiona defaults + catálogo + override de
-usuario, expande variables y secciones). El resultado es un `Resolved.Tree` plano
-que consumen el gestor de init, los checks, las rules y el descubrimiento de
+El catálogo empaquetado (cargado desde el directorio compilado en el binario) y
+la config de usuario se combinan en tres etapas: **Load** (registra todos los
+documentos), **applyOSSelectors** (colapsa los bloques `os:` según el SO
+detectado) y **Resolve** (fusiona defaults + catálogo + override de usuario,
+expande variables y secciones). El resultado es un `Resolved.Tree` plano que
+consumen el gestor de init, los checks, las rules y el descubrimiento de
 procesos.
 
 ```mermaid

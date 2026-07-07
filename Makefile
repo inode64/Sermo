@@ -6,8 +6,10 @@ GO_BUILD_ENV := CGO_ENABLED=$(CGO_ENABLED) GOAMD64=$(GOAMD64)
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 # Go linker flags for -ldflags. Named GO_LDFLAGS (not LDFLAGS) so Gentoo and
 # other distro build environments can export LDFLAGS=-Wl,... without breaking
-# go build.
-GO_LDFLAGS ?= -s -w -X sermo/internal/buildinfo.Version=$(VERSION)
+# go build. GO_BUILD_LDFLAGS appends Sermo's required metadata so overriding
+# GO_LDFLAGS cannot detach the binary from SERMO_DATADIR's catalog.
+GO_LDFLAGS ?= -s -w
+GO_BUILD_LDFLAGS = $(GO_LDFLAGS) -X sermo/internal/buildinfo.Version=$(VERSION) -X sermo/internal/config.defaultCatalogDir=$(SERMO_DATADIR)/catalog
 
 # Standard GNU-style install variables. Override on the command line, e.g.
 #   make install DESTDIR=/tmp/stage PREFIX=/usr
@@ -58,8 +60,8 @@ LINT_CACHE_ENV = $(LINT_PATH) XDG_CACHE_HOME="$${XDG_CACHE_HOME:-$(LINT_CACHE_DI
 # Render the init/unit files for the chosen paths: rewrite the binary and config
 # locations baked into the packaging templates.
 unit_subst = sed -e 's|/usr/bin/sermod|$(sbindir)/sermod|g' -e 's|/etc/sermo|$(SERMO_CONFDIR)|g'
-# Rewrite the catalog/config paths in the sample config to the chosen dirs.
-config_subst = sed -e 's|\.\./catalog|$(SERMO_DATADIR)/catalog|g' -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$(SERMO_CONFDIR)|g' -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
+# Rewrite config paths in the sample config to the chosen dirs.
+config_subst = sed -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$(SERMO_CONFDIR)|g' -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
@@ -70,8 +72,8 @@ tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(
 all: build
 
 build:
-	$(GO_BUILD_ENV) go build -trimpath -buildvcs=false -ldflags '$(GO_LDFLAGS)' -o $(BIN)/sermoctl ./cmd/sermoctl
-	$(GO_BUILD_ENV) go build -trimpath -buildvcs=false -ldflags '$(GO_LDFLAGS)' -o $(BIN)/sermod ./cmd/sermod
+	$(GO_BUILD_ENV) go build -trimpath -buildvcs=false -ldflags '$(GO_BUILD_LDFLAGS)' -o $(BIN)/sermoctl ./cmd/sermoctl
+	$(GO_BUILD_ENV) go build -trimpath -buildvcs=false -ldflags '$(GO_BUILD_LDFLAGS)' -o $(BIN)/sermod ./cmd/sermod
 
 # YAML formatting and lint (yamlfmt via go install, yamllint via pip/pipx).
 YAMLFMT ?= yamlfmt
@@ -179,10 +181,10 @@ install-examples:
 	done
 
 # Install the global config (kept if one already exists) and create the
-# configured directories for user catalog entries, services, host-specific apps,
-# storage documents, notifier fragments and watch documents.
+# configured directories for services, host-specific apps, storage documents,
+# notifier fragments and watch documents.
 install-config:
-	$(call install_dirs,$(DESTDIR)$(SERMO_CONFDIR)/catalog-available/services $(DESTDIR)$(SERMO_CONFDIR)/catalog-available/apps $(DESTDIR)$(SERMO_CONFDIR)/catalog-available/libs $(DESTDIR)$(SERMO_CONFDIR)/catalog-available/patterns $(DESTDIR)$(SERMO_CONFDIR)/services $(DESTDIR)$(SERMO_CONFDIR)/apps $(DESTDIR)$(SERMO_CONFDIR)/notifiers $(DESTDIR)$(SERMO_CONFDIR)/storages $(DESTDIR)$(SERMO_CONFDIR)/networks $(DESTDIR)$(SERMO_CONFDIR)/watches)
+	$(call install_dirs,$(DESTDIR)$(SERMO_CONFDIR)/services $(DESTDIR)$(SERMO_CONFDIR)/apps $(DESTDIR)$(SERMO_CONFDIR)/notifiers $(DESTDIR)$(SERMO_CONFDIR)/storages $(DESTDIR)$(SERMO_CONFDIR)/networks $(DESTDIR)$(SERMO_CONFDIR)/watches)
 	@if [ -f "$(DESTDIR)$(SERMO_CONFDIR)/sermo.yml" ]; then \
 		echo "  keeping existing $(DESTDIR)$(SERMO_CONFDIR)/sermo.yml"; \
 	else \

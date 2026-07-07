@@ -16,7 +16,6 @@ func writeTempConfig(t *testing.T) string {
 engine:
   backend: auto
 paths:
-  catalog: [ `+root+`/catalog ]
   services: [ `+root+`/services ]
 defaults:
   policy:

@@ -9,7 +9,6 @@ const mountGlobal = `
 engine:
   backend: auto
 paths:
-  catalog: [ @ROOT@/catalog ]
   services: [ @ROOT@/services ]
   storages: [ @ROOT@/storages ]
   runtime: /run/sermo
@@ -31,7 +30,7 @@ mount:
   umount: { term_timeout: 12s, kill_timeout: 5s }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -56,7 +55,7 @@ mount:
   umount: { allow_sigkill: true }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -74,7 +73,7 @@ kind: service
 name: web
 `,
 	})
-	_, err := Load(global)
+	_, err := loadConfig(t, global)
 	if err == nil || !strings.Contains(err.Error(), "located under a storage directory but declares kind: service") {
 		t.Fatalf("Load error = %v, want storage-only directory error", err)
 	}

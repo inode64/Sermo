@@ -253,7 +253,7 @@ func TestListFiltersMissingBinaries(t *testing.T) {
 		"catalog/apps/absent.yml":  "name: absent\nvariables:\n  binary: /nonexistent/absent\n",
 		"services/.keep":           "",
 		"sermo.yml": "engine: { backend: systemd }\n" +
-			"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: [" + filepath.Join(root, "services") + "]\n  runtime: /run/sermo\n" +
+			"paths:\n  services: [" + filepath.Join(root, "services") + "]\n  runtime: /run/sermo\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n",
 	} {
 		path := filepath.Join(root, dir)
@@ -264,7 +264,7 @@ func TestListFiltersMissingBinaries(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	cfg, err := config.Load(filepath.Join(root, "sermo.yml"))
+	cfg, err := config.Load(filepath.Join(root, "sermo.yml"), config.WithCatalogDirs(filepath.Join(root, "catalog")))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -364,7 +364,7 @@ service: { systemd: [mysql] }
 apps: [mysql]
 `,
 				"sermo.yml": "engine: { backend: systemd }\n" +
-					"paths:\n  catalog: [" + catalogDir + "]\n  services: [" + servicesDir + "]\n  runtime: /run/sermo\n" +
+					"paths:\n  services: [" + servicesDir + "]\n  runtime: /run/sermo\n" +
 					"defaults:\n  policy: { cooldown: 5m }\n",
 			}
 			for rel, content := range files {
@@ -376,7 +376,7 @@ apps: [mysql]
 					t.Fatal(err)
 				}
 			}
-			cfg, err := config.Load(filepath.Join(root, "sermo.yml"))
+			cfg, err := config.Load(filepath.Join(root, "sermo.yml"), config.WithCatalogDirs(catalogDir))
 			if err != nil {
 				t.Fatalf("Load: %v", err)
 			}
@@ -474,7 +474,7 @@ preflight:
 `, local, local),
 		"services/.keep": "",
 		"sermo.yml": "engine: { backend: systemd }\n" +
-			"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: [" + filepath.Join(root, "services") + "]\n  runtime: /run/sermo\n" +
+			"paths:\n  services: [" + filepath.Join(root, "services") + "]\n  runtime: /run/sermo\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n",
 	} {
 		path := filepath.Join(root, dir)
@@ -485,7 +485,7 @@ preflight:
 			t.Fatal(err)
 		}
 	}
-	cfg, err := config.Load(filepath.Join(root, "sermo.yml"))
+	cfg, err := config.Load(filepath.Join(root, "sermo.yml"), config.WithCatalogDirs(filepath.Join(root, "catalog")))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -538,7 +538,7 @@ preflight:
 `, filepath.Join(binDir, "php${version}")),
 		"services/.keep": "",
 		"sermo.yml": "engine: { backend: systemd }\n" +
-			"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: [" + filepath.Join(root, "services") + "]\n  runtime: /run/sermo\n" +
+			"paths:\n  services: [" + filepath.Join(root, "services") + "]\n  runtime: /run/sermo\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n",
 	} {
 		path := filepath.Join(root, dir)
@@ -549,7 +549,7 @@ preflight:
 			t.Fatal(err)
 		}
 	}
-	cfg, err := config.Load(filepath.Join(root, "sermo.yml"))
+	cfg, err := config.Load(filepath.Join(root, "sermo.yml"), config.WithCatalogDirs(filepath.Join(root, "catalog")))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

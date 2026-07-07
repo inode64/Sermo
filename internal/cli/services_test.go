@@ -60,13 +60,13 @@ preflight:
 	write(filepath.Join(appsDir, "git.yml"), "name: git\nvariables: { binary: /bin/git }\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, catalogDir, servicesDir))
+`, servicesDir))
 	global := filepath.Join(root, "sermo.yml")
 
 	var out bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}}
+	app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}, LoadConfig: testLoadConfigWithCatalog(catalogDir)}
 	if code := app.Run(context.Background(), []string{"--config", global, "services"}); code != exitSuccess {
 		t.Fatalf("services exit = %d", code)
 	}

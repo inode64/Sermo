@@ -17,11 +17,7 @@ import (
 // runtime state, stops the current generation gracefully, and starts a new one.
 type Monitor struct {
 	ConfigPath string
-	// CatalogDirs mirrors `sermod --catalog`: when set, a reload overrides the
-	// config's paths.catalog with these directories so reload behaves like the
-	// initial load.
-	CatalogDirs []string
-	Logger      interface {
+	Logger     interface {
 		Info(msg string, args ...any)
 		Warn(msg string, args ...any)
 		Error(msg string, args ...any)
@@ -87,11 +83,7 @@ func (m *Monitor) Reload() {
 		return
 	}
 
-	var loadOpts []config.Option
-	if len(m.CatalogDirs) > 0 {
-		loadOpts = append(loadOpts, config.WithCatalogDirs(m.CatalogDirs...))
-	}
-	newCfg, err := config.Load(m.ConfigPath, loadOpts...)
+	newCfg, err := config.Load(m.ConfigPath)
 	if err != nil {
 		m.emitReloadError(fmt.Sprintf("load config: %v", err))
 		return

@@ -14,10 +14,7 @@ import (
 // DefaultGlobalPath is the standard location of the global configuration.
 const DefaultGlobalPath = "/etc/sermo/sermo.yml"
 
-const (
-	defaultCatalogShareDir     = "/usr/share/sermo/catalog"
-	defaultCatalogAvailableDir = "/etc/sermo/catalog-available"
-)
+var defaultCatalogDir = "/usr/share/sermo/catalog"
 
 const (
 	yamlFileExt     = ".yml"
@@ -37,13 +34,9 @@ type loadOptions struct {
 	serviceUnits map[string][]string
 }
 
-// WithCatalogDirs overrides the catalog search directories (the definition
-// directories holding services/apps/libs/patterns) declared in the global
-// config's paths.catalog. Relative entries are resolved against the current
-// working directory (not the config file), since the override is a caller/CLI
-// choice. It backs `sermod --catalog` and lets tests load the installed config
-// (which points at /usr/share/sermo/catalog) while keeping definitions in the
-// source tree.
+// WithCatalogDirs overrides the compiled catalog search directory for tests and
+// staged packaging checks. It is intentionally not exposed in YAML or daemon
+// flags: production loads catalog definitions from defaultCatalogDir.
 func WithCatalogDirs(dirs ...string) Option {
 	return func(o *loadOptions) { o.catalogDirs = dirs }
 }
@@ -82,15 +75,11 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(o.catalogDirs) > 0 {
-		global.Catalog = absOverrideDirs(o.catalogDirs)
-		global.CatalogPaths = pathSpecsFromPaths(global.Catalog)
-	}
 	applyPathDirOverride(&global, o.pathDirs)
 
-	catalogPaths := global.CatalogPaths
-	if len(catalogPaths) == 0 {
-		catalogPaths = pathSpecsFromPaths([]string{defaultCatalogShareDir, defaultCatalogAvailableDir})
+	catalogPaths := pathSpecsFromPaths([]string{defaultCatalogDir})
+	if len(o.catalogDirs) > 0 {
+		catalogPaths = pathSpecsFromPaths(absOverrideDirs(o.catalogDirs))
 	}
 	_, servicePathsOverridden := o.pathDirs[pathKeyServices]
 	servicePaths := global.ServicePaths
@@ -187,9 +176,6 @@ func loadGlobal(path string) (Global, error) {
 		g.Defaults = map[string]any{}
 	}
 	if paths, ok := raw[sectionPaths].(map[string]any); ok {
-		if g.CatalogPaths, err = pathSpecList(paths[pathKeyCatalog], "paths.catalog"); err != nil {
-			return Global{}, parseGlobalConfigError(path, err)
-		}
 		if g.ServicePaths, err = pathSpecList(paths[pathKeyServices], "paths.services"); err != nil {
 			return Global{}, parseGlobalConfigError(path, err)
 		}
@@ -208,7 +194,6 @@ func loadGlobal(path string) (Global, error) {
 		if g.WatchPaths, err = pathSpecList(paths[pathKeyWatches], "paths.watches"); err != nil {
 			return Global{}, parseGlobalConfigError(path, err)
 		}
-		g.Catalog = pathsFromSpecs(g.CatalogPaths)
 		g.Services = pathsFromSpecs(g.ServicePaths)
 		g.Apps = pathsFromSpecs(g.AppPaths)
 		g.Notifiers = pathsFromSpecs(g.NotifierPaths)
@@ -264,20 +249,18 @@ func absOverrideDirs(dirs []string) []string {
 	return out
 }
 
-// resolveConfigPaths makes catalog/services/apps/runtime/state/templates paths
-// absolute. Relative entries are resolved against the global config file's
-// directory so a tree like examples/sermo.yml with `services: [services]` loads
+// resolveConfigPaths makes services/apps/runtime/state/templates paths absolute.
+// Relative entries are resolved against the global config file's directory so a
+// tree like examples/sermo.yml with `services: [services]` loads
 // examples/services when run from the repository.
 func resolveConfigPaths(globalPath string, g *Global) {
 	base := configBaseDir(globalPath)
-	g.Catalog = resolvePathList(base, g.Catalog)
 	g.Services = resolvePathList(base, g.Services)
 	g.Apps = resolvePathList(base, g.Apps)
 	g.Notifiers = resolvePathList(base, g.Notifiers)
 	g.Storages = resolvePathList(base, g.Storages)
 	g.Networks = resolvePathList(base, g.Networks)
 	g.Watches = resolvePathList(base, g.Watches)
-	g.CatalogPaths = resolvePathSpecs(base, g.CatalogPaths)
 	g.ServicePaths = resolvePathSpecs(base, g.ServicePaths)
 	g.AppPaths = resolvePathSpecs(base, g.AppPaths)
 	g.NotifierPaths = resolvePathSpecs(base, g.NotifierPaths)
@@ -453,8 +436,8 @@ func uniquePathSpecs(specs []PathSpec) []PathSpec {
 
 // loadDir reads catalog documents from the explicit services/apps/libs/patterns
 // category directories. Recursive controls descent below those base catalog
-// directories. A missing directory is not an error (a host may not have user
-// catalog documents), but an unreadable one is.
+// directories. A missing directory is not an error (tests and partial installs
+// may intentionally omit catalog content), but an unreadable one is.
 func (c *Config) loadDir(dir string, recursive bool) error {
 	return c.loadCategoryDir(dir, "", recursive)
 }

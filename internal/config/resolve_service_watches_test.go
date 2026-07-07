@@ -16,7 +16,7 @@ func resolveWatchService(t *testing.T, body string) (map[string]any, []string) {
 		"sermo.yml":        baseGlobal,
 		"services/svc.yml": "name: svc\nservice: x\npolicy: { cooldown: 5m }\n" + body,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
