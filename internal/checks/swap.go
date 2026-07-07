@@ -93,7 +93,7 @@ func (c *swapCheck) Run(_ context.Context) Result {
 		}
 		delta := deltaOrZero(total, c.lastIO)
 		c.lastIO = total
-		data[fieldValue], data["pages"] = delta, total
+		data[fieldValue], data[DataKeyPages] = delta, total
 		met := compareFloat(float64(delta), c.op, c.value)
 		res := c.result(met, fmt.Sprintf("swap io +%d pages/cycle (total %d)", delta, total), start)
 		res.Data = data

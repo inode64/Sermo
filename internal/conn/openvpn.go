@@ -44,14 +44,14 @@ func (openvpnProtocol) RequiresUser() bool { return false }
 func (openvpnProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	host := cfg.Host
 	if host == "" {
-		host = "127.0.0.1"
+		host = DefaultHost
 	}
 	port := cfg.Port
 	if port == 0 {
 		port = 1194
 	}
 	transport := networkUDP
-	if cfg.Params["transport"] == networkTCP {
+	if cfg.Params[ParamKeyTransport] == networkTCP {
 		transport = networkTCP
 	}
 

@@ -32,7 +32,7 @@ func (sshProtocol) RequiresUser() bool { return false }
 func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	host := cfg.Host
 	if host == "" {
-		host = "127.0.0.1"
+		host = DefaultHost
 	}
 	port := cfg.Port
 	if port == 0 {
@@ -102,10 +102,10 @@ func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	return Result{
 		Version: software,
 		Extra: map[string]string{
-			"fingerprint":    ssh.FingerprintSHA256(hostKey),
-			"host_key_algo":  hostKey.Type(),
-			"server_version": banner,
-			extraProtocol:    proto,
+			ExtraKeyFingerprint: ssh.FingerprintSHA256(hostKey),
+			"host_key_algo":     hostKey.Type(),
+			"server_version":    banner,
+			extraProtocol:       proto,
 		},
 	}, nil
 }

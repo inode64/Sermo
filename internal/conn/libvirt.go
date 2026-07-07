@@ -63,7 +63,7 @@ func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	ch := make(chan probeOut, 1)
 	go func() {
-		res, err := libvirtProbe(l, uri, mode, cfg.Params["domain"])
+		res, err := libvirtProbe(l, uri, mode, cfg.Params[ParamKeyDomain])
 		ch <- probeOut{res, err}
 	}()
 	select {
@@ -137,7 +137,7 @@ func libvirtProbe(l *libvirt.Libvirt, uri, mode, domain string) (Result, error) 
 		extra["domain"] = domain
 		extra["domain.state"] = s
 		extra["domain.running"] = strconv.FormatBool(libvirt.DomainState(state) == libvirt.DomainRunning)
-		extra["fingerprint"] = s // on_change tracks the VM's state
+		extra[ExtraKeyFingerprint] = s // on_change tracks the VM's state
 	}
 
 	return Result{Version: version, Extra: extra}, nil
@@ -178,7 +178,7 @@ func libvirtTransport(cfg Config) (mode, addr, uri string) {
 	}
 	host := cfg.Host
 	if host == "" {
-		host = "127.0.0.1"
+		host = DefaultHost
 	}
 	port := cfg.Port
 	if port == 0 {

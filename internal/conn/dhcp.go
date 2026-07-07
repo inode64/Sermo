@@ -62,7 +62,7 @@ func (dhcpProtocol) RequiresUser() bool { return false }
 
 func (dhcpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	iface := cfg.Interface
-	mac, err := dhcpClientMAC(cfg.Params["mac"])
+	mac, err := dhcpClientMAC(cfg.Params[ParamKeyMAC])
 	if err != nil {
 		return Result{}, err
 	}
@@ -74,7 +74,7 @@ func (dhcpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if iface == "" {
 		host := cfg.Host
 		if host == "" {
-			host = "127.0.0.1"
+			host = DefaultHost
 		}
 		port := cfg.Port
 		if port == 0 {

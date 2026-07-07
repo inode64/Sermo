@@ -15,6 +15,24 @@ import (
 	"sync"
 )
 
+// DefaultHost is the loopback host protocol probes use when config omits host.
+const DefaultHost = "127.0.0.1"
+
+// Result.Extra keys shared with consumers that interpret protocol identity.
+const (
+	ExtraKeyFingerprint = "fingerprint"
+	ExtraKeyGreeting    = "greeting"
+)
+
+// Config.Params keys consumed by protocol probes.
+const (
+	ParamKeyAuthSource = "auth_source"
+	ParamKeyDomain     = "domain"
+	ParamKeyMAC        = "mac"
+	ParamKeyResolvconf = "resolvconf"
+	ParamKeyTransport  = "transport"
+)
+
 const (
 	networkTCP    = "tcp"
 	networkUDP    = "udp"
@@ -25,7 +43,7 @@ const (
 	schemeHTTPS = "https"
 	// extraGreeting is the Result.Extra key carrying a text-protocol server's
 	// greeting/banner line (ftp, imap, pop, nntp, rsync, sieve, …).
-	extraGreeting = "greeting"
+	extraGreeting = ExtraKeyGreeting
 	// extraProgram and extraRPCStatus are the Result.Extra keys of the
 	// Sun-RPC probes (rpcbind, nfs, mountd, glusterfs): the queried program
 	// number and the portmapper/RPC status.

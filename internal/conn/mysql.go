@@ -119,7 +119,7 @@ func MySQLDSN(cfg Config) string { return buildDSN(cfg) }
 func buildMySQLConfig(cfg Config) *mysql.Config {
 	host := cfg.Host
 	if host == "" {
-		host = "127.0.0.1"
+		host = DefaultHost
 	}
 	port := cfg.Port
 	if port == 0 {

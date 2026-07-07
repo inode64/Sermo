@@ -20,7 +20,7 @@ import (
 // Shared by host watches and service checks. A storage check verifies space/inodes
 // and/or whether the path is mounted, so at least one of the two must be present.
 func validateStorageFields(prefix string, fields map[string]any, add addFunc) {
-	if cfgval.String(fields["path"]) == "" {
+	if cfgval.String(fields[checks.CheckKeyPath]) == "" {
 		add("%s.path is required for a storage check", prefix)
 	}
 	preds := validatePresentThresholds(prefix, fields, checks.StoragePredFields, add)
@@ -34,13 +34,13 @@ func validateStorageFields(prefix string, fields map[string]any, add addFunc) {
 // check and reports whether it was present.
 func validateMountConditions(prefix string, fields map[string]any, add addFunc) bool {
 	active := false
-	if v, present := fields["mounted"]; present {
+	if v, present := fields[checks.CheckKeyMounted]; present {
 		active = true
 		if _, ok := v.(bool); !ok {
 			add("%s.mounted must be a boolean", prefix)
 		}
 	}
-	for _, field := range []string{"fstype", "device", "options"} {
+	for _, field := range []string{checks.CheckKeyFSType, checks.CheckKeyDevice, checks.CheckKeyOptions} {
 		if _, present := fields[field]; present {
 			add("%s.%s is not supported for a storage check; use mounted to verify the mount point", prefix, field)
 		}
@@ -53,22 +53,22 @@ func validateMountConditions(prefix string, fields map[string]any, add addFunc) 
 // shared core of every delta/threshold/predicate check.
 func validateOpNumeric(label string, m map[string]any, add addFunc) {
 	validateCompareOp(label, m, add)
-	if !isNumeric(cfgval.String(m["value"])) {
-		add("%s value %q must be numeric", label, cfgval.String(m["value"]))
+	if !isNumeric(cfgval.String(m[checks.CheckKeyValue])) {
+		add("%s value %q must be numeric", label, cfgval.String(m[checks.CheckKeyValue]))
 	}
 }
 
 func validateOpByteSize(label string, m map[string]any, add addFunc) {
 	validateCompareOp(label, m, add)
-	if _, ok := cfgval.ByteSize(m["value"]); !ok {
-		add("%s value %q must include a size suffix (K, M, G or T; e.g. 10G, 500M)", label, cfgval.String(m["value"]))
+	if _, ok := cfgval.ByteSize(m[checks.CheckKeyValue]); !ok {
+		add("%s value %q must include a size suffix (K, M, G or T; e.g. 10G, 500M)", label, cfgval.String(m[checks.CheckKeyValue]))
 	}
 }
 
 func validateOpPercent(label string, m map[string]any, add addFunc) {
 	validateCompareOp(label, m, add)
-	if !isPercentValue(cfgval.String(m["value"])) {
-		add("%s value %q must be a percentage in 0..100 (e.g. 90 or 90%%)", label, cfgval.String(m["value"]))
+	if !isPercentValue(cfgval.String(m[checks.CheckKeyValue])) {
+		add("%s value %q must be a percentage in 0..100 (e.g. 90 or 90%%)", label, cfgval.String(m[checks.CheckKeyValue]))
 	}
 }
 
@@ -76,7 +76,7 @@ func validateOpPercent(label string, m map[string]any, add addFunc) {
 // map is not one of the comparison operators the storage-style checks share. It is
 // the op-validation prologue every validateOp* helper repeats.
 func validateCompareOp(label string, m map[string]any, add addFunc) {
-	if op := cfgval.String(m["op"]); !isValidCompareOp(op) {
+	if op := cfgval.String(m[checks.CheckKeyOp]); !isValidCompareOp(op) {
 		add("%s has an invalid op %q", label, op)
 	}
 }
@@ -129,7 +129,7 @@ func validateThresholdPreds(prefix string, fieldsMap map[string]any, fields []st
 // validateOomFields validates an oom check's optional delta {op, value} (the
 // default fires on any OOM kill, so a bare oom check is valid).
 func validateOomFields(prefix string, fields map[string]any, add addFunc) {
-	delta, present := fields["delta"]
+	delta, present := fields[checks.CheckKeyDelta]
 	if !present {
 		return
 	}
@@ -158,7 +158,7 @@ func validateCheckGate(path, name string, entry, section map[string]any, add add
 			}
 		}
 	}
-	if v, present := entry["skip_when_changed"]; present {
+	if v, present := entry[checks.CheckKeySkipWhenChanged]; present {
 		if _, ok := gateStrings(v); !ok {
 			add("%s.skip_when_changed must be a file path or a list of file paths", path)
 		}
@@ -176,33 +176,33 @@ func gateStrings(v any) ([]string, bool) {
 // optional request (method/headers/body/json) and response-assertion fields
 // (expect_body/expect_json) shapes.
 func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
-	if cfgval.String(fields["url"]) == "" {
+	if cfgval.String(fields[checks.CheckKeyURL]) == "" {
 		add("%s.url is required for an http check", prefix)
 	}
-	if v, present := fields["method"]; present {
+	if v, present := fields[checks.CheckKeyMethod]; present {
 		if _, warn := checks.ParseHTTPMethod(v); warn != "" {
 			add("%s.%s", prefix, warn)
 		}
 	}
-	if v, present := fields["http3"]; present {
+	if v, present := fields[checks.CheckKeyHTTP3]; present {
 		if h3, ok := v.(bool); !ok {
 			add("%s.http3 must be a boolean", prefix)
 		} else if h3 {
 			// HTTP/3 runs over QUIC (TLS-only) and cannot use an HTTP proxy.
-			if u := cfgval.String(fields["url"]); u != "" {
+			if u := cfgval.String(fields[checks.CheckKeyURL]); u != "" {
 				if parsed, err := url.Parse(u); err != nil || parsed.Scheme != "https" {
 					add("%s.http3 requires an https url", prefix)
 				}
 			}
-			if cfgval.String(fields["proxy"]) != "" {
+			if cfgval.String(fields[checks.CheckKeyProxy]) != "" {
 				add("%s.http3 and proxy are mutually exclusive", prefix)
 			}
-			if len(cfgval.StringList(fields["interface"])) > 0 {
+			if len(cfgval.StringList(fields[checks.CheckKeyInterface])) > 0 {
 				add("%s.http3 and interface are mutually exclusive", prefix)
 			}
 		}
 	}
-	if p := cfgval.String(fields["proxy"]); p != "" {
+	if p := cfgval.String(fields[checks.CheckKeyProxy]); p != "" {
 		u, err := url.Parse(p)
 		if err != nil || u.Host == "" {
 			add("%s.proxy %q is not a valid URL", prefix, p)
@@ -210,46 +210,46 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 			add("%s.proxy scheme must be %s", prefix, checks.HTTPProxySchemeList)
 		}
 	}
-	if v, present := fields["body"]; present {
+	if v, present := fields[checks.CheckKeyBody]; present {
 		if _, ok := v.(string); !ok {
 			add("%s.body must be a string", prefix)
 		}
 	}
-	if j, hasJSON := fields["json"]; hasJSON && j != nil {
-		if _, hasBody := fields["body"]; hasBody {
+	if j, hasJSON := fields[checks.CheckKeyJSON]; hasJSON && j != nil {
+		if _, hasBody := fields[checks.CheckKeyBody]; hasBody {
 			add("%s.body and json are mutually exclusive", prefix)
 		}
 	}
-	if v, present := fields["headers"]; present {
+	if v, present := fields[checks.CheckKeyHeaders]; present {
 		if _, ok := v.(map[string]any); !ok {
 			add("%s.headers must be a mapping", prefix)
 		}
 	}
-	if v, present := fields["expect_body"]; present {
+	if v, present := fields[checks.CheckKeyExpectBody]; present {
 		if m, ok := v.(map[string]any); ok {
-			validateOpValue(prefix, "expect_body", m, add)
+			validateOpValue(prefix, checks.CheckKeyExpectBody, m, add)
 		} else {
 			add("%s.expect_body must be an {op, value} mapping", prefix)
 		}
 	}
-	if m, ok := fields["expect_status"].(map[string]any); ok {
-		validateOpValue(prefix, "expect_status", m, add)
+	if m, ok := fields[checks.CheckKeyExpectStatus].(map[string]any); ok {
+		validateOpValue(prefix, checks.CheckKeyExpectStatus, m, add)
 	}
-	if v, present := fields["expect_latency"]; present {
+	if v, present := fields[checks.CheckKeyExpectLatency]; present {
 		if m, ok := v.(map[string]any); ok {
-			validateOpValue(prefix, "expect_latency", m, add)
+			validateOpValue(prefix, checks.CheckKeyExpectLatency, m, add)
 		} else {
 			add("%s.expect_latency must be an {op, value} mapping", prefix)
 		}
 	}
-	if v, present := fields["expect_json"]; present {
+	if v, present := fields[checks.CheckKeyExpectJSON]; present {
 		m, ok := v.(map[string]any)
 		if !ok {
 			add("%s.expect_json must be a mapping", prefix)
 		} else {
 			for _, path := range slices.Sorted(maps.Keys(m)) {
 				if cond, ok := m[path].(map[string]any); ok {
-					op := cfgval.String(cond["op"])
+					op := cfgval.String(cond[checks.CheckKeyOp])
 					if op == "" {
 						op = "=="
 					}
@@ -257,7 +257,7 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 						add("%s.expect_json.%s op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, path, op)
 						continue
 					}
-					if err := checks.ValidateAssertionValue(prefix+".expect_json."+path, op, cfgval.String(cond["value"])); err != nil {
+					if err := checks.ValidateAssertionValue(prefix+"."+checks.CheckKeyExpectJSON+"."+path, op, cfgval.String(cond[checks.CheckKeyValue])); err != nil {
 						add("%s", err)
 					}
 				}
@@ -290,17 +290,17 @@ func validateVersionMatcherField(prefix string, v any, add addFunc) {
 }
 
 func validateCommandFields(path string, entry map[string]any, validateAnalyzeFields bool, add addFunc) {
-	if !cfgval.IsNonEmptyStringArray(entry["command"]) {
+	if !cfgval.IsNonEmptyStringArray(entry[checks.CheckKeyCommand]) {
 		add("%s command must be an array, not a shell string", path)
 	}
 	validateCommandUser(path, entry, add)
 	validateCommandExpectations(path, entry, add)
-	if v, present := entry["on_change"]; present {
+	if v, present := entry[checks.CheckKeyOnChange]; present {
 		if _, ok := v.(bool); !ok {
 			add("%s.on_change must be a boolean", path)
 		}
 	}
-	validateVersionMatcherField(path, entry["version_match"], add)
+	validateVersionMatcherField(path, entry[checks.CheckKeyVersionMatch], add)
 	if validateAnalyzeFields {
 		validateAnalyze(path, entry, add)
 	}
@@ -308,13 +308,13 @@ func validateCommandFields(path string, entry map[string]any, validateAnalyzeFie
 }
 
 func validateCommandExpectations(path string, entry map[string]any, add addFunc) {
-	if v, present := entry["expect_exit"]; present {
+	if v, present := entry[checks.CheckKeyExpectExit]; present {
 		if !isExpectExit(v) {
 			add("%s expect_exit must be an integer or a non-empty list of integers", path)
 		}
 	}
-	validateOutputExpectation(path, "expect_stdout", entry["expect_stdout"], add)
-	validateOutputExpectation(path, "expect_stderr", entry["expect_stderr"], add)
+	validateOutputExpectation(path, checks.CheckKeyExpectStdout, entry[checks.CheckKeyExpectStdout], add)
+	validateOutputExpectation(path, checks.CheckKeyExpectStderr, entry[checks.CheckKeyExpectStderr], add)
 }
 
 func isExpectExit(raw any) bool {
@@ -326,12 +326,12 @@ func isExpectExit(raw any) bool {
 // http response comparisons): op must be a known comparison operator, and value
 // must be numeric for ordering ops and a valid regexp for =~.
 func validateOpValue(prefix, label string, m map[string]any, add addFunc) {
-	op := cfgval.String(m["op"])
+	op := cfgval.String(m[checks.CheckKeyOp])
 	if !cfgval.IsAssertOp(op) {
 		add("%s.%s op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, label, op)
 		return
 	}
-	value := cfgval.String(m["value"])
+	value := cfgval.String(m[checks.CheckKeyValue])
 	if err := checks.ValidateAssertionValue(prefix+"."+label, op, value); err != nil {
 		add("%s", err)
 	}
@@ -340,21 +340,21 @@ func validateOpValue(prefix, label string, m map[string]any, add addFunc) {
 // validatePortsFields validates a ports check at prefix: a parseable `ports` spec
 // (list + ranges) and the enumerated expect/match values.
 func validatePortsFields(prefix string, fields map[string]any, add addFunc) {
-	if err := validatePortSpec(cfgval.String(fields["ports"])); err != "" {
+	if err := validatePortSpec(cfgval.String(fields[checks.CheckKeyPorts])); err != "" {
 		add("%s.ports %s", prefix, err)
 	}
-	if v := cfgval.String(fields["expect"]); v != "" && v != "open" && v != "closed" && v != "any" {
+	if v := cfgval.String(fields[checks.CheckKeyExpect]); v != "" && v != "open" && v != "closed" && v != "any" {
 		add("%s.expect must be open, closed or any", prefix)
 	}
-	if v := cfgval.String(fields["match"]); v != "" && v != "all" && v != "any" && v != "none" {
+	if v := cfgval.String(fields[checks.CheckKeyMatch]); v != "" && v != "all" && v != "any" && v != "none" {
 		add("%s.match must be all, any or none", prefix)
 	}
-	if v, present := fields["on_change"]; present {
+	if v, present := fields[checks.CheckKeyOnChange]; present {
 		if _, ok := v.(bool); !ok {
 			add("%s.on_change must be a boolean", prefix)
 		}
 	}
-	if v, present := fields["connect_timeout"]; present && !isPositiveDuration(cfgval.String(v)) {
+	if v, present := fields[checks.CheckKeyConnectTimeout]; present && !isPositiveDuration(cfgval.String(v)) {
 		add("%s.connect_timeout must be a valid positive duration", prefix)
 	}
 }
@@ -384,7 +384,7 @@ func validatePortSpec(spec string) string {
 // validateLoadFields validates a load check at prefix: an optional boolean
 // per_cpu and at least one load1/load5/load15 threshold.
 func validateLoadFields(prefix string, fields map[string]any, add addFunc) {
-	if v, present := fields["per_cpu"]; present {
+	if v, present := fields[checks.CheckKeyPerCPU]; present {
 		if _, ok := v.(bool); !ok {
 			add("%s.per_cpu must be a boolean", prefix)
 		}
@@ -395,7 +395,7 @@ func validateLoadFields(prefix string, fields map[string]any, add addFunc) {
 // validateHdparmFields validates an hdparm check: a required device and at least
 // one of the read/cached {op, value} throughput predicates.
 func validateHdparmFields(prefix string, fields map[string]any, add addFunc) {
-	if cfgval.String(fields["device"]) == "" {
+	if cfgval.String(fields[checks.CheckKeyDevice]) == "" {
 		add("%s.device is required for an hdparm check", prefix)
 	}
 	if validatePresentThresholds(prefix, fields, checks.HdparmPredFields, add) == 0 {
@@ -407,7 +407,7 @@ func validateHdparmFields(prefix string, fields map[string]any, add addFunc) {
 // optional {op, value} attribute predicates (without one, it alerts on a failed
 // SMART health verdict).
 func validateSmartFields(prefix string, fields map[string]any, add addFunc) {
-	if cfgval.String(fields["device"]) == "" {
+	if cfgval.String(fields[checks.CheckKeyDevice]) == "" {
 		add("%s.device is required for a smart check", prefix)
 	}
 	validatePresentThresholds(prefix, fields, checks.SmartPredFields, add)
@@ -430,17 +430,17 @@ func isNumeric(s string) bool {
 // port must be numeric when present, and tls must be a boolean or one of the
 // known string modes.
 func validateConnFields(prefix string, fields map[string]any, requireUser bool, add addFunc) {
-	if requireUser && cfgval.String(fields["user"]) == "" {
+	if requireUser && cfgval.String(fields[checks.CheckKeyUser]) == "" {
 		add("%s.user is required for a connection check", prefix)
 	}
 	// The same 1..65535 range walkScalars enforces on resolved services, so a
 	// connection check behaves identically as a host watch.
-	if v, present := fields["port"]; present {
+	if v, present := fields[checks.CheckKeyPort]; present {
 		if n, ok := cfgval.Int(v); !ok || n < 1 || n > 65535 {
 			add("%s.port %q must be an integer in 1..65535", prefix, cfgval.String(v))
 		}
 	}
-	if v, present := fields["tls"]; present {
+	if v, present := fields[checks.CheckKeyTLS]; present {
 		switch t := v.(type) {
 		case bool:
 			// fine
@@ -458,7 +458,7 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 	}
 	// expect: optional response assertions (field -> value | {op, value}),
 	// compared against the probe's version / Extra fields.
-	if v, present := fields["expect"]; present {
+	if v, present := fields[checks.CheckKeyExpect]; present {
 		m, ok := v.(map[string]any)
 		if !ok {
 			add("%s.expect must be a mapping of field -> value or {op, value}", prefix)
@@ -470,14 +470,14 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 			}
 		}
 	}
-	if v, present := fields["expect_latency"]; present {
+	if v, present := fields[checks.CheckKeyExpectLatency]; present {
 		if m, ok := v.(map[string]any); ok {
-			validateOpValue(prefix, "expect_latency", m, add)
+			validateOpValue(prefix, checks.CheckKeyExpectLatency, m, add)
 		} else {
 			add("%s.expect_latency must be an {op, value} mapping", prefix)
 		}
 	}
-	for _, key := range []string{"on_change", "on_version_change"} {
+	for _, key := range []string{checks.CheckKeyOnChange, checks.CheckKeyOnVersionChange} {
 		if v, present := fields[key]; present {
 			if _, ok := v.(bool); !ok {
 				add("%s.%s must be a boolean", prefix, key)
@@ -487,7 +487,14 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 }
 
 var countKinds = set("any", "file", "dir", "symlink")
-var sqlEngines = set("mysql", "mariadb", "postgres", "postgresql", "sqlite", "sqlite3")
+var sqlEngines = set(
+	checks.SQLEngineMySQL,
+	checks.SQLEngineMariaDB,
+	checks.SQLEnginePostgres,
+	checks.SQLEnginePostgreSQL,
+	checks.SQLEngineSQLite,
+	checks.SQLEngineSQLite3,
+)
 
 // validateCheckSection validates a checks/preflight section: known types,
 // optional/verify booleans, command array form, valid service/process states,
@@ -504,7 +511,7 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			add("%s must be a mapping", path)
 			continue
 		}
-		if v, present := entry["optional"]; present {
+		if v, present := entry[checks.CheckKeyOptional]; present {
 			if _, isBool := v.(bool); !isBool {
 				add("%s.optional must be a boolean", path)
 			}
@@ -515,11 +522,11 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 		if v, present := entry[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("%s.interval %q must be a valid positive duration", path, cfgval.String(v))
 		}
-		if v, present := entry["timeout"]; present && !isPositiveDuration(cfgval.String(v)) {
+		if v, present := entry[checks.CheckKeyTimeout]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("%s.timeout %q must be a valid positive duration", path, cfgval.String(v))
 		}
 		validateCheckGate(path, name, entry, entries, add)
-		typ := cfgval.String(entry["type"])
+		typ := cfgval.String(entry[checks.CheckKeyType])
 		if typ == "" {
 			add("%s has no type", path)
 			continue
@@ -527,7 +534,7 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 		// verify: true marks a check as a post-operation start-verification probe.
 		// Only health checks (OK == the service is up) can confirm a start; a
 		// condition check's OK means a threshold fired, which is not verification.
-		if v, present := entry["verify"]; present {
+		if v, present := entry[checks.CheckKeyVerify]; present {
 			if b, ok := v.(bool); !ok {
 				add("%s.verify must be a boolean", path)
 			} else if b && !checks.IsHealthType(typ) {
@@ -548,16 +555,16 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 // (error|warning|ok), stream (stdout|stderr|both or empty), and that `match`
 // is a non-empty regular expression.
 func validateAnalyze(path string, entry map[string]any, add addFunc) {
-	analyze, ok := entry["analyze"].(map[string]any)
+	analyze, ok := entry[checks.CheckKeyAnalyze].(map[string]any)
 	if !ok {
-		if _, present := entry["analyze"]; present {
+		if _, present := entry[checks.CheckKeyAnalyze]; present {
 			add("%s.analyze must be a mapping", path)
 		}
 		return
 	}
-	rules, ok := analyze["rules"].([]any)
+	rules, ok := analyze[checks.CheckKeyRules].([]any)
 	if !ok {
-		if _, present := analyze["rules"]; present {
+		if _, present := analyze[checks.CheckKeyRules]; present {
 			add("%s.analyze.rules must be a list", path)
 		}
 		return
@@ -569,24 +576,24 @@ func validateAnalyze(path string, entry map[string]any, add addFunc) {
 			add("%s.analyze rule %d must be a mapping", path, i)
 			continue
 		}
-		id := cfgval.AsString(rm["id"])
+		id := cfgval.AsString(rm[checks.CheckKeyID])
 		if id == "" {
 			add("%s.analyze rule %d is missing an id", path, i)
 		} else if seen[id] {
 			add("%s.analyze has a duplicate rule id %q", path, id)
 		}
 		seen[id] = true
-		switch cfgval.AsString(rm["severity"]) {
+		switch cfgval.AsString(rm[checks.CheckKeySeverity]) {
 		case "error", "warning", "ok":
 		default:
 			add("%s.analyze rule %q severity must be error, warning or ok", path, id)
 		}
-		switch cfgval.AsString(rm["stream"]) {
+		switch cfgval.AsString(rm[checks.CheckKeyStream]) {
 		case "", checks.AnalyzeStreamBoth, checks.AnalyzeStreamStdout, checks.AnalyzeStreamStderr:
 		default:
 			add("%s.analyze rule %q stream must be stdout, stderr or both", path, id)
 		}
-		match := cfgval.AsString(rm["match"])
+		match := cfgval.AsString(rm[checks.CheckKeyMatch])
 		if match == "" {
 			add("%s.analyze rule %q is missing a match", path, id)
 			continue
@@ -598,7 +605,7 @@ func validateAnalyze(path string, entry map[string]any, add addFunc) {
 }
 
 func validateCommandExport(path string, entry map[string]any, add addFunc) {
-	raw, present := entry["export"]
+	raw, present := entry[checks.CheckKeyExport]
 	if !present {
 		return
 	}
@@ -613,15 +620,15 @@ func validateCommandExport(path string, entry map[string]any, add addFunc) {
 		}
 		switch spec := exports[name].(type) {
 		case map[string]any:
-			if from := cfgval.String(spec["from"]); from != "" && from != "stdout" && from != "stderr" {
+			if from := cfgval.String(spec[checks.CheckKeyFrom]); from != "" && from != "stdout" && from != "stderr" {
 				add("%s.export.%s.from must be stdout or stderr", path, name)
 			}
-			if v, present := spec["trim"]; present {
+			if v, present := spec[checks.CheckKeyTrim]; present {
 				if _, ok := v.(bool); !ok {
 					add("%s.export.%s.trim must be a boolean", path, name)
 				}
 			}
-			if rawRegex, present := spec["regex"]; present {
+			if rawRegex, present := spec[checks.CheckKeyRegex]; present {
 				pattern := cfgval.String(rawRegex)
 				if pattern == "" {
 					add("%s.export.%s.regex must be non-empty", path, name)
@@ -656,10 +663,10 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 			validateConnFields(path, entry, proto.RequiresUser(), add)
 			validateInterfaceFields(path, entry, add)
 			if proto.Name() == "dns" {
-				if v, present := entry["resolvconf"]; present {
+				if v, present := entry[checks.CheckKeyResolvconf]; present {
 					if _, ok := v.(bool); !ok {
 						add("%s.resolvconf must be a boolean", path)
-					} else if cfgval.Bool(v) && cfgval.String(entry["host"]) != "" {
+					} else if cfgval.Bool(v) && cfgval.String(entry[checks.CheckKeyHost]) != "" {
 						add("%s host and resolvconf are mutually exclusive", path)
 					}
 				}
@@ -671,7 +678,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 	validateInterfaceFields(path, entry, add)
 	switch typ {
 	case checks.CheckTypeTCP:
-		if n, ok := cfgval.Int(entry["port"]); !ok || n < 1 || n > 65535 {
+		if n, ok := cfgval.Int(entry[checks.CheckKeyPort]); !ok || n < 1 || n > 65535 {
 			add("%s.port is required and must be a port in 1..65535 for a tcp check", path)
 		}
 	case checks.CheckTypeHTTP:
@@ -681,7 +688,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 	case checks.CheckTypeCommand:
 		validateCommandFields(path, entry, true, add)
 	case checks.CheckTypeService:
-		st := cfgval.String(entry["expect"])
+		st := cfgval.String(entry[checks.CheckKeyExpect])
 		if st == "" {
 			add("%s.expect is required for a service check", path)
 		} else {
@@ -690,8 +697,8 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 			}
 		}
 	case checks.CheckTypeProcess:
-		hasExe := cfgval.String(entry["exe"]) != ""
-		exeAny, hasExeAnyField := entry["exe_any"]
+		hasExe := cfgval.String(entry[checks.CheckKeyExe]) != ""
+		exeAny, hasExeAnyField := entry[checks.CheckKeyExeAny]
 		hasExeAny := cfgval.IsNonEmptyStringList(exeAny)
 		if hasExeAnyField && !hasExeAny {
 			add("%s.exe_any must be a string or non-empty list of strings", path)
@@ -702,27 +709,27 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		case hasExe && hasExeAny:
 			add("%s must define only one of exe or exe_any", path)
 		}
-		if st := cfgval.String(entry["state"]); st != "" {
+		if st := cfgval.String(entry[checks.CheckKeyState]); st != "" {
 			if _, ok := processStates[st]; !ok {
 				add("%s state %q is not one of running, zombie, absent", path, st)
 			}
 		}
 	case checks.CheckTypeFileExists:
-		p := cfgval.String(entry["path"])
+		p := cfgval.String(entry[checks.CheckKeyPath])
 		if p == "" {
 			add("%s.path is required for a file_exists check", path)
 		} else if underDir(p, locksDir) {
 			add("%s file_exists must not point under the runtime lock dir %s", path, locksDir)
 		}
 	case checks.CheckTypeFile:
-		if cfgval.String(entry["path"]) == "" {
+		if cfgval.String(entry[checks.CheckKeyPath]) == "" {
 			add("%s.path is required for a file check", path)
 		}
 	case checks.CheckTypeLockfile:
-		if !cfgval.IsNonEmptyStringList(entry["path"]) {
+		if !cfgval.IsNonEmptyStringList(entry[checks.CheckKeyPath]) {
 			add("%s.path is required for a lockfile check", path)
 		} else {
-			for _, p := range cfgval.StringList(entry["path"]) {
+			for _, p := range cfgval.StringList(entry[checks.CheckKeyPath]) {
 				if underDir(p, locksDir) {
 					add("%s lockfile must not point under the runtime lock dir %s", path, locksDir)
 					break
@@ -730,19 +737,19 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 			}
 		}
 	case checks.CheckTypeBinary:
-		if cfgval.String(entry["path"]) == "" {
+		if cfgval.String(entry[checks.CheckKeyPath]) == "" {
 			add("%s.path is required for a binary check", path)
 		}
 	case checks.CheckTypePidfile:
-		if !cfgval.IsNonEmptyStringList(entry["path"]) {
+		if !cfgval.IsNonEmptyStringList(entry[checks.CheckKeyPath]) {
 			add("%s.path is required for a pidfile check", path)
 		}
 	case checks.CheckTypeSocket:
-		if !cfgval.IsNonEmptyStringList(entry["path"]) {
+		if !cfgval.IsNonEmptyStringList(entry[checks.CheckKeyPath]) {
 			add("%s.path is required for a socket check", path)
 		}
 	case checks.CheckTypeLibraries:
-		if cfgval.String(entry["binary"]) == "" {
+		if cfgval.String(entry[checks.CheckKeyBinary]) == "" {
 			add("%s.binary is required for a libraries check", path)
 		}
 	case checks.CheckTypeMetric:
@@ -759,7 +766,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		validateThresholdPreds(path, entry, checks.UsersPredFields, add)
 	case checks.CheckTypeProcessCount:
 		validateThresholdPreds(path, entry, checks.ProcessCountPredFields, add)
-		for _, f := range []string{"exe", "exe_dir"} {
+		for _, f := range []string{checks.CheckKeyExe, checks.CheckKeyExeDir} {
 			if p := cfgval.String(entry[f]); p != "" && !filepath.IsAbs(p) {
 				add("%s.%s must be an absolute path", path, f)
 			}
@@ -777,18 +784,18 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 	case checks.CheckTypeEDAC:
 		validatePresentThresholds(path, entry, checks.EdacPredFields, add)
 	case checks.CheckTypeConfig:
-		_, hasCmd := entry["command"]
-		_, hasPath := entry["path"]
+		_, hasCmd := entry[checks.CheckKeyCommand]
+		_, hasPath := entry[checks.CheckKeyPath]
 		if !hasCmd && !hasPath {
 			add("%s requires a command and/or path", path)
 		}
-		if hasCmd && !cfgval.IsNonEmptyStringArray(entry["command"]) {
+		if hasCmd && !cfgval.IsNonEmptyStringArray(entry[checks.CheckKeyCommand]) {
 			add("%s command must be an array, not a shell string", path)
 		}
-		if hasPath && !cfgval.IsNonEmptyStringList(entry["path"]) {
+		if hasPath && !cfgval.IsNonEmptyStringList(entry[checks.CheckKeyPath]) {
 			add("%s.path must be a string or non-empty list of strings", path)
 		}
-		if v, present := entry["on_change"]; present {
+		if v, present := entry[checks.CheckKeyOnChange]; present {
 			if _, ok := v.(bool); !ok {
 				add("%s.on_change must be a boolean", path)
 			}
@@ -811,27 +818,27 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 	case checks.CheckTypeFirewallRules:
 		validateFirewallRulesFields(path, entry, add)
 	case checks.CheckTypeNet:
-		if cfgval.String(entry["interface"]) == "" {
+		if cfgval.String(entry[checks.CheckKeyInterface]) == "" {
 			add("%s.interface is required for a net check", path)
 		}
-		validateNetMetricCondition(path, cfgval.String(entry["metric"]), entry, add)
+		validateNetMetricCondition(path, cfgval.String(entry[checks.CheckKeyMetric]), entry, add)
 	case checks.CheckTypeICMP:
-		if cfgval.String(entry["host"]) == "" {
+		if cfgval.String(entry[checks.CheckKeyHost]) == "" {
 			add("%s.host is required for an icmp check", path)
 		}
-		if v, present := entry["count"]; present {
+		if v, present := entry[checks.CheckKeyCount]; present {
 			if n, ok := cfgval.Int(v); !ok || n <= 0 {
 				add("%s.count must be a positive integer", path)
 			}
 		}
-		validateICMPMetricCondition(path, cfgval.String(entry["metric"]), entry, add)
+		validateICMPMetricCondition(path, cfgval.String(entry[checks.CheckKeyMetric]), entry, add)
 	case checks.CheckTypeSwap:
-		validateSwapMetricCondition(path, cfgval.String(entry["metric"]), entry, add)
+		validateSwapMetricCondition(path, cfgval.String(entry[checks.CheckKeyMetric]), entry, add)
 	case checks.CheckTypeRoute:
-		if f := cfgval.String(entry["family"]); f != "" && f != checks.FamilyIPv4 && f != checks.FamilyIPv6 {
+		if f := cfgval.String(entry[checks.CheckKeyFamily]); f != "" && f != checks.FamilyIPv4 && f != checks.FamilyIPv6 {
 			add("%s.family must be ipv4 or ipv6", path)
 		}
-		if v, present := entry["interface"]; present {
+		if v, present := entry[checks.CheckKeyInterface]; present {
 			if _, ok := v.(string); !ok {
 				add("%s.interface must be a single interface name for a route check", path)
 			}
@@ -845,10 +852,10 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 	case checks.CheckTypeCert:
 		validateCertFields(path, entry, add)
 	case checks.CheckTypeSQLite, checks.CheckTypeSQLite3:
-		if cfgval.String(entry["path"]) == "" {
+		if cfgval.String(entry[checks.CheckKeyPath]) == "" {
 			add("%s.path is required for a sqlite check", path)
 		}
-		if v, present := entry["quick"]; present {
+		if v, present := entry[checks.CheckKeyQuick]; present {
 			if _, ok := v.(bool); !ok {
 				add("%s.quick must be a boolean", path)
 			}
@@ -868,7 +875,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 }
 
 func validateCommandUser(path string, entry map[string]any, add addFunc) {
-	raw, present := entry["user"]
+	raw, present := entry[checks.CheckKeyUser]
 	if !present {
 		return
 	}
@@ -879,7 +886,7 @@ func validateCommandUser(path string, entry map[string]any, add addFunc) {
 }
 
 func validateFirewallRulesFields(prefix string, fields map[string]any, add addFunc) {
-	backend := cfgval.String(fields["backend"])
+	backend := cfgval.String(fields[checks.CheckKeyBackend])
 	if backend == checks.FirewallBackendNftAlias {
 		backend = checks.FirewallBackendNftables
 	}
@@ -888,7 +895,7 @@ func validateFirewallRulesFields(prefix string, fields map[string]any, add addFu
 	default:
 		add("%s.backend must be auto, nftables or iptables", prefix)
 	}
-	if v, present := fields["min_rules"]; present {
+	if v, present := fields[checks.CheckKeyMinRules]; present {
 		n, ok := cfgval.Int(v)
 		if !ok || n < 1 {
 			add("%s.min_rules must be a positive integer", prefix)
@@ -899,7 +906,7 @@ func validateFirewallRulesFields(prefix string, fields map[string]any, add addFu
 // validateWebsocketFields validates a websocket check: a required url with a
 // ws/wss/http/https scheme.
 func validateWebsocketFields(prefix string, fields map[string]any, add addFunc) {
-	raw := cfgval.String(fields["url"])
+	raw := cfgval.String(fields[checks.CheckKeyURL])
 	if raw == "" {
 		add("%s.url is required for a websocket check", prefix)
 		return
@@ -919,18 +926,18 @@ func validateWebsocketFields(prefix string, fields map[string]any, add addFunc) 
 // validateAutofsFields validates an autofs check: an optional count {op, value}
 // predicate, mutually exclusive with path.
 func validateAutofsFields(prefix string, fields map[string]any, add addFunc) {
-	count, hasCount := fields["count"].(map[string]any)
+	count, hasCount := fields[checks.CheckKeyCount].(map[string]any)
 	if !hasCount {
 		return
 	}
-	if cfgval.String(fields["path"]) != "" {
+	if cfgval.String(fields[checks.CheckKeyPath]) != "" {
 		add("%s: path and count are mutually exclusive", prefix)
 	}
-	op := cfgval.String(count["op"])
+	op := cfgval.String(count[checks.CheckKeyOp])
 	if !cfgval.IsCompareOp(op) {
 		add("%s.count.op %q is not one of >, >=, <, <=, ==, !=", prefix, op)
 	}
-	if !isNumeric(cfgval.String(count["value"])) {
+	if !isNumeric(cfgval.String(count[checks.CheckKeyValue])) {
 		add("%s.count.value must be numeric", prefix)
 	}
 }
@@ -938,16 +945,16 @@ func validateAutofsFields(prefix string, fields map[string]any, add addFunc) {
 // validateSizeFields validates a size (growth) check: a required path, a
 // positive parseable grow_by byte size and a positive within duration.
 func validateSizeFields(prefix string, fields map[string]any, add addFunc) {
-	if cfgval.String(fields["path"]) == "" {
+	if cfgval.String(fields[checks.CheckKeyPath]) == "" {
 		add("%s.path is required for a size check", prefix)
 	}
-	gb := cfgval.String(fields["grow_by"])
+	gb := cfgval.String(fields[checks.CheckKeyGrowBy])
 	if gb == "" {
 		add("%s.grow_by is required for a size check (e.g. 1G)", prefix)
 	} else if n, ok := cfgval.ByteSize(gb); !ok || n == 0 {
 		add("%s.grow_by %q must be a positive size with a K/M/G/T suffix (e.g. 1G, 500M)", prefix, gb)
 	}
-	w := cfgval.String(fields["within"])
+	w := cfgval.String(fields[checks.CheckKeyWithin])
 	if w == "" {
 		add("%s.within is required for a size check (e.g. 1h)", prefix)
 	} else if !isPositiveDuration(w) {
@@ -960,22 +967,22 @@ func validateSizeFields(prefix string, fields map[string]any, add addFunc) {
 // collection+pipeline / command), JSON-parseable filter/pipeline/command, and a
 // result path where one is needed.
 func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
-	op := cfgval.String(fields["op"])
+	op := cfgval.String(fields[checks.CheckKeyOp])
 	if !cfgval.IsAssertOp(op) {
 		add("%s.op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, op)
 	}
-	if cfgval.String(fields["value"]) == "" {
+	if cfgval.String(fields[checks.CheckKeyValue]) == "" {
 		add("%s.value is required for a mongodb-query check", prefix)
 	} else if cfgval.IsAssertOp(op) {
-		if err := checks.ValidateAssertionValue(prefix, op, cfgval.String(fields["value"])); err != nil {
+		if err := checks.ValidateAssertionValue(prefix, op, cfgval.String(fields[checks.CheckKeyValue])); err != nil {
 			add("%s", err)
 		}
 	}
 
-	collection := cfgval.String(fields["collection"])
-	command := cfgval.String(fields["command"])
-	pipeline := cfgval.String(fields["pipeline"])
-	result := cfgval.String(fields["result"])
+	collection := cfgval.String(fields[checks.CheckKeyCollection])
+	command := cfgval.String(fields[checks.CheckKeyCommand])
+	pipeline := cfgval.String(fields[checks.CheckKeyPipeline])
+	result := cfgval.String(fields[checks.CheckKeyResult])
 
 	switch {
 	case command != "":
@@ -989,7 +996,7 @@ func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
 			add("%s.command must be a JSON object", prefix)
 		}
 	case collection != "":
-		if cfgval.String(fields["database"]) == "" {
+		if cfgval.String(fields[checks.CheckKeyDatabase]) == "" {
 			add("%s.database is required for a collection query", prefix)
 		}
 		if pipeline != "" {
@@ -999,7 +1006,7 @@ func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
 			if !isJSONArray(pipeline) {
 				add("%s.pipeline must be a JSON array", prefix)
 			}
-		} else if f := cfgval.String(fields["filter"]); f != "" && !isJSONObject(f) {
+		} else if f := cfgval.String(fields[checks.CheckKeyFilter]); f != "" && !isJSONObject(f) {
 			add("%s.filter must be a JSON object", prefix)
 		}
 	default:
@@ -1011,7 +1018,7 @@ func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
 // shared by network checks: `interface` is a string or a list of strings (a
 // name/IP/MAC), and `interface_match` is any|all.
 func validateInterfaceFields(prefix string, fields map[string]any, add addFunc) {
-	if v, ok := fields["interface"]; ok {
+	if v, ok := fields[checks.CheckKeyInterface]; ok {
 		switch t := v.(type) {
 		case string:
 		case []any:
@@ -1025,7 +1032,7 @@ func validateInterfaceFields(prefix string, fields map[string]any, add addFunc) 
 			add("%s.interface must be a string or a list of strings (name/IP/MAC)", prefix)
 		}
 	}
-	if m := cfgval.String(fields["interface_match"]); m != "" && m != "any" && m != "all" {
+	if m := cfgval.String(fields[checks.CheckKeyInterfaceMatch]); m != "" && m != "any" && m != "all" {
 		add("%s.interface_match %q must be any or all", prefix, m)
 	}
 }
@@ -1034,34 +1041,34 @@ func validateInterfaceFields(prefix string, fields map[string]any, add addFunc) 
 // a value, plus the language-specific target — InfluxQL needs a `database`, Flux
 // needs an `org` and `token`.
 func validateInfluxFields(prefix string, fields map[string]any, add addFunc) {
-	if cfgval.String(fields["query"]) == "" {
+	if cfgval.String(fields[checks.CheckKeyQuery]) == "" {
 		add("%s.query is required for an influxdb-query check", prefix)
 	}
-	op := cfgval.String(fields["op"])
+	op := cfgval.String(fields[checks.CheckKeyOp])
 	if !cfgval.IsAssertOp(op) {
 		add("%s.op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, op)
 	}
-	if cfgval.String(fields["value"]) == "" {
+	if cfgval.String(fields[checks.CheckKeyValue]) == "" {
 		add("%s.value is required for an influxdb-query check", prefix)
 	} else if cfgval.IsAssertOp(op) {
-		if err := checks.ValidateAssertionValue(prefix, op, cfgval.String(fields["value"])); err != nil {
+		if err := checks.ValidateAssertionValue(prefix, op, cfgval.String(fields[checks.CheckKeyValue])); err != nil {
 			add("%s", err)
 		}
 	}
-	language := cfgval.String(fields["language"])
+	language := cfgval.String(fields[checks.CheckKeyLanguage])
 	if language == "" {
-		language = "influxql"
+		language = checks.InfluxLanguageInfluxQL
 	}
 	switch language {
-	case "influxql":
-		if cfgval.String(fields["database"]) == "" {
+	case checks.InfluxLanguageInfluxQL:
+		if cfgval.String(fields[checks.CheckKeyDatabase]) == "" {
 			add("%s.database is required for an influxql query", prefix)
 		}
-	case "flux":
-		if cfgval.String(fields["org"]) == "" {
+	case checks.InfluxLanguageFlux:
+		if cfgval.String(fields[checks.CheckKeyOrg]) == "" {
 			add("%s.org is required for a flux query", prefix)
 		}
-		if cfgval.String(fields["token"]) == "" {
+		if cfgval.String(fields[checks.CheckKeyToken]) == "" {
 			add("%s.token is required for a flux query", prefix)
 		}
 	default:
@@ -1084,18 +1091,18 @@ func isJSONArray(s string) bool {
 // validateSQLFields validates a sql check: a known engine, a query, a valid op
 // and value, plus engine-specific connection requirements.
 func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
-	engine := cfgval.String(fields["engine"])
+	engine := cfgval.String(fields[checks.CheckKeyEngine])
 	if _, ok := sqlEngines[engine]; !ok {
 		add("%s.engine must be one of mysql, mariadb, postgres, postgresql, sqlite", prefix)
 	}
-	if cfgval.String(fields["query"]) == "" {
+	if cfgval.String(fields[checks.CheckKeyQuery]) == "" {
 		add("%s.query is required for a sql check", prefix)
 	}
-	op := cfgval.String(fields["op"])
+	op := cfgval.String(fields[checks.CheckKeyOp])
 	if !cfgval.IsAssertOp(op) {
 		add("%s.op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, op)
 	}
-	value := cfgval.String(fields["value"])
+	value := cfgval.String(fields[checks.CheckKeyValue])
 	if value == "" {
 		add("%s.value is required for a sql check", prefix)
 	} else if cfgval.IsAssertOp(op) {
@@ -1104,12 +1111,12 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 		}
 	}
 	switch engine {
-	case "sqlite", "sqlite3":
-		if cfgval.String(fields["path"]) == "" {
+	case checks.SQLEngineSQLite, checks.SQLEngineSQLite3:
+		if cfgval.String(fields[checks.CheckKeyPath]) == "" {
 			add("%s.path is required for a sqlite sql check", prefix)
 		}
-	case "mysql", "mariadb", "postgres", "postgresql":
-		if cfgval.String(fields["user"]) == "" {
+	case checks.SQLEngineMySQL, checks.SQLEngineMariaDB, checks.SQLEnginePostgres, checks.SQLEnginePostgreSQL:
+		if cfgval.String(fields[checks.CheckKeyUser]) == "" {
 			add("%s.user is required for a %s sql check", prefix, engine)
 		}
 	}
@@ -1120,38 +1127,38 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 // positive expires_in_days, and boolean toggles. New certificate conditions add
 // here.
 func validateCertFields(prefix string, fields map[string]any, add addFunc) {
-	host := cfgval.String(fields["host"])
-	path := cfgval.String(fields["path"])
+	host := cfgval.String(fields[checks.CheckKeyHost])
+	path := cfgval.String(fields[checks.CheckKeyPath])
 	switch {
 	case host == "" && path == "":
 		add("%s requires a host or a path", prefix)
 	case host != "" && path != "":
 		add("%s.host and %s.path are mutually exclusive", prefix, prefix)
 	}
-	if v, present := fields["port"]; present {
+	if v, present := fields[checks.CheckKeyPort]; present {
 		if n, ok := cfgval.Int(v); !ok || n < 1 || n > 65535 {
 			add("%s.port must be an integer in 1..65535", prefix)
 		}
 	}
-	if v, present := fields["server_name"]; present {
+	if v, present := fields[checks.CheckKeyServerName]; present {
 		if _, ok := v.(string); !ok {
 			add("%s.server_name must be a string (SNI + hostname to verify)", prefix)
 		}
 	}
 	// A PEM file has no endpoint: port and server_name only make sense with host.
 	if host == "" && path != "" {
-		for _, key := range []string{"port", "server_name"} {
+		for _, key := range []string{checks.CheckKeyPort, checks.CheckKeyServerName} {
 			if _, present := fields[key]; present {
 				add("%s.%s does not apply to a PEM file path", prefix, key)
 			}
 		}
 	}
-	if v, present := fields["expires_in_days"]; present {
+	if v, present := fields[checks.CheckKeyExpiresInDays]; present {
 		if n, ok := cfgval.Int(v); !ok || n < 1 {
 			add("%s.expires_in_days must be a positive integer", prefix)
 		}
 	}
-	for _, key := range []string{"on_algorithm_change", "on_issuer_change", "on_change", "cert_verify"} {
+	for _, key := range []string{checks.CheckKeyOnAlgorithmChange, checks.CheckKeyOnIssuerChange, checks.CheckKeyOnChange, checks.CheckKeyCertVerify} {
 		if v, present := fields[key]; present {
 			if _, ok := v.(bool); !ok {
 				add("%s.%s must be a boolean", prefix, key)
@@ -1163,7 +1170,7 @@ func validateCertFields(prefix string, fields map[string]any, add addFunc) {
 // validateDiskIOFields validates a diskio check: a required block device name
 // and at least one rate predicate.
 func validateDiskIOFields(prefix string, fields map[string]any, add addFunc) {
-	if cfgval.String(fields["device"]) == "" {
+	if cfgval.String(fields[checks.CheckKeyDevice]) == "" {
 		add("%s.device is required for a diskio check (e.g. sda, nvme0n1)", prefix)
 	}
 	validateThresholdPreds(prefix, fields, checks.DiskIOPredFields, add)
@@ -1172,7 +1179,7 @@ func validateDiskIOFields(prefix string, fields map[string]any, add addFunc) {
 // validatePressureFields validates a pressure (PSI) check: a required resource
 // (cpu, memory or io) and at least one some_*/full_* stall predicate.
 func validatePressureFields(prefix string, fields map[string]any, add addFunc) {
-	switch cfgval.String(fields["resource"]) {
+	switch cfgval.String(fields[checks.CheckKeyResource]) {
 	case checks.PressureResourceCPU, checks.PressureResourceMemory, checks.PressureResourceIO:
 	default:
 		add("%s.resource must be cpu, memory or io for a pressure check", prefix)
@@ -1185,32 +1192,32 @@ func validatePressureFields(prefix string, fields map[string]any, add addFunc) {
 // top level, or nested under `count: {op, value}` like the other named
 // predicates (use one form, not both).
 func validateCount(entry map[string]any, path string, add addFunc) {
-	if cfgval.String(entry["path"]) == "" {
+	if cfgval.String(entry[checks.CheckKeyPath]) == "" {
 		add("%s count check requires a path", path)
 	}
-	if of := cfgval.String(entry["of"]); of != "" {
+	if of := cfgval.String(entry[checks.CheckKeyOf]); of != "" {
 		if _, ok := countKinds[of]; !ok {
 			add("%s count `of` %q is not one of any, file, dir, symlink", path, of)
 		}
 	}
-	if v, present := entry["recursive"]; present {
+	if v, present := entry[checks.CheckKeyRecursive]; present {
 		if _, ok := v.(bool); !ok {
 			add("%s count recursive must be a boolean", path)
 		}
 	}
 	threshold := entry
-	if m, ok := entry["count"].(map[string]any); ok {
-		_, hasOp := entry["op"]
-		_, hasValue := entry["value"]
+	if m, ok := entry[checks.CheckKeyCount].(map[string]any); ok {
+		_, hasOp := entry[checks.CheckKeyOp]
+		_, hasValue := entry[checks.CheckKeyValue]
 		if hasOp || hasValue {
 			add("%s count check must not mix a nested count {op, value} with top-level op/value", path)
 		}
 		threshold = m
 	}
-	if op := cfgval.String(threshold["op"]); !isValidCompareOp(op) {
+	if op := cfgval.String(threshold[checks.CheckKeyOp]); !isValidCompareOp(op) {
 		add("%s count check requires a valid op (>=, >, <=, <, ==, !=)", path)
 	}
-	if !isNumeric(cfgval.String(threshold["value"])) {
-		add("%s count check value %q must be numeric", path, cfgval.String(threshold["value"]))
+	if !isNumeric(cfgval.String(threshold[checks.CheckKeyValue])) {
+		add("%s count check value %q must be numeric", path, cfgval.String(threshold[checks.CheckKeyValue]))
 	}
 }
