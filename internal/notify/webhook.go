@@ -58,7 +58,7 @@ func postWebhook(ctx context.Context, label, webhook string, payload []byte) err
 // webhookURL reads and validates the `webhook` field shared by the webhook
 // transports: required, and an http(s) URL.
 func webhookURL(typ string, entry map[string]any) (string, error) {
-	webhook, _ := entry[keyWebhook].(string)
+	webhook, _ := entry[KeyWebhook].(string)
 	if webhook == "" {
 		return "", errors.New(typ + " notifier requires a webhook")
 	}

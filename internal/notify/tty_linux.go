@@ -46,8 +46,8 @@ func defaultUTMPPaths() []string {
 func buildTTY(name string, entry map[string]any) (Notifier, error) {
 	return &ttyNotifier{
 		name:      name,
-		typ:       notifierTypeTTY,
-		users:     stringSet(cfgval.StringList(entry[keyUsers])),
+		typ:       TypeTTY,
+		users:     stringSet(cfgval.StringList(entry[KeyUsers])),
 		utmpPaths: defaultUTMPPaths(),
 		devRoot:   defaultTTYDevRoot,
 		writeTTY:  writeTTYLinux,
@@ -59,7 +59,7 @@ func buildTTY(name string, entry map[string]any) (Notifier, error) {
 func buildWall(name string, entry map[string]any) (Notifier, error) {
 	return &ttyNotifier{
 		name:      name,
-		typ:       notifierTypeWall,
+		typ:       TypeWall,
 		utmpPaths: defaultUTMPPaths(),
 		devRoot:   defaultTTYDevRoot,
 		writeTTY:  writeTTYLinux,
@@ -72,7 +72,7 @@ func (n *ttyNotifier) Name() string { return n.name }
 
 func (n *ttyNotifier) Type() string {
 	if n.typ == "" {
-		return notifierTypeTTY
+		return TypeTTY
 	}
 	return n.typ
 }

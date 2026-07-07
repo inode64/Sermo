@@ -49,129 +49,129 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 
 func certCheckReadings(data map[string]any) []web.WatchReading {
 	var out []web.WatchReading
-	if v := cfgval.String(data["source"]); v != "" {
-		out = append(out, web.WatchReading{Field: "source", Label: "Source", Value: v})
+	if v := cfgval.String(data[checks.DataKeySource]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeySource, Label: "Source", Value: v})
 	}
-	if v, ok := cfgval.Int(data["days_left"]); ok {
-		out = append(out, web.WatchReading{Field: "days_left", Label: "Days left", Value: strconv.Itoa(v)})
+	if v, ok := cfgval.Int(data[checks.DataKeyDaysLeft]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyDaysLeft, Label: "Days left", Value: strconv.Itoa(v)})
 	}
-	if v := cfgval.String(data["not_after"]); v != "" {
-		out = append(out, web.WatchReading{Field: "not_after", Label: "Expires", Value: v})
+	if v := cfgval.String(data[checks.DataKeyNotAfter]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyNotAfter, Label: "Expires", Value: v})
 	}
-	if v := cfgval.String(data["public_key_algorithm"]); v != "" {
-		out = append(out, web.WatchReading{Field: "public_key_algorithm", Label: "Key type", Value: v})
+	if v := cfgval.String(data[checks.DataKeyPublicKeyAlgorithm]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyPublicKeyAlgorithm, Label: "Key type", Value: v})
 	}
-	if v, ok := cfgval.Int(data["key_bits"]); ok {
-		out = append(out, web.WatchReading{Field: "key_bits", Label: "Key bits", Value: strconv.Itoa(v)})
+	if v, ok := cfgval.Int(data[checks.DataKeyKeyBits]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyKeyBits, Label: "Key bits", Value: strconv.Itoa(v)})
 	}
-	if names, ok := data["dns_names"].([]string); ok && len(names) > 0 {
-		out = append(out, web.WatchReading{Field: "dns_names", Label: "DNS names", Value: strings.Join(names, ", ")})
+	if names, ok := data[checks.DataKeyDNSNames].([]string); ok && len(names) > 0 {
+		out = append(out, web.WatchReading{Field: checks.DataKeyDNSNames, Label: "DNS names", Value: strings.Join(names, ", ")})
 	}
-	if v := cfgval.String(data["issuer"]); v != "" {
-		out = append(out, web.WatchReading{Field: "issuer", Label: "Issuer", Value: v})
+	if v := cfgval.String(data[checks.DataKeyIssuer]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyIssuer, Label: "Issuer", Value: v})
 	}
 	return out
 }
 
 func countCheckReadings(data map[string]any) []web.WatchReading {
 	var out []web.WatchReading
-	if v := cfgval.String(data["path"]); v != "" {
-		out = append(out, web.WatchReading{Field: "path", Label: "Path", Value: v})
+	if v := cfgval.String(data[checks.DataKeyPath]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyPath, Label: "Path", Value: v})
 	}
-	if v := cfgval.String(data["of"]); v != "" {
-		out = append(out, web.WatchReading{Field: "of", Label: "Of", Value: v})
+	if v := cfgval.String(data[checks.DataKeyOf]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyOf, Label: "Of", Value: v})
 	}
-	if v, ok := cfgval.Int(data["count"]); ok {
-		out = append(out, web.WatchReading{Field: "count", Label: "Count", Value: strconv.Itoa(v)})
+	if v, ok := cfgval.Int(data[checks.DataKeyCount]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyCount, Label: "Count", Value: strconv.Itoa(v)})
 	}
 	return out
 }
 
 func firewallCheckReadings(data map[string]any) []web.WatchReading {
 	var out []web.WatchReading
-	if v := cfgval.String(data["backend"]); v != "" {
-		out = append(out, web.WatchReading{Field: "backend", Label: "Backend", Value: v})
+	if v := cfgval.String(data[checks.DataKeyBackend]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyBackend, Label: "Backend", Value: v})
 	}
-	if v, ok := cfgval.Int(data["rules"]); ok {
-		out = append(out, web.WatchReading{Field: "rules", Label: "Rules", Value: strconv.Itoa(v)})
+	if v, ok := cfgval.Int(data[checks.DataKeyRules]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyRules, Label: "Rules", Value: strconv.Itoa(v)})
 	}
-	if v, ok := cfgval.Int(data["min_rules"]); ok {
-		out = append(out, web.WatchReading{Field: "min_rules", Label: "Min rules", Value: strconv.Itoa(v)})
+	if v, ok := cfgval.Int(data[checks.DataKeyMinRules]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyMinRules, Label: "Min rules", Value: strconv.Itoa(v)})
 	}
 	return out
 }
 
 func fileCheckReadings(data map[string]any) []web.WatchReading {
 	var out []web.WatchReading
-	if v := cfgval.String(data["path"]); v != "" {
-		out = append(out, web.WatchReading{Field: "path", Label: "Path", Value: v})
+	if v := cfgval.String(data[checks.DataKeyPath]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyPath, Label: "Path", Value: v})
 	}
-	if v, ok := cfgval.Int(data["size"]); ok {
-		out = append(out, web.WatchReading{Field: "size", Label: "Size", Value: humanize.Bytes(uint64(v))})
+	if v, ok := cfgval.Int(data[checks.DataKeySize]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeySize, Label: "Size", Value: humanize.Bytes(uint64(v))})
 	}
 	return out
 }
 
 func sizeCheckReadings(data map[string]any) []web.WatchReading {
 	var out []web.WatchReading
-	if v := cfgval.String(data["path"]); v != "" {
-		out = append(out, web.WatchReading{Field: "path", Label: "Path", Value: v})
+	if v := cfgval.String(data[checks.DataKeyPath]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyPath, Label: "Path", Value: v})
 	}
-	if v, ok := cfgval.Int(data["current_bytes"]); ok {
-		out = append(out, web.WatchReading{Field: "current_bytes", Label: "Current size", Value: humanize.Bytes(uint64(v))})
+	if v, ok := cfgval.Int(data[checks.DataKeyCurrentBytes]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyCurrentBytes, Label: "Current size", Value: humanize.Bytes(uint64(v))})
 	}
-	if v, ok := cfgval.Int(data["growth_bytes"]); ok {
-		out = append(out, web.WatchReading{Field: "growth_bytes", Label: "Growth", Value: humanizeSigned(int64(v))})
+	if v, ok := cfgval.Int(data[checks.DataKeyGrowthBytes]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyGrowthBytes, Label: "Growth", Value: humanizeSigned(int64(v))})
 	}
 	return out
 }
 
 func connCheckReadings(data map[string]any) []web.WatchReading {
 	var out []web.WatchReading
-	if v := cfgval.String(data["host"]); v != "" {
-		out = append(out, web.WatchReading{Field: "host", Label: "Host", Value: v})
+	if v := cfgval.String(data[checks.DataKeyHost]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyHost, Label: "Host", Value: v})
 	}
-	if v, ok := cfgval.Int(data["port"]); ok {
-		out = append(out, web.WatchReading{Field: "port", Label: "Port", Value: strconv.Itoa(v)})
+	if v, ok := cfgval.Int(data[checks.DataKeyPort]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyPort, Label: "Port", Value: strconv.Itoa(v)})
 	}
-	if v := cfgval.String(data["socket"]); v != "" {
-		out = append(out, web.WatchReading{Field: "socket", Label: "Socket", Value: v})
+	if v := cfgval.String(data[checks.DataKeySocket]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeySocket, Label: "Socket", Value: v})
 	}
-	if v := cfgval.String(data["protocol"]); v != "" {
-		out = append(out, web.WatchReading{Field: "protocol", Label: "Protocol", Value: v})
+	if v := cfgval.String(data[checks.DataKeyProtocol]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyProtocol, Label: "Protocol", Value: v})
 	}
-	if v, ok := cfgval.Int(data["latency_ms"]); ok {
-		out = append(out, web.WatchReading{Field: "latency_ms", Label: "Latency", Value: strconv.Itoa(v) + " ms"})
+	if v, ok := cfgval.Int(data[checks.DataKeyLatencyMS]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyLatencyMS, Label: "Latency", Value: strconv.Itoa(v) + " ms"})
 	}
 	return out
 }
 
 func httpCheckReadings(data map[string]any) []web.WatchReading {
 	out := connCheckReadings(data)
-	if v, ok := cfgval.Int(data["status"]); ok {
-		out = append(out, web.WatchReading{Field: "status", Label: "Status", Value: strconv.Itoa(v)})
+	if v, ok := cfgval.Int(data[checks.DataKeyStatus]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyStatus, Label: "Status", Value: strconv.Itoa(v)})
 	}
 	return out
 }
 
 func resourceCheckReadings(checkType string, data map[string]any) []web.WatchReading {
 	var out []web.WatchReading
-	if v := cfgval.String(data["path"]); v != "" {
-		out = append(out, web.WatchReading{Field: "path", Label: "Path", Value: v})
+	if v := cfgval.String(data[checks.DataKeyPath]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyPath, Label: "Path", Value: v})
 	}
-	if v, ok := cfgval.Float(data["used_pct"]); ok {
-		out = append(out, web.WatchReading{Field: "used_pct", Label: "Used", Value: fmt.Sprintf("%.2f%%", v)})
+	if v, ok := cfgval.Float(data[checks.DataKeyUsedPct]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyUsedPct, Label: "Used", Value: fmt.Sprintf("%.2f%%", v)})
 	}
-	if v, ok := byteField(data["used_bytes"]); ok {
-		out = append(out, web.WatchReading{Field: "used_bytes", Label: "Used bytes", Value: humanize.Bytes(v)})
+	if v, ok := byteField(data[checks.DataKeyUsedBytes]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyUsedBytes, Label: "Used bytes", Value: humanize.Bytes(v)})
 	}
-	if v, ok := byteField(data["free_bytes"]); ok {
-		out = append(out, web.WatchReading{Field: "free_bytes", Label: "Free bytes", Value: humanize.Bytes(v)})
+	if v, ok := byteField(data[checks.DataKeyFreeBytes]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyFreeBytes, Label: "Free bytes", Value: humanize.Bytes(v)})
 	}
-	if v, ok := byteField(data["available_bytes"]); ok {
-		out = append(out, web.WatchReading{Field: "available_bytes", Label: "Available", Value: humanize.Bytes(v)})
+	if v, ok := byteField(data[checks.DataKeyAvailableBytes]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyAvailableBytes, Label: "Available", Value: humanize.Bytes(v)})
 	}
-	if v, ok := cfgval.Float(data["value"]); ok {
+	if v, ok := cfgval.Float(data[checks.DataKeyValue]); ok {
 		label := "Value"
 		switch checkType {
 		case checks.CheckTypeLoad:
@@ -181,7 +181,7 @@ func resourceCheckReadings(checkType string, data map[string]any) []web.WatchRea
 		case checks.CheckTypeSwap:
 			label = "Free"
 		}
-		out = append(out, web.WatchReading{Field: "value", Label: label, Value: fmt.Sprintf("%.2f", v)})
+		out = append(out, web.WatchReading{Field: checks.DataKeyValue, Label: label, Value: fmt.Sprintf("%.2f", v)})
 	}
 	return out
 }
@@ -193,16 +193,16 @@ func pressureCheckReadings(data map[string]any) []web.WatchReading {
 			out = append(out, web.WatchReading{Field: field, Label: field, Value: fmt.Sprintf("%.2f%%", v)})
 		}
 	}
-	if v, ok := cfgval.Float(data["value"]); ok {
-		out = append(out, web.WatchReading{Field: "value", Label: "Value", Value: fmt.Sprintf("%.2f%%", v)})
+	if v, ok := cfgval.Float(data[checks.DataKeyValue]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyValue, Label: "Value", Value: fmt.Sprintf("%.2f%%", v)})
 	}
 	return out
 }
 
 func diskioCheckReadings(data map[string]any) []web.WatchReading {
 	var out []web.WatchReading
-	if v := cfgval.String(data["device"]); v != "" {
-		out = append(out, web.WatchReading{Field: "device", Label: "Device", Value: v})
+	if v := cfgval.String(data[checks.DataKeyDevice]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyDevice, Label: "Device", Value: v})
 	}
 	for _, field := range []struct {
 		key, label, unit string
@@ -223,11 +223,11 @@ func diskioCheckReadings(data map[string]any) []web.WatchReading {
 
 func metricCheckReadings(checkType string, data map[string]any) []web.WatchReading {
 	var out []web.WatchReading
-	if v := cfgval.String(data["device"]); v != "" {
-		out = append(out, web.WatchReading{Field: "device", Label: "Device", Value: v})
+	if v := cfgval.String(data[checks.DataKeyDevice]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyDevice, Label: "Device", Value: v})
 	}
-	if v := cfgval.String(data["health"]); v != "" {
-		out = append(out, web.WatchReading{Field: "health", Label: "Health", Value: v})
+	if v := cfgval.String(data[checks.DataKeyHealth]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyHealth, Label: "Health", Value: v})
 	}
 	for _, m := range checks.GraphMetrics(checkType) {
 		if v, ok := data[m.Key].(float64); ok {

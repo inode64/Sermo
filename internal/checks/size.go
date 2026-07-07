@@ -80,12 +80,12 @@ func (c *sizeCheck) Run(ctx context.Context) Result {
 		humanize.Bytes(uint64(c.growBy)), c.window)
 	res := c.result(ok, msg, start)
 	res.Data = map[string]any{
-		"path":           c.path,
-		"current_bytes":  size,
-		"baseline_bytes": baseline.size,
-		"growth_bytes":   growth,
-		"window":         c.window.String(),
-		fieldValue:       growth,
+		DataKeyPath:          c.path,
+		DataKeyCurrentBytes:  size,
+		DataKeyBaselineBytes: baseline.size,
+		DataKeyGrowthBytes:   growth,
+		DataKeyWindow:        c.window.String(),
+		fieldValue:           growth,
 	}
 	return res
 }

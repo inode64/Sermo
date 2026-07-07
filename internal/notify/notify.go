@@ -37,13 +37,15 @@ type Notifier interface {
 	Send(ctx context.Context, msg Message) error
 }
 
+// Config key constants name fields inside one notifier configuration entry.
 const (
-	keyDSN     = "dsn"
-	keyFrom    = "from"
-	keyTo      = "to"
-	keyType    = "type"
-	keyUsers   = "users"
-	keyWebhook = "webhook"
+	KeyDSN      = "dsn"
+	KeyFrom     = "from"
+	KeyTemplate = "template"
+	KeyTo       = "to"
+	KeyType     = "type"
+	KeyUsers    = "users"
+	KeyWebhook  = "webhook"
 )
 
 // Option customizes notifier construction.
@@ -54,12 +56,13 @@ type buildOptions struct {
 	templatesDisabled bool
 }
 
+// Type constants are the supported notifier transport names.
 const (
-	notifierTypeEmail = "email"
-	notifierTypeSlack = "slack"
-	notifierTypeTeams = "teams"
-	notifierTypeTTY   = "tty"
-	notifierTypeWall  = "wall"
+	TypeEmail = "email"
+	TypeSlack = "slack"
+	TypeTeams = "teams"
+	TypeTTY   = "tty"
+	TypeWall  = "wall"
 )
 
 // WithTemplateDir configures where named notification templates are loaded
@@ -88,11 +91,11 @@ func Enabled(entry map[string]any) bool {
 // builders maps a notifier `type` to its constructor. Register new transports
 // here (e.g. a future "discord").
 var builders = map[string]func(name string, entry map[string]any) (Notifier, error){
-	notifierTypeEmail: buildEmail,
-	notifierTypeSlack: buildSlack,
-	notifierTypeTeams: buildTeams,
-	notifierTypeTTY:   buildTTY,
-	notifierTypeWall:  buildWall,
+	TypeEmail: buildEmail,
+	TypeSlack: buildSlack,
+	TypeTeams: buildTeams,
+	TypeTTY:   buildTTY,
+	TypeWall:  buildWall,
 }
 
 // Build constructs global notifiers. Malformed or unknown-type entries become
@@ -116,7 +119,7 @@ func Build(raw map[string]any, opts ...Option) (map[string]Notifier, []string) {
 		if !Enabled(entry) {
 			continue
 		}
-		typ, _ := entry[keyType].(string)
+		typ, _ := entry[KeyType].(string)
 		build, ok := builders[typ]
 		if !ok {
 			warnings = append(warnings, fmt.Sprintf("notifier %s: unsupported type %q", name, typ))
@@ -127,7 +130,7 @@ func Build(raw map[string]any, opts ...Option) (map[string]Notifier, []string) {
 			warnings = append(warnings, "notifier "+name+": "+err.Error())
 			continue
 		}
-		if templateName := cfgval.AsString(entry["template"]); templateName != "" && !options.templatesDisabled {
+		if templateName := cfgval.AsString(entry[KeyTemplate]); templateName != "" && !options.templatesDisabled {
 			tmpl, err := LoadTemplate(options.templateDir, templateName)
 			if err != nil {
 				warnings = append(warnings, fmt.Sprintf("notifier %s: template %q: %v", name, templateName, err))

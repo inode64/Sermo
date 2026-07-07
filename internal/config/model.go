@@ -12,6 +12,7 @@ package config
 import (
 	"maps"
 	"sermo/internal/cfgval"
+	"sermo/internal/notify"
 	"sermo/internal/rules"
 	"slices"
 )
@@ -589,8 +590,8 @@ func (c *Config) Notifiers() map[string]any {
 		return nil
 	}
 	out := map[string]any{
-		notifierTypeTTY:  map[string]any{"type": notifierTypeTTY},
-		notifierTypeWall: map[string]any{"type": notifierTypeWall},
+		notify.TypeTTY:  map[string]any{notify.KeyType: notify.TypeTTY},
+		notify.TypeWall: map[string]any{notify.KeyType: notify.TypeWall},
 	}
 	m, _ := c.Global.Raw[pathKeyNotifiers].(map[string]any)
 	for name, entry := range m {

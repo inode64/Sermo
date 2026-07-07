@@ -46,7 +46,7 @@ type storageCheck struct {
 
 func (c storageCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	data := map[string]any{"path": c.path}
+	data := map[string]any{DataKeyPath: c.path}
 
 	// Mount verification takes precedence: a wrong/absent mount makes the space
 	// numbers meaningless (statfs would report the parent filesystem).
@@ -60,10 +60,10 @@ func (c storageCheck) Run(_ context.Context) Result {
 			return c.result(false, "mount "+c.path+": "+err.Error(), start)
 		}
 		mounted, problem, reason, info := c.mount.evaluate(mounts, c.path)
-		data["mounted"] = mounted
+		data[DataKeyMounted] = mounted
 		if info != nil {
-			data["fstype"], data["device"] = info.FSType, info.Device
-			data["options"] = strings.Join(info.Options, ",")
+			data[DataKeyFSType], data[DataKeyDevice] = info.FSType, info.Device
+			data[DataKeyOptions] = strings.Join(info.Options, ",")
 		}
 		if problem {
 			res := c.result(true, c.path+" "+reason, start)
@@ -110,7 +110,7 @@ func (c storageCheck) Run(_ context.Context) Result {
 	data[fieldInodesUsedPct] = st.InodesUsedPct
 	data[fieldInodesFreePct] = st.InodesFreePct
 	data[fieldInodesFree] = st.InodesFree
-	data["inodes_total"] = st.InodesTotal
+	data[DataKeyInodesTotal] = st.InodesTotal
 	data[fieldValue] = firstPredValue(c.preds, values, st.UsedPct)
 	res.Data = data
 	return res

@@ -60,7 +60,7 @@ type Email struct {
 func (e *Email) Name() string { return e.name }
 
 // Type returns the notifier type identifier.
-func (e *Email) Type() string { return notifierTypeEmail }
+func (e *Email) Type() string { return TypeEmail }
 
 // Send delivers the message over SMTP.
 func (e *Email) Send(ctx context.Context, msg Message) error {
@@ -73,7 +73,7 @@ func (e *Email) Send(ctx context.Context, msg Message) error {
 
 // buildEmail constructs an Email notifier from a config entry.
 func buildEmail(name string, entry map[string]any) (Notifier, error) {
-	dsnStr, _ := entry[keyDSN].(string)
+	dsnStr, _ := entry[KeyDSN].(string)
 	if dsnStr == "" {
 		return nil, errors.New("email notifier requires a dsn")
 	}
@@ -81,11 +81,11 @@ func buildEmail(name string, entry map[string]any) (Notifier, error) {
 	if err != nil {
 		return nil, err
 	}
-	from, _ := entry[keyFrom].(string)
+	from, _ := entry[KeyFrom].(string)
 	if from == "" {
 		return nil, errors.New("email notifier requires a from address")
 	}
-	to := cfgval.StringList(entry[keyTo])
+	to := cfgval.StringList(entry[KeyTo])
 	if len(to) == 0 {
 		return nil, errors.New("email notifier requires at least one to address")
 	}

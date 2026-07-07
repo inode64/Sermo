@@ -124,7 +124,7 @@ func (c *websocketCheck) handshake(ctx context.Context, iface string, start time
 }
 
 func websocketResponseData(resp *http.Response) map[string]any {
-	return map[string]any{"status": resp.StatusCode, "subprotocol": resp.Header.Get("Sec-WebSocket-Protocol")}
+	return map[string]any{DataKeyStatus: resp.StatusCode, DataKeySubprotocol: resp.Header.Get("Sec-WebSocket-Protocol")}
 }
 
 // handshakeRequest builds the RFC 6455 client opening handshake.

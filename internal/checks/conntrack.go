@@ -40,7 +40,7 @@ func (c conntrackCheck) Run(_ context.Context) Result {
 	if err != nil {
 		return c.result(false, "conntrack: "+err.Error(), start)
 	}
-	return levelCountResult(c.base, c.preds, "conntrack", "entries", "count", s.Count, s.Max, start)
+	return levelCountResult(c.base, c.preds, "conntrack", "entries", DataKeyCount, s.Count, s.Max, start)
 }
 
 // SampleConntrack returns one live netfilter conntrack observation using the

@@ -52,7 +52,7 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 	ok := levelPredsHold(c.preds, values)
 
 	r := c.result(ok, hdparmMessage(c.device, values), start)
-	r.Data = map[string]any{"device": c.device}
+	r.Data = map[string]any{DataKeyDevice: c.device}
 	for k, v := range values {
 		r.Data[k] = v
 	}

@@ -49,11 +49,11 @@ func (c countCheck) Run(ctx context.Context) Result {
 	res := c.result(ok, fmt.Sprintf("%d %s entries %s %s (want %s %s)",
 		n, c.kind, scope, c.path, c.op, strconv.FormatFloat(c.value, 'f', -1, 64)), start)
 	res.Data = map[string]any{
-		"path":      c.path,
-		"of":        c.kind,
-		"recursive": c.recursive,
-		"count":     n,
-		fieldValue:  n,
+		DataKeyPath:      c.path,
+		DataKeyOf:        c.kind,
+		DataKeyRecursive: c.recursive,
+		DataKeyCount:     n,
+		fieldValue:       n,
 	}
 	return res
 }

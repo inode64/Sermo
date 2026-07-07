@@ -68,33 +68,33 @@ func validateNotifiers(notifiers map[string]any, templateDir string, add func(st
 			continue
 		}
 		validateNotifierTemplate(name, entry, templateDir, add)
-		switch typ := cfgval.String(entry["type"]); typ {
-		case notifierTypeEmail:
-			dsn := cfgval.String(entry["dsn"])
+		switch typ := cfgval.String(entry[notify.KeyType]); typ {
+		case notify.TypeEmail:
+			dsn := cfgval.String(entry[notify.KeyDSN])
 			if dsn == "" {
 				add("notifiers.%s.dsn is required for an email notifier", name)
 			} else if !strings.HasPrefix(dsn, "smtp://") && !strings.HasPrefix(dsn, "smtps://") {
 				add("notifiers.%s.dsn must be an smtp:// or smtps:// URL", name)
 			}
-			if cfgval.String(entry["from"]) == "" {
+			if cfgval.String(entry[notify.KeyFrom]) == "" {
 				add("notifiers.%s.from is required for an email notifier", name)
 			}
-			if !cfgval.IsNonEmptyStringList(entry["to"]) {
+			if !cfgval.IsNonEmptyStringList(entry[notify.KeyTo]) {
 				add("notifiers.%s.to must list at least one address", name)
 			}
-		case notifierTypeSlack, notifierTypeTeams:
-			wh := cfgval.String(entry["webhook"])
+		case notify.TypeSlack, notify.TypeTeams:
+			wh := cfgval.String(entry[notify.KeyWebhook])
 			if wh == "" {
 				add("notifiers.%s.webhook is required for a %s notifier", name, typ)
 			} else if !strings.HasPrefix(wh, "http://") && !strings.HasPrefix(wh, "https://") {
 				add("notifiers.%s.webhook must be an http(s) URL", name)
 			}
-		case notifierTypeTTY:
-			if users, present := entry["users"]; present && !cfgval.IsStringOrStringList(users) {
+		case notify.TypeTTY:
+			if users, present := entry[notify.KeyUsers]; present && !cfgval.IsStringOrStringList(users) {
 				add("notifiers.%s.users must be a string or list of strings", name)
 			}
-		case notifierTypeWall:
-			if _, present := entry["users"]; present {
+		case notify.TypeWall:
+			if _, present := entry[notify.KeyUsers]; present {
 				add("notifiers.%s.users is not supported for a wall notifier; use type tty to target specific users", name)
 			}
 		case "":
@@ -110,7 +110,7 @@ func validateNotifiers(notifiers map[string]any, templateDir string, add func(st
 }
 
 func validateNotifierTemplate(name string, entry map[string]any, templateDir string, add func(string, ...any)) {
-	raw, present := entry["template"]
+	raw, present := entry[notify.KeyTemplate]
 	if !present {
 		return
 	}

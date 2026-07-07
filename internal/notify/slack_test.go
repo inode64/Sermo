@@ -32,7 +32,7 @@ func TestSlackSendPostsPayload(t *testing.T) {
 		name:    "team",
 		webhook: "https://hooks.slack.com/services/x",
 		post: func(_ context.Context, label, url string, payload []byte) error {
-			if label != notifierTypeSlack {
+			if label != TypeSlack {
 				t.Fatalf("label = %q, want slack", label)
 			}
 			gotURL, gotPayload = url, payload
