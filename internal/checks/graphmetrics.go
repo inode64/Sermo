@@ -16,8 +16,8 @@ var graphMetrics = map[string][]GraphMetric{
 	CheckTypeSensors:      {{Key: sensorTemp, Unit: "°C"}, {Key: sensorFan, Unit: "RPM"}},
 	CheckTypeSmart:        {{Key: fieldTemperature, Unit: "°C"}, {Key: fieldReallocated, Unit: ""}, {Key: fieldWear, Unit: "%"}, {Key: fieldPowerOnHours, Unit: "h"}},
 	CheckTypeEDAC:         {{Key: fieldCE, Unit: ""}, {Key: fieldUE, Unit: ""}},
-	CheckTypeUsers:        {{Key: "count", Unit: "users"}},
-	CheckTypeProcessCount: {{Key: "count", Unit: "processes"}},
+	CheckTypeUsers:        {{Key: DataKeyCount, Unit: "users"}},
+	CheckTypeProcessCount: {{Key: DataKeyCount, Unit: "processes"}},
 }
 
 // GraphMetrics returns the graphable metrics declared for a check type, or nil

@@ -108,17 +108,17 @@ var (
 	// reads naturally, e.g. "50M").
 	DiskIOPredFields = []string{fieldUtilPct, fieldReadBytes, fieldWriteBytes, fieldAwaitMs}
 	// FdsPredFields are the predicates of an fds check.
-	FdsPredFields = []string{fieldUsedPct, fieldFree, "allocated"}
+	FdsPredFields = []string{fieldUsedPct, fieldFree, DataKeyAllocated}
 	// PidsPredFields are the predicates of a pids check.
-	PidsPredFields = []string{fieldUsedPct, fieldFree, "count"}
+	PidsPredFields = []string{fieldUsedPct, fieldFree, DataKeyCount}
 	// ConntrackPredFields are the predicates of a conntrack check.
-	ConntrackPredFields = []string{fieldUsedPct, fieldFree, "count"}
+	ConntrackPredFields = []string{fieldUsedPct, fieldFree, DataKeyCount}
 	// LoadPredFields are the predicates of a load check.
 	LoadPredFields = []string{fieldLoad1, fieldLoad5, fieldLoad15}
 	// UsersPredFields is the single required predicate of a users check.
-	UsersPredFields = []string{"count"}
+	UsersPredFields = []string{DataKeyCount}
 	// ProcessCountPredFields is the single required predicate of a process_count check.
-	ProcessCountPredFields = []string{"count"}
+	ProcessCountPredFields = []string{DataKeyCount}
 	// SensorPredFields are the predicates of a sensors check.
 	SensorPredFields = []string{sensorTemp, sensorFan, sensorVoltage}
 	// HdparmPredFields are the predicates of an hdparm check.
@@ -130,9 +130,9 @@ var (
 	// EdacPredFields are the optional predicates of an edac check.
 	EdacPredFields = []string{fieldCE, fieldUE}
 	// EntropyPredFields is the single required predicate of an entropy check.
-	EntropyPredFields = []string{"avail"}
+	EntropyPredFields = []string{DataKeyAvail}
 	// ZombiePredFields is the single required predicate of a zombies check.
-	ZombiePredFields = []string{"count"}
+	ZombiePredFields = []string{DataKeyCount}
 )
 
 // parseLevelPreds reads the {op, value} predicates present in entry among

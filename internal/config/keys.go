@@ -21,11 +21,3 @@ const (
 	backendSystemd = string(servicemgr.BackendSystemd)
 	backendOpenRC  = string(servicemgr.BackendOpenRC)
 )
-
-const (
-	notifierTypeEmail = "email"
-	notifierTypeSlack = "slack"
-	notifierTypeTeams = "teams"
-	notifierTypeTTY   = "tty"
-	notifierTypeWall  = "wall"
-)

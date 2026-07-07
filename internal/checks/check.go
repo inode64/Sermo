@@ -20,11 +20,6 @@ import (
 	"sermo/internal/conn"
 )
 
-// DataKeyOutput is the Result.Data key under which a command check or app probe
-// stores its bounded stdout/stderr on failure. The daemon reads it to thread
-// command output into an event, so writer (checks) and reader (app) share it.
-const DataKeyOutput = "output"
-
 // Result is the observable outcome of one check.
 type Result struct {
 	Service   string         `json:"service,omitempty"`
@@ -136,7 +131,7 @@ func (b base) result(ok bool, message string, start time.Time) Result {
 // so a count momentarily above the max can't underflow the unsigned subtraction
 // — the "label cur/max unit (pct)" message, and the Data map. countField names
 // the primary metric in values/Data ("allocated", "count"). The kernel maximum
-// (each sample's Max, the Data `max` field) is the `limit` parameter: the
+// (each sample's Max, the DataKeyMax field) is the `limit` parameter: the
 // lowercase local is `limit`, not `max`, only to avoid shadowing the Go `max`
 // builtin — keep it that way. When it is 0 the maximum is unknown, so used_pct/
 // free are omitted and a predicate on them cannot hold (the level check is an AND).
@@ -149,7 +144,7 @@ func levelCountResult(b base, preds []levelPred, label, unit, countField string,
 		values[fieldFree] = float64(limit - min(count, limit))
 	}
 	res := b.result(levelPredsHold(preds, values), fmt.Sprintf("%s %d/%d %s (%.1f%%)", label, count, limit, unit, usedPct), start)
-	res.Data = map[string]any{countField: count, "max": limit, fieldUsedPct: usedPct}
+	res.Data = map[string]any{countField: count, DataKeyMax: limit, fieldUsedPct: usedPct}
 	if limit > 0 {
 		res.Data[fieldFree] = limit - min(count, limit)
 	}

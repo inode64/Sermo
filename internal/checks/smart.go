@@ -59,7 +59,7 @@ func (c smartCheck) Run(ctx context.Context) Result {
 		}
 	}
 	r := c.result(ok, "smart "+c.device+" health="+health, start)
-	r.Data = map[string]any{"device": c.device, "health": health}
+	r.Data = map[string]any{DataKeyDevice: c.device, DataKeyHealth: health}
 	for k, v := range data.values {
 		r.Data[k] = v
 	}

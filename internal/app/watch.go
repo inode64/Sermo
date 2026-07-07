@@ -80,7 +80,7 @@ type Watch struct {
 	// Expand, when set, runs a native storage-expansion action on a firing cycle,
 	// gated by Policy so it does not run every cycle while the volume stays low.
 	// It is meant for `storage` watches; the target path comes from the check
-	// Result's "path" data.
+	// Result's checks.DataKeyPath data.
 	Expand   *ExpandSpec
 	Expander VolumeExpander
 	Policy   rules.Policy
@@ -224,7 +224,7 @@ func (w *Watch) runExpand(ctx context.Context, res checks.Result) {
 		w.emit(Event{Watch: w.Name, Kind: eventKindExpandSkipped, Message: reason})
 		return
 	}
-	path := cfgval.String(res.Data["path"])
+	path := cfgval.String(res.Data[checks.DataKeyPath])
 	r, err := w.Expander.ExpandPath(ctx, path, w.Expand.By)
 	w.policyState.Record(at, w.Policy)
 	if err != nil {

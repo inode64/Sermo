@@ -89,7 +89,7 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 	res := c.result(ok, fmt.Sprintf("diskio %s util %.1f%% read %.0fB/s write %.0fB/s await %.1fms",
 		c.device, rates.UtilPct, rates.ReadBytes, rates.WriteBytes, rates.AwaitMs), start)
 	res.Data = map[string]any{
-		"device":        c.device,
+		DataKeyDevice:   c.device,
 		fieldUtilPct:    rates.UtilPct,
 		fieldReadBytes:  rates.ReadBytes,
 		fieldWriteBytes: rates.WriteBytes,

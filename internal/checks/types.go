@@ -180,7 +180,7 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 func (c *httpCheck) success(resp *http.Response, elapsed time.Duration, statusMsg string, start time.Time) Result {
 	if c.certHost == "" || resp.TLS == nil || len(resp.TLS.PeerCertificates) == 0 {
 		res := c.result(true, statusMsg, start)
-		res.Data = map[string]any{"status": resp.StatusCode, "latency_ms": elapsed.Milliseconds(), "protocol": resp.Proto}
+		res.Data = map[string]any{DataKeyStatus: resp.StatusCode, DataKeyLatencyMS: elapsed.Milliseconds(), DataKeyProtocol: resp.Proto}
 		return res
 	}
 	leaf := resp.TLS.PeerCertificates[0]
@@ -196,7 +196,7 @@ func (c *httpCheck) success(resp *http.Response, elapsed time.Duration, statusMs
 	}
 	res := c.result(ok, msg, start)
 	data := certData(c.certHost, c.certHost, "", s, daysLeft, hasExpiry)
-	data["status"], data["latency_ms"], data["protocol"] = resp.StatusCode, elapsed.Milliseconds(), resp.Proto
+	data[DataKeyStatus], data[DataKeyLatencyMS], data[DataKeyProtocol] = resp.StatusCode, elapsed.Milliseconds(), resp.Proto
 	res.Data = data
 	return res
 }
@@ -525,7 +525,7 @@ func (c fileCheck) Run(_ context.Context) Result {
 		return c.result(false, c.path+" is not a regular file", start)
 	}
 	res := c.result(true, c.path+" is a regular file", start)
-	res.Data = map[string]any{"path": c.path, "size": info.Size()}
+	res.Data = map[string]any{DataKeyPath: c.path, DataKeySize: info.Size()}
 	return res
 }
 
@@ -593,7 +593,7 @@ func lockfileCandidate(path string, info os.FileInfo) pathMatch {
 	}
 	return pathMatch{
 		message: path + " is a regular lockfile",
-		data:    map[string]any{"path": path, "size": info.Size()},
+		data:    map[string]any{DataKeyPath: path, DataKeySize: info.Size()},
 	}
 }
 
@@ -634,7 +634,7 @@ func socketCandidate(path string, info os.FileInfo) pathMatch {
 	}
 	return pathMatch{
 		message: path + " is a socket",
-		data:    map[string]any{"path": path},
+		data:    map[string]any{DataKeyPath: path},
 	}
 }
 

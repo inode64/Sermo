@@ -48,7 +48,7 @@ func (c pidfileCheck) Run(_ context.Context) Result {
 			continue
 		}
 		r := c.result(true, fmt.Sprintf("%s -> pid %d running", path, pid), start)
-		r.Data = map[string]any{"pid": pid, "path": path}
+		r.Data = map[string]any{DataKeyPID: pid, DataKeyPath: path}
 		return r
 	}
 	if len(failures) > 0 {
@@ -58,14 +58,14 @@ func (c pidfileCheck) Run(_ context.Context) Result {
 		path := c.paths[0]
 		if pids := c.liveFallbackPIDs(alive); len(pids) > 0 {
 			r := c.result(true, fmt.Sprintf("%s absent; backend reports %d running pid(s)", path, len(pids)), start)
-			r.Data = map[string]any{"pids": pids, "source": "backend"}
+			r.Data = map[string]any{DataKeyPIDs: pids, DataKeySource: DataSourceBackend}
 			return r
 		}
 		return c.result(false, path+" does not exist (service active but no pidfile)", start)
 	}
 	if pids := c.liveFallbackPIDs(alive); len(pids) > 0 {
 		r := c.result(true, fmt.Sprintf("no pidfile candidate exists (%s); backend reports %d running pid(s)", strings.Join(c.paths, ", "), len(pids)), start)
-		r.Data = map[string]any{"pids": pids, "source": "backend", "paths": c.paths}
+		r.Data = map[string]any{DataKeyPIDs: pids, DataKeySource: DataSourceBackend, DataKeyPaths: c.paths}
 		return r
 	}
 	return c.result(false, fmt.Sprintf("none of pidfile candidates exist (%s) (service active but no pidfile)", strings.Join(c.paths, ", ")), start)

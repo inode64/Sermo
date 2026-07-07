@@ -67,6 +67,6 @@ func (c sqliteCheck) Run(ctx context.Context) Result {
 	}
 
 	res := c.result(true, c.path+": integrity ok", start)
-	res.Data = map[string]any{"path": c.path}
+	res.Data = map[string]any{DataKeyPath: c.path}
 	return res
 }

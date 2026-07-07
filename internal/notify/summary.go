@@ -10,11 +10,11 @@ import (
 // ConfigSummary returns a non-secret destination hint for operator dashboards.
 func ConfigSummary(typ string, entry map[string]any) string {
 	switch typ {
-	case notifierTypeEmail:
-		to := cfgval.StringList(entry[keyTo])
+	case TypeEmail:
+		to := cfgval.StringList(entry[KeyTo])
 		return listSummary(to, "")
-	case notifierTypeSlack, notifierTypeTeams:
-		webhook := cfgval.AsString(entry[keyWebhook])
+	case TypeSlack, TypeTeams:
+		webhook := cfgval.AsString(entry[KeyWebhook])
 		if webhook == "" {
 			return ""
 		}
@@ -23,10 +23,10 @@ func ConfigSummary(typ string, entry map[string]any) string {
 			return ""
 		}
 		return u.Host
-	case notifierTypeTTY:
-		users := cfgval.StringList(entry[keyUsers])
+	case TypeTTY:
+		users := cfgval.StringList(entry[KeyUsers])
 		return listSummary(users, "all active terminals")
-	case notifierTypeWall:
+	case TypeWall:
 		return "all active terminals"
 	default:
 		return ""
