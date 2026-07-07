@@ -81,6 +81,13 @@ const (
 	DataKeyZombies            = "zombies"
 )
 
+// Pattern analyzer result data keys.
+const (
+	DataKeyPatternID       = "pattern_id"
+	DataKeyPatternLine     = "pattern_line"
+	DataKeyPatternSeverity = "pattern_severity"
+)
+
 // Result data-map source values.
 const (
 	DataSourceBackend = "backend"

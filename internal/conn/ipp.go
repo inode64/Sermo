@@ -17,7 +17,14 @@ func init() { Register(ippProtocol{}, protocolAliasCUPS) }
 // ippCUPSGetDefault is the CUPS-Get-Default operation id — a server-level IPP
 // operation needing only the charset/language attributes, so it works without a
 // printer URI.
-const ippCUPSGetDefault = 0x4001
+const (
+	ippContentType    = "application/ipp"
+	ippCUPSGetDefault = 0x4001
+	ippEndpointRoot   = "/"
+	ippExtraStatus    = "ipp_status"
+	ippExtraVersion   = "ipp_version"
+	ippVersionPrefix  = "IPP/"
+)
 
 // ippProtocol probes an IPP server (CUPS/cupsd) natively: it POSTs an IPP
 // request (CUPS-Get-Default) to the server over HTTP and verifies a valid IPP
@@ -48,12 +55,12 @@ func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		client = httpProbeClient(cfg.Interface, tlsConfig)
 	}
 
-	url := scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/"
+	url := scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port)) + ippEndpointRoot
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buildIPPRequest(ippCUPSGetDefault, 1)))
 	if err != nil {
 		return Result{}, err
 	}
-	req.Header.Set("Content-Type", "application/ipp")
+	req.Header.Set(httpHeaderContentType, ippContentType)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -69,10 +76,10 @@ func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 	return Result{
-		Version: "IPP/" + version,
+		Version: ippVersionPrefix + version,
 		Extra: map[string]string{
-			"ipp_version": version,
-			"ipp_status":  ippStatusName(status),
+			ippExtraVersion: version,
+			ippExtraStatus:  ippStatusName(status),
 		},
 	}, nil
 }

@@ -11,6 +11,13 @@ import (
 	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver (pure Go)
 )
 
+const (
+	sqliteBusyTimeoutMS   = 2000
+	sqliteIntegrityOK     = "ok"
+	sqliteIntegrityPragma = "PRAGMA integrity_check;"
+	sqliteQuickPragma     = "PRAGMA quick_check;"
+)
+
 // sqliteCheck verifies a SQLite database file is healthy by running SQLite's
 // integrity check. It passes (health-style, OK==true) when the check reports
 // "ok"; a missing/unreadable file, a non-database file, or reported corruption
@@ -31,15 +38,15 @@ func (c sqliteCheck) Run(ctx context.Context) Result {
 		return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
 	}
 
-	db, err := sql.Open(SQLEngineSQLite, "file:"+c.path+"?mode=ro&_pragma=busy_timeout(2000)")
+	db, err := sql.Open(SQLEngineSQLite, fmt.Sprintf("file:%s?mode=ro&_pragma=busy_timeout(%d)", c.path, sqliteBusyTimeoutMS))
 	if err != nil {
 		return c.result(false, fmt.Sprintf("open %s: %v", c.path, err), start)
 	}
 	defer func() { _ = db.Close() }()
 
-	pragma := "PRAGMA integrity_check;"
+	pragma := sqliteIntegrityPragma
 	if c.quick {
-		pragma = "PRAGMA quick_check;"
+		pragma = sqliteQuickPragma
 	}
 	// A healthy database returns a single "ok" row; a corrupt one returns up to
 	// 100 problem rows. Read them all so the failure message carries the real
@@ -55,7 +62,7 @@ func (c sqliteCheck) Run(ctx context.Context) Result {
 		if err := rows.Scan(&line); err != nil {
 			return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
 		}
-		if line != "ok" {
+		if line != sqliteIntegrityOK {
 			problems = append(problems, line)
 		}
 	}

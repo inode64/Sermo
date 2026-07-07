@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -19,7 +18,7 @@ import (
 // so the goroutine could block until daemon shutdown.
 func TestWebBackendOperateBoundsSlotWait(t *testing.T) {
 	dir := t.TempDir()
-	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
 	engine := operation.New(operation.Config{
 		Service: "web",
 		Unit:    "nginx",
@@ -27,7 +26,7 @@ func TestWebBackendOperateBoundsSlotWait(t *testing.T) {
 		Tree:    map[string]any{"policy": map[string]any{"cooldown": "5m"}},
 		Manager: fakeManager{},
 		Locker:  &locker,
-		Scanner: locks.NewScanner(filepath.Join(dir, "locks")),
+		Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
 		CheckDeps: checks.Deps{
 			DefaultTimeout: time.Second,
 			Status: func(context.Context) (servicemgr.Status, error) {

@@ -19,6 +19,17 @@ import (
 	"sermo/internal/conn"
 )
 
+const (
+	httpHeaderAccept      = "Accept"
+	httpHeaderContentType = "Content-Type"
+	influxAuthHeader      = "Authorization"
+	influxAuthTokenPrefix = "Token "
+	influxFluxAccept      = "application/csv"
+	influxFluxContentType = "application/vnd.flux"
+	influxFluxQueryPath   = "/api/v2/query"
+	influxQLQueryPath     = "/query"
+)
+
 // influxCheck runs an InfluxDB query and compares one scalar result with a
 // threshold. It is condition-style: OK means the comparison holds. Use a
 // read-only user or token.
@@ -86,13 +97,13 @@ func (c influxCheck) queryScalar(ctx context.Context, client *http.Client, base 
 // influxqlScalar runs the InfluxQL query over the 1.x GET /query API.
 func (c influxCheck) influxqlScalar(ctx context.Context, client *http.Client, base string) (string, bool, error) {
 	q := url.Values{"db": {c.database}, "q": {c.query}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/query?"+q.Encode(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+influxQLQueryPath+"?"+q.Encode(), nil)
 	if err != nil {
 		return "", false, err
 	}
 	switch {
 	case c.token != "":
-		req.Header.Set("Authorization", "Token "+c.token)
+		req.Header.Set(influxAuthHeader, influxAuthTokenPrefix+c.token)
 	case c.cfg.User != "":
 		req.SetBasicAuth(c.cfg.User, c.cfg.Password)
 	}
@@ -154,14 +165,14 @@ func (c influxCheck) influxqlScalar(ctx context.Context, client *http.Client, ba
 // fluxScalar runs the Flux query over the 2.x POST /api/v2/query API and reads a
 // scalar from the annotated-CSV response (the `_value` column by default).
 func (c influxCheck) fluxScalar(ctx context.Context, client *http.Client, base string) (string, bool, error) {
-	u := base + "/api/v2/query?org=" + url.QueryEscape(c.org)
+	u := base + influxFluxQueryPath + "?org=" + url.QueryEscape(c.org)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, strings.NewReader(c.query))
 	if err != nil {
 		return "", false, err
 	}
-	req.Header.Set("Authorization", "Token "+c.token)
-	req.Header.Set("Content-Type", "application/vnd.flux")
-	req.Header.Set("Accept", "application/csv")
+	req.Header.Set(influxAuthHeader, influxAuthTokenPrefix+c.token)
+	req.Header.Set(httpHeaderContentType, influxFluxContentType)
+	req.Header.Set(httpHeaderAccept, influxFluxAccept)
 
 	resp, err := client.Do(req)
 	if err != nil {

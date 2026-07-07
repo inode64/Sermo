@@ -71,7 +71,7 @@ func (a App) runWatchMonitor(opts options, pause bool) int {
 		status = monitorStatusNotPaused
 	}
 	if opts.json {
-		writeJSON(a.Stdout, map[string]any{"watch": name, "monitoring": status})
+		writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: name, cliJSONKeyMonitoring: status})
 		return exitSuccess
 	}
 	switch status {
@@ -125,7 +125,7 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 		}
 	}
 	if opts.json {
-		writeJSON(a.Stdout, map[string]string{"watch": name, "state": state})
+		writeJSON(a.Stdout, map[string]string{cliJSONKeyWatch: name, cliJSONKeyState: state})
 		return exitSuccess
 	}
 	fmt.Fprintf(a.Stdout, "%s state=%s\n", name, state)

@@ -668,6 +668,11 @@ func serviceWatchRuleCondition(target serviceWatchRuleTarget) map[string]any {
 // Injected after validateVariableValues so a display_name carrying its own
 // ${...} is not mistaken for a nested variable; an explicit `variables` entry of
 // the same name takes precedence and is left untouched.
+const (
+	builtinPidfileDir = "/run"
+	pidfileExt        = ".pid"
+)
+
 func injectBuiltinVariables(vars map[string]string, name string, merged map[string]any) {
 	if _, ok := vars[keyName]; !ok {
 		vars[keyName] = name
@@ -682,7 +687,7 @@ func injectBuiltinVariables(vars map[string]string, name string, merged map[stri
 	// ${pidfile} falls back to the conventional /run/<unit>.pid; an explicit
 	// `pidfile` variable always wins.
 	if _, ok := vars[VariableKeyPidfile]; !ok {
-		vars[VariableKeyPidfile] = "/run/" + vars[VariableKeyService] + ".pid"
+		vars[VariableKeyPidfile] = builtinPidfileDir + "/" + vars[VariableKeyService] + pidfileExt
 	}
 	// ${port} mirrors the top-level `port:` field; unlike the others it has no
 	// fallback, so it is injected only when the field is set — leaving ${port}

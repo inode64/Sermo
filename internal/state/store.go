@@ -30,6 +30,11 @@ import (
 // Filename is the database file name placed under the state directory.
 const Filename = "sermo.db"
 
+const (
+	sqliteBusyTimeoutMS = 5000
+	sqliteDriverName    = "sqlite"
+)
+
 // Sources record who last changed a monitoring state row, for inspection.
 const (
 	SourceConfig         = "config"           // daemon applied an entry's `monitor` flag
@@ -289,10 +294,10 @@ func OpenWith(path string, opts Options) (*Store, error) {
 	// commit — the per-cycle SLA/measurement writes would otherwise each force a
 	// disk sync.
 	dsn := fmt.Sprintf(
-		"file:%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(on)&_pragma=cache_size(-%d)",
-		path, cacheKiB,
+		"file:%s?_pragma=busy_timeout(%d)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(on)&_pragma=cache_size(-%d)",
+		path, sqliteBusyTimeoutMS, cacheKiB,
 	)
-	db, err := sql.Open("sqlite", dsn)
+	db, err := sql.Open(sqliteDriverName, dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open state db %s: %w", path, err)
 	}

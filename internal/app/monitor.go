@@ -40,6 +40,13 @@ type Monitor struct {
 	booted    bool
 }
 
+const (
+	monitorLogFieldError    = "error"
+	monitorLogFieldServices = "services"
+	monitorLogFieldWarning  = "warning"
+	monitorLogFieldWatches  = "watches"
+)
+
 // NewMonitor wires a monitor from the initial validated config and shared deps.
 func NewMonitor(cfg *config.Config, deps Deps, scheduler Scheduler, readiness *Readiness, collector *metrics.Collector, web *WebBackendHolder) *Monitor {
 	return &Monitor{
@@ -137,12 +144,12 @@ func (m *Monitor) Reload() {
 	if m.web != nil {
 		if warns := m.web.Reload(newCfg, m.deps); len(warns) > 0 {
 			for _, w := range warns {
-				m.Logger.Warn("reload web backend", "warning", w)
+				m.Logger.Warn("reload web backend", monitorLogFieldWarning, w)
 			}
 		}
 	}
 	for _, w := range append(warnings, watchWarnings...) {
-		m.Logger.Warn("reload build", "warning", w)
+		m.Logger.Warn("reload build", monitorLogFieldWarning, w)
 	}
 
 	m.startGenerationLocked(m.parent, false)
@@ -153,7 +160,7 @@ func (m *Monitor) Reload() {
 			Message: fmt.Sprintf("config reloaded (%d services, %d watches)", len(workers), len(watches)),
 		})
 	}
-	m.Logger.Info("config reloaded", "services", len(workers), "watches", len(watches))
+	m.Logger.Info("config reloaded", monitorLogFieldServices, len(workers), monitorLogFieldWatches, len(watches))
 }
 
 func (m *Monitor) applyConfig(cfg *config.Config) {
@@ -175,7 +182,7 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	m.deps.Notifiers = notifiers
 	m.deps.GlobalNotify = config.NotifyDefault(cfg.Global.Raw)
 	for _, w := range warns {
-		m.Logger.Warn("reload notifiers", "warning", w)
+		m.Logger.Warn("reload notifiers", monitorLogFieldWarning, w)
 	}
 	if m.deps.DiagnosticLog != nil {
 		m.deps.DiagnosticLog.UpdateConfig(cfg)
@@ -236,7 +243,7 @@ func (m *Monitor) stopGenerationLocked(final bool) {
 }
 
 func (m *Monitor) emitReloadError(msg string) {
-	m.Logger.Warn("config reload rejected", "error", msg)
+	m.Logger.Warn("config reload rejected", monitorLogFieldError, msg)
 	if m.deps.Emit != nil {
 		m.deps.Emit(Event{Kind: eventKindError, Action: eventActionReload, Message: msg})
 	}

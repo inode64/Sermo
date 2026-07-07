@@ -24,6 +24,12 @@ func (prometheusProtocol) Name() string       { return ProtocolNamePrometheus }
 func (prometheusProtocol) DefaultPort() int   { return defaultPortPrometheus }
 func (prometheusProtocol) RequiresUser() bool { return false }
 
+const (
+	promBuildInfoEndpoint = "/api/v1/status/buildinfo"
+	promHealthyEndpoint   = "/-/healthy"
+	promStatusSuccess     = "success"
+)
+
 func (prometheusProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	client, base := PrometheusClient(cfg)
 	// buildinfo carries the version and proves the API is up; on a non-API reply
@@ -65,7 +71,7 @@ func PrometheusClient(cfg Config) (*http.Client, string) {
 // false only when the endpoint is missing/not Prometheus, signalling a /-/healthy
 // fallback.
 func promBuildInfo(ctx context.Context, client *http.Client, base string, cfg Config) (res Result, handled bool, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v1/status/buildinfo", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+promBuildInfoEndpoint, nil)
 	if err != nil {
 		return Result{}, true, err
 	}
@@ -87,7 +93,7 @@ func promBuildInfo(ctx context.Context, client *http.Client, base string, cfg Co
 	if json.Unmarshal(body, &info) != nil || info.Status == "" {
 		return Result{}, false, nil // not the Prometheus API JSON — fall back
 	}
-	if info.Status != "success" {
+	if info.Status != promStatusSuccess {
 		return Result{}, true, fmt.Errorf("prometheus buildinfo status %q", info.Status)
 	}
 	extra := map[string]string{}
@@ -102,7 +108,7 @@ func promBuildInfo(ctx context.Context, client *http.Client, base string, cfg Co
 
 // promHealthy queries /-/healthy, the always-available liveness endpoint.
 func promHealthy(ctx context.Context, client *http.Client, base string, cfg Config) (Result, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/-/healthy", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+promHealthyEndpoint, nil)
 	if err != nil {
 		return Result{}, err
 	}
@@ -114,7 +120,7 @@ func promHealthy(ctx context.Context, client *http.Client, base string, cfg Conf
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxHTTPProbeShortBody))
 	if resp.StatusCode != http.StatusOK {
-		return Result{}, fmt.Errorf("prometheus: /-/healthy HTTP status %d", resp.StatusCode)
+		return Result{}, fmt.Errorf("prometheus: %s HTTP status %d", promHealthyEndpoint, resp.StatusCode)
 	}
 	return Result{}, nil
 }

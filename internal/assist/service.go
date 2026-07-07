@@ -222,7 +222,7 @@ func askServiceProps(p *Prompt, env Env, c ServiceCandidate, reviewPort bool) (s
 		if pidfile := askServicePidfile(p, c); pidfile != "" {
 			body[config.ServiceKeyPidfile] = pidfile
 		} else if selector, label := detectedProcessSelector(c); selector != nil && p.Confirm("No pidfile — match "+c.Name+" by "+label+"?", true) {
-			body[config.SectionProcesses] = map[string]any{"main": selector}
+			body[config.SectionProcesses] = map[string]any{process.RoleMain: selector}
 		}
 	}
 	return c.Name, body

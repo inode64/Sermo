@@ -4,6 +4,11 @@ import (
 	"context"
 )
 
+const (
+	slackPayloadTextKey = "text"
+	slackCodeFence      = "```"
+)
+
 // Slack posts notifications to a Slack incoming webhook. Uses only net/http (no
 // external dependency).
 type Slack struct {
@@ -35,12 +40,12 @@ func buildSlack(name string, entry map[string]any) (Notifier, error) {
 // slackPayload renders the Slack incoming-webhook body: the subject as the lead
 // line and the detail in a monospace block so the SERMO_* fields stay readable.
 func slackPayload(msg Message) []byte {
-	return webhookPayload(map[string]string{"text": slackText(msg)})
+	return webhookPayload(map[string]string{slackPayloadTextKey: slackText(msg)})
 }
 
 func slackText(msg Message) string {
 	if msg.Body != "" {
-		return msg.Subject + "\n```\n" + msg.Body + "\n```"
+		return msg.Subject + "\n" + slackCodeFence + "\n" + msg.Body + "\n" + slackCodeFence
 	}
 	return msg.Subject
 }

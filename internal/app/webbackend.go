@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"path/filepath"
 	"runtime"
 	"slices"
 	"sort"
@@ -65,7 +64,10 @@ const (
 const (
 	backendStatusError        = "error"
 	watchConditionFieldGrowth = "growth"
-	watchCategoryFallback     = "watch"
+	watchReadingFieldError    = "error"
+	watchReadingFieldResult   = "result"
+	watchReadingFieldSample   = "sample"
+	watchCategoryFallback     = config.WatchCategoryWatch
 	watchReadingFieldState    = checks.CheckKeyState
 	watchReadingStateActive   = string(servicemgr.StatusActive)
 	watchReadingStateBaseline = "baseline"
@@ -599,12 +601,12 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, status, chec
 		snap := b.snapshots.Get(name)
 		for _, check := range e.checkNames {
 			if _, ok := snap[check]; !ok {
-				addMissing("checks")
+				addMissing(config.SectionChecks)
 				break
 			}
 		}
 		if checkHealth == checkHealthUnknown {
-			addMissing("checks")
+			addMissing(config.SectionChecks)
 		}
 	}
 	if b.observability != nil {
@@ -688,7 +690,7 @@ func (b *WebBackend) operationSettlingPending(name string) bool {
 var lockProcProber locks.ProcessProber = locks.OSProcessProber{}
 
 func locksScanner(cfg *config.Config) locks.Scanner {
-	s := locks.NewScanner(filepath.Join(cfg.Global.RuntimeDir(), "locks"))
+	s := locks.NewScanner(locks.RuntimeLocksDir(cfg.Global.RuntimeDir()))
 	s.Proc = lockProcProber
 	return s
 }
@@ -1865,7 +1867,7 @@ func (b *WebBackend) zombieWatchView() (*web.WatchMeter, []web.WatchReading, str
 }
 
 func watchErrorReadings(message string) []web.WatchReading {
-	return []web.WatchReading{{Field: "sample", Label: "Sample", Error: message}}
+	return []web.WatchReading{{Field: watchReadingFieldSample, Label: "Sample", Error: message}}
 }
 
 func watchPercent(value float64) string {
@@ -2521,7 +2523,7 @@ func (b *WebBackend) ReleaseLock(_ context.Context, service, name string) web.Ac
 		b.emitLockReleaseEvent(service, name, eventKindError, eventStatusFailed, msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
-	locker := locks.NewNamedLocker(filepath.Join(b.cfg.Global.RuntimeDir(), "locks"))
+	locker := locks.NewNamedLocker(locks.RuntimeLocksDir(b.cfg.Global.RuntimeDir()))
 	locker.Proc = lockProcProber
 	lk, err := locker.ReleaseInactive(service, name)
 	if err != nil {

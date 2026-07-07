@@ -23,6 +23,8 @@ func (rspamdProtocol) Name() string       { return ProtocolNameRspamd }
 func (rspamdProtocol) DefaultPort() int   { return defaultPortRspamd }
 func (rspamdProtocol) RequiresUser() bool { return false }
 
+const rspamdPingEndpoint = "/ping"
+
 func (rspamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	host := cfg.Host
 	if host == "" {
@@ -43,7 +45,7 @@ func (rspamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		client = httpProbeClient(cfg.Interface, tlsConfig)
 	}
 
-	url := scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/ping"
+	url := scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port)) + rspamdPingEndpoint
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return Result{}, err
@@ -59,10 +61,10 @@ func (rspamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPProbeShortBody))
 	if !strings.EqualFold(strings.TrimSpace(string(body)), respPong) {
-		return Result{}, fmt.Errorf("rspamd: /ping returned %q, want pong", strings.TrimSpace(string(body)))
+		return Result{}, fmt.Errorf("rspamd: %s returned %q, want pong", rspamdPingEndpoint, strings.TrimSpace(string(body)))
 	}
 
-	server := resp.Header.Get("Server")
+	server := resp.Header.Get(httpHeaderServer)
 	extra := map[string]string{extraPing: respPong}
 	if server != "" {
 		extra[ExtraKeyServer] = server

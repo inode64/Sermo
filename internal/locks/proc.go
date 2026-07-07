@@ -9,6 +9,8 @@ import (
 	"syscall"
 )
 
+const procStatPathFormat = "/proc/%d/stat"
+
 // OSProcessProber probes real processes via signal 0 and /proc.
 type OSProcessProber struct{}
 
@@ -26,7 +28,7 @@ func (OSProcessProber) Alive(pid int) bool {
 // (field 2) may contain spaces and parentheses, so parsing resumes after the
 // final ')'.
 func (OSProcessProber) StartTicks(pid int) (uint64, bool) {
-	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	data, err := os.ReadFile(fmt.Sprintf(procStatPathFormat, pid))
 	if err != nil {
 		return 0, false
 	}

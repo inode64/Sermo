@@ -7,7 +7,9 @@ import (
 	"log/slog"
 
 	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/operation"
+	"sermo/internal/rules"
 )
 
 // Event records what a worker cycle did, for the operator-visible log.
@@ -31,8 +33,8 @@ const (
 	eventKindAction           = "action"
 	eventKindAlert            = "alert"
 	eventKindError            = "error"
-	eventKindHook             = "hook"
-	eventKindNotify           = "notify"
+	eventKindHook             = config.WatchThenKeyHook
+	eventKindNotify           = rules.RuleFieldNotify
 	eventKindDryRun           = "dry-run"
 	eventKindFiring           = "firing"
 	eventKindRecovered        = "recovered"
@@ -44,7 +46,7 @@ const (
 	eventKindCascade          = "cascade"
 	eventKindReload           = "reload"
 
-	eventKindExpand        = "expand"
+	eventKindExpand        = config.WatchThenKeyExpand
 	eventKindExpandSkipped = "expand-skipped"
 	eventKindExpandFailed  = "expand-failed"
 )
@@ -52,9 +54,9 @@ const (
 // Event status values for Event.Status — the outcome of an emitted action:
 // succeeded, blocked by a guard/lock/cooldown, or failed.
 const (
-	eventStatusOK      = "ok"
-	eventStatusBlocked = "blocked"
-	eventStatusFailed  = "failed"
+	eventStatusOK      = string(operation.ResultOK)
+	eventStatusBlocked = string(operation.ResultBlocked)
+	eventStatusFailed  = string(operation.ResultFailed)
 )
 
 // Event action values emitted by daemon-side monitoring adjustments and web
@@ -62,12 +64,26 @@ const (
 const (
 	eventActionMonitor           = "monitor"
 	eventActionUnmonitor         = "unmonitor"
-	eventActionExpand            = "expand"
+	eventActionExpand            = config.WatchThenKeyExpand
 	eventActionReleaseLock       = "release-lock"
 	eventActionOperationSettling = "operation-settling"
 	eventActionPanicOn           = "panic-on"
 	eventActionPanicOff          = "panic-off"
 	eventActionReload            = "reload"
+)
+
+// Event field names are shared by structured logs and JSON event export.
+const (
+	eventFieldTime    = "time"
+	eventFieldService = "service"
+	eventFieldWatch   = "watch"
+	eventFieldApp     = "app"
+	eventFieldKind    = "kind"
+	eventFieldRule    = "rule"
+	eventFieldAction  = "action"
+	eventFieldStatus  = "status"
+	eventFieldMessage = "message"
+	eventFieldOutput  = "output"
 )
 
 // resultOutput extracts the bounded command output a check stored under
@@ -122,24 +138,24 @@ func SlogEmitter(logger *slog.Logger) func(Event) {
 		logger = slog.Default()
 	}
 	return func(e Event) {
-		attrs := []any{"service", e.Service, "kind", e.Kind}
+		attrs := []any{eventFieldService, e.Service, eventFieldKind, e.Kind}
 		if e.Watch != "" {
-			attrs = append(attrs, "watch", e.Watch)
+			attrs = append(attrs, eventFieldWatch, e.Watch)
 		}
 		if e.App != "" {
-			attrs = append(attrs, "app", e.App)
+			attrs = append(attrs, eventFieldApp, e.App)
 		}
 		if e.Rule != "" {
-			attrs = append(attrs, "rule", e.Rule)
+			attrs = append(attrs, eventFieldRule, e.Rule)
 		}
 		if e.Action != "" {
-			attrs = append(attrs, "action", e.Action)
+			attrs = append(attrs, eventFieldAction, e.Action)
 		}
 		if e.Status != "" {
-			attrs = append(attrs, "status", e.Status)
+			attrs = append(attrs, eventFieldStatus, e.Status)
 		}
 		if e.Message != "" {
-			attrs = append(attrs, "message", e.Message)
+			attrs = append(attrs, eventFieldMessage, e.Message)
 		}
 		switch e.Kind {
 		case eventKindError, eventKindHookFail, eventKindNotifyFail:

@@ -21,9 +21,14 @@ func (cloudflaredProtocol) Name() string       { return ProtocolNameCloudflared 
 func (cloudflaredProtocol) DefaultPort() int   { return defaultPortCloudflared }
 func (cloudflaredProtocol) RequiresUser() bool { return false }
 
+const (
+	cloudflaredMetricPrefix    = "cloudflared_"
+	cloudflaredMetricsEndpoint = "/metrics"
+)
+
 func (cloudflaredProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	client, base := cloudflaredClient(cfg)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/metrics", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+cloudflaredMetricsEndpoint, nil)
 	if err != nil {
 		return Result{}, err
 	}
@@ -34,17 +39,17 @@ func (cloudflaredProtocol) Probe(ctx context.Context, cfg Config) (Result, error
 	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPProbeLargeBody))
 	if resp.StatusCode != http.StatusOK {
-		return Result{}, fmt.Errorf("cloudflared: /metrics HTTP status %d", resp.StatusCode)
+		return Result{}, fmt.Errorf("cloudflared: %s HTTP status %d", cloudflaredMetricsEndpoint, resp.StatusCode)
 	}
-	if !bytes.Contains(body, []byte("cloudflared_")) {
-		return Result{}, fmt.Errorf("cloudflared: /metrics response did not contain cloudflared metrics")
+	if !bytes.Contains(body, []byte(cloudflaredMetricPrefix)) {
+		return Result{}, fmt.Errorf("cloudflared: %s response did not contain cloudflared metrics", cloudflaredMetricsEndpoint)
 	}
 
 	extra := map[string]string{
-		extraEndpoint:  "/metrics",
+		extraEndpoint:  cloudflaredMetricsEndpoint,
 		ExtraKeyStatus: strconv.Itoa(resp.StatusCode),
 	}
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
+	if ct := resp.Header.Get(httpHeaderContentType); ct != "" {
 		extra[extraContentType] = ct
 	}
 	return Result{Extra: extra}, nil

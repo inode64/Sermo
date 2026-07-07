@@ -252,6 +252,8 @@ func sigName(sig syscall.Signal) string {
 // signalNames maps the signal names accepted in configuration to their numbers.
 // These are the signals daemons actually use to reload/rotate/cycle in place; the
 // fatal/stop signals (TERM/KILL) are handled by the stop policy, not reload.
+const signalNamePrefix = "SIG"
+
 var signalNames = map[string]syscall.Signal{
 	"HUP":   syscall.SIGHUP,
 	"INT":   syscall.SIGINT,
@@ -269,7 +271,7 @@ var signalNames = map[string]syscall.Signal{
 // `reload.signal` fails validation instead of silently sending nothing.
 func ParseSignal(name string) (syscall.Signal, error) {
 	key := strings.ToUpper(strings.TrimSpace(name))
-	key = strings.TrimPrefix(key, "SIG")
+	key = strings.TrimPrefix(key, signalNamePrefix)
 	if sig, ok := signalNames[key]; ok {
 		return sig, nil
 	}
@@ -302,7 +304,7 @@ var killSignalNames = map[string]syscall.Signal{
 // instead of silently sending the wrong thing.
 func ParseKillSignal(name string) (syscall.Signal, error) {
 	key := strings.ToUpper(strings.TrimSpace(name))
-	key = strings.TrimPrefix(key, "SIG")
+	key = strings.TrimPrefix(key, signalNamePrefix)
 	if sig, ok := killSignalNames[key]; ok {
 		return sig, nil
 	}

@@ -37,10 +37,20 @@ import (
 var assets embed.FS
 
 const (
-	headerContentType   = "Content-Type"
-	contentTypeHTMLUTF8 = "text/html; charset=utf-8"
-	contentTypeJSON     = "application/json"
-	contentTypeTextUTF8 = "text/plain; charset=utf-8"
+	headerContentType     = "Content-Type"
+	headerWWWAuthenticate = "WWW-Authenticate"
+	authBasicRealmSermo   = `Basic realm="Sermo"`
+	contentTypeHTMLUTF8   = "text/html; charset=utf-8"
+	contentTypeJSON       = "application/json"
+	contentTypeTextUTF8   = "text/plain; charset=utf-8"
+)
+
+const (
+	routePathRoot   = "/"
+	routePathLivez  = "/livez"
+	routePathReadyz = "/readyz"
+	routePathLogin  = "/login"
+	apiPathPrefix   = "/" + apiSegmentRoot + "/"
 )
 
 // API path segment names used by routing and access-log classification.
@@ -75,6 +85,77 @@ const (
 	queryBoolTrue = "true"
 	queryBoolYes  = "yes"
 	queryBoolOn   = "on"
+)
+
+const (
+	routeIndex             = "GET " + routePathRoot
+	routeLivez             = "GET " + routePathLivez
+	routeReadyz            = "GET " + routePathReadyz
+	routeAPIWhoami         = "GET /api/whoami"
+	routeAPIServices       = "GET /api/services"
+	routeAPIWatches        = "GET /api/watches"
+	routeAPIWatchAction    = "POST /api/watches/{name}/{action}"
+	routeAPINotifiers      = "GET /api/notifiers"
+	routeAPIApplications   = "GET /api/applications"
+	routeAPIMounts         = "GET /api/mounts"
+	routeAPIMountAction    = "POST /api/mounts/{name}/{action}"
+	routeAPIDaemon         = "GET /api/daemon"
+	routeAPIDaemonMetrics  = "GET /api/daemon/metrics"
+	routeAPIHost           = "GET /api/host"
+	routeAPILocks          = "GET /api/locks"
+	routeAPILockRelease    = "POST /api/locks/{service}/release"
+	routeAPIActivity       = "GET /api/activity"
+	routeAPIMonitoring     = "GET /api/monitoring"
+	routeAPIDetail         = "GET /api/services/{name}"
+	routeAPISeries         = "GET /api/services/{name}/sla"
+	routeAPIMetrics        = "GET /api/services/{name}/metrics"
+	routeAPIServiceRuntime = "GET /api/services/{name}/runtime"
+	routeAPIServiceEvents  = "GET /api/services/{name}/events"
+	routeAPIAppEvents      = "GET /api/applications/{name}/events"
+	routeAPIEvents         = "GET /api/events"
+	routeAPIEventsClear    = "POST /api/events/clear"
+	routeAPIStateCompact   = "POST /api/state/compact"
+	routeAPIPanic          = "POST /api/panic/{action}"
+	routeAPIOps            = "GET /api/ops"
+	routeAPIPreflight      = "POST /api/services/{name}/preflight"
+	routeAPIAction         = "POST /api/services/{name}/{action}"
+	routeAPIReload         = "POST /api/reload"
+)
+
+// API route variables and query parameter names.
+const (
+	apiParamAction     = "action"
+	apiParamName       = "name"
+	apiParamService    = "service"
+	apiQueryBefore     = "before"
+	apiQueryCheck      = "check"
+	apiQueryKind       = "kind"
+	apiQueryKill       = "kill"
+	apiQueryLimit      = "limit"
+	apiQueryMetric     = "metric"
+	apiQueryNoCascade  = "no_cascade"
+	apiQueryOnlyErrors = "only_errors"
+	apiQuerySince      = "since"
+	apiQueryStatus     = "status"
+	apiQueryVerbose    = "verbose"
+	apiQueryWatch      = "watch"
+)
+
+// Ad-hoc JSON keys used by small HTTP responses without a dedicated struct.
+const (
+	apiJSONKeyGo            = "go"
+	apiJSONKeyNow           = "now"
+	apiJSONKeyOK            = "ok"
+	apiJSONKeyPoints        = "points"
+	apiJSONKeyPruned        = "pruned"
+	apiJSONKeyServices      = "services"
+	apiJSONKeySince         = "since"
+	apiJSONKeyStartedAt     = "started_at"
+	apiJSONKeyStatus        = "status"
+	apiJSONKeyUptime        = "uptime"
+	apiJSONKeyUptimeSeconds = "uptime_seconds"
+	apiStatusOK             = "ok"
+	apiStatusOKLine         = apiStatusOK + "\n"
 )
 
 // Service is the web view of one configured service. Services with `enabled: false`
@@ -854,38 +935,38 @@ func (s *Server) Handler() http.Handler {
 		s.started = time.Now()
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /", s.handleIndex)
-	mux.HandleFunc("GET /livez", s.handleLivez)
-	mux.HandleFunc("GET /readyz", s.handleReadyz)
-	mux.HandleFunc("GET /api/whoami", s.handleWhoami)
-	mux.HandleFunc("GET /api/services", s.handleServices)
-	mux.HandleFunc("GET /api/watches", s.handleWatches)
-	mux.HandleFunc("POST /api/watches/{name}/{action}", s.handleWatchAction)
-	mux.HandleFunc("GET /api/notifiers", s.handleNotifiers)
-	mux.HandleFunc("GET /api/applications", s.handleApplications)
-	mux.HandleFunc("GET /api/mounts", s.handleMounts)
-	mux.HandleFunc("POST /api/mounts/{name}/{action}", s.handleMountAction)
-	mux.HandleFunc("GET /api/daemon", s.handleDaemon)
-	mux.HandleFunc("GET /api/daemon/metrics", s.handleDaemonMetrics)
-	mux.HandleFunc("GET /api/host", s.handleHost)
-	mux.HandleFunc("GET /api/locks", s.handleLocks)
-	mux.HandleFunc("POST /api/locks/{service}/release", s.handleLockRelease)
-	mux.HandleFunc("GET /api/activity", s.handleActivity)
-	mux.HandleFunc("GET /api/monitoring", s.handleMonitoring)
-	mux.HandleFunc("GET /api/services/{name}", s.handleDetail)
-	mux.HandleFunc("GET /api/services/{name}/sla", s.handleSeries)
-	mux.HandleFunc("GET /api/services/{name}/metrics", s.handleMetrics)
-	mux.HandleFunc("GET /api/services/{name}/runtime", s.handleServiceRuntime)
-	mux.HandleFunc("GET /api/services/{name}/events", s.handleServiceEvents)
-	mux.HandleFunc("GET /api/applications/{name}/events", s.handleApplicationEvents)
-	mux.HandleFunc("GET /api/events", s.handleEvents)
-	mux.HandleFunc("POST /api/events/clear", s.handleEventsClear)
-	mux.HandleFunc("POST /api/state/compact", s.handleStateCompact)
-	mux.HandleFunc("POST /api/panic/{action}", s.handlePanic)
-	mux.HandleFunc("GET /api/ops", s.handleOperations)
-	mux.HandleFunc("POST /api/services/{name}/preflight", s.handlePreflight)
-	mux.HandleFunc("POST /api/services/{name}/{action}", s.handleAction)
-	mux.HandleFunc("POST /api/reload", s.handleReload)
+	mux.HandleFunc(routeIndex, s.handleIndex)
+	mux.HandleFunc(routeLivez, s.handleLivez)
+	mux.HandleFunc(routeReadyz, s.handleReadyz)
+	mux.HandleFunc(routeAPIWhoami, s.handleWhoami)
+	mux.HandleFunc(routeAPIServices, s.handleServices)
+	mux.HandleFunc(routeAPIWatches, s.handleWatches)
+	mux.HandleFunc(routeAPIWatchAction, s.handleWatchAction)
+	mux.HandleFunc(routeAPINotifiers, s.handleNotifiers)
+	mux.HandleFunc(routeAPIApplications, s.handleApplications)
+	mux.HandleFunc(routeAPIMounts, s.handleMounts)
+	mux.HandleFunc(routeAPIMountAction, s.handleMountAction)
+	mux.HandleFunc(routeAPIDaemon, s.handleDaemon)
+	mux.HandleFunc(routeAPIDaemonMetrics, s.handleDaemonMetrics)
+	mux.HandleFunc(routeAPIHost, s.handleHost)
+	mux.HandleFunc(routeAPILocks, s.handleLocks)
+	mux.HandleFunc(routeAPILockRelease, s.handleLockRelease)
+	mux.HandleFunc(routeAPIActivity, s.handleActivity)
+	mux.HandleFunc(routeAPIMonitoring, s.handleMonitoring)
+	mux.HandleFunc(routeAPIDetail, s.handleDetail)
+	mux.HandleFunc(routeAPISeries, s.handleSeries)
+	mux.HandleFunc(routeAPIMetrics, s.handleMetrics)
+	mux.HandleFunc(routeAPIServiceRuntime, s.handleServiceRuntime)
+	mux.HandleFunc(routeAPIServiceEvents, s.handleServiceEvents)
+	mux.HandleFunc(routeAPIAppEvents, s.handleApplicationEvents)
+	mux.HandleFunc(routeAPIEvents, s.handleEvents)
+	mux.HandleFunc(routeAPIEventsClear, s.handleEventsClear)
+	mux.HandleFunc(routeAPIStateCompact, s.handleStateCompact)
+	mux.HandleFunc(routeAPIPanic, s.handlePanic)
+	mux.HandleFunc(routeAPIOps, s.handleOperations)
+	mux.HandleFunc(routeAPIPreflight, s.handlePreflight)
+	mux.HandleFunc(routeAPIAction, s.handleAction)
+	mux.HandleFunc(routeAPIReload, s.handleReload)
 	return securityHeaders(s.withAuth(s.withAccessLog(mux)))
 }
 
@@ -931,7 +1012,7 @@ func cspNonceFrom(ctx context.Context) string {
 // eventLimit reads the `limit` query param, defaulting and capping it.
 func eventLimit(r *http.Request) int {
 	limit := defaultEventLimit
-	if q := r.URL.Query().Get("limit"); q != "" {
+	if q := r.URL.Query().Get(apiQueryLimit); q != "" {
 		if n, err := strconv.Atoi(q); err == nil && n > 0 {
 			limit = n
 		}
@@ -953,11 +1034,11 @@ type eventFilter struct {
 func parseEventFilter(r *http.Request) eventFilter {
 	q := r.URL.Query()
 	return eventFilter{
-		Service:    q.Get("service"),
-		Watch:      q.Get("watch"),
-		Kind:       q.Get("kind"),
-		Status:     q.Get("status"),
-		OnlyErrors: truthy(q.Get("only_errors")),
+		Service:    q.Get(apiParamService),
+		Watch:      q.Get(apiQueryWatch),
+		Kind:       q.Get(apiQueryKind),
+		Status:     q.Get(apiQueryStatus),
+		OnlyErrors: truthy(q.Get(apiQueryOnlyErrors)),
 	}
 }
 
@@ -1119,12 +1200,12 @@ func (s *Server) handleMounts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	action := r.PathValue("action")
+	name := r.PathValue(apiParamName)
+	action := r.PathValue(apiParamAction)
 	switch action {
 	case mountctl.ActionMount, mountctl.ActionUmount:
 		res := s.Backend.MountAction(s.operateContext(), name, action, MountActionOptions{
-			KillBlockers: queryBool(r, "kill"),
+			KillBlockers: queryBool(r, apiQueryKill),
 		})
 		status := http.StatusOK
 		if !res.OK {
@@ -1168,7 +1249,7 @@ func (s *Server) handleLocks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLockRelease(w http.ResponseWriter, r *http.Request) {
-	res := s.Backend.ReleaseLock(r.Context(), r.PathValue("service"), r.URL.Query().Get("name"))
+	res := s.Backend.ReleaseLock(r.Context(), r.PathValue(apiParamService), r.URL.Query().Get(apiParamName))
 	status := http.StatusOK
 	if !res.OK {
 		status = http.StatusConflict
@@ -1185,7 +1266,7 @@ func (s *Server) handleMonitoring(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
-	detail, ok := s.Backend.Detail(r.Context(), r.PathValue("name"))
+	detail, ok := s.Backend.Detail(r.Context(), r.PathValue(apiParamName))
 	if !ok {
 		writeError(w, http.StatusNotFound, "unknown service")
 		return
@@ -1196,7 +1277,7 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
 // seriesSince reads the `since` query param, defaulting and capping it.
 func seriesSince(r *http.Request) time.Duration {
 	since := defaultSeriesWindow
-	if q := r.URL.Query().Get("since"); q != "" {
+	if q := r.URL.Query().Get(apiQuerySince); q != "" {
 		if d, err := time.ParseDuration(q); err == nil && d > 0 {
 			since = d
 		}
@@ -1209,21 +1290,21 @@ func seriesSince(r *http.Request) time.Duration {
 
 func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
 	since := seriesSince(r)
-	points, ok := s.Backend.Series(r.Context(), r.PathValue("name"), since)
+	points, ok := s.Backend.Series(r.Context(), r.PathValue(apiParamName), since)
 	if !ok {
 		writeError(w, http.StatusNotFound, "unknown service")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"since": since.String(), "points": points})
+	writeJSON(w, http.StatusOK, map[string]any{apiJSONKeySince: since.String(), apiJSONKeyPoints: points})
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
-	check := r.URL.Query().Get("check")
+	check := r.URL.Query().Get(apiQueryCheck)
 	if check == "" {
 		writeError(w, http.StatusBadRequest, "check query parameter is required")
 		return
 	}
-	res, ok := s.Backend.Metrics(r.Context(), r.PathValue("name"), check, r.URL.Query().Get("metric"), seriesSince(r))
+	res, ok := s.Backend.Metrics(r.Context(), r.PathValue(apiParamName), check, r.URL.Query().Get(apiQueryMetric), seriesSince(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, "unknown service or check")
 		return
@@ -1232,7 +1313,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleServiceRuntime(w http.ResponseWriter, r *http.Request) {
-	res, ok := s.Backend.ServiceRuntime(r.Context(), r.PathValue("name"), seriesSince(r))
+	res, ok := s.Backend.ServiceRuntime(r.Context(), r.PathValue(apiParamName), seriesSince(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, "unknown service")
 		return
@@ -1273,20 +1354,20 @@ func parseBeforeQuery(beforeStr string) (time.Time, error) {
 // handleEventsClear supports `sermoctl events clear [--before TIME]`.
 // TIME may be RFC3339 or a duration (e.g. "2h" means "before now-2h").
 func (s *Server) handleEventsClear(w http.ResponseWriter, r *http.Request) {
-	before, err := parseBeforeQuery(r.URL.Query().Get("before"))
+	before, err := parseBeforeQuery(r.URL.Query().Get(apiQueryBefore))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: err.Error()})
 		return
 	}
 	n := s.Backend.PruneEvents(r.Context(), before)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ok":     true,
-		"pruned": n,
+		apiJSONKeyOK:     true,
+		apiJSONKeyPruned: n,
 	})
 }
 
 func (s *Server) handleStateCompact(w http.ResponseWriter, r *http.Request) {
-	before, err := parseBeforeQuery(r.URL.Query().Get("before"))
+	before, err := parseBeforeQuery(r.URL.Query().Get(apiQueryBefore))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, StateCompactResult{OK: false, Message: err.Error()})
 		return
@@ -1303,7 +1384,7 @@ func (s *Server) handleStateCompact(w http.ResponseWriter, r *http.Request) {
 // panic mode. It is admin-only (POST gated by withAuth) and CSRF-protected.
 func (s *Server) handlePanic(w http.ResponseWriter, r *http.Request) {
 	var on bool
-	switch r.PathValue("action") {
+	switch r.PathValue(apiParamAction) {
 	case apiActionPanicOn:
 		on = true
 	case apiActionPanicOff:
@@ -1331,7 +1412,7 @@ func (s *Server) readyReport(ctx context.Context) ReadyReport {
 		return s.Readiness.Report(ctx)
 	}
 	return ReadyReport{
-		Ready: true, Status: "ok",
+		Ready: true, Status: apiStatusOK,
 		Services: len(s.Backend.Services(ctx)),
 	}
 }
@@ -1342,11 +1423,11 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 	if !rep.Ready {
 		status = http.StatusServiceUnavailable
 	}
-	if !r.URL.Query().Has("verbose") {
+	if !r.URL.Query().Has(apiQueryVerbose) {
 		w.Header().Set(headerContentType, contentTypeTextUTF8)
 		w.WriteHeader(status)
 		if rep.Ready {
-			_, _ = io.WriteString(w, "ok\n")
+			_, _ = io.WriteString(w, apiStatusOKLine)
 		} else {
 			_, _ = io.WriteString(w, rep.Status+"\n")
 		}
@@ -1360,26 +1441,26 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 // returns JSON with uptime, the number of services and the runtime version. It is
 // served without authentication (see withAuth) so probes need no credentials.
 func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
-	if !r.URL.Query().Has("verbose") {
+	if !r.URL.Query().Has(apiQueryVerbose) {
 		w.Header().Set(headerContentType, contentTypeTextUTF8)
-		_, _ = io.WriteString(w, "ok\n")
+		_, _ = io.WriteString(w, apiStatusOKLine)
 		return
 	}
 	now := time.Now()
 	uptime := now.Sub(s.started)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status":         "ok",
-		"started_at":     s.started.Format(time.RFC3339),
-		"now":            now.Format(time.RFC3339),
-		"uptime":         uptime.Round(time.Second).String(),
-		"uptime_seconds": int64(uptime.Seconds()),
-		"services":       len(s.Backend.Services(r.Context())),
-		"go":             runtime.Version(),
+		apiJSONKeyStatus:        apiStatusOK,
+		apiJSONKeyStartedAt:     s.started.Format(time.RFC3339),
+		apiJSONKeyNow:           now.Format(time.RFC3339),
+		apiJSONKeyUptime:        uptime.Round(time.Second).String(),
+		apiJSONKeyUptimeSeconds: int64(uptime.Seconds()),
+		apiJSONKeyServices:      len(s.Backend.Services(r.Context())),
+		apiJSONKeyGo:            runtime.Version(),
 	})
 }
 
 func (s *Server) handleServiceEvents(w http.ResponseWriter, r *http.Request) {
-	events, ok := s.Backend.ServiceEvents(r.Context(), r.PathValue("name"), eventLimit(r))
+	events, ok := s.Backend.ServiceEvents(r.Context(), r.PathValue(apiParamName), eventLimit(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, "unknown service")
 		return
@@ -1388,7 +1469,7 @@ func (s *Server) handleServiceEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleApplicationEvents(w http.ResponseWriter, r *http.Request) {
-	events, ok := s.Backend.ApplicationEvents(r.Context(), r.PathValue("name"), eventLimit(r))
+	events, ok := s.Backend.ApplicationEvents(r.Context(), r.PathValue(apiParamName), eventLimit(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, "unknown application")
 		return
@@ -1397,7 +1478,7 @@ func (s *Server) handleApplicationEvents(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+	name := r.PathValue(apiParamName)
 	res, ok := s.Backend.Preflight(r.Context(), name)
 	if !ok {
 		writeError(w, http.StatusNotFound, "unknown service")
@@ -1407,11 +1488,11 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	action := r.PathValue("action")
+	name := r.PathValue(apiParamName)
+	action := r.PathValue(apiParamAction)
 	switch {
 	case operateActions[action]:
-		opts := OperateOpts{NoCascade: queryBool(r, "no_cascade")}
+		opts := OperateOpts{NoCascade: queryBool(r, apiQueryNoCascade)}
 		res := s.Backend.Operate(s.operateContext(), name, action, opts)
 		status := http.StatusOK
 		if !res.OK {
@@ -1431,8 +1512,8 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	action := r.PathValue("action")
+	name := r.PathValue(apiParamName)
+	action := r.PathValue(apiParamAction)
 	if watchOperateActions[action] {
 		res := s.Backend.ExpandWatch(s.operateContext(), name)
 		status := http.StatusOK

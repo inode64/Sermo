@@ -26,6 +26,8 @@ import (
 )
 
 const (
+	certDefaultPort = "443"
+
 	// OnModeChange is the `on: change` metric/field mode: fire when the
 	// observed value changes between cycles instead of comparing to a threshold.
 	OnModeChange = "change"
@@ -1223,7 +1225,7 @@ func buildZombieCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 // buildOomCheck builds an OOM-kill delta check (defaults to firing on any kill).
 func buildOomCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	// delta is optional; the default fires on any OOM kill (> 0).
-	op, value := ">", 0.0
+	op, value := cfgval.CompareOpGreater, 0.0
 	if raw, present := entry[CheckKeyDelta]; present {
 		var errs string
 		if op, value, errs = parseDeltaThreshold(raw, "oom"); errs != "" {
@@ -1243,7 +1245,7 @@ func buildCertCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	case host != "" && path != "":
 		return nil, "cert check: host and path are mutually exclusive"
 	}
-	port := "443"
+	port := certDefaultPort
 	if p, ok := cfgval.Int(entry[CheckKeyPort]); ok {
 		port = strconv.Itoa(p)
 	}

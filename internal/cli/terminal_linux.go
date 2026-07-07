@@ -10,7 +10,12 @@ import (
 	"strings"
 )
 
-const procSelfFDPath = "/proc/self/fd"
+const (
+	consoleDevicePath = "/dev/console"
+	devPtsPrefix      = "/dev/pts/"
+	devTTYPrefix      = "/dev/tty"
+	procSelfFDPath    = "/proc/self/fd"
+)
 
 func stdinIsTerminal(r io.Reader) bool {
 	f, ok := r.(*os.File)
@@ -26,7 +31,7 @@ func stdinIsTerminal(r io.Reader) bool {
 		return false
 	}
 	target = filepath.Clean(target)
-	return strings.HasPrefix(target, "/dev/pts/") ||
-		strings.HasPrefix(target, "/dev/tty") ||
-		target == "/dev/console"
+	return strings.HasPrefix(target, devPtsPrefix) ||
+		strings.HasPrefix(target, devTTYPrefix) ||
+		target == consoleDevicePath
 }

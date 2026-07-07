@@ -9,6 +9,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/notify"
 	"sermo/internal/output"
 	"sermo/internal/rules"
@@ -244,10 +245,10 @@ func watchDryRunMessage(hook HookSpec, notifiers []notify.Notifier, expand *Expa
 		actions = append(actions, eventActionExpand)
 	}
 	if len(hook.Command) > 0 {
-		actions = append(actions, "hook")
+		actions = append(actions, config.WatchThenKeyHook)
 	}
 	if len(notifiers) > 0 {
-		actions = append(actions, "notify")
+		actions = append(actions, rules.RuleFieldNotify)
 	}
 	if len(actions) == 0 {
 		return "dry-run: no configured watch actions"

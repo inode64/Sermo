@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"path/filepath"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
@@ -72,7 +71,7 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, libBaseli
 		Tree:             tree,
 		Manager:          deps.Manager,
 		Locker:           &locker,
-		Scanner:          locks.NewScanner(filepath.Join(deps.Runtime, "locks")),
+		Scanner:          locks.NewScanner(locks.RuntimeLocksDir(deps.Runtime)),
 		Discoverer:       discoverer,
 		ResolveUser:      discoverer.ResolveUser,
 		CheckDeps:        checkDeps,

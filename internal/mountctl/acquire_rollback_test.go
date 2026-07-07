@@ -3,7 +3,6 @@ package mountctl
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -19,11 +18,11 @@ func TestAcquireUnmountsOnStateWriteFailure(t *testing.T) {
 	runner := &fakeRunner{mounted: &mounted}
 	c := testController(t, &mounted, runner)
 
-	// Make only the mounts/state dir read-only so writeState's WriteFile fails,
-	// while the operation lock (mounts/ops) and readState (a missing state file)
+	// Make only the mount state dir read-only so writeState's WriteFile fails,
+	// while the operation lock and readState (a missing state file)
 	// still work.
 	runtime := t.TempDir()
-	stateDir := filepath.Join(runtime, "mounts", "state")
+	stateDir := mountStateDir(runtime)
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
 		t.Fatal(err)
 	}

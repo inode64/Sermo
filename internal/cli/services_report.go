@@ -58,7 +58,7 @@ func selectServicesReportNotifiers(selection []string, registry map[string]notif
 		return nil, nil, nil
 	}
 	names := servicesReportNotifierNames(selection, registry)
-	hasWall := servicesReportHasNotifierType(names, registry, "wall")
+	hasWall := servicesReportHasNotifierType(names, registry, notify.TypeWall)
 	seen := map[string]struct{}{}
 	selected := make([]notify.Notifier, 0, len(names))
 	outNames := make([]string, 0, len(names))
@@ -73,7 +73,7 @@ func selectServicesReportNotifiers(selection []string, registry map[string]notif
 		if !ok {
 			return nil, nil, fmt.Errorf("services --notify references unknown or disabled notifier %q", name)
 		}
-		if hasWall && n.Type() == "tty" {
+		if hasWall && n.Type() == notify.TypeTTY {
 			continue
 		}
 		seen[name] = struct{}{}
@@ -175,7 +175,7 @@ func servicesReportHTML(reports []appinspect.Report, stats servicesReportStats, 
 	b.WriteString(`</td></tr>`)
 	b.WriteString(`<tr><td style="padding:22px 28px 8px;">`)
 	b.WriteString(`<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>`)
-	writeReportCard(&b, "OK", stats.OK, "#16a34a")
+	writeReportCard(&b, cliTextOK, stats.OK, "#16a34a")
 	writeReportCard(&b, "Issues", stats.Issues, "#dc2626")
 	writeReportCard(&b, "Installed", stats.Installed, "#2563eb")
 	writeReportCard(&b, "Not installed", stats.NotInstalled, "#64748b")

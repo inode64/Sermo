@@ -194,7 +194,7 @@ func buildNetWatch(iface Iface, s netSettings) map[string]any {
 		}
 	}
 	entry := map[string]any{
-		config.EntryKeyCategory: watchCategoryNetwork,
+		config.EntryKeyCategory: config.WatchCategoryNetwork,
 		config.WatchKeyCheck: map[string]any{
 			checks.CheckKeyType:      checks.CheckTypeNet,
 			checks.CheckKeyInterface: iface.Name,

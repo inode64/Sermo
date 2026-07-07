@@ -13,6 +13,27 @@ func init() { Register(nutProtocol{}, protocolAliasUPS, protocolAliasUPSD) }
 
 const nutVarUPSStatus = "ups.status"
 
+const (
+	nutCmdListUPS        = "LIST UPS"
+	nutCmdListVarPrefix  = "LIST VAR "
+	nutCmdLoginPrefix    = "LOGIN "
+	nutCmdLogout         = "LOGOUT"
+	nutCmdPasswordPrefix = "PASSWORD "
+	nutCmdUsernamePrefix = "USERNAME "
+	nutCmdVER            = "VER"
+	nutLineTerminator    = "\n"
+	nutReplyBeginListUPS = "BEGIN LIST UPS"
+	nutReplyBeginListVar = "BEGIN LIST VAR"
+	nutReplyEndListUPS   = "END LIST UPS"
+	nutReplyEndListVar   = "END LIST VAR"
+	nutReplyERR          = "ERR"
+	nutReplyOK           = "OK"
+	nutReplyTrimRight    = "\r\n"
+	nutReplyUPSToken     = "UPS"
+	nutReplyVarPrefix    = "VAR "
+	nutVersionPrefix     = "Network UPS Tools upsd "
+)
+
 // nutInterestingVars are the upsd variables exposed in the probe Result (and so
 // to `expect`, hooks as SERMO_*, and the web detail) when a UPS is selected. They
 // cover the operationally useful signals — power/battery state, charge and
@@ -71,15 +92,15 @@ func (nutProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 func nutHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	br := bufio.NewReader(rw)
 
-	if err := writeNUT(rw, "VER"); err != nil {
+	if err := writeNUT(rw, nutCmdVER); err != nil {
 		return Result{}, err
 	}
 	ver, err := readNUTLine(br)
 	if err != nil {
-		return Result{}, fmt.Errorf("VER: %w", err)
+		return Result{}, fmt.Errorf("%s: %w", nutCmdVER, err)
 	}
-	if strings.HasPrefix(ver, "ERR") {
-		return Result{}, fmt.Errorf("VER: %s", nutErr(ver))
+	if strings.HasPrefix(ver, nutReplyERR) {
+		return Result{}, fmt.Errorf("%s: %s", nutCmdVER, nutErr(ver))
 	}
 	res := Result{Version: nutVersion(ver), Extra: map[string]string{ExtraKeyServer: ver}}
 
@@ -95,14 +116,14 @@ func nutHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	// USERNAME/PASSWORD are not validated by upsd on their own; LOGIN to the
 	// selected UPS is what actually verifies the credentials and access.
 	if cfg.User != "" {
-		if err := nutCmdOK(rw, br, "USERNAME "+cfg.User); err != nil {
+		if err := nutCmdOK(rw, br, nutCmdUsernamePrefix+cfg.User); err != nil {
 			return Result{}, fmt.Errorf("username: %w", err)
 		}
-		if err := nutCmdOK(rw, br, "PASSWORD "+cfg.Password); err != nil {
+		if err := nutCmdOK(rw, br, nutCmdPasswordPrefix+cfg.Password); err != nil {
 			return Result{}, fmt.Errorf("password: %w", err)
 		}
 		if ups != "" {
-			if err := nutCmdOK(rw, br, "LOGIN "+ups); err != nil {
+			if err := nutCmdOK(rw, br, nutCmdLoginPrefix+ups); err != nil {
 				return Result{}, fmt.Errorf("login: %w", err)
 			}
 			res.Extra[extraLogin] = ups
@@ -125,23 +146,23 @@ func nutHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 		}
 	}
 
-	_ = writeNUT(rw, "LOGOUT") // best effort
+	_ = writeNUT(rw, nutCmdLogout) // best effort
 	return res, nil
 }
 
 // nutListUPS returns the UPS names from `LIST UPS`.
 func nutListUPS(rw io.ReadWriter, br *bufio.Reader) ([]string, error) {
-	if err := writeNUT(rw, "LIST UPS"); err != nil {
+	if err := writeNUT(rw, nutCmdListUPS); err != nil {
 		return nil, err
 	}
 	first, err := readNUTLine(br)
 	if err != nil {
 		return nil, err
 	}
-	if strings.HasPrefix(first, "ERR") {
+	if strings.HasPrefix(first, nutReplyERR) {
 		return nil, errors.New(nutErr(first))
 	}
-	if !strings.HasPrefix(first, "BEGIN LIST UPS") {
+	if !strings.HasPrefix(first, nutReplyBeginListUPS) {
 		return nil, fmt.Errorf("unexpected reply: %s", first)
 	}
 	var names []string
@@ -150,10 +171,10 @@ func nutListUPS(rw io.ReadWriter, br *bufio.Reader) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		if strings.HasPrefix(line, "END LIST UPS") {
+		if strings.HasPrefix(line, nutReplyEndListUPS) {
 			return names, nil
 		}
-		if f := strings.Fields(line); len(f) >= 2 && f[0] == "UPS" {
+		if f := strings.Fields(line); len(f) >= 2 && f[0] == nutReplyUPSToken {
 			names = append(names, f[1])
 		}
 	}
@@ -161,17 +182,17 @@ func nutListUPS(rw io.ReadWriter, br *bufio.Reader) ([]string, error) {
 
 // nutListVars returns every variable for ups from `LIST VAR <ups>`.
 func nutListVars(rw io.ReadWriter, br *bufio.Reader, ups string) (map[string]string, error) {
-	if err := writeNUT(rw, "LIST VAR "+ups); err != nil {
+	if err := writeNUT(rw, nutCmdListVarPrefix+ups); err != nil {
 		return nil, err
 	}
 	first, err := readNUTLine(br)
 	if err != nil {
 		return nil, err
 	}
-	if strings.HasPrefix(first, "ERR") {
+	if strings.HasPrefix(first, nutReplyERR) {
 		return nil, errors.New(nutErr(first))
 	}
-	if !strings.HasPrefix(first, "BEGIN LIST VAR") {
+	if !strings.HasPrefix(first, nutReplyBeginListVar) {
 		return nil, fmt.Errorf("unexpected reply: %s", first)
 	}
 	vars := map[string]string{}
@@ -180,7 +201,7 @@ func nutListVars(rw io.ReadWriter, br *bufio.Reader, ups string) (map[string]str
 		if err != nil {
 			return nil, err
 		}
-		if strings.HasPrefix(line, "END LIST VAR") {
+		if strings.HasPrefix(line, nutReplyEndListVar) {
 			return vars, nil
 		}
 		if name, val, ok := parseNUTVarLine(line); ok {
@@ -191,7 +212,7 @@ func nutListVars(rw io.ReadWriter, br *bufio.Reader, ups string) (map[string]str
 
 // writeNUT sends a single newline-terminated command.
 func writeNUT(w io.Writer, cmd string) error {
-	_, err := io.WriteString(w, cmd+"\n")
+	_, err := io.WriteString(w, cmd+nutLineTerminator)
 	return err
 }
 
@@ -201,7 +222,7 @@ func readNUTLine(br *bufio.Reader) (string, error) {
 	if err != nil && s == "" {
 		return "", err
 	}
-	return strings.TrimRight(s, "\r\n"), nil
+	return strings.TrimRight(s, nutReplyTrimRight), nil
 }
 
 // nutCmdOK sends cmd and requires an `OK` reply, mapping `ERR <reason>` to an error.
@@ -214,9 +235,9 @@ func nutCmdOK(w io.Writer, br *bufio.Reader, cmd string) error {
 		return err
 	}
 	switch {
-	case strings.HasPrefix(line, "OK"):
+	case strings.HasPrefix(line, nutReplyOK):
 		return nil
-	case strings.HasPrefix(line, "ERR"):
+	case strings.HasPrefix(line, nutReplyERR):
 		return errors.New(nutErr(line))
 	default:
 		return fmt.Errorf("unexpected reply: %s", line)
@@ -225,14 +246,14 @@ func nutCmdOK(w io.Writer, br *bufio.Reader, cmd string) error {
 
 // nutErr returns the reason after the ERR token.
 func nutErr(line string) string {
-	return strings.TrimSpace(strings.TrimPrefix(line, "ERR"))
+	return strings.TrimSpace(strings.TrimPrefix(line, nutReplyERR))
 }
 
 // nutVersion extracts the version from a `VER` reply such as
 // "Network UPS Tools upsd 2.8.0 - http://…", falling back to the first token of
 // the whole line when the prefix is absent.
 func nutVersion(line string) string {
-	v := strings.TrimPrefix(line, "Network UPS Tools upsd ")
+	v := strings.TrimPrefix(line, nutVersionPrefix)
 	if i := strings.IndexByte(v, ' '); i >= 0 {
 		v = v[:i]
 	}
@@ -242,7 +263,7 @@ func nutVersion(line string) string {
 // parseNUTVarLine parses a `VAR <ups> <var> "<value>"` reply into the variable
 // name and its value.
 func parseNUTVarLine(line string) (name, value string, ok bool) {
-	if !strings.HasPrefix(line, "VAR ") {
+	if !strings.HasPrefix(line, nutReplyVarPrefix) {
 		return "", "", false
 	}
 	q := strings.IndexByte(line, '"')

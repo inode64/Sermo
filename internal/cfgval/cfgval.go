@@ -18,6 +18,8 @@ const (
 	minInt = -maxInt - 1
 )
 
+const entryKeyEnabled = "enabled"
+
 // TCP port bounds shared by configuration, CLI parsing and network clients.
 const (
 	// MinTCPPort is the lowest valid TCP/UDP port number operators can configure.
@@ -401,7 +403,7 @@ func IsAssertOp(op string) bool {
 // absent or non-boolean `enabled` means enabled — the shared reading across
 // checks, rules, watches, services and diagnostics.
 func Disabled(entry map[string]any) bool {
-	b, ok := entry["enabled"].(bool)
+	b, ok := entry[entryKeyEnabled].(bool)
 	return ok && !b
 }
 
