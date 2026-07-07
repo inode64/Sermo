@@ -168,7 +168,7 @@ func smtpTLSConfig(host string) *tls.Config {
 
 func newSMTPClient(d emailDSN, tlsCfg *tls.Config, timeout time.Duration) (*gomail.Client, error) {
 	port, err := strconv.Atoi(d.port)
-	if err != nil || port <= 0 || port > 65535 {
+	if err != nil || !cfgval.ValidTCPPort(port) {
 		return nil, fmt.Errorf("invalid SMTP port %q", d.port)
 	}
 

@@ -76,7 +76,7 @@ func (c *websocketCheck) Run(ctx context.Context) Result {
 // routing) and returns its Result.
 func (c *websocketCheck) handshake(ctx context.Context, iface string, start time.Time) Result {
 	addr := net.JoinHostPort(c.host, c.port)
-	nc, err := conn.BindDialer(iface).DialContext(ctx, "tcp", addr)
+	nc, err := conn.BindDialer(iface).DialContext(ctx, conn.TransportTCP, addr)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("websocket %s: %v", c.rawURL, err), start)
 	}
@@ -227,7 +227,7 @@ func wsAccept(key string) string {
 // wsSkipVerify reports whether the tls value requests skipping verification.
 func wsSkipVerify(tlsVal string) bool {
 	switch strings.ToLower(strings.TrimSpace(tlsVal)) {
-	case "skip-verify":
+	case conn.TLSModeSkipVerify:
 		return true
 	default:
 		return false

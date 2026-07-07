@@ -142,7 +142,7 @@ func (d Detector) Detect(ctx context.Context, requested Backend) (Detection, err
 }
 
 func (d Detector) probeSystemd(ctx context.Context) BackendProbe {
-	if !d.Probe.CommandExists(cmdSystemctl) || !d.Probe.PathExists("/run/systemd/system") {
+	if !d.Probe.CommandExists(cmdSystemctl) || !d.Probe.PathExists(systemdRuntimeDir) {
 		return BackendProbe{}
 	}
 
@@ -152,7 +152,7 @@ func (d Detector) probeSystemd(ctx context.Context) BackendProbe {
 		state = strings.TrimSpace(result.Stderr)
 	}
 
-	active := isUsableSystemdState(state) || d.pid1Is("systemd")
+	active := isUsableSystemdState(state) || d.pid1Is(systemdProcessName)
 	return BackendProbe{
 		Available: state != "",
 		Active:    active,
@@ -165,7 +165,7 @@ func (d Detector) probeOpenRC(ctx context.Context) BackendProbe {
 		return BackendProbe{}
 	}
 
-	hasRunDir := d.Probe.PathExists("/run/openrc")
+	hasRunDir := d.Probe.PathExists(openRCRuntimeDir)
 	rcStatusWorks := false
 	state := ""
 	if d.Probe.CommandExists(cmdRcStatus) {
@@ -186,7 +186,7 @@ func (d Detector) run(ctx context.Context, name string, args ...string) (execx.R
 }
 
 func (d Detector) pid1Is(name string) bool {
-	data, err := d.Probe.ReadFile("/proc/1/comm")
+	data, err := d.Probe.ReadFile(pid1CommPath)
 	if err != nil {
 		return false
 	}
@@ -195,7 +195,7 @@ func (d Detector) pid1Is(name string) bool {
 
 func isUsableSystemdState(state string) bool {
 	switch strings.TrimSpace(state) {
-	case "running", "degraded":
+	case systemdStateRunning, systemdStateDegraded:
 		return true
 	default:
 		return false

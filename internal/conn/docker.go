@@ -9,6 +9,9 @@ import (
 
 func init() { Register(dockerProtocol{}) }
 
+// DefaultDockerSocket is Docker Engine's local Unix API socket.
+const DefaultDockerSocket = dockerctl.DefaultSocket
+
 // dockerProtocol probes a Docker Engine daemon over its HTTP API, by default on
 // the local Unix socket /run/docker.sock (set `host` for a TCP daemon, with
 // `tls` for 2376). It GETs /info — proving the daemon is up — and exposes the
@@ -20,7 +23,7 @@ func init() { Register(dockerProtocol{}) }
 type dockerProtocol struct{}
 
 // Name returns the canonical type token.
-func (dockerProtocol) Name() string { return "docker" }
+func (dockerProtocol) Name() string { return ProtocolNameDocker }
 
 // DefaultPort is Docker's plaintext TCP port (use 2376 with tls). Ignored when
 // probing the default Unix socket.
@@ -43,12 +46,12 @@ func (dockerProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 	res := Result{Version: info.ServerVersion, Extra: map[string]string{
-		"containers":         strconv.Itoa(info.Containers),
-		"containers.running": strconv.Itoa(info.ContainersRunning),
-		"containers.paused":  strconv.Itoa(info.ContainersPaused),
-		"containers.stopped": strconv.Itoa(info.ContainersStopped),
-		"images":             strconv.Itoa(info.Images),
-		"warnings":           strconv.Itoa(len(info.Warnings)),
+		ExtraKeyDockerContainers: strconv.Itoa(info.Containers),
+		ExtraKeyDockerRunning:    strconv.Itoa(info.ContainersRunning),
+		ExtraKeyDockerPaused:     strconv.Itoa(info.ContainersPaused),
+		ExtraKeyDockerStopped:    strconv.Itoa(info.ContainersStopped),
+		ExtraKeyDockerImages:     strconv.Itoa(info.Images),
+		ExtraKeyDockerWarnings:   strconv.Itoa(len(info.Warnings)),
 	}}
 
 	if name := cfg.Query; name != "" {
@@ -65,15 +68,15 @@ func (dockerProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // change fingerprint so on_change tracks its state/health transitions.
 func dockerContainer(c dockerctl.Container, res *Result) {
 	health := c.HealthStatus()
-	res.Extra["container"] = c.ContainerName()
-	res.Extra["container.status"] = c.State.Status
-	res.Extra["container.health"] = health
-	res.Extra["container.running"] = strconv.FormatBool(c.State.Running)
-	res.Extra["container.restartcount"] = strconv.Itoa(c.RestartCount)
-	res.Extra["container.exitcode"] = strconv.Itoa(c.State.ExitCode)
+	res.Extra[ExtraKeyContainer] = c.ContainerName()
+	res.Extra[ExtraKeyContainerStatus] = c.State.Status
+	res.Extra[ExtraKeyContainerHealth] = health
+	res.Extra[ExtraKeyContainerRunning] = strconv.FormatBool(c.State.Running)
+	res.Extra[ExtraKeyContainerRestarts] = strconv.Itoa(c.RestartCount)
+	res.Extra[ExtraKeyContainerExitCode] = strconv.Itoa(c.State.ExitCode)
 	// fingerprint drives on_change: any status (or health) transition fires it.
 	fp := c.State.Status
-	if health != "none" {
+	if health != dockerctl.HealthStatusNone {
 		fp += "/" + health
 	}
 	res.Extra[ExtraKeyFingerprint] = fp

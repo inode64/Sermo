@@ -9,7 +9,7 @@ import (
 
 // Register amqp under its canonical name plus a "rabbitmq" alias, since RabbitMQ
 // is the broker this probe is overwhelmingly used against.
-func init() { Register(amqpProtocol{}, "rabbitmq") }
+func init() { Register(amqpProtocol{}, protocolAliasRabbitMQ) }
 
 // amqpProtocol probes an AMQP 0-9-1 broker (RabbitMQ, …) natively — no external
 // driver. It writes the AMQP protocol header and reads the broker's unprompted
@@ -21,8 +21,8 @@ func init() { Register(amqpProtocol{}, "rabbitmq") }
 // like the other connection checks.
 type amqpProtocol struct{}
 
-func (amqpProtocol) Name() string       { return "amqp" }
-func (amqpProtocol) DefaultPort() int   { return 5672 }
+func (amqpProtocol) Name() string       { return ProtocolNameAMQP }
+func (amqpProtocol) DefaultPort() int   { return defaultPortAMQP }
 func (amqpProtocol) RequiresUser() bool { return false }
 
 // amqpHeader is the protocol header for AMQP 0-9-1: "AMQP" then 0, 0, 9, 1.
@@ -31,10 +31,13 @@ var amqpHeader = []byte{'A', 'M', 'Q', 'P', 0, 0, 9, 1}
 // maxAMQPFrame bounds the Connection.Start payload we are willing to read, so a
 // hostile or non-AMQP peer cannot make the probe allocate without limit. The
 // real frame is a few hundred bytes.
-const maxAMQPFrame = 1 << 20
+const (
+	maxAMQPFrame                   = 1 << 20
+	amqpNegotiationVersionMismatch = "version-mismatch"
+)
 
 func (amqpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, 5672)
+	c, err := dialDeadline(ctx, cfg, defaultPortAMQP)
 	if err != nil {
 		return Result{}, err
 	}
@@ -58,7 +61,7 @@ func (amqpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		_, _ = io.ReadFull(c, rev[:]) // drain the 8th byte; ignore errors
 		return Result{
 			Version: fmt.Sprintf("AMQP %d-%d-%d", hdr[5], hdr[6], rev[0]),
-			Extra:   map[string]string{"negotiation": "version-mismatch"},
+			Extra:   map[string]string{extraNegotiation: amqpNegotiationVersionMismatch},
 		}, nil
 	}
 

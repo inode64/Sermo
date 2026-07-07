@@ -15,8 +15,9 @@ import (
 // Link-state values reported and expected by net/icmp state checks. Exported so
 // config validation checks the same expect vocabulary the check evaluates.
 const (
-	NetStateUp   = "up"
-	NetStateDown = "down"
+	NetStateUp      = "up"
+	NetStateDown    = "down"
+	NetStateUnknown = "unknown"
 )
 
 // Address-presence expect values for a net address check. Exported for the same
@@ -24,12 +25,24 @@ const (
 const (
 	NetAddrPresent = "present"
 	NetAddrAbsent  = "absent"
+	netAddrNone    = "none"
 )
 
 // Network statistics counter names used by the default net error metric.
 const (
 	NetCounterRXErrors = "rx_errors"
 	NetCounterTXErrors = "tx_errors"
+)
+
+const (
+	// SysfsIfaceFlagUp is Linux IFF_UP from /sys/class/net/<iface>/flags.
+	SysfsIfaceFlagUp uint64 = 0x1
+	// SysfsIfaceFlagLoopback is Linux IFF_LOOPBACK from /sys/class/net/<iface>/flags.
+	SysfsIfaceFlagLoopback uint64 = 0x8
+	// SysfsIfaceFlagRunning is Linux IFF_RUNNING from /sys/class/net/<iface>/flags.
+	SysfsIfaceFlagRunning uint64 = 0x40
+
+	sysfsNetClassPath = "/sys/class/net"
 )
 
 // NetSample is one observation of a network interface.
@@ -147,7 +160,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 		joined := strings.Join(s.Addrs, ",")
 		display := joined
 		if display == "" {
-			display = "none"
+			display = netAddrNone
 		}
 		data[DataKeyAddresses] = s.Addrs
 		if c.expect != "" {
@@ -186,7 +199,7 @@ func SampleNet(iface string) (NetSample, error) { return defaultNetSampler(iface
 
 // defaultNetSampler reads interface flags and /sys/class/net/<iface>.
 func defaultNetSampler(iface string) (NetSample, error) {
-	return sampleNetFromSysfs(iface, "/sys/class/net")
+	return sampleNetFromSysfs(iface, sysfsNetClassPath)
 }
 
 // InterfaceExists reports whether an interface is visible through netlink or
@@ -195,7 +208,7 @@ func defaultNetSampler(iface string) (NetSample, error) {
 func InterfaceExists(iface string) bool {
 	ifi, err := net.InterfaceByName(iface)
 	if err != nil {
-		_, statErr := os.Stat(sysfsIfaceDir("/sys/class/net", iface))
+		_, statErr := os.Stat(sysfsIfaceDir(sysfsNetClassPath, iface))
 		return statErr == nil
 	}
 	return ifi != nil
@@ -259,7 +272,7 @@ func sysfsIfaceDir(root, iface string) string {
 func sysfsIfaceUp(dir string) bool {
 	flags := sysfsIfaceFlagBits(filepath.Join(dir, "flags"))
 	operstate := strings.TrimSpace(readTextFile(filepath.Join(dir, "operstate")))
-	return flags&0x1 != 0 && (flags&0x40 != 0 || operstate == NetStateUp || operstate == "unknown")
+	return flags&SysfsIfaceFlagUp != 0 && (flags&SysfsIfaceFlagRunning != 0 || operstate == NetStateUp || operstate == NetStateUnknown)
 }
 
 func sysfsIfaceFlagBits(path string) uint64 {

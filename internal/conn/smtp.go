@@ -16,12 +16,12 @@ func init() { Register(smtpProtocol{}) }
 // performs AUTH PLAIN. TLS is implicit (SMTPS) when enabled — use port 465.
 type smtpProtocol struct{}
 
-func (smtpProtocol) Name() string       { return "smtp" }
-func (smtpProtocol) DefaultPort() int   { return 25 }
+func (smtpProtocol) Name() string       { return ProtocolNameSMTP }
+func (smtpProtocol) DefaultPort() int   { return defaultPortSMTP }
 func (smtpProtocol) RequiresUser() bool { return false }
 
 func (smtpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	return probeBanner(ctx, cfg, 25, smtpHandshake)
+	return probeBanner(ctx, cfg, defaultPortSMTP, smtpHandshake)
 }
 
 // smtpHandshake reads the 220 greeting, greets with EHLO (falling back to HELO),

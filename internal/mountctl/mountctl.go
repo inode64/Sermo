@@ -39,6 +39,9 @@ const (
 	// ActionUmount is the Result.Action value and umount(8) subcommand for unmounting.
 	ActionUmount = "umount"
 
+	// DefaultFstabPath is the system fstab file Sermo reads by default.
+	DefaultFstabPath          = "/etc/fstab"
+	procRootPath              = "/proc"
 	rootMountPath             = "/"
 	rootUmountDisabledMessage = "root filesystem cannot be unmounted"
 
@@ -563,14 +566,14 @@ func (c Controller) runtime() string {
 	if c.Runtime != "" {
 		return c.Runtime
 	}
-	return "/run/sermo"
+	return config.DefaultRuntime
 }
 
 // FstabEntries reads fstabPath and returns its mount entries. An empty path
 // means /etc/fstab.
 func FstabEntries(fstabPath string) ([]FstabEntry, error) {
 	if fstabPath == "" {
-		fstabPath = "/etc/fstab"
+		fstabPath = DefaultFstabPath
 	}
 	data, err := os.ReadFile(fstabPath)
 	if err != nil {
@@ -603,7 +606,7 @@ func FstabEntries(fstabPath string) ([]FstabEntry, error) {
 
 // PathInFstab reports whether path is a mountpoint in /etc/fstab.
 func PathInFstab(path string) (bool, error) {
-	entries, err := FstabEntries("/etc/fstab")
+	entries, err := FstabEntries(DefaultFstabPath)
 	if err != nil {
 		return false, err
 	}
@@ -697,7 +700,7 @@ func pidUsesMounts(ctx context.Context, pid int, mountPaths []string) ([]string,
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	base := filepath.Join("/proc", fmt.Sprint(pid))
+	base := filepath.Join(procRootPath, fmt.Sprint(pid))
 	matches := map[string]struct{}{}
 	for _, name := range []string{"cwd", "root"} {
 		if err := linkMountMatches(ctx, filepath.Join(base, name), mountPaths, matches); err != nil {
@@ -746,7 +749,7 @@ func pidUsesPath(ctx context.Context, pid int, mountPath string) bool {
 	if err := ctx.Err(); err != nil {
 		return false
 	}
-	base := filepath.Join("/proc", fmt.Sprint(pid))
+	base := filepath.Join(procRootPath, fmt.Sprint(pid))
 	for _, name := range []string{"cwd", "root"} {
 		if err := ctx.Err(); err != nil {
 			return false

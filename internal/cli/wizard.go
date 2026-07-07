@@ -21,6 +21,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/dockerctl"
 	"sermo/internal/mountctl"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
@@ -34,14 +35,17 @@ const (
 	yamlFileExt     = ".yml"
 	yamlLongFileExt = ".yaml"
 
-	wizardAssistantMount   = "mount"
-	wizardAssistantNet     = "net"
-	wizardAssistantService = "service"
-	wizardAssistantUplink  = "uplink"
-	wizardAssistantVolume  = "volume"
+	wizardAssistantMount   = assist.AssistantNameMount
+	wizardAssistantNet     = assist.AssistantNameNet
+	wizardAssistantService = assist.AssistantNameService
+	wizardAssistantUplink  = assist.AssistantNameUplink
+	wizardAssistantVolume  = assist.AssistantNameVolume
 
-	serviceFamilyDocker = "docker"
-	serviceFamilyVM     = "vm"
+	serviceFamilyDocker = dockerctl.ControlType
+	serviceFamilyVM     = assist.AssistantNameVM
+
+	loopbackIfaceName       = "lo"
+	wizardSysfsNetClassPath = "/sys/class/net"
 
 	wizardNounMount   = wizardAssistantMount
 	wizardNounService = wizardAssistantService
@@ -264,7 +268,7 @@ func listVolumes() ([]assist.Volume, error) {
 }
 
 func listWizardMounts() ([]assist.MountCandidate, error) {
-	entries, err := mountctl.FstabEntries("/etc/fstab")
+	entries, err := mountctl.FstabEntries(mountctl.DefaultFstabPath)
 	if err != nil {
 		return nil, err
 	}
@@ -300,7 +304,7 @@ func listWizardMounts() ([]assist.MountCandidate, error) {
 func listIfaces() ([]assist.Iface, error) {
 	ifs, err := net.Interfaces()
 	if err != nil {
-		return listIfacesFromSysfs("/sys/class/net")
+		return listIfacesFromSysfs(wizardSysfsNetClassPath)
 	}
 	out := make([]assist.Iface, 0, len(ifs))
 	for _, in := range ifs {
@@ -313,7 +317,7 @@ func listIfaces() ([]assist.Iface, error) {
 		})
 	}
 	if !hasNonLoopbackIface(out) {
-		if sysfs, err := listIfacesFromSysfs("/sys/class/net"); err == nil && hasNonLoopbackIface(sysfs) {
+		if sysfs, err := listIfacesFromSysfs(wizardSysfsNetClassPath); err == nil && hasNonLoopbackIface(sysfs) {
 			return sysfs, nil
 		}
 	}
@@ -343,8 +347,8 @@ func listIfacesFromSysfs(root string) ([]assist.Iface, error) {
 		dir := filepath.Join(root, name)
 		flags := sysfsIfaceFlags(filepath.Join(dir, "flags"))
 		operstate := strings.TrimSpace(readSmallFile(filepath.Join(dir, "operstate")))
-		loopback := flags&0x8 != 0 || name == "lo"
-		up := flags&0x1 != 0 && (flags&0x40 != 0 || operstate == "up" || operstate == "unknown")
+		loopback := flags&checks.SysfsIfaceFlagLoopback != 0 || name == loopbackIfaceName
+		up := flags&checks.SysfsIfaceFlagUp != 0 && (flags&checks.SysfsIfaceFlagRunning != 0 || operstate == checks.NetStateUp || operstate == checks.NetStateUnknown)
 		out = append(out, assist.Iface{Name: name, Up: up, Loopback: loopback})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -369,7 +373,7 @@ func readSmallFile(path string) string {
 func defaultRouteIfaces() []string {
 	seen := map[string]bool{}
 	var out []string
-	for _, family := range []string{"ipv4", "ipv6"} {
+	for _, family := range []string{checks.FamilyIPv4, checks.FamilyIPv6} {
 		routes, err := checks.SampleRoutes(family)
 		if err != nil {
 			continue

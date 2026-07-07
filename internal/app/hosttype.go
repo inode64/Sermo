@@ -14,6 +14,57 @@ const (
 	cpuInfoPath    = "/proc/cpuinfo"
 )
 
+const (
+	dmiFieldSysVendor      = "sys_vendor"
+	dmiFieldProductName    = "product_name"
+	dmiFieldProductVersion = "product_version"
+	dmiFieldBoardVendor    = "board_vendor"
+	dmiFieldBIOSVendor     = "bios_vendor"
+	dmiFieldChassisVendor  = "chassis_vendor"
+)
+
+const (
+	hostTypeKindBareMetal      = "bare_metal"
+	hostTypeKindUnknown        = "unknown"
+	hostTypeKindVirtualMachine = "virtual_machine"
+	hostTypeLabelBareMetal     = "bare metal"
+	hostTypeLabelAlibabaCloud  = "Alibaba Cloud VM"
+	hostTypeLabelAmazonEC2     = "Amazon EC2 VM"
+	hostTypeLabelAppleVirtual  = "Apple Virtualization VM"
+	hostTypeLabelBhyve         = "bhyve VM"
+	hostTypeLabelDigitalOcean  = "DigitalOcean VM"
+	hostTypeLabelGCE           = "Google Compute Engine VM"
+	hostTypeLabelHyperV        = "Hyper-V VM"
+	hostTypeLabelKVM           = "KVM/QEMU VM"
+	hostTypeLabelOpenStack     = "OpenStack VM"
+	hostTypeLabelOracleCloud   = "Oracle Cloud VM"
+	hostTypeLabelParallels     = "Parallels VM"
+	hostTypeLabelQEMU          = "QEMU VM"
+	hostTypeLabelTencentCloud  = "Tencent Cloud VM"
+	hostTypeLabelUnknown       = hostTypeKindUnknown
+	hostTypeLabelVirtual       = "virtual machine"
+	hostTypeLabelVirtualBox    = "VirtualBox VM"
+	hostTypeLabelVMware        = "VMware VM"
+	hostTypeLabelXen           = "Xen VM"
+	hostTypePlatformAlibaba    = "alibaba_cloud"
+	hostTypePlatformAmazonEC2  = "amazon_ec2"
+	hostTypePlatformApple      = "apple_virtualization"
+	hostTypePlatformBhyve      = "bhyve"
+	hostTypePlatformDigital    = "digitalocean"
+	hostTypePlatformGCE        = "gce"
+	hostTypePlatformHyperV     = "hyperv"
+	hostTypePlatformKVM        = "kvm"
+	hostTypePlatformOpenStack  = "openstack"
+	hostTypePlatformOracle     = "oracle_cloud"
+	hostTypePlatformParallels  = "parallels"
+	hostTypePlatformQEMU       = "qemu"
+	hostTypePlatformTencent    = "tencent_cloud"
+	hostTypePlatformVirtual    = "virtualized"
+	hostTypePlatformVirtualBox = "virtualbox"
+	hostTypePlatformVMware     = "vmware"
+	hostTypePlatformXen        = "xen"
+)
+
 type hostTypeFact struct {
 	key   string
 	value string
@@ -32,26 +83,26 @@ func detectHostType(readFile func(string) ([]byte, error)) web.HostTypeInfo {
 	facts := readDMIHostTypeFacts(readFile)
 	if platform, label := virtualPlatformFromText(joinHostTypeFacts(facts)); platform != "" {
 		return web.HostTypeInfo{
-			Kind:     "virtual_machine",
+			Kind:     hostTypeKindVirtualMachine,
 			Platform: platform,
 			Label:    label,
 			Detail:   hostTypeFactDetail(facts),
 		}
 	}
 
-	if typ, ok := readHostTypeFile(readFile, hypervisorPath); ok && strings.EqualFold(typ, "xen") {
+	if typ, ok := readHostTypeFile(readFile, hypervisorPath); ok && strings.EqualFold(typ, hostTypePlatformXen) {
 		return web.HostTypeInfo{
-			Kind:     "virtual_machine",
-			Platform: "xen",
-			Label:    "Xen VM",
-			Detail:   "/sys/hypervisor/type=xen",
+			Kind:     hostTypeKindVirtualMachine,
+			Platform: hostTypePlatformXen,
+			Label:    hostTypeLabelXen,
+			Detail:   hypervisorPath + "=" + hostTypePlatformXen,
 		}
 	}
 
 	if cpuinfo, ok := readHostTypeFile(readFile, cpuInfoPath); ok {
 		if platform, label := virtualPlatformFromCPU(cpuinfo); platform != "" {
 			return web.HostTypeInfo{
-				Kind:     "virtual_machine",
+				Kind:     hostTypeKindVirtualMachine,
 				Platform: platform,
 				Label:    label,
 				Detail:   "CPU hypervisor vendor",
@@ -59,9 +110,9 @@ func detectHostType(readFile func(string) ([]byte, error)) web.HostTypeInfo {
 		}
 		if cpuHasHypervisorFlag(cpuinfo) {
 			return web.HostTypeInfo{
-				Kind:     "virtual_machine",
-				Platform: "virtualized",
-				Label:    "virtual machine",
+				Kind:     hostTypeKindVirtualMachine,
+				Platform: hostTypePlatformVirtual,
+				Label:    hostTypeLabelVirtual,
 				Detail:   "CPU hypervisor flag",
 			}
 		}
@@ -69,23 +120,23 @@ func detectHostType(readFile func(string) ([]byte, error)) web.HostTypeInfo {
 
 	if len(facts) > 0 {
 		return web.HostTypeInfo{
-			Kind:   "bare_metal",
-			Label:  "bare metal",
+			Kind:   hostTypeKindBareMetal,
+			Label:  hostTypeLabelBareMetal,
 			Detail: hostTypeFactDetail(facts),
 		}
 	}
 
-	return web.HostTypeInfo{Kind: "unknown", Label: "unknown"}
+	return web.HostTypeInfo{Kind: hostTypeKindUnknown, Label: hostTypeLabelUnknown}
 }
 
 func readDMIHostTypeFacts(readFile func(string) ([]byte, error)) []hostTypeFact {
 	files := []string{
-		"sys_vendor",
-		"product_name",
-		"product_version",
-		"board_vendor",
-		"bios_vendor",
-		"chassis_vendor",
+		dmiFieldSysVendor,
+		dmiFieldProductName,
+		dmiFieldProductVersion,
+		dmiFieldBoardVendor,
+		dmiFieldBIOSVendor,
+		dmiFieldChassisVendor,
 	}
 	facts := make([]hostTypeFact, 0, len(files))
 	for _, name := range files {
@@ -129,7 +180,7 @@ func hostTypeFactDetail(facts []hostTypeFact) string {
 	if len(facts) == 0 {
 		return ""
 	}
-	preferred := []string{"sys_vendor", "product_name", "product_version"}
+	preferred := []string{dmiFieldSysVendor, dmiFieldProductName, dmiFieldProductVersion}
 	seen := map[string]bool{}
 	parts := make([]string, 0, len(preferred))
 	for _, key := range preferred {
@@ -160,22 +211,22 @@ func virtualPlatformFromText(text string) (string, string) {
 		platform string
 		label    string
 	}{
-		{[]string{"vmware"}, "vmware", "VMware VM"},
-		{[]string{"microsoft corporation virtual machine", "hyper v", "microsoft hv"}, "hyperv", "Hyper-V VM"},
-		{[]string{"virtualbox", "innotek"}, "virtualbox", "VirtualBox VM"},
-		{[]string{"kvm", "qemu", "rhev", "ovirt", "bochs"}, "kvm", "KVM/QEMU VM"},
-		{[]string{"xen"}, "xen", "Xen VM"},
-		{[]string{"parallels"}, "parallels", "Parallels VM"},
-		{[]string{"bhyve"}, "bhyve", "bhyve VM"},
-		{[]string{"amazon ec2"}, "amazon_ec2", "Amazon EC2 VM"},
-		{[]string{"google compute engine"}, "gce", "Google Compute Engine VM"},
-		{[]string{"digitalocean"}, "digitalocean", "DigitalOcean VM"},
-		{[]string{"openstack"}, "openstack", "OpenStack VM"},
-		{[]string{"oracle cloud"}, "oracle_cloud", "Oracle Cloud VM"},
-		{[]string{"alibaba cloud"}, "alibaba_cloud", "Alibaba Cloud VM"},
-		{[]string{"tencent cloud"}, "tencent_cloud", "Tencent Cloud VM"},
-		{[]string{"apple virtualization", "virtualmac"}, "apple_virtualization", "Apple Virtualization VM"},
-		{[]string{"virtual machine"}, "virtualized", "virtual machine"},
+		{[]string{"vmware"}, hostTypePlatformVMware, hostTypeLabelVMware},
+		{[]string{"microsoft corporation virtual machine", "hyper v", "microsoft hv"}, hostTypePlatformHyperV, hostTypeLabelHyperV},
+		{[]string{"virtualbox", "innotek"}, hostTypePlatformVirtualBox, hostTypeLabelVirtualBox},
+		{[]string{"kvm", "qemu", "rhev", "ovirt", "bochs"}, hostTypePlatformKVM, hostTypeLabelKVM},
+		{[]string{"xen"}, hostTypePlatformXen, hostTypeLabelXen},
+		{[]string{"parallels"}, hostTypePlatformParallels, hostTypeLabelParallels},
+		{[]string{"bhyve"}, hostTypePlatformBhyve, hostTypeLabelBhyve},
+		{[]string{"amazon ec2"}, hostTypePlatformAmazonEC2, hostTypeLabelAmazonEC2},
+		{[]string{"google compute engine"}, hostTypePlatformGCE, hostTypeLabelGCE},
+		{[]string{"digitalocean"}, hostTypePlatformDigital, hostTypeLabelDigitalOcean},
+		{[]string{"openstack"}, hostTypePlatformOpenStack, hostTypeLabelOpenStack},
+		{[]string{"oracle cloud"}, hostTypePlatformOracle, hostTypeLabelOracleCloud},
+		{[]string{"alibaba cloud"}, hostTypePlatformAlibaba, hostTypeLabelAlibabaCloud},
+		{[]string{"tencent cloud"}, hostTypePlatformTencent, hostTypeLabelTencentCloud},
+		{[]string{"apple virtualization", "virtualmac"}, hostTypePlatformApple, hostTypeLabelAppleVirtual},
+		{[]string{hostTypeLabelVirtual}, hostTypePlatformVirtual, hostTypeLabelVirtual},
 	} {
 		for _, needle := range match.needles {
 			if strings.Contains(normalized, needle) {
@@ -193,13 +244,13 @@ func virtualPlatformFromCPU(cpuinfo string) (string, string) {
 		platform string
 		label    string
 	}{
-		{"kvmkvmkvm", "kvm", "KVM/QEMU VM"},
-		{"microsoft hv", "hyperv", "Hyper-V VM"},
-		{"vmwarevmware", "vmware", "VMware VM"},
-		{"vboxvboxvbox", "virtualbox", "VirtualBox VM"},
-		{"xenvmmxenvmm", "xen", "Xen VM"},
-		{"bhyve bhyve", "bhyve", "bhyve VM"},
-		{"tcgtcgtcgtcg", "qemu", "QEMU VM"},
+		{"kvmkvmkvm", hostTypePlatformKVM, hostTypeLabelKVM},
+		{"microsoft hv", hostTypePlatformHyperV, hostTypeLabelHyperV},
+		{"vmwarevmware", hostTypePlatformVMware, hostTypeLabelVMware},
+		{"vboxvboxvbox", hostTypePlatformVirtualBox, hostTypeLabelVirtualBox},
+		{"xenvmmxenvmm", hostTypePlatformXen, hostTypeLabelXen},
+		{"bhyve bhyve", hostTypePlatformBhyve, hostTypeLabelBhyve},
+		{"tcgtcgtcgtcg", hostTypePlatformQEMU, hostTypeLabelQEMU},
 	} {
 		if strings.Contains(normalized, match.needle) {
 			return match.platform, match.label

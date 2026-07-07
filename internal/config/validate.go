@@ -5,7 +5,6 @@ import (
 	"maps"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 
 	"sermo/internal/cfgval"
@@ -879,11 +878,11 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 
 	walkScalars(tree, func(path, key, value string) {
 		switch key {
-		case "port":
-			if n, err := strconv.Atoi(value); err != nil || n < 1 || n > 65535 {
-				add("%s = %q must resolve to a port in 1..65535", path, value)
+		case checks.CheckKeyPort:
+			if n, ok := cfgval.Int(value); !ok || !validTCPPort(n) {
+				add("%s = %q must resolve to a port in %s", path, value, cfgval.TCPPortRange())
 			}
-		case "expect_status":
+		case checks.CheckKeyExpectStatus:
 			if !validExpectStatus(value) {
 				add("%s = %q must resolve to a valid HTTP status, class (2xx) or list", path, value)
 			}

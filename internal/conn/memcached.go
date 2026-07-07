@@ -11,7 +11,7 @@ import (
 
 func init() {
 	// "memcache" is a common shorthand for the same daemon.
-	Register(memcachedProtocol{}, "memcache")
+	Register(memcachedProtocol{}, protocolAliasMemcache)
 }
 
 // memcachedProtocol probes a memcached server natively over its ASCII text
@@ -21,14 +21,14 @@ func init() {
 // an expect: rule can assert on them.
 type memcachedProtocol struct{}
 
-func (memcachedProtocol) Name() string       { return "memcached" }
-func (memcachedProtocol) DefaultPort() int   { return 11211 }
+func (memcachedProtocol) Name() string       { return ProtocolNameMemcached }
+func (memcachedProtocol) DefaultPort() int   { return defaultPortMemcached }
 func (memcachedProtocol) RequiresUser() bool { return false }
 
 // Probe connects (TCP, a Unix socket when cfg.Socket is set, TLS when
 // configured) and runs the stats handshake. The caller's context bounds it.
 func (memcachedProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, 11211)
+	c, err := dialDeadline(ctx, cfg, defaultPortMemcached)
 	if err != nil {
 		return Result{}, err
 	}

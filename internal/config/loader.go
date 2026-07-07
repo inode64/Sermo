@@ -14,6 +14,16 @@ import (
 // DefaultGlobalPath is the standard location of the global configuration.
 const DefaultGlobalPath = "/etc/sermo/sermo.yml"
 
+const (
+	defaultCatalogShareDir     = "/usr/share/sermo/catalog"
+	defaultCatalogAvailableDir = "/etc/sermo/catalog-available"
+)
+
+const (
+	yamlFileExt     = ".yml"
+	yamlLongFileExt = ".yaml"
+)
+
 var defaultServiceDirs = []string{pathKeyServices}
 var defaultAppDirs = []string{pathKeyApps}
 var defaultStorageDirs = []string{pathKeyStorages}
@@ -80,7 +90,7 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 
 	catalogPaths := global.CatalogPaths
 	if len(catalogPaths) == 0 {
-		catalogPaths = pathSpecsFromPaths([]string{"/usr/share/sermo/catalog", "/etc/sermo/catalog-available"})
+		catalogPaths = pathSpecsFromPaths([]string{defaultCatalogShareDir, defaultCatalogAvailableDir})
 	}
 	_, servicePathsOverridden := o.pathDirs[pathKeyServices]
 	servicePaths := global.ServicePaths
@@ -470,11 +480,11 @@ func (c *Config) loadWatchDir(dir string, recursive bool) error {
 }
 
 func (c *Config) loadServiceDirEntries(dir string, recursive bool) error {
-	return c.loadKindDirEntries(dir, "service", kindService, recursive)
+	return c.loadKindDirEntries(dir, kindService, kindService, recursive)
 }
 
 func (c *Config) loadAppDirEntries(dir string, recursive bool) error {
-	return c.loadKindDirEntries(dir, "app", kindApp, recursive)
+	return c.loadKindDirEntries(dir, kindApp, kindApp, recursive)
 }
 
 func (c *Config) loadNotifierDirEntries(dir string, recursive bool) error {
@@ -535,7 +545,7 @@ func (c *Config) loadWatchDirEntries(dir string, recursive bool) error {
 }
 
 func (c *Config) loadStorageDirEntries(dir string, recursive bool) error {
-	return c.loadKindDirEntries(dir, "storage", kindStorage, recursive)
+	return c.loadKindDirEntries(dir, kindStorage, kindStorage, recursive)
 }
 
 func (c *Config) loadKindDirEntries(dir, label, kind string, recursive bool) error {
@@ -816,5 +826,5 @@ func CategoryLabel(body map[string]any, fallback string) string {
 
 func isYAML(name string) bool {
 	ext := filepath.Ext(name)
-	return ext == ".yml" || ext == ".yaml"
+	return ext == yamlFileExt || ext == yamlLongFileExt
 }

@@ -10,8 +10,8 @@ import (
 )
 
 // OomSamplerFunc reads the cumulative count of kernel OOM kills, reporting ok =
-// false when the counter is unavailable (kernels before the /proc/vmstat
-// oom_kill field). Injected for tests; the default reads /proc/vmstat.
+// false when the counter is unavailable (kernels before the oom_kill vmstat
+// field). Injected for tests; the default reads the kernel vmstat file.
 type OomSamplerFunc func() (uint64, bool)
 
 // oomCheck fires when the kernel OOM killer has reaped processes since the last
@@ -53,12 +53,12 @@ func (c *oomCheck) Run(_ context.Context) Result {
 }
 
 // SampleOom returns the cumulative kernel OOM-kill counter using the default
-// /proc/vmstat reader. ok is false when the counter is unavailable.
+// vmstat reader. ok is false when the counter is unavailable.
 func SampleOom() (count uint64, ok bool) { return defaultOomSampler() }
 
-// defaultOomSampler reads the cumulative oom_kill counter from /proc/vmstat.
+// defaultOomSampler reads the cumulative oom_kill counter from vmstat.
 func defaultOomSampler() (uint64, bool) {
-	data, err := os.ReadFile("/proc/vmstat")
+	data, err := os.ReadFile(procVMStatPath)
 	if err != nil {
 		return 0, false
 	}

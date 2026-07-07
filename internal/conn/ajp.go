@@ -13,8 +13,9 @@ func init() { Register(ajpProtocol{}) }
 
 // AJP13 ping/pong prefix codes.
 const (
-	ajpCPing = 0x0A // web server -> container: are you alive?
-	ajpCPong = 0x09 // container -> web server: yes
+	ajpCPing      = 0x0A // web server -> container: are you alive?
+	ajpCPong      = 0x09 // container -> web server: yes
+	ajpReplyCPong = "cpong"
 )
 
 // ajpProtocol probes an Apache JServ Protocol (AJP13) connector — Tomcat's AJP
@@ -23,8 +24,8 @@ const (
 // a trusted-network protocol).
 type ajpProtocol struct{}
 
-func (ajpProtocol) Name() string       { return "ajp" }
-func (ajpProtocol) DefaultPort() int   { return 8009 }
+func (ajpProtocol) Name() string       { return ProtocolNameAJP }
+func (ajpProtocol) DefaultPort() int   { return defaultPortAJP }
 func (ajpProtocol) RequiresUser() bool { return false }
 
 func (ajpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -34,7 +35,7 @@ func (ajpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 8009
+		port = defaultPortAJP
 	}
 	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
@@ -70,7 +71,7 @@ func (ajpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if !ajpIsCPong(prefix) {
 		return Result{}, fmt.Errorf("unexpected AJP reply prefix %#x (want CPong)", prefix)
 	}
-	return Result{Extra: map[string]string{extraReply: "cpong"}}, nil
+	return Result{Extra: map[string]string{extraReply: ajpReplyCPong}}, nil
 }
 
 // buildAJPCPing builds an AJP13 CPing packet (web-server-to-container magic

@@ -10,7 +10,7 @@ import (
 	"strconv"
 )
 
-func init() { Register(influxdbProtocol{}, "influx") }
+func init() { Register(influxdbProtocol{}, protocolAliasInflux) }
 
 // influxdbProtocol probes an InfluxDB server via its HTTP API. It GETs /health
 // (InfluxDB 2.x and 1.8+) and verifies a JSON `status` of "pass" — reporting the
@@ -20,8 +20,8 @@ func init() { Register(influxdbProtocol{}, "influx") }
 // are unauthenticated.
 type influxdbProtocol struct{}
 
-func (influxdbProtocol) Name() string       { return "influxdb" }
-func (influxdbProtocol) DefaultPort() int   { return 8086 }
+func (influxdbProtocol) Name() string       { return ProtocolNameInfluxDB }
+func (influxdbProtocol) DefaultPort() int   { return defaultPortInfluxDB }
 func (influxdbProtocol) RequiresUser() bool { return false }
 
 func (influxdbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -45,7 +45,7 @@ func InfluxClient(cfg Config) (*http.Client, string) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 8086
+		port = defaultPortInfluxDB
 	}
 	scheme := schemeHTTP
 	client := httpProbeClient(cfg.Interface, nil)
@@ -74,7 +74,7 @@ func influxHealth(ctx context.Context, client *http.Client, base string) (res Re
 		return Result{}, true, err // server unreachable — conclusive
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPProbeBody))
 
 	var h struct {
 		Name    string `json:"name"`
@@ -85,9 +85,9 @@ func influxHealth(ctx context.Context, client *http.Client, base string) (res Re
 	if json.Unmarshal(body, &h) != nil || h.Status == "" {
 		return Result{}, false, nil // not the InfluxDB health JSON — fall back to /ping
 	}
-	extra := map[string]string{"status": h.Status}
+	extra := map[string]string{ExtraKeyStatus: h.Status}
 	if h.Version != "" {
-		extra["version_string"] = h.Version
+		extra[ExtraKeyVersionString] = h.Version
 	}
 	if h.Status != "pass" {
 		return Result{}, true, fmt.Errorf("influxdb health status %q: %s", h.Status, h.Message)
@@ -107,14 +107,14 @@ func influxPing(ctx context.Context, client *http.Client, base string) (Result, 
 		return Result{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxHTTPProbeShortBody))
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
 		return Result{}, fmt.Errorf("influxdb: /ping HTTP status %d", resp.StatusCode)
 	}
 	version := resp.Header.Get("X-Influxdb-Version")
 	extra := map[string]string{}
 	if version != "" {
-		extra["version_string"] = version
+		extra[ExtraKeyVersionString] = version
 	}
 	return Result{Version: version, Extra: extra}, nil
 }

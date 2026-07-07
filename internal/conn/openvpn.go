@@ -12,13 +12,14 @@ import (
 	"strconv"
 )
 
-func init() { Register(openvpnProtocol{}, "ovpn") }
+func init() { Register(openvpnProtocol{}, protocolAliasOpenVPN) }
 
 // OpenVPN control-channel opcodes (src/openvpn/ssl_pkt.h). The first byte packs
 // the opcode in the high 5 bits and the key id in the low 3 (opcode = b>>3).
 const (
 	openvpnHardResetClientV2 = 7 // P_CONTROL_HARD_RESET_CLIENT_V2
 	openvpnHardResetServerV2 = 8 // P_CONTROL_HARD_RESET_SERVER_V2
+	openvpnReplyHardReset    = "hard_reset_server"
 )
 
 // openvpnProtocol probes an OpenVPN server natively over its control channel.
@@ -37,8 +38,8 @@ const (
 // not prove it is down.
 type openvpnProtocol struct{}
 
-func (openvpnProtocol) Name() string       { return "openvpn" }
-func (openvpnProtocol) DefaultPort() int   { return 1194 }
+func (openvpnProtocol) Name() string       { return ProtocolNameOpenVPN }
+func (openvpnProtocol) DefaultPort() int   { return defaultPortOpenVPN }
 func (openvpnProtocol) RequiresUser() bool { return false }
 
 func (openvpnProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -48,7 +49,7 @@ func (openvpnProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 1194
+		port = defaultPortOpenVPN
 	}
 	transport := networkUDP
 	if cfg.Params[ParamKeyTransport] == networkTCP {
@@ -70,7 +71,7 @@ func (openvpnProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err := parseOpenVPNReset(reply, sid); err != nil {
 		return Result{}, err
 	}
-	return Result{Extra: map[string]string{extraTransport: transport, extraReply: "hard_reset_server"}}, nil
+	return Result{Extra: map[string]string{extraTransport: transport, extraReply: openvpnReplyHardReset}}, nil
 }
 
 // openvpnSessionID returns a random 8-byte OpenVPN session id.

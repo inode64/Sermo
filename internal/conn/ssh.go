@@ -25,8 +25,8 @@ func init() { Register(sshProtocol{}) }
 // used.
 type sshProtocol struct{}
 
-func (sshProtocol) Name() string       { return "ssh" }
-func (sshProtocol) DefaultPort() int   { return 22 }
+func (sshProtocol) Name() string       { return ProtocolNameSSH }
+func (sshProtocol) DefaultPort() int   { return defaultPortSSH }
 func (sshProtocol) RequiresUser() bool { return false }
 
 func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -36,7 +36,7 @@ func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 22
+		port = defaultPortSSH
 	}
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 

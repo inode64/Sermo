@@ -24,8 +24,8 @@ const dbusDefaultAddress = "unix:path=/run/dbus/system_bus_socket"
 // access is governed by the socket's permissions.
 type dbusProtocol struct{}
 
-func (dbusProtocol) Name() string       { return "dbus" }
-func (dbusProtocol) DefaultPort() int   { return 0 }
+func (dbusProtocol) Name() string       { return ProtocolNameDBus }
+func (dbusProtocol) DefaultPort() int   { return defaultPortNone }
 func (dbusProtocol) RequiresUser() bool { return false }
 
 func (dbusProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -69,12 +69,12 @@ func dbusProbe(ctx context.Context, addr string) (Result, error) {
 	if err := conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetId", 0).Store(&busID); err != nil {
 		return Result{}, err
 	}
-	extra := map[string]string{"address": addr}
+	extra := map[string]string{extraAddress: addr}
 	if busID != "" {
-		extra["bus_id"] = busID
+		extra[extraBusID] = busID
 	}
 	if names := conn.Names(); len(names) > 0 {
-		extra["unique_name"] = names[0]
+		extra[extraUniqueName] = names[0]
 	}
 	return Result{Extra: extra}, nil
 }

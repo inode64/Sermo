@@ -8,7 +8,7 @@ import (
 	"strconv"
 )
 
-func init() { Register(cephProtocol{}, "ceph-mon") }
+func init() { Register(cephProtocol{}, protocolAliasCephMon) }
 
 // cephProtocol probes a Ceph monitor over the Ceph messenger protocol. On
 // connect a Ceph daemon (mon/osd/mgr) sends a banner: "ceph v2\n" for messenger
@@ -17,8 +17,8 @@ func init() { Register(cephProtocol{}, "ceph-mon") }
 // messenger version. No auth (the banner precedes the authenticated handshake).
 type cephProtocol struct{}
 
-func (cephProtocol) Name() string       { return "ceph" }
-func (cephProtocol) DefaultPort() int   { return 3300 }
+func (cephProtocol) Name() string       { return ProtocolNameCeph }
+func (cephProtocol) DefaultPort() int   { return defaultPortCeph }
 func (cephProtocol) RequiresUser() bool { return false }
 
 func (cephProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -28,7 +28,7 @@ func (cephProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 3300
+		port = defaultPortCeph
 	}
 	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
@@ -45,7 +45,7 @@ func (cephProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if !ok {
 		return Result{}, fmt.Errorf("not a Ceph messenger banner: %q", buf)
 	}
-	return Result{Extra: map[string]string{"messenger": messenger}}, nil
+	return Result{Extra: map[string]string{extraMessenger: messenger}}, nil
 }
 
 // parseCephBanner identifies the Ceph messenger version from the connect banner:

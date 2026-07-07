@@ -16,6 +16,7 @@ import (
 	"github.com/digitalocean/go-libvirt/socket/dialers"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/conn"
 	"sermo/internal/servicemgr"
 )
 
@@ -23,11 +24,11 @@ const (
 	// DefaultURI is the libvirt connect URI used for local QEMU/KVM domains.
 	DefaultURI = string(libvirt.QEMUSystem)
 	// DefaultSocket is libvirt's traditional local control socket.
-	DefaultSocket = "/run/libvirt/libvirt-sock"
+	DefaultSocket = conn.DefaultLibvirtSocket
 	// DefaultQEMUSocket is the modular libvirt QEMU daemon's local socket.
 	DefaultQEMUSocket = "/run/libvirt/virtqemud-sock"
 	// DefaultPort is libvirt's plaintext TCP port.
-	DefaultPort = 16509
+	DefaultPort = conn.DefaultPortLibvirt
 )
 
 // ControlType is the service control.type value for libvirt-backed services.
@@ -391,7 +392,7 @@ func ValidHostPort(host string, port int) bool {
 		return true
 	}
 	_, _, err := net.SplitHostPort(net.JoinHostPort(host, strconv.Itoa(port)))
-	return err == nil && port > 0 && port <= 65535
+	return err == nil && cfgval.ValidTCPPort(port)
 }
 
 // LocalSocketCandidates returns local libvirt sockets in preferred order.

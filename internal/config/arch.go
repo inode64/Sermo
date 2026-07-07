@@ -12,6 +12,16 @@ import (
 // arch-specific binary or library, e.g. binary: /usr/bin/qemu-system-${arch}.
 const archMarker = "${arch}"
 
+const (
+	goarch386   = "386"
+	goarchAMD64 = "amd64"
+	goarchARM64 = "arm64"
+
+	unameI686    = "i686"
+	unameX8664   = "x86_64"
+	unameAArch64 = "aarch64"
+)
+
 // detectedArch holds the machine architecture used for ${arch}. It is resolved
 // once at package load; tests may override it before calling Load.
 var detectedArch = detectArch()
@@ -34,12 +44,12 @@ func detectArch() string {
 // fallback when uname is unavailable.
 func goarchToUname(goarch string) string {
 	switch goarch {
-	case "amd64":
-		return "x86_64"
-	case "arm64":
-		return "aarch64"
-	case "386":
-		return "i686"
+	case goarchAMD64:
+		return unameX8664
+	case goarchARM64:
+		return unameAArch64
+	case goarch386:
+		return unameI686
 	default:
 		return goarch
 	}

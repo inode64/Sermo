@@ -26,8 +26,8 @@ func init() { Register(dnsProtocol{}) }
 // standard library resolver builds on) rather than a hand-rolled wire codec.
 type dnsProtocol struct{}
 
-func (dnsProtocol) Name() string       { return "dns" }
-func (dnsProtocol) DefaultPort() int   { return 53 }
+func (dnsProtocol) Name() string       { return ProtocolNameDNS }
+func (dnsProtocol) DefaultPort() int   { return dnsDefaultPort }
 func (dnsProtocol) RequiresUser() bool { return false }
 
 // resolvConfPath is the resolver configuration consulted by `resolvconf:
@@ -38,12 +38,27 @@ var resolvConfPath = "/etc/resolv.conf"
 // interface addresses to avoid binding local-resolver probes to an egress NIC.
 var dnsInterfaceAddrs = net.InterfaceAddrs
 
-const dnsLocalRouteTimeout = 100 * time.Millisecond
+const (
+	dnsFallbackID        = 0x1234
+	dnsDefaultPort       = 53
+	dnsDefaultQuery      = "localhost"
+	dnsLocalRouteTimeout = 100 * time.Millisecond
+)
+
+const (
+	dnsQTypeA        = 1
+	dnsRCodeNoError  = 0
+	dnsRCodeFormErr  = 1
+	dnsRCodeServFail = 2
+	dnsRCodeNXDomain = 3
+	dnsRCodeNotImp   = 4
+	dnsRCodeRefused  = 5
+)
 
 var dnsRouteAddrs = func(host string) (net.Addr, net.Addr, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), dnsLocalRouteTimeout)
 	defer cancel()
-	c, err := (&net.Dialer{}).DialContext(ctx, networkUDP, net.JoinHostPort(host, "53"))
+	c, err := (&net.Dialer{}).DialContext(ctx, networkUDP, net.JoinHostPort(host, strconv.Itoa(dnsDefaultPort)))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -53,7 +68,7 @@ var dnsRouteAddrs = func(host string) (net.Addr, net.Addr, error) {
 
 func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	host := cfg.Host
-	if cfg.Params[ParamKeyResolvconf] == "true" {
+	if cfg.Params[ParamKeyResolvconf] == ParamValueTrue {
 		ns, err := firstNameserver(resolvConfPath)
 		if err != nil {
 			return Result{}, err
@@ -65,15 +80,15 @@ func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 53
+		port = dnsDefaultPort
 	}
 	name := cfg.Query
 	if name == "" {
-		name = "localhost"
+		name = dnsDefaultQuery
 	}
 
 	id := dnsID()
-	query, err := buildDNSQuery(id, name, 1) // QTYPE A
+	query, err := buildDNSQuery(id, name, dnsQTypeA)
 	if err != nil {
 		return Result{}, err
 	}
@@ -104,10 +119,10 @@ func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, fmt.Errorf("DNS query for %q returned %s", name, rcodeName(rcode))
 	}
 	return Result{Extra: map[string]string{
-		"query":     name,
-		"rcode":     rcodeName(rcode),
-		"answers":   strconv.Itoa(answers),
-		"addresses": strings.Join(addrs, ","),
+		ExtraKeyDNSQuery:     name,
+		ExtraKeyDNSRCode:     rcodeName(rcode),
+		ExtraKeyDNSAnswers:   strconv.Itoa(answers),
+		ExtraKeyDNSAddresses: strings.Join(addrs, ","),
 	}}, nil
 }
 
@@ -177,21 +192,23 @@ func dnsNameserverRoutesToSelf(ip net.IP) bool {
 
 // dnsResponseOK reports whether an rcode means the server answered healthily: a
 // successful lookup (NOERROR) or an authoritative "no such name" (NXDOMAIN).
-func dnsResponseOK(rcode int) bool { return rcode == 0 || rcode == 3 }
+func dnsResponseOK(rcode int) bool {
+	return rcode == dnsRCodeNoError || rcode == dnsRCodeNXDomain
+}
 
 func rcodeName(rcode int) string {
 	switch rcode {
-	case 0:
-		return "NOERROR"
-	case 1:
+	case dnsRCodeNoError:
+		return DNSRCodeNoErrorName
+	case dnsRCodeFormErr:
 		return "FORMERR"
-	case 2:
+	case dnsRCodeServFail:
 		return "SERVFAIL"
-	case 3:
+	case dnsRCodeNXDomain:
 		return "NXDOMAIN"
-	case 4:
+	case dnsRCodeNotImp:
 		return "NOTIMP"
-	case 5:
+	case dnsRCodeRefused:
 		return "REFUSED"
 	default:
 		return "RCODE" + strconv.Itoa(rcode)
@@ -201,7 +218,7 @@ func rcodeName(rcode int) string {
 func dnsID() uint16 {
 	var b [2]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return 0x1234
+		return dnsFallbackID
 	}
 	return binary.BigEndian.Uint16(b[:])
 }

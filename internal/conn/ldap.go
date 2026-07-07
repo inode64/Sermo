@@ -14,8 +14,11 @@ import (
 func init() { Register(ldapProtocol{}) }
 
 const (
-	defaultLDAPPort         = 389
+	defaultLDAPPort         = defaultPortLDAP
 	defaultLDAPProbeTimeout = 5 * time.Second
+	ldapBindAnonymous       = "anonymous"
+	ldapBindSimple          = "simple"
+	ldapResultSuccess       = "success"
 )
 
 // ldapProtocol probes an LDAP directory using go-ldap. With no user it performs
@@ -23,7 +26,7 @@ const (
 // the bind DN). TLS is implicit (LDAPS) when enabled — use port 636.
 type ldapProtocol struct{}
 
-func (ldapProtocol) Name() string       { return "ldap" }
+func (ldapProtocol) Name() string       { return ProtocolNameLDAP }
 func (ldapProtocol) DefaultPort() int   { return defaultLDAPPort }
 func (ldapProtocol) RequiresUser() bool { return false }
 
@@ -61,10 +64,10 @@ func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	l.SetTimeout(timeout)
 
 	requireAuth := cfg.User != ""
-	mode := "anonymous"
+	mode := ldapBindAnonymous
 	var bindErr error
 	if requireAuth {
-		mode = "simple"
+		mode = ldapBindSimple
 		bindErr = l.Bind(cfg.User, cfg.Password)
 	} else {
 		_, bindErr = l.SimpleBind(&ldap.SimpleBindRequest{AllowEmptyPassword: true})
@@ -82,11 +85,11 @@ func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, fmt.Errorf("ldap bind: %w", bindErr)
 	}
 
-	extra := map[string]string{"bind": mode}
+	extra := map[string]string{extraBind: mode}
 	if bindOK {
-		extra["result"] = "success"
+		extra[extraResult] = ldapResultSuccess
 	} else {
-		extra["result"] = bindErr.Error() // anonymous: server up but bind rejected
+		extra[extraResult] = bindErr.Error() // anonymous: server up but bind rejected
 	}
 	return Result{Extra: extra}, nil
 }

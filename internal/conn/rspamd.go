@@ -19,8 +19,8 @@ func init() { Register(rspamdProtocol{}) }
 // rspamd version is read from the "Server: Rspamd/<version>" response header.
 type rspamdProtocol struct{}
 
-func (rspamdProtocol) Name() string       { return "rspamd" }
-func (rspamdProtocol) DefaultPort() int   { return 11334 }
+func (rspamdProtocol) Name() string       { return ProtocolNameRspamd }
+func (rspamdProtocol) DefaultPort() int   { return defaultPortRspamd }
 func (rspamdProtocol) RequiresUser() bool { return false }
 
 func (rspamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -30,7 +30,7 @@ func (rspamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 11334
+		port = defaultPortRspamd
 	}
 	scheme := schemeHTTP
 	client := httpProbeClient(cfg.Interface, nil)
@@ -57,7 +57,7 @@ func (rspamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if resp.StatusCode != http.StatusOK {
 		return Result{}, fmt.Errorf("rspamd: HTTP status %d", resp.StatusCode)
 	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPProbeShortBody))
 	if !strings.EqualFold(strings.TrimSpace(string(body)), respPong) {
 		return Result{}, fmt.Errorf("rspamd: /ping returned %q, want pong", strings.TrimSpace(string(body)))
 	}
@@ -65,7 +65,7 @@ func (rspamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	server := resp.Header.Get("Server")
 	extra := map[string]string{extraPing: respPong}
 	if server != "" {
-		extra["server"] = server
+		extra[ExtraKeyServer] = server
 	}
 	return Result{Version: rspamdVersion(server), Extra: extra}, nil
 }

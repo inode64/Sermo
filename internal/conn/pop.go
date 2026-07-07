@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func init() { Register(popProtocol{}, "pop3") }
+func init() { Register(popProtocol{}, protocolAliasPOP3) }
 
 // popProtocol probes a POP3 server natively (RFC 1939). With no user it is an
 // anonymous connectivity check (verify the server greets +OK). With a
@@ -17,12 +17,12 @@ func init() { Register(popProtocol{}, "pop3") }
 // when enabled — use port 995.
 type popProtocol struct{}
 
-func (popProtocol) Name() string       { return "pop" }
-func (popProtocol) DefaultPort() int   { return 110 }
+func (popProtocol) Name() string       { return ProtocolNamePOP }
+func (popProtocol) DefaultPort() int   { return defaultPortPOP }
 func (popProtocol) RequiresUser() bool { return false }
 
 func (popProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	return probeBanner(ctx, cfg, 110, popHandshake)
+	return probeBanner(ctx, cfg, defaultPortPOP, popHandshake)
 }
 
 // popHandshake reads the +OK greeting, authenticates with USER/PASS when a user

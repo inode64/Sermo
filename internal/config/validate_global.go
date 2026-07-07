@@ -14,13 +14,13 @@ import (
 // validateWatches checks each host-watch entry: a known check type with valid
 // thresholds and a local action or inherited global notify default.
 // validateWeb checks the global `web` block. The UI is enabled only when `port`
-// is set to an integer in 1..65535; a `web` block without `port` (or with port
-// omitted) is valid and leaves the dashboard disabled, matching sermod.
+// is set to a valid TCP port; a `web` block without `port` (or with port omitted)
+// is valid and leaves the dashboard disabled, matching sermod.
 func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 	if portRaw, present := webCfg[WebKeyPort]; present {
 		port, ok := cfgval.Int(portRaw)
-		if !ok || port < 1 || port > 65535 {
-			add("web.port must be an integer in 1..65535")
+		if !ok || !validTCPPort(port) {
+			add("web.port must be an integer in %s", cfgval.TCPPortRange())
 		}
 	}
 	if v, present := webCfg[WebKeyAddress]; present {

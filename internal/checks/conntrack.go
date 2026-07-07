@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+const (
+	procConntrackCountPath = "/proc/sys/net/netfilter/nf_conntrack_count"
+	procConntrackMaxPath   = "/proc/sys/net/netfilter/nf_conntrack_max"
+)
+
 // ConntrackSample is one observation of the netfilter connection-tracking table:
 // the entries currently tracked and the table maximum (nf_conntrack_max).
 type ConntrackSample struct {
@@ -51,11 +56,11 @@ func SampleConntrack() (ConntrackSample, error) { return defaultConntrackSampler
 // defaultConntrackSampler reads the conntrack count and max from
 // /proc/sys/net/netfilter (present when the nf_conntrack module is loaded).
 func defaultConntrackSampler() (ConntrackSample, error) {
-	count, err := readProcUint("/proc/sys/net/netfilter/nf_conntrack_count")
+	count, err := readProcUint(procConntrackCountPath)
 	if err != nil {
 		return ConntrackSample{}, err
 	}
-	maxConn, err := readProcUint("/proc/sys/net/netfilter/nf_conntrack_max")
+	maxConn, err := readProcUint(procConntrackMaxPath)
 	if err != nil {
 		return ConntrackSample{}, err
 	}

@@ -3,8 +3,10 @@ package assist
 import (
 	"fmt"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/conn"
 	"sermo/internal/rules"
 )
 
@@ -16,7 +18,7 @@ import (
 type uplinkAssistant struct{}
 
 // Name implements Assistant.
-func (uplinkAssistant) Name() string { return "uplink" }
+func (uplinkAssistant) Name() string { return AssistantNameUplink }
 
 // Title implements Assistant.
 func (uplinkAssistant) Title() string {
@@ -112,12 +114,12 @@ func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {
 		},
 		"uplink-" + iface + "-dns": debounce(map[string]any{
 			config.WatchKeyCheck: map[string]any{
-				checks.CheckKeyType:       "dns",
+				checks.CheckKeyType:       conn.ProtocolNameDNS,
 				checks.CheckKeyResolvconf: true,
 				checks.CheckKeyQuery:      s.probeName,
 				checks.CheckKeyExpect: map[string]any{
-					"rcode":   "NOERROR",
-					"answers": map[string]any{checks.CheckKeyOp: ">", checks.CheckKeyValue: 0},
+					conn.ExtraKeyDNSRCode:   conn.DNSRCodeNoErrorName,
+					conn.ExtraKeyDNSAnswers: map[string]any{checks.CheckKeyOp: cfgval.CompareOpGreater, checks.CheckKeyValue: 0},
 				},
 				checks.CheckKeyTimeout: "5s",
 			},

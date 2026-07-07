@@ -16,12 +16,12 @@ func init() { Register(imapProtocol{}) }
 // (IMAPS) when enabled — use port 993.
 type imapProtocol struct{}
 
-func (imapProtocol) Name() string       { return "imap" }
-func (imapProtocol) DefaultPort() int   { return 143 }
+func (imapProtocol) Name() string       { return ProtocolNameIMAP }
+func (imapProtocol) DefaultPort() int   { return defaultPortIMAP }
 func (imapProtocol) RequiresUser() bool { return false }
 
 func (imapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	return probeBanner(ctx, cfg, 143, imapHandshake)
+	return probeBanner(ctx, cfg, defaultPortIMAP, imapHandshake)
 }
 
 // imapHandshake reads the server greeting (which must be OK or PREAUTH), performs

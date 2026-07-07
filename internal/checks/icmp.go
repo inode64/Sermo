@@ -17,6 +17,9 @@ const (
 	defaultPingCount            = 3
 	defaultPingTimeout          = 5 * time.Second
 	defaultPingPerPacketTimeout = time.Second
+	icmpListenAnyIPv4           = "0.0.0.0"
+	networkIP4                  = "ip4"
+	networkIP4ICMP              = "ip4:icmp"
 )
 
 // PingSample is one ICMP observation of a host.
@@ -198,11 +201,11 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 	if timeout <= 0 {
 		timeout = defaultPingTimeout
 	}
-	addr, err := net.ResolveIPAddr("ip4", host)
+	addr, err := net.ResolveIPAddr(networkIP4, host)
 	if err != nil {
 		return PingSample{}, err
 	}
-	listen := "0.0.0.0"
+	listen := icmpListenAnyIPv4
 	if iface != "" {
 		ip, err := conn.ResolveInterfaceIPv4(iface)
 		if err != nil {
@@ -210,7 +213,7 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 		}
 		listen = ip
 	}
-	conn, err := icmp.ListenPacket("ip4:icmp", listen)
+	conn, err := icmp.ListenPacket(networkIP4ICMP, listen)
 	if err != nil {
 		return PingSample{}, err
 	}

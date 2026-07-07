@@ -17,5 +17,5 @@ func detectHost() string {
 	if h, err := os.Hostname(); err == nil && h != "" {
 		return h
 	}
-	return "localhost"
+	return defaultLocalHostname
 }

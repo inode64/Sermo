@@ -11,9 +11,13 @@ import (
 	"github.com/digitalocean/go-libvirt/socket/dialers"
 )
 
-func init() { Register(libvirtProtocol{}, "libvirtd") }
+func init() { Register(libvirtProtocol{}, protocolAliasLibvirtd) }
+
+// DefaultLibvirtSocket is libvirt's local daemon socket.
+const DefaultLibvirtSocket = "/run/libvirt/libvirt-sock"
 
 const defaultLibvirtTimeout = 10 * time.Second
+const libvirtTransportSocket = "socket"
 
 // libvirtProtocol probes a libvirt daemon (libvirtd) natively over its RPC
 // protocol using the pure-Go github.com/digitalocean/go-libvirt client. It opens
@@ -34,8 +38,8 @@ const defaultLibvirtTimeout = 10 * time.Second
 // user/password is required here.
 type libvirtProtocol struct{}
 
-func (libvirtProtocol) Name() string       { return "libvirt" }
-func (libvirtProtocol) DefaultPort() int   { return 16509 }
+func (libvirtProtocol) Name() string       { return ProtocolNameLibvirt }
+func (libvirtProtocol) DefaultPort() int   { return defaultPortLibvirt }
 func (libvirtProtocol) RequiresUser() bool { return false }
 
 func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -44,7 +48,7 @@ func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 	var l *libvirt.Libvirt
 	switch mode {
-	case "socket":
+	case libvirtTransportSocket:
 		l = libvirt.NewWithDialer(dialers.NewLocal(
 			dialers.WithSocket(addr),
 			dialers.WithLocalTimeout(timeout),
@@ -104,23 +108,23 @@ func libvirtProbe(l *libvirt.Libvirt, uri, mode, domain string) (Result, error) 
 		return Result{}, err
 	}
 	version := formatLibvirtVersion(ver)
-	extra := map[string]string{"uri": uri, "lib_version": version, extraTransport: mode}
+	extra := map[string]string{extraURI: uri, extraLibVersion: version, extraTransport: mode}
 	if hostname, err := l.ConnectGetHostname(); err == nil && hostname != "" {
-		extra["hostname"] = hostname
+		extra[ExtraKeyHostname] = hostname
 	}
 
 	// Domain counts and node capacity are best-effort: the connect + version above
 	// already proved liveness, so a driver that rejects these still reports up.
 	if active, err := l.ConnectNumOfDomains(); err == nil {
-		extra["domains.active"] = strconv.Itoa(int(active))
+		extra[ExtraKeyDomainActive] = strconv.Itoa(int(active))
 		if inactive, err := l.ConnectNumOfDefinedDomains(); err == nil {
-			extra["domains.inactive"] = strconv.Itoa(int(inactive))
-			extra["domains"] = strconv.Itoa(int(active) + int(inactive))
+			extra[ExtraKeyDomainInactive] = strconv.Itoa(int(inactive))
+			extra[ExtraKeyDomainCount] = strconv.Itoa(int(active) + int(inactive))
 		}
 	}
 	if _, mem, cpus, _, _, _, _, _, err := l.NodeGetInfo(); err == nil {
-		extra["node.cpus"] = strconv.Itoa(int(cpus))
-		extra["node.memory_mb"] = strconv.FormatUint(mem/1024, 10) // NodeGetInfo memory is KiB
+		extra[ExtraKeyNodeCPUs] = strconv.Itoa(int(cpus))
+		extra[ExtraKeyNodeMemoryMB] = strconv.FormatUint(mem/1024, 10) // NodeGetInfo memory is KiB
 	}
 
 	// Optional single-domain state — fails the check when the VM is unknown.
@@ -134,9 +138,9 @@ func libvirtProbe(l *libvirt.Libvirt, uri, mode, domain string) (Result, error) 
 			return Result{}, fmt.Errorf("domain %q state: %w", domain, err)
 		}
 		s := libvirtDomainState(state)
-		extra["domain"] = domain
-		extra["domain.state"] = s
-		extra["domain.running"] = strconv.FormatBool(libvirt.DomainState(state) == libvirt.DomainRunning)
+		extra[ExtraKeyDomain] = domain
+		extra[ExtraKeyDomainState] = s
+		extra[ExtraKeyDomainRunning] = strconv.FormatBool(libvirt.DomainState(state) == libvirt.DomainRunning)
 		extra[ExtraKeyFingerprint] = s // on_change tracks the VM's state
 	}
 
@@ -147,21 +151,21 @@ func libvirtProbe(l *libvirt.Libvirt, uri, mode, domain string) (Result, error) 
 func libvirtDomainState(s int32) string {
 	switch libvirt.DomainState(s) {
 	case libvirt.DomainRunning:
-		return "running"
+		return LibvirtDomainStateRunning
 	case libvirt.DomainBlocked:
-		return "blocked"
+		return LibvirtDomainStateBlocked
 	case libvirt.DomainPaused:
-		return "paused"
+		return LibvirtDomainStatePaused
 	case libvirt.DomainShutdown:
-		return "shutdown"
+		return LibvirtDomainStateShutdown
 	case libvirt.DomainShutoff:
-		return "shutoff"
+		return LibvirtDomainStateShutoff
 	case libvirt.DomainCrashed:
-		return "crashed"
+		return LibvirtDomainStateCrashed
 	case libvirt.DomainPmsuspended:
-		return "pmsuspended"
+		return LibvirtDomainStatePMSuspended
 	default:
-		return "nostate"
+		return LibvirtDomainStateNoState
 	}
 }
 
@@ -174,7 +178,7 @@ func libvirtTransport(cfg Config) (mode, addr, uri string) {
 		uri = string(libvirt.QEMUSystem)
 	}
 	if cfg.Socket != "" {
-		return "socket", cfg.Socket, uri
+		return libvirtTransportSocket, cfg.Socket, uri
 	}
 	host := cfg.Host
 	if host == "" {
@@ -182,7 +186,7 @@ func libvirtTransport(cfg Config) (mode, addr, uri string) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 16509
+		port = defaultPortLibvirt
 	}
 	return networkTCP, net.JoinHostPort(host, strconv.Itoa(port)), uri
 }

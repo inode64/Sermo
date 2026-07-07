@@ -27,5 +27,5 @@ func detectHostname() string {
 			return short
 		}
 	}
-	return "localhost"
+	return defaultLocalHostname
 }

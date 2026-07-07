@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/conn"
 	"sermo/internal/execx"
 )
@@ -169,7 +170,7 @@ func (c *portsCheck) probe(ctx context.Context, port int) bool {
 	dial := c.dialFunc
 	if dial == nil {
 		dial = func(ctx context.Context, iface, addr string) (net.Conn, error) {
-			return conn.BindDialer(iface).DialContext(ctx, "tcp", addr)
+			return conn.BindDialer(iface).DialContext(ctx, conn.TransportTCP, addr)
 		}
 	}
 	// With an interface set, a port is "open" if it connects on any (or, with
@@ -193,7 +194,7 @@ func portState(open bool) string {
 
 // ParsePortSpec parses a ports specification of comma-separated single ports and
 // inclusive ranges, e.g. "80,443,1024-4000". Ports are de-duplicated and sorted;
-// each must be 1..65535 and a range must be ascending.
+// each must be a valid TCP port and a range must be ascending.
 func ParsePortSpec(spec string) ([]int, error) {
 	seen := map[int]bool{}
 	for _, tok := range strings.Split(spec, ",") {
@@ -213,8 +214,8 @@ func ParsePortSpec(spec string) ([]int, error) {
 				return nil, fmt.Errorf("invalid port range %q", tok)
 			}
 		}
-		if start < 1 || end > 65535 || start > end {
-			return nil, fmt.Errorf("port range %q is out of 1..65535", tok)
+		if !cfgval.ValidTCPPort(start) || !cfgval.ValidTCPPort(end) || start > end {
+			return nil, fmt.Errorf("port range %q is out of %s", tok, cfgval.TCPPortRange())
 		}
 		for p := start; p <= end; p++ {
 			seen[p] = true

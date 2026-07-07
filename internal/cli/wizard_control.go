@@ -37,7 +37,7 @@ func listWizardDockerContainers(ctx context.Context, timeout time.Duration) ([]a
 			continue
 		}
 		out = append(out, assist.DockerCandidate{
-			Name:      wizardManagedServiceName("docker", name),
+			Name:      wizardManagedServiceName(dockerctl.ControlType, name),
 			Title:     name,
 			Container: name,
 			Status:    container.State,
@@ -83,7 +83,7 @@ func listWizardVMs(ctx context.Context, timeout time.Duration) ([]assist.VMCandi
 			continue
 		}
 		out = append(out, assist.VMCandidate{
-			Name:   wizardManagedServiceName("vm", name),
+			Name:   wizardManagedServiceName(serviceFamilyVM, name),
 			Title:  name,
 			Domain: name,
 			Status: string(domain.Status),

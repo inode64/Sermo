@@ -11,7 +11,7 @@ import (
 	"strconv"
 )
 
-func init() { Register(dhcpProtocol{}, "dhcpd") }
+func init() { Register(dhcpProtocol{}, protocolAliasDHCPD) }
 
 // DHCP message format and option codes (RFC 2131 / RFC 2132).
 const (
@@ -22,6 +22,9 @@ const (
 	dhcpFlagBroadcast = 0x8000
 	dhcpServerPort    = 67
 	dhcpClientPort    = 68
+
+	dhcpMACLocalAdminBit = 0x02
+	dhcpMACMulticastBit  = 0x01
 
 	// DHCP message types (option 53).
 	dhcpDiscover = 1
@@ -35,6 +38,10 @@ const (
 	dhcpOptServerID     = 54
 	dhcpOptParamReqList = 55
 	dhcpOptEnd          = 255
+
+	dhcpModeBroadcast = "broadcast"
+	dhcpModeUnicast   = "unicast"
+	dhcpMessageOffer  = "offer"
 )
 
 // dhcpMagicCookie precedes the options field in a DHCP message (RFC 2131 §3).
@@ -56,7 +63,7 @@ var dhcpMagicCookie = []byte{99, 130, 83, 99}
 // server that only answers reserved clients).
 type dhcpProtocol struct{}
 
-func (dhcpProtocol) Name() string       { return "dhcp" }
+func (dhcpProtocol) Name() string       { return ProtocolNameDHCP }
 func (dhcpProtocol) DefaultPort() int   { return dhcpServerPort }
 func (dhcpProtocol) RequiresUser() bool { return false }
 
@@ -93,23 +100,23 @@ func (dhcpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 
 	extra := map[string]string{
-		"dhcp_message": "offer",
-		"offered_ip":   info.offeredIP,
-		"client_mac":   mac.String(),
+		extraDHCPMessage: dhcpMessageOffer,
+		extraOfferedIP:   info.offeredIP,
+		extraClientMAC:   mac.String(),
 	}
 	if iface != "" {
-		extra["mode"], extra["interface"] = "broadcast", iface
+		extra[extraMode], extra[extraInterface] = dhcpModeBroadcast, iface
 	} else {
-		extra["mode"] = "unicast"
+		extra[extraMode] = dhcpModeUnicast
 	}
 	if info.serverID != "" {
-		extra["server_id"] = info.serverID
+		extra[extraServerID] = info.serverID
 	}
 	if info.subnetMask != "" {
-		extra["subnet_mask"] = info.subnetMask
+		extra[extraSubnetMask] = info.subnetMask
 	}
 	if info.leaseSeconds > 0 {
-		extra["lease_seconds"] = strconv.Itoa(info.leaseSeconds)
+		extra[extraLeaseSeconds] = strconv.Itoa(info.leaseSeconds)
 	}
 	return Result{Extra: extra}, nil
 }
@@ -132,7 +139,7 @@ func dhcpClientMAC(s string) (net.HardwareAddr, error) {
 	if _, err := rand.Read(mac); err != nil {
 		return nil, err
 	}
-	mac[0] = (mac[0] | 0x02) &^ 0x01 // locally administered, unicast
+	mac[0] = (mac[0] | dhcpMACLocalAdminBit) &^ dhcpMACMulticastBit
 	return mac, nil
 }
 

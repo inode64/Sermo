@@ -13,14 +13,14 @@ import (
 )
 
 func init() {
-	Register(postgresProtocol{}, "postgresql")
+	Register(postgresProtocol{}, protocolAliasPostgreSQL)
 }
 
 // postgresProtocol probes a PostgreSQL server.
 type postgresProtocol struct{}
 
-func (postgresProtocol) Name() string       { return "postgres" }
-func (postgresProtocol) DefaultPort() int   { return 5432 }
+func (postgresProtocol) Name() string       { return ProtocolNamePostgres }
+func (postgresProtocol) DefaultPort() int   { return defaultPortPostgres }
 func (postgresProtocol) RequiresUser() bool { return true }
 
 // Probe connects (authenticating with the configured user/password), verifies
@@ -80,7 +80,7 @@ func buildPGDSN(cfg Config) string {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 5432
+		port = defaultPortPostgres
 	}
 	u := url.URL{
 		Scheme: "postgres",
@@ -102,18 +102,18 @@ func buildPGDSN(cfg Config) string {
 // (lib/pq "require"); the verify-* / prefer modes pass through.
 func sslMode(tls string) string {
 	switch strings.ToLower(strings.TrimSpace(tls)) {
-	case "", "false", "no", "off", "disable":
-		return "disable"
-	case "true", "yes", "on", "require":
-		return "require"
+	case "", tlsModeFalse, tlsModeNo, tlsModeOff, tlsDisable:
+		return tlsDisable
+	case ParamValueTrue, tlsModeYes, tlsModeOn, tlsRequire:
+		return tlsRequire
 	case tlsSkipVerify:
-		return "require"
-	case "prefer":
-		return "prefer"
-	case "verify-ca":
-		return "verify-ca"
-	case "verify-full":
-		return "verify-full"
+		return tlsRequire
+	case tlsPrefer:
+		return tlsPrefer
+	case tlsVerifyCA:
+		return tlsVerifyCA
+	case tlsVerifyFull:
+		return tlsVerifyFull
 	default:
 		return tls // allow a valid sslmode passed through
 	}

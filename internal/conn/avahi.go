@@ -8,7 +8,7 @@ import (
 	"github.com/godbus/dbus/v5"
 )
 
-func init() { Register(avahiProtocol{}, "avahi-daemon") }
+func init() { Register(avahiProtocol{}, protocolAliasAvahiDaemon) }
 
 // avahiServerRunning is AVAHI_SERVER_RUNNING (avahi-common/defs.h, the
 // AvahiServerState enum).
@@ -26,8 +26,8 @@ const avahiServerRunning = 2
 // Socket-based, no TCP port. No user/password (bus permissions govern access).
 type avahiProtocol struct{}
 
-func (avahiProtocol) Name() string       { return "avahi" }
-func (avahiProtocol) DefaultPort() int   { return 0 }
+func (avahiProtocol) Name() string       { return ProtocolNameAvahi }
+func (avahiProtocol) DefaultPort() int   { return defaultPortNone }
 func (avahiProtocol) RequiresUser() bool { return false }
 
 func (avahiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -74,18 +74,18 @@ func avahiProbe(ctx context.Context, addr string) (Result, error) {
 
 	extra := map[string]string{}
 	if versionString != "" {
-		extra["version_string"] = versionString
+		extra[ExtraKeyVersionString] = versionString
 	}
 	// Best-effort extras: host name and server state.
 	var hostname string
 	if err := obj.CallWithContext(ctx, "org.freedesktop.Avahi.Server.GetHostName", 0).Store(&hostname); err == nil && hostname != "" {
-		extra["hostname"] = hostname
+		extra[ExtraKeyHostname] = hostname
 	}
 	var state int32
 	if err := obj.CallWithContext(ctx, "org.freedesktop.Avahi.Server.GetState", 0).Store(&state); err == nil {
-		extra["state"] = strconv.Itoa(int(state))
+		extra[extraState] = strconv.Itoa(int(state))
 		if state == avahiServerRunning {
-			extra["running"] = "true"
+			extra[extraRunning] = strconv.FormatBool(true)
 		}
 	}
 	return Result{Version: avahiVersion(versionString), Extra: extra}, nil

@@ -18,10 +18,179 @@ import (
 // DefaultHost is the loopback host protocol probes use when config omits host.
 const DefaultHost = "127.0.0.1"
 
+// ProtocolName* constants are canonical connection protocol names shared by the
+// protocol registry and check builders.
+const (
+	ProtocolNameACPID       = "acpid"
+	ProtocolNameAJP         = "ajp"
+	ProtocolNameAMQP        = "amqp"
+	ProtocolNameAsterisk    = "asterisk"
+	ProtocolNameAvahi       = "avahi"
+	ProtocolNameCeph        = "ceph"
+	ProtocolNameClamd       = "clamd"
+	ProtocolNameCloudflared = "cloudflared"
+	ProtocolNameDBus        = "dbus"
+	ProtocolNameDHClient    = "dhclient"
+	ProtocolNameDHCP        = "dhcp"
+	ProtocolNameDNS         = "dns"
+	ProtocolNameDocker      = "docker"
+	ProtocolNameFail2ban    = "fail2ban"
+	ProtocolNameFPM         = "fpm"
+	ProtocolNameFTP         = "ftp"
+	ProtocolNameGlusterFS   = "glusterfs"
+	ProtocolNameGuacd       = "guacd"
+	ProtocolNameIMAP        = "imap"
+	ProtocolNameInfluxDB    = "influxdb"
+	ProtocolNameIPP         = "ipp"
+	ProtocolNameKafka       = "kafka"
+	ProtocolNameLDAP        = "ldap"
+	ProtocolNameLibvirt     = "libvirt"
+	ProtocolNameLVMPolld    = "lvmpolld"
+	ProtocolNameMemcached   = "memcached"
+	ProtocolNameMongoDB     = "mongodb"
+	ProtocolNameMountd      = "mountd"
+	ProtocolNameMQTT        = "mqtt"
+	ProtocolNameMySQL       = "mysql"
+	ProtocolNameNebula      = "nebula"
+	ProtocolNameNFS         = "nfs"
+	ProtocolNameNNTP        = "nntp"
+	ProtocolNameNTP         = "ntp"
+	ProtocolNameNUT         = "nut"
+	ProtocolNameOpenVPN     = "openvpn"
+	ProtocolNameOpenVSwitch = "openvswitch"
+	ProtocolNamePOP         = "pop"
+	ProtocolNamePostgres    = "postgres"
+	ProtocolNamePrometheus  = "prometheus"
+	ProtocolNameRDP         = "rdp"
+	ProtocolNameRedis       = "redis"
+	ProtocolNameRPCBind     = "rpcbind"
+	ProtocolNameRsync       = "rsync"
+	ProtocolNameRspamd      = "rspamd"
+	ProtocolNameSieve       = "sieve"
+	ProtocolNameSMB         = "smb"
+	ProtocolNameSMTP        = "smtp"
+	ProtocolNameSNMP        = "snmp"
+	ProtocolNameSpamd       = "spamd"
+	ProtocolNameSSH         = "ssh"
+	ProtocolNameStatd       = "statd"
+	ProtocolNameSyncthing   = "syncthing"
+	ProtocolNameTFTP        = "tftp"
+	ProtocolNameUDisks2     = "udisks2"
+	ProtocolNameUniFi       = "unifi"
+	ProtocolNameVarnish     = "varnish"
+)
+
+// Protocol aliases accepted by the registry in addition to canonical names.
+const (
+	protocolAliasAMI              = "ami"
+	protocolAliasAvahiDaemon      = "avahi-daemon"
+	protocolAliasCephMon          = "ceph-mon"
+	protocolAliasCIFS             = "cifs"
+	protocolAliasClamAV           = "clamav"
+	protocolAliasCloudflareTunnel = "cloudflare-tunnel"
+	protocolAliasCUPS             = "cups"
+	protocolAliasDHClient         = "dhcp-client"
+	protocolAliasDHCPD            = "dhcpd"
+	protocolAliasGluster          = "gluster"
+	protocolAliasGlusterd         = "glusterd"
+	protocolAliasGuacamole        = "guacamole"
+	protocolAliasInflux           = "influx"
+	protocolAliasLibvirtd         = "libvirtd"
+	protocolAliasMariaDB          = "mariadb"
+	protocolAliasManageSieve      = "managesieve"
+	protocolAliasMemcache         = "memcache"
+	protocolAliasMongo            = "mongo"
+	protocolAliasMSWBTServer      = "ms-wbt-server"
+	protocolAliasNebulaVPN        = "nebula-vpn"
+	protocolAliasNFSMountd        = "nfs-mountd"
+	protocolAliasNFSServer        = "nfs-server"
+	protocolAliasNFSD             = "nfsd"
+	protocolAliasNFSStatd         = "nfs-statd"
+	protocolAliasNNTPs            = "nntps"
+	protocolAliasNSM              = "nsm"
+	protocolAliasOpenVPN          = "ovpn"
+	protocolAliasOVS              = "ovs"
+	protocolAliasOVSDB            = "ovsdb"
+	protocolAliasOVSDBServer      = "ovsdb-server"
+	protocolAliasPHPFPM           = "php-fpm"
+	protocolAliasPOP3             = "pop3"
+	protocolAliasPortmap          = "portmap"
+	protocolAliasPortmapper       = "portmapper"
+	protocolAliasPostgreSQL       = "postgresql"
+	protocolAliasPrometheus       = "prom"
+	protocolAliasRabbitMQ         = "rabbitmq"
+	protocolAliasRPCMountd        = "rpc.mountd"
+	protocolAliasRPCStatd         = "rpc.statd"
+	protocolAliasRsyncd           = "rsyncd"
+	protocolAliasSamba            = "samba"
+	protocolAliasSpamAssassin     = "spamassassin"
+	protocolAliasUniFiController  = "unifi-controller"
+	protocolAliasUniFiNetwork     = "unifi-network"
+	protocolAliasUPS              = "ups"
+	protocolAliasUPSD             = "upsd"
+	protocolAliasValkey           = "valkey"
+	protocolAliasVarnishAdm       = "varnishadm"
+)
+
 // Result.Extra keys shared with consumers that interpret protocol identity.
 const (
-	ExtraKeyFingerprint = "fingerprint"
-	ExtraKeyGreeting    = "greeting"
+	ExtraKeyFingerprint       = "fingerprint"
+	ExtraKeyGreeting          = "greeting"
+	ExtraKeyHostname          = "hostname"
+	ExtraKeyRole              = "role"
+	ExtraKeyServer            = "server"
+	ExtraKeyStatus            = "status"
+	ExtraKeyVersionString     = "version_string"
+	ExtraKeyContainer         = "container"
+	ExtraKeyContainerStatus   = "container.status"
+	ExtraKeyContainerHealth   = "container.health"
+	ExtraKeyContainerRunning  = "container.running"
+	ExtraKeyContainerRestarts = "container.restartcount"
+	ExtraKeyContainerExitCode = "container.exitcode"
+	ExtraKeyDockerContainers  = "containers"
+	ExtraKeyDockerRunning     = "containers.running"
+	ExtraKeyDockerPaused      = "containers.paused"
+	ExtraKeyDockerStopped     = "containers.stopped"
+	ExtraKeyDockerImages      = "images"
+	ExtraKeyDockerWarnings    = "warnings"
+	ExtraKeyDNSQuery          = "query"
+	ExtraKeyDNSRCode          = "rcode"
+	ExtraKeyDNSAnswers        = "answers"
+	ExtraKeyDNSAddresses      = "addresses"
+	ExtraKeyDomain            = "domain"
+	ExtraKeyDomainCount       = "domains"
+	ExtraKeyDomainActive      = "domains.active"
+	ExtraKeyDomainInactive    = "domains.inactive"
+	ExtraKeyDomainState       = "domain.state"
+	ExtraKeyDomainRunning     = "domain.running"
+	ExtraKeyKafkaAPICount     = "api_count"
+	ExtraKeyKafkaErrorCode    = "error_code"
+	ExtraKeyKafkaProduceAPI   = "produce_api"
+	ExtraKeyKafkaVoteAPI      = "vote_api"
+	ExtraKeyMongoReadOnly     = "read_only"
+	ExtraKeyMongoSetName      = "set_name"
+	ExtraKeyNodeCPUs          = "node.cpus"
+	ExtraKeyNodeMemoryMB      = "node.memory_mb"
+)
+
+// DNSRCodeNoErrorName is the DNS response code name for a successful response.
+const DNSRCodeNoErrorName = "NOERROR"
+
+// DockerContainerStatusRunning is the running status emitted in
+// ExtraKeyContainerStatus.
+const DockerContainerStatusRunning = "running"
+
+// LibvirtDomainState* constants are stable lower-case state names emitted in
+// ExtraKeyDomainState.
+const (
+	LibvirtDomainStateRunning     = "running"
+	LibvirtDomainStateBlocked     = "blocked"
+	LibvirtDomainStatePaused      = "paused"
+	LibvirtDomainStateShutdown    = "shutdown"
+	LibvirtDomainStateShutoff     = "shutoff"
+	LibvirtDomainStateCrashed     = "crashed"
+	LibvirtDomainStatePMSuspended = "pmsuspended"
+	LibvirtDomainStateNoState     = "nostate"
 )
 
 // Config.Params keys consumed by protocol probes.
@@ -33,10 +202,96 @@ const (
 	ParamKeyTransport  = "transport"
 )
 
+// ParamValueTrue is the string form used for true boolean values in Config.Params.
+const ParamValueTrue = "true"
+
+// TLSModeSkipVerify is the tls mode that enables TLS without certificate
+// verification.
+const TLSModeSkipVerify = "skip-verify"
+
+// Transport names accepted by protocol params that expose a network transport.
 const (
-	networkTCP    = "tcp"
-	networkUDP    = "udp"
-	tlsSkipVerify = "skip-verify"
+	TransportTCP = "tcp"
+	TransportUDP = "udp"
+)
+
+// Default protocol ports used when a check omits an explicit port.
+const (
+	defaultPortNone        = 0
+	defaultPortAJP         = 8009
+	defaultPortAMQP        = 5672
+	defaultPortAsterisk    = 5038
+	defaultPortCeph        = 3300
+	defaultPortClamd       = 3310
+	defaultPortCloudflared = 60123
+	defaultPortFPM         = 9000
+	defaultPortFTP         = 21
+	defaultPortGlusterFS   = 24007
+	defaultPortGuacd       = 4822
+	defaultPortIMAP        = 143
+	defaultPortInfluxDB    = 8086
+	defaultPortIPP         = 631
+	defaultPortKafka       = 9092
+	defaultPortLDAP        = 389
+	defaultPortLibvirt     = 16509
+	defaultPortMemcached   = 11211
+	defaultPortMongoDB     = 27017
+	defaultPortMountd      = 20048
+	defaultPortMQTT        = 1883
+	defaultPortMySQL       = 3306
+	defaultPortNebula      = 4242
+	defaultPortNFS         = 2049
+	defaultPortNNTP        = 119
+	defaultPortNTP         = 123
+	defaultPortNUT         = 3493
+	defaultPortOpenVPN     = 1194
+	defaultPortOpenVSwitch = 6640
+	defaultPortPOP         = 110
+	defaultPortPostgres    = 5432
+	defaultPortPrometheus  = 9090
+	defaultPortRDP         = 3389
+	defaultPortRedis       = 6379
+	defaultPortRPCBind     = 111
+	defaultPortRsync       = 873
+	defaultPortRspamd      = 11334
+	defaultPortSieve       = 4190
+	defaultPortSMB         = 445
+	defaultPortSMTP        = 25
+	defaultPortSpamd       = 783
+	defaultPortSSH         = 22
+	defaultPortStatd       = 662
+	defaultPortSyncthing   = 8384
+	defaultPortTFTP        = 69
+	defaultPortUniFi       = 8443
+	defaultPortVarnish     = 6082
+)
+
+// DefaultPortLibvirt is libvirt's plaintext TCP port.
+const DefaultPortLibvirt = defaultPortLibvirt
+
+const (
+	fallbackXID32 = 0x53524d4f // "SRMO"
+	networkTCP    = TransportTCP
+	networkUDP    = TransportUDP
+	networkUnix   = "unix"
+
+	// HTTP probe body limits keep service probes bounded against unexpected peers.
+	maxHTTPProbeBody      = 64 << 10
+	maxHTTPProbeLargeBody = 1 << 20
+	maxHTTPProbeShortBody = 4 << 10
+
+	tlsSkipVerify = TLSModeSkipVerify
+	tlsModeFalse  = "false"
+	tlsModeYes    = "yes"
+	tlsModeNo     = "no"
+	tlsModeOn     = "on"
+	tlsModeOff    = "off"
+	tlsRequired   = "required"
+	tlsDisable    = "disable"
+	tlsRequire    = "require"
+	tlsPrefer     = "prefer"
+	tlsVerifyCA   = "verify-ca"
+	tlsVerifyFull = "verify-full"
 	// schemeHTTP and schemeHTTPS are the URL schemes an HTTP-based probe selects
 	// by whether TLS is in use.
 	schemeHTTP  = "http"
@@ -44,6 +299,66 @@ const (
 	// extraGreeting is the Result.Extra key carrying a text-protocol server's
 	// greeting/banner line (ftp, imap, pop, nntp, rsync, sieve, …).
 	extraGreeting = ExtraKeyGreeting
+	extraAddress  = "address"
+	extraArch     = "arch"
+	// extraAuthenticated marks protocols where optional auth was actually tested.
+	extraAuthenticated = "authenticated"
+	extraBanner        = "banner"
+	extraBind          = "bind"
+	extraBusID         = "bus_id"
+	// extraCLIStatus is the Varnish CLI status code exposed by varnishadm.
+	extraCLIStatus             = "cli_status"
+	extraClientMAC             = "client_mac"
+	extraConnack               = "connack"
+	extraContentType           = "content_type"
+	extraDatabases             = "databases"
+	extraDHCPMessage           = "dhcp_message"
+	extraEndpoint              = "endpoint"
+	extraFixedAddress          = "fixed_address"
+	extraHealth                = "health"
+	extraImplementation        = "implementation"
+	extraInterface             = "interface"
+	extraLeaseExpires          = "lease_expires_at"
+	extraLeaseFile             = "lease_file"
+	extraLeaseSeconds          = "lease_seconds"
+	extraLeaseSecondsRemaining = "lease_seconds_remaining"
+	extraLibVersion            = "lib_version"
+	extraLogin                 = "login"
+	extraMessenger             = "messenger"
+	extraMode                  = "mode"
+	extraNegotiation           = "negotiation"
+	extraOS                    = "os"
+	extraOffsetSeconds         = "offset_seconds"
+	extraOwner                 = "owner"
+	extraOfferedIP             = "offered_ip"
+	extraPool                  = "pool"
+	extraProcessManager        = "process_manager"
+	extraRC                    = "rc"
+	extraResult                = "result"
+	extraRevision              = "revision"
+	extraRunning               = "running"
+	extraSecurity              = "security"
+	extraSelect                = "select"
+	extraServerID              = "server_id"
+	extraServerVer             = "server_version"
+	extraSession               = "session_present"
+	extraShareAccess           = "share_access"
+	extraShares                = "shares"
+	extraState                 = "state"
+	extraStratum               = "stratum"
+	extraSubnetMask            = "subnet_mask"
+	extraSysContact            = "sys_contact"
+	extraSysLocation           = "sys_location"
+	extraSysName               = "sys_name"
+	extraSysUptimeSeconds      = "sys_uptime_seconds"
+	extraTFTPError             = "tftp_error"
+	extraTFTPErrorCode         = "tftp_error_code"
+	extraUniqueName            = "unique_name"
+	extraUPS                   = "ups"
+	extraURI                   = "uri"
+	extraUptime                = "uptime_seconds"
+	extraUUID                  = "uuid"
+	extraVersion               = "version"
 	// extraProgram and extraRPCStatus are the Result.Extra keys of the
 	// Sun-RPC probes (rpcbind, nfs, mountd, glusterfs): the queried program
 	// number and the portmapper/RPC status.
@@ -59,6 +374,7 @@ const (
 	// extraReply is the Result.Extra key carrying a probe's decoded reply token
 	// (ajp cpong, openvpn/nebula reset, tftp op).
 	extraReply = "reply"
+	extraQuery = "query"
 	// extraTransport is the Result.Extra key carrying the transport a probe used
 	// (openvpn udp/tcp, libvirt connection mode).
 	extraTransport = "transport"
@@ -110,6 +426,18 @@ type Protocol interface {
 	Probe(ctx context.Context, cfg Config) (Result, error)
 }
 
+// ValidTLSValue reports whether value is one of the connection-check TLS mode
+// strings accepted by config validation.
+func ValidTLSValue(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case ParamValueTrue, tlsModeFalse, tlsModeYes, tlsModeNo, tlsModeOn, tlsModeOff,
+		tlsRequired, tlsSkipVerify, tlsDisable, tlsRequire, tlsPrefer, tlsVerifyCA, tlsVerifyFull:
+		return true
+	default:
+		return false
+	}
+}
+
 // registry maps protocol names (canonical and aliases) to protocols.
 type registry struct {
 	mu     sync.RWMutex
@@ -145,6 +473,16 @@ func Register(p Protocol, aliases ...string) { defaultRegistry.register(p, alias
 // Lookup returns the protocol registered under name (canonical or alias).
 func Lookup(name string) (Protocol, bool) { return defaultRegistry.lookup(name) }
 
+// DefaultPort returns the registered protocol's default port, or 0 when name is
+// not registered.
+func DefaultPort(name string) int {
+	proto, ok := Lookup(name)
+	if !ok {
+		return defaultPortNone
+	}
+	return proto.DefaultPort()
+}
+
 // readCRLFLine reads one CRLF/LF-terminated line, trimmed — the line shape
 // every text protocol probe (redis RESP, imap, nut, …) reads.
 func readCRLFLine(br *bufio.Reader) (string, error) {
@@ -170,7 +508,7 @@ func readGreetingLine(r io.Reader) (string, error) {
 func randXID32() uint32 {
 	var b [4]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return 0x53524d4f // "SRMO"
+		return fallbackXID32
 	}
 	return binary.BigEndian.Uint32(b[:])
 }

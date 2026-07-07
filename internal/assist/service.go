@@ -8,6 +8,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/process"
+	"sermo/internal/servicemgr"
 )
 
 // serviceAssistant enables a catalog service as a monitored service. It detects
@@ -18,9 +19,9 @@ type serviceAssistant struct{}
 
 const serviceConfigWatchInterval = "60m"
 const serviceConfigWatchName = "config-files"
-const serviceStatusWatchName = "service"
+const serviceStatusWatchName = AssistantNameService
 
-func (serviceAssistant) Name() string { return "service" }
+func (serviceAssistant) Name() string { return AssistantNameService }
 func (serviceAssistant) Title() string {
 	return "Monitor a system service (apache, nginx, mysql, …)"
 }
@@ -109,7 +110,7 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 
 	return Result{
 		Services: services,
-		Summary:  resultSummary("service", services),
+		Summary:  resultSummary(AssistantNameService, services),
 	}, nil
 }
 
@@ -147,7 +148,7 @@ func splitServiceCandidates(cands []ServiceCandidate) (activeCatalog, generic []
 }
 
 func serviceCandidateActive(c ServiceCandidate) bool {
-	return c.Status == "active"
+	return c.Status == string(servicemgr.StatusActive)
 }
 
 func chooseServices(p *Prompt, question string, cands []ServiceCandidate, allowNone bool) []ServiceCandidate {
@@ -203,7 +204,7 @@ func askServiceProps(p *Prompt, env Env, c ServiceCandidate, reviewPort bool) (s
 		body[config.ServiceKeyService] = unit
 		addCheckOnlyWatch(body, serviceStatusWatchName, map[string]any{
 			checks.CheckKeyType:   checks.CheckTypeService,
-			checks.CheckKeyExpect: "active",
+			checks.CheckKeyExpect: string(servicemgr.StatusActive),
 		})
 	} else {
 		body[config.ServiceKeyUses] = c.Name

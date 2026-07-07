@@ -17,7 +17,7 @@ type FdsSample struct {
 }
 
 // FdsSamplerFunc reads the current fd sample. Injected for tests; the default
-// reads /proc/sys/fs/file-nr.
+// reads the kernel file-nr sysctl.
 type FdsSamplerFunc func() (FdsSample, error)
 
 // fdsCheck is a level check for system-wide file descriptor exhaustion.
@@ -45,22 +45,22 @@ func (c fdsCheck) Run(_ context.Context) Result {
 // backend can render an fds gauge without running a full fds check.
 func SampleFds() (FdsSample, error) { return defaultFdsSampler() }
 
-// defaultFdsSampler reads allocated (field 1) and max (field 3) from
-// /proc/sys/fs/file-nr. The middle field (free handles) is always 0 on modern
-// kernels, so allocated is the in-use count.
+// defaultFdsSampler reads allocated (field 1) and max (field 3). The middle
+// field (free handles) is always 0 on modern kernels, so allocated is the
+// in-use count.
 func defaultFdsSampler() (FdsSample, error) {
-	data, err := os.ReadFile("/proc/sys/fs/file-nr")
+	data, err := os.ReadFile(procFileNRPath)
 	if err != nil {
 		return FdsSample{}, err
 	}
 	fields := strings.Fields(string(data))
 	if len(fields) < 3 {
-		return FdsSample{}, fmt.Errorf("malformed /proc/sys/fs/file-nr")
+		return FdsSample{}, fmt.Errorf("malformed %s", procFileNRPath)
 	}
 	alloc, e1 := strconv.ParseUint(fields[0], 10, 64)
 	maxFds, e3 := strconv.ParseUint(fields[2], 10, 64)
 	if e1 != nil || e3 != nil {
-		return FdsSample{}, fmt.Errorf("malformed /proc/sys/fs/file-nr")
+		return FdsSample{}, fmt.Errorf("malformed %s", procFileNRPath)
 	}
 	return FdsSample{Allocated: alloc, Max: maxFds}, nil
 }

@@ -10,7 +10,13 @@ import (
 	"strings"
 )
 
-func init() { Register(guacdProtocol{}, "guacamole") }
+func init() { Register(guacdProtocol{}, protocolAliasGuacamole) }
+
+const (
+	guacdDefaultProtocol = "vnc"
+	guacdSelectOp        = "select"
+	extraOpcode          = "opcode"
+)
 
 // guacdProtocol probes the Apache Guacamole proxy daemon (guacd) natively over
 // the Guacamole protocol. It opens the handshake by sending a `select`
@@ -20,8 +26,8 @@ func init() { Register(guacdProtocol{}, "guacamole") }
 // up and speaking the protocol. No auth.
 type guacdProtocol struct{}
 
-func (guacdProtocol) Name() string       { return "guacd" }
-func (guacdProtocol) DefaultPort() int   { return 4822 }
+func (guacdProtocol) Name() string       { return ProtocolNameGuacd }
+func (guacdProtocol) DefaultPort() int   { return defaultPortGuacd }
 func (guacdProtocol) RequiresUser() bool { return false }
 
 func (guacdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -31,11 +37,11 @@ func (guacdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 4822
+		port = defaultPortGuacd
 	}
 	selectProto := cfg.Query
 	if selectProto == "" {
-		selectProto = "vnc"
+		selectProto = guacdDefaultProtocol
 	}
 
 	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, net.JoinHostPort(host, strconv.Itoa(port)))
@@ -45,7 +51,7 @@ func (guacdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	defer func() { _ = c.Close() }()
 	applyDeadline(ctx, c)
 
-	if _, err := io.WriteString(c, guacInstruction("select", selectProto)); err != nil {
+	if _, err := io.WriteString(c, guacInstruction(guacdSelectOp, selectProto)); err != nil {
 		return Result{}, err
 	}
 	line, err := bufio.NewReader(c).ReadString(';')
@@ -56,7 +62,7 @@ func (guacdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Extra: map[string]string{"select": selectProto, "opcode": opcode}}, nil
+	return Result{Extra: map[string]string{extraSelect: selectProto, extraOpcode: opcode}}, nil
 }
 
 // guacInstruction encodes a Guacamole instruction: each element as

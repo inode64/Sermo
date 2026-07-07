@@ -8,7 +8,9 @@ import (
 	"strings"
 )
 
-func init() { Register(openvswitchProtocol{}, "ovs", "ovsdb", "ovsdb-server") }
+func init() {
+	Register(openvswitchProtocol{}, protocolAliasOVS, protocolAliasOVSDB, protocolAliasOVSDBServer)
+}
 
 // openvswitchProtocol probes Open vSwitch's configuration database server
 // (ovsdb-server) over the OVSDB management protocol (RFC 7047), a JSON-RPC
@@ -21,12 +23,12 @@ func init() { Register(openvswitchProtocol{}, "ovs", "ovsdb", "ovsdb-server") }
 // No auth.
 type openvswitchProtocol struct{}
 
-func (openvswitchProtocol) Name() string       { return "openvswitch" }
-func (openvswitchProtocol) DefaultPort() int   { return 6640 }
+func (openvswitchProtocol) Name() string       { return ProtocolNameOpenVSwitch }
+func (openvswitchProtocol) DefaultPort() int   { return defaultPortOpenVSwitch }
 func (openvswitchProtocol) RequiresUser() bool { return false }
 
 func (openvswitchProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, 6640)
+	c, err := dialDeadline(ctx, cfg, defaultPortOpenVSwitch)
 	if err != nil {
 		return Result{}, err
 	}
@@ -42,7 +44,7 @@ func (openvswitchProtocol) Probe(ctx context.Context, cfg Config) (Result, error
 	}
 	extra := map[string]string{}
 	if len(dbs) > 0 {
-		extra["databases"] = strings.Join(dbs, ",")
+		extra[extraDatabases] = strings.Join(dbs, ",")
 	}
 
 	// When the Open_vSwitch database is present, read ovs_version for version

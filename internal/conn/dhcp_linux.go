@@ -13,7 +13,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const defaultDHCPExchangeTimeout = 5 * time.Second
+const (
+	defaultDHCPExchangeTimeout = 5 * time.Second
+	networkIP4                 = "ip4"
+)
 
 // dhcpExchange sends packet and returns the first DHCP reply matching xid. When
 // iface is set it broadcasts out that link (255.255.255.255:67), binding the
@@ -95,7 +98,7 @@ func dhcpDestination(iface, server string) (*net.UDPAddr, error) {
 	if err != nil {
 		return nil, err
 	}
-	ip, err := net.ResolveIPAddr("ip4", host)
+	ip, err := net.ResolveIPAddr(networkIP4, host)
 	if err != nil {
 		return nil, err
 	}

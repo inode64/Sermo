@@ -12,6 +12,8 @@ import (
 
 func init() { Register(syncthingProtocol{}) }
 
+const syncthingHealthOK = "OK"
+
 // syncthingProtocol probes a Syncthing instance via its REST API. It GETs the
 // unauthenticated /rest/noauth/health endpoint and verifies a {"status":"OK"}
 // reply — proof the daemon is up. When an API key is supplied (in the password
@@ -19,8 +21,8 @@ func init() { Register(syncthingProtocol{}) }
 // Syncthing version. No user is required.
 type syncthingProtocol struct{}
 
-func (syncthingProtocol) Name() string       { return "syncthing" }
-func (syncthingProtocol) DefaultPort() int   { return 8384 }
+func (syncthingProtocol) Name() string       { return ProtocolNameSyncthing }
+func (syncthingProtocol) DefaultPort() int   { return defaultPortSyncthing }
 func (syncthingProtocol) RequiresUser() bool { return false }
 
 func (syncthingProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -30,7 +32,7 @@ func (syncthingProtocol) Probe(ctx context.Context, cfg Config) (Result, error) 
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 8384
+		port = defaultPortSyncthing
 	}
 	scheme := schemeHTTP
 	client := httpProbeClient(cfg.Interface, nil)
@@ -51,11 +53,11 @@ func (syncthingProtocol) Probe(ctx context.Context, cfg Config) (Result, error) 
 	if err := syncthingGet(ctx, client, base+"/rest/noauth/health", "", &health); err != nil {
 		return Result{}, err
 	}
-	if health.Status != "OK" {
+	if health.Status != syncthingHealthOK {
 		return Result{}, fmt.Errorf("syncthing: health status %q, want OK", health.Status)
 	}
 
-	extra := map[string]string{"health": health.Status}
+	extra := map[string]string{extraHealth: health.Status}
 
 	// 2. With an API key, read the version too (a bad key surfaces as an error).
 	if cfg.Password != "" {
@@ -68,13 +70,13 @@ func (syncthingProtocol) Probe(ctx context.Context, cfg Config) (Result, error) 
 			return Result{}, err
 		}
 		if ver.Version != "" {
-			extra["version"] = ver.Version
+			extra[extraVersion] = ver.Version
 		}
 		if ver.OS != "" {
-			extra["os"] = ver.OS
+			extra[extraOS] = ver.OS
 		}
 		if ver.Arch != "" {
-			extra["arch"] = ver.Arch
+			extra[extraArch] = ver.Arch
 		}
 		return Result{Version: ver.Version, Extra: extra}, nil
 	}
@@ -99,7 +101,7 @@ func syncthingGet(ctx context.Context, client *http.Client, url, apiKey string, 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("syncthing: HTTP status %d", resp.StatusCode)
 	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPProbeBody))
 	if err := json.Unmarshal(body, out); err != nil {
 		return fmt.Errorf("syncthing: invalid JSON response: %w", err)
 	}

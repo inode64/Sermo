@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"sermo/internal/conn"
 )
 
 // CertSample is one observation of TLS material — a leaf certificate read from a
@@ -399,12 +401,12 @@ func verifyCertChain(leaf *x509.Certificate, peers []*x509.Certificate, serverNa
 // verifying the chain and hostname against the system roots.
 func defaultCertSampler(ctx context.Context, host, port, serverName string, verify bool) (CertSample, error) {
 	cfg := &tls.Config{InsecureSkipVerify: true, ServerName: serverName} //nolint:gosec // inspected manually below
-	conn, err := (&tls.Dialer{Config: cfg}).DialContext(ctx, "tcp", net.JoinHostPort(host, port))
+	nc, err := (&tls.Dialer{Config: cfg}).DialContext(ctx, conn.TransportTCP, net.JoinHostPort(host, port))
 	if err != nil {
 		return CertSample{}, err
 	}
-	defer conn.Close()
-	state := conn.(*tls.Conn).ConnectionState()
+	defer nc.Close()
+	state := nc.(*tls.Conn).ConnectionState()
 	if len(state.PeerCertificates) == 0 {
 		return CertSample{}, errors.New("no certificate presented")
 	}

@@ -50,7 +50,8 @@ const (
 )
 
 const (
-	defaultRuntimeDir    = "/run/sermo"
+	defaultRuntimeDir    = config.DefaultRuntime
+	defaultWebAddress    = "127.0.0.1"
 	daemonPIDFilename    = "sermod.pid"
 	instanceLockFilename = "sermod.lock"
 )
@@ -468,12 +469,12 @@ func webListenAddr(cfg *config.Config) (addr, reason string) {
 	if !ok {
 		return "", fmt.Sprintf("web.port is not a number (%T)", m[config.WebKeyPort])
 	}
-	if port < 1 || port > 65535 {
-		return "", fmt.Sprintf("web.port must be in 1..65535 (got %d)", port)
+	if !cfgval.ValidTCPPort(port) {
+		return "", fmt.Sprintf("web.port must be in %s (got %d)", cfgval.TCPPortRange(), port)
 	}
 	address, _ := m[config.WebKeyAddress].(string)
 	if address == "" {
-		address = "127.0.0.1"
+		address = defaultWebAddress
 	}
 	return net.JoinHostPort(address, strconv.Itoa(port)), ""
 }
