@@ -30,6 +30,22 @@ const (
 	DefaultPort = 16509
 )
 
+// ControlType is the service control.type value for libvirt-backed services.
+const ControlType = "libvirt"
+
+const sectionControl = "control"
+
+// ControlKey constants are keys inside a libvirt service control block.
+const (
+	ControlKeyType   = "type"
+	ControlKeyURI    = "uri"
+	ControlKeyDomain = "domain"
+	ControlKeyUUID   = "uuid"
+	ControlKeySocket = "socket"
+	ControlKeyHost   = "host"
+	ControlKeyPort   = "port"
+)
+
 const defaultLibvirtTimeout = 10 * time.Second
 
 // Domain action labels used in operator-facing errors.
@@ -51,7 +67,7 @@ type Spec struct {
 
 // SpecFromTree reads a service's optional `control: {type: libvirt, ...}` block.
 func SpecFromTree(tree map[string]any) (Spec, bool, error) {
-	raw, present := tree["control"]
+	raw, present := tree[sectionControl]
 	if !present {
 		return Spec{}, false, nil
 	}
@@ -59,15 +75,15 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 	if !ok {
 		return Spec{}, true, fmt.Errorf("control must be a mapping")
 	}
-	if typ := cfgval.String(m["type"]); typ != "libvirt" {
+	if typ := cfgval.String(m[ControlKeyType]); typ != ControlType {
 		return Spec{}, true, fmt.Errorf("control.type %q is not supported", typ)
 	}
 	spec := Spec{
-		URI:    cfgval.String(m["uri"]),
-		Domain: cfgval.String(m["domain"]),
-		UUID:   cfgval.String(m["uuid"]),
-		Socket: cfgval.String(m["socket"]),
-		Host:   cfgval.String(m["host"]),
+		URI:    cfgval.String(m[ControlKeyURI]),
+		Domain: cfgval.String(m[ControlKeyDomain]),
+		UUID:   cfgval.String(m[ControlKeyUUID]),
+		Socket: cfgval.String(m[ControlKeySocket]),
+		Host:   cfgval.String(m[ControlKeyHost]),
 	}
 	if spec.URI == "" {
 		spec.URI = DefaultURI
@@ -75,7 +91,7 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 	if spec.Host == "" && spec.Socket == "" {
 		spec.Socket = DefaultSocket
 	}
-	if p, ok := cfgval.Int(m["port"]); ok {
+	if p, ok := cfgval.Int(m[ControlKeyPort]); ok {
 		spec.Port = p
 	}
 	if spec.Port == 0 {

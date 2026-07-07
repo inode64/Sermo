@@ -9,6 +9,7 @@ import (
 
 	"sermo/internal/app"
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/locks"
 	"sermo/internal/mountctl"
@@ -155,7 +156,7 @@ func (a App) configuredMountSpec(opts options, cfg *config.Config, name string) 
 		a.printIssues(opts, scopedIssues("storage "+name, errs))
 		return mountctl.Spec{}, exitConfigInvalid
 	}
-	if _, ok := resolved.Tree["mount"].(map[string]any); !ok {
+	if _, ok := resolved.Tree[config.StorageKeyMount].(map[string]any); !ok {
 		a.reportError(opts, fmt.Sprintf("storage %q has no mount block", name))
 		return mountctl.Spec{}, exitRuntimeError
 	}
@@ -213,7 +214,7 @@ func storageMountWatchConfig(cfg *config.Config, storage string) (monitorMode st
 	if len(errs) > 0 || resolved.Tree == nil {
 		return "", false, false
 	}
-	if _, hasCapacity := resolved.Tree["capacity"].(map[string]any); !hasCapacity {
+	if _, hasCapacity := resolved.Tree[config.StorageKeyCapacity].(map[string]any); !hasCapacity {
 		return "", false, false
 	}
 	watches, _ := cfg.ResolveWatches()
@@ -221,8 +222,8 @@ func storageMountWatchConfig(cfg *config.Config, storage string) (monitorMode st
 	if entry == nil {
 		return "", false, false
 	}
-	check, _ := entry["check"].(map[string]any)
-	if cfgval.AsString(check["type"]) != "storage" {
+	check, _ := entry[config.WatchKeyCheck].(map[string]any)
+	if cfgval.AsString(check[checks.CheckKeyType]) != checks.CheckTypeStorage {
 		return "", false, false
 	}
 	return config.MonitorMode(entry), cfgval.Disabled(entry), true

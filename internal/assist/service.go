@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"sermo/internal/checks"
+	"sermo/internal/config"
 )
 
 // serviceAssistant enables a catalog service as a monitored service. It detects
@@ -14,6 +17,7 @@ type serviceAssistant struct{}
 
 const serviceConfigWatchInterval = "60m"
 const serviceConfigWatchName = "config-files"
+const serviceStatusWatchName = "service"
 
 func (serviceAssistant) Name() string { return "service" }
 func (serviceAssistant) Title() string {
@@ -123,7 +127,7 @@ func askServiceSettings(p *Prompt, label string) serviceSettings {
 func (s serviceSettings) apply(body map[string]any) {
 	s.Monitoring.apply(body)
 	if s.DryRun {
-		body["dry_run"] = true
+		body[config.EntryKeyDryRun] = true
 	}
 }
 
@@ -189,14 +193,17 @@ func askServiceProps(p *Prompt, env Env, c ServiceCandidate, reviewPort bool) (s
 		p.printf("  %q is already configured; skipping.\n", c.Name)
 		return "", nil
 	}
-	body := map[string]any{"enabled": true}
+	body := map[string]any{config.EntryKeyEnabled: true}
 	if c.Generic {
 		unit := c.Unit
 		if unit == "" {
 			unit = c.Name
 		}
 		body["service"] = unit
-		addCheckOnlyWatch(body, "service", map[string]any{"type": "service", "expect": "active"})
+		addCheckOnlyWatch(body, serviceStatusWatchName, map[string]any{
+			checks.CheckKeyType:   checks.CheckTypeService,
+			checks.CheckKeyExpect: "active",
+		})
 	} else {
 		body["uses"] = c.Name
 	}
@@ -243,19 +250,19 @@ func configWatchQuestion(c ServiceCandidate) string {
 
 func addConfigWatch(body map[string]any, paths []string) {
 	addCheckOnlyWatch(body, serviceConfigWatchName, map[string]any{
-		"type":      "config",
-		"path":      stringsToAny(paths),
-		"on_change": true,
-	}, map[string]any{"interval": serviceConfigWatchInterval})
+		checks.CheckKeyType:     checks.CheckTypeConfig,
+		checks.CheckKeyPath:     stringsToAny(paths),
+		checks.CheckKeyOnChange: true,
+	}, map[string]any{config.EntryKeyInterval: serviceConfigWatchInterval})
 }
 
 func addCheckOnlyWatch(body map[string]any, name string, check map[string]any, fields ...map[string]any) {
-	watches, _ := body["watches"].(map[string]any)
+	watches, _ := body[config.SectionWatches].(map[string]any)
 	if watches == nil {
 		watches = map[string]any{}
-		body["watches"] = watches
+		body[config.SectionWatches] = watches
 	}
-	entry := map[string]any{"check": check}
+	entry := map[string]any{config.WatchKeyCheck: check}
 	for _, fieldSet := range fields {
 		for key, value := range fieldSet {
 			entry[key] = value

@@ -1,10 +1,17 @@
 package assist
 
-import "fmt"
+import (
+	"fmt"
+
+	"sermo/internal/checks"
+	"sermo/internal/config"
+	"sermo/internal/dockerctl"
+	"sermo/internal/virt"
+)
 
 type dockerAssistant struct{}
 
-func (dockerAssistant) Name() string { return "docker" }
+func (dockerAssistant) Name() string { return dockerctl.ControlType }
 func (dockerAssistant) Title() string {
 	return "Monitor and manage Docker containers"
 }
@@ -117,39 +124,45 @@ func chooseVMs(p *Prompt, question string, cands []VMCandidate) []VMCandidate {
 }
 
 func buildDockerService(c DockerCandidate) map[string]any {
-	control := map[string]any{"type": "docker", "container": c.Container}
+	control := map[string]any{
+		dockerctl.ControlKeyType:      dockerctl.ControlType,
+		dockerctl.ControlKeyContainer: c.Container,
+	}
 	check := map[string]any{
-		"type":      "docker",
-		"container": c.Container,
-		"on_change": true,
-		"expect": map[string]any{
-			"container.status": map[string]any{"op": "==", "value": "running"},
+		checks.CheckKeyType:      dockerctl.ControlType,
+		checks.CheckKeyContainer: c.Container,
+		checks.CheckKeyOnChange:  true,
+		checks.CheckKeyExpect: map[string]any{
+			"container.status": map[string]any{checks.CheckKeyOp: "==", checks.CheckKeyValue: "running"},
 		},
 	}
 	if c.Socket != "" {
-		control["socket"] = c.Socket
-		check["socket"] = c.Socket
+		control[dockerctl.ControlKeySocket] = c.Socket
+		check[checks.CheckKeySocket] = c.Socket
 	}
-	return controlledService(control, "docker", check)
+	return controlledService(control, dockerctl.ControlType, check)
 }
 
 func buildVMService(c VMCandidate) map[string]any {
-	control := map[string]any{"type": "libvirt", "domain": c.Domain}
+	control := map[string]any{
+		virt.ControlKeyType:   virt.ControlType,
+		virt.ControlKeyDomain: c.Domain,
+	}
 	check := map[string]any{
-		"type":      "libvirt",
-		"domain":    c.Domain,
-		"on_change": true,
-		"expect": map[string]any{
-			"domain.state": map[string]any{"op": "==", "value": "running"},
+		checks.CheckKeyType:     virt.ControlType,
+		checks.CheckKeyDomain:   c.Domain,
+		checks.CheckKeyOnChange: true,
+		checks.CheckKeyExpect: map[string]any{
+			"domain.state": map[string]any{checks.CheckKeyOp: "==", checks.CheckKeyValue: "running"},
 		},
 	}
 	if c.URI != "" {
-		control["uri"] = c.URI
-		check["query"] = c.URI
+		control[virt.ControlKeyURI] = c.URI
+		check[checks.CheckKeyQuery] = c.URI
 	}
 	if c.Socket != "" {
-		control["socket"] = c.Socket
-		check["socket"] = c.Socket
+		control[virt.ControlKeySocket] = c.Socket
+		check[checks.CheckKeySocket] = c.Socket
 	}
 	return controlledService(control, "vm", check)
 }
@@ -164,10 +177,10 @@ func vmName(c VMCandidate) string {
 
 func controlledService(control map[string]any, checkName string, check map[string]any) map[string]any {
 	return map[string]any{
-		"enabled": true,
-		"control": control,
-		"watches": map[string]any{
-			checkName: map[string]any{"check": check},
+		config.EntryKeyEnabled: true,
+		config.SectionControl:  control,
+		config.SectionWatches: map[string]any{
+			checkName: map[string]any{config.WatchKeyCheck: check},
 		},
 	}
 }

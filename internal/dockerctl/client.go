@@ -46,6 +46,22 @@ const (
 	DefaultPort = 2375
 )
 
+// ControlType is the service control.type value for Docker-backed services.
+const ControlType = "docker"
+
+const sectionControl = "control"
+
+// ControlKey constants are keys inside a Docker service control block.
+const (
+	ControlKeyType      = "type"
+	ControlKeySocket    = "socket"
+	ControlKeyHost      = "host"
+	ControlKeyPort      = "port"
+	ControlKeyTLS       = "tls"
+	ControlKeyContainer = "container"
+	ControlKeyInterface = "interface"
+)
+
 // Spec describes a Docker Engine endpoint and the target container for control.
 type Spec struct {
 	Socket    string
@@ -60,7 +76,7 @@ type Spec struct {
 
 // SpecFromTree reads a service's optional `control: {type: docker, ...}` block.
 func SpecFromTree(tree map[string]any) (Spec, bool, error) {
-	raw, present := tree["control"]
+	raw, present := tree[sectionControl]
 	if !present {
 		return Spec{}, false, nil
 	}
@@ -68,16 +84,16 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 	if !ok {
 		return Spec{}, true, fmt.Errorf("control must be a mapping")
 	}
-	if typ := cfgval.String(m["type"]); typ != "docker" {
+	if typ := cfgval.String(m[ControlKeyType]); typ != ControlType {
 		return Spec{}, false, nil
 	}
 	spec := Spec{
-		Socket:    cfgval.String(m["socket"]),
-		Host:      cfgval.String(m["host"]),
-		TLS:       cfgval.String(m["tls"]),
-		Container: cfgval.String(m["container"]),
+		Socket:    cfgval.String(m[ControlKeySocket]),
+		Host:      cfgval.String(m[ControlKeyHost]),
+		TLS:       cfgval.String(m[ControlKeyTLS]),
+		Container: cfgval.String(m[ControlKeyContainer]),
 	}
-	if _, present := m["interface"]; present {
+	if _, present := m[ControlKeyInterface]; present {
 		return Spec{}, true, fmt.Errorf("control.interface is not supported for docker control")
 	}
 	if spec.Socket != "" && spec.Host != "" {
@@ -89,14 +105,14 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 	if spec.Host != "" && strings.TrimSpace(spec.Host) == "" {
 		return Spec{}, true, fmt.Errorf("control.host must not be blank")
 	}
-	if !ValidTLSValue(m["tls"]) {
-		return Spec{}, true, fmt.Errorf("control.tls %q is not a valid docker TLS mode", cfgval.String(m["tls"]))
+	if !ValidTLSValue(m[ControlKeyTLS]) {
+		return Spec{}, true, fmt.Errorf("control.tls %q is not a valid docker TLS mode", cfgval.String(m[ControlKeyTLS]))
 	}
 	if spec.Host == "" && spec.Socket == "" {
 		spec.Socket = DefaultSocket
 	}
-	if _, present := m["port"]; present {
-		p, ok := cfgval.Int(m["port"])
+	if _, present := m[ControlKeyPort]; present {
+		p, ok := cfgval.Int(m[ControlKeyPort])
 		if !ok || p < 1 || p > 65535 {
 			return Spec{}, true, fmt.Errorf("control.port must be an integer in 1..65535")
 		}

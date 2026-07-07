@@ -5,6 +5,7 @@ package rules
 // accepted YAML and runtime parsing cannot drift.
 const (
 	SectionRules      = "rules"
+	SectionPolicy     = "policy"
 	SectionRuleWindow = "rule_window"
 )
 
@@ -66,6 +67,21 @@ const (
 	WindowKeyMinMatches   = "min_matches"
 	WindowModeConsecutive = "consecutive"
 	WindowModeWithin      = "within"
+)
+
+// PolicyKey constants are keys inside a service or watch `policy` block.
+const (
+	PolicyKeyCooldown         = "cooldown"
+	PolicyKeyMaxActions       = "max_actions"
+	PolicyKeyMaxActionsWindow = "max_actions_window"
+	PolicyKeyBackoff          = "backoff"
+)
+
+// BackoffKey constants are keys inside `policy.backoff`.
+const (
+	BackoffKeyInitial = "initial"
+	BackoffKeyFactor  = "factor"
+	BackoffKeyMax     = "max"
 )
 
 // ProcessStateRunning is the default process condition state.

@@ -463,9 +463,9 @@ func verifyRunner(tree map[string]any, deps checks.Deps, sample func(context.Con
 // resolution.
 func collectVerifyChecks(tree map[string]any) map[string]any {
 	out := map[string]any{}
-	section, _ := tree["checks"].(map[string]any)
+	section, _ := tree[config.SectionChecks].(map[string]any)
 	for name, raw := range section {
-		if entry, ok := raw.(map[string]any); ok && cfgval.Bool(entry["verify"]) {
+		if entry, ok := raw.(map[string]any); ok && cfgval.Bool(entry[checks.CheckKeyVerify]) {
 			out[name] = entry
 		}
 	}
@@ -478,9 +478,9 @@ func guardClosure(tree map[string]any, deps checks.Deps, sample func(context.Con
 	return func(ctx context.Context, action string) (bool, string, error) {
 		runDeps := checkDepsForEval(ctx, deps, sample)
 		ruleSet, _ := rules.ParseRules(tree)
-		section, _ := tree["checks"].(map[string]any)
+		section, _ := tree[config.SectionChecks].(map[string]any)
 		built, _ := checks.Build(section, runDeps)
-		preflightSection, _ := tree["preflight"].(map[string]any)
+		preflightSection, _ := tree[config.SectionPreflight].(map[string]any)
 		preflightBuilt, _ := checks.Build(preflightSection, runDeps)
 		cache := map[string]checks.Result{}
 		for _, r := range checks.Run(ctx, built, 0) {

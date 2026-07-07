@@ -103,7 +103,7 @@ func knownWatchName(cfg *config.Config, name string) bool {
 		if len(errs) > 0 || resolved.Tree == nil {
 			continue
 		}
-		watches, ok := resolved.Tree["watches"].(map[string]any)
+		watches, ok := resolved.Tree[config.SectionWatches].(map[string]any)
 		if !ok {
 			continue
 		}

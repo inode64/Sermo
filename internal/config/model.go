@@ -38,9 +38,13 @@ const sectionStopPolicy = "stop_policy"
 // sectionPolicy is the remediation policy block; sectionRuleWindow is the
 // firing-window fallback block owned by the rules grammar.
 const (
-	sectionPolicy     = "policy"
+	sectionPolicy     = rules.SectionPolicy
 	sectionRuleWindow = rules.SectionRuleWindow
+	sectionControl    = "control"
 )
+
+// SectionControl is the per-service control backend override block.
+const SectionControl = sectionControl
 
 // Global section keys.
 const (
@@ -50,6 +54,9 @@ const (
 	sectionSecurity = "security"
 	sectionWatches  = "watches"
 )
+
+// SectionWatches is the global or service embedded watches block.
+const SectionWatches = sectionWatches
 
 // Engine block and field keys.
 const (
@@ -113,6 +120,9 @@ const (
 // keyDryRun is the per-target flag that simulates automatic actions.
 const keyDryRun = "dry_run"
 
+// EntryKeyDryRun is the shared per-target `dry_run` key.
+const EntryKeyDryRun = keyDryRun
+
 // Check-gate / check-entry field keys.
 const (
 	keyRequires = "requires"
@@ -126,11 +136,45 @@ const (
 	keyUsage    = "usage"
 )
 
+// StorageKeyCapacity is the storage capacity automation block.
+const StorageKeyCapacity = keyCapacity
+
 // Per-target monitoring metadata keys.
 const (
 	keyMonitor  = "monitor"
 	keyInterval = "interval"
 	keyEnabled  = "enabled"
+)
+
+// EntryKeyMonitor is the shared `monitor` key on watches and targets.
+const EntryKeyMonitor = keyMonitor
+
+// EntryKeyInterval is the shared `interval` key on checks, watches and targets.
+const EntryKeyInterval = keyInterval
+
+// EntryKeyEnabled is the shared `enabled` key on targets and service watches.
+const EntryKeyEnabled = keyEnabled
+
+// Shared generic field keys.
+const (
+	keyCategory  = "category"
+	keyPath      = "path"
+	keyRecursive = "recursive"
+	keyType      = "type"
+)
+
+// EntryKeyCategory is the shared user-facing `category` metadata key.
+const EntryKeyCategory = keyCategory
+
+// EntryKeyPath is the shared top-level `path` key for path-backed targets.
+const EntryKeyPath = keyPath
+
+// Service monitor block keys.
+const (
+	ServiceMonitorKeyVersion  = "version"
+	ServiceMonitorKeyConfig   = "config"
+	ServiceMonitorKeyOnChange = "on_change"
+	ServiceMonitorKeyLevel    = "level"
 )
 
 // storage mount / umount block field keys.
@@ -142,17 +186,29 @@ const (
 	keyAllowLazy    = "allow_lazy"
 )
 
+// StorageKeyMount is the fstab-backed storage mount block.
+const StorageKeyMount = keyMount
+
 // sectionMetrics is the multi-metric watch block: a map of metric name to its
 // per-metric condition/action (used by net/swap/icmp watches).
 const sectionMetrics = "metrics"
+
+// SectionMetrics is the multi-metric watch block.
+const SectionMetrics = sectionMetrics
 
 // sectionChecks is the service/watch health-check block: a map of check name to
 // its check definition. Distinct from the paths.* keys (no paths.checks exists).
 const sectionChecks = "checks"
 
+// SectionChecks is the service/watch health-check block.
+const SectionChecks = sectionChecks
+
 // sectionPreflight is the service block of gating checks that must pass before a
 // start/restart/reload operation runs.
 const sectionPreflight = "preflight"
+
+// SectionPreflight is the service preflight check block.
+const SectionPreflight = sectionPreflight
 
 // sectionProcesses is the service block of named process selectors (exe/user)
 // used for discovery and kill matching.
@@ -555,8 +611,8 @@ func StopInvariants(tree map[string]any) (pidfilePaths, files []string, clean bo
 					cleanPaths = append(cleanPaths, CleanPath{Path: e})
 				}
 			case map[string]any:
-				p := cfgval.AsString(e["path"])
-				rec, _ := e["recursive"].(bool)
+				p := cfgval.AsString(e[keyPath])
+				rec, _ := e[keyRecursive].(bool)
 				if p != "" {
 					cleanPaths = append(cleanPaths, CleanPath{Path: p, Recursive: rec})
 				}

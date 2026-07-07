@@ -8,6 +8,12 @@ import (
 	"time"
 
 	"sermo/internal/config"
+	"sermo/internal/rules"
+)
+
+const (
+	watchCategoryNetwork = "network"
+	watchCategoryStorage = "storage"
 )
 
 // Monitoring is the shared monitor-state + interval answer every wizard asks
@@ -67,10 +73,10 @@ func (p *Prompt) AskInterval(def string) string {
 // Keeps the injection identical across assistants.
 func (m Monitoring) apply(entry map[string]any) {
 	if m.Monitor != "" {
-		entry["monitor"] = m.Monitor
+		entry[config.EntryKeyMonitor] = m.Monitor
 	}
 	if m.Interval != "" {
-		entry["interval"] = m.Interval
+		entry[config.EntryKeyInterval] = m.Interval
 	}
 }
 
@@ -100,14 +106,14 @@ func watchHasSideEffect(env Env, notifiers []string, hasNativeAction bool) bool 
 
 func applyDryRun(entry map[string]any, dryRun bool) {
 	if dryRun {
-		entry["dry_run"] = true
+		entry[config.EntryKeyDryRun] = true
 	}
 }
 
 func watchThen(notifiers []string) map[string]any {
 	then := map[string]any{}
 	if len(notifiers) > 0 {
-		then["notify"] = notifiers
+		then[rules.RuleFieldNotify] = notifiers
 	}
 	return then
 }

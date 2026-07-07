@@ -94,6 +94,7 @@ const (
 	CheckKeyResolvconf            = "resolvconf"
 	CheckKeyResource              = "resource"
 	CheckKeyResult                = "result"
+	CheckKeyRequires              = "requires"
 	CheckKeyRules                 = "rules"
 	CheckKeyScope                 = "scope"
 	CheckKeyServerName            = "server_name"

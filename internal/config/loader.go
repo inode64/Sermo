@@ -365,17 +365,17 @@ func pathSpecFromListItem(v any, field string) (PathSpec, bool, error) {
 func pathSpecFromMap(m map[string]any, field string) (PathSpec, error) {
 	for key := range m {
 		switch key {
-		case "path", "recursive":
+		case keyPath, keyRecursive:
 		default:
 			return PathSpec{}, fmt.Errorf("%s.%s is not supported; use path and recursive", field, key)
 		}
 	}
-	path, ok := m["path"].(string)
+	path, ok := m[keyPath].(string)
 	if !ok || path == "" {
 		return PathSpec{}, fmt.Errorf("%s.path must be a non-empty string", field)
 	}
 	var recursive bool
-	if raw, present := m["recursive"]; present {
+	if raw, present := m[keyRecursive]; present {
 		recursive, ok = raw.(bool)
 		if !ok {
 			return PathSpec{}, fmt.Errorf("%s.recursive must be a boolean", field)
@@ -808,7 +808,7 @@ func DisplayName(body map[string]any, fallback string) string {
 // CategoryLabel returns the optional UI grouping category from a document body,
 // falling back to fallback when the field is absent or blank.
 func CategoryLabel(body map[string]any, fallback string) string {
-	if s, ok := body["category"].(string); ok && strings.TrimSpace(s) != "" {
+	if s, ok := body[keyCategory].(string); ok && strings.TrimSpace(s) != "" {
 		return strings.TrimSpace(s)
 	}
 	return fallback

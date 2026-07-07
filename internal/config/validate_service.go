@@ -12,7 +12,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/dockerctl"
 	"sermo/internal/process"
-	"sermo/internal/servicemgr"
+	"sermo/internal/rules"
 	"sermo/internal/virt"
 )
 
@@ -40,12 +40,12 @@ func validateMonitorMode(path string, mode any, add addFunc) {
 // the `none` sentinel). The version/config commands themselves are reused from
 // the catalog service (commands.version / preflight.config) and validated there.
 func validateServiceMonitors(tree map[string]any, notifiers map[string]struct{}, add addFunc) {
-	for _, key := range []string{"version", "config"} {
+	for _, key := range []string{ServiceMonitorKeyVersion, ServiceMonitorKeyConfig} {
 		block, ok := tree[key].(map[string]any)
 		if !ok {
 			continue
 		}
-		oc, present := block["on_change"]
+		oc, present := block[ServiceMonitorKeyOnChange]
 		if !present {
 			continue
 		}
@@ -54,13 +54,13 @@ func validateServiceMonitors(tree map[string]any, notifiers map[string]struct{},
 			add("%s.on_change must be a mapping", key)
 			continue
 		}
-		if _, present := ocMap["notify"]; present {
-			validateNotifySelection(key+".on_change.notify", ocMap["notify"], notifiers, add)
+		if _, present := ocMap[rules.RuleFieldNotify]; present {
+			validateNotifySelection(key+".on_change.notify", ocMap[rules.RuleFieldNotify], notifiers, add)
 		}
 		// `level` selects version-change granularity and only applies to the
 		// version monitor, which compares version_short at major/minor/patch.
-		if lv, present := ocMap["level"]; present {
-			if key != "version" {
+		if lv, present := ocMap[ServiceMonitorKeyLevel]; present {
+			if key != ServiceMonitorKeyVersion {
 				add("%s.on_change.level is only supported for the version monitor", key)
 			} else if _, ok := checks.VersionLevel(cfgval.String(lv)); !ok {
 				add("version.on_change.level %q is not one of major, minor, patch", cfgval.String(lv))
@@ -132,8 +132,8 @@ func validateCleanOnStop(raw any, add addFunc) {
 		case string:
 			path = e
 		case map[string]any:
-			path = cfgval.AsString(e["path"])
-			if rawRecursive, present := e["recursive"]; present {
+			path = cfgval.AsString(e[keyPath])
+			if rawRecursive, present := e[keyRecursive]; present {
 				var ok bool
 				recursive, ok = rawRecursive.(bool)
 				if !ok {
@@ -252,20 +252,20 @@ func validatePolicyExtras(tree map[string]any, add addFunc) {
 	if !ok {
 		return
 	}
-	if v, present := policy["max_actions"]; present {
+	if v, present := policy[rules.PolicyKeyMaxActions]; present {
 		if n, ok := cfgval.Int(v); !ok || n <= 0 {
 			add("policy.max_actions must be an integer > 0")
 		}
-		if _, hasWindow := policy["max_actions_window"]; !hasWindow {
+		if _, hasWindow := policy[rules.PolicyKeyMaxActionsWindow]; !hasWindow {
 			add("policy.max_actions requires policy.max_actions_window")
 		}
 	}
-	if v, present := policy["max_actions_window"]; present && !isPositiveDuration(cfgval.String(v)) {
+	if v, present := policy[rules.PolicyKeyMaxActionsWindow]; present && !isPositiveDuration(cfgval.String(v)) {
 		add("policy.max_actions_window %q must be a valid positive duration", cfgval.String(v))
 	}
-	if bo, ok := policy["backoff"].(map[string]any); ok {
-		initial := cfgval.String(bo["initial"])
-		maxStr := cfgval.String(bo["max"])
+	if bo, ok := policy[rules.PolicyKeyBackoff].(map[string]any); ok {
+		initial := cfgval.String(bo[rules.BackoffKeyInitial])
+		maxStr := cfgval.String(bo[rules.BackoffKeyMax])
 		initialOK := isPositiveDuration(initial)
 		maxOK := isPositiveDuration(maxStr)
 		if !initialOK {
@@ -288,7 +288,7 @@ func validatePolicyExtras(tree map[string]any, add addFunc) {
 }
 
 func validateControl(tree map[string]any, add addFunc) {
-	raw, present := tree["control"]
+	raw, present := tree[SectionControl]
 	if !present {
 		return
 	}
@@ -297,13 +297,13 @@ func validateControl(tree map[string]any, add addFunc) {
 		add("control must be a mapping")
 		return
 	}
-	typ := cfgval.String(control["type"])
+	typ := cfgval.String(control[keyType])
 	switch typ {
-	case string(servicemgr.BackendLibvirt):
-		validateControlKeys(control, set("type", "uri", "domain", "uuid", "socket", "host", "port"), "type, uri, domain, uuid, socket, host, port", add)
+	case virt.ControlType:
+		validateControlKeys(control, set(virt.ControlKeyType, virt.ControlKeyURI, virt.ControlKeyDomain, virt.ControlKeyUUID, virt.ControlKeySocket, virt.ControlKeyHost, virt.ControlKeyPort), "type, uri, domain, uuid, socket, host, port", add)
 		validateLibvirtControl(control, add)
-	case string(servicemgr.BackendDocker):
-		validateControlKeys(control, set("type", "socket", "host", "port", "tls", "container"), "type, socket, host, port, tls, container", add)
+	case dockerctl.ControlType:
+		validateControlKeys(control, set(dockerctl.ControlKeyType, dockerctl.ControlKeySocket, dockerctl.ControlKeyHost, dockerctl.ControlKeyPort, dockerctl.ControlKeyTLS, dockerctl.ControlKeyContainer), "type, socket, host, port, tls, container", add)
 		validateDockerControl(control, add)
 	default:
 		add("control.type %q is not one of libvirt, docker", typ)
@@ -319,29 +319,29 @@ func validateControlKeys(control map[string]any, allowed map[string]struct{}, la
 }
 
 func validateLibvirtControl(control map[string]any, add addFunc) {
-	if domain := cfgval.String(control["domain"]); domain == "" {
+	if domain := cfgval.String(control[virt.ControlKeyDomain]); domain == "" {
 		add("control.domain is required for libvirt")
 	}
-	if uri := cfgval.String(control["uri"]); uri != "" && strings.TrimSpace(uri) == "" {
+	if uri := cfgval.String(control[virt.ControlKeyURI]); uri != "" && strings.TrimSpace(uri) == "" {
 		add("control.uri must not be blank")
 	}
-	if uuid := cfgval.String(control["uuid"]); uuid != "" {
+	if uuid := cfgval.String(control[virt.ControlKeyUUID]); uuid != "" {
 		if _, err := virt.ParseUUID(uuid); err != nil {
 			add("control.uuid %q must be a canonical UUID or 32 hex digits", uuid)
 		}
 	}
-	if socket := cfgval.String(control["socket"]); socket != "" && !virt.ValidSocketPath(socket) {
+	if socket := cfgval.String(control[virt.ControlKeySocket]); socket != "" && !virt.ValidSocketPath(socket) {
 		add("control.socket %q must be an absolute path", socket)
 	}
-	host := cfgval.String(control["host"])
+	host := cfgval.String(control[virt.ControlKeyHost])
 	if host != "" && strings.TrimSpace(host) == "" {
 		add("control.host must not be blank")
 	}
-	if host != "" && cfgval.String(control["socket"]) != "" {
+	if host != "" && cfgval.String(control[virt.ControlKeySocket]) != "" {
 		add("control must not set both socket and host")
 	}
-	if _, present := control["port"]; present {
-		port, ok := cfgval.Int(control["port"])
+	if _, present := control[virt.ControlKeyPort]; present {
+		port, ok := cfgval.Int(control[virt.ControlKeyPort])
 		if !ok || !virt.ValidHostPort(host, port) {
 			add("control.port must be an integer in 1..65535")
 		}
@@ -349,27 +349,27 @@ func validateLibvirtControl(control map[string]any, add addFunc) {
 }
 
 func validateDockerControl(control map[string]any, add addFunc) {
-	if container := cfgval.String(control["container"]); container == "" {
+	if container := cfgval.String(control[dockerctl.ControlKeyContainer]); container == "" {
 		add("control.container is required for docker")
 	}
-	if socket := cfgval.String(control["socket"]); socket != "" && !filepath.IsAbs(socket) {
+	if socket := cfgval.String(control[dockerctl.ControlKeySocket]); socket != "" && !filepath.IsAbs(socket) {
 		add("control.socket %q must be an absolute path", socket)
 	}
-	host := cfgval.String(control["host"])
+	host := cfgval.String(control[dockerctl.ControlKeyHost])
 	if host != "" && strings.TrimSpace(host) == "" {
 		add("control.host must not be blank")
 	}
-	if host != "" && cfgval.String(control["socket"]) != "" {
+	if host != "" && cfgval.String(control[dockerctl.ControlKeySocket]) != "" {
 		add("control must not set both socket and host")
 	}
-	if _, present := control["port"]; present {
-		port, ok := cfgval.Int(control["port"])
+	if _, present := control[dockerctl.ControlKeyPort]; present {
+		port, ok := cfgval.Int(control[dockerctl.ControlKeyPort])
 		if !ok || port < 1 || port > 65535 {
 			add("control.port must be an integer in 1..65535")
 		}
 	}
-	if !dockerctl.ValidTLSValue(control["tls"]) {
-		add("control.tls %q is not one of true, false, required, skip-verify", cfgval.String(control["tls"]))
+	if !dockerctl.ValidTLSValue(control[dockerctl.ControlKeyTLS]) {
+		add("control.tls %q is not one of true, false, required, skip-verify", cfgval.String(control[dockerctl.ControlKeyTLS]))
 	}
 }
 
@@ -394,7 +394,7 @@ func validateReload(tree map[string]any, backend string, add addFunc) {
 		add("reload.when %q must be \"auto\" or \"always\"", when)
 	}
 	sig := cfgval.AsString(r["signal"])
-	_, hasCmd := r["command"]
+	_, hasCmd := r[checks.CheckKeyCommand]
 	switch {
 	case sig != "" && hasCmd:
 		add("reload sets both signal and command; use exactly one")
@@ -411,9 +411,9 @@ func validateReload(tree map[string]any, backend string, add addFunc) {
 			}
 		}
 	case hasCmd:
-		if !cfgval.IsNonEmptyStringArray(r["command"]) {
+		if !cfgval.IsNonEmptyStringArray(r[checks.CheckKeyCommand]) {
 			add("reload.command must be an array, not a shell string")
-		} else if len(cfgval.StringArray(r["command"])) == 0 {
+		} else if len(cfgval.StringArray(r[checks.CheckKeyCommand])) == 0 {
 			add("reload.command must not be empty")
 		}
 	default:
@@ -474,7 +474,7 @@ func validateCommands(tree map[string]any, add addFunc) {
 		}
 		path := "commands." + name
 		validateCommandFields(path, entry, false, add)
-		if v, present := entry["timeout"]; present && !isPositiveDuration(cfgval.String(v)) {
+		if v, present := entry[checks.CheckKeyTimeout]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("commands.%s timeout %q must be a valid positive duration", name, cfgval.String(v))
 		}
 	}
@@ -580,7 +580,7 @@ func policyCooldown(tree map[string]any) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	v, present := policy["cooldown"]
+	v, present := policy[rules.PolicyKeyCooldown]
 	if !present {
 		return "", false
 	}

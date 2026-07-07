@@ -84,7 +84,7 @@ func (c *Config) StorageNameByPath(path string) string {
 		if len(errs) > 0 {
 			continue
 		}
-		if cleanMountPath(cfgval.String(resolved.Tree["path"])) == cleanPath {
+		if cleanMountPath(cfgval.String(resolved.Tree[keyPath])) == cleanPath {
 			return name
 		}
 	}
@@ -109,7 +109,7 @@ func (c *Config) StorageMountNames() []string {
 		if len(errs) > 0 {
 			continue
 		}
-		if _, ok := resolved.Tree["mount"].(map[string]any); ok {
+		if _, ok := resolved.Tree[keyMount].(map[string]any); ok {
 			out = append(out, name)
 		}
 	}
@@ -244,7 +244,7 @@ func parseServiceArtifactPaths(kind string, raw any) (serviceArtifactPaths, []st
 	pathRaw := raw
 	optional := false
 	if m, ok := raw.(map[string]any); ok {
-		pathRaw = m["path"]
+		pathRaw = m[keyPath]
 		optional = cfgval.Bool(m[keyOptional])
 	}
 	paths := cfgval.StringList(pathRaw)
@@ -310,7 +310,7 @@ func (c *Config) expandAnalyze(tree map[string]any) []string {
 			if !ok {
 				continue
 			}
-			check, ok := entry["check"].(map[string]any)
+			check, ok := entry[WatchKeyCheck].(map[string]any)
 			if !ok {
 				continue
 			}
@@ -492,7 +492,7 @@ func expandServiceWatches(tree map[string]any) []string {
 		then, _ := rawThen.(map[string]any)
 		action := cfgval.String(then[rules.RuleFieldAction])
 		if !hasThen {
-			check, ok := entry["check"].(map[string]any)
+			check, ok := entry[WatchKeyCheck].(map[string]any)
 			if !ok {
 				add("watches.%s.check is required", name)
 				continue
@@ -509,7 +509,7 @@ func expandServiceWatches(tree map[string]any) []string {
 		// Validate the action grammar here (this entry is removed before the
 		// resolved-tree validators run, so they never see it).
 		validateWatchThenAction("watches."+name, action, then, add)
-		check, ok := entry["check"].(map[string]any)
+		check, ok := entry[WatchKeyCheck].(map[string]any)
 		if !ok {
 			add("watches.%s.check is required", name)
 			continue
@@ -554,7 +554,7 @@ func promoteServiceWatchCheck(checksMap map[string]any, name string, entry, chec
 		add("watches.%s would overwrite existing check %q; rename the watch", name, name)
 		return serviceWatchRuleTarget{}, false
 	}
-	checkType := cfgval.String(check[rules.FieldType])
+	checkType := cfgval.String(check[checks.CheckKeyType])
 	if checkType == "" {
 		add("watches.%s.check.type is required", name)
 		return serviceWatchRuleTarget{}, false
@@ -593,7 +593,7 @@ func buildServiceWatchRule(entry, then map[string]any, action string, target ser
 	default:
 		rule[rules.RuleFieldType] = string(rules.RuleRemediation)
 	}
-	// A rule's notify is an entry-level field (ParseRules reads entry["notify"]),
+	// A rule's notify is an entry-level field (ParseRules reads entry[rules.RuleFieldNotify]),
 	// not part of then; a guard never notifies.
 	if action != string(rules.ActionBlock) {
 		if n, has := then[rules.RuleFieldNotify]; has {
@@ -833,20 +833,20 @@ func storageCapacityWatch(tree map[string]any) (map[string]any, bool) {
 		return nil, false
 	}
 	check := map[string]any{
-		"type": "storage",
-		"path": tree["path"],
+		checks.CheckKeyType: checks.CheckTypeStorage,
+		checks.CheckKeyPath: tree[checks.CheckKeyPath],
 	}
-	if _, hasMount := tree["mount"].(map[string]any); hasMount {
-		if _, explicit := capacity["mounted"]; !explicit {
-			check["mounted"] = true
+	if _, hasMount := tree[keyMount].(map[string]any); hasMount {
+		if _, explicit := capacity[checks.CheckKeyMounted]; !explicit {
+			check[checks.CheckKeyMounted] = true
 		}
 	}
-	for _, key := range append([]string{"mounted"}, checks.StoragePredFields...) {
+	for _, key := range append([]string{checks.CheckKeyMounted}, checks.StoragePredFields...) {
 		if v, present := capacity[key]; present {
 			check[key] = v
 		}
 	}
-	entry := map[string]any{"check": check}
+	entry := map[string]any{WatchKeyCheck: check}
 	for _, key := range []string{"display_name", "description", "category", keyDryRun, keyMonitor, keyInterval} {
 		if v, present := tree[key]; present {
 			entry[key] = v
@@ -1027,11 +1027,11 @@ func (c *Config) expandAppsChain(tree map[string]any, chain []string) []string {
 				errs = append(errs, fmt.Sprintf("apps preflight key %q would overwrite an existing preflight check; rename one of the checks", key))
 				continue
 			}
-			if checkName == "version" {
-				if match, present := resolved.Tree["version_match"]; present {
+			if checkName == checks.DataKeyVersion {
+				if match, present := resolved.Tree[checks.CheckKeyVersionMatch]; present {
 					if checkMap, ok := check.(map[string]any); ok {
 						check = maps.Clone(checkMap)
-						check.(map[string]any)["version_match"] = match
+						check.(map[string]any)[checks.CheckKeyVersionMatch] = match
 					}
 				}
 			}

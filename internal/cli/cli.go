@@ -455,7 +455,7 @@ func (a App) serviceMonitorState(opts options) monitorView {
 				view.Enabled = false
 				view.Paused = true
 			}
-			if mode, _ := resolved.Tree["monitor"].(string); mode == config.MonitorDisabled {
+			if mode, _ := resolved.Tree[config.EntryKeyMonitor].(string); mode == config.MonitorDisabled {
 				view.Paused = true
 			}
 		}
@@ -973,7 +973,7 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 		return code
 	}
 
-	section, _ := resolved.Tree["preflight"].(map[string]any)
+	section, _ := resolved.Tree[config.SectionPreflight].(map[string]any)
 	discoverer := process.NewDiscovererWithUserLookup(app.EngineUserLookup(cfg, a.Runner))
 	deps := checks.Deps{
 		Service:        service,

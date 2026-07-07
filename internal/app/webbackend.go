@@ -315,7 +315,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		if target.Unit == "" {
 			continue
 		}
-		iv := cfgval.Duration(resolved.Tree["interval"])
+		iv := cfgval.Duration(resolved.Tree[config.EntryKeyInterval])
 		if iv <= 0 {
 			iv = config.EngineInterval(cfg, config.DefaultEngineInterval)
 		}
@@ -363,7 +363,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		// listed and controllable (monitor/unmonitor) in the web UI like host
 		// watches. Their live meter is omitted — the checks are scoped to the
 		// service PID tree, which the host-scoped web live-view path does not model.
-		if watchesSection, ok := resolved.Tree["watches"].(map[string]any); ok {
+		if watchesSection, ok := resolved.Tree[config.SectionWatches].(map[string]any); ok {
 			for _, wn := range slices.Sorted(maps.Keys(watchesSection)) {
 				wentry, ok := watchesSection[wn].(map[string]any)
 				if !ok || reservedServiceWatchName(wn) || unsupportedServiceWatchType(wentry) != "" {
@@ -400,7 +400,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	if raw := cfg.Notifiers(); len(raw) > 0 {
 		for _, name := range slices.Sorted(maps.Keys(raw)) {
 			entry, _ := raw[name].(map[string]any)
-			typ := cfgval.AsString(entry["type"])
+			typ := cfgval.AsString(entry[notify.KeyType])
 			wn := &webNotifier{
 				name:    name,
 				typ:     typ,
@@ -421,10 +421,10 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 // omitted). warn is a non-empty message when the expand action is malformed.
 func newWebWatch(name string, entry map[string]any, globalNotify []string, defaultInterval time.Duration, serviceScoped bool) (*webWatch, string) {
 	ctype := ""
-	if ce, ok := entry["check"].(map[string]any); ok {
+	if ce, ok := entry[config.WatchKeyCheck].(map[string]any); ok {
 		ctype = cfgval.AsString(ce[checks.CheckKeyType])
 	}
-	iv := cfgval.Duration(entry["interval"])
+	iv := cfgval.Duration(entry[config.EntryKeyInterval])
 	if iv <= 0 {
 		iv = defaultInterval
 	}
@@ -433,14 +433,14 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 	var notifierNames []string
 	var expand *ExpandSpec
 	var warn string
-	if then, ok := entry["then"].(map[string]any); ok {
-		if h, ok := then["hook"].(map[string]any); ok && len(h) > 0 {
-			if cmd := h[checks.CheckKeyCommand]; cmd != nil {
+	if then, ok := entry[rules.RuleFieldThen].(map[string]any); ok {
+		if h, ok := then[config.WatchThenKeyHook].(map[string]any); ok && len(h) > 0 {
+			if cmd := h[config.WatchHookKeyCommand]; cmd != nil {
 				hookCommand = cfgval.StringArray(cmd)
 				hasHook = len(hookCommand) > 0
 			}
 		}
-		notifierNames = effectiveNotify(cfgval.StringList(then["notify"]), globalNotify)
+		notifierNames = effectiveNotify(cfgval.StringList(then[rules.RuleFieldNotify]), globalNotify)
 		if parsed, err := parseExpand(then, ctype); err != nil {
 			warn = err.Error()
 		} else {
@@ -471,7 +471,7 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 // checkCatalog returns a service's check names (sorted) and their types, from the
 // resolved `checks` section.
 func checkCatalog(tree map[string]any) ([]string, map[string]string) {
-	section, ok := tree["checks"].(map[string]any)
+	section, ok := tree[config.SectionChecks].(map[string]any)
 	if !ok {
 		return nil, nil
 	}
@@ -954,7 +954,7 @@ func watchStorageMountFailed(w web.Watch) bool {
 		return false
 	}
 	for _, cond := range w.Conditions {
-		if cond.Field != "mounted" || cond.Op != "==" {
+		if cond.Field != checks.DataKeyMounted || cond.Op != "==" {
 			continue
 		}
 		expect, err := strconv.ParseBool(cond.Value)
@@ -1000,12 +1000,12 @@ func isWatchActivityKind(kind string) bool {
 }
 
 func checkMap(entry map[string]any) map[string]any {
-	check, _ := entry["check"].(map[string]any)
+	check, _ := entry[config.WatchKeyCheck].(map[string]any)
 	return check
 }
 
 func metricsMap(entry map[string]any) map[string]any {
-	metrics, _ := entry["metrics"].(map[string]any)
+	metrics, _ := entry[config.SectionMetrics].(map[string]any)
 	return metrics
 }
 
@@ -1065,7 +1065,7 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 			Value: cfgval.String(m[checks.CheckKeyValue]),
 		})
 	}
-	switch cfgval.AsString(check[rules.FieldType]) {
+	switch cfgval.AsString(check[checks.CheckKeyType]) {
 	case checks.CheckTypeAutofs:
 		if path := cfgval.AsString(check[checks.CheckKeyPath]); path != "" {
 			out = append(out, web.WatchCondition{Field: checks.DataKeyPath, Op: "==", Value: path})
@@ -1083,9 +1083,9 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 			out = append(out, web.WatchCondition{Field: checks.DataKeyRecursive, Op: "==", Value: fmt.Sprintf("%t", recursive)})
 		}
 		if m, ok := check[checks.CheckKeyCount].(map[string]any); ok {
-			out = append(out, web.WatchCondition{Field: checks.DataKeyCount, Op: cfgval.AsString(m[rules.FieldOp]), Value: cfgval.String(m[rules.FieldValue])})
-		} else if op := cfgval.AsString(check[rules.FieldOp]); op != "" {
-			out = append(out, web.WatchCondition{Field: checks.DataKeyCount, Op: op, Value: cfgval.String(check[rules.FieldValue])})
+			out = append(out, web.WatchCondition{Field: checks.DataKeyCount, Op: cfgval.AsString(m[checks.CheckKeyOp]), Value: cfgval.String(m[checks.CheckKeyValue])})
+		} else if op := cfgval.AsString(check[checks.CheckKeyOp]); op != "" {
+			out = append(out, web.WatchCondition{Field: checks.DataKeyCount, Op: op, Value: cfgval.String(check[checks.CheckKeyValue])})
 		}
 	case checks.CheckTypeFile:
 		out = append(out, fileWatchConditions(check)...)
@@ -1132,7 +1132,7 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 	if v, ok := check[checks.CheckKeyMounted].(bool); ok {
 		out = append(out, web.WatchCondition{Field: checks.DataKeyMounted, Op: "==", Value: fmt.Sprintf("%t", v)})
 	}
-	if cfgval.AsString(check[rules.FieldType]) == checks.CheckTypeOOM {
+	if cfgval.AsString(check[checks.CheckKeyType]) == checks.CheckTypeOOM {
 		if _, ok := check[checks.CheckKeyDelta].(map[string]any); !ok {
 			out = append(out, web.WatchCondition{Field: "delta", Op: ">", Value: "0"})
 		}
@@ -1142,7 +1142,7 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 }
 
 func watchConditionFields(check map[string]any) []string {
-	checkType := cfgval.AsString(check[rules.FieldType])
+	checkType := cfgval.AsString(check[checks.CheckKeyType])
 	switch checkType {
 	case checks.CheckTypeStorage:
 		return checks.StoragePredFields
@@ -1179,7 +1179,7 @@ func watchConditionFields(check map[string]any) []string {
 	case checks.CheckTypeEDAC:
 		return checks.EdacPredFields
 	case checks.CheckTypeAutofs:
-		return []string{checks.DataKeyCount}
+		return []string{checks.CheckKeyCount}
 	default:
 		return nil
 	}
@@ -1197,7 +1197,7 @@ func fileWatchConditions(check map[string]any) []web.WatchCondition {
 		if on := cfgval.AsString(size[checks.CheckKeyOn]); on != "" {
 			out = append(out, web.WatchCondition{Field: checks.DataKeySize, Value: on})
 		} else {
-			out = append(out, web.WatchCondition{Field: checks.DataKeySize, Op: cfgval.AsString(size[rules.FieldOp]), Value: cfgval.String(size[rules.FieldValue])})
+			out = append(out, web.WatchCondition{Field: checks.DataKeySize, Op: cfgval.AsString(size[checks.CheckKeyOp]), Value: cfgval.String(size[checks.CheckKeyValue])})
 		}
 	}
 	for _, field := range []string{checks.CheckKeyPermissions, checks.CheckKeyOwner} {
@@ -1248,7 +1248,7 @@ func watchMetricConditions(metrics map[string]any) []web.WatchCondition {
 				Value: cfgval.String(change[checks.CheckKeyDelta]),
 			})
 		}
-		for _, field := range []string{"used_pct", "free_pct", "free_bytes"} {
+		for _, field := range []string{checks.LevelFieldUsedPct, checks.LevelFieldFreePct, checks.LevelFieldFreeBytes} {
 			m, ok := entry[field].(map[string]any)
 			if !ok {
 				continue
@@ -1858,8 +1858,8 @@ func watchMetricEnabled(metrics map[string]any, metric string) bool {
 }
 
 func netErrorTotal(metrics map[string]any, counters map[string]uint64) uint64 {
-	names := []string{"rx_errors", "tx_errors"}
-	if entry, ok := metrics["errors"].(map[string]any); ok {
+	names := []string{checks.NetCounterRXErrors, checks.NetCounterTXErrors}
+	if entry, ok := metrics[checks.NetMetricErrors].(map[string]any); ok {
 		if configured := cfgval.StringArray(entry[checks.CheckKeyCounters]); len(configured) > 0 {
 			names = configured
 		}

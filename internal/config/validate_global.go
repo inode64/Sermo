@@ -225,7 +225,7 @@ func defaultsCooldown(defaults map[string]any) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	v, present := policy["cooldown"]
+	v, present := policy[rules.PolicyKeyCooldown]
 	if !present {
 		return "", false
 	}
