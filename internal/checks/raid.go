@@ -71,7 +71,7 @@ func SampleRaid() (RaidStatus, error) { return defaultRaidSampler() }
 
 // defaultRaidSampler parses /proc/mdstat (absent/empty -> no arrays).
 func defaultRaidSampler() (RaidStatus, error) {
-	b, err := os.ReadFile("/proc/mdstat")
+	b, err := os.ReadFile(procMDStatPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return RaidStatus{}, nil

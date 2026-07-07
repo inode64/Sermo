@@ -5,6 +5,12 @@ import (
 	"strings"
 )
 
+const (
+	initSystemdRuntimeDir = "/run/systemd/system"
+	initOpenRCRuntimeDir  = "/run/openrc"
+	initOpenRCBinaryPath  = "/sbin/openrc"
+)
+
 // detectedInit holds the init system used as the ${init} built-in
 // (systemd | openrc). Resolved once at package load; SERMO_INIT overrides
 // detection (handy off-host or in tests).
@@ -14,13 +20,13 @@ func detectInit() string {
 	if v := envOverride(envInitOverride); v != "" {
 		return strings.ToLower(v)
 	}
-	if _, err := os.Stat("/run/systemd/system"); err == nil {
+	if _, err := os.Stat(initSystemdRuntimeDir); err == nil {
 		return backendSystemd
 	}
-	if _, err := os.Stat("/run/openrc"); err == nil {
+	if _, err := os.Stat(initOpenRCRuntimeDir); err == nil {
 		return backendOpenRC
 	}
-	if _, err := os.Stat("/sbin/openrc"); err == nil {
+	if _, err := os.Stat(initOpenRCBinaryPath); err == nil {
 		return backendOpenRC
 	}
 	return backendSystemd

@@ -60,7 +60,7 @@ func (c edacCheck) Run(_ context.Context) Result {
 func SampleEdac() (EdacCounts, error) { return defaultEdacSampler() }
 
 // defaultEdacSampler reads /sys/devices/system/edac.
-func defaultEdacSampler() (EdacCounts, error) { return readEDAC("/sys/devices/system/edac") }
+func defaultEdacSampler() (EdacCounts, error) { return readEDAC(sysEDACPath) }
 
 // readEDAC sums ce_count/ue_count across the memory controllers under root.
 func readEDAC(root string) (EdacCounts, error) {

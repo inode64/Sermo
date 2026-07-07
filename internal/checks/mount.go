@@ -60,7 +60,7 @@ func (m mountCond) evaluate(mounts []Mount, path string) (mounted, problem bool,
 
 // defaultMountSampler reads the mount table from /proc/mounts.
 func defaultMountSampler() ([]Mount, error) {
-	data, err := os.ReadFile("/proc/mounts")
+	data, err := os.ReadFile(procMountsPath)
 	if err != nil {
 		return nil, err
 	}

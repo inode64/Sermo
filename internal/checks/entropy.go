@@ -44,7 +44,7 @@ func SampleEntropy() (avail uint64, ok bool) { return defaultEntropySampler() }
 
 // defaultEntropySampler reads /proc/sys/kernel/random/entropy_avail.
 func defaultEntropySampler() (uint64, bool) {
-	n, err := readProcUint("/proc/sys/kernel/random/entropy_avail")
+	n, err := readProcUint(procEntropyAvailPath)
 	if err != nil {
 		return 0, false
 	}
