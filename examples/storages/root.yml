@@ -1,13 +1,14 @@
 name: storage-root
 display_name: Root filesystem
 category: storage
-path: /
 monitor: disabled
 interval: 30s
-capacity:
+check:
+  type: storage
+  path: /
   used_pct: { op: ">=", value: "90%" }
   mounted: true
-  for: { cycles: 3 }
-  then:
-    hook:
-      command: [/usr/local/bin/sermo-storage-alert.sh, /]
+for: { cycles: 3 }
+then:
+  hook:
+    command: [/usr/local/bin/sermo-storage-alert.sh, /]

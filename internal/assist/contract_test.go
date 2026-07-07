@@ -149,20 +149,16 @@ func TestGeneratedMountsPassConfigValidation(t *testing.T) {
 	body := buildMountUnit(MountCandidate{Path: "/mnt/backup"}, mountSettings{refcount: true})
 	cfg := &config.Config{
 		Global: config.Global{
-			Raw:      map[string]any{},
+			Raw: map[string]any{
+				"watches": map[string]any{
+					"mount-mnt-backup": body,
+				},
+			},
 			Defaults: map[string]any{"policy": map[string]any{"cooldown": "5m"}},
 		},
-		Storages: map[string]*config.Document{
-			"mount-mnt-backup": {
-				Kind: "storage",
-				Name: "mount-mnt-backup",
-				Body: body,
-			},
-		},
-		StorageNames: []string{"mount-mnt-backup"},
 	}
 	for _, issue := range config.Validate(cfg) {
-		if issue.Scope == "storage mount-mnt-backup" {
+		if issue.Scope == "watch mount-mnt-backup" {
 			t.Errorf("wizard-generated mount failed validation: %s", issue)
 		}
 	}

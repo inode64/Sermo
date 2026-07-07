@@ -8,7 +8,7 @@ type Volume struct {
 }
 
 // MountCandidate is an fstab-backed mount target the mount assistant can
-// register as a storage target with a mount block.
+// register as a storage watch with a mount block.
 type MountCandidate struct {
 	Path    string
 	Source  string
@@ -84,8 +84,8 @@ type Env struct {
 }
 
 // Result is what an assistant produced: watch entries that the CLI renders as
-// watch or storage documents, kind:service files (`Services`: service name ->
-// body), mount documents, plus a short human summary.
+// classified watch documents, kind:service files (`Services`: service name ->
+// body), mount watch documents, plus a short human summary.
 type Result struct {
 	Watches  map[string]any
 	Services map[string]any

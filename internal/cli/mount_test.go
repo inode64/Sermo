@@ -21,17 +21,18 @@ func writeMountConfig(t *testing.T) string {
 	mustWrite(t, global, `
 paths:
   services: [ `+root+`/services ]
-  storages: [ `+root+`/storages ]
+  watches: [ `+root+`/mounts ]
   runtime: `+root+`/run
   state: `+root+`/state
 defaults:
   policy:
     cooldown: 5m
 `)
-	mustWrite(t, filepath.Join(root, "storages", "backup.yml"), `
+	mustWrite(t, filepath.Join(root, "mounts", "backup.yml"), `
 name: mount-backup
-path: /mnt/backup
-capacity:
+check:
+  type: storage
+  path: /mnt/backup
   mounted: true
 mount: {}
 `)

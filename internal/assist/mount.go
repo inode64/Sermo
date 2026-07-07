@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"sermo/internal/checks"
 	"sermo/internal/config"
 )
 
@@ -63,7 +64,11 @@ func askMountSettings(p *Prompt, label string) mountSettings {
 func buildMountUnit(c MountCandidate, s mountSettings) map[string]any {
 	return map[string]any{
 		config.EntryKeyCategory: watchCategoryStorage,
-		config.EntryKeyPath:     filepath.Clean(c.Path),
+		config.WatchKeyCheck: map[string]any{
+			checks.CheckKeyType: checks.CheckTypeStorage,
+			checks.CheckKeyPath: filepath.Clean(c.Path),
+			"mounted":           true,
+		},
 		config.StorageKeyMount: map[string]any{
 			"refcount": s.refcount,
 			"umount": map[string]any{

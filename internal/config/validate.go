@@ -10,7 +10,6 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/process"
-	"sermo/internal/rules"
 )
 
 // Issue is a single validation finding, scoped to a document or "global".
@@ -39,12 +38,10 @@ var rejectedSecurityToggles = []string{
 
 var validGlobalPathKeys = set(
 	pathKeyApps,
-	pathKeyNetworks,
 	pathKeyNotifiers,
 	pathKeyRuntime,
 	pathKeyServices,
 	pathKeyState,
-	pathKeyStorages,
 	pathKeyTemplates,
 	pathKeyWatches,
 )
@@ -65,7 +62,6 @@ func Validate(cfg *Config) []Issue {
 	issues = append(issues, cfg.validationIssues...)
 	issues = append(issues, validateDocuments(cfg)...)
 	issues = append(issues, validateServices(cfg)...)
-	issues = append(issues, validateStorages(cfg)...)
 	return issues
 }
 
@@ -151,10 +147,8 @@ func validateGlobal(cfg *Config) []Issue {
 		}
 		pathLists := map[string][]string{
 			pathKeyApps:      cfg.Global.Apps,
-			pathKeyNetworks:  cfg.Global.Networks,
 			pathKeyNotifiers: cfg.Global.Notifiers,
 			pathKeyServices:  cfg.Global.Services,
-			pathKeyStorages:  cfg.Global.Storages,
 			pathKeyWatches:   cfg.Global.Watches,
 		}
 		for name, dirs := range pathLists {
@@ -232,7 +226,7 @@ func registryLabel(key string) string {
 	if key == catalogServiceKey {
 		return "catalog service"
 	}
-	return key // "app", "lib", "patterns", "service", "storage"
+	return key // "app", "lib", "patterns", "service"
 }
 
 func validateDocuments(cfg *Config) []Issue {
@@ -242,7 +236,7 @@ func validateDocuments(cfg *Config) []Issue {
 	// `apache` app that owns its binary), and a catalog service template and a
 	// configured service may both be named `apache` without colliding.
 	registryKeys := []string{
-		catalogServiceKey, kindApp, kindLibrary, kindPatterns, kindService, kindStorage,
+		catalogServiceKey, kindApp, kindLibrary, kindPatterns, kindService,
 	}
 	counts := map[string]map[string]int{}
 	aliasOwners := map[string]map[string]string{}
@@ -280,12 +274,12 @@ func validateDocuments(cfg *Config) []Issue {
 		issues = append(issues, validateAppLinks(cfg, doc, scope)...)
 		issues = append(issues, validateVersionMatch(doc, scope)...)
 		switch doc.Kind {
-		case kindApp, kindLibrary, kindPatterns, kindService, kindStorage:
+		case kindApp, kindLibrary, kindPatterns, kindService:
 		case "":
-			issues = append(issues, Issue{Scope: scope, Msg: "document has no kind (expected app, lib, patterns, service or storage)"})
+			issues = append(issues, Issue{Scope: scope, Msg: "document has no kind (expected app, lib, patterns or service)"})
 			continue
 		default:
-			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected app, lib, patterns, service or storage)", doc.Kind)})
+			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected app, lib, patterns or service)", doc.Kind)})
 			continue
 		}
 		if doc.Name == "" {
@@ -612,157 +606,6 @@ func validateServices(cfg *Config) []Issue {
 		}
 	}
 	return issues
-}
-
-func validateStorages(cfg *Config) []Issue {
-	var issues []Issue
-	paths := map[string]string{}
-	notifiers := notifierNames(cfg.Notifiers())
-	defaultNotify := NotifyDefault(cfg.Global.Raw)
-	for _, name := range cfg.StorageNames {
-		if name == "" {
-			continue
-		}
-		resolved, errs := cfg.ResolveStorage(name)
-		for _, e := range errs {
-			issues = append(issues, Issue{Scope: "storage " + name, Msg: e})
-		}
-		if resolved.Tree == nil {
-			continue
-		}
-		issues = append(issues, validateStorage(name, resolved.Tree, notifiers, defaultNotify)...)
-		path := filepath.Clean(cfgval.String(resolved.Tree[keyPath]))
-		if path != "." && path != "" {
-			if prev := paths[path]; prev != "" && prev != name {
-				issues = append(issues, Issue{Scope: "storage " + name, Msg: fmt.Sprintf("path %q is already used by storage %q", path, prev)})
-			} else {
-				paths[path] = name
-			}
-		}
-	}
-	return issues
-}
-
-func validateStorage(name string, tree map[string]any, notifiers map[string]struct{}, defaultNotify []string) []Issue {
-	var issues []Issue
-	add := func(format string, args ...any) {
-		issues = append(issues, Issue{Scope: "storage " + name, Msg: fmt.Sprintf(format, args...)})
-	}
-
-	allowed := set(keyName, keyDisplayName, keyDescription, keyCategory, keyPath, keyDryRun, keyMonitor, keyInterval, keyCapacity, keyUsage, keyMount, sectionVariables, keyOS)
-	for _, key := range slices.Sorted(maps.Keys(tree)) {
-		if _, ok := allowed[key]; !ok {
-			add("key %q is not supported for kind: storage", key)
-		}
-	}
-
-	path := cfgval.String(tree[keyPath])
-	if path == "" {
-		add("path is required")
-	} else if !filepath.IsAbs(path) {
-		add("path %q must be an absolute path", path)
-	}
-	if mode, present := tree[keyMonitor]; present {
-		validateMonitorMode(keyMonitor, mode, add)
-	}
-	if v, present := tree[keyDryRun]; present {
-		if _, ok := v.(bool); !ok {
-			add("dry_run must be a boolean")
-		}
-	}
-	if v, present := tree[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
-		add("interval %q must be a valid positive duration", cfgval.String(v))
-	}
-	if capacity, ok := tree[keyCapacity].(map[string]any); ok {
-		validateStorageCapacity(name, path, tree, capacity, notifiers, defaultNotify, add)
-	} else if _, present := tree[keyCapacity]; present {
-		add("capacity must be a mapping")
-	}
-	if usage, ok := tree[keyUsage].(map[string]any); ok {
-		validateStorageUsage(usage, notifiers, add)
-	} else if _, present := tree[keyUsage]; present {
-		add("usage must be a mapping")
-	}
-	if mount, ok := tree[keyMount].(map[string]any); ok {
-		validateStorageMount(mount, add)
-	} else if _, present := tree[keyMount]; present {
-		add("mount must be a mapping")
-	}
-
-	for _, e := range validateVariableValues(collectVariables(tree)) {
-		add("variables: %s", e)
-	}
-	return issues
-}
-
-func validateStorageCapacity(name, path string, tree, capacity map[string]any, notifiers map[string]struct{}, defaultNotify []string, add addFunc) {
-	allowed := set("mounted", "for", "within", "then", sectionPolicy)
-	for _, field := range checks.StoragePredFields {
-		allowed[field] = struct{}{}
-	}
-	for _, key := range slices.Sorted(maps.Keys(capacity)) {
-		if _, ok := allowed[key]; !ok {
-			add("capacity key %q is not supported", key)
-		}
-	}
-	check := map[string]any{checks.CheckKeyType: checks.CheckTypeStorage, checks.CheckKeyPath: path}
-	for _, key := range append([]string{checks.CheckKeyMounted}, checks.StoragePredFields...) {
-		if v, present := capacity[key]; present {
-			check[key] = v
-		}
-	}
-	entry := map[string]any{WatchKeyCheck: check}
-	for _, key := range []string{keyDryRun, keyMonitor, keyInterval} {
-		if v, present := tree[key]; present {
-			entry[key] = v
-		}
-	}
-	for _, key := range []string{rules.RuleFieldFor, rules.RuleFieldWithin, rules.RuleFieldThen, sectionPolicy} {
-		if v, present := capacity[key]; present {
-			entry[key] = v
-		}
-	}
-	validateWatches(map[string]any{name: entry}, "", notifiers, defaultNotify, func(format string, args ...any) {
-		add(strings.Replace(fmt.Sprintf(format, args...), "watches."+name, keyCapacity, 1))
-	})
-}
-
-func validateStorageUsage(usage map[string]any, notifiers map[string]struct{}, add addFunc) {
-	const (
-		usageKeyProcesses   = "processes"
-		usageKeyUsers       = "users"
-		usageKeyObservedFor = "observed_for"
-	)
-	allowed := set(usageKeyProcesses, usageKeyUsers, usageKeyObservedFor, rules.RuleFieldFor, rules.RuleFieldWithin, rules.RuleFieldThen)
-	for _, key := range slices.Sorted(maps.Keys(usage)) {
-		if _, ok := allowed[key]; !ok {
-			add("usage key %q is not supported", key)
-		}
-	}
-	for _, key := range []string{usageKeyProcesses, usageKeyUsers} {
-		raw, present := usage[key]
-		if !present {
-			continue
-		}
-		m, ok := raw.(map[string]any)
-		if !ok {
-			add("usage.%s must be a mapping {op, value}", key)
-			continue
-		}
-		validateOpNumeric("usage."+key, m, add)
-	}
-	if v, present := usage[usageKeyObservedFor]; present && !isPositiveDuration(cfgval.String(v)) {
-		add("usage.observed_for %q must be a valid positive duration", cfgval.String(v))
-	}
-	validateWindow(keyUsage, usage, add)
-	if rawThen, present := usage[rules.RuleFieldThen]; present {
-		then, ok := rawThen.(map[string]any)
-		if !ok {
-			add("usage.then must be a mapping")
-		} else if _, present := then[rules.RuleFieldNotify]; present {
-			validateNotifySelection("usage.then.notify", then[rules.RuleFieldNotify], notifiers, add)
-		}
-	}
 }
 
 func validateStorageMount(mount map[string]any, add addFunc) {

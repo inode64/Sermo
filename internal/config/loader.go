@@ -23,7 +23,6 @@ const (
 
 var defaultServiceDirs = []string{pathKeyServices}
 var defaultAppDirs = []string{pathKeyApps}
-var defaultStorageDirs = []string{pathKeyStorages}
 
 // Option customizes Load.
 type Option func(*loadOptions)
@@ -95,15 +94,8 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		global.Apps = pathsFromSpecs(appPaths)
 		global.AppPaths = append([]PathSpec(nil), appPaths...)
 	}
-	_, storagePathsOverridden := o.pathDirs[pathKeyStorages]
-	storagePaths := global.StoragePaths
-	if len(storagePaths) == 0 && !storagePathsOverridden {
-		storagePaths = pathSpecsFromPaths(defaultConfigDirs(globalPath, defaultStorageDirs))
-		global.Storages = pathsFromSpecs(storagePaths)
-		global.StoragePaths = append([]PathSpec(nil), storagePaths...)
-	}
 	notifierPaths := global.NotifierPaths
-	watchPaths := appendPathSpecLists(global.NetworkPaths, global.WatchPaths)
+	watchPaths := global.WatchPaths
 
 	cfg := &Config{
 		Global:          global,
@@ -112,7 +104,6 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		Libraries:       map[string]*Document{},
 		Patterns:        map[string]*Document{},
 		Services:        map[string]*Document{},
-		Storages:        map[string]*Document{},
 		serviceUnits:    cloneServiceUnits(o.serviceUnits),
 	}
 
@@ -133,11 +124,6 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	}
 	for _, spec := range uniquePathSpecs(notifierPaths) {
 		if err := cfg.loadNotifierDir(spec.Path, spec.Recursive); err != nil {
-			return nil, err
-		}
-	}
-	for _, spec := range uniquePathSpecs(storagePaths) {
-		if err := cfg.loadStorageDir(spec.Path, spec.Recursive); err != nil {
 			return nil, err
 		}
 	}
@@ -185,20 +171,12 @@ func loadGlobal(path string) (Global, error) {
 		if g.NotifierPaths, err = pathSpecList(paths[pathKeyNotifiers], "paths.notifiers"); err != nil {
 			return Global{}, parseGlobalConfigError(path, err)
 		}
-		if g.StoragePaths, err = pathSpecList(paths[pathKeyStorages], "paths.storages"); err != nil {
-			return Global{}, parseGlobalConfigError(path, err)
-		}
-		if g.NetworkPaths, err = pathSpecList(paths[pathKeyNetworks], "paths.networks"); err != nil {
-			return Global{}, parseGlobalConfigError(path, err)
-		}
 		if g.WatchPaths, err = pathSpecList(paths[pathKeyWatches], "paths.watches"); err != nil {
 			return Global{}, parseGlobalConfigError(path, err)
 		}
 		g.Services = pathsFromSpecs(g.ServicePaths)
 		g.Apps = pathsFromSpecs(g.AppPaths)
 		g.Notifiers = pathsFromSpecs(g.NotifierPaths)
-		g.Storages = pathsFromSpecs(g.StoragePaths)
-		g.Networks = pathsFromSpecs(g.NetworkPaths)
 		g.Watches = pathsFromSpecs(g.WatchPaths)
 		g.Runtime = cfgval.String(paths[pathKeyRuntime])
 		g.State = cfgval.String(paths[pathKeyState])
@@ -227,8 +205,6 @@ func applyPathDirOverride(g *Global, overrides map[string][]string) {
 	apply(pathKeyServices, &g.Services, &g.ServicePaths)
 	apply(pathKeyApps, &g.Apps, &g.AppPaths)
 	apply(pathKeyNotifiers, &g.Notifiers, &g.NotifierPaths)
-	apply(pathKeyStorages, &g.Storages, &g.StoragePaths)
-	apply(pathKeyNetworks, &g.Networks, &g.NetworkPaths)
 	apply(pathKeyWatches, &g.Watches, &g.WatchPaths)
 }
 
@@ -258,14 +234,10 @@ func resolveConfigPaths(globalPath string, g *Global) {
 	g.Services = resolvePathList(base, g.Services)
 	g.Apps = resolvePathList(base, g.Apps)
 	g.Notifiers = resolvePathList(base, g.Notifiers)
-	g.Storages = resolvePathList(base, g.Storages)
-	g.Networks = resolvePathList(base, g.Networks)
 	g.Watches = resolvePathList(base, g.Watches)
 	g.ServicePaths = resolvePathSpecs(base, g.ServicePaths)
 	g.AppPaths = resolvePathSpecs(base, g.AppPaths)
 	g.NotifierPaths = resolvePathSpecs(base, g.NotifierPaths)
-	g.StoragePaths = resolvePathSpecs(base, g.StoragePaths)
-	g.NetworkPaths = resolvePathSpecs(base, g.NetworkPaths)
 	g.WatchPaths = resolvePathSpecs(base, g.WatchPaths)
 	if g.Runtime != "" {
 		g.Runtime = resolveConfigPath(base, g.Runtime)
@@ -409,14 +381,6 @@ func resolvePathSpecs(base string, specs []PathSpec) []PathSpec {
 	return out
 }
 
-func appendPathSpecLists(lists ...[]PathSpec) []PathSpec {
-	var out []PathSpec
-	for _, list := range lists {
-		out = append(out, list...)
-	}
-	return out
-}
-
 func uniquePathSpecs(specs []PathSpec) []PathSpec {
 	seen := map[string]int{}
 	out := make([]PathSpec, 0, len(specs))
@@ -452,10 +416,6 @@ func (c *Config) loadAppDir(dir string, recursive bool) error {
 
 func (c *Config) loadNotifierDir(dir string, recursive bool) error {
 	return c.loadNotifierDirEntries(dir, recursive)
-}
-
-func (c *Config) loadStorageDir(dir string, recursive bool) error {
-	return c.loadStorageDirEntries(dir, recursive)
 }
 
 func (c *Config) loadWatchDir(dir string, recursive bool) error {
@@ -525,10 +485,6 @@ func (c *Config) loadWatchDirEntries(dir string, recursive bool) error {
 		}
 	}
 	return nil
-}
-
-func (c *Config) loadStorageDirEntries(dir string, recursive bool) error {
-	return c.loadKindDirEntries(dir, kindStorage, kindStorage, recursive)
 }
 
 func (c *Config) loadKindDirEntries(dir, label, kind string, recursive bool) error {
@@ -742,8 +698,6 @@ func (c *Config) add(doc *Document) {
 		indexDocument(c.Patterns, &c.PatternNames, doc)
 	case kindService:
 		indexDocument(c.Services, &c.ServiceNames, doc)
-	case kindStorage:
-		indexDocument(c.Storages, &c.StorageNames, doc)
 	}
 	c.docs = append(c.docs, doc)
 }

@@ -120,7 +120,7 @@ engine:
   backend: auto
 paths:
   services: [ @ROOT@/services ]
-  storages: [ @ROOT@/storages ]
+  watches: [ @ROOT@/watches ]
   runtime: /run/sermo
 defaults:
   dry_run: true
@@ -141,10 +141,11 @@ service: demo
 name: demo
 uses: demo
 `,
-		"storages/data.yml": `
+		"watches/data.yml": `
 name: data
-path: /data
-capacity:
+check:
+  type: storage
+  path: /data
   used_pct: { op: ">=", value: "90%" }
 `,
 	})
@@ -180,10 +181,10 @@ capacity:
 	}
 	capacity, ok := watches["data"].(map[string]any)
 	if !ok {
-		t.Fatalf("storage capacity watch not resolved: %v", watches)
+		t.Fatalf("storage watch not resolved: %v", watches)
 	}
 	if !DryRun(capacity) {
-		t.Fatal("storage capacity watch should inherit storage/defaults dry_run")
+		t.Fatal("storage watch should inherit defaults.dry_run")
 	}
 }
 
@@ -1035,30 +1036,28 @@ name: web
 	}
 }
 
-func TestLoadUsesConfigRelativeDefaultStorageDirsWhenStoragesOmitted(t *testing.T) {
+func TestLoadDoesNotUseConfigRelativeDefaultWatchDirsWhenWatchesOmitted(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
 paths:
   runtime: /run/sermo
 `,
-		"storages/data.yml": `
+		"watches/data.yml": `
 name: mount-data
-path: /data
+check: { type: storage, path: /data, mounted: true }
 mount: {}
 `,
 	})
-	root := filepath.Dir(global)
-	wantStorages := []string{filepath.Join(root, "storages")}
-
 	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got := strings.Join(cfg.Global.Storages, "\n"); got != strings.Join(wantStorages, "\n") {
-		t.Fatalf("Global.Storages = %v, want %v", cfg.Global.Storages, wantStorages)
+	watches, errs := cfg.ResolveWatches()
+	if len(errs) != 0 {
+		t.Fatalf("ResolveWatches() errors: %v", errs)
 	}
-	if _, ok := cfg.Storages["mount-data"]; !ok {
-		t.Fatalf("storage from default storages dir was not loaded")
+	if _, ok := watches["mount-data"]; ok {
+		t.Fatalf("watch directory should not be loaded unless paths.watches lists it")
 	}
 }
 
@@ -1078,15 +1077,13 @@ paths:
     - path: @ROOT@/notifiers-flat
     - path: @ROOT@/notifiers-recursive
       recursive: true
-  storages:
+  watches:
     - path: @ROOT@/storages-flat
     - path: @ROOT@/storages-recursive
       recursive: true
-  networks:
     - path: @ROOT@/networks-flat
     - path: @ROOT@/networks-recursive
       recursive: true
-  watches:
     - path: @ROOT@/watches-flat
     - path: @ROOT@/watches-recursive
       recursive: true
@@ -1139,24 +1136,27 @@ notifiers:
 `,
 		"storages-flat/root.yml": `
 name: storage-direct
-path: /
-capacity:
+check:
+  type: storage
+  path: /
   used_pct: { op: ">=", value: "90%" }
-  then: { notify: [ops] }
+then: { notify: [ops] }
 `,
 		"storages-flat/deep/skipped.yml": `
 name: storage-skipped
-path: /tmp
-capacity:
+check:
+  type: storage
+  path: /tmp
   used_pct: { op: ">=", value: "90%" }
-  then: { notify: [ops] }
+then: { notify: [ops] }
 `,
 		"storages-recursive/deep/root.yml": `
 name: storage-recursive
-path: /var
-capacity:
+check:
+  type: storage
+  path: /var
   used_pct: { op: ">=", value: "90%" }
-  then: { notify: [ops] }
+then: { notify: [ops] }
 `,
 		"networks-flat/ping.yml": `
 name: network-direct
@@ -1200,17 +1200,17 @@ then: { notify: [ops] }
 `,
 		"storages-flat/direct-mount.yml": `
 name: direct-mount
-path: /mnt/direct
+check: { type: storage, path: /mnt/direct, mounted: true }
 mount: {}
 `,
 		"storages-flat/deep/skipped-mount.yml": `
 name: skipped-mount
-path: /mnt/skipped
+check: { type: storage, path: /mnt/skipped, mounted: true }
 mount: {}
 `,
 		"storages-recursive/deep/recursive-mount.yml": `
 name: recursive-mount
-path: /mnt/recursive
+check: { type: storage, path: /mnt/recursive, mounted: true }
 mount: {}
 `,
 	})
@@ -1249,7 +1249,7 @@ mount: {}
 	if len(errs) != 0 {
 		t.Fatalf("ResolveWatches() errors: %v", errs)
 	}
-	for _, name := range []string{"storage-direct", "storage-recursive", "network-direct", "network-recursive", "load-direct", "load-recursive"} {
+	for _, name := range []string{"storage-direct", "storage-recursive", "network-direct", "network-recursive", "load-direct", "load-recursive", "direct-mount", "recursive-mount"} {
 		if _, ok := watches[name]; !ok {
 			t.Fatalf("watch %q was not loaded: %v", name, watches)
 		}
@@ -1257,18 +1257,18 @@ mount: {}
 	if got := watches["network-direct"].(map[string]any)["category"]; got != "network" {
 		t.Fatalf("included network watch category = %v, want network", got)
 	}
-	for _, name := range []string{"storage-skipped", "network-skipped", "load-skipped"} {
+	for _, name := range []string{"storage-skipped", "network-skipped", "load-skipped", "skipped-mount"} {
 		if _, ok := watches[name]; ok {
 			t.Fatalf("non-recursive watch path loaded nested watch %q", name)
 		}
 	}
 	for _, name := range []string{"direct-mount", "recursive-mount"} {
-		if _, ok := cfg.Storages[name]; !ok {
+		if !slices.Contains(cfg.StorageMountNames(), name) {
 			t.Fatalf("mount-capable storage %q was not loaded", name)
 		}
 	}
-	if _, ok := cfg.Storages["skipped-mount"]; ok {
-		t.Fatalf("non-recursive storages path loaded nested mount-capable storage")
+	if slices.Contains(cfg.StorageMountNames(), "skipped-mount") {
+		t.Fatalf("non-recursive watch path loaded nested mount-capable storage")
 	}
 	if issues := Validate(cfg); len(issues) != 0 {
 		t.Fatalf("recursive path config should validate, got %v", issues)
@@ -1310,41 +1310,30 @@ service: web
 	}
 }
 
-func TestStorageCapacityWatchRejectsDuplicate(t *testing.T) {
-	root := t.TempDir()
-	storages := filepath.Join(root, "storages")
-	if err := os.MkdirAll(storages, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	global := filepath.Join(root, "sermo.yml")
-	if err := os.WriteFile(global, []byte(`
+func TestIncludedStorageWatchRejectsDuplicate(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
 paths:
-  storages: [storages]
+  watches: [ @ROOT@/storages ]
 watches:
   storage-root:
     check: { type: storage, path: /, used_pct: { op: ">=", value: 90 } }
     then:
       hook: { command: [/bin/true] }
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(storages, "storage-root.yml"), []byte(`
+`,
+		"storages/storage-root.yml": `
 name: storage-root
-path: /
-capacity:
+check:
+  type: storage
+  path: /
   used_pct: { op: ">=", value: 95 }
-  then:
-    hook: { command: [/bin/true] }
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
+then:
+  hook: { command: [/bin/true] }
+`,
+	})
 
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if issues := Validate(cfg); !hasIssue(issues, `capacity watch would overwrite existing watch "storage-root"`) {
-		t.Fatalf("Validate issues = %v, want duplicate generated watch", issues)
+	if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), `watch "storage-root" is already defined`) {
+		t.Fatalf("Load() error = %v, want duplicate storage watch", err)
 	}
 }
 
@@ -1374,8 +1363,7 @@ func TestLoadIncludedWatchDocumentRejectsDuplicateAcrossWatchDirs(t *testing.T) 
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
 paths:
-  networks: [ @ROOT@/networks ]
-  watches: [ @ROOT@/watches ]
+  watches: [ @ROOT@/networks, @ROOT@/watches ]
 defaults:
   policy: { cooldown: 5m }
 `,
@@ -1417,17 +1405,16 @@ check: { type: load, load5: { op: ">", value: 3 } }
 func TestLoadIncludedWatchDocumentRejectsGroupedWatchesMap(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		path string
 		dir  string
 	}{
-		{name: "watch-dir", path: "watches", dir: "watches"},
-		{name: "network-dir", path: "networks", dir: "networks"},
+		{name: "watch-dir", dir: "watches"},
+		{name: "network-dir", dir: "networks"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			global := writeConfig(t, map[string]string{
 				"sermo.yml": `
 paths:
-  ` + tc.path + `: [ @ROOT@/` + tc.dir + ` ]
+  watches: [ @ROOT@/` + tc.dir + ` ]
 defaults:
   policy: { cooldown: 5m }
 `,
@@ -1487,24 +1474,27 @@ defaults:
 	}
 }
 
-func TestStorageMountCapacityDefaultsMounted(t *testing.T) {
+func TestStorageWatchMountedFieldIsPreserved(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
 paths:
-  storages: [ @ROOT@/storages ]
+  watches: [ @ROOT@/storages ]
 `,
 		"storages/backup.yml": `
 name: storage-backup
-path: /mnt/backup
-capacity:
+check:
+  type: storage
+  path: /mnt/backup
+  mounted: true
   used_pct: { op: ">=", value: 90 }
 mount:
   refcount: true
 `,
 		"storages/archive.yml": `
 name: storage-archive
-path: /mnt/archive
-capacity:
+check:
+  type: storage
+  path: /mnt/archive
   mounted: false
 mount:
   refcount: true
@@ -1528,11 +1518,11 @@ mount:
 	}
 }
 
-func TestStorageCapacityWatchKeepsMetadata(t *testing.T) {
+func TestStorageWatchKeepsMetadata(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
 paths:
-  storages: [ @ROOT@/storages ]
+  watches: [ @ROOT@/storages ]
 defaults:
   policy: { cooldown: 5m }
 `,
@@ -1541,8 +1531,9 @@ name: storage-root
 display_name: Root filesystem
 description: System volume
 category: storage
-path: /
-capacity:
+check:
+  type: storage
+  path: /
   used_pct: { op: ">=", value: 90 }
 `,
 	})
@@ -1576,7 +1567,7 @@ func TestLoadIncludedNotifierFragments(t *testing.T) {
 		"sermo.yml": `
 paths:
   notifiers: [ @ROOT@/notifiers ]
-  storages: [ @ROOT@/storages ]
+  watches: [ @ROOT@/storages ]
 defaults:
   policy: { cooldown: 5m }
 notify: [ops]
@@ -1591,11 +1582,12 @@ notifiers:
 `,
 		"storages/storage-root.yml": `
 name: storage-root
-path: /
-capacity:
+check:
+  type: storage
+  path: /
   used_pct: { op: ">=", value: "90%" }
-  then:
-    notify: [ops]
+then:
+  notify: [ops]
 `,
 	})
 
@@ -1612,7 +1604,7 @@ capacity:
 		t.Fatalf("ResolveWatches() errors: %v", errs)
 	}
 	if _, ok := watches["storage-root"]; !ok {
-		t.Fatalf("storage watch not generated: %v", watches)
+		t.Fatalf("storage watch not loaded: %v", watches)
 	}
 	if issues := Validate(cfg); len(issues) != 0 {
 		t.Fatalf("included notifier/watch config should validate, got %v", issues)
@@ -1725,9 +1717,7 @@ func TestLoadExplicitTargetDirectories(t *testing.T) {
 paths:
   services: [ @ROOT@/services ]
   notifiers: [ @ROOT@/notifiers ]
-  storages: [ @ROOT@/storages ]
-  networks: [ @ROOT@/networks ]
-  watches: [ @ROOT@/watches ]
+  watches: [ @ROOT@/storages, @ROOT@/networks, @ROOT@/watches ]
 defaults:
   policy: { cooldown: 5m }
 notify: [ops]
@@ -1746,14 +1736,15 @@ notifiers:
 `,
 		"storages/root.yml": `
 name: storage-root
-path: /
-capacity:
+check:
+  type: storage
+  path: /
   used_pct: { op: ">=", value: "90%" }
-  then: { notify: [ops] }
+then: { notify: [ops] }
 `,
 		"storages/backup.yml": `
 name: backup
-path: /mnt/backup
+check: { type: storage, path: /mnt/backup, mounted: true }
 mount: {}
 `,
 		"networks/ping.yml": `
@@ -1787,7 +1778,7 @@ then: { notify: [ops] }
 	if len(errs) != 0 {
 		t.Fatalf("ResolveWatches() errors: %v", errs)
 	}
-	for _, name := range []string{"storage-root", "ping-gw", "load"} {
+	for _, name := range []string{"storage-root", "backup", "ping-gw", "load"} {
 		if _, ok := watches[name]; !ok {
 			t.Fatalf("watch %q was not loaded from explicit directories: %v", name, watches)
 		}
@@ -1795,8 +1786,8 @@ then: { notify: [ops] }
 	if got := cfgval.String(watches["ping-gw"].(map[string]any)["category"]); got != "network" {
 		t.Fatalf("included watch category = %q, want network", got)
 	}
-	if _, ok := cfg.Storages["backup"]; !ok {
-		t.Fatalf("mount-capable storage directory was not loaded: %v", cfg.StorageNames)
+	if !slices.Contains(cfg.StorageMountNames(), "backup") {
+		t.Fatalf("mount-capable storage directory was not loaded: %v", cfg.StorageMountNames())
 	}
 	if issues := Validate(cfg); len(issues) != 0 {
 		t.Fatalf("explicit target directory config should validate, got %v", issues)

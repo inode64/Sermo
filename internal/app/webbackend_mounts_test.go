@@ -67,17 +67,14 @@ func TestWebBackendMounts(t *testing.T) {
 	cfg := &config.Config{
 		Global: config.Global{Runtime: runtime, Raw: map[string]any{
 			"paths": map[string]any{"runtime": runtime},
-		}},
-		Storages: map[string]*config.Document{
-			"mount-backup": {
-				Body: map[string]any{
+			"watches": map[string]any{
+				"mount-backup": map[string]any{
 					"name":  "mount-backup",
-					"path":  "/mnt/backup",
+					"check": map[string]any{"type": "storage", "path": "/mnt/backup", "mounted": true},
 					"mount": map[string]any{},
 				},
 			},
-		},
-		StorageNames: []string{"mount-backup"},
+		}},
 	}
 	b, warns := NewWebBackend(cfg, Deps{
 		MountSampler: func() ([]checks.Mount, error) {
@@ -382,15 +379,10 @@ func mountTestConfig(t *testing.T) *config.Config {
 	return &config.Config{
 		Global: config.Global{Runtime: runtime, Raw: map[string]any{
 			"paths": map[string]any{"runtime": runtime},
-		}},
-		Storages: map[string]*config.Document{
-			"mount-backup": {
-				Body: map[string]any{
-					"name": "mount-backup",
-					"path": "/mnt/backup",
-					"capacity": map[string]any{
-						"mounted": true,
-					},
+			"watches": map[string]any{
+				"mount-backup": map[string]any{
+					"name":  "mount-backup",
+					"check": map[string]any{"type": "storage", "path": "/mnt/backup", "mounted": true},
 					"mount": map[string]any{
 						"refcount": false,
 						"umount": map[string]any{
@@ -407,8 +399,7 @@ func mountTestConfig(t *testing.T) *config.Config {
 					},
 				},
 			},
-		},
-		StorageNames: []string{"mount-backup"},
+		}},
 	}
 }
 
@@ -419,15 +410,10 @@ func rootMountTestConfig(t *testing.T) *config.Config {
 	return &config.Config{
 		Global: config.Global{Runtime: runtime, Raw: map[string]any{
 			"paths": map[string]any{"runtime": runtime},
-		}},
-		Storages: map[string]*config.Document{
-			"mount-root": {
-				Body: map[string]any{
-					"name": "mount-root",
-					"path": "/",
-					"capacity": map[string]any{
-						"mounted": true,
-					},
+			"watches": map[string]any{
+				"mount-root": map[string]any{
+					"name":  "mount-root",
+					"check": map[string]any{"type": "storage", "path": "/", "mounted": true},
 					"mount": map[string]any{
 						"refcount": false,
 						"umount": map[string]any{
@@ -442,7 +428,6 @@ func rootMountTestConfig(t *testing.T) *config.Config {
 					},
 				},
 			},
-		},
-		StorageNames: []string{"mount-root"},
+		}},
 	}
 }

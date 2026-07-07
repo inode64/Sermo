@@ -15,8 +15,8 @@ import (
 // reference file cannot drift from the schema. Each `---` document is placed
 // where it would live in a deployment: the global part as sermo.yml, catalog
 // kinds (service/app/lib/patterns) in a catalog dir, services in a services dir,
-// storages in a storages dir; the example's absolute paths are rewritten to the
-// test sandbox.
+// and host watches in classified watch dirs; the example's absolute paths are
+// rewritten to the test sandbox.
 func TestDocsSermoAllValidates(t *testing.T) {
 	root := repoRoot(t)
 	raw, err := os.ReadFile(filepath.Join(root, "docs", "sermo-all.yml"))
@@ -27,8 +27,13 @@ func TestDocsSermoAllValidates(t *testing.T) {
 	dir := t.TempDir()
 	catalogExtra := filepath.Join(dir, "catalog-extra")
 	servicesDir := filepath.Join(dir, "services")
-	storagesDir := filepath.Join(dir, "storages")
-	for _, d := range []string{servicesDir, catalogExtra, storagesDir} {
+	watchDirs := map[string]string{
+		"watches":  filepath.Join(dir, "watches"),
+		"networks": filepath.Join(dir, "networks"),
+		"storages": filepath.Join(dir, "storages"),
+		"mounts":   filepath.Join(dir, "mounts"),
+	}
+	for _, d := range append([]string{servicesDir, catalogExtra}, mapValues(watchDirs)...) {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -47,7 +52,8 @@ func TestDocsSermoAllValidates(t *testing.T) {
 	locMarker := regexp.MustCompile(`(?m)^# location:[[:space:]]*(\S+)`)
 	var globalDoc string
 	var services []string
-	var storages []string
+	var watches []string
+	var storageWatches []string
 	for i, doc := range strings.Split(string(raw), "\n---\n") {
 		var body map[string]any
 		if err := yaml.Unmarshal([]byte(doc), &body); err != nil {
@@ -73,9 +79,12 @@ func TestDocsSermoAllValidates(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(servicesDir, name+".yml"), []byte(doc), 0o644); err != nil {
 				t.Fatal(err)
 			}
-		case "storages":
-			storages = append(storages, name)
-			if err := os.WriteFile(filepath.Join(storagesDir, name+".yml"), []byte(doc), 0o644); err != nil {
+		case "watches", "networks", "storages", "mounts":
+			watches = append(watches, name)
+			if loc == "storages" || loc == "mounts" {
+				storageWatches = append(storageWatches, name)
+			}
+			if err := os.WriteFile(filepath.Join(watchDirs[loc], name+".yml"), []byte(doc), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		default:
@@ -94,7 +103,7 @@ func TestDocsSermoAllValidates(t *testing.T) {
 	}
 	global["paths"] = map[string]any{
 		"services": []any{servicesDir},
-		"storages": []any{storagesDir},
+		"watches":  stringsToAny(mapValues(watchDirs)),
 		"runtime":  filepath.Join(dir, "runtime"),
 		"state":    filepath.Join(dir, "state"),
 	}
@@ -124,14 +133,39 @@ func TestDocsSermoAllValidates(t *testing.T) {
 			t.Errorf("service %s: empty resolved tree", name)
 		}
 	}
-	for _, name := range storages {
+	resolvedWatches, errs := cfg.ResolveWatches()
+	if len(errs) != 0 {
+		t.Fatalf("resolve watches: %v", errs)
+	}
+	for _, name := range watches {
+		if _, ok := resolvedWatches[name]; !ok {
+			t.Errorf("watch %s: missing from resolved watches", name)
+		}
+	}
+	for _, name := range storageWatches {
 		resolved, errs := cfg.ResolveStorage(name)
 		if len(errs) != 0 {
-			t.Errorf("storage %s: resolve errors = %v", name, errs)
+			t.Errorf("storage watch %s: resolve errors = %v", name, errs)
 			continue
 		}
 		if len(resolved.Tree) == 0 {
-			t.Errorf("storage %s: empty resolved tree", name)
+			t.Errorf("storage watch %s: empty resolved tree", name)
 		}
 	}
+}
+
+func mapValues(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for _, value := range m {
+		out = append(out, value)
+	}
+	return out
+}
+
+func stringsToAny(values []string) []any {
+	out := make([]any, 0, len(values))
+	for _, value := range values {
+		out = append(out, value)
+	}
+	return out
 }

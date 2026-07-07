@@ -30,12 +30,11 @@ paths:
     - apps
   notifiers:
     - notifiers
-  storages:
-    - storages
-  networks:
-    - networks
   watches:
     - watches
+    - networks
+    - storages
+    - mounts
 
   # Keep local runs out of /run and /var/lib.
   runtime: /tmp/sermo-dev/run

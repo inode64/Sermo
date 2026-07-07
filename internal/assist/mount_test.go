@@ -3,6 +3,9 @@ package assist
 import (
 	"strings"
 	"testing"
+
+	"sermo/internal/checks"
+	"sermo/internal/config"
 )
 
 func TestMountAssistantGeneratesMountUnit(t *testing.T) {
@@ -29,8 +32,12 @@ func TestMountAssistantGeneratesMountUnit(t *testing.T) {
 	if !ok {
 		t.Fatalf("mount block missing: %+v", body)
 	}
-	if body["path"] != "/mnt/backup" || mount["refcount"] != true {
-		t.Fatalf("mount body = %+v, want path/refcount", body)
+	check, ok := body[config.WatchKeyCheck].(map[string]any)
+	if !ok {
+		t.Fatalf("check block missing: %+v", body)
+	}
+	if check[checks.CheckKeyPath] != "/mnt/backup" || check[checks.CheckKeyType] != checks.CheckTypeStorage || check["mounted"] != true || mount["refcount"] != true {
+		t.Fatalf("mount body = %+v, want storage check/refcount", body)
 	}
 	umount, ok := mount["umount"].(map[string]any)
 	if !ok || umount["allow_sigkill"] != false || umount["allow_lazy"] != false {

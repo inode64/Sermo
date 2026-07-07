@@ -128,7 +128,7 @@ type Controller struct {
 	LockTTL        time.Duration
 }
 
-// SpecFromStorageTree reads a resolved kind: storage body with a mount block.
+// SpecFromStorageTree reads a resolved storage watch tree with a mount block.
 func SpecFromStorageTree(name string, tree map[string]any) Spec {
 	mount, _ := tree[config.StorageKeyMount].(map[string]any)
 	umount, _ := mount[config.MountKeyUmount].(map[string]any)

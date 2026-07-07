@@ -59,27 +59,26 @@ func (c *Config) resolveService(name string, pruneOptional bool) (Resolved, []st
 	return Resolved{Name: canonicalName, Tree: expanded}, errs
 }
 
-// ResolveStorage expands one configured storage document. Storage targets only
-// merge the storage-safe subset of global defaults; each file under
-// paths.storages is otherwise the complete declaration for one storage target
-// and its optional fstab-backed mount operations.
+// ResolveStorage returns one resolved storage watch in the tree shape mount
+// operations consume: top-level metadata/path/mount copied from a normal
+// `check.type: storage` watch. It is an adapter for mount-facing code; storage
+// watches are configured through paths.watches like every other host watch.
 func (c *Config) ResolveStorage(name string) (Resolved, []string) {
-	doc, ok := c.Storages[name]
+	watches, errs := c.ResolveWatches()
+	entry, ok := watches[name].(map[string]any)
 	if !ok {
-		return Resolved{Name: name}, []string{fmt.Sprintf("unknown storage %q", name)}
+		return Resolved{Name: name}, append(errs, fmt.Sprintf("unknown storage watch %q", name))
 	}
-	body := mergeMaps(c.defaultsPerStorage(), stripMeta(doc.Body))
-	vars, errs := c.expansionVariables(body, name)
-	expanded, expErrs := expandTree(body, vars)
-	errs = append(errs, expErrs...)
-	return Resolved{Name: name, Tree: expanded}, errs
+	tree, storageErrs := storageTreeFromWatch(name, entry)
+	errs = append(errs, storageErrs...)
+	return Resolved{Name: name, Tree: tree}, errs
 }
 
-// StorageNameByPath returns the configured storage name whose resolved path
-// matches path. Empty means no configured storage currently owns that path.
+// StorageNameByPath returns the configured storage watch name whose resolved path
+// matches path. Empty means no configured storage watch currently owns that path.
 func (c *Config) StorageNameByPath(path string) string {
 	cleanPath := cleanMountPath(path)
-	for _, name := range c.StorageNames {
+	for _, name := range c.StorageWatchNames() {
 		resolved, errs := c.ResolveStorage(name)
 		if len(errs) > 0 {
 			continue
@@ -98,13 +97,14 @@ func cleanMountPath(path string) string {
 	return filepath.Clean(path)
 }
 
-// StorageMountNames returns the storage targets that expose mount operations.
+// StorageMountNames returns the storage watches that expose mount operations.
 func (c *Config) StorageMountNames() []string {
 	if c == nil {
 		return nil
 	}
-	out := make([]string, 0, len(c.StorageNames))
-	for _, name := range c.StorageNames {
+	names := c.StorageWatchNames()
+	out := make([]string, 0, len(names))
+	for _, name := range names {
 		resolved, errs := c.ResolveStorage(name)
 		if len(errs) > 0 {
 			continue
@@ -114,6 +114,38 @@ func (c *Config) StorageMountNames() []string {
 		}
 	}
 	return out
+}
+
+// StorageWatchNames returns configured host watches backed by a storage check.
+func (c *Config) StorageWatchNames() []string {
+	if c == nil {
+		return nil
+	}
+	watches, _ := c.ResolveWatches()
+	out := make([]string, 0, len(watches))
+	for _, name := range slices.Sorted(maps.Keys(watches)) {
+		entry, _ := watches[name].(map[string]any)
+		check, _ := entry[WatchKeyCheck].(map[string]any)
+		if cfgval.String(check[checks.CheckKeyType]) == checks.CheckTypeStorage {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func storageTreeFromWatch(name string, entry map[string]any) (map[string]any, []string) {
+	check, _ := entry[WatchKeyCheck].(map[string]any)
+	if cfgval.String(check[checks.CheckKeyType]) != checks.CheckTypeStorage {
+		return nil, []string{fmt.Sprintf("watch %q is not a storage watch", name)}
+	}
+	path := cfgval.String(check[checks.CheckKeyPath])
+	tree := map[string]any{keyPath: path}
+	for _, key := range []string{keyDisplayName, keyDescription, keyCategory, keyDryRun, keyMonitor, keyInterval, keyMount} {
+		if v, present := entry[key]; present {
+			tree[key] = deepCopy(v)
+		}
+	}
+	return tree, nil
 }
 
 // Service-artifact kinds. Each top-level artifact declaration desugars into an
@@ -788,9 +820,9 @@ func appVariablePrefix(name string) string {
 	return strings.TrimRight(b.String(), "_")
 }
 
-// ResolveWatches returns the global `watches` section plus storage capacity
-// watches with ${var} expanded against the custom global variables and the
-// host-level builtins. Watches have no per-watch builtins (name/port/pidfile).
+// ResolveWatches returns the global `watches` section with ${var} expanded
+// against the custom global variables and the host-level builtins. Watches have
+// no per-watch builtins (name/port/pidfile).
 // nil when no watches are configured.
 func (c *Config) ResolveWatches() (map[string]any, []string) {
 	raw := map[string]any{}
@@ -799,75 +831,14 @@ func (c *Config) ResolveWatches() (map[string]any, []string) {
 			raw[name] = deepCopy(entry)
 		}
 	}
-	errs := c.addStorageCapacityWatches(raw)
 	if len(raw) == 0 {
-		return nil, errs
+		return nil, nil
 	}
 	c.applyWatchDefaults(raw)
 	vars := c.globalVars()
 	injectHostBuiltins(vars)
 	expanded, expErrs := expandTree(raw, vars)
-	errs = append(errs, expErrs...)
-	return expanded, errs
-}
-
-func (c *Config) addStorageCapacityWatches(dst map[string]any) []string {
-	if c == nil {
-		return nil
-	}
-	var errs []string
-	for _, name := range c.StorageNames {
-		resolved, resErrs := c.ResolveStorage(name)
-		for _, err := range resErrs {
-			errs = append(errs, "storage "+name+": "+err)
-		}
-		if len(resErrs) > 0 || resolved.Tree == nil {
-			continue
-		}
-		entry, ok := storageCapacityWatch(resolved.Tree)
-		if !ok {
-			continue
-		}
-		if _, exists := dst[name]; exists {
-			errs = append(errs, fmt.Sprintf("storage %q capacity watch would overwrite existing watch %q", name, name))
-			continue
-		}
-		dst[name] = entry
-	}
-	return errs
-}
-
-func storageCapacityWatch(tree map[string]any) (map[string]any, bool) {
-	capacity, ok := tree[keyCapacity].(map[string]any)
-	if !ok {
-		return nil, false
-	}
-	check := map[string]any{
-		checks.CheckKeyType: checks.CheckTypeStorage,
-		checks.CheckKeyPath: tree[checks.CheckKeyPath],
-	}
-	if _, hasMount := tree[keyMount].(map[string]any); hasMount {
-		if _, explicit := capacity[checks.CheckKeyMounted]; !explicit {
-			check[checks.CheckKeyMounted] = true
-		}
-	}
-	for _, key := range append([]string{checks.CheckKeyMounted}, checks.StoragePredFields...) {
-		if v, present := capacity[key]; present {
-			check[key] = v
-		}
-	}
-	entry := map[string]any{WatchKeyCheck: check}
-	for _, key := range []string{keyDisplayName, keyDescription, keyCategory, keyDryRun, keyMonitor, keyInterval} {
-		if v, present := tree[key]; present {
-			entry[key] = v
-		}
-	}
-	for _, key := range []string{rules.RuleFieldFor, rules.RuleFieldWithin, rules.RuleFieldThen, sectionPolicy} {
-		if v, present := capacity[key]; present {
-			entry[key] = v
-		}
-	}
-	return entry, true
+	return expanded, expErrs
 }
 
 // expandRestartOnChange desugars a `restart_on_change: {libraries: [...]}` block
@@ -1187,18 +1158,6 @@ func (c *Config) mergedService(name string, chain []string) (map[string]any, err
 func (c *Config) defaultsPerService() map[string]any {
 	out := map[string]any{}
 	for _, key := range perServiceDefaults {
-		if v, ok := c.Global.Defaults[key]; ok {
-			out[key] = deepCopy(v)
-		}
-	}
-	return out
-}
-
-// defaultsPerStorage returns a fresh copy of global defaults that apply to
-// storages.
-func (c *Config) defaultsPerStorage() map[string]any {
-	out := map[string]any{}
-	for _, key := range perStorageDefaults {
 		if v, ok := c.Global.Defaults[key]; ok {
 			out[key] = deepCopy(v)
 		}
