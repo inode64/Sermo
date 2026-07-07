@@ -18,6 +18,19 @@ const (
 	minInt = -maxInt - 1
 )
 
+// TCP port bounds shared by configuration, CLI parsing and network clients.
+const (
+	// MinTCPPort is the lowest valid TCP/UDP port number operators can configure.
+	MinTCPPort = 1
+	// MaxTCPPort is the highest valid TCP/UDP port number operators can configure.
+	MaxTCPPort = 65535
+)
+
+// TCPPortRange describes the accepted TCP/UDP port range for diagnostics.
+func TCPPortRange() string {
+	return strconv.Itoa(MinTCPPort) + ".." + strconv.Itoa(MaxTCPPort)
+}
+
 // Comparison/assertion operator vocabulary shared by configuration validation
 // and runtime checks.
 const (
@@ -216,6 +229,12 @@ func Int(v any) (int, bool) {
 	default:
 		return 0, false
 	}
+}
+
+// ValidTCPPort reports whether n is inside the user-configurable TCP/UDP port
+// range.
+func ValidTCPPort(n int) bool {
+	return n >= MinTCPPort && n <= MaxTCPPort
 }
 
 // IntList coerces a scalar-or-list YAML field into one or more ints. A scalar

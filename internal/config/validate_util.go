@@ -61,6 +61,10 @@ func validExpectStatus(value string) bool {
 	return err == nil && n >= 100 && n <= 599
 }
 
+func validTCPPort(n int) bool {
+	return cfgval.ValidTCPPort(n)
+}
+
 func isPositiveDuration(s string) bool {
 	return isDuration(s, false)
 }

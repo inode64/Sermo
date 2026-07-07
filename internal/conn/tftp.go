@@ -25,8 +25,8 @@ const (
 // proves the server is up and speaking TFTP. No authentication.
 type tftpProtocol struct{}
 
-func (tftpProtocol) Name() string       { return "tftp" }
-func (tftpProtocol) DefaultPort() int   { return 69 }
+func (tftpProtocol) Name() string       { return ProtocolNameTFTP }
+func (tftpProtocol) DefaultPort() int   { return defaultPortTFTP }
 func (tftpProtocol) RequiresUser() bool { return false }
 
 func (tftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -36,7 +36,7 @@ func (tftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 69
+		port = defaultPortTFTP
 	}
 	server, err := net.ResolveUDPAddr(networkUDP, net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
@@ -73,10 +73,10 @@ func (tftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, fmt.Errorf("unexpected TFTP opcode %d", opcode)
 	}
 
-	extra := map[string]string{"query": filename, extraReply: tftpOpName(opcode)}
+	extra := map[string]string{extraQuery: filename, extraReply: tftpOpName(opcode)}
 	if opcode == tftpERROR {
-		extra["tftp_error_code"] = strconv.Itoa(errCode)
-		extra["tftp_error"] = msg
+		extra[extraTFTPErrorCode] = strconv.Itoa(errCode)
+		extra[extraTFTPError] = msg
 	}
 	return Result{Extra: extra}, nil
 }

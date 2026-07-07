@@ -15,7 +15,7 @@ import (
 
 func init() {
 	// MariaDB speaks the MySQL wire protocol, so the same driver serves both.
-	Register(mysqlProtocol{}, "mariadb")
+	Register(mysqlProtocol{}, protocolAliasMariaDB)
 }
 
 // mysqlProtocol probes a MySQL or MariaDB server. With no credentials it reads
@@ -23,8 +23,8 @@ func init() {
 // check; with a user/password it performs a full authenticated ping.
 type mysqlProtocol struct{}
 
-func (mysqlProtocol) Name() string     { return "mysql" }
-func (mysqlProtocol) DefaultPort() int { return 3306 }
+func (mysqlProtocol) Name() string     { return ProtocolNameMySQL }
+func (mysqlProtocol) DefaultPort() int { return defaultPortMySQL }
 
 // RequiresUser is false: a credential-free probe reads the server's initial
 // handshake (proving liveness, like smtp/amqp). A user only enables the deeper
@@ -42,7 +42,7 @@ func (mysqlProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		// afterwards), so dial without TLS regardless of cfg.TLS.
 		plain := cfg
 		plain.TLS = ""
-		c, err := dialDeadline(ctx, plain, 3306)
+		c, err := dialDeadline(ctx, plain, defaultPortMySQL)
 		if err != nil {
 			return Result{}, err
 		}
@@ -123,7 +123,7 @@ func buildMySQLConfig(cfg Config) *mysql.Config {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 3306
+		port = defaultPortMySQL
 	}
 	c := mysql.NewConfig()
 	c.Net = networkTCP
@@ -157,10 +157,10 @@ func buildDSN(cfg Config) string {
 // result means plaintext (the driver default).
 func normalizeTLS(s string) string {
 	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "", "false", "no", "off":
+	case "", tlsModeFalse, tlsModeNo, tlsModeOff:
 		return ""
-	case "true", "yes", "on", "required":
-		return "true"
+	case ParamValueTrue, tlsModeYes, tlsModeOn, tlsRequired:
+		return ParamValueTrue
 	case tlsSkipVerify:
 		return tlsSkipVerify
 	default:

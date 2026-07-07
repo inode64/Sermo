@@ -12,14 +12,14 @@ import (
 	"time"
 )
 
-func init() { Register(dhclientProtocol{}, "dhcp-client") }
+func init() { Register(dhclientProtocol{}, protocolAliasDHClient) }
 
 // dhclientProtocol verifies a local DHCP client socket. A DHCP client does not
 // expose a request/response service like dhcpd does; it receives offers on UDP
 // port 68. The probe therefore checks the kernel UDP socket table directly.
 type dhclientProtocol struct{}
 
-func (dhclientProtocol) Name() string       { return "dhclient" }
+func (dhclientProtocol) Name() string       { return ProtocolNameDHClient }
 func (dhclientProtocol) DefaultPort() int   { return dhcpClientPort }
 func (dhclientProtocol) RequiresUser() bool { return false }
 
@@ -51,14 +51,14 @@ func (dhclientProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		if err != nil {
 			return Result{}, err
 		}
-		extra["lease_file"] = cfg.Query
-		extra["lease_expires_at"] = lease.expires.Format(time.RFC3339)
-		extra["lease_seconds_remaining"] = strconv.FormatInt(int64(lease.expires.Sub(now).Seconds()), 10)
+		extra[extraLeaseFile] = cfg.Query
+		extra[extraLeaseExpires] = lease.expires.Format(time.RFC3339)
+		extra[extraLeaseSecondsRemaining] = strconv.FormatInt(int64(lease.expires.Sub(now).Seconds()), 10)
 		if lease.interfaceName != "" {
-			extra["interface"] = lease.interfaceName
+			extra[extraInterface] = lease.interfaceName
 		}
 		if lease.fixedAddress != "" {
-			extra["fixed_address"] = lease.fixedAddress
+			extra[extraFixedAddress] = lease.fixedAddress
 		}
 	}
 	return Result{Extra: extra}, nil

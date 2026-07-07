@@ -13,6 +13,29 @@ import (
 	"sermo/internal/execx"
 )
 
+const (
+	openRCVarArgv0               = "argv_0"
+	openRCVarChroot              = "CHROOT"
+	openRCVarCommand             = "command"
+	openRCVarCommandUser         = "command_user"
+	openRCVarExec                = "exec"
+	openRCVarPidfile             = "pidfile"
+	openRCVarPidfileUpper        = "PIDFILE"
+	openRCVarPidfileSuffix       = "_PIDFILE"
+	openRCVarPrefix              = "RC_PREFIX"
+	openRCVarStartStopDaemonArgs = "start_stop_daemon_args"
+	openRCVarSvcName             = "RC_SVCNAME"
+	openRCVarSvcNameCompat       = "SVCNAME"
+
+	openRCSuffixTrimDir = "%/"
+
+	shellKeywordElse = "else"
+	shellKeywordFi   = "fi"
+
+	legacyRunDir  = "/var/run"
+	runtimeRunDir = "/run"
+)
+
 // Init-definition patterns the wizard uses to derive a pidfile/exe. All are
 // best-effort and only accept literal values (a leading `$` means the script
 // builds the path from a variable we don't expand, so it's skipped).
@@ -95,7 +118,7 @@ func detectSystemdProc(ctx context.Context, runner execx.Runner, unit string) Pr
 
 func detectOpenRCProc(readFile func(string) ([]byte, error), unit string) ProcInfo {
 	var blob strings.Builder
-	for _, path := range []string{filepath.Join("/etc/init.d", unit), filepath.Join("/etc/conf.d", unit)} {
+	for _, path := range []string{filepath.Join(openRCInitDir, unit), filepath.Join(openRCConfDir, unit)} {
 		if data, err := readFile(path); err == nil {
 			blob.Write(data)
 			blob.WriteByte('\n')
@@ -104,9 +127,9 @@ func detectOpenRCProc(readFile func(string) ([]byte, error), unit string) ProcIn
 	text := blob.String()
 	vars := openRCAssignments(text, unit)
 	info := ProcInfo{
-		Pidfile: cleanProcPath(firstNonEmpty(vars["pidfile"], vars["PIDFILE"], suffixVar(vars, "_PIDFILE"))),
-		Exe:     cleanProcPath(vars["command"]),
-		User:    serviceUser(firstNonEmpty(vars["command_user"], userFromArgs(vars["start_stop_daemon_args"]), userFromArgs(text))),
+		Pidfile: cleanProcPath(firstNonEmpty(vars[openRCVarPidfile], vars[openRCVarPidfileUpper], suffixVar(vars, openRCVarPidfileSuffix))),
+		Exe:     cleanProcPath(vars[openRCVarCommand]),
+		User:    serviceUser(firstNonEmpty(vars[openRCVarCommandUser], userFromArgs(vars[openRCVarStartStopDaemonArgs]), userFromArgs(text))),
 	}
 	if info.Pidfile == "" {
 		info.Pidfile = cleanProcPath(firstResolvedArg(text, vars, openrcPidfileArg, openrcWritePIDArg))
@@ -114,7 +137,7 @@ func detectOpenRCProc(readFile func(string) ([]byte, error), unit string) ProcIn
 	if info.Exe == "" {
 		info.Exe = cleanProcPath(firstResolvedArg(text, vars, openrcExecArg, openrcCommandAfterDash))
 	}
-	if command := cleanProcPath(vars["command"]); command != "" {
+	if command := cleanProcPath(vars[openRCVarCommand]); command != "" {
 		info.Cmd = commandRegex(command)
 	}
 	runtime := detectOpenRCRuntimeProc(readFile, unit)
@@ -131,16 +154,16 @@ func detectOpenRCProc(readFile func(string) ([]byte, error), unit string) ProcIn
 }
 
 func detectOpenRCRuntimeProc(readFile func(string) ([]byte, error), unit string) ProcInfo {
-	data, err := readFile(filepath.Join("/run/openrc/daemons", unit, "001"))
+	data, err := readFile(filepath.Join(openRCDaemonsDir, unit, "001"))
 	if err != nil {
 		return ProcInfo{}
 	}
 	vars := openRCAssignments(string(data), unit)
 	info := ProcInfo{
-		Pidfile: cleanProcPath(vars["pidfile"]),
-		Exe:     cleanProcPath(firstNonEmpty(vars["exec"], vars["argv_0"])),
+		Pidfile: cleanProcPath(vars[openRCVarPidfile]),
+		Exe:     cleanProcPath(firstNonEmpty(vars[openRCVarExec], vars[openRCVarArgv0])),
 	}
-	if command := cleanProcPath(vars["argv_0"]); command != "" {
+	if command := cleanProcPath(vars[openRCVarArgv0]); command != "" {
 		info.Cmd = commandRegex(command)
 	}
 	return info
@@ -148,10 +171,10 @@ func detectOpenRCRuntimeProc(readFile func(string) ([]byte, error), unit string)
 
 func openRCAssignments(text, unit string) map[string]string {
 	vars := map[string]string{
-		"CHROOT":     "",
-		"RC_PREFIX":  "",
-		"RC_SVCNAME": unit,
-		"SVCNAME":    unit,
+		openRCVarChroot:        "",
+		openRCVarPrefix:        "",
+		openRCVarSvcName:       unit,
+		openRCVarSvcNameCompat: unit,
 	}
 	active := true
 	var stack []openRCBranch
@@ -164,7 +187,7 @@ func openRCAssignments(text, unit string) map[string]string {
 			}
 			continue
 		}
-		if line == "else" && len(stack) > 0 {
+		if line == shellKeywordElse && len(stack) > 0 {
 			b := stack[len(stack)-1]
 			if b.known {
 				active = b.parent && !b.cond
@@ -173,7 +196,7 @@ func openRCAssignments(text, unit string) map[string]string {
 			}
 			continue
 		}
-		if line == "fi" && len(stack) > 0 {
+		if line == shellKeywordFi && len(stack) > 0 {
 			b := stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
 			active = b.parent
@@ -270,7 +293,7 @@ func resolveOpenRCValue(raw string, vars map[string]string) (string, bool) {
 				unresolved = true
 				return match
 			}
-			if m[2] == "%/" {
+			if m[2] == openRCSuffixTrimDir {
 				value = strings.TrimSuffix(value, "/")
 			}
 			if m[3] != "" {
@@ -408,11 +431,11 @@ func commandRegex(command string) string {
 func cleanProcPath(s string) string {
 	if strings.HasPrefix(s, "/") {
 		clean := filepath.Clean(s)
-		if clean == "/var/run" {
-			return "/run"
+		if clean == legacyRunDir {
+			return runtimeRunDir
 		}
-		if strings.HasPrefix(clean, "/var/run/") {
-			return "/run/" + strings.TrimPrefix(clean, "/var/run/")
+		if strings.HasPrefix(clean, legacyRunDir+"/") {
+			return runtimeRunDir + "/" + strings.TrimPrefix(clean, legacyRunDir+"/")
 		}
 		return clean
 	}

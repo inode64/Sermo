@@ -17,7 +17,7 @@ import (
 // notifications and an optional native auto-expand action.
 type volumeAssistant struct{}
 
-func (volumeAssistant) Name() string { return "volume" }
+func (volumeAssistant) Name() string { return AssistantNameVolume }
 func (volumeAssistant) Title() string {
 	return "Storage volume checks (free space, optional auto-expand)"
 }

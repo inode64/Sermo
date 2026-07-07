@@ -3,6 +3,7 @@ package assist
 import (
 	"fmt"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
 )
@@ -13,7 +14,7 @@ type netAssistant struct{}
 
 const netKeywordActive = "active"
 
-func (netAssistant) Name() string  { return "net" }
+func (netAssistant) Name() string  { return AssistantNameNet }
 func (netAssistant) Title() string { return "Network interface checks (link state, errors, speed)" }
 
 func (netAssistant) Run(p *Prompt, env Env) (res Result, err error) {
@@ -171,7 +172,7 @@ func buildNetWatch(iface Iface, s netSettings) map[string]any {
 			metrics[checks.NetMetricState] = cond
 		case checks.NetMetricErrors:
 			metrics[checks.NetMetricErrors] = map[string]any{
-				checks.CheckKeyDelta: map[string]any{checks.CheckKeyOp: ">", checks.CheckKeyValue: s.errorsAt},
+				checks.CheckKeyDelta: map[string]any{checks.CheckKeyOp: cfgval.CompareOpGreater, checks.CheckKeyValue: s.errorsAt},
 				config.WatchKeyThen:  newThen(),
 			}
 		case checks.NetMetricSpeed:
@@ -185,7 +186,7 @@ func buildNetWatch(iface Iface, s netSettings) map[string]any {
 			}
 			cond := map[string]any{config.WatchKeyThen: newThen()}
 			if s.addrAbsent {
-				cond[checks.CheckKeyExpect] = "absent"
+				cond[checks.CheckKeyExpect] = checks.NetAddrAbsent
 			} else {
 				cond[checks.CheckKeyOn] = checks.OnModeChange
 			}

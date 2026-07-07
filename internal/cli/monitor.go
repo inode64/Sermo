@@ -15,9 +15,9 @@ import (
 // reboots — and a service whose `monitor` flag is `previous` is restored to it on
 // the next daemon start.
 func (a App) runMonitor(opts options, pause bool) int {
-	verb := "monitor"
+	verb := commandMonitor
 	if pause {
-		verb = "unmonitor"
+		verb = commandUnmonitor
 	}
 	service := opts.service()
 	if service == "" {

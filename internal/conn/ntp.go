@@ -14,14 +14,28 @@ import (
 
 func init() { Register(ntpProtocol{}) }
 
+const (
+	ntpExtraKeyLeap             = "leap"
+	ntpExtraKeyPrecisionSeconds = "precision_seconds"
+	ntpExtraKeyRootDelayMS      = "root_delay_ms"
+	ntpExtraKeyRootDispersionMS = "root_dispersion_ms"
+	ntpExtraKeyReferenceID      = "reference_id"
+
+	ntpLeapNone           = "none"
+	ntpLeapAddSecond      = "add-second"
+	ntpLeapDelSecond      = "del-second"
+	ntpLeapUnsynchronized = "unsynchronized"
+	ntpLeapUnknown        = "unknown"
+)
+
 // ntpProtocol probes an NTP server (RFC 5905) with the github.com/beevik/ntp
 // client: it queries the server and verifies it answers with a usable time. The
 // query is dialed through BindDialer so an `interface:` setting still pins the
 // egress link (SO_BINDTODEVICE), like every other probe. No auth.
 type ntpProtocol struct{}
 
-func (ntpProtocol) Name() string       { return "ntp" }
-func (ntpProtocol) DefaultPort() int   { return 123 }
+func (ntpProtocol) Name() string       { return ProtocolNameNTP }
+func (ntpProtocol) DefaultPort() int   { return defaultPortNTP }
 func (ntpProtocol) RequiresUser() bool { return false }
 
 func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -31,7 +45,7 @@ func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 123
+		port = defaultPortNTP
 	}
 
 	opt := ntp.QueryOptions{
@@ -55,8 +69,8 @@ func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 
 	extra := ntpExtraFields(resp)
-	extra["stratum"] = strconv.Itoa(stratum)
-	extra["offset_seconds"] = strconv.FormatFloat(resp.ClockOffset.Seconds(), 'f', 6, 64)
+	extra[extraStratum] = strconv.Itoa(stratum)
+	extra[extraOffsetSeconds] = strconv.FormatFloat(resp.ClockOffset.Seconds(), 'f', 6, 64)
 	return Result{Extra: extra}, nil
 }
 
@@ -78,17 +92,17 @@ func ntpTimeout(ctx context.Context) time.Duration {
 // reference identifier. These let an expect: rule assert sync quality, e.g.
 // leap == none or root_dispersion_ms below a threshold.
 func ntpExtraFields(resp *ntp.Response) map[string]string {
-	leaps := [...]string{"none", "add-second", "del-second", "unsynchronized"}
-	leap := "unknown"
+	leaps := [...]string{ntpLeapNone, ntpLeapAddSecond, ntpLeapDelSecond, ntpLeapUnsynchronized}
+	leap := ntpLeapUnknown
 	if int(resp.Leap) < len(leaps) {
 		leap = leaps[resp.Leap]
 	}
 	return map[string]string{
-		"leap":               leap,
-		"precision_seconds":  strconv.FormatFloat(resp.Precision.Seconds(), 'g', 4, 64),
-		"root_delay_ms":      strconv.FormatFloat(resp.RootDelay.Seconds()*1000, 'f', 3, 64),
-		"root_dispersion_ms": strconv.FormatFloat(resp.RootDispersion.Seconds()*1000, 'f', 3, 64),
-		"reference_id":       ntpRefID(resp.ReferenceID, int(resp.Stratum)),
+		ntpExtraKeyLeap:             leap,
+		ntpExtraKeyPrecisionSeconds: strconv.FormatFloat(resp.Precision.Seconds(), 'g', 4, 64),
+		ntpExtraKeyRootDelayMS:      strconv.FormatFloat(resp.RootDelay.Seconds()*1000, 'f', 3, 64),
+		ntpExtraKeyRootDispersionMS: strconv.FormatFloat(resp.RootDispersion.Seconds()*1000, 'f', 3, 64),
+		ntpExtraKeyReferenceID:      ntpRefID(resp.ReferenceID, int(resp.Stratum)),
 	}
 }
 

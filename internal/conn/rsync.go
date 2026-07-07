@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func init() { Register(rsyncProtocol{}, "rsyncd") }
+func init() { Register(rsyncProtocol{}, protocolAliasRsyncd) }
 
 // rsyncProtocol probes an rsync daemon natively. On connect, rsyncd sends an
 // "@RSYNCD: <version>" greeting; reading it verifies the daemon is up and
@@ -16,8 +16,8 @@ func init() { Register(rsyncProtocol{}, "rsyncd") }
 // but the greeting is unauthenticated).
 type rsyncProtocol struct{}
 
-func (rsyncProtocol) Name() string       { return "rsync" }
-func (rsyncProtocol) DefaultPort() int   { return 873 }
+func (rsyncProtocol) Name() string       { return ProtocolNameRsync }
+func (rsyncProtocol) DefaultPort() int   { return defaultPortRsync }
 func (rsyncProtocol) RequiresUser() bool { return false }
 
 func (rsyncProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -27,7 +27,7 @@ func (rsyncProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 873
+		port = defaultPortRsync
 	}
 	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {

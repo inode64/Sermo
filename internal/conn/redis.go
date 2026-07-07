@@ -12,8 +12,13 @@ import (
 
 func init() {
 	// Valkey is a redis fork speaking the same RESP protocol.
-	Register(redisProtocol{}, "valkey")
+	Register(redisProtocol{}, protocolAliasValkey)
 }
+
+const (
+	redisInfoVersion         = "redis_version"
+	redisInfoUptimeInSeconds = "uptime_in_seconds"
+)
 
 // redisProtocol probes a Redis (or Valkey) server natively over RESP — no
 // external driver: the handshake (optional AUTH, then PING, then INFO for the
@@ -21,15 +26,15 @@ func init() {
 // implemented directly on a socket.
 type redisProtocol struct{}
 
-func (redisProtocol) Name() string       { return "redis" }
-func (redisProtocol) DefaultPort() int   { return 6379 }
+func (redisProtocol) Name() string       { return ProtocolNameRedis }
+func (redisProtocol) DefaultPort() int   { return defaultPortRedis }
 func (redisProtocol) RequiresUser() bool { return false }
 
 // Probe connects (over TLS when configured), authenticates if a password/user is
 // set, verifies the server answers PING, and reads its version. The caller's
 // context bounds the probe.
 func (redisProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	return probeBanner(ctx, cfg, 6379, redisHandshake)
+	return probeBanner(ctx, cfg, defaultPortRedis, redisHandshake)
 }
 
 // redisHandshake runs the RESP handshake on rw: optional AUTH, a PING that must
@@ -71,9 +76,9 @@ func redisHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	if writeRESP(rw, "INFO") == nil {
 		if info, err := readRESP(br); err == nil {
 			fields := parseRedisInfo(info)
-			res.Version = fields["redis_version"]
+			res.Version = fields[redisInfoVersion]
 			for _, k := range []string{
-				"role", "master_link_status", "connected_clients",
+				ExtraKeyRole, "master_link_status", "connected_clients",
 				"used_memory", "maxmemory", "mem_fragmentation_ratio",
 				"rdb_last_bgsave_status", "aof_last_write_status", "loading",
 			} {
@@ -81,8 +86,8 @@ func redisHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 					res.Extra[k] = v
 				}
 			}
-			if v := fields["uptime_in_seconds"]; v != "" {
-				res.Extra["uptime_seconds"] = v
+			if v := fields[redisInfoUptimeInSeconds]; v != "" {
+				res.Extra[extraUptime] = v
 			}
 		}
 	}

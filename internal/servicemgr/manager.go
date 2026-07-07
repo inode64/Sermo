@@ -209,7 +209,7 @@ func (m systemdManager) SupportsReload(ctx context.Context, service string) (boo
 	if result.ExitCode < 0 && strings.TrimSpace(result.Stdout) == "" {
 		return false, fmt.Errorf("query CanReload for %s: %s", unit, execx.OperatorFailure(err, result, 0))
 	}
-	return strings.EqualFold(strings.TrimSpace(result.Stdout), "yes"), nil
+	return strings.EqualFold(strings.TrimSpace(result.Stdout), systemdValueYes), nil
 }
 
 func (m systemdManager) action(ctx context.Context, verb, service string) error {
@@ -297,7 +297,7 @@ func (m openrcManager) SupportsReload(_ context.Context, service string) (bool, 
 	if read == nil {
 		read = os.ReadFile
 	}
-	data, err := read(filepath.Join("/etc/init.d", service))
+	data, err := read(filepath.Join(openRCInitDir, service))
 	if err != nil {
 		return false, nil //nolint:nilerr // unreadable scripts mean reload support is unknown; callers fall back safely
 	}
@@ -335,7 +335,7 @@ func actionError(command string, result execx.Result, err error) error {
 // systemdUnitSuffixes are the unit types systemd recognizes; a service name that
 // already carries one of these is used verbatim.
 var systemdUnitSuffixes = []string{
-	".service", ".socket", ".target", ".mount", ".automount",
+	systemdServiceSuffix, ".socket", ".target", ".mount", ".automount",
 	".swap", ".path", ".timer", ".slice", ".scope", ".device",
 }
 
@@ -347,7 +347,7 @@ func systemdUnit(service string) string {
 			return service
 		}
 	}
-	return service + ".service"
+	return service + systemdServiceSuffix
 }
 
 // NormalizeUnit normalizes a backend-specific service name to its init unit.
@@ -359,7 +359,6 @@ func NormalizeUnit(backend Backend, service string) string {
 }
 
 func systemdStatus(state string) Status {
-	const systemdStateDeactivating = "deactivating"
 	switch state {
 	case string(StatusActive):
 		return StatusActive

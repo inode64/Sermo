@@ -9,7 +9,13 @@ import (
 	"strings"
 )
 
-func init() { Register(varnishProtocol{}, "varnishadm") }
+func init() { Register(varnishProtocol{}, protocolAliasVarnishAdm) }
+
+const (
+	maxVarnishCLIBody       = 1 << 16
+	varnishStatusAuthNeeded = 107 // CLIS_AUTH
+	extraAuthRequired       = "auth_required"
+)
 
 // varnishProtocol probes Varnish Cache via its management CLI (varnishadm, the
 // `-T` admin port). On connect varnishd sends a CLI response: a "<status>
@@ -19,12 +25,12 @@ func init() { Register(varnishProtocol{}, "varnishadm") }
 // protocol. Liveness only — the CLI secret authentication is not performed.
 type varnishProtocol struct{}
 
-func (varnishProtocol) Name() string       { return "varnish" }
-func (varnishProtocol) DefaultPort() int   { return 6082 }
+func (varnishProtocol) Name() string       { return ProtocolNameVarnish }
+func (varnishProtocol) DefaultPort() int   { return defaultPortVarnish }
 func (varnishProtocol) RequiresUser() bool { return false }
 
 func (varnishProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, 6082)
+	c, err := dialDeadline(ctx, cfg, defaultPortVarnish)
 	if err != nil {
 		return Result{}, err
 	}
@@ -40,16 +46,16 @@ func (varnishProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 	body := ""
-	if length > 0 && length <= 1<<16 {
+	if length > 0 && length <= maxVarnishCLIBody {
 		buf := make([]byte, length)
 		if _, rerr := io.ReadFull(br, buf); rerr == nil {
 			body = string(buf)
 		}
 	}
 
-	extra := map[string]string{"cli_status": strconv.Itoa(status)}
-	if status == 107 { // CLIS_AUTH
-		extra["auth_required"] = "true"
+	extra := map[string]string{extraCLIStatus: strconv.Itoa(status)}
+	if status == varnishStatusAuthNeeded {
+		extra[extraAuthRequired] = strconv.FormatBool(true)
 	}
 	return Result{Version: varnishVersion(body), Extra: extra}, nil
 }

@@ -100,6 +100,17 @@ type Assistant interface {
 	Run(p *Prompt, env Env) (Result, error)
 }
 
+// AssistantName* constants are the stable command tokens accepted by
+// `sermoctl wizard`.
+const (
+	AssistantNameMount   = "mount"
+	AssistantNameNet     = "net"
+	AssistantNameService = "service"
+	AssistantNameUplink  = "uplink"
+	AssistantNameVM      = "vm"
+	AssistantNameVolume  = "volume"
+)
+
 // registry is the ordered set of available assistants. Add new ones here.
 var registry = []Assistant{
 	serviceAssistant{},

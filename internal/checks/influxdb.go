@@ -102,7 +102,7 @@ func (c influxCheck) influxqlScalar(ctx context.Context, client *http.Client, ba
 		return "", false, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPBody))
 	if resp.StatusCode != http.StatusOK {
 		return "", false, fmt.Errorf("HTTP status %d: %s", resp.StatusCode, influxErrorBody(body))
 	}
@@ -168,7 +168,7 @@ func (c influxCheck) fluxScalar(ctx context.Context, client *http.Client, base s
 		return "", false, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPBody))
 	if resp.StatusCode != http.StatusOK {
 		return "", false, fmt.Errorf("HTTP status %d: %s", resp.StatusCode, influxErrorBody(body))
 	}
@@ -291,10 +291,7 @@ func influxConnConfig(entry map[string]any) conn.Config {
 	if cfg.Host == "" {
 		cfg.Host = conn.DefaultHost
 	}
-	cfg.Port = 8086
-	if proto, ok := conn.Lookup("influxdb"); ok {
-		cfg.Port = proto.DefaultPort()
-	}
+	cfg.Port = conn.DefaultPort(conn.ProtocolNameInfluxDB)
 	if p, ok := cfgval.Int(entry[CheckKeyPort]); ok {
 		cfg.Port = p
 	}

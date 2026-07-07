@@ -224,10 +224,7 @@ func mongoConnConfig(entry map[string]any) conn.Config {
 	if cfg.Host == "" {
 		cfg.Host = conn.DefaultHost
 	}
-	cfg.Port = 27017
-	if proto, ok := conn.Lookup("mongodb"); ok {
-		cfg.Port = proto.DefaultPort()
-	}
+	cfg.Port = conn.DefaultPort(conn.ProtocolNameMongoDB)
 	if p, ok := cfgval.Int(entry[CheckKeyPort]); ok {
 		cfg.Port = p
 	}

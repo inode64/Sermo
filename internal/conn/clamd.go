@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func init() { Register(clamdProtocol{}, "clamav") }
+func init() { Register(clamdProtocol{}, protocolAliasClamAV) }
 
 // clamdProtocol probes a ClamAV daemon (clamd) natively over its simple text
 // protocol. It sends the `VERSION` command (newline-prefixed form) and verifies
@@ -16,12 +16,12 @@ func init() { Register(clamdProtocol{}, "clamav") }
 // `socket`) or TCP (default port 3310). No auth, no TLS.
 type clamdProtocol struct{}
 
-func (clamdProtocol) Name() string       { return "clamd" }
-func (clamdProtocol) DefaultPort() int   { return 3310 }
+func (clamdProtocol) Name() string       { return ProtocolNameClamd }
+func (clamdProtocol) DefaultPort() int   { return defaultPortClamd }
 func (clamdProtocol) RequiresUser() bool { return false }
 
 func (clamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, 3310)
+	c, err := dialDeadline(ctx, cfg, defaultPortClamd)
 	if err != nil {
 		return Result{}, err
 	}
@@ -38,7 +38,7 @@ func (clamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if !ok {
 		return Result{}, fmt.Errorf("not a clamd VERSION reply: %q", line)
 	}
-	return Result{Version: version, Extra: map[string]string{"version_string": line}}, nil
+	return Result{Version: version, Extra: map[string]string{ExtraKeyVersionString: line}}, nil
 }
 
 // clamdVersion extracts the engine version from a clamd VERSION reply

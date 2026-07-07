@@ -17,7 +17,7 @@ type PidsSample struct {
 }
 
 // PidsSamplerFunc reads the current PID-table sample. Injected for tests; the
-// default reads /proc/loadavg and /proc/sys/kernel/pid_max.
+// default reads loadavg and kernel.pid_max.
 type PidsSamplerFunc func() (PidsSample, error)
 
 // pidsCheck is a level check for PID table exhaustion.
@@ -45,26 +45,26 @@ func (c pidsCheck) Run(_ context.Context) Result {
 // web backend can render a PID-table gauge without running a full pids check.
 func SamplePids() (PidsSample, error) { return defaultPidsSampler() }
 
-// defaultPidsSampler reads the total scheduling entities from the fourth
-// /proc/loadavg field ("running/total") and the limit from kernel.pid_max.
+// defaultPidsSampler reads the total scheduling entities from the fourth loadavg
+// field ("running/total") and the limit from kernel.pid_max.
 func defaultPidsSampler() (PidsSample, error) {
-	data, err := os.ReadFile("/proc/loadavg")
+	data, err := os.ReadFile(procLoadavgPath)
 	if err != nil {
 		return PidsSample{}, err
 	}
 	fields := strings.Fields(string(data))
 	if len(fields) < 4 {
-		return PidsSample{}, fmt.Errorf("malformed /proc/loadavg")
+		return PidsSample{}, fmt.Errorf("malformed %s", procLoadavgPath)
 	}
 	_, total, ok := strings.Cut(fields[3], "/")
 	if !ok {
-		return PidsSample{}, fmt.Errorf("malformed /proc/loadavg entities field %q", fields[3])
+		return PidsSample{}, fmt.Errorf("malformed %s entities field %q", procLoadavgPath, fields[3])
 	}
 	var s PidsSample
 	if s.Threads, err = strconv.ParseUint(total, 10, 64); err != nil {
 		return PidsSample{}, fmt.Errorf("malformed thread count %q", total)
 	}
-	if v, err := readProcUint("/proc/sys/kernel/pid_max"); err == nil {
+	if v, err := readProcUint(procPidMaxPath); err == nil {
 		s.Max = v
 	}
 	return s, nil

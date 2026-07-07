@@ -8,7 +8,7 @@ import (
 	"strconv"
 )
 
-func init() { Register(nebulaProtocol{}, "nebula-vpn") }
+func init() { Register(nebulaProtocol{}, protocolAliasNebulaVPN) }
 
 // Nebula UDP control-protocol constants (slackhq/nebula `header` package). The
 // first byte packs the protocol version in the high nibble and the message type
@@ -18,6 +18,7 @@ const (
 	nebulaHeaderLen     = 16
 	nebulaTypeMessage   = 1 // a tunnelled data packet
 	nebulaTypeRecvError = 2 // "no tunnel for that index — re-handshake"
+	nebulaReplyRecvErr  = "recv_error"
 )
 
 // nebulaProtocol probes a Nebula mesh-VPN node natively over its UDP control
@@ -33,8 +34,8 @@ const (
 // address — stays silent and reads as down.
 type nebulaProtocol struct{}
 
-func (nebulaProtocol) Name() string       { return "nebula" }
-func (nebulaProtocol) DefaultPort() int   { return 4242 }
+func (nebulaProtocol) Name() string       { return ProtocolNameNebula }
+func (nebulaProtocol) DefaultPort() int   { return defaultPortNebula }
 func (nebulaProtocol) RequiresUser() bool { return false }
 
 func (nebulaProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -44,7 +45,7 @@ func (nebulaProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 4242
+		port = defaultPortNebula
 	}
 
 	// A random 32-bit tunnel index the node won't have (reuses the shared random
@@ -69,7 +70,7 @@ func (nebulaProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err := parseNebulaRecvError(buf[:n], index); err != nil {
 		return Result{}, err
 	}
-	return Result{Extra: map[string]string{extraReply: "recv_error"}}, nil
+	return Result{Extra: map[string]string{extraReply: nebulaReplyRecvErr}}, nil
 }
 
 // nebulaMessage builds a 16-byte Nebula Message header (type 1) with the given

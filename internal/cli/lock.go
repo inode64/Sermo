@@ -29,9 +29,9 @@ func (a App) runLock(ctx context.Context, opts options) int {
 	locker := locks.NewNamedLocker(filepath.Join(cfg.Global.RuntimeDir(), "locks"))
 
 	switch opts.args[0] {
-	case "acquire":
+	case commandLockAcquire:
 		return a.runLockAcquire(opts, cfg, locker, opts.args[1:])
-	case "release":
+	case commandLockRelease:
 		return a.runLockRelease(opts, cfg, locker, opts.args[1:])
 	default:
 		return a.runLockWrap(ctx, opts, cfg, locker, opts.args[0])

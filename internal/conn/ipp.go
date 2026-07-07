@@ -12,7 +12,7 @@ import (
 	"strconv"
 )
 
-func init() { Register(ippProtocol{}, "cups") }
+func init() { Register(ippProtocol{}, protocolAliasCUPS) }
 
 // ippCUPSGetDefault is the CUPS-Get-Default operation id — a server-level IPP
 // operation needing only the charset/language attributes, so it works without a
@@ -24,8 +24,8 @@ const ippCUPSGetDefault = 0x4001
 // response. Any parseable IPP reply proves the daemon is up and speaking IPP.
 type ippProtocol struct{}
 
-func (ippProtocol) Name() string       { return "ipp" }
-func (ippProtocol) DefaultPort() int   { return 631 }
+func (ippProtocol) Name() string       { return ProtocolNameIPP }
+func (ippProtocol) DefaultPort() int   { return defaultPortIPP }
 func (ippProtocol) RequiresUser() bool { return false }
 
 func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -35,7 +35,7 @@ func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 631
+		port = defaultPortIPP
 	}
 	scheme := schemeHTTP
 	client := httpProbeClient(cfg.Interface, nil)
@@ -63,7 +63,7 @@ func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if resp.StatusCode != http.StatusOK {
 		return Result{}, fmt.Errorf("ipp: HTTP status %d", resp.StatusCode)
 	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPProbeBody))
 	version, status, err := parseIPPResponse(body)
 	if err != nil {
 		return Result{}, err

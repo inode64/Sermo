@@ -24,6 +24,26 @@ const (
 	cmdRcStatus  = "rc-status"
 )
 
+// systemd tokens consumed from command output or used to normalize unit names.
+const (
+	systemdProcessName       = "systemd"
+	systemdRuntimeDir        = "/run/systemd/system"
+	systemdUnitHeader        = "UNIT"
+	systemdServiceSuffix     = ".service"
+	systemdStateRunning      = "running"
+	systemdStateDegraded     = "degraded"
+	systemdStateDeactivating = "deactivating"
+	systemdValueYes          = "yes"
+)
+
+const (
+	openRCRuntimeDir = "/run/openrc"
+	openRCInitDir    = "/etc/init.d"
+	openRCConfDir    = "/etc/conf.d"
+	openRCDaemonsDir = "/run/openrc/daemons"
+	pid1CommPath     = "/proc/1/comm"
+)
+
 // Service-manager action verbs passed to init backend commands.
 const (
 	actionStart       = "start"

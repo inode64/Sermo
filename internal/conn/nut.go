@@ -9,7 +9,9 @@ import (
 	"strings"
 )
 
-func init() { Register(nutProtocol{}, "ups", "upsd") }
+func init() { Register(nutProtocol{}, protocolAliasUPS, protocolAliasUPSD) }
+
+const nutVarUPSStatus = "ups.status"
 
 // nutInterestingVars are the upsd variables exposed in the probe Result (and so
 // to `expect`, hooks as SERMO_*, and the web detail) when a UPS is selected. They
@@ -18,7 +20,7 @@ func init() { Register(nutProtocol{}, "ups", "upsd") }
 // mirrored into the change fingerprint so `on_change` alerts on state transitions
 // (e.g. OL -> OB DISCHRG -> OB LB).
 var nutInterestingVars = []string{
-	"ups.status",
+	nutVarUPSStatus,
 	"ups.load",
 	"ups.temperature",
 	"ups.power",
@@ -48,10 +50,10 @@ var nutInterestingVars = []string{
 type nutProtocol struct{}
 
 // Name returns the canonical type token.
-func (nutProtocol) Name() string { return "nut" }
+func (nutProtocol) Name() string { return ProtocolNameNUT }
 
 // DefaultPort is upsd's IANA port.
-func (nutProtocol) DefaultPort() int { return 3493 }
+func (nutProtocol) DefaultPort() int { return defaultPortNUT }
 
 // RequiresUser reports that authentication is optional (an anonymous VER probe is
 // a valid liveness check).
@@ -59,7 +61,7 @@ func (nutProtocol) RequiresUser() bool { return false }
 
 // Probe dials upsd and runs the handshake.
 func (nutProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	return probeBanner(ctx, cfg, 3493, nutHandshake)
+	return probeBanner(ctx, cfg, defaultPortNUT, nutHandshake)
 }
 
 // nutHandshake runs the upsd exchange over rw (split out so it is testable with a
@@ -79,7 +81,7 @@ func nutHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	if strings.HasPrefix(ver, "ERR") {
 		return Result{}, fmt.Errorf("VER: %s", nutErr(ver))
 	}
-	res := Result{Version: nutVersion(ver), Extra: map[string]string{"server": ver}}
+	res := Result{Version: nutVersion(ver), Extra: map[string]string{ExtraKeyServer: ver}}
 
 	ups := cfg.Query
 	if ups == "" {
@@ -103,12 +105,12 @@ func nutHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 			if err := nutCmdOK(rw, br, "LOGIN "+ups); err != nil {
 				return Result{}, fmt.Errorf("login: %w", err)
 			}
-			res.Extra["login"] = ups
+			res.Extra[extraLogin] = ups
 		}
 	}
 
 	if ups != "" {
-		res.Extra["ups"] = ups
+		res.Extra[extraUPS] = ups
 		vars, err := nutListVars(rw, br, ups)
 		if err != nil {
 			return Result{}, fmt.Errorf("list vars: %w", err)
@@ -118,7 +120,7 @@ func nutHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 				res.Extra[key] = v
 			}
 		}
-		if status, ok := vars["ups.status"]; ok {
+		if status, ok := vars[nutVarUPSStatus]; ok {
 			res.Extra[ExtraKeyFingerprint] = status // drives on_change (state transitions)
 		}
 	}

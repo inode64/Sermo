@@ -9,7 +9,7 @@ import (
 	"strconv"
 )
 
-func init() { Register(rdpProtocol{}, "ms-wbt-server") }
+func init() { Register(rdpProtocol{}, protocolAliasMSWBTServer) }
 
 // RDP negotiation requested protocols (MS-RDPBCGR): standard RDP security, TLS
 // and CredSSP/NLA — advertising all lets the server pick and report its policy.
@@ -22,8 +22,8 @@ const rdpRequestedProtocols = 0x00000003 // PROTOCOL_SSL | PROTOCOL_HYBRID
 // reported. No auth (the negotiation precedes authentication).
 type rdpProtocol struct{}
 
-func (rdpProtocol) Name() string       { return "rdp" }
-func (rdpProtocol) DefaultPort() int   { return 3389 }
+func (rdpProtocol) Name() string       { return ProtocolNameRDP }
+func (rdpProtocol) DefaultPort() int   { return defaultPortRDP }
 func (rdpProtocol) RequiresUser() bool { return false }
 
 func (rdpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -33,7 +33,7 @@ func (rdpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 3389
+		port = defaultPortRDP
 	}
 	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
@@ -54,7 +54,7 @@ func (rdpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Extra: map[string]string{"security": security}}, nil
+	return Result{Extra: map[string]string{extraSecurity: security}}, nil
 }
 
 // buildRDPNegRequest builds a TPKT + X.224 Connection Request enclosing an RDP
@@ -99,13 +99,13 @@ func parseRDPConfirm(b []byte) (string, error) {
 			return "negotiation-failure", nil
 		}
 	}
-	return "rdp", nil // CC with no negotiation response: standard RDP security
+	return ProtocolNameRDP, nil // CC with no negotiation response: standard RDP security
 }
 
 func rdpProtocolName(p uint32) string {
 	switch p {
 	case 0:
-		return "rdp"
+		return ProtocolNameRDP
 	case 1:
 		return "tls"
 	case 2:

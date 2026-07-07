@@ -38,7 +38,7 @@ const (
 // ASN.1 implementation.
 type snmpProtocol struct{}
 
-func (snmpProtocol) Name() string       { return "snmp" }
+func (snmpProtocol) Name() string       { return ProtocolNameSNMP }
 func (snmpProtocol) DefaultPort() int   { return defaultSNMPPort }
 func (snmpProtocol) RequiresUser() bool { return false }
 
@@ -72,13 +72,13 @@ func (snmpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	// Identification fields the agent exposes alongside the object id, each
 	// assertable via expect: (e.g. sys_name == host).
-	putIfSet(extra, "sys_name", snmpString(by[oidSysName]))
-	putIfSet(extra, "sys_contact", snmpString(by[oidSysContact]))
-	putIfSet(extra, "sys_location", snmpString(by[oidSysLocation]))
+	putIfSet(extra, extraSysName, snmpString(by[oidSysName]))
+	putIfSet(extra, extraSysContact, snmpString(by[oidSysContact]))
+	putIfSet(extra, extraSysLocation, snmpString(by[oidSysLocation]))
 	if up, ok := by[oidSysUpTime]; ok {
 		switch up.Type {
 		case g.TimeTicks, g.Integer, g.Counter32, g.Gauge32, g.Counter64:
-			extra["sys_uptime_seconds"] = strconv.FormatInt(g.ToBigInt(up.Value).Int64()/100, 10)
+			extra[extraSysUptimeSeconds] = strconv.FormatInt(g.ToBigInt(up.Value).Int64()/100, 10)
 		}
 	}
 	return Result{Version: sysDescr, Extra: extra}, nil

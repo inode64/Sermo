@@ -3,6 +3,7 @@ package servicemgr
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -84,7 +85,7 @@ func (r UnitResolver) knows(ctx context.Context, backend Backend, unit, candidat
 		res, err := execx.Run(ctx, runner, r.timeout(), cmdSystemctl, "cat", "--", unit)
 		return err == nil && res.ExitCode == 0
 	case BackendOpenRC:
-		return probe.PathExists("/etc/init.d/" + candidate)
+		return probe.PathExists(filepath.Join(openRCInitDir, candidate))
 	default:
 		return false
 	}

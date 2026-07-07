@@ -25,11 +25,11 @@ func (a App) runPanic(opts options) int {
 
 	var set, on bool
 	switch sub {
-	case "on", "enable":
+	case commandPanicOn, commandPanicEnable:
 		set, on = true, true
-	case "off", "disable":
+	case commandPanicOff, commandPanicDisable:
 		set, on = true, false
-	case "", "status":
+	case "", commandStatus:
 		set = false
 	default:
 		return a.commandUsageError(commandPanic, fmt.Sprintf("unknown panic argument %q (use on, off or status)", sub))
@@ -85,7 +85,7 @@ func (a App) reportPanic(opts options, rec state.GlobalRecord, found bool) {
 	if found && !rec.UpdatedAt.IsZero() {
 		changedAt = rec.UpdatedAt.UTC().Format(time.RFC3339)
 	}
-	state := "off"
+	state := commandPanicOff
 	if enabled {
 		state = "on (hooks, alerts and automatic remediation suspended)"
 	}

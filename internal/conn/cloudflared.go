@@ -10,15 +10,15 @@ import (
 	"strconv"
 )
 
-func init() { Register(cloudflaredProtocol{}, "cloudflare-tunnel") }
+func init() { Register(cloudflaredProtocol{}, protocolAliasCloudflareTunnel) }
 
 // cloudflaredProtocol probes a Cloudflare Tunnel daemon through its local
 // Prometheus metrics endpoint. The endpoint is exposed by cloudflared's
 // --metrics option and is commonly bound to 127.0.0.1:60123.
 type cloudflaredProtocol struct{}
 
-func (cloudflaredProtocol) Name() string       { return "cloudflared" }
-func (cloudflaredProtocol) DefaultPort() int   { return 60123 }
+func (cloudflaredProtocol) Name() string       { return ProtocolNameCloudflared }
+func (cloudflaredProtocol) DefaultPort() int   { return defaultPortCloudflared }
 func (cloudflaredProtocol) RequiresUser() bool { return false }
 
 func (cloudflaredProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -32,7 +32,7 @@ func (cloudflaredProtocol) Probe(ctx context.Context, cfg Config) (Result, error
 		return Result{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPProbeLargeBody))
 	if resp.StatusCode != http.StatusOK {
 		return Result{}, fmt.Errorf("cloudflared: /metrics HTTP status %d", resp.StatusCode)
 	}
@@ -41,11 +41,11 @@ func (cloudflaredProtocol) Probe(ctx context.Context, cfg Config) (Result, error
 	}
 
 	extra := map[string]string{
-		"endpoint": "/metrics",
-		"status":   strconv.Itoa(resp.StatusCode),
+		extraEndpoint:  "/metrics",
+		ExtraKeyStatus: strconv.Itoa(resp.StatusCode),
 	}
 	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		extra["content_type"] = ct
+		extra[extraContentType] = ct
 	}
 	return Result{Extra: extra}, nil
 }
@@ -57,7 +57,7 @@ func cloudflaredClient(cfg Config) (*http.Client, string) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 60123
+		port = defaultPortCloudflared
 	}
 	scheme := schemeHTTP
 	client := httpProbeClient(cfg.Interface, nil)

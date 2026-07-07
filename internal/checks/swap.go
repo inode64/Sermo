@@ -10,7 +10,7 @@ import (
 )
 
 // SwapSample is one observation of system swap: total/free bytes and the
-// cumulative pages swapped in/out since boot (/proc/vmstat pswpin/pswpout).
+// cumulative pages swapped in/out since boot (vmstat pswpin/pswpout).
 type SwapSample struct {
 	TotalBytes uint64
 	FreeBytes  uint64
@@ -19,7 +19,7 @@ type SwapSample struct {
 }
 
 // SwapSamplerFunc reads the current swap sample. Injected for tests; the default
-// reads /proc/meminfo and /proc/vmstat.
+// reads meminfo and vmstat.
 type SwapSamplerFunc func() (SwapSample, error)
 
 // swap check metric names (the `metric:` selector of a swap check). Exported so
@@ -106,11 +106,11 @@ func (c *swapCheck) Run(_ context.Context) Result {
 	}
 }
 
-// defaultSwapSampler reads SwapTotal/SwapFree from /proc/meminfo and the
-// pswpin/pswpout counters from /proc/vmstat.
+// defaultSwapSampler reads SwapTotal/SwapFree from meminfo and the pswpin/pswpout
+// counters from vmstat.
 func defaultSwapSampler() (SwapSample, error) {
 	var s SwapSample
-	mem, err := os.ReadFile("/proc/meminfo")
+	mem, err := os.ReadFile(procMeminfoPath)
 	if err != nil {
 		return s, err
 	}
@@ -121,7 +121,7 @@ func defaultSwapSampler() (SwapSample, error) {
 			s.FreeBytes = parseMeminfoKB(v)
 		}
 	}
-	if vm, err := os.ReadFile("/proc/vmstat"); err == nil {
+	if vm, err := os.ReadFile(procVMStatPath); err == nil {
 		pagesIn, pagesOut, err := parseSwapVMStat(string(vm))
 		if err != nil {
 			return s, err

@@ -10,7 +10,7 @@ import (
 	"strconv"
 )
 
-func init() { Register(prometheusProtocol{}, "prom") }
+func init() { Register(prometheusProtocol{}, protocolAliasPrometheus) }
 
 // prometheusProtocol probes a Prometheus server via its HTTP API. It GETs
 // /api/v1/status/buildinfo and verifies a `success` status — reporting the server
@@ -20,8 +20,8 @@ func init() { Register(prometheusProtocol{}, "prom") }
 // API).
 type prometheusProtocol struct{}
 
-func (prometheusProtocol) Name() string       { return "prometheus" }
-func (prometheusProtocol) DefaultPort() int   { return 9090 }
+func (prometheusProtocol) Name() string       { return ProtocolNamePrometheus }
+func (prometheusProtocol) DefaultPort() int   { return defaultPortPrometheus }
 func (prometheusProtocol) RequiresUser() bool { return false }
 
 func (prometheusProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -44,7 +44,7 @@ func PrometheusClient(cfg Config) (*http.Client, string) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 9090
+		port = defaultPortPrometheus
 	}
 	scheme := schemeHTTP
 	client := httpProbeClient(cfg.Interface, nil)
@@ -75,7 +75,7 @@ func promBuildInfo(ctx context.Context, client *http.Client, base string, cfg Co
 		return Result{}, true, err // server unreachable — conclusive
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPProbeBody))
 
 	var info struct {
 		Status string `json:"status"`
@@ -92,10 +92,10 @@ func promBuildInfo(ctx context.Context, client *http.Client, base string, cfg Co
 	}
 	extra := map[string]string{}
 	if info.Data.Version != "" {
-		extra["version_string"] = info.Data.Version
+		extra[ExtraKeyVersionString] = info.Data.Version
 	}
 	if info.Data.Revision != "" {
-		extra["revision"] = info.Data.Revision
+		extra[extraRevision] = info.Data.Revision
 	}
 	return Result{Version: info.Data.Version, Extra: extra}, true, nil
 }
@@ -112,7 +112,7 @@ func promHealthy(ctx context.Context, client *http.Client, base string, cfg Conf
 		return Result{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxHTTPProbeShortBody))
 	if resp.StatusCode != http.StatusOK {
 		return Result{}, fmt.Errorf("prometheus: /-/healthy HTTP status %d", resp.StatusCode)
 	}

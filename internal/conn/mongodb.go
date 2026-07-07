@@ -12,16 +12,28 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 )
 
-func init() { Register(mongodbProtocol{}, "mongo") }
+func init() { Register(mongodbProtocol{}, protocolAliasMongo) }
 
 // mongoDisconnectTimeout bounds teardown after the operation context expires.
 const mongoDisconnectTimeout = 5 * time.Second
 
+const (
+	mongoRoleArbiter    = "arbiter"
+	mongoRolePrimary    = "primary"
+	mongoRoleSecondary  = "secondary"
+	mongoRoleStandalone = "standalone"
+	mongoRoleUnknown    = "unknown"
+	mongoAdminDatabase  = "admin"
+	mongoBuildInfoCmd   = "buildInfo"
+	mongoHelloCmd       = "hello"
+	mongoIsMasterCmd    = "isMaster"
+)
+
 // mongodbProtocol probes a MongoDB server.
 type mongodbProtocol struct{}
 
-func (mongodbProtocol) Name() string       { return "mongodb" }
-func (mongodbProtocol) DefaultPort() int   { return 27017 }
+func (mongodbProtocol) Name() string       { return ProtocolNameMongoDB }
+func (mongodbProtocol) DefaultPort() int   { return defaultPortMongoDB }
 func (mongodbProtocol) RequiresUser() bool { return false }
 
 // Probe pings MongoDB and returns version/topology extras.
@@ -39,12 +51,12 @@ func (mongodbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		Version string `bson:"version"`
 	}
 	// Best effort: a successful ping already proves connect + auth.
-	_ = client.Database("admin").RunCommand(ctx, bson.D{{Key: "buildInfo", Value: 1}}).Decode(&info)
+	_ = client.Database(mongoAdminDatabase).RunCommand(ctx, bson.D{{Key: mongoBuildInfoCmd, Value: 1}}).Decode(&info)
 
 	// Topology is best effort; ping already proved liveness.
 	role, setName, readOnly := mongoTopology(ctx, client)
-	extra := map[string]string{"role": role, "read_only": strconv.FormatBool(readOnly)}
-	putIfSet(extra, "set_name", setName)
+	extra := map[string]string{ExtraKeyRole: role, ExtraKeyMongoReadOnly: strconv.FormatBool(readOnly)}
+	putIfSet(extra, ExtraKeyMongoSetName, setName)
 	return Result{Version: info.Version, Extra: extra}, nil
 }
 
@@ -60,8 +72,8 @@ func mongoTopology(ctx context.Context, client *mongo.Client) (role, setName str
 		SetName           string `bson:"setName"`
 		ReadOnly          bool   `bson:"readOnly"`
 	}
-	if client.Database("admin").RunCommand(ctx, bson.D{{Key: "hello", Value: 1}}).Decode(&h) != nil {
-		_ = client.Database("admin").RunCommand(ctx, bson.D{{Key: "isMaster", Value: 1}}).Decode(&h)
+	if client.Database(mongoAdminDatabase).RunCommand(ctx, bson.D{{Key: mongoHelloCmd, Value: 1}}).Decode(&h) != nil {
+		_ = client.Database(mongoAdminDatabase).RunCommand(ctx, bson.D{{Key: mongoIsMasterCmd, Value: 1}}).Decode(&h)
 	}
 	return mongoRole(h.IsWritablePrimary || h.IsMaster, h.Secondary, h.ArbiterOnly, h.SetName), h.SetName, h.ReadOnly
 }
@@ -72,15 +84,15 @@ func mongoTopology(ctx context.Context, client *mongo.Client) (role, setName str
 func mongoRole(primary, secondary, arbiter bool, setName string) string {
 	switch {
 	case setName == "":
-		return "standalone"
+		return mongoRoleStandalone
 	case arbiter:
-		return "arbiter"
+		return mongoRoleArbiter
 	case primary:
-		return "primary"
+		return mongoRolePrimary
 	case secondary:
-		return "secondary"
+		return mongoRoleSecondary
 	default:
-		return "unknown"
+		return mongoRoleUnknown
 	}
 }
 
@@ -92,7 +104,7 @@ func MongoConnect(cfg Config) (*mongo.Client, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 27017
+		port = defaultPortMongoDB
 	}
 	opts := options.Client().SetHosts([]string{net.JoinHostPort(host, strconv.Itoa(port))})
 	if cfg.Interface != "" {
@@ -106,7 +118,7 @@ func MongoConnect(cfg Config) (*mongo.Client, error) {
 			authSource = cfg.Database
 		}
 		if authSource == "" {
-			authSource = "admin"
+			authSource = mongoAdminDatabase
 		}
 		opts.SetAuth(options.Credential{Username: cfg.User, Password: cfg.Password, AuthSource: authSource})
 	}

@@ -16,12 +16,12 @@ func init() { Register(ftpProtocol{}) }
 // "anonymous". TLS is implicit (FTPS) when enabled — use port 990.
 type ftpProtocol struct{}
 
-func (ftpProtocol) Name() string       { return "ftp" }
-func (ftpProtocol) DefaultPort() int   { return 21 }
+func (ftpProtocol) Name() string       { return ProtocolNameFTP }
+func (ftpProtocol) DefaultPort() int   { return defaultPortFTP }
 func (ftpProtocol) RequiresUser() bool { return false }
 
 func (ftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	return probeBanner(ctx, cfg, 21, ftpHandshake)
+	return probeBanner(ctx, cfg, defaultPortFTP, ftpHandshake)
 }
 
 // ftpHandshake reads the 220 greeting, logs in with USER/PASS when credentials

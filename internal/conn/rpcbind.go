@@ -9,7 +9,7 @@ import (
 	"strconv"
 )
 
-func init() { Register(rpcbindProtocol{}, "portmap", "portmapper") }
+func init() { Register(rpcbindProtocol{}, protocolAliasPortmap, protocolAliasPortmapper) }
 
 // ONC RPC / portmapper constants (RFC 5531, RFC 1833).
 const (
@@ -28,8 +28,8 @@ const (
 // well-formed RPC reply — proof the daemon is up and speaking RPC. No auth.
 type rpcbindProtocol struct{}
 
-func (rpcbindProtocol) Name() string       { return "rpcbind" }
-func (rpcbindProtocol) DefaultPort() int   { return 111 }
+func (rpcbindProtocol) Name() string       { return ProtocolNameRPCBind }
+func (rpcbindProtocol) DefaultPort() int   { return defaultPortRPCBind }
 func (rpcbindProtocol) RequiresUser() bool { return false }
 
 func (rpcbindProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -39,7 +39,7 @@ func (rpcbindProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 111
+		port = defaultPortRPCBind
 	}
 
 	xid := randXID32()
@@ -62,7 +62,7 @@ func (rpcbindProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Extra: map[string]string{extraProgram: "100000", extraRPCStatus: status}}, nil
+	return Result{Extra: map[string]string{extraProgram: strconv.Itoa(portmapProg), extraRPCStatus: status}}, nil
 }
 
 // buildRPCNull builds an ONC RPC CALL for the NULL procedure of program prog

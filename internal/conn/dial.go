@@ -116,9 +116,9 @@ func dialDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, e
 
 // dialUnix dials a Unix-domain socket. It is the one-liner the socket-only
 // probes (acpid, fail2ban, lvmpolld, docker, …) and dialDeadline share, so the
-// "&net.Dialer{}.DialContext(ctx, \"unix\", …)" incantation lives in one place.
+// net.Dialer incantation lives in one place.
 func dialUnix(ctx context.Context, socket string) (net.Conn, error) {
-	return (&net.Dialer{}).DialContext(ctx, "unix", socket)
+	return (&net.Dialer{}).DialContext(ctx, networkUnix, socket)
 }
 
 // probeDialer returns a dialer for driver-backed protocol probes. When iface is

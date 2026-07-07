@@ -9,7 +9,7 @@ import (
 	"strconv"
 )
 
-func init() { Register(nntpProtocol{}, "nntps") }
+func init() { Register(nntpProtocol{}, protocolAliasNNTPs) }
 
 // nntpProtocol probes an NNTP news server natively (RFC 3977). With no user it is
 // an anonymous connectivity check (verify the server greets 200/201). With a
@@ -17,12 +17,12 @@ func init() { Register(nntpProtocol{}, "nntps") }
 // implicit (NNTPS) when enabled — use port 563.
 type nntpProtocol struct{}
 
-func (nntpProtocol) Name() string       { return "nntp" }
-func (nntpProtocol) DefaultPort() int   { return 119 }
+func (nntpProtocol) Name() string       { return ProtocolNameNNTP }
+func (nntpProtocol) DefaultPort() int   { return defaultPortNNTP }
 func (nntpProtocol) RequiresUser() bool { return false }
 
 func (nntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	return probeBanner(ctx, cfg, 119, nntpHandshake)
+	return probeBanner(ctx, cfg, defaultPortNNTP, nntpHandshake)
 }
 
 // nntpHandshake reads the greeting (200 posting allowed / 201 posting

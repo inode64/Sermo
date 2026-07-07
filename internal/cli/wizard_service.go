@@ -27,7 +27,16 @@ import (
 	"github.com/goccy/go-yaml"
 )
 
-const systemdServiceUnitExt = ".service"
+const (
+	systemdServiceUnitExt = ".service"
+
+	procNetTCPPath       = "/proc/net/tcp"
+	procNetTCP6Path      = "/proc/net/tcp6"
+	procNetUDPPath       = "/proc/net/udp"
+	procNetUDP6Path      = "/proc/net/udp6"
+	procNetStateListen   = "0A"
+	procNetStateUDPReady = "07"
+)
 
 // listInstalledCatalogServices returns active service targets for the wizard: catalog
 // catalog services whose init unit exists, plus active backend units not backed by the
@@ -224,7 +233,7 @@ func servicePort(tree map[string]any) int {
 		return 0
 	}
 	if p, ok := cfgval.Int(vars[config.VariableKeyPort]); ok {
-		if p >= 1 && p <= 65535 {
+		if cfgval.ValidTCPPort(p) {
 			return p
 		}
 	}
@@ -312,7 +321,7 @@ func parseCephAddrVersion(addrs, version string) (string, int, bool) {
 	}
 	host = strings.Trim(host, "[]")
 	port, err := strconv.Atoi(portText)
-	if err != nil || host == "" || port <= 0 || port > 65535 {
+	if err != nil || host == "" || !cfgval.ValidTCPPort(port) {
 		return "", 0, false
 	}
 	return host, port, true
@@ -350,10 +359,10 @@ type procSocketTable struct {
 
 func procSocketTables() []procSocketTable {
 	return []procSocketTable{
-		{path: "/proc/net/tcp", states: map[string]bool{"0A": true}},
-		{path: "/proc/net/tcp6", states: map[string]bool{"0A": true}, ipv6: true},
-		{path: "/proc/net/udp", states: map[string]bool{"07": true}},
-		{path: "/proc/net/udp6", states: map[string]bool{"07": true}, ipv6: true},
+		{path: procNetTCPPath, states: map[string]bool{procNetStateListen: true}},
+		{path: procNetTCP6Path, states: map[string]bool{procNetStateListen: true}, ipv6: true},
+		{path: procNetUDPPath, states: map[string]bool{procNetStateUDPReady: true}},
+		{path: procNetUDP6Path, states: map[string]bool{procNetStateUDPReady: true}, ipv6: true},
 	}
 }
 
