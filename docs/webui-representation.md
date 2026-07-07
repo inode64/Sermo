@@ -18,11 +18,11 @@ Keep changes concrete:
 - The Web UI is one embedded document: `internal/web/index.html`.
 - Data panels are `<details>` cards. The page scrolls as a whole; do not add
   panel-local scrollbars.
-- Services, applications, storages and watches can use `category` for grouping,
-  filtering or search depending on the panel.
+- Services, applications and watches (including storage watches) can use
+  `category` for grouping, filtering or search depending on the panel.
 - A top-level YAML `category` field is the category source. If it is absent,
-  services fall back to `service`, applications to `app`, storages to `storage`
-  and watches to `watch`.
+  services fall back to `service`, applications to `app`, storage watches to
+  `storage` and other watches to `watch`.
 - State-changing buttons use the same safe backend path as `sermoctl`.
 
 ## Data sources
@@ -39,7 +39,7 @@ Keep changes concrete:
 | Service events | `GET /api/services/{name}/events` | per-service event feed |
 | Host watches | `GET /api/watches` | host-level watches |
 | Applications | `GET /api/applications` | installed catalog apps |
-| Mount units | `GET /api/mounts` | storage targets with `mount:` backed by fstab |
+| Mount units | `GET /api/mounts` | storage watches with `mount:` backed by fstab |
 | Notifiers | `GET /api/notifiers` | notifier targets |
 | Daemon settings | `GET /api/daemon` | engine/runtime config |
 | Daemon process metrics | `GET /api/daemon/metrics` | persisted sermod CPU/memory/IO history |

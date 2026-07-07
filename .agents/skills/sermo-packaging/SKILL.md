@@ -69,8 +69,8 @@ packaging/debian/
 variables and `DESTDIR` staging, composed of granular targets: `install-bin`
 (sermoctl→`$(bindir)`, sermod→`$(sbindir)`), `install-catalog` (recursive,
 preserving `services/apps/libs/patterns`), `install-config` (sample `sermo.yml`,
-never overwriting an existing one; creates services, apps, notifiers, storages,
-networks and watches config directories),
+never overwriting an existing one; creates services, apps, notifiers, and watch
+config directories: watches, networks, storages and mounts),
 `install-templates`, `install-tmpfiles`,
 `install-systemd` and `install-openrc`. The unit/init templates carry default `/usr/bin/sermod` and
 `/etc/sermo` paths that install rewrites to the chosen `$(sbindir)` /

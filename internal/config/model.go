@@ -29,7 +29,6 @@ const (
 	kindLibrary  = "lib"
 	kindService  = "service"
 	kindPatterns = "patterns"
-	kindStorage  = "storage"
 	kindWatch    = "watch"
 )
 
@@ -202,15 +201,6 @@ const (
 	keyVerify   = "verify"
 )
 
-// Storage document block keys.
-const (
-	keyCapacity = "capacity"
-	keyUsage    = "usage"
-)
-
-// StorageKeyCapacity is the storage capacity automation block.
-const StorageKeyCapacity = keyCapacity
-
 // Per-target monitoring metadata keys.
 const (
 	keyMonitor  = "monitor"
@@ -315,7 +305,7 @@ const (
 	keyAllowLazy    = "allow_lazy"
 )
 
-// StorageKeyMount is the fstab-backed storage mount block.
+// StorageKeyMount is the fstab-backed storage watch mount block.
 const StorageKeyMount = keyMount
 
 // sectionMetrics is the multi-metric watch block: a map of metric name to its
@@ -411,10 +401,6 @@ var metaKeys = map[string]struct{}{
 // perServiceDefaults are the only parts of global `defaults` that merge into a
 // service. Engine-wide settings never reach individual services.
 var perServiceDefaults = []string{keyDryRun, sectionStopPolicy, sectionPolicy, sectionRuleWindow}
-
-// perStorageDefaults are the only parts of global `defaults` that merge into a
-// storage target.
-var perStorageDefaults = []string{keyDryRun}
 
 // Document is a single loaded catalog definition or configured target in raw,
 // unexpanded form.
@@ -605,14 +591,10 @@ type Global struct {
 	Services      []string
 	Apps          []string
 	Notifiers     []string
-	Storages      []string
-	Networks      []string
 	Watches       []string
 	ServicePaths  []PathSpec
 	AppPaths      []PathSpec
 	NotifierPaths []PathSpec
-	StoragePaths  []PathSpec
-	NetworkPaths  []PathSpec
 	WatchPaths    []PathSpec
 	Runtime       string
 	State         string
@@ -811,7 +793,6 @@ type Config struct {
 	Libraries       map[string]*Document // kind lib (shared libraries)
 	Patterns        map[string]*Document // kind patterns (output-analysis rule sets)
 	Services        map[string]*Document // kind service (enabled instances)
-	Storages        map[string]*Document // kind storage (capacity and optional fstab-backed mount unit)
 	docs            []*Document          // every document in load order
 
 	materializedNameCollisions []materializedNameCollision
@@ -824,7 +805,6 @@ type Config struct {
 	LibraryNames        []string
 	PatternNames        []string
 	ServiceNames        []string
-	StorageNames        []string
 }
 
 type materializedNameCollision struct {

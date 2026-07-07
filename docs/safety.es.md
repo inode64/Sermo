@@ -201,9 +201,8 @@ Ciclo de vida:
 
 ## Operaciones de montaje
 
-Las unidades de montaje (cargadas desde documentos de storage bajo
-`paths.storages`, por defecto `/etc/sermo/storages`, cuando definen `mount:`)
-son acciones manuales del operador expuestas por
+Las unidades de montaje (cargadas desde documentos de watch de storage listados
+en `paths.watches`, cuando definen `mount:`) son acciones manuales del operador expuestas por
 `sermoctl mount|umount` y por el panel **Mount units** de la interfaz web; no
 son remediación del ciclo del daemon. Aun así usan la misma postura de
 seguridad:

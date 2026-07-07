@@ -1,8 +1,8 @@
 # Sermo minimal installed configuration.
 #
 # Engine-wide settings are not merged into individual targets. Only the
-# target-safe parts of `defaults` are: dry_run for services, storages and
-# watches; stop_policy, policy and rule_window for services.
+# target-safe parts of `defaults` are: dry_run for services and watches;
+# stop_policy, policy and rule_window for services.
 # For source-tree development and local validation, build with SERMO_DATADIR=$PWD
 # and use examples/sermo-dev.yml; this file intentionally points at installed
 # /etc/sermo and /usr/share/sermo locations.
@@ -45,13 +45,12 @@ paths:
     - /etc/sermo/apps  # host-specific app documents
   notifiers:
     - /etc/sermo/notifiers
-  storages:
-    - /etc/sermo/storages  # storage docs: capacity and optional mount ops
-  networks:
-    - /etc/sermo/networks  # network/uplink watch documents
   watches:
     - /etc/sermo/watches  # generic host watch documents
-  # The shipped examples under storages/, networks/ and watches/ use
+    - /etc/sermo/networks  # network/uplink watch documents
+    - /etc/sermo/storages  # storage watch documents
+    - /etc/sermo/mounts  # fstab-backed storage mount watch documents
+  # The shipped examples under watches/, networks/, storages/ and mounts/ use
   # `monitor: disabled` so copying them cannot immediately run hooks or send
   # notifications. After adapting thresholds, hooks and notify targets for the
   # host, set each entry to `monitor: enabled` or `monitor: previous`.

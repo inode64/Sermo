@@ -219,13 +219,14 @@ unexpected panic recovered at the top level.
 
 ## Mounts
 
-Mount actions are fstab-backed and use storage files with a `mount:` block from
-`/etc/sermo/storages` by default. A path target that is not configured is still
+Mount actions are fstab-backed and use storage watch files with a `mount:` block
+from directories listed in `paths.watches` (the wizard writes
+`/etc/sermo/mounts` by default). A path target that is not configured is still
 accepted, but it uses safe defaults and must exist in `/etc/fstab`. See
 [storage and mount units](configuration.md#storage-and-mount-units).
 `sermoctl umount /` is always rejected; Sermo never unmounts the root
 filesystem.
 
 `sermoctl wizard mount` lists mount points declared in `/etc/fstab` and writes
-safe storage files under `paths.storages`; it does not execute mount or umount
-while generating the config.
+safe storage watch files under `mounts/`, adding that directory to
+`paths.watches`; it does not execute mount or umount while generating the config.

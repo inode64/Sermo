@@ -8,9 +8,9 @@ import (
 	"sermo/internal/state"
 )
 
-// SyncStorageMountMonitoring pauses a storage capacity watch after a successful
-// umount and restores it after a later successful mount when the umount created
-// the pause. Existing manual unmonitor state is preserved.
+// SyncStorageMountMonitoring pauses a storage watch after a successful umount and
+// restores it after a later successful mount when the umount created the pause.
+// Existing manual unmonitor state is preserved.
 func SyncStorageMountMonitoring(store MonitorStore, storage, action string, resultOK bool, monitorMode string, disabled bool, pauseSource, restoreSource string) (ManualMonitorChange, error) {
 	if store == nil || disabled || monitorMode == config.MonitorDisabled || !resultOK {
 		return ManualMonitorChange{}, nil

@@ -5,12 +5,10 @@ import "sermo/internal/servicemgr"
 const (
 	pathKeyApps      = "apps"
 	pathKeyLocks     = "locks"
-	pathKeyNetworks  = "networks"
 	pathKeyNotifiers = "notifiers"
 	pathKeyRuntime   = "runtime"
 	pathKeyServices  = "services"
 	pathKeyState     = "state"
-	pathKeyStorages  = "storages"
 	pathKeyTemplates = "templates"
 	pathKeyWatches   = "watches"
 )

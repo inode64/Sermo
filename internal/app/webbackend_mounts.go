@@ -121,7 +121,7 @@ func (b *WebBackend) mountSpec(name string) (mountctl.Spec, bool, string) {
 		return mountctl.Spec{}, false, errs[0]
 	}
 	if _, ok := resolved.Tree[config.StorageKeyMount].(map[string]any); !ok {
-		return mountctl.Spec{}, false, "storage " + name + " has no mount block"
+		return mountctl.Spec{}, false, "storage watch " + name + " has no mount block"
 	}
 	return mountctl.SpecFromStorageTree(name, resolved.Tree), true, ""
 }
@@ -397,7 +397,7 @@ func (b *WebBackend) MountAction(ctx context.Context, name, action string, opts 
 
 func (b *WebBackend) syncStorageMountMonitoring(storage, action string, resultOK bool) {
 	w, ok := b.watches[storage]
-	if !ok || w.checkType != checks.CheckTypeStorage || !b.storageHasCapacity(storage) {
+	if !ok || w.checkType != checks.CheckTypeStorage {
 		return
 	}
 	change, err := SyncStorageMountMonitoring(
@@ -417,18 +417,6 @@ func (b *WebBackend) syncStorageMountMonitoring(storage, action string, resultOK
 	if change.Changed {
 		b.emitWatchMonitorEvent(storage, change.Action, eventKindAction, eventStatusOK, change.Message)
 	}
-}
-
-func (b *WebBackend) storageHasCapacity(name string) bool {
-	if b.cfg == nil {
-		return false
-	}
-	resolved, errs := b.cfg.ResolveStorage(name)
-	if len(errs) > 0 || resolved.Tree == nil {
-		return false
-	}
-	_, ok := resolved.Tree[config.StorageKeyCapacity].(map[string]any)
-	return ok
 }
 
 // AlertMountUsers sends a native TTY warning to users currently blocking a mount.

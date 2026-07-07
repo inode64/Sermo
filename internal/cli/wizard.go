@@ -23,13 +23,14 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/dockerctl"
 	"sermo/internal/mountctl"
-	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/volume"
 )
 
 const (
 	networksConfigDir = "networks"
+	storagesConfigDir = "storages"
+	mountsConfigDir   = "mounts"
 	watchesConfigDir  = "watches"
 
 	yamlFileExt     = ".yml"
@@ -49,7 +50,6 @@ const (
 
 	wizardNounMount   = wizardAssistantMount
 	wizardNounService = wizardAssistantService
-	wizardNounStorage = "storage"
 	wizardNounWatch   = "watch"
 
 	wizardFieldCheck     = "check"
@@ -126,11 +126,7 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 	fmt.Fprintf(a.Stdout, "\nGenerated configuration (%s):\n\n%s\n", res.Summary, data)
 
 	if !p.Confirm("Merge this into "+globalPath+"?", false) {
-		if wizardWritesStorageDocs(as.Name()) {
-			fmt.Fprintln(a.Stdout, "Not written — paste the blocks above into files under a paths.storages directory.")
-		} else {
-			fmt.Fprintln(a.Stdout, "Not written — paste each block above into its own YAML file loaded from paths.networks or paths.watches.")
-		}
+		fmt.Fprintln(a.Stdout, "Not written — paste each block above into its own YAML file loaded from paths.watches.")
 		return exitSuccess, nil
 	}
 	var deletes []string
@@ -175,13 +171,6 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 }
 
 func renderWizardWatchPreview(wizard string, entries map[string]any) ([]byte, error) {
-	if wizardWritesStorageDocs(wizard) {
-		docs, err := storageDocsFromVolumeWatches(entries)
-		if err != nil {
-			return nil, err
-		}
-		return yaml.Marshal(docsPreview(docs))
-	}
 	docs, err := watchDocsFromEntries(entries)
 	if err != nil {
 		return nil, err
@@ -422,9 +411,6 @@ func ensureNoWatchCollisions(cfg *config.Config, entries map[string]any) error {
 	}
 	watches, _ := cfg.ResolveWatches()
 	for name := range entries {
-		if _, exists := cfg.Storages[name]; exists {
-			return fmt.Errorf("storage %q already exists in loaded config; not overwriting", name)
-		}
 		if _, exists := watches[name]; exists {
 			return fmt.Errorf("watch %q already exists in loaded config; not overwriting", name)
 		}
@@ -432,18 +418,9 @@ func ensureNoWatchCollisions(cfg *config.Config, entries map[string]any) error {
 	return nil
 }
 
-// mergeWizardWatches writes one generated target per YAML file. Volume output
-// is converted to storage documents under paths.storages; other watch
-// assistants write watch documents under paths.networks or paths.watches so the
-// loader can merge them without rewriting sermo.yml on every generated watch.
+// mergeWizardWatches writes one generated watch per YAML file under a classified
+// directory loaded from paths.watches.
 func mergeWizardWatches(path, wizard string, entries map[string]any) (wizardMergeResult, error) {
-	if wizardWritesStorageDocs(wizard) {
-		docs, err := storageDocsFromVolumeWatches(entries)
-		if err != nil {
-			return wizardMergeResult{}, err
-		}
-		return mergeWizardStorageDocs(path, docs)
-	}
 	relDir, targetDir := wizardTargetDir(path, wizard, entries)
 	pathKey := wizardPathKey(wizard, entries)
 	docs, err := watchDocsFromEntries(entries)
@@ -479,70 +456,8 @@ func watchDocFromEntry(name string, raw any) (map[string]any, error) {
 	return doc, nil
 }
 
-func wizardWritesStorageDocs(wizard string) bool {
-	return wizard == wizardAssistantVolume
-}
-
-func wizardOutputNoun(wizard string) string {
-	if wizardWritesStorageDocs(wizard) {
-		return wizardNounStorage
-	}
+func wizardOutputNoun(string) string {
 	return wizardNounWatch
-}
-
-func storageDocsFromVolumeWatches(entries map[string]any) (map[string]map[string]any, error) {
-	docs := make(map[string]map[string]any, len(entries))
-	for _, name := range slices.Sorted(maps.Keys(entries)) {
-		entry, ok := entries[name].(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("watch %q is not a mapping", name)
-		}
-		check, ok := entry[wizardFieldCheck].(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("watch %q has no check mapping", name)
-		}
-		path, _ := check[wizardFieldPath].(string)
-		if path == "" {
-			return nil, fmt.Errorf("watch %q has no storage path", name)
-		}
-		doc := map[string]any{
-			wizardFieldName:         name,
-			config.EntryKeyCategory: wizardNounStorage,
-			wizardFieldPath:         path,
-		}
-		for _, key := range []string{config.EntryKeyMonitor, config.EntryKeyInterval} {
-			if v, present := entry[key]; present {
-				doc[key] = v
-			}
-		}
-		capacity := map[string]any{}
-		for key, value := range check {
-			switch key {
-			case wizardFieldType, wizardFieldPath:
-			default:
-				capacity[key] = value
-			}
-		}
-		for _, key := range []string{rules.RuleFieldFor, rules.RuleFieldWithin, config.WatchKeyThen, rules.SectionPolicy} {
-			if v, present := entry[key]; present {
-				capacity[key] = v
-			}
-		}
-		doc[config.StorageKeyCapacity] = capacity
-		docs[name] = doc
-	}
-	return docs, nil
-}
-
-func mergeWizardStorageDocs(path string, docs map[string]map[string]any) (wizardMergeResult, error) {
-	relDir := storagesConfigDir
-	targetDir := filepath.Join(filepath.Dir(filepath.Clean(path)), relDir)
-	pathKey := storagesConfigDir
-	files, bak, err := writeConfigDocs(path, pathKey, relDir, targetDir, wizardNounStorage, docs)
-	if err != nil {
-		return wizardMergeResult{}, err
-	}
-	return wizardMergeResult{Backup: bak, Dir: targetDir, Files: plannedConfigFilePaths(files), PathKey: pathKey}, nil
 }
 
 func wizardTargetDir(path, wizard string, entries map[string]any) (string, string) {
@@ -552,15 +467,7 @@ func wizardTargetDir(path, wizard string, entries map[string]any) (string, strin
 }
 
 func wizardPathKey(wizard string, entries map[string]any) string {
-	dirName := wizardConfigDirName(wizard, entries)
-	switch dirName {
-	case storagesConfigDir:
-		return storagesConfigDir
-	case networksConfigDir:
-		return networksConfigDir
-	default:
-		return watchesConfigDir
-	}
+	return watchesConfigDir
 }
 
 func wizardCleanupDirs(path, wizard string, entries map[string]any) []string {
@@ -569,7 +476,7 @@ func wizardCleanupDirs(path, wizard string, entries map[string]any) []string {
 }
 
 func wizardConfigDirName(wizard string, entries map[string]any) string {
-	if wizardWritesStorageDocs(wizard) {
+	if wizard == wizardAssistantVolume {
 		return storagesConfigDir
 	}
 	dirName := ""
@@ -785,10 +692,10 @@ func existingWizardWatchFiles(targetDir string) ([]wizardWatchFile, error) {
 	return files, nil
 }
 
-// parseWatchFile reads a managed watch document or storage document once and
+// parseWatchFile reads a managed watch document once and
 // returns both the names it declares and the host targets they monitor (the
-// storage `path`, the `check.path` of storage watches and the `check.interface`
-// of net/route/icmp/dns watches — keys that match detectedTargetKeys). nil/nil
+// `check.path` of storage watches and the `check.interface` of
+// net/route/icmp/dns watches — keys that match detectedTargetKeys). nil/nil
 // on any read or parse error.
 func parseWatchFile(path string) (names, targets []string) {
 	data, err := os.ReadFile(path)

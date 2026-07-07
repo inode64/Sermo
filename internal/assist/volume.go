@@ -13,7 +13,7 @@ import (
 	volumeinfo "sermo/internal/volume"
 )
 
-// volumeAssistant creates storage targets: a free/used-space threshold with
+// volumeAssistant creates storage watches: a free/used-space threshold with
 // notifications and an optional native auto-expand action.
 type volumeAssistant struct{}
 
@@ -57,7 +57,7 @@ func (volumeAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		}
 		watches[watchName("storage", v.Mountpoint)] = buildVolWatch(v, *s)
 	}
-	return Result{Watches: watches, Summary: fmt.Sprintf("%d storage target(s)", len(watches))}, nil
+	return Result{Watches: watches, Summary: fmt.Sprintf("%d storage watch(es)", len(watches))}, nil
 }
 
 func storageVolumeCandidates(vols []Volume) []Volume {

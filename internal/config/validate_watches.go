@@ -49,7 +49,9 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			continue
 		}
 		cp := "watches." + name + ".check"
-		switch cfgval.String(check[checks.CheckKeyType]) {
+		typ := cfgval.String(check[checks.CheckKeyType])
+		validateWatchMountBlock(name, typ, entry, add)
+		switch typ {
 		case checks.CheckTypeStorage:
 			// The one single-shot type with its own case: a storage watch may carry
 			// a then.expand action, so its hook block allows expand.
@@ -71,13 +73,31 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			// Any single-shot service check (tcp, http, load, oom, cert, …) can be
 			// a host watch: validate its fields with the same per-type validators a
 			// checks: section uses and require a hook (section: unified checks).
-			if validateWatchableCheck(cp, cfgval.String(check[checks.CheckKeyType]), check, locksDir, add) {
+			if validateWatchableCheck(cp, typ, check, locksDir, add) {
 				validateHookBlock("watches."+name, entry, false, false, defaultNotify, add)
 			} else {
-				add("watches.%s.check.type %q is not supported", name, cfgval.String(check[checks.CheckKeyType]))
+				add("watches.%s.check.type %q is not supported", name, typ)
 			}
 		}
 	}
+}
+
+func validateWatchMountBlock(name, typ string, entry map[string]any, add func(string, ...any)) {
+	mount, ok := entry[keyMount].(map[string]any)
+	if _, present := entry[keyMount]; !present {
+		return
+	}
+	if !ok {
+		add("watches.%s.mount must be a mapping", name)
+		return
+	}
+	if typ != checks.CheckTypeStorage {
+		add("watches.%s.mount is only valid on a storage watch", name)
+		return
+	}
+	validateStorageMount(mount, func(format string, args ...any) {
+		add("watches.%s."+format, append([]any{name}, args...)...)
+	})
 }
 
 // validateServiceWatches validates a service tree's embedded `watches:` section.

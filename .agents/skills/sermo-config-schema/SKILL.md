@@ -22,8 +22,10 @@ A document's kind is determined by where it is read from, so files do not carry 
 
 - catalog subdirectory: `catalog/services/` → service, `catalog/apps/` → app,
   `catalog/libs/` → lib, `catalog/patterns/` → patterns;
-- deployed config dirs: `paths.services` → service, `paths.storages` → storage,
-  `paths.networks` / `paths.watches` → watch.
+- deployed config dirs: `paths.services` → service, `paths.watches` → watch.
+  Storage, network/uplink and mount documents are all watch documents, usually
+  kept in classified directories such as `storages/`, `networks/` and `mounts/`
+  listed under `paths.watches`.
 
 A `kind:` key is optional and redundant; if one is present in a deployed file it
 must match the location, otherwise loading fails. Examples (one per file):
@@ -56,10 +58,12 @@ clone: redis-main
 ```
 
 ```yaml
-# <paths.storages>/backup.yml  → storage
+# <paths.watches>/storages/backup.yml  → watch
 name: storage-backup
-path: /mnt/backup
-capacity:
+category: storage
+check:
+  type: storage
+  path: /mnt/backup
   mounted: true
   free_pct: { op: "<", value: "10%" }
 mount:
@@ -78,22 +82,23 @@ category: "database"      # optional WebUI grouping/filter label
 
 - `display_name` is the label shown to humans in catalog inventory
   (`sermoctl services` / `apps` / `libs`) and the Web UI service/application/
-  storage/watch lists.
+  watch lists.
   When absent or blank it falls back to `name`. Omit it when it would just repeat
   `name`.
 - `description` is optional free text with NO fallback: when absent, nothing is
   shown — never substitute `name`.
-- `category` groups/filters services, installed apps, storages and watches in
-  the Web UI; when absent, they fall back to `service`, `app`, `storage` or
-  `watch`. All three metadata fields must be strings if present.
+- `category` groups/filters services, installed apps and watches (including
+  storage watches) in the Web UI; when absent, they fall back to `service`,
+  `app`, `storage` for storage watches or `watch` for other watches. All three
+  metadata fields must be strings if present.
 
 ## File granularity
 
 Use one YAML file per target — a single document of one kind per file, never
 several grouped together. A document's kind is derived from where it lives
-(catalog subdir / `paths.services` / `paths.storages` / `paths.networks` /
-`paths.watches`), so a top-level `kind:` is optional. Watch documents under
-`paths.networks` and `paths.watches` use top-level `name:` plus the watch fields.
+(catalog subdir / `paths.services` / `paths.watches`), so a top-level `kind:`
+is optional. Watch documents under any directory listed in `paths.watches` use
+top-level `name:` plus the watch fields.
 Notifier fragment files still use a
 top-level `notifiers:` map, but the map must contain exactly one named entry.
 `docs/sermo-all.yml` is the only reference-style exception: it groups examples so
@@ -195,7 +200,7 @@ delete: true removes inherited item
 
 Precedence, low to high for services: `global defaults < catalog service (uses)/clone
 source < service overrides`. Only target-safe parts of global `defaults` merge
-into configured targets: `dry_run` applies to services, storages and watches;
+into configured targets: `dry_run` applies to services and watches;
 `stop_policy`, `policy` and `rule_window` apply to services. Engine settings
 (interval, max_parallel_checks, default_timeout, backend) are NOT merged into
 targets. Variables expand once, after all merging. See `docs/configuration.md`.
@@ -350,7 +355,7 @@ kill_only_if without both exe_any and users
 SIGKILL without explicit permission
 rules with both for and within if unsupported
 guards without blocks
-display_name, description and category, if present, are strings (all optional; display_name falls back to name, description has no fallback, category groups WebUI services/apps/storages/watches)
+display_name, description and category, if present, are strings (all optional; display_name falls back to name, description has no fallback, category groups WebUI services/apps/watches, with storage watches categorized as storage)
 service must be scalar `service: <unit>` or a per-init map
 service expect/state in {active, inactive, failed, unknown}; process state in {running, zombie, absent}
 metric scope is service or system, and name exists in that scope's catalog

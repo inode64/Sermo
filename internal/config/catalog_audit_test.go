@@ -355,8 +355,6 @@ func TestShippedGlobalConfigValidates(t *testing.T) {
 		withPathDirs("services"),
 		withPathDirs("apps"),
 		withPathDirs("notifiers"),
-		withPathDirs("storages"),
-		withPathDirs("networks"),
 		withPathDirs("watches"),
 	)
 	if err != nil {
@@ -386,9 +384,6 @@ func TestRepoDevConfigLoadsExampleTree(t *testing.T) {
 	if _, ok := cfg.Apps["custom-tool"]; !ok {
 		t.Fatalf("dev config did not load examples/apps: %v", cfg.AppNames)
 	}
-	if _, ok := cfg.Storages["mount-backup"]; !ok {
-		t.Fatalf("dev config did not load examples/storages: %v", cfg.StorageNames)
-	}
 	notifiers, _ := cfg.Global.Raw["notifiers"].(map[string]any)
 	if _, ok := notifiers["ops-email"]; !ok {
 		t.Fatalf("dev config did not load examples/notifiers: %v", notifiers)
@@ -397,17 +392,23 @@ func TestRepoDevConfigLoadsExampleTree(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatalf("dev config watch resolution failed: %v", errs)
 	}
-	for _, name := range []string{"storage-root", "ping-gw", "load"} {
+	for _, name := range []string{"storage-root", "mount-backup", "ping-gw", "load"} {
 		if _, ok := watches[name]; !ok {
 			t.Fatalf("dev config did not load watch %q from example dirs: %v", name, watches)
 		}
+	}
+	if !slices.Contains(cfg.StorageMountNames(), "mount-backup") {
+		t.Fatalf("dev config did not load mount-capable storage watch: %v", cfg.StorageMountNames())
 	}
 }
 
 func TestExampleWatchDocsUseOneTargetPerFile(t *testing.T) {
 	root := repoRoot(t)
-	for _, relDir := range []string{"examples/watches", "examples/networks"} {
+	for _, relDir := range []string{"examples/watches", "examples/networks", "examples/storages", "examples/mounts"} {
 		dir := filepath.Join(root, relDir)
+		if !dirExists(dir) {
+			t.Fatalf("%s is missing", relDir)
+		}
 		files, err := yamlFiles(dir)
 		if err != nil {
 			t.Fatal(err)
@@ -459,7 +460,6 @@ func TestExampleTargetDocsUseOneTargetPerFile(t *testing.T) {
 	}{
 		{relDir: "examples/services", groupedKey: "services"},
 		{relDir: "examples/apps", groupedKey: "apps"},
-		{relDir: "examples/storages", groupedKey: "storages"},
 	} {
 		t.Run(tc.relDir, func(t *testing.T) {
 			dir := filepath.Join(root, tc.relDir)
@@ -499,7 +499,6 @@ func TestShippedServiceConfigsLiveUnderServices(t *testing.T) {
 	}
 
 	assertExampleDocsHaveKind(t, filepath.Join(root, "examples", "apps"), kindApp)
-	assertExampleDocsHaveKind(t, filepath.Join(root, "examples", "storages"), kindStorage)
 }
 
 func TestShippedServiceConfigExamplesValidate(t *testing.T) {
