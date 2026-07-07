@@ -422,7 +422,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 func newWebWatch(name string, entry map[string]any, globalNotify []string, defaultInterval time.Duration, serviceScoped bool) (*webWatch, string) {
 	ctype := ""
 	if ce, ok := entry["check"].(map[string]any); ok {
-		ctype = cfgval.AsString(ce["type"])
+		ctype = cfgval.AsString(ce[checks.CheckKeyType])
 	}
 	iv := cfgval.Duration(entry["interval"])
 	if iv <= 0 {
@@ -435,7 +435,7 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 	var warn string
 	if then, ok := entry["then"].(map[string]any); ok {
 		if h, ok := then["hook"].(map[string]any); ok && len(h) > 0 {
-			if cmd := h["command"]; cmd != nil {
+			if cmd := h[checks.CheckKeyCommand]; cmd != nil {
 				hookCommand = cfgval.StringArray(cmd)
 				hasHook = len(hookCommand) > 0
 			}
@@ -480,7 +480,7 @@ func checkCatalog(tree map[string]any) ([]string, map[string]string) {
 	for name, raw := range section {
 		typ := ""
 		if m, ok := raw.(map[string]any); ok {
-			typ, _ = m["type"].(string)
+			typ, _ = m[checks.CheckKeyType].(string)
 		}
 		types[name] = typ
 		names = append(names, name)
@@ -1061,28 +1061,28 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 		}
 		out = append(out, web.WatchCondition{
 			Field: field,
-			Op:    cfgval.AsString(m["op"]),
-			Value: cfgval.String(m["value"]),
+			Op:    cfgval.AsString(m[checks.CheckKeyOp]),
+			Value: cfgval.String(m[checks.CheckKeyValue]),
 		})
 	}
 	switch cfgval.AsString(check[rules.FieldType]) {
 	case checks.CheckTypeAutofs:
-		if path := cfgval.AsString(check[checks.DataKeyPath]); path != "" {
+		if path := cfgval.AsString(check[checks.CheckKeyPath]); path != "" {
 			out = append(out, web.WatchCondition{Field: checks.DataKeyPath, Op: "==", Value: path})
-		} else if _, ok := check[checks.DataKeyCount].(map[string]any); !ok {
+		} else if _, ok := check[checks.CheckKeyCount].(map[string]any); !ok {
 			out = append(out, web.WatchCondition{Field: checks.DataKeyCount, Op: ">=", Value: "1"})
 		}
 	case checks.CheckTypeCount:
-		if path := cfgval.AsString(check[checks.DataKeyPath]); path != "" {
+		if path := cfgval.AsString(check[checks.CheckKeyPath]); path != "" {
 			out = append(out, web.WatchCondition{Field: checks.DataKeyPath, Value: path})
 		}
-		if kind := cfgval.AsString(check[checks.DataKeyOf]); kind != "" {
+		if kind := cfgval.AsString(check[checks.CheckKeyOf]); kind != "" {
 			out = append(out, web.WatchCondition{Field: checks.DataKeyOf, Value: kind})
 		}
-		if recursive, ok := check[checks.DataKeyRecursive].(bool); ok {
+		if recursive, ok := check[checks.CheckKeyRecursive].(bool); ok {
 			out = append(out, web.WatchCondition{Field: checks.DataKeyRecursive, Op: "==", Value: fmt.Sprintf("%t", recursive)})
 		}
-		if m, ok := check[checks.DataKeyCount].(map[string]any); ok {
+		if m, ok := check[checks.CheckKeyCount].(map[string]any); ok {
 			out = append(out, web.WatchCondition{Field: checks.DataKeyCount, Op: cfgval.AsString(m[rules.FieldOp]), Value: cfgval.String(m[rules.FieldValue])})
 		} else if op := cfgval.AsString(check[rules.FieldOp]); op != "" {
 			out = append(out, web.WatchCondition{Field: checks.DataKeyCount, Op: op, Value: cfgval.String(check[rules.FieldValue])})
@@ -1090,27 +1090,27 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 	case checks.CheckTypeFile:
 		out = append(out, fileWatchConditions(check)...)
 	case checks.CheckTypeProcess:
-		if value := cfgval.String(check["for"]); value != "" {
-			out = append(out, web.WatchCondition{Field: "for", Op: ">=", Value: value})
+		if value := cfgval.String(check[checks.CheckKeyFor]); value != "" {
+			out = append(out, web.WatchCondition{Field: checks.CheckKeyFor, Op: ">=", Value: value})
 		}
-		if gone, ok := check["gone"].(bool); ok && gone {
-			out = append(out, web.WatchCondition{Field: "gone", Op: "==", Value: "true"})
+		if gone, ok := check[checks.CheckKeyGone].(bool); ok && gone {
+			out = append(out, web.WatchCondition{Field: checks.CheckKeyGone, Op: "==", Value: "true"})
 		}
 	case checks.CheckTypeRoute:
-		family := cfgval.AsString(check["family"])
+		family := cfgval.AsString(check[checks.CheckKeyFamily])
 		if family == "" {
 			family = "ipv4"
 		}
-		out = append(out, web.WatchCondition{Field: "family", Op: "==", Value: family})
-		if iface := cfgval.AsString(check["interface"]); iface != "" {
-			out = append(out, web.WatchCondition{Field: "interface", Op: "==", Value: iface})
+		out = append(out, web.WatchCondition{Field: checks.DataKeyFamily, Op: "==", Value: family})
+		if iface := cfgval.AsString(check[checks.CheckKeyInterface]); iface != "" {
+			out = append(out, web.WatchCondition{Field: checks.DataKeyInterface, Op: "==", Value: iface})
 		}
 	case checks.CheckTypeFirewallRules:
-		backend := cfgval.AsString(check[checks.DataKeyBackend])
+		backend := cfgval.AsString(check[checks.CheckKeyBackend])
 		if backend == "" {
 			backend = checks.FirewallBackendAuto
 		}
-		minRules := cfgval.String(check[checks.DataKeyMinRules])
+		minRules := cfgval.String(check[checks.CheckKeyMinRules])
 		if minRules == "" {
 			minRules = "1"
 		}
@@ -1119,21 +1119,21 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 			web.WatchCondition{Field: checks.DataKeyRules, Op: ">=", Value: minRules},
 		)
 	case checks.CheckTypeSize:
-		if path := cfgval.AsString(check[checks.DataKeyPath]); path != "" {
+		if path := cfgval.AsString(check[checks.CheckKeyPath]); path != "" {
 			out = append(out, web.WatchCondition{Field: checks.DataKeyPath, Value: path})
 		}
-		if growBy := cfgval.String(check["grow_by"]); growBy != "" {
+		if growBy := cfgval.String(check[checks.CheckKeyGrowBy]); growBy != "" {
 			out = append(out, web.WatchCondition{Field: "growth", Op: ">=", Value: growBy})
 		}
-		if within := cfgval.String(check["within"]); within != "" {
+		if within := cfgval.String(check[checks.CheckKeyWithin]); within != "" {
 			out = append(out, web.WatchCondition{Field: "within", Value: within})
 		}
 	}
-	if v, ok := check[checks.DataKeyMounted].(bool); ok {
+	if v, ok := check[checks.CheckKeyMounted].(bool); ok {
 		out = append(out, web.WatchCondition{Field: checks.DataKeyMounted, Op: "==", Value: fmt.Sprintf("%t", v)})
 	}
 	if cfgval.AsString(check[rules.FieldType]) == checks.CheckTypeOOM {
-		if _, ok := check["delta"].(map[string]any); !ok {
+		if _, ok := check[checks.CheckKeyDelta].(map[string]any); !ok {
 			out = append(out, web.WatchCondition{Field: "delta", Op: ">", Value: "0"})
 		}
 	}
@@ -1187,26 +1187,26 @@ func watchConditionFields(check map[string]any) []string {
 
 func fileWatchConditions(check map[string]any) []web.WatchCondition {
 	var out []web.WatchCondition
-	if path := cfgval.AsString(check[checks.DataKeyPath]); path != "" {
+	if path := cfgval.AsString(check[checks.CheckKeyPath]); path != "" {
 		out = append(out, web.WatchCondition{Field: checks.DataKeyPath, Value: path})
 	}
-	if recursive, ok := check[checks.DataKeyRecursive].(bool); ok {
+	if recursive, ok := check[checks.CheckKeyRecursive].(bool); ok {
 		out = append(out, web.WatchCondition{Field: checks.DataKeyRecursive, Op: "==", Value: fmt.Sprintf("%t", recursive)})
 	}
-	if size, ok := check[checks.DataKeySize].(map[string]any); ok {
-		if on := cfgval.AsString(size["on"]); on != "" {
+	if size, ok := check[checks.CheckKeySize].(map[string]any); ok {
+		if on := cfgval.AsString(size[checks.CheckKeyOn]); on != "" {
 			out = append(out, web.WatchCondition{Field: checks.DataKeySize, Value: on})
 		} else {
 			out = append(out, web.WatchCondition{Field: checks.DataKeySize, Op: cfgval.AsString(size[rules.FieldOp]), Value: cfgval.String(size[rules.FieldValue])})
 		}
 	}
-	for _, field := range []string{"permissions", "owner"} {
+	for _, field := range []string{checks.CheckKeyPermissions, checks.CheckKeyOwner} {
 		if m, ok := check[field].(map[string]any); ok {
-			out = append(out, web.WatchCondition{Field: field, Value: cfgval.AsString(m["on"])})
+			out = append(out, web.WatchCondition{Field: field, Value: cfgval.AsString(m[checks.CheckKeyOn])})
 		}
 	}
-	if m, ok := check["existence"].(map[string]any); ok {
-		out = append(out, web.WatchCondition{Field: "existence", Value: cfgval.AsString(m["on"])})
+	if m, ok := check[checks.CheckKeyExistence].(map[string]any); ok {
+		out = append(out, web.WatchCondition{Field: checks.CheckKeyExistence, Value: cfgval.AsString(m[checks.CheckKeyOn])})
 	}
 	return out
 }
@@ -1221,31 +1221,31 @@ func watchMetricConditions(metrics map[string]any) []web.WatchCondition {
 		if len(entry) == 0 {
 			continue
 		}
-		if on := cfgval.AsString(entry["on"]); on != "" {
+		if on := cfgval.AsString(entry[checks.CheckKeyOn]); on != "" {
 			out = append(out, web.WatchCondition{Field: metric + ".on", Value: on})
 		}
-		if expect := cfgval.AsString(entry["expect"]); expect != "" {
+		if expect := cfgval.AsString(entry[checks.CheckKeyExpect]); expect != "" {
 			out = append(out, web.WatchCondition{Field: metric + ".expect", Op: "==", Value: expect})
 		}
-		if delta, ok := entry["delta"].(map[string]any); ok {
+		if delta, ok := entry[checks.CheckKeyDelta].(map[string]any); ok {
 			out = append(out, web.WatchCondition{
 				Field: metric + ".delta",
-				Op:    cfgval.AsString(delta["op"]),
-				Value: cfgval.String(delta["value"]),
+				Op:    cfgval.AsString(delta[checks.CheckKeyOp]),
+				Value: cfgval.String(delta[checks.CheckKeyValue]),
 			})
 		}
-		if threshold, ok := entry["threshold"].(map[string]any); ok {
+		if threshold, ok := entry[checks.CheckKeyThreshold].(map[string]any); ok {
 			out = append(out, web.WatchCondition{
 				Field: metric + ".threshold",
-				Op:    cfgval.AsString(threshold["op"]),
-				Value: cfgval.String(threshold["value"]),
+				Op:    cfgval.AsString(threshold[checks.CheckKeyOp]),
+				Value: cfgval.String(threshold[checks.CheckKeyValue]),
 			})
 		}
-		if change, ok := entry["change"].(map[string]any); ok {
+		if change, ok := entry[checks.CheckKeyChange].(map[string]any); ok {
 			out = append(out, web.WatchCondition{
 				Field: metric + ".change",
 				Op:    ">",
-				Value: cfgval.String(change["delta"]),
+				Value: cfgval.String(change[checks.CheckKeyDelta]),
 			})
 		}
 		for _, field := range []string{"used_pct", "free_pct", "free_bytes"} {
@@ -1255,8 +1255,8 @@ func watchMetricConditions(metrics map[string]any) []web.WatchCondition {
 			}
 			out = append(out, web.WatchCondition{
 				Field: metric + "." + field,
-				Op:    cfgval.AsString(m["op"]),
-				Value: cfgval.String(m["value"]),
+				Op:    cfgval.AsString(m[checks.CheckKeyOp]),
+				Value: cfgval.String(m[checks.CheckKeyValue]),
 			})
 		}
 	}
@@ -1363,12 +1363,12 @@ func (b *WebBackend) watchLiveView(w *webWatch, system metrics.Snapshot) (*web.W
 }
 
 func (b *WebBackend) processWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
-	name := cfgval.AsString(w.check["name"])
+	name := cfgval.AsString(w.check[checks.CheckKeyName])
 	if name == "" {
 		msg := "missing name"
 		return nil, watchErrorReadings(msg), "process: " + msg
 	}
-	user := cfgval.AsString(w.check["user"])
+	user := cfgval.AsString(w.check[checks.CheckKeyUser])
 	sampler := b.procSampler
 	if sampler == nil {
 		sampler = osProcSampler{userLookup: b.userLookup}
@@ -1431,7 +1431,7 @@ func (b *WebBackend) autofsWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 	if len(points) > 0 {
 		readings = append(readings, web.WatchReading{Field: checks.DataKeyMountpoints, Label: "Paths", Value: strings.Join(points, ", ")})
 	}
-	if path := cfgval.AsString(w.check[checks.DataKeyPath]); path != "" {
+	if path := cfgval.AsString(w.check[checks.CheckKeyPath]); path != "" {
 		state := "missing"
 		if slices.Contains(points, path) {
 			state = "active"
@@ -1444,7 +1444,7 @@ func (b *WebBackend) autofsWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 }
 
 func (b *WebBackend) diskIOWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
-	device := cfgval.AsString(w.check[checks.DataKeyDevice])
+	device := cfgval.AsString(w.check[checks.CheckKeyDevice])
 	if device == "" {
 		msg := "missing device"
 		return nil, watchErrorReadings(msg), "diskio: " + msg
@@ -1503,8 +1503,8 @@ func (b *WebBackend) sensorsWatchView(w *webWatch) (*web.WatchMeter, []web.Watch
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "sensors: " + msg
 	}
-	chip := cfgval.AsString(w.check["chip"])
-	label := cfgval.AsString(w.check["label"])
+	chip := cfgval.AsString(w.check[checks.CheckKeyChip])
+	label := cfgval.AsString(w.check[checks.CheckKeyLabel])
 	values := checks.SummarizeSensors(readings, chip, label)
 	out := []web.WatchReading{{Field: "inputs", Label: "Inputs", Value: fmt.Sprintf("%d", values.Count)}}
 	if chip != "" {
@@ -1550,7 +1550,7 @@ func (b *WebBackend) raidWatchView() (*web.WatchMeter, []web.WatchReading, strin
 	summary := fmt.Sprintf("raid: %d arrays, %d degraded, %d recovering", st.Arrays, st.Degraded, st.Recovering)
 	if len(st.DegradedNames) > 0 {
 		names := strings.Join(st.DegradedNames, ", ")
-		readings = append(readings, web.WatchReading{Field: "degraded_arrays", Label: "Degraded arrays", Value: names})
+		readings = append(readings, web.WatchReading{Field: checks.DataKeyDegradedArrays, Label: "Degraded arrays", Value: names})
 		summary += " (" + names + ")"
 	}
 	return nil, readings, summary
@@ -1579,11 +1579,11 @@ func (b *WebBackend) edacWatchView() (*web.WatchMeter, []web.WatchReading, strin
 }
 
 func (b *WebBackend) routeWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
-	family := cfgval.AsString(w.check["family"])
+	family := cfgval.AsString(w.check[checks.CheckKeyFamily])
 	if family == "" {
 		family = "ipv4"
 	}
-	iface := cfgval.AsString(w.check["interface"])
+	iface := cfgval.AsString(w.check[checks.CheckKeyInterface])
 	sampler := b.routeSampler
 	if sampler == nil {
 		sampler = checks.SampleRoutes
@@ -1595,16 +1595,16 @@ func (b *WebBackend) routeWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRe
 	}
 	matched := matchingDefaultRoutes(routes, iface)
 	readings := []web.WatchReading{
-		{Field: "family", Label: "Family", Value: family},
-		{Field: "routes", Label: "Default routes", Value: fmt.Sprintf("%d", len(routes))},
+		{Field: checks.DataKeyFamily, Label: "Family", Value: family},
+		{Field: checks.DataKeyRoutes, Label: "Default routes", Value: fmt.Sprintf("%d", len(routes))},
 	}
 	if iface != "" {
-		readings = append(readings, web.WatchReading{Field: "interface", Label: "Required interface", Value: iface})
+		readings = append(readings, web.WatchReading{Field: checks.DataKeyInterface, Label: "Required interface", Value: iface})
 	}
 	if len(matched) > 0 {
 		readings = append(readings, web.WatchReading{Field: "egress", Label: "Egress", Value: matched[0].Iface})
 		if matched[0].Gateway != "" {
-			readings = append(readings, web.WatchReading{Field: "gateway", Label: "Gateway", Value: matched[0].Gateway})
+			readings = append(readings, web.WatchReading{Field: checks.DataKeyGateway, Label: "Gateway", Value: matched[0].Gateway})
 		}
 	}
 	switch {
@@ -1620,7 +1620,7 @@ func (b *WebBackend) routeWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRe
 }
 
 func (b *WebBackend) netWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
-	iface := cfgval.AsString(w.check["interface"])
+	iface := cfgval.AsString(w.check[checks.CheckKeyInterface])
 	if iface == "" {
 		msg := "missing interface"
 		return nil, watchErrorReadings(msg), "net: " + msg
@@ -1636,7 +1636,7 @@ func (b *WebBackend) netWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRead
 	}
 
 	readings := []web.WatchReading{
-		{Field: "interface", Label: "Interface", Value: iface},
+		{Field: checks.DataKeyInterface, Label: "Interface", Value: iface},
 		{Field: checks.NetMetricState, Label: "State", Value: s.State},
 	}
 	parts := []string{iface + " state " + s.State}
@@ -1666,21 +1666,21 @@ func (b *WebBackend) netWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRead
 }
 
 func (b *WebBackend) icmpWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
-	host := cfgval.AsString(w.check["host"])
+	host := cfgval.AsString(w.check[checks.CheckKeyHost])
 	if host == "" {
 		msg := "missing host"
 		return nil, watchErrorReadings(msg), "icmp: " + msg
 	}
 	count := 3
-	if v, ok := cfgval.Int(w.check["count"]); ok && v > 0 {
+	if v, ok := cfgval.Int(w.check[checks.CheckKeyCount]); ok && v > 0 {
 		count = v
 	}
-	timeout := cfgval.Duration(w.check["timeout"])
+	timeout := cfgval.Duration(w.check[checks.CheckKeyTimeout])
 	if timeout <= 0 {
 		timeout = b.defaultTimeout
 	}
-	s, err := checks.SampleICMP(host, cfgval.StringList(w.check["interface"]),
-		cfgval.AsString(w.check["interface_match"]) == "all", count, timeout, b.pingSampler)
+	s, err := checks.SampleICMP(host, cfgval.StringList(w.check[checks.CheckKeyInterface]),
+		cfgval.AsString(w.check[checks.CheckKeyInterfaceMatch]) == "all", count, timeout, b.pingSampler)
 	if err != nil {
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "icmp " + host + ": " + msg
@@ -1762,7 +1762,7 @@ func (b *WebBackend) pidsWatchView() (*web.WatchMeter, []web.WatchReading, strin
 }
 
 func (b *WebBackend) pressureWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
-	resource := cfgval.AsString(w.check["resource"])
+	resource := cfgval.AsString(w.check[checks.CheckKeyResource])
 	if resource == "" {
 		msg := "missing resource"
 		return nil, watchErrorReadings(msg), "pressure: " + msg
@@ -1860,7 +1860,7 @@ func watchMetricEnabled(metrics map[string]any, metric string) bool {
 func netErrorTotal(metrics map[string]any, counters map[string]uint64) uint64 {
 	names := []string{"rx_errors", "tx_errors"}
 	if entry, ok := metrics["errors"].(map[string]any); ok {
-		if configured := cfgval.StringArray(entry["counters"]); len(configured) > 0 {
+		if configured := cfgval.StringArray(entry[checks.CheckKeyCounters]); len(configured) > 0 {
 			names = configured
 		}
 	}
@@ -2026,7 +2026,7 @@ func storageWatchInfo(w *webWatch, b *WebBackend) *web.StorageWatchInfo {
 	if w == nil || w.check == nil {
 		return nil
 	}
-	path := cfgval.String(w.check[checks.DataKeyPath])
+	path := cfgval.String(w.check[checks.CheckKeyPath])
 	if path == "" {
 		return nil
 	}
@@ -2081,7 +2081,7 @@ func storageWatchInfo(w *webWatch, b *WebBackend) *web.StorageWatchInfo {
 }
 
 func storageMountExpectation(check map[string]any) (bool, bool) {
-	v, ok := check["mounted"].(bool)
+	v, ok := check[checks.CheckKeyMounted].(bool)
 	return v, ok
 }
 
@@ -3352,7 +3352,7 @@ func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionRes
 		b.emitWatchExpandEvent(name, eventKindExpandSkipped, eventStatusBlocked, msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
-	path := cfgval.AsString(w.check[checks.DataKeyPath])
+	path := cfgval.AsString(w.check[checks.CheckKeyPath])
 	if path == "" {
 		msg := fmt.Sprintf("watch %q storage check has no path", name)
 		b.emitWatchExpandEvent(name, eventKindExpandFailed, eventStatusFailed, msg)

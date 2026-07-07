@@ -39,6 +39,12 @@ type mongoCheck struct {
 	value      string
 }
 
+const (
+	mongoModeCount     = "count"
+	mongoModeAggregate = "aggregate"
+	mongoModeCommand   = "command"
+)
+
 func (c mongoCheck) Run(ctx context.Context) Result {
 	start := time.Now()
 	ctx, cancel := c.withTimeout(ctx)
@@ -60,9 +66,14 @@ func (c mongoCheck) Run(ctx context.Context) Result {
 		return c.result(false, "mongodb: "+err.Error(), start)
 	}
 	res := c.result(ok, fmt.Sprintf("mongodb: %q %s %q = %t", result, c.op, c.value, ok), start)
-	data := map[string]any{"op": c.op, "threshold": c.value, "result": result, "mode": c.mode}
+	data := map[string]any{
+		DataKeyOp:        c.op,
+		DataKeyThreshold: c.value,
+		DataKeyResult:    result,
+		DataKeyMode:      c.mode,
+	}
 	if f, perr := strconv.ParseFloat(strings.TrimSpace(result), 64); perr == nil {
-		data[fieldValue] = f
+		data[DataKeyValue] = f
 	}
 	res.Data = data
 	return res
@@ -72,13 +83,13 @@ func (c mongoCheck) Run(ctx context.Context) Result {
 func (c mongoCheck) scalar(ctx context.Context, client *mongo.Client) (string, error) {
 	db := client.Database(c.database)
 	switch c.mode {
-	case "count":
+	case mongoModeCount:
 		n, err := db.Collection(c.collection).CountDocuments(ctx, c.filter)
 		if err != nil {
 			return "", err
 		}
 		return strconv.FormatInt(n, 10), nil
-	case "aggregate":
+	case mongoModeAggregate:
 		cur, err := db.Collection(c.collection).Aggregate(ctx, c.pipeline)
 		if err != nil {
 			return "", err
@@ -91,7 +102,7 @@ func (c mongoCheck) scalar(ctx context.Context, client *mongo.Client) (string, e
 			return "", errors.New("aggregation returned no documents")
 		}
 		return mongoLookup(cur.Current, c.resultPath)
-	default: // command
+	default: // mongoModeCommand
 		raw, err := db.RunCommand(ctx, c.command).Raw()
 		if err != nil {
 			return "", err
@@ -134,24 +145,24 @@ func mongoRawScalar(rv bson.RawValue) (string, bool) {
 
 // buildMongoCheck builds a mongodb-query check.
 func buildMongoCheck(b base, entry map[string]any) (Check, string) {
-	op := cfgval.AsString(entry["op"])
+	op := cfgval.AsString(entry[CheckKeyOp])
 	if !validCompareOp(op) {
 		return nil, "mongodb-query check op must be one of ==, !=, >, >=, <, <=, contains, =~"
 	}
-	value := cfgval.String(entry["value"])
+	value := cfgval.String(entry[CheckKeyValue])
 	if value == "" {
 		return nil, "mongodb-query check requires a value"
 	}
-	if err := ValidateAssertionValue("value", op, value); err != nil {
+	if err := ValidateAssertionValue(CheckKeyValue, op, value); err != nil {
 		return nil, "mongodb-query check " + err.Error()
 	}
 
-	collection := cfgval.AsString(entry["collection"])
-	command := cfgval.AsString(entry["command"])
-	pipeline := cfgval.AsString(entry["pipeline"])
-	resultPath := cfgval.AsString(entry["result"])
+	collection := cfgval.AsString(entry[CheckKeyCollection])
+	command := cfgval.AsString(entry[CheckKeyCommand])
+	pipeline := cfgval.AsString(entry[CheckKeyPipeline])
+	resultPath := cfgval.AsString(entry[CheckKeyResult])
 
-	c := mongoCheck{base: b, cfg: mongoConnConfig(entry), database: cfgval.AsString(entry["database"]), collection: collection, op: op, value: value}
+	c := mongoCheck{base: b, cfg: mongoConnConfig(entry), database: cfgval.AsString(entry[CheckKeyDatabase]), collection: collection, op: op, value: value}
 
 	switch {
 	case command != "":
@@ -168,7 +179,7 @@ func buildMongoCheck(b base, entry map[string]any) (Check, string) {
 		if c.database == "" {
 			c.database = "admin"
 		}
-		c.mode, c.command, c.resultPath = "command", doc, strings.Split(resultPath, ".")
+		c.mode, c.command, c.resultPath = mongoModeCommand, doc, strings.Split(resultPath, ".")
 	case collection != "":
 		if c.database == "" {
 			return nil, "mongodb-query check: a collection query requires a database"
@@ -181,17 +192,17 @@ func buildMongoCheck(b base, entry map[string]any) (Check, string) {
 			if err != nil {
 				return nil, "mongodb-query check: invalid pipeline JSON: " + err.Error()
 			}
-			c.mode, c.pipeline, c.resultPath = "aggregate", pl, strings.Split(resultPath, ".")
+			c.mode, c.pipeline, c.resultPath = mongoModeAggregate, pl, strings.Split(resultPath, ".")
 		} else {
 			filter := bson.D{}
-			if f := cfgval.AsString(entry["filter"]); f != "" {
+			if f := cfgval.AsString(entry[CheckKeyFilter]); f != "" {
 				d, err := parseMongoDoc(f)
 				if err != nil {
 					return nil, "mongodb-query check: invalid filter JSON: " + err.Error()
 				}
 				filter = d
 			}
-			c.mode, c.filter = "count", filter
+			c.mode, c.filter = mongoModeCount, filter
 		}
 	default:
 		return nil, "mongodb-query check requires a collection (+filter), a collection+pipeline, or a command"
@@ -204,24 +215,24 @@ func buildMongoCheck(b base, entry map[string]any) (Check, string) {
 // optional auth_source.
 func mongoConnConfig(entry map[string]any) conn.Config {
 	cfg := conn.Config{
-		Host:     cfgval.AsString(entry["host"]),
-		User:     cfgval.AsString(entry["user"]),
-		Password: cfgval.AsString(entry["password"]),
-		Database: cfgval.AsString(entry["database"]),
-		TLS:      tlsString(entry["tls"]),
+		Host:     cfgval.AsString(entry[CheckKeyHost]),
+		User:     cfgval.AsString(entry[CheckKeyUser]),
+		Password: cfgval.AsString(entry[CheckKeyPassword]),
+		Database: cfgval.AsString(entry[CheckKeyDatabase]),
+		TLS:      tlsString(entry[CheckKeyTLS]),
 	}
 	if cfg.Host == "" {
-		cfg.Host = "127.0.0.1"
+		cfg.Host = conn.DefaultHost
 	}
 	cfg.Port = 27017
 	if proto, ok := conn.Lookup("mongodb"); ok {
 		cfg.Port = proto.DefaultPort()
 	}
-	if p, ok := cfgval.Int(entry["port"]); ok {
+	if p, ok := cfgval.Int(entry[CheckKeyPort]); ok {
 		cfg.Port = p
 	}
-	if as := cfgval.AsString(entry["auth_source"]); as != "" {
-		cfg.Params = map[string]string{"auth_source": as}
+	if as := cfgval.AsString(entry[CheckKeyAuthSource]); as != "" {
+		cfg.Params = map[string]string{conn.ParamKeyAuthSource: as}
 	}
 	return cfg
 }

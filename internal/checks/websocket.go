@@ -67,7 +67,7 @@ func (c *websocketCheck) Run(ctx context.Context) Result {
 		if chosenRes.Data == nil {
 			chosenRes.Data = map[string]any{}
 		}
-		chosenRes.Data["interfaces"] = perIface
+		chosenRes.Data[DataKeyInterfaces] = perIface
 	}
 	return chosenRes
 }
@@ -151,7 +151,7 @@ func (c *websocketCheck) handshakeRequest(key string) string {
 
 // buildWebsocketCheck parses the url and builds a websocket check.
 func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
-	raw := cfgval.AsString(entry["url"])
+	raw := cfgval.AsString(entry[CheckKeyURL])
 	if raw == "" {
 		return nil, "websocket check requires a url"
 	}
@@ -178,14 +178,14 @@ func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
 		rawURL:      raw,
 		scheme:      u.Scheme,
 		host:        u.Hostname(),
-		ifaces:      parseInterfaces(entry["interface"]),
+		ifaces:      parseInterfaces(entry[CheckKeyInterface]),
 		ifaceAll:    wsAll,
 		port:        port,
 		path:        websocketPath(u),
-		tls:         tlsString(entry["tls"]),
-		origin:      cfgval.AsString(entry["origin"]),
-		subprotocol: cfgval.AsString(entry["subprotocol"]),
-		headers:     cfgval.StringMap(entry["headers"]),
+		tls:         tlsString(entry[CheckKeyTLS]),
+		origin:      cfgval.AsString(entry[CheckKeyOrigin]),
+		subprotocol: cfgval.AsString(entry[CheckKeySubprotocol]),
+		headers:     cfgval.StringMap(entry[CheckKeyHeaders]),
 	}, ""
 }
 

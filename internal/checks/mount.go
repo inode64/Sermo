@@ -33,7 +33,7 @@ type mountCond struct {
 // options are reported as data but do not control the check.
 func parseMountCond(entry map[string]any) mountCond {
 	m := mountCond{expectMount: true}
-	if v, ok := entry["mounted"].(bool); ok {
+	if v, ok := entry[CheckKeyMounted].(bool); ok {
 		m.active, m.expectMount = true, v
 	}
 	return m

@@ -22,7 +22,7 @@ type connCheck struct {
 	proto conn.Protocol
 	cfg   conn.Config
 	probe func(context.Context, conn.Config) (conn.Result, error)
-	// onChange alerts when the server's fingerprint (Result.Extra["fingerprint"],
+	// onChange alerts when the server's fingerprint (Result.Extra[conn.ExtraKeyFingerprint],
 	// e.g. an SSH host key) changes between cycles. onVersionChange alerts when the
 	// server's version identity changes (its reported version, or the connection
 	// greeting banner for protocols that have no version — smtp/imap/pop/ftp).
@@ -60,7 +60,7 @@ func versionIdentity(res conn.Result) string {
 	if res.Version != "" {
 		return res.Version
 	}
-	return res.Extra["greeting"]
+	return res.Extra[conn.ExtraKeyGreeting]
 }
 
 func trimConnResult(res conn.Result) conn.Result {
@@ -116,20 +116,20 @@ func (c connCheck) Run(ctx context.Context) Result {
 		var problems []string
 		extra := map[string]any{}
 		if c.onChange {
-			fp := res.Extra["fingerprint"]
+			fp := res.Extra[conn.ExtraKeyFingerprint]
 			if c.state.primed && fp != c.state.lastFingerprint {
 				problems = append(problems, fmt.Sprintf("fingerprint changed (%s -> %s)", c.state.lastFingerprint, fp))
-				extra["fingerprint_old"] = c.state.lastFingerprint
+				extra[DataKeyFingerprintOld] = c.state.lastFingerprint
 			}
-			c.state.lastFingerprint, extra["fingerprint"] = fp, fp
+			c.state.lastFingerprint, extra[DataKeyFingerprint] = fp, fp
 		}
 		if c.onVersionChange {
 			v := versionIdentity(res)
 			if c.state.primed && v != c.state.lastVersion {
 				problems = append(problems, fmt.Sprintf("version changed (%s -> %s)", c.state.lastVersion, v))
-				extra["version_old"] = c.state.lastVersion
+				extra[DataKeyVersionOld] = c.state.lastVersion
 			}
-			c.state.lastVersion, extra["version"] = v, v
+			c.state.lastVersion, extra[DataKeyVersion] = v, v
 		}
 		primed := c.state.primed
 		c.state.primed = true
@@ -185,7 +185,7 @@ func (c connCheck) Run(ctx context.Context) Result {
 func (c connCheck) evalExpect(res conn.Result) string {
 	for _, a := range c.expect {
 		var got string
-		if a.path == "version" {
+		if a.path == DataKeyVersion {
 			got = res.Version
 		} else {
 			v, ok := res.Extra[a.path]
@@ -208,27 +208,27 @@ func (c connCheck) evalExpect(res conn.Result) string {
 // buildConnCheck builds a connection-protocol check for a registered protocol.
 // The password arrives already resolved from ${env:...} by the config loader.
 func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, string) {
-	user := cfgval.AsString(entry["user"])
+	user := cfgval.AsString(entry[CheckKeyUser])
 	if user == "" && proto.RequiresUser() {
 		return nil, proto.Name() + " check requires a user"
 	}
-	host := cfgval.AsString(entry["host"])
+	host := cfgval.AsString(entry[CheckKeyHost])
 	if host == "" {
-		host = "127.0.0.1"
+		host = conn.DefaultHost
 	}
 	port := proto.DefaultPort()
-	if p, ok := cfgval.Int(entry["port"]); ok {
+	if p, ok := cfgval.Int(entry[CheckKeyPort]); ok {
 		port = p
 	}
 	cfg := conn.Config{
 		Host:     host,
 		Port:     port,
-		Socket:   cfgval.AsString(entry["socket"]),
+		Socket:   cfgval.AsString(entry[CheckKeySocket]),
 		User:     user,
-		Password: cfgval.AsString(entry["password"]),
-		Database: cfgval.AsString(entry["database"]),
-		Query:    cfgval.AsString(entry["query"]),
-		TLS:      tlsString(entry["tls"]),
+		Password: cfgval.AsString(entry[CheckKeyPassword]),
+		Database: cfgval.AsString(entry[CheckKeyDatabase]),
+		Query:    cfgval.AsString(entry[CheckKeyQuery]),
+		TLS:      tlsString(entry[CheckKeyTLS]),
 		// cfg.Interface is set per-attempt by connCheck.Run from the interface set;
 		// it pins the probe's egress (SO_BINDTODEVICE) on multi-homed hosts.
 	}
@@ -236,70 +236,70 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	// /etc/resolv.conf instead of a fixed host (with pppd's usepeerdns, the
 	// provider's resolver). Scoped here so it never leaks into other protocols.
 	if proto.Name() == "dns" {
-		if cfgval.Bool(entry["resolvconf"]) {
-			if cfgval.AsString(entry["host"]) != "" {
+		if cfgval.Bool(entry[CheckKeyResolvconf]) {
+			if cfgval.AsString(entry[CheckKeyHost]) != "" {
 				return nil, "dns check: host and resolvconf are mutually exclusive"
 			}
-			cfg.Params = map[string]string{"resolvconf": "true"}
+			cfg.Params = map[string]string{conn.ParamKeyResolvconf: "true"}
 		}
 	}
 	// dhcp takes an optional fixed client MAC (absent -> a random anonymous MAC).
 	// Scoped to dhcp so it never leaks into the driver params other protocols pass
 	// through cfg.Params. Its egress interface uses the shared cfg.Interface.
 	if proto.Name() == "dhcp" {
-		if mac := cfgval.AsString(entry["mac"]); mac != "" {
+		if mac := cfgval.AsString(entry[CheckKeyMAC]); mac != "" {
 			if _, err := net.ParseMAC(mac); err != nil {
 				return nil, fmt.Sprintf("dhcp check: invalid mac %q", mac)
 			}
-			cfg.Params = map[string]string{"mac": mac}
+			cfg.Params = map[string]string{conn.ParamKeyMAC: mac}
 		}
 	}
 	// dhclient can optionally validate an active ISC dhclient lease file.
 	if proto.Name() == "dhclient" {
-		if leaseFile := cfgval.AsString(entry["lease_file"]); leaseFile != "" {
+		if leaseFile := cfgval.AsString(entry[CheckKeyLeaseFile]); leaseFile != "" {
 			cfg.Query = leaseFile
 		}
 	}
 	// openvpn defaults to UDP; `transport: tcp` selects TCP (length-prefixed
 	// framing). Scoped here so it never leaks into other protocols' params.
 	if proto.Name() == "openvpn" {
-		if tr := strings.ToLower(cfgval.AsString(entry["transport"])); tr != "" {
+		if tr := strings.ToLower(cfgval.AsString(entry[CheckKeyTransport])); tr != "" {
 			if tr != "udp" && tr != "tcp" {
 				return nil, fmt.Sprintf("openvpn check: transport must be udp or tcp, got %q", tr)
 			}
-			cfg.Params = map[string]string{"transport": tr}
+			cfg.Params = map[string]string{conn.ParamKeyTransport: tr}
 		}
 	}
 	// mongodb takes an optional auth_source (the credentials database); MongoConnect
 	// defaults it to the target database, then admin. Scoped here so it never leaks
 	// into other protocols' params.
 	if proto.Name() == "mongodb" {
-		if as := cfgval.AsString(entry["auth_source"]); as != "" {
-			cfg.Params = map[string]string{"auth_source": as}
+		if as := cfgval.AsString(entry[CheckKeyAuthSource]); as != "" {
+			cfg.Params = map[string]string{conn.ParamKeyAuthSource: as}
 		}
 	}
 	// fpm takes an optional `status_path` (the pool's pm.status_path); set, the
 	// probe fetches the status page and exposes the pool metrics, carried in
 	// cfg.Query. Absent, the probe does a plain /ping liveness check.
 	if proto.Name() == "fpm" {
-		if sp := cfgval.AsString(entry["status_path"]); sp != "" {
+		if sp := cfgval.AsString(entry[CheckKeyStatusPath]); sp != "" {
 			cfg.Query = sp
 		}
 	}
 	// nut takes an optional `ups` (the UPS to read variables from / LOGIN to),
 	// carried in cfg.Query; absent, the probe auto-detects a single configured UPS.
 	if proto.Name() == "nut" {
-		if u := cfgval.AsString(entry["ups"]); u != "" {
+		if u := cfgval.AsString(entry[CheckKeyUPS]); u != "" {
 			cfg.Query = u
 		}
 	}
 	// docker takes an optional `container` (name/id whose state/health to read),
 	// carried in cfg.Query, and defaults to the local Engine Unix socket.
 	if proto.Name() == "docker" {
-		if c := cfgval.AsString(entry["container"]); c != "" {
+		if c := cfgval.AsString(entry[CheckKeyContainer]); c != "" {
 			cfg.Query = c
 		}
-		if cfg.Socket == "" && cfgval.AsString(entry["host"]) == "" {
+		if cfg.Socket == "" && cfgval.AsString(entry[CheckKeyHost]) == "" {
 			cfg.Socket = "/run/docker.sock"
 		}
 	}
@@ -307,11 +307,11 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	// optional `domain` selects a single VM whose state to read (the connect URI
 	// stays in cfg.Query, so the VM name is carried in cfg.Params).
 	if proto.Name() == "libvirt" {
-		if cfg.Socket == "" && cfgval.AsString(entry["host"]) == "" {
+		if cfg.Socket == "" && cfgval.AsString(entry[CheckKeyHost]) == "" {
 			cfg.Socket = "/run/libvirt/libvirt-sock"
 		}
-		if d := cfgval.AsString(entry["domain"]); d != "" {
-			cfg.Params = map[string]string{"domain": d}
+		if d := cfgval.AsString(entry[CheckKeyDomain]); d != "" {
+			cfg.Params = map[string]string{conn.ParamKeyDomain: d}
 		}
 	}
 	// acpid is socket-only; default to its well-known event socket.
@@ -330,12 +330,12 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	// (socket path or full address), stored in Socket so the check message shows
 	// it instead of host:port.
 	if proto.Name() == "dbus" || proto.Name() == "avahi" {
-		cfg.Socket = conn.DBusAddress(cfgval.AsString(entry["socket"]), cfgval.AsString(entry["query"]))
+		cfg.Socket = conn.DBusAddress(cfgval.AsString(entry[CheckKeySocket]), cfgval.AsString(entry[CheckKeyQuery]))
 	}
 	c := connCheck{base: b, proto: proto, cfg: cfg, probe: proto.Probe}
 	// Optional response assertions: a mapping of field -> value | {op, value},
 	// compared against the probe Result (version / Extra) — works for any protocol.
-	expect, ewarn := parseAssertionMap(entry["expect"], "expect")
+	expect, ewarn := parseAssertionMap(entry[CheckKeyExpect], CheckKeyExpect)
 	if ewarn != "" {
 		return nil, proto.Name() + " check: " + ewarn
 	}
@@ -345,12 +345,12 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 		return nil, proto.Name() + " check: " + lwarn
 	}
 	c.latencyOp, c.latencyValue = lop, lval
-	c.onChange = cfgval.Bool(entry["on_change"])
-	c.onVersionChange = cfgval.Bool(entry["on_version_change"])
+	c.onChange = cfgval.Bool(entry[CheckKeyOnChange])
+	c.onVersionChange = cfgval.Bool(entry[CheckKeyOnVersionChange])
 	if c.onChange || c.onVersionChange {
 		c.state = &connState{}
 	}
-	c.ifaces = parseInterfaces(entry["interface"])
+	c.ifaces = parseInterfaces(entry[CheckKeyInterface])
 	all, iwarn := parseInterfaceMatch(entry)
 	if iwarn != "" {
 		return nil, proto.Name() + " check: " + iwarn

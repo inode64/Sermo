@@ -74,7 +74,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 	if err != nil {
 		return c.result(false, fmt.Sprintf("net %s: %v", c.iface, err), start)
 	}
-	data := map[string]any{"interface": c.iface, fieldMetric: c.metric}
+	data := map[string]any{DataKeyInterface: c.iface, fieldMetric: c.metric}
 
 	switch c.metric {
 	case "state":
@@ -143,7 +143,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 		if display == "" {
 			display = "none"
 		}
-		data["addresses"] = s.Addrs
+		data[DataKeyAddresses] = s.Addrs
 		if c.expect != "" {
 			present := len(s.Addrs) > 0
 			data[fieldValue] = len(s.Addrs)

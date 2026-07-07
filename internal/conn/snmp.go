@@ -59,9 +59,9 @@ func (snmpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, fmt.Errorf("snmp: no system MIB values returned (wrong community/credentials?)")
 	}
 	extra := map[string]string{
-		"fingerprint":   sysObjectID, // device identity; watched by on_change
-		"sys_object_id": sysObjectID,
-		"snmp_version":  snmpVersionName(cfg),
+		ExtraKeyFingerprint: sysObjectID, // device identity; watched by on_change
+		"sys_object_id":     sysObjectID,
+		"snmp_version":      snmpVersionName(cfg),
 	}
 	// Identification fields the agent exposes alongside the object id, each
 	// assertable via expect: (e.g. sys_name == host).
@@ -90,7 +90,7 @@ func snmpVersionName(cfg Config) string {
 func buildSNMPParams(ctx context.Context, cfg Config, timeout time.Duration) *g.GoSNMP {
 	host := cfg.Host
 	if host == "" {
-		host = "127.0.0.1"
+		host = DefaultHost
 	}
 	port := cfg.Port
 	if port == 0 {

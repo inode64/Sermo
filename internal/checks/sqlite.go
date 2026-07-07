@@ -31,7 +31,7 @@ func (c sqliteCheck) Run(ctx context.Context) Result {
 		return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
 	}
 
-	db, err := sql.Open("sqlite", "file:"+c.path+"?mode=ro&_pragma=busy_timeout(2000)")
+	db, err := sql.Open(SQLEngineSQLite, "file:"+c.path+"?mode=ro&_pragma=busy_timeout(2000)")
 	if err != nil {
 		return c.result(false, fmt.Sprintf("open %s: %v", c.path, err), start)
 	}

@@ -80,7 +80,7 @@ const (
 	fieldMetric = "metric"
 	// fieldValue is the result data-map key holding the breaching number a hook
 	// sees as SERMO_VALUE. Every level/stateful check publishes it. (This is the
-	// output key; the config-input threshold is entry["value"], left as-is.)
+	// output key; the config-input threshold is entry[CheckKeyValue], left as-is.)
 	fieldValue = "value"
 	// fieldHost and fieldPort are the target-identity result data-map keys of the
 	// endpoint checks (icmp, ports, cert, connection-protocol probes).
@@ -152,11 +152,11 @@ func parseLevelPreds(entry map[string]any, fields []string) ([]levelPred, error)
 		if !ok {
 			return nil, fmt.Errorf("%s must be a mapping {op, value}", field)
 		}
-		op := cfgval.AsString(m["op"])
+		op := cfgval.AsString(m[CheckKeyOp])
 		if !cfgval.IsCompareOp(op) {
 			return nil, fmt.Errorf("%s has invalid op %q", field, op)
 		}
-		val, err := parseLevelPredValue(field, m["value"])
+		val, err := parseLevelPredValue(field, m[CheckKeyValue])
 		if err != nil {
 			return nil, err
 		}
@@ -187,11 +187,11 @@ func parseDeltaThreshold(raw any, label string) (op string, value float64, errs 
 	if !ok {
 		return "", 0, label + " requires a delta {op, value}"
 	}
-	op = cfgval.AsString(m["op"])
+	op = cfgval.AsString(m[CheckKeyOp])
 	if !cfgval.IsCompareOp(op) {
 		return "", 0, label + " delta has an invalid op"
 	}
-	value, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
+	value, err := strconv.ParseFloat(cfgval.String(m[CheckKeyValue]), 64)
 	if err != nil {
 		return "", 0, label + " delta value must be numeric"
 	}

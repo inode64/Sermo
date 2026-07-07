@@ -30,7 +30,7 @@ func (ajpProtocol) RequiresUser() bool { return false }
 func (ajpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	host := cfg.Host
 	if host == "" {
-		host = "127.0.0.1"
+		host = DefaultHost
 	}
 	port := cfg.Port
 	if port == 0 {

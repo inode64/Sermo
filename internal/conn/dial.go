@@ -53,7 +53,7 @@ func probeBanner(ctx context.Context, cfg Config, defaultPort int, handshake fun
 func dialConn(ctx context.Context, cfg Config, port int) (net.Conn, error) {
 	host := cfg.Host
 	if host == "" {
-		host = "127.0.0.1"
+		host = DefaultHost
 	}
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	d := BindDialer(cfg.Interface)
