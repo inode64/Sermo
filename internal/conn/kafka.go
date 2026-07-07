@@ -21,8 +21,8 @@ func init() { Register(kafkaProtocol{}) }
 // assert it reached the intended listener (broker vs controller).
 type kafkaProtocol struct{}
 
-func (kafkaProtocol) Name() string       { return "kafka" }
-func (kafkaProtocol) DefaultPort() int   { return 9092 }
+func (kafkaProtocol) Name() string       { return ProtocolNameKafka }
+func (kafkaProtocol) DefaultPort() int   { return defaultPortKafka }
 func (kafkaProtocol) RequiresUser() bool { return false }
 
 const (
@@ -32,12 +32,16 @@ const (
 	kafkaCorrelationID  = 0x5365726d // "Serm" — echoed back verbatim in the response header
 	kafkaMinResponse    = 10         // correlation_id(4) + error_code(2) + array_len(4)
 	maxKafkaResponse    = 1 << 20    // bound the reply so a non-Kafka peer cannot exhaust memory
+	kafkaRoleBroker     = "broker"
+	kafkaRoleController = "controller"
+	kafkaFlagYes        = "yes"
+	kafkaFlagNo         = "no"
 )
 
 // Probe opens the connection (TCP, TLS when configured) and runs the ApiVersions
 // handshake. The caller's context bounds it.
 func (kafkaProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, 9092)
+	c, err := dialDeadline(ctx, cfg, defaultPortKafka)
 	if err != nil {
 		return Result{}, err
 	}
@@ -106,19 +110,19 @@ func readKafkaAPIVersions(r io.Reader) (Result, error) {
 	}
 
 	res := Result{Extra: map[string]string{
-		"api_count":   strconv.Itoa(int(count)),
-		"error_code":  strconv.Itoa(int(errorCode)),
-		"produce_api": yesNo(keys[kafkaProduceKey]),
-		"vote_api":    yesNo(keys[kafkaVoteKey]),
+		ExtraKeyKafkaAPICount:   strconv.Itoa(int(count)),
+		ExtraKeyKafkaErrorCode:  strconv.Itoa(int(errorCode)),
+		ExtraKeyKafkaProduceAPI: yesNo(keys[kafkaProduceKey]),
+		ExtraKeyKafkaVoteAPI:    yesNo(keys[kafkaVoteKey]),
 	}}
 	// Best-effort role label from the advertised APIs: a broker (data plane)
 	// listener exposes Produce; a KRaft controller listener exposes the Raft
 	// quorum APIs (Vote) and not Produce.
 	switch {
 	case keys[kafkaProduceKey]:
-		res.Extra["role"] = "broker"
+		res.Extra[ExtraKeyRole] = kafkaRoleBroker
 	case keys[kafkaVoteKey]:
-		res.Extra["role"] = "controller"
+		res.Extra[ExtraKeyRole] = kafkaRoleController
 	}
 	return res, nil
 }
@@ -127,7 +131,7 @@ func readKafkaAPIVersions(r io.Reader) (Result, error) {
 // for the role-detection flags.
 func yesNo(b bool) string {
 	if b {
-		return "yes"
+		return kafkaFlagYes
 	}
-	return "no"
+	return kafkaFlagNo
 }

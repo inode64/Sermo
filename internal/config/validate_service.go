@@ -342,7 +342,7 @@ func validateLibvirtControl(control map[string]any, add addFunc) {
 	if _, present := control[virt.ControlKeyPort]; present {
 		port, ok := cfgval.Int(control[virt.ControlKeyPort])
 		if !ok || !virt.ValidHostPort(host, port) {
-			add("control.port must be an integer in 1..65535")
+			add("control.port must be an integer in %s", cfgval.TCPPortRange())
 		}
 	}
 }
@@ -363,8 +363,8 @@ func validateDockerControl(control map[string]any, add addFunc) {
 	}
 	if _, present := control[dockerctl.ControlKeyPort]; present {
 		port, ok := cfgval.Int(control[dockerctl.ControlKeyPort])
-		if !ok || port < 1 || port > 65535 {
-			add("control.port must be an integer in 1..65535")
+		if !ok || !validTCPPort(port) {
+			add("control.port must be an integer in %s", cfgval.TCPPortRange())
 		}
 	}
 	if !dockerctl.ValidTLSValue(control[dockerctl.ControlKeyTLS]) {

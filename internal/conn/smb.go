@@ -15,7 +15,7 @@ import (
 	"github.com/cloudsoda/go-smb2"
 )
 
-func init() { Register(smbProtocol{}, "samba", "cifs") }
+func init() { Register(smbProtocol{}, protocolAliasSamba, protocolAliasCIFS) }
 
 // smbProtocol probes an SMB/CIFS server (e.g. Samba). It first runs a native
 // SMB2 NEGOTIATE to learn the dialect, protocol family and whether signing is
@@ -27,8 +27,8 @@ func init() { Register(smbProtocol{}, "samba", "cifs") }
 // (DOMAIN\user or user@domain).
 type smbProtocol struct{}
 
-func (smbProtocol) Name() string       { return "smb" }
-func (smbProtocol) DefaultPort() int   { return 445 }
+func (smbProtocol) Name() string       { return ProtocolNameSMB }
+func (smbProtocol) DefaultPort() int   { return defaultPortSMB }
 func (smbProtocol) RequiresUser() bool { return false }
 
 func (smbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -38,7 +38,7 @@ func (smbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 445
+		port = defaultPortSMB
 	}
 	addr := net.JoinHostPort(host, strconv.Itoa(port))
 
@@ -73,10 +73,10 @@ func smbSession(ctx context.Context, addr string, cfg Config, extra map[string]s
 		return fmt.Errorf("smb auth: %w", err)
 	}
 	defer func() { _ = s.Logoff() }()
-	extra["authenticated"] = "true"
+	extra[extraAuthenticated] = strconv.FormatBool(true)
 
 	if names, err := s.ListSharenames(); err == nil {
-		extra["shares"] = strconv.Itoa(len(names))
+		extra[extraShares] = strconv.Itoa(len(names))
 	}
 	if share := cfg.Query; share != "" {
 		fs, err := s.Mount(share)
@@ -84,7 +84,7 @@ func smbSession(ctx context.Context, addr string, cfg Config, extra map[string]s
 			return fmt.Errorf("smb mount %q: %w", share, err)
 		}
 		_ = fs.Umount()
-		extra["share_access"] = share
+		extra[extraShareAccess] = share
 	}
 	return nil
 }

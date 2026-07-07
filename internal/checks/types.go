@@ -42,7 +42,7 @@ func (c tcpCheck) Run(ctx context.Context) Result {
 
 	addr := net.JoinHostPort(c.host, strconv.Itoa(c.port))
 	chosen, perIface, err := tryInterfaces(c.ifaces, c.ifaceAll, func(iface string) error {
-		nc, e := conn.BindDialer(iface).DialContext(ctx, "tcp", addr)
+		nc, e := conn.BindDialer(iface).DialContext(ctx, conn.TransportTCP, addr)
 		if e == nil {
 			_ = nc.Close()
 		}
@@ -264,10 +264,7 @@ func jsonValueString(v any) string {
 	case float64:
 		return strconv.FormatFloat(t, 'f', -1, 64)
 	case bool:
-		if t {
-			return "true"
-		}
-		return "false"
+		return strconv.FormatBool(t)
 	case nil:
 		return "null"
 	default:

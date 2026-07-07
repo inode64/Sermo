@@ -41,6 +41,19 @@ const (
 	commandMountList    = "list"
 	commandStateCompact = "compact"
 	commandArgAll       = "all"
+	commandArgClear     = "clear"
+)
+
+const (
+	commandLockAcquire = "acquire"
+	commandLockRelease = "release"
+)
+
+const (
+	commandPanicEnable  = "enable"
+	commandPanicDisable = "disable"
+	commandPanicOn      = "on"
+	commandPanicOff     = "off"
 )
 
 const (
@@ -50,9 +63,15 @@ const (
 )
 
 const (
+	defaultWebAPIAddress = "127.0.0.1"
+	daemonPIDFilename    = "sermod.pid"
+)
+
+const (
 	cliFieldSermoService = "SERMO_SERVICE"
 	cliFieldSermoAction  = "SERMO_ACTION"
 	cliFieldSermoStatus  = "SERMO_STATUS"
+	cliDisplayUnknown    = "unknown"
 
 	cliFieldSermoReport        = "SERMO_REPORT"
 	cliFieldSermoReportHost    = "SERMO_REPORT_HOST"

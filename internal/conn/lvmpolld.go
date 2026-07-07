@@ -11,8 +11,16 @@ import (
 
 func init() { Register(lvmpolldProtocol{}) }
 
-// lvmpolldDefaultSocket is lvmpolld's well-known control socket.
-const lvmpolldDefaultSocket = "/run/lvm/lvmpolld.socket"
+// DefaultLVMPolldSocket is lvmpolld's well-known control socket.
+const DefaultLVMPolldSocket = "/run/lvm/lvmpolld.socket"
+
+const (
+	lvmDaemonFieldProtocol   = "protocol"
+	lvmDaemonFieldResponse   = "response"
+	lvmDaemonFieldVersion    = "version"
+	lvmDaemonProtocolVersion = "protocol_version"
+	lvmDaemonResponseOK      = "OK"
+)
 
 // lvmpolldProtocol probes LVM's poll daemon (lvmpolld) over its Unix socket
 // using LVM's generic daemon protocol (the "libdaemon" framework). The client
@@ -26,14 +34,14 @@ const lvmpolldDefaultSocket = "/run/lvm/lvmpolld.socket"
 // (no TCP port), no auth.
 type lvmpolldProtocol struct{}
 
-func (lvmpolldProtocol) Name() string       { return "lvmpolld" }
-func (lvmpolldProtocol) DefaultPort() int   { return 0 }
+func (lvmpolldProtocol) Name() string       { return ProtocolNameLVMPolld }
+func (lvmpolldProtocol) DefaultPort() int   { return defaultPortNone }
 func (lvmpolldProtocol) RequiresUser() bool { return false }
 
 func (lvmpolldProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	socket := cfg.Socket
 	if socket == "" {
-		socket = lvmpolldDefaultSocket
+		socket = DefaultLVMPolldSocket
 	}
 	c, err := dialUnix(ctx, socket)
 	if err != nil {
@@ -52,20 +60,20 @@ func (lvmpolldProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 	fields := parseLVMDaemonReply(reply)
-	if fields["response"] != "OK" {
-		return Result{}, fmt.Errorf("lvmpolld hello: response = %q", fields["response"])
+	if fields[lvmDaemonFieldResponse] != lvmDaemonResponseOK {
+		return Result{}, fmt.Errorf("lvmpolld hello: response = %q", fields[lvmDaemonFieldResponse])
 	}
 	// Guard against pointing at a different LVM daemon (lvmetad, dmeventd) that
 	// shares the protocol but answers a different name.
-	if p := fields["protocol"]; p != "" && p != "lvmpolld" {
+	if p := fields[lvmDaemonFieldProtocol]; p != "" && p != ProtocolNameLVMPolld {
 		return Result{}, fmt.Errorf("lvmpolld hello: protocol = %q, not lvmpolld", p)
 	}
 	extra := map[string]string{extraSocket: socket}
-	if p := fields["protocol"]; p != "" {
-		extra["protocol"] = p
+	if p := fields[lvmDaemonFieldProtocol]; p != "" {
+		extra[extraProtocol] = p
 	}
-	if v := fields["version"]; v != "" {
-		extra["protocol_version"] = v
+	if v := fields[lvmDaemonFieldVersion]; v != "" {
+		extra[lvmDaemonProtocolVersion] = v
 	}
 	return Result{Extra: extra}, nil
 }

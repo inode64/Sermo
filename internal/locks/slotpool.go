@@ -11,13 +11,21 @@ import (
 
 var errSlotBusy = errors.New("operation slot busy")
 
-// defaultSlotTTL is the safety-net lifetime stamped on a slot lock file. Owner
-// liveness already reclaims a slot when its holder exits; the TTL only bounds a
-// slot whose owner is alive-but-wedged (or survives a PID-reuse false positive),
-// matching the TTL the operation and named lockers set. It is deliberately far
-// larger than any real operation (themselves bounded by the operation lock TTL)
-// so a legitimately long operation is never reclaimed out from under itself.
-const defaultSlotTTL = time.Hour
+const (
+	// defaultSlotCount is the fallback process-wide operation concurrency.
+	defaultSlotCount = 2
+
+	// defaultSlotTTL is the safety-net lifetime stamped on a slot lock file. Owner
+	// liveness already reclaims a slot when its holder exits; the TTL only bounds a
+	// slot whose owner is alive-but-wedged (or survives a PID-reuse false positive),
+	// matching the TTL the operation and named lockers set. It is deliberately far
+	// larger than any real operation (themselves bounded by the operation lock TTL)
+	// so a legitimately long operation is never reclaimed out from under itself.
+	defaultSlotTTL = time.Hour
+
+	// defaultAcquireRetryInterval spaces retries while all operation slots are busy.
+	defaultAcquireRetryInterval = 20 * time.Millisecond
+)
 
 // SlotHandle is one acquired global operation slot.
 type SlotHandle struct {
@@ -46,10 +54,11 @@ type SlotPool struct {
 	Sleep func(time.Duration)
 }
 
-// NewSlotPool returns a pool over dir with the given capacity. <=0 defaults to 2.
+// NewSlotPool returns a pool over dir with the given capacity. <=0 defaults to
+// defaultSlotCount.
 func NewSlotPool(dir string, slots int) SlotPool {
 	if slots <= 0 {
-		slots = 2
+		slots = defaultSlotCount
 	}
 	return SlotPool{
 		Dir:   dir,
@@ -68,7 +77,7 @@ func NewSlotPool(dir string, slots int) SlotPool {
 // makes this a non-mutating copy.
 func (p SlotPool) withDefaults() SlotPool {
 	if p.Slots <= 0 {
-		p.Slots = 2
+		p.Slots = defaultSlotCount
 	}
 	if p.Proc == nil {
 		p.Proc = OSProcessProber{}
@@ -129,7 +138,7 @@ func (p SlotPool) Acquire(ctx context.Context) (*SlotHandle, error) {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		default:
-			p.Sleep(20 * time.Millisecond)
+			p.Sleep(defaultAcquireRetryInterval)
 		}
 	}
 }

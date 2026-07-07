@@ -25,9 +25,22 @@ import (
 // never responds could block a watch cycle indefinitely.
 const defaultTimeout = 10 * time.Second
 
-// tlsModeSkipVerify is the tls: mode that dials without verifying the daemon's
-// certificate chain.
-const tlsModeSkipVerify = "skip-verify"
+const (
+	dockerResponseBodyLimit = 256 << 10
+	dockerErrorBodyLimit    = 4 << 10
+)
+
+// Docker TLS mode tokens accepted from control.tls.
+const (
+	tlsModeFalse      = "false"
+	tlsModeNo         = "no"
+	tlsModeOff        = "off"
+	tlsModeTrue       = "true"
+	tlsModeYes        = "yes"
+	tlsModeOn         = "on"
+	tlsModeRequired   = "required"
+	tlsModeSkipVerify = "skip-verify"
+)
 
 // ensureDeadline returns ctx unchanged when it already carries a deadline,
 // otherwise a child bounded by defaultTimeout. The returned cancel must be
@@ -40,11 +53,18 @@ func ensureDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
 }
 
 const (
+	// DefaultHost is Docker's loopback host when TCP control omits host.
+	DefaultHost = "127.0.0.1"
 	// DefaultSocket is Docker's local Unix API socket on modern Linux systems.
 	DefaultSocket = "/run/docker.sock"
 	// DefaultPort is Docker's plaintext TCP API port.
 	DefaultPort = 2375
 )
+
+// HealthStatusNone is emitted when Docker exposes no container health state.
+const HealthStatusNone = "none"
+
+const networkUnix = "unix"
 
 // ControlType is the service control.type value for Docker-backed services.
 const ControlType = "docker"
@@ -113,8 +133,8 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 	}
 	if _, present := m[ControlKeyPort]; present {
 		p, ok := cfgval.Int(m[ControlKeyPort])
-		if !ok || p < 1 || p > 65535 {
-			return Spec{}, true, fmt.Errorf("control.port must be an integer in 1..65535")
+		if !ok || !cfgval.ValidTCPPort(p) {
+			return Spec{}, true, fmt.Errorf("control.port must be an integer in %s", cfgval.TCPPortRange())
 		}
 		spec.Port = p
 	}
@@ -139,14 +159,14 @@ func NewClient(spec Spec) (*Client, error) {
 		socket := filepath.Clean(spec.Socket)
 		tr := &http.Transport{
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				return (&net.Dialer{}).DialContext(ctx, "unix", socket)
+				return (&net.Dialer{}).DialContext(ctx, networkUnix, socket)
 			},
 		}
 		return &Client{HTTP: &http.Client{Transport: tr}, Base: "http://docker"}, nil
 	}
 	host := spec.Host
 	if host == "" {
-		host = "127.0.0.1"
+		host = DefaultHost
 	}
 	port := spec.Port
 	if port == 0 {
@@ -223,7 +243,7 @@ type ContainerSummary struct {
 // HealthStatus returns the stable health label for a container.
 func (c Container) HealthStatus() string {
 	if c.State.Health == nil || c.State.Health.Status == "" {
-		return "none"
+		return HealthStatusNone
 	}
 	return c.State.Health.Status
 }
@@ -297,7 +317,7 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 	if resp.StatusCode != http.StatusOK {
 		return dockerStatusError(resp)
 	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 256<<10))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, dockerResponseBodyLimit))
 	if err := json.Unmarshal(body, out); err != nil {
 		return fmt.Errorf("docker: invalid JSON response: %w", err)
 	}
@@ -325,7 +345,7 @@ func (c *Client) post(ctx context.Context, path string, body io.Reader, ok ...in
 }
 
 func dockerStatusError(resp *http.Response) error {
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, dockerErrorBodyLimit))
 	return fmt.Errorf("docker: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 }
 
@@ -336,10 +356,10 @@ func containerPath(container, suffix string) string {
 // NormalizeTLS maps friendly TLS values to Docker HTTP client modes.
 func NormalizeTLS(s string) string {
 	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "", "false", "no", "off":
+	case "", tlsModeFalse, tlsModeNo, tlsModeOff:
 		return ""
-	case "true", "yes", "on", "required":
-		return "true"
+	case tlsModeTrue, tlsModeYes, tlsModeOn, tlsModeRequired:
+		return tlsModeTrue
 	case tlsModeSkipVerify:
 		return tlsModeSkipVerify
 	default:
@@ -356,7 +376,7 @@ func ValidTLSValue(v any) bool {
 		return true
 	case string:
 		switch strings.ToLower(strings.TrimSpace(t)) {
-		case "true", "false", "yes", "no", "on", "off", "required", tlsModeSkipVerify:
+		case tlsModeTrue, tlsModeFalse, tlsModeYes, tlsModeNo, tlsModeOn, tlsModeOff, tlsModeRequired, tlsModeSkipVerify:
 			return true
 		default:
 			return false

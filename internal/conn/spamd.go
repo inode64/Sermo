@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func init() { Register(spamdProtocol{}, "spamassassin") }
+func init() { Register(spamdProtocol{}, protocolAliasSpamAssassin) }
 
 // spamdProtocol probes the SpamAssassin daemon (spamd) over the SPAMC/SPAMD
 // protocol. It sends a `PING` and verifies spamd answers `SPAMD/<v> 0 PONG` —
@@ -15,12 +15,12 @@ func init() { Register(spamdProtocol{}, "spamassassin") }
 // or a Unix socket (set `socket`). No auth.
 type spamdProtocol struct{}
 
-func (spamdProtocol) Name() string       { return "spamd" }
-func (spamdProtocol) DefaultPort() int   { return 783 }
+func (spamdProtocol) Name() string       { return ProtocolNameSpamd }
+func (spamdProtocol) DefaultPort() int   { return defaultPortSpamd }
 func (spamdProtocol) RequiresUser() bool { return false }
 
 func (spamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, 783)
+	c, err := dialDeadline(ctx, cfg, defaultPortSpamd)
 	if err != nil {
 		return Result{}, err
 	}

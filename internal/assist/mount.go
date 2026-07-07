@@ -11,7 +11,7 @@ import (
 
 type mountAssistant struct{}
 
-func (mountAssistant) Name() string { return "mount" }
+func (mountAssistant) Name() string { return AssistantNameMount }
 func (mountAssistant) Title() string {
 	return "Manage fstab-backed mount units"
 }
@@ -85,7 +85,7 @@ func mountResult(mounts map[string]any) (Result, error) {
 }
 
 func mountUnitName(path string) string {
-	return watchName("mount", filepath.Clean(path))
+	return watchName(AssistantNameMount, filepath.Clean(path))
 }
 
 func sortedMountCandidates(cands []MountCandidate) []MountCandidate {

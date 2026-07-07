@@ -6,9 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 )
 
 func init() { Register(mqttProtocol{}) }
+
+const (
+	mqttClientID                 = "sermo-check"
+	mqttConnackCodeAccepted byte = 0
+)
 
 // mqttProtocol probes an MQTT broker natively (MQTT 3.1.1): it performs the
 // CONNECT handshake and verifies the broker answers with a CONNACK accepting the
@@ -18,18 +24,18 @@ func init() { Register(mqttProtocol{}) }
 // with the reason.
 type mqttProtocol struct{}
 
-func (mqttProtocol) Name() string       { return "mqtt" }
-func (mqttProtocol) DefaultPort() int   { return 1883 }
+func (mqttProtocol) Name() string       { return ProtocolNameMQTT }
+func (mqttProtocol) DefaultPort() int   { return defaultPortMQTT }
 func (mqttProtocol) RequiresUser() bool { return false }
 
 func (mqttProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, 1883)
+	c, err := dialDeadline(ctx, cfg, defaultPortMQTT)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
 
-	if _, err := c.Write(buildMQTTConnect("sermo-check", cfg.User, cfg.Password)); err != nil {
+	if _, err := c.Write(buildMQTTConnect(mqttClientID, cfg.User, cfg.Password)); err != nil {
 		return Result{}, err
 	}
 	var ack [4]byte
@@ -40,12 +46,12 @@ func (mqttProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	if code != 0 {
+	if code != mqttConnackCodeAccepted {
 		return Result{}, fmt.Errorf("MQTT connection refused: %s", mqttConnackName(code))
 	}
-	extra := map[string]string{"connack": mqttConnackName(code)}
+	extra := map[string]string{extraConnack: mqttConnackName(code)}
 	if sessionPresent {
-		extra["session_present"] = "true"
+		extra[extraSession] = strconv.FormatBool(true)
 	}
 	return Result{Extra: extra}, nil
 }

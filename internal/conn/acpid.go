@@ -6,8 +6,8 @@ import (
 
 func init() { Register(acpidProtocol{}) }
 
-// acpidDefaultSocket is acpid's well-known local event socket.
-const acpidDefaultSocket = "/run/acpid.socket"
+// DefaultACPIDSocket is acpid's well-known local event socket.
+const DefaultACPIDSocket = "/run/acpid.socket"
 
 // acpidProtocol probes the ACPI event daemon (acpid). acpid is an event
 // broadcaster with no request/response protocol: clients connect to its Unix
@@ -18,14 +18,14 @@ const acpidDefaultSocket = "/run/acpid.socket"
 // no auth.
 type acpidProtocol struct{}
 
-func (acpidProtocol) Name() string       { return "acpid" }
-func (acpidProtocol) DefaultPort() int   { return 0 }
+func (acpidProtocol) Name() string       { return ProtocolNameACPID }
+func (acpidProtocol) DefaultPort() int   { return defaultPortNone }
 func (acpidProtocol) RequiresUser() bool { return false }
 
 func (acpidProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	socket := cfg.Socket
 	if socket == "" {
-		socket = acpidDefaultSocket
+		socket = DefaultACPIDSocket
 	}
 	c, err := dialUnix(ctx, socket)
 	if err != nil {

@@ -6,7 +6,9 @@ import (
 	"strconv"
 )
 
-func init() { Register(statdProtocol{}, "rpc.statd", "nsm", "nfs-statd") }
+func init() {
+	Register(statdProtocol{}, protocolAliasRPCStatd, protocolAliasNSM, protocolAliasNFSStatd)
+}
 
 // NSM (Network Status Monitor) program number (RFC 1813 appendix; statd). Only
 // version 1 exists; the NULL procedure (0) is always present.
@@ -25,8 +27,8 @@ const (
 // rpcbind/nfs probes.
 type statdProtocol struct{}
 
-func (statdProtocol) Name() string       { return "statd" }
-func (statdProtocol) DefaultPort() int   { return 662 }
+func (statdProtocol) Name() string       { return ProtocolNameStatd }
+func (statdProtocol) DefaultPort() int   { return defaultPortStatd }
 func (statdProtocol) RequiresUser() bool { return false }
 
 func (statdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -36,7 +38,7 @@ func (statdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 662
+		port = defaultPortStatd
 	}
 
 	xid := randXID32()
@@ -55,5 +57,5 @@ func (statdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Extra: map[string]string{extraProgram: "100024", extraRPCStatus: status}}, nil
+	return Result{Extra: map[string]string{extraProgram: strconv.Itoa(statdProg), extraRPCStatus: status}}, nil
 }

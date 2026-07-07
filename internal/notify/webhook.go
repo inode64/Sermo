@@ -16,6 +16,9 @@ import (
 // cycle.
 const webhookTimeout = 15 * time.Second
 
+// webhookErrorSnippetLimit bounds the non-2xx response body included in errors.
+const webhookErrorSnippetLimit = 256
+
 // webhookPoster delivers a JSON payload to a webhook; injected so tests do not
 // hit the network. label names the transport in error messages.
 type webhookPoster func(ctx context.Context, label, webhook string, payload []byte) error
@@ -49,7 +52,7 @@ func postWebhook(ctx context.Context, label, webhook string, payload []byte) err
 	defer resp.Body.Close()
 
 	if resp.StatusCode/100 != 2 {
-		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, webhookErrorSnippetLimit))
 		return fmt.Errorf("%s webhook returned %s: %s", label, resp.Status, strings.TrimSpace(string(snippet)))
 	}
 	return nil

@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func init() { Register(sieveProtocol{}, "managesieve") }
+func init() { Register(sieveProtocol{}, protocolAliasManageSieve) }
 
 // sieveProtocol probes a ManageSieve server natively (RFC 5804). On connect the
 // server sends a greeting: capability lines (quoted name/value pairs) terminated
@@ -18,12 +18,12 @@ func init() { Register(sieveProtocol{}, "managesieve") }
 // implicit TLS.
 type sieveProtocol struct{}
 
-func (sieveProtocol) Name() string       { return "sieve" }
-func (sieveProtocol) DefaultPort() int   { return 4190 }
+func (sieveProtocol) Name() string       { return ProtocolNameSieve }
+func (sieveProtocol) DefaultPort() int   { return defaultPortSieve }
 func (sieveProtocol) RequiresUser() bool { return false }
 
 func (sieveProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, 4190)
+	c, err := dialDeadline(ctx, cfg, defaultPortSieve)
 	if err != nil {
 		return Result{}, err
 	}
@@ -40,7 +40,7 @@ func (sieveProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 			case strings.HasPrefix(upper, "OK"):
 				extra := map[string]string{extraGreeting: line}
 				if impl != "" {
-					extra["implementation"] = impl
+					extra[extraImplementation] = impl
 				}
 				return Result{Version: impl, Extra: extra}, nil
 			case strings.HasPrefix(upper, "NO"), strings.HasPrefix(upper, "BYE"):

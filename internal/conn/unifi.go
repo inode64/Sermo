@@ -10,7 +10,9 @@ import (
 	"strconv"
 )
 
-func init() { Register(unifiProtocol{}, "unifi-controller", "unifi-network") }
+func init() { Register(unifiProtocol{}, protocolAliasUniFiController, protocolAliasUniFiNetwork) }
+
+const unifiRCOK = "ok"
 
 // unifiProtocol probes a UniFi Network controller (Ubiquiti) via its management
 // API. It GETs the unauthenticated /status endpoint over HTTPS and verifies a
@@ -21,8 +23,8 @@ func init() { Register(unifiProtocol{}, "unifi-controller", "unifi-network") }
 // unauthenticated).
 type unifiProtocol struct{}
 
-func (unifiProtocol) Name() string       { return "unifi" }
-func (unifiProtocol) DefaultPort() int   { return 8443 }
+func (unifiProtocol) Name() string       { return ProtocolNameUniFi }
+func (unifiProtocol) DefaultPort() int   { return defaultPortUniFi }
 func (unifiProtocol) RequiresUser() bool { return false }
 
 func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -32,13 +34,13 @@ func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 8443
+		port = defaultPortUniFi
 	}
 
 	tc := tlsClientConfig(host)
 	// UniFi controllers ship a self-signed certificate; skip verification unless
 	// the operator explicitly opts into it with tls: true.
-	if normalizeTLS(cfg.TLS) != "true" {
+	if normalizeTLS(cfg.TLS) != ParamValueTrue {
 		tc.InsecureSkipVerify = true //nolint:gosec // UniFi ships a self-signed cert; operator opts into verification with tls: true
 	}
 	client := httpProbeClient(cfg.Interface, tc)
@@ -56,7 +58,7 @@ func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if resp.StatusCode != http.StatusOK {
 		return Result{}, fmt.Errorf("unifi: HTTP status %d", resp.StatusCode)
 	}
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPProbeBody))
 
 	var status struct {
 		Meta struct {
@@ -68,16 +70,16 @@ func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err := json.Unmarshal(body, &status); err != nil {
 		return Result{}, fmt.Errorf("unifi: invalid JSON response: %w", err)
 	}
-	if status.Meta.RC != "ok" {
+	if status.Meta.RC != unifiRCOK {
 		return Result{}, fmt.Errorf("unifi: status rc %q, want ok", status.Meta.RC)
 	}
 
-	extra := map[string]string{"rc": status.Meta.RC}
+	extra := map[string]string{extraRC: status.Meta.RC}
 	if status.Meta.UUID != "" {
-		extra["uuid"] = status.Meta.UUID
+		extra[extraUUID] = status.Meta.UUID
 	}
 	if v := status.Meta.ServerVersion; v != "" {
-		extra["server_version"] = v
+		extra[extraServerVer] = v
 		return Result{Version: v, Extra: extra}, nil
 	}
 	return Result{Extra: extra}, nil

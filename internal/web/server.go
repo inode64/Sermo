@@ -70,6 +70,11 @@ const (
 	apiActionRelease   = "release"
 	apiActionClear     = "clear"
 	apiActionCompact   = "compact"
+
+	queryBoolOne  = "1"
+	queryBoolTrue = "true"
+	queryBoolYes  = "yes"
+	queryBoolOn   = "on"
 )
 
 // Service is the web view of one configured service. Services with `enabled: false`
@@ -690,6 +695,12 @@ type Event struct {
 	Output string `json:"output,omitempty"`
 }
 
+const (
+	eventKindError          = "error"
+	eventKindFailedFragment = "failed"
+	eventStatusError        = "error"
+)
+
 // maxSeriesWindow bounds the history a single request may ask for (the retention).
 const maxSeriesWindow = 366 * 24 * time.Hour
 
@@ -952,7 +963,7 @@ func parseEventFilter(r *http.Request) eventFilter {
 
 func truthy(v string) bool {
 	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "1", "true", "yes", "on":
+	case queryBoolOne, queryBoolTrue, queryBoolYes, queryBoolOn:
 		return true
 	default:
 		return false
@@ -996,11 +1007,16 @@ func filterEvents(events []Event, f eventFilter, limit int) []Event {
 }
 
 func isErrorEvent(e Event) bool {
-	if e.Kind == "error" || strings.Contains(e.Kind, "failed") {
+	if e.Kind == eventKindError || strings.Contains(e.Kind, eventKindFailedFragment) {
 		return true
 	}
 	switch e.Status {
-	case "failed", "error", "blocked", "orphan_processes", "preflight_failed", "postflight_failed":
+	case string(operation.ResultFailed),
+		eventStatusError,
+		string(operation.ResultBlocked),
+		string(operation.ResultOrphanProcesses),
+		string(operation.ResultPreflightFailed),
+		string(operation.ResultPostflightFailed):
 		return true
 	default:
 		return false
@@ -1238,7 +1254,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 // ("1", "true" or "yes", case-insensitive).
 func queryBool(r *http.Request, key string) bool {
 	v := strings.ToLower(strings.TrimSpace(r.URL.Query().Get(key)))
-	return v == "1" || v == "true" || v == "yes"
+	return v == queryBoolOne || v == queryBoolTrue || v == queryBoolYes
 }
 
 func parseBeforeQuery(beforeStr string) (time.Time, error) {

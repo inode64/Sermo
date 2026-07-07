@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-func init() { Register(mountdProtocol{}, "rpc.mountd", "nfs-mountd") }
+func init() { Register(mountdProtocol{}, protocolAliasRPCMountd, protocolAliasNFSMountd) }
 
 // MOUNT program number (RFC 1813 appendix I). Versions 1–3 are served; the NULL
 // procedure (0) exists in every version.
@@ -24,8 +24,8 @@ const (
 // Reuses the RPC helpers of the rpcbind/nfs probes.
 type mountdProtocol struct{}
 
-func (mountdProtocol) Name() string       { return "mountd" }
-func (mountdProtocol) DefaultPort() int   { return 20048 }
+func (mountdProtocol) Name() string       { return ProtocolNameMountd }
+func (mountdProtocol) DefaultPort() int   { return defaultPortMountd }
 func (mountdProtocol) RequiresUser() bool { return false }
 
 func (mountdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -35,7 +35,7 @@ func (mountdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 20048
+		port = defaultPortMountd
 	}
 
 	xid := randXID32()
@@ -54,5 +54,5 @@ func (mountdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Extra: map[string]string{extraProgram: "100005", extraRPCStatus: status}}, nil
+	return Result{Extra: map[string]string{extraProgram: strconv.Itoa(mountProg), extraRPCStatus: status}}, nil
 }

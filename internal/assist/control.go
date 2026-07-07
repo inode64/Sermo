@@ -3,8 +3,10 @@ package assist
 import (
 	"fmt"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/conn"
 	"sermo/internal/dockerctl"
 	"sermo/internal/virt"
 )
@@ -34,7 +36,7 @@ func (dockerAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 
 type vmAssistant struct{}
 
-func (vmAssistant) Name() string { return "vm" }
+func (vmAssistant) Name() string { return AssistantNameVM }
 func (vmAssistant) Title() string {
 	return "Monitor and manage libvirt/QEMU virtual machines"
 }
@@ -111,7 +113,7 @@ func controlledResult(services map[string]any) (Result, error) {
 	}
 	return Result{
 		Services: services,
-		Summary:  resultSummary("service", services),
+		Summary:  resultSummary(AssistantNameService, services),
 	}, nil
 }
 
@@ -133,7 +135,7 @@ func buildDockerService(c DockerCandidate) map[string]any {
 		checks.CheckKeyContainer: c.Container,
 		checks.CheckKeyOnChange:  true,
 		checks.CheckKeyExpect: map[string]any{
-			"container.status": map[string]any{checks.CheckKeyOp: "==", checks.CheckKeyValue: "running"},
+			conn.ExtraKeyContainerStatus: map[string]any{checks.CheckKeyOp: cfgval.CompareOpEqual, checks.CheckKeyValue: conn.DockerContainerStatusRunning},
 		},
 	}
 	if c.Socket != "" {
@@ -153,7 +155,7 @@ func buildVMService(c VMCandidate) map[string]any {
 		checks.CheckKeyDomain:   c.Domain,
 		checks.CheckKeyOnChange: true,
 		checks.CheckKeyExpect: map[string]any{
-			"domain.state": map[string]any{checks.CheckKeyOp: "==", checks.CheckKeyValue: "running"},
+			conn.ExtraKeyDomainState: map[string]any{checks.CheckKeyOp: cfgval.CompareOpEqual, checks.CheckKeyValue: conn.LibvirtDomainStateRunning},
 		},
 	}
 	if c.URI != "" {
@@ -164,7 +166,7 @@ func buildVMService(c VMCandidate) map[string]any {
 		control[virt.ControlKeySocket] = c.Socket
 		check[checks.CheckKeySocket] = c.Socket
 	}
-	return controlledService(control, "vm", check)
+	return controlledService(control, AssistantNameVM, check)
 }
 
 func dockerName(c DockerCandidate) string {

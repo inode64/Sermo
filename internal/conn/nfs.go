@@ -9,7 +9,7 @@ import (
 	"strconv"
 )
 
-func init() { Register(nfsProtocol{}, "nfs-server", "nfsd") }
+func init() { Register(nfsProtocol{}, protocolAliasNFSServer, protocolAliasNFSD) }
 
 // NFS program number (RFC 1813). NFSv4 is TCP-only on 2049; v3 also serves UDP.
 const (
@@ -24,8 +24,8 @@ const (
 // the RPC helpers of the rpcbind probe.
 type nfsProtocol struct{}
 
-func (nfsProtocol) Name() string       { return "nfs" }
-func (nfsProtocol) DefaultPort() int   { return 2049 }
+func (nfsProtocol) Name() string       { return ProtocolNameNFS }
+func (nfsProtocol) DefaultPort() int   { return defaultPortNFS }
 func (nfsProtocol) RequiresUser() bool { return false }
 
 func (nfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -35,7 +35,7 @@ func (nfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 2049
+		port = defaultPortNFS
 	}
 
 	xid := randXID32()
@@ -54,7 +54,7 @@ func (nfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Extra: map[string]string{extraProgram: "100003", extraRPCStatus: status}}, nil
+	return Result{Extra: map[string]string{extraProgram: strconv.Itoa(nfsProg), extraRPCStatus: status}}, nil
 }
 
 // rpcCallTCP sends an RPC message over a TCP connection using record marking

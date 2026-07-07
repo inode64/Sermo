@@ -433,11 +433,11 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 	if requireUser && cfgval.String(fields[checks.CheckKeyUser]) == "" {
 		add("%s.user is required for a connection check", prefix)
 	}
-	// The same 1..65535 range walkScalars enforces on resolved services, so a
+	// The same TCP port range walkScalars enforces on resolved services, so a
 	// connection check behaves identically as a host watch.
 	if v, present := fields[checks.CheckKeyPort]; present {
-		if n, ok := cfgval.Int(v); !ok || n < 1 || n > 65535 {
-			add("%s.port %q must be an integer in 1..65535", prefix, cfgval.String(v))
+		if n, ok := cfgval.Int(v); !ok || !validTCPPort(n) {
+			add("%s.port %q must be an integer in %s", prefix, cfgval.String(v), cfgval.TCPPortRange())
 		}
 	}
 	if v, present := fields[checks.CheckKeyTLS]; present {
@@ -445,11 +445,7 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 		case bool:
 			// fine
 		case string:
-			switch strings.ToLower(strings.TrimSpace(t)) {
-			case "true", "false", "yes", "no", "on", "off", "required", "skip-verify",
-				// PostgreSQL sslmodes
-				"disable", "require", "prefer", "verify-ca", "verify-full":
-			default:
+			if !conn.ValidTLSValue(t) {
 				add("%s.tls %q must be a boolean, skip-verify, or a valid sslmode", prefix, t)
 			}
 		default:
@@ -662,7 +658,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		if proto, isProto := conn.Lookup(typ); isProto {
 			validateConnFields(path, entry, proto.RequiresUser(), add)
 			validateInterfaceFields(path, entry, add)
-			if proto.Name() == "dns" {
+			if proto.Name() == conn.ProtocolNameDNS {
 				if v, present := entry[checks.CheckKeyResolvconf]; present {
 					if _, ok := v.(bool); !ok {
 						add("%s.resolvconf must be a boolean", path)
@@ -678,8 +674,8 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 	validateInterfaceFields(path, entry, add)
 	switch typ {
 	case checks.CheckTypeTCP:
-		if n, ok := cfgval.Int(entry[checks.CheckKeyPort]); !ok || n < 1 || n > 65535 {
-			add("%s.port is required and must be a port in 1..65535 for a tcp check", path)
+		if n, ok := cfgval.Int(entry[checks.CheckKeyPort]); !ok || !validTCPPort(n) {
+			add("%s.port is required and must be a port in %s for a tcp check", path, cfgval.TCPPortRange())
 		}
 	case checks.CheckTypeHTTP:
 		validateHTTPFields(path, entry, add)
@@ -1123,7 +1119,7 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 }
 
 // validateCertFields validates a cert check at prefix: exactly one of host (a
-// live TLS endpoint) or path (a PEM file), optional port (1..65535), optional
+// live TLS endpoint) or path (a PEM file), optional valid TCP port, optional
 // positive expires_in_days, and boolean toggles. New certificate conditions add
 // here.
 func validateCertFields(prefix string, fields map[string]any, add addFunc) {
@@ -1136,8 +1132,8 @@ func validateCertFields(prefix string, fields map[string]any, add addFunc) {
 		add("%s.host and %s.path are mutually exclusive", prefix, prefix)
 	}
 	if v, present := fields[checks.CheckKeyPort]; present {
-		if n, ok := cfgval.Int(v); !ok || n < 1 || n > 65535 {
-			add("%s.port must be an integer in 1..65535", prefix)
+		if n, ok := cfgval.Int(v); !ok || !validTCPPort(n) {
+			add("%s.port must be an integer in %s", prefix, cfgval.TCPPortRange())
 		}
 	}
 	if v, present := fields[checks.CheckKeyServerName]; present {

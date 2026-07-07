@@ -64,9 +64,9 @@ func (c memoryCheck) Run(_ context.Context) Result {
 	return res
 }
 
-// defaultMemorySampler reads MemTotal/MemAvailable from /proc/meminfo.
+// defaultMemorySampler reads MemTotal/MemAvailable from meminfo.
 func defaultMemorySampler() (MemorySample, error) {
-	data, err := os.ReadFile("/proc/meminfo")
+	data, err := os.ReadFile(procMeminfoPath)
 	if err != nil {
 		return MemorySample{}, err
 	}

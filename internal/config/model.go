@@ -363,6 +363,10 @@ const (
 	CategoryPatterns = "patterns"
 )
 
+const catalogDirLibraries = "libs"
+
+const defaultLocalHostname = "localhost"
+
 // kindForCategory maps a catalog category to the document kind it is registered
 // under, so the subdirectory alone determines a definition's kind.
 func kindForCategory(category string) string {
@@ -386,9 +390,9 @@ func categoryFromDir(name string) string {
 		return CategoryService
 	case pathKeyApps:
 		return CategoryApp
-	case "libs":
+	case catalogDirLibraries:
 		return CategoryLibrary
-	case "patterns":
+	case CategoryPatterns:
 		return CategoryPatterns
 	default:
 		return ""

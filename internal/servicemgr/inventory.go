@@ -13,6 +13,10 @@ import (
 const (
 	openRCRunlevelPrefix        = "runlevel:"
 	openRCDynamicRunlevelPrefix = "dynamic runlevel:"
+	openRCRunlevelDefault       = "default"
+	openRCRunlevelNeededWanted  = "needed/wanted"
+	openRCRunlevelManual        = "manual"
+	openRCRunlevelHotplugged    = "hotplugged"
 	openRCStateStarted          = "started"
 	openRCStateNotStarted       = "not started"
 	openRCStateStopped          = "stopped"
@@ -48,10 +52,10 @@ func ParseSystemdActiveUnits(stdout string) []string {
 	sc := bufio.NewScanner(strings.NewReader(stdout))
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
-		if len(fields) == 0 || fields[0] == "UNIT" {
+		if len(fields) == 0 || fields[0] == systemdUnitHeader {
 			continue
 		}
-		if strings.HasSuffix(fields[0], ".service") {
+		if strings.HasSuffix(fields[0], systemdServiceSuffix) {
 			out = append(out, fields[0])
 		}
 	}
@@ -94,7 +98,7 @@ func openRCRunlevel(line string) (string, bool) {
 
 func openRCServiceRunlevel(name string) bool {
 	switch name {
-	case "default", "needed/wanted", "manual", "hotplugged":
+	case openRCRunlevelDefault, openRCRunlevelNeededWanted, openRCRunlevelManual, openRCRunlevelHotplugged:
 		return true
 	default:
 		return false

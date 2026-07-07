@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-func init() { Register(fpmProtocol{}, "php-fpm") }
+func init() { Register(fpmProtocol{}, protocolAliasPHPFPM) }
 
 // FastCGI record types and constants (FastCGI spec 1.0).
 const (
@@ -30,8 +30,8 @@ const (
 // The pool must have `ping.path = /ping` enabled. No authentication.
 type fpmProtocol struct{}
 
-func (fpmProtocol) Name() string       { return "fpm" }
-func (fpmProtocol) DefaultPort() int   { return 9000 } // FPM over TCP
+func (fpmProtocol) Name() string       { return ProtocolNameFPM }
+func (fpmProtocol) DefaultPort() int   { return defaultPortFPM } // FPM over TCP
 func (fpmProtocol) RequiresUser() bool { return false }
 
 // Probe dials the FPM socket (Unix when Socket is set, else TCP host:port) and
@@ -39,7 +39,7 @@ func (fpmProtocol) RequiresUser() bool { return false }
 // the check's status_path — pm.status_path in the pool config), it additionally
 // fetches the pool status page and exposes its metrics in Extra.
 func (fpmProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, 9000)
+	c, err := dialDeadline(ctx, cfg, defaultPortFPM)
 	if err != nil {
 		return Result{}, err
 	}
@@ -52,7 +52,7 @@ func (fpmProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	// the first after the ping). Its metrics (active/idle processes, listen
 	// queue, slow requests, …) become assertable via expect:.
 	if cfg.Query != "" {
-		if sc, derr := dialDeadline(ctx, cfg, 9000); derr == nil {
+		if sc, derr := dialDeadline(ctx, cfg, defaultPortFPM); derr == nil {
 			defer func() { _ = sc.Close() }()
 			if stdout, _, rerr := fpmRequest(sc, cfg.Query, "json"); rerr == nil {
 				mergeFPMStatus(res.Extra, stdout)
@@ -140,8 +140,8 @@ func mergeFPMStatus(extra map[string]string, stdout string) {
 	if json.Unmarshal([]byte(strings.TrimSpace(body)), &s) != nil {
 		return
 	}
-	putIfSet(extra, "pool", s.Pool)
-	putIfSet(extra, "process_manager", s.ProcessManager)
+	putIfSet(extra, extraPool, s.Pool)
+	putIfSet(extra, extraProcessManager, s.ProcessManager)
 	for k, v := range map[string]int{
 		"active_processes": s.ActiveProcesses, "idle_processes": s.IdleProcesses,
 		"total_processes": s.TotalProcesses, "max_active_processes": s.MaxActiveProcesses,

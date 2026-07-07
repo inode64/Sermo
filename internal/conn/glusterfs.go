@@ -6,12 +6,13 @@ import (
 	"strconv"
 )
 
-func init() { Register(glusterfsProtocol{}, "glusterd", "gluster") }
+func init() { Register(glusterfsProtocol{}, protocolAliasGlusterd, protocolAliasGluster) }
 
 // GlusterFS handshake RPC program (rpc/rpc-lib protocol-common.h).
 const (
 	glusterHandshakeProg = 14398633
 	glusterHandshakeVers = 2
+	glusterHandshakeName = "glusterfs-handshake"
 )
 
 // glusterfsProtocol probes a GlusterFS management daemon (glusterd) over the
@@ -26,8 +27,8 @@ const (
 // management RPC).
 type glusterfsProtocol struct{}
 
-func (glusterfsProtocol) Name() string       { return "glusterfs" }
-func (glusterfsProtocol) DefaultPort() int   { return 24007 }
+func (glusterfsProtocol) Name() string       { return ProtocolNameGlusterFS }
+func (glusterfsProtocol) DefaultPort() int   { return defaultPortGlusterFS }
 func (glusterfsProtocol) RequiresUser() bool { return false }
 
 func (glusterfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -37,7 +38,7 @@ func (glusterfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) 
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 24007
+		port = defaultPortGlusterFS
 	}
 
 	xid := randXID32()
@@ -56,5 +57,5 @@ func (glusterfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) 
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Extra: map[string]string{extraProgram: "glusterfs-handshake", extraRPCStatus: status}}, nil
+	return Result{Extra: map[string]string{extraProgram: glusterHandshakeName, extraRPCStatus: status}}, nil
 }

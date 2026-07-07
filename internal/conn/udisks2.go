@@ -22,8 +22,8 @@ const udisks2ManagerPath = "/org/freedesktop/UDisks2/Manager"
 // path, or `query` carries a full D-Bus address.
 type udisks2Protocol struct{}
 
-func (udisks2Protocol) Name() string       { return "udisks2" }
-func (udisks2Protocol) DefaultPort() int   { return 0 }
+func (udisks2Protocol) Name() string       { return ProtocolNameUDisks2 }
+func (udisks2Protocol) DefaultPort() int   { return defaultPortNone }
 func (udisks2Protocol) RequiresUser() bool { return false }
 
 func (udisks2Protocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -71,5 +71,5 @@ func udisks2Probe(ctx context.Context, addr string) (Result, error) {
 		return Result{}, err
 	}
 
-	return Result{Extra: map[string]string{"owner": owner}}, nil
+	return Result{Extra: map[string]string{extraOwner: owner}}, nil
 }

@@ -1219,20 +1219,20 @@ func formatProcess(p process.Process) string {
 
 func processDisplayField(p process.Process) (key, value string) {
 	if p.ExeOK && p.Exe != "" {
-		return "exe", p.Exe
+		return process.SelectorKeyExe, p.Exe
 	}
 	if cmd := strings.TrimSpace(strings.Join(p.Cmdline, " ")); cmd != "" {
-		return "cmd", strconv.Quote(cmd)
+		return process.SelectorKeyCmd, strconv.Quote(cmd)
 	}
 	if p.Exe != "" {
-		return "exe", p.Exe
+		return process.SelectorKeyExe, p.Exe
 	}
-	return "exe", "unknown"
+	return process.SelectorKeyExe, cliDisplayUnknown
 }
 
 func orUnknown(s string) string {
 	if s == "" {
-		return "unknown"
+		return cliDisplayUnknown
 	}
 	return s
 }
@@ -1362,7 +1362,7 @@ func statusToJSON(status servicemgr.ServiceStatus, mon monitorView, state string
 // - `sermoctl events clear [--before TIME]` clears all events or events before a given time.
 func (a App) runEvents(ctx context.Context, opts options) int {
 	args := opts.args
-	if len(args) > 0 && args[0] == "clear" {
+	if len(args) > 0 && args[0] == commandArgClear {
 		if len(args) > 1 {
 			return a.commandUsageError(commandEvents, "events clear accepts only optional --before TIME")
 		}
@@ -1448,7 +1448,7 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 // runActivity dispatches activity subcommands. Activity is the dashboard's
 // recent-events view, so clearing it uses the same daemon event-prune path.
 func (a App) runActivity(ctx context.Context, opts options) int {
-	if len(opts.args) > 0 && opts.args[0] == "clear" {
+	if len(opts.args) > 0 && opts.args[0] == commandArgClear {
 		if len(opts.args) > 1 {
 			return a.commandUsageError(commandActivity, "activity clear accepts only optional --before TIME")
 		}
@@ -1718,7 +1718,7 @@ func webAPIBase(cfg *config.Config) (string, error) {
 	}
 	addr := cfgval.String(wraw[config.WebKeyAddress])
 	if addr == "" {
-		addr = "127.0.0.1"
+		addr = defaultWebAPIAddress
 	}
 	p, ok := cfgval.Int(wraw[config.WebKeyPort])
 	if !ok || p <= 0 {
@@ -1732,7 +1732,7 @@ func webAPIBase(cfg *config.Config) (string, error) {
 // after the configured runtime dir. Keep this list restricted to current
 // supported paths; old package locations are intentionally not searched.
 func defaultReloadPidfileFallbacks() []string {
-	return []string{"/run/sermo/sermod.pid"}
+	return []string{filepath.Join(config.DefaultRuntime, daemonPIDFilename)}
 }
 
 // runReload asks the running sermod to reload its configuration (SIGHUP
@@ -1747,14 +1747,14 @@ func (a App) runReload(ctx context.Context, opts options) int {
 
 	runtimeDir := cfg.Global.RuntimeDir()
 	if runtimeDir == "" {
-		runtimeDir = "/run/sermo"
+		runtimeDir = config.DefaultRuntime
 	}
 
 	fallbacks := a.pidfileFallbacks
 	if fallbacks == nil {
 		fallbacks = defaultReloadPidfileFallbacks()
 	}
-	candidates := append([]string{filepath.Join(runtimeDir, "sermod.pid")}, fallbacks...)
+	candidates := append([]string{filepath.Join(runtimeDir, daemonPIDFilename)}, fallbacks...)
 
 	var pid int
 	for _, p := range candidates {

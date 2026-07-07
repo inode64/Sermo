@@ -11,6 +11,12 @@ import (
 	"sermo/internal/output"
 )
 
+const (
+	smartHealthUnknown = "unknown"
+	smartHealthPassed  = "PASSED"
+	smartHealthFailed  = "FAILED"
+)
+
 // smartCheck reads a drive's SMART health and attributes via `smartctl -j`. With
 // no predicate it alerts when the overall SMART health verdict is FAILED;
 // predicates on `temperature` (°C), `reallocated` (sectors), `wear` (SSD/NVMe
@@ -50,12 +56,12 @@ func (c smartCheck) Run(ctx context.Context) Result {
 		ok = levelPredsHold(c.preds, data.values)
 	}
 
-	health := "unknown"
+	health := smartHealthUnknown
 	if data.healthKnown {
 		if data.passed {
-			health = "PASSED"
+			health = smartHealthPassed
 		} else {
-			health = "FAILED"
+			health = smartHealthFailed
 		}
 	}
 	r := c.result(ok, "smart "+c.device+" health="+health, start)
@@ -104,12 +110,12 @@ func SampleSmart(ctx context.Context, runner execx.Runner, device string, timeou
 
 func smartHealthLabel(data smartData) string {
 	if !data.healthKnown {
-		return "unknown"
+		return smartHealthUnknown
 	}
 	if data.passed {
-		return "PASSED"
+		return smartHealthPassed
 	}
-	return "FAILED"
+	return smartHealthFailed
 }
 
 // smartData is the parsed subset of `smartctl -j` output.
