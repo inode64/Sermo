@@ -82,7 +82,6 @@ preflight: { binary: { type: binary, path: "`+binary+`" } }
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(`
 paths:
-  catalog: [`+catalogDir+`]
   runtime: /run/sermo
 defaults: { policy: { cooldown: 5m } }
 `), 0o644); err != nil {
@@ -92,9 +91,10 @@ defaults: { policy: { cooldown: 5m } }
 	notifier := &fakeReportNotifier{name: "ops"}
 	var stdout bytes.Buffer
 	app := App{
-		Env:    func(string) string { return "" },
-		Stdout: &stdout,
-		Stderr: &bytes.Buffer{},
+		Env:        func(string) string { return "" },
+		Stdout:     &stdout,
+		Stderr:     &bytes.Buffer{},
+		LoadConfig: testLoadConfigWithCatalog(catalogDir),
 		BuildNotifiers: func(*config.Config) (map[string]notify.Notifier, []string) {
 			return map[string]notify.Notifier{"ops": notifier}, nil
 		},

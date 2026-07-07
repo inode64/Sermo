@@ -1,9 +1,11 @@
 # Sermo source-tree development configuration.
 #
 # This file is meant for validating and inspecting the repository examples
-# without installing them under /etc/sermo:
+# without installing them under /etc/sermo. Build the local binary with the
+# repository catalog as its compiled catalog directory first:
 #
-#   sermoctl --config examples/sermo-dev.yml config validate
+#   SERMO_DATADIR=$PWD make build
+#   bin/sermoctl --config examples/sermo-dev.yml config validate
 #
 # It loads every bundled example below examples/. If you run sermod with this
 # file, those service examples become real monitor targets; adapt or pause them
@@ -22,8 +24,6 @@ engine:
 
 paths:
   # Relative entries resolve against this file's directory (examples/).
-  catalog:
-    - ../catalog
   services:
     - services
   apps:

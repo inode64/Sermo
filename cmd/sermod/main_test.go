@@ -19,7 +19,7 @@ import (
 
 func TestRunRejectsInvalidConfig(t *testing.T) {
 	dir := t.TempDir()
-	for _, sub := range []string{"enabled", "catalog"} {
+	for _, sub := range []string{"enabled"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -28,12 +28,11 @@ func TestRunRejectsInvalidConfig(t *testing.T) {
 	content := fmt.Sprintf(`engine:
   interval: notaduration
 paths:
-  catalog: [%s]
   services: [%s]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
-`, filepath.Join(dir, "catalog"), filepath.Join(dir, "enabled"))
+`, filepath.Join(dir, "enabled"))
 	if err := os.WriteFile(global, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -45,12 +44,13 @@ defaults:
 
 // TestRepoDevConfigHasMonitorTargets guards the source-tree development config.
 // It loads the example target directories directly, without rewriting paths, so
-// developers can validate the same tree with examples/sermo-dev.yml.
+// developers can validate the same tree with examples/sermo-dev.yml once the
+// binary is built with the repository catalog as its compiled catalog directory.
 func TestRepoDevConfigHasMonitorTargets(t *testing.T) {
 	root := repoRoot(t)
 	global := filepath.Join(root, "examples", "sermo-dev.yml")
 
-	cfg, err := config.Load(global)
+	cfg, err := config.Load(global, config.WithCatalogDirs(filepath.Join(root, "catalog")))
 	if err != nil {
 		t.Fatalf("Load(%q): %v", global, err)
 	}
@@ -109,27 +109,6 @@ func TestVersionSubcommandOnlyAsFirstArg(t *testing.T) {
 	}
 }
 
-func TestParseArgsCatalog(t *testing.T) {
-	// Both spellings, repeatable, accumulate in order.
-	parsed, err := parseArgs([]string{"run", "--catalog", "/a", "--catalog=/b"})
-	if err != nil {
-		t.Fatalf("parseArgs: %v", err)
-	}
-	if got := parsed.catalog; len(got) != 2 || got[0] != "/a" || got[1] != "/b" {
-		t.Fatalf("catalog = %v, want [/a /b]", got)
-	}
-
-	// Defaults to none.
-	if parsed, err := parseArgs([]string{"run"}); err != nil || len(parsed.catalog) != 0 {
-		t.Fatalf("parseArgs(run) catalog = %v, err = %v; want empty, nil", parsed.catalog, err)
-	}
-
-	// Missing value is an error.
-	if _, err := parseArgs([]string{"run", "--catalog"}); err == nil {
-		t.Fatal("parseArgs(--catalog) without value: want error, got nil")
-	}
-}
-
 func TestParseArgsConfig(t *testing.T) {
 	// Both --config and --config= forms.
 	for _, c := range []struct {
@@ -149,7 +128,7 @@ func TestParseArgsConfig(t *testing.T) {
 		}
 	}
 
-	// Missing value errors (same helper path as catalog).
+	// Missing value errors use the pflag normalization path.
 	if _, err := parseArgs([]string{"run", "--config"}); err == nil {
 		t.Fatal("parseArgs(--config) without value: want error, got nil")
 	}
@@ -285,7 +264,7 @@ func TestRunSmokeLifecycle(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	for _, sub := range []string{"enabled", "catalog"} {
+	for _, sub := range []string{"enabled"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -296,7 +275,6 @@ func TestRunSmokeLifecycle(t *testing.T) {
   backend: auto
   interval: 1s
 paths:
-  catalog: [%s]
   services: [%s]
   runtime: %s
   state: %s
@@ -310,8 +288,7 @@ watches:
     monitor: disabled
     check: { type: oom }
     then: { hook: { command: [/bin/true] } }
-`, filepath.Join(dir, "catalog"), filepath.Join(dir, "enabled"),
-		filepath.Join(dir, "runtime"), filepath.Join(dir, "state"), port)
+`, filepath.Join(dir, "enabled"), filepath.Join(dir, "runtime"), filepath.Join(dir, "state"), port)
 	if err := os.WriteFile(global, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}

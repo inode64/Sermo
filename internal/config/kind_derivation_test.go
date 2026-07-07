@@ -11,7 +11,6 @@ const kindDerivationGlobal = `
 engine:
   backend: auto
 paths:
-  catalog: [ @ROOT@/catalog ]
   services: [ @ROOT@/services ]
   apps: [ @ROOT@/apps ]
   storages: [ @ROOT@/storages ]
@@ -30,7 +29,7 @@ func TestKindDerivedFromLocation(t *testing.T) {
 		"apps/demo-app.yml": "name: demo-app\n",
 		"storages/demo.yml": "name: mount-demo\npath: /mnt/demo\nmount: {}\n",
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -60,7 +59,7 @@ func TestKindMatchingDeclarationAccepted(t *testing.T) {
 		"sermo.yml":         kindDerivationGlobal,
 		"services/demo.yml": "kind: service\nname: demo-svc\nuses: nothing\n",
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -76,7 +75,7 @@ func TestKindConflictingDeclarationRejected(t *testing.T) {
 		"sermo.yml":         kindDerivationGlobal,
 		"services/demo.yml": "kind: storage\nname: demo-svc\n",
 	})
-	_, err := Load(global)
+	_, err := loadConfig(t, global)
 	if err == nil || !strings.Contains(err.Error(), "located under a service directory but declares kind: storage") {
 		t.Fatalf("Load error = %v, want service/storage conflict error", err)
 	}
@@ -95,7 +94,7 @@ func TestCatalogServiceAndConfiguredServiceShareName(t *testing.T) {
 		// configured service ALSO named "redis" that uses the template
 		"services/redis.yml": "name: redis\nuses: redis\n",
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

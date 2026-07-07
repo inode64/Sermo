@@ -18,17 +18,21 @@ watches:
       url: "http://${host}:${port}${health_path}"
 ```
 
-El catálogo empaquetado (`catalog/`) cubre familias de servicios comunes como servidores
-web, bases de datos, runtimes de contenedores, ayudantes NFS/libvirt y servicios de
-hardware/sistema. Definen variables, preflight, procesos, watches, stop_policy,
-política de remediación y reglas, de modo que un servicio configurado normalmente solo
-establece unos pocos overrides. Los servicios de catálogo de alto impacto como bases de datos, cachés y colas pueden llevar ajustes
-de `policy` locales más estrictos que los valores por defecto globales, con cooldowns más largos,
-rate limits y backoff para evitar bucles de reinicio.
+El catálogo empaquetado cubre familias de servicios comunes como servidores web,
+bases de datos, runtimes de contenedores, ayudantes NFS/libvirt y servicios de
+hardware/sistema. En el árbol de fuentes es `catalog/`; en builds empaquetados
+Sermo lee el directorio de catálogo compilado en el binario. Los perfiles de
+catálogo definen variables, preflight, procesos, watches, stop_policy, política
+de remediación y reglas, de modo que un servicio configurado normalmente solo
+establece unos pocos overrides. Los servicios de catálogo de alto impacto como
+bases de datos, cachés y colas pueden llevar ajustes de `policy` locales más
+estrictos que los valores por defecto globales, con cooldowns más largos, rate
+limits y backoff para evitar bucles de reinicio.
 
 ## Categorías
 
-Los documentos de catálogo se agrupan por el subdirectorio en el que viven bajo una raíz de catálogo:
+Los documentos de catálogo se agrupan por el subdirectorio en el que viven bajo la
+raíz del catálogo empaquetado:
 
 ```
 catalog/
@@ -41,8 +45,8 @@ catalog/
 El directorio establece la categoría de catálogo (`service` / `app` / `library` /
 `patterns`) y, por tanto, el kind del documento (`service` / `app` / `lib` /
 `patterns`), de modo que un `kind:` de nivel superior es redundante y se omite; los ficheros colocados
-directamente en una raíz de catálogo se rechazan. Use un fichero YAML por documento de catálogo:
-un servicio, app, lib o pattern en cada fichero.
+directamente en la raíz del catálogo empaquetado se rechazan. Use un fichero YAML
+por documento de catálogo: un servicio, app, lib o pattern en cada fichero.
 `sermoctl services`, `sermoctl apps` y `sermoctl libs` listan cada categoría,
 mostrando cuáles están instalados, la versión que su comando de versión reporta, y
 si resuelven sin error (añada `all` para incluir los no instalados).

@@ -2039,7 +2039,6 @@ func TestWebBackendPropagatesCustomExecxRunnerToWatchHooks(t *testing.T) {
 	// Minimal config with a watch that has a hook. The check is a simple command that always succeeds.
 	cfgContent := `
 paths:
-  catalog: []
   services: []
   runtime: /tmp
 defaults:

@@ -78,7 +78,7 @@ notifiers:
     from: "x@y"
     to: [a@b]
 `})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func loadServiceConfig(t *testing.T, serviceYAML string) *Config {
 		"sermo.yml":        baseGlobal,
 		"services/svc.yml": serviceYAML,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}

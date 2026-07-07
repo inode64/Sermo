@@ -18,17 +18,20 @@ watches:
       url: "http://${host}:${port}${health_path}"
 ```
 
-The packaged catalog (`catalog/`) covers common service families such as web
-servers, databases, container runtimes, NFS/libvirt helpers and hardware/system
-services. They define variables, preflight, processes, watches, stop_policy,
-remediation policy and rules so a configured service usually only sets a few
-overrides. High-impact catalog services such as databases, caches and queues may carry stricter
-local `policy` settings than the global defaults, with longer cooldowns,
-rate limits and backoff to avoid restart loops.
+The packaged catalog covers common service families such as web servers,
+databases, container runtimes, NFS/libvirt helpers and hardware/system services.
+In the source tree this is `catalog/`; in packaged builds Sermo reads the catalog
+directory compiled into the binary. Catalog profiles define variables,
+preflight, processes, watches, stop_policy, remediation policy and rules so a
+configured service usually only sets a few overrides. High-impact catalog
+services such as databases, caches and queues may carry stricter local `policy`
+settings than the global defaults, with longer cooldowns, rate limits and
+backoff to avoid restart loops.
 
 ## Categories
 
-Catalog documents are grouped by the subdirectory they live in under a catalog root:
+Catalog documents are grouped by the subdirectory they live in under the
+packaged catalog root:
 
 ```
 catalog/
@@ -41,8 +44,8 @@ catalog/
 The directory sets the catalog category (`service` / `app` / `library` /
 `patterns`) and therefore the document's kind (`service` / `app` / `lib` /
 `patterns`), so a top-level `kind:` is redundant and omitted; files placed
-directly in a catalog root are rejected. Use one YAML file per catalog document:
-one service, app, lib or pattern in each file.
+directly in the packaged catalog root are rejected. Use one YAML file per catalog
+document: one service, app, lib or pattern in each file.
 `sermoctl services`, `sermoctl apps` and `sermoctl libs` list each category,
 showing which are installed, the version their version command reports, and
 whether they resolve without error (add `all` to include the not-installed).

@@ -36,11 +36,19 @@ func writeConfig(t *testing.T, files map[string]string) string {
 	return global
 }
 
+func loadConfig(t *testing.T, global string, opts ...Option) (*Config, error) {
+	t.Helper()
+	catalogDir := filepath.Join(filepath.Dir(global), "catalog")
+	if _, err := os.Stat(catalogDir); err == nil {
+		opts = append([]Option{WithCatalogDirs(catalogDir)}, opts...)
+	}
+	return Load(global, opts...)
+}
+
 const baseGlobal = `
 engine:
   backend: auto
 paths:
-  catalog: [ @ROOT@/catalog ]
   services: [ @ROOT@/services ]
   runtime: /run/sermo
 defaults:
@@ -76,7 +84,7 @@ checks:
 `,
 	})
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -111,7 +119,6 @@ func TestResolveDryRunDefaultsTargets(t *testing.T) {
 engine:
   backend: auto
 paths:
-  catalog: [ @ROOT@/catalog ]
   services: [ @ROOT@/services ]
   storages: [ @ROOT@/storages ]
   runtime: /run/sermo
@@ -142,7 +149,7 @@ capacity:
 `,
 	})
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -194,7 +201,7 @@ uses: samba
 `,
 	})
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -230,7 +237,7 @@ uses: smb
 `,
 	})
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -266,7 +273,7 @@ uses: smb
 `,
 	})
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -303,7 +310,7 @@ aliases: nope
 `,
 	})
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -342,7 +349,7 @@ variables:
 `,
 	})
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -362,7 +369,7 @@ func TestMultiInstanceServiceOverridesPerInstance(t *testing.T) {
 	// pidfile and config path. This is the supported pattern for running e.g.
 	// two MariaDB or php-fpm instances off a single catalog service — no new mechanism
 	// is needed beyond `uses` + per-instance `variables`.
-	cfg, err := Load(writeConfig(t, map[string]string{
+	cfg, err := loadConfig(t, writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/services/dbserver.yml": `
 name: dbserver
@@ -460,7 +467,7 @@ name: tomcat-main
 uses: tomcat
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -516,7 +523,7 @@ name: dbus-main
 uses: dbus
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -566,7 +573,7 @@ name: cups
 uses: cups
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -616,7 +623,7 @@ name: php-fpm
 uses: php-fpm
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -662,7 +669,7 @@ name: cups
 uses: cups
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -701,7 +708,7 @@ name: php-fpm
 uses: php-fpm
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -734,7 +741,7 @@ name: web-main
 uses: web
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -756,7 +763,7 @@ apps: [no-such-app]
 service: web
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -774,7 +781,7 @@ apps: [app, 7]
 service: web
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -807,7 +814,7 @@ name: stack-main
 uses: stack
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -851,7 +858,7 @@ name: stack-main
 uses: stack
 `,
 	})
-	cfg, err = Load(global)
+	cfg, err = loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -897,7 +904,7 @@ name: web-main
 uses: web
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -924,7 +931,7 @@ name: redis-main
 service: redis
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -960,7 +967,6 @@ uses: redis
 	if err := os.WriteFile(global, []byte(`
 engine: { backend: auto }
 paths:
-  catalog: [../catalog]
   services: [services]
   runtime: /run/sermo
 defaults:
@@ -975,15 +981,12 @@ watches:
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(catalogDir))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 	if got := cfg.Global.Services[0]; got != serviceDir {
 		t.Fatalf("Services[0] = %q, want %q", got, serviceDir)
-	}
-	if got := cfg.Global.Catalog[0]; got != catalogDir {
-		t.Fatalf("Catalog[0] = %q, want %q", got, catalogDir)
 	}
 	if len(cfg.Services) != 1 {
 		t.Fatalf("Services = %d, want 1", len(cfg.Services))
@@ -1011,7 +1014,6 @@ func TestLoadUsesConfigRelativeDefaultServiceDirsWhenServiceDirsOmitted(t *testi
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
 paths:
-  catalog: [ @ROOT@/catalog ]
   runtime: /run/sermo
 `,
 		"services/web.yml": `
@@ -1019,7 +1021,7 @@ name: web
 `,
 	})
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1037,7 +1039,6 @@ func TestLoadUsesConfigRelativeDefaultStorageDirsWhenStoragesOmitted(t *testing.
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
 paths:
-  catalog: [ @ROOT@/catalog ]
   runtime: /run/sermo
 `,
 		"storages/data.yml": `
@@ -1049,7 +1050,7 @@ mount: {}
 	root := filepath.Dir(global)
 	wantStorages := []string{filepath.Join(root, "storages")}
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1065,10 +1066,6 @@ func TestLoadPathSpecsRecursiveOptIn(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
 paths:
-  catalog:
-    - path: @ROOT@/catalog-flat
-    - path: @ROOT@/catalog-recursive
-      recursive: true
   services:
     - path: @ROOT@/services-flat
     - path: @ROOT@/services-recursive
@@ -1097,15 +1094,6 @@ paths:
 defaults:
   policy: { cooldown: 5m }
 notify: [ops]
-`,
-		"catalog-flat/services/direct-service.yml": `
-name: direct-service
-`,
-		"catalog-flat/services/deep/skipped-service.yml": `
-name: skipped-service
-`,
-		"catalog-recursive/services/deep/recursive-service.yml": `
-name: recursive-service
 `,
 		"services-flat/direct-service.yml": `
 name: direct-service
@@ -1227,19 +1215,11 @@ mount: {}
 `,
 	})
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	for _, name := range []string{"direct-service", "recursive-service"} {
-		if _, ok := cfg.CatalogServices[name]; !ok {
-			t.Fatalf("catalog service %q was not loaded", name)
-		}
-	}
-	if _, ok := cfg.CatalogServices["skipped-service"]; ok {
-		t.Fatalf("non-recursive catalog path loaded nested catalog service")
-	}
 	for _, name := range []string{"direct-service", "recursive-service"} {
 		if _, ok := cfg.Services[name]; !ok {
 			t.Fatalf("service %q was not loaded", name)
@@ -1317,7 +1297,7 @@ service: web
 	}
 
 	t.Chdir(root)
-	cfg, err := Load(filepath.Join("conf", "sermo.yml"))
+	cfg, err := loadConfig(t, filepath.Join("conf", "sermo.yml"))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1359,7 +1339,7 @@ capacity:
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1385,7 +1365,7 @@ check: { type: load, load5: { op: ">", value: 3 } }
 `,
 	})
 
-	if _, err := Load(global); err == nil || !strings.Contains(err.Error(), `watch "load" is already defined`) {
+	if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), `watch "load" is already defined`) {
 		t.Fatalf("Load() error = %v, want duplicate watch", err)
 	}
 }
@@ -1411,7 +1391,7 @@ check: { type: load, load5: { op: ">", value: 3 } }
 `,
 	})
 
-	if _, err := Load(global); err == nil || !strings.Contains(err.Error(), `watch "ping-gw" is already defined`) {
+	if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), `watch "ping-gw" is already defined`) {
 		t.Fatalf("Load() error = %v, want duplicate watch across watch dirs", err)
 	}
 }
@@ -1429,7 +1409,7 @@ check: { type: load, load5: { op: ">", value: 3 } }
 `,
 	})
 
-	if _, err := Load(global); err == nil || !strings.Contains(err.Error(), "watch documents must define name") {
+	if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), "watch documents must define name") {
 		t.Fatalf("Load() error = %v, want missing watch name", err)
 	}
 }
@@ -1458,7 +1438,7 @@ watches:
 `,
 			})
 
-			if _, err := Load(global); err == nil || !strings.Contains(err.Error(), "watch documents use top-level name/check fields, not a watches map") {
+			if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), "watch documents use top-level name/check fields, not a watches map") {
 				t.Fatalf("Load() error = %v, want grouped watches map rejection", err)
 			}
 		})
@@ -1500,7 +1480,7 @@ defaults:
 				"watches/load.yml": tc.body,
 			})
 
-			if _, err := Load(global); err == nil || !strings.Contains(err.Error(), tc.want) {
+			if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("Load() error = %v, want %q", err, tc.want)
 			}
 		})
@@ -1530,7 +1510,7 @@ mount:
   refcount: true
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1567,7 +1547,7 @@ capacity:
 `,
 	})
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1619,7 +1599,7 @@ capacity:
 `,
 	})
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1659,7 +1639,7 @@ notifiers:
 `,
 	})
 
-	if _, err := Load(global); err == nil || !strings.Contains(err.Error(), `notifier "ops" is already defined`) {
+	if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), `notifier "ops" is already defined`) {
 		t.Fatalf("Load() error = %v, want duplicate notifier", err)
 	}
 }
@@ -1683,7 +1663,7 @@ notifiers:
 `,
 	})
 
-	if _, err := Load(global); err == nil || !strings.Contains(err.Error(), "notifiers fragments must contain exactly one entry") {
+	if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), "notifiers fragments must contain exactly one entry") {
 		t.Fatalf("Load() error = %v, want one-notifier-per-file error", err)
 	}
 }
@@ -1732,7 +1712,7 @@ defaults:
 				"notifiers/ops.yml": tc.body,
 			})
 
-			if _, err := Load(global); err == nil || !strings.Contains(err.Error(), tc.want) {
+			if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("Load() error = %v, want %q", err, tc.want)
 			}
 		})
@@ -1793,7 +1773,7 @@ then: { notify: [ops] }
 `,
 	})
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1829,7 +1809,6 @@ func TestValidateGlobalErrors(t *testing.T) {
 engine:
   backend: bogus
 paths:
-  catalog: [ @ROOT@/catalog ]
   services: [ @ROOT@/services ]
   locks: /run/sermo/locks
   runtime: relative/path
@@ -1843,7 +1822,7 @@ security:
   allow_sigkill_by_default: true
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1871,7 +1850,7 @@ web: { address: 127.0.0.1, port: 9797 }
 paths: { services: [ @ROOT@/services ] }
 defaults: { policy: { cooldown: 5m } }
 `})
-	cfg, err := Load(goodGlobal)
+	cfg, err := loadConfig(t, goodGlobal)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1886,7 +1865,7 @@ web: { port: 70000, address: 5 }
 paths: { services: [ @ROOT@/services ] }
 defaults: { policy: { cooldown: 5m } }
 `})
-	cfg, err = Load(badGlobal)
+	cfg, err = loadConfig(t, badGlobal)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1903,7 +1882,7 @@ web: { address: 127.0.0.1 }
 paths: { services: [ @ROOT@/services ] }
 defaults: { policy: { cooldown: 5m } }
 `})
-	cfg, err = Load(disabledGlobal)
+	cfg, err = loadConfig(t, disabledGlobal)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1923,7 +1902,7 @@ checks:
   http: { type: http, url: "http://${missing}/", port: 99999 }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1948,7 +1927,7 @@ name: b
 clone: a
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1967,7 +1946,7 @@ variables:
   b: "x"
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2052,7 +2031,7 @@ checks:
 `,
 		"services/app-main.yml": "name: app-main\nuses: app\n",
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2085,7 +2064,7 @@ preflight:
   version: { type: command, command: ["/usr/bin/strings", "${binary}"], timeout: 10s, optional: true }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2112,7 +2091,7 @@ pidfile: run/app.pid
 `,
 		"services/app-main.yml": "name: app-main\nuses: app\n",
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2177,7 +2156,7 @@ rules:
 `,
 	})
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2253,7 +2232,7 @@ name: plain
 service: plain
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2276,7 +2255,7 @@ name: dup
 name: dup
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2296,7 +2275,7 @@ service: mysql
 name: apache/main
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2391,7 +2370,7 @@ rules:
       message: "${service} on ${host}: ${event}/${action} at ${date}"
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2431,7 +2410,7 @@ checks:
   init: { type: command, command: ["echo", "${init}"] }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2466,7 +2445,7 @@ checks:
   who: { type: command, command: ["id", "${user}"] }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2492,7 +2471,7 @@ checks:
   ping: { type: tcp, host: "${host}", port: "80" }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2514,7 +2493,7 @@ checks:
   ping: { type: tcp, host: "127.0.0.1", port: "${port}" }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2540,7 +2519,7 @@ checks:
   ping: { type: tcp, host: "127.0.0.1", port: "${port}" }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2561,7 +2540,7 @@ checks:
   ping: { type: tcp, host: "127.0.0.1", port: "${port}" }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2600,7 +2579,7 @@ policy:
     default: { cooldown: 9m }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2643,7 +2622,7 @@ pidfile:
     default: [/run/db.pid]
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2666,7 +2645,7 @@ variables:
   binary: "/opt/${os}/bin/app"
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2698,7 +2677,7 @@ preflight:
   binary: { type: binary, path: "${binary}" }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2725,7 +2704,7 @@ func TestCatalogCategoryFromDirectory(t *testing.T) {
 		"catalog/libs/glibc.yml":      "name: glibc\nbinary: /lib64/libc.so.6\n",
 		"catalog/patterns/common.yml": "name: common\n",
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2757,7 +2736,7 @@ func TestCatalogRootFilesRejected(t *testing.T) {
 		"sermo.yml":         baseGlobal,
 		"catalog/nginx.yml": "name: nginx\nservice: nginx\n",
 	})
-	_, err := Load(global)
+	_, err := loadConfig(t, global)
 	if err == nil || !strings.Contains(err.Error(), "catalog documents must live under services, apps, libs, or patterns") {
 		t.Fatalf("Load() error = %v, want catalog root rejection", err)
 	}
@@ -2775,7 +2754,7 @@ reload_on_change:
     - /lib/udev/rules.d
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2815,7 +2794,7 @@ restart_on_change:
   libraries: [glibc]
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2848,7 +2827,7 @@ restart_on_change:
   libraries: [nginx, ghost]
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2887,7 +2866,7 @@ rules:
       action: restart
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2929,7 +2908,7 @@ rules:
     then: { action: restart }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -3158,12 +3137,12 @@ checks:
 		global := filepath.Join(root, "sermo-"+backend+".yml")
 		if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: %s }
-paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, backend, filepath.Dir(catalogDir), servicesDir)), 0o644); err != nil {
+`, backend, servicesDir)), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		cfg, err := Load(global)
+		cfg, err := loadConfig(t, global, WithCatalogDirs(filepath.Dir(catalogDir)))
 		if err != nil {
 			t.Fatalf("Load(%s): %v", backend, err)
 		}
@@ -3268,13 +3247,13 @@ variables:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: openrc }
-paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, catalogDir, servicesDir)), 0o644); err != nil {
+`, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -3309,7 +3288,7 @@ func TestCatalogServiceVersionTemplateRequiresLinkedAppDiscovery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(writeConfig(t, map[string]string{
+	cfg, err := loadConfig(t, writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/services/worker.yml": fmt.Sprintf(`
 name: worker%%v
@@ -3380,16 +3359,15 @@ checks: { service: { type: service, expect: active } }
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: systemd }
 paths:
-  catalog: [ %s ]
   services: [ %s ]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
-`, catalogDir, servicesDir)), 0o644); err != nil {
+`, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -3474,16 +3452,15 @@ checks: { service: { type: service, expect: active } }
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
 paths:
-  catalog: [ %s ]
   services: [ %s ]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
-`, catalogDir, servicesDir)), 0o644); err != nil {
+`, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global, WithServiceUnits("systemd", []string{"postgresql-16.service"}))
+	cfg, err := loadConfig(t, global, WithServiceUnits("systemd", []string{"postgresql-16.service"}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -3573,13 +3550,13 @@ checks:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, catalogDir, servicesDir)), 0o644); err != nil {
+`, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -3652,13 +3629,13 @@ preflight:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, catalogDir, servicesDir)), 0o644); err != nil {
+`, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -3775,13 +3752,13 @@ variables:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, catalogDir, servicesDir)), 0o644); err != nil {
+`, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -3888,13 +3865,13 @@ preflight:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, catalogDir, servicesDir)), 0o644); err != nil {
+`, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -3949,7 +3926,7 @@ defaults: { policy: { cooldown: 5m } }
 }
 
 func TestCompositeVersionTemplateCurrentFromMaterializesActiveSlot(t *testing.T) {
-	cfg, err := Load(writeConfig(t, map[string]string{
+	cfg, err := loadConfig(t, writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/java.yml": `
 name: java-%i-%v
@@ -3988,7 +3965,7 @@ func TestVersionTemplateUnversionedRequiresBinary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(writeConfig(t, map[string]string{
+	cfg, err := loadConfig(t, writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/python%n.yml": fmt.Sprintf(`
 name: python%%n
@@ -4020,7 +3997,7 @@ func TestVersionTemplateUnversionedCanBeDisabled(t *testing.T) {
 		}
 	}
 
-	cfg, err := Load(writeConfig(t, map[string]string{
+	cfg, err := loadConfig(t, writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/php.yml": fmt.Sprintf(`
 name: php%%v
@@ -4052,7 +4029,7 @@ func TestVersionTemplateUnversionedCanOverrideMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(writeConfig(t, map[string]string{
+	cfg, err := loadConfig(t, writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/php.yml": fmt.Sprintf(`
 name: php%%v
@@ -4091,7 +4068,7 @@ func TestVersionTemplateSkipsExistingCanonicalName(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(writeConfig(t, map[string]string{
+	cfg, err := loadConfig(t, writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/python%n.yml": fmt.Sprintf(`
 name: python%%n
@@ -4161,13 +4138,13 @@ variables:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: openrc }
-paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, catalogDir, servicesDir)), 0o644); err != nil {
+`, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global, WithServiceUnits("openrc", []string{"openvpn.tun1", "openvpn.client-a"}))
+	cfg, err := loadConfig(t, global, WithServiceUnits("openrc", []string{"openvpn.tun1", "openvpn.client-a"}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -4267,16 +4244,15 @@ apps: ["php-fpm-${version}"]
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
 paths:
-  catalog: [ %s ]
   services: [ %s ]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
-`, catalogDir, servicesDir)), 0o644); err != nil {
+`, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -4319,7 +4295,7 @@ name: site
 uses: php-fpm-8.3
 service: php-fpm
 `)
-	cfg, err = Load(global)
+	cfg, err = loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() reload error = %v", err)
 	}
@@ -4366,7 +4342,7 @@ checks:
   svc: { type: service, expect: active }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -4396,7 +4372,7 @@ checks:
   svc: { type: service, expect: active }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -4443,16 +4419,15 @@ checks: { service: { type: service, expect: active } }
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: systemd }
 paths:
-  catalog: [ %s ]
   services: [ %s ]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
-`, catalogDir, servicesDir)), 0o644); err != nil {
+`, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global, WithServiceUnits("systemd", []string{
+	cfg, err := loadConfig(t, global, WithServiceUnits("systemd", []string{
 		"ceph-osd@0.service",
 		"ceph-osd@1.service",
 		"ceph-osd@3.service",
@@ -4525,15 +4500,14 @@ checks: { service: { type: service, expect: active } }
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: systemd }
 paths:
-  catalog: [ %s ]
   services: [ %s ]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
-`, catalogDir, servicesDir)), 0o644); err != nil {
+`, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global, WithServiceUnits("systemd", nil))
+	cfg, err := loadConfig(t, global, WithServiceUnits("systemd", nil))
 	if err != nil {
 		t.Fatalf("Load() with no OSDs must not error, got %v", err)
 	}
@@ -4570,7 +4544,7 @@ watches:
 `,
 		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -4606,7 +4580,7 @@ func TestExpandAnalyzeUnknownSetAndBadSilence(t *testing.T) {
 			"catalog/services/svc.yml":    "name: svc\nvariables:\n  binary: /bin/true\nwatches:\n  config-files:\n    check:\n      type: command\n      command: [\"${binary}\"]\n      analyze:\n" + analyze,
 			"services/svc-main.yml":       "name: svc-main\nuses: svc\n",
 		})
-		cfg, err := Load(global)
+		cfg, err := loadConfig(t, global)
 		if err != nil {
 			t.Fatalf("Load() error = %v", err)
 		}
@@ -4641,7 +4615,7 @@ checks:
 `,
 		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -4680,7 +4654,7 @@ checks:
 `,
 		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -4712,7 +4686,7 @@ checks:
 `,
 		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -4751,7 +4725,7 @@ checks:
 `,
 		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -4799,7 +4773,7 @@ checks:
 `,
 		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -4832,7 +4806,7 @@ checks:
 `,
 		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -4871,7 +4845,7 @@ checks:
 `,
 		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -4900,7 +4874,7 @@ checks:
 `,
 		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -4939,7 +4913,7 @@ checks:
 `,
 		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -4964,7 +4938,7 @@ checks:
 `,
 		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -5043,7 +5017,6 @@ func TestGlobalCustomVariables(t *testing.T) {
 		"sermo.yml": `
 engine: { backend: auto }
 paths:
-  catalog: [ @ROOT@/catalog ]
   services: [ @ROOT@/services ]
   runtime: /run/sermo
 defaults:
@@ -5062,7 +5035,7 @@ checks:
 		// b overrides the custom host with its own variable.
 		"services/b.yml": "name: b\nuses: svc\nvariables: { host: 127.0.0.1 }\n",
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -5092,7 +5065,6 @@ func TestResolveWatchesExpandsCustomVars(t *testing.T) {
 		"sermo.yml": `
 engine: { backend: auto }
 paths:
-  catalog: [ @ROOT@/catalog ]
   services: [ @ROOT@/services ]
   runtime: /run/sermo
 defaults:
@@ -5102,7 +5074,7 @@ watches:
   w: { check: { type: file_exists, path: "${cdir}/flag" } }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -5140,7 +5112,7 @@ rules:
     then: { action: alert, message: "glibc changed" }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -5171,7 +5143,7 @@ rules:
     then: { action: alert, message: "x" }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -5221,13 +5193,13 @@ checks:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, catalogDir, servicesDir)), 0o644); err != nil {
+`, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -5274,13 +5246,13 @@ checks:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: systemd }
-paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, catalogDir, servicesDir)), 0o644); err != nil {
+`, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global, WithServiceUnits("systemd", []string{
+	cfg, err := loadConfig(t, global, WithServiceUnits("systemd", []string{
 		"tomcat-8.5-main.service",
 		"tomcat-9-guacamole.service",
 		"tomcat-8.5.service",
@@ -5396,13 +5368,13 @@ checks:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, filepath.Join(root, "catalog"), servicesDir)), 0o644); err != nil {
+`, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -5512,11 +5484,11 @@ checks:
 	global := filepath.Join(root, "sermo.yml")
 	write(global, fmt.Sprintf(`
 engine: { backend: systemd }
-paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, filepath.Join(root, "catalog"), servicesDir))
+`, servicesDir))
 
-	cfg, err := Load(global, WithServiceUnits("systemd", []string{"nut-driver@rack.snmp.service"}))
+	cfg, err := loadConfig(t, global, WithServiceUnits("systemd", []string{"nut-driver@rack.snmp.service"}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -5605,13 +5577,13 @@ checks:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, filepath.Join(root, "catalog"), servicesDir)), 0o644); err != nil {
+`, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -5689,13 +5661,13 @@ checks:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, filepath.Join(root, "catalog"), servicesDir)), 0o644); err != nil {
+`, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}

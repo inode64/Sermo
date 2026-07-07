@@ -33,6 +33,10 @@ func repoRoot(t *testing.T) string {
 	return root
 }
 
+func repoCatalogDir(root string) string {
+	return filepath.Join(root, "catalog")
+}
+
 func readYAMLMap(t *testing.T, path string) map[string]any {
 	t.Helper()
 	data, err := os.ReadFile(path) //nolint:gosec // tests read YAML artifacts under the repository root.
@@ -153,12 +157,11 @@ func TestCatalogServicesNoArtifactCheckCollision(t *testing.T) {
 // be materialized off-host, so only the concrete service names are exercised.
 func TestRealCatalogAllServicesValidate(t *testing.T) {
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
 
 	writeGlobal := func(dir, enabled, backend string) string {
 		global := filepath.Join(dir, "sermo.yml")
 		body := "engine: { backend: " + backend + " }\n" +
-			"paths:\n  catalog: [" + catalogDir + "]\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
+			"paths:\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n"
 		if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 			t.Fatal(err)
@@ -175,7 +178,7 @@ func TestRealCatalogAllServicesValidate(t *testing.T) {
 			if err := os.MkdirAll(emptyEnabled, 0o755); err != nil {
 				t.Fatal(err)
 			}
-			probe, err := Load(writeGlobal(probeDir, emptyEnabled, backend))
+			probe, err := Load(writeGlobal(probeDir, emptyEnabled, backend), WithCatalogDirs(repoCatalogDir(root)))
 			if err != nil {
 				t.Fatalf("Load (probe): %v", err)
 			}
@@ -200,7 +203,7 @@ func TestRealCatalogAllServicesValidate(t *testing.T) {
 				t.Fatal("no instantiable catalog services found")
 			}
 
-			cfg, err := Load(writeGlobal(dir, enabled, backend))
+			cfg, err := Load(writeGlobal(dir, enabled, backend), WithCatalogDirs(repoCatalogDir(root)))
 			if err != nil {
 				t.Fatalf("Load: %v", err)
 			}
@@ -215,13 +218,13 @@ func TestApacheCatalogRestartsOnHotWorkerThread(t *testing.T) {
 	root := repoRoot(t)
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -271,12 +274,12 @@ func TestAllCatalogServicesDesugarInPreview(t *testing.T) {
 	root := repoRoot(t)
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -304,13 +307,13 @@ func TestContainerdCatalogRestartsOnVersionChange(t *testing.T) {
 	root := repoRoot(t)
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -348,7 +351,7 @@ func TestShippedGlobalConfigValidates(t *testing.T) {
 	root := repoRoot(t)
 
 	cfg, err := Load(filepath.Join(root, "examples", "sermo.yml"),
-		WithCatalogDirs(filepath.Join(root, "catalog")),
+		WithCatalogDirs(repoCatalogDir(root)),
 		withPathDirs("services"),
 		withPathDirs("apps"),
 		withPathDirs("notifiers"),
@@ -369,7 +372,7 @@ func TestShippedGlobalConfigValidates(t *testing.T) {
 
 func TestRepoDevConfigLoadsExampleTree(t *testing.T) {
 	root := repoRoot(t)
-	cfg, err := Load(filepath.Join(root, "examples", "sermo-dev.yml"))
+	cfg, err := Load(filepath.Join(root, "examples", "sermo-dev.yml"), WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -508,12 +511,12 @@ func TestShippedServiceConfigExamplesValidate(t *testing.T) {
 
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: [" + servicesDir + "]\n  runtime: /run/sermo\n" +
+	body := "paths:\n  services: [" + servicesDir + "]\n  runtime: /run/sermo\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -578,7 +581,7 @@ func TestGentooCatalogPidfileOverrides(t *testing.T) {
 	}
 	global := filepath.Join(dir, "sermo.yml")
 	body := "engine: { backend: openrc }\n" +
-		"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
+		"paths:\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -590,7 +593,7 @@ func TestGentooCatalogPidfileOverrides(t *testing.T) {
 		}
 	}
 
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -659,12 +662,12 @@ func TestCatalogUnifiUsesMongodAppBinary(t *testing.T) {
 
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -696,12 +699,12 @@ func TestSMBCatalogUsesPerRolePidfiles(t *testing.T) {
 	root := repoRoot(t)
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -738,15 +741,14 @@ func TestCatalogServicesUseCanonicalServiceNames(t *testing.T) {
 	defer func() { detectedOS = old }()
 
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -808,15 +810,14 @@ func TestCatalogServicesUseCanonicalServiceNames(t *testing.T) {
 
 func TestCatalogAppsDeclareVersionSource(t *testing.T) {
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -844,15 +845,14 @@ func TestCatalogAppsDeclareVersionSource(t *testing.T) {
 
 func TestCatalogAppsDeclareHealthOrVersionSource(t *testing.T) {
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -878,15 +878,14 @@ func TestCatalogAppsDeclareHealthOrVersionSource(t *testing.T) {
 
 func TestCatalogOptionalAppVersionsRequireHealth(t *testing.T) {
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -904,15 +903,14 @@ func TestCatalogOptionalAppVersionsRequireHealth(t *testing.T) {
 
 func TestCatalogAppsUseSharedVersionProviders(t *testing.T) {
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -948,15 +946,14 @@ func TestCatalogAppsUseSharedVersionProviders(t *testing.T) {
 
 func TestCatalogCupsUsesSingleCupsdApp(t *testing.T) {
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -995,15 +992,14 @@ func TestCatalogCupsUsesSingleCupsdApp(t *testing.T) {
 
 func TestCatalogConfigPreflightsUseResolvedAppTools(t *testing.T) {
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -1174,15 +1170,14 @@ func TestCatalogRAIDChecksAlertOnDegradedArrays(t *testing.T) {
 
 func TestRequestedHostProfilesExist(t *testing.T) {
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -1362,15 +1357,14 @@ func TestCatalogNetworkManagerStatusIsAuxiliary(t *testing.T) {
 
 func TestCatalogServiceProcessChecksUseLinkedAppBinaries(t *testing.T) {
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -1541,15 +1535,14 @@ func TestCatalogDaemonProcessChecksAreAuxiliary(t *testing.T) {
 
 func TestCatalogForegroundPidfilesAreOptional(t *testing.T) {
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -1567,15 +1560,14 @@ func TestCatalogForegroundPidfilesAreOptional(t *testing.T) {
 
 func TestCatalogRRDCachedUsesUnixSocketHealth(t *testing.T) {
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -1648,15 +1640,14 @@ func TestNoPostflightSectionRemains(t *testing.T) {
 
 func TestCatalogVirtlogdUsesSocketHealth(t *testing.T) {
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -1680,15 +1671,14 @@ func TestCatalogVirtlogdUsesSocketHealth(t *testing.T) {
 
 func TestCatalogServicesUseAppVariablesForBinaryRefs(t *testing.T) {
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -1792,15 +1782,14 @@ func TestCatalogServicesUseAppVariablesForBinaryRefs(t *testing.T) {
 
 func TestDatabaseCatalogServicesBlockRestartDuringBackup(t *testing.T) {
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -1885,12 +1874,12 @@ func TestUbuntuCatalogOverrides(t *testing.T) {
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
 	body := "engine: { backend: systemd }\n" +
-		"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: []\n  runtime: /run/sermo\n" +
+		"paths:\n  services: []\n  runtime: /run/sermo\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -2113,14 +2102,13 @@ func TestRedisCatalogAlertsOnPersistenceFailure(t *testing.T) {
 
 func TestWALGBackupAppsResolveRequiredBinaryPreflight(t *testing.T) {
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n"
+	body := "paths:\n  services: []\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -2188,15 +2176,14 @@ func TestWALGBackupAppsResolveRequiredBinaryPreflight(t *testing.T) {
 
 func TestCatalogServicesReuseLinkedAppBinaries(t *testing.T) {
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
+	body := "paths:\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -2245,7 +2232,7 @@ func TestCatalogServicesDoNotOwnRuntimeResourcePreflight(t *testing.T) {
 
 func TestCatalogVersionedServicesHaveDiscoverySource(t *testing.T) {
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
+	catalogDir := repoCatalogDir(root)
 
 	apps := map[string]map[string]any{}
 	appFiles, err := yamlFiles(filepath.Join(catalogDir, "apps"))
@@ -2318,7 +2305,7 @@ func TestCatalogVersionedServicesHaveDiscoverySource(t *testing.T) {
 
 func TestCatalogCommandEntriesDoNotUseArgumentKeys(t *testing.T) {
 	root := repoRoot(t)
-	catalogDir := filepath.Join(root, "catalog")
+	catalogDir := repoCatalogDir(root)
 	err := filepath.WalkDir(catalogDir, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err

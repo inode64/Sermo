@@ -13,7 +13,7 @@ func validateService(t *testing.T, serviceYAML string) []Issue {
 		"sermo.yml":        baseGlobal,
 		"services/svc.yml": serviceYAML,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -40,7 +40,7 @@ paths:
 defaults:
   policy: { cooldown: 5m }
 `})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ paths:
 defaults:
   policy: { cooldown: 5m }
 `})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ paths:
 defaults:
   policy: { cooldown: 5m }
 `})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ paths:
 defaults:
   policy: { cooldown: 5m }
 `})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +173,7 @@ paths:
 defaults:
   policy: { cooldown: 5m }
 `})
-			cfg, err := Load(global)
+			cfg, err := loadConfig(t, global)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1162,7 +1162,7 @@ version_from: provider
 service: not-app
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1227,7 +1227,7 @@ version_match: { contains: Demo }
 service: not-app
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1415,7 +1415,7 @@ preflight:
   binary: { type: binary, path: "${binary}" }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1442,7 +1442,7 @@ checks:
   service: { type: service, expect: active }
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}

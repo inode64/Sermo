@@ -106,7 +106,6 @@ web:
   address: HOST
   port: PORT
 paths:
-  catalog: [CATALOG]
 `)
 	app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
 	opts := options{config: global}
@@ -133,7 +132,6 @@ func daemonAPITestConfig(t *testing.T, serverURL, template string) (root, global
 	content = strings.ReplaceAll(content, "PORT", strconv.Itoa(port))
 	content = strings.ReplaceAll(content, "SERVICES", filepath.Join(root, "services"))
 	content = strings.ReplaceAll(content, "WATCHES", filepath.Join(root, "watches"))
-	content = strings.ReplaceAll(content, "CATALOG", filepath.Join(root, "catalog"))
 	global = filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, content)
 	cfg, err = config.Load(global)

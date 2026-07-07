@@ -211,8 +211,10 @@ named entry. The only exception is a clearly labeled reference bundle such as
 in one place.
 
 For source-tree development and validation without installing under `/etc/sermo`,
-use `examples/sermo-dev.yml` (relative `paths.*` into the bundled `examples/`
-tree). `examples/sermo.yml` intentionally targets installed locations.
+build with `SERMO_DATADIR=$PWD make build`, then use `examples/sermo-dev.yml`
+(relative `paths.*` into the bundled `examples/` tree). The packaged catalog is
+not a `paths.*` setting; it comes from the catalog directory compiled into the
+binary. `examples/sermo.yml` intentionally targets installed locations.
 
 ## Catalog init and reload fallback verification
 

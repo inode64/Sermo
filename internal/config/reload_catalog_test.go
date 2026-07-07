@@ -28,7 +28,7 @@ func TestRealCatalogReloadServicesResolve(t *testing.T) {
 		t.Helper()
 		global := filepath.Join(dir, "sermo.yml")
 		body := "engine: { backend: " + backend + " }\n" +
-			"paths:\n  catalog: [" + catalogDir + "]\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
+			"paths:\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n"
 		if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 			t.Fatal(err)
@@ -43,7 +43,7 @@ func TestRealCatalogReloadServicesResolve(t *testing.T) {
 			if err := os.MkdirAll(probeEnabled, 0o755); err != nil {
 				t.Fatal(err)
 			}
-			probe, err := Load(writeGlobal(probeDir, probeEnabled, backend))
+			probe, err := Load(writeGlobal(probeDir, probeEnabled, backend), WithCatalogDirs(catalogDir))
 			if err != nil {
 				t.Fatalf("Load (probe): %v", err)
 			}
@@ -64,7 +64,7 @@ func TestRealCatalogReloadServicesResolve(t *testing.T) {
 				}
 			}
 
-			cfg, err := Load(writeGlobal(dir, enabled, backend))
+			cfg, err := Load(writeGlobal(dir, enabled, backend), WithCatalogDirs(catalogDir))
 			if err != nil {
 				t.Fatalf("Load: %v", err)
 			}

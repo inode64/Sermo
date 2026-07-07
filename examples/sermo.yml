@@ -3,9 +3,9 @@
 # Engine-wide settings are not merged into individual targets. Only the
 # target-safe parts of `defaults` are: dry_run for services, storages and
 # watches; stop_policy, policy and rule_window for services.
-# For source-tree development and local validation, use examples/sermo-dev.yml;
-# this file intentionally points at installed /etc/sermo and /usr/share/sermo
-# locations.
+# For source-tree development and local validation, build with SERMO_DATADIR=$PWD
+# and use examples/sermo-dev.yml; this file intentionally points at installed
+# /etc/sermo and /usr/share/sermo locations.
 
 engine:
   backend: auto
@@ -39,12 +39,6 @@ engine:
 paths:
   # Directory entries are non-recursive by default. Use
   # `{ path: /some/dir, recursive: true }` for nested *.yml files.
-  # Catalog documents must live under immediate services/apps/libs/patterns
-  # category directories.
-  catalog:
-    - /usr/share/sermo/catalog
-    - /etc/sermo/catalog-available
-
   services:
     - /etc/sermo/services
   apps:

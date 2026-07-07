@@ -602,14 +602,12 @@ type Global struct {
 	Path          string
 	Raw           map[string]any
 	Defaults      map[string]any
-	Catalog       []string
 	Services      []string
 	Apps          []string
 	Notifiers     []string
 	Storages      []string
 	Networks      []string
 	Watches       []string
-	CatalogPaths  []PathSpec
 	ServicePaths  []PathSpec
 	AppPaths      []PathSpec
 	NotifierPaths []PathSpec

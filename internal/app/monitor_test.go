@@ -18,7 +18,7 @@ import (
 
 func TestMonitorReloadPreservesWorkerState(t *testing.T) {
 	dir := t.TempDir()
-	for _, sub := range []string{"catalog", "services", "run"} {
+	for _, sub := range []string{"services", "run"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -28,12 +28,11 @@ func TestMonitorReloadPreservesWorkerState(t *testing.T) {
 	baseCfg := fmt.Sprintf(`engine:
   interval: 100ms
 paths:
-  catalog: [%[1]q]
-  services: [%[2]q]
-  runtime: %[3]q
+  services: [%[1]q]
+  runtime: %[2]q
 defaults:
   policy: { cooldown: 1m }
-`, filepath.Join(dir, "catalog"), enabled, filepath.Join(dir, "run"))
+`, enabled, filepath.Join(dir, "run"))
 
 	global := filepath.Join(dir, "sermo.yml")
 	service := func(name string) string {
@@ -131,12 +130,11 @@ func TestMonitorReloadRejectsInvalidConfig(t *testing.T) {
 	valid := fmt.Sprintf(`engine:
   interval: 100ms
 paths:
-  catalog: [%q]
   services: [%q]
   runtime: %q
 defaults:
   policy: { cooldown: 1m }
-`, filepath.Join(dir, "catalog"), enabled, filepath.Join(dir, "run"))
+`, enabled, filepath.Join(dir, "run"))
 	if err := os.WriteFile(global, []byte(valid), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -174,12 +172,11 @@ checks:
 	invalid := fmt.Sprintf(`engine:
   interval: notaduration
 paths:
-  catalog: [%q]
   services: [%q]
   runtime: %q
 defaults:
   policy: { cooldown: 1m }
-`, filepath.Join(dir, "catalog"), enabled, filepath.Join(dir, "run"))
+`, enabled, filepath.Join(dir, "run"))
 	if err := os.WriteFile(global, []byte(invalid), 0o644); err != nil {
 		t.Fatal(err)
 	}
