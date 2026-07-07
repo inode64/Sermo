@@ -44,11 +44,12 @@ unverified listener.
 git status --short --branch
 ```
 
-2. Build temporary binaries:
+2. Choose the absolute remote run directory before building, then build temporary
+   binaries with the catalog directory compiled to that same remote path:
 
 ```sh
-GOAMD64=v1 go build -o /tmp/sermod-remote-test ./cmd/sermod
-GOAMD64=v1 go build -o /tmp/sermoctl-remote-test ./cmd/sermoctl
+REMOTE_DIR=/tmp/sermo-remote-test-$(date +%Y%m%d%H%M%S)-$$
+GOAMD64=v1 SERMO_DATADIR="$REMOTE_DIR" make build
 ```
 
 3. Package the current catalog if the remote test needs catalog discovery:
@@ -116,13 +117,14 @@ When `9797` is already listening:
 
 For each host:
 
-1. Create a unique remote directory under `/tmp`.
-2. Copy `sermod`, `sermoctl`, and optional catalog archive into that directory.
+1. Create the `REMOTE_DIR` chosen during local preparation under `/tmp` on that
+   host.
+2. Copy `bin/sermod`, `bin/sermoctl`, and optional catalog archive into that
+   directory.
 3. Write `config.yml` in that directory. Minimal shape for catalog/app checks:
 
 ```yaml
 paths:
-  catalog: [/tmp/sermo-remote-test-XXX/catalog]
   runtime: /tmp/sermo-remote-test-XXX/run
 
 defaults:
@@ -133,7 +135,11 @@ web:
   port: 9797
 ```
 
-Use the real remote directory instead of `XXX`. If a wizard-generated config is used, rewrite only the temporary copy and keep `web.address: 0.0.0.0`.
+Use the real remote directory instead of `XXX`. Do not add a catalog path to the
+config; for catalog/app checks, unpack the catalog archive to
+`/tmp/sermo-remote-test-XXX/catalog` and use binaries built with
+`SERMO_DATADIR=/tmp/sermo-remote-test-XXX`. If a wizard-generated config is
+used, rewrite only the temporary copy and keep `web.address: 0.0.0.0`.
 
 Use Sermo wizards and tools for configuration generation:
 

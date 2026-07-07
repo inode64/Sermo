@@ -36,14 +36,14 @@ func TestMonitorUnmonitorCommand(t *testing.T) {
 	write(filepath.Join(servicesDir, "web.yml"), "name: web\nuses: nginx\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], services: [ %s ], runtime: %s, state: %s }
+paths: { services: [ %s ], runtime: %s, state: %s }
 defaults: { policy: { cooldown: 5m } }
-`, catalogDir, servicesDir, runDir, stateDir))
+`, servicesDir, runDir, stateDir))
 	global := filepath.Join(root, "sermo.yml")
 
 	run := func(args ...string) int {
 		var out bytes.Buffer
-		app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}}
+		app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}, LoadConfig: testLoadConfigWithCatalog(catalogDir)}
 		return app.Run(context.Background(), append([]string{"--config", global}, args...))
 	}
 
@@ -99,7 +99,7 @@ func TestWatchMonitorUnmonitorCommand(t *testing.T) {
 	}
 	if err := os.WriteFile(filepath.Join(root, "sermo.yml"), []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [], services: [ %s ], runtime: %s, state: %s }
+paths: { services: [ %s ], runtime: %s, state: %s }
 defaults: { policy: { cooldown: 5m } }
 `, servicesDir, runDir, stateDir)), 0o644); err != nil {
 		t.Fatal(err)
@@ -263,9 +263,9 @@ func monitorTestConfig(t *testing.T) (root, global string) {
 	write(filepath.Join(servicesDir, "web.yml"), "name: web\nuses: nginx\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], services: [ %s ], runtime: %s, state: %s }
+paths: { services: [ %s ], runtime: %s, state: %s }
 defaults: { policy: { cooldown: 5m } }
-`, catalogDir, servicesDir, runDir, stateDir))
+`, servicesDir, runDir, stateDir))
 	return root, filepath.Join(root, "sermo.yml")
 }
 
@@ -282,9 +282,10 @@ func monitorTestApp(root string, stdout *bytes.Buffer) App {
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return fakeManager{status: status}, nil
 		},
-		Env:    func(string) string { return "" },
-		Stdout: stdout,
-		Stderr: &bytes.Buffer{},
+		Env:        func(string) string { return "" },
+		Stdout:     stdout,
+		Stderr:     &bytes.Buffer{},
+		LoadConfig: testLoadConfigWithCatalog(filepath.Join(root, "catalog")),
 	}
 }
 

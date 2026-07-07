@@ -26,7 +26,7 @@ name: svc
 service: svc
 `,
 	})
-	cfg, err := Load(global)
+	cfg, err := loadConfig(t, global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}

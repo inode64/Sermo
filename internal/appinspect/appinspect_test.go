@@ -128,12 +128,12 @@ checks:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: systemd }
-paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, catalogDir, servicesDir)), 0o644); err != nil {
+`, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(global)
+	cfg, err := config.Load(global, config.WithCatalogDirs(catalogDir))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -193,12 +193,12 @@ preflight:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, catalogDir, servicesDir)), 0o644); err != nil {
+`, servicesDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := config.Load(global)
+	cfg, err := config.Load(global, config.WithCatalogDirs(catalogDir))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

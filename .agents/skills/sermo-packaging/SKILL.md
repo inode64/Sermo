@@ -69,15 +69,16 @@ packaging/debian/
 variables and `DESTDIR` staging, composed of granular targets: `install-bin`
 (sermoctl→`$(bindir)`, sermod→`$(sbindir)`), `install-catalog` (recursive,
 preserving `services/apps/libs/patterns`), `install-config` (sample `sermo.yml`,
-never overwriting an existing one; creates catalog-available, services, apps,
-notifiers, storages, networks and watches config directories),
+never overwriting an existing one; creates services, apps, notifiers, storages,
+networks and watches config directories),
 `install-templates`, `install-tmpfiles`,
 `install-systemd` and `install-openrc`. The unit/init templates carry default `/usr/bin/sermod` and
 `/etc/sermo` paths that install rewrites to the chosen `$(sbindir)` /
-`$(SERMO_CONFDIR)`; the sample config's `/usr/share/sermo` and `/etc/sermo` paths
-are rewritten too, so the install is relocatable. Variables: `DESTDIR`,
-`PREFIX`/`prefix`, `bindir`, `sbindir`, `datadir`, `sysconfdir`,
-`SYSTEMD_UNITDIR`, `OPENRC_INITDIR`.
+`$(SERMO_CONFDIR)`. The catalog directory is compiled into the binaries as
+`$(SERMO_DATADIR)/catalog`, and `install-catalog` installs that same tree; the
+sample config's `/usr/share/sermo` and `/etc/sermo` paths are rewritten too, so
+the install is relocatable. Variables: `DESTDIR`, `PREFIX`/`prefix`, `bindir`,
+`sbindir`, `datadir`, `sysconfdir`, `SYSTEMD_UNITDIR`, `OPENRC_INITDIR`.
 
 ## Tests/checks
 

@@ -39,7 +39,6 @@ var rejectedSecurityToggles = []string{
 
 var validGlobalPathKeys = set(
 	pathKeyApps,
-	pathKeyCatalog,
 	pathKeyNetworks,
 	pathKeyNotifiers,
 	pathKeyRuntime,
@@ -152,7 +151,6 @@ func validateGlobal(cfg *Config) []Issue {
 		}
 		pathLists := map[string][]string{
 			pathKeyApps:      cfg.Global.Apps,
-			pathKeyCatalog:   cfg.Global.Catalog,
 			pathKeyNetworks:  cfg.Global.Networks,
 			pathKeyNotifiers: cfg.Global.Notifiers,
 			pathKeyServices:  cfg.Global.Services,

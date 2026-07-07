@@ -41,7 +41,6 @@ const (
 const (
 	commandRun     = "run"
 	commandVersion = "version"
-	flagCatalog    = "catalog"
 	flagConfig     = "config"
 	flagVerbose    = "verbose"
 	flagVersion    = "--version"
@@ -77,7 +76,7 @@ func run(args []string) int {
 	parsed, err := parseArgs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "usage error: %v\n", err)
-		fmt.Fprintln(os.Stderr, "usage: sermod run [--config /etc/sermo/sermo.yml] [--catalog DIR ...] [--verbose|-v]")
+		fmt.Fprintln(os.Stderr, "usage: sermod run [--config /etc/sermo/sermo.yml] [--verbose|-v]")
 		fmt.Fprintln(os.Stderr, "       sermod version")
 		return exitUsage
 	}
@@ -106,12 +105,7 @@ func run(args []string) int {
 			"affected", "service control, signalling other users' processes, icmp checks, per-process IO, cross-user /proc inspection")
 	}
 
-	var loadOpts []config.Option
-	if len(parsed.catalog) > 0 {
-		loadOpts = append(loadOpts, config.WithCatalogDirs(parsed.catalog...))
-		logger.Debug("overriding catalog directories", "catalog", parsed.catalog)
-	}
-	cfg, err := config.Load(globalPath, loadOpts...)
+	cfg, err := config.Load(globalPath)
 	if err != nil {
 		logger.Error("load config", "error", err)
 		return 2
@@ -380,7 +374,6 @@ func run(args []string) int {
 		StartupDelay: startupDelay,
 	}, readiness, collector, webHolder)
 	monitor.ConfigPath = globalPath
-	monitor.CatalogDirs = parsed.catalog
 	monitor.Logger = logger
 	monitor.Init(workers, watches)
 
@@ -414,9 +407,6 @@ type cliArgs struct {
 	command    string
 	globalPath string
 	verbose    bool
-	// catalog overrides paths.catalog from the global config. Repeatable;
-	// each --catalog adds a directory. Empty means use the config as-is.
-	catalog []string
 }
 
 func parseArgs(args []string) (cliArgs, error) {
@@ -425,7 +415,6 @@ func parseArgs(args []string) (cliArgs, error) {
 	fs.SetOutput(io.Discard)
 	fs.SetInterspersed(true)
 	fs.StringVar(&parsed.globalPath, flagConfig, config.DefaultGlobalPath, "")
-	fs.StringArrayVar(&parsed.catalog, flagCatalog, nil, "")
 	fs.BoolVarP(&parsed.verbose, flagVerbose, shortVerbose, false, "")
 	if err := fs.Parse(args); err != nil {
 		return cliArgs{}, normalizePflagError(err)

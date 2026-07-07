@@ -194,8 +194,10 @@ excepción es un bundle de referencia claramente etiquetado como `docs/sermo-all
 que agrupa ejemplos para validar el esquema completo en un único lugar.
 
 Para desarrollo y validación en el árbol de fuentes sin instalar bajo `/etc/sermo`,
-usa `examples/sermo-dev.yml` (`paths.*` relativos al árbol `examples/` incluido).
-`examples/sermo.yml` apunta intencionadamente a ubicaciones instaladas.
+compila con `SERMO_DATADIR=$PWD make build` y luego usa `examples/sermo-dev.yml`
+(`paths.*` relativos al árbol `examples/` incluido). El catálogo empaquetado no
+es un ajuste de `paths.*`; viene del directorio de catálogo compilado en el
+binario. `examples/sermo.yml` apunta intencionadamente a ubicaciones instaladas.
 
 ## Catalog init and reload fallback verification
 

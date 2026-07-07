@@ -82,7 +82,7 @@ sermoctl status nginx
 sermoctl is-active nginx
 
 # List catalog inventory, not configured runtime targets
-sermoctl services      # catalog service profiles under paths.catalog (nginx, mariadb, ...)
+sermoctl services      # packaged catalog service profiles (nginx, mariadb, ...)
 sermoctl services all  # include profiles not installed on this host
 sermoctl services --notify ops-email  # email a services inventory report
 sermoctl apps          # tools/runtimes (only installed)
@@ -113,7 +113,7 @@ Packaged definitions live under [`catalog/`](catalog/), sample configs under
 [`examples/`](examples/), packaging units under [`packaging/`](packaging/). The
 on-host file layout is in
 [configuration → layout](docs/configuration.md#layout).
-Daemon flags for development and packaging (`--catalog`, `--verbose`) are in
+Daemon flags (`--verbose`) are in
 [CLI → sermod daemon flags](docs/cli.md#sermod-daemon-flags).
 
 ## Documentation

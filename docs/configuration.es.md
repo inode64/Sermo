@@ -34,8 +34,9 @@ directorio equivocado. La configuración distribuida la omite.
 > desviarse del esquema. Es solo un paquete de referencia; los despliegues reales
 > mantienen un destino por archivo. La configuración operativa distribuida es
 > `examples/sermo.yml`.
-> Desde un checkout del código fuente, usa `examples/sermo-dev.yml` para validar el
-> árbol de ejemplos incluido sin reescribir las rutas instaladas en `/etc/sermo`.
+> Desde un checkout del código fuente, compila con `SERMO_DATADIR=$PWD make build`
+> y luego usa `examples/sermo-dev.yml` para validar el árbol de ejemplos incluido
+> sin reescribir las rutas instaladas en `/etc/sermo`.
 
 ## Cambios de esquema
 
@@ -54,7 +55,6 @@ excepciones explícitas en el propietario.
 /etc/sermo/sermo.yml              global config
 /usr/share/sermo/catalog/{services,apps,libs,patterns}/*.yml   packaged catalog
 /usr/share/sermo/examples/        packaged examples operators may copy/adapt
-/etc/sermo/catalog-available/{services,apps,libs,patterns}/*.yml   user catalog definitions
 /etc/sermo/services/*.yml concrete service documents
 /etc/sermo/apps/*.yml     host-specific app documents
 /etc/sermo/notifiers/*.yml notifier fragments
@@ -64,13 +64,10 @@ excepciones explícitas en el propietario.
 /etc/sermo/templates/*.yml notification templates
 ```
 
-Los directorios que Sermo lee provienen de `paths` en la configuración global:
+Los directorios configurables que Sermo lee provienen de `paths` en la configuración global:
 
 ```yaml
 paths:
-  catalog:
-    - /usr/share/sermo/catalog
-    - /etc/sermo/catalog-available
   services:
     - /etc/sermo/services
   apps:
@@ -88,9 +85,15 @@ paths:
   templates: /etc/sermo/templates
 ```
 
-Las listas de directorios bajo `paths.catalog`, `paths.services`, `paths.apps`,
-`paths.notifiers`, `paths.storages`, `paths.networks` y `paths.watches`
-aceptan o bien una cadena de ruta o un mapeo explícito:
+El catálogo empaquetado se carga siempre desde el directorio de catálogo compilado
+en el binario. El Makefile del proyecto lo define como `$(SERMO_DATADIR)/catalog`,
+que por defecto es `/usr/share/sermo/catalog` en builds empaquetados. Si un
+servicio aún no está en el catálogo empaquetado, defínelo como un servicio local
+normal bajo `paths.services`.
+
+Las listas de directorios bajo `paths.services`, `paths.apps`, `paths.notifiers`,
+`paths.storages`, `paths.networks` y `paths.watches` aceptan o bien una cadena
+de ruta o un mapeo explícito:
 
 ```yaml
 paths:
@@ -105,20 +108,12 @@ carga solo los archivos `.yml`/`.yaml` directamente dentro de ese directorio.
 `recursive: true` desciende por todo el subárbol, cargando aún los archivos en orden
 ordenado determinista. Las claves desconocidas bajo `paths` se rechazan para que los
 errores tipográficos no deshabiliten silenciosamente una fuente configurada.
-Para `paths.catalog`, los documentos del catálogo deben residir bajo los directorios
-de categoría inmediatos `services/`, `apps/`, `libs/` o `patterns/`. Esos
-directorios de categoría son parte de la disposición del catálogo y se leen incluso
-cuando `recursive` es false; `recursive: true` solo controla los directorios por
-debajo de esos directorios de categoría.
 
 `paths.runtime` es la raíz para los locks de runtime con nombre (`<runtime>/locks`,
 un archivo por lock llamado `<service>[.<name>].lock`) y los locks de operación
 internos (`<runtime>/ops/<service>.lock`). Reside en tmpfs y se borra al reiniciar.
 `paths.locks` **no** está soportado. Consulta [Locks](safety.es.md#locks) para la
 semántica de TTL y de reclamación de locks obsoletos.
-
-Si se omite `paths.catalog`, Sermo lee los valores por defecto del catálogo
-instalado: `/usr/share/sermo/catalog` y `/etc/sermo/catalog-available`.
 
 Solo los directorios de documentos de service, app y storage tienen alternativas
 relativas a la configuración. Si se omite `paths.services`, `paths.apps` o

@@ -31,7 +31,7 @@ sermod run --config /etc/sermo/sermo.yml
 Las ejecuciones manuales admiten estos flags:
 
 ```text
-sermod run [--config PATH] [--catalog DIR ...] [--verbose|-v]
+sermod run [--config PATH] [--verbose|-v]
 sermod version
 sermod --version
 ```
@@ -39,17 +39,11 @@ sermod --version
 - `--config PATH` carga el archivo de config global. El valor por defecto es
   `/etc/sermo/sermo.yml`. Usa la misma ruta con `sermoctl --config` al
   validar o recargar un árbol no estándar.
-- `--catalog DIR` sobrescribe `paths.catalog` para este proceso del daemon. Es
-  repetible y preserva el orden, de modo que las comprobaciones de desarrollo y
-  empaquetado pueden ejecutarse contra directorios de catálogo del árbol de
-  fuentes o preparados sin editar la config.
 - `--verbose` / `-v` habilita el logging de depuración, incluyendo detalles de
-  carga de config, sobrescrituras de catálogo, detección de backend y recuentos
-  de destinos de monitorización.
+  carga de config, detección de backend y recuentos de destinos de monitorización.
 
 Usa `sermoctl daemon reload` para pedir a un daemon en ejecución que vuelva a
-leer el archivo de config con el que se arrancó; cambiar `--catalog` requiere
-reiniciar `sermod` con el nuevo conjunto de flags.
+leer el archivo de config con el que se arrancó.
 
 ## Superficie de comandos
 
@@ -188,9 +182,9 @@ candidato para el backend activo; esos son errores de configuración.
 ## Inventario de catálogo
 
 `sermoctl services`, `sermoctl apps`, `sermoctl libs` y `sermoctl patterns`
-listan las **definiciones de catálogo** distribuidas bajo `paths.catalog` (ver
-[services.md](services.es.md)): qué perfiles están instalados, la versión que
-reporta su comando de versión, y si se resuelven. Añade `all` para incluir
+listan las **definiciones de catálogo** distribuidas en el catálogo empaquetado
+(ver [services.md](services.es.md)): qué perfiles están instalados, la versión
+que reporta su comando de versión, y si se resuelven. Añade `all` para incluir
 entradas cuyo binario o archivo de librería no está presente en el host.
 
 Esto **no** es la lista de **destinos de runtime configurados** que `sermod`
