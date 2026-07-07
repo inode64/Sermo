@@ -267,6 +267,7 @@ func TestStatusCommandJSON(t *testing.T) {
 
 func TestStatusCommandUsesResolvedConfiguredUnit(t *testing.T) {
 	root := t.TempDir()
+	catalogDir := filepath.Join(root, "catalog")
 	mustWrite(t, filepath.Join(root, "sermo.yml"), `
 paths:
   services: [`+filepath.Join(root, "services")+`]
@@ -284,12 +285,13 @@ checks:
 name: rpc-mountd
 uses: rpc-mountd
 `)
-	cfg, err := config.Load(filepath.Join(root, "sermo.yml"))
+	cfg, err := config.Load(filepath.Join(root, "sermo.yml"), config.WithCatalogDirs(catalogDir))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	var stdout bytes.Buffer
+	var stderr bytes.Buffer
 	var statusCalls []string
 	app := App{
 		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
@@ -306,12 +308,12 @@ uses: rpc-mountd
 		Runner:     statusUnitRunner{known: "nfs-mountd.service"},
 		Env:        func(string) string { return "" },
 		Stdout:     &stdout,
-		Stderr:     &bytes.Buffer{},
+		Stderr:     &stderr,
 	}
 
 	code := app.Run(context.Background(), []string{"status", "rpc-mountd"})
 	if code != exitSuccess {
-		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+		t.Fatalf("Run() exit = %d, want %d; stderr=%s", code, exitSuccess, stderr.String())
 	}
 	if len(statusCalls) == 0 {
 		t.Fatal("manager Status was not called")
