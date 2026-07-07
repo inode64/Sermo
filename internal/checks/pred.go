@@ -91,6 +91,18 @@ const (
 	fieldTotal = "total"
 )
 
+// LevelFieldUsedPct is the public `used_pct` predicate/data field.
+const LevelFieldUsedPct = fieldUsedPct
+
+// LevelFieldFreePct is the public `free_pct` predicate/data field.
+const LevelFieldFreePct = fieldFreePct
+
+// LevelFieldUsedBytes is the public `used_bytes` predicate/data field.
+const LevelFieldUsedBytes = fieldUsedBytes
+
+// LevelFieldFreeBytes is the public `free_bytes` predicate/data field.
+const LevelFieldFreeBytes = fieldFreeBytes
+
 // Predicate field lists, one per level check. They are exported so config
 // validation walks the same lists and both layers stay in step by construction.
 var (

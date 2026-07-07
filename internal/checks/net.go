@@ -26,6 +26,12 @@ const (
 	NetAddrAbsent  = "absent"
 )
 
+// Network statistics counter names used by the default net error metric.
+const (
+	NetCounterRXErrors = "rx_errors"
+	NetCounterTXErrors = "tx_errors"
+)
+
 // NetSample is one observation of a network interface.
 type NetSample struct {
 	State      string // "up" | "down"
@@ -77,7 +83,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 	data := map[string]any{DataKeyInterface: c.iface, fieldMetric: c.metric}
 
 	switch c.metric {
-	case "state":
+	case NetMetricState:
 		if c.expect != "" {
 			data[fieldValue] = s.State
 			res := c.result(s.State == c.expect, fmt.Sprintf("%s state %s (want %s)", c.iface, s.State, c.expect), start)
@@ -98,7 +104,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 		res.Data = data
 		return res
 
-	case "speed":
+	case NetMetricSpeed:
 		if !s.SpeedKnown {
 			res := c.result(false, fmt.Sprintf("%s speed unknown", c.iface), start)
 			res.Data = data
@@ -118,7 +124,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 		res.Data = data
 		return res
 
-	case "errors":
+	case NetMetricErrors:
 		var total uint64
 		for _, name := range c.counters {
 			total += s.Counters[name]
@@ -137,7 +143,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 		res.Data = data
 		return res
 
-	case "address":
+	case NetMetricAddress:
 		joined := strings.Join(s.Addrs, ",")
 		display := joined
 		if display == "" {

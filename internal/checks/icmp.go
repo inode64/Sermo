@@ -62,7 +62,7 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 	data := map[string]any{fieldHost: c.host, fieldMetric: c.metric}
 
 	switch c.metric {
-	case "state":
+	case NetMetricState:
 		state := NetStateDown
 		if s.Reachable {
 			state = NetStateUp

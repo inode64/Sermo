@@ -22,6 +22,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/mountctl"
+	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/volume"
 )
@@ -501,11 +502,11 @@ func storageDocsFromVolumeWatches(entries map[string]any) (map[string]map[string
 			return nil, fmt.Errorf("watch %q has no storage path", name)
 		}
 		doc := map[string]any{
-			wizardFieldName: name,
-			"category":      wizardNounStorage,
-			wizardFieldPath: path,
+			wizardFieldName:         name,
+			config.EntryKeyCategory: wizardNounStorage,
+			wizardFieldPath:         path,
 		}
-		for _, key := range []string{"monitor", "interval"} {
+		for _, key := range []string{config.EntryKeyMonitor, config.EntryKeyInterval} {
 			if v, present := entry[key]; present {
 				doc[key] = v
 			}
@@ -518,12 +519,12 @@ func storageDocsFromVolumeWatches(entries map[string]any) (map[string]map[string
 				capacity[key] = value
 			}
 		}
-		for _, key := range []string{"for", "within", "then", "policy"} {
+		for _, key := range []string{rules.RuleFieldFor, rules.RuleFieldWithin, config.WatchKeyThen, rules.SectionPolicy} {
 			if v, present := entry[key]; present {
 				capacity[key] = v
 			}
 		}
-		doc["capacity"] = capacity
+		doc[config.StorageKeyCapacity] = capacity
 		docs[name] = doc
 	}
 	return docs, nil

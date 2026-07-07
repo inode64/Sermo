@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
+	"sermo/internal/config"
+	"sermo/internal/rules"
 	volumeinfo "sermo/internal/volume"
 )
 
@@ -78,7 +81,7 @@ func volumeLabel(v Volume) string {
 // volSettings are the answers gathered for one (or all) volume(s).
 type volSettings struct {
 	Monitoring        // shared monitor-state + interval (asked first, see docs/wizards.md)
-	metric     string // free_pct | used_pct | free_bytes | used_bytes
+	metric     string // checks.LevelFieldFreePct/UsedPct/FreeBytes/UsedBytes
 	op         string
 	value      any
 	forCycles  int
@@ -99,16 +102,16 @@ func askVolSettings(p *Prompt, env Env, label string) (volSettings, error) {
 		"used space at/above a size (K/M/G/T)",
 	}) {
 	case 0:
-		s.metric, s.op = "free_pct", "<"
+		s.metric, s.op = checks.LevelFieldFreePct, "<"
 		s.value = askPercent(p, "Alert when free space drops below", 10)
 	case 1:
-		s.metric, s.op = "used_pct", ">="
+		s.metric, s.op = checks.LevelFieldUsedPct, ">="
 		s.value = askPercent(p, "Alert when used space reaches/exceeds", 90)
 	case 2:
-		s.metric, s.op = "free_bytes", "<"
+		s.metric, s.op = checks.LevelFieldFreeBytes, "<"
 		s.value = askSize(p, "Alert when free space drops below (e.g. 10G)", "10G")
 	default:
-		s.metric, s.op = "used_bytes", ">="
+		s.metric, s.op = checks.LevelFieldUsedBytes, ">="
 		s.value = askSize(p, "Alert when used space reaches/exceeds (e.g. 100G)", "100G")
 	}
 	s.forCycles = p.AskInt("Require the condition for how many cycles first?", 3)
@@ -124,23 +127,27 @@ func askVolSettings(p *Prompt, env Env, label string) (volSettings, error) {
 
 func buildVolWatch(v Volume, s volSettings) map[string]any {
 	check := map[string]any{
-		"type": "storage",
-		"path": v.Mountpoint,
+		checks.CheckKeyType: checks.CheckTypeStorage,
+		checks.CheckKeyPath: v.Mountpoint,
 		s.metric: map[string]any{
-			"op":    s.op,
-			"value": s.value,
+			checks.CheckKeyOp:    s.op,
+			checks.CheckKeyValue: s.value,
 		},
 	}
 	then := watchThen(s.notifiers)
 	if s.expand {
-		then["expand"] = map[string]any{"by": s.expandBy}
+		then[config.WatchThenKeyExpand] = map[string]any{config.WatchExpandKeyBy: s.expandBy}
 	}
-	entry := map[string]any{"category": "storage", "check": check, "then": then}
+	entry := map[string]any{
+		config.EntryKeyCategory: watchCategoryStorage,
+		config.WatchKeyCheck:    check,
+		config.WatchKeyThen:     then,
+	}
 	if s.forCycles > 0 {
-		entry["for"] = map[string]any{"cycles": s.forCycles}
+		entry[rules.RuleFieldFor] = map[string]any{rules.WindowKeyCycles: s.forCycles}
 	}
 	if s.expand && s.cooldown != "" {
-		entry["policy"] = map[string]any{"cooldown": s.cooldown}
+		entry[rules.SectionPolicy] = map[string]any{rules.PolicyKeyCooldown: s.cooldown}
 	}
 	s.Monitoring.apply(entry)
 	applyDryRun(entry, s.dryRun)

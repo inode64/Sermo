@@ -12,6 +12,8 @@ import (
 	"sermo/internal/virt"
 )
 
+const controlKeyType = "type"
+
 // Target is the manager/unit pair the operation path should use for a service.
 type Target struct {
 	Unit        string
@@ -42,7 +44,7 @@ func Resolve(ctx context.Context, name string, tree map[string]any, backend serv
 
 func resolveControlledTarget(typ string, tree map[string]any) (Target, error) {
 	switch typ {
-	case "libvirt":
+	case virt.ControlType:
 		spec, _, err := virt.SpecFromTree(tree)
 		if err != nil {
 			return Target{}, err
@@ -52,7 +54,7 @@ func resolveControlledTarget(typ string, tree map[string]any) (Target, error) {
 			Backend: servicemgr.BackendLibvirt,
 			Manager: virt.NewManager(spec),
 		}, nil
-	case "docker":
+	case dockerctl.ControlType:
 		spec, _, err := dockerctl.SpecFromTree(tree)
 		if err != nil {
 			return Target{}, err
@@ -90,7 +92,7 @@ func ResolveWithFallback(ctx context.Context, name string, tree map[string]any, 
 }
 
 func controlType(tree map[string]any) (string, bool, error) {
-	raw, present := tree["control"]
+	raw, present := tree[config.SectionControl]
 	if !present {
 		return "", false, nil
 	}
@@ -98,5 +100,5 @@ func controlType(tree map[string]any) (string, bool, error) {
 	if !ok {
 		return "", true, fmt.Errorf("control must be a mapping")
 	}
-	return cfgval.String(control["type"]), true, nil
+	return cfgval.String(control[controlKeyType]), true, nil
 }

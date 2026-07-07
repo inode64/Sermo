@@ -204,20 +204,20 @@ func (s *RemediationState) countWithin(now time.Time, window time.Duration) int 
 // ParsePolicy reads the resolved `policy` section into a Policy.
 func ParsePolicy(tree map[string]any) Policy {
 	p := Policy{}
-	section, ok := tree["policy"].(map[string]any)
+	section, ok := tree[SectionPolicy].(map[string]any)
 	if !ok {
 		return p
 	}
-	p.Cooldown = cfgval.Duration(section["cooldown"])
-	p.MaxActionsWindow = cfgval.Duration(section["max_actions_window"])
-	if n, ok := cfgval.Int(section["max_actions"]); ok {
+	p.Cooldown = cfgval.Duration(section[PolicyKeyCooldown])
+	p.MaxActionsWindow = cfgval.Duration(section[PolicyKeyMaxActionsWindow])
+	if n, ok := cfgval.Int(section[PolicyKeyMaxActions]); ok {
 		p.MaxActions = n
 	}
-	if bo, ok := section["backoff"].(map[string]any); ok {
+	if bo, ok := section[PolicyKeyBackoff].(map[string]any); ok {
 		b := &Backoff{
-			Initial: cfgval.Duration(bo["initial"]),
-			Factor:  floatOrZero(bo["factor"]),
-			Max:     cfgval.Duration(bo["max"]),
+			Initial: cfgval.Duration(bo[BackoffKeyInitial]),
+			Factor:  floatOrZero(bo[BackoffKeyFactor]),
+			Max:     cfgval.Duration(bo[BackoffKeyMax]),
 		}
 		if b.Factor <= 0 {
 			b.Factor = 2

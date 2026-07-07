@@ -11,6 +11,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/process"
+	"sermo/internal/rules"
 )
 
 // Issue is a single validation finding, scoped to a document or "global".
@@ -265,7 +266,7 @@ func validateDocuments(cfg *Config) []Issue {
 				issues = append(issues, Issue{Scope: scope, Msg: "display_name must be a string"})
 			}
 		}
-		if d, present := doc.Body["category"]; present {
+		if d, present := doc.Body[keyCategory]; present {
 			if _, ok := d.(string); !ok {
 				issues = append(issues, Issue{Scope: scope, Msg: "category must be a string"})
 			}
@@ -373,7 +374,7 @@ func validateMaterializedNameCollisions(cfg *Config) []Issue {
 }
 
 func validateVersionMatch(doc *Document, scope string) []Issue {
-	raw, present := doc.Body["version_match"]
+	raw, present := doc.Body[checks.CheckKeyVersionMatch]
 	if !present {
 		return nil
 	}
@@ -633,7 +634,7 @@ func validateStorages(cfg *Config) []Issue {
 			continue
 		}
 		issues = append(issues, validateStorage(name, resolved.Tree, notifiers, defaultNotify)...)
-		path := filepath.Clean(cfgval.String(resolved.Tree["path"]))
+		path := filepath.Clean(cfgval.String(resolved.Tree[keyPath]))
 		if path != "." && path != "" {
 			if prev := paths[path]; prev != "" && prev != name {
 				issues = append(issues, Issue{Scope: "storage " + name, Msg: fmt.Sprintf("path %q is already used by storage %q", path, prev)})
@@ -658,7 +659,7 @@ func validateStorage(name string, tree map[string]any, notifiers map[string]stru
 		}
 	}
 
-	path := cfgval.String(tree["path"])
+	path := cfgval.String(tree[keyPath])
 	if path == "" {
 		add("path is required")
 	} else if !filepath.IsAbs(path) {
@@ -707,19 +708,19 @@ func validateStorageCapacity(name, path string, tree, capacity map[string]any, n
 			add("capacity key %q is not supported", key)
 		}
 	}
-	check := map[string]any{"type": "storage", "path": path}
-	for _, key := range append([]string{"mounted"}, checks.StoragePredFields...) {
+	check := map[string]any{checks.CheckKeyType: checks.CheckTypeStorage, checks.CheckKeyPath: path}
+	for _, key := range append([]string{checks.CheckKeyMounted}, checks.StoragePredFields...) {
 		if v, present := capacity[key]; present {
 			check[key] = v
 		}
 	}
-	entry := map[string]any{"check": check}
+	entry := map[string]any{WatchKeyCheck: check}
 	for _, key := range []string{keyDryRun, keyMonitor, keyInterval} {
 		if v, present := tree[key]; present {
 			entry[key] = v
 		}
 	}
-	for _, key := range []string{"for", "within", "then", sectionPolicy} {
+	for _, key := range []string{rules.RuleFieldFor, rules.RuleFieldWithin, rules.RuleFieldThen, sectionPolicy} {
 		if v, present := capacity[key]; present {
 			entry[key] = v
 		}
@@ -752,12 +753,12 @@ func validateStorageUsage(usage map[string]any, notifiers map[string]struct{}, a
 		add("usage.observed_for %q must be a valid positive duration", cfgval.String(v))
 	}
 	validateWindow(keyUsage, usage, add)
-	if rawThen, present := usage["then"]; present {
+	if rawThen, present := usage[rules.RuleFieldThen]; present {
 		then, ok := rawThen.(map[string]any)
 		if !ok {
 			add("usage.then must be a mapping")
-		} else if _, present := then["notify"]; present {
-			validateNotifySelection("usage.then.notify", then["notify"], notifiers, add)
+		} else if _, present := then[rules.RuleFieldNotify]; present {
+			validateNotifySelection("usage.then.notify", then[rules.RuleFieldNotify], notifiers, add)
 		}
 	}
 }

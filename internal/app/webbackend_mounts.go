@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/mountctl"
 	"sermo/internal/notify"
 	"sermo/internal/process"
@@ -19,7 +21,10 @@ import (
 // scan walks /proc/cwd, /proc/root and /proc/fd for every process, so dashboard
 // refreshes share one sample for a short window while still updating quickly
 // after users leave a mount.
-const mountUsageTTL = 15 * time.Second
+const (
+	mountBlockersNotifierName = "mount-blockers"
+	mountUsageTTL             = 15 * time.Second
+)
 
 // MountAlertDelivery reports which mount-blocking users were targeted by a
 // console alert.
@@ -45,15 +50,15 @@ func (ttyMountUserAlerter) AlertMountUsers(ctx context.Context, spec mountctl.Sp
 		userValues = append(userValues, user)
 	}
 	registry, warnings := notify.Build(map[string]any{
-		"mount-blockers": map[string]any{
-			"type":  "tty",
-			"users": userValues,
+		mountBlockersNotifierName: map[string]any{
+			notify.KeyType:  notify.TypeTTY,
+			notify.KeyUsers: userValues,
 		},
 	}, notify.WithoutTemplates())
 	if len(warnings) > 0 {
 		return MountAlertDelivery{Users: users}, errors.New(strings.Join(warnings, "; "))
 	}
-	notifier := registry["mount-blockers"]
+	notifier := registry[mountBlockersNotifierName]
 	if notifier == nil {
 		return MountAlertDelivery{Users: users}, errors.New("tty notifier unavailable")
 	}
@@ -115,7 +120,7 @@ func (b *WebBackend) mountSpec(name string) (mountctl.Spec, bool, string) {
 	if len(errs) > 0 {
 		return mountctl.Spec{}, false, errs[0]
 	}
-	if _, ok := resolved.Tree["mount"].(map[string]any); !ok {
+	if _, ok := resolved.Tree[config.StorageKeyMount].(map[string]any); !ok {
 		return mountctl.Spec{}, false, "storage " + name + " has no mount block"
 	}
 	return mountctl.SpecFromStorageTree(name, resolved.Tree), true, ""
@@ -392,7 +397,7 @@ func (b *WebBackend) MountAction(ctx context.Context, name, action string, opts 
 
 func (b *WebBackend) syncStorageMountMonitoring(storage, action string, resultOK bool) {
 	w, ok := b.watches[storage]
-	if !ok || w.checkType != "storage" || !b.storageHasCapacity(storage) {
+	if !ok || w.checkType != checks.CheckTypeStorage || !b.storageHasCapacity(storage) {
 		return
 	}
 	change, err := SyncStorageMountMonitoring(
@@ -422,7 +427,7 @@ func (b *WebBackend) storageHasCapacity(name string) bool {
 	if len(errs) > 0 || resolved.Tree == nil {
 		return false
 	}
-	_, ok := resolved.Tree["capacity"].(map[string]any)
+	_, ok := resolved.Tree[config.StorageKeyCapacity].(map[string]any)
 	return ok
 }
 

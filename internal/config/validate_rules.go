@@ -344,9 +344,9 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 			return
 		}
 		entry := maps.Clone(m)
-		entry[rules.FieldType] = checks.CheckTypeCommand
+		entry[checks.CheckKeyType] = checks.CheckTypeCommand
 		validateSingleShotCheckFields(path+".command", checks.CheckTypeCommand, entry, "", add)
-		if cfgval.String(m["timeout"]) == "" {
+		if cfgval.String(m[checks.CheckKeyTimeout]) == "" {
 			add("%s.command condition must declare a timeout", path)
 		}
 	case rules.ConditionMetric:
@@ -421,7 +421,7 @@ func validateProbe(v any, path string, checkNames, systemMetricChecks map[string
 			continue
 		}
 		entry := maps.Clone(fields)
-		entry[rules.FieldType] = typ
+		entry[checks.CheckKeyType] = typ
 		if typ == checks.CheckTypeMetric {
 			validateMetric(entry, path+"."+typ, allowSystemMetric, add)
 			continue
@@ -534,7 +534,7 @@ func collectSystemMetricChecks(tree map[string]any) map[string]struct{} {
 			continue
 		}
 		for name, raw := range entries {
-			if e, ok := raw.(map[string]any); ok && cfgval.String(e[rules.FieldType]) == checks.CheckTypeMetric && cfgval.String(e[rules.FieldScope]) == checks.MetricScopeSystem {
+			if e, ok := raw.(map[string]any); ok && cfgval.String(e[checks.CheckKeyType]) == checks.CheckTypeMetric && cfgval.String(e[checks.CheckKeyScope]) == checks.MetricScopeSystem {
 				names[name] = struct{}{}
 			}
 		}
