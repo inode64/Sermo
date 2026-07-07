@@ -28,10 +28,10 @@ import (
 )
 
 const (
-	networksConfigDir = "networks"
-	storagesConfigDir = "storages"
-	mountsConfigDir   = "mounts"
-	watchesConfigDir  = "watches"
+	networksConfigDir = config.WatchDirNetworks
+	storagesConfigDir = config.WatchDirStorages
+	mountsConfigDir   = config.WatchDirMounts
+	watchesConfigDir  = config.WatchDirWatches
 
 	yamlFileExt     = ".yml"
 	yamlLongFileExt = ".yaml"
@@ -50,14 +50,14 @@ const (
 
 	wizardNounMount   = wizardAssistantMount
 	wizardNounService = wizardAssistantService
-	wizardNounWatch   = "watch"
+	wizardNounWatch   = config.WatchCategoryWatch
 
-	wizardFieldCheck     = "check"
-	wizardFieldInterface = "interface"
-	wizardFieldKind      = "kind"
-	wizardFieldName      = "name"
-	wizardFieldPath      = "path"
-	wizardFieldType      = "type"
+	wizardFieldCheck     = config.WatchKeyCheck
+	wizardFieldInterface = checks.CheckKeyInterface
+	wizardFieldKind      = config.EntryKeyKind
+	wizardFieldName      = config.EntryKeyName
+	wizardFieldPath      = config.EntryKeyPath
+	wizardFieldType      = config.EntryKeyType
 
 	serviceTargetSeparator = ":"
 )
@@ -516,7 +516,7 @@ func watchEntryCheckType(v any) string {
 
 func watchTypeDirName(checkType string) string {
 	switch strings.ToLower(checkType) {
-	case wizardAssistantNet, "network", "icmp":
+	case wizardAssistantNet, config.WatchCategoryNetwork, checks.CheckTypeICMP:
 		return networksConfigDir
 	default:
 		return watchesConfigDir

@@ -10,6 +10,17 @@ import (
 
 func init() { Register(imapProtocol{}) }
 
+const (
+	imapGreetingOKPrefix      = "* OK"
+	imapGreetingPreauthPrefix = "* PREAUTH"
+	imapLoginCommand          = "LOGIN"
+	imapLogoutCommand         = "LOGOUT"
+	imapStatusOK              = "OK"
+	imapTagLogin              = "a1"
+	imapTagLogout             = "a2"
+	imapTerminator            = "\r\n"
+)
+
 // imapProtocol probes an IMAP server natively (RFC 3501). With no credentials it
 // is an anonymous connectivity check: it reads the greeting and verifies the
 // server is ready. With a user/password it performs a LOGIN. TLS is implicit
@@ -35,17 +46,16 @@ func imapHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	}
 	res := Result{Extra: map[string]string{extraGreeting: strings.TrimSpace(greeting)}}
 
-	preauth := strings.HasPrefix(greeting, "* PREAUTH")
-	if !strings.HasPrefix(greeting, "* OK") && !preauth {
+	preauth := strings.HasPrefix(greeting, imapGreetingPreauthPrefix)
+	if !strings.HasPrefix(greeting, imapGreetingOKPrefix) && !preauth {
 		return Result{}, fmt.Errorf("unexpected greeting: %s", strings.TrimSpace(greeting))
 	}
 
 	if (cfg.User != "" || cfg.Password != "") && !preauth {
-		const tag = "a1"
-		if _, err := fmt.Fprintf(rw, "%s LOGIN %s %s\r\n", tag, imapQuote(cfg.User), imapQuote(cfg.Password)); err != nil {
+		if _, err := fmt.Fprintf(rw, "%s %s %s %s%s", imapTagLogin, imapLoginCommand, imapQuote(cfg.User), imapQuote(cfg.Password), imapTerminator); err != nil {
 			return Result{}, err
 		}
-		ok, status, err := readIMAPTagged(br, tag)
+		ok, status, err := readIMAPTagged(br, imapTagLogin)
 		if err != nil {
 			return Result{}, err
 		}
@@ -55,7 +65,7 @@ func imapHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	}
 
 	// Best-effort logout (reply ignored).
-	_, _ = fmt.Fprint(rw, "a2 LOGOUT\r\n")
+	_, _ = fmt.Fprintf(rw, "%s %s%s", imapTagLogout, imapLogoutCommand, imapTerminator)
 	return res, nil
 }
 
@@ -79,7 +89,7 @@ func readIMAPTagged(br *bufio.Reader, tag string) (ok bool, status string, err e
 			if len(fields) == 0 {
 				return false, line, nil
 			}
-			return strings.EqualFold(fields[0], "OK"), rest, nil
+			return strings.EqualFold(fields[0], imapStatusOK), rest, nil
 		}
 		// otherwise an untagged "*" line — keep reading.
 	}

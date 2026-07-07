@@ -32,7 +32,7 @@ func (c appCheck) Run(ctx context.Context) checks.Result {
 	return res
 }
 
-const appWatchCheckType = "app"
+const appWatchCheckType = config.CategoryApp
 
 // appWatchInterval is the cadence at which installed apps are inspected for
 // errors (engine.app_interval, default 5m). Apps change rarely and each check

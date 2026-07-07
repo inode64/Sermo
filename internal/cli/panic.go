@@ -69,13 +69,13 @@ func (a App) runPanic(opts options) int {
 func (a App) reportPanic(opts options, rec state.GlobalRecord, found bool) {
 	enabled := found && rec.On
 	if opts.json {
-		payload := map[string]any{"panic": enabled}
+		payload := map[string]any{cliJSONKeyPanic: enabled}
 		if found {
 			if rec.Source != "" {
-				payload["panic_source"] = rec.Source
+				payload[cliJSONKeyPanicSource] = rec.Source
 			}
 			if !rec.UpdatedAt.IsZero() {
-				payload["panic_changed_at"] = rec.UpdatedAt.UTC().Format(time.RFC3339)
+				payload[cliJSONKeyPanicChanged] = rec.UpdatedAt.UTC().Format(time.RFC3339)
 			}
 		}
 		writeJSON(a.Stdout, payload)

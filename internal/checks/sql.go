@@ -139,7 +139,7 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 		if path == "" {
 			return nil, "sql check (sqlite) requires a path"
 		}
-		dsn = "file:" + path + "?mode=ro&_pragma=busy_timeout(2000)"
+		dsn = fmt.Sprintf("file:%s?mode=ro&_pragma=busy_timeout(%d)", path, sqliteBusyTimeoutMS)
 	default:
 		if cfgval.AsString(entry[CheckKeyUser]) == "" {
 			return nil, "sql check (" + engine + ") requires a user"

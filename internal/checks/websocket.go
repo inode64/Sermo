@@ -23,6 +23,27 @@ import (
 // server's Sec-WebSocket-Accept.
 const wsGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
+const (
+	wsConnectionUpgrade = "Upgrade"
+	wsCRLF              = "\r\n"
+	wsDefaultPath       = "/"
+	wsDefaultPortPlain  = "80"
+	wsDefaultPortTLS    = "443"
+	wsHeaderFormat      = "%s: %s" + wsCRLF
+	wsHeaderAccept      = "Sec-WebSocket-Accept"
+	wsHeaderConnection  = "Connection"
+	wsHeaderHost        = "Host"
+	wsHeaderKey         = "Sec-WebSocket-Key"
+	wsHeaderOrigin      = "Origin"
+	wsHeaderProtocol    = "Sec-WebSocket-Protocol"
+	wsHeaderUpgrade     = "Upgrade"
+	wsHeaderVersion     = "Sec-WebSocket-Version"
+	wsKeySize           = 16
+	wsRequestLineFormat = "GET %s HTTP/1.1" + wsCRLF
+	wsUpgradeWebSocket  = "websocket"
+	wsVersion13         = "13"
+)
+
 // websocketCheck verifies a WebSocket endpoint completes the RFC 6455 opening
 // handshake: it sends the HTTP Upgrade request and checks the server answers
 // 101 Switching Protocols with a Sec-WebSocket-Accept matching the sent key.
@@ -114,7 +135,7 @@ func (c *websocketCheck) handshake(ctx context.Context, iface string, start time
 	if resp.StatusCode != http.StatusSwitchingProtocols {
 		return c.result(false, fmt.Sprintf("websocket %s: status %d (want 101)", c.rawURL, resp.StatusCode), start)
 	}
-	if got := resp.Header.Get("Sec-WebSocket-Accept"); got != wsAccept(key) {
+	if got := resp.Header.Get(wsHeaderAccept); got != wsAccept(key) {
 		return c.result(false, fmt.Sprintf("websocket %s: invalid Sec-WebSocket-Accept %q", c.rawURL, got), start)
 	}
 
@@ -124,28 +145,28 @@ func (c *websocketCheck) handshake(ctx context.Context, iface string, start time
 }
 
 func websocketResponseData(resp *http.Response) map[string]any {
-	return map[string]any{DataKeyStatus: resp.StatusCode, DataKeySubprotocol: resp.Header.Get("Sec-WebSocket-Protocol")}
+	return map[string]any{DataKeyStatus: resp.StatusCode, DataKeySubprotocol: resp.Header.Get(wsHeaderProtocol)}
 }
 
 // handshakeRequest builds the RFC 6455 client opening handshake.
 func (c *websocketCheck) handshakeRequest(key string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "GET %s HTTP/1.1\r\n", c.path)
-	fmt.Fprintf(&b, "Host: %s\r\n", c.host)
-	b.WriteString("Upgrade: websocket\r\n")
-	b.WriteString("Connection: Upgrade\r\n")
-	fmt.Fprintf(&b, "Sec-WebSocket-Key: %s\r\n", key)
-	b.WriteString("Sec-WebSocket-Version: 13\r\n")
+	fmt.Fprintf(&b, wsRequestLineFormat, c.path)
+	fmt.Fprintf(&b, wsHeaderFormat, wsHeaderHost, c.host)
+	fmt.Fprintf(&b, wsHeaderFormat, wsHeaderUpgrade, wsUpgradeWebSocket)
+	fmt.Fprintf(&b, wsHeaderFormat, wsHeaderConnection, wsConnectionUpgrade)
+	fmt.Fprintf(&b, wsHeaderFormat, wsHeaderKey, key)
+	fmt.Fprintf(&b, wsHeaderFormat, wsHeaderVersion, wsVersion13)
 	if c.origin != "" {
-		fmt.Fprintf(&b, "Origin: %s\r\n", c.origin)
+		fmt.Fprintf(&b, wsHeaderFormat, wsHeaderOrigin, c.origin)
 	}
 	if c.subprotocol != "" {
-		fmt.Fprintf(&b, "Sec-WebSocket-Protocol: %s\r\n", c.subprotocol)
+		fmt.Fprintf(&b, wsHeaderFormat, wsHeaderProtocol, c.subprotocol)
 	}
 	for k, v := range c.headers {
-		fmt.Fprintf(&b, "%s: %s\r\n", k, v)
+		fmt.Fprintf(&b, wsHeaderFormat, k, v)
 	}
-	b.WriteString("\r\n")
+	b.WriteString(wsCRLF)
 	return b.String()
 }
 
@@ -195,22 +216,22 @@ func websocketSecure(scheme string) bool {
 
 func websocketDefaultPort(secure bool) string {
 	if secure {
-		return "443"
+		return wsDefaultPortTLS
 	}
-	return "80"
+	return wsDefaultPortPlain
 }
 
 func websocketPath(u *url.URL) string {
 	path := u.RequestURI()
 	if path == "" {
-		return "/"
+		return wsDefaultPath
 	}
 	return path
 }
 
 // wsKey returns a fresh base64 Sec-WebSocket-Key (16 random bytes).
 func wsKey() (string, error) {
-	var b [16]byte
+	var b [wsKeySize]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err
 	}

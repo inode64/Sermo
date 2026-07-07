@@ -14,6 +14,13 @@ const udisks2BusName = "org.freedesktop.UDisks2"
 // udisks2ManagerPath is the Manager object path on the system bus.
 const udisks2ManagerPath = "/org/freedesktop/UDisks2/Manager"
 
+const (
+	dbusBusName      = "org.freedesktop.DBus"
+	dbusObjectPath   = "/org/freedesktop/DBus"
+	dbusGetNameOwner = "org.freedesktop.DBus.GetNameOwner"
+	dbusPeerPing     = "org.freedesktop.DBus.Peer.Ping"
+)
+
 // udisks2Protocol probes UDisks2 on the system D-Bus bus. It connects to the
 // bus, verifies the org.freedesktop.UDisks2 name is owned, and issues
 // org.freedesktop.DBus.Peer.Ping on the Manager object — proof the disk
@@ -61,13 +68,13 @@ func udisks2Probe(ctx context.Context, addr string) (Result, error) {
 	}
 
 	var owner string
-	bus := conn.Object("org.freedesktop.DBus", "/org/freedesktop/DBus")
-	if err := bus.CallWithContext(ctx, "org.freedesktop.DBus.GetNameOwner", 0, udisks2BusName).Store(&owner); err != nil {
+	bus := conn.Object(dbusBusName, dbusObjectPath)
+	if err := bus.CallWithContext(ctx, dbusGetNameOwner, 0, udisks2BusName).Store(&owner); err != nil {
 		return Result{}, err
 	}
 
 	obj := conn.Object(udisks2BusName, udisks2ManagerPath)
-	if err := obj.CallWithContext(ctx, "org.freedesktop.DBus.Peer.Ping", 0).Store(); err != nil {
+	if err := obj.CallWithContext(ctx, dbusPeerPing, 0).Store(); err != nil {
 		return Result{}, err
 	}
 

@@ -72,13 +72,13 @@ func (a App) runMonitor(opts options, pause bool) int {
 
 func (a App) reportMonitor(opts options, store *state.Store, service, status string) {
 	rec, found, _ := store.MonitorState(service)
-	payload := map[string]any{"service": service, "monitoring": status}
+	payload := map[string]any{cliJSONKeyService: service, cliJSONKeyMonitoring: status}
 	if found {
 		if rec.Source != "" {
-			payload["monitor_source"] = rec.Source
+			payload[cliJSONKeyMonitorSource] = rec.Source
 		}
 		if !rec.UpdatedAt.IsZero() {
-			payload["monitor_changed_at"] = rec.UpdatedAt.UTC().Format(time.RFC3339)
+			payload[cliJSONKeyMonitorChanged] = rec.UpdatedAt.UTC().Format(time.RFC3339)
 		}
 	}
 	if opts.json {

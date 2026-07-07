@@ -50,7 +50,7 @@ func (a App) runPatterns(opts options) int {
 	}
 
 	if opts.json {
-		writeJSON(a.Stdout, map[string]any{"patterns": reports})
+		writeJSON(a.Stdout, map[string]any{cliJSONKeyPatterns: reports})
 		return exitSuccess
 	}
 	if len(reports) == 0 {

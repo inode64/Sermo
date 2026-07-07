@@ -17,7 +17,12 @@ const (
 	defaultPingCount            = 3
 	defaultPingTimeout          = 5 * time.Second
 	defaultPingPerPacketTimeout = time.Second
+	icmpEchoCode                = 0
+	icmpIDMask                  = 0xffff
 	icmpListenAnyIPv4           = "0.0.0.0"
+	icmpPayload                 = "sermo"
+	icmpReplyBufferSize         = 1500
+	icmpV4ProtocolNumber        = 1
 	networkIP4                  = "ip4"
 	networkIP4ICMP              = "ip4:icmp"
 )
@@ -223,13 +228,13 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 	if perPacket <= 0 {
 		perPacket = defaultPingPerPacketTimeout
 	}
-	id := os.Getpid() & 0xffff
-	reply := make([]byte, 1500)
+	id := os.Getpid() & icmpIDMask
+	reply := make([]byte, icmpReplyBufferSize)
 	var rtts []float64
 	for seq := 0; seq < count; seq++ {
 		msg := icmp.Message{
-			Type: ipv4.ICMPTypeEcho, Code: 0,
-			Body: &icmp.Echo{ID: id, Seq: seq, Data: []byte("sermo")},
+			Type: ipv4.ICMPTypeEcho, Code: icmpEchoCode,
+			Body: &icmp.Echo{ID: id, Seq: seq, Data: []byte(icmpPayload)},
 		}
 		b, err := msg.Marshal(nil)
 		if err != nil {
@@ -256,7 +261,7 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 			if !sameIPv4(peer, addr.IP) {
 				continue
 			}
-			rm, err := icmp.ParseMessage(1, reply[:n]) // 1 = ICMPv4 protocol number
+			rm, err := icmp.ParseMessage(icmpV4ProtocolNumber, reply[:n])
 			if err != nil {
 				continue
 			}

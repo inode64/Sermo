@@ -63,17 +63,17 @@ func askMountSettings(p *Prompt, label string) mountSettings {
 
 func buildMountUnit(c MountCandidate, s mountSettings) map[string]any {
 	return map[string]any{
-		config.EntryKeyCategory: watchCategoryStorage,
+		config.EntryKeyCategory: config.WatchCategoryStorage,
 		config.WatchKeyCheck: map[string]any{
-			checks.CheckKeyType: checks.CheckTypeStorage,
-			checks.CheckKeyPath: filepath.Clean(c.Path),
-			"mounted":           true,
+			checks.CheckKeyType:    checks.CheckTypeStorage,
+			checks.CheckKeyPath:    filepath.Clean(c.Path),
+			checks.CheckKeyMounted: true,
 		},
 		config.StorageKeyMount: map[string]any{
-			"refcount": s.refcount,
-			"umount": map[string]any{
-				"allow_sigkill": false,
-				"allow_lazy":    false,
+			config.MountKeyRefcount: s.refcount,
+			config.MountKeyUmount: map[string]any{
+				config.MountKeyAllowSIGKILL: false,
+				config.MountKeyAllowLazy:    false,
 			},
 		},
 	}

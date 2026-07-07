@@ -64,8 +64,8 @@ func loginUser(env func(string) string) string {
 func notifyBlockedActionTTY(ctx context.Context, result operation.Result, userName string) error {
 	registry, warnings := notify.Build(map[string]any{
 		blockedActionTTYNotifierName: map[string]any{
-			"type":  "tty",
-			"users": []any{userName},
+			notify.KeyType:  notify.TypeTTY,
+			notify.KeyUsers: []any{userName},
 		},
 	}, notify.WithoutTemplates())
 	if len(warnings) > 0 {

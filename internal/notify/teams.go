@@ -4,6 +4,31 @@ import (
 	"context"
 )
 
+const (
+	teamsAdaptiveCardSchema    = "http://adaptivecards.io/schemas/adaptive-card.json"
+	teamsAdaptiveCardType      = "AdaptiveCard"
+	teamsAdaptiveCardVersion   = "1.4"
+	teamsAttachmentContentType = "application/vnd.microsoft.card.adaptive"
+	teamsCardBodyKey           = "body"
+	teamsCardContentKey        = "content"
+	teamsCardContentTypeKey    = "contentType"
+	teamsCardSchemaKey         = "$schema"
+	teamsCardTypeKey           = "type"
+	teamsCardVersionKey        = "version"
+	teamsFontTypeKey           = "fontType"
+	teamsFontTypeMonospace     = "Monospace"
+	teamsMessageAttachmentsKey = "attachments"
+	teamsMessageType           = "message"
+	teamsMSTeamsKey            = "msteams"
+	teamsMSTeamsWidth          = "Full"
+	teamsMSTeamsWidthKey       = "width"
+	teamsTextBlockType         = "TextBlock"
+	teamsTextKey               = "text"
+	teamsTextWeightBolder      = "Bolder"
+	teamsTextWeightKey         = "weight"
+	teamsTextWrapKey           = "wrap"
+)
+
 // Teams posts notifications to a Microsoft Teams incoming webhook (a Teams
 // Workflows / Power Automate "when a webhook request is received" URL). Uses
 // only net/http (no external dependency).
@@ -38,31 +63,31 @@ func buildTeams(name string, entry map[string]any) (Notifier, error) {
 // in a monospace block — the same layout as the slack payload.
 func teamsPayload(msg Message) []byte {
 	return webhookPayload(map[string]any{
-		"type": "message",
-		"attachments": []any{map[string]any{
-			"contentType": "application/vnd.microsoft.card.adaptive",
-			"content":     teamsCard(msg),
+		teamsCardTypeKey: teamsMessageType,
+		teamsMessageAttachmentsKey: []any{map[string]any{
+			teamsCardContentTypeKey: teamsAttachmentContentType,
+			teamsCardContentKey:     teamsCard(msg),
 		}},
 	})
 }
 
 func teamsCard(msg Message) map[string]any {
 	return map[string]any{
-		"$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-		"type":    "AdaptiveCard",
-		"version": "1.4",
-		"msteams": map[string]any{"width": "Full"},
-		"body":    teamsCardBody(msg),
+		teamsCardSchemaKey:  teamsAdaptiveCardSchema,
+		teamsCardTypeKey:    teamsAdaptiveCardType,
+		teamsCardVersionKey: teamsAdaptiveCardVersion,
+		teamsMSTeamsKey:     map[string]any{teamsMSTeamsWidthKey: teamsMSTeamsWidth},
+		teamsCardBodyKey:    teamsCardBody(msg),
 	}
 }
 
 func teamsCardBody(msg Message) []map[string]any {
 	body := []map[string]any{{
-		"type": "TextBlock", "text": msg.Subject, "weight": "Bolder", "wrap": true,
+		teamsCardTypeKey: teamsTextBlockType, teamsTextKey: msg.Subject, teamsTextWeightKey: teamsTextWeightBolder, teamsTextWrapKey: true,
 	}}
 	if msg.Body != "" {
 		body = append(body, map[string]any{
-			"type": "TextBlock", "text": msg.Body, "wrap": true, "fontType": "Monospace",
+			teamsCardTypeKey: teamsTextBlockType, teamsTextKey: msg.Body, teamsTextWrapKey: true, teamsFontTypeKey: teamsFontTypeMonospace,
 		})
 	}
 	return body

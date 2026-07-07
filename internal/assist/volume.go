@@ -55,7 +55,7 @@ func (volumeAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 			}
 			s = &t
 		}
-		watches[watchName("storage", v.Mountpoint)] = buildVolWatch(v, *s)
+		watches[watchName(config.WatchCategoryStorage, v.Mountpoint)] = buildVolWatch(v, *s)
 	}
 	return Result{Watches: watches, Summary: fmt.Sprintf("%d storage watch(es)", len(watches))}, nil
 }
@@ -139,7 +139,7 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 		then[config.WatchThenKeyExpand] = map[string]any{config.WatchExpandKeyBy: s.expandBy}
 	}
 	entry := map[string]any{
-		config.EntryKeyCategory: watchCategoryStorage,
+		config.EntryKeyCategory: config.WatchCategoryStorage,
 		config.WatchKeyCheck:    check,
 		config.WatchKeyThen:     then,
 	}

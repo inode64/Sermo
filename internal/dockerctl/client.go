@@ -30,6 +30,21 @@ const (
 	dockerErrorBodyLimit    = 4 << 10
 )
 
+const (
+	dockerSchemeHTTP          = "http"
+	dockerSchemeHTTPS         = "https"
+	dockerSocketBaseURL       = dockerSchemeHTTP + "://docker"
+	dockerEndpointInfo        = "/info"
+	dockerEndpointContainers  = "/containers/json"
+	dockerEndpointInspect     = "/json"
+	dockerEndpointStart       = "/start"
+	dockerEndpointStop        = "/stop"
+	dockerEndpointUnpause     = "/unpause"
+	dockerQueryAll            = "?all=1"
+	dockerQueryNoKillStop     = "?t=-1"
+	dockerContainerPathPrefix = "/containers/"
+)
+
 // Docker TLS mode tokens accepted from control.tls.
 const (
 	tlsModeFalse      = "false"
@@ -162,7 +177,7 @@ func NewClient(spec Spec) (*Client, error) {
 				return (&net.Dialer{}).DialContext(ctx, networkUnix, socket)
 			},
 		}
-		return &Client{HTTP: &http.Client{Transport: tr}, Base: "http://docker"}, nil
+		return &Client{HTTP: &http.Client{Transport: tr}, Base: dockerSocketBaseURL}, nil
 	}
 	host := spec.Host
 	if host == "" {
@@ -176,9 +191,9 @@ func NewClient(spec Spec) (*Client, error) {
 	if spec.DialContext != nil {
 		tr.DialContext = spec.DialContext
 	}
-	scheme := "http"
+	scheme := dockerSchemeHTTP
 	if mode := NormalizeTLS(spec.TLS); mode != "" {
-		scheme = "https"
+		scheme = dockerSchemeHTTPS
 		tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
 		if mode == tlsModeSkipVerify {
 			tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
@@ -256,7 +271,7 @@ func (c Container) ContainerName() string {
 // Info reads Docker daemon info.
 func (c *Client) Info(ctx context.Context) (Info, error) {
 	var info Info
-	if err := c.get(ctx, "/info", &info); err != nil {
+	if err := c.get(ctx, dockerEndpointInfo, &info); err != nil {
 		return Info{}, err
 	}
 	return info, nil
@@ -265,7 +280,7 @@ func (c *Client) Info(ctx context.Context) (Info, error) {
 // Inspect reads one container by name or ID.
 func (c *Client) Inspect(ctx context.Context, container string) (Container, error) {
 	var out Container
-	if err := c.get(ctx, containerPath(container, "/json"), &out); err != nil {
+	if err := c.get(ctx, containerPath(container, dockerEndpointInspect), &out); err != nil {
 		return Container{}, err
 	}
 	return out, nil
@@ -274,9 +289,9 @@ func (c *Client) Inspect(ctx context.Context, container string) (Container, erro
 // ListContainers lists Docker containers. With all=true it includes stopped
 // containers so the wizard can create a service that may be started later.
 func (c *Client) ListContainers(ctx context.Context, all bool) ([]ContainerSummary, error) {
-	path := "/containers/json"
+	path := dockerEndpointContainers
 	if all {
-		path += "?all=1"
+		path += dockerQueryAll
 	}
 	var out []ContainerSummary
 	if err := c.get(ctx, path, &out); err != nil {
@@ -287,19 +302,19 @@ func (c *Client) ListContainers(ctx context.Context, all bool) ([]ContainerSumma
 
 // Start starts a stopped container. Already-running is treated as success.
 func (c *Client) Start(ctx context.Context, container string) error {
-	return c.post(ctx, containerPath(container, "/start"), nil, http.StatusNoContent, http.StatusNotModified)
+	return c.post(ctx, containerPath(container, dockerEndpointStart), nil, http.StatusNoContent, http.StatusNotModified)
 }
 
 // Stop asks Docker to stop a container without delegating SIGKILL escalation to
 // Docker. `t=-1` waits indefinitely after SIGTERM; Sermo's operation context is
 // the outer bound and residual handling remains in the operation engine.
 func (c *Client) Stop(ctx context.Context, container string) error {
-	return c.post(ctx, containerPath(container, "/stop")+"?t=-1", nil, http.StatusNoContent, http.StatusNotModified)
+	return c.post(ctx, containerPath(container, dockerEndpointStop)+dockerQueryNoKillStop, nil, http.StatusNoContent, http.StatusNotModified)
 }
 
 // Unpause resumes a paused container. Already-unpaused is treated as success.
 func (c *Client) Unpause(ctx context.Context, container string) error {
-	return c.post(ctx, containerPath(container, "/unpause"), nil, http.StatusNoContent, http.StatusNotModified)
+	return c.post(ctx, containerPath(container, dockerEndpointUnpause), nil, http.StatusNoContent, http.StatusNotModified)
 }
 
 func (c *Client) get(ctx context.Context, path string, out any) error {
@@ -350,7 +365,7 @@ func dockerStatusError(resp *http.Response) error {
 }
 
 func containerPath(container, suffix string) string {
-	return "/containers/" + url.PathEscape(container) + suffix
+	return dockerContainerPathPrefix + url.PathEscape(container) + suffix
 }
 
 // NormalizeTLS maps friendly TLS values to Docker HTTP client modes.

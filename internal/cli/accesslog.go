@@ -11,6 +11,7 @@ import (
 const (
 	accessStatusOK    = "ok"
 	accessStatusError = "error"
+	accessSourceCLI   = "cli"
 )
 
 const (
@@ -42,12 +43,12 @@ func (a App) recordAccess(cfg *config.Config, command, target, status, message s
 		actor = "-"
 	}
 	_ = w.Write(map[string]any{
-		"time":    time.Now().UTC().Format(time.RFC3339),
-		"source":  "cli",
-		"actor":   actor,
-		"command": command,
-		"target":  target,
-		"status":  status,
-		"message": message,
+		cliJSONKeyTime:    time.Now().UTC().Format(time.RFC3339),
+		cliJSONKeySource:  accessSourceCLI,
+		cliJSONKeyActor:   actor,
+		cliJSONKeyCommand: command,
+		cliJSONKeyTarget:  target,
+		cliJSONKeyStatus:  status,
+		cliJSONKeyMessage: message,
 	})
 }

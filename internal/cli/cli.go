@@ -63,6 +63,31 @@ const (
 	daemonWebClientTimeout     = 10 * time.Second
 )
 
+const (
+	daemonProcessName            = "sermod"
+	daemonWebSchemeHTTP          = "http"
+	daemonWebAuthUserPrefix      = "admin:"
+	daemonWebCSRFHeader          = "X-Sermo-CSRF"
+	daemonWebCSRFValue           = "1"
+	daemonWebHeaderAuthorization = "Authorization"
+	daemonWebBasicAuthPrefix     = "Basic "
+	daemonAPIPathApplications    = "/api/applications"
+	daemonAPIPathEvents          = "/api/events"
+	daemonAPIPathEventsClear     = daemonAPIPathEvents + "/clear"
+	daemonAPIPathServices        = "/api/services"
+	daemonAPIPathWatches         = "/api/watches"
+	daemonAPIPathServiceEvents   = "/events"
+	daemonAPIQueryBefore         = "before"
+	daemonAPIQueryLimit          = "limit"
+	pflagUnknownFlagPrefix       = "unknown flag: "
+)
+
+const (
+	cliTextFail = "FAIL"
+	cliTextOK   = "OK"
+	cliTextWarn = "WARN"
+)
+
 // BackendDetector detects the service manager backend.
 type BackendDetector interface {
 	Detect(ctx context.Context, requested servicemgr.Backend) (servicemgr.Detection, error)
@@ -366,7 +391,7 @@ func (a App) runBackend(ctx context.Context, opts options) int {
 	detection, err := a.Detector.Detect(ctx, opts.backend)
 	if err != nil {
 		if opts.json {
-			writeJSON(a.Stdout, map[string]string{"error": err.Error()})
+			writeJSON(a.Stdout, map[string]string{cliJSONKeyError: err.Error()})
 		} else {
 			fmt.Fprintf(a.Stderr, "backend detection failed: %v\n", err)
 		}
@@ -374,7 +399,7 @@ func (a App) runBackend(ctx context.Context, opts options) int {
 	}
 
 	if opts.json {
-		writeJSON(a.Stdout, map[string]string{"backend": string(detection.Backend)})
+		writeJSON(a.Stdout, map[string]string{cliJSONKeyBackend: string(detection.Backend)})
 		return exitSuccess
 	}
 
@@ -785,7 +810,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 	}
 
 	runtime := cfg.Global.RuntimeDir()
-	locker := locks.NewOperationLocker(filepath.Join(runtime, "ops"))
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(runtime))
 	locker.OnReclaim = func(service, reason string) {
 		fmt.Fprintf(a.Stderr, "reclaimed stale operation lock for %s (%s)\n", service, reason)
 	}
@@ -804,7 +829,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		Tree:             resolved.Tree,
 		Manager:          target.Manager,
 		Locker:           &locker,
-		Scanner:          locks.NewScanner(filepath.Join(runtime, "locks")),
+		Scanner:          locks.NewScanner(locks.RuntimeLocksDir(runtime)),
 		Discoverer:       discoverer,
 		ResolveUser:      discoverer.ResolveUser,
 		CheckDeps:        checks.Deps{DefaultTimeout: engineDefaultTimeout(cfg), Runner: a.Runner, Processes: discoverer.ObserveState, ProcessesAny: discoverer.ObserveAnyState, ProcessCount: discoverer.CountMatching},
@@ -906,15 +931,15 @@ func (a App) runConfigValidate(globalPath string, rest []string, opts options) i
 	if len(issues) == 0 {
 		switch {
 		case opts.json:
-			writeJSON(a.Stdout, map[string]any{"valid": true})
+			writeJSON(a.Stdout, map[string]any{cliJSONKeyValid: true})
 		case !opts.quiet:
-			fmt.Fprintln(a.Stdout, "OK")
+			fmt.Fprintln(a.Stdout, cliTextOK)
 		}
 		return exitSuccess
 	}
 
 	if opts.json {
-		writeJSON(a.Stdout, map[string]any{"valid": false, "errors": issuesJSON(issues)})
+		writeJSON(a.Stdout, map[string]any{cliJSONKeyValid: false, cliJSONKeyErrors: issuesJSON(issues)})
 	} else {
 		a.printIssues(opts, issues)
 	}
@@ -924,7 +949,7 @@ func (a App) runConfigValidate(globalPath string, rest []string, opts options) i
 // printIssues writes validation findings in the section-30 ERROR format.
 func (a App) printIssues(opts options, issues []config.Issue) {
 	if opts.json {
-		writeJSON(a.Stdout, map[string]any{"valid": false, "errors": issuesJSON(issues)})
+		writeJSON(a.Stdout, map[string]any{cliJSONKeyValid: false, cliJSONKeyErrors: issuesJSON(issues)})
 		return
 	}
 	for _, is := range issues {
@@ -943,7 +968,7 @@ func scopedIssues(scope string, msgs []string) []config.Issue {
 func issuesJSON(issues []config.Issue) []map[string]string {
 	out := make([]map[string]string, 0, len(issues))
 	for _, is := range issues {
-		out = append(out, map[string]string{"scope": is.Scope, "error": is.Msg})
+		out = append(out, map[string]string{cliJSONKeyScope: is.Scope, cliJSONKeyError: is.Msg})
 	}
 	return out
 }
@@ -995,7 +1020,7 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 	outcome := checks.Evaluate(results)
 
 	if opts.json {
-		writeJSON(a.Stdout, map[string]any{"service": service, "ok": outcome.OK, "checks": results})
+		writeJSON(a.Stdout, map[string]any{cliJSONKeyService: service, cliJSONKeyOK: outcome.OK, cliJSONKeyChecks: results})
 	} else {
 		a.printPreflight(service, outcome)
 	}
@@ -1007,9 +1032,9 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 }
 
 func (a App) printPreflight(service string, outcome checks.Outcome) {
-	overall := "OK"
+	overall := cliTextOK
 	if !outcome.OK {
-		overall = "FAIL"
+		overall = cliTextFail
 	}
 	if len(outcome.Results) == 0 {
 		fmt.Fprintf(a.Stdout, "preflight %s: %s (no checks)\n", service, overall)
@@ -1017,11 +1042,11 @@ func (a App) printPreflight(service string, outcome checks.Outcome) {
 	}
 	fmt.Fprintf(a.Stdout, "preflight %s: %s\n", service, overall)
 	for _, r := range outcome.Results {
-		tag := "OK"
+		tag := cliTextOK
 		if !r.OK {
-			tag = "FAIL"
+			tag = cliTextFail
 			if r.Optional {
-				tag = "WARN"
+				tag = cliTextWarn
 			}
 		}
 		fmt.Fprintf(a.Stdout, "  %-4s %s: %s\n", tag, r.Check, r.Message)
@@ -1075,7 +1100,7 @@ func (a App) runLocks(opts options) int {
 	}
 	service := canonicalServiceIfKnown(cfg, opts.service())
 
-	dir := filepath.Join(cfg.Global.RuntimeDir(), "locks")
+	dir := locks.RuntimeLocksDir(cfg.Global.RuntimeDir())
 	report, err := locks.NewScanner(dir).Scan(service)
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("scan locks failed: %v", err))
@@ -1087,8 +1112,8 @@ func (a App) runLocks(opts options) int {
 
 	if opts.json {
 		writeJSON(a.Stdout, map[string]any{
-			"service": report.Service,
-			"locks":   report.Locks,
+			cliJSONKeyService: report.Service,
+			cliJSONKeyLocks:   report.Locks,
 		})
 		return exitSuccess
 	}
@@ -1157,7 +1182,7 @@ func (a App) runProcesses(opts options) int {
 	}
 
 	if opts.json {
-		writeJSON(a.Stdout, map[string]any{"service": service, "processes": procs})
+		writeJSON(a.Stdout, map[string]any{cliJSONKeyService: service, cliJSONKeyProcesses: procs})
 		return exitSuccess
 	}
 
@@ -1303,7 +1328,7 @@ func (a App) resolveControlTarget(ctx context.Context, opts options, service str
 
 func (a App) reportError(opts options, msg string) {
 	if opts.json {
-		writeJSON(a.Stdout, map[string]string{"error": msg})
+		writeJSON(a.Stdout, map[string]string{cliJSONKeyError: msg})
 		return
 	}
 	fmt.Fprintln(a.Stderr, msg)
@@ -1366,7 +1391,7 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 		if len(args) > 1 {
 			return a.commandUsageError(commandEvents, "events clear accepts only optional --before TIME")
 		}
-		return a.runEventsClear(ctx, opts, "events")
+		return a.runEventsClear(ctx, opts, commandEvents)
 	}
 	if len(args) > 1 {
 		return a.commandUsageError(commandEvents, "events accepts at most one service name")
@@ -1476,7 +1501,7 @@ func (a App) runEventsClear(ctx context.Context, opts options, noun string) int 
 		return a.fail(opts, err.Error())
 	}
 	if opts.json {
-		writeJSON(a.Stdout, map[string]any{"pruned": n})
+		writeJSON(a.Stdout, map[string]any{cliJSONKeyPruned: n})
 	} else if before.IsZero() {
 		fmt.Fprintf(a.Stdout, "cleared %d %s\n", n, noun)
 	} else {
@@ -1512,24 +1537,19 @@ func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Ti
 	if err != nil {
 		return 0, err
 	}
-	u := base + "/api/events/clear"
+	u := base + daemonAPIPathEventsClear
 	if !before.IsZero() {
-		u += "?before=" + before.Format(time.RFC3339)
+		u += "?" + daemonAPIQueryBefore + "=" + before.Format(time.RFC3339)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
 	if err != nil {
 		return 0, err
 	}
-	req.Header.Set("X-Sermo-CSRF", "1")
+	req.Header.Set(daemonWebCSRFHeader, daemonWebCSRFValue)
 
 	// If the config declares an admin password, send Basic auth (any user + pw).
-	if wraw, ok := cfg.Global.Raw[config.SectionWeb].(map[string]any); ok {
-		if pw := cfgval.String(wraw[config.WebKeyPassword]); pw != "" {
-			cred := base64.StdEncoding.EncodeToString([]byte("admin:" + pw))
-			req.Header.Set("Authorization", "Basic "+cred)
-		}
-	}
+	applyDaemonWebAuth(req, cfg)
 
 	client := &http.Client{Timeout: daemonWebClientTimeout}
 	resp, err := client.Do(req)
@@ -1568,9 +1588,9 @@ func (a App) fetchEvents(ctx context.Context, opts options, service string, limi
 
 	var u string
 	if service != "" {
-		u = fmt.Sprintf("%s/api/services/%s/events?limit=%d", base, service, limit)
+		u = fmt.Sprintf("%s%s/%s%s?%s=%d", base, daemonAPIPathServices, service, daemonAPIPathServiceEvents, daemonAPIQueryLimit, limit)
 	} else {
-		u = fmt.Sprintf("%s/api/events?limit=%d", base, limit)
+		u = fmt.Sprintf("%s%s?%s=%d", base, daemonAPIPathEvents, daemonAPIQueryLimit, limit)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
@@ -1578,12 +1598,7 @@ func (a App) fetchEvents(ctx context.Context, opts options, service string, limi
 		return nil, err
 	}
 	// no CSRF needed for GET; add auth if configured
-	if wraw, ok := cfg.Global.Raw[config.SectionWeb].(map[string]any); ok {
-		if pw := cfgval.String(wraw[config.WebKeyPassword]); pw != "" {
-			cred := base64.StdEncoding.EncodeToString([]byte("admin:" + pw))
-			req.Header.Set("Authorization", "Basic "+cred)
-		}
-	}
+	applyDaemonWebAuth(req, cfg)
 
 	client := &http.Client{Timeout: daemonWebClientTimeout}
 	resp, err := client.Do(req)
@@ -1605,12 +1620,21 @@ func (a App) fetchEvents(ctx context.Context, opts options, service string, limi
 }
 
 func applyDaemonWebAuth(req *http.Request, cfg *config.Config) {
-	if wraw, ok := cfg.Global.Raw[config.SectionWeb].(map[string]any); ok {
-		if pw := cfgval.String(wraw[config.WebKeyPassword]); pw != "" {
-			cred := base64.StdEncoding.EncodeToString([]byte("admin:" + pw))
-			req.Header.Set("Authorization", "Basic "+cred)
-		}
+	if pw := daemonWebPassword(cfg); pw != "" {
+		req.Header.Set(daemonWebHeaderAuthorization, daemonWebBasicAuth(pw))
 	}
+}
+
+func daemonWebPassword(cfg *config.Config) string {
+	if wraw, ok := cfg.Global.Raw[config.SectionWeb].(map[string]any); ok {
+		return cfgval.String(wraw[config.WebKeyPassword])
+	}
+	return ""
+}
+
+func daemonWebBasicAuth(password string) string {
+	cred := base64.StdEncoding.EncodeToString([]byte(daemonWebAuthUserPrefix + password))
+	return daemonWebBasicAuthPrefix + cred
 }
 
 // daemonAPIGet performs an authenticated GET against the running sermod web API.
@@ -1654,7 +1678,7 @@ func (a App) fetchDaemonServiceState(ctx context.Context, opts options, service 
 	} else if len(cfg.Services) > 0 {
 		return "", false
 	}
-	body, status, err := a.daemonAPIGet(ctx, opts, "/api/services/"+url.PathEscape(name))
+	body, status, err := a.daemonAPIGet(ctx, opts, daemonAPIPathServices+"/"+url.PathEscape(name))
 	if err != nil || status != http.StatusOK {
 		return "", false
 	}
@@ -1668,7 +1692,7 @@ func (a App) fetchDaemonServiceState(ctx context.Context, opts options, service 
 }
 
 func (a App) fetchDaemonWatchState(ctx context.Context, opts options, watch string) (string, bool) {
-	body, status, err := a.daemonAPIGet(ctx, opts, "/api/watches")
+	body, status, err := a.daemonAPIGet(ctx, opts, daemonAPIPathWatches)
 	if err != nil || status != http.StatusOK {
 		return "", false
 	}
@@ -1688,7 +1712,7 @@ func (a App) fetchDaemonWatchState(ctx context.Context, opts options, watch stri
 }
 
 func (a App) fetchDaemonApplicationStates(ctx context.Context, opts options) map[string]string {
-	body, status, err := a.daemonAPIGet(ctx, opts, "/api/applications")
+	body, status, err := a.daemonAPIGet(ctx, opts, daemonAPIPathApplications)
 	if err != nil || status != http.StatusOK {
 		return nil
 	}
@@ -1725,7 +1749,7 @@ func webAPIBase(cfg *config.Config) (string, error) {
 		return "", fmt.Errorf("web.port is not set in config")
 	}
 	port := p
-	return fmt.Sprintf("http://%s:%d", addr, port), nil
+	return fmt.Sprintf("%s://%s:%d", daemonWebSchemeHTTP, addr, port), nil
 }
 
 // defaultReloadPidfileFallbacks are the absolute pidfiles `daemon reload` checks
@@ -1777,7 +1801,7 @@ func (a App) runReload(ctx context.Context, opts options) int {
 		if find == nil {
 			find = process.PIDsByComm
 		}
-		if pids, err := find("sermod"); err == nil {
+		if pids, err := find(daemonProcessName); err == nil {
 			for _, p := range pids {
 				if p > 0 {
 					pid = p
@@ -1800,7 +1824,7 @@ func (a App) runReload(ctx context.Context, opts options) int {
 
 	a.recordAccess(cfg, accessCommandDaemonReload, "", accessStatusOK, fmt.Sprintf("pid %d", pid))
 	if opts.json {
-		writeJSON(a.Stdout, map[string]any{"ok": true, "pid": pid})
+		writeJSON(a.Stdout, map[string]any{cliJSONKeyOK: true, cliJSONKeyPID: pid})
 	} else {
 		fmt.Fprintf(a.Stdout, "reload signal (HUP) sent to sermod pid %d\n", pid)
 	}
@@ -1874,8 +1898,8 @@ func splitCommandArgs(args []string) (flagArgs, commandArgs []string) {
 }
 
 func normalizePflagError(err error) error {
-	if msg := err.Error(); strings.HasPrefix(msg, "unknown flag: ") {
-		return fmt.Errorf("unknown flag %s", strings.TrimPrefix(msg, "unknown flag: "))
+	if msg := err.Error(); strings.HasPrefix(msg, pflagUnknownFlagPrefix) {
+		return fmt.Errorf("unknown flag %s", strings.TrimPrefix(msg, pflagUnknownFlagPrefix))
 	}
 	return err
 }

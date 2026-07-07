@@ -609,42 +609,42 @@ func validateServices(cfg *Config) []Issue {
 }
 
 func validateStorageMount(mount map[string]any, add addFunc) {
-	allowed := set(keyRefcount, keyUmount, sectionStopPolicy)
+	allowed := set(MountKeyRefcount, MountKeyUmount, MountKeyStopPolicy)
 	for _, key := range slices.Sorted(maps.Keys(mount)) {
 		if _, ok := allowed[key]; !ok {
 			add("mount key %q is not supported", key)
 		}
 	}
-	if v, present := mount[keyRefcount]; present {
+	if v, present := mount[MountKeyRefcount]; present {
 		if _, ok := v.(bool); !ok {
 			add("mount.refcount must be true or false")
 		}
 	}
 
-	umount, _ := mount[keyUmount].(map[string]any)
-	if _, present := mount[keyUmount]; present && umount == nil {
+	umount, _ := mount[MountKeyUmount].(map[string]any)
+	if _, present := mount[MountKeyUmount]; present && umount == nil {
 		add("mount.umount must be a mapping")
 	}
 	allowSIGKILL := false
 	if umount != nil {
-		allowedUmount := set(keyTermTimeout, keyKillTimeout, keyAllowSIGKILL, keyAllowLazy)
+		allowedUmount := set(StopPolicyKeyTermTimeout, StopPolicyKeyKillTimeout, MountKeyAllowSIGKILL, MountKeyAllowLazy)
 		for _, key := range slices.Sorted(maps.Keys(umount)) {
 			if _, ok := allowedUmount[key]; !ok {
 				add("mount.umount key %q is not one of term_timeout, kill_timeout, allow_sigkill, allow_lazy", key)
 			}
 		}
-		for _, field := range []string{keyTermTimeout, keyKillTimeout} {
+		for _, field := range []string{StopPolicyKeyTermTimeout, StopPolicyKeyKillTimeout} {
 			if v, present := umount[field]; present && !isPositiveDuration(cfgval.String(v)) {
 				add("mount.umount.%s %q must be a valid positive duration", field, cfgval.String(v))
 			}
 		}
-		for _, field := range []string{keyAllowSIGKILL, keyAllowLazy} {
+		for _, field := range []string{MountKeyAllowSIGKILL, MountKeyAllowLazy} {
 			if v, present := umount[field]; present {
 				b, ok := v.(bool)
 				if !ok {
 					add("mount.umount.%s must be true or false", field)
 				}
-				if field == keyAllowSIGKILL && ok && b {
+				if field == MountKeyAllowSIGKILL && ok && b {
 					allowSIGKILL = true
 				}
 			}

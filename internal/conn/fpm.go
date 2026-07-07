@@ -25,6 +25,11 @@ const (
 	fcgiRequestID    = 1
 )
 
+const (
+	fpmDefaultPingPath  = "/ping"
+	fpmStatusFormatJSON = "json"
+)
+
 // fpmProtocol probes a PHP-FPM pool over FastCGI by requesting its ping path
 // (default /ping) and expecting "pong". It speaks FastCGI natively (no driver).
 // The pool must have `ping.path = /ping` enabled. No authentication.
@@ -44,7 +49,7 @@ func (fpmProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	res, err := fpmHandshake(c, "/ping")
+	res, err := fpmHandshake(c, fpmDefaultPingPath)
 	if err != nil {
 		return res, err
 	}
@@ -54,7 +59,7 @@ func (fpmProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if cfg.Query != "" {
 		if sc, derr := dialDeadline(ctx, cfg, defaultPortFPM); derr == nil {
 			defer func() { _ = sc.Close() }()
-			if stdout, _, rerr := fpmRequest(sc, cfg.Query, "json"); rerr == nil {
+			if stdout, _, rerr := fpmRequest(sc, cfg.Query, fpmStatusFormatJSON); rerr == nil {
 				mergeFPMStatus(res.Extra, stdout)
 			}
 		}

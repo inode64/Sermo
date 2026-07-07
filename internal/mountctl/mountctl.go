@@ -44,6 +44,11 @@ const (
 	procRootPath              = "/proc"
 	rootMountPath             = "/"
 	rootUmountDisabledMessage = "root filesystem cannot be unmounted"
+	runtimeDirMounts          = "mounts"
+	runtimeDirOps             = "ops"
+	runtimeDirState           = "state"
+	stateFileExt              = ".json"
+	tmpFileExt                = ".tmp"
 
 	// ResultFailed is the Result.Status value for a failed mount/umount action.
 	ResultFailed = "failed"
@@ -52,6 +57,13 @@ const (
 
 	mountStateActive   = "active"
 	mountStateInactive = "inactive"
+
+	mountMessageAlreadyUnmounted      = "already unmounted"
+	mountMessageBusy                  = "mount is busy"
+	mountMessageMounted               = "mounted"
+	mountMessageRefcountAcquired      = "acquired, already mounted"
+	mountMessageRefcountReleasedInUse = "released, still in use"
+	mountMessageUnmounted             = "unmounted"
 )
 
 // UmountSpec controls unmount escalation after a normal umount fails.
@@ -262,9 +274,9 @@ func (c Controller) Acquire(ctx context.Context, spec Spec) (Result, error) {
 			return Result{}, err
 		}
 		mounted, _ = c.isMounted(spec.Path)
-		msg := "mounted"
+		msg := mountMessageMounted
 		if mounted && prev > 0 {
-			msg = "acquired, already mounted"
+			msg = mountMessageRefcountAcquired
 		}
 		return Result{Name: spec.Name, Path: spec.Path, Action: ActionMount, Status: ResultOK, Message: msg, Mounted: mounted, Refcount: state.Refcount}, nil
 	})
@@ -288,7 +300,7 @@ func (c Controller) Release(ctx context.Context, spec Spec) (Result, error) {
 				return Result{}, err
 			}
 			mounted, _ := c.isMounted(spec.Path)
-			return Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultOK, Message: "released, still in use", Mounted: mounted, Refcount: state.Refcount}, nil
+			return Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultOK, Message: mountMessageRefcountReleasedInUse, Mounted: mounted, Refcount: state.Refcount}, nil
 		}
 
 		unmount, err := c.unmount(ctx, spec)
@@ -341,7 +353,7 @@ func (c Controller) withLock(spec Spec, fn func() (Result, error)) (Result, erro
 	if ttl <= 0 {
 		ttl = DefaultLockTTL
 	}
-	locker := locks.NewOperationLocker(filepath.Join(c.runtime(), "mounts", "ops"))
+	locker := locks.NewOperationLocker(mountOpsDir(c.runtime()))
 	handle, err := locker.Acquire(stateID(spec), ttl)
 	if err != nil {
 		return Result{}, err
@@ -359,19 +371,19 @@ func (c Controller) unmount(ctx context.Context, spec Spec) (Result, error) {
 		return Result{}, err
 	}
 	if !mounted {
-		return Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultOK, Message: "already unmounted", Mounted: false}, nil
+		return Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultOK, Message: mountMessageAlreadyUnmounted, Mounted: false}, nil
 	}
 	if err := c.run(ctx, ActionUmount, spec.Path); err == nil {
-		return Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultOK, Message: "unmounted", Mounted: false}, nil
+		return Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultOK, Message: mountMessageUnmounted, Mounted: false}, nil
 	}
 	// Only treat the path as unmounted when the recheck succeeds and reports so;
 	// a read failure must not be mistaken for "unmounted" and skip escalation.
 	if ok, rerr := c.isMounted(spec.Path); rerr == nil && !ok {
-		return Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultOK, Message: "unmounted", Mounted: false}, nil
+		return Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultOK, Message: mountMessageUnmounted, Mounted: false}, nil
 	}
 
 	blockers, derr := c.discoverUsers(ctx, spec.Path)
-	result := Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultFailed, Message: "mount is busy", Mounted: true, Blockers: blockers}
+	result := Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultFailed, Message: mountMessageBusy, Mounted: true, Blockers: blockers}
 	if derr != nil {
 		// A discovery failure must not masquerade as "no blockers": surface it so
 		// the operator knows escalation could not be attempted, rather than
@@ -449,7 +461,7 @@ func (c Controller) readState(spec Spec) (State, error) {
 }
 
 func (c Controller) writeState(spec Spec, state State) error {
-	dir := filepath.Join(c.runtime(), "mounts", "state")
+	dir := mountStateDir(c.runtime())
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("create mount state dir %s: %w", dir, err)
 	}
@@ -461,7 +473,7 @@ func (c Controller) writeState(spec Spec, state State) error {
 		return err
 	}
 	path := c.statePath(spec)
-	tmp := path + ".tmp"
+	tmp := path + tmpFileExt
 	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
 		return fmt.Errorf("write mount state %s: %w", tmp, err)
 	}
@@ -472,7 +484,15 @@ func (c Controller) writeState(spec Spec, state State) error {
 }
 
 func (c Controller) statePath(spec Spec) string {
-	return filepath.Join(c.runtime(), "mounts", "state", stateID(spec)+".json")
+	return filepath.Join(mountStateDir(c.runtime()), stateID(spec)+stateFileExt)
+}
+
+func mountOpsDir(runtime string) string {
+	return filepath.Join(runtime, runtimeDirMounts, runtimeDirOps)
+}
+
+func mountStateDir(runtime string) string {
+	return filepath.Join(runtime, runtimeDirMounts, runtimeDirState)
 }
 
 func stateID(spec Spec) string {

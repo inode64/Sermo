@@ -505,7 +505,7 @@ func pathExists(p string) bool {
 
 // servicesIncludeDir is the explicit services subdirectory the service wizard
 // writes kind:service files into.
-const servicesIncludeDir = "services"
+const servicesIncludeDir = config.ConfigDirServices
 
 // writeWizardServices renders the generated services, confirms, then writes one
 // `kind: service` file per service into the services directory and ensures that

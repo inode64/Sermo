@@ -46,10 +46,10 @@ func (b *WebBackend) probeWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRe
 	res := check.Run(ctx)
 	readings := checkReadings(w.checkType, res.Data)
 	if len(readings) == 0 && res.Message != "" {
-		readings = []web.WatchReading{{Field: "result", Label: "Result", Value: res.Message}}
+		readings = []web.WatchReading{{Field: watchReadingFieldResult, Label: "Result", Value: res.Message}}
 	}
 	if !res.Healthy() && res.Message != "" {
-		readings = append([]web.WatchReading{{Field: "error", Label: "Error", Error: res.Message}}, readings...)
+		readings = append([]web.WatchReading{{Field: watchReadingFieldError, Label: "Error", Error: res.Message}}, readings...)
 	}
 	summary := res.Message
 	if summary == "" && len(readings) > 0 {

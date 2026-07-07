@@ -163,14 +163,18 @@ const (
 	ExtraKeyDomainInactive    = "domains.inactive"
 	ExtraKeyDomainState       = "domain.state"
 	ExtraKeyDomainRunning     = "domain.running"
+	ExtraKeyInode             = "inode"
 	ExtraKeyKafkaAPICount     = "api_count"
 	ExtraKeyKafkaErrorCode    = "error_code"
 	ExtraKeyKafkaProduceAPI   = "produce_api"
 	ExtraKeyKafkaVoteAPI      = "vote_api"
+	ExtraKeyLocalAddress      = "local_address"
 	ExtraKeyMongoReadOnly     = "read_only"
 	ExtraKeyMongoSetName      = "set_name"
 	ExtraKeyNodeCPUs          = "node.cpus"
 	ExtraKeyNodeMemoryMB      = "node.memory_mb"
+	ExtraKeyPort              = "port"
+	ExtraKeyState             = "state"
 )
 
 // DNSRCodeNoErrorName is the DNS response code name for a successful response.
@@ -280,6 +284,10 @@ const (
 	maxHTTPProbeLargeBody = 1 << 20
 	maxHTTPProbeShortBody = 4 << 10
 
+	httpHeaderContentType   = "Content-Type"
+	httpHeaderServer        = "Server"
+	httpHeaderSyncthingAuth = "X-API-Key"
+
 	tlsSkipVerify = TLSModeSkipVerify
 	tlsModeFalse  = "false"
 	tlsModeYes    = "yes"
@@ -344,7 +352,6 @@ const (
 	extraSession               = "session_present"
 	extraShareAccess           = "share_access"
 	extraShares                = "shares"
-	extraState                 = "state"
 	extraStratum               = "stratum"
 	extraSubnetMask            = "subnet_mask"
 	extraSysContact            = "sys_contact"

@@ -11,6 +11,8 @@ import (
 	"sermo/internal/operation"
 )
 
+const runtimeDirOpSlots = "op-slots"
+
 // OpGate serializes service operations across workers, the web UI and sermoctl
 // using the global operation semaphore.
 type OpGate struct {
@@ -26,7 +28,7 @@ func NewOpGate(slots int, runtimeDir string) *OpGate {
 		slots = DefaultEngineMaxParallelOperations
 	}
 	if runtimeDir != "" {
-		return &OpGate{pool: locks.NewSlotPool(filepath.Join(runtimeDir, "op-slots"), slots)}
+		return &OpGate{pool: locks.NewSlotPool(filepath.Join(runtimeDir, runtimeDirOpSlots), slots)}
 	}
 	return &OpGate{mem: make(chan struct{}, slots)}
 }

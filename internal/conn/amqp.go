@@ -33,7 +33,22 @@ var amqpHeader = []byte{'A', 'M', 'Q', 'P', 0, 0, 9, 1}
 // real frame is a few hundred bytes.
 const (
 	maxAMQPFrame                   = 1 << 20
+	amqpClassConnection            = 10
+	amqpFrameEnd                   = 0xCE
+	amqpFrameEndSize               = 1
+	amqpFrameHeaderSize            = 7
+	amqpFrameMethod                = 1
+	amqpMethodHeaderSize           = 4
+	amqpMethodStart                = 10
 	amqpNegotiationVersionMismatch = "version-mismatch"
+	amqpServerPropertiesOffset     = 6
+)
+
+const (
+	amqpPropClusterName = "cluster_name"
+	amqpPropPlatform    = "platform"
+	amqpPropProduct     = "product"
+	amqpPropVersion     = "version"
 )
 
 func (amqpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -47,8 +62,8 @@ func (amqpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 
-	// A method frame header is 7 bytes: type(1) channel(2) size(4).
-	var hdr [7]byte
+	// A method frame header is type(1), channel(2), size(4).
+	var hdr [amqpFrameHeaderSize]byte
 	if _, err := io.ReadFull(c, hdr[:]); err != nil {
 		return Result{}, err
 	}
@@ -65,8 +80,7 @@ func (amqpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		}, nil
 	}
 
-	const frameMethod = 1
-	if hdr[0] != frameMethod {
+	if hdr[0] != amqpFrameMethod {
 		return Result{}, fmt.Errorf("unexpected AMQP frame type %d (want method)", hdr[0])
 	}
 	size := binary.BigEndian.Uint32(hdr[3:7])
@@ -75,26 +89,21 @@ func (amqpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 
 	// Read the payload plus the trailing frame-end octet (0xCE).
-	payload := make([]byte, int(size)+1)
+	payload := make([]byte, int(size)+amqpFrameEndSize)
 	if _, err := io.ReadFull(c, payload); err != nil {
 		return Result{}, err
 	}
-	const frameEnd = 0xCE
-	if payload[size] != frameEnd {
+	if payload[size] != amqpFrameEnd {
 		return Result{}, fmt.Errorf("malformed AMQP frame (bad frame-end 0x%02x)", payload[size])
 	}
 	body := payload[:size]
 
 	// Method payload: class-id(2) method-id(2); Connection.Start is class 10,
 	// method 10. version-major and version-minor follow, then server-properties.
-	const (
-		classConnection = 10
-		methodStart     = 10
-	)
-	if len(body) < 4 {
+	if len(body) < amqpMethodHeaderSize {
 		return Result{}, fmt.Errorf("short AMQP method frame (%d bytes)", len(body))
 	}
-	if class, method := binary.BigEndian.Uint16(body[0:2]), binary.BigEndian.Uint16(body[2:4]); class != classConnection || method != methodStart {
+	if class, method := binary.BigEndian.Uint16(body[0:2]), binary.BigEndian.Uint16(body[2:4]); class != amqpClassConnection || method != amqpMethodStart {
 		return Result{}, fmt.Errorf("unexpected AMQP method %d.%d (want Connection.Start 10.10)", class, method)
 	}
 
@@ -102,10 +111,10 @@ func (amqpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	// failure leaves the fields empty without failing the liveness check, mirroring
 	// redis INFO.
 	res := Result{Extra: map[string]string{}}
-	if len(body) >= 6 { // skip version-major(1) + version-minor(1)
-		props := parseAMQPTable(body[6:])
-		res.Version = props["version"]
-		for _, k := range []string{"product", "cluster_name", "platform"} {
+	if len(body) >= amqpServerPropertiesOffset { // skip version-major(1) + version-minor(1)
+		props := parseAMQPTable(body[amqpServerPropertiesOffset:])
+		res.Version = props[amqpPropVersion]
+		for _, k := range []string{amqpPropProduct, amqpPropClusterName, amqpPropPlatform} {
 			if v := props[k]; v != "" {
 				res.Extra[k] = v
 			}

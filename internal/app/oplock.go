@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"sermo/internal/locks"
 )
@@ -10,7 +9,7 @@ import (
 // configureOperationLocker returns the per-service internal operation locker with
 // stale-lock reclaims logged through onReclaim (AGENTS.md).
 func configureOperationLocker(runtimeDir string, onReclaim func(service, reason string)) locks.OperationLocker {
-	locker := locks.NewOperationLocker(filepath.Join(runtimeDir, "ops"))
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(runtimeDir))
 	if onReclaim != nil {
 		locker.OnReclaim = onReclaim
 	}

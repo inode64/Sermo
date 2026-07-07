@@ -37,7 +37,7 @@ defaults:
   policy:
     cooldown: 5m
 `)
-	return global, filepath.Join(root, "run", "locks")
+	return global, locks.RuntimeLocksDir(filepath.Join(root, "run"))
 }
 
 func writeLockFixture(t *testing.T, dir, fileName string, payload map[string]any) {

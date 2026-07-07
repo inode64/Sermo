@@ -27,6 +27,24 @@ func (openvswitchProtocol) Name() string       { return ProtocolNameOpenVSwitch 
 func (openvswitchProtocol) DefaultPort() int   { return defaultPortOpenVSwitch }
 func (openvswitchProtocol) RequiresUser() bool { return false }
 
+const (
+	ovsdbColumnVersion       = "ovs_version"
+	ovsdbDatabaseOpenVSwitch = "Open_vSwitch"
+	ovsdbFieldColumns        = "columns"
+	ovsdbFieldID             = "id"
+	ovsdbFieldMethod         = "method"
+	ovsdbFieldOp             = "op"
+	ovsdbFieldParams         = "params"
+	ovsdbFieldTable          = "table"
+	ovsdbFieldWhere          = "where"
+	ovsdbIDListDatabases     = "0"
+	ovsdbIDTransact          = "1"
+	ovsdbMethodListDatabases = "list_dbs"
+	ovsdbMethodTransact      = "transact"
+	ovsdbOpSelect            = "select"
+	ovsdbTableOpenVSwitch    = ovsdbDatabaseOpenVSwitch
+)
+
 func (openvswitchProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	c, err := dialDeadline(ctx, cfg, defaultPortOpenVSwitch)
 	if err != nil {
@@ -39,7 +57,7 @@ func (openvswitchProtocol) Probe(ctx context.Context, cfg Config) (Result, error
 
 	// list_dbs proves the server is up and reports the databases it serves.
 	var dbs []string
-	if err := ovsdbCall(enc, dec, "0", "list_dbs", []any{}, &dbs); err != nil {
+	if err := ovsdbCall(enc, dec, ovsdbIDListDatabases, ovsdbMethodListDatabases, []any{}, &dbs); err != nil {
 		return Result{}, err
 	}
 	extra := map[string]string{}
@@ -51,7 +69,7 @@ func (openvswitchProtocol) Probe(ctx context.Context, cfg Config) (Result, error
 	// tracking. A best-effort step: an empty/absent value leaves Version unset.
 	version := ""
 	for _, db := range dbs {
-		if db == "Open_vSwitch" {
+		if db == ovsdbDatabaseOpenVSwitch {
 			version = ovsdbVersion(enc, dec)
 			break
 		}
@@ -72,7 +90,7 @@ type ovsdbResponse struct {
 // into out (when non-nil). It skips any request the server interleaves, matching
 // the reply by id.
 func ovsdbCall(enc *json.Encoder, dec *json.Decoder, id, method string, params []any, out any) error {
-	if err := enc.Encode(map[string]any{"method": method, "params": params, "id": id}); err != nil {
+	if err := enc.Encode(map[string]any{ovsdbFieldMethod: method, ovsdbFieldParams: params, ovsdbFieldID: id}); err != nil {
 		return err
 	}
 	for i := 0; i < 8; i++ {
@@ -103,18 +121,18 @@ func ovsdbCall(enc *json.Encoder, dec *json.Decoder, id, method string, params [
 // select. It returns "" on any error or when the column is unset (OVSDB renders
 // an absent optional column as a set, which does not unmarshal into a string).
 func ovsdbVersion(enc *json.Encoder, dec *json.Decoder) string {
-	params := []any{"Open_vSwitch", map[string]any{
-		"op":      "select",
-		"table":   "Open_vSwitch",
-		"where":   []any{},
-		"columns": []string{"ovs_version"},
+	params := []any{ovsdbDatabaseOpenVSwitch, map[string]any{
+		ovsdbFieldOp:      ovsdbOpSelect,
+		ovsdbFieldTable:   ovsdbTableOpenVSwitch,
+		ovsdbFieldWhere:   []any{},
+		ovsdbFieldColumns: []string{ovsdbColumnVersion},
 	}}
 	var result []struct {
 		Rows []struct {
 			OvsVersion json.RawMessage `json:"ovs_version"`
 		} `json:"rows"`
 	}
-	if err := ovsdbCall(enc, dec, "1", "transact", params, &result); err != nil {
+	if err := ovsdbCall(enc, dec, ovsdbIDTransact, ovsdbMethodTransact, params, &result); err != nil {
 		return ""
 	}
 	if len(result) == 0 || len(result[0].Rows) == 0 {

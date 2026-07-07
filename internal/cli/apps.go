@@ -17,20 +17,20 @@ import (
 // command reports, and whether they resolve without error. Only installed apps
 // are shown unless `apps all` is given.
 func (a App) runApps(ctx context.Context, opts options) int {
-	return a.listCategory(ctx, opts, config.CategoryApp, "apps", "installed applications", "APPLICATION")
+	return a.listCategory(ctx, opts, config.CategoryApp, commandApps, "installed applications", "APPLICATION")
 }
 
 // runLibs lists catalog libraries (catalog/libs) services can watch for
 // changes, with the version each reports and whether it is present.
 func (a App) runLibs(ctx context.Context, opts options) int {
-	return a.listCategory(ctx, opts, config.CategoryLibrary, "libs", "libraries", "LIBRARY")
+	return a.listCategory(ctx, opts, config.CategoryLibrary, commandLibs, "libraries", "LIBRARY")
 }
 
 // runServices lists catalog service profiles (catalog/services): which
 // are installed, the version their version command reports, and whether they
 // resolve without error.
 func (a App) runServices(ctx context.Context, opts options) int {
-	return a.listCategory(ctx, opts, config.CategoryService, "services", "installed services", "SERVICE")
+	return a.listCategory(ctx, opts, config.CategoryService, commandServices, "installed services", "SERVICE")
 }
 
 func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, empty, heading string) int {
@@ -73,7 +73,7 @@ func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, 
 	if opts.json {
 		out := map[string]any{jsonKey: reports}
 		if notified != nil {
-			out["notified"] = notified
+			out[cliJSONKeyNotified] = notified
 		}
 		writeJSON(a.Stdout, out)
 		return exitSuccess
