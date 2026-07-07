@@ -8,6 +8,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/notify"
+	"sermo/internal/rules"
 )
 
 // validateWatches checks each host-watch entry: a known check type with valid
@@ -175,15 +176,15 @@ func validateNotifyRefs(name string, entry map[string]any, notifiers map[string]
 		if !ok {
 			return
 		}
-		if _, present := t["notify"]; present {
-			validateNotifySelection(prefix+".then.notify", t["notify"], notifiers, add)
+		if _, present := t[rules.RuleFieldNotify]; present {
+			validateNotifySelection(prefix+".then.notify", t[rules.RuleFieldNotify], notifiers, add)
 		}
 	}
-	check("watches."+name, entry["then"])
+	check("watches."+name, entry[rules.RuleFieldThen])
 	if metrics, ok := entry[sectionMetrics].(map[string]any); ok {
 		for _, key := range slices.Sorted(maps.Keys(metrics)) {
 			if m, ok := metrics[key].(map[string]any); ok {
-				check(fmt.Sprintf("watches.%s.metrics.%s", name, key), m["then"])
+				check(fmt.Sprintf("watches.%s.metrics.%s", name, key), m[rules.RuleFieldThen])
 			}
 		}
 	}

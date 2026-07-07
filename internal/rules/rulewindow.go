@@ -30,49 +30,49 @@ func FormatCondition(node map[string]any) string {
 	}
 	for op, body := range node {
 		switch op {
-		case "failed", "active":
+		case ConditionFailed, ConditionActive:
 			if m, ok := body.(map[string]any); ok {
-				if c := cfgval.AsString(m["check"]); c != "" {
+				if c := cfgval.AsString(m[FieldCheck]); c != "" {
 					return op + ":" + c
 				}
 			}
-		case "metric":
+		case ConditionMetric:
 			if m, ok := body.(map[string]any); ok {
-				name := cfgval.AsString(m["name"])
+				name := cfgval.AsString(m[FieldName])
 				if name == "" {
-					name = cfgval.AsString(m["metric"])
+					name = cfgval.AsString(m[FieldMetric])
 				}
 				if name != "" {
 					return "metric:" + name
 				}
 			}
-		case "service":
+		case ConditionService:
 			if m, ok := body.(map[string]any); ok {
-				if s := cfgval.AsString(m["service"]); s != "" {
+				if s := cfgval.AsString(m[ConditionService]); s != "" {
 					return "service:" + s
 				}
 			}
-		case "process":
+		case ConditionProcess:
 			if m, ok := body.(map[string]any); ok {
-				if n := cfgval.AsString(m["name"]); n != "" {
+				if n := cfgval.AsString(m[FieldName]); n != "" {
 					return "process:" + n
 				}
 			}
-		case "file":
+		case ConditionFile:
 			if m, ok := body.(map[string]any); ok {
-				if p := cfgval.AsString(m["path"]); p != "" {
+				if p := cfgval.AsString(m[FieldPath]); p != "" {
 					return "file:" + p
 				}
 			}
-		case "command":
+		case ConditionCommand:
 			return "command"
-		case "changed":
+		case ConditionChanged:
 			if m, ok := body.(map[string]any); ok {
-				if p := cfgval.AsString(m["path"]); p != "" {
+				if p := cfgval.AsString(m[FieldPath]); p != "" {
 					return "changed:" + p
 				}
 			}
-		case "and", "or":
+		case ConditionAnd, ConditionOr:
 			if list, ok := body.([]any); ok {
 				parts := make([]string, 0, len(list))
 				for _, item := range list {
@@ -82,7 +82,7 @@ func FormatCondition(node map[string]any) string {
 				}
 				return op + "(" + strings.Join(parts, ", ") + ")"
 			}
-		case "not":
+		case ConditionNot:
 			if sub, ok := body.(map[string]any); ok {
 				return "not(" + FormatCondition(sub) + ")"
 			}
