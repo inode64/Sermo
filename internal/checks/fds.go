@@ -37,7 +37,7 @@ func (c fdsCheck) Run(_ context.Context) Result {
 	if err != nil {
 		return c.result(false, "fds: "+err.Error(), start)
 	}
-	return levelCountResult(c.base, c.preds, "fds", "allocated", "allocated", s.Allocated, s.Max, start)
+	return levelCountResult(c.base, c.preds, "fds", "allocated", DataKeyAllocated, s.Allocated, s.Max, start)
 }
 
 // SampleFds returns one live system-wide fd observation (allocated/max) using

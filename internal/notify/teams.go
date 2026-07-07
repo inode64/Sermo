@@ -17,16 +17,16 @@ type Teams struct {
 func (t *Teams) Name() string { return t.name }
 
 // Type returns the notifier type identifier.
-func (t *Teams) Type() string { return notifierTypeTeams }
+func (t *Teams) Type() string { return TypeTeams }
 
 // Send posts the message to the configured Teams webhook.
 func (t *Teams) Send(ctx context.Context, msg Message) error {
-	return sendWebhook(ctx, t.post, notifierTypeTeams, t.webhook, teamsPayload(msg))
+	return sendWebhook(ctx, t.post, TypeTeams, t.webhook, teamsPayload(msg))
 }
 
 // buildTeams constructs a Teams notifier from a config entry.
 func buildTeams(name string, entry map[string]any) (Notifier, error) {
-	webhook, err := webhookURL(notifierTypeTeams, entry)
+	webhook, err := webhookURL(TypeTeams, entry)
 	if err != nil {
 		return nil, err
 	}

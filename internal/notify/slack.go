@@ -16,16 +16,16 @@ type Slack struct {
 func (s *Slack) Name() string { return s.name }
 
 // Type returns the notifier type identifier.
-func (s *Slack) Type() string { return notifierTypeSlack }
+func (s *Slack) Type() string { return TypeSlack }
 
 // Send posts the message to the configured Slack webhook.
 func (s *Slack) Send(ctx context.Context, msg Message) error {
-	return sendWebhook(ctx, s.post, notifierTypeSlack, s.webhook, slackPayload(msg))
+	return sendWebhook(ctx, s.post, TypeSlack, s.webhook, slackPayload(msg))
 }
 
 // buildSlack constructs a Slack notifier from a config entry.
 func buildSlack(name string, entry map[string]any) (Notifier, error) {
-	webhook, err := webhookURL(notifierTypeSlack, entry)
+	webhook, err := webhookURL(TypeSlack, entry)
 	if err != nil {
 		return nil, err
 	}

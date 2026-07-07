@@ -32,10 +32,10 @@ func (c usersCheck) Run(_ context.Context) Result {
 	if err != nil {
 		return c.result(false, "users: "+err.Error(), start)
 	}
-	values := map[string]float64{"count": float64(n)}
+	values := map[string]float64{DataKeyCount: float64(n)}
 	ok := levelPredsHold(c.preds, values)
 	res := c.result(ok, fmt.Sprintf("%d user(s) logged in", n), start)
-	res.Data = map[string]any{"count": n, fieldValue: float64(n)}
+	res.Data = map[string]any{DataKeyCount: n, fieldValue: float64(n)}
 	return res
 }
 

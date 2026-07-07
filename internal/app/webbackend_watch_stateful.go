@@ -18,7 +18,7 @@ import (
 )
 
 func (b *WebBackend) fileWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
-	path := cfgval.AsString(w.check["path"])
+	path := cfgval.AsString(w.check[checks.DataKeyPath])
 	if path == "" {
 		msg := "missing path"
 		return nil, watchErrorReadings(msg), "file: " + msg
@@ -33,9 +33,9 @@ func (b *WebBackend) fileWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 	}
 	kind := fileKindLabel(info.Mode())
 	readings := []web.WatchReading{
-		{Field: "path", Label: "Path", Value: path},
+		{Field: checks.DataKeyPath, Label: "Path", Value: path},
 		{Field: "kind", Label: "Kind", Value: kind},
-		{Field: "size", Label: "Size", Value: humanize.Bytes(uint64(info.Size()))},
+		{Field: checks.DataKeySize, Label: "Size", Value: humanize.Bytes(uint64(info.Size()))},
 		{Field: "mode", Label: "Mode", Value: info.Mode().Perm().String()},
 	}
 	if sys, ok := info.Sys().(*syscall.Stat_t); ok {
@@ -43,7 +43,7 @@ func (b *WebBackend) fileWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 			Field: "owner", Label: "Owner", Value: fmt.Sprintf("%d:%d", sys.Uid, sys.Gid),
 		})
 	}
-	if cfgval.Bool(w.check["recursive"]) && info.IsDir() {
+	if cfgval.Bool(w.check[checks.DataKeyRecursive]) && info.IsDir() {
 		ctx, cancel := b.probeContext()
 		defer cancel()
 		n, err := checks.TallyEntries(ctx, path, "any", true, b.probeTimeout())
@@ -70,16 +70,16 @@ func fileKindLabel(mode os.FileMode) string {
 }
 
 func (b *WebBackend) countWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
-	path := cfgval.AsString(w.check["path"])
+	path := cfgval.AsString(w.check[checks.DataKeyPath])
 	if path == "" {
 		msg := "missing path"
 		return nil, watchErrorReadings(msg), "count: " + msg
 	}
-	kind := cfgval.AsString(w.check["of"])
+	kind := cfgval.AsString(w.check[checks.DataKeyOf])
 	if kind == "" {
 		kind = "any"
 	}
-	recursive := cfgval.Bool(w.check["recursive"])
+	recursive := cfgval.Bool(w.check[checks.DataKeyRecursive])
 	ctx, cancel := b.probeContext()
 	defer cancel()
 	n, err := checks.TallyEntries(ctx, path, kind, recursive, b.probeTimeout())
@@ -92,17 +92,17 @@ func (b *WebBackend) countWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRe
 		scope = "under"
 	}
 	readings := []web.WatchReading{
-		{Field: "path", Label: "Path", Value: path},
-		{Field: "of", Label: "Of", Value: kind},
-		{Field: "count", Label: "Count", Value: strconv.Itoa(n)},
+		{Field: checks.DataKeyPath, Label: "Path", Value: path},
+		{Field: checks.DataKeyOf, Label: "Of", Value: kind},
+		{Field: checks.DataKeyCount, Label: "Count", Value: strconv.Itoa(n)},
 	}
 	return nil, readings, fmt.Sprintf("%d %s entries %s %s", n, kind, scope, path)
 }
 
 func (b *WebBackend) firewallRulesWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
-	backend := cfgval.AsString(w.check["backend"])
+	backend := cfgval.AsString(w.check[checks.DataKeyBackend])
 	if backend == "" {
-		backend = "auto"
+		backend = checks.FirewallBackendAuto
 	}
 	sampler := b.firewallSampler
 	if sampler == nil {
@@ -120,21 +120,21 @@ func (b *WebBackend) firewallRulesWatchView(w *webWatch) (*web.WatchMeter, []web
 		return nil, watchErrorReadings(msg), "firewall: " + msg
 	}
 	minRules := uint64(1)
-	if v, present := w.check["min_rules"]; present {
+	if v, present := w.check[checks.DataKeyMinRules]; present {
 		if n, ok := cfgval.Int(v); ok && n >= 1 {
 			minRules = uint64(n)
 		}
 	}
 	readings := []web.WatchReading{
-		{Field: "backend", Label: "Backend", Value: sample.Backend},
-		{Field: "rules", Label: "Rules", Value: strconv.FormatUint(sample.Rules, 10)},
-		{Field: "min_rules", Label: "Min rules", Value: strconv.FormatUint(minRules, 10)},
+		{Field: checks.DataKeyBackend, Label: "Backend", Value: sample.Backend},
+		{Field: checks.DataKeyRules, Label: "Rules", Value: strconv.FormatUint(sample.Rules, 10)},
+		{Field: checks.DataKeyMinRules, Label: "Min rules", Value: strconv.FormatUint(minRules, 10)},
 	}
 	return nil, readings, fmt.Sprintf("firewall %s has %d rules", sample.Backend, sample.Rules)
 }
 
 func (b *WebBackend) sizeWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
-	path := cfgval.AsString(w.check["path"])
+	path := cfgval.AsString(w.check[checks.DataKeyPath])
 	if path == "" {
 		msg := "missing path"
 		return nil, watchErrorReadings(msg), "size: " + msg
@@ -147,8 +147,8 @@ func (b *WebBackend) sizeWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 		return nil, watchErrorReadings(msg), "size: " + msg
 	}
 	readings := []web.WatchReading{
-		{Field: "path", Label: "Path", Value: path},
-		{Field: "current_bytes", Label: "Current size", Value: humanize.Bytes(uint64(size))},
+		{Field: checks.DataKeyPath, Label: "Path", Value: path},
+		{Field: checks.DataKeyCurrentBytes, Label: "Current size", Value: humanize.Bytes(uint64(size))},
 	}
 	if growBy := cfgval.String(w.check["grow_by"]); growBy != "" {
 		readings = append(readings, web.WatchReading{Field: "grow_by", Label: "Growth limit", Value: growBy})
@@ -160,7 +160,7 @@ func (b *WebBackend) sizeWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 }
 
 func (b *WebBackend) hdparmWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
-	device := cfgval.AsString(w.check["device"])
+	device := cfgval.AsString(w.check[checks.DataKeyDevice])
 	if device == "" {
 		msg := "missing device"
 		return nil, watchErrorReadings(msg), "hdparm: " + msg
@@ -183,7 +183,7 @@ func (b *WebBackend) hdparmWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "hdparm: " + msg
 	}
-	readings := []web.WatchReading{{Field: "device", Label: "Device", Value: device}}
+	readings := []web.WatchReading{{Field: checks.DataKeyDevice, Label: "Device", Value: device}}
 	parts := make([]string, 0, 2)
 	for _, field := range []string{"read", "cached"} {
 		if v, ok := values[field]; ok {
@@ -197,7 +197,7 @@ func (b *WebBackend) hdparmWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 }
 
 func (b *WebBackend) smartWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
-	device := cfgval.AsString(w.check["device"])
+	device := cfgval.AsString(w.check[checks.DataKeyDevice])
 	if device == "" {
 		msg := "missing device"
 		return nil, watchErrorReadings(msg), "smart: " + msg
@@ -210,8 +210,8 @@ func (b *WebBackend) smartWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRe
 		return nil, watchErrorReadings(msg), "smart: " + msg
 	}
 	readings := []web.WatchReading{
-		{Field: "device", Label: "Device", Value: device},
-		{Field: "health", Label: "Health", Value: sample.Health},
+		{Field: checks.DataKeyDevice, Label: "Device", Value: device},
+		{Field: checks.DataKeyHealth, Label: "Health", Value: sample.Health},
 	}
 	for _, field := range checks.SmartPredFields {
 		if v, ok := sample.Values[field]; ok {

@@ -35,10 +35,10 @@ func (c processCountCheck) Run(_ context.Context) Result {
 		counter = defaultProcessCount
 	}
 	n := counter(c.user, c.exe, c.exeDir)
-	values := map[string]float64{"count": float64(n)}
+	values := map[string]float64{DataKeyCount: float64(n)}
 	ok := levelPredsHold(c.preds, values)
 	res := c.result(ok, fmt.Sprintf("%d process(es)%s", n, c.scope()), start)
-	res.Data = map[string]any{"count": n, fieldValue: float64(n)}
+	res.Data = map[string]any{DataKeyCount: n, fieldValue: float64(n)}
 	return res
 }
 

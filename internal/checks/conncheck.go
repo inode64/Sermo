@@ -135,7 +135,7 @@ func (c connCheck) Run(ctx context.Context) Result {
 		c.state.primed = true
 		if primed && len(problems) > 0 {
 			r := c.result(false, fmt.Sprintf("%s %s: %s", c.proto.Name(), addr, strings.Join(problems, "; ")), start)
-			r.Data = map[string]any{"protocol": c.proto.Name(), fieldHost: c.cfg.Host, fieldPort: c.cfg.Port, "latency_ms": elapsed.Milliseconds()}
+			r.Data = map[string]any{DataKeyProtocol: c.proto.Name(), DataKeyHost: c.cfg.Host, DataKeyPort: c.cfg.Port, DataKeyLatencyMS: elapsed.Milliseconds()}
 			for k, v := range extra {
 				r.Data[k] = v
 			}
@@ -161,17 +161,17 @@ func (c connCheck) Run(ctx context.Context) Result {
 		}
 	}
 	r := c.result(ok, msg, start)
-	r.Data = map[string]any{"protocol": c.proto.Name(), "latency_ms": elapsed.Milliseconds()}
+	r.Data = map[string]any{DataKeyProtocol: c.proto.Name(), DataKeyLatencyMS: elapsed.Milliseconds()}
 	if c.cfg.Socket != "" {
-		r.Data["socket"] = c.cfg.Socket
+		r.Data[DataKeySocket] = c.cfg.Socket
 	} else {
-		r.Data[fieldHost], r.Data[fieldPort] = c.cfg.Host, c.cfg.Port
+		r.Data[DataKeyHost], r.Data[DataKeyPort] = c.cfg.Host, c.cfg.Port
 	}
 	if perIface != nil {
-		r.Data["interfaces"] = perIface
+		r.Data[DataKeyInterfaces] = perIface
 	}
 	if res.Version != "" {
-		r.Data["version"] = res.Version
+		r.Data[DataKeyVersion] = res.Version
 	}
 	for k, v := range res.Extra {
 		r.Data[k] = v

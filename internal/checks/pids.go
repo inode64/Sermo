@@ -37,7 +37,7 @@ func (c pidsCheck) Run(_ context.Context) Result {
 	if err != nil {
 		return c.result(false, "pids: "+err.Error(), start)
 	}
-	return levelCountResult(c.base, c.preds, "pids", "in use", "count", s.Threads, s.Max, start)
+	return levelCountResult(c.base, c.preds, "pids", "in use", DataKeyCount, s.Threads, s.Max, start)
 }
 
 // SamplePids returns one live PID-table observation (count/max) using the

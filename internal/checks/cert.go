@@ -197,42 +197,42 @@ func certMessage(src string, s CertSample, daysLeft int, hasExpiry bool) string 
 // material's kind.
 func certData(source, host, path string, s CertSample, daysLeft int, hasExpiry bool) map[string]any {
 	data := map[string]any{
-		"kind":        s.Kind,
-		"source":      source,
-		"fingerprint": s.Fingerprint,
+		DataKeyKind:        s.Kind,
+		DataKeySource:      source,
+		DataKeyFingerprint: s.Fingerprint,
 	}
 	if host != "" {
-		data[fieldHost] = host
+		data[DataKeyHost] = host
 	}
 	if path != "" {
-		data["path"] = path
+		data[DataKeyPath] = path
 	}
 	if s.SignatureAlgorithm != "" {
-		data["signature_algorithm"] = s.SignatureAlgorithm
+		data[DataKeySignatureAlgorithm] = s.SignatureAlgorithm
 	}
 	if s.PublicKeyAlgorithm != "" {
-		data["public_key_algorithm"] = s.PublicKeyAlgorithm
+		data[DataKeyPublicKeyAlgorithm] = s.PublicKeyAlgorithm
 	}
 	if s.KeyBits > 0 {
-		data["key_bits"] = s.KeyBits
+		data[DataKeyKeyBits] = s.KeyBits
 	}
 	if s.Subject != "" {
-		data["subject"] = s.Subject
+		data[DataKeySubject] = s.Subject
 	}
 	if s.Issuer != "" {
-		data["issuer"] = s.Issuer
+		data[DataKeyIssuer] = s.Issuer
 	}
 	if s.SerialNumber != "" {
-		data["serial_number"] = s.SerialNumber
+		data[DataKeySerialNumber] = s.SerialNumber
 	}
 	if len(s.DNSNames) > 0 {
-		data["dns_names"] = s.DNSNames
+		data[DataKeyDNSNames] = s.DNSNames
 	}
 	if hasExpiry {
-		data["days_left"] = daysLeft
+		data[DataKeyDaysLeft] = daysLeft
 		data[fieldValue] = daysLeft
-		data["not_before"] = s.NotBefore.Format(time.RFC3339)
-		data["not_after"] = s.NotAfter.Format(time.RFC3339)
+		data[DataKeyNotBefore] = s.NotBefore.Format(time.RFC3339)
+		data[DataKeyNotAfter] = s.NotAfter.Format(time.RFC3339)
 	}
 	return data
 }
