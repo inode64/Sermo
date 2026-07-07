@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"sermo/internal/config"
 )
 
 type mountAssistant struct{}
@@ -60,9 +62,9 @@ func askMountSettings(p *Prompt, label string) mountSettings {
 
 func buildMountUnit(c MountCandidate, s mountSettings) map[string]any {
 	return map[string]any{
-		"category": "storage",
-		"path":     filepath.Clean(c.Path),
-		"mount": map[string]any{
+		config.EntryKeyCategory: watchCategoryStorage,
+		config.EntryKeyPath:     filepath.Clean(c.Path),
+		config.StorageKeyMount: map[string]any{
 			"refcount": s.refcount,
 			"umount": map[string]any{
 				"allow_sigkill": false,

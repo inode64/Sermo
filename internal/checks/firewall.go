@@ -73,7 +73,7 @@ func (c firewallRulesCheck) Run(ctx context.Context) Result {
 }
 
 func buildFirewallRulesCheck(b base, entry map[string]any, runner execx.Runner, deps Deps) (Check, string) {
-	backend := cfgval.AsString(entry[DataKeyBackend])
+	backend := cfgval.AsString(entry[CheckKeyBackend])
 	if backend == "" {
 		backend = FirewallBackendAuto
 	}
@@ -84,7 +84,7 @@ func buildFirewallRulesCheck(b base, entry map[string]any, runner execx.Runner, 
 		return nil, "firewall_rules check backend must be auto, nftables or iptables"
 	}
 	minRules := uint64(1)
-	if v, present := entry[DataKeyMinRules]; present {
+	if v, present := entry[CheckKeyMinRules]; present {
 		n, ok := cfgval.Int(v)
 		if !ok || n < 1 {
 			return nil, "firewall_rules check min_rules must be a positive integer"

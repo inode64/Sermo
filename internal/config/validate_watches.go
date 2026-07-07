@@ -42,13 +42,13 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		validateWindow("watches."+name, entry, add)
 		validateWatchPolicy("watches."+name, entry, add)
 
-		check, ok := entry["check"].(map[string]any)
+		check, ok := entry[WatchKeyCheck].(map[string]any)
 		if !ok {
 			add("watches.%s.check is required", name)
 			continue
 		}
 		cp := "watches." + name + ".check"
-		switch cfgval.String(check[rules.FieldType]) {
+		switch cfgval.String(check[checks.CheckKeyType]) {
 		case checks.CheckTypeStorage:
 			// The one single-shot type with its own case: a storage watch may carry
 			// a then.expand action, so its hook block allows expand.
@@ -70,10 +70,10 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			// Any single-shot service check (tcp, http, load, oom, cert, …) can be
 			// a host watch: validate its fields with the same per-type validators a
 			// checks: section uses and require a hook (section: unified checks).
-			if validateWatchableCheck(cp, cfgval.String(check[rules.FieldType]), check, locksDir, add) {
+			if validateWatchableCheck(cp, cfgval.String(check[checks.CheckKeyType]), check, locksDir, add) {
 				validateHookBlock("watches."+name, entry, false, false, defaultNotify, add)
 			} else {
-				add("watches.%s.check.type %q is not supported", name, cfgval.String(check[rules.FieldType]))
+				add("watches.%s.check.type %q is not supported", name, cfgval.String(check[checks.CheckKeyType]))
 			}
 		}
 	}
@@ -101,7 +101,7 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 			add("watches.%s must be a mapping", name)
 			continue
 		}
-		if name == "version" || name == "config" {
+		if name == ServiceMonitorKeyVersion || name == ServiceMonitorKeyConfig {
 			add("watches.%s name is reserved for the version/config monitor; rename it", name)
 			continue
 		}
@@ -129,12 +129,12 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 		validateWindow(prefix, entry, add)
 		validateWatchPolicy(prefix, entry, add)
 
-		check, ok := entry["check"].(map[string]any)
+		check, ok := entry[WatchKeyCheck].(map[string]any)
 		if !ok {
 			add("%s.check is required", prefix)
 			continue
 		}
-		typ := cfgval.String(check[rules.FieldType])
+		typ := cfgval.String(check[checks.CheckKeyType])
 		switch {
 		case typ == "":
 			add("%s.check.type is required", prefix)
@@ -205,7 +205,7 @@ func validateWatchThenAction(prefix, action string, then map[string]any, add fun
 		add("%s.then.action %q is not one of restart, start, stop, reload, resume, alert, block", prefix, action)
 		return
 	}
-	for _, k := range []string{"hook", "expand", "kill"} {
+	for _, k := range []string{WatchThenKeyHook, WatchThenKeyExpand, WatchThenKeyKill} {
 		if _, has := then[k]; has {
 			add("%s.then.%s cannot be combined with an action (a watch is either an operation/alert or a fire-and-forget %s)", prefix, k, k)
 		}
@@ -284,15 +284,15 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKi
 		add("%s.then must be a mapping", prefix)
 		return
 	}
-	allowed := set("hook", rules.RuleFieldNotify, "notify_interval", "expand", "kill")
+	allowed := set(WatchThenKeyHook, rules.RuleFieldNotify, WatchThenKeyNotifyInterval, WatchThenKeyExpand, WatchThenKeyKill)
 	for _, key := range slices.Sorted(maps.Keys(then)) {
 		if _, ok := allowed[key]; !ok {
 			add("%s.then.%s is not supported", prefix, key)
 		}
 	}
-	hook, hasHook := then["hook"].(map[string]any)
+	hook, hasHook := then[WatchThenKeyHook].(map[string]any)
 	notify := cfgval.StringList(then[rules.RuleFieldNotify])
-	if v, present := then["notify_interval"]; present {
+	if v, present := then[WatchThenKeyNotifyInterval]; present {
 		// notify_interval re-sends the notification as a reminder while the watch
 		// stays firing; absent means notify once on the rising edge. It only
 		// affects delivery, so it is meaningless without notify targets.
@@ -302,7 +302,7 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKi
 			add("%s.then.notify_interval has no effect without notify targets", prefix)
 		}
 	}
-	rawExpand, expandPresent := then["expand"]
+	rawExpand, expandPresent := then[WatchThenKeyExpand]
 	expand, hasExpand := rawExpand.(map[string]any)
 	switch {
 	case expandPresent && !hasExpand:
@@ -312,11 +312,11 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKi
 	case hasExpand:
 		// The same grammar the daemon's parseExpand applies, so a bad size fails
 		// `config validate` instead of the next start/reload.
-		if by, ok := cfgval.ByteSize(expand["by"]); !ok || by == 0 {
-			add("%s.then.expand.by %q must be a positive size with a K/M/G/T suffix (e.g. 5G)", prefix, cfgval.String(expand["by"]))
+		if by, ok := cfgval.ByteSize(expand[WatchExpandKeyBy]); !ok || by == 0 {
+			add("%s.then.expand.by %q must be a positive size with a K/M/G/T suffix (e.g. 5G)", prefix, cfgval.String(expand[WatchExpandKeyBy]))
 		}
 	}
-	rawKill, killPresent := then["kill"]
+	rawKill, killPresent := then[WatchThenKeyKill]
 	kill, hasKill := rawKill.(map[string]any)
 	switch {
 	case killPresent && !hasKill:
@@ -335,10 +335,10 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKi
 		return
 	}
 	if hasHook {
-		if !cfgval.IsNonEmptyStringArray(hook["command"]) {
+		if !cfgval.IsNonEmptyStringArray(hook[WatchHookKeyCommand]) {
 			add("%s.then.hook.command must be a non-empty array", prefix)
 		}
-		if v, present := hook["timeout"]; present && !isPositiveDuration(cfgval.String(v)) {
+		if v, present := hook[WatchHookKeyTimeout]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("%s.then.hook.timeout %q must be a valid positive duration", prefix, cfgval.String(v))
 		}
 		validateCommandExpectations(prefix+".then.hook", hook, add)
@@ -350,17 +350,17 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKi
 // the daemon uses), an optional boolean `escalate`, and the optional grace
 // durations that only apply when escalating.
 func validateKillAction(prefix string, kill map[string]any, add func(string, ...any)) {
-	if s := cfgval.String(kill["signal"]); s != "" {
+	if s := cfgval.String(kill[WatchKillKeySignal]); s != "" {
 		if _, err := process.ParseKillSignal(s); err != nil {
 			add("%s.then.kill.signal %q must be TERM or KILL", prefix, s)
 		}
 	}
-	if v, present := kill["escalate"]; present {
+	if v, present := kill[WatchKillKeyEscalate]; present {
 		if _, ok := v.(bool); !ok {
 			add("%s.then.kill.escalate must be a boolean", prefix)
 		}
 	}
-	for _, f := range []string{keyTermTimeout, keyKillTimeout} {
+	for _, f := range []string{WatchKillKeyTermTimeout, WatchKillKeyKillTimeout} {
 		if v, present := kill[f]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("%s.then.kill.%s %q must be a valid positive duration", prefix, f, cfgval.String(v))
 		}
@@ -382,7 +382,7 @@ func validateWatchPolicy(prefix string, entry map[string]any, add addFunc) {
 		return
 	}
 	padd := func(format string, args ...any) { add(prefix+"."+format, args...) }
-	if v, has := policy["cooldown"]; has && !isPositiveDuration(cfgval.String(v)) {
+	if v, has := policy[rules.PolicyKeyCooldown]; has && !isPositiveDuration(cfgval.String(v)) {
 		padd("policy.cooldown %q must be a valid positive duration", cfgval.String(v))
 	}
 	validatePolicyExtras(entry, padd)
@@ -444,7 +444,7 @@ func validateInvalidWatchEntryFields(name, typ string, entry map[string]any, key
 // metrics map, each metric with a valid condition and its own hook.
 func validateNetCheck(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
 	validateMetricWatchEntry(name, entry, add)
-	if cfgval.String(check["interface"]) == "" {
+	if cfgval.String(check[checks.CheckKeyInterface]) == "" {
 		add("watches.%s.check.interface is required for a net check", name)
 	}
 	metrics, ok := entry[sectionMetrics].(map[string]any)
@@ -474,24 +474,24 @@ func validateNetMetricCondition(prefix, metric string, m map[string]any, add add
 	case checks.NetMetricState:
 		validateStateMetric(prefix, m, add)
 	case checks.NetMetricSpeed:
-		if cfgval.String(m["on"]) != checks.OnModeChange {
+		if cfgval.String(m[checks.CheckKeyOn]) != checks.OnModeChange {
 			add("%s requires on: change", prefix)
 		}
 	case checks.NetMetricErrors:
-		delta, ok := m["delta"].(map[string]any)
+		delta, ok := m[checks.CheckKeyDelta].(map[string]any)
 		if !ok {
 			add("%s.delta {op, value} is required", prefix)
 		} else {
 			validateOpNumeric(prefix+".delta", delta, add)
 		}
-		if c, present := m["counters"]; present {
+		if c, present := m[checks.CheckKeyCounters]; present {
 			if !cfgval.IsNonEmptyStringArray(c) {
 				add("%s.counters must be a non-empty list", prefix)
 			}
 		}
 	case checks.NetMetricAddress:
-		exp := cfgval.String(m["expect"])
-		onChange := cfgval.String(m["on"]) == checks.OnModeChange
+		exp := cfgval.String(m[checks.CheckKeyExpect])
+		onChange := cfgval.String(m[checks.CheckKeyOn]) == checks.OnModeChange
 		if exp == "" && !onChange {
 			add("%s requires expect: present|absent or on: change", prefix)
 		} else if exp != "" && exp != checks.NetAddrPresent && exp != checks.NetAddrAbsent {
@@ -545,7 +545,7 @@ func validateSwapMetricCondition(prefix, metric string, m map[string]any, add ad
 	case checks.SwapMetricUsage:
 		validateThresholdPreds(prefix, m, checks.SwapUsageFields, add)
 	case checks.SwapMetricIO:
-		delta, ok := m["delta"].(map[string]any)
+		delta, ok := m[checks.CheckKeyDelta].(map[string]any)
 		if !ok {
 			add("%s.delta {op, value} is required", prefix)
 		} else {
@@ -559,8 +559,8 @@ func validateSwapMetricCondition(prefix, metric string, m map[string]any, add ad
 // validateStateMetric validates a state metric condition shared by net/icmp:
 // expect up|down OR on: change.
 func validateStateMetric(prefix string, m map[string]any, add func(string, ...any)) {
-	exp := cfgval.String(m["expect"])
-	onChange := cfgval.String(m["on"]) == checks.OnModeChange
+	exp := cfgval.String(m[checks.CheckKeyExpect])
+	onChange := cfgval.String(m[checks.CheckKeyOn]) == checks.OnModeChange
 	if exp == "" && !onChange {
 		add("%s requires expect: up|down or on: change", prefix)
 	} else if exp != "" && exp != checks.NetStateUp && exp != checks.NetStateDown {
@@ -573,10 +573,10 @@ func validateStateMetric(prefix string, m map[string]any, add func(string, ...an
 // own hook.
 func validateICMPCheck(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
 	validateMetricWatchEntry(name, entry, add)
-	if cfgval.String(check["host"]) == "" {
+	if cfgval.String(check[checks.CheckKeyHost]) == "" {
 		add("watches.%s.check.host is required for an icmp check", name)
 	}
-	if v, present := check["count"]; present {
+	if v, present := check[checks.CheckKeyCount]; present {
 		if n, ok := cfgval.Int(v); !ok || n <= 0 {
 			add("watches.%s.check.count must be a positive integer", name)
 		}
@@ -608,8 +608,8 @@ func validateICMPMetricCondition(prefix, metric string, m map[string]any, add ad
 	case checks.NetMetricState:
 		validateStateMetric(prefix, m, add)
 	case checks.IcmpMetricLatency:
-		th, hasT := m["threshold"].(map[string]any)
-		ch, hasC := m["change"].(map[string]any)
+		th, hasT := m[checks.CheckKeyThreshold].(map[string]any)
+		ch, hasC := m[checks.CheckKeyChange].(map[string]any)
 		if !hasT && !hasC {
 			add("%s requires threshold {op, value} or change {delta}", prefix)
 		}
@@ -620,8 +620,8 @@ func validateICMPMetricCondition(prefix, metric string, m map[string]any, add ad
 			validateOpNumeric(prefix+".threshold", th, add)
 		}
 		if hasC {
-			if !isNumeric(cfgval.String(ch["delta"])) {
-				add("%s.change delta %q must be numeric", prefix, cfgval.String(ch["delta"]))
+			if !isNumeric(cfgval.String(ch[checks.CheckKeyDelta])) {
+				add("%s.change delta %q must be numeric", prefix, cfgval.String(ch[checks.CheckKeyDelta]))
 			}
 		}
 	default:
@@ -634,35 +634,35 @@ func validateICMPMetricCondition(prefix, metric string, m map[string]any, add ad
 // permissions/owner on change, existence on delete), plus the entry's hook.
 func validateFileCheck(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
 	validateStatefulWatchEntry(name, "file", entry, add)
-	if cfgval.String(check[rules.FieldPath]) == "" {
+	if cfgval.String(check[checks.CheckKeyPath]) == "" {
 		add("watches.%s.check.path is required for a file check", name)
 	}
-	if v, present := check["recursive"]; present {
+	if v, present := check[checks.CheckKeyRecursive]; present {
 		if _, ok := v.(bool); !ok {
 			add("watches.%s.check.recursive must be a boolean", name)
 		}
 	}
 
 	conds := 0
-	if sz, ok := check["size"].(map[string]any); ok {
+	if sz, ok := check[checks.CheckKeySize].(map[string]any); ok {
 		conds++
-		if cfgval.String(sz["on"]) != checks.OnModeChange {
-			if !isValidCompareOp(cfgval.String(sz[rules.FieldOp])) || !isNumeric(cfgval.String(sz[rules.FieldValue])) {
+		if cfgval.String(sz[checks.CheckKeyOn]) != checks.OnModeChange {
+			if !isValidCompareOp(cfgval.String(sz[checks.CheckKeyOp])) || !isNumeric(cfgval.String(sz[checks.CheckKeyValue])) {
 				add("watches.%s.check.size requires on: change or {op, value} with a numeric value", name)
 			}
 		}
 	}
-	for _, attr := range []string{"permissions", "owner"} {
+	for _, attr := range []string{checks.CheckKeyPermissions, checks.CheckKeyOwner} {
 		if m, ok := check[attr].(map[string]any); ok {
 			conds++
-			if cfgval.String(m["on"]) != checks.OnModeChange {
+			if cfgval.String(m[checks.CheckKeyOn]) != checks.OnModeChange {
 				add("watches.%s.check.%s requires on: change", name, attr)
 			}
 		}
 	}
-	if e, ok := check["existence"].(map[string]any); ok {
+	if e, ok := check[checks.CheckKeyExistence].(map[string]any); ok {
 		conds++
-		if cfgval.String(e["on"]) != "delete" {
+		if cfgval.String(e[checks.CheckKeyOn]) != checks.OnModeDelete {
 			add("watches.%s.check.existence requires on: delete", name)
 		}
 	}
@@ -678,11 +678,11 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 // entry's hook.
 func validateProcessWatch(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
 	validateStatefulWatchEntry(name, "process", entry, add)
-	if cfgval.String(check[rules.FieldName]) == "" {
+	if cfgval.String(check[checks.CheckKeyName]) == "" {
 		add("watches.%s.check.name is required for a process check", name)
 	}
 	conds := 0
-	if v, present := check[rules.RuleFieldFor]; present {
+	if v, present := check[checks.CheckKeyFor]; present {
 		conds++
 		if !isPositiveDuration(cfgval.String(v)) {
 			add("watches.%s.check.for %q must be a valid positive duration", name, cfgval.String(v))
@@ -694,11 +694,11 @@ func validateProcessWatch(name string, check, entry map[string]any, defaultNotif
 			continue
 		}
 		conds++
-		if !isValidCompareOp(cfgval.String(m[rules.FieldOp])) || !isNumeric(cfgval.String(m[rules.FieldValue])) {
+		if !isValidCompareOp(cfgval.String(m[checks.CheckKeyOp])) || !isNumeric(cfgval.String(m[checks.CheckKeyValue])) {
 			add("watches.%s.check.%s requires {op, value} with a numeric value", name, attr)
 		}
 	}
-	if v, present := check["gone"]; present {
+	if v, present := check[checks.CheckKeyGone]; present {
 		if b, ok := v.(bool); !ok {
 			add("watches.%s.check.gone must be a boolean", name)
 		} else if b {
@@ -719,13 +719,13 @@ func validateProcessWatchKillSelector(name string, check, entry map[string]any, 
 	if !ok {
 		return
 	}
-	if _, present := then["kill"]; !present {
+	if _, present := then[WatchThenKeyKill]; !present {
 		return
 	}
-	if !filepath.IsAbs(cfgval.String(check[rules.FieldName])) {
+	if !filepath.IsAbs(cfgval.String(check[checks.CheckKeyName])) {
 		add("watches.%s.then.kill requires check.name to be an absolute resolved exe path", name)
 	}
-	if cfgval.String(check[rules.FieldUser]) == "" {
+	if cfgval.String(check[checks.CheckKeyUser]) == "" {
 		add("watches.%s.then.kill requires check.user", name)
 	}
 }

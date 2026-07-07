@@ -220,7 +220,7 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 	setReportOwner(&r, info, lookup)
 
 	health := probeCommandFor(resolved.Tree, "health")
-	version := probeCommandFor(resolved.Tree, "version")
+	version := probeCommandFor(resolved.Tree, checks.DataKeyVersion)
 	if len(health.argv) > 0 {
 		var healthOut string
 		r.OK, r.Status, healthOut = runExitProbe(ctx, runner, health)
@@ -387,7 +387,7 @@ func modeString(info os.FileInfo) string {
 // Otherwise (no such command, or it errors or prints nothing) it falls back to
 // parsing the raw version line with ShortVersion.
 func shortVersionFor(ctx context.Context, runner execx.Runner, tree map[string]any, rawVersion string) string {
-	if vc := probeCommandFor(tree, "version_short"); len(vc.argv) > 0 {
+	if vc := probeCommandFor(tree, checks.DataKeyVersionShort); len(vc.argv) > 0 {
 		res, err := runProbeCommand(ctx, runner, vc)
 		if err == nil && res.ExitCode == 0 {
 			if line := output.FirstNonEmptyLine(res.Stdout); line != "" {
@@ -415,9 +415,9 @@ func runProbeCommand(ctx context.Context, runner execx.Runner, cmd probeCommand)
 // binaryPath returns the resolved binary path of a daemon: its preflight
 // `binary` check path when present, otherwise the `binary` variable.
 func binaryPath(tree map[string]any) string {
-	if pf, ok := tree["preflight"].(map[string]any); ok {
-		if bin, ok := pf["binary"].(map[string]any); ok {
-			if p := cfgval.AsString(bin["path"]); p != "" {
+	if pf, ok := tree[config.SectionPreflight].(map[string]any); ok {
+		if bin, ok := pf[checks.CheckTypeBinary].(map[string]any); ok {
+			if p := cfgval.AsString(bin[checks.CheckKeyPath]); p != "" {
 				return p
 			}
 		}
@@ -435,8 +435,8 @@ func binaryPath(tree map[string]any) string {
 
 func firstNamespacedBinaryPath(preflight map[string]any) string {
 	for _, prefix := range namespacedBinaryPrefixes(preflight) {
-		if bin, ok := preflight[prefix+"-binary"].(map[string]any); ok {
-			if p := cfgval.AsString(bin["path"]); p != "" {
+		if bin, ok := preflight[prefix+"-"+checks.CheckTypeBinary].(map[string]any); ok {
+			if p := cfgval.AsString(bin[checks.CheckKeyPath]); p != "" {
 				return p
 			}
 		}
@@ -447,12 +447,12 @@ func firstNamespacedBinaryPath(preflight map[string]any) string {
 func namespacedBinaryPrefixes(preflight map[string]any) []string {
 	prefixes := make([]string, 0, len(preflight))
 	for key, raw := range preflight {
-		prefix, ok := strings.CutSuffix(key, "-binary")
+		prefix, ok := strings.CutSuffix(key, "-"+checks.CheckTypeBinary)
 		if !ok || prefix == "" {
 			continue
 		}
 		entry, ok := raw.(map[string]any)
-		if !ok || cfgval.AsString(entry["type"]) != "binary" || cfgval.AsString(entry["path"]) == "" {
+		if !ok || cfgval.AsString(entry[checks.CheckKeyType]) != checks.CheckTypeBinary || cfgval.AsString(entry[checks.CheckKeyPath]) == "" {
 			continue
 		}
 		prefixes = append(prefixes, prefix)
@@ -492,34 +492,34 @@ func probeCommandFor(tree map[string]any, key string) probeCommand {
 		return probeCommand{}
 	}
 	vc := probeCommand{
-		argv:       cfgval.StringList(entry["command"]),
-		user:       cfgval.String(entry["user"]),
-		timeout:    cfgval.DurationOr(entry["timeout"], probeTimeout),
+		argv:       cfgval.StringList(entry[checks.CheckKeyCommand]),
+		user:       cfgval.String(entry[checks.CheckKeyUser]),
+		timeout:    cfgval.DurationOr(entry[checks.CheckKeyTimeout], probeTimeout),
 		expectExit: []int{0},
 	}
-	if v, ok := cfgval.IntList(entry["expect_exit"]); ok {
+	if v, ok := cfgval.IntList(entry[checks.CheckKeyExpectExit]); ok {
 		vc.expectExit = v
 	}
-	vc.optional = cfgval.Bool(entry["optional"])
-	vc.stdout, _ = checks.ParseOutputMatcher(entry["expect_stdout"])
-	vc.stderr, _ = checks.ParseOutputMatcher(entry["expect_stderr"])
-	if key == "version" {
-		vc.versionMatch, vc.versionMatchWarn = checks.ParseVersionMatcher(entry["version_match"])
+	vc.optional = cfgval.Bool(entry[checks.CheckKeyOptional])
+	vc.stdout, _ = checks.ParseOutputMatcher(entry[checks.CheckKeyExpectStdout])
+	vc.stderr, _ = checks.ParseOutputMatcher(entry[checks.CheckKeyExpectStderr])
+	if key == checks.DataKeyVersion {
+		vc.versionMatch, vc.versionMatchWarn = checks.ParseVersionMatcher(entry[checks.CheckKeyVersionMatch])
 		if !vc.versionMatch.Active() && vc.versionMatchWarn == "" {
-			vc.versionMatch, vc.versionMatchWarn = checks.ParseVersionMatcher(tree["version_match"])
+			vc.versionMatch, vc.versionMatchWarn = checks.ParseVersionMatcher(tree[checks.CheckKeyVersionMatch])
 		}
 	}
 	return vc
 }
 
 func namespacedReservedCommandEntry(tree map[string]any, key string) map[string]any {
-	preflight, ok := tree["preflight"].(map[string]any)
+	preflight, ok := tree[config.SectionPreflight].(map[string]any)
 	if !ok {
 		return nil
 	}
 	for _, prefix := range namespacedBinaryPrefixes(preflight) {
 		entry, ok := preflight[prefix+"-"+key].(map[string]any)
-		if ok && len(cfgval.StringList(entry["command"])) > 0 {
+		if ok && len(cfgval.StringList(entry[checks.CheckKeyCommand])) > 0 {
 			return entry
 		}
 	}

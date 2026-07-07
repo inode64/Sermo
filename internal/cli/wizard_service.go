@@ -19,8 +19,10 @@ import (
 	"sermo/internal/assist"
 	"sermo/internal/cfgval"
 	"sermo/internal/config"
+	"sermo/internal/dockerctl"
 	"sermo/internal/execx"
 	"sermo/internal/servicemgr"
+	"sermo/internal/virt"
 
 	"github.com/goccy/go-yaml"
 )
@@ -603,12 +605,12 @@ func serviceFileTarget(path string) string {
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return ""
 	}
-	if control, ok := doc["control"].(map[string]any); ok {
-		switch cfgval.AsString(control[wizardFieldType]) {
-		case serviceFamilyDocker:
-			return serviceTargetKey(serviceFamilyDocker, cfgval.AsString(control["container"]))
-		case "libvirt":
-			return serviceTargetKey(serviceFamilyVM, cfgval.AsString(control["domain"]))
+	if control, ok := doc[config.SectionControl].(map[string]any); ok {
+		switch cfgval.AsString(control[dockerctl.ControlKeyType]) {
+		case dockerctl.ControlType:
+			return serviceTargetKey(serviceFamilyDocker, cfgval.AsString(control[dockerctl.ControlKeyContainer]))
+		case virt.ControlType:
+			return serviceTargetKey(serviceFamilyVM, cfgval.AsString(control[virt.ControlKeyDomain]))
 		}
 	}
 	if s, _ := doc["uses"].(string); s != "" {

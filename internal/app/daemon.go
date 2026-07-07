@@ -111,7 +111,12 @@ type RuleStateStore interface {
 
 // measuredCheckTypes are the check types whose latency is recorded as a time
 // series (and graphed in the web), mirroring icmp's latency metric.
-var measuredCheckTypes = map[string]bool{"tcp": true, "ports": true, "http": true, "service": true}
+var measuredCheckTypes = map[string]bool{
+	checks.CheckTypeTCP:     true,
+	checks.CheckTypePorts:   true,
+	checks.CheckTypeHTTP:    true,
+	checks.CheckTypeService: true,
+}
 
 // Deps are the host capabilities the daemon wires into each worker.
 type Deps struct {
@@ -392,7 +397,7 @@ func wireCascade(workers []*Worker, cascadeMap map[string][]string, deps Deps) {
 // merges each app's preflight under "<app>-<check>"; the "<app>-version" entries
 // carry the app version probe with variables already expanded. Keyed by app name.
 func appVersionCmds(tree map[string]any) map[string]appVersionCmd {
-	preflight, ok := tree["preflight"].(map[string]any)
+	preflight, ok := tree[config.SectionPreflight].(map[string]any)
 	if !ok {
 		return nil
 	}
@@ -407,14 +412,14 @@ func appVersionCmds(tree map[string]any) map[string]appVersionCmd {
 		if !ok {
 			continue
 		}
-		argv := cfgval.StringList(entry["command"])
+		argv := cfgval.StringList(entry[checks.CheckKeyCommand])
 		if len(argv) == 0 {
 			continue
 		}
 		cmds[app] = appVersionCmd{
 			argv:    argv,
-			user:    cfgval.String(entry["user"]),
-			timeout: cfgval.Duration(entry["timeout"]),
+			user:    cfgval.String(entry[checks.CheckKeyUser]),
+			timeout: cfgval.Duration(entry[checks.CheckKeyTimeout]),
 		}
 	}
 	if len(cmds) == 0 {
@@ -453,7 +458,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	// interval/resolution); skipped cycles reuse its last result so the cache and
 	// rule windows stay complete. resolution is the service's own interval, or the
 	// global one.
-	resolution := cfgval.Duration(tree["interval"])
+	resolution := cfgval.Duration(tree[config.EntryKeyInterval])
 	if resolution <= 0 {
 		resolution = deps.Interval
 	}
@@ -464,10 +469,10 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 
 	cache := map[string]checks.Result{}
 	recordMeasurement := measurementRecorder(deps, name, tree)
-	section, _ := tree["checks"].(map[string]any)
+	section, _ := tree[config.SectionChecks].(map[string]any)
 	built, checkWarnings, setCycleMetrics := buildWorkerCheckSet(section, checkDeps, sampleMetrics != nil)
 	warnings = append(warnings, checkWarnings...)
-	preflightSection, _ := tree["preflight"].(map[string]any)
+	preflightSection, _ := tree[config.SectionPreflight].(map[string]any)
 	preflightBuilt, preflightWarnings := checks.Build(preflightSection, checkDeps)
 	warnings = append(warnings, preflightWarnings...)
 	remediationState, windowStates, stateWarnings := loadRuleState(deps.RuleState, name, ruleSet)
@@ -484,7 +489,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Remediation:  deps.Remediation,
 		RuleWindows:  deps.RuleWindows,
 		CheckDeps:    checkDeps,
-		Interval:     cfgval.Duration(tree["interval"]),
+		Interval:     cfgval.Duration(tree[config.EntryKeyInterval]),
 		Gates:        parseCheckGates(tree),
 		Sample:       sampleMetrics,
 		LiveSample:   liveSample,
@@ -572,7 +577,7 @@ func watchMetricSourceFactory(service string, discoverer process.Discoverer, sel
 		}
 		return func(scope, metric string) (metrics.Reading, bool) {
 			var snap metrics.Snapshot
-			if scope == "system" {
+			if scope == checks.MetricScopeSystem {
 				snap = wc.SampleSystem()
 			} else {
 				snap = wc.SampleService(service, discoverPIDs(discoverer, selectors))
@@ -627,7 +632,7 @@ func checkIntervals(tree map[string]any, resolution time.Duration) (map[string]i
 		// misuse can't divide by zero below (round(d/0) -> +Inf -> undefined int).
 		return nil, nil
 	}
-	section, ok := tree["checks"].(map[string]any)
+	section, ok := tree[config.SectionChecks].(map[string]any)
 	if !ok {
 		return nil, nil
 	}
@@ -638,7 +643,7 @@ func checkIntervals(tree map[string]any, resolution time.Duration) (map[string]i
 		if !ok {
 			continue
 		}
-		d := cfgval.Duration(entry["interval"])
+		d := cfgval.Duration(entry[config.EntryKeyInterval])
 		if d <= 0 {
 			continue // no per-check interval: runs every cycle
 		}
@@ -743,14 +748,14 @@ func checkSLARecorder(deps Deps, name string) func(map[string]checks.Result, map
 // type publishes (checks.GraphMetrics), for the recorder to persist from
 // Result.Data. Empty when no configured check declares graphable metrics.
 func graphableCheckMetrics(tree map[string]any) map[string][]checks.GraphMetric {
-	section, _ := tree["checks"].(map[string]any)
+	section, _ := tree[config.SectionChecks].(map[string]any)
 	out := map[string][]checks.GraphMetric{}
 	for cn, raw := range section {
 		m, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
-		typ, _ := m["type"].(string)
+		typ, _ := m[checks.CheckKeyType].(string)
 		if g := checks.GraphMetrics(typ); len(g) > 0 {
 			out[cn] = g
 		}
@@ -776,7 +781,7 @@ func numericData(v any) (float64, bool) {
 // parseCheckGates reads each check's `requires` and `skip_when_changed` fields
 // into the worker's interdependency map. Returns nil when no check is gated.
 func parseCheckGates(tree map[string]any) map[string]CheckGate {
-	section, _ := tree["checks"].(map[string]any)
+	section, _ := tree[config.SectionChecks].(map[string]any)
 	gates := map[string]CheckGate{}
 	for name, raw := range section {
 		m, ok := raw.(map[string]any)
@@ -784,8 +789,8 @@ func parseCheckGates(tree map[string]any) map[string]CheckGate {
 			continue
 		}
 		gate := CheckGate{
-			Requires:        cfgval.StringList(m["requires"]),
-			SkipWhenChanged: cfgval.StringList(m["skip_when_changed"]),
+			Requires:        cfgval.StringList(m[checks.CheckKeyRequires]),
+			SkipWhenChanged: cfgval.StringList(m[checks.CheckKeySkipWhenChanged]),
 		}
 		if len(gate.Requires) > 0 || len(gate.SkipWhenChanged) > 0 {
 			gates[name] = gate
@@ -800,11 +805,11 @@ func parseCheckGates(tree map[string]any) map[string]CheckGate {
 // measuredCheckNames returns the names of a service's checks whose type is graphed
 // (measuredCheckTypes).
 func measuredCheckNames(tree map[string]any) map[string]bool {
-	section, _ := tree["checks"].(map[string]any)
+	section, _ := tree[config.SectionChecks].(map[string]any)
 	out := map[string]bool{}
 	for cn, raw := range section {
 		if m, ok := raw.(map[string]any); ok {
-			if t, _ := m["type"].(string); measuredCheckTypes[t] {
+			if t, _ := m[checks.CheckKeyType].(string); measuredCheckTypes[t] {
 				out[cn] = true
 			}
 		}
@@ -917,7 +922,7 @@ func metricSampler(service string, tree map[string]any, collector *metrics.Colle
 		}
 		return func(scope, name string) (metrics.Reading, bool) {
 			snap := svc
-			if scope == "system" {
+			if scope == checks.MetricScopeSystem {
 				snap = sys
 			}
 			if snap == nil {
@@ -1043,29 +1048,29 @@ func processTotalsFromPIDs(pids []int, r procMetricReader) *web.ProcessTotals {
 // reporting whether service-scope and/or system-scope metrics are referenced.
 func usesMetrics(tree map[string]any) (service, system bool) {
 	mark := func(scope string) {
-		if scope == "system" {
+		if scope == checks.MetricScopeSystem {
 			system = true
 		} else {
 			service = true
 		}
 	}
-	for _, section := range []string{"checks", "preflight"} {
+	for _, section := range []string{config.SectionChecks, config.SectionPreflight} {
 		entries, ok := tree[section].(map[string]any)
 		if !ok {
 			continue
 		}
 		for _, e := range entries {
 			if m, ok := e.(map[string]any); ok {
-				if t, _ := m["type"].(string); t == "metric" {
-					mark(scopeOf(m))
+				if t, _ := m[checks.CheckKeyType].(string); t == checks.CheckTypeMetric {
+					mark(checkMetricScopeOf(m))
 				}
 			}
 		}
 	}
-	if ruleMap, ok := tree["rules"].(map[string]any); ok {
+	if ruleMap, ok := tree[rules.SectionRules].(map[string]any); ok {
 		for _, e := range ruleMap {
 			if m, ok := e.(map[string]any); ok {
-				if ifNode, ok := m["if"].(map[string]any); ok {
+				if ifNode, ok := m[rules.RuleFieldIf].(map[string]any); ok {
 					scanMetricScopes(ifNode, mark)
 				}
 			}
@@ -1077,19 +1082,19 @@ func usesMetrics(tree map[string]any) (service, system bool) {
 func scanMetricScopes(node map[string]any, mark func(string)) {
 	for k, v := range node {
 		switch k {
-		case "metric":
+		case rules.ConditionMetric:
 			if m, ok := v.(map[string]any); ok {
-				mark(scopeOf(m))
+				mark(ruleMetricScopeOf(m))
 			}
-		case "failed", "active":
+		case rules.ConditionFailed, rules.ConditionActive:
 			m, ok := v.(map[string]any)
-			if !ok || cfgval.AsString(m["check"]) != "" {
+			if !ok || cfgval.AsString(m[rules.FieldCheck]) != "" {
 				continue
 			}
-			if metric, ok := m["metric"].(map[string]any); ok {
-				mark(scopeOf(metric))
+			if metric, ok := m[rules.FieldMetric].(map[string]any); ok {
+				mark(ruleMetricScopeOf(metric))
 			}
-		case "and", "or":
+		case rules.ConditionAnd, rules.ConditionOr:
 			if list, ok := v.([]any); ok {
 				for _, item := range list {
 					if m, ok := item.(map[string]any); ok {
@@ -1097,7 +1102,7 @@ func scanMetricScopes(node map[string]any, mark func(string)) {
 					}
 				}
 			}
-		case "not":
+		case rules.ConditionNot:
 			if m, ok := v.(map[string]any); ok {
 				scanMetricScopes(m, mark)
 			}
@@ -1105,11 +1110,18 @@ func scanMetricScopes(node map[string]any, mark func(string)) {
 	}
 }
 
-func scopeOf(m map[string]any) string {
-	if s, _ := m["scope"].(string); s != "" {
+func checkMetricScopeOf(m map[string]any) string {
+	if s, _ := m[checks.CheckKeyScope].(string); s != "" {
 		return s
 	}
-	return "service"
+	return checks.MetricScopeService
+}
+
+func ruleMetricScopeOf(m map[string]any) string {
+	if s, _ := m[rules.FieldScope].(string); s != "" {
+		return s
+	}
+	return checks.MetricScopeService
 }
 
 // HasConfiguredTargets reports whether the config declares any services or
@@ -1120,6 +1132,6 @@ func HasConfiguredTargets(cfg *config.Config) bool {
 	if len(cfg.Services) > 0 {
 		return true
 	}
-	raw, ok := cfg.Global.Raw["watches"].(map[string]any)
+	raw, ok := cfg.Global.Raw[config.SectionWatches].(map[string]any)
 	return ok && len(raw) > 0
 }

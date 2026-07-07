@@ -25,10 +25,13 @@ import (
 	"sermo/internal/servicemgr"
 )
 
-// OnModeChange is the `on: change` metric/field mode: fire when the observed
-// value changes between cycles rather than comparing it to a threshold. Shared
-// with the host-watch builder so both read the mode the same way.
-const OnModeChange = "change"
+const (
+	// OnModeChange is the `on: change` metric/field mode: fire when the
+	// observed value changes between cycles instead of comparing to a threshold.
+	OnModeChange = "change"
+	// OnModeDelete is the `on: delete` file existence mode.
+	OnModeDelete = "delete"
+)
 
 // net/icmp check metric names (the `metric:` selector of a net or icmp check).
 // The net ones are exported so the web backend labels its net-watch readings
@@ -670,12 +673,12 @@ type commandExport struct {
 func parseCommandExports(checkName string, raw any) ([]commandExport, string) {
 	exports := map[string]commandExport{}
 	switch checkName {
-	case "version":
+	case DataKeyVersion:
 		exports[DataKeyVersion] = defaultCommandExport(DataKeyVersion)
-		short := defaultCommandExport("version_short")
+		short := defaultCommandExport(DataKeyVersionShort)
 		short.shortVersion = true
 		exports[DataKeyVersionShort] = short
-	case "version_short":
+	case DataKeyVersionShort:
 		exports[checkName] = defaultCommandExport(checkName)
 	}
 	if raw == nil {
@@ -1006,7 +1009,7 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	case NetMetricErrors:
 		c.counters = cfgval.StringArray(entry[CheckKeyCounters])
 		if len(c.counters) == 0 {
-			c.counters = []string{"rx_errors", "tx_errors"}
+			c.counters = []string{NetCounterRXErrors, NetCounterTXErrors}
 		}
 		op, v, errs := parseDeltaThreshold(entry[CheckKeyDelta], "net errors")
 		if errs != "" {

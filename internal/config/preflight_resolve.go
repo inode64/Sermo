@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 )
 
 var wholeVarRef = regexp.MustCompile(`^\$\{\s*([^}:][^}]*)\s*\}$`)
@@ -34,18 +35,18 @@ func resolvePreflightResourceVariables(tree map[string]any) []string {
 		if !ok {
 			continue
 		}
-		typ := cfgval.String(entry["type"])
+		typ := cfgval.String(entry[checks.CheckKeyType])
 		if !isResourcePreflightType(typ) {
 			continue
 		}
-		selected, _, ok := selectResourcePath(typ, entry["path"])
+		selected, _, ok := selectResourcePath(typ, entry[checks.CheckKeyPath])
 		if !ok {
 			continue
 		}
 		if selected != "" {
-			entry["path"] = selected
+			entry[checks.CheckKeyPath] = selected
 		}
-		if ref, isRef := variablePathRef(entry["path"]); isRef {
+		if ref, isRef := variablePathRef(entry[checks.CheckKeyPath]); isRef {
 			vars := ensureVariables(tree)
 			raw, exists := vars[ref]
 			if !exists {
@@ -56,7 +57,7 @@ func resolvePreflightResourceVariables(tree map[string]any) []string {
 				continue
 			}
 			vars[ref] = selected
-			entry["path"] = selected
+			entry[checks.CheckKeyPath] = selected
 		}
 	}
 	return errs
@@ -146,17 +147,17 @@ func applyCommandExportDefaults(tree map[string]any) {
 func applyCommandExportDefaultsFromSection(tree map[string]any, section map[string]any) {
 	for _, name := range slices.Sorted(maps.Keys(section)) {
 		entry, ok := section[name].(map[string]any)
-		if !ok || len(cfgval.StringArray(entry["command"])) == 0 {
+		if !ok || len(cfgval.StringArray(entry[checks.CheckKeyCommand])) == 0 {
 			continue
 		}
 		switch name {
-		case "version":
-			setExportDefault(tree, "version", "")
-			setExportDefault(tree, "version_short", "")
-		case "version_short":
-			setExportDefault(tree, "version_short", "")
+		case checks.DataKeyVersion:
+			setExportDefault(tree, checks.DataKeyVersion, "")
+			setExportDefault(tree, checks.DataKeyVersionShort, "")
+		case checks.DataKeyVersionShort:
+			setExportDefault(tree, checks.DataKeyVersionShort, "")
 		}
-		exports, ok := entry["export"].(map[string]any)
+		exports, ok := entry[checks.CheckKeyExport].(map[string]any)
 		if !ok {
 			continue
 		}

@@ -26,17 +26,17 @@ func diagService(b *builder, cfg *config.Config, name string, global time.Durati
 	}
 
 	resolution := global
-	if d := cfgval.Duration(resolved.Tree["interval"]); d > 0 {
+	if d := cfgval.Duration(resolved.Tree[config.EntryKeyInterval]); d > 0 {
 		resolution = d
 	}
-	section, _ := resolved.Tree["checks"].(map[string]any)
+	section, _ := resolved.Tree[config.SectionChecks].(map[string]any)
 	for _, cn := range slices.Sorted(maps.Keys(section)) {
 		entry, ok := section[cn].(map[string]any)
 		if !ok {
 			continue
 		}
 		scope := fmt.Sprintf("service %s check %s", name, cn)
-		if d := cfgval.Duration(entry["interval"]); d > 0 {
+		if d := cfgval.Duration(entry[config.EntryKeyInterval]); d > 0 {
 			checkAlignment(b, scope, d, resolution)
 		}
 		diagCheckResources(b, scope, entry, host)
@@ -59,18 +59,18 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 			continue
 		}
 		scope := "watch " + name
-		if d := cfgval.Duration(entry["interval"]); d > 0 {
+		if d := cfgval.Duration(entry[config.EntryKeyInterval]); d > 0 {
 			checkAlignment(b, scope, d, global)
 		}
-		check, _ := entry["check"].(map[string]any)
+		check, _ := entry[config.WatchKeyCheck].(map[string]any)
 		if check == nil {
 			continue
 		}
-		switch cfgval.AsString(check["type"]) {
+		switch cfgval.AsString(check[checks.CheckKeyType]) {
 		case checks.CheckTypeNet:
 			warnMissingInterface(b, scope, check, host)
 		case checks.CheckTypeFile:
-			if p := cfgval.AsString(check["path"]); p != "" && !host.PathExists(p) {
+			if p := cfgval.AsString(check[checks.CheckKeyPath]); p != "" && !host.PathExists(p) {
 				b.add(LevelWarning, scope, "path %q does not exist", p)
 			}
 		default:
@@ -84,32 +84,32 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 // diagCheckResources flags host resources referenced by a single-shot check
 // that do not exist on this host. Shared by service checks and host watches.
 func diagCheckResources(b *builder, scope string, entry map[string]any, host Host) {
-	switch cfgval.AsString(entry["type"]) {
+	switch cfgval.AsString(entry[checks.CheckKeyType]) {
 	case checks.CheckTypeStorage:
 		diagStorageResources(b, scope, entry, host)
 	case checks.CheckTypeCount:
-		if p := cfgval.AsString(entry["path"]); p != "" && !host.PathExists(p) {
+		if p := cfgval.AsString(entry[checks.CheckKeyPath]); p != "" && !host.PathExists(p) {
 			b.add(LevelWarning, scope, "directory %q does not exist", p)
 		}
 	case checks.CheckTypeDiskIO:
-		if dev := cfgval.AsString(entry["device"]); dev != "" && !host.PathExists("/sys/class/block/"+dev) {
+		if dev := cfgval.AsString(entry[checks.CheckKeyDevice]); dev != "" && !host.PathExists("/sys/class/block/"+dev) {
 			b.add(LevelWarning, scope, "block device %q does not exist (no /sys/class/block entry)", dev)
 		}
 	case checks.CheckTypeHdparm, checks.CheckTypeSmart:
-		if dev := cfgval.AsString(entry["device"]); dev != "" && !host.PathExists(dev) {
+		if dev := cfgval.AsString(entry[checks.CheckKeyDevice]); dev != "" && !host.PathExists(dev) {
 			b.add(LevelWarning, scope, "device %q does not exist", dev)
 		}
 	case checks.CheckTypeRoute:
 		warnMissingInterface(b, scope, entry, host)
 	case checks.CheckTypePressure:
-		if res := cfgval.AsString(entry["resource"]); res != "" && !host.PathExists("/proc/pressure/"+res) {
+		if res := cfgval.AsString(entry[checks.CheckKeyResource]); res != "" && !host.PathExists("/proc/pressure/"+res) {
 			b.add(LevelWarning, scope, "kernel exposes no /proc/pressure/%s (CONFIG_PSI off?); this check will never fire", res)
 		}
 	}
 }
 
 func warnMissingInterface(b *builder, scope string, entry map[string]any, host Host) {
-	if iface := cfgval.AsString(entry["interface"]); iface != "" && !host.InterfaceExists(iface) {
+	if iface := cfgval.AsString(entry[checks.CheckKeyInterface]); iface != "" && !host.InterfaceExists(iface) {
 		b.add(LevelWarning, scope, "network interface %q does not exist", iface)
 	}
 }
@@ -117,7 +117,7 @@ func warnMissingInterface(b *builder, scope string, entry map[string]any, host H
 // diagStorageResources flags a storage check's path when it is missing, and a configured
 // mount that is not currently mounted.
 func diagStorageResources(b *builder, scope string, fields map[string]any, host Host) {
-	p := cfgval.AsString(fields["path"])
+	p := cfgval.AsString(fields[checks.CheckKeyPath])
 	if p == "" {
 		return
 	}
@@ -133,7 +133,7 @@ func diagStorageResources(b *builder, scope string, fields map[string]any, host 
 // hasMountCondition mirrors the storage-check schema: `mounted` is the only
 // mount condition (config validation rejects fstype/device/options).
 func hasMountCondition(fields map[string]any) bool {
-	_, ok := fields["mounted"]
+	_, ok := fields[checks.CheckKeyMounted]
 	return ok
 }
 

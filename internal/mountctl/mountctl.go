@@ -15,6 +15,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/locks"
 	"sermo/internal/mounts"
@@ -126,13 +127,13 @@ type Controller struct {
 
 // SpecFromStorageTree reads a resolved kind: storage body with a mount block.
 func SpecFromStorageTree(name string, tree map[string]any) Spec {
-	mount, _ := tree["mount"].(map[string]any)
+	mount, _ := tree[config.StorageKeyMount].(map[string]any)
 	umount, _ := mount["umount"].(map[string]any)
 	spec := Spec{
 		Name:        name,
 		DisplayName: cfgval.String(tree["display_name"]),
-		Category:    cfgval.String(tree["category"]),
-		Path:        filepath.Clean(cfgval.String(tree["path"])),
+		Category:    cfgval.String(tree[config.EntryKeyCategory]),
+		Path:        filepath.Clean(cfgval.String(tree[config.EntryKeyPath])),
 		Refcount:    true,
 		Umount:      defaultUmountSpec(),
 	}

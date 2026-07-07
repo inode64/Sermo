@@ -1,6 +1,12 @@
 package assist
 
-import "fmt"
+import (
+	"fmt"
+
+	"sermo/internal/checks"
+	"sermo/internal/config"
+	"sermo/internal/rules"
+)
 
 // uplinkAssistant generates the full monitoring set for an internet uplink
 // interface (PPPoE, WAN port, LTE modem): link state, assigned address,
@@ -67,42 +73,60 @@ func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {
 	}
 	debounce := func(entry map[string]any) map[string]any {
 		if s.forCycles > 0 {
-			entry["for"] = map[string]any{"cycles": s.forCycles}
+			entry[rules.RuleFieldFor] = map[string]any{rules.WindowKeyCycles: s.forCycles}
 		}
 		return entry
 	}
 	watches := map[string]any{
 		"uplink-" + iface: map[string]any{
-			"check": map[string]any{"type": "net", "interface": iface},
-			"metrics": map[string]any{
+			config.WatchKeyCheck: map[string]any{checks.CheckKeyType: checks.CheckTypeNet, checks.CheckKeyInterface: iface},
+			config.SectionMetrics: map[string]any{
 				// Alert while the link is down, and on a provider-forced
 				// renumbering or reconnect (also the dynamic-DNS trigger).
-				"state":   map[string]any{"expect": "down", "then": newThen()},
-				"address": map[string]any{"on": "change", "then": newThen()},
+				checks.NetMetricState: map[string]any{
+					checks.CheckKeyExpect: checks.NetStateDown,
+					config.WatchKeyThen:   newThen(),
+				},
+				checks.NetMetricAddress: map[string]any{
+					checks.CheckKeyOn:   checks.OnModeChange,
+					config.WatchKeyThen: newThen(),
+				},
 			},
 		},
 		"uplink-" + iface + "-route": map[string]any{
-			"check": map[string]any{"type": "route", "interface": iface},
-			"then":  newThen(),
+			config.WatchKeyCheck: map[string]any{checks.CheckKeyType: checks.CheckTypeRoute, checks.CheckKeyInterface: iface},
+			config.WatchKeyThen:  newThen(),
 		},
 		"uplink-" + iface + "-ping": map[string]any{
-			"check": map[string]any{"type": "icmp", "host": s.probeHost, "interface": iface},
-			"metrics": map[string]any{
-				"state": debounce(map[string]any{"expect": "down", "then": newThen()}),
+			config.WatchKeyCheck: map[string]any{
+				checks.CheckKeyType:      checks.CheckTypeICMP,
+				checks.CheckKeyHost:      s.probeHost,
+				checks.CheckKeyInterface: iface,
+			},
+			config.SectionMetrics: map[string]any{
+				checks.NetMetricState: debounce(map[string]any{
+					checks.CheckKeyExpect: checks.NetStateDown,
+					config.WatchKeyThen:   newThen(),
+				}),
 			},
 		},
 		"uplink-" + iface + "-dns": debounce(map[string]any{
-			"check": map[string]any{
-				"type": "dns", "resolvconf": true, "query": s.probeName,
-				"expect":  map[string]any{"rcode": "NOERROR", "answers": map[string]any{"op": ">", "value": 0}},
-				"timeout": "5s",
+			config.WatchKeyCheck: map[string]any{
+				checks.CheckKeyType:       "dns",
+				checks.CheckKeyResolvconf: true,
+				checks.CheckKeyQuery:      s.probeName,
+				checks.CheckKeyExpect: map[string]any{
+					"rcode":   "NOERROR",
+					"answers": map[string]any{checks.CheckKeyOp: ">", checks.CheckKeyValue: 0},
+				},
+				checks.CheckKeyTimeout: "5s",
 			},
-			"then": newThen(),
+			config.WatchKeyThen: newThen(),
 		}),
 	}
 	for _, entry := range watches {
 		if m, ok := entry.(map[string]any); ok {
-			m["category"] = "network"
+			m[config.EntryKeyCategory] = watchCategoryNetwork
 			s.Monitoring.apply(m)
 			applyDryRun(m, s.dryRun)
 		}
