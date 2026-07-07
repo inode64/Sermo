@@ -359,12 +359,13 @@ func NormalizeUnit(backend Backend, service string) string {
 }
 
 func systemdStatus(state string) Status {
+	const systemdStateDeactivating = "deactivating"
 	switch state {
-	case "active":
+	case string(StatusActive):
 		return StatusActive
-	case "failed":
+	case string(StatusFailed):
 		return StatusFailed
-	case "inactive", "deactivating":
+	case string(StatusInactive), systemdStateDeactivating:
 		return StatusInactive
 	default:
 		// activating, reloading, unknown and empty states are not a clean active.
@@ -408,7 +409,7 @@ func openrcStateTextStatus(text string, includeInactive bool) Status {
 		return StatusFailed
 	case strings.Contains(state, openRCStateStopped),
 		strings.Contains(state, openRCStateNotStarted),
-		includeInactive && strings.Contains(state, "inactive"):
+		includeInactive && strings.Contains(state, string(StatusInactive)):
 		return StatusInactive
 	case strings.Contains(state, openRCStateStarted):
 		return StatusActive

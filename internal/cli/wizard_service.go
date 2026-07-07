@@ -67,7 +67,7 @@ func listInstalledCatalogServices(ctx context.Context, cfg *config.Config, backe
 		}
 		if name == "ceph-mon" {
 			if host, port := detectCephMonEndpoint(ctx, runner, timeout, unit); host != "" && port > 0 {
-				c.Variables = map[string]any{"host": host, "port": port}
+				c.Variables = map[string]any{config.VariableKeyHost: host, config.VariableKeyPort: port}
 				c.Port = port
 			}
 		}
@@ -76,8 +76,8 @@ func listInstalledCatalogServices(ctx context.Context, cfg *config.Config, backe
 		c.Pidfile, c.Exe, c.Cmd, c.User = proc.Pidfile, proc.Exe, proc.Cmd, proc.User
 		if c.Port > 0 {
 			c.PortListening = portListening(c.Port)
-			if host, ok := portListenerHost(c.Port); ok && serviceHasVariable(resolved.Tree, "host") {
-				mergeCandidateVariables(&c, map[string]any{"host": host})
+			if host, ok := portListenerHost(c.Port); ok && serviceHasVariable(resolved.Tree, config.VariableKeyHost) {
+				mergeCandidateVariables(&c, map[string]any{config.VariableKeyHost: host})
 			}
 		}
 		out = append(out, c)
@@ -211,7 +211,7 @@ func serviceUnitStatus(ctx context.Context, manager servicemgr.Manager, unit str
 }
 
 func serviceTitle(tree map[string]any, fallback string) string {
-	if s := cfgval.AsString(tree["display_name"]); s != "" {
+	if s := cfgval.AsString(tree[config.EntryKeyDisplayName]); s != "" {
 		return s
 	}
 	return fallback
@@ -219,11 +219,11 @@ func serviceTitle(tree map[string]any, fallback string) string {
 
 // servicePort reads the catalog service's default port from its variables (0 if none).
 func servicePort(tree map[string]any) int {
-	vars, ok := tree["variables"].(map[string]any)
+	vars, ok := tree[config.SectionVariables].(map[string]any)
 	if !ok {
 		return 0
 	}
-	if p, ok := cfgval.Int(vars["port"]); ok {
+	if p, ok := cfgval.Int(vars[config.VariableKeyPort]); ok {
 		if p >= 1 && p <= 65535 {
 			return p
 		}
@@ -232,7 +232,7 @@ func servicePort(tree map[string]any) int {
 }
 
 func serviceHasVariable(tree map[string]any, name string) bool {
-	vars, ok := tree["variables"].(map[string]any)
+	vars, ok := tree[config.SectionVariables].(map[string]any)
 	if !ok {
 		return false
 	}
@@ -322,7 +322,7 @@ func parseCephAddrVersion(addrs, version string) (string, int, bool) {
 // the host (a catalog hint; empty when not declared).
 func existingConfigFiles(tree map[string]any) []string {
 	var out []string
-	for _, f := range cfgval.StringList(tree["config_files"]) {
+	for _, f := range cfgval.StringList(tree[config.ServiceKeyConfigFiles]) {
 		if pathExists(f) {
 			out = append(out, f)
 		}
@@ -613,7 +613,7 @@ func serviceFileTarget(path string) string {
 			return serviceTargetKey(serviceFamilyVM, cfgval.AsString(control[virt.ControlKeyDomain]))
 		}
 	}
-	if s, _ := doc["uses"].(string); s != "" {
+	if s, _ := doc[config.ServiceKeyUses].(string); s != "" {
 		return serviceTargetKey(wizardNounService, s)
 	}
 	s, _ := doc[wizardFieldName].(string)

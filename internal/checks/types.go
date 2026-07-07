@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/conn"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
@@ -207,27 +208,27 @@ func (c *httpCheck) success(resp *http.Response, elapsed time.Duration, statusMs
 func jsonAssert(got any, op, want string) bool {
 	gotStr := jsonValueString(got)
 	switch op {
-	case "", "==":
+	case "", cfgval.CompareOpEqual:
 		return gotStr == want
-	case "!=":
+	case cfgval.CompareOpNotEqual:
 		return gotStr != want
-	case "contains":
+	case cfgval.AssertOpContains:
 		return strings.Contains(gotStr, want)
-	case "=~":
-		ok, _ := compareValue(gotStr, "=~", want)
+	case cfgval.AssertOpRegex:
+		ok, _ := compareValue(gotStr, cfgval.AssertOpRegex, want)
 		return ok
-	case ">", ">=", "<", "<=":
+	case cfgval.CompareOpGreater, cfgval.CompareOpGreaterEqual, cfgval.CompareOpLess, cfgval.CompareOpLessEqual:
 		gf, err1 := strconv.ParseFloat(gotStr, 64)
 		wf, err2 := strconv.ParseFloat(want, 64)
 		if err1 != nil || err2 != nil {
 			return false
 		}
 		switch op {
-		case ">":
+		case cfgval.CompareOpGreater:
 			return gf > wf
-		case ">=":
+		case cfgval.CompareOpGreaterEqual:
 			return gf >= wf
-		case "<":
+		case cfgval.CompareOpLess:
 			return gf < wf
 		default:
 			return gf <= wf
@@ -537,7 +538,7 @@ type lockfileCheck struct {
 }
 
 func (c lockfileCheck) Run(_ context.Context) Result {
-	return pathMatchResult(c.base, c.paths, lockfileCandidate, "lockfile")
+	return pathMatchResult(c.base, c.paths, lockfileCandidate, CheckTypeLockfile)
 }
 
 type pathMatch struct {
@@ -625,7 +626,7 @@ type socketCheck struct {
 }
 
 func (c socketCheck) Run(_ context.Context) Result {
-	return pathMatchResult(c.base, c.paths, socketCandidate, "socket")
+	return pathMatchResult(c.base, c.paths, socketCandidate, CheckTypeSocket)
 }
 
 func socketCandidate(path string, info os.FileInfo) pathMatch {

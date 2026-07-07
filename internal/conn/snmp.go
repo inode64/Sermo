@@ -22,6 +22,13 @@ const (
 	oidSysLocation = ".1.3.6.1.2.1.1.6.0"
 )
 
+const (
+	defaultSNMPPort         = 161
+	defaultSNMPProbeTimeout = 5 * time.Second
+	defaultSNMPRetries      = 1
+	defaultSNMPCommunity    = "public"
+)
+
 // snmpProtocol probes an SNMP agent using gosnmp. With no user it uses SNMPv2c
 // (community from password, default "public" — the anonymous/shared-secret
 // model). With a user it uses SNMPv3 USM (a password adds SHA authentication,
@@ -32,11 +39,11 @@ const (
 type snmpProtocol struct{}
 
 func (snmpProtocol) Name() string       { return "snmp" }
-func (snmpProtocol) DefaultPort() int   { return 161 }
+func (snmpProtocol) DefaultPort() int   { return defaultSNMPPort }
 func (snmpProtocol) RequiresUser() bool { return false }
 
 func (snmpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	timeout := 5 * time.Second
+	timeout := defaultSNMPProbeTimeout
 	if dl, ok := ctx.Deadline(); ok {
 		if d := time.Until(dl); d > 0 {
 			timeout = d
@@ -94,7 +101,7 @@ func buildSNMPParams(ctx context.Context, cfg Config, timeout time.Duration) *g.
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 161
+		port = defaultSNMPPort
 	}
 	p := &g.GoSNMP{
 		Target:    host,
@@ -102,7 +109,7 @@ func buildSNMPParams(ctx context.Context, cfg Config, timeout time.Duration) *g.
 		Transport: networkUDP,
 		Context:   ctx,
 		Timeout:   timeout,
-		Retries:   1,
+		Retries:   defaultSNMPRetries,
 		MaxOids:   g.MaxOids,
 	}
 	if cfg.Interface != "" {
@@ -112,7 +119,7 @@ func buildSNMPParams(ctx context.Context, cfg Config, timeout time.Duration) *g.
 		p.Version = g.Version2c
 		p.Community = cfg.Password
 		if p.Community == "" {
-			p.Community = "public"
+			p.Community = defaultSNMPCommunity
 		}
 		return p
 	}

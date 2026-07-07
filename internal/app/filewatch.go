@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 	"sermo/internal/notify"
 )
 
@@ -36,6 +37,14 @@ type fileState struct {
 	uid, gid uint32
 	breached bool // previous size-threshold result, for edge detection
 }
+
+const (
+	fileChangeDeleted       = "deleted"
+	fileChangeSize          = "size"
+	fileChangeSizeThreshold = "size_threshold"
+	fileChangePermissions   = "permissions"
+	fileChangeOwner         = "owner"
+)
 
 // fileWatcher monitors a file or directory (optionally its whole subtree) for
 // attribute changes and fires a hook once per change. It is stateful: it
@@ -97,8 +106,8 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 			return
 		}
 		if w.cond.onDelete && !observeOnlyCycle(ctx) {
-			w.fire(ctx, p, "deleted", p+" no longer exists", map[string]string{
-				"SERMO_OLD": strconv.FormatInt(w.baseline[p].size, 10),
+			w.fire(ctx, p, fileChangeDeleted, p+" no longer exists", map[string]string{
+				sermoEnvOld: strconv.FormatInt(w.baseline[p].size, 10),
 			})
 		}
 		delete(w.baseline, p)
@@ -151,33 +160,33 @@ func (w *fileWatcher) stateOf(info fs.FileInfo) fileState {
 func (w *fileWatcher) diff(ctx context.Context, path string, prev, cur fileState) {
 	c := w.cond
 	if c.sizeChange && cur.size != prev.size {
-		w.fire(ctx, path, "size", fmt.Sprintf("%s size %d -> %d", path, prev.size, cur.size), map[string]string{
-			"SERMO_OLD":  strconv.FormatInt(prev.size, 10),
-			"SERMO_NEW":  strconv.FormatInt(cur.size, 10),
-			"SERMO_SIZE": strconv.FormatInt(cur.size, 10),
+		w.fire(ctx, path, fileChangeSize, fmt.Sprintf("%s size %d -> %d", path, prev.size, cur.size), map[string]string{
+			sermoEnvOld:  strconv.FormatInt(prev.size, 10),
+			sermoEnvNew:  strconv.FormatInt(cur.size, 10),
+			sermoEnvSize: strconv.FormatInt(cur.size, 10),
 		})
 	}
 	// Edge-triggered: fire only when the threshold is newly crossed.
 	if c.sizeOp != "" && cur.breached && !prev.breached {
 		val := strconv.FormatFloat(c.sizeValue, 'f', -1, 64)
-		w.fire(ctx, path, "size_threshold",
+		w.fire(ctx, path, fileChangeSizeThreshold,
 			fmt.Sprintf("%s size %d %s %s", path, cur.size, c.sizeOp, val), map[string]string{
-				"SERMO_SIZE":  strconv.FormatInt(cur.size, 10),
-				"SERMO_OP":    c.sizeOp,
-				"SERMO_VALUE": val,
+				sermoEnvSize:  strconv.FormatInt(cur.size, 10),
+				sermoEnvOp:    c.sizeOp,
+				sermoEnvValue: val,
 			})
 	}
 	if c.permChange && cur.perm != prev.perm {
-		w.fire(ctx, path, "permissions", fmt.Sprintf("%s permissions %04o -> %04o", path, prev.perm, cur.perm), map[string]string{
-			"SERMO_OLD": fmt.Sprintf("%04o", prev.perm),
-			"SERMO_NEW": fmt.Sprintf("%04o", cur.perm),
+		w.fire(ctx, path, fileChangePermissions, fmt.Sprintf("%s permissions %04o -> %04o", path, prev.perm, cur.perm), map[string]string{
+			sermoEnvOld: fmt.Sprintf("%04o", prev.perm),
+			sermoEnvNew: fmt.Sprintf("%04o", cur.perm),
 		})
 	}
 	if c.ownerChange && (cur.uid != prev.uid || cur.gid != prev.gid) {
-		w.fire(ctx, path, "owner",
+		w.fire(ctx, path, fileChangeOwner,
 			fmt.Sprintf("%s owner %d:%d -> %d:%d", path, prev.uid, prev.gid, cur.uid, cur.gid), map[string]string{
-				"SERMO_OLD": fmt.Sprintf("%d:%d", prev.uid, prev.gid),
-				"SERMO_NEW": fmt.Sprintf("%d:%d", cur.uid, cur.gid),
+				sermoEnvOld: fmt.Sprintf("%d:%d", prev.uid, prev.gid),
+				sermoEnvNew: fmt.Sprintf("%d:%d", cur.uid, cur.gid),
 			})
 	}
 }
@@ -186,11 +195,11 @@ func (w *fileWatcher) diff(ctx context.Context, path string, prev, cur fileState
 // failure is reported but never aborts the cycle (other changes still fire).
 func (w *fileWatcher) fire(ctx context.Context, path, change, msg string, extra map[string]string) {
 	env := map[string]string{
-		"SERMO_WATCH":      w.name,
-		"SERMO_CHECK_TYPE": "file",
-		"SERMO_PATH":       path,
-		"SERMO_CHANGE":     change,
-		"SERMO_MESSAGE":    msg,
+		sermoEnvWatch:     w.name,
+		sermoEnvCheckType: checks.CheckTypeFile,
+		sermoEnvPath:      path,
+		sermoEnvChange:    change,
+		sermoEnvMessage:   msg,
 	}
 	for k, v := range extra {
 		env[k] = v
@@ -201,7 +210,7 @@ func (w *fileWatcher) fire(ctx context.Context, path, change, msg string, extra 
 		return
 	}
 	if w.inPanic != nil && w.inPanic() {
-		w.emitEvent(Event{Watch: w.name, Kind: "panic-suppressed", Message: "panic mode: hook/notify suppressed: " + msg})
+		w.emitEvent(Event{Watch: w.name, Kind: eventKindPanicSuppressed, Message: "panic mode: hook/notify suppressed: " + msg})
 		return
 	}
 	if len(w.hook.Command) > 0 {

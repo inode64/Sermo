@@ -13,6 +13,8 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+const defaultDHCPExchangeTimeout = 5 * time.Second
+
 // dhcpExchange sends packet and returns the first DHCP reply matching xid. When
 // iface is set it broadcasts out that link (255.255.255.255:67), binding the
 // socket to the interface; otherwise it unicasts to server (host:port). Either
@@ -52,7 +54,7 @@ func dhcpExchange(ctx context.Context, iface, server string, packet []byte, xid 
 
 	deadline, ok := ctx.Deadline()
 	if !ok {
-		deadline = time.Now().Add(5 * time.Second)
+		deadline = time.Now().Add(defaultDHCPExchangeTimeout)
 	}
 	_ = pc.SetDeadline(deadline)
 

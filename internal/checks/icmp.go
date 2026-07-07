@@ -13,6 +13,12 @@ import (
 	"sermo/internal/conn"
 )
 
+const (
+	defaultPingCount            = 3
+	defaultPingTimeout          = 5 * time.Second
+	defaultPingPerPacketTimeout = time.Second
+)
+
 // PingSample is one ICMP observation of a host.
 type PingSample struct {
 	Reachable bool
@@ -187,10 +193,10 @@ func (c *icmpCheck) sample(sampler PingSamplerFunc) (PingSample, error) {
 // mechanism) so the echo requests leave through it on a multi-homed host.
 func defaultPingSampler(host, iface string, count int, timeout time.Duration) (PingSample, error) {
 	if count <= 0 {
-		count = 3
+		count = defaultPingCount
 	}
 	if timeout <= 0 {
-		timeout = 5 * time.Second
+		timeout = defaultPingTimeout
 	}
 	addr, err := net.ResolveIPAddr("ip4", host)
 	if err != nil {
@@ -212,7 +218,7 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 
 	perPacket := timeout / time.Duration(count)
 	if perPacket <= 0 {
-		perPacket = time.Second
+		perPacket = defaultPingPerPacketTimeout
 	}
 	id := os.Getpid() & 0xffff
 	reply := make([]byte, 1500)

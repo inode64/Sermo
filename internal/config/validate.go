@@ -256,12 +256,12 @@ func validateDocuments(cfg *Config) []Issue {
 
 	for _, doc := range cfg.docs {
 		scope := documentScope(doc)
-		if d, present := doc.Body["description"]; present {
+		if d, present := doc.Body[keyDescription]; present {
 			if _, ok := d.(string); !ok {
 				issues = append(issues, Issue{Scope: scope, Msg: "description must be a string"})
 			}
 		}
-		if d, present := doc.Body["display_name"]; present {
+		if d, present := doc.Body[keyDisplayName]; present {
 			if _, ok := d.(string); !ok {
 				issues = append(issues, Issue{Scope: scope, Msg: "display_name must be a string"})
 			}
@@ -307,7 +307,7 @@ func validateDocuments(cfg *Config) []Issue {
 			continue
 		}
 		scope := documentScope(doc)
-		raw, present := doc.Body["aliases"]
+		raw, present := doc.Body[keyAliases]
 		if !present {
 			continue
 		}
@@ -392,7 +392,7 @@ func validateVersionMatch(doc *Document, scope string) []Issue {
 }
 
 func validateVersionFrom(cfg *Config, doc *Document, scope string) []Issue {
-	raw, present := doc.Body["version_from"]
+	raw, present := doc.Body[keyVersionFrom]
 	if !present {
 		return nil
 	}
@@ -436,7 +436,7 @@ func versionFromCycle(cfg *Config, start string) []string {
 		if doc == nil {
 			return nil
 		}
-		source := cfgval.String(doc.Body["version_from"])
+		source := cfgval.String(doc.Body[keyVersionFrom])
 		if source == "" {
 			return nil
 		}
@@ -453,7 +453,7 @@ func validateVersionsCurrentFrom(doc *Document, scope string) []Issue {
 	if !ok {
 		return nil
 	}
-	raw, present := versions["current_from"]
+	raw, present := versions[keyVersionsCurrentFrom]
 	if !present {
 		return nil
 	}
@@ -470,7 +470,7 @@ func validateVersionsFrom(doc *Document, scope string) []Issue {
 	if !ok {
 		return nil
 	}
-	raw, present := versions["from"]
+	raw, present := versions[keyVersionsFrom]
 	if !present {
 		return nil
 	}
@@ -531,7 +531,7 @@ func validateVersionsCurrentFromValue(path string, raw any, add addFunc) {
 
 func validateAppLinks(cfg *Config, doc *Document, scope string) []Issue {
 	var issues []Issue
-	raw, present := doc.Body["apps"]
+	raw, present := doc.Body[keyApps]
 	if !present {
 		return issues
 	}
@@ -557,7 +557,7 @@ func validateAppLinks(cfg *Config, doc *Document, scope string) []Issue {
 func validateBinaryVariables(doc *Document, scope string) []Issue {
 	var issues []Issue
 	if vars, ok := doc.Body[sectionVariables].(map[string]any); ok {
-		raw := vars["binary"]
+		raw := vars[VariableKeyBinary]
 		if raw == nil {
 			return issues
 		}
@@ -652,7 +652,7 @@ func validateStorage(name string, tree map[string]any, notifiers map[string]stru
 		issues = append(issues, Issue{Scope: "storage " + name, Msg: fmt.Sprintf(format, args...)})
 	}
 
-	allowed := set("name", "display_name", "description", "category", "path", keyDryRun, keyMonitor, keyInterval, keyCapacity, keyUsage, keyMount, sectionVariables, "os")
+	allowed := set(keyName, keyDisplayName, keyDescription, keyCategory, keyPath, keyDryRun, keyMonitor, keyInterval, keyCapacity, keyUsage, keyMount, sectionVariables, keyOS)
 	for _, key := range slices.Sorted(maps.Keys(tree)) {
 		if _, ok := allowed[key]; !ok {
 			add("key %q is not supported for kind: storage", key)
@@ -731,13 +731,18 @@ func validateStorageCapacity(name, path string, tree, capacity map[string]any, n
 }
 
 func validateStorageUsage(usage map[string]any, notifiers map[string]struct{}, add addFunc) {
-	allowed := set("processes", "users", "observed_for", "for", "within", "then")
+	const (
+		usageKeyProcesses   = "processes"
+		usageKeyUsers       = "users"
+		usageKeyObservedFor = "observed_for"
+	)
+	allowed := set(usageKeyProcesses, usageKeyUsers, usageKeyObservedFor, rules.RuleFieldFor, rules.RuleFieldWithin, rules.RuleFieldThen)
 	for _, key := range slices.Sorted(maps.Keys(usage)) {
 		if _, ok := allowed[key]; !ok {
 			add("usage key %q is not supported", key)
 		}
 	}
-	for _, key := range []string{"processes", "users"} {
+	for _, key := range []string{usageKeyProcesses, usageKeyUsers} {
 		raw, present := usage[key]
 		if !present {
 			continue
@@ -749,7 +754,7 @@ func validateStorageUsage(usage map[string]any, notifiers map[string]struct{}, a
 		}
 		validateOpNumeric("usage."+key, m, add)
 	}
-	if v, present := usage["observed_for"]; present && !isPositiveDuration(cfgval.String(v)) {
+	if v, present := usage[usageKeyObservedFor]; present && !isPositiveDuration(cfgval.String(v)) {
 		add("usage.observed_for %q must be a valid positive duration", cfgval.String(v))
 	}
 	validateWindow(keyUsage, usage, add)
@@ -829,7 +834,7 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 // effectiveBackend returns the init backend validation should assume:
 // SERMO_BACKEND, then explicit engine.backend, otherwise host-detected init.
 func effectiveBackend(cfg *Config) string {
-	if backend := strings.ToLower(envOverride("SERMO_BACKEND")); backend == backendSystemd || backend == backendOpenRC {
+	if backend := strings.ToLower(envOverride(EnvBackendOverride)); backend == backendSystemd || backend == backendOpenRC {
 		return backend
 	}
 	if engine, ok := cfg.Global.Raw[SectionEngine].(map[string]any); ok {
@@ -839,6 +844,8 @@ func effectiveBackend(cfg *Config) string {
 	}
 	return detectedInit
 }
+
+const keyUnsupportedRemediation = "remediation"
 
 func validateResolved(name string, tree map[string]any, runtime string, notifiers map[string]struct{}, services map[string]struct{}, backend string) []Issue {
 	var issues []Issue
@@ -858,7 +865,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 			add("dry_run must be a boolean")
 		}
 	}
-	if _, present := tree["remediation"]; present {
+	if _, present := tree[keyUnsupportedRemediation]; present {
 		add("remediation is not supported; use top-level dry_run")
 	}
 

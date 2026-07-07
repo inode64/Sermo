@@ -10,15 +10,8 @@ import (
 	"strconv"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/execx"
-)
-
-// Count entry kinds use lstat types, so symlinks are never followed.
-const (
-	countAny     = "any"     // every entry, regardless of type
-	countFile    = "file"    // regular files only
-	countDir     = "dir"     // directories only
-	countSymlink = "symlink" // symbolic links only
 )
 
 // countCheck is condition-style: OK means the entry count matches op/value.
@@ -113,13 +106,13 @@ func (c countCheck) tallyRecursive(ctx context.Context) (int, error) {
 // matches applies the configured lstat-kind filter.
 func (c countCheck) matches(typ fs.FileMode) bool {
 	switch c.kind {
-	case countAny:
+	case CountKindAny:
 		return true
-	case countSymlink:
+	case CountKindSymlink:
 		return typ&fs.ModeSymlink != 0
-	case countDir:
+	case CountKindDir:
 		return typ&fs.ModeSymlink == 0 && typ.IsDir()
-	case countFile:
+	case CountKindFile:
 		return typ&fs.ModeSymlink == 0 && typ.IsRegular()
 	default:
 		return false
@@ -132,9 +125,9 @@ func (c countCheck) matches(typ fs.FileMode) bool {
 // and is used for operator-facing timeout messages.
 func TallyEntries(ctx context.Context, path, kind string, recursive bool, timeout time.Duration) (int, error) {
 	if kind == "" {
-		kind = countAny
+		kind = CountKindAny
 	}
-	c := countCheck{base: base{timeout: timeout}, path: path, kind: kind, recursive: recursive, op: ">=", value: 0}
+	c := countCheck{base: base{timeout: timeout}, path: path, kind: kind, recursive: recursive, op: cfgval.CompareOpGreaterEqual, value: 0}
 	n, err := c.tally(ctx)
 	if err != nil {
 		return 0, errors.New(execx.ContextFailure(err, timeout))
@@ -145,7 +138,7 @@ func TallyEntries(ctx context.Context, path, kind string, recursive bool, timeou
 // validCountKind reports whether s is a supported `of` value.
 func validCountKind(s string) bool {
 	switch s {
-	case countAny, countFile, countDir, countSymlink:
+	case CountKindAny, CountKindFile, CountKindDir, CountKindSymlink:
 		return true
 	default:
 		return false

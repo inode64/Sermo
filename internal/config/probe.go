@@ -24,7 +24,7 @@ func extractFileValue(path string, spec map[string]any) (string, bool, error) {
 	if !ok {
 		return "", false, nil
 	}
-	if pat := cfgval.String(spec["pattern"]); pat != "" {
+	if pat := cfgval.String(spec[varKeyPattern]); pat != "" {
 		re, err := regexp.Compile(pat)
 		if err != nil {
 			return "", false, fmt.Errorf("pattern is not a valid regex: %w", err)
@@ -37,7 +37,7 @@ func extractFileValue(path string, spec map[string]any) (string, bool, error) {
 		}
 		return "", false, nil
 	}
-	if key := cfgval.String(spec["directive"]); key != "" {
+	if key := cfgval.String(spec[varKeyDirective]); key != "" {
 		value, ok := directiveValue(data, key)
 		return value, ok, nil
 	}

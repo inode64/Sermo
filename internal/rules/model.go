@@ -24,6 +24,11 @@ const (
 	RuleAlert       RuleType = "alert"
 )
 
+const (
+	referencedChecksSectionChecks    = "checks"
+	referencedChecksSectionPreflight = "preflight"
+)
+
 // ActionType is a rule's then.action.
 type ActionType string
 
@@ -183,7 +188,7 @@ func ConditionUsesSystemMetric(node map[string]any, refChecks map[string]any) bo
 // point at (checks and preflight), for system-metric detection.
 func ReferencedChecks(tree map[string]any) map[string]any {
 	out := map[string]any{}
-	for _, section := range []string{"checks", "preflight"} {
+	for _, section := range []string{referencedChecksSectionChecks, referencedChecksSectionPreflight} {
 		if m, ok := tree[section].(map[string]any); ok {
 			for name, entry := range m {
 				out[name] = entry

@@ -29,7 +29,7 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 		return sizeCheckReadings(data)
 	case checks.CheckTypeTCP, checks.CheckTypePorts:
 		return connCheckReadings(data)
-	case checks.CheckTypeHTTP, "https":
+	case checks.CheckTypeHTTP, checks.URLSchemeHTTPS:
 		return httpCheckReadings(data)
 	case checks.CheckTypeStorage, checks.CheckTypeSwap, checks.CheckTypeMemory, checks.CheckTypeLoad:
 		return resourceCheckReadings(checkType, data)
@@ -207,10 +207,10 @@ func diskioCheckReadings(data map[string]any) []web.WatchReading {
 	for _, field := range []struct {
 		key, label, unit string
 	}{
-		{"util_pct", "Utilization", "%"},
-		{"read_bytes", "Read", " B/s"},
-		{"write_bytes", "Write", " B/s"},
-		{"await_ms", "Await", " ms"},
+		{checks.DiskIOFieldUtilPct, "Utilization", "%"},
+		{checks.DiskIOFieldReadBytes, "Read", " B/s"},
+		{checks.DiskIOFieldWriteBytes, "Write", " B/s"},
+		{checks.DiskIOFieldAwaitMs, "Await", " ms"},
 	} {
 		if v, ok := cfgval.Float(data[field.key]); ok {
 			out = append(out, web.WatchReading{

@@ -446,16 +446,16 @@ func buildPortsCheck(b base, entry map[string]any) (Check, string) {
 	}
 	expect := cfgval.AsString(entry[CheckKeyExpect])
 	if expect == "" {
-		expect = "open"
+		expect = PortStateOpen
 	}
-	if expect != "open" && expect != "closed" && expect != "any" {
+	if expect != PortStateOpen && expect != PortStateClosed && expect != PortExpectAny {
 		return nil, "ports check: expect must be open, closed or any"
 	}
 	match := cfgval.AsString(entry[CheckKeyMatch])
 	if match == "" {
-		match = "all"
+		match = PortMatchAll
 	}
-	if match != "all" && match != "any" && match != "none" {
+	if match != PortMatchAll && match != PortMatchAny && match != PortMatchNone {
 		return nil, "ports check: match must be all, any or none"
 	}
 	connectTimeout := time.Duration(0)
@@ -522,7 +522,7 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 		// HTTP/3 runs over QUIC (always TLS 1.3) and cannot use an HTTP
 		// forward proxy. The transport never falls back to TCP, so a failure
 		// to reach the endpoint over QUIC fails (alerts) the check.
-		if u, err := url.Parse(rawURL); err != nil || u.Scheme != "https" {
+		if u, err := url.Parse(rawURL); err != nil || u.Scheme != URLSchemeHTTPS {
 			return nil, "http check: http3 requires an https url"
 		}
 		if proxyURL != nil {
@@ -571,7 +571,7 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 		}
 		op := cfgval.AsString(bodyMatch[CheckKeyOp])
 		if !validCompareOp(op) {
-			return nil, "http expect_body op must be one of ==, !=, >, >=, <, <=, contains, =~"
+			return nil, "http expect_body op must be one of " + cfgval.AssertOpSummary
 		}
 		value := cfgval.String(bodyMatch[CheckKeyValue])
 		if err := ValidateAssertionValue(CheckKeyExpectBody, op, value); err != nil {
@@ -918,7 +918,7 @@ func buildCountCheck(b base, entry map[string]any) (Check, string) {
 	}
 	kind := cfgval.AsString(entry[CheckKeyOf])
 	if kind == "" {
-		kind = countAny
+		kind = CountKindAny
 	}
 	if !validCountKind(kind) {
 		return nil, "count check `of` must be file, dir, symlink or any"
@@ -1408,7 +1408,7 @@ const HTTPProxySchemeList = "http, https, socks5 or socks5h"
 // IsHTTPProxyScheme reports whether scheme is accepted for an HTTP check proxy.
 func IsHTTPProxyScheme(scheme string) bool {
 	switch scheme {
-	case "http", "https", "socks5", "socks5h":
+	case URLSchemeHTTP, URLSchemeHTTPS, URLSchemeSOCKS5, URLSchemeSOCKS5H:
 		return true
 	default:
 		return false
@@ -1457,7 +1457,7 @@ func configureHTTPCert(hc *httpCheck, entry map[string]any, rawURL string) strin
 	if err != nil {
 		return "http check: invalid url: " + err.Error()
 	}
-	if u.Scheme != "https" {
+	if u.Scheme != URLSchemeHTTPS {
 		return "http check: cert_* options require an https url"
 	}
 	verify := true
@@ -1556,10 +1556,10 @@ func parseAssertionMap(v any, field string) ([]jsonAssertion, string) {
 		if cond, ok := raw.(map[string]any); ok {
 			op := cfgval.AsString(cond[CheckKeyOp])
 			if op == "" {
-				op = "=="
+				op = cfgval.CompareOpEqual
 			}
 			if !validCompareOp(op) {
-				return nil, fmt.Sprintf("%s.%s op must be one of ==, !=, >, >=, <, <=, contains, =~", field, path)
+				return nil, fmt.Sprintf("%s.%s op must be one of %s", field, path, cfgval.AssertOpSummary)
 			}
 			value := cfgval.String(cond[CheckKeyValue])
 			if err := ValidateAssertionValue(field+"."+path, op, value); err != nil {
@@ -1567,7 +1567,7 @@ func parseAssertionMap(v any, field string) ([]jsonAssertion, string) {
 			}
 			out = append(out, jsonAssertion{path: path, op: op, value: value})
 		} else {
-			out = append(out, jsonAssertion{path: path, op: "==", value: cfgval.String(raw)})
+			out = append(out, jsonAssertion{path: path, op: cfgval.CompareOpEqual, value: cfgval.String(raw)})
 		}
 	}
 	return out, ""
@@ -1583,7 +1583,7 @@ func parseStatusMatcher(v any) (statusMatcher, error) {
 	if cond, ok := v.(map[string]any); ok {
 		op := cfgval.AsString(cond[CheckKeyOp])
 		if !validCompareOp(op) {
-			return statusMatcher{}, fmt.Errorf("expect_status op must be one of ==, !=, >, >=, <, <=, contains, =~")
+			return statusMatcher{}, fmt.Errorf("expect_status op must be one of %s", cfgval.AssertOpSummary)
 		}
 		value := cfgval.String(cond[CheckKeyValue])
 		if err := ValidateAssertionValue(CheckKeyExpectStatus, op, value); err != nil {

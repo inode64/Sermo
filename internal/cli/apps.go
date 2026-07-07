@@ -34,13 +34,13 @@ func (a App) runServices(ctx context.Context, opts options) int {
 }
 
 func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, empty, heading string) int {
-	if len(opts.args) > 1 || (len(opts.args) == 1 && opts.args[0] != "all") {
+	if len(opts.args) > 1 || (len(opts.args) == 1 && opts.args[0] != commandArgAll) {
 		return a.commandUsageError(jsonKey, fmt.Sprintf("%s accepts only optional `all`", jsonKey))
 	}
 	if len(opts.notifyNames) > 0 && category != config.CategoryService {
 		return a.commandUsageError(jsonKey, "--notify is only supported by services")
 	}
-	includeMissing := len(opts.args) > 0 && opts.args[0] == "all"
+	includeMissing := len(opts.args) > 0 && opts.args[0] == commandArgAll
 
 	cfg, code := a.loadConfig(opts)
 	if code != exitSuccess {

@@ -66,21 +66,21 @@ func (s KillSelector) userMatches(uid uint32, resolve UserResolver) bool {
 // reporting malformed durations as warnings.
 func ParseStopPolicy(tree map[string]any) (KillPolicy, []string) {
 	policy := KillPolicy{}
-	sp, ok := tree["stop_policy"].(map[string]any)
+	sp, ok := tree[SectionStopPolicy].(map[string]any)
 	if !ok {
 		return policy, nil
 	}
 
 	var warnings []string
-	policy.GracefulTimeout = parseDuration(sp["graceful_timeout"], "stop_policy.graceful_timeout", &warnings)
-	policy.TermTimeout = parseDuration(sp["term_timeout"], "stop_policy.term_timeout", &warnings)
-	policy.KillTimeout = parseDuration(sp["kill_timeout"], "stop_policy.kill_timeout", &warnings)
-	if b, ok := sp["force_kill"].(bool); ok {
+	policy.GracefulTimeout = parseDuration(sp[StopPolicyKeyGracefulTimeout], SectionStopPolicy+"."+StopPolicyKeyGracefulTimeout, &warnings)
+	policy.TermTimeout = parseDuration(sp[StopPolicyKeyTermTimeout], SectionStopPolicy+"."+StopPolicyKeyTermTimeout, &warnings)
+	policy.KillTimeout = parseDuration(sp[StopPolicyKeyKillTimeout], SectionStopPolicy+"."+StopPolicyKeyKillTimeout, &warnings)
+	if b, ok := sp[StopPolicyKeyForceKill].(bool); ok {
 		policy.ForceKill = b
 	}
-	if koi, ok := sp["kill_only_if"].(map[string]any); ok {
-		policy.KillOnlyIf.Users = cfgval.StringList(koi["users"])
-		policy.KillOnlyIf.ExeAny = cfgval.StringList(koi["exe_any"])
+	if koi, ok := sp[StopPolicyKeyKillOnlyIf].(map[string]any); ok {
+		policy.KillOnlyIf.Users = cfgval.StringList(koi[StopPolicyKeyUsers])
+		policy.KillOnlyIf.ExeAny = cfgval.StringList(koi[StopPolicyKeyExeAny])
 	}
 	return policy, warnings
 }

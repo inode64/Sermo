@@ -18,6 +18,12 @@ const (
 	TargetStateOK         = "ok"
 	TargetStateMonitored  = "monitored"
 	TargetStateFailed     = "failed"
+	TargetStateWarning    = "warning"
+)
+
+const (
+	checkHealthFailing = "failing"
+	checkHealthUnknown = "unknown"
 )
 
 // ServiceState folds config, backend status and monitoring health into the
@@ -50,9 +56,9 @@ func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, ob
 		return TargetStateStarted
 	}
 	switch checkHealth {
-	case "failing":
+	case checkHealthFailing:
 		return TargetStateFailed
-	case "unknown":
+	case checkHealthUnknown:
 		return TargetStateCollecting
 	}
 	if !observabilityReady {

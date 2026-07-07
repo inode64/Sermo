@@ -121,9 +121,19 @@ func (c *Config) StorageMountNames() []string {
 // is also the tree key the declaration is read from (and, for socket/lockfile,
 // removed at). A watches.<kind> entry collides with the generated check.
 const (
-	artifactPidfile  = "pidfile"
-	artifactSocket   = "socket"
-	artifactLockfile = "lockfile"
+	artifactPidfile  = checks.CheckTypePidfile
+	artifactSocket   = checks.CheckTypeSocket
+	artifactLockfile = checks.CheckTypeLockfile
+)
+
+const (
+	keyReloadOnChange  = "reload_on_change"
+	keyRestartOnChange = "restart_on_change"
+	keyLibraries       = "libraries"
+	keyAnalyze         = "analyze"
+	keyAnalyzeSilence  = "silence"
+	keyAnalyzeUse      = "use"
+	keyRuleID          = "id"
 )
 
 // expandPidfile validates a top-level `pidfile: <path>` or candidate list and
@@ -131,7 +141,7 @@ const (
 // resolved tree as the service's single pidfile source; process discovery and
 // OpenRC signal reload derive their internal pidfile selector from it.
 func expandPidfile(tree map[string]any) []string {
-	raw, present := tree[artifactPidfile]
+	raw, present := tree[ServiceKeyPidfile]
 	if !present {
 		return nil
 	}
@@ -140,7 +150,7 @@ func expandPidfile(tree map[string]any) []string {
 		return errs
 	}
 	pathValue := serviceArtifactPathValue(decl.paths)
-	tree[artifactPidfile] = pathValue
+	tree[ServiceKeyPidfile] = pathValue
 
 	// Gated health check, unless the service already defines one.
 	ensureServiceArtifactCheck(tree, artifactPidfile, artifactPidfile, pathValue, decl.optional)
@@ -152,12 +162,12 @@ func expandPidfile(tree map[string]any) []string {
 // set of alternative paths for one process, `pidfiles` declares several process
 // roles that must each have a live pidfile while the service is active.
 func expandPidfiles(tree map[string]any) []string {
-	raw, present := tree["pidfiles"]
+	raw, present := tree[ServiceKeyPidfiles]
 	if !present {
 		return nil
 	}
 	var errs []string
-	if _, hasPidfile := tree[artifactPidfile]; hasPidfile {
+	if _, hasPidfile := tree[ServiceKeyPidfile]; hasPidfile {
 		errs = append(errs, "pidfile and pidfiles are mutually exclusive")
 	}
 	pidfiles, ok := raw.(map[string]any)
@@ -190,13 +200,13 @@ func expandPidfiles(tree map[string]any) []string {
 		checkName := artifactPidfile + "-" + role
 		if _, exists := checksMap[checkName]; !exists {
 			checksMap[checkName] = map[string]any{
-				"type":      artifactPidfile,
-				"path":      pathValue,
-				keyRequires: []any{"service"},
+				keyType:     artifactPidfile,
+				keyPath:     pathValue,
+				keyRequires: []any{ServiceKeyService},
 			}
 		}
 	}
-	tree["pidfiles"] = normalized
+	tree[ServiceKeyPidfiles] = normalized
 	tree[sectionChecks] = checksMap
 	return errs
 }
@@ -267,9 +277,9 @@ func ensureServiceArtifactCheck(tree map[string]any, name, checkType string, pat
 	}
 	if _, exists := checksMap[name]; !exists {
 		entry := map[string]any{
-			"type":      checkType,
-			"path":      pathValue,
-			keyRequires: []any{"service"},
+			keyType:     checkType,
+			keyPath:     pathValue,
+			keyRequires: []any{ServiceKeyService},
 		}
 		if optional {
 			entry[keyOptional] = true
@@ -334,15 +344,15 @@ func (c *Config) expandAnalyzeSection(section string, entries map[string]any) []
 }
 
 func (c *Config) expandAnalyzeEntry(scope string, entry map[string]any) []string {
-	analyze, ok := entry["analyze"].(map[string]any)
+	analyze, ok := entry[keyAnalyze].(map[string]any)
 	if !ok {
-		if _, present := entry["analyze"]; present {
+		if _, present := entry[keyAnalyze]; present {
 			return []string{scope + ".analyze must be a mapping"}
 		}
 		return nil
 	}
-	rules, errs := c.resolveAnalyze(scope+".analyze", analyze)
-	entry["analyze"] = map[string]any{"rules": rules}
+	ruleList, errs := c.resolveAnalyze(scope+".analyze", analyze)
+	entry[keyAnalyze] = map[string]any{rules.SectionRules: ruleList}
 	return errs
 }
 
@@ -351,12 +361,12 @@ func (c *Config) resolveAnalyze(scope string, analyze map[string]any) ([]any, []
 	var errs []string
 
 	silence := map[string]bool{}
-	for _, id := range cfgval.StringList(analyze["silence"]) {
+	for _, id := range cfgval.StringList(analyze[keyAnalyzeSilence]) {
 		silence[id] = true
 	}
 	seenSilence := map[string]bool{}
 
-	var rules []any
+	var ruleList []any
 	ids := map[string]bool{}
 	addRule := func(r any) {
 		rm, ok := r.(map[string]any)
@@ -364,35 +374,35 @@ func (c *Config) resolveAnalyze(scope string, analyze map[string]any) ([]any, []
 			errs = append(errs, scope+": each rule must be a mapping")
 			return
 		}
-		id := cfgval.AsString(rm["id"])
+		id := cfgval.AsString(rm[keyRuleID])
 		if id != "" && ids[id] {
 			errs = append(errs, fmt.Sprintf("%s: duplicate rule id %q", scope, id))
 			return
 		}
 		ids[id] = true
-		rules = append(rules, r)
+		ruleList = append(ruleList, r)
 	}
 
 	// Local rules come FIRST so the service takes precedence: a local rule (e.g.
 	// an `ok` whitelist for a known-benign line) wins over an inherited rule that
 	// would otherwise match the same line, since evaluation is first-match-wins.
-	if local, ok := analyze["rules"].([]any); ok {
+	if local, ok := analyze[rules.SectionRules].([]any); ok {
 		for _, r := range local {
 			addRule(r)
 		}
 	}
 
 	// Inherited rules from each `use` set, in order, minus silenced ids.
-	for _, setName := range cfgval.StringList(analyze["use"]) {
+	for _, setName := range cfgval.StringList(analyze[keyAnalyzeUse]) {
 		doc, ok := c.Patterns[setName]
 		if !ok {
 			errs = append(errs, fmt.Sprintf("%s.use references %q, which is not a patterns set", scope, setName))
 			continue
 		}
-		setRules, _ := doc.Body["rules"].([]any)
+		setRules, _ := doc.Body[rules.SectionRules].([]any)
 		for _, r := range setRules {
 			if rm, ok := r.(map[string]any); ok {
-				if id := cfgval.AsString(rm["id"]); id != "" && silence[id] {
+				if id := cfgval.AsString(rm[keyRuleID]); id != "" && silence[id] {
 					seenSilence[id] = true
 					continue
 				}
@@ -402,13 +412,13 @@ func (c *Config) resolveAnalyze(scope string, analyze map[string]any) ([]any, []
 	}
 
 	// A silence id that matched no inherited rule is a typo worth catching.
-	for _, id := range cfgval.StringList(analyze["silence"]) {
+	for _, id := range cfgval.StringList(analyze[keyAnalyzeSilence]) {
 		if !seenSilence[id] {
 			errs = append(errs, fmt.Sprintf("%s.silence references id %q not present in the inherited sets", scope, id))
 		}
 	}
 
-	return rules, errs
+	return ruleList, errs
 }
 
 // expandReloadOnChange desugars a `reload_on_change: {paths: [...]}` block into
@@ -418,22 +428,22 @@ func (c *Config) resolveAnalyze(scope string, analyze map[string]any) ([]any, []
 // nginx vhosts, named zones, …). The block is removed; an empty paths list is a
 // no-op.
 func expandReloadOnChange(tree map[string]any) []string {
-	roc, ok := tree["reload_on_change"].(map[string]any)
+	roc, ok := tree[keyReloadOnChange].(map[string]any)
 	if !ok {
-		if _, present := tree["reload_on_change"]; present {
-			delete(tree, "reload_on_change")
+		if _, present := tree[keyReloadOnChange]; present {
+			delete(tree, keyReloadOnChange)
 			return []string{"reload_on_change must be a mapping with a paths list"}
 		}
 		return nil
 	}
-	delete(tree, "reload_on_change")
+	delete(tree, keyReloadOnChange)
 
 	ruleMap, _ := tree[rules.SectionRules].(map[string]any)
 	if ruleMap == nil {
 		ruleMap = map[string]any{}
 	}
 	var errs []string
-	for i, p := range cfgval.StringList(roc["paths"]) {
+	for i, p := range cfgval.StringList(roc[keyPaths]) {
 		if p == "" {
 			errs = append(errs, "reload_on_change.paths entry is empty")
 			continue
@@ -627,27 +637,27 @@ func serviceWatchRuleCondition(target serviceWatchRuleTarget) map[string]any {
 // ${...} is not mistaken for a nested variable; an explicit `variables` entry of
 // the same name takes precedence and is left untouched.
 func injectBuiltinVariables(vars map[string]string, name string, merged map[string]any) {
-	if _, ok := vars["name"]; !ok {
-		vars["name"] = name
+	if _, ok := vars[keyName]; !ok {
+		vars[keyName] = name
 	}
-	if _, ok := vars["display_name"]; !ok {
-		vars["display_name"] = DisplayName(merged, name)
+	if _, ok := vars[keyDisplayName]; !ok {
+		vars[keyDisplayName] = DisplayName(merged, name)
 	}
-	if _, ok := vars["service"]; !ok {
-		vars["service"] = ServiceUnit(merged, name)
+	if _, ok := vars[VariableKeyService]; !ok {
+		vars[VariableKeyService] = ServiceUnit(merged, name)
 	}
 	injectHostBuiltins(vars)
 	// ${pidfile} falls back to the conventional /run/<unit>.pid; an explicit
 	// `pidfile` variable always wins.
-	if _, ok := vars["pidfile"]; !ok {
-		vars["pidfile"] = "/run/" + vars["service"] + ".pid"
+	if _, ok := vars[VariableKeyPidfile]; !ok {
+		vars[VariableKeyPidfile] = "/run/" + vars[VariableKeyService] + ".pid"
 	}
 	// ${port} mirrors the top-level `port:` field; unlike the others it has no
 	// fallback, so it is injected only when the field is set — leaving ${port}
 	// undefined (and so a clear error) when nothing provides a port.
-	if _, ok := vars["port"]; !ok {
-		if p := cfgval.String(merged["port"]); p != "" {
-			vars["port"] = p
+	if _, ok := vars[VariableKeyPort]; !ok {
+		if p := cfgval.String(merged[VariableKeyPort]); p != "" {
+			vars[VariableKeyPort] = p
 		}
 	}
 }
@@ -656,17 +666,17 @@ func injectBuiltinVariables(vars map[string]string, name string, merged map[stri
 // host/hostname/init/user — when absent. Shared by injectBuiltinVariables and
 // the watch expansion (watches have no service-specific builtins).
 func injectHostBuiltins(vars map[string]string) {
-	if _, ok := vars["host"]; !ok {
-		vars["host"] = detectedHost
+	if _, ok := vars[VariableKeyHost]; !ok {
+		vars[VariableKeyHost] = detectedHost
 	}
-	if _, ok := vars["hostname"]; !ok {
-		vars["hostname"] = detectedHostname
+	if _, ok := vars[VariableKeyHostname]; !ok {
+		vars[VariableKeyHostname] = detectedHostname
 	}
-	if _, ok := vars["init"]; !ok {
-		vars["init"] = detectedInit
+	if _, ok := vars[VariableKeyInit]; !ok {
+		vars[VariableKeyInit] = detectedInit
 	}
-	if _, ok := vars["user"]; !ok {
-		vars["user"] = detectedUser
+	if _, ok := vars[VariableKeyUser]; !ok {
+		vars[VariableKeyUser] = detectedUser
 	}
 }
 
@@ -679,7 +689,7 @@ func (c *Config) globalVars() map[string]string {
 }
 
 func (c *Config) expansionVariables(tree map[string]any, name string) (map[string]string, []string) {
-	return c.expansionVariablesForKind(tree, name, cfgval.String(tree["kind"]))
+	return c.expansionVariablesForKind(tree, name, cfgval.String(tree[keyKind]))
 }
 
 func (c *Config) expansionVariablesForKind(tree map[string]any, name string, kind string) (map[string]string, []string) {
@@ -694,7 +704,7 @@ func (c *Config) expansionVariablesForKind(tree map[string]any, name string, kin
 }
 
 func (c *Config) appVariables(tree map[string]any) (map[string]string, []string) {
-	names := cfgval.StringList(tree["apps"])
+	names := cfgval.StringList(tree[keyApps])
 	if len(names) == 0 {
 		return nil, nil
 	}
@@ -847,7 +857,7 @@ func storageCapacityWatch(tree map[string]any) (map[string]any, bool) {
 		}
 	}
 	entry := map[string]any{WatchKeyCheck: check}
-	for _, key := range []string{"display_name", "description", "category", keyDryRun, keyMonitor, keyInterval} {
+	for _, key := range []string{keyDisplayName, keyDescription, keyCategory, keyDryRun, keyMonitor, keyInterval} {
 		if v, present := tree[key]; present {
 			entry[key] = v
 		}
@@ -866,18 +876,18 @@ func storageCapacityWatch(tree map[string]any) (map[string]any, bool) {
 // matching library, so the generated `changed:` condition carries a
 // concrete path. The block is removed; unknown or non-library references error.
 func (c *Config) expandRestartOnChange(tree map[string]any) []string {
-	roc, ok := tree["restart_on_change"].(map[string]any)
+	roc, ok := tree[keyRestartOnChange].(map[string]any)
 	if !ok {
 		return nil
 	}
-	delete(tree, "restart_on_change")
+	delete(tree, keyRestartOnChange)
 
 	var errs []string
 	libraries, _ := tree[rules.SectionRules].(map[string]any)
 	if libraries == nil {
 		libraries = map[string]any{}
 	}
-	for _, lib := range cfgval.StringList(roc["libraries"]) {
+	for _, lib := range cfgval.StringList(roc[keyLibraries]) {
 		path, known := c.libraryPath(lib)
 		switch {
 		case !known:
@@ -992,9 +1002,9 @@ func (c *Config) expandApps(tree map[string]any) []string {
 // error instead of recursing until the stack overflows. chain holds app names
 // only — a catalog service/service that links an app of the same name is not a cycle.
 func (c *Config) expandAppsChain(tree map[string]any, chain []string) []string {
-	_, present := tree["apps"]
-	names := cfgval.StringList(tree["apps"])
-	delete(tree, "apps")
+	_, present := tree[keyApps]
+	names := cfgval.StringList(tree[keyApps])
+	delete(tree, keyApps)
 	if !present {
 		return nil
 	}
@@ -1143,11 +1153,11 @@ func (c *Config) mergedService(name string, chain []string) (map[string]any, err
 	}
 
 	var merged map[string]any
-	if clone := cfgval.String(doc.Body["clone"]); clone != "" {
+	if clone := cfgval.String(doc.Body[keyClone]); clone != "" {
 		// clone and uses are mutually exclusive: the clone branch ignores uses
 		// entirely, so accepting both would silently drop the catalog service the author
 		// asked to inherit. Surface it instead.
-		if uses := cfgval.String(doc.Body["uses"]); uses != "" {
+		if uses := cfgval.String(doc.Body[ServiceKeyUses]); uses != "" {
 			return nil, fmt.Errorf("service %q sets both clone and uses, which are mutually exclusive", name)
 		}
 		src, err := c.mergedService(clone, append(chain, name))
@@ -1157,7 +1167,7 @@ func (c *Config) mergedService(name string, chain []string) (map[string]any, err
 		merged = src
 	} else {
 		merged = c.defaultsPerService()
-		if uses := cfgval.String(doc.Body["uses"]); uses != "" {
+		if uses := cfgval.String(doc.Body[ServiceKeyUses]); uses != "" {
 			catalogName, ok := c.CanonicalCatalogName(CategoryService, uses)
 			if !ok {
 				return nil, fmt.Errorf("service %q uses unknown catalog service %q", name, uses)

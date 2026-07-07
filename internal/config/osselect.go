@@ -9,12 +9,14 @@ import (
 // (os-release ID: gentoo, debian, ubuntu, ...).
 const osMarker = "${os}"
 
+const keyOSDefault = "default"
+
 // detectedOS holds the OS id used for ${os} and `os:` selectors. Resolved once at
 // package load; tests may override it before calling Load.
 var detectedOS = detectOS()
 
 func detectOS() string {
-	if v := envOverride("SERMO_OS"); v != "" {
+	if v := envOverride(envOSOverride); v != "" {
 		return strings.ToLower(v)
 	}
 	if id := osReleaseID(); id != "" {
@@ -61,7 +63,7 @@ func collapseOS(v any, osID string) any {
 		out := make(map[string]any, len(t))
 		var selector map[string]any
 		for k, e := range t {
-			if k == "os" {
+			if k == keyOS {
 				if m, ok := e.(map[string]any); ok {
 					selector = m
 					continue
@@ -98,7 +100,7 @@ func selectOSBranch(selector map[string]any, osID string) any {
 	if b, ok := selector[osID]; ok {
 		return b
 	}
-	if b, ok := selector["default"]; ok {
+	if b, ok := selector[keyOSDefault]; ok {
 		return b
 	}
 	return nil

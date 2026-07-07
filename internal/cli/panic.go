@@ -20,7 +20,7 @@ func (a App) runPanic(opts options) int {
 		sub = strings.ToLower(opts.args[0])
 	}
 	if len(opts.args) > 1 {
-		return a.commandUsageError("panic", "panic takes at most one argument: on, off or status")
+		return a.commandUsageError(commandPanic, "panic takes at most one argument: on, off or status")
 	}
 
 	var set, on bool
@@ -32,7 +32,7 @@ func (a App) runPanic(opts options) int {
 	case "", "status":
 		set = false
 	default:
-		return a.commandUsageError("panic", fmt.Sprintf("unknown panic argument %q (use on, off or status)", sub))
+		return a.commandUsageError(commandPanic, fmt.Sprintf("unknown panic argument %q (use on, off or status)", sub))
 	}
 
 	cfg, code := a.loadConfig(opts)
@@ -52,10 +52,10 @@ func (a App) runPanic(opts options) int {
 			cmd = "panic on"
 		}
 		if err := store.SetPanic(on, state.SourceCLI); err != nil {
-			a.recordAccess(cfg, cmd, "", "error", err.Error())
+			a.recordAccess(cfg, cmd, "", accessStatusError, err.Error())
 			return a.fail(opts, fmt.Sprintf("panic failed: %v", err))
 		}
-		a.recordAccess(cfg, cmd, "", "ok", "")
+		a.recordAccess(cfg, cmd, "", accessStatusOK, "")
 	}
 
 	rec, found, err := store.Panic()

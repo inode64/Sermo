@@ -11,6 +11,8 @@ import (
 	"io"
 	"strconv"
 	"strings"
+
+	"sermo/internal/config"
 )
 
 // Prompt asks interactive questions over a reader/writer pair. All helpers
@@ -179,7 +181,7 @@ func (p *Prompt) MultiChooseKeyword(question string, options []string, keywords 
 				return nil, kw
 			}
 		}
-		if strings.EqualFold(ans, "all") && len(options) > 0 {
+		if strings.EqualFold(ans, config.SelectionKeywordAll) && len(options) > 0 {
 			idx := make([]int, len(options))
 			for i := range options {
 				idx[i] = i

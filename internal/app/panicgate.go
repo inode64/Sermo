@@ -7,6 +7,8 @@ import (
 	"sermo/internal/state"
 )
 
+const defaultPanicGateTTL = time.Second
+
 // panicReader is the persisted source of the daemon-wide panic flag. Satisfied
 // by *state.Store; kept narrow so the gate can be tested without a database.
 type panicReader interface {
@@ -33,7 +35,7 @@ type PanicGate struct {
 // NewPanicGate returns a gate backed by store. A nil store means panic mode is
 // never on (no persistence).
 func NewPanicGate(store panicReader) *PanicGate {
-	return &PanicGate{store: store, ttl: time.Second, now: time.Now}
+	return &PanicGate{store: store, ttl: defaultPanicGateTTL, now: time.Now}
 }
 
 // Active reports whether panic mode is currently on, refreshing from the store

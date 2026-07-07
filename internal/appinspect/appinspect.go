@@ -25,6 +25,25 @@ import (
 // probeTimeout bounds each app probe command invocation.
 const probeTimeout = 5 * time.Second
 
+const (
+	// StatusOK reports a successful application inspection.
+	StatusOK = "ok"
+	// StatusNotInstalled reports that the configured binary is absent.
+	StatusNotInstalled = "not installed"
+	// StatusNoBinaryConfigured reports that the application has no binary path.
+	StatusNoBinaryConfigured = "no binary configured"
+	// StatusPrefixError prefixes application inspection failures.
+	StatusPrefixError = "error:"
+	// StatusPrefixNotInstalled prefixes version-identity misses.
+	StatusPrefixNotInstalled = StatusNotInstalled + ":"
+)
+
+const (
+	statusErrorPrefix               = StatusPrefixError + " "
+	statusNotInstalledVersionPrefix = StatusPrefixNotInstalled + " version "
+	statusVersionFromCycle          = "version_from cycle"
+)
+
 // Report is one application's installed/version/health summary.
 type Report struct {
 	Name          string `json:"name"`
@@ -146,7 +165,7 @@ func inspectCatalog(ctx context.Context, runner execx.Runner, cfg *config.Config
 		return cached
 	}
 	if chain[name] {
-		return Report{Name: name, Status: "version_from cycle"}
+		return Report{Name: name, Status: statusVersionFromCycle}
 	}
 	chain[name] = true
 	resolved, _ := cfg.ResolveCatalog(category, name)
@@ -160,7 +179,7 @@ func inspectCatalog(ctx context.Context, runner execx.Runner, cfg *config.Config
 }
 
 func fillVersionFrom(ctx context.Context, runner execx.Runner, cfg *config.Config, r *Report, tree map[string]any, cache map[string]Report, chain map[string]bool, opts ...Option) {
-	source := cfgval.String(tree["version_from"])
+	source := cfgval.String(tree[config.AppKeyVersionFrom])
 	if source == "" {
 		return
 	}
@@ -195,21 +214,21 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 	var info os.FileInfo
 	switch fi, err := os.Stat(r.Binary); {
 	case r.Binary == "":
-		r.Status = "no binary configured"
+		r.Status = StatusNoBinaryConfigured
 		return r
 	case err != nil:
-		r.Status = "not installed"
+		r.Status = StatusNotInstalled
 		return r
 	case fi.IsDir():
 		info = fi
 		r.Permissions = modeString(info)
-		r.Status = "error: " + r.Binary + " is a directory"
+		r.Status = statusErrorPrefix + r.Binary + " is a directory"
 		return r
 	case fi.Mode().Perm()&0o111 == 0:
 		info = fi
 		r.Permissions = modeString(info)
 		r.Installed = true
-		r.Status = "error: " + r.Binary + " is not executable"
+		r.Status = statusErrorPrefix + r.Binary + " is not executable"
 		return r
 	default:
 		info = fi
@@ -226,7 +245,7 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 		r.OK, r.Status, healthOut = runExitProbe(ctx, runner, health)
 		if !r.OK && health.optional {
 			r.OK = true
-			r.Status = "ok"
+			r.Status = StatusOK
 		} else if !r.OK {
 			r.Output = healthOut
 		}
@@ -249,7 +268,7 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 
 	if len(version.argv) == 0 {
 		r.OK = true
-		r.Status = "ok"
+		r.Status = StatusOK
 		return r
 	}
 
@@ -263,7 +282,7 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 	}
 	if !vres.ok && (version.optional || options.versionOptional) {
 		r.OK = true
-		r.Status = "ok"
+		r.Status = StatusOK
 		return r
 	}
 	r.OK = vres.ok
@@ -275,10 +294,10 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 }
 
 func versionIdentityStatus(status string) string {
-	if strings.HasPrefix(status, "not installed:") {
+	if strings.HasPrefix(status, StatusPrefixNotInstalled) {
 		return status
 	}
-	return "not installed: version " + strings.TrimPrefix(status, "error: ")
+	return statusNotInstalledVersionPrefix + strings.TrimPrefix(status, statusErrorPrefix)
 }
 
 func setReportOwner(r *Report, info os.FileInfo, lookup *process.UserLookup) {
@@ -316,13 +335,13 @@ func runExitProbe(ctx context.Context, runner execx.Runner, cmd probeCommand) (b
 		if msg == "" {
 			msg = execx.CommandDidNotStart
 		}
-		return false, "error: " + msg, output.Bounded(res.Stdout, res.Stderr)
+		return false, statusErrorPrefix + msg, output.Bounded(res.Stdout, res.Stderr)
 	case err != nil && res.ExitCode == 0:
-		return false, "error: " + err.Error(), output.Bounded(res.Stdout, res.Stderr)
+		return false, statusErrorPrefix + err.Error(), output.Bounded(res.Stdout, res.Stderr)
 	case !checks.ExitCodeExpected(res.ExitCode, cmd.expectExit):
-		return false, fmt.Sprintf("error: exit %d (want %s)", res.ExitCode, checks.ExpectExitText(cmd.expectExit)), output.Bounded(res.Stdout, res.Stderr)
+		return false, fmt.Sprintf("%sexit %d (want %s)", statusErrorPrefix, res.ExitCode, checks.ExpectExitText(cmd.expectExit)), output.Bounded(res.Stdout, res.Stderr)
 	default:
-		return true, "ok", ""
+		return true, StatusOK, ""
 	}
 }
 
@@ -346,33 +365,33 @@ func runVersionProbe(ctx context.Context, runner execx.Runner, tree map[string]a
 		if msg == "" {
 			msg = execx.CommandDidNotStart
 		}
-		return fail("error: " + msg)
+		return fail(statusErrorPrefix + msg)
 	case err != nil && res.ExitCode == 0:
-		return fail("error: " + err.Error())
+		return fail(statusErrorPrefix + err.Error())
 	case !checks.ExitCodeExpected(res.ExitCode, cmd.expectExit):
-		status := fmt.Sprintf("error: exit %d (want %s)", res.ExitCode, checks.ExpectExitText(cmd.expectExit))
+		status := fmt.Sprintf("%sexit %d (want %s)", statusErrorPrefix, res.ExitCode, checks.ExpectExitText(cmd.expectExit))
 		if line := output.FirstNonEmptyLine(res.Stderr); line != "" {
 			status += ": " + line
 		}
 		return fail(status)
 	}
 	if ok, detail := cmd.stdout.Match(res.Stdout); !ok {
-		return fail("error: stdout " + detail)
+		return fail(statusErrorPrefix + "stdout " + detail)
 	}
 	if ok, detail := cmd.stderr.Match(res.Stderr); !ok {
-		return fail("error: stderr " + detail)
+		return fail(statusErrorPrefix + "stderr " + detail)
 	}
 	if cmd.versionMatchWarn != "" {
-		return fail("error: version_match " + cmd.versionMatchWarn)
+		return fail(statusErrorPrefix + "version_match " + cmd.versionMatchWarn)
 	}
 	if ok, detail := cmd.versionMatch.Match(checks.VersionOutput(res.Stdout, res.Stderr)); !ok {
-		return versionProbeResult{identityMismatch: true, status: "not installed: version " + detail, output: output.Bounded(res.Stdout, res.Stderr)}
+		return versionProbeResult{identityMismatch: true, status: statusNotInstalledVersionPrefix + detail, output: output.Bounded(res.Stdout, res.Stderr)}
 	}
 	raw := output.FirstNonEmptyLine(res.Stdout)
 	if raw == "" {
 		raw = output.FirstNonEmptyLine(res.Stderr)
 	}
-	return versionProbeResult{ok: true, status: "ok", raw: raw, short: shortVersionFor(ctx, runner, tree, raw)}
+	return versionProbeResult{ok: true, status: StatusOK, raw: raw, short: shortVersionFor(ctx, runner, tree, raw)}
 }
 
 // modeString renders the binary's permissions like `ls -l` does, with the octal
@@ -425,8 +444,8 @@ func binaryPath(tree map[string]any) string {
 			return p
 		}
 	}
-	if vars, ok := tree["variables"].(map[string]any); ok {
-		if p := cfgval.AsString(vars["binary"]); p != "" {
+	if vars, ok := tree[config.SectionVariables].(map[string]any); ok {
+		if p := cfgval.AsString(vars[config.VariableKeyBinary]); p != "" {
 			return p
 		}
 	}

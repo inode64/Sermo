@@ -11,6 +11,8 @@ import (
 	"sermo/internal/operation"
 )
 
+const blockedActionTTYNotifierName = "operator-tty"
+
 func (a App) notifyInteractiveBlockedAction(ctx context.Context, result operation.Result) {
 	if !shouldNotifyInteractiveBlockedAction(result) {
 		return
@@ -61,7 +63,7 @@ func loginUser(env func(string) string) string {
 
 func notifyBlockedActionTTY(ctx context.Context, result operation.Result, userName string) error {
 	registry, warnings := notify.Build(map[string]any{
-		"operator-tty": map[string]any{
+		blockedActionTTYNotifierName: map[string]any{
 			"type":  "tty",
 			"users": []any{userName},
 		},
@@ -69,17 +71,17 @@ func notifyBlockedActionTTY(ctx context.Context, result operation.Result, userNa
 	if len(warnings) > 0 {
 		return errors.New(strings.Join(warnings, "; "))
 	}
-	notifier := registry["operator-tty"]
+	notifier := registry[blockedActionTTYNotifierName]
 	if notifier == nil {
-		return errors.New("operator-tty notifier unavailable")
+		return fmt.Errorf("%s notifier unavailable", blockedActionTTYNotifierName)
 	}
 	return notifier.Send(ctx, notify.Message{
 		Subject: fmt.Sprintf("Sermo denied %s restart", result.Service),
 		Body:    fmt.Sprintf("A restart request for %s was denied: %s.", result.Service, result.Message),
 		Fields: map[string]string{
-			"SERMO_SERVICE": result.Service,
-			"SERMO_ACTION":  result.Action,
-			"SERMO_STATUS":  string(result.Status),
+			cliFieldSermoService: result.Service,
+			cliFieldSermoAction:  result.Action,
+			cliFieldSermoStatus:  string(result.Status),
 		},
 	})
 }

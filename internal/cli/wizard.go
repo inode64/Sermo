@@ -62,7 +62,7 @@ const (
 // `sermoctl wizard [name]` runs the named assistant, or lists them to choose.
 func (a App) runWizard(ctx context.Context, opts options) int {
 	if len(opts.args) > 1 {
-		return a.commandUsageError("wizard", "wizard accepts at most one assistant name")
+		return a.commandUsageError(commandWizard, "wizard accepts at most one assistant name")
 	}
 	code, err := a.runWizardSession(ctx, opts)
 	if err != nil {
@@ -924,10 +924,10 @@ func ensureConfigPathDir(globalPath, pathKey, relDir, targetDir string) (string,
 }
 
 func ensureConfigPathList(root map[string]any, base, pathKey, relDir, targetDir string) (bool, error) {
-	paths, _ := root["paths"].(map[string]any)
+	paths, _ := root[config.SectionPaths].(map[string]any)
 	if paths == nil {
 		paths = map[string]any{}
-		root["paths"] = paths
+		root[config.SectionPaths] = paths
 	}
 	list, err := cfgval.StrictStringList(paths[pathKey])
 	if err != nil {
