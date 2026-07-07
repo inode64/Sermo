@@ -57,15 +57,15 @@ func (a App) runStateCompact(ctx context.Context, opts options) int {
 
 	if opts.json {
 		writeJSON(a.Stdout, map[string]any{
-			"pruned":          result.Rows,
-			"before":          before.UTC().Format(time.RFC3339),
-			"sla":             result.SLA,
-			"measurements":    result.Measurements,
-			"metrics":         result.Metrics,
-			"daemon_metrics":  result.DaemonMetrics,
-			"service_metrics": result.ServiceMetrics,
-			"events":          result.Events,
-			"vacuum":          true,
+			cliJSONKeyPruned:         result.Rows,
+			cliJSONKeyBefore:         before.UTC().Format(time.RFC3339),
+			cliJSONKeySLA:            result.SLA,
+			cliJSONKeyMeasurements:   result.Measurements,
+			cliJSONKeyMetrics:        result.Metrics,
+			cliJSONKeyDaemonMetrics:  result.DaemonMetrics,
+			cliJSONKeyServiceMetrics: result.ServiceMetrics,
+			cliJSONKeyEvents:         result.Events,
+			cliJSONKeyVacuum:         true,
 		})
 		return exitSuccess
 	}

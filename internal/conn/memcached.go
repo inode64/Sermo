@@ -25,6 +25,24 @@ func (memcachedProtocol) Name() string       { return ProtocolNameMemcached }
 func (memcachedProtocol) DefaultPort() int   { return defaultPortMemcached }
 func (memcachedProtocol) RequiresUser() bool { return false }
 
+const (
+	memcachedStatBytes               = "bytes"
+	memcachedStatCmdGet              = "cmd_get"
+	memcachedStatCmdSet              = "cmd_set"
+	memcachedStatCurrConnections     = "curr_connections"
+	memcachedStatCurrItems           = "curr_items"
+	memcachedStatEvictions           = "evictions"
+	memcachedStatGetHits             = "get_hits"
+	memcachedStatGetMisses           = "get_misses"
+	memcachedStatLimitMaxBytes       = "limit_maxbytes"
+	memcachedStatRejectedConnections = "rejected_connections"
+	memcachedStatThreads             = "threads"
+	memcachedStatTotalConnections    = "total_connections"
+	memcachedStatTotalItems          = "total_items"
+	memcachedStatUptime              = "uptime"
+	memcachedStatVersion             = "version"
+)
+
 // Probe connects (TCP, a Unix socket when cfg.Socket is set, TLS when
 // configured) and runs the stats handshake. The caller's context bounds it.
 func (memcachedProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -71,12 +89,22 @@ func memcachedStats(rw io.ReadWriter) (Result, error) {
 	// rest are numeric counters/gauges worth asserting on — connections, the
 	// hit-ratio inputs, capacity and evictions — published as numeric strings so
 	// expect: can use >, <, == against them.
-	res := Result{Version: fields["version"], Extra: map[string]string{}}
+	res := Result{Version: fields[memcachedStatVersion], Extra: map[string]string{}}
 	for _, k := range []string{
-		"uptime", "curr_connections", "total_connections", "rejected_connections",
-		"cmd_get", "cmd_set", "get_hits", "get_misses",
-		"curr_items", "total_items", "bytes", "evictions",
-		"limit_maxbytes", "threads",
+		memcachedStatUptime,
+		memcachedStatCurrConnections,
+		memcachedStatTotalConnections,
+		memcachedStatRejectedConnections,
+		memcachedStatCmdGet,
+		memcachedStatCmdSet,
+		memcachedStatGetHits,
+		memcachedStatGetMisses,
+		memcachedStatCurrItems,
+		memcachedStatTotalItems,
+		memcachedStatBytes,
+		memcachedStatEvictions,
+		memcachedStatLimitMaxBytes,
+		memcachedStatThreads,
 	} {
 		if v := fields[k]; v != "" {
 			res.Extra[k] = v

@@ -48,7 +48,7 @@ func TestAcquireOnEmptyDir(t *testing.T) {
 
 func TestOperationAcquireRejectsPathLikeService(t *testing.T) {
 	root := t.TempDir()
-	l := NewOperationLocker(filepath.Join(root, "ops"))
+	l := NewOperationLocker(RuntimeOpsDir(root))
 
 	_, err := l.Acquire("../escape", time.Hour)
 	if err == nil || !strings.Contains(err.Error(), "simple name") {

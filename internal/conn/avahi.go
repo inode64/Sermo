@@ -83,7 +83,7 @@ func avahiProbe(ctx context.Context, addr string) (Result, error) {
 	}
 	var state int32
 	if err := obj.CallWithContext(ctx, "org.freedesktop.Avahi.Server.GetState", 0).Store(&state); err == nil {
-		extra[extraState] = strconv.Itoa(int(state))
+		extra[ExtraKeyState] = strconv.Itoa(int(state))
 		if state == avahiServerRunning {
 			extra[extraRunning] = strconv.FormatBool(true)
 		}

@@ -39,13 +39,14 @@ const (
 )
 
 const (
-	commandRun     = "run"
-	commandVersion = "version"
-	flagConfig     = "config"
-	flagVerbose    = "verbose"
-	flagVersion    = "--version"
-	flagVersionAlt = "-V"
-	shortVerbose   = "v"
+	commandRun             = "run"
+	commandVersion         = "version"
+	flagConfig             = "config"
+	flagVerbose            = "verbose"
+	flagVersion            = "--version"
+	flagVersionAlt         = "-V"
+	pflagUnknownFlagPrefix = "unknown flag: "
+	shortVerbose           = "v"
 )
 
 const (
@@ -53,6 +54,33 @@ const (
 	defaultWebAddress    = "127.0.0.1"
 	daemonPIDFilename    = "sermod.pid"
 	instanceLockFilename = "sermod.lock"
+)
+
+const (
+	logFieldAddress               = "address"
+	logFieldAffected              = "affected"
+	logFieldAuth                  = "auth"
+	logFieldBackend               = "backend"
+	logFieldConfig                = "config"
+	logFieldConfigured            = "configured"
+	logFieldEnabledApps           = "enabled_apps"
+	logFieldEnabledServices       = "enabled_services"
+	logFieldEnabledServiceWatches = "enabled_service_watches"
+	logFieldEnabledWatches        = "enabled_watches"
+	logFieldError                 = "error"
+	logFieldEUID                  = "euid"
+	logFieldKey                   = "key"
+	logFieldMessage               = "message"
+	logFieldPath                  = "path"
+	logFieldPID                   = "pid"
+	logFieldReason                = "reason"
+	logFieldRows                  = "rows"
+	logFieldScope                 = "scope"
+	logFieldServices              = "services"
+	logFieldWarning               = "warning"
+	logFieldWatches               = "watches"
+
+	logValueAuthEnabled = "enabled"
 )
 
 func main() {
@@ -92,7 +120,7 @@ func run(args []string) int {
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 	if parsed.verbose {
-		logger.Debug("verbose logging enabled", "config", globalPath)
+		logger.Debug("verbose logging enabled", logFieldConfig, globalPath)
 	}
 
 	// Sermo is designed to run as root: it inspects and signals processes owned by
@@ -101,22 +129,22 @@ func run(args []string) int {
 	// degrade — so warn loudly rather than fail silently.
 	if os.Geteuid() != 0 {
 		logger.Warn("sermod is not running as root; features that need privileges will be unavailable",
-			"euid", os.Geteuid(),
-			"affected", "service control, signalling other users' processes, icmp checks, per-process IO, cross-user /proc inspection")
+			logFieldEUID, os.Geteuid(),
+			logFieldAffected, "service control, signalling other users' processes, icmp checks, per-process IO, cross-user /proc inspection")
 	}
 
 	cfg, err := config.Load(globalPath)
 	if err != nil {
-		logger.Error("load config", "error", err)
+		logger.Error("load config", logFieldError, err)
 		return 2
 	}
 	if issues := config.Validate(cfg); len(issues) > 0 {
 		for _, is := range issues {
-			logger.Error("config invalid", "scope", is.Scope, "message", is.Msg)
+			logger.Error("config invalid", logFieldScope, is.Scope, logFieldMessage, is.Msg)
 		}
 		return exitConfigInvalid
 	}
-	logger.Debug("config loaded", "path", globalPath, "services", len(cfg.Services))
+	logger.Debug("config loaded", logFieldPath, globalPath, logFieldServices, len(cfg.Services))
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
@@ -124,20 +152,20 @@ func run(args []string) int {
 	detector := servicemgr.NewDetector()
 	backend, err := servicemgr.ParseBackend(app.EngineString(cfg, config.EngineKeyBackend))
 	if err != nil {
-		logger.Error("backend", "error", err)
+		logger.Error("backend", logFieldError, err)
 		return 2
 	}
 	detection, err := detector.Detect(ctx, backend)
 	if err != nil {
-		logger.Error("detect backend", "error", err)
+		logger.Error("detect backend", logFieldError, err)
 		return 2
 	}
 	manager, err := servicemgr.NewManager(detection.Backend)
 	if err != nil {
-		logger.Error("service manager", "error", err)
+		logger.Error("service manager", logFieldError, err)
 		return 2
 	}
-	logger.Debug("service backend detected", "backend", detection.Backend)
+	logger.Debug("service backend detected", logFieldBackend, detection.Backend)
 
 	// Ensure the runtime root exists owner-only (root) before any lock dir or the
 	// pidfile is created under it, so it stays 0700 even when the packaging
@@ -147,7 +175,7 @@ func run(args []string) int {
 		rt = defaultRuntimeDir
 	}
 	if err := os.MkdirAll(rt, 0o700); err != nil {
-		logger.Warn("create runtime dir failed", "path", rt, "error", err)
+		logger.Warn("create runtime dir failed", logFieldPath, rt, logFieldError, err)
 	}
 
 	instanceLock, err := acquireInstanceLock(rt)
@@ -155,12 +183,12 @@ func run(args []string) int {
 		var busy *alreadyRunningError
 		if errors.As(err, &busy) {
 			if busy.PID > 0 {
-				logger.Warn("refusing to start a second sermod instance", "pid", busy.PID)
+				logger.Warn("refusing to start a second sermod instance", logFieldPID, busy.PID)
 			} else {
 				logger.Warn("refusing to start a second sermod instance")
 			}
 		} else {
-			logger.Warn("acquire sermod instance lock failed", "error", err)
+			logger.Warn("acquire sermod instance lock failed", logFieldError, err)
 		}
 		return exitAlreadyRunning
 	}
@@ -171,14 +199,14 @@ func run(args []string) int {
 		state.Options{CacheBytes: app.EngineByteSize(cfg, config.EngineKeyStateCacheSize, state.DefaultCacheBytes)},
 	)
 	if err != nil {
-		logger.Error("open state store", "error", err)
+		logger.Error("open state store", logFieldError, err)
 		return 2
 	}
 	defer store.Close()
 
 	notifiers, notifyWarnings := notify.Build(cfg.Notifiers(), notify.WithTemplateDir(cfg.Global.TemplateDir()))
 	for _, w := range notifyWarnings {
-		logger.Warn("build notifiers", "warning", w)
+		logger.Warn("build notifiers", logFieldWarning, w)
 	}
 
 	// Bound persisted history to roughly a year of data before hydrating the
@@ -196,17 +224,17 @@ func run(args []string) int {
 		{"events", store.PruneEvents},
 	} {
 		if n, err := p.prune(cutoff); err != nil {
-			logger.Warn("prune "+p.what, "error", err)
+			logger.Warn("prune "+p.what, logFieldError, err)
 		} else if n > 0 {
-			logger.Info("pruned old "+p.what, "rows", n)
+			logger.Info("pruned old "+p.what, logFieldRows, n)
 		}
 	}
 
 	eventLog, err := app.NewPersistentEventLog(1000, store, func(err error) {
-		logger.Warn("persist event failed", "error", err)
+		logger.Warn("persist event failed", logFieldError, err)
 	})
 	if err != nil {
-		logger.Warn("load persisted events failed", "error", err)
+		logger.Warn("load persisted events failed", logFieldError, err)
 	}
 
 	accessLog := openEngineLog(logger, cfg, config.EngineKeyAccess)
@@ -281,12 +309,12 @@ func run(args []string) int {
 
 	workers, svcWatches, warnings := app.BuildWorkers(cfg, deps, collector)
 	for _, w := range warnings {
-		logger.Warn("build workers", "warning", w)
+		logger.Warn("build workers", logFieldWarning, w)
 	}
 
 	watches, watchWarnings := app.BuildWatches(cfg, deps, interval)
 	for _, w := range watchWarnings {
-		logger.Warn("build watches", "warning", w)
+		logger.Warn("build watches", logFieldWarning, w)
 	}
 	hostWatches := len(watches)
 	// Service-embedded watches (a service's `watches:` section) run the host-watch
@@ -298,7 +326,12 @@ func run(args []string) int {
 	// first-cycle settling alongside host watches.
 	appWatches := app.BuildAppWatches(cfg, deps)
 	watches = append(watches, appWatches...)
-	logger.Debug("built monitor targets", "enabled_services", len(workers), "enabled_watches", hostWatches, "enabled_service_watches", len(svcWatches), "enabled_apps", len(appWatches), "configured", app.HasConfiguredTargets(cfg))
+	logger.Debug("built monitor targets",
+		logFieldEnabledServices, len(workers),
+		logFieldEnabledWatches, hostWatches,
+		logFieldEnabledServiceWatches, len(svcWatches),
+		logFieldEnabledApps, len(appWatches),
+		logFieldConfigured, app.HasConfiguredTargets(cfg))
 
 	if len(workers) == 0 && len(watches) == 0 {
 		if !app.HasConfiguredTargets(cfg) {
@@ -321,7 +354,7 @@ func run(args []string) int {
 	{
 		pidPath := filepath.Join(rt, daemonPIDFilename)
 		if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644); err != nil { //nolint:gosec // G306: pidfile is intentionally world-readable (0644)
-			logger.Warn("write pidfile failed (daemon reload via sermoctl may need to fall back)", "path", pidPath, "error", err)
+			logger.Warn("write pidfile failed (daemon reload via sermoctl may need to fall back)", logFieldPath, pidPath, logFieldError, err)
 		} else {
 			// Best effort cleanup on normal exit (init systems may manage their own).
 			defer func(p string) { _ = os.Remove(p) }(pidPath)
@@ -334,7 +367,7 @@ func run(args []string) int {
 		var webWarnings []string
 		webHolder, webWarnings = app.NewWebBackendHolder(cfg, deps)
 		for _, w := range webWarnings {
-			logger.Warn("build web backend", "warning", w)
+			logger.Warn("build web backend", logFieldWarning, w)
 		}
 		auth := webAuth(cfg)
 		server := &web.Server{
@@ -351,22 +384,22 @@ func run(args []string) int {
 				return (process.OSSignaler{}).Signal(os.Getpid(), syscall.SIGHUP)
 			},
 		}
-		logger.Debug("starting web ui server", "address", addr, "auth", auth.Enabled())
+		logger.Debug("starting web ui server", logFieldAddress, addr, logFieldAuth, auth.Enabled())
 		go func() {
 			if err := server.Run(ctx); err != nil {
-				logger.Error("web server", "error", err)
+				logger.Error("web server", logFieldError, err)
 			}
 		}()
 		if auth.Enabled() {
-			logger.Info("sermod web ui listening", "address", addr, "auth", "enabled")
+			logger.Info("sermod web ui listening", logFieldAddress, addr, logFieldAuth, logValueAuthEnabled)
 		} else {
-			logger.Warn("sermod web ui listening with NO authentication", "address", addr)
+			logger.Warn("sermod web ui listening with NO authentication", logFieldAddress, addr)
 		}
 	} else {
-		logger.Warn("web ui disabled; no port will be opened", "reason", webDisabledReason)
+		logger.Warn("web ui disabled; no port will be opened", logFieldReason, webDisabledReason)
 	}
 
-	logger.Info("sermod starting", "backend", detection.Backend, "services", len(workers), "watches", len(watches))
+	logger.Info("sermod starting", logFieldBackend, detection.Backend, logFieldServices, len(workers), logFieldWatches, len(watches))
 
 	monitor := app.NewMonitor(cfg, deps, app.Scheduler{
 		Interval:     interval,
@@ -434,8 +467,8 @@ func parseArgs(args []string) (cliArgs, error) {
 }
 
 func normalizePflagError(err error) error {
-	if msg := err.Error(); strings.HasPrefix(msg, "unknown flag: ") {
-		return fmt.Errorf("unknown flag %s", strings.TrimPrefix(msg, "unknown flag: "))
+	if msg := err.Error(); strings.HasPrefix(msg, pflagUnknownFlagPrefix) {
+		return fmt.Errorf("unknown flag %s", strings.TrimPrefix(msg, pflagUnknownFlagPrefix))
 	}
 	return err
 }
@@ -489,9 +522,9 @@ func openEngineLog(logger *slog.Logger, cfg *config.Config, key string) *logfile
 	}
 	w, err := logfile.Open(path)
 	if err != nil {
-		logger.Warn("engine log disabled", "key", key, "path", path, "error", err)
+		logger.Warn("engine log disabled", logFieldKey, key, logFieldPath, path, logFieldError, err)
 		return nil
 	}
-	logger.Info("engine log enabled", "key", key, "path", path)
+	logger.Info("engine log enabled", logFieldKey, key, logFieldPath, path)
 	return w
 }

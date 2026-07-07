@@ -22,6 +22,16 @@ type DiagnosticLog struct {
 	now    func() time.Time
 }
 
+const (
+	diagFieldTime     = "time"
+	diagFieldErrors   = "errors"
+	diagFieldWarnings = "warnings"
+	diagFieldFindings = "findings"
+
+	diagScopeLocks      = "locks"
+	diagScopeOperations = "operations"
+)
+
 // NewDiagnosticLog builds a scheduled diagnostics exporter. file must be set.
 func NewDiagnosticLog(cfg *config.Config, host diag.Host, opGate *OpGate, file *logfile.Writer, now func() time.Time) *DiagnosticLog {
 	if now == nil {
@@ -66,10 +76,10 @@ func (l *DiagnosticLog) Export() {
 	at := now().UTC()
 	errors, warnings := countDiagFindingLevels(findings)
 	_ = file.Write(map[string]any{
-		"time":     at.Format(time.RFC3339),
-		"errors":   errors,
-		"warnings": warnings,
-		"findings": findings,
+		diagFieldTime:     at.Format(time.RFC3339),
+		diagFieldErrors:   errors,
+		diagFieldWarnings: warnings,
+		diagFieldFindings: findings,
 	})
 }
 
@@ -122,10 +132,10 @@ func lockDiagFindings(cfg *config.Config) []diag.Finding {
 	warnings, err := locksScanner(cfg).ScanDir()
 	var out []diag.Finding
 	if err != nil {
-		out = append(out, diag.Finding{Level: diag.LevelError, Scope: "locks", Message: err.Error()})
+		out = append(out, diag.Finding{Level: diag.LevelError, Scope: diagScopeLocks, Message: err.Error()})
 	}
 	for _, w := range warnings {
-		out = append(out, diag.Finding{Level: diag.LevelWarning, Scope: "locks", Message: w})
+		out = append(out, diag.Finding{Level: diag.LevelWarning, Scope: diagScopeLocks, Message: w})
 	}
 	return out
 }
@@ -137,13 +147,13 @@ func operationSlotDiagFindings(inUse, total int) []diag.Finding {
 	if inUse >= total {
 		return []diag.Finding{{
 			Level:   diag.LevelWarning,
-			Scope:   "operations",
+			Scope:   diagScopeOperations,
 			Message: fmt.Sprintf("operation slots saturated (%d/%d in use)", inUse, total),
 		}}
 	}
 	return []diag.Finding{{
 		Level:   diag.LevelInfo,
-		Scope:   "operations",
+		Scope:   diagScopeOperations,
 		Message: fmt.Sprintf("operation slots %d/%d in use", inUse, total),
 	}}
 }

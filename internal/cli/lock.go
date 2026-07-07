@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 
 	"sermo/internal/config"
 	"sermo/internal/locks"
+	"sermo/internal/operation"
 )
 
 // runLock dispatches the named-lock commands ():
@@ -26,7 +26,7 @@ func (a App) runLock(ctx context.Context, opts options) int {
 	if code != exitSuccess {
 		return code
 	}
-	locker := locks.NewNamedLocker(filepath.Join(cfg.Global.RuntimeDir(), "locks"))
+	locker := locks.NewNamedLocker(locks.RuntimeLocksDir(cfg.Global.RuntimeDir()))
 
 	switch opts.args[0] {
 	case commandLockAcquire:
@@ -127,7 +127,7 @@ func (a App) reportLockError(opts options, err error) int {
 	var held *locks.HeldError
 	if errors.As(err, &held) {
 		if opts.json {
-			writeJSON(a.Stdout, map[string]string{"status": "blocked", "message": "lock already held"})
+			writeJSON(a.Stdout, map[string]string{cliJSONKeyStatus: string(operation.ResultBlocked), cliJSONKeyMessage: "lock already held"})
 		} else {
 			fmt.Fprintf(a.Stdout, "BLOCKED %s lock\nreason: lock already held\n", held.Service)
 		}

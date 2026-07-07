@@ -12,7 +12,10 @@ import (
 
 func init() { Register(unifiProtocol{}, protocolAliasUniFiController, protocolAliasUniFiNetwork) }
 
-const unifiRCOK = "ok"
+const (
+	unifiRCOK           = "ok"
+	unifiStatusEndpoint = "/status"
+)
 
 // unifiProtocol probes a UniFi Network controller (Ubiquiti) via its management
 // API. It GETs the unauthenticated /status endpoint over HTTPS and verifies a
@@ -45,7 +48,7 @@ func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	client := httpProbeClient(cfg.Interface, tc)
 
-	url := "https://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/status"
+	url := schemeHTTPS + "://" + net.JoinHostPort(host, strconv.Itoa(port)) + unifiStatusEndpoint
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return Result{}, err
@@ -71,7 +74,7 @@ func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, fmt.Errorf("unifi: invalid JSON response: %w", err)
 	}
 	if status.Meta.RC != unifiRCOK {
-		return Result{}, fmt.Errorf("unifi: status rc %q, want ok", status.Meta.RC)
+		return Result{}, fmt.Errorf("unifi: status rc %q, want %s", status.Meta.RC, unifiRCOK)
 	}
 
 	extra := map[string]string{extraRC: status.Meta.RC}

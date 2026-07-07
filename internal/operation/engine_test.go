@@ -246,7 +246,7 @@ func TestVerifyRunnerSourcesOnlyVerifyChecks(t *testing.T) {
 // the engine's Postflight closure from verify:true checks (not a postflight section).
 func TestNewWiresVerifyChecksAsPostflight(t *testing.T) {
 	dir := t.TempDir()
-	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
 	missing := "/nonexistent-verify-wiring-xyz"
 	engine := New(Config{
 		Service: "web",
@@ -259,7 +259,7 @@ func TestNewWiresVerifyChecksAsPostflight(t *testing.T) {
 		CheckDeps:  checks.Deps{DefaultTimeout: time.Second},
 		Manager:    &fakeManager{status: servicemgr.StatusActive},
 		Locker:     &locker,
-		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
+		Scanner:    locks.NewScanner(locks.RuntimeLocksDir(dir)),
 		Discoverer: process.NewDiscovererWithUserLookup(nil),
 		Sleep:      func(time.Duration) {},
 	})
@@ -721,7 +721,7 @@ func TestRestartRediscoveryErrorDoesNotStart(t *testing.T) {
 
 func TestNewInvalidReloadBlocksRestart(t *testing.T) {
 	dir := t.TempDir()
-	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
 	mgr := &fakeManager{status: servicemgr.StatusActive}
 	engine := New(Config{
 		Service:    "web",
@@ -730,7 +730,7 @@ func TestNewInvalidReloadBlocksRestart(t *testing.T) {
 		Tree:       map[string]any{"reload": map[string]any{"signal": "NOTASIGNAL"}},
 		Manager:    mgr,
 		Locker:     &locker,
-		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
+		Scanner:    locks.NewScanner(locks.RuntimeLocksDir(dir)),
 		Discoverer: process.NewDiscovererWithUserLookup(nil),
 		Sleep:      func(time.Duration) {},
 	})
@@ -749,7 +749,7 @@ func TestNewInvalidReloadBlocksRestart(t *testing.T) {
 
 func TestNewInvalidProcessSelectorBlocksRestart(t *testing.T) {
 	dir := t.TempDir()
-	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
 	mgr := &fakeManager{status: servicemgr.StatusActive}
 	engine := New(Config{
 		Service:    "mysql-main",
@@ -758,7 +758,7 @@ func TestNewInvalidProcessSelectorBlocksRestart(t *testing.T) {
 		Tree:       map[string]any{"processes": map[string]any{"main": map[string]any{"user": "mysql"}}},
 		Manager:    mgr,
 		Locker:     &locker,
-		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
+		Scanner:    locks.NewScanner(locks.RuntimeLocksDir(dir)),
 		Discoverer: process.NewDiscovererWithUserLookup(nil),
 		Sleep:      func(time.Duration) {},
 	})
@@ -807,7 +807,7 @@ func TestNewResidualDiscoveryReadsLiveProcfs(t *testing.T) {
 	discoverer.Reader = process.NewCachingReader(inner, time.Hour)
 
 	dir := t.TempDir()
-	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
 	engine := New(Config{
 		Service:    "mysql-main",
 		Unit:       "mysqld",
@@ -815,7 +815,7 @@ func TestNewResidualDiscoveryReadsLiveProcfs(t *testing.T) {
 		Tree:       map[string]any{"processes": map[string]any{"main": map[string]any{"exe": "/usr/sbin/mysqld", "user": "mysql"}}},
 		Manager:    &fakeManager{status: servicemgr.StatusActive},
 		Locker:     &locker,
-		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
+		Scanner:    locks.NewScanner(locks.RuntimeLocksDir(dir)),
 		Discoverer: discoverer,
 		Sleep:      func(time.Duration) {},
 	})
@@ -833,7 +833,7 @@ func TestNewResidualDiscoveryReadsLiveProcfs(t *testing.T) {
 
 func TestNewRuntimeDiscoveryWarningWithoutCommandMatchBlocksRestart(t *testing.T) {
 	dir := t.TempDir()
-	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
 	mgr := &fakeManager{status: servicemgr.StatusActive}
 	engine := New(Config{
 		Service: "mysql-main",
@@ -844,7 +844,7 @@ func TestNewRuntimeDiscoveryWarningWithoutCommandMatchBlocksRestart(t *testing.T
 		},
 		Manager:    mgr,
 		Locker:     &locker,
-		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
+		Scanner:    locks.NewScanner(locks.RuntimeLocksDir(dir)),
 		Discoverer: process.NewDiscovererWithUserLookup(nil),
 		Sleep:      func(time.Duration) {},
 	})
@@ -867,7 +867,7 @@ func TestNewRuntimeDiscoveryWarningWithCommandMatchDoesNotBlockRestart(t *testin
 	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
 	mgr := &fakeManager{status: servicemgr.StatusActive}
 	engine := New(Config{
 		Service: "mysql-main",
@@ -881,7 +881,7 @@ func TestNewRuntimeDiscoveryWarningWithCommandMatchDoesNotBlockRestart(t *testin
 		},
 		Manager: mgr,
 		Locker:  &locker,
-		Scanner: locks.NewScanner(filepath.Join(dir, "locks")),
+		Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
 		Discoverer: process.Discoverer{
 			Reader:      &countingPIDReader{ids: map[int]process.Identity{}},
 			ResolveUser: func(name string) (uint32, bool) { return 1001, name == "mysql" },
@@ -900,7 +900,7 @@ func TestNewRuntimeDiscoveryWarningWithCommandMatchDoesNotBlockRestart(t *testin
 
 func TestNewInvalidStopPolicyDurationBlocksBeforeServiceAction(t *testing.T) {
 	dir := t.TempDir()
-	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
 	mgr := &fakeManager{status: servicemgr.StatusActive}
 	engine := New(Config{
 		Service: "mysql-main",
@@ -911,7 +911,7 @@ func TestNewInvalidStopPolicyDurationBlocksBeforeServiceAction(t *testing.T) {
 		},
 		Manager:    mgr,
 		Locker:     &locker,
-		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
+		Scanner:    locks.NewScanner(locks.RuntimeLocksDir(dir)),
 		Discoverer: process.NewDiscovererWithUserLookup(nil),
 		Sleep:      func(time.Duration) {},
 	})
@@ -934,7 +934,7 @@ func TestNewWiresDefaultRuntimeDeps(t *testing.T) {
 	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
 	reader := &countingPIDReader{
 		ids: map[int]process.Identity{
 			200: {PID: 200, PPID: 1, UID: 1001, Exe: exe, ExeOK: true, State: "S"},
@@ -957,7 +957,7 @@ func TestNewWiresDefaultRuntimeDeps(t *testing.T) {
 		},
 		Manager:    mgr,
 		Locker:     &locker,
-		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
+		Scanner:    locks.NewScanner(locks.RuntimeLocksDir(dir)),
 		Discoverer: discoverer,
 		Sleep:      func(time.Duration) {},
 	})
@@ -979,7 +979,7 @@ func TestNewWiresDefaultRuntimeDeps(t *testing.T) {
 
 func TestNewPreservesExplicitResolveUser(t *testing.T) {
 	dir := t.TempDir()
-	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
 	engine := New(Config{
 		Service: "mysql-main",
 		Unit:    "mysqld",
@@ -987,7 +987,7 @@ func TestNewPreservesExplicitResolveUser(t *testing.T) {
 		Tree:    map[string]any{},
 		Manager: &fakeManager{status: servicemgr.StatusActive},
 		Locker:  &locker,
-		Scanner: locks.NewScanner(filepath.Join(dir, "locks")),
+		Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
 		Discoverer: process.Discoverer{
 			ResolveUser: func(string) (uint32, bool) { return 7, true },
 		},

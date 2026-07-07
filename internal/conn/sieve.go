@@ -10,6 +10,15 @@ import (
 
 func init() { Register(sieveProtocol{}, protocolAliasManageSieve) }
 
+const (
+	sieveCapabilityImplementation = "IMPLEMENTATION"
+	sieveGreetingLimit            = 64
+	sieveLineTrimRight            = "\r\n"
+	sieveReplyBye                 = "BYE"
+	sieveReplyNo                  = "NO"
+	sieveReplyOK                  = "OK"
+)
+
 // sieveProtocol probes a ManageSieve server natively (RFC 5804). On connect the
 // server sends a greeting: capability lines (quoted name/value pairs) terminated
 // by an OK/NO/BYE response. Reading it and seeing the final OK proves the server
@@ -31,19 +40,19 @@ func (sieveProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 	br := bufio.NewReader(c)
 	impl := ""
-	for i := 0; i < 64; i++ {
+	for i := 0; i < sieveGreetingLimit; i++ {
 		line, rerr := br.ReadString('\n')
-		line = strings.TrimRight(line, "\r\n")
+		line = strings.TrimRight(line, sieveLineTrimRight)
 		if line != "" {
 			upper := strings.ToUpper(line)
 			switch {
-			case strings.HasPrefix(upper, "OK"):
+			case strings.HasPrefix(upper, sieveReplyOK):
 				extra := map[string]string{extraGreeting: line}
 				if impl != "" {
 					extra[extraImplementation] = impl
 				}
 				return Result{Version: impl, Extra: extra}, nil
-			case strings.HasPrefix(upper, "NO"), strings.HasPrefix(upper, "BYE"):
+			case strings.HasPrefix(upper, sieveReplyNo), strings.HasPrefix(upper, sieveReplyBye):
 				return Result{}, fmt.Errorf("ManageSieve greeting refused: %s", line)
 			default:
 				if v, ok := sieveImplementation(line); ok {
@@ -62,7 +71,7 @@ func (sieveProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // (`"IMPLEMENTATION" "Dovecot …"` -> "Dovecot …").
 func sieveImplementation(line string) (string, bool) {
 	parts := strings.Split(line, `"`)
-	if len(parts) >= 4 && parts[1] == "IMPLEMENTATION" {
+	if len(parts) >= 4 && parts[1] == sieveCapabilityImplementation {
 		return parts[3], true
 	}
 	return "", false

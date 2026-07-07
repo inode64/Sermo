@@ -10,6 +10,11 @@ import (
 	"sermo/internal/cfgval"
 )
 
+const (
+	autofsDefaultMinMountpoints = 1
+	autofsFSType                = "autofs"
+)
+
 // autofsCheck verifies the autofs automounter is active by inspecting the mount
 // table for autofs-type mountpoints — the map roots `automount` maintains while
 // it runs (they appear in /proc/mounts as fstype `autofs` and vanish when the
@@ -40,17 +45,17 @@ func (c autofsCheck) Run(_ context.Context) Result {
 
 	var points []string
 	for i := range mounts {
-		if mounts[i].FSType == "autofs" {
+		if mounts[i].FSType == autofsFSType {
 			points = append(points, mounts[i].MountPoint)
 		}
 	}
-	data := map[string]any{DataKeyCount: len(points), fieldValue: len(points), DataKeyMountpoints: strings.Join(points, ",")}
+	data := map[string]any{DataKeyCount: len(points), DataKeyValue: len(points), DataKeyMountpoints: strings.Join(points, ",")}
 
 	if c.path != "" {
 		ok := slices.Contains(points, c.path)
-		msg := "autofs mountpoint " + c.path + " is active"
+		msg := autofsFSType + " mountpoint " + c.path + " is active"
 		if !ok {
-			msg = "autofs mountpoint " + c.path + " is not active"
+			msg = autofsFSType + " mountpoint " + c.path + " is not active"
 		}
 		res := c.result(ok, msg, start)
 		res.Data = data
@@ -59,10 +64,10 @@ func (c autofsCheck) Run(_ context.Context) Result {
 
 	op, value := c.op, c.value
 	if op == "" {
-		op, value = cfgval.CompareOpGreaterEqual, 1
+		op, value = cfgval.CompareOpGreaterEqual, autofsDefaultMinMountpoints
 	}
 	ok := compareFloat(float64(len(points)), op, value)
-	res := c.result(ok, fmt.Sprintf("%d autofs mountpoint(s) active", len(points)), start)
+	res := c.result(ok, fmt.Sprintf("%d %s mountpoint(s) active", len(points), autofsFSType), start)
 	res.Data = data
 	return res
 }

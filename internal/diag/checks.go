@@ -12,6 +12,11 @@ import (
 	"sermo/internal/config"
 )
 
+const (
+	diagProcPressureRoot = "/proc/pressure"
+	diagSysBlockRoot     = "/sys/class/block"
+)
+
 // diagService diagnoses one service's per-check intervals and referenced paths.
 // Disabled services and ones with resolution errors (already reported by the
 // config diagnostics) are skipped.
@@ -92,7 +97,7 @@ func diagCheckResources(b *builder, scope string, entry map[string]any, host Hos
 			b.add(LevelWarning, scope, "directory %q does not exist", p)
 		}
 	case checks.CheckTypeDiskIO:
-		if dev := cfgval.AsString(entry[checks.CheckKeyDevice]); dev != "" && !host.PathExists("/sys/class/block/"+dev) {
+		if dev := cfgval.AsString(entry[checks.CheckKeyDevice]); dev != "" && !host.PathExists(diagSysBlockRoot+"/"+dev) {
 			b.add(LevelWarning, scope, "block device %q does not exist (no /sys/class/block entry)", dev)
 		}
 	case checks.CheckTypeHdparm, checks.CheckTypeSmart:
@@ -102,7 +107,7 @@ func diagCheckResources(b *builder, scope string, entry map[string]any, host Hos
 	case checks.CheckTypeRoute:
 		warnMissingInterface(b, scope, entry, host)
 	case checks.CheckTypePressure:
-		if res := cfgval.AsString(entry[checks.CheckKeyResource]); res != "" && !host.PathExists("/proc/pressure/"+res) {
+		if res := cfgval.AsString(entry[checks.CheckKeyResource]); res != "" && !host.PathExists(diagProcPressureRoot+"/"+res) {
 			b.add(LevelWarning, scope, "kernel exposes no /proc/pressure/%s (CONFIG_PSI off?); this check will never fire", res)
 		}
 	}

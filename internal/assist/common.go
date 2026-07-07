@@ -11,11 +11,6 @@ import (
 	"sermo/internal/rules"
 )
 
-const (
-	watchCategoryNetwork = "network"
-	watchCategoryStorage = "storage"
-)
-
 // Monitoring is the shared monitor-state + interval answer every wizard asks
 // once the targets are chosen. It is injected verbatim into each generated
 // entry (a watch entry or a service body) by the assistants, so the question

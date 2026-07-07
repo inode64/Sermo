@@ -116,16 +116,16 @@ func (l *EventLog) exportEvent(e LoggedEvent) {
 	}
 	rec := eventRecordFromLogged(e)
 	_ = w.Write(map[string]any{
-		"time":    rec.At.UTC().Format(time.RFC3339),
-		"service": rec.Service,
-		"watch":   rec.Watch,
-		"app":     rec.App,
-		"kind":    rec.Kind,
-		"rule":    rec.Rule,
-		"action":  rec.Action,
-		"status":  rec.Status,
-		"message": rec.Message,
-		"output":  rec.Output,
+		eventFieldTime:    rec.At.UTC().Format(time.RFC3339),
+		eventFieldService: rec.Service,
+		eventFieldWatch:   rec.Watch,
+		eventFieldApp:     rec.App,
+		eventFieldKind:    rec.Kind,
+		eventFieldRule:    rec.Rule,
+		eventFieldAction:  rec.Action,
+		eventFieldStatus:  rec.Status,
+		eventFieldMessage: rec.Message,
+		eventFieldOutput:  rec.Output,
 	})
 }
 

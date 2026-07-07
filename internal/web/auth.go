@@ -69,16 +69,16 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Liveness is a public probe: monitors and load balancers carry no
 		// credentials, so /livez bypasses authentication entirely.
-		if r.URL.Path == "/livez" || r.URL.Path == "/readyz" {
+		if r.URL.Path == routePathLivez || r.URL.Path == routePathReadyz {
 			next.ServeHTTP(w, r)
 			return
 		}
 
 		role := s.Auth.role(r)
 
-		if r.URL.Path == "/login" {
+		if r.URL.Path == routePathLogin {
 			if role == roleAdmin {
-				http.Redirect(w, r, "/", http.StatusSeeOther)
+				http.Redirect(w, r, routePathRoot, http.StatusSeeOther)
 			} else {
 				s.challenge(w)
 			}
@@ -104,7 +104,7 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 }
 
 func (s *Server) challenge(w http.ResponseWriter) {
-	w.Header().Set("WWW-Authenticate", `Basic realm="Sermo"`)
+	w.Header().Set(headerWWWAuthenticate, authBasicRealmSermo)
 	writeJSON(w, http.StatusUnauthorized, ActionResult{OK: false, Message: "authentication required"})
 }
 

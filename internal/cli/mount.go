@@ -225,7 +225,7 @@ func storageMountWatchConfig(cfg *config.Config, storage string) (monitorMode st
 func (a App) printMountResult(opts options, res mountctl.Result, err error) int {
 	if opts.json {
 		if err != nil && res.Name == "" {
-			writeJSON(a.Stdout, map[string]string{"error": err.Error()})
+			writeJSON(a.Stdout, map[string]string{cliJSONKeyError: err.Error()})
 		} else {
 			writeJSON(a.Stdout, res)
 		}

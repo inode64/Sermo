@@ -24,6 +24,13 @@ func (influxdbProtocol) Name() string       { return ProtocolNameInfluxDB }
 func (influxdbProtocol) DefaultPort() int   { return defaultPortInfluxDB }
 func (influxdbProtocol) RequiresUser() bool { return false }
 
+const (
+	influxHeaderVersion  = "X-Influxdb-Version"
+	influxHealthEndpoint = "/health"
+	influxHealthPass     = "pass"
+	influxPingEndpoint   = "/ping"
+)
+
 func (influxdbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	client, base := InfluxClient(cfg)
 
@@ -65,7 +72,7 @@ func InfluxClient(cfg Config) (*http.Client, string) {
 // transport error, or a recognised InfluxDB health JSON); it is false only when
 // the endpoint is missing/not InfluxDB, signalling a /ping fallback.
 func influxHealth(ctx context.Context, client *http.Client, base string) (res Result, handled bool, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/health", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+influxHealthEndpoint, nil)
 	if err != nil {
 		return Result{}, true, err
 	}
@@ -89,7 +96,7 @@ func influxHealth(ctx context.Context, client *http.Client, base string) (res Re
 	if h.Version != "" {
 		extra[ExtraKeyVersionString] = h.Version
 	}
-	if h.Status != "pass" {
+	if h.Status != influxHealthPass {
 		return Result{}, true, fmt.Errorf("influxdb health status %q: %s", h.Status, h.Message)
 	}
 	return Result{Version: h.Version, Extra: extra}, true, nil
@@ -98,7 +105,7 @@ func influxHealth(ctx context.Context, client *http.Client, base string) (res Re
 // influxPing queries /ping, the universal liveness endpoint; the version is in
 // the X-Influxdb-Version response header.
 func influxPing(ctx context.Context, client *http.Client, base string) (Result, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/ping", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+influxPingEndpoint, nil)
 	if err != nil {
 		return Result{}, err
 	}
@@ -109,9 +116,9 @@ func influxPing(ctx context.Context, client *http.Client, base string) (Result, 
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxHTTPProbeShortBody))
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
-		return Result{}, fmt.Errorf("influxdb: /ping HTTP status %d", resp.StatusCode)
+		return Result{}, fmt.Errorf("influxdb: %s HTTP status %d", influxPingEndpoint, resp.StatusCode)
 	}
-	version := resp.Header.Get("X-Influxdb-Version")
+	version := resp.Header.Get(influxHeaderVersion)
 	extra := map[string]string{}
 	if version != "" {
 		extra[ExtraKeyVersionString] = version

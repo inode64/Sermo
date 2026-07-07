@@ -19,6 +19,13 @@ const webhookTimeout = 15 * time.Second
 // webhookErrorSnippetLimit bounds the non-2xx response body included in errors.
 const webhookErrorSnippetLimit = 256
 
+const (
+	webhookHeaderContentType = "Content-Type"
+	webhookContentTypeJSON   = "application/json"
+	webhookSchemeHTTP        = "http://"
+	webhookSchemeHTTPS       = "https://"
+)
+
 // webhookPoster delivers a JSON payload to a webhook; injected so tests do not
 // hit the network. label names the transport in error messages.
 type webhookPoster func(ctx context.Context, label, webhook string, payload []byte) error
@@ -42,7 +49,7 @@ func postWebhook(ctx context.Context, label, webhook string, payload []byte) err
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(webhookHeaderContentType, webhookContentTypeJSON)
 
 	client := &http.Client{Timeout: webhookTimeout}
 	resp, err := client.Do(req)
@@ -65,7 +72,7 @@ func webhookURL(typ string, entry map[string]any) (string, error) {
 	if webhook == "" {
 		return "", errors.New(typ + " notifier requires a webhook")
 	}
-	if !strings.HasPrefix(webhook, "https://") && !strings.HasPrefix(webhook, "http://") {
+	if !strings.HasPrefix(webhook, webhookSchemeHTTPS) && !strings.HasPrefix(webhook, webhookSchemeHTTP) {
 		return "", errors.New(typ + " webhook must be an http(s) URL")
 	}
 	return webhook, nil

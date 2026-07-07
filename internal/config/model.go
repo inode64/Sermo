@@ -241,6 +241,9 @@ const EntryKeyCategory = keyCategory
 // EntryKeyName is the shared user-facing `name` metadata key.
 const EntryKeyName = keyName
 
+// EntryKeyKind is the optional declared document `kind` key.
+const EntryKeyKind = keyKind
+
 // EntryKeyDisplayName is the shared user-facing `display_name` metadata key.
 const EntryKeyDisplayName = keyDisplayName
 
@@ -249,6 +252,35 @@ const EntryKeyDescription = keyDescription
 
 // EntryKeyPath is the shared top-level `path` key for path-backed targets.
 const EntryKeyPath = keyPath
+
+// EntryKeyType is the shared `type` discriminator key inside typed blocks.
+const EntryKeyType = keyType
+
+// ConfigDirServices is the standard service config directory name.
+const ConfigDirServices = pathKeyServices
+
+// Watch directory names used for the classified directories operators commonly
+// list under paths.watches.
+const (
+	// WatchDirWatches is the generic host-watch config directory name.
+	WatchDirWatches = pathKeyWatches
+	// WatchDirNetworks is the network/uplink watch config directory name.
+	WatchDirNetworks = "networks"
+	// WatchDirStorages is the storage watch config directory name.
+	WatchDirStorages = "storages"
+	// WatchDirMounts is the fstab-backed mount watch config directory name.
+	WatchDirMounts = "mounts"
+)
+
+// Watch category values used by generated host watches and Web UI grouping.
+const (
+	// WatchCategoryWatch is the generic host-watch category fallback.
+	WatchCategoryWatch = kindWatch
+	// WatchCategoryStorage groups storage-capacity and mount-backed watches.
+	WatchCategoryStorage = "storage"
+	// WatchCategoryNetwork groups network/uplink watches.
+	WatchCategoryNetwork = "network"
+)
 
 // Service monitor block keys.
 const (
@@ -347,10 +379,10 @@ const SectionVariables = sectionVariables
 // from (catalog/services, catalog/apps, catalog/libs, catalog/patterns). The
 // category tracks the kind for display and category-scoped listings.
 const (
-	CategoryService  = "service"
-	CategoryApp      = "app"
+	CategoryService  = kindService
+	CategoryApp      = kindApp
 	CategoryLibrary  = "library"
-	CategoryPatterns = "patterns"
+	CategoryPatterns = kindPatterns
 )
 
 const catalogDirLibraries = "libs"

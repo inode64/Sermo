@@ -73,8 +73,8 @@ func wizardMountStorageDoc(name string, body any) map[string]any {
 	doc := map[string]any{wizardFieldName: name}
 	mount := map[string]any{}
 	check := map[string]any{
-		checks.CheckKeyType: checks.CheckTypeStorage,
-		"mounted":           true,
+		checks.CheckKeyType:    checks.CheckTypeStorage,
+		checks.CheckKeyMounted: true,
 	}
 	if b, ok := body.(map[string]any); ok {
 		for _, key := range []string{config.EntryKeyDisplayName, config.EntryKeyDescription, config.EntryKeyCategory, config.EntryKeyMonitor, config.EntryKeyInterval} {

@@ -86,8 +86,10 @@ const (
 // Process Role labels for non-selector members: backend seeds are the service's
 // main process, and tree members discovered via PPID are children.
 const (
-	roleMain  = "main"
-	roleChild = "child"
+	// RoleMain is the canonical role for the primary service process selector.
+	RoleMain = "main"
+	// RoleChild marks descendant processes discovered from a primary process.
+	RoleChild = "child"
 )
 
 // Selector is one internal process discovery source. Public `processes` entries

@@ -56,7 +56,7 @@ func TestNamedPinIsActiveWithoutOwner(t *testing.T) {
 
 func TestNamedLockerRejectsPathLikeIDs(t *testing.T) {
 	root := t.TempDir()
-	l := namedLocker(filepath.Join(root, "locks"), fakeProc{})
+	l := namedLocker(RuntimeLocksDir(root), fakeProc{})
 
 	tests := []struct {
 		name    string

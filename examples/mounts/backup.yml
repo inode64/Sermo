@@ -1,0 +1,18 @@
+name: mount-backup
+display_name: Backup mount
+category: storage
+monitor: disabled
+interval: 30s
+check:
+  type: storage
+  path: /mnt/backup
+  mounted: true
+  used_pct: { op: ">=", value: "90%" }
+for: { cycles: 3 }
+mount:
+  refcount: true
+  umount:
+    term_timeout: 12s
+    kill_timeout: 5s
+    allow_sigkill: false
+    allow_lazy: false

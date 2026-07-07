@@ -12,7 +12,11 @@ import (
 
 func init() { Register(syncthingProtocol{}) }
 
-const syncthingHealthOK = "OK"
+const (
+	syncthingHealthEndpoint  = "/rest/noauth/health"
+	syncthingHealthOK        = "OK"
+	syncthingVersionEndpoint = "/rest/system/version"
+)
 
 // syncthingProtocol probes a Syncthing instance via its REST API. It GETs the
 // unauthenticated /rest/noauth/health endpoint and verifies a {"status":"OK"}
@@ -50,7 +54,7 @@ func (syncthingProtocol) Probe(ctx context.Context, cfg Config) (Result, error) 
 	var health struct {
 		Status string `json:"status"`
 	}
-	if err := syncthingGet(ctx, client, base+"/rest/noauth/health", "", &health); err != nil {
+	if err := syncthingGet(ctx, client, base+syncthingHealthEndpoint, "", &health); err != nil {
 		return Result{}, err
 	}
 	if health.Status != syncthingHealthOK {
@@ -66,7 +70,7 @@ func (syncthingProtocol) Probe(ctx context.Context, cfg Config) (Result, error) 
 			OS      string `json:"os"`
 			Arch    string `json:"arch"`
 		}
-		if err := syncthingGet(ctx, client, base+"/rest/system/version", cfg.Password, &ver); err != nil {
+		if err := syncthingGet(ctx, client, base+syncthingVersionEndpoint, cfg.Password, &ver); err != nil {
 			return Result{}, err
 		}
 		if ver.Version != "" {
@@ -91,7 +95,7 @@ func syncthingGet(ctx context.Context, client *http.Client, url, apiKey string, 
 		return err
 	}
 	if apiKey != "" {
-		req.Header.Set("X-API-Key", apiKey)
+		req.Header.Set(httpHeaderSyncthingAuth, apiKey)
 	}
 	resp, err := client.Do(req)
 	if err != nil {

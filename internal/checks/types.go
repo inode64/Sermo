@@ -25,6 +25,31 @@ import (
 	"sermo/internal/servicemgr"
 )
 
+const (
+	ldSoConfDir       = "/etc/ld.so.conf.d"
+	ldSoConfFile      = "/etc/ld.so.conf"
+	ldSoConfSuffix    = ".conf"
+	ldSoIncludePrefix = "include "
+	ldLibraryPathEnv  = "LD_LIBRARY_PATH"
+	ldPathSeparator   = ":"
+	ldCommentHash     = "#"
+	ldCommentSemi     = ";"
+	elfOriginToken    = "$ORIGIN"
+	elfOriginBraced   = "${ORIGIN}"
+	libDirAArch64     = "/lib/aarch64-linux-gnu"
+	libDirARMHF       = "/lib/arm-linux-gnueabihf"
+	libDirI386        = "/lib/i386-linux-gnu"
+	libDirRoot        = "/lib"
+	libDirRoot64      = "/lib64"
+	libDirUsr         = "/usr/lib"
+	libDirUsr64       = "/usr/lib64"
+	libDirUsrAArch64  = "/usr/lib/aarch64-linux-gnu"
+	libDirUsrARMHF    = "/usr/lib/arm-linux-gnueabihf"
+	libDirUsrI386     = "/usr/lib/i386-linux-gnu"
+	libDirUsrX8664    = "/usr/lib/x86_64-linux-gnu"
+	libDirX8664       = "/lib/x86_64-linux-gnu"
+)
+
 // tcpCheck dials a TCP host:port, optionally egressing through one
 // or more interfaces (ifaces); ifaceAll requires every one to succeed.
 type tcpCheck struct {
@@ -116,7 +141,7 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 		return c.result(false, fmt.Sprintf("build request: %v", err), start)
 	}
 	if c.contentType != "" {
-		req.Header.Set("Content-Type", c.contentType)
+		req.Header.Set(httpHeaderContentType, c.contentType)
 	}
 	for k, v := range c.headers {
 		req.Header.Set(k, v)
@@ -381,7 +406,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		if sev, id, line := c.analyzer.Analyze(res.Stdout, res.Stderr); sev != SevOK {
 			r := c.result(false, fmt.Sprintf("exit %d; %s pattern %q: %s", res.ExitCode, sev, id, output.FirstNonEmptyLine(line)), start)
 			r.Optional = sev == SevWarning
-			r.Data = map[string]any{"pattern_id": id, "pattern_severity": sev.String(), "pattern_line": line}
+			r.Data = map[string]any{DataKeyPatternID: id, DataKeyPatternSeverity: sev.String(), DataKeyPatternLine: line}
 			if out := output.Bounded(res.Stdout, res.Stderr); out != "" {
 				r.Data[DataKeyOutput] = out
 			}
@@ -737,8 +762,8 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 
 	// LD_LIBRARY_PATH takes precedence (as the real dynamic linker does).
 	// We prepend it so it is searched first.
-	if lp := os.Getenv("LD_LIBRARY_PATH"); lp != "" {
-		for _, p := range strings.Split(lp, ":") {
+	if lp := os.Getenv(ldLibraryPathEnv); lp != "" {
+		for _, p := range strings.Split(lp, ldPathSeparator) {
 			if p != "" {
 				dirs = append([]string{expandOrigin(p, c.binary)}, dirs...)
 			}
@@ -802,13 +827,13 @@ func collectLibrarySearchDirs(binary string, ef *elf.File) []string {
 
 	// Prefer RUNPATH, fall back to RPATH (older binaries).
 	if rps, _ := ef.DynString(elf.DT_RUNPATH); len(rps) > 0 && rps[0] != "" {
-		for _, p := range strings.Split(rps[0], ":") {
+		for _, p := range strings.Split(rps[0], ldPathSeparator) {
 			if p != "" {
 				dirs = append(dirs, expandOrigin(p, binary))
 			}
 		}
 	} else if rps, _ := ef.DynString(elf.DT_RPATH); len(rps) > 0 && rps[0] != "" {
-		for _, p := range strings.Split(rps[0], ":") {
+		for _, p := range strings.Split(rps[0], ldPathSeparator) {
 			if p != "" {
 				dirs = append(dirs, expandOrigin(p, binary))
 			}
@@ -822,23 +847,23 @@ func collectLibrarySearchDirs(binary string, ef *elf.File) []string {
 
 	// Common system locations (covers most distros and multi-arch setups).
 	dirs = append(dirs,
-		"/lib", "/usr/lib",
-		"/lib64", "/usr/lib64",
-		"/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu",
-		"/lib/aarch64-linux-gnu", "/usr/lib/aarch64-linux-gnu",
-		"/lib/i386-linux-gnu", "/usr/lib/i386-linux-gnu",
-		"/lib/arm-linux-gnueabihf", "/usr/lib/arm-linux-gnueabihf",
+		libDirRoot, libDirUsr,
+		libDirRoot64, libDirUsr64,
+		libDirX8664, libDirUsrX8664,
+		libDirAArch64, libDirUsrAArch64,
+		libDirI386, libDirUsrI386,
+		libDirARMHF, libDirUsrARMHF,
 	)
 
 	// Best-effort augmentation from ld.so.conf and fragments.
-	if more := parseLdSoConf("/etc/ld.so.conf"); len(more) > 0 {
+	if more := parseLdSoConf(ldSoConfFile); len(more) > 0 {
 		dirs = append(dirs, more...)
 	}
 	// Common drop-in directory even if main conf doesn't include it.
-	if entries, _ := os.ReadDir("/etc/ld.so.conf.d"); len(entries) > 0 {
+	if entries, _ := os.ReadDir(ldSoConfDir); len(entries) > 0 {
 		for _, e := range entries {
-			if strings.HasSuffix(e.Name(), ".conf") {
-				if more := parseLdSoConf(filepath.Join("/etc/ld.so.conf.d", e.Name())); len(more) > 0 {
+			if strings.HasSuffix(e.Name(), ldSoConfSuffix) {
+				if more := parseLdSoConf(filepath.Join(ldSoConfDir, e.Name())); len(more) > 0 {
 					dirs = append(dirs, more...)
 				}
 			}
@@ -850,8 +875,8 @@ func collectLibrarySearchDirs(binary string, ef *elf.File) []string {
 
 func expandOrigin(p, binary string) string {
 	dir := filepath.Dir(binary)
-	p = strings.ReplaceAll(p, "$ORIGIN", dir)
-	p = strings.ReplaceAll(p, "${ORIGIN}", dir)
+	p = strings.ReplaceAll(p, elfOriginToken, dir)
+	p = strings.ReplaceAll(p, elfOriginBraced, dir)
 	return filepath.Clean(p)
 }
 
@@ -882,10 +907,10 @@ func parseLdSoConf(path string) []string {
 	var out []string
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+		if line == "" || strings.HasPrefix(line, ldCommentHash) || strings.HasPrefix(line, ldCommentSemi) {
 			continue
 		}
-		if strings.HasPrefix(line, "include ") {
+		if strings.HasPrefix(line, ldSoIncludePrefix) {
 			continue // we handle .d explicitly
 		}
 		out = append(out, line)

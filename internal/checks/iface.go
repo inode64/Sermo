@@ -5,6 +5,8 @@ import (
 	"sermo/internal/cfgval"
 )
 
+const interfaceResultOK = "ok"
+
 // parseInterfaces reads the optional `interface` field: a single identifier
 // (name/IP/MAC) or a list of them. An empty/absent value means default routing.
 func parseInterfaces(v any) []string {
@@ -55,7 +57,7 @@ func tryInterfaces(ifaces []string, matchAll bool, op func(iface string) error) 
 	for _, ifc := range ifaces {
 		e := op(ifc)
 		if e == nil {
-			perIface[ifc] = "ok"
+			perIface[ifc] = interfaceResultOK
 			chosen = ifc
 			if !matchAll {
 				return ifc, perIface, nil // any: first success wins
@@ -89,5 +91,5 @@ func ifaceData(perIface map[string]any) map[string]any {
 	if perIface == nil {
 		return nil
 	}
-	return map[string]any{"interfaces": perIface}
+	return map[string]any{DataKeyInterfaces: perIface}
 }

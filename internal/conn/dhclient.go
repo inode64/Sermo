@@ -14,6 +14,22 @@ import (
 
 func init() { Register(dhclientProtocol{}, protocolAliasDHClient) }
 
+const procNetUDPPath = "/proc/net/udp"
+
+const (
+	procUDPHeaderField              = "sl"
+	dhclientAnyInterface            = "any interface"
+	dhclientLeaseBlockStart         = "lease {"
+	dhclientLeaseBlockEnd           = "}"
+	dhclientLeaseExpireField        = "expire"
+	dhclientLeaseExpirePrefix       = dhclientLeaseExpireField + " "
+	dhclientLeaseFixedAddressPrefix = "fixed-address "
+	dhclientLeaseInterfacePrefix    = "interface "
+	dhclientLeaseQuoteCutset        = `"`
+	dhclientLeaseTerminator         = ";"
+	dhclientLeaseTimeLayout         = "2006/01/02 15:04:05"
+)
+
 // dhclientProtocol verifies a local DHCP client socket. A DHCP client does not
 // expose a request/response service like dhcpd does; it receives offers on UDP
 // port 68. The probe therefore checks the kernel UDP socket table directly.
@@ -31,7 +47,7 @@ func (dhclientProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if port == 0 {
 		port = dhcpClientPort
 	}
-	sock, err := findUDP4Socket("/proc/net/udp", cfg.Host, port)
+	sock, err := findUDP4Socket(procNetUDPPath, cfg.Host, port)
 	if err != nil {
 		return Result{}, err
 	}
@@ -39,11 +55,11 @@ func (dhclientProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 	extra := map[string]string{
-		extraProtocol:   networkUDP,
-		"local_address": sock.localAddress,
-		"port":          strconv.Itoa(sock.port),
-		"state":         sock.state,
-		"inode":         sock.inode,
+		extraProtocol:        networkUDP,
+		ExtraKeyLocalAddress: sock.localAddress,
+		ExtraKeyPort:         strconv.Itoa(sock.port),
+		ExtraKeyState:        sock.state,
+		ExtraKeyInode:        sock.inode,
 	}
 	if cfg.Query != "" {
 		now := time.Now().UTC()
@@ -93,7 +109,7 @@ func parseUDP4SocketTable(r io.Reader, host string, port int) (udpSocket, bool, 
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
-		if len(fields) < 10 || fields[0] == "sl" {
+		if len(fields) < 10 || fields[0] == procUDPHeaderField {
 			continue
 		}
 		addr, p, err := parseProcUDP4Address(fields[1])
@@ -145,9 +161,9 @@ func readDHClientLease(path, iface string, now time.Time) (dhclientLease, error)
 		return dhclientLease{}, err
 	}
 	if !ok {
-		target := "any interface"
+		target := dhclientAnyInterface
 		if iface != "" {
-			target = "interface " + iface
+			target = dhclientLeaseInterfacePrefix + iface
 		}
 		return dhclientLease{}, fmt.Errorf("dhclient: no unexpired lease in %s for %s", path, target)
 	}
@@ -163,21 +179,21 @@ func parseDHClientLeases(r io.Reader, iface string, now time.Time) (dhclientLeas
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		switch {
-		case line == "lease {":
+		case line == dhclientLeaseBlockStart:
 			inLease = true
 			cur = dhclientLease{}
-		case inLease && line == "}":
+		case inLease && line == dhclientLeaseBlockEnd:
 			if cur.expires.After(now) && (iface == "" || cur.interfaceName == iface) {
 				if !found || cur.expires.After(best.expires) {
 					best, found = cur, true
 				}
 			}
 			inLease = false
-		case inLease && strings.HasPrefix(line, "interface "):
-			cur.interfaceName = strings.Trim(strings.TrimSuffix(strings.TrimPrefix(line, "interface "), ";"), `"`)
-		case inLease && strings.HasPrefix(line, "fixed-address "):
-			cur.fixedAddress = strings.TrimSuffix(strings.TrimPrefix(line, "fixed-address "), ";")
-		case inLease && strings.HasPrefix(line, "expire "):
+		case inLease && strings.HasPrefix(line, dhclientLeaseInterfacePrefix):
+			cur.interfaceName = strings.Trim(strings.TrimSuffix(strings.TrimPrefix(line, dhclientLeaseInterfacePrefix), dhclientLeaseTerminator), dhclientLeaseQuoteCutset)
+		case inLease && strings.HasPrefix(line, dhclientLeaseFixedAddressPrefix):
+			cur.fixedAddress = strings.TrimSuffix(strings.TrimPrefix(line, dhclientLeaseFixedAddressPrefix), dhclientLeaseTerminator)
+		case inLease && strings.HasPrefix(line, dhclientLeaseExpirePrefix):
 			expires, err := parseDHClientLeaseTime(line)
 			if err != nil {
 				return dhclientLease{}, false, err
@@ -192,11 +208,11 @@ func parseDHClientLeases(r io.Reader, iface string, now time.Time) (dhclientLeas
 }
 
 func parseDHClientLeaseTime(line string) (time.Time, error) {
-	fields := strings.Fields(strings.TrimSuffix(line, ";"))
-	if len(fields) != 4 || fields[0] != "expire" {
+	fields := strings.Fields(strings.TrimSuffix(line, dhclientLeaseTerminator))
+	if len(fields) != 4 || fields[0] != dhclientLeaseExpireField {
 		return time.Time{}, fmt.Errorf("dhclient: malformed lease expiry %q", line)
 	}
-	t, err := time.ParseInLocation("2006/01/02 15:04:05", fields[2]+" "+fields[3], time.UTC)
+	t, err := time.ParseInLocation(dhclientLeaseTimeLayout, fields[2]+" "+fields[3], time.UTC)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("dhclient: malformed lease expiry %q: %w", line, err)
 	}

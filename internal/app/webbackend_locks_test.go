@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"sermo/internal/config"
+	"sermo/internal/locks"
 )
 
 func writeWebLockFixture(t *testing.T, dir, fileName string, payload map[string]any) {
@@ -52,7 +53,7 @@ func TestWebBackendDetailLocks(t *testing.T) {
 	useFakeLockProber(t)
 	root := t.TempDir()
 	runtime := filepath.Join(root, "run")
-	locksDir := filepath.Join(runtime, "locks")
+	locksDir := locks.RuntimeLocksDir(runtime)
 	expires := time.Now().Add(time.Hour).UTC()
 
 	writeWebLockFixture(t, locksDir, "mysql\\backup.lock", map[string]any{
@@ -101,7 +102,7 @@ func TestWebBackendDetailLocks(t *testing.T) {
 func TestWebBackendDetailLockWarnings(t *testing.T) {
 	root := t.TempDir()
 	runtime := filepath.Join(root, "run")
-	locksDir := filepath.Join(runtime, "locks")
+	locksDir := locks.RuntimeLocksDir(runtime)
 	if err := os.MkdirAll(locksDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +130,7 @@ func TestWebBackendViewActiveLocks(t *testing.T) {
 	useFakeLockProber(t)
 	root := t.TempDir()
 	runtime := filepath.Join(root, "run")
-	locksDir := filepath.Join(runtime, "locks")
+	locksDir := locks.RuntimeLocksDir(runtime)
 	expires := time.Now().Add(time.Hour).UTC()
 
 	writeWebLockFixture(t, locksDir, "mysql\\backup.lock", map[string]any{
@@ -164,7 +165,7 @@ func TestWebBackendServicesActiveLocks(t *testing.T) {
 	useFakeLockProber(t)
 	root := t.TempDir()
 	runtime := filepath.Join(root, "run")
-	locksDir := filepath.Join(runtime, "locks")
+	locksDir := locks.RuntimeLocksDir(runtime)
 	expires := time.Now().Add(time.Hour).UTC()
 	ticks := fakeOwnerTicks
 
@@ -214,7 +215,7 @@ func TestWebBackendLocksContext(t *testing.T) {
 	useFakeLockProber(t)
 	root := t.TempDir()
 	runtime := filepath.Join(root, "run")
-	locksDir := filepath.Join(runtime, "locks")
+	locksDir := locks.RuntimeLocksDir(runtime)
 	now := time.Now().UTC()
 
 	writeWebLockFixture(t, locksDir, "mysql\\backup.lock", map[string]any{
@@ -271,7 +272,7 @@ func TestWebBackendLocksSeveralServices(t *testing.T) {
 	useFakeLockProber(t)
 	root := t.TempDir()
 	runtime := filepath.Join(root, "run")
-	locksDir := filepath.Join(runtime, "locks")
+	locksDir := locks.RuntimeLocksDir(runtime)
 	expires := time.Now().Add(time.Hour).UTC()
 	ticks := fakeOwnerTicks
 
@@ -322,7 +323,7 @@ func TestWebBackendReleaseLockOnlyInactive(t *testing.T) {
 	useFakeLockProber(t)
 	root := t.TempDir()
 	runtime := filepath.Join(root, "run")
-	locksDir := filepath.Join(runtime, "locks")
+	locksDir := locks.RuntimeLocksDir(runtime)
 	ticks := fakeOwnerTicks
 
 	writeWebLockFixture(t, locksDir, "mysql\\backup.lock", map[string]any{
