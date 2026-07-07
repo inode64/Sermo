@@ -5,6 +5,19 @@ import (
 	"strings"
 )
 
+// EnvBackendOverride is the environment variable that selects the service
+// manager backend for validation and CLI defaults.
+const EnvBackendOverride = "SERMO_BACKEND"
+
+const (
+	envHostOverride     = "SERMO_HOST"
+	envHostnameOverride = "SERMO_HOSTNAME"
+	envUserOverride     = "SERMO_USER"
+	envInitOverride     = "SERMO_INIT"
+	envArchOverride     = "SERMO_ARCH"
+	envOSOverride       = "SERMO_OS"
+)
+
 // envOverride returns the trimmed value of one of the SERMO_* detector or
 // rendering overrides (SERMO_HOST, SERMO_HOSTNAME, SERMO_USER, SERMO_INIT,
 // SERMO_BACKEND, SERMO_ARCH, SERMO_OS), or "" when unset. Every built-in

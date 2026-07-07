@@ -33,6 +33,48 @@ const (
 	SelectorCommandMatch = "command_match"
 )
 
+// Resolved service-tree process discovery keys.
+const (
+	// ServiceKeyPidfile is the top-level pidfile field parsed into a pidfile selector.
+	ServiceKeyPidfile = "pidfile"
+	// ServiceKeyPidfiles is the named pidfile roles field parsed into pidfile selectors.
+	ServiceKeyPidfiles = "pidfiles"
+	// SectionProcesses is the public block of named command-match selectors.
+	SectionProcesses = "processes"
+)
+
+// Selector field keys.
+const (
+	// SelectorKeyExe is a process selector's exact executable path field.
+	SelectorKeyExe = "exe"
+	// SelectorKeyCmd is a process selector's command-line regex field.
+	SelectorKeyCmd = "cmd"
+	// SelectorKeyUser is a process selector's real-user field.
+	SelectorKeyUser = "user"
+	// SelectorKeyGroup is a process selector's real-group field.
+	SelectorKeyGroup = "group"
+)
+
+// Stop policy field keys parsed by process kill policy.
+const (
+	// SectionStopPolicy is the block governing stop-time cleanup and signal escalation.
+	SectionStopPolicy = "stop_policy"
+	// StopPolicyKeyGracefulTimeout is stop_policy.graceful_timeout.
+	StopPolicyKeyGracefulTimeout = "graceful_timeout"
+	// StopPolicyKeyTermTimeout is stop_policy.term_timeout.
+	StopPolicyKeyTermTimeout = "term_timeout"
+	// StopPolicyKeyKillTimeout is stop_policy.kill_timeout.
+	StopPolicyKeyKillTimeout = "kill_timeout"
+	// StopPolicyKeyForceKill is stop_policy.force_kill.
+	StopPolicyKeyForceKill = "force_kill"
+	// StopPolicyKeyKillOnlyIf is stop_policy.kill_only_if.
+	StopPolicyKeyKillOnlyIf = "kill_only_if"
+	// StopPolicyKeyUsers is stop_policy.kill_only_if.users.
+	StopPolicyKeyUsers = "users"
+	// StopPolicyKeyExeAny is stop_policy.kill_only_if.exe_any.
+	StopPolicyKeyExeAny = "exe_any"
+)
+
 // Discovery source labels.
 const (
 	sourceBackend = "backend"

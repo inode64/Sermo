@@ -11,9 +11,17 @@ import (
 // keyEnableIf is the per-entry gate key (and its label/path prefix in diagnostics).
 const keyEnableIf = "enable_if"
 
+const (
+	keyEnableIfFile     = "file"
+	keyEnableIfKey      = "key"
+	keyEnableIfContains = "contains"
+	keyEnableIfEquals   = "equals"
+	keyEnableIfMatches  = "matches"
+)
+
 var (
 	enableIfSections = set(sectionChecks, sectionPreflight, sectionProcesses, sectionWatches)
-	enableIfKeys     = set("file", "key", "contains", "equals", "matches")
+	enableIfKeys     = set(keyEnableIfFile, keyEnableIfKey, keyEnableIfContains, keyEnableIfEquals, keyEnableIfMatches)
 )
 
 func pruneEnableIf(v any, path []string) any {
@@ -103,13 +111,13 @@ func validateEnableIfSpec(path string, spec any, add addFunc) {
 			add("%s.%s is not supported; enable_if accepts file, key and one of contains, equals or matches", path, key)
 		}
 	}
-	file := cfgval.String(m["file"])
+	file := cfgval.String(m[keyEnableIfFile])
 	if file == "" {
 		add("%s.file is required", path)
 	} else if !filepath.IsAbs(file) {
 		add("%s.file %q must be absolute", path, file)
 	}
-	if cfgval.String(m["key"]) == "" {
+	if cfgval.String(m[keyEnableIfKey]) == "" {
 		add("%s.key is required", path)
 	}
 	if predicates := validateEnableIfPredicates(path, m, add); predicates != 1 {
@@ -119,18 +127,18 @@ func validateEnableIfSpec(path string, spec any, add addFunc) {
 
 func validateEnableIfPredicates(path string, m map[string]any, add addFunc) int {
 	predicates := 0
-	if _, has := m["contains"]; has {
+	if _, has := m[keyEnableIfContains]; has {
 		predicates++
-		if cfgval.String(m["contains"]) == "" {
+		if cfgval.String(m[keyEnableIfContains]) == "" {
 			add("%s.contains must be non-empty", path)
 		}
 	}
-	if _, has := m["equals"]; has {
+	if _, has := m[keyEnableIfEquals]; has {
 		predicates++
 	}
-	if _, has := m["matches"]; has {
+	if _, has := m[keyEnableIfMatches]; has {
 		predicates++
-		pat := cfgval.String(m["matches"])
+		pat := cfgval.String(m[keyEnableIfMatches])
 		if pat == "" {
 			add("%s.matches must be non-empty", path)
 		} else if _, err := regexp.Compile(pat); err != nil {
@@ -156,7 +164,7 @@ func enableIfHolds(spec any) bool {
 	if !valid {
 		return false
 	}
-	file, key := cfgval.String(m["file"]), cfgval.String(m["key"])
+	file, key := cfgval.String(m[keyEnableIfFile]), cfgval.String(m[keyEnableIfKey])
 	if file == "" || key == "" {
 		return false
 	}
@@ -168,13 +176,13 @@ func enableIfHolds(spec any) bool {
 }
 
 func enableIfPredicateMatches(m map[string]any, val string) bool {
-	if want := cfgval.String(m["contains"]); want != "" {
+	if want := cfgval.String(m[keyEnableIfContains]); want != "" {
 		return strings.Contains(val, want)
 	}
-	if want, has := m["equals"]; has {
+	if want, has := m[keyEnableIfEquals]; has {
 		return val == cfgval.String(want)
 	}
-	if pat := cfgval.String(m["matches"]); pat != "" {
+	if pat := cfgval.String(m[keyEnableIfMatches]); pat != "" {
 		re, err := regexp.Compile(pat)
 		return err == nil && re.MatchString(val)
 	}

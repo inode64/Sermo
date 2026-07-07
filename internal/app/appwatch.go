@@ -10,8 +10,8 @@ import (
 )
 
 // appCheck adapts a single application's inspection to a checks.Check: OK when
-// the app reports "ok", otherwise the Result message carries the error detail
-// appinspect captured (e.g. "error: exit 1 (want 0): <stderr>").
+// the app reports appinspect.StatusOK, otherwise the Result message carries the
+// error detail appinspect captured (e.g. "error: exit 1 (want 0): <stderr>").
 type appCheck struct {
 	name    string
 	inspect func(context.Context) appinspect.Report
@@ -23,7 +23,7 @@ func (c appCheck) Run(ctx context.Context) checks.Result {
 	rep := c.inspect(ctx)
 	res := checks.Result{
 		Check:   c.name,
-		OK:      rep.Status == appStatusOK,
+		OK:      rep.Status == appinspect.StatusOK,
 		Message: rep.Status,
 	}
 	if !res.OK && rep.Output != "" {
@@ -32,8 +32,7 @@ func (c appCheck) Run(ctx context.Context) checks.Result {
 	return res
 }
 
-// appStatusOK is the appinspect status reported by a healthy application.
-const appStatusOK = "ok"
+const appWatchCheckType = "app"
 
 // appWatchInterval is the cadence at which installed apps are inspected for
 // errors (engine.app_interval, default 5m). Apps change rarely and each check
@@ -73,7 +72,7 @@ func BuildAppWatches(cfg *config.Config, deps Deps) []*Watch {
 		out = append(out, &Watch{
 			Name:       name,
 			App:        name,
-			CheckType:  "app",
+			CheckType:  appWatchCheckType,
 			Check:      check,
 			FireOnFail: true,
 			Interval:   interval,

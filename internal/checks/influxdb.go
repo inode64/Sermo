@@ -235,7 +235,7 @@ func buildInfluxCheck(b base, entry map[string]any) (Check, string) {
 	}
 	op := cfgval.AsString(entry[CheckKeyOp])
 	if !validCompareOp(op) {
-		return nil, "influxdb-query check op must be one of ==, !=, >, >=, <, <=, contains, =~"
+		return nil, "influxdb-query check op must be one of " + cfgval.AssertOpSummary
 	}
 	value := cfgval.String(entry[CheckKeyValue])
 	if value == "" {

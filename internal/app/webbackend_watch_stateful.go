@@ -17,6 +17,8 @@ import (
 	"sermo/internal/web"
 )
 
+const watchReadingFieldEntries = "entries"
+
 func (b *WebBackend) fileWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
 	path := cfgval.AsString(w.check[checks.CheckKeyPath])
 	if path == "" {
@@ -34,23 +36,23 @@ func (b *WebBackend) fileWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 	kind := fileKindLabel(info.Mode())
 	readings := []web.WatchReading{
 		{Field: checks.DataKeyPath, Label: "Path", Value: path},
-		{Field: "kind", Label: "Kind", Value: kind},
+		{Field: checks.DataKeyKind, Label: "Kind", Value: kind},
 		{Field: checks.DataKeySize, Label: "Size", Value: humanize.Bytes(uint64(info.Size()))},
-		{Field: "mode", Label: "Mode", Value: info.Mode().Perm().String()},
+		{Field: checks.DataKeyMode, Label: "Mode", Value: info.Mode().Perm().String()},
 	}
 	if sys, ok := info.Sys().(*syscall.Stat_t); ok {
 		readings = append(readings, web.WatchReading{
-			Field: "owner", Label: "Owner", Value: fmt.Sprintf("%d:%d", sys.Uid, sys.Gid),
+			Field: checks.CheckKeyOwner, Label: "Owner", Value: fmt.Sprintf("%d:%d", sys.Uid, sys.Gid),
 		})
 	}
 	if cfgval.Bool(w.check[checks.CheckKeyRecursive]) && info.IsDir() {
 		ctx, cancel := b.probeContext()
 		defer cancel()
-		n, err := checks.TallyEntries(ctx, path, "any", true, b.probeTimeout())
+		n, err := checks.TallyEntries(ctx, path, checks.CountKindAny, true, b.probeTimeout())
 		if err != nil {
-			readings = append(readings, web.WatchReading{Field: "entries", Label: "Entries", Error: err.Error()})
+			readings = append(readings, web.WatchReading{Field: watchReadingFieldEntries, Label: "Entries", Error: err.Error()})
 		} else {
-			readings = append(readings, web.WatchReading{Field: "entries", Label: "Entries", Value: strconv.Itoa(n)})
+			readings = append(readings, web.WatchReading{Field: watchReadingFieldEntries, Label: "Entries", Value: strconv.Itoa(n)})
 		}
 	}
 	return nil, readings, fmt.Sprintf("%s %s", path, kind)
@@ -59,9 +61,9 @@ func (b *WebBackend) fileWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 func fileKindLabel(mode os.FileMode) string {
 	switch {
 	case mode&os.ModeSymlink != 0:
-		return "symlink"
+		return checks.CountKindSymlink
 	case mode.IsRegular():
-		return "file"
+		return checks.CountKindFile
 	case mode.IsDir():
 		return "directory"
 	default:
@@ -77,7 +79,7 @@ func (b *WebBackend) countWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRe
 	}
 	kind := cfgval.AsString(w.check[checks.CheckKeyOf])
 	if kind == "" {
-		kind = "any"
+		kind = checks.CountKindAny
 	}
 	recursive := cfgval.Bool(w.check[checks.CheckKeyRecursive])
 	ctx, cancel := b.probeContext()
@@ -151,10 +153,10 @@ func (b *WebBackend) sizeWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 		{Field: checks.DataKeyCurrentBytes, Label: "Current size", Value: humanize.Bytes(uint64(size))},
 	}
 	if growBy := cfgval.String(w.check[checks.CheckKeyGrowBy]); growBy != "" {
-		readings = append(readings, web.WatchReading{Field: "grow_by", Label: "Growth limit", Value: growBy})
+		readings = append(readings, web.WatchReading{Field: checks.CheckKeyGrowBy, Label: "Growth limit", Value: growBy})
 	}
 	if within := cfgval.String(w.check[checks.CheckKeyWithin]); within != "" {
-		readings = append(readings, web.WatchReading{Field: "within", Label: "Window", Value: within})
+		readings = append(readings, web.WatchReading{Field: checks.CheckKeyWithin, Label: "Window", Value: within})
 	}
 	return nil, readings, fmt.Sprintf("%s size %s", path, humanize.Bytes(uint64(size)))
 }
@@ -169,9 +171,9 @@ func (b *WebBackend) hdparmWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 	for _, field := range checks.HdparmPredFields {
 		if _, ok := w.check[field].(map[string]any); ok {
 			switch field {
-			case "cached":
+			case checks.HdparmFieldCached:
 				wantCached = true
-			case "read":
+			case checks.HdparmFieldRead:
 				wantRead = true
 			}
 		}
@@ -185,7 +187,7 @@ func (b *WebBackend) hdparmWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 	}
 	readings := []web.WatchReading{{Field: checks.DataKeyDevice, Label: "Device", Value: device}}
 	parts := make([]string, 0, 2)
-	for _, field := range []string{"read", "cached"} {
+	for _, field := range []string{checks.HdparmFieldRead, checks.HdparmFieldCached} {
 		if v, ok := values[field]; ok {
 			readings = append(readings, web.WatchReading{
 				Field: field, Label: field, Value: fmt.Sprintf("%.1f MB/s", v),
@@ -218,9 +220,9 @@ func (b *WebBackend) smartWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRe
 			label := field
 			unit := ""
 			switch field {
-			case "temperature":
+			case checks.SmartFieldTemperature:
 				unit = " °C"
-			case "wear":
+			case checks.SmartFieldWear:
 				unit = metricUnitPercent
 			}
 			readings = append(readings, web.WatchReading{

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/process"
@@ -88,6 +89,11 @@ type procState struct {
 	hadIO     bool
 	fired     bool // previous cycle's predicate, for edge detection
 }
+
+const (
+	procChangeGone      = "gone"
+	procChangeThreshold = "threshold"
+)
 
 // killSpec is a process watch's `then.kill` action: signal the matched PID with
 // the native process signaller (process.OSSignaler). escalate follows the first
@@ -187,13 +193,13 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 		if w.cond.onGone && !observeOnlyCycle(ctx) {
 			st := w.state[pid]
 			env := map[string]string{
-				"SERMO_PID":         strconv.Itoa(pid),
-				"SERMO_PROCESS":     w.match.Name,
-				"SERMO_CHANGE":      "gone",
-				"SERMO_AGE_SECONDS": strconv.FormatInt(int64(t.Sub(st.firstSeen).Seconds()), 10),
+				sermoEnvPID:        strconv.Itoa(pid),
+				sermoEnvProcess:    w.match.Name,
+				sermoEnvChange:     procChangeGone,
+				sermoEnvAgeSeconds: strconv.FormatInt(int64(t.Sub(st.firstSeen).Seconds()), 10),
 			}
 			if w.match.User != "" {
-				env["SERMO_USER"] = w.match.User
+				env[sermoEnvUser] = w.match.User
 			}
 			w.fire(ctx, ProcInfo{PID: pid}, fmt.Sprintf("%s pid %d is gone", w.match.Name, pid), env)
 		}
@@ -215,14 +221,14 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 	age := now.Sub(st.firstSeen)
 
 	env := map[string]string{
-		"SERMO_PID":         strconv.Itoa(s.PID),
-		"SERMO_PROCESS":     w.match.Name,
-		"SERMO_CHANGE":      "threshold",
-		"SERMO_AGE_SECONDS": strconv.FormatInt(int64(age.Seconds()), 10),
-		"SERMO_MEMORY":      strconv.FormatUint(s.RSS, 10),
+		sermoEnvPID:        strconv.Itoa(s.PID),
+		sermoEnvProcess:    w.match.Name,
+		sermoEnvChange:     procChangeThreshold,
+		sermoEnvAgeSeconds: strconv.FormatInt(int64(age.Seconds()), 10),
+		sermoEnvMemory:     strconv.FormatUint(s.RSS, 10),
 	}
 	if w.match.User != "" {
-		env["SERMO_USER"] = w.match.User
+		env[sermoEnvUser] = w.match.User
 	}
 
 	// A watch with only `gone` never fires on presence.
@@ -235,7 +241,7 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 	}
 
 	if cpuPct, ready := cpuPercent(st.prevCPU, s.CPUTicks, st.prevAt, now); ready {
-		env["SERMO_CPU"] = strconv.FormatFloat(cpuPct, 'f', 2, 64)
+		env[sermoEnvCPU] = strconv.FormatFloat(cpuPct, 'f', 2, 64)
 		if c.cpuOp != "" && !cfgval.CompareFloat(cpuPct, c.cpuOp, c.cpuValue) {
 			ok = false
 		}
@@ -244,7 +250,7 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 	}
 
 	if ioRate, ready := ioBytesPerSec(st.prevIO, s.IOBytes, st.hadIO, s.HasIO, st.prevAt, now); ready {
-		env["SERMO_IO"] = strconv.FormatFloat(ioRate, 'f', 0, 64)
+		env[sermoEnvIO] = strconv.FormatFloat(ioRate, 'f', 0, 64)
 		if c.ioOp != "" && !cfgval.CompareFloat(ioRate, c.ioOp, c.ioValue) {
 			ok = false
 		}
@@ -257,19 +263,19 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 }
 
 func (w *procWatcher) fire(ctx context.Context, info ProcInfo, msg string, env map[string]string) {
-	env["SERMO_WATCH"] = w.name
-	env["SERMO_CHECK_TYPE"] = "process"
-	env["SERMO_MESSAGE"] = msg
+	env[sermoEnvWatch] = w.name
+	env[sermoEnvCheckType] = checks.CheckTypeProcess
+	env[sermoEnvMessage] = msg
 	// The kill action only applies to a presence fire (a matched, still-present
 	// PID); a `gone` fire has nothing to signal.
-	killable := w.kill != nil && env["SERMO_CHANGE"] == "threshold"
+	killable := w.kill != nil && env[sermoEnvChange] == procChangeThreshold
 	if w.dryRun {
 		w.emitEvent(Event{Watch: w.name, Kind: eventKindDryRun, Message: w.dryRunActions(killable) + ": " + msg})
 		dispatchDryRunNotify(ctx, w.notifiers, watchMessage(w.name, msg, env), w.name, w.emitEvent)
 		return
 	}
 	if w.inPanic != nil && w.inPanic() {
-		w.emitEvent(Event{Watch: w.name, Kind: "panic-suppressed", Message: "panic mode: hook/notify/kill suppressed: " + msg})
+		w.emitEvent(Event{Watch: w.name, Kind: eventKindPanicSuppressed, Message: "panic mode: hook/notify/kill suppressed: " + msg})
 		return
 	}
 

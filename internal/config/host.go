@@ -11,7 +11,7 @@ import (
 var detectedHost = detectHost()
 
 func detectHost() string {
-	if v := envOverride("SERMO_HOST"); v != "" {
+	if v := envOverride(envHostOverride); v != "" {
 		return v
 	}
 	if h, err := os.Hostname(); err == nil && h != "" {

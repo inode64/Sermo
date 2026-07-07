@@ -38,7 +38,7 @@ type Watch struct {
 	// emitted on the App dimension (instead of Watch) so they are queryable and
 	// shown per application, separate from host watches. Built by BuildAppWatches.
 	App       string
-	CheckType string // e.g. "storage"; for SERMO_CHECK_TYPE (Result.Check is the watch name)
+	CheckType string // e.g. "storage"; for sermoEnvCheckType (Result.Check is the watch name)
 	Check     checks.Check
 	Window    rules.Rule // carries only For/Within; used by rules.WindowState.Fires
 	Hook      HookSpec
@@ -143,7 +143,7 @@ func (w *Watch) RunCycle(ctx context.Context) {
 		return
 	}
 	if w.InPanic != nil && w.InPanic() {
-		w.emit(Event{Watch: w.Name, Kind: "panic-suppressed", Message: "panic mode: hook/notify/expand suppressed"})
+		w.emit(Event{Watch: w.Name, Kind: eventKindPanicSuppressed, Message: "panic mode: hook/notify/expand suppressed"})
 		return
 	}
 
@@ -338,12 +338,12 @@ func watchMessage(name, message string, env map[string]string) notify.Message {
 // reaches the hook without per-type code.
 func hookEnv(name, checkType string, res checks.Result) map[string]string {
 	env := map[string]string{
-		"SERMO_WATCH":      name,
-		"SERMO_CHECK_TYPE": checkType,
-		"SERMO_MESSAGE":    output.Trim(res.Message),
+		sermoEnvWatch:     name,
+		sermoEnvCheckType: checkType,
+		sermoEnvMessage:   output.Trim(res.Message),
 	}
 	for k, v := range res.Data {
-		env["SERMO_"+envKey(k)] = output.Trim(cfgval.String(v))
+		env[sermoEnvPrefix+envKey(k)] = output.Trim(cfgval.String(v))
 	}
 	return env
 }

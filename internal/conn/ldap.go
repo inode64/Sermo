@@ -13,13 +13,18 @@ import (
 
 func init() { Register(ldapProtocol{}) }
 
+const (
+	defaultLDAPPort         = 389
+	defaultLDAPProbeTimeout = 5 * time.Second
+)
+
 // ldapProtocol probes an LDAP directory using go-ldap. With no user it performs
 // an anonymous bind; with a user/password it performs a simple bind (the user is
 // the bind DN). TLS is implicit (LDAPS) when enabled — use port 636.
 type ldapProtocol struct{}
 
 func (ldapProtocol) Name() string       { return "ldap" }
-func (ldapProtocol) DefaultPort() int   { return 389 }
+func (ldapProtocol) DefaultPort() int   { return defaultLDAPPort }
 func (ldapProtocol) RequiresUser() bool { return false }
 
 func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -29,9 +34,9 @@ func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = 389
+		port = defaultLDAPPort
 	}
-	timeout := 5 * time.Second
+	timeout := defaultLDAPProbeTimeout
 	if dl, ok := ctx.Deadline(); ok {
 		if d := time.Until(dl); d > 0 {
 			timeout = d

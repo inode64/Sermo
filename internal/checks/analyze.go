@@ -18,6 +18,13 @@ const (
 	SevError                   // maps to a required failure
 )
 
+// Analyze severity names accepted in YAML and rendered in output.
+const (
+	AnalyzeSeverityError   = "error"
+	AnalyzeSeverityWarning = "warning"
+	AnalyzeSeverityOK      = "ok"
+)
+
 // Analyze stream identifiers accepted by command output analysis rules.
 const (
 	AnalyzeStreamBoth   = "both"
@@ -28,21 +35,21 @@ const (
 func (s Severity) String() string {
 	switch s {
 	case SevError:
-		return "error"
+		return AnalyzeSeverityError
 	case SevWarning:
-		return "warning"
+		return AnalyzeSeverityWarning
 	default:
-		return "ok"
+		return AnalyzeSeverityOK
 	}
 }
 
 func parseSeverity(s string) (Severity, bool) {
 	switch s {
-	case "error":
+	case AnalyzeSeverityError:
 		return SevError, true
-	case "warning":
+	case AnalyzeSeverityWarning:
 		return SevWarning, true
-	case "ok":
+	case AnalyzeSeverityOK:
 		return SevOK, true
 	default:
 		return SevOK, false
@@ -75,7 +82,7 @@ func (a *outputAnalyzer) Analyze(stdout, stderr string) (sev Severity, id, line 
 				continue
 			}
 			for _, r := range a.rules {
-				if r.stream != "both" && r.stream != stream {
+				if r.stream != AnalyzeStreamBoth && r.stream != stream {
 					continue
 				}
 				if r.re.MatchString(ln) {

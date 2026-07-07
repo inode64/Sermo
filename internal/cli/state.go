@@ -12,12 +12,12 @@ import (
 // runState dispatches persistent state-store maintenance commands.
 func (a App) runState(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.commandUsageError("state", "state supports only: compact [--before TIME]")
+		return a.commandUsageError(commandState, "state supports only: compact [--before TIME]")
 	}
 	sub := opts.args[0]
 	rest := opts.args[1:]
-	if sub != "compact" || len(rest) > 0 {
-		return a.commandUsageError("state", "state supports only: compact [--before TIME]")
+	if sub != commandStateCompact || len(rest) > 0 {
+		return a.commandUsageError(commandState, "state supports only: compact [--before TIME]")
 	}
 	return a.runStateCompact(ctx, opts)
 }
@@ -44,14 +44,14 @@ func (a App) runStateCompact(ctx context.Context, opts options) int {
 
 	result, err := store.PruneHistory(before)
 	if err != nil {
-		a.recordAccess(cfg, "state compact", "", "error", err.Error())
+		a.recordAccess(cfg, accessCommandStateCompact, "", accessStatusError, err.Error())
 		return a.fail(opts, fmt.Sprintf("prune state history: %v", err))
 	}
 
 	compactCtx, cancel := context.WithTimeout(ctx, opts.timeout)
 	defer cancel()
 	if err := store.Compact(compactCtx); err != nil {
-		a.recordAccess(cfg, "state compact", "", "error", err.Error())
+		a.recordAccess(cfg, accessCommandStateCompact, "", accessStatusError, err.Error())
 		return a.fail(opts, fmt.Sprintf("compact state database: %v", err))
 	}
 
@@ -82,6 +82,6 @@ func (a App) runStateCompact(ctx context.Context, opts options) int {
 		result.ServiceMetrics,
 		result.Events,
 	)
-	a.recordAccess(cfg, "state compact", "", "ok", fmt.Sprintf("pruned %d rows", result.Rows))
+	a.recordAccess(cfg, accessCommandStateCompact, "", accessStatusOK, fmt.Sprintf("pruned %d rows", result.Rows))
 	return exitSuccess
 }

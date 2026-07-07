@@ -31,9 +31,9 @@ func parseInterfaces(v any) []string {
 // The bool reports whether ALL listed interfaces must succeed.
 func parseInterfaceMatch(entry map[string]any) (all bool, warn string) {
 	switch m := cfgval.AsString(entry[CheckKeyInterfaceMatch]); m {
-	case "", "any":
+	case "", InterfaceMatchAny:
 		return false, ""
-	case "all":
+	case InterfaceMatchAll:
 		return true, ""
 	default:
 		return false, fmt.Sprintf("interface_match %q must be any or all", m)

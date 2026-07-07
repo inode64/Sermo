@@ -496,14 +496,14 @@ func ReadPidfile(path string) (int, error) {
 // are command-match selectors and use exe/cmd directly.
 func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 	var selectors []Selector
-	if paths := cfgval.StringList(tree["pidfile"]); len(paths) > 0 {
+	if paths := cfgval.StringList(tree[ServiceKeyPidfile]); len(paths) > 0 {
 		selectors = append(selectors, Selector{
-			Name:  "pidfile",
+			Name:  string(SelectorPidfile),
 			Type:  SelectorPidfile,
 			Paths: paths,
 		})
 	}
-	if pidfiles, ok := tree["pidfiles"].(map[string]any); ok {
+	if pidfiles, ok := tree[ServiceKeyPidfiles].(map[string]any); ok {
 		for _, role := range sortedMapKeys(pidfiles) {
 			paths := cfgval.StringList(pidfiles[role])
 			if len(paths) == 0 {
@@ -517,7 +517,7 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 		}
 	}
 
-	raw, ok := tree["processes"].(map[string]any)
+	raw, ok := tree[SectionProcesses].(map[string]any)
 	if !ok {
 		return selectors, nil
 	}
@@ -532,10 +532,10 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 		sel := Selector{
 			Name:  name,
 			Type:  SelectorCommandMatch,
-			Exe:   cfgval.AsString(entry["exe"]),
-			Cmd:   cfgval.AsString(entry["cmd"]),
-			User:  cfgval.AsString(entry["user"]),
-			Group: cfgval.AsString(entry["group"]),
+			Exe:   cfgval.AsString(entry[SelectorKeyExe]),
+			Cmd:   cfgval.AsString(entry[SelectorKeyCmd]),
+			User:  cfgval.AsString(entry[SelectorKeyUser]),
+			Group: cfgval.AsString(entry[SelectorKeyGroup]),
 		}
 		if sel.Exe != "" {
 			sel.exePath = canonicalizePath(sel.Exe)

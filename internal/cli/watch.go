@@ -10,23 +10,20 @@ import (
 	"sermo/internal/state"
 )
 
-// watchCommand is the command name reported in watch usage errors.
-const watchCommand = "watch"
-
 // runWatch dispatches host-watch queries against the running daemon.
 func (a App) runWatch(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.commandUsageError(watchCommand, "watch requires subcommand status, monitor or unmonitor")
+		return a.commandUsageError(commandWatch, "watch requires subcommand status, monitor or unmonitor")
 	}
 	switch opts.args[0] {
-	case "status":
+	case commandStatus:
 		return a.runWatchStatus(ctx, opts)
-	case "monitor":
+	case commandMonitor:
 		return a.runWatchMonitor(opts, false)
-	case "unmonitor":
+	case commandUnmonitor:
 		return a.runWatchMonitor(opts, true)
 	default:
-		return a.commandUsageError(watchCommand, fmt.Sprintf("unknown watch subcommand %q", opts.args[0]))
+		return a.commandUsageError(commandWatch, fmt.Sprintf("unknown watch subcommand %q", opts.args[0]))
 	}
 }
 
@@ -36,12 +33,12 @@ func (a App) runWatch(ctx context.Context, opts options) int {
 // unmonitoring a service never touches its watches and vice versa. The daemon
 // reads this key live each cycle.
 func (a App) runWatchMonitor(opts options, pause bool) int {
-	verb := "monitor"
+	verb := commandMonitor
 	if pause {
-		verb = "unmonitor"
+		verb = commandUnmonitor
 	}
 	if len(opts.args) != 2 {
-		return a.commandUsageError(watchCommand, fmt.Sprintf("watch %s requires exactly one watch name", verb))
+		return a.commandUsageError(commandWatch, fmt.Sprintf("watch %s requires exactly one watch name", verb))
 	}
 	name := opts.args[1]
 
@@ -66,21 +63,21 @@ func (a App) runWatchMonitor(opts options, pause bool) int {
 	if err := store.SetActive(key, !pause, state.SourceCLI); err != nil {
 		return a.fail(opts, fmt.Sprintf("watch %s failed: %v", verb, err))
 	}
-	status := "resumed"
+	status := monitorStatusResumed
 	switch {
 	case pause:
-		status = "paused"
+		status = monitorStatusPaused
 	case !found || active:
-		status = "not-paused"
+		status = monitorStatusNotPaused
 	}
 	if opts.json {
 		writeJSON(a.Stdout, map[string]any{"watch": name, "monitoring": status})
 		return exitSuccess
 	}
 	switch status {
-	case "paused":
+	case monitorStatusPaused:
 		fmt.Fprintf(a.Stdout, "monitoring paused for watch %s\n", name)
-	case "resumed":
+	case monitorStatusResumed:
 		fmt.Fprintf(a.Stdout, "monitoring resumed for watch %s\n", name)
 	default:
 		fmt.Fprintf(a.Stdout, "watch %s was not paused\n", name)
@@ -118,7 +115,7 @@ func knownWatchName(cfg *config.Config, name string) bool {
 
 func (a App) runWatchStatus(ctx context.Context, opts options) int {
 	if len(opts.args) != 2 {
-		return a.commandUsageError(watchCommand, "watch status requires exactly one watch name")
+		return a.commandUsageError(commandWatch, "watch status requires exactly one watch name")
 	}
 	name := opts.args[1]
 	state := app.TargetStateOK

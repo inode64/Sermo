@@ -11,7 +11,7 @@ import (
 var detectedInit = detectInit()
 
 func detectInit() string {
-	if v := envOverride("SERMO_INIT"); v != "" {
+	if v := envOverride(envInitOverride); v != "" {
 		return strings.ToLower(v)
 	}
 	if _, err := os.Stat("/run/systemd/system"); err == nil {

@@ -42,7 +42,12 @@ const (
 	templateCurrentLabel  = "current"
 	// keyVersions is the discovery-metadata map key holding the version instances
 	// a service exposes; it is stripped from a concrete resolved definition.
-	keyVersions = "versions"
+	keyVersions            = "versions"
+	keyVersionFrom         = "version_from"
+	keyVersionsFrom        = "from"
+	keyVersionsRequire     = "require"
+	keyVersionsCurrentFrom = "current_from"
+	keyVersionsUnversioned = "unversioned"
 	// Template token variable names: the ${...} body variable each placeholder
 	// binds, and the key its captured value is stored under in a match.
 	varVersion  = "version"
@@ -50,6 +55,10 @@ const (
 	varSep      = "sep"
 	varInstance = "instance"
 )
+
+// AppKeyVersionFrom is the app catalog field that delegates version discovery
+// to another app document.
+const AppKeyVersionFrom = keyVersionFrom
 
 // tokenFor returns the template token a name carries, or nil if it is not a
 // version template.
@@ -197,7 +206,7 @@ func versionsRequire(body map[string]any) []string {
 	if !ok {
 		return nil
 	}
-	return cfgval.StringList(v["require"])
+	return cfgval.StringList(v[keyVersionsRequire])
 }
 
 func requireSatisfied(require []string, vals map[string]string, toks []tmplToken) bool {
@@ -237,7 +246,7 @@ func (c *Config) multiTokenDiscoverySource(body map[string]any, toks []tmplToken
 			binary:  true,
 		}
 	}
-	for _, name := range cfgval.StringList(body["apps"]) {
+	for _, name := range cfgval.StringList(body[keyApps]) {
 		doc, ok := c.Apps[linkedAppTemplateNameMulti(name, toks)]
 		if !ok {
 			continue
@@ -456,8 +465,8 @@ func instantiateMulti(body map[string]any, templateName string, match templateMa
 		applyUnversionedOverrides(out)
 	}
 	injectMaterializedBinary(out, materializedBinaryFromMatch(body, kind, match))
-	out["kind"] = kind
-	out["name"] = name
+	out[keyKind] = kind
+	out[keyName] = name
 	trimMaterializedMetadata(out)
 	delete(out, keyVersions)
 	return &Document{
@@ -890,7 +899,7 @@ func (c *Config) versionDiscoverySource(body map[string]any, tok tmplToken, kind
 	if paths := pathsContainingMarker(c.versionsFromPaths(body), tok.marker()); len(paths) > 0 {
 		return versionDiscovery{paths: paths, options: body}
 	}
-	for _, name := range cfgval.StringList(body["apps"]) {
+	for _, name := range cfgval.StringList(body[keyApps]) {
 		doc, ok := c.Apps[linkedAppTemplateName(name, tok)]
 		if !ok {
 			continue
@@ -933,14 +942,14 @@ func (c *Config) versionsFromPaths(body map[string]any) []string {
 
 func versionsFromPathsForBackend(body map[string]any, backend string) []string {
 	if v, ok := body[keyVersions].(map[string]any); ok {
-		return versionFromPaths(v["from"], backend)
+		return versionFromPaths(v[keyVersionsFrom], backend)
 	}
 	return nil
 }
 
 func allVersionsFromPaths(body map[string]any) []string {
 	if v, ok := body[keyVersions].(map[string]any); ok {
-		return allVersionFromPaths(v["from"])
+		return allVersionFromPaths(v[keyVersionsFrom])
 	}
 	return nil
 }
@@ -968,7 +977,7 @@ func versionsCurrentFromCandidates(body map[string]any) []string {
 	if !ok {
 		return nil
 	}
-	return cfgval.StringList(v["current_from"])
+	return cfgval.StringList(v[keyVersionsCurrentFrom])
 }
 
 func anyContains(values []string, marker string) bool {
@@ -989,7 +998,7 @@ func versionUnversionedEnabled(body map[string]any, tok tmplToken) bool {
 	if !ok {
 		return tok.allowEmpty
 	}
-	raw, present := versions["unversioned"]
+	raw, present := versions[keyVersionsUnversioned]
 	if !present {
 		return tok.allowEmpty
 	}
@@ -1021,11 +1030,11 @@ func unversionedVersionPath(discoverPath string, tok tmplToken) (string, bool) {
 // intact for instantiateVersion to bind.
 func (c *Config) templateBody(tmpl *Document, kind string) map[string]any {
 	body := stripMeta(tmpl.Body)
-	body["kind"] = kind
-	if base := cfgval.String(tmpl.Body["uses"]); base != "" {
+	body[keyKind] = kind
+	if base := cfgval.String(tmpl.Body[ServiceKeyUses]); base != "" {
 		if src, ok := c.CatalogServices[base]; ok {
 			body = mergeMaps(stripMeta(src.Body), body)
-			body["kind"] = kind
+			body[keyKind] = kind
 		}
 	}
 	return body
@@ -1076,8 +1085,8 @@ func instantiateVersion(body map[string]any, templateName string, match template
 		applyUnversionedOverrides(out)
 	}
 	injectMaterializedBinary(out, materializedBinaryFromMatch(body, kind, match))
-	out["kind"] = kind
-	out["name"] = name
+	out[keyKind] = kind
+	out[keyName] = name
 	trimMaterializedMetadata(out)
 	delete(out, keyVersions) // discovery metadata, not part of the concrete definition
 	return &Document{
@@ -1091,7 +1100,7 @@ func instantiateVersion(body map[string]any, templateName string, match template
 }
 
 func templateUsesCurrentLabel(body map[string]any) bool {
-	for _, key := range []string{"display_name", "description"} {
+	for _, key := range []string{keyDisplayName, keyDescription} {
 		if strings.Contains(cfgval.String(body[key]), templateCurrentMarker) {
 			return true
 		}
@@ -1147,11 +1156,11 @@ func injectMaterializedBinary(out map[string]any, binary string) {
 		vars = map[string]any{}
 		out[sectionVariables] = vars
 	}
-	vars["binary"] = binary
+	vars[VariableKeyBinary] = binary
 }
 
 func trimMaterializedMetadata(out map[string]any) {
-	for _, key := range []string{"name", "display_name", "description"} {
+	for _, key := range []string{keyName, keyDisplayName, keyDescription} {
 		if value, ok := out[key].(string); ok {
 			out[key] = strings.TrimSpace(value)
 		}
@@ -1163,7 +1172,7 @@ func applyUnversionedOverrides(out map[string]any) {
 	if !ok {
 		return
 	}
-	overrides, ok := versions["unversioned"].(map[string]any)
+	overrides, ok := versions[keyVersionsUnversioned].(map[string]any)
 	if !ok {
 		return
 	}

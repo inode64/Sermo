@@ -122,7 +122,7 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 	}
 	op := cfgval.AsString(entry[CheckKeyOp])
 	if !validCompareOp(op) {
-		return nil, "sql check op must be one of ==, !=, >, >=, <, <=, contains, =~"
+		return nil, "sql check op must be one of " + cfgval.AssertOpSummary
 	}
 	value := cfgval.String(entry[CheckKeyValue])
 	if value == "" {

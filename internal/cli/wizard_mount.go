@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	mountSectionKey   = "mount"
 	storagesConfigDir = "storages"
 )
 
@@ -32,7 +31,7 @@ func (a App) writeWizardMounts(p *assist.Prompt, opts options, globalPath string
 		if b, ok := body.(map[string]any); ok {
 			for k, v := range b {
 				switch k {
-				case "refcount", "umount", "stop_policy", mountSectionKey:
+				case config.MountKeyRefcount, config.MountKeyUmount, config.MountKeyStopPolicy, config.StorageKeyMount:
 					// Moved into mount: below.
 				default:
 					doc[k] = v
@@ -87,21 +86,21 @@ func wizardMountStorageDoc(name string, body any) map[string]any {
 	doc := map[string]any{wizardFieldName: name}
 	mount := map[string]any{}
 	if b, ok := body.(map[string]any); ok {
-		for _, key := range []string{"refcount", "umount", "stop_policy"} {
+		for _, key := range []string{config.MountKeyRefcount, config.MountKeyUmount, config.MountKeyStopPolicy} {
 			if v, present := b[key]; present {
 				mount[key] = v
 			}
 		}
-		if existing, ok := b[mountSectionKey].(map[string]any); ok {
+		if existing, ok := b[config.StorageKeyMount].(map[string]any); ok {
 			for k, v := range existing {
 				mount[k] = v
 			}
 		}
 	}
 	if len(mount) == 0 {
-		mount["refcount"] = true
+		mount[config.MountKeyRefcount] = true
 	}
-	doc[mountSectionKey] = mount
+	doc[config.StorageKeyMount] = mount
 	return doc
 }
 
@@ -162,7 +161,7 @@ func mountFileTarget(path string) string {
 	if kind, _ := doc[wizardFieldKind].(string); kind != "" && kind != wizardNounStorage {
 		return ""
 	}
-	if _, ok := doc[mountSectionKey].(map[string]any); !ok {
+	if _, ok := doc[config.StorageKeyMount].(map[string]any); !ok {
 		return ""
 	}
 	target := cfgval.String(doc[wizardFieldPath])

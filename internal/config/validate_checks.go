@@ -190,7 +190,7 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 		} else if h3 {
 			// HTTP/3 runs over QUIC (TLS-only) and cannot use an HTTP proxy.
 			if u := cfgval.String(fields[checks.CheckKeyURL]); u != "" {
-				if parsed, err := url.Parse(u); err != nil || parsed.Scheme != "https" {
+				if parsed, err := url.Parse(u); err != nil || parsed.Scheme != checks.URLSchemeHTTPS {
 					add("%s.http3 requires an https url", prefix)
 				}
 			}
@@ -251,10 +251,10 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 				if cond, ok := m[path].(map[string]any); ok {
 					op := cfgval.String(cond[checks.CheckKeyOp])
 					if op == "" {
-						op = "=="
+						op = cfgval.CompareOpEqual
 					}
 					if !cfgval.IsAssertOp(op) {
-						add("%s.expect_json.%s op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, path, op)
+						add("%s.expect_json.%s op %q is not one of %s", prefix, path, op, cfgval.AssertOpSummary)
 						continue
 					}
 					if err := checks.ValidateAssertionValue(prefix+"."+checks.CheckKeyExpectJSON+"."+path, op, cfgval.String(cond[checks.CheckKeyValue])); err != nil {
@@ -328,7 +328,7 @@ func isExpectExit(raw any) bool {
 func validateOpValue(prefix, label string, m map[string]any, add addFunc) {
 	op := cfgval.String(m[checks.CheckKeyOp])
 	if !cfgval.IsAssertOp(op) {
-		add("%s.%s op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, label, op)
+		add("%s.%s op %q is not one of %s", prefix, label, op, cfgval.AssertOpSummary)
 		return
 	}
 	value := cfgval.String(m[checks.CheckKeyValue])
@@ -343,10 +343,10 @@ func validatePortsFields(prefix string, fields map[string]any, add addFunc) {
 	if err := validatePortSpec(cfgval.String(fields[checks.CheckKeyPorts])); err != "" {
 		add("%s.ports %s", prefix, err)
 	}
-	if v := cfgval.String(fields[checks.CheckKeyExpect]); v != "" && v != "open" && v != "closed" && v != "any" {
+	if v := cfgval.String(fields[checks.CheckKeyExpect]); v != "" && v != checks.PortStateOpen && v != checks.PortStateClosed && v != checks.PortExpectAny {
 		add("%s.expect must be open, closed or any", prefix)
 	}
-	if v := cfgval.String(fields[checks.CheckKeyMatch]); v != "" && v != "all" && v != "any" && v != "none" {
+	if v := cfgval.String(fields[checks.CheckKeyMatch]); v != "" && v != checks.PortMatchAll && v != checks.PortMatchAny && v != checks.PortMatchNone {
 		add("%s.match must be all, any or none", prefix)
 	}
 	if v, present := fields[checks.CheckKeyOnChange]; present {
@@ -486,7 +486,7 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 	}
 }
 
-var countKinds = set("any", "file", "dir", "symlink")
+var countKinds = set(checks.CountKindAny, checks.CountKindFile, checks.CountKindDir, checks.CountKindSymlink)
 var sqlEngines = set(
 	checks.SQLEngineMySQL,
 	checks.SQLEngineMariaDB,
@@ -584,7 +584,7 @@ func validateAnalyze(path string, entry map[string]any, add addFunc) {
 		}
 		seen[id] = true
 		switch cfgval.AsString(rm[checks.CheckKeySeverity]) {
-		case "error", "warning", "ok":
+		case checks.AnalyzeSeverityError, checks.AnalyzeSeverityWarning, checks.AnalyzeSeverityOK:
 		default:
 			add("%s.analyze rule %q severity must be error, warning or ok", path, id)
 		}
@@ -620,7 +620,7 @@ func validateCommandExport(path string, entry map[string]any, add addFunc) {
 		}
 		switch spec := exports[name].(type) {
 		case map[string]any:
-			if from := cfgval.String(spec[checks.CheckKeyFrom]); from != "" && from != "stdout" && from != "stderr" {
+			if from := cfgval.String(spec[checks.CheckKeyFrom]); from != "" && from != checks.AnalyzeStreamStdout && from != checks.AnalyzeStreamStderr {
 				add("%s.export.%s.from must be stdout or stderr", path, name)
 			}
 			if v, present := spec[checks.CheckKeyTrim]; present {
@@ -917,7 +917,7 @@ func validateWebsocketFields(prefix string, fields map[string]any, add addFunc) 
 		return
 	}
 	switch u.Scheme {
-	case "ws", "wss", "http", "https":
+	case checks.URLSchemeWS, checks.URLSchemeWSS, checks.URLSchemeHTTP, checks.URLSchemeHTTPS:
 	default:
 		add("%s.url scheme must be ws, wss, http or https", prefix)
 	}
@@ -935,7 +935,7 @@ func validateAutofsFields(prefix string, fields map[string]any, add addFunc) {
 	}
 	op := cfgval.String(count[checks.CheckKeyOp])
 	if !cfgval.IsCompareOp(op) {
-		add("%s.count.op %q is not one of >, >=, <, <=, ==, !=", prefix, op)
+		add("%s.count.op %q is not one of %s", prefix, op, cfgval.CompareOpSummary)
 	}
 	if !isNumeric(cfgval.String(count[checks.CheckKeyValue])) {
 		add("%s.count.value must be numeric", prefix)
@@ -969,7 +969,7 @@ func validateSizeFields(prefix string, fields map[string]any, add addFunc) {
 func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
 	op := cfgval.String(fields[checks.CheckKeyOp])
 	if !cfgval.IsAssertOp(op) {
-		add("%s.op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, op)
+		add("%s.op %q is not one of %s", prefix, op, cfgval.AssertOpSummary)
 	}
 	if cfgval.String(fields[checks.CheckKeyValue]) == "" {
 		add("%s.value is required for a mongodb-query check", prefix)
@@ -1032,7 +1032,7 @@ func validateInterfaceFields(prefix string, fields map[string]any, add addFunc) 
 			add("%s.interface must be a string or a list of strings (name/IP/MAC)", prefix)
 		}
 	}
-	if m := cfgval.String(fields[checks.CheckKeyInterfaceMatch]); m != "" && m != "any" && m != "all" {
+	if m := cfgval.String(fields[checks.CheckKeyInterfaceMatch]); m != "" && m != checks.InterfaceMatchAny && m != checks.InterfaceMatchAll {
 		add("%s.interface_match %q must be any or all", prefix, m)
 	}
 }
@@ -1046,7 +1046,7 @@ func validateInfluxFields(prefix string, fields map[string]any, add addFunc) {
 	}
 	op := cfgval.String(fields[checks.CheckKeyOp])
 	if !cfgval.IsAssertOp(op) {
-		add("%s.op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, op)
+		add("%s.op %q is not one of %s", prefix, op, cfgval.AssertOpSummary)
 	}
 	if cfgval.String(fields[checks.CheckKeyValue]) == "" {
 		add("%s.value is required for an influxdb-query check", prefix)
@@ -1100,7 +1100,7 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 	}
 	op := cfgval.String(fields[checks.CheckKeyOp])
 	if !cfgval.IsAssertOp(op) {
-		add("%s.op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, op)
+		add("%s.op %q is not one of %s", prefix, op, cfgval.AssertOpSummary)
 	}
 	value := cfgval.String(fields[checks.CheckKeyValue])
 	if value == "" {
@@ -1215,7 +1215,7 @@ func validateCount(entry map[string]any, path string, add addFunc) {
 		threshold = m
 	}
 	if op := cfgval.String(threshold[checks.CheckKeyOp]); !isValidCompareOp(op) {
-		add("%s count check requires a valid op (>=, >, <=, <, ==, !=)", path)
+		add("%s count check requires a valid op (%s)", path, cfgval.CompareOpSummary)
 	}
 	if !isNumeric(cfgval.String(threshold[checks.CheckKeyValue])) {
 		add("%s count check value %q must be numeric", path, cfgval.String(threshold[checks.CheckKeyValue]))

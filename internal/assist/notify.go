@@ -26,11 +26,11 @@ func chooseNotifiers(p *Prompt, env Env) []string {
 	if len(env.DefaultNotify) > 0 {
 		question = "Notify which targets? ('default' inherits global notify: " + strings.Join(env.DefaultNotify, ", ") + ")"
 	}
-	idx, kw := p.MultiChooseKeyword(question, env.Notifiers, "none", "default")
+	idx, kw := p.MultiChooseKeyword(question, env.Notifiers, config.NotifyNone, config.NotifyKeywordDefault)
 	switch kw {
-	case "none":
+	case config.NotifyNone:
 		return []string{config.NotifyNone}
-	case "default":
+	case config.NotifyKeywordDefault:
 		if len(env.DefaultNotify) > 0 {
 			return nil // inherit the configured global default
 		}

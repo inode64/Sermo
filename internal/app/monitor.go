@@ -157,7 +157,7 @@ func (m *Monitor) Reload() {
 
 	if m.deps.Emit != nil {
 		m.deps.Emit(Event{
-			Kind:    "reload",
+			Kind:    eventKindReload,
 			Message: fmt.Sprintf("config reloaded (%d services, %d watches)", len(workers), len(watches)),
 		})
 	}
@@ -246,7 +246,7 @@ func (m *Monitor) stopGenerationLocked(final bool) {
 func (m *Monitor) emitReloadError(msg string) {
 	m.Logger.Warn("config reload rejected", "error", msg)
 	if m.deps.Emit != nil {
-		m.deps.Emit(Event{Kind: eventKindError, Action: "reload", Message: msg})
+		m.deps.Emit(Event{Kind: eventKindError, Action: eventActionReload, Message: msg})
 	}
 }
 

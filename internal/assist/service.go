@@ -7,6 +7,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/process"
 )
 
 // serviceAssistant enables a catalog service as a monitored service. It detects
@@ -157,8 +158,8 @@ func chooseServices(p *Prompt, question string, cands []ServiceCandidate, allowN
 	var sel []int
 	if allowNone {
 		var keyword string
-		sel, keyword = p.MultiChooseKeyword(question, labels, "none")
-		if keyword == "none" {
+		sel, keyword = p.MultiChooseKeyword(question, labels, config.SelectionKeywordNone)
+		if keyword == config.SelectionKeywordNone {
 			return nil
 		}
 	} else {
@@ -199,18 +200,18 @@ func askServiceProps(p *Prompt, env Env, c ServiceCandidate, reviewPort bool) (s
 		if unit == "" {
 			unit = c.Name
 		}
-		body["service"] = unit
+		body[config.ServiceKeyService] = unit
 		addCheckOnlyWatch(body, serviceStatusWatchName, map[string]any{
 			checks.CheckKeyType:   checks.CheckTypeService,
 			checks.CheckKeyExpect: "active",
 		})
 	} else {
-		body["uses"] = c.Name
+		body[config.ServiceKeyUses] = c.Name
 	}
 	mergeServiceVariables(body, c.Variables)
 	if reviewPort && c.Port > 0 {
 		if n := p.AskInt(fmt.Sprintf("Port for %s?", c.Name), c.Port); n > 0 && n != c.Port {
-			mergeServiceVariables(body, map[string]any{"port": n})
+			mergeServiceVariables(body, map[string]any{config.VariableKeyPort: n})
 		}
 	}
 	if len(c.ConfigPaths) > 0 && p.Confirm(configWatchQuestion(c), true) {
@@ -218,9 +219,9 @@ func askServiceProps(p *Prompt, env Env, c ServiceCandidate, reviewPort bool) (s
 	}
 	if c.Generic {
 		if pidfile := askServicePidfile(p, c); pidfile != "" {
-			body["pidfile"] = pidfile
+			body[config.ServiceKeyPidfile] = pidfile
 		} else if selector, label := detectedProcessSelector(c); selector != nil && p.Confirm("No pidfile — match "+c.Name+" by "+label+"?", true) {
-			body["processes"] = map[string]any{"main": selector}
+			body[config.SectionProcesses] = map[string]any{"main": selector}
 		}
 	}
 	return c.Name, body
@@ -230,10 +231,10 @@ func mergeServiceVariables(body map[string]any, vars map[string]any) {
 	if len(vars) == 0 {
 		return
 	}
-	dst, _ := body["variables"].(map[string]any)
+	dst, _ := body[config.SectionVariables].(map[string]any)
 	if dst == nil {
 		dst = map[string]any{}
-		body["variables"] = dst
+		body[config.SectionVariables] = dst
 	}
 	for key, value := range vars {
 		dst[key] = value
@@ -292,16 +293,16 @@ func askServicePidfile(p *Prompt, c ServiceCandidate) string {
 func detectedProcessSelector(c ServiceCandidate) (map[string]any, string) {
 	selector := map[string]any{}
 	if c.Cmd != "" {
-		selector["cmd"] = c.Cmd
+		selector[process.SelectorKeyCmd] = c.Cmd
 		if c.User != "" {
-			selector["user"] = c.User
+			selector[process.SelectorKeyUser] = c.User
 		}
 		return selector, "command pattern " + c.Cmd
 	}
 	if c.Exe != "" {
-		selector["exe"] = c.Exe
+		selector[process.SelectorKeyExe] = c.Exe
 		if c.User != "" {
-			selector["user"] = c.User
+			selector[process.SelectorKeyUser] = c.User
 		}
 		return selector, "executable " + c.Exe
 	}
@@ -321,18 +322,18 @@ func serviceLabel(c ServiceCandidate) string {
 		}
 		details = append(details, port)
 	}
-	if host, _ := c.Variables["host"].(string); host != "" {
-		details = append(details, labelField("host", host))
+	if host, _ := c.Variables[config.VariableKeyHost].(string); host != "" {
+		details = append(details, labelField(config.VariableKeyHost, host))
 	}
 	if len(c.ConfigPaths) > 0 {
 		details = append(details, labelField("config", c.ConfigPaths[0]))
 	}
 	if c.Pidfile != "" {
-		details = append(details, labelField("pidfile", c.Pidfile))
+		details = append(details, labelField(config.ServiceKeyPidfile, c.Pidfile))
 	} else if c.Cmd != "" {
 		details = append(details, "cmd match")
 	} else if c.Exe != "" {
-		details = append(details, labelField("exe", c.Exe))
+		details = append(details, labelField(process.SelectorKeyExe, c.Exe))
 	}
 	if !c.UnitPresent {
 		details = append(details, "unit not found")

@@ -24,7 +24,7 @@ const defaultSLASeriesWindow = 24 * time.Hour
 // disabled) are absent from the series, never counted as downtime.
 func (a App) runSLA(opts options) int {
 	if len(opts.args) > 1 {
-		return a.commandUsageError("sla", "sla accepts at most one service name")
+		return a.commandUsageError(commandSLA, "sla accepts at most one service name")
 	}
 	cfg, code := a.loadConfig(opts)
 	if code != exitSuccess {
@@ -75,7 +75,7 @@ func (a App) runSLA(opts options) int {
 func (a App) runSLASeries(opts options, cfg *config.Config) int {
 	service := opts.service()
 	if service == "" {
-		return a.commandUsageError("sla", "sla --series requires a service name")
+		return a.commandUsageError(commandSLA, "sla --series requires a service name")
 	}
 	canonical, ok := cfg.CanonicalServiceName(service)
 	if !ok {

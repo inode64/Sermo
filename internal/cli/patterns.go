@@ -6,6 +6,8 @@ import (
 	"text/tabwriter"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/config"
+	"sermo/internal/rules"
 )
 
 // runPatterns lists the output-analysis pattern sets (catalog/patterns): each
@@ -13,7 +15,7 @@ import (
 // binary, so it is a bespoke lister rather than appinspect.List.
 func (a App) runPatterns(opts options) int {
 	if len(opts.args) > 0 {
-		return a.commandUsageError("patterns", "patterns takes no arguments")
+		return a.commandUsageError(commandPatterns, "patterns takes no arguments")
 	}
 	cfg, code := a.loadConfig(opts)
 	if code != exitSuccess {
@@ -39,11 +41,11 @@ func (a App) runPatterns(opts options) int {
 		if doc == nil {
 			continue
 		}
-		rules, _ := doc.Body["rules"].([]any)
+		ruleList, _ := doc.Body[rules.SectionRules].([]any)
 		reports = append(reports, setReport{
 			Name:        name,
-			Rules:       len(rules),
-			Description: cfgval.AsString(doc.Body["description"]),
+			Rules:       len(ruleList),
+			Description: cfgval.AsString(doc.Body[config.EntryKeyDescription]),
 		})
 	}
 

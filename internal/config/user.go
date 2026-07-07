@@ -11,7 +11,7 @@ import (
 var detectedUser = detectUser()
 
 func detectUser() string {
-	if v := envOverride("SERMO_USER"); v != "" {
+	if v := envOverride(envUserOverride); v != "" {
 		return v
 	}
 	if u, err := user.Current(); err == nil && u.Username != "" {
