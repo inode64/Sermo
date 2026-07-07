@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -43,7 +44,7 @@ func SampleZombies() (count uint64, ok bool) { return defaultZombieSampler() }
 
 // defaultZombieSampler counts processes whose /proc/<pid>/stat run state is "Z".
 func defaultZombieSampler() (uint64, bool) {
-	entries, err := os.ReadDir("/proc")
+	entries, err := os.ReadDir(procRootPath)
 	if err != nil {
 		return 0, false
 	}
@@ -64,7 +65,7 @@ func defaultZombieSampler() (uint64, bool) {
 // or "" if it cannot be read. The comm field may contain spaces and parentheses,
 // so the state is the first token after the final ')'.
 func procRunState(pid int) string {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	data, err := os.ReadFile(filepath.Join(procRootPath, strconv.Itoa(pid), "stat"))
 	if err != nil {
 		return ""
 	}

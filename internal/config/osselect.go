@@ -11,6 +11,11 @@ const osMarker = "${os}"
 
 const keyOSDefault = "default"
 
+const (
+	osReleaseEtcPath = "/etc/os-release"
+	osReleaseUsrPath = "/usr/lib/os-release"
+)
+
 // detectedOS holds the OS id used for ${os} and `os:` selectors. Resolved once at
 // package load; tests may override it before calling Load.
 var detectedOS = detectOS()
@@ -27,7 +32,7 @@ func detectOS() string {
 
 // osReleaseID returns the lowercased ID= field of os-release, or "".
 func osReleaseID() string {
-	for _, path := range []string{"/etc/os-release", "/usr/lib/os-release"} {
+	for _, path := range []string{osReleaseEtcPath, osReleaseUsrPath} {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			continue

@@ -127,7 +127,7 @@ func SampleDiskIO(device string) (DiskIOSample, error) { return defaultDiskIOSam
 // device name: reads, reads-merged, sectors-read, ms-reading, writes,
 // writes-merged, sectors-written, ms-writing, in-flight, io-ticks-ms, ….
 func defaultDiskIOSampler(device string) (DiskIOSample, error) {
-	data, err := os.ReadFile("/proc/diskstats")
+	data, err := os.ReadFile(procDiskstatsPath)
 	if err != nil {
 		return DiskIOSample{}, err
 	}

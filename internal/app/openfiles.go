@@ -18,6 +18,11 @@ import (
 // once per TTL (the smart/hdparm interval-bound pattern, see heavyLiveViewTypes).
 const openFilesTallyTTL = time.Minute
 
+const (
+	procRootPath = "/proc"
+	procFDDir    = "fd"
+)
+
 // openFilesByMountCached returns open-file counts keyed by mount point, computed
 // at most once per openFilesTallyTTL and shared across every storage watch. The
 // lock is held across the scan so concurrent dashboard requests coalesce onto a
@@ -59,7 +64,7 @@ func scanOpenFilesByMount(mounts []checks.Mount) map[string]int64 {
 		return tally
 	}
 	for _, pid := range pids {
-		fdDir := filepath.Join("/proc", strconv.Itoa(pid), "fd")
+		fdDir := filepath.Join(procRootPath, strconv.Itoa(pid), procFDDir)
 		entries, err := os.ReadDir(fdDir)
 		if err != nil {
 			continue // process exited or its fd directory is not readable

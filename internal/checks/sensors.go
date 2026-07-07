@@ -147,7 +147,7 @@ func sensorValueMap(summary SensorValues) map[string]float64 {
 }
 
 // defaultSensorSampler reads /sys/class/hwmon.
-func defaultSensorSampler() ([]SensorReading, error) { return readHwmon("/sys/class/hwmon") }
+func defaultSensorSampler() ([]SensorReading, error) { return readHwmon(sysHwmonPath) }
 
 // SampleSensors returns one live hardware-sensor observation using the default
 // hwmon sampler.

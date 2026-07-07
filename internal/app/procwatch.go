@@ -21,7 +21,10 @@ import (
 
 // procClockTicks is the kernel USER_HZ (jiffies/second), used to turn CPU ticks
 // into seconds. 100 is correct on virtually all Linux builds (mirrors metrics).
-const procClockTicks = 100.0
+const (
+	procClockTicks = 100.0
+	procIOFilename = "io"
+)
 
 // ProcMatch selects which processes a process watch tracks: by name (the exe
 // basename or its full resolved path) and optionally the owning user.
@@ -509,7 +512,7 @@ func procMatchesWithLookup(m ProcMatch, id process.Identity, lookup *process.Use
 // readProcIO sums read_bytes and write_bytes from /proc/<pid>/io (the bytes that
 // actually hit storage). Unreadable (permission or unsupported) yields ok=false.
 func readProcIO(pid int) (uint64, bool) {
-	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/io")
+	data, err := os.ReadFile(filepath.Join(procRootPath, strconv.Itoa(pid), procIOFilename))
 	if err != nil {
 		return 0, false
 	}
