@@ -26,14 +26,14 @@ func compareValue(result, op, value string) (bool, error) {
 		if err != nil {
 			return false, fmt.Errorf("%w for op %s", err, op)
 		}
-		vf, err := parseNumericString("value", value)
+		vf, err := parseNumericString(CheckKeyValue, value)
 		if err != nil {
 			return false, err
 		}
 		return compareFloat(rf, op, vf), nil
 	case "==", "!=":
 		rf, rerr := parseNumericString("result", result)
-		vf, verr := parseNumericString("value", value)
+		vf, verr := parseNumericString(CheckKeyValue, value)
 		if rerr == nil && verr == nil {
 			return compareFloat(rf, op, vf), nil
 		}
@@ -88,11 +88,11 @@ func ParseOutputMatcher(v any) (OutputMatcher, string) {
 	case string:
 		return OutputMatcher{Substring: t}, ""
 	case map[string]any:
-		op := cfgval.AsString(t["op"])
+		op := cfgval.AsString(t[CheckKeyOp])
 		if !validCompareOp(op) {
 			return OutputMatcher{}, "op must be one of ==, !=, >, >=, <, <=, contains, =~"
 		}
-		value := cfgval.String(t["value"])
+		value := cfgval.String(t[CheckKeyValue])
 		if err := ValidateAssertionValue("", op, value); err != nil {
 			return OutputMatcher{}, err.Error()
 		}
@@ -234,16 +234,16 @@ func VersionOutput(stdout, stderr string) string {
 // by the http and connection checks. It returns the operator and value (empty op
 // when the field is absent) or a warning when the operator is invalid.
 func parseExpectLatency(entry map[string]any) (op, value, warn string) {
-	lat, ok := entry["expect_latency"].(map[string]any)
+	lat, ok := entry[CheckKeyExpectLatency].(map[string]any)
 	if !ok {
 		return "", "", ""
 	}
-	op = cfgval.AsString(lat["op"])
+	op = cfgval.AsString(lat[CheckKeyOp])
 	if !validCompareOp(op) {
 		return "", "", "expect_latency op must be one of ==, !=, >, >=, <, <=, contains, =~"
 	}
-	value = cfgval.String(lat["value"])
-	if err := ValidateAssertionValue("expect_latency", op, value); err != nil {
+	value = cfgval.String(lat[CheckKeyValue])
+	if err := ValidateAssertionValue(CheckKeyExpectLatency, op, value); err != nil {
 		return "", "", err.Error()
 	}
 	return op, value, ""
@@ -251,7 +251,7 @@ func parseExpectLatency(entry map[string]any) (op, value, warn string) {
 
 // ValidateAssertionValue checks the value side of assertion operators.
 func ValidateAssertionValue(label, op, value string) error {
-	valueLabel := "value"
+	valueLabel := CheckKeyValue
 	if label != "" {
 		valueLabel = label + " value"
 	}

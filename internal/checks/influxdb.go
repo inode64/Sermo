@@ -54,15 +54,21 @@ func (c influxCheck) Run(ctx context.Context) Result {
 		return c.result(false, "influxdb: "+err.Error(), start)
 	}
 	res := c.result(ok, fmt.Sprintf("influxdb: %q %s %q = %t", result, c.op, c.value, ok), start)
-	data := map[string]any{"language": c.language, "query": c.query, "op": c.op, "threshold": c.value, "result": result}
+	data := map[string]any{
+		DataKeyLanguage:  c.language,
+		DataKeyQuery:     c.query,
+		DataKeyOp:        c.op,
+		DataKeyThreshold: c.value,
+		DataKeyResult:    result,
+	}
 	if c.database != "" {
-		data["database"] = c.database
+		data[DataKeyDatabase] = c.database
 	}
 	if c.org != "" {
-		data["org"] = c.org
+		data[DataKeyOrg] = c.org
 	}
 	if f, perr := strconv.ParseFloat(strings.TrimSpace(result), 64); perr == nil {
-		data[fieldValue] = f
+		data[DataKeyValue] = f
 	}
 	res.Data = data
 	return res
@@ -71,7 +77,7 @@ func (c influxCheck) Run(ctx context.Context) Result {
 // queryScalar runs the query and returns the chosen scalar. The second return
 // reports an empty result (no data, or a null/empty cell).
 func (c influxCheck) queryScalar(ctx context.Context, client *http.Client, base string) (string, bool, error) {
-	if c.language == "flux" {
+	if c.language == InfluxLanguageFlux {
 		return c.fluxScalar(ctx, client, base)
 	}
 	return c.influxqlScalar(ctx, client, base)
@@ -223,44 +229,44 @@ func influxErrorBody(body []byte) string {
 // connection variables (host/port/user/password/tls). `language` selects InfluxQL
 // (1.x, needs a `database`) or Flux (2.x, needs an `org` and `token`).
 func buildInfluxCheck(b base, entry map[string]any) (Check, string) {
-	query := cfgval.AsString(entry["query"])
+	query := cfgval.AsString(entry[CheckKeyQuery])
 	if query == "" {
 		return nil, "influxdb-query check requires a query"
 	}
-	op := cfgval.AsString(entry["op"])
+	op := cfgval.AsString(entry[CheckKeyOp])
 	if !validCompareOp(op) {
 		return nil, "influxdb-query check op must be one of ==, !=, >, >=, <, <=, contains, =~"
 	}
-	value := cfgval.String(entry["value"])
+	value := cfgval.String(entry[CheckKeyValue])
 	if value == "" {
 		return nil, "influxdb-query check requires a value"
 	}
-	if err := ValidateAssertionValue("value", op, value); err != nil {
+	if err := ValidateAssertionValue(CheckKeyValue, op, value); err != nil {
 		return nil, "influxdb-query check " + err.Error()
 	}
-	language := cfgval.AsString(entry["language"])
+	language := cfgval.AsString(entry[CheckKeyLanguage])
 	if language == "" {
-		language = "influxql"
+		language = InfluxLanguageInfluxQL
 	}
 
 	c := influxCheck{
 		base:     b,
 		cfg:      influxConnConfig(entry),
 		language: language,
-		database: cfgval.AsString(entry["database"]),
-		org:      cfgval.AsString(entry["org"]),
+		database: cfgval.AsString(entry[CheckKeyDatabase]),
+		org:      cfgval.AsString(entry[CheckKeyOrg]),
 		query:    query,
-		column:   cfgval.AsString(entry["column"]),
-		token:    cfgval.AsString(entry["token"]),
+		column:   cfgval.AsString(entry[CheckKeyColumn]),
+		token:    cfgval.AsString(entry[CheckKeyToken]),
 		op:       op,
 		value:    value,
 	}
 	switch language {
-	case "influxql":
+	case InfluxLanguageInfluxQL:
 		if c.database == "" {
 			return nil, "influxdb-query (influxql) check requires a database"
 		}
-	case "flux":
+	case InfluxLanguageFlux:
 		if c.org == "" {
 			return nil, "influxdb-query (flux) check requires an org"
 		}
@@ -277,19 +283,19 @@ func buildInfluxCheck(b base, entry map[string]any) (Check, string) {
 // the port to InfluxDB's standard port (via the conn registry).
 func influxConnConfig(entry map[string]any) conn.Config {
 	cfg := conn.Config{
-		Host:     cfgval.AsString(entry["host"]),
-		User:     cfgval.AsString(entry["user"]),
-		Password: cfgval.AsString(entry["password"]),
-		TLS:      tlsString(entry["tls"]),
+		Host:     cfgval.AsString(entry[CheckKeyHost]),
+		User:     cfgval.AsString(entry[CheckKeyUser]),
+		Password: cfgval.AsString(entry[CheckKeyPassword]),
+		TLS:      tlsString(entry[CheckKeyTLS]),
 	}
 	if cfg.Host == "" {
-		cfg.Host = "127.0.0.1"
+		cfg.Host = conn.DefaultHost
 	}
 	cfg.Port = 8086
 	if proto, ok := conn.Lookup("influxdb"); ok {
 		cfg.Port = proto.DefaultPort()
 	}
-	if p, ok := cfgval.Int(entry["port"]); ok {
+	if p, ok := cfgval.Int(entry[CheckKeyPort]); ok {
 		cfg.Port = p
 	}
 	return cfg

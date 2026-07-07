@@ -88,7 +88,7 @@ func mongoRole(primary, secondary, arbiter bool, setName string) string {
 func MongoConnect(cfg Config) (*mongo.Client, error) {
 	host := cfg.Host
 	if host == "" {
-		host = "127.0.0.1"
+		host = DefaultHost
 	}
 	port := cfg.Port
 	if port == 0 {
@@ -101,7 +101,7 @@ func MongoConnect(cfg Config) (*mongo.Client, error) {
 	if cfg.User != "" {
 		// Auth database: an explicit auth_source, else the target database, else
 		// admin (MongoDB's conventional credentials database).
-		authSource := cfg.Params["auth_source"]
+		authSource := cfg.Params[ParamKeyAuthSource]
 		if authSource == "" {
 			authSource = cfg.Database
 		}

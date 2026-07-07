@@ -104,7 +104,7 @@ func parseAnalyzer(v any) (*outputAnalyzer, string) {
 	if !ok {
 		return nil, "analyze must be a mapping"
 	}
-	raw, ok := m["rules"].([]any)
+	raw, ok := m[CheckKeyRules].([]any)
 	if !ok || len(raw) == 0 {
 		return nil, "" // inert: no rules
 	}
@@ -115,7 +115,7 @@ func parseAnalyzer(v any) (*outputAnalyzer, string) {
 		if !ok {
 			return nil, fmt.Sprintf("analyze rule %d must be a mapping", i)
 		}
-		id := cfgval.AsString(rm["id"])
+		id := cfgval.AsString(rm[CheckKeyID])
 		if id == "" {
 			return nil, fmt.Sprintf("analyze rule %d is missing an id", i)
 		}
@@ -123,18 +123,18 @@ func parseAnalyzer(v any) (*outputAnalyzer, string) {
 			return nil, fmt.Sprintf("analyze has a duplicate rule id %q", id)
 		}
 		seen[id] = true
-		sev, ok := parseSeverity(cfgval.AsString(rm["severity"]))
+		sev, ok := parseSeverity(cfgval.AsString(rm[CheckKeySeverity]))
 		if !ok {
 			return nil, fmt.Sprintf("analyze rule %q severity must be error, warning or ok", id)
 		}
-		stream := cfgval.AsString(rm["stream"])
+		stream := cfgval.AsString(rm[CheckKeyStream])
 		if stream == "" {
 			stream = AnalyzeStreamBoth
 		}
 		if stream != AnalyzeStreamBoth && stream != AnalyzeStreamStdout && stream != AnalyzeStreamStderr {
 			return nil, fmt.Sprintf("analyze rule %q stream must be stdout, stderr or both", id)
 		}
-		match := cfgval.AsString(rm["match"])
+		match := cfgval.AsString(rm[CheckKeyMatch])
 		if match == "" {
 			return nil, fmt.Sprintf("analyze rule %q is missing a match", id)
 		}

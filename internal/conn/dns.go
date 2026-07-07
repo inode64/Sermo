@@ -53,7 +53,7 @@ var dnsRouteAddrs = func(host string) (net.Addr, net.Addr, error) {
 
 func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	host := cfg.Host
-	if cfg.Params["resolvconf"] == "true" {
+	if cfg.Params[ParamKeyResolvconf] == "true" {
 		ns, err := firstNameserver(resolvConfPath)
 		if err != nil {
 			return Result{}, err
@@ -61,7 +61,7 @@ func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		host = ns
 	}
 	if host == "" {
-		host = "127.0.0.1"
+		host = DefaultHost
 	}
 	port := cfg.Port
 	if port == 0 {

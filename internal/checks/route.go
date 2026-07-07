@@ -67,11 +67,11 @@ func (c routeCheck) Run(_ context.Context) Result {
 		msg = "no " + c.family + " default route"
 	}
 	res := c.result(ok, msg, start)
-	res.Data = map[string]any{"family": c.family, "routes": len(routes), fieldValue: len(matched)}
+	res.Data = map[string]any{DataKeyFamily: c.family, DataKeyRoutes: len(routes), fieldValue: len(matched)}
 	if ok {
-		res.Data["interface"] = matched[0].Iface
+		res.Data[DataKeyInterface] = matched[0].Iface
 		if matched[0].Gateway != "" {
-			res.Data["gateway"] = matched[0].Gateway
+			res.Data[DataKeyGateway] = matched[0].Gateway
 		}
 	}
 	return res

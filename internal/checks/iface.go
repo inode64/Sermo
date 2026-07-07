@@ -30,7 +30,7 @@ func parseInterfaces(v any) []string {
 // parseInterfaceMatch reads `interface_match` (any|all, default any → false).
 // The bool reports whether ALL listed interfaces must succeed.
 func parseInterfaceMatch(entry map[string]any) (all bool, warn string) {
-	switch m := cfgval.AsString(entry["interface_match"]); m {
+	switch m := cfgval.AsString(entry[CheckKeyInterfaceMatch]); m {
 	case "", "any":
 		return false, ""
 	case "all":

@@ -76,7 +76,7 @@ func dockerContainer(c dockerctl.Container, res *Result) {
 	if health != "none" {
 		fp += "/" + health
 	}
-	res.Extra["fingerprint"] = fp
+	res.Extra[ExtraKeyFingerprint] = fp
 }
 
 // dockerClient builds an HTTP client for the daemon: a Unix-socket transport when

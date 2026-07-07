@@ -76,7 +76,7 @@ func postgresConnector(cfg Config) (*pq.Connector, error) {
 func buildPGDSN(cfg Config) string {
 	host := cfg.Host
 	if host == "" {
-		host = "127.0.0.1"
+		host = DefaultHost
 	}
 	port := cfg.Port
 	if port == 0 {

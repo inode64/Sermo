@@ -45,14 +45,14 @@ func (c sqlCheck) Run(ctx context.Context) Result {
 
 	res := c.result(ok, fmt.Sprintf("sql %s: %q %s %q = %t", c.engine, result, c.op, c.value, ok), start)
 	data := map[string]any{
-		"engine":    c.engine,
-		"query":     c.query,
-		"op":        c.op,
-		"threshold": c.value,
-		"result":    result,
+		DataKeyEngine:    c.engine,
+		DataKeyQuery:     c.query,
+		DataKeyOp:        c.op,
+		DataKeyThreshold: c.value,
+		DataKeyResult:    result,
 	}
 	if f, perr := strconv.ParseFloat(strings.TrimSpace(result), 64); perr == nil {
-		data[fieldValue] = f
+		data[DataKeyValue] = f
 	}
 	res.Data = data
 	return res
@@ -96,12 +96,12 @@ func sqlValueString(v any) string {
 // sqlEngineDriver maps an engine token to its database/sql driver name.
 func sqlEngineDriver(engine string) (string, bool) {
 	switch engine {
-	case "mysql", "mariadb":
-		return "mysql", true
-	case "postgres", "postgresql":
-		return "postgres", true
-	case "sqlite", "sqlite3":
-		return "sqlite", true
+	case SQLEngineMySQL, SQLEngineMariaDB:
+		return SQLEngineMySQL, true
+	case SQLEnginePostgres, SQLEnginePostgreSQL:
+		return SQLEnginePostgres, true
+	case SQLEngineSQLite, SQLEngineSQLite3:
+		return SQLEngineSQLite, true
 	default:
 		return "", false
 	}
@@ -111,41 +111,41 @@ func sqlEngineDriver(engine string) (string, bool) {
 // the engine: mysql/postgres reuse the conn DSN builders and host/port/user/
 // password/database/tls fields; sqlite opens `path` read-only.
 func buildSQLCheck(b base, entry map[string]any) (Check, string) {
-	engine := cfgval.AsString(entry["engine"])
+	engine := cfgval.AsString(entry[CheckKeyEngine])
 	driver, ok := sqlEngineDriver(engine)
 	if !ok {
 		return nil, "sql check requires an engine (mysql, mariadb, postgres, postgresql, sqlite)"
 	}
-	query := cfgval.AsString(entry["query"])
+	query := cfgval.AsString(entry[CheckKeyQuery])
 	if query == "" {
 		return nil, "sql check requires a query"
 	}
-	op := cfgval.AsString(entry["op"])
+	op := cfgval.AsString(entry[CheckKeyOp])
 	if !validCompareOp(op) {
 		return nil, "sql check op must be one of ==, !=, >, >=, <, <=, contains, =~"
 	}
-	value := cfgval.String(entry["value"])
+	value := cfgval.String(entry[CheckKeyValue])
 	if value == "" {
 		return nil, "sql check requires a value"
 	}
-	if err := ValidateAssertionValue("value", op, value); err != nil {
+	if err := ValidateAssertionValue(CheckKeyValue, op, value); err != nil {
 		return nil, "sql check " + err.Error()
 	}
 
 	var dsn string
 	switch driver {
-	case "sqlite":
-		path := cfgval.AsString(entry["path"])
+	case SQLEngineSQLite:
+		path := cfgval.AsString(entry[CheckKeyPath])
 		if path == "" {
 			return nil, "sql check (sqlite) requires a path"
 		}
 		dsn = "file:" + path + "?mode=ro&_pragma=busy_timeout(2000)"
 	default:
-		if cfgval.AsString(entry["user"]) == "" {
+		if cfgval.AsString(entry[CheckKeyUser]) == "" {
 			return nil, "sql check (" + engine + ") requires a user"
 		}
 		cfg := sqlConnConfig(engine, entry)
-		if driver == "mysql" {
+		if driver == SQLEngineMySQL {
 			dsn = conn.MySQLDSN(cfg)
 		} else {
 			dsn = conn.PostgresDSN(cfg)
@@ -158,19 +158,19 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 // the port to the engine's standard port (via the conn registry).
 func sqlConnConfig(engine string, entry map[string]any) conn.Config {
 	cfg := conn.Config{
-		Host:     cfgval.AsString(entry["host"]),
-		User:     cfgval.AsString(entry["user"]),
-		Password: cfgval.AsString(entry["password"]),
-		Database: cfgval.AsString(entry["database"]),
-		TLS:      tlsString(entry["tls"]),
+		Host:     cfgval.AsString(entry[CheckKeyHost]),
+		User:     cfgval.AsString(entry[CheckKeyUser]),
+		Password: cfgval.AsString(entry[CheckKeyPassword]),
+		Database: cfgval.AsString(entry[CheckKeyDatabase]),
+		TLS:      tlsString(entry[CheckKeyTLS]),
 	}
 	if cfg.Host == "" {
-		cfg.Host = "127.0.0.1"
+		cfg.Host = conn.DefaultHost
 	}
 	if proto, ok := conn.Lookup(engine); ok {
 		cfg.Port = proto.DefaultPort()
 	}
-	if p, ok := cfgval.Int(entry["port"]); ok {
+	if p, ok := cfgval.Int(entry[CheckKeyPort]); ok {
 		cfg.Port = p
 	}
 	return cfg

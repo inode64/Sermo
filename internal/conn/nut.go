@@ -119,7 +119,7 @@ func nutHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 			}
 		}
 		if status, ok := vars["ups.status"]; ok {
-			res.Extra["fingerprint"] = status // drives on_change (state transitions)
+			res.Extra[ExtraKeyFingerprint] = status // drives on_change (state transitions)
 		}
 	}
 
