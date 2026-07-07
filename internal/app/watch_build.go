@@ -79,7 +79,7 @@ func buildWatchEntry(name string, entry map[string]any, deps Deps, defaultInterv
 	if w := applyWatchMonitorMode(deps.Monitor, name, config.MonitorMode(entry)); w != "" {
 		warnings = append(warnings, w)
 	}
-	switch cfgval.AsString(checkEntry["type"]) {
+	switch cfgval.AsString(checkEntry[rules.FieldType]) {
 	case checks.CheckTypeNet, checks.CheckTypeICMP, checks.CheckTypeSwap:
 		expanded, warns := buildMetricWatches(name, entry, checkEntry, deps, interval)
 		return expanded, append(warnings, warns...)
@@ -158,7 +158,7 @@ func serviceWatches(service string, tree map[string]any, checkDeps checks.Deps, 
 // isMetricWatch reports whether a watch entry's check is a metric check.
 func isMetricWatch(entry map[string]any) bool {
 	checkEntry, _ := entry["check"].(map[string]any)
-	return cfgval.AsString(checkEntry["type"]) == "metric"
+	return cfgval.AsString(checkEntry[rules.FieldType]) == checks.CheckTypeMetric
 }
 
 // reservedServiceWatchName reports whether a service watch name collides with a
@@ -178,7 +178,7 @@ func reservedServiceWatchName(name string) bool {
 // collector scoped to the service PID tree.)
 func unsupportedServiceWatchType(entry map[string]any) string {
 	checkEntry, _ := entry["check"].(map[string]any)
-	switch cfgval.AsString(checkEntry["type"]) {
+	switch cfgval.AsString(checkEntry[rules.FieldType]) {
 	case checks.CheckTypeNet, checks.CheckTypeICMP, checks.CheckTypeSwap:
 		return "net/icmp/swap watches are host-scoped; declare them under the global watches: section"
 	case checks.CheckTypeProcess:
@@ -192,7 +192,7 @@ func unsupportedServiceWatchType(entry map[string]any) string {
 // (storage/load/…) and any single-shot service check (tcp/http/…) used as a watch.
 // Health checks fire the hook on failure; condition checks on OK (threshold met).
 func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
-	typ := cfgval.AsString(checkEntry["type"])
+	typ := cfgval.AsString(checkEntry[rules.FieldType])
 	check, err := checks.BuildInline(name, checkEntry, watchInlineDeps(deps))
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
@@ -254,7 +254,7 @@ func hasWatchAction(hook HookSpec, names, effectiveNames []string, expand *Expan
 func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) ([]*Watch, []string) {
 	metrics, ok := entry["metrics"].(map[string]any)
 	if !ok || len(metrics) == 0 {
-		return nil, []string{"watch " + name + ": " + cfgval.AsString(checkEntry["type"]) + " check requires a non-empty metrics map"}
+		return nil, []string{"watch " + name + ": " + cfgval.AsString(checkEntry[rules.FieldType]) + " check requires a non-empty metrics map"}
 	}
 	var out []*Watch
 	var warns []string
@@ -267,7 +267,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 		ce := map[string]any{}
 		for k, v := range mEntry { // condition keys
 			switch k {
-			case "then", "for", "within":
+			case rules.RuleFieldThen, rules.RuleFieldFor, rules.RuleFieldWithin:
 			default:
 				ce[k] = v
 			}
@@ -275,7 +275,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 		for k, v := range checkEntry { // base check fields win
 			ce[k] = v
 		}
-		ce["metric"] = key
+		ce[rules.FieldMetric] = key
 
 		check, err := checks.BuildInline(name, ce, watchInlineDeps(deps))
 		if err != nil {
@@ -291,7 +291,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 		}
 		out = append(out, &Watch{
 			Name:           name,
-			CheckType:      cfgval.AsString(checkEntry["type"]),
+			CheckType:      cfgval.AsString(checkEntry[rules.FieldType]),
 			Check:          check,
 			Window:         rules.ParseWindowRule(mEntry),
 			Hook:           actions.hook,
@@ -314,7 +314,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 // baseline, conditions and hook) wired into a Watch through Watch.Cycle so it can
 // fire one hook per change. The Watch's check/window fields are unused.
 func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
-	if cfgval.AsString(checkEntry["path"]) == "" {
+	if cfgval.AsString(checkEntry[rules.FieldPath]) == "" {
 		return nil, "watch " + name + ": file check requires a path"
 	}
 	cond, err := parseFileCond(checkEntry)
@@ -329,7 +329,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	}
 	fw := &fileWatcher{
 		name:      name,
-		path:      cfgval.AsString(checkEntry["path"]),
+		path:      cfgval.AsString(checkEntry[rules.FieldPath]),
 		recursive: cfgval.Bool(checkEntry["recursive"]),
 		cond:      cond,
 		hook:      actions.hook,
@@ -341,7 +341,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	}
 	return &Watch{
 		Name:      name,
-		CheckType: "file",
+		CheckType: checks.CheckTypeFile,
 		Interval:  interval,
 		IsPaused:  monitorPaused(deps.Monitor, watchMonitorKey(name)),
 		InPanic:   deps.Panic.Active,
@@ -357,7 +357,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 // state, conditions and hook) wired into a Watch through Watch.Cycle so it can
 // fire one hook per matching PID.
 func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
-	pname := cfgval.AsString(checkEntry["name"])
+	pname := cfgval.AsString(checkEntry[rules.FieldName])
 	if pname == "" {
 		return nil, "watch " + name + ": process check requires a name"
 	}
@@ -365,9 +365,9 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	match := ProcMatch{Name: pname, User: cfgval.AsString(checkEntry["user"])}
+	match := ProcMatch{Name: pname, User: cfgval.AsString(checkEntry[rules.FieldUser])}
 	actions, err := resolveWatchActions(entry, deps, watchActionOptions{
-		checkType:    "process",
+		checkType:    checks.CheckTypeProcess,
 		parseKill:    true,
 		emptyMessage: "then requires a hook, notify and/or kill",
 	})
@@ -402,7 +402,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	}
 	return &Watch{
 		Name:      name,
-		CheckType: "process",
+		CheckType: checks.CheckTypeProcess,
 		Interval:  interval,
 		IsPaused:  monitorPaused(deps.Monitor, watchMonitorKey(name)),
 		InPanic:   deps.Panic.Active,
@@ -428,8 +428,8 @@ func processWatchKillSelector(match ProcMatch) (process.KillSelector, error) {
 // entry. At least one must be present.
 func parseProcCond(check map[string]any) (procCond, error) {
 	var c procCond
-	if _, present := check["for"]; present {
-		d := cfgval.Duration(check["for"])
+	if _, present := check[rules.RuleFieldFor]; present {
+		d := cfgval.Duration(check[rules.RuleFieldFor])
 		if d <= 0 {
 			return c, fmt.Errorf("process for must be a positive duration")
 		}
@@ -449,11 +449,11 @@ func parseProcCond(check map[string]any) (procCond, error) {
 		if !ok {
 			continue
 		}
-		op := cfgval.AsString(m["op"])
+		op := cfgval.AsString(m[rules.FieldOp])
 		if !cfgval.IsCompareOp(op) {
 			return c, fmt.Errorf("process %s requires a valid op (>=, >, <=, <, ==, !=)", t.key)
 		}
-		v, ok := cfgval.Float(m["value"])
+		v, ok := cfgval.Float(m[rules.FieldValue])
 		if !ok {
 			return c, fmt.Errorf("process %s value must be numeric", t.key)
 		}
@@ -480,11 +480,11 @@ func parseFileCond(check map[string]any) (fileCond, error) {
 		if cfgval.AsString(sz["on"]) == checks.OnModeChange {
 			c.sizeChange = true
 		} else {
-			op := cfgval.AsString(sz["op"])
+			op := cfgval.AsString(sz[rules.FieldOp])
 			if !cfgval.IsCompareOp(op) {
 				return c, fmt.Errorf("file size requires on: change or {op, value}")
 			}
-			v, ok := cfgval.Float(sz["value"])
+			v, ok := cfgval.Float(sz[rules.FieldValue])
 			if !ok {
 				return c, fmt.Errorf("file size value must be numeric")
 			}
@@ -536,7 +536,7 @@ func parseThenAndExplicit(entry map[string]any) (HookSpec, []string, map[string]
 }
 
 func thenMap(entry map[string]any) (map[string]any, error) {
-	raw, present := entry["then"]
+	raw, present := entry[rules.RuleFieldThen]
 	if !present {
 		return nil, nil
 	}
@@ -571,7 +571,7 @@ func parseActions(then map[string]any) (HookSpec, []string, error) {
 		}
 		hook.Stdout, hook.Stderr = stdout, stderr
 	}
-	return hook, cfgval.StringList(then["notify"]), nil
+	return hook, cfgval.StringList(then[rules.RuleFieldNotify]), nil
 }
 
 type watchActions struct {
@@ -752,14 +752,14 @@ func versionMonitor(name string, tree map[string]any, deps Deps, interval time.D
 	if lerr != "" {
 		return nil, "service " + name + ": version monitor: " + lerr
 	}
-	entry["type"] = "command"
+	entry[rules.FieldType] = checks.CheckTypeCommand
 	entry["on_change"] = true
 	entry["change_level"] = level
 	check, err := checks.BuildInline(name+":version", entry, monitorDeps(deps))
 	if err != nil {
 		return nil, "service " + name + ": version monitor: " + err.Error()
 	}
-	return monitorWatch(name+":version", "command", check, notify, config.DryRun(tree), deps, interval), ""
+	return monitorWatch(name+":version", checks.CheckTypeCommand, check, notify, config.DryRun(tree), deps, interval), ""
 }
 
 // configMonitor synthesizes a watch that alerts when the service's config is
@@ -771,7 +771,7 @@ func configMonitor(name string, tree map[string]any, deps Deps, interval time.Du
 	if !ok {
 		return nil, ""
 	}
-	entry := map[string]any{"type": "config", "on_change": true}
+	entry := map[string]any{rules.FieldType: checks.CheckTypeConfig, "on_change": true}
 	if cmdEntry := configTestCommandEntry(tree); cmdEntry != nil {
 		if cmd := cmdEntry["command"]; cmd != nil {
 			entry["command"] = cmd
@@ -790,7 +790,7 @@ func configMonitor(name string, tree map[string]any, deps Deps, interval time.Du
 	if err != nil {
 		return nil, "service " + name + ": config monitor: " + err.Error()
 	}
-	return monitorWatch(name+":config", "config", check, notify, config.DryRun(tree), deps, interval), ""
+	return monitorWatch(name+":config", checks.CheckTypeConfig, check, notify, config.DryRun(tree), deps, interval), ""
 }
 
 // onChangeNotify reads an `{on_change: {notify: [...]}}` block, returning the
@@ -804,7 +804,7 @@ func onChangeNotify(v any) ([]string, bool) {
 	if !ok {
 		return nil, false
 	}
-	return cfgval.StringList(oc["notify"]), true
+	return cfgval.StringList(oc[rules.RuleFieldNotify]), true
 }
 
 // onChangeVersionLevel reads `version.on_change.level` (major|minor|patch) and

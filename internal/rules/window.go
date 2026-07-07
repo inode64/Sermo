@@ -8,13 +8,6 @@ import (
 	"sermo/internal/cfgval"
 )
 
-// Window config keys parsed from a rule's for/within block.
-const (
-	windowKeyCycles     = "cycles"
-	windowKeyDuration   = "duration"
-	windowKeyMinMatches = "min_matches"
-)
-
 // WindowSample is one observed condition result in a duration-based within
 // window.
 type WindowSample struct {
@@ -285,8 +278,8 @@ func ParseForWindow(v any) *ForWindow {
 	if !ok {
 		return nil
 	}
-	cycles, _ := cfgval.Int(m[windowKeyCycles])
-	return &ForWindow{Cycles: cycles, Duration: cfgval.Duration(m[windowKeyDuration])}
+	cycles, _ := cfgval.Int(m[WindowKeyCycles])
+	return &ForWindow{Cycles: cycles, Duration: cfgval.Duration(m[WindowKeyDuration])}
 }
 
 // ParseWithinWindow parses a `within` window ({cycles, min_matches}) from a config
@@ -298,15 +291,15 @@ func ParseWithinWindow(v any) *WithinWindow {
 	if !ok {
 		return nil
 	}
-	cycles, _ := cfgval.Int(m[windowKeyCycles])
-	return &WithinWindow{Cycles: cycles, Duration: cfgval.Duration(m[windowKeyDuration]), MinMatches: minMatches(m)}
+	cycles, _ := cfgval.Int(m[WindowKeyCycles])
+	return &WithinWindow{Cycles: cycles, Duration: cfgval.Duration(m[WindowKeyDuration]), MinMatches: minMatches(m)}
 }
 
 // ParseWindow parses an entry's `for`/`within` sub-blocks into their windows.
 // Shared by the rules parser and the host-watch builder so both read a window the
 // same way.
 func ParseWindow(entry map[string]any) (*ForWindow, *WithinWindow) {
-	return ParseForWindow(entry["for"]), ParseWithinWindow(entry["within"])
+	return ParseForWindow(entry[RuleFieldFor]), ParseWithinWindow(entry[RuleFieldWithin])
 }
 
 // ParseWindowRule returns a Rule carrying only the for/within window from entry —
@@ -329,13 +322,13 @@ func ParseRuleWindow(v any) (*ForWindow, *WithinWindow) {
 	if !ok {
 		return nil, nil
 	}
-	cycles, _ := cfgval.Int(m[windowKeyCycles])
-	duration := cfgval.Duration(m[windowKeyDuration])
+	cycles, _ := cfgval.Int(m[WindowKeyCycles])
+	duration := cfgval.Duration(m[WindowKeyDuration])
 	if cycles <= 0 && duration <= 0 {
 		return nil, nil
 	}
-	switch cfgval.AsString(m["mode"]) {
-	case "within":
+	switch cfgval.AsString(m[FieldMode]) {
+	case WindowModeWithin:
 		return nil, &WithinWindow{Cycles: cycles, Duration: duration, MinMatches: minMatches(m)}
 	default: // "" or "consecutive"
 		if duration > 0 {
@@ -349,7 +342,7 @@ func ParseRuleWindow(v any) (*ForWindow, *WithinWindow) {
 }
 
 func minMatches(m map[string]any) int {
-	matches, _ := cfgval.Int(m[windowKeyMinMatches])
+	matches, _ := cfgval.Int(m[WindowKeyMinMatches])
 	if matches <= 0 {
 		return 1
 	}

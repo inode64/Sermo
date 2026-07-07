@@ -303,7 +303,7 @@ func (c *Config) expandAnalyze(tree map[string]any) []string {
 		errs = append(errs, c.expandAnalyzeSection(sectionChecks, checks)...)
 	}
 
-	watches, ok := tree["watches"].(map[string]any)
+	watches, ok := tree[sectionWatches].(map[string]any)
 	if ok {
 		for _, name := range slices.Sorted(maps.Keys(watches)) {
 			entry, ok := watches[name].(map[string]any)
@@ -428,9 +428,9 @@ func expandReloadOnChange(tree map[string]any) []string {
 	}
 	delete(tree, "reload_on_change")
 
-	rules, _ := tree["rules"].(map[string]any)
-	if rules == nil {
-		rules = map[string]any{}
+	ruleMap, _ := tree[rules.SectionRules].(map[string]any)
+	if ruleMap == nil {
+		ruleMap = map[string]any{}
 	}
 	var errs []string
 	for i, p := range cfgval.StringList(roc["paths"]) {
@@ -439,18 +439,18 @@ func expandReloadOnChange(tree map[string]any) []string {
 			continue
 		}
 		key := fmt.Sprintf("reload-on-change-%d", i+1)
-		if _, exists := rules[key]; exists {
+		if _, exists := ruleMap[key]; exists {
 			errs = append(errs, fmt.Sprintf("reload_on_change would overwrite existing rule %q; rename that rule", key))
 			continue
 		}
-		rules[key] = map[string]any{
-			"type": "remediation",
-			"if":   map[string]any{"changed": map[string]any{"path": p}},
-			"then": map[string]any{"action": "reload"},
+		ruleMap[key] = map[string]any{
+			rules.RuleFieldType: string(rules.RuleRemediation),
+			rules.RuleFieldIf:   map[string]any{rules.ConditionChanged: map[string]any{rules.FieldPath: p}},
+			rules.RuleFieldThen: map[string]any{rules.RuleFieldAction: string(rules.ActionReload)},
 		}
 	}
-	if len(rules) > 0 {
-		tree["rules"] = rules
+	if len(ruleMap) > 0 {
+		tree[rules.SectionRules] = ruleMap
 	}
 	return errs
 }
@@ -469,7 +469,7 @@ func expandReloadOnChange(tree map[string]any) []string {
 // rule take the watch's name; a collision with an existing check/rule is an
 // error. Reusing an existing check is expressed with an explicit rules: entry.
 func expandServiceWatches(tree map[string]any) []string {
-	watches, ok := tree["watches"].(map[string]any)
+	watches, ok := tree[sectionWatches].(map[string]any)
 	if !ok {
 		return nil
 	}
@@ -477,7 +477,7 @@ func expandServiceWatches(tree map[string]any) []string {
 	if checksMap == nil {
 		checksMap = map[string]any{}
 	}
-	rulesMap, _ := tree["rules"].(map[string]any)
+	rulesMap, _ := tree[rules.SectionRules].(map[string]any)
 	if rulesMap == nil {
 		rulesMap = map[string]any{}
 	}
@@ -488,9 +488,9 @@ func expandServiceWatches(tree map[string]any) []string {
 		if !ok {
 			continue
 		}
-		rawThen, hasThen := entry["then"]
+		rawThen, hasThen := entry[rules.RuleFieldThen]
 		then, _ := rawThen.(map[string]any)
-		action := cfgval.String(then["action"])
+		action := cfgval.String(then[rules.RuleFieldAction])
 		if !hasThen {
 			check, ok := entry["check"].(map[string]any)
 			if !ok {
@@ -532,10 +532,10 @@ func expandServiceWatches(tree map[string]any) []string {
 		tree[sectionChecks] = checksMap
 	}
 	if len(rulesMap) > 0 {
-		tree["rules"] = rulesMap
+		tree[rules.SectionRules] = rulesMap
 	}
 	if len(watches) == 0 {
-		delete(tree, "watches")
+		delete(tree, sectionWatches)
 	}
 	return errs
 }
@@ -554,7 +554,7 @@ func promoteServiceWatchCheck(checksMap map[string]any, name string, entry, chec
 		add("watches.%s would overwrite existing check %q; rename the watch", name, name)
 		return serviceWatchRuleTarget{}, false
 	}
-	checkType := cfgval.String(check["type"])
+	checkType := cfgval.String(check[rules.FieldType])
 	if checkType == "" {
 		add("watches.%s.check.type is required", name)
 		return serviceWatchRuleTarget{}, false
@@ -570,48 +570,48 @@ func promoteServiceWatchCheck(checksMap map[string]any, name string, entry, chec
 }
 
 func buildServiceWatchRule(entry, then map[string]any, action string, target serviceWatchRuleTarget) map[string]any {
-	rule := map[string]any{"if": serviceWatchRuleCondition(target)}
-	if w, has := entry["for"]; has {
-		rule["for"] = w
+	rule := map[string]any{rules.RuleFieldIf: serviceWatchRuleCondition(target)}
+	if w, has := entry[rules.RuleFieldFor]; has {
+		rule[rules.RuleFieldFor] = w
 	}
-	if w, has := entry["within"]; has {
-		rule["within"] = w
+	if w, has := entry[rules.RuleFieldWithin]; has {
+		rule[rules.RuleFieldWithin] = w
 	}
 
-	thenOut := map[string]any{"action": action}
-	if msg := cfgval.String(then["message"]); msg != "" {
-		thenOut["message"] = msg
+	thenOut := map[string]any{rules.RuleFieldAction: action}
+	if msg := cfgval.String(then[rules.RuleFieldMessage]); msg != "" {
+		thenOut[rules.RuleFieldMessage] = msg
 	}
 	switch rules.ActionType(action) {
 	case rules.ActionBlock:
-		rule["type"] = string(rules.RuleGuard)
-		if b := cfgval.StringList(then["blocks"]); len(b) > 0 {
-			rule["blocks"] = then["blocks"]
+		rule[rules.RuleFieldType] = string(rules.RuleGuard)
+		if b := cfgval.StringList(then[rules.RuleFieldBlocks]); len(b) > 0 {
+			rule[rules.RuleFieldBlocks] = then[rules.RuleFieldBlocks]
 		}
 	case rules.ActionAlert:
-		rule["type"] = string(rules.RuleAlert)
+		rule[rules.RuleFieldType] = string(rules.RuleAlert)
 	default:
-		rule["type"] = string(rules.RuleRemediation)
+		rule[rules.RuleFieldType] = string(rules.RuleRemediation)
 	}
 	// A rule's notify is an entry-level field (ParseRules reads entry["notify"]),
 	// not part of then; a guard never notifies.
 	if action != string(rules.ActionBlock) {
-		if n, has := then["notify"]; has {
-			rule["notify"] = n
+		if n, has := then[rules.RuleFieldNotify]; has {
+			rule[rules.RuleFieldNotify] = n
 		}
 	}
-	rule["then"] = thenOut
+	rule[rules.RuleFieldThen] = thenOut
 	return rule
 }
 
 // serviceWatchRuleCondition preserves watch polarity: health checks fire on
 // failure, while condition checks fire when their threshold is active.
 func serviceWatchRuleCondition(target serviceWatchRuleTarget) map[string]any {
-	operand := map[string]any{"check": target.checkName}
+	operand := map[string]any{rules.FieldCheck: target.checkName}
 	if checks.IsHealthType(target.checkType) {
-		return map[string]any{"failed": operand}
+		return map[string]any{rules.ConditionFailed: operand}
 	}
-	return map[string]any{"active": operand}
+	return map[string]any{rules.ConditionActive: operand}
 }
 
 // injectBuiltinVariables makes the document's identity available for ${...}
@@ -784,7 +784,7 @@ func appVariablePrefix(name string) string {
 // nil when no watches are configured.
 func (c *Config) ResolveWatches() (map[string]any, []string) {
 	raw := map[string]any{}
-	if configured, ok := c.Global.Raw["watches"].(map[string]any); ok {
+	if configured, ok := c.Global.Raw[sectionWatches].(map[string]any); ok {
 		for name, entry := range configured {
 			raw[name] = deepCopy(entry)
 		}
@@ -852,7 +852,7 @@ func storageCapacityWatch(tree map[string]any) (map[string]any, bool) {
 			entry[key] = v
 		}
 	}
-	for _, key := range []string{"for", "within", "then", sectionPolicy} {
+	for _, key := range []string{rules.RuleFieldFor, rules.RuleFieldWithin, rules.RuleFieldThen, sectionPolicy} {
 		if v, present := capacity[key]; present {
 			entry[key] = v
 		}
@@ -873,7 +873,7 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 	delete(tree, "restart_on_change")
 
 	var errs []string
-	libraries, _ := tree["rules"].(map[string]any)
+	libraries, _ := tree[rules.SectionRules].(map[string]any)
 	if libraries == nil {
 		libraries = map[string]any{}
 	}
@@ -893,13 +893,15 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 			continue
 		}
 		libraries[key] = map[string]any{
-			"type": "remediation",
-			"if":   map[string]any{"changed": map[string]any{"library": lib, "path": path}},
-			"then": map[string]any{"action": "restart"},
+			rules.RuleFieldType: string(rules.RuleRemediation),
+			rules.RuleFieldIf: map[string]any{
+				rules.ConditionChanged: map[string]any{rules.FieldLibrary: lib, rules.FieldPath: path},
+			},
+			rules.RuleFieldThen: map[string]any{rules.RuleFieldAction: string(rules.ActionRestart)},
 		}
 	}
 	if len(libraries) > 0 {
-		tree["rules"] = libraries
+		tree[rules.SectionRules] = libraries
 	}
 	return errs
 }
@@ -922,18 +924,18 @@ func (c *Config) libraryPath(lib string) (path string, known bool) {
 // works anywhere a condition does. Conditions already carrying a path are left
 // untouched (the restart_on_change desugar emits both keys).
 func (c *Config) resolveChangedLibraries(tree map[string]any) []string {
-	rules, ok := tree["rules"].(map[string]any)
+	rulesMap, ok := tree[rules.SectionRules].(map[string]any)
 	if !ok {
 		return nil
 	}
 	var errs []string
-	for _, name := range slices.Sorted(maps.Keys(rules)) {
-		rule, ok := rules[name].(map[string]any)
+	for _, name := range slices.Sorted(maps.Keys(rulesMap)) {
+		rule, ok := rulesMap[name].(map[string]any)
 		if !ok {
 			continue
 		}
-		if ifNode, ok := rule["if"].(map[string]any); ok {
-			errs = append(errs, c.fillChangedLibraryPaths(ifNode, "rules."+name)...)
+		if ifNode, ok := rule[rules.RuleFieldIf].(map[string]any); ok {
+			errs = append(errs, c.fillChangedLibraryPaths(ifNode, rules.SectionRules+"."+name)...)
 		}
 	}
 	return errs
@@ -943,7 +945,7 @@ func (c *Config) resolveChangedLibraries(tree map[string]any) []string {
 // not) and rewrites its changed-library leaf, collecting resolution errors.
 func (c *Config) fillChangedLibraryPaths(node map[string]any, scope string) []string {
 	var errs []string
-	for _, key := range []string{"and", "or"} {
+	for _, key := range []string{rules.ConditionAnd, rules.ConditionOr} {
 		items, ok := node[key].([]any)
 		if !ok {
 			continue
@@ -954,15 +956,15 @@ func (c *Config) fillChangedLibraryPaths(node map[string]any, scope string) []st
 			}
 		}
 	}
-	if child, ok := node["not"].(map[string]any); ok {
+	if child, ok := node[rules.ConditionNot].(map[string]any); ok {
 		errs = append(errs, c.fillChangedLibraryPaths(child, scope)...)
 	}
-	ch, ok := node["changed"].(map[string]any)
+	ch, ok := node[rules.ConditionChanged].(map[string]any)
 	if !ok {
 		return errs
 	}
-	lib := cfgval.String(ch["library"])
-	if lib == "" || cfgval.String(ch["path"]) != "" {
+	lib := cfgval.String(ch[rules.FieldLibrary])
+	if lib == "" || cfgval.String(ch[rules.FieldPath]) != "" {
 		return errs
 	}
 	path, known := c.libraryPath(lib)
@@ -972,7 +974,7 @@ func (c *Config) fillChangedLibraryPaths(node map[string]any, scope string) []st
 	case path == "":
 		errs = append(errs, fmt.Sprintf("%s: library %q has no binary to watch", scope, lib))
 	default:
-		ch["path"] = path
+		ch[rules.FieldPath] = path
 	}
 	return errs
 }

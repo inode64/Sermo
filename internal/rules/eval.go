@@ -78,13 +78,13 @@ func (e *Evaluator) Eval(ctx context.Context, node map[string]any) (bool, error)
 		return false, fmt.Errorf("empty condition")
 	}
 
-	if v, ok := node["and"]; ok {
+	if v, ok := node[ConditionAnd]; ok {
 		return e.evalList(ctx, v, true)
 	}
-	if v, ok := node["or"]; ok {
+	if v, ok := node[ConditionOr]; ok {
 		return e.evalList(ctx, v, false)
 	}
-	if v, ok := node["not"]; ok {
+	if v, ok := node[ConditionNot]; ok {
 		child, ok := v.(map[string]any)
 		if !ok {
 			return false, fmt.Errorf("not: must be a condition mapping")
@@ -92,30 +92,30 @@ func (e *Evaluator) Eval(ctx context.Context, node map[string]any) (bool, error)
 		r, err := e.Eval(ctx, child)
 		return !r, err
 	}
-	if v, ok := node["failed"]; ok {
+	if v, ok := node[ConditionFailed]; ok {
 		res, err := e.probe(ctx, v)
 		return !res.OK, err
 	}
-	if v, ok := node["active"]; ok {
+	if v, ok := node[ConditionActive]; ok {
 		res, err := e.probe(ctx, v)
 		return res.OK, err
 	}
-	if v, ok := node["file"]; ok {
+	if v, ok := node[ConditionFile]; ok {
 		return e.evalFile(ctx, v)
 	}
-	if v, ok := node["command"]; ok {
-		return e.evalInline(ctx, "command", v)
+	if v, ok := node[ConditionCommand]; ok {
+		return e.evalInline(ctx, checks.CheckTypeCommand, v)
 	}
-	if v, ok := node["service"]; ok {
+	if v, ok := node[ConditionService]; ok {
 		return e.evalService(ctx, v)
 	}
-	if v, ok := node["process"]; ok {
+	if v, ok := node[ConditionProcess]; ok {
 		return e.evalProcess(v)
 	}
-	if v, ok := node["metric"]; ok {
+	if v, ok := node[ConditionMetric]; ok {
 		return e.evalMetric(v)
 	}
-	if v, ok := node["changed"]; ok {
+	if v, ok := node[ConditionChanged]; ok {
 		return e.evalChanged(ctx, v)
 	}
 	return false, fmt.Errorf("condition has no recognized operator")
@@ -163,7 +163,7 @@ func (e *Evaluator) probe(ctx context.Context, v any) (checks.Result, error) {
 	if err != nil {
 		return checks.Result{}, err
 	}
-	if ref := cfgval.AsString(m["check"]); ref != "" {
+	if ref := cfgval.AsString(m[FieldCheck]); ref != "" {
 		res, ok := e.Cache[ref]
 		if !ok {
 			if e.ResolveRef != nil {
@@ -198,15 +198,15 @@ func (e *Evaluator) evalFile(ctx context.Context, v any) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	path := cfgval.AsString(m["path"])
+	path := cfgval.AsString(m[FieldPath])
 	if path == "" {
 		return false, fmt.Errorf("file condition requires a path")
 	}
 	wantExists := true
-	if b, ok := m["exists"].(bool); ok {
+	if b, ok := m[FieldExists].(bool); ok {
 		wantExists = b
 	}
-	res, err := e.runInline(ctx, "file", map[string]any{"type": "file_exists", "path": path}, m)
+	res, err := e.runInline(ctx, checks.CheckTypeFile, map[string]any{FieldType: checks.CheckTypeFileExists, FieldPath: path}, m)
 	if err != nil {
 		return false, err
 	}
@@ -218,11 +218,11 @@ func (e *Evaluator) evalService(ctx context.Context, v any) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	state := cfgval.AsString(m["state"])
+	state := cfgval.AsString(m[FieldState])
 	if state == "" {
 		return false, fmt.Errorf("service condition requires a state")
 	}
-	res, err := e.runInline(ctx, "service", map[string]any{"type": "service", "expect": state}, m)
+	res, err := e.runInline(ctx, checks.CheckTypeService, map[string]any{FieldType: checks.CheckTypeService, FieldExpect: state}, m)
 	if err != nil {
 		return false, err
 	}
@@ -240,11 +240,11 @@ func (e *Evaluator) evalProcess(v any) (bool, error) {
 	if e.Deps.Processes == nil {
 		return false, nil
 	}
-	want := cfgval.AsString(m["state"])
+	want := cfgval.AsString(m[FieldState])
 	if want == "" {
-		want = "running"
+		want = ProcessStateRunning
 	}
-	return e.Deps.Processes(cfgval.AsString(m["exe"]), cfgval.AsString(m["user"])) == want, nil
+	return e.Deps.Processes(cfgval.AsString(m[FieldExe]), cfgval.AsString(m[FieldUser])) == want, nil
 }
 
 // evalMetric reads a sampled metric and compares it to the threshold.
@@ -258,15 +258,15 @@ func (e *Evaluator) evalMetric(v any) (bool, error) {
 	if e.Deps.Metrics == nil {
 		return false, nil
 	}
-	scope := cfgval.AsString(m["scope"])
+	scope := cfgval.AsString(m[FieldScope])
 	if scope == "" {
-		scope = "service"
+		scope = checks.MetricScopeService
 	}
-	reading, ok := e.Deps.Metrics(scope, cfgval.AsString(m["name"]))
+	reading, ok := e.Deps.Metrics(scope, cfgval.AsString(m[FieldName]))
 	if !ok {
 		return false, nil
 	}
-	return metrics.Compare(reading, cfgval.AsString(m["op"]), cfgval.String(m["value"]))
+	return metrics.Compare(reading, cfgval.AsString(m[FieldOp]), cfgval.String(m[FieldValue]))
 }
 
 // evalChanged is true when the watched signal differs from the baseline tracked
@@ -279,9 +279,9 @@ func (e *Evaluator) evalChanged(ctx context.Context, v any) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if app := cfgval.AsString(m["app"]); app != "" {
+	if app := cfgval.AsString(m[FieldApp]); app != "" {
 		level := 3 // patch: any a.b.c change fires
-		if name := cfgval.AsString(m["level"]); name != "" {
+		if name := cfgval.AsString(m[FieldLevel]); name != "" {
 			lvl, ok := checks.VersionLevel(name)
 			if !ok {
 				return false, fmt.Errorf("changed condition level %q is not one of major, minor, patch", name)
@@ -293,7 +293,7 @@ func (e *Evaluator) evalChanged(ctx context.Context, v any) (bool, error) {
 		}
 		return e.ChangedVersion(ctx, app, level)
 	}
-	path := cfgval.AsString(m["path"])
+	path := cfgval.AsString(m[FieldPath])
 	if path == "" {
 		return false, fmt.Errorf("changed condition requires a path or app")
 	}
@@ -309,7 +309,7 @@ func (e *Evaluator) evalInline(ctx context.Context, typ string, v any) (bool, er
 	if err != nil {
 		return false, err
 	}
-	entry := map[string]any{"type": typ}
+	entry := map[string]any{FieldType: typ}
 	for k, val := range m {
 		entry[k] = val
 	}
@@ -349,7 +349,7 @@ func inlineEntry(m map[string]any) (map[string]any, string, error) {
 		if !ok {
 			return nil, "", fmt.Errorf("inline %s probe must be a mapping", k)
 		}
-		entry := map[string]any{"type": k}
+		entry := map[string]any{FieldType: k}
 		for pk, pv := range params {
 			entry[pk] = pv
 		}
