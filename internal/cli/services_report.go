@@ -36,7 +36,7 @@ func (a App) sendServicesReport(ctx context.Context, opts options, cfg *config.C
 	}
 	selected, names, err := selectServicesReportNotifiers(opts.notifyNames, registry)
 	if err != nil {
-		return nil, a.commandUsageError("services", err.Error())
+		return nil, a.commandUsageError(commandServices, err.Error())
 	}
 	if len(selected) == 0 {
 		return nil, a.fail(opts, "services --notify selected no enabled notifiers")
@@ -84,7 +84,7 @@ func selectServicesReportNotifiers(selection []string, registry map[string]notif
 }
 
 func servicesReportNotifierNames(selection []string, registry map[string]notify.Notifier) []string {
-	if slices.Contains(selection, "all") {
+	if slices.Contains(selection, commandArgAll) {
 		return slices.Sorted(maps.Keys(registry))
 	}
 	return selection
@@ -112,12 +112,12 @@ func servicesReportMessage(reports []appinspect.Report, includeMissing bool, now
 		Body:    body,
 		HTML:    servicesReportHTML(reports, stats, includeMissing, host, now),
 		Fields: map[string]string{
-			"SERMO_REPORT":         "services",
-			"SERMO_REPORT_HOST":    host,
-			"SERMO_REPORT_TOTAL":   strconv.Itoa(stats.Total),
-			"SERMO_REPORT_OK":      strconv.Itoa(stats.OK),
-			"SERMO_REPORT_ISSUES":  strconv.Itoa(stats.Issues),
-			"SERMO_REPORT_MISSING": strconv.Itoa(stats.NotInstalled),
+			cliFieldSermoReport:        commandServices,
+			cliFieldSermoReportHost:    host,
+			cliFieldSermoReportTotal:   strconv.Itoa(stats.Total),
+			cliFieldSermoReportOK:      strconv.Itoa(stats.OK),
+			cliFieldSermoReportIssues:  strconv.Itoa(stats.Issues),
+			cliFieldSermoReportMissing: strconv.Itoa(stats.NotInstalled),
 		},
 	}
 }

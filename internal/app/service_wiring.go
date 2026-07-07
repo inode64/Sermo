@@ -6,6 +6,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/locks"
 	"sermo/internal/metrics"
 	"sermo/internal/operation"
@@ -110,25 +111,25 @@ func serviceBackendPIDs(deps Deps, unit string) func() []int {
 // otherwise we derive the safest init-provided identity we can detect.
 func serviceProcessSelectors(ctx context.Context, tree map[string]any, deps Deps, unit string) ([]process.Selector, []string) {
 	selectors, warnings := process.ParseSelectors(tree)
-	if _, configured := tree["processes"]; !configured && len(selectors) == 0 {
+	if _, configured := tree[config.SectionProcesses]; !configured && len(selectors) == 0 {
 		selectors = initDerivedProcessSelectors(servicemgr.DetectProcInfo(ctx, deps.ExecxRunner, nil, deps.Backend, unit))
 	}
 	return selectors, warnings
 }
 
 func noResidentProcess(tree map[string]any) bool {
-	processes, ok := tree["processes"].(map[string]any)
-	return ok && len(processes) == 0 && len(cfgval.StringList(tree["pidfile"])) == 0
+	processes, ok := tree[config.SectionProcesses].(map[string]any)
+	return ok && len(processes) == 0 && len(cfgval.StringList(tree[config.ServiceKeyPidfile])) == 0
 }
 
 func serviceNoResidentProcess(tree map[string]any, selectors []process.Selector, backendPIDs func() []int) bool {
 	if noResidentProcess(tree) {
 		return true
 	}
-	if processes, configured := tree["processes"].(map[string]any); configured && len(processes) > 0 && len(selectors) == 0 {
+	if processes, configured := tree[config.SectionProcesses].(map[string]any); configured && len(processes) > 0 && len(selectors) == 0 {
 		return false
 	}
-	if len(selectors) > 0 || len(cfgval.StringList(tree["pidfile"])) > 0 {
+	if len(selectors) > 0 || len(cfgval.StringList(tree[config.ServiceKeyPidfile])) > 0 {
 		return false
 	}
 	return !hasBackendPIDs(backendPIDs)

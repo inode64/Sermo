@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"sermo/internal/cfgval"
 )
 
 // autofsCheck verifies the autofs automounter is active by inspecting the mount
@@ -57,7 +59,7 @@ func (c autofsCheck) Run(_ context.Context) Result {
 
 	op, value := c.op, c.value
 	if op == "" {
-		op, value = ">=", 1
+		op, value = cfgval.CompareOpGreaterEqual, 1
 	}
 	ok := compareFloat(float64(len(points)), op, value)
 	res := c.result(ok, fmt.Sprintf("%d autofs mountpoint(s) active", len(points)), start)

@@ -604,7 +604,7 @@ func (w *Worker) emitAlertsFiltered(ctx context.Context, r rules.Rule, allow fun
 		// command's stdout/stderr so the operator can see why the rule fired.
 		w.emit(Event{Kind: eventKindAlert, Rule: r.Name, Message: msg, Output: output})
 		if panicking {
-			w.emit(Event{Kind: "notify-suppressed", Rule: r.Name, Message: "panic mode: alert notification suppressed"})
+			w.emit(Event{Kind: eventKindNotifySuppressed, Rule: r.Name, Message: "panic mode: alert notification suppressed"})
 			continue
 		}
 		for _, n := range notifiers {
@@ -629,7 +629,7 @@ func alertMessage(service, rule, msg, output string) notify.Message {
 	return notify.Message{
 		Subject: fmt.Sprintf("[sermo] %s: %s", service, msg),
 		Body:    body,
-		Fields:  map[string]string{"SERMO_SERVICE": service, "SERMO_RULE": rule},
+		Fields:  map[string]string{sermoEnvService: service, sermoEnvRule: rule},
 	}
 }
 

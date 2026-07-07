@@ -18,15 +18,14 @@ import (
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
 
-// Process-selector field keys (exe/cmd/user/group identity).
-const (
-	keyExe   = "exe"
-	keyCmd   = "cmd"
-	keyUser  = "user"
-	keyGroup = "group"
+var validProcessSelectorKeys = set(
+	process.SelectorKeyExe,
+	process.SelectorKeyCmd,
+	process.SelectorKeyUser,
+	process.SelectorKeyGroup,
+	keyDelete,
+	keyEnableIf,
 )
-
-var validProcessSelectorKeys = set(keyExe, keyCmd, keyUser, keyGroup, "delete", keyEnableIf)
 
 func validateMonitorMode(path string, mode any, add addFunc) {
 	s, isStr := mode.(string)
@@ -85,24 +84,24 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 		add("stop_policy.force_kill=true requires kill_only_if")
 	}
 	if hasKoi {
-		if !cfgval.IsNonEmptyStringList(koi["users"]) || !cfgval.IsNonEmptyStringList(koi["exe_any"]) {
+		if !cfgval.IsNonEmptyStringList(koi[keyUsers]) || !cfgval.IsNonEmptyStringList(koi[keyExeAny]) {
 			add("stop_policy.kill_only_if must define both users and exe_any, each non-empty")
 		}
 	}
 	// Stopped-state invariants (verified after a clean stop). clean_after_stop is
 	// the master opt-in that enables deleting stale leftovers and the clean_on_stop
 	// list; with it off the invariants are only verified and warned about.
-	for _, b := range []string{"pidfile_absent", "clean_after_stop"} {
+	for _, b := range []string{keyPidfileAbsent, keyCleanAfterStop} {
 		if v, present := sp[b]; present {
 			if _, ok := v.(bool); !ok {
 				add("stop_policy.%s must be true or false", b)
 			}
 		}
 	}
-	if v, present := sp["files_absent"]; present && !cfgval.IsNonEmptyStringList(v) {
+	if v, present := sp[keyFilesAbsent]; present && !cfgval.IsNonEmptyStringList(v) {
 		add("stop_policy.files_absent must be a non-empty list of paths/globs")
 	}
-	validateCleanOnStop(sp["clean_on_stop"], add)
+	validateCleanOnStop(sp[keyCleanOnStop], add)
 }
 
 // protectedDirs are absolute paths that clean_on_stop must never delete
@@ -192,7 +191,7 @@ func validateProcesses(tree map[string]any, add addFunc) {
 				add("%s.%s is not supported; processes entries accept exe, cmd, user, group and enable_if", path, key)
 			}
 		}
-		exe, cmd := cfgval.String(entry[keyExe]), cfgval.String(entry[keyCmd])
+		exe, cmd := cfgval.String(entry[process.SelectorKeyExe]), cfgval.String(entry[process.SelectorKeyCmd])
 		if exe == "" && cmd == "" {
 			add("%s requires exe or cmd", path)
 		}
@@ -205,8 +204,8 @@ func validateProcesses(tree map[string]any, add addFunc) {
 }
 
 func validatePidfiles(tree map[string]any, add addFunc) {
-	raw, present := tree["pidfiles"]
-	if _, hasPidfile := tree["pidfile"]; hasPidfile && present {
+	raw, present := tree[ServiceKeyPidfiles]
+	if _, hasPidfile := tree[ServiceKeyPidfile]; hasPidfile && present {
 		add("pidfile and pidfiles are mutually exclusive")
 	}
 	if !present {
@@ -238,10 +237,10 @@ func validatePidfiles(tree map[string]any, add addFunc) {
 			add("pidfiles.%s requires matching processes.%s", role, role)
 			continue
 		}
-		if cfgval.String(entry[keyExe]) == "" {
+		if cfgval.String(entry[process.SelectorKeyExe]) == "" {
 			add("pidfiles.%s requires processes.%s.exe for exact pidfile identity", role, role)
 		}
-		if cfgval.String(entry[keyUser]) == "" {
+		if cfgval.String(entry[process.SelectorKeyUser]) == "" {
 			add("pidfiles.%s requires processes.%s.user for exact pidfile identity", role, role)
 		}
 	}
@@ -381,7 +380,7 @@ func validateDockerControl(control map[string]any, add addFunc) {
 // process selector with exact exe and user so the signal target can be verified
 // before signaling.
 func validateReload(tree map[string]any, backend string, add addFunc) {
-	raw, present := tree["reload"]
+	raw, present := tree[SectionReload]
 	if !present {
 		return
 	}
@@ -390,11 +389,11 @@ func validateReload(tree map[string]any, backend string, add addFunc) {
 		add("reload must be a mapping with a signal or command")
 		return
 	}
-	if when := cfgval.AsString(r["when"]); when != "" && when != "auto" && when != "always" {
+	if when := cfgval.AsString(r[ReloadKeyWhen]); when != "" && when != ReloadWhenAuto && when != ReloadWhenAlways {
 		add("reload.when %q must be \"auto\" or \"always\"", when)
 	}
-	sig := cfgval.AsString(r["signal"])
-	_, hasCmd := r[checks.CheckKeyCommand]
+	sig := cfgval.AsString(r[ReloadKeySignal])
+	_, hasCmd := r[ReloadKeyCommand]
 	switch {
 	case sig != "" && hasCmd:
 		add("reload sets both signal and command; use exactly one")
@@ -426,7 +425,7 @@ func validateReload(tree map[string]any, backend string, add addFunc) {
 // services need it because OpenRC has no MainPID source. Systemd-only services
 // can rely on the backend MainPID path instead.
 func reloadSignalNeedsPidfileIdentity(tree map[string]any, backend string) bool {
-	svc, ok := tree["service"].(map[string]any)
+	svc, ok := tree[ServiceKeyService].(map[string]any)
 	if !ok {
 		return backend == backendOpenRC
 	}
@@ -439,7 +438,7 @@ func reloadSignalNeedsPidfileIdentity(tree map[string]any, backend string) bool 
 }
 
 func reloadSignalPidfileIdentity(tree map[string]any) (pidfile, identity bool) {
-	pidfile = len(cfgval.StringList(tree["pidfile"])) > 0
+	pidfile = len(cfgval.StringList(tree[ServiceKeyPidfile])) > 0
 	procs, ok := tree[sectionProcesses].(map[string]any)
 	if !ok {
 		return pidfile, false
@@ -449,7 +448,7 @@ func reloadSignalPidfileIdentity(tree map[string]any) (pidfile, identity bool) {
 		if !ok {
 			continue
 		}
-		if cfgval.String(entry[keyExe]) != "" && cfgval.String(entry[keyUser]) != "" {
+		if cfgval.String(entry[process.SelectorKeyExe]) != "" && cfgval.String(entry[process.SelectorKeyUser]) != "" {
 			identity = true
 		}
 	}
@@ -462,7 +461,7 @@ func reloadSignalPidfileIdentity(tree map[string]any) (pidfile, identity bool) {
 // and `version_short` by the apps listings, and `version` by the
 // version.on_change monitor; any other entry is informational.
 func validateCommands(tree map[string]any, add addFunc) {
-	commands, ok := tree["commands"].(map[string]any)
+	commands, ok := tree[sectionCommands].(map[string]any)
 	if !ok {
 		return
 	}
@@ -483,7 +482,7 @@ func validateCommands(tree map[string]any, add addFunc) {
 // validateServiceField checks the `service` field: a scalar unit name or a
 // per-init map of systemd/openrc candidate lists.
 func validateServiceField(tree map[string]any, add addFunc) {
-	s, present := tree["service"]
+	s, present := tree[ServiceKeyService]
 	if !present {
 		return
 	}
@@ -516,7 +515,7 @@ func validateServiceField(tree map[string]any, add addFunc) {
 // must be non-empty and must not repeat the primary `service` unit for that
 // backend (a self-reference).
 func validateAlsoService(tree map[string]any, add addFunc) {
-	a, present := tree["also_service"]
+	a, present := tree[ServiceKeyAlsoService]
 	if !present {
 		return
 	}
@@ -525,7 +524,7 @@ func validateAlsoService(tree map[string]any, add addFunc) {
 		add("also_service must be a per-init map (systemd/openrc)")
 		return
 	}
-	svc, _ := tree["service"].(map[string]any)
+	svc, _ := tree[ServiceKeyService].(map[string]any)
 	for _, k := range slices.Sorted(maps.Keys(m)) {
 		if k != backendSystemd && k != backendOpenRC {
 			add("also_service key %q is not one of systemd, openrc", k)
@@ -555,8 +554,8 @@ func validateAlsoService(tree map[string]any, add addFunc) {
 // validateCascade checks `also_apply`: each entry must be a known service and not
 // the service itself. Targets receive the same action via their own operation.
 func validateCascade(name string, tree map[string]any, services map[string]struct{}, add addFunc) {
-	targets, err := cfgval.StrictStringList(tree["also_apply"])
-	if _, present := tree["also_apply"]; present && err != nil {
+	targets, err := cfgval.StrictStringList(tree[ServiceKeyAlsoApply])
+	if _, present := tree[ServiceKeyAlsoApply]; present && err != nil {
 		add("also_apply must be a string or list of strings")
 		return
 	}

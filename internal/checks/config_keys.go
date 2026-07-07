@@ -121,3 +121,44 @@ const (
 	CheckKeyVersionMatch          = "version_match"
 	CheckKeyWithin                = "within"
 )
+
+// ports check expect/match values.
+const (
+	PortStateOpen   = "open"
+	PortStateClosed = "closed"
+	PortExpectAny   = "any"
+	PortMatchAll    = "all"
+	PortMatchAny    = "any"
+	PortMatchNone   = "none"
+)
+
+// count check entry-kind values.
+const (
+	CountKindAny     = "any"
+	CountKindFile    = "file"
+	CountKindDir     = "dir"
+	CountKindSymlink = "symlink"
+)
+
+// version_match mapping keys.
+const (
+	VersionMatchKeyContains = "contains"
+	VersionMatchKeyExcludes = "excludes"
+	VersionMatchKeyRegex    = "regex"
+)
+
+// interface_match values.
+const (
+	InterfaceMatchAny = "any"
+	InterfaceMatchAll = "all"
+)
+
+// URL schemes accepted by checks.
+const (
+	URLSchemeHTTP    = "http"
+	URLSchemeHTTPS   = "https"
+	URLSchemeWS      = "ws"
+	URLSchemeWSS     = "wss"
+	URLSchemeSOCKS5  = "socks5"
+	URLSchemeSOCKS5H = "socks5h"
+)

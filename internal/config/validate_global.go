@@ -42,9 +42,21 @@ func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 	}
 }
 
-// NotifyNone is the reserved notify sentinel: a notify selection of `none`
-// suppresses delivery, and no notifier may take it as a name.
-const NotifyNone = "none"
+// Selection keywords shared by wizard/config selection flows.
+const (
+	SelectionKeywordAll     = "all"
+	SelectionKeywordNone    = "none"
+	SelectionKeywordDefault = "default"
+)
+
+// Notify selection keywords.
+const (
+	NotifyKeywordAll     = SelectionKeywordAll
+	NotifyKeywordDefault = SelectionKeywordDefault
+	// NotifyNone is the reserved notify sentinel: a notify selection of `none`
+	// suppresses delivery, and no notifier may take it as a name.
+	NotifyNone = SelectionKeywordNone
+)
 
 // validateNotifiers checks the global `notifiers` section: each entry is a known
 // type with the fields that type needs. New transports validate here too.
@@ -195,7 +207,7 @@ func validateNotifyRefs(name string, entry map[string]any, notifiers map[string]
 // (date/event/action). Builtins (host/port/…) are intentionally NOT reserved —
 // a custom variable may override them. Duplicate names are already rejected by
 // the YAML parser (a mapping key defined twice is a load error).
-var reservedVarNames = set("all", "none", "default", "date", "event", "action")
+var reservedVarNames = set(SelectionKeywordAll, SelectionKeywordNone, SelectionKeywordDefault, runtimeVarDate, runtimeVarEvent, runtimeVarAction)
 
 // validateDefaultsVariables checks the optional defaults.variables map: it must be
 // a mapping; each value must be a scalar or a list (not a nested mapping); and no

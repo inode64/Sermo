@@ -13,6 +13,7 @@ import (
 	"maps"
 	"sermo/internal/cfgval"
 	"sermo/internal/notify"
+	"sermo/internal/process"
 	"sermo/internal/rules"
 	"slices"
 )
@@ -29,11 +30,12 @@ const (
 	kindService  = "service"
 	kindPatterns = "patterns"
 	kindStorage  = "storage"
+	kindWatch    = "watch"
 )
 
 // sectionStopPolicy is the per-service/mount block declaring the stopped-state
 // invariants (pidfile/file cleanup) the engine enforces.
-const sectionStopPolicy = "stop_policy"
+const sectionStopPolicy = process.SectionStopPolicy
 
 // sectionPolicy is the remediation policy block; sectionRuleWindow is the
 // firing-window fallback block owned by the rules grammar.
@@ -41,10 +43,32 @@ const (
 	sectionPolicy     = rules.SectionPolicy
 	sectionRuleWindow = rules.SectionRuleWindow
 	sectionControl    = "control"
+	sectionCommands   = "commands"
+	sectionReload     = "reload"
 )
 
 // SectionControl is the per-service control backend override block.
 const SectionControl = sectionControl
+
+// SectionCommands is the service/app command definition block.
+const SectionCommands = sectionCommands
+
+// SectionReload is the native service reload override block.
+const SectionReload = sectionReload
+
+// Reload block field and value keys.
+const (
+	// ReloadKeyWhen is reload.when.
+	ReloadKeyWhen = "when"
+	// ReloadKeySignal is reload.signal.
+	ReloadKeySignal = "signal"
+	// ReloadKeyCommand is reload.command.
+	ReloadKeyCommand = "command"
+	// ReloadWhenAuto runs native reload only when init cannot reload.
+	ReloadWhenAuto = "auto"
+	// ReloadWhenAlways makes native reload replace backend reload.
+	ReloadWhenAlways = "always"
+)
 
 // Global section keys.
 const (
@@ -57,6 +81,9 @@ const (
 
 // SectionWatches is the global or service embedded watches block.
 const SectionWatches = sectionWatches
+
+// SectionPaths is the top-level paths configuration block.
+const SectionPaths = sectionPaths
 
 // Engine block and field keys.
 const (
@@ -110,11 +137,18 @@ const (
 
 // stop_policy timeout and kill-guard field keys.
 const (
-	keyGracefulTimeout = "graceful_timeout"
-	keyTermTimeout     = "term_timeout"
-	keyKillTimeout     = "kill_timeout"
-	keyForceKill       = "force_kill"
-	keyKillOnlyIf      = "kill_only_if"
+	keyGracefulTimeout = process.StopPolicyKeyGracefulTimeout
+	keyTermTimeout     = process.StopPolicyKeyTermTimeout
+	keyKillTimeout     = process.StopPolicyKeyKillTimeout
+	keyForceKill       = process.StopPolicyKeyForceKill
+	keyKillOnlyIf      = process.StopPolicyKeyKillOnlyIf
+	keyUsers           = process.StopPolicyKeyUsers
+	keyExeAny          = process.StopPolicyKeyExeAny
+	keyPidfileAbsent   = "pidfile_absent"
+	keyFilesAbsent     = "files_absent"
+	keyCleanAfterStop  = "clean_after_stop"
+	keyCleanOnStop     = "clean_on_stop"
+	keyMountStopPolicy = sectionStopPolicy
 )
 
 // keyDryRun is the per-target flag that simulates automatic actions.
@@ -122,6 +156,44 @@ const keyDryRun = "dry_run"
 
 // EntryKeyDryRun is the shared per-target `dry_run` key.
 const EntryKeyDryRun = keyDryRun
+
+// Stop policy field keys.
+const (
+	// StopPolicyKeyTermTimeout is stop_policy.term_timeout.
+	StopPolicyKeyTermTimeout = keyTermTimeout
+	// StopPolicyKeyKillTimeout is stop_policy.kill_timeout.
+	StopPolicyKeyKillTimeout = keyKillTimeout
+	// StopPolicyKeyForceKill is stop_policy.force_kill.
+	StopPolicyKeyForceKill = keyForceKill
+	// StopPolicyKeyKillOnlyIf is stop_policy.kill_only_if.
+	StopPolicyKeyKillOnlyIf = keyKillOnlyIf
+	// StopPolicyKeyUsers is stop_policy.kill_only_if.users.
+	StopPolicyKeyUsers = keyUsers
+	// StopPolicyKeyExeAny is stop_policy.kill_only_if.exe_any.
+	StopPolicyKeyExeAny = keyExeAny
+	// StopPolicyKeyPidfileAbsent is stop_policy.pidfile_absent.
+	StopPolicyKeyPidfileAbsent = keyPidfileAbsent
+	// StopPolicyKeyFilesAbsent is stop_policy.files_absent.
+	StopPolicyKeyFilesAbsent = keyFilesAbsent
+	// StopPolicyKeyCleanAfterStop is stop_policy.clean_after_stop.
+	StopPolicyKeyCleanAfterStop = keyCleanAfterStop
+	// StopPolicyKeyCleanOnStop is stop_policy.clean_on_stop.
+	StopPolicyKeyCleanOnStop = keyCleanOnStop
+)
+
+// Storage mount field keys.
+const (
+	// MountKeyUmount is mount.umount.
+	MountKeyUmount = keyUmount
+	// MountKeyRefcount is mount.refcount.
+	MountKeyRefcount = keyRefcount
+	// MountKeyAllowSIGKILL is mount.umount.allow_sigkill.
+	MountKeyAllowSIGKILL = keyAllowSIGKILL
+	// MountKeyAllowLazy is mount.umount.allow_lazy.
+	MountKeyAllowLazy = keyAllowLazy
+	// MountKeyStopPolicy is mount.stop_policy.
+	MountKeyStopPolicy = keyMountStopPolicy
+)
 
 // Check-gate / check-entry field keys.
 const (
@@ -157,14 +229,33 @@ const EntryKeyEnabled = keyEnabled
 
 // Shared generic field keys.
 const (
-	keyCategory  = "category"
-	keyPath      = "path"
-	keyRecursive = "recursive"
-	keyType      = "type"
+	keyName        = "name"
+	keyDisplayName = "display_name"
+	keyDescription = "description"
+	keyAliases     = "aliases"
+	keyApps        = "apps"
+	keyClone       = "clone"
+	keyCategory    = "category"
+	keyDelete      = "delete"
+	keyKind        = "kind"
+	keyOS          = "os"
+	keyPath        = "path"
+	keyPaths       = "paths"
+	keyRecursive   = "recursive"
+	keyType        = "type"
 )
 
 // EntryKeyCategory is the shared user-facing `category` metadata key.
 const EntryKeyCategory = keyCategory
+
+// EntryKeyName is the shared user-facing `name` metadata key.
+const EntryKeyName = keyName
+
+// EntryKeyDisplayName is the shared user-facing `display_name` metadata key.
+const EntryKeyDisplayName = keyDisplayName
+
+// EntryKeyDescription is the shared user-facing `description` metadata key.
+const EntryKeyDescription = keyDescription
 
 // EntryKeyPath is the shared top-level `path` key for path-backed targets.
 const EntryKeyPath = keyPath
@@ -175,6 +266,44 @@ const (
 	ServiceMonitorKeyConfig   = "config"
 	ServiceMonitorKeyOnChange = "on_change"
 	ServiceMonitorKeyLevel    = "level"
+)
+
+// Service document field keys shared by resolver, validators and generators.
+const (
+	// ServiceKeyService is the top-level service unit field.
+	ServiceKeyService = "service"
+	// ServiceKeyUses is the catalog service reference field.
+	ServiceKeyUses = "uses"
+	// ServiceKeyPidfile is the primary pidfile field.
+	ServiceKeyPidfile = process.ServiceKeyPidfile
+	// ServiceKeyPidfiles is the named pidfile roles field.
+	ServiceKeyPidfiles = process.ServiceKeyPidfiles
+	// ServiceKeyAlsoService is the auxiliary init units field.
+	ServiceKeyAlsoService = "also_service"
+	// ServiceKeyAlsoApply is the cascading Sermo services field.
+	ServiceKeyAlsoApply = "also_apply"
+	// ServiceKeyConfigFiles is the catalog hint listing service config files.
+	ServiceKeyConfigFiles = "config_files"
+)
+
+// VariableKey constants are built-in or conventional variables in variables:.
+const (
+	// VariableKeyBinary is the conventional executable path variable.
+	VariableKeyBinary = "binary"
+	// VariableKeyService is the resolved service unit variable.
+	VariableKeyService = "service"
+	// VariableKeyPidfile is the resolved primary pidfile variable.
+	VariableKeyPidfile = "pidfile"
+	// VariableKeyPort is the conventional listen port variable.
+	VariableKeyPort = "port"
+	// VariableKeyHost is the bind/connect host variable.
+	VariableKeyHost = "host"
+	// VariableKeyHostname is the short hostname built-in variable.
+	VariableKeyHostname = "hostname"
+	// VariableKeyInit is the active init backend variable.
+	VariableKeyInit = "init"
+	// VariableKeyUser is the resolved service user variable.
+	VariableKeyUser = "user"
 )
 
 // storage mount / umount block field keys.
@@ -212,11 +341,17 @@ const SectionPreflight = sectionPreflight
 
 // sectionProcesses is the service block of named process selectors (exe/user)
 // used for discovery and kill matching.
-const sectionProcesses = "processes"
+const sectionProcesses = process.SectionProcesses
+
+// SectionProcesses is the service block of named process selectors.
+const SectionProcesses = sectionProcesses
 
 // sectionVariables is the ${var} definition block (on defaults, a service, a
 // storage doc or an app) expanded during resolution.
 const sectionVariables = "variables"
+
+// SectionVariables is the ${var} definition block.
+const SectionVariables = sectionVariables
 
 // Catalog categories mirror the catalog subdirectory a definition is loaded
 // from (catalog/services, catalog/apps, catalog/libs, catalog/patterns). The
@@ -263,10 +398,10 @@ func categoryFromDir(name string) string {
 // metaKeys are the document keys that control resolution and are not part of a
 // service's merged body.
 var metaKeys = map[string]struct{}{
-	"aliases": {},
-	"name":    {},
-	"uses":    {},
-	"clone":   {},
+	keyAliases:     {},
+	keyName:        {},
+	ServiceKeyUses: {},
+	keyClone:       {},
 }
 
 // perServiceDefaults are the only parts of global `defaults` that merge into a
@@ -312,7 +447,7 @@ func DocumentAliases(doc *Document) []string {
 	if doc == nil {
 		return nil
 	}
-	return cfgval.StringList(doc.Body["aliases"])
+	return cfgval.StringList(doc.Body[keyAliases])
 }
 
 // CanonicalCatalogName returns the canonical name for a catalog document in
@@ -363,7 +498,7 @@ func (c *Config) canonicalServiceNameFromCatalogAlias(alias string) (string, boo
 		if doc == nil || docName != catalogName {
 			continue
 		}
-		uses := cfgval.String(doc.Body["uses"])
+		uses := cfgval.String(doc.Body[ServiceKeyUses])
 		if uses == "" {
 			continue
 		}
@@ -519,7 +654,7 @@ func (g Global) TemplateDir() string {
 // `service`, or the first candidate of a per-init `service` map; falling back to
 // the given name.
 func ServiceUnit(tree map[string]any, fallback string) string {
-	switch s := tree["service"].(type) {
+	switch s := tree[ServiceKeyService].(type) {
 	case string:
 		if s != "" {
 			return s
@@ -543,7 +678,7 @@ func ServiceUnit(tree map[string]any, fallback string) string {
 //     backend, requiring a match (trust = false). A backend with no entry is
 //     not available: the candidate list is empty.
 func ServiceCandidates(tree map[string]any, backend, fallback string) (candidates []string, trust bool) {
-	switch s := tree["service"].(type) {
+	switch s := tree[ServiceKeyService].(type) {
 	case string:
 		if s != "" {
 			return []string{s}, true
@@ -566,7 +701,7 @@ func ServiceCandidates(tree map[string]any, backend, fallback string) (candidate
 // which cascades to other Sermo services. Empty when absent or when the backend
 // has no list.
 func AdditionalUnits(tree map[string]any, backend string) []string {
-	m, ok := tree["also_service"].(map[string]any)
+	m, ok := tree[ServiceKeyAlsoService].(map[string]any)
 	if !ok {
 		return nil
 	}
@@ -595,15 +730,15 @@ func StopInvariants(tree map[string]any) (pidfilePaths, files []string, clean bo
 	if !ok {
 		return nil, nil, false, nil
 	}
-	clean, _ = sp["clean_after_stop"].(bool)
-	files = cfgval.StringList(sp["files_absent"])
-	if pa, _ := sp["pidfile_absent"].(bool); pa {
-		pidfilePaths = append(pidfilePaths, cfgval.StringList(tree["pidfile"])...)
+	clean, _ = sp[keyCleanAfterStop].(bool)
+	files = cfgval.StringList(sp[keyFilesAbsent])
+	if pa, _ := sp[keyPidfileAbsent].(bool); pa {
+		pidfilePaths = append(pidfilePaths, cfgval.StringList(tree[ServiceKeyPidfile])...)
 		for _, role := range sortedPidfileRoles(tree) {
-			pidfilePaths = append(pidfilePaths, cfgval.StringList(tree["pidfiles"].(map[string]any)[role])...)
+			pidfilePaths = append(pidfilePaths, cfgval.StringList(tree[ServiceKeyPidfiles].(map[string]any)[role])...)
 		}
 	}
-	if raw, ok := sp["clean_on_stop"].([]any); ok {
+	if raw, ok := sp[keyCleanOnStop].([]any); ok {
 		for _, item := range raw {
 			switch e := item.(type) {
 			case string:
@@ -623,7 +758,7 @@ func StopInvariants(tree map[string]any) (pidfilePaths, files []string, clean bo
 }
 
 func sortedPidfileRoles(tree map[string]any) []string {
-	pidfiles, ok := tree["pidfiles"].(map[string]any)
+	pidfiles, ok := tree[ServiceKeyPidfiles].(map[string]any)
 	if !ok {
 		return nil
 	}
@@ -635,7 +770,7 @@ func sortedPidfileRoles(tree map[string]any) []string {
 // via their own guarded operation. Reload is deliberately not cascaded. Empty
 // when absent.
 func CascadeTargets(tree map[string]any) []string {
-	return cfgval.StringList(tree["also_apply"])
+	return cfgval.StringList(tree[ServiceKeyAlsoApply])
 }
 
 // Notifiers returns the global `notifiers` section plus built-in notifiers. It is

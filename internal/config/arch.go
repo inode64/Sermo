@@ -17,7 +17,7 @@ const archMarker = "${arch}"
 var detectedArch = detectArch()
 
 func detectArch() string {
-	if v := envOverride("SERMO_ARCH"); v != "" {
+	if v := envOverride(envArchOverride); v != "" {
 		return v
 	}
 	// Native uname(2) via x/sys/unix — no external `uname` process.

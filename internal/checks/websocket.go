@@ -160,7 +160,7 @@ func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
 		return nil, "websocket check: invalid url"
 	}
 	switch u.Scheme {
-	case "ws", "wss", "http", "https":
+	case URLSchemeWS, URLSchemeWSS, URLSchemeHTTP, URLSchemeHTTPS:
 	default:
 		return nil, "websocket check url scheme must be ws, wss, http or https"
 	}
@@ -190,7 +190,7 @@ func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
 }
 
 func websocketSecure(scheme string) bool {
-	return scheme == "wss" || scheme == "https"
+	return scheme == URLSchemeWSS || scheme == URLSchemeHTTPS
 }
 
 func websocketDefaultPort(secure bool) string {

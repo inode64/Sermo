@@ -11,6 +11,8 @@ import (
 // (link state, errors, speed) each notifying the chosen targets.
 type netAssistant struct{}
 
+const netKeywordActive = "active"
+
 func (netAssistant) Name() string  { return "net" }
 func (netAssistant) Title() string { return "Network interface checks (link state, errors, speed)" }
 
@@ -73,16 +75,16 @@ func chooseIfaces(p *Prompt, question string, cands []Iface, defaultIfaces []str
 	}
 	var keywords []string
 	if hasActive {
-		keywords = append(keywords, "active")
+		keywords = append(keywords, netKeywordActive)
 	}
 	if allowDefault && hasDefault {
-		keywords = append(keywords, "default")
+		keywords = append(keywords, config.SelectionKeywordDefault)
 	}
 	sel, keyword := p.MultiChooseKeyword(question, labels, keywords...)
 	switch keyword {
-	case "active":
+	case netKeywordActive:
 		return filterIfaces(cands, func(c Iface) bool { return c.Up })
-	case "default":
+	case config.SelectionKeywordDefault:
 		return filterIfaces(cands, func(c Iface) bool { return defaults[c.Name] })
 	default:
 		return candidatesByIndexes(cands, sel)

@@ -19,9 +19,9 @@ import (
 // vocabulary.
 func compareValue(result, op, value string) (bool, error) {
 	switch op {
-	case "contains":
+	case cfgval.AssertOpContains:
 		return strings.Contains(result, value), nil
-	case ">", ">=", "<", "<=":
+	case cfgval.CompareOpGreater, cfgval.CompareOpGreaterEqual, cfgval.CompareOpLess, cfgval.CompareOpLessEqual:
 		rf, err := parseNumericString("result", result)
 		if err != nil {
 			return false, fmt.Errorf("%w for op %s", err, op)
@@ -31,17 +31,17 @@ func compareValue(result, op, value string) (bool, error) {
 			return false, err
 		}
 		return compareFloat(rf, op, vf), nil
-	case "==", "!=":
+	case cfgval.CompareOpEqual, cfgval.CompareOpNotEqual:
 		rf, rerr := parseNumericString("result", result)
 		vf, verr := parseNumericString(CheckKeyValue, value)
 		if rerr == nil && verr == nil {
 			return compareFloat(rf, op, vf), nil
 		}
-		if op == "==" {
+		if op == cfgval.CompareOpEqual {
 			return result == value, nil
 		}
 		return result != value, nil
-	case "=~":
+	case cfgval.AssertOpRegex:
 		re, err := regexp.Compile(value)
 		if err != nil {
 			return false, fmt.Errorf("invalid regex %q: %w", value, err)
@@ -90,7 +90,7 @@ func ParseOutputMatcher(v any) (OutputMatcher, string) {
 	case map[string]any:
 		op := cfgval.AsString(t[CheckKeyOp])
 		if !validCompareOp(op) {
-			return OutputMatcher{}, "op must be one of ==, !=, >, >=, <, <=, contains, =~"
+			return OutputMatcher{}, "op must be one of " + cfgval.AssertOpSummary
 		}
 		value := cfgval.String(t[CheckKeyValue])
 		if err := ValidateAssertionValue("", op, value); err != nil {
@@ -152,11 +152,11 @@ func ParseVersionMatcher(v any) (VersionMatcher, string) {
 			return VersionMatcher{}, fmt.Sprintf("%s must be a non-empty string or list", key)
 		}
 		switch key {
-		case "contains":
+		case VersionMatchKeyContains:
 			matcher.Contains = append(matcher.Contains, values...)
-		case "excludes":
+		case VersionMatchKeyExcludes:
 			matcher.Excludes = append(matcher.Excludes, values...)
-		case "regex":
+		case VersionMatchKeyRegex:
 			for _, value := range values {
 				re, err := regexp.Compile(value)
 				if err != nil {
@@ -240,7 +240,7 @@ func parseExpectLatency(entry map[string]any) (op, value, warn string) {
 	}
 	op = cfgval.AsString(lat[CheckKeyOp])
 	if !validCompareOp(op) {
-		return "", "", "expect_latency op must be one of ==, !=, >, >=, <, <=, contains, =~"
+		return "", "", "expect_latency op must be one of " + cfgval.AssertOpSummary
 	}
 	value = cfgval.String(lat[CheckKeyValue])
 	if err := ValidateAssertionValue(CheckKeyExpectLatency, op, value); err != nil {
@@ -256,11 +256,11 @@ func ValidateAssertionValue(label, op, value string) error {
 		valueLabel = label + " value"
 	}
 	switch op {
-	case ">", ">=", "<", "<=":
+	case cfgval.CompareOpGreater, cfgval.CompareOpGreaterEqual, cfgval.CompareOpLess, cfgval.CompareOpLessEqual:
 		if _, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err != nil {
 			return fmt.Errorf("%s %q must be numeric for op %s", valueLabel, value, op)
 		}
-	case "=~":
+	case cfgval.AssertOpRegex:
 		if _, err := regexp.Compile(value); err != nil {
 			return fmt.Errorf("%s is not a valid regexp: %w", valueLabel, err)
 		}

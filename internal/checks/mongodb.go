@@ -147,7 +147,7 @@ func mongoRawScalar(rv bson.RawValue) (string, bool) {
 func buildMongoCheck(b base, entry map[string]any) (Check, string) {
 	op := cfgval.AsString(entry[CheckKeyOp])
 	if !validCompareOp(op) {
-		return nil, "mongodb-query check op must be one of ==, !=, >, >=, <, <=, contains, =~"
+		return nil, "mongodb-query check op must be one of " + cfgval.AssertOpSummary
 	}
 	value := cfgval.String(entry[CheckKeyValue])
 	if value == "" {

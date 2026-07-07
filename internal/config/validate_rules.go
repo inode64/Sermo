@@ -468,7 +468,7 @@ func validateMetric(entry map[string]any, path string, allowSystem bool, add add
 	}
 	if op := cfgval.String(entry[rules.FieldOp]); op != "" {
 		if !cfgval.IsCompareOp(op) {
-			add("%s op %q is not one of >, >=, <, <=, ==, !=", path, op)
+			add("%s op %q is not one of %s", path, op, cfgval.CompareOpSummary)
 		}
 	}
 	value := cfgval.String(entry[rules.FieldValue])

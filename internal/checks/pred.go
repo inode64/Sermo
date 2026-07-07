@@ -103,6 +103,36 @@ const LevelFieldUsedBytes = fieldUsedBytes
 // LevelFieldFreeBytes is the public `free_bytes` predicate/data field.
 const LevelFieldFreeBytes = fieldFreeBytes
 
+// DiskIOFieldUtilPct is the public disk utilization predicate/data field.
+const DiskIOFieldUtilPct = fieldUtilPct
+
+// DiskIOFieldReadBytes is the public disk read-rate predicate/data field.
+const DiskIOFieldReadBytes = fieldReadBytes
+
+// DiskIOFieldWriteBytes is the public disk write-rate predicate/data field.
+const DiskIOFieldWriteBytes = fieldWriteBytes
+
+// DiskIOFieldAwaitMs is the public disk await-time predicate/data field.
+const DiskIOFieldAwaitMs = fieldAwaitMs
+
+// HdparmFieldRead is the public buffered-read predicate/data field.
+const HdparmFieldRead = fieldRead
+
+// HdparmFieldCached is the public cached-read predicate/data field.
+const HdparmFieldCached = fieldCached
+
+// SmartFieldTemperature is the public SMART temperature predicate/data field.
+const SmartFieldTemperature = fieldTemperature
+
+// SmartFieldReallocated is the public SMART reallocated-sector predicate/data field.
+const SmartFieldReallocated = fieldReallocated
+
+// SmartFieldWear is the public SMART wear predicate/data field.
+const SmartFieldWear = fieldWear
+
+// SmartFieldPowerOnHours is the public SMART power-on-hours predicate/data field.
+const SmartFieldPowerOnHours = fieldPowerOnHours
+
 // Predicate field lists, one per level check. They are exported so config
 // validation walks the same lists and both layers stay in step by construction.
 var (
@@ -118,7 +148,7 @@ var (
 	// DiskIOPredFields are the predicates of a diskio check: per-cycle rates
 	// (read_bytes/write_bytes are bytes per second, so the size-suffix grammar
 	// reads naturally, e.g. "50M").
-	DiskIOPredFields = []string{fieldUtilPct, fieldReadBytes, fieldWriteBytes, fieldAwaitMs}
+	DiskIOPredFields = []string{DiskIOFieldUtilPct, DiskIOFieldReadBytes, DiskIOFieldWriteBytes, DiskIOFieldAwaitMs}
 	// FdsPredFields are the predicates of an fds check.
 	FdsPredFields = []string{fieldUsedPct, fieldFree, DataKeyAllocated}
 	// PidsPredFields are the predicates of a pids check.
@@ -134,9 +164,9 @@ var (
 	// SensorPredFields are the predicates of a sensors check.
 	SensorPredFields = []string{sensorTemp, sensorFan, sensorVoltage}
 	// HdparmPredFields are the predicates of an hdparm check.
-	HdparmPredFields = []string{fieldRead, fieldCached}
+	HdparmPredFields = []string{HdparmFieldRead, HdparmFieldCached}
 	// SmartPredFields are the optional attribute predicates of a smart check.
-	SmartPredFields = []string{fieldTemperature, fieldReallocated, fieldWear, fieldPowerOnHours}
+	SmartPredFields = []string{SmartFieldTemperature, SmartFieldReallocated, SmartFieldWear, SmartFieldPowerOnHours}
 	// RaidPredFields are the optional predicates of a raid check.
 	RaidPredFields = []string{fieldDegraded, fieldRecovering, fieldArrays}
 	// EdacPredFields are the optional predicates of an edac check.

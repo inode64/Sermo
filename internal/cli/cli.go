@@ -276,74 +276,74 @@ func (a App) Run(ctx context.Context, args []string) int {
 		opts.timeout = defaultTimeout(opts.command)
 	}
 	if opts.backend == "" {
-		envBackend, err := servicemgr.ParseBackend(a.Env("SERMO_BACKEND"))
+		envBackend, err := servicemgr.ParseBackend(a.Env(config.EnvBackendOverride))
 		if err != nil {
-			fmt.Fprintf(a.Stderr, "usage error: SERMO_BACKEND: %v\n", err)
+			fmt.Fprintf(a.Stderr, "usage error: %s: %v\n", config.EnvBackendOverride, err)
 			return exitUsage
 		}
 		opts.backend = envBackend
 	}
 
 	switch opts.command {
-	case "help":
+	case commandHelp:
 		return runHelp(a, opts)
-	case "version":
+	case commandVersion:
 		fmt.Fprintln(a.Stdout, buildinfo.String())
 		return exitSuccess
-	case "backend":
+	case commandBackend:
 		return a.runBackend(ctx, opts)
-	case "status":
+	case commandStatus:
 		return a.runStatus(ctx, opts)
-	case "is-active":
+	case commandIsActive:
 		return a.runIsActive(ctx, opts)
-	case actionStart, actionStop, actionRestart, actionResume:
+	case commandStart, commandStop, commandRestart, commandResume:
 		return a.runAction(ctx, opts, opts.command)
-	case mountctl.ActionMount:
+	case commandMount:
 		return a.runMount(ctx, opts)
-	case mountctl.ActionUmount:
+	case commandUmount:
 		return a.runUmount(ctx, opts)
-	case "config":
+	case commandConfig:
 		return a.runConfig(opts)
-	case "locks":
+	case commandLocks:
 		return a.runLocks(opts)
-	case "processes":
+	case commandProcesses:
 		return a.runProcesses(opts)
-	case "preflight":
+	case commandPreflight:
 		return a.runPreflight(ctx, opts)
-	case "daemon":
+	case commandDaemon:
 		return a.runDaemon(ctx, opts)
-	case "watch":
+	case commandWatch:
 		return a.runWatch(ctx, opts)
-	case "events":
+	case commandEvents:
 		return a.runEvents(ctx, opts)
-	case "activity":
+	case commandActivity:
 		return a.runActivity(ctx, opts)
-	case "apps":
+	case commandApps:
 		return a.runApps(ctx, opts)
-	case "libs":
+	case commandLibs:
 		return a.runLibs(ctx, opts)
-	case "patterns":
+	case commandPatterns:
 		return a.runPatterns(opts)
-	case "services":
+	case commandServices:
 		return a.runServices(ctx, opts)
-	case "state":
+	case commandState:
 		return a.runState(ctx, opts)
-	case "lock":
+	case commandLock:
 		return a.runLock(ctx, opts)
-	case "unmonitor":
+	case commandUnmonitor:
 		return a.runMonitor(opts, true)
-	case "monitor":
+	case commandMonitor:
 		return a.runMonitor(opts, false)
-	case "panic":
+	case commandPanic:
 		return a.runPanic(opts)
-	case "sla":
+	case commandSLA:
 		return a.runSLA(opts)
-	case actionReload:
+	case commandReload:
 		if opts.service() == "" {
-			return a.commandUsageError(actionReload, "reload requires a service name; use `sermoctl daemon reload` to reload sermod config")
+			return a.commandUsageError(commandReload, "reload requires a service name; use `sermoctl daemon reload` to reload sermod config")
 		}
-		return a.runAction(ctx, opts, actionReload)
-	case "wizard":
+		return a.runAction(ctx, opts, commandReload)
+	case commandWizard:
 		return a.runWizard(ctx, opts)
 	case "":
 		fmt.Fprintln(a.Stderr, "usage error: missing command")
@@ -384,10 +384,10 @@ func (a App) runBackend(ctx context.Context, opts options) int {
 
 func (a App) runStatus(ctx context.Context, opts options) int {
 	if opts.service() == "" {
-		return a.commandUsageError("status", "status requires a service name")
+		return a.commandUsageError(commandStatus, "status requires a service name")
 	}
 	if len(opts.args) > 1 {
-		return a.commandUsageError("status", "status takes exactly one service name")
+		return a.commandUsageError(commandStatus, "status takes exactly one service name")
 	}
 
 	status, code := a.serviceStatus(ctx, opts)
@@ -500,10 +500,10 @@ func metaSuffix(source, changedAt string) string {
 
 func (a App) runIsActive(ctx context.Context, opts options) int {
 	if opts.service() == "" {
-		return a.commandUsageError("is-active", "is-active requires a service name")
+		return a.commandUsageError(commandIsActive, "is-active requires a service name")
 	}
 	if len(opts.args) > 1 {
-		return a.commandUsageError("is-active", "is-active takes exactly one service name")
+		return a.commandUsageError(commandIsActive, "is-active takes exactly one service name")
 	}
 
 	status, code := a.serviceStatus(ctx, opts)
@@ -569,14 +569,14 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	}
 	result, err := a.operateWithCascade(ctx, opts, cfg, resolved, service, action, actionStore)
 	if err != nil {
-		a.recordAccess(cfg, action, service, "error", err.Error())
+		a.recordAccess(cfg, action, service, accessStatusError, err.Error())
 		return a.fail(opts, err.Error())
 	}
 	a.notifyInteractiveBlockedAction(ctx, result)
 
-	status := "ok"
+	status := accessStatusOK
 	if result.Status != operation.ResultOK {
-		status = "error"
+		status = accessStatusError
 	}
 	a.recordAccess(cfg, action, service, status, result.Message)
 
@@ -705,7 +705,7 @@ func (a App) beginManualOperationSettling(cfg *config.Config, store *state.Store
 	if err := app.BeginOperationSettlingForCLI(store, service, action); err != nil {
 		msg := err.Error()
 		fmt.Fprintf(a.Stderr, "warning: %s\n", msg)
-		a.recordAccess(cfg, action+"-settling", service, "error", msg)
+		a.recordAccess(cfg, action+"-settling", service, accessStatusError, msg)
 	}
 }
 
@@ -716,7 +716,7 @@ func (a App) finishManualOperationSettling(cfg *config.Config, store *state.Stor
 	if err := app.FinishOperationSettlingForCLIWithActive(store, service, action, result, opErr, activeAfterStart); err != nil {
 		msg := err.Error()
 		fmt.Fprintf(a.Stderr, "warning: %s\n", msg)
-		a.recordAccess(cfg, action+"-settling", service, "error", msg)
+		a.recordAccess(cfg, action+"-settling", service, accessStatusError, msg)
 	}
 }
 
@@ -728,11 +728,11 @@ func (a App) syncManualActionMonitoring(cfg *config.Config, store *state.Store, 
 	if err != nil {
 		msg := err.Error()
 		fmt.Fprintf(a.Stderr, "warning: %s\n", msg)
-		a.recordAccess(cfg, action+"-monitor", service, "error", msg)
+		a.recordAccess(cfg, action+"-monitor", service, accessStatusError, msg)
 		return
 	}
 	if change.Changed {
-		a.recordAccess(cfg, change.Action, service, "ok", change.Message)
+		a.recordAccess(cfg, change.Action, service, accessStatusOK, change.Message)
 	}
 }
 
@@ -876,7 +876,7 @@ func operationExit(status operation.ResultStatus) int {
 // runConfig dispatches the `config` subcommands.
 func (a App) runConfig(opts options) int {
 	if len(opts.args) == 0 {
-		return a.commandUsageError("config", "config requires a subcommand (validate)")
+		return a.commandUsageError(commandConfig, "config requires a subcommand (validate)")
 	}
 
 	sub := opts.args[0]
@@ -884,16 +884,16 @@ func (a App) runConfig(opts options) int {
 	globalPath := opts.globalPath()
 
 	switch sub {
-	case "validate":
+	case commandValidate:
 		return a.runConfigValidate(globalPath, rest, opts)
 	default:
-		return a.commandUsageError("config", fmt.Sprintf("unknown config subcommand %q", sub))
+		return a.commandUsageError(commandConfig, fmt.Sprintf("unknown config subcommand %q", sub))
 	}
 }
 
 func (a App) runConfigValidate(globalPath string, rest []string, opts options) int {
 	if len(rest) > 0 {
-		return a.commandUsageError("config", "config validate takes no service name; it validates the whole Sermo configuration")
+		return a.commandUsageError(commandConfig, "config validate takes no service name; it validates the whole Sermo configuration")
 	}
 
 	cfg, err := a.LoadConfig(globalPath)
@@ -952,10 +952,10 @@ func issuesJSON(issues []config.Issue) []map[string]string {
 // under engine.default_timeout. A required check failure exits 1.
 func (a App) runPreflight(ctx context.Context, opts options) int {
 	if opts.service() == "" {
-		return a.commandUsageError("preflight", "preflight requires a service name")
+		return a.commandUsageError(commandPreflight, "preflight requires a service name")
 	}
 	if len(opts.args) > 1 {
-		return a.commandUsageError("preflight", "preflight takes exactly one service name")
+		return a.commandUsageError(commandPreflight, "preflight takes exactly one service name")
 	}
 	service := opts.service()
 
@@ -1063,10 +1063,10 @@ func engineDefaultTimeout(cfg *config.Config) time.Duration {
 // stale), reading the runtime root from the loaded config.
 func (a App) runLocks(opts options) int {
 	if opts.service() == "" {
-		return a.commandUsageError("locks", "locks requires a service name")
+		return a.commandUsageError(commandLocks, "locks requires a service name")
 	}
 	if len(opts.args) > 1 {
-		return a.commandUsageError("locks", "locks takes exactly one service name")
+		return a.commandUsageError(commandLocks, "locks takes exactly one service name")
 	}
 
 	cfg, code := a.loadConfig(opts)
@@ -1127,10 +1127,10 @@ func formatLock(lock locks.Lock) string {
 // , reading the service's `processes` selectors from resolved config.
 func (a App) runProcesses(opts options) int {
 	if opts.service() == "" {
-		return a.commandUsageError("processes", "processes requires a service name")
+		return a.commandUsageError(commandProcesses, "processes requires a service name")
 	}
 	if len(opts.args) > 1 {
-		return a.commandUsageError("processes", "processes takes exactly one service name")
+		return a.commandUsageError(commandProcesses, "processes takes exactly one service name")
 	}
 	service := opts.service()
 
@@ -1332,9 +1332,9 @@ type statusJSON struct {
 // not given. Backend actions can legitimately take much longer than a probe.
 func defaultTimeout(command string) time.Duration {
 	switch command {
-	case actionStart, actionStop, actionRestart, actionReload, actionResume, mountctl.ActionMount, mountctl.ActionUmount, "state":
+	case commandStart, commandStop, commandRestart, commandReload, commandResume, commandMount, commandUmount, commandState:
 		return app.DefaultEngineOperationTimeout
-	case "services":
+	case commandServices:
 		return defaultListCommandTimeout
 	default:
 		return defaultProbeCommandTimeout
@@ -1364,12 +1364,12 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 	args := opts.args
 	if len(args) > 0 && args[0] == "clear" {
 		if len(args) > 1 {
-			return a.commandUsageError("events", "events clear accepts only optional --before TIME")
+			return a.commandUsageError(commandEvents, "events clear accepts only optional --before TIME")
 		}
 		return a.runEventsClear(ctx, opts, "events")
 	}
 	if len(args) > 1 {
-		return a.commandUsageError("events", "events accepts at most one service name")
+		return a.commandUsageError(commandEvents, "events accepts at most one service name")
 	}
 
 	// list mode: `sermoctl events [SERVICE] [--limit N]`
@@ -1450,11 +1450,11 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 func (a App) runActivity(ctx context.Context, opts options) int {
 	if len(opts.args) > 0 && opts.args[0] == "clear" {
 		if len(opts.args) > 1 {
-			return a.commandUsageError("activity", "activity clear accepts only optional --before TIME")
+			return a.commandUsageError(commandActivity, "activity clear accepts only optional --before TIME")
 		}
 		return a.runEventsClear(ctx, opts, "activity entries")
 	}
-	return a.commandUsageError("activity", "activity supports only: clear [--before TIME]")
+	return a.commandUsageError(commandActivity, "activity supports only: clear [--before TIME]")
 }
 
 func (a App) runEventsClear(ctx context.Context, opts options, noun string) int {
@@ -1472,7 +1472,7 @@ func (a App) runEventsClear(ctx context.Context, opts options, noun string) int 
 	}
 	n, err := pruneEvents(ctx, opts, before)
 	if err != nil {
-		a.recordAccess(cfg, "events clear", "", "error", err.Error())
+		a.recordAccess(cfg, accessCommandEventsClear, "", accessStatusError, err.Error())
 		return a.fail(opts, err.Error())
 	}
 	if opts.json {
@@ -1482,7 +1482,7 @@ func (a App) runEventsClear(ctx context.Context, opts options, noun string) int 
 	} else {
 		fmt.Fprintf(a.Stdout, "cleared %d %s before %s\n", n, noun, before.Format(time.RFC3339))
 	}
-	a.recordAccess(cfg, "events clear", "", "ok", fmt.Sprintf("pruned %d %s", n, noun))
+	a.recordAccess(cfg, accessCommandEventsClear, "", accessStatusOK, fmt.Sprintf("pruned %d %s", n, noun))
 	return exitSuccess
 }
 
@@ -1524,8 +1524,8 @@ func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Ti
 	req.Header.Set("X-Sermo-CSRF", "1")
 
 	// If the config declares an admin password, send Basic auth (any user + pw).
-	if wraw, ok := cfg.Global.Raw["web"].(map[string]any); ok {
-		if pw := cfgval.String(wraw["password"]); pw != "" {
+	if wraw, ok := cfg.Global.Raw[config.SectionWeb].(map[string]any); ok {
+		if pw := cfgval.String(wraw[config.WebKeyPassword]); pw != "" {
 			cred := base64.StdEncoding.EncodeToString([]byte("admin:" + pw))
 			req.Header.Set("Authorization", "Basic "+cred)
 		}
@@ -1578,8 +1578,8 @@ func (a App) fetchEvents(ctx context.Context, opts options, service string, limi
 		return nil, err
 	}
 	// no CSRF needed for GET; add auth if configured
-	if wraw, ok := cfg.Global.Raw["web"].(map[string]any); ok {
-		if pw := cfgval.String(wraw["password"]); pw != "" {
+	if wraw, ok := cfg.Global.Raw[config.SectionWeb].(map[string]any); ok {
+		if pw := cfgval.String(wraw[config.WebKeyPassword]); pw != "" {
 			cred := base64.StdEncoding.EncodeToString([]byte("admin:" + pw))
 			req.Header.Set("Authorization", "Basic "+cred)
 		}
@@ -1605,8 +1605,8 @@ func (a App) fetchEvents(ctx context.Context, opts options, service string, limi
 }
 
 func applyDaemonWebAuth(req *http.Request, cfg *config.Config) {
-	if wraw, ok := cfg.Global.Raw["web"].(map[string]any); ok {
-		if pw := cfgval.String(wraw["password"]); pw != "" {
+	if wraw, ok := cfg.Global.Raw[config.SectionWeb].(map[string]any); ok {
+		if pw := cfgval.String(wraw[config.WebKeyPassword]); pw != "" {
 			cred := base64.StdEncoding.EncodeToString([]byte("admin:" + pw))
 			req.Header.Set("Authorization", "Basic "+cred)
 		}
@@ -1712,15 +1712,15 @@ func (a App) fetchDaemonApplicationStates(ctx context.Context, opts options) map
 }
 
 func webAPIBase(cfg *config.Config) (string, error) {
-	wraw, _ := cfg.Global.Raw["web"].(map[string]any)
+	wraw, _ := cfg.Global.Raw[config.SectionWeb].(map[string]any)
 	if wraw == nil {
 		return "", fmt.Errorf("web UI is not enabled in config (no web: block or no port); the event API is exposed by the running daemon")
 	}
-	addr := cfgval.String(wraw["address"])
+	addr := cfgval.String(wraw[config.WebKeyAddress])
 	if addr == "" {
 		addr = "127.0.0.1"
 	}
-	p, ok := cfgval.Int(wraw["port"])
+	p, ok := cfgval.Int(wraw[config.WebKeyPort])
 	if !ok || p <= 0 {
 		return "", fmt.Errorf("web.port is not set in config")
 	}
@@ -1788,17 +1788,17 @@ func (a App) runReload(ctx context.Context, opts options) int {
 	}
 
 	if pid <= 0 {
-		a.recordAccess(cfg, "daemon reload", "", "error", "could not find running sermod pid")
+		a.recordAccess(cfg, accessCommandDaemonReload, "", accessStatusError, "could not find running sermod pid")
 		return a.fail(opts, "could not find running sermod pid (no pidfile and no running sermod process)")
 	}
 
 	// Send SIGHUP. On Linux this is reliable for the daemon's signal handler.
 	if err := (process.OSSignaler{}).Signal(pid, syscall.SIGHUP); err != nil {
-		a.recordAccess(cfg, "daemon reload", "", "error", err.Error())
+		a.recordAccess(cfg, accessCommandDaemonReload, "", accessStatusError, err.Error())
 		return a.fail(opts, fmt.Sprintf("failed to signal pid %d: %v", pid, err))
 	}
 
-	a.recordAccess(cfg, "daemon reload", "", "ok", fmt.Sprintf("pid %d", pid))
+	a.recordAccess(cfg, accessCommandDaemonReload, "", accessStatusOK, fmt.Sprintf("pid %d", pid))
 	if opts.json {
 		writeJSON(a.Stdout, map[string]any{"ok": true, "pid": pid})
 	} else {

@@ -51,6 +51,22 @@ const (
 	slaTimelineCacheTTL = 45 * time.Second
 )
 
+const (
+	remediationStatePaused   = TargetStatePaused
+	remediationStatePending  = "pending"
+	remediationStateEligible = "eligible"
+	remediationStateBlocked  = "blocked"
+)
+
+const (
+	backendStatusError        = "error"
+	watchCategoryFallback     = "watch"
+	watchReadingFieldState    = checks.CheckKeyState
+	watchReadingStateActive   = string(servicemgr.StatusActive)
+	watchReadingStateBaseline = "baseline"
+	watchReadingStateMissing  = "missing"
+)
+
 // webEntry is one service's web-backend record.
 type webEntry struct {
 	displayName       string
@@ -450,7 +466,7 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 	return &webWatch{
 		name:          name,
 		displayName:   config.DisplayName(entry, name),
-		category:      config.CategoryLabel(entry, "watch"),
+		category:      config.CategoryLabel(entry, watchCategoryFallback),
 		checkType:     ctype,
 		interval:      iv,
 		disabled:      cfgval.Disabled(entry),
@@ -580,7 +596,7 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, status, chec
 				break
 			}
 		}
-		if checkHealth == "unknown" {
+		if checkHealth == checkHealthUnknown {
 			addMissing("checks")
 		}
 	}
@@ -614,24 +630,24 @@ func (b *WebBackend) decorateRemediation(name string, svc *web.Service) {
 		return
 	}
 	if !svc.Monitored {
-		svc.RemediationState = "paused"
+		svc.RemediationState = remediationStatePaused
 		return
 	}
 	if b.remediation == nil {
-		svc.RemediationState = "pending"
+		svc.RemediationState = remediationStatePending
 		return
 	}
 	rep, ok := b.remediation.Get(name)
 	if !ok {
-		svc.RemediationState = "pending"
+		svc.RemediationState = remediationStatePending
 		return
 	}
 	if rep.Allowed {
-		svc.RemediationState = "eligible"
+		svc.RemediationState = remediationStateEligible
 	} else if rep.Reason != "" {
 		svc.RemediationState = rep.Reason
 	} else {
-		svc.RemediationState = "blocked"
+		svc.RemediationState = remediationStateBlocked
 	}
 	if !rep.NextEligibleAt.IsZero() {
 		svc.NextEligibleAt = rep.NextEligibleAt.UTC().Format(time.RFC3339)
@@ -644,7 +660,7 @@ func (b *WebBackend) operationSettlingPending(name string) bool {
 	}
 	rec, found, err := b.operationSettling.OperationSettling(name)
 	if err != nil {
-		b.emitMonitorEvent(name, "operation-settling", eventKindError, "", err.Error())
+		b.emitMonitorEvent(name, eventActionOperationSettling, eventKindError, "", err.Error())
 		return false
 	}
 	if !found {
@@ -652,7 +668,7 @@ func (b *WebBackend) operationSettlingPending(name string) bool {
 	}
 	if !rec.UpdatedAt.IsZero() && b.webNow().Sub(rec.UpdatedAt) > operationSettlingMaxAge {
 		if err := b.operationSettling.ClearOperationSettling(name); err != nil {
-			b.emitMonitorEvent(name, "operation-settling", eventKindError, "", err.Error())
+			b.emitMonitorEvent(name, eventActionOperationSettling, eventKindError, "", err.Error())
 		}
 		return false
 	}
@@ -742,13 +758,13 @@ func (b *WebBackend) lockReportsByService() map[string]locks.Report {
 // services with no observed checks yet are "unknown".
 func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, monitored bool) (failing int, health string) {
 	if !monitored {
-		return 0, "paused"
+		return 0, TargetStatePaused
 	}
 	if len(checkNames) == 0 {
 		return 0, ""
 	}
 	if snap == nil {
-		return 0, "unknown"
+		return 0, checkHealthUnknown
 	}
 	observed := false
 	for _, name := range checkNames {
@@ -763,12 +779,12 @@ func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, moni
 		failing++
 	}
 	if !observed {
-		return 0, "unknown"
+		return 0, checkHealthUnknown
 	}
 	if failing > 0 {
-		return failing, "failing"
+		return failing, checkHealthFailing
 	}
-	return 0, "ok"
+	return 0, TargetStateOK
 }
 
 // Services returns the web view of every configured service.
@@ -913,7 +929,7 @@ func (b *WebBackend) lastWatchActivities() map[string]watchActivity {
 // cache so the service list does not invoke systemctl/rc-status on every poll.
 func (e *webEntry) backendStatus(ctx context.Context, now time.Time) string {
 	if e == nil || e.status == nil {
-		return "unknown"
+		return string(servicemgr.StatusUnknown)
 	}
 	e.statusMu.Lock()
 	defer e.statusMu.Unlock()
@@ -922,7 +938,7 @@ func (e *webEntry) backendStatus(ctx context.Context, now time.Time) string {
 	}
 	st, err := e.status(ctx)
 	if err != nil {
-		e.cachedStatus = "error"
+		e.cachedStatus = backendStatusError
 	} else {
 		e.cachedStatus = string(st)
 	}
@@ -1432,12 +1448,12 @@ func (b *WebBackend) autofsWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 		readings = append(readings, web.WatchReading{Field: checks.DataKeyMountpoints, Label: "Paths", Value: strings.Join(points, ", ")})
 	}
 	if path := cfgval.AsString(w.check[checks.CheckKeyPath]); path != "" {
-		state := "missing"
+		state := watchReadingStateMissing
 		if slices.Contains(points, path) {
-			state = "active"
+			state = watchReadingStateActive
 		}
 		readings = append(readings, web.WatchReading{Field: checks.DataKeyPath, Label: "Configured path", Value: path})
-		readings = append(readings, web.WatchReading{Field: "state", Label: "State", Value: state})
+		readings = append(readings, web.WatchReading{Field: watchReadingFieldState, Label: "State", Value: state})
 		return nil, readings, fmt.Sprintf("autofs %s %s (%d mountpoint%s)", path, state, len(points), pluralSuffix(len(points), "mountpoint"))
 	}
 	return nil, readings, fmt.Sprintf("%d autofs mountpoint%s active", len(points), pluralSuffix(len(points), "mountpoint"))
@@ -1475,19 +1491,19 @@ func (b *WebBackend) diskIOWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 
 	readings := []web.WatchReading{{Field: checks.DataKeyDevice, Label: "Device", Value: device}}
 	if !st.primed {
-		readings = append(readings, web.WatchReading{Field: "state", Label: "State", Value: "baseline"})
+		readings = append(readings, web.WatchReading{Field: watchReadingFieldState, Label: "State", Value: watchReadingStateBaseline})
 		return nil, readings, "diskio " + device + " baseline"
 	}
 	rates, ok := checks.CalculateDiskIORates(st.sample, sample, at.Sub(st.at))
 	if !ok {
-		readings = append(readings, web.WatchReading{Field: "state", Label: "State", Value: "baseline"})
+		readings = append(readings, web.WatchReading{Field: watchReadingFieldState, Label: "State", Value: watchReadingStateBaseline})
 		return nil, readings, "diskio " + device + " baseline"
 	}
 	readings = append(readings,
-		web.WatchReading{Field: "util_pct", Label: "Utilization", Value: watchPercent(rates.UtilPct)},
-		web.WatchReading{Field: "read_bytes", Label: "Read", Value: fmt.Sprintf("%.0f B/s", rates.ReadBytes)},
-		web.WatchReading{Field: "write_bytes", Label: "Write", Value: fmt.Sprintf("%.0f B/s", rates.WriteBytes)},
-		web.WatchReading{Field: "await_ms", Label: "Await", Value: fmt.Sprintf("%.1f ms", rates.AwaitMs)},
+		web.WatchReading{Field: checks.DiskIOFieldUtilPct, Label: "Utilization", Value: watchPercent(rates.UtilPct)},
+		web.WatchReading{Field: checks.DiskIOFieldReadBytes, Label: "Read", Value: fmt.Sprintf("%.0f B/s", rates.ReadBytes)},
+		web.WatchReading{Field: checks.DiskIOFieldWriteBytes, Label: "Write", Value: fmt.Sprintf("%.0f B/s", rates.WriteBytes)},
+		web.WatchReading{Field: checks.DiskIOFieldAwaitMs, Label: "Await", Value: fmt.Sprintf("%.1f ms", rates.AwaitMs)},
 	)
 	return nil, readings, fmt.Sprintf("diskio %s util %.1f%% read %.0fB/s write %.0fB/s await %.1fms",
 		device, rates.UtilPct, rates.ReadBytes, rates.WriteBytes, rates.AwaitMs)
@@ -1680,7 +1696,7 @@ func (b *WebBackend) icmpWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 		timeout = b.defaultTimeout
 	}
 	s, err := checks.SampleICMP(host, cfgval.StringList(w.check[checks.CheckKeyInterface]),
-		cfgval.AsString(w.check[checks.CheckKeyInterfaceMatch]) == "all", count, timeout, b.pingSampler)
+		cfgval.AsString(w.check[checks.CheckKeyInterfaceMatch]) == checks.InterfaceMatchAll, count, timeout, b.pingSampler)
 	if err != nil {
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "icmp " + host + ": " + msg
@@ -2210,13 +2226,13 @@ func applicationFromReport(r appinspect.Report) web.Application {
 
 func applicationStateFromReport(r appinspect.Report) string {
 	status := strings.TrimSpace(strings.ToLower(r.Status))
-	if status == "" || status == "ok" || r.OK {
+	if status == "" || status == appinspect.StatusOK || r.OK {
 		return TargetStateOK
 	}
-	if status == "not installed" || status == "no binary configured" || strings.HasPrefix(status, "error:") {
+	if status == appinspect.StatusNotInstalled || status == appinspect.StatusNoBinaryConfigured || strings.HasPrefix(status, appinspect.StatusPrefixError) {
 		return TargetStateFailed
 	}
-	return "warning"
+	return TargetStateWarning
 }
 
 func (b *WebBackend) withApplicationSLA(apps []web.Application) []web.Application {
@@ -2287,7 +2303,7 @@ func (b *WebBackend) DaemonInfo(ctx context.Context) web.DaemonInfo {
 			}
 		}
 		if info.Backend == "" {
-			info.Backend = "auto"
+			info.Backend = string(servicemgr.BackendAuto)
 		}
 	}
 
@@ -2974,9 +2990,9 @@ func (b *WebBackend) Series(_ context.Context, name string, since time.Duration)
 // so it survives daemon restarts. The running workers pick up the change within
 // the panic gate's refresh window.
 func (b *WebBackend) SetPanic(_ context.Context, on bool) web.ActionResult {
-	action := "panic-off"
+	action := eventActionPanicOff
 	if on {
-		action = "panic-on"
+		action = eventActionPanicOn
 	}
 	if b.store == nil {
 		msg := "panic mode state is unavailable"

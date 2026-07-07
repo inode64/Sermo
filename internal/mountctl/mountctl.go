@@ -128,37 +128,37 @@ type Controller struct {
 // SpecFromStorageTree reads a resolved kind: storage body with a mount block.
 func SpecFromStorageTree(name string, tree map[string]any) Spec {
 	mount, _ := tree[config.StorageKeyMount].(map[string]any)
-	umount, _ := mount["umount"].(map[string]any)
+	umount, _ := mount[config.MountKeyUmount].(map[string]any)
 	spec := Spec{
 		Name:        name,
-		DisplayName: cfgval.String(tree["display_name"]),
+		DisplayName: cfgval.String(tree[config.EntryKeyDisplayName]),
 		Category:    cfgval.String(tree[config.EntryKeyCategory]),
 		Path:        filepath.Clean(cfgval.String(tree[config.EntryKeyPath])),
 		Refcount:    true,
 		Umount:      defaultUmountSpec(),
 	}
-	if ref, ok := mount["refcount"].(bool); ok {
+	if ref, ok := mount[config.MountKeyRefcount].(bool); ok {
 		spec.Refcount = ref
 	}
-	if d := cfgval.Duration(umount["term_timeout"]); d > 0 {
+	if d := cfgval.Duration(umount[config.StopPolicyKeyTermTimeout]); d > 0 {
 		spec.Umount.TermTimeout = d
 	}
-	if d := cfgval.Duration(umount["kill_timeout"]); d > 0 {
+	if d := cfgval.Duration(umount[config.StopPolicyKeyKillTimeout]); d > 0 {
 		spec.Umount.KillTimeout = d
 	}
-	if b, ok := umount["allow_sigkill"].(bool); ok {
+	if b, ok := umount[config.MountKeyAllowSIGKILL].(bool); ok {
 		spec.Umount.AllowSIGKILL = b
 	}
-	if b, ok := umount["allow_lazy"].(bool); ok {
+	if b, ok := umount[config.MountKeyAllowLazy].(bool); ok {
 		spec.Umount.AllowLazy = b
 	}
-	if sp, ok := mount["stop_policy"].(map[string]any); ok {
-		if force, _ := sp["force_kill"].(bool); force {
+	if sp, ok := mount[config.MountKeyStopPolicy].(map[string]any); ok {
+		if force, _ := sp[config.StopPolicyKeyForceKill].(bool); force {
 			spec.Umount.AllowSIGKILL = true
 		}
-		if koi, ok := sp["kill_only_if"].(map[string]any); ok {
-			spec.KillOnlyIf.Users = cfgval.StringList(koi["users"])
-			spec.KillOnlyIf.ExeAny = cfgval.StringList(koi["exe_any"])
+		if koi, ok := sp[config.StopPolicyKeyKillOnlyIf].(map[string]any); ok {
+			spec.KillOnlyIf.Users = cfgval.StringList(koi[config.StopPolicyKeyUsers])
+			spec.KillOnlyIf.ExeAny = cfgval.StringList(koi[config.StopPolicyKeyExeAny])
 		}
 	}
 	return spec

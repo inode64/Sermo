@@ -44,28 +44,28 @@ func (a App) runMonitor(opts options, pause bool) int {
 
 	if pause {
 		if err := store.SetActive(service, false, state.SourceCLI); err != nil {
-			a.recordAccess(cfg, verb, service, "error", err.Error())
+			a.recordAccess(cfg, verb, service, accessStatusError, err.Error())
 			return a.fail(opts, fmt.Sprintf("unmonitor failed: %v", err))
 		}
-		a.recordAccess(cfg, verb, service, "ok", "paused")
-		a.reportMonitor(opts, store, service, "paused")
+		a.recordAccess(cfg, verb, service, accessStatusOK, monitorStatusPaused)
+		a.reportMonitor(opts, store, service, monitorStatusPaused)
 		return exitSuccess
 	}
 
 	active, found, err := store.Active(service)
 	if err != nil {
-		a.recordAccess(cfg, verb, service, "error", err.Error())
+		a.recordAccess(cfg, verb, service, accessStatusError, err.Error())
 		return a.fail(opts, fmt.Sprintf("monitor failed: %v", err))
 	}
 	if err := store.SetActive(service, true, state.SourceCLI); err != nil {
-		a.recordAccess(cfg, verb, service, "error", err.Error())
+		a.recordAccess(cfg, verb, service, accessStatusError, err.Error())
 		return a.fail(opts, fmt.Sprintf("monitor failed: %v", err))
 	}
-	status := "resumed"
+	status := monitorStatusResumed
 	if !found || active {
-		status = "not-paused"
+		status = monitorStatusNotPaused
 	}
-	a.recordAccess(cfg, verb, service, "ok", status)
+	a.recordAccess(cfg, verb, service, accessStatusOK, status)
 	a.reportMonitor(opts, store, service, status)
 	return exitSuccess
 }
@@ -86,9 +86,9 @@ func (a App) reportMonitor(opts options, store *state.Store, service, status str
 		return
 	}
 	switch status {
-	case "paused":
+	case monitorStatusPaused:
 		fmt.Fprintf(a.Stdout, "monitoring paused for %s%s\n", service, monitorMetaSuffix(rec, found))
-	case "resumed":
+	case monitorStatusResumed:
 		fmt.Fprintf(a.Stdout, "monitoring resumed for %s%s\n", service, monitorMetaSuffix(rec, found))
 	default:
 		fmt.Fprintf(a.Stdout, "%s was not paused\n", service)

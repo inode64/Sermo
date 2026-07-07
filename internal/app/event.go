@@ -15,7 +15,7 @@ type Event struct {
 	Service string
 	Watch   string // set for host-watch events (instead of Service)
 	App     string // set for installed-application monitoring events (instead of Service/Watch)
-	Kind    string // cycle | action | suppressed | alert | error | firing | recovered | dry-run | hook | hook-failed | notify | notify-failed | cascade
+	Kind    string // eventKind* value describing the visible event type
 	Rule    string
 	Action  string
 	Status  string
@@ -26,21 +26,23 @@ type Event struct {
 	Output string
 }
 
-// Event kind values for Event.Kind. Centralized kinds live here; the full
-// vocabulary is listed on the Kind field doc.
+// Event kind values for Event.Kind.
 const (
-	eventKindAction     = "action"
-	eventKindAlert      = "alert"
-	eventKindError      = "error"
-	eventKindHook       = "hook"
-	eventKindNotify     = "notify"
-	eventKindDryRun     = "dry-run"
-	eventKindFiring     = "firing"
-	eventKindRecovered  = "recovered"
-	eventKindHookFail   = "hook-failed"
-	eventKindNotifyFail = "notify-failed"
-	eventKindSuppressed = "suppressed"
-	eventKindCascade    = "cascade"
+	eventKindAction           = "action"
+	eventKindAlert            = "alert"
+	eventKindError            = "error"
+	eventKindHook             = "hook"
+	eventKindNotify           = "notify"
+	eventKindDryRun           = "dry-run"
+	eventKindFiring           = "firing"
+	eventKindRecovered        = "recovered"
+	eventKindHookFail         = "hook-failed"
+	eventKindNotifyFail       = "notify-failed"
+	eventKindSuppressed       = "suppressed"
+	eventKindPanicSuppressed  = "panic-suppressed"
+	eventKindNotifySuppressed = "notify-suppressed"
+	eventKindCascade          = "cascade"
+	eventKindReload           = "reload"
 
 	eventKindExpand        = "expand"
 	eventKindExpandSkipped = "expand-skipped"
@@ -58,10 +60,14 @@ const (
 // Event action values emitted by daemon-side monitoring adjustments and web
 // actions that are not service operation rule actions.
 const (
-	eventActionMonitor     = "monitor"
-	eventActionUnmonitor   = "unmonitor"
-	eventActionExpand      = "expand"
-	eventActionReleaseLock = "release-lock"
+	eventActionMonitor           = "monitor"
+	eventActionUnmonitor         = "unmonitor"
+	eventActionExpand            = "expand"
+	eventActionReleaseLock       = "release-lock"
+	eventActionOperationSettling = "operation-settling"
+	eventActionPanicOn           = "panic-on"
+	eventActionPanicOff          = "panic-off"
+	eventActionReload            = "reload"
 )
 
 // resultOutput extracts the bounded command output a check stored under

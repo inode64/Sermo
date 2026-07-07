@@ -42,7 +42,7 @@ func applyDeletes(tree map[string]any) {
 			if !ok {
 				continue
 			}
-			if cfgval.Bool(entry["delete"]) {
+			if cfgval.Bool(entry[keyDelete]) {
 				delete(entries, name)
 			}
 		}

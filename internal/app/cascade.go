@@ -10,7 +10,10 @@ import (
 
 // cascadeMaxDepth backstops pathological (but acyclic) also_apply chains; the
 // visited set already cuts cycles. It counts recursion depth, not total nodes.
-const cascadeMaxDepth = 16
+const (
+	cascadeMaxDepth          = 16
+	cascadeBlockedRetryDelay = time.Second
+)
 
 // operateFn runs one service's guarded operation for an action, returning its
 // Result. The daemon supplies the monitor's per-service Operate; the CLI builds a
@@ -91,7 +94,7 @@ func (c cascader) operate(ctx context.Context, svc, action string) operation.Res
 	res := c.op(ctx, svc, action)
 	if res.Status == operation.ResultBlocked {
 		if c.sleep != nil {
-			c.sleep(time.Second)
+			c.sleep(cascadeBlockedRetryDelay)
 		}
 		res = c.op(ctx, svc, action)
 	}

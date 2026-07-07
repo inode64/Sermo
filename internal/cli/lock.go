@@ -12,9 +12,6 @@ import (
 	"sermo/internal/locks"
 )
 
-// lockCommand is the command name reported in lock usage errors.
-const lockCommand = "lock"
-
 // runLock dispatches the named-lock commands ():
 //
 //	lock SERVICE [--name N] --reason R --ttl D -- COMMAND...   (hold for COMMAND)
@@ -22,7 +19,7 @@ const lockCommand = "lock"
 //	lock release SERVICE [--name N]
 func (a App) runLock(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.commandUsageError(lockCommand, "lock requires a service or subcommand")
+		return a.commandUsageError(commandLock, "lock requires a service or subcommand")
 	}
 
 	cfg, code := a.loadConfig(opts)
@@ -43,10 +40,10 @@ func (a App) runLock(ctx context.Context, opts options) int {
 
 func (a App) runLockAcquire(opts options, cfg *config.Config, locker locks.NamedLocker, args []string) int {
 	if len(args) == 0 {
-		return a.commandUsageError(lockCommand, "lock acquire requires a service name")
+		return a.commandUsageError(commandLock, "lock acquire requires a service name")
 	}
 	if len(args) > 1 {
-		return a.commandUsageError(lockCommand, "lock acquire takes exactly one service name")
+		return a.commandUsageError(commandLock, "lock acquire takes exactly one service name")
 	}
 	if code := requireLockMeta(a, opts); code != exitSuccess {
 		return code
@@ -55,37 +52,37 @@ func (a App) runLockAcquire(opts options, cfg *config.Config, locker locks.Named
 
 	path, err := locker.Pin(service, opts.name, opts.reason, opts.ttl)
 	if err != nil {
-		a.recordAccess(cfg, "lock acquire", service, "error", err.Error())
+		a.recordAccess(cfg, accessCommandLockAcquire, service, accessStatusError, err.Error())
 		return a.reportLockError(opts, err)
 	}
-	a.recordAccess(cfg, "lock acquire", service, "ok", path)
+	a.recordAccess(cfg, accessCommandLockAcquire, service, accessStatusOK, path)
 	fmt.Fprintf(a.Stdout, "acquired %s\n", path)
 	return exitSuccess
 }
 
 func (a App) runLockRelease(opts options, cfg *config.Config, locker locks.NamedLocker, args []string) int {
 	if len(args) == 0 {
-		return a.commandUsageError(lockCommand, "lock release requires a service name")
+		return a.commandUsageError(commandLock, "lock release requires a service name")
 	}
 	if len(args) > 1 {
-		return a.commandUsageError(lockCommand, "lock release takes exactly one service name")
+		return a.commandUsageError(commandLock, "lock release takes exactly one service name")
 	}
 	service := canonicalServiceIfKnown(cfg, args[0])
 	if err := locker.Release(service, opts.name); err != nil {
-		a.recordAccess(cfg, "lock release", service, "error", err.Error())
+		a.recordAccess(cfg, accessCommandLockRelease, service, accessStatusError, err.Error())
 		return a.fail(opts, fmt.Sprintf("release failed: %v", err))
 	}
-	a.recordAccess(cfg, "lock release", service, "ok", lockID(service, opts.name))
+	a.recordAccess(cfg, accessCommandLockRelease, service, accessStatusOK, lockID(service, opts.name))
 	fmt.Fprintf(a.Stdout, "released %s\n", lockID(service, opts.name))
 	return exitSuccess
 }
 
 func (a App) runLockWrap(ctx context.Context, opts options, cfg *config.Config, locker locks.NamedLocker, service string) int {
 	if len(opts.args) > 1 {
-		return a.commandUsageError(lockCommand, "lock wrap takes exactly one service name before --")
+		return a.commandUsageError(commandLock, "lock wrap takes exactly one service name before --")
 	}
 	if len(opts.commandArgs) == 0 {
-		return a.commandUsageError(lockCommand, "lock SERVICE ... -- COMMAND requires a command after --")
+		return a.commandUsageError(commandLock, "lock SERVICE ... -- COMMAND requires a command after --")
 	}
 	if code := requireLockMeta(a, opts); code != exitSuccess {
 		return code
@@ -94,7 +91,7 @@ func (a App) runLockWrap(ctx context.Context, opts options, cfg *config.Config, 
 
 	handle, err := locker.Hold(service, opts.name, opts.reason, opts.ttl)
 	if err != nil {
-		a.recordAccess(cfg, "lock wrap", service, "error", err.Error())
+		a.recordAccess(cfg, accessCommandLockWrap, service, accessStatusError, err.Error())
 		return a.reportLockError(opts, err)
 	}
 	defer func() { _ = handle.Release() }()
@@ -106,22 +103,22 @@ func (a App) runLockWrap(ctx context.Context, opts options, cfg *config.Config, 
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			a.recordAccess(cfg, "lock wrap", service, "error", fmt.Sprintf("exit %d", exitErr.ExitCode()))
+			a.recordAccess(cfg, accessCommandLockWrap, service, accessStatusError, fmt.Sprintf("exit %d", exitErr.ExitCode()))
 			return exitErr.ExitCode()
 		}
-		a.recordAccess(cfg, "lock wrap", service, "error", err.Error())
+		a.recordAccess(cfg, accessCommandLockWrap, service, accessStatusError, err.Error())
 		return a.fail(opts, fmt.Sprintf("run command: %v", err))
 	}
-	a.recordAccess(cfg, "lock wrap", service, "ok", opts.commandArgs[0])
+	a.recordAccess(cfg, accessCommandLockWrap, service, accessStatusOK, opts.commandArgs[0])
 	return exitSuccess
 }
 
 func requireLockMeta(a App, opts options) int {
 	if opts.reason == "" {
-		return a.commandUsageError(lockCommand, "--reason is required")
+		return a.commandUsageError(commandLock, "--reason is required")
 	}
 	if opts.ttl <= 0 {
-		return a.commandUsageError(lockCommand, "--ttl is required and must be positive")
+		return a.commandUsageError(commandLock, "--ttl is required and must be positive")
 	}
 	return exitSuccess
 }

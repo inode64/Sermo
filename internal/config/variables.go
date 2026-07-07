@@ -23,6 +23,12 @@ const (
 	varKeyDefault   = "default"
 )
 
+const (
+	runtimeVarDate   = "date"
+	runtimeVarEvent  = "event"
+	runtimeVarAction = "action"
+)
+
 var fromFileVariableKeys = set(varKeyFromFile, varKeyDirective, varKeyPattern, varKeyDefault)
 
 // collectVariables reads the merged `variables` section into a flat string map.
@@ -33,7 +39,7 @@ var fromFileVariableKeys = set(varKeyFromFile, varKeyDirective, varKeyPattern, v
 // type (binary, file, socket or pidfile); collectVariables just consumes the
 // resulting variables map.
 func collectVariables(tree map[string]any) map[string]string {
-	return collectVariablesForKind(tree, cfgval.String(tree["kind"]))
+	return collectVariablesForKind(tree, cfgval.String(tree[keyKind]))
 }
 
 func collectVariablesForKind(tree map[string]any, _ string) map[string]string {
@@ -103,7 +109,7 @@ func documentBinaryCandidates(tree map[string]any) []string {
 	if vars == nil {
 		return nil
 	}
-	return cfgval.StringList(vars["binary"])
+	return cfgval.StringList(vars[VariableKeyBinary])
 }
 
 // resolveFileVars overrides each from_file variable with the value read from its
@@ -320,7 +326,7 @@ func expandValue(v any, vars map[string]string, path string, errs *[]string) any
 // runtimeVars are substituted by the worker when an event is emitted, not during
 // resolution. expandString leaves them as literal ${...} (without erroring) so a
 // rule message can reference the firing event's context.
-var runtimeVars = map[string]bool{"date": true, "event": true, "action": true}
+var runtimeVars = map[string]bool{runtimeVarDate: true, runtimeVarEvent: true, runtimeVarAction: true}
 
 func expandString(s string, vars map[string]string, path string, errs *[]string) string {
 	return varRef.ReplaceAllStringFunc(s, func(match string) string {

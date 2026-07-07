@@ -172,7 +172,7 @@ func (b *WebBackend) Mounts(ctx context.Context) []web.Mount {
 				DisplayName:  row.spec.DisplayName,
 				Category:     row.spec.Category,
 				Path:         row.spec.Path,
-				State:        "error",
+				State:        backendStatusError,
 				Refcounted:   row.spec.Refcount,
 				CanUmount:    umountReason == "",
 				UmountReason: umountReason,
@@ -415,7 +415,7 @@ func (b *WebBackend) syncStorageMountMonitoring(storage, action string, resultOK
 		return
 	}
 	if change.Changed {
-		b.emitWatchMonitorEvent(storage, change.Action, eventKindAction, "ok", change.Message)
+		b.emitWatchMonitorEvent(storage, change.Action, eventKindAction, eventStatusOK, change.Message)
 	}
 }
 

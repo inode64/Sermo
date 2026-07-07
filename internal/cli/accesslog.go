@@ -8,6 +8,20 @@ import (
 	"sermo/internal/logfile"
 )
 
+const (
+	accessStatusOK    = "ok"
+	accessStatusError = "error"
+)
+
+const (
+	accessCommandStateCompact = "state compact"
+	accessCommandLockAcquire  = "lock acquire"
+	accessCommandLockRelease  = "lock release"
+	accessCommandLockWrap     = "lock wrap"
+	accessCommandEventsClear  = "events clear"
+	accessCommandDaemonReload = "daemon reload"
+)
+
 // recordAccess appends one CLI access record when engine.access is configured.
 func (a App) recordAccess(cfg *config.Config, command, target, status, message string) {
 	if cfg == nil {

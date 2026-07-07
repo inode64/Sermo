@@ -9,6 +9,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/conn"
+	"sermo/internal/metrics"
 	"sermo/internal/process"
 	"sermo/internal/rules"
 )
@@ -255,7 +256,7 @@ func serviceWatchableType(typ string) bool {
 }
 
 func validateWatchMetadata(name string, entry map[string]any, add func(string, ...any)) {
-	for _, key := range []string{"display_name", "description", "category"} {
+	for _, key := range []string{keyDisplayName, keyDescription, keyCategory} {
 		if v, present := entry[key]; present {
 			if _, ok := v.(string); !ok {
 				add("watches.%s.%s must be a string", name, key)
@@ -633,7 +634,7 @@ func validateICMPMetricCondition(prefix, metric string, m map[string]any, add ad
 // recursive, and at least one attribute condition (size threshold/change,
 // permissions/owner on change, existence on delete), plus the entry's hook.
 func validateFileCheck(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
-	validateStatefulWatchEntry(name, "file", entry, add)
+	validateStatefulWatchEntry(name, checks.CheckTypeFile, entry, add)
 	if cfgval.String(check[checks.CheckKeyPath]) == "" {
 		add("watches.%s.check.path is required for a file check", name)
 	}
@@ -677,7 +678,7 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 // at least one condition (for duration, or cpu/memory/io {op, value}), plus the
 // entry's hook.
 func validateProcessWatch(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
-	validateStatefulWatchEntry(name, "process", entry, add)
+	validateStatefulWatchEntry(name, checks.CheckTypeProcess, entry, add)
 	if cfgval.String(check[checks.CheckKeyName]) == "" {
 		add("watches.%s.check.name is required for a process check", name)
 	}
@@ -688,7 +689,7 @@ func validateProcessWatch(name string, check, entry map[string]any, defaultNotif
 			add("watches.%s.check.for %q must be a valid positive duration", name, cfgval.String(v))
 		}
 	}
-	for _, attr := range []string{"cpu", "memory", "io"} {
+	for _, attr := range []string{metrics.MetricCPU, metrics.MetricMemory, metrics.MetricIO} {
 		m, ok := check[attr].(map[string]any)
 		if !ok {
 			continue

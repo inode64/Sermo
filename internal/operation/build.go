@@ -18,6 +18,8 @@ import (
 	"sermo/internal/servicemgr"
 )
 
+const defaultLockTTL = 5 * time.Minute
+
 // Config wires the real components an Engine needs for a resolved service.
 type Config struct {
 	Service string
@@ -79,7 +81,7 @@ func New(c Config) Engine {
 	selectors, selectorWarnings := process.ParseSelectors(tree)
 	hasCommandMatch := hasCommandMatchSelector(selectors)
 	configErr := firstWarningError(
-		warningError("stop_policy", stopPolicyWarnings),
+		warningError(process.SectionStopPolicy, stopPolicyWarnings),
 		warningError("selector config", selectorWarnings),
 		reloadConfigError(tree),
 	)
@@ -114,7 +116,7 @@ func New(c Config) Engine {
 
 	ttl := c.LockTTL
 	if ttl <= 0 {
-		ttl = 5 * time.Minute
+		ttl = defaultLockTTL
 	}
 
 	return Engine{
@@ -138,7 +140,7 @@ func New(c Config) Engine {
 			return report.Locks, err
 		},
 		Guard:            guardClosure(tree, deps, c.MetricSample, c.Changed),
-		Preflight:        sectionRunner(tree, "preflight", deps, c.MetricSample),
+		Preflight:        sectionRunner(tree, config.SectionPreflight, deps, c.MetricSample),
 		Postflight:       verifyRunner(tree, deps, c.MetricSample),
 		ReloadFunc:       reloadClosure(tree, deps, c.Manager, c.Backend, c.Unit, c.Discoverer, selectors),
 		ResumeFunc:       resumeClosure(c.Manager, c.Unit),
@@ -248,27 +250,20 @@ type reloadSpec struct {
 	always  bool
 }
 
-// Reload-block keys: the `reload:` service block and its signal/command fields.
-const (
-	reloadBlockKey   = "reload"
-	reloadSignalKey  = "signal"
-	reloadCommandKey = "command"
-)
-
 // reloadConfigError reports an invalid native reload declaration that validation
 // should have rejected but must not be silently ignored at runtime.
 func reloadConfigError(tree map[string]any) error {
-	r, ok := tree[reloadBlockKey].(map[string]any)
+	r, ok := tree[config.SectionReload].(map[string]any)
 	if !ok {
 		return nil
 	}
-	if name := cfgval.AsString(r[reloadSignalKey]); name != "" {
+	if name := cfgval.AsString(r[config.ReloadKeySignal]); name != "" {
 		if _, err := process.ParseSignal(name); err != nil {
 			return fmt.Errorf("reload.signal: %w", err)
 		}
 		return nil
 	}
-	if argv := cfgval.StringArray(r[reloadCommandKey]); len(argv) > 0 {
+	if argv := cfgval.StringArray(r[config.ReloadKeyCommand]); len(argv) > 0 {
 		return nil
 	}
 	return fmt.Errorf("reload: block declares no command or signal")
@@ -278,9 +273,9 @@ func reloadConfigError(tree map[string]any) error {
 // nil when the block is absent or empty/invalid; the engine then uses the plain
 // backend reload.
 func parseReloadSpec(tree map[string]any) *reloadSpec {
-	if r, ok := tree[reloadBlockKey].(map[string]any); ok {
-		spec := &reloadSpec{always: cfgval.AsString(r["when"]) == "always"}
-		if name := cfgval.AsString(r[reloadSignalKey]); name != "" {
+	if r, ok := tree[config.SectionReload].(map[string]any); ok {
+		spec := &reloadSpec{always: cfgval.AsString(r[config.ReloadKeyWhen]) == config.ReloadWhenAlways}
+		if name := cfgval.AsString(r[config.ReloadKeySignal]); name != "" {
 			sig, err := process.ParseSignal(name)
 			if err != nil {
 				return nil
@@ -288,7 +283,7 @@ func parseReloadSpec(tree map[string]any) *reloadSpec {
 			spec.signal, spec.hasSig = sig, true
 			return spec
 		}
-		if argv := cfgval.StringArray(r[reloadCommandKey]); len(argv) > 0 {
+		if argv := cfgval.StringArray(r[config.ReloadKeyCommand]); len(argv) > 0 {
 			spec.command = argv
 			return spec
 		}
@@ -390,7 +385,7 @@ func reloadContextError(err error) error {
 }
 
 func reloadPidfile(tree map[string]any) string {
-	if paths := cfgval.StringList(tree["pidfile"]); len(paths) > 0 {
+	if paths := cfgval.StringList(tree[config.ServiceKeyPidfile]); len(paths) > 0 {
 		return paths[0]
 	}
 	return ""

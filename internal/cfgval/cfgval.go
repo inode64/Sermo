@@ -18,6 +18,22 @@ const (
 	minInt = -maxInt - 1
 )
 
+// Comparison/assertion operator vocabulary shared by configuration validation
+// and runtime checks.
+const (
+	CompareOpGreaterEqual = ">="
+	CompareOpGreater      = ">"
+	CompareOpLessEqual    = "<="
+	CompareOpLess         = "<"
+	CompareOpEqual        = "=="
+	CompareOpNotEqual     = "!="
+	AssertOpContains      = "contains"
+	AssertOpRegex         = "=~"
+
+	CompareOpSummary = ">=, >, <=, <, ==, !="
+	AssertOpSummary  = "==, !=, >, >=, <, <=, contains, =~"
+)
+
 // AsString returns v when it is a string, or "" otherwise. Use it for fields
 // that must already be strings; a non-string value is ignored (typically caught
 // as a validation error elsewhere). To coerce any scalar to its string form,
@@ -318,17 +334,17 @@ func Float(v any) (float64, bool) {
 // evaluate thresholds through this one definition.
 func CompareFloat(a float64, op string, b float64) bool {
 	switch op {
-	case ">=":
+	case CompareOpGreaterEqual:
 		return a >= b
-	case ">":
+	case CompareOpGreater:
 		return a > b
-	case "<=":
+	case CompareOpLessEqual:
 		return a <= b
-	case "<":
+	case CompareOpLess:
 		return a < b
-	case "==":
+	case CompareOpEqual:
 		return a == b
-	case "!=":
+	case CompareOpNotEqual:
 		return a != b
 	default:
 		return false
@@ -342,7 +358,7 @@ func CompareFloat(a float64, op string, b float64) bool {
 // separate, wider set (see internal/checks compareValue).
 func IsCompareOp(op string) bool {
 	switch op {
-	case ">=", ">", "<=", "<", "==", "!=":
+	case CompareOpGreaterEqual, CompareOpGreater, CompareOpLessEqual, CompareOpLess, CompareOpEqual, CompareOpNotEqual:
 		return true
 	default:
 		return false
@@ -355,7 +371,7 @@ func IsCompareOp(op string) bool {
 // matchers so the assertion vocabulary cannot drift.
 func IsAssertOp(op string) bool {
 	switch op {
-	case "contains", "=~":
+	case AssertOpContains, AssertOpRegex:
 		return true
 	default:
 		return IsCompareOp(op)

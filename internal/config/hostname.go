@@ -18,7 +18,7 @@ var detectedHostname = detectHostname()
 func detectHostname() string {
 	// SERMO_HOSTNAME is taken verbatim (like SERMO_HOST), so an operator can
 	// force any instance id, including a full FQDN if their units need it.
-	if v := envOverride("SERMO_HOSTNAME"); v != "" {
+	if v := envOverride(envHostnameOverride); v != "" {
 		return v
 	}
 	if h, err := os.Hostname(); err == nil && h != "" {

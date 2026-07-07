@@ -74,7 +74,7 @@ func ensureVariables(tree map[string]any) map[string]any {
 
 func isResourcePreflightType(typ string) bool {
 	switch typ {
-	case "binary", "file", "socket", "pidfile", "lockfile":
+	case checks.CheckTypeBinary, checks.CheckTypeFile, checks.CheckTypeSocket, checks.CheckTypePidfile, checks.CheckTypeLockfile:
 		return true
 	default:
 		return false
@@ -123,11 +123,11 @@ func resourceCandidateMatches(typ, path string) bool {
 		return false
 	}
 	switch typ {
-	case "binary":
+	case checks.CheckTypeBinary:
 		return info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0
-	case "file", "pidfile", "lockfile":
+	case checks.CheckTypeFile, checks.CheckTypePidfile, checks.CheckTypeLockfile:
 		return info.Mode().IsRegular()
-	case "socket":
+	case checks.CheckTypeSocket:
 		return info.Mode()&os.ModeSocket != 0
 	default:
 		return false
@@ -135,7 +135,7 @@ func resourceCandidateMatches(typ, path string) bool {
 }
 
 func applyCommandExportDefaults(tree map[string]any) {
-	for _, sectionName := range []string{"commands", sectionPreflight} {
+	for _, sectionName := range []string{sectionCommands, sectionPreflight} {
 		section, ok := tree[sectionName].(map[string]any)
 		if !ok {
 			continue
@@ -172,7 +172,7 @@ func exportDefault(raw any) string {
 	if !ok {
 		return ""
 	}
-	if v, present := m["default"]; present {
+	if v, present := m[varKeyDefault]; present {
 		return cfgval.String(v)
 	}
 	return ""

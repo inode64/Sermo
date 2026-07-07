@@ -12,6 +12,8 @@ const (
 	readinessStarting     = "starting"
 	readinessReady        = "ready"
 	readinessShuttingDown = "shutting_down"
+	readinessStatusPanic  = "panic mode"
+	readinessPanicMessage = "panic mode: hooks, alerts and automatic remediation are suspended"
 )
 
 // Readiness tracks whether sermod has finished its startup delay and begun
@@ -123,7 +125,7 @@ func (r *Readiness) MarkShuttingDown() {
 // Report implements web.ReadinessChecker.
 func (r *Readiness) Report(context.Context) web.ReadyReport {
 	if r == nil {
-		return web.ReadyReport{Ready: true, Status: "ok"}
+		return web.ReadyReport{Ready: true, Status: TargetStateOK}
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -135,14 +137,14 @@ func (r *Readiness) Report(context.Context) web.ReadyReport {
 	switch r.state {
 	case readinessReady:
 		rep.Ready = true
-		rep.Status = "ok"
+		rep.Status = TargetStateOK
 		// Panic mode overrides the healthy status (but not starting/shutting_down,
 		// which describe the lifecycle): the daemon is up but holding back hooks,
 		// alerts and remediation.
 		if r.panic != nil && r.panic() {
 			rep.Panic = true
-			rep.Status = "panic mode"
-			rep.Message = "panic mode: hooks, alerts and automatic remediation are suspended"
+			rep.Status = readinessStatusPanic
+			rep.Message = readinessPanicMessage
 		}
 	case readinessShuttingDown:
 		rep.Status = readinessShuttingDown

@@ -18,22 +18,22 @@ import (
 
 func (a App) runMount(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.commandUsageError(mountctl.ActionMount, "mount requires a target, or subcommand status/list")
+		return a.commandUsageError(commandMount, "mount requires a target, or subcommand status/list")
 	}
 	switch opts.args[0] {
-	case "list":
+	case commandMountList:
 		if len(opts.args) > 1 {
-			return a.commandUsageError(mountctl.ActionMount, "mount list takes no arguments")
+			return a.commandUsageError(commandMount, "mount list takes no arguments")
 		}
 		return a.runMountList(opts)
-	case "status":
+	case commandStatus:
 		if len(opts.args) != 2 {
-			return a.commandUsageError(mountctl.ActionMount, "mount status requires exactly one mount name or path")
+			return a.commandUsageError(commandMount, "mount status requires exactly one mount name or path")
 		}
 		return a.runMountStatus(opts, opts.args[1])
 	default:
 		if len(opts.args) > 1 {
-			return a.commandUsageError(mountctl.ActionMount, "mount takes exactly one target")
+			return a.commandUsageError(commandMount, "mount takes exactly one target")
 		}
 		return a.runMountAcquire(ctx, opts, opts.args[0])
 	}
@@ -41,10 +41,10 @@ func (a App) runMount(ctx context.Context, opts options) int {
 
 func (a App) runUmount(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.commandUsageError(mountctl.ActionUmount, "umount requires a mount name or path")
+		return a.commandUsageError(commandUmount, "umount requires a mount name or path")
 	}
 	if len(opts.args) > 1 {
-		return a.commandUsageError(mountctl.ActionUmount, "umount takes exactly one mount name or path")
+		return a.commandUsageError(commandUmount, "umount takes exactly one mount name or path")
 	}
 	cfg, code := a.loadConfig(opts)
 	if cfg == nil {
@@ -190,7 +190,7 @@ func (a App) syncStorageMountMonitoring(opts options, cfg *config.Config, storag
 	if err != nil {
 		msg := fmt.Sprintf("storage mount monitoring unavailable: %v", err)
 		fmt.Fprintf(a.Stderr, "warning: %s\n", msg)
-		a.recordAccess(cfg, action+"-monitor", storage, "error", msg)
+		a.recordAccess(cfg, action+"-monitor", storage, accessStatusError, msg)
 		return
 	}
 	defer store.Close()
@@ -198,11 +198,11 @@ func (a App) syncStorageMountMonitoring(opts options, cfg *config.Config, storag
 	if err != nil {
 		msg := err.Error()
 		fmt.Fprintf(a.Stderr, "warning: %s\n", msg)
-		a.recordAccess(cfg, action+"-monitor", storage, "error", msg)
+		a.recordAccess(cfg, action+"-monitor", storage, accessStatusError, msg)
 		return
 	}
 	if change.Changed {
-		a.recordAccess(cfg, change.Action, storage, mountctl.ResultOK, change.Message)
+		a.recordAccess(cfg, change.Action, storage, accessStatusOK, change.Message)
 	}
 }
 

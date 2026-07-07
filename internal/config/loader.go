@@ -634,7 +634,7 @@ func (c *Config) mergeWatchDocument(doc *Document) error {
 	if _, present := doc.Body[pathKeyWatches]; present {
 		return fmt.Errorf("%s: watch documents use top-level name/check fields, not a watches map", doc.Path)
 	}
-	if declared := cfgval.String(doc.Body["kind"]); declared != "" && declared != "watch" {
+	if declared := cfgval.String(doc.Body[keyKind]); declared != "" && declared != kindWatch {
 		return fmt.Errorf("%s: located under a watches directory but declares kind: %s", doc.Path, declared)
 	}
 	if doc.Name == "" {
@@ -644,8 +644,8 @@ func (c *Config) mergeWatchDocument(doc *Document) error {
 		return fmt.Errorf("%s: watch name %q must be a simple name without path separators", doc.Path, doc.Name)
 	}
 	entry := cloneMap(doc.Body)
-	delete(entry, "kind")
-	delete(entry, "name")
+	delete(entry, keyKind)
+	delete(entry, keyName)
 	expandEnvTree(entry)
 
 	dst, _ := c.Global.Raw[pathKeyWatches].(map[string]any)
@@ -713,7 +713,7 @@ func loadDocument(path string) (*Document, error) {
 	// any `kind:` still present in the body is honored there only as an optional
 	// consistency check, so loadDocument leaves Document.Kind unset.
 	return &Document{
-		Name: cfgval.String(body["name"]),
+		Name: cfgval.String(body[keyName]),
 		Path: path,
 		Body: body,
 	}, nil
@@ -724,7 +724,7 @@ func loadDocument(path string) (*Document, error) {
 // may be omitted. When still present it must match, which catches a file dropped
 // into the wrong directory (e.g. a mount under services/).
 func assignKind(doc *Document, expected string) error {
-	if declared := cfgval.String(doc.Body["kind"]); declared != "" && declared != expected {
+	if declared := cfgval.String(doc.Body[keyKind]); declared != "" && declared != expected {
 		return fmt.Errorf("%s: located under a %s directory but declares kind: %s", doc.Path, expected, declared)
 	}
 	doc.Kind = expected
@@ -799,7 +799,7 @@ func uniqueStrings(sorted []string) []string {
 // (e.g. "MariaDB"), falling back to fallback — typically the document's own
 // `name` — when the field is absent or blank.
 func DisplayName(body map[string]any, fallback string) string {
-	if s, ok := body["display_name"].(string); ok && strings.TrimSpace(s) != "" {
+	if s, ok := body[keyDisplayName].(string); ok && strings.TrimSpace(s) != "" {
 		return s
 	}
 	return fallback

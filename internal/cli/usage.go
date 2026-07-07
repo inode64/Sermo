@@ -23,33 +23,33 @@ type commandGroup struct {
 var commandGroups = []commandGroup{
 	{
 		Title:    "Basics",
-		Commands: []string{"version", "backend", "status", "is-active", "watch"},
+		Commands: []string{commandVersion, commandBackend, commandStatus, commandIsActive, commandWatch},
 	},
 	{
 		Title:    "Safe Service Operations",
-		Commands: []string{"start", "stop", "restart", "reload", "resume", "monitor", "unmonitor", "preflight", "processes", "locks", "lock"},
+		Commands: []string{commandStart, commandStop, commandRestart, commandReload, commandResume, commandMonitor, commandUnmonitor, commandPreflight, commandProcesses, commandLocks, commandLock},
 	},
 	{
 		Title:    "Mounts",
-		Commands: []string{"mount", "umount"},
+		Commands: []string{commandMount, commandUmount},
 	},
 	{
 		Title:    "Configuration And Catalog",
-		Commands: []string{"config", "daemon", "services", "apps", "libs", "patterns", "wizard"},
+		Commands: []string{commandConfig, commandDaemon, commandServices, commandApps, commandLibs, commandPatterns, commandWizard},
 	},
 	{
 		Title:    "History And State",
-		Commands: []string{"events", "activity", "sla", "state"},
+		Commands: []string{commandEvents, commandActivity, commandSLA, commandState},
 	},
 	{
 		Title:    "Emergency",
-		Commands: []string{"panic"},
+		Commands: []string{commandPanic},
 	},
 }
 
 var commandUsages = []commandUsage{
 	{
-		Name:    "help",
+		Name:    commandHelp,
 		Summary: "Show global help or detailed help for one command.",
 		Usage: []string{
 			"sermoctl help",
@@ -62,7 +62,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "version",
+		Name:    commandVersion,
 		Summary: "Print the sermoctl version.",
 		Usage: []string{
 			"sermoctl version",
@@ -71,7 +71,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "backend",
+		Name:    commandBackend,
 		Summary: "Detect and print the active service-manager backend.",
 		Usage: []string{
 			"sermoctl backend",
@@ -86,7 +86,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "status",
+		Name:    commandStatus,
 		Summary: "Show one service's resolved runtime state.",
 		Usage: []string{
 			"sermoctl status SERVICE",
@@ -105,7 +105,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "watch",
+		Name:    commandWatch,
 		Summary: "Query or pause/resume a watch (host watch or service watch).",
 		Usage: []string{
 			"sermoctl watch status WATCH",
@@ -131,7 +131,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "is-active",
+		Name:    commandIsActive,
 		Summary: "Exit 0 when a service is active, 1 when it is not active.",
 		Usage: []string{
 			"sermoctl is-active SERVICE",
@@ -146,7 +146,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "start",
+		Name:    commandStart,
 		Summary: "Start a service through the safe operation engine.",
 		Usage: []string{
 			"sermoctl start SERVICE [--no-cascade]",
@@ -163,7 +163,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "stop",
+		Name:    commandStop,
 		Summary: "Stop a service through the safe operation engine.",
 		Usage: []string{
 			"sermoctl stop SERVICE [--no-cascade]",
@@ -179,7 +179,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "restart",
+		Name:    commandRestart,
 		Summary: "Restart a service through the safe operation engine.",
 		Usage: []string{
 			"sermoctl restart SERVICE [--no-cascade]",
@@ -195,7 +195,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "reload",
+		Name:    commandReload,
 		Summary: "Reload one service in place.",
 		Usage: []string{
 			"sermoctl reload SERVICE",
@@ -209,7 +209,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "resume",
+		Name:    commandResume,
 		Summary: "Resume a paused service target through the safe operation engine.",
 		Usage: []string{
 			"sermoctl resume SERVICE",
@@ -219,7 +219,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "monitor",
+		Name:    commandMonitor,
 		Summary: "Resume daemon monitoring for a service.",
 		Usage: []string{
 			"sermoctl monitor SERVICE",
@@ -229,7 +229,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "unmonitor",
+		Name:    commandUnmonitor,
 		Summary: "Pause daemon monitoring for a service without removing config.",
 		Usage: []string{
 			"sermoctl unmonitor SERVICE",
@@ -242,7 +242,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "panic",
+		Name:    commandPanic,
 		Summary: "Enable, disable or show the daemon-wide panic mode.",
 		Usage: []string{
 			"sermoctl panic on|off|status",
@@ -259,7 +259,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "preflight",
+		Name:    commandPreflight,
 		Summary: "Run a service's preflight checks without changing service state.",
 		Usage: []string{
 			"sermoctl preflight SERVICE",
@@ -269,7 +269,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "processes",
+		Name:    commandProcesses,
 		Summary: "Show processes matched by a service's resolved process selectors.",
 		Usage: []string{
 			"sermoctl processes SERVICE",
@@ -282,7 +282,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "locks",
+		Name:    commandLocks,
 		Summary: "List named runtime locks for a service.",
 		Usage: []string{
 			"sermoctl locks SERVICE",
@@ -296,7 +296,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "lock",
+		Name:    commandLock,
 		Summary: "Acquire, release or hold a named runtime lock around a command.",
 		Usage: []string{
 			"sermoctl lock SERVICE [--name NAME] --reason REASON --ttl DURATION -- COMMAND...",
@@ -315,7 +315,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "mount",
+		Name:    commandMount,
 		Summary: "Acquire or inspect a configured fstab-backed mount.",
 		Usage: []string{
 			"sermoctl mount TARGET",
@@ -332,7 +332,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "umount",
+		Name:    commandUmount,
 		Summary: "Release a configured fstab-backed mount.",
 		Usage: []string{
 			"sermoctl umount TARGET",
@@ -342,7 +342,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "config",
+		Name:    commandConfig,
 		Summary: "Validate Sermo configuration.",
 		Usage: []string{
 			"sermoctl config validate",
@@ -352,7 +352,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "daemon",
+		Name:    commandDaemon,
 		Summary: "Reload the running sermod process.",
 		Usage: []string{
 			"sermoctl daemon reload",
@@ -365,7 +365,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "services",
+		Name:    commandServices,
 		Summary: "List packaged service catalog entries and installation status.",
 		Usage: []string{
 			"sermoctl services [all] [--long] [--notify NAME[,NAME]|all]",
@@ -389,7 +389,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "apps",
+		Name:    commandApps,
 		Summary: "List packaged application/runtime catalog entries.",
 		Usage: []string{
 			"sermoctl apps [all] [--long]",
@@ -404,7 +404,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "libs",
+		Name:    commandLibs,
 		Summary: "List packaged library catalog entries used by restart-on-change.",
 		Usage: []string{
 			"sermoctl libs [all] [--long]",
@@ -415,14 +415,14 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "patterns",
+		Name:    commandPatterns,
 		Summary: "List output-analysis pattern sets and rule counts.",
 		Usage: []string{
 			"sermoctl patterns",
 		},
 	},
 	{
-		Name:    "wizard",
+		Name:    commandWizard,
 		Summary: "Generate service, watch and mount configuration interactively.",
 		Usage: []string{
 			"sermoctl wizard",
@@ -434,7 +434,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "events",
+		Name:    commandEvents,
 		Summary: "List or clear recent daemon events through the web API.",
 		Usage: []string{
 			"sermoctl events [SERVICE] [--limit N]",
@@ -450,7 +450,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "activity",
+		Name:    commandActivity,
 		Summary: "Clear the same event log shown as Recent activity in the web UI.",
 		Usage: []string{
 			"sermoctl activity clear [--before TIME]",
@@ -460,7 +460,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "sla",
+		Name:    commandSLA,
 		Summary: "Report service availability windows or per-minute series.",
 		Usage: []string{
 			"sermoctl sla [SERVICE]",
@@ -477,7 +477,7 @@ var commandUsages = []commandUsage{
 		},
 	},
 	{
-		Name:    "state",
+		Name:    commandState,
 		Summary: "Prune old history and vacuum the persistent state database.",
 		Usage: []string{
 			"sermoctl state compact [--before TIME]",
@@ -501,9 +501,9 @@ func runHelp(a App, opts options) int {
 		if writeCommandUsage(a.Stdout, opts.args[0]) {
 			return exitSuccess
 		}
-		return a.commandUsageError("help", fmt.Sprintf("unknown help topic %q", opts.args[0]))
+		return a.commandUsageError(commandHelp, fmt.Sprintf("unknown help topic %q", opts.args[0]))
 	default:
-		return a.commandUsageError("help", "help accepts at most one command")
+		return a.commandUsageError(commandHelp, "help accepts at most one command")
 	}
 }
 

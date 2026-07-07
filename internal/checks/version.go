@@ -7,6 +7,18 @@ import (
 	"sermo/internal/cfgval"
 )
 
+const (
+	reservedCommandSectionPreflight = "preflight"
+	reservedCommandSectionCommands  = "commands"
+)
+
+// Version-level names accepted by version.on_change.
+const (
+	VersionLevelMajor = "major"
+	VersionLevelMinor = "minor"
+	VersionLevelPatch = "patch"
+)
+
 // ReservedCommandEntry returns the resolved reserved-command entry for key
 // ("health", "version" or "version_short"): preflight.<key> takes precedence
 // over commands.<key>, and an entry only counts when it carries a non-empty
@@ -14,7 +26,7 @@ import (
 // version.on_change monitor (app) so the precedence rule lives in one place.
 // nil when neither section declares one.
 func ReservedCommandEntry(tree map[string]any, key string) map[string]any {
-	for _, src := range []string{"preflight", "commands"} {
+	for _, src := range []string{reservedCommandSectionPreflight, reservedCommandSectionCommands} {
 		if section, ok := tree[src].(map[string]any); ok {
 			if entry, ok := section[key].(map[string]any); ok && len(cfgval.StringList(entry[CheckKeyCommand])) > 0 {
 				return entry
@@ -102,11 +114,11 @@ func shortNTPVersion(s string) string {
 // is false for any other name.
 func VersionLevel(name string) (int, bool) {
 	switch name {
-	case "major":
+	case VersionLevelMajor:
 		return 1, true
-	case "minor":
+	case VersionLevelMinor:
 		return 2, true
-	case "patch":
+	case VersionLevelPatch:
 		return 3, true
 	default:
 		return 0, false

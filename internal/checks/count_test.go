@@ -53,10 +53,10 @@ func TestCountClassifiesEntriesNonRecursive(t *testing.T) {
 		kind string
 		want int
 	}{
-		{countFile, 2},    // a.txt, b.txt (not the symlink, not sub/)
-		{countDir, 1},     // sub/
-		{countSymlink, 1}, // link
-		{countAny, 4},     // a.txt, b.txt, sub/, link
+		{CountKindFile, 2},    // a.txt, b.txt (not the symlink, not sub/)
+		{CountKindDir, 1},     // sub/
+		{CountKindSymlink, 1}, // link
+		{CountKindAny, 4},     // a.txt, b.txt, sub/, link
 	}
 	for _, tc := range cases {
 		t.Run(tc.kind, func(t *testing.T) {
@@ -74,11 +74,11 @@ func TestCountClassifiesEntriesNonRecursive(t *testing.T) {
 func TestCountRecursiveDescendsSubtree(t *testing.T) {
 	root := countTree(t)
 	// Recursive files: a.txt, b.txt, sub/c.txt = 3.
-	if n, _ := countOf(root, countFile, true, "==", 0).tally(context.Background()); n != 3 {
+	if n, _ := countOf(root, CountKindFile, true, "==", 0).tally(context.Background()); n != 3 {
 		t.Fatalf("recursive file count = %d, want 3", n)
 	}
 	// Recursive dirs: sub/, sub/nested/ = 2 (root itself never counted).
-	if n, _ := countOf(root, countDir, true, "==", 0).tally(context.Background()); n != 2 {
+	if n, _ := countOf(root, CountKindDir, true, "==", 0).tally(context.Background()); n != 2 {
 		t.Fatalf("recursive dir count = %d, want 2", n)
 	}
 }
@@ -88,7 +88,7 @@ func TestCountCheckHonorsCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	res := countOf(root, countAny, true, ">", 0).Run(ctx)
+	res := countOf(root, CountKindAny, true, ">", 0).Run(ctx)
 	if res.OK {
 		t.Fatal("canceled count check should fail")
 	}
@@ -100,19 +100,19 @@ func TestCountCheckHonorsCanceledContext(t *testing.T) {
 func TestCountCheckPredicate(t *testing.T) {
 	root := countTree(t)
 	// 2 files, threshold "<= 5" holds -> OK.
-	if res := countOf(root, countFile, false, "<=", 5).Run(context.Background()); !res.OK {
+	if res := countOf(root, CountKindFile, false, "<=", 5).Run(context.Background()); !res.OK {
 		t.Fatalf("expected OK for 2 files <= 5, got %q", res.Message)
 	}
 	// 2 files, threshold ">= 5" does not hold -> not OK. The "want" value is
 	// rendered with FormatFloat -1 precision, so an integral threshold has no
 	// trailing ".0" (e.g. "5", not "5.0").
-	if res := countOf(root, countFile, false, ">=", 5).Run(context.Background()); res.OK {
+	if res := countOf(root, CountKindFile, false, ">=", 5).Run(context.Background()); res.OK {
 		t.Fatal("expected not OK for 2 files >= 5")
 	} else if want := "2 file entries in"; !strings.Contains(res.Message, want) || !strings.Contains(res.Message, "(want >= 5)") {
 		t.Fatalf("message = %q, want %q and (want >= 5)", res.Message, want)
 	}
 	// Data carries the numeric count under both count and value keys.
-	res := countOf(root, countFile, false, ">=", 1).Run(context.Background())
+	res := countOf(root, CountKindFile, false, ">=", 1).Run(context.Background())
 	if res.Data["count"] != 2 || res.Data["value"] != 2 {
 		t.Fatalf("data = %+v, want count/value = 2", res.Data)
 	}
@@ -125,13 +125,13 @@ func TestTallyEntriesEmptyKindDefaultsToAny(t *testing.T) {
 		t.Fatalf("TallyEntries(\"\") = %d, %v; want 4, nil", n, err)
 	}
 	// A non-empty kind must be honored, not coerced to "any".
-	if n, err := TallyEntries(context.Background(), root, countFile, false, 0); err != nil || n != 2 {
-		t.Fatalf("TallyEntries(%q) = %d, %v; want 2, nil", countFile, n, err)
+	if n, err := TallyEntries(context.Background(), root, CountKindFile, false, 0); err != nil || n != 2 {
+		t.Fatalf("TallyEntries(%q) = %d, %v; want 2, nil", CountKindFile, n, err)
 	}
 }
 
 func TestCountCheckMissingPathFails(t *testing.T) {
-	res := countOf(filepath.Join(t.TempDir(), "nope"), countAny, false, ">", 0).Run(context.Background())
+	res := countOf(filepath.Join(t.TempDir(), "nope"), CountKindAny, false, ">", 0).Run(context.Background())
 	if res.OK {
 		t.Fatal("count of a missing directory should fail")
 	}
