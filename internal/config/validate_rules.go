@@ -22,8 +22,8 @@ import (
 // optional, defaulting to 1 (true at least once within the window) — must be
 // positive and no larger than within.cycles when cycles are used.
 func validateWindow(prefix string, entry map[string]any, add addFunc) {
-	rawFor, hasFor := entry["for"]
-	rawWithin, hasWithin := entry["within"]
+	rawFor, hasFor := entry[rules.RuleFieldFor]
+	rawWithin, hasWithin := entry[rules.RuleFieldWithin]
 	if hasFor && hasWithin {
 		add("%s cannot define both for and within", prefix)
 	}
@@ -35,7 +35,7 @@ func validateWindow(prefix string, entry map[string]any, add addFunc) {
 			add("%s.for must be a mapping, e.g. for: {cycles: 3} or for: {duration: 6m}", prefix)
 		} else {
 			for _, key := range slices.Sorted(maps.Keys(f)) {
-				if key != "cycles" && key != "duration" {
+				if key != rules.WindowKeyCycles && key != rules.WindowKeyDuration {
 					add("%s.for.%s is not supported; for is always consecutive and only accepts cycles or duration", prefix, key)
 				}
 			}
@@ -49,12 +49,12 @@ func validateWindow(prefix string, entry map[string]any, add addFunc) {
 			return
 		}
 		for _, key := range slices.Sorted(maps.Keys(wn)) {
-			if key != "cycles" && key != "duration" && key != "min_matches" {
+			if key != rules.WindowKeyCycles && key != rules.WindowKeyDuration && key != rules.WindowKeyMinMatches {
 				add("%s.within.%s is not supported; within only accepts cycles or duration, plus min_matches", prefix, key)
 			}
 		}
 		cycles, hasCycles := validateWindowLength(prefix+".within", wn, add)
-		if v, present := wn["min_matches"]; present {
+		if v, present := wn[rules.WindowKeyMinMatches]; present {
 			matches, _ := cfgval.Int(v)
 			switch {
 			case matches <= 0:
@@ -67,8 +67,8 @@ func validateWindow(prefix string, entry map[string]any, add addFunc) {
 }
 
 func validateWindowLength(prefix string, m map[string]any, add addFunc) (cycles int, hasCycles bool) {
-	_, hasCycles = m["cycles"]
-	_, hasDuration := m["duration"]
+	_, hasCycles = m[rules.WindowKeyCycles]
+	_, hasDuration := m[rules.WindowKeyDuration]
 	switch {
 	case !hasCycles && !hasDuration:
 		add("%s must define exactly one of cycles or duration", prefix)
@@ -76,12 +76,12 @@ func validateWindowLength(prefix string, m map[string]any, add addFunc) (cycles 
 		add("%s cannot define both cycles and duration", prefix)
 	}
 	if hasCycles {
-		cycles, _ = cfgval.Int(m["cycles"])
+		cycles, _ = cfgval.Int(m[rules.WindowKeyCycles])
 		if cycles <= 0 {
 			add("%s.cycles must be > 0", prefix)
 		}
 	}
-	if hasDuration && !isPositiveDuration(cfgval.String(m["duration"])) {
+	if hasDuration && !isPositiveDuration(cfgval.String(m[rules.WindowKeyDuration])) {
 		add("%s.duration must be a valid positive duration", prefix)
 	}
 	return cycles, hasCycles
@@ -150,10 +150,10 @@ func validateRuleWindow(tree map[string]any, add addFunc) {
 		return
 	}
 	cycles, hasCycles := validateWindowLength(sectionRuleWindow, m, add)
-	switch mode := cfgval.String(m["mode"]); mode {
-	case "", "consecutive":
-	case "within":
-		if v, present := m["min_matches"]; present {
+	switch mode := cfgval.String(m[rules.FieldMode]); mode {
+	case "", rules.WindowModeConsecutive:
+	case rules.WindowModeWithin:
+		if v, present := m[rules.WindowKeyMinMatches]; present {
 			matches, _ := cfgval.Int(v)
 			switch {
 			case matches <= 0:
@@ -168,7 +168,7 @@ func validateRuleWindow(tree map[string]any, add addFunc) {
 }
 
 func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFunc) {
-	ruleMap, ok := tree["rules"].(map[string]any)
+	ruleMap, ok := tree[rules.SectionRules].(map[string]any)
 	if !ok {
 		return
 	}
@@ -176,36 +176,36 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 	systemMetricChecks := collectSystemMetricChecks(tree)
 
 	for _, name := range slices.Sorted(maps.Keys(ruleMap)) {
-		path := "rules." + name
+		path := rules.SectionRules + "." + name
 		entry, ok := ruleMap[name].(map[string]any)
 		if !ok {
 			add("%s must be a mapping", path)
 			continue
 		}
 
-		if _, present := entry["notify"]; present {
-			validateNotifySelection(path+".notify", entry["notify"], notifiers, add)
+		if _, present := entry[rules.RuleFieldNotify]; present {
+			validateNotifySelection(path+".notify", entry[rules.RuleFieldNotify], notifiers, add)
 		}
 
-		rtype := cfgval.String(entry["type"])
+		rtype := cfgval.String(entry[rules.RuleFieldType])
 		switch rtype {
 		case string(rules.RuleRemediation), string(rules.RuleGuard), string(rules.RuleAlert):
 		default:
 			add("%s type %q is not one of remediation, guard, alert", path, rtype)
 		}
 
-		ifNode, hasIf := entry["if"].(map[string]any)
+		ifNode, hasIf := entry[rules.RuleFieldIf].(map[string]any)
 		if !hasIf {
 			add("%s has no if condition", path)
 		}
-		then, hasThen := entry["then"].(map[string]any)
+		then, hasThen := entry[rules.RuleFieldThen].(map[string]any)
 		if !hasThen {
 			add("%s has no then action", path)
 		}
 		actions := ruleActions(then)
 		isGuard := rtype == string(rules.RuleGuard)
-		blocks, blocksErr := cfgval.StrictStringList(entry["blocks"])
-		if _, present := entry["blocks"]; present && blocksErr != nil {
+		blocks, blocksErr := cfgval.StrictStringList(entry[rules.RuleFieldBlocks])
+		if _, present := entry[rules.RuleFieldBlocks]; present && blocksErr != nil {
 			add("%s.blocks must be a string or list of strings", path)
 		}
 		hasBlock := false
@@ -235,10 +235,10 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 			// A guard is evaluated on demand during an operation and blocks the
 			// instant its condition holds; for/within windows are never advanced
 			// for guards, so they would be silently ignored. Reject them.
-			if _, ok := entry["for"]; ok {
+			if _, ok := entry[rules.RuleFieldFor]; ok {
 				add("%s guard rules do not support a for window", path)
 			}
-			if _, ok := entry["within"]; ok {
+			if _, ok := entry[rules.RuleFieldWithin]; ok {
 				add("%s guard rules do not support a within window", path)
 			}
 		} else if len(blocks) > 0 {
@@ -250,8 +250,8 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 		// remediation rule without one is an alert in disguise.
 		hasOperation := false
 		for _, act := range actions {
-			switch act.typ {
-			case "restart", "start", "stop", "reload", "resume":
+			switch rules.ActionType(act.typ) {
+			case rules.ActionRestart, rules.ActionStart, rules.ActionStop, rules.ActionReload, rules.ActionResume:
 				hasOperation = true
 				if rtype != string(rules.RuleRemediation) {
 					add("%s only remediation rules may use action %s", path, act.typ)
@@ -270,7 +270,19 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 	}
 }
 
-var conditionOperators = []string{"and", "or", "not", "failed", "active", "metric", "service", "process", "file", "command", "changed"}
+var conditionOperators = []string{
+	rules.ConditionAnd,
+	rules.ConditionOr,
+	rules.ConditionNot,
+	rules.ConditionFailed,
+	rules.ConditionActive,
+	rules.ConditionMetric,
+	rules.ConditionService,
+	rules.ConditionProcess,
+	rules.ConditionFile,
+	rules.ConditionCommand,
+	rules.ConditionChanged,
+}
 
 // validateCondition checks one condition node: exactly one operator/leaf, valid
 // check references, valid service/process states, command array+timeout, and
@@ -284,7 +296,7 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 	key := present[0]
 
 	switch key {
-	case "and", "or":
+	case rules.ConditionAnd, rules.ConditionOr:
 		items, ok := node[key].([]any)
 		if !ok || len(items) == 0 {
 			add("%s.%s requires a non-empty list", path, key)
@@ -298,51 +310,51 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 			}
 			validateCondition(child, fmt.Sprintf("%s.%s[%d]", path, key, i), checkNames, systemMetricChecks, allowSystemMetric, add)
 		}
-	case "not":
-		child, ok := node["not"].(map[string]any)
+	case rules.ConditionNot:
+		child, ok := node[rules.ConditionNot].(map[string]any)
 		if !ok {
 			add("%s.not must be a condition", path)
 			return
 		}
 		validateCondition(child, path+".not", checkNames, systemMetricChecks, allowSystemMetric, add)
-	case "failed", "active":
+	case rules.ConditionFailed, rules.ConditionActive:
 		validateProbe(node[key], path+"."+key, checkNames, systemMetricChecks, allowSystemMetric, add)
-	case "service":
-		validateState(node["service"], "state", serviceStates, "active, inactive, paused, failed, unknown", path+".service", add)
-	case "process":
-		validateState(node["process"], "state", processStates, "running, zombie, absent", path+".process", add)
-	case "file":
-		m, ok := node["file"].(map[string]any)
-		if !ok || cfgval.String(m["path"]) == "" {
+	case rules.ConditionService:
+		validateState(node[rules.ConditionService], rules.FieldState, serviceStates, "active, inactive, paused, failed, unknown", path+".service", add)
+	case rules.ConditionProcess:
+		validateState(node[rules.ConditionProcess], rules.FieldState, processStates, "running, zombie, absent", path+".process", add)
+	case rules.ConditionFile:
+		m, ok := node[rules.ConditionFile].(map[string]any)
+		if !ok || cfgval.String(m[rules.FieldPath]) == "" {
 			add("%s.file requires a path", path)
 		}
 		if ok {
 			// `exists` defaults to true at runtime; a non-boolean (e.g. the
 			// string "false") would silently act as true.
-			if v, present := m["exists"]; present {
+			if v, present := m[rules.FieldExists]; present {
 				if _, isBool := v.(bool); !isBool {
 					add("%s.file.exists must be a boolean", path)
 				}
 			}
 		}
-	case "command":
-		m, ok := node["command"].(map[string]any)
+	case rules.ConditionCommand:
+		m, ok := node[rules.ConditionCommand].(map[string]any)
 		if !ok {
 			add("%s.command must be a mapping", path)
 			return
 		}
 		entry := maps.Clone(m)
-		entry["type"] = "command"
-		validateSingleShotCheckFields(path+".command", "command", entry, "", add)
+		entry[rules.FieldType] = checks.CheckTypeCommand
+		validateSingleShotCheckFields(path+".command", checks.CheckTypeCommand, entry, "", add)
 		if cfgval.String(m["timeout"]) == "" {
 			add("%s.command condition must declare a timeout", path)
 		}
-	case "metric":
-		if m, ok := node["metric"].(map[string]any); ok {
+	case rules.ConditionMetric:
+		if m, ok := node[rules.ConditionMetric].(map[string]any); ok {
 			validateMetric(m, path+".metric", allowSystemMetric, add)
 		}
-	case "changed":
-		validateChanged(node["changed"], path+".changed", treeAppVersionChecks(checkNames), add)
+	case rules.ConditionChanged:
+		validateChanged(node[rules.ConditionChanged], path+".changed", treeAppVersionChecks(checkNames), add)
 	}
 }
 
@@ -352,8 +364,8 @@ func validateChanged(v any, path string, appVersionChecks map[string]struct{}, a
 		add("%s must be a mapping", path)
 		return
 	}
-	filePath := cfgval.String(m["path"])
-	app := cfgval.String(m["app"])
+	filePath := cfgval.String(m[rules.FieldPath])
+	app := cfgval.String(m[rules.FieldApp])
 	switch {
 	case filePath == "" && app == "":
 		add("%s requires a path or app", path)
@@ -363,7 +375,7 @@ func validateChanged(v any, path string, appVersionChecks map[string]struct{}, a
 	if app == "" {
 		return
 	}
-	if level := cfgval.String(m["level"]); level != "" {
+	if level := cfgval.String(m[rules.FieldLevel]); level != "" {
 		if _, ok := checks.VersionLevel(level); !ok {
 			add("%s.level %q is not one of major, minor, patch", path, level)
 		}
@@ -390,7 +402,7 @@ func validateProbe(v any, path string, checkNames, systemMetricChecks map[string
 		add("%s must be a mapping", path)
 		return
 	}
-	if ref := cfgval.String(m["check"]); ref != "" {
+	if ref := cfgval.String(m[rules.FieldCheck]); ref != "" {
 		if _, ok := checkNames[ref]; !ok {
 			add("%s references unknown check %q", path, ref)
 		} else if _, isSys := systemMetricChecks[ref]; isSys && !allowSystemMetric {
@@ -409,8 +421,8 @@ func validateProbe(v any, path string, checkNames, systemMetricChecks map[string
 			continue
 		}
 		entry := maps.Clone(fields)
-		entry["type"] = typ
-		if typ == "metric" {
+		entry[rules.FieldType] = typ
+		if typ == checks.CheckTypeMetric {
 			validateMetric(entry, path+"."+typ, allowSystemMetric, add)
 			continue
 		}
@@ -436,7 +448,7 @@ func validateState(v any, field string, valid map[string]struct{}, list, path st
 }
 
 func validateMetric(entry map[string]any, path string, allowSystem bool, add addFunc) {
-	scope := cfgval.String(entry["scope"])
+	scope := cfgval.String(entry[rules.FieldScope])
 	if scope == "" {
 		scope = checks.MetricScopeService
 	}
@@ -445,7 +457,7 @@ func validateMetric(entry map[string]any, path string, allowSystem bool, add add
 		add("%s scope %q is not service or system", path, scope)
 		return
 	}
-	name := cfgval.String(entry["name"])
+	name := cfgval.String(entry[rules.FieldName])
 	known := false
 	if name == "" {
 		add("%s requires a metric name", path)
@@ -454,12 +466,12 @@ func validateMetric(entry map[string]any, path string, allowSystem bool, add add
 	} else {
 		known = true
 	}
-	if op := cfgval.String(entry["op"]); op != "" {
+	if op := cfgval.String(entry[rules.FieldOp]); op != "" {
 		if !cfgval.IsCompareOp(op) {
 			add("%s op %q is not one of >, >=, <, <=, ==, !=", path, op)
 		}
 	}
-	value := cfgval.String(entry["value"])
+	value := cfgval.String(entry[rules.FieldValue])
 	if !parseMetricValue(value) {
 		add("%s value %q must be a number with an optional trailing %%", path, value)
 	} else if known {
@@ -487,16 +499,16 @@ type valAction struct {
 // ruleActions returns a rule's actions, supporting both the single
 // `then: {action, message}` and the multi `then: {actions: [...]}` forms.
 func ruleActions(then map[string]any) []valAction {
-	if list, ok := then["actions"].([]any); ok {
+	if list, ok := then[rules.RuleFieldActions].([]any); ok {
 		out := make([]valAction, 0, len(list))
 		for _, item := range list {
 			if m, ok := item.(map[string]any); ok {
-				out = append(out, valAction{typ: cfgval.String(m["type"]), message: cfgval.String(m["message"])})
+				out = append(out, valAction{typ: cfgval.String(m[rules.RuleFieldType]), message: cfgval.String(m[rules.RuleFieldMessage])})
 			}
 		}
 		return out
 	}
-	return []valAction{{typ: cfgval.String(then["action"]), message: cfgval.String(then["message"])}}
+	return []valAction{{typ: cfgval.String(then[rules.RuleFieldAction]), message: cfgval.String(then[rules.RuleFieldMessage])}}
 }
 
 func collectCheckNames(tree map[string]any) map[string]struct{} {
@@ -522,7 +534,7 @@ func collectSystemMetricChecks(tree map[string]any) map[string]struct{} {
 			continue
 		}
 		for name, raw := range entries {
-			if e, ok := raw.(map[string]any); ok && cfgval.String(e["type"]) == checks.CheckTypeMetric && cfgval.String(e["scope"]) == checks.MetricScopeSystem {
+			if e, ok := raw.(map[string]any); ok && cfgval.String(e[rules.FieldType]) == checks.CheckTypeMetric && cfgval.String(e[rules.FieldScope]) == checks.MetricScopeSystem {
 				names[name] = struct{}{}
 			}
 		}

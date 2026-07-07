@@ -117,16 +117,16 @@ func (r Rule) AlertMessages() []string {
 // `then: {action, message}` and the multi form `then: {actions: [...]}` are both
 // accepted.
 func parseActions(then map[string]any) []Action {
-	if list, ok := then["actions"].([]any); ok {
+	if list, ok := then[RuleFieldActions].([]any); ok {
 		var out []Action
 		for _, item := range list {
 			if m, ok := item.(map[string]any); ok {
-				out = append(out, Action{Type: ActionType(cfgval.AsString(m["type"])), Message: cfgval.AsString(m["message"])})
+				out = append(out, Action{Type: ActionType(cfgval.AsString(m[RuleFieldType])), Message: cfgval.AsString(m[RuleFieldMessage])})
 			}
 		}
 		return out
 	}
-	return []Action{{Type: ActionType(cfgval.AsString(then["action"])), Message: cfgval.AsString(then["message"])}}
+	return []Action{{Type: ActionType(cfgval.AsString(then[RuleFieldAction])), Message: cfgval.AsString(then[RuleFieldMessage])}}
 }
 
 // ConditionUsesSystemMetric walks a condition tree and reports whether any
@@ -138,7 +138,7 @@ func parseActions(then map[string]any) []Action {
 func ConditionUsesSystemMetric(node map[string]any, refChecks map[string]any) bool {
 	for key, v := range node {
 		switch key {
-		case "and", "or":
+		case ConditionAnd, ConditionOr:
 			list, ok := v.([]any)
 			if !ok {
 				continue
@@ -148,30 +148,30 @@ func ConditionUsesSystemMetric(node map[string]any, refChecks map[string]any) bo
 					return true
 				}
 			}
-		case "not":
+		case ConditionNot:
 			if m, ok := v.(map[string]any); ok && ConditionUsesSystemMetric(m, refChecks) {
 				return true
 			}
-		case "metric":
-			if m, ok := v.(map[string]any); ok && cfgval.AsString(m["scope"]) == checks.MetricScopeSystem {
+		case ConditionMetric:
+			if m, ok := v.(map[string]any); ok && cfgval.AsString(m[FieldScope]) == checks.MetricScopeSystem {
 				return true
 			}
-		case "failed", "active":
+		case ConditionFailed, ConditionActive:
 			m, ok := v.(map[string]any)
 			if !ok {
 				continue
 			}
-			if ref := cfgval.AsString(m["check"]); ref != "" {
+			if ref := cfgval.AsString(m[FieldCheck]); ref != "" {
 				if refChecks == nil {
 					continue
 				}
 				if c, ok := refChecks[ref].(map[string]any); ok &&
-					cfgval.AsString(c["type"]) == checks.CheckTypeMetric && cfgval.AsString(c["scope"]) == checks.MetricScopeSystem {
+					cfgval.AsString(c[FieldType]) == checks.CheckTypeMetric && cfgval.AsString(c[FieldScope]) == checks.MetricScopeSystem {
 					return true
 				}
 				continue
 			}
-			if c, ok := m["metric"].(map[string]any); ok && cfgval.AsString(c["scope"]) == checks.MetricScopeSystem {
+			if c, ok := m[ConditionMetric].(map[string]any); ok && cfgval.AsString(c[FieldScope]) == checks.MetricScopeSystem {
 				return true
 			}
 		}
@@ -197,7 +197,7 @@ func ReferencedChecks(tree map[string]any) map[string]any {
 // `enabled: false` entries and reporting malformed ones as warnings. Rules are
 // returned in name order (guards are evaluated in this order).
 func ParseRules(tree map[string]any) ([]Rule, []string) {
-	raw, ok := tree["rules"].(map[string]any)
+	raw, ok := tree[SectionRules].(map[string]any)
 	if !ok {
 		return nil, nil
 	}
@@ -206,7 +206,7 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 	// `within`, from the merged `rule_window` block. Absent or
 	// default-equivalent, both are nil and rules keep the built-in immediate
 	// default.
-	fbFor, fbWithin := ParseRuleWindow(tree["rule_window"])
+	fbFor, fbWithin := ParseRuleWindow(tree[SectionRuleWindow])
 
 	refChecks := ReferencedChecks(tree)
 	var rules []Rule
@@ -220,36 +220,36 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 		if cfgval.Disabled(entry) {
 			continue
 		}
-		ifNode, ok := entry["if"].(map[string]any)
+		ifNode, ok := entry[RuleFieldIf].(map[string]any)
 		if !ok {
 			warnings = append(warnings, "rule "+name+" has no if condition")
 			continue
 		}
-		thenNode, ok := entry["then"].(map[string]any)
+		thenNode, ok := entry[RuleFieldThen].(map[string]any)
 		if !ok {
 			warnings = append(warnings, "rule "+name+" has no then action")
 			continue
 		}
-		if RuleType(cfgval.AsString(entry["type"])) != RuleAlert && ConditionUsesSystemMetric(ifNode, refChecks) {
+		if RuleType(cfgval.AsString(entry[RuleFieldType])) != RuleAlert && ConditionUsesSystemMetric(ifNode, refChecks) {
 			warnings = append(warnings, "rule "+name+": a scope: system metric may only drive alert rules; rule dropped (safety invariant)")
 			continue
 		}
 		actions := parseActions(thenNode)
 		forWin, withinWin := ParseWindow(entry)
-		if _, hasFor := entry["for"]; !hasFor {
-			if _, hasWithin := entry["within"]; !hasWithin {
+		if _, hasFor := entry[RuleFieldFor]; !hasFor {
+			if _, hasWithin := entry[RuleFieldWithin]; !hasWithin {
 				forWin, withinWin = fbFor, fbWithin
 			}
 		}
 		rules = append(rules, Rule{
 			Name:    name,
-			Type:    RuleType(cfgval.AsString(entry["type"])),
+			Type:    RuleType(cfgval.AsString(entry[RuleFieldType])),
 			If:      ifNode,
 			For:     forWin,
 			Within:  withinWin,
 			Actions: actions,
-			Blocks:  cfgval.StringList(entry["blocks"]),
-			Notify:  cfgval.StringList(entry["notify"]),
+			Blocks:  cfgval.StringList(entry[RuleFieldBlocks]),
+			Notify:  cfgval.StringList(entry[RuleFieldNotify]),
 		})
 	}
 	return rules, warnings

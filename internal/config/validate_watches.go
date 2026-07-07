@@ -48,7 +48,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			continue
 		}
 		cp := "watches." + name + ".check"
-		switch cfgval.String(check["type"]) {
+		switch cfgval.String(check[rules.FieldType]) {
 		case checks.CheckTypeStorage:
 			// The one single-shot type with its own case: a storage watch may carry
 			// a then.expand action, so its hook block allows expand.
@@ -70,10 +70,10 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			// Any single-shot service check (tcp, http, load, oom, cert, …) can be
 			// a host watch: validate its fields with the same per-type validators a
 			// checks: section uses and require a hook (section: unified checks).
-			if validateWatchableCheck(cp, cfgval.String(check["type"]), check, locksDir, add) {
+			if validateWatchableCheck(cp, cfgval.String(check[rules.FieldType]), check, locksDir, add) {
 				validateHookBlock("watches."+name, entry, false, false, defaultNotify, add)
 			} else {
-				add("watches.%s.check.type %q is not supported", name, cfgval.String(check["type"]))
+				add("watches.%s.check.type %q is not supported", name, cfgval.String(check[rules.FieldType]))
 			}
 		}
 	}
@@ -88,9 +88,9 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 // still validates their grammar when it sees an unexpanded tree. Per-type field
 // grammar is shared with host watches.
 func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[string]struct{}, defaultNotify []string, add func(string, ...any)) {
-	watches, ok := tree["watches"].(map[string]any)
+	watches, ok := tree[sectionWatches].(map[string]any)
 	if !ok {
-		if _, present := tree["watches"]; present {
+		if _, present := tree[sectionWatches]; present {
 			add("watches must be a mapping of named watches")
 		}
 		return
@@ -121,9 +121,9 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 				add("%s.dry_run must be a boolean", prefix)
 			}
 		}
-		if then, ok := entry["then"].(map[string]any); ok {
-			if _, present := then["notify"]; present {
-				validateNotifySelection(prefix+".then.notify", then["notify"], notifiers, add)
+		if then, ok := entry[rules.RuleFieldThen].(map[string]any); ok {
+			if _, present := then[rules.RuleFieldNotify]; present {
+				validateNotifySelection(prefix+".then.notify", then[rules.RuleFieldNotify], notifiers, add)
 			}
 		}
 		validateWindow(prefix, entry, add)
@@ -134,13 +134,13 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 			add("%s.check is required", prefix)
 			continue
 		}
-		typ := cfgval.String(check["type"])
+		typ := cfgval.String(check[rules.FieldType])
 		switch {
 		case typ == "":
 			add("%s.check.type is required", prefix)
 			continue
 		}
-		rawThen, hasThen := entry["then"]
+		rawThen, hasThen := entry[rules.RuleFieldThen]
 		then, _ := rawThen.(map[string]any)
 		if !hasThen {
 			if !validateSingleShotCheckFields(prefix+".check", typ, check, locksDir, add) {
@@ -160,7 +160,7 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 			continue
 		}
 		validateSingleShotCheckFields(prefix+".check", typ, check, locksDir, add)
-		if action := cfgval.String(then["action"]); action != "" {
+		if action := cfgval.String(then[rules.RuleFieldAction]); action != "" {
 			// A rule-class action (restart/…/block/alert) makes this watch a
 			// checks:+rules: desugar target (see expandServiceWatches); validate the
 			// action semantics instead of the fire-and-forget hook block.
@@ -210,20 +210,20 @@ func validateWatchThenAction(prefix, action string, then map[string]any, add fun
 			add("%s.then.%s cannot be combined with an action (a watch is either an operation/alert or a fire-and-forget %s)", prefix, k, k)
 		}
 	}
-	allowed := set("action", "message", "blocks", "notify")
+	allowed := set(rules.RuleFieldAction, rules.RuleFieldMessage, rules.RuleFieldBlocks, rules.RuleFieldNotify)
 	for _, k := range slices.Sorted(maps.Keys(then)) {
 		if _, ok := allowed[k]; !ok {
 			add("%s.then.%s is not supported with an action", prefix, k)
 		}
 	}
 	if action == string(rules.ActionBlock) {
-		if _, hasNotify := then["notify"]; hasNotify {
+		if _, hasNotify := then[rules.RuleFieldNotify]; hasNotify {
 			add("%s.then.notify is not supported with action: block; guard rules do not notify", prefix)
 		}
-		if cfgval.String(then["message"]) == "" {
+		if cfgval.String(then[rules.RuleFieldMessage]) == "" {
 			add("%s.then.message is required with action: block", prefix)
 		}
-		blocks := cfgval.StringList(then["blocks"])
+		blocks := cfgval.StringList(then[rules.RuleFieldBlocks])
 		if len(blocks) == 0 {
 			add("%s.then requires a non-empty blocks: [list of actions] for a block (guard) action", prefix)
 		}
@@ -233,10 +233,10 @@ func validateWatchThenAction(prefix, action string, then map[string]any, add fun
 			}
 		}
 	} else if action == string(rules.ActionAlert) {
-		if cfgval.String(then["message"]) == "" {
+		if cfgval.String(then[rules.RuleFieldMessage]) == "" {
 			add("%s.then.message is required with action: alert", prefix)
 		}
-	} else if _, hasBlocks := then["blocks"]; hasBlocks {
+	} else if _, hasBlocks := then[rules.RuleFieldBlocks]; hasBlocks {
 		add("%s.then.blocks is only valid with action: block", prefix)
 	}
 }
@@ -270,7 +270,7 @@ func validateWatchMetadata(name string, entry map[string]any, add func(string, .
 // references are checked separately by validateNotifyRefs (which has the
 // configured notifier set).
 func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKill bool, defaultNotify []string, add func(string, ...any)) {
-	rawThen, present := block["then"]
+	rawThen, present := block[rules.RuleFieldThen]
 	if !present {
 		// Absent `then` is valid: the watch is alert/monitor-only. Its `check` +
 		// `for` (or per-metric conditions) will still produce "firing" state
@@ -284,14 +284,14 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKi
 		add("%s.then must be a mapping", prefix)
 		return
 	}
-	allowed := set("hook", "notify", "notify_interval", "expand", "kill")
+	allowed := set("hook", rules.RuleFieldNotify, "notify_interval", "expand", "kill")
 	for _, key := range slices.Sorted(maps.Keys(then)) {
 		if _, ok := allowed[key]; !ok {
 			add("%s.then.%s is not supported", prefix, key)
 		}
 	}
 	hook, hasHook := then["hook"].(map[string]any)
-	notify := cfgval.StringList(then["notify"])
+	notify := cfgval.StringList(then[rules.RuleFieldNotify])
 	if v, present := then["notify_interval"]; present {
 		// notify_interval re-sends the notification as a reminder while the watch
 		// stays firing; absent means notify once on the rising edge. It only
@@ -418,14 +418,14 @@ func HasEffectiveNotifyAction(names, defaultNotify []string) bool {
 // validateMetricWatchEntry rejects entry-level then/for/within on a multi-metric
 // watch (net, icmp, swap): those fields belong inside each metric's own block.
 func validateMetricWatchEntry(name string, entry map[string]any, add func(string, ...any)) {
-	validateInvalidWatchEntryFields(name, "multi-metric", entry, []string{"then", "for", "within"}, "metrics.<name>.%s", add)
+	validateInvalidWatchEntryFields(name, "multi-metric", entry, []string{rules.RuleFieldThen, rules.RuleFieldFor, rules.RuleFieldWithin}, "metrics.<name>.%s", add)
 }
 
 // validateStatefulWatchEntry rejects entry-level for/within on a file or process
 // watch: these use internal per-path/per-PID state and never read the shared
 // rules window fields at the entry level.
 func validateStatefulWatchEntry(name, typ string, entry map[string]any, add func(string, ...any)) {
-	validateInvalidWatchEntryFields(name, typ, entry, []string{"for", "within"}, "", add)
+	validateInvalidWatchEntryFields(name, typ, entry, []string{rules.RuleFieldFor, rules.RuleFieldWithin}, "", add)
 }
 
 func validateInvalidWatchEntryFields(name, typ string, entry map[string]any, keys []string, moveHint string, add func(string, ...any)) {
@@ -634,7 +634,7 @@ func validateICMPMetricCondition(prefix, metric string, m map[string]any, add ad
 // permissions/owner on change, existence on delete), plus the entry's hook.
 func validateFileCheck(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
 	validateStatefulWatchEntry(name, "file", entry, add)
-	if cfgval.String(check["path"]) == "" {
+	if cfgval.String(check[rules.FieldPath]) == "" {
 		add("watches.%s.check.path is required for a file check", name)
 	}
 	if v, present := check["recursive"]; present {
@@ -647,7 +647,7 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 	if sz, ok := check["size"].(map[string]any); ok {
 		conds++
 		if cfgval.String(sz["on"]) != checks.OnModeChange {
-			if !isValidCompareOp(cfgval.String(sz["op"])) || !isNumeric(cfgval.String(sz["value"])) {
+			if !isValidCompareOp(cfgval.String(sz[rules.FieldOp])) || !isNumeric(cfgval.String(sz[rules.FieldValue])) {
 				add("watches.%s.check.size requires on: change or {op, value} with a numeric value", name)
 			}
 		}
@@ -678,11 +678,11 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 // entry's hook.
 func validateProcessWatch(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
 	validateStatefulWatchEntry(name, "process", entry, add)
-	if cfgval.String(check["name"]) == "" {
+	if cfgval.String(check[rules.FieldName]) == "" {
 		add("watches.%s.check.name is required for a process check", name)
 	}
 	conds := 0
-	if v, present := check["for"]; present {
+	if v, present := check[rules.RuleFieldFor]; present {
 		conds++
 		if !isPositiveDuration(cfgval.String(v)) {
 			add("watches.%s.check.for %q must be a valid positive duration", name, cfgval.String(v))
@@ -694,7 +694,7 @@ func validateProcessWatch(name string, check, entry map[string]any, defaultNotif
 			continue
 		}
 		conds++
-		if !isValidCompareOp(cfgval.String(m["op"])) || !isNumeric(cfgval.String(m["value"])) {
+		if !isValidCompareOp(cfgval.String(m[rules.FieldOp])) || !isNumeric(cfgval.String(m[rules.FieldValue])) {
 			add("watches.%s.check.%s requires {op, value} with a numeric value", name, attr)
 		}
 	}
@@ -715,17 +715,17 @@ func validateProcessWatch(name string, check, entry map[string]any, defaultNotif
 }
 
 func validateProcessWatchKillSelector(name string, check, entry map[string]any, add func(string, ...any)) {
-	then, ok := entry["then"].(map[string]any)
+	then, ok := entry[rules.RuleFieldThen].(map[string]any)
 	if !ok {
 		return
 	}
 	if _, present := then["kill"]; !present {
 		return
 	}
-	if !filepath.IsAbs(cfgval.String(check["name"])) {
+	if !filepath.IsAbs(cfgval.String(check[rules.FieldName])) {
 		add("watches.%s.then.kill requires check.name to be an absolute resolved exe path", name)
 	}
-	if cfgval.String(check["user"]) == "" {
+	if cfgval.String(check[rules.FieldUser]) == "" {
 		add("watches.%s.then.kill requires check.user", name)
 	}
 }

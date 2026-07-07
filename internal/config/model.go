@@ -12,6 +12,7 @@ package config
 import (
 	"maps"
 	"sermo/internal/cfgval"
+	"sermo/internal/rules"
 	"slices"
 )
 
@@ -34,10 +35,10 @@ const (
 const sectionStopPolicy = "stop_policy"
 
 // sectionPolicy is the remediation policy block; sectionRuleWindow is the
-// firing-window fallback block.
+// firing-window fallback block owned by the rules grammar.
 const (
 	sectionPolicy     = "policy"
-	sectionRuleWindow = "rule_window"
+	sectionRuleWindow = rules.SectionRuleWindow
 )
 
 // Global section keys.
@@ -46,6 +47,7 @@ const (
 	sectionNotify   = "notify"
 	sectionPaths    = "paths"
 	sectionSecurity = "security"
+	sectionWatches  = "watches"
 )
 
 // Engine block and field keys.
