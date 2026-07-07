@@ -147,17 +147,13 @@ func (a App) mountSpec(opts options, cfg *config.Config, target string) (mountct
 }
 
 func (a App) configuredMountSpec(opts options, cfg *config.Config, name string) (mountctl.Spec, int) {
-	if _, ok := cfg.Storages[name]; !ok {
-		a.reportError(opts, fmt.Sprintf("unknown mount %q", name))
-		return mountctl.Spec{}, exitRuntimeError
-	}
 	resolved, errs := cfg.ResolveStorage(name)
 	if len(errs) > 0 {
-		a.printIssues(opts, scopedIssues("storage "+name, errs))
+		a.printIssues(opts, scopedIssues("watch "+name, errs))
 		return mountctl.Spec{}, exitConfigInvalid
 	}
 	if _, ok := resolved.Tree[config.StorageKeyMount].(map[string]any); !ok {
-		a.reportError(opts, fmt.Sprintf("storage %q has no mount block", name))
+		a.reportError(opts, fmt.Sprintf("storage watch %q has no mount block", name))
 		return mountctl.Spec{}, exitRuntimeError
 	}
 	return mountctl.SpecFromStorageTree(name, resolved.Tree), exitSuccess
@@ -212,9 +208,6 @@ func storageMountWatchConfig(cfg *config.Config, storage string) (monitorMode st
 	}
 	resolved, errs := cfg.ResolveStorage(storage)
 	if len(errs) > 0 || resolved.Tree == nil {
-		return "", false, false
-	}
-	if _, hasCapacity := resolved.Tree[config.StorageKeyCapacity].(map[string]any); !hasCapacity {
 		return "", false, false
 	}
 	watches, _ := cfg.ResolveWatches()

@@ -2,32 +2,36 @@
 
 Sermo configuration is split by target type: **catalog service/app/lib/pattern
 definitions**, **services** as concrete monitored instances, **notifiers** as
-delivery targets, **storages** as filesystem capacity targets with optional
-fstab-backed mount operations, and **watches** as host-level monitors. Watch
-files are single-watch documents with `name:`; notifier files remain global
-fragments with a top-level `notifiers:` map.
+delivery targets, and **watches** as host-level monitors. Storage capacity,
+network/uplink and fstab-backed mount entries are all watch documents; operators
+usually keep them in classified directories such as `storages/`, `networks/` and
+`mounts/`, all listed under `paths.watches`. Watch files are single-watch
+documents with `name:`; notifier files remain global fragments with a top-level
+`notifiers:` map.
 
 New configuration must use one YAML file per target. That means one catalog app,
-daemon, lib or pattern per file; one service per file; one storage per file; one
-notifier per file; and one host watch per file (`network`, `uplink`, `load`,
-and other watch documents). Notifier fragment files still have the top-level
-`notifiers:` map, but that map must contain exactly one named entry. This keeps
-generated configuration easy to diff, replace and clean up per target.
+daemon, lib or pattern per file; one service per file; one notifier per file;
+and one host watch per file (`storage`, `network`, `uplink`, `load`, mount
+watches and other watch documents). Notifier fragment files still have the
+top-level `notifiers:` map, but that map must contain exactly one named entry.
+This keeps generated configuration easy to diff, replace and clean up per
+target.
 
 A document's **kind is determined by where it lives** — its catalog subdirectory
 (`services/` → service, `apps/` → app, `libs/` → lib, `patterns/` → patterns) or
-the configured path it loads from (`paths.services` → service, `paths.storages` →
-storage, `paths.networks` / `paths.watches` → watch). A catalog `services/` definition (a *catalog service*) and a `paths.services`
-instance (a *configured service*) share the kind `service`; they stay distinct by
-location. A top-level `kind:` key is therefore **optional and redundant**; when one
-is present in a deployed file it must match the location, which catches a file
-placed in the wrong directory. Shipped configuration omits it.
+the configured path it loads from (`paths.services` → service, `paths.watches`
+→ watch). A catalog `services/` definition (a *catalog service*) and a
+`paths.services` instance (a *configured service*) share the kind `service`;
+they stay distinct by location. A top-level `kind:` key is therefore **optional
+and redundant**; when one is present in a deployed file it must match the
+location, which catches a file placed in the wrong directory. Shipped
+configuration omits it.
 
 > **Complete annotated example.** [`docs/sermo-all.yml`](sermo-all.yml) shows
 > every configuration surface in one place — global config, watches, and one
 > document of each kind (a catalog service, app, lib, pattern, a configured
-> service, and a storage), plus a cloned service example — and is validated by the
-> test suite, so it cannot
+> service, and storage/mount watches), plus a cloned service example — and is
+> validated by the test suite, so it cannot
 > drift from the schema. It is a reference bundle only; real deployments keep
 > one target per file. The shipped operational config is `examples/sermo.yml`.
 > From a source checkout, build with `SERMO_DATADIR=$PWD make build`, then use
@@ -53,9 +57,10 @@ normalized to `/run`, must be documented as explicit exceptions at the owner.
 /etc/sermo/services/*.yml concrete service documents
 /etc/sermo/apps/*.yml     host-specific app documents
 /etc/sermo/notifiers/*.yml notifier fragments
-/etc/sermo/storages/*.yml storage documents (capacity and optional mount operations)
-/etc/sermo/networks/*.yml network watch documents
 /etc/sermo/watches/*.yml  generic host watch documents
+/etc/sermo/networks/*.yml network/uplink watch documents
+/etc/sermo/storages/*.yml storage watch documents
+/etc/sermo/mounts/*.yml   fstab-backed storage mount watch documents
 /etc/sermo/templates/*.yml notification templates
 ```
 
@@ -69,12 +74,11 @@ paths:
     - /etc/sermo/apps
   notifiers:
     - /etc/sermo/notifiers
-  storages:
-    - /etc/sermo/storages
-  networks:
-    - /etc/sermo/networks
   watches:
     - /etc/sermo/watches
+    - /etc/sermo/networks
+    - /etc/sermo/storages
+    - /etc/sermo/mounts
   runtime: /run/sermo
   state: /var/lib/sermo
   templates: /etc/sermo/templates
@@ -86,9 +90,8 @@ defaults to `/usr/share/sermo/catalog` in packaged builds. If a service is not
 in the packaged catalog yet, define it as a normal local service under
 `paths.services`.
 
-Directory lists under `paths.services`, `paths.apps`, `paths.notifiers`,
-`paths.storages`, `paths.networks` and `paths.watches` accept either a path
-string or an explicit mapping:
+Directory lists under `paths.services`, `paths.apps`, `paths.notifiers` and
+`paths.watches` accept either a path string or an explicit mapping:
 
 ```yaml
 paths:
@@ -110,23 +113,22 @@ per lock named `<service>[.<name>].lock`) and internal operation locks
 `paths.locks` is **not** supported. See [Locks](safety.md#locks) for the TTL and
 stale-reclaim semantics.
 
-Only service, app and storage document directories have config-relative fallbacks.
-If `paths.services`, `paths.apps` or `paths.storages` is omitted, Sermo falls back
-to `services/`, `apps/` or `storages/` next to the loaded `sermo.yml` file. With
-the standard `/etc/sermo/sermo.yml` this means `/etc/sermo/services`,
-`/etc/sermo/apps` and `/etc/sermo/storages`.
+Only service and app document directories have config-relative fallbacks. If
+`paths.services` or `paths.apps` is omitted, Sermo falls back to `services/` or
+`apps/` next to the loaded `sermo.yml` file. With the standard
+`/etc/sermo/sermo.yml` this means `/etc/sermo/services` and `/etc/sermo/apps`.
 
 Optional include directories have no implicit fallback. If `paths.notifiers`,
-`paths.networks` or `paths.watches` is omitted or empty, Sermo loads no
-notifiers or watch documents of that type; a sibling `notifiers/`, `networks/`
-or `watches/` directory next to `sermo.yml` is ignored until listed
-explicitly under `paths`.
+or `paths.watches` is omitted or empty, Sermo loads no notifiers or host watch
+documents; sibling `notifiers/`, `watches/`, `networks/`, `storages/` or
+`mounts/` directories next to `sermo.yml` are ignored until listed explicitly
+under `paths`.
 
-Every new service document, storage document, notifier fragment or watch
-document under configured directories should be isolated in its own `.yml` file,
-even when several targets are generated in the same wizard run. Storage documents may expose mount
-operations with a `mount:` block while keeping capacity monitoring in the same
-target.
+Every new service document, notifier fragment or watch document under configured
+directories should be isolated in its own `.yml` file, even when several targets
+are generated in the same wizard run. A storage watch may expose mount
+operations with a top-level `mount:` block while keeping capacity monitoring in
+the same target.
 
 Use `/run` for runtime paths in Sermo configuration and examples. Do not write
 new `/var/run` pidfiles, sockets, lockfiles or runtime directories in
@@ -224,30 +226,31 @@ notification templates. `make install` creates it and installs
 
 ## Storage and mount units
 
-A storage document defines a named filesystem target under `paths.storages`
-(default `/etc/sermo/storages`). It may declare `capacity:` for monitoring,
-`mount:` for `sermoctl mount`/`sermoctl umount`, or both. Mount operations
+A storage watch defines a named filesystem target in any directory listed under
+`paths.watches` (commonly `/etc/sermo/storages` or `/etc/sermo/mounts`). It uses
+`check.type: storage` for capacity and mount-state monitoring, and may add a
+top-level `mount:` block for `sermoctl mount`/`sermoctl umount`. Mount operations
 deliberately use `/etc/fstab` as the source of truth: the YAML contains the mount
 path and Sermo policy only, not `source`, `fstype`, `options` or class metadata.
-When a storage has both `capacity:` and `mount:`, the generated capacity watch
-requires the storage `path` to be the mounted mountpoint (`mounted: true`) unless
-`capacity.mounted` is explicitly set.
+When a storage watch has `mount:`, set `check.mounted: true` when the path must
+be a mounted mountpoint.
 
 ```yaml
 name: mount-backup
 display_name: Backup mount
 category: storage
 
-path: /mnt/backup
 monitor: previous
 interval: 30s
 
-capacity:
+check:
+  type: storage
+  path: /mnt/backup
   mounted: true
   used_pct: { op: ">=", value: "90%" }
-  for: { cycles: 3 }
-  then:
-    notify: default
+for: { cycles: 3 }
+then:
+  notify: default
 
 mount:
   refcount: true
@@ -269,7 +272,7 @@ sermoctl mount status mount-backup
 sermoctl mount list
 ```
 
-The Web UI's **Mount units** panel exposes storage targets that have a `mount:`
+The Web UI's **Mount units** panel exposes storage watches that have a `mount:`
 block. It can mount/unmount, show the same busy-process blockers before
 unmounting, send a native TTY alert to logged-in users who are blocking the
 mount, and run `kill+umount` only through the explicit mount kill policy below.
@@ -821,7 +824,7 @@ their process table and latency/CPU/memory/IO charts.
 Web-triggered monitor changes are recorded with source `web` in the state store;
 manual stops from the web UI or CLI use `web-manual-stop` / `cli-manual-stop`
 until a later successful start restores the previous monitored state. A successful
-storage `umount` pauses that storage capacity watch with `web-mount-umount` or
+storage `umount` pauses that storage watch with `web-mount-umount` or
 `cli-mount-umount`; a later successful `mount` restores it only when that umount
 created the pause. The dashboard and
 `GET /api/services` / `GET /api/watches` expose `state`, `monitored`,
@@ -1092,18 +1095,18 @@ document never merges into a service. (A service can also declare its own
 
 > **Tip — generate configuration interactively.** `sermoctl wizard` can write
 > three different surfaces. The storage assistant (`volume`) prints storage
-> documents with `capacity:` and writes one file per target under
-> `/etc/sermo/storages`. Watch assistants (`net`, `uplink`) print watch
-> document previews and, if accepted, write one watch per file under a watch-type
-> directory such as `/etc/sermo/networks` or `/etc/sermo/watches`; the wizard
-> adds that directory to the matching `paths.*` (writing a `.bak` first).
+> watch documents and writes one file per target under `/etc/sermo/storages`.
+> Watch assistants (`net`, `uplink`) print watch document previews and, if
+> accepted, write one watch per file under a watch-type directory such as
+> `/etc/sermo/networks` or `/etc/sermo/watches`; the wizard adds that directory
+> to `paths.watches` (writing a `.bak` first).
 > Service assistants (`service`, `docker`, `vm`) write
 > one service file per target under `services/` and ensure that
 > `paths.services` loads it; `docker` and `vm` add `control.type: docker` or
 > `control.type: libvirt` plus matching check-only watches. The mount assistant
-> (`mount`) lists `/etc/fstab` mount points and writes safe storage files with
-> a `mount:` block under `paths.storages`; it does not mount or unmount while
-> generating config.
+> (`mount`) lists `/etc/fstab` mount points and writes safe storage watch files
+> with a `mount:` block under `/etc/sermo/mounts`; it does not mount or unmount
+> while generating config.
 >
 > `sermoctl wizard volume` creates storage checks for mounted local and
 > network/distributed filesystems (threshold as a percent or size, optional
@@ -1133,8 +1136,8 @@ document never merges into a service. (A service can also declare its own
 > global `notify` configured) it degrades to a monitor-only watch
 > (`notify: [none]`) with a one-line note — it never re-asks or aborts. The
 > wizard asks monitored entries for monitor state (`enabled`/`disabled`/
-> `previous`) and an optional check interval; storage files generated only for
-> mount operations are not monitored entries, so the mount assistant skips those questions. See
+> `previous`) and an optional check interval; mount watch files generated only
+> for mount operations are not monitored entries, so the mount assistant skips those questions. See
 > [wizards](wizards.md) for the full flow.
 
 A watch's `then` block (when present) declares the actions taken when it
@@ -1179,7 +1182,7 @@ again, the next episode notifies afresh. To get a periodic **reminder** while a
 watch stays firing, set `then.notify_interval` to a positive duration: the
 notification is re-sent once that interval elapses. It only affects delivery, so
 it requires `notify` targets. Both the edge-triggered default and
-`notify_interval` apply to generated storage capacity watches, the standard
+`notify_interval` apply to storage watches, the standard
 single-shot service checks, and the `net`/`icmp`/`swap` metric watches. The
 `file` and `process` watches have their own notification model — one event per
 changed path or matching pid — and ignore `notify_interval`.
@@ -1187,19 +1190,20 @@ changed path or matching pid — and ignore `notify_interval`.
 ```yaml
 # /etc/sermo/storages/storage-root.yml
 name: storage-root
-path: /
 monitor: previous
-capacity:
+check:
+  type: storage
+  path: /
   used_pct: { op: ">=", value: "90%" }
-  for: { cycles: 3 }
-  then:
-    notify: [ops-email]
-    notify_interval: 30m     # re-notify every 30m while still firing
+for: { cycles: 3 }
+then:
+  notify: [ops-email]
+  notify_interval: 30m     # re-notify every 30m while still firing
 ```
 
 Use `dry_run: true` when you want automatic actions wired for a trial run, but
 you do not want non-console side effects yet. It is available in `defaults`, in
-each service, in each storage target, and in each watch entry. A target-level
+each service, and in each watch entry. A target-level
 setting overrides `defaults.dry_run`.
 
 Dry-run applies only to automatic actions driven by monitoring/rules:
@@ -1263,23 +1267,23 @@ entry structurally and no runtime watch is built. Use `monitor: disabled` when
 you want the watch visible in the web UI and available for an admin to resume
 with **monitor**.
 
-Storage monitors live in storage documents under `paths.storages`; their
-`capacity:` block generates the runtime storage watch and carries over
-`display_name` / `category` metadata. Network and generic watch directories
-(`paths.networks` and `paths.watches`) contain watch documents. A watch document
-is a normal YAML file with top-level `name`, optional `display_name` /
-`category`, and the watch fields:
+Storage, network and generic host monitors all live in watch documents loaded
+from `paths.watches`. The directory name is just classification for operators:
+`storages/`, `networks/`, `mounts/` and `watches/` are all normal watch dirs
+when listed under `paths.watches`. A watch document is a normal YAML file with
+top-level `name`, optional `display_name` / `category`, and the watch fields:
 
 ```yaml
 # /etc/sermo/storages/storage-root.yml
 name: storage-root
 category: storage
-path: /
 monitor: previous
-capacity:
+check:
+  type: storage
+  path: /
   used_pct: { op: ">=", value: "90%" }
-  then:
-    notify: [ops-email]
+then:
+  notify: [ops-email]
 ```
 
 ```yaml
@@ -1296,7 +1300,7 @@ Keeping wizard output in separate files makes it easy to remove or review one
 target without rewriting the whole global config. Notifier fragments follow the
 same one-entry rule under a top-level `notifiers:` map in `paths.notifiers`.
 The compact reference examples below still use global `watches:` maps; when you
-store the same watch under `paths.networks` or `paths.watches`, move the entry
+store the same watch under a directory listed in `paths.watches`, move the entry
 name to top-level `name:` and keep the inner fields at the top level.
 
 These conventions keep the per-type sections below short:
@@ -1344,25 +1348,26 @@ These conventions keep the per-type sections below short:
   against a baseline carried across cycles: the **first cycle primes the baseline
   and never fires**, and a counter reset clamps the per-cycle delta to zero.
 
-### `then.expand` — volume growth (storage capacity)
+### `then.expand` — volume growth (storage watch)
 
-A storage target's `capacity:` block can grow the LVM-backed filesystem under
-the checked path automatically when it runs low. The expansion is native (Sermo
+A storage watch can grow the LVM-backed filesystem under the checked path
+automatically when it runs low. The expansion is native (Sermo
 orchestrates it in Go, invoking only `lvs`/`vgs`/`lvextend` and the filesystem
 grow tool — `resize2fs`, `xfs_growfs` or `btrfs` — which have no Go API):
 
 ```yaml
 # /etc/sermo/storages/expand-backup.yml
 name: expand-backup
-path: /mnt/backup
 monitor: previous
-capacity:
+check:
+  type: storage
+  path: /mnt/backup
   free_pct: { op: "<", value: "10%" }
-  for: { cycles: 3 }                    # confirm low for 3 cycles first
-  policy: { cooldown: 30m }             # at most one expansion per 30m (see below)
-  then:
-    expand: { by: 5G }                  # grow by up to 5G (capped to VG free)
-    notify: [ops-email]                 # optional: report the outcome
+for: { cycles: 3 }                    # confirm low for 3 cycles first
+policy: { cooldown: 30m }             # at most one expansion per 30m (see below)
+then:
+  expand: { by: 5G }                  # grow by up to 5G (capped to VG free)
+  notify: [ops-email]                 # optional: report the outcome
 ```
 
 `expand.by` is the amount to grow by (`K`/`M`/`G`/`T`, binary units). It is
@@ -1538,16 +1543,17 @@ watches:
 ```yaml
 # /etc/sermo/storages/storage-root.yml
 name: storage-root
-path: /
 monitor: enabled       # optional, default enabled
 interval: 1m           # optional, default engine.interval
-capacity:
+check:
+  type: storage
+  path: /
   used_pct: { op: ">=", value: "90%" } # check fires when crossed
-  for: { cycles: 3 }     # optional window; reuses the rules engine
-  then:
-    hook:
-      command: [/usr/local/bin/alert-storage.sh, "/"]
-      timeout: 10s       # optional, default engine.default_timeout
+for: { cycles: 3 }     # optional window; reuses the rules engine
+then:
+  hook:
+    command: [/usr/local/bin/alert-storage.sh, "/"]
+    timeout: 10s       # optional, default engine.default_timeout
 ```
 
 The generated `storage` check reads filesystem usage for `path` and is true when
@@ -1562,13 +1568,14 @@ inodes (millions of tiny files) rejects new files while bytes are still free.
 ```yaml
 # /etc/sermo/storages/storage-root.yml
 name: storage-root
-path: /
-capacity:
+check:
+  type: storage
+  path: /
   used_pct: { op: ">=", value: "90%" }       # block space
   free_bytes: { op: "<", value: 10G }        # absolute free space
   inodes_used_pct: { op: ">=", value: "90%" } # inode table
-  then:
-    hook: { command: [/usr/local/bin/alert-storage.sh, "/"] }
+then:
+  hook: { command: [/usr/local/bin/alert-storage.sh, "/"] }
 ```
 
 A filesystem that does not report inodes (`inodes_total == 0`, e.g. btrfs) never
@@ -1585,12 +1592,13 @@ when you want to assert the path's mount state:
 ```yaml
 # /etc/sermo/storages/data.yml
 name: data
-path: /data
-capacity:
+check:
+  type: storage
+  path: /data
   mounted: true            # require it to be a mount point (set false to require NOT mounted)
   used_pct: { op: ">=", value: "90%" } # space predicate(s), optional alongside mount
-  then:
-    hook: { command: [/usr/local/bin/alert-storage.sh, "/data"] }
+then:
+  hook: { command: [/usr/local/bin/alert-storage.sh, "/data"] }
 ```
 
 A storage check needs **at least one** of a space/inode predicate or a mount
@@ -2132,15 +2140,15 @@ watch/hook structure.
 ## Global defaults
 
 Only target-safe parts of `defaults` merge into configured targets:
-`dry_run` applies to services, storages and watches; `stop_policy`, `policy`
-and `rule_window` apply to services. Engine-wide settings (`interval`,
+`dry_run` applies to services and watches; `stop_policy`, `policy` and
+`rule_window` apply to services. Engine-wide settings (`interval`,
 `max_parallel_checks`, `max_parallel_operations`, `default_timeout`,
 `operation_timeout`, `startup_delay`, `backend`, `user_lookup`,
 `user_lookup_timeout`, `state_cache_size`) are daemon configuration and never
 merge into a service.
 
-`defaults.dry_run` is optional and defaults to `false`; a service, storage or
-watch may override it with its own top-level `dry_run`.
+`defaults.dry_run` is optional and defaults to `false`; a service or watch may
+override it with its own top-level `dry_run`.
 
 `defaults.policy.cooldown` is **required and positive**: every resolved service
 inherits a loop-prevention cooldown unless it overrides it.

@@ -145,7 +145,11 @@ Use Sermo wizards and tools for configuration generation:
 
 - Prefer `sermoctl wizard service` for active services, and the matching Sermo wizard/tool for other explicitly requested target types.
 - Do not hand-write the initial service set when a Sermo wizard can generate it.
-- Keep generated config granular: one file per service, storage target, notifier, network watch, interface, VM, container, app or other target. Storage files under `paths.storages` are storage documents; watch files under `paths.networks` and `paths.watches` are watch documents with top-level `name:`; notifier fragment files contain `notifiers:` with one named entry.
+- Keep generated config granular: one file per service, notifier, storage watch,
+  network watch, interface, VM, container, app or other target. Storage,
+  network/uplink and mount files are all watch documents loaded from
+  `paths.watches`, with top-level `name:` plus the watch fields; notifier
+  fragment files contain `notifiers:` with one named entry.
 - If the wizard output needs adjustment, edit only the generated files under the remote `/tmp/sermo-remote-test-*` directory, then run `sermoctl config validate` again.
 - If an adjustment reveals a project/catalog bug, fix the local project and redeploy new `/tmp` artifacts instead of patching permanent remote host files.
 
@@ -208,27 +212,29 @@ and the corresponding docs/schema. The discovery script must be data-driven from
 that inventory: adding a new host watch type to Sermo should require no edit to
 this skill before remote installation runs start considering it.
 - Generate one file per host watch under the matching temporary directory.
-  Storage targets loaded by `paths.storages` are storage documents with
-  `capacity:`; network and generic watch directories contain watch documents
-  with top-level `name:` plus the watch fields.
+  Storage, network and generic watch directories are all listed under
+  `paths.watches`; every file is a watch document with top-level `name:` plus
+  the watch fields.
 - Include baseline watches for every safely discoverable host resource on every
   complete config according to the run-time inventory. Do not use a hardcoded
   allow-list. For feature-dependent watches, generate entries only when the
   remote host exposes the required source data read-only; otherwise record the
   skip reason. Skip pseudo filesystems, bind mounts and transient
   container/runtime mounts unless the user explicitly asks for them.
-- Every generated storage target must alert when free space is below 10%. Put
-  `free_pct: { op: "<", value: "10%" }` in the storage document's `capacity:`
-  block rather than an inverted `used_pct` threshold. For paths that are
-  expected mount points, include `mounted: true` in that same `capacity:` block
-  so an unmounted network or USB path alerts before `statfs` can report the
-  parent filesystem. Do not configure `fstype`, `device` or `options` as
-  predicates; they are result data only.
+- Every generated storage watch must alert when free space is below 10%. Put
+  `free_pct: { op: "<", value: "10%" }` in the watch's `check:` block rather
+  than an inverted `used_pct` threshold. For paths that are expected mount
+  points, include `mounted: true` in that same `check:` block so an unmounted
+  network or USB path alerts before `statfs` can report the parent filesystem.
+  Do not configure `fstype`, `device` or `options` as predicates; they are
+  result data only.
 
 ```yaml
 name: storage-mnt-backup
-path: /mnt/backup
-capacity:
+category: storage
+check:
+  type: storage
+  path: /mnt/backup
   mounted: true
   free_pct: { op: "<", value: "10%" }
 ```
@@ -236,22 +242,26 @@ capacity:
   If real notification delivery is part of the requested remote installation,
   attach the selected notifier or inherit the configured global notify. If the
   run is only validating routing, use target-level `dry_run: true`; otherwise keep the
-  storage target alert-only or monitor-only according to the requested mode.
+  storage watch alert-only or monitor-only according to the requested mode.
 - Include `mount:` blocks for network and USB mount targets that are declared
-  in `/etc/fstab`, writing one storage file per target under `paths.storages`. Detect them
-  with read-only probes (`findmnt --fstab`, `/etc/fstab`, `lsblk`, `/dev/disk/by-*`
-  and `/proc/self/mountinfo`); never mount or unmount them during discovery.
+  in `/etc/fstab`, writing one storage watch file per target under a `mounts/`
+  directory listed in `paths.watches`. Detect them with read-only probes
+  (`findmnt --fstab`, `/etc/fstab`, `lsblk`, `/dev/disk/by-*` and
+  `/proc/self/mountinfo`); never mount or unmount them during discovery.
   Network candidates include NFS/NFS4, CIFS/SMB, SSHFS/fuse.sshfs, Ceph,
   GlusterFS and similar remote storage. USB candidates include removable devices
   or filesystems whose source resolves through USB/removable block devices.
-  Keep the storage document fstab-backed and policy-only for mount operations:
+  Keep the storage watch fstab-backed and policy-only for mount operations:
 
 ```yaml
-# <paths.storages>/mount-mnt-backup.yml  → storage
+# <paths.watches>/mounts/mount-mnt-backup.yml  → watch
 name: mount-mnt-backup
 display_name: Backup mount
 category: storage
-path: /mnt/backup
+check:
+  type: storage
+  path: /mnt/backup
+  mounted: true
 mount:
   refcount: true
   umount:

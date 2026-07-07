@@ -203,8 +203,8 @@ Lifecycle:
 
 ## Mount operations
 
-Mount units (loaded from storage documents under `paths.storages`, default
-`/etc/sermo/storages`, when they define `mount:`) are manual operator actions exposed by
+Mount units (loaded from storage watch documents listed in `paths.watches`, when
+they define `mount:`) are manual operator actions exposed by
 `sermoctl mount|umount` and the Web UI **Mount units** panel; they are not
 daemon-cycle remediation. They still use the same safety posture:
 

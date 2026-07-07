@@ -1,30 +1,27 @@
 package config
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
 const mountGlobal = `
 engine:
   backend: auto
 paths:
   services: [ @ROOT@/services ]
-  storages: [ @ROOT@/storages ]
+  watches: [ @ROOT@/mounts ]
   runtime: /run/sermo
 defaults:
   policy:
     cooldown: 5m
 `
 
-func TestLoadMountDocumentsFromStoragesPath(t *testing.T) {
+func TestLoadMountWatchFromWatchesPath(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": mountGlobal,
-		"storages/backup.yml": `
+		"mounts/backup.yml": `
 name: mount-backup
 display_name: Backup mount
 category: storage
-path: /mnt/backup
+check: { type: storage, path: /mnt/backup, mounted: true }
 mount:
   refcount: true
   umount: { term_timeout: 12s, kill_timeout: 5s }
@@ -34,8 +31,8 @@ mount:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if _, ok := cfg.Storages["mount-backup"]; !ok {
-		t.Fatalf("mount-backup not loaded: %v", cfg.StorageNames)
+	if got := cfg.StorageMountNames(); len(got) != 1 || got[0] != "mount-backup" {
+		t.Fatalf("mount-backup not loaded: %v", got)
 	}
 	if got := cfg.StorageNameByPath("/mnt/backup"); got != "mount-backup" {
 		t.Fatalf("StorageNameByPath = %q, want mount-backup", got)
@@ -48,9 +45,9 @@ mount:
 func TestMountValidationRejectsUnsafeSIGKILLWithoutSelector(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": mountGlobal,
-		"storages/backup.yml": `
+		"mounts/backup.yml": `
 name: mount-backup
-path: /mnt/backup
+check: { type: storage, path: /mnt/backup, mounted: true }
 mount:
   umount: { allow_sigkill: true }
 `,
@@ -65,16 +62,20 @@ mount:
 	}
 }
 
-func TestStorageDirOnlyAllowsStorageDocuments(t *testing.T) {
+func TestMountBlockRequiresStorageWatch(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": mountGlobal,
-		"storages/web.yml": `
-kind: service
+		"mounts/web.yml": `
 name: web
+check: { type: load, load5: { op: ">", value: 3 } }
+mount: {}
 `,
 	})
-	_, err := loadConfig(t, global)
-	if err == nil || !strings.Contains(err.Error(), "located under a storage directory but declares kind: service") {
-		t.Fatalf("Load error = %v, want storage-only directory error", err)
+	cfg, err := loadConfig(t, global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if issues := Validate(cfg); !hasIssue(issues, "watches.web.mount is only valid on a storage watch") {
+		t.Fatalf("Validate issues = %v, want mount/storage-watch error", issues)
 	}
 }

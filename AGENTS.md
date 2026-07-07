@@ -202,13 +202,14 @@ duplicate aliases for the same pidfile or socket.
 
 Use one YAML file per target — a single document of one kind per file, never
 several targets grouped together. A document's kind is derived from where it
-lives (catalog subdir / `paths.services` / `paths.storages` / `paths.networks` /
-`paths.watches`), so a top-level `kind:` is optional and omitted. Watch documents
-under `paths.networks` and `paths.watches` use top-level `name:` plus the watch fields; notifier fragments
+lives (catalog subdir / `paths.services` / `paths.watches`), so a top-level
+`kind:` is optional and omitted. Watch documents under any directory listed in
+`paths.watches` use top-level `name:` plus the watch fields; notifier fragments
 still use a top-level `notifiers:` map, but that map must contain exactly one
-named entry. The only exception is a clearly labeled reference bundle such as
-`docs/sermo-all.yml`, which groups examples so the full schema can be validated
-in one place.
+named entry. Use classified watch directories such as `watches/`, `networks/`,
+`storages/` and `mounts/` by listing them all under `paths.watches`. The only
+exception is a clearly labeled reference bundle such as `docs/sermo-all.yml`,
+which groups examples so the full schema can be validated in one place.
 
 For source-tree development and validation without installing under `/etc/sermo`,
 build with `SERMO_DATADIR=$PWD make build`, then use `examples/sermo-dev.yml`

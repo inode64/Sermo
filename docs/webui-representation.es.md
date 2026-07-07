@@ -18,11 +18,11 @@ Mantén los cambios concretos:
 - La interfaz web es un único documento embebido: `internal/web/index.html`.
 - Los paneles de datos son tarjetas `<details>`. La página se desplaza como un todo; no añadas
   barras de desplazamiento locales por panel.
-- Los servicios, aplicaciones, storages y watches pueden usar `category` para
-  agrupar, filtrar o buscar según el panel.
+- Los servicios, aplicaciones y watches (incluidas las watches de storage) pueden
+  usar `category` para agrupar, filtrar o buscar según el panel.
 - Un campo YAML `category` de nivel superior es la fuente de la categoría. Si está ausente,
-  los servicios recurren a `service`, las aplicaciones a `app`, los storages a
-  `storage` y los watches a `watch`.
+  los servicios recurren a `service`, las aplicaciones a `app`, las watches de
+  storage a `storage` y el resto de watches a `watch`.
 - Los botones que cambian de estado usan la misma ruta segura de backend que `sermoctl`.
 
 ## Fuentes de datos
@@ -39,7 +39,7 @@ Mantén los cambios concretos:
 | Eventos del servicio | `GET /api/services/{name}/events` | feed de eventos por servicio |
 | Watches de host | `GET /api/watches` | watches a nivel de host |
 | Aplicaciones | `GET /api/applications` | aplicaciones de catálogo instaladas |
-| Unidades de montaje | `GET /api/mounts` | storages con `mount:` respaldados por fstab |
+| Unidades de montaje | `GET /api/mounts` | watches de storage con `mount:` respaldadas por fstab |
 | Notifiers | `GET /api/notifiers` | destinos de notifiers |
 | Configuración del daemon | `GET /api/daemon` | configuración de engine/runtime |
 | Métricas de proceso del daemon | `GET /api/daemon/metrics` | historial persistido de CPU/memoria/IO de sermod |

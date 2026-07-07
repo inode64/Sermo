@@ -227,12 +227,14 @@ superior.
 
 ## Montajes
 
-Las acciones de montaje se respaldan en fstab y usan archivos de storage con un
-bloque `mount:` de `/etc/sermo/storages` por defecto. Un destino de ruta que no
+Las acciones de montaje se respaldan en fstab y usan archivos de watch de
+storage con un bloque `mount:` desde directorios listados en `paths.watches` (el
+asistente escribe `/etc/sermo/mounts` por defecto). Un destino de ruta que no
 esté configurado se sigue aceptando, pero usa valores por defecto seguros y debe
 existir en `/etc/fstab`. Ver [storage y unidades de montaje](configuration.es.md#storage-y-unidades-de-montaje).
 `sermoctl umount /` siempre se rechaza; Sermo nunca desmonta el filesystem raíz.
 
 `sermoctl wizard mount` lista los puntos de montaje declarados en `/etc/fstab` y
-escribe archivos de storage seguros bajo `paths.storages`; no ejecuta mount ni
-umount mientras genera la config.
+escribe archivos seguros de watch de storage bajo `mounts/`, añadiendo ese
+directorio a `paths.watches`; no ejecuta mount ni umount mientras genera la
+config.

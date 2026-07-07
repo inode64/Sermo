@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// kindDerivationGlobal wires a services, apps and storages directory so each
+// kindDerivationGlobal wires service and app directories so each
 // loader path can be exercised from one config.
 const kindDerivationGlobal = `
 engine:
@@ -13,7 +13,6 @@ engine:
 paths:
   services: [ @ROOT@/services ]
   apps: [ @ROOT@/apps ]
-  storages: [ @ROOT@/storages ]
   runtime: /run/sermo
 defaults:
   policy:
@@ -27,7 +26,6 @@ func TestKindDerivedFromLocation(t *testing.T) {
 		"sermo.yml":         kindDerivationGlobal,
 		"services/demo.yml": "name: demo-svc\nuses: nothing\n",
 		"apps/demo-app.yml": "name: demo-app\n",
-		"storages/demo.yml": "name: mount-demo\npath: /mnt/demo\nmount: {}\n",
 	})
 	cfg, err := loadConfig(t, global)
 	if err != nil {
@@ -40,7 +38,6 @@ func TestKindDerivedFromLocation(t *testing.T) {
 	}{
 		{cfg.Services, "demo-svc", kindService},
 		{cfg.Apps, "demo-app", kindApp},
-		{cfg.Storages, "mount-demo", kindStorage},
 	} {
 		doc, ok := tc.reg[tc.name]
 		if !ok {
@@ -73,11 +70,11 @@ func TestKindMatchingDeclarationAccepted(t *testing.T) {
 func TestKindConflictingDeclarationRejected(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml":         kindDerivationGlobal,
-		"services/demo.yml": "kind: storage\nname: demo-svc\n",
+		"services/demo.yml": "kind: app\nname: demo-svc\n",
 	})
 	_, err := loadConfig(t, global)
-	if err == nil || !strings.Contains(err.Error(), "located under a service directory but declares kind: storage") {
-		t.Fatalf("Load error = %v, want service/storage conflict error", err)
+	if err == nil || !strings.Contains(err.Error(), "located under a service directory but declares kind: app") {
+		t.Fatalf("Load error = %v, want service/app conflict error", err)
 	}
 }
 
