@@ -14,42 +14,6 @@ import (
 	"sermo/internal/rules"
 )
 
-func watchPath(name string) string {
-	return SectionWatches + "." + name
-}
-
-func watchFieldPath(name, field string) string {
-	return watchPath(name) + "." + field
-}
-
-func watchCheckPath(name string) string {
-	return watchFieldPath(name, WatchKeyCheck)
-}
-
-func watchCheckFieldPath(name, field string) string {
-	return watchCheckPath(name) + "." + field
-}
-
-func watchMetricsPath(name string) string {
-	return watchFieldPath(name, sectionMetrics)
-}
-
-func watchMetricPath(name, metric string) string {
-	return watchMetricsPath(name) + "." + metric
-}
-
-func thenFieldPath(prefix, field string) string {
-	return prefix + "." + rules.RuleFieldThen + "." + field
-}
-
-func thenHookPath(prefix string) string {
-	return thenFieldPath(prefix, WatchThenKeyHook)
-}
-
-func thenKillPath(prefix string) string {
-	return thenFieldPath(prefix, WatchThenKeyKill)
-}
-
 func validateWatches(watches map[string]any, locksDir string, notifiers map[string]struct{}, defaultNotify []string, add func(string, ...any)) {
 	for _, name := range slices.Sorted(maps.Keys(watches)) {
 		prefix := watchPath(name)

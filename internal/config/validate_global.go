@@ -10,26 +10,6 @@ import (
 	"sermo/internal/rules"
 )
 
-const (
-	webPathAddress       = SectionWeb + "." + WebKeyAddress
-	webPathGuest         = SectionWeb + "." + WebKeyGuest
-	webPathGuestPassword = SectionWeb + "." + WebKeyGuestPassword
-	webPathPassword      = SectionWeb + "." + WebKeyPassword
-	webPathPort          = SectionWeb + "." + WebKeyPort
-)
-
-func notifierPath(name string) string {
-	return pathKeyNotifiers + "." + name
-}
-
-func notifierFieldPath(name, field string) string {
-	return notifierPath(name) + "." + field
-}
-
-func defaultsVariablePath(name string) string {
-	return defaultsPathVariables + "." + name
-}
-
 // validateWatches checks each host-watch entry: a known check type with valid
 // thresholds and a local action or inherited global notify default.
 // validateWeb checks the global `web` block. The UI is enabled only when `port`
