@@ -178,9 +178,9 @@ func TestManagerUsesUUIDLookup(t *testing.T) {
 
 func TestSpecFromTree(t *testing.T) {
 	spec, ok, err := SpecFromTree(map[string]any{
-		"control": map[string]any{
-			"type":   "libvirt",
-			"domain": "vm01",
+		sectionControl: map[string]any{
+			ControlKeyType:   ControlType,
+			ControlKeyDomain: "vm01",
 		},
 	})
 	if err != nil || !ok {
@@ -192,7 +192,7 @@ func TestSpecFromTree(t *testing.T) {
 }
 
 func TestSpecFromTreeRequiresDomain(t *testing.T) {
-	_, ok, err := SpecFromTree(map[string]any{"control": map[string]any{"type": "libvirt"}})
+	_, ok, err := SpecFromTree(map[string]any{sectionControl: map[string]any{ControlKeyType: ControlType}})
 	if !ok || err == nil {
 		t.Fatalf("SpecFromTree() ok=%v err=%v, want domain error", ok, err)
 	}

@@ -163,6 +163,8 @@ const (
 	StateRunning = "running"
 	StateZombie  = "zombie"
 	StateAbsent  = "absent"
+	// StateSummary is the user-facing list of process watch states.
+	StateSummary = StateRunning + ", " + StateZombie + ", " + StateAbsent
 )
 
 // ObserveState reports the state of processes matching an exe/user selector,
@@ -197,7 +199,7 @@ func (d Discoverer) ObserveAnyState(exes []string, user string) string {
 			continue
 		}
 		matched = true
-		if id.State != "Z" {
+		if id.State != ProcStateZombie {
 			live = true
 		}
 	}

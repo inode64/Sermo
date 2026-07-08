@@ -21,7 +21,7 @@ func TestAppCheckMapsStatus(t *testing.T) {
 		t.Fatalf("error result must carry the probe output, got %q", resultOutput(r))
 	}
 	okc := appCheck{name: "x", inspect: func(context.Context) appinspect.Report {
-		return appinspect.Report{Status: "ok"}
+		return appinspect.Report{Status: appinspect.StatusOK}
 	}}
 	if r := okc.Run(context.Background()); !r.OK {
 		t.Fatal("ok status must map to OK")
@@ -53,7 +53,7 @@ func TestAppWatchStartupObserveOnlySkipsNotify(t *testing.T) {
 	}
 
 	w.RunCycle(context.Background())
-	if len(n.msgs) != 0 || hasEventKind(events, "firing") {
+	if len(n.msgs) != 0 || hasEventKind(events, eventKindFiring) {
 		t.Fatalf("observe-only app-watch must not notify or fire, events=%v msgs=%d", events, len(n.msgs))
 	}
 	if !settling.Observed(SettlingAppKey("salt-minion")) {
@@ -96,13 +96,13 @@ func TestAppWatchNotifiesOnceAndRecovers(t *testing.T) {
 			t.Fatalf("app-watch event must be on the App dimension, got %+v", e)
 		}
 	}
-	if !hasEventKind(events, "firing") || !hasEventKind(events, "recovered") {
+	if !hasEventKind(events, eventKindFiring) || !hasEventKind(events, eventKindRecovered) {
 		t.Fatalf("want firing and recovered, kinds = %v", eventKinds(events))
 	}
-	if !hasEvent(events, "notify") {
+	if !hasEvent(events, eventKindNotify) {
 		t.Fatalf("expected a notify event, got %v", events)
 	}
-	if !hasEventMessage(events, "firing", "error: exit 1") {
+	if !hasEventMessage(events, eventKindFiring, "error: exit 1") {
 		t.Fatalf("firing event must carry the error detail, got %v", events)
 	}
 }

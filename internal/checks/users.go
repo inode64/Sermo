@@ -35,7 +35,7 @@ func (c usersCheck) Run(_ context.Context) Result {
 	values := map[string]float64{DataKeyCount: float64(n)}
 	ok := levelPredsHold(c.preds, values)
 	res := c.result(ok, fmt.Sprintf("%d user(s) logged in", n), start)
-	res.Data = map[string]any{DataKeyCount: n, fieldValue: float64(n)}
+	res.Data = map[string]any{DataKeyCount: n, DataKeyValue: float64(n)}
 	return res
 }
 

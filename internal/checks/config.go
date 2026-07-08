@@ -36,14 +36,14 @@ func (c configCheck) Run(ctx context.Context) Result {
 	// Validity: a non-zero exit from the config-test command means invalid config.
 	if len(c.argv) > 0 {
 		res, err := c.runConfigCommand(ctx)
-		if res.ExitCode == -1 {
+		if res.ExitCode == execx.ExitCodeRunFailure {
 			msg := execx.OperatorFailure(err, res, c.timeout)
 			if msg == "" {
 				msg = execx.CommandDidNotStart
 			}
 			return c.result(false, "config invalid: "+msg, start)
 		}
-		if res.ExitCode != 0 {
+		if res.ExitCode != execx.ExitCodeSuccess {
 			msg := "config invalid"
 			if s := output.FirstNonEmptyLine(res.Stderr); s != "" {
 				msg += ": " + s
@@ -70,7 +70,7 @@ func (c configCheck) Run(ctx context.Context) Result {
 
 func (c configCheck) runConfigCommand(ctx context.Context) (execx.Result, error) {
 	if c.user != "" {
-		return execx.RunUser(ctx, c.runner, 0, c.user, c.argv[0], c.argv[1:]...)
+		return execx.RunUser(ctx, c.runner, execx.NoTimeout, c.user, c.argv[0], c.argv[1:]...)
 	}
 	return c.runner.Run(ctx, c.argv[0], c.argv[1:]...)
 }

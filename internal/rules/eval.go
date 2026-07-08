@@ -284,7 +284,7 @@ func (e *Evaluator) evalChanged(ctx context.Context, v any) (bool, error) {
 		if name := cfgval.AsString(m[FieldLevel]); name != "" {
 			lvl, ok := checks.VersionLevel(name)
 			if !ok {
-				return false, fmt.Errorf("changed condition level %q is not one of major, minor, patch", name)
+				return false, fmt.Errorf("changed condition level %q is not one of %s", name, checks.VersionLevelSummary)
 			}
 			level = lvl
 		}

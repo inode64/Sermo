@@ -59,10 +59,10 @@ func (c loadCheck) Run(_ context.Context) Result {
 	}
 	res := c.result(ok, fmt.Sprintf("load %.2f %.2f %.2f%s", s.Load1, s.Load5, s.Load15, suffix), start)
 	res.Data = map[string]any{
-		fieldLoad1: s.Load1, fieldLoad5: s.Load5, fieldLoad15: s.Load15,
-		"num_cpu": s.NumCPU, "per_cpu": c.perCPU,
+		DataKeyLoad1: s.Load1, DataKeyLoad5: s.Load5, DataKeyLoad15: s.Load15,
+		DataKeyNumCPU: s.NumCPU, DataKeyPerCPU: c.perCPU,
 	}
-	res.Data[fieldValue] = firstPredValue(c.preds, values, values[fieldLoad1])
+	res.Data[DataKeyValue] = firstPredValue(c.preds, values, values[fieldLoad1])
 	return res
 }
 

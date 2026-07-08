@@ -306,14 +306,14 @@ func deltaOrZero(cur, prev uint64) uint64 {
 // parseLevelPredValue parses one predicate value by its field's form.
 func parseLevelPredValue(field string, raw any) (float64, error) {
 	value := cfgval.String(raw)
-	if strings.HasSuffix(field, "_bytes") {
+	if strings.HasSuffix(field, LevelFieldSuffixBytes) {
 		n, ok := cfgval.ByteSize(raw)
 		if !ok {
 			return 0, fmt.Errorf("%s value %q must include a size suffix (K, M, G or T; e.g. 10G)", field, value)
 		}
 		return float64(n), nil
 	}
-	if strings.HasSuffix(field, "_pct") {
+	if strings.HasSuffix(field, LevelFieldSuffixPct) {
 		val, ok := cfgval.Percent(raw)
 		if !ok {
 			return 0, fmt.Errorf("%s value %q must be a percentage in %s (e.g. 90 or 90%%)", field, value, cfgval.PercentRange())

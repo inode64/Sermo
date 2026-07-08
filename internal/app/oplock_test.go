@@ -9,7 +9,7 @@ func TestOperationLockReclaimEvent(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("events = %+v", events)
 	}
-	if events[0].Service != "mysql" || events[0].Kind != "alert" {
+	if events[0].Service != "mysql" || events[0].Kind != eventKindAlert {
 		t.Fatalf("event = %+v", events[0])
 	}
 	if events[0].Message != "reclaimed stale operation lock (expired)" {

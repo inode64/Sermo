@@ -20,6 +20,8 @@ const (
 	FirewallBackendIptables = "iptables"
 	// FirewallBackendNftAlias is the accepted shorthand for the nftables backend.
 	FirewallBackendNftAlias = "nft"
+	// FirewallBackendSummary is the user-facing list of firewall backend selectors.
+	FirewallBackendSummary = FirewallBackendAuto + ", " + FirewallBackendNftables + " or " + FirewallBackendIptables
 )
 
 const (
@@ -73,7 +75,7 @@ func (c firewallRulesCheck) Run(ctx context.Context) Result {
 		DataKeyBackend:  sample.Backend,
 		DataKeyRules:    sample.Rules,
 		DataKeyMinRules: c.minRules,
-		fieldValue:      sample.Rules,
+		DataKeyValue:    sample.Rules,
 	}
 	return res
 }
@@ -87,7 +89,7 @@ func buildFirewallRulesCheck(b base, entry map[string]any, runner execx.Runner, 
 		backend = FirewallBackendNftables
 	}
 	if !validFirewallBackend(backend) {
-		return nil, "firewall_rules check backend must be auto, nftables or iptables"
+		return nil, "firewall_rules check backend must be " + FirewallBackendSummary
 	}
 	minRules := uint64(1)
 	if v, present := entry[CheckKeyMinRules]; present {
@@ -164,7 +166,7 @@ func sampleIptablesRules(ctx context.Context, runner execx.Runner) (FirewallRule
 	var errs []error
 	for _, command := range [...]string{iptablesSaveIPv4, iptablesSaveIPv6} {
 		res, err := runner.Run(ctx, command)
-		if err != nil || res.ExitCode != 0 {
+		if err != nil || res.ExitCode != execx.ExitCodeSuccess {
 			errs = append(errs, commandResultError(command, res, err))
 			continue
 		}
@@ -190,8 +192,8 @@ func joinFirewallErrors(errs []error) error {
 }
 
 func commandResultError(command string, res execx.Result, err error) error {
-	if res.ExitCode == -1 {
-		msg := execx.OperatorFailure(err, res, 0)
+	if res.ExitCode == execx.ExitCodeRunFailure {
+		msg := execx.OperatorFailure(err, res, execx.NoTimeout)
 		if msg == "" {
 			msg = execx.CommandDidNotStart
 		}

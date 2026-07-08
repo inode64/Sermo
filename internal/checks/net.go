@@ -18,6 +18,8 @@ const (
 	NetStateUp      = "up"
 	NetStateDown    = "down"
 	NetStateUnknown = "unknown"
+	// NetStateSummary is the user-facing list of expected link states.
+	NetStateSummary = NetStateUp + " or " + NetStateDown
 )
 
 // Address-presence expect values for a net address check. Exported for the same
@@ -25,6 +27,8 @@ const (
 const (
 	NetAddrPresent = "present"
 	NetAddrAbsent  = "absent"
+	// NetAddrSummary is the user-facing list of expected address states.
+	NetAddrSummary = NetAddrPresent + " or " + NetAddrAbsent
 	netAddrNone    = "none"
 )
 
@@ -100,12 +104,12 @@ func (c *netCheck) Run(_ context.Context) Result {
 	if err != nil {
 		return c.result(false, fmt.Sprintf("net %s: %v", c.iface, err), start)
 	}
-	data := map[string]any{DataKeyInterface: c.iface, fieldMetric: c.metric}
+	data := map[string]any{DataKeyInterface: c.iface, DataKeyMetric: c.metric}
 
 	switch c.metric {
 	case NetMetricState:
 		if c.expect != "" {
-			data[fieldValue] = s.State
+			data[DataKeyValue] = s.State
 			res := c.result(s.State == c.expect, fmt.Sprintf("%s state %s (want %s)", c.iface, s.State, c.expect), start)
 			res.Data = data
 			return res
@@ -117,7 +121,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 			return res
 		}
 		changed := s.State != c.lastState
-		data[fieldOld], data[fieldNew], data[fieldValue] = c.lastState, s.State, s.State
+		data[DataKeyOld], data[DataKeyNew], data[DataKeyValue] = c.lastState, s.State, s.State
 		msg := fmt.Sprintf("%s state %s->%s", c.iface, c.lastState, s.State)
 		c.lastState = s.State
 		res := c.result(changed, msg, start)
@@ -137,7 +141,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 			return res
 		}
 		changed := s.SpeedMbps != c.lastSpeed
-		data[fieldOld], data[fieldNew], data[fieldValue] = c.lastSpeed, s.SpeedMbps, s.SpeedMbps
+		data[DataKeyOld], data[DataKeyNew], data[DataKeyValue] = c.lastSpeed, s.SpeedMbps, s.SpeedMbps
 		msg := fmt.Sprintf("%s speed %d->%d", c.iface, c.lastSpeed, s.SpeedMbps)
 		c.lastSpeed = s.SpeedMbps
 		res := c.result(changed, msg, start)
@@ -157,7 +161,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 		}
 		delta := deltaOrZero(total, c.lastErrTotal)
 		c.lastErrTotal = total
-		data[fieldValue], data[fieldTotal] = delta, total
+		data[DataKeyValue], data[DataKeyTotal] = delta, total
 		met := compareFloat(float64(delta), c.op, c.value)
 		res := c.result(met, fmt.Sprintf("%s errors +%d (total %d)", c.iface, delta, total), start)
 		res.Data = data
@@ -172,7 +176,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 		data[DataKeyAddresses] = s.Addrs
 		if c.expect != "" {
 			present := len(s.Addrs) > 0
-			data[fieldValue] = len(s.Addrs)
+			data[DataKeyValue] = len(s.Addrs)
 			ok := (c.expect == NetAddrPresent) == present
 			res := c.result(ok, fmt.Sprintf("%s address %s (want %s)", c.iface, display, c.expect), start)
 			res.Data = data
@@ -185,7 +189,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 			return res
 		}
 		changed := joined != c.lastAddrs
-		data[fieldOld], data[fieldNew], data[fieldValue] = c.lastAddrs, joined, joined
+		data[DataKeyOld], data[DataKeyNew], data[DataKeyValue] = c.lastAddrs, joined, joined
 		msg := fmt.Sprintf("%s address %s->%s", c.iface, c.lastAddrs, joined)
 		c.lastAddrs = joined
 		res := c.result(changed, msg, start)

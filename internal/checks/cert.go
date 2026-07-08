@@ -22,6 +22,28 @@ import (
 	"sermo/internal/conn"
 )
 
+const (
+	certKindCertificate        = "certificate"
+	certKindCertificateRequest = "certificate_request"
+	certKindPrivateKey         = "private_key"
+	certKindPublicKey          = "public_key"
+	certKindOpenSSHPrivateKey  = "openssh_private_key"
+	certKindOpenSSHPublicKey   = "openssh_public_key"
+
+	certPEMTypeCertificate           = "CERTIFICATE"
+	certPEMTypeCertificateRequest    = "CERTIFICATE REQUEST"
+	certPEMTypeNewCertificateRequest = "NEW CERTIFICATE REQUEST"
+	certPEMTypeRSAPrivateKey         = "RSA PRIVATE KEY"
+	certPEMTypeECPrivateKey          = "EC PRIVATE KEY"
+	certPEMTypePrivateKey            = "PRIVATE KEY"
+	certPEMTypePublicKey             = "PUBLIC KEY"
+	certPEMTypeOpenSSHPrivateKey     = "OPENSSH PRIVATE KEY"
+
+	keyAlgorithmRSA     = "RSA"
+	keyAlgorithmECDSA   = "ECDSA"
+	keyAlgorithmEd25519 = "Ed25519"
+)
+
 // CertSample is one observation of TLS material — a leaf certificate read from a
 // live endpoint, or a certificate/request/key parsed from a local file. Fields
 // that do not apply to the material's kind are left zero (e.g. a private key has
@@ -232,7 +254,7 @@ func certData(source, host, path string, s CertSample, daysLeft int, hasExpiry b
 	}
 	if hasExpiry {
 		data[DataKeyDaysLeft] = daysLeft
-		data[fieldValue] = daysLeft
+		data[DataKeyValue] = daysLeft
 		data[DataKeyNotBefore] = s.NotBefore.Format(time.RFC3339)
 		data[DataKeyNotAfter] = s.NotAfter.Format(time.RFC3339)
 	}
@@ -250,7 +272,7 @@ func parseCertMaterial(data []byte) (CertSample, error) {
 		// Not PEM — try an OpenSSH authorized_keys public key line.
 		if pub, _, _, _, err := ssh.ParseAuthorizedKey(data); err == nil {
 			return CertSample{
-				Kind:               "openssh_public_key",
+				Kind:               certKindOpenSSHPublicKey,
 				PublicKeyAlgorithm: pub.Type(),
 				Fingerprint:        ssh.FingerprintSHA256(pub),
 			}, nil
@@ -262,20 +284,20 @@ func parseCertMaterial(data []byte) (CertSample, error) {
 	fp := hex.EncodeToString(sum[:])
 
 	switch block.Type {
-	case "CERTIFICATE":
+	case certPEMTypeCertificate:
 		cert, err := x509.ParseCertificate(block.Bytes)
 		if err != nil {
 			return CertSample{}, err
 		}
 		return certSampleFromCert(cert), nil
-	case "CERTIFICATE REQUEST", "NEW CERTIFICATE REQUEST":
+	case certPEMTypeCertificateRequest, certPEMTypeNewCertificateRequest:
 		csr, err := x509.ParseCertificateRequest(block.Bytes)
 		if err != nil {
 			return CertSample{}, err
 		}
 		algo, bits := keyAlgoBits(csr.PublicKey)
 		return CertSample{
-			Kind:               "certificate_request",
+			Kind:               certKindCertificateRequest,
 			SignatureAlgorithm: csr.SignatureAlgorithm.String(),
 			PublicKeyAlgorithm: algo,
 			KeyBits:            bits,
@@ -283,42 +305,42 @@ func parseCertMaterial(data []byte) (CertSample, error) {
 			DNSNames:           csr.DNSNames,
 			Fingerprint:        fp,
 		}, nil
-	case "RSA PRIVATE KEY":
+	case certPEMTypeRSAPrivateKey:
 		key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
 		if err != nil {
 			return CertSample{}, err
 		}
-		return privateKeySample("private_key", key, fp), nil
-	case "EC PRIVATE KEY":
+		return privateKeySample(certKindPrivateKey, key, fp), nil
+	case certPEMTypeECPrivateKey:
 		key, err := x509.ParseECPrivateKey(block.Bytes)
 		if err != nil {
 			return CertSample{}, err
 		}
-		return privateKeySample("private_key", key, fp), nil
-	case "PRIVATE KEY":
+		return privateKeySample(certKindPrivateKey, key, fp), nil
+	case certPEMTypePrivateKey:
 		key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 		if err != nil {
 			return CertSample{}, err
 		}
-		return privateKeySample("private_key", key, fp), nil
-	case "PUBLIC KEY":
+		return privateKeySample(certKindPrivateKey, key, fp), nil
+	case certPEMTypePublicKey:
 		key, err := x509.ParsePKIXPublicKey(block.Bytes)
 		if err != nil {
 			return CertSample{}, err
 		}
 		algo, bits := keyAlgoBits(key)
 		return CertSample{
-			Kind:               "public_key",
+			Kind:               certKindPublicKey,
 			PublicKeyAlgorithm: algo,
 			KeyBits:            bits,
 			Fingerprint:        fp,
 		}, nil
-	case "OPENSSH PRIVATE KEY":
+	case certPEMTypeOpenSSHPrivateKey:
 		key, err := ssh.ParseRawPrivateKey(data)
 		if err != nil {
 			return CertSample{}, err
 		}
-		return privateKeySample("openssh_private_key", key, fp), nil
+		return privateKeySample(certKindOpenSSHPrivateKey, key, fp), nil
 	default:
 		// Unknown PEM block (e.g. DH PARAMETERS): report what we can.
 		return CertSample{
@@ -344,15 +366,15 @@ func privateKeySample(kind string, key any, fp string) CertSample {
 func keyAlgoBits(key any) (string, int) {
 	switch k := key.(type) {
 	case *rsa.PrivateKey:
-		return "RSA", k.N.BitLen()
+		return keyAlgorithmRSA, k.N.BitLen()
 	case *rsa.PublicKey:
-		return "RSA", k.N.BitLen()
+		return keyAlgorithmRSA, k.N.BitLen()
 	case *ecdsa.PrivateKey:
-		return "ECDSA", k.Curve.Params().BitSize
+		return keyAlgorithmECDSA, k.Curve.Params().BitSize
 	case *ecdsa.PublicKey:
-		return "ECDSA", k.Curve.Params().BitSize
+		return keyAlgorithmECDSA, k.Curve.Params().BitSize
 	case ed25519.PrivateKey, *ed25519.PrivateKey, ed25519.PublicKey, *ed25519.PublicKey:
-		return "Ed25519", 256
+		return keyAlgorithmEd25519, 256
 	default:
 		return "", 0
 	}
@@ -367,7 +389,7 @@ func certSampleFromCert(leaf *x509.Certificate) CertSample {
 	}
 	_, bits := keyAlgoBits(leaf.PublicKey)
 	return CertSample{
-		Kind:               "certificate",
+		Kind:               certKindCertificate,
 		NotBefore:          leaf.NotBefore,
 		NotAfter:           leaf.NotAfter,
 		SignatureAlgorithm: leaf.SignatureAlgorithm.String(),

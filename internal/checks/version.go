@@ -19,6 +19,15 @@ const (
 	VersionLevelMajor = "major"
 	VersionLevelMinor = "minor"
 	VersionLevelPatch = "patch"
+	// VersionLevelSummary is the user-facing list of accepted version levels.
+	VersionLevelSummary = VersionLevelMajor + ", " + VersionLevelMinor + ", " + VersionLevelPatch
+)
+
+// Version-level component counts used when truncating version_short values.
+const (
+	VersionLevelMajorComponents = 1
+	VersionLevelMinorComponents = 2
+	VersionLevelPatchComponents = 3
 )
 
 // ReservedCommandEntry returns the resolved reserved-command entry for key
@@ -116,11 +125,11 @@ func shortNTPVersion(s string) string {
 func VersionLevel(name string) (int, bool) {
 	switch name {
 	case VersionLevelMajor:
-		return 1, true
+		return VersionLevelMajorComponents, true
 	case VersionLevelMinor:
-		return 2, true
+		return VersionLevelMinorComponents, true
 	case VersionLevelPatch:
-		return 3, true
+		return VersionLevelPatchComponents, true
 	default:
 		return 0, false
 	}

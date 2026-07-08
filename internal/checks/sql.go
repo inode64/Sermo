@@ -114,7 +114,7 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 	engine := cfgval.AsString(entry[CheckKeyEngine])
 	driver, ok := sqlEngineDriver(engine)
 	if !ok {
-		return nil, "sql check requires an engine (mysql, mariadb, postgres, postgresql, sqlite)"
+		return nil, "sql check requires an engine (" + SQLEngineSummary + ")"
 	}
 	query := cfgval.AsString(entry[CheckKeyQuery])
 	if query == "" {
@@ -139,7 +139,7 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 		if path == "" {
 			return nil, "sql check (sqlite) requires a path"
 		}
-		dsn = fmt.Sprintf("file:%s?mode=ro&_pragma=busy_timeout(%d)", path, sqliteBusyTimeoutMS)
+		dsn = sqliteReadOnlyDSN(path)
 	default:
 		if cfgval.AsString(entry[CheckKeyUser]) == "" {
 			return nil, "sql check (" + engine + ") requires a user"

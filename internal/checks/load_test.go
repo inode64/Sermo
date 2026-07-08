@@ -59,9 +59,9 @@ func TestLoadMultiPredAnd(t *testing.T) {
 func TestBuildLoadCheck(t *testing.T) {
 	built, warns := Build(map[string]any{
 		"l": map[string]any{
-			"type":    "load",
-			"per_cpu": true,
-			"load5":   map[string]any{"op": ">", "value": 1.0},
+			CheckKeyType:   CheckTypeLoad,
+			CheckKeyPerCPU: true,
+			fieldLoad5:     map[string]any{CheckKeyOp: ">", CheckKeyValue: 1.0},
 		},
 	}, Deps{LoadSampler: fakeLoad(LoadSample{Load5: 8, NumCPU: 4})})
 	if len(warns) != 0 {

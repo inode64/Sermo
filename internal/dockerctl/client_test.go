@@ -113,9 +113,9 @@ func TestClientListContainers(t *testing.T) {
 }
 
 func TestSpecFromTreeDockerDefaults(t *testing.T) {
-	spec, ok, err := SpecFromTree(map[string]any{"control": map[string]any{
-		"type":      "docker",
-		"container": "web",
+	spec, ok, err := SpecFromTree(map[string]any{sectionControl: map[string]any{
+		ControlKeyType:      ControlType,
+		ControlKeyContainer: "web",
 	}})
 	if err != nil || !ok {
 		t.Fatalf("SpecFromTree() ok=%v err=%v", ok, err)
@@ -130,15 +130,15 @@ func TestSpecFromTreeDockerRejectsUnsafeOptions(t *testing.T) {
 		name string
 		tree map[string]any
 	}{
-		{name: "missing container", tree: map[string]any{"type": "docker"}},
-		{name: "socket and host", tree: map[string]any{"type": "docker", "container": "web", "socket": "/run/docker.sock", "host": "127.0.0.1"}},
-		{name: "relative socket", tree: map[string]any{"type": "docker", "container": "web", "socket": "docker.sock"}},
-		{name: "bad port", tree: map[string]any{"type": "docker", "container": "web", "host": "127.0.0.1", "port": 70000}},
-		{name: "interface", tree: map[string]any{"type": "docker", "container": "web", "interface": "eth0"}},
-		{name: "bad tls mode", tree: map[string]any{"type": "docker", "container": "web", "host": "127.0.0.1", "tls": "maybe"}},
+		{name: "missing container", tree: map[string]any{ControlKeyType: ControlType}},
+		{name: "socket and host", tree: map[string]any{ControlKeyType: ControlType, ControlKeyContainer: "web", ControlKeySocket: "/run/docker.sock", ControlKeyHost: "127.0.0.1"}},
+		{name: "relative socket", tree: map[string]any{ControlKeyType: ControlType, ControlKeyContainer: "web", ControlKeySocket: "docker.sock"}},
+		{name: "bad port", tree: map[string]any{ControlKeyType: ControlType, ControlKeyContainer: "web", ControlKeyHost: "127.0.0.1", ControlKeyPort: 70000}},
+		{name: "interface", tree: map[string]any{ControlKeyType: ControlType, ControlKeyContainer: "web", ControlKeyInterface: "eth0"}},
+		{name: "bad tls mode", tree: map[string]any{ControlKeyType: ControlType, ControlKeyContainer: "web", ControlKeyHost: "127.0.0.1", ControlKeyTLS: "maybe"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, ok, err := SpecFromTree(map[string]any{"control": tc.tree})
+			_, ok, err := SpecFromTree(map[string]any{sectionControl: tc.tree})
 			if !ok || err == nil {
 				t.Fatalf("SpecFromTree() ok=%v err=%v, want error", ok, err)
 			}

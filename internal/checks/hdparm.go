@@ -12,6 +12,8 @@ import (
 	"sermo/internal/output"
 )
 
+const hdparmCommand = CheckTypeHdparm
+
 // hdparmCheck compares configured hdparm timing rates with thresholds. It is
 // condition-style: OK means every predicate holds. Only timings used by
 // predicates are run; hdparm -t needs root and adds device I/O.
@@ -33,20 +35,21 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 	for _, p := range c.preds {
 		want[p.field] = true
 	}
-	res, runErr := c.runner.Run(ctx, "hdparm", hdparmArgs(c.device, want[fieldCached], want[fieldRead])...)
-	if res.ExitCode == -1 {
+	prefix := hdparmCommand + " " + c.device
+	res, runErr := c.runner.Run(ctx, hdparmCommand, hdparmArgs(c.device, want[fieldCached], want[fieldRead])...)
+	if res.ExitCode == execx.ExitCodeRunFailure {
 		msg := execx.OperatorFailure(runErr, res, c.timeout)
 		if msg == "" {
 			msg = execx.CommandDidNotStart
 		}
-		return c.result(false, "hdparm "+c.device+": "+msg, start)
+		return c.result(false, prefix+": "+msg, start)
 	}
 	values, err := parseHdparm(res.Stdout)
 	if err != nil {
 		if s := output.FirstNonEmptyLine(res.Stderr); s != "" {
-			return c.result(false, "hdparm "+c.device+": "+s, start)
+			return c.result(false, prefix+": "+s, start)
 		}
-		return c.result(false, "hdparm "+c.device+": "+err.Error(), start)
+		return c.result(false, prefix+": "+err.Error(), start)
 	}
 
 	ok := levelPredsHold(c.preds, values)
@@ -69,8 +72,8 @@ func SampleHdparm(ctx context.Context, runner execx.Runner, device string, wantC
 	if !wantCached && !wantRead {
 		wantCached, wantRead = true, true
 	}
-	res, runErr := runner.Run(ctx, "hdparm", hdparmArgs(device, wantCached, wantRead)...)
-	if res.ExitCode == -1 {
+	res, runErr := runner.Run(ctx, hdparmCommand, hdparmArgs(device, wantCached, wantRead)...)
+	if res.ExitCode == execx.ExitCodeRunFailure {
 		msg := execx.OperatorFailure(runErr, res, timeout)
 		if msg == "" {
 			msg = execx.CommandDidNotStart

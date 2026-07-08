@@ -46,7 +46,7 @@ func (c countCheck) Run(ctx context.Context) Result {
 		DataKeyOf:        c.kind,
 		DataKeyRecursive: c.recursive,
 		DataKeyCount:     n,
-		fieldValue:       n,
+		DataKeyValue:     n,
 	}
 	return res
 }

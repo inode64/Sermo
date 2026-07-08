@@ -326,8 +326,8 @@ func nativeReloadFunc(spec *reloadSpec, deps checks.Deps, backend, unit string, 
 	return func(ctx context.Context) error {
 		res, err := runner.Run(ctx, argv[0], argv[1:]...)
 		if err != nil {
-			if res.ExitCode == -1 {
-				msg := execx.OperatorFailure(err, res, 0)
+			if res.ExitCode == execx.ExitCodeRunFailure {
+				msg := execx.OperatorFailure(err, res, execx.NoTimeout)
 				if msg == "" {
 					msg = execx.CommandDidNotStart
 				}
@@ -335,10 +335,10 @@ func nativeReloadFunc(spec *reloadSpec, deps checks.Deps, backend, unit string, 
 			}
 			return err
 		}
-		if res.ExitCode == -1 {
+		if res.ExitCode == execx.ExitCodeRunFailure {
 			return errors.New(execx.CommandDidNotStart)
 		}
-		if res.ExitCode != 0 {
+		if res.ExitCode != execx.ExitCodeSuccess {
 			msg := strings.TrimSpace(res.Stderr)
 			if msg == "" {
 				msg = strings.TrimSpace(res.Stdout)
@@ -381,7 +381,7 @@ func reloadContextError(err error) error {
 	if err == nil {
 		return nil
 	}
-	return errors.New(execx.ContextFailure(err, 0))
+	return errors.New(execx.ContextFailure(err, execx.NoTimeout))
 }
 
 func reloadPidfile(tree map[string]any) string {

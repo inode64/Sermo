@@ -9,6 +9,8 @@ import (
 	"sermo/internal/web"
 )
 
+const webBackendUnavailableMessage = "web backend unavailable"
+
 // WebBackendHolder exposes a web.Backend that can be swapped on config reload.
 type WebBackendHolder struct {
 	mu sync.RWMutex
@@ -90,7 +92,7 @@ func (h *WebBackendHolder) MountAction(ctx context.Context, name, action string,
 	if b := h.backend(); b != nil {
 		return b.MountAction(ctx, name, action, opts)
 	}
-	return web.MountActionResult{OK: false, Name: name, Action: action, Message: "web backend unavailable"}
+	return web.MountActionResult{OK: false, Name: name, Action: action, Message: webBackendUnavailableMessage}
 }
 
 // MountBlockers reports current mount blockers through the active backend.
@@ -98,7 +100,7 @@ func (h *WebBackendHolder) MountBlockers(ctx context.Context, name string) web.M
 	if b := h.backend(); b != nil {
 		return b.MountBlockers(ctx, name)
 	}
-	return web.MountBlockersResult{OK: false, Name: name, Message: "web backend unavailable"}
+	return web.MountBlockersResult{OK: false, Name: name, Message: webBackendUnavailableMessage}
 }
 
 // AlertMountUsers sends a console alert through the active backend.
@@ -106,7 +108,7 @@ func (h *WebBackendHolder) AlertMountUsers(ctx context.Context, name string) web
 	if b := h.backend(); b != nil {
 		return b.AlertMountUsers(ctx, name)
 	}
-	return web.MountAlertResult{OK: false, Name: name, Message: "web backend unavailable"}
+	return web.MountAlertResult{OK: false, Name: name, Message: webBackendUnavailableMessage}
 }
 
 // DaemonInfo returns daemon and engine info from the active backend.
@@ -146,7 +148,7 @@ func (h *WebBackendHolder) ReleaseLock(ctx context.Context, service, name string
 	if b := h.backend(); b != nil {
 		return b.ReleaseLock(ctx, service, name)
 	}
-	return web.ActionResult{OK: false, Message: "web backend unavailable"}
+	return web.ActionResult{OK: false, Message: webBackendUnavailableMessage}
 }
 
 // ActivitySummary returns the recent-activity rollup from the active backend.
@@ -242,7 +244,7 @@ func (h *WebBackendHolder) Operate(ctx context.Context, name, action string, opt
 	if b := h.backend(); b != nil {
 		return b.Operate(ctx, name, action, opts)
 	}
-	return web.ActionResult{OK: false, Message: "web backend unavailable"}
+	return web.ActionResult{OK: false, Message: webBackendUnavailableMessage}
 }
 
 // CompactState prunes old persisted history through the active backend.
@@ -250,7 +252,7 @@ func (h *WebBackendHolder) CompactState(ctx context.Context, before time.Time) w
 	if b := h.backend(); b != nil {
 		return b.CompactState(ctx, before)
 	}
-	return web.StateCompactResult{OK: false, Message: "web backend unavailable"}
+	return web.StateCompactResult{OK: false, Message: webBackendUnavailableMessage}
 }
 
 // Preflight runs a service's preflight checks through the active backend.
@@ -274,7 +276,7 @@ func (h *WebBackendHolder) SetPanic(ctx context.Context, on bool) web.ActionResu
 	if b := h.backend(); b != nil {
 		return b.SetPanic(ctx, on)
 	}
-	return web.ActionResult{OK: false, Message: "backend unavailable"}
+	return web.ActionResult{OK: false, Message: webBackendUnavailableMessage}
 }
 
 // SetWatchMonitored toggles a host watch's monitoring through the active backend.
@@ -290,5 +292,5 @@ func (h *WebBackendHolder) ExpandWatch(ctx context.Context, name string) web.Act
 	if b := h.backend(); b != nil {
 		return b.ExpandWatch(ctx, name)
 	}
-	return web.ActionResult{OK: false, Message: "web backend unavailable"}
+	return web.ActionResult{OK: false, Message: webBackendUnavailableMessage}
 }

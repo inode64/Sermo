@@ -20,13 +20,13 @@ import (
 // parsedIndex parses the embedded, generated index.html once per test.
 func parsedIndex(t *testing.T) (*html.Node, string) {
 	t.Helper()
-	page, err := assets.ReadFile("index.html")
+	page, err := assets.ReadFile(assetIndexHTML)
 	if err != nil {
-		t.Fatalf("read embedded index.html: %v", err)
+		t.Fatalf("read embedded %s: %v", assetIndexHTML, err)
 	}
 	doc, err := html.Parse(strings.NewReader(string(page)))
 	if err != nil {
-		t.Fatalf("parse index.html: %v", err)
+		t.Fatalf("parse %s: %v", assetIndexHTML, err)
 	}
 	return doc, string(page)
 }
@@ -75,16 +75,16 @@ func TestIndexServerContract(t *testing.T) {
 	}
 	for _, n := range append(append([]*html.Node{}, styles...), scripts...) {
 		nonce, ok := attr(n, "nonce")
-		if !ok || nonce != "{{CSP_NONCE}}" {
-			t.Fatalf("<%s> nonce = %q, want {{CSP_NONCE}}", n.Data, nonce)
+		if !ok || nonce != templateNoncePlaceholder {
+			t.Fatalf("<%s> nonce = %q, want %s", n.Data, nonce, templateNoncePlaceholder)
 		}
 	}
 
-	if got := strings.Count(raw, "{{CSP_NONCE}}"); got != 2 {
-		t.Fatalf("{{CSP_NONCE}} count = %d, want 2", got)
+	if got := strings.Count(raw, templateNoncePlaceholder); got != 2 {
+		t.Fatalf("%s count = %d, want 2", templateNoncePlaceholder, got)
 	}
-	if !strings.Contains(raw, "{{VERSION}}") {
-		t.Fatalf("index.html missing {{VERSION}} placeholder")
+	if !strings.Contains(raw, templateVersionPlaceholder) {
+		t.Fatalf("%s missing %s placeholder", assetIndexHTML, templateVersionPlaceholder)
 	}
 }
 
@@ -266,7 +266,7 @@ func TestSourceLoadDefersWatchesWithoutStaleFastPathReference(t *testing.T) {
 		t.Fatalf("read src/app.js: %v", err)
 	}
 	text := string(src)
-	if !strings.Contains(text, `getJSON("api/watches", null).then`) {
+	if !strings.Contains(text, `getJSON(apiWatchesPath, null).then`) {
 		t.Fatalf("load() no longer defers api/watches")
 	}
 	if strings.Contains(text, "if (watches) renderWatches(watches);") {

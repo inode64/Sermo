@@ -9,7 +9,7 @@ import (
 // (os-release ID: gentoo, debian, ubuntu, ...).
 const osMarker = "${os}"
 
-const keyOSDefault = "default"
+const keyOSDefault = SelectionKeywordDefault
 
 const (
 	osReleaseEtcPath = "/etc/os-release"

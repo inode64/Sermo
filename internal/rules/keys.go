@@ -67,6 +67,8 @@ const (
 	WindowKeyMinMatches   = "min_matches"
 	WindowModeConsecutive = "consecutive"
 	WindowModeWithin      = "within"
+	// WindowModeSummary is the user-facing list of rule_window modes.
+	WindowModeSummary = WindowModeConsecutive + ", " + WindowModeWithin
 )
 
 // PolicyKey constants are keys inside a service or watch `policy` block.

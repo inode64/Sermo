@@ -183,7 +183,7 @@ func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
 	switch u.Scheme {
 	case URLSchemeWS, URLSchemeWSS, URLSchemeHTTP, URLSchemeHTTPS:
 	default:
-		return nil, "websocket check url scheme must be ws, wss, http or https"
+		return nil, "websocket check url scheme must be " + WebsocketURLSchemeSummary
 	}
 	secure := websocketSecure(u.Scheme)
 	port := u.Port()

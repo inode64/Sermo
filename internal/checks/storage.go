@@ -102,16 +102,16 @@ func (c storageCheck) Run(_ context.Context) Result {
 	}
 	ok := levelPredsHold(c.preds, values)
 	res := c.result(ok, fmt.Sprintf("%s used %.1f%% free %.1f%% inodes %.1f%% used", c.path, st.UsedPct, st.FreePct, st.InodesUsedPct), start)
-	data[fieldUsedPct] = st.UsedPct
-	data[fieldFreePct] = st.FreePct
-	data[fieldUsedBytes] = usedBytes
-	data[fieldFreeBytes] = st.FreeBytes
-	data[fieldTotalBytes] = st.TotalBytes
-	data[fieldInodesUsedPct] = st.InodesUsedPct
-	data[fieldInodesFreePct] = st.InodesFreePct
-	data[fieldInodesFree] = st.InodesFree
+	data[DataKeyUsedPct] = st.UsedPct
+	data[DataKeyFreePct] = st.FreePct
+	data[DataKeyUsedBytes] = usedBytes
+	data[DataKeyFreeBytes] = st.FreeBytes
+	data[DataKeyTotalBytes] = st.TotalBytes
+	data[DataKeyInodesUsedPct] = st.InodesUsedPct
+	data[DataKeyInodesFreePct] = st.InodesFreePct
+	data[DataKeyInodesFree] = st.InodesFree
 	data[DataKeyInodesTotal] = st.InodesTotal
-	data[fieldValue] = firstPredValue(c.preds, values, st.UsedPct)
+	data[DataKeyValue] = firstPredValue(c.preds, values, st.UsedPct)
 	res.Data = data
 	return res
 }
@@ -138,8 +138,8 @@ func statfsUsage(path string) (StorageStats, error) {
 	used := total - s.Bfree*bsize
 	var usedPct, freePct float64
 	if total > 0 {
-		usedPct = float64(used) / float64(total) * 100
-		freePct = float64(free) / float64(total) * 100
+		usedPct = float64(used) / float64(total) * percentScale
+		freePct = float64(free) / float64(total) * percentScale
 	}
 
 	// Inode accounting (f_files/f_ffree); 0 total means the filesystem does not
@@ -148,8 +148,8 @@ func statfsUsage(path string) (StorageStats, error) {
 	inodesFree := uint64(s.Ffree)
 	var inUsedPct, inFreePct float64
 	if inodesTotal > 0 {
-		inUsedPct = float64(inodesTotal-inodesFree) / float64(inodesTotal) * 100
-		inFreePct = float64(inodesFree) / float64(inodesTotal) * 100
+		inUsedPct = float64(inodesTotal-inodesFree) / float64(inodesTotal) * percentScale
+		inFreePct = float64(inodesFree) / float64(inodesTotal) * percentScale
 	}
 
 	return StorageStats{

@@ -93,5 +93,5 @@ func WatchActivityFailed(kind string) bool {
 	if kind == eventKindFiring {
 		return true
 	}
-	return strings.HasSuffix(kind, "-failed")
+	return strings.HasSuffix(kind, eventKindFailedSuffix)
 }

@@ -7,6 +7,7 @@ import (
 
 	"sermo/internal/execx"
 	"sermo/internal/notify"
+	"sermo/internal/servicemgr"
 )
 
 type monitorUserRunner struct {
@@ -36,7 +37,7 @@ func monitorTestDeps() Deps {
 }
 
 func TestVersionMonitorAdvancesSettling(t *testing.T) {
-	ready := NewReadiness("systemd", 1, 0)
+	ready := NewReadiness(string(servicemgr.BackendSystemd), 1, 0)
 	settling := NewSettling(ready)
 	settling.Reset([]string{SettlingWatchKey("apache:version")})
 	ready.ExpectFirstCycles(1)

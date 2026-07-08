@@ -76,7 +76,7 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 	if err != nil {
 		return c.result(false, fmt.Sprintf("icmp %s: %v", c.host, err), start)
 	}
-	data := map[string]any{fieldHost: c.host, fieldMetric: c.metric}
+	data := map[string]any{DataKeyHost: c.host, DataKeyMetric: c.metric}
 
 	switch c.metric {
 	case NetMetricState:
@@ -85,7 +85,7 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 			state = NetStateUp
 		}
 		if c.expect != "" {
-			data[fieldValue] = state
+			data[DataKeyValue] = state
 			res := c.result(state == c.expect, fmt.Sprintf("%s %s (want %s)", c.host, state, c.expect), start)
 			res.Data = data
 			return res
@@ -97,7 +97,7 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 			return res
 		}
 		changed := state != c.lastState
-		data[fieldOld], data[fieldNew], data[fieldValue] = c.lastState, state, state
+		data[DataKeyOld], data[DataKeyNew], data[DataKeyValue] = c.lastState, state, state
 		msg := fmt.Sprintf("%s state %s->%s", c.host, c.lastState, state)
 		c.lastState = state
 		res := c.result(changed, msg, start)
@@ -111,7 +111,7 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 			return res
 		}
 		if c.hasThreshold {
-			data[fieldValue] = s.RTTms
+			data[DataKeyValue] = s.RTTms
 			met := compareFloat(s.RTTms, c.op, c.value)
 			res := c.result(met, fmt.Sprintf("%s rtt %.1fms %s %.1f", c.host, s.RTTms, c.op, c.value), start)
 			res.Data = data
@@ -129,7 +129,7 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 			diff = -diff
 		}
 		changed := diff > c.delta
-		data[fieldOld], data[fieldNew], data[fieldValue] = c.lastRTT, s.RTTms, s.RTTms
+		data[DataKeyOld], data[DataKeyNew], data[DataKeyValue] = c.lastRTT, s.RTTms, s.RTTms
 		msg := fmt.Sprintf("%s rtt %.1f->%.1fms (|Δ|=%.1f > %.1f)", c.host, c.lastRTT, s.RTTms, diff, c.delta)
 		c.lastRTT = s.RTTms
 		res := c.result(changed, msg, start)

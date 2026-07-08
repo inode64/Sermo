@@ -131,7 +131,7 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 			return &Handle{ownedLock{path: path, ownerPID: pid, ownerStartTicks: ticks}}, nil
 		}
 		if !errors.Is(err, os.ErrExist) {
-			return nil, fmt.Errorf("acquire %s: %w", path, err)
+			return nil, fmt.Errorf(lockAcquireErrorFormat, path, err)
 		}
 
 		existing, rerr := readLockFile(path)
@@ -139,7 +139,7 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 			if isRetryableLockRead(rerr) {
 				continue // vanished or still being written; retry
 			}
-			return nil, fmt.Errorf("acquire %s: %w", path, rerr)
+			return nil, fmt.Errorf(lockAcquireErrorFormat, path, rerr)
 		}
 
 		state, reason := classify(existing, now(), proc)

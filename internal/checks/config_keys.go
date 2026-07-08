@@ -122,6 +122,15 @@ const (
 	CheckKeyWithin                = "within"
 )
 
+// LevelField suffixes classify storage-style threshold fields by value form.
+const (
+	LevelFieldSuffixBytes = "_bytes"
+	LevelFieldSuffixPct   = "_pct"
+)
+
+// CommandDefaultExpectedExit is the implicit successful command exit code.
+const CommandDefaultExpectedExit = 0
+
 // ports check expect/match values.
 const (
 	PortStateOpen   = "open"
@@ -130,6 +139,10 @@ const (
 	PortMatchAll    = "all"
 	PortMatchAny    = "any"
 	PortMatchNone   = "none"
+	// PortExpectSummary is the user-facing list of ports expect values.
+	PortExpectSummary = PortStateOpen + ", " + PortStateClosed + " or " + PortExpectAny
+	// PortMatchSummary is the user-facing list of ports match values.
+	PortMatchSummary = PortMatchAll + ", " + PortMatchAny + " or " + PortMatchNone
 )
 
 // count check entry-kind values.
@@ -138,6 +151,8 @@ const (
 	CountKindFile    = "file"
 	CountKindDir     = "dir"
 	CountKindSymlink = "symlink"
+	// CountKindSummary is the user-facing list of count entry-kind values.
+	CountKindSummary = CountKindAny + ", " + CountKindFile + ", " + CountKindDir + " or " + CountKindSymlink
 )
 
 // version_match mapping keys.
@@ -145,12 +160,16 @@ const (
 	VersionMatchKeyContains = "contains"
 	VersionMatchKeyExcludes = "excludes"
 	VersionMatchKeyRegex    = "regex"
+	// VersionMatchKeySummary is the user-facing list of version_match keys.
+	VersionMatchKeySummary = VersionMatchKeyContains + ", " + VersionMatchKeyExcludes + " or " + VersionMatchKeyRegex
 )
 
 // interface_match values.
 const (
 	InterfaceMatchAny = "any"
 	InterfaceMatchAll = "all"
+	// InterfaceMatchSummary is the user-facing list of interface_match modes.
+	InterfaceMatchSummary = InterfaceMatchAny + " or " + InterfaceMatchAll
 )
 
 // URL schemes accepted by checks.
@@ -161,4 +180,6 @@ const (
 	URLSchemeWSS     = "wss"
 	URLSchemeSOCKS5  = "socks5"
 	URLSchemeSOCKS5H = "socks5h"
+	// WebsocketURLSchemeSummary is the user-facing list of accepted websocket URL schemes.
+	WebsocketURLSchemeSummary = URLSchemeWS + ", " + URLSchemeWSS + ", " + URLSchemeHTTP + " or " + URLSchemeHTTPS
 )

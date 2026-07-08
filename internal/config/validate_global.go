@@ -20,7 +20,7 @@ func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 	if portRaw, present := webCfg[WebKeyPort]; present {
 		port, ok := cfgval.Int(portRaw)
 		if !ok || !validTCPPort(port) {
-			add("web.port must be an integer in %s", cfgval.TCPPortRange())
+			add(validationTCPPortRangeFormat, "web."+WebKeyPort, cfgval.TCPPortRange())
 		}
 	}
 	if v, present := webCfg[WebKeyAddress]; present {
@@ -73,7 +73,7 @@ func validateNotifiers(notifiers map[string]any, templateDir string, add func(st
 		}
 		if v, present := entry[keyEnabled]; present {
 			if _, ok := v.(bool); !ok {
-				add("notifiers.%s.enabled must be a boolean", name)
+				add(validationBooleanFormat, "notifiers."+name+"."+keyEnabled)
 			}
 		}
 		if enabled, ok := entry[keyEnabled].(bool); ok && !enabled {
@@ -85,7 +85,7 @@ func validateNotifiers(notifiers map[string]any, templateDir string, add func(st
 			dsn := cfgval.String(entry[notify.KeyDSN])
 			if dsn == "" {
 				add("notifiers.%s.dsn is required for an email notifier", name)
-			} else if !strings.HasPrefix(dsn, "smtp://") && !strings.HasPrefix(dsn, "smtps://") {
+			} else if !strings.HasPrefix(dsn, notify.EmailDSNPrefixSMTP) && !strings.HasPrefix(dsn, notify.EmailDSNPrefixSMTPS) {
 				add("notifiers.%s.dsn must be an smtp:// or smtps:// URL", name)
 			}
 			if cfgval.String(entry[notify.KeyFrom]) == "" {
@@ -98,12 +98,12 @@ func validateNotifiers(notifiers map[string]any, templateDir string, add func(st
 			wh := cfgval.String(entry[notify.KeyWebhook])
 			if wh == "" {
 				add("notifiers.%s.webhook is required for a %s notifier", name, typ)
-			} else if !strings.HasPrefix(wh, "http://") && !strings.HasPrefix(wh, "https://") {
+			} else if !strings.HasPrefix(wh, notify.WebhookURLPrefixHTTP) && !strings.HasPrefix(wh, notify.WebhookURLPrefixHTTPS) {
 				add("notifiers.%s.webhook must be an http(s) URL", name)
 			}
 		case notify.TypeTTY:
 			if users, present := entry[notify.KeyUsers]; present && !cfgval.IsStringOrStringList(users) {
-				add("notifiers.%s.users must be a string or list of strings", name)
+				add(validationStringListFormat, "notifiers."+name+"."+notify.KeyUsers)
 			}
 		case notify.TypeWall:
 			if _, present := entry[notify.KeyUsers]; present {
@@ -164,7 +164,7 @@ func NotifyDefault(raw map[string]any) []string {
 func validateNotifySelection(prefix string, raw any, defined map[string]struct{}, add func(string, ...any)) {
 	names, err := cfgval.StrictStringList(raw)
 	if err != nil {
-		add("%s must be a string or list of strings", prefix)
+		add(validationStringListFormat, prefix)
 		return
 	}
 	if slices.Contains(names, NotifyNone) && len(names) > 1 {

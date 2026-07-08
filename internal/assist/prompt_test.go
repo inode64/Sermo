@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"sermo/internal/config"
 )
 
 func newTestPrompt(input string) (*Prompt, *strings.Builder) {
@@ -34,7 +36,7 @@ func TestPromptConfirm(t *testing.T) {
 	if !p.Confirm("ok?", true) {
 		t.Fatal("after the empty line re-prompts, 'yes' should be true")
 	}
-	if !strings.Contains(out.String(), "please answer y or n") {
+	if !strings.Contains(out.String(), strings.TrimSpace(promptConfirmAnswerRequired)) {
 		t.Fatalf("an empty answer must re-prompt, got %q", out.String())
 	}
 }
@@ -58,20 +60,20 @@ func TestPromptMultiChoose(t *testing.T) {
 		t.Fatalf("MultiChoose = %v, want [0 2]", got)
 	}
 
-	p2, _ := newTestPrompt("all\n")
+	p2, _ := newTestPrompt(config.SelectionKeywordAll + "\n")
 	if got := p2.MultiChoose("pick", []string{"a", "b", "c"}); len(got) != 3 {
 		t.Fatalf("'all' should select every option, got %v", got)
 	}
 }
 
 func TestPromptMultiChooseByName(t *testing.T) {
-	opts := []string{"none (do not notify)", "ops-email", "default (inherit global notify)"}
+	opts := []string{config.NotifyNone + " (do not notify)", "ops-email", config.NotifyKeywordDefault + " (inherit global notify)"}
 
 	// "none" / "default" select the matching always-present entries by name.
-	if got := mustMultiChoose(t, "none\n", opts); len(got) != 1 || got[0] != 0 {
+	if got := mustMultiChoose(t, config.NotifyNone+"\n", opts); len(got) != 1 || got[0] != 0 {
 		t.Fatalf("'none' = %v, want [0]", got)
 	}
-	if got := mustMultiChoose(t, "DEFAULT\n", opts); len(got) != 1 || got[0] != 2 {
+	if got := mustMultiChoose(t, strings.ToUpper(config.NotifyKeywordDefault)+"\n", opts); len(got) != 1 || got[0] != 2 {
 		t.Fatalf("'default' (case-insensitive) = %v, want [2]", got)
 	}
 	if got := mustMultiChoose(t, "ops-email\n", opts); len(got) != 1 || got[0] != 1 {
@@ -92,34 +94,34 @@ func TestPromptMultiChooseKeyword(t *testing.T) {
 	opts := []string{"ops-email", "team-slack"}
 
 	t.Run("keywords return without indices", func(t *testing.T) {
-		p, _ := newTestPrompt("none\n")
-		if idx, kw := p.MultiChooseKeyword("pick", opts, "none", "default"); kw != "none" || idx != nil {
+		p, _ := newTestPrompt(config.NotifyNone + "\n")
+		if idx, kw := p.MultiChooseKeyword("pick", opts, config.NotifyNone, config.NotifyKeywordDefault); kw != config.NotifyNone || idx != nil {
 			t.Fatalf("= (%v, %q), want (nil, none)", idx, kw)
 		}
-		p, _ = newTestPrompt("DEFAULT\n")
-		if _, kw := p.MultiChooseKeyword("pick", opts, "none", "default"); kw != "default" {
+		p, _ = newTestPrompt(strings.ToUpper(config.NotifyKeywordDefault) + "\n")
+		if _, kw := p.MultiChooseKeyword("pick", opts, config.NotifyNone, config.NotifyKeywordDefault); kw != config.NotifyKeywordDefault {
 			t.Fatalf("keyword should match case-insensitively, got %q", kw)
 		}
 	})
 
 	t.Run("numbers, names and all select options", func(t *testing.T) {
 		p, _ := newTestPrompt("2\n")
-		if idx, kw := p.MultiChooseKeyword("pick", opts, "none", "default"); kw != "" || len(idx) != 1 || idx[0] != 1 {
+		if idx, kw := p.MultiChooseKeyword("pick", opts, config.NotifyNone, config.NotifyKeywordDefault); kw != "" || len(idx) != 1 || idx[0] != 1 {
 			t.Fatalf("= (%v, %q), want ([1], \"\")", idx, kw)
 		}
 		p, _ = newTestPrompt("team-slack\n")
-		if idx, _ := p.MultiChooseKeyword("pick", opts, "none", "default"); len(idx) != 1 || idx[0] != 1 {
+		if idx, _ := p.MultiChooseKeyword("pick", opts, config.NotifyNone, config.NotifyKeywordDefault); len(idx) != 1 || idx[0] != 1 {
 			t.Fatalf("name = %v, want [1]", idx)
 		}
-		p, _ = newTestPrompt("all\n")
-		if idx, _ := p.MultiChooseKeyword("pick", opts, "none", "default"); len(idx) != 2 {
+		p, _ = newTestPrompt(config.SelectionKeywordAll + "\n")
+		if idx, _ := p.MultiChooseKeyword("pick", opts, config.NotifyNone, config.NotifyKeywordDefault); len(idx) != 2 {
 			t.Fatalf("'all' = %v, want both options", idx)
 		}
 	})
 
 	t.Run("keywords do not occupy menu rows", func(t *testing.T) {
 		p, out := newTestPrompt("1\n")
-		if idx, _ := p.MultiChooseKeyword("pick", opts, "none", "default"); idx[0] != 0 {
+		if idx, _ := p.MultiChooseKeyword("pick", opts, config.NotifyNone, config.NotifyKeywordDefault); idx[0] != 0 {
 			t.Fatalf("1 = %v, want the first defined option", idx)
 		}
 		if s := out.String(); strings.Contains(s, "1) none") || strings.Contains(s, "3) default") {
@@ -131,9 +133,9 @@ func TestPromptMultiChooseKeyword(t *testing.T) {
 	})
 
 	t.Run("empty option list still accepts keywords", func(t *testing.T) {
-		p, out := newTestPrompt("all\nnone\n")
-		idx, kw := p.MultiChooseKeyword("pick", nil, "none", "default")
-		if kw != "none" || idx != nil {
+		p, out := newTestPrompt(config.SelectionKeywordAll + "\n" + config.NotifyNone + "\n")
+		idx, kw := p.MultiChooseKeyword("pick", nil, config.NotifyNone, config.NotifyKeywordDefault)
+		if kw != config.NotifyNone || idx != nil {
 			t.Fatalf("= (%v, %q), want (nil, none): 'all' is meaningless without options", idx, kw)
 		}
 		if !strings.Contains(out.String(), "enter 'none' or 'default'") {

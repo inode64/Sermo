@@ -34,7 +34,7 @@ func (c entropyCheck) Run(_ context.Context) Result {
 	}
 	met := compareFloat(float64(avail), c.op, c.value)
 	res := c.result(met, fmt.Sprintf("entropy_avail %d bits", avail), start)
-	res.Data = map[string]any{DataKeyAvail: avail, fieldValue: avail}
+	res.Data = map[string]any{DataKeyAvail: avail, DataKeyValue: avail}
 	return res
 }
 

@@ -20,8 +20,6 @@ import (
 )
 
 const (
-	httpHeaderAccept      = "Accept"
-	httpHeaderContentType = "Content-Type"
 	influxAuthHeader      = "Authorization"
 	influxAuthTokenPrefix = "Token "
 	influxFluxAccept      = "application/csv"
@@ -285,7 +283,7 @@ func buildInfluxCheck(b base, entry map[string]any) (Check, string) {
 			return nil, "influxdb-query (flux) check requires a token"
 		}
 	default:
-		return nil, "influxdb-query check language must be influxql or flux"
+		return nil, "influxdb-query check language must be " + InfluxLanguageSummary
 	}
 	return c, ""
 }

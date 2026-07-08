@@ -32,7 +32,7 @@ func buildReportNotifiers(cfg *config.Config) (map[string]notify.Notifier, []str
 func (a App) sendServicesReport(ctx context.Context, opts options, cfg *config.Config, reports []appinspect.Report, includeMissing bool) ([]string, int) {
 	registry, warnings := a.BuildNotifiers(cfg)
 	for _, warning := range warnings {
-		fmt.Fprintf(a.Stderr, "warning: %s\n", warning)
+		fmt.Fprintf(a.Stderr, cliWarningFormat, warning)
 	}
 	selected, names, err := selectServicesReportNotifiers(opts.notifyNames, registry)
 	if err != nil {

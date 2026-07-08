@@ -73,23 +73,33 @@ const (
 )
 
 const (
-	backendStatusError        = "error"
-	watchConditionFieldGrowth = "growth"
-	watchReadingFieldError    = "error"
-	watchReadingFieldCPUTicks = "cpu_ticks"
-	watchReadingFieldMatches  = "matches"
-	watchReadingFieldProcess  = checks.CheckTypeProcess
-	watchReadingFieldResult   = "result"
-	watchReadingFieldRSS      = "rss"
-	watchReadingFieldSample   = "sample"
-	watchCategoryFallback     = config.WatchCategoryWatch
-	watchReadingFieldState    = checks.CheckKeyState
-	watchReadingFieldUser     = checks.CheckKeyUser
-	watchReadingStateActive   = string(servicemgr.StatusActive)
-	watchReadingStateBaseline = "baseline"
-	watchReadingStateMissing  = "missing"
-	watchReadingValueNone     = "none"
-	watchReadingValueUnknown  = checks.NetStateUnknown
+	backendStatusError         = "error"
+	watchConditionFieldGrowth  = "growth"
+	watchMetricFieldSeparator  = "."
+	watchMetricSuffixChange    = "change"
+	watchMetricSuffixDelta     = checks.CheckKeyDelta
+	watchMetricSuffixExpect    = checks.CheckKeyExpect
+	watchMetricSuffixOn        = checks.CheckKeyOn
+	watchMetricSuffixThreshold = "threshold"
+	watchReadingFieldError     = "error"
+	watchReadingFieldCPUTicks  = "cpu_ticks"
+	watchReadingFieldMatches   = "matches"
+	watchReadingFieldProcess   = checks.CheckTypeProcess
+	watchReadingFieldResult    = checks.DataKeyResult
+	watchReadingFieldRSS       = "rss"
+	watchReadingFieldSample    = "sample"
+	watchCategoryFallback      = config.WatchCategoryWatch
+	watchReadingFieldState     = checks.CheckKeyState
+	watchReadingFieldUser      = checks.CheckKeyUser
+	watchReadingStateActive    = string(servicemgr.StatusActive)
+	watchReadingStateBaseline  = "baseline"
+	watchReadingStateMissing   = "missing"
+	lockOwnerStatusLive        = "live"
+	lockReleaseDefaultRule     = "default"
+	unknownServiceMessage      = "unknown service "
+	unknownServiceMessageFmt   = unknownServiceMessage + "%q"
+	watchReadingValueNone      = "none"
+	watchReadingValueUnknown   = checks.NetStateUnknown
 )
 
 // webEntry is one service's web-backend record.
@@ -551,11 +561,11 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	}
 	svc.LastEvent = lastEvent
 	if e.disabled {
-		svc.Status = "disabled"
+		svc.Status = TargetStateDisabled
 		svc.State = ServiceState(false, false, svc.Status, "", true, false)
 		svc.Monitored = false
 		svc.CheckHealth = ""
-		svc.RemediationState = "disabled"
+		svc.RemediationState = TargetStateDisabled
 		return svc
 	}
 	svc.Status = e.backendStatus(ctx, b.webNow())
@@ -1082,7 +1092,7 @@ func watchSummary(w *webWatch, storage *web.StorageWatchInfo, liveSummary string
 	for _, c := range conds {
 		parts = append(parts, watchConditionText(c))
 	}
-	return strings.Join(parts, ", ")
+	return strings.Join(parts, displayListSeparator)
 }
 
 func watchConditionText(c web.WatchCondition) string {
@@ -1264,29 +1274,29 @@ func watchMetricConditions(metrics map[string]any) []web.WatchCondition {
 			continue
 		}
 		if on := cfgval.AsString(entry[checks.CheckKeyOn]); on != "" {
-			out = append(out, web.WatchCondition{Field: metric + ".on", Value: on})
+			out = append(out, web.WatchCondition{Field: watchMetricConditionField(metric, watchMetricSuffixOn), Value: on})
 		}
 		if expect := cfgval.AsString(entry[checks.CheckKeyExpect]); expect != "" {
-			out = append(out, web.WatchCondition{Field: metric + ".expect", Op: cfgval.CompareOpEqual, Value: expect})
+			out = append(out, web.WatchCondition{Field: watchMetricConditionField(metric, watchMetricSuffixExpect), Op: cfgval.CompareOpEqual, Value: expect})
 		}
 		if delta, ok := entry[checks.CheckKeyDelta].(map[string]any); ok {
 			out = append(out, web.WatchCondition{
-				Field: metric + ".delta",
+				Field: watchMetricConditionField(metric, watchMetricSuffixDelta),
 				Op:    cfgval.AsString(delta[checks.CheckKeyOp]),
 				Value: cfgval.String(delta[checks.CheckKeyValue]),
 			})
 		}
 		if threshold, ok := entry[checks.CheckKeyThreshold].(map[string]any); ok {
 			out = append(out, web.WatchCondition{
-				Field: metric + ".threshold",
+				Field: watchMetricConditionField(metric, watchMetricSuffixThreshold),
 				Op:    cfgval.AsString(threshold[checks.CheckKeyOp]),
 				Value: cfgval.String(threshold[checks.CheckKeyValue]),
 			})
 		}
 		if change, ok := entry[checks.CheckKeyChange].(map[string]any); ok {
 			out = append(out, web.WatchCondition{
-				Field: metric + ".change",
-				Op:    ">",
+				Field: watchMetricConditionField(metric, watchMetricSuffixChange),
+				Op:    cfgval.CompareOpGreater,
 				Value: cfgval.String(change[checks.CheckKeyDelta]),
 			})
 		}
@@ -1296,13 +1306,17 @@ func watchMetricConditions(metrics map[string]any) []web.WatchCondition {
 				continue
 			}
 			out = append(out, web.WatchCondition{
-				Field: metric + "." + field,
+				Field: watchMetricConditionField(metric, field),
 				Op:    cfgval.AsString(m[checks.CheckKeyOp]),
 				Value: cfgval.String(m[checks.CheckKeyValue]),
 			})
 		}
 	}
 	return out
+}
+
+func watchMetricConditionField(metric, suffix string) string {
+	return metric + watchMetricFieldSeparator + suffix
 }
 
 // heavyLiveViewTypes are the watch check types whose dashboard live view runs
@@ -1313,11 +1327,9 @@ func watchMetricConditions(metrics map[string]any) []web.WatchCondition {
 // filesystem state views used by tests and operators, and rate-based diskio,
 // which must sample on every poll to compute deltas.
 var heavyLiveViewTypes = map[string]bool{
-	"hdparm": true,
-	"smart":  true,
+	checks.CheckTypeHdparm: true,
+	checks.CheckTypeSmart:  true,
 }
-
-const watchDataKeyNumCPU = "num_cpu"
 
 func (b *WebBackend) watchDashboardView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
 	if w == nil {
@@ -1387,10 +1399,10 @@ func watchSnapshotMetricConfigured(w *webWatch, snap CheckSnapshot) bool {
 func watchSnapshotReadings(checkType string, snap CheckSnapshot) []web.WatchReading {
 	readings := checkReadings(checkType, snap.Data)
 	if len(readings) == 0 && snap.Message != "" {
-		readings = []web.WatchReading{{Field: watchReadingFieldResult, Label: "Result", Value: snap.Message}}
+		readings = []web.WatchReading{{Field: watchReadingFieldResult, Label: watchReadingLabelResult, Value: snap.Message}}
 	}
 	if !snap.healthy() && snap.Message != "" {
-		readings = append([]web.WatchReading{{Field: watchReadingFieldError, Label: "Error", Error: snap.Message}}, readings...)
+		readings = append([]web.WatchReading{{Field: watchReadingFieldError, Label: watchReadingLabelError, Error: snap.Message}}, readings...)
 	}
 	return readings
 }
@@ -1429,11 +1441,11 @@ func watchMeterFromSnapshot(checkType string, data map[string]any) *web.WatchMet
 		}
 	case checks.CheckTypeLoad:
 		load, loadOK := cfgval.Float(data[metrics.MetricLoad1])
-		numCPU, cpuOK := cfgval.Int(data[watchDataKeyNumCPU])
+		numCPU, cpuOK := cfgval.Int(data[checks.DataKeyNumCPU])
 		if !loadOK || !cpuOK || numCPU <= 0 {
 			return nil
 		}
-		return &web.WatchMeter{Kind: checks.CheckTypeLoad, UsedPct: load / float64(numCPU) * 100, Load: load, NumCPU: numCPU}
+		return &web.WatchMeter{Kind: checks.CheckTypeLoad, UsedPct: load / float64(numCPU) * percentScale, Load: load, NumCPU: numCPU}
 	case checks.CheckTypeFDS:
 		return watchCountMeter(checks.CheckTypeFDS, data, checks.DataKeyAllocated)
 	case checks.CheckTypePIDs:
@@ -1573,20 +1585,20 @@ func (b *WebBackend) processWatchView(w *webWatch) (*web.WatchMeter, []web.Watch
 	}
 
 	readings := []web.WatchReading{
-		{Field: watchReadingFieldProcess, Label: "Process", Value: name},
-		{Field: watchReadingFieldMatches, Label: "Matches", Value: fmt.Sprintf("%d", len(samples))},
+		{Field: watchReadingFieldProcess, Label: watchReadingLabelProcess, Value: name},
+		{Field: watchReadingFieldMatches, Label: watchReadingLabelMatches, Value: fmt.Sprintf("%d", len(samples))},
 	}
 	if user != "" {
-		readings = append(readings, web.WatchReading{Field: watchReadingFieldUser, Label: "User", Value: user})
+		readings = append(readings, web.WatchReading{Field: watchReadingFieldUser, Label: watchReadingLabelUser, Value: user})
 	}
 	if len(samples) > 0 {
 		readings = append(readings,
-			web.WatchReading{Field: checks.DataKeyPIDs, Label: "PIDs", Value: processPIDList(samples)},
-			web.WatchReading{Field: watchReadingFieldRSS, Label: "RSS total", Value: fmt.Sprintf("%d %s", rssTotal, metrics.MetricUnitBytes)},
-			web.WatchReading{Field: watchReadingFieldCPUTicks, Label: "CPU ticks", Value: fmt.Sprintf("%d", cpuTicksTotal)},
+			web.WatchReading{Field: checks.DataKeyPIDs, Label: watchReadingLabelPIDs, Value: processPIDList(samples)},
+			web.WatchReading{Field: watchReadingFieldRSS, Label: watchReadingLabelRSS, Value: fmt.Sprintf("%d %s", rssTotal, metrics.MetricUnitBytes)},
+			web.WatchReading{Field: watchReadingFieldCPUTicks, Label: watchReadingLabelCPUTicks, Value: fmt.Sprintf("%d", cpuTicksTotal)},
 		)
 		if ioKnown {
-			readings = append(readings, web.WatchReading{Field: metrics.MetricIO, Label: "IO total", Value: fmt.Sprintf("%d %s", ioTotal, metrics.MetricUnitBytes)})
+			readings = append(readings, web.WatchReading{Field: metrics.MetricIO, Label: watchReadingLabelIO, Value: fmt.Sprintf("%d %s", ioTotal, metrics.MetricUnitBytes)})
 		}
 	}
 
@@ -1612,17 +1624,17 @@ func (b *WebBackend) autofsWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 		return nil, watchErrorReadings(msg), "autofs: " + msg
 	}
 	points := autofsMountpoints(mounts)
-	readings := []web.WatchReading{{Field: checks.DataKeyCount, Label: "Mountpoints", Value: fmt.Sprintf("%d", len(points))}}
+	readings := []web.WatchReading{{Field: checks.DataKeyCount, Label: watchReadingLabelMountpoints, Value: fmt.Sprintf("%d", len(points))}}
 	if len(points) > 0 {
-		readings = append(readings, web.WatchReading{Field: checks.DataKeyMountpoints, Label: "Paths", Value: strings.Join(points, ", ")})
+		readings = append(readings, web.WatchReading{Field: checks.DataKeyMountpoints, Label: watchReadingLabelPaths, Value: strings.Join(points, displayListSeparator)})
 	}
 	if path := cfgval.AsString(w.check[checks.CheckKeyPath]); path != "" {
 		state := watchReadingStateMissing
 		if slices.Contains(points, path) {
 			state = watchReadingStateActive
 		}
-		readings = append(readings, web.WatchReading{Field: checks.DataKeyPath, Label: "Configured path", Value: path})
-		readings = append(readings, web.WatchReading{Field: watchReadingFieldState, Label: "State", Value: state})
+		readings = append(readings, web.WatchReading{Field: checks.DataKeyPath, Label: watchReadingLabelConfiguredPath, Value: path})
+		readings = append(readings, web.WatchReading{Field: watchReadingFieldState, Label: watchReadingLabelState, Value: state})
 		return nil, readings, fmt.Sprintf("autofs %s %s (%d mountpoint%s)", path, state, len(points), pluralSuffix(len(points), "mountpoint"))
 	}
 	return nil, readings, fmt.Sprintf("%d autofs mountpoint%s active", len(points), pluralSuffix(len(points), "mountpoint"))
@@ -1669,17 +1681,17 @@ func (b *WebBackend) diskIOWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 	// its last computed rates (st unchanged).
 	b.diskIOMu.Unlock()
 
-	readings := []web.WatchReading{{Field: checks.DataKeyDevice, Label: "Device", Value: device}}
+	readings := []web.WatchReading{{Field: checks.DataKeyDevice, Label: watchReadingLabelDevice, Value: device}}
 	if !st.hasRates {
-		readings = append(readings, web.WatchReading{Field: watchReadingFieldState, Label: "State", Value: watchReadingStateBaseline})
+		readings = append(readings, web.WatchReading{Field: watchReadingFieldState, Label: watchReadingLabelState, Value: watchReadingStateBaseline})
 		return nil, readings, "diskio " + device + " baseline"
 	}
 	rates := st.rates
 	readings = append(readings,
-		web.WatchReading{Field: checks.DiskIOFieldUtilPct, Label: "Utilization", Value: watchPercent(rates.UtilPct)},
-		web.WatchReading{Field: checks.DiskIOFieldReadBytes, Label: "Read", Value: fmt.Sprintf("%.0f B/s", rates.ReadBytes)},
-		web.WatchReading{Field: checks.DiskIOFieldWriteBytes, Label: "Write", Value: fmt.Sprintf("%.0f B/s", rates.WriteBytes)},
-		web.WatchReading{Field: checks.DiskIOFieldAwaitMs, Label: "Await", Value: fmt.Sprintf("%.1f ms", rates.AwaitMs)},
+		web.WatchReading{Field: checks.DiskIOFieldUtilPct, Label: watchReadingLabelUtilization, Value: watchPercent(rates.UtilPct)},
+		web.WatchReading{Field: checks.DiskIOFieldReadBytes, Label: watchReadingLabelRead, Value: watchReadingMetricValue(rates.ReadBytes, 0, metrics.MetricUnitBytesPerSecond)},
+		web.WatchReading{Field: checks.DiskIOFieldWriteBytes, Label: watchReadingLabelWrite, Value: watchReadingMetricValue(rates.WriteBytes, 0, metrics.MetricUnitBytesPerSecond)},
+		web.WatchReading{Field: checks.DiskIOFieldAwaitMs, Label: watchReadingLabelAwait, Value: watchReadingMetricValue(rates.AwaitMs, 1, metrics.MetricUnitMilliseconds)},
 	)
 	return nil, readings, fmt.Sprintf("diskio %s util %.1f%% read %.0fB/s write %.0fB/s await %.1fms",
 		device, rates.UtilPct, rates.ReadBytes, rates.WriteBytes, rates.AwaitMs)
@@ -1698,24 +1710,24 @@ func (b *WebBackend) sensorsWatchView(w *webWatch) (*web.WatchMeter, []web.Watch
 	chip := cfgval.AsString(w.check[checks.CheckKeyChip])
 	label := cfgval.AsString(w.check[checks.CheckKeyLabel])
 	values := checks.SummarizeSensors(readings, chip, label)
-	out := []web.WatchReading{{Field: "inputs", Label: "Inputs", Value: fmt.Sprintf("%d", values.Count)}}
+	out := []web.WatchReading{{Field: checks.DataKeyInputs, Label: watchReadingLabelInputs, Value: fmt.Sprintf("%d", values.Count)}}
 	if chip != "" {
-		out = append(out, web.WatchReading{Field: "chip", Label: "Chip filter", Value: chip})
+		out = append(out, web.WatchReading{Field: checks.DataKeyChip, Label: watchReadingLabelChipFilter, Value: chip})
 	}
 	if label != "" {
-		out = append(out, web.WatchReading{Field: "label", Label: "Label filter", Value: label})
+		out = append(out, web.WatchReading{Field: checks.DataKeyLabel, Label: watchReadingLabelLabelFilter, Value: label})
 	}
 	parts := make([]string, 0, 3)
 	if values.HasTemp {
-		out = append(out, web.WatchReading{Field: "temp", Label: "Hottest temp", Value: fmt.Sprintf("%.1f C", values.Temp)})
+		out = append(out, web.WatchReading{Field: checks.DataKeyTemp, Label: watchReadingLabelHottestTemp, Value: watchReadingMetricValue(values.Temp, 1, watchReadingUnitCelsius)})
 		parts = append(parts, fmt.Sprintf("temp=%.1fC", values.Temp))
 	}
 	if values.HasFan {
-		out = append(out, web.WatchReading{Field: "fan", Label: "Slowest fan", Value: fmt.Sprintf("%.0f RPM", values.Fan)})
+		out = append(out, web.WatchReading{Field: checks.DataKeyFan, Label: watchReadingLabelSlowestFan, Value: watchReadingMetricValue(values.Fan, 0, watchReadingUnitRPM)})
 		parts = append(parts, fmt.Sprintf("fan=%.0fRPM", values.Fan))
 	}
 	if values.HasVoltage {
-		out = append(out, web.WatchReading{Field: "voltage", Label: "Lowest voltage", Value: fmt.Sprintf("%.2f V", values.Voltage)})
+		out = append(out, web.WatchReading{Field: checks.DataKeyVoltage, Label: watchReadingLabelVoltage, Value: watchReadingMetricValue(values.Voltage, 2, watchReadingUnitVolt)})
 		parts = append(parts, fmt.Sprintf("voltage=%.2fV", values.Voltage))
 	}
 	if len(parts) == 0 {
@@ -1735,14 +1747,14 @@ func (b *WebBackend) raidWatchView() (*web.WatchMeter, []web.WatchReading, strin
 		return nil, watchErrorReadings(msg), "raid: " + msg
 	}
 	readings := []web.WatchReading{
-		{Field: "arrays", Label: "Arrays", Value: fmt.Sprintf("%d", st.Arrays)},
-		{Field: "degraded", Label: "Degraded", Value: fmt.Sprintf("%d", st.Degraded)},
-		{Field: "recovering", Label: "Recovering", Value: fmt.Sprintf("%d", st.Recovering)},
+		{Field: checks.DataKeyArrays, Label: watchReadingLabelArrays, Value: fmt.Sprintf("%d", st.Arrays)},
+		{Field: checks.DataKeyDegraded, Label: watchReadingLabelDegraded, Value: fmt.Sprintf("%d", st.Degraded)},
+		{Field: checks.DataKeyRecovering, Label: watchReadingLabelRecovering, Value: fmt.Sprintf("%d", st.Recovering)},
 	}
 	summary := fmt.Sprintf("raid: %d arrays, %d degraded, %d recovering", st.Arrays, st.Degraded, st.Recovering)
 	if len(st.DegradedNames) > 0 {
-		names := strings.Join(st.DegradedNames, ", ")
-		readings = append(readings, web.WatchReading{Field: checks.DataKeyDegradedArrays, Label: "Degraded arrays", Value: names})
+		names := strings.Join(st.DegradedNames, displayListSeparator)
+		readings = append(readings, web.WatchReading{Field: checks.DataKeyDegradedArrays, Label: watchReadingLabelDegradedArrays, Value: names})
 		summary += " (" + names + ")"
 	}
 	return nil, readings, summary
@@ -1760,12 +1772,12 @@ func (b *WebBackend) edacWatchView() (*web.WatchMeter, []web.WatchReading, strin
 	}
 	if !st.Present {
 		msg := "no EDAC controllers"
-		return nil, []web.WatchReading{{Field: "present", Label: "EDAC", Error: msg}}, "edac: " + msg
+		return nil, []web.WatchReading{{Field: checks.DataKeyPresent, Label: watchReadingLabelEDAC, Error: msg}}, "edac: " + msg
 	}
 	return nil,
 		[]web.WatchReading{
-			{Field: "ce", Label: "Correctable", Value: fmt.Sprintf("%d", st.CE)},
-			{Field: "ue", Label: "Uncorrectable", Value: fmt.Sprintf("%d", st.UE)},
+			{Field: checks.DataKeyCE, Label: watchReadingLabelCorrectable, Value: fmt.Sprintf("%d", st.CE)},
+			{Field: checks.DataKeyUE, Label: watchReadingLabelUncorrectable, Value: fmt.Sprintf("%d", st.UE)},
 		},
 		fmt.Sprintf("edac: %d correctable, %d uncorrectable", st.CE, st.UE)
 }
@@ -1787,16 +1799,16 @@ func (b *WebBackend) routeWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRe
 	}
 	matched := matchingDefaultRoutes(routes, iface)
 	readings := []web.WatchReading{
-		{Field: checks.DataKeyFamily, Label: "Family", Value: family},
-		{Field: checks.DataKeyRoutes, Label: "Default routes", Value: fmt.Sprintf("%d", len(routes))},
+		{Field: checks.DataKeyFamily, Label: watchReadingLabelFamily, Value: family},
+		{Field: checks.DataKeyRoutes, Label: watchReadingLabelDefaultRoutes, Value: fmt.Sprintf("%d", len(routes))},
 	}
 	if iface != "" {
-		readings = append(readings, web.WatchReading{Field: checks.DataKeyInterface, Label: "Required interface", Value: iface})
+		readings = append(readings, web.WatchReading{Field: checks.DataKeyInterface, Label: watchReadingLabelRequiredInterface, Value: iface})
 	}
 	if len(matched) > 0 {
-		readings = append(readings, web.WatchReading{Field: "egress", Label: "Egress", Value: matched[0].Iface})
+		readings = append(readings, web.WatchReading{Field: checks.DataKeyEgress, Label: watchReadingLabelEgress, Value: matched[0].Iface})
 		if matched[0].Gateway != "" {
-			readings = append(readings, web.WatchReading{Field: checks.DataKeyGateway, Label: "Gateway", Value: matched[0].Gateway})
+			readings = append(readings, web.WatchReading{Field: checks.DataKeyGateway, Label: watchReadingLabelGateway, Value: matched[0].Gateway})
 		}
 	}
 	switch {
@@ -1828,30 +1840,30 @@ func (b *WebBackend) netWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRead
 	}
 
 	readings := []web.WatchReading{
-		{Field: checks.DataKeyInterface, Label: "Interface", Value: iface},
-		{Field: checks.NetMetricState, Label: "State", Value: s.State},
+		{Field: checks.DataKeyInterface, Label: watchReadingLabelInterface, Value: iface},
+		{Field: checks.NetMetricState, Label: watchReadingLabelState, Value: s.State},
 	}
 	parts := []string{iface + " state " + s.State}
 	if watchMetricEnabled(w.metrics, checks.NetMetricSpeed) {
 		if s.SpeedKnown {
-			readings = append(readings, web.WatchReading{Field: checks.NetMetricSpeed, Label: "Speed", Value: fmt.Sprintf("%d Mbps", s.SpeedMbps)})
+			readings = append(readings, web.WatchReading{Field: checks.NetMetricSpeed, Label: watchReadingLabelSpeed, Value: watchReadingIntMetricValue(s.SpeedMbps, watchReadingUnitMegabitsPerSecond)})
 			parts = append(parts, fmt.Sprintf("speed %d Mbps", s.SpeedMbps))
 		} else {
-			readings = append(readings, web.WatchReading{Field: checks.NetMetricSpeed, Label: "Speed", Value: watchReadingValueUnknown})
+			readings = append(readings, web.WatchReading{Field: checks.NetMetricSpeed, Label: watchReadingLabelSpeed, Value: watchReadingValueUnknown})
 			parts = append(parts, "speed "+watchReadingValueUnknown)
 		}
 	}
 	if watchMetricEnabled(w.metrics, checks.NetMetricErrors) {
 		total := netErrorTotal(w.metrics, s.Counters)
-		readings = append(readings, web.WatchReading{Field: checks.NetMetricErrors, Label: "Errors total", Value: fmt.Sprintf("%d", total)})
+		readings = append(readings, web.WatchReading{Field: checks.NetMetricErrors, Label: watchReadingLabelErrorsTotal, Value: fmt.Sprintf("%d", total)})
 		parts = append(parts, fmt.Sprintf("errors %d", total))
 	}
 	if watchMetricEnabled(w.metrics, checks.NetMetricAddress) {
-		value := strings.Join(s.Addrs, ", ")
+		value := strings.Join(s.Addrs, displayListSeparator)
 		if value == "" {
 			value = watchReadingValueNone
 		}
-		readings = append(readings, web.WatchReading{Field: checks.NetMetricAddress, Label: "Addresses", Value: value})
+		readings = append(readings, web.WatchReading{Field: checks.NetMetricAddress, Label: watchReadingLabelAddresses, Value: value})
 		parts = append(parts, fmt.Sprintf("%d address%s", len(s.Addrs), pluralSuffix(len(s.Addrs), "address")))
 	}
 	return nil, readings, strings.Join(parts, " · ")
@@ -1882,15 +1894,15 @@ func (b *WebBackend) icmpWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 		state = checks.NetStateUp
 	}
 	readings := []web.WatchReading{
-		{Field: checks.DataKeyHost, Label: "Host", Value: host},
-		{Field: checks.NetMetricState, Label: "State", Value: state},
+		{Field: checks.DataKeyHost, Label: watchReadingLabelHost, Value: host},
+		{Field: checks.NetMetricState, Label: watchReadingLabelState, Value: state},
 	}
 	parts := []string{host + " " + state}
 	if s.RTTKnown {
-		readings = append(readings, web.WatchReading{Field: checks.IcmpMetricLatency, Label: "RTT", Value: fmt.Sprintf("%.1f ms", s.RTTms)})
+		readings = append(readings, web.WatchReading{Field: checks.IcmpMetricLatency, Label: watchReadingLabelRTT, Value: watchReadingMetricValue(s.RTTms, 1, metrics.MetricUnitMilliseconds)})
 		parts = append(parts, fmt.Sprintf("rtt %.1f ms", s.RTTms))
 	} else if watchMetricEnabled(w.metrics, checks.IcmpMetricLatency) {
-		readings = append(readings, web.WatchReading{Field: checks.IcmpMetricLatency, Label: "RTT", Value: watchReadingValueUnknown})
+		readings = append(readings, web.WatchReading{Field: checks.IcmpMetricLatency, Label: watchReadingLabelRTT, Value: watchReadingValueUnknown})
 		parts = append(parts, "rtt "+watchReadingValueUnknown)
 	}
 	return nil, readings, strings.Join(parts, " · ")
@@ -1907,7 +1919,7 @@ func (b *WebBackend) oomWatchView() (*web.WatchMeter, []web.WatchReading, string
 		return nil, watchErrorReadings(msg), "oom: " + msg
 	}
 	return nil,
-		[]web.WatchReading{{Field: checks.DataKeyTotal, Label: "OOM kills", Value: fmt.Sprintf("%d", count)}},
+		[]web.WatchReading{{Field: checks.DataKeyTotal, Label: watchReadingLabelOOMKills, Value: fmt.Sprintf("%d", count)}},
 		fmt.Sprintf("%d oom_kill total", count)
 }
 
@@ -1923,13 +1935,13 @@ func (b *WebBackend) fdsWatchView() (*web.WatchMeter, []web.WatchReading, string
 	}
 	summary := fmt.Sprintf("fds %d allocated", s.Allocated)
 	if s.Max > 0 {
-		usedPct := float64(s.Allocated) / float64(s.Max) * 100
+		usedPct := float64(s.Allocated) / float64(s.Max) * percentScale
 		summary = fmt.Sprintf("fds %d/%d allocated (%.1f%%)", s.Allocated, s.Max, usedPct)
 	}
 	if meter := countMeter(checks.CheckTypeFDS, s.Allocated, s.Max); meter != nil {
 		return meter, nil, summary
 	}
-	return nil, []web.WatchReading{{Field: checks.DataKeyCount, Label: "Allocated", Value: fmt.Sprintf("%d", s.Allocated)}}, summary
+	return nil, []web.WatchReading{{Field: checks.DataKeyCount, Label: watchReadingLabelAllocated, Value: fmt.Sprintf("%d", s.Allocated)}}, summary
 }
 
 func (b *WebBackend) pidsWatchView() (*web.WatchMeter, []web.WatchReading, string) {
@@ -1944,13 +1956,13 @@ func (b *WebBackend) pidsWatchView() (*web.WatchMeter, []web.WatchReading, strin
 	}
 	summary := fmt.Sprintf("pids %d in use", s.Threads)
 	if s.Max > 0 {
-		usedPct := float64(s.Threads) / float64(s.Max) * 100
+		usedPct := float64(s.Threads) / float64(s.Max) * percentScale
 		summary = fmt.Sprintf("pids %d/%d in use (%.1f%%)", s.Threads, s.Max, usedPct)
 	}
 	if meter := countMeter(checks.CheckTypePIDs, s.Threads, s.Max); meter != nil {
 		return meter, nil, summary
 	}
-	return nil, []web.WatchReading{{Field: checks.DataKeyCount, Label: "In use", Value: fmt.Sprintf("%d", s.Threads)}}, summary
+	return nil, []web.WatchReading{{Field: checks.DataKeyCount, Label: watchReadingLabelInUse, Value: fmt.Sprintf("%d", s.Threads)}}, summary
 }
 
 func (b *WebBackend) pressureWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
@@ -1969,13 +1981,13 @@ func (b *WebBackend) pressureWatchView(w *webWatch) (*web.WatchMeter, []web.Watc
 		return nil, watchErrorReadings(msg), "pressure " + resource + ": " + msg
 	}
 	readings := []web.WatchReading{
-		{Field: "resource", Label: "Resource", Value: resource},
-		{Field: "some_avg10", Label: "Some avg10", Value: watchPercent(s.Some.Avg10)},
-		{Field: "some_avg60", Label: "Some avg60", Value: watchPercent(s.Some.Avg60)},
-		{Field: "some_avg300", Label: "Some avg300", Value: watchPercent(s.Some.Avg300)},
-		{Field: "full_avg10", Label: "Full avg10", Value: watchPercent(s.Full.Avg10)},
-		{Field: "full_avg60", Label: "Full avg60", Value: watchPercent(s.Full.Avg60)},
-		{Field: "full_avg300", Label: "Full avg300", Value: watchPercent(s.Full.Avg300)},
+		{Field: checks.DataKeyResource, Label: watchReadingLabelResource, Value: resource},
+		{Field: checks.PressureFieldSomeAvg10, Label: watchReadingLabelSomeAvg10, Value: watchPercent(s.Some.Avg10)},
+		{Field: checks.PressureFieldSomeAvg60, Label: watchReadingLabelSomeAvg60, Value: watchPercent(s.Some.Avg60)},
+		{Field: checks.PressureFieldSomeAvg300, Label: watchReadingLabelSomeAvg300, Value: watchPercent(s.Some.Avg300)},
+		{Field: checks.PressureFieldFullAvg10, Label: watchReadingLabelFullAvg10, Value: watchPercent(s.Full.Avg10)},
+		{Field: checks.PressureFieldFullAvg60, Label: watchReadingLabelFullAvg60, Value: watchPercent(s.Full.Avg60)},
+		{Field: checks.PressureFieldFullAvg300, Label: watchReadingLabelFullAvg300, Value: watchPercent(s.Full.Avg300)},
 	}
 	summary := fmt.Sprintf("pressure %s some %.2f/%.2f/%.2f full %.2f/%.2f/%.2f",
 		resource, s.Some.Avg10, s.Some.Avg60, s.Some.Avg300, s.Full.Avg10, s.Full.Avg60, s.Full.Avg300)
@@ -1994,13 +2006,13 @@ func (b *WebBackend) conntrackWatchView() (*web.WatchMeter, []web.WatchReading, 
 	}
 	summary := fmt.Sprintf("conntrack %d entries", s.Count)
 	if s.Max > 0 {
-		usedPct := float64(s.Count) / float64(s.Max) * 100
+		usedPct := float64(s.Count) / float64(s.Max) * percentScale
 		summary = fmt.Sprintf("conntrack %d/%d entries (%.1f%%)", s.Count, s.Max, usedPct)
 	}
 	if meter := countMeter(checks.CheckTypeConntrack, s.Count, s.Max); meter != nil {
 		return meter, nil, summary
 	}
-	return nil, []web.WatchReading{{Field: checks.DataKeyCount, Label: "Count", Value: fmt.Sprintf("%d entries", s.Count)}}, summary
+	return nil, []web.WatchReading{{Field: checks.DataKeyCount, Label: watchReadingLabelCount, Value: fmt.Sprintf("%d entries", s.Count)}}, summary
 }
 
 func (b *WebBackend) entropyWatchView() (*web.WatchMeter, []web.WatchReading, string) {
@@ -2014,7 +2026,7 @@ func (b *WebBackend) entropyWatchView() (*web.WatchMeter, []web.WatchReading, st
 		return nil, watchErrorReadings(msg), "entropy: " + msg
 	}
 	return nil,
-		[]web.WatchReading{{Field: checks.DataKeyAvail, Label: "Available", Value: fmt.Sprintf("%d bits", avail)}},
+		[]web.WatchReading{{Field: checks.DataKeyAvail, Label: watchReadingLabelAvailable, Value: watchReadingUintMetricValue(avail, watchReadingUnitBits)}},
 		fmt.Sprintf("%d available bits", avail)
 }
 
@@ -2029,16 +2041,16 @@ func (b *WebBackend) zombieWatchView() (*web.WatchMeter, []web.WatchReading, str
 		return nil, watchErrorReadings(msg), "zombies: " + msg
 	}
 	return nil,
-		[]web.WatchReading{{Field: checks.DataKeyCount, Label: "Zombies", Value: fmt.Sprintf("%d", count)}},
+		[]web.WatchReading{{Field: checks.DataKeyCount, Label: watchReadingLabelZombies, Value: fmt.Sprintf("%d", count)}},
 		fmt.Sprintf("%d zombie processes", count)
 }
 
 func watchErrorReadings(message string) []web.WatchReading {
-	return []web.WatchReading{{Field: watchReadingFieldSample, Label: "Sample", Error: message}}
+	return []web.WatchReading{{Field: watchReadingFieldSample, Label: watchReadingLabelSample, Error: message}}
 }
 
 func watchPercent(value float64) string {
-	return fmt.Sprintf("%.2f%%", value)
+	return watchReadingMetricValue(value, 2, metrics.MetricUnitPercent)
 }
 
 func watchMetricEnabled(metrics map[string]any, metric string) bool {
@@ -2091,7 +2103,7 @@ func processPIDList(samples []ProcInfo) string {
 	if extra := len(samples) - processPIDListLimit; extra > 0 {
 		parts = append(parts, fmt.Sprintf("+%d more", extra))
 	}
-	return strings.Join(parts, ", ")
+	return strings.Join(parts, displayListSeparator)
 }
 
 func autofsMountpoints(mounts []checks.Mount) []string {
@@ -2165,7 +2177,7 @@ func watchMeter(checkType string, system metrics.Snapshot) *web.WatchMeter {
 			UsedBytes:  used,
 			FreeBytes:  free,
 		}
-	case "load":
+	case checks.CheckTypeLoad:
 		r, ok := system[metrics.MetricLoad1]
 		if !ok || !r.HasAbsolute {
 			return nil
@@ -2173,9 +2185,9 @@ func watchMeter(checkType string, system metrics.Snapshot) *web.WatchMeter {
 		ncpu := runtime.NumCPU()
 		pct := 0.0
 		if ncpu > 0 {
-			pct = r.Absolute / float64(ncpu) * 100
+			pct = r.Absolute / float64(ncpu) * percentScale
 		}
-		return &web.WatchMeter{Kind: "load", UsedPct: pct, Load: r.Absolute, NumCPU: ncpu}
+		return &web.WatchMeter{Kind: checks.CheckTypeLoad, UsedPct: pct, Load: r.Absolute, NumCPU: ncpu}
 	}
 	return nil
 }
@@ -2189,7 +2201,7 @@ func countMeter(kind string, count, limit uint64) *web.WatchMeter {
 	}
 	return &web.WatchMeter{
 		Kind:    kind,
-		UsedPct: float64(count) / float64(limit) * 100,
+		UsedPct: float64(count) / float64(limit) * percentScale,
 		Count:   count,
 		Max:     limit,
 	}
@@ -2700,7 +2712,7 @@ func hostMetric(name string, r metrics.Reading) web.HostMetric {
 		if r.HasAbsolute {
 			if ncpu := runtime.NumCPU(); ncpu > 0 {
 				m.Total = float64(ncpu)
-				m.Percent = r.Absolute / float64(ncpu) * 100
+				m.Percent = r.Absolute / float64(ncpu) * percentScale
 			}
 		}
 	}
@@ -2730,7 +2742,7 @@ func (b *WebBackend) Locks(_ context.Context) []web.Lock {
 // TTL/staleness rules make them inactive.
 func (b *WebBackend) ReleaseLock(_ context.Context, service, name string) web.ActionResult {
 	if _, ok := b.entries[service]; !ok {
-		msg := "unknown service " + service
+		msg := unknownServiceMessage + service
 		b.emitLockReleaseEvent(service, name, eventKindError, eventStatusFailed, msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
@@ -2766,7 +2778,7 @@ func (b *WebBackend) emitLockReleaseEvent(service, name, kind, status, message s
 	}
 	rule := name
 	if rule == "" {
-		rule = "default"
+		rule = lockReleaseDefaultRule
 	}
 	b.emit(Event{
 		Service: service,
@@ -3175,11 +3187,11 @@ func lockOwnerStatus(lk locks.Lock) string {
 	}
 	switch lk.State {
 	case locks.StateActive:
-		return "live"
+		return lockOwnerStatusLive
 	case locks.StateStale:
-		return "stale"
+		return string(locks.StateStale)
 	case locks.StateExpired:
-		return "expired"
+		return string(locks.StateExpired)
 	default:
 		return string(lk.State)
 	}
@@ -3409,7 +3421,7 @@ func (b *WebBackend) lastServiceEvent(name string) *web.Event {
 func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.OperateOpts) web.ActionResult {
 	e := b.entries[name]
 	if e == nil {
-		msg := "unknown service " + name
+		msg := unknownServiceMessage + name
 		if b.emit != nil {
 			b.emit(Event{Service: name, Kind: eventKindError, Action: action, Message: msg})
 		}
@@ -3498,7 +3510,7 @@ func (b *WebBackend) manualActionActiveAfterStart(ctx context.Context, name, act
 func (b *WebBackend) operationResult(ctx context.Context, name, action string) operation.Result {
 	e := b.entries[name]
 	if e == nil {
-		return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: "unknown service " + name}
+		return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: unknownServiceMessage + name}
 	}
 	if e.disabled {
 		return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: "service " + name + " is disabled in configuration"}
@@ -3630,12 +3642,12 @@ func (b *WebBackend) SetMonitored(_ context.Context, name string, monitored bool
 		action = eventActionUnmonitor
 	}
 	if _, ok := b.entries[name]; !ok {
-		msg := fmt.Sprintf("unknown service %q", name)
+		msg := fmt.Sprintf(unknownServiceMessageFmt, name)
 		b.emitMonitorEvent(name, action, eventKindError, "", msg)
 		return fmt.Errorf("%s", msg)
 	}
 	if b.store == nil {
-		msg := "monitoring state is unavailable"
+		msg := eventMessageMonitoringStateUnavailable
 		b.emitMonitorEvent(name, action, eventKindError, "", msg)
 		return fmt.Errorf("%s", msg)
 	}
@@ -3651,16 +3663,16 @@ func (b *WebBackend) SetMonitored(_ context.Context, name string, monitored bool
 		return fmt.Errorf("%s", msg)
 	}
 	if found && priorActive == monitored {
-		msg := "already monitored"
+		msg := eventMessageAlreadyMonitored
 		if !monitored {
-			msg = "already paused"
+			msg = eventMessageAlreadyPaused
 		}
 		b.emitMonitorEvent(name, action, eventKindSuppressed, "", msg)
 		return nil
 	}
-	msg := "monitoring resumed"
+	msg := eventMessageMonitoringResumed
 	if !monitored {
-		msg = "monitoring paused"
+		msg = eventMessageMonitoringPaused
 	}
 	b.emitMonitorEvent(name, action, eventKindAction, eventStatusOK, msg)
 	return nil
@@ -3678,7 +3690,7 @@ func (b *WebBackend) SetWatchMonitored(_ context.Context, name string, monitored
 		return fmt.Errorf("%s", msg)
 	}
 	if b.store == nil {
-		msg := "monitoring state is unavailable"
+		msg := eventMessageMonitoringStateUnavailable
 		b.emitWatchMonitorEvent(name, action, eventKindError, "", msg)
 		return fmt.Errorf("%s", msg)
 	}
@@ -3695,16 +3707,16 @@ func (b *WebBackend) SetWatchMonitored(_ context.Context, name string, monitored
 		return fmt.Errorf("%s", msg)
 	}
 	if found && priorActive == monitored {
-		msg := "already monitored"
+		msg := eventMessageAlreadyMonitored
 		if !monitored {
-			msg = "already paused"
+			msg = eventMessageAlreadyPaused
 		}
 		b.emitWatchMonitorEvent(name, action, eventKindSuppressed, "", msg)
 		return nil
 	}
-	msg := "monitoring resumed"
+	msg := eventMessageMonitoringResumed
 	if !monitored {
-		msg = "monitoring paused"
+		msg = eventMessageMonitoringPaused
 	}
 	b.emitWatchMonitorEvent(name, action, eventKindAction, eventStatusOK, msg)
 	return nil

@@ -16,6 +16,11 @@ import (
 	"sermo/internal/volume"
 )
 
+const (
+	watchDryRunMessageNoActions = "dry-run: no configured watch actions"
+	watchDryRunMessagePrefix    = "dry-run: would run "
+)
+
 // VolumeExpander grows the filesystem backing a path. Satisfied by
 // volume.Expander; injected so a watch's expand action can be tested without
 // touching real LVM.
@@ -264,9 +269,9 @@ func watchDryRunMessage(hook HookSpec, notifiers []notify.Notifier, expand *Expa
 		actions = append(actions, rules.RuleFieldNotify)
 	}
 	if len(actions) == 0 {
-		return "dry-run: no configured watch actions"
+		return watchDryRunMessageNoActions
 	}
-	return "dry-run: would run " + strings.Join(actions, ", ")
+	return watchDryRunMessagePrefix + strings.Join(actions, displayListSeparator)
 }
 
 func (w *Watch) dryRunMessage() string {

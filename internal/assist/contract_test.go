@@ -6,7 +6,12 @@ import (
 
 	"github.com/goccy/go-yaml"
 
+	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/notify"
+	"sermo/internal/rules"
+	"sermo/internal/servicemgr"
 )
 
 // The wizard's generated watches must always pass config validation — this is
@@ -14,24 +19,24 @@ import (
 // Every builder/threshold form the wizard can emit is exercised here.
 func TestGeneratedWatchesPassConfigValidation(t *testing.T) {
 	volPct := buildVolWatch(Volume{Mountpoint: "/data"}, volSettings{
-		Monitoring: Monitoring{Monitor: "previous", Interval: "1m"},
-		metric:     "free_pct", op: "<", value: "10%",
-		forCycles: 3, notifiers: []string{"ops"},
-		dryRun: true, expand: true, expandBy: "5G", cooldown: "30m",
+		Monitoring: Monitoring{Monitor: config.MonitorPrevious, Interval: "1m"},
+		metric:     checks.LevelFieldFreePct, op: cfgval.CompareOpLess, value: "10%",
+		forCycles: volumeDefaultForCycles, notifiers: []string{"ops"},
+		dryRun: true, expand: true, expandBy: volumeDefaultExpandBy, cooldown: volumeDefaultExpandCooldown,
 	})
 	volBytes := buildVolWatch(Volume{Mountpoint: "/srv"}, volSettings{
-		Monitoring: Monitoring{Monitor: "disabled"},
-		metric:     "used_bytes", op: ">=", value: "100G",
-		notifiers: []string{"none"}, // monitor-only watch must also validate
+		Monitoring: Monitoring{Monitor: config.MonitorDisabled},
+		metric:     checks.LevelFieldUsedBytes, op: cfgval.CompareOpGreaterEqual, value: volumeDefaultUsedSize,
+		notifiers: []string{config.NotifyNone}, // monitor-only watch must also validate
 	})
 	netAll := buildNetWatch(Iface{Name: "eth0"}, netSettings{
-		Monitoring: Monitoring{Monitor: "enabled", Interval: "15s"},
-		metrics:    []string{"state", "errors", "speed", "address"},
-		errorsAt:   100, stateDown: true,
+		Monitoring: Monitoring{Monitor: config.MonitorEnabled, Interval: "15s"},
+		metrics:    []string{checks.NetMetricState, checks.NetMetricErrors, checks.NetMetricSpeed, checks.NetMetricAddress},
+		errorsAt:   netDefaultErrorDelta, stateDown: true,
 		notifiers: []string{"ops"},
 	})
 	uplink := buildUplinkWatches("ppp0", uplinkSettings{
-		probeHost: "1.1.1.1", probeName: "example.com", forCycles: 3,
+		probeHost: uplinkDefaultProbeHost, probeName: uplinkDefaultProbeName, forCycles: uplinkDefaultForCycles,
 		notifiers: []string{"ops"},
 	})
 
@@ -39,9 +44,9 @@ func TestGeneratedWatchesPassConfigValidation(t *testing.T) {
 	// read back by the loader — the validator sees parsed-YAML shapes, not the
 	// builder's Go values.
 	generated := map[string]any{
-		"data":     volPct,
-		"srv":      volBytes,
-		"net-eth0": netAll,
+		"data":                  volPct,
+		"srv":                   volBytes,
+		netWatchPrefix + "eth0": netAll,
 	}
 	for name, entry := range uplink {
 		generated[name] = entry
@@ -58,11 +63,11 @@ func TestGeneratedWatchesPassConfigValidation(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{
 		Raw: map[string]any{
 			"notifiers": map[string]any{
-				"ops": map[string]any{"type": "slack", "webhook": "https://hooks.slack.com/services/T0/B0/X"},
+				"ops": map[string]any{notify.KeyType: notify.TypeSlack, notify.KeyWebhook: "https://hooks.slack.com/services/T0/B0/X"},
 			},
-			"watches": watches,
+			config.SectionWatches: watches,
 		},
-		Defaults: map[string]any{"policy": map[string]any{"cooldown": "5m"}},
+		Defaults: map[string]any{rules.SectionPolicy: map[string]any{rules.PolicyKeyCooldown: "5m"}},
 	}}
 	for _, issue := range config.Validate(cfg) {
 		if strings.Contains(issue.Msg, "watches.") {
@@ -75,28 +80,31 @@ func TestGeneratedGenericServicePassesConfigValidation(t *testing.T) {
 	cfg := &config.Config{
 		Global: config.Global{
 			Raw:      map[string]any{},
-			Defaults: map[string]any{"policy": map[string]any{"cooldown": "5m"}},
+			Defaults: map[string]any{rules.SectionPolicy: map[string]any{rules.PolicyKeyCooldown: "5m"}},
 		},
 		Services: map[string]*config.Document{
 			"customd": {
 				Kind: "service",
 				Name: "customd",
 				Body: map[string]any{
-					"enabled": true,
-					"service": "customd",
-					"watches": map[string]any{
-						"service": map[string]any{"check": map[string]any{"type": "service", "expect": "active"}},
+					config.EntryKeyEnabled:   true,
+					config.ServiceKeyService: "customd",
+					config.SectionWatches: map[string]any{
+						serviceStatusWatchName: map[string]any{config.WatchKeyCheck: map[string]any{
+							checks.CheckKeyType:   checks.CheckTypeService,
+							checks.CheckKeyExpect: string(servicemgr.StatusActive),
+						}},
 						serviceConfigWatchName: map[string]any{
-							"interval": serviceConfigWatchInterval,
-							"check": map[string]any{
-								"type":      "config",
-								"path":      []any{"/etc/customd.conf"},
-								"on_change": true,
+							config.EntryKeyInterval: serviceConfigWatchInterval,
+							config.WatchKeyCheck: map[string]any{
+								checks.CheckKeyType:     checks.CheckTypeConfig,
+								checks.CheckKeyPath:     []any{"/etc/customd.conf"},
+								checks.CheckKeyOnChange: true,
 							},
 						},
 					},
-					"pidfile": "/run/customd.pid",
-					"dry_run": true,
+					config.ServiceKeyPidfile: "/run/customd.pid",
+					config.EntryKeyDryRun:    true,
 				},
 			},
 		},
@@ -113,7 +121,7 @@ func TestGeneratedControlledServicesPassConfigValidation(t *testing.T) {
 	cfg := &config.Config{
 		Global: config.Global{
 			Raw:      map[string]any{},
-			Defaults: map[string]any{"policy": map[string]any{"cooldown": "5m"}},
+			Defaults: map[string]any{rules.SectionPolicy: map[string]any{rules.PolicyKeyCooldown: "5m"}},
 		},
 		Services: map[string]*config.Document{
 			"docker-web": {
@@ -150,11 +158,11 @@ func TestGeneratedMountsPassConfigValidation(t *testing.T) {
 	cfg := &config.Config{
 		Global: config.Global{
 			Raw: map[string]any{
-				"watches": map[string]any{
+				config.SectionWatches: map[string]any{
 					"mount-mnt-backup": body,
 				},
 			},
-			Defaults: map[string]any{"policy": map[string]any{"cooldown": "5m"}},
+			Defaults: map[string]any{rules.SectionPolicy: map[string]any{rules.PolicyKeyCooldown: "5m"}},
 		},
 	}
 	for _, issue := range config.Validate(cfg) {

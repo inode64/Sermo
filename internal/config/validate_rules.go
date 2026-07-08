@@ -86,11 +86,6 @@ func validateWindowLength(prefix string, m map[string]any, add addFunc) (cycles 
 	return cycles, hasCycles
 }
 
-const (
-	serviceStateSummary = "active, inactive, paused, failed, unknown"
-	processStateSummary = "running, zombie, absent"
-)
-
 var serviceStates = set(
 	string(servicemgr.StatusActive),
 	string(servicemgr.StatusInactive),
@@ -167,7 +162,7 @@ func validateRuleWindow(tree map[string]any, add addFunc) {
 			}
 		}
 	default:
-		add("rule_window.mode %q is not one of consecutive, within", mode)
+		add("rule_window.mode %q is not one of %s", mode, rules.WindowModeSummary)
 	}
 }
 
@@ -183,7 +178,7 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 		path := rules.SectionRules + "." + name
 		entry, ok := ruleMap[name].(map[string]any)
 		if !ok {
-			add("%s must be a mapping", path)
+			add(validationMappingFormat, path)
 			continue
 		}
 
@@ -195,7 +190,7 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 		switch rtype {
 		case string(rules.RuleRemediation), string(rules.RuleGuard), string(rules.RuleAlert):
 		default:
-			add("%s type %q is not one of remediation, guard, alert", path, rtype)
+			add("%s type %q is not one of %s", path, rtype, rules.RuleTypeSummary)
 		}
 
 		ifNode, hasIf := entry[rules.RuleFieldIf].(map[string]any)
@@ -210,13 +205,13 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 		isGuard := rtype == string(rules.RuleGuard)
 		blocks, blocksErr := cfgval.StrictStringList(entry[rules.RuleFieldBlocks])
 		if _, present := entry[rules.RuleFieldBlocks]; present && blocksErr != nil {
-			add("%s.blocks must be a string or list of strings", path)
+			add(validationStringListFormat, path+"."+rules.RuleFieldBlocks)
 		}
 		hasBlock := false
 		for _, act := range actions {
 			if act.typ != "" {
 				if _, ok := validActions[act.typ]; !ok {
-					add("%s then.action %q is not one of restart, start, stop, reload, resume, alert, block", path, act.typ)
+					add("%s then.action %q is not one of %s", path, act.typ, rules.RuleActionSummary)
 				}
 			}
 			if act.typ == string(rules.ActionBlock) {
@@ -324,9 +319,9 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 	case rules.ConditionFailed, rules.ConditionActive:
 		validateProbe(node[key], path+"."+key, checkNames, systemMetricChecks, allowSystemMetric, add)
 	case rules.ConditionService:
-		validateState(node[rules.ConditionService], rules.FieldState, serviceStates, serviceStateSummary, path+".service", add)
+		validateState(node[rules.ConditionService], rules.FieldState, serviceStates, servicemgr.StatusSummary, path+".service", add)
 	case rules.ConditionProcess:
-		validateState(node[rules.ConditionProcess], rules.FieldState, processStates, processStateSummary, path+".process", add)
+		validateState(node[rules.ConditionProcess], rules.FieldState, processStates, process.StateSummary, path+".process", add)
 	case rules.ConditionFile:
 		m, ok := node[rules.ConditionFile].(map[string]any)
 		if !ok || cfgval.String(m[rules.FieldPath]) == "" {
@@ -337,7 +332,7 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 			// string "false") would silently act as true.
 			if v, present := m[rules.FieldExists]; present {
 				if _, isBool := v.(bool); !isBool {
-					add("%s.file.exists must be a boolean", path)
+					add(validationBooleanFormat, path+"."+rules.ConditionFile+"."+rules.FieldExists)
 				}
 			}
 		}
@@ -365,7 +360,7 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 func validateChanged(v any, path string, appVersionChecks map[string]struct{}, add addFunc) {
 	m, ok := v.(map[string]any)
 	if !ok {
-		add("%s must be a mapping", path)
+		add(validationMappingFormat, path)
 		return
 	}
 	filePath := cfgval.String(m[rules.FieldPath])
@@ -381,7 +376,7 @@ func validateChanged(v any, path string, appVersionChecks map[string]struct{}, a
 	}
 	if level := cfgval.String(m[rules.FieldLevel]); level != "" {
 		if _, ok := checks.VersionLevel(level); !ok {
-			add("%s.level %q is not one of major, minor, patch", path, level)
+			add("%s.level %q is not one of %s", path, level, checks.VersionLevelSummary)
 		}
 	}
 	if _, ok := appVersionChecks[app]; !ok {
@@ -392,7 +387,7 @@ func validateChanged(v any, path string, appVersionChecks map[string]struct{}, a
 func treeAppVersionChecks(checkNames map[string]struct{}) map[string]struct{} {
 	out := map[string]struct{}{}
 	for name := range checkNames {
-		app, ok := strings.CutSuffix(name, "-version")
+		app, ok := strings.CutSuffix(name, ServiceMonitorVersionCheckSuffix)
 		if ok && app != "" {
 			out[app] = struct{}{}
 		}
@@ -403,7 +398,7 @@ func treeAppVersionChecks(checkNames map[string]struct{}) map[string]struct{} {
 func validateProbe(v any, path string, checkNames, systemMetricChecks map[string]struct{}, allowSystemMetric bool, add addFunc) {
 	m, ok := v.(map[string]any)
 	if !ok {
-		add("%s must be a mapping", path)
+		add(validationMappingFormat, path)
 		return
 	}
 	if ref := cfgval.String(m[rules.FieldCheck]); ref != "" {
@@ -439,7 +434,7 @@ func validateProbe(v any, path string, checkNames, systemMetricChecks map[string
 func validateState(v any, field string, valid map[string]struct{}, list, path string, add addFunc) {
 	m, ok := v.(map[string]any)
 	if !ok {
-		add("%s must be a mapping", path)
+		add(validationMappingFormat, path)
 		return
 	}
 	st := cfgval.String(m[field])

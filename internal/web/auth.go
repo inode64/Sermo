@@ -36,6 +36,18 @@ const (
 	roleGuest = "guest"
 )
 
+const (
+	whoamiFieldAuth   = "auth"
+	whoamiFieldCanAct = "can_act"
+	whoamiFieldRole   = "role"
+)
+
+const (
+	authMessageMissingCSRFHeader = "missing " + headerSermoCSRF + " header (CSRF protection)"
+	authMessageReadOnly          = "read-only access"
+	authMessageRequired          = "authentication required"
+)
+
 // role resolves a request to roleAdmin, roleGuest, or "" (unauthenticated).
 func (a Auth) role(r *http.Request) string {
 	if !a.Enabled() {
@@ -89,8 +101,8 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 		// CSRF: state-changing requests must carry the custom header (set by the
 		// dashboard's fetch). Checked before auth so a forged cross-site request is
 		// rejected even when the browser would attach cached credentials.
-		if !isReadMethod(r.Method) && r.Header.Get(csrfHeader) == "" {
-			writeJSON(w, http.StatusForbidden, ActionResult{OK: false, Message: "missing " + csrfHeader + " header (CSRF protection)"})
+		if !isReadMethod(r.Method) && r.Header.Get(headerSermoCSRF) == "" {
+			writeJSON(w, http.StatusForbidden, ActionResult{OK: false, Message: authMessageMissingCSRFHeader})
 			return
 		}
 		if role == "" {
@@ -98,7 +110,7 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 			return
 		}
 		if !isReadMethod(r.Method) && role != roleAdmin {
-			writeJSON(w, http.StatusForbidden, ActionResult{OK: false, Message: "read-only access"})
+			writeJSON(w, http.StatusForbidden, ActionResult{OK: false, Message: authMessageReadOnly})
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), roleCtxKey{}, role)))
@@ -107,7 +119,7 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 
 func (s *Server) challenge(w http.ResponseWriter) {
 	w.Header().Set(headerWWWAuthenticate, authBasicRealmSermo)
-	writeJSON(w, http.StatusUnauthorized, ActionResult{OK: false, Message: "authentication required"})
+	writeJSON(w, http.StatusUnauthorized, ActionResult{OK: false, Message: authMessageRequired})
 }
 
 func (s *Server) handleWhoami(w http.ResponseWriter, r *http.Request) {
@@ -116,9 +128,9 @@ func (s *Server) handleWhoami(w http.ResponseWriter, r *http.Request) {
 		role = roleAdmin
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"role":    role,
-		"can_act": role == roleAdmin,
-		"auth":    s.Auth.Enabled(),
+		whoamiFieldRole:   role,
+		whoamiFieldCanAct: role == roleAdmin,
+		whoamiFieldAuth:   s.Auth.Enabled(),
 	})
 }
 

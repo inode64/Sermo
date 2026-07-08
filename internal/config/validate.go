@@ -21,10 +21,31 @@ type Issue struct {
 var validBackends = map[string]struct{}{"": {}, backendAuto: {}, backendSystemd: {}, backendOpenRC: {}}
 
 const (
+	backendSummary        = backendAuto + ", " + backendSystemd + ", " + backendOpenRC
+	initBackendSummary    = backendSystemd + ", " + backendOpenRC
+	userLookupModeSummary = process.UserLookupAuto + ", " +
+		process.UserLookupNative + ", " +
+		process.UserLookupGetent + ", " +
+		process.UserLookupNumeric
+	mountUmountKeySummary = StopPolicyKeyTermTimeout + ", " +
+		StopPolicyKeyKillTimeout + ", " +
+		MountKeyAllowSIGKILL + ", " +
+		MountKeyAllowLazy
+
 	securityKeyAllowSIGKILLByDefault         = "allow_sigkill_by_default"
 	securityKeyBlockRestartOnActiveLock      = "block_restart_on_active_lock"
 	securityKeyRequireKillSelector           = "require_kill_selector"
 	securityKeyRequirePreflightBeforeRestart = "require_preflight_before_restart"
+
+	validationAnalyzeMappingFormat   = "%s.analyze must be a mapping"
+	validationBooleanFormat          = "%s must be a boolean"
+	validationBooleanLiteralFormat   = "%s must be true or false"
+	validationMappingFormat          = "%s must be a mapping"
+	validationNonEmptyPathListFormat = "%s must be a non-empty path string or list"
+	validationPathListFormat         = "%s must be a path string or list of path strings"
+	validationPidfilesMappingMsg     = "pidfiles must be a mapping of process role to path string or candidate list"
+	validationStringListFormat       = "%s must be a string or list of strings"
+	validationTCPPortRangeFormat     = "%s must be an integer in %s"
 )
 
 // rejectedSecurityToggles are keys under `security:` that try to disable hard
@@ -76,7 +97,7 @@ func validateGlobal(cfg *Config) []Issue {
 
 	if engine, ok := raw[SectionEngine].(map[string]any); ok {
 		if backend := cfgval.String(engine[EngineKeyBackend]); !isValidBackend(backend) {
-			add("engine.backend %q is not one of auto, systemd, openrc", backend)
+			add("engine.backend %q is not one of %s", backend, backendSummary)
 		}
 		for _, field := range []string{keyInterval, EngineKeyDefaultTimeout, EngineKeyOperationTimeout} {
 			if v, present := engine[field]; present && !isPositiveDuration(cfgval.String(v)) {
@@ -87,7 +108,7 @@ func validateGlobal(cfg *Config) []Issue {
 			add("engine.startup_delay %q must be a valid non-negative duration (0 disables the wait)", cfgval.String(v))
 		}
 		if mode := cfgval.String(engine[EngineKeyUserLookup]); !process.ValidUserLookupMode(mode) {
-			add("engine.user_lookup %q is not one of auto, native, getent, numeric", mode)
+			add("engine.user_lookup %q is not one of %s", mode, userLookupModeSummary)
 		}
 		if v, present := engine[EngineKeyUserLookupTimeout]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("engine.user_lookup_timeout %q must be a valid positive duration", cfgval.String(v))
@@ -191,7 +212,7 @@ func validateGlobal(cfg *Config) []Issue {
 	validateDefaultsVariables(cfg.Global.Defaults, add)
 	if v, present := cfg.Global.Defaults[keyDryRun]; present {
 		if _, ok := v.(bool); !ok {
-			add("defaults.dry_run must be a boolean")
+			add(validationBooleanFormat, sectionDefaults+"."+keyDryRun)
 		}
 	}
 	// Nested-${} in a custom variable value, and any undefined ${var} used in a
@@ -276,10 +297,10 @@ func validateDocuments(cfg *Config) []Issue {
 		switch doc.Kind {
 		case kindApp, kindLibrary, kindPatterns, kindService:
 		case "":
-			issues = append(issues, Issue{Scope: scope, Msg: "document has no kind (expected app, lib, patterns or service)"})
+			issues = append(issues, Issue{Scope: scope, Msg: "document has no kind (expected " + kindSummary + ")"})
 			continue
 		default:
-			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected app, lib, patterns or service)", doc.Kind)})
+			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected %s)", doc.Kind, kindSummary)})
 			continue
 		}
 		if doc.Name == "" {
@@ -376,7 +397,7 @@ func validateVersionMatch(doc *Document, scope string) []Issue {
 	if _, warn := checks.ParseVersionMatcher(raw); warn != "" {
 		issues = append(issues, Issue{Scope: scope, Msg: "version_match " + warn})
 	}
-	if doc.Kind == kindApp && checks.ReservedCommandEntry(doc.Body, "version") == nil {
+	if doc.Kind == kindApp && checks.ReservedCommandEntry(doc.Body, ServiceMonitorKeyVersion) == nil {
 		issues = append(issues, Issue{Scope: scope, Msg: "version_match requires a version command"})
 	}
 	return issues
@@ -501,7 +522,7 @@ func validateVersionsFromBranch(path string, raw any, add addFunc) {
 	case string, []any:
 		validateVersionsFromValue(path, raw, add)
 	default:
-		add("%s must be a path string or list of path strings", path)
+		add(validationPathListFormat, path)
 	}
 }
 
@@ -516,7 +537,7 @@ func validateVersionsCurrentFromValue(path string, raw any, add addFunc) {
 			validateVersionsCurrentFromValue(fmt.Sprintf("%s[%d]", path, i), item, add)
 		}
 	default:
-		add("%s must be a path string or list of path strings", path)
+		add(validationPathListFormat, path)
 	}
 }
 
@@ -528,7 +549,7 @@ func validateAppLinks(cfg *Config, doc *Document, scope string) []Issue {
 	}
 	names, err := cfgval.StrictStringList(raw)
 	if err != nil {
-		return append(issues, Issue{Scope: scope, Msg: "apps must be a string or list of strings"})
+		return append(issues, Issue{Scope: scope, Msg: fmt.Sprintf(validationStringListFormat, keyApps)})
 	}
 	for _, name := range names {
 		if name == "" || strings.Contains(name, "${") {
@@ -554,7 +575,7 @@ func validateBinaryVariables(doc *Document, scope string) []Issue {
 		}
 		candidates, err := cfgval.StrictStringList(raw)
 		if err != nil || len(candidates) == 0 {
-			issues = append(issues, Issue{Scope: scope, Msg: "variables.binary must be a non-empty path string or list"})
+			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf(validationNonEmptyPathListFormat, sectionVariables+"."+VariableKeyBinary)})
 			return issues
 		}
 		for _, path := range candidates {
@@ -617,7 +638,7 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 	}
 	if v, present := mount[MountKeyRefcount]; present {
 		if _, ok := v.(bool); !ok {
-			add("mount.refcount must be true or false")
+			add(validationBooleanLiteralFormat, "mount."+MountKeyRefcount)
 		}
 	}
 
@@ -630,7 +651,7 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 		allowedUmount := set(StopPolicyKeyTermTimeout, StopPolicyKeyKillTimeout, MountKeyAllowSIGKILL, MountKeyAllowLazy)
 		for _, key := range slices.Sorted(maps.Keys(umount)) {
 			if _, ok := allowedUmount[key]; !ok {
-				add("mount.umount key %q is not one of term_timeout, kill_timeout, allow_sigkill, allow_lazy", key)
+				add("mount.umount key %q is not one of %s", key, mountUmountKeySummary)
 			}
 		}
 		for _, field := range []string{StopPolicyKeyTermTimeout, StopPolicyKeyKillTimeout} {
@@ -642,7 +663,7 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 			if v, present := umount[field]; present {
 				b, ok := v.(bool)
 				if !ok {
-					add("mount.umount.%s must be true or false", field)
+					add(validationBooleanLiteralFormat, "mount.umount."+field)
 				}
 				if field == MountKeyAllowSIGKILL && ok && b {
 					allowSIGKILL = true
@@ -702,7 +723,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	}
 	if v, present := tree[keyDryRun]; present {
 		if _, ok := v.(bool); !ok {
-			add("dry_run must be a boolean")
+			add(validationBooleanFormat, keyDryRun)
 		}
 	}
 	if _, present := tree[keyUnsupportedRemediation]; present {

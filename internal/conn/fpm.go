@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"strconv"
 	"strings"
 )
@@ -35,7 +36,7 @@ const (
 	fpmCGIHeaderSeparatorLF   = "\n\n"
 	fpmGatewayInterfaceCGI11  = "CGI/1.1"
 	fpmQuerySeparator         = "?"
-	fpmRequestMethodGET       = "GET"
+	fpmRequestMethodGET       = http.MethodGet
 	fpmServerProtocolHTTP11   = "HTTP/1.1"
 	fpmServerSoftware         = "sermo"
 )

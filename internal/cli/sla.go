@@ -13,6 +13,8 @@ import (
 // defaultSLASeriesWindow is the series lookback used when --since is omitted.
 const defaultSLASeriesWindow = 24 * time.Hour
 
+const cliTextNotAvailable = "n/a"
+
 // runSLA reports per-service availability over rolling windows (hour..year),
 // computed from the per-cycle samples the daemon records. `sla` reports every
 // configured service; `sla SERVICE` reports a single one. A window with no
@@ -39,7 +41,7 @@ func (a App) runSLA(opts options) int {
 	if s := opts.service(); s != "" {
 		canonical, ok := cfg.CanonicalServiceName(s)
 		if !ok {
-			return a.fail(opts, fmt.Sprintf("unknown service %q", s))
+			return a.fail(opts, fmt.Sprintf(cliUnknownServiceFormat, s))
 		}
 		services = []string{canonical}
 	} else {
@@ -79,7 +81,7 @@ func (a App) runSLASeries(opts options, cfg *config.Config) int {
 	}
 	canonical, ok := cfg.CanonicalServiceName(service)
 	if !ok {
-		return a.fail(opts, fmt.Sprintf("unknown service %q", service))
+		return a.fail(opts, fmt.Sprintf(cliUnknownServiceFormat, service))
 	}
 	service = canonical
 
@@ -159,7 +161,7 @@ func (a App) writeSLATable(reports []serviceSLA) {
 func formatSLA(v state.SLAValue) string {
 	ratio, ok := v.Ratio()
 	if !ok {
-		return "n/a"
+		return cliTextNotAvailable
 	}
 	return fmt.Sprintf("%.2f%%", ratio*100)
 }
@@ -171,7 +173,7 @@ func (a App) writeSLASeriesTable(service string, points []state.SLAPoint) {
 	}
 	fmt.Fprintln(a.Stdout, "TIME\tUP\tTOTAL\tSLA")
 	for _, p := range points {
-		sla := "n/a"
+		sla := cliTextNotAvailable
 		if ratio, ok := slaPointRatio(p); ok {
 			sla = fmt.Sprintf("%.2f%%", ratio*100)
 		}

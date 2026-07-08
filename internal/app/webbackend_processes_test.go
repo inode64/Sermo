@@ -57,7 +57,7 @@ func TestWebBackendDetailProcessesRealPidfile(t *testing.T) {
 	}
 	cfg := writeWebProcessConfig(t, pidfile)
 
-	wb, warnings := NewWebBackend(cfg, Deps{Backend: "systemd", Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{}})
+	wb, warnings := NewWebBackend(cfg, Deps{Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{}})
 	if len(warnings) > 0 {
 		t.Fatalf("NewWebBackend warnings: %v", warnings)
 	}
@@ -88,7 +88,7 @@ func TestWebBackendDetailProcessesRealPidfile(t *testing.T) {
 
 func TestWebBackendDetailProcessesNone(t *testing.T) {
 	cfg := writeWebProcessConfig(t, "/nonexistent/pidfile.pid")
-	wb, _ := NewWebBackend(cfg, Deps{Backend: "systemd", Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{}})
+	wb, _ := NewWebBackend(cfg, Deps{Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{}})
 
 	detail, ok := wb.Detail(context.Background(), "mysql-main")
 	if !ok {

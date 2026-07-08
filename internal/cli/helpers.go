@@ -12,7 +12,7 @@ import (
 func (a App) canonicalService(opts options, cfg *config.Config, name string) (string, int) {
 	canonical, ok := cfg.CanonicalServiceName(name)
 	if !ok {
-		return "", a.fail(opts, fmt.Sprintf("unknown service %q", name))
+		return "", a.fail(opts, fmt.Sprintf(cliUnknownServiceFormat, name))
 	}
 	return canonical, exitSuccess
 }

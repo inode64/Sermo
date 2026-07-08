@@ -7,6 +7,8 @@ import "strings"
 const (
 	outputLineBreak          = '\n'
 	outputLineSeparator      = "\n"
+	streamLabelStdout        = "stdout"
+	streamLabelStderr        = "stderr"
 	streamLabelSeparator     = ":\n"
 	truncatedOutputPrefix    = "… (truncated)\n"
 	truncatedFirstLineOffset = 1
@@ -45,8 +47,8 @@ func Bounded(stdout, stderr string) string {
 		label string
 		text  string
 	}{
-		{label: "stdout", text: stdout},
-		{label: "stderr", text: stderr},
+		{label: streamLabelStdout, text: stdout},
+		{label: streamLabelStderr, text: stderr},
 	} {
 		if section := streamSection(stream.label, stream.text); section != "" {
 			parts = append(parts, section)

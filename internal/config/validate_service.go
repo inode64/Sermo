@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"maps"
 	"path/filepath"
 	"regexp"
@@ -14,6 +15,23 @@ import (
 	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/virt"
+)
+
+const (
+	controlTypeSummary      = virt.ControlType + ", " + dockerctl.ControlType
+	dockerControlKeySummary = dockerctl.ControlKeyType + ", " +
+		dockerctl.ControlKeySocket + ", " +
+		dockerctl.ControlKeyHost + ", " +
+		dockerctl.ControlKeyPort + ", " +
+		dockerctl.ControlKeyTLS + ", " +
+		dockerctl.ControlKeyContainer
+	libvirtControlKeySummary = virt.ControlKeyType + ", " +
+		virt.ControlKeyURI + ", " +
+		virt.ControlKeyDomain + ", " +
+		virt.ControlKeyUUID + ", " +
+		virt.ControlKeySocket + ", " +
+		virt.ControlKeyHost + ", " +
+		virt.ControlKeyPort
 )
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
@@ -30,7 +48,7 @@ var validProcessSelectorKeys = set(
 func validateMonitorMode(path string, mode any, add addFunc) {
 	s, isStr := mode.(string)
 	if _, ok := validMonitorModes[s]; !isStr || !ok {
-		add("%s %q is not one of enabled, disabled, previous", path, cfgval.String(mode))
+		add("%s %q is not one of %s", path, cfgval.String(mode), MonitorModeSummary)
 	}
 }
 
@@ -62,7 +80,7 @@ func validateServiceMonitors(tree map[string]any, notifiers map[string]struct{},
 			if key != ServiceMonitorKeyVersion {
 				add("%s.on_change.level is only supported for the version monitor", key)
 			} else if _, ok := checks.VersionLevel(cfgval.String(lv)); !ok {
-				add("version.on_change.level %q is not one of major, minor, patch", cfgval.String(lv))
+				add("version.on_change.level %q is not one of %s", cfgval.String(lv), checks.VersionLevelSummary)
 			}
 		}
 	}
@@ -94,7 +112,7 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 	for _, b := range []string{keyPidfileAbsent, keyCleanAfterStop} {
 		if v, present := sp[b]; present {
 			if _, ok := v.(bool); !ok {
-				add("stop_policy.%s must be true or false", b)
+				add(validationBooleanLiteralFormat, "stop_policy."+b)
 			}
 		}
 	}
@@ -136,7 +154,7 @@ func validateCleanOnStop(raw any, add addFunc) {
 				var ok bool
 				recursive, ok = rawRecursive.(bool)
 				if !ok {
-					add("stop_policy.clean_on_stop[%d].recursive must be a boolean", i)
+					add(validationBooleanFormat, fmt.Sprintf("stop_policy.clean_on_stop[%d].recursive", i))
 				}
 			}
 		default:
@@ -183,7 +201,7 @@ func validateProcesses(tree map[string]any, add addFunc) {
 		path := "processes." + name
 		entry, ok := processes[name].(map[string]any)
 		if !ok {
-			add("%s must be a mapping", path)
+			add(validationMappingFormat, path)
 			continue
 		}
 		for _, key := range slices.Sorted(maps.Keys(entry)) {
@@ -213,7 +231,7 @@ func validatePidfiles(tree map[string]any, add addFunc) {
 	}
 	pidfiles, ok := raw.(map[string]any)
 	if !ok {
-		add("pidfiles must be a mapping of process role to path string or candidate list")
+		add(validationPidfilesMappingMsg)
 		return
 	}
 	processes, _ := tree[sectionProcesses].(map[string]any)
@@ -224,7 +242,7 @@ func validatePidfiles(tree map[string]any, add addFunc) {
 		}
 		paths := cfgval.StringList(pidfiles[role])
 		if len(paths) == 0 {
-			add("pidfiles.%s must be a non-empty path string or list", role)
+			add(validationNonEmptyPathListFormat, "pidfiles."+role)
 			continue
 		}
 		for _, path := range paths {
@@ -299,13 +317,13 @@ func validateControl(tree map[string]any, add addFunc) {
 	typ := cfgval.String(control[keyType])
 	switch typ {
 	case virt.ControlType:
-		validateControlKeys(control, set(virt.ControlKeyType, virt.ControlKeyURI, virt.ControlKeyDomain, virt.ControlKeyUUID, virt.ControlKeySocket, virt.ControlKeyHost, virt.ControlKeyPort), "type, uri, domain, uuid, socket, host, port", add)
+		validateControlKeys(control, set(virt.ControlKeyType, virt.ControlKeyURI, virt.ControlKeyDomain, virt.ControlKeyUUID, virt.ControlKeySocket, virt.ControlKeyHost, virt.ControlKeyPort), libvirtControlKeySummary, add)
 		validateLibvirtControl(control, add)
 	case dockerctl.ControlType:
-		validateControlKeys(control, set(dockerctl.ControlKeyType, dockerctl.ControlKeySocket, dockerctl.ControlKeyHost, dockerctl.ControlKeyPort, dockerctl.ControlKeyTLS, dockerctl.ControlKeyContainer), "type, socket, host, port, tls, container", add)
+		validateControlKeys(control, set(dockerctl.ControlKeyType, dockerctl.ControlKeySocket, dockerctl.ControlKeyHost, dockerctl.ControlKeyPort, dockerctl.ControlKeyTLS, dockerctl.ControlKeyContainer), dockerControlKeySummary, add)
 		validateDockerControl(control, add)
 	default:
-		add("control.type %q is not one of libvirt, docker", typ)
+		add("control.type %q is not one of %s", typ, controlTypeSummary)
 	}
 }
 
@@ -342,7 +360,7 @@ func validateLibvirtControl(control map[string]any, add addFunc) {
 	if _, present := control[virt.ControlKeyPort]; present {
 		port, ok := cfgval.Int(control[virt.ControlKeyPort])
 		if !ok || !virt.ValidHostPort(host, port) {
-			add("control.port must be an integer in %s", cfgval.TCPPortRange())
+			add(validationTCPPortRangeFormat, "control."+virt.ControlKeyPort, cfgval.TCPPortRange())
 		}
 	}
 }
@@ -364,11 +382,11 @@ func validateDockerControl(control map[string]any, add addFunc) {
 	if _, present := control[dockerctl.ControlKeyPort]; present {
 		port, ok := cfgval.Int(control[dockerctl.ControlKeyPort])
 		if !ok || !validTCPPort(port) {
-			add("control.port must be an integer in %s", cfgval.TCPPortRange())
+			add(validationTCPPortRangeFormat, "control."+dockerctl.ControlKeyPort, cfgval.TCPPortRange())
 		}
 	}
 	if !dockerctl.ValidTLSValue(control[dockerctl.ControlKeyTLS]) {
-		add("control.tls %q is not one of true, false, required, skip-verify", cfgval.String(control[dockerctl.ControlKeyTLS]))
+		add("control.tls %q is not one of %s", cfgval.String(control[dockerctl.ControlKeyTLS]), dockerctl.TLSValueSummary)
 	}
 }
 
@@ -390,7 +408,7 @@ func validateReload(tree map[string]any, backend string, add addFunc) {
 		return
 	}
 	if when := cfgval.AsString(r[ReloadKeyWhen]); when != "" && when != ReloadWhenAuto && when != ReloadWhenAlways {
-		add("reload.when %q must be \"auto\" or \"always\"", when)
+		add("reload.when %q must be %s", when, ReloadWhenSummary)
 	}
 	sig := cfgval.AsString(r[ReloadKeySignal])
 	_, hasCmd := r[ReloadKeyCommand]
@@ -502,7 +520,7 @@ func validateServiceField(tree map[string]any, add addFunc) {
 					add("service.%s must be a non-empty list", k)
 				}
 			default:
-				add("service key %q is not one of systemd, openrc", k)
+				add("service key %q is not one of %s", k, initBackendSummary)
 			}
 		}
 	default:
@@ -527,7 +545,7 @@ func validateAlsoService(tree map[string]any, add addFunc) {
 	svc, _ := tree[ServiceKeyService].(map[string]any)
 	for _, k := range slices.Sorted(maps.Keys(m)) {
 		if k != backendSystemd && k != backendOpenRC {
-			add("also_service key %q is not one of systemd, openrc", k)
+			add("also_service key %q is not one of %s", k, initBackendSummary)
 			continue
 		}
 		units := cfgval.StringList(m[k])
@@ -556,7 +574,7 @@ func validateAlsoService(tree map[string]any, add addFunc) {
 func validateCascade(name string, tree map[string]any, services map[string]struct{}, add addFunc) {
 	targets, err := cfgval.StrictStringList(tree[ServiceKeyAlsoApply])
 	if _, present := tree[ServiceKeyAlsoApply]; present && err != nil {
-		add("also_apply must be a string or list of strings")
+		add(validationStringListFormat, ServiceKeyAlsoApply)
 		return
 	}
 	for _, target := range targets {

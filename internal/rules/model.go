@@ -22,6 +22,8 @@ const (
 	RuleRemediation RuleType = "remediation"
 	RuleGuard       RuleType = "guard"
 	RuleAlert       RuleType = "alert"
+	// RuleTypeSummary is the user-facing list of rule types.
+	RuleTypeSummary = string(RuleRemediation) + ", " + string(RuleGuard) + ", " + string(RuleAlert)
 )
 
 const (
@@ -41,6 +43,14 @@ const (
 	ActionResume  ActionType = "resume"
 	ActionAlert   ActionType = "alert"
 	ActionBlock   ActionType = "block"
+	// RuleActionSummary is the user-facing list of rule action types.
+	RuleActionSummary = string(ActionRestart) + ", " +
+		string(ActionStart) + ", " +
+		string(ActionStop) + ", " +
+		string(ActionReload) + ", " +
+		string(ActionResume) + ", " +
+		string(ActionAlert) + ", " +
+		string(ActionBlock)
 )
 
 // Action is one resolved entry from a rule's then block.

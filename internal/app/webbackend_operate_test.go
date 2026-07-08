@@ -8,6 +8,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/locks"
 	"sermo/internal/operation"
+	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 	"sermo/internal/web"
@@ -34,7 +35,7 @@ func TestWebBackendOperateEmitsEvent(t *testing.T) {
 	engine := operation.New(operation.Config{
 		Service: "web",
 		Unit:    "nginx",
-		Backend: "systemd",
+		Backend: string(servicemgr.BackendSystemd),
 		Tree:    map[string]any{"policy": map[string]any{"cooldown": "5m"}},
 		Manager: fakeManager{},
 		Locker:  &locker,
@@ -55,19 +56,19 @@ func TestWebBackendOperateEmitsEvent(t *testing.T) {
 		emit: func(e Event) { events = append(events, e) },
 	}
 
-	res := b.Operate(context.Background(), "web", "start", web.OperateOpts{})
+	res := b.Operate(context.Background(), "web", string(rules.ActionStart), web.OperateOpts{})
 	if !res.OK {
 		t.Fatalf("operate: %+v", res)
 	}
 	if len(events) != 1 {
 		t.Fatalf("want one action event, got %+v", events)
 	}
-	if events[0].Kind != "action" || events[0].Action != "start" || events[0].Service != "web" {
+	if events[0].Kind != eventKindAction || events[0].Action != string(rules.ActionStart) || events[0].Service != "web" {
 		t.Fatalf("event = %+v", events[0])
 	}
 
-	b.Operate(context.Background(), "missing", "stop", web.OperateOpts{})
-	if len(events) != 2 || events[1].Kind != "error" {
+	b.Operate(context.Background(), "missing", string(rules.ActionStop), web.OperateOpts{})
+	if len(events) != 2 || events[1].Kind != eventKindError {
 		t.Fatalf("unknown service should emit error: %+v", events[1:])
 	}
 }
@@ -83,7 +84,7 @@ func TestWebBackendOperateStopStartSyncsMonitoring(t *testing.T) {
 	engine := operation.New(operation.Config{
 		Service: "web",
 		Unit:    "nginx",
-		Backend: "systemd",
+		Backend: string(servicemgr.BackendSystemd),
 		Tree:    map[string]any{"policy": map[string]any{"cooldown": "5m"}},
 		Manager: fakeManager{},
 		Locker:  &locker,
@@ -115,11 +116,11 @@ func TestWebBackendOperateStopStartSyncsMonitoring(t *testing.T) {
 	if _, found, _ := store.OperationSettling("web"); found {
 		t.Fatal("stop should clear operation settling after pausing monitoring")
 	}
-	if len(events) != 1 || events[0].Action != "unmonitor" || events[0].Message != "monitoring paused after manual stop" {
+	if len(events) != 1 || events[0].Action != eventActionUnmonitor || events[0].Message != eventMessageMonitoringPausedAfterManualStop {
 		t.Fatalf("stop events = %+v", events)
 	}
 
-	res = b.Operate(context.Background(), "web", "start", web.OperateOpts{})
+	res = b.Operate(context.Background(), "web", string(rules.ActionStart), web.OperateOpts{})
 	if !res.OK {
 		t.Fatalf("start: %+v", res)
 	}
@@ -130,10 +131,10 @@ func TestWebBackendOperateStopStartSyncsMonitoring(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("start should leave post-operation settling: found=%v err=%v", found, err)
 	}
-	if rec.Action != "start" || rec.Phase != state.OperationSettlingSettling || rec.Source != state.SourceWeb {
+	if rec.Action != string(rules.ActionStart) || rec.Phase != state.OperationSettlingSettling || rec.Source != state.SourceWeb {
 		t.Fatalf("start settling = %+v", rec)
 	}
-	if len(events) != 2 || events[1].Action != "monitor" || events[1].Message != "monitoring resumed after manual start" {
+	if len(events) != 2 || events[1].Action != eventActionMonitor || events[1].Message != eventMessageMonitoringResumedAfterManualStart {
 		t.Fatalf("start events = %+v", events)
 	}
 }

@@ -2,6 +2,7 @@ package config
 
 import (
 	"sermo/internal/checks"
+	"sermo/internal/metrics"
 	"sermo/internal/rules"
 )
 
@@ -38,3 +39,16 @@ const (
 
 // WatchExpandKeyBy configures the amount for a storage watch's then.expand action.
 const WatchExpandKeyBy = "by"
+
+// FileWatchConditionSummary is the user-facing list of file-watch conditions.
+const FileWatchConditionSummary = checks.CheckKeySize + ", " +
+	checks.CheckKeyPermissions + ", " +
+	checks.CheckKeyOwner + ", " +
+	checks.CheckKeyExistence
+
+// ProcessWatchConditionSummary is the user-facing list of process-watch conditions.
+const ProcessWatchConditionSummary = checks.CheckKeyFor + ", " +
+	metrics.MetricCPU + ", " +
+	metrics.MetricMemory + ", " +
+	metrics.MetricIO + ", " +
+	checks.CheckKeyGone

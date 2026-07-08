@@ -15,6 +15,8 @@ const (
 	// exported so config validation checks the same set the check accepts.
 	FamilyIPv4 = "ipv4"
 	FamilyIPv6 = "ipv6"
+	// RouteFamilySummary is the user-facing list of route family selectors.
+	RouteFamilySummary = FamilyIPv4 + " or " + FamilyIPv6
 )
 
 // DefaultRoute is one up default-route entry: the egress interface and the
@@ -67,7 +69,7 @@ func (c routeCheck) Run(_ context.Context) Result {
 		msg = "no " + c.family + " default route"
 	}
 	res := c.result(ok, msg, start)
-	res.Data = map[string]any{DataKeyFamily: c.family, DataKeyRoutes: len(routes), fieldValue: len(matched)}
+	res.Data = map[string]any{DataKeyFamily: c.family, DataKeyRoutes: len(routes), DataKeyValue: len(matched)}
 	if ok {
 		res.Data[DataKeyInterface] = matched[0].Iface
 		if matched[0].Gateway != "" {

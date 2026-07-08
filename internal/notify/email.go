@@ -24,9 +24,15 @@ const dialTimeout = 15 * time.Second
 
 const minSMTPTimeout = time.Nanosecond
 
+// Email DSN constants are the supported SMTP URL schemes and their URL prefixes.
 const (
-	schemeSMTP       = "smtp"
-	schemeSMTPS      = "smtps"
+	EmailDSNSchemeSMTP  = "smtp"
+	EmailDSNSchemeSMTPS = "smtps"
+	EmailDSNPrefixSMTP  = EmailDSNSchemeSMTP + "://"
+	EmailDSNPrefixSMTPS = EmailDSNSchemeSMTPS + "://"
+)
+
+const (
 	smtpDefaultPort  = "587"
 	smtpsDefaultPort = "465"
 )
@@ -100,12 +106,12 @@ func parseEmailDSN(s string) (emailDSN, error) {
 	}
 	var d emailDSN
 	switch u.Scheme {
-	case schemeSMTP:
+	case EmailDSNSchemeSMTP:
 		d.implicitTLS = false
-	case schemeSMTPS:
+	case EmailDSNSchemeSMTPS:
 		d.implicitTLS = true
 	default:
-		return emailDSN{}, fmt.Errorf("dsn scheme %q must be %s or %s", u.Scheme, schemeSMTP, schemeSMTPS)
+		return emailDSN{}, fmt.Errorf("dsn scheme %q must be %s or %s", u.Scheme, EmailDSNSchemeSMTP, EmailDSNSchemeSMTPS)
 	}
 	d.host = u.Hostname()
 	if d.host == "" {

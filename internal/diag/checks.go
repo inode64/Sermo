@@ -13,8 +13,11 @@ import (
 )
 
 const (
-	diagProcPressureRoot = "/proc/pressure"
-	diagSysBlockRoot     = "/sys/class/block"
+	diagProcPressureRoot        = "/proc/pressure"
+	diagSysBlockRoot            = "/sys/class/block"
+	diagScopeServiceCheckFormat = "service %s check %s"
+	diagScopeWatchPrefix        = "watch "
+	diagMessagePathMissing      = "path %q does not exist"
 )
 
 // diagService diagnoses one service's per-check intervals and referenced paths.
@@ -40,7 +43,7 @@ func diagService(b *builder, cfg *config.Config, name string, global time.Durati
 		if !ok {
 			continue
 		}
-		scope := fmt.Sprintf("service %s check %s", name, cn)
+		scope := fmt.Sprintf(diagScopeServiceCheckFormat, name, cn)
 		if d := cfgval.Duration(entry[config.EntryKeyInterval]); d > 0 {
 			checkAlignment(b, scope, d, resolution)
 		}
@@ -63,7 +66,7 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 		if config.MonitorMode(entry) == config.MonitorDisabled {
 			continue
 		}
-		scope := "watch " + name
+		scope := diagScopeWatchPrefix + name
 		if d := cfgval.Duration(entry[config.EntryKeyInterval]); d > 0 {
 			checkAlignment(b, scope, d, global)
 		}
@@ -76,7 +79,7 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 			warnMissingInterface(b, scope, check, host)
 		case checks.CheckTypeFile:
 			if p := cfgval.AsString(check[checks.CheckKeyPath]); p != "" && !host.PathExists(p) {
-				b.add(LevelWarning, scope, "path %q does not exist", p)
+				b.add(LevelWarning, scope, diagMessagePathMissing, p)
 			}
 		default:
 			// Every single-shot check type shares the same resource probes as a
@@ -127,7 +130,7 @@ func diagStorageResources(b *builder, scope string, fields map[string]any, host 
 		return
 	}
 	if !host.PathExists(p) {
-		b.add(LevelWarning, scope, "path %q does not exist", p)
+		b.add(LevelWarning, scope, diagMessagePathMissing, p)
 		return
 	}
 	if hasMountCondition(fields) && !host.IsMountPoint(p) {

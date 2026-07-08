@@ -32,7 +32,7 @@ func TestLoadedRemediationStateSuppressesAfterRestart(t *testing.T) {
 	if len(h.ops) != 0 {
 		t.Fatalf("persisted cooldown must suppress after restart, ops=%v", h.ops)
 	}
-	if e, ok := h.eventOf("suppressed"); !ok || e.Message != "cooldown" {
+	if e, ok := h.eventOf(eventKindSuppressed); !ok || e.Message != "cooldown" {
 		t.Fatalf("expected cooldown suppression from persisted state, events=%+v", h.events)
 	}
 }

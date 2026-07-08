@@ -260,7 +260,7 @@ func TestWebBackendLocksContext(t *testing.T) {
 			t.Fatalf("active lock timing fields missing: %+v", lk)
 		}
 	}
-	if byName["backup"].state != "active" || byName["backup"].owner != "live" || byName["backup"].releaseable || !slices.Equal(byName["backup"].blocks, serviceOperationActionList()) {
+	if byName["backup"].state != "active" || byName["backup"].owner != lockOwnerStatusLive || byName["backup"].releaseable || !slices.Equal(byName["backup"].blocks, serviceOperationActionList()) {
 		t.Fatalf("backup context = %+v", byName["backup"])
 	}
 	if byName["old"].state != "expired" || !byName["old"].releaseable || len(byName["old"].blocks) != 0 {
@@ -362,7 +362,7 @@ func TestWebBackendReleaseLockOnlyInactive(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(locksDir, "mysql\\old.lock")); !os.IsNotExist(err) {
 		t.Fatalf("expired lock should be removed: %v", err)
 	}
-	if len(events) != 2 || events[0].Kind != "suppressed" || events[1].Kind != "action" {
+	if len(events) != 2 || events[0].Kind != eventKindSuppressed || events[1].Kind != eventKindAction {
 		t.Fatalf("events = %+v", events)
 	}
 }

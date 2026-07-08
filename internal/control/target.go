@@ -12,7 +12,10 @@ import (
 	"sermo/internal/virt"
 )
 
-const controlKeyType = "type"
+const (
+	controlKeyType     = config.EntryKeyType
+	controlTypeSummary = virt.ControlType + ", " + dockerctl.ControlType
+)
 
 // Target is the manager/unit pair the operation path should use for a service.
 type Target struct {
@@ -67,7 +70,7 @@ func resolveControlledTarget(typ string, tree map[string]any) (Target, error) {
 			BackendPIDs: manager.BackendPIDs(),
 		}, nil
 	default:
-		return Target{}, fmt.Errorf("control.type %q is not one of libvirt, docker", typ)
+		return Target{}, fmt.Errorf("control.type %q is not one of %s", typ, controlTypeSummary)
 	}
 }
 

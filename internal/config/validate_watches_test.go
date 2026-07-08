@@ -1018,7 +1018,7 @@ func TestValidateSwapWatchErrors(t *testing.T) {
 		"watches.no-metrics.metrics is required and must be non-empty for a swap check",
 		"watches.empty-usage.metrics.usage requires at least one of used_pct/free_pct/free_bytes",
 		"watches.bad-io.metrics.io.delta has an invalid op",
-		"watches.bad-metric.metrics.bogus is not a supported swap metric (usage, io)",
+		"watches.bad-metric.metrics.bogus is not a supported swap metric (usage or io)",
 	}
 	for _, w := range want {
 		if !hasIssue(issues, w) {

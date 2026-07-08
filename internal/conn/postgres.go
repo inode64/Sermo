@@ -83,7 +83,7 @@ func buildPGDSN(cfg Config) string {
 		port = defaultPortPostgres
 	}
 	u := url.URL{
-		Scheme: "postgres",
+		Scheme: ProtocolNamePostgres,
 		User:   url.UserPassword(cfg.User, cfg.Password),
 		Host:   net.JoinHostPort(host, strconv.Itoa(port)),
 		Path:   "/" + cfg.Database,

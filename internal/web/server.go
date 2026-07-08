@@ -37,14 +37,44 @@ import (
 var assets embed.FS
 
 const (
-	headerContentType     = "Content-Type"
-	headerWWWAuthenticate = "WWW-Authenticate"
-	authBasicRealmSermo   = `Basic realm="Sermo"`
-	contentTypeHTMLUTF8   = "text/html; charset=utf-8"
-	contentTypeJSON       = "application/json"
-	contentTypeTextUTF8   = "text/plain; charset=utf-8"
-	cspNonceBytes         = 16
-	cspFallbackNonceBase  = 36
+	headerCacheControl          = "Cache-Control"
+	headerContentSecurityPolicy = "Content-Security-Policy"
+	headerContentType           = "Content-Type"
+	headerReferrerPolicy        = "Referrer-Policy"
+	headerSermoCSRF             = "X-Sermo-CSRF"
+	headerWWWAuthenticate       = "WWW-Authenticate"
+	headerXContentTypeOptions   = "X-Content-Type-Options"
+	headerXFrameOptions         = "X-Frame-Options"
+	authBasicRealmSermo         = `Basic realm="Sermo"`
+	contentTypeHTMLUTF8         = "text/html; charset=utf-8"
+	contentTypeJSON             = "application/json"
+	contentTypeTextUTF8         = "text/plain; charset=utf-8"
+	headerValueDeny             = "DENY"
+	headerValueNoCache          = "no-cache"
+	headerValueNoReferrer       = "no-referrer"
+	headerValueNoSniff          = "nosniff"
+	cspNonceBytes               = 16
+	cspFallbackNonceBase        = 36
+	assetIndexHTML              = "index.html"
+	templateNoncePlaceholder    = "{{CSP_NONCE}}"
+	templateVersionPlaceholder  = "{{VERSION}}"
+)
+
+const (
+	cspSeparator                   = "; "
+	cspSourceSelf                  = "'self'"
+	cspSourceNone                  = "'none'"
+	cspSourceUnsafeInline          = "'unsafe-inline'"
+	cspSourceData                  = "data:"
+	cspNonceSourceSuffix           = "'"
+	cspDirectiveDefaultSrc         = "default-src " + cspSourceSelf
+	cspDirectiveScriptSrcPrefix    = "script-src " + cspSourceSelf + " 'nonce-"
+	cspDirectiveScriptUnsafeInline = "script-src " + cspSourceSelf + " " + cspSourceUnsafeInline
+	cspDirectiveStyleSrc           = "style-src " + cspSourceSelf + " " + cspSourceUnsafeInline
+	cspDirectiveImgSrc             = "img-src " + cspSourceSelf + " " + cspSourceData
+	cspDirectiveBaseURI            = "base-uri " + cspSourceNone
+	cspDirectiveFormAction         = "form-action " + cspSourceSelf
+	cspDirectiveFrameAncestors     = "frame-ancestors " + cspSourceNone
 )
 
 const (
@@ -52,20 +82,33 @@ const (
 	routePathLivez  = "/livez"
 	routePathReadyz = "/readyz"
 	routePathLogin  = "/login"
-	apiPathPrefix   = "/" + apiSegmentRoot + "/"
+	routePathAPI    = "/" + apiSegmentRoot
+	apiPathPrefix   = routePathAPI + "/"
 )
 
 // API path segment names used by routing and access-log classification.
 const (
-	apiSegmentRoot     = "api"
-	apiSegmentServices = "services"
-	apiSegmentWatches  = "watches"
-	apiSegmentMounts   = "mounts"
-	apiSegmentLocks    = "locks"
-	apiSegmentEvents   = "events"
-	apiSegmentState    = "state"
-	apiSegmentPanic    = "panic"
-	apiSegmentReload   = "reload"
+	apiSegmentRoot         = "api"
+	apiSegmentActivity     = "activity"
+	apiSegmentApplications = "applications"
+	apiSegmentDaemon       = "daemon"
+	apiSegmentEvents       = "events"
+	apiSegmentHost         = "host"
+	apiSegmentLocks        = "locks"
+	apiSegmentMetrics      = "metrics"
+	apiSegmentMonitoring   = "monitoring"
+	apiSegmentMounts       = "mounts"
+	apiSegmentNotifiers    = "notifiers"
+	apiSegmentOps          = "ops"
+	apiSegmentPanic        = "panic"
+	apiSegmentPreflight    = "preflight"
+	apiSegmentReload       = "reload"
+	apiSegmentRuntime      = "runtime"
+	apiSegmentServices     = "services"
+	apiSegmentSLA          = "sla"
+	apiSegmentState        = "state"
+	apiSegmentWatches      = "watches"
+	apiSegmentWhoami       = "whoami"
 )
 
 // HTTP action names accepted by the dashboard API.
@@ -83,6 +126,8 @@ const (
 	apiActionRelease   = "release"
 	apiActionClear     = "clear"
 	apiActionCompact   = "compact"
+	apiActionBlockers  = "blockers"
+	apiActionAlert     = "alert"
 
 	queryBoolOne  = "1"
 	queryBoolTrue = "true"
@@ -91,38 +136,15 @@ const (
 )
 
 const (
-	routeIndex             = "GET " + routePathRoot
-	routeLivez             = "GET " + routePathLivez
-	routeReadyz            = "GET " + routePathReadyz
-	routeAPIWhoami         = "GET /api/whoami"
-	routeAPIServices       = "GET /api/services"
-	routeAPIWatches        = "GET /api/watches"
-	routeAPIWatchAction    = "POST /api/watches/{name}/{action}"
-	routeAPINotifiers      = "GET /api/notifiers"
-	routeAPIApplications   = "GET /api/applications"
-	routeAPIMounts         = "GET /api/mounts"
-	routeAPIMountAction    = "POST /api/mounts/{name}/{action}"
-	routeAPIDaemon         = "GET /api/daemon"
-	routeAPIDaemonMetrics  = "GET /api/daemon/metrics"
-	routeAPIHost           = "GET /api/host"
-	routeAPILocks          = "GET /api/locks"
-	routeAPILockRelease    = "POST /api/locks/{service}/release"
-	routeAPIActivity       = "GET /api/activity"
-	routeAPIMonitoring     = "GET /api/monitoring"
-	routeAPIDetail         = "GET /api/services/{name}"
-	routeAPISeries         = "GET /api/services/{name}/sla"
-	routeAPIMetrics        = "GET /api/services/{name}/metrics"
-	routeAPIServiceRuntime = "GET /api/services/{name}/runtime"
-	routeAPIServiceEvents  = "GET /api/services/{name}/events"
-	routeAPIAppEvents      = "GET /api/applications/{name}/events"
-	routeAPIEvents         = "GET /api/events"
-	routeAPIEventsClear    = "POST /api/events/clear"
-	routeAPIStateCompact   = "POST /api/state/compact"
-	routeAPIPanic          = "POST /api/panic/{action}"
-	routeAPIOps            = "GET /api/ops"
-	routeAPIPreflight      = "POST /api/services/{name}/preflight"
-	routeAPIAction         = "POST /api/services/{name}/{action}"
-	routeAPIReload         = "POST /api/reload"
+	apiErrorCheckQueryRequired       = "check query parameter is required"
+	apiErrorPanicAction              = "panic action must be on or off"
+	apiErrorReloadUnavailable        = "reload is not available for this daemon"
+	apiErrorUnknownActionPrefix      = "unknown action "
+	apiErrorUnknownApplication       = "unknown application"
+	apiErrorUnknownMountActionPrefix = "unknown mount action "
+	apiErrorUnknownService           = "unknown service"
+	apiErrorUnknownServiceOrCheck    = "unknown service or check"
+	apiMessageReloadRequested        = "reload requested"
 )
 
 // API route variables and query parameter names.
@@ -142,6 +164,68 @@ const (
 	apiQueryStatus     = "status"
 	apiQueryVerbose    = "verbose"
 	apiQueryWatch      = "watch"
+)
+
+const (
+	routeMethodGet  = http.MethodGet + " "
+	routeMethodPost = http.MethodPost + " "
+	routeVarAction  = "{" + apiParamAction + "}"
+	routeVarName    = "{" + apiParamName + "}"
+	routeVarService = "{" + apiParamService + "}"
+)
+
+const (
+	apiPathActivity     = apiPathPrefix + apiSegmentActivity
+	apiPathApplications = apiPathPrefix + apiSegmentApplications
+	apiPathDaemon       = apiPathPrefix + apiSegmentDaemon
+	apiPathEvents       = apiPathPrefix + apiSegmentEvents
+	apiPathHost         = apiPathPrefix + apiSegmentHost
+	apiPathLocks        = apiPathPrefix + apiSegmentLocks
+	apiPathMonitoring   = apiPathPrefix + apiSegmentMonitoring
+	apiPathMounts       = apiPathPrefix + apiSegmentMounts
+	apiPathNotifiers    = apiPathPrefix + apiSegmentNotifiers
+	apiPathOps          = apiPathPrefix + apiSegmentOps
+	apiPathPanic        = apiPathPrefix + apiSegmentPanic
+	apiPathReload       = apiPathPrefix + apiSegmentReload
+	apiPathServices     = apiPathPrefix + apiSegmentServices
+	apiPathState        = apiPathPrefix + apiSegmentState
+	apiPathWatches      = apiPathPrefix + apiSegmentWatches
+	apiPathWhoami       = apiPathPrefix + apiSegmentWhoami
+)
+
+const (
+	routeIndex             = routeMethodGet + routePathRoot
+	routeLivez             = routeMethodGet + routePathLivez
+	routeReadyz            = routeMethodGet + routePathReadyz
+	routeAPIWhoami         = routeMethodGet + apiPathWhoami
+	routeAPIServices       = routeMethodGet + apiPathServices
+	routeAPIWatches        = routeMethodGet + apiPathWatches
+	routeAPIWatchAction    = routeMethodPost + apiPathWatches + "/" + routeVarName + "/" + routeVarAction
+	routeAPINotifiers      = routeMethodGet + apiPathNotifiers
+	routeAPIApplications   = routeMethodGet + apiPathApplications
+	routeAPIMounts         = routeMethodGet + apiPathMounts
+	routeAPIMountAction    = routeMethodPost + apiPathMounts + "/" + routeVarName + "/" + routeVarAction
+	routeAPIDaemon         = routeMethodGet + apiPathDaemon
+	routeAPIDaemonMetrics  = routeMethodGet + apiPathDaemon + "/" + apiSegmentMetrics
+	routeAPIHost           = routeMethodGet + apiPathHost
+	routeAPILocks          = routeMethodGet + apiPathLocks
+	routeAPILockRelease    = routeMethodPost + apiPathLocks + "/" + routeVarService + "/" + apiActionRelease
+	routeAPIActivity       = routeMethodGet + apiPathActivity
+	routeAPIMonitoring     = routeMethodGet + apiPathMonitoring
+	routeAPIDetail         = routeMethodGet + apiPathServices + "/" + routeVarName
+	routeAPISeries         = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentSLA
+	routeAPIMetrics        = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentMetrics
+	routeAPIServiceRuntime = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentRuntime
+	routeAPIServiceEvents  = routeMethodGet + apiPathServices + "/" + routeVarName + "/" + apiSegmentEvents
+	routeAPIAppEvents      = routeMethodGet + apiPathApplications + "/" + routeVarName + "/" + apiSegmentEvents
+	routeAPIEvents         = routeMethodGet + apiPathEvents
+	routeAPIEventsClear    = routeMethodPost + apiPathEvents + "/" + apiActionClear
+	routeAPIStateCompact   = routeMethodPost + apiPathState + "/" + apiActionCompact
+	routeAPIPanic          = routeMethodPost + apiPathPanic + "/" + routeVarAction
+	routeAPIOps            = routeMethodGet + apiPathOps
+	routeAPIPreflight      = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + apiSegmentPreflight
+	routeAPIAction         = routeMethodPost + apiPathServices + "/" + routeVarName + "/" + routeVarAction
+	routeAPIReload         = routeMethodPost + apiPathReload
 )
 
 // Ad-hoc JSON keys used by small HTTP responses without a dedicated struct.
@@ -780,9 +864,16 @@ type Event struct {
 }
 
 const (
+	eventKindAction         = "action"
+	eventKindAlert          = "alert"
 	eventKindError          = "error"
+	eventKindHook           = "hook"
+	eventKindHookFailed     = "hook-failed"
 	eventKindFailedFragment = "failed"
+	eventKindRecovery       = "recovery"
+	eventStatusOK           = apiStatusOK
 	eventStatusError        = "error"
+	eventStatusFailed       = "failed"
 )
 
 // maxSeriesWindow bounds the history a single request may ask for (the retention).
@@ -988,15 +1079,24 @@ func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		nonce := cspNonce()
 		h := w.Header()
-		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("X-Frame-Options", "DENY")
-		h.Set("Referrer-Policy", "no-referrer")
-		h.Set("Content-Security-Policy",
-			"default-src 'self'; script-src 'self' 'nonce-"+nonce+"'; "+
-				"style-src 'self' 'unsafe-inline'; img-src 'self' data:; "+
-				"base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+		h.Set(headerXContentTypeOptions, headerValueNoSniff)
+		h.Set(headerXFrameOptions, headerValueDeny)
+		h.Set(headerReferrerPolicy, headerValueNoReferrer)
+		h.Set(headerContentSecurityPolicy, contentSecurityPolicy(nonce))
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), cspNonceCtxKey{}, nonce)))
 	})
+}
+
+func contentSecurityPolicy(nonce string) string {
+	return strings.Join([]string{
+		cspDirectiveDefaultSrc,
+		cspDirectiveScriptSrcPrefix + nonce + cspNonceSourceSuffix,
+		cspDirectiveStyleSrc,
+		cspDirectiveImgSrc,
+		cspDirectiveBaseURI,
+		cspDirectiveFormAction,
+		cspDirectiveFrameAncestors,
+	}, cspSeparator)
 }
 
 func cspNonce() string {
@@ -1107,12 +1207,6 @@ func isErrorEvent(e Event) bool {
 	}
 }
 
-// csrfHeader must be present on every state-changing request. A cross-site HTML
-// form cannot set a custom header, and a cross-site fetch that tries to would
-// trigger a CORS preflight we never answer — so requiring it blocks CSRF against
-// the (root-privileged) action endpoints, in both authenticated and open modes.
-const csrfHeader = "X-Sermo-CSRF"
-
 // serverWriteTimeout returns the HTTP write deadline for action handlers that may
 // block until a safe operation finishes.
 func serverWriteTimeout(maxOp time.Duration) time.Duration {
@@ -1165,20 +1259,20 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	page, err := assets.ReadFile("index.html")
+	page, err := assets.ReadFile(assetIndexHTML)
 	if err != nil {
 		http.Error(w, "dashboard unavailable", http.StatusInternalServerError)
 		return
 	}
-	html := strings.ReplaceAll(string(page), "{{CSP_NONCE}}", cspNonceFrom(r.Context()))
-	page = []byte(strings.ReplaceAll(html, "{{VERSION}}", htmlpkg.EscapeString(buildinfo.Short())))
+	html := strings.ReplaceAll(string(page), templateNoncePlaceholder, cspNonceFrom(r.Context()))
+	page = []byte(strings.ReplaceAll(html, templateVersionPlaceholder, htmlpkg.EscapeString(buildinfo.Short())))
 	w.Header().Set(headerContentType, contentTypeHTMLUTF8)
 	// The dashboard markup/JS is embedded in the binary and changes across
 	// versions (new sections like host watches are added over time). Without a
 	// cache directive a browser may keep serving a stale copy after an upgrade,
 	// so newly added sections never appear even though the API returns their
 	// data. no-cache forces a revalidation on every load.
-	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set(headerCacheControl, headerValueNoCache)
 	_, _ = w.Write(page)
 }
 
@@ -1215,14 +1309,14 @@ func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
 			status = http.StatusConflict
 		}
 		writeJSON(w, status, res)
-	case "blockers":
+	case apiActionBlockers:
 		res := s.Backend.MountBlockers(r.Context(), name)
 		status := http.StatusOK
 		if !res.OK {
 			status = http.StatusConflict
 		}
 		writeJSON(w, status, res)
-	case "alert":
+	case apiActionAlert:
 		res := s.Backend.AlertMountUsers(s.operateContext(), name)
 		status := http.StatusOK
 		if !res.OK {
@@ -1230,7 +1324,7 @@ func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, status, res)
 	default:
-		writeError(w, http.StatusBadRequest, "unknown mount action "+action)
+		writeError(w, http.StatusBadRequest, apiErrorUnknownMountActionPrefix+action)
 	}
 }
 
@@ -1271,7 +1365,7 @@ func (s *Server) handleMonitoring(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
 	detail, ok := s.Backend.Detail(r.Context(), r.PathValue(apiParamName))
 	if !ok {
-		writeError(w, http.StatusNotFound, "unknown service")
+		writeError(w, http.StatusNotFound, apiErrorUnknownService)
 		return
 	}
 	writeJSON(w, http.StatusOK, detail)
@@ -1295,7 +1389,7 @@ func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
 	since := seriesSince(r)
 	points, ok := s.Backend.Series(r.Context(), r.PathValue(apiParamName), since)
 	if !ok {
-		writeError(w, http.StatusNotFound, "unknown service")
+		writeError(w, http.StatusNotFound, apiErrorUnknownService)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{apiJSONKeySince: since.String(), apiJSONKeyPoints: points})
@@ -1304,12 +1398,12 @@ func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	check := r.URL.Query().Get(apiQueryCheck)
 	if check == "" {
-		writeError(w, http.StatusBadRequest, "check query parameter is required")
+		writeError(w, http.StatusBadRequest, apiErrorCheckQueryRequired)
 		return
 	}
 	res, ok := s.Backend.Metrics(r.Context(), r.PathValue(apiParamName), check, r.URL.Query().Get(apiQueryMetric), seriesSince(r))
 	if !ok {
-		writeError(w, http.StatusNotFound, "unknown service or check")
+		writeError(w, http.StatusNotFound, apiErrorUnknownServiceOrCheck)
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
@@ -1318,7 +1412,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleServiceRuntime(w http.ResponseWriter, r *http.Request) {
 	res, ok := s.Backend.ServiceRuntime(r.Context(), r.PathValue(apiParamName), seriesSince(r))
 	if !ok {
-		writeError(w, http.StatusNotFound, "unknown service")
+		writeError(w, http.StatusNotFound, apiErrorUnknownService)
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
@@ -1401,7 +1495,7 @@ func (s *Server) handlePanic(w http.ResponseWriter, r *http.Request) {
 	case apiActionPanicOff:
 		on = false
 	default:
-		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: "panic action must be on or off"})
+		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: apiErrorPanicAction})
 		return
 	}
 	res := s.Backend.SetPanic(s.operateContext(), on)
@@ -1473,7 +1567,7 @@ func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleServiceEvents(w http.ResponseWriter, r *http.Request) {
 	events, ok := s.Backend.ServiceEvents(r.Context(), r.PathValue(apiParamName), eventLimit(r))
 	if !ok {
-		writeError(w, http.StatusNotFound, "unknown service")
+		writeError(w, http.StatusNotFound, apiErrorUnknownService)
 		return
 	}
 	writeJSON(w, http.StatusOK, events)
@@ -1482,7 +1576,7 @@ func (s *Server) handleServiceEvents(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleApplicationEvents(w http.ResponseWriter, r *http.Request) {
 	events, ok := s.Backend.ApplicationEvents(r.Context(), r.PathValue(apiParamName), eventLimit(r))
 	if !ok {
-		writeError(w, http.StatusNotFound, "unknown application")
+		writeError(w, http.StatusNotFound, apiErrorUnknownApplication)
 		return
 	}
 	writeJSON(w, http.StatusOK, events)
@@ -1492,7 +1586,7 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue(apiParamName)
 	res, ok := s.Backend.Preflight(r.Context(), name)
 	if !ok {
-		writeError(w, http.StatusNotFound, "unknown service")
+		writeError(w, http.StatusNotFound, apiErrorUnknownService)
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
@@ -1518,7 +1612,7 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, ActionResult{OK: true})
 	default:
-		writeError(w, http.StatusBadRequest, "unknown action "+action)
+		writeError(w, http.StatusBadRequest, apiErrorUnknownActionPrefix+action)
 	}
 }
 
@@ -1535,7 +1629,7 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !monitorActions[action] {
-		writeError(w, http.StatusBadRequest, "unknown action "+action)
+		writeError(w, http.StatusBadRequest, apiErrorUnknownActionPrefix+action)
 		return
 	}
 	if err := s.Backend.SetWatchMonitored(r.Context(), name, action == apiActionMonitor); err != nil {
@@ -1547,14 +1641,14 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleReload(w http.ResponseWriter, r *http.Request) {
 	if s.Reload == nil {
-		writeError(w, http.StatusServiceUnavailable, "reload is not available for this daemon")
+		writeError(w, http.StatusServiceUnavailable, apiErrorReloadUnavailable)
 		return
 	}
 	if err := s.Reload(); err != nil {
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, ActionResult{OK: true, Message: "reload requested"})
+	writeJSON(w, http.StatusOK, ActionResult{OK: true, Message: apiMessageReloadRequested})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
