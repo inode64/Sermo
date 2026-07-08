@@ -275,6 +275,23 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/notify ./internal/checks` y
   `make check` pasan.
 
+### Fase 10: Dias fijos de historial y SLA
+
+- Mantener `internal/state` como owner de la retencion historica y de las
+  ventanas SLA persistidas.
+- Nombrar los multiplicadores de dias fijos para que quede explicito que el
+  ano/mes de SLA son ventanas rolling, no limites de calendario.
+
+Estado ejecutado:
+
+- `DefaultHistoryRetention` se deriva de `historyRetentionDays` y `hoursPerDay`.
+- Los spans SLA de semana/mes/ano se derivan de `slaRollingWeekDays`,
+  `slaRollingMonthDays` y `slaRollingYearDays`.
+- `internal/web` sigue heredando el horizonte maximo a traves de
+  `state.DefaultHistoryRetention`.
+- Validacion ejecutada: `go test ./internal/state ./internal/web` y
+  `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
