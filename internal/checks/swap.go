@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"sermo/internal/units"
 )
 
 const (
@@ -17,7 +19,6 @@ const (
 	swapVMStatPagesInPrefix  = swapVMStatPagesIn + " "
 	swapVMStatPagesOutPrefix = swapVMStatPagesOut + " "
 	swapMeminfoKBIndex       = 0
-	swapBytesPerKiB          = 1024
 )
 
 // SwapSample is one observation of system swap: total/free bytes and the
@@ -179,5 +180,5 @@ func parseMeminfoKB(s string) uint64 {
 	if err != nil {
 		return 0
 	}
-	return kb * swapBytesPerKiB
+	return kb * units.BytesPerKiB
 }
