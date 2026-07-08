@@ -28,7 +28,7 @@ const (
 	wsCRLF              = "\r\n"
 	wsDefaultPath       = "/"
 	wsDefaultPortPlain  = "80"
-	wsDefaultPortTLS    = "443"
+	wsDefaultPortTLS    = defaultTLSPort
 	wsHeaderFormat      = "%s: %s" + wsCRLF
 	wsHeaderAccept      = "Sec-WebSocket-Accept"
 	wsHeaderConnection  = "Connection"

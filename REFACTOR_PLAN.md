@@ -416,6 +416,18 @@ Estado ejecutado:
 - `openRCDaemonsDir` se deriva de `openRCRuntimeDir + "/daemons"`.
 - Validacion ejecutada: `go test ./internal/servicemgr` y `make check` pasan.
 
+### Fase 20: Puerto TLS por defecto en checks
+
+- Mantener los defaults de puertos de checks dentro de `internal/checks`.
+- Reutilizar un unico puerto TLS por defecto para el check de certificado y el
+  WebSocket seguro.
+
+Estado ejecutado:
+
+- `defaultTLSPort` reemplaza el literal `443` duplicado.
+- `cert` y `websocket` consumen el mismo default TLS.
+- Validacion ejecutada: `go test ./internal/checks` y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
