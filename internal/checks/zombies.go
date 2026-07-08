@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+const (
+	procPIDStatFile       = "stat"
+	procStatRunStateIndex = 0
+)
+
 // ZombieSamplerFunc counts the zombie (defunct) processes, reporting ok = false
 // when /proc cannot be read. Injected for tests; the default scans /proc.
 type ZombieSamplerFunc func() (uint64, bool)
@@ -65,7 +70,7 @@ func defaultZombieSampler() (uint64, bool) {
 // or "" if it cannot be read. The comm field may contain spaces and parentheses,
 // so the state is the first token after the final ')'.
 func procRunState(pid int) string {
-	data, err := os.ReadFile(filepath.Join(procRootPath, strconv.Itoa(pid), "stat"))
+	data, err := os.ReadFile(filepath.Join(procRootPath, strconv.Itoa(pid), procPIDStatFile))
 	if err != nil {
 		return ""
 	}
@@ -75,8 +80,8 @@ func procRunState(pid int) string {
 		return ""
 	}
 	fields := strings.Fields(s[paren+1:])
-	if len(fields) == 0 {
+	if len(fields) <= procStatRunStateIndex {
 		return ""
 	}
-	return fields[0]
+	return fields[procStatRunStateIndex]
 }

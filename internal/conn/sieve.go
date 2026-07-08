@@ -12,8 +12,10 @@ func init() { Register(sieveProtocol{}, protocolAliasManageSieve) }
 
 const (
 	sieveCapabilityImplementation = "IMPLEMENTATION"
+	sieveCapabilityMinParts       = 4
+	sieveCapabilityNameIndex      = 1
+	sieveCapabilityValueIndex     = 3
 	sieveGreetingLimit            = 64
-	sieveLineTrimRight            = "\r\n"
 	sieveReplyBye                 = "BYE"
 	sieveReplyNo                  = "NO"
 	sieveReplyOK                  = "OK"
@@ -41,8 +43,8 @@ func (sieveProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	br := bufio.NewReader(c)
 	impl := ""
 	for i := 0; i < sieveGreetingLimit; i++ {
-		line, rerr := br.ReadString('\n')
-		line = strings.TrimRight(line, sieveLineTrimRight)
+		line, rerr := br.ReadString(protocolLineBreak)
+		line = strings.TrimRight(line, protocolTrimCRLF)
 		if line != "" {
 			upper := strings.ToUpper(line)
 			switch {
@@ -71,8 +73,8 @@ func (sieveProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // (`"IMPLEMENTATION" "Dovecot …"` -> "Dovecot …").
 func sieveImplementation(line string) (string, bool) {
 	parts := strings.Split(line, `"`)
-	if len(parts) >= 4 && parts[1] == sieveCapabilityImplementation {
-		return parts[3], true
+	if len(parts) >= sieveCapabilityMinParts && parts[sieveCapabilityNameIndex] == sieveCapabilityImplementation {
+		return parts[sieveCapabilityValueIndex], true
 	}
 	return "", false
 }

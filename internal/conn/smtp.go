@@ -20,6 +20,17 @@ func (smtpProtocol) Name() string       { return ProtocolNameSMTP }
 func (smtpProtocol) DefaultPort() int   { return defaultPortSMTP }
 func (smtpProtocol) RequiresUser() bool { return false }
 
+const (
+	smtpAuthPlainDelimiter      = "\x00"
+	smtpCommandAuthPlainFormat  = "AUTH PLAIN %s\r\n"
+	smtpCommandEHLO             = "EHLO sermo\r\n"
+	smtpCommandHELO             = "HELO sermo\r\n"
+	smtpCommandQuit             = "QUIT\r\n"
+	smtpStatusAuthSucceeded     = 235
+	smtpStatusGreetingReady     = 220
+	smtpStatusRequestedActionOK = 250
+)
+
 func (smtpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	return probeBanner(ctx, cfg, defaultPortSMTP, smtpHandshake)
 }
@@ -34,45 +45,45 @@ func smtpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 	res := Result{Extra: map[string]string{extraGreeting: greeting}}
-	if code != 220 {
+	if code != smtpStatusGreetingReady {
 		return Result{}, fmt.Errorf("unexpected greeting: %d %s", code, greeting)
 	}
 
-	if _, err := fmt.Fprint(rw, "EHLO sermo\r\n"); err != nil {
+	if _, err := fmt.Fprint(rw, smtpCommandEHLO); err != nil {
 		return Result{}, err
 	}
 	code, _, err = tp.ReadResponse(0)
 	if err != nil {
 		return Result{}, err
 	}
-	if code != 250 {
+	if code != smtpStatusRequestedActionOK {
 		// Older servers may not support EHLO; try HELO.
-		if _, err := fmt.Fprint(rw, "HELO sermo\r\n"); err != nil {
+		if _, err := fmt.Fprint(rw, smtpCommandHELO); err != nil {
 			return Result{}, err
 		}
 		var text string
 		if code, text, err = tp.ReadResponse(0); err != nil {
 			return Result{}, err
 		}
-		if code != 250 {
+		if code != smtpStatusRequestedActionOK {
 			return Result{}, fmt.Errorf("EHLO/HELO refused: %d %s", code, text)
 		}
 	}
 
 	if cfg.User != "" {
-		token := base64.StdEncoding.EncodeToString([]byte("\x00" + cfg.User + "\x00" + cfg.Password))
-		if _, err := fmt.Fprintf(rw, "AUTH PLAIN %s\r\n", token); err != nil {
+		token := base64.StdEncoding.EncodeToString([]byte(smtpAuthPlainDelimiter + cfg.User + smtpAuthPlainDelimiter + cfg.Password))
+		if _, err := fmt.Fprintf(rw, smtpCommandAuthPlainFormat, token); err != nil {
 			return Result{}, err
 		}
 		code, text, err := tp.ReadResponse(0)
 		if err != nil {
 			return Result{}, err
 		}
-		if code != 235 {
+		if code != smtpStatusAuthSucceeded {
 			return Result{}, fmt.Errorf("auth failed: %d %s", code, text)
 		}
 	}
 
-	_, _ = fmt.Fprint(rw, "QUIT\r\n") // best effort
+	_, _ = fmt.Fprint(rw, smtpCommandQuit) // best effort
 	return res, nil
 }

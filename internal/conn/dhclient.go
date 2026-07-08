@@ -3,6 +3,7 @@ package conn
 import (
 	"bufio"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"net"
@@ -18,6 +19,16 @@ const procNetUDPPath = "/proc/net/udp"
 
 const (
 	procUDPHeaderField              = "sl"
+	procUDPMinFields                = 10
+	procUDPHeaderIndex              = 0
+	procUDPLocalAddressIndex        = 1
+	procUDPStateIndex               = 3
+	procUDPInodeIndex               = 9
+	procUDPAddressSeparator         = ":"
+	procUDPHexBase                  = 16
+	procUDPPortBits                 = 16
+	procUDPIPv4Bits                 = 32
+	procUDPFormatBase               = 10
 	dhclientAnyInterface            = "any interface"
 	dhclientLeaseBlockStart         = "lease {"
 	dhclientLeaseBlockEnd           = "}"
@@ -28,6 +39,14 @@ const (
 	dhclientLeaseQuoteCutset        = `"`
 	dhclientLeaseTerminator         = ";"
 	dhclientLeaseTimeLayout         = "2006/01/02 15:04:05"
+	dhclientLeaseExpireMinFields    = 4
+	dhclientLeaseExpireFieldIndex   = 0
+	dhclientLeaseExpireDateIndex    = 2
+	dhclientLeaseExpireTimeIndex    = 3
+	ipv4Byte0                       = 0
+	ipv4Byte1                       = 1
+	ipv4Byte2                       = 2
+	ipv4Byte3                       = 3
 )
 
 // dhclientProtocol verifies a local DHCP client socket. A DHCP client does not
@@ -69,7 +88,7 @@ func (dhclientProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		}
 		extra[extraLeaseFile] = cfg.Query
 		extra[extraLeaseExpires] = lease.expires.Format(time.RFC3339)
-		extra[extraLeaseSecondsRemaining] = strconv.FormatInt(int64(lease.expires.Sub(now).Seconds()), 10)
+		extra[extraLeaseSecondsRemaining] = strconv.FormatInt(int64(lease.expires.Sub(now).Seconds()), procUDPFormatBase)
 		if lease.interfaceName != "" {
 			extra[extraInterface] = lease.interfaceName
 		}
@@ -109,17 +128,17 @@ func parseUDP4SocketTable(r io.Reader, host string, port int) (udpSocket, bool, 
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
-		if len(fields) < 10 || fields[0] == procUDPHeaderField {
+		if len(fields) < procUDPMinFields || fields[procUDPHeaderIndex] == procUDPHeaderField {
 			continue
 		}
-		addr, p, err := parseProcUDP4Address(fields[1])
+		addr, p, err := parseProcUDP4Address(fields[procUDPLocalAddressIndex])
 		if err != nil {
 			return udpSocket{}, false, err
 		}
 		if p != port || (host != "" && addr != host) {
 			continue
 		}
-		return udpSocket{localAddress: addr, port: p, state: fields[3], inode: fields[9]}, true, nil
+		return udpSocket{localAddress: addr, port: p, state: fields[procUDPStateIndex], inode: fields[procUDPInodeIndex]}, true, nil
 	}
 	if err := sc.Err(); err != nil {
 		return udpSocket{}, false, fmt.Errorf("dhclient: read UDP socket table: %w", err)
@@ -128,19 +147,21 @@ func parseUDP4SocketTable(r io.Reader, host string, port int) (udpSocket, bool, 
 }
 
 func parseProcUDP4Address(s string) (string, int, error) {
-	addrHex, portHex, ok := strings.Cut(s, ":")
+	addrHex, portHex, ok := strings.Cut(s, procUDPAddressSeparator)
 	if !ok {
 		return "", 0, fmt.Errorf("dhclient: malformed UDP address %q", s)
 	}
-	addr, err := strconv.ParseUint(addrHex, 16, 32)
+	addr, err := strconv.ParseUint(addrHex, procUDPHexBase, procUDPIPv4Bits)
 	if err != nil {
 		return "", 0, fmt.Errorf("dhclient: malformed UDP address %q: %w", s, err)
 	}
-	port, err := strconv.ParseUint(portHex, 16, 16)
+	port, err := strconv.ParseUint(portHex, procUDPHexBase, procUDPPortBits)
 	if err != nil {
 		return "", 0, fmt.Errorf("dhclient: malformed UDP port %q: %w", s, err)
 	}
-	ip := net.IPv4(byte(addr), byte(addr>>8), byte(addr>>16), byte(addr>>24))
+	var b [net.IPv4len]byte
+	binary.LittleEndian.PutUint32(b[:], uint32(addr))
+	ip := net.IPv4(b[ipv4Byte0], b[ipv4Byte1], b[ipv4Byte2], b[ipv4Byte3])
 	return ip.String(), int(port), nil
 }
 
@@ -209,10 +230,10 @@ func parseDHClientLeases(r io.Reader, iface string, now time.Time) (dhclientLeas
 
 func parseDHClientLeaseTime(line string) (time.Time, error) {
 	fields := strings.Fields(strings.TrimSuffix(line, dhclientLeaseTerminator))
-	if len(fields) != 4 || fields[0] != dhclientLeaseExpireField {
+	if len(fields) != dhclientLeaseExpireMinFields || fields[dhclientLeaseExpireFieldIndex] != dhclientLeaseExpireField {
 		return time.Time{}, fmt.Errorf("dhclient: malformed lease expiry %q", line)
 	}
-	t, err := time.ParseInLocation(dhclientLeaseTimeLayout, fields[2]+" "+fields[3], time.UTC)
+	t, err := time.ParseInLocation(dhclientLeaseTimeLayout, fields[dhclientLeaseExpireDateIndex]+" "+fields[dhclientLeaseExpireTimeIndex], time.UTC)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("dhclient: malformed lease expiry %q: %w", line, err)
 	}

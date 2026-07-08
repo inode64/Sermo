@@ -93,6 +93,8 @@ type Watch struct {
 	settled      bool      // true after the startup observation cycle completed
 }
 
+const watchEnvAssignSeparator = "="
+
 // RunCycle runs the check, advances the window, and fires the hook on a firing
 // cycle. An evaluation/hook error is emitted, never fatal.
 func (w *Watch) RunCycle(ctx context.Context) {
@@ -324,7 +326,7 @@ func watchMessage(name, message string, env map[string]string) notify.Message {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		body.WriteString(k + "=" + env[k] + "\n")
+		body.WriteString(k + watchEnvAssignSeparator + env[k] + appLineSeparator)
 	}
 	return notify.Message{
 		Subject: fmt.Sprintf("[sermo] %s: %s", name, message),

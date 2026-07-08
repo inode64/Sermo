@@ -16,6 +16,7 @@ const (
 	imapLoginCommand          = "LOGIN"
 	imapLogoutCommand         = "LOGOUT"
 	imapStatusOK              = "OK"
+	imapStatusFieldIndex      = 0
 	imapTagLogin              = "a1"
 	imapTagLogout             = "a2"
 	imapTerminator            = "\r\n"
@@ -89,7 +90,7 @@ func readIMAPTagged(br *bufio.Reader, tag string) (ok bool, status string, err e
 			if len(fields) == 0 {
 				return false, line, nil
 			}
-			return strings.EqualFold(fields[0], imapStatusOK), rest, nil
+			return strings.EqualFold(fields[imapStatusFieldIndex], imapStatusOK), rest, nil
 		}
 		// otherwise an untagged "*" line — keep reading.
 	}

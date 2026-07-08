@@ -10,6 +10,8 @@ import (
 	"sermo/internal/state"
 )
 
+const watchCommandTargetArgCount = 2
+
 // runWatch dispatches host-watch queries against the running daemon.
 func (a App) runWatch(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
@@ -37,7 +39,7 @@ func (a App) runWatchMonitor(opts options, pause bool) int {
 	if pause {
 		verb = commandUnmonitor
 	}
-	if len(opts.args) != 2 {
+	if len(opts.args) != watchCommandTargetArgCount {
 		return a.commandUsageError(commandWatch, fmt.Sprintf("watch %s requires exactly one watch name", verb))
 	}
 	name := opts.args[1]
@@ -114,7 +116,7 @@ func knownWatchName(cfg *config.Config, name string) bool {
 }
 
 func (a App) runWatchStatus(ctx context.Context, opts options) int {
-	if len(opts.args) != 2 {
+	if len(opts.args) != watchCommandTargetArgCount {
 		return a.commandUsageError(commandWatch, "watch status requires exactly one watch name")
 	}
 	name := opts.args[1]

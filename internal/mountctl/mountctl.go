@@ -41,7 +41,13 @@ const (
 
 	// DefaultFstabPath is the system fstab file Sermo reads by default.
 	DefaultFstabPath          = "/etc/fstab"
+	mountStateDirMode         = 0o700
+	mountStateFileMode        = 0o600
+	procDeletedPathSuffix     = " (deleted)"
+	procFDDir                 = "fd"
+	procCWDLink               = "cwd"
 	procRootPath              = "/proc"
+	procRootLink              = "root"
 	rootMountPath             = "/"
 	rootUmountDisabledMessage = "root filesystem cannot be unmounted"
 	runtimeDirMounts          = "mounts"
@@ -64,6 +70,16 @@ const (
 	mountMessageRefcountAcquired      = "acquired, already mounted"
 	mountMessageRefcountReleasedInUse = "released, still in use"
 	mountMessageUnmounted             = "unmounted"
+
+	fstabCommentPrefix    = "#"
+	fstabLineSeparator    = "\n"
+	fstabMinFields        = 2
+	fstabSourceIndex      = 0
+	fstabPathIndex        = 1
+	fstabFSTypeIndex      = 2
+	fstabOptionsIndex     = 3
+	fstabFSTypeMinFields  = fstabFSTypeIndex + 1
+	fstabOptionsMinFields = fstabOptionsIndex + 1
 )
 
 // UmountSpec controls unmount escalation after a normal umount fails.
@@ -462,7 +478,7 @@ func (c Controller) readState(spec Spec) (State, error) {
 
 func (c Controller) writeState(spec Spec, state State) error {
 	dir := mountStateDir(c.runtime())
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(dir, mountStateDirMode); err != nil {
 		return fmt.Errorf("create mount state dir %s: %w", dir, err)
 	}
 	state.Name = spec.Name
@@ -474,7 +490,7 @@ func (c Controller) writeState(spec Spec, state State) error {
 	}
 	path := c.statePath(spec)
 	tmp := path + tmpFileExt
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
+	if err := os.WriteFile(tmp, append(data, '\n'), mountStateFileMode); err != nil {
 		return fmt.Errorf("write mount state %s: %w", tmp, err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
@@ -600,24 +616,24 @@ func FstabEntries(fstabPath string) ([]FstabEntry, error) {
 		return nil, err
 	}
 	var entries []FstabEntry
-	for _, line := range strings.Split(string(data), "\n") {
+	for _, line := range strings.Split(string(data), fstabLineSeparator) {
 		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
+		if line == "" || strings.HasPrefix(line, fstabCommentPrefix) {
 			continue
 		}
 		fields := strings.Fields(line)
-		if len(fields) < 2 {
+		if len(fields) < fstabMinFields {
 			continue
 		}
 		entry := FstabEntry{
-			Source: mounts.UnescapeField(fields[0]),
-			Path:   filepath.Clean(mounts.UnescapeField(fields[1])),
+			Source: mounts.UnescapeField(fields[fstabSourceIndex]),
+			Path:   filepath.Clean(mounts.UnescapeField(fields[fstabPathIndex])),
 		}
-		if len(fields) > 2 {
-			entry.FSType = fields[2]
+		if len(fields) >= fstabFSTypeMinFields {
+			entry.FSType = fields[fstabFSTypeIndex]
 		}
-		if len(fields) > 3 {
-			entry.Options = fields[3]
+		if len(fields) >= fstabOptionsMinFields {
+			entry.Options = fields[fstabOptionsIndex]
 		}
 		entries = append(entries, entry)
 	}
@@ -727,7 +743,7 @@ func pidUsesMounts(ctx context.Context, pid int, mountPaths []string) ([]string,
 			return nil, err
 		}
 	}
-	fdDir := filepath.Join(base, "fd")
+	fdDir := filepath.Join(base, procFDDir)
 	entries, err := os.ReadDir(fdDir)
 	if err == nil {
 		for _, entry := range entries {
@@ -745,7 +761,7 @@ func linkMountMatches(ctx context.Context, link string, mountPaths []string, mat
 	}
 	target, err := os.Readlink(link)
 	if err == nil && filepath.IsAbs(target) {
-		target = strings.TrimSuffix(target, " (deleted)")
+		target = strings.TrimSuffix(target, procDeletedPathSuffix)
 		cleanTarget := filepath.Clean(target)
 		for _, mountPath := range mountPaths {
 			if mounts.PathUnder(cleanTarget, mountPath) {
@@ -770,7 +786,7 @@ func pidUsesPath(ctx context.Context, pid int, mountPath string) bool {
 		return false
 	}
 	base := filepath.Join(procRootPath, fmt.Sprint(pid))
-	for _, name := range []string{"cwd", "root"} {
+	for _, name := range []string{procCWDLink, procRootLink} {
 		if err := ctx.Err(); err != nil {
 			return false
 		}
@@ -778,7 +794,7 @@ func pidUsesPath(ctx context.Context, pid int, mountPath string) bool {
 			return true
 		}
 	}
-	fdDir := filepath.Join(base, "fd")
+	fdDir := filepath.Join(base, procFDDir)
 	entries, err := os.ReadDir(fdDir)
 	if err != nil {
 		return false
@@ -802,6 +818,6 @@ func linkUnderMount(ctx context.Context, link, mountPath string) bool {
 	if err != nil || !filepath.IsAbs(target) {
 		return false
 	}
-	target = strings.TrimSuffix(target, " (deleted)")
+	target = strings.TrimSuffix(target, procDeletedPathSuffix)
 	return mounts.PathUnder(filepath.Clean(target), mountPath)
 }

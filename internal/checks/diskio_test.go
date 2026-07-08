@@ -60,11 +60,11 @@ func TestDiskIOCheckRates(t *testing.T) {
 	if res.Data["util_pct"].(float64) != 90 {
 		t.Fatalf("util_pct = %v, want 90", res.Data["util_pct"])
 	}
-	if got := res.Data["write_bytes"].(float64); got != 4096.0*512/10 {
-		t.Fatalf("write_bytes = %v, want %v", got, 4096.0*512/10)
+	if got := res.Data["write_bytes"].(float64); got != 4096.0*diskIOSectorBytes/10 {
+		t.Fatalf("write_bytes = %v, want %v", got, 4096.0*diskIOSectorBytes/10)
 	}
-	if got := res.Data["read_bytes"].(float64); got != 2048.0*512/10 {
-		t.Fatalf("read_bytes = %v, want %v", got, 2048.0*512/10)
+	if got := res.Data["read_bytes"].(float64); got != 2048.0*diskIOSectorBytes/10 {
+		t.Fatalf("read_bytes = %v, want %v", got, 2048.0*diskIOSectorBytes/10)
 	}
 	if got := res.Data["await_ms"].(float64); got != 15 {
 		t.Fatalf("await_ms = %v, want 15", got)
@@ -129,7 +129,7 @@ func TestParseDiskIOSample(t *testing.T) {
 		t.Fatalf("sample = %+v", got)
 	}
 
-	fields[5] = "bad"
+	fields[diskStatsSectorsReadIndex] = "bad"
 	if _, err := parseDiskIOSample(fields); err == nil || !strings.Contains(err.Error(), "sectors_read") {
 		t.Fatalf("malformed sectors_read err = %v, want named parse error", err)
 	}
@@ -160,15 +160,15 @@ func firstNonZeroDiskstatDevice(t *testing.T) string {
 	}
 	for _, line := range strings.Split(string(content), "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 13 {
+		if len(fields) < diskStatsMinFields {
 			continue
 		}
-		data, err := defaultDiskIOSampler(fields[2])
+		data, err := defaultDiskIOSampler(fields[diskStatsDeviceFieldIndex])
 		if err != nil {
 			continue
 		}
 		if data.ReadsCompleted != 0 || data.SectorsRead != 0 || data.IOTicksMs != 0 {
-			return fields[2]
+			return fields[diskStatsDeviceFieldIndex]
 		}
 	}
 	return ""

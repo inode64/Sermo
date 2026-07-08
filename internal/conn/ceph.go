@@ -21,6 +21,16 @@ func (cephProtocol) Name() string       { return ProtocolNameCeph }
 func (cephProtocol) DefaultPort() int   { return defaultPortCeph }
 func (cephProtocol) RequiresUser() bool { return false }
 
+const (
+	cephBannerBytes            = 8
+	cephBannerMinBytes         = 7
+	cephBannerPrefix           = "ceph v"
+	cephMessengerVersionOffset = 6
+	cephMessengerV1            = "v1"
+	cephMessengerV2            = "v2"
+	cephMessengerV2Byte        = '2'
+)
+
 func (cephProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	host := cfg.Host
 	if host == "" {
@@ -37,7 +47,7 @@ func (cephProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	defer func() { _ = c.Close() }()
 	applyDeadline(ctx, c)
 
-	buf := make([]byte, 8) // "ceph v2\n" / first 8 bytes of "ceph v027"
+	buf := make([]byte, cephBannerBytes)
 	if _, err := io.ReadFull(c, buf); err != nil {
 		return Result{}, err
 	}
@@ -51,11 +61,11 @@ func (cephProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // parseCephBanner identifies the Ceph messenger version from the connect banner:
 // "ceph v2…" -> "v2", "ceph v0…" (e.g. "ceph v027") -> "v1".
 func parseCephBanner(b []byte) (string, bool) {
-	if len(b) < 7 || string(b[:6]) != "ceph v" {
+	if len(b) < cephBannerMinBytes || string(b[:len(cephBannerPrefix)]) != cephBannerPrefix {
 		return "", false
 	}
-	if b[6] == '2' {
-		return "v2", true
+	if b[cephMessengerVersionOffset] == cephMessengerV2Byte {
+		return cephMessengerV2, true
 	}
-	return "v1", true
+	return cephMessengerV1, true
 }

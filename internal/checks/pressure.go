@@ -18,6 +18,17 @@ const (
 	PressureResourceIO     = "io"
 )
 
+const (
+	psiLineSome          = "some"
+	psiLineFull          = "full"
+	psiKeyAvg10          = "avg10"
+	psiKeyAvg60          = "avg60"
+	psiKeyAvg300         = "avg300"
+	psiKeyValueSeparator = "="
+	psiLineKindIndex     = 0
+	psiMinFields         = 4
+)
+
 // PressureAverages are one PSI line's rolling stall percentages (10s/60s/300s
 // windows).
 type PressureAverages struct {
@@ -100,36 +111,36 @@ func defaultPressureSampler(resource string) (PressureSample, error) {
 func parsePressure(data string) (PressureSample, error) {
 	var s PressureSample
 	seen := false
-	for _, line := range strings.Split(data, "\n") {
+	for _, line := range strings.Split(data, checkLineSeparator) {
 		fields := strings.Fields(line)
-		if len(fields) < 4 {
+		if len(fields) < psiMinFields {
 			continue
 		}
 		var avgs *PressureAverages
-		switch fields[0] {
-		case "some":
+		switch fields[psiLineKindIndex] {
+		case psiLineSome:
 			avgs = &s.Some
-		case "full":
+		case psiLineFull:
 			avgs = &s.Full
 		default:
 			continue
 		}
 		seen = true
 		for _, kv := range fields[1:] {
-			key, val, ok := strings.Cut(kv, "=")
+			key, val, ok := strings.Cut(kv, psiKeyValueSeparator)
 			if !ok {
 				continue
 			}
-			f, err := strconv.ParseFloat(val, 64)
+			f, err := strconv.ParseFloat(val, numericBits64)
 			if err != nil {
 				continue
 			}
 			switch key {
-			case "avg10":
+			case psiKeyAvg10:
 				avgs.Avg10 = f
-			case "avg60":
+			case psiKeyAvg60:
 				avgs.Avg60 = f
-			case "avg300":
+			case psiKeyAvg300:
 				avgs.Avg300 = f
 			}
 		}

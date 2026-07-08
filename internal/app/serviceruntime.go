@@ -146,9 +146,9 @@ func (s *ServiceMetricSampler) Series(name string, cur web.ServiceRuntime, since
 	return web.ServiceRuntimeMetrics{
 		Since:   since.String(),
 		Current: cur,
-		CPU:     serviceMetricSeries(metrics.MetricCPU, metricUnitPercent, since, samples, func(p serviceMetricSample) (float64, bool) { return p.current.CPU, p.current.HasCPU }),
-		Memory:  serviceMetricSeries(metrics.MetricMemory, metricUnitBytes, since, samples, func(p serviceMetricSample) (float64, bool) { return float64(p.current.RSS), p.current.Count > 0 }),
-		IO:      serviceMetricSeries(metrics.MetricIO, metricUnitBytesPerSecond, since, samples, func(p serviceMetricSample) (float64, bool) { return p.current.IORate, p.current.IOReady }),
+		CPU:     serviceMetricSeries(metrics.MetricCPU, metrics.MetricUnitPercent, since, samples, func(p serviceMetricSample) (float64, bool) { return p.current.CPU, p.current.HasCPU }),
+		Memory:  serviceMetricSeries(metrics.MetricMemory, metrics.MetricUnitBytes, since, samples, func(p serviceMetricSample) (float64, bool) { return float64(p.current.RSS), p.current.Count > 0 }),
+		IO:      serviceMetricSeries(metrics.MetricIO, metrics.MetricUnitBytesPerSecond, since, samples, func(p serviceMetricSample) (float64, bool) { return p.current.IORate, p.current.IOReady }),
 	}
 }
 
@@ -171,9 +171,9 @@ func (s *ServiceMetricSampler) persistentSeries(name string, cur web.ServiceRunt
 	if s == nil || s.store == nil {
 		return web.ServiceRuntimeMetrics{}, false
 	}
-	now := at.Add(time.Minute)
+	now := at.Add(metricSeriesBucket)
 	series := func(metric, unit string) (web.MetricSeries, bool) {
-		stat, err := s.store.ServiceMetricSummary(name, metric, since+time.Minute, now)
+		stat, err := s.store.ServiceMetricSummary(name, metric, since+metricSeriesBucket, now)
 		if err != nil {
 			return web.MetricSeries{}, false
 		}
@@ -190,15 +190,15 @@ func (s *ServiceMetricSampler) persistentSeries(name string, cur web.ServiceRunt
 			Points:  measurementPoints(points),
 		}, true
 	}
-	cpu, ok := series(metrics.MetricCPU, metricUnitPercent)
+	cpu, ok := series(metrics.MetricCPU, metrics.MetricUnitPercent)
 	if !ok {
 		return web.ServiceRuntimeMetrics{}, false
 	}
-	memory, ok := series(metrics.MetricMemory, metricUnitBytes)
+	memory, ok := series(metrics.MetricMemory, metrics.MetricUnitBytes)
 	if !ok {
 		return web.ServiceRuntimeMetrics{}, false
 	}
-	io, ok := series(metrics.MetricIO, metricUnitBytesPerSecond)
+	io, ok := series(metrics.MetricIO, metrics.MetricUnitBytesPerSecond)
 	if !ok {
 		return web.ServiceRuntimeMetrics{}, false
 	}
@@ -242,7 +242,7 @@ func serviceMetricSeries(metric, unit string, since time.Duration, samples []ser
 			continue
 		}
 		addDaemonMetric(&summary, v)
-		minute := sample.at.UTC().Truncate(time.Minute)
+		minute := sample.at.UTC().Truncate(metricSeriesBucket)
 		agg := byMinute[minute]
 		if agg == nil {
 			agg = &daemonMetricAgg{}

@@ -28,6 +28,12 @@ import (
 const (
 	cssMarker = "/*__SERMO_CSS__*/"
 	jsMarker  = "/*__SERMO_JS__*/"
+
+	webBuildExpectedOutputFiles = 1
+	webBuildFailureExitCode     = 1
+	webBuildOutputFileIndex     = 0
+	webBuildOutputFileMode      = 0o600
+	webBuildReplaceOnce         = 1
 )
 
 func main() {
@@ -37,7 +43,7 @@ func main() {
 
 	if err := build(*srcDir, *out); err != nil {
 		fmt.Fprintln(os.Stderr, "webbuild:", err)
-		os.Exit(1)
+		os.Exit(webBuildFailureExitCode)
 	}
 }
 
@@ -64,8 +70,8 @@ func build(srcDir, out string) error {
 	if !strings.Contains(page, jsMarker) {
 		return fmt.Errorf("js marker %q not found in shell", jsMarker)
 	}
-	page = strings.Replace(page, cssMarker, css, 1)
-	page = strings.Replace(page, jsMarker, js, 1)
+	page = strings.Replace(page, cssMarker, css, webBuildReplaceOnce)
+	page = strings.Replace(page, jsMarker, js, webBuildReplaceOnce)
 
 	// A bundle that smuggled in a literal </script> or </style> would break the
 	// inline blocks; esbuild never emits one, but guard regardless.
@@ -82,7 +88,7 @@ func build(srcDir, out string) error {
 		}
 	}
 
-	return os.WriteFile(out, []byte(page), 0o600) // #nosec G304 G703
+	return os.WriteFile(out, []byte(page), webBuildOutputFileMode) // #nosec G304 G703
 }
 
 func bundleJS(entry string) (string, error) {
@@ -124,10 +130,10 @@ func single(res api.BuildResult) (string, error) {
 		msgs := api.FormatMessages(res.Errors, api.FormatMessagesOptions{Kind: api.ErrorMessage})
 		return "", fmt.Errorf("%s", strings.Join(msgs, "\n"))
 	}
-	if len(res.OutputFiles) != 1 {
+	if len(res.OutputFiles) != webBuildExpectedOutputFiles {
 		return "", fmt.Errorf("expected 1 output file, got %d", len(res.OutputFiles))
 	}
-	return string(res.OutputFiles[0].Contents), nil
+	return string(res.OutputFiles[webBuildOutputFileIndex].Contents), nil
 }
 
 func normalizeVendoredJSLiterals(js string) string {

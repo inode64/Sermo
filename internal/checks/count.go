@@ -40,7 +40,7 @@ func (c countCheck) Run(ctx context.Context) Result {
 		scope = "under"
 	}
 	res := c.result(ok, fmt.Sprintf("%d %s entries %s %s (want %s %s)",
-		n, c.kind, scope, c.path, c.op, strconv.FormatFloat(c.value, 'f', -1, 64)), start)
+		n, c.kind, scope, c.path, c.op, strconv.FormatFloat(c.value, floatFormatFixed, floatPrecisionAuto, numericBits64)), start)
 	res.Data = map[string]any{
 		DataKeyPath:      c.path,
 		DataKeyOf:        c.kind,

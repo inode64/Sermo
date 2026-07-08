@@ -3069,8 +3069,9 @@ function updateWatchSortIndicators(panelKey) {
 
 function watchPanelKeyForElement(el) {
   const id = (el && el.closest("details") && el.closest("details").id) || "";
-  if (id === "storage-section") return "storage";
-  if (id === "network-section") return "network";
+  for (const [key, panel] of Object.entries(watchPanels)) {
+    if (panel.section === "#" + id) return key;
+  }
   return "host";
 }
 

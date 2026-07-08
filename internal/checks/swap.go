@@ -9,6 +9,17 @@ import (
 	"time"
 )
 
+const (
+	swapMeminfoTotalPrefix   = "SwapTotal:"
+	swapMeminfoFreePrefix    = "SwapFree:"
+	swapVMStatPagesIn        = "pswpin"
+	swapVMStatPagesOut       = "pswpout"
+	swapVMStatPagesInPrefix  = swapVMStatPagesIn + " "
+	swapVMStatPagesOutPrefix = swapVMStatPagesOut + " "
+	swapMeminfoKBIndex       = 0
+	swapBytesPerKiB          = 1024
+)
+
 // SwapSample is one observation of system swap: total/free bytes and the
 // cumulative pages swapped in/out since boot (vmstat pswpin/pswpout).
 type SwapSample struct {
@@ -114,10 +125,10 @@ func defaultSwapSampler() (SwapSample, error) {
 	if err != nil {
 		return s, err
 	}
-	for _, line := range strings.Split(string(mem), "\n") {
-		if v, ok := strings.CutPrefix(line, "SwapTotal:"); ok {
+	for _, line := range strings.Split(string(mem), checkLineSeparator) {
+		if v, ok := strings.CutPrefix(line, swapMeminfoTotalPrefix); ok {
 			s.TotalBytes = parseMeminfoKB(v)
-		} else if v, ok := strings.CutPrefix(line, "SwapFree:"); ok {
+		} else if v, ok := strings.CutPrefix(line, swapMeminfoFreePrefix); ok {
 			s.FreeBytes = parseMeminfoKB(v)
 		}
 	}
@@ -132,14 +143,14 @@ func defaultSwapSampler() (SwapSample, error) {
 }
 
 func parseSwapVMStat(vm string) (pagesIn, pagesOut uint64, err error) {
-	for _, line := range strings.Split(vm, "\n") {
-		if v, ok := strings.CutPrefix(line, "pswpin "); ok {
-			pagesIn, err = parseSwapPageCounter("pswpin", v)
+	for _, line := range strings.Split(vm, checkLineSeparator) {
+		if v, ok := strings.CutPrefix(line, swapVMStatPagesInPrefix); ok {
+			pagesIn, err = parseSwapPageCounter(swapVMStatPagesIn, v)
 			if err != nil {
 				return 0, 0, err
 			}
-		} else if v, ok := strings.CutPrefix(line, "pswpout "); ok {
-			pagesOut, err = parseSwapPageCounter("pswpout", v)
+		} else if v, ok := strings.CutPrefix(line, swapVMStatPagesOutPrefix); ok {
+			pagesOut, err = parseSwapPageCounter(swapVMStatPagesOut, v)
 			if err != nil {
 				return 0, 0, err
 			}
@@ -149,7 +160,7 @@ func parseSwapVMStat(vm string) (pagesIn, pagesOut uint64, err error) {
 }
 
 func parseSwapPageCounter(name, value string) (uint64, error) {
-	n, err := strconv.ParseUint(strings.TrimSpace(value), 10, 64)
+	n, err := strconv.ParseUint(strings.TrimSpace(value), numericBaseDecimal, numericBits64)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", name, err)
 	}
@@ -162,9 +173,9 @@ func parseMeminfoKB(s string) uint64 {
 	if len(fields) == 0 {
 		return 0
 	}
-	kb, err := strconv.ParseUint(fields[0], 10, 64)
+	kb, err := strconv.ParseUint(fields[swapMeminfoKBIndex], numericBaseDecimal, numericBits64)
 	if err != nil {
 		return 0
 	}
-	return kb * 1024
+	return kb * swapBytesPerKiB
 }

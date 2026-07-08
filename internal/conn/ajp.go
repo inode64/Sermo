@@ -18,6 +18,24 @@ const (
 	ajpReplyCPong = "cpong"
 )
 
+const (
+	ajpHeaderBytes            = 4
+	ajpMinResponseBytes       = 5
+	ajpMaxPacketBytes         = 8192
+	ajpMagicRequestHigh       = 0x12
+	ajpMagicRequestLow        = 0x34
+	ajpMagicResponseHigh      = 0x41
+	ajpMagicResponseLow       = 0x42
+	ajpMagicHighOffset        = 0
+	ajpMagicLowOffset         = 1
+	ajpLengthHighOffset       = 2
+	ajpLengthLowOffset        = 3
+	ajpLengthShift            = 8
+	ajpPayloadOffset          = 4
+	ajpCPingPayloadLengthHigh = 0
+	ajpCPingPayloadLength     = 1
+)
+
 // ajpProtocol probes an Apache JServ Protocol (AJP13) connector — Tomcat's AJP
 // port, used by front-ends like Apache/nginx. It sends a CPing and expects a
 // CPong, the same liveness probe those front-ends use. No authentication (AJP is
@@ -49,15 +67,15 @@ func (ajpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	// Read the full reply, not a single Read: TCP may split the small CPong across
 	// segments, and a short Read would falsely report a live connector as down.
-	header := make([]byte, 4)
+	header := make([]byte, ajpHeaderBytes)
 	if _, err := io.ReadFull(c, header); err != nil {
 		return Result{}, err
 	}
-	if header[0] != 0x41 || header[1] != 0x42 { // "AB"
+	if header[ajpMagicHighOffset] != ajpMagicResponseHigh || header[ajpMagicLowOffset] != ajpMagicResponseLow {
 		return Result{}, errors.New("not an AJP response (bad magic)")
 	}
-	length := int(header[2])<<8 | int(header[3])
-	if length < 1 || length > 8192 { // AJP packets are bounded at 8KiB
+	length := int(header[ajpLengthHighOffset])<<ajpLengthShift | int(header[ajpLengthLowOffset])
+	if length < ajpCPingPayloadLength || length > ajpMaxPacketBytes {
 		return Result{}, errors.New("invalid AJP response length")
 	}
 	payload := make([]byte, length)
@@ -77,23 +95,23 @@ func (ajpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // buildAJPCPing builds an AJP13 CPing packet (web-server-to-container magic
 // 0x1234, a one-byte payload of the CPing prefix).
 func buildAJPCPing() []byte {
-	return []byte{0x12, 0x34, 0x00, 0x01, ajpCPing}
+	return []byte{ajpMagicRequestHigh, ajpMagicRequestLow, ajpCPingPayloadLengthHigh, ajpCPingPayloadLength, ajpCPing}
 }
 
 // parseAJPResponse validates a container-to-web-server packet (magic "AB",
 // 2-byte length) and returns its first payload byte (the prefix code).
 func parseAJPResponse(b []byte) (prefix byte, err error) {
-	if len(b) < 5 {
+	if len(b) < ajpMinResponseBytes {
 		return 0, errors.New("short AJP response")
 	}
-	if b[0] != 0x41 || b[1] != 0x42 { // "AB"
+	if b[ajpMagicHighOffset] != ajpMagicResponseHigh || b[ajpMagicLowOffset] != ajpMagicResponseLow {
 		return 0, errors.New("not an AJP response (bad magic)")
 	}
-	length := int(b[2])<<8 | int(b[3])
-	if length < 1 || len(b) < 4+length {
+	length := int(b[ajpLengthHighOffset])<<ajpLengthShift | int(b[ajpLengthLowOffset])
+	if length < ajpCPingPayloadLength || len(b) < ajpHeaderBytes+length {
 		return 0, errors.New("truncated AJP response")
 	}
-	return b[4], nil
+	return b[ajpPayloadOffset], nil
 }
 
 func ajpIsCPong(prefix byte) bool { return prefix == ajpCPong }

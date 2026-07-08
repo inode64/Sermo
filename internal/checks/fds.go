@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+const (
+	fileNRAllocatedIndex = 0
+	fileNRMaxIndex       = 2
+	fileNRMinFields      = fileNRMaxIndex + 1
+)
+
 // FdsSample is one observation of the system-wide open file descriptors: the
 // number currently allocated and the kernel maximum (fs.file-max).
 type FdsSample struct {
@@ -54,11 +60,11 @@ func defaultFdsSampler() (FdsSample, error) {
 		return FdsSample{}, err
 	}
 	fields := strings.Fields(string(data))
-	if len(fields) < 3 {
+	if len(fields) < fileNRMinFields {
 		return FdsSample{}, fmt.Errorf("malformed %s", procFileNRPath)
 	}
-	alloc, e1 := strconv.ParseUint(fields[0], 10, 64)
-	maxFds, e3 := strconv.ParseUint(fields[2], 10, 64)
+	alloc, e1 := strconv.ParseUint(fields[fileNRAllocatedIndex], numericBaseDecimal, numericBits64)
+	maxFds, e3 := strconv.ParseUint(fields[fileNRMaxIndex], numericBaseDecimal, numericBits64)
 	if e1 != nil || e3 != nil {
 		return FdsSample{}, fmt.Errorf("malformed %s", procFileNRPath)
 	}

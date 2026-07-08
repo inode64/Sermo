@@ -18,6 +18,7 @@ const DefaultLibvirtSocket = "/run/libvirt/libvirt-sock"
 
 const defaultLibvirtTimeout = 10 * time.Second
 const libvirtTransportSocket = "socket"
+const libvirtNodeMemoryKiBPerMiB = 1024
 
 // libvirtProtocol probes a libvirt daemon (libvirtd) natively over its RPC
 // protocol using the pure-Go github.com/digitalocean/go-libvirt client. It opens
@@ -124,7 +125,7 @@ func libvirtProbe(l *libvirt.Libvirt, uri, mode, domain string) (Result, error) 
 	}
 	if _, mem, cpus, _, _, _, _, _, err := l.NodeGetInfo(); err == nil {
 		extra[ExtraKeyNodeCPUs] = strconv.Itoa(int(cpus))
-		extra[ExtraKeyNodeMemoryMB] = strconv.FormatUint(mem/1024, 10) // NodeGetInfo memory is KiB
+		extra[ExtraKeyNodeMemoryMB] = strconv.FormatUint(mem/libvirtNodeMemoryKiBPerMiB, numericBaseDecimal)
 	}
 
 	// Optional single-domain state — fails the check when the VM is unknown.

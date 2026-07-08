@@ -21,6 +21,14 @@ func (popProtocol) Name() string       { return ProtocolNamePOP }
 func (popProtocol) DefaultPort() int   { return defaultPortPOP }
 func (popProtocol) RequiresUser() bool { return false }
 
+const (
+	popCommandPassFormat = "PASS %s\r\n"
+	popCommandQuit       = "QUIT\r\n"
+	popCommandUserFormat = "USER %s\r\n"
+	popReplyERR          = "-ERR"
+	popReplyOK           = "+OK"
+)
+
 func (popProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	return probeBanner(ctx, cfg, defaultPortPOP, popHandshake)
 }
@@ -37,13 +45,13 @@ func popHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	res := Result{Extra: map[string]string{extraGreeting: greeting}}
 
 	if cfg.User != "" {
-		if _, err := fmt.Fprintf(rw, "USER %s\r\n", cfg.User); err != nil {
+		if _, err := fmt.Fprintf(rw, popCommandUserFormat, cfg.User); err != nil {
 			return Result{}, err
 		}
 		if _, err := readPOPReply(br); err != nil {
 			return Result{}, fmt.Errorf("user: %w", err)
 		}
-		if _, err := fmt.Fprintf(rw, "PASS %s\r\n", cfg.Password); err != nil {
+		if _, err := fmt.Fprintf(rw, popCommandPassFormat, cfg.Password); err != nil {
 			return Result{}, err
 		}
 		if _, err := readPOPReply(br); err != nil {
@@ -51,23 +59,22 @@ func popHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 		}
 	}
 
-	_, _ = fmt.Fprint(rw, "QUIT\r\n") // best effort
+	_, _ = fmt.Fprint(rw, popCommandQuit) // best effort
 	return res, nil
 }
 
 // readPOPReply reads one status line: "+OK <text>" returns the text; "-ERR
 // <text>" returns it as an error.
 func readPOPReply(br *bufio.Reader) (string, error) {
-	s, err := br.ReadString('\n')
+	line, err := readCRLFLine(br)
 	if err != nil {
 		return "", err
 	}
-	line := strings.TrimRight(s, "\r\n")
 	switch {
-	case strings.HasPrefix(line, "+OK"):
-		return strings.TrimSpace(strings.TrimPrefix(line, "+OK")), nil
-	case strings.HasPrefix(line, "-ERR"):
-		return "", errors.New(strings.TrimSpace(strings.TrimPrefix(line, "-ERR")))
+	case strings.HasPrefix(line, popReplyOK):
+		return strings.TrimSpace(strings.TrimPrefix(line, popReplyOK)), nil
+	case strings.HasPrefix(line, popReplyERR):
+		return "", errors.New(strings.TrimSpace(strings.TrimPrefix(line, popReplyERR)))
 	default:
 		return "", fmt.Errorf("unexpected reply: %s", line)
 	}

@@ -28,10 +28,16 @@ const (
 	nutReplyEndListVar   = "END LIST VAR"
 	nutReplyERR          = "ERR"
 	nutReplyOK           = "OK"
-	nutReplyTrimRight    = "\r\n"
 	nutReplyUPSToken     = "UPS"
 	nutReplyVarPrefix    = "VAR "
 	nutVersionPrefix     = "Network UPS Tools upsd "
+	nutSingleUPSCount    = 1
+	nutSingleUPSIndex    = 0
+	nutUPSLineMinFields  = 2
+	nutUPSLineTypeIndex  = 0
+	nutUPSLineNameIndex  = 1
+	nutVarHeadMinFields  = 3
+	nutVarNameIndex      = 2
 )
 
 // nutInterestingVars are the upsd variables exposed in the probe Result (and so
@@ -108,8 +114,8 @@ func nutHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	if ups == "" {
 		// Auto-detect a single configured UPS so the common one-UPS host needs no
 		// `ups` field. Zero or several UPSes leave the check at VER liveness.
-		if names, err := nutListUPS(rw, br); err == nil && len(names) == 1 {
-			ups = names[0]
+		if names, err := nutListUPS(rw, br); err == nil && len(names) == nutSingleUPSCount {
+			ups = names[nutSingleUPSIndex]
 		}
 	}
 
@@ -174,8 +180,8 @@ func nutListUPS(rw io.ReadWriter, br *bufio.Reader) ([]string, error) {
 		if strings.HasPrefix(line, nutReplyEndListUPS) {
 			return names, nil
 		}
-		if f := strings.Fields(line); len(f) >= 2 && f[0] == nutReplyUPSToken {
-			names = append(names, f[1])
+		if f := strings.Fields(line); len(f) >= nutUPSLineMinFields && f[nutUPSLineTypeIndex] == nutReplyUPSToken {
+			names = append(names, f[nutUPSLineNameIndex])
 		}
 	}
 }
@@ -218,11 +224,11 @@ func writeNUT(w io.Writer, cmd string) error {
 
 // readNUTLine reads one CRLF/LF-terminated reply line.
 func readNUTLine(br *bufio.Reader) (string, error) {
-	s, err := br.ReadString('\n')
+	s, err := br.ReadString(protocolLineBreak)
 	if err != nil && s == "" {
 		return "", err
 	}
-	return strings.TrimRight(s, nutReplyTrimRight), nil
+	return strings.TrimRight(s, protocolTrimCRLF), nil
 }
 
 // nutCmdOK sends cmd and requires an `OK` reply, mapping `ERR <reason>` to an error.
@@ -271,14 +277,14 @@ func parseNUTVarLine(line string) (name, value string, ok bool) {
 		return "", "", false
 	}
 	head := strings.Fields(line[:q]) // VAR <ups> <var>
-	if len(head) < 3 {
+	if len(head) < nutVarHeadMinFields {
 		return "", "", false
 	}
 	v, ok := parseNUTVar(line)
 	if !ok {
 		return "", "", false
 	}
-	return head[2], v, true
+	return head[nutVarNameIndex], v, true
 }
 
 // parseNUTVar extracts the quoted value from a `VAR …"<value>"` reply.

@@ -88,6 +88,16 @@ const (
 	cliTextWarn = "WARN"
 )
 
+const (
+	eventsTableTimestampWidth = 19
+	eventsTableTargetWidth    = 15
+	eventsTableKindWidth      = 8
+	eventsTableActionWidth    = 7
+	eventsTableMessageWidth   = 60
+	eventsTableEllipsisWidth  = 3
+	eventsTableEllipsis       = "..."
+)
+
 // BackendDetector detects the service manager backend.
 type BackendDetector interface {
 	Detect(ctx context.Context, requested servicemgr.Backend) (servicemgr.Detection, error)
@@ -1434,8 +1444,8 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 	fmt.Fprintln(tw, "TIME\tTARGET\tKIND\tACTION\tMESSAGE")
 	for _, e := range evs {
 		ts := e.Time
-		if len(ts) >= 19 {
-			ts = ts[:19]
+		if len(ts) >= eventsTableTimestampWidth {
+			ts = ts[:eventsTableTimestampWidth]
 		}
 		target := e.Service
 		if target == "" {
@@ -1444,25 +1454,25 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 		if target == "" {
 			target = "-"
 		}
-		if len(target) > 15 {
-			target = target[:15]
+		if len(target) > eventsTableTargetWidth {
+			target = target[:eventsTableTargetWidth]
 		}
 		kind := e.Kind
-		if len(kind) > 8 {
-			kind = kind[:8]
+		if len(kind) > eventsTableKindWidth {
+			kind = kind[:eventsTableKindWidth]
 		}
 		action := e.Action
 		if action == "" {
 			action = e.Status
 		}
-		if len(action) > 7 {
-			action = action[:7]
+		if len(action) > eventsTableActionWidth {
+			action = action[:eventsTableActionWidth]
 		}
 		// The message column is capped for terminal readability; tabwriter sizes
 		// the rest to content.
 		msg := e.Message
-		if len(msg) > 60 {
-			msg = msg[:57] + "..."
+		if len(msg) > eventsTableMessageWidth {
+			msg = msg[:eventsTableMessageWidth-eventsTableEllipsisWidth] + eventsTableEllipsis
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", ts, target, kind, action, msg)
 	}

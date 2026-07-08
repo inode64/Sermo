@@ -51,7 +51,7 @@ func (c sqlCheck) Run(ctx context.Context) Result {
 		DataKeyThreshold: c.value,
 		DataKeyResult:    result,
 	}
-	if f, perr := strconv.ParseFloat(strings.TrimSpace(result), 64); perr == nil {
+	if f, perr := strconv.ParseFloat(strings.TrimSpace(result), numericBits64); perr == nil {
 		data[DataKeyValue] = f
 	}
 	res.Data = data

@@ -20,27 +20,27 @@ func sampler(samples ...NetSample) NetSamplerFunc {
 }
 
 func TestNetStateExpect(t *testing.T) {
-	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: "state", expect: "down",
-		sampler: sampler(NetSample{State: "down"})}
+	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricState, expect: NetStateDown,
+		sampler: sampler(NetSample{State: NetStateDown})}
 	res := c.Run(context.Background())
-	if !res.OK || res.Data["value"] != "down" || res.Data["interface"] != "eth0" {
+	if !res.OK || res.Data[DataKeyValue] != NetStateDown || res.Data[DataKeyInterface] != "eth0" {
 		t.Fatalf("expect-down should fire: %+v", res)
 	}
-	c2 := &netCheck{base: base{name: "n"}, iface: "eth0", metric: "state", expect: "down",
-		sampler: sampler(NetSample{State: "up"})}
+	c2 := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricState, expect: NetStateDown,
+		sampler: sampler(NetSample{State: NetStateUp})}
 	if c2.Run(context.Background()).OK {
 		t.Fatal("expect-down must not fire when up")
 	}
 }
 
 func TestNetStateOnChange(t *testing.T) {
-	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: "state", onChange: true,
-		sampler: sampler(NetSample{State: "up"}, NetSample{State: "down"})}
+	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricState, onChange: true,
+		sampler: sampler(NetSample{State: NetStateUp}, NetSample{State: NetStateDown})}
 	if c.Run(context.Background()).OK {
 		t.Fatal("first cycle must prime, not fire")
 	}
 	res := c.Run(context.Background())
-	if !res.OK || res.Data["old"] != "up" || res.Data["new"] != "down" {
+	if !res.OK || res.Data[fieldOld] != NetStateUp || res.Data[fieldNew] != NetStateDown {
 		t.Fatalf("state change should fire with old/new: %+v", res)
 	}
 	if c.Run(context.Background()).OK { // down -> down, no change
@@ -49,7 +49,7 @@ func TestNetStateOnChange(t *testing.T) {
 }
 
 func TestNetSpeedOnChange(t *testing.T) {
-	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: "speed", onChange: true,
+	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricSpeed, onChange: true,
 		sampler: sampler(
 			NetSample{SpeedMbps: 1000, SpeedKnown: true},
 			NetSample{SpeedMbps: 100, SpeedKnown: true},
@@ -63,7 +63,7 @@ func TestNetSpeedOnChange(t *testing.T) {
 }
 
 func TestNetSpeedUnknownDoesNotFire(t *testing.T) {
-	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: "speed", onChange: true,
+	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricSpeed, onChange: true,
 		sampler: sampler(NetSample{SpeedKnown: false})}
 	if c.Run(context.Background()).OK {
 		t.Fatal("unknown speed must not fire")
@@ -71,27 +71,27 @@ func TestNetSpeedUnknownDoesNotFire(t *testing.T) {
 }
 
 func TestNetErrorsDelta(t *testing.T) {
-	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: "errors",
-		counters: []string{"rx_errors", "tx_errors"}, op: ">", value: 100,
+	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricErrors,
+		counters: []string{NetCounterRXErrors, NetCounterTXErrors}, op: ">", value: 100,
 		sampler: sampler(
-			NetSample{Counters: map[string]uint64{"rx_errors": 10, "tx_errors": 0}},
-			NetSample{Counters: map[string]uint64{"rx_errors": 200, "tx_errors": 0}}, // +190
+			NetSample{Counters: map[string]uint64{NetCounterRXErrors: 10, NetCounterTXErrors: 0}},
+			NetSample{Counters: map[string]uint64{NetCounterRXErrors: 200, NetCounterTXErrors: 0}}, // +190
 		)}
 	if c.Run(context.Background()).OK {
 		t.Fatal("first cycle primes (no delta)")
 	}
 	res := c.Run(context.Background())
-	if !res.OK || res.Data["value"] != uint64(190) {
+	if !res.OK || res.Data[DataKeyValue] != uint64(190) {
 		t.Fatalf("errors delta should fire with value 190: %+v", res)
 	}
 }
 
 func TestNetErrorsCounterResetNoFire(t *testing.T) {
-	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: "errors",
-		counters: []string{"rx_errors"}, op: ">", value: 0,
+	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricErrors,
+		counters: []string{NetCounterRXErrors}, op: ">", value: 0,
 		sampler: sampler(
-			NetSample{Counters: map[string]uint64{"rx_errors": 500}},
-			NetSample{Counters: map[string]uint64{"rx_errors": 0}}, // reset -> delta 0
+			NetSample{Counters: map[string]uint64{NetCounterRXErrors: 500}},
+			NetSample{Counters: map[string]uint64{NetCounterRXErrors: 0}}, // reset -> delta 0
 		)}
 	c.Run(context.Background())
 	if c.Run(context.Background()).OK {
@@ -100,7 +100,7 @@ func TestNetErrorsCounterResetNoFire(t *testing.T) {
 }
 
 func TestNetSamplerError(t *testing.T) {
-	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: "state", expect: "up",
+	c := &netCheck{base: base{name: "n"}, iface: "eth0", metric: NetMetricState, expect: NetStateUp,
 		sampler: func(string) (NetSample, error) { return NetSample{}, errors.New("boom") }}
 	if c.Run(context.Background()).OK {
 		t.Fatal("sampler error must not fire")
@@ -111,26 +111,26 @@ func TestSampleNetFromSysfsFallback(t *testing.T) {
 	root := t.TempDir()
 	iface := "sermo-test0"
 	dir := filepath.Join(root, iface)
-	statDir := filepath.Join(dir, "statistics")
+	statDir := filepath.Join(dir, sysfsIfaceStatisticsDir)
 	if err := os.MkdirAll(statDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	files := map[string]string{
-		filepath.Join(dir, "flags"):           "0x1003\n",
-		filepath.Join(dir, "operstate"):       "up\n",
-		filepath.Join(dir, "speed"):           "1000\n",
-		filepath.Join(statDir, "rx_errors"):   "7\n",
-		filepath.Join(statDir, "tx_errors"):   "11\n",
-		filepath.Join(statDir, "rx_dropped"):  "13\n",
-		filepath.Join(statDir, "tx_dropped"):  "17\n",
-		filepath.Join(statDir, "collisions"):  "19\n",
-		filepath.Join(statDir, "multicast"):   "23\n",
-		filepath.Join(statDir, "rx_packets"):  "29\n",
-		filepath.Join(statDir, "tx_packets"):  "31\n",
-		filepath.Join(statDir, "rx_bytes"):    "37\n",
-		filepath.Join(statDir, "tx_bytes"):    "41\n",
-		filepath.Join(statDir, "rx_overruns"): "43\n",
-		filepath.Join(statDir, "tx_overruns"): "47\n",
+		filepath.Join(dir, sysfsIfaceFlagsFile):     "0x1003\n",
+		filepath.Join(dir, sysfsIfaceOperstateFile): NetStateUp + "\n",
+		filepath.Join(dir, sysfsIfaceSpeedFile):     "1000\n",
+		filepath.Join(statDir, NetCounterRXErrors):  "7\n",
+		filepath.Join(statDir, NetCounterTXErrors):  "11\n",
+		filepath.Join(statDir, "rx_dropped"):        "13\n",
+		filepath.Join(statDir, "tx_dropped"):        "17\n",
+		filepath.Join(statDir, "collisions"):        "19\n",
+		filepath.Join(statDir, "multicast"):         "23\n",
+		filepath.Join(statDir, "rx_packets"):        "29\n",
+		filepath.Join(statDir, "tx_packets"):        "31\n",
+		filepath.Join(statDir, "rx_bytes"):          "37\n",
+		filepath.Join(statDir, "tx_bytes"):          "41\n",
+		filepath.Join(statDir, "rx_overruns"):       "43\n",
+		filepath.Join(statDir, "tx_overruns"):       "47\n",
 	}
 	for path, body := range files {
 		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
@@ -142,10 +142,10 @@ func TestSampleNetFromSysfsFallback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sample.State != "up" || !sample.SpeedKnown || sample.SpeedMbps != 1000 {
+	if sample.State != NetStateUp || !sample.SpeedKnown || sample.SpeedMbps != 1000 {
 		t.Fatalf("sample = %+v, want up speed 1000", sample)
 	}
-	if sample.Counters["rx_errors"] != 7 || sample.Counters["tx_errors"] != 11 {
+	if sample.Counters[NetCounterRXErrors] != 7 || sample.Counters[NetCounterTXErrors] != 11 {
 		t.Fatalf("counters = %+v, want rx/tx errors", sample.Counters)
 	}
 }
@@ -154,10 +154,10 @@ func TestSampleNetFromSysfsZeroSpeedKnown(t *testing.T) {
 	root := t.TempDir()
 	iface := "sermo-test1"
 	dir := filepath.Join(root, iface)
-	if err := os.MkdirAll(filepath.Join(dir, "statistics"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, sysfsIfaceStatisticsDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for name, body := range map[string]string{"flags": "0x1003\n", "operstate": "up\n", "speed": "0\n"} {
+	for name, body := range map[string]string{sysfsIfaceFlagsFile: "0x1003\n", sysfsIfaceOperstateFile: NetStateUp + "\n", sysfsIfaceSpeedFile: "0\n"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -183,26 +183,26 @@ func TestSampleNetFromSysfsMissingDirErrors(t *testing.T) {
 func TestSysfsIfaceUp(t *testing.T) {
 	mk := func(flags, operstate string) string {
 		d := t.TempDir()
-		if err := os.WriteFile(filepath.Join(d, "flags"), []byte(flags), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(d, sysfsIfaceFlagsFile), []byte(flags), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(d, "operstate"), []byte(operstate), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(d, sysfsIfaceOperstateFile), []byte(operstate), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		return d
 	}
 	// IFF_UP set: operstate "up" and "unknown" both count as up; "down" does not.
-	if !sysfsIfaceUp(mk("0x1\n", "up\n")) {
+	if !sysfsIfaceUp(mk("0x1\n", NetStateUp+"\n")) {
 		t.Error("operstate up must be up")
 	}
-	if !sysfsIfaceUp(mk("0x1\n", "unknown\n")) {
+	if !sysfsIfaceUp(mk("0x1\n", NetStateUnknown+"\n")) {
 		t.Error("operstate unknown must be up")
 	}
-	if sysfsIfaceUp(mk("0x1\n", "down\n")) {
+	if sysfsIfaceUp(mk("0x1\n", NetStateDown+"\n")) {
 		t.Error("operstate down must be down")
 	}
 	// IFF_UP clear is never up.
-	if sysfsIfaceUp(mk("0x0\n", "up\n")) {
+	if sysfsIfaceUp(mk("0x0\n", NetStateUp+"\n")) {
 		t.Error("IFF_UP clear must be down")
 	}
 }

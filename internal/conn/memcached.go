@@ -26,6 +26,10 @@ func (memcachedProtocol) DefaultPort() int   { return defaultPortMemcached }
 func (memcachedProtocol) RequiresUser() bool { return false }
 
 const (
+	memcachedCommandStats            = "stats\r\n"
+	memcachedFieldSeparator          = " "
+	memcachedReplyEnd                = "END"
+	memcachedReplyStatPrefix         = "STAT "
 	memcachedStatBytes               = "bytes"
 	memcachedStatCmdGet              = "cmd_get"
 	memcachedStatCmdSet              = "cmd_set"
@@ -59,25 +63,24 @@ func (memcachedProtocol) Probe(ctx context.Context, cfg Config) (Result, error) 
 // in Result.Extra; any non-STAT/non-END line (e.g. an ERROR reply, or a server
 // that is not memcached) fails the probe.
 func memcachedStats(rw io.ReadWriter) (Result, error) {
-	if _, err := io.WriteString(rw, "stats\r\n"); err != nil {
+	if _, err := io.WriteString(rw, memcachedCommandStats); err != nil {
 		return Result{}, err
 	}
 	br := bufio.NewReader(rw)
 	fields := map[string]string{}
 	for {
-		line, err := br.ReadString('\n')
+		line, err := readCRLFLine(br)
 		if err != nil {
 			return Result{}, err
 		}
-		line = strings.TrimRight(line, "\r\n")
-		if line == "END" {
+		if line == memcachedReplyEnd {
 			break
 		}
-		rest, ok := strings.CutPrefix(line, "STAT ")
+		rest, ok := strings.CutPrefix(line, memcachedReplyStatPrefix)
 		if !ok {
 			return Result{}, fmt.Errorf("unexpected memcached stats reply %q", line)
 		}
-		if k, v, ok := strings.Cut(rest, " "); ok {
+		if k, v, ok := strings.Cut(rest, memcachedFieldSeparator); ok {
 			fields[k] = v
 		}
 	}

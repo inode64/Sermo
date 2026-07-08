@@ -30,6 +30,64 @@ const (
 	fpmStatusFormatJSON = "json"
 )
 
+const (
+	fpmCGIHeaderSeparatorCRLF = "\r\n\r\n"
+	fpmCGIHeaderSeparatorLF   = "\n\n"
+	fpmGatewayInterfaceCGI11  = "CGI/1.1"
+	fpmQuerySeparator         = "?"
+	fpmRequestMethodGET       = "GET"
+	fpmServerProtocolHTTP11   = "HTTP/1.1"
+	fpmServerSoftware         = "sermo"
+)
+
+const (
+	fpmParamGatewayInterface = "GATEWAY_INTERFACE"
+	fpmParamQueryString      = "QUERY_STRING"
+	fpmParamRequestMethod    = "REQUEST_METHOD"
+	fpmParamRequestURI       = "REQUEST_URI"
+	fpmParamScriptFilename   = "SCRIPT_FILENAME"
+	fpmParamScriptName       = "SCRIPT_NAME"
+	fpmParamServerProtocol   = "SERVER_PROTOCOL"
+	fpmParamServerSoftware   = "SERVER_SOFTWARE"
+)
+
+const (
+	fpmExtraAcceptedConn       = "accepted_conn"
+	fpmExtraActiveProcesses    = "active_processes"
+	fpmExtraIdleProcesses      = "idle_processes"
+	fpmExtraListenQueue        = "listen_queue"
+	fpmExtraMaxActiveProcesses = "max_active_processes"
+	fpmExtraMaxChildrenReached = "max_children_reached"
+	fpmExtraMaxListenQueue     = "max_listen_queue"
+	fpmExtraSlowRequests       = "slow_requests"
+	fpmExtraTotalProcesses     = "total_processes"
+	fpmExtraUptimeSeconds      = "uptime_seconds"
+)
+
+const (
+	fcgiBeginRequestFlagsClose        = 0
+	fcgiBeginRequestRoleHigh          = 0
+	fcgiContentLengthHighShift        = 8
+	fcgiHeaderBytes                   = 8
+	fcgiHeaderContentLengthHighOffset = 4
+	fcgiHeaderContentLengthLowOffset  = 5
+	fcgiHeaderPaddingLengthOffset     = 6
+	fcgiHeaderTypeOffset              = 1
+	fcgiLongParamLenFlag              = 0x80
+	fcgiLongParamLenByte3Shift        = 24
+	fcgiLongParamLenByte2Shift        = 16
+	fcgiLongParamLenByte1Shift        = 8
+	fcgiPaddingLengthNone             = 0
+	fcgiParamNameIndex                = 0
+	fcgiParamPairFields               = 2
+	fcgiParamValueIndex               = 1
+	fcgiRequestIDHigh                 = 0
+	fcgiReservedByte                  = 0
+	fcgiShortParamLenMax              = 128
+)
+
+type fcgiParam [fcgiParamPairFields]string
+
 // fpmProtocol probes a PHP-FPM pool over FastCGI by requesting its ping path
 // (default /ping) and expecting "pong". It speaks FastCGI natively (no driver).
 // The pool must have `ping.path = /ping` enabled. No authentication.
@@ -88,22 +146,31 @@ func fpmHandshake(rw io.ReadWriter, pingPath string) (Result, error) {
 // FCGI_BEGIN_REQUEST is sent with flags 0, so the server closes it afterwards.
 func fpmRequest(rw io.ReadWriter, script, query string) (stdout, stderr string, err error) {
 	// FCGI_BEGIN_REQUEST: role RESPONDER, flags 0 (close after request).
-	if err := writeFCGIRecord(rw, fcgiBeginRequest, []byte{0, fcgiResponder, 0, 0, 0, 0, 0, 0}); err != nil {
+	if err := writeFCGIRecord(rw, fcgiBeginRequest, []byte{
+		fcgiBeginRequestRoleHigh,
+		fcgiResponder,
+		fcgiBeginRequestFlagsClose,
+		fcgiReservedByte,
+		fcgiReservedByte,
+		fcgiReservedByte,
+		fcgiReservedByte,
+		fcgiReservedByte,
+	}); err != nil {
 		return "", "", err
 	}
 	uri := script
 	if query != "" {
-		uri += "?" + query
+		uri += fpmQuerySeparator + query
 	}
-	params := encodeFCGIParams([][2]string{
-		{"SCRIPT_NAME", script},
-		{"SCRIPT_FILENAME", script},
-		{"REQUEST_METHOD", "GET"},
-		{"REQUEST_URI", uri},
-		{"QUERY_STRING", query},
-		{"SERVER_PROTOCOL", "HTTP/1.1"},
-		{"GATEWAY_INTERFACE", "CGI/1.1"},
-		{"SERVER_SOFTWARE", "sermo"},
+	params := encodeFCGIParams([]fcgiParam{
+		{fpmParamScriptName, script},
+		{fpmParamScriptFilename, script},
+		{fpmParamRequestMethod, fpmRequestMethodGET},
+		{fpmParamRequestURI, uri},
+		{fpmParamQueryString, query},
+		{fpmParamServerProtocol, fpmServerProtocolHTTP11},
+		{fpmParamGatewayInterface, fpmGatewayInterfaceCGI11},
+		{fpmParamServerSoftware, fpmServerSoftware},
 	})
 	if err := writeFCGIRecord(rw, fcgiParams, params); err != nil {
 		return "", "", err
@@ -123,9 +190,9 @@ func fpmRequest(rw io.ReadWriter, script, query string) (stdout, stderr string, 
 // untouched.
 func mergeFPMStatus(extra map[string]string, stdout string) {
 	body := stdout
-	if _, after, ok := strings.Cut(stdout, "\r\n\r\n"); ok { // strip CGI headers
+	if _, after, ok := strings.Cut(stdout, fpmCGIHeaderSeparatorCRLF); ok { // strip CGI headers
 		body = after
-	} else if _, after, ok := strings.Cut(stdout, "\n\n"); ok {
+	} else if _, after, ok := strings.Cut(stdout, fpmCGIHeaderSeparatorLF); ok {
 		body = after
 	}
 	var s struct {
@@ -148,11 +215,16 @@ func mergeFPMStatus(extra map[string]string, stdout string) {
 	putIfSet(extra, extraPool, s.Pool)
 	putIfSet(extra, extraProcessManager, s.ProcessManager)
 	for k, v := range map[string]int{
-		"active_processes": s.ActiveProcesses, "idle_processes": s.IdleProcesses,
-		"total_processes": s.TotalProcesses, "max_active_processes": s.MaxActiveProcesses,
-		"listen_queue": s.ListenQueue, "max_listen_queue": s.MaxListenQueue,
-		"max_children_reached": s.MaxChildrenReached, "slow_requests": s.SlowRequests,
-		"accepted_conn": s.AcceptedConn, "uptime_seconds": s.StartSince,
+		fpmExtraActiveProcesses:    s.ActiveProcesses,
+		fpmExtraIdleProcesses:      s.IdleProcesses,
+		fpmExtraTotalProcesses:     s.TotalProcesses,
+		fpmExtraMaxActiveProcesses: s.MaxActiveProcesses,
+		fpmExtraListenQueue:        s.ListenQueue,
+		fpmExtraMaxListenQueue:     s.MaxListenQueue,
+		fpmExtraMaxChildrenReached: s.MaxChildrenReached,
+		fpmExtraSlowRequests:       s.SlowRequests,
+		fpmExtraAcceptedConn:       s.AcceptedConn,
+		fpmExtraUptimeSeconds:      s.StartSince,
 	} {
 		extra[k] = strconv.Itoa(v)
 	}
@@ -164,9 +236,9 @@ func writeFCGIRecord(w io.Writer, recType byte, content []byte) error {
 	n := len(content)
 	header := []byte{
 		fcgiVersion1, recType,
-		0, fcgiRequestID, // request id (big-endian) = 1
-		byte(n >> 8), byte(n), // content length (big-endian)
-		0, 0, // padding length, reserved
+		fcgiRequestIDHigh, fcgiRequestID,
+		byte(n >> fcgiContentLengthHighShift), byte(n),
+		fcgiPaddingLengthNone, fcgiReservedByte,
 	}
 	if _, err := w.Write(header); err != nil {
 		return err
@@ -181,23 +253,23 @@ func writeFCGIRecord(w io.Writer, recType byte, content []byte) error {
 
 // encodeFCGIParams encodes name/value pairs as a FCGI_PARAMS body. Lengths < 128
 // use one byte; longer use the 4-byte form (high bit set).
-func encodeFCGIParams(pairs [][2]string) []byte {
+func encodeFCGIParams(pairs []fcgiParam) []byte {
 	var b bytes.Buffer
 	writeLen := func(n int) {
-		if n < 128 {
+		if n < fcgiShortParamLenMax {
 			b.WriteByte(byte(n))
 			return
 		}
-		b.WriteByte(byte(n>>24) | 0x80)
-		b.WriteByte(byte(n >> 16))
-		b.WriteByte(byte(n >> 8))
+		b.WriteByte(byte(n>>fcgiLongParamLenByte3Shift) | fcgiLongParamLenFlag)
+		b.WriteByte(byte(n >> fcgiLongParamLenByte2Shift))
+		b.WriteByte(byte(n >> fcgiLongParamLenByte1Shift))
 		b.WriteByte(byte(n))
 	}
 	for _, kv := range pairs {
-		writeLen(len(kv[0]))
-		writeLen(len(kv[1]))
-		b.WriteString(kv[0])
-		b.WriteString(kv[1])
+		writeLen(len(kv[fcgiParamNameIndex]))
+		writeLen(len(kv[fcgiParamValueIndex]))
+		b.WriteString(kv[fcgiParamNameIndex])
+		b.WriteString(kv[fcgiParamValueIndex])
 	}
 	return b.Bytes()
 }
@@ -206,14 +278,15 @@ func encodeFCGIParams(pairs [][2]string) []byte {
 // accumulated STDOUT and STDERR.
 func readFCGIResponse(r io.Reader) (stdout, stderr string, err error) {
 	var out, errOut bytes.Buffer
-	header := make([]byte, 8)
+	header := make([]byte, fcgiHeaderBytes)
 	for {
 		if _, err := io.ReadFull(r, header); err != nil {
 			return "", "", err
 		}
-		recType := header[1]
-		clen := int(header[4])<<8 | int(header[5])
-		plen := int(header[6])
+		recType := header[fcgiHeaderTypeOffset]
+		clen := int(header[fcgiHeaderContentLengthHighOffset])<<fcgiContentLengthHighShift |
+			int(header[fcgiHeaderContentLengthLowOffset])
+		plen := int(header[fcgiHeaderPaddingLengthOffset])
 		body := make([]byte, clen+plen)
 		if len(body) > 0 {
 			if _, err := io.ReadFull(r, body); err != nil {

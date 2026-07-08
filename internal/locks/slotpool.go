@@ -119,7 +119,7 @@ func (p SlotPool) InUse() (int, error) {
 // Acquire waits until a slot is available or ctx is cancelled.
 func (p SlotPool) Acquire(ctx context.Context) (*SlotHandle, error) {
 	p = p.withDefaults()
-	if err := os.MkdirAll(p.Dir, 0o755); err != nil {
+	if err := os.MkdirAll(p.Dir, lockDirMode); err != nil {
 		return nil, fmt.Errorf("create op-slots dir %s: %w", p.Dir, err)
 	}
 

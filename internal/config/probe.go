@@ -8,6 +8,18 @@ import (
 	"strings"
 )
 
+const (
+	directiveKeyIndex   = 0
+	directiveValueIndex = 1
+	directiveMinFields  = directiveValueIndex + 1
+	confdAssignSep      = "="
+	confdQuoteTrimSet   = `"'`
+	configLineSeparator = "\n"
+
+	patternCaptureGroup     = 1
+	patternCaptureMinGroups = patternCaptureGroup + 1
+)
+
 // probe.go reads host config files at load/resolve time. Two consumers share it:
 // `enable_if` (a boolean predicate that keeps or prunes a document branch) and
 // from_file variables (a value extracted into ${var}). A missing file or
@@ -32,8 +44,8 @@ func extractFileValue(path string, spec map[string]any) (string, bool, error) {
 		if re.NumSubexp() < 1 {
 			return "", false, fmt.Errorf("pattern must define at least one capture group")
 		}
-		if sub := re.FindSubmatch(data); len(sub) >= 2 {
-			return string(sub[1]), true, nil
+		if sub := re.FindSubmatch(data); len(sub) >= patternCaptureMinGroups {
+			return string(sub[patternCaptureGroup]), true, nil
 		}
 		return "", false, nil
 	}
@@ -53,10 +65,10 @@ func readOptionalFile(path string) ([]byte, bool) {
 // key and value are whitespace-separated (e.g. `port 1194`). Comment and blank
 // lines never match because their first field is not the key.
 func directiveValue(data []byte, key string) (string, bool) {
-	for _, line := range strings.Split(string(data), "\n") {
+	for _, line := range strings.Split(string(data), configLineSeparator) {
 		fields := strings.Fields(line)
-		if len(fields) >= 2 && fields[0] == key {
-			return fields[1], true
+		if len(fields) >= directiveMinFields && fields[directiveKeyIndex] == key {
+			return fields[directiveValueIndex], true
 		}
 	}
 	return "", false
@@ -70,13 +82,13 @@ func confdValue(path, key string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	for _, line := range strings.Split(string(data), "\n") {
+	for _, line := range strings.Split(string(data), configLineSeparator) {
 		line = strings.TrimSpace(line)
-		rest, ok := strings.CutPrefix(line, key+"=")
+		rest, ok := strings.CutPrefix(line, key+confdAssignSep)
 		if !ok {
 			continue
 		}
-		return strings.Trim(strings.TrimSpace(rest), `"'`), true
+		return strings.Trim(strings.TrimSpace(rest), confdQuoteTrimSet), true
 	}
 	return "", false
 }

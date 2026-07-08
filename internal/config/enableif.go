@@ -12,6 +12,8 @@ import (
 const keyEnableIf = "enable_if"
 
 const (
+	enableIfEntryPathDepth = 2
+
 	keyEnableIfFile     = "file"
 	keyEnableIfKey      = "key"
 	keyEnableIfContains = "contains"
@@ -66,7 +68,7 @@ func appendPath(path []string, key string) []string {
 }
 
 func enableIfAllowedAt(path []string) bool {
-	if len(path) != 2 {
+	if len(path) != enableIfEntryPathDepth {
 		return false
 	}
 	_, ok := enableIfSections[path[0]]

@@ -43,6 +43,16 @@ const (
 	dnsDefaultPort       = 53
 	dnsDefaultQuery      = "localhost"
 	dnsLocalRouteTimeout = 100 * time.Millisecond
+	dnsUDPBufferBytes    = 1500
+	dnsIDBytes           = 2
+	dnsHeaderBytes       = 12
+	dnsANCountStart      = 6
+	dnsANCountEnd        = 8
+	resolvConfLineSep    = "\n"
+	resolvConfNameserver = "nameserver"
+	resolvConfKeyIndex   = 0
+	resolvConfValueIndex = 1
+	resolvConfMinFields  = resolvConfValueIndex + 1
 )
 
 const (
@@ -53,6 +63,15 @@ const (
 	dnsRCodeNXDomain = 3
 	dnsRCodeNotImp   = 4
 	dnsRCodeRefused  = 5
+)
+
+const (
+	dnsRCodeNameFormErr  = "FORMERR"
+	dnsRCodeNameServFail = "SERVFAIL"
+	dnsRCodeNameNXDomain = "NXDOMAIN"
+	dnsRCodeNameNotImp   = "NOTIMP"
+	dnsRCodeNameRefused  = "REFUSED"
+	dnsRCodeNameUnknown  = "RCODE"
 )
 
 var dnsRouteAddrs = func(host string) (net.Addr, net.Addr, error) {
@@ -103,7 +122,7 @@ func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if _, err := c.Write(query); err != nil {
 		return Result{}, err
 	}
-	buf := make([]byte, 1500)
+	buf := make([]byte, dnsUDPBufferBytes)
 	n, err := c.Read(buf)
 	if err != nil {
 		return Result{}, err
@@ -134,10 +153,10 @@ func firstNameserver(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for _, line := range strings.Split(string(data), "\n") {
+	for _, line := range strings.Split(string(data), resolvConfLineSep) {
 		fields := strings.Fields(line)
-		if len(fields) >= 2 && fields[0] == "nameserver" {
-			return fields[1], nil
+		if len(fields) >= resolvConfMinFields && fields[resolvConfKeyIndex] == resolvConfNameserver {
+			return fields[resolvConfValueIndex], nil
 		}
 	}
 	return "", fmt.Errorf("no nameserver entries in %s", path)
@@ -201,22 +220,22 @@ func rcodeName(rcode int) string {
 	case dnsRCodeNoError:
 		return DNSRCodeNoErrorName
 	case dnsRCodeFormErr:
-		return "FORMERR"
+		return dnsRCodeNameFormErr
 	case dnsRCodeServFail:
-		return "SERVFAIL"
+		return dnsRCodeNameServFail
 	case dnsRCodeNXDomain:
-		return "NXDOMAIN"
+		return dnsRCodeNameNXDomain
 	case dnsRCodeNotImp:
-		return "NOTIMP"
+		return dnsRCodeNameNotImp
 	case dnsRCodeRefused:
-		return "REFUSED"
+		return dnsRCodeNameRefused
 	default:
-		return "RCODE" + strconv.Itoa(rcode)
+		return dnsRCodeNameUnknown + strconv.Itoa(rcode)
 	}
 }
 
 func dnsID() uint16 {
-	var b [2]byte
+	var b [dnsIDBytes]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return dnsFallbackID
 	}
@@ -264,8 +283,8 @@ func parseDNSReply(b []byte) (id uint16, rcode int, answers int, addrs []string,
 	if !hdr.Response {
 		return hdr.ID, 0, 0, nil, errors.New("not a DNS response (QR=0)")
 	}
-	if len(b) >= 12 { // always true after Start; makes the header read bounds-safe
-		answers = int(binary.BigEndian.Uint16(b[6:8])) // ANCOUNT from the header
+	if len(b) >= dnsHeaderBytes { // always true after Start; makes the header read bounds-safe
+		answers = int(binary.BigEndian.Uint16(b[dnsANCountStart:dnsANCountEnd]))
 	}
 	// Collect A/AAAA answers; a malformed question/answer section still leaves a
 	// valid header for the liveness verdict, so it is not a probe error.

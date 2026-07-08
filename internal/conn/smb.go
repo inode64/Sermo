@@ -31,6 +31,60 @@ func (smbProtocol) Name() string       { return ProtocolNameSMB }
 func (smbProtocol) DefaultPort() int   { return defaultPortSMB }
 func (smbProtocol) RequiresUser() bool { return false }
 
+const (
+	smbExtraSigningRequired = "signing_required"
+	smbProtocolID           = "\xfeSMB"
+	smbProtocolIDBytes      = 4
+)
+
+const (
+	smbDirectTCPHeaderBytes        = 4
+	smbDirectTCPLengthHighOffset   = 1
+	smbDirectTCPLengthMiddleOffset = 2
+	smbDirectTCPLengthLowOffset    = 3
+	smbDirectTCPMessageType        = 0x00
+	smbLengthByteShift             = 8
+	smbLengthHighShift             = 16
+)
+
+const (
+	smb2CreditRequestOffset           = 14
+	smb2Dialect202                    = 0x0202
+	smb2Dialect210                    = 0x0210
+	smb2Dialect300                    = 0x0300
+	smb2Dialect302                    = 0x0302
+	smb2Dialect311                    = 0x0311
+	smb2DialectWildcard               = 0x02FF
+	smb2HeaderBytes                   = 64
+	smb2HashAlgorithmSHA512           = 0x0001
+	smb2MaxNegotiateResponseBytes     = 1 << 16
+	smb2MinNegotiateResponseBytes     = 70
+	smb2NegotiateCommand              = 1
+	smb2NegotiateContextCount         = 1
+	smb2NegotiateContextCountOffset   = 32
+	smb2NegotiateContextOffset        = 112
+	smb2NegotiateContextOffsetOffset  = 28
+	smb2NegotiateDialectCountOffset   = 2
+	smb2NegotiateFixedBytes           = 36
+	smb2NegotiateSecurityModeOffset   = 4
+	smb2NegotiateSigningEnabled       = 0x0001
+	smb2NegotiateSigningRequired      = 0x0002
+	smb2PreauthContextBytes           = 8
+	smb2PreauthDataBytes              = 6
+	smb2PreauthDataLength             = 38
+	smb2PreauthDataLengthOffset       = 2
+	smb2PreauthHashAlgorithmCount     = 1
+	smb2PreauthHashAlgorithmOffset    = 4
+	smb2PreauthHashCountOffset        = 0
+	smb2PreauthIntegrityContext       = 0x0001
+	smb2PreauthSaltBytes              = 32
+	smb2PreauthSaltLengthOffset       = 2
+	smb2ResponseDialectOffset         = 68
+	smb2ResponseSecurityModeOffset    = 66
+	smb2ResponseSecurityModeEndOffset = 68
+	smb2ResponseDialectEndOffset      = 70
+)
+
 func (smbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	host := cfg.Host
 	if host == "" {
@@ -47,8 +101,8 @@ func (smbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 	extra := map[string]string{
-		extraProtocol:      smbProtocolName(dialect),
-		"signing_required": strconv.FormatBool(signingRequired),
+		extraProtocol:           smbProtocolName(dialect),
+		smbExtraSigningRequired: strconv.FormatBool(signingRequired),
 	}
 
 	if cfg.User != "" {
@@ -119,12 +173,14 @@ func smbNegotiate(ctx context.Context, addr, iface string) (dialect uint16, sign
 		return 0, false, err
 	}
 
-	var h [4]byte
+	var h [smbDirectTCPHeaderBytes]byte
 	if _, err := io.ReadFull(c, h[:]); err != nil {
 		return 0, false, err
 	}
-	n := int(h[1])<<16 | int(h[2])<<8 | int(h[3]) // direct-TCP message length
-	if n < 70 || n > 1<<16 {
+	n := int(h[smbDirectTCPLengthHighOffset])<<smbLengthHighShift |
+		int(h[smbDirectTCPLengthMiddleOffset])<<smbLengthByteShift |
+		int(h[smbDirectTCPLengthLowOffset])
+	if n < smb2MinNegotiateResponseBytes || n > smb2MaxNegotiateResponseBytes {
 		return 0, false, errors.New("invalid SMB2 negotiate response length")
 	}
 	resp := make([]byte, n)
@@ -137,45 +193,45 @@ func smbNegotiate(ctx context.Context, addr, iface string) (dialect uint16, sign
 // parseSMBNegotiate reads the dialect and signing requirement from an SMB2
 // NEGOTIATE response (after the direct-TCP framing has been stripped).
 func parseSMBNegotiate(resp []byte) (uint16, bool, error) {
-	if len(resp) < 70 || !bytes.Equal(resp[0:4], []byte{0xFE, 'S', 'M', 'B'}) {
+	if len(resp) < smb2MinNegotiateResponseBytes ||
+		!bytes.Equal(resp[:smbProtocolIDBytes], []byte(smbProtocolID)) {
 		return 0, false, errors.New("not an SMB2 response")
 	}
-	securityMode := binary.LittleEndian.Uint16(resp[66:68])
-	dialect := binary.LittleEndian.Uint16(resp[68:70])
-	const signingRequired = 0x0002 // SMB2_NEGOTIATE_SIGNING_REQUIRED
-	return dialect, securityMode&signingRequired != 0, nil
+	securityMode := binary.LittleEndian.Uint16(resp[smb2ResponseSecurityModeOffset:smb2ResponseSecurityModeEndOffset])
+	dialect := binary.LittleEndian.Uint16(resp[smb2ResponseDialectOffset:smb2ResponseDialectEndOffset])
+	return dialect, securityMode&smb2NegotiateSigningRequired != 0, nil
 }
 
 // buildSMBNegotiate builds a direct-TCP-framed SMB2 NEGOTIATE request offering
 // dialects 2.0.2..3.1.1 (with the mandatory pre-auth integrity context for
 // 3.1.1).
 func buildSMBNegotiate() ([]byte, error) {
-	var guid [16]byte
+	var guid [smbProtocolIDBytes * 4]byte
 	if _, err := rand.Read(guid[:]); err != nil {
 		return nil, err
 	}
-	var salt [32]byte
+	var salt [smb2PreauthSaltBytes]byte
 	if _, err := rand.Read(salt[:]); err != nil {
 		return nil, err
 	}
-	dialects := []uint16{0x0202, 0x0210, 0x0300, 0x0302, 0x0311}
+	dialects := []uint16{smb2Dialect202, smb2Dialect210, smb2Dialect300, smb2Dialect302, smb2Dialect311}
 
 	var b bytes.Buffer
 	// SMB2 header (64 bytes): ProtocolId, StructureSize, Command=NEGOTIATE.
-	hdr := make([]byte, 64)
-	copy(hdr[0:4], []byte{0xFE, 'S', 'M', 'B'})
-	binary.LittleEndian.PutUint16(hdr[4:], 64)
-	binary.LittleEndian.PutUint16(hdr[14:], 1) // CreditRequest
+	hdr := make([]byte, smb2HeaderBytes)
+	copy(hdr[:smbProtocolIDBytes], smbProtocolID)
+	binary.LittleEndian.PutUint16(hdr[smbProtocolIDBytes:], smb2HeaderBytes)
+	binary.LittleEndian.PutUint16(hdr[smb2CreditRequestOffset:], smb2NegotiateCommand)
 	b.Write(hdr)
 
 	// NEGOTIATE request body (36 fixed bytes).
-	body := make([]byte, 36)
-	binary.LittleEndian.PutUint16(body[0:], 36)                    // StructureSize
-	binary.LittleEndian.PutUint16(body[2:], uint16(len(dialects))) // DialectCount
-	binary.LittleEndian.PutUint16(body[4:], 0x0001)                // SecurityMode = SIGNING_ENABLED
-	copy(body[12:28], guid[:])                                     // ClientGuid
-	binary.LittleEndian.PutUint32(body[28:], 112)                  // NegotiateContextOffset
-	binary.LittleEndian.PutUint16(body[32:], 1)                    // NegotiateContextCount
+	body := make([]byte, smb2NegotiateFixedBytes)
+	binary.LittleEndian.PutUint16(body[0:], smb2NegotiateFixedBytes)
+	binary.LittleEndian.PutUint16(body[smb2NegotiateDialectCountOffset:], uint16(len(dialects)))
+	binary.LittleEndian.PutUint16(body[smb2NegotiateSecurityModeOffset:], smb2NegotiateSigningEnabled)
+	copy(body[12:28], guid[:])
+	binary.LittleEndian.PutUint32(body[smb2NegotiateContextOffsetOffset:], smb2NegotiateContextOffset)
+	binary.LittleEndian.PutUint16(body[smb2NegotiateContextCountOffset:], smb2NegotiateContextCount)
 	b.Write(body)
 
 	for _, d := range dialects {
@@ -184,35 +240,40 @@ func buildSMBNegotiate() ([]byte, error) {
 	b.Write([]byte{0, 0}) // pad dialects (110) to 8-byte alignment (112)
 
 	// SMB2_PREAUTH_INTEGRITY_CAPABILITIES context.
-	ctx := make([]byte, 8)
-	binary.LittleEndian.PutUint16(ctx[0:], 0x0001) // ContextType
-	binary.LittleEndian.PutUint16(ctx[2:], 38)     // DataLength
+	ctx := make([]byte, smb2PreauthContextBytes)
+	binary.LittleEndian.PutUint16(ctx[0:], smb2PreauthIntegrityContext)
+	binary.LittleEndian.PutUint16(ctx[smb2PreauthDataLengthOffset:], smb2PreauthDataLength)
 	b.Write(ctx)
-	data := make([]byte, 6)
-	binary.LittleEndian.PutUint16(data[0:], 1)      // HashAlgorithmCount
-	binary.LittleEndian.PutUint16(data[2:], 32)     // SaltLength
-	binary.LittleEndian.PutUint16(data[4:], 0x0001) // SHA-512
+	data := make([]byte, smb2PreauthDataBytes)
+	binary.LittleEndian.PutUint16(data[smb2PreauthHashCountOffset:], smb2PreauthHashAlgorithmCount)
+	binary.LittleEndian.PutUint16(data[smb2PreauthSaltLengthOffset:], smb2PreauthSaltBytes)
+	binary.LittleEndian.PutUint16(data[smb2PreauthHashAlgorithmOffset:], smb2HashAlgorithmSHA512)
 	b.Write(data)
 	b.Write(salt[:])
 
 	msg := b.Bytes()
-	frame := []byte{0x00, byte(len(msg) >> 16), byte(len(msg) >> 8), byte(len(msg))}
+	frame := []byte{
+		smbDirectTCPMessageType,
+		byte(len(msg) >> smbLengthHighShift),
+		byte(len(msg) >> smbLengthByteShift),
+		byte(len(msg)),
+	}
 	return append(frame, msg...), nil
 }
 
 func smbDialectName(d uint16) string {
 	switch d {
-	case 0x0202:
+	case smb2Dialect202:
 		return "2.0.2"
-	case 0x0210:
+	case smb2Dialect210:
 		return "2.1"
-	case 0x0300:
+	case smb2Dialect300:
 		return "3.0"
-	case 0x0302:
+	case smb2Dialect302:
 		return "3.0.2"
-	case 0x0311:
+	case smb2Dialect311:
 		return "3.1.1"
-	case 0x02FF:
+	case smb2DialectWildcard:
 		return "2.x"
 	default:
 		return fmt.Sprintf("0x%04x", d)

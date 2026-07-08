@@ -19,6 +19,12 @@ func (spamdProtocol) Name() string       { return ProtocolNameSpamd }
 func (spamdProtocol) DefaultPort() int   { return defaultPortSpamd }
 func (spamdProtocol) RequiresUser() bool { return false }
 
+const (
+	spamdCommandPing = "PING SPAMC/1.5\r\n\r\n"
+	spamdReplyPong   = "PONG"
+	spamdReplyPrefix = "SPAMD/"
+)
+
 func (spamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	c, err := dialDeadline(ctx, cfg, defaultPortSpamd)
 	if err != nil {
@@ -26,7 +32,7 @@ func (spamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	defer func() { _ = c.Close() }()
 
-	if _, err := io.WriteString(c, "PING SPAMC/1.5\r\n\r\n"); err != nil {
+	if _, err := io.WriteString(c, spamdCommandPing); err != nil {
 		return Result{}, err
 	}
 	line, err := readGreetingLine(c)
@@ -43,11 +49,10 @@ func (spamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // parseSpamdPong validates a spamd PING reply ("SPAMD/1.5 0 PONG") and returns
 // the SPAMD protocol version.
 func parseSpamdPong(line string) (string, bool) {
-	const prefix = "SPAMD/"
-	if !strings.HasPrefix(line, prefix) || !strings.Contains(line, "PONG") {
+	if !strings.HasPrefix(line, spamdReplyPrefix) || !strings.Contains(line, spamdReplyPong) {
 		return "", false
 	}
-	v := line[len(prefix):]
+	v := line[len(spamdReplyPrefix):]
 	if i := strings.IndexByte(v, ' '); i >= 0 {
 		v = v[:i]
 	}

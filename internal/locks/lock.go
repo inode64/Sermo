@@ -16,6 +16,14 @@ import (
 type State string
 
 const (
+	lockDirMode  = 0o755
+	lockFileMode = 0o644
+
+	lockIdentifierService = "service"
+	lockIdentifierName    = "lock name"
+)
+
+const (
 	// StateActive blocks the actions its guards cover.
 	StateActive State = "active"
 	// StateExpired means the TTL elapsed; the lock is inactive and reclaimable.

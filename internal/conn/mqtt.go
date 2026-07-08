@@ -12,8 +12,38 @@ import (
 func init() { Register(mqttProtocol{}) }
 
 const (
-	mqttClientID                 = "sermo-check"
-	mqttConnackCodeAccepted byte = 0
+	mqttClientID                          = "sermo-check"
+	mqttProtocolName                      = "MQTT"
+	mqttConnackNameAccepted               = "accepted"
+	mqttConnackNameBadCredentials         = "bad-username-or-password"
+	mqttConnackNameIDRejected             = "identifier-rejected"
+	mqttConnackNameNotAuthorized          = "not-authorized"
+	mqttConnackNameServerUnavailable      = "server-unavailable"
+	mqttConnackNameUnacceptableProto      = "unacceptable-protocol-version"
+	mqttConnackCodeAccepted          byte = 0
+	mqttConnackCodeUnacceptableProto byte = 1
+	mqttConnackCodeIDRejected        byte = 2
+	mqttConnackCodeServerUnavailable byte = 3
+	mqttConnackCodeBadCredentials    byte = 4
+	mqttConnackCodeNotAuthorized     byte = 5
+	mqttConnackPacketType            byte = 0x20
+	mqttConnackSessionPresent        byte = 0x01
+	mqttConnectCleanSession          byte = 0x02
+	mqttConnectPacketType            byte = 0x10
+	mqttConnectPasswordFlag          byte = 0x40
+	mqttConnectUserFlag              byte = 0x80
+	mqttProtocolLevel311             byte = 0x04
+	mqttRemainingLengthBase               = 128
+	mqttRemainingLengthMoreFlag      byte = 0x80
+	mqttStringLengthShift                 = 8
+	mqttKeepAliveSeconds                  = 60
+)
+
+const (
+	mqttPacketTypeOffset         = 0
+	mqttConnackMinBytes          = 4
+	mqttConnackSessionFlagOffset = 2
+	mqttConnackReturnCodeOffset  = 3
 )
 
 // mqttProtocol probes an MQTT broker natively (MQTT 3.1.1): it performs the
@@ -38,7 +68,7 @@ func (mqttProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if _, err := c.Write(buildMQTTConnect(mqttClientID, cfg.User, cfg.Password)); err != nil {
 		return Result{}, err
 	}
-	var ack [4]byte
+	var ack [mqttConnackMinBytes]byte
 	if _, err := io.ReadFull(c, ack[:]); err != nil {
 		return Result{}, err
 	}
@@ -60,18 +90,18 @@ func (mqttProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // optional username/password.
 func buildMQTTConnect(clientID, user, pass string) []byte {
 	var vh bytes.Buffer
-	writeMQTTString(&vh, "MQTT")
-	vh.WriteByte(0x04)  // protocol level (MQTT 3.1.1)
-	flags := byte(0x02) // clean session
+	writeMQTTString(&vh, mqttProtocolName)
+	vh.WriteByte(mqttProtocolLevel311)
+	flags := mqttConnectCleanSession
 	if user != "" {
-		flags |= 0x80
+		flags |= mqttConnectUserFlag
 	}
 	if pass != "" {
-		flags |= 0x40
+		flags |= mqttConnectPasswordFlag
 	}
 	vh.WriteByte(flags)
-	vh.WriteByte(0x00) // keep-alive high byte
-	vh.WriteByte(0x3C) // keep-alive low byte (60s)
+	vh.WriteByte(byte(mqttKeepAliveSeconds >> mqttStringLengthShift))
+	vh.WriteByte(byte(mqttKeepAliveSeconds))
 	writeMQTTString(&vh, clientID)
 	if user != "" {
 		writeMQTTString(&vh, user)
@@ -81,7 +111,7 @@ func buildMQTTConnect(clientID, user, pass string) []byte {
 	}
 
 	var pkt bytes.Buffer
-	pkt.WriteByte(0x10) // CONNECT control packet
+	pkt.WriteByte(mqttConnectPacketType)
 	writeMQTTRemainingLength(&pkt, vh.Len())
 	pkt.Write(vh.Bytes())
 	return pkt.Bytes()
@@ -90,7 +120,7 @@ func buildMQTTConnect(clientID, user, pass string) []byte {
 // writeMQTTString writes a 2-byte big-endian length-prefixed UTF-8 string.
 func writeMQTTString(b *bytes.Buffer, s string) {
 	n := len(s)
-	b.WriteByte(byte(n >> 8))
+	b.WriteByte(byte(n >> mqttStringLengthShift))
 	b.WriteByte(byte(n))
 	b.WriteString(s)
 }
@@ -98,10 +128,10 @@ func writeMQTTString(b *bytes.Buffer, s string) {
 // writeMQTTRemainingLength writes the MQTT variable-length "remaining length".
 func writeMQTTRemainingLength(b *bytes.Buffer, n int) {
 	for {
-		d := byte(n % 128)
-		n /= 128
+		d := byte(n % mqttRemainingLengthBase)
+		n /= mqttRemainingLengthBase
 		if n > 0 {
-			d |= 0x80
+			d |= mqttRemainingLengthMoreFlag
 		}
 		b.WriteByte(d)
 		if n == 0 {
@@ -113,30 +143,30 @@ func writeMQTTRemainingLength(b *bytes.Buffer, n int) {
 // parseMQTTConnack reads a CONNACK packet: the connect return code and the
 // session-present flag.
 func parseMQTTConnack(b []byte) (code byte, sessionPresent bool, err error) {
-	if len(b) < 4 {
+	if len(b) < mqttConnackMinBytes {
 		return 0, false, errors.New("short MQTT CONNACK")
 	}
-	if b[0] != 0x20 {
-		return 0, false, fmt.Errorf("not an MQTT CONNACK (0x%02x)", b[0])
+	if b[mqttPacketTypeOffset] != mqttConnackPacketType {
+		return 0, false, fmt.Errorf("not an MQTT CONNACK (0x%02x)", b[mqttPacketTypeOffset])
 	}
-	return b[3], b[2]&0x01 != 0, nil
+	return b[mqttConnackReturnCodeOffset], b[mqttConnackSessionFlagOffset]&mqttConnackSessionPresent != 0, nil
 }
 
 // mqttConnackName names a CONNACK return code (MQTT 3.1.1).
 func mqttConnackName(code byte) string {
 	switch code {
-	case 0:
-		return "accepted"
-	case 1:
-		return "unacceptable-protocol-version"
-	case 2:
-		return "identifier-rejected"
-	case 3:
-		return "server-unavailable"
-	case 4:
-		return "bad-username-or-password"
-	case 5:
-		return "not-authorized"
+	case mqttConnackCodeAccepted:
+		return mqttConnackNameAccepted
+	case mqttConnackCodeUnacceptableProto:
+		return mqttConnackNameUnacceptableProto
+	case mqttConnackCodeIDRejected:
+		return mqttConnackNameIDRejected
+	case mqttConnackCodeServerUnavailable:
+		return mqttConnackNameServerUnavailable
+	case mqttConnackCodeBadCredentials:
+		return mqttConnackNameBadCredentials
+	case mqttConnackCodeNotAuthorized:
+		return mqttConnackNameNotAuthorized
 	default:
 		return fmt.Sprintf("code-%d", code)
 	}

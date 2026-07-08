@@ -7,7 +7,24 @@ import (
 	"strings"
 )
 
-const procRoot = "/proc"
+const (
+	procRoot        = "/proc"
+	procFileCmdline = "cmdline"
+	procFileExe     = "exe"
+	procFileStatus  = "status"
+
+	procStatusStatePrefix = "State:"
+	procStatusPPIDPrefix  = "PPid:"
+	procStatusUIDPrefix   = "Uid:"
+	procStatusGIDPrefix   = "Gid:"
+	procLineSeparator     = "\n"
+	procStatusFirstField  = 0
+	numericIDBase         = 10
+	numericIDBits         = 32
+
+	procCmdlineSeparator = "\x00"
+	procDeletedSuffix    = " (deleted)"
+)
 
 func procPIDPath(pid int, name string) string {
 	return filepath.Join(procRoot, strconv.Itoa(pid), name)
@@ -80,33 +97,33 @@ func (r OSReader) userName(uid uint32) string {
 }
 
 func readStatus(pid int) (ppid int, uid, gid uint32, state string, ok bool) {
-	data, err := os.ReadFile(procPIDPath(pid, "status"))
+	data, err := os.ReadFile(procPIDPath(pid, procFileStatus))
 	if err != nil {
 		return 0, 0, 0, "", false
 	}
 	var gotPPID, gotUID bool
-	for _, line := range strings.Split(string(data), "\n") {
+	for _, line := range strings.Split(string(data), procLineSeparator) {
 		switch {
-		case strings.HasPrefix(line, "State:"):
-			if fields := strings.Fields(strings.TrimPrefix(line, "State:")); len(fields) > 0 {
-				state = fields[0] // single char: R, S, Z, ...
+		case strings.HasPrefix(line, procStatusStatePrefix):
+			if fields := strings.Fields(strings.TrimPrefix(line, procStatusStatePrefix)); len(fields) > procStatusFirstField {
+				state = fields[procStatusFirstField] // single char: R, S, Z, ...
 			}
-		case strings.HasPrefix(line, "PPid:"):
-			if v, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "PPid:"))); err == nil {
+		case strings.HasPrefix(line, procStatusPPIDPrefix):
+			if v, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, procStatusPPIDPrefix))); err == nil {
 				ppid, gotPPID = v, true
 			}
-		case strings.HasPrefix(line, "Uid:"):
-			fields := strings.Fields(strings.TrimPrefix(line, "Uid:"))
-			if len(fields) > 0 {
-				if v, err := strconv.ParseUint(fields[0], 10, 32); err == nil {
+		case strings.HasPrefix(line, procStatusUIDPrefix):
+			fields := strings.Fields(strings.TrimPrefix(line, procStatusUIDPrefix))
+			if len(fields) > procStatusFirstField {
+				if v, err := strconv.ParseUint(fields[procStatusFirstField], numericIDBase, numericIDBits); err == nil {
 					uid, gotUID = uint32(v), true
 				}
 			}
-		case strings.HasPrefix(line, "Gid:"):
+		case strings.HasPrefix(line, procStatusGIDPrefix):
 			// real GID is the first field, like Uid; best-effort (not required).
-			fields := strings.Fields(strings.TrimPrefix(line, "Gid:"))
-			if len(fields) > 0 {
-				if v, err := strconv.ParseUint(fields[0], 10, 32); err == nil {
+			fields := strings.Fields(strings.TrimPrefix(line, procStatusGIDPrefix))
+			if len(fields) > procStatusFirstField {
+				if v, err := strconv.ParseUint(fields[procStatusFirstField], numericIDBase, numericIDBits); err == nil {
 					gid = uint32(v)
 				}
 			}
@@ -119,29 +136,29 @@ func readStatus(pid int) (ppid int, uid, gid uint32, state string, ok bool) {
 // read or points at a deleted binary, so such a process never matches an exe
 // selector.
 func readExe(pid int) (string, bool) {
-	target, err := os.Readlink(procPIDPath(pid, "exe"))
+	target, err := os.Readlink(procPIDPath(pid, procFileExe))
 	if err != nil {
 		return "", false
 	}
-	if target == "" || strings.HasSuffix(target, " (deleted)") {
+	if target == "" || strings.HasSuffix(target, procDeletedSuffix) {
 		return "", false
 	}
 	return filepath.Clean(target), true
 }
 
 func readCmdline(pid int) []string {
-	data, err := os.ReadFile(procPIDPath(pid, "cmdline"))
+	data, err := os.ReadFile(procPIDPath(pid, procFileCmdline))
 	if err != nil || len(data) == 0 {
 		return nil
 	}
-	parts := strings.Split(strings.TrimRight(string(data), "\x00"), "\x00")
+	parts := strings.Split(strings.TrimRight(string(data), procCmdlineSeparator), procCmdlineSeparator)
 	return parts
 }
 
 // OSUserResolver resolves a selector user name (or numeric id) to a real UID
 // through the passwd database.
 func OSUserResolver(name string) (uint32, bool) {
-	if uid, err := strconv.ParseUint(name, 10, 32); err == nil {
+	if uid, err := strconv.ParseUint(name, numericIDBase, numericIDBits); err == nil {
 		return uint32(uid), true
 	}
 	return nativeUserID(name)
@@ -150,7 +167,7 @@ func OSUserResolver(name string) (uint32, bool) {
 // OSGroupResolver resolves a group name (or numeric gid string) to its GID via
 // the OS group database — the group analog of OSUserResolver, native Go.
 func OSGroupResolver(name string) (uint32, bool) {
-	if gid, err := strconv.ParseUint(name, 10, 32); err == nil {
+	if gid, err := strconv.ParseUint(name, numericIDBase, numericIDBits); err == nil {
 		return uint32(gid), true
 	}
 	return nativeGroupID(name)

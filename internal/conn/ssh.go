@@ -29,6 +29,18 @@ func (sshProtocol) Name() string       { return ProtocolNameSSH }
 func (sshProtocol) DefaultPort() int   { return defaultPortSSH }
 func (sshProtocol) RequiresUser() bool { return false }
 
+const (
+	sshBannerPrefix        = "SSH-"
+	sshBannerSeparator     = "-"
+	sshDefaultProbeUser    = "anonymous"
+	sshExtraHostKeyAlgo    = "host_key_algo"
+	sshExtraServerVersion  = "server_version"
+	sshLineTerminator      = '\n'
+	sshLineTrimRight       = "\r\n"
+	sshMaxBannerBytes      = 16 * 1024
+	sshRejectReasonMessage = ""
+)
+
 func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	host := cfg.Host
 	if host == "" {
@@ -53,14 +65,14 @@ func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("read ssh banner: %w", err)
 	}
-	if !strings.HasPrefix(banner, "SSH-") {
+	if !strings.HasPrefix(banner, sshBannerPrefix) {
 		return Result{}, fmt.Errorf("not an SSH server: %q", banner)
 	}
 
 	var hostKey ssh.PublicKey
 	user := cfg.User
 	if user == "" {
-		user = "anonymous"
+		user = sshDefaultProbeUser
 	}
 	var auth []ssh.AuthMethod
 	if cfg.Password != "" {
@@ -82,7 +94,7 @@ func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		go ssh.DiscardRequests(reqs)
 		go func() {
 			for ch := range chans {
-				_ = ch.Reject(ssh.Prohibited, "")
+				_ = ch.Reject(ssh.Prohibited, sshRejectReasonMessage)
 			}
 		}()
 		_ = sshConn.Close()
@@ -102,10 +114,10 @@ func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	return Result{
 		Version: software,
 		Extra: map[string]string{
-			ExtraKeyFingerprint: ssh.FingerprintSHA256(hostKey),
-			"host_key_algo":     hostKey.Type(),
-			"server_version":    banner,
-			extraProtocol:       proto,
+			ExtraKeyFingerprint:   ssh.FingerprintSHA256(hostKey),
+			sshExtraHostKeyAlgo:   hostKey.Type(),
+			sshExtraServerVersion: banner,
+			extraProtocol:         proto,
 		},
 	}, nil
 }
@@ -127,8 +139,8 @@ func sshSucceeds(hostKeyCaptured, authed, requireAuth bool) bool {
 // parseSSHBanner splits an SSH identification string ("SSH-2.0-OpenSSH_9.6 …")
 // into its protocol version and software/comment portion.
 func parseSSHBanner(banner string) (protocol, software string) {
-	rest := strings.TrimPrefix(banner, "SSH-")
-	proto, sw, ok := strings.Cut(rest, "-")
+	rest := strings.TrimPrefix(banner, sshBannerPrefix)
+	proto, sw, ok := strings.Cut(rest, sshBannerSeparator)
 	if !ok {
 		return rest, ""
 	}
@@ -144,16 +156,16 @@ func readSSHBanner(c net.Conn) (raw []byte, banner string, err error) {
 	var line []byte
 	one := make([]byte, 1)
 	for {
-		if len(raw) > 16*1024 {
+		if len(raw) > sshMaxBannerBytes {
 			return raw, "", errors.New("ssh banner too long")
 		}
 		n, rerr := c.Read(one)
 		if n == 1 {
 			raw = append(raw, one[0])
-			if one[0] == '\n' {
-				s := strings.TrimRight(string(line), "\r\n")
+			if one[0] == sshLineTerminator {
+				s := strings.TrimRight(string(line), sshLineTrimRight)
 				line = line[:0]
-				if strings.HasPrefix(s, "SSH-") {
+				if strings.HasPrefix(s, sshBannerPrefix) {
 					return raw, s, nil
 				}
 				continue // a pre-identification line; keep reading

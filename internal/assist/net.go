@@ -93,9 +93,9 @@ func chooseIfaces(p *Prompt, question string, cands []Iface, defaultIfaces []str
 }
 
 func ifaceLabel(iface Iface, defaultRoute bool) string {
-	state := "down"
+	state := checks.NetStateDown
 	if iface.Up {
-		state = "up"
+		state = checks.NetStateUp
 	}
 	label := fmt.Sprintf("%s (%s)", iface.Name, state)
 	if defaultRoute {

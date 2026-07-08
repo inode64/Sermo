@@ -26,6 +26,36 @@ const (
 	ippVersionPrefix  = "IPP/"
 )
 
+const (
+	ippRequestIDDefault    = 1
+	ippResponseMinBytes    = 8
+	ippStatusOffset        = 2
+	ippStatusEndOffset     = 4
+	ippVersionMajor        = 2
+	ippVersionMinor        = 0
+	ippVersionMajorOffset  = 0
+	ippVersionMinorOffset  = 1
+	ippTagOperationAttrs   = 0x01
+	ippTagEndOfAttributes  = 0x03
+	ippTagCharset          = 0x47
+	ippTagNaturalLanguage  = 0x48
+	ippAttrCharset         = "attributes-charset"
+	ippAttrNaturalLanguage = "attributes-natural-language"
+	ippCharsetUTF8         = "utf-8"
+	ippLanguageEN          = "en"
+)
+
+const (
+	ippStatusOK                  = 0x0000
+	ippStatusClientUnauthorized  = 0x0401
+	ippStatusClientNotFound      = 0x0406
+	ippStatusServerInternalError = 0x0500
+	ippStatusNameOK              = "successful-ok"
+	ippStatusNameUnauthorized    = "client-error-not-authorized"
+	ippStatusNameNotFound        = "client-error-not-found"
+	ippStatusNameInternalError   = "server-error-internal-error"
+)
+
 // ippProtocol probes an IPP server (CUPS/cupsd) natively: it POSTs an IPP
 // request (CUPS-Get-Default) to the server over HTTP and verifies a valid IPP
 // response. Any parseable IPP reply proves the daemon is up and speaking IPP.
@@ -56,7 +86,7 @@ func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 
 	url := scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port)) + ippEndpointRoot
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buildIPPRequest(ippCUPSGetDefault, 1)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buildIPPRequest(ippCUPSGetDefault, ippRequestIDDefault)))
 	if err != nil {
 		return Result{}, err
 	}
@@ -88,13 +118,13 @@ func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // attributes-charset and attributes-natural-language operation attributes.
 func buildIPPRequest(op uint16, requestID uint32) []byte {
 	var b bytes.Buffer
-	b.Write([]byte{0x02, 0x00}) // version 2.0
+	b.Write([]byte{ippVersionMajor, ippVersionMinor})
 	_ = binary.Write(&b, binary.BigEndian, op)
 	_ = binary.Write(&b, binary.BigEndian, requestID)
-	b.WriteByte(0x01) // operation-attributes-tag
-	writeIPPAttr(&b, 0x47, "attributes-charset", "utf-8")
-	writeIPPAttr(&b, 0x48, "attributes-natural-language", "en")
-	b.WriteByte(0x03) // end-of-attributes-tag
+	b.WriteByte(ippTagOperationAttrs)
+	writeIPPAttr(&b, ippTagCharset, ippAttrCharset, ippCharsetUTF8)
+	writeIPPAttr(&b, ippTagNaturalLanguage, ippAttrNaturalLanguage, ippLanguageEN)
+	b.WriteByte(ippTagEndOfAttributes)
 	return b.Bytes()
 }
 
@@ -108,25 +138,25 @@ func writeIPPAttr(b *bytes.Buffer, valueTag byte, name, value string) {
 
 // parseIPPResponse reads the IPP response header: version and status-code.
 func parseIPPResponse(b []byte) (version string, status uint16, err error) {
-	if len(b) < 8 {
+	if len(b) < ippResponseMinBytes {
 		return "", 0, errors.New("short IPP response")
 	}
-	version = fmt.Sprintf("%d.%d", b[0], b[1])
-	status = binary.BigEndian.Uint16(b[2:4])
+	version = fmt.Sprintf("%d.%d", b[ippVersionMajorOffset], b[ippVersionMinorOffset])
+	status = binary.BigEndian.Uint16(b[ippStatusOffset:ippStatusEndOffset])
 	return version, status, nil
 }
 
 // ippStatusName maps a few common IPP status codes; others render as hex.
 func ippStatusName(code uint16) string {
 	switch code {
-	case 0x0000:
-		return "successful-ok"
-	case 0x0401:
-		return "client-error-not-authorized"
-	case 0x0406:
-		return "client-error-not-found"
-	case 0x0500:
-		return "server-error-internal-error"
+	case ippStatusOK:
+		return ippStatusNameOK
+	case ippStatusClientUnauthorized:
+		return ippStatusNameUnauthorized
+	case ippStatusClientNotFound:
+		return ippStatusNameNotFound
+	case ippStatusServerInternalError:
+		return ippStatusNameInternalError
 	default:
 		return fmt.Sprintf("0x%04x", code)
 	}

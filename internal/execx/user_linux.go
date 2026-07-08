@@ -12,6 +12,11 @@ import (
 	"syscall"
 )
 
+const (
+	userIDNumericBase = 10
+	userIDBitSize     = 32
+)
+
 func prepareCommandUser(cmd *exec.Cmd, userName string) error {
 	userName = strings.TrimSpace(userName)
 	if userName == "" {
@@ -71,7 +76,7 @@ func numericUserID(s string) bool {
 }
 
 func parseUserID(s, label string) (uint32, error) {
-	n, err := strconv.ParseUint(s, 10, 32)
+	n, err := strconv.ParseUint(s, userIDNumericBase, userIDBitSize)
 	if err != nil {
 		return 0, fmt.Errorf("execx: parse command user %s %q: %w", label, s, err)
 	}

@@ -37,6 +37,9 @@ const (
 )
 
 const (
+	serviceOutputLineSeparator = "\n"
+	serviceOutputLineByte      = '\n'
+
 	openRCRuntimeDir = "/run/openrc"
 	openRCInitDir    = "/etc/init.d"
 	openRCConfDir    = "/etc/conf.d"

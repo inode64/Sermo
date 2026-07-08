@@ -65,6 +65,13 @@ const (
 	TypeWall  = "wall"
 )
 
+const (
+	notifyCRLF = "\r\n"
+	notifyCR   = "\r"
+	notifyLF   = "\n"
+	notifySP   = " "
+)
+
 // WithTemplateDir configures where named notification templates are loaded
 // from.
 func WithTemplateDir(dir string) Option {

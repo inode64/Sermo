@@ -69,13 +69,13 @@ func dhcpExchange(ctx context.Context, iface, server string, packet []byte, xid 
 		return nil, err
 	}
 
-	buf := make([]byte, 1500)
+	buf := make([]byte, dhcpUDPBufferBytes)
 	for {
 		n, _, err := pc.ReadFrom(buf)
 		if err != nil {
 			return nil, err
 		}
-		if n >= 8 && buf[0] == dhcpOpBootReply && binary.BigEndian.Uint32(buf[4:8]) == xid {
+		if n >= dhcpXIDEndOffset && buf[dhcpOpOffset] == dhcpOpBootReply && binary.BigEndian.Uint32(buf[dhcpXIDOffset:dhcpXIDEndOffset]) == xid {
 			reply := make([]byte, n)
 			copy(reply, buf[:n])
 			return reply, nil

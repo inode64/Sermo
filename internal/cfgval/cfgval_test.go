@@ -350,6 +350,31 @@ func TestByteSize(t *testing.T) {
 	}
 }
 
+func TestPercent(t *testing.T) {
+	cases := []struct {
+		in   any
+		want float64
+		ok   bool
+	}{
+		{"0", 0, true},
+		{"100", 100, true},
+		{" 10% ", 10, true},
+		{"12.5%", 12.5, true},
+		{75, 75, true},
+		{-1, 0, false},
+		{"101", 0, false},
+		{"NaN", 0, false},
+		{"bad", 0, false},
+		{"%", 0, false},
+	}
+	for _, c := range cases {
+		got, ok := Percent(c.in)
+		if got != c.want || ok != c.ok {
+			t.Errorf("Percent(%#v) = (%v, %v), want (%v, %v)", c.in, got, ok, c.want, c.ok)
+		}
+	}
+}
+
 func TestBool(t *testing.T) {
 	if !Bool(true) {
 		t.Error("Bool(true) = false")

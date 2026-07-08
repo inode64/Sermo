@@ -23,7 +23,11 @@ func (rspamdProtocol) Name() string       { return ProtocolNameRspamd }
 func (rspamdProtocol) DefaultPort() int   { return defaultPortRspamd }
 func (rspamdProtocol) RequiresUser() bool { return false }
 
-const rspamdPingEndpoint = "/ping"
+const (
+	rspamdPingEndpoint  = "/ping"
+	rspamdVersionDelims = " \t;,"
+	rspamdVersionPrefix = "rspamd/"
+)
 
 func (rspamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	host := cfg.Host
@@ -76,13 +80,12 @@ func (rspamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // "Rspamd/3.8.4" -> "3.8.4". It returns "" when the header is absent or not in
 // the expected form.
 func rspamdVersion(server string) string {
-	const prefix = "rspamd/"
-	i := strings.Index(strings.ToLower(server), prefix)
+	i := strings.Index(strings.ToLower(server), rspamdVersionPrefix)
 	if i < 0 {
 		return ""
 	}
-	v := server[i+len(prefix):]
-	if j := strings.IndexAny(v, " \t;,"); j >= 0 {
+	v := server[i+len(rspamdVersionPrefix):]
+	if j := strings.IndexAny(v, rspamdVersionDelims); j >= 0 {
 		v = v[:j]
 	}
 	return v

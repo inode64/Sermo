@@ -9,20 +9,59 @@ import (
 	"time"
 )
 
-// clockTicks is the conventional kernel USER_HZ on Linux. The Go runtime does
+// LinuxClockTicks is the conventional kernel USER_HZ on Linux. The Go runtime does
 // not expose sysconf(SC_CLK_TCK); 100 is correct on virtually all Linux builds.
-const clockTicks = 100.0
+const LinuxClockTicks = 100.0
 
 // pageSize is used to convert statm resident pages to bytes.
 var pageSize = uint64(os.Getpagesize())
 
-const procRoot = "/proc"
+const (
+	procRoot          = "/proc"
+	procLineSeparator = "\n"
+	bytesPerKiB       = 1024
+)
 
 // procfs file names read under /proc and /proc/<pid>.
 const (
-	procFileStat   = "stat"
-	procFileStatm  = "statm"
-	procFileStatus = "status"
+	procFileFD      = "fd"
+	procFileIO      = "io"
+	procFileLoadavg = "loadavg"
+	procFileMeminfo = "meminfo"
+	procFileStat    = "stat"
+	procFileStatm   = "statm"
+	procFileStatus  = "status"
+	procFileTask    = "task"
+)
+
+const (
+	procStatUTimeIndex            = 11
+	procStatSTimeIndex            = 12
+	procStatStartTimeIndex        = 19
+	procStatmResidentPagesIndex   = 1
+	procStatCPULabelIndex         = 0
+	procStatCPUValuesStartIndex   = procStatCPULabelIndex + 1
+	procStatAggregateMinFields    = 5
+	procStatCPUPrefix             = "cpu"
+	procStatBootTimePrefix        = "btime "
+	procStatIdleValueOffset       = 3
+	procStatIOWaitValueOffset     = 4
+	procLoadAvg1Index             = 0
+	procLoadAvg5Index             = 1
+	procLoadAvg15Index            = 2
+	procLoadAvgMinFields          = 3
+	procMeminfoMemTotalPrefix     = "MemTotal:"
+	procMeminfoMemAvailablePrefix = "MemAvailable:"
+	procMeminfoSwapTotalPrefix    = "SwapTotal:"
+	procMeminfoSwapFreePrefix     = "SwapFree:"
+	procStatusVMSwapPrefix        = "VmSwap:"
+	procIOReadBytesPrefix         = "read_bytes:"
+	procIOWriteBytesPrefix        = "write_bytes:"
+	meminfoValueIndex             = 1
+	procDecimalBase               = 10
+	procUintBits                  = 64
+	procIntBits                   = 64
+	procFloatBits                 = 64
 )
 
 func procPath(name string) string {
@@ -50,11 +89,11 @@ func (OSReader) ProcessCPU(pid int) (uint64, bool) {
 	// After ')', tokens begin at field 3 (state); utime is field 14 (index 11),
 	// stime field 15 (index 12).
 	fields := strings.Fields(stat[closeParen+1:])
-	if len(fields) <= 12 {
+	if len(fields) <= procStatSTimeIndex {
 		return 0, false
 	}
-	utime, err1 := strconv.ParseUint(fields[11], 10, 64)
-	stime, err2 := strconv.ParseUint(fields[12], 10, 64)
+	utime, err1 := strconv.ParseUint(fields[procStatUTimeIndex], procDecimalBase, procUintBits)
+	stime, err2 := strconv.ParseUint(fields[procStatSTimeIndex], procDecimalBase, procUintBits)
 	if err1 != nil || err2 != nil {
 		return 0, false
 	}
@@ -76,7 +115,7 @@ func (OSReader) ProcessStartTime(pid int) (time.Time, bool) {
 	if !ok {
 		return time.Time{}, false
 	}
-	startSeconds := float64(startTicks) / clockTicks
+	startSeconds := float64(startTicks) / LinuxClockTicks
 	whole := int64(startSeconds)
 	nsec := int64((startSeconds - float64(whole)) * float64(time.Second))
 	return time.Unix(boot+whole, nsec), true
@@ -90,10 +129,10 @@ func parseProcStartTicks(stat string) (uint64, bool) {
 	// After ')', tokens begin at field 3 (state); starttime is field 22, so
 	// index 19 in this slice.
 	fields := strings.Fields(stat[closeParen+1:])
-	if len(fields) <= 19 {
+	if len(fields) <= procStatStartTimeIndex {
 		return 0, false
 	}
-	start, err := strconv.ParseUint(fields[19], 10, 64)
+	start, err := strconv.ParseUint(fields[procStatStartTimeIndex], procDecimalBase, procUintBits)
 	return start, err == nil
 }
 
@@ -102,9 +141,9 @@ func procBootTime() (int64, bool) {
 	if err != nil {
 		return 0, false
 	}
-	for _, line := range strings.Split(string(data), "\n") {
-		if v, ok := strings.CutPrefix(line, "btime "); ok {
-			sec, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+	for _, line := range strings.Split(string(data), procLineSeparator) {
+		if v, ok := strings.CutPrefix(line, procStatBootTimePrefix); ok {
+			sec, err := strconv.ParseInt(strings.TrimSpace(v), procDecimalBase, procIntBits)
 			return sec, err == nil
 		}
 	}
@@ -118,10 +157,10 @@ func (OSReader) ProcessRSS(pid int) (uint64, bool) {
 		return 0, false
 	}
 	fields := strings.Fields(string(data))
-	if len(fields) < 2 {
+	if len(fields) <= procStatmResidentPagesIndex {
 		return 0, false
 	}
-	pages, err := strconv.ParseUint(fields[1], 10, 64)
+	pages, err := strconv.ParseUint(fields[procStatmResidentPagesIndex], procDecimalBase, procUintBits)
 	if err != nil {
 		return 0, false
 	}
@@ -137,8 +176,8 @@ func (OSReader) ProcessSwap(pid int) (uint64, bool) {
 	if err != nil {
 		return 0, false
 	}
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.HasPrefix(line, "VmSwap:") {
+	for _, line := range strings.Split(string(data), procLineSeparator) {
+		if strings.HasPrefix(line, procStatusVMSwapPrefix) {
 			return parseMeminfoKB(line)
 		}
 	}
@@ -149,30 +188,41 @@ func (OSReader) ProcessSwap(pid int) (uint64, bool) {
 // /proc/<pid>/io. Reading another user's io requires privilege, so ok is false
 // when the file cannot be read.
 func (OSReader) ProcessIO(pid int) (read, write uint64, ok bool) {
-	data, err := os.ReadFile(procPIDPath(pid, "io"))
+	data, err := os.ReadFile(procPIDPath(pid, procFileIO))
 	if err != nil {
 		return 0, 0, false
 	}
+	return parseProcIO(string(data))
+}
+
+func parseProcIO(data string) (read, write uint64, ok bool) {
 	var haveR, haveW bool
-	for _, line := range strings.Split(string(data), "\n") {
-		if v, found := strings.CutPrefix(line, "read_bytes:"); found {
-			if n, err := strconv.ParseUint(strings.TrimSpace(v), 10, 64); err == nil {
+	for _, line := range strings.Split(data, procLineSeparator) {
+		if v, found := strings.CutPrefix(line, procIOReadBytesPrefix); found {
+			if n, err := strconv.ParseUint(strings.TrimSpace(v), procDecimalBase, procUintBits); err == nil {
 				read, haveR = n, true
+			} else {
+				return 0, 0, false
 			}
-		} else if v, found := strings.CutPrefix(line, "write_bytes:"); found {
-			if n, err := strconv.ParseUint(strings.TrimSpace(v), 10, 64); err == nil {
+		} else if v, found := strings.CutPrefix(line, procIOWriteBytesPrefix); found {
+			if n, err := strconv.ParseUint(strings.TrimSpace(v), procDecimalBase, procUintBits); err == nil {
 				write, haveW = n, true
+			} else {
+				return 0, 0, false
 			}
 		}
 	}
-	return read, write, haveR && haveW
+	if !haveR || !haveW {
+		return 0, 0, false
+	}
+	return read, write, true
 }
 
 // ProcessFDs counts the entries in /proc/<pid>/fd (open file descriptors).
 // Reading another user's fd dir requires privilege, so ok is false when it
 // cannot be read.
 func (OSReader) ProcessFDs(pid int) (uint64, bool) {
-	entries, err := os.ReadDir(procPIDPath(pid, "fd"))
+	entries, err := os.ReadDir(procPIDPath(pid, procFileFD))
 	if err != nil {
 		return 0, false
 	}
@@ -181,7 +231,7 @@ func (OSReader) ProcessFDs(pid int) (uint64, bool) {
 
 // ProcessThreads counts the entries in /proc/<pid>/task (the process's threads).
 func (OSReader) ProcessThreads(pid int) (uint64, bool) {
-	entries, err := os.ReadDir(procPIDPath(pid, "task"))
+	entries, err := os.ReadDir(procPIDPath(pid, procFileTask))
 	if err != nil {
 		return 0, false
 	}
@@ -224,7 +274,7 @@ type procMeminfoTotals struct {
 }
 
 func readProcMeminfoTotals() procMeminfoTotals {
-	data, err := os.ReadFile(procPath("meminfo"))
+	data, err := os.ReadFile(procPath(procFileMeminfo))
 	if err != nil {
 		return procMeminfoTotals{}
 	}
@@ -235,15 +285,15 @@ func parseProcMeminfoTotals(data []byte) procMeminfoTotals {
 	var totals procMeminfoTotals
 	var memoryAvailable, swapFree uint64
 	var haveMemoryAvailable, haveSwapFree bool
-	for _, line := range strings.Split(string(data), "\n") {
+	for _, line := range strings.Split(string(data), procLineSeparator) {
 		switch {
-		case strings.HasPrefix(line, "MemTotal:"):
+		case strings.HasPrefix(line, procMeminfoMemTotalPrefix):
 			totals.memoryTotal, totals.memoryOK = parseMeminfoKB(line)
-		case strings.HasPrefix(line, "MemAvailable:"):
+		case strings.HasPrefix(line, procMeminfoMemAvailablePrefix):
 			memoryAvailable, haveMemoryAvailable = parseMeminfoKB(line)
-		case strings.HasPrefix(line, "SwapTotal:"):
+		case strings.HasPrefix(line, procMeminfoSwapTotalPrefix):
 			totals.swapTotal, totals.swapOK = parseMeminfoKB(line)
-		case strings.HasPrefix(line, "SwapFree:"):
+		case strings.HasPrefix(line, procMeminfoSwapFreePrefix):
 			swapFree, haveSwapFree = parseMeminfoKB(line)
 		}
 	}
@@ -274,17 +324,17 @@ func (OSReader) SystemCPU() (busy, total uint64, ok bool) {
 		line = data[:i]
 	}
 	fields := strings.Fields(string(line))
-	if len(fields) < 5 || fields[0] != "cpu" {
+	if len(fields) < procStatAggregateMinFields || fields[procStatCPULabelIndex] != procStatCPUPrefix {
 		return 0, 0, false
 	}
 	var sum, idle uint64
-	for i, f := range fields[1:] {
-		v, err := strconv.ParseUint(f, 10, 64)
+	for i, f := range fields[procStatCPUValuesStartIndex:] {
+		v, err := strconv.ParseUint(f, procDecimalBase, procUintBits)
 		if err != nil {
 			continue
 		}
 		sum += v
-		if i == 3 || i == 4 { // idle, iowait
+		if i == procStatIdleValueOffset || i == procStatIOWaitValueOffset {
 			idle += v
 		}
 	}
@@ -293,17 +343,17 @@ func (OSReader) SystemCPU() (busy, total uint64, ok bool) {
 
 // LoadAverages reads the first three fields of /proc/loadavg.
 func (OSReader) LoadAverages() (l1, l5, l15 float64, ok bool) {
-	data, err := os.ReadFile(procPath("loadavg"))
+	data, err := os.ReadFile(procPath(procFileLoadavg))
 	if err != nil {
 		return 0, 0, 0, false
 	}
 	fields := strings.Fields(string(data))
-	if len(fields) < 3 {
+	if len(fields) < procLoadAvgMinFields {
 		return 0, 0, 0, false
 	}
-	l1, e1 := strconv.ParseFloat(fields[0], 64)
-	l5, e5 := strconv.ParseFloat(fields[1], 64)
-	l15, e15 := strconv.ParseFloat(fields[2], 64)
+	l1, e1 := strconv.ParseFloat(fields[procLoadAvg1Index], procFloatBits)
+	l5, e5 := strconv.ParseFloat(fields[procLoadAvg5Index], procFloatBits)
+	l15, e15 := strconv.ParseFloat(fields[procLoadAvg15Index], procFloatBits)
 	if e1 != nil || e5 != nil || e15 != nil {
 		return 0, 0, 0, false
 	}
@@ -337,8 +387,8 @@ func procStatCPUCount() int {
 // aggregate "cpu" line, which has no digit after the prefix, is excluded).
 func countCPULines(data []byte) int {
 	n := 0
-	for _, line := range strings.Split(string(data), "\n") {
-		if len(line) > 3 && strings.HasPrefix(line, "cpu") && line[3] >= '0' && line[3] <= '9' {
+	for _, line := range strings.Split(string(data), procLineSeparator) {
+		if len(line) > len(procStatCPUPrefix) && strings.HasPrefix(line, procStatCPUPrefix) && line[len(procStatCPUPrefix)] >= '0' && line[len(procStatCPUPrefix)] <= '9' {
 			n++
 		}
 	}
@@ -346,16 +396,16 @@ func countCPULines(data []byte) int {
 }
 
 // ClockTicks returns the kernel USER_HZ.
-func (OSReader) ClockTicks() float64 { return clockTicks }
+func (OSReader) ClockTicks() float64 { return LinuxClockTicks }
 
 func parseMeminfoKB(line string) (uint64, bool) {
 	fields := strings.Fields(line)
-	if len(fields) < 2 {
+	if len(fields) <= meminfoValueIndex {
 		return 0, false
 	}
-	kb, err := strconv.ParseUint(fields[1], 10, 64)
+	kb, err := strconv.ParseUint(fields[meminfoValueIndex], procDecimalBase, procUintBits)
 	if err != nil {
 		return 0, false
 	}
-	return kb * 1024, true
+	return kb * bytesPerKiB, true
 }

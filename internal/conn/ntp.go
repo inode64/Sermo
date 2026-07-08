@@ -26,6 +26,19 @@ const (
 	ntpLeapDelSecond      = "del-second"
 	ntpLeapUnsynchronized = "unsynchronized"
 	ntpLeapUnknown        = "unknown"
+
+	ntpRefIDBytes              = 4
+	ntpPrimaryStratum          = 1
+	ntpMinHealthyStratum       = 1
+	ntpMaxHealthyStratum       = 15
+	ntpMillisecondsPerSecond   = 1000
+	ntpOffsetPrecision         = 6
+	ntpPrecisionSignificant    = 4
+	ntpRootDelayPrecision      = 3
+	ntpRootDispersionPrecision = 3
+	ntpFormatFixed             = 'f'
+	ntpFormatCompact           = 'g'
+	ntpFormatBits              = 64
 )
 
 // ntpProtocol probes an NTP server (RFC 5905) with the github.com/beevik/ntp
@@ -70,7 +83,7 @@ func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 	extra := ntpExtraFields(resp)
 	extra[extraStratum] = strconv.Itoa(stratum)
-	extra[extraOffsetSeconds] = strconv.FormatFloat(resp.ClockOffset.Seconds(), 'f', 6, 64)
+	extra[extraOffsetSeconds] = strconv.FormatFloat(resp.ClockOffset.Seconds(), ntpFormatFixed, ntpOffsetPrecision, ntpFormatBits)
 	return Result{Extra: extra}, nil
 }
 
@@ -99,9 +112,9 @@ func ntpExtraFields(resp *ntp.Response) map[string]string {
 	}
 	return map[string]string{
 		ntpExtraKeyLeap:             leap,
-		ntpExtraKeyPrecisionSeconds: strconv.FormatFloat(resp.Precision.Seconds(), 'g', 4, 64),
-		ntpExtraKeyRootDelayMS:      strconv.FormatFloat(resp.RootDelay.Seconds()*1000, 'f', 3, 64),
-		ntpExtraKeyRootDispersionMS: strconv.FormatFloat(resp.RootDispersion.Seconds()*1000, 'f', 3, 64),
+		ntpExtraKeyPrecisionSeconds: strconv.FormatFloat(resp.Precision.Seconds(), ntpFormatCompact, ntpPrecisionSignificant, ntpFormatBits),
+		ntpExtraKeyRootDelayMS:      strconv.FormatFloat(resp.RootDelay.Seconds()*ntpMillisecondsPerSecond, ntpFormatFixed, ntpRootDelayPrecision, ntpFormatBits),
+		ntpExtraKeyRootDispersionMS: strconv.FormatFloat(resp.RootDispersion.Seconds()*ntpMillisecondsPerSecond, ntpFormatFixed, ntpRootDispersionPrecision, ntpFormatBits),
 		ntpExtraKeyReferenceID:      ntpRefID(resp.ReferenceID, int(resp.Stratum)),
 	}
 }
@@ -110,9 +123,9 @@ func ntpExtraFields(resp *ntp.Response) map[string]string {
 // (e.g. "GPS", "PPS") for a stratum-1 server, otherwise the dotted IPv4 of the
 // upstream server it syncs from.
 func ntpRefID(id uint32, stratum int) string {
-	var b [4]byte
+	var b [ntpRefIDBytes]byte
 	binary.BigEndian.PutUint32(b[:], id)
-	if stratum <= 1 {
+	if stratum <= ntpPrimaryStratum {
 		return strings.TrimRight(string(b[:]), "\x00 ")
 	}
 	return net.IP(b[:]).String()
@@ -121,5 +134,5 @@ func ntpRefID(id uint32, stratum int) string {
 // ntpHealthy reports whether the server is synchronized (stratum 1..15); stratum
 // 0 is kiss-o'-death and 16 is unsynchronized.
 func ntpHealthy(stratum int) bool {
-	return stratum >= 1 && stratum <= 15
+	return stratum >= ntpMinHealthyStratum && stratum <= ntpMaxHealthyStratum
 }

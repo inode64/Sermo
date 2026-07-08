@@ -15,6 +15,10 @@ func init() { Register(guacdProtocol{}, protocolAliasGuacamole) }
 const (
 	guacdDefaultProtocol = "vnc"
 	guacdSelectOp        = "select"
+	guacdInstructionEnd  = ';'
+	guacdElementSep      = ','
+	guacdLengthSep       = '.'
+	guacdLengthSepWidth  = 1
 	extraOpcode          = "opcode"
 )
 
@@ -54,7 +58,7 @@ func (guacdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if _, err := io.WriteString(c, guacInstruction(guacdSelectOp, selectProto)); err != nil {
 		return Result{}, err
 	}
-	line, err := bufio.NewReader(c).ReadString(';')
+	line, err := bufio.NewReader(c).ReadString(guacdInstructionEnd)
 	if err != nil && line == "" {
 		return Result{}, err
 	}
@@ -72,20 +76,20 @@ func guacInstruction(elements ...string) string {
 	var b strings.Builder
 	for i, e := range elements {
 		if i > 0 {
-			b.WriteByte(',')
+			b.WriteByte(guacdElementSep)
 		}
 		b.WriteString(strconv.Itoa(len(e)))
-		b.WriteByte('.')
+		b.WriteByte(guacdLengthSep)
 		b.WriteString(e)
 	}
-	b.WriteByte(';')
+	b.WriteByte(guacdInstructionEnd)
 	return b.String()
 }
 
 // parseGuacInstruction reads the opcode (first element's value) of a Guacamole
 // instruction, validating the "<length>.<value>" framing.
 func parseGuacInstruction(s string) (string, error) {
-	dot := strings.IndexByte(s, '.')
+	dot := strings.IndexByte(s, guacdLengthSep)
 	if dot <= 0 {
 		return "", errors.New("not a Guacamole instruction")
 	}
@@ -93,7 +97,7 @@ func parseGuacInstruction(s string) (string, error) {
 	if err != nil || n < 0 {
 		return "", errors.New("invalid Guacamole element length")
 	}
-	start := dot + 1
+	start := dot + guacdLengthSepWidth
 	if start+n > len(s) {
 		return "", errors.New("truncated Guacamole instruction")
 	}

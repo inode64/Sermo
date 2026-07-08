@@ -13,6 +13,8 @@ import (
 
 var wholeVarRef = regexp.MustCompile(`^\$\{\s*([^}:][^}]*)\s*\}$`)
 
+const resourceExecutableModeMask = 0o111
+
 // prepareExpansionInputs mutates the raw merged tree before variable collection:
 // resource preflight entries narrow candidate lists to the path valid for their
 // type, and command exports declare variables with their configured defaults.
@@ -90,7 +92,7 @@ func variablePathRef(raw any) (string, bool) {
 	if m == nil {
 		return "", false
 	}
-	name := strings.TrimSpace(m[1])
+	name := strings.TrimSpace(m[varRefNameGroup])
 	if name == "" || strings.HasPrefix(name, "env:") {
 		return "", false
 	}
@@ -124,7 +126,7 @@ func resourceCandidateMatches(typ, path string) bool {
 	}
 	switch typ {
 	case checks.CheckTypeBinary:
-		return info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0
+		return info.Mode().IsRegular() && info.Mode().Perm()&resourceExecutableModeMask != 0
 	case checks.CheckTypeFile, checks.CheckTypePidfile, checks.CheckTypeLockfile:
 		return info.Mode().IsRegular()
 	case checks.CheckTypeSocket:

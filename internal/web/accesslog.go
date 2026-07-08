@@ -19,6 +19,16 @@ const (
 	accessFieldTime      = "time"
 )
 
+const (
+	apiAccessRootMinSegments = 2
+	apiAccessRootSegment     = 0
+	apiAccessResourceSegment = 1
+	apiAccessTargetSegments  = 3
+	apiAccessTargetSegment   = 2
+	apiAccessActionSegments  = 4
+	apiAccessActionSegment   = 3
+)
+
 type accessStatusRecorder struct {
 	http.ResponseWriter
 	status int
@@ -64,43 +74,43 @@ func (s *Server) recordWebAccess(r *http.Request, status int) {
 
 func parseAPIAccessTarget(path string) (target, action string) {
 	parts := strings.Split(strings.Trim(path, "/"), "/")
-	if len(parts) < 2 || parts[0] != apiSegmentRoot {
+	if len(parts) < apiAccessRootMinSegments || parts[apiAccessRootSegment] != apiSegmentRoot {
 		return "", ""
 	}
-	switch parts[1] {
+	switch parts[apiAccessResourceSegment] {
 	case apiSegmentServices, apiSegmentWatches:
-		if len(parts) >= 3 {
-			target = parts[2]
+		if len(parts) >= apiAccessTargetSegments {
+			target = parts[apiAccessTargetSegment]
 		}
-		if len(parts) >= 4 {
-			action = parts[3]
+		if len(parts) >= apiAccessActionSegments {
+			action = parts[apiAccessActionSegment]
 		}
 	case apiSegmentLocks:
-		if len(parts) >= 3 {
-			target = parts[2]
+		if len(parts) >= apiAccessTargetSegments {
+			target = parts[apiAccessTargetSegment]
 			action = apiActionRelease
 		}
 	case apiSegmentEvents:
-		if len(parts) >= 3 {
-			action = parts[2]
+		if len(parts) >= apiAccessTargetSegments {
+			action = parts[apiAccessTargetSegment]
 		} else {
 			action = apiActionClear
 		}
 	case apiSegmentState:
-		if len(parts) >= 3 {
-			action = parts[2]
+		if len(parts) >= apiAccessTargetSegments {
+			action = parts[apiAccessTargetSegment]
 		} else {
 			action = apiActionCompact
 		}
 	case apiSegmentPanic:
-		if len(parts) >= 3 {
-			action = parts[2]
+		if len(parts) >= apiAccessTargetSegments {
+			action = parts[apiAccessTargetSegment]
 		}
 	case apiSegmentReload:
 		action = apiActionReload
 	default:
-		if len(parts) >= 3 {
-			action = parts[2]
+		if len(parts) >= apiAccessTargetSegments {
+			action = parts[apiAccessTargetSegment]
 		}
 	}
 	return target, action

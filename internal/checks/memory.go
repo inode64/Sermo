@@ -8,6 +8,11 @@ import (
 	"time"
 )
 
+const (
+	meminfoMemTotalPrefix     = "MemTotal:"
+	meminfoMemAvailablePrefix = "MemAvailable:"
+)
+
 // MemorySample is one observation of system RAM: total bytes and the kernel's
 // MemAvailable estimate (what new allocations can claim without swapping).
 type MemorySample struct {
@@ -71,10 +76,10 @@ func defaultMemorySampler() (MemorySample, error) {
 		return MemorySample{}, err
 	}
 	var s MemorySample
-	for _, line := range strings.Split(string(data), "\n") {
-		if v, ok := strings.CutPrefix(line, "MemTotal:"); ok {
+	for _, line := range strings.Split(string(data), checkLineSeparator) {
+		if v, ok := strings.CutPrefix(line, meminfoMemTotalPrefix); ok {
 			s.TotalBytes = parseMeminfoKB(v)
-		} else if v, ok := strings.CutPrefix(line, "MemAvailable:"); ok {
+		} else if v, ok := strings.CutPrefix(line, meminfoMemAvailablePrefix); ok {
 			s.AvailableBytes = parseMeminfoKB(v)
 		}
 	}

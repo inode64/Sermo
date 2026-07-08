@@ -41,10 +41,11 @@ type Monitor struct {
 }
 
 const (
-	monitorLogFieldError    = "error"
-	monitorLogFieldServices = "services"
-	monitorLogFieldWarning  = "warning"
-	monitorLogFieldWatches  = "watches"
+	monitorLogFieldError        = "error"
+	monitorLogFieldServices     = "services"
+	monitorLogFieldWarning      = "warning"
+	monitorLogFieldWatches      = "watches"
+	validationIssuePreviewLimit = 5
 )
 
 // NewMonitor wires a monitor from the initial validated config and shared deps.
@@ -266,11 +267,10 @@ func monitorTargetNames(workers []*Worker, watches []*Watch) []string {
 }
 
 func formatValidationIssues(issues []config.Issue) string {
-	const limit = 5
-	msgs := make([]string, 0, min(len(issues), limit))
+	msgs := make([]string, 0, min(len(issues), validationIssuePreviewLimit))
 	for i, issue := range issues {
-		if i >= limit {
-			msgs = append(msgs, fmt.Sprintf("... and %d more", len(issues)-limit))
+		if i >= validationIssuePreviewLimit {
+			msgs = append(msgs, fmt.Sprintf("... and %d more", len(issues)-validationIssuePreviewLimit))
 			break
 		}
 		msgs = append(msgs, issue.Msg)
