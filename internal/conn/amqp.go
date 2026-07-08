@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+
+	"sermo/internal/units"
 )
 
 // Register amqp under its canonical name plus a "rabbitmq" alias, since RabbitMQ
@@ -29,7 +31,7 @@ func (amqpProtocol) RequiresUser() bool { return false }
 // hostile or non-AMQP peer cannot make the probe allocate without limit. The
 // real frame is a few hundred bytes.
 const (
-	maxAMQPFrame                   = 1 << 20
+	maxAMQPFrame                   = units.BytesPerMiB
 	amqpClassConnection            = 10
 	amqpFrameEnd                   = 0xCE
 	amqpFrameEndSize               = 1

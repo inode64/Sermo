@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+
+	"sermo/internal/units"
 )
 
 func init() { Register(kafkaProtocol{}) }
@@ -31,8 +33,8 @@ const (
 	kafkaVoteKey        = 52         // Vote — served on a KRaft controller (quorum) listener
 	kafkaCorrelationID  = 0x5365726d // "Serm" — echoed back verbatim in the response header
 	kafkaAPIVersion     = 0
-	kafkaMinResponse    = 10      // correlation_id(4) + error_code(2) + array_len(4)
-	maxKafkaResponse    = 1 << 20 // bound the reply so a non-Kafka peer cannot exhaust memory
+	kafkaMinResponse    = 10                // correlation_id(4) + error_code(2) + array_len(4)
+	maxKafkaResponse    = units.BytesPerMiB // bound the reply so a non-Kafka peer cannot exhaust memory
 	kafkaRoleBroker     = "broker"
 	kafkaRoleController = "controller"
 	kafkaFlagYes        = "yes"

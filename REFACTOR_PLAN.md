@@ -648,6 +648,25 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/netutil ./internal/conn
   ./internal/dockerctl ./internal/cli` y `make check` pasan.
 
+### Fase 36: Factores binarios de tamaño extendidos
+
+- Extender `internal/units` para factores binarios de bytes que cruzan parser,
+  probes, checks, Docker control y estado.
+- Reutilizar los factores en limites defensivos de lectura y cache, sin tocar
+  numeros que son IDs o campos de protocolo.
+
+Estado ejecutado:
+
+- `units.BytesPerMiB`, `BytesPerGiB` y `BytesPerTiB` se derivan del mismo owner
+  que `BytesPerKiB`.
+- `cfgval.ByteSize`, limites HTTP/checks, payloads AMQP/Kafka/NFS/SSH, limites
+  de cuerpo Docker y cache SQLite usan esos factores compartidos.
+- No cambia ningun limite visible ni semantica de parseo; solo se reemplazan
+  shifts/literales por constantes de unidad.
+- Validacion ejecutada: `go test ./internal/units ./internal/cfgval
+  ./internal/checks ./internal/conn ./internal/dockerctl ./internal/state` y
+  `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.

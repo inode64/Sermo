@@ -23,6 +23,7 @@ import (
 	"sermo/internal/output"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
+	"sermo/internal/units"
 )
 
 const (
@@ -122,7 +123,7 @@ type jsonAssertion struct {
 }
 
 // maxHTTPBody bounds how much of the response is read for body/JSON assertions.
-const maxHTTPBody = 1 << 20
+const maxHTTPBody = units.BytesPerMiB
 
 const httpStatusClassDivisor = 100
 
