@@ -39,6 +39,13 @@ type templateData struct {
 	fields  map[string]string
 }
 
+const (
+	templateFileSuffix        = ".yml"
+	templateSubjectNameSuffix = ":subject"
+	templateBodyNameSuffix    = ":body"
+	templateOptionMissingKey  = "missingkey=zero"
+)
+
 // Field returns a structured field value by name, or an empty string when the
 // notification did not provide that field.
 func (d templateData) Field(name string) string {
@@ -91,7 +98,7 @@ func LoadTemplate(dir, name string) (*Template, error) {
 	if !ValidTemplateName(name) {
 		return nil, fmt.Errorf("invalid template name %q", name)
 	}
-	path := filepath.Join(dir, name+".yml")
+	path := filepath.Join(dir, name+templateFileSuffix)
 	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return nil, err
@@ -113,14 +120,14 @@ func parseTemplate(name string, data []byte) (*Template, error) {
 	}
 	t := &Template{name: name}
 	if strings.TrimSpace(raw.Subject) != "" {
-		parsed, err := template.New(name + ":subject").Option("missingkey=zero").Parse(raw.Subject)
+		parsed, err := template.New(name + templateSubjectNameSuffix).Option(templateOptionMissingKey).Parse(raw.Subject)
 		if err != nil {
 			return nil, fmt.Errorf("parse subject: %w", err)
 		}
 		t.subject = parsed
 	}
 	if strings.TrimSpace(raw.Body) != "" {
-		parsed, err := template.New(name + ":body").Option("missingkey=zero").Parse(raw.Body)
+		parsed, err := template.New(name + templateBodyNameSuffix).Option(templateOptionMissingKey).Parse(raw.Body)
 		if err != nil {
 			return nil, fmt.Errorf("parse body: %w", err)
 		}
