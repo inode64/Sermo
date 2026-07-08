@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"strconv"
 	"strings"
 
 	"sermo/internal/units"
@@ -52,7 +51,7 @@ func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if port == 0 {
 		port = defaultPortSSH
 	}
-	addr := net.JoinHostPort(host, strconv.Itoa(port))
+	addr := hostPort(host, port)
 
 	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, addr)
 	if err != nil {

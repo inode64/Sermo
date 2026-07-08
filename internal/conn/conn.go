@@ -11,6 +11,8 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"io"
+	"net"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -540,4 +542,8 @@ func randXID32() uint32 {
 		return fallbackXID32
 	}
 	return binary.BigEndian.Uint32(b[:])
+}
+
+func hostPort(host string, port int) string {
+	return net.JoinHostPort(host, strconv.Itoa(port))
 }

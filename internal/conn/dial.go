@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"io"
 	"net"
-	"strconv"
 	"time"
 )
 
@@ -55,7 +54,7 @@ func dialConn(ctx context.Context, cfg Config, port int) (net.Conn, error) {
 	if host == "" {
 		host = DefaultHost
 	}
-	addr := net.JoinHostPort(host, strconv.Itoa(port))
+	addr := hostPort(host, port)
 	d := BindDialer(cfg.Interface)
 	switch normalizeTLS(cfg.TLS) {
 	case "":

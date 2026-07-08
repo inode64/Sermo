@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"net"
-	"strconv"
 )
 
 func init() { Register(nebulaProtocol{}, protocolAliasNebulaVPN) }
@@ -61,7 +59,7 @@ func (nebulaProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	// uint32 helper); the recv_error echoes it back so we can match the reply.
 	index := randXID32()
 
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkUDP, net.JoinHostPort(host, strconv.Itoa(port)))
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkUDP, hostPort(host, port))
 	if err != nil {
 		return Result{}, err
 	}

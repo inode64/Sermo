@@ -5,8 +5,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"net"
-	"strconv"
 )
 
 func init() { Register(rdpProtocol{}, protocolAliasMSWBTServer) }
@@ -77,7 +75,7 @@ func (rdpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if port == 0 {
 		port = defaultPortRDP
 	}
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, net.JoinHostPort(host, strconv.Itoa(port)))
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, hostPort(host, port))
 	if err != nil {
 		return Result{}, err
 	}

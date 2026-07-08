@@ -113,7 +113,7 @@ func (dhcpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		if port == 0 {
 			port = dhcpServerPort
 		}
-		server = net.JoinHostPort(host, strconv.Itoa(port))
+		server = hostPort(host, port)
 	}
 
 	reply, err := dhcpExchange(ctx, iface, server, packet, xid)

@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
-	"strconv"
 	"time"
 
 	ldap "github.com/go-ldap/ldap/v3"
@@ -101,7 +99,7 @@ func buildLDAPURL(host string, port int, tlsMode string) (url string, useTLS boo
 	if useTLS {
 		scheme = "ldaps"
 	}
-	return scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port)), useTLS
+	return scheme + "://" + hostPort(host, port), useTLS
 }
 
 // ldapSucceeds decides the outcome: an anonymous check passes if the server

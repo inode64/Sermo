@@ -2,7 +2,6 @@ package conn
 
 import (
 	"context"
-	"net"
 	"strconv"
 	"time"
 
@@ -106,7 +105,7 @@ func MongoConnect(cfg Config) (*mongo.Client, error) {
 	if port == 0 {
 		port = defaultPortMongoDB
 	}
-	opts := options.Client().SetHosts([]string{net.JoinHostPort(host, strconv.Itoa(port))})
+	opts := options.Client().SetHosts([]string{hostPort(host, port)})
 	if cfg.Interface != "" {
 		opts.SetDialer(BindDialer(cfg.Interface))
 	}

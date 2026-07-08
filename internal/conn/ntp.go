@@ -69,7 +69,7 @@ func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 			return BindDialer(cfg.Interface).DialContext(ctx, networkUDP, remote)
 		},
 	}
-	resp, err := ntp.QueryWithOptions(net.JoinHostPort(host, strconv.Itoa(port)), opt)
+	resp, err := ntp.QueryWithOptions(hostPort(host, port), opt)
 	if err != nil {
 		return Result{}, err
 	}

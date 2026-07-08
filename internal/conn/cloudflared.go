@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"strconv"
 )
@@ -75,5 +74,5 @@ func cloudflaredClient(cfg Config) (*http.Client, string) {
 		}
 		client = httpProbeClient(cfg.Interface, tlsConfig)
 	}
-	return client, scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port))
+	return client, scheme + "://" + hostPort(host, port)
 }
