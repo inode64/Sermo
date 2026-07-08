@@ -17,6 +17,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/netutil"
+	"sermo/internal/units"
 )
 
 // defaultTimeout bounds a Docker API request when the caller's context carries
@@ -27,8 +28,8 @@ import (
 const defaultTimeout = 10 * time.Second
 
 const (
-	dockerResponseBodyLimit = 256 << 10
-	dockerErrorBodyLimit    = 4 << 10
+	dockerResponseBodyLimit = 256 * units.BytesPerKiB
+	dockerErrorBodyLimit    = 4 * units.BytesPerKiB
 )
 
 const (

@@ -283,7 +283,7 @@ func Open(path string) (*Store, error) {
 // per-cycle upsert burst does not thrash them from disk and — because every
 // statement shares the single connection — stall interactive control writes
 // (monitor/unmonitor) behind it for seconds.
-const DefaultCacheBytes = 64 << 20
+const DefaultCacheBytes = 64 * units.BytesPerMiB
 
 // Options tunes an opened Store.
 type Options struct {

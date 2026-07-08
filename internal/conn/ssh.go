@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"sermo/internal/units"
+
 	"golang.org/x/crypto/ssh"
 )
 
@@ -37,7 +39,7 @@ const (
 	sshExtraServerVersion  = "server_version"
 	sshLineTerminator      = '\n'
 	sshLineTrimRight       = "\r\n"
-	sshMaxBannerBytes      = 16 * 1024
+	sshMaxBannerBytes      = 16 * units.BytesPerKiB
 	sshRejectReasonMessage = ""
 )
 
