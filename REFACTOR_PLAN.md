@@ -292,6 +292,21 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/state ./internal/web` y
   `make check` pasan.
 
+### Fase 11: Ventana por defecto de series
+
+- Mantener `internal/state` como owner del lookback por defecto usado cuando una
+  consulta de series historicas omite `since`.
+- Reutilizar el mismo valor desde CLI y Web sin cambiar el default publico de
+  24h.
+
+Estado ejecutado:
+
+- `state.DefaultSeriesWindow` define el lookback normal de series.
+- `sermoctl sla --series` y el Web API derivan sus defaults desde
+  `state.DefaultSeriesWindow`.
+- Validacion ejecutada: `go test ./internal/state ./internal/cli ./internal/web`
+  y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.

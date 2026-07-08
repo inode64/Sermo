@@ -12,7 +12,7 @@ import (
 )
 
 // defaultSLASeriesWindow is the series lookback used when --since is omitted.
-const defaultSLASeriesWindow = 24 * time.Hour
+const defaultSLASeriesWindow = state.DefaultSeriesWindow
 
 const cliTextNotAvailable = "n/a"
 
