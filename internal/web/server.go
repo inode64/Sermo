@@ -32,6 +32,7 @@ import (
 	"sermo/internal/mountctl"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
+	"sermo/internal/state"
 )
 
 //go:embed index.html
@@ -878,7 +879,7 @@ const (
 )
 
 // maxSeriesWindow bounds the history a single request may ask for (the retention).
-const maxSeriesWindow = 366 * 24 * time.Hour
+const maxSeriesWindow = state.DefaultHistoryRetention
 
 // defaultEventLimit / maxEventLimit bound how many log events a request returns.
 const defaultEventLimit = 100

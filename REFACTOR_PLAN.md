@@ -227,6 +227,21 @@ Estado ejecutado:
 - Validacion ejecutada: `make web`, `go test ./internal/web` y `make check`
   pasan.
 
+### Fase 7: Horizonte de retencion compartido
+
+- Usar `state.DefaultHistoryRetention` como owner unico del horizonte historico
+  retenido para SLA, metricas y eventos.
+- Derivar desde ese owner el maximo de ventana que el Web API acepta para series
+  historicas, evitando repetir `366 * 24h` en `internal/web`.
+
+Estado ejecutado:
+
+- `internal/web/server.go` importa `internal/state` y define
+  `maxSeriesWindow = state.DefaultHistoryRetention`.
+- La prueba existente `TestSeriesSinceParsing` sigue cubriendo que una ventana
+  excesiva se capea al valor maximo.
+- Validacion ejecutada: `go test ./internal/web` y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
