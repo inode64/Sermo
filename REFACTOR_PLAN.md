@@ -242,6 +242,23 @@ Estado ejecutado:
   excesiva se capea al valor maximo.
 - Validacion ejecutada: `go test ./internal/web` y `make check` pasan.
 
+### Fase 8: Limites locales de eventos
+
+- Nombrar los limites numericos de eventos que tienen politicas distintas por
+  superficie, sin compartir constantes cuando el contrato no es el mismo.
+- Mantener separado el limite del listado CLI, el limite/cap del Web API y el
+  numero de eventos que el resumen de actividad escanea internamente.
+
+Estado ejecutado:
+
+- `internal/cli/cli.go` usa `defaultEventsListLimit` para el listado
+  `sermoctl events`.
+- `internal/app/webbackend.go` usa `activitySummaryEventScanLimit` para el
+  rollup del dashboard.
+- No se cambiaron defaults publicos ni limites de API.
+- Validacion ejecutada: `go test ./internal/app ./internal/cli` y `make check`
+  pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
