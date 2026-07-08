@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -546,6 +547,85 @@ func TestWebBackendApplicationsCacheIgnoresCancelledRequests(t *testing.T) {
 	b.applicationsAt = time.Now().Add(-applicationsCacheTTL - time.Nanosecond)
 	if got := b.Applications(cancelled); len(got) != 1 || got[0].Name != "complete" {
 		t.Fatalf("cancelled Applications after expiry = %v, want previous complete cache", got)
+	}
+}
+
+func TestWebBackendApplicationsServeStaleWhileRefreshing(t *testing.T) {
+	scanning := make(chan struct{})
+	release := make(chan struct{})
+	var calls atomic.Int32
+	b := &WebBackend{
+		applicationsList: func(context.Context) []web.Application {
+			if calls.Add(1) == 1 {
+				close(scanning)
+				<-release
+			}
+			return []web.Application{{Name: "fresh"}}
+		},
+	}
+	b.applicationsCache = []web.Application{{Name: "stale"}}
+	b.applicationsAt = time.Now().Add(-applicationsCacheTTL - time.Nanosecond)
+
+	leader := make(chan []web.Application)
+	go func() { leader <- b.Applications(context.Background()) }()
+	<-scanning
+
+	// While the scan holds the refresh slot, other viewers must be served the
+	// expired-but-complete inventory instead of queueing behind the scan.
+	if got := b.Applications(context.Background()); len(got) != 1 || got[0].Name != "stale" {
+		t.Fatalf("Applications during refresh = %v, want stale cache", got)
+	}
+	close(release)
+	if got := <-leader; len(got) != 1 || got[0].Name != "fresh" {
+		t.Fatalf("refreshing Applications = %v, want fresh inventory", got)
+	}
+	if got := b.Applications(context.Background()); len(got) != 1 || got[0].Name != "fresh" {
+		t.Fatalf("Applications after refresh = %v, want fresh cache", got)
+	}
+	if n := calls.Load(); n != 1 {
+		t.Fatalf("applicationsList calls = %d, want 1", n)
+	}
+}
+
+func TestWebBackendApplicationsColdStartSingleScan(t *testing.T) {
+	scanning := make(chan struct{})
+	release := make(chan struct{})
+	var calls atomic.Int32
+	b := &WebBackend{
+		applicationsList: func(context.Context) []web.Application {
+			if calls.Add(1) == 1 {
+				close(scanning)
+				<-release
+			}
+			return []web.Application{{Name: "fresh"}}
+		},
+	}
+
+	leader := make(chan []web.Application)
+	go func() { leader <- b.Applications(context.Background()) }()
+	<-scanning
+
+	// A cold-start viewer has no previous inventory to serve, so it waits for
+	// the running scan and shares its result rather than starting a second one.
+	follower := make(chan []web.Application)
+	go func() { follower <- b.Applications(context.Background()) }()
+
+	// A cold-start viewer that goes away stops waiting instead of scanning.
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if got := b.Applications(cancelled); got != nil {
+		t.Fatalf("cancelled cold-start Applications = %v, want nil", got)
+	}
+
+	close(release)
+	if got := <-leader; len(got) != 1 || got[0].Name != "fresh" {
+		t.Fatalf("cold-start Applications = %v, want fresh inventory", got)
+	}
+	if got := <-follower; len(got) != 1 || got[0].Name != "fresh" {
+		t.Fatalf("cold-start follower Applications = %v, want shared fresh inventory", got)
+	}
+	if n := calls.Load(); n != 1 {
+		t.Fatalf("applicationsList calls = %d, want 1", n)
 	}
 }
 

@@ -217,10 +217,11 @@ type WebBackend struct {
 	diskIOMu    sync.Mutex
 	diskIOState map[string]webDiskIOState
 
-	applicationsMu    sync.Mutex
-	applicationsAt    time.Time
-	applicationsCache []web.Application
-	applicationsList  func(context.Context) []web.Application
+	applicationsMu      sync.Mutex
+	applicationsAt      time.Time
+	applicationsCache   []web.Application
+	applicationsRefresh chan struct{} // non-nil while a scan is rebuilding the cache; closed when it finishes
+	applicationsList    func(context.Context) []web.Application
 
 	slaCacheMu sync.Mutex
 	slaCache   map[slaCacheKey]cachedSLATimelines
@@ -2178,24 +2179,65 @@ func (b *WebBackend) Notifiers(ctx context.Context) []web.Notifier {
 // binary is present) with their version and binary location, reusing the same
 // inspection the sermoctl `apps` listing uses so both surfaces agree.
 func (b *WebBackend) Applications(ctx context.Context) []web.Application {
-	b.applicationsMu.Lock()
-	defer b.applicationsMu.Unlock()
-
-	if !b.applicationsAt.IsZero() && time.Since(b.applicationsAt) < applicationsCacheTTL {
-		return b.withApplicationLastEvents(slices.Clone(b.applicationsCache))
+	// The inventory scan runs version/binary probes and can take seconds, so it
+	// must not run under applicationsMu: only one request rebuilds the cache
+	// (applicationsRefresh) while every other viewer is served the previous
+	// inventory — or, on a cold start, waits for that first scan.
+	for {
+		b.applicationsMu.Lock()
+		cached := slices.Clone(b.applicationsCache)
+		hasCache := !b.applicationsAt.IsZero()
+		if hasCache && time.Since(b.applicationsAt) < applicationsCacheTTL {
+			b.applicationsMu.Unlock()
+			return b.withApplicationLastEvents(cached)
+		}
+		refresh := b.applicationsRefresh
+		if refresh == nil {
+			break // become the rebuilding request; lock still held
+		}
+		b.applicationsMu.Unlock()
+		if hasCache {
+			// An expired-but-complete inventory beats queueing every viewer
+			// behind the scan that is already refreshing it.
+			return b.withApplicationLastEvents(cached)
+		}
+		select {
+		case <-refresh:
+			// Re-check the cache the finished scan produced.
+		case <-ctx.Done():
+			return nil
+		}
 	}
+	done := make(chan struct{})
+	b.applicationsRefresh = done
+	b.applicationsMu.Unlock()
+	// Clear the in-flight marker in a defer so even a panicking scan cannot
+	// leave cold-start viewers waiting on the channel forever. The deferred
+	// close runs after the cache update below, so woken viewers always
+	// re-check an already-updated cache.
+	defer func() {
+		b.applicationsMu.Lock()
+		b.applicationsRefresh = nil
+		b.applicationsMu.Unlock()
+		close(done)
+	}()
+
 	apps := b.loadApplications(ctx)
+
+	b.applicationsMu.Lock()
 	if ctx.Err() != nil {
 		// A cancelled request yields a partial inventory; caching it would
 		// serve an incomplete app list to every viewer for the full TTL.
 		// Prefer the previous complete cache when there is one.
 		if !b.applicationsAt.IsZero() {
-			return b.withApplicationLastEvents(slices.Clone(b.applicationsCache))
+			apps = slices.Clone(b.applicationsCache)
 		}
+		b.applicationsMu.Unlock()
 		return b.withApplicationLastEvents(apps)
 	}
 	b.applicationsAt = time.Now()
 	b.applicationsCache = slices.Clone(apps)
+	b.applicationsMu.Unlock()
 	return b.withApplicationLastEvents(apps)
 }
 

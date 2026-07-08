@@ -237,6 +237,15 @@ func (b *WebBackend) mountUsageCached(ctx context.Context, specs []mountctl.Spec
 		}
 	}
 	usage = ensureMountUsagePaths(usage, paths)
+	if ctx.Err() != nil {
+		// A cancelled request marks every path with its cancellation error;
+		// caching that would show a bogus blocker error to every viewer for
+		// the full TTL. Prefer the previous complete cache when there is one.
+		if b.mountUsage != nil && mountUsageCovers(b.mountUsage, paths) {
+			return b.mountUsage, b.mountUsageErrors
+		}
+		return usage, usageErrors
+	}
 	b.mountUsage = usage
 	b.mountUsageErrors = usageErrors
 	b.mountUsageAt = now
