@@ -104,6 +104,24 @@ rg -n '"[a-z_]+(\.[a-z_]+)+"' internal --glob '!**/*_test.go'
 rg -n '[^A-Za-z0-9_]100(\.0)?|\*\s*100|/\s*100' internal
 ```
 
+Estado ejecutado:
+
+- Literales con punto restantes en Go productivo: mayoritariamente constantes de
+  protocolo o formato externo (`conn` extra keys, NUT variable names, RPC aliases,
+  build metadata `vcs.*`, filenames de assets, `sermod.pid`, `sermo.db`). No se
+  deben mover salvo que un owner los comparta realmente.
+- Numeros `100` restantes en Go productivo: clasificados como divisores/clases
+  HTTP, IDs de protocolo RPC/NFS/NSM/portmap, escalas de tiempo/procfs/SNMP/NTP,
+  limites de validacion porcentual y defaults de UI/API. Los factores de
+  porcentaje Go ya estan centralizados en `metrics.PercentScale`.
+- Web frontend: `internal/web/src/app.js` todavia contiene conversiones
+  porcentuales y segundos/milisegundos locales. Son candidatos de UI para un
+  refactor posterior, pero cualquier cambio exige `make web` y revisar el HTML
+  generado.
+- Decision de alcance: fase 1 queda como inventario sin cambios de runtime. Las
+  extracciones que merezcan codigo pasan a fases 2 y 3, donde se revisan helpers
+  de paths y acciones/estados por owner.
+
 ### Fase 2: Consolidar helpers de paths sin sobregeneralizar
 
 - Mantener helpers junto al owner cuando el path es local a un validador.
