@@ -251,6 +251,10 @@ const (
 // unless an operator runs state compact with an explicit --before cutoff.
 const DefaultHistoryRetention = historyRetentionDays * hoursPerDay * time.Hour
 
+// DefaultSeriesWindow is the normal lookback used when a series request omits
+// its `since` window.
+const DefaultSeriesWindow = hoursPerDay * time.Hour
+
 // PruneHistoryResult summarizes old persisted history removed from time-series
 // and event tables.
 type PruneHistoryResult struct {
