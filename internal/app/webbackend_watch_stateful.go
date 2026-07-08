@@ -28,7 +28,7 @@ const (
 func (b *WebBackend) fileWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
 	path := cfgval.AsString(w.check[checks.CheckKeyPath])
 	if path == "" {
-		msg := "missing path"
+		msg := watchMissingPathMessage
 		return nil, watchErrorReadings(msg), "file: " + msg
 	}
 	info, err := os.Lstat(path)
@@ -80,7 +80,7 @@ func fileKindLabel(mode os.FileMode) string {
 func (b *WebBackend) countWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
 	path := cfgval.AsString(w.check[checks.CheckKeyPath])
 	if path == "" {
-		msg := "missing path"
+		msg := watchMissingPathMessage
 		return nil, watchErrorReadings(msg), "count: " + msg
 	}
 	kind := cfgval.AsString(w.check[checks.CheckKeyOf])
@@ -127,7 +127,7 @@ func (b *WebBackend) firewallRulesWatchView(w *webWatch) (*web.WatchMeter, []web
 		msg := execx.FormatContextOrError(err, b.probeTimeout())
 		return nil, watchErrorReadings(msg), "firewall: " + msg
 	}
-	minRules := uint64(1)
+	minRules := watchFirewallDefaultMinRules
 	if v, present := w.check[checks.CheckKeyMinRules]; present {
 		if n, ok := cfgval.Int(v); ok && n >= 1 {
 			minRules = uint64(n)
@@ -144,7 +144,7 @@ func (b *WebBackend) firewallRulesWatchView(w *webWatch) (*web.WatchMeter, []web
 func (b *WebBackend) sizeWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
 	path := cfgval.AsString(w.check[checks.CheckKeyPath])
 	if path == "" {
-		msg := "missing path"
+		msg := watchMissingPathMessage
 		return nil, watchErrorReadings(msg), "size: " + msg
 	}
 	ctx, cancel := b.probeContext()
@@ -170,7 +170,7 @@ func (b *WebBackend) sizeWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 func (b *WebBackend) hdparmWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
 	device := cfgval.AsString(w.check[checks.CheckKeyDevice])
 	if device == "" {
-		msg := "missing device"
+		msg := watchMissingDeviceMessage
 		return nil, watchErrorReadings(msg), "hdparm: " + msg
 	}
 	wantCached, wantRead := false, false
@@ -207,7 +207,7 @@ func (b *WebBackend) hdparmWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 func (b *WebBackend) smartWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
 	device := cfgval.AsString(w.check[checks.CheckKeyDevice])
 	if device == "" {
-		msg := "missing device"
+		msg := watchMissingDeviceMessage
 		return nil, watchErrorReadings(msg), "smart: " + msg
 	}
 	ctx, cancel := b.probeContext()

@@ -18,7 +18,16 @@ import (
 	"sermo/internal/servicemgr"
 )
 
-const defaultLockTTL = 5 * time.Minute
+const (
+	defaultLockTTL = 5 * time.Minute
+
+	reloadCommandPath             = config.SectionReload + "." + config.ReloadKeyCommand
+	reloadCommandLabel            = config.SectionReload + " " + config.ReloadKeyCommand
+	reloadSignalPath              = config.SectionReload + "." + config.ReloadKeySignal
+	reloadSupportLabel            = config.SectionReload + " support"
+	runtimeDiscoveryWarningPrefix = "runtime discovery"
+	selectorWarningPrefix         = "selector config"
+)
 
 // Config wires the real components an Engine needs for a resolved service.
 type Config struct {
@@ -82,7 +91,7 @@ func New(c Config) Engine {
 	hasCommandMatch := hasCommandMatchSelector(selectors)
 	configErr := firstWarningError(
 		warningError(process.SectionStopPolicy, stopPolicyWarnings),
-		warningError("selector config", selectorWarnings),
+		warningError(selectorWarningPrefix, selectorWarnings),
 		reloadConfigError(tree),
 	)
 
@@ -99,7 +108,7 @@ func New(c Config) Engine {
 		}
 		procs, warnings := c.Discoverer.Discover(selectors)
 		if len(warnings) > 0 && !hasCommandMatch {
-			return procs, warningError("runtime discovery", warnings)
+			return procs, warningError(runtimeDiscoveryWarningPrefix, warnings)
 		}
 		return procs, nil
 	}
@@ -186,7 +195,7 @@ func reloadClosure(tree map[string]any, deps checks.Deps, mgr Manager, backend, 
 	initReload := func(ctx context.Context) error {
 		ok, err := mgr.SupportsReload(ctx, unit)
 		if err != nil {
-			return fmt.Errorf("reload support: %w", err)
+			return fmt.Errorf("%s: %w", reloadSupportLabel, err)
 		}
 		if !ok {
 			return UnsupportedReloadError(unit)
@@ -207,7 +216,7 @@ func reloadClosure(tree map[string]any, deps checks.Deps, mgr Manager, backend, 
 	return func(ctx context.Context) error {
 		ok, err := mgr.SupportsReload(ctx, unit)
 		if err != nil {
-			return fmt.Errorf("reload support: %w", err)
+			return fmt.Errorf("%s: %w", reloadSupportLabel, err)
 		}
 		if ok {
 			return backendReload(ctx)
@@ -219,7 +228,7 @@ func reloadClosure(tree map[string]any, deps checks.Deps, mgr Manager, backend, 
 // UnsupportedReloadError reports a reload action rejected before execution
 // because neither the init backend nor a native fallback can reload the unit.
 func UnsupportedReloadError(unit string) error {
-	return fmt.Errorf("service %s does not support reload: init backend reports no reload and no reload.command or reload.signal is configured", unit)
+	return fmt.Errorf("service %s does not support reload: init backend reports no reload and no %s or %s is configured", unit, reloadCommandPath, reloadSignalPath)
 }
 
 // ReloadSupported reports whether the resolved service can perform a reload
@@ -259,14 +268,14 @@ func reloadConfigError(tree map[string]any) error {
 	}
 	if name := cfgval.AsString(r[config.ReloadKeySignal]); name != "" {
 		if _, err := process.ParseSignal(name); err != nil {
-			return fmt.Errorf("reload.signal: %w", err)
+			return fmt.Errorf("%s: %w", reloadSignalPath, err)
 		}
 		return nil
 	}
 	if argv := cfgval.StringArray(r[config.ReloadKeyCommand]); len(argv) > 0 {
 		return nil
 	}
-	return fmt.Errorf("reload: block declares no command or signal")
+	return fmt.Errorf("%s: block declares no %s or %s", config.SectionReload, config.ReloadKeyCommand, config.ReloadKeySignal)
 }
 
 // parseReloadSpec reads the native reload from the `reload:` block. It returns
@@ -343,7 +352,7 @@ func nativeReloadFunc(spec *reloadSpec, deps checks.Deps, backend, unit string, 
 			if msg == "" {
 				msg = strings.TrimSpace(res.Stdout)
 			}
-			return fmt.Errorf("reload command exited %d: %s", res.ExitCode, msg)
+			return fmt.Errorf("%s exited %d: %s", reloadCommandLabel, res.ExitCode, msg)
 		}
 		return nil
 	}
@@ -355,7 +364,7 @@ type reloadPIDSource string
 
 const (
 	reloadPIDMain    reloadPIDSource = "mainpid"
-	reloadPIDPidfile reloadPIDSource = "pidfile"
+	reloadPIDPidfile reloadPIDSource = config.ServiceKeyPidfile
 )
 
 func reloadPID(ctx context.Context, runner execx.Runner, backend, unit, pidfile string) (int, reloadPIDSource, error) {
@@ -372,7 +381,7 @@ func reloadPID(ctx context.Context, runner execx.Runner, backend, unit, pidfile 
 		pid, err := process.ReadPidfile(pidfile)
 		return pid, reloadPIDPidfile, err
 	}
-	return 0, "", fmt.Errorf("reload: cannot resolve a pid to signal — the backend exposes no MainPID (OpenRC) and the service declares no pidfile:; add a pidfile: so the signal target can be found")
+	return 0, "", fmt.Errorf("reload: cannot resolve a pid to signal: backend exposes no MainPID (OpenRC) and the service declares no %s; add %s: so the signal target can be found", config.ServiceKeyPidfile, config.ServiceKeyPidfile)
 }
 
 // reloadPidfile returns the service's top-level pidfile path, used as the signal

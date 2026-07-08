@@ -33,7 +33,7 @@ const (
 	eventKindFailedSuffix = "-failed"
 
 	eventKindAction           = "action"
-	eventKindAlert            = "alert"
+	eventKindAlert            = string(rules.ActionAlert)
 	eventKindError            = "error"
 	eventKindHook             = config.WatchThenKeyHook
 	eventKindNotify           = rules.RuleFieldNotify

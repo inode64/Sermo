@@ -589,6 +589,9 @@ func (c *Config) catalogNames(category string) []string {
 // DefaultRuntime is the runtime root used when paths.runtime is unset.
 const DefaultRuntime = "/run/sermo"
 
+// DaemonPIDFilename is the sermod pidfile name written under the runtime root.
+const DaemonPIDFilename = "sermod.pid"
+
 // DefaultState is the persistent state root used when paths.state is unset. It
 // lives under /var/lib so it survives reboots, unlike the runtime root on tmpfs.
 const DefaultState = "/var/lib/sermo"

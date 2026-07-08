@@ -37,6 +37,9 @@ const (
 	// MetricUnitNone marks unitless graph metrics.
 	MetricUnitNone = ""
 
+	// PercentScale converts ratios into percentage points.
+	PercentScale = 100.0
+
 	metricFloatBits = 64
 )
 

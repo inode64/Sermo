@@ -68,7 +68,7 @@ const (
 
 const (
 	defaultWebAPIAddress = "127.0.0.1"
-	daemonPIDFilename    = "sermod.pid"
+	daemonPIDFilename    = config.DaemonPIDFilename
 )
 
 const (

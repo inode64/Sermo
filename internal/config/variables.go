@@ -38,6 +38,14 @@ const (
 
 var fromFileVariableKeys = set(varKeyFromFile, varKeyDirective, varKeyPattern, varKeyDefault)
 
+func variablePath(name string) string {
+	return SectionVariables + "." + name
+}
+
+func variableFieldPath(name, field string) string {
+	return variablePath(name) + "." + field
+}
+
 // collectVariables reads the merged `variables` section into a flat string map.
 // Values are stringified (a YAML int like `port: 8080` becomes "8080"). A
 // list-valued variable is treated as candidate paths and resolves to the first
@@ -141,14 +149,14 @@ func resolveFileVars(vars map[string]string, tree map[string]any) []string {
 			continue
 		}
 		var specErrs []string
-		validateFromFileSpec("variables."+name, spec, func(format string, args ...any) {
+		validateFromFileSpec(variablePath(name), spec, func(format string, args ...any) {
 			specErrs = append(specErrs, fmt.Sprintf(format, args...))
 		})
 		if len(specErrs) > 0 {
 			errs = append(errs, specErrs...)
 			continue
 		}
-		path, pathErrs := substituteVars(cfgval.String(from), vars, "variables."+name+".from_file")
+		path, pathErrs := substituteVars(cfgval.String(from), vars, variableFieldPath(name, varKeyFromFile))
 		errs = append(errs, pathErrs...)
 		if len(pathErrs) > 0 {
 			continue
@@ -160,7 +168,7 @@ func resolveFileVars(vars map[string]string, tree map[string]any) []string {
 		}
 		val, found, err := extractFileValue(path, resolvedSpec)
 		if err != nil {
-			errs = append(errs, fmt.Sprintf("variables.%s: %v", name, err))
+			errs = append(errs, fmt.Sprintf("%s: %v", variablePath(name), err))
 			continue
 		}
 		if found {
@@ -176,7 +184,7 @@ func resolveFromFileSpecVars(name string, spec map[string]any, vars map[string]s
 	if pat == "" {
 		return out, nil
 	}
-	resolved, errs := substitutePatternVars(pat, vars, "variables."+name+".pattern")
+	resolved, errs := substitutePatternVars(pat, vars, variableFieldPath(name, varKeyPattern))
 	if len(errs) > 0 {
 		return out, errs
 	}
@@ -231,7 +239,7 @@ func validateVariableValues(vars map[string]string) []string {
 	return errs
 }
 
-func validateFromFileVariables(prefix string, raw any, add addFunc) {
+func validateFromFileVariables(raw any, add addFunc) {
 	vars, ok := raw.(map[string]any)
 	if !ok {
 		return
@@ -244,7 +252,7 @@ func validateFromFileVariables(prefix string, raw any, add addFunc) {
 		if _, has := spec[varKeyFromFile]; !has {
 			continue
 		}
-		validateFromFileSpec(prefix+"."+name, spec, add)
+		validateFromFileSpec(variablePath(name), spec, add)
 	}
 }
 

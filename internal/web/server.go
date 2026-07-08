@@ -31,6 +31,7 @@ import (
 	"sermo/internal/logfile"
 	"sermo/internal/mountctl"
 	"sermo/internal/operation"
+	"sermo/internal/rules"
 )
 
 //go:embed index.html
@@ -113,11 +114,11 @@ const (
 
 // HTTP action names accepted by the dashboard API.
 const (
-	apiActionStart     = "start"
-	apiActionStop      = "stop"
-	apiActionRestart   = "restart"
-	apiActionReload    = "reload"
-	apiActionResume    = "resume"
+	apiActionStart     = string(rules.ActionStart)
+	apiActionStop      = string(rules.ActionStop)
+	apiActionRestart   = string(rules.ActionRestart)
+	apiActionReload    = string(rules.ActionReload)
+	apiActionResume    = string(rules.ActionResume)
 	apiActionMonitor   = "monitor"
 	apiActionUnmonitor = "unmonitor"
 	apiActionExpand    = "expand"
@@ -127,7 +128,7 @@ const (
 	apiActionClear     = "clear"
 	apiActionCompact   = "compact"
 	apiActionBlockers  = "blockers"
-	apiActionAlert     = "alert"
+	apiActionAlert     = string(rules.ActionAlert)
 
 	queryBoolOne  = "1"
 	queryBoolTrue = "true"
@@ -241,7 +242,7 @@ const (
 	apiJSONKeyStatus        = "status"
 	apiJSONKeyUptime        = "uptime"
 	apiJSONKeyUptimeSeconds = "uptime_seconds"
-	apiStatusOK             = "ok"
+	apiStatusOK             = string(operation.ResultOK)
 	apiStatusOKLine         = apiStatusOK + "\n"
 )
 
@@ -865,15 +866,15 @@ type Event struct {
 
 const (
 	eventKindAction         = "action"
-	eventKindAlert          = "alert"
+	eventKindAlert          = string(rules.ActionAlert)
 	eventKindError          = "error"
 	eventKindHook           = "hook"
-	eventKindHookFailed     = "hook-failed"
-	eventKindFailedFragment = "failed"
+	eventKindFailedFragment = string(operation.ResultFailed)
+	eventKindHookFailed     = eventKindHook + "-" + eventKindFailedFragment
 	eventKindRecovery       = "recovery"
 	eventStatusOK           = apiStatusOK
 	eventStatusError        = "error"
-	eventStatusFailed       = "failed"
+	eventStatusFailed       = string(operation.ResultFailed)
 )
 
 // maxSeriesWindow bounds the history a single request may ask for (the retention).
