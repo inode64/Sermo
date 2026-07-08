@@ -26,6 +26,32 @@ type servicesReportStats struct {
 	VersionKnown int
 }
 
+const (
+	servicesReportDateLayout = "2006-01-02 15:04 MST"
+	servicesReportFontSans   = "Arial,Helvetica,sans-serif"
+	servicesReportFontMono   = "Menlo,Consolas,monospace"
+)
+
+const (
+	servicesReportColorPageBG      = "#f4f6fb"
+	servicesReportColorText        = "#182230"
+	servicesReportColorPanel       = "#ffffff"
+	servicesReportColorFrameBorder = "#dfe5ef"
+	servicesReportColorBorder      = "#e2e8f0"
+	servicesReportColorHeaderBG    = "#0f172a"
+	servicesReportColorHeaderHint  = "#93c5fd"
+	servicesReportColorHeaderMeta  = "#cbd5e1"
+	servicesReportColorTableHeadBG = "#f8fafc"
+	servicesReportColorSecondary   = "#475569"
+	servicesReportColorMuted       = "#64748b"
+	servicesReportColorOK          = "#16a34a"
+	servicesReportColorIssue       = "#dc2626"
+	servicesReportColorInfo        = "#2563eb"
+	servicesReportColorOKBadgeBG   = "#dcfce7"
+	servicesReportColorBadBadgeBG  = "#fee2e2"
+	servicesReportColorMuteBadgeBG = "#f1f5f9"
+)
+
 func buildReportNotifiers(cfg *config.Config) (map[string]notify.Notifier, []string) {
 	return notify.Build(cfg.Notifiers(), notify.WithoutTemplates())
 }
@@ -166,47 +192,57 @@ func servicesReportText(reports []appinspect.Report, stats servicesReportStats, 
 
 func servicesReportHTML(reports []appinspect.Report, stats servicesReportStats, includeMissing bool, host string, now time.Time) string {
 	var b strings.Builder
-	b.WriteString(`<!doctype html><html><body style="margin:0;padding:0;background:#f4f6fb;color:#182230;font-family:Arial,Helvetica,sans-serif;">`)
-	b.WriteString(`<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f6fb;padding:24px 0;"><tr><td align="center">`)
-	b.WriteString(`<table role="presentation" width="760" cellspacing="0" cellpadding="0" style="width:760px;max-width:100%;background:#ffffff;border:1px solid #dfe5ef;border-radius:14px;overflow:hidden;">`)
-	b.WriteString(`<tr><td style="background:#0f172a;color:#ffffff;padding:24px 28px;">`)
-	b.WriteString(`<div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#93c5fd;">Sermo Services Report</div>`)
+	fmt.Fprintf(&b, `<!doctype html><html><body style="margin:0;padding:0;background:%s;color:%s;font-family:%s;">`,
+		servicesReportColorPageBG, servicesReportColorText, servicesReportFontSans)
+	fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellspacing="0" cellpadding="0" style="background:%s;padding:24px 0;"><tr><td align="center">`, servicesReportColorPageBG)
+	fmt.Fprintf(&b, `<table role="presentation" width="760" cellspacing="0" cellpadding="0" style="width:760px;max-width:100%%;background:%s;border:1px solid %s;border-radius:14px;overflow:hidden;">`,
+		servicesReportColorPanel, servicesReportColorFrameBorder)
+	fmt.Fprintf(&b, `<tr><td style="background:%s;color:%s;padding:24px 28px;">`, servicesReportColorHeaderBG, servicesReportColorPanel)
+	fmt.Fprintf(&b, `<div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:%s;">Sermo Services Report</div>`, servicesReportColorHeaderHint)
 	b.WriteString(`<div style="font-size:28px;font-weight:700;line-height:1.2;margin-top:6px;">Service catalog health</div>`)
-	fmt.Fprintf(&b, `<div style="font-size:13px;color:#cbd5e1;margin-top:8px;">Host %s · %s · %s</div>`, esc(host), esc(now.Format("2006-01-02 15:04 MST")), esc(reportScope(includeMissing)))
+	fmt.Fprintf(&b, `<div style="font-size:13px;color:%s;margin-top:8px;">Host %s · %s · %s</div>`,
+		servicesReportColorHeaderMeta, esc(host), esc(now.Format(servicesReportDateLayout)), esc(reportScope(includeMissing)))
 	b.WriteString(`</td></tr>`)
 	b.WriteString(`<tr><td style="padding:22px 28px 8px;">`)
 	b.WriteString(`<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>`)
-	writeReportCard(&b, cliTextOK, stats.OK, "#16a34a")
-	writeReportCard(&b, "Issues", stats.Issues, "#dc2626")
-	writeReportCard(&b, "Installed", stats.Installed, "#2563eb")
-	writeReportCard(&b, "Not installed", stats.NotInstalled, "#64748b")
+	writeReportCard(&b, cliTextOK, stats.OK, servicesReportColorOK)
+	writeReportCard(&b, "Issues", stats.Issues, servicesReportColorIssue)
+	writeReportCard(&b, "Installed", stats.Installed, servicesReportColorInfo)
+	writeReportCard(&b, "Not installed", stats.NotInstalled, servicesReportColorMuted)
 	b.WriteString(`</tr></table>`)
 	b.WriteString(`</td></tr>`)
 	b.WriteString(`<tr><td style="padding:10px 28px 18px;">`)
 	writeDistributionBar(&b, stats)
 	b.WriteString(`</td></tr>`)
 	b.WriteString(`<tr><td style="padding:0 28px 28px;">`)
-	b.WriteString(`<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">`)
-	b.WriteString(`<tr style="background:#f8fafc;">`)
-	b.WriteString(`<th align="left" style="padding:11px 12px;font-size:12px;color:#475569;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #e2e8f0;">Service</th>`)
-	b.WriteString(`<th align="left" style="padding:11px 12px;font-size:12px;color:#475569;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #e2e8f0;">Version</th>`)
-	b.WriteString(`<th align="left" style="padding:11px 12px;font-size:12px;color:#475569;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #e2e8f0;">Status</th>`)
+	fmt.Fprintf(&b, `<table role="presentation" width="100%%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid %s;border-radius:10px;overflow:hidden;">`, servicesReportColorBorder)
+	fmt.Fprintf(&b, `<tr style="background:%s;">`, servicesReportColorTableHeadBG)
+	writeReportHeaderCell(&b, "Service")
+	writeReportHeaderCell(&b, "Version")
+	writeReportHeaderCell(&b, "Status")
 	b.WriteString(`</tr>`)
 	if len(reports) == 0 {
-		b.WriteString(`<tr><td colspan="3" style="padding:18px 12px;color:#64748b;">No service catalog entries matched the report scope.</td></tr>`)
+		fmt.Fprintf(&b, `<tr><td colspan="3" style="padding:18px 12px;color:%s;">No service catalog entries matched the report scope.</td></tr>`, servicesReportColorMuted)
 	}
 	for _, r := range reports {
 		writeReportRow(&b, r)
 	}
 	b.WriteString(`</table>`)
 	b.WriteString(`</td></tr>`)
-	b.WriteString(`<tr><td style="padding:16px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;">Generated by <strong>Sermo</strong>. This report is based on <code style="font-family:Menlo,Consolas,monospace;">sermoctl services</code> catalog probes.</td></tr>`)
+	fmt.Fprintf(&b, `<tr><td style="padding:16px 28px;background:%s;border-top:1px solid %s;color:%s;font-size:12px;">Generated by <strong>Sermo</strong>. This report is based on <code style="font-family:%s;">sermoctl services</code> catalog probes.</td></tr>`,
+		servicesReportColorTableHeadBG, servicesReportColorBorder, servicesReportColorMuted, servicesReportFontMono)
 	b.WriteString(`</table></td></tr></table></body></html>`)
 	return b.String()
 }
 
+func writeReportHeaderCell(b *strings.Builder, label string) {
+	fmt.Fprintf(b, `<th align="left" style="padding:11px 12px;font-size:12px;color:%s;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid %s;">%s</th>`,
+		servicesReportColorSecondary, servicesReportColorBorder, esc(label))
+}
+
 func writeReportCard(b *strings.Builder, label string, value int, color string) {
-	fmt.Fprintf(b, `<td style="width:25%%;padding:0 7px 12px 0;"><div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#ffffff;"><div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;">%s</div><div style="font-size:28px;font-weight:700;color:%s;margin-top:4px;">%d</div></div></td>`, esc(label), color, value)
+	fmt.Fprintf(b, `<td style="width:25%%;padding:0 7px 12px 0;"><div style="border:1px solid %s;border-radius:12px;padding:14px;background:%s;"><div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:%s;">%s</div><div style="font-size:28px;font-weight:700;color:%s;margin-top:4px;">%d</div></div></td>`,
+		servicesReportColorBorder, servicesReportColorPanel, servicesReportColorMuted, esc(label), color, value)
 }
 
 func writeDistributionBar(b *strings.Builder, stats servicesReportStats) {
@@ -214,26 +250,29 @@ func writeDistributionBar(b *strings.Builder, stats servicesReportStats) {
 	okPct := float64(stats.OK) / float64(total) * metrics.PercentScale
 	issuePct := float64(stats.Issues) / float64(total) * metrics.PercentScale
 	missingPct := float64(stats.NotInstalled) / float64(total) * metrics.PercentScale
-	b.WriteString(`<div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin-bottom:8px;">Distribution</div>`)
-	fmt.Fprintf(b, `<div style="height:12px;border-radius:999px;overflow:hidden;background:#e2e8f0;"><span style="display:inline-block;height:12px;width:%.2f%%;background:#16a34a;"></span><span style="display:inline-block;height:12px;width:%.2f%%;background:#dc2626;"></span><span style="display:inline-block;height:12px;width:%.2f%%;background:#64748b;"></span></div>`, okPct, issuePct, missingPct)
+	fmt.Fprintf(b, `<div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:%s;margin-bottom:8px;">Distribution</div>`, servicesReportColorMuted)
+	fmt.Fprintf(b, `<div style="height:12px;border-radius:999px;overflow:hidden;background:%s;"><span style="display:inline-block;height:12px;width:%.2f%%;background:%s;"></span><span style="display:inline-block;height:12px;width:%.2f%%;background:%s;"></span><span style="display:inline-block;height:12px;width:%.2f%%;background:%s;"></span></div>`,
+		servicesReportColorBorder, okPct, servicesReportColorOK, issuePct, servicesReportColorIssue, missingPct, servicesReportColorMuted)
 }
 
 func writeReportRow(b *strings.Builder, r appinspect.Report) {
 	b.WriteString(`<tr>`)
-	fmt.Fprintf(b, `<td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;font-size:14px;color:#182230;font-weight:600;">%s</td>`, esc(r.DisplayName))
-	fmt.Fprintf(b, `<td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#475569;font-family:Menlo,Consolas,monospace;">%s</td>`, esc(reportVersion(r)))
-	fmt.Fprintf(b, `<td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;font-size:13px;">%s</td>`, statusBadge(r))
+	fmt.Fprintf(b, `<td style="padding:10px 12px;border-bottom:1px solid %s;font-size:14px;color:%s;font-weight:600;">%s</td>`,
+		servicesReportColorBorder, servicesReportColorText, esc(r.DisplayName))
+	fmt.Fprintf(b, `<td style="padding:10px 12px;border-bottom:1px solid %s;font-size:13px;color:%s;font-family:%s;">%s</td>`,
+		servicesReportColorBorder, servicesReportColorSecondary, servicesReportFontMono, esc(reportVersion(r)))
+	fmt.Fprintf(b, `<td style="padding:10px 12px;border-bottom:1px solid %s;font-size:13px;">%s</td>`, servicesReportColorBorder, statusBadge(r))
 	b.WriteString(`</tr>`)
 }
 
 func statusBadge(r appinspect.Report) string {
-	color := "#16a34a"
-	bg := "#dcfce7"
+	color := servicesReportColorOK
+	bg := servicesReportColorOKBadgeBG
 	label := r.Status
 	if !r.Installed {
-		color, bg = "#64748b", "#f1f5f9"
+		color, bg = servicesReportColorMuted, servicesReportColorMuteBadgeBG
 	} else if !r.OK {
-		color, bg = "#dc2626", "#fee2e2"
+		color, bg = servicesReportColorIssue, servicesReportColorBadBadgeBG
 	}
 	return fmt.Sprintf(`<span style="display:inline-block;border-radius:999px;padding:4px 9px;background:%s;color:%s;font-weight:700;">%s</span>`, bg, color, esc(label))
 }
