@@ -514,6 +514,21 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/process ./internal/cli` y
   `make check` pasan.
 
+### Fase 27: Paths procfs por proceso en metricas
+
+- Mantener los nombres y paths `/proc/<pid>/...` en `internal/process`.
+- Reutilizarlos desde `internal/metrics` para lecturas por proceso, dejando los
+  ficheros globales de `/proc` en el owner de metricas.
+
+Estado ejecutado:
+
+- `process` expone nombres procfs por proceso para `stat`, `statm`, `status`,
+  `io`, `fd` y `task`.
+- `metrics.OSReader` usa `process.PIDPath` para CPU, start time, RSS, swap, IO,
+  FD count y thread count por PID.
+- Validacion ejecutada: `go test ./internal/process ./internal/metrics` y
+  `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
