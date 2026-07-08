@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 
+	"sermo/internal/httpx"
 	"sermo/internal/netutil"
 	"sermo/internal/units"
 )
@@ -303,8 +304,8 @@ const (
 	maxHTTPProbeLargeBody = units.BytesPerMiB
 	maxHTTPProbeShortBody = 4 * units.BytesPerKiB
 
-	httpHeaderContentType   = "Content-Type"
-	httpHeaderServer        = "Server"
+	httpHeaderContentType   = httpx.HeaderContentType
+	httpHeaderServer        = httpx.HeaderServer
 	httpHeaderSyncthingAuth = "X-API-Key"
 
 	tlsSkipVerify = TLSModeSkipVerify

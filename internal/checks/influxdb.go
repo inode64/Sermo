@@ -17,10 +17,11 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
+	"sermo/internal/httpx"
 )
 
 const (
-	influxAuthHeader      = "Authorization"
+	influxAuthHeader      = httpx.HeaderAuthorization
 	influxAuthTokenPrefix = "Token "
 	influxFluxAccept      = "application/csv"
 	influxFluxContentType = "application/vnd.flux"
