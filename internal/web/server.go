@@ -886,7 +886,7 @@ const defaultEventLimit = 100
 const maxEventLimit = 1000
 
 // defaultSeriesWindow is used when no (or an invalid) `since` is given.
-const defaultSeriesWindow = 24 * time.Hour
+const defaultSeriesWindow = state.DefaultSeriesWindow
 
 // Backend is what the web server needs from the daemon.
 type Backend interface {
