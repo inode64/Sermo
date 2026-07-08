@@ -2,15 +2,15 @@ package locks
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"syscall"
+
+	"sermo/internal/process"
 )
 
 const (
-	procStatPathFormat     = "/proc/%d/stat"
 	procStatNumericBase    = 10
 	procStatStartTimeBits  = 64
 	procStatStartTimeIndex = 19
@@ -33,7 +33,7 @@ func (OSProcessProber) Alive(pid int) bool {
 // (field 2) may contain spaces and parentheses, so parsing resumes after the
 // final ')'.
 func (OSProcessProber) StartTicks(pid int) (uint64, bool) {
-	data, err := os.ReadFile(fmt.Sprintf(procStatPathFormat, pid))
+	data, err := os.ReadFile(process.PIDPath(pid, process.ProcFileStat))
 	if err != nil {
 		return 0, false
 	}
