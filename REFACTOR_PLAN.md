@@ -601,6 +601,19 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/metrics ./internal/app` y
   `make check` pasan.
 
+### Fase 33: Mensaje de conflicto control socket/host
+
+- Mantener mensajes de validacion de `control:` en `internal/config`.
+- Nombrar el conflicto comun de `socket` y `host` para Docker y libvirt sin
+  acoplarlo al parser runtime de `dockerctl`.
+
+Estado ejecutado:
+
+- `validate_service.go` usa `controlSocketHostConflictMessage` para ambos
+  backends de control.
+- No se cambia el texto visible del error ni la validacion de Docker/libvirt.
+- Validacion ejecutada: `go test ./internal/config` y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
