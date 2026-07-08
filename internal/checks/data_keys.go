@@ -1,5 +1,7 @@
 package checks
 
+import "sermo/internal/conn"
+
 // Result data-map keys shared by check implementations and consumers. These
 // names are part of the event/web surface that Result.Data exposes.
 const (
@@ -88,7 +90,7 @@ const (
 	DataKeySerialNumber       = "serial_number"
 	DataKeySignatureAlgorithm = "signature_algorithm"
 	DataKeySize               = CheckKeySize
-	DataKeySocket             = CheckKeySocket
+	DataKeySocket             = conn.ExtraKeySocket
 	DataKeySource             = "source"
 	DataKeyStatus             = "status"
 	DataKeySubject            = "subject"

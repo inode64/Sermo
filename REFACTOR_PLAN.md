@@ -614,6 +614,23 @@ Estado ejecutado:
 - No se cambia el texto visible del error ni la validacion de Docker/libvirt.
 - Validacion ejecutada: `go test ./internal/config` y `make check` pasan.
 
+### Fase 34: Clave de socket de probes compartida
+
+- Mantener en `internal/conn` las claves que los probes devuelven en
+  `Result.Extra`.
+- Reutilizar la clave de socket desde `internal/checks`, que la propaga a
+  `Result.Data` para Web/eventos.
+
+Estado ejecutado:
+
+- `conn.ExtraKeySocket` expone la clave `socket` ya usada por acpid, fail2ban y
+  lvmpolld.
+- `checks.DataKeySocket` deriva de esa clave en vez de duplicar el literal via
+  la clave de configuracion.
+- No cambia el valor visible de datos, JSON ni lecturas.
+- Validacion ejecutada: `go test ./internal/conn ./internal/checks ./internal/app`
+  y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.

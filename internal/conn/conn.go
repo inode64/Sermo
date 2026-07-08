@@ -406,6 +406,9 @@ const (
 	extraSocket = "socket"
 )
 
+// ExtraKeySocket is the Result.Extra key carrying the Unix socket path a probe used.
+const ExtraKeySocket = extraSocket
+
 // Config is the connection target for a protocol probe. Fields that do not apply
 // to a protocol are ignored by it.
 type Config struct {
