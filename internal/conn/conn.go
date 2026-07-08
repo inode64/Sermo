@@ -191,10 +191,6 @@ const (
 // DNSRCodeNoErrorName is the DNS response code name for a successful response.
 const DNSRCodeNoErrorName = "NOERROR"
 
-// DockerContainerStatusRunning is the running status emitted in
-// ExtraKeyContainerStatus.
-const DockerContainerStatusRunning = "running"
-
 // LibvirtDomainState* constants are stable lower-case state names emitted in
 // ExtraKeyDomainState.
 const (
