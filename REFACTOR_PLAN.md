@@ -347,6 +347,19 @@ Estado ejecutado:
   reportan una spec vacia.
 - Validacion ejecutada: `go test ./internal/config` y `make check` pasan.
 
+### Fase 15: Constantes de plantillas de notificacion
+
+- Mantener el loader de plantillas en `internal/notify/template.go`.
+- Nombrar el sufijo de archivo, los nombres internos de subtemplate y la opcion
+  de `text/template` para claves ausentes.
+
+Estado ejecutado:
+
+- `LoadTemplate` usa `templateFileSuffix`.
+- `parseTemplate` usa constantes para `:subject`, `:body` y
+  `missingkey=zero`.
+- Validacion ejecutada: `go test ./internal/notify` y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
