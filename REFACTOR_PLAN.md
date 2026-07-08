@@ -335,6 +335,18 @@ Estado ejecutado:
 - Se dejaron locales los logger names de `internal/app/event.go`.
 - Validacion ejecutada: `go test ./internal/app` y `make check` pasan.
 
+### Fase 14: Mensaje requerido de ports
+
+- Mantener la validacion de `ports` en `internal/config/validate_checks.go`.
+- Nombrar el mensaje reutilizado para specs de puertos vacias, conservando el
+  mismo ejemplo visible al operador.
+
+Estado ejecutado:
+
+- `validatePortSpec` usa `portSpecRequiredMessage` para los dos caminos que
+  reportan una spec vacia.
+- Validacion ejecutada: `go test ./internal/config` y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
