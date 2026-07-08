@@ -34,7 +34,7 @@ const Filename = "sermo.db"
 
 const (
 	stateDirMode        = 0o700
-	secondsPerMinute    = 60
+	secondsPerMinute    = units.SecondsPerMinute
 	sqliteBusyTimeoutMS = 5000
 	sqliteDriverName    = "sqlite"
 )
@@ -245,7 +245,7 @@ type Store struct {
 }
 
 const (
-	hoursPerDay          = 24
+	hoursPerDay          = units.HoursPerDay
 	historyRetentionDays = 366
 )
 
