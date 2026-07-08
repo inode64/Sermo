@@ -3,6 +3,7 @@ package cli
 import (
 	"sermo/internal/config"
 	"sermo/internal/mountctl"
+	"sermo/internal/netutil"
 	"sermo/internal/servicemgr"
 )
 
@@ -67,7 +68,7 @@ const (
 )
 
 const (
-	defaultWebAPIAddress = "127.0.0.1"
+	defaultWebAPIAddress = netutil.LoopbackIPv4
 	daemonPIDFilename    = config.DaemonPIDFilename
 )
 

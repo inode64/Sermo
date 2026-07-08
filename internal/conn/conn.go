@@ -13,10 +13,12 @@ import (
 	"io"
 	"strings"
 	"sync"
+
+	"sermo/internal/netutil"
 )
 
 // DefaultHost is the loopback host protocol probes use when config omits host.
-const DefaultHost = "127.0.0.1"
+const DefaultHost = netutil.LoopbackIPv4
 
 const (
 	numericBaseDecimal = 10
@@ -293,7 +295,7 @@ const (
 	fallbackXID32 = 0x53524d4f // "SRMO"
 	networkTCP    = TransportTCP
 	networkUDP    = TransportUDP
-	networkUnix   = "unix"
+	networkUnix   = netutil.NetworkUnix
 
 	// HTTP probe body limits keep service probes bounded against unexpected peers.
 	maxHTTPProbeBody      = 64 << 10

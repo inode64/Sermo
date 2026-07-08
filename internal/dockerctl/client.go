@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/netutil"
 )
 
 // defaultTimeout bounds a Docker API request when the caller's context carries
@@ -72,7 +73,7 @@ func ensureDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
 
 const (
 	// DefaultHost is Docker's loopback host when TCP control omits host.
-	DefaultHost = "127.0.0.1"
+	DefaultHost = netutil.LoopbackIPv4
 	// DefaultSocket is Docker's local Unix API socket on modern Linux systems.
 	DefaultSocket = "/run/docker.sock"
 	// DefaultPort is Docker's plaintext TCP API port.
@@ -82,7 +83,7 @@ const (
 // HealthStatusNone is emitted when Docker exposes no container health state.
 const HealthStatusNone = "none"
 
-const networkUnix = "unix"
+const networkUnix = netutil.NetworkUnix
 
 // ControlType is the service control.type value for Docker-backed services.
 const ControlType = "docker"
