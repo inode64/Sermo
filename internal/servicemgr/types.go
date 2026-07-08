@@ -82,6 +82,12 @@ const (
 	pid1CommPath     = "/proc/1/comm"
 )
 
+// SystemdRuntimeDir is systemd's runtime unit directory.
+const SystemdRuntimeDir = systemdRuntimeDir
+
+// OpenRCRuntimeDir is OpenRC's runtime state directory.
+const OpenRCRuntimeDir = openRCRuntimeDir
+
 // Service-manager action verbs passed to init backend commands.
 const (
 	actionStart       = "start"

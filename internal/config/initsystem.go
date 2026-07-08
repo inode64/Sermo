@@ -3,12 +3,12 @@ package config
 import (
 	"os"
 	"strings"
+
+	"sermo/internal/servicemgr"
 )
 
 const (
-	initSystemdRuntimeDir = "/run/systemd/system"
-	initOpenRCRuntimeDir  = "/run/openrc"
-	initOpenRCBinaryPath  = "/sbin/openrc"
+	initOpenRCBinaryPath = "/sbin/openrc"
 )
 
 // detectedInit holds the init system used as the ${init} built-in
@@ -20,10 +20,10 @@ func detectInit() string {
 	if v := envOverride(envInitOverride); v != "" {
 		return strings.ToLower(v)
 	}
-	if _, err := os.Stat(initSystemdRuntimeDir); err == nil {
+	if _, err := os.Stat(servicemgr.SystemdRuntimeDir); err == nil {
 		return backendSystemd
 	}
-	if _, err := os.Stat(initOpenRCRuntimeDir); err == nil {
+	if _, err := os.Stat(servicemgr.OpenRCRuntimeDir); err == nil {
 		return backendOpenRC
 	}
 	if _, err := os.Stat(initOpenRCBinaryPath); err == nil {

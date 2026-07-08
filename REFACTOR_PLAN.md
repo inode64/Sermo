@@ -390,6 +390,21 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/config ./internal/app` y
   `make check` pasan.
 
+### Fase 18: Directorios runtime de init compartidos
+
+- Mantener los directorios runtime de systemd/OpenRC en `internal/servicemgr`,
+  que es el owner de deteccion y normalizacion de init backends.
+- Reutilizarlos desde `internal/config` para detectar el built-in `${init}`.
+
+Estado ejecutado:
+
+- `servicemgr.SystemdRuntimeDir` y `servicemgr.OpenRCRuntimeDir` exponen los
+  directorios runtime usados por el detector.
+- `config.detectInit` usa esas constantes en vez de duplicar `/run/systemd/system`
+  y `/run/openrc`.
+- Validacion ejecutada: `go test ./internal/config ./internal/servicemgr` y
+  `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
