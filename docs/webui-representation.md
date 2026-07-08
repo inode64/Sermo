@@ -18,6 +18,12 @@ Keep changes concrete:
 - The Web UI is one embedded document: `internal/web/index.html`.
 - Data panels are `<details>` cards. The page scrolls as a whole; do not add
   panel-local scrollbars.
+- Every data panel carries `class="panel"` (shared styling such as the
+  disconnected dimming targets that class, not an id list). Watch panel
+  `<details>` also carry `data-panel="<key>"` naming their entry in the
+  `watchPanels` registry; rendering, deep-link routing, attention navigation
+  and the `/` search shortcut iterate that registry, so a new watch panel needs
+  only its registry entry and HTML block.
 - Services, applications and watches (including storage watches) can use
   `category` for grouping, filtering or search depending on the panel.
 - A top-level YAML `category` field is the category source. If it is absent,
