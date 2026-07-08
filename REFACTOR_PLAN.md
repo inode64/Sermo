@@ -428,6 +428,21 @@ Estado ejecutado:
 - `cert` y `websocket` consumen el mismo default TLS.
 - Validacion ejecutada: `go test ./internal/checks` y `make check` pasan.
 
+### Fase 21: Constantes sysfs de interfaces de red
+
+- Mantener el vocabulario de `/sys/class/net` en `internal/checks`, owner del
+  muestreo de interfaces.
+- Reutilizar desde el wizard las constantes de path, archivos y parseo de flags
+  sysfs sin mover logica ni cambiar la salida generada.
+
+Estado ejecutado:
+
+- `checks` expone las constantes sysfs de interfaces que ya usaba su sampler.
+- `sermoctl wizard` consume esas constantes en su fallback de descubrimiento de
+  interfaces.
+- Validacion ejecutada: `go test ./internal/checks ./internal/cli` y
+  `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.

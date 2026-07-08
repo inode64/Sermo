@@ -46,14 +46,21 @@ const (
 	// SysfsIfaceFlagRunning is Linux IFF_RUNNING from /sys/class/net/<iface>/flags.
 	SysfsIfaceFlagRunning uint64 = 0x40
 
-	sysfsNetClassPath        = "/sys/class/net"
-	sysfsIfaceFlagsFile      = "flags"
-	sysfsIfaceOperstateFile  = "operstate"
-	sysfsIfaceSpeedFile      = "speed"
-	sysfsIfaceStatisticsDir  = "statistics"
-	sysfsIfaceHexValuePrefix = "0x"
-	sysfsIfaceFlagsBase      = 16
-	sysfsIfaceFlagsBits      = 64
+	// SysfsNetClassPath is Linux's sysfs network-interface root.
+	SysfsNetClassPath = "/sys/class/net"
+	// SysfsIfaceFlagsFile is the sysfs file containing interface flag bits.
+	SysfsIfaceFlagsFile = "flags"
+	// SysfsIfaceOperstateFile is the sysfs file containing interface state.
+	SysfsIfaceOperstateFile = "operstate"
+	// SysfsIfaceHexValuePrefix prefixes hexadecimal sysfs flag values.
+	SysfsIfaceHexValuePrefix = "0x"
+	// SysfsIfaceFlagsBase is the integer base for sysfs flag parsing.
+	SysfsIfaceFlagsBase = 16
+	// SysfsIfaceFlagsBits is the bit width for sysfs flag parsing.
+	SysfsIfaceFlagsBits = 64
+
+	sysfsIfaceSpeedFile     = "speed"
+	sysfsIfaceStatisticsDir = "statistics"
 )
 
 // NetSample is one observation of a network interface.
@@ -210,7 +217,7 @@ func SampleNet(iface string) (NetSample, error) { return defaultNetSampler(iface
 
 // defaultNetSampler reads interface flags and /sys/class/net/<iface>.
 func defaultNetSampler(iface string) (NetSample, error) {
-	return sampleNetFromSysfs(iface, sysfsNetClassPath)
+	return sampleNetFromSysfs(iface, SysfsNetClassPath)
 }
 
 // InterfaceExists reports whether an interface is visible through netlink or
@@ -219,7 +226,7 @@ func defaultNetSampler(iface string) (NetSample, error) {
 func InterfaceExists(iface string) bool {
 	ifi, err := net.InterfaceByName(iface)
 	if err != nil {
-		_, statErr := os.Stat(sysfsIfaceDir(sysfsNetClassPath, iface))
+		_, statErr := os.Stat(sysfsIfaceDir(SysfsNetClassPath, iface))
 		return statErr == nil
 	}
 	return ifi != nil
@@ -281,15 +288,15 @@ func sysfsIfaceDir(root, iface string) string {
 }
 
 func sysfsIfaceUp(dir string) bool {
-	flags := sysfsIfaceFlagBits(filepath.Join(dir, sysfsIfaceFlagsFile))
-	operstate := strings.TrimSpace(readTextFile(filepath.Join(dir, sysfsIfaceOperstateFile)))
+	flags := sysfsIfaceFlagBits(filepath.Join(dir, SysfsIfaceFlagsFile))
+	operstate := strings.TrimSpace(readTextFile(filepath.Join(dir, SysfsIfaceOperstateFile)))
 	return flags&SysfsIfaceFlagUp != 0 && (flags&SysfsIfaceFlagRunning != 0 || operstate == NetStateUp || operstate == NetStateUnknown)
 }
 
 func sysfsIfaceFlagBits(path string) uint64 {
 	raw := strings.TrimSpace(readTextFile(path))
-	raw = strings.TrimPrefix(raw, sysfsIfaceHexValuePrefix)
-	flags, _ := strconv.ParseUint(raw, sysfsIfaceFlagsBase, sysfsIfaceFlagsBits)
+	raw = strings.TrimPrefix(raw, SysfsIfaceHexValuePrefix)
+	flags, _ := strconv.ParseUint(raw, SysfsIfaceFlagsBase, SysfsIfaceFlagsBits)
 	return flags
 }
 
