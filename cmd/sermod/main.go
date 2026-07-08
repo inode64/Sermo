@@ -52,7 +52,7 @@ const (
 const (
 	defaultRuntimeDir    = config.DefaultRuntime
 	defaultWebAddress    = "127.0.0.1"
-	daemonPIDFilename    = "sermod.pid"
+	daemonPIDFilename    = config.DaemonPIDFilename
 	instanceLockFilename = "sermod.lock"
 )
 

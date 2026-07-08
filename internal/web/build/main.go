@@ -29,6 +29,10 @@ const (
 	cssMarker = "/*__SERMO_CSS__*/"
 	jsMarker  = "/*__SERMO_JS__*/"
 
+	webBuildShellFilename  = "index.html"
+	webBuildStylesFilename = "styles.css"
+	webBuildScriptFilename = "app.js"
+
 	webBuildExpectedOutputFiles = 1
 	webBuildFailureExitCode     = 1
 	webBuildOutputFileIndex     = 0
@@ -50,15 +54,15 @@ func main() {
 func build(srcDir, out string) error {
 	// srcDir/out come from CLI flags driven by the Makefile, not untrusted
 	// input; this is a developer build tool, so path-traversal taint is moot.
-	shell, err := os.ReadFile(filepath.Join(srcDir, "index.html")) // #nosec G304
+	shell, err := os.ReadFile(filepath.Join(srcDir, webBuildShellFilename)) // #nosec G304
 	if err != nil {
 		return err
 	}
-	css, err := bundleCSS(filepath.Join(srcDir, "styles.css"))
+	css, err := bundleCSS(filepath.Join(srcDir, webBuildStylesFilename))
 	if err != nil {
 		return fmt.Errorf("css: %w", err)
 	}
-	js, err := bundleJS(filepath.Join(srcDir, "app.js"))
+	js, err := bundleJS(filepath.Join(srcDir, webBuildScriptFilename))
 	if err != nil {
 		return fmt.Errorf("js: %w", err)
 	}

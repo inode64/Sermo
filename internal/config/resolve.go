@@ -174,6 +174,8 @@ const (
 	keyRuleID          = checks.CheckKeyID
 )
 
+const reloadOnChangePathPaths = keyReloadOnChange + "." + keyPaths
+
 // expandPidfile validates a top-level `pidfile: <path>` or candidate list and
 // adds a gated `pidfile` health check. The top-level declaration remains in the
 // resolved tree as the service's single pidfile source; process discovery and
@@ -219,18 +221,19 @@ func expandPidfiles(tree map[string]any) []string {
 		checksMap = map[string]any{}
 	}
 	for _, role := range slices.Sorted(maps.Keys(pidfiles)) {
+		path := pidfilesRolePath(role)
 		if !validDocumentName(role) {
-			errs = append(errs, fmt.Sprintf("pidfiles.%s role must be a simple name without path separators", role))
+			errs = append(errs, fmt.Sprintf("%s role must be a simple name without path separators", path))
 			continue
 		}
 		paths := cfgval.StringList(pidfiles[role])
 		if len(paths) == 0 {
-			errs = append(errs, fmt.Sprintf(validationNonEmptyPathListFormat, "pidfiles."+role))
+			errs = append(errs, fmt.Sprintf(validationNonEmptyPathListFormat, path))
 			continue
 		}
 		for _, path := range paths {
 			if !filepath.IsAbs(path) {
-				errs = append(errs, fmt.Sprintf("pidfiles.%s path %q must be absolute", role, path))
+				errs = append(errs, fmt.Sprintf("%s path %q must be absolute", pidfilesRolePath(role), path))
 			}
 		}
 		pathValue := serviceArtifactPathValue(paths)
@@ -362,7 +365,7 @@ func (c *Config) expandAnalyze(tree map[string]any) []string {
 			if !ok {
 				continue
 			}
-			errs = append(errs, c.expandAnalyzeEntry("watches."+name+".check", check)...)
+			errs = append(errs, c.expandAnalyzeEntry(watchCheckPath(name), check)...)
 		}
 	}
 
@@ -483,7 +486,7 @@ func expandReloadOnChange(tree map[string]any) []string {
 	var errs []string
 	for i, p := range cfgval.StringList(roc[keyPaths]) {
 		if p == "" {
-			errs = append(errs, "reload_on_change.paths entry is empty")
+			errs = append(errs, reloadOnChangePathPaths+" entry is empty")
 			continue
 		}
 		key := fmt.Sprintf("reload-on-change-%d", i+1)
@@ -542,7 +545,7 @@ func expandServiceWatches(tree map[string]any) []string {
 		if !hasThen {
 			check, ok := entry[WatchKeyCheck].(map[string]any)
 			if !ok {
-				add("watches.%s.check is required", name)
+				add("%s is required", watchCheckPath(name))
 				continue
 			}
 			if _, ok := promoteServiceWatchCheck(checksMap, name, entry, check, add); !ok {
@@ -556,14 +559,14 @@ func expandServiceWatches(tree map[string]any) []string {
 		}
 		// Validate the action grammar here (this entry is removed before the
 		// resolved-tree validators run, so they never see it).
-		validateWatchThenAction("watches."+name, action, then, add)
+		validateWatchThenAction(watchPath(name), action, then, add)
 		check, ok := entry[WatchKeyCheck].(map[string]any)
 		if !ok {
-			add("watches.%s.check is required", name)
+			add("%s is required", watchCheckPath(name))
 			continue
 		}
 		if _, exists := rulesMap[name]; exists {
-			add("watches.%s would overwrite existing rule %q; rename the watch", name, name)
+			add("%s would overwrite existing rule %q; rename the watch", watchPath(name), name)
 			continue
 		}
 
@@ -599,12 +602,12 @@ var serviceWatchCheckEntryFields = [...]string{keyEnabled, keyVerify, keyRequire
 // returning the generated rule target.
 func promoteServiceWatchCheck(checksMap map[string]any, name string, entry, check map[string]any, add func(string, ...any)) (serviceWatchRuleTarget, bool) {
 	if _, exists := checksMap[name]; exists {
-		add("watches.%s would overwrite existing check %q; rename the watch", name, name)
+		add("%s would overwrite existing check %q; rename the watch", watchPath(name), name)
 		return serviceWatchRuleTarget{}, false
 	}
 	checkType := cfgval.String(check[checks.CheckKeyType])
 	if checkType == "" {
-		add("watches.%s.check.type is required", name)
+		add("%s is required", watchCheckFieldPath(name, checks.CheckKeyType))
 		return serviceWatchRuleTarget{}, false
 	}
 	genCheck := cloneMap(check)

@@ -604,7 +604,7 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, status, chec
 			b.observability.Clear(name)
 		}
 		if monitored && !observed {
-			return false, []string{"startup observation"}
+			return false, []string{observabilityMissingStartup}
 		}
 		return false, nil
 	}
@@ -629,10 +629,10 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, status, chec
 	}
 	if b.observability != nil {
 		if _, ready := b.observability.Ready(name); !ready {
-			addMissing("availability history")
+			addMissing(observabilityMissingHistory)
 		}
 		if !e.noResidentProcess && !b.serviceRuntimeObservabilityReady(name, e) {
-			addMissing("runtime metrics")
+			addMissing(observabilityMissingRuntime)
 		}
 	}
 	if len(missing) > 0 {
@@ -738,7 +738,7 @@ func activeLockNamesFromReport(report locks.Report) []string {
 		}
 		n := lk.Name
 		if n == "" {
-			n = "(default)"
+			n = watchDefaultLockName
 		}
 		names = append(names, n)
 	}
@@ -1006,7 +1006,7 @@ func watchStorageMountFailed(w web.Watch) bool {
 		return false
 	}
 	for _, cond := range w.Conditions {
-		if cond.Field != checks.DataKeyMounted || cond.Op != "==" {
+		if cond.Field != checks.DataKeyMounted || cond.Op != cfgval.CompareOpEqual {
 			continue
 		}
 		expect, err := strconv.ParseBool(cond.Value)
@@ -1077,7 +1077,7 @@ func watchSummary(w *webWatch, storage *web.StorageWatchInfo, liveSummary string
 		}
 		fs := storage.FileSystem
 		if fs == "" {
-			fs = "filesystem"
+			fs = watchFallbackFilesystem
 		}
 		return fmt.Sprintf("%s: %.1f%% free (%d bytes) on %s", storage.Path, storage.FreePct, storage.FreeBytes, fs)
 	}
@@ -1122,7 +1122,7 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 		if path := cfgval.AsString(check[checks.CheckKeyPath]); path != "" {
 			out = append(out, web.WatchCondition{Field: checks.DataKeyPath, Op: cfgval.CompareOpEqual, Value: path})
 		} else if _, ok := check[checks.CheckKeyCount].(map[string]any); !ok {
-			out = append(out, web.WatchCondition{Field: checks.DataKeyCount, Op: cfgval.CompareOpGreaterEqual, Value: "1"})
+			out = append(out, web.WatchCondition{Field: checks.DataKeyCount, Op: cfgval.CompareOpGreaterEqual, Value: watchConditionDefaultMinimum})
 		}
 	case checks.CheckTypeCount:
 		if path := cfgval.AsString(check[checks.CheckKeyPath]); path != "" {
@@ -1164,7 +1164,7 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 		}
 		minRules := cfgval.String(check[checks.CheckKeyMinRules])
 		if minRules == "" {
-			minRules = "1"
+			minRules = strconv.FormatUint(watchFirewallDefaultMinRules, watchReadingNumericBase)
 		}
 		out = append(out,
 			web.WatchCondition{Field: checks.DataKeyBackend, Op: cfgval.CompareOpEqual, Value: backend},
@@ -1186,7 +1186,7 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 	}
 	if cfgval.AsString(check[checks.CheckKeyType]) == checks.CheckTypeOOM {
 		if _, ok := check[checks.CheckKeyDelta].(map[string]any); !ok {
-			out = append(out, web.WatchCondition{Field: checks.CheckKeyDelta, Op: cfgval.CompareOpGreater, Value: "0"})
+			out = append(out, web.WatchCondition{Field: checks.CheckKeyDelta, Op: cfgval.CompareOpGreater, Value: watchConditionDefaultDelta})
 		}
 	}
 	out = append(out, watchMetricConditions(metrics)...)
@@ -1198,7 +1198,7 @@ func watchConditionFields(check map[string]any) []string {
 	switch checkType {
 	case checks.CheckTypeStorage:
 		return checks.StoragePredFields
-	case metrics.MetricMemory:
+	case checks.CheckTypeMemory:
 		return checks.MemoryPredFields
 	case checks.CheckTypePressure:
 		return checks.PressurePredFields
@@ -1445,7 +1445,7 @@ func watchMeterFromSnapshot(checkType string, data map[string]any) *web.WatchMet
 		if !loadOK || !cpuOK || numCPU <= 0 {
 			return nil
 		}
-		return &web.WatchMeter{Kind: checks.CheckTypeLoad, UsedPct: load / float64(numCPU) * percentScale, Load: load, NumCPU: numCPU}
+		return &web.WatchMeter{Kind: checks.CheckTypeLoad, UsedPct: load / float64(numCPU) * metrics.PercentScale, Load: load, NumCPU: numCPU}
 	case checks.CheckTypeFDS:
 		return watchCountMeter(checks.CheckTypeFDS, data, checks.DataKeyAllocated)
 	case checks.CheckTypePIDs:
@@ -1562,7 +1562,7 @@ func (b *WebBackend) watchLiveView(w *webWatch, system metrics.Snapshot) (*web.W
 func (b *WebBackend) processWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
 	name := cfgval.AsString(w.check[checks.CheckKeyName])
 	if name == "" {
-		msg := "missing name"
+		msg := watchMissingNameMessage
 		return nil, watchErrorReadings(msg), "process: " + msg
 	}
 	user := cfgval.AsString(w.check[checks.CheckKeyUser])
@@ -1643,7 +1643,7 @@ func (b *WebBackend) autofsWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 func (b *WebBackend) diskIOWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
 	device := cfgval.AsString(w.check[checks.CheckKeyDevice])
 	if device == "" {
-		msg := "missing device"
+		msg := watchMissingDeviceMessage
 		return nil, watchErrorReadings(msg), "diskio: " + msg
 	}
 	sampler := b.diskIOSampler
@@ -1826,7 +1826,7 @@ func (b *WebBackend) routeWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRe
 func (b *WebBackend) netWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
 	iface := cfgval.AsString(w.check[checks.CheckKeyInterface])
 	if iface == "" {
-		msg := "missing interface"
+		msg := watchMissingInterfaceMessage
 		return nil, watchErrorReadings(msg), "net: " + msg
 	}
 	sampler := b.netSampler
@@ -1935,7 +1935,7 @@ func (b *WebBackend) fdsWatchView() (*web.WatchMeter, []web.WatchReading, string
 	}
 	summary := fmt.Sprintf("fds %d allocated", s.Allocated)
 	if s.Max > 0 {
-		usedPct := float64(s.Allocated) / float64(s.Max) * percentScale
+		usedPct := float64(s.Allocated) / float64(s.Max) * metrics.PercentScale
 		summary = fmt.Sprintf("fds %d/%d allocated (%.1f%%)", s.Allocated, s.Max, usedPct)
 	}
 	if meter := countMeter(checks.CheckTypeFDS, s.Allocated, s.Max); meter != nil {
@@ -1956,7 +1956,7 @@ func (b *WebBackend) pidsWatchView() (*web.WatchMeter, []web.WatchReading, strin
 	}
 	summary := fmt.Sprintf("pids %d in use", s.Threads)
 	if s.Max > 0 {
-		usedPct := float64(s.Threads) / float64(s.Max) * percentScale
+		usedPct := float64(s.Threads) / float64(s.Max) * metrics.PercentScale
 		summary = fmt.Sprintf("pids %d/%d in use (%.1f%%)", s.Threads, s.Max, usedPct)
 	}
 	if meter := countMeter(checks.CheckTypePIDs, s.Threads, s.Max); meter != nil {
@@ -2006,7 +2006,7 @@ func (b *WebBackend) conntrackWatchView() (*web.WatchMeter, []web.WatchReading, 
 	}
 	summary := fmt.Sprintf("conntrack %d entries", s.Count)
 	if s.Max > 0 {
-		usedPct := float64(s.Count) / float64(s.Max) * percentScale
+		usedPct := float64(s.Count) / float64(s.Max) * metrics.PercentScale
 		summary = fmt.Sprintf("conntrack %d/%d entries (%.1f%%)", s.Count, s.Max, usedPct)
 	}
 	if meter := countMeter(checks.CheckTypeConntrack, s.Count, s.Max); meter != nil {
@@ -2185,7 +2185,7 @@ func watchMeter(checkType string, system metrics.Snapshot) *web.WatchMeter {
 		ncpu := runtime.NumCPU()
 		pct := 0.0
 		if ncpu > 0 {
-			pct = r.Absolute / float64(ncpu) * percentScale
+			pct = r.Absolute / float64(ncpu) * metrics.PercentScale
 		}
 		return &web.WatchMeter{Kind: checks.CheckTypeLoad, UsedPct: pct, Load: r.Absolute, NumCPU: ncpu}
 	}
@@ -2201,7 +2201,7 @@ func countMeter(kind string, count, limit uint64) *web.WatchMeter {
 	}
 	return &web.WatchMeter{
 		Kind:    kind,
-		UsedPct: float64(count) / float64(limit) * percentScale,
+		UsedPct: float64(count) / float64(limit) * metrics.PercentScale,
 		Count:   count,
 		Max:     limit,
 	}
@@ -2712,7 +2712,7 @@ func hostMetric(name string, r metrics.Reading) web.HostMetric {
 		if r.HasAbsolute {
 			if ncpu := runtime.NumCPU(); ncpu > 0 {
 				m.Total = float64(ncpu)
-				m.Percent = r.Absolute / float64(ncpu) * percentScale
+				m.Percent = r.Absolute / float64(ncpu) * metrics.PercentScale
 			}
 		}
 	}

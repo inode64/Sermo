@@ -21,6 +21,13 @@ const (
 	yamlLongFileExt = ".yaml"
 )
 
+const (
+	pathsLabelApps      = SectionPaths + "." + pathKeyApps
+	pathsLabelNotifiers = SectionPaths + "." + pathKeyNotifiers
+	pathsLabelServices  = SectionPaths + "." + pathKeyServices
+	pathsLabelWatches   = SectionPaths + "." + pathKeyWatches
+)
+
 var defaultServiceDirs = []string{pathKeyServices}
 var defaultAppDirs = []string{pathKeyApps}
 
@@ -162,16 +169,16 @@ func loadGlobal(path string) (Global, error) {
 		g.Defaults = map[string]any{}
 	}
 	if paths, ok := raw[sectionPaths].(map[string]any); ok {
-		if g.ServicePaths, err = pathSpecList(paths[pathKeyServices], "paths.services"); err != nil {
+		if g.ServicePaths, err = pathSpecList(paths[pathKeyServices], pathsLabelServices); err != nil {
 			return Global{}, parseGlobalConfigError(path, err)
 		}
-		if g.AppPaths, err = pathSpecList(paths[pathKeyApps], "paths.apps"); err != nil {
+		if g.AppPaths, err = pathSpecList(paths[pathKeyApps], pathsLabelApps); err != nil {
 			return Global{}, parseGlobalConfigError(path, err)
 		}
-		if g.NotifierPaths, err = pathSpecList(paths[pathKeyNotifiers], "paths.notifiers"); err != nil {
+		if g.NotifierPaths, err = pathSpecList(paths[pathKeyNotifiers], pathsLabelNotifiers); err != nil {
 			return Global{}, parseGlobalConfigError(path, err)
 		}
-		if g.WatchPaths, err = pathSpecList(paths[pathKeyWatches], "paths.watches"); err != nil {
+		if g.WatchPaths, err = pathSpecList(paths[pathKeyWatches], pathsLabelWatches); err != nil {
 			return Global{}, parseGlobalConfigError(path, err)
 		}
 		g.Services = pathsFromSpecs(g.ServicePaths)

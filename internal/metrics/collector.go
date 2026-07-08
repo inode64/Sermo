@@ -175,7 +175,7 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	mem := Reading{Absolute: float64(rss), HasAbsolute: true, Ready: measured(present > 0)}
 	totals := readerMemoryTotals(c.Reader, hasSwap)
 	if totals.memoryOK {
-		mem.Percent = float64(rss) / float64(totals.memoryTotal) * 100
+		mem.Percent = float64(rss) / float64(totals.memoryTotal) * PercentScale
 		mem.HasPercent = true
 	}
 	snap[MetricMemory] = mem
@@ -185,7 +185,7 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	if hasSwap {
 		sw := Reading{Absolute: float64(swap), HasAbsolute: true, Ready: measured(present > 0)}
 		if totals.swapOK && totals.swapTotal > 0 {
-			sw.Percent = float64(swap) / float64(totals.swapTotal) * 100
+			sw.Percent = float64(swap) / float64(totals.swapTotal) * PercentScale
 			sw.HasPercent = true
 		}
 		snap[MetricSwap] = sw
@@ -316,7 +316,7 @@ func (c *Collector) SampleSystem() Snapshot {
 	totals := readerMemoryTotals(c.Reader, true)
 	if totals.memoryOK {
 		r := Reading{Absolute: float64(totals.memoryUsed), HasAbsolute: true, Ready: true}
-		r.Percent = float64(totals.memoryUsed) / float64(totals.memoryTotal) * 100
+		r.Percent = float64(totals.memoryUsed) / float64(totals.memoryTotal) * PercentScale
 		r.HasPercent = true
 		r.Total, r.HasTotal = float64(totals.memoryTotal), true
 		snap[MetricTotalMemory] = r
@@ -331,7 +331,7 @@ func (c *Collector) SampleSystem() Snapshot {
 		if c.prevSystem != nil && busy >= c.prevSystem.busy && total > c.prevSystem.total {
 			dBusy := busy - c.prevSystem.busy
 			dTotal := total - c.prevSystem.total
-			cpu.Percent = float64(dBusy) / float64(dTotal) * 100
+			cpu.Percent = float64(dBusy) / float64(dTotal) * PercentScale
 			cpu.Ready = true
 		}
 		c.prevSystem = &sysSample{busy: busy, total: total}
@@ -351,7 +351,7 @@ func (c *Collector) SampleSystem() Snapshot {
 		snap[MetricTotalSwap] = Reading{
 			Absolute:    float64(totals.swapUsed),
 			HasAbsolute: true,
-			Percent:     float64(totals.swapUsed) / float64(totals.swapTotal) * 100,
+			Percent:     float64(totals.swapUsed) / float64(totals.swapTotal) * PercentScale,
 			HasPercent:  true,
 			Total:       float64(totals.swapTotal),
 			HasTotal:    true,
@@ -435,7 +435,7 @@ func perProcCPURates(prev, cur procCPUSample, hz float64) (rates map[int]float64
 		if !ok || curT < prevT {
 			continue
 		}
-		rates[pid] = float64(curT-prevT) / hz / wall * 100
+		rates[pid] = float64(curT-prevT) / hz / wall * PercentScale
 	}
 	return rates, true
 }
@@ -471,6 +471,6 @@ func cpuRate(prev, cur cpuSample, hz float64, ncpu int) Reading {
 	if cur.ticks > prev.ticks {
 		cpuSeconds = float64(cur.ticks-prev.ticks) / hz
 	}
-	pct := cpuSeconds / (wall * float64(ncpu)) * 100
+	pct := cpuSeconds / (wall * float64(ncpu)) * PercentScale
 	return Reading{Percent: pct, HasPercent: true, Ready: true}
 }

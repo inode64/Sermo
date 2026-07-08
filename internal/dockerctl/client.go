@@ -100,6 +100,15 @@ const (
 	ControlKeyInterface = "interface"
 )
 
+const (
+	controlPathContainer = sectionControl + "." + ControlKeyContainer
+	controlPathHost      = sectionControl + "." + ControlKeyHost
+	controlPathInterface = sectionControl + "." + ControlKeyInterface
+	controlPathPort      = sectionControl + "." + ControlKeyPort
+	controlPathSocket    = sectionControl + "." + ControlKeySocket
+	controlPathTLS       = sectionControl + "." + ControlKeyTLS
+)
+
 // Spec describes a Docker Engine endpoint and the target container for control.
 type Spec struct {
 	Socket    string
@@ -132,19 +141,19 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 		Container: cfgval.String(m[ControlKeyContainer]),
 	}
 	if _, present := m[ControlKeyInterface]; present {
-		return Spec{}, true, fmt.Errorf("control.interface is not supported for docker control")
+		return Spec{}, true, fmt.Errorf("%s is not supported for docker control", controlPathInterface)
 	}
 	if spec.Socket != "" && spec.Host != "" {
 		return Spec{}, true, fmt.Errorf("control must not set both socket and host")
 	}
 	if spec.Socket != "" && !filepath.IsAbs(spec.Socket) {
-		return Spec{}, true, fmt.Errorf("control.socket %q must be an absolute path", spec.Socket)
+		return Spec{}, true, fmt.Errorf("%s %q must be an absolute path", controlPathSocket, spec.Socket)
 	}
 	if spec.Host != "" && strings.TrimSpace(spec.Host) == "" {
-		return Spec{}, true, fmt.Errorf("control.host must not be blank")
+		return Spec{}, true, fmt.Errorf("%s must not be blank", controlPathHost)
 	}
 	if !ValidTLSValue(m[ControlKeyTLS]) {
-		return Spec{}, true, fmt.Errorf("control.tls %q is not a valid docker TLS mode", cfgval.String(m[ControlKeyTLS]))
+		return Spec{}, true, fmt.Errorf("%s %q is not a valid docker TLS mode", controlPathTLS, cfgval.String(m[ControlKeyTLS]))
 	}
 	if spec.Host == "" && spec.Socket == "" {
 		spec.Socket = DefaultSocket
@@ -152,7 +161,7 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 	if _, present := m[ControlKeyPort]; present {
 		p, ok := cfgval.Int(m[ControlKeyPort])
 		if !ok || !cfgval.ValidTCPPort(p) {
-			return Spec{}, true, fmt.Errorf("control.port must be an integer in %s", cfgval.TCPPortRange())
+			return Spec{}, true, fmt.Errorf("%s must be an integer in %s", controlPathPort, cfgval.TCPPortRange())
 		}
 		spec.Port = p
 	}
@@ -160,7 +169,7 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 		spec.Port = DefaultPort
 	}
 	if spec.Container == "" {
-		return Spec{}, true, fmt.Errorf("control.container is required for docker")
+		return Spec{}, true, fmt.Errorf("%s is required for docker", controlPathContainer)
 	}
 	return spec, true, nil
 }

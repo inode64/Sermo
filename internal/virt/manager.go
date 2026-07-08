@@ -47,6 +47,12 @@ const (
 	ControlKeyPort   = "port"
 )
 
+const (
+	controlPathDomain = sectionControl + "." + ControlKeyDomain
+	controlPathType   = sectionControl + "." + ControlKeyType
+	controlPathUUID   = sectionControl + "." + ControlKeyUUID
+)
+
 const defaultLibvirtTimeout = 10 * time.Second
 
 // Domain action labels used in operator-facing errors.
@@ -77,7 +83,7 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 		return Spec{}, true, fmt.Errorf("control must be a mapping")
 	}
 	if typ := cfgval.String(m[ControlKeyType]); typ != ControlType {
-		return Spec{}, true, fmt.Errorf("control.type %q is not supported", typ)
+		return Spec{}, true, fmt.Errorf("%s %q is not supported", controlPathType, typ)
 	}
 	spec := Spec{
 		URI:    cfgval.String(m[ControlKeyURI]),
@@ -99,11 +105,11 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 		spec.Port = DefaultPort
 	}
 	if spec.Domain == "" {
-		return Spec{}, true, fmt.Errorf("control.domain is required for libvirt")
+		return Spec{}, true, fmt.Errorf("%s is required for libvirt", controlPathDomain)
 	}
 	if spec.UUID != "" {
 		if _, err := ParseUUID(spec.UUID); err != nil {
-			return Spec{}, true, fmt.Errorf("control.uuid: %w", err)
+			return Spec{}, true, fmt.Errorf("%s: %w", controlPathUUID, err)
 		}
 	}
 	return spec, true, nil
