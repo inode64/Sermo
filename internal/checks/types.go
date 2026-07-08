@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -20,6 +19,7 @@ import (
 	"sermo/internal/conn"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
+	"sermo/internal/netutil"
 	"sermo/internal/output"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
@@ -68,7 +68,7 @@ func (c tcpCheck) Run(ctx context.Context) Result {
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
-	addr := net.JoinHostPort(c.host, strconv.Itoa(c.port))
+	addr := netutil.JoinHostPort(c.host, c.port)
 	chosen, perIface, err := tryInterfaces(c.ifaces, c.ifaceAll, func(iface string) error {
 		nc, e := conn.BindDialer(iface).DialContext(ctx, conn.TransportTCP, addr)
 		if e == nil {
