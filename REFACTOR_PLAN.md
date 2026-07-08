@@ -443,6 +443,20 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/checks ./internal/cli` y
   `make check` pasan.
 
+### Fase 22: Sufijo systemd service compartido
+
+- Mantener el vocabulario de unidades systemd en `internal/servicemgr`.
+- Reutilizar el sufijo `.service` desde el wizard en vez de duplicarlo en CLI.
+
+Estado ejecutado:
+
+- `servicemgr.SystemdServiceSuffix` expone el sufijo ya usado por la
+  normalizacion de unidades systemd.
+- El wizard de servicios usa ese owner para deduplicar, comparar y derivar
+  nombres desde unidades systemd.
+- Validacion ejecutada: `go test ./internal/servicemgr ./internal/cli` y
+  `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.

@@ -29,8 +29,6 @@ import (
 )
 
 const (
-	systemdServiceUnitExt = ".service"
-
 	procNetTCPPath        = "/proc/net/tcp"
 	procNetTCP6Path       = "/proc/net/tcp6"
 	procNetUDPPath        = "/proc/net/udp"
@@ -167,9 +165,9 @@ func addWizardCatalogUnits(keys map[string]struct{}, backend servicemgr.Backend,
 		keys[unit] = struct{}{}
 		if backend == servicemgr.BackendSystemd {
 			if !strings.Contains(unit, ".") {
-				keys[unit+systemdServiceUnitExt] = struct{}{}
+				keys[unit+servicemgr.SystemdServiceSuffix] = struct{}{}
 			}
-			if name := strings.TrimSuffix(unit, systemdServiceUnitExt); name != unit {
+			if name := strings.TrimSuffix(unit, servicemgr.SystemdServiceSuffix); name != unit {
 				keys[name] = struct{}{}
 			}
 		}
@@ -185,11 +183,11 @@ func wizardUnitKnown(keys map[string]struct{}, backend servicemgr.Backend, unit 
 		return true
 	}
 	if backend == servicemgr.BackendSystemd {
-		if strings.HasSuffix(unit, systemdServiceUnitExt) {
-			_, ok := keys[strings.TrimSuffix(unit, systemdServiceUnitExt)]
+		if strings.HasSuffix(unit, servicemgr.SystemdServiceSuffix) {
+			_, ok := keys[strings.TrimSuffix(unit, servicemgr.SystemdServiceSuffix)]
 			return ok
 		}
-		_, ok := keys[unit+systemdServiceUnitExt]
+		_, ok := keys[unit+servicemgr.SystemdServiceSuffix]
 		return ok
 	}
 	return false
@@ -198,7 +196,7 @@ func wizardUnitKnown(keys map[string]struct{}, backend servicemgr.Backend, unit 
 func wizardServiceNameForUnit(backend servicemgr.Backend, unit string) string {
 	name := strings.TrimSpace(unit)
 	if backend == servicemgr.BackendSystemd {
-		name = strings.TrimSuffix(name, systemdServiceUnitExt)
+		name = strings.TrimSuffix(name, servicemgr.SystemdServiceSuffix)
 	}
 	return name
 }
@@ -309,7 +307,7 @@ func detectCephMonEndpoint(ctx context.Context, runner execx.Runner, timeout tim
 }
 
 func cephMonID(unit string) string {
-	unit = strings.TrimSuffix(strings.TrimSpace(unit), systemdServiceUnitExt)
+	unit = strings.TrimSuffix(strings.TrimSpace(unit), servicemgr.SystemdServiceSuffix)
 	_, id, ok := strings.Cut(unit, "@")
 	if !ok {
 		return ""

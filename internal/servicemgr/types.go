@@ -85,6 +85,9 @@ const (
 // SystemdRuntimeDir is systemd's runtime unit directory.
 const SystemdRuntimeDir = systemdRuntimeDir
 
+// SystemdServiceSuffix is the suffix for systemd service units.
+const SystemdServiceSuffix = systemdServiceSuffix
+
 // OpenRCRuntimeDir is OpenRC's runtime state directory.
 const OpenRCRuntimeDir = openRCRuntimeDir
 
