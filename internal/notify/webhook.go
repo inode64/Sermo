@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/httpx"
 	"sermo/internal/netutil"
 )
 
@@ -27,8 +28,8 @@ const (
 )
 
 const (
-	webhookHeaderContentType = "Content-Type"
-	webhookContentTypeJSON   = "application/json"
+	webhookHeaderContentType = httpx.HeaderContentType
+	webhookContentTypeJSON   = httpx.ContentTypeJSON
 )
 
 const (

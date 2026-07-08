@@ -20,6 +20,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
 	"sermo/internal/execx"
+	"sermo/internal/httpx"
 	"sermo/internal/metrics"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
@@ -37,9 +38,9 @@ const (
 
 const (
 	defaultHTTPStatusCode       = http.StatusOK
-	httpHeaderAccept            = "Accept"
-	httpHeaderContentType       = "Content-Type"
-	httpContentTypeJSON         = "application/json"
+	httpHeaderAccept            = httpx.HeaderAccept
+	httpHeaderContentType       = httpx.HeaderContentType
+	httpContentTypeJSON         = httpx.ContentTypeJSON
 	httpStatusClassPatternLen   = 3
 	httpStatusClassDigitIndex   = 0
 	httpStatusClassWildcard1    = 1
