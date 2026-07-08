@@ -736,6 +736,24 @@ Estado ejecutado:
   ./internal/conn ./internal/notify ./internal/cli ./internal/web` y
   `make check` pasan.
 
+### Fase 41: Estados Docker en su owner
+
+- Mover los labels de estado de contenedor Docker al paquete que modela el API
+  Docker.
+- Conservar el alias publico de `conn` usado por los asistentes y expectativas
+  de checks.
+
+Estado ejecutado:
+
+- `dockerctl.ContainerStatus*` centraliza `created`, `dead`, `exited`,
+  `paused`, `removing`, `restarting` y `running`.
+- `dockerctl.Manager` compara contra esas constantes en lugar de un bloque
+  privado paralelo.
+- `conn.DockerContainerStatusRunning` pasa a ser alias de
+  `dockerctl.ContainerStatusRunning`, sin cambiar el valor emitido.
+- Validacion ejecutada: `go test ./internal/dockerctl ./internal/conn
+  ./internal/assist` y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
