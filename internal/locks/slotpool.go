@@ -15,6 +15,9 @@ const (
 	// defaultSlotCount is the fallback process-wide operation concurrency.
 	defaultSlotCount = 2
 
+	slotLockFileNameFormat = "%d.slot"
+	slotLockServiceFormat  = "slot-%d"
+
 	// defaultSlotTTL is the safety-net lifetime stamped on a slot lock file. Owner
 	// liveness already reclaims a slot when its holder exits; the TTL only bounds a
 	// slot whose owner is alive-but-wedged (or survives a PID-reuse false positive),
@@ -102,7 +105,7 @@ func (p SlotPool) InUse() (int, error) {
 	p = p.withDefaults()
 	inUse := 0
 	for i := 0; i < p.Slots; i++ {
-		path := filepath.Join(p.Dir, fmt.Sprintf("%d.slot", i))
+		path := filepath.Join(p.Dir, fmt.Sprintf(slotLockFileNameFormat, i))
 		existing, err := readLockFile(path)
 		if err != nil {
 			// A missing or unreadable slot file is not held.
@@ -125,7 +128,7 @@ func (p SlotPool) Acquire(ctx context.Context) (*SlotHandle, error) {
 
 	for {
 		for i := 0; i < p.Slots; i++ {
-			path := filepath.Join(p.Dir, fmt.Sprintf("%d.slot", i))
+			path := filepath.Join(p.Dir, fmt.Sprintf(slotLockFileNameFormat, i))
 			h, err := p.tryAcquire(path, i, p.Proc, p.Now, p.Self)
 			if err == nil {
 				return h, nil
@@ -156,7 +159,7 @@ func (p SlotPool) tryAcquire(path string, slot int, proc ProcessProber, now func
 	// overflows.
 	for attempt := 0; attempt < maxAcquireAttempts; attempt++ {
 		payload := lockFile{
-			Service:         fmt.Sprintf("slot-%d", slot),
+			Service:         fmt.Sprintf(slotLockServiceFormat, slot),
 			OwnerPID:        pid,
 			OwnerStartTicks: ticks,
 			CreatedAt:       now(),
@@ -165,7 +168,7 @@ func (p SlotPool) tryAcquire(path string, slot int, proc ProcessProber, now func
 		if err := writeLockFileExclusive(path, payload); err == nil {
 			return &SlotHandle{ownedLock{path: path, ownerPID: pid, ownerStartTicks: ticks}}, nil
 		} else if !errors.Is(err, os.ErrExist) {
-			return nil, fmt.Errorf("acquire %s: %w", path, err)
+			return nil, fmt.Errorf(lockAcquireErrorFormat, path, err)
 		}
 
 		existing, rerr := readLockFile(path)
@@ -173,7 +176,7 @@ func (p SlotPool) tryAcquire(path string, slot int, proc ProcessProber, now func
 			if isRetryableLockRead(rerr) {
 				continue // vanished or still being written; retry this slot
 			}
-			return nil, fmt.Errorf("acquire %s: %w", path, rerr)
+			return nil, fmt.Errorf(lockAcquireErrorFormat, path, rerr)
 		}
 		state, _ := classify(existing, now(), proc)
 		if state == StateActive {

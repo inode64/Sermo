@@ -81,7 +81,7 @@ func MainPIDContext(ctx context.Context, runner execx.Runner, backend Backend, u
 	if runner == nil {
 		runner = execx.CommandRunner{}
 	}
-	res, err := execx.Run(ctx, runner, defaultDetectTimeout, cmdSystemctl, "show", "-p", "MainPID", "--value", "--", unit)
+	res, err := runSystemctlShow(ctx, runner, defaultDetectTimeout, systemctlPropertyMainPID, unit)
 	if err != nil {
 		return 0, false
 	}
@@ -106,7 +106,7 @@ func CgroupPIDs(runner execx.Runner, readFile func(string) ([]byte, error), back
 	if readFile == nil {
 		readFile = os.ReadFile
 	}
-	res, err := execx.Run(context.Background(), runner, defaultDetectTimeout, cmdSystemctl, "show", "-p", "ControlGroup", "--value", "--", unit)
+	res, err := runSystemctlShow(context.Background(), runner, defaultDetectTimeout, systemctlPropertyCGroup, unit)
 	if err != nil {
 		return nil, false
 	}
@@ -168,10 +168,10 @@ func (m systemdManager) Status(ctx context.Context, service string) (ServiceStat
 	unit := systemdUnit(service)
 	// `systemctl is-active` exits non-zero when the unit is not active but still
 	// prints the state, so a non-zero exit is not a failure to query.
-	result, err := m.runner.Run(ctx, cmdSystemctl, "is-active", "--", unit)
+	result, err := m.runner.Run(ctx, cmdSystemctl, systemctlCmdIsActive, commandArgTerminator, unit)
 	state := strings.TrimSpace(result.Stdout)
 	if state == "" && result.ExitCode < 0 {
-		return ServiceStatus{}, fmt.Errorf("query systemd status for %s: %s", unit, execx.OperatorFailure(err, result, 0))
+		return ServiceStatus{}, fmt.Errorf("query systemd status for %s: %s", unit, execx.OperatorFailure(err, result, execx.NoTimeout))
 	}
 	return ServiceStatus{
 		Service: service,
@@ -205,18 +205,18 @@ func (m systemdManager) ResetState(ctx context.Context, service string) error {
 // the unit defines an ExecReload (so `systemctl reload` is applicable).
 func (m systemdManager) SupportsReload(ctx context.Context, service string) (bool, error) {
 	unit := systemdUnit(service)
-	result, err := m.runner.Run(ctx, cmdSystemctl, "show", "-p", "CanReload", "--value", "--", unit)
+	result, err := runSystemctlShow(ctx, m.runner, 0, systemctlPropertyCanReload, unit)
 	if result.ExitCode < 0 && strings.TrimSpace(result.Stdout) == "" {
-		return false, fmt.Errorf("query CanReload for %s: %s", unit, execx.OperatorFailure(err, result, 0))
+		return false, fmt.Errorf("query CanReload for %s: %s", unit, execx.OperatorFailure(err, result, execx.NoTimeout))
 	}
 	return strings.EqualFold(strings.TrimSpace(result.Stdout), systemdValueYes), nil
 }
 
 func (m systemdManager) action(ctx context.Context, verb, service string) error {
 	unit := systemdUnit(service)
-	result, err := m.runner.Run(ctx, cmdSystemctl, verb, "--", unit)
+	result, err := m.runner.Run(ctx, cmdSystemctl, verb, commandArgTerminator, unit)
 	if err != nil {
-		return actionError(fmt.Sprintf("systemctl %s %s", verb, unit), result, err)
+		return actionError(fmt.Sprintf("%s %s %s", cmdSystemctl, verb, unit), result, err)
 	}
 	return nil
 }
@@ -230,9 +230,9 @@ type openrcManager struct {
 func (m openrcManager) Status(ctx context.Context, service string) (ServiceStatus, error) {
 	// `rc-service SERVICE status` exits non-zero when stopped/crashed but reports
 	// the state on stdout, so a non-zero exit is not a failure to query.
-	result, err := m.runner.Run(ctx, cmdRcService, service, "status")
+	result, err := m.runner.Run(ctx, cmdRcService, service, actionStatus)
 	if result.ExitCode < 0 && strings.TrimSpace(result.Stdout) == "" {
-		return ServiceStatus{}, fmt.Errorf("query openrc status for %s: %s", service, execx.OperatorFailure(err, result, 0))
+		return ServiceStatus{}, fmt.Errorf("query openrc status for %s: %s", service, execx.OperatorFailure(err, result, execx.NoTimeout))
 	}
 	status := openrcStatus(result)
 	if status == StatusUnknown {
@@ -249,7 +249,7 @@ func (m openrcManager) Status(ctx context.Context, service string) (ServiceStatu
 }
 
 func (m openrcManager) rcStatus(ctx context.Context, service string) (Status, bool) {
-	result, _ := m.runner.Run(ctx, cmdRcStatus, "-a")
+	result, _ := m.runner.Run(ctx, cmdRcStatus, openRCFlagAllShort)
 	if strings.TrimSpace(result.Stdout) == "" {
 		return StatusUnknown, false
 	}
@@ -307,7 +307,7 @@ func (m openrcManager) SupportsReload(_ context.Context, service string) (bool, 
 func (m openrcManager) action(ctx context.Context, verb, service string) error {
 	result, err := m.runner.Run(ctx, cmdRcService, service, verb)
 	if err != nil {
-		return actionError(fmt.Sprintf("rc-service %s %s", service, verb), result, err)
+		return actionError(fmt.Sprintf("%s %s %s", cmdRcService, service, verb), result, err)
 	}
 	return nil
 }
@@ -316,8 +316,8 @@ func (m openrcManager) action(ctx context.Context, verb, service string) error {
 // command's stderr/stdout for a useful message and falling back to the raw
 // runner error (which carries the exit code).
 func actionError(command string, result execx.Result, err error) error {
-	if result.ExitCode == -1 && err != nil {
-		return fmt.Errorf("%s: %s", command, execx.OperatorFailure(err, result, 0))
+	if result.ExitCode == execx.ExitCodeRunFailure && err != nil {
+		return fmt.Errorf("%s: %s", command, execx.OperatorFailure(err, result, execx.NoTimeout))
 	}
 	if msg := strings.TrimSpace(result.Stderr); msg != "" {
 		return fmt.Errorf("%s: %s", command, msg)
@@ -325,7 +325,7 @@ func actionError(command string, result execx.Result, err error) error {
 	if msg := strings.TrimSpace(result.Stdout); msg != "" {
 		return fmt.Errorf("%s: %s", command, msg)
 	}
-	msg := execx.OperatorFailure(err, result, 0)
+	msg := execx.OperatorFailure(err, result, execx.NoTimeout)
 	if msg == "" {
 		msg = err.Error()
 	}
@@ -335,8 +335,17 @@ func actionError(command string, result execx.Result, err error) error {
 // systemdUnitSuffixes are the unit types systemd recognizes; a service name that
 // already carries one of these is used verbatim.
 var systemdUnitSuffixes = []string{
-	systemdServiceSuffix, ".socket", ".target", ".mount", ".automount",
-	".swap", ".path", ".timer", ".slice", ".scope", ".device",
+	systemdServiceSuffix,
+	systemdSocketSuffix,
+	systemdTargetSuffix,
+	systemdMountSuffix,
+	systemdAutomountSuffix,
+	systemdSwapSuffix,
+	systemdPathSuffix,
+	systemdTimerSuffix,
+	systemdSliceSuffix,
+	systemdScopeSuffix,
+	systemdDeviceSuffix,
 }
 
 // systemdUnit normalizes a service name to a systemd unit, appending `.service`

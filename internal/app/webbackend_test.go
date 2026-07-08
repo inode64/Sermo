@@ -18,10 +18,12 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/appinspect"
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
+	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 	"sermo/internal/volume"
@@ -202,7 +204,7 @@ func TestWebBackendApplicationsIncludeServiceSLA(t *testing.T) {
 			service: map[string][]state.SLAValue{"nginx": {{Window: "day", Up: 99, Total: 100}}},
 		},
 		applicationsList: func(context.Context) []web.Application {
-			return []web.Application{{Name: "nginx", Status: "ok"}, {Name: "orphan", Status: "ok"}}
+			return []web.Application{{Name: "nginx", Status: appinspect.StatusOK}, {Name: "orphan", Status: appinspect.StatusOK}}
 		},
 	}
 
@@ -222,14 +224,14 @@ func TestWebBackendApplicationsIncludeLastEvent(t *testing.T) {
 	events := NewEventLog(10)
 	t0 := time.Date(2026, 6, 7, 14, 0, 0, 0, time.UTC)
 	events.now = func() time.Time { return t0 }
-	events.Add(Event{App: "nginx", Kind: "firing", Message: "version changed"})
+	events.Add(Event{App: "nginx", Kind: eventKindFiring, Message: "version changed"})
 	events.now = func() time.Time { return t0.Add(time.Minute) }
-	events.Add(Event{App: "nginx", Kind: "recovered", Message: "ok"})
+	events.Add(Event{App: "nginx", Kind: eventKindRecovered, Message: "ok"})
 
 	b := &WebBackend{
 		events: events,
 		applicationsList: func(context.Context) []web.Application {
-			return []web.Application{{Name: "nginx", Status: "ok"}, {Name: "orphan", Status: "ok"}}
+			return []web.Application{{Name: "nginx", Status: appinspect.StatusOK}, {Name: "orphan", Status: appinspect.StatusOK}}
 		},
 	}
 
@@ -237,7 +239,7 @@ func TestWebBackendApplicationsIncludeLastEvent(t *testing.T) {
 	if len(apps) != 2 {
 		t.Fatalf("apps = %+v", apps)
 	}
-	if apps[0].LastEvent == nil || apps[0].LastEvent.Kind != "recovered" || apps[0].LastEvent.Message != "ok" {
+	if apps[0].LastEvent == nil || apps[0].LastEvent.Kind != eventKindRecovered || apps[0].LastEvent.Message != "ok" {
 		t.Fatalf("nginx LastEvent = %+v, want recovered ok", apps[0].LastEvent)
 	}
 	if apps[1].LastEvent != nil {
@@ -256,7 +258,7 @@ func TestWebBackendViewMonitorSource(t *testing.T) {
 	b := &WebBackend{
 		order: []string{"web"},
 		entries: map[string]*webEntry{
-			"web": {unit: "nginx", backend: "systemd"},
+			"web": {unit: "nginx", backend: string(servicemgr.BackendSystemd)},
 		},
 		store: store,
 	}
@@ -275,7 +277,7 @@ func TestWebBackendViewInterval(t *testing.T) {
 	b := &WebBackend{
 		order: []string{"web"},
 		entries: map[string]*webEntry{
-			"web": {unit: "nginx", backend: "systemd", interval: 10 * time.Second},
+			"web": {unit: "nginx", backend: string(servicemgr.BackendSystemd), interval: 10 * time.Second},
 		},
 	}
 	svc := b.view(context.Background(), "web", b.entries["web"])
@@ -365,12 +367,12 @@ func TestWebBackendLastEventIndexes(t *testing.T) {
 		events.now = func() time.Time { return at }
 		events.Add(e)
 	}
-	add(t0, Event{Service: "web", Kind: "action", Action: "start", Status: "ok"})
-	add(t0.Add(time.Minute), Event{Service: "db", Kind: "action", Action: "restart", Status: "ok"})
-	add(t0.Add(2*time.Minute), Event{Watch: "storage-root", Kind: "notify", Message: "sent"})
-	add(t0.Add(3*time.Minute), Event{Watch: "storage-root", Kind: "error", Message: "ignored"})
-	add(t0.Add(4*time.Minute), Event{Service: "web", Kind: "action", Action: "restart", Status: "blocked"})
-	add(t0.Add(5*time.Minute), Event{Watch: "storage-root", Kind: "hook-failed", Message: "failed"})
+	add(t0, Event{Service: "web", Kind: eventKindAction, Action: string(rules.ActionStart), Status: eventStatusOK})
+	add(t0.Add(time.Minute), Event{Service: "db", Kind: eventKindAction, Action: string(rules.ActionRestart), Status: eventStatusOK})
+	add(t0.Add(2*time.Minute), Event{Watch: "storage-root", Kind: eventKindNotify, Message: "sent"})
+	add(t0.Add(3*time.Minute), Event{Watch: "storage-root", Kind: eventKindError, Message: "ignored"})
+	add(t0.Add(4*time.Minute), Event{Service: "web", Kind: eventKindAction, Action: string(rules.ActionRestart), Status: eventStatusBlocked})
+	add(t0.Add(5*time.Minute), Event{Watch: "storage-root", Kind: eventKindHookFail, Message: "failed"})
 
 	b := &WebBackend{
 		events:     events,
@@ -379,16 +381,16 @@ func TestWebBackendLastEventIndexes(t *testing.T) {
 	}
 
 	services := b.lastServiceEvents()
-	if got := services["web"]; got == nil || got.Action != "restart" || got.Status != "blocked" {
+	if got := services["web"]; got == nil || got.Action != string(rules.ActionRestart) || got.Status != eventStatusBlocked {
 		t.Fatalf("web last event = %+v, want restart/blocked", got)
 	}
-	if got := services["db"]; got == nil || got.Action != "restart" || got.Status != "ok" {
+	if got := services["db"]; got == nil || got.Action != string(rules.ActionRestart) || got.Status != eventStatusOK {
 		t.Fatalf("db last event = %+v, want restart/ok", got)
 	}
 
 	activities := b.lastWatchActivities()
 	wantAt := t0.Add(5 * time.Minute).Format(time.RFC3339)
-	if got := activities["storage-root"]; got.Kind != "hook-failed" || got.At != wantAt {
+	if got := activities["storage-root"]; got.Kind != eventKindHookFail || got.At != wantAt {
 		t.Fatalf("storage-root activity = %+v, want hook-failed at %s", got, wantAt)
 	}
 }
@@ -396,11 +398,11 @@ func TestWebBackendLastEventIndexes(t *testing.T) {
 func TestWebBackendActivitySummaryCountsAllServiceOperations(t *testing.T) {
 	events := NewEventLog(10)
 	for _, action := range serviceOperationActionList() {
-		events.Add(Event{Service: "web", Kind: "action", Action: action, Status: "ok"})
+		events.Add(Event{Service: "web", Kind: eventKindAction, Action: action, Status: eventStatusOK})
 	}
-	events.Add(Event{Watch: "storage-root", Kind: "hook", Status: "ok"})
-	events.Add(Event{Watch: "storage-root", Kind: "notify", Status: "ok"})
-	events.Add(Event{Kind: "error", Message: "boom"})
+	events.Add(Event{Watch: "storage-root", Kind: eventKindHook, Status: eventStatusOK})
+	events.Add(Event{Watch: "storage-root", Kind: eventKindNotify, Status: eventStatusOK})
+	events.Add(Event{Kind: eventKindError, Message: "boom"})
 
 	b := &WebBackend{events: events}
 	got := b.ActivitySummary(context.Background())
@@ -419,8 +421,8 @@ func TestWebBackendLastWatchActivityIncludesRecovered(t *testing.T) {
 		events.now = func() time.Time { return at }
 		events.Add(e)
 	}
-	add(t0, Event{Watch: "uplink-dns", Kind: "firing", Message: "dns timeout"})
-	add(t0.Add(time.Minute), Event{Watch: "uplink-dns", Kind: "recovered", Message: "dns ok"})
+	add(t0, Event{Watch: "uplink-dns", Kind: eventKindFiring, Message: "dns timeout"})
+	add(t0.Add(time.Minute), Event{Watch: "uplink-dns", Kind: eventKindRecovered, Message: "dns ok"})
 
 	b := &WebBackend{
 		events:     events,
@@ -428,7 +430,7 @@ func TestWebBackendLastWatchActivityIncludesRecovered(t *testing.T) {
 	}
 	activities := b.lastWatchActivities()
 	wantAt := t0.Add(time.Minute).Format(time.RFC3339)
-	if got := activities["uplink-dns"]; got.Kind != "recovered" || got.At != wantAt {
+	if got := activities["uplink-dns"]; got.Kind != eventKindRecovered || got.At != wantAt {
 		t.Fatalf("uplink-dns activity = %+v, want recovered at %s", got, wantAt)
 	}
 }
@@ -442,7 +444,7 @@ func TestWatchViewFailedIgnoresActivityBeforeMonitorChange(t *testing.T) {
 		{
 			name: "failed activity before monitor change is stale",
 			watch: web.Watch{
-				LastActivityKind: "firing",
+				LastActivityKind: eventKindFiring,
 				LastActivity:     "2026-06-17T14:10:43Z",
 				MonitorChangedAt: "2026-06-17T14:14:53Z",
 			},
@@ -450,7 +452,7 @@ func TestWatchViewFailedIgnoresActivityBeforeMonitorChange(t *testing.T) {
 		{
 			name: "failed activity after monitor change is current",
 			watch: web.Watch{
-				LastActivityKind: "firing",
+				LastActivityKind: eventKindFiring,
 				LastActivity:     "2026-06-17T14:20:43Z",
 				MonitorChangedAt: "2026-06-17T14:14:53Z",
 			},
@@ -459,7 +461,7 @@ func TestWatchViewFailedIgnoresActivityBeforeMonitorChange(t *testing.T) {
 		{
 			name: "bad timestamp keeps conservative failure",
 			watch: web.Watch{
-				LastActivityKind: "firing",
+				LastActivityKind: eventKindFiring,
 				LastActivity:     "bad-time",
 				MonitorChangedAt: "2026-06-17T14:14:53Z",
 			},
@@ -468,7 +470,7 @@ func TestWatchViewFailedIgnoresActivityBeforeMonitorChange(t *testing.T) {
 		{
 			name: "recovered activity is not failed",
 			watch: web.Watch{
-				LastActivityKind: "recovered",
+				LastActivityKind: eventKindRecovered,
 				LastActivity:     "2026-06-17T14:20:43Z",
 				MonitorChangedAt: "2026-06-17T14:14:53Z",
 			},
@@ -1186,33 +1188,36 @@ func TestWebBackendStatefulWatchReadings(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"cfg-file": map[string]any{"check": map[string]any{
-				"type": "file",
-				"path": filepath.Join(dir, "a.txt"),
+		config.SectionWatches: map[string]any{
+			"cfg-file": map[string]any{config.WatchKeyCheck: map[string]any{
+				checks.CheckKeyType: checks.CheckTypeFile,
+				checks.CheckKeyPath: filepath.Join(dir, "a.txt"),
 			}},
-			"entry-count": map[string]any{"check": map[string]any{
-				"type": "count",
-				"path": dir,
-				"of":   "file",
+			"entry-count": map[string]any{config.WatchKeyCheck: map[string]any{
+				checks.CheckKeyType: checks.CheckTypeCount,
+				checks.CheckKeyPath: dir,
+				checks.CheckKeyOf:   checks.CountKindFile,
 			}},
-			"fw": map[string]any{"check": map[string]any{
-				"type": "firewall_rules",
+			"fw": map[string]any{config.WatchKeyCheck: map[string]any{
+				checks.CheckKeyType: checks.CheckTypeFirewallRules,
 			}},
-			"grow": map[string]any{"check": map[string]any{
-				"type":    "size",
-				"path":    filepath.Join(dir, "a.txt"),
-				"grow_by": "1M",
-				"within":  "1h",
+			"grow": map[string]any{config.WatchKeyCheck: map[string]any{
+				checks.CheckKeyType:   checks.CheckTypeSize,
+				checks.CheckKeyPath:   filepath.Join(dir, "a.txt"),
+				checks.CheckKeyGrowBy: "1M",
+				checks.CheckKeyWithin: "1h",
 			}},
-			"disk-speed": map[string]any{"check": map[string]any{
-				"type":   "hdparm",
-				"device": "/dev/sda",
-				"read":   map[string]any{"op": ">", "value": 50},
+			"disk-speed": map[string]any{config.WatchKeyCheck: map[string]any{
+				checks.CheckKeyType:   checks.CheckTypeHdparm,
+				checks.CheckKeyDevice: "/dev/sda",
+				checks.HdparmFieldRead: map[string]any{
+					checks.CheckKeyOp:    ">",
+					checks.CheckKeyValue: 50,
+				},
 			}},
-			"disk-health": map[string]any{"check": map[string]any{
-				"type":   "smart",
-				"device": "/dev/sda",
+			"disk-health": map[string]any{config.WatchKeyCheck: map[string]any{
+				checks.CheckKeyType:   checks.CheckTypeSmart,
+				checks.CheckKeyDevice: "/dev/sda",
 			}},
 		},
 	}}}
@@ -1221,7 +1226,7 @@ func TestWebBackendStatefulWatchReadings(t *testing.T) {
 	b, warns := NewWebBackend(cfg, Deps{
 		DefaultTimeout: 5 * time.Second,
 		FirewallRulesSampler: func(context.Context, string, execx.Runner) (checks.FirewallRulesSample, error) {
-			return checks.FirewallRulesSample{Backend: "nftables", Rules: 42}, nil
+			return checks.FirewallRulesSample{Backend: checks.FirewallBackendNftables, Rules: 42}, nil
 		},
 		ExecxRunner: webBackendTestRunner{byCommand: map[string]execx.Result{
 			"hdparm":   {Stdout: hdparmOut},
@@ -1800,7 +1805,7 @@ func TestWebBackendExpandWatchUsesConfiguredPathAndSize(t *testing.T) {
 	if !slices.Equal(exp.calls, []string{"/data/app:5368709120"}) {
 		t.Fatalf("expand calls = %v, want configured path and 5G", exp.calls)
 	}
-	if len(events) != 1 || events[0].Watch != "storage-data" || events[0].Kind != "expand" || events[0].Action != "expand" || events[0].Status != "ok" {
+	if len(events) != 1 || events[0].Watch != "storage-data" || events[0].Kind != eventKindExpand || events[0].Action != eventActionExpand || events[0].Status != eventStatusOK {
 		t.Fatalf("events = %+v, want successful expand event", events)
 	}
 }
@@ -1931,12 +1936,12 @@ func TestWebBackendIncludesDisabledServices(t *testing.T) {
 	b := &WebBackend{
 		order: []string{"mysql", "web"},
 		entries: map[string]*webEntry{
-			"mysql": {displayName: "MySQL", category: "database", unit: "mysqld", backend: "systemd", disabled: true},
+			"mysql": {displayName: "MySQL", category: "database", unit: "mysqld", backend: string(servicemgr.BackendSystemd), disabled: true},
 			"web": {
 				displayName: "Web",
 				category:    "frontend",
 				unit:        "nginx",
-				backend:     "systemd",
+				backend:     string(servicemgr.BackendSystemd),
 				status:      func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
 			},
 		},
@@ -1977,7 +1982,7 @@ func TestWebBackendIncludesDisabledServices(t *testing.T) {
 	}
 
 	// Operate must be rejected for disabled
-	res := b.Operate(context.Background(), "mysql", "restart", web.OperateOpts{})
+	res := b.Operate(context.Background(), "mysql", string(rules.ActionRestart), web.OperateOpts{})
 	if res.OK {
 		t.Fatal("operate on disabled must fail")
 	}
@@ -2000,7 +2005,7 @@ func TestWebBackendReloadUnsupportedIsExposedAndBlocked(t *testing.T) {
 				displayName: "ACPI Daemon",
 				category:    "hardware",
 				unit:        "acpid",
-				backend:     "openrc",
+				backend:     string(servicemgr.BackendOpenRC),
 				status:      func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
 				canReload:   false,
 			},
@@ -2020,7 +2025,7 @@ func TestWebBackendReloadUnsupportedIsExposedAndBlocked(t *testing.T) {
 	if res.OK || !strings.Contains(res.Message, "does not support reload") {
 		t.Fatalf("reload result = %+v, want unsupported reload error", res)
 	}
-	if len(events) != 1 || events[0].Kind != "error" || events[0].Action != "reload" {
+	if len(events) != 1 || events[0].Kind != eventKindError || events[0].Action != eventActionReload {
 		t.Fatalf("events = %+v, want one reload error event", events)
 	}
 }
@@ -2139,12 +2144,15 @@ func TestWatchSnapshotsFeedHeavyProbeView(t *testing.T) {
 		watches: map[string]*webWatch{
 			"disk": {
 				name:      "disk",
-				checkType: "hdparm",
+				checkType: checks.CheckTypeHdparm,
 				interval:  time.Hour,
 				check: map[string]any{
-					"type":   "hdparm",
-					"device": "/dev/sda",
-					"read":   map[string]any{"op": "<", "value": 100},
+					checks.CheckKeyType:   checks.CheckTypeHdparm,
+					checks.CheckKeyDevice: "/dev/sda",
+					checks.HdparmFieldRead: map[string]any{
+						checks.CheckKeyOp:    "<",
+						checks.CheckKeyValue: 100,
+					},
 				},
 			},
 		},
@@ -2285,7 +2293,7 @@ watches:
 
 	fake := &fakeEnvRunnerForWeb{}
 	deps := Deps{
-		Backend:        "systemd",
+		Backend:        servicemgr.BackendSystemd,
 		Manager:        fakeManager{},
 		ExecxRunner:    fake,
 		DefaultTimeout: time.Second,

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sermo/internal/process"
+	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 	"sermo/internal/web"
@@ -146,23 +147,23 @@ func TestEventLogLastServiceAndWatchIndexes(t *testing.T) {
 	l := NewEventLog(10)
 	t0 := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
 	l.now = func() time.Time { return t0 }
-	l.Add(Event{Service: "web", Kind: "action", Action: "start"})
+	l.Add(Event{Service: "web", Kind: eventKindAction, Action: string(rules.ActionStart)})
 	l.now = func() time.Time { return t0.Add(time.Minute) }
-	l.Add(Event{Watch: "storage-root", Kind: "notify"})
+	l.Add(Event{Watch: "storage-root", Kind: eventKindNotify})
 	l.now = func() time.Time { return t0.Add(2 * time.Minute) }
-	l.Add(Event{Service: "web", Kind: "action", Action: "restart"})
+	l.Add(Event{Service: "web", Kind: eventKindAction, Action: string(rules.ActionRestart)})
 	l.now = func() time.Time { return t0.Add(3 * time.Minute) }
-	l.Add(Event{Watch: "storage-root", Kind: "hook-failed"})
+	l.Add(Event{Watch: "storage-root", Kind: eventKindHookFail})
 
 	ev, ok := l.LastService("web")
-	if !ok || ev.Action != "restart" {
+	if !ok || ev.Action != string(rules.ActionRestart) {
 		t.Fatalf("LastService(web) = %+v ok=%v", ev, ok)
 	}
 	if _, ok := l.LastService("db"); ok {
 		t.Fatal("LastService(db) should be missing")
 	}
 	watch, ok := l.LastWatchActivity("storage-root")
-	if !ok || watch.Kind != "hook-failed" {
+	if !ok || watch.Kind != eventKindHookFail {
 		t.Fatalf("LastWatchActivity(storage-root) = %+v ok=%v", watch, ok)
 	}
 }

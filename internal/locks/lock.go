@@ -21,6 +21,8 @@ const (
 
 	lockIdentifierService = "service"
 	lockIdentifierName    = "lock name"
+
+	lockAcquireErrorFormat = "acquire %s: %w"
 )
 
 const (
@@ -31,6 +33,12 @@ const (
 	// StateStale means the owner is gone (dead PID or PID reuse); inactive and
 	// reclaimable.
 	StateStale State = "stale"
+)
+
+const (
+	staleReasonExpired   = string(StateExpired)
+	staleReasonDeadOwner = "dead owner"
+	staleReasonPIDReuse  = "pid reuse"
 )
 
 // Lock is a named runtime lock found on disk, with its computed state.
@@ -106,14 +114,14 @@ func toLock(lf lockFile, path string, state State, staleReason string) Lock {
 // process prober.
 func classify(lf lockFile, now time.Time, proc ProcessProber) (State, string) {
 	if !lf.ExpiresAt.IsZero() && !now.Before(lf.ExpiresAt) {
-		return StateExpired, "expired"
+		return StateExpired, staleReasonExpired
 	}
 	if lf.OwnerPID > 0 {
 		if !proc.Alive(lf.OwnerPID) {
-			return StateStale, "dead owner"
+			return StateStale, staleReasonDeadOwner
 		}
 		if ticks, ok := proc.StartTicks(lf.OwnerPID); ok && ticks != lf.OwnerStartTicks {
-			return StateStale, "pid reuse"
+			return StateStale, staleReasonPIDReuse
 		}
 	}
 	return StateActive, ""

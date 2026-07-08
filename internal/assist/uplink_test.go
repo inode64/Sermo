@@ -3,6 +3,10 @@ package assist
 import (
 	"strings"
 	"testing"
+
+	"sermo/internal/checks"
+	"sermo/internal/config"
+	"sermo/internal/rules"
 )
 
 func TestUplinkAssistant(t *testing.T) {
@@ -19,52 +23,52 @@ func TestUplinkAssistant(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing watch %s in %v", name, res.Watches)
 		}
-		if entry["category"] != "network" {
-			t.Fatalf("%s category = %v, want network", name, entry["category"])
+		if entry[config.EntryKeyCategory] != config.WatchCategoryNetwork {
+			t.Fatalf("%s category = %v, want network", name, entry[config.EntryKeyCategory])
 		}
 	}
 
 	link := res.Watches["uplink-eth0"].(map[string]any)
-	if link["monitor"] != "enabled" {
-		t.Fatalf("monitor = %v, want enabled (applied to every uplink watch)", link["monitor"])
+	if link[config.EntryKeyMonitor] != config.MonitorEnabled {
+		t.Fatalf("monitor = %v, want enabled (applied to every uplink watch)", link[config.EntryKeyMonitor])
 	}
-	metrics := link["metrics"].(map[string]any)
-	if metrics["state"].(map[string]any)["expect"] != "down" {
-		t.Fatalf("state = %v, want expect down", metrics["state"])
+	metrics := link[config.SectionMetrics].(map[string]any)
+	if metrics[checks.NetMetricState].(map[string]any)[checks.CheckKeyExpect] != checks.NetStateDown {
+		t.Fatalf("state = %v, want expect down", metrics[checks.NetMetricState])
 	}
-	if metrics["address"].(map[string]any)["on"] != "change" {
-		t.Fatalf("address = %v, want on change", metrics["address"])
+	if metrics[checks.NetMetricAddress].(map[string]any)[checks.CheckKeyOn] != checks.OnModeChange {
+		t.Fatalf("address = %v, want on change", metrics[checks.NetMetricAddress])
 	}
 
 	route := res.Watches["uplink-eth0-route"].(map[string]any)
-	if route["check"].(map[string]any)["interface"] != "eth0" {
-		t.Fatalf("route check = %v", route["check"])
+	if route[config.WatchKeyCheck].(map[string]any)[checks.CheckKeyInterface] != "eth0" {
+		t.Fatalf("route check = %v", route[config.WatchKeyCheck])
 	}
-	if _, debounced := route["for"]; debounced {
+	if _, debounced := route[rules.RuleFieldFor]; debounced {
 		t.Fatalf("the route layer must fire immediately, got %v", route)
 	}
 
 	ping := res.Watches["uplink-eth0-ping"].(map[string]any)
-	state := ping["metrics"].(map[string]any)["state"].(map[string]any)
-	if state["for"].(map[string]any)["cycles"] != 3 {
+	state := ping[config.SectionMetrics].(map[string]any)[checks.NetMetricState].(map[string]any)
+	if state[rules.RuleFieldFor].(map[string]any)[rules.WindowKeyCycles] != uplinkDefaultForCycles {
 		t.Fatalf("ping state = %v, want the default 3-cycle debounce", state)
 	}
-	if notify := state["then"].(map[string]any)["notify"].([]string); len(notify) != 1 || notify[0] != "ops-email" {
+	if notify := state[config.WatchKeyThen].(map[string]any)[rules.RuleFieldNotify].([]string); len(notify) != 1 || notify[0] != "ops-email" {
 		t.Fatalf("ping notify = %v, want [ops-email]", notify)
 	}
-	if ping["dry_run"] != true {
-		t.Fatalf("ping dry_run = %v, want true", ping["dry_run"])
+	if ping[config.EntryKeyDryRun] != true {
+		t.Fatalf("ping dry_run = %v, want true", ping[config.EntryKeyDryRun])
 	}
 
 	dns := res.Watches["uplink-eth0-dns"].(map[string]any)
-	check := dns["check"].(map[string]any)
-	if check["resolvconf"] != true || check["query"] != "example.com" {
+	check := dns[config.WatchKeyCheck].(map[string]any)
+	if check[checks.CheckKeyResolvconf] != true || check[checks.CheckKeyQuery] != uplinkDefaultProbeName {
 		t.Fatalf("dns check = %v", check)
 	}
-	if _, bound := check["interface"]; bound {
+	if _, bound := check[checks.CheckKeyInterface]; bound {
 		t.Fatalf("dns check must use the system resolver without an interface pin: %v", check)
 	}
-	if dns["for"].(map[string]any)["cycles"] != 3 {
+	if dns[rules.RuleFieldFor].(map[string]any)[rules.WindowKeyCycles] != uplinkDefaultForCycles {
 		t.Fatalf("dns = %v, want the 3-cycle debounce", dns)
 	}
 }
@@ -79,7 +83,7 @@ func TestUplinkAssistantDefaultRouteKeyword(t *testing.T) {
 		}, nil
 	}
 	env.DefaultIfaces = []string{"wg0"}
-	script := strings.Join([]string{"default", "1", "", "", "", "", "1", "y"}, "\n") + "\n"
+	script := strings.Join([]string{config.SelectionKeywordDefault, "1", "", "", "", "", "1", "y"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := uplinkAssistant{}.Run(p, env)
 	if err != nil {
@@ -96,21 +100,21 @@ func TestUplinkAssistantDefaultRouteKeyword(t *testing.T) {
 func TestUplinkAssistantInheritsDefaultNotify(t *testing.T) {
 	// Custom probe host and name; 'default' inherits the global notify, so
 	// every generated then block omits notify.
-	script := strings.Join([]string{"1", "1", "", "8.8.8.8", "cloudflare.com", "2", "default", "n"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "", "8.8.8.8", "cloudflare.com", "2", config.NotifyKeywordDefault, "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := uplinkAssistant{}.Run(p, testEnvWithDefaultNotify())
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	dns := res.Watches["uplink-eth0-dns"].(map[string]any)
-	if dns["check"].(map[string]any)["query"] != "cloudflare.com" {
-		t.Fatalf("dns check = %v, want the custom probe name", dns["check"])
+	if dns[config.WatchKeyCheck].(map[string]any)[checks.CheckKeyQuery] != "cloudflare.com" {
+		t.Fatalf("dns check = %v, want the custom probe name", dns[config.WatchKeyCheck])
 	}
-	if _, hasNotify := dns["then"].(map[string]any)["notify"]; hasNotify {
-		t.Fatalf("notify should be omitted to inherit the global default: %v", dns["then"])
+	if _, hasNotify := dns[config.WatchKeyThen].(map[string]any)[rules.RuleFieldNotify]; hasNotify {
+		t.Fatalf("notify should be omitted to inherit the global default: %v", dns[config.WatchKeyThen])
 	}
 	ping := res.Watches["uplink-eth0-ping"].(map[string]any)
-	if ping["check"].(map[string]any)["host"] != "8.8.8.8" {
-		t.Fatalf("ping check = %v, want the custom probe host", ping["check"])
+	if ping[config.WatchKeyCheck].(map[string]any)[checks.CheckKeyHost] != "8.8.8.8" {
+		t.Fatalf("ping check = %v, want the custom probe host", ping[config.WatchKeyCheck])
 	}
 }

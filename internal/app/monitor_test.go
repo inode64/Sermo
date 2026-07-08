@@ -55,7 +55,7 @@ checks:
 	if err != nil {
 		t.Fatal(err)
 	}
-	ready := NewReadiness("systemd", 1, 0)
+	ready := NewReadiness(string(servicemgr.BackendSystemd), 1, 0)
 	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: execx.CommandRunner{}, Settling: NewSettling(ready)}
 	collector := metrics.New(metrics.OSReader{})
 	workers, _, _ := BuildWorkers(cfg, deps, collector)
@@ -152,7 +152,7 @@ checks:
 	if err != nil {
 		t.Fatal(err)
 	}
-	ready := NewReadiness("systemd", 1, 0)
+	ready := NewReadiness(string(servicemgr.BackendSystemd), 1, 0)
 	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: execx.CommandRunner{}, Settling: NewSettling(ready)}
 	collector := metrics.New(metrics.OSReader{})
 	workers, _, _ := BuildWorkers(cfg, deps, collector)
@@ -197,7 +197,7 @@ defaults:
 	if after < before {
 		t.Fatalf("cycle after rejected reload = %d, want preserved >= %d", after, before)
 	}
-	if rep := ready.Report(context.Background()); !rep.Ready || rep.Status != "ok" {
+	if rep := ready.Report(context.Background()); !rep.Ready || rep.Status != TargetStateOK {
 		t.Fatalf("readiness = %+v, want ready during rejected reload", rep)
 	}
 }

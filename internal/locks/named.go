@@ -157,7 +157,7 @@ func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ow
 			return &Handle{ownedLock{path: path, ownerPID: ownerPID, ownerStartTicks: ownerTicks}}, nil
 		}
 		if !errors.Is(err, os.ErrExist) {
-			return nil, fmt.Errorf("acquire %s: %w", path, err)
+			return nil, fmt.Errorf(lockAcquireErrorFormat, path, err)
 		}
 
 		existing, rerr := readLockFile(path)
@@ -165,7 +165,7 @@ func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ow
 			if isRetryableLockRead(rerr) {
 				continue
 			}
-			return nil, fmt.Errorf("acquire %s: %w", path, rerr)
+			return nil, fmt.Errorf(lockAcquireErrorFormat, path, rerr)
 		}
 		state, staleReason := classify(existing, now(), proc)
 		if state == StateActive {

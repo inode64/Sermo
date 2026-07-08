@@ -17,6 +17,17 @@ import (
 // that are not a managed service.
 type uplinkAssistant struct{}
 
+const (
+	uplinkWatchPrefix      = "uplink-"
+	uplinkWatchSuffixDNS   = "-dns"
+	uplinkWatchSuffixPing  = "-ping"
+	uplinkWatchSuffixRoute = "-route"
+	uplinkDNSProbeTimeout  = "5s"
+	uplinkDefaultProbeHost = "1.1.1.1"
+	uplinkDefaultProbeName = "example.com"
+	uplinkDefaultForCycles = 3
+)
+
 // Name implements Assistant.
 func (uplinkAssistant) Name() string { return AssistantNameUplink }
 
@@ -41,9 +52,9 @@ func (uplinkAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	selected := chooseIfaces(p, "Which uplink interfaces do you want to monitor?", cands, env.DefaultIfaces, true)
 
 	s := uplinkSettings{Monitoring: p.AskMonitoring("the uplink watches")}
-	s.probeHost = p.Ask("Probe host to ping through the uplink", "1.1.1.1")
-	s.probeName = p.Ask("Public DNS name to resolve through the uplink", "example.com")
-	s.forCycles = p.AskInt("Require probe failures for how many cycles first?", 3)
+	s.probeHost = p.Ask("Probe host to ping through the uplink", uplinkDefaultProbeHost)
+	s.probeName = p.Ask("Public DNS name to resolve through the uplink", uplinkDefaultProbeName)
+	s.forCycles = p.AskInt("Require probe failures for how many cycles first?", uplinkDefaultForCycles)
 	s.notifiers = chooseNotifiers(p, env)
 	s.dryRun = p.AskWatchDryRun("the uplink watches", env, s.notifiers, false)
 
@@ -80,7 +91,7 @@ func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {
 		return entry
 	}
 	watches := map[string]any{
-		"uplink-" + iface: map[string]any{
+		uplinkWatchPrefix + iface: map[string]any{
 			config.WatchKeyCheck: map[string]any{checks.CheckKeyType: checks.CheckTypeNet, checks.CheckKeyInterface: iface},
 			config.SectionMetrics: map[string]any{
 				// Alert while the link is down, and on a provider-forced
@@ -95,11 +106,11 @@ func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {
 				},
 			},
 		},
-		"uplink-" + iface + "-route": map[string]any{
+		uplinkWatchPrefix + iface + uplinkWatchSuffixRoute: map[string]any{
 			config.WatchKeyCheck: map[string]any{checks.CheckKeyType: checks.CheckTypeRoute, checks.CheckKeyInterface: iface},
 			config.WatchKeyThen:  newThen(),
 		},
-		"uplink-" + iface + "-ping": map[string]any{
+		uplinkWatchPrefix + iface + uplinkWatchSuffixPing: map[string]any{
 			config.WatchKeyCheck: map[string]any{
 				checks.CheckKeyType:      checks.CheckTypeICMP,
 				checks.CheckKeyHost:      s.probeHost,
@@ -112,7 +123,7 @@ func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {
 				}),
 			},
 		},
-		"uplink-" + iface + "-dns": debounce(map[string]any{
+		uplinkWatchPrefix + iface + uplinkWatchSuffixDNS: debounce(map[string]any{
 			config.WatchKeyCheck: map[string]any{
 				checks.CheckKeyType:       conn.ProtocolNameDNS,
 				checks.CheckKeyResolvconf: true,
@@ -121,7 +132,7 @@ func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {
 					conn.ExtraKeyDNSRCode:   conn.DNSRCodeNoErrorName,
 					conn.ExtraKeyDNSAnswers: map[string]any{checks.CheckKeyOp: cfgval.CompareOpGreater, checks.CheckKeyValue: 0},
 				},
-				checks.CheckKeyTimeout: "5s",
+				checks.CheckKeyTimeout: uplinkDNSProbeTimeout,
 			},
 			config.WatchKeyThen: newThen(),
 		}),

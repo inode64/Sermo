@@ -264,7 +264,7 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 		// framing). Scoped here so it never leaks into other protocols' params.
 		if tr := strings.ToLower(cfgval.AsString(entry[CheckKeyTransport])); tr != "" {
 			if tr != conn.TransportUDP && tr != conn.TransportTCP {
-				return nil, fmt.Sprintf("openvpn check: transport must be udp or tcp, got %q", tr)
+				return nil, fmt.Sprintf("openvpn check: transport must be %s, got %q", conn.TransportSummary, tr)
 			}
 			cfg.Params = map[string]string{conn.ParamKeyTransport: tr}
 		}

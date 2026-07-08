@@ -159,5 +159,5 @@ func watchResultSlot(r checks.Result) string {
 	if r.Check != "" {
 		return r.Check
 	}
-	return "result"
+	return checks.DataKeyResult
 }

@@ -40,7 +40,7 @@ func nftablesContextError(err error) error {
 	if err == nil {
 		return nil
 	}
-	return errors.New(execx.ContextFailure(err, 0))
+	return errors.New(execx.ContextFailure(err, execx.NoTimeout))
 }
 
 func listNftablesRules() (uint64, error) {

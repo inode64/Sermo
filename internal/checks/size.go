@@ -85,7 +85,7 @@ func (c *sizeCheck) Run(ctx context.Context) Result {
 		DataKeyBaselineBytes: baseline.size,
 		DataKeyGrowthBytes:   growth,
 		DataKeyWindow:        c.window.String(),
-		fieldValue:           growth,
+		DataKeyValue:         growth,
 	}
 	return res
 }

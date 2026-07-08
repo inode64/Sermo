@@ -1,6 +1,10 @@
 package cli
 
-import "sermo/internal/mountctl"
+import (
+	"sermo/internal/config"
+	"sermo/internal/mountctl"
+	"sermo/internal/servicemgr"
+)
 
 const (
 	commandHelp      = "help"
@@ -40,7 +44,7 @@ const (
 const (
 	commandMountList    = "list"
 	commandStateCompact = "compact"
-	commandArgAll       = "all"
+	commandArgAll       = config.SelectionKeywordAll
 	commandArgClear     = "clear"
 )
 
@@ -71,7 +75,7 @@ const (
 	cliFieldSermoService = "SERMO_SERVICE"
 	cliFieldSermoAction  = "SERMO_ACTION"
 	cliFieldSermoStatus  = "SERMO_STATUS"
-	cliDisplayUnknown    = "unknown"
+	cliDisplayUnknown    = string(servicemgr.StatusUnknown)
 
 	cliFieldSermoReport        = "SERMO_REPORT"
 	cliFieldSermoReportHost    = "SERMO_REPORT_HOST"

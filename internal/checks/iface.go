@@ -38,7 +38,7 @@ func parseInterfaceMatch(entry map[string]any) (all bool, warn string) {
 	case InterfaceMatchAll:
 		return true, ""
 	default:
-		return false, fmt.Sprintf("interface_match %q must be any or all", m)
+		return false, fmt.Sprintf("interface_match %q must be %s", m, InterfaceMatchSummary)
 	}
 }
 

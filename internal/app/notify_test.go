@@ -49,7 +49,7 @@ func TestWatchDispatchesNotifyOnFire(t *testing.T) {
 	if msg.Subject == "" || msg.Fields["SERMO_PATH"] != "/" {
 		t.Fatalf("notification missing context: %+v", msg)
 	}
-	if !hasEvent(events, "notify") {
+	if !hasEvent(events, eventKindNotify) {
 		t.Fatalf("expected a notify event, got %v", events)
 	}
 }
@@ -70,7 +70,7 @@ func TestWatchPanicSuppressesNotify(t *testing.T) {
 	if len(n.msgs) != 0 {
 		t.Fatalf("panic mode must suppress notifications, sent %d", len(n.msgs))
 	}
-	if !hasEvent(events, "panic-suppressed") {
+	if !hasEvent(events, eventKindPanicSuppressed) {
 		t.Fatalf("expected a panic-suppressed event, got %v", events)
 	}
 }
@@ -100,7 +100,7 @@ func TestWatchNotifyFailureEmitsEvent(t *testing.T) {
 		Emit:      func(e Event) { events = append(events, e) },
 	}
 	w.RunCycle(context.Background())
-	if !hasEvent(events, "notify-failed") {
+	if !hasEvent(events, eventKindNotifyFail) {
 		t.Fatalf("a failed delivery should emit notify-failed, got %v", events)
 	}
 }

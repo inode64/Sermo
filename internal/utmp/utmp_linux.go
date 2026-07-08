@@ -16,19 +16,21 @@ import (
 // ut_line (terminal) and ut_user (name) fields are fixed-width NUL-padded
 // C strings at the offsets below.
 const (
-	recordSize  = 384
-	userProcess = 7
-	lineOffset  = 8
-	lineSize    = 32
-	userOffset  = 44
-	userSize    = 32
+	recordSize        = 384
+	userProcess       = 7
+	lineOffset        = 8
+	lineSize          = 32
+	userOffset        = 44
+	userSize          = 32
+	utmpRunPath       = "/run/utmp"
+	utmpLegacyRunPath = "/var/run/utmp"
 )
 
 var nativeEndian = binary.NativeEndian
 
 // defaultPaths are the usual utmp locations; /run/utmp is canonical, with the
 // legacy /var/run/utmp kept as a fallback.
-var defaultPaths = []string{"/run/utmp", "/var/run/utmp"}
+var defaultPaths = []string{utmpRunPath, utmpLegacyRunPath}
 
 // Sessions returns the active login sessions from the default utmp file.
 func Sessions() ([]Session, error) {

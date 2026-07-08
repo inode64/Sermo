@@ -36,7 +36,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		}
 		if v, present := entry[keyDryRun]; present {
 			if _, ok := v.(bool); !ok {
-				add("watches.%s.dry_run must be a boolean", name)
+				add(validationBooleanFormat, "watches."+name+"."+keyDryRun)
 			}
 		}
 		validateNotifyRefs(name, entry, notifiers, add)
@@ -139,7 +139,7 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 		}
 		if v, present := entry[keyDryRun]; present {
 			if _, ok := v.(bool); !ok {
-				add("%s.dry_run must be a boolean", prefix)
+				add(validationBooleanFormat, prefix+"."+keyDryRun)
 			}
 		}
 		if then, ok := entry[rules.RuleFieldThen].(map[string]any); ok {
@@ -223,7 +223,7 @@ func isOperationAction(action string) bool {
 // effects or watch-only notification cadence.
 func validateWatchThenAction(prefix, action string, then map[string]any, add func(string, ...any)) {
 	if !isRuleClassAction(action) {
-		add("%s.then.action %q is not one of restart, start, stop, reload, resume, alert, block", prefix, action)
+		add("%s.then.action %q is not one of %s", prefix, action, rules.RuleActionSummary)
 		return
 	}
 	for _, k := range []string{WatchThenKeyHook, WatchThenKeyExpand, WatchThenKeyKill} {
@@ -373,12 +373,12 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKi
 func validateKillAction(prefix string, kill map[string]any, add func(string, ...any)) {
 	if s := cfgval.String(kill[WatchKillKeySignal]); s != "" {
 		if _, err := process.ParseKillSignal(s); err != nil {
-			add("%s.then.kill.signal %q must be TERM or KILL", prefix, s)
+			add("%s.then.kill.signal %q must be %s", prefix, s, process.KillSignalSummary)
 		}
 	}
 	if v, present := kill[WatchKillKeyEscalate]; present {
 		if _, ok := v.(bool); !ok {
-			add("%s.then.kill.escalate must be a boolean", prefix)
+			add(validationBooleanFormat, prefix+"."+rules.RuleFieldThen+"."+WatchThenKeyKill+"."+WatchKillKeyEscalate)
 		}
 	}
 	for _, f := range []string{WatchKillKeyTermTimeout, WatchKillKeyKillTimeout} {
@@ -477,7 +477,7 @@ func validateNetCheck(name string, check, entry map[string]any, defaultNotify []
 		prefix := fmt.Sprintf("watches.%s.metrics.%s", name, key)
 		m, ok := metrics[key].(map[string]any)
 		if !ok {
-			add("%s must be a mapping", prefix)
+			add(validationMappingFormat, prefix)
 			continue
 		}
 		validateNetMetricCondition(prefix, key, m, add)
@@ -516,10 +516,10 @@ func validateNetMetricCondition(prefix, metric string, m map[string]any, add add
 		if exp == "" && !onChange {
 			add("%s requires expect: present|absent or on: change", prefix)
 		} else if exp != "" && exp != checks.NetAddrPresent && exp != checks.NetAddrAbsent {
-			add("%s.expect must be present or absent", prefix)
+			add("%s.expect must be %s", prefix, checks.NetAddrSummary)
 		}
 	default:
-		add("%s is not a supported net metric (state, speed, errors, address)", prefix)
+		add("%s is not a supported net metric (%s)", prefix, checks.NetMetricSummary)
 	}
 }
 
@@ -548,7 +548,7 @@ func validateSwapCheck(name string, entry map[string]any, defaultNotify []string
 		prefix := fmt.Sprintf("watches.%s.metrics.%s", name, key)
 		m, ok := metrics[key].(map[string]any)
 		if !ok {
-			add("%s must be a mapping", prefix)
+			add(validationMappingFormat, prefix)
 			continue
 		}
 		validateSwapMetricCondition(prefix, key, m, add)
@@ -573,7 +573,7 @@ func validateSwapMetricCondition(prefix, metric string, m map[string]any, add ad
 			validateOpNumeric(prefix+".delta", delta, add)
 		}
 	default:
-		add("%s is not a supported swap metric (usage, io)", prefix)
+		add("%s is not a supported swap metric (%s)", prefix, checks.SwapMetricSummary)
 	}
 }
 
@@ -585,7 +585,7 @@ func validateStateMetric(prefix string, m map[string]any, add func(string, ...an
 	if exp == "" && !onChange {
 		add("%s requires expect: up|down or on: change", prefix)
 	} else if exp != "" && exp != checks.NetStateUp && exp != checks.NetStateDown {
-		add("%s.expect must be up or down", prefix)
+		add("%s.expect must be %s", prefix, checks.NetStateSummary)
 	}
 }
 
@@ -611,7 +611,7 @@ func validateICMPCheck(name string, check, entry map[string]any, defaultNotify [
 		prefix := fmt.Sprintf("watches.%s.metrics.%s", name, key)
 		m, ok := metrics[key].(map[string]any)
 		if !ok {
-			add("%s must be a mapping", prefix)
+			add(validationMappingFormat, prefix)
 			continue
 		}
 		validateICMPMetricCondition(prefix, key, m, add)
@@ -646,7 +646,7 @@ func validateICMPMetricCondition(prefix, metric string, m map[string]any, add ad
 			}
 		}
 	default:
-		add("%s is not a supported icmp metric (state, latency)", prefix)
+		add("%s is not a supported icmp metric (%s)", prefix, checks.ICMPMetricSummary)
 	}
 }
 
@@ -660,7 +660,7 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 	}
 	if v, present := check[checks.CheckKeyRecursive]; present {
 		if _, ok := v.(bool); !ok {
-			add("watches.%s.check.recursive must be a boolean", name)
+			add(validationBooleanFormat, "watches."+name+"."+WatchKeyCheck+"."+checks.CheckKeyRecursive)
 		}
 	}
 
@@ -688,7 +688,7 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 		}
 	}
 	if conds == 0 {
-		add("watches.%s.check requires at least one of size, permissions, owner, existence", name)
+		add("watches.%s.check requires at least one of %s", name, FileWatchConditionSummary)
 	}
 
 	validateHookBlock("watches."+name, entry, false, false, defaultNotify, add)
@@ -721,13 +721,13 @@ func validateProcessWatch(name string, check, entry map[string]any, defaultNotif
 	}
 	if v, present := check[checks.CheckKeyGone]; present {
 		if b, ok := v.(bool); !ok {
-			add("watches.%s.check.gone must be a boolean", name)
+			add(validationBooleanFormat, "watches."+name+"."+WatchKeyCheck+"."+checks.CheckKeyGone)
 		} else if b {
 			conds++
 		}
 	}
 	if conds == 0 {
-		add("watches.%s.check requires at least one of for, cpu, memory, io, gone", name)
+		add("watches.%s.check requires at least one of %s", name, ProcessWatchConditionSummary)
 	}
 
 	// A process watch is the one type that may carry a native `then.kill` action.

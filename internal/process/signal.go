@@ -297,6 +297,9 @@ var killSignalNames = map[string]syscall.Signal{
 	"KILL": syscall.SIGKILL,
 }
 
+// KillSignalSummary is the user-facing list of termination signals a kill action accepts.
+const KillSignalSummary = "TERM or KILL"
+
 // ParseKillSignal resolves a termination signal name for a kill action. The name
 // is case-insensitive and an optional `SIG` prefix is accepted (`TERM`, `sigterm`,
 // `SIGKILL` all resolve). Unlike ParseSignal it accepts KILL and rejects every
@@ -308,5 +311,5 @@ func ParseKillSignal(name string) (syscall.Signal, error) {
 	if sig, ok := killSignalNames[key]; ok {
 		return sig, nil
 	}
-	return 0, fmt.Errorf("kill signal %q: only TERM or KILL are valid", name)
+	return 0, fmt.Errorf("kill signal %q: only %s are valid", name, KillSignalSummary)
 }

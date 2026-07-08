@@ -50,7 +50,7 @@ func SyncManualActionMonitoringWithActive(store MonitorStore, service, action st
 			Changed:   true,
 			Monitored: false,
 			Action:    eventActionUnmonitor,
-			Message:   "monitoring paused after manual stop",
+			Message:   eventMessageMonitoringPausedAfterManualStop,
 		}, nil
 	case rules.ActionStart, rules.ActionRestart, rules.ActionResume:
 		if !result.OK() && !activeAfterStart {
@@ -70,7 +70,7 @@ func SyncManualActionMonitoringWithActive(store MonitorStore, service, action st
 			Changed:   true,
 			Monitored: true,
 			Action:    eventActionMonitor,
-			Message:   "monitoring resumed after manual start",
+			Message:   eventMessageMonitoringResumedAfterManualStart,
 		}, nil
 	default:
 		return ManualMonitorChange{}, nil

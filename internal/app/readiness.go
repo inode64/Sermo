@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	readinessStarting     = "starting"
+	readinessStarting     = TargetStateStarting
 	readinessReady        = "ready"
 	readinessShuttingDown = "shutting_down"
 	readinessStatusPanic  = "panic mode"

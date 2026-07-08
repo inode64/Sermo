@@ -38,6 +38,8 @@ type SwapSamplerFunc func() (SwapSample, error)
 const (
 	SwapMetricUsage = "usage"
 	SwapMetricIO    = "io"
+	// SwapMetricSummary is the user-facing list of swap check metrics.
+	SwapMetricSummary = SwapMetricUsage + " or " + SwapMetricIO
 )
 
 // swapCheck watches one swap metric. `usage` is a level check over
@@ -67,7 +69,7 @@ func (c *swapCheck) Run(_ context.Context) Result {
 	if err != nil {
 		return c.result(false, "swap: "+err.Error(), start)
 	}
-	data := map[string]any{fieldMetric: c.metric, fieldTotalBytes: s.TotalBytes, fieldFreeBytes: s.FreeBytes}
+	data := map[string]any{DataKeyMetric: c.metric, DataKeyTotalBytes: s.TotalBytes, DataKeyFreeBytes: s.FreeBytes}
 
 	switch c.metric {
 	case SwapMetricUsage:
@@ -84,12 +86,12 @@ func (c *swapCheck) Run(_ context.Context) Result {
 			return res
 		}
 		used := s.TotalBytes - s.FreeBytes
-		usedPct := float64(used) / float64(s.TotalBytes) * 100
-		freePct := float64(s.FreeBytes) / float64(s.TotalBytes) * 100
+		usedPct := float64(used) / float64(s.TotalBytes) * percentScale
+		freePct := float64(s.FreeBytes) / float64(s.TotalBytes) * percentScale
 		values := map[string]float64{fieldUsedPct: usedPct, fieldFreePct: freePct, fieldFreeBytes: float64(s.FreeBytes)}
 		ok := levelPredsHold(c.preds, values)
-		data[fieldUsedPct], data[fieldFreePct] = usedPct, freePct
-		data[fieldValue] = firstPredValue(c.preds, values, usedPct)
+		data[DataKeyUsedPct], data[DataKeyFreePct] = usedPct, freePct
+		data[DataKeyValue] = firstPredValue(c.preds, values, usedPct)
 		res := c.result(ok, fmt.Sprintf("swap used %.1f%% free %.1f%% (%d bytes free)", usedPct, freePct, s.FreeBytes), start)
 		res.Data = data
 		return res
@@ -104,7 +106,7 @@ func (c *swapCheck) Run(_ context.Context) Result {
 		}
 		delta := deltaOrZero(total, c.lastIO)
 		c.lastIO = total
-		data[fieldValue], data[DataKeyPages] = delta, total
+		data[DataKeyValue], data[DataKeyPages] = delta, total
 		met := compareFloat(float64(delta), c.op, c.value)
 		res := c.result(met, fmt.Sprintf("swap io +%d pages/cycle (total %d)", delta, total), start)
 		res.Data = data

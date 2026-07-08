@@ -82,8 +82,8 @@ func (r UnitResolver) Resolve(ctx context.Context, backend Backend, candidates [
 func (r UnitResolver) knows(ctx context.Context, backend Backend, unit, candidate string, runner execx.Runner, probe Probe) bool {
 	switch backend {
 	case BackendSystemd:
-		res, err := execx.Run(ctx, runner, r.timeout(), cmdSystemctl, "cat", "--", unit)
-		return err == nil && res.ExitCode == 0
+		res, err := execx.Run(ctx, runner, r.timeout(), cmdSystemctl, systemctlCmdCat, commandArgTerminator, unit)
+		return err == nil && res.ExitCode == execx.ExitCodeSuccess
 	case BackendOpenRC:
 		return probe.PathExists(filepath.Join(openRCInitDir, candidate))
 	default:

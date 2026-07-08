@@ -15,6 +15,8 @@ const (
 	BackendOpenRC  Backend = "openrc"
 	BackendLibvirt Backend = "libvirt"
 	BackendDocker  Backend = "docker"
+	// BackendInitSummary is the user-facing list of selectable init backends.
+	BackendInitSummary = string(BackendAuto) + ", " + string(BackendSystemd) + " or " + string(BackendOpenRC)
 )
 
 // Init-system command binaries invoked through the execx runner.
@@ -24,12 +26,45 @@ const (
 	cmdRcStatus  = "rc-status"
 )
 
+const commandArgTerminator = "--"
+
+// systemctl subcommands, flags and properties used by service-manager probes.
+const (
+	systemctlCmdCat             = "cat"
+	systemctlCmdIsActive        = "is-active"
+	systemctlCmdIsSystemRunning = "is-system-running"
+	systemctlCmdListUnits       = "list-units"
+	systemctlCmdShow            = "show"
+
+	systemctlFlagNoLegend      = "--no-legend"
+	systemctlFlagNoPager       = "--no-pager"
+	systemctlFlagProperty      = "-p"
+	systemctlFlagStateActive   = "--state=active"
+	systemctlFlagTypeService   = "--type=service"
+	systemctlFlagValue         = "--value"
+	systemctlPropertyCanReload = "CanReload"
+	systemctlPropertyCGroup    = "ControlGroup"
+	systemctlPropertyExecStart = "ExecStart"
+	systemctlPropertyMainPID   = "MainPID"
+	systemctlPropertyPIDFile   = "PIDFile"
+)
+
 // systemd tokens consumed from command output or used to normalize unit names.
 const (
 	systemdProcessName       = "systemd"
 	systemdRuntimeDir        = "/run/systemd/system"
 	systemdUnitHeader        = "UNIT"
 	systemdServiceSuffix     = ".service"
+	systemdSocketSuffix      = ".socket"
+	systemdTargetSuffix      = ".target"
+	systemdMountSuffix       = ".mount"
+	systemdAutomountSuffix   = ".automount"
+	systemdSwapSuffix        = ".swap"
+	systemdPathSuffix        = ".path"
+	systemdTimerSuffix       = ".timer"
+	systemdSliceSuffix       = ".slice"
+	systemdScopeSuffix       = ".scope"
+	systemdDeviceSuffix      = ".device"
 	systemdStateRunning      = "running"
 	systemdStateDegraded     = "degraded"
 	systemdStateDeactivating = "deactivating"
@@ -51,10 +86,16 @@ const (
 const (
 	actionStart       = "start"
 	actionStop        = "stop"
+	actionStatus      = "status"
 	actionRestart     = "restart"
 	actionReload      = "reload"
 	actionResetFailed = "reset-failed"
 	actionZap         = "zap"
+)
+
+const (
+	openRCFlagAll      = "--all"
+	openRCFlagAllShort = "-a"
 )
 
 // ParseBackend parses a backend name used by CLI flags and environment values.
@@ -67,7 +108,7 @@ func ParseBackend(value string) (Backend, error) {
 	case BackendOpenRC:
 		return BackendOpenRC, nil
 	default:
-		return "", fmt.Errorf("unknown backend %q (expected auto, systemd or openrc)", value)
+		return "", fmt.Errorf("unknown backend %q (expected %s)", value, BackendInitSummary)
 	}
 }
 
@@ -81,4 +122,10 @@ const (
 	StatusPaused   Status = "paused"
 	StatusFailed   Status = "failed"
 	StatusUnknown  Status = "unknown"
+	// StatusSummary is the user-facing list of normalized service statuses.
+	StatusSummary = string(StatusActive) + ", " +
+		string(StatusInactive) + ", " +
+		string(StatusPaused) + ", " +
+		string(StatusFailed) + ", " +
+		string(StatusUnknown)
 )

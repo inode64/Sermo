@@ -81,10 +81,10 @@ func writeBinary(t *testing.T, mode os.FileMode) string {
 func TestInspectBinaryStates(t *testing.T) {
 	runner := fakeRunner{}
 
-	if r := inspect(t, runner, tree("", nil)); r.Installed || r.Status != "no binary configured" {
+	if r := inspect(t, runner, tree("", nil)); r.Installed || r.Status != StatusNoBinaryConfigured {
 		t.Errorf("no binary: %+v", r)
 	}
-	if r := inspect(t, runner, tree("/nonexistent/tool", nil)); r.Installed || r.Status != "not installed" {
+	if r := inspect(t, runner, tree("/nonexistent/tool", nil)); r.Installed || r.Status != StatusNotInstalled {
 		t.Errorf("missing binary: %+v", r)
 	}
 	if r := inspect(t, runner, tree(t.TempDir(), nil)); r.Installed || !strings.Contains(r.Status, "is a directory") {
@@ -95,7 +95,7 @@ func TestInspectBinaryStates(t *testing.T) {
 	}
 	// Executable with no version command: installed and ok without running anything.
 	r := inspect(t, runner, tree(writeBinary(t, 0o755), nil))
-	if !r.Installed || !r.OK || r.Status != "ok" || !strings.Contains(r.Permissions, "0755") {
+	if !r.Installed || !r.OK || r.Status != StatusOK || !strings.Contains(r.Permissions, "0755") {
 		t.Errorf("plain executable: %+v", r)
 	}
 }
@@ -206,7 +206,7 @@ func TestInspectVersionCommandOutcomes(t *testing.T) {
 	optionalFailure := inspect(t, fakeRunner{byPath: map[string]execx.Result{
 		bin: {Stderr: "wrapper requires a login shell\n", ExitCode: 126},
 	}}, tree(bin, version(map[string]any{"optional": true})))
-	if !optionalFailure.OK || optionalFailure.Status != "ok" || optionalFailure.Version != "" {
+	if !optionalFailure.OK || optionalFailure.Status != StatusOK || optionalFailure.Version != "" {
 		t.Errorf("optional version failure should not fail the app: %+v", optionalFailure)
 	}
 }
@@ -226,7 +226,7 @@ func TestInspectHealthCommandTakesPriority(t *testing.T) {
 		commandKey(bin, "-h"):        {Stdout: "usage without a version\n", Stderr: "noise\n", ExitCode: 0},
 		commandKey(bin, "--version"): {Stderr: "not supported\n", ExitCode: 2},
 	}}, tr)
-	if !r.OK || r.Status != "ok" {
+	if !r.OK || r.Status != StatusOK {
 		t.Fatalf("health success should make app ok regardless of output/version failure: %+v", r)
 	}
 	if r.Version != "" || r.VersionShort != "" {

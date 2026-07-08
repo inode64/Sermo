@@ -109,7 +109,7 @@ func (s *daemonMetricSampler) sampleLocked() daemonMetricSample {
 		cur.rss = rss
 		cur.rssOK = true
 		if total, _, ok := s.reader.TotalMemory(); ok && total > 0 {
-			cur.memoryPercent = float64(rss) / float64(total) * 100
+			cur.memoryPercent = float64(rss) / float64(total) * percentScale
 			cur.memoryPctOK = true
 		}
 	}
@@ -127,7 +127,7 @@ func (s *daemonMetricSampler) sampleLocked() daemonMetricSample {
 			hz := s.reader.ClockTicks()
 			ncpu := cur.numCPU
 			if wall > 0 && hz > 0 && ncpu > 0 {
-				cur.cpu = float64(ticks-s.prev.cpuTicks) / hz / wall / float64(ncpu) * 100
+				cur.cpu = float64(ticks-s.prev.cpuTicks) / hz / wall / float64(ncpu) * percentScale
 				cur.cpuReady = true
 			}
 		}

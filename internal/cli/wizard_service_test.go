@@ -10,6 +10,7 @@ import (
 	"sermo/internal/assist"
 	"sermo/internal/cfgval"
 	"sermo/internal/config"
+	"sermo/internal/dockerctl"
 	"sermo/internal/servicemgr"
 )
 
@@ -99,19 +100,19 @@ func TestSpecificListenerHostRequiresOneNonLoopbackAddress(t *testing.T) {
 }
 
 func TestMergeCandidateVariablesPreservesDetectedValues(t *testing.T) {
-	c := assist.ServiceCandidate{Variables: map[string]any{"port": 3300}}
-	mergeCandidateVariables(&c, map[string]any{"host": "192.0.2.22"})
-	if c.Variables["port"] != 3300 || c.Variables["host"] != "192.0.2.22" {
+	c := assist.ServiceCandidate{Variables: map[string]any{config.VariableKeyPort: 3300}}
+	mergeCandidateVariables(&c, map[string]any{config.VariableKeyHost: "192.0.2.22"})
+	if c.Variables[config.VariableKeyPort] != 3300 || c.Variables[config.VariableKeyHost] != "192.0.2.22" {
 		t.Fatalf("variables = %#v, want existing port and detected host", c.Variables)
 	}
 }
 
 func TestDaemonHasVariable(t *testing.T) {
-	tree := map[string]any{"variables": map[string]any{"host": "127.0.0.1"}}
-	if !serviceHasVariable(tree, "host") {
+	tree := map[string]any{config.SectionVariables: map[string]any{config.VariableKeyHost: "127.0.0.1"}}
+	if !serviceHasVariable(tree, config.VariableKeyHost) {
 		t.Fatal("serviceHasVariable(host) = false, want true")
 	}
-	if serviceHasVariable(tree, "port") {
+	if serviceHasVariable(tree, config.VariableKeyPort) {
 		t.Fatal("serviceHasVariable(port) = true, want false")
 	}
 }
@@ -341,10 +342,10 @@ func TestWriteServiceFilesRejectsExistingFileBeforeUpdatingConfig(t *testing.T) 
 
 	_, _, err := writeServiceFiles(cfgPath, map[string]map[string]any{
 		"docker-web": {
-			"name": "docker-web",
-			"control": map[string]any{
-				"type":      "docker",
-				"container": "web",
+			config.EntryKeyName: "docker-web",
+			config.SectionControl: map[string]any{
+				dockerctl.ControlKeyType:      dockerctl.ControlType,
+				dockerctl.ControlKeyContainer: "web",
 			},
 		},
 	})

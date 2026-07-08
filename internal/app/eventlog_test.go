@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"sermo/internal/logfile"
+	"sermo/internal/rules"
 	"sermo/internal/state"
 )
 
@@ -22,7 +23,7 @@ func TestEventLogExportsToFile(t *testing.T) {
 	l := NewEventLog(10)
 	l.SetEventFile(w)
 	l.now = func() time.Time { return time.Date(2026, 6, 24, 9, 0, 0, 0, time.UTC) }
-	l.Add(Event{Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "done"})
+	l.Add(Event{Service: "web", Kind: eventKindAction, Action: string(rules.ActionRestart), Status: eventStatusOK, Message: "done"})
 	if err := w.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
@@ -40,16 +41,16 @@ func TestEventLogExportsToFile(t *testing.T) {
 	if err := json.Unmarshal(sc.Bytes(), &row); err != nil {
 		t.Fatalf("json: %v", err)
 	}
-	if row["service"] != "web" || row["kind"] != "action" {
+	if row["service"] != "web" || row["kind"] != eventKindAction {
 		t.Fatalf("row = %+v", row)
 	}
 }
 
 func TestEventLogRecentNewestFirst(t *testing.T) {
 	l := NewEventLog(10)
-	l.Add(Event{Service: "a", Kind: "action", Message: "1"})
-	l.Add(Event{Service: "b", Kind: "alert", Message: "2"})
-	l.Add(Event{Service: "a", Kind: "error", Message: "3"})
+	l.Add(Event{Service: "a", Kind: eventKindAction, Message: "1"})
+	l.Add(Event{Service: "b", Kind: eventKindAlert, Message: "2"})
+	l.Add(Event{Service: "a", Kind: eventKindError, Message: "3"})
 
 	all := l.Recent("", 0)
 	if len(all) != 3 || all[0].Message != "3" || all[2].Message != "1" {
@@ -79,10 +80,10 @@ func TestEventLogPerService(t *testing.T) {
 
 func TestEventLogPerApp(t *testing.T) {
 	l := NewEventLog(10)
-	l.Add(Event{App: "salt-minion", Kind: "firing", Message: "error: exit 1"})
+	l.Add(Event{App: "salt-minion", Kind: eventKindFiring, Message: "error: exit 1"})
 	l.Add(Event{Service: "web", Message: "svc"})
-	l.Add(Event{App: "salt-minion", Kind: "recovered", Message: "ok"})
-	l.Add(Event{App: "redis", Kind: "firing", Message: "boom"})
+	l.Add(Event{App: "salt-minion", Kind: eventKindRecovered, Message: "ok"})
+	l.Add(Event{App: "redis", Kind: eventKindFiring, Message: "boom"})
 
 	salt := l.RecentApp("salt-minion", 0)
 	if len(salt) != 2 || salt[0].Message != "ok" || salt[1].Message != "error: exit 1" {
@@ -115,7 +116,7 @@ func TestMultiEmit(t *testing.T) {
 		nil, // skipped
 		func(e Event) { b = append(b, e) },
 	)
-	emit(Event{Kind: "action"})
+	emit(Event{Kind: eventKindAction})
 	if len(a) != 1 || len(b) != 1 {
 		t.Fatalf("MultiEmit did not fan out: a=%d b=%d", len(a), len(b))
 	}
@@ -153,7 +154,7 @@ func TestEventLogConcurrentAddRecent(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		for i := 0; i < 5000; i++ {
-			l.Add(Event{Service: "a", Kind: "action", Message: "x"})
+			l.Add(Event{Service: "a", Kind: eventKindAction, Message: "x"})
 		}
 		close(done)
 	}()
@@ -179,9 +180,9 @@ func TestPersistentEventLogHydratesServiceEvents(t *testing.T) {
 		t.Fatalf("NewPersistentEventLog(first): %v", err)
 	}
 	log.now = func() time.Time { return t0 }
-	log.Add(Event{Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "restart completed"})
+	log.Add(Event{Service: "web", Kind: eventKindAction, Action: string(rules.ActionRestart), Status: eventStatusOK, Message: "restart completed"})
 	log.now = func() time.Time { return t0.Add(time.Minute) }
-	log.Add(Event{Watch: "storage-root", Kind: "hook", Message: "hook completed"})
+	log.Add(Event{Watch: "storage-root", Kind: eventKindHook, Message: "hook completed"})
 	if err := first.Close(); err != nil {
 		t.Fatalf("close first store: %v", err)
 	}
@@ -201,13 +202,13 @@ func TestPersistentEventLogHydratesServiceEvents(t *testing.T) {
 		t.Fatalf("hydrated global events = %+v", global)
 	}
 	service := hydrated.Recent("web", 10)
-	if len(service) != 1 || service[0].Service != "web" || service[0].Action != "restart" {
+	if len(service) != 1 || service[0].Service != "web" || service[0].Action != string(rules.ActionRestart) {
 		t.Fatalf("hydrated service events = %+v", service)
 	}
 
 	b := &WebBackend{entries: map[string]*webEntry{"web": {}}, events: hydrated}
 	webEvents, ok := b.ServiceEvents(context.Background(), "web", 10)
-	if !ok || len(webEvents) != 1 || webEvents[0].Service != "web" || webEvents[0].Action != "restart" {
+	if !ok || len(webEvents) != 1 || webEvents[0].Service != "web" || webEvents[0].Action != string(rules.ActionRestart) {
 		t.Fatalf("web service events = %+v ok=%v", webEvents, ok)
 	}
 }

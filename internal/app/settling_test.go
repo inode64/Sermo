@@ -3,10 +3,12 @@ package app
 import (
 	"context"
 	"testing"
+
+	"sermo/internal/servicemgr"
 )
 
 func TestSettlingMarkObservedAdvancesReadiness(t *testing.T) {
-	ready := NewReadiness("systemd", 2, 0)
+	ready := NewReadiness(string(servicemgr.BackendSystemd), 2, 0)
 	ready.ExpectFirstCycles(2)
 	s := NewSettling(ready)
 	s.Reset([]string{"a", "b"})
@@ -19,7 +21,7 @@ func TestSettlingMarkObservedAdvancesReadiness(t *testing.T) {
 		t.Fatalf("one observed target should stay starting: %+v", rep)
 	}
 	s.MarkObserved("b")
-	if rep := ready.Report(context.Background()); !rep.Ready || rep.Status != "ok" {
+	if rep := ready.Report(context.Background()); !rep.Ready || rep.Status != TargetStateOK {
 		t.Fatalf("all observed targets should be ready: %+v", rep)
 	}
 }
@@ -43,7 +45,7 @@ func TestActiveMonitorTargetsDedupesMetricWatchKeys(t *testing.T) {
 	// End-to-end: arm readiness with the deduped count and settle each distinct
 	// key once, as the scheduler does (only the first object per key runs the
 	// observe-only cycle). The daemon must reach ready.
-	ready := NewReadiness("openrc", 0, len(watches))
+	ready := NewReadiness(string(servicemgr.BackendOpenRC), 0, len(watches))
 	ready.ExpectFirstCycles(activeMonitorTargets(nil, watches))
 	s := NewSettling(ready)
 	s.Reset(monitorTargetNames(nil, watches))

@@ -6,17 +6,17 @@ import (
 )
 
 func dockerControl(extra map[string]any) map[string]any {
-	c := map[string]any{"type": "docker"}
+	c := map[string]any{ControlKeyType: ControlType}
 	for k, v := range extra {
 		c[k] = v
 	}
-	return map[string]any{"control": c}
+	return map[string]any{sectionControl: c}
 }
 
 // SpecFromTree validates a docker control block. Pin the blank-host guard and
 // the port range boundaries (1..65535), which mutation testing left unasserted.
 func TestSpecFromTreeValidation(t *testing.T) {
-	if _, _, err := SpecFromTree(dockerControl(map[string]any{"host": "   "})); err == nil ||
+	if _, _, err := SpecFromTree(dockerControl(map[string]any{ControlKeyHost: "   "})); err == nil ||
 		!strings.Contains(err.Error(), "must not be blank") {
 		t.Errorf("whitespace-only host: got %v, want 'must not be blank'", err)
 	}
@@ -30,7 +30,7 @@ func TestSpecFromTreeValidation(t *testing.T) {
 		{65535, false}, // upper boundary
 		{65536, true},  // above range
 	} {
-		_, _, err := SpecFromTree(dockerControl(map[string]any{"host": "tcp.example", "port": pc.port, "container": "web"}))
+		_, _, err := SpecFromTree(dockerControl(map[string]any{ControlKeyHost: "tcp.example", ControlKeyPort: pc.port, ControlKeyContainer: "web"}))
 		if (err != nil) != pc.wantErr {
 			t.Errorf("port %d: err = %v, wantErr = %v", pc.port, err, pc.wantErr)
 		}

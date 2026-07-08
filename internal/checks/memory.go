@@ -48,8 +48,8 @@ func (c memoryCheck) Run(_ context.Context) Result {
 		return c.result(false, "memory: total size unknown", start)
 	}
 	avail := min(s.AvailableBytes, s.TotalBytes)
-	usedPct := float64(s.TotalBytes-avail) / float64(s.TotalBytes) * 100
-	availPct := float64(avail) / float64(s.TotalBytes) * 100
+	usedPct := float64(s.TotalBytes-avail) / float64(s.TotalBytes) * percentScale
+	availPct := float64(avail) / float64(s.TotalBytes) * percentScale
 	values := map[string]float64{
 		fieldUsedPct:        usedPct,
 		fieldAvailablePct:   availPct,
@@ -60,12 +60,12 @@ func (c memoryCheck) Run(_ context.Context) Result {
 
 	res := c.result(ok, fmt.Sprintf("memory used %.1f%% available %.1f%% (%d bytes)", usedPct, availPct, avail), start)
 	res.Data = map[string]any{
-		fieldTotalBytes:     s.TotalBytes,
-		fieldAvailableBytes: avail,
-		fieldUsedPct:        usedPct,
-		fieldAvailablePct:   availPct,
+		DataKeyTotalBytes:     s.TotalBytes,
+		DataKeyAvailableBytes: avail,
+		DataKeyUsedPct:        usedPct,
+		DataKeyAvailablePct:   availPct,
 	}
-	res.Data[fieldValue] = firstPredValue(c.preds, values, usedPct)
+	res.Data[DataKeyValue] = firstPredValue(c.preds, values, usedPct)
 	return res
 }
 

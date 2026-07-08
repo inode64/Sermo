@@ -220,10 +220,19 @@ const ParamValueTrue = "true"
 // verification.
 const TLSModeSkipVerify = "skip-verify"
 
+const (
+	// TLSValueSummary is the user-facing list of accepted connection-check TLS values.
+	TLSValueSummary = "boolean, " + TLSModeSkipVerify + ", or a valid sslmode"
+	// TLSScalarSummary is the user-facing scalar form accepted in YAML.
+	TLSScalarSummary = "true/false/" + TLSModeSkipVerify
+)
+
 // Transport names accepted by protocol params that expose a network transport.
 const (
 	TransportTCP = "tcp"
 	TransportUDP = "udp"
+	// TransportSummary is the user-facing list of network transport names.
+	TransportSummary = TransportUDP + " or " + TransportTCP
 )
 
 // Default protocol ports used when a check omits an explicit port.

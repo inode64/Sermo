@@ -77,9 +77,9 @@ func TestScanClassifiesStates(t *testing.T) {
 		reason string
 	}{
 		"backup":  {StateActive, ""},
-		"expired": {StateExpired, "expired"},
-		"dead":    {StateStale, "dead owner"},
-		"reused":  {StateStale, "pid reuse"},
+		"expired": {StateExpired, staleReasonExpired},
+		"dead":    {StateStale, staleReasonDeadOwner},
+		"reused":  {StateStale, staleReasonPIDReuse},
 	}
 	if len(report.Locks) != len(want) {
 		t.Fatalf("got %d locks, want %d: %+v", len(report.Locks), len(want), report.Locks)

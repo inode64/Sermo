@@ -32,7 +32,7 @@ func TestStaggerOffsetSpreadsAcrossInterval(t *testing.T) {
 // TestSchedulerGateWaitsForFirstCycles checks that with gateReady=true the daemon
 // stays "starting" until every target (here two watches) has run its first cycle.
 func TestSchedulerGateWaitsForFirstCycles(t *testing.T) {
-	ready := NewReadiness("systemd", 0, 0)
+	ready := NewReadiness(string(servicemgr.BackendSystemd), 0, 0)
 	settling := NewSettling(ready)
 	settling.Reset([]string{SettlingWatchKey("a"), SettlingWatchKey("b")})
 	var ran int32
@@ -73,7 +73,7 @@ func TestSchedulerGateWaitsForFirstCycles(t *testing.T) {
 		}
 		time.Sleep(2 * time.Millisecond)
 	}
-	if rep := ready.Report(context.Background()); !rep.Ready || rep.Status != "ok" {
+	if rep := ready.Report(context.Background()); !rep.Ready || rep.Status != TargetStateOK {
 		t.Fatalf("gate should be ready after both first cycles: %+v", rep)
 	}
 	cancel()
@@ -377,7 +377,7 @@ func TestSchedulerRunsWatchWithCustomInjectedRunnerVerifiesEnv(t *testing.T) {
 }
 
 func TestSchedulerGateCompletesWithInactiveWorker(t *testing.T) {
-	ready := NewReadiness("systemd", 1, 0)
+	ready := NewReadiness(string(servicemgr.BackendSystemd), 1, 0)
 	settling := NewSettling(ready)
 	settling.Reset([]string{SettlingServiceKey("web")})
 

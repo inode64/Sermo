@@ -140,7 +140,7 @@ func TestProcWatchDryRunSkipsHookAndNotify(t *testing.T) {
 	if len(n.msgs) != 0 {
 		t.Fatalf("dry-run must not notify, got %d messages", len(n.msgs))
 	}
-	if len(h.events) != 1 || h.events[0].Kind != "dry-run" {
+	if len(h.events) != 1 || h.events[0].Kind != eventKindDryRun {
 		t.Fatalf("expected one dry-run event, got %+v", h.events)
 	}
 }
@@ -305,7 +305,7 @@ func TestProcWatchWithRealOSHookRunner(t *testing.T) {
 		sampler: s,
 	}
 	h.tick(w, time.Second)
-	if len(h.events) != 1 || h.events[0].Kind != "hook" {
+	if len(h.events) != 1 || h.events[0].Kind != eventKindHook {
 		t.Fatalf("expected one hook event via real OSHookRunner, got %d events: %v", len(h.events), h.events)
 	}
 }

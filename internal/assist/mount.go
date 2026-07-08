@@ -12,6 +12,12 @@ import (
 
 type mountAssistant struct{}
 
+const (
+	mountCandidateStateMounted    = "mounted"
+	mountCandidateStateNotMounted = "not mounted"
+	mountSourceDetailSeparator    = " on "
+)
+
 func (mountAssistant) Name() string { return AssistantNameMount }
 func (mountAssistant) Title() string {
 	return "Manage fstab-backed mount units"
@@ -102,9 +108,9 @@ func sortedMountCandidates(cands []MountCandidate) []MountCandidate {
 }
 
 func mountCandidateLabel(c MountCandidate) string {
-	state := "not mounted"
+	state := mountCandidateStateNotMounted
 	if c.Mounted {
-		state = "mounted"
+		state = mountCandidateStateMounted
 	}
 	parts := []string{c.Path}
 	if detail := mountSourceDetail(c); detail != "" {
@@ -115,5 +121,5 @@ func mountCandidateLabel(c MountCandidate) string {
 }
 
 func mountSourceDetail(c MountCandidate) string {
-	return strings.TrimSpace(strings.Join(nonEmpty(c.FSType, c.Source), " on "))
+	return strings.TrimSpace(strings.Join(nonEmpty(c.FSType, c.Source), mountSourceDetailSeparator))
 }

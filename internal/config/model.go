@@ -30,6 +30,7 @@ const (
 	kindService  = "service"
 	kindPatterns = "patterns"
 	kindWatch    = "watch"
+	kindSummary  = kindApp + ", " + kindLibrary + ", " + kindPatterns + " or " + kindService
 )
 
 // sectionStopPolicy is the per-service/mount block declaring the stopped-state
@@ -67,6 +68,8 @@ const (
 	ReloadWhenAuto = "auto"
 	// ReloadWhenAlways makes native reload replace backend reload.
 	ReloadWhenAlways = "always"
+	// ReloadWhenSummary is the user-facing list of reload.when modes.
+	ReloadWhenSummary = `"` + ReloadWhenAuto + `" or "` + ReloadWhenAlways + `"`
 )
 
 // Global section keys.
@@ -289,6 +292,10 @@ const (
 	ServiceMonitorKeyOnChange = "on_change"
 	ServiceMonitorKeyLevel    = "level"
 )
+
+// ServiceMonitorVersionCheckSuffix is appended to an app name for its generated
+// version preflight check.
+const ServiceMonitorVersionCheckSuffix = "-" + ServiceMonitorKeyVersion
 
 // Service document field keys shared by resolver, validators and generators.
 const (
@@ -598,6 +605,8 @@ const (
 	MonitorEnabled  = "enabled"
 	MonitorDisabled = "disabled"
 	MonitorPrevious = "previous"
+	// MonitorModeSummary is the user-facing list of monitor modes.
+	MonitorModeSummary = MonitorEnabled + ", " + MonitorDisabled + ", " + MonitorPrevious
 )
 
 // MonitorMode returns a resolved entry's `monitor` flag, defaulting to

@@ -37,7 +37,17 @@ func NewPrompt(in io.Reader, out io.Writer) *Prompt {
 // abort with this error.
 var ErrInputClosed = errors.New("input ended before the prompt was answered")
 
-const promptLineBreak = '\n'
+const (
+	promptLineBreak = '\n'
+
+	promptConfirmHintDefaultNo  = "y/N"
+	promptConfirmHintDefaultYes = "Y/n"
+	promptConfirmAnswerYesShort = "y"
+	promptConfirmAnswerYesLong  = "yes"
+	promptConfirmAnswerNoShort  = "n"
+	promptConfirmAnswerNoLong   = "no"
+	promptConfirmAnswerRequired = "  please answer y or n\n"
+)
 
 // promptAbort is the panic sentinel Recover translates into ErrInputClosed.
 type promptAbort struct{}
@@ -113,19 +123,19 @@ func (p *Prompt) AskNonEmpty(question string) string {
 // sets which letter the hint capitalizes (the suggested answer). On EOF the
 // re-prompt aborts with ErrInputClosed like every other required prompt.
 func (p *Prompt) Confirm(question string, def bool) bool {
-	hint := "y/N"
+	hint := promptConfirmHintDefaultNo
 	if def {
-		hint = "Y/n"
+		hint = promptConfirmHintDefaultYes
 	}
 	for {
 		p.printf("%s [%s]: ", question, hint)
 		switch strings.ToLower(p.readLine()) {
-		case "y", "yes":
+		case promptConfirmAnswerYesShort, promptConfirmAnswerYesLong:
 			return true
-		case "n", "no":
+		case promptConfirmAnswerNoShort, promptConfirmAnswerNoLong:
 			return false
 		default:
-			p.printf("  please answer y or n\n")
+			p.printf(promptConfirmAnswerRequired)
 			p.abortIfClosed()
 		}
 	}
@@ -165,7 +175,7 @@ func (p *Prompt) MultiChoose(question string, options []string) []int {
 func (p *Prompt) MultiChooseKeyword(question string, options []string, keywords ...string) ([]int, string) {
 	quoted := make([]string, 0, len(keywords)+1)
 	if len(options) > 0 {
-		quoted = append(quoted, "'all'")
+		quoted = append(quoted, "'"+config.SelectionKeywordAll+"'")
 	}
 	for _, kw := range keywords {
 		quoted = append(quoted, "'"+kw+"'")

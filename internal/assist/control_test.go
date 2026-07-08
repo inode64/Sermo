@@ -3,6 +3,13 @@ package assist
 import (
 	"strings"
 	"testing"
+
+	"sermo/internal/cfgval"
+	"sermo/internal/checks"
+	"sermo/internal/config"
+	"sermo/internal/conn"
+	"sermo/internal/dockerctl"
+	"sermo/internal/virt"
 )
 
 func TestDockerAssistant(t *testing.T) {
@@ -16,11 +23,11 @@ func TestDockerAssistant(t *testing.T) {
 		},
 	}
 	script := strings.Join([]string{
-		"all", // select both; redis is already configured and will be skipped
-		"y",   // shared settings
-		"1",   // monitor enabled
-		"",    // interval inherit
-		"n",   // no dry-run
+		config.SelectionKeywordAll, // select both; redis is already configured and will be skipped
+		"y",                        // shared settings
+		"1",                        // monitor enabled
+		"",                         // interval inherit
+		"n",                        // no dry-run
 	}, "\n") + "\n"
 	var out strings.Builder
 	p := NewPrompt(strings.NewReader(script), &out)
@@ -32,16 +39,16 @@ func TestDockerAssistant(t *testing.T) {
 		t.Fatalf("already configured container was emitted: %v", res.Services["docker-redis"])
 	}
 	svc := res.Services["docker-web"].(map[string]any)
-	control := svc["control"].(map[string]any)
-	if control["type"] != "docker" || control["container"] != "web" || control["socket"] != "/run/docker.sock" {
+	control := svc[config.SectionControl].(map[string]any)
+	if control[dockerctl.ControlKeyType] != dockerctl.ControlType || control[dockerctl.ControlKeyContainer] != "web" || control[dockerctl.ControlKeySocket] != "/run/docker.sock" {
 		t.Fatalf("control = %v, want docker/web socket", control)
 	}
-	check := svc["watches"].(map[string]any)["docker"].(map[string]any)["check"].(map[string]any)
-	if check["type"] != "docker" || check["container"] != "web" || check["on_change"] != true {
+	check := svc[config.SectionWatches].(map[string]any)[dockerctl.ControlType].(map[string]any)[config.WatchKeyCheck].(map[string]any)
+	if check[checks.CheckKeyType] != dockerctl.ControlType || check[checks.CheckKeyContainer] != "web" || check[checks.CheckKeyOnChange] != true {
 		t.Fatalf("docker check = %v", check)
 	}
-	expect := check["expect"].(map[string]any)["container.status"].(map[string]any)
-	if expect["op"] != "==" || expect["value"] != "running" {
+	expect := check[checks.CheckKeyExpect].(map[string]any)[conn.ExtraKeyContainerStatus].(map[string]any)
+	if expect[checks.CheckKeyOp] != cfgval.CompareOpEqual || expect[checks.CheckKeyValue] != conn.DockerContainerStatusRunning {
 		t.Fatalf("docker expect = %v, want running", expect)
 	}
 	if !strings.Contains(out.String(), `"docker-redis" is already configured`) {
@@ -67,18 +74,18 @@ func TestVMAssistant(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 	svc := res.Services["vm-web01"].(map[string]any)
-	if svc["monitor"] != "previous" || svc["interval"] != "1m" {
-		t.Fatalf("monitor/interval = %v/%v, want previous/1m", svc["monitor"], svc["interval"])
+	if svc[config.EntryKeyMonitor] != config.MonitorPrevious || svc[config.EntryKeyInterval] != "1m" {
+		t.Fatalf("monitor/interval = %v/%v, want previous/1m", svc[config.EntryKeyMonitor], svc[config.EntryKeyInterval])
 	}
-	if svc["dry_run"] != true {
-		t.Fatalf("dry_run = %v, want true", svc["dry_run"])
+	if svc[config.EntryKeyDryRun] != true {
+		t.Fatalf("dry_run = %v, want true", svc[config.EntryKeyDryRun])
 	}
-	control := svc["control"].(map[string]any)
-	if control["type"] != "libvirt" || control["domain"] != "web01" || control["uri"] != "qemu:///system" {
+	control := svc[config.SectionControl].(map[string]any)
+	if control[virt.ControlKeyType] != virt.ControlType || control[virt.ControlKeyDomain] != "web01" || control[virt.ControlKeyURI] != "qemu:///system" {
 		t.Fatalf("control = %v, want libvirt web01", control)
 	}
-	check := svc["watches"].(map[string]any)["vm"].(map[string]any)["check"].(map[string]any)
-	if check["type"] != "libvirt" || check["domain"] != "web01" || check["query"] != "qemu:///system" {
+	check := svc[config.SectionWatches].(map[string]any)[AssistantNameVM].(map[string]any)[config.WatchKeyCheck].(map[string]any)
+	if check[checks.CheckKeyType] != virt.ControlType || check[checks.CheckKeyDomain] != "web01" || check[checks.CheckKeyQuery] != "qemu:///system" {
 		t.Fatalf("vm check = %v", check)
 	}
 }

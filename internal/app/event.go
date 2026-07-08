@@ -30,6 +30,8 @@ type Event struct {
 
 // Event kind values for Event.Kind.
 const (
+	eventKindFailedSuffix = "-failed"
+
 	eventKindAction           = "action"
 	eventKindAlert            = "alert"
 	eventKindError            = "error"
@@ -38,17 +40,19 @@ const (
 	eventKindDryRun           = "dry-run"
 	eventKindFiring           = "firing"
 	eventKindRecovered        = "recovered"
-	eventKindHookFail         = "hook-failed"
-	eventKindNotifyFail       = "notify-failed"
+	eventKindHookFail         = config.WatchThenKeyHook + eventKindFailedSuffix
+	eventKindNotifyFail       = rules.RuleFieldNotify + eventKindFailedSuffix
 	eventKindSuppressed       = "suppressed"
 	eventKindPanicSuppressed  = "panic-suppressed"
 	eventKindNotifySuppressed = "notify-suppressed"
 	eventKindCascade          = "cascade"
-	eventKindReload           = "reload"
+	eventKindReload           = string(rules.ActionReload)
 
 	eventKindExpand        = config.WatchThenKeyExpand
 	eventKindExpandSkipped = "expand-skipped"
-	eventKindExpandFailed  = "expand-failed"
+	eventKindExpandFailed  = config.WatchThenKeyExpand + eventKindFailedSuffix
+	eventKindKill          = config.WatchThenKeyKill
+	eventKindKillFailed    = config.WatchThenKeyKill + eventKindFailedSuffix
 )
 
 // Event status values for Event.Status — the outcome of an emitted action:
@@ -69,7 +73,20 @@ const (
 	eventActionOperationSettling = "operation-settling"
 	eventActionPanicOn           = "panic-on"
 	eventActionPanicOff          = "panic-off"
-	eventActionReload            = "reload"
+	eventActionReload            = string(rules.ActionReload)
+)
+
+// Event message values shared by monitor-state transitions.
+const (
+	eventMessageMonitoringPaused                   = "monitoring paused"
+	eventMessageMonitoringResumed                  = "monitoring resumed"
+	eventMessageAlreadyPaused                      = "already paused"
+	eventMessageAlreadyMonitored                   = "already monitored"
+	eventMessageMonitoringStateUnavailable         = "monitoring state is unavailable"
+	eventMessageMonitoringPausedAfterManualStop    = "monitoring paused after manual stop"
+	eventMessageMonitoringResumedAfterManualStart  = "monitoring resumed after manual start"
+	eventMessageMonitoringPausedAfterStorageUmount = "monitoring paused after storage umount"
+	eventMessageMonitoringResumedAfterStorageMount = "monitoring resumed after storage mount"
 )
 
 // Event field names are shared by structured logs and JSON event export.

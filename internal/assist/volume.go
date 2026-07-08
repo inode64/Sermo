@@ -16,6 +16,17 @@ import (
 // notifications and an optional native auto-expand action.
 type volumeAssistant struct{}
 
+const (
+	volumeDefaultFreePct        = 10
+	volumeDefaultUsedPct        = 90
+	volumeDefaultFreeSize       = "10G"
+	volumeDefaultUsedSize       = "100G"
+	volumeDefaultForCycles      = 3
+	volumeDefaultExpandBy       = "5G"
+	volumeDefaultExpandCooldown = "30m"
+	volumeRootWatchName         = "root"
+)
+
 func (volumeAssistant) Name() string { return AssistantNameVolume }
 func (volumeAssistant) Title() string {
 	return "Storage volume checks (free space, optional auto-expand)"
@@ -101,24 +112,24 @@ func askVolSettings(p *Prompt, env Env, label string) (volSettings, error) {
 		"used space at/above a size (K/M/G/T)",
 	}) {
 	case 0:
-		s.metric, s.op = checks.LevelFieldFreePct, "<"
-		s.value = askPercent(p, "Alert when free space drops below", 10)
+		s.metric, s.op = checks.LevelFieldFreePct, cfgval.CompareOpLess
+		s.value = askPercent(p, "Alert when free space drops below", volumeDefaultFreePct)
 	case 1:
-		s.metric, s.op = checks.LevelFieldUsedPct, ">="
-		s.value = askPercent(p, "Alert when used space reaches/exceeds", 90)
+		s.metric, s.op = checks.LevelFieldUsedPct, cfgval.CompareOpGreaterEqual
+		s.value = askPercent(p, "Alert when used space reaches/exceeds", volumeDefaultUsedPct)
 	case 2:
-		s.metric, s.op = checks.LevelFieldFreeBytes, "<"
-		s.value = askSize(p, "Alert when free space drops below (e.g. 10G)", "10G")
+		s.metric, s.op = checks.LevelFieldFreeBytes, cfgval.CompareOpLess
+		s.value = askSize(p, "Alert when free space drops below (e.g. 10G)", volumeDefaultFreeSize)
 	default:
-		s.metric, s.op = checks.LevelFieldUsedBytes, ">="
-		s.value = askSize(p, "Alert when used space reaches/exceeds (e.g. 100G)", "100G")
+		s.metric, s.op = checks.LevelFieldUsedBytes, cfgval.CompareOpGreaterEqual
+		s.value = askSize(p, "Alert when used space reaches/exceeds (e.g. 100G)", volumeDefaultUsedSize)
 	}
-	s.forCycles = p.AskInt("Require the condition for how many cycles first?", 3)
+	s.forCycles = p.AskInt("Require the condition for how many cycles first?", volumeDefaultForCycles)
 	s.notifiers = chooseNotifiers(p, env)
 	if p.Confirm("Auto-expand this volume when low? (requires an LVM volume)", false) {
 		s.expand = true
-		s.expandBy = askSize(p, "Grow by how much each time (e.g. 5G)", "5G")
-		s.cooldown = askDuration(p, "Minimum time between expansions (cooldown)", "30m")
+		s.expandBy = askSize(p, "Grow by how much each time (e.g. 5G)", volumeDefaultExpandBy)
+		s.cooldown = askDuration(p, "Minimum time between expansions (cooldown)", volumeDefaultExpandCooldown)
 	}
 	s.dryRun = p.AskWatchDryRun(label, env, s.notifiers, s.expand)
 	return s, nil
@@ -209,7 +220,7 @@ func validSize(s string) bool {
 func watchName(prefix, path string) string {
 	s := strings.Trim(path, "/")
 	if s == "" {
-		s = "root"
+		s = volumeRootWatchName
 	}
 	s = strings.Map(func(r rune) rune {
 		switch {

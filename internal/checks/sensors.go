@@ -22,6 +22,11 @@ const (
 // data key (sensorVoltage).
 const sensorKindIn = "in"
 
+const (
+	hwmonUnitScale  = 1.0
+	hwmonMilliScale = 1000.0
+)
+
 // SensorReading is one hwmon input: the chip name, the kind (temp/fan/in), a
 // label and the value in its natural unit (°C, RPM, V).
 type SensorReading struct {
@@ -163,9 +168,9 @@ func readHwmon(root string) ([]SensorReading, error) {
 	var out []SensorReading
 	for _, d := range dirs {
 		chip := readTrim(filepath.Join(d, "name"))
-		out = append(out, readSensorKind(d, chip, sensorTemp, 1000)...)
-		out = append(out, readSensorKind(d, chip, sensorFan, 1)...)
-		out = append(out, readSensorKind(d, chip, sensorKindIn, 1000)...)
+		out = append(out, readSensorKind(d, chip, sensorTemp, hwmonMilliScale)...)
+		out = append(out, readSensorKind(d, chip, sensorFan, hwmonUnitScale)...)
+		out = append(out, readSensorKind(d, chip, sensorKindIn, hwmonMilliScale)...)
 	}
 	return out, nil
 }

@@ -19,6 +19,8 @@ const (
 	keyEnableIfContains = "contains"
 	keyEnableIfEquals   = "equals"
 	keyEnableIfMatches  = "matches"
+
+	enableIfPredicateSummary = keyEnableIfContains + ", " + keyEnableIfEquals + " or " + keyEnableIfMatches
 )
 
 var (
@@ -105,12 +107,12 @@ func walkEnableIf(v any, path []string, add addFunc) {
 func validateEnableIfSpec(path string, spec any, add addFunc) {
 	m, ok := spec.(map[string]any)
 	if !ok {
-		add("%s must be a mapping", path)
+		add(validationMappingFormat, path)
 		return
 	}
 	for key := range m {
 		if _, ok := enableIfKeys[key]; !ok {
-			add("%s.%s is not supported; enable_if accepts file, key and one of contains, equals or matches", path, key)
+			add("%s.%s is not supported; enable_if accepts file, key and one of %s", path, key, enableIfPredicateSummary)
 		}
 	}
 	file := cfgval.String(m[keyEnableIfFile])
@@ -123,7 +125,7 @@ func validateEnableIfSpec(path string, spec any, add addFunc) {
 		add("%s.key is required", path)
 	}
 	if predicates := validateEnableIfPredicates(path, m, add); predicates != 1 {
-		add("%s must define exactly one of contains, equals or matches", path)
+		add("%s must define exactly one of %s", path, enableIfPredicateSummary)
 	}
 }
 

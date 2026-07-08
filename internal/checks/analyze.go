@@ -23,6 +23,8 @@ const (
 	AnalyzeSeverityError   = "error"
 	AnalyzeSeverityWarning = "warning"
 	AnalyzeSeverityOK      = "ok"
+	// AnalyzeSeveritySummary is the user-facing list of analysis severities.
+	AnalyzeSeveritySummary = AnalyzeSeverityError + ", " + AnalyzeSeverityWarning + " or " + AnalyzeSeverityOK
 )
 
 // Analyze stream identifiers accepted by command output analysis rules.
@@ -30,6 +32,10 @@ const (
 	AnalyzeStreamBoth   = "both"
 	AnalyzeStreamStdout = "stdout"
 	AnalyzeStreamStderr = "stderr"
+	// AnalyzeStreamSummary is the user-facing list of analysis stream values.
+	AnalyzeStreamSummary = AnalyzeStreamStdout + ", " + AnalyzeStreamStderr + " or " + AnalyzeStreamBoth
+	// AnalyzeExportStreamSummary is the user-facing list of export stream values.
+	AnalyzeExportStreamSummary = AnalyzeStreamStdout + " or " + AnalyzeStreamStderr
 )
 
 func (s Severity) String() string {
@@ -109,7 +115,7 @@ func parseAnalyzer(v any) (*outputAnalyzer, string) {
 	}
 	m, ok := v.(map[string]any)
 	if !ok {
-		return nil, "analyze must be a mapping"
+		return nil, CheckKeyAnalyze + " must be a mapping"
 	}
 	raw, ok := m[CheckKeyRules].([]any)
 	if !ok || len(raw) == 0 {
@@ -120,36 +126,44 @@ func parseAnalyzer(v any) (*outputAnalyzer, string) {
 	for i, item := range raw {
 		rm, ok := item.(map[string]any)
 		if !ok {
-			return nil, fmt.Sprintf("analyze rule %d must be a mapping", i)
+			return nil, analyzeRuleIndex(i) + " must be a mapping"
 		}
 		id := cfgval.AsString(rm[CheckKeyID])
 		if id == "" {
-			return nil, fmt.Sprintf("analyze rule %d is missing an id", i)
+			return nil, analyzeRuleIndex(i) + " is missing an id"
 		}
 		if seen[id] {
-			return nil, fmt.Sprintf("analyze has a duplicate rule id %q", id)
+			return nil, fmt.Sprintf("%s has a duplicate rule id %q", CheckKeyAnalyze, id)
 		}
 		seen[id] = true
 		sev, ok := parseSeverity(cfgval.AsString(rm[CheckKeySeverity]))
 		if !ok {
-			return nil, fmt.Sprintf("analyze rule %q severity must be error, warning or ok", id)
+			return nil, fmt.Sprintf("%s severity must be %s", analyzeRuleID(id), AnalyzeSeveritySummary)
 		}
 		stream := cfgval.AsString(rm[CheckKeyStream])
 		if stream == "" {
 			stream = AnalyzeStreamBoth
 		}
 		if stream != AnalyzeStreamBoth && stream != AnalyzeStreamStdout && stream != AnalyzeStreamStderr {
-			return nil, fmt.Sprintf("analyze rule %q stream must be stdout, stderr or both", id)
+			return nil, fmt.Sprintf("%s stream must be %s", analyzeRuleID(id), AnalyzeStreamSummary)
 		}
 		match := cfgval.AsString(rm[CheckKeyMatch])
 		if match == "" {
-			return nil, fmt.Sprintf("analyze rule %q is missing a match", id)
+			return nil, analyzeRuleID(id) + " is missing a match"
 		}
 		re, err := regexp.Compile(match)
 		if err != nil {
-			return nil, fmt.Sprintf("analyze rule %q has an invalid regex: %v", id, err)
+			return nil, fmt.Sprintf("%s has an invalid regex: %v", analyzeRuleID(id), err)
 		}
 		a.rules = append(a.rules, analyzeRule{id: id, re: re, severity: sev, stream: stream})
 	}
 	return a, ""
+}
+
+func analyzeRuleIndex(index int) string {
+	return fmt.Sprintf("%s rule %d", CheckKeyAnalyze, index)
+}
+
+func analyzeRuleID(id string) string {
+	return fmt.Sprintf("%s rule %q", CheckKeyAnalyze, id)
 }

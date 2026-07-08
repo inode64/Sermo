@@ -30,6 +30,11 @@ const (
 	DefaultUserLookupTimeout = 250 * time.Millisecond
 )
 
+const (
+	getentDatabaseGroup  = "group"
+	getentDatabasePasswd = "passwd"
+)
+
 type idLookupResult struct {
 	id uint32
 	ok bool
@@ -344,7 +349,7 @@ func (l *UserLookup) negativeExpired(ok bool, at time.Time) bool {
 }
 
 func (l *UserLookup) getentUserID(name string) (uint32, bool) {
-	line, ok := l.getent("passwd", name)
+	line, ok := l.getent(getentDatabasePasswd, name)
 	if !ok {
 		return 0, false
 	}
@@ -353,7 +358,7 @@ func (l *UserLookup) getentUserID(name string) (uint32, bool) {
 }
 
 func (l *UserLookup) getentGroupID(name string) (uint32, bool) {
-	line, ok := l.getent("group", name)
+	line, ok := l.getent(getentDatabaseGroup, name)
 	if !ok {
 		return 0, false
 	}
@@ -362,7 +367,7 @@ func (l *UserLookup) getentGroupID(name string) (uint32, bool) {
 }
 
 func (l *UserLookup) getentUserName(uid uint32) (string, bool) {
-	line, ok := l.getent("passwd", strconv.FormatUint(uint64(uid), numericIDBase))
+	line, ok := l.getent(getentDatabasePasswd, strconv.FormatUint(uint64(uid), numericIDBase))
 	if !ok {
 		return "", false
 	}
@@ -371,7 +376,7 @@ func (l *UserLookup) getentUserName(uid uint32) (string, bool) {
 }
 
 func (l *UserLookup) getentGroupName(gid uint32) (string, bool) {
-	line, ok := l.getent("group", strconv.FormatUint(uint64(gid), numericIDBase))
+	line, ok := l.getent(getentDatabaseGroup, strconv.FormatUint(uint64(gid), numericIDBase))
 	if !ok {
 		return "", false
 	}
@@ -380,8 +385,8 @@ func (l *UserLookup) getentGroupName(gid uint32) (string, bool) {
 }
 
 func (l *UserLookup) getent(database, query string) (string, bool) {
-	res, err := execx.Run(context.Background(), l.runner, l.timeout, "getent", database, query)
-	if err != nil || res.ExitCode != 0 {
+	res, err := execx.Run(context.Background(), l.runner, l.timeout, UserLookupGetent, database, query)
+	if err != nil || res.ExitCode != execx.ExitCodeSuccess {
 		return "", false
 	}
 	for _, line := range strings.Split(res.Stdout, procLineSeparator) {

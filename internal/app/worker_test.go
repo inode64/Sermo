@@ -61,7 +61,7 @@ func TestWorkerStartupSkipsChecksUntilBackendActive(t *testing.T) {
 	}
 
 	w.RunCycle(context.Background())
-	if _, ok := h.eventOf("alert"); ok {
+	if _, ok := h.eventOf(eventKindAlert); ok {
 		t.Fatal("inactive backend must not fire alerts during startup")
 	}
 	if !settling.Observed(SettlingServiceKey("web")) {
@@ -80,7 +80,7 @@ func TestWorkerStartupObserveOnlySuppressesAlerts(t *testing.T) {
 	}
 
 	w.RunCycle(context.Background())
-	if _, ok := h.eventOf("alert"); ok {
+	if _, ok := h.eventOf(eventKindAlert); ok {
 		t.Fatal("first active cycle must not fire alerts")
 	}
 	if !settling.Observed(SettlingServiceKey("web")) {
@@ -88,7 +88,7 @@ func TestWorkerStartupObserveOnlySuppressesAlerts(t *testing.T) {
 	}
 
 	w.RunCycle(context.Background())
-	if _, ok := h.eventOf("alert"); !ok {
+	if _, ok := h.eventOf(eventKindAlert); !ok {
 		t.Fatal("second cycle should fire the alert")
 	}
 }
@@ -136,7 +136,7 @@ func TestWorkerOperationRunningSkipsChecksAndAlerts(t *testing.T) {
 	if checksRun != 0 {
 		t.Fatalf("operation running must skip checks, ran %d", checksRun)
 	}
-	if _, ok := h.eventOf("alert"); ok {
+	if _, ok := h.eventOf(eventKindAlert); ok {
 		t.Fatal("operation running must suppress alerts")
 	}
 	if _, found, _ := store.OperationSettling("web"); !found {
@@ -157,7 +157,7 @@ func TestWorkerOperationSettlingObserveOnlySuppressesSideEffects(t *testing.T) {
 	w.RecordHealth = func(bool) { recorded = true }
 
 	w.RunCycle(context.Background())
-	if _, ok := h.eventOf("alert"); ok {
+	if _, ok := h.eventOf(eventKindAlert); ok {
 		t.Fatal("post-operation observe-only cycle must suppress alerts")
 	}
 	if recorded {
@@ -168,7 +168,7 @@ func TestWorkerOperationSettlingObserveOnlySuppressesSideEffects(t *testing.T) {
 	}
 
 	w.RunCycle(context.Background())
-	if _, ok := h.eventOf("alert"); !ok {
+	if _, ok := h.eventOf(eventKindAlert); !ok {
 		t.Fatal("next cycle should alert when the check is still failing")
 	}
 }
@@ -187,7 +187,7 @@ func TestWorkerOperationSettlingWaitsForActiveBackend(t *testing.T) {
 	}
 
 	w.RunCycle(context.Background())
-	if _, ok := h.eventOf("alert"); ok {
+	if _, ok := h.eventOf(eventKindAlert); ok {
 		t.Fatal("inactive backend while settling must suppress alerts")
 	}
 	if _, found, _ := store.OperationSettling("web"); !found {
@@ -206,7 +206,7 @@ func TestCycleAlertCarriesFailingCheckOutput(t *testing.T) {
 
 	w.RunCycle(context.Background())
 
-	ev, ok := h.eventOf("alert")
+	ev, ok := h.eventOf(eventKindAlert)
 	if !ok {
 		t.Fatalf("expected an alert event: %+v", h.events)
 	}
@@ -230,7 +230,7 @@ func TestCycleAlertNotifiesGlobalDefault(t *testing.T) {
 	if len(n.msgs) != 1 {
 		t.Fatalf("alert should notify the inherited global default, got %d messages", len(n.msgs))
 	}
-	if _, ok := h.eventOf("notify"); !ok {
+	if _, ok := h.eventOf(eventKindNotify); !ok {
 		t.Errorf("expected a notify event: %+v", h.events)
 	}
 }
@@ -247,7 +247,7 @@ func TestCycleAlertNotifyNoneSuppresses(t *testing.T) {
 	if len(n.msgs) != 0 {
 		t.Fatalf("notify: none must suppress delivery, got %d messages", len(n.msgs))
 	}
-	if _, ok := h.eventOf("alert"); !ok {
+	if _, ok := h.eventOf(eventKindAlert); !ok {
 		t.Errorf("alert event should still be emitted: %+v", h.events)
 	}
 }
@@ -310,13 +310,13 @@ func TestCycleFiresRemediation(t *testing.T) {
 
 	w.RunCycle(context.Background())
 
-	if len(h.ops) != 1 || h.ops[0] != "restart" {
+	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
 		t.Fatalf("ops = %v, want [restart]", h.ops)
 	}
 	if !w.State.LastActionAt.Equal(t0) {
 		t.Errorf("state not recorded: %v", w.State.LastActionAt)
 	}
-	if e, ok := h.eventOf("action"); !ok || e.Action != "restart" || e.Status != "ok" {
+	if e, ok := h.eventOf(eventKindAction); !ok || e.Action != string(rules.ActionRestart) || e.Status != eventStatusOK {
 		t.Errorf("missing action event: %+v", h.events)
 	}
 }
@@ -334,7 +334,7 @@ func TestCyclePanicSuppressesRemediation(t *testing.T) {
 	if !w.State.LastActionAt.IsZero() {
 		t.Errorf("suppressed remediation must not record state: %v", w.State.LastActionAt)
 	}
-	if e, ok := h.eventOf("suppressed"); !ok || !strings.Contains(e.Message, "panic mode") {
+	if e, ok := h.eventOf(eventKindSuppressed); !ok || !strings.Contains(e.Message, "panic mode") {
 		t.Fatalf("expected a panic suppression event, got %+v", h.events)
 	}
 }
@@ -352,10 +352,10 @@ func TestPanicSuppressesAlertDeliveryButKeepsEvent(t *testing.T) {
 	if len(n.msgs) != 0 {
 		t.Fatalf("panic mode must suppress alert delivery, sent %d", len(n.msgs))
 	}
-	if _, ok := h.eventOf("alert"); !ok {
+	if _, ok := h.eventOf(eventKindAlert); !ok {
 		t.Errorf("the alert event must still be emitted in panic mode: %+v", h.events)
 	}
-	if _, ok := h.eventOf("notify-suppressed"); !ok {
+	if _, ok := h.eventOf(eventKindNotifySuppressed); !ok {
 		t.Errorf("expected a notify-suppressed event: %+v", h.events)
 	}
 }
@@ -390,10 +390,10 @@ func TestCycleGuardCanReferencePreflightCheck(t *testing.T) {
 	if len(h.ops) != 0 {
 		t.Fatalf("guarded remediation must not operate, ops=%v", h.ops)
 	}
-	if e, ok := h.eventOf("suppressed"); !ok || !strings.Contains(e.Message, "guard: config invalid") {
+	if e, ok := h.eventOf(eventKindSuppressed); !ok || !strings.Contains(e.Message, "guard: config invalid") {
 		t.Fatalf("guard suppression event = %+v, events=%+v", e, h.events)
 	}
-	if e, ok := h.eventOf("error"); ok {
+	if e, ok := h.eventOf(eventKindError); ok {
 		t.Fatalf("preflight reference must not emit an error event: %+v", e)
 	}
 }
@@ -431,7 +431,7 @@ func TestCycleRestartsOnLibraryChange(t *testing.T) {
 
 	// Cycle 2: change detected → one restart, then baseline acknowledged.
 	w.RunCycle(context.Background())
-	if len(h.ops) != 1 || h.ops[0] != "restart" {
+	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
 		t.Fatalf("change should restart once, ops=%v", h.ops)
 	}
 
@@ -481,7 +481,7 @@ func TestCycleRestartsOnAppVersionChange(t *testing.T) {
 
 	// Cycle 2: patch bump 1.7.0 -> 1.7.1 fires once, then baseline acknowledged.
 	w.RunCycle(context.Background())
-	if len(h.ops) != 1 || h.ops[0] != "restart" {
+	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
 		t.Fatalf("version change should restart once, ops=%v", h.ops)
 	}
 
@@ -508,7 +508,7 @@ func TestCycleAppVersionChangeRespectsLevel(t *testing.T) {
 		t.Fatalf("patch bump must not restart at minor level, ops=%v", h.ops)
 	}
 	w.RunCycle(context.Background()) // minor bump
-	if len(h.ops) != 1 || h.ops[0] != "restart" {
+	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
 		t.Fatalf("minor bump must restart, ops=%v", h.ops)
 	}
 }
@@ -522,10 +522,10 @@ func TestFailedOperationEmitsErrorEvent(t *testing.T) {
 
 	w.RunCycle(context.Background())
 
-	if e, ok := h.eventOf("error"); !ok || e.Action != "restart" || e.Status != "failed" {
+	if e, ok := h.eventOf(eventKindError); !ok || e.Action != string(rules.ActionRestart) || e.Status != eventStatusFailed {
 		t.Fatalf("failed remediation event = %+v, want kind=error status=failed", h.events)
 	}
-	if _, ok := h.eventOf("action"); ok {
+	if _, ok := h.eventOf(eventKindAction); ok {
 		t.Fatalf("failed operation must not emit kind=action: %+v", h.events)
 	}
 }
@@ -539,10 +539,10 @@ func TestBlockedOperationEmitsSuppressedEvent(t *testing.T) {
 
 	w.RunCycle(context.Background())
 
-	if e, ok := h.eventOf("suppressed"); !ok || e.Action != "restart" || e.Status != "blocked" {
+	if e, ok := h.eventOf(eventKindSuppressed); !ok || e.Action != string(rules.ActionRestart) || e.Status != eventStatusBlocked {
 		t.Fatalf("blocked remediation event = %+v, want kind=suppressed status=blocked", h.events)
 	}
-	if _, ok := h.eventOf("action"); ok {
+	if _, ok := h.eventOf(eventKindAction); ok {
 		t.Fatalf("blocked operation must not emit kind=action: %+v", h.events)
 	}
 }
@@ -660,7 +660,7 @@ func TestRuntimeVarsSubstitutedInMessage(t *testing.T) {
 
 	w.RunCycle(context.Background())
 
-	e, ok := h.eventOf("alert")
+	e, ok := h.eventOf(eventKindAlert)
 	if !ok {
 		t.Fatalf("no alert emitted: %+v", h.events)
 	}
@@ -692,7 +692,7 @@ func TestCycleCooldownSuppresses(t *testing.T) {
 	if len(h.ops) != 0 {
 		t.Fatalf("cooldown must suppress the action, ops=%v", h.ops)
 	}
-	if e, ok := h.eventOf("suppressed"); !ok || e.Message != "cooldown" {
+	if e, ok := h.eventOf(eventKindSuppressed); !ok || e.Message != "cooldown" {
 		t.Errorf("expected a cooldown suppression event: %+v", h.events)
 	}
 }
@@ -719,10 +719,10 @@ func TestCycleCooldownSkipsToNextFiringRule(t *testing.T) {
 	if len(h.ops) != 0 {
 		t.Fatalf("cooldown must suppress restart, ops=%v", h.ops)
 	}
-	if e, ok := h.eventOf("suppressed"); !ok || e.Rule != "a-restart" {
+	if e, ok := h.eventOf(eventKindSuppressed); !ok || e.Rule != "a-restart" {
 		t.Fatalf("expected restart suppressed-by-cooldown: %+v", h.events)
 	}
-	if e, ok := h.eventOf("alert"); !ok || e.Rule != "b-notify" || e.Message != "http still down" {
+	if e, ok := h.eventOf(eventKindAlert); !ok || e.Rule != "b-notify" || e.Message != "http still down" {
 		t.Fatalf("later firing rule must still alert: %+v", h.events)
 	}
 }
@@ -754,10 +754,10 @@ func TestCycleGuardBlocksThenNextRuleWins(t *testing.T) {
 	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
 
 	w.RunCycle(context.Background())
-	if len(h.ops) != 1 || h.ops[0] != "stop" {
+	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionStop) {
 		t.Fatalf("ops = %v, want [stop] (restart blocked, first non-blocked wins)", h.ops)
 	}
-	if e, ok := h.eventOf("suppressed"); !ok || e.Action != "restart" {
+	if e, ok := h.eventOf(eventKindSuppressed); !ok || e.Action != string(rules.ActionRestart) {
 		t.Errorf("expected restart suppressed-by-guard event: %+v", h.events)
 	}
 }
@@ -777,7 +777,7 @@ func TestCycleAlertFires(t *testing.T) {
 	if len(h.ops) != 0 {
 		t.Fatalf("alert must not operate, ops=%v", h.ops)
 	}
-	if e, ok := h.eventOf("alert"); !ok || e.Message != "http is down" {
+	if e, ok := h.eventOf(eventKindAlert); !ok || e.Message != "http is down" {
 		t.Errorf("expected alert event: %+v", h.events)
 	}
 }
@@ -802,7 +802,7 @@ func TestCycleForWindowDelaysAction(t *testing.T) {
 		t.Fatalf("must not act before 3 consecutive failures, ops=%v", h.ops)
 	}
 	w.RunCycle(context.Background())
-	if len(h.ops) != 1 || h.ops[0] != "restart" {
+	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
 		t.Fatalf("ops = %v, want [restart] on the third failing cycle", h.ops)
 	}
 }
@@ -829,7 +829,7 @@ func TestCycleForDurationWindowDelaysAction(t *testing.T) {
 	}
 	now = now.Add(time.Minute)
 	w.RunCycle(context.Background())
-	if len(h.ops) != 1 || h.ops[0] != "restart" {
+	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
 		t.Fatalf("ops = %v, want [restart] after 6m", h.ops)
 	}
 }
@@ -894,13 +894,13 @@ func TestCycleMultiActionRunsAlertThenOperation(t *testing.T) {
 
 	w.RunCycle(context.Background())
 
-	if len(h.ops) != 1 || h.ops[0] != "restart" {
+	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
 		t.Fatalf("ops = %v, want [restart]", h.ops)
 	}
-	if e, ok := h.eventOf("alert"); !ok || e.Message != "http is down, restarting" {
+	if e, ok := h.eventOf(eventKindAlert); !ok || e.Message != "http is down, restarting" {
 		t.Fatalf("expected the alert action to also fire: %+v", h.events)
 	}
-	if _, ok := h.eventOf("action"); !ok {
+	if _, ok := h.eventOf(eventKindAction); !ok {
 		t.Fatalf("expected the restart action event")
 	}
 }
@@ -926,7 +926,7 @@ func TestCycleMultiActionSuppressedDoesNotAlert(t *testing.T) {
 	if len(h.ops) != 0 {
 		t.Fatalf("cooldown must suppress, ops=%v", h.ops)
 	}
-	if _, ok := h.eventOf("alert"); ok {
+	if _, ok := h.eventOf(eventKindAlert); ok {
 		t.Fatalf("alert must not fire while suppressed: %+v", h.events)
 	}
 }
@@ -963,7 +963,7 @@ func TestWorkerFiresSuppressesSystemMetricRemediation(t *testing.T) {
 	if w.fires(context.Background(), ev, r, t0, nil) {
 		t.Fatal("a system-metric remediation rule must never fire")
 	}
-	if len(events) != 1 || events[0].Kind != "error" || !strings.Contains(events[0].Message, "alert rules") {
+	if len(events) != 1 || events[0].Kind != eventKindError || !strings.Contains(events[0].Message, "alert rules") {
 		t.Fatalf("events = %+v, want one error explaining the suppression", events)
 	}
 
@@ -978,7 +978,7 @@ func TestWorkerFiresSuppressesSystemMetricRemediation(t *testing.T) {
 	if w.fires(context.Background(), ev, r, t0, nil) {
 		t.Fatal("an inline system-metric remediation probe must never fire")
 	}
-	if len(events) != 1 || events[0].Kind != "error" || !strings.Contains(events[0].Message, "alert rules") {
+	if len(events) != 1 || events[0].Kind != eventKindError || !strings.Contains(events[0].Message, "alert rules") {
 		t.Fatalf("inline events = %+v, want one error explaining the suppression", events)
 	}
 
@@ -994,7 +994,7 @@ func TestWorkerFiresSuppressesSystemMetricRemediation(t *testing.T) {
 	if w.fires(context.Background(), ev, r, t0, nil) {
 		t.Fatal("a remediation rule referencing a system metric check must never fire")
 	}
-	if len(events) != 1 || events[0].Kind != "error" || !strings.Contains(events[0].Message, "alert rules") {
+	if len(events) != 1 || events[0].Kind != eventKindError || !strings.Contains(events[0].Message, "alert rules") {
 		t.Fatalf("check-ref events = %+v, want one error explaining the suppression", events)
 	}
 
@@ -1018,7 +1018,7 @@ func TestWorkerRemediationReloadOperates(t *testing.T) {
 	w := h.worker(remediationTree("reload-on-bad-config", "config", "reload"), rules.Policy{Cooldown: time.Minute}, nil)
 	w.RunCycle(context.Background())
 
-	if len(h.ops) != 1 || h.ops[0] != "reload" {
+	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionReload) {
 		t.Fatalf("ops = %v, want one reload through the engine", h.ops)
 	}
 	if w.State.LastActionAt.IsZero() {
@@ -1041,11 +1041,11 @@ func TestWorkerDryRunEvaluatesButDoesNotAct(t *testing.T) {
 	if len(h.ops) != 0 {
 		t.Fatalf("dry-run mode executed ops=%v; must not call Operate", h.ops)
 	}
-	ev, ok := h.eventOf("dry-run")
+	ev, ok := h.eventOf(eventKindDryRun)
 	if !ok {
 		t.Fatalf("no dry-run event emitted; events=%+v", h.events)
 	}
-	if ev.Action != "restart" || !strings.Contains(ev.Message, "would") {
+	if ev.Action != string(rules.ActionRestart) || !strings.Contains(ev.Message, "would") {
 		t.Fatalf("dry-run event = %+v, want action=restart and 'would' in message", ev)
 	}
 	if !w.State.LastActionAt.IsZero() || len(w.State.RecentActions) != 0 {
@@ -1069,14 +1069,14 @@ func TestWorkerDryRunReportsSuppression(t *testing.T) {
 	if len(h.ops) != 0 {
 		t.Fatalf("dry-run mode executed ops=%v; must not call Operate", h.ops)
 	}
-	if _, ok := h.eventOf("suppressed"); ok {
+	if _, ok := h.eventOf(eventKindSuppressed); ok {
 		t.Fatalf("dry-run mode must report via a dry-run event, not a plain suppressed one; events=%+v", h.events)
 	}
-	ev, ok := h.eventOf("dry-run")
+	ev, ok := h.eventOf(eventKindDryRun)
 	if !ok {
 		t.Fatalf("no dry-run event emitted; events=%+v", h.events)
 	}
-	if ev.Action != "restart" || !strings.Contains(ev.Message, "suppressed: cooldown") {
+	if ev.Action != string(rules.ActionRestart) || !strings.Contains(ev.Message, "suppressed: cooldown") {
 		t.Fatalf("dry-run event = %+v, want action=restart and 'suppressed: cooldown' in message", ev)
 	}
 	if !w.State.LastActionAt.Equal(t0.Add(-30 * time.Second)) {
@@ -1116,16 +1116,16 @@ func TestWorkerDryRunSendsOnlyWallAlerts(t *testing.T) {
 	if len(wall.msgs) != 1 {
 		t.Fatalf("dry-run must still send wall notification, got %d", len(wall.msgs))
 	}
-	if _, ok := h.eventOf("alert"); !ok {
+	if _, ok := h.eventOf(eventKindAlert); !ok {
 		t.Fatalf("dry-run alert rule should still emit alert event: %+v", h.events)
 	}
-	if _, ok := h.eventOf("notify"); !ok {
+	if _, ok := h.eventOf(eventKindNotify); !ok {
 		t.Fatalf("dry-run wall notification should emit notify event: %+v", h.events)
 	}
 }
 
 func TestWorkerSettlesInactiveBackendOnObserveOnly(t *testing.T) {
-	ready := NewReadiness("systemd", 1, 0)
+	ready := NewReadiness(string(servicemgr.BackendSystemd), 1, 0)
 	settling := NewSettling(ready)
 	settling.Reset([]string{SettlingServiceKey("web")})
 	ready.ExpectFirstCycles(1)
@@ -1153,13 +1153,13 @@ func TestWorkerSettlesInactiveBackendOnObserveOnly(t *testing.T) {
 	if !settling.Observed(SettlingServiceKey("web")) {
 		t.Fatal("inactive backend must complete startup observation")
 	}
-	if rep := ready.Report(context.Background()); !rep.Ready || rep.Status != "ok" {
+	if rep := ready.Report(context.Background()); !rep.Ready || rep.Status != TargetStateOK {
 		t.Fatalf("readiness = %+v, want ready after inactive observe-only cycle", rep)
 	}
 }
 
 func TestSettlingDuplicateServiceAndAppNamesAdvanceReadiness(t *testing.T) {
-	ready := NewReadiness("systemd", 2, 0)
+	ready := NewReadiness(string(servicemgr.BackendSystemd), 2, 0)
 	settling := NewSettling(ready)
 	settling.Reset([]string{SettlingServiceKey("redis"), SettlingAppKey("redis")})
 	ready.ExpectFirstCycles(2)

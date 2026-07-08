@@ -13,6 +13,12 @@ import (
 	"sermo/internal/rules"
 )
 
+const (
+	unknownCatalogFormat        = "unknown %s %q"
+	unknownCatalogServiceFormat = "unknown catalog service %q"
+	unknownServiceFormat        = "unknown service %q"
+)
+
 // Resolved is a fully flattened, variable-expanded service definition.
 type Resolved struct {
 	Name string
@@ -30,7 +36,7 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 func (c *Config) resolveService(name string, pruneOptional bool) (Resolved, []string) {
 	canonicalName, ok := c.CanonicalServiceName(name)
 	if !ok {
-		return Resolved{Name: name}, []string{fmt.Sprintf("unknown service %q", name)}
+		return Resolved{Name: name}, []string{fmt.Sprintf(unknownServiceFormat, name)}
 	}
 	merged, err := c.mergedService(canonicalName, nil)
 	if err != nil {
@@ -161,11 +167,11 @@ const (
 const (
 	keyReloadOnChange  = "reload_on_change"
 	keyRestartOnChange = "restart_on_change"
-	keyLibraries       = "libraries"
-	keyAnalyze         = "analyze"
+	keyLibraries       = checks.CheckTypeLibraries
+	keyAnalyze         = checks.CheckKeyAnalyze
 	keyAnalyzeSilence  = "silence"
 	keyAnalyzeUse      = "use"
-	keyRuleID          = "id"
+	keyRuleID          = checks.CheckKeyID
 )
 
 // expandPidfile validates a top-level `pidfile: <path>` or candidate list and
@@ -204,7 +210,7 @@ func expandPidfiles(tree map[string]any) []string {
 	}
 	pidfiles, ok := raw.(map[string]any)
 	if !ok {
-		return append(errs, "pidfiles must be a mapping of process role to path string or candidate list")
+		return append(errs, validationPidfilesMappingMsg)
 	}
 
 	normalized := make(map[string]any, len(pidfiles))
@@ -219,7 +225,7 @@ func expandPidfiles(tree map[string]any) []string {
 		}
 		paths := cfgval.StringList(pidfiles[role])
 		if len(paths) == 0 {
-			errs = append(errs, fmt.Sprintf("pidfiles.%s must be a non-empty path string or list", role))
+			errs = append(errs, fmt.Sprintf(validationNonEmptyPathListFormat, "pidfiles."+role))
 			continue
 		}
 		for _, path := range paths {
@@ -379,7 +385,7 @@ func (c *Config) expandAnalyzeEntry(scope string, entry map[string]any) []string
 	analyze, ok := entry[keyAnalyze].(map[string]any)
 	if !ok {
 		if _, present := entry[keyAnalyze]; present {
-			return []string{scope + ".analyze must be a mapping"}
+			return []string{fmt.Sprintf(validationAnalyzeMappingFormat, scope)}
 		}
 		return nil
 	}
@@ -1037,11 +1043,11 @@ func (c *Config) expandAppsChain(tree map[string]any, chain []string) []string {
 func (c *Config) ResolveCatalogService(name string) (Resolved, []string) {
 	canonicalName, ok := c.CanonicalCatalogName(CategoryService, name)
 	if !ok {
-		return Resolved{Name: name}, []string{fmt.Sprintf("unknown catalog service %q", name)}
+		return Resolved{Name: name}, []string{fmt.Sprintf(unknownCatalogServiceFormat, name)}
 	}
 	doc, ok := c.CatalogServices[canonicalName]
 	if !ok {
-		return Resolved{Name: name}, []string{fmt.Sprintf("unknown catalog service %q", name)}
+		return Resolved{Name: name}, []string{fmt.Sprintf(unknownCatalogServiceFormat, name)}
 	}
 	return c.resolveDoc(doc, canonicalName)
 }
@@ -1068,11 +1074,11 @@ func (c *Config) catalogRegistry(category string) map[string]*Document {
 func (c *Config) ResolveCatalog(category, name string) (Resolved, []string) {
 	canonicalName, ok := c.CanonicalCatalogName(category, name)
 	if !ok {
-		return Resolved{Name: name}, []string{fmt.Sprintf("unknown %s %q", category, name)}
+		return Resolved{Name: name}, []string{fmt.Sprintf(unknownCatalogFormat, category, name)}
 	}
 	doc := c.catalogRegistry(category)[canonicalName]
 	if doc == nil {
-		return Resolved{Name: name}, []string{fmt.Sprintf("unknown %s %q", category, name)}
+		return Resolved{Name: name}, []string{fmt.Sprintf(unknownCatalogFormat, category, name)}
 	}
 	return c.resolveDoc(doc, canonicalName)
 }
@@ -1113,7 +1119,7 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string) (
 func (c *Config) mergedService(name string, chain []string) (map[string]any, error) {
 	canonicalName, ok := c.CanonicalServiceName(name)
 	if !ok {
-		return nil, fmt.Errorf("unknown service %q", name)
+		return nil, fmt.Errorf(unknownServiceFormat, name)
 	}
 	name = canonicalName
 	for _, prev := range chain {
@@ -1125,7 +1131,7 @@ func (c *Config) mergedService(name string, chain []string) (map[string]any, err
 
 	doc, ok := c.Services[name]
 	if !ok {
-		return nil, fmt.Errorf("unknown service %q", name)
+		return nil, fmt.Errorf(unknownServiceFormat, name)
 	}
 
 	var merged map[string]any

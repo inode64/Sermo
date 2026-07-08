@@ -129,7 +129,7 @@ func TestProcWatchKillDryRunDoesNotSignal(t *testing.T) {
 	}
 	var dry *Event
 	for i := range h.events {
-		if h.events[i].Kind == "dry-run" {
+		if h.events[i].Kind == eventKindDryRun {
 			dry = &h.events[i]
 		}
 	}

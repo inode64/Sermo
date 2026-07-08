@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"sermo/internal/mountctl"
 )
 
 type fakeBackend struct {
@@ -51,7 +53,7 @@ func (f *fakeBackend) MountAction(_ context.Context, name, action string, opts M
 	if f.mountAction.Message != "" || f.mountAction.Name != "" {
 		return f.mountAction
 	}
-	return MountActionResult{OK: true, Name: name, Action: action, Status: "ok", Message: "ok"}
+	return MountActionResult{OK: true, Name: name, Action: action, Status: eventStatusOK, Message: "ok"}
 }
 func (f *fakeBackend) MountBlockers(_ context.Context, name string) MountBlockersResult {
 	if f.mountBlockers.Name != "" || f.mountBlockers.Message != "" || len(f.mountBlockers.Blockers) > 0 {
@@ -115,12 +117,12 @@ func (f *fakeBackend) Events(_ context.Context, limit int) []Event {
 		}
 		return f.events
 	}
-	return []Event{{Time: "2026-06-07T10:00:00Z", Service: "web", Kind: "action", Action: "restart", Message: "restarted"}}
+	return []Event{{Time: "2026-06-07T10:00:00Z", Service: "web", Kind: eventKindAction, Action: apiActionRestart, Message: "restarted"}}
 }
 func (f *fakeBackend) ServiceEvents(_ context.Context, name string, limit int) ([]Event, bool) {
 	for _, s := range f.services {
 		if s.Name == name {
-			return []Event{{Time: "2026-06-07T10:00:00Z", Service: name, Kind: "alert", Message: "down"}}, true
+			return []Event{{Time: "2026-06-07T10:00:00Z", Service: name, Kind: eventKindAlert, Message: "down"}}, true
 		}
 	}
 	return nil, false
@@ -246,7 +248,7 @@ func newServer(b Backend) http.Handler {
 // postReq is a POST request carrying the CSRF header (as the dashboard sends).
 func postReq(path string) *http.Request {
 	r := httptest.NewRequest(http.MethodPost, path, nil)
-	r.Header.Set(csrfHeader, "1")
+	r.Header.Set(headerSermoCSRF, "1")
 	return r
 }
 
@@ -255,7 +257,7 @@ func TestHandlePanicToggles(t *testing.T) {
 	h := newServer(b)
 
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, postReq("/api/panic/on"))
+	h.ServeHTTP(rec, postReq(testAPIPath(apiSegmentPanic, apiActionPanicOn)))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST /api/panic/on = %d", rec.Code)
 	}
@@ -264,7 +266,7 @@ func TestHandlePanicToggles(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, postReq("/api/panic/off"))
+	h.ServeHTTP(rec, postReq(testAPIPath(apiSegmentPanic, apiActionPanicOff)))
 	if rec.Code != http.StatusOK || b.panic {
 		t.Fatalf("POST /api/panic/off = %d, panic=%v", rec.Code, b.panic)
 	}
@@ -272,7 +274,7 @@ func TestHandlePanicToggles(t *testing.T) {
 
 func TestHandlePanicRejectsBadAction(t *testing.T) {
 	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{}).ServeHTTP(rec, postReq("/api/panic/maybe"))
+	newServer(&fakeBackend{}).ServeHTTP(rec, postReq(testAPIPath(apiSegmentPanic, "maybe")))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("POST /api/panic/maybe = %d, want 400", rec.Code)
 	}
@@ -281,23 +283,23 @@ func TestHandlePanicRejectsBadAction(t *testing.T) {
 func TestServesDashboard(t *testing.T) {
 	h := newServer(&fakeBackend{})
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, routePathRoot, nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET / = %d", rec.Code)
 	}
 	if !strings.Contains(rec.Body.String(), "<html") {
 		t.Fatalf("dashboard is not HTML: %s", rec.Body.String()[:64])
 	}
-	if strings.Contains(rec.Body.String(), "{{CSP_NONCE}}") {
+	if strings.Contains(rec.Body.String(), templateNoncePlaceholder) {
 		t.Fatal("dashboard still contains the CSP nonce placeholder")
 	}
 	if !strings.Contains(rec.Body.String(), `<script nonce="`) || !strings.Contains(rec.Body.String(), `<style nonce="`) {
 		t.Fatalf("dashboard did not receive CSP nonce attributes")
 	}
 	// The served page is built from internal/web/src by esbuild, so JS function
-	// names are minified away. Assert on markers that survive minification: CSS
-	// class selectors and the verbatim attribute strings in template literals.
-	for _, want := range []string{"usagebar-fill", "usagebar-label", "usage-crit", `data-watch-action="expand"`} {
+	// names and dynamic template values are minified away. Assert on markers that
+	// survive minification: CSS class selectors and delegated action attributes.
+	for _, want := range []string{"usagebar-fill", "usagebar-label", "usage-crit", "data-watch-action"} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Fatalf("dashboard missing storage usage UI marker %q", want)
 		}
@@ -312,41 +314,41 @@ func TestServesDashboard(t *testing.T) {
 	}
 	// The dashboard must not be cached, or an upgraded binary's new sections
 	// (e.g. host watches) stay invisible behind a stale browser copy.
-	if cc := rec.Header().Get("Cache-Control"); cc != "no-cache" {
-		t.Fatalf("dashboard Cache-Control = %q, want no-cache", cc)
+	if cc := rec.Header().Get(headerCacheControl); cc != headerValueNoCache {
+		t.Fatalf("dashboard %s = %q, want %s", headerCacheControl, cc, headerValueNoCache)
 	}
 }
 
 func TestSecurityHeaders(t *testing.T) {
 	h := newServer(&fakeBackend{})
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, routePathRoot, nil))
 	want := map[string]string{
-		"X-Content-Type-Options": "nosniff",
-		"X-Frame-Options":        "DENY",
-		"Referrer-Policy":        "no-referrer",
+		headerXContentTypeOptions: headerValueNoSniff,
+		headerXFrameOptions:       headerValueDeny,
+		headerReferrerPolicy:      headerValueNoReferrer,
 	}
 	for k, v := range want {
 		if got := rec.Header().Get(k); got != v {
 			t.Errorf("%s = %q, want %q", k, got, v)
 		}
 	}
-	if csp := rec.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'self'") {
-		t.Errorf("Content-Security-Policy = %q, want it to contain default-src 'self'", csp)
+	if csp := rec.Header().Get(headerContentSecurityPolicy); !strings.Contains(csp, cspDirectiveDefaultSrc) {
+		t.Errorf("%s = %q, want it to contain %s", headerContentSecurityPolicy, csp, cspDirectiveDefaultSrc)
 	}
-	csp := rec.Header().Get("Content-Security-Policy")
-	if !strings.Contains(csp, "script-src 'self' 'nonce-") {
-		t.Errorf("Content-Security-Policy = %q, want script-src nonce", csp)
+	csp := rec.Header().Get(headerContentSecurityPolicy)
+	if !strings.Contains(csp, cspDirectiveScriptSrcPrefix) {
+		t.Errorf("%s = %q, want script-src nonce", headerContentSecurityPolicy, csp)
 	}
-	if strings.Contains(csp, "script-src 'self' 'unsafe-inline'") {
-		t.Errorf("Content-Security-Policy = %q, script-src must not allow unsafe-inline", csp)
+	if strings.Contains(csp, cspDirectiveScriptUnsafeInline) {
+		t.Errorf("%s = %q, script-src must not allow unsafe-inline", headerContentSecurityPolicy, csp)
 	}
 }
 
 func TestListServices(t *testing.T) {
 	b := &fakeBackend{services: []Service{{Name: "web", Category: "frontend", Status: "active", Monitored: true}}}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services", nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, apiPathServices, nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d", rec.Code)
 	}
@@ -364,10 +366,10 @@ func TestListApplications(t *testing.T) {
 		Name: "nginx", DisplayName: "Nginx", Category: "web", Binary: "/usr/bin/nginx",
 		Permissions: "-rwxr-xr-x (0755)", User: "root", Group: "root",
 		Version:      "nginx version: nginx/1.30.2",
-		VersionShort: "1.30.2", VersionSource: "nginx-bin", Status: "ok",
+		VersionShort: "1.30.2", VersionSource: "nginx-bin", Status: apiStatusOK,
 	}}}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/applications", nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, apiPathApplications, nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d", rec.Code)
 	}
@@ -388,7 +390,7 @@ func TestListMounts(t *testing.T) {
 		Name: "mount-backup", Path: "/mnt/backup", Mounted: true, Refcount: 2, State: "active", Refcounted: true,
 	}}}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/mounts", nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, apiPathMounts, nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d", rec.Code)
 	}
@@ -407,7 +409,9 @@ func TestListMounts(t *testing.T) {
 func TestMountAction(t *testing.T) {
 	b := &fakeBackend{}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, postReq("/api/mounts/mount-backup/umount?kill=1"))
+	newServer(b).ServeHTTP(rec, postReq(
+		testPathQuery(testMountPath("mount-backup", mountctl.ActionUmount), testQueryParam(apiQueryKill, queryBoolOne)),
+	))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d", rec.Code)
 	}
@@ -418,14 +422,14 @@ func TestMountAction(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if !res.OK || res.Action != "umount" {
+	if !res.OK || res.Action != mountctl.ActionUmount {
 		t.Fatalf("unexpected response: %+v", res)
 	}
 }
 
 func TestMountActionRejectsUnknown(t *testing.T) {
 	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{}).ServeHTTP(rec, postReq("/api/mounts/mount-backup/reboot"))
+	newServer(&fakeBackend{}).ServeHTTP(rec, postReq(testMountPath("mount-backup", "reboot")))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status %d, want 400", rec.Code)
 	}
@@ -443,7 +447,7 @@ func TestMountBlockers(t *testing.T) {
 		}},
 	}}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, postReq("/api/mounts/mount-backup/blockers"))
+	newServer(b).ServeHTTP(rec, postReq(testMountPath("mount-backup", apiActionBlockers)))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d", rec.Code)
 	}
@@ -461,7 +465,7 @@ func TestMountAlert(t *testing.T) {
 		OK: true, Name: "mount-backup", Path: "/mnt/backup", Users: []string{"backup"}, Delivered: 1, Message: "alert sent",
 	}}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, postReq("/api/mounts/mount-backup/alert"))
+	newServer(b).ServeHTTP(rec, postReq(testMountPath("mount-backup", apiActionAlert)))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d", rec.Code)
 	}
@@ -477,7 +481,7 @@ func TestMountAlert(t *testing.T) {
 func TestServiceDetail(t *testing.T) {
 	b := &fakeBackend{services: []Service{{Name: "web", Status: "active", Monitored: true}}}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/web", nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testServicePath("web"), nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("detail status %d", rec.Code)
 	}
@@ -492,7 +496,7 @@ func TestServiceDetail(t *testing.T) {
 
 func TestServiceDetailUnknown(t *testing.T) {
 	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/ghost", nil))
+	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testServicePath("ghost"), nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown detail = %d, want 404", rec.Code)
 	}
@@ -501,7 +505,11 @@ func TestServiceDetailUnknown(t *testing.T) {
 func TestSLASeries(t *testing.T) {
 	b := &fakeBackend{services: []Service{{Name: "web"}}}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/web/sla?since=168h", nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(
+		http.MethodGet,
+		testPathQuery(testServicePath("web", apiSegmentSLA), testQueryParam(apiQuerySince, "168h")),
+		nil,
+	))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("series status %d", rec.Code)
 	}
@@ -524,12 +532,16 @@ func TestSLASeriesDefaultsAndCaps(t *testing.T) {
 	b := &fakeBackend{services: []Service{{Name: "web"}}}
 	h := newServer(b)
 	// no since -> default 24h
-	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/services/web/sla", nil))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, testServicePath("web", apiSegmentSLA), nil))
 	if b.seriesSince != 24*time.Hour {
 		t.Fatalf("default since = %v, want 24h", b.seriesSince)
 	}
 	// absurd since -> capped at the retention window
-	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/services/web/sla?since=99999h", nil))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(
+		http.MethodGet,
+		testPathQuery(testServicePath("web", apiSegmentSLA), testQueryParam(apiQuerySince, "99999h")),
+		nil,
+	))
 	if b.seriesSince != maxSeriesWindow {
 		t.Fatalf("since not capped: %v", b.seriesSince)
 	}
@@ -537,7 +549,7 @@ func TestSLASeriesDefaultsAndCaps(t *testing.T) {
 
 func TestSLASeriesUnknown(t *testing.T) {
 	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/ghost/sla", nil))
+	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testServicePath("ghost", apiSegmentSLA), nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown series = %d, want 404", rec.Code)
 	}
@@ -546,7 +558,11 @@ func TestSLASeriesUnknown(t *testing.T) {
 func TestGlobalEvents(t *testing.T) {
 	b := &fakeBackend{}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/events?limit=50", nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(
+		http.MethodGet,
+		testPathQuery(apiPathEvents, testQueryParam(apiQueryLimit, "50")),
+		nil,
+	))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("events status %d", rec.Code)
 	}
@@ -557,7 +573,7 @@ func TestGlobalEvents(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(got) != 1 || got[0].Kind != "action" {
+	if len(got) != 1 || got[0].Kind != eventKindAction {
 		t.Fatalf("unexpected events: %+v", got)
 	}
 }
@@ -565,11 +581,15 @@ func TestGlobalEvents(t *testing.T) {
 func TestEventLimitCapAndDefault(t *testing.T) {
 	b := &fakeBackend{}
 	h := newServer(b)
-	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/events", nil))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, apiPathEvents, nil))
 	if b.eventLimit != defaultEventLimit {
 		t.Fatalf("default limit = %d, want %d", b.eventLimit, defaultEventLimit)
 	}
-	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/events?limit=99999", nil))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(
+		http.MethodGet,
+		testPathQuery(apiPathEvents, testQueryParam(apiQueryLimit, "99999")),
+		nil,
+	))
 	if b.eventLimit != maxEventLimit {
 		t.Fatalf("limit not capped: %d", b.eventLimit)
 	}
@@ -577,10 +597,10 @@ func TestEventLimitCapAndDefault(t *testing.T) {
 
 func TestGlobalEventsFilters(t *testing.T) {
 	events := []Event{
-		{Time: "2026-06-07T10:00:04Z", Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "done"},
-		{Time: "2026-06-07T10:00:03Z", Service: "db", Kind: "error", Action: "restart", Status: "failed", Message: "blocked"},
-		{Time: "2026-06-07T10:00:02Z", Watch: "storage-root", Kind: "hook-failed", Status: "failed", Message: "hook failed"},
-		{Time: "2026-06-07T10:00:01Z", Watch: "storage-root", Kind: "hook", Status: "ok", Message: "hook ok"},
+		{Time: "2026-06-07T10:00:04Z", Service: "web", Kind: eventKindAction, Action: apiActionRestart, Status: eventStatusOK, Message: "done"},
+		{Time: "2026-06-07T10:00:03Z", Service: "db", Kind: eventKindError, Action: apiActionRestart, Status: eventStatusFailed, Message: "blocked"},
+		{Time: "2026-06-07T10:00:02Z", Watch: "storage-root", Kind: eventKindHookFailed, Status: eventStatusFailed, Message: "hook failed"},
+		{Time: "2026-06-07T10:00:01Z", Watch: "storage-root", Kind: eventKindHook, Status: eventStatusOK, Message: "hook ok"},
 	}
 	tests := []struct {
 		name       string
@@ -590,17 +610,17 @@ func TestGlobalEventsFilters(t *testing.T) {
 		wantFirst  string
 		wantStatus string
 	}{
-		{name: "service", query: "?service=db", wantLimit: maxEventLimit, wantCount: 1, wantFirst: "db"},
-		{name: "watch kind", query: "?watch=storage-root&kind=hook-failed", wantLimit: maxEventLimit, wantCount: 1, wantFirst: "storage-root"},
-		{name: "status", query: "?status=failed", wantLimit: maxEventLimit, wantCount: 2, wantStatus: "failed"},
-		{name: "only errors", query: "?only_errors=1", wantLimit: maxEventLimit, wantCount: 2},
-		{name: "filtered limit", query: "?only_errors=true&limit=1", wantLimit: maxEventLimit, wantCount: 1},
+		{name: "service", query: testQueryParam(apiParamService, "db"), wantLimit: maxEventLimit, wantCount: 1, wantFirst: "db"},
+		{name: "watch kind", query: testQueryParams(apiQueryWatch, "storage-root", apiQueryKind, eventKindHookFailed), wantLimit: maxEventLimit, wantCount: 1, wantFirst: "storage-root"},
+		{name: "status", query: testQueryParam(apiQueryStatus, eventStatusFailed), wantLimit: maxEventLimit, wantCount: 2, wantStatus: eventStatusFailed},
+		{name: "only errors", query: testQueryParam(apiQueryOnlyErrors, queryBoolOne), wantLimit: maxEventLimit, wantCount: 2},
+		{name: "filtered limit", query: testQueryParams(apiQueryOnlyErrors, queryBoolTrue, apiQueryLimit, queryBoolOne), wantLimit: maxEventLimit, wantCount: 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			b := &fakeBackend{events: events}
 			rec := httptest.NewRecorder()
-			newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/events"+tt.query, nil))
+			newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(apiPathEvents, tt.query), nil))
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status %d", rec.Code)
 			}
@@ -633,7 +653,7 @@ func TestGlobalEventsFilters(t *testing.T) {
 func TestServiceEvents(t *testing.T) {
 	b := &fakeBackend{services: []Service{{Name: "web"}}}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/web/events", nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testServicePath("web", apiSegmentEvents), nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("service events status %d", rec.Code)
 	}
@@ -646,7 +666,7 @@ func TestServiceEvents(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/ghost/events", nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testServicePath("ghost", apiSegmentEvents), nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown service events = %d, want 404", rec.Code)
 	}
@@ -655,7 +675,14 @@ func TestServiceEvents(t *testing.T) {
 func TestMetrics(t *testing.T) {
 	b := &fakeBackend{services: []Service{{Name: "web"}}}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/web/metrics?check=http&since=168h", nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(
+		http.MethodGet,
+		testPathQuery(
+			testServicePath("web", apiSegmentMetrics),
+			testQueryParams(apiQueryCheck, "http", apiQuerySince, "168h"),
+		),
+		nil,
+	))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("metrics status %d", rec.Code)
 	}
@@ -672,13 +699,17 @@ func TestMetrics(t *testing.T) {
 
 	// missing check -> 400
 	rec = httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/web/metrics", nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testServicePath("web", apiSegmentMetrics), nil))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("missing check = %d, want 400", rec.Code)
 	}
 	// unknown service -> 404
 	rec = httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/ghost/metrics?check=http", nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(
+		http.MethodGet,
+		testPathQuery(testServicePath("ghost", apiSegmentMetrics), testQueryParam(apiQueryCheck, "http")),
+		nil,
+	))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown service = %d, want 404", rec.Code)
 	}
@@ -687,7 +718,11 @@ func TestMetrics(t *testing.T) {
 func TestServiceRuntimeMetrics(t *testing.T) {
 	b := &fakeBackend{services: []Service{{Name: "web"}}}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/web/runtime?since=168h", nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(
+		http.MethodGet,
+		testPathQuery(testServicePath("web", apiSegmentRuntime), testQueryParam(apiQuerySince, "168h")),
+		nil,
+	))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("runtime status %d", rec.Code)
 	}
@@ -703,7 +738,7 @@ func TestServiceRuntimeMetrics(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/ghost/runtime", nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testServicePath("ghost", apiSegmentRuntime), nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown runtime service = %d, want 404", rec.Code)
 	}
@@ -711,7 +746,11 @@ func TestServiceRuntimeMetrics(t *testing.T) {
 
 func TestDaemonMetrics(t *testing.T) {
 	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/daemon/metrics?since=1h", nil))
+	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(
+		http.MethodGet,
+		testPathQuery(testAPIPath(apiSegmentDaemon, apiSegmentMetrics), testQueryParam(apiQuerySince, "1h")),
+		nil,
+	))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("daemon metrics status %d", rec.Code)
 	}
@@ -727,7 +766,7 @@ func TestDaemonMetrics(t *testing.T) {
 func TestOperationsAPI(t *testing.T) {
 	b := &fakeBackend{opsSlots: OperationSlots{InUse: 2, Total: 2}}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/ops", nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, apiPathOps, nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("ops status %d", rec.Code)
 	}
@@ -743,7 +782,9 @@ func TestOperationsAPI(t *testing.T) {
 func TestReleaseLockEndpoint(t *testing.T) {
 	b := &fakeBackend{releaseOK: true}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, postReq("/api/locks/mysql/release?name=backup"))
+	newServer(b).ServeHTTP(rec, postReq(
+		testPathQuery(testLockPath("mysql", apiActionRelease), testQueryParam(apiParamName, "backup")),
+	))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("release status = %d, body = %s", rec.Code, rec.Body.String())
 	}
@@ -754,7 +795,7 @@ func TestReleaseLockEndpoint(t *testing.T) {
 
 func TestReleaseLockEndpointConflict(t *testing.T) {
 	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{}).ServeHTTP(rec, postReq("/api/locks/mysql/release"))
+	newServer(&fakeBackend{}).ServeHTTP(rec, postReq(testLockPath("mysql", apiActionRelease)))
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("blocked release status = %d, want 409", rec.Code)
 	}
@@ -763,14 +804,14 @@ func TestReleaseLockEndpointConflict(t *testing.T) {
 func TestOperateActions(t *testing.T) {
 	b := &fakeBackend{}
 	h := newServer(b)
-	for _, action := range []string{"start", "stop", "restart"} {
+	for _, action := range []string{apiActionStart, apiActionStop, apiActionRestart} {
 		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, postReq("/api/services/web/"+action))
+		h.ServeHTTP(rec, postReq(testServicePath("web", action)))
 		if rec.Code != http.StatusOK {
 			t.Fatalf("%s = %d", action, rec.Code)
 		}
 	}
-	want := []string{"web/start", "web/stop", "web/restart"}
+	want := []string{"web/" + apiActionStart, "web/" + apiActionStop, "web/" + apiActionRestart}
 	if strings.Join(b.operated, ",") != strings.Join(want, ",") {
 		t.Fatalf("operated = %v, want %v", b.operated, want)
 	}
@@ -779,7 +820,9 @@ func TestOperateActions(t *testing.T) {
 func TestOperateNoCascadeQuery(t *testing.T) {
 	b := &fakeBackend{}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, postReq("/api/services/web/restart?no_cascade=1"))
+	newServer(b).ServeHTTP(rec, postReq(
+		testPathQuery(testServicePath("web", apiActionRestart), testQueryParam(apiQueryNoCascade, queryBoolOne)),
+	))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("restart no_cascade = %d", rec.Code)
 	}
@@ -790,7 +833,9 @@ func TestOperateNoCascadeQuery(t *testing.T) {
 
 func TestStateCompact(t *testing.T) {
 	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{}).ServeHTTP(rec, postReq("/api/state/compact?before=720h"))
+	newServer(&fakeBackend{}).ServeHTTP(rec, postReq(
+		testPathQuery(testAPIPath(apiSegmentState, apiActionCompact), testQueryParam(apiQueryBefore, "720h")),
+	))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("state compact = %d body=%s", rec.Code, rec.Body.String())
 	}
@@ -807,12 +852,12 @@ func TestMonitorActions(t *testing.T) {
 	b := &fakeBackend{}
 	h := newServer(b)
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, postReq("/api/services/web/unmonitor"))
+	h.ServeHTTP(rec, postReq(testServicePath("web", apiActionUnmonitor)))
 	if rec.Code != http.StatusOK || b.monitored["web"] != false {
 		t.Fatalf("unmonitor: code=%d monitored=%v", rec.Code, b.monitored)
 	}
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, postReq("/api/services/web/monitor"))
+	h.ServeHTTP(rec, postReq(testServicePath("web", apiActionMonitor)))
 	if rec.Code != http.StatusOK || b.monitored["web"] != true {
 		t.Fatalf("monitor: code=%d monitored=%v", rec.Code, b.monitored)
 	}
@@ -822,12 +867,12 @@ func TestWatchMonitorActions(t *testing.T) {
 	b := &fakeBackend{}
 	h := newServer(b)
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, postReq("/api/watches/storage-root/unmonitor"))
+	h.ServeHTTP(rec, postReq(testWatchPath("storage-root", apiActionUnmonitor)))
 	if rec.Code != http.StatusOK || b.watchMonitored["storage-root"] != false {
 		t.Fatalf("watch unmonitor: code=%d monitored=%v", rec.Code, b.watchMonitored)
 	}
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, postReq("/api/watches/storage-root/monitor"))
+	h.ServeHTTP(rec, postReq(testWatchPath("storage-root", apiActionMonitor)))
 	if rec.Code != http.StatusOK || b.watchMonitored["storage-root"] != true {
 		t.Fatalf("watch monitor: code=%d monitored=%v", rec.Code, b.watchMonitored)
 	}
@@ -836,7 +881,7 @@ func TestWatchMonitorActions(t *testing.T) {
 func TestWatchExpandAction(t *testing.T) {
 	b := &fakeBackend{}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, postReq("/api/watches/storage-root/expand"))
+	newServer(b).ServeHTTP(rec, postReq(testWatchPath("storage-root", apiActionExpand)))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("watch expand: code=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -847,7 +892,7 @@ func TestWatchExpandAction(t *testing.T) {
 
 func TestUnknownActionIsBadRequest(t *testing.T) {
 	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{}).ServeHTTP(rec, postReq("/api/services/web/destroy"))
+	newServer(&fakeBackend{}).ServeHTTP(rec, postReq(testServicePath("web", "destroy")))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("unknown action = %d, want 400", rec.Code)
 	}
@@ -856,16 +901,16 @@ func TestUnknownActionIsBadRequest(t *testing.T) {
 func TestEventsClear(t *testing.T) {
 	b := &fakeBackend{
 		events: []Event{
-			{Time: "2026-06-01T00:00:00Z", Kind: "action"},
-			{Time: "2026-06-10T00:00:00Z", Kind: "alert"},
-			{Time: "2026-06-12T00:00:00Z", Kind: "action"},
+			{Time: "2026-06-01T00:00:00Z", Kind: eventKindAction},
+			{Time: "2026-06-10T00:00:00Z", Kind: eventKindAlert},
+			{Time: "2026-06-12T00:00:00Z", Kind: eventKindAction},
 		},
 	}
 	h := newServer(b)
 
 	// clear all
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, postReq("/api/events/clear"))
+	h.ServeHTTP(rec, postReq(testAPIPath(apiSegmentEvents, apiActionClear)))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("clear all status %d: %s", rec.Code, rec.Body.String())
 	}
@@ -879,7 +924,9 @@ func TestEventsClear(t *testing.T) {
 		{Time: "2026-06-12T00:00:00Z", Kind: "keep"},
 	}
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, postReq("/api/events/clear?before=2026-06-05T00:00:00Z"))
+	h.ServeHTTP(rec, postReq(
+		testPathQuery(testAPIPath(apiSegmentEvents, apiActionClear), testQueryParam(apiQueryBefore, "2026-06-05T00:00:00Z")),
+	))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("clear before status %d", rec.Code)
 	}
@@ -890,7 +937,7 @@ func TestEventsClear(t *testing.T) {
 
 func TestFailedOperateIsConflict(t *testing.T) {
 	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{failOp: true}).ServeHTTP(rec, postReq("/api/services/web/restart"))
+	newServer(&fakeBackend{failOp: true}).ServeHTTP(rec, postReq(testServicePath("web", apiActionRestart)))
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("failed operate = %d, want 409", rec.Code)
 	}
@@ -899,7 +946,7 @@ func TestFailedOperateIsConflict(t *testing.T) {
 func TestPreflightEndpoint(t *testing.T) {
 	b := &fakeBackend{services: []Service{{Name: "web"}}}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, postReq("/api/services/web/preflight"))
+	newServer(b).ServeHTTP(rec, postReq(testServicePath("web", apiSegmentPreflight)))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("preflight status = %d, want 200", rec.Code)
 	}
@@ -917,7 +964,7 @@ func TestPreflightEndpoint(t *testing.T) {
 
 func TestPreflightUnknownService(t *testing.T) {
 	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{}).ServeHTTP(rec, postReq("/api/services/ghost/preflight"))
+	newServer(&fakeBackend{}).ServeHTTP(rec, postReq(testServicePath("ghost", apiSegmentPreflight)))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown preflight = %d, want 404", rec.Code)
 	}
@@ -960,7 +1007,7 @@ func TestOperateContextIgnoresRequestCancel(t *testing.T) {
 	srv.shutdown = context.Background()
 	h := srv.Handler()
 
-	req := postReq("/api/services/web/restart")
+	req := postReq(testServicePath("web", apiActionRestart))
 	reqCtx, cancel := context.WithCancel(req.Context())
 	cancel() // simulate client disconnect / HTTP deadline
 	req = req.WithContext(reqCtx)
@@ -982,7 +1029,7 @@ func TestGetOnActionRouteNotAllowed(t *testing.T) {
 	// Only POST is registered for the action route; GET must not operate.
 	b := &fakeBackend{}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/web/start", nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testServicePath("web", apiActionStart), nil))
 	if rec.Code == http.StatusOK || len(b.operated) != 0 {
 		t.Fatalf("GET should not trigger an action: code=%d operated=%v", rec.Code, b.operated)
 	}
@@ -1016,7 +1063,9 @@ func TestParseBeforeQueryRejectsUnsafeCutoffs(t *testing.T) {
 }
 
 func TestEventLimitParsing(t *testing.T) {
-	mk := func(q string) *http.Request { return httptest.NewRequest(http.MethodGet, "/api/events?limit="+q, nil) }
+	mk := func(q string) *http.Request {
+		return httptest.NewRequest(http.MethodGet, testPathQuery(apiPathEvents, testQueryParam(apiQueryLimit, q)), nil)
+	}
 	if got := eventLimit(mk("5")); got != 5 {
 		t.Errorf("limit=5 -> %d, want 5", got)
 	}
@@ -1031,7 +1080,9 @@ func TestEventLimitParsing(t *testing.T) {
 }
 
 func TestSeriesSinceParsing(t *testing.T) {
-	mk := func(q string) *http.Request { return httptest.NewRequest(http.MethodGet, "/api/series?since="+q, nil) }
+	mk := func(q string) *http.Request {
+		return httptest.NewRequest(http.MethodGet, testPathQuery(routePathRoot, testQueryParam(apiQuerySince, q)), nil)
+	}
 	if got := seriesSince(mk("2h")); got != 2*time.Hour {
 		t.Errorf("since=2h -> %v, want 2h", got)
 	}
@@ -1045,13 +1096,13 @@ func TestSeriesSinceParsing(t *testing.T) {
 }
 
 func TestFilterEventsByKind(t *testing.T) {
-	events := []Event{{Kind: "alert"}, {Kind: "recovery"}, {Kind: "alert"}}
-	got := filterEvents(events, eventFilter{Kind: "alert"}, 100)
+	events := []Event{{Kind: eventKindAlert}, {Kind: eventKindRecovery}, {Kind: eventKindAlert}}
+	got := filterEvents(events, eventFilter{Kind: eventKindAlert}, 100)
 	if len(got) != 2 {
 		t.Fatalf("filtered %d events, want 2 alerts", len(got))
 	}
 	for _, e := range got {
-		if e.Kind != "alert" {
+		if e.Kind != eventKindAlert {
 			t.Fatalf("kept a non-alert event: %+v", e)
 		}
 	}

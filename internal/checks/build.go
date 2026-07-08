@@ -37,6 +37,9 @@ const (
 
 const (
 	defaultHTTPStatusCode       = http.StatusOK
+	httpHeaderAccept            = "Accept"
+	httpHeaderContentType       = "Content-Type"
+	httpContentTypeJSON         = "application/json"
 	httpStatusClassPatternLen   = 3
 	httpStatusClassDigitIndex   = 0
 	httpStatusClassWildcard1    = 1
@@ -57,6 +60,10 @@ const (
 	NetMetricErrors   = "errors"
 	NetMetricAddress  = "address"
 	IcmpMetricLatency = "latency" // exported for the web backend's icmp-watch readings
+	// NetMetricSummary is the user-facing list of net check metrics.
+	NetMetricSummary = NetMetricState + ", " + NetMetricSpeed + ", " + NetMetricErrors + " or " + NetMetricAddress
+	// ICMPMetricSummary is the user-facing list of icmp check metrics.
+	ICMPMetricSummary = NetMetricState + " or " + IcmpMetricLatency
 )
 
 // MetricReader returns a sampled metric for a scope. The daemon
@@ -464,14 +471,14 @@ func buildPortsCheck(b base, entry map[string]any) (Check, string) {
 		expect = PortStateOpen
 	}
 	if expect != PortStateOpen && expect != PortStateClosed && expect != PortExpectAny {
-		return nil, "ports check: expect must be open, closed or any"
+		return nil, "ports check: expect must be " + PortExpectSummary
 	}
 	match := cfgval.AsString(entry[CheckKeyMatch])
 	if match == "" {
 		match = PortMatchAll
 	}
 	if match != PortMatchAll && match != PortMatchAny && match != PortMatchNone {
-		return nil, "ports check: match must be all, any or none"
+		return nil, "ports check: match must be " + PortMatchSummary
 	}
 	connectTimeout := time.Duration(0)
 	if raw, present := entry[CheckKeyConnectTimeout]; present {
@@ -524,7 +531,7 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 		if err != nil {
 			return nil, "http check: invalid json body: " + err.Error()
 		}
-		body, contentType = raw, "application/json"
+		body, contentType = raw, httpContentTypeJSON
 	} else if s := cfgval.AsString(entry[CheckKeyBody]); s != "" {
 		body = []byte(s)
 	}
@@ -644,7 +651,7 @@ func buildCommandCheck(b base, entry map[string]any, runner execx.Runner) (Check
 	if len(argv) == 0 {
 		return nil, "command check requires a non-empty command array"
 	}
-	expect := []int{0}
+	expect := []int{CommandDefaultExpectedExit}
 	if v, ok := cfgval.IntList(entry[CheckKeyExpectExit]); ok {
 		expect = v
 	}
@@ -701,12 +708,12 @@ func parseCommandExports(checkName string, raw any) ([]commandExport, string) {
 	}
 	specs, ok := raw.(map[string]any)
 	if !ok {
-		return nil, "export must be a mapping of variable name -> export rule"
+		return nil, CheckKeyExport + " must be a mapping of variable name -> export rule"
 	}
 	for _, name := range slices.Sorted(maps.Keys(specs)) {
 		spec, ok := specs[name].(map[string]any)
 		if !ok {
-			return nil, "export." + name + " must be a mapping"
+			return nil, commandExportPath(name) + " must be a mapping"
 		}
 		e := defaultCommandExport(name)
 		if from := cfgval.String(spec[CheckKeyFrom]); from != "" {
@@ -715,12 +722,12 @@ func parseCommandExports(checkName string, raw any) ([]commandExport, string) {
 		switch e.from {
 		case AnalyzeStreamStdout, AnalyzeStreamStderr:
 		default:
-			return nil, "export." + name + ".from must be stdout or stderr"
+			return nil, commandExportPath(name, CheckKeyFrom) + " must be " + AnalyzeExportStreamSummary
 		}
 		if rawTrim, present := spec[CheckKeyTrim]; present {
 			v, ok := rawTrim.(bool)
 			if !ok {
-				return nil, "export." + name + ".trim must be a boolean"
+				return nil, commandExportPath(name, CheckKeyTrim) + " must be a boolean"
 			}
 			e.trim = v
 		}
@@ -730,17 +737,24 @@ func parseCommandExports(checkName string, raw any) ([]commandExport, string) {
 		if rawRegex, present := spec[CheckKeyRegex]; present {
 			pattern := cfgval.String(rawRegex)
 			if pattern == "" {
-				return nil, "export." + name + ".regex must be non-empty"
+				return nil, commandExportPath(name, CheckKeyRegex) + " must be non-empty"
 			}
 			re, err := regexp.Compile(pattern)
 			if err != nil {
-				return nil, "export." + name + ".regex is invalid: " + err.Error()
+				return nil, commandExportPath(name, CheckKeyRegex) + " is invalid: " + err.Error()
 			}
 			e.regex = re
 		}
 		exports[name] = e
 	}
 	return sortedCommandExports(exports), ""
+}
+
+func commandExportPath(name string, fields ...string) string {
+	parts := make([]string, 0, len(fields)+2)
+	parts = append(parts, CheckKeyExport, name)
+	parts = append(parts, fields...)
+	return strings.Join(parts, ".")
 }
 
 func defaultCommandExport(name string) commandExport {
@@ -942,7 +956,7 @@ func buildCountCheck(b base, entry map[string]any) (Check, string) {
 		kind = CountKindAny
 	}
 	if !validCountKind(kind) {
-		return nil, "count check `of` must be file, dir, symlink or any"
+		return nil, "count check `of` must be " + CountKindSummary
 	}
 	// The threshold may sit at the top level (op/value) or be nested under
 	// `count: {op, value}` like every other named predicate.
@@ -1016,7 +1030,7 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		}
 		if expect != "" {
 			if expect != NetStateUp && expect != NetStateDown {
-				return nil, "net state expect must be up or down"
+				return nil, "net state expect must be " + NetStateSummary
 			}
 			c.expect = expect
 		} else if onChange {
@@ -1045,14 +1059,14 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		}
 		if expect != "" {
 			if expect != NetAddrPresent && expect != NetAddrAbsent {
-				return nil, "net address expect must be present or absent"
+				return nil, "net address expect must be " + NetAddrSummary
 			}
 			c.expect = expect
 		} else if onChange {
 			c.onChange = true
 		}
 	default:
-		return nil, "net check metric must be state, speed, errors or address"
+		return nil, "net check metric must be " + NetMetricSummary
 	}
 	return c, ""
 }
@@ -1205,7 +1219,7 @@ func buildPressureCheck(b base, entry map[string]any, deps Deps) (Check, string)
 	switch resource {
 	case PressureResourceCPU, PressureResourceMemory, PressureResourceIO:
 	default:
-		return nil, "pressure check requires resource: cpu, memory or io"
+		return nil, "pressure check requires resource: " + PressureResourceSummary
 	}
 	preds, errs := requireLevelPreds(entry, PressurePredFields, "pressure check")
 	if errs != "" {
@@ -1322,7 +1336,7 @@ func buildSwapCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		}
 		c.op, c.value = op, v
 	default:
-		return nil, "swap check metric must be usage or io"
+		return nil, "swap check metric must be " + SwapMetricSummary
 	}
 	return c, ""
 }
@@ -1355,7 +1369,7 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		}
 		if expect != "" {
 			if expect != NetStateUp && expect != NetStateDown {
-				return nil, "icmp state expect must be up or down"
+				return nil, "icmp state expect must be " + NetStateSummary
 			}
 			c.expect = expect
 		} else if onChange {
@@ -1385,7 +1399,7 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 			c.hasChange, c.delta = true, d
 		}
 	default:
-		return nil, "icmp check metric must be state or latency"
+		return nil, "icmp check metric must be " + ICMPMetricSummary
 	}
 	return c, ""
 }
@@ -1398,7 +1412,7 @@ func buildRouteCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		family = FamilyIPv4
 	case FamilyIPv4, FamilyIPv6:
 	default:
-		return nil, "route family must be ipv4 or ipv6"
+		return nil, "route family must be " + RouteFamilySummary
 	}
 	return routeCheck{base: b, family: family, iface: cfgval.AsString(entry[CheckKeyInterface]), sampler: deps.RouteSampler}, ""
 }
@@ -1424,7 +1438,7 @@ func buildSizeCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 
 // HTTPProxySchemeList is the user-facing list of accepted HTTP check proxy
 // schemes.
-const HTTPProxySchemeList = "http, https, socks5 or socks5h"
+const HTTPProxySchemeList = URLSchemeHTTP + ", " + URLSchemeHTTPS + ", " + URLSchemeSOCKS5 + " or " + URLSchemeSOCKS5H
 
 // IsHTTPProxyScheme reports whether scheme is accepted for an HTTP check proxy.
 func IsHTTPProxyScheme(scheme string) bool {
@@ -1456,8 +1470,11 @@ func parseProxyURL(entry map[string]any) (*url.URL, string) {
 
 // httpCertKeys are the optional certificate-inspection keys on the http check.
 var httpCertKeys = []string{
-	"cert_expires_in_days", "cert_verify",
-	"cert_on_change", "cert_on_issuer_change", "cert_on_algorithm_change",
+	CheckKeyCertExpiresInDays,
+	CheckKeyCertVerify,
+	CheckKeyCertOnChange,
+	CheckKeyCertOnIssuerChange,
+	CheckKeyCertOnAlgorithmChange,
 }
 
 // configureHTTPCert enables certificate inspection on hc when any cert_* key is

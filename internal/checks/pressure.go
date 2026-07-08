@@ -16,6 +16,8 @@ const (
 	PressureResourceCPU    = "cpu"
 	PressureResourceMemory = "memory"
 	PressureResourceIO     = "io"
+	// PressureResourceSummary is the user-facing list of PSI resources.
+	PressureResourceSummary = PressureResourceCPU + ", " + PressureResourceMemory + " or " + PressureResourceIO
 )
 
 const (
@@ -77,7 +79,7 @@ func (c pressureCheck) Run(_ context.Context) Result {
 	res := c.result(ok, fmt.Sprintf("pressure %s some %.2f/%.2f/%.2f full %.2f/%.2f/%.2f",
 		c.resource, s.Some.Avg10, s.Some.Avg60, s.Some.Avg300, s.Full.Avg10, s.Full.Avg60, s.Full.Avg300), start)
 	res.Data = map[string]any{
-		"resource":      c.resource,
+		DataKeyResource: c.resource,
 		fieldSomeAvg10:  s.Some.Avg10,
 		fieldSomeAvg60:  s.Some.Avg60,
 		fieldSomeAvg300: s.Some.Avg300,
@@ -85,7 +87,7 @@ func (c pressureCheck) Run(_ context.Context) Result {
 		fieldFullAvg60:  s.Full.Avg60,
 		fieldFullAvg300: s.Full.Avg300,
 	}
-	res.Data[fieldValue] = firstPredValue(c.preds, values, s.Some.Avg10)
+	res.Data[DataKeyValue] = firstPredValue(c.preds, values, s.Some.Avg10)
 	return res
 }
 

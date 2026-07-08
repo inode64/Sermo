@@ -5,15 +5,17 @@ import (
 	"errors"
 	"testing"
 
+	"sermo/internal/config"
+	"sermo/internal/dockerctl"
 	"sermo/internal/execx"
 	"sermo/internal/servicemgr"
 )
 
 func TestResolveDockerControl(t *testing.T) {
 	target, err := Resolve(context.Background(), "svc", map[string]any{
-		"control": map[string]any{
-			"type":      "docker",
-			"container": "web",
+		config.SectionControl: map[string]any{
+			dockerctl.ControlKeyType:      dockerctl.ControlType,
+			dockerctl.ControlKeyContainer: "web",
 		},
 	}, servicemgr.BackendSystemd, nil, servicemgr.UnitResolver{})
 	if err != nil {
@@ -29,8 +31,8 @@ func TestResolveDockerControl(t *testing.T) {
 
 func TestResolveWithFallbackDoesNotFallbackForControlledService(t *testing.T) {
 	target, warning := ResolveWithFallback(context.Background(), "svc", map[string]any{
-		"control": map[string]any{
-			"type": "docker",
+		config.SectionControl: map[string]any{
+			dockerctl.ControlKeyType: dockerctl.ControlType,
 		},
 	}, servicemgr.BackendSystemd, nil, servicemgr.UnitResolver{})
 	if warning == "" {
@@ -43,8 +45,8 @@ func TestResolveWithFallbackDoesNotFallbackForControlledService(t *testing.T) {
 
 func TestResolveWithFallbackUsesConfiguredInitUnit(t *testing.T) {
 	target, warning := ResolveWithFallback(context.Background(), "svc", map[string]any{
-		"service": map[string]any{
-			"systemd": []any{"legacy-svc"},
+		config.ServiceKeyService: map[string]any{
+			string(servicemgr.BackendSystemd): []any{"legacy-svc"},
 		},
 	}, servicemgr.BackendSystemd, nil, servicemgr.UnitResolver{Runner: noKnownUnitsRunner{}})
 	if target.Unit != "legacy-svc" || target.Backend != servicemgr.BackendSystemd {
@@ -57,9 +59,9 @@ func TestResolveWithFallbackUsesConfiguredInitUnit(t *testing.T) {
 
 func TestResolveWithFallbackUsesActiveBackendCandidate(t *testing.T) {
 	target, warning := ResolveWithFallback(context.Background(), "svc", map[string]any{
-		"service": map[string]any{
-			"systemd": []any{"svc@main"},
-			"openrc":  []any{"svc.main"},
+		config.ServiceKeyService: map[string]any{
+			string(servicemgr.BackendSystemd): []any{"svc@main"},
+			string(servicemgr.BackendOpenRC):  []any{"svc.main"},
 		},
 	}, servicemgr.BackendOpenRC, nil, servicemgr.UnitResolver{Probe: noKnownUnitsProbe{}})
 	if target.Unit != "svc.main" || target.Backend != servicemgr.BackendOpenRC {
@@ -72,8 +74,8 @@ func TestResolveWithFallbackUsesActiveBackendCandidate(t *testing.T) {
 
 func TestResolveWithFallbackDoesNotFallbackWhenBackendHasNoCandidates(t *testing.T) {
 	target, warning := ResolveWithFallback(context.Background(), "svc", map[string]any{
-		"service": map[string]any{
-			"systemd": []any{"systemd-only"},
+		config.ServiceKeyService: map[string]any{
+			string(servicemgr.BackendSystemd): []any{"systemd-only"},
 		},
 	}, servicemgr.BackendOpenRC, nil, servicemgr.UnitResolver{})
 	if warning == "" {

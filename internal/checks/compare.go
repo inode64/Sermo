@@ -22,7 +22,7 @@ func compareValue(result, op, value string) (bool, error) {
 	case cfgval.AssertOpContains:
 		return strings.Contains(result, value), nil
 	case cfgval.CompareOpGreater, cfgval.CompareOpGreaterEqual, cfgval.CompareOpLess, cfgval.CompareOpLessEqual:
-		rf, err := parseNumericString("result", result)
+		rf, err := parseNumericString(CheckKeyResult, result)
 		if err != nil {
 			return false, fmt.Errorf("%w for op %s", err, op)
 		}
@@ -32,7 +32,7 @@ func compareValue(result, op, value string) (bool, error) {
 		}
 		return compareFloat(rf, op, vf), nil
 	case cfgval.CompareOpEqual, cfgval.CompareOpNotEqual:
-		rf, rerr := parseNumericString("result", result)
+		rf, rerr := parseNumericString(CheckKeyResult, result)
 		vf, verr := parseNumericString(CheckKeyValue, value)
 		if rerr == nil && verr == nil {
 			return compareFloat(rf, op, vf), nil
@@ -143,7 +143,7 @@ func ParseVersionMatcher(v any) (VersionMatcher, string) {
 	}
 	spec, ok := v.(map[string]any)
 	if !ok {
-		return VersionMatcher{}, "must be a mapping with contains, excludes or regex"
+		return VersionMatcher{}, "must be a mapping with " + VersionMatchKeySummary
 	}
 	var matcher VersionMatcher
 	for _, key := range slices.Sorted(maps.Keys(spec)) {
@@ -166,11 +166,11 @@ func ParseVersionMatcher(v any) (VersionMatcher, string) {
 				matcher.regexps = append(matcher.regexps, re)
 			}
 		default:
-			return VersionMatcher{}, fmt.Sprintf("unknown key %q (expected contains, excludes or regex)", key)
+			return VersionMatcher{}, fmt.Sprintf("unknown key %q (expected %s)", key, VersionMatchKeySummary)
 		}
 	}
 	if !matcher.Active() {
-		return VersionMatcher{}, "must declare contains, excludes or regex"
+		return VersionMatcher{}, "must declare " + VersionMatchKeySummary
 	}
 	return matcher, ""
 }
