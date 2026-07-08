@@ -529,6 +529,20 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/process ./internal/metrics` y
   `make check` pasan.
 
+### Fase 28: Start ticks de locks via procfs compartido
+
+- Mantener la ruta `/proc/<pid>/stat` en `internal/process`.
+- Reutilizarla desde locks para leer `owner_start_ticks` sin cambiar la
+  semantica de deteccion de locks stale.
+
+Estado ejecutado:
+
+- `locks.OSProcessProber.StartTicks` usa
+  `process.PIDPath(pid, process.ProcFileStat)`.
+- Se elimina el formato local `/proc/%d/stat`.
+- Validacion ejecutada: `go test ./internal/locks ./internal/process` y
+  `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
