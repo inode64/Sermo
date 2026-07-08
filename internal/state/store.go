@@ -242,9 +242,14 @@ type Store struct {
 	now func() time.Time
 }
 
+const (
+	hoursPerDay          = 24
+	historyRetentionDays = 366
+)
+
 // DefaultHistoryRetention is the normal SLA/metrics/event history window kept
 // unless an operator runs state compact with an explicit --before cutoff.
-const DefaultHistoryRetention = 366 * 24 * time.Hour
+const DefaultHistoryRetention = historyRetentionDays * hoursPerDay * time.Hour
 
 // PruneHistoryResult summarizes old persisted history removed from time-series
 // and event tables.
@@ -854,10 +859,14 @@ const (
 	slaWindowMonth = "month"
 	slaWindowYear  = "year"
 
-	slaSpanDay   = 24 * time.Hour
-	slaSpanWeek  = 7 * slaSpanDay
-	slaSpanMonth = 30 * slaSpanDay
-	slaSpanYear  = 365 * slaSpanDay
+	slaRollingWeekDays  = 7
+	slaRollingMonthDays = 30
+	slaRollingYearDays  = 365
+
+	slaSpanDay   = hoursPerDay * time.Hour
+	slaSpanWeek  = slaRollingWeekDays * slaSpanDay
+	slaSpanMonth = slaRollingMonthDays * slaSpanDay
+	slaSpanYear  = slaRollingYearDays * slaSpanDay
 
 	slaSegmentsHour  = 12
 	slaSegmentsDay   = 24
