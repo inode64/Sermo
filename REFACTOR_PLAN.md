@@ -405,6 +405,17 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/config ./internal/servicemgr` y
   `make check` pasan.
 
+### Fase 19: Directorio de daemons OpenRC derivado
+
+- Mantener los paths OpenRC relacionados dentro de `internal/servicemgr`.
+- Derivar el directorio de metadata de daemons desde el runtime dir OpenRC para
+  evitar repetir el prefijo `/run/openrc`.
+
+Estado ejecutado:
+
+- `openRCDaemonsDir` se deriva de `openRCRuntimeDir + "/daemons"`.
+- Validacion ejecutada: `go test ./internal/servicemgr` y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
