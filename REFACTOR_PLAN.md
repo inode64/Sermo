@@ -156,6 +156,19 @@ Estado ejecutado:
   contrato.
 - Documentar excepciones cuando un string visible debe permanecer local.
 
+Estado ejecutado:
+
+- `internal/app/event.go`, `internal/web/server.go`, `internal/operation`,
+  `internal/rules` y `internal/servicemgr` ya derivan las acciones/status que
+  comparten contrato exacto.
+- Se dejaron locales los textos que coinciden pero no son el mismo contrato:
+  estados externos de Docker/libvirt/systemd, estados visuales del frontend,
+  nombres JSON/DOM, estados de locks/mounts y mensajes/event kinds propios de
+  cada superficie.
+- Safety review: bajo riesgo. No se modifico ningun camino de operacion,
+  guard/preflight/lock, kill/signal ni remediation; solo se documento la
+  decision de no crear coupling por coincidencia textual.
+
 ### Fase 4: Validacion y tests por riesgo
 
 - Para cambios de config: `go test ./internal/config`.
