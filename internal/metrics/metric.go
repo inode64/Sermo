@@ -12,6 +12,34 @@ import (
 	"sermo/internal/cfgval"
 )
 
+const (
+	// MetricUnitPercent is the canonical UI/API unit for percentage metrics.
+	MetricUnitPercent = "%"
+	// MetricUnitBytes is the canonical UI/API unit for byte gauges.
+	MetricUnitBytes = "bytes"
+	// MetricUnitBytesPerSecond is the canonical UI/API unit for byte-rate metrics.
+	MetricUnitBytesPerSecond = "B/s"
+	// MetricUnitMilliseconds is the canonical UI/API unit for latency/duration metrics.
+	MetricUnitMilliseconds = "ms"
+
+	// MetricUnitMegabytesPerSecond is the canonical UI/API unit for disk throughput.
+	MetricUnitMegabytesPerSecond = "MB/s"
+	// MetricUnitCelsius is the canonical UI/API unit for temperatures.
+	MetricUnitCelsius = "°C"
+	// MetricUnitRPM is the canonical UI/API unit for fan speed.
+	MetricUnitRPM = "RPM"
+	// MetricUnitHours is the canonical UI/API unit for hour counters.
+	MetricUnitHours = "h"
+	// MetricUnitUsers is the canonical UI/API unit for user counts.
+	MetricUnitUsers = "users"
+	// MetricUnitProcesses is the canonical UI/API unit for process counts.
+	MetricUnitProcesses = "processes"
+	// MetricUnitNone marks unitless graph metrics.
+	MetricUnitNone = ""
+
+	metricFloatBits = 64
+)
+
 // Reading is one metric's sampled value. A metric may expose an absolute form,
 // a percentage form, or both. Rate metrics are not Ready on the
 // first cycle, before a delta can be computed.
@@ -66,14 +94,14 @@ func metricValue(r Reading, isPercent bool, threshold string) (float64, error) {
 
 func parseThreshold(s string) (value float64, isPercent bool, err error) {
 	s = strings.TrimSpace(s)
-	if raw, ok := strings.CutSuffix(s, "%"); ok {
-		v, perr := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if raw, ok := strings.CutSuffix(s, MetricUnitPercent); ok {
+		v, perr := strconv.ParseFloat(strings.TrimSpace(raw), metricFloatBits)
 		if perr != nil {
 			return 0, false, fmt.Errorf("invalid percentage %q", s)
 		}
 		return v, true, nil
 	}
-	v, perr := strconv.ParseFloat(s, 64)
+	v, perr := strconv.ParseFloat(s, metricFloatBits)
 	if perr != nil {
 		return 0, false, fmt.Errorf("invalid number %q", s)
 	}

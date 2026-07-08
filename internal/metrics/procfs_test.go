@@ -82,6 +82,47 @@ func TestParseMeminfoKBRejectsMissingValue(t *testing.T) {
 	}
 }
 
+func TestParseProcIO(t *testing.T) {
+	tests := []struct {
+		name      string
+		data      string
+		wantRead  uint64
+		wantWrite uint64
+		ok        bool
+	}{
+		{
+			name:      "valid",
+			data:      "rchar: 1\nread_bytes: 10\nwrite_bytes: 25\ncancelled_write_bytes: 0\n",
+			wantRead:  10,
+			wantWrite: 25,
+			ok:        true,
+		},
+		{
+			name: "missing write bytes",
+			data: "read_bytes: 10\n",
+			ok:   false,
+		},
+		{
+			name: "malformed read bytes",
+			data: "read_bytes: nope\nwrite_bytes: 25\n",
+			ok:   false,
+		},
+		{
+			name: "malformed write bytes",
+			data: "read_bytes: 10\nwrite_bytes: nope\n",
+			ok:   false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotRead, gotWrite, ok := parseProcIO(tc.data)
+			if ok != tc.ok || gotRead != tc.wantRead || gotWrite != tc.wantWrite {
+				t.Fatalf("parseProcIO() = (%d, %d, %v); want (%d, %d, %v)", gotRead, gotWrite, ok, tc.wantRead, tc.wantWrite, tc.ok)
+			}
+		})
+	}
+}
+
 // swapReader adds an optional TotalSwap to fakeReader so SampleSystem's swap
 // branch can be exercised deterministically.
 type swapReader struct {

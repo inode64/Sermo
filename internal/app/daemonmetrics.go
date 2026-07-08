@@ -11,7 +11,11 @@ import (
 	"sermo/internal/web"
 )
 
-const daemonMetricRetention = state.DefaultHistoryRetention
+const (
+	daemonMetricMaxInt64  = uint64(1<<63 - 1)
+	daemonMetricRetention = state.DefaultHistoryRetention
+	metricSeriesBucket    = time.Minute
+)
 
 type daemonMetricSampler struct {
 	reader metrics.Reader
@@ -91,9 +95,9 @@ func (s *daemonMetricSampler) Series(since time.Duration) web.DaemonMetrics {
 	return web.DaemonMetrics{
 		Since:   since.String(),
 		Current: daemonRuntime(sample),
-		CPU:     daemonMetricSeries(metrics.MetricCPU, metricUnitPercent, since, samples, func(p daemonMetricSample) (float64, bool) { return p.cpu, p.cpuReady }),
-		Memory:  daemonMetricSeries(metrics.MetricMemory, metricUnitBytes, since, samples, func(p daemonMetricSample) (float64, bool) { return float64(p.rss), p.rssOK }),
-		IO:      daemonMetricSeries(metrics.MetricIO, metricUnitBytesPerSecond, since, samples, func(p daemonMetricSample) (float64, bool) { return p.io, p.ioReady }),
+		CPU:     daemonMetricSeries(metrics.MetricCPU, metrics.MetricUnitPercent, since, samples, func(p daemonMetricSample) (float64, bool) { return p.cpu, p.cpuReady }),
+		Memory:  daemonMetricSeries(metrics.MetricMemory, metrics.MetricUnitBytes, since, samples, func(p daemonMetricSample) (float64, bool) { return float64(p.rss), p.rssOK }),
+		IO:      daemonMetricSeries(metrics.MetricIO, metrics.MetricUnitBytesPerSecond, since, samples, func(p daemonMetricSample) (float64, bool) { return p.io, p.ioReady }),
 	}
 }
 
@@ -165,9 +169,9 @@ func (s *daemonMetricSampler) persistentSeries(sample daemonMetricSample, since 
 	if s.store == nil {
 		return web.DaemonMetrics{}, false
 	}
-	now := sample.at.Add(time.Minute)
+	now := sample.at.Add(metricSeriesBucket)
 	series := func(metric, unit string) (web.MetricSeries, bool) {
-		stat, err := s.store.DaemonMetricSummary(metric, since+time.Minute, now)
+		stat, err := s.store.DaemonMetricSummary(metric, since+metricSeriesBucket, now)
 		if err != nil {
 			return web.MetricSeries{}, false
 		}
@@ -184,15 +188,15 @@ func (s *daemonMetricSampler) persistentSeries(sample daemonMetricSample, since 
 			Points:  measurementPoints(points),
 		}, true
 	}
-	cpu, ok := series(metrics.MetricCPU, metricUnitPercent)
+	cpu, ok := series(metrics.MetricCPU, metrics.MetricUnitPercent)
 	if !ok {
 		return web.DaemonMetrics{}, false
 	}
-	memory, ok := series(metrics.MetricMemory, metricUnitBytes)
+	memory, ok := series(metrics.MetricMemory, metrics.MetricUnitBytes)
 	if !ok {
 		return web.DaemonMetrics{}, false
 	}
-	io, ok := series(metrics.MetricIO, metricUnitBytesPerSecond)
+	io, ok := series(metrics.MetricIO, metrics.MetricUnitBytesPerSecond)
 	if !ok {
 		return web.DaemonMetrics{}, false
 	}
@@ -262,7 +266,7 @@ func daemonMetricSeries(metric, unit string, since time.Duration, samples []daem
 			continue
 		}
 		addDaemonMetric(&summary, v)
-		minute := sample.at.UTC().Truncate(time.Minute)
+		minute := sample.at.UTC().Truncate(metricSeriesBucket)
 		agg := byMinute[minute]
 		if agg == nil {
 			agg = &daemonMetricAgg{}
@@ -330,9 +334,8 @@ func metricSummary(stat state.MeasurementStat) web.MetricSummary {
 }
 
 func uintToInt64(v uint64) int64 {
-	const maxInt64 = uint64(1<<63 - 1)
-	if v > maxInt64 {
-		return int64(maxInt64)
+	if v > daemonMetricMaxInt64 {
+		return int64(daemonMetricMaxInt64)
 	}
 	return int64(v)
 }

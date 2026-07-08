@@ -15,6 +15,15 @@ import (
 // failure (exit code -1) but provides no underlying error detail.
 const CommandDidNotStart = "command did not start"
 
+const (
+	commandRunErrorPrefix        = "run "
+	commandRunErrorSeparator     = ": "
+	commandRunErrorFormat        = commandRunErrorPrefix + "%s" + commandRunErrorSeparator + "%w"
+	commandRunExitCodeFormat     = commandRunErrorPrefix + "%s" + commandRunErrorSeparator + "exit code %d"
+	commandRunTimeoutAfterFormat = commandRunErrorPrefix + "%s" + commandRunErrorSeparator + "timeout after %s: %w"
+	commandRunTimeoutFormat      = commandRunErrorPrefix + "%s" + commandRunErrorSeparator + "timeout: %w"
+)
+
 // Result contains the observable result of an external command.
 type Result struct {
 	Stdout   string
@@ -101,21 +110,21 @@ func runPrepared(ctx context.Context, cmd *exec.Cmd, start time.Time, displayNam
 		result.ExitCode = -1
 		if errors.Is(ctxErr, context.DeadlineExceeded) {
 			if d := result.Duration.Round(time.Millisecond); d > 0 {
-				return result, fmt.Errorf("run %s: timeout after %s: %w", displayName, d, ctxErr)
+				return result, fmt.Errorf(commandRunTimeoutAfterFormat, displayName, d, ctxErr)
 			}
-			return result, fmt.Errorf("run %s: timeout: %w", displayName, ctxErr)
+			return result, fmt.Errorf(commandRunTimeoutFormat, displayName, ctxErr)
 		}
-		return result, fmt.Errorf("run %s: %w", displayName, ctxErr)
+		return result, fmt.Errorf(commandRunErrorFormat, displayName, ctxErr)
 	}
 
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
 		result.ExitCode = exitErr.ExitCode()
-		return result, fmt.Errorf("run %s: exit code %d", displayName, result.ExitCode)
+		return result, fmt.Errorf(commandRunExitCodeFormat, displayName, result.ExitCode)
 	}
 
 	result.ExitCode = -1
-	return result, fmt.Errorf("run %s: %w", displayName, err)
+	return result, fmt.Errorf(commandRunErrorFormat, displayName, err)
 }
 
 // CommandLookup finds executable commands.
@@ -241,9 +250,9 @@ func OperatorFailure(err error, res Result, timeout time.Duration) string {
 		return "timeout"
 	}
 	msg := err.Error()
-	if after, ok := strings.CutPrefix(msg, "run "); ok {
-		if i := strings.Index(after, ": "); i >= 0 {
-			return after[i+2:]
+	if after, ok := strings.CutPrefix(msg, commandRunErrorPrefix); ok {
+		if _, detail, ok := strings.Cut(after, commandRunErrorSeparator); ok {
+			return detail
 		}
 	}
 	return msg

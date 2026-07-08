@@ -43,6 +43,8 @@ const (
 	contentTypeHTMLUTF8   = "text/html; charset=utf-8"
 	contentTypeJSON       = "application/json"
 	contentTypeTextUTF8   = "text/plain; charset=utf-8"
+	cspNonceBytes         = 16
+	cspFallbackNonceBase  = 36
 )
 
 const (
@@ -997,9 +999,9 @@ func securityHeaders(next http.Handler) http.Handler {
 }
 
 func cspNonce() string {
-	var b [16]byte
+	var b [cspNonceBytes]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return strconv.FormatInt(time.Now().UnixNano(), 36)
+		return strconv.FormatInt(time.Now().UnixNano(), cspFallbackNonceBase)
 	}
 	return base64.RawStdEncoding.EncodeToString(b[:])
 }

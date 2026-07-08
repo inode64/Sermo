@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+const (
+	procLoadavgEntitiesIndex = 3
+	procLoadavgMinFields     = procLoadavgEntitiesIndex + 1
+	procLoadavgEntitiesSep   = "/"
+)
+
 // PidsSample is one observation of the kernel PID table: the total scheduling
 // entities alive (threads — each consumes a PID) and the kernel.pid_max limit.
 type PidsSample struct {
@@ -53,15 +59,16 @@ func defaultPidsSampler() (PidsSample, error) {
 		return PidsSample{}, err
 	}
 	fields := strings.Fields(string(data))
-	if len(fields) < 4 {
+	if len(fields) < procLoadavgMinFields {
 		return PidsSample{}, fmt.Errorf("malformed %s", procLoadavgPath)
 	}
-	_, total, ok := strings.Cut(fields[3], "/")
+	entities := fields[procLoadavgEntitiesIndex]
+	_, total, ok := strings.Cut(entities, procLoadavgEntitiesSep)
 	if !ok {
-		return PidsSample{}, fmt.Errorf("malformed %s entities field %q", procLoadavgPath, fields[3])
+		return PidsSample{}, fmt.Errorf("malformed %s entities field %q", procLoadavgPath, entities)
 	}
 	var s PidsSample
-	if s.Threads, err = strconv.ParseUint(total, 10, 64); err != nil {
+	if s.Threads, err = strconv.ParseUint(total, numericBaseDecimal, numericBits64); err != nil {
 		return PidsSample{}, fmt.Errorf("malformed thread count %q", total)
 	}
 	if v, err := readProcUint(procPidMaxPath); err == nil {

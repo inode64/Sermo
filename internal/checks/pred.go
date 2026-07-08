@@ -3,7 +3,6 @@ package checks
 import (
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 
 	"sermo/internal/cfgval"
@@ -115,6 +114,24 @@ const DiskIOFieldWriteBytes = fieldWriteBytes
 // DiskIOFieldAwaitMs is the public disk await-time predicate/data field.
 const DiskIOFieldAwaitMs = fieldAwaitMs
 
+// PressureFieldSomeAvg10 is the public PSI `some avg10` predicate/data field.
+const PressureFieldSomeAvg10 = fieldSomeAvg10
+
+// PressureFieldSomeAvg60 is the public PSI `some avg60` predicate/data field.
+const PressureFieldSomeAvg60 = fieldSomeAvg60
+
+// PressureFieldSomeAvg300 is the public PSI `some avg300` predicate/data field.
+const PressureFieldSomeAvg300 = fieldSomeAvg300
+
+// PressureFieldFullAvg10 is the public PSI `full avg10` predicate/data field.
+const PressureFieldFullAvg10 = fieldFullAvg10
+
+// PressureFieldFullAvg60 is the public PSI `full avg60` predicate/data field.
+const PressureFieldFullAvg60 = fieldFullAvg60
+
+// PressureFieldFullAvg300 is the public PSI `full avg300` predicate/data field.
+const PressureFieldFullAvg300 = fieldFullAvg300
+
 // HdparmFieldRead is the public buffered-read predicate/data field.
 const HdparmFieldRead = fieldRead
 
@@ -144,7 +161,14 @@ var (
 	MemoryPredFields = []string{fieldUsedPct, fieldAvailablePct, fieldAvailableBytes}
 	// PressurePredFields are the predicates of a pressure (PSI) check: the
 	// rolling stall percentages of the some/full lines.
-	PressurePredFields = []string{fieldSomeAvg10, fieldSomeAvg60, fieldSomeAvg300, fieldFullAvg10, fieldFullAvg60, fieldFullAvg300}
+	PressurePredFields = []string{
+		PressureFieldSomeAvg10,
+		PressureFieldSomeAvg60,
+		PressureFieldSomeAvg300,
+		PressureFieldFullAvg10,
+		PressureFieldFullAvg60,
+		PressureFieldFullAvg300,
+	}
 	// DiskIOPredFields are the predicates of a diskio check: per-cycle rates
 	// (read_bytes/write_bytes are bytes per second, so the size-suffix grammar
 	// reads naturally, e.g. "50M").
@@ -233,8 +257,8 @@ func parseDeltaThreshold(raw any, label string) (op string, value float64, errs 
 	if !cfgval.IsCompareOp(op) {
 		return "", 0, label + " delta has an invalid op"
 	}
-	value, err := strconv.ParseFloat(cfgval.String(m[CheckKeyValue]), 64)
-	if err != nil {
+	value, ok = cfgval.Float(m[CheckKeyValue])
+	if !ok {
 		return "", 0, label + " delta value must be numeric"
 	}
 	if math.IsInf(value, 0) || math.IsNaN(value) {
@@ -290,15 +314,14 @@ func parseLevelPredValue(field string, raw any) (float64, error) {
 		return float64(n), nil
 	}
 	if strings.HasSuffix(field, "_pct") {
-		s := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(value), "%"))
-		val, err := strconv.ParseFloat(s, 64)
-		if err != nil || math.IsInf(val, 0) || math.IsNaN(val) || val < 0 || val > 100 {
-			return 0, fmt.Errorf("%s value %q must be a percentage in 0..100 (e.g. 90 or 90%%)", field, value)
+		val, ok := cfgval.Percent(raw)
+		if !ok {
+			return 0, fmt.Errorf("%s value %q must be a percentage in %s (e.g. 90 or 90%%)", field, value, cfgval.PercentRange())
 		}
 		return val, nil
 	}
-	val, err := strconv.ParseFloat(value, 64)
-	if err != nil {
+	val, ok := cfgval.Float(raw)
+	if !ok {
 		return 0, fmt.Errorf("%s value %q is not numeric", field, value)
 	}
 	if math.IsInf(val, 0) || math.IsNaN(val) {

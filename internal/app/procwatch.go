@@ -3,12 +3,10 @@ package app
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -17,13 +15,6 @@ import (
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/process"
-)
-
-// procClockTicks is the kernel USER_HZ (jiffies/second), used to turn CPU ticks
-// into seconds. 100 is correct on virtually all Linux builds (mirrors metrics).
-const (
-	procClockTicks = 100.0
-	procIOFilename = "io"
 )
 
 // ProcMatch selects which processes a process watch tracks: by name (the exe
@@ -199,7 +190,7 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 				sermoEnvPID:        strconv.Itoa(pid),
 				sermoEnvProcess:    w.match.Name,
 				sermoEnvChange:     procChangeGone,
-				sermoEnvAgeSeconds: strconv.FormatInt(int64(t.Sub(st.firstSeen).Seconds()), 10),
+				sermoEnvAgeSeconds: strconv.FormatInt(int64(t.Sub(st.firstSeen).Seconds()), envFormatBase),
 			}
 			if w.match.User != "" {
 				env[sermoEnvUser] = w.match.User
@@ -227,8 +218,8 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 		sermoEnvPID:        strconv.Itoa(s.PID),
 		sermoEnvProcess:    w.match.Name,
 		sermoEnvChange:     procChangeThreshold,
-		sermoEnvAgeSeconds: strconv.FormatInt(int64(age.Seconds()), 10),
-		sermoEnvMemory:     strconv.FormatUint(s.RSS, 10),
+		sermoEnvAgeSeconds: strconv.FormatInt(int64(age.Seconds()), envFormatBase),
+		sermoEnvMemory:     strconv.FormatUint(s.RSS, envFormatBase),
 	}
 	if w.match.User != "" {
 		env[sermoEnvUser] = w.match.User
@@ -244,7 +235,7 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 	}
 
 	if cpuPct, ready := cpuPercent(st.prevCPU, s.CPUTicks, st.prevAt, now); ready {
-		env[sermoEnvCPU] = strconv.FormatFloat(cpuPct, 'f', 2, 64)
+		env[sermoEnvCPU] = strconv.FormatFloat(cpuPct, envFloatFormat, procWatchCPUPrecision, envFloatBits)
 		if c.cpuOp != "" && !cfgval.CompareFloat(cpuPct, c.cpuOp, c.cpuValue) {
 			ok = false
 		}
@@ -253,7 +244,7 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 	}
 
 	if ioRate, ready := ioBytesPerSec(st.prevIO, s.IOBytes, st.hadIO, s.HasIO, st.prevAt, now); ready {
-		env[sermoEnvIO] = strconv.FormatFloat(ioRate, 'f', 0, 64)
+		env[sermoEnvIO] = strconv.FormatFloat(ioRate, envFloatFormat, procWatchIOPrecision, envFloatBits)
 		if c.ioOp != "" && !cfgval.CompareFloat(ioRate, c.ioOp, c.ioValue) {
 			ok = false
 		}
@@ -435,7 +426,7 @@ func cpuPercent(prevTicks, curTicks uint64, prevAt, now time.Time) (float64, boo
 	if wall <= 0 || n <= 0 {
 		return 0, false
 	}
-	secs := float64(curTicks-prevTicks) / procClockTicks
+	secs := float64(curTicks-prevTicks) / metrics.LinuxClockTicks
 	return secs / (wall * float64(n)) * 100, true
 }
 
@@ -481,8 +472,8 @@ func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 		if v, ok := mr.ProcessRSS(pid); ok {
 			info.RSS = v
 		}
-		if v, ok := readProcIO(pid); ok {
-			info.IOBytes, info.HasIO = v, true
+		if read, write, ok := mr.ProcessIO(pid); ok {
+			info.IOBytes, info.HasIO = read+write, true
 		}
 		out = append(out, info)
 	}
@@ -507,40 +498,4 @@ func procMatchesWithLookup(m ProcMatch, id process.Identity, lookup *process.Use
 		}
 	}
 	return m.Name != "" || m.User != ""
-}
-
-// readProcIO sums read_bytes and write_bytes from /proc/<pid>/io (the bytes that
-// actually hit storage). Unreadable (permission or unsupported) yields ok=false.
-func readProcIO(pid int) (uint64, bool) {
-	data, err := os.ReadFile(filepath.Join(procRootPath, strconv.Itoa(pid), procIOFilename))
-	if err != nil {
-		return 0, false
-	}
-	return parseProcIO(string(data))
-}
-
-func parseProcIO(data string) (uint64, bool) {
-	var read, write uint64
-	var haveRead, haveWrite bool
-	for _, line := range strings.Split(data, "\n") {
-		if v, ok := strings.CutPrefix(line, "read_bytes:"); ok {
-			parsed, err := strconv.ParseUint(strings.TrimSpace(v), 10, 64)
-			if err != nil {
-				return 0, false
-			}
-			read = parsed
-			haveRead = true
-		} else if v, ok := strings.CutPrefix(line, "write_bytes:"); ok {
-			parsed, err := strconv.ParseUint(strings.TrimSpace(v), 10, 64)
-			if err != nil {
-				return 0, false
-			}
-			write = parsed
-			haveWrite = true
-		}
-	}
-	if !haveRead || !haveWrite {
-		return 0, false
-	}
-	return read + write, true
 }

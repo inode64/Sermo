@@ -75,7 +75,7 @@ func TestFPMMergeStatus(t *testing.T) {
 
 func TestFCGIParamsRoundTrip(t *testing.T) {
 	// A short name/value encodes as 1-byte lengths and round-trips.
-	enc := encodeFCGIParams([][2]string{{"SCRIPT_NAME", "/ping"}})
+	enc := encodeFCGIParams([]fcgiParam{{"SCRIPT_NAME", "/ping"}})
 	if enc[0] != byte(len("SCRIPT_NAME")) || enc[1] != byte(len("/ping")) {
 		t.Fatalf("length prefixes wrong: %v", enc[:2])
 	}

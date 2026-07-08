@@ -9,6 +9,27 @@ import (
 	"time"
 )
 
+const (
+	diskIOSectorBytes = 512
+
+	diskStatsMinFields            = 13
+	diskStatsDeviceFieldIndex     = 2
+	diskStatsReadsCompletedIndex  = 3
+	diskStatsSectorsReadIndex     = 5
+	diskStatsReadTicksMsIndex     = 6
+	diskStatsWritesCompletedIndex = 7
+	diskStatsSectorsWrittenIndex  = 9
+	diskStatsWriteTicksMsIndex    = 10
+	diskStatsIOTicksMsIndex       = 12
+	diskStatsReadsCompletedField  = "reads_completed"
+	diskStatsSectorsReadField     = "sectors_read"
+	diskStatsReadTicksMsField     = "read_ticks_ms"
+	diskStatsWritesCompletedField = "writes_completed"
+	diskStatsSectorsWrittenField  = "sectors_written"
+	diskStatsWriteTicksMsField    = "write_ticks_ms"
+	diskStatsIOTicksMsField       = "io_ticks_ms"
+)
+
 // DiskIOSample is one observation of a block device's /proc/diskstats counters
 // (cumulative since boot; sectors are always 512 bytes there).
 type DiskIOSample struct {
@@ -109,8 +130,8 @@ func CalculateDiskIORates(prev, cur DiskIOSample, elapsed time.Duration) (DiskIO
 	ioTicks := deltaOrZero(cur.IOTicksMs, prev.IOTicksMs)
 	rates := DiskIORates{
 		UtilPct:    min(100, float64(ioTicks)/float64(elapsedMs)*100),
-		ReadBytes:  float64(deltaOrZero(cur.SectorsRead, prev.SectorsRead)*512) / elapsed.Seconds(),
-		WriteBytes: float64(deltaOrZero(cur.SectorsWritten, prev.SectorsWritten)*512) / elapsed.Seconds(),
+		ReadBytes:  float64(deltaOrZero(cur.SectorsRead, prev.SectorsRead)*diskIOSectorBytes) / elapsed.Seconds(),
+		WriteBytes: float64(deltaOrZero(cur.SectorsWritten, prev.SectorsWritten)*diskIOSectorBytes) / elapsed.Seconds(),
 	}
 	ops := deltaOrZero(cur.ReadsCompleted, prev.ReadsCompleted) + deltaOrZero(cur.WritesCompleted, prev.WritesCompleted)
 	if ops > 0 {
@@ -131,9 +152,9 @@ func defaultDiskIOSampler(device string) (DiskIOSample, error) {
 	if err != nil {
 		return DiskIOSample{}, err
 	}
-	for _, line := range strings.Split(string(data), "\n") {
+	for _, line := range strings.Split(string(data), checkLineSeparator) {
 		fields := strings.Fields(line)
-		if len(fields) < 13 || fields[2] != device {
+		if len(fields) < diskStatsMinFields || fields[diskStatsDeviceFieldIndex] != device {
 			continue
 		}
 		sample, err := parseDiskIOSample(fields)
@@ -146,34 +167,34 @@ func defaultDiskIOSampler(device string) (DiskIOSample, error) {
 }
 
 func parseDiskIOSample(fields []string) (DiskIOSample, error) {
-	if len(fields) < 13 {
-		return DiskIOSample{}, fmt.Errorf("diskstats line has %d fields, want at least 13", len(fields))
+	if len(fields) < diskStatsMinFields {
+		return DiskIOSample{}, fmt.Errorf("diskstats line has %d fields, want at least %d", len(fields), diskStatsMinFields)
 	}
-	readsCompleted, err := diskIOUint(fields, 3, "reads_completed")
+	readsCompleted, err := diskIOUint(fields, diskStatsReadsCompletedIndex, diskStatsReadsCompletedField)
 	if err != nil {
 		return DiskIOSample{}, err
 	}
-	sectorsRead, err := diskIOUint(fields, 5, "sectors_read")
+	sectorsRead, err := diskIOUint(fields, diskStatsSectorsReadIndex, diskStatsSectorsReadField)
 	if err != nil {
 		return DiskIOSample{}, err
 	}
-	readTicksMs, err := diskIOUint(fields, 6, "read_ticks_ms")
+	readTicksMs, err := diskIOUint(fields, diskStatsReadTicksMsIndex, diskStatsReadTicksMsField)
 	if err != nil {
 		return DiskIOSample{}, err
 	}
-	writesCompleted, err := diskIOUint(fields, 7, "writes_completed")
+	writesCompleted, err := diskIOUint(fields, diskStatsWritesCompletedIndex, diskStatsWritesCompletedField)
 	if err != nil {
 		return DiskIOSample{}, err
 	}
-	sectorsWritten, err := diskIOUint(fields, 9, "sectors_written")
+	sectorsWritten, err := diskIOUint(fields, diskStatsSectorsWrittenIndex, diskStatsSectorsWrittenField)
 	if err != nil {
 		return DiskIOSample{}, err
 	}
-	writeTicksMs, err := diskIOUint(fields, 10, "write_ticks_ms")
+	writeTicksMs, err := diskIOUint(fields, diskStatsWriteTicksMsIndex, diskStatsWriteTicksMsField)
 	if err != nil {
 		return DiskIOSample{}, err
 	}
-	ioTicksMs, err := diskIOUint(fields, 12, "io_ticks_ms")
+	ioTicksMs, err := diskIOUint(fields, diskStatsIOTicksMsIndex, diskStatsIOTicksMsField)
 	if err != nil {
 		return DiskIOSample{}, err
 	}
@@ -189,7 +210,7 @@ func parseDiskIOSample(fields []string) (DiskIOSample, error) {
 }
 
 func diskIOUint(fields []string, index int, name string) (uint64, error) {
-	n, err := strconv.ParseUint(fields[index], 10, 64)
+	n, err := strconv.ParseUint(fields[index], numericBaseDecimal, numericBits64)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", name, err)
 	}

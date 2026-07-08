@@ -18,6 +18,8 @@ func (asteriskProtocol) Name() string       { return ProtocolNameAsterisk }
 func (asteriskProtocol) DefaultPort() int   { return defaultPortAsterisk }
 func (asteriskProtocol) RequiresUser() bool { return false }
 
+const asteriskGreetingPrefix = "Asterisk Call Manager/"
+
 func (asteriskProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	c, err := dialDeadline(ctx, cfg, defaultPortAsterisk)
 	if err != nil {
@@ -39,9 +41,8 @@ func (asteriskProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // asteriskGreetingVersion extracts the manager version from an AMI greeting
 // ("Asterisk Call Manager/2.10.6" -> "2.10.6").
 func asteriskGreetingVersion(line string) (string, bool) {
-	const prefix = "Asterisk Call Manager/"
-	if !strings.HasPrefix(line, prefix) {
+	if !strings.HasPrefix(line, asteriskGreetingPrefix) {
 		return "", false
 	}
-	return strings.TrimSpace(strings.TrimPrefix(line, prefix)), true
+	return strings.TrimSpace(strings.TrimPrefix(line, asteriskGreetingPrefix)), true
 }

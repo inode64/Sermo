@@ -70,6 +70,22 @@ func (mysqlProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // The real packet is well under a kilobyte.
 const maxMySQLHandshake = 1 << 16
 
+const (
+	mysqlPacketHeaderBytes            = 4
+	mysqlMinPayloadBytes              = 1
+	mysqlPayloadLengthLowOffset       = 0
+	mysqlPayloadLengthMidOffset       = 1
+	mysqlPayloadLengthHighOffset      = 2
+	mysqlPayloadLengthMidShift        = 8
+	mysqlPayloadLengthHighShift       = 16
+	mysqlProtocolVersionOffset        = 0
+	mysqlServerVersionOffset          = 1
+	mysqlProtocolVersion10       byte = 0x0a
+	mysqlPacketERR               byte = 0xff
+	mysqlERRMessageOffset             = 3
+	mysqlNullTerminator          byte = 0
+)
+
 // mysqlGreeting reads the server's Initial Handshake Packet — sent unprompted on
 // connect, before authentication — and extracts the server version. A
 // well-formed protocol-10 handshake proves the peer is a live MySQL/MariaDB
@@ -77,13 +93,15 @@ const maxMySQLHandshake = 1 << 16
 // but refused the connection (host blocked, too many connections, …); it is
 // returned as an error carrying the server's message.
 func mysqlGreeting(r io.Reader) (Result, error) {
-	var hdr [4]byte
+	var hdr [mysqlPacketHeaderBytes]byte
 	if _, err := io.ReadFull(r, hdr[:]); err != nil {
 		return Result{}, err
 	}
 	// Packet header: 3-byte little-endian payload length, then a sequence id.
-	n := int(hdr[0]) | int(hdr[1])<<8 | int(hdr[2])<<16
-	if n < 1 || n > maxMySQLHandshake {
+	n := int(hdr[mysqlPayloadLengthLowOffset]) |
+		int(hdr[mysqlPayloadLengthMidOffset])<<mysqlPayloadLengthMidShift |
+		int(hdr[mysqlPayloadLengthHighOffset])<<mysqlPayloadLengthHighShift
+	if n < mysqlMinPayloadBytes || n > maxMySQLHandshake {
 		return Result{}, fmt.Errorf("mysql: implausible handshake length %d", n)
 	}
 	payload := make([]byte, n)
@@ -91,22 +109,22 @@ func mysqlGreeting(r io.Reader) (Result, error) {
 		return Result{}, err
 	}
 
-	switch payload[0] {
-	case 0x0a: // protocol version 10
+	switch payload[mysqlProtocolVersionOffset] {
+	case mysqlProtocolVersion10:
 		// server_version: a null-terminated string right after the version byte.
-		ver := payload[1:]
-		if i := bytes.IndexByte(ver, 0); i >= 0 {
+		ver := payload[mysqlServerVersionOffset:]
+		if i := bytes.IndexByte(ver, mysqlNullTerminator); i >= 0 {
 			ver = ver[:i]
 		}
 		return Result{Version: string(ver)}, nil
-	case 0xff: // ERR packet before handshake: code(2, LE) + message
+	case mysqlPacketERR:
 		msg := ""
-		if len(payload) > 3 {
-			msg = strings.TrimSpace(string(payload[3:]))
+		if len(payload) > mysqlERRMessageOffset {
+			msg = strings.TrimSpace(string(payload[mysqlERRMessageOffset:]))
 		}
 		return Result{}, fmt.Errorf("mysql: server refused connection: %s", msg)
 	default:
-		return Result{}, fmt.Errorf("mysql: unexpected handshake protocol byte 0x%02x (not MySQL)", payload[0])
+		return Result{}, fmt.Errorf("mysql: unexpected handshake protocol byte 0x%02x (not MySQL)", payload[mysqlProtocolVersionOffset])
 	}
 }
 

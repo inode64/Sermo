@@ -31,6 +31,8 @@ import (
 const Filename = "sermo.db"
 
 const (
+	stateDirMode        = 0o700
+	secondsPerMinute    = 60
 	sqliteBusyTimeoutMS = 5000
 	sqliteDriverName    = "sqlite"
 )
@@ -276,7 +278,7 @@ func OpenWith(path string, opts Options) (*Store, error) {
 		// secrets, but there is no reason for it to be world-traversable. Matches the
 		// packaging (tmpfiles.d / OpenRC) mode. MkdirAll leaves an existing dir's
 		// mode untouched, so a pre-created 0700 dir is preserved.
-		if err := os.MkdirAll(dir, 0o700); err != nil {
+		if err := os.MkdirAll(dir, stateDirMode); err != nil {
 			return nil, fmt.Errorf("create state dir %s: %w", dir, err)
 		}
 	}
@@ -1110,7 +1112,7 @@ func (s *Store) slaTimelines(query string, keyArgs []any, now time.Time) ([]SLAW
 		// startBucket+spanSec would stop one bucket short and exclude the current
 		// minute, making SLAWindowTimeline.Up/Total disagree with SLAReport for the
 		// same window. The current minute clamps into the last segment below.
-		endBucket := minuteBucket(now) + 60
+		endBucket := minuteBucket(now) + secondsPerMinute
 		segSpan := spanSec / int64(segCount)
 		if segSpan <= 0 {
 			segSpan = 1

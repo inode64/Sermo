@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 
 	"sermo/internal/cfgval"
@@ -68,7 +67,7 @@ func validateOpByteSize(label string, m map[string]any, add addFunc) {
 func validateOpPercent(label string, m map[string]any, add addFunc) {
 	validateCompareOp(label, m, add)
 	if !isPercentValue(cfgval.String(m[checks.CheckKeyValue])) {
-		add("%s value %q must be a percentage in 0..100 (e.g. 90 or 90%%)", label, cfgval.String(m[checks.CheckKeyValue]))
+		add("%s value %q must be a percentage in %s (e.g. 90 or 90%%)", label, cfgval.String(m[checks.CheckKeyValue]), cfgval.PercentRange())
 	}
 }
 
@@ -82,9 +81,8 @@ func validateCompareOp(label string, m map[string]any, add addFunc) {
 }
 
 func isPercentValue(s string) bool {
-	s = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(s), "%"))
-	n, err := strconv.ParseFloat(s, 64)
-	return err == nil && n >= 0 && n <= 100
+	_, ok := cfgval.Percent(s)
+	return ok
 }
 
 // validatePresentThresholds validates the present {op, value} predicates among
@@ -421,8 +419,8 @@ func isValidCompareOp(op string) bool {
 }
 
 func isNumeric(s string) bool {
-	_, err := strconv.ParseFloat(s, 64)
-	return err == nil
+	_, ok := cfgval.Float(s)
+	return ok
 }
 
 // validateConnFields validates a connection-protocol check (mysql, …): a user
@@ -689,7 +687,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 			add("%s.expect is required for a service check", path)
 		} else {
 			if _, ok := serviceStates[st]; !ok {
-				add("%s expect %q is not one of active, inactive, paused, failed, unknown", path, st)
+				add("%s expect %q is not one of %s", path, st, serviceStateSummary)
 			}
 		}
 	case checks.CheckTypeProcess:
@@ -707,7 +705,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		}
 		if st := cfgval.String(entry[checks.CheckKeyState]); st != "" {
 			if _, ok := processStates[st]; !ok {
-				add("%s state %q is not one of running, zombie, absent", path, st)
+				add("%s state %q is not one of %s", path, st, processStateSummary)
 			}
 		}
 	case checks.CheckTypeFileExists:

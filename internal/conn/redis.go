@@ -16,8 +16,39 @@ func init() {
 }
 
 const (
+	redisCommandAuth         = "AUTH"
+	redisCommandInfo         = "INFO"
+	redisCommandPing         = "PING"
 	redisInfoVersion         = "redis_version"
 	redisInfoUptimeInSeconds = "uptime_in_seconds"
+	redisPong                = "PONG"
+)
+
+const (
+	redisInfoAOFLastWriteStatus = "aof_last_write_status"
+	redisInfoConnectedClients   = "connected_clients"
+	redisInfoLoading            = "loading"
+	redisInfoMasterLinkStatus   = "master_link_status"
+	redisInfoMaxMemory          = "maxmemory"
+	redisInfoMemFragRatio       = "mem_fragmentation_ratio"
+	redisInfoRDBLastSaveStatus  = "rdb_last_bgsave_status"
+	redisInfoUsedMemory         = "used_memory"
+)
+
+const (
+	redisInfoCommentPrefix       = "#"
+	redisInfoFieldSeparator      = ":"
+	redisInfoLineSeparator       = "\n"
+	redisInfoTrimRight           = "\r"
+	redisRESPArrayHeaderFormat   = "*%d\r\n"
+	redisRESPBulkStringFormat    = "$%d\r\n%s\r\n"
+	redisRESPPayloadOffset       = 1
+	redisRESPBulkTerminatorBytes = 2
+	redisRESPTypeOffset          = 0
+	redisRESPTypeBulkString      = '$'
+	redisRESPTypeError           = '-'
+	redisRESPTypeInteger         = ':'
+	redisRESPTypeSimpleString    = '+'
 )
 
 // redisProtocol probes a Redis (or Valkey) server natively over RESP — no
@@ -43,7 +74,7 @@ func redisHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	br := bufio.NewReader(rw)
 
 	if cfg.Password != "" || cfg.User != "" {
-		args := []string{"AUTH"}
+		args := []string{redisCommandAuth}
 		if cfg.User != "" {
 			args = append(args, cfg.User)
 		}
@@ -56,14 +87,14 @@ func redisHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 		}
 	}
 
-	if err := writeRESP(rw, "PING"); err != nil {
+	if err := writeRESP(rw, redisCommandPing); err != nil {
 		return Result{}, err
 	}
 	pong, err := readRESP(br)
 	if err != nil {
 		return Result{}, err
 	}
-	if !strings.EqualFold(pong, "PONG") {
+	if !strings.EqualFold(pong, redisPong) {
 		return Result{}, fmt.Errorf("unexpected PING reply %q", pong)
 	}
 
@@ -73,14 +104,14 @@ func redisHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	// assert on it (e.g. role == master, master_link_status == up,
 	// rdb_last_bgsave_status == ok).
 	res := Result{Extra: map[string]string{}}
-	if writeRESP(rw, "INFO") == nil {
+	if writeRESP(rw, redisCommandInfo) == nil {
 		if info, err := readRESP(br); err == nil {
 			fields := parseRedisInfo(info)
 			res.Version = fields[redisInfoVersion]
 			for _, k := range []string{
-				ExtraKeyRole, "master_link_status", "connected_clients",
-				"used_memory", "maxmemory", "mem_fragmentation_ratio",
-				"rdb_last_bgsave_status", "aof_last_write_status", "loading",
+				ExtraKeyRole, redisInfoMasterLinkStatus, redisInfoConnectedClients,
+				redisInfoUsedMemory, redisInfoMaxMemory, redisInfoMemFragRatio,
+				redisInfoRDBLastSaveStatus, redisInfoAOFLastWriteStatus, redisInfoLoading,
 			} {
 				if v := fields[k]; v != "" {
 					res.Extra[k] = v
@@ -97,9 +128,9 @@ func redisHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 // writeRESP encodes args as a RESP array of bulk strings.
 func writeRESP(w io.Writer, args ...string) error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "*%d\r\n", len(args))
+	fmt.Fprintf(&b, redisRESPArrayHeaderFormat, len(args))
 	for _, a := range args {
-		fmt.Fprintf(&b, "$%d\r\n%s\r\n", len(a), a)
+		fmt.Fprintf(&b, redisRESPBulkStringFormat, len(a), a)
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
@@ -118,26 +149,26 @@ func readRESP(br *bufio.Reader) (string, error) {
 	if line == "" {
 		return "", errors.New("empty reply")
 	}
-	switch line[0] {
-	case '+', ':':
-		return line[1:], nil
-	case '-':
-		return "", errors.New(line[1:])
-	case '$':
-		n, err := strconv.Atoi(line[1:])
+	switch line[redisRESPTypeOffset] {
+	case redisRESPTypeSimpleString, redisRESPTypeInteger:
+		return line[redisRESPPayloadOffset:], nil
+	case redisRESPTypeError:
+		return "", errors.New(line[redisRESPPayloadOffset:])
+	case redisRESPTypeBulkString:
+		n, err := strconv.Atoi(line[redisRESPPayloadOffset:])
 		if err != nil {
 			return "", fmt.Errorf("bad bulk length %q", line)
 		}
 		if n < 0 {
 			return "", nil // null bulk
 		}
-		buf := make([]byte, n+2) // payload + trailing CRLF
+		buf := make([]byte, n+redisRESPBulkTerminatorBytes)
 		if _, err := io.ReadFull(br, buf); err != nil {
 			return "", err
 		}
 		return string(buf[:n]), nil
 	default:
-		return "", fmt.Errorf("unsupported RESP reply type %q", string(line[0]))
+		return "", fmt.Errorf("unsupported RESP reply type %q", string(line[redisRESPTypeOffset]))
 	}
 }
 
@@ -146,12 +177,12 @@ func readRESP(br *bufio.Reader) (string, error) {
 // dropped; each field is split on its first ':'.
 func parseRedisInfo(info string) map[string]string {
 	out := map[string]string{}
-	for _, line := range strings.Split(info, "\n") {
-		line = strings.TrimRight(line, "\r")
-		if line == "" || strings.HasPrefix(line, "#") {
+	for _, line := range strings.Split(info, redisInfoLineSeparator) {
+		line = strings.TrimRight(line, redisInfoTrimRight)
+		if line == "" || strings.HasPrefix(line, redisInfoCommentPrefix) {
 			continue
 		}
-		if k, v, ok := strings.Cut(line, ":"); ok {
+		if k, v, ok := strings.Cut(line, redisInfoFieldSeparator); ok {
 			out[k] = v
 		}
 	}

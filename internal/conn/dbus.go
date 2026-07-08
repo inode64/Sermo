@@ -8,8 +8,14 @@ import (
 
 func init() { Register(dbusProtocol{}) }
 
-// dbusDefaultAddress is the well-known system bus address.
-const dbusDefaultAddress = "unix:path=/run/dbus/system_bus_socket"
+const (
+	// dbusDefaultAddress is the well-known system bus address.
+	dbusDefaultAddress = "unix:path=/run/dbus/system_bus_socket"
+
+	dbusCallFlags         = 0
+	dbusFirstNameIndex    = 0
+	dbusProbeResultBuffer = 1
+)
 
 // dbusProtocol probes a D-Bus daemon natively over its wire protocol using the
 // pure-Go github.com/godbus/dbus/v5 client. Connecting performs the SASL auth
@@ -44,7 +50,7 @@ func (dbusProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		res Result
 		err error
 	}
-	ch := make(chan probeOut, 1)
+	ch := make(chan probeOut, dbusProbeResultBuffer)
 	go func() {
 		res, err := dbusProbe(ctx, addr)
 		ch <- probeOut{res, err}
@@ -66,7 +72,7 @@ func dbusProbe(ctx context.Context, addr string) (Result, error) {
 	defer func() { _ = conn.Close() }()
 
 	var busID string
-	if err := conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetId", 0).Store(&busID); err != nil {
+	if err := conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.GetId", dbusCallFlags).Store(&busID); err != nil {
 		return Result{}, err
 	}
 	extra := map[string]string{extraAddress: addr}
@@ -74,7 +80,7 @@ func dbusProbe(ctx context.Context, addr string) (Result, error) {
 		extra[extraBusID] = busID
 	}
 	if names := conn.Names(); len(names) > 0 {
-		extra[extraUniqueName] = names[0]
+		extra[extraUniqueName] = names[dbusFirstNameIndex]
 	}
 	return Result{Extra: extra}, nil
 }

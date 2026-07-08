@@ -83,45 +83,6 @@ func TestProcWatchMinAgeEdge(t *testing.T) {
 	}
 }
 
-func TestParseProcIO(t *testing.T) {
-	tests := []struct {
-		name string
-		data string
-		want uint64
-		ok   bool
-	}{
-		{
-			name: "valid",
-			data: "rchar: 1\nread_bytes: 10\nwrite_bytes: 25\ncancelled_write_bytes: 0\n",
-			want: 35,
-			ok:   true,
-		},
-		{
-			name: "missing write bytes",
-			data: "read_bytes: 10\n",
-			ok:   false,
-		},
-		{
-			name: "malformed read bytes",
-			data: "read_bytes: nope\nwrite_bytes: 25\n",
-			ok:   false,
-		},
-		{
-			name: "malformed write bytes",
-			data: "read_bytes: 10\nwrite_bytes: nope\n",
-			ok:   false,
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got, ok := parseProcIO(tc.data)
-			if ok != tc.ok || got != tc.want {
-				t.Fatalf("parseProcIO() = %d, %v; want %d, %v", got, ok, tc.want, tc.ok)
-			}
-		})
-	}
-}
-
 func TestProcWatchMemoryThreshold(t *testing.T) {
 	h := &procHarness{clock: time.Unix(1_000_000, 0)}
 	s := &fakeProcSampler{cycles: [][]ProcInfo{

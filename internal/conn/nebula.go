@@ -21,6 +21,15 @@ const (
 	nebulaReplyRecvErr  = "recv_error"
 )
 
+const (
+	nebulaHeaderByteOffset = 0
+	nebulaIndexStartOffset = 4
+	nebulaIndexEndOffset   = 8
+	nebulaReplyBufferBytes = 64
+	nebulaTypeMask         = 0x0f
+	nebulaVersionShift     = 4
+)
+
 // nebulaProtocol probes a Nebula mesh-VPN node natively over its UDP control
 // protocol. A real tunnel needs a CA-signed certificate, but a node answers a
 // data packet for an unknown tunnel index with a plaintext "recv_error" telling
@@ -62,7 +71,7 @@ func (nebulaProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if _, err := c.Write(nebulaMessage(index)); err != nil {
 		return Result{}, err
 	}
-	buf := make([]byte, 64)
+	buf := make([]byte, nebulaReplyBufferBytes)
 	n, err := c.Read(buf)
 	if err != nil {
 		return Result{}, err
@@ -78,8 +87,8 @@ func (nebulaProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // tunnel for that index answer with a recv_error.
 func nebulaMessage(index uint32) []byte {
 	b := make([]byte, nebulaHeaderLen)
-	b[0] = nebulaVersion<<4 | nebulaTypeMessage
-	binary.BigEndian.PutUint32(b[4:8], index)
+	b[nebulaHeaderByteOffset] = nebulaVersion<<nebulaVersionShift | nebulaTypeMessage
+	binary.BigEndian.PutUint32(b[nebulaIndexStartOffset:nebulaIndexEndOffset], index)
 	return b
 }
 
@@ -89,13 +98,13 @@ func parseNebulaRecvError(b []byte, index uint32) error {
 	if len(b) < nebulaHeaderLen {
 		return errors.New("nebula: short reply")
 	}
-	if b[0]>>4 != nebulaVersion {
+	if b[nebulaHeaderByteOffset]>>nebulaVersionShift != nebulaVersion {
 		return errors.New("nebula: unexpected protocol version")
 	}
-	if b[0]&0x0f != nebulaTypeRecvError {
+	if b[nebulaHeaderByteOffset]&nebulaTypeMask != nebulaTypeRecvError {
 		return errors.New("nebula: reply is not a recv_error")
 	}
-	if binary.BigEndian.Uint32(b[4:8]) != index {
+	if binary.BigEndian.Uint32(b[nebulaIndexStartOffset:nebulaIndexEndOffset]) != index {
 		return errors.New("nebula: recv_error index mismatch")
 	}
 	return nil

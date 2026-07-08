@@ -22,6 +22,12 @@ const (
 	FirewallBackendNftAlias = "nft"
 )
 
+const (
+	iptablesSaveIPv4         = "iptables-save"
+	iptablesSaveIPv6         = "ip6tables-save"
+	iptablesSaveCommandCount = 2
+)
+
 // FirewallRulesSample is one observation of loaded packet-filter rules.
 type FirewallRulesSample struct {
 	Backend string
@@ -156,7 +162,7 @@ func sampleNftablesRules(ctx context.Context, _ execx.Runner) (FirewallRulesSamp
 func sampleIptablesRules(ctx context.Context, runner execx.Runner) (FirewallRulesSample, error) {
 	var rules uint64
 	var errs []error
-	for _, command := range []string{"iptables-save", "ip6tables-save"} {
+	for _, command := range [...]string{iptablesSaveIPv4, iptablesSaveIPv6} {
 		res, err := runner.Run(ctx, command)
 		if err != nil || res.ExitCode != 0 {
 			errs = append(errs, commandResultError(command, res, err))
@@ -164,7 +170,7 @@ func sampleIptablesRules(ctx context.Context, runner execx.Runner) (FirewallRule
 		}
 		rules += countIptablesRules(res.Stdout)
 	}
-	if len(errs) == 2 {
+	if len(errs) == iptablesSaveCommandCount {
 		return FirewallRulesSample{}, joinFirewallErrors(errs)
 	}
 	return FirewallRulesSample{Backend: FirewallBackendIptables, Rules: rules}, nil
@@ -206,7 +212,7 @@ func commandResultError(command string, res execx.Result, err error) error {
 
 func countIptablesRules(out string) uint64 {
 	var rules uint64
-	for _, line := range strings.Split(out, "\n") {
+	for _, line := range strings.Split(out, checkLineSeparator) {
 		if strings.HasPrefix(strings.TrimSpace(line), "-A ") {
 			rules++
 		}

@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	defaultPingCount            = 3
 	defaultPingTimeout          = 5 * time.Second
 	defaultPingPerPacketTimeout = time.Second
 	icmpEchoCode                = 0
@@ -23,9 +22,13 @@ const (
 	icmpPayload                 = "sermo"
 	icmpReplyBufferSize         = 1500
 	icmpV4ProtocolNumber        = 1
+	microsecondsPerMillisecond  = 1000.0
 	networkIP4                  = "ip4"
 	networkIP4ICMP              = "ip4:icmp"
 )
+
+// DefaultPingCount is the default number of ICMP echo requests for ping checks.
+const DefaultPingCount = 3
 
 // PingSample is one ICMP observation of a host.
 type PingSample struct {
@@ -201,7 +204,7 @@ func (c *icmpCheck) sample(sampler PingSamplerFunc) (PingSample, error) {
 // mechanism) so the echo requests leave through it on a multi-homed host.
 func defaultPingSampler(host, iface string, count int, timeout time.Duration) (PingSample, error) {
 	if count <= 0 {
-		count = defaultPingCount
+		count = DefaultPingCount
 	}
 	if timeout <= 0 {
 		timeout = defaultPingTimeout
@@ -269,7 +272,7 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 			if rm.Type != ipv4.ICMPTypeEchoReply || !ok || echo.ID != id || echo.Seq != seq {
 				continue
 			}
-			rtts = append(rtts, float64(time.Since(sent).Microseconds())/1000.0)
+			rtts = append(rtts, float64(time.Since(sent).Microseconds())/microsecondsPerMillisecond)
 			break
 		}
 	}

@@ -29,6 +29,13 @@ const (
 	runtimeVarAction = "action"
 )
 
+const (
+	varEnvPrefix      = "env:"
+	varEnvDefaultSep  = ":-"
+	varEnvRefOpenText = "${env:"
+	varRefNameGroup   = 1
+)
+
 var fromFileVariableKeys = set(varKeyFromFile, varKeyDirective, varKeyPattern, varKeyDefault)
 
 // collectVariables reads the merged `variables` section into a flat string map.
@@ -183,8 +190,8 @@ func resolveFromFileSpecVars(name string, spec map[string]any, vars map[string]s
 func substituteVars(s string, vars map[string]string, path string) (string, []string) {
 	var errs []string
 	out := varRef.ReplaceAllStringFunc(s, func(ref string) string {
-		name := strings.TrimSpace(varRef.FindStringSubmatch(ref)[1])
-		if rest, ok := strings.CutPrefix(name, "env:"); ok {
+		name := varRefName(ref)
+		if rest, ok := strings.CutPrefix(name, varEnvPrefix); ok {
 			return resolveEnvRef(rest)
 		}
 		if val, ok := vars[name]; ok {
@@ -199,8 +206,8 @@ func substituteVars(s string, vars map[string]string, path string) (string, []st
 func substitutePatternVars(s string, vars map[string]string, path string) (string, []string) {
 	var errs []string
 	out := varRef.ReplaceAllStringFunc(s, func(ref string) string {
-		name := strings.TrimSpace(varRef.FindStringSubmatch(ref)[1])
-		if rest, ok := strings.CutPrefix(name, "env:"); ok {
+		name := varRefName(ref)
+		if rest, ok := strings.CutPrefix(name, varEnvPrefix); ok {
 			return regexp.QuoteMeta(resolveEnvRef(rest))
 		}
 		if val, ok := vars[name]; ok {
@@ -330,8 +337,8 @@ var runtimeVars = map[string]bool{runtimeVarDate: true, runtimeVarEvent: true, r
 
 func expandString(s string, vars map[string]string, path string, errs *[]string) string {
 	return varRef.ReplaceAllStringFunc(s, func(match string) string {
-		name := strings.TrimSpace(varRef.FindStringSubmatch(match)[1])
-		if rest, ok := strings.CutPrefix(name, "env:"); ok {
+		name := varRefName(match)
+		if rest, ok := strings.CutPrefix(name, varEnvPrefix); ok {
 			return resolveEnvRef(rest) // ${env:NAME} -> environment, never an error
 		}
 		if val, ok := vars[name]; ok {
@@ -352,8 +359,8 @@ func expandString(s string, vars map[string]string, path string, errs *[]string)
 // config is merely validated.
 func resolveEnvRef(ref string) string {
 	name, def := ref, ""
-	if i := strings.Index(ref, ":-"); i >= 0 {
-		name, def = ref[:i], ref[i+2:]
+	if i := strings.Index(ref, varEnvDefaultSep); i >= 0 {
+		name, def = ref[:i], ref[i+len(varEnvDefaultSep):]
 	}
 	if v := os.Getenv(strings.TrimSpace(name)); v != "" {
 		return v
@@ -365,16 +372,20 @@ func resolveEnvRef(ref string) string {
 // ${...} untouched. Used to resolve secrets in the global config (which has no
 // per-service variables) and inside variable values.
 func expandEnvString(s string) string {
-	if !strings.Contains(s, "${env:") {
+	if !strings.Contains(s, varEnvRefOpenText) {
 		return s
 	}
 	return varRef.ReplaceAllStringFunc(s, func(match string) string {
-		name := strings.TrimSpace(varRef.FindStringSubmatch(match)[1])
-		if rest, ok := strings.CutPrefix(name, "env:"); ok {
+		name := varRefName(match)
+		if rest, ok := strings.CutPrefix(name, varEnvPrefix); ok {
 			return resolveEnvRef(rest)
 		}
 		return match
 	})
+}
+
+func varRefName(ref string) string {
+	return strings.TrimSpace(varRef.FindStringSubmatch(ref)[varRefNameGroup])
 }
 
 // expandEnvTree resolves ${env:...} references across every string in a tree,

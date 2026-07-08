@@ -31,9 +31,55 @@ const (
 
 	shellKeywordElse = "else"
 	shellKeywordFi   = "fi"
+	shellIfPrefix    = "if "
+	shellThenSuffix  = "then"
+
+	shellCommandSubstitutionPrefix = "$("
+	shellCommandSubstitutionQuote  = "`"
+	shellConditionAnd              = "&&"
+	shellGlobAny                   = "*"
+	shellLineContinuation          = "\\"
+	shellNoOpPrefix                = ":"
+	shellStatementTerminator       = ";"
+	shellUserGroupSeparator        = ":"
+	shellVariableMarker            = "$"
+	shellVariablePrefix            = "${"
+	shellVariableSuffix            = "}"
 
 	legacyRunDir  = "/var/run"
 	runtimeRunDir = "/run"
+
+	openRCMaxValueExpansionPasses = 8
+
+	shellClosingDelimiterBytes = 1
+	shellDefaultOperatorBytes  = 2
+	shellFirstByteIndex        = 0
+	shellNextByteOffset        = 1
+	shellQuoteBodyStart        = 1
+	shellQuoteMinBytes         = 2
+	shellVariablePrefixBytes   = len(shellVariablePrefix)
+
+	systemdExecPathGroup        = 1
+	openRCAssignNameGroup       = 1
+	openRCAssignValueGroup      = 2
+	openRCConditionLeftGroup    = 1
+	openRCConditionRightGroup   = 2
+	openRCValueExprGroup        = 1
+	openRCUserArgGroup          = 1
+	openRCVarRefNameGroup       = 1
+	openRCVarRefSuffixTrimGroup = 2
+	openRCVarRefPrefixTrimGroup = 3
+	openRCVarRefBareNameGroup   = 4
+
+	shellCloseBraceByte       = '}'
+	shellCommentByte          = '#'
+	shellDefaultAssignByte    = '='
+	shellDefaultMinusByte     = '-'
+	shellDefaultSeparatorByte = ':'
+	shellDoubleQuoteByte      = '"'
+	shellOpenBraceByte        = '{'
+	shellSingleQuoteByte      = '\''
+	shellVariableByte         = '$'
 )
 
 // Init-definition patterns the wizard uses to derive a pidfile/exe. All are
@@ -110,7 +156,7 @@ func detectSystemdProc(ctx context.Context, runner execx.Runner, unit string) Pr
 	}
 	if res, err := execx.Run(ctx, runner, defaultDetectTimeout, cmdSystemctl, "show", "-p", "ExecStart", "--value", "--", unit); err == nil {
 		if m := systemdExecPath.FindStringSubmatch(res.Stdout); m != nil {
-			info.Exe = cleanProcPath(m[1])
+			info.Exe = cleanProcPath(m[systemdExecPathGroup])
 		}
 	}
 	return info
@@ -121,7 +167,7 @@ func detectOpenRCProc(readFile func(string) ([]byte, error), unit string) ProcIn
 	for _, path := range []string{filepath.Join(openRCInitDir, unit), filepath.Join(openRCConfDir, unit)} {
 		if data, err := readFile(path); err == nil {
 			blob.Write(data)
-			blob.WriteByte('\n')
+			blob.WriteByte(serviceOutputLineByte)
 		}
 	}
 	text := blob.String()
@@ -178,7 +224,7 @@ func openRCAssignments(text, unit string) map[string]string {
 	}
 	active := true
 	var stack []openRCBranch
-	for _, line := range strings.Split(text, "\n") {
+	for _, line := range strings.Split(text, serviceOutputLineSeparator) {
 		line = strings.TrimSpace(line)
 		if b, ok := openRCIfBranch(line, active, vars); ok {
 			stack = append(stack, b)
@@ -205,8 +251,8 @@ func openRCAssignments(text, unit string) map[string]string {
 		if !active {
 			continue
 		}
-		if strings.HasPrefix(line, ":") {
-			expr := strings.TrimSpace(strings.TrimPrefix(line, ":"))
+		if strings.HasPrefix(line, shellNoOpPrefix) {
+			expr := strings.TrimSpace(strings.TrimPrefix(line, shellNoOpPrefix))
 			name, _, ok := defaultExpr(expr)
 			if !ok {
 				continue
@@ -217,8 +263,8 @@ func openRCAssignments(text, unit string) map[string]string {
 			continue
 		}
 		if m := openrcAssign.FindStringSubmatch(line); m != nil {
-			name := m[1]
-			value, ok := resolveOpenRCValue(m[2], vars)
+			name := m[openRCAssignNameGroup]
+			value, ok := resolveOpenRCValue(m[openRCAssignValueGroup], vars)
 			if ok {
 				vars[name] = value
 			}
@@ -228,20 +274,20 @@ func openRCAssignments(text, unit string) map[string]string {
 }
 
 func openRCIfBranch(line string, active bool, vars map[string]string) (openRCBranch, bool) {
-	if !strings.HasPrefix(line, "if ") || !strings.HasSuffix(line, "then") {
+	if !strings.HasPrefix(line, shellIfPrefix) || !strings.HasSuffix(line, shellThenSuffix) {
 		return openRCBranch{}, false
 	}
-	expr := strings.TrimSpace(strings.TrimPrefix(line, "if "))
-	expr = strings.TrimSpace(strings.TrimSuffix(expr, "then"))
-	expr = strings.TrimSpace(strings.TrimSuffix(expr, ";"))
+	expr := strings.TrimSpace(strings.TrimPrefix(line, shellIfPrefix))
+	expr = strings.TrimSpace(strings.TrimSuffix(expr, shellThenSuffix))
+	expr = strings.TrimSpace(strings.TrimSuffix(expr, shellStatementTerminator))
 	cond, known := evalOpenRCCondition(expr, vars)
 	return openRCBranch{parent: active, cond: cond, known: known}, true
 }
 
 func evalOpenRCCondition(expr string, vars map[string]string) (bool, bool) {
 	result := true
-	for _, part := range strings.Split(expr, "&&") {
-		part = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(part), "\\"))
+	for _, part := range strings.Split(expr, shellConditionAnd) {
+		part = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(part), shellLineContinuation))
 		ok, known := evalOpenRCTerm(part, vars)
 		if !known {
 			return false, false
@@ -253,15 +299,15 @@ func evalOpenRCCondition(expr string, vars map[string]string) (bool, bool) {
 
 func evalOpenRCTerm(term string, vars map[string]string) (bool, bool) {
 	if m := openrcNonEmptyCond.FindStringSubmatch(term); m != nil {
-		value, ok := resolveOpenRCValue(m[1], vars)
+		value, ok := resolveOpenRCValue(m[openRCConditionLeftGroup], vars)
 		return value != "", ok
 	}
 	if m := openrcNotEqualCond.FindStringSubmatch(term); m != nil {
-		left, ok := resolveOpenRCValue(m[1], vars)
+		left, ok := resolveOpenRCValue(m[openRCConditionLeftGroup], vars)
 		if !ok {
 			return false, false
 		}
-		right := shellWord(m[2])
+		right := shellWord(m[openRCConditionRightGroup])
 		return left != right, true
 	}
 	return false, false
@@ -269,11 +315,11 @@ func evalOpenRCTerm(term string, vars map[string]string) (bool, bool) {
 
 func resolveOpenRCValue(raw string, vars map[string]string) (string, bool) {
 	s := strings.TrimSpace(stripShellComment(raw))
-	if strings.Contains(s, "$(") || strings.Contains(s, "`") {
+	if strings.Contains(s, shellCommandSubstitutionPrefix) || strings.Contains(s, shellCommandSubstitutionQuote) {
 		return "", false
 	}
 	s = shellWord(s)
-	for range 8 {
+	for range openRCMaxValueExpansionPasses {
 		if name, def, ok := defaultExpr(s); ok {
 			if value, exists := vars[name]; exists && value != "" {
 				return value, true
@@ -284,27 +330,27 @@ func resolveOpenRCValue(raw string, vars map[string]string) (string, bool) {
 		var unresolved bool
 		next := openrcSimpleVarRef.ReplaceAllStringFunc(s, func(match string) string {
 			m := openrcSimpleVarRef.FindStringSubmatch(match)
-			name := m[1]
+			name := m[openRCVarRefNameGroup]
 			if name == "" {
-				name = m[4]
+				name = m[openRCVarRefBareNameGroup]
 			}
 			value, ok := vars[name]
 			if !ok {
 				unresolved = true
 				return match
 			}
-			if m[2] == openRCSuffixTrimDir {
+			if m[openRCVarRefSuffixTrimGroup] == openRCSuffixTrimDir {
 				value = strings.TrimSuffix(value, "/")
 			}
-			if m[3] != "" {
-				value = trimShellPrefixPattern(value, m[3])
+			if m[openRCVarRefPrefixTrimGroup] != "" {
+				value = trimShellPrefixPattern(value, m[openRCVarRefPrefixTrimGroup])
 			}
 			return value
 		})
 		if unresolved {
 			return "", false
 		}
-		if strings.Contains(next, "$") {
+		if strings.Contains(next, shellVariableMarker) {
 			return "", false
 		}
 		if next == s {
@@ -316,8 +362,8 @@ func resolveOpenRCValue(raw string, vars map[string]string) (string, bool) {
 }
 
 func trimShellPrefixPattern(value, pattern string) string {
-	if strings.HasPrefix(pattern, "*") {
-		suffix := strings.TrimPrefix(pattern, "*")
+	if strings.HasPrefix(pattern, shellGlobAny) {
+		suffix := strings.TrimPrefix(pattern, shellGlobAny)
 		if suffix == "" {
 			return value
 		}
@@ -330,24 +376,25 @@ func trimShellPrefixPattern(value, pattern string) string {
 }
 
 func defaultExpr(s string) (name, def string, ok bool) {
-	if !strings.HasPrefix(s, "${") || !strings.HasSuffix(s, "}") {
+	if !strings.HasPrefix(s, shellVariablePrefix) || !strings.HasSuffix(s, shellVariableSuffix) {
 		return "", "", false
 	}
-	body := s[2 : len(s)-1]
+	body := s[shellVariablePrefixBytes : len(s)-shellClosingDelimiterBytes]
 	depth := 0
-	for i := 0; i < len(body)-1; i++ {
-		if body[i] == '$' && body[i+1] == '{' {
+	for i := shellFirstByteIndex; i < len(body)-shellNextByteOffset; i++ {
+		next := body[i+shellNextByteOffset]
+		if body[i] == shellVariableByte && next == shellOpenBraceByte {
 			depth++
 			i++
 			continue
 		}
-		if body[i] == '}' && depth > 0 {
+		if body[i] == shellCloseBraceByte && depth > 0 {
 			depth--
 			continue
 		}
-		if depth == 0 && body[i] == ':' && (body[i+1] == '-' || body[i+1] == '=') {
+		if depth == 0 && body[i] == shellDefaultSeparatorByte && (next == shellDefaultMinusByte || next == shellDefaultAssignByte) {
 			name = strings.TrimSpace(body[:i])
-			def = strings.TrimSpace(body[i+2:])
+			def = strings.TrimSpace(body[i+shellDefaultOperatorBytes:])
 			return name, def, name != "" && def != ""
 		}
 	}
@@ -359,16 +406,16 @@ func stripShellComment(s string) string {
 	var prev rune
 	for i, r := range s {
 		switch r {
-		case '\'':
+		case shellSingleQuoteByte:
 			if !inDouble {
 				inSingle = !inSingle
 			}
-		case '"':
+		case shellDoubleQuoteByte:
 			if !inSingle {
 				inDouble = !inDouble
 			}
-		case '#':
-			if !inSingle && !inDouble && (i == 0 || unicode.IsSpace(prev)) {
+		case shellCommentByte:
+			if !inSingle && !inDouble && (i == shellFirstByteIndex || unicode.IsSpace(prev)) {
 				return s[:i]
 			}
 		}
@@ -379,9 +426,11 @@ func stripShellComment(s string) string {
 
 func shellWord(s string) string {
 	s = strings.TrimSpace(s)
-	if len(s) >= 2 {
-		if (s[0] == '"' && s[len(s)-1] == '"') || (s[0] == '\'' && s[len(s)-1] == '\'') {
-			return strings.TrimSpace(s[1 : len(s)-1])
+	if len(s) >= shellQuoteMinBytes {
+		last := len(s) - shellClosingDelimiterBytes
+		if (s[shellFirstByteIndex] == shellDoubleQuoteByte && s[last] == shellDoubleQuoteByte) ||
+			(s[shellFirstByteIndex] == shellSingleQuoteByte && s[last] == shellSingleQuoteByte) {
+			return strings.TrimSpace(s[shellQuoteBodyStart:last])
 		}
 	}
 	return s
@@ -390,7 +439,7 @@ func shellWord(s string) string {
 func firstResolvedArg(text string, vars map[string]string, exprs ...*regexp.Regexp) string {
 	for _, expr := range exprs {
 		for _, m := range expr.FindAllStringSubmatch(text, -1) {
-			if value, ok := resolveOpenRCValue(m[1], vars); ok && value != "" {
+			if value, ok := resolveOpenRCValue(m[openRCValueExprGroup], vars); ok && value != "" {
 				return value
 			}
 		}
@@ -413,14 +462,14 @@ func suffixVar(vars map[string]string, suffix string) string {
 
 func userFromArgs(s string) string {
 	if m := openrcUserArg.FindStringSubmatch(s); m != nil {
-		return shellWord(m[1])
+		return shellWord(m[openRCUserArgGroup])
 	}
 	return ""
 }
 
 func serviceUser(s string) string {
 	s = shellWord(strings.TrimSpace(s))
-	user, _, _ := strings.Cut(s, ":")
+	user, _, _ := strings.Cut(s, shellUserGroupSeparator)
 	return strings.TrimSpace(user)
 }
 

@@ -39,10 +39,15 @@ const (
 	ovsdbFieldWhere          = "where"
 	ovsdbIDListDatabases     = "0"
 	ovsdbIDTransact          = "1"
+	ovsdbJSONNull            = "null"
 	ovsdbMethodListDatabases = "list_dbs"
 	ovsdbMethodTransact      = "transact"
 	ovsdbOpSelect            = "select"
+	ovsdbProbeMaxResponses   = 8
 	ovsdbTableOpenVSwitch    = ovsdbDatabaseOpenVSwitch
+
+	ovsdbFirstResultIndex = 0
+	ovsdbFirstRowIndex    = 0
 )
 
 func (openvswitchProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -93,7 +98,7 @@ func ovsdbCall(enc *json.Encoder, dec *json.Decoder, id, method string, params [
 	if err := enc.Encode(map[string]any{ovsdbFieldMethod: method, ovsdbFieldParams: params, ovsdbFieldID: id}); err != nil {
 		return err
 	}
-	for i := 0; i < 8; i++ {
+	for i := 0; i < ovsdbProbeMaxResponses; i++ {
 		var resp ovsdbResponse
 		if err := dec.Decode(&resp); err != nil {
 			return err
@@ -106,7 +111,7 @@ func ovsdbCall(enc *json.Encoder, dec *json.Decoder, id, method string, params [
 		if gotID != id {
 			continue
 		}
-		if len(resp.Error) > 0 && string(resp.Error) != "null" {
+		if len(resp.Error) > 0 && string(resp.Error) != ovsdbJSONNull {
 			return fmt.Errorf("ovsdb %s error: %s", method, resp.Error)
 		}
 		if out != nil && len(resp.Result) > 0 {
@@ -135,11 +140,11 @@ func ovsdbVersion(enc *json.Encoder, dec *json.Decoder) string {
 	if err := ovsdbCall(enc, dec, ovsdbIDTransact, ovsdbMethodTransact, params, &result); err != nil {
 		return ""
 	}
-	if len(result) == 0 || len(result[0].Rows) == 0 {
+	if len(result) == 0 || len(result[ovsdbFirstResultIndex].Rows) == 0 {
 		return ""
 	}
 	var v string
-	if json.Unmarshal(result[0].Rows[0].OvsVersion, &v) == nil {
+	if json.Unmarshal(result[ovsdbFirstResultIndex].Rows[ovsdbFirstRowIndex].OvsVersion, &v) == nil {
 		return v
 	}
 	return ""

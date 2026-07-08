@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 
 	"sermo/internal/cfgval"
@@ -86,6 +85,11 @@ func validateWindowLength(prefix string, m map[string]any, add addFunc) (cycles 
 	}
 	return cycles, hasCycles
 }
+
+const (
+	serviceStateSummary = "active, inactive, paused, failed, unknown"
+	processStateSummary = "running, zombie, absent"
+)
 
 var serviceStates = set(
 	string(servicemgr.StatusActive),
@@ -320,9 +324,9 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 	case rules.ConditionFailed, rules.ConditionActive:
 		validateProbe(node[key], path+"."+key, checkNames, systemMetricChecks, allowSystemMetric, add)
 	case rules.ConditionService:
-		validateState(node[rules.ConditionService], rules.FieldState, serviceStates, "active, inactive, paused, failed, unknown", path+".service", add)
+		validateState(node[rules.ConditionService], rules.FieldState, serviceStates, serviceStateSummary, path+".service", add)
 	case rules.ConditionProcess:
-		validateState(node[rules.ConditionProcess], rules.FieldState, processStates, "running, zombie, absent", path+".process", add)
+		validateState(node[rules.ConditionProcess], rules.FieldState, processStates, processStateSummary, path+".process", add)
 	case rules.ConditionFile:
 		m, ok := node[rules.ConditionFile].(map[string]any)
 		if !ok || cfgval.String(m[rules.FieldPath]) == "" {
@@ -478,7 +482,7 @@ func validateMetric(entry map[string]any, path string, allowSystem bool, add add
 		// Form must match: a "%" threshold needs a percentage form, a bare number
 		// an absolute form.
 		form := metricForms[name]
-		if strings.HasSuffix(strings.TrimSpace(value), "%") {
+		if strings.HasSuffix(strings.TrimSpace(value), cfgval.PercentSuffix) {
 			if !form.percent {
 				add("%s uses a %% threshold but metric %q has no percentage form", path, name)
 			}
@@ -557,10 +561,10 @@ func parseMetricValue(s string) bool {
 	if s == "" {
 		return false
 	}
-	if strings.HasSuffix(s, "%") {
-		n, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimSuffix(s, "%")), 64)
-		return err == nil && n >= 0 && n <= 100
+	if strings.HasSuffix(s, cfgval.PercentSuffix) {
+		_, ok := cfgval.Percent(s)
+		return ok
 	}
-	_, err := strconv.ParseFloat(s, 64)
-	return err == nil
+	_, ok := cfgval.Float(s)
+	return ok
 }

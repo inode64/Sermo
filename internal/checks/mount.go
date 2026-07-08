@@ -8,6 +8,15 @@ import (
 	"sermo/internal/mounts"
 )
 
+const (
+	procMountsMinFields       = 4
+	procMountsDeviceIndex     = 0
+	procMountsMountPointIndex = 1
+	procMountsFSTypeIndex     = 2
+	procMountsOptionsIndex    = 3
+	procMountsOptionsSep      = ","
+)
+
 // Mount is one entry of the mount table.
 type Mount struct {
 	Device     string
@@ -65,16 +74,16 @@ func defaultMountSampler() ([]Mount, error) {
 		return nil, err
 	}
 	var out []Mount
-	for _, line := range strings.Split(string(data), "\n") {
+	for _, line := range strings.Split(string(data), checkLineSeparator) {
 		fields := strings.Fields(line)
-		if len(fields) < 4 {
+		if len(fields) < procMountsMinFields {
 			continue
 		}
 		out = append(out, Mount{
-			Device:     mounts.UnescapeField(fields[0]),
-			MountPoint: mounts.UnescapeField(fields[1]),
-			FSType:     fields[2],
-			Options:    strings.Split(fields[3], ","),
+			Device:     mounts.UnescapeField(fields[procMountsDeviceIndex]),
+			MountPoint: mounts.UnescapeField(fields[procMountsMountPointIndex]),
+			FSType:     fields[procMountsFSTypeIndex],
+			Options:    strings.Split(fields[procMountsOptionsIndex], procMountsOptionsSep),
 		})
 	}
 	return out, nil

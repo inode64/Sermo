@@ -49,9 +49,14 @@ const (
 	// slaTimelineCacheTTL caches SLA timeline strips for detail/expansion views.
 	slaTimelineCacheTTL = 45 * time.Second
 
-	procUptimePath   = "/proc/uptime"
-	osReleaseEtcPath = "/etc/os-release"
-	osReleaseUsrPath = "/usr/lib/os-release"
+	procUptimePath         = "/proc/uptime"
+	procUptimeValueIndex   = 0
+	procUptimeFloatBits    = 64
+	processPIDListLimit    = 20
+	osReleaseEtcPath       = "/etc/os-release"
+	osReleaseUsrPath       = "/usr/lib/os-release"
+	osReleasePrettyNameKey = "PRETTY_NAME="
+	osReleaseValueTrimSet  = `"'`
 )
 
 const (
@@ -65,10 +70,15 @@ const (
 	backendStatusError        = "error"
 	watchConditionFieldGrowth = "growth"
 	watchReadingFieldError    = "error"
+	watchReadingFieldCPUTicks = "cpu_ticks"
+	watchReadingFieldMatches  = "matches"
+	watchReadingFieldProcess  = checks.CheckTypeProcess
 	watchReadingFieldResult   = "result"
+	watchReadingFieldRSS      = "rss"
 	watchReadingFieldSample   = "sample"
 	watchCategoryFallback     = config.WatchCategoryWatch
 	watchReadingFieldState    = checks.CheckKeyState
+	watchReadingFieldUser     = checks.CheckKeyUser
 	watchReadingStateActive   = string(servicemgr.StatusActive)
 	watchReadingStateBaseline = "baseline"
 	watchReadingStateMissing  = "missing"
@@ -1413,20 +1423,20 @@ func (b *WebBackend) processWatchView(w *webWatch) (*web.WatchMeter, []web.Watch
 	}
 
 	readings := []web.WatchReading{
-		{Field: "process", Label: "Process", Value: name},
-		{Field: "matches", Label: "Matches", Value: fmt.Sprintf("%d", len(samples))},
+		{Field: watchReadingFieldProcess, Label: "Process", Value: name},
+		{Field: watchReadingFieldMatches, Label: "Matches", Value: fmt.Sprintf("%d", len(samples))},
 	}
 	if user != "" {
-		readings = append(readings, web.WatchReading{Field: "user", Label: "User", Value: user})
+		readings = append(readings, web.WatchReading{Field: watchReadingFieldUser, Label: "User", Value: user})
 	}
 	if len(samples) > 0 {
 		readings = append(readings,
 			web.WatchReading{Field: checks.DataKeyPIDs, Label: "PIDs", Value: processPIDList(samples)},
-			web.WatchReading{Field: "rss", Label: "RSS total", Value: fmt.Sprintf("%d %s", rssTotal, metricUnitBytes)},
-			web.WatchReading{Field: "cpu_ticks", Label: "CPU ticks", Value: fmt.Sprintf("%d", cpuTicksTotal)},
+			web.WatchReading{Field: watchReadingFieldRSS, Label: "RSS total", Value: fmt.Sprintf("%d %s", rssTotal, metrics.MetricUnitBytes)},
+			web.WatchReading{Field: watchReadingFieldCPUTicks, Label: "CPU ticks", Value: fmt.Sprintf("%d", cpuTicksTotal)},
 		)
 		if ioKnown {
-			readings = append(readings, web.WatchReading{Field: metrics.MetricIO, Label: "IO total", Value: fmt.Sprintf("%d %s", ioTotal, metricUnitBytes)})
+			readings = append(readings, web.WatchReading{Field: metrics.MetricIO, Label: "IO total", Value: fmt.Sprintf("%d %s", ioTotal, metrics.MetricUnitBytes)})
 		}
 	}
 
@@ -1696,7 +1706,7 @@ func (b *WebBackend) icmpWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 		msg := "missing host"
 		return nil, watchErrorReadings(msg), "icmp: " + msg
 	}
-	count := 3
+	count := checks.DefaultPingCount
 	if v, ok := cfgval.Int(w.check[checks.CheckKeyCount]); ok && v > 0 {
 		count = v
 	}
@@ -1710,9 +1720,9 @@ func (b *WebBackend) icmpWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "icmp " + host + ": " + msg
 	}
-	state := "down"
+	state := checks.NetStateDown
 	if s.Reachable {
-		state = "up"
+		state = checks.NetStateUp
 	}
 	readings := []web.WatchReading{
 		{Field: checks.DataKeyHost, Label: "Host", Value: host},
@@ -1914,15 +1924,14 @@ func pluralSuffix(count int, singular string) string {
 }
 
 func processPIDList(samples []ProcInfo) string {
-	const limit = 20
-	parts := make([]string, 0, min(len(samples), limit)+1)
+	parts := make([]string, 0, min(len(samples), processPIDListLimit)+1)
 	for i, sample := range samples {
-		if i >= limit {
+		if i >= processPIDListLimit {
 			break
 		}
 		parts = append(parts, fmt.Sprintf("%d", sample.PID))
 	}
-	if extra := len(samples) - limit; extra > 0 {
+	if extra := len(samples) - processPIDListLimit; extra > 0 {
 		parts = append(parts, fmt.Sprintf("+%d more", extra))
 	}
 	return strings.Join(parts, ", ")
@@ -2391,7 +2400,7 @@ func parseProcUptime(data []byte) (time.Duration, bool) {
 	if len(fields) == 0 {
 		return 0, false
 	}
-	secs, err := strconv.ParseFloat(fields[0], 64)
+	secs, err := strconv.ParseFloat(fields[procUptimeValueIndex], procUptimeFloatBits)
 	if err != nil || secs < 0 {
 		return 0, false
 	}
@@ -2415,9 +2424,9 @@ func osPrettyName() string {
 // os-release content, or "" when absent. Pure, so it is testable without the
 // host files.
 func parseOSReleasePrettyName(data []byte) string {
-	for _, line := range strings.Split(string(data), "\n") {
-		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "PRETTY_NAME="); ok {
-			if name := strings.Trim(v, `"'`); name != "" {
+	for _, line := range strings.Split(string(data), appLineSeparator) {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), osReleasePrettyNameKey); ok {
+			if name := strings.Trim(v, osReleaseValueTrimSet); name != "" {
 				return name
 			}
 		}
@@ -2476,7 +2485,7 @@ func hostMetric(name string, r metrics.Reading) web.HostMetric {
 	}
 	switch name {
 	case metrics.MetricTotalMemory, metrics.MetricTotalSwap:
-		m.Unit = metricUnitBytes
+		m.Unit = metrics.MetricUnitBytes
 	case metrics.MetricLoad1:
 		// Only derive the per-CPU percentage from a real reading; guarding on
 		// HasAbsolute (as watchMeter does) avoids fabricating Total/Percent when
@@ -3063,7 +3072,7 @@ func (b *WebBackend) Metrics(_ context.Context, name, check, metric string, sinc
 		if !measuredCheckTypes[typ] {
 			return web.MetricSeries{}, false
 		}
-		out := web.MetricSeries{Check: check, Since: since.String(), Unit: metricUnitMilliseconds}
+		out := web.MetricSeries{Check: check, Since: since.String(), Unit: metrics.MetricUnitMilliseconds}
 		if b.measure == nil {
 			return out, true
 		}

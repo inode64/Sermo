@@ -26,6 +26,8 @@ import (
 )
 
 const (
+	binaryExecutableModeMask = 0o111
+
 	ldSoConfDir       = "/etc/ld.so.conf.d"
 	ldSoConfFile      = "/etc/ld.so.conf"
 	ldSoConfSuffix    = ".conf"
@@ -158,7 +160,7 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 		return c.result(false, fmt.Sprintf("status %d (want %s)", resp.StatusCode, c.expect), start)
 	}
 	if c.latencyOp != "" {
-		ms := strconv.FormatInt(elapsed.Milliseconds(), 10)
+		ms := strconv.FormatInt(elapsed.Milliseconds(), numericBaseDecimal)
 		ok, err := compareValue(ms, c.latencyOp, c.latencyValue)
 		if err != nil {
 			return c.result(false, fmt.Sprintf("latency: %v", err), start)
@@ -243,8 +245,8 @@ func jsonAssert(got any, op, want string) bool {
 		ok, _ := compareValue(gotStr, cfgval.AssertOpRegex, want)
 		return ok
 	case cfgval.CompareOpGreater, cfgval.CompareOpGreaterEqual, cfgval.CompareOpLess, cfgval.CompareOpLessEqual:
-		gf, err1 := strconv.ParseFloat(gotStr, 64)
-		wf, err2 := strconv.ParseFloat(want, 64)
+		gf, err1 := strconv.ParseFloat(gotStr, numericBits64)
+		wf, err2 := strconv.ParseFloat(want, numericBits64)
 		if err1 != nil || err2 != nil {
 			return false
 		}
@@ -287,7 +289,7 @@ func jsonValueString(v any) string {
 	case string:
 		return t
 	case float64:
-		return strconv.FormatFloat(t, 'f', -1, 64)
+		return strconv.FormatFloat(t, floatFormatFixed, floatPrecisionAuto, numericBits64)
 	case bool:
 		return strconv.FormatBool(t)
 	case nil:
@@ -635,7 +637,7 @@ func (c binaryCheck) Run(_ context.Context) Result {
 	if info.IsDir() {
 		return c.result(false, c.path+" is a directory", start)
 	}
-	if info.Mode().Perm()&0o111 == 0 {
+	if info.Mode().Perm()&binaryExecutableModeMask == 0 {
 		return c.result(false, c.path+" is not executable", start)
 	}
 	return c.result(true, c.path+" is executable", start)
@@ -905,7 +907,7 @@ func parseLdSoConf(path string) []string {
 		return nil
 	}
 	var out []string
-	for _, line := range strings.Split(string(data), "\n") {
+	for _, line := range strings.Split(string(data), checkLineSeparator) {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, ldCommentHash) || strings.HasPrefix(line, ldCommentSemi) {
 			continue

@@ -94,7 +94,7 @@ func NewOperationLocker(dir string) OperationLocker {
 // stale lock (expired TTL or dead/reused owner) is reclaimed and acquisition
 // proceeds.
 func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, error) {
-	if err := validateIdentifier("service", service, false); err != nil {
+	if err := validateIdentifier(lockIdentifierService, service, false); err != nil {
 		return nil, err
 	}
 
@@ -111,7 +111,7 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 		self = selfIdentity
 	}
 
-	if err := os.MkdirAll(l.Dir, 0o755); err != nil {
+	if err := os.MkdirAll(l.Dir, lockDirMode); err != nil {
 		return nil, fmt.Errorf("create ops dir %s: %w", l.Dir, err)
 	}
 
@@ -223,7 +223,7 @@ func lockReclaimDir(path string) (func(), error) {
 // and fsyncs the file and its directory so a lock that exists is always complete
 // after a crash. An existing file yields os.ErrExist.
 func writeLockFileExclusive(path string, lf lockFile) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, lockFileMode)
 	if err != nil {
 		return err
 	}

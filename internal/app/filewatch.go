@@ -44,6 +44,8 @@ const (
 	fileChangeSizeThreshold = "size_threshold"
 	fileChangePermissions   = "permissions"
 	fileChangeOwner         = "owner"
+
+	fileStatePermMask = 0o7777
 )
 
 // fileWatcher monitors a file or directory (optionally its whole subtree) for
@@ -107,7 +109,7 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 		}
 		if w.cond.onDelete && !observeOnlyCycle(ctx) {
 			w.fire(ctx, p, fileChangeDeleted, p+" no longer exists", map[string]string{
-				sermoEnvOld: strconv.FormatInt(w.baseline[p].size, 10),
+				sermoEnvOld: strconv.FormatInt(w.baseline[p].size, envFormatBase),
 			})
 		}
 		delete(w.baseline, p)
@@ -146,7 +148,7 @@ func (w *fileWatcher) scan() map[string]fileState {
 func (w *fileWatcher) stateOf(info fs.FileInfo) fileState {
 	st := fileState{size: info.Size()}
 	if sys, ok := info.Sys().(*syscall.Stat_t); ok {
-		st.perm = uint32(sys.Mode) & 0o7777
+		st.perm = uint32(sys.Mode) & fileStatePermMask
 		st.uid, st.gid = sys.Uid, sys.Gid
 	}
 	if w.cond.sizeOp != "" {
@@ -161,32 +163,32 @@ func (w *fileWatcher) diff(ctx context.Context, path string, prev, cur fileState
 	c := w.cond
 	if c.sizeChange && cur.size != prev.size {
 		w.fire(ctx, path, fileChangeSize, fmt.Sprintf("%s size %d -> %d", path, prev.size, cur.size), map[string]string{
-			sermoEnvOld:  strconv.FormatInt(prev.size, 10),
-			sermoEnvNew:  strconv.FormatInt(cur.size, 10),
-			sermoEnvSize: strconv.FormatInt(cur.size, 10),
+			sermoEnvOld:  strconv.FormatInt(prev.size, envFormatBase),
+			sermoEnvNew:  strconv.FormatInt(cur.size, envFormatBase),
+			sermoEnvSize: strconv.FormatInt(cur.size, envFormatBase),
 		})
 	}
 	// Edge-triggered: fire only when the threshold is newly crossed.
 	if c.sizeOp != "" && cur.breached && !prev.breached {
-		val := strconv.FormatFloat(c.sizeValue, 'f', -1, 64)
+		val := strconv.FormatFloat(c.sizeValue, envFloatFormat, envFloatPrecisionAuto, envFloatBits)
 		w.fire(ctx, path, fileChangeSizeThreshold,
 			fmt.Sprintf("%s size %d %s %s", path, cur.size, c.sizeOp, val), map[string]string{
-				sermoEnvSize:  strconv.FormatInt(cur.size, 10),
+				sermoEnvSize:  strconv.FormatInt(cur.size, envFormatBase),
 				sermoEnvOp:    c.sizeOp,
 				sermoEnvValue: val,
 			})
 	}
 	if c.permChange && cur.perm != prev.perm {
 		w.fire(ctx, path, fileChangePermissions, fmt.Sprintf("%s permissions %04o -> %04o", path, prev.perm, cur.perm), map[string]string{
-			sermoEnvOld: fmt.Sprintf("%04o", prev.perm),
-			sermoEnvNew: fmt.Sprintf("%04o", cur.perm),
+			sermoEnvOld: fmt.Sprintf(fileModeFormat, prev.perm),
+			sermoEnvNew: fmt.Sprintf(fileModeFormat, cur.perm),
 		})
 	}
 	if c.ownerChange && (cur.uid != prev.uid || cur.gid != prev.gid) {
 		w.fire(ctx, path, fileChangeOwner,
 			fmt.Sprintf("%s owner %d:%d -> %d:%d", path, prev.uid, prev.gid, cur.uid, cur.gid), map[string]string{
-				sermoEnvOld: fmt.Sprintf("%d:%d", prev.uid, prev.gid),
-				sermoEnvNew: fmt.Sprintf("%d:%d", cur.uid, cur.gid),
+				sermoEnvOld: fmt.Sprintf(fileOwnerFormat, prev.uid, prev.gid),
+				sermoEnvNew: fmt.Sprintf(fileOwnerFormat, cur.uid, cur.gid),
 			})
 	}
 }

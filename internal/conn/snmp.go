@@ -27,6 +27,7 @@ const (
 	defaultSNMPProbeTimeout = 5 * time.Second
 	defaultSNMPRetries      = 1
 	defaultSNMPCommunity    = "public"
+	snmpTimeTicksPerSecond  = 100
 )
 
 // snmpProtocol probes an SNMP agent using gosnmp. With no user it uses SNMPv2c
@@ -78,7 +79,7 @@ func (snmpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if up, ok := by[oidSysUpTime]; ok {
 		switch up.Type {
 		case g.TimeTicks, g.Integer, g.Counter32, g.Gauge32, g.Counter64:
-			extra[extraSysUptimeSeconds] = strconv.FormatInt(g.ToBigInt(up.Value).Int64()/100, 10)
+			extra[extraSysUptimeSeconds] = strconv.FormatInt(g.ToBigInt(up.Value).Int64()/snmpTimeTicksPerSecond, numericBaseDecimal)
 		}
 	}
 	return Result{Version: sysDescr, Extra: extra}, nil

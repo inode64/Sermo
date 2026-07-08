@@ -49,6 +49,13 @@ type nameLookupResult struct {
 // silently weakening a force_kill safety decision.
 const negativeCacheTTL = 30 * time.Second
 
+const (
+	passwdGroupFieldSeparator = ":"
+	passwdGroupNameIndex      = 0
+	passwdGroupIDIndex        = 2
+	passwdGroupMinFields      = passwdGroupIDIndex + 1
+)
+
 // UserLookupConfig configures user/group lookup behavior.
 type UserLookupConfig struct {
 	Mode    string
@@ -355,7 +362,7 @@ func (l *UserLookup) getentGroupID(name string) (uint32, bool) {
 }
 
 func (l *UserLookup) getentUserName(uid uint32) (string, bool) {
-	line, ok := l.getent("passwd", strconv.FormatUint(uint64(uid), 10))
+	line, ok := l.getent("passwd", strconv.FormatUint(uint64(uid), numericIDBase))
 	if !ok {
 		return "", false
 	}
@@ -364,7 +371,7 @@ func (l *UserLookup) getentUserName(uid uint32) (string, bool) {
 }
 
 func (l *UserLookup) getentGroupName(gid uint32) (string, bool) {
-	line, ok := l.getent("group", strconv.FormatUint(uint64(gid), 10))
+	line, ok := l.getent("group", strconv.FormatUint(uint64(gid), numericIDBase))
 	if !ok {
 		return "", false
 	}
@@ -377,7 +384,7 @@ func (l *UserLookup) getent(database, query string) (string, bool) {
 	if err != nil || res.ExitCode != 0 {
 		return "", false
 	}
-	for _, line := range strings.Split(res.Stdout, "\n") {
+	for _, line := range strings.Split(res.Stdout, procLineSeparator) {
 		line = strings.TrimSpace(line)
 		if line != "" {
 			return line, true
@@ -403,7 +410,7 @@ func nativeGroupID(name string) (uint32, bool) {
 }
 
 func nativeUserName(uid uint32) (string, bool) {
-	u, err := user.LookupId(strconv.FormatUint(uint64(uid), 10))
+	u, err := user.LookupId(strconv.FormatUint(uint64(uid), numericIDBase))
 	if err != nil || u.Username == "" {
 		return "", false
 	}
@@ -411,7 +418,7 @@ func nativeUserName(uid uint32) (string, bool) {
 }
 
 func nativeGroupName(gid uint32) (string, bool) {
-	g, err := user.LookupGroupId(strconv.FormatUint(uint64(gid), 10))
+	g, err := user.LookupGroupId(strconv.FormatUint(uint64(gid), numericIDBase))
 	if err != nil || g.Name == "" {
 		return "", false
 	}
@@ -419,25 +426,25 @@ func nativeGroupName(gid uint32) (string, bool) {
 }
 
 func parsePasswdLine(line string) (string, uint32, bool) {
-	fields := strings.Split(line, ":")
-	if len(fields) < 3 || fields[0] == "" {
+	fields := strings.Split(line, passwdGroupFieldSeparator)
+	if len(fields) < passwdGroupMinFields || fields[passwdGroupNameIndex] == "" {
 		return "", 0, false
 	}
-	uid, ok := parseUint32(fields[2])
-	return fields[0], uid, ok
+	uid, ok := parseUint32(fields[passwdGroupIDIndex])
+	return fields[passwdGroupNameIndex], uid, ok
 }
 
 func parseGroupLine(line string) (string, uint32, bool) {
-	fields := strings.Split(line, ":")
-	if len(fields) < 3 || fields[0] == "" {
+	fields := strings.Split(line, passwdGroupFieldSeparator)
+	if len(fields) < passwdGroupMinFields || fields[passwdGroupNameIndex] == "" {
 		return "", 0, false
 	}
-	gid, ok := parseUint32(fields[2])
-	return fields[0], gid, ok
+	gid, ok := parseUint32(fields[passwdGroupIDIndex])
+	return fields[passwdGroupNameIndex], gid, ok
 }
 
 func parseUint32(s string) (uint32, bool) {
-	n, err := strconv.ParseUint(strings.TrimSpace(s), 10, 32)
+	n, err := strconv.ParseUint(strings.TrimSpace(s), numericIDBase, numericIDBits)
 	if err != nil {
 		return 0, false
 	}

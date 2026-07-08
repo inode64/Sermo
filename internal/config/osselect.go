@@ -14,6 +14,8 @@ const keyOSDefault = "default"
 const (
 	osReleaseEtcPath = "/etc/os-release"
 	osReleaseUsrPath = "/usr/lib/os-release"
+	osReleaseIDKey   = "ID="
+	osReleaseTrimSet = `"'`
 )
 
 // detectedOS holds the OS id used for ${os} and `os:` selectors. Resolved once at
@@ -37,9 +39,9 @@ func osReleaseID() string {
 		if err != nil {
 			continue
 		}
-		for _, line := range strings.Split(string(data), "\n") {
-			if v, ok := strings.CutPrefix(strings.TrimSpace(line), "ID="); ok {
-				return strings.ToLower(strings.Trim(v, `"'`))
+		for _, line := range strings.Split(string(data), configLineSeparator) {
+			if v, ok := strings.CutPrefix(strings.TrimSpace(line), osReleaseIDKey); ok {
+				return strings.ToLower(strings.Trim(v, osReleaseTrimSet))
 			}
 		}
 	}

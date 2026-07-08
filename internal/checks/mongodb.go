@@ -72,7 +72,7 @@ func (c mongoCheck) Run(ctx context.Context) Result {
 		DataKeyResult:    result,
 		DataKeyMode:      c.mode,
 	}
-	if f, perr := strconv.ParseFloat(strings.TrimSpace(result), 64); perr == nil {
+	if f, perr := strconv.ParseFloat(strings.TrimSpace(result), numericBits64); perr == nil {
 		data[DataKeyValue] = f
 	}
 	res.Data = data
@@ -88,7 +88,7 @@ func (c mongoCheck) scalar(ctx context.Context, client *mongo.Client) (string, e
 		if err != nil {
 			return "", err
 		}
-		return strconv.FormatInt(n, 10), nil
+		return strconv.FormatInt(n, numericBaseDecimal), nil
 	case mongoModeAggregate:
 		cur, err := db.Collection(c.collection).Aggregate(ctx, c.pipeline)
 		if err != nil {
@@ -131,11 +131,11 @@ func mongoRawScalar(rv bson.RawValue) (string, bool) {
 	case bson.TypeString:
 		return rv.StringValue(), true
 	case bson.TypeInt32:
-		return strconv.FormatInt(int64(rv.Int32()), 10), true
+		return strconv.FormatInt(int64(rv.Int32()), numericBaseDecimal), true
 	case bson.TypeInt64:
-		return strconv.FormatInt(rv.Int64(), 10), true
+		return strconv.FormatInt(rv.Int64(), numericBaseDecimal), true
 	case bson.TypeDouble:
-		return strconv.FormatFloat(rv.Double(), 'f', -1, 64), true
+		return strconv.FormatFloat(rv.Double(), floatFormatFixed, floatPrecisionAuto, numericBits64), true
 	case bson.TypeBoolean:
 		return strconv.FormatBool(rv.Boolean()), true
 	default:

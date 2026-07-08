@@ -44,6 +44,32 @@ const (
 	dhcpMessageOffer  = "offer"
 )
 
+const (
+	dhcpPacketMinBytes            = 240
+	dhcpOpOffset                  = 0
+	dhcpHardwareTypeOffset        = 1
+	dhcpHardwareLengthOffset      = 2
+	dhcpXIDOffset                 = 4
+	dhcpXIDEndOffset              = 8
+	dhcpFlagsOffset               = 10
+	dhcpOfferedIPOffset           = 16
+	dhcpOfferedIPEndOffset        = 20
+	dhcpClientHardwareAddrOffset  = 28
+	dhcpClientHardwareAddrEnd     = dhcpClientHardwareAddrOffset + dhcpHLenEthernet
+	dhcpMagicCookieOffset         = 236
+	dhcpMagicCookieEndOffset      = 240
+	dhcpOptionsOffset             = dhcpMagicCookieEndOffset
+	dhcpOptionPad                 = 0
+	dhcpOptionLengthOffset        = 1
+	dhcpOptionValueOffset         = 2
+	dhcpOptionHeaderBytes         = 2
+	dhcpOptionFirstValueOffset    = 0
+	dhcpMessageTypeOptionBytes    = 1
+	dhcpFourByteOptionBytes       = net.IPv4len
+	dhcpParameterRequestListBytes = 4
+	dhcpUDPBufferBytes            = 1500
+)
+
 // dhcpMagicCookie precedes the options field in a DHCP message (RFC 2131 §3).
 var dhcpMagicCookie = []byte{99, 130, 83, 99}
 
@@ -148,17 +174,17 @@ func dhcpClientMAC(s string) (net.HardwareAddr, error) {
 // list). The broadcast flag is set so the server broadcasts the OFFER back to
 // port 68, where the probe can receive it.
 func buildDHCPDiscover(xid uint32, mac net.HardwareAddr) []byte {
-	msg := make([]byte, 240)
-	msg[0] = dhcpOpBootRequest
-	msg[1] = dhcpHTypeEthernet
-	msg[2] = dhcpHLenEthernet
-	binary.BigEndian.PutUint32(msg[4:], xid)
-	binary.BigEndian.PutUint16(msg[10:], dhcpFlagBroadcast)
-	copy(msg[28:34], mac)
-	copy(msg[236:240], dhcpMagicCookie)
+	msg := make([]byte, dhcpPacketMinBytes)
+	msg[dhcpOpOffset] = dhcpOpBootRequest
+	msg[dhcpHardwareTypeOffset] = dhcpHTypeEthernet
+	msg[dhcpHardwareLengthOffset] = dhcpHLenEthernet
+	binary.BigEndian.PutUint32(msg[dhcpXIDOffset:], xid)
+	binary.BigEndian.PutUint16(msg[dhcpFlagsOffset:], dhcpFlagBroadcast)
+	copy(msg[dhcpClientHardwareAddrOffset:dhcpClientHardwareAddrEnd], mac)
+	copy(msg[dhcpMagicCookieOffset:dhcpMagicCookieEndOffset], dhcpMagicCookie)
 	msg = append(msg,
-		dhcpOptMessageType, 1, dhcpDiscover,
-		dhcpOptParamReqList, 4, dhcpOptSubnetMask, dhcpOptRouter, dhcpOptLeaseTime, dhcpOptServerID,
+		dhcpOptMessageType, dhcpMessageTypeOptionBytes, dhcpDiscover,
+		dhcpOptParamReqList, dhcpParameterRequestListBytes, dhcpOptSubnetMask, dhcpOptRouter, dhcpOptLeaseTime, dhcpOptServerID,
 		dhcpOptEnd,
 	)
 	return msg
@@ -176,57 +202,57 @@ type dhcpOfferInfo struct {
 // parseDHCPOffer validates a DHCP reply is a well-formed OFFER for xid and
 // extracts the offered address (yiaddr) and the common options.
 func parseDHCPOffer(b []byte, xid uint32) (dhcpOfferInfo, error) {
-	if len(b) < 240 {
+	if len(b) < dhcpPacketMinBytes {
 		return dhcpOfferInfo{}, errors.New("short DHCP reply")
 	}
-	if b[0] != dhcpOpBootReply {
-		return dhcpOfferInfo{}, fmt.Errorf("not a DHCP reply (op=%d)", b[0])
+	if b[dhcpOpOffset] != dhcpOpBootReply {
+		return dhcpOfferInfo{}, fmt.Errorf("not a DHCP reply (op=%d)", b[dhcpOpOffset])
 	}
-	if got := binary.BigEndian.Uint32(b[4:8]); got != xid {
+	if got := binary.BigEndian.Uint32(b[dhcpXIDOffset:dhcpXIDEndOffset]); got != xid {
 		return dhcpOfferInfo{}, errors.New("DHCP reply xid mismatch")
 	}
-	if !bytes.Equal(b[236:240], dhcpMagicCookie) {
+	if !bytes.Equal(b[dhcpMagicCookieOffset:dhcpMagicCookieEndOffset], dhcpMagicCookie) {
 		return dhcpOfferInfo{}, errors.New("missing DHCP magic cookie")
 	}
 
-	info := dhcpOfferInfo{offeredIP: net.IP(b[16:20]).String()}
-	opts := b[240:]
+	info := dhcpOfferInfo{offeredIP: net.IP(b[dhcpOfferedIPOffset:dhcpOfferedIPEndOffset]).String()}
+	opts := b[dhcpOptionsOffset:]
 	for i := 0; i < len(opts); {
 		code := opts[i]
 		if code == dhcpOptEnd {
 			break
 		}
-		if code == 0 { // pad
+		if code == dhcpOptionPad {
 			i++
 			continue
 		}
-		if i+1 >= len(opts) {
+		if i+dhcpOptionLengthOffset >= len(opts) {
 			break
 		}
-		l := int(opts[i+1])
-		if i+2+l > len(opts) {
+		l := int(opts[i+dhcpOptionLengthOffset])
+		if i+dhcpOptionValueOffset+l > len(opts) {
 			break
 		}
-		data := opts[i+2 : i+2+l]
+		data := opts[i+dhcpOptionValueOffset : i+dhcpOptionValueOffset+l]
 		switch code {
 		case dhcpOptMessageType:
-			if l == 1 {
-				info.messageType = int(data[0])
+			if l == dhcpMessageTypeOptionBytes {
+				info.messageType = int(data[dhcpOptionFirstValueOffset])
 			}
 		case dhcpOptServerID:
-			if l == 4 {
+			if l == dhcpFourByteOptionBytes {
 				info.serverID = net.IP(data).String()
 			}
 		case dhcpOptSubnetMask:
-			if l == 4 {
+			if l == dhcpFourByteOptionBytes {
 				info.subnetMask = net.IP(data).String()
 			}
 		case dhcpOptLeaseTime:
-			if l == 4 {
+			if l == dhcpFourByteOptionBytes {
 				info.leaseSeconds = int(binary.BigEndian.Uint32(data))
 			}
 		}
-		i += 2 + l
+		i += dhcpOptionHeaderBytes + l
 	}
 	if info.messageType != dhcpOffer {
 		return dhcpOfferInfo{}, fmt.Errorf("expected DHCPOFFER, got message type %d", info.messageType)

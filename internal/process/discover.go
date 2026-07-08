@@ -478,7 +478,7 @@ func ReadPidfile(path string) (int, error) {
 		return 0, err
 	}
 	text := strings.TrimSpace(string(data))
-	line, _, _ := strings.Cut(text, "\n")
+	line, _, _ := strings.Cut(text, procLineSeparator)
 	line = strings.TrimSpace(line)
 	pid, err := strconv.Atoi(line)
 	if err != nil {

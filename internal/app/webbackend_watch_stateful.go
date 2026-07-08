@@ -14,10 +14,13 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/execx"
+	"sermo/internal/metrics"
 	"sermo/internal/web"
 )
 
 const watchReadingFieldEntries = "entries"
+
+const watchReadingNumericBase = 10
 
 func (b *WebBackend) fileWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
 	path := cfgval.AsString(w.check[checks.CheckKeyPath])
@@ -129,8 +132,8 @@ func (b *WebBackend) firewallRulesWatchView(w *webWatch) (*web.WatchMeter, []web
 	}
 	readings := []web.WatchReading{
 		{Field: checks.DataKeyBackend, Label: "Backend", Value: sample.Backend},
-		{Field: checks.DataKeyRules, Label: "Rules", Value: strconv.FormatUint(sample.Rules, 10)},
-		{Field: checks.DataKeyMinRules, Label: "Min rules", Value: strconv.FormatUint(minRules, 10)},
+		{Field: checks.DataKeyRules, Label: "Rules", Value: strconv.FormatUint(sample.Rules, watchReadingNumericBase)},
+		{Field: checks.DataKeyMinRules, Label: "Min rules", Value: strconv.FormatUint(minRules, watchReadingNumericBase)},
 	}
 	return nil, readings, fmt.Sprintf("firewall %s has %d rules", sample.Backend, sample.Rules)
 }
@@ -223,7 +226,7 @@ func (b *WebBackend) smartWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRe
 			case checks.SmartFieldTemperature:
 				unit = " °C"
 			case checks.SmartFieldWear:
-				unit = metricUnitPercent
+				unit = metrics.MetricUnitPercent
 			}
 			readings = append(readings, web.WatchReading{
 				Field: field, Label: label, Value: fmt.Sprintf("%.0f%s", v, unit),

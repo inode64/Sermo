@@ -22,6 +22,23 @@ const (
 	openvpnReplyHardReset    = "hard_reset_server"
 )
 
+const (
+	openvpnACKIDsBytes              = 4
+	openvpnACKLengthOffset          = 9
+	openvpnACKSessionOffsetBase     = 10
+	openvpnKeyIDBits                = 3
+	openvpnMinServerResetBytes      = 18
+	openvpnMTUBytes                 = 1500
+	openvpnOpcodeOffset             = 0
+	openvpnPacketIDBytes            = 4
+	openvpnSessionIDBytes           = 8
+	openvpnSessionIDFallback        = "OPENVPN_"
+	openvpnTCPFrameHeaderBytes      = 2
+	openvpnClientResetCapacityBytes = 14
+	openvpnEmptyACKLength           = 0
+	openvpnEmptyPacketIDByte        = 0
+)
+
 // openvpnProtocol probes an OpenVPN server natively over its control channel.
 // The first step of the OpenVPN handshake is unauthenticated (the TLS exchange
 // comes after): a client sends a P_CONTROL_HARD_RESET_CLIENT_V2 and the server
@@ -76,9 +93,9 @@ func (openvpnProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 // openvpnSessionID returns a random 8-byte OpenVPN session id.
 func openvpnSessionID() []byte {
-	b := make([]byte, 8)
+	b := make([]byte, openvpnSessionIDBytes)
 	if _, err := rand.Read(b); err != nil {
-		copy(b, "OPENVPN_") // 8-byte deterministic fallback
+		copy(b, openvpnSessionIDFallback)
 	}
 	return b
 }
@@ -87,11 +104,13 @@ func openvpnSessionID() []byte {
 // packet (key id 0): the opcode byte, the 8-byte session id, an empty ACK array
 // (length 0) and message packet-id 0. No tls-auth HMAC is included.
 func openvpnClientReset(sid []byte) []byte {
-	b := make([]byte, 0, 14)
-	b = append(b, openvpnHardResetClientV2<<3) // opcode<<3 | key_id(0)
-	b = append(b, sid...)                      // own session id (8 bytes)
-	b = append(b, 0x00)                        // ACK array length = 0
-	b = append(b, 0, 0, 0, 0)                  // message packet-id = 0
+	b := make([]byte, 0, openvpnClientResetCapacityBytes)
+	b = append(b, openvpnHardResetClientV2<<openvpnKeyIDBits)
+	b = append(b, sid...)
+	b = append(b, openvpnEmptyACKLength)
+	for range openvpnPacketIDBytes {
+		b = append(b, openvpnEmptyPacketIDByte)
+	}
 	return b
 }
 
@@ -99,13 +118,13 @@ func openvpnClientReset(sid []byte) []byte {
 // big-endian length framing when transport is "tcp" (UDP is unframed).
 func openvpnExchange(c net.Conn, transport string, packet []byte) ([]byte, error) {
 	if transport == networkTCP {
-		frame := make([]byte, 2+len(packet))
-		binary.BigEndian.PutUint16(frame[:2], uint16(len(packet)))
-		copy(frame[2:], packet)
+		frame := make([]byte, openvpnTCPFrameHeaderBytes+len(packet))
+		binary.BigEndian.PutUint16(frame[:openvpnTCPFrameHeaderBytes], uint16(len(packet)))
+		copy(frame[openvpnTCPFrameHeaderBytes:], packet)
 		if _, err := c.Write(frame); err != nil {
 			return nil, err
 		}
-		var lb [2]byte
+		var lb [openvpnTCPFrameHeaderBytes]byte
 		if _, err := io.ReadFull(c, lb[:]); err != nil {
 			return nil, err
 		}
@@ -118,7 +137,7 @@ func openvpnExchange(c net.Conn, transport string, packet []byte) ([]byte, error
 	if _, err := c.Write(packet); err != nil {
 		return nil, err
 	}
-	buf := make([]byte, 1500)
+	buf := make([]byte, openvpnMTUBytes)
 	n, err := c.Read(buf)
 	if err != nil {
 		return nil, err
@@ -131,21 +150,21 @@ func openvpnExchange(c net.Conn, transport string, packet []byte) ([]byte, error
 // answering our probe. Layout: opcode(1) own_session_id(8) ack_len(1)
 // ack_ids(4*ack_len) remote_session_id(8, only when ack_len>0) packet_id(4).
 func parseOpenVPNReset(b, sid []byte) error {
-	if len(b) < 18 {
+	if len(b) < openvpnMinServerResetBytes {
 		return errors.New("openvpn: short reply")
 	}
-	if op := b[0] >> 3; op != openvpnHardResetServerV2 {
+	if op := b[openvpnOpcodeOffset] >> openvpnKeyIDBits; op != openvpnHardResetServerV2 {
 		return fmt.Errorf("openvpn: reply opcode %d, not hard_reset_server_v2", op)
 	}
-	ackLen := int(b[9])
-	if ackLen == 0 {
+	ackLen := int(b[openvpnACKLengthOffset])
+	if ackLen == openvpnEmptyACKLength {
 		return errors.New("openvpn: server reply did not acknowledge the reset")
 	}
-	off := 10 + 4*ackLen // start of the echoed remote session id
-	if len(b) < off+8 {
+	off := openvpnACKSessionOffsetBase + openvpnACKIDsBytes*ackLen
+	if len(b) < off+openvpnSessionIDBytes {
 		return errors.New("openvpn: truncated server ACK")
 	}
-	if !bytes.Equal(b[off:off+8], sid) {
+	if !bytes.Equal(b[off:off+openvpnSessionIDBytes], sid) {
 		return errors.New("openvpn: server ACK does not echo our session id")
 	}
 	return nil

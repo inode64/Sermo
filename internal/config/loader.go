@@ -431,8 +431,7 @@ func (c *Config) loadAppDirEntries(dir string, recursive bool) error {
 }
 
 func (c *Config) loadNotifierDirEntries(dir string, recursive bool) error {
-	const section = pathKeyNotifiers
-	names, subdirs, err := configDirEntries(dir, section)
+	names, subdirs, err := configDirEntries(dir, pathKeyNotifiers)
 	if err != nil {
 		return err
 	}
@@ -447,7 +446,7 @@ func (c *Config) loadNotifierDirEntries(dir string, recursive bool) error {
 			return err
 		}
 		if !handled {
-			return fmt.Errorf("%s: %s config directories only support top-level %s", doc.Path, section, section)
+			return fmt.Errorf("%s: %s config directories only support top-level %s", doc.Path, pathKeyNotifiers, pathKeyNotifiers)
 		}
 	}
 	if !recursive {
@@ -610,29 +609,27 @@ func (c *Config) mergeWatchDocument(doc *Document) error {
 }
 
 func (c *Config) mergeNotifierFragment(doc *Document) (bool, error) {
-	const section = pathKeyNotifiers
-	if _, present := doc.Body[section]; !present {
+	if _, present := doc.Body[pathKeyNotifiers]; !present {
 		return false, nil
 	}
 	for key := range doc.Body {
-		if key != section {
-			return true, fmt.Errorf("%s: %s fragments only support top-level %s, got %q", doc.Path, section, section, key)
+		if key != pathKeyNotifiers {
+			return true, fmt.Errorf("%s: %s fragments only support top-level %s, got %q", doc.Path, pathKeyNotifiers, pathKeyNotifiers, key)
 		}
 	}
 	return c.mergeNotifierMap(doc)
 }
 
 func (c *Config) mergeNotifierMap(doc *Document) (bool, error) {
-	const section = pathKeyNotifiers
-	raw := expandEnvTree(doc.Body[section])
+	raw := expandEnvTree(doc.Body[pathKeyNotifiers])
 	entries, ok := raw.(map[string]any)
 	if !ok {
-		return true, fmt.Errorf("%s: %s must be a mapping", doc.Path, section)
+		return true, fmt.Errorf("%s: %s must be a mapping", doc.Path, pathKeyNotifiers)
 	}
 	if len(entries) != 1 {
-		return true, fmt.Errorf("%s: %s fragments must contain exactly one entry", doc.Path, section)
+		return true, fmt.Errorf("%s: %s fragments must contain exactly one entry", doc.Path, pathKeyNotifiers)
 	}
-	dst, _ := c.Global.Raw[section].(map[string]any)
+	dst, _ := c.Global.Raw[pathKeyNotifiers].(map[string]any)
 	if dst == nil {
 		dst = map[string]any{}
 	}
@@ -642,7 +639,7 @@ func (c *Config) mergeNotifierMap(doc *Document) (bool, error) {
 		}
 		dst[name] = entry
 	}
-	c.Global.Raw[section] = dst
+	c.Global.Raw[pathKeyNotifiers] = dst
 	return true, nil
 }
 

@@ -87,6 +87,13 @@ var (
 	mdStatusRe = regexp.MustCompile(`\[([U_]+)\]`)
 )
 
+const (
+	mdArrayNameGroup   = 1
+	mdRatioTotalGroup  = 1
+	mdRatioActiveGroup = 2
+	mdStatusMapGroup   = 1
+)
+
 // parseMdstat parses /proc/mdstat: an array (a line "mdN : …" and the indented
 // lines that follow it) is degraded when its [n/m] active count is short or its
 // [U_…] member map has a down member ('_'); it is recovering when its block
@@ -109,11 +116,11 @@ func parseMdstat(s string) RaidStatus {
 		}
 		cur, degraded, recovering = "", false, false
 	}
-	for _, l := range strings.Split(s, "\n") {
+	for _, l := range strings.Split(s, checkLineSeparator) {
 		trimmed := strings.TrimSpace(l)
 		if h := mdHeadRe.FindStringSubmatch(trimmed); h != nil {
 			flush()
-			cur = h[1]
+			cur = h[mdArrayNameGroup]
 			continue
 		}
 		if cur == "" {
@@ -124,13 +131,13 @@ func parseMdstat(s string) RaidStatus {
 			continue
 		}
 		if m := mdRatioRe.FindStringSubmatch(l); m != nil {
-			total, _ := strconv.Atoi(m[1])
-			active, _ := strconv.Atoi(m[2])
+			total, _ := strconv.Atoi(m[mdRatioTotalGroup])
+			active, _ := strconv.Atoi(m[mdRatioActiveGroup])
 			if active < total {
 				degraded = true
 			}
 		}
-		if m := mdStatusRe.FindStringSubmatch(l); m != nil && strings.Contains(m[1], "_") {
+		if m := mdStatusRe.FindStringSubmatch(l); m != nil && strings.Contains(m[mdStatusMapGroup], "_") {
 			degraded = true
 		}
 		if strings.Contains(l, "recovery") || strings.Contains(l, "resync") ||
