@@ -543,6 +543,19 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/locks ./internal/process` y
   `make check` pasan.
 
+### Fase 29: Timeout libvirt compartido
+
+- Mantener defaults de conexion libvirt en `internal/conn`, que ya expone socket
+  y puerto para checks y control de VMs.
+- Reutilizar el timeout por defecto desde `internal/virt`.
+
+Estado ejecutado:
+
+- `conn.DefaultLibvirtTimeout` expone el timeout fallback de conexiones libvirt.
+- `virt.timeoutFromContext` consume ese default en vez de duplicar `10s`.
+- Validacion ejecutada: `go test ./internal/conn ./internal/virt` y
+  `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
