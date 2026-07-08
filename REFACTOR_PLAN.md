@@ -631,6 +631,23 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/conn ./internal/checks ./internal/app`
   y `make check` pasan.
 
+### Fase 35: Constantes de red locales compartidas
+
+- Crear un owner estrecho para constantes de red basicas que cruzan paquetes
+  leaf sin imponer dependencias entre ellos.
+- Reutilizar el loopback IPv4 y el nombre de red Unix en probes, Docker control
+  y CLI.
+
+Estado ejecutado:
+
+- `internal/netutil` define `LoopbackIPv4` y `NetworkUnix`.
+- `internal/conn.DefaultHost`, `dockerctl.DefaultHost`, el `networkUnix` de
+  Docker y la direccion local por defecto de `sermoctl daemon` derivan de ese
+  owner.
+- No cambia ningun default visible: siguen siendo `127.0.0.1` y `unix`.
+- Validacion ejecutada: `go test ./internal/netutil ./internal/conn
+  ./internal/dockerctl ./internal/cli` y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
