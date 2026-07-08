@@ -19,10 +19,19 @@ const runtimeMetricDefs = [
   { key: metricNameIO, label: "IO", unit: metricUnitBytesPerSecond, chartLabel: "Daemon IO metric chart" },
 ];
 
-function setStatus(msg, kind) {
+// Action feedback must survive the dashboard refresh that almost every action
+// triggers: load() ends with a status clear, which used to wipe e.g.
+// "umount failed: device busy" after ~100ms. A kinded message holds the line
+// for statusStickyMs against that refresh clear; explicit setStatus("") calls
+// (before a new action) still clear immediately.
+const statusStickyMs = 5000;
+let statusStickyUntil = 0;
+
+function setStatus(msg, kind, sticky = true) {
   const el = $("#err");
   if (!el) return;
   const text = msg || "";
+  statusStickyUntil = text && kind && sticky ? Date.now() + statusStickyMs : 0;
   const statusCls = text ? (kind === "ok" ? "status-ok" : kind === "warn" ? "status-warn" : "status-err") : "";
   const prevCls = el.classList.contains("status-ok") ? "status-ok"
     : el.classList.contains("status-warn") ? "status-warn"
@@ -61,7 +70,17 @@ let loadSeq = 0;
 function showDisconnected() {
   document.body.classList.add("disconnected");
   const age = lastLoadOk ? ` (last update ${fmtSince(Date.now() - lastLoadOk)} ago)` : "";
-  setStatus("Disconnected — retrying…" + age, "warn");
+  // Not sticky: the banner is re-asserted on every failed poll and must
+  // disappear on the first successful refresh after the connection recovers.
+  setStatus("Disconnected — retrying…" + age, "warn", false);
+}
+
+// clearStatusAfterRefresh is load()'s end-of-refresh clear: it respects the
+// sticky hold so a just-shown action result stays readable across the reload
+// the action itself triggered.
+function clearStatusAfterRefresh() {
+  if (Date.now() < statusStickyUntil) return;
+  setStatus("");
 }
 
 // load refreshes the dashboard in two phases: first the lightweight status and
@@ -93,7 +112,7 @@ async function load() {
     connOK = true;
     lastLoadOk = Date.now();
     document.body.classList.remove("disconnected");
-    setStatus("");
+    clearStatusAfterRefresh();
   } else {
     connOK = false;
     showDisconnected();

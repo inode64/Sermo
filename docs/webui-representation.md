@@ -85,6 +85,11 @@ Editable notes:
   `/proc/uptime`, surfaced as `host_uptime` on `GET /api/daemon`), not the sermod
   process uptime. The sermod process uptime stays on the Daemon panel and
   `GET /livez?verbose`.
+- Action feedback (the `#err` status line, ok/warn/err) stays visible for at
+  least ~5 seconds: the dashboard refresh that a completed action triggers does
+  not clear it, so a result like `umount failed: device busy` remains readable.
+  Starting a new action clears it immediately, and the disconnected banner is
+  exempt — it disappears on the first successful refresh.
 
 ## Overview tiles
 
