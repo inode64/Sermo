@@ -204,6 +204,29 @@ Estado ejecutado:
 - La excepcion relevante queda documentada aqui: los strings que coinciden entre
   superficies no se comparten si no representan el mismo contrato.
 
+### Fase 6: Constantes del Web UI
+
+- Extraer literales conceptuales del frontend sin cambiar el contrato del Web
+  API ni la estructura DOM.
+- Mantener las constantes dentro de `internal/web/src/app.js`, que es el owner de
+  formato, tiempos, umbrales visuales y geometria de graficas del dashboard.
+- Regenerar `internal/web/index.html` con `make web` despues de editar
+  `internal/web/src/`.
+
+Estado ejecutado:
+
+- Se centralizaron factores de porcentaje, conversiones de segundos y
+  milisegundos, ventanas moviles de 1h/24h/7d/30d/1y, umbrales visuales de uso,
+  umbrales SLA, longitud de preview de eventos, ticks de refresco y geometria de
+  graficas.
+- `slaColor`, `slaWindowSpanMs`, `pctClamp`, formatters de duracion/edad,
+  barras de uso, metric charts, SLA charts y previews de eventos consumen esos
+  nombres en vez de numeros dispersos.
+- No se cambio comportamiento publico; el HTML generado se actualizo solo como
+  artefacto derivado del build web.
+- Validacion ejecutada: `make web`, `go test ./internal/web` y `make check`
+  pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.

@@ -178,6 +178,56 @@ const serviceStatusFilterStates = [
 const watchStatusFilterStates = [targetStateDisabled, targetStateOK, targetStateStarting, targetStateFailed];
 const appStatusFilterStates = [targetStateOK, targetStateStarting, targetStateWarning, targetStateFailed];
 const mountStatusFilterStates = [mountStateActive, mountStateInactive];
+const percentMin = 0;
+const percentMax = 100;
+const percentScale = percentMax;
+const slaHealthyPct = 99;
+const slaWarningPct = 95;
+const usageCriticalPct = 95;
+const usageHighPct = 90;
+const usageWarnPct = 75;
+const loadWarnPct = 80;
+const secondsPerMinute = 60;
+const minutesPerHour = 60;
+const hoursPerDay = 24;
+const rollingWeekDays = 7;
+const rollingMonthDays = 30;
+const rollingYearDays = 365;
+const secondsPerHour = secondsPerMinute * minutesPerHour;
+const secondsPerDay = secondsPerHour * hoursPerDay;
+const millisecondsPerSecond = 1000;
+const millisecondsPerMinute = millisecondsPerSecond * secondsPerMinute;
+const millisecondsPerHour = millisecondsPerMinute * minutesPerHour;
+const millisecondsPerDay = millisecondsPerHour * hoursPerDay;
+const eventMessagePreviewChars = 160;
+const liveOpsTickMs = millisecondsPerSecond;
+const refreshAgeTickMs = millisecondsPerSecond;
+const chartViewWidth = 640;
+const chartViewHeight = 160;
+const chartColumnCount = 120;
+const slaChartPadLeft = 42;
+const slaChartPadRight = 16;
+const slaChartPadTop = 14;
+const slaChartPadBottom = 30;
+const metricChartPad = 34;
+const slaChartReferenceThresholds = [slaHealthyPct, slaWarningPct];
+const slaChartYLabelCandidates = [
+  percentMax,
+  slaHealthyPct,
+  slaWarningPct,
+  90,
+  75,
+  50,
+  25,
+];
+const slaChartYMinSteps = [
+  { threshold: 99.5, floor: slaHealthyPct },
+  { threshold: slaHealthyPct, floor: 98 },
+  { threshold: slaWarningPct, floor: 90 },
+  { threshold: 90, floor: 80 },
+  { threshold: 70, floor: 60 },
+  { threshold: 40, floor: 30 },
+];
 const overviewActiveServiceStates = [targetStateStarted, targetStateCollecting, targetStateMonitored];
 const mountStateClasses = {
   [mountStateActive]: "state-running",
@@ -697,10 +747,10 @@ function eventMessageHTML(e, key) {
   const msg = e.message || "";
   const msgId = key + "-msg";
   const msgOpen = eventExpanded.has(key);
-  const truncated = msg.length > 160 && !msgOpen;
+  const truncated = msg.length > eventMessagePreviewChars && !msgOpen;
   const text = truncated
-    ? tpl`<span id="${msgId}" class="event-msg">${msg.slice(0, 160)}<span class="muted">…</span> <button type="button" data-event-toggle="${key}" aria-expanded="${domBoolFalse}" aria-controls="${msgId}" aria-label="Show full event message">more</button></span>`
-    : tpl`<span id="${msgId}" class="event-msg">${msg}${msg.length > 160 ? tpl` <button type="button" data-event-toggle="${key}" aria-expanded="${domBoolTrue}" aria-controls="${msgId}" aria-label="Show less of event message">less</button>` : nothing}</span>`;
+    ? tpl`<span id="${msgId}" class="event-msg">${msg.slice(0, eventMessagePreviewChars)}<span class="muted">…</span> <button type="button" data-event-toggle="${key}" aria-expanded="${domBoolFalse}" aria-controls="${msgId}" aria-label="Show full event message">more</button></span>`
+    : tpl`<span id="${msgId}" class="event-msg">${msg}${msg.length > eventMessagePreviewChars ? tpl` <button type="button" data-event-toggle="${key}" aria-expanded="${domBoolTrue}" aria-controls="${msgId}" aria-label="Show less of event message">less</button>` : nothing}</span>`;
   // Bounded stdout/stderr of the failing command, collapsed behind an "output"
   // toggle so the multi-line blob does not clutter the row by default.
   const out = e.output || "";
@@ -1474,7 +1524,7 @@ function serviceBusy(name) {
 }
 function opElapsed(op) {
   const end = op.finished || Date.now();
-  return Math.max(0, Math.floor((end - op.started) / 1000));
+  return Math.max(0, Math.floor((end - op.started) / millisecondsPerSecond));
 }
 function opStateText(op) {
   if (!op.finished) return operationStateRunning;
@@ -1512,7 +1562,7 @@ function finishOperation(name, ok, message) {
   }, 8000);
 }
 function ensureLiveOpsTimer() {
-  if (!liveOpsTimer) liveOpsTimer = setInterval(updateLiveOps, 1000);
+  if (!liveOpsTimer) liveOpsTimer = setInterval(updateLiveOps, liveOpsTickMs);
 }
 function stopLiveOpsTimerIfIdle() {
   if (liveOpsTimer && liveOps.size === 0) {
@@ -2368,7 +2418,7 @@ function memoryInline(rss) {
   rss = Number(rss) || 0;
   if (!rss) return tpl`<span class="muted">—</span>`;
   const hostMem = hostMemTotalBytes();
-  if (hostMem > 0) return usageBarMini(pctClamp(rss / hostMem * 100), fmtBytes(rss), `${fmtBytes(rss)} resident memory`);
+  if (hostMem > 0) return usageBarMini(pctClamp(rss / hostMem * percentScale), fmtBytes(rss), `${fmtBytes(rss)} resident memory`);
   return tpl`<b>${fmtBytes(rss)}</b>`;
 }
 
@@ -2408,16 +2458,23 @@ function slaWindowLabel(window) {
 
 function slaColor(pct) {
   if (pct == null) return "color-mix(in srgb, var(--text-2) 40%, transparent)";
-  if (pct >= 99) return themeHealthColor(healthStatusOK);
-  if (pct >= 95) return themeHealthColor(healthStatusWarning);
+  if (pct >= slaHealthyPct) return themeHealthColor(healthStatusOK);
+  if (pct >= slaWarningPct) return themeHealthColor(healthStatusWarning);
   return themeHealthColor(healthStatusCritical);
+}
+
+function slaChartYFloor(worstPct) {
+  for (const step of slaChartYMinSteps) {
+    if (worstPct >= step.threshold) return step.floor;
+  }
+  return percentMin;
 }
 
 function renderSLAWindows(wins, compact) {
   wins = wins || [];
   if (!wins.length) return tpl`<span class="muted">No SLA data yet.</span>`;
   const rows = wins.map((w) => {
-    const pct = w.ratio == null ? null : Number(w.ratio) * 100;
+    const pct = w.ratio == null ? null : Number(w.ratio) * percentScale;
     const label = slaWindowLabel(w.window);
     const pctText = pct == null ? "—" : fmtPct(pct);
     const count = `${Number(w.up || 0)}/${Number(w.total || 0)}`;
@@ -2454,7 +2511,7 @@ function slaTimelineDataRows(segments, window) {
     const segStart = endMs - spanMs + (idx / n) * spanMs;
     const segEnd = endMs - spanMs + ((idx + 1) / n) * spanMs;
     const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
-    const pctText = ratio == null ? "no data" : fmtPct(Number(ratio) * 100);
+    const pctText = ratio == null ? "no data" : fmtPct(Number(ratio) * percentScale);
     return tpl`<tr><td>${when}</td><td>${pctText}</td></tr>`;
   });
 }
@@ -2466,7 +2523,7 @@ function renderSLATimeline(segments, window) {
   const spanMs = slaWindowSpanMs(window);
   const endMs = Date.now();
   const cells = segments.map((ratio, i) => {
-    const pct = ratio == null ? null : Number(ratio) * 100;
+    const pct = ratio == null ? null : Number(ratio) * percentScale;
     const segStart = endMs - spanMs + (i / n) * spanMs;
     const segEnd = endMs - spanMs + ((i + 1) / n) * spanMs;
     const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
@@ -2480,19 +2537,19 @@ function renderSLATimeline(segments, window) {
 
 function slaWindowSpanMs(window) {
   switch (window) {
-    case "hour": return 36e5;
-    case "day": return 864e5;
-    case "week": return 6048e5;
-    case "month": return 2592e6;
-    case "year": return 3.1536e10;
-    default: return 864e5;
+    case "hour": return millisecondsPerHour;
+    case "day": return millisecondsPerDay;
+    case "week": return rollingWeekDays * millisecondsPerDay;
+    case "month": return rollingMonthDays * millisecondsPerDay;
+    case "year": return rollingYearDays * millisecondsPerDay;
+    default: return millisecondsPerDay;
   }
 }
 
 function slaPointPct(p) {
   const total = Number(p && p.total || 0);
   if (total <= 0) return null;
-  return pctClamp(Number(p.up || 0) / total * 100);
+  return pctClamp(Number(p.up || 0) / total * percentScale);
 }
 
 function slaPointTime(p) {
@@ -2517,7 +2574,7 @@ function slaTimelineSummary(points) {
     total += Number(p.total || 0);
   });
   if (total <= 0) return '<span class="muted">No data in this window.</span>';
-  const pct = up / total * 100;
+  const pct = up / total * percentScale;
   const incidentCount = (points || []).filter((p) => Number(p.total || 0) > Number(p.up || 0)).length;
   const head = incidentCount
     ? `<span class="bad">${incidentCount} incident${incidentCount === 1 ? "" : "s"}</span>`
@@ -2555,8 +2612,14 @@ async function loadServiceSLA(name) {
 }
 
 function drawSLAChart(points, win) {
-  const W = 640, H = 160, padL = 42, padR = 16, padT = 14, padB = 30, cols = 120;
-  const span = windowMs[win || metricWindow] || 864e5;
+  const W = chartViewWidth;
+  const H = chartViewHeight;
+  const padL = slaChartPadLeft;
+  const padR = slaChartPadRight;
+  const padT = slaChartPadTop;
+  const padB = slaChartPadBottom;
+  const cols = chartColumnCount;
+  const span = windowMs[win || metricWindow] || millisecondsPerDay;
   const endMs = Date.now();
   const startMs = endMs - span;
   const plotW = W - padL - padR;
@@ -2572,11 +2635,11 @@ function drawSLAChart(points, win) {
   // another. Pick a "nice" floor just below the worst observed value: healthy
   // data gets a tight 99–100 / 95–100 view, real downtime widens it as needed.
   const lo = Math.min.apply(null, observed.map((o) => o.pct));
-  const yMin = lo >= 99.5 ? 99 : lo >= 99 ? 98 : lo >= 95 ? 90 : lo >= 90 ? 80 : lo >= 70 ? 60 : lo >= 40 ? 30 : 0;
+  const yMin = slaChartYFloor(lo);
   const x = (t) => padL + ((t - startMs) / span) * plotW;
-  const y = (pct) => padT + (100 - Math.max(yMin, Math.min(100, pct))) / (100 - yMin) * plotH;
+  const y = (pct) => padT + (percentMax - Math.max(yMin, Math.min(percentMax, pct))) / (percentMax - yMin) * plotH;
 
-  const breakMs = Math.max(span / cols * 2.5, 6 * 60 * 1000);
+  const breakMs = Math.max(span / cols * 2.5, 6 * millisecondsPerMinute);
   const segments = [];
   let seg = [];
   observed.forEach((o) => {
@@ -2590,14 +2653,14 @@ function drawSLAChart(points, win) {
 
   // Reference threshold bands (the slaColor breakpoints), drawn only when inside
   // the current range.
-  const refs = [99, 95].filter((v) => v > yMin && v < 100).map((v) =>
+  const refs = slaChartReferenceThresholds.filter((v) => v > yMin && v < percentMax).map((v) =>
     `<line x1="${padL}" y1="${y(v).toFixed(1)}" x2="${W - padR}" y2="${y(v).toFixed(1)}" stroke="#8883" stroke-dasharray="3 4"></line>`).join("");
   // Y labels: candidates coarsest→finest, placed greedily top-down and skipped
   // when they would land within 11px of an already-placed one, so they never
   // overlap no matter how tight or wide the zoomed range is.
   const placed = [];
-  const yLabels = [100, 99, 95, 90, 75, 50, 25, yMin]
-    .filter((v, i, a) => v >= yMin && v <= 100 && a.indexOf(v) === i)
+  const yLabels = slaChartYLabelCandidates.concat(yMin)
+    .filter((v, i, a) => v >= yMin && v <= percentMax && a.indexOf(v) === i)
     .sort((a, b) => b - a)
     .map((v) => {
       const yy = y(v);
@@ -2720,7 +2783,7 @@ function renderServiceDetail(d) {
   // When the host RAM total is known, show each process's resident memory as a
   // share of host RAM (a compact bar), plus a bar on the whole-tree total.
   const hostMem = hostMemTotalBytes();
-  const memPct = (rss) => hostMem > 0 ? pctClamp((Number(rss) || 0) / hostMem * 100) : 0;
+  const memPct = (rss) => hostMem > 0 ? pctClamp((Number(rss) || 0) / hostMem * percentScale) : 0;
   const totalBar = pt && hostMem > 0
     ? tpl` ${usageBarMini(memPct(pt.rss || 0), fmtPct(memPct(pt.rss || 0)))}`
     : nothing;
@@ -2879,10 +2942,10 @@ function fmtNum(n, max = 2, fallback = "—") {
 function fmtUptime(sec) {
   sec = Math.floor(Number(sec));
   if (!Number.isFinite(sec) || sec < 0) return "";
-  const d = Math.floor(sec / 86400);
-  const h = Math.floor((sec % 86400) / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = sec % 60;
+  const d = Math.floor(sec / secondsPerDay);
+  const h = Math.floor((sec % secondsPerDay) / secondsPerHour);
+  const m = Math.floor((sec % secondsPerHour) / secondsPerMinute);
+  const s = sec % secondsPerMinute;
   const parts = [];
   if (d) parts.push(d + "d");
   if (d || h) parts.push(h + "h");
@@ -2913,15 +2976,15 @@ function fmtPct(n) {
 function pctClamp(n) {
   n = Number(n);
   if (!Number.isFinite(n)) return 0;
-  return Math.max(0, Math.min(100, n));
+  return Math.max(percentMin, Math.min(percentMax, n));
 }
 
 function usageLevel(pct) {
   pct = pctClamp(pct);
   if (pct <= 0) return "usage-empty";
-  if (pct >= 95) return "usage-crit";
-  if (pct >= 90) return "usage-high";
-  if (pct >= 75) return "usage-warn";
+  if (pct >= usageCriticalPct) return "usage-crit";
+  if (pct >= usageHighPct) return "usage-high";
+  if (pct >= usageWarnPct) return "usage-warn";
   return "usage-ok";
 }
 
@@ -2941,7 +3004,7 @@ function usageBarSpan(p, extraClass, label, title, ariaLabel, elId) {
 function usageBar(pct, label, elId) {
   const p = pctClamp(pct);
   const used = fmtPct(p);
-  const freeLabel = fmtPct(100 - p);
+  const freeLabel = fmtPct(percentMax - p);
   return usageBarSpan(p, "", label != null ? label : used, `${used} used · ${freeLabel} free`, `${used} used, ${freeLabel} free`, elId);
 }
 
@@ -2988,9 +3051,9 @@ function storageUsedPct(d) {
   if (!d) return null;
   const used = Number(d.used_bytes);
   const total = Number(d.total_bytes);
-  if (Number.isFinite(used) && Number.isFinite(total) && total > 0) return pctClamp((used / total) * 100);
+  if (Number.isFinite(used) && Number.isFinite(total) && total > 0) return pctClamp((used / total) * percentScale);
   const free = Number(d.free_bytes);
-  if (Number.isFinite(free) && Number.isFinite(total) && total > 0) return pctClamp(((total - free) / total) * 100);
+  if (Number.isFinite(free) && Number.isFinite(total) && total > 0) return pctClamp(((total - free) / total) * percentScale);
   return Number.isFinite(Number(d.used_pct)) ? pctClamp(d.used_pct) : null;
 }
 
@@ -3281,10 +3344,10 @@ function parseDurationSeconds(raw) {
     matched = true;
     const n = parseFloat(m[1]);
     switch (m[2]) {
-      case "ms": total += n / 1000; break;
+      case "ms": total += n / millisecondsPerSecond; break;
       case "s": total += n; break;
-      case "m": total += n * 60; break;
-      case "h": total += n * 3600; break;
+      case "m": total += n * secondsPerMinute; break;
+      case "h": total += n * secondsPerHour; break;
     }
   }
   if (matched) return total;
@@ -4269,10 +4332,10 @@ function pctVal(metrics, name) {
 // "3h", "2d"); every age/remaining formatter builds on it.
 function shortDur(sec) {
   sec = Math.max(0, Math.floor(Number(sec) || 0));
-  if (sec < 60) return sec + "s";
-  if (sec < 3600) return Math.floor(sec / 60) + "m";
-  if (sec < 86400) return Math.floor(sec / 3600) + "h";
-  return Math.floor(sec / 86400) + "d";
+  if (sec < secondsPerMinute) return sec + "s";
+  if (sec < secondsPerHour) return Math.floor(sec / secondsPerMinute) + "m";
+  if (sec < secondsPerDay) return Math.floor(sec / secondsPerHour) + "h";
+  return Math.floor(sec / secondsPerDay) + "d";
 }
 
 function fmtSeconds(n) {
@@ -4653,7 +4716,7 @@ function renderOverview(ctx) {
       label: "Load 1m",
       value: fmtNum(load.absolute, 2),
       sub: loadSub,
-      cls: hasCap ? (p >= 100 ? "t-crit" : (p >= 80 ? "t-warn" : "")) : "",
+      cls: hasCap ? (p >= percentMax ? "t-crit" : (p >= loadWarnPct ? "t-warn" : "")) : "",
       extra: hasCap ? usageBar(p, fmtPct(p), gaugeId) : nothing,
       target: "daemon-section",
       ariaLabel: tileAriaLabel("Load 1m", fmtNum(load.absolute, 2), loadSub, "daemon-section"),
@@ -5288,7 +5351,13 @@ async function loadServiceEvents(name) {
   }
 }
 
-const windowMs = { "1h": 36e5, "24h": 864e5, "168h": 6048e5, "720h": 2592e6, "8760h": 3.1536e10 };
+const windowMs = {
+  "1h": millisecondsPerHour,
+  "24h": millisecondsPerDay,
+  "168h": rollingWeekDays * millisecondsPerDay,
+  "720h": rollingMonthDays * millisecondsPerDay,
+  "8760h": rollingYearDays * millisecondsPerDay,
+};
 
 // Latency graph state: the selected measured check and its window.
 let metricCheck = "";
@@ -5464,8 +5533,11 @@ function slaChartDataTable(observed) {
 
 function drawMetricChart(points, unit, win, label) {
   unit = unit || metricUnitMilliseconds;
-  const W = 640, H = 160, pad = 34, cols = 120;
-  const span = windowMs[win || metricWindow] || 864e5;
+  const W = chartViewWidth;
+  const H = chartViewHeight;
+  const pad = metricChartPad;
+  const cols = chartColumnCount;
+  const span = windowMs[win || metricWindow] || millisecondsPerDay;
   const { buckets, startMs } = bucketize(points, span, cols,
     () => ({ n: 0, sum: 0, min: Infinity, max: -Infinity }),
     (b, p) => {
@@ -5533,18 +5605,18 @@ function fmtTime(t) {
 function fmtRemain(until) {
   const d = new Date(until);
   if (isNaN(d)) return "";
-  const sec = Math.floor((d - Date.now()) / 1000);
+  const sec = Math.floor((d - Date.now()) / millisecondsPerSecond);
   if (sec <= 0) return "elapsed";
-  if (sec < 3600) return shortDur(sec) + " remaining";
-  return Math.floor(sec / 3600) + "h remaining · until " + fmtTime(until);
+  if (sec < secondsPerHour) return shortDur(sec) + " remaining";
+  return Math.floor(sec / secondsPerHour) + "h remaining · until " + fmtTime(until);
 }
 
 function fmtUntilShort(until) {
   const d = new Date(until);
   if (isNaN(d)) return "";
-  const sec = Math.floor((d - Date.now()) / 1000);
+  const sec = Math.floor((d - Date.now()) / millisecondsPerSecond);
   if (sec <= 0) return "now";
-  if (sec < 86400) return "in " + shortDur(sec);
+  if (sec < secondsPerDay) return "in " + shortDur(sec);
   return d.toLocaleDateString();
 }
 
@@ -5601,9 +5673,9 @@ function renderRemediation(r) {
 function fmtAge(t) {
   const d = new Date(t);
   if (isNaN(d)) return "";
-  const sec = Math.floor((Date.now() - d) / 1000);
+  const sec = Math.floor((Date.now() - d) / millisecondsPerSecond);
   if (sec < 0) return "just now";
-  if (sec < 86400) return shortDur(sec) + " ago";
+  if (sec < secondsPerDay) return shortDur(sec) + " ago";
   return fmtTime(t);
 }
 
@@ -6083,9 +6155,9 @@ loadMe().then(() => { load(); });
 let lastRefresh = 0;
 function refreshNow() { load(); }
 function fmtSince(ms) {
-  const s = Math.max(0, Math.round(ms / 1000));
-  if (s < 60) return s + "s";
-  const m = Math.floor(s / 60), r = s % 60;
+  const s = Math.max(0, Math.round(ms / millisecondsPerSecond));
+  if (s < secondsPerMinute) return s + "s";
+  const m = Math.floor(s / secondsPerMinute), r = s % secondsPerMinute;
   return r ? `${m}m ${r}s` : `${m}m`;
 }
 function tickRefreshAge() {
@@ -6096,7 +6168,7 @@ function tickRefreshAge() {
   if (el.textContent === text) return;
   el.textContent = text;
 }
-setInterval(tickRefreshAge, 1000);
+setInterval(tickRefreshAge, refreshAgeTickMs);
 
 let refreshTimer = null;
 function applyRefresh(ms) {
