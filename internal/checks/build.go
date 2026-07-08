@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	certDefaultPort = "443"
+	defaultTLSPort = "443"
 
 	// OnModeChange is the `on: change` metric/field mode: fire when the
 	// observed value changes between cycles instead of comparing to a threshold.
@@ -1278,7 +1278,7 @@ func buildCertCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	case host != "" && path != "":
 		return nil, "cert check: host and path are mutually exclusive"
 	}
-	port := certDefaultPort
+	port := defaultTLSPort
 	if p, ok := cfgval.Int(entry[CheckKeyPort]); ok {
 		port = strconv.Itoa(p)
 	}
