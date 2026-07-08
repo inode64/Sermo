@@ -970,7 +970,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPIPreflight, s.handlePreflight)
 	mux.HandleFunc(routeAPIAction, s.handleAction)
 	mux.HandleFunc(routeAPIReload, s.handleReload)
-	return securityHeaders(s.withAuth(s.withAccessLog(mux)))
+	return securityHeaders(s.withAccessLog(s.withAuth(mux)))
 }
 
 type cspNonceCtxKey struct{}

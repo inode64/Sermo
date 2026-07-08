@@ -59,6 +59,9 @@ func (s *Server) recordWebAccess(r *http.Request, status int) {
 	target, action := parseAPIAccessTarget(r.URL.Path)
 	actor := roleFrom(r.Context())
 	if actor == "" {
+		actor = s.Auth.role(r)
+	}
+	if actor == "" {
 		actor = accessActorAnonymous
 	}
 	entry := map[string]any{
