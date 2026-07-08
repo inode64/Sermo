@@ -195,6 +195,15 @@ Estado ejecutado:
 - Si se introduce una excepcion o una razon de seguridad, documentarla en el
   owner y, si es usuario-facing, en `docs/`.
 
+Estado ejecutado:
+
+- No hubo cambios de estructura publica YAML/JSON, CLI, Web API ni comportamiento
+  observable de operaciones.
+- No se actualizaron README, `docs/` ni ejemplos porque el refactor solo movio
+  literales/helpers internos y documento el plan.
+- La excepcion relevante queda documentada aqui: los strings que coinciden entre
+  superficies no se comparten si no representan el mismo contrato.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
