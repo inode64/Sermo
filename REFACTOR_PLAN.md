@@ -457,6 +457,21 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/servicemgr ./internal/cli` y
   `make check` pasan.
 
+### Fase 23: Vocabulario Linux `/proc/net` compartido
+
+- Crear un owner pequeno para las constantes de las tablas Linux `/proc/net/*`
+  que hoy consumen el wizard de servicios y el probe `dhclient`.
+- Compartir rutas, indices de campos, estados codificados y constantes de parseo
+  sin mover la logica de parsing ni cambiar mensajes de error.
+
+Estado ejecutado:
+
+- `internal/procnet` centraliza paths TCP/UDP, indices, estados y bases de
+  parseo de sockets `/proc/net`.
+- `internal/cli` y `internal/conn` consumen ese vocabulario comun.
+- Validacion ejecutada: `go test ./internal/procnet ./internal/conn ./internal/cli`
+  y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.

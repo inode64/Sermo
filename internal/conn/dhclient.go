@@ -11,23 +11,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"sermo/internal/procnet"
 )
 
 func init() { Register(dhclientProtocol{}, protocolAliasDHClient) }
 
-const procNetUDPPath = "/proc/net/udp"
-
 const (
-	procUDPHeaderField              = "sl"
-	procUDPMinFields                = 10
-	procUDPHeaderIndex              = 0
-	procUDPLocalAddressIndex        = 1
-	procUDPStateIndex               = 3
-	procUDPInodeIndex               = 9
-	procUDPAddressSeparator         = ":"
-	procUDPHexBase                  = 16
-	procUDPPortBits                 = 16
-	procUDPIPv4Bits                 = 32
 	procUDPFormatBase               = 10
 	dhclientAnyInterface            = "any interface"
 	dhclientLeaseBlockStart         = "lease {"
@@ -43,10 +33,6 @@ const (
 	dhclientLeaseExpireFieldIndex   = 0
 	dhclientLeaseExpireDateIndex    = 2
 	dhclientLeaseExpireTimeIndex    = 3
-	ipv4Byte0                       = 0
-	ipv4Byte1                       = 1
-	ipv4Byte2                       = 2
-	ipv4Byte3                       = 3
 )
 
 // dhclientProtocol verifies a local DHCP client socket. A DHCP client does not
@@ -66,7 +52,7 @@ func (dhclientProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if port == 0 {
 		port = dhcpClientPort
 	}
-	sock, err := findUDP4Socket(procNetUDPPath, cfg.Host, port)
+	sock, err := findUDP4Socket(procnet.PathUDP, cfg.Host, port)
 	if err != nil {
 		return Result{}, err
 	}
@@ -128,17 +114,17 @@ func parseUDP4SocketTable(r io.Reader, host string, port int) (udpSocket, bool, 
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
-		if len(fields) < procUDPMinFields || fields[procUDPHeaderIndex] == procUDPHeaderField {
+		if len(fields) < procnet.InodeMinFields || fields[procnet.HeaderIndex] == procnet.HeaderField {
 			continue
 		}
-		addr, p, err := parseProcUDP4Address(fields[procUDPLocalAddressIndex])
+		addr, p, err := parseProcUDP4Address(fields[procnet.LocalAddressIndex])
 		if err != nil {
 			return udpSocket{}, false, err
 		}
 		if p != port || (host != "" && addr != host) {
 			continue
 		}
-		return udpSocket{localAddress: addr, port: p, state: fields[procUDPStateIndex], inode: fields[procUDPInodeIndex]}, true, nil
+		return udpSocket{localAddress: addr, port: p, state: fields[procnet.StateIndex], inode: fields[procnet.InodeIndex]}, true, nil
 	}
 	if err := sc.Err(); err != nil {
 		return udpSocket{}, false, fmt.Errorf("dhclient: read UDP socket table: %w", err)
@@ -147,21 +133,21 @@ func parseUDP4SocketTable(r io.Reader, host string, port int) (udpSocket, bool, 
 }
 
 func parseProcUDP4Address(s string) (string, int, error) {
-	addrHex, portHex, ok := strings.Cut(s, procUDPAddressSeparator)
+	addrHex, portHex, ok := strings.Cut(s, procnet.AddressSeparator)
 	if !ok {
 		return "", 0, fmt.Errorf("dhclient: malformed UDP address %q", s)
 	}
-	addr, err := strconv.ParseUint(addrHex, procUDPHexBase, procUDPIPv4Bits)
+	addr, err := strconv.ParseUint(addrHex, procnet.HexBase, procnet.IPv4Bits)
 	if err != nil {
 		return "", 0, fmt.Errorf("dhclient: malformed UDP address %q: %w", s, err)
 	}
-	port, err := strconv.ParseUint(portHex, procUDPHexBase, procUDPPortBits)
+	port, err := strconv.ParseUint(portHex, procnet.HexBase, procnet.PortBits)
 	if err != nil {
 		return "", 0, fmt.Errorf("dhclient: malformed UDP port %q: %w", s, err)
 	}
 	var b [net.IPv4len]byte
 	binary.LittleEndian.PutUint32(b[:], uint32(addr))
-	ip := net.IPv4(b[ipv4Byte0], b[ipv4Byte1], b[ipv4Byte2], b[ipv4Byte3])
+	ip := net.IPv4(b[procnet.IPv4Byte0], b[procnet.IPv4Byte1], b[procnet.IPv4Byte2], b[procnet.IPv4Byte3])
 	return ip.String(), int(port), nil
 }
 
