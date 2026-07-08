@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -77,5 +78,45 @@ func TestRecordWebAccessLogsMountActionAndQuery(t *testing.T) {
 	}
 	if _, ok := entry[accessFieldQuery]; ok {
 		t.Fatalf("access entry = %v, want no query field", entry)
+	}
+}
+
+func TestAccessLogRecordsAuthDeniedPost(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "access.log")
+	log, err := logfile.Open(path)
+	if err != nil {
+		t.Fatalf("logfile.Open: %v", err)
+	}
+	defer log.Close()
+
+	s := &Server{
+		Backend:   &fakeBackend{services: []Service{{Name: "web"}}},
+		Auth:      Auth{AdminPassword: "secret", GuestPassword: "guestpw"},
+		AccessLog: log,
+	}
+	h := s.Handler()
+
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/services/web/restart", nil)
+	r.Header.Set(csrfHeader, "1")
+	r.SetBasicAuth("guest", "guestpw")
+	h.ServeHTTP(rec, r)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("guest action = %d, want 403", rec.Code)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read access log: %v", err)
+	}
+	var entry map[string]any
+	if err := json.Unmarshal(data, &entry); err != nil {
+		t.Fatalf("access log line = %q: %v", data, err)
+	}
+	if entry[accessFieldActor] != roleGuest || entry[accessFieldStatus] != float64(http.StatusForbidden) {
+		t.Fatalf("access entry = %v, want actor=guest status=403", entry)
+	}
+	if entry[accessFieldTarget] != "web" || entry[accessFieldAction] != "restart" {
+		t.Fatalf("access entry = %v, want target=web action=restart", entry)
 	}
 }
