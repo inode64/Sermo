@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"sermo/internal/process"
+	"sermo/internal/units"
 )
 
 // LinuxClockTicks is the conventional kernel USER_HZ on Linux. The Go runtime does
@@ -21,7 +22,6 @@ var pageSize = uint64(os.Getpagesize())
 const (
 	procRoot          = "/proc"
 	procLineSeparator = "\n"
-	bytesPerKiB       = 1024
 )
 
 // procfs file names read directly under /proc.
@@ -400,5 +400,5 @@ func parseMeminfoKB(line string) (uint64, bool) {
 	if err != nil {
 		return 0, false
 	}
-	return kb * bytesPerKiB, true
+	return kb * units.BytesPerKiB, true
 }

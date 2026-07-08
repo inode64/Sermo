@@ -24,6 +24,8 @@ import (
 	"sort"
 	"time"
 
+	"sermo/internal/units"
+
 	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
 )
 
@@ -307,7 +309,7 @@ func OpenWith(path string, opts Options) (*Store, error) {
 	}
 	// SQLite reads a negative cache_size as a KiB budget (a positive value would be
 	// a page count); convert the byte budget to KiB.
-	cacheKiB := cacheBytes / 1024
+	cacheKiB := cacheBytes / units.BytesPerKiB
 
 	// synchronous=NORMAL is safe under WAL (no corruption risk; at worst the last
 	// few committed cycles are lost on a power cut) and avoids an fsync on every
