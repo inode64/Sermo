@@ -10,14 +10,14 @@ import (
 )
 
 func TestReadinessLifecycle(t *testing.T) {
-	r := NewReadiness("systemd", 3, 1)
+	r := NewReadiness(string(servicemgr.BackendSystemd), 3, 1)
 
 	if rep := r.Report(context.Background()); rep.Ready || rep.Status != readinessStarting {
 		t.Fatalf("initial = %+v", rep)
 	}
 
 	r.MarkReady()
-	if rep := r.Report(context.Background()); !rep.Ready || rep.Status != "ok" || rep.Services != 3 || rep.Watches != 1 {
+	if rep := r.Report(context.Background()); !rep.Ready || rep.Status != TargetStateOK || rep.Services != 3 || rep.Watches != 1 {
 		t.Fatalf("ready = %+v", rep)
 	}
 
@@ -28,7 +28,7 @@ func TestReadinessLifecycle(t *testing.T) {
 }
 
 func TestReadinessFirstCycleGate(t *testing.T) {
-	r := NewReadiness("systemd", 2, 0)
+	r := NewReadiness(string(servicemgr.BackendSystemd), 2, 0)
 	r.ExpectFirstCycles(2)
 
 	rep := r.Report(context.Background())
@@ -45,13 +45,13 @@ func TestReadinessFirstCycleGate(t *testing.T) {
 	}
 
 	r.markFirstCycle()
-	if rep := r.Report(context.Background()); !rep.Ready || rep.Status != "ok" {
+	if rep := r.Report(context.Background()); !rep.Ready || rep.Status != TargetStateOK {
 		t.Fatalf("should be ready after 2/2: %+v", rep)
 	}
 }
 
 func TestReadinessGateZeroTargetsReadyImmediately(t *testing.T) {
-	r := NewReadiness("systemd", 0, 0)
+	r := NewReadiness(string(servicemgr.BackendSystemd), 0, 0)
 	r.ExpectFirstCycles(0)
 	if rep := r.Report(context.Background()); !rep.Ready {
 		t.Fatalf("zero targets must be ready immediately: %+v", rep)
@@ -59,7 +59,7 @@ func TestReadinessGateZeroTargetsReadyImmediately(t *testing.T) {
 }
 
 func TestReadinessMarkReadyDoesNotUndoShutdown(t *testing.T) {
-	r := NewReadiness("systemd", 1, 0)
+	r := NewReadiness(string(servicemgr.BackendSystemd), 1, 0)
 	r.ExpectFirstCycles(1)
 	r.MarkShuttingDown()
 	// A late first-cycle signal (or MarkReady) must not revive the daemon.
@@ -71,7 +71,7 @@ func TestReadinessMarkReadyDoesNotUndoShutdown(t *testing.T) {
 }
 
 func TestSchedulerMarksReadiness(t *testing.T) {
-	ready := NewReadiness("systemd", 1, 0)
+	ready := NewReadiness(string(servicemgr.BackendSystemd), 1, 0)
 	settling := NewSettling(ready)
 	settling.Reset([]string{SettlingServiceKey("a")})
 	workers := []*Worker{

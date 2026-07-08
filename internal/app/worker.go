@@ -766,7 +766,7 @@ func (w *Worker) sampleVersion(ctx context.Context, vc appVersionCmd) (string, e
 	} else {
 		res, err = execx.Run(ctx, runner, timeout, vc.argv[0], vc.argv[1:]...)
 	}
-	if res.ExitCode != 0 {
+	if res.ExitCode != execx.ExitCodeSuccess {
 		if err != nil {
 			return "", err
 		}

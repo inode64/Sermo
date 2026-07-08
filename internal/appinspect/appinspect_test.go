@@ -51,7 +51,7 @@ func TestInspectUsesNamespacedAppPreflight(t *testing.T) {
 	report := Inspect(context.Background(), testRunner{
 		binary: {Stdout: "Webd 1.2.3\n", ExitCode: 0},
 	}, "web", resolved)
-	if !report.Installed || !report.OK || report.Binary != binary || report.Status != "ok" {
+	if !report.Installed || !report.OK || report.Binary != binary || report.Status != StatusOK {
 		t.Fatalf("Inspect() = %+v, want installed ok report for namespaced binary", report)
 	}
 	if report.Version != "Webd 1.2.3" || report.VersionShort != "1.2.3" {
@@ -238,20 +238,20 @@ func TestInspectCanTreatVersionFailureAsOptional(t *testing.T) {
 	runner := testRunner{binary: {Stderr: "bad flag\n", ExitCode: 2}}
 
 	strict := Inspect(context.Background(), runner, "web", resolved)
-	if strict.OK || strict.Status == "ok" {
+	if strict.OK || strict.Status == StatusOK {
 		t.Fatalf("strict Inspect() = %+v, want version failure", strict)
 	}
 	if !strings.Contains(strict.Output, "bad flag") {
 		t.Fatalf("a failing probe must capture the command output, got %q", strict.Output)
 	}
 	optional := Inspect(context.Background(), runner, "web", resolved, WithOptionalVersion())
-	if !optional.OK || optional.Status != "ok" {
+	if !optional.OK || optional.Status != StatusOK {
 		t.Fatalf("optional Inspect() = %+v, want ok with unknown version", optional)
 	}
 
 	resolved.Tree["version_match"] = map[string]any{"contains": "Webd"}
 	matched := Inspect(context.Background(), runner, "web", resolved, WithOptionalVersion())
-	if matched.Installed || !strings.HasPrefix(matched.Status, "not installed: version ") {
+	if matched.Installed || !strings.HasPrefix(matched.Status, statusNotInstalledVersionPrefix) {
 		t.Fatalf("version_match Inspect() = %+v, want identity failure despite optional version", matched)
 	}
 }

@@ -116,7 +116,7 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 		fieldWriteBytes: rates.WriteBytes,
 		fieldAwaitMs:    rates.AwaitMs,
 	}
-	res.Data[fieldValue] = firstPredValue(c.preds, values, rates.UtilPct)
+	res.Data[DataKeyValue] = firstPredValue(c.preds, values, rates.UtilPct)
 	return res
 }
 
@@ -129,7 +129,7 @@ func CalculateDiskIORates(prev, cur DiskIOSample, elapsed time.Duration) (DiskIO
 	}
 	ioTicks := deltaOrZero(cur.IOTicksMs, prev.IOTicksMs)
 	rates := DiskIORates{
-		UtilPct:    min(100, float64(ioTicks)/float64(elapsedMs)*100),
+		UtilPct:    min(percentScale, float64(ioTicks)/float64(elapsedMs)*percentScale),
 		ReadBytes:  float64(deltaOrZero(cur.SectorsRead, prev.SectorsRead)*diskIOSectorBytes) / elapsed.Seconds(),
 		WriteBytes: float64(deltaOrZero(cur.SectorsWritten, prev.SectorsWritten)*diskIOSectorBytes) / elapsed.Seconds(),
 	}

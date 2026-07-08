@@ -26,6 +26,12 @@ const (
 	LevelInfo    Level = "info"
 )
 
+const (
+	levelRankError = iota
+	levelRankWarning
+	levelRankInfo
+)
+
 // Finding is one diagnostic result.
 type Finding struct {
 	Level   Level  `json:"level"`
@@ -94,11 +100,11 @@ func (b *builder) sort() {
 func levelRank(level Level) int {
 	switch level {
 	case LevelError:
-		return 0
+		return levelRankError
 	case LevelWarning:
-		return 1
+		return levelRankWarning
 	default:
-		return 2
+		return levelRankInfo
 	}
 }
 

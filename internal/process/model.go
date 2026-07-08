@@ -78,9 +78,9 @@ const (
 // Discovery source labels.
 const (
 	sourceBackend = "backend"
-	sourcePidfile = "pidfile"
-	sourceCommand = "command_match"
-	sourceChild   = "child"
+	sourcePidfile = SelectorPidfile
+	sourceCommand = SelectorCommandMatch
+	sourceChild   = RoleChild
 )
 
 // Process Role labels for non-selector members: backend seeds are the service's
@@ -121,3 +121,8 @@ type Identity struct {
 	State   string // /proc/<pid>/stat run state: R, S, D, Z (zombie), ...
 	Cmdline []string
 }
+
+// Raw process states read from /proc status/stat files.
+const (
+	ProcStateZombie = "Z"
+)

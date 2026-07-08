@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"sermo/internal/process"
 )
 
 const (
@@ -39,7 +41,7 @@ func (c zombieCheck) Run(_ context.Context) Result {
 	}
 	met := compareFloat(float64(count), c.op, c.value)
 	res := c.result(met, fmt.Sprintf("%d zombie processes", count), start)
-	res.Data = map[string]any{DataKeyZombies: count, fieldValue: count}
+	res.Data = map[string]any{DataKeyZombies: count, DataKeyValue: count}
 	return res
 }
 
@@ -47,7 +49,7 @@ func (c zombieCheck) Run(_ context.Context) Result {
 // /proc scanner. ok is false when /proc cannot be read.
 func SampleZombies() (count uint64, ok bool) { return defaultZombieSampler() }
 
-// defaultZombieSampler counts processes whose /proc/<pid>/stat run state is "Z".
+// defaultZombieSampler counts processes whose /proc/<pid>/stat run state is zombie.
 func defaultZombieSampler() (uint64, bool) {
 	entries, err := os.ReadDir(procRootPath)
 	if err != nil {
@@ -59,7 +61,7 @@ func defaultZombieSampler() (uint64, bool) {
 		if err != nil || pid <= 0 {
 			continue
 		}
-		if procRunState(pid) == "Z" {
+		if procRunState(pid) == process.ProcStateZombie {
 			n++
 		}
 	}

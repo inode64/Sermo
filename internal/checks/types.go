@@ -379,7 +379,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		}
 		return r
 	}
-	if res.ExitCode == -1 {
+	if res.ExitCode == execx.ExitCodeRunFailure {
 		msg := execx.OperatorFailure(err, res, c.timeout)
 		if msg == "" {
 			msg = execx.CommandDidNotStart
@@ -420,7 +420,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		key := c.changeKey(raw)
 		if c.state.primed && key != c.state.last {
 			r := c.result(false, fmt.Sprintf("output changed (%s -> %s)", output.FirstNonEmptyLine(c.state.lastRaw), output.FirstNonEmptyLine(raw)), start)
-			r.Data = map[string]any{fieldOld: c.state.lastRaw, fieldNew: raw}
+			r.Data = map[string]any{DataKeyOld: c.state.lastRaw, DataKeyNew: raw}
 			c.state.last, c.state.lastRaw = key, raw
 			return r
 		}
@@ -450,7 +450,7 @@ func (c commandCheck) changeKey(raw string) string {
 
 func (c commandCheck) runCommand(ctx context.Context) (execx.Result, error) {
 	if c.user != "" {
-		return execx.RunUser(ctx, c.runner, 0, c.user, c.argv[0], c.argv[1:]...)
+		return execx.RunUser(ctx, c.runner, execx.NoTimeout, c.user, c.argv[0], c.argv[1:]...)
 	}
 	return c.runner.Run(ctx, c.argv[0], c.argv[1:]...)
 }
@@ -459,7 +459,7 @@ func (c commandCheck) runCommand(ctx context.Context) (execx.Result, error) {
 // codes. A nil or empty expected list means the default success code, 0.
 func ExitCodeExpected(got int, want []int) bool {
 	if len(want) == 0 {
-		want = []int{0}
+		want = []int{CommandDefaultExpectedExit}
 	}
 	for _, n := range want {
 		if got == n {
@@ -472,7 +472,7 @@ func ExitCodeExpected(got int, want []int) bool {
 // ExpectExitText formats expected exit codes for operator-facing messages.
 func ExpectExitText(want []int) string {
 	if len(want) == 0 {
-		return "0"
+		return strconv.Itoa(CommandDefaultExpectedExit)
 	}
 	parts := make([]string, 0, len(want))
 	for _, n := range want {

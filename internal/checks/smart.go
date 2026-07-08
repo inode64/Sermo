@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	smartctlCommand    = "smartctl"
 	smartHealthUnknown = "unknown"
 	smartHealthPassed  = "PASSED"
 	smartHealthFailed  = "FAILED"
@@ -35,20 +36,21 @@ func (c smartCheck) Run(ctx context.Context) Result {
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
-	res, runErr := c.runner.Run(ctx, "smartctl", "-H", "-A", "-j", c.device)
-	if res.ExitCode == -1 {
+	prefix := CheckTypeSmart + " " + c.device
+	res, runErr := c.runner.Run(ctx, smartctlCommand, smartctlArgs(c.device)...)
+	if res.ExitCode == execx.ExitCodeRunFailure {
 		msg := execx.OperatorFailure(runErr, res, c.timeout)
 		if msg == "" {
 			msg = execx.CommandDidNotStart
 		}
-		return c.result(false, "smart "+c.device+": "+msg, start)
+		return c.result(false, prefix+": "+msg, start)
 	}
 	data, err := parseSmart(res.Stdout)
 	if err != nil {
 		if s := output.FirstNonEmptyLine(res.Stderr); s != "" {
-			return c.result(false, "smart "+c.device+": "+s, start)
+			return c.result(false, prefix+": "+s, start)
 		}
-		return c.result(false, "smart "+c.device+": "+err.Error(), start)
+		return c.result(false, prefix+": "+err.Error(), start)
 	}
 
 	ok := data.healthKnown && !data.passed // default alert condition: health FAILED
@@ -64,7 +66,7 @@ func (c smartCheck) Run(ctx context.Context) Result {
 			health = smartHealthFailed
 		}
 	}
-	r := c.result(ok, "smart "+c.device+" health="+health, start)
+	r := c.result(ok, prefix+" health="+health, start)
 	r.Data = map[string]any{DataKeyDevice: c.device, DataKeyHealth: health}
 	for k, v := range data.values {
 		r.Data[k] = v
@@ -86,8 +88,8 @@ func SampleSmart(ctx context.Context, runner execx.Runner, device string, timeou
 	if runner == nil {
 		runner = execx.CommandRunner{}
 	}
-	res, runErr := runner.Run(ctx, "smartctl", "-H", "-A", "-j", device)
-	if res.ExitCode == -1 {
+	res, runErr := runner.Run(ctx, smartctlCommand, smartctlArgs(device)...)
+	if res.ExitCode == execx.ExitCodeRunFailure {
 		msg := execx.OperatorFailure(runErr, res, timeout)
 		if msg == "" {
 			msg = execx.CommandDidNotStart
@@ -106,6 +108,10 @@ func SampleSmart(ctx context.Context, runner execx.Runner, device string, timeou
 		HealthKnown: data.healthKnown,
 		Values:      data.values,
 	}, nil
+}
+
+func smartctlArgs(device string) []string {
+	return []string{"-H", "-A", "-j", device}
 }
 
 func smartHealthLabel(data smartData) string {

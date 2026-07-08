@@ -334,7 +334,7 @@ func (w *procWatcher) doKill(ctx context.Context, info ProcInfo, msg string) {
 		return
 	}
 	if _, ok := w.matchingProcess(info.PID); ok {
-		w.emitEvent(Event{Watch: w.name, Kind: "kill-failed", Message: fmt.Sprintf("%s: pid %d survived SIGKILL", msg, info.PID)})
+		w.emitEvent(Event{Watch: w.name, Kind: eventKindKillFailed, Message: fmt.Sprintf("%s: pid %d survived SIGKILL", msg, info.PID)})
 	}
 }
 
@@ -350,18 +350,18 @@ func (w *procWatcher) emitSignalResult(msg string, sig syscall.Signal, result pr
 	if len(result.Signalled) > 0 {
 		pid := result.Signalled[0]
 		if sig == syscall.SIGKILL && w.kill.signal != syscall.SIGKILL {
-			w.emitEvent(Event{Watch: w.name, Kind: "kill", Message: fmt.Sprintf("%s: escalated to SIGKILL for pid %d", msg, pid)})
+			w.emitEvent(Event{Watch: w.name, Kind: eventKindKill, Message: fmt.Sprintf("%s: escalated to SIGKILL for pid %d", msg, pid)})
 		} else {
-			w.emitEvent(Event{Watch: w.name, Kind: "kill", Message: fmt.Sprintf("%s: sent %s to pid %d", msg, sigName(sig), pid)})
+			w.emitEvent(Event{Watch: w.name, Kind: eventKindKill, Message: fmt.Sprintf("%s: sent %s to pid %d", msg, sigName(sig), pid)})
 		}
 		return true
 	}
 	if len(result.Failed) > 0 {
 		failure := result.Failed[0]
-		w.emitEvent(Event{Watch: w.name, Kind: "kill-failed", Message: fmt.Sprintf("%s: %s pid %d: %v", msg, sigName(sig), failure.PID, failure.Err)})
+		w.emitEvent(Event{Watch: w.name, Kind: eventKindKillFailed, Message: fmt.Sprintf("%s: %s pid %d: %v", msg, sigName(sig), failure.PID, failure.Err)})
 		return false
 	}
-	w.emitEvent(Event{Watch: w.name, Kind: "kill-failed", Message: fmt.Sprintf("%s: pid did not match kill selector", msg)})
+	w.emitEvent(Event{Watch: w.name, Kind: eventKindKillFailed, Message: fmt.Sprintf("%s: pid did not match kill selector", msg)})
 	return false
 }
 
@@ -427,7 +427,7 @@ func cpuPercent(prevTicks, curTicks uint64, prevAt, now time.Time) (float64, boo
 		return 0, false
 	}
 	secs := float64(curTicks-prevTicks) / metrics.LinuxClockTicks
-	return secs / (wall * float64(n)) * 100, true
+	return secs / (wall * float64(n)) * percentScale, true
 }
 
 // ioBytesPerSec derives a process's IO rate from two cumulative byte samples.

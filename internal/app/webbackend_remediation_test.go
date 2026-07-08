@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sermo/internal/rules"
+	"sermo/internal/servicemgr"
 )
 
 func TestWebBackendDetailRemediation(t *testing.T) {
@@ -50,14 +51,14 @@ func TestWebBackendServicesExposeRemediationAndLastEventSummary(t *testing.T) {
 	reg.Publish("web", policy, state, t0.Add(time.Minute))
 
 	events.now = func() time.Time { return t0.Add(2 * time.Minute) }
-	events.Add(Event{Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "restart completed"})
+	events.Add(Event{Service: "web", Kind: eventKindAction, Action: string(rules.ActionRestart), Status: eventStatusOK, Message: "restart completed"})
 
 	b := &WebBackend{
 		order: []string{"web"},
 		entries: map[string]*webEntry{
 			"web": {
 				unit:           "nginx.service",
-				backend:        "systemd",
+				backend:        string(servicemgr.BackendSystemd),
 				policyCooldown: 5 * time.Minute,
 			},
 		},
@@ -77,7 +78,7 @@ func TestWebBackendServicesExposeRemediationAndLastEventSummary(t *testing.T) {
 	if svc.NextEligibleAt != wantNext {
 		t.Fatalf("NextEligibleAt = %q, want %q", svc.NextEligibleAt, wantNext)
 	}
-	if svc.LastEvent == nil || svc.LastEvent.Action != "restart" || svc.LastEvent.Status != "ok" {
+	if svc.LastEvent == nil || svc.LastEvent.Action != string(rules.ActionRestart) || svc.LastEvent.Status != eventStatusOK {
 		t.Fatalf("LastEvent = %+v, want restart/ok", svc.LastEvent)
 	}
 }

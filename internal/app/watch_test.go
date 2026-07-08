@@ -191,7 +191,7 @@ func TestWatchExpandFiresOnceThenCooldown(t *testing.T) {
 	if len(exp.calls) != 1 || exp.calls[0] != "/mnt/backup:5368709120" {
 		t.Fatalf("expand calls = %v, want one /mnt/backup:5368709120", exp.calls)
 	}
-	if !hasEventKind(events, "expand") {
+	if !hasEventKind(events, eventKindExpand) {
 		t.Fatalf("expected an 'expand' event, got %v", events)
 	}
 
@@ -200,7 +200,7 @@ func TestWatchExpandFiresOnceThenCooldown(t *testing.T) {
 	if len(exp.calls) != 1 {
 		t.Fatalf("expand must be suppressed within cooldown, calls = %v", exp.calls)
 	}
-	if !hasEventKind(events, "expand-skipped") {
+	if !hasEventKind(events, eventKindExpandSkipped) {
 		t.Fatalf("expected an 'expand-skipped' event on cooldown, got %v", events)
 	}
 
@@ -224,7 +224,7 @@ func TestWatchExpandFailureEmitsEvent(t *testing.T) {
 		Emit:      func(e Event) { events = append(events, e) },
 	}
 	w.RunCycle(context.Background())
-	if !hasEventKind(events, "expand-failed") {
+	if !hasEventKind(events, eventKindExpandFailed) {
 		t.Fatalf("expected an 'expand-failed' event, got %v", events)
 	}
 }
@@ -263,13 +263,13 @@ func TestWatchDryRunSkipsHookNotifyAndExpand(t *testing.T) {
 	if len(exp.calls) != 0 {
 		t.Fatalf("dry-run must not expand, calls = %v", exp.calls)
 	}
-	if !hasEventKind(events, "firing") || !hasEventKind(events, "dry-run") {
+	if !hasEventKind(events, eventKindFiring) || !hasEventKind(events, eventKindDryRun) {
 		t.Fatalf("dry-run should emit firing and dry-run events, got %v", events)
 	}
-	if !hasEventMessage(events, "dry-run", "suppressed: cooldown") {
+	if !hasEventMessage(events, eventKindDryRun, "suppressed: cooldown") {
 		t.Fatalf("dry-run should report expand policy suppression, got %v", events)
 	}
-	if hasEventKind(events, "hook") || hasEventKind(events, "notify") || hasEventKind(events, "expand") {
+	if hasEventKind(events, eventKindHook) || hasEventKind(events, eventKindNotify) || hasEventKind(events, eventKindExpand) {
 		t.Fatalf("dry-run emitted side-effect event: %v", events)
 	}
 }
@@ -295,7 +295,7 @@ func TestWatchDryRunSendsOnlyWallNotify(t *testing.T) {
 	if len(wall.msgs) != 1 {
 		t.Fatalf("dry-run must still send wall notification, got %d", len(wall.msgs))
 	}
-	if !hasEventKind(events, "notify") {
+	if !hasEventKind(events, eventKindNotify) {
 		t.Fatalf("wall notification should emit notify event, got %v", events)
 	}
 }
@@ -315,7 +315,7 @@ func TestWatchStartupObserveOnlySkipsFiring(t *testing.T) {
 	}
 
 	w.RunCycle(context.Background())
-	if len(n.msgs) != 0 || hasEventKind(events, "firing") {
+	if len(n.msgs) != 0 || hasEventKind(events, eventKindFiring) {
 		t.Fatalf("observe-only watch must not fire or notify, events=%v msgs=%d", events, len(n.msgs))
 	}
 	if !settling.Observed(SettlingWatchKey("storage-root")) {
@@ -323,7 +323,7 @@ func TestWatchStartupObserveOnlySkipsFiring(t *testing.T) {
 	}
 
 	w.RunCycle(context.Background())
-	if !hasEventKind(events, "firing") {
+	if !hasEventKind(events, eventKindFiring) {
 		t.Fatalf("second cycle must emit firing, events=%v", events)
 	}
 }
@@ -543,7 +543,7 @@ func TestWatchWithRealOSHookRunner(t *testing.T) {
 		// This exercises defaultHookRunner path + real execution in a Watch context.
 		Runner: OSHookRunner{},
 		Emit: func(e Event) {
-			if e.Kind == "hook" || e.Kind == "hook-failed" {
+			if e.Kind == eventKindHook || e.Kind == eventKindHookFail {
 				hookEvents = append(hookEvents, e)
 			}
 		},
@@ -552,7 +552,7 @@ func TestWatchWithRealOSHookRunner(t *testing.T) {
 	if len(hookEvents) != 1 {
 		t.Fatalf("expected 1 hook event, got %d: %v", len(hookEvents), hookEvents)
 	}
-	if hookEvents[0].Kind != "hook" {
+	if hookEvents[0].Kind != eventKindHook {
 		t.Fatalf("expected hook success event, got %s", hookEvents[0].Kind)
 	}
 }

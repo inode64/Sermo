@@ -90,19 +90,19 @@ func TestAcquireReclaimsStale(t *testing.T) {
 			name:    "expired",
 			lf:      lockFile{Service: "mysql", OwnerPID: 100, OwnerStartTicks: 884512, ExpiresAt: fixedNow.Add(-time.Hour)},
 			proc:    fakeProc{alive: map[int]bool{100: true}, ticks: map[int]uint64{100: 884512}},
-			wantTag: "expired",
+			wantTag: staleReasonExpired,
 		},
 		{
 			name:    "dead owner",
 			lf:      lockFile{Service: "mysql", OwnerPID: 200, OwnerStartTicks: 884512, ExpiresAt: fixedNow.Add(time.Hour)},
 			proc:    fakeProc{alive: map[int]bool{200: false}},
-			wantTag: "dead owner",
+			wantTag: staleReasonDeadOwner,
 		},
 		{
 			name:    "pid reuse",
 			lf:      lockFile{Service: "mysql", OwnerPID: 100, OwnerStartTicks: 111111, ExpiresAt: fixedNow.Add(time.Hour)},
 			proc:    fakeProc{alive: map[int]bool{100: true}, ticks: map[int]uint64{100: 884512}},
-			wantTag: "pid reuse",
+			wantTag: staleReasonPIDReuse,
 		},
 	}
 	for _, tc := range cases {

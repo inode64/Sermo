@@ -10,7 +10,8 @@ func TestBounded(t *testing.T) {
 		t.Fatalf("empty streams must yield empty output, got %q", got)
 	}
 	got := Bounded("hello\n", "boom\n")
-	if !strings.Contains(got, "stdout:\nhello") || !strings.Contains(got, "stderr:\nboom") {
+	if !strings.Contains(got, streamLabelStdout+streamLabelSeparator+"hello") ||
+		!strings.Contains(got, streamLabelStderr+streamLabelSeparator+"boom") {
 		t.Fatalf("combined output must label both streams: %q", got)
 	}
 

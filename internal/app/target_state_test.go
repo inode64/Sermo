@@ -1,6 +1,10 @@
 package app
 
-import "testing"
+import (
+	"testing"
+
+	"sermo/internal/servicemgr"
+)
 
 func TestServiceState(t *testing.T) {
 	tests := []struct {
@@ -13,18 +17,18 @@ func TestServiceState(t *testing.T) {
 		ready         bool
 		want          string
 	}{
-		{name: "disabled", enabled: false, monitored: false, backendStatus: "active", observed: true, want: TargetStateDisabled},
-		{name: "starting monitored", enabled: true, monitored: true, backendStatus: "inactive", observed: false, want: TargetStateStarting},
-		{name: "started unmonitored", enabled: true, monitored: false, backendStatus: "active", observed: true, want: TargetStateStarted},
-		{name: "paused unmonitored", enabled: true, monitored: false, backendStatus: "paused", observed: true, want: TargetStateStopped},
-		{name: "stopped unmonitored", enabled: true, monitored: false, backendStatus: "inactive", observed: true, want: TargetStateStopped},
-		{name: "failed unmonitored", enabled: true, monitored: false, backendStatus: "failed", observed: true, want: TargetStateStopped},
-		{name: "collecting active healthy without observability", enabled: true, monitored: true, backendStatus: "active", checkHealth: "ok", observed: true, want: TargetStateCollecting},
-		{name: "monitored active healthy", enabled: true, monitored: true, backendStatus: "active", checkHealth: "ok", observed: true, ready: true, want: TargetStateMonitored},
-		{name: "paused monitored", enabled: true, monitored: true, backendStatus: "paused", checkHealth: "ok", observed: true, want: TargetStateFailed},
-		{name: "collecting active unknown checks", enabled: true, monitored: true, backendStatus: "active", checkHealth: "unknown", observed: true, ready: true, want: TargetStateCollecting},
-		{name: "failed backend", enabled: true, monitored: true, backendStatus: "failed", observed: true, want: TargetStateFailed},
-		{name: "failed checks", enabled: true, monitored: true, backendStatus: "active", checkHealth: "failing", observed: true, ready: true, want: TargetStateFailed},
+		{name: "disabled", enabled: false, monitored: false, backendStatus: string(servicemgr.StatusActive), observed: true, want: TargetStateDisabled},
+		{name: "starting monitored", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusInactive), observed: false, want: TargetStateStarting},
+		{name: "started unmonitored", enabled: true, monitored: false, backendStatus: string(servicemgr.StatusActive), observed: true, want: TargetStateStarted},
+		{name: "paused unmonitored", enabled: true, monitored: false, backendStatus: string(servicemgr.StatusPaused), observed: true, want: TargetStateStopped},
+		{name: "stopped unmonitored", enabled: true, monitored: false, backendStatus: string(servicemgr.StatusInactive), observed: true, want: TargetStateStopped},
+		{name: "failed unmonitored", enabled: true, monitored: false, backendStatus: string(servicemgr.StatusFailed), observed: true, want: TargetStateStopped},
+		{name: "collecting active healthy without observability", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: TargetStateOK, observed: true, want: TargetStateCollecting},
+		{name: "monitored active healthy", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: TargetStateOK, observed: true, ready: true, want: TargetStateMonitored},
+		{name: "paused monitored", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusPaused), checkHealth: TargetStateOK, observed: true, want: TargetStateFailed},
+		{name: "collecting active unknown checks", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: checkHealthUnknown, observed: true, ready: true, want: TargetStateCollecting},
+		{name: "failed backend", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusFailed), observed: true, want: TargetStateFailed},
+		{name: "failed checks", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: checkHealthFailing, observed: true, ready: true, want: TargetStateFailed},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -65,13 +69,13 @@ func TestWatchActivityFailed(t *testing.T) {
 		kind string
 		want bool
 	}{
-		{kind: "firing", want: true},
-		{kind: "hook-failed", want: true},
-		{kind: "notify-failed", want: true},
-		{kind: "expand-failed", want: true},
-		{kind: "recovered"},
-		{kind: "hook"},
-		{kind: "notify"},
+		{kind: eventKindFiring, want: true},
+		{kind: eventKindHookFail, want: true},
+		{kind: eventKindNotifyFail, want: true},
+		{kind: eventKindExpandFailed, want: true},
+		{kind: eventKindRecovered},
+		{kind: eventKindHook},
+		{kind: eventKindNotify},
 	}
 	for _, tt := range tests {
 		t.Run(tt.kind, func(t *testing.T) {

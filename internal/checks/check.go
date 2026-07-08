@@ -139,7 +139,7 @@ func levelCountResult(b base, preds []levelPred, label, unit, countField string,
 	values := map[string]float64{countField: float64(count)}
 	usedPct := 0.0
 	if limit > 0 {
-		usedPct = float64(count) / float64(limit) * 100
+		usedPct = float64(count) / float64(limit) * percentScale
 		values[fieldUsedPct] = usedPct
 		values[fieldFree] = float64(limit - min(count, limit))
 	}
@@ -148,6 +148,6 @@ func levelCountResult(b base, preds []levelPred, label, unit, countField string,
 	if limit > 0 {
 		res.Data[fieldFree] = limit - min(count, limit)
 	}
-	res.Data[fieldValue] = firstPredValue(preds, values, usedPct)
+	res.Data[DataKeyValue] = firstPredValue(preds, values, usedPct)
 	return res
 }

@@ -12,6 +12,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
+	"sermo/internal/servicemgr"
 	"sermo/internal/web"
 )
 
@@ -310,7 +311,7 @@ func TestWebBackendListsAndControlsServiceWatches(t *testing.T) {
 	}
 	store := newFakeStore()
 	b, warns := NewWebBackend(cfg, Deps{
-		Backend: "systemd", Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{},
+		Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{},
 		DefaultTimeout: time.Second, Now: time.Now, Emit: func(Event) {}, Monitor: store,
 	})
 	if len(warns) != 0 {

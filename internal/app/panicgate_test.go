@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"sermo/internal/servicemgr"
 )
 
 func TestPanicGateNilSafe(t *testing.T) {
@@ -43,12 +45,12 @@ func TestPanicGateReadsAndCaches(t *testing.T) {
 // while the gate is active, and back to "ok" when it clears.
 func TestReadinessReportsPanic(t *testing.T) {
 	panicking := false
-	r := NewReadiness("systemd", 3, 1)
+	r := NewReadiness(string(servicemgr.BackendSystemd), 3, 1)
 	r.MarkReady()
 	r.WatchPanic(func() bool { return panicking })
 
 	rep := r.Report(context.Background())
-	if rep.Panic || rep.Status != "ok" || !rep.Ready {
+	if rep.Panic || rep.Status != TargetStateOK || !rep.Ready {
 		t.Fatalf("baseline report = %+v, want ok/not-panic/ready", rep)
 	}
 
@@ -59,7 +61,7 @@ func TestReadinessReportsPanic(t *testing.T) {
 	}
 
 	panicking = false
-	if rep = r.Report(context.Background()); rep.Panic || rep.Status != "ok" {
+	if rep = r.Report(context.Background()); rep.Panic || rep.Status != TargetStateOK {
 		t.Fatalf("cleared report = %+v, want ok", rep)
 	}
 }
@@ -67,7 +69,7 @@ func TestReadinessReportsPanic(t *testing.T) {
 // TestReadinessPanicDoesNotOverrideLifecycle ensures starting/shutting_down keep
 // precedence over panic mode.
 func TestReadinessPanicDoesNotOverrideLifecycle(t *testing.T) {
-	r := NewReadiness("systemd", 1, 0)
+	r := NewReadiness(string(servicemgr.BackendSystemd), 1, 0)
 	r.WatchPanic(func() bool { return true })
 
 	if rep := r.Report(context.Background()); rep.Status != "starting" || rep.Panic {

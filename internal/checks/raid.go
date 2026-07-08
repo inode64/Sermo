@@ -58,7 +58,7 @@ func (c raidCheck) Run(_ context.Context) Result {
 		msg += " (" + strings.Join(st.DegradedNames, ", ") + ")"
 	}
 	r := c.result(ok, msg, start)
-	r.Data = map[string]any{fieldArrays: st.Arrays, fieldDegraded: st.Degraded, fieldRecovering: st.Recovering}
+	r.Data = map[string]any{DataKeyArrays: st.Arrays, DataKeyDegraded: st.Degraded, DataKeyRecovering: st.Recovering}
 	if len(st.DegradedNames) > 0 {
 		r.Data[DataKeyDegradedArrays] = strings.Join(st.DegradedNames, ",")
 	}

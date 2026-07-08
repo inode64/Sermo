@@ -12,6 +12,8 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/conn"
+	"sermo/internal/process"
+	"sermo/internal/servicemgr"
 )
 
 // validateStorageFields validates a storage check's fields at prefix (the dotted path
@@ -36,7 +38,7 @@ func validateMountConditions(prefix string, fields map[string]any, add addFunc) 
 	if v, present := fields[checks.CheckKeyMounted]; present {
 		active = true
 		if _, ok := v.(bool); !ok {
-			add("%s.mounted must be a boolean", prefix)
+			add(validationBooleanFormat, prefix+"."+checks.CheckKeyMounted)
 		}
 	}
 	for _, field := range []string{checks.CheckKeyFSType, checks.CheckKeyDevice, checks.CheckKeyOptions} {
@@ -104,9 +106,9 @@ func validatePresentThresholds(prefix string, fieldsMap map[string]any, fields [
 			continue
 		}
 		switch {
-		case strings.HasSuffix(field, "_bytes"):
+		case strings.HasSuffix(field, checks.LevelFieldSuffixBytes):
 			validateOpByteSize(prefix+"."+field, m, add)
-		case strings.HasSuffix(field, "_pct"):
+		case strings.HasSuffix(field, checks.LevelFieldSuffixPct):
 			validateOpPercent(prefix+"."+field, m, add)
 		default:
 			validateOpNumeric(prefix+"."+field, m, add)
@@ -184,7 +186,7 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 	}
 	if v, present := fields[checks.CheckKeyHTTP3]; present {
 		if h3, ok := v.(bool); !ok {
-			add("%s.http3 must be a boolean", prefix)
+			add(validationBooleanFormat, prefix+"."+checks.CheckKeyHTTP3)
 		} else if h3 {
 			// HTTP/3 runs over QUIC (TLS-only) and cannot use an HTTP proxy.
 			if u := cfgval.String(fields[checks.CheckKeyURL]); u != "" {
@@ -295,7 +297,7 @@ func validateCommandFields(path string, entry map[string]any, validateAnalyzeFie
 	validateCommandExpectations(path, entry, add)
 	if v, present := entry[checks.CheckKeyOnChange]; present {
 		if _, ok := v.(bool); !ok {
-			add("%s.on_change must be a boolean", path)
+			add(validationBooleanFormat, path+"."+checks.CheckKeyOnChange)
 		}
 	}
 	validateVersionMatcherField(path, entry[checks.CheckKeyVersionMatch], add)
@@ -342,14 +344,14 @@ func validatePortsFields(prefix string, fields map[string]any, add addFunc) {
 		add("%s.ports %s", prefix, err)
 	}
 	if v := cfgval.String(fields[checks.CheckKeyExpect]); v != "" && v != checks.PortStateOpen && v != checks.PortStateClosed && v != checks.PortExpectAny {
-		add("%s.expect must be open, closed or any", prefix)
+		add("%s.expect must be %s", prefix, checks.PortExpectSummary)
 	}
 	if v := cfgval.String(fields[checks.CheckKeyMatch]); v != "" && v != checks.PortMatchAll && v != checks.PortMatchAny && v != checks.PortMatchNone {
-		add("%s.match must be all, any or none", prefix)
+		add("%s.match must be %s", prefix, checks.PortMatchSummary)
 	}
 	if v, present := fields[checks.CheckKeyOnChange]; present {
 		if _, ok := v.(bool); !ok {
-			add("%s.on_change must be a boolean", prefix)
+			add(validationBooleanFormat, prefix+"."+checks.CheckKeyOnChange)
 		}
 	}
 	if v, present := fields[checks.CheckKeyConnectTimeout]; present && !isPositiveDuration(cfgval.String(v)) {
@@ -384,7 +386,7 @@ func validatePortSpec(spec string) string {
 func validateLoadFields(prefix string, fields map[string]any, add addFunc) {
 	if v, present := fields[checks.CheckKeyPerCPU]; present {
 		if _, ok := v.(bool); !ok {
-			add("%s.per_cpu must be a boolean", prefix)
+			add(validationBooleanFormat, prefix+"."+checks.CheckKeyPerCPU)
 		}
 	}
 	validateThresholdPreds(prefix, fields, checks.LoadPredFields, add)
@@ -397,7 +399,7 @@ func validateHdparmFields(prefix string, fields map[string]any, add addFunc) {
 		add("%s.device is required for an hdparm check", prefix)
 	}
 	if validatePresentThresholds(prefix, fields, checks.HdparmPredFields, add) == 0 {
-		add("%s requires at least one of read/cached {op, value}", prefix)
+		add("%s requires at least one of %s {op, value}", prefix, strings.Join(checks.HdparmPredFields, "/"))
 	}
 }
 
@@ -444,10 +446,10 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 			// fine
 		case string:
 			if !conn.ValidTLSValue(t) {
-				add("%s.tls %q must be a boolean, skip-verify, or a valid sslmode", prefix, t)
+				add("%s.tls %q must be %s", prefix, t, conn.TLSValueSummary)
 			}
 		default:
-			add("%s.tls must be a boolean or a string (true/false/skip-verify)", prefix)
+			add("%s.tls must be a boolean or a string (%s)", prefix, conn.TLSScalarSummary)
 		}
 	}
 	// expect: optional response assertions (field -> value | {op, value}),
@@ -474,7 +476,7 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 	for _, key := range []string{checks.CheckKeyOnChange, checks.CheckKeyOnVersionChange} {
 		if v, present := fields[key]; present {
 			if _, ok := v.(bool); !ok {
-				add("%s.%s must be a boolean", prefix, key)
+				add(validationBooleanFormat, prefix+"."+key)
 			}
 		}
 	}
@@ -502,12 +504,12 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 		path := section + "." + name
 		entry, ok := entries[name].(map[string]any)
 		if !ok {
-			add("%s must be a mapping", path)
+			add(validationMappingFormat, path)
 			continue
 		}
 		if v, present := entry[checks.CheckKeyOptional]; present {
 			if _, isBool := v.(bool); !isBool {
-				add("%s.optional must be a boolean", path)
+				add(validationBooleanFormat, path+"."+checks.CheckKeyOptional)
 			}
 		}
 		// A per-check interval runs the check every N cycles (N rounded from
@@ -530,7 +532,7 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 		// condition check's OK means a threshold fired, which is not verification.
 		if v, present := entry[checks.CheckKeyVerify]; present {
 			if b, ok := v.(bool); !ok {
-				add("%s.verify must be a boolean", path)
+				add(validationBooleanFormat, path+"."+checks.CheckKeyVerify)
 			} else if b && !checks.IsHealthType(typ) {
 				add("%s.verify is only valid on a health check (tcp/http/service/command/cert/…); %q is a condition check whose OK does not confirm a successful start", path, typ)
 			}
@@ -552,7 +554,7 @@ func validateAnalyze(path string, entry map[string]any, add addFunc) {
 	analyze, ok := entry[checks.CheckKeyAnalyze].(map[string]any)
 	if !ok {
 		if _, present := entry[checks.CheckKeyAnalyze]; present {
-			add("%s.analyze must be a mapping", path)
+			add(validationAnalyzeMappingFormat, path)
 		}
 		return
 	}
@@ -580,12 +582,12 @@ func validateAnalyze(path string, entry map[string]any, add addFunc) {
 		switch cfgval.AsString(rm[checks.CheckKeySeverity]) {
 		case checks.AnalyzeSeverityError, checks.AnalyzeSeverityWarning, checks.AnalyzeSeverityOK:
 		default:
-			add("%s.analyze rule %q severity must be error, warning or ok", path, id)
+			add("%s.analyze rule %q severity must be %s", path, id, checks.AnalyzeSeveritySummary)
 		}
 		switch cfgval.AsString(rm[checks.CheckKeyStream]) {
 		case "", checks.AnalyzeStreamBoth, checks.AnalyzeStreamStdout, checks.AnalyzeStreamStderr:
 		default:
-			add("%s.analyze rule %q stream must be stdout, stderr or both", path, id)
+			add("%s.analyze rule %q stream must be %s", path, id, checks.AnalyzeStreamSummary)
 		}
 		match := cfgval.AsString(rm[checks.CheckKeyMatch])
 		if match == "" {
@@ -615,11 +617,11 @@ func validateCommandExport(path string, entry map[string]any, add addFunc) {
 		switch spec := exports[name].(type) {
 		case map[string]any:
 			if from := cfgval.String(spec[checks.CheckKeyFrom]); from != "" && from != checks.AnalyzeStreamStdout && from != checks.AnalyzeStreamStderr {
-				add("%s.export.%s.from must be stdout or stderr", path, name)
+				add("%s.export.%s.from must be %s", path, name, checks.AnalyzeExportStreamSummary)
 			}
 			if v, present := spec[checks.CheckKeyTrim]; present {
 				if _, ok := v.(bool); !ok {
-					add("%s.export.%s.trim must be a boolean", path, name)
+					add(validationBooleanFormat, path+"."+checks.CheckKeyExport+"."+name+"."+checks.CheckKeyTrim)
 				}
 			}
 			if rawRegex, present := spec[checks.CheckKeyRegex]; present {
@@ -659,7 +661,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 			if proto.Name() == conn.ProtocolNameDNS {
 				if v, present := entry[checks.CheckKeyResolvconf]; present {
 					if _, ok := v.(bool); !ok {
-						add("%s.resolvconf must be a boolean", path)
+						add(validationBooleanFormat, path+"."+checks.CheckKeyResolvconf)
 					} else if cfgval.Bool(v) && cfgval.String(entry[checks.CheckKeyHost]) != "" {
 						add("%s host and resolvconf are mutually exclusive", path)
 					}
@@ -687,7 +689,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 			add("%s.expect is required for a service check", path)
 		} else {
 			if _, ok := serviceStates[st]; !ok {
-				add("%s expect %q is not one of %s", path, st, serviceStateSummary)
+				add("%s expect %q is not one of %s", path, st, servicemgr.StatusSummary)
 			}
 		}
 	case checks.CheckTypeProcess:
@@ -705,7 +707,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		}
 		if st := cfgval.String(entry[checks.CheckKeyState]); st != "" {
 			if _, ok := processStates[st]; !ok {
-				add("%s state %q is not one of %s", path, st, processStateSummary)
+				add("%s state %q is not one of %s", path, st, process.StateSummary)
 			}
 		}
 	case checks.CheckTypeFileExists:
@@ -769,7 +771,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		validateHdparmFields(path, entry, add)
 	case checks.CheckTypeSensors:
 		if validatePresentThresholds(path, entry, checks.SensorPredFields, add) == 0 {
-			add("%s requires at least one of temp/fan/voltage {op, value}", path)
+			add("%s requires at least one of %s {op, value}", path, strings.Join(checks.SensorPredFields, "/"))
 		}
 	case checks.CheckTypeSmart:
 		validateSmartFields(path, entry, add)
@@ -791,7 +793,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		}
 		if v, present := entry[checks.CheckKeyOnChange]; present {
 			if _, ok := v.(bool); !ok {
-				add("%s.on_change must be a boolean", path)
+				add(validationBooleanFormat, path+"."+checks.CheckKeyOnChange)
 			}
 		}
 		if hasCmd {
@@ -830,7 +832,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		validateSwapMetricCondition(path, cfgval.String(entry[checks.CheckKeyMetric]), entry, add)
 	case checks.CheckTypeRoute:
 		if f := cfgval.String(entry[checks.CheckKeyFamily]); f != "" && f != checks.FamilyIPv4 && f != checks.FamilyIPv6 {
-			add("%s.family must be ipv4 or ipv6", path)
+			add("%s.family must be %s", path, checks.RouteFamilySummary)
 		}
 		if v, present := entry[checks.CheckKeyInterface]; present {
 			if _, ok := v.(string); !ok {
@@ -851,7 +853,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		}
 		if v, present := entry[checks.CheckKeyQuick]; present {
 			if _, ok := v.(bool); !ok {
-				add("%s.quick must be a boolean", path)
+				add(validationBooleanFormat, path+"."+checks.CheckKeyQuick)
 			}
 		}
 	case checks.CheckTypeSQL:
@@ -887,7 +889,7 @@ func validateFirewallRulesFields(prefix string, fields map[string]any, add addFu
 	switch backend {
 	case "", checks.FirewallBackendAuto, checks.FirewallBackendNftables, checks.FirewallBackendIptables:
 	default:
-		add("%s.backend must be auto, nftables or iptables", prefix)
+		add("%s.backend must be %s", prefix, checks.FirewallBackendSummary)
 	}
 	if v, present := fields[checks.CheckKeyMinRules]; present {
 		n, ok := cfgval.Int(v)
@@ -913,7 +915,7 @@ func validateWebsocketFields(prefix string, fields map[string]any, add addFunc) 
 	switch u.Scheme {
 	case checks.URLSchemeWS, checks.URLSchemeWSS, checks.URLSchemeHTTP, checks.URLSchemeHTTPS:
 	default:
-		add("%s.url scheme must be ws, wss, http or https", prefix)
+		add("%s.url scheme must be %s", prefix, checks.WebsocketURLSchemeSummary)
 	}
 }
 
@@ -1027,7 +1029,7 @@ func validateInterfaceFields(prefix string, fields map[string]any, add addFunc) 
 		}
 	}
 	if m := cfgval.String(fields[checks.CheckKeyInterfaceMatch]); m != "" && m != checks.InterfaceMatchAny && m != checks.InterfaceMatchAll {
-		add("%s.interface_match %q must be any or all", prefix, m)
+		add("%s.interface_match %q must be %s", prefix, m, checks.InterfaceMatchSummary)
 	}
 }
 
@@ -1066,7 +1068,7 @@ func validateInfluxFields(prefix string, fields map[string]any, add addFunc) {
 			add("%s.token is required for a flux query", prefix)
 		}
 	default:
-		add("%s.language %q must be influxql or flux", prefix, language)
+		add("%s.language %q must be %s", prefix, language, checks.InfluxLanguageSummary)
 	}
 }
 
@@ -1087,7 +1089,7 @@ func isJSONArray(s string) bool {
 func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 	engine := cfgval.String(fields[checks.CheckKeyEngine])
 	if _, ok := sqlEngines[engine]; !ok {
-		add("%s.engine must be one of mysql, mariadb, postgres, postgresql, sqlite", prefix)
+		add("%s.engine must be one of %s", prefix, checks.SQLEngineSummary)
 	}
 	if cfgval.String(fields[checks.CheckKeyQuery]) == "" {
 		add("%s.query is required for a sql check", prefix)
@@ -1131,7 +1133,7 @@ func validateCertFields(prefix string, fields map[string]any, add addFunc) {
 	}
 	if v, present := fields[checks.CheckKeyPort]; present {
 		if n, ok := cfgval.Int(v); !ok || !validTCPPort(n) {
-			add("%s.port must be an integer in %s", prefix, cfgval.TCPPortRange())
+			add(validationTCPPortRangeFormat, prefix+"."+checks.CheckKeyPort, cfgval.TCPPortRange())
 		}
 	}
 	if v, present := fields[checks.CheckKeyServerName]; present {
@@ -1155,7 +1157,7 @@ func validateCertFields(prefix string, fields map[string]any, add addFunc) {
 	for _, key := range []string{checks.CheckKeyOnAlgorithmChange, checks.CheckKeyOnIssuerChange, checks.CheckKeyOnChange, checks.CheckKeyCertVerify} {
 		if v, present := fields[key]; present {
 			if _, ok := v.(bool); !ok {
-				add("%s.%s must be a boolean", prefix, key)
+				add(validationBooleanFormat, prefix+"."+key)
 			}
 		}
 	}
@@ -1176,7 +1178,7 @@ func validatePressureFields(prefix string, fields map[string]any, add addFunc) {
 	switch cfgval.String(fields[checks.CheckKeyResource]) {
 	case checks.PressureResourceCPU, checks.PressureResourceMemory, checks.PressureResourceIO:
 	default:
-		add("%s.resource must be cpu, memory or io for a pressure check", prefix)
+		add("%s.resource must be %s for a pressure check", prefix, checks.PressureResourceSummary)
 	}
 	validateThresholdPreds(prefix, fields, checks.PressurePredFields, add)
 }
@@ -1191,7 +1193,7 @@ func validateCount(entry map[string]any, path string, add addFunc) {
 	}
 	if of := cfgval.String(entry[checks.CheckKeyOf]); of != "" {
 		if _, ok := countKinds[of]; !ok {
-			add("%s count `of` %q is not one of any, file, dir, symlink", path, of)
+			add("%s count `of` %q is not one of %s", path, of, checks.CountKindSummary)
 		}
 	}
 	if v, present := entry[checks.CheckKeyRecursive]; present {

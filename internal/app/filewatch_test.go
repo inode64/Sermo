@@ -66,7 +66,7 @@ func TestFileWatchSizeChange(t *testing.T) {
 	if env["SERMO_CHANGE"] != "size" || env["SERMO_NEW"] != "25" || env["SERMO_PATH"] != f {
 		t.Fatalf("unexpected hook env: %v", env)
 	}
-	if len(h.events) != 1 || h.events[0].Kind != "hook" {
+	if len(h.events) != 1 || h.events[0].Kind != eventKindHook {
 		t.Fatalf("want one hook event, got %+v", h.events)
 	}
 }
@@ -90,7 +90,7 @@ func TestFileWatchDryRunSkipsHookAndNotify(t *testing.T) {
 	if len(n.msgs) != 0 {
 		t.Fatalf("dry-run must not notify, got %d messages", len(n.msgs))
 	}
-	if len(h.events) != 1 || h.events[0].Kind != "dry-run" {
+	if len(h.events) != 1 || h.events[0].Kind != eventKindDryRun {
 		t.Fatalf("expected one dry-run event, got %+v", h.events)
 	}
 }
@@ -236,7 +236,7 @@ func TestFileWatchWithRealOSHookRunner(t *testing.T) {
 		// Use real OSHookRunner (not the test Func) to cover default path + execx.
 		runner: OSHookRunner{},
 		emit: func(e Event) {
-			if e.Kind == "hook" || e.Kind == "hook-failed" {
+			if e.Kind == eventKindHook || e.Kind == eventKindHookFail {
 				hookEvents = append(hookEvents, e)
 			}
 		},
@@ -252,7 +252,7 @@ func TestFileWatchWithRealOSHookRunner(t *testing.T) {
 	writeSize(t, f, 20)
 	w.runCycle(context.Background())
 
-	if len(hookEvents) != 1 || hookEvents[0].Kind != "hook" {
+	if len(hookEvents) != 1 || hookEvents[0].Kind != eventKindHook {
 		t.Fatalf("expected one successful hook event, got %d: %v", len(hookEvents), hookEvents)
 	}
 }
@@ -279,7 +279,7 @@ func TestFileWatchMissingRootDeletion(t *testing.T) {
 
 	w.runCycle(context.Background())
 
-	if len(h.events) != 1 || h.events[0].Kind != "hook" {
+	if len(h.events) != 1 || h.events[0].Kind != eventKindHook {
 		t.Fatalf("expected one delete hook event, got %d: %v", len(h.events), h.events)
 	}
 	if msg := h.events[0].Message; msg == "" || !(len(msg) > 0) {

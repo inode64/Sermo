@@ -286,12 +286,18 @@ type cephMonMetadata struct {
 	Addrs string `json:"addrs"`
 }
 
+const (
+	cephCommand            = "ceph"
+	cephSubcommandMon      = "mon"
+	cephSubcommandMetadata = "metadata"
+)
+
 func detectCephMonEndpoint(ctx context.Context, runner execx.Runner, timeout time.Duration, unit string) (string, int) {
 	id := cephMonID(unit)
 	if id == "" {
 		return "", 0
 	}
-	res, err := execx.Run(ctx, runner, timeout, "ceph", "mon", "metadata", id)
+	res, err := execx.Run(ctx, runner, timeout, cephCommand, cephSubcommandMon, cephSubcommandMetadata, id)
 	if err != nil || strings.TrimSpace(res.Stdout) == "" {
 		return "", 0
 	}

@@ -46,8 +46,11 @@ const (
 	procDeletedPathSuffix     = " (deleted)"
 	procFDDir                 = "fd"
 	procCWDLink               = "cwd"
+	processRoleMountUser      = "mount-user"
+	processSourceMount        = ActionMount
 	procRootPath              = "/proc"
 	procRootLink              = "root"
+	rootMountID               = "root"
 	rootMountPath             = "/"
 	rootUmountDisabledMessage = "root filesystem cannot be unmounted"
 	runtimeDirMounts          = "mounts"
@@ -66,10 +69,12 @@ const (
 
 	mountMessageAlreadyUnmounted      = "already unmounted"
 	mountMessageBusy                  = "mount is busy"
+	mountMessageLazyUnmounted         = "lazy unmounted"
 	mountMessageMounted               = "mounted"
 	mountMessageRefcountAcquired      = "acquired, already mounted"
 	mountMessageRefcountReleasedInUse = "released, still in use"
 	mountMessageUnmounted             = "unmounted"
+	mountMessageUnmountedAfterSignal  = "unmounted after signalling blockers"
 
 	fstabCommentPrefix    = "#"
 	fstabLineSeparator    = "\n"
@@ -230,7 +235,7 @@ func UmountDisabledReason(path string) string {
 func IDForPath(path string) string {
 	clean := strings.Trim(filepath.Clean(path), "/")
 	if clean == "" || clean == "." {
-		return "root"
+		return rootMountID
 	}
 	var b strings.Builder
 	for _, r := range clean {
@@ -429,13 +434,13 @@ func (c Controller) unmount(ctx context.Context, spec Spec) (Result, error) {
 		result.Signalled = reaped.Signalled
 		result.Blockers = reaped.Remaining
 		if err := c.run(ctx, ActionUmount, spec.Path); err == nil {
-			return Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultOK, Message: "unmounted after signalling blockers", Mounted: false, Signalled: reaped.Signalled}, nil
+			return Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultOK, Message: mountMessageUnmountedAfterSignal, Mounted: false, Signalled: reaped.Signalled}, nil
 		}
 	}
 	if spec.Umount.AllowLazy {
 		if err := c.run(ctx, ActionUmount, "-l", spec.Path); err == nil {
 			result.Status = ResultOK
-			result.Message = "lazy unmounted"
+			result.Message = mountMessageLazyUnmounted
 			result.Mounted = false
 			result.Lazy = true
 			return result, nil
@@ -700,8 +705,8 @@ func ProcessesByMount(ctx context.Context, mountPaths []string, lookup *process.
 				Exe:     id.Exe,
 				ExeOK:   id.ExeOK,
 				Cmdline: id.Cmdline,
-				Role:    "mount-user",
-				Source:  "mount",
+				Role:    processRoleMountUser,
+				Source:  processSourceMount,
 			}
 			for _, mountPath := range matches {
 				out[mountPath] = append(out[mountPath], proc)
@@ -738,7 +743,7 @@ func pidUsesMounts(ctx context.Context, pid int, mountPaths []string) ([]string,
 	}
 	base := filepath.Join(procRootPath, fmt.Sprint(pid))
 	matches := map[string]struct{}{}
-	for _, name := range []string{"cwd", "root"} {
+	for _, name := range []string{procCWDLink, procRootLink} {
 		if err := linkMountMatches(ctx, filepath.Join(base, name), mountPaths, matches); err != nil {
 			return nil, err
 		}

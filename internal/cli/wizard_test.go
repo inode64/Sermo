@@ -11,7 +11,9 @@ import (
 	"testing"
 
 	"sermo/internal/assist"
+	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/rules"
 )
 
 func fakeWizardEnv(*config.Config) assist.Env {
@@ -398,9 +400,9 @@ func TestWriteMountFilesRejectsExistingFileBeforeUpdatingConfig(t *testing.T) {
 
 	_, _, err := writeMountFiles(cfgPath, map[string]map[string]any{
 		"mount-mnt-backup": {
-			"name":  "mount-mnt-backup",
-			"check": map[string]any{"type": "storage", "path": "/mnt/backup", "mounted": true},
-			"mount": map[string]any{},
+			config.EntryKeyName:    "mount-mnt-backup",
+			config.WatchKeyCheck:   map[string]any{checks.CheckKeyType: checks.CheckTypeStorage, checks.CheckKeyPath: "/mnt/backup", checks.CheckKeyMounted: true},
+			config.StorageKeyMount: map[string]any{},
 		},
 	})
 	if err == nil || !strings.Contains(err.Error(), "already exists") {
@@ -475,7 +477,9 @@ func TestMergeWizardWatchesRejectsExistingFile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmp, "storages", "storage-root.yml"), []byte("name: storage-root\ncheck: { type: storage, path: /, used_pct: { op: \">=\", value: 90 } }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := mergeWizardWatches(cfgPath, "volume", map[string]any{"storage-root": map[string]any{"check": map[string]any{"type": "storage", "path": "/"}}}); err == nil {
+	if _, err := mergeWizardWatches(cfgPath, "volume", map[string]any{"storage-root": map[string]any{
+		config.WatchKeyCheck: map[string]any{checks.CheckKeyType: checks.CheckTypeStorage, checks.CheckKeyPath: "/"},
+	}}); err == nil {
 		t.Fatal("existing storage watch file must not be overwritten")
 	}
 }
@@ -486,7 +490,10 @@ func TestMergeWizardWatchesAddsStoragesDirToWatchesPath(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte("paths:\n  services: [services]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	merged, err := mergeWizardWatches(cfgPath, "volume", map[string]any{"storage-root": map[string]any{"check": map[string]any{"type": "storage", "path": "/"}, "then": map[string]any{"notify": []any{"ops"}}}})
+	merged, err := mergeWizardWatches(cfgPath, "volume", map[string]any{"storage-root": map[string]any{
+		config.WatchKeyCheck: map[string]any{checks.CheckKeyType: checks.CheckTypeStorage, checks.CheckKeyPath: "/"},
+		config.WatchKeyThen:  map[string]any{rules.RuleFieldNotify: []any{"ops"}},
+	}})
 	if err != nil {
 		t.Fatalf("mergeWizardWatches: %v", err)
 	}
@@ -510,9 +517,9 @@ func TestMergeWizardWatchesWritesWatchDocuments(t *testing.T) {
 	}
 	merged, err := mergeWizardWatches(cfgPath, "net", map[string]any{
 		"net-eth0": map[string]any{
-			"category": "network",
-			"check":    map[string]any{"type": "net", "interface": "eth0"},
-			"metrics":  map[string]any{"state": map[string]any{"expect": "up"}},
+			config.EntryKeyCategory: config.WatchCategoryNetwork,
+			config.WatchKeyCheck:    map[string]any{checks.CheckKeyType: checks.CheckTypeNet, checks.CheckKeyInterface: "eth0"},
+			config.SectionMetrics:   map[string]any{checks.NetMetricState: map[string]any{checks.CheckKeyExpect: checks.NetStateUp}},
 		},
 	})
 	if err != nil {
@@ -542,7 +549,7 @@ func TestWizardConfigDirNameUsesWatchType(t *testing.T) {
 			name:   "volume assistant writes storages directory",
 			wizard: "volume",
 			entries: map[string]any{
-				"storage-root": map[string]any{"check": map[string]any{"type": "storage"}},
+				"storage-root": map[string]any{config.WatchKeyCheck: map[string]any{checks.CheckKeyType: checks.CheckTypeStorage}},
 			},
 			want: "storages",
 		},
@@ -550,7 +557,7 @@ func TestWizardConfigDirNameUsesWatchType(t *testing.T) {
 			name:   "net assistant writes networks directory",
 			wizard: "net",
 			entries: map[string]any{
-				"net-eth0": map[string]any{"check": map[string]any{"type": "net"}},
+				"net-eth0": map[string]any{config.WatchKeyCheck: map[string]any{checks.CheckKeyType: checks.CheckTypeNet}},
 			},
 			want: "networks",
 		},
@@ -558,7 +565,7 @@ func TestWizardConfigDirNameUsesWatchType(t *testing.T) {
 			name:   "custom storage watch writes generic watches directory",
 			wizard: "custom wizard",
 			entries: map[string]any{
-				"storage-root": map[string]any{"check": map[string]any{"type": "storage"}},
+				"storage-root": map[string]any{config.WatchKeyCheck: map[string]any{checks.CheckKeyType: checks.CheckTypeStorage}},
 			},
 			want: "watches",
 		},
@@ -593,7 +600,7 @@ func TestWizardCleanupDirsUsesCurrentOutputDirOnly(t *testing.T) {
 			name:   "volume checks storages dir",
 			wizard: "volume",
 			entries: map[string]any{
-				"storage-root": map[string]any{"check": map[string]any{"type": "storage"}},
+				"storage-root": map[string]any{config.WatchKeyCheck: map[string]any{checks.CheckKeyType: checks.CheckTypeStorage}},
 			},
 			want: []string{filepath.Join(tmp, "storages")},
 		},
@@ -601,7 +608,7 @@ func TestWizardCleanupDirsUsesCurrentOutputDirOnly(t *testing.T) {
 			name:   "net checks networks dir",
 			wizard: "net",
 			entries: map[string]any{
-				"net-eth0": map[string]any{"check": map[string]any{"type": "net"}},
+				"net-eth0": map[string]any{config.WatchKeyCheck: map[string]any{checks.CheckKeyType: checks.CheckTypeNet}},
 			},
 			want: []string{filepath.Join(tmp, "networks")},
 		},

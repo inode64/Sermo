@@ -12,8 +12,17 @@ import (
 )
 
 // CommandDidNotStart is the operator-facing message when execx marks a run
-// failure (exit code -1) but provides no underlying error detail.
+// failure (ExitCodeRunFailure) but provides no underlying error detail.
 const CommandDidNotStart = "command did not start"
+
+const (
+	// ExitCodeSuccess is the conventional successful process exit code.
+	ExitCodeSuccess = 0
+	// ExitCodeRunFailure is the synthetic exit code for start, timeout and runner failures.
+	ExitCodeRunFailure = -1
+	// NoTimeout disables execx's additional per-command deadline.
+	NoTimeout time.Duration = 0
+)
 
 const (
 	commandRunErrorPrefix        = "run "
@@ -67,7 +76,7 @@ func (CommandRunner) RunUser(ctx context.Context, user, name string, args ...str
 	start := time.Now()
 	cmd := exec.CommandContext(ctx, name, args...)
 	if err := prepareCommandUser(cmd, user); err != nil {
-		return Result{ExitCode: -1, Duration: time.Since(start)}, err
+		return Result{ExitCode: ExitCodeRunFailure, Duration: time.Since(start)}, err
 	}
 	return runPrepared(ctx, cmd, start, name)
 }
@@ -98,7 +107,7 @@ func runPrepared(ctx context.Context, cmd *exec.Cmd, start time.Time, displayNam
 	result := Result{
 		Stdout:   stdout.String(),
 		Stderr:   stderr.String(),
-		ExitCode: 0,
+		ExitCode: ExitCodeSuccess,
 		Duration: time.Since(start),
 	}
 
@@ -107,7 +116,7 @@ func runPrepared(ctx context.Context, cmd *exec.Cmd, start time.Time, displayNam
 	}
 
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		result.ExitCode = -1
+		result.ExitCode = ExitCodeRunFailure
 		if errors.Is(ctxErr, context.DeadlineExceeded) {
 			if d := result.Duration.Round(time.Millisecond); d > 0 {
 				return result, fmt.Errorf(commandRunTimeoutAfterFormat, displayName, d, ctxErr)
@@ -123,7 +132,7 @@ func runPrepared(ctx context.Context, cmd *exec.Cmd, start time.Time, displayNam
 		return result, fmt.Errorf(commandRunExitCodeFormat, displayName, result.ExitCode)
 	}
 
-	result.ExitCode = -1
+	result.ExitCode = ExitCodeRunFailure
 	return result, fmt.Errorf(commandRunErrorFormat, displayName, err)
 }
 
@@ -179,7 +188,7 @@ func RunUser(ctx context.Context, r Runner, timeout time.Duration, user, name st
 	if ur, ok := r.(UserRunner); ok {
 		return ur.RunUser(ctx, user, name, args...)
 	}
-	return Result{ExitCode: -1}, fmt.Errorf("execx: runner does not support user %q", user)
+	return Result{ExitCode: ExitCodeRunFailure}, fmt.Errorf("execx: runner does not support user %q", user)
 }
 
 // EnvRunner is an optional interface implemented by runners that can execute
@@ -216,7 +225,7 @@ func IsContextErr(err error) bool {
 // check messages when the timeout is enforced by context.WithTimeout rather than
 // execx.Run directly.
 func ContextFailure(err error, timeout time.Duration) string {
-	return OperatorFailure(err, Result{ExitCode: -1}, timeout)
+	return OperatorFailure(err, Result{ExitCode: ExitCodeRunFailure}, timeout)
 }
 
 // FormatContextOrError returns an operator-facing message for context errors, or
@@ -229,8 +238,8 @@ func FormatContextOrError(err error, timeout time.Duration) string {
 }
 
 // OperatorFailure formats a command run failure for check, probe and hook status
-// messages. Exit code -1 from execx marks a run failure (timeout, missing
-// binary, …), not a real process exit status. Timeouts are reported as
+// messages. ExitCodeRunFailure from execx marks a run failure (timeout, missing
+// binary, ...), not a real process exit status. Timeouts are reported as
 // "timeout after <duration>" instead of "exit -1" or "context deadline exceeded".
 func OperatorFailure(err error, res Result, timeout time.Duration) string {
 	if err == nil {

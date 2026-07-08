@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"sermo/internal/config"
+	"sermo/internal/notify"
 )
 
 func TestIssueHelpers(t *testing.T) {
@@ -28,8 +29,8 @@ func TestIssueHelpers(t *testing.T) {
 func TestNotifierNamesSorted(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"notifiers": map[string]any{
-			"zeta": map[string]any{"type": "slack"},
-			"alfa": map[string]any{"type": "email"},
+			"zeta": map[string]any{notify.KeyType: notify.TypeSlack},
+			"alfa": map[string]any{notify.KeyType: notify.TypeEmail},
 		},
 	}}}
 	got := notifierNames(cfg)
@@ -43,8 +44,8 @@ func TestNotifierNamesSorted(t *testing.T) {
 
 func TestWizardServiceHelpers(t *testing.T) {
 	tree := map[string]any{
-		"display_name": "MariaDB",
-		"variables":    map[string]any{"port": 3306},
+		config.EntryKeyDisplayName: "MariaDB",
+		config.SectionVariables:    map[string]any{config.VariableKeyPort: 3306},
 	}
 	if got := serviceTitle(tree, "mariadb"); got != "MariaDB" {
 		t.Fatalf("serviceTitle = %q", got)
@@ -59,7 +60,7 @@ func TestWizardServiceHelpers(t *testing.T) {
 		t.Fatalf("servicePort without variables = %d", got)
 	}
 	for _, port := range []any{0, -1, 65536, "70000", "not-a-port"} {
-		if got := servicePort(map[string]any{"variables": map[string]any{"port": port}}); got != 0 {
+		if got := servicePort(map[string]any{config.SectionVariables: map[string]any{config.VariableKeyPort: port}}); got != 0 {
 			t.Fatalf("servicePort(%v) = %d, want 0", port, got)
 		}
 	}

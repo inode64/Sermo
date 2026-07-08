@@ -24,6 +24,7 @@ import (
 const (
 	defaultWatchKillTermTimeout = 10 * time.Second
 	defaultWatchKillTimeout     = 5 * time.Second
+	serviceWatchNameSeparator   = ":"
 )
 
 // BuildWatches resolves the global `watches` section into runnable Watches, plus
@@ -167,6 +168,10 @@ func isMetricWatch(entry map[string]any) bool {
 // names are reserved.
 func reservedServiceWatchName(name string) bool {
 	return name == config.ServiceMonitorKeyVersion || name == config.ServiceMonitorKeyConfig
+}
+
+func serviceMonitorWatchName(service, monitor string) string {
+	return service + serviceWatchNameSeparator + monitor
 }
 
 // unsupportedServiceWatchType reports why a check type cannot back a service
@@ -469,7 +474,7 @@ func parseProcCond(check map[string]any) (procCond, error) {
 		c.onGone = b
 	}
 	if !c.any() {
-		return c, fmt.Errorf("process check requires at least one of for, cpu, memory, io, gone")
+		return c, fmt.Errorf("process check requires at least one of %s", config.ProcessWatchConditionSummary)
 	}
 	return c, nil
 }
@@ -512,7 +517,7 @@ func parseFileCond(check map[string]any) (fileCond, error) {
 		c.onDelete = true
 	}
 	if !c.any() {
-		return c, fmt.Errorf("file check requires at least one of size, permissions, owner, existence")
+		return c, fmt.Errorf("file check requires at least one of %s", config.FileWatchConditionSummary)
 	}
 	return c, nil
 }
@@ -757,11 +762,12 @@ func versionMonitor(name string, tree map[string]any, deps Deps, interval time.D
 	entry[checks.CheckKeyType] = checks.CheckTypeCommand
 	entry[checks.CheckKeyOnChange] = true
 	entry[checks.CheckKeyChangeLevel] = level
-	check, err := checks.BuildInline(name+":version", entry, monitorDeps(deps))
+	watchName := serviceMonitorWatchName(name, config.ServiceMonitorKeyVersion)
+	check, err := checks.BuildInline(watchName, entry, monitorDeps(deps))
 	if err != nil {
 		return nil, "service " + name + ": version monitor: " + err.Error()
 	}
-	return monitorWatch(name+":version", checks.CheckTypeCommand, check, notify, config.DryRun(tree), deps, interval), ""
+	return monitorWatch(watchName, checks.CheckTypeCommand, check, notify, config.DryRun(tree), deps, interval), ""
 }
 
 // configMonitor synthesizes a watch that alerts when the service's config is
@@ -788,11 +794,12 @@ func configMonitor(name string, tree map[string]any, deps Deps, interval time.Du
 	if entry[checks.CheckKeyCommand] == nil && entry[checks.CheckKeyPath] == nil {
 		return nil, "service " + name + ": config monitor needs preflight.config (or a path)"
 	}
-	check, err := checks.BuildInline(name+":config", entry, monitorDeps(deps))
+	watchName := serviceMonitorWatchName(name, config.ServiceMonitorKeyConfig)
+	check, err := checks.BuildInline(watchName, entry, monitorDeps(deps))
 	if err != nil {
 		return nil, "service " + name + ": config monitor: " + err.Error()
 	}
-	return monitorWatch(name+":config", checks.CheckTypeConfig, check, notify, config.DryRun(tree), deps, interval), ""
+	return monitorWatch(watchName, checks.CheckTypeConfig, check, notify, config.DryRun(tree), deps, interval), ""
 }
 
 // onChangeNotify reads an `{on_change: {notify: [...]}}` block, returning the
@@ -815,19 +822,19 @@ func onChangeNotify(v any) ([]string, bool) {
 func onChangeVersionLevel(v any) (int, string) {
 	block, ok := v.(map[string]any)
 	if !ok {
-		return 3, ""
+		return checks.VersionLevelPatchComponents, ""
 	}
 	oc, ok := block[config.ServiceMonitorKeyOnChange].(map[string]any)
 	if !ok {
-		return 3, ""
+		return checks.VersionLevelPatchComponents, ""
 	}
 	name := cfgval.String(oc[config.ServiceMonitorKeyLevel])
 	if name == "" {
-		return 3, ""
+		return checks.VersionLevelPatchComponents, ""
 	}
 	level, ok := checks.VersionLevel(name)
 	if !ok {
-		return 0, "version.on_change.level " + name + " is not one of major, minor, patch"
+		return 0, "version.on_change.level " + name + " is not one of " + checks.VersionLevelSummary
 	}
 	return level, ""
 }

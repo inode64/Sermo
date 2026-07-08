@@ -187,7 +187,7 @@ func (a App) syncStorageMountMonitoring(opts options, cfg *config.Config, storag
 	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
 		msg := fmt.Sprintf("storage mount monitoring unavailable: %v", err)
-		fmt.Fprintf(a.Stderr, "warning: %s\n", msg)
+		fmt.Fprintf(a.Stderr, cliWarningFormat, msg)
 		a.recordAccess(cfg, action+"-monitor", storage, accessStatusError, msg)
 		return
 	}
@@ -195,7 +195,7 @@ func (a App) syncStorageMountMonitoring(opts options, cfg *config.Config, storag
 	change, err := app.SyncStorageMountMonitoring(store, storage, action, resultOK, monitorMode, disabled, state.SourceCLIMountUmount, state.SourceCLI)
 	if err != nil {
 		msg := err.Error()
-		fmt.Fprintf(a.Stderr, "warning: %s\n", msg)
+		fmt.Fprintf(a.Stderr, cliWarningFormat, msg)
 		a.recordAccess(cfg, action+"-monitor", storage, accessStatusError, msg)
 		return
 	}

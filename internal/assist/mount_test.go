@@ -28,7 +28,7 @@ func TestMountAssistantGeneratesMountUnit(t *testing.T) {
 	if !ok {
 		t.Fatalf("mount-mnt-backup missing: %+v", res.Mounts)
 	}
-	mount, ok := body["mount"].(map[string]any)
+	mount, ok := body[config.StorageKeyMount].(map[string]any)
 	if !ok {
 		t.Fatalf("mount block missing: %+v", body)
 	}
@@ -36,12 +36,12 @@ func TestMountAssistantGeneratesMountUnit(t *testing.T) {
 	if !ok {
 		t.Fatalf("check block missing: %+v", body)
 	}
-	if check[checks.CheckKeyPath] != "/mnt/backup" || check[checks.CheckKeyType] != checks.CheckTypeStorage || check["mounted"] != true || mount["refcount"] != true {
+	if check[checks.CheckKeyPath] != "/mnt/backup" || check[checks.CheckKeyType] != checks.CheckTypeStorage || check[checks.CheckKeyMounted] != true || mount[config.MountKeyRefcount] != true {
 		t.Fatalf("mount body = %+v, want storage check/refcount", body)
 	}
-	umount, ok := mount["umount"].(map[string]any)
-	if !ok || umount["allow_sigkill"] != false || umount["allow_lazy"] != false {
-		t.Fatalf("umount policy = %+v, want safe defaults", mount["umount"])
+	umount, ok := mount[config.MountKeyUmount].(map[string]any)
+	if !ok || umount[config.MountKeyAllowSIGKILL] != false || umount[config.MountKeyAllowLazy] != false {
+		t.Fatalf("umount policy = %+v, want safe defaults", mount[config.MountKeyUmount])
 	}
 }
 
@@ -64,9 +64,9 @@ func TestMountAssistantBatchSettings(t *testing.T) {
 	}
 	for name, raw := range res.Mounts {
 		body := raw.(map[string]any)
-		mount := body["mount"].(map[string]any)
-		if mount["refcount"] != false {
-			t.Fatalf("%s refcount = %v, want false", name, mount["refcount"])
+		mount := body[config.StorageKeyMount].(map[string]any)
+		if mount[config.MountKeyRefcount] != false {
+			t.Fatalf("%s refcount = %v, want false", name, mount[config.MountKeyRefcount])
 		}
 	}
 }

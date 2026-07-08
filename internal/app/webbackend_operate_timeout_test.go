@@ -22,7 +22,7 @@ func TestWebBackendOperateBoundsSlotWait(t *testing.T) {
 	engine := operation.New(operation.Config{
 		Service: "web",
 		Unit:    "nginx",
-		Backend: "systemd",
+		Backend: string(servicemgr.BackendSystemd),
 		Tree:    map[string]any{"policy": map[string]any{"cooldown": "5m"}},
 		Manager: fakeManager{},
 		Locker:  &locker,

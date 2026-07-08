@@ -43,6 +43,7 @@ const (
 const (
 	statusErrorPrefix               = StatusPrefixError + " "
 	statusNotInstalledVersionPrefix = StatusPrefixNotInstalled + " version "
+	statusCurrentLabel              = "current"
 	statusVersionFromCycle          = "version_from cycle"
 )
 
@@ -142,13 +143,13 @@ func applyCurrentLabels(reports []Report, cfg *config.Config, category string) {
 		if !base.Installed || !base.OK || base.VersionShort == "" || base.VersionShort != reports[i].VersionShort {
 			continue
 		}
-		reports[i].DisplayName = strings.TrimSpace(reports[i].DisplayName + " current")
+		reports[i].DisplayName = strings.TrimSpace(reports[i].DisplayName + " " + statusCurrentLabel)
 	}
 }
 
 func hasCurrentLabel(displayName string) bool {
 	for _, field := range strings.Fields(displayName) {
-		if field == "current" {
+		if field == statusCurrentLabel {
 			return true
 		}
 	}
@@ -240,7 +241,7 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 
 	setReportOwner(&r, info, lookup)
 
-	health := probeCommandFor(resolved.Tree, "health")
+	health := probeCommandFor(resolved.Tree, checks.DataKeyHealth)
 	version := probeCommandFor(resolved.Tree, checks.DataKeyVersion)
 	if len(health.argv) > 0 {
 		var healthOut string
@@ -332,13 +333,13 @@ func inspectOptions(opts []Option) options {
 func runExitProbe(ctx context.Context, runner execx.Runner, cmd probeCommand) (bool, string, string) {
 	res, err := runProbeCommand(ctx, runner, cmd)
 	switch {
-	case res.ExitCode == -1:
+	case res.ExitCode == execx.ExitCodeRunFailure:
 		msg := execx.OperatorFailure(err, res, cmd.timeout)
 		if msg == "" {
 			msg = execx.CommandDidNotStart
 		}
 		return false, statusErrorPrefix + msg, output.Bounded(res.Stdout, res.Stderr)
-	case err != nil && res.ExitCode == 0:
+	case err != nil && res.ExitCode == checks.CommandDefaultExpectedExit:
 		return false, statusErrorPrefix + err.Error(), output.Bounded(res.Stdout, res.Stderr)
 	case !checks.ExitCodeExpected(res.ExitCode, cmd.expectExit):
 		return false, fmt.Sprintf("%sexit %d (want %s)", statusErrorPrefix, res.ExitCode, checks.ExpectExitText(cmd.expectExit)), output.Bounded(res.Stdout, res.Stderr)
@@ -362,13 +363,13 @@ func runVersionProbe(ctx context.Context, runner execx.Runner, tree map[string]a
 		return versionProbeResult{status: status, output: output.Bounded(res.Stdout, res.Stderr)}
 	}
 	switch {
-	case res.ExitCode == -1:
+	case res.ExitCode == execx.ExitCodeRunFailure:
 		msg := execx.OperatorFailure(err, res, cmd.timeout)
 		if msg == "" {
 			msg = execx.CommandDidNotStart
 		}
 		return fail(statusErrorPrefix + msg)
-	case err != nil && res.ExitCode == 0:
+	case err != nil && res.ExitCode == checks.CommandDefaultExpectedExit:
 		return fail(statusErrorPrefix + err.Error())
 	case !checks.ExitCodeExpected(res.ExitCode, cmd.expectExit):
 		status := fmt.Sprintf("%sexit %d (want %s)", statusErrorPrefix, res.ExitCode, checks.ExpectExitText(cmd.expectExit))
@@ -410,7 +411,7 @@ func modeString(info os.FileInfo) string {
 func shortVersionFor(ctx context.Context, runner execx.Runner, tree map[string]any, rawVersion string) string {
 	if vc := probeCommandFor(tree, checks.DataKeyVersionShort); len(vc.argv) > 0 {
 		res, err := runProbeCommand(ctx, runner, vc)
-		if err == nil && res.ExitCode == 0 {
+		if err == nil && res.ExitCode == checks.CommandDefaultExpectedExit {
 			if line := output.FirstNonEmptyLine(res.Stdout); line != "" {
 				return line
 			}
@@ -516,7 +517,7 @@ func probeCommandFor(tree map[string]any, key string) probeCommand {
 		argv:       cfgval.StringList(entry[checks.CheckKeyCommand]),
 		user:       cfgval.String(entry[checks.CheckKeyUser]),
 		timeout:    cfgval.DurationOr(entry[checks.CheckKeyTimeout], probeTimeout),
-		expectExit: []int{0},
+		expectExit: []int{checks.CommandDefaultExpectedExit},
 	}
 	if v, ok := cfgval.IntList(entry[checks.CheckKeyExpectExit]); ok {
 		vc.expectExit = v

@@ -65,21 +65,45 @@ const (
 
 const (
 	daemonProcessName            = "sermod"
-	daemonWebSchemeHTTP          = "http"
+	daemonWebSchemeHTTP          = checks.URLSchemeHTTP
 	daemonWebAuthUserPrefix      = "admin:"
 	daemonWebCSRFHeader          = "X-Sermo-CSRF"
 	daemonWebCSRFValue           = "1"
 	daemonWebHeaderAuthorization = "Authorization"
 	daemonWebBasicAuthPrefix     = "Basic "
-	daemonAPIPathApplications    = "/api/applications"
-	daemonAPIPathEvents          = "/api/events"
+	daemonAPIPathRoot            = "/api"
+	daemonAPIPathApplications    = daemonAPIPathRoot + "/applications"
+	daemonAPIPathEvents          = daemonAPIPathRoot + "/events"
 	daemonAPIPathEventsClear     = daemonAPIPathEvents + "/clear"
-	daemonAPIPathServices        = "/api/services"
-	daemonAPIPathWatches         = "/api/watches"
+	daemonAPIPathServices        = daemonAPIPathRoot + "/services"
+	daemonAPIPathWatches         = daemonAPIPathRoot + "/watches"
 	daemonAPIPathServiceEvents   = "/events"
 	daemonAPIQueryBefore         = "before"
 	daemonAPIQueryLimit          = "limit"
+	cliUnknownServiceFormat      = "unknown service %q"
+	cliWarningFormat             = "warning: %s\n"
 	pflagUnknownFlagPrefix       = "unknown flag: "
+)
+
+const (
+	cliFlagSetName   = "sermoctl"
+	cliFlagBackend   = commandBackend
+	cliFlagBefore    = daemonAPIQueryBefore
+	cliFlagConfig    = commandConfig
+	cliFlagHelp      = commandHelp
+	cliFlagJSON      = "json"
+	cliFlagLimit     = daemonAPIQueryLimit
+	cliFlagLong      = "long"
+	cliFlagName      = config.EntryKeyName
+	cliFlagNoCascade = "no-cascade"
+	cliFlagNotify    = rules.RuleFieldNotify
+	cliFlagQuiet     = "quiet"
+	cliFlagReason    = "reason"
+	cliFlagSeries    = "series"
+	cliFlagSince     = "since"
+	cliFlagTimeout   = checks.CheckKeyTimeout
+	cliFlagTTL       = "ttl"
+	cliFlagVersion   = commandVersion
 )
 
 const (
@@ -739,7 +763,7 @@ func (a App) beginManualOperationSettling(cfg *config.Config, store *state.Store
 	}
 	if err := app.BeginOperationSettlingForCLI(store, service, action); err != nil {
 		msg := err.Error()
-		fmt.Fprintf(a.Stderr, "warning: %s\n", msg)
+		fmt.Fprintf(a.Stderr, cliWarningFormat, msg)
 		a.recordAccess(cfg, action+"-settling", service, accessStatusError, msg)
 	}
 }
@@ -750,7 +774,7 @@ func (a App) finishManualOperationSettling(cfg *config.Config, store *state.Stor
 	}
 	if err := app.FinishOperationSettlingForCLIWithActive(store, service, action, result, opErr, activeAfterStart); err != nil {
 		msg := err.Error()
-		fmt.Fprintf(a.Stderr, "warning: %s\n", msg)
+		fmt.Fprintf(a.Stderr, cliWarningFormat, msg)
 		a.recordAccess(cfg, action+"-settling", service, accessStatusError, msg)
 	}
 }
@@ -762,7 +786,7 @@ func (a App) syncManualActionMonitoring(cfg *config.Config, store *state.Store, 
 	change, err := app.SyncManualActionMonitoringWithActive(store, service, action, result, state.SourceCLIManualStop, state.SourceCLI, activeAfterStart)
 	if err != nil {
 		msg := err.Error()
-		fmt.Fprintf(a.Stderr, "warning: %s\n", msg)
+		fmt.Fprintf(a.Stderr, cliWarningFormat, msg)
 		a.recordAccess(cfg, action+"-monitor", service, accessStatusError, msg)
 		return
 	}
@@ -870,7 +894,7 @@ func (a App) printOperation(r operation.Result) {
 		// unit that failed to stop, a stale artifact left behind) folded into the
 		// message after the bare "<action> ok"; surface it instead of dropping it.
 		if note := strings.TrimSpace(strings.TrimPrefix(r.Message, r.Action+" ok")); note != "" {
-			fmt.Fprintf(a.Stdout, "warning: %s\n", note)
+			fmt.Fprintf(a.Stdout, cliWarningFormat, note)
 		}
 	case operation.ResultBlocked:
 		fmt.Fprintf(a.Stdout, "BLOCKED %s %s\n", r.Service, r.Action)
@@ -1020,7 +1044,7 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 	built, buildWarnings := checks.BuildWithWarnings(section, deps)
 	warnings := checks.BuildWarningStrings(buildWarnings)
 	for _, w := range warnings {
-		fmt.Fprintf(a.Stderr, "warning: %s\n", w)
+		fmt.Fprintf(a.Stderr, cliWarningFormat, w)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, app.PreflightDeadline(deps.DefaultTimeout))
@@ -1117,7 +1141,7 @@ func (a App) runLocks(opts options) int {
 	}
 
 	for _, w := range report.Warnings {
-		fmt.Fprintf(a.Stderr, "warning: %s\n", w)
+		fmt.Fprintf(a.Stderr, cliWarningFormat, w)
 	}
 
 	if opts.json {
@@ -1188,7 +1212,7 @@ func (a App) runProcesses(opts options) int {
 	warnings = append(warnings, discWarnings...)
 
 	for _, w := range warnings {
-		fmt.Fprintf(a.Stderr, "warning: %s\n", w)
+		fmt.Fprintf(a.Stderr, cliWarningFormat, w)
 	}
 
 	if opts.json {
@@ -1309,7 +1333,7 @@ func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.Servic
 				return servicemgr.ServiceStatus{}, exitRuntimeError
 			}
 		} else if len(cfg.Services) > 0 {
-			a.reportError(opts, fmt.Sprintf("unknown service %q", service))
+			a.reportError(opts, fmt.Sprintf(cliUnknownServiceFormat, service))
 			return servicemgr.ServiceStatus{}, exitRuntimeError
 		}
 	}
@@ -1855,26 +1879,26 @@ func parseArgs(args []string) (options, error) {
 
 	var backend string
 	var notifyValues []string
-	fs := pflag.NewFlagSet("sermoctl", pflag.ContinueOnError)
+	fs := pflag.NewFlagSet(cliFlagSetName, pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.SetInterspersed(true)
-	fs.BoolVarP(&opts.help, "help", "h", false, "")
-	fs.BoolVarP(&opts.version, "version", "V", false, "")
-	fs.BoolVar(&opts.json, "json", false, "")
-	fs.BoolVarP(&opts.quiet, "quiet", "q", false, "")
-	fs.BoolVar(&opts.noCascade, "no-cascade", false, "")
-	fs.BoolVar(&opts.series, "series", false, "")
-	fs.BoolVar(&opts.long, "long", false, "")
-	fs.StringArrayVar(&notifyValues, "notify", nil, "")
-	fs.DurationVar(&opts.since, "since", 0, "")
-	fs.StringVar(&opts.before, "before", "", "")
-	fs.IntVar(&opts.eventLimit, "limit", 0, "")
-	fs.StringVar(&backend, "backend", "", "")
-	fs.DurationVar(&opts.timeout, "timeout", 0, "")
-	fs.StringVar(&opts.config, "config", "", "")
-	fs.StringVar(&opts.name, "name", "", "")
-	fs.StringVar(&opts.reason, "reason", "", "")
-	fs.DurationVar(&opts.ttl, "ttl", 0, "")
+	fs.BoolVarP(&opts.help, cliFlagHelp, "h", false, "")
+	fs.BoolVarP(&opts.version, cliFlagVersion, "V", false, "")
+	fs.BoolVar(&opts.json, cliFlagJSON, false, "")
+	fs.BoolVarP(&opts.quiet, cliFlagQuiet, "q", false, "")
+	fs.BoolVar(&opts.noCascade, cliFlagNoCascade, false, "")
+	fs.BoolVar(&opts.series, cliFlagSeries, false, "")
+	fs.BoolVar(&opts.long, cliFlagLong, false, "")
+	fs.StringArrayVar(&notifyValues, cliFlagNotify, nil, "")
+	fs.DurationVar(&opts.since, cliFlagSince, 0, "")
+	fs.StringVar(&opts.before, cliFlagBefore, "", "")
+	fs.IntVar(&opts.eventLimit, cliFlagLimit, 0, "")
+	fs.StringVar(&backend, cliFlagBackend, "", "")
+	fs.DurationVar(&opts.timeout, cliFlagTimeout, 0, "")
+	fs.StringVar(&opts.config, cliFlagConfig, "", "")
+	fs.StringVar(&opts.name, cliFlagName, "", "")
+	fs.StringVar(&opts.reason, cliFlagReason, "", "")
+	fs.DurationVar(&opts.ttl, cliFlagTTL, 0, "")
 
 	if err := fs.Parse(flagArgs); err != nil {
 		return opts, normalizePflagError(err)
@@ -1882,7 +1906,7 @@ func parseArgs(args []string) (options, error) {
 	// --limit defaults to 0 (unset → runEvents applies its default). An explicit
 	// 0 or negative is rejected rather than silently falling back to the default,
 	// which the bare `> 0` guard could not distinguish from "unset".
-	if fs.Changed("limit") && opts.eventLimit < 1 {
+	if fs.Changed(cliFlagLimit) && opts.eventLimit < 1 {
 		return opts, fmt.Errorf("--limit must be a positive integer")
 	}
 	if backend != "" {

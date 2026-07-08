@@ -12,7 +12,11 @@ import (
 // (link state, errors, speed) each notifying the chosen targets.
 type netAssistant struct{}
 
-const netKeywordActive = "active"
+const (
+	netKeywordActive     = "active"
+	netWatchPrefix       = "net-"
+	netDefaultErrorDelta = 100
+)
 
 func (netAssistant) Name() string  { return AssistantNameNet }
 func (netAssistant) Title() string { return "Network interface checks (link state, errors, speed)" }
@@ -50,7 +54,7 @@ func (netAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 			}
 			s = &t
 		}
-		watches["net-"+c.Name] = buildNetWatch(c, *s)
+		watches[netWatchPrefix+c.Name] = buildNetWatch(c, *s)
 	}
 	return Result{Watches: watches, Summary: fmt.Sprintf("%d net watch(es)", len(watches))}, nil
 }
@@ -145,7 +149,7 @@ func askNetSettings(p *Prompt, env Env, label string) (netSettings, error) {
 		case checks.NetMetricState:
 			s.stateDown = p.Choose("For link state, alert when…", []string{"it changes (up or down)", "it goes down"}) == 1
 		case checks.NetMetricErrors:
-			s.errorsAt = p.AskInt("Alert when interface errors per cycle exceed", 100)
+			s.errorsAt = p.AskInt("Alert when interface errors per cycle exceed", netDefaultErrorDelta)
 		case checks.NetMetricAddress:
 			s.addrAbsent = p.Choose("For the IP address, alert when…", []string{"it changes (reconnect/renumbering)", "the interface has no address"}) == 1
 		}

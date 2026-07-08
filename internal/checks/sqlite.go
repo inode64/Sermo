@@ -12,11 +12,16 @@ import (
 )
 
 const (
-	sqliteBusyTimeoutMS   = 2000
-	sqliteIntegrityOK     = "ok"
-	sqliteIntegrityPragma = "PRAGMA integrity_check;"
-	sqliteQuickPragma     = "PRAGMA quick_check;"
+	sqliteBusyTimeoutMS      = 2000
+	sqliteIntegrityOK        = "ok"
+	sqliteIntegrityPragma    = "PRAGMA integrity_check;"
+	sqliteQuickPragma        = "PRAGMA quick_check;"
+	sqliteReadOnlyDSNPattern = "file:%s?mode=ro&_pragma=busy_timeout(%d)"
 )
+
+func sqliteReadOnlyDSN(path string) string {
+	return fmt.Sprintf(sqliteReadOnlyDSNPattern, path, sqliteBusyTimeoutMS)
+}
 
 // sqliteCheck verifies a SQLite database file is healthy by running SQLite's
 // integrity check. It passes (health-style, OK==true) when the check reports
@@ -38,7 +43,7 @@ func (c sqliteCheck) Run(ctx context.Context) Result {
 		return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
 	}
 
-	db, err := sql.Open(SQLEngineSQLite, fmt.Sprintf("file:%s?mode=ro&_pragma=busy_timeout(%d)", c.path, sqliteBusyTimeoutMS))
+	db, err := sql.Open(SQLEngineSQLite, sqliteReadOnlyDSN(c.path))
 	if err != nil {
 		return c.result(false, fmt.Sprintf("open %s: %v", c.path, err), start)
 	}

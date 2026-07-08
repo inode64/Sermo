@@ -37,6 +37,15 @@ const (
 	sqliteDriverName    = "sqlite"
 )
 
+const (
+	stateTableSLASample         = "sla_sample"
+	stateTableCheckSLASample    = "check_sla_sample"
+	stateTableMeasurement       = "measurement"
+	stateTableMeasurementMetric = "measurement_metric"
+	stateTableDaemonMetric      = "daemon_metric"
+	stateTableServiceMetric     = "service_metric"
+)
+
 // Sources record who last changed a monitoring state row, for inspection.
 const (
 	SourceConfig         = "config"           // daemon applied an entry's `monitor` flag
@@ -1255,7 +1264,7 @@ func (s *Store) MeasurementSeries(service, check string, from, to time.Time) ([]
 
 // PruneMeasurements deletes measurement buckets older than before. Returns rows removed.
 func (s *Store) PruneMeasurements(before time.Time) (int64, error) {
-	return s.pruneBuckets("measurement", before)
+	return s.pruneBuckets(stateTableMeasurement, before)
 }
 
 // pruneBuckets deletes rows with a bucket older than before from one of the
@@ -1328,7 +1337,7 @@ func (s *Store) MetricSeries(service, check, metric string, from, to time.Time) 
 
 // PruneMetrics deletes named-metric buckets older than before. Returns rows removed.
 func (s *Store) PruneMetrics(before time.Time) (int64, error) {
-	return s.pruneBuckets("measurement_metric", before)
+	return s.pruneBuckets(stateTableMeasurementMetric, before)
 }
 
 // RecordDaemonMetric accumulates one sermod process metric observation into its
@@ -1389,7 +1398,7 @@ func (s *Store) DaemonMetricSeries(metric string, from, to time.Time) ([]Measure
 
 // PruneDaemonMetrics deletes daemon metric buckets older than before. Returns rows removed.
 func (s *Store) PruneDaemonMetrics(before time.Time) (int64, error) {
-	return s.pruneBuckets("daemon_metric", before)
+	return s.pruneBuckets(stateTableDaemonMetric, before)
 }
 
 // RecordServiceMetric accumulates one service process-tree metric observation
@@ -1451,17 +1460,17 @@ func (s *Store) ServiceMetricSeries(service, metric string, from, to time.Time) 
 // PruneServiceMetrics deletes service runtime metric buckets older than before.
 // Returns rows removed.
 func (s *Store) PruneServiceMetrics(before time.Time) (int64, error) {
-	return s.pruneBuckets("service_metric", before)
+	return s.pruneBuckets(stateTableServiceMetric, before)
 }
 
 // PruneSLA deletes SLA buckets older than before, bounding the table to roughly
 // one year of per-minute samples per service. Returns the rows removed.
 func (s *Store) PruneSLA(before time.Time) (int64, error) {
-	total, err := s.pruneBuckets("sla_sample", before)
+	total, err := s.pruneBuckets(stateTableSLASample, before)
 	if err != nil {
 		return 0, err
 	}
-	rows, err := s.pruneBuckets("check_sla_sample", before)
+	rows, err := s.pruneBuckets(stateTableCheckSLASample, before)
 	if err != nil {
 		return 0, err
 	}

@@ -13,11 +13,270 @@ const hostMetricTotalCPU = "total_cpu";
 const hostMetricTotalMemory = "total_memory";
 const hostMetricTotalSwap = "total_swap";
 const hostMetricLoad1 = "load1";
+const eventLogLimit = "500";
+const eventRecentLimit = "200";
+const httpMethodPost = "POST";
+const csrfHeader = "X-Sermo-CSRF";
+const csrfHeaderValue = "1";
+const apiApplicationsPath = "api/applications";
+const apiActivityPath = "api/activity";
+const apiDaemonPath = "api/daemon";
+const apiDaemonMetricsPath = "api/daemon/metrics";
+const apiEventsPath = "api/events";
+const apiEventsClearPath = "api/events/clear";
+const apiHostPath = "api/host";
+const apiLocksPath = "api/locks";
+const apiMonitoringPath = "api/monitoring";
+const apiOpsPath = "api/ops";
+const apiMountsPath = "api/mounts";
+const apiNotifiersPath = "api/notifiers";
+const apiPanicPath = "api/panic";
+const apiReloadPath = "api/reload";
+const apiServicesPath = "api/services";
+const apiStateCompactPath = "api/state/compact";
+const apiWatchesPath = "api/watches";
+const apiWhoamiPath = "api/whoami";
+const apiQueryCheck = "check";
+const apiQueryKill = "kill";
+const apiQueryKind = "kind";
+const apiQueryLimit = "limit";
+const apiQueryName = "name";
+const apiQueryNoCascade = "no_cascade";
+const apiQueryOnlyErrors = "only_errors";
+const apiQueryService = "service";
+const apiQuerySince = "since";
+const apiQueryStatus = "status";
+const apiQueryWatch = "watch";
+const apiEventsRecentPath = `${apiEventsPath}?${apiQueryLimit}=${eventRecentLimit}`;
+const apiSuffixBlockers = "/blockers";
+const apiSuffixEvents = "/events";
+const apiSuffixMetrics = "/metrics";
+const apiSuffixPreflight = "/preflight";
+const apiSuffixRelease = "/release";
+const apiSuffixRuntime = "/runtime";
+const apiSuffixSLA = "/sla";
+const readyVerbosePath = "readyz?verbose";
+const liveVerbosePath = "livez?verbose";
+const expansionPrefixApp = "app:";
+const expansionPrefixService = "svc:";
+const expansionPrefixWatch = "wat:";
+const eventDetailLimit = "50";
+const eventContextLimit = "1";
+const queryBoolOne = "1";
+const storageBoolTrue = "1";
+const storageBoolFalse = "0";
+const domBoolTrue = "true";
+const domBoolFalse = "false";
+const domEventChange = "change";
+const domEventClick = "click";
+const domEventClose = "close";
+const domEventHashChange = "hashchange";
+const domEventInput = "input";
+const domEventKeydown = "keydown";
+const domEventResize = "resize";
+const domEventToggle = "toggle";
+const domEventVisibilityChange = "visibilitychange";
+const keyEnter = "Enter";
+const keyEscape = "Escape";
+const keySpace = " ";
+const scrollBlockStart = "start";
+const scrollBehaviorSmooth = "smooth";
+const filterAll = "all";
+const feedbackStatusOK = "ok";
+const feedbackStatusWarn = "warn";
+const feedbackStatusErr = "err";
+const targetStateDisabled = "disabled";
+const targetStateRunning = "running";
+const targetStateStarted = "started";
+const targetStatePaused = "paused";
+const targetStateStopped = "stopped";
+const targetStateWarning = "warning";
+const targetStateOK = "ok";
+const targetStateMonitored = "monitored";
+const targetStateCollecting = "collecting";
+const targetStateFailed = "failed";
+const targetStateStarting = "starting";
+const targetStateStopping = "stopping";
+const targetStateRestarting = "restarting";
+const targetStateResuming = "resuming";
+const targetStateReloading = "reloading";
+const targetStateWorking = "working";
+const operationStateRunning = "running";
+const operationStateCompleted = "completed";
+const healthStatusCritical = "critical";
+const healthStatusCriticalShort = "crit";
+const healthStatusWarning = targetStateWarning;
+const healthStatusWarningShort = feedbackStatusWarn;
+const healthStatusOK = targetStateOK;
+const healthStatusInfo = "info";
+const healthStatusMuted = "muted";
+const policyStateEligible = "eligible";
+const policyStateCooldown = "cooldown";
+const policyStateRateLimit = "rate limit";
+const policyStateBlocked = "blocked";
+const policyStatePending = "pending";
+const backendStatusActive = "active";
+const backendStatusInactive = "inactive";
+const backendStatusUnknown = "unknown";
+const mountStateActive = "active";
+const mountStateInactive = "inactive";
+const mountStateError = "error";
+const lockStateActive = "active";
+const lockStateStale = "stale";
+const lockOwnerStatusLive = "live";
+const lockOwnerStatusStale = "stale";
+const daemonStatusStarting = targetStateStarting;
+const daemonStatusShuttingDown = "shutting_down";
+const monitorModeEnabled = "enabled";
+const panicModeOn = "on";
+const panicModeOff = "off";
+const actionAlert = "alert";
+const actionExpand = "expand";
+const actionKillUmount = "kill-umount";
+const actionMonitor = "monitor";
+const actionReload = "reload";
+const actionRestart = "restart";
+const actionResume = "resume";
+const actionStart = "start";
+const actionStop = "stop";
+const actionUnmonitor = "unmonitor";
+const actionUmount = "umount";
+const eventKindAction = "action";
+const eventKindCascade = "cascade";
+const eventKindDryRun = "dry-run";
+const eventKindExpandFailed = "expand-failed";
+const eventKindExpandSkipped = "expand-skipped";
+const eventKindFiring = "firing";
+const eventKindHook = "hook";
+const eventKindHookFailed = "hook-failed";
+const eventKindKill = "kill";
+const eventKindKillFailed = "kill-failed";
+const eventKindNotify = "notify";
+const eventKindNotifyFailed = "notify-failed";
+const eventKindNotifySuppressed = "notify-suppressed";
+const eventKindPanicSuppressed = "panic-suppressed";
+const eventKindRecovered = "recovered";
+const eventKindSuppressed = "suppressed";
+const eventStatusPreflightFailed = "preflight_failed";
+const eventStatusPostflightFailed = "postflight_failed";
+const eventStatusOrphanProcesses = "orphan_processes";
+const servicePreflightActions = [actionStart, actionStop, actionRestart];
+const serviceTrackedActions = [actionStart, actionStop, actionRestart, actionReload, actionResume];
+const activityCriticalStatuses = [targetStateFailed, mountStateError, eventStatusPreflightFailed, eventStatusPostflightFailed, eventStatusOrphanProcesses];
+const activityCriticalKinds = [mountStateError, eventKindHookFailed, eventKindNotifyFailed, eventKindExpandFailed, eventKindKillFailed];
+const activityWarningKinds = [actionAlert, eventKindFiring, eventKindSuppressed, eventKindPanicSuppressed, eventKindNotifySuppressed, eventKindExpandSkipped];
+const activityOKKinds = [eventKindAction, eventKindCascade, eventKindHook, eventKindNotify, eventKindRecovered, actionExpand, eventKindKill];
+const serviceStatusFilterStates = [
+  targetStateDisabled,
+  targetStateStopped,
+  targetStateStarted,
+  targetStateStarting,
+  targetStateCollecting,
+  targetStateMonitored,
+  targetStateFailed,
+];
+const watchStatusFilterStates = [targetStateDisabled, targetStateOK, targetStateStarting, targetStateFailed];
+const appStatusFilterStates = [targetStateOK, targetStateStarting, targetStateWarning, targetStateFailed];
+const mountStatusFilterStates = [mountStateActive, mountStateInactive];
+const overviewActiveServiceStates = [targetStateStarted, targetStateCollecting, targetStateMonitored];
+const mountStateClasses = {
+  [mountStateActive]: "state-running",
+  [mountStateInactive]: "state-stopped",
+  [mountStateError]: "state-failed",
+};
+const mountStateRanks = {
+  [mountStateActive]: 0,
+  [mountStateInactive]: 1,
+  [mountStateError]: 2,
+};
+const targetStateClasses = {
+  [targetStateDisabled]: "state-disabled",
+  [targetStateRunning]: "state-running",
+  [targetStateStarted]: "state-started",
+  [targetStatePaused]: "state-paused",
+  [targetStateStopped]: "state-stopped",
+  [targetStateWarning]: "state-warning",
+  [targetStateOK]: "state-ok",
+  [targetStateMonitored]: "state-monitored",
+  [targetStateCollecting]: "state-collecting",
+  [targetStateFailed]: "state-failed",
+  [targetStateStarting]: "state-starting",
+  [targetStateStopping]: "state-starting",
+  [targetStateRestarting]: "state-starting",
+  [targetStateResuming]: "state-starting",
+  [targetStateReloading]: "state-starting",
+};
+const targetStateRanks = {
+  [targetStateDisabled]: 0,
+  [targetStateStopped]: 1,
+  [targetStateStarting]: 2,
+  [targetStateCollecting]: 3,
+  [targetStateStarted]: 4,
+  [targetStateMonitored]: 5,
+  [targetStateFailed]: 7,
+  [targetStateRunning]: 2,
+  [targetStatePaused]: 3,
+  [targetStateOK]: 5,
+  [targetStateWarning]: 6,
+  [targetStateStopping]: 1,
+  [targetStateRestarting]: 1,
+  [targetStateResuming]: 1,
+  [targetStateReloading]: 1,
+};
+const operationActionStates = {
+  [actionStart]: targetStateStarting,
+  [actionStop]: targetStateStopping,
+  [actionRestart]: targetStateRestarting,
+  [actionResume]: targetStateResuming,
+  [actionReload]: targetStateReloading,
+};
 const runtimeMetricDefs = [
   { key: metricNameCPU, label: "CPU", unit: metricUnitPercent, chartLabel: "Daemon CPU metric chart" },
   { key: metricNameMemory, label: "memory", unit: metricUnitBytes, chartLabel: "Daemon memory metric chart" },
   { key: metricNameIO, label: "IO", unit: metricUnitBytesPerSecond, chartLabel: "Daemon IO metric chart" },
 ];
+
+function csrfPostOptions() {
+  return { method: httpMethodPost, headers: { [csrfHeader]: csrfHeaderValue } };
+}
+
+function apiEntityPath(base, name, suffix = "") {
+  return `${base}/${encodeURIComponent(name)}${suffix}`;
+}
+
+function apiActionSuffix(action, query = "") { return `/${action}${query}`; }
+function apiLimitSuffix(base, limit) { return `${base}?${apiQueryLimit}=${limit}`; }
+function apiSinceSuffix(base, since) { return `${base}?${apiQuerySince}=${since}`; }
+function applicationAPI(name, suffix = "") { return apiEntityPath(apiApplicationsPath, name, suffix); }
+function applicationEventsAPI(name, limit) { return applicationAPI(name, apiLimitSuffix(apiSuffixEvents, limit)); }
+function daemonMetricsAPI(since) { return `${apiDaemonMetricsPath}?${apiQuerySince}=${since}`; }
+function eventsAPI(params) { return `${apiEventsPath}?${params.toString()}`; }
+function eventsClearAPI(query = "") { return `${apiEventsClearPath}${query}`; }
+function lockReleaseAPI(service, query = "") { return apiEntityPath(apiLocksPath, service, `${apiSuffixRelease}${query}`); }
+function mountAPI(name, suffix = "") { return apiEntityPath(apiMountsPath, name, suffix); }
+function mountBlockersAPI(name) { return mountAPI(name, apiSuffixBlockers); }
+function panicAPI(enable) { return `${apiPanicPath}/${enable ? panicModeOn : panicModeOff}`; }
+function serviceAPI(name, suffix = "") { return apiEntityPath(apiServicesPath, name, suffix); }
+function serviceEventsAPI(name, limit) { return serviceAPI(name, apiLimitSuffix(apiSuffixEvents, limit)); }
+function serviceMetricsAPI(name, check, since) { return serviceAPI(name, `${apiSuffixMetrics}?${apiQueryCheck}=${encodeURIComponent(check)}&${apiQuerySince}=${since}`); }
+function servicePreflightAPI(name) { return serviceAPI(name, apiSuffixPreflight); }
+function serviceRuntimeAPI(name, since) { return serviceAPI(name, apiSinceSuffix(apiSuffixRuntime, since)); }
+function serviceSLAAPI(name, since) { return serviceAPI(name, apiSinceSuffix(apiSuffixSLA, since)); }
+function stateCompactAPI(query = "") { return `${apiStateCompactPath}${query}`; }
+function watchAPI(name, suffix = "") { return apiEntityPath(apiWatchesPath, name, suffix); }
+function expansionKey(prefix, name) { return `${prefix}${name}`; }
+function expansionName(key, prefix) { return key.slice(prefix.length); }
+function appExpansionKey(name) { return expansionKey(expansionPrefixApp, name); }
+function serviceExpansionKey(name) { return expansionKey(expansionPrefixService, name); }
+function watchExpansionKey(name) { return expansionKey(expansionPrefixWatch, name); }
+function isAppExpansionKey(key) { return key.startsWith(expansionPrefixApp); }
+function isServiceExpansionKey(key) { return key.startsWith(expansionPrefixService); }
+function isWatchExpansionKey(key) { return key.startsWith(expansionPrefixWatch); }
+function isShareableExpansionKey(key) {
+  return isServiceExpansionKey(key) || isWatchExpansionKey(key) || isAppExpansionKey(key);
+}
+function isServicePreflightAction(action) { return servicePreflightActions.includes(action); }
+function isDangerServiceAction(action) { return action === actionStop || action === actionRestart; }
 
 // Action feedback must survive the dashboard refresh that almost every action
 // triggers: load() ends with a status clear, which used to wipe e.g.
@@ -32,7 +291,7 @@ function setStatus(msg, kind, sticky = true) {
   if (!el) return;
   const text = msg || "";
   statusStickyUntil = text && kind && sticky ? Date.now() + statusStickyMs : 0;
-  const statusCls = text ? (kind === "ok" ? "status-ok" : kind === "warn" ? "status-warn" : "status-err") : "";
+  const statusCls = text ? (kind === feedbackStatusOK ? "status-ok" : kind === feedbackStatusWarn ? "status-warn" : "status-err") : "";
   const prevCls = el.classList.contains("status-ok") ? "status-ok"
     : el.classList.contains("status-warn") ? "status-warn"
     : el.classList.contains("status-err") ? "status-err" : "";
@@ -46,7 +305,7 @@ let me = { can_act: true, role: "admin", auth: false };
 
 async function loadMe() {
   try {
-    const res = await fetch("api/whoami");
+    const res = await fetch(apiWhoamiPath);
     if (res.ok) me = await res.json();
   } catch (e) { /* keep defaults */ }
   if (!me.auth) { $("#me").innerHTML = ""; }
@@ -72,7 +331,7 @@ function showDisconnected() {
   const age = lastLoadOk ? ` (last update ${fmtSince(Date.now() - lastLoadOk)} ago)` : "";
   // Not sticky: the banner is re-asserted on every failed poll and must
   // disappear on the first successful refresh after the connection recovers.
-  setStatus("Disconnected — retrying…" + age, "warn", false);
+  setStatus("Disconnected — retrying…" + age, feedbackStatusWarn, false);
 }
 
 // clearStatusAfterRefresh is load()'s end-of-refresh clear: it respects the
@@ -93,18 +352,18 @@ async function load() {
   healthIconReady = false;
   const sameLoad = () => seq === loadSeq;
   const [services, mounts, notifiers, daemon, daemonMetrics, locks, activity, ready, live, mon, ops, hostMetrics] = await Promise.all([
-    fetch("api/services").then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).catch(() => null),
-    getJSON("api/mounts", null),        // configured mount units
-    getJSON("api/notifiers", null),     // what watches can send to
-    getJSON("api/daemon", null),        // daemon / engine settings panel
-    getJSON(`api/daemon/metrics?since=${daemonMetricWindow}`, null),
-    getJSON("api/locks", null),         // global runtime locks (active and stale)
-    getJSON("api/activity", null),      // quick activity summary
+    fetch(apiServicesPath).then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).catch(() => null),
+    getJSON(apiMountsPath, null),       // configured mount units
+    getJSON(apiNotifiersPath, null),    // what watches can send to
+    getJSON(apiDaemonPath, null),       // daemon / engine settings panel
+    getJSON(daemonMetricsAPI(daemonMetricWindow), null),
+    getJSON(apiLocksPath, null),        // global runtime locks (active and stale)
+    getJSON(apiActivityPath, null),     // quick activity summary
     fetchReadyReport(),
-    getJSON("livez?verbose", {}),
-    getJSON("api/monitoring", {}),
-    getJSON("api/ops", {}),
-    getJSON("api/host", []),
+    getJSON(liveVerbosePath, {}),
+    getJSON(apiMonitoringPath, {}),
+    getJSON(apiOpsPath, {}),
+    getJSON(apiHostPath, []),
   ]);
   if (!sameLoad()) return;
   if (services) {
@@ -146,20 +405,20 @@ async function load() {
     renderAttention();
   } else {
     healthIconReady = true;
-    setFavicon("warning");
+    setFavicon(healthStatusWarning);
   }
 
   lastRefresh = Date.now();
   tickRefreshAge();
 
-  getJSON("api/watches", null).then((watches) => {
+  getJSON(apiWatchesPath, null).then((watches) => {
     if (!sameLoad() || !watches) return;
     renderWatches(watches);
     if (connOK) renderAttention();
     refreshExpandedWatches();
   });
 
-  getJSON("api/applications", null).then((apps) => {
+  getJSON(apiApplicationsPath, null).then((apps) => {
     if (!sameLoad() || !apps) return;
     renderApps(apps);
     if (connOK) renderAttention();
@@ -171,19 +430,16 @@ async function reloadConfig() {
   const btn = $("#reload-btn");
   if (btn) btn.disabled = true;
   try {
-    const res = await fetch("api/reload", {
-      method: "POST",
-      headers: { "X-Sermo-CSRF": "1" },
-    });
+    const res = await fetch(apiReloadPath, csrfPostOptions());
     const body = await res.json().catch(() => ({}));
     if (!res.ok || body.ok === false) {
       throw new Error(body.message || ("HTTP " + res.status));
     }
-    setStatus("config reload requested", "ok");
+    setStatus("config reload requested", feedbackStatusOK);
     // next auto-refresh (or manual load) will pick up any service changes
     setTimeout(load, 800);
   } catch (e) {
-    setStatus("reload failed: " + e.message, "err");
+    setStatus("reload failed: " + e.message, feedbackStatusErr);
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -202,7 +458,7 @@ function renderOpsPanel(o) {
     return;
   }
   const saturated = o.in_use >= o.total;
-  const cls = saturated ? "failed" : "";
+  const cls = saturated ? targetStateFailed : "";
   el.innerHTML = `Operation slots: <span class="${cls}">${o.in_use}/${o.total}</span> in use`;
 }
 
@@ -211,18 +467,18 @@ let eventFilterTimer = null;
 
 async function loadEvents() {
   try {
-    const params = new URLSearchParams({ limit: "500" });
+    const params = new URLSearchParams({ [apiQueryLimit]: eventLogLimit });
     const add = (id, key) => {
       const el = $("#" + id);
       const v = el ? el.value.trim() : "";
       if (v) params.set(key, v);
     };
-    add("event-service", "service");
-    add("event-watch", "watch");
-    add("event-kind", "kind");
-    add("event-status", "status");
-    if ($("#event-errors") && $("#event-errors").checked) params.set("only_errors", "1");
-    const res = await fetch("api/events?" + params.toString());
+    add("event-service", apiQueryService);
+    add("event-watch", apiQueryWatch);
+    add("event-kind", apiQueryKind);
+    add("event-status", apiQueryStatus);
+    if ($("#event-errors") && $("#event-errors").checked) params.set(apiQueryOnlyErrors, queryBoolOne);
+    const res = await fetch(eventsAPI(params));
     if (!res.ok) return;
     allEvents = await res.json();
     renderGlobalEvents();
@@ -247,8 +503,8 @@ function flushLoadEvents() {
 }
 
 function eventFilterKey(e) {
-  if (e.key === "Enter") flushLoadEvents();
-  if (e.key === "Escape") clearEventFilters();
+  if (e.key === keyEnter) flushLoadEvents();
+  if (e.key === keyEscape) clearEventFilters();
 }
 
 function clearEventFilters() {
@@ -360,17 +616,14 @@ async function requestPanic(enable) {
   const btn = $("#panic-btn");
   if (btn) btn.disabled = true;
   try {
-    const res = await fetch(`api/panic/${enable ? "on" : "off"}`, {
-      method: "POST",
-      headers: { "X-Sermo-CSRF": "1" },
-    });
+    const res = await fetch(panicAPI(enable), csrfPostOptions());
     const body = await res.json().catch(() => ({}));
     if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
     updatePanicView(enable);
-    setStatus(body.message || (enable ? "panic mode enabled" : "panic mode disabled"), enable ? "err" : "ok");
+    setStatus(body.message || (enable ? "panic mode enabled" : "panic mode disabled"), enable ? feedbackStatusErr : feedbackStatusOK);
     await load();
   } catch (e) {
-    setStatus(`panic mode: ${e.message}`, "err");
+    setStatus(`panic mode: ${e.message}`, feedbackStatusErr);
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -388,17 +641,14 @@ async function clearEventLog(beforeValue) {
   if (btn) btn.disabled = true;
   try {
     const q = before ? `?before=${encodeURIComponent(before)}` : "";
-    const res = await fetch(`api/events/clear${q}`, {
-      method: "POST",
-      headers: { "X-Sermo-CSRF": "1" },
-    });
+    const res = await fetch(eventsClearAPI(q), csrfPostOptions());
     const body = await res.json().catch(() => ({}));
     if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
     const n = Number(body.pruned) || 0;
-    setStatus(n ? `cleared ${n} event${n === 1 ? "" : "s"}` : "no events to clear", "ok");
+    setStatus(n ? `cleared ${n} event${n === 1 ? "" : "s"}` : "no events to clear", feedbackStatusOK);
     await load();
   } catch (e) {
-    setStatus(`events clear: ${e.message}`, "err");
+    setStatus(`events clear: ${e.message}`, feedbackStatusErr);
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -416,17 +666,14 @@ async function compactState() {
   if (btn) btn.disabled = true;
   try {
     const q = before ? `?before=${encodeURIComponent(before)}` : "";
-    const res = await fetch(`api/state/compact${q}`, {
-      method: "POST",
-      headers: { "X-Sermo-CSRF": "1" },
-    });
+    const res = await fetch(stateCompactAPI(q), csrfPostOptions());
     const body = await res.json().catch(() => ({}));
     if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
     const n = Number(body.pruned) || 0;
-    setStatus(n ? `compacted state: pruned ${n} row${n === 1 ? "" : "s"}` : (body.message || "state compact completed"), "ok");
+    setStatus(n ? `compacted state: pruned ${n} row${n === 1 ? "" : "s"}` : (body.message || "state compact completed"), feedbackStatusOK);
     await load();
   } catch (e) {
-    setStatus(`state compact: ${e.message}`, "err");
+    setStatus(`state compact: ${e.message}`, feedbackStatusErr);
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -441,8 +688,8 @@ function toggleEventMsg(key) {
   else eventExpanded.add(key);
   renderGlobalEvents();
   expanded.forEach((expKey) => {
-    if (expKey.startsWith("svc:")) loadServiceEvents(expKey.slice(4));
-    else if (expKey.startsWith("app:")) loadAppEvents(expKey.slice(4));
+    if (isServiceExpansionKey(expKey)) loadServiceEvents(expansionName(expKey, expansionPrefixService));
+    else if (isAppExpansionKey(expKey)) loadAppEvents(expansionName(expKey, expansionPrefixApp));
   });
 }
 
@@ -452,8 +699,8 @@ function eventMessageHTML(e, key) {
   const msgOpen = eventExpanded.has(key);
   const truncated = msg.length > 160 && !msgOpen;
   const text = truncated
-    ? tpl`<span id="${msgId}" class="event-msg">${msg.slice(0, 160)}<span class="muted">…</span> <button type="button" data-event-toggle="${key}" aria-expanded="false" aria-controls="${msgId}" aria-label="Show full event message">more</button></span>`
-    : tpl`<span id="${msgId}" class="event-msg">${msg}${msg.length > 160 ? tpl` <button type="button" data-event-toggle="${key}" aria-expanded="true" aria-controls="${msgId}" aria-label="Show less of event message">less</button>` : nothing}</span>`;
+    ? tpl`<span id="${msgId}" class="event-msg">${msg.slice(0, 160)}<span class="muted">…</span> <button type="button" data-event-toggle="${key}" aria-expanded="${domBoolFalse}" aria-controls="${msgId}" aria-label="Show full event message">more</button></span>`
+    : tpl`<span id="${msgId}" class="event-msg">${msg}${msg.length > 160 ? tpl` <button type="button" data-event-toggle="${key}" aria-expanded="${domBoolTrue}" aria-controls="${msgId}" aria-label="Show less of event message">less</button>` : nothing}</span>`;
   // Bounded stdout/stderr of the failing command, collapsed behind an "output"
   // toggle so the multi-line blob does not clutter the row by default.
   const out = e.output || "";
@@ -462,8 +709,8 @@ function eventMessageHTML(e, key) {
   const outId = okey + "-panel";
   const outOpen = eventExpanded.has(okey);
   return outOpen
-    ? tpl`${text} <button type="button" data-event-toggle="${okey}" aria-expanded="true" aria-controls="${outId}" aria-label="Hide command output">hide output</button><pre id="${outId}" class="event-output">${out}</pre>`
-    : tpl`${text} <button type="button" data-event-toggle="${okey}" aria-expanded="false" aria-controls="${outId}" aria-label="Show command output">output</button>`;
+    ? tpl`${text} <button type="button" data-event-toggle="${okey}" aria-expanded="${domBoolTrue}" aria-controls="${outId}" aria-label="Hide command output">hide output</button><pre id="${outId}" class="event-output">${out}</pre>`
+    : tpl`${text} <button type="button" data-event-toggle="${okey}" aria-expanded="${domBoolFalse}" aria-controls="${outId}" aria-label="Show command output">output</button>`;
 }
 
 function eventSubject(e) {
@@ -532,7 +779,7 @@ function renderGlobalEvents() {
     const open = eventExpanded.has(groupKey);
     return [
       tpl`<tr class="event-group">
-        <td colspan="4"><button type="button" class="row-toggle" data-event-toggle="${groupKey}" aria-expanded="${open ? "true" : "false"}" aria-controls="${panelId}"><span class="exp" aria-hidden="true">${open ? "▾" : "▸"}</span>${who} <span class="muted">${action} · ${g.length} event${g.length === 1 ? "" : "s"}${statuses ? " · " + statuses : ""}</span></button></td>
+        <td colspan="4"><button type="button" class="row-toggle" data-event-toggle="${groupKey}" aria-expanded="${open ? domBoolTrue : domBoolFalse}" aria-controls="${panelId}"><span class="exp" aria-hidden="true">${open ? "▾" : "▸"}</span>${who} <span class="muted">${action} · ${g.length} event${g.length === 1 ? "" : "s"}${statuses ? " · " + statuses : ""}</span></button></td>
       </tr>`,
       open ? eventRows(g, true, { prefix: "group" + gi, panelId }) : nothing,
     ];
@@ -582,22 +829,22 @@ function unitCell(s) {
 
 function policyStateClass(state) {
   switch (state) {
-    case "eligible": return "ok";
-    case "cooldown":
-    case "rate limit":
-    case "blocked": return "inactive";
-    case "disabled":
-    case "paused":
-    case "pending": return "muted";
-    default: return "muted";
+    case policyStateEligible: return "ok";
+    case policyStateCooldown:
+    case policyStateRateLimit:
+    case policyStateBlocked: return "inactive";
+    case targetStateDisabled:
+    case targetStatePaused:
+    case policyStatePending: return healthStatusMuted;
+    default: return healthStatusMuted;
   }
 }
 
 function policyCell(s) {
   // remediation_state is always sent (decorateRemediation covers every path).
-  const state = s.remediation_state || "unknown";
+  const state = s.remediation_state || backendStatusUnknown;
   // A paused service shows its state in the State column; don't repeat it here.
-  if (state === "paused") return tpl`<span class="muted">—</span>`;
+  if (state === targetStatePaused) return tpl`<span class="muted">—</span>`;
   const cd = s.policy_cooldown ? tpl`<div class="muted mono">${s.policy_cooldown}</div>` : nothing;
   return tpl`<div class="policy-cell"><span class="${policyStateClass(state)}">${state}</span>${cd}</div>`;
 }
@@ -620,13 +867,13 @@ function lastEventTime(item) {
 function activitySeverity(kind, status) {
   const k = String(kind || "").toLowerCase();
   const st = String(status || "").toLowerCase();
-  if (["failed", "error", "preflight_failed", "postflight_failed", "orphan_processes"].includes(st)) return "crit";
-  if (st === "blocked") return "warn";
-  if (["error", "hook-failed", "notify-failed", "expand-failed", "kill-failed"].includes(k)) return "crit";
-  if (["alert", "firing", "suppressed", "panic-suppressed", "notify-suppressed", "expand-skipped"].includes(k)) return "warn";
-  if (["action", "cascade", "hook", "notify", "recovered", "expand", "kill"].includes(k)) return "ok";
-  if (k === "dry-run") return "info";
-  return "muted";
+  if (activityCriticalStatuses.includes(st)) return healthStatusCriticalShort;
+  if (st === policyStateBlocked) return healthStatusWarningShort;
+  if (activityCriticalKinds.includes(k)) return healthStatusCriticalShort;
+  if (activityWarningKinds.includes(k)) return healthStatusWarningShort;
+  if (activityOKKinds.includes(k)) return healthStatusOK;
+  if (k === eventKindDryRun) return healthStatusInfo;
+  return healthStatusMuted;
 }
 
 function activityDateCell(e) {
@@ -646,8 +893,8 @@ function nextRemediationCell(s) {
   if (s.next_eligible_at) {
     return tpl`<span title="${fmtTime(s.next_eligible_at)}">${fmtUntilShort(s.next_eligible_at)}</span>`;
   }
-  if (state === "eligible") return tpl`<span class="ok">now</span>`;
-  if (state === "pending") return tpl`<span class="muted">${state}</span>`; // paused -> "—" (shown in State)
+  if (state === policyStateEligible) return tpl`<span class="ok">now</span>`;
+  if (state === policyStatePending) return tpl`<span class="muted">${state}</span>`; // paused -> "—" (shown in State)
   return tpl`<span class="muted">—</span>`;
 }
 
@@ -655,21 +902,21 @@ function nextRemediationCell(s) {
 // so typing or switching a filter re-renders from cache without a refetch.
 let allServices = [];
 let svcQuery = "";
-let svcStatus = "all"; // all | disabled | stopped | started | starting | collecting | monitored | failed
-let svcCategory = "all";
+let svcStatus = filterAll; // all | disabled | stopped | started | starting | collecting | monitored | failed
+let svcCategory = filterAll;
 let svcGrouped = false;
 let svcCollapsedGroups = new Set();
 let svcSort = { key: "", dir: 1 };
 const splitServicePanels = {
   container: {
-    query: "", status: "all", sort: { key: "", dir: 1 },
+    query: "", status: filterAll, sort: { key: "", dir: 1 },
     surface: "container", section: "#containers-section", rows: "#container-rows", count: "#containers-count",
     filterCount: "#container-count", filters: "#container-filters", search: "#container-search",
     filterDataset: "cf", sortIndicator: "ci", sortAttr: "container-sort", sortDataset: "containerSort",
     label: "containers", empty: "No containers.", emptyFiltered: "No containers match the filter.",
   },
   vm: {
-    query: "", status: "all", sort: { key: "", dir: 1 },
+    query: "", status: filterAll, sort: { key: "", dir: 1 },
     surface: "vm", section: "#vms-section", rows: "#vm-rows", count: "#vms-count",
     filterCount: "#vm-count", filters: "#vm-filters", search: "#vm-search",
     filterDataset: "vf", sortIndicator: "vi", sortAttr: "vm-sort", sortDataset: "vmSort",
@@ -678,14 +925,14 @@ const splitServicePanels = {
 };
 let allMounts = [];
 let mountQuery = "";
-let mountStatus = "all";
-let mountCategory = "all";
+let mountStatus = filterAll;
+let mountCategory = filterAll;
 let mountSort = { key: "", dir: 1 };
 let expanded = new Set(); // open expansions, keyed "svc:<name>" / "wat:<name>" / "app:<name>"
 let allApps = [];
 let appQuery = "";
-let appCategory = "all";
-let appStatus = "all";
+let appCategory = filterAll;
+let appStatus = filterAll;
 let appGrouped = false;
 let appCollapsedGroups = new Set();
 let appSort = { key: "", dir: 1 };
@@ -702,7 +949,7 @@ let allWatches = [];
 const watchPanels = {
   storage: {
     match: isStorageWatch,
-    query: "", status: "all", type: "all", sort: { key: "", dir: 1 }, defaultSortByName: true,
+    query: "", status: filterAll, type: filterAll, sort: { key: "", dir: 1 }, defaultSortByName: true,
     section: "#storage-section", rows: "#storage-rows", count: "#storage-count",
     filterCount: "#storage-filter-count", filters: "#storage-filters", search: "#storage-search", typeSelect: "#storage-type",
     allTypesLabel: "all storage types", empty: "No storage watches.", emptyFiltered: "No storage watches match the filter.",
@@ -714,7 +961,7 @@ const watchPanels = {
   },
   network: {
     match: isNetworkWatch,
-    query: "", status: "all", type: "all", sort: { key: "", dir: 1 }, defaultSortByName: true,
+    query: "", status: filterAll, type: filterAll, sort: { key: "", dir: 1 }, defaultSortByName: true,
     section: "#network-section", rows: "#network-rows", count: "#network-count",
     filterCount: "#network-filter-count", filters: "#network-filters", search: "#network-search", typeSelect: "#network-type",
     allTypesLabel: "all network types", empty: "No network watches.", emptyFiltered: "No network watches match the filter.",
@@ -722,7 +969,7 @@ const watchPanels = {
   },
   cert: {
     match: isCertWatch,
-    query: "", status: "all", type: "all", sort: { key: "", dir: 1 }, defaultSortByName: true,
+    query: "", status: filterAll, type: filterAll, sort: { key: "", dir: 1 }, defaultSortByName: true,
     section: "#cert-section", rows: "#cert-rows", count: "#cert-count",
     filterCount: "#cert-filter-count", filters: "#cert-filters", search: "#cert-search", typeSelect: "#cert-type",
     allTypesLabel: "all certificate types", empty: "No certificate watches.", emptyFiltered: "No certificate watches match the filter.",
@@ -736,7 +983,7 @@ const watchPanels = {
   },
   diskio: {
     match: isDiskioWatch,
-    query: "", status: "all", type: "all", sort: { key: "", dir: 1 }, defaultSortByName: true,
+    query: "", status: filterAll, type: filterAll, sort: { key: "", dir: 1 }, defaultSortByName: true,
     section: "#diskio-section", rows: "#diskio-rows", count: "#diskio-count",
     filterCount: "#diskio-filter-count", filters: "#diskio-filters", search: "#diskio-search",
     // No type dropdown: disk I/O watches only ever have the one check type.
@@ -745,7 +992,7 @@ const watchPanels = {
     rowHTML: diskioRowHTML,
   },
   host: {
-    query: "", status: "all", type: "all", sort: { key: "", dir: 1 }, defaultSortByName: false,
+    query: "", status: filterAll, type: filterAll, sort: { key: "", dir: 1 }, defaultSortByName: false,
     section: "#watches-section", rows: "#watch-rows", count: "#watches-count",
     filterCount: "#watch-count", filters: "#watch-filters", search: "#watch-search", typeSelect: "#watch-type",
     allTypesLabel: "all host types", empty: "No watches.", emptyFiltered: "No watches match the filter.",
@@ -898,73 +1145,31 @@ let latestHostMetrics = [];   // last /api/host readings (for process memory bar
 let healthIconReady = false;
 
 function targetStateClass(state) {
-  switch (state) {
-    case "disabled": return "state-disabled";
-    case "running": return "state-running";
-    case "started": return "state-started";
-    case "paused": return "state-paused";
-    case "stopped": return "state-stopped";
-    case "warning": return "state-warning";
-    case "ok": return "state-ok";
-    case "monitored": return "state-monitored";
-    case "collecting": return "state-collecting";
-    case "failed": return "state-failed";
-    case "starting": return "state-starting";
-    case "stopping":
-    case "restarting":
-    case "resuming":
-    case "reloading":
-      return "state-starting";
-    default: return "muted";
-  }
+  return targetStateClasses[state] || healthStatusMuted;
 }
 
 function stateBadge(state) {
-  return stateBadgeLabel(state, state || "unknown");
+  return stateBadgeLabel(state, state || backendStatusUnknown);
 }
 
 function stateBadgeLabel(state, label) {
-  const st = state || "unknown";
+  const st = state || backendStatusUnknown;
   return tpl`<span class="target-state ${targetStateClass(st)}">${label || st}</span>`;
 }
 
 function stateRank(state) {
-  switch (state) {
-    case "disabled": return 0;
-    case "stopped": return 1;
-    case "starting": return 2;
-    case "collecting": return 3;
-    case "started": return 4;
-    case "monitored": return 5;
-    case "failed": return 7;
-    case "running": return 2;
-    case "paused": return 3;
-    case "ok": return 5;
-    case "warning": return 6;
-    case "stopping": return 1;
-    case "restarting": return 1;
-    case "resuming": return 1;
-    case "reloading": return 1;
-    default: return 5;
-  }
+  return targetStateRanks[state] ?? 5;
 }
 
 // serviceState reads the server-computed state (app.ServiceState). The UI is
 // embedded in the same binary, so the field is always present — deriving it
 // again here would just be a second copy of that logic that could drift.
 function serviceState(s) {
-  return (s && s.state) || "unknown";
+  return (s && s.state) || backendStatusUnknown;
 }
 
 function operationState(action) {
-  switch (action) {
-    case "start": return "starting";
-    case "stop": return "stopping";
-    case "restart": return "restarting";
-    case "resume": return "resuming";
-    case "reload": return "reloading";
-    default: return "working";
-  }
+  return operationActionStates[action] || targetStateWorking;
 }
 
 function serviceDisplayState(s) {
@@ -975,7 +1180,7 @@ function serviceDisplayState(s) {
 
 function serviceStateBadge(s) {
   const st = serviceDisplayState(s);
-  const missing = (st === "collecting" && s && Array.isArray(s.observability_missing) && s.observability_missing.length)
+  const missing = (st === targetStateCollecting && s && Array.isArray(s.observability_missing) && s.observability_missing.length)
     ? `Collecting ${s.observability_missing.join(", ")}`
     : "";
   return missing ? tpl`<span title="${missing}">${stateBadge(st)}</span>` : stateBadge(st);
@@ -1040,14 +1245,14 @@ function serviceSurfaceWithStatus(status) {
   return serviceSurfaceRegular;
 }
 
-function isFailing(s) { return serviceState(s) === "failed"; }
+function isFailing(s) { return serviceState(s) === targetStateFailed; }
 function isServiceAttention(s) {
   const st = serviceState(s);
-  return st === "failed";
+  return st === targetStateFailed;
 }
 function isWatchAttention(w) {
   const st = watchStateText(w);
-  return st === "failed";
+  return st === targetStateFailed;
 }
 
 function openServiceStatusTarget(status) {
@@ -1063,40 +1268,40 @@ function openServiceStatusTarget(status) {
   if (sec) {
     setPanelVisible(sec, true);
     sec.open = true;
-    sec.scrollIntoView({ block: "start", behavior: "smooth" });
+    sec.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
   }
 }
 
 function openPanelTarget(target) {
   if (target === "failed-services") {
-    openServiceStatusTarget("failed");
+    openServiceStatusTarget(targetStateFailed);
     return;
   }
   if (target === "starting-services") {
-    openServiceStatusTarget("starting");
+    openServiceStatusTarget(targetStateStarting);
     return;
   }
   if (target === "collecting-services") {
-    openServiceStatusTarget("collecting");
+    openServiceStatusTarget(targetStateCollecting);
     return;
   }
   if (target === "monitored-services") {
-    openServiceStatusTarget("monitored");
+    openServiceStatusTarget(targetStateMonitored);
     return;
   }
 
   if (target === "failed-apps") {
     const sec = $("#apps-section");
     if (sec) sec.open = true;
-    setAppStatus("failed");
-    sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
+    setAppStatus(targetStateFailed);
+    sec && sec.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
     return;
   }
   if (target === "starting-apps") {
     const sec = $("#apps-section");
     if (sec) sec.open = true;
-    setAppStatus("starting");
-    sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
+    setAppStatus(targetStateStarting);
+    sec && sec.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
     return;
   }
   if (target === "failed-watches") {
@@ -1104,7 +1309,7 @@ function openPanelTarget(target) {
     // them, so open all and scroll to whichever actually holds one (in panel
     // declaration order, Host watches as the fallback).
     openAllWatchPanels();
-    setAllWatchStatuses("failed");
+    setAllWatchStatuses(targetStateFailed);
     let dest = $(getWatchPanel("host").section);
     for (const [key, panel] of Object.entries(watchPanels)) {
       const sec = $(panel.section);
@@ -1113,28 +1318,28 @@ function openPanelTarget(target) {
         break;
       }
     }
-    dest && dest.scrollIntoView({ block: "start", behavior: "smooth" });
+    dest && dest.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
     return;
   }
   if (target === "starting-watches") {
     openAllWatchPanels();
-    setAllWatchStatuses("starting");
+    setAllWatchStatuses(targetStateStarting);
     const sec = $(getWatchPanel("host").section);
-    sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
+    sec && sec.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
     return;
   }
   const el = $("#" + target);
   if (!el) return;
   if (el.tagName === "DETAILS") el.open = true;
-  el.scrollIntoView({ block: "start", behavior: "smooth" });
+  el.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
 }
 // themeHealthColor reads the active --ok/--warn/--crit tokens so the favicon and
 // brand dot track light/dark scheme instead of hard-coded palette literals.
 function themeHealthColor(status) {
   const root = getComputedStyle(document.documentElement);
-  if (status === "critical" || status === "crit") return root.getPropertyValue("--crit").trim() || "#cf222e";
-  if (status === "warning" || status === "warn") return root.getPropertyValue("--warn").trim() || "#9a6700";
-  if (status === "starting") return root.getPropertyValue("--text-2").trim() || "#8b96a5"; // neutral grey while the daemon settles
+  if (status === healthStatusCritical || status === healthStatusCriticalShort) return root.getPropertyValue("--crit").trim() || "#cf222e";
+  if (status === healthStatusWarning || status === healthStatusWarningShort) return root.getPropertyValue("--warn").trim() || "#9a6700";
+  if (status === targetStateStarting) return root.getPropertyValue("--text-2").trim() || "#8b96a5"; // neutral grey while the daemon settles
   return root.getPropertyValue("--ok").trim() || "#1a7f37";
 }
 // setFavicon reflects overall health in the browser tab: green = ok,
@@ -1160,7 +1365,7 @@ function renderAttention() {
   const failing = (allServices || []).filter(isServiceAttention);
   if (failing.length) {
     items.push({
-      level: "critical",
+      level: healthStatusCritical,
       title: failing.length === 1 ? "1 service needs attention" : `${failing.length} services need attention`,
       detail: failing.slice(0, 4).map((s) => s.name).join(", ") + (failing.length > 4 ? ` and ${failing.length - 4} more` : ""),
       target: "failed-services",
@@ -1169,34 +1374,34 @@ function renderAttention() {
   const failingWatches = (allWatches || []).filter(isWatchAttention);
   if (failingWatches.length) {
     items.push({
-      level: "critical",
+      level: healthStatusCritical,
       title: failingWatches.length === 1 ? "1 watch firing" : `${failingWatches.length} watches firing`,
       detail: failingWatches.slice(0, 4).map((w) => displayName(w) || w.name).join(", ") + (failingWatches.length > 4 ? ` and ${failingWatches.length - 4} more` : ""),
       target: "failed-watches",
     });
   }
-  const failingApps = (allApps || []).filter((a) => appStateText(a) === "failed");
+  const failingApps = (allApps || []).filter((a) => appStateText(a) === targetStateFailed);
   if (failingApps.length) {
     items.push({
-      level: "critical",
+      level: healthStatusCritical,
       title: failingApps.length === 1 ? "1 application failed" : `${failingApps.length} applications failed`,
       detail: failingApps.slice(0, 4).map((a) => displayName(a) || a.name).join(", ") + (failingApps.length > 4 ? ` and ${failingApps.length - 4} more` : ""),
       target: "failed-apps",
     });
   }
-  const activeLocks = (latestLocks || []).filter((l) => l.state === "active");
+  const activeLocks = (latestLocks || []).filter((l) => l.state === lockStateActive);
   if (activeLocks.length) {
     items.push({
-      level: "critical",
+      level: healthStatusCritical,
       title: activeLocks.length === 1 ? "1 active lock" : `${activeLocks.length} active locks`,
       detail: activeLocks.slice(0, 4).map((l) => [l.service, l.name].filter(Boolean).join(":")).join(", "),
       target: "locks-section",
     });
   }
-  const staleLocks = (latestLocks || []).filter((l) => l.state === "stale");
+  const staleLocks = (latestLocks || []).filter((l) => l.state === lockStateStale);
   if (staleLocks.length) {
     items.push({
-      level: "warning",
+      level: healthStatusWarning,
       title: staleLocks.length === 1 ? "1 stale lock" : `${staleLocks.length} stale locks`,
       detail: staleLocks.slice(0, 4).map((l) => [l.service, l.name].filter(Boolean).join(":")).join(", "),
       target: "locks-section",
@@ -1204,15 +1409,15 @@ function renderAttention() {
   }
   if (liveOpsSlots && liveOpsSlots.total > 0 && liveOpsSlots.in_use >= liveOpsSlots.total) {
     items.push({
-      level: "warning",
+      level: healthStatusWarning,
       title: "Operation slots saturated",
       detail: `${liveOpsSlots.in_use}/${liveOpsSlots.total} slots in use`,
       target: "services-section",
     });
   }
-  if (latestReady && latestReady.ready === false && latestReady.status === "shutting_down") {
+  if (latestReady && latestReady.ready === false && latestReady.status === daemonStatusShuttingDown) {
     items.push({
-      level: "warning",
+      level: healthStatusWarning,
       title: "Daemon shutting down",
       detail: latestReady.message || latestReady.status || "",
       target: "daemon-section",
@@ -1225,7 +1430,7 @@ function renderAttention() {
   // red through its own path (failed services/watches/apps, hook-failed/firing).
   if (latestActivity && (latestActivity.errors || 0) > 0) {
     items.push({
-      level: "warning",
+      level: healthStatusWarning,
       title: latestActivity.errors === 1 ? "1 recent error" : `${latestActivity.errors} recent errors`,
       detail: latestActivity.last_event_kind ? `last: ${latestActivity.last_event_kind}` : "see recent activity",
       target: "activity-section",
@@ -1234,18 +1439,18 @@ function renderAttention() {
   // While the daemon is settling (starting), the tab favicon is neutral grey and
   // other health signals are premature, so it overrides the ok/warning/critical
   // colour. Startup progress lives in the status bar (`status: starting`).
-  const startingNow = latestReady && latestReady.ready === false && latestReady.status === "starting";
+  const startingNow = latestReady && latestReady.ready === false && latestReady.status === daemonStatusStarting;
   if (startingNow) {
-    setFavicon("starting");
+    setFavicon(targetStateStarting);
     if (healthIconReady) document.title = "Sermo · starting";
   } else if (!items.length) {
-    setFavicon("ok");
+    setFavicon(healthStatusOK);
     if (healthIconReady) document.title = "Sermo · services";
     box.classList.add("live-hidden");
     setHTMLIfChanged(box, "");
     return;
   } else {
-    setFavicon(items.some((it) => it.level === "critical") ? "critical" : "warning");
+    setFavicon(items.some((it) => it.level === healthStatusCritical) ? healthStatusCritical : healthStatusWarning);
     if (healthIconReady) document.title = `(${items.length}) Sermo · services`;
   }
   box.classList.remove("live-hidden");
@@ -1256,13 +1461,13 @@ function renderAttention() {
     </div>
     <div class="attn-list">${items.map((it) => `
       <button class="attn-item ${esc(it.level)}" data-panel-target="${esc(it.target)}" aria-label="${esc(attnAriaLabel(it))}">
-        <div class="attn-title ${it.level === "critical" ? "bad" : "inactive"}">${esc(it.title)}</div>
+        <div class="attn-title ${it.level === healthStatusCritical ? "bad" : "inactive"}">${esc(it.title)}</div>
         ${it.detail ? `<div class="attn-detail">${esc(it.detail)}</div>` : ""}
       </button>
     `).join("")}</div>`;
   setHTMLIfChanged(box, html);
 }
-function isTrackedOperation(action) { return action === "start" || action === "stop" || action === "restart" || action === "reload" || action === "resume"; }
+function isTrackedOperation(action) { return serviceTrackedActions.includes(action); }
 function serviceBusy(name) {
   const op = liveOps.get(name);
   return !!op && !op.finished;
@@ -1272,8 +1477,8 @@ function opElapsed(op) {
   return Math.max(0, Math.floor((end - op.started) / 1000));
 }
 function opStateText(op) {
-  if (!op.finished) return "running";
-  return op.ok ? "completed" : "failed";
+  if (!op.finished) return operationStateRunning;
+  return op.ok ? operationStateCompleted : targetStateFailed;
 }
 function beginOperation(name, action) {
   liveOps.set(name, {
@@ -1293,7 +1498,7 @@ function finishOperation(name, ok, message) {
   const op = liveOps.get(name) || { name, action: "operation", started: Date.now() };
   op.finished = Date.now();
   op.ok = !!ok;
-  op.message = message || (ok ? "completed" : "failed");
+  op.message = message || (ok ? operationStateCompleted : targetStateFailed);
   liveOps.set(name, op);
   renderOperationLive();
   renderServices();
@@ -1316,7 +1521,7 @@ function stopLiveOpsTimerIfIdle() {
   }
 }
 async function updateLiveOps() {
-  liveOpsSlots = await getJSON("api/ops", liveOpsSlots || {});
+  liveOpsSlots = await getJSON(apiOpsPath, liveOpsSlots || {});
   renderOperationLive();
   renderServices();
   if (liveOps.size === 0) stopLiveOpsTimerIfIdle();
@@ -1331,12 +1536,12 @@ function renderOperationLive() {
     return;
   }
   const slotText = liveOpsSlots && liveOpsSlots.total != null
-    ? `<div class="muted op-slots-summary">Operation slots: <b class="${(liveOpsSlots.in_use || 0) >= (liveOpsSlots.total || 1) ? 'failed' : ''}">${liveOpsSlots.in_use || 0}/${liveOpsSlots.total || 0}</b> in use</div>`
+    ? `<div class="muted op-slots-summary">Operation slots: <b class="${(liveOpsSlots.in_use || 0) >= (liveOpsSlots.total || 1) ? targetStateFailed : ''}">${liveOpsSlots.in_use || 0}/${liveOpsSlots.total || 0}</b> in use</div>`
     : "";
   box.classList.remove("live-hidden");
   const html = slotText + ops.map((op) => {
     const state = opStateText(op);
-    const cls = op.finished ? (op.ok ? "ok" : "failed") : "";
+    const cls = op.finished ? (op.ok ? targetStateOK : targetStateFailed) : "";
     const since = op.finished ? `${opElapsed(op)}s total` : `${opElapsed(op)}s elapsed`;
     return `<div class="op-card">
       <span class="op-dot ${cls}" aria-hidden="true"></span>
@@ -1351,18 +1556,7 @@ function renderOperationLive() {
 }
 
 function serviceStatusMatches(s, status) {
-  switch (status) {
-    case "disabled":
-    case "stopped":
-    case "started":
-    case "starting":
-    case "collecting":
-    case "monitored":
-    case "failed":
-      return serviceDisplayState(s) === status;
-    default:
-      return true; // "all"
-  }
+  return serviceStatusFilterStates.includes(status) ? serviceDisplayState(s) === status : true;
 }
 
 function serviceQueryMatches(s, query, category) {
@@ -1376,12 +1570,12 @@ function serviceQueryMatches(s, query, category) {
 function serviceMatches(s) {
   if (serviceSurfaceOf(s) !== serviceSurfaceRegular) return false;
   const category = categoryOf(s, "service");
-  if (svcCategory !== "all" && category !== svcCategory) return false;
+  if (svcCategory !== filterAll && category !== svcCategory) return false;
   return serviceQueryMatches(s, svcQuery, category) && serviceStatusMatches(s, svcStatus);
 }
 
 function setSvcQuery(v) { svcQuery = (v || "").trim().toLowerCase(); renderServices(); saveUIState(); }
-function setSvcCategory(v) { svcCategory = v || "all"; renderServices(); saveUIState(); }
+function setSvcCategory(v) { svcCategory = v || filterAll; renderServices(); saveUIState(); }
 
 function getSplitServicePanel(panelKey) {
   return splitServicePanels[panelKey] || splitServicePanelBySurface(panelKey);
@@ -1461,36 +1655,41 @@ function renderFilterButtonCounts(selector, counts) {
   });
 }
 
+function stateCounts(items, stateOf, states) {
+  const list = items || [];
+  const counts = { [filterAll]: list.length };
+  states.forEach((state) => { counts[state] = 0; });
+  list.forEach((item) => {
+    const state = stateOf(item);
+    if (counts[state] !== undefined) counts[state]++;
+  });
+  return counts;
+}
+
 function normalizeServiceStatusFilter(v) {
   switch (v) {
-    case "running":
-      return "all";
-    case "paused":
-      return "stopped";
+    case targetStateRunning:
+      return filterAll;
+    case targetStatePaused:
+      return targetStateStopped;
     default:
-      return v || "all";
+      return v || filterAll;
   }
 }
 
 function normalizeWatchStatusFilter(v) {
-  return v || "all";
+  return v || filterAll;
 }
 
 function normalizeMountStatusFilter(v) {
-  switch (v) {
-    case "active":
-    case "inactive":
-      return v;
-    default:
-      return "all";
-  }
+  return mountStatusFilterStates.includes(v) ? v : filterAll;
 }
 
 function syncFilterButtons(selector, datasetKey, activeValue) {
   document.querySelectorAll(`${selector} button`).forEach((b) => {
     const pressed = b.dataset[datasetKey] === activeValue;
     b.classList.toggle("f-active", pressed);
-    b.setAttribute("aria-pressed", pressed ? "true" : "false");
+    b.setAttribute("aria-pressed", pressed ? domBoolTrue : domBoolFalse);
   });
 }
 
@@ -1544,17 +1743,7 @@ function updateSortIndicators() {
 }
 
 function serviceStatusCounts(services) {
-  const s = services || [];
-  return {
-    all: s.length,
-    disabled: s.filter((x) => serviceDisplayState(x) === "disabled").length,
-    stopped: s.filter((x) => serviceDisplayState(x) === "stopped").length,
-    started: s.filter((x) => serviceDisplayState(x) === "started").length,
-    starting: s.filter((x) => serviceDisplayState(x) === "starting").length,
-    collecting: s.filter((x) => serviceDisplayState(x) === "collecting").length,
-    monitored: s.filter((x) => serviceDisplayState(x) === "monitored").length,
-    failed: s.filter((x) => serviceDisplayState(x) === "failed").length,
-  };
+  return stateCounts(services, serviceDisplayState, serviceStatusFilterStates);
 }
 
 // renderFilterCounts annotates each status-filter button with how many services
@@ -1590,37 +1779,37 @@ function toggleAllSvcGroups() {
 }
 
 function serviceActionDisabled(s, action, busy) {
-  const st = (s.status || "unknown").toLowerCase();
-  const paused = st === "paused";
-  const stopped = st === "inactive" || st === "failed";
+  const st = (s.status || backendStatusUnknown).toLowerCase();
+  const paused = st === targetStatePaused;
+  const stopped = st === backendStatusInactive || st === targetStateFailed;
   switch (action) {
-    case "start":
-      return !!(busy || st === "active" || paused);
-    case "stop": return !!(busy || stopped);
-    case "restart": return !!busy;
-    case "resume": return !!(busy || !paused);
-    case "reload": return !!(busy || st !== "active" || !s.can_reload);
-    case "monitor":
-    case "unmonitor": return !!busy;
+    case actionStart:
+      return !!(busy || st === backendStatusActive || paused);
+    case actionStop: return !!(busy || stopped);
+    case actionRestart: return !!busy;
+    case actionResume: return !!(busy || !paused);
+    case actionReload: return !!(busy || st !== backendStatusActive || !s.can_reload);
+    case actionMonitor:
+    case actionUnmonitor: return !!busy;
     default: return false;
   }
 }
 
 function serviceActionDisabledReason(s, action, busy) {
-  const st = (s.status || "unknown").toLowerCase();
+  const st = (s.status || backendStatusUnknown).toLowerCase();
   if (busy) return "operation in progress";
-  const paused = st === "paused";
-  const stopped = st === "inactive" || st === "failed";
+  const paused = st === targetStatePaused;
+  const stopped = st === backendStatusInactive || st === targetStateFailed;
   switch (action) {
-    case "start":
+    case actionStart:
       if (paused) return "service is paused";
-      if (st === "active") return "service is already running";
+      if (st === backendStatusActive) return "service is already running";
       return "";
-    case "stop": return stopped ? "service is already stopped" : "";
-    case "resume": return !paused ? "service is not paused" : "";
-    case "reload":
+    case actionStop: return stopped ? "service is already stopped" : "";
+    case actionResume: return !paused ? "service is not paused" : "";
+    case actionReload:
       if (!s.can_reload) return "service does not support reload";
-      return st !== "active" ? "service is not running" : "";
+      return st !== backendStatusActive ? "service is not running" : "";
     default: return "";
   }
 }
@@ -1643,8 +1832,8 @@ function svcActionDescribedBy(s, action, busy) {
 }
 
 function servicePowerAction(s) {
-  const st = (s.status || "unknown").toLowerCase();
-  return st === "active" || st === "paused" ? "stop" : "start";
+  const st = (s.status || backendStatusUnknown).toLowerCase();
+  return st === backendStatusActive || st === targetStatePaused ? actionStop : actionStart;
 }
 
 function expandToggleAriaLabel(name, open, subject) {
@@ -1658,13 +1847,13 @@ function groupToggleAriaLabel(category, count, collapsed) {
 function svcActionAriaLabel(s, action) {
   const name = displayName(s) || s.name || "";
   switch (action) {
-    case "start": return `Start service ${name}`;
-    case "stop": return `Stop service ${name}`;
-    case "restart": return `Restart service ${name}`;
-    case "resume": return `Resume service ${name}`;
-    case "reload": return `Reload service ${name}`;
-    case "monitor": return `Monitor service ${name}`;
-    case "unmonitor": return `Unmonitor service ${name}`;
+    case actionStart: return `Start service ${name}`;
+    case actionStop: return `Stop service ${name}`;
+    case actionRestart: return `Restart service ${name}`;
+    case actionResume: return `Resume service ${name}`;
+    case actionReload: return `Reload service ${name}`;
+    case actionMonitor: return `Monitor service ${name}`;
+    case actionUnmonitor: return `Unmonitor service ${name}`;
     default: return `${action} service ${name}`;
   }
 }
@@ -1672,7 +1861,6 @@ function svcActionAriaLabel(s, action) {
 // serviceRowParts builds one service's main and optional expansion <tr> HTML.
 // Shared by the full tbody rebuild and the large-fleet in-place patch path.
 function serviceRowParts(s, opts = {}) {
-  const st = (s.status || "unknown").toLowerCase();
   const state = serviceState(s);
   const category = categoryOf(s, "service");
   const op = liveOps.get(s.name);
@@ -1690,22 +1878,22 @@ function serviceRowParts(s, opts = {}) {
     actions = me.can_act ? tpl`
         ${svcActionHint(s, powerAction, busy)}
         <button ?disabled=${serviceActionDisabled(s, powerAction, busy)} data-service="${s.name}" data-service-action="${powerAction}" title="${alsoApply ? `also applies to: ${s.also_apply.join(", ")}` : nothing}" aria-label="${svcActionAriaLabel(s, powerAction)}" aria-describedby="${svcActionDescribedBy(s, powerAction, busy)}">${powerAction}</button>
-        ${svcActionHint(s, "restart", busy)}
-        <button ?disabled=${serviceActionDisabled(s, "restart", busy)} data-service="${s.name}" data-service-action="restart" aria-label="${svcActionAriaLabel(s, "restart")}" aria-describedby="${svcActionDescribedBy(s, "restart", busy)}">restart</button>
-        ${showResume ? tpl`${svcActionHint(s, "resume", busy)}<button ?disabled=${serviceActionDisabled(s, "resume", busy)} data-service="${s.name}" data-service-action="resume" aria-label="${svcActionAriaLabel(s, "resume")}" aria-describedby="${svcActionDescribedBy(s, "resume", busy)}">resume</button>` : nothing}
-        ${svcActionHint(s, "reload", busy)}
-        <button ?disabled=${serviceActionDisabled(s, "reload", busy)} data-service="${s.name}" data-service-action="reload" aria-label="${svcActionAriaLabel(s, "reload")}" aria-describedby="${svcActionDescribedBy(s, "reload", busy)}">reload</button>
+        ${svcActionHint(s, actionRestart, busy)}
+        <button ?disabled=${serviceActionDisabled(s, actionRestart, busy)} data-service="${s.name}" data-service-action="${actionRestart}" aria-label="${svcActionAriaLabel(s, actionRestart)}" aria-describedby="${svcActionDescribedBy(s, actionRestart, busy)}">${actionRestart}</button>
+        ${showResume ? tpl`${svcActionHint(s, actionResume, busy)}<button ?disabled=${serviceActionDisabled(s, actionResume, busy)} data-service="${s.name}" data-service-action="${actionResume}" aria-label="${svcActionAriaLabel(s, actionResume)}" aria-describedby="${svcActionDescribedBy(s, actionResume, busy)}">${actionResume}</button>` : nothing}
+        ${svcActionHint(s, actionReload, busy)}
+        <button ?disabled=${serviceActionDisabled(s, actionReload, busy)} data-service="${s.name}" data-service-action="${actionReload}" aria-label="${svcActionAriaLabel(s, actionReload)}" aria-describedby="${svcActionDescribedBy(s, actionReload, busy)}">${actionReload}</button>
         ${s.monitored
-          ? tpl`${svcActionHint(s, "unmonitor", busy)}<button ?disabled=${serviceActionDisabled(s, "unmonitor", busy)} data-service="${s.name}" data-service-action="unmonitor" aria-label="${svcActionAriaLabel(s, "unmonitor")}" aria-describedby="${svcActionDescribedBy(s, "unmonitor", busy)}">unmonitor</button>`
-          : tpl`${svcActionHint(s, "monitor", busy)}<button ?disabled=${serviceActionDisabled(s, "monitor", busy)} data-service="${s.name}" data-service-action="monitor" aria-label="${svcActionAriaLabel(s, "monitor")}" aria-describedby="${svcActionDescribedBy(s, "monitor", busy)}">monitor</button>`}`
+          ? tpl`${svcActionHint(s, actionUnmonitor, busy)}<button ?disabled=${serviceActionDisabled(s, actionUnmonitor, busy)} data-service="${s.name}" data-service-action="${actionUnmonitor}" aria-label="${svcActionAriaLabel(s, actionUnmonitor)}" aria-describedby="${svcActionDescribedBy(s, actionUnmonitor, busy)}">${actionUnmonitor}</button>`
+          : tpl`${svcActionHint(s, actionMonitor, busy)}<button ?disabled=${serviceActionDisabled(s, actionMonitor, busy)} data-service="${s.name}" data-service-action="${actionMonitor}" aria-label="${svcActionAriaLabel(s, actionMonitor)}" aria-describedby="${svcActionDescribedBy(s, actionMonitor, busy)}">${actionMonitor}</button>`}`
       : tpl`<span class="muted">read-only</span>`;
   }
   const label = displayName(s);
-  const key = "svc:" + s.name;
+  const key = serviceExpansionKey(s.name);
   const open = expanded.has(key);
   const chev = tpl`<span class="exp" aria-hidden="true">${open ? '▾' : '▸'}</span>`;
   const name = tpl`<button type="button" class="name row-toggle" data-service-expand="${s.name}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(label, open, "service details")}">${label}</button>`;
-  const rowClass = state === "failed" ? "row-failing" : (state === "warning" ? "row-warning" : "");
+  const rowClass = state === targetStateFailed ? "row-failing" : (state === targetStateWarning ? "row-warning" : "");
   const main = tpl`<tr id="svc-row-${s.name}" class="clickable ${rowClass}" data-exp-key="${key}">
     <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
     <td>${categoryBadge(category)}</td>
@@ -1743,7 +1931,7 @@ function render(services) {
 }
 
 function servicePanelFilterActive(query, status, category) {
-  return !!query || status !== "all" || (category !== undefined && category !== "all");
+  return !!query || status !== filterAll || (category !== undefined && category !== filterAll);
 }
 
 function sortServiceList(list, sort) {
@@ -1842,7 +2030,7 @@ function toggleExpand(key) {
     if (location.hash === "#" + key) history.replaceState(null, "", location.pathname + location.search);
   } else {
     expanded.add(key);
-    if (key.startsWith("svc:") || key.startsWith("wat:") || key.startsWith("app:")) {
+    if (isShareableExpansionKey(key)) {
       history.replaceState(null, "", "#" + key); // shareable deep-link
     }
   }
@@ -1854,7 +2042,7 @@ function toggleExpand(key) {
 
 function openServiceExpansion(name, scroll) {
   if (!name) return;
-  const key = "svc:" + name;
+  const key = serviceExpansionKey(name);
   if (!expanded.has(key)) expanded.add(key);
   history.replaceState(null, "", "#" + key);
   openSectionForService(name);
@@ -1867,7 +2055,7 @@ function openServiceExpansion(name, scroll) {
 
 function toggleServiceExpansion(name) {
   if (!name) return;
-  toggleExpand("svc:" + name);
+  toggleExpand(serviceExpansionKey(name));
 }
 
 function refreshExpandedServiceDetails() {
@@ -1882,7 +2070,7 @@ function refreshExpandedServiceDetails() {
 // cached content yet (an expansion that never loaded) falls back to a fetch.
 function reassertExpansions() {
   expanded.forEach((k) => {
-    if (!k.startsWith("svc:") && !k.startsWith("wat:")) return;
+    if (!isServiceExpansionKey(k) && !isWatchExpansionKey(k)) return;
     if (!expCache[k]) {
       loadExpansionFor(k);
       return;
@@ -1906,7 +2094,7 @@ function refreshExpandedServices(opts = {}) {
   if (document.hidden && !opts.force) return;
   if (opts.metricsOnly) {
     expanded.forEach((k) => {
-      if (!k.startsWith("svc:")) return;
+      if (!isServiceExpansionKey(k)) return;
       const detail = expDetailCache[k];
       if (detail) hydrateServiceDetail(detail);
     });
@@ -1916,7 +2104,7 @@ function refreshExpandedServices(opts = {}) {
   svcExpandRefreshTick++;
   const periodicFull = forceFull || (svcExpandRefreshTick % SVC_EXPAND_FULL_EVERY === 0);
   expanded.forEach((k) => {
-    if (!k.startsWith("svc:")) return;
+    if (!isServiceExpansionKey(k)) return;
     if (!expCache[k] || periodicFull) {
       loadExpansionFor(k);
       return;
@@ -1930,10 +2118,10 @@ function refreshExpandedServices(opts = {}) {
 // one events download per expanded watch per render.
 async function refreshExpandedWatches() {
   if (document.hidden) return;
-  const keys = [...expanded].filter((k) => k.startsWith("wat:"));
+  const keys = [...expanded].filter(isWatchExpansionKey);
   if (!keys.length) return;
   try {
-    const res = await fetch("api/events?limit=200");
+    const res = await fetch(apiEventsRecentPath);
     if (!res.ok) return;
     const events = (await res.json()) || [];
     keys.forEach((k) => renderWatchExpansionInto(k, events));
@@ -1941,7 +2129,7 @@ async function refreshExpandedWatches() {
 }
 
 async function refreshServiceExpansionLight(key) {
-  const name = key.slice(4);
+  const name = expansionName(key, expansionPrefixService);
   const tr = [...document.querySelectorAll("tr.exp-row")].find((r) => r.dataset.exp === key);
   if (!tr) return;
   // A structural re-render of #rows can recreate this row and blank its detail
@@ -1949,7 +2137,7 @@ async function refreshServiceExpansionLight(key) {
   // expansion survives expanding/collapsing other rows.
   if (expCache[key]) litRender(expCache[key], tr.querySelector("td"));
   try {
-    const res = await fetch(`api/services/${encodeURIComponent(name)}`);
+    const res = await fetch(serviceAPI(name));
     if (!res.ok) return;
     const detailData = await res.json();
     expDetailCache[key] = detailData;
@@ -1972,13 +2160,13 @@ function applyHash() {
     if (section.classList.contains("panel-hidden")) return;
     if (section.tagName === "DETAILS") section.open = true;
     if (!hashScrolled) {
-      section.scrollIntoView({ block: "start" });
+      section.scrollIntoView({ block: scrollBlockStart });
       hashScrolled = true;
     }
     return;
   }
-  if (h.startsWith("svc:")) {
-    const name = h.slice(4);
+  if (isServiceExpansionKey(h)) {
+    const name = expansionName(h, expansionPrefixService);
     if (!(allServices || []).some((s) => s.name === name)) return;
     openSectionForService(name);
     if (!expanded.has(h)) { expanded.add(h); renderServices(); }
@@ -1989,8 +2177,8 @@ function applyHash() {
     }
     return;
   }
-  if (h.startsWith("wat:")) {
-    const name = h.slice(4);
+  if (isWatchExpansionKey(h)) {
+    const name = expansionName(h, expansionPrefixWatch);
     const w = (allWatches || []).find((item) => item && item.name === name);
     if (!w) return;
     const sec = $(watchSectionFor(w));
@@ -2003,8 +2191,8 @@ function applyHash() {
     }
     return;
   }
-  if (h.startsWith("app:")) {
-    const name = h.slice(4);
+  if (isAppExpansionKey(h)) {
+    const name = expansionName(h, expansionPrefixApp);
     if (!(allApps || []).some((a) => a.name === name)) return;
     const sec = $("#apps-section");
     if (sec) { setPanelVisible(sec, true); sec.open = true; }
@@ -2016,7 +2204,7 @@ function applyHash() {
     }
   }
 }
-window.addEventListener("hashchange", () => { hashScrolled = false; applyHash(); });
+window.addEventListener(domEventHashChange, () => { hashScrolled = false; applyHash(); });
 
 // rowClick expands a row from a click anywhere on it, except on interactive
 // elements (action buttons and links) which keep their own behaviour.
@@ -2038,7 +2226,7 @@ function expansionCell(key) {
 // already-fetched events response, shared by the first-open fetch and the
 // per-poll refresh so expanded watches never each download their own copy.
 function renderWatchExpansionInto(key, events) {
-  const name = key.slice(4);
+  const name = expansionName(key, expansionPrefixWatch);
   const html = renderWatchExpansion((allWatches || []).find((x) => x.name === name),
     (events || []).filter((e) => e.watch === name));
   expCache[key] = html;
@@ -2054,9 +2242,9 @@ async function loadExpansionFor(key) {
   const cell = expansionCell(key);
   if (cell && !expCache[key]) litRender(tpl`<span class="muted">loading…</span>`, cell);
   try {
-    if (key.startsWith("svc:")) {
-      const name = key.slice(4);
-      const res = await fetch(`api/services/${encodeURIComponent(name)}`);
+    if (isServiceExpansionKey(key)) {
+      const name = expansionName(key, expansionPrefixService);
+      const res = await fetch(serviceAPI(name));
       if (!res.ok) return;
       const detailData = await res.json();
       expDetailCache[key] = detailData;
@@ -2065,8 +2253,8 @@ async function loadExpansionFor(key) {
       const target = expansionCell(key);
       if (target) litRender(html, target);
       hydrateServiceDetail(detailData);
-    } else if (key.startsWith("wat:")) {
-      const res = await fetch("api/events?limit=200");
+    } else if (isWatchExpansionKey(key)) {
+      const res = await fetch(apiEventsRecentPath);
       const events = res.ok ? await res.json() : [];
       renderWatchExpansionInto(key, events);
     }
@@ -2220,9 +2408,9 @@ function slaWindowLabel(window) {
 
 function slaColor(pct) {
   if (pct == null) return "color-mix(in srgb, var(--text-2) 40%, transparent)";
-  if (pct >= 99) return themeHealthColor("ok");
-  if (pct >= 95) return themeHealthColor("warning");
-  return themeHealthColor("critical");
+  if (pct >= 99) return themeHealthColor(healthStatusOK);
+  if (pct >= 95) return themeHealthColor(healthStatusWarning);
+  return themeHealthColor(healthStatusCritical);
 }
 
 function renderSLAWindows(wins, compact) {
@@ -2354,7 +2542,7 @@ async function loadServiceSLA(name) {
   const chart = document.getElementById(detailDomId(name, "sla-chart"));
   if (!summary || !chart) return;
   try {
-    const res = await fetch(`api/services/${encodeURIComponent(name)}/sla?since=${metricWindow}`);
+    const res = await fetch(serviceSLAAPI(name, metricWindow));
     if (!res.ok) throw new Error("HTTP " + res.status);
     const body = await res.json();
     const points = body.points || [];
@@ -2901,7 +3089,7 @@ function watchMonitorHint(w) {
 }
 
 function watchMonitorMode(w) {
-  return w && w.monitor ? w.monitor : "enabled";
+  return w && w.monitor ? w.monitor : monitorModeEnabled;
 }
 
 function watchHasNotify(w) {
@@ -2916,7 +3104,7 @@ function watchHasExpand(w) {
 // disabled, starting, failed or ok). Monitor state remains available to actions
 // and search, but the State column renders one state badge.
 function watchStateText(w) {
-  return (w && w.state) || "unknown";
+  return (w && w.state) || backendStatusUnknown;
 }
 
 function watchStateRank(w) {
@@ -2970,7 +3158,7 @@ function watchSearchText(w) {
     (w.hook_command || []).join(" "),
     notifierNames(w).join(" "),
     watchHasNotify(w) ? "notify notifiers" : "",
-    watchHasExpand(w) ? "expand" : "",
+    watchHasExpand(w) ? actionExpand : "",
     w.dry_run ? "dry run dry-run" : "",
     watchStateText(w),
     w && w.monitored ? "monitoring enabled" : "monitoring paused",
@@ -2994,14 +3182,8 @@ function watchTypeValue(panel, w) {
 function watchMatches(w, panelKey) {
   const panel = getWatchPanel(panelKey);
   if (panel.query && !watchSearchText(w).includes(panel.query)) return false;
-  if (panel.type !== "all" && watchTypeValue(panel, w) !== panel.type) return false;
-  switch (panel.status) {
-    case "disabled":      return watchStateText(w) === "disabled";
-    case "ok":            return watchStateText(w) === "ok";
-    case "starting":      return watchStateText(w) === "starting";
-    case "failed":        return watchStateText(w) === "failed";
-    default:           return true;
-  }
+  if (panel.type !== filterAll && watchTypeValue(panel, w) !== panel.type) return false;
+  return watchStatusFilterStates.includes(panel.status) ? watchStateText(w) === panel.status : true;
 }
 
 function syncWatchFilterActive(panelKey) {
@@ -3026,7 +3208,7 @@ function setWatchStatus(panelKey, v) {
 
 function setAllWatchStatuses(v) {
   Object.keys(watchPanels).forEach((key) => {
-    watchPanels[key].status = v || "all";
+    watchPanels[key].status = v || filterAll;
     syncWatchFilterActive(key);
   });
   renderWatches();
@@ -3042,7 +3224,7 @@ function openAllWatchPanels() {
 
 function setWatchType(panelKey, v) {
   const panel = getWatchPanel(panelKey);
-  panel.type = v || "all";
+  panel.type = v || filterAll;
   renderWatches();
   saveUIState();
 }
@@ -3054,7 +3236,7 @@ function setWatchType(panelKey, v) {
 function syncWatchTypeSelect(panelKey, watches) {
   const panel = getWatchPanel(panelKey);
   const select = $(panel.typeSelect);
-  if (!select) return "all";
+  if (!select) return filterAll;
   const counts = new Map();
   (watches || []).forEach((w) => {
     const t = watchTypeValue(panel, w);
@@ -3067,13 +3249,13 @@ function syncWatchTypeSelect(panelKey, watches) {
   // dropdown and force "all" so no stale selection keeps filtering.
   if (panel.typeFilterMin && types.length < panel.typeFilterMin) {
     select.hidden = true;
-    select.innerHTML = `<option value="all">${esc(panel.allTypesLabel)}</option>`;
-    select.value = "all";
-    return "all";
+    select.innerHTML = `<option value="${filterAll}">${esc(panel.allTypesLabel)}</option>`;
+    select.value = filterAll;
+    return filterAll;
   }
   select.hidden = false;
-  const next = panel.type !== "all" && counts.has(panel.type) ? panel.type : "all";
-  select.innerHTML = `<option value="all">${esc(panel.allTypesLabel)}</option>` + types.map((t) =>
+  const next = panel.type !== filterAll && counts.has(panel.type) ? panel.type : filterAll;
+  select.innerHTML = `<option value="${filterAll}">${esc(panel.allTypesLabel)}</option>` + types.map((t) =>
     `<option value="${esc(t)}">${esc(t)} (${counts.get(t)})</option>`).join("");
   select.value = next;
   return next;
@@ -3081,17 +3263,11 @@ function syncWatchTypeSelect(panelKey, watches) {
 
 function renderWatchFilterCounts(panelKey, watches) {
   const w = watches || allWatches || [];
-  renderFilterButtonCounts(getWatchPanel(panelKey).filters, {
-    all: w.length,
-    disabled: w.filter((x) => watchStateText(x) === "disabled").length,
-    ok: w.filter((x) => watchStateText(x) === "ok").length,
-    starting: w.filter((x) => watchStateText(x) === "starting").length,
-    failed: w.filter((x) => watchStateText(x) === "failed").length,
-  });
+  renderFilterButtonCounts(getWatchPanel(panelKey).filters, stateCounts(w, watchStateText, watchStatusFilterStates));
 }
 
 function watchPanelFilterActive(panel) {
-  return !!(panel.query || panel.status !== "all" || panel.type !== "all");
+  return !!(panel.query || panel.status !== filterAll || panel.type !== filterAll);
 }
 
 function parseDurationSeconds(raw) {
@@ -3288,25 +3464,25 @@ function isDiskioWatch(w) {
 
 function watchActionDisabled(w, action) {
   if (!w || !w.enabled) return true;
-  if (watchStateText(w) === "starting") return true;
+  if (watchStateText(w) === targetStateStarting) return true;
   switch (action) {
-    case "monitor": return !!w.monitored;
-    case "unmonitor": return !w.monitored;
-    case "expand": return !watchHasExpand(w);
+    case actionMonitor: return !!w.monitored;
+    case actionUnmonitor: return !w.monitored;
+    case actionExpand: return !watchHasExpand(w);
     default: return false;
   }
 }
 
 function watchActionDisabledReason(w, action) {
-  if (watchStateText(w) === "starting") return "watch is starting";
+  if (watchStateText(w) === targetStateStarting) return "watch is starting";
   switch (action) {
-    case "monitor":
+    case actionMonitor:
       if (w.monitored) return "watch is already monitored";
       return "";
-    case "unmonitor":
+    case actionUnmonitor:
       if (!w.monitored) return "watch is paused";
       return "";
-    case "expand":
+    case actionExpand:
       if (!watchHasExpand(w)) return "expand is not configured";
       return "";
     default: return "";
@@ -3333,9 +3509,9 @@ function watchActionDescribedBy(w, action) {
 function watchActionAriaLabel(w, action) {
   const name = displayName(w) || w.name || "";
   switch (action) {
-    case "expand": return `Expand storage for watch ${name}`;
-    case "monitor": return `Monitor watch ${name}`;
-    case "unmonitor": return `Unmonitor watch ${name}`;
+    case actionExpand: return `Expand storage for watch ${name}`;
+    case actionMonitor: return `Monitor watch ${name}`;
+    case actionUnmonitor: return `Unmonitor watch ${name}`;
     default: return `${action} watch ${name}`;
   }
 }
@@ -3373,14 +3549,14 @@ function watchNameCell(w, key, open) {
 // watchActionsCell renders the shared actions cell (expand / monitor / unmonitor).
 function watchActionsCell(w) {
   const expandBtn = (w.expand && Number(w.expand.by_bytes) > 0 && me.can_act && w.enabled)
-    ? tpl`${watchActionHint(w, "expand")}<button ?disabled=${watchActionDisabled(w, "expand")} data-watch="${w.name}" data-watch-action="expand" aria-label="${watchActionAriaLabel(w, "expand")}" aria-describedby="${watchActionDescribedBy(w, "expand")}">expand ${fmtBytes(w.expand.by_bytes)}</button>`
+    ? tpl`${watchActionHint(w, actionExpand)}<button ?disabled=${watchActionDisabled(w, actionExpand)} data-watch="${w.name}" data-watch-action="${actionExpand}" aria-label="${watchActionAriaLabel(w, actionExpand)}" aria-describedby="${watchActionDescribedBy(w, actionExpand)}">${actionExpand} ${fmtBytes(w.expand.by_bytes)}</button>`
     : nothing;
   const monitorBtn = !w.enabled
     ? tpl`<span class="muted">disabled in config</span>`
     : (me.can_act
       ? (w.monitored
-        ? tpl`${watchActionHint(w, "unmonitor")}<button ?disabled=${watchActionDisabled(w, "unmonitor")} data-watch="${w.name}" data-watch-action="unmonitor" aria-label="${watchActionAriaLabel(w, "unmonitor")}" aria-describedby="${watchActionDescribedBy(w, "unmonitor")}">unmonitor</button>`
-        : tpl`${watchActionHint(w, "monitor")}<button ?disabled=${watchActionDisabled(w, "monitor")} data-watch="${w.name}" data-watch-action="monitor" aria-label="${watchActionAriaLabel(w, "monitor")}" aria-describedby="${watchActionDescribedBy(w, "monitor")}">monitor</button>`)
+        ? tpl`${watchActionHint(w, actionUnmonitor)}<button ?disabled=${watchActionDisabled(w, actionUnmonitor)} data-watch="${w.name}" data-watch-action="${actionUnmonitor}" aria-label="${watchActionAriaLabel(w, actionUnmonitor)}" aria-describedby="${watchActionDescribedBy(w, actionUnmonitor)}">${actionUnmonitor}</button>`
+        : tpl`${watchActionHint(w, actionMonitor)}<button ?disabled=${watchActionDisabled(w, actionMonitor)} data-watch="${w.name}" data-watch-action="${actionMonitor}" aria-label="${watchActionAriaLabel(w, actionMonitor)}" aria-describedby="${watchActionDescribedBy(w, actionMonitor)}">${actionMonitor}</button>`)
       : tpl`<span class="muted">read-only</span>`);
   const actions = !w.enabled
     ? tpl`<span class="muted">disabled in config</span>`
@@ -3392,7 +3568,7 @@ function watchActionsCell(w) {
 // "failed") paints the row red, a warning amber, matching serviceRowParts so
 // certificate and every other host-watch panel follow the same visual line.
 function watchRowClass(state) {
-  return state === "failed" ? "row-failing" : (state === "warning" ? "row-warning" : "");
+  return state === targetStateFailed ? "row-failing" : (state === targetStateWarning ? "row-warning" : "");
 }
 
 // watchExpansionRow returns the inline expansion row when open. Its colspan must
@@ -3409,7 +3585,7 @@ function watchExpansionRow(key, open, cols = 9) {
 // panels so they render identically (including the expand action).
 function watchRowHTML(w) {
   const state = watchStateText(w);
-  const key = "wat:" + w.name;
+  const key = watchExpansionKey(w.name);
   const open = expanded.has(key);
   const row = tpl`<tr id="wat-row-${w.name}" class="clickable ${watchRowClass(state)}" data-exp-key="${key}">
     ${watchNameCell(w, key, open)}
@@ -3443,7 +3619,7 @@ function storageRowHTML(w) {
   const mount = d.mount_point
     ? (d.mounted === false ? tpl`<span class="bad">${d.mount_point} (not mounted)</span>` : tpl`<code>${d.mount_point}</code>`)
     : (w.storage && w.storage.mounted === false ? tpl`<span class="bad">not found</span>` : tpl`<span class="muted">—</span>`);
-  const key = "wat:" + w.name;
+  const key = watchExpansionKey(w.name);
   const open = expanded.has(key);
   const row = tpl`<tr id="wat-row-${w.name}" class="clickable ${watchRowClass(state)}" data-exp-key="${key}">
     ${watchNameCell(w, key, open)}
@@ -3462,7 +3638,7 @@ function storageRowHTML(w) {
 // readings (expiry date, days left, issuer) in place of the generic type/summary.
 function certRowHTML(w) {
   const state = watchStateText(w);
-  const key = "wat:" + w.name;
+  const key = watchExpansionKey(w.name);
   const open = expanded.has(key);
   const algo = readingRaw(w, "public_key_algorithm");
   const bits = readingRaw(w, "key_bits");
@@ -3487,7 +3663,7 @@ function certRowHTML(w) {
 // readings (device, utilization, read/write throughput, await latency).
 function diskioRowHTML(w) {
   const state = watchStateText(w);
-  const key = "wat:" + w.name;
+  const key = watchExpansionKey(w.name);
   const open = expanded.has(key);
   const row = tpl`<tr id="wat-row-${w.name}" class="clickable ${watchRowClass(state)}" data-exp-key="${key}">
     ${watchNameCell(w, key, open)}
@@ -3560,71 +3736,55 @@ const appSortKeys = {
   version: (a) => (a.version_short || a.version || "").toLowerCase(),
   last: lastEventTime,
 };
+const appStateLabels = {
+  [targetStateOK]: "Ok",
+  [targetStateStarting]: "Starting",
+  [targetStateWarning]: "Warning",
+  [targetStateFailed]: "Failed",
+};
 function setAppSort(key) { toggleSort(appSort, key, renderApps); }
 function setAppQuery(q) { appQuery = q || ""; renderApps(); saveUIState(); }
-function setAppCategory(v) { appCategory = v || "all"; renderApps(); saveUIState(); }
+function setAppCategory(v) { appCategory = v || filterAll; renderApps(); saveUIState(); }
 function setAppStatus(v) {
-  appStatus = v || "all";
+  appStatus = v || filterAll;
   syncFilterButtons("#app-filters", "af", appStatus);
   renderApps();
   saveUIState();
 }
 function renderAppFilterCounts() {
-  const a = allApps || [];
-  renderFilterButtonCounts("#app-filters", {
-    all: a.length,
-    ok: a.filter((x) => appStateText(x) === "ok").length,
-    starting: a.filter((x) => appStateText(x) === "starting").length,
-    warning: a.filter((x) => appStateText(x) === "warning").length,
-    failed: a.filter((x) => appStateText(x) === "failed").length,
-  });
+  renderFilterButtonCounts("#app-filters", stateCounts(allApps, appStateText, appStatusFilterStates));
 }
 function updateAppSortIndicators() {
   updateSortIndicatorsFor("ai", appSort, ".apps-table th.sortable[data-app-sort]", "appSort");
 }
 function appStateText(a) {
-  if (a && a.state === "starting") return "starting";
+  if (a && a.state === targetStateStarting) return targetStateStarting;
   const status = String((a && a.status) || "").trim().toLowerCase();
-  if (!status || status === "ok") return "ok";
-  if (status.startsWith("error:") || status === "not installed" || status === "no binary configured") return "failed";
-  return "warning";
+  if (!status || status === targetStateOK) return targetStateOK;
+  if (status.startsWith("error:") || status === "not installed" || status === "no binary configured") return targetStateFailed;
+  return targetStateWarning;
 }
 function appStateRank(a) {
   switch (appStateText(a)) {
-    case "ok": return 0;
-    case "starting": return 1;
-    case "warning": return 2;
-    case "failed": return 3;
+    case targetStateOK: return 0;
+    case targetStateStarting: return 1;
+    case targetStateWarning: return 2;
+    case targetStateFailed: return 3;
     default: return 4;
   }
 }
 function appStatusLabel(a) {
-  switch (appStateText(a)) {
-    case "ok": return "Ok";
-    case "starting": return "Starting";
-    case "warning": return "Warning";
-    case "failed": return "Failed";
-    default: return "Unknown";
-  }
+  return appStateLabels[appStateText(a)] || "Unknown";
 }
 function appStatusCell(a) {
   const state = appStateText(a);
-  const detail = (a && a.status && a.status !== "ok") ? a.status : appStatusLabel(a);
+  const detail = (a && a.status && a.status !== targetStateOK) ? a.status : appStatusLabel(a);
   return tpl`<td class="status-cell status-${state}" title="${detail}">${stateBadgeLabel(state, appStatusLabel(a))}</td>`;
 }
 function appMatches(a) {
   const category = categoryOf(a, "app");
-  if (appCategory !== "all" && category !== appCategory) return false;
-  switch (appStatus) {
-    case "ok":
-    case "starting":
-    case "warning":
-    case "failed":
-      if (appStateText(a) !== appStatus) return false;
-      break;
-    default:
-      break;
-  }
+  if (appCategory !== filterAll && category !== appCategory) return false;
+  if (appStatusFilterStates.includes(appStatus) && appStateText(a) !== appStatus) return false;
   if (!appQuery) return true;
   const q = appQuery.toLowerCase();
   return displayName(a).toLowerCase().includes(q)
@@ -3705,13 +3865,13 @@ function renderApps(apps) {
   const visibleCategories = sortedCategories(list, "app");
   appCollapsedGroups.forEach((category) => { if (!visibleCategories.includes(category)) appCollapsedGroups.delete(category); });
   updateGroupButtons("app", appGrouped, visibleCategories, appCollapsedGroups, "applications");
-  if (filterCount) filterCount.textContent = (appQuery || appCategory !== "all" || appStatus !== "all") ? `showing ${list.length} of ${total}` : "";
+  if (filterCount) filterCount.textContent = (appQuery || appCategory !== filterAll || appStatus !== filterAll) ? `showing ${list.length} of ${total}` : "";
   const appRow = (a) => {
     const category = categoryOf(a, "app");
     const state = appStateText(a);
-    const rowClass = state === "failed" ? "row-failing" : (state === "warning" ? "row-warning" : "");
+    const rowClass = state === targetStateFailed ? "row-failing" : (state === targetStateWarning ? "row-warning" : "");
     const label = displayName(a);
-    const key = "app:" + a.name;
+    const key = appExpansionKey(a.name);
     const open = expanded.has(key);
     const chev = tpl`<span class="exp" aria-hidden="true">${open ? '▾' : '▸'}</span>`;
     const ver = a.version_short || a.version || "—";
@@ -3735,7 +3895,7 @@ function renderApps(apps) {
   litRender(content, tbody);
   // Fill the recent-events table of each expanded app (async), mirroring how
   // expanded services load their events.
-  (allApps || []).forEach((a) => { if (expanded.has("app:" + a.name)) loadAppEvents(a.name); });
+  (allApps || []).forEach((a) => { if (expanded.has(appExpansionKey(a.name))) loadAppEvents(a.name); });
   applyHash();
   updateSectionNav();
 }
@@ -3753,7 +3913,7 @@ function renderAppExpansion(a) {
   const category = categoryOf(a, "app");
   const sla = renderSLAWindows(a.sla, true);
   const st = appStateText(a);
-  const statusCls = st === "failed" ? "lvl-error" : (st === "warning" ? "lvl-warning" : "");
+  const statusCls = st === targetStateFailed ? "lvl-error" : (st === targetStateWarning ? "lvl-warning" : "");
   const statusHTML = a.status
     ? tpl`<span class="${statusCls}">${a.status}</span>`
     : "—";
@@ -3783,7 +3943,7 @@ async function loadAppEvents(name) {
   if (!target) return;
   renderEventsLoading(target);
   try {
-    const res = await fetch(`api/applications/${encodeURIComponent(name)}/events?limit=50`);
+    const res = await fetch(applicationEventsAPI(name, eventDetailLimit));
     if (!res.ok) throw new Error("HTTP " + res.status);
     litRender(eventRows(await res.json(), false), target);
   } catch (e) {
@@ -3834,25 +3994,19 @@ function renderWatchExpansion(w, events) {
 }
 
 function mountStateClass(state, mounted) {
-  if (state === "error") return "state-failed";
-  if (mounted || state === "active") return "state-running";
-  return "state-stopped";
+  if (mounted) return mountStateClasses[mountStateActive];
+  return mountStateClasses[state] || mountStateClasses[mountStateInactive];
 }
 
 function mountStateText(m) {
   const state = String((m && m.state) || "").toLowerCase();
-  if (state === "error") return "error";
-  if ((m && m.mounted) || state === "active") return "active";
-  return "inactive";
+  if (state === mountStateError) return mountStateError;
+  if ((m && m.mounted) || state === mountStateActive) return mountStateActive;
+  return mountStateInactive;
 }
 
 function mountStateRank(m) {
-  switch (mountStateText(m)) {
-    case "active": return 0;
-    case "inactive": return 1;
-    case "error": return 2;
-    default: return 3;
-  }
+  return mountStateRanks[mountStateText(m)] ?? 3;
 }
 
 function mountBlockers(m) {
@@ -3911,7 +4065,7 @@ const mountSortKeys = {
 
 function setMountSort(key) { toggleSort(mountSort, key, renderMounts); }
 function setMountQuery(v) { mountQuery = (v || "").trim().toLowerCase(); renderMounts(); saveUIState(); }
-function setMountCategory(v) { mountCategory = v || "all"; renderMounts(); saveUIState(); }
+function setMountCategory(v) { mountCategory = v || filterAll; renderMounts(); saveUIState(); }
 function setMountStatus(v) {
   mountStatus = normalizeMountStatusFilter(v);
   syncFilterButtons("#mount-filters", "mf", mountStatus);
@@ -3921,8 +4075,8 @@ function setMountStatus(v) {
 
 function mountMatches(m) {
   const category = categoryOf(m, "storage");
-  if (mountCategory !== "all" && category !== mountCategory) return false;
-  if (mountStatus !== "all" && mountStateText(m) !== mountStatus) return false;
+  if (mountCategory !== filterAll && category !== mountCategory) return false;
+  if (mountStatus !== filterAll && mountStateText(m) !== mountStatus) return false;
   if (!mountQuery) return true;
   const hay = [
     displayName(m), m.name || "", m.display_name || "", category, m.path || "",
@@ -3932,24 +4086,19 @@ function mountMatches(m) {
 }
 
 function renderMountFilterCounts() {
-  const mounts = allMounts || [];
-  renderFilterButtonCounts("#mount-filters", {
-    all: mounts.length,
-    active: mounts.filter((m) => mountStateText(m) === "active").length,
-    inactive: mounts.filter((m) => mountStateText(m) === "inactive").length,
-  });
+  renderFilterButtonCounts("#mount-filters", stateCounts(allMounts, mountStateText, mountStatusFilterStates));
 }
 
 function syncMountCategorySelect() {
   const select = $("#mount-category");
-  if (!select) return mountCategory || "all";
+  if (!select) return mountCategory || filterAll;
   const categories = sortedCategories(allMounts || [], "storage");
   const counts = categoryCounts(allMounts || [], "storage");
   const visible = categories.length > 1;
   select.classList.toggle("panel-hidden", !visible);
   select.disabled = !visible;
-  const next = visible && mountCategory !== "all" && categories.includes(mountCategory) ? mountCategory : "all";
-  select.innerHTML = `<option value="all">all groups</option>` + categories.map((category) =>
+  const next = visible && mountCategory !== filterAll && categories.includes(mountCategory) ? mountCategory : filterAll;
+  select.innerHTML = `<option value="${filterAll}">all groups</option>` + categories.map((category) =>
     `<option value="${esc(category)}">${esc(category)} (${counts.get(category) || 0})</option>`
   ).join("");
   select.value = next;
@@ -3984,12 +4133,12 @@ function renderMounts(mounts) {
     sortedBy(list, mountSort, mountSortKeys, "name");
   }
   updateMountSortIndicators();
-  if (filterCount) filterCount.textContent = (mountQuery || mountStatus !== "all" || mountCategory !== "all") ? `showing ${list.length} of ${total}` : "";
+  if (filterCount) filterCount.textContent = (mountQuery || mountStatus !== filterAll || mountCategory !== filterAll) ? `showing ${list.length} of ${total}` : "";
   const rows = list.map((m) => {
     const label = esc(m.display_name || m.name);
     const category = categoryOf(m, "storage");
     const mounted = !!m.mounted;
-    const state = m.state || (mounted ? "active" : "inactive");
+    const state = m.state || (mounted ? mountStateActive : mountStateInactive);
     const detail = m.message ? ` title="${esc(m.message)}"` : "";
     const refcount = m.refcounted === false ? '<span class="muted">off</span>' : String(Number(m.refcount || 0));
     const name = esc(m.name || "");
@@ -4022,9 +4171,9 @@ function mountActionButtons(m, mounted) {
   const hint = disabledReason ? `<span id="${hintId}" class="visually-hidden">${esc(disabledReason)}</span>` : "";
   const disabledAttrs = disabledReason ? ` disabled aria-describedby="${hintId}" title="${esc(disabledReason)}"` : "";
   return hint +
-    `<button data-mount="${name}" data-mount-action="umount" aria-label="Unmount ${label}"${disabledAttrs}>umount</button>` +
-    `<button data-mount="${name}" data-mount-action="alert" aria-label="Alert users blocking ${label}"${disabledAttrs}>alert</button>` +
-    `<button class="danger-btn" data-mount="${name}" data-mount-action="kill-umount" aria-label="Kill blockers and unmount ${label}"${disabledAttrs}>kill+umount</button>`;
+    `<button data-mount="${name}" data-mount-action="${actionUmount}" aria-label="Unmount ${label}"${disabledAttrs}>${actionUmount}</button>` +
+    `<button data-mount="${name}" data-mount-action="${actionAlert}" aria-label="Alert users blocking ${label}"${disabledAttrs}>${actionAlert}</button>` +
+    `<button class="danger-btn" data-mount="${name}" data-mount-action="${actionKillUmount}" aria-label="Kill blockers and unmount ${label}"${disabledAttrs}>kill+umount</button>`;
 }
 
 function mountUmountDisabledReason(m) {
@@ -4135,7 +4284,7 @@ function lockName(l) {
 }
 
 function lockStateHTML(l) {
-  const cls = l.state === "active" ? "bad" : (l.state === "stale" ? "inactive" : "muted");
+  const cls = l.state === lockStateActive ? "bad" : (l.state === lockStateStale ? "inactive" : "muted");
   return tpl`<span class="${cls}">${l.state || ""}</span>`;
 }
 
@@ -4147,7 +4296,7 @@ function lockTTL(l) {
 
 function lockOwner(l) {
   if (!l.owner_pid) return tpl`<span class="muted">none</span>`;
-  const cls = l.owner_status === "live" ? "ok" : (l.owner_status === "stale" ? "inactive" : "muted");
+  const cls = l.owner_status === lockOwnerStatusLive ? "ok" : (l.owner_status === lockOwnerStatusStale ? "inactive" : "muted");
   const reason = l.stale_reason ? ` · ${l.stale_reason}` : "";
   return tpl`<span class="${cls}">${l.owner_pid}</span> <span class="muted">${(l.owner_status || "") + reason}</span>`;
 }
@@ -4183,7 +4332,7 @@ function lockReleaseDisabled(l) {
 function lockReleaseDisabledReason(l) {
   if (!me.can_act) return "";
   if (l.releaseable) return "";
-  if (l.state === "active") return "lock is still active";
+  if (l.state === lockStateActive) return "lock is still active";
   return "lock cannot be released";
 }
 
@@ -4213,18 +4362,15 @@ async function releaseLock(service, name) {
     danger: true,
   }))) return;
   setStatus("");
-  const qs = name ? `?name=${encodeURIComponent(name)}` : "";
+  const qs = name ? `?${apiQueryName}=${encodeURIComponent(name)}` : "";
   try {
-    const res = await fetch(`api/locks/${encodeURIComponent(service)}/release${qs}`, {
-      method: "POST",
-      headers: { "X-Sermo-CSRF": "1" },
-    });
+    const res = await fetch(lockReleaseAPI(service, qs), csrfPostOptions());
     const body = await res.json().catch(() => ({}));
     if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
-    setStatus(`released lock ${label}`, "ok");
+    setStatus(`released lock ${label}`, feedbackStatusOK);
     await load();
   } catch (e) {
-    setStatus(`release ${label}: ${e.message}`, "err");
+    setStatus(`release ${label}: ${e.message}`, feedbackStatusErr);
   }
 }
 
@@ -4333,19 +4479,19 @@ function renderOverview(ctx) {
   const { ready, live, mon, ops, locks, hostMetrics } = ctx;
   const svcs = allServices || [];
   const enabled = svcs.filter((s) => s.enabled);
-  const failedSvcs = svcs.filter((s) => serviceDisplayState(s) === "failed");
-  const startingSvcs = svcs.filter((s) => serviceDisplayState(s) === "starting");
-  const collectingSvcs = svcs.filter((s) => serviceDisplayState(s) === "collecting");
-  const activeSvcs = enabled.filter((s) => ["started", "collecting", "monitored"].includes(serviceDisplayState(s)));
-  const monitoredSvcs = enabled.filter((s) => serviceDisplayState(s) === "monitored");
+  const failedSvcs = svcs.filter((s) => serviceDisplayState(s) === targetStateFailed);
+  const startingSvcs = svcs.filter((s) => serviceDisplayState(s) === targetStateStarting);
+  const collectingSvcs = svcs.filter((s) => serviceDisplayState(s) === targetStateCollecting);
+  const activeSvcs = enabled.filter((s) => overviewActiveServiceStates.includes(serviceDisplayState(s)));
+  const monitoredSvcs = enabled.filter((s) => serviceDisplayState(s) === targetStateMonitored);
   const watches = allWatches || [];
   const enabledWatches = watches.filter((w) => w && w.enabled);
-  const failedWatches = watches.filter((w) => watchStateText(w) === "failed");
-  const startingWatches = watches.filter((w) => watchStateText(w) === "starting");
-  const startingApps = (allApps || []).filter((a) => appStateText(a) === "starting");
-  const daemonStarting = ready && ready.status === "starting" && ready.ready === false;
-  const activeLocks = (locks || []).filter((l) => l.state === "active");
-  const failedApps = (allApps || []).filter((a) => appStateText(a) === "failed");
+  const failedWatches = watches.filter((w) => watchStateText(w) === targetStateFailed);
+  const startingWatches = watches.filter((w) => watchStateText(w) === targetStateStarting);
+  const startingApps = (allApps || []).filter((a) => appStateText(a) === targetStateStarting);
+  const daemonStarting = ready && ready.status === daemonStatusStarting && ready.ready === false;
+  const activeLocks = (locks || []).filter((l) => l.state === lockStateActive);
+  const failedApps = (allApps || []).filter((a) => appStateText(a) === targetStateFailed);
   const alerts = failedSvcs.length + failedWatches.length + failedApps.length + activeLocks.length;
   const settling = daemonStarting || startingSvcs.length > 0 || startingWatches.length > 0 || startingApps.length > 0;
   const servicesSettlingSub = () => {
@@ -4534,7 +4680,7 @@ async function getJSON(url, dflt) {
 // status line keeps showing the daemon lifecycle state.
 async function fetchReadyReport() {
   try {
-    const r = await fetch("readyz?verbose");
+    const r = await fetch(readyVerbosePath);
     const data = await r.json();
     return (data && typeof data === "object") ? data : {};
   } catch (_) {
@@ -4648,7 +4794,7 @@ function renderStatus(ctx) {
     if (ops.active_users != null) {
       parts.push(`users: <b>${ops.active_users || 0}</b>`);
     }
-    const activeLocks = (locks || []).filter(l => l.state === "active").length;
+    const activeLocks = (locks || []).filter(l => l.state === lockStateActive).length;
     if (activeLocks > 0 || (locks || []).length > 0) {
       let lockStr = `locks: <b>${activeLocks}</b>`;
       if (activeLocks < (locks || []).length) lockStr += `/${(locks || []).length}`;
@@ -4658,9 +4804,9 @@ function renderStatus(ctx) {
     // Host uptime and daemon lifecycle status are always the last two readings,
     // paired so status stays immediately after uptime.
     const hostUp = fmtUptime(daemon.host_uptime_seconds);
-    const statusText = ready.status || (ready.ready ? "ok" : "");
-    const statusCls = ready.panic ? "status-panic" : (statusText === "starting" ? "status-starting" : (ready.ready ? "ok" : "inactive"));
-    const statusLabel = statusText === "starting" && ready.message
+    const statusText = ready.status || (ready.ready ? healthStatusOK : "");
+    const statusCls = ready.panic ? "status-panic" : (statusText === daemonStatusStarting ? "status-starting" : (ready.ready ? healthStatusOK : "inactive"));
+    const statusLabel = statusText === daemonStatusStarting && ready.message
       ? `${esc(statusText)} <span class="muted">(${esc(ready.message)})</span>`
       : esc(statusText || "—");
     const tail = [
@@ -4679,7 +4825,7 @@ function renderStatus(ctx) {
     set("#daemon-uptime", fmtUptime(live.uptime_seconds));
     if (live.go) set("#daemon-go", live.go);
     if (ready.status) {
-      const cls = ready.panic ? "status-panic" : (ready.status === "starting" ? "status-starting" : (ready.ready ? "ok" : "inactive"));
+      const cls = ready.panic ? "status-panic" : (ready.status === daemonStatusStarting ? "status-starting" : (ready.ready ? healthStatusOK : "inactive"));
       const el = $("#daemon-ready");
       if (el) {
         el.textContent = ready.status;
@@ -4694,8 +4840,8 @@ function renderStatus(ctx) {
 
 async function act(name, action) {
   let noCascade = false;
-  if ((action === "start" || action === "stop" || action === "restart") && !(await confirmAction(name, action))) return;
-  if (action === "start" || action === "stop" || action === "restart") {
+  if (isServicePreflightAction(action) && !(await confirmAction(name, action))) return;
+  if (isServicePreflightAction(action)) {
     noCascade = confirmNoCascade;
     confirmNoCascade = false;
   }
@@ -4703,11 +4849,8 @@ async function act(name, action) {
   const tracked = isTrackedOperation(action);
   if (tracked) beginOperation(name, action);
   try {
-    const q = noCascade ? "?no_cascade=1" : "";
-    const res = await fetch(`api/services/${encodeURIComponent(name)}/${action}${q}`, {
-      method: "POST",
-      headers: { "X-Sermo-CSRF": "1" },
-    });
+    const q = noCascade ? `?${apiQueryNoCascade}=${queryBoolOne}` : "";
+    const res = await fetch(serviceAPI(name, apiActionSuffix(action, q)), csrfPostOptions());
     const body = await res.json().catch(() => ({}));
     if (!res.ok || body.ok === false) {
       throw new Error(body.message || ("HTTP " + res.status));
@@ -4715,34 +4858,28 @@ async function act(name, action) {
     if (tracked) finishOperation(name, true, body.message || body.status || "operation completed");
   } catch (e) {
     if (tracked) finishOperation(name, false, e.message);
-    setStatus(`${action} ${name}: ${e.message}`, "err");
+    setStatus(`${action} ${name}: ${e.message}`, feedbackStatusErr);
   }
   load();
 }
 
 async function actWatch(name, action) {
-  if (action === "expand" && !(await confirmWatchExpand(name))) return;
+  if (action === actionExpand && !(await confirmWatchExpand(name))) return;
   setStatus("");
   try {
-    const res = await fetch(`api/watches/${encodeURIComponent(name)}/${action}`, {
-      method: "POST",
-      headers: { "X-Sermo-CSRF": "1" },
-    });
+    const res = await fetch(watchAPI(name, apiActionSuffix(action)), csrfPostOptions());
     const body = await res.json().catch(() => ({}));
     if (!res.ok || body.ok === false) {
       throw new Error(body.message || ("HTTP " + res.status));
     }
   } catch (e) {
-    setStatus(`${action} watch ${name}: ${e.message}`, "err");
+    setStatus(`${action} watch ${name}: ${e.message}`, feedbackStatusErr);
   }
   load();
 }
 
 async function fetchMountBlockers(name) {
-  const res = await fetch(`api/mounts/${encodeURIComponent(name)}/blockers`, {
-    method: "POST",
-    headers: { "X-Sermo-CSRF": "1" },
-  });
+  const res = await fetch(mountBlockersAPI(name), csrfPostOptions());
   const body = await res.json().catch(() => ({}));
   if (!res.ok || body.ok === false) {
     throw new Error(body.message || ("HTTP " + res.status));
@@ -4764,7 +4901,7 @@ function mountBlockerSummary(blockers) {
 async function confirmMountUnmount(name) {
   const info = await fetchMountBlockers(name);
   if (info.can_umount === false) {
-    setStatus(`umount ${name}: ${info.umount_disabled_reason || info.message || "unmount is disabled"}`, "warn");
+    setStatus(`umount ${name}: ${info.umount_disabled_reason || info.message || "unmount is disabled"}`, feedbackStatusWarn);
     return false;
   }
   const blockers = info.blockers || [];
@@ -4774,7 +4911,7 @@ async function confirmMountUnmount(name) {
   return promptConfirm({
     title: `Unmount ${name}?`,
     message,
-    okLabel: "umount",
+    okLabel: actionUmount,
     danger: true,
   });
 }
@@ -4782,7 +4919,7 @@ async function confirmMountUnmount(name) {
 async function confirmMountKillUnmount(name) {
   const info = await fetchMountBlockers(name);
   if (info.can_umount === false) {
-    setStatus(`kill+umount ${name}: ${info.umount_disabled_reason || info.message || "unmount is disabled"}`, "warn");
+    setStatus(`kill+umount ${name}: ${info.umount_disabled_reason || info.message || "unmount is disabled"}`, feedbackStatusWarn);
     return false;
   }
   const blockers = info.blockers || [];
@@ -4790,12 +4927,12 @@ async function confirmMountKillUnmount(name) {
     return promptConfirm({
       title: `Unmount ${name}?`,
       message: `No blocking processes are using "${name}" right now. Unmount normally?`,
-      okLabel: "umount",
+      okLabel: actionUmount,
       danger: true,
     });
   }
   if (!info.can_kill) {
-    setStatus(`kill+umount ${name}: no current blocker is killable by this mount policy`, "warn");
+    setStatus(`kill+umount ${name}: no current blocker is killable by this mount policy`, feedbackStatusWarn);
     return false;
   }
   return promptConfirm({
@@ -4809,22 +4946,22 @@ async function confirmMountKillUnmount(name) {
 async function confirmMountAlert(name) {
   const info = await fetchMountBlockers(name);
   if (info.can_umount === false) {
-    setStatus(`alert ${name}: ${info.umount_disabled_reason || info.message || "unmount is disabled"}`, "warn");
+    setStatus(`alert ${name}: ${info.umount_disabled_reason || info.message || "unmount is disabled"}`, feedbackStatusWarn);
     return false;
   }
   const blockers = info.blockers || [];
   if (!blockers.length) {
-    setStatus(`alert ${name}: no blocking processes found`, "warn");
+    setStatus(`alert ${name}: no blocking processes found`, feedbackStatusWarn);
     return false;
   }
   if (!info.can_alert) {
-    setStatus(`alert ${name}: blockers have no resolved login user`, "warn");
+    setStatus(`alert ${name}: blockers have no resolved login user`, feedbackStatusWarn);
     return false;
   }
   return promptConfirm({
     title: `Alert users for ${name}?`,
     message: `Send a console message to users currently blocking "${name}"?\n\n${mountBlockerSummary(blockers)}`,
-    okLabel: "alert",
+    okLabel: actionAlert,
     danger: false,
   });
 }
@@ -4834,32 +4971,29 @@ async function actMount(name, action) {
   let postAction = action;
   let query = "";
   try {
-    if (action === "umount" && !(await confirmMountUnmount(name))) return;
-    if (action === "kill-umount") {
+    if (action === actionUmount && !(await confirmMountUnmount(name))) return;
+    if (action === actionKillUmount) {
       if (!(await confirmMountKillUnmount(name))) return;
-      postAction = "umount";
-      query = "?kill=1";
+      postAction = actionUmount;
+      query = `?${apiQueryKill}=${queryBoolOne}`;
     }
-    if (action === "alert" && !(await confirmMountAlert(name))) return;
+    if (action === actionAlert && !(await confirmMountAlert(name))) return;
   } catch (e) {
-    setStatus(`${action} ${name}: ${e.message}`, "err");
+    setStatus(`${action} ${name}: ${e.message}`, feedbackStatusErr);
     return;
   }
 
   setStatus("");
   try {
-    const res = await fetch(`api/mounts/${encodeURIComponent(name)}/${postAction}${query}`, {
-      method: "POST",
-      headers: { "X-Sermo-CSRF": "1" },
-    });
+    const res = await fetch(mountAPI(name, apiActionSuffix(postAction, query)), csrfPostOptions());
     const body = await res.json().catch(() => ({}));
     if (!res.ok || body.ok === false) {
       const blockers = body.blockers && body.blockers.length ? `; blockers: ${mountBlockerSummary(body.blockers)}` : "";
       throw new Error((body.message || ("HTTP " + res.status)) + blockers);
     }
-    setStatus(`${action} ${name}: ${body.message || "ok"}`, "ok");
+    setStatus(`${action} ${name}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
   } catch (e) {
-    setStatus(`${action} ${name}: ${e.message}`, "err");
+    setStatus(`${action} ${name}: ${e.message}`, feedbackStatusErr);
   }
   load();
 }
@@ -4871,7 +5005,7 @@ async function confirmWatchExpand(name) {
   return promptConfirm({
     title: `Expand ${name}?`,
     message: `Expand "${name}"${path} by ${by}?`,
-    okLabel: "expand",
+    okLabel: actionExpand,
     danger: true,
   });
 }
@@ -4920,7 +5054,7 @@ let confirmNoCascade = false;
 function confirmPreflightDisabledReason(action, state = {}) {
   if (state.loading) return "loading service context";
   if (state.running) return "preflight is running";
-  if (!["start", "stop", "restart"].includes(action)) return "preflight not available for this action";
+  if (!isServicePreflightAction(action)) return "preflight not available for this action";
   return "";
 }
 
@@ -4977,7 +5111,7 @@ async function confirmAction(name, action) {
       title: `${action} ${name}?`,
       message: `${action} "${name}"?`,
       okLabel: action,
-      danger: action === "stop" || action === "restart",
+      danger: isDangerServiceAction(action),
     });
   }
   confirmCtx = { name, action, detail: null, lastEvent: null, preflight: null };
@@ -4998,8 +5132,8 @@ async function confirmAction(name, action) {
 
   try {
     const [detailRes, eventRes] = await Promise.all([
-      fetch(`api/services/${encodeURIComponent(name)}`),
-      fetch(`api/services/${encodeURIComponent(name)}/events?limit=1`),
+      fetch(serviceAPI(name)),
+      fetch(serviceEventsAPI(name, eventContextLimit)),
     ]);
     if (!detailRes.ok) throw new Error("HTTP " + detailRes.status);
     confirmCtx.detail = await detailRes.json();
@@ -5009,7 +5143,7 @@ async function confirmAction(name, action) {
     }
     syncConfirmPreflightButton(action);
     const alsoApply = (confirmCtx.detail?.also_apply || []);
-    const showCascade = alsoApply.length > 0 && (action === "start" || action === "stop" || action === "restart");
+    const showCascade = alsoApply.length > 0 && isServicePreflightAction(action);
     if (cascadeWrap) cascadeWrap.classList.toggle("is-hidden", !showCascade);
     renderActionConfirm();
   } catch (e) {
@@ -5037,19 +5171,19 @@ function closeActionConfirm(ok) {
 // makes sure an Esc-driven close still resolves the pending action as "cancel".
 (function initConfirmDialog() {
   const dlg = $("#action-confirm");
-  if (dlg) dlg.addEventListener("close", () => { if (confirmResolve) closeActionConfirm(false); });
+  if (dlg) dlg.addEventListener(domEventClose, () => { if (confirmResolve) closeActionConfirm(false); });
 })();
 
 function renderActionConfirm() {
   const ctx = confirmCtx || {};
   const d = ctx.detail || {};
-  const activeLocks = (d.locks || []).filter((l) => l.state === "active");
+  const activeLocks = (d.locks || []).filter((l) => l.state === lockStateActive);
   const failingChecks = (d.checks || []).filter((c) => c.ran && !c.ok && !c.optional);
   const procWarnings = d.process_warnings || [];
   const noResidentProcess = !!d.no_resident_process;
   const ev = ctx.lastEvent;
   const pre = ctx.preflight;
-  const preState = ["start", "stop", "restart"].includes(ctx.action)
+  const preState = isServicePreflightAction(ctx.action)
     ? pre ? (pre.ok ? tpl`<span class="ok">OK</span>` : tpl`<span class="bad">FAIL</span>`) : tpl`<span class="inactive">not run in this dialog</span>`
     : tpl`<span class="muted">not available for this action</span>`;
   const lockLine = activeLocks.length
@@ -5065,9 +5199,9 @@ function renderActionConfirm() {
     ? tpl`${fmtTime(ev.time)} · <span class="kind kind-${ev.kind}">${ev.kind || ""}</span> ${[ev.action, ev.status].filter(Boolean).join(" ")} <span class="muted">${ev.message || ""}</span>`
     : tpl`<span class="muted">none recorded</span>`;
   const preRows = pre ? tpl`<div class="confirm-preflight-block">${preflightRows(pre.checks || [])}</div>` : nothing;
-  const warning = ctx.action === "restart"
+  const warning = ctx.action === actionRestart
     ? "A safe restart stops the unit, verifies residual processes, then starts only if the stop phase is clean."
-    : ctx.action === "start"
+    : ctx.action === actionStart
       ? "Start will run through locks, guards and configured checks before the service is started."
       : "Stop will run through locks, guards and residual-process handling. It will not start the service again.";
   const cascadeTargets = (d.also_apply || []).filter(Boolean);
@@ -5097,10 +5231,7 @@ async function runConfirmPreflight() {
   syncConfirmPreflightButton(confirmCtx.action, { running: true });
   $("#confirm-preflight-btn").textContent = "running…";
   try {
-    const res = await fetch(`api/services/${encodeURIComponent(confirmCtx.name)}/preflight`, {
-      method: "POST",
-      headers: { "X-Sermo-CSRF": "1" },
-    });
+    const res = await fetch(servicePreflightAPI(confirmCtx.name), csrfPostOptions());
     if (!res.ok) throw new Error("HTTP " + res.status);
     confirmCtx.preflight = await res.json();
     renderActionConfirm();
@@ -5132,10 +5263,7 @@ async function runPreflight(name) {
   if (!target) return;
   litRender(tpl`<span class="muted">running…</span>`, target);
   try {
-    const res = await fetch(`api/services/${encodeURIComponent(name)}/preflight`, {
-      method: "POST",
-      headers: { "X-Sermo-CSRF": "1" },
-    });
+    const res = await fetch(servicePreflightAPI(name), csrfPostOptions());
     if (!res.ok) throw new Error("HTTP " + res.status);
     const body = await res.json();
     const head = body.ok
@@ -5152,7 +5280,7 @@ async function loadServiceEvents(name) {
   if (!target) return;
   renderEventsLoading(target);
   try {
-    const res = await fetch(`api/services/${encodeURIComponent(name)}/events?limit=50`);
+    const res = await fetch(serviceEventsAPI(name, eventDetailLimit));
     if (!res.ok) throw new Error("HTTP " + res.status);
     litRender(eventRows(await res.json(), false), target);
   } catch (e) {
@@ -5170,7 +5298,7 @@ const metricWins = [["1h", "1h"], ["24h", "24h"], ["7d", "168h"], ["30d", "720h"
 function setMetricCheck(name, service) {
   metricCheck = name;
   if (service) syncMetricCheckButtons(service, name);
-  const key = service ? "svc:" + service : "";
+  const key = service ? serviceExpansionKey(service) : "";
   const detail = key ? expDetailCache[key] : null;
   if (detail) loadMetrics(service, serviceMeasuredChecks(detail));
   else if (service) loadExpansionFor(key);
@@ -5191,7 +5319,7 @@ function setDaemonMetricWin(win) {
 
 function metricCheckButtons(serviceName, measured, selected) {
   const btns = measured.map((c) =>
-    tpl`<button data-metric-service="${serviceName}" data-metric-check="${c.name}" aria-pressed=${c.name === selected ? "true" : "false"} class="${c.name === selected ? "win-btn-active" : nothing}">${c.name}</button> `);
+    tpl`<button data-metric-service="${serviceName}" data-metric-check="${c.name}" aria-pressed=${c.name === selected ? domBoolTrue : domBoolFalse} class="${c.name === selected ? "win-btn-active" : nothing}">${c.name}</button> `);
   return tpl`<span role="group" aria-label="Latency check">${btns}</span>`;
 }
 
@@ -5200,13 +5328,13 @@ function syncMetricCheckButtons(serviceName, selected) {
     if (btn.dataset.metricService !== serviceName) return;
     const active = btn.dataset.metricCheck === selected;
     btn.classList.toggle("win-btn-active", active);
-    btn.setAttribute("aria-pressed", active ? "true" : "false");
+    btn.setAttribute("aria-pressed", active ? domBoolTrue : domBoolFalse);
   });
 }
 
 function winButtons(list, selected, fn, groupLabel) {
   const btns = list.map(([label, val]) =>
-    tpl`<button data-window-kind="${fn}" data-window-value="${val}" aria-pressed=${val === selected ? "true" : "false"} class="${val === selected ? "win-btn-active" : nothing}">${label}</button> `);
+    tpl`<button data-window-kind="${fn}" data-window-value="${val}" aria-pressed=${val === selected ? domBoolTrue : domBoolFalse} class="${val === selected ? "win-btn-active" : nothing}">${label}</button> `);
   return tpl`<span role="group" aria-label="${groupLabel || "Time window"}">${btns}</span>`;
 }
 
@@ -5215,7 +5343,7 @@ function syncWindowButtons(kind, selected) {
     if (btn.dataset.windowKind !== kind) return;
     const active = btn.dataset.windowValue === selected;
     btn.classList.toggle("win-btn-active", active);
-    btn.setAttribute("aria-pressed", active ? "true" : "false");
+    btn.setAttribute("aria-pressed", active ? domBoolTrue : domBoolFalse);
   });
 }
 
@@ -5226,7 +5354,7 @@ async function loadMetrics(name, measured) {
   const chart = document.getElementById(detailDomId(name, "lat-chart"));
   if (!summary || !chart) return;
   try {
-    const res = await fetch(`api/services/${encodeURIComponent(name)}/metrics?check=${encodeURIComponent(check)}&since=${metricWindow}`);
+    const res = await fetch(serviceMetricsAPI(name, check, metricWindow));
     if (!res.ok) throw new Error("HTTP " + res.status);
     const body = await res.json();
     const s = body.summary || {};
@@ -5248,7 +5376,7 @@ async function loadServiceRuntimeMetrics(name) {
     if (chart) chart.innerHTML = "";
   });
   try {
-    const res = await fetch(`api/services/${encodeURIComponent(name)}/runtime?since=${metricWindow}`);
+    const res = await fetch(serviceRuntimeAPI(name, metricWindow));
     if (!res.ok) throw new Error("HTTP " + res.status);
     const body = await res.json();
     runtimeMetricDefs.forEach(({ key, label, unit }) => {
@@ -5269,7 +5397,7 @@ function renderServiceRuntimeMetric(name, suffix, series, label, fallbackUnit) {
 
 async function loadDaemonMetrics() {
   try {
-    const body = await getJSON(`api/daemon/metrics?since=${daemonMetricWindow}`, null);
+    const body = await getJSON(daemonMetricsAPI(daemonMetricWindow), null);
     if (body) renderDaemonMetrics(body);
   } catch (_) { /* getJSON already degrades */ }
 }
@@ -5519,11 +5647,11 @@ function sortedCategories(items, fallback) {
 
 function syncCategorySelect(id, items, fallback, selected) {
   const select = $(id);
-  if (!select) return selected || "all";
+  if (!select) return selected || filterAll;
   const categories = sortedCategories(items, fallback);
-  const next = selected !== "all" && categories.includes(selected) ? selected : "all";
+  const next = selected !== filterAll && categories.includes(selected) ? selected : filterAll;
   const counts = categoryCounts(items, fallback);
-  select.innerHTML = `<option value="all">all categories</option>` + categories.map((category) =>
+  select.innerHTML = `<option value="${filterAll}">all categories</option>` + categories.map((category) =>
     `<option value="${esc(category)}">${esc(category)} (${counts.get(category) || 0})</option>`
   ).join("");
   select.value = next;
@@ -5550,7 +5678,7 @@ function renderGroupedRows(list, collapsedGroups, panel, fallback, colspan, rend
     const collapsed = collapsedGroups.has(category);
     const panelId = groupedPanelId(panel, items);
     const header = tpl`<tr class="group-row">
-      <td colspan="${colspan}"><button type="button" class="row-toggle group-toggle" data-group-panel="${panel}" data-group-name="${category}" aria-expanded="${collapsed ? "false" : "true"}" aria-controls="${panelId}" aria-label="${groupToggleAriaLabel(category, items.length, collapsed)}"><span class="exp" aria-hidden="true">${collapsed ? "▸" : "▾"}</span>${category} <span class="muted">${items.length}</span></button></td>
+      <td colspan="${colspan}"><button type="button" class="row-toggle group-toggle" data-group-panel="${panel}" data-group-name="${category}" aria-expanded="${collapsed ? domBoolFalse : domBoolTrue}" aria-controls="${panelId}" aria-label="${groupToggleAriaLabel(category, items.length, collapsed)}"><span class="exp" aria-hidden="true">${collapsed ? "▸" : "▾"}</span>${category} <span class="muted">${items.length}</span></button></td>
     </tr>`;
     return [header, collapsed ? nothing : items.map(renderRow)];
   });
@@ -5559,7 +5687,7 @@ function renderGroupedRows(list, collapsedGroups, panel, fallback, colspan, rend
 function updateGroupButtons(prefix, grouped, categories, collapsedGroups, label) {
   const group = $("#" + prefix + "-group-toggle");
   if (group) {
-    group.setAttribute("aria-pressed", grouped ? "true" : "false");
+    group.setAttribute("aria-pressed", grouped ? domBoolTrue : domBoolFalse);
     group.title = grouped ? `Ungroup ${label}` : `Group ${label} by category`;
     group.setAttribute("aria-label", group.title);
   }
@@ -5571,7 +5699,7 @@ function updateGroupButtons(prefix, grouped, categories, collapsedGroups, label)
   all.innerHTML = allCollapsed ? "▾" : "▴";
   all.title = allCollapsed ? `Expand all ${label} groups` : `Collapse all ${label} groups`;
   all.setAttribute("aria-label", all.title);
-  all.setAttribute("aria-pressed", grouped && any && !allCollapsed ? "true" : "false");
+  all.setAttribute("aria-pressed", grouped && any && !allCollapsed ? domBoolTrue : domBoolFalse);
 }
 
 function closestFrom(event, selector) {
@@ -5583,9 +5711,9 @@ function closestFrom(event, selector) {
 function bindSortHeader(th, action) {
   th.tabIndex = 0;
   th.setAttribute("aria-sort", "none");
-  th.addEventListener("click", action);
-  th.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter" && e.key !== " ") return;
+  th.addEventListener(domEventClick, action);
+  th.addEventListener(domEventKeydown, (e) => {
+    if (e.key !== keyEnter && e.key !== keySpace) return;
     e.preventDefault();
     action();
   });
@@ -5593,22 +5721,22 @@ function bindSortHeader(th, action) {
 
 function initStaticHandlers() {
   const refreshSelect = $("#refresh-select");
-  if (refreshSelect) refreshSelect.addEventListener("change", () => setRefresh(refreshSelect.value));
+  if (refreshSelect) refreshSelect.addEventListener(domEventChange, () => setRefresh(refreshSelect.value));
 
   const refreshButton = $("#refresh-now");
-  if (refreshButton) refreshButton.addEventListener("click", refreshNow);
+  if (refreshButton) refreshButton.addEventListener(domEventClick, refreshNow);
 
   const shortcutToggle = $("#shortcut-toggle");
   if (shortcutToggle) {
     shortcutToggle.checked = keyboardShortcutsEnabled();
-    shortcutToggle.addEventListener("change", () => setKeyboardShortcutsEnabled(shortcutToggle.checked));
+    shortcutToggle.addEventListener(domEventChange, () => setKeyboardShortcutsEnabled(shortcutToggle.checked));
   }
 
   const svcSearch = $("#svc-search");
   if (svcSearch) {
-    svcSearch.addEventListener("input", () => setSvcQuery(svcSearch.value));
-    svcSearch.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
+    svcSearch.addEventListener(domEventInput, () => setSvcQuery(svcSearch.value));
+    svcSearch.addEventListener(domEventKeydown, (e) => {
+      if (e.key === keyEscape) {
         svcSearch.value = "";
         setSvcQuery("");
       }
@@ -5617,18 +5745,18 @@ function initStaticHandlers() {
 
   const svcFilters = $("#svc-filters");
   if (svcFilters) {
-    svcFilters.addEventListener("click", (e) => {
+    svcFilters.addEventListener(domEventClick, (e) => {
       const btn = closestFrom(e, "button[data-f]");
-      if (btn) setSvcStatus(btn.dataset.f || "all");
+      if (btn) setSvcStatus(btn.dataset.f || filterAll);
     });
   }
 
   const svcCategorySelect = $("#svc-category");
-  if (svcCategorySelect) svcCategorySelect.addEventListener("change", () => setSvcCategory(svcCategorySelect.value));
+  if (svcCategorySelect) svcCategorySelect.addEventListener(domEventChange, () => setSvcCategory(svcCategorySelect.value));
 
   const svcGroupToggle = $("#svc-group-toggle");
   if (svcGroupToggle) {
-    svcGroupToggle.addEventListener("click", (e) => {
+    svcGroupToggle.addEventListener(domEventClick, (e) => {
       e.preventDefault();
       e.stopPropagation();
       setSvcGrouped(!svcGrouped);
@@ -5636,7 +5764,7 @@ function initStaticHandlers() {
   }
   const svcGroupsToggle = $("#svc-groups-toggle");
   if (svcGroupsToggle) {
-    svcGroupsToggle.addEventListener("click", (e) => {
+    svcGroupsToggle.addEventListener(domEventClick, (e) => {
       e.preventDefault();
       e.stopPropagation();
       toggleAllSvcGroups();
@@ -5648,9 +5776,9 @@ function initStaticHandlers() {
     if (!panel) return;
     const search = $(panel.search);
     if (search) {
-      search.addEventListener("input", () => setSplitServiceQuery(panelKey, search.value));
-      search.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") {
+      search.addEventListener(domEventInput, () => setSplitServiceQuery(panelKey, search.value));
+      search.addEventListener(domEventKeydown, (e) => {
+        if (e.key === keyEscape) {
           search.value = "";
           setSplitServiceQuery(panelKey, "");
         }
@@ -5658,9 +5786,9 @@ function initStaticHandlers() {
     }
     const filters = $(panel.filters);
     if (filters) {
-      filters.addEventListener("click", (e) => {
+      filters.addEventListener(domEventClick, (e) => {
         const btn = closestFrom(e, `button[data-${panel.filterDataset}]`);
-        if (btn) setSplitServiceStatus(panelKey, btn.dataset[panel.filterDataset] || "all");
+        if (btn) setSplitServiceStatus(panelKey, btn.dataset[panel.filterDataset] || filterAll);
       });
     }
     document.querySelectorAll(`${panel.section} .services-table th.sortable[data-${panel.sortAttr}]`).forEach((th) => {
@@ -5683,9 +5811,9 @@ function initStaticHandlers() {
     const panel = getWatchPanel(panelKey);
     const search = $(panel.search);
     if (search) {
-      search.addEventListener("input", () => setWatchQuery(panelKey, search.value));
-      search.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") {
+      search.addEventListener(domEventInput, () => setWatchQuery(panelKey, search.value));
+      search.addEventListener(domEventKeydown, (e) => {
+        if (e.key === keyEscape) {
           search.value = "";
           setWatchQuery(panelKey, "");
         }
@@ -5693,13 +5821,13 @@ function initStaticHandlers() {
     }
 
     const typeSelect = $(panel.typeSelect);
-    if (typeSelect) typeSelect.addEventListener("change", () => setWatchType(panelKey, typeSelect.value));
+    if (typeSelect) typeSelect.addEventListener(domEventChange, () => setWatchType(panelKey, typeSelect.value));
 
     const filters = $(panel.filters);
     if (filters) {
-      filters.addEventListener("click", (e) => {
+      filters.addEventListener(domEventClick, (e) => {
         const btn = closestFrom(e, "button[data-wf]");
-        if (btn) setWatchStatus(panelKey, btn.dataset.wf || "all");
+        if (btn) setWatchStatus(panelKey, btn.dataset.wf || filterAll);
       });
     }
   }
@@ -5711,9 +5839,9 @@ function initStaticHandlers() {
 
   const mountSearch = $("#mount-search");
   if (mountSearch) {
-    mountSearch.addEventListener("input", () => setMountQuery(mountSearch.value));
-    mountSearch.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
+    mountSearch.addEventListener(domEventInput, () => setMountQuery(mountSearch.value));
+    mountSearch.addEventListener(domEventKeydown, (e) => {
+      if (e.key === keyEscape) {
         mountSearch.value = "";
         setMountQuery("");
       }
@@ -5721,13 +5849,13 @@ function initStaticHandlers() {
   }
 
   const mountCategorySelect = $("#mount-category");
-  if (mountCategorySelect) mountCategorySelect.addEventListener("change", () => setMountCategory(mountCategorySelect.value));
+  if (mountCategorySelect) mountCategorySelect.addEventListener(domEventChange, () => setMountCategory(mountCategorySelect.value));
 
   const mountFilters = $("#mount-filters");
   if (mountFilters) {
-    mountFilters.addEventListener("click", (e) => {
+    mountFilters.addEventListener(domEventClick, (e) => {
       const btn = closestFrom(e, "button[data-mf]");
-      if (btn) setMountStatus(btn.dataset.mf || "all");
+      if (btn) setMountStatus(btn.dataset.mf || filterAll);
     });
   }
 
@@ -5737,9 +5865,9 @@ function initStaticHandlers() {
 
   const appSearch = $("#app-search");
   if (appSearch) {
-    appSearch.addEventListener("input", () => setAppQuery(appSearch.value));
-    appSearch.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
+    appSearch.addEventListener(domEventInput, () => setAppQuery(appSearch.value));
+    appSearch.addEventListener(domEventKeydown, (e) => {
+      if (e.key === keyEscape) {
         appSearch.value = "";
         setAppQuery("");
       }
@@ -5747,18 +5875,18 @@ function initStaticHandlers() {
   }
 
   const appCategorySelect = $("#app-category");
-  if (appCategorySelect) appCategorySelect.addEventListener("change", () => setAppCategory(appCategorySelect.value));
+  if (appCategorySelect) appCategorySelect.addEventListener(domEventChange, () => setAppCategory(appCategorySelect.value));
   const appFilters = $("#app-filters");
   if (appFilters) {
-    appFilters.addEventListener("click", (e) => {
+    appFilters.addEventListener(domEventClick, (e) => {
       const btn = closestFrom(e, "button[data-af]");
-      if (btn) setAppStatus(btn.dataset.af || "all");
+      if (btn) setAppStatus(btn.dataset.af || filterAll);
     });
   }
 
   const appGroupToggle = $("#app-group-toggle");
   if (appGroupToggle) {
-    appGroupToggle.addEventListener("click", (e) => {
+    appGroupToggle.addEventListener(domEventClick, (e) => {
       e.preventDefault();
       e.stopPropagation();
       setAppGrouped(!appGrouped);
@@ -5766,7 +5894,7 @@ function initStaticHandlers() {
   }
   const appGroupsToggle = $("#app-groups-toggle");
   if (appGroupsToggle) {
-    appGroupsToggle.addEventListener("click", (e) => {
+    appGroupsToggle.addEventListener(domEventClick, (e) => {
       e.preventDefault();
       e.stopPropagation();
       toggleAllAppGroups();
@@ -5780,78 +5908,78 @@ function initStaticHandlers() {
   ["event-service", "event-watch", "event-kind", "event-status"].forEach((id) => {
     const el = $("#" + id);
     if (!el) return;
-    el.addEventListener("input", scheduleLoadEvents);
-    el.addEventListener("keydown", eventFilterKey);
+    el.addEventListener(domEventInput, scheduleLoadEvents);
+    el.addEventListener(domEventKeydown, eventFilterKey);
   });
   const onlyErrors = $("#event-errors");
-  if (onlyErrors) onlyErrors.addEventListener("change", flushLoadEvents);
+  if (onlyErrors) onlyErrors.addEventListener(domEventChange, flushLoadEvents);
   const groupEvents = $("#event-group");
-  if (groupEvents) groupEvents.addEventListener("change", () => { saveUIState(); renderGlobalEvents(); });
+  if (groupEvents) groupEvents.addEventListener(domEventChange, () => { saveUIState(); renderGlobalEvents(); });
   const eventResetFilters = $("#event-reset-filters");
-  if (eventResetFilters) eventResetFilters.addEventListener("click", clearEventFilters);
+  if (eventResetFilters) eventResetFilters.addEventListener(domEventClick, clearEventFilters);
   const eventClear = $("#event-clear");
   if (eventClear) {
-    eventClear.addEventListener("click", (e) => {
+    eventClear.addEventListener(domEventClick, (e) => {
       e.stopPropagation();
       clearEventLog();
     });
   }
 
   document.querySelectorAll("[data-confirm-result]").forEach((btn) => {
-    btn.addEventListener("click", () => closeActionConfirm(btn.dataset.confirmResult === "true"));
+    btn.addEventListener(domEventClick, () => closeActionConfirm(btn.dataset.confirmResult === domBoolTrue));
   });
   const confirmPreflight = $("#confirm-preflight-btn");
-  if (confirmPreflight) confirmPreflight.addEventListener("click", runConfirmPreflight);
+  if (confirmPreflight) confirmPreflight.addEventListener(domEventClick, runConfirmPreflight);
 
   const reloadBtn = $("#reload-btn");
   if (reloadBtn) {
-    reloadBtn.addEventListener("click", (e) => {
+    reloadBtn.addEventListener(domEventClick, (e) => {
       e.stopPropagation();
       reloadConfig();
     });
   }
   const activityClear = $("#activity-clear");
   if (activityClear) {
-    activityClear.addEventListener("click", (e) => {
+    activityClear.addEventListener(domEventClick, (e) => {
       e.stopPropagation();
       clearEventLog($("#event-before")?.value || "");
     });
   }
   const stateCompactBtn = $("#state-compact-btn");
   if (stateCompactBtn) {
-    stateCompactBtn.addEventListener("click", (e) => {
+    stateCompactBtn.addEventListener(domEventClick, (e) => {
       e.stopPropagation();
       compactState();
     });
   }
   const panicBtn = $("#panic-btn");
   if (panicBtn) {
-    panicBtn.addEventListener("click", (e) => {
+    panicBtn.addEventListener(domEventClick, (e) => {
       e.stopPropagation();
       requestPanic(!panicOn);
     });
   }
   const panicDlg = $("#panic-confirm");
   if (panicDlg) {
-    panicDlg.addEventListener("click", (e) => {
+    panicDlg.addEventListener(domEventClick, (e) => {
       const b = e.target.closest("[data-panic-result]");
-      if (b) closePanicConfirm(b.dataset.panicResult === "true");
+      if (b) closePanicConfirm(b.dataset.panicResult === domBoolTrue);
     });
-    panicDlg.addEventListener("close", () => { if (panicResolve) closePanicConfirm(false); });
+    panicDlg.addEventListener(domEventClose, () => { if (panicResolve) closePanicConfirm(false); });
   }
 
   const simpleDlg = $("#simple-confirm");
   if (simpleDlg) {
-    simpleDlg.addEventListener("click", (e) => {
+    simpleDlg.addEventListener(domEventClick, (e) => {
       const b = closestFrom(e, "[data-simple-result]");
-      if (b) closePromptConfirm(b.dataset.simpleResult === "true");
+      if (b) closePromptConfirm(b.dataset.simpleResult === domBoolTrue);
     });
-    simpleDlg.addEventListener("close", () => { if (promptConfirmResolve) closePromptConfirm(false); });
+    simpleDlg.addEventListener(domEventClose, () => { if (promptConfirmResolve) closePromptConfirm(false); });
   }
 }
 
 function initDelegatedHandlers() {
-  document.addEventListener("click", (e) => {
+  document.addEventListener(domEventClick, (e) => {
     const eventToggle = closestFrom(e, "[data-event-toggle]");
     if (eventToggle) {
       toggleEventMsg(eventToggle.dataset.eventToggle || "");
@@ -5945,7 +6073,7 @@ function initDelegatedHandlers() {
 
 initStaticHandlers();
 initDelegatedHandlers();
-window.addEventListener("resize", updateTopbarHeight);
+window.addEventListener(domEventResize, updateTopbarHeight);
 updateTopbarHeight();
 loadMe().then(() => { load(); });
 
@@ -5977,7 +6105,7 @@ function applyRefresh(ms) {
   // handler refreshes immediately when it becomes visible again.
   refreshTimer = ms > 0 ? setInterval(() => { if (document.hidden) return; load(); }, ms) : null;
 }
-document.addEventListener("visibilitychange", () => {
+document.addEventListener(domEventVisibilityChange, () => {
   if (!document.hidden) load();
 });
 function setRefresh(v) {
@@ -5994,11 +6122,11 @@ function setRefresh(v) {
 })();
 
 function keyboardShortcutsEnabled() {
-  try { return localStorage.getItem(KEYBOARD_SHORTCUTS_KEY) !== "0"; } catch (_) { return true; }
+  try { return localStorage.getItem(KEYBOARD_SHORTCUTS_KEY) !== storageBoolFalse; } catch (_) { return true; }
 }
 
 function setKeyboardShortcutsEnabled(enabled) {
-  try { localStorage.setItem(KEYBOARD_SHORTCUTS_KEY, enabled ? "1" : "0"); } catch (_) {}
+  try { localStorage.setItem(KEYBOARD_SHORTCUTS_KEY, enabled ? storageBoolTrue : storageBoolFalse); } catch (_) {}
 }
 
 // activeSearchBox returns the search input for the topmost open data panel.
@@ -6023,7 +6151,7 @@ function activeSearchBox() {
 }
 
 // "/" focuses the visible panel search (unless already typing in a field).
-document.addEventListener("keydown", (e) => {
+document.addEventListener(domEventKeydown, (e) => {
   if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
   if (!keyboardShortcutsEnabled()) return;
   const tag = document.activeElement && document.activeElement.tagName;
@@ -6043,10 +6171,10 @@ document.addEventListener("keydown", (e) => {
     const key = "sermo-open-" + el.id;
     try {
       const saved = localStorage.getItem(key);
-      if (saved !== null) el.open = saved === "1";
+      if (saved !== null) el.open = saved === storageBoolTrue;
     } catch (_) {}
-    el.addEventListener("toggle", () => {
-      try { localStorage.setItem(key, el.open ? "1" : "0"); } catch (_) {}
+    el.addEventListener(domEventToggle, () => {
+      try { localStorage.setItem(key, el.open ? storageBoolTrue : storageBoolFalse); } catch (_) {}
     });
   });
 })();

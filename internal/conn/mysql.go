@@ -50,7 +50,7 @@ func (mysqlProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return mysqlGreeting(c)
 	}
 
-	db, err := sql.Open("mysql", buildDSN(cfg))
+	db, err := sql.Open(ProtocolNameMySQL, buildDSN(cfg))
 	if err != nil {
 		return Result{}, err
 	}

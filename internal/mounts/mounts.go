@@ -3,7 +3,27 @@ package mounts
 
 import "strings"
 
-var escapedFieldReplacer = strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`)
+const (
+	mountFieldEscapeSpace     = `\040`
+	mountFieldSpace           = " "
+	mountFieldEscapeTab       = `\011`
+	mountFieldTab             = "\t"
+	mountFieldEscapeNewline   = `\012`
+	mountFieldNewline         = "\n"
+	mountFieldEscapeBackslash = `\134`
+	mountFieldBackslash       = "\\"
+)
+
+var escapedFieldReplacer = strings.NewReplacer(
+	mountFieldEscapeSpace,
+	mountFieldSpace,
+	mountFieldEscapeTab,
+	mountFieldTab,
+	mountFieldEscapeNewline,
+	mountFieldNewline,
+	mountFieldEscapeBackslash,
+	mountFieldBackslash,
+)
 
 // UnescapeField decodes the octal escapes used in /proc/mounts and /etc/fstab
 // fields for space, tab, newline and backslash.

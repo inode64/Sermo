@@ -22,8 +22,18 @@ const webhookErrorSnippetLimit = 256
 const (
 	webhookHeaderContentType = "Content-Type"
 	webhookContentTypeJSON   = "application/json"
-	webhookSchemeHTTP        = "http://"
-	webhookSchemeHTTPS       = "https://"
+)
+
+const (
+	webhookURLSchemeHTTP  = "http"
+	webhookURLSchemeHTTPS = "https"
+	webhookURLSchemeSep   = "://"
+)
+
+// Webhook URL prefix constants are the supported webhook transport URL schemes.
+const (
+	WebhookURLPrefixHTTP  = webhookURLSchemeHTTP + webhookURLSchemeSep
+	WebhookURLPrefixHTTPS = webhookURLSchemeHTTPS + webhookURLSchemeSep
 )
 
 // webhookPoster delivers a JSON payload to a webhook; injected so tests do not
@@ -72,7 +82,7 @@ func webhookURL(typ string, entry map[string]any) (string, error) {
 	if webhook == "" {
 		return "", errors.New(typ + " notifier requires a webhook")
 	}
-	if !strings.HasPrefix(webhook, webhookSchemeHTTPS) && !strings.HasPrefix(webhook, webhookSchemeHTTP) {
+	if !strings.HasPrefix(webhook, WebhookURLPrefixHTTPS) && !strings.HasPrefix(webhook, WebhookURLPrefixHTTP) {
 		return "", errors.New(typ + " webhook must be an http(s) URL")
 	}
 	return webhook, nil

@@ -343,7 +343,7 @@ func pathSpecFromMap(m map[string]any, field string) (PathSpec, error) {
 	if raw, present := m[keyRecursive]; present {
 		recursive, ok = raw.(bool)
 		if !ok {
-			return PathSpec{}, fmt.Errorf("%s.recursive must be a boolean", field)
+			return PathSpec{}, fmt.Errorf(validationBooleanFormat, field+"."+keyRecursive)
 		}
 	}
 	return PathSpec{Path: path, Recursive: recursive}, nil

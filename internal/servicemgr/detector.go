@@ -146,7 +146,7 @@ func (d Detector) probeSystemd(ctx context.Context) BackendProbe {
 		return BackendProbe{}
 	}
 
-	result, _ := d.run(ctx, cmdSystemctl, "is-system-running")
+	result, _ := d.run(ctx, cmdSystemctl, systemctlCmdIsSystemRunning)
 	state := strings.TrimSpace(result.Stdout)
 	if state == "" {
 		state = strings.TrimSpace(result.Stderr)
