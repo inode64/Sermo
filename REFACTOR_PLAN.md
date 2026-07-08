@@ -768,6 +768,23 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/conn ./internal/dockerctl
   ./internal/virt ./internal/assist ./internal/config` y `make check` pasan.
 
+### Fase 43: Factores temporales compartidos
+
+- Extender `internal/units` con factores de conversion temporales simples,
+  manteniendo ahi solo constantes matematicas, no timeouts configurables.
+- Reutilizar esos factores en ventanas de estado y formateo compacto de
+  intervalos.
+
+Estado ejecutado:
+
+- `units.SecondsPerMinute`, `MinutesPerHour`, `HoursPerDay`, `DaysPerWeek` y
+  `DaysPerMonthApprox` nombran conversiones usadas por estado y WebBackend.
+- `state` reutiliza los factores para buckets por minuto y ventanas por dia.
+- `app.formatInterval` reutiliza los mismos factores para dias, semanas y meses
+  aproximados sin cambiar la salida.
+- Validacion ejecutada: `go test ./internal/units ./internal/state
+  ./internal/app` y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.

@@ -27,6 +27,7 @@ import (
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
+	"sermo/internal/units"
 	"sermo/internal/web"
 )
 
@@ -2573,11 +2574,11 @@ func formatInterval(d time.Duration) string {
 	}
 	total := int64(d / time.Second)
 	const (
-		minute = 60
-		hour   = 60 * minute
-		day    = 24 * hour
-		week   = 7 * day
-		month  = 30 * day // display approximation
+		minute = units.SecondsPerMinute
+		hour   = units.MinutesPerHour * minute
+		day    = units.HoursPerDay * hour
+		week   = units.DaysPerWeek * day
+		month  = units.DaysPerMonthApprox * day // display approximation
 	)
 	units := []struct {
 		secs   int64
