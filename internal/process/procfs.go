@@ -15,7 +15,11 @@ const (
 	procFileFD      = "fd"
 	procFileCWD     = "cwd"
 	procFileRoot    = "root"
+	procFileIO      = "io"
+	procFileStat    = "stat"
+	procFileStatm   = "statm"
 	procFileStatus  = "status"
+	procFileTask    = "task"
 
 	procStatusStatePrefix = "State:"
 	procStatusPPIDPrefix  = "PPid:"
@@ -46,6 +50,21 @@ const ProcFileCWD = procFileCWD
 
 // ProcFileRoot is the /proc/<pid>/root symlink name.
 const ProcFileRoot = procFileRoot
+
+// ProcFileIO is the /proc/<pid>/io file name.
+const ProcFileIO = procFileIO
+
+// ProcFileStat is the /proc/<pid>/stat file name.
+const ProcFileStat = procFileStat
+
+// ProcFileStatm is the /proc/<pid>/statm file name.
+const ProcFileStatm = procFileStatm
+
+// ProcFileStatus is the /proc/<pid>/status file name.
+const ProcFileStatus = procFileStatus
+
+// ProcFileTask is the /proc/<pid>/task directory name.
+const ProcFileTask = procFileTask
 
 // PIDPath returns a path under /proc/<pid>.
 func PIDPath(pid int, name string) string {
