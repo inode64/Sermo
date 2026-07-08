@@ -43,6 +43,12 @@ const (
 	// The dashboard refreshes every 30s by default, so keep status warm across
 	// ordinary refreshes instead of running one init status probe per service.
 	serviceStatusCacheTTL = 2 * time.Minute
+	// diskIORateMinWindow is the shortest elapsed span disk I/O rates may be
+	// computed over. The delta baseline is shared by every dashboard viewer, so
+	// without a floor two tabs polling moments apart would re-base the deltas
+	// over a near-zero window and report garbage rates; polls arriving inside
+	// the window keep the previous baseline and serve the last computed rates.
+	diskIORateMinWindow = time.Second
 	// serviceReloadCapabilityTimeout bounds init metadata checks used only to
 	// decide whether the dashboard should offer a per-service reload action.
 	serviceReloadCapabilityTimeout = 2 * time.Second
@@ -252,9 +258,11 @@ type cachedSLATimelines struct {
 }
 
 type webDiskIOState struct {
-	primed bool
-	at     time.Time
-	sample checks.DiskIOSample
+	primed   bool
+	at       time.Time
+	sample   checks.DiskIOSample
+	rates    checks.DiskIORates
+	hasRates bool
 }
 
 // NewWebBackend resolves services for the web UI. All services present in the
@@ -957,6 +965,15 @@ func (e *webEntry) backendStatus(ctx context.Context, now time.Time) string {
 	}
 	st, err := e.status(ctx)
 	if err != nil {
+		if ctx.Err() != nil {
+			// The viewer cancelled the request mid-probe (e.g. closed the tab).
+			// Don't poison the shared cache with "error" for everyone else;
+			// keep the previous entry and let the next poll retry.
+			if !e.statusAt.IsZero() {
+				return e.cachedStatus
+			}
+			return string(servicemgr.StatusUnknown)
+		}
 		e.cachedStatus = backendStatusError
 	} else {
 		e.cachedStatus = string(st)
@@ -1505,19 +1522,26 @@ func (b *WebBackend) diskIOWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 		b.diskIOState = map[string]webDiskIOState{}
 	}
 	st := b.diskIOState[key]
-	b.diskIOState[key] = webDiskIOState{primed: true, at: at, sample: sample}
+	switch {
+	case !st.primed:
+		st = webDiskIOState{primed: true, at: at, sample: sample}
+		b.diskIOState[key] = st
+	case at.Sub(st.at) >= diskIORateMinWindow:
+		next := webDiskIOState{primed: true, at: at, sample: sample}
+		next.rates, next.hasRates = checks.CalculateDiskIORates(st.sample, sample, at.Sub(st.at))
+		st = next
+		b.diskIOState[key] = st
+	}
+	// Polls inside diskIORateMinWindow keep the previous baseline and serve
+	// its last computed rates (st unchanged).
 	b.diskIOMu.Unlock()
 
 	readings := []web.WatchReading{{Field: checks.DataKeyDevice, Label: "Device", Value: device}}
-	if !st.primed {
+	if !st.hasRates {
 		readings = append(readings, web.WatchReading{Field: watchReadingFieldState, Label: "State", Value: watchReadingStateBaseline})
 		return nil, readings, "diskio " + device + " baseline"
 	}
-	rates, ok := checks.CalculateDiskIORates(st.sample, sample, at.Sub(st.at))
-	if !ok {
-		readings = append(readings, web.WatchReading{Field: watchReadingFieldState, Label: "State", Value: watchReadingStateBaseline})
-		return nil, readings, "diskio " + device + " baseline"
-	}
+	rates := st.rates
 	readings = append(readings,
 		web.WatchReading{Field: checks.DiskIOFieldUtilPct, Label: "Utilization", Value: watchPercent(rates.UtilPct)},
 		web.WatchReading{Field: checks.DiskIOFieldReadBytes, Label: "Read", Value: fmt.Sprintf("%.0f B/s", rates.ReadBytes)},
@@ -2161,6 +2185,15 @@ func (b *WebBackend) Applications(ctx context.Context) []web.Application {
 		return b.withApplicationLastEvents(slices.Clone(b.applicationsCache))
 	}
 	apps := b.loadApplications(ctx)
+	if ctx.Err() != nil {
+		// A cancelled request yields a partial inventory; caching it would
+		// serve an incomplete app list to every viewer for the full TTL.
+		// Prefer the previous complete cache when there is one.
+		if !b.applicationsAt.IsZero() {
+			return b.withApplicationLastEvents(slices.Clone(b.applicationsCache))
+		}
+		return b.withApplicationLastEvents(apps)
+	}
 	b.applicationsAt = time.Now()
 	b.applicationsCache = slices.Clone(apps)
 	return b.withApplicationLastEvents(apps)
