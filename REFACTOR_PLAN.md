@@ -307,6 +307,20 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/state ./internal/cli ./internal/web`
   y `make check` pasan.
 
+### Fase 12: Constantes del informe HTML de servicios
+
+- Mantener el HTML del informe de `sermoctl services --notify` en su owner
+  actual, `internal/cli/services_report.go`.
+- Nombrar colores, fuentes y formato de fecha usados repetidamente en el email
+  HTML sin cambiar la salida ni introducir un sistema de plantillas nuevo.
+
+Estado ejecutado:
+
+- Se centralizaron colores, fuentes y layout de fecha del informe.
+- Las cabeceras de tabla repetidas usan `writeReportHeaderCell`.
+- El informe conserva el mismo contenido y estilos inline compatibles con email.
+- Validacion ejecutada: `go test ./internal/cli` y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
