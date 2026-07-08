@@ -11,6 +11,9 @@ const (
 	procRoot        = "/proc"
 	procFileCmdline = "cmdline"
 	procFileExe     = "exe"
+	procFileFD      = "fd"
+	procFileCWD     = "cwd"
+	procFileRoot    = "root"
 	procFileStatus  = "status"
 
 	procStatusStatePrefix = "State:"
@@ -28,6 +31,25 @@ const (
 
 func procPIDPath(pid int, name string) string {
 	return filepath.Join(procRoot, strconv.Itoa(pid), name)
+}
+
+// ProcFileFD is the /proc/<pid>/fd directory name.
+const ProcFileFD = procFileFD
+
+// ProcFileCWD is the /proc/<pid>/cwd symlink name.
+const ProcFileCWD = procFileCWD
+
+// ProcFileRoot is the /proc/<pid>/root symlink name.
+const ProcFileRoot = procFileRoot
+
+// PIDPath returns a path under /proc/<pid>.
+func PIDPath(pid int, name string) string {
+	return procPIDPath(pid, name)
+}
+
+// TrimDeletedSuffix removes the kernel suffix appended to deleted file links.
+func TrimDeletedSuffix(path string) string {
+	return strings.TrimSuffix(path, procDeletedSuffix)
 }
 
 // Reader reads process identities from a /proc-like source. It is an interface

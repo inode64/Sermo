@@ -3,8 +3,6 @@ package app
 import (
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
 
 	"sermo/internal/checks"
@@ -17,12 +15,6 @@ import (
 // on one dashboard poll share a single scan, and repeated polls re-scan at most
 // once per TTL (the smart/hdparm interval-bound pattern, see heavyLiveViewTypes).
 const openFilesTallyTTL = time.Minute
-
-const (
-	procDeletedPathSuffix = " (deleted)"
-	procRootPath          = "/proc"
-	procFDDir             = "fd"
-)
 
 // openFilesByMountCached returns open-file counts keyed by mount point, computed
 // at most once per openFilesTallyTTL and shared across every storage watch. The
@@ -65,7 +57,7 @@ func scanOpenFilesByMount(mounts []checks.Mount) map[string]int64 {
 		return tally
 	}
 	for _, pid := range pids {
-		fdDir := filepath.Join(procRootPath, strconv.Itoa(pid), procFDDir)
+		fdDir := process.PIDPath(pid, process.ProcFileFD)
 		entries, err := os.ReadDir(fdDir)
 		if err != nil {
 			continue // process exited or its fd directory is not readable
@@ -75,7 +67,7 @@ func scanOpenFilesByMount(mounts []checks.Mount) map[string]int64 {
 			if err != nil || !filepath.IsAbs(target) {
 				continue
 			}
-			target = strings.TrimSuffix(target, procDeletedPathSuffix)
+			target = process.TrimDeletedSuffix(target)
 			if m := checks.MountForPath(mounts, filepath.Clean(target)); m != nil {
 				tally[m.MountPoint]++
 			}
