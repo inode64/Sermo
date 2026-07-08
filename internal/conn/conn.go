@@ -321,8 +321,9 @@ const (
 	tlsVerifyFull = "verify-full"
 	// schemeHTTP and schemeHTTPS are the URL schemes an HTTP-based probe selects
 	// by whether TLS is in use.
-	schemeHTTP  = "http"
-	schemeHTTPS = "https"
+	schemeHTTP         = netutil.URLSchemeHTTP
+	schemeHTTPS        = netutil.URLSchemeHTTPS
+	urlSchemeSeparator = netutil.URLSchemeSeparator
 	// extraGreeting is the Result.Extra key carrying a text-protocol server's
 	// greeting/banner line (ftp, imap, pop, nntp, rsync, sieve, …).
 	extraGreeting = ExtraKeyGreeting

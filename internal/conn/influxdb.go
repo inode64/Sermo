@@ -63,7 +63,7 @@ func InfluxClient(cfg Config) (*http.Client, string) {
 		}
 		client = httpProbeClient(cfg.Interface, tlsConfig)
 	}
-	return client, scheme + "://" + hostPort(host, port)
+	return client, scheme + urlSchemeSeparator + hostPort(host, port)
 }
 
 // influxHealth queries /health. handled is true when the result is conclusive (a

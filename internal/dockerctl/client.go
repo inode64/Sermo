@@ -32,9 +32,9 @@ const (
 )
 
 const (
-	dockerSchemeHTTP          = "http"
-	dockerSchemeHTTPS         = "https"
-	dockerSocketBaseURL       = dockerSchemeHTTP + "://docker"
+	dockerSchemeHTTP          = netutil.URLSchemeHTTP
+	dockerSchemeHTTPS         = netutil.URLSchemeHTTPS
+	dockerSocketBaseURL       = dockerSchemeHTTP + netutil.URLSchemeSeparator + "docker"
 	dockerEndpointInfo        = "/info"
 	dockerEndpointContainers  = "/containers/json"
 	dockerEndpointInspect     = "/json"
@@ -213,7 +213,7 @@ func NewClient(spec Spec) (*Client, error) {
 		}
 		tr.TLSClientConfig = tc
 	}
-	return &Client{HTTP: &http.Client{Transport: tr}, Base: scheme + "://" + netutil.JoinHostPort(host, port)}, nil
+	return &Client{HTTP: &http.Client{Transport: tr}, Base: scheme + netutil.URLSchemeSeparator + netutil.JoinHostPort(host, port)}, nil
 }
 
 // CloseIdleConnections closes idle HTTP transport connections.

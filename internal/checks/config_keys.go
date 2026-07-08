@@ -1,5 +1,7 @@
 package checks
 
+import "sermo/internal/netutil"
+
 // Check-entry YAML keys shared by builders, validators and web readers. These
 // names are part of Sermo's public configuration surface.
 const (
@@ -174,8 +176,8 @@ const (
 
 // URL schemes accepted by checks.
 const (
-	URLSchemeHTTP    = "http"
-	URLSchemeHTTPS   = "https"
+	URLSchemeHTTP    = netutil.URLSchemeHTTP
+	URLSchemeHTTPS   = netutil.URLSchemeHTTPS
 	URLSchemeWS      = "ws"
 	URLSchemeWSS     = "wss"
 	URLSchemeSOCKS5  = "socks5"
