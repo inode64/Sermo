@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"sermo/internal/netutil"
 )
 
 // webhookTimeout bounds a webhook POST so a slow endpoint cannot stall a watch
@@ -30,9 +32,9 @@ const (
 )
 
 const (
-	webhookURLSchemeHTTP  = "http"
-	webhookURLSchemeHTTPS = "https"
-	webhookURLSchemeSep   = "://"
+	webhookURLSchemeHTTP  = netutil.URLSchemeHTTP
+	webhookURLSchemeHTTPS = netutil.URLSchemeHTTPS
+	webhookURLSchemeSep   = netutil.URLSchemeSeparator
 )
 
 // Webhook URL prefix constants are the supported webhook transport URL schemes.

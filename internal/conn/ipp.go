@@ -83,7 +83,7 @@ func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		client = httpProbeClient(cfg.Interface, tlsConfig)
 	}
 
-	url := scheme + "://" + hostPort(host, port) + ippEndpointRoot
+	url := scheme + urlSchemeSeparator + hostPort(host, port) + ippEndpointRoot
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buildIPPRequest(ippCUPSGetDefault, ippRequestIDDefault)))
 	if err != nil {
 		return Result{}, err
