@@ -60,6 +60,7 @@ const (
 	apiSegmentRoot     = "api"
 	apiSegmentServices = "services"
 	apiSegmentWatches  = "watches"
+	apiSegmentMounts   = "mounts"
 	apiSegmentLocks    = "locks"
 	apiSegmentEvents   = "events"
 	apiSegmentState    = "state"
