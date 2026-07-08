@@ -43,13 +43,8 @@ const (
 	DefaultFstabPath          = "/etc/fstab"
 	mountStateDirMode         = 0o700
 	mountStateFileMode        = 0o600
-	procDeletedPathSuffix     = " (deleted)"
-	procFDDir                 = "fd"
-	procCWDLink               = "cwd"
 	processRoleMountUser      = "mount-user"
 	processSourceMount        = ActionMount
-	procRootPath              = "/proc"
-	procRootLink              = "root"
 	rootMountID               = "root"
 	rootMountPath             = "/"
 	rootUmountDisabledMessage = "root filesystem cannot be unmounted"
@@ -741,14 +736,13 @@ func pidUsesMounts(ctx context.Context, pid int, mountPaths []string) ([]string,
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	base := filepath.Join(procRootPath, fmt.Sprint(pid))
 	matches := map[string]struct{}{}
-	for _, name := range []string{procCWDLink, procRootLink} {
-		if err := linkMountMatches(ctx, filepath.Join(base, name), mountPaths, matches); err != nil {
+	for _, name := range []string{process.ProcFileCWD, process.ProcFileRoot} {
+		if err := linkMountMatches(ctx, process.PIDPath(pid, name), mountPaths, matches); err != nil {
 			return nil, err
 		}
 	}
-	fdDir := filepath.Join(base, procFDDir)
+	fdDir := process.PIDPath(pid, process.ProcFileFD)
 	entries, err := os.ReadDir(fdDir)
 	if err == nil {
 		for _, entry := range entries {
@@ -766,7 +760,7 @@ func linkMountMatches(ctx context.Context, link string, mountPaths []string, mat
 	}
 	target, err := os.Readlink(link)
 	if err == nil && filepath.IsAbs(target) {
-		target = strings.TrimSuffix(target, procDeletedPathSuffix)
+		target = process.TrimDeletedSuffix(target)
 		cleanTarget := filepath.Clean(target)
 		for _, mountPath := range mountPaths {
 			if mounts.PathUnder(cleanTarget, mountPath) {
@@ -790,16 +784,15 @@ func pidUsesPath(ctx context.Context, pid int, mountPath string) bool {
 	if err := ctx.Err(); err != nil {
 		return false
 	}
-	base := filepath.Join(procRootPath, fmt.Sprint(pid))
-	for _, name := range []string{procCWDLink, procRootLink} {
+	for _, name := range []string{process.ProcFileCWD, process.ProcFileRoot} {
 		if err := ctx.Err(); err != nil {
 			return false
 		}
-		if linkUnderMount(ctx, filepath.Join(base, name), mountPath) {
+		if linkUnderMount(ctx, process.PIDPath(pid, name), mountPath) {
 			return true
 		}
 	}
-	fdDir := filepath.Join(base, procFDDir)
+	fdDir := process.PIDPath(pid, process.ProcFileFD)
 	entries, err := os.ReadDir(fdDir)
 	if err != nil {
 		return false
@@ -823,6 +816,6 @@ func linkUnderMount(ctx context.Context, link, mountPath string) bool {
 	if err != nil || !filepath.IsAbs(target) {
 		return false
 	}
-	target = strings.TrimSuffix(target, procDeletedPathSuffix)
+	target = process.TrimDeletedSuffix(target)
 	return mounts.PathUnder(filepath.Clean(target), mountPath)
 }

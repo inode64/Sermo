@@ -472,6 +472,22 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/procnet ./internal/conn ./internal/cli`
   y `make check` pasan.
 
+### Fase 24: Helpers procfs de procesos
+
+- Mantener la construccion de paths `/proc/<pid>/...` en `internal/process`,
+  owner de la lectura de identidades de procesos.
+- Reutilizar esos helpers desde los scans de open files y blockers de mounts sin
+  cambiar los criterios de matching ni la politica de senales.
+
+Estado ejecutado:
+
+- `process.PIDPath` y las constantes `ProcFileFD`, `ProcFileCWD` y
+  `ProcFileRoot` reemplazan rutas `/proc/<pid>/...` reconstruidas localmente.
+- `process.TrimDeletedSuffix` centraliza el sufijo kernel ` (deleted)` usado al
+  interpretar symlinks procfs.
+- Validacion ejecutada: `go test ./internal/process ./internal/app ./internal/mountctl`
+  y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
