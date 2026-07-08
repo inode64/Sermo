@@ -35,12 +35,10 @@ type ttyNotifier struct {
 const (
 	defaultTTYDevRoot = "/dev"
 	defaultTTYHost    = "localhost"
-	utmpPathRun       = "/run/utmp"
-	utmpPathVarRun    = "/var/run/utmp"
 )
 
 func defaultUTMPPaths() []string {
-	return []string{utmpPathRun, utmpPathVarRun}
+	return utmp.DefaultPaths()
 }
 
 func buildTTY(name string, entry map[string]any) (Notifier, error) {

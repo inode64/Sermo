@@ -360,6 +360,21 @@ Estado ejecutado:
   `missingkey=zero`.
 - Validacion ejecutada: `go test ./internal/notify` y `make check` pasan.
 
+### Fase 16: Defaults de utmp compartidos
+
+- Mantener los paths canonicos/fallback de utmp en `internal/utmp`, que es el
+  owner del parser de sesiones.
+- Reutilizarlos desde el notifier TTY/Wall sin exponer una slice mutable.
+
+Estado ejecutado:
+
+- `utmp.DefaultPaths` devuelve una copia de los paths por defecto en Linux y
+  `nil` fuera de Linux.
+- `internal/notify/tty_linux.go` usa `utmp.DefaultPaths()` en vez de duplicar
+  `/run/utmp` y `/var/run/utmp`.
+- Validacion ejecutada: `go test ./internal/utmp ./internal/notify` y
+  `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
