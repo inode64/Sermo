@@ -754,6 +754,20 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/dockerctl ./internal/conn
   ./internal/assist` y `make check` pasan.
 
+### Fase 42: Tokens type de control/protocolo
+
+- Alinear los tokens `type` que comparten checks de conexion y controles de
+  servicio para evitar literales paralelos.
+- Usar los owners existentes y no crear un paquete global solo para dos tokens.
+
+Estado ejecutado:
+
+- `conn.ProtocolNameDocker` delega en `dockerctl.ControlType`.
+- `virt.ControlType` delega en `conn.ProtocolNameLibvirt`.
+- No cambia ningun valor YAML ni ningun nombre de protocolo/control.
+- Validacion ejecutada: `go test ./internal/conn ./internal/dockerctl
+  ./internal/virt ./internal/assist ./internal/config` y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.

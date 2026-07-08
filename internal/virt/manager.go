@@ -33,7 +33,7 @@ const (
 )
 
 // ControlType is the service control.type value for libvirt-backed services.
-const ControlType = "libvirt"
+const ControlType = conn.ProtocolNameLibvirt
 
 const sectionControl = "control"
 

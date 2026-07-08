@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 
+	"sermo/internal/dockerctl"
 	"sermo/internal/httpx"
 	"sermo/internal/netutil"
 	"sermo/internal/units"
@@ -44,7 +45,7 @@ const (
 	ProtocolNameDHClient    = "dhclient"
 	ProtocolNameDHCP        = "dhcp"
 	ProtocolNameDNS         = "dns"
-	ProtocolNameDocker      = "docker"
+	ProtocolNameDocker      = dockerctl.ControlType
 	ProtocolNameFail2ban    = "fail2ban"
 	ProtocolNameFPM         = "fpm"
 	ProtocolNameFTP         = "ftp"
