@@ -718,6 +718,24 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/netutil ./internal/checks
   ./internal/conn ./internal/dockerctl ./internal/notify` y `make check` pasan.
 
+### Fase 40: Constantes HTTP compartidas
+
+- Crear un owner sin dependencias para headers HTTP estandar y media types
+  usados por checks, probes, notifiers, CLI y Web API.
+- Mantener aliases locales donde el nombre describe el contexto del owner y no
+  tocar headers propios como CSRF o WebSocket.
+
+Estado ejecutado:
+
+- `internal/httpx` centraliza `Accept`, `Authorization`, `Content-Type`,
+  `Server` y `application/json`.
+- Checks HTTP/InfluxDB, probes HTTP-like de `conn`, webhook notify, cliente de
+  API de `sermoctl` y servidor web reutilizan esas constantes.
+- No cambia ningun header emitido, leido ni validado.
+- Validacion ejecutada: `go test ./internal/httpx ./internal/checks
+  ./internal/conn ./internal/notify ./internal/cli ./internal/web` y
+  `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.

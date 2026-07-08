@@ -27,6 +27,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/control"
 	"sermo/internal/execx"
+	"sermo/internal/httpx"
 	"sermo/internal/locks"
 	"sermo/internal/metrics"
 	"sermo/internal/mountctl"
@@ -70,7 +71,7 @@ const (
 	daemonWebAuthUserPrefix      = "admin:"
 	daemonWebCSRFHeader          = "X-Sermo-CSRF"
 	daemonWebCSRFValue           = "1"
-	daemonWebHeaderAuthorization = "Authorization"
+	daemonWebHeaderAuthorization = httpx.HeaderAuthorization
 	daemonWebBasicAuthPrefix     = "Basic "
 	daemonAPIPathRoot            = "/api"
 	daemonAPIPathApplications    = daemonAPIPathRoot + "/applications"

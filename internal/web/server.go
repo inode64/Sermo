@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"sermo/internal/buildinfo"
+	"sermo/internal/httpx"
 	"sermo/internal/logfile"
 	"sermo/internal/mountctl"
 	"sermo/internal/operation"
@@ -41,7 +42,7 @@ var assets embed.FS
 const (
 	headerCacheControl          = "Cache-Control"
 	headerContentSecurityPolicy = "Content-Security-Policy"
-	headerContentType           = "Content-Type"
+	headerContentType           = httpx.HeaderContentType
 	headerReferrerPolicy        = "Referrer-Policy"
 	headerSermoCSRF             = "X-Sermo-CSRF"
 	headerWWWAuthenticate       = "WWW-Authenticate"
@@ -49,7 +50,7 @@ const (
 	headerXFrameOptions         = "X-Frame-Options"
 	authBasicRealmSermo         = `Basic realm="Sermo"`
 	contentTypeHTMLUTF8         = "text/html; charset=utf-8"
-	contentTypeJSON             = "application/json"
+	contentTypeJSON             = httpx.ContentTypeJSON
 	contentTypeTextUTF8         = "text/plain; charset=utf-8"
 	headerValueDeny             = "DENY"
 	headerValueNoCache          = "no-cache"
