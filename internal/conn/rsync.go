@@ -3,8 +3,6 @@ package conn
 import (
 	"context"
 	"fmt"
-	"net"
-	"strconv"
 	"strings"
 )
 
@@ -31,7 +29,7 @@ func (rsyncProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if port == 0 {
 		port = defaultPortRsync
 	}
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, net.JoinHostPort(host, strconv.Itoa(port)))
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, hostPort(host, port))
 	if err != nil {
 		return Result{}, err
 	}

@@ -7,9 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"strconv"
 )
 
 func init() { Register(ippProtocol{}, protocolAliasCUPS) }
@@ -85,7 +83,7 @@ func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		client = httpProbeClient(cfg.Interface, tlsConfig)
 	}
 
-	url := scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port)) + ippEndpointRoot
+	url := scheme + "://" + hostPort(host, port) + ippEndpointRoot
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buildIPPRequest(ippCUPSGetDefault, ippRequestIDDefault)))
 	if err != nil {
 		return Result{}, err

@@ -4,9 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"net"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/lib/pq"
@@ -85,7 +83,7 @@ func buildPGDSN(cfg Config) string {
 	u := url.URL{
 		Scheme: ProtocolNamePostgres,
 		User:   url.UserPassword(cfg.User, cfg.Password),
-		Host:   net.JoinHostPort(host, strconv.Itoa(port)),
+		Host:   hostPort(host, port),
 		Path:   "/" + cfg.Database,
 	}
 	q := url.Values{}

@@ -2,7 +2,6 @@ package conn
 
 import (
 	"context"
-	"net"
 	"strconv"
 )
 
@@ -42,7 +41,7 @@ func (statdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 
 	xid := randXID32()
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, net.JoinHostPort(host, strconv.Itoa(port)))
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, hostPort(host, port))
 	if err != nil {
 		return Result{}, err
 	}

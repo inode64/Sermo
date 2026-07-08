@@ -194,7 +194,7 @@ func libvirtTransport(cfg Config) (mode, addr, uri string) {
 	if port == 0 {
 		port = defaultPortLibvirt
 	}
-	return networkTCP, net.JoinHostPort(host, strconv.Itoa(port)), uri
+	return networkTCP, hostPort(host, port), uri
 }
 
 // libvirtTimeout derives a dialer timeout from the context deadline, falling

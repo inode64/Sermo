@@ -77,7 +77,7 @@ const (
 var dnsRouteAddrs = func(host string) (net.Addr, net.Addr, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), dnsLocalRouteTimeout)
 	defer cancel()
-	c, err := (&net.Dialer{}).DialContext(ctx, networkUDP, net.JoinHostPort(host, strconv.Itoa(dnsDefaultPort)))
+	c, err := (&net.Dialer{}).DialContext(ctx, networkUDP, hostPort(host, dnsDefaultPort))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -112,7 +112,7 @@ func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 
-	c, err := BindDialer(dnsProbeInterface(host, cfg.Interface)).DialContext(ctx, networkUDP, net.JoinHostPort(host, strconv.Itoa(port)))
+	c, err := BindDialer(dnsProbeInterface(host, cfg.Interface)).DialContext(ctx, networkUDP, hostPort(host, port))
 	if err != nil {
 		return Result{}, err
 	}

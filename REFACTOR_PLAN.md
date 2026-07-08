@@ -667,6 +667,22 @@ Estado ejecutado:
   ./internal/checks ./internal/conn ./internal/dockerctl ./internal/state` y
   `make check` pasan.
 
+### Fase 37: Helper host:port para probes
+
+- Mantener la construccion host:port repetida dentro de `internal/conn`, donde
+  viven los probes que usan `host` y `port` enteros.
+- Reducir la repeticion de `net.JoinHostPort(host, strconv.Itoa(port))` sin
+  cambiar transportes, timeouts ni binding de interfaz.
+
+Estado ejecutado:
+
+- `conn.hostPort(host, port)` centraliza el formateo `host:port` con puerto
+  entero.
+- Los probes de `internal/conn` consumen el helper y se eliminan imports locales
+  de `net`/`strconv` donde ya no eran necesarios.
+- No se cambia ningun address resultante ni el uso de `BindDialer`.
+- Validacion ejecutada: `go test ./internal/conn` y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.

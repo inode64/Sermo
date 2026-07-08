@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"net"
 	"strconv"
 )
 
@@ -84,7 +83,7 @@ func (rpcbindProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 
 	xid := randXID32()
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkUDP, net.JoinHostPort(host, strconv.Itoa(port)))
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkUDP, hostPort(host, port))
 	if err != nil {
 		return Result{}, err
 	}

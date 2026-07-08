@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
-	"strconv"
 )
 
 func init() { Register(cephProtocol{}, protocolAliasCephMon) }
@@ -40,7 +38,7 @@ func (cephProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if port == 0 {
 		port = defaultPortCeph
 	}
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, net.JoinHostPort(host, strconv.Itoa(port)))
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, hostPort(host, port))
 	if err != nil {
 		return Result{}, err
 	}

@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"strconv"
 )
 
 func init() { Register(unifiProtocol{}, protocolAliasUniFiController, protocolAliasUniFiNetwork) }
@@ -48,7 +46,7 @@ func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	client := httpProbeClient(cfg.Interface, tc)
 
-	url := schemeHTTPS + "://" + net.JoinHostPort(host, strconv.Itoa(port)) + unifiStatusEndpoint
+	url := schemeHTTPS + "://" + hostPort(host, port) + unifiStatusEndpoint
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return Result{}, err
