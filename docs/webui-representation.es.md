@@ -18,6 +18,13 @@ Mantén los cambios concretos:
 - La interfaz web es un único documento embebido: `internal/web/index.html`.
 - Los paneles de datos son tarjetas `<details>`. La página se desplaza como un todo; no añadas
   barras de desplazamiento locales por panel.
+- Todo panel de datos lleva `class="panel"` (los estilos compartidos, como el
+  atenuado de desconexión, apuntan a esa clase y no a una lista de ids). Los
+  `<details>` de paneles de watches llevan además `data-panel="<clave>"` con el
+  nombre de su entrada en el registro `watchPanels`; el renderizado, el routing
+  de deep-links, la navegación de atención y el atajo de búsqueda `/` iteran ese
+  registro, de modo que un panel de watches nuevo solo necesita su entrada en el
+  registro y su bloque HTML.
 - Los servicios, aplicaciones y watches (incluidas las watches de storage) pueden
   usar `category` para agrupar, filtrar o buscar según el panel.
 - Un campo YAML `category` de nivel superior es la fuente de la categoría. Si está ausente,
