@@ -293,7 +293,7 @@ func daemonMetricSeries(metric, unit string, since time.Duration, samples []daem
 		})
 	}
 	return web.MetricSeries{
-		Check:   "sermod",
+		Check:   daemonMetricCheck,
 		Metric:  metric,
 		Since:   since.String(),
 		Unit:    unit,
