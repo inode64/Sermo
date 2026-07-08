@@ -124,6 +124,8 @@ type jsonAssertion struct {
 // maxHTTPBody bounds how much of the response is read for body/JSON assertions.
 const maxHTTPBody = 1 << 20
 
+const httpStatusClassDivisor = 100
+
 func (c *httpCheck) Run(ctx context.Context) Result {
 	start := time.Now()
 	ctx, cancel := c.withTimeout(ctx)
@@ -314,7 +316,7 @@ func (m statusMatcher) matches(code int) bool {
 		ok, _ := compareValue(strconv.Itoa(code), m.op, m.value)
 		return ok
 	}
-	return slices.Contains(m.codes, code) || slices.Contains(m.classes, code/100)
+	return slices.Contains(m.codes, code) || slices.Contains(m.classes, code/httpStatusClassDivisor)
 }
 
 func (m statusMatcher) String() string {
