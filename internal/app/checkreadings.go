@@ -106,13 +106,13 @@ const (
 )
 
 const (
-	watchReadingUnitBits               = "bits"
+	watchReadingUnitBits               = metrics.MetricUnitBits
 	watchReadingUnitCelsius            = "C"
 	watchReadingUnitCelsiusSymbol      = metrics.MetricUnitCelsius
 	watchReadingUnitMegabytesPerSecond = metrics.MetricUnitMegabytesPerSecond
-	watchReadingUnitMegabitsPerSecond  = "Mbps"
+	watchReadingUnitMegabitsPerSecond  = metrics.MetricUnitMegabitsPerSecond
 	watchReadingUnitRPM                = metrics.MetricUnitRPM
-	watchReadingUnitVolt               = "V"
+	watchReadingUnitVolt               = metrics.MetricUnitVolt
 )
 
 func checkReadings(checkType string, data map[string]any) []web.WatchReading {

@@ -19,15 +19,21 @@ const (
 	MetricUnitBytes = "bytes"
 	// MetricUnitBytesPerSecond is the canonical UI/API unit for byte-rate metrics.
 	MetricUnitBytesPerSecond = "B/s"
+	// MetricUnitBits is the canonical UI/API unit for bit counts.
+	MetricUnitBits = "bits"
 	// MetricUnitMilliseconds is the canonical UI/API unit for latency/duration metrics.
 	MetricUnitMilliseconds = "ms"
 
 	// MetricUnitMegabytesPerSecond is the canonical UI/API unit for disk throughput.
 	MetricUnitMegabytesPerSecond = "MB/s"
+	// MetricUnitMegabitsPerSecond is the canonical UI/API unit for link speed.
+	MetricUnitMegabitsPerSecond = "Mbps"
 	// MetricUnitCelsius is the canonical UI/API unit for temperatures.
 	MetricUnitCelsius = "°C"
 	// MetricUnitRPM is the canonical UI/API unit for fan speed.
 	MetricUnitRPM = "RPM"
+	// MetricUnitVolt is the canonical UI/API unit for voltage readings.
+	MetricUnitVolt = "V"
 	// MetricUnitHours is the canonical UI/API unit for hour counters.
 	MetricUnitHours = "h"
 	// MetricUnitUsers is the canonical UI/API unit for user counts.
