@@ -16,6 +16,8 @@ import (
 	"sermo/internal/servicemgr"
 )
 
+const portSpecRequiredMessage = `is required (e.g. "80,443,1024-4000")`
+
 // validateStorageFields validates a storage check's fields at prefix (the dotted path
 // to the fields container, e.g. "watches.storage-root.check" or "checks.root").
 // Shared by host watches and service checks. A storage check verifies space/inodes
@@ -363,7 +365,7 @@ func validatePortsFields(prefix string, fields map[string]any, add addFunc) {
 // and inclusive ranges (e.g. "80,443,1024-4000"), else a short reason.
 func validatePortSpec(spec string) string {
 	if strings.TrimSpace(spec) == "" {
-		return "is required (e.g. \"80,443,1024-4000\")"
+		return portSpecRequiredMessage
 	}
 	if _, err := checks.ParsePortSpec(spec); err != nil {
 		msg := strings.TrimPrefix(err.Error(), "port ")
@@ -374,7 +376,7 @@ func validatePortSpec(spec string) string {
 			return "has an invalid port " + strings.TrimPrefix(msg, "invalid port ")
 		}
 		if msg == "no ports specified" {
-			return "is required (e.g. \"80,443,1024-4000\")"
+			return portSpecRequiredMessage
 		}
 		return msg
 	}
