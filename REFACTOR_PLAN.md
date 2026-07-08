@@ -375,6 +375,21 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/utmp ./internal/notify` y
   `make check` pasan.
 
+### Fase 17: Paths de os-release compartidos
+
+- Mantener en `internal/config` el orden canonico de lectura de `os-release`,
+  usado para selectores `${os}`.
+- Reutilizar ese orden desde el backend web cuando muestra el nombre amigable
+  del sistema operativo.
+
+Estado ejecutado:
+
+- `config.OSReleasePaths()` devuelve los paths de `os-release` en prioridad.
+- `config.osReleaseID` y `app.osPrettyName` consumen esa funcion en vez de
+  duplicar `/etc/os-release` y `/usr/lib/os-release`.
+- Validacion ejecutada: `go test ./internal/config ./internal/app` y
+  `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
