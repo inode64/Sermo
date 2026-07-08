@@ -88,12 +88,12 @@ sermoctl sla [SERVICE]                  # service availability windows (all serv
 sermoctl sla --series SERVICE [--since DURATION]  # per-minute series; --since default 24h
 
 sermoctl events [SERVICE] [--limit N]   # list recent events (global or for SERVICE)
-sermoctl events clear [--before TIME]   # omit TIME to clear all; TIME may be RFC3339 or duration (e.g. 1h)
+sermoctl events clear [--before TIME]   # omit TIME to clear all; TIME may be non-future RFC3339 or positive duration
                                         # only events strictly before the timestamp are removed
 sermoctl activity clear [--before TIME] # clears the same log shown as Recent activity
 
 sermoctl state compact [--before TIME]  # prunes old history and vacuums the state database
-                                        # omit TIME for normal 366-day retention; TIME may be RFC3339 or duration
+                                        # omit TIME for normal 366-day retention; TIME may be non-future RFC3339 or positive duration
 
 sermoctl lock SERVICE [--name NAME] --reason REASON --ttl DURATION -- COMMAND...
 sermoctl lock acquire SERVICE [--name NAME] --reason REASON --ttl DURATION

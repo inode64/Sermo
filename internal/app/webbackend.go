@@ -170,6 +170,7 @@ type WebBackend struct {
 	store             MonitorStore
 	operationSettling OperationSettlingStore
 	snapshots         *Snapshots
+	watchSnapshots    *WatchSnapshots
 	settling          *Settling
 	observability     *ObservabilityRegistry
 	sla               SLAReader
@@ -226,9 +227,6 @@ type WebBackend struct {
 	slaCacheMu sync.Mutex
 	slaCache   map[slaCacheKey]cachedSLATimelines
 
-	liveViewMu    sync.Mutex
-	liveViewCache map[string]cachedLiveView
-
 	openFilesMu      sync.Mutex
 	openFilesTally   map[string]int64
 	openFilesTallyAt time.Time
@@ -237,15 +235,6 @@ type WebBackend struct {
 	mountUsageAt     time.Time
 	mountUsage       map[string][]process.Process
 	mountUsageErrors map[string]string
-}
-
-// cachedLiveView memoizes a watch's dashboard live-probe result for the watch's
-// interval so /api/watches never re-runs an expensive probe on every poll.
-type cachedLiveView struct {
-	at       time.Time
-	meter    *web.WatchMeter
-	readings []web.WatchReading
-	summary  string
 }
 
 type slaCacheKey struct {
@@ -288,6 +277,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		store:             deps.Monitor,
 		operationSettling: operationSettling,
 		snapshots:         deps.Snapshots,
+		watchSnapshots:    deps.WatchSnapshots,
 		settling:          deps.Settling,
 		observability:     deps.Observability,
 		events:            deps.Events,
@@ -330,7 +320,6 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		operationTimeout:  deps.OperationTimeout,
 		now:               deps.Now,
 		slaCache:          map[slaCacheKey]cachedSLATimelines{},
-		liveViewCache:     map[string]cachedLiveView{},
 	}
 	if wb.serviceMetrics == nil {
 		wb.serviceMetrics = NewServiceMetricSampler()
@@ -858,7 +847,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		var readings []web.WatchReading
 		liveSummary := ""
 		if !w.disabled && !w.serviceScoped {
-			meter, readings, liveSummary = b.cachedWatchLiveView(w, system)
+			meter, readings, liveSummary = b.watchDashboardView(w, system)
 		}
 		monitorMode := w.monitorMode
 		if monitorMode == "" {
@@ -1328,32 +1317,175 @@ var heavyLiveViewTypes = map[string]bool{
 	"smart":  true,
 }
 
-// cachedWatchLiveView serves cached heavy watch probes without running them from
-// the HTTP handler. Heavy probes already run in the daemon watch cycle; opening
-// the dashboard must not trigger extra hdparm/smart work. Cheap
-// live views still sample on demand because they are bounded and expected to be
-// current on every dashboard refresh.
-func (b *WebBackend) cachedWatchLiveView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
+const watchDataKeyNumCPU = "num_cpu"
+
+func (b *WebBackend) watchDashboardView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
 	if w == nil {
 		return nil, nil, ""
 	}
-	ttl := w.interval
-	if ttl <= 0 || b.liveViewCache == nil || !heavyLiveViewTypes[w.checkType] {
-		return b.watchLiveView(w, system)
+	if b.watchSnapshots != nil && watchUsesDaemonSnapshot(w.checkType) {
+		return b.watchSnapshotView(w, system)
 	}
-	now := time.Now
-	if b.now != nil {
-		now = b.now
-	}
-	at := now()
+	return b.legacyWatchLiveView(w, system)
+}
 
-	b.liveViewMu.Lock()
-	if e, ok := b.liveViewCache[w.name]; ok && at.Sub(e.at) < ttl {
-		b.liveViewMu.Unlock()
-		return e.meter, e.readings, e.summary
+func watchUsesDaemonSnapshot(checkType string) bool {
+	switch checkType {
+	case checks.CheckTypeFile, checks.CheckTypeProcess:
+		return false
+	default:
+		return true
 	}
-	b.liveViewMu.Unlock()
-	return nil, nil, ""
+}
+
+func (b *WebBackend) watchSnapshotView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
+	snaps := b.watchSnapshots.Get(w.name, w.checkType)
+	if len(snaps) == 0 {
+		if m := watchMeter(w.checkType, system); m != nil {
+			return m, nil, ""
+		}
+		return nil, nil, ""
+	}
+	var meter *web.WatchMeter
+	var readings []web.WatchReading
+	var summaries []string
+	for _, snap := range snaps {
+		if !b.watchSnapshotCurrent(w, snap) || !watchSnapshotMetricConfigured(w, snap) {
+			continue
+		}
+		rs := watchSnapshotReadings(w.checkType, snap)
+		readings = append(readings, rs...)
+		if meter == nil {
+			meter = watchMeterFromSnapshot(w.checkType, snap.Data)
+		}
+		if summary := watchSnapshotSummary(snap, rs); summary != "" {
+			summaries = append(summaries, summary)
+		}
+	}
+	if meter == nil {
+		meter = watchMeter(w.checkType, system)
+	}
+	return meter, readings, strings.Join(summaries, " · ")
+}
+
+func (b *WebBackend) watchSnapshotCurrent(w *webWatch, snap CheckSnapshot) bool {
+	if snap.At.IsZero() {
+		return false
+	}
+	return b.webNow().Sub(snap.At) <= runtimePublishMaxAge(w.interval)
+}
+
+func watchSnapshotMetricConfigured(w *webWatch, snap CheckSnapshot) bool {
+	metric := cfgval.String(snap.Data[checks.DataKeyMetric])
+	if metric == "" || len(w.metrics) == 0 {
+		return true
+	}
+	_, ok := w.metrics[metric]
+	return ok
+}
+
+func watchSnapshotReadings(checkType string, snap CheckSnapshot) []web.WatchReading {
+	readings := checkReadings(checkType, snap.Data)
+	if len(readings) == 0 && snap.Message != "" {
+		readings = []web.WatchReading{{Field: watchReadingFieldResult, Label: "Result", Value: snap.Message}}
+	}
+	if !snap.healthy() && snap.Message != "" {
+		readings = append([]web.WatchReading{{Field: watchReadingFieldError, Label: "Error", Error: snap.Message}}, readings...)
+	}
+	return readings
+}
+
+func watchSnapshotSummary(snap CheckSnapshot, readings []web.WatchReading) string {
+	if snap.Message != "" {
+		return snap.Message
+	}
+	for _, r := range readings {
+		if r.Error != "" {
+			return r.Error
+		}
+		if r.Value != "" {
+			return r.Value
+		}
+	}
+	return ""
+}
+
+func watchMeterFromSnapshot(checkType string, data map[string]any) *web.WatchMeter {
+	switch checkType {
+	case checks.CheckTypeMemory:
+		total, totalOK := uintField(data[checks.DataKeyTotalBytes])
+		available, availableOK := uintField(data[checks.DataKeyAvailableBytes])
+		usedPct, pctOK := cfgval.Float(data[checks.DataKeyUsedPct])
+		if !totalOK || !availableOK || !pctOK {
+			return nil
+		}
+		available = min(available, total)
+		return &web.WatchMeter{
+			Kind:       metrics.MetricMemory,
+			UsedPct:    usedPct,
+			TotalBytes: total,
+			UsedBytes:  total - available,
+			FreeBytes:  available,
+		}
+	case checks.CheckTypeLoad:
+		load, loadOK := cfgval.Float(data[metrics.MetricLoad1])
+		numCPU, cpuOK := cfgval.Int(data[watchDataKeyNumCPU])
+		if !loadOK || !cpuOK || numCPU <= 0 {
+			return nil
+		}
+		return &web.WatchMeter{Kind: checks.CheckTypeLoad, UsedPct: load / float64(numCPU) * 100, Load: load, NumCPU: numCPU}
+	case checks.CheckTypeFDS:
+		return watchCountMeter(checks.CheckTypeFDS, data, checks.DataKeyAllocated)
+	case checks.CheckTypePIDs:
+		return watchCountMeter(checks.CheckTypePIDs, data, checks.DataKeyCount)
+	case checks.CheckTypeConntrack:
+		return watchCountMeter(checks.CheckTypeConntrack, data, checks.DataKeyCount)
+	default:
+		return nil
+	}
+}
+
+func watchCountMeter(kind string, data map[string]any, countKey string) *web.WatchMeter {
+	count, countOK := uintField(data[countKey])
+	limit, limitOK := uintField(data[checks.DataKeyMax])
+	usedPct, pctOK := cfgval.Float(data[checks.DataKeyUsedPct])
+	if !countOK || !limitOK || !pctOK || limit == 0 {
+		return nil
+	}
+	return &web.WatchMeter{Kind: kind, UsedPct: usedPct, Count: count, Max: limit}
+}
+
+func uintField(v any) (uint64, bool) {
+	switch n := v.(type) {
+	case uint64:
+		return n, true
+	case int:
+		if n >= 0 {
+			return uint64(n), true
+		}
+	case int64:
+		if n >= 0 {
+			return uint64(n), true
+		}
+	case float64:
+		if n >= 0 {
+			return uint64(n), true
+		}
+	}
+	return 0, false
+}
+
+// legacyWatchLiveView serves older in-process web backends that were not wired
+// with WatchSnapshots. Expensive disk commands are still blocked here; sermod
+// publishes their daemon-cycle results through WatchSnapshots instead.
+func (b *WebBackend) legacyWatchLiveView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
+	if w == nil {
+		return nil, nil, ""
+	}
+	if heavyLiveViewTypes[w.checkType] {
+		return nil, nil, ""
+	}
+	return b.watchLiveView(w, system)
 }
 
 func (b *WebBackend) watchLiveView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {

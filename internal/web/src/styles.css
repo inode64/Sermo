@@ -24,6 +24,7 @@
     --radius-s: 7px;
     --shadow: 0 1px 2px rgb(16 24 40 / .05), 0 1px 3px rgb(16 24 40 / .06);
     --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --topbar-h: 0px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -90,7 +91,7 @@
   .services-table { min-width: 86rem; font-size: .82rem; line-height: 1.3; font-variant-numeric: tabular-nums; }
   .services-table th, .services-table td { padding: .34rem .5rem; vertical-align: top; }
   .services-table th { white-space: nowrap; }
-  .services-table thead th, .watch-table thead th, .apps-table thead th { position: sticky; top: 0; background: var(--panel); z-index: 4; white-space: nowrap; box-shadow: 0 1px 0 var(--line); }
+  .services-table thead th, .watch-table thead th, .apps-table thead th { position: sticky; top: var(--topbar-h); background: var(--panel); z-index: 4; white-space: nowrap; box-shadow: 0 1px 0 var(--line); }
   th.sortable { cursor: pointer; }
   th.sortable:hover { color: var(--text); }
   .sort-ind { font-size: .7rem; color: var(--accent); }
@@ -201,7 +202,7 @@
   .danger-btn { border-color: color-mix(in srgb, var(--crit) 55%, transparent); background: color-mix(in srgb, var(--crit) 12%, transparent); color: var(--crit); }
   .danger-btn:hover { background: color-mix(in srgb, var(--crit) 20%, transparent); }
   @keyframes panic-pulse { 50% { opacity: .6; } }
-  .panic-btn { border-color: var(--crit); background: var(--crit); color: #fff; font-weight: 700; letter-spacing: .02em; }
+  .panic-btn { border-color: var(--crit); background: var(--crit); color: var(--bg); font-weight: 700; letter-spacing: .02em; }
   .panic-btn:hover { filter: brightness(1.12); }
   .panic-btn.active { animation: panic-pulse 1.1s ease-in-out infinite; }
   .status-panic { color: var(--crit); font-weight: 700; }
@@ -465,12 +466,12 @@
   .watch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .35rem 1rem; margin: .2rem 0 .65rem; font-size: .9rem; }
   .watch-grid div { min-width: 0; overflow-wrap: anywhere; }
 
-  /* ---- responsive: tablet & phone ------------------------------------------
+  /* ---- responsive: narrow desktop, tablet & phone ---------------------------
      Keep the document itself fluid: wide data tables shed secondary columns and
      let action buttons wrap inside their cells instead of forcing page-wide
      horizontal scroll. The full data remains available in each row expansion.
      This block intentionally lives after the base table min-width rules. */
-  @media (max-width: 1024px) {
+  @media (max-width: 1420px) {
     .services-table, .watch-table, .apps-table, .mount-table {
       min-width: 0;
       max-width: 100%;

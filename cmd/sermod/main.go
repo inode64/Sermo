@@ -278,6 +278,7 @@ func run(args []string) int {
 		Notifiers:         notifiers,
 		GlobalNotify:      config.NotifyDefault(cfg.Global.Raw),
 		Snapshots:         app.NewSnapshots(),
+		WatchSnapshots:    app.NewWatchSnapshots(),
 		Live:              app.NewLiveMetrics(),
 		ServiceMetrics:    app.NewServiceMetricSampler(store),
 		Observability:     app.NewObservabilityRegistry(),

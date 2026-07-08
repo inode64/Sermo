@@ -58,6 +58,10 @@ type Watch struct {
 	Interval time.Duration
 	Now      func() time.Time
 	Emit     func(Event)
+	// Publish records the latest daemon-cycle check result for the web UI. It is
+	// intentionally best-effort: watch actions and alerts must not depend on the
+	// dashboard cache.
+	Publish func(watch, checkType string, result checks.Result)
 	// IsPaused reports whether this watch is currently paused by an operator.
 	// Paused watches skip checks/hooks/notifies/expand until monitored again.
 	IsPaused func() bool
@@ -114,6 +118,7 @@ func (w *Watch) RunCycle(ctx context.Context) {
 		return
 	}
 	res := w.Check.Run(ctx)
+	w.publish(res)
 	if observeOnly {
 		w.markSettled()
 		return
@@ -163,6 +168,12 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	}
 	if w.shouldNotify(wasFiring) {
 		dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
+	}
+}
+
+func (w *Watch) publish(res checks.Result) {
+	if w.Publish != nil {
+		w.Publish(w.Name, w.CheckType, res)
 	}
 }
 

@@ -222,6 +222,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		FireOnFail:     checks.IsHealthType(typ),
 		Now:            deps.Now,
 		Emit:           deps.Emit,
+		Publish:        publishWatchSnapshots(deps.WatchSnapshots),
 	}
 	if actions.expand != nil {
 		w.Expand = actions.expand
@@ -305,6 +306,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			Settling:       deps.Settling,
 			Now:            deps.Now,
 			Emit:           deps.Emit,
+			Publish:        publishWatchSnapshots(deps.WatchSnapshots),
 		})
 	}
 	return out, warns
@@ -884,7 +886,15 @@ func monitorWatch(name, checkType string, check checks.Check, notify []string, d
 		FireOnFail: true, // command/config are health-style: alert (notify) on failure/change
 		Now:        deps.Now,
 		Emit:       deps.Emit,
+		Publish:    publishWatchSnapshots(deps.WatchSnapshots),
 	}
+}
+
+func publishWatchSnapshots(s *WatchSnapshots) func(string, string, checks.Result) {
+	if s == nil {
+		return nil
+	}
+	return s.Publish
 }
 
 // effectiveNotify applies notify precedence (per-site over global): an explicit

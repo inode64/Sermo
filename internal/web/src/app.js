@@ -4558,6 +4558,13 @@ function setPanelVisible(el, show) {
   el.classList.toggle("panel-hidden", !show);
 }
 
+function updateTopbarHeight() {
+  const topbar = $("#topbar");
+  if (!topbar) return;
+  const height = Math.ceil(topbar.getBoundingClientRect().height);
+  document.documentElement.style.setProperty("--topbar-h", `${height}px`);
+}
+
 function sectionNavCountText(text) {
   const trimmed = (text || "").trim();
   if (!trimmed) return "";
@@ -4586,6 +4593,7 @@ function updateSectionNav() {
     if (countEl) countEl.textContent = count;
   });
   nav.classList.toggle("nav-hidden", visible === 0);
+  updateTopbarHeight();
 }
 
 function renderStatus(ctx) {
@@ -5937,6 +5945,8 @@ function initDelegatedHandlers() {
 
 initStaticHandlers();
 initDelegatedHandlers();
+window.addEventListener("resize", updateTopbarHeight);
+updateTopbarHeight();
 loadMe().then(() => { load(); });
 
 // Manual refresh + a once-per-second "updated Xs ago" readout. The readout is

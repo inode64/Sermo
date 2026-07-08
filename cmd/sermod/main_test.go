@@ -68,6 +68,7 @@ func TestRepoDevConfigHasMonitorTargets(t *testing.T) {
 	deps := app.Deps{
 		DefaultTimeout: 10 * time.Second,
 		Interval:       30 * time.Second,
+		WatchSnapshots: app.NewWatchSnapshots(),
 		ExecxRunner:    execx.CommandRunner{},
 	}
 	watches, watchWarns := app.BuildWatches(cfg, deps, deps.Interval)

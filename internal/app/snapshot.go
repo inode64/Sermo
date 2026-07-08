@@ -1,9 +1,12 @@
 package app
 
 import (
+	"maps"
+	"slices"
 	"sync"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 )
 
@@ -81,4 +84,80 @@ func (s *Snapshots) Get(service string) map[string]CheckSnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.byService[service]
+}
+
+type watchResultSnapshot struct {
+	checkType string
+	result    CheckSnapshot
+}
+
+// WatchSnapshots holds each host watch's latest daemon-cycle check result. The
+// web UI reads this registry so /api/watches does not start probes of its own.
+type WatchSnapshots struct {
+	mu      sync.RWMutex
+	now     func() time.Time
+	byWatch map[string]map[string]watchResultSnapshot
+}
+
+// NewWatchSnapshots returns an empty host-watch result registry.
+func NewWatchSnapshots() *WatchSnapshots {
+	return &WatchSnapshots{now: time.Now, byWatch: map[string]map[string]watchResultSnapshot{}}
+}
+
+// Publish records one daemon-cycle result for a watch. Multi-metric watches
+// share a visible watch name, so each metric gets its own slot under that name.
+func (s *WatchSnapshots) Publish(watch, checkType string, r checks.Result) {
+	if s == nil {
+		return
+	}
+	now := s.now
+	if now == nil {
+		now = time.Now
+	}
+	slot := watchResultSlot(r)
+	snap := CheckSnapshot{
+		OK: r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Message: r.Message,
+		Data: maps.Clone(r.Data), Ran: true, At: now(),
+	}
+	s.mu.Lock()
+	if s.byWatch[watch] == nil {
+		s.byWatch[watch] = map[string]watchResultSnapshot{}
+	}
+	s.byWatch[watch][slot] = watchResultSnapshot{checkType: checkType, result: snap}
+	s.mu.Unlock()
+}
+
+// Get returns the latest result snapshots for a watch and check type, sorted by
+// stable slot. Results from a previous config generation with the same watch
+// name but a different check type are ignored.
+func (s *WatchSnapshots) Get(watch, checkType string) []CheckSnapshot {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	slots := s.byWatch[watch]
+	if len(slots) == 0 {
+		return nil
+	}
+	keys := slices.Sorted(maps.Keys(slots))
+	out := make([]CheckSnapshot, 0, len(keys))
+	for _, key := range keys {
+		snap := slots[key]
+		if snap.checkType != checkType {
+			continue
+		}
+		out = append(out, snap.result)
+	}
+	return out
+}
+
+func watchResultSlot(r checks.Result) string {
+	if metric := cfgval.String(r.Data[checks.DataKeyMetric]); metric != "" {
+		return checks.DataKeyMetric + ":" + metric
+	}
+	if r.Check != "" {
+		return r.Check
+	}
+	return "result"
 }

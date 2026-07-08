@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"net/http"
 )
@@ -9,7 +10,7 @@ import (
 // Auth controls access to the dashboard via HTTP Basic auth with two roles:
 //
 //   - admin: full access (read and actions). Granted by AdminPassword.
-//   - guest: read-only (GET only; POST actions are refused). Granted by
+//   - guest: read-only (GET/HEAD only; state-changing requests are refused). Granted by
 //     GuestPassword, or to anonymous requests when AnonymousGuest is set.
 //
 // When no field is set, auth is disabled and every request is treated as admin
@@ -62,14 +63,15 @@ func roleFrom(ctx context.Context) string {
 }
 
 // withAuth enforces the role on each request: unauthenticated requests get a Basic
-// challenge, guests may only read (GET), and /login is an admin-only endpoint that
-// triggers the browser's login prompt then redirects home (used to escalate from
-// anonymous guest to admin).
+// challenge, guests may only read (GET/HEAD), and /login is an admin-only
+// endpoint that triggers the browser's login prompt then redirects home (used to
+// escalate from anonymous guest to admin).
 func (s *Server) withAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Liveness is a public probe: monitors and load balancers carry no
-		// credentials, so /livez bypasses authentication entirely.
-		if r.URL.Path == routePathLivez || r.URL.Path == routePathReadyz {
+		// Plain liveness/readiness probes are public: monitors and load balancers
+		// carry no credentials. Verbose probes include inventory/runtime details,
+		// so they follow normal read auth when auth is enabled.
+		if isPlainHealthProbe(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -85,9 +87,9 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 			return
 		}
 		// CSRF: state-changing requests must carry the custom header (set by the
-		// dashboard's fetch). Checked before auth so a forged cross-site POST is
+		// dashboard's fetch). Checked before auth so a forged cross-site request is
 		// rejected even when the browser would attach cached credentials.
-		if r.Method == http.MethodPost && r.Header.Get(csrfHeader) == "" {
+		if !isReadMethod(r.Method) && r.Header.Get(csrfHeader) == "" {
 			writeJSON(w, http.StatusForbidden, ActionResult{OK: false, Message: "missing " + csrfHeader + " header (CSRF protection)"})
 			return
 		}
@@ -95,7 +97,7 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 			s.challenge(w)
 			return
 		}
-		if r.Method == http.MethodPost && role != roleAdmin {
+		if !isReadMethod(r.Method) && role != roleAdmin {
 			writeJSON(w, http.StatusForbidden, ActionResult{OK: false, Message: "read-only access"})
 			return
 		}
@@ -121,5 +123,18 @@ func (s *Server) handleWhoami(w http.ResponseWriter, r *http.Request) {
 }
 
 func secureEqual(a, b string) bool {
-	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+	ah := sha256.Sum256([]byte(a))
+	bh := sha256.Sum256([]byte(b))
+	return subtle.ConstantTimeCompare(ah[:], bh[:]) == 1
+}
+
+func isReadMethod(method string) bool {
+	return method == http.MethodGet || method == http.MethodHead
+}
+
+func isPlainHealthProbe(r *http.Request) bool {
+	if r == nil || !isReadMethod(r.Method) || r.URL.Query().Has(apiQueryVerbose) {
+		return false
+	}
+	return r.URL.Path == routePathLivez || r.URL.Path == routePathReadyz
 }

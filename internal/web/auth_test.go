@@ -14,7 +14,7 @@ func authServer(a Auth) http.Handler {
 
 func req(method, path, user, pass string) *http.Request {
 	r := httptest.NewRequest(method, path, nil)
-	if method == http.MethodPost {
+	if !isReadMethod(method) {
 		r.Header.Set(csrfHeader, "1")
 	}
 	if user != "" || pass != "" {
@@ -62,6 +62,27 @@ func TestReadyzPublicEvenWithAuth(t *testing.T) {
 	}
 }
 
+func TestVerboseHealthRequiresAuth(t *testing.T) {
+	h := (&Server{
+		Backend:   &fakeBackend{services: []Service{{Name: "web"}}},
+		Auth:      Auth{AdminPassword: "secret"},
+		Readiness: fakeReadiness{rep: ReadyReport{Ready: true, Status: "ok", Services: 1}},
+	}).Handler()
+	for _, path := range []string{"/livez?verbose", "/readyz?verbose"} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("GET %s without auth = %d, want 401", path, rec.Code)
+		}
+
+		rec = httptest.NewRecorder()
+		h.ServeHTTP(rec, req(http.MethodGet, path, "admin", "secret"))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s with admin auth = %d, want 200", path, rec.Code)
+		}
+	}
+}
+
 func TestReadyzStartingReturns503(t *testing.T) {
 	h := (&Server{
 		Backend: &fakeBackend{services: []Service{{Name: "web"}}},
@@ -104,14 +125,20 @@ func TestLivezVerbose(t *testing.T) {
 	}
 }
 
-func TestCSRFGuardOnPost(t *testing.T) {
-	h := authServer(Auth{}) // open mode: even without auth, a forged POST is blocked
+func TestCSRFGuardOnUnsafeMethods(t *testing.T) {
+	h := authServer(Auth{}) // open mode: even without auth, a forged request is blocked
 	// no CSRF header -> rejected
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/api/services/web/restart", nil)
 	h.ServeHTTP(rec, r)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("POST without CSRF header = %d, want 403", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodPut, "/api/services/web/restart", nil)
+	h.ServeHTTP(rec, r)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("PUT without CSRF header = %d, want 403", rec.Code)
 	}
 	// with the header -> allowed
 	rec = httptest.NewRecorder()
@@ -161,6 +188,11 @@ func TestGuestIsReadOnly(t *testing.T) {
 	h.ServeHTTP(rec, req(http.MethodPost, "/api/services/web/restart", "guest", "guestpw"))
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("guest action = %d, want 403", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req(http.MethodPut, "/api/services/web/restart", "guest", "guestpw"))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("guest unsafe method = %d, want 403", rec.Code)
 	}
 }
 
