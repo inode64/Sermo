@@ -249,6 +249,9 @@ type Deps struct {
 	// Snapshots collects each service's latest check results for the web detail
 	// view. Optional: nil disables publishing.
 	Snapshots *Snapshots
+	// WatchSnapshots collects each host watch's latest daemon-cycle check result
+	// for the web watch list. Optional: nil keeps the legacy web live probes.
+	WatchSnapshots *WatchSnapshots
 	// Remediation collects each service's remediation policy view for the web
 	// detail. Optional: nil disables publishing.
 	Remediation *RemediationRegistry

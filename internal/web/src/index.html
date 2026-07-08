@@ -29,8 +29,8 @@
     <button id="refresh-now" title="Refresh dashboard now" aria-label="Refresh dashboard now">&#x27F3;</button>
   </div>
 </div>
-<div id="system-status" role="status" aria-live="polite" aria-atomic="false"></div>
-<div id="statusbar" role="status" aria-live="polite" aria-atomic="false"></div>
+<div id="system-status" aria-live="off"></div>
+<div id="statusbar" aria-live="off"></div>
 <nav id="section-nav" aria-label="Dashboard sections">
   <a class="section-jump" href="#services-section" data-panel-target="services-section" data-count-source="services-count">Services <span class="nav-count" data-nav-count></span></a>
   <a class="section-jump" href="#containers-section" data-panel-target="containers-section" data-count-source="containers-count">Containers <span class="nav-count" data-nav-count></span></a>
@@ -403,8 +403,8 @@
     <label class="muted"><input id="event-group" type="checkbox" checked> group actions</label>
     <button id="event-reset-filters" type="button" aria-label="Reset event filters">reset filters</button>
     <label for="event-before" class="visually-hidden">Clear events before cutoff</label>
-    <input id="event-before" type="text" class="admin-hidden" placeholder="before (e.g. 720h)" title="Optional: clear only events older than this duration or RFC3339 timestamp" aria-describedby="event-before-hint">
-    <span id="event-before-hint" class="visually-hidden">Optional duration (e.g. 720h) or RFC3339 timestamp; leave empty to clear all events.</span>
+    <input id="event-before" type="text" class="admin-hidden" placeholder="before (e.g. 720h)" title="Optional: clear only events older than this positive duration or non-future RFC3339 timestamp" aria-describedby="event-before-hint">
+    <span id="event-before-hint" class="visually-hidden">Optional positive duration (e.g. 720h) or non-future RFC3339 timestamp; leave empty to clear all events.</span>
     <button id="event-clear" class="danger-btn admin-hidden" type="button" aria-label="Clear event log">clear log</button>
     <span id="event-count" class="muted"></span>
   </div>
@@ -587,8 +587,8 @@
     <button id="state-compact-btn" class="danger-btn admin-hidden" aria-label="Compact persisted state">compact state</button>
     <button id="panic-btn" class="panic-btn admin-hidden" title="Suspend hooks, alerts and automatic remediation" aria-label="Enter panic mode and suspend hooks, alerts and automatic remediation">panic mode</button>
     <label for="state-before" class="visually-hidden">Compact state before cutoff</label>
-    <input id="state-before" type="text" class="admin-before-input admin-hidden" placeholder="before (e.g. 720h)" title="Optional state compact cutoff: duration or RFC3339 timestamp" aria-describedby="state-before-hint">
-    <span id="state-before-hint" class="visually-hidden">Optional duration (e.g. 720h) or RFC3339 timestamp; leave empty for default retention.</span>
+    <input id="state-before" type="text" class="admin-before-input admin-hidden" placeholder="before (e.g. 720h)" title="Optional state compact cutoff: positive duration or non-future RFC3339 timestamp" aria-describedby="state-before-hint">
+    <span id="state-before-hint" class="visually-hidden">Optional positive duration (e.g. 720h) or non-future RFC3339 timestamp; leave empty for default retention.</span>
     <label class="muted shortcut-toggle" aria-describedby="shortcut-hint-desc"><input id="shortcut-toggle" type="checkbox" checked> keyboard shortcuts</label>
     <span id="shortcut-hint-desc" class="visually-hidden">When enabled, press slash to focus the search box in the open panel.</span>
     <span id="search-shortcut-hint" class="visually-hidden">Press slash to focus this search when keyboard shortcuts are enabled.</span>

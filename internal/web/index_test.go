@@ -355,7 +355,7 @@ func TestIndexWatchReadingLongValuesWrap(t *testing.T) {
 func TestIndexResponsiveTablesDoNotKeepDesktopMinWidth(t *testing.T) {
 	css := strings.ReplaceAll(bundledCSS(t), " ", "")
 	base := strings.Index(css, ".watch-table{min-width:72rem")
-	responsive := strings.LastIndex(css, "@media(max-width:1024px){.services-table,.watch-table,.apps-table,.mount-table{min-width:0;max-width:100%}")
+	responsive := strings.LastIndex(css, "@media(max-width:1420px){.services-table,.watch-table,.apps-table,.mount-table{min-width:0;max-width:100%}")
 	if base < 0 {
 		t.Fatal("bundled CSS missing watch-table desktop min-width")
 	}
@@ -366,6 +366,8 @@ func TestIndexResponsiveTablesDoNotKeepDesktopMinWidth(t *testing.T) {
 		t.Fatal("responsive table override appears before desktop min-width and can be overridden")
 	}
 	for _, needle := range []string{
+		"--topbar-h:0px",
+		"top:var(--topbar-h)",
 		".services-table.actions{min-width:14rem;max-width:22rem;white-space:normal}",
 		".actionsbutton{margin-right:.25rem;margin-bottom:.25rem;",
 		"#notifiers-sectionth:nth-child(3)",
@@ -588,8 +590,8 @@ func TestIndexAccessibilityShell(t *testing.T) {
 		live   string
 		atomic string
 	}{
-		{"system-status", "polite", "false"},
-		{"statusbar", "polite", "false"},
+		{"system-status", "off", ""},
+		{"statusbar", "off", ""},
 		{"err", "polite", ""},
 		{"op-live", "polite", ""},
 	} {
@@ -600,6 +602,11 @@ func TestIndexAccessibilityShell(t *testing.T) {
 		}
 		if live, ok := attr(el, "aria-live"); !ok || live != spec.live {
 			t.Errorf("#%s aria-live = %q, want %q", spec.id, live, spec.live)
+		}
+		if spec.live == "off" {
+			if role, ok := attr(el, "role"); ok {
+				t.Errorf("#%s role = %q, want no implicit live-region role", spec.id, role)
+			}
 		}
 		if spec.atomic != "" {
 			if atomic, ok := attr(el, "aria-atomic"); !ok || atomic != spec.atomic {

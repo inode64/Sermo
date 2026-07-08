@@ -71,6 +71,32 @@ func TestSnapshotsPublishAtOnlyWhenRan(t *testing.T) {
 	}
 }
 
+func TestWatchSnapshotsKeepMetricSlots(t *testing.T) {
+	t0 := time.Date(2026, 6, 7, 10, 0, 0, 0, time.UTC)
+	s := NewWatchSnapshots()
+	s.now = func() time.Time { return t0 }
+
+	s.Publish("uplink", checks.CheckTypeICMP, checks.Result{
+		Check: "uplink",
+		Data:  map[string]any{checks.DataKeyMetric: checks.NetMetricState, checks.DataKeyValue: checks.NetStateUp},
+	})
+	s.Publish("uplink", checks.CheckTypeICMP, checks.Result{
+		Check: "uplink",
+		Data:  map[string]any{checks.DataKeyMetric: checks.IcmpMetricLatency, checks.DataKeyValue: 12.5},
+	})
+
+	got := s.Get("uplink", checks.CheckTypeICMP)
+	if len(got) != 2 {
+		t.Fatalf("watch snapshots = %+v, want two metric slots", got)
+	}
+	if got[0].Data[checks.DataKeyMetric] != checks.IcmpMetricLatency || got[1].Data[checks.DataKeyMetric] != checks.NetMetricState {
+		t.Fatalf("watch snapshot order/data = %+v", got)
+	}
+	if wrongType := s.Get("uplink", checks.CheckTypeNet); len(wrongType) != 0 {
+		t.Fatalf("wrong check type returned snapshots: %+v", wrongType)
+	}
+}
+
 func TestWorkerPublishesCache(t *testing.T) {
 	var published map[string]checks.Result
 	w := &Worker{

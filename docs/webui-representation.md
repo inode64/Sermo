@@ -68,7 +68,7 @@ enabled.
 | Watch action | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand` |
 | Mount action | `POST /api/mounts/{name}/{action}[?kill=1]` | `mount`, `umount`, `blockers`, `alert`; `kill=1` enables policy-gated blocker signalling for `umount`; `/` rejects unmount paths |
 | Lock release | `POST /api/locks/{service}/release?name=NAME` | releases inactive stale/expired named locks; active locks are refused |
-| Events clear | `POST /api/events/clear?before=TIME` | clears persisted event/activity rows; `before` accepts RFC3339 or duration |
+| Events clear | `POST /api/events/clear?before=TIME` | clears persisted event/activity rows; `before` accepts a positive duration or non-future RFC3339 timestamp |
 | State compact | `POST /api/state/compact?before=TIME` | prunes old SLA/metrics/event history and vacuums the state database; matches `sermoctl state compact` |
 | Daemon reload | `POST /api/reload` | requests a `sermod` configuration reload |
 
@@ -330,7 +330,8 @@ Columns per panel (every panel ends with Last activity, State, Actions):
 | Disk I/O watches | Name, Device, Util%, Read / Write, Await |
 | Host watches | Name, Type, Summary |
 
-The Certificate and Disk I/O columns read the watch's live readings
+The Certificate and Disk I/O columns read the watch readings published by the
+latest daemon watch cycle
 (certificate expiry, days left, issuer and public-key algorithm; device,
 utilization, read/write throughput and await latency).
 
@@ -391,7 +392,8 @@ Editable notes:
   is still useful.
 - **clear log** (admin only) calls `POST /api/events/clear` after confirmation,
   matching `sermoctl events clear`. An optional **before** field passes
-  `?before=TIME` (duration or RFC3339) to prune only older rows.
+  `?before=TIME` (positive duration or non-future RFC3339) to prune only older
+  rows.
 - The `kind` filter covers the emitted event kinds: `cycle`, `action`,
   `suppressed`, `alert`, `error`, `firing`, `recovered`, `dry-run`,
   `reload` (a successful config reload of the running daemon),
@@ -475,21 +477,6 @@ Columns:
 | Blocks | blocked actions |
 | Reason | operator-supplied reason |
 | Action | release button when allowed |
-
-## Service row expansion
-
-Container: `tr.exp-row` under the selected service row.
-
-Opened from a service row/name. There is no separate lower detail panel.
-
-| Area | Current representation |
-| --- | --- |
-| Header | service name, unit and state; `starting` is the operator-facing badge — expansion detail can lag one cycle behind it during settling |
-| Actions | service row operation buttons and inline preflight |
-| Checks | resolved check state |
-| Metrics | selectable metric/check series |
-| Events | recent service events |
-| Rules | remediation and alert rules |
 
 ## Action confirmation dialog
 
