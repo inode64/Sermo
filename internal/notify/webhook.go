@@ -20,6 +20,11 @@ const webhookTimeout = 15 * time.Second
 const webhookErrorSnippetLimit = 256
 
 const (
+	httpStatusClassDivisor = 100
+	httpStatusClassSuccess = 2
+)
+
+const (
 	webhookHeaderContentType = "Content-Type"
 	webhookContentTypeJSON   = "application/json"
 )
@@ -68,7 +73,7 @@ func postWebhook(ctx context.Context, label, webhook string, payload []byte) err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode/100 != 2 {
+	if resp.StatusCode/httpStatusClassDivisor != httpStatusClassSuccess {
 		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, webhookErrorSnippetLimit))
 		return fmt.Errorf("%s webhook returned %s: %s", label, resp.Status, strings.TrimSpace(string(snippet)))
 	}

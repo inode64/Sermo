@@ -259,6 +259,22 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/app ./internal/cli` y `make check`
   pasan.
 
+### Fase 9: Clases HTTP locales
+
+- Nombrar el divisor de clase HTTP (`status / 100`) donde se usa en runtime.
+- Mantener constantes locales porque el webhook solo clasifica exito de
+  transporte y `checks` compara codigos configurados; no son el mismo contrato
+  publico aunque usen la misma matematica.
+
+Estado ejecutado:
+
+- `internal/notify/webhook.go` usa constantes locales para divisor de clase HTTP
+  y clase de exito.
+- `internal/checks/types.go` usa una constante local para calcular la clase de
+  estado en `statusMatcher`.
+- Validacion ejecutada: `go test ./internal/notify ./internal/checks` y
+  `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
