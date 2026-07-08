@@ -62,8 +62,6 @@ const (
 	procUptimeValueIndex   = 0
 	procUptimeFloatBits    = 64
 	processPIDListLimit    = 20
-	osReleaseEtcPath       = "/etc/os-release"
-	osReleaseUsrPath       = "/usr/lib/os-release"
 	osReleasePrettyNameKey = "PRETTY_NAME="
 	osReleaseValueTrimSet  = `"'`
 )
@@ -2632,7 +2630,7 @@ func parseProcUptime(data []byte) (time.Duration, bool) {
 // osPrettyName returns a human-friendly OS label (PRETTY_NAME from os-release on
 // Linux, e.g. "Debian GNU/Linux 12 (bookworm)"), falling back to runtime.GOOS.
 func osPrettyName() string {
-	for _, path := range []string{osReleaseEtcPath, osReleaseUsrPath} {
+	for _, path := range config.OSReleasePaths() {
 		if data, err := os.ReadFile(path); err == nil {
 			if name := parseOSReleasePrettyName(data); name != "" {
 				return name
