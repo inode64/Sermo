@@ -61,7 +61,7 @@ func (tftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if port == 0 {
 		port = defaultPortTFTP
 	}
-	server, err := net.ResolveUDPAddr(networkUDP, net.JoinHostPort(host, strconv.Itoa(port)))
+	server, err := net.ResolveUDPAddr(networkUDP, hostPort(host, port))
 	if err != nil {
 		return Result{}, err
 	}

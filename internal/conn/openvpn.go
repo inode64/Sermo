@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strconv"
 )
 
 func init() { Register(openvpnProtocol{}, protocolAliasOpenVPN) }
@@ -74,7 +73,7 @@ func (openvpnProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 
 	sid := openvpnSessionID()
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, transport, net.JoinHostPort(host, strconv.Itoa(port)))
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, transport, hostPort(host, port))
 	if err != nil {
 		return Result{}, err
 	}

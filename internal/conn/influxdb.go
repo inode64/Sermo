@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"strconv"
 )
 
 func init() { Register(influxdbProtocol{}, protocolAliasInflux) }
@@ -65,7 +63,7 @@ func InfluxClient(cfg Config) (*http.Client, string) {
 		}
 		client = httpProbeClient(cfg.Interface, tlsConfig)
 	}
-	return client, scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port))
+	return client, scheme + "://" + hostPort(host, port)
 }
 
 // influxHealth queries /health. handled is true when the result is conclusive (a

@@ -6,8 +6,6 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
-	"net"
-	"strconv"
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
@@ -145,7 +143,7 @@ func buildMySQLConfig(cfg Config) *mysql.Config {
 	}
 	c := mysql.NewConfig()
 	c.Net = networkTCP
-	c.Addr = net.JoinHostPort(host, strconv.Itoa(port))
+	c.Addr = hostPort(host, port)
 	c.User = cfg.User
 	c.Passwd = cfg.Password
 	c.DBName = cfg.Database

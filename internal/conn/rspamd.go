@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"strconv"
 	"strings"
 )
 
@@ -49,7 +47,7 @@ func (rspamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		client = httpProbeClient(cfg.Interface, tlsConfig)
 	}
 
-	url := scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port)) + rspamdPingEndpoint
+	url := scheme + "://" + hostPort(host, port) + rspamdPingEndpoint
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return Result{}, err

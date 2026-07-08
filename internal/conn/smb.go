@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"strconv"
 	"strings"
 
@@ -94,7 +93,7 @@ func (smbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if port == 0 {
 		port = defaultPortSMB
 	}
-	addr := net.JoinHostPort(host, strconv.Itoa(port))
+	addr := hostPort(host, port)
 
 	dialect, signingRequired, err := smbNegotiate(ctx, addr, cfg.Interface)
 	if err != nil {

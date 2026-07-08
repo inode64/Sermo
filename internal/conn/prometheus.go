@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"strconv"
 )
 
 func init() { Register(prometheusProtocol{}, protocolAliasPrometheus) }
@@ -63,7 +61,7 @@ func PrometheusClient(cfg Config) (*http.Client, string) {
 		}
 		client = httpProbeClient(cfg.Interface, tlsConfig)
 	}
-	return client, scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port))
+	return client, scheme + "://" + hostPort(host, port)
 }
 
 // promBuildInfo queries /api/v1/status/buildinfo. handled is true when the result

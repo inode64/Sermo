@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
-	"strconv"
 )
 
 func init() { Register(syncthingProtocol{}) }
@@ -48,7 +46,7 @@ func (syncthingProtocol) Probe(ctx context.Context, cfg Config) (Result, error) 
 		}
 		client = httpProbeClient(cfg.Interface, tlsConfig)
 	}
-	base := scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port))
+	base := scheme + "://" + hostPort(host, port)
 
 	// 1. Unauthenticated health check — proves the daemon is up.
 	var health struct {
