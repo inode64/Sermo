@@ -141,6 +141,50 @@ func TestWebBackendMountsIncludesUsageAndCaches(t *testing.T) {
 	}
 }
 
+func TestWebBackendMountUsageCacheIgnoresCancelledRequests(t *testing.T) {
+	now := time.Unix(100, 0)
+	calls := 0
+	cfg := mountTestConfig(t)
+	b, warns := NewWebBackend(cfg, Deps{
+		Now: func() time.Time { return now },
+		MountSampler: func() ([]checks.Mount, error) {
+			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
+		},
+		MountDiscoverUsers: func(string) ([]process.Process, error) {
+			calls++
+			return []process.Process{{
+				PID: 123, User: "backup", UID: 1000, Exe: "/usr/bin/rsync", ExeOK: true, Source: "mount",
+			}}, nil
+		},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	// A cancelled request cannot probe blockers; it reports the cancellation
+	// for its own viewer but must not cache it for everyone else.
+	mounts := b.Mounts(cancelled)
+	if calls != 0 || len(mounts) != 1 || mounts[0].BlockerError == "" {
+		t.Fatalf("cancelled mounts = %+v calls=%d, want uncached blocker error", mounts, calls)
+	}
+
+	mounts = b.Mounts(context.Background())
+	if calls != 1 || len(mounts) != 1 || mounts[0].BlockerError != "" || len(mounts[0].Blockers) != 1 {
+		t.Fatalf("mounts after cancelled request = %+v calls=%d, want fresh probe with one blocker", mounts, calls)
+	}
+
+	// After expiry a cancelled request is served the previous complete usage
+	// instead of replacing it with cancellation errors.
+	now = now.Add(mountUsageTTL + time.Nanosecond)
+	mounts = b.Mounts(cancelled)
+	if calls != 1 || len(mounts) != 1 || mounts[0].BlockerError != "" || len(mounts[0].Blockers) != 1 {
+		t.Fatalf("cancelled mounts after expiry = %+v calls=%d, want previous usage", mounts, calls)
+	}
+}
+
 func TestWebBackendMountsReportsUsageError(t *testing.T) {
 	cfg := mountTestConfig(t)
 	b, warns := NewWebBackend(cfg, Deps{
