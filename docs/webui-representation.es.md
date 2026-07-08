@@ -205,6 +205,12 @@ Compartida por los paneles Services, Containers y Virtual machines:
 | Preflight | ejecutor de preflight en línea y resultados |
 | Eventos | eventos de servicio retenidos recientes |
 
+Las expansiones abiertas (de servicio y de watch) obtienen detalle fresco una
+vez por refresco del dashboard; los re-renders intermedios (teclas de filtro,
+ordenación, el ticker de operaciones en vivo) redibujan desde el detalle
+cacheado sin peticiones extra, y todos los watches expandidos comparten una
+única descarga de eventos recientes por refresco.
+
 Estados vacíos:
 
 - `No services.`

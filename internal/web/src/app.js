@@ -113,6 +113,9 @@ async function load() {
     lastLoadOk = Date.now();
     document.body.classList.remove("disconnected");
     clearStatusAfterRefresh();
+    // Open expansions fetch fresh detail once per poll here; re-renders in
+    // between (filter keystrokes, ops ticker) only re-assert cached content.
+    refreshExpandedServices();
   } else {
     connOK = false;
     showDisconnected();
@@ -153,6 +156,7 @@ async function load() {
     if (!sameLoad() || !watches) return;
     renderWatches(watches);
     if (connOK) renderAttention();
+    refreshExpandedWatches();
   });
 
   getJSON("api/applications", null).then((apps) => {
@@ -1716,7 +1720,7 @@ function serviceRowHTML(s, opts = {}) {
 
 function finishSvcRender() {
   renderAttention();
-  refreshExpandedServices();
+  reassertExpansions();
 }
 
 // render receives fresh data on each refresh; cache it, then render through the
@@ -1859,10 +1863,33 @@ function refreshExpandedServiceDetails() {
   refreshExpandedServices({ metricsOnly: true });
 }
 
-// refreshExpandedServices reloads open expansions on each dashboard refresh.
+// reassertExpansions re-fills open expansion cells from cache after a
+// structural table re-render (filter keystrokes, sorting, grouping, the 1s
+// operations ticker), which can recreate rows and blank their detail cells.
+// It performs no network requests: fresh data arrives once per dashboard poll
+// via refreshExpandedServices / refreshExpandedWatches. Only a key with no
+// cached content yet (an expansion that never loaded) falls back to a fetch.
+function reassertExpansions() {
+  expanded.forEach((k) => {
+    if (!k.startsWith("svc:") && !k.startsWith("wat:")) return;
+    if (!expCache[k]) {
+      loadExpansionFor(k);
+      return;
+    }
+    const cell = expansionCell(k);
+    if (cell) litRender(expCache[k], cell);
+    // Re-hydrate charts/events for service details: a recreated row renders
+    // the cached markup with empty chart containers.
+    const detail = expDetailCache[k];
+    if (detail) hydrateServiceDetail(detail);
+  });
+}
+
+// refreshExpandedServices reloads open service expansions once per dashboard
+// refresh (called from load(), not from re-renders — see reassertExpansions).
 // Service expansions skip the full HTML rebuild on most cycles (charts and
 // events are refreshed via hydrateServiceDetail only); a full renderServiceDetail
-// pass runs every SVC_EXPAND_FULL_EVERY cycles or when the cache is empty.
+// pass runs every SVC_EXPAND_FULL_EVERY polls or when the cache is empty.
 // Skipped while the tab is hidden unless opts.force is set.
 function refreshExpandedServices(opts = {}) {
   if (document.hidden && !opts.force) return;
@@ -1878,10 +1905,6 @@ function refreshExpandedServices(opts = {}) {
   svcExpandRefreshTick++;
   const periodicFull = forceFull || (svcExpandRefreshTick % SVC_EXPAND_FULL_EVERY === 0);
   expanded.forEach((k) => {
-    if (k.startsWith("wat:")) {
-      loadExpansionFor(k);
-      return;
-    }
     if (!k.startsWith("svc:")) return;
     if (!expCache[k] || periodicFull) {
       loadExpansionFor(k);
@@ -1889,6 +1912,21 @@ function refreshExpandedServices(opts = {}) {
     }
     refreshServiceExpansionLight(k);
   });
+}
+
+// refreshExpandedWatches refetches recent events once per dashboard refresh and
+// re-renders every open watch expansion from that single response, instead of
+// one events download per expanded watch per render.
+async function refreshExpandedWatches() {
+  if (document.hidden) return;
+  const keys = [...expanded].filter((k) => k.startsWith("wat:"));
+  if (!keys.length) return;
+  try {
+    const res = await fetch("api/events?limit=200");
+    if (!res.ok) return;
+    const events = (await res.json()) || [];
+    keys.forEach((k) => renderWatchExpansionInto(k, events));
+  } catch (_) { /* keep the last content on a transient error */ }
 }
 
 async function refreshServiceExpansionLight(key) {
@@ -1978,41 +2016,55 @@ function rowClick(event, key) {
   toggleExpand(key);
 }
 
-// loadExpansionFor is the sole renderer of an expansion's detail cell: the row
-// template leaves the <td> empty (no binding) and we litRender into it here, so
-// the outer #rows/watch render and this loader never fight over the same cell.
+// Expansion detail cells are rendered only through litRender into the cell
+// found here (by loadExpansionFor, renderWatchExpansionInto and
+// reassertExpansions): the row template leaves the <td> empty (no binding), so
+// the outer #rows/watch render and these loaders never fight over the same cell.
 function expansionCell(key) {
   const tr = [...document.querySelectorAll("tr.exp-row")].find((r) => r.dataset.exp === key);
   return tr ? tr.querySelector("td") : null;
 }
 
+// renderWatchExpansionInto renders one watch expansion cell from an
+// already-fetched events response, shared by the first-open fetch and the
+// per-poll refresh so expanded watches never each download their own copy.
+function renderWatchExpansionInto(key, events) {
+  const name = key.slice(4);
+  const html = renderWatchExpansion((allWatches || []).find((x) => x.name === name),
+    (events || []).filter((e) => e.watch === name));
+  expCache[key] = html;
+  const target = expansionCell(key);
+  if (target) litRender(html, target);
+}
+
+const expLoading = new Set(); // keys with an in-flight detail fetch
+
 async function loadExpansionFor(key) {
+  if (expLoading.has(key)) return;
+  expLoading.add(key);
   const cell = expansionCell(key);
   if (cell && !expCache[key]) litRender(tpl`<span class="muted">loading…</span>`, cell);
   try {
-    let html;
-    let detailData = null;
     if (key.startsWith("svc:")) {
       const name = key.slice(4);
       const res = await fetch(`api/services/${encodeURIComponent(name)}`);
       if (!res.ok) return;
-      detailData = await res.json();
+      const detailData = await res.json();
       expDetailCache[key] = detailData;
-      html = renderServiceDetail(detailData);
+      const html = renderServiceDetail(detailData);
+      expCache[key] = html;
+      const target = expansionCell(key);
+      if (target) litRender(html, target);
+      hydrateServiceDetail(detailData);
     } else if (key.startsWith("wat:")) {
-      const name = key.slice(4);
       const res = await fetch("api/events?limit=200");
       const events = res.ok ? await res.json() : [];
-      html = renderWatchExpansion((allWatches || []).find((x) => x.name === name),
-        (events || []).filter((e) => e.watch === name));
-    } else {
-      return;
+      renderWatchExpansionInto(key, events);
     }
-    expCache[key] = html;
-    const target = expansionCell(key);
-    if (target) litRender(html, target);
-    if (detailData) hydrateServiceDetail(detailData);
-  } catch (_) { /* keep the last content on a transient error */ }
+  } catch (_) { /* keep the last content on a transient error */
+  } finally {
+    expLoading.delete(key);
+  }
 }
 
 // bucketize folds time-series points into cols buckets covering the last span
@@ -3434,7 +3486,7 @@ function renderWatches(watches) {
   renderWatchPanel("cert", all.filter(isCertWatch));
   renderWatchPanel("diskio", all.filter(isDiskioWatch));
   renderWatchPanel("host", all.filter((w) => !isStorageWatch(w) && !isNetworkWatch(w) && !isCertWatch(w) && !isDiskioWatch(w)));
-  expanded.forEach((k) => { if (k.startsWith("wat:")) loadExpansionFor(k); });
+  reassertExpansions();
   applyHash();
   updateSectionNav();
 }
