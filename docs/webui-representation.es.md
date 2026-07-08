@@ -280,10 +280,12 @@ la API rechaza `umount?kill=1` sin escanear blockers ni enviar señales.
 
 ## Paneles de watches de host
 
-Section ids: `storage-section`, `network-section`, `watches-section`
+Section ids: `storage-section`, `network-section`, `cert-section`,
+`diskio-section`, `watches-section`
 
 `Storage` contiene los watches de `storage`, `Network` contiene los watches `net`/`icmp`,
-y `Host watches` contiene los tipos restantes de watch de host.
+`Certificate watches` contiene los watches `cert`, `Disk I/O watches` contiene
+los watches `diskio`, y `Host watches` contiene los tipos restantes de watch de host.
 
 El resumen de un watch `storage` muestra la ruta, el sistema de archivos, el
 punto de montaje y el espacio usado/libre, además del recuento de **archivos
@@ -298,34 +300,49 @@ aparecen en el detalle del servicio.
 | Parte | Representación actual |
 | --- | --- |
 | Título | nombre del panel más el recuento total del subconjunto de watches de ese panel |
-| Controles | búsqueda, filtro de tipo, filtros de estado, recuento mostrado |
-| Filtro de tipo | `all ... types` específico del panel más los distintos tipos de check presentes actualmente en ese panel |
+| Controles | búsqueda, filtro de tipo (por panel, ver abajo), filtros de estado, recuento mostrado |
+| Filtro de tipo | `all ... types` específico del panel más los valores distintos presentes actualmente en ese panel; Storage filtra por tipo de sistema de archivos (todos sus watches comparten un mismo tipo de check), Certificate watches por algoritmo de clave pública (el desplegable solo aparece con 3+ tipos de clave distintos), Disk I/O no tiene desplegable de tipo |
 | Filtros de estado | all, disabled, ok, starting, failed |
-| Búsqueda | display name, nombre crudo, categoría, tipo, resumen, intervalo, estado de hook/notify y condiciones |
-| Ordenación | Name, Type, Summary, Interval, Polarity, Hook, Notifiers, Last activity, State |
+| Búsqueda | display name, nombre crudo, categoría, tipo, resumen, intervalo, polaridad, estado/comando del hook, nombres de notifiers, estado de expand/dry-run/monitorización y condiciones |
+| Ordenación | todas las cabeceras de columna excepto Actions son ordenables; Storage, Network, Certificate y Disk I/O ordenan por Name por defecto, Host watches mantiene el orden del servidor hasta que se pulsa una cabecera |
 | Visibilidad | oculto cuando no hay watches configurados para el subconjunto de ese panel |
 
-Columnas:
+Columnas por panel (todos los paneles terminan con Last activity, State, Actions):
+
+| Panel | Columnas específicas del panel |
+| --- | --- |
+| Storage | Name, Usage, Filesystem, Mount point |
+| Network | Name, Type, Summary |
+| Certificate watches | Name, Expires, Days left, Issuer, Key type |
+| Disk I/O watches | Name, Device, Util%, Read / Write, Await |
+| Host watches | Name, Type, Summary |
+
+Las columnas de Certificate y Disk I/O leen las lecturas en vivo del watch
+(caducidad del certificado, días restantes, emisor y algoritmo de clave
+pública; dispositivo, utilización, throughput de lectura/escritura y latencia
+await).
+
+Columnas compartidas:
 
 | Columna | Significado |
 | --- | --- |
 | Name | nombre para mostrar, con fallback al nombre, capitalizado |
 | Type | tipo de check |
 | Summary | resumen de estado específico del watch |
-| Interval | intervalo de watch resuelto |
-| Polarity | dispara en fallo / dispara en condición |
-| Hook | estado del hook configurado |
-| Notifiers | recuento/lista de notifiers configurados |
 | Last activity | última actividad de hook/notify |
 | State | estado normalizado único del watch: `disabled` cuando config/monitor state lo excluye de comprobaciones activas, `starting` antes de la primera muestra monitorizada, `failed` para un fallo activo y `ok` en el resto |
 | Actions | monitor/unmonitor y acciones admitidas |
+
+Interval, polaridad (dispara en fallo / en umbral), hook y notifiers no son
+columnas de la tabla; viven en la rejilla de config de la expansión de fila y
+siguen siendo buscables.
 
 Expansión de fila:
 
 | Área | Contenido |
 | --- | --- |
-| Config | categoría, condiciones y umbrales del check |
-| Readings | lecturas actuales del host |
+| Config | tipo, categoría, intervalo, dispara (en fallo / en umbral), estado, flag de monitorización, hook, notifiers, dry run |
+| Readings | lecturas actuales del host, seguidas de las condiciones y umbrales del check |
 | Activity | eventos recientes del watch |
 | Expand | acción de expansión de almacenamiento cuando está configurada |
 
@@ -337,6 +354,10 @@ Estados vacíos:
 - `No storage watches match the filter.`
 - `No network watches.`
 - `No network watches match the filter.`
+- `No certificate watches.`
+- `No certificate watches match the filter.`
+- `No disk I/O watches.`
+- `No disk I/O watches match the filter.`
 
 ## Panel de eventos
 

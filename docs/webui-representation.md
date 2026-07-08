@@ -279,10 +279,12 @@ without scanning blockers or sending signals.
 
 ## Host watch panels
 
-Section ids: `storage-section`, `network-section`, `watches-section`
+Section ids: `storage-section`, `network-section`, `cert-section`,
+`diskio-section`, `watches-section`
 
 `Storage` contains `storage` watches, `Network` contains `net`/`icmp` watches,
-and `Host watches` contains the remaining host watch types.
+`Certificate watches` contains `cert` watches, `Disk I/O watches` contains
+`diskio` watches, and `Host watches` contains the remaining host watch types.
 
 A `storage` watch summary shows the path, filesystem, mount point and used/free
 space, plus — when any exist — the count of **open files** on that filesystem
@@ -295,34 +297,48 @@ column, from the same per-process totals already in the service detail.
 | Part | Current representation |
 | --- | --- |
 | Title | Panel name plus total count for that panel's watch subset |
-| Controls | search, type filter, state filters, showing count |
-| Type filter | panel-specific `all ... types` plus the distinct check types currently present in that panel |
+| Controls | search, type filter (per panel, see below), state filters, showing count |
+| Type filter | panel-specific `all ... types` plus the distinct values currently present in that panel; Storage filters by filesystem type (all its watches share one check type), Certificate watches by public-key algorithm (the dropdown only appears with 3+ distinct key types), Disk I/O has no type dropdown |
 | State filters | all, disabled, ok, starting, failed |
-| Search | display name, raw name, category, type, summary, interval, hook/notify state and conditions |
-| Sorting | Name, Type, Summary, Interval, Polarity, Hook, Notifiers, Last activity, State |
+| Search | display name, raw name, category, type, summary, interval, polarity, hook state/command, notifier names, expand/dry-run/monitoring state and conditions |
+| Sorting | every column header except Actions is sortable; Storage, Network, Certificate and Disk I/O default to Name order, Host watches keeps the server order until a header is clicked |
 | Visibility | hidden when no watches are configured for that panel's subset |
 
-Columns:
+Columns per panel (every panel ends with Last activity, State, Actions):
+
+| Panel | Panel-specific columns |
+| --- | --- |
+| Storage | Name, Usage, Filesystem, Mount point |
+| Network | Name, Type, Summary |
+| Certificate watches | Name, Expires, Days left, Issuer, Key type |
+| Disk I/O watches | Name, Device, Util%, Read / Write, Await |
+| Host watches | Name, Type, Summary |
+
+The Certificate and Disk I/O columns read the watch's live readings
+(certificate expiry, days left, issuer and public-key algorithm; device,
+utilization, read/write throughput and await latency).
+
+Shared columns:
 
 | Column | Meaning |
 | --- | --- |
 | Name | display name, falling back to name, capitalized |
 | Type | check type |
 | Summary | watch-specific status summary |
-| Interval | resolved watch interval |
-| Polarity | fires on fail / fires on condition |
-| Hook | configured hook state |
-| Notifiers | configured notifier count/list |
 | Last activity | latest hook/notify activity |
 | State | single normalized watch state: `disabled` when config/monitor state excludes it from active checks, `starting` before the first monitored sample, `failed` for an active failure, otherwise `ok` |
 | Actions | monitor/unmonitor and supported actions |
+
+Interval, polarity (fires on fail / on threshold), hook and notifiers are not
+table columns; they live in the row expansion's config grid and remain
+searchable.
 
 Row expansion:
 
 | Area | Content |
 | --- | --- |
-| Config | category, check conditions and thresholds |
-| Readings | current host readings |
+| Config | type, category, interval, fires (on fail / on threshold), state, monitor flag, hook, notifiers, dry run |
+| Readings | current host readings, then check conditions and thresholds |
 | Activity | recent watch events |
 | Expand | storage expansion action when configured |
 
@@ -334,6 +350,10 @@ Empty states:
 - `No storage watches match the filter.`
 - `No network watches.`
 - `No network watches match the filter.`
+- `No certificate watches.`
+- `No certificate watches match the filter.`
+- `No disk I/O watches.`
+- `No disk I/O watches match the filter.`
 
 ## Events panel
 
