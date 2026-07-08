@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"maps"
 	"path/filepath"
 	"regexp"
@@ -32,25 +31,6 @@ const (
 		virt.ControlKeySocket + ", " +
 		virt.ControlKeyHost + ", " +
 		virt.ControlKeyPort
-
-	controlPathContainer = SectionControl + "." + dockerctl.ControlKeyContainer
-	controlPathDomain    = SectionControl + "." + virt.ControlKeyDomain
-	controlPathHost      = SectionControl + "." + virt.ControlKeyHost
-	controlPathPort      = SectionControl + "." + virt.ControlKeyPort
-	controlPathSocket    = SectionControl + "." + virt.ControlKeySocket
-	controlPathTLS       = SectionControl + "." + dockerctl.ControlKeyTLS
-	controlPathType      = SectionControl + "." + keyType
-	controlPathURI       = SectionControl + "." + virt.ControlKeyURI
-	controlPathUUID      = SectionControl + "." + virt.ControlKeyUUID
-
-	reloadPathCommand = SectionReload + "." + ReloadKeyCommand
-	reloadPathSignal  = SectionReload + "." + ReloadKeySignal
-	reloadPathWhen    = SectionReload + "." + ReloadKeyWhen
-
-	stopPolicyPathCleanOnStop = sectionStopPolicy + "." + keyCleanOnStop
-	stopPolicyPathFilesAbsent = sectionStopPolicy + "." + keyFilesAbsent
-	stopPolicyPathForceKill   = sectionStopPolicy + "." + keyForceKill
-	stopPolicyPathKillOnlyIf  = sectionStopPolicy + "." + keyKillOnlyIf
 )
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
@@ -63,38 +43,6 @@ var validProcessSelectorKeys = set(
 	keyDelete,
 	keyEnableIf,
 )
-
-func processEntryPath(name string) string {
-	return SectionProcesses + "." + name
-}
-
-func processFieldPath(name, field string) string {
-	return processEntryPath(name) + "." + field
-}
-
-func pidfilesRolePath(role string) string {
-	return ServiceKeyPidfiles + "." + role
-}
-
-func serviceBackendPath(backend string) string {
-	return ServiceKeyService + "." + backend
-}
-
-func alsoServiceBackendPath(backend string) string {
-	return ServiceKeyAlsoService + "." + backend
-}
-
-func serviceMonitorFieldPath(monitor, field string) string {
-	return monitor + "." + field
-}
-
-func serviceMonitorOnChangePath(monitor string) string {
-	return serviceMonitorFieldPath(monitor, ServiceMonitorKeyOnChange)
-}
-
-func serviceMonitorOnChangeFieldPath(monitor, field string) string {
-	return serviceMonitorOnChangePath(monitor) + "." + field
-}
 
 func validateMonitorMode(path string, mode any, add addFunc) {
 	s, isStr := mode.(string)
@@ -171,14 +119,6 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 		add("%s must be a non-empty list of paths/globs", stopPolicyPathFilesAbsent)
 	}
 	validateCleanOnStop(sp[keyCleanOnStop], add)
-}
-
-func stopPolicyFieldPath(field string) string {
-	return sectionStopPolicy + "." + field
-}
-
-func stopPolicyCleanOnStopEntryPath(i int) string {
-	return fmt.Sprintf("%s[%d]", stopPolicyPathCleanOnStop, i)
 }
 
 // protectedDirs are absolute paths that clean_on_stop must never delete

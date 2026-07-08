@@ -137,6 +137,16 @@ Candidatos actuales:
 - Mantener `control.*`, `reload.*`, `watches.*` y `variables.*` cerca de sus
   validadores mientras no haya una API externa que los necesite.
 
+Estado ejecutado:
+
+- Los helpers de paths de validacion/configuracion cruzados se movieron a
+  `internal/config/field_paths.go`.
+- No se creo un paquete nuevo ni una abstraccion global. El owner sigue siendo
+  `internal/config`.
+- `control.*`, `reload.*`, `watches.*`, `variables.*`, `policy.*`, `web.*`,
+  `notifiers.*`, `mount.*`, `pidfiles.*` y helpers relacionados conservan los
+  mismos strings resultantes; el cambio es de ubicacion y ownership.
+
 ### Fase 3: Revisar constantes de estados, acciones y eventos
 
 - Usar constantes tipadas de `rules`, `operation`, `servicemgr`, `checks`,
