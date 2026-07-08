@@ -12,6 +12,10 @@ func init() { Register(dockerProtocol{}) }
 // DefaultDockerSocket is Docker Engine's local Unix API socket.
 const DefaultDockerSocket = dockerctl.DefaultSocket
 
+// DockerContainerStatusRunning is the running status emitted in
+// ExtraKeyContainerStatus.
+const DockerContainerStatusRunning = dockerctl.ContainerStatusRunning
+
 // dockerProtocol probes a Docker Engine daemon over its HTTP API, by default on
 // the local Unix socket /run/docker.sock (set `host` for a TCP daemon, with
 // `tls` for 2376). It GETs /info — proving the daemon is up — and exposes the

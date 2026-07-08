@@ -83,6 +83,17 @@ const (
 // HealthStatusNone is emitted when Docker exposes no container health state.
 const HealthStatusNone = "none"
 
+// ContainerStatus* constants are Docker `.State.Status` labels from inspect.
+const (
+	ContainerStatusCreated    = "created"
+	ContainerStatusDead       = "dead"
+	ContainerStatusExited     = "exited"
+	ContainerStatusPaused     = "paused"
+	ContainerStatusRemoving   = "removing"
+	ContainerStatusRestarting = "restarting"
+	ContainerStatusRunning    = "running"
+)
+
 const networkUnix = netutil.NetworkUnix
 
 // ControlType is the service control.type value for Docker-backed services.
