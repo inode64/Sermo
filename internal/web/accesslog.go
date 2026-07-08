@@ -13,6 +13,7 @@ const (
 	accessFieldActor     = "actor"
 	accessFieldMethod    = "method"
 	accessFieldPath      = "path"
+	accessFieldQuery     = "query"
 	accessFieldSource    = "source"
 	accessFieldStatus    = "status"
 	accessFieldTarget    = "target"
@@ -60,7 +61,7 @@ func (s *Server) recordWebAccess(r *http.Request, status int) {
 	if actor == "" {
 		actor = accessActorAnonymous
 	}
-	_ = s.AccessLog.Write(map[string]any{
+	entry := map[string]any{
 		accessFieldTime:   time.Now().UTC().Format(time.RFC3339),
 		accessFieldSource: accessSourceWeb,
 		accessFieldActor:  actor,
@@ -69,7 +70,14 @@ func (s *Server) recordWebAccess(r *http.Request, status int) {
 		accessFieldStatus: status,
 		accessFieldTarget: target,
 		accessFieldAction: action,
-	})
+	}
+	// Query parameters change what an action does (umount?kill=1, clear?before=,
+	// release?name=), so the audit record must keep them. CSRF travels in a
+	// header, never in the query, so logging the raw string is safe.
+	if q := r.URL.RawQuery; q != "" {
+		entry[accessFieldQuery] = q
+	}
+	_ = s.AccessLog.Write(entry)
 }
 
 func parseAPIAccessTarget(path string) (target, action string) {
@@ -78,7 +86,7 @@ func parseAPIAccessTarget(path string) (target, action string) {
 		return "", ""
 	}
 	switch parts[apiAccessResourceSegment] {
-	case apiSegmentServices, apiSegmentWatches:
+	case apiSegmentServices, apiSegmentWatches, apiSegmentMounts:
 		if len(parts) >= apiAccessTargetSegments {
 			target = parts[apiAccessTargetSegment]
 		}

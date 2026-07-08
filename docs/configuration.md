@@ -329,6 +329,9 @@ Omit a key to leave that channel off.
   SQLite store.
 - `engine.access` records mutating operator traffic: POST actions through the web
   API and state-changing `sermoctl` commands (`monitor`, `start`, `lock`, …).
+  Web records carry the parsed target and action (services, watches, mounts,
+  locks, …) and the request query string when present (for example
+  `umount?kill=1` or `clear?before=24h`), so action-changing flags are audited.
   Routine GET polling is not logged.
 - `engine.diagnostics` runs scheduled configuration/host diagnostics in the
   background (default interval `1h`, overridable with `engine.diagnostics_interval`)
