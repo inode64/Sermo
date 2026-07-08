@@ -502,6 +502,18 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/checks ./internal/diag` y
   `make check` pasan.
 
+### Fase 26: Helper `/proc/self` compartido
+
+- Mantener la construccion de paths procfs en `internal/process`.
+- Reutilizar `/proc/self/fd` desde CLI sin duplicar el path literal.
+
+Estado ejecutado:
+
+- `process.SelfPath` construye paths bajo `/proc/self`.
+- La deteccion de terminal de `sermoctl` usa `process.SelfPath(process.ProcFileFD)`.
+- Validacion ejecutada: `go test ./internal/process ./internal/cli` y
+  `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.

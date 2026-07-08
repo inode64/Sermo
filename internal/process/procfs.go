@@ -9,6 +9,7 @@ import (
 
 const (
 	procRoot        = "/proc"
+	procSelf        = "self"
 	procFileCmdline = "cmdline"
 	procFileExe     = "exe"
 	procFileFD      = "fd"
@@ -33,6 +34,10 @@ func procPIDPath(pid int, name string) string {
 	return filepath.Join(procRoot, strconv.Itoa(pid), name)
 }
 
+func procSelfPath(name string) string {
+	return filepath.Join(procRoot, procSelf, name)
+}
+
 // ProcFileFD is the /proc/<pid>/fd directory name.
 const ProcFileFD = procFileFD
 
@@ -45,6 +50,11 @@ const ProcFileRoot = procFileRoot
 // PIDPath returns a path under /proc/<pid>.
 func PIDPath(pid int, name string) string {
 	return procPIDPath(pid, name)
+}
+
+// SelfPath returns a path under /proc/self.
+func SelfPath(name string) string {
+	return procSelfPath(name)
 }
 
 // TrimDeletedSuffix removes the kernel suffix appended to deleted file links.
