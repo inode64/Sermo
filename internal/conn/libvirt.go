@@ -17,6 +17,10 @@ func init() { Register(libvirtProtocol{}, protocolAliasLibvirtd) }
 const DefaultLibvirtSocket = "/run/libvirt/libvirt-sock"
 
 const defaultLibvirtTimeout = 10 * time.Second
+
+// DefaultLibvirtTimeout is the fallback timeout for libvirt connections.
+const DefaultLibvirtTimeout = defaultLibvirtTimeout
+
 const libvirtTransportSocket = "socket"
 const libvirtNodeMemoryKiBPerMiB = 1024
 
@@ -197,7 +201,7 @@ func libvirtTransport(cfg Config) (mode, addr, uri string) {
 func libvirtTimeout(ctx context.Context) time.Duration {
 	dl, ok := ctx.Deadline()
 	if !ok {
-		return defaultLibvirtTimeout
+		return DefaultLibvirtTimeout
 	}
 	if d := time.Until(dl); d > 0 {
 		return d
