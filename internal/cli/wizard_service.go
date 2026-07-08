@@ -22,39 +22,11 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/dockerctl"
 	"sermo/internal/execx"
+	"sermo/internal/procnet"
 	"sermo/internal/servicemgr"
 	"sermo/internal/virt"
 
 	"github.com/goccy/go-yaml"
-)
-
-const (
-	procNetTCPPath        = "/proc/net/tcp"
-	procNetTCP6Path       = "/proc/net/tcp6"
-	procNetUDPPath        = "/proc/net/udp"
-	procNetUDP6Path       = "/proc/net/udp6"
-	procNetHeaderField    = "sl"
-	procNetAddressSep     = ":"
-	procNetMinFields      = 4
-	procNetHeaderIndex    = 0
-	procNetLocalAddrIndex = 1
-	procNetStateIndex     = 3
-	procNetStateListen    = "0A"
-	procNetStateUDPReady  = "07"
-
-	procNetHexBase          = 16
-	procNetPortBits         = 16
-	procNetIPv4HexChars     = 8
-	procNetIPv4Bits         = 32
-	procNetIPv6HexChars     = 32
-	procNetIPv6Words        = 4
-	procNetIPv6WordHexChars = 8
-	procNetIPv6WordBits     = 32
-
-	ipv4Byte0 = 0
-	ipv4Byte1 = 1
-	ipv4Byte2 = 2
-	ipv4Byte3 = 3
 )
 
 // listInstalledCatalogServices returns active service targets for the wizard: catalog
@@ -384,10 +356,10 @@ type procSocketTable struct {
 
 func procSocketTables() []procSocketTable {
 	return []procSocketTable{
-		{path: procNetTCPPath, states: map[string]bool{procNetStateListen: true}},
-		{path: procNetTCP6Path, states: map[string]bool{procNetStateListen: true}, ipv6: true},
-		{path: procNetUDPPath, states: map[string]bool{procNetStateUDPReady: true}},
-		{path: procNetUDP6Path, states: map[string]bool{procNetStateUDPReady: true}, ipv6: true},
+		{path: procnet.PathTCP, states: map[string]bool{procnet.StateListen: true}},
+		{path: procnet.PathTCP6, states: map[string]bool{procnet.StateListen: true}, ipv6: true},
+		{path: procnet.PathUDP, states: map[string]bool{procnet.StateUDPReady: true}},
+		{path: procnet.PathUDP6, states: map[string]bool{procnet.StateUDPReady: true}, ipv6: true},
 	}
 }
 
@@ -423,17 +395,17 @@ func parseProcSocketTable(r io.Reader, port int, states map[string]bool) (bool, 
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
-		if len(fields) < procNetMinFields || fields[procNetHeaderIndex] == procNetHeaderField {
+		if len(fields) < procnet.MinFields || fields[procnet.HeaderIndex] == procnet.HeaderField {
 			continue
 		}
-		if !states[strings.ToUpper(fields[procNetStateIndex])] {
+		if !states[strings.ToUpper(fields[procnet.StateIndex])] {
 			continue
 		}
-		_, portHex, ok := strings.Cut(fields[procNetLocalAddrIndex], procNetAddressSep)
+		_, portHex, ok := strings.Cut(fields[procnet.LocalAddressIndex], procnet.AddressSeparator)
 		if !ok {
 			continue
 		}
-		got, err := strconv.ParseUint(portHex, procNetHexBase, procNetPortBits)
+		got, err := strconv.ParseUint(portHex, procnet.HexBase, procnet.PortBits)
 		if err != nil {
 			continue
 		}
@@ -449,17 +421,17 @@ func parseProcSocketTableHosts(r io.Reader, port int, states map[string]bool, ip
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
-		if len(fields) < procNetMinFields || fields[procNetHeaderIndex] == procNetHeaderField {
+		if len(fields) < procnet.MinFields || fields[procnet.HeaderIndex] == procnet.HeaderField {
 			continue
 		}
-		if !states[strings.ToUpper(fields[procNetStateIndex])] {
+		if !states[strings.ToUpper(fields[procnet.StateIndex])] {
 			continue
 		}
-		hostHex, portHex, ok := strings.Cut(fields[procNetLocalAddrIndex], procNetAddressSep)
+		hostHex, portHex, ok := strings.Cut(fields[procnet.LocalAddressIndex], procnet.AddressSeparator)
 		if !ok {
 			continue
 		}
-		got, err := strconv.ParseUint(portHex, procNetHexBase, procNetPortBits)
+		got, err := strconv.ParseUint(portHex, procnet.HexBase, procnet.PortBits)
 		if err != nil || int(got) != port {
 			continue
 		}
@@ -479,27 +451,27 @@ func procSocketHost(hexAddr string, ipv6 bool) (string, bool) {
 }
 
 func procIPv4Host(hexAddr string) (string, bool) {
-	if len(hexAddr) != procNetIPv4HexChars {
+	if len(hexAddr) != procnet.IPv4HexChars {
 		return "", false
 	}
-	raw, err := strconv.ParseUint(hexAddr, procNetHexBase, procNetIPv4Bits)
+	raw, err := strconv.ParseUint(hexAddr, procnet.HexBase, procnet.IPv4Bits)
 	if err != nil {
 		return "", false
 	}
 	var b [net.IPv4len]byte
 	binary.LittleEndian.PutUint32(b[:], uint32(raw))
-	ip := net.IPv4(b[ipv4Byte0], b[ipv4Byte1], b[ipv4Byte2], b[ipv4Byte3])
+	ip := net.IPv4(b[procnet.IPv4Byte0], b[procnet.IPv4Byte1], b[procnet.IPv4Byte2], b[procnet.IPv4Byte3])
 	return ip.String(), true
 }
 
 func procIPv6Host(hexAddr string) (string, bool) {
-	if len(hexAddr) != procNetIPv6HexChars {
+	if len(hexAddr) != procnet.IPv6HexChars {
 		return "", false
 	}
 	var b [net.IPv6len]byte
-	for i := 0; i < procNetIPv6Words; i++ {
-		start := i * procNetIPv6WordHexChars
-		raw, err := strconv.ParseUint(hexAddr[start:start+procNetIPv6WordHexChars], procNetHexBase, procNetIPv6WordBits)
+	for i := 0; i < procnet.IPv6Words; i++ {
+		start := i * procnet.IPv6WordHexChars
+		raw, err := strconv.ParseUint(hexAddr[start:start+procnet.IPv6WordHexChars], procnet.HexBase, procnet.IPv6WordBits)
 		if err != nil {
 			return "", false
 		}
