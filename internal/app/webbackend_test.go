@@ -318,6 +318,45 @@ func TestWebBackendMonitoringStatusAvoidsServiceViewWork(t *testing.T) {
 	}
 }
 
+func TestWebBackendStatusCacheIgnoresCancelledRequests(t *testing.T) {
+	now := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
+	calls := 0
+	e := &webEntry{status: func(ctx context.Context) (servicemgr.Status, error) {
+		calls++
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		return servicemgr.StatusActive, nil
+	}}
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if got := e.backendStatus(cancelled, now); got != string(servicemgr.StatusUnknown) {
+		t.Fatalf("cold cancelled status = %q, want unknown", got)
+	}
+	if !e.statusAt.IsZero() {
+		t.Fatalf("cancelled request populated statusAt = %v, want zero", e.statusAt)
+	}
+
+	if got := e.backendStatus(context.Background(), now); got != string(servicemgr.StatusActive) {
+		t.Fatalf("status = %q, want active", got)
+	}
+
+	// A cancelled probe after TTL expiry must serve the previous entry instead
+	// of caching "error" for every other viewer.
+	later := now.Add(serviceStatusCacheTTL + time.Second)
+	if got := e.backendStatus(cancelled, later); got != string(servicemgr.StatusActive) {
+		t.Fatalf("cancelled status after expiry = %q, want cached active", got)
+	}
+	if got := e.backendStatus(context.Background(), later); got != string(servicemgr.StatusActive) {
+		t.Fatalf("status after cancelled probe = %q, want active from a fresh probe", got)
+	}
+	if calls != 4 {
+		t.Fatalf("status probe calls = %d, want 4", calls)
+	}
+}
+
 func TestWebBackendLastEventIndexes(t *testing.T) {
 	events := NewEventLog(10)
 	t0 := time.Date(2026, 6, 7, 14, 0, 0, 0, time.UTC)
@@ -475,6 +514,38 @@ func TestWebBackendApplicationsCache(t *testing.T) {
 	third := b.Applications(context.Background())
 	if calls != 2 || len(third) != 1 || third[0].Name != "second" {
 		t.Fatalf("expired Applications = %v, calls=%d; want refreshed second", third, calls)
+	}
+}
+
+func TestWebBackendApplicationsCacheIgnoresCancelledRequests(t *testing.T) {
+	b := &WebBackend{
+		applicationsList: func(ctx context.Context) []web.Application {
+			if ctx.Err() != nil {
+				// A cancelled request aborts inspection early and yields a
+				// partial inventory; model that as an empty list.
+				return nil
+			}
+			return []web.Application{{Name: "complete"}}
+		},
+	}
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if got := b.Applications(cancelled); len(got) != 0 {
+		t.Fatalf("cold cancelled Applications = %v, want empty partial result", got)
+	}
+	if !b.applicationsAt.IsZero() {
+		t.Fatalf("cancelled request populated applicationsAt = %v, want zero", b.applicationsAt)
+	}
+
+	if got := b.Applications(context.Background()); len(got) != 1 || got[0].Name != "complete" {
+		t.Fatalf("Applications = %v, want complete inventory", got)
+	}
+
+	b.applicationsAt = time.Now().Add(-applicationsCacheTTL - time.Nanosecond)
+	if got := b.Applications(cancelled); len(got) != 1 || got[0].Name != "complete" {
+		t.Fatalf("cancelled Applications after expiry = %v, want previous complete cache", got)
 	}
 }
 
@@ -982,6 +1053,21 @@ func TestWebBackendAdditionalHostWatchReadings(t *testing.T) {
 	}
 	if got := readingByField(diskio.Readings, "read_bytes").Value; got != "1024 B/s" {
 		t.Fatalf("diskio read = %q, want 1024 B/s", got)
+	}
+
+	// A second viewer polling inside diskIORateMinWindow must not re-base the
+	// shared delta baseline over a near-zero window; it re-serves the rates
+	// computed for the previous poll.
+	now = now.Add(200 * time.Millisecond)
+	quick := map[string]web.Watch{}
+	for _, w := range b.Watches(context.Background()) {
+		quick[w.Name] = w
+	}
+	if got := readingByField(quick["diskio-root"].Readings, "util_pct").Value; got != "50.00%" {
+		t.Fatalf("diskio util on quick re-poll = %q, want cached 50.00%%", got)
+	}
+	if got := readingByField(quick["diskio-root"].Readings, "read_bytes").Value; got != "1024 B/s" {
+		t.Fatalf("diskio read on quick re-poll = %q, want cached 1024 B/s", got)
 	}
 
 	edac := byName["edac"]
