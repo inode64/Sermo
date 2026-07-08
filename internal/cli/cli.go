@@ -61,6 +61,7 @@ const (
 	defaultProbeCommandTimeout = 2 * time.Second
 	defaultListCommandTimeout  = 30 * time.Second
 	daemonWebClientTimeout     = 10 * time.Second
+	defaultEventsListLimit     = 50
 )
 
 const (
@@ -1432,7 +1433,7 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 	}
 
 	// list mode: `sermoctl events [SERVICE] [--limit N]`
-	limit := 50
+	limit := defaultEventsListLimit
 	if opts.eventLimit > 0 {
 		limit = opts.eventLimit
 	}
