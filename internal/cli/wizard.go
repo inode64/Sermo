@@ -45,11 +45,7 @@ const (
 	serviceFamilyDocker = dockerctl.ControlType
 	serviceFamilyVM     = assist.AssistantNameVM
 
-	loopbackIfaceName       = "lo"
-	wizardSysfsNetClassPath = "/sys/class/net"
-	wizardSysfsHexPrefix    = "0x"
-	wizardSysfsFlagsBase    = 16
-	wizardSysfsFlagsBits    = 64
+	loopbackIfaceName = "lo"
 
 	wizardConfigDirMode  = 0o755
 	wizardConfigFileMode = 0o644
@@ -299,7 +295,7 @@ func listWizardMounts() ([]assist.MountCandidate, error) {
 func listIfaces() ([]assist.Iface, error) {
 	ifs, err := net.Interfaces()
 	if err != nil {
-		return listIfacesFromSysfs(wizardSysfsNetClassPath)
+		return listIfacesFromSysfs(checks.SysfsNetClassPath)
 	}
 	out := make([]assist.Iface, 0, len(ifs))
 	for _, in := range ifs {
@@ -312,7 +308,7 @@ func listIfaces() ([]assist.Iface, error) {
 		})
 	}
 	if !hasNonLoopbackIface(out) {
-		if sysfs, err := listIfacesFromSysfs(wizardSysfsNetClassPath); err == nil && hasNonLoopbackIface(sysfs) {
+		if sysfs, err := listIfacesFromSysfs(checks.SysfsNetClassPath); err == nil && hasNonLoopbackIface(sysfs) {
 			return sysfs, nil
 		}
 	}
@@ -340,8 +336,8 @@ func listIfacesFromSysfs(root string) ([]assist.Iface, error) {
 		}
 		name := entry.Name()
 		dir := filepath.Join(root, name)
-		flags := sysfsIfaceFlags(filepath.Join(dir, "flags"))
-		operstate := strings.TrimSpace(readSmallFile(filepath.Join(dir, "operstate")))
+		flags := sysfsIfaceFlags(filepath.Join(dir, checks.SysfsIfaceFlagsFile))
+		operstate := strings.TrimSpace(readSmallFile(filepath.Join(dir, checks.SysfsIfaceOperstateFile)))
 		loopback := flags&checks.SysfsIfaceFlagLoopback != 0 || name == loopbackIfaceName
 		up := flags&checks.SysfsIfaceFlagUp != 0 && (flags&checks.SysfsIfaceFlagRunning != 0 || operstate == checks.NetStateUp || operstate == checks.NetStateUnknown)
 		out = append(out, assist.Iface{Name: name, Up: up, Loopback: loopback})
@@ -352,8 +348,8 @@ func listIfacesFromSysfs(root string) ([]assist.Iface, error) {
 
 func sysfsIfaceFlags(path string) uint64 {
 	raw := strings.TrimSpace(readSmallFile(path))
-	raw = strings.TrimPrefix(raw, wizardSysfsHexPrefix)
-	flags, _ := strconv.ParseUint(raw, wizardSysfsFlagsBase, wizardSysfsFlagsBits)
+	raw = strings.TrimPrefix(raw, checks.SysfsIfaceHexValuePrefix)
+	flags, _ := strconv.ParseUint(raw, checks.SysfsIfaceFlagsBase, checks.SysfsIfaceFlagsBits)
 	return flags
 }
 
