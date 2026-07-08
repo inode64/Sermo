@@ -78,7 +78,7 @@ const (
 	openRCRuntimeDir = "/run/openrc"
 	openRCInitDir    = "/etc/init.d"
 	openRCConfDir    = "/etc/conf.d"
-	openRCDaemonsDir = "/run/openrc/daemons"
+	openRCDaemonsDir = openRCRuntimeDir + "/daemons"
 	pid1CommPath     = "/proc/1/comm"
 )
 
