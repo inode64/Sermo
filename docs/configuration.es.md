@@ -343,7 +343,10 @@ cuando se establece; los directorios padre se crean según sea necesario (direct
   almacén SQLite.
 - `engine.access` registra el tráfico mutador del operador: acciones POST a través de la
   API web y comandos `sermoctl` que cambian el estado (`monitor`, `start`, `lock`, …).
-  El polling GET rutinario no se registra.
+  Los registros web llevan el target y la acción parseados (services, watches,
+  mounts, locks, …) y la query string de la petición cuando existe (por ejemplo
+  `umount?kill=1` o `clear?before=24h`), de modo que los flags que alteran la
+  acción quedan auditados. El polling GET rutinario no se registra.
 - `engine.diagnostics` ejecuta diagnósticos programados de configuración/host en segundo
   plano (intervalo por defecto `1h`, sustituible con `engine.diagnostics_interval`)
   y añade cada snapshot como una línea JSON al archivo. Rota y conserva el archivo con
