@@ -427,7 +427,7 @@ func cpuPercent(prevTicks, curTicks uint64, prevAt, now time.Time) (float64, boo
 		return 0, false
 	}
 	secs := float64(curTicks-prevTicks) / metrics.LinuxClockTicks
-	return secs / (wall * float64(n)) * percentScale, true
+	return secs / (wall * float64(n)) * metrics.PercentScale, true
 }
 
 // ioBytesPerSec derives a process's IO rate from two cumulative byte samples.

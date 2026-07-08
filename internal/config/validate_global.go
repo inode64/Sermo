@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -10,6 +9,26 @@ import (
 	"sermo/internal/notify"
 	"sermo/internal/rules"
 )
+
+const (
+	webPathAddress       = SectionWeb + "." + WebKeyAddress
+	webPathGuest         = SectionWeb + "." + WebKeyGuest
+	webPathGuestPassword = SectionWeb + "." + WebKeyGuestPassword
+	webPathPassword      = SectionWeb + "." + WebKeyPassword
+	webPathPort          = SectionWeb + "." + WebKeyPort
+)
+
+func notifierPath(name string) string {
+	return pathKeyNotifiers + "." + name
+}
+
+func notifierFieldPath(name, field string) string {
+	return notifierPath(name) + "." + field
+}
+
+func defaultsVariablePath(name string) string {
+	return defaultsPathVariables + "." + name
+}
 
 // validateWatches checks each host-watch entry: a known check type with valid
 // thresholds and a local action or inherited global notify default.
@@ -20,24 +39,28 @@ func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 	if portRaw, present := webCfg[WebKeyPort]; present {
 		port, ok := cfgval.Int(portRaw)
 		if !ok || !validTCPPort(port) {
-			add(validationTCPPortRangeFormat, "web."+WebKeyPort, cfgval.TCPPortRange())
+			add(validationTCPPortRangeFormat, webPathPort, cfgval.TCPPortRange())
 		}
 	}
 	if v, present := webCfg[WebKeyAddress]; present {
 		if _, isStr := v.(string); !isStr {
-			add("web.address must be a string")
+			add("%s must be a string", webPathAddress)
 		}
 	}
-	for _, key := range []string{WebKeyPassword, WebKeyGuestPassword} {
+	for _, pathAndKey := range [][2]string{
+		{webPathPassword, WebKeyPassword},
+		{webPathGuestPassword, WebKeyGuestPassword},
+	} {
+		path, key := pathAndKey[0], pathAndKey[1]
 		if v, present := webCfg[key]; present {
 			if _, isStr := v.(string); !isStr {
-				add("web.%s must be a string", key)
+				add("%s must be a string", path)
 			}
 		}
 	}
 	if v, present := webCfg[WebKeyGuest]; present {
 		if _, isBool := v.(bool); !isBool {
-			add("web.guest must be a boolean (allow anonymous read-only access)")
+			add("%s must be a boolean (allow anonymous read-only access)", webPathGuest)
 		}
 	}
 }
@@ -62,18 +85,19 @@ const (
 // type with the fields that type needs. New transports validate here too.
 func validateNotifiers(notifiers map[string]any, templateDir string, add func(string, ...any)) {
 	for _, name := range slices.Sorted(maps.Keys(notifiers)) {
+		path := notifierPath(name)
 		if name == NotifyNone {
-			add("notifiers.%s: %q is a reserved keyword and cannot name a notifier", name, NotifyNone)
+			add("%s: %q is a reserved keyword and cannot name a notifier", path, NotifyNone)
 			continue
 		}
 		entry, ok := notifiers[name].(map[string]any)
 		if !ok {
-			add("notifiers.%s must be a mapping", name)
+			add("%s must be a mapping", path)
 			continue
 		}
 		if v, present := entry[keyEnabled]; present {
 			if _, ok := v.(bool); !ok {
-				add(validationBooleanFormat, "notifiers."+name+"."+keyEnabled)
+				add(validationBooleanFormat, notifierFieldPath(name, keyEnabled))
 			}
 		}
 		if enabled, ok := entry[keyEnabled].(bool); ok && !enabled {
@@ -84,38 +108,38 @@ func validateNotifiers(notifiers map[string]any, templateDir string, add func(st
 		case notify.TypeEmail:
 			dsn := cfgval.String(entry[notify.KeyDSN])
 			if dsn == "" {
-				add("notifiers.%s.dsn is required for an email notifier", name)
+				add("%s is required for an email notifier", notifierFieldPath(name, notify.KeyDSN))
 			} else if !strings.HasPrefix(dsn, notify.EmailDSNPrefixSMTP) && !strings.HasPrefix(dsn, notify.EmailDSNPrefixSMTPS) {
-				add("notifiers.%s.dsn must be an smtp:// or smtps:// URL", name)
+				add("%s must be an smtp:// or smtps:// URL", notifierFieldPath(name, notify.KeyDSN))
 			}
 			if cfgval.String(entry[notify.KeyFrom]) == "" {
-				add("notifiers.%s.from is required for an email notifier", name)
+				add("%s is required for an email notifier", notifierFieldPath(name, notify.KeyFrom))
 			}
 			if !cfgval.IsNonEmptyStringList(entry[notify.KeyTo]) {
-				add("notifiers.%s.to must list at least one address", name)
+				add("%s must list at least one address", notifierFieldPath(name, notify.KeyTo))
 			}
 		case notify.TypeSlack, notify.TypeTeams:
 			wh := cfgval.String(entry[notify.KeyWebhook])
 			if wh == "" {
-				add("notifiers.%s.webhook is required for a %s notifier", name, typ)
+				add("%s is required for a %s notifier", notifierFieldPath(name, notify.KeyWebhook), typ)
 			} else if !strings.HasPrefix(wh, notify.WebhookURLPrefixHTTP) && !strings.HasPrefix(wh, notify.WebhookURLPrefixHTTPS) {
-				add("notifiers.%s.webhook must be an http(s) URL", name)
+				add("%s must be an http(s) URL", notifierFieldPath(name, notify.KeyWebhook))
 			}
 		case notify.TypeTTY:
 			if users, present := entry[notify.KeyUsers]; present && !cfgval.IsStringOrStringList(users) {
-				add(validationStringListFormat, "notifiers."+name+"."+notify.KeyUsers)
+				add(validationStringListFormat, notifierFieldPath(name, notify.KeyUsers))
 			}
 		case notify.TypeWall:
 			if _, present := entry[notify.KeyUsers]; present {
-				add("notifiers.%s.users is not supported for a wall notifier; use type tty to target specific users", name)
+				add("%s is not supported for a wall notifier; use type tty to target specific users", notifierFieldPath(name, notify.KeyUsers))
 			}
 		case "":
-			add("notifiers.%s.type is required", name)
+			add("%s is required", notifierFieldPath(name, notify.KeyType))
 		default:
 			// The vocabulary comes from the notify registry, so adding a
 			// transport there cannot leave validation rejecting it by drift.
 			if !slices.Contains(notify.SupportedTypes(), typ) {
-				add("notifiers.%s.type %q is not supported (%s)", name, typ, strings.Join(notify.SupportedTypes(), ", "))
+				add("%s %q is not supported (%s)", notifierFieldPath(name, notify.KeyType), typ, strings.Join(notify.SupportedTypes(), ", "))
 			}
 		}
 	}
@@ -128,11 +152,11 @@ func validateNotifierTemplate(name string, entry map[string]any, templateDir str
 	}
 	templateName, ok := raw.(string)
 	if !ok || strings.TrimSpace(templateName) == "" {
-		add("notifiers.%s.template must be a template name", name)
+		add("%s must be a template name", notifierFieldPath(name, notify.KeyTemplate))
 		return
 	}
 	if _, err := notify.LoadTemplate(templateDir, templateName); err != nil {
-		add("notifiers.%s.template %q is invalid: %v", name, templateName, err)
+		add("%s %q is invalid: %v", notifierFieldPath(name, notify.KeyTemplate), templateName, err)
 	}
 }
 
@@ -189,14 +213,14 @@ func validateNotifyRefs(name string, entry map[string]any, notifiers map[string]
 			return
 		}
 		if _, present := t[rules.RuleFieldNotify]; present {
-			validateNotifySelection(prefix+".then.notify", t[rules.RuleFieldNotify], notifiers, add)
+			validateNotifySelection(thenFieldPath(prefix, rules.RuleFieldNotify), t[rules.RuleFieldNotify], notifiers, add)
 		}
 	}
-	check("watches."+name, entry[rules.RuleFieldThen])
+	check(watchPath(name), entry[rules.RuleFieldThen])
 	if metrics, ok := entry[sectionMetrics].(map[string]any); ok {
 		for _, key := range slices.Sorted(maps.Keys(metrics)) {
 			if m, ok := metrics[key].(map[string]any); ok {
-				check(fmt.Sprintf("watches.%s.metrics.%s", name, key), m[rules.RuleFieldThen])
+				check(watchMetricPath(name, key), m[rules.RuleFieldThen])
 			}
 		}
 	}
@@ -219,15 +243,15 @@ func validateDefaultsVariables(defaults map[string]any, add addFunc) {
 	}
 	m, ok := v.(map[string]any)
 	if !ok {
-		add("defaults.variables must be a mapping of name -> value")
+		add("%s must be a mapping of name -> value", defaultsPathVariables)
 		return
 	}
 	for _, name := range slices.Sorted(maps.Keys(m)) {
 		if _, reserved := reservedVarNames[name]; reserved {
-			add("defaults.variables: %q is a reserved name and cannot be a custom variable", name)
+			add("%s: %q is a reserved name and cannot be a custom variable", defaultsPathVariables, name)
 		}
 		if _, isMap := m[name].(map[string]any); isMap {
-			add("defaults.variables.%s must be a scalar or a list, not a mapping", name)
+			add("%s must be a scalar or a list, not a mapping", defaultsVariablePath(name))
 		}
 	}
 }

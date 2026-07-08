@@ -13,6 +13,7 @@ import (
 
 	"sermo/internal/appinspect"
 	"sermo/internal/config"
+	"sermo/internal/metrics"
 	"sermo/internal/notify"
 )
 
@@ -210,9 +211,9 @@ func writeReportCard(b *strings.Builder, label string, value int, color string) 
 
 func writeDistributionBar(b *strings.Builder, stats servicesReportStats) {
 	total := max(stats.Total, 1)
-	okPct := float64(stats.OK) / float64(total) * 100
-	issuePct := float64(stats.Issues) / float64(total) * 100
-	missingPct := float64(stats.NotInstalled) / float64(total) * 100
+	okPct := float64(stats.OK) / float64(total) * metrics.PercentScale
+	issuePct := float64(stats.Issues) / float64(total) * metrics.PercentScale
+	missingPct := float64(stats.NotInstalled) / float64(total) * metrics.PercentScale
 	b.WriteString(`<div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin-bottom:8px;">Distribution</div>`)
 	fmt.Fprintf(b, `<div style="height:12px;border-radius:999px;overflow:hidden;background:#e2e8f0;"><span style="display:inline-block;height:12px;width:%.2f%%;background:#16a34a;"></span><span style="display:inline-block;height:12px;width:%.2f%%;background:#dc2626;"></span><span style="display:inline-block;height:12px;width:%.2f%%;background:#64748b;"></span></div>`, okPct, issuePct, missingPct)
 }

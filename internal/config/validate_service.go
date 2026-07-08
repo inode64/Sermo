@@ -32,6 +32,25 @@ const (
 		virt.ControlKeySocket + ", " +
 		virt.ControlKeyHost + ", " +
 		virt.ControlKeyPort
+
+	controlPathContainer = SectionControl + "." + dockerctl.ControlKeyContainer
+	controlPathDomain    = SectionControl + "." + virt.ControlKeyDomain
+	controlPathHost      = SectionControl + "." + virt.ControlKeyHost
+	controlPathPort      = SectionControl + "." + virt.ControlKeyPort
+	controlPathSocket    = SectionControl + "." + virt.ControlKeySocket
+	controlPathTLS       = SectionControl + "." + dockerctl.ControlKeyTLS
+	controlPathType      = SectionControl + "." + keyType
+	controlPathURI       = SectionControl + "." + virt.ControlKeyURI
+	controlPathUUID      = SectionControl + "." + virt.ControlKeyUUID
+
+	reloadPathCommand = SectionReload + "." + ReloadKeyCommand
+	reloadPathSignal  = SectionReload + "." + ReloadKeySignal
+	reloadPathWhen    = SectionReload + "." + ReloadKeyWhen
+
+	stopPolicyPathCleanOnStop = sectionStopPolicy + "." + keyCleanOnStop
+	stopPolicyPathFilesAbsent = sectionStopPolicy + "." + keyFilesAbsent
+	stopPolicyPathForceKill   = sectionStopPolicy + "." + keyForceKill
+	stopPolicyPathKillOnlyIf  = sectionStopPolicy + "." + keyKillOnlyIf
 )
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
@@ -44,6 +63,38 @@ var validProcessSelectorKeys = set(
 	keyDelete,
 	keyEnableIf,
 )
+
+func processEntryPath(name string) string {
+	return SectionProcesses + "." + name
+}
+
+func processFieldPath(name, field string) string {
+	return processEntryPath(name) + "." + field
+}
+
+func pidfilesRolePath(role string) string {
+	return ServiceKeyPidfiles + "." + role
+}
+
+func serviceBackendPath(backend string) string {
+	return ServiceKeyService + "." + backend
+}
+
+func alsoServiceBackendPath(backend string) string {
+	return ServiceKeyAlsoService + "." + backend
+}
+
+func serviceMonitorFieldPath(monitor, field string) string {
+	return monitor + "." + field
+}
+
+func serviceMonitorOnChangePath(monitor string) string {
+	return serviceMonitorFieldPath(monitor, ServiceMonitorKeyOnChange)
+}
+
+func serviceMonitorOnChangeFieldPath(monitor, field string) string {
+	return serviceMonitorOnChangePath(monitor) + "." + field
+}
 
 func validateMonitorMode(path string, mode any, add addFunc) {
 	s, isStr := mode.(string)
@@ -68,19 +119,19 @@ func validateServiceMonitors(tree map[string]any, notifiers map[string]struct{},
 		}
 		ocMap, ok := oc.(map[string]any)
 		if !ok {
-			add("%s.on_change must be a mapping", key)
+			add("%s must be a mapping", serviceMonitorOnChangePath(key))
 			continue
 		}
 		if _, present := ocMap[rules.RuleFieldNotify]; present {
-			validateNotifySelection(key+".on_change.notify", ocMap[rules.RuleFieldNotify], notifiers, add)
+			validateNotifySelection(serviceMonitorOnChangeFieldPath(key, rules.RuleFieldNotify), ocMap[rules.RuleFieldNotify], notifiers, add)
 		}
 		// `level` selects version-change granularity and only applies to the
 		// version monitor, which compares version_short at major/minor/patch.
 		if lv, present := ocMap[ServiceMonitorKeyLevel]; present {
 			if key != ServiceMonitorKeyVersion {
-				add("%s.on_change.level is only supported for the version monitor", key)
+				add("%s is only supported for the version monitor", serviceMonitorOnChangeFieldPath(key, ServiceMonitorKeyLevel))
 			} else if _, ok := checks.VersionLevel(cfgval.String(lv)); !ok {
-				add("version.on_change.level %q is not one of %s", cfgval.String(lv), checks.VersionLevelSummary)
+				add("%s %q is not one of %s", serviceMonitorOnChangeFieldPath(ServiceMonitorKeyVersion, ServiceMonitorKeyLevel), cfgval.String(lv), checks.VersionLevelSummary)
 			}
 		}
 	}
@@ -93,17 +144,17 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 	}
 	for _, field := range []string{keyGracefulTimeout, keyTermTimeout, keyKillTimeout} {
 		if v, present := sp[field]; present && !isPositiveDuration(cfgval.String(v)) {
-			add("stop_policy.%s %q must be a valid positive duration", field, cfgval.String(v))
+			add("%s %q must be a valid positive duration", stopPolicyFieldPath(field), cfgval.String(v))
 		}
 	}
 	force, _ := sp[keyForceKill].(bool)
 	koi, hasKoi := sp[keyKillOnlyIf].(map[string]any)
 	if force && !hasKoi {
-		add("stop_policy.force_kill=true requires kill_only_if")
+		add("%s=true requires %s", stopPolicyPathForceKill, keyKillOnlyIf)
 	}
 	if hasKoi {
 		if !cfgval.IsNonEmptyStringList(koi[keyUsers]) || !cfgval.IsNonEmptyStringList(koi[keyExeAny]) {
-			add("stop_policy.kill_only_if must define both users and exe_any, each non-empty")
+			add("%s must define both %s and %s, each non-empty", stopPolicyPathKillOnlyIf, keyUsers, keyExeAny)
 		}
 	}
 	// Stopped-state invariants (verified after a clean stop). clean_after_stop is
@@ -112,14 +163,22 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 	for _, b := range []string{keyPidfileAbsent, keyCleanAfterStop} {
 		if v, present := sp[b]; present {
 			if _, ok := v.(bool); !ok {
-				add(validationBooleanLiteralFormat, "stop_policy."+b)
+				add(validationBooleanLiteralFormat, stopPolicyFieldPath(b))
 			}
 		}
 	}
 	if v, present := sp[keyFilesAbsent]; present && !cfgval.IsNonEmptyStringList(v) {
-		add("stop_policy.files_absent must be a non-empty list of paths/globs")
+		add("%s must be a non-empty list of paths/globs", stopPolicyPathFilesAbsent)
 	}
 	validateCleanOnStop(sp[keyCleanOnStop], add)
+}
+
+func stopPolicyFieldPath(field string) string {
+	return sectionStopPolicy + "." + field
+}
+
+func stopPolicyCleanOnStopEntryPath(i int) string {
+	return fmt.Sprintf("%s[%d]", stopPolicyPathCleanOnStop, i)
 }
 
 // protectedDirs are absolute paths that clean_on_stop must never delete
@@ -139,10 +198,11 @@ func validateCleanOnStop(raw any, add addFunc) {
 	}
 	list, ok := raw.([]any)
 	if !ok {
-		add("stop_policy.clean_on_stop must be a list")
+		add("%s must be a list", stopPolicyPathCleanOnStop)
 		return
 	}
 	for i, item := range list {
+		entryPath := stopPolicyCleanOnStopEntryPath(i)
 		var path string
 		var recursive bool
 		switch e := item.(type) {
@@ -154,19 +214,19 @@ func validateCleanOnStop(raw any, add addFunc) {
 				var ok bool
 				recursive, ok = rawRecursive.(bool)
 				if !ok {
-					add(validationBooleanFormat, fmt.Sprintf("stop_policy.clean_on_stop[%d].recursive", i))
+					add(validationBooleanFormat, entryPath+"."+keyRecursive)
 				}
 			}
 		default:
-			add("stop_policy.clean_on_stop[%d] must be a path or a {path, recursive} mapping", i)
+			add("%s must be a path or a {path, recursive} mapping", entryPath)
 			continue
 		}
 		if path == "" {
-			add("stop_policy.clean_on_stop[%d] has an empty path", i)
+			add("%s has an empty path", entryPath)
 			continue
 		}
 		if !filepath.IsAbs(path) {
-			add("stop_policy.clean_on_stop[%d] path %q must be absolute", i, path)
+			add("%s path %q must be absolute", entryPath, path)
 			continue
 		}
 		if recursive {
@@ -175,9 +235,9 @@ func validateCleanOnStop(raw any, add addFunc) {
 			clean := filepath.Clean(path)
 			_, isProtected := protectedDirs[clean]
 			if strings.ContainsAny(path, "*?[") {
-				add("stop_policy.clean_on_stop[%d] recursive path %q must not be a glob", i, path)
+				add("%s recursive path %q must not be a glob", entryPath, path)
 			} else if isProtected || pathDepth(clean) < 2 {
-				add("stop_policy.clean_on_stop[%d] refuses to recursively delete %q (root/shallow/system path)", i, path)
+				add("%s refuses to recursively delete %q (root/shallow/system path)", entryPath, path)
 			}
 		}
 	}
@@ -198,7 +258,7 @@ func validateProcesses(tree map[string]any, add addFunc) {
 		return
 	}
 	for _, name := range slices.Sorted(maps.Keys(processes)) {
-		path := "processes." + name
+		path := processEntryPath(name)
 		entry, ok := processes[name].(map[string]any)
 		if !ok {
 			add(validationMappingFormat, path)
@@ -236,30 +296,31 @@ func validatePidfiles(tree map[string]any, add addFunc) {
 	}
 	processes, _ := tree[sectionProcesses].(map[string]any)
 	for _, role := range slices.Sorted(maps.Keys(pidfiles)) {
+		path := pidfilesRolePath(role)
 		if !validDocumentName(role) {
-			add("pidfiles.%s role must be a simple name without path separators", role)
+			add("%s role must be a simple name without path separators", path)
 			continue
 		}
 		paths := cfgval.StringList(pidfiles[role])
 		if len(paths) == 0 {
-			add(validationNonEmptyPathListFormat, "pidfiles."+role)
+			add(validationNonEmptyPathListFormat, path)
 			continue
 		}
 		for _, path := range paths {
 			if !filepath.IsAbs(path) {
-				add("pidfiles.%s path %q must be absolute", role, path)
+				add("%s path %q must be absolute", pidfilesRolePath(role), path)
 			}
 		}
 		entry, ok := processes[role].(map[string]any)
 		if !ok {
-			add("pidfiles.%s requires matching processes.%s", role, role)
+			add("%s requires matching %s", path, processEntryPath(role))
 			continue
 		}
 		if cfgval.String(entry[process.SelectorKeyExe]) == "" {
-			add("pidfiles.%s requires processes.%s.exe for exact pidfile identity", role, role)
+			add("%s requires %s for exact pidfile identity", path, processFieldPath(role, process.SelectorKeyExe))
 		}
 		if cfgval.String(entry[process.SelectorKeyUser]) == "" {
-			add("pidfiles.%s requires processes.%s.user for exact pidfile identity", role, role)
+			add("%s requires %s for exact pidfile identity", path, processFieldPath(role, process.SelectorKeyUser))
 		}
 	}
 }
@@ -271,14 +332,14 @@ func validatePolicyExtras(tree map[string]any, add addFunc) {
 	}
 	if v, present := policy[rules.PolicyKeyMaxActions]; present {
 		if n, ok := cfgval.Int(v); !ok || n <= 0 {
-			add("policy.max_actions must be an integer > 0")
+			add("%s must be an integer > 0", policyPathMaxActions)
 		}
 		if _, hasWindow := policy[rules.PolicyKeyMaxActionsWindow]; !hasWindow {
-			add("policy.max_actions requires policy.max_actions_window")
+			add("%s requires %s", policyPathMaxActions, policyPathMaxActionsWindow)
 		}
 	}
 	if v, present := policy[rules.PolicyKeyMaxActionsWindow]; present && !isPositiveDuration(cfgval.String(v)) {
-		add("policy.max_actions_window %q must be a valid positive duration", cfgval.String(v))
+		add("%s %q must be a valid positive duration", policyPathMaxActionsWindow, cfgval.String(v))
 	}
 	if bo, ok := policy[rules.PolicyKeyBackoff].(map[string]any); ok {
 		initial := cfgval.String(bo[rules.BackoffKeyInitial])
@@ -286,10 +347,10 @@ func validatePolicyExtras(tree map[string]any, add addFunc) {
 		initialOK := isPositiveDuration(initial)
 		maxOK := isPositiveDuration(maxStr)
 		if !initialOK {
-			add("policy.backoff.initial must be a valid positive duration")
+			add("%s must be a valid positive duration", policyPathBackoffInitial)
 		}
 		if !maxOK {
-			add("policy.backoff.max must be a valid positive duration")
+			add("%s must be a valid positive duration", policyPathBackoffMax)
 		}
 		// Only compare once both parse cleanly: otherwise a garbage initial
 		// (di defaulting to 0) would let any max pass, and an omitted max would
@@ -298,7 +359,7 @@ func validatePolicyExtras(tree map[string]any, add addFunc) {
 			di, _ := time.ParseDuration(initial)
 			dm, _ := time.ParseDuration(maxStr)
 			if dm < di {
-				add("policy.backoff.max must be >= initial")
+				add("%s must be >= initial", policyPathBackoffMax)
 			}
 		}
 	}
@@ -323,7 +384,7 @@ func validateControl(tree map[string]any, add addFunc) {
 		validateControlKeys(control, set(dockerctl.ControlKeyType, dockerctl.ControlKeySocket, dockerctl.ControlKeyHost, dockerctl.ControlKeyPort, dockerctl.ControlKeyTLS, dockerctl.ControlKeyContainer), dockerControlKeySummary, add)
 		validateDockerControl(control, add)
 	default:
-		add("control.type %q is not one of %s", typ, controlTypeSummary)
+		add("%s %q is not one of %s", controlPathType, typ, controlTypeSummary)
 	}
 }
 
@@ -337,22 +398,22 @@ func validateControlKeys(control map[string]any, allowed map[string]struct{}, la
 
 func validateLibvirtControl(control map[string]any, add addFunc) {
 	if domain := cfgval.String(control[virt.ControlKeyDomain]); domain == "" {
-		add("control.domain is required for libvirt")
+		add("%s is required for libvirt", controlPathDomain)
 	}
 	if uri := cfgval.String(control[virt.ControlKeyURI]); uri != "" && strings.TrimSpace(uri) == "" {
-		add("control.uri must not be blank")
+		add("%s must not be blank", controlPathURI)
 	}
 	if uuid := cfgval.String(control[virt.ControlKeyUUID]); uuid != "" {
 		if _, err := virt.ParseUUID(uuid); err != nil {
-			add("control.uuid %q must be a canonical UUID or 32 hex digits", uuid)
+			add("%s %q must be a canonical UUID or 32 hex digits", controlPathUUID, uuid)
 		}
 	}
 	if socket := cfgval.String(control[virt.ControlKeySocket]); socket != "" && !virt.ValidSocketPath(socket) {
-		add("control.socket %q must be an absolute path", socket)
+		add("%s %q must be an absolute path", controlPathSocket, socket)
 	}
 	host := cfgval.String(control[virt.ControlKeyHost])
 	if host != "" && strings.TrimSpace(host) == "" {
-		add("control.host must not be blank")
+		add("%s must not be blank", controlPathHost)
 	}
 	if host != "" && cfgval.String(control[virt.ControlKeySocket]) != "" {
 		add("control must not set both socket and host")
@@ -360,21 +421,21 @@ func validateLibvirtControl(control map[string]any, add addFunc) {
 	if _, present := control[virt.ControlKeyPort]; present {
 		port, ok := cfgval.Int(control[virt.ControlKeyPort])
 		if !ok || !virt.ValidHostPort(host, port) {
-			add(validationTCPPortRangeFormat, "control."+virt.ControlKeyPort, cfgval.TCPPortRange())
+			add(validationTCPPortRangeFormat, controlPathPort, cfgval.TCPPortRange())
 		}
 	}
 }
 
 func validateDockerControl(control map[string]any, add addFunc) {
 	if container := cfgval.String(control[dockerctl.ControlKeyContainer]); container == "" {
-		add("control.container is required for docker")
+		add("%s is required for docker", controlPathContainer)
 	}
 	if socket := cfgval.String(control[dockerctl.ControlKeySocket]); socket != "" && !filepath.IsAbs(socket) {
-		add("control.socket %q must be an absolute path", socket)
+		add("%s %q must be an absolute path", controlPathSocket, socket)
 	}
 	host := cfgval.String(control[dockerctl.ControlKeyHost])
 	if host != "" && strings.TrimSpace(host) == "" {
-		add("control.host must not be blank")
+		add("%s must not be blank", controlPathHost)
 	}
 	if host != "" && cfgval.String(control[dockerctl.ControlKeySocket]) != "" {
 		add("control must not set both socket and host")
@@ -382,11 +443,11 @@ func validateDockerControl(control map[string]any, add addFunc) {
 	if _, present := control[dockerctl.ControlKeyPort]; present {
 		port, ok := cfgval.Int(control[dockerctl.ControlKeyPort])
 		if !ok || !validTCPPort(port) {
-			add(validationTCPPortRangeFormat, "control."+dockerctl.ControlKeyPort, cfgval.TCPPortRange())
+			add(validationTCPPortRangeFormat, controlPathPort, cfgval.TCPPortRange())
 		}
 	}
 	if !dockerctl.ValidTLSValue(control[dockerctl.ControlKeyTLS]) {
-		add("control.tls %q is not one of %s", cfgval.String(control[dockerctl.ControlKeyTLS]), dockerctl.TLSValueSummary)
+		add("%s %q is not one of %s", controlPathTLS, cfgval.String(control[dockerctl.ControlKeyTLS]), dockerctl.TLSValueSummary)
 	}
 }
 
@@ -408,7 +469,7 @@ func validateReload(tree map[string]any, backend string, add addFunc) {
 		return
 	}
 	if when := cfgval.AsString(r[ReloadKeyWhen]); when != "" && when != ReloadWhenAuto && when != ReloadWhenAlways {
-		add("reload.when %q must be %s", when, ReloadWhenSummary)
+		add("%s %q must be %s", reloadPathWhen, when, ReloadWhenSummary)
 	}
 	sig := cfgval.AsString(r[ReloadKeySignal])
 	_, hasCmd := r[ReloadKeyCommand]
@@ -417,21 +478,21 @@ func validateReload(tree map[string]any, backend string, add addFunc) {
 		add("reload sets both signal and command; use exactly one")
 	case sig != "":
 		if _, err := process.ParseSignal(sig); err != nil {
-			add("reload.signal %q is not a known signal name (%s)", sig, strings.Join(process.SignalNames(), ", "))
+			add("%s %q is not a known signal name (%s)", reloadPathSignal, sig, strings.Join(process.SignalNames(), ", "))
 		} else if reloadSignalNeedsPidfileIdentity(tree, backend) {
 			pidfile, identity := reloadSignalPidfileIdentity(tree)
 			if !pidfile {
-				add("reload.signal requires top-level pidfile: when the service runs on OpenRC (no MainPID)")
+				add("%s requires top-level pidfile: when the service runs on OpenRC (no MainPID)", reloadPathSignal)
 			}
 			if !identity {
-				add("reload.signal requires a processes selector with both exe and user so the pidfile PID can be verified before signaling")
+				add("%s requires a processes selector with both exe and user so the pidfile PID can be verified before signaling", reloadPathSignal)
 			}
 		}
 	case hasCmd:
-		if !cfgval.IsNonEmptyStringArray(r[checks.CheckKeyCommand]) {
-			add("reload.command must be an array, not a shell string")
-		} else if len(cfgval.StringArray(r[checks.CheckKeyCommand])) == 0 {
-			add("reload.command must not be empty")
+		if !cfgval.IsNonEmptyStringArray(r[ReloadKeyCommand]) {
+			add("%s must be an array, not a shell string", reloadPathCommand)
+		} else if len(cfgval.StringArray(r[ReloadKeyCommand])) == 0 {
+			add("%s must not be empty", reloadPathCommand)
 		}
 	default:
 		add("reload must set either signal or command")
@@ -457,7 +518,7 @@ func reloadSignalNeedsPidfileIdentity(tree map[string]any, backend string) bool 
 
 func reloadSignalPidfileIdentity(tree map[string]any) (pidfile, identity bool) {
 	pidfile = len(cfgval.StringList(tree[ServiceKeyPidfile])) > 0
-	procs, ok := tree[sectionProcesses].(map[string]any)
+	procs, ok := tree[SectionProcesses].(map[string]any)
 	if !ok {
 		return pidfile, false
 	}
@@ -484,15 +545,15 @@ func validateCommands(tree map[string]any, add addFunc) {
 		return
 	}
 	for _, name := range slices.Sorted(maps.Keys(commands)) {
+		path := sectionCommands + "." + name
 		entry, ok := commands[name].(map[string]any)
 		if !ok {
-			add("commands.%s must be a mapping", name)
+			add("%s must be a mapping", path)
 			continue
 		}
-		path := "commands." + name
 		validateCommandFields(path, entry, false, add)
 		if v, present := entry[checks.CheckKeyTimeout]; present && !isPositiveDuration(cfgval.String(v)) {
-			add("commands.%s timeout %q must be a valid positive duration", name, cfgval.String(v))
+			add("%s timeout %q must be a valid positive duration", path, cfgval.String(v))
 		}
 	}
 }
@@ -517,7 +578,7 @@ func validateServiceField(tree map[string]any, add addFunc) {
 			switch k {
 			case backendSystemd, backendOpenRC:
 				if !cfgval.IsNonEmptyStringArray(v[k]) {
-					add("service.%s must be a non-empty list", k)
+					add("%s must be a non-empty list", serviceBackendPath(k))
 				}
 			default:
 				add("service key %q is not one of %s", k, initBackendSummary)
@@ -550,7 +611,7 @@ func validateAlsoService(tree map[string]any, add addFunc) {
 		}
 		units := cfgval.StringList(m[k])
 		if !cfgval.IsNonEmptyStringArray(m[k]) {
-			add("also_service.%s must be a non-empty list", k)
+			add("%s must be a non-empty list", alsoServiceBackendPath(k))
 		}
 		primary := map[string]bool{}
 		if svc != nil {
@@ -560,10 +621,10 @@ func validateAlsoService(tree map[string]any, add addFunc) {
 		}
 		for _, u := range units {
 			if strings.TrimSpace(u) == "" {
-				add("also_service.%s contains an empty unit", k)
+				add("%s contains an empty unit", alsoServiceBackendPath(k))
 			}
 			if primary[u] {
-				add("also_service.%s lists %q, which is the primary service unit", k, u)
+				add("%s lists %q, which is the primary service unit", alsoServiceBackendPath(k), u)
 			}
 		}
 	}

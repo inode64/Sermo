@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sermo/internal/config"
+	"sermo/internal/metrics"
 	"sermo/internal/state"
 )
 
@@ -163,7 +164,7 @@ func formatSLA(v state.SLAValue) string {
 	if !ok {
 		return cliTextNotAvailable
 	}
-	return fmt.Sprintf("%.2f%%", ratio*100)
+	return fmt.Sprintf("%.2f%%", ratio*metrics.PercentScale)
 }
 
 func (a App) writeSLASeriesTable(service string, points []state.SLAPoint) {
@@ -175,7 +176,7 @@ func (a App) writeSLASeriesTable(service string, points []state.SLAPoint) {
 	for _, p := range points {
 		sla := cliTextNotAvailable
 		if ratio, ok := slaPointRatio(p); ok {
-			sla = fmt.Sprintf("%.2f%%", ratio*100)
+			sla = fmt.Sprintf("%.2f%%", ratio*metrics.PercentScale)
 		}
 		fmt.Fprintf(a.Stdout, "%s\t%d\t%d\t%s\n", p.Start.Format(time.RFC3339), p.Up, p.Total, sla)
 	}
