@@ -13,6 +13,13 @@ const (
 	NetworkUnix = "unix"
 )
 
+// URL scheme constants shared by packages that must not depend on each other.
+const (
+	URLSchemeHTTP      = "http"
+	URLSchemeHTTPS     = "https"
+	URLSchemeSeparator = "://"
+)
+
 // JoinHostPort formats host with an integer port using net.JoinHostPort rules.
 func JoinHostPort(host string, port int) string {
 	return net.JoinHostPort(host, strconv.Itoa(port))

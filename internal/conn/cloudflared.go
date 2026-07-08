@@ -74,5 +74,5 @@ func cloudflaredClient(cfg Config) (*http.Client, string) {
 		}
 		client = httpProbeClient(cfg.Interface, tlsConfig)
 	}
-	return client, scheme + "://" + hostPort(host, port)
+	return client, scheme + urlSchemeSeparator + hostPort(host, port)
 }

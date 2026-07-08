@@ -46,7 +46,7 @@ func (syncthingProtocol) Probe(ctx context.Context, cfg Config) (Result, error) 
 		}
 		client = httpProbeClient(cfg.Interface, tlsConfig)
 	}
-	base := scheme + "://" + hostPort(host, port)
+	base := scheme + urlSchemeSeparator + hostPort(host, port)
 
 	// 1. Unauthenticated health check — proves the daemon is up.
 	var health struct {

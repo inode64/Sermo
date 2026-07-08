@@ -701,6 +701,23 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/netutil ./internal/conn
   ./internal/dockerctl ./internal/checks ./internal/virt` y `make check` pasan.
 
+### Fase 39: Constantes compartidas de esquema URL
+
+- Subir los esquemas `http`/`https` y el separador `://` a `internal/netutil`
+  para paquetes que no deben depender entre si.
+- Mantener alias locales o publicos donde son parte del vocabulario del owner,
+  evitando cambios de API.
+
+Estado ejecutado:
+
+- `netutil.URLSchemeHTTP`, `URLSchemeHTTPS` y `URLSchemeSeparator` centralizan
+  el vocabulario generico de URL.
+- `checks.URLSchemeHTTP/HTTPS` quedan como alias publicos; Docker, notify y los
+  probes HTTP-like de `conn` reutilizan el owner generico.
+- No cambia ninguna URL construida ni la validacion de esquemas aceptados.
+- Validacion ejecutada: `go test ./internal/netutil ./internal/checks
+  ./internal/conn ./internal/dockerctl ./internal/notify` y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
