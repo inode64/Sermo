@@ -54,6 +54,9 @@ const (
 	serviceReloadCapabilityTimeout = 2 * time.Second
 	// slaTimelineCacheTTL caches SLA timeline strips for detail/expansion views.
 	slaTimelineCacheTTL = 45 * time.Second
+	// activitySummaryEventScanLimit bounds the recent event scan used for the
+	// dashboard rollup; event list endpoints keep their own request limits.
+	activitySummaryEventScanLimit = 500
 
 	procUptimePath         = "/proc/uptime"
 	procUptimeValueIndex   = 0
@@ -2817,8 +2820,7 @@ func (b *WebBackend) ActivitySummary(ctx context.Context) web.ActivitySummary {
 		return summary
 	}
 
-	// Scan a reasonable number of recent events (cheap for the UI)
-	events := b.events.Recent("", 500)
+	events := b.events.Recent("", activitySummaryEventScanLimit)
 	summary.TotalEvents = len(events)
 
 	if len(events) > 0 {
