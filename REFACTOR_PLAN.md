@@ -584,6 +584,23 @@ Estado ejecutado:
   lectura actual.
 - Validacion ejecutada: `go test ./internal/app` y `make check` pasan.
 
+### Fase 32: Familia completa de unidades metricas
+
+- Completar las unidades canonicas de `internal/metrics` que el backend de
+  lecturas ya mostraba localmente.
+- Mantener fuera solo representaciones que no son identicas.
+
+Estado ejecutado:
+
+- `metrics.MetricUnitBits`, `MetricUnitMegabitsPerSecond` y `MetricUnitVolt`
+  nombran unidades existentes.
+- `internal/app/checkreadings.go` reutiliza esas constantes para entropia, red y
+  voltaje.
+- `watchReadingUnitCelsius = "C"` sigue local porque no equivale al simbolo
+  canonico `metrics.MetricUnitCelsius`.
+- Validacion ejecutada: `go test ./internal/metrics ./internal/app` y
+  `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
