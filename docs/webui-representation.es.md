@@ -85,6 +85,12 @@ Notas editables:
   `/proc/uptime`, expuesto como `host_uptime` en `GET /api/daemon`), no el uptime del
   proceso sermod. El uptime del proceso sermod permanece en el panel del daemon y en
   `GET /livez?verbose`.
+- El feedback de acciones (la línea de estado `#err`, ok/warn/err) permanece
+  visible al menos ~5 segundos: el refresco del dashboard que dispara una acción
+  completada no lo borra, de modo que un resultado como `umount failed: device
+  busy` sigue siendo legible. Iniciar una nueva acción lo borra de inmediato, y
+  el banner de desconexión queda exento — desaparece en el primer refresco
+  exitoso.
 
 ## Tarjetas de resumen
 
