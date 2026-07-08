@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -214,7 +213,7 @@ func NewClient(spec Spec) (*Client, error) {
 		}
 		tr.TLSClientConfig = tc
 	}
-	return &Client{HTTP: &http.Client{Transport: tr}, Base: scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port))}, nil
+	return &Client{HTTP: &http.Client{Transport: tr}, Base: scheme + "://" + netutil.JoinHostPort(host, port)}, nil
 }
 
 // CloseIdleConnections closes idle HTTP transport connections.
