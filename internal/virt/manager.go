@@ -17,6 +17,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
+	"sermo/internal/netutil"
 	"sermo/internal/servicemgr"
 )
 
@@ -395,7 +396,7 @@ func ValidHostPort(host string, port int) bool {
 	if host == "" {
 		return true
 	}
-	_, _, err := net.SplitHostPort(net.JoinHostPort(host, strconv.Itoa(port)))
+	_, _, err := net.SplitHostPort(netutil.JoinHostPort(host, port))
 	return err == nil && cfgval.ValidTCPPort(port)
 }
 

@@ -11,8 +11,6 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"io"
-	"net"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -545,5 +543,5 @@ func randXID32() uint32 {
 }
 
 func hostPort(host string, port int) string {
-	return net.JoinHostPort(host, strconv.Itoa(port))
+	return netutil.JoinHostPort(host, port)
 }

@@ -13,6 +13,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
 	"sermo/internal/execx"
+	"sermo/internal/netutil"
 )
 
 // maxPorts caps a single ports check to keep a scan bounded.
@@ -176,7 +177,7 @@ func (c *portsCheck) probe(ctx context.Context, port int) bool {
 	// With an interface set, a port is "open" if it connects on any (or, with
 	// ifaceAll, every) configured interface.
 	_, _, err := tryInterfaces(c.ifaces, c.ifaceAll, func(iface string) error {
-		nc, e := dial(pctx, iface, net.JoinHostPort(c.host, strconv.Itoa(port)))
+		nc, e := dial(pctx, iface, netutil.JoinHostPort(c.host, port))
 		if e == nil {
 			_ = nc.Close()
 		}

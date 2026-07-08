@@ -10,6 +10,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/conn"
+	"sermo/internal/netutil"
 	"sermo/internal/output"
 )
 
@@ -87,7 +88,7 @@ func (c connCheck) Run(ctx context.Context) Result {
 	}
 	addr := c.cfg.Socket
 	if addr == "" {
-		addr = net.JoinHostPort(c.cfg.Host, strconv.Itoa(c.cfg.Port))
+		addr = netutil.JoinHostPort(c.cfg.Host, c.cfg.Port)
 	}
 	var res conn.Result
 	var elapsed time.Duration

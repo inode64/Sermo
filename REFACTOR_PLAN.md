@@ -683,6 +683,24 @@ Estado ejecutado:
 - No se cambia ningun address resultante ni el uso de `BindDialer`.
 - Validacion ejecutada: `go test ./internal/conn` y `make check` pasan.
 
+### Fase 38: Helper host:port compartido
+
+- Subir el formateo `host` + puerto entero a `internal/netutil` para los usos
+  fuera de `internal/conn`.
+- Mantener `conn.hostPort` como fachada local para no dispersar imports en cada
+  probe.
+
+Estado ejecutado:
+
+- `netutil.JoinHostPort(host, port)` encapsula `net.JoinHostPort` con
+  `strconv.Itoa`.
+- Docker control, checks HTTP/ports/conn y validacion libvirt reutilizan el
+  helper.
+- El helper privado de `conn` delega en `netutil`, conservando el refactor de la
+  fase anterior.
+- Validacion ejecutada: `go test ./internal/netutil ./internal/conn
+  ./internal/dockerctl ./internal/checks ./internal/virt` y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
