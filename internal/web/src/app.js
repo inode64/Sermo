@@ -692,8 +692,16 @@ let appSort = { key: "", dir: 1 };
 let metricWindow = "24h";
 let daemonMetricWindow = "24h";
 let allWatches = [];
+// watchPanels is the single registry of the watch panels: classification
+// (match), section/controls selectors and filter state all live here, and the
+// section's <details data-panel="..."> attribute names the key. Rendering,
+// deep-link routing and attention navigation iterate this object, so adding a
+// panel means one entry here plus its HTML block — no other list to extend.
+// Panels are tried in declaration order; "host" has no match and is the
+// fallback for every remaining watch type.
 const watchPanels = {
   storage: {
+    match: isStorageWatch,
     query: "", status: "all", type: "all", sort: { key: "", dir: 1 }, defaultSortByName: true,
     section: "#storage-section", rows: "#storage-rows", count: "#storage-count",
     filterCount: "#storage-filter-count", filters: "#storage-filters", search: "#storage-search", typeSelect: "#storage-type",
@@ -705,6 +713,7 @@ const watchPanels = {
     rowHTML: storageRowHTML,
   },
   network: {
+    match: isNetworkWatch,
     query: "", status: "all", type: "all", sort: { key: "", dir: 1 }, defaultSortByName: true,
     section: "#network-section", rows: "#network-rows", count: "#network-count",
     filterCount: "#network-filter-count", filters: "#network-filters", search: "#network-search", typeSelect: "#network-type",
@@ -712,6 +721,7 @@ const watchPanels = {
     cols: 6,
   },
   cert: {
+    match: isCertWatch,
     query: "", status: "all", type: "all", sort: { key: "", dir: 1 }, defaultSortByName: true,
     section: "#cert-section", rows: "#cert-rows", count: "#cert-count",
     filterCount: "#cert-filter-count", filters: "#cert-filters", search: "#cert-search", typeSelect: "#cert-type",
@@ -725,6 +735,7 @@ const watchPanels = {
     rowHTML: certRowHTML,
   },
   diskio: {
+    match: isDiskioWatch,
     query: "", status: "all", type: "all", sort: { key: "", dir: 1 }, defaultSortByName: true,
     section: "#diskio-section", rows: "#diskio-rows", count: "#diskio-count",
     filterCount: "#diskio-filter-count", filters: "#diskio-filters", search: "#diskio-search",
@@ -1089,26 +1100,26 @@ function openPanelTarget(target) {
     return;
   }
   if (target === "failed-watches") {
-    // Storage and network watches live in their own panels; a firing one could be
-    // in any of the three, so open all and scroll to whichever actually holds it.
-    const storage = $("#storage-section");
-    const network = $("#network-section");
-    const sec = $("#watches-section");
-    [storage, network, sec].forEach((s) => { if (s) s.open = true; });
+    // Each watch panel is its own <details>; a firing watch could be in any of
+    // them, so open all and scroll to whichever actually holds one (in panel
+    // declaration order, Host watches as the fallback).
+    openAllWatchPanels();
     setAllWatchStatuses("failed");
-    const firing = (w) => isWatchAttention(w);
-    let dest = sec;
-    if (storage && panelVisible(storage) && (allWatches || []).some((w) => isStorageWatch(w) && firing(w))) dest = storage;
-    else if (network && panelVisible(network) && (allWatches || []).some((w) => isNetworkWatch(w) && firing(w))) dest = network;
+    let dest = $(getWatchPanel("host").section);
+    for (const [key, panel] of Object.entries(watchPanels)) {
+      const sec = $(panel.section);
+      if (sec && panelVisible(sec) && (allWatches || []).some((w) => watchPanelKeyFor(w) === key && isWatchAttention(w))) {
+        dest = sec;
+        break;
+      }
+    }
     dest && dest.scrollIntoView({ block: "start", behavior: "smooth" });
     return;
   }
   if (target === "starting-watches") {
-    const storage = $("#storage-section");
-    const network = $("#network-section");
-    const sec = $("#watches-section");
-    [storage, network, sec].forEach((s) => { if (s) s.open = true; });
+    openAllWatchPanels();
     setAllWatchStatuses("starting");
+    const sec = $(getWatchPanel("host").section);
     sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
     return;
   }
@@ -1951,9 +1962,7 @@ async function refreshServiceExpansionLight(key) {
 // Runs after each render and on hashchange.
 let hashScrolled = false;
 function watchSectionFor(w) {
-  if (isStorageWatch(w)) return "#storage-section";
-  if (isNetworkWatch(w)) return "#network-section";
-  return "#watches-section";
+  return getWatchPanel(watchPanelKeyFor(w)).section;
 }
 function applyHash() {
   const h = decodeURIComponent(location.hash.slice(1));
@@ -3024,6 +3033,13 @@ function setAllWatchStatuses(v) {
   saveUIState();
 }
 
+function openAllWatchPanels() {
+  Object.values(watchPanels).forEach((panel) => {
+    const sec = $(panel.section);
+    if (sec) sec.open = true;
+  });
+}
+
 function setWatchType(panelKey, v) {
   const panel = getWatchPanel(panelKey);
   panel.type = v || "all";
@@ -3138,12 +3154,21 @@ function updateWatchSortIndicators(panelKey) {
   });
 }
 
-function watchPanelKeyForElement(el) {
-  const id = (el && el.closest("details") && el.closest("details").id) || "";
+// watchPanelKeyFor classifies a watch into its panel via the registry's match
+// predicates; watches no predicate claims belong to the Host watches panel.
+function watchPanelKeyFor(w) {
   for (const [key, panel] of Object.entries(watchPanels)) {
-    if (panel.section === "#" + id) return key;
+    if (panel.match && panel.match(w)) return key;
   }
   return "host";
+}
+
+// watchPanelKeyForElement reads the panel key straight from the enclosing
+// <details data-panel="..."> attribute, so panel markup names its own key.
+function watchPanelKeyForElement(el) {
+  const details = el && el.closest("details[data-panel]");
+  const key = details ? details.dataset.panel : "";
+  return watchPanels[key] ? key : "host";
 }
 
 function renderConditionRows(conditions) {
@@ -3481,11 +3506,9 @@ function diskioRowHTML(w) {
 function renderWatches(watches) {
   if (watches) allWatches = watches;
   const all = allWatches || [];
-  renderWatchPanel("storage", all.filter(isStorageWatch));
-  renderWatchPanel("network", all.filter(isNetworkWatch));
-  renderWatchPanel("cert", all.filter(isCertWatch));
-  renderWatchPanel("diskio", all.filter(isDiskioWatch));
-  renderWatchPanel("host", all.filter((w) => !isStorageWatch(w) && !isNetworkWatch(w) && !isCertWatch(w) && !isDiskioWatch(w)));
+  Object.keys(watchPanels).forEach((key) => {
+    renderWatchPanel(key, all.filter((w) => watchPanelKeyFor(w) === key));
+  });
   reassertExpansions();
   applyHash();
   updateSectionNav();
@@ -5969,14 +5992,14 @@ function setKeyboardShortcutsEnabled(enabled) {
 }
 
 // activeSearchBox returns the search input for the topmost open data panel.
+// Watch panels come straight from the watchPanels registry so a new panel's
+// search box joins the "/" shortcut without extending this list.
 function activeSearchBox() {
   const panels = [
     ["#services-section", "#svc-search"],
     ["#containers-section", "#container-search"],
     ["#vms-section", "#vm-search"],
-    ["#storage-section", "#storage-search"],
-    ["#network-section", "#network-search"],
-    ["#watches-section", "#watch-search"],
+    ...Object.values(watchPanels).map((p) => [p.section, p.search]),
     ["#apps-section", "#app-search"],
   ];
   for (const [sectionSel, searchSel] of panels) {

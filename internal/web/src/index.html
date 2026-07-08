@@ -59,7 +59,7 @@
 <div id="attention" role="alert" aria-live="assertive" aria-atomic="true"></div>
 <div id="op-live" role="status" aria-live="polite" aria-atomic="true"></div>
 <h2 class="visually-hidden">Storage</h2>
-<details id="storage-section" open class="panel-hidden">
+<details id="storage-section" open class="panel panel-hidden" data-panel="storage">
   <summary>Storage <span id="storage-count" class="muted"></span></summary>
   <div id="storage-controls" class="panel-controls">
     <label for="storage-search" class="visually-hidden">Filter storage watches</label>
@@ -93,7 +93,7 @@
 </details>
 
 <h2 class="visually-hidden">Services</h2>
-<details id="services-section" open>
+<details id="services-section" open class="panel">
   <summary>
     <span class="summary-title">Services <span id="services-count" class="muted"></span></span>
     <span class="panel-tools">
@@ -141,7 +141,7 @@
 </details>
 
 <h2 class="visually-hidden">Containers</h2>
-<details id="containers-section" open class="panel-hidden">
+<details id="containers-section" open class="panel panel-hidden">
   <summary>Containers <span id="containers-count" class="muted"></span></summary>
   <div id="container-controls" class="panel-controls">
     <label for="container-search" class="visually-hidden">Filter containers</label>
@@ -179,7 +179,7 @@
 </details>
 
 <h2 class="visually-hidden">Virtual machines</h2>
-<details id="vms-section" open class="panel-hidden">
+<details id="vms-section" open class="panel panel-hidden">
   <summary>Virtual machines <span id="vms-count" class="muted"></span></summary>
   <div id="vm-controls" class="panel-controls">
     <label for="vm-search" class="visually-hidden">Filter virtual machines</label>
@@ -217,7 +217,7 @@
 </details>
 
 <h2 class="visually-hidden">Network</h2>
-<details id="network-section" open class="panel-hidden">
+<details id="network-section" open class="panel panel-hidden" data-panel="network">
   <summary>Network <span id="network-count" class="muted"></span></summary>
   <div id="network-controls" class="panel-controls">
     <label for="network-search" class="visually-hidden">Filter network watches</label>
@@ -250,7 +250,7 @@
 </details>
 
 <h2 class="visually-hidden">Installed applications</h2>
-<details id="apps-section" open class="panel-hidden">
+<details id="apps-section" open class="panel panel-hidden">
   <summary>
     <span class="summary-title">Installed applications <span id="apps-count" class="muted"></span></span>
     <span class="panel-tools">
@@ -288,7 +288,7 @@
 </details>
 
 <h2 class="visually-hidden">Certificate watches</h2>
-<details id="cert-section" open class="panel-hidden">
+<details id="cert-section" open class="panel panel-hidden" data-panel="cert">
   <summary>Certificate watches <span id="cert-count" class="muted"></span></summary>
   <div id="cert-controls" class="panel-controls">
     <label for="cert-search" class="visually-hidden">Filter certificate watches</label>
@@ -323,7 +323,7 @@
 </details>
 
 <h2 class="visually-hidden">Disk I/O watches</h2>
-<details id="diskio-section" open class="panel-hidden">
+<details id="diskio-section" open class="panel panel-hidden" data-panel="diskio">
   <summary>Disk I/O watches <span id="diskio-count" class="muted"></span></summary>
   <div id="diskio-controls" class="panel-controls">
     <label for="diskio-search" class="visually-hidden">Filter disk I/O watches</label>
@@ -355,7 +355,7 @@
 </details>
 
 <h2 class="visually-hidden">Host watches</h2>
-<details id="watches-section" open class="panel-hidden">
+<details id="watches-section" open class="panel panel-hidden" data-panel="host">
   <summary>Host watches <span id="watches-count" class="muted"></span></summary>
   <div id="watch-controls" class="panel-controls">
     <label for="watch-search" class="visually-hidden">Filter host watches</label>
@@ -388,7 +388,7 @@
 </details>
 
 <h2 class="visually-hidden">Events</h2>
-<details id="events-section" open>
+<details id="events-section" open class="panel">
   <summary>Events <span class="muted">(dry-run events appear when automatic actions are simulated)</span></summary>
   <div id="event-controls" role="group" aria-label="Filter events">
     <label for="event-service" class="visually-hidden">Filter events by service</label>
@@ -421,7 +421,7 @@
 </details>
 
 <h2 class="visually-hidden">Mount units</h2>
-<details id="mounts-section" class="panel-hidden">
+<details id="mounts-section" class="panel panel-hidden">
   <summary>Mount units <span id="mounts-count" class="muted"></span></summary>
   <div id="mount-controls" class="panel-controls">
     <label for="mount-search" class="visually-hidden">Filter mount units</label>
@@ -455,7 +455,7 @@
 </details>
 
 <h2 class="visually-hidden">Notifiers</h2>
-<details id="notifiers-section" class="panel-hidden">
+<details id="notifiers-section" class="panel panel-hidden">
   <summary>Notifiers <span id="notifiers-count" class="muted"></span></summary>
   <table>
     <caption class="visually-hidden">Notifiers</caption>
@@ -466,7 +466,7 @@
 </details>
 
 <h2 class="visually-hidden">Daemon / Engine settings</h2>
-<details id="daemon-section">
+<details id="daemon-section" class="panel">
   <summary>Daemon / Engine settings</summary>
   <div class="daemon-cols">
     <div>
@@ -514,7 +514,7 @@
 </details>
 
 <h2 class="visually-hidden">Recent activity</h2>
-<details id="activity-section">
+<details id="activity-section" class="panel">
   <summary>Recent activity <span class="muted">(last 500 events)</span></summary>
   <div class="activity-stats">
     <div>Service actions: <b id="act-service"></b></div>
@@ -526,7 +526,7 @@
   </div>
 </details>
 
-<section id="locks-section" class="panel-hidden">
+<section id="locks-section" class="panel panel-hidden">
   <h2>Runtime Locks <span id="locks-count" class="muted"></span></h2>
   <table>
     <caption class="visually-hidden">Runtime locks</caption>
