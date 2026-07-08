@@ -173,20 +173,20 @@ func ttyPath(devRoot, line string) (string, bool) {
 
 func ttyPayload(msg Message, host string, at time.Time) []byte {
 	var b strings.Builder
-	fmt.Fprintf(&b, "\nMessage from Sermo on %s at %s\n", terminalSafe(host), at.Format(time.RFC1123))
+	fmt.Fprintf(&b, notifyLF+"Message from Sermo on %s at %s"+notifyLF, terminalSafe(host), at.Format(time.RFC1123))
 	if msg.Subject != "" {
-		b.WriteString("\n")
+		b.WriteString(notifyLF)
 		b.WriteString(terminalSafe(msg.Subject))
-		b.WriteString("\n")
+		b.WriteString(notifyLF)
 	}
 	if msg.Body != "" {
-		b.WriteString("\n")
+		b.WriteString(notifyLF)
 		b.WriteString(terminalSafe(msg.Body))
-		if !strings.HasSuffix(msg.Body, "\n") {
-			b.WriteString("\n")
+		if !strings.HasSuffix(msg.Body, notifyLF) {
+			b.WriteString(notifyLF)
 		}
 	}
-	return []byte(strings.ReplaceAll(b.String(), "\n", "\r\n"))
+	return []byte(strings.ReplaceAll(b.String(), notifyLF, notifyCRLF))
 }
 
 func terminalSafe(s string) string {

@@ -20,6 +20,17 @@ func (ftpProtocol) Name() string       { return ProtocolNameFTP }
 func (ftpProtocol) DefaultPort() int   { return defaultPortFTP }
 func (ftpProtocol) RequiresUser() bool { return false }
 
+const (
+	ftpAnonymousUser     = "anonymous"
+	ftpCommandPassFormat = "PASS %s\r\n"
+	ftpCommandQuit       = "QUIT\r\n"
+	ftpCommandUserFormat = "USER %s\r\n"
+	ftpStatusLoggedIn    = 230
+	ftpStatusNeedAccount = 332
+	ftpStatusNeedPass    = 331
+	ftpStatusReady       = 220
+)
+
 func (ftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	return probeBanner(ctx, cfg, defaultPortFTP, ftpHandshake)
 }
@@ -33,16 +44,16 @@ func ftpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 	res := Result{Extra: map[string]string{extraGreeting: greeting}}
-	if code != 220 {
+	if code != ftpStatusReady {
 		return Result{}, fmt.Errorf("unexpected greeting: %d %s", code, greeting)
 	}
 
 	if cfg.User != "" || cfg.Password != "" {
 		user := cfg.User
 		if user == "" {
-			user = "anonymous"
+			user = ftpAnonymousUser
 		}
-		if _, err := fmt.Fprintf(rw, "USER %s\r\n", user); err != nil {
+		if _, err := fmt.Fprintf(rw, ftpCommandUserFormat, user); err != nil {
 			return Result{}, err
 		}
 		code, text, err := tp.ReadResponse(0)
@@ -50,16 +61,16 @@ func ftpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 			return Result{}, err
 		}
 		switch {
-		case code == 230: // logged in, no password needed
-		case code == 331 || code == 332: // password (or account) required
-			if _, err := fmt.Fprintf(rw, "PASS %s\r\n", cfg.Password); err != nil {
+		case code == ftpStatusLoggedIn: // logged in, no password needed
+		case code == ftpStatusNeedPass || code == ftpStatusNeedAccount: // password (or account) required
+			if _, err := fmt.Fprintf(rw, ftpCommandPassFormat, cfg.Password); err != nil {
 				return Result{}, err
 			}
 			code, text, err = tp.ReadResponse(0)
 			if err != nil {
 				return Result{}, err
 			}
-			if code != 230 {
+			if code != ftpStatusLoggedIn {
 				return Result{}, fmt.Errorf("login failed: %d %s", code, text)
 			}
 		default:
@@ -67,6 +78,6 @@ func ftpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 		}
 	}
 
-	_, _ = fmt.Fprint(rw, "QUIT\r\n") // best effort
+	_, _ = fmt.Fprint(rw, ftpCommandQuit) // best effort
 	return res, nil
 }

@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,12 +31,32 @@ import (
 const (
 	systemdServiceUnitExt = ".service"
 
-	procNetTCPPath       = "/proc/net/tcp"
-	procNetTCP6Path      = "/proc/net/tcp6"
-	procNetUDPPath       = "/proc/net/udp"
-	procNetUDP6Path      = "/proc/net/udp6"
-	procNetStateListen   = "0A"
-	procNetStateUDPReady = "07"
+	procNetTCPPath        = "/proc/net/tcp"
+	procNetTCP6Path       = "/proc/net/tcp6"
+	procNetUDPPath        = "/proc/net/udp"
+	procNetUDP6Path       = "/proc/net/udp6"
+	procNetHeaderField    = "sl"
+	procNetAddressSep     = ":"
+	procNetMinFields      = 4
+	procNetHeaderIndex    = 0
+	procNetLocalAddrIndex = 1
+	procNetStateIndex     = 3
+	procNetStateListen    = "0A"
+	procNetStateUDPReady  = "07"
+
+	procNetHexBase          = 16
+	procNetPortBits         = 16
+	procNetIPv4HexChars     = 8
+	procNetIPv4Bits         = 32
+	procNetIPv6HexChars     = 32
+	procNetIPv6Words        = 4
+	procNetIPv6WordHexChars = 8
+	procNetIPv6WordBits     = 32
+
+	ipv4Byte0 = 0
+	ipv4Byte1 = 1
+	ipv4Byte2 = 2
+	ipv4Byte3 = 3
 )
 
 // listInstalledCatalogServices returns active service targets for the wizard: catalog
@@ -398,17 +419,17 @@ func parseProcSocketTable(r io.Reader, port int, states map[string]bool) (bool, 
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
-		if len(fields) < 4 || fields[0] == "sl" {
+		if len(fields) < procNetMinFields || fields[procNetHeaderIndex] == procNetHeaderField {
 			continue
 		}
-		if !states[strings.ToUpper(fields[3])] {
+		if !states[strings.ToUpper(fields[procNetStateIndex])] {
 			continue
 		}
-		_, portHex, ok := strings.Cut(fields[1], ":")
+		_, portHex, ok := strings.Cut(fields[procNetLocalAddrIndex], procNetAddressSep)
 		if !ok {
 			continue
 		}
-		got, err := strconv.ParseUint(portHex, 16, 16)
+		got, err := strconv.ParseUint(portHex, procNetHexBase, procNetPortBits)
 		if err != nil {
 			continue
 		}
@@ -424,17 +445,17 @@ func parseProcSocketTableHosts(r io.Reader, port int, states map[string]bool, ip
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
-		if len(fields) < 4 || fields[0] == "sl" {
+		if len(fields) < procNetMinFields || fields[procNetHeaderIndex] == procNetHeaderField {
 			continue
 		}
-		if !states[strings.ToUpper(fields[3])] {
+		if !states[strings.ToUpper(fields[procNetStateIndex])] {
 			continue
 		}
-		hostHex, portHex, ok := strings.Cut(fields[1], ":")
+		hostHex, portHex, ok := strings.Cut(fields[procNetLocalAddrIndex], procNetAddressSep)
 		if !ok {
 			continue
 		}
-		got, err := strconv.ParseUint(portHex, 16, 16)
+		got, err := strconv.ParseUint(portHex, procNetHexBase, procNetPortBits)
 		if err != nil || int(got) != port {
 			continue
 		}
@@ -454,31 +475,31 @@ func procSocketHost(hexAddr string, ipv6 bool) (string, bool) {
 }
 
 func procIPv4Host(hexAddr string) (string, bool) {
-	if len(hexAddr) != 8 {
+	if len(hexAddr) != procNetIPv4HexChars {
 		return "", false
 	}
-	raw, err := strconv.ParseUint(hexAddr, 16, 32)
+	raw, err := strconv.ParseUint(hexAddr, procNetHexBase, procNetIPv4Bits)
 	if err != nil {
 		return "", false
 	}
-	ip := net.IPv4(byte(raw), byte(raw>>8), byte(raw>>16), byte(raw>>24))
+	var b [net.IPv4len]byte
+	binary.LittleEndian.PutUint32(b[:], uint32(raw))
+	ip := net.IPv4(b[ipv4Byte0], b[ipv4Byte1], b[ipv4Byte2], b[ipv4Byte3])
 	return ip.String(), true
 }
 
 func procIPv6Host(hexAddr string) (string, bool) {
-	if len(hexAddr) != 32 {
+	if len(hexAddr) != procNetIPv6HexChars {
 		return "", false
 	}
-	var b [16]byte
-	for i := 0; i < 4; i++ {
-		raw, err := strconv.ParseUint(hexAddr[i*8:(i+1)*8], 16, 32)
+	var b [net.IPv6len]byte
+	for i := 0; i < procNetIPv6Words; i++ {
+		start := i * procNetIPv6WordHexChars
+		raw, err := strconv.ParseUint(hexAddr[start:start+procNetIPv6WordHexChars], procNetHexBase, procNetIPv6WordBits)
 		if err != nil {
 			return "", false
 		}
-		b[i*4] = byte(raw)
-		b[i*4+1] = byte(raw >> 8)
-		b[i*4+2] = byte(raw >> 16)
-		b[i*4+3] = byte(raw >> 24)
+		binary.LittleEndian.PutUint32(b[i*net.IPv4len:], uint32(raw))
 	}
 	return net.IP(b[:]).String(), true
 }

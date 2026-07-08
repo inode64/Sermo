@@ -9,7 +9,12 @@ import (
 	"syscall"
 )
 
-const procStatPathFormat = "/proc/%d/stat"
+const (
+	procStatPathFormat     = "/proc/%d/stat"
+	procStatNumericBase    = 10
+	procStatStartTimeBits  = 64
+	procStatStartTimeIndex = 19
+)
 
 // OSProcessProber probes real processes via signal 0 and /proc.
 type OSProcessProber struct{}
@@ -40,11 +45,10 @@ func (OSProcessProber) StartTicks(pid int) (uint64, bool) {
 	// After ')', fields begin at field 3 (state); starttime (field 22) is the
 	// 20th of these (index 19).
 	fields := strings.Fields(stat[closeParen+1:])
-	const startTimeIndex = 19
-	if len(fields) <= startTimeIndex {
+	if len(fields) <= procStatStartTimeIndex {
 		return 0, false
 	}
-	ticks, err := strconv.ParseUint(fields[startTimeIndex], 10, 64)
+	ticks, err := strconv.ParseUint(fields[procStatStartTimeIndex], procStatNumericBase, procStatStartTimeBits)
 	if err != nil {
 		return 0, false
 	}

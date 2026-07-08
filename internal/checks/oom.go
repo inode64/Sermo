@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const oomVMStatKillPrefix = "oom_kill "
+
 // OomSamplerFunc reads the cumulative count of kernel OOM kills, reporting ok =
 // false when the counter is unavailable (kernels before the oom_kill vmstat
 // field). Injected for tests; the default reads the kernel vmstat file.
@@ -62,9 +64,9 @@ func defaultOomSampler() (uint64, bool) {
 	if err != nil {
 		return 0, false
 	}
-	for _, line := range strings.Split(string(data), "\n") {
-		if v, ok := strings.CutPrefix(line, "oom_kill "); ok {
-			n, err := strconv.ParseUint(strings.TrimSpace(v), 10, 64)
+	for _, line := range strings.Split(string(data), checkLineSeparator) {
+		if v, ok := strings.CutPrefix(line, oomVMStatKillPrefix); ok {
+			n, err := strconv.ParseUint(strings.TrimSpace(v), numericBaseDecimal, numericBits64)
 			return n, err == nil
 		}
 	}

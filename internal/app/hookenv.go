@@ -24,4 +24,13 @@ const (
 	sermoEnvUser       = sermoEnvPrefix + "USER"
 	sermoEnvCPU        = sermoEnvPrefix + "CPU"
 	sermoEnvIO         = sermoEnvPrefix + "IO"
+
+	envFormatBase         = 10
+	envFloatBits          = 64
+	envFloatFormat        = 'f'
+	envFloatPrecisionAuto = -1
+	procWatchCPUPrecision = 2
+	procWatchIOPrecision  = 0
+	fileModeFormat        = "%04o"
+	fileOwnerFormat       = "%d:%d"
 )

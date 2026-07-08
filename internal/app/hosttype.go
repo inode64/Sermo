@@ -9,6 +9,8 @@ import (
 )
 
 const (
+	appLineSeparator = "\n"
+
 	dmiIDPath      = "/sys/class/dmi/id"
 	hypervisorPath = "/sys/hypervisor/type"
 	cpuInfoPath    = "/proc/cpuinfo"
@@ -260,7 +262,7 @@ func virtualPlatformFromCPU(cpuinfo string) (string, string) {
 }
 
 func cpuHasHypervisorFlag(cpuinfo string) bool {
-	for _, line := range strings.Split(cpuinfo, "\n") {
+	for _, line := range strings.Split(cpuinfo, appLineSeparator) {
 		name, flags, ok := strings.Cut(line, ":")
 		if !ok {
 			continue

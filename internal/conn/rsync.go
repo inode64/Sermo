@@ -20,6 +20,8 @@ func (rsyncProtocol) Name() string       { return ProtocolNameRsync }
 func (rsyncProtocol) DefaultPort() int   { return defaultPortRsync }
 func (rsyncProtocol) RequiresUser() bool { return false }
 
+const rsyncGreetingPrefix = "@RSYNCD:"
+
 func (rsyncProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	host := cfg.Host
 	if host == "" {
@@ -53,9 +55,8 @@ func (rsyncProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // rsyncGreetingVersion extracts the protocol version from an rsync daemon
 // greeting ("@RSYNCD: <version>").
 func rsyncGreetingVersion(line string) (string, bool) {
-	const prefix = "@RSYNCD:"
-	if !strings.HasPrefix(line, prefix) {
+	if !strings.HasPrefix(line, rsyncGreetingPrefix) {
 		return "", false
 	}
-	return strings.TrimSpace(strings.TrimPrefix(line, prefix)), true
+	return strings.TrimSpace(strings.TrimPrefix(line, rsyncGreetingPrefix)), true
 }

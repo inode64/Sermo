@@ -73,7 +73,7 @@ func readProcUint(path string) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	n, err := strconv.ParseUint(strings.TrimSpace(string(data)), 10, 64)
+	n, err := strconv.ParseUint(strings.TrimSpace(string(data)), numericBaseDecimal, numericBits64)
 	if err != nil {
 		return 0, fmt.Errorf("malformed %s", path)
 	}

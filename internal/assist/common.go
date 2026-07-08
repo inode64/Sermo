@@ -143,16 +143,27 @@ func candidateNames[T any](cands []T, name func(T) string) []string {
 	return out
 }
 
+const (
+	labelDetailSeparator = " · "
+	labelFieldSeparator  = ": "
+
+	labelFieldConfig    = "config"
+	labelFieldContainer = "container"
+	labelFieldDomain    = "domain"
+	labelFieldStatus    = "status"
+	labelFieldUnit      = "unit"
+)
+
 func detailLabel(title string, details ...string) string {
 	parts := append([]string{title}, nonEmpty(details...)...)
-	return strings.Join(parts, " · ")
+	return strings.Join(parts, labelDetailSeparator)
 }
 
 func labelField(name, value string) string {
 	if value == "" {
 		return ""
 	}
-	return name + ": " + value
+	return name + labelFieldSeparator + value
 }
 
 func nonEmpty(values ...string) []string {

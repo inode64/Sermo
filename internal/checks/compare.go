@@ -53,7 +53,7 @@ func compareValue(result, op, value string) (bool, error) {
 }
 
 func parseNumericString(label, value string) (float64, error) {
-	f, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	f, err := strconv.ParseFloat(strings.TrimSpace(value), numericBits64)
 	if err != nil {
 		return 0, fmt.Errorf("%s %q is not numeric", label, value)
 	}
@@ -226,7 +226,7 @@ func VersionOutput(stdout, stderr string) string {
 	case stderr == "":
 		return stdout
 	default:
-		return stdout + "\n" + stderr
+		return stdout + checkLineSeparator + stderr
 	}
 }
 
@@ -257,7 +257,7 @@ func ValidateAssertionValue(label, op, value string) error {
 	}
 	switch op {
 	case cfgval.CompareOpGreater, cfgval.CompareOpGreaterEqual, cfgval.CompareOpLess, cfgval.CompareOpLessEqual:
-		if _, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err != nil {
+		if _, err := strconv.ParseFloat(strings.TrimSpace(value), numericBits64); err != nil {
 			return fmt.Errorf("%s %q must be numeric for op %s", valueLabel, value, op)
 		}
 	case cfgval.AssertOpRegex:

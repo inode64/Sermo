@@ -42,7 +42,14 @@ const (
 	// SysfsIfaceFlagRunning is Linux IFF_RUNNING from /sys/class/net/<iface>/flags.
 	SysfsIfaceFlagRunning uint64 = 0x40
 
-	sysfsNetClassPath = "/sys/class/net"
+	sysfsNetClassPath        = "/sys/class/net"
+	sysfsIfaceFlagsFile      = "flags"
+	sysfsIfaceOperstateFile  = "operstate"
+	sysfsIfaceSpeedFile      = "speed"
+	sysfsIfaceStatisticsDir  = "statistics"
+	sysfsIfaceHexValuePrefix = "0x"
+	sysfsIfaceFlagsBase      = 16
+	sysfsIfaceFlagsBits      = 64
 )
 
 // NetSample is one observation of a network interface.
@@ -231,8 +238,8 @@ func sampleNetFromSysfs(iface, root string) (NetSample, error) {
 	}
 	sample := NetSample{State: state, Counters: map[string]uint64{}}
 
-	if raw, err := os.ReadFile(filepath.Join(dir, "speed")); err == nil {
-		if v, err := strconv.ParseInt(strings.TrimSpace(string(raw)), 10, 64); err == nil && v >= 0 {
+	if raw, err := os.ReadFile(filepath.Join(dir, sysfsIfaceSpeedFile)); err == nil {
+		if v, err := strconv.ParseInt(strings.TrimSpace(string(raw)), numericBaseDecimal, numericBits64); err == nil && v >= 0 {
 			sample.SpeedMbps, sample.SpeedKnown = v, true
 		}
 	}
@@ -241,7 +248,7 @@ func sampleNetFromSysfs(iface, root string) (NetSample, error) {
 		addNetInterfaceAddrs(&sample, ifi)
 	}
 
-	statDir := filepath.Join(dir, "statistics")
+	statDir := filepath.Join(dir, sysfsIfaceStatisticsDir)
 	if entries, err := os.ReadDir(statDir); err == nil {
 		for _, e := range entries {
 			if v, err := readProcUint(filepath.Join(statDir, e.Name())); err == nil {
@@ -270,15 +277,15 @@ func sysfsIfaceDir(root, iface string) string {
 }
 
 func sysfsIfaceUp(dir string) bool {
-	flags := sysfsIfaceFlagBits(filepath.Join(dir, "flags"))
-	operstate := strings.TrimSpace(readTextFile(filepath.Join(dir, "operstate")))
+	flags := sysfsIfaceFlagBits(filepath.Join(dir, sysfsIfaceFlagsFile))
+	operstate := strings.TrimSpace(readTextFile(filepath.Join(dir, sysfsIfaceOperstateFile)))
 	return flags&SysfsIfaceFlagUp != 0 && (flags&SysfsIfaceFlagRunning != 0 || operstate == NetStateUp || operstate == NetStateUnknown)
 }
 
 func sysfsIfaceFlagBits(path string) uint64 {
 	raw := strings.TrimSpace(readTextFile(path))
-	raw = strings.TrimPrefix(raw, "0x")
-	flags, _ := strconv.ParseUint(raw, 16, 64)
+	raw = strings.TrimPrefix(raw, sysfsIfaceHexValuePrefix)
+	flags, _ := strconv.ParseUint(raw, sysfsIfaceFlagsBase, sysfsIfaceFlagsBits)
 	return flags
 }
 

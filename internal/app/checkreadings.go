@@ -9,6 +9,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/metrics"
 	"sermo/internal/web"
 )
 
@@ -188,7 +189,7 @@ func resourceCheckReadings(checkType string, data map[string]any) []web.WatchRea
 
 func pressureCheckReadings(data map[string]any) []web.WatchReading {
 	var out []web.WatchReading
-	for _, field := range []string{"some_avg10", "some_avg60", "some_avg300", "full_avg10", "full_avg60", "full_avg300"} {
+	for _, field := range checks.PressurePredFields {
 		if v, ok := cfgval.Float(data[field]); ok {
 			out = append(out, web.WatchReading{Field: field, Label: field, Value: fmt.Sprintf("%.2f%%", v)})
 		}
@@ -207,10 +208,10 @@ func diskioCheckReadings(data map[string]any) []web.WatchReading {
 	for _, field := range []struct {
 		key, label, unit string
 	}{
-		{checks.DiskIOFieldUtilPct, "Utilization", "%"},
-		{checks.DiskIOFieldReadBytes, "Read", " B/s"},
-		{checks.DiskIOFieldWriteBytes, "Write", " B/s"},
-		{checks.DiskIOFieldAwaitMs, "Await", " ms"},
+		{checks.DiskIOFieldUtilPct, "Utilization", metrics.MetricUnitPercent},
+		{checks.DiskIOFieldReadBytes, "Read", " " + metrics.MetricUnitBytesPerSecond},
+		{checks.DiskIOFieldWriteBytes, "Write", " " + metrics.MetricUnitBytesPerSecond},
+		{checks.DiskIOFieldAwaitMs, "Await", " " + metrics.MetricUnitMilliseconds},
 	} {
 		if v, ok := cfgval.Float(data[field.key]); ok {
 			out = append(out, web.WatchReading{

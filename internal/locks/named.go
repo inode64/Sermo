@@ -137,7 +137,7 @@ func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ow
 	}
 
 	proc, now := l.dependencies()
-	if err := os.MkdirAll(l.Dir, 0o755); err != nil {
+	if err := os.MkdirAll(l.Dir, lockDirMode); err != nil {
 		return nil, fmt.Errorf("create locks dir %s: %w", l.Dir, err)
 	}
 
@@ -184,10 +184,10 @@ func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ow
 }
 
 func validateLockIDs(service, name string) error {
-	if err := validateIdentifier("service", service, false); err != nil {
+	if err := validateIdentifier(lockIdentifierService, service, false); err != nil {
 		return err
 	}
-	return validateIdentifier("lock name", name, true)
+	return validateIdentifier(lockIdentifierName, name, true)
 }
 
 func lockID(service, name string) string {

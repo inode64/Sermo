@@ -10,6 +10,8 @@ import (
 const (
 	reservedCommandSectionPreflight = "preflight"
 	reservedCommandSectionCommands  = "commands"
+	ntpVersionPrefix                = "ntpd "
+	shortVersionCaptureGroup        = 1
 )
 
 // Version-level names accepted by version.on_change.
@@ -75,34 +77,33 @@ func ShortVersion(s string) string {
 		return v
 	}
 	for _, re := range shortVersionSpecificREs {
-		if match := re.FindStringSubmatch(s); len(match) > 1 {
-			return match[1]
+		if match := re.FindStringSubmatch(s); len(match) > shortVersionCaptureGroup {
+			return match[shortVersionCaptureGroup]
 		}
 	}
-	if match := shortVersionRE.FindStringSubmatch(s); len(match) > 1 {
-		return match[1]
+	if match := shortVersionRE.FindStringSubmatch(s); len(match) > shortVersionCaptureGroup {
+		return match[shortVersionCaptureGroup]
 	}
-	if match := shortIntegerVersionRE.FindStringSubmatch(s); len(match) > 1 {
-		return match[1]
+	if match := shortIntegerVersionRE.FindStringSubmatch(s); len(match) > shortVersionCaptureGroup {
+		return match[shortVersionCaptureGroup]
 	}
 	return ""
 }
 
 func shortNTPVersion(s string) string {
-	const prefix = "ntpd "
-	if !strings.HasPrefix(s, prefix) {
+	if !strings.HasPrefix(s, ntpVersionPrefix) {
 		return ""
 	}
-	token, _, _ := strings.Cut(strings.TrimSpace(strings.TrimPrefix(s, prefix)), " ")
+	token, _, _ := strings.Cut(strings.TrimSpace(strings.TrimPrefix(s, ntpVersionPrefix)), " ")
 	if token == "" {
 		return ""
 	}
-	if match := ntpPatchVersionRE.FindStringSubmatch(token); len(match) > 1 {
-		return match[1]
+	if match := ntpPatchVersionRE.FindStringSubmatch(token); len(match) > shortVersionCaptureGroup {
+		return match[shortVersionCaptureGroup]
 	}
 	if strings.Contains(token, "@") {
-		if match := shortVersionRE.FindStringSubmatch(token); len(match) > 1 {
-			return match[1]
+		if match := shortVersionRE.FindStringSubmatch(token); len(match) > shortVersionCaptureGroup {
+			return match[shortVersionCaptureGroup]
 		}
 		return ""
 	}

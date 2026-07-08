@@ -25,6 +25,11 @@ import (
 const DefaultCommandTimeout = 30 * time.Second
 
 const (
+	volumeNumericBaseDecimal = 10
+	volumeNumericBits64      = 64
+)
+
+const (
 	cmdBtrfs     = "btrfs"
 	cmdLVExtend  = "lvextend"
 	cmdLVS       = "lvs"
@@ -379,5 +384,5 @@ func procMounts() ([]Mount, error) {
 
 // parseInt trims and parses a decimal integer from command output.
 func parseInt(s string) (int64, error) {
-	return strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+	return strconv.ParseInt(strings.TrimSpace(s), volumeNumericBaseDecimal, volumeNumericBits64)
 }

@@ -18,6 +18,23 @@ const (
 	minInt = -maxInt - 1
 )
 
+const (
+	floatFormatFixed       = 'f'
+	floatPrecisionAuto     = -1
+	floatPrecisionInteger  = 0
+	numericBaseDecimal     = 10
+	numericBits64          = 64
+	numericBitsCurrentArch = 0
+)
+
+const (
+	// PercentSuffix is the canonical suffix for percentage config thresholds.
+	PercentSuffix = "%"
+
+	percentMin = 0
+	percentMax = 100
+)
+
 const entryKeyEnabled = "enabled"
 
 // TCP port bounds shared by configuration, CLI parsing and network clients.
@@ -31,6 +48,11 @@ const (
 // TCPPortRange describes the accepted TCP/UDP port range for diagnostics.
 func TCPPortRange() string {
 	return strconv.Itoa(MinTCPPort) + ".." + strconv.Itoa(MaxTCPPort)
+}
+
+// PercentRange describes the accepted percentage range for diagnostics.
+func PercentRange() string {
+	return strconv.Itoa(percentMin) + ".." + strconv.Itoa(percentMax)
 }
 
 // Comparison/assertion operator vocabulary shared by configuration validation
@@ -67,11 +89,11 @@ func String(v any) string {
 	case int:
 		return strconv.Itoa(t)
 	case int64:
-		return strconv.FormatInt(t, 10)
+		return strconv.FormatInt(t, numericBaseDecimal)
 	case uint64:
-		return strconv.FormatUint(t, 10)
+		return strconv.FormatUint(t, numericBaseDecimal)
 	case float64:
-		return strconv.FormatFloat(t, 'f', -1, 64)
+		return strconv.FormatFloat(t, floatFormatFixed, floatPrecisionAuto, numericBits64)
 	case bool:
 		return strconv.FormatBool(t)
 	case nil:
@@ -276,7 +298,11 @@ func uint64Value(n uint64) (int, bool) {
 }
 
 func float64Int(n float64) (int, bool) {
-	i, err := strconv.ParseInt(strconv.FormatFloat(math.Trunc(n), 'f', 0, 64), 10, 0)
+	i, err := strconv.ParseInt(
+		strconv.FormatFloat(math.Trunc(n), floatFormatFixed, floatPrecisionInteger, numericBits64),
+		numericBaseDecimal,
+		numericBitsCurrentArch,
+	)
 	return int(i), err == nil
 }
 
@@ -318,16 +344,31 @@ func ByteSize(v any) (uint64, bool) {
 	if !hasUnit {
 		return 0, false
 	}
-	n, err := strconv.ParseFloat(s, 64)
+	n, err := strconv.ParseFloat(s, numericBits64)
 	bytes := n * unit
 	// Reject anything that does not fit a uint64. float64(^uint64(0)) rounds up to
 	// 2^64, so a strict `>` would let values in [2^64-1024, 2^64) through and the
 	// uint64(bytes) conversion of a float at/above 2^63 is undefined in Go; use
 	// `>=` against 2^64 so only representable values convert.
-	if err != nil || n < 0 || math.IsNaN(bytes) || math.IsInf(bytes, 0) || bytes >= math.Exp2(64) {
+	if err != nil || n < 0 || math.IsNaN(bytes) || math.IsInf(bytes, 0) || bytes >= math.Exp2(numericBits64) {
 		return 0, false
 	}
 	return uint64(bytes), true
+}
+
+// Percent parses a percentage in the accepted Sermo config form: either a
+// number or the same number with a trailing percent suffix, bounded to 0..100.
+func Percent(v any) (float64, bool) {
+	s := strings.TrimSpace(String(v))
+	if s == "" {
+		return 0, false
+	}
+	raw := strings.TrimSpace(strings.TrimSuffix(s, PercentSuffix))
+	n, ok := Float(raw)
+	if !ok || math.IsNaN(n) || math.IsInf(n, 0) || n < percentMin || n > percentMax {
+		return 0, false
+	}
+	return n, true
 }
 
 // Float reads a numeric config value that may decode as a YAML int, float or
@@ -343,7 +384,7 @@ func Float(v any) (float64, bool) {
 	case float64:
 		return t, true
 	case string:
-		f, err := strconv.ParseFloat(strings.TrimSpace(t), 64)
+		f, err := strconv.ParseFloat(strings.TrimSpace(t), numericBits64)
 		return f, err == nil
 	default:
 		return 0, false

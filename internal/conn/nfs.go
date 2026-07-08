@@ -17,6 +17,11 @@ const (
 	nfsVers = 3
 )
 
+const (
+	rpcFragmentLastMask    = 0x80000000
+	rpcTCPMaxFragmentBytes = 1 << 20
+)
+
 // nfsProtocol probes an NFS server natively over ONC RPC: it sends an RPC NULL
 // call to the NFS program (100003) over TCP/2049 and verifies a well-formed RPC
 // reply — proof the server is up and speaking RPC. A version-mismatch reply
@@ -60,20 +65,20 @@ func (nfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // rpcCallTCP sends an RPC message over a TCP connection using record marking
 // (RFC 5531 §11) and reads the (possibly fragmented) reply.
 func rpcCallTCP(c net.Conn, payload []byte) ([]byte, error) {
-	hdr := make([]byte, 4)
-	binary.BigEndian.PutUint32(hdr, uint32(len(payload))|0x80000000) // last fragment
+	hdr := make([]byte, rpcWordBytes)
+	binary.BigEndian.PutUint32(hdr, uint32(len(payload))|rpcFragmentLastMask)
 	if _, err := c.Write(append(hdr, payload...)); err != nil {
 		return nil, err
 	}
 	var reply []byte
 	for {
-		var m [4]byte
+		var m [rpcWordBytes]byte
 		if _, err := io.ReadFull(c, m[:]); err != nil {
 			return nil, err
 		}
 		marker := binary.BigEndian.Uint32(m[:])
-		n := int(marker &^ 0x80000000)
-		if n < 0 || n > 1<<20 {
+		n := int(marker &^ rpcFragmentLastMask)
+		if n < 0 || n > rpcTCPMaxFragmentBytes {
 			return nil, errors.New("nfs: RPC fragment too large")
 		}
 		frag := make([]byte, n)
@@ -81,7 +86,7 @@ func rpcCallTCP(c net.Conn, payload []byte) ([]byte, error) {
 			return nil, err
 		}
 		reply = append(reply, frag...)
-		if marker&0x80000000 != 0 { // last fragment
+		if marker&rpcFragmentLastMask != 0 {
 			break
 		}
 	}

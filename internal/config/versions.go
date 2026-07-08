@@ -38,8 +38,13 @@ var tmplTokens = []tmplToken{
 }
 
 const (
-	templateCurrentMarker = "${current}"
-	templateCurrentLabel  = "current"
+	templateCurrentMarker   = "${current}"
+	templateCurrentLabel    = "current"
+	templateCaptureGroup    = 1
+	templateCaptureOffset   = 1
+	javaReleaseKeySeparator = "="
+	javaReleaseValueTrimSet = `"`
+	javaReleaseVersionKey   = "JAVA_VERSION"
 	// keyVersions is the discovery-metadata map key holding the version instances
 	// a service exposes; it is stripped from a concrete resolved definition.
 	keyVersions            = "versions"
@@ -363,7 +368,7 @@ func materializedServiceUnitMatches(patterns, units []string, toks []tmplToken) 
 			}
 			values := make(map[string]string, len(order))
 			for i, tk := range order {
-				values[tk.variable] = sub[i+1]
+				values[tk.variable] = sub[i+templateCaptureOffset]
 			}
 			addImplicitTokenValues(values, toks)
 			normalizeOptionalTupleValues(values)
@@ -568,7 +573,7 @@ func discoverTokenMatches(paths []string, toks []tmplToken, matchedBinary bool) 
 			}
 			values := make(map[string]string, len(order))
 			for i, tk := range order {
-				values[tk.variable] = sub[i+1]
+				values[tk.variable] = sub[i+templateCaptureOffset]
 			}
 			addImplicitTokenValues(values, toks)
 			realPath := realPathFor(matchPath)
@@ -633,7 +638,7 @@ func refineMatchValuesFromRealPath(values map[string]string, pattern, realPath s
 		}
 		out := cloneStringMap(values)
 		for i, tk := range order {
-			out[tk.variable] = sub[i+1]
+			out[tk.variable] = sub[i+templateCaptureOffset]
 		}
 		normalizeOptionalTupleValues(out)
 		return out
@@ -665,12 +670,12 @@ func refineJavaReleaseVersion(values map[string]string, realPath string) map[str
 }
 
 func javaReleaseVersion(data string) string {
-	for _, line := range strings.Split(data, "\n") {
-		key, value, ok := strings.Cut(line, "=")
-		if !ok || key != "JAVA_VERSION" {
+	for _, line := range strings.Split(data, configLineSeparator) {
+		key, value, ok := strings.Cut(line, javaReleaseKeySeparator)
+		if !ok || key != javaReleaseVersionKey {
 			continue
 		}
-		return strings.Trim(strings.TrimSpace(value), `"`)
+		return strings.Trim(strings.TrimSpace(value), javaReleaseValueTrimSet)
 	}
 	return ""
 }
@@ -1064,7 +1069,7 @@ func discoverVersions(discoverPath string, tok tmplToken) []string {
 		if sub == nil {
 			continue
 		}
-		if v := sub[1]; !seen[v] {
+		if v := sub[templateCaptureGroup]; !seen[v] {
 			seen[v] = true
 			out = append(out, v)
 		}

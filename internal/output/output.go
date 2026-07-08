@@ -4,6 +4,14 @@ package output
 
 import "strings"
 
+const (
+	outputLineBreak          = '\n'
+	outputLineSeparator      = "\n"
+	streamLabelSeparator     = ":\n"
+	truncatedOutputPrefix    = "… (truncated)\n"
+	truncatedFirstLineOffset = 1
+)
+
 // Trim removes surrounding whitespace from captured command, SQL, protocol and
 // hook text while preserving meaningful internal line breaks.
 func Trim(s string) string {
@@ -13,7 +21,7 @@ func Trim(s string) string {
 // FirstNonEmptyLine returns the first non-empty line of s, trimmed.
 func FirstNonEmptyLine(s string) string {
 	clean := Trim(s)
-	for _, line := range strings.Split(clean, "\n") {
+	for _, line := range strings.Split(clean, outputLineSeparator) {
 		if t := strings.TrimSpace(line); t != "" {
 			return t
 		}
@@ -47,12 +55,12 @@ func Bounded(stdout, stderr string) string {
 	if len(parts) == 0 {
 		return ""
 	}
-	return boundTail(strings.Join(parts, "\n"))
+	return boundTail(strings.Join(parts, outputLineSeparator))
 }
 
 func streamSection(label, text string) string {
 	if s := Trim(text); s != "" {
-		return label + ":\n" + s
+		return label + streamLabelSeparator + s
 	}
 	return ""
 }
@@ -64,15 +72,15 @@ func boundTail(s string) string {
 	s, cut = tailBytes(s, boundedMaxBytes)
 	truncated = truncated || cut
 	if truncated {
-		return "… (truncated)\n" + s
+		return truncatedOutputPrefix + s
 	}
 	return s
 }
 
 func tailLines(s string, limit int) (string, bool) {
-	lines := strings.Split(s, "\n")
+	lines := strings.Split(s, outputLineSeparator)
 	if len(lines) > limit {
-		return strings.Join(lines[len(lines)-limit:], "\n"), true
+		return strings.Join(lines[len(lines)-limit:], outputLineSeparator), true
 	}
 	return s, false
 }
@@ -83,8 +91,8 @@ func tailBytes(s string, limit int) (string, bool) {
 	}
 	s = s[len(s)-limit:]
 	// Drop a partial first line left by the byte cut.
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		s = s[i+1:]
+	if i := strings.IndexByte(s, outputLineBreak); i >= 0 {
+		s = s[i+truncatedFirstLineOffset:]
 	}
 	return s, true
 }

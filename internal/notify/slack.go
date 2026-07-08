@@ -45,7 +45,7 @@ func slackPayload(msg Message) []byte {
 
 func slackText(msg Message) string {
 	if msg.Body != "" {
-		return msg.Subject + "\n" + slackCodeFence + "\n" + msg.Body + "\n" + slackCodeFence
+		return msg.Subject + notifyLF + slackCodeFence + notifyLF + msg.Body + notifyLF + slackCodeFence
 	}
 	return msg.Subject
 }

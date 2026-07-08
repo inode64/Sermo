@@ -25,6 +25,8 @@ import (
 // probeTimeout bounds each app probe command invocation.
 const probeTimeout = 5 * time.Second
 
+const binaryExecutableModeMask = 0o111
+
 const (
 	// StatusOK reports a successful application inspection.
 	StatusOK = "ok"
@@ -224,7 +226,7 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 		r.Permissions = modeString(info)
 		r.Status = statusErrorPrefix + r.Binary + " is a directory"
 		return r
-	case fi.Mode().Perm()&0o111 == 0:
+	case fi.Mode().Perm()&binaryExecutableModeMask == 0:
 		info = fi
 		r.Permissions = modeString(info)
 		r.Installed = true

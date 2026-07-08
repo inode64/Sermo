@@ -18,8 +18,19 @@ const (
 	lvmDaemonFieldProtocol   = "protocol"
 	lvmDaemonFieldResponse   = "response"
 	lvmDaemonFieldVersion    = "version"
+	lvmDaemonHelloRequest    = "request = \"hello\"\n\n##\n"
+	lvmDaemonLineSeparator   = "\n"
+	lvmDaemonMessageDelim    = "\n##\n"
+	lvmDaemonQuoteCutset     = "\""
 	lvmDaemonProtocolVersion = "protocol_version"
 	lvmDaemonResponseOK      = "OK"
+)
+
+const (
+	lvmDaemonFieldSeparator     = '='
+	lvmDaemonInitialBufferBytes = 256
+	lvmDaemonMaxMessageBytes    = 1 << 16
+	lvmDaemonReadBufferBytes    = 512
 )
 
 // lvmpolldProtocol probes LVM's poll daemon (lvmpolld) over its Unix socket
@@ -52,7 +63,7 @@ func (lvmpolldProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 	// The hello request body is a single config field; buffer framing appends the
 	// "\n##\n" delimiter (matching libdaemon's buffer_write exactly).
-	if _, err := io.WriteString(c, "request = \"hello\"\n\n##\n"); err != nil {
+	if _, err := io.WriteString(c, lvmDaemonHelloRequest); err != nil {
 		return Result{}, err
 	}
 	reply, err := readLVMDaemonMessage(c)
@@ -82,10 +93,9 @@ func (lvmpolldProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // "\n##\n" delimiter, which it strips. It caps the message to guard against a
 // misbehaving or non-LVM peer that never sends the delimiter.
 func readLVMDaemonMessage(r io.Reader) (string, error) {
-	const maxLen = 1 << 16
-	delim := []byte("\n##\n")
-	buf := make([]byte, 0, 256)
-	tmp := make([]byte, 512)
+	delim := []byte(lvmDaemonMessageDelim)
+	buf := make([]byte, 0, lvmDaemonInitialBufferBytes)
+	tmp := make([]byte, lvmDaemonReadBufferBytes)
 	for {
 		n, err := r.Read(tmp)
 		if n > 0 {
@@ -93,7 +103,7 @@ func readLVMDaemonMessage(r io.Reader) (string, error) {
 			if i := bytes.Index(buf, delim); i >= 0 {
 				return string(buf[:i]), nil
 			}
-			if len(buf) > maxLen {
+			if len(buf) > lvmDaemonMaxMessageBytes {
 				return "", errors.New("lvmpolld: reply exceeds size limit")
 			}
 		}
@@ -112,14 +122,14 @@ func readLVMDaemonMessage(r io.Reader) (string, error) {
 // do not occur here — are simply ignored.
 func parseLVMDaemonReply(s string) map[string]string {
 	out := map[string]string{}
-	for _, line := range strings.Split(s, "\n") {
+	for _, line := range strings.Split(s, lvmDaemonLineSeparator) {
 		line = strings.TrimSpace(line)
-		eq := strings.IndexByte(line, '=')
+		eq := strings.IndexByte(line, lvmDaemonFieldSeparator)
 		if eq < 0 {
 			continue
 		}
 		key := strings.TrimSpace(line[:eq])
-		val := strings.Trim(strings.TrimSpace(line[eq+1:]), "\"")
+		val := strings.Trim(strings.TrimSpace(line[eq+1:]), lvmDaemonQuoteCutset)
 		if key != "" {
 			out[key] = val
 		}

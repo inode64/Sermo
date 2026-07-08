@@ -1,5 +1,7 @@
 package checks
 
+import "sermo/internal/metrics"
+
 // GraphMetric describes a numeric field a check publishes in its Result.Data for
 // time-series graphing: the Data key and the unit shown in the UI.
 type GraphMetric struct {
@@ -12,12 +14,12 @@ type GraphMetric struct {
 // Result.Data under Key — the recorder, store and web graph it generically, so
 // this is reusable by any check (and service).
 var graphMetrics = map[string][]GraphMetric{
-	CheckTypeHdparm:       {{Key: fieldRead, Unit: "MB/s"}, {Key: fieldCached, Unit: "MB/s"}},
-	CheckTypeSensors:      {{Key: sensorTemp, Unit: "°C"}, {Key: sensorFan, Unit: "RPM"}},
-	CheckTypeSmart:        {{Key: fieldTemperature, Unit: "°C"}, {Key: fieldReallocated, Unit: ""}, {Key: fieldWear, Unit: "%"}, {Key: fieldPowerOnHours, Unit: "h"}},
-	CheckTypeEDAC:         {{Key: fieldCE, Unit: ""}, {Key: fieldUE, Unit: ""}},
-	CheckTypeUsers:        {{Key: DataKeyCount, Unit: "users"}},
-	CheckTypeProcessCount: {{Key: DataKeyCount, Unit: "processes"}},
+	CheckTypeHdparm:       {{Key: fieldRead, Unit: metrics.MetricUnitMegabytesPerSecond}, {Key: fieldCached, Unit: metrics.MetricUnitMegabytesPerSecond}},
+	CheckTypeSensors:      {{Key: sensorTemp, Unit: metrics.MetricUnitCelsius}, {Key: sensorFan, Unit: metrics.MetricUnitRPM}},
+	CheckTypeSmart:        {{Key: fieldTemperature, Unit: metrics.MetricUnitCelsius}, {Key: fieldReallocated, Unit: metrics.MetricUnitNone}, {Key: fieldWear, Unit: metrics.MetricUnitPercent}, {Key: fieldPowerOnHours, Unit: metrics.MetricUnitHours}},
+	CheckTypeEDAC:         {{Key: fieldCE, Unit: metrics.MetricUnitNone}, {Key: fieldUE, Unit: metrics.MetricUnitNone}},
+	CheckTypeUsers:        {{Key: DataKeyCount, Unit: metrics.MetricUnitUsers}},
+	CheckTypeProcessCount: {{Key: DataKeyCount, Unit: metrics.MetricUnitProcesses}},
 }
 
 // GraphMetrics returns the graphable metrics declared for a check type, or nil

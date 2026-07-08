@@ -188,9 +188,9 @@ func controlledService(control map[string]any, checkName string, check map[strin
 }
 
 func dockerLabel(c DockerCandidate) string {
-	return detailLabel(c.Title, labelField("container", c.Container), labelField("status", c.Status))
+	return detailLabel(c.Title, labelField(labelFieldContainer, c.Container), labelField(labelFieldStatus, c.Status))
 }
 
 func vmLabel(c VMCandidate) string {
-	return detailLabel(c.Title, labelField("domain", c.Domain), labelField("status", c.Status))
+	return detailLabel(c.Title, labelField(labelFieldDomain, c.Domain), labelField(labelFieldStatus, c.Status))
 }

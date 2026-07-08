@@ -14,6 +14,11 @@ func init() { Register(varnishProtocol{}, protocolAliasVarnishAdm) }
 const (
 	maxVarnishCLIBody       = 1 << 16
 	varnishStatusAuthNeeded = 107 // CLIS_AUTH
+	varnishStatusLineFields = 2
+	varnishStatusFieldIndex = 0
+	varnishLengthFieldIndex = 1
+	varnishVersionDelims    = " \t\r\n"
+	varnishVersionPrefix    = "varnish-"
 	extraAuthRequired       = "auth_required"
 )
 
@@ -37,7 +42,7 @@ func (varnishProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	defer func() { _ = c.Close() }()
 
 	br := bufio.NewReader(c)
-	line, err := br.ReadString('\n')
+	line, err := br.ReadString(protocolLineBreak)
 	if err != nil && line == "" {
 		return Result{}, err
 	}
@@ -63,13 +68,13 @@ func (varnishProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // parseVarnishStatus parses a Varnish CLI status line ("<status> <length>").
 func parseVarnishStatus(line string) (status, length int, err error) {
 	f := strings.Fields(line)
-	if len(f) < 2 {
+	if len(f) < varnishStatusLineFields {
 		return 0, 0, errors.New("not a Varnish CLI status line")
 	}
-	if status, err = strconv.Atoi(f[0]); err != nil {
+	if status, err = strconv.Atoi(f[varnishStatusFieldIndex]); err != nil {
 		return 0, 0, errors.New("invalid Varnish CLI status")
 	}
-	if length, err = strconv.Atoi(f[1]); err != nil || length < 0 {
+	if length, err = strconv.Atoi(f[varnishLengthFieldIndex]); err != nil || length < 0 {
 		return 0, 0, errors.New("invalid Varnish CLI length")
 	}
 	return status, length, nil
@@ -78,13 +83,12 @@ func parseVarnishStatus(line string) (status, length int, err error) {
 // varnishVersion extracts the version from a CLI banner ("varnish-7.4.1
 // revision …" -> "7.4.1"). Empty when absent (e.g. an auth challenge).
 func varnishVersion(body string) string {
-	const prefix = "varnish-"
-	i := strings.Index(body, prefix)
+	i := strings.Index(body, varnishVersionPrefix)
 	if i < 0 {
 		return ""
 	}
-	v := body[i+len(prefix):]
-	if j := strings.IndexAny(v, " \t\r\n"); j >= 0 {
+	v := body[i+len(varnishVersionPrefix):]
+	if j := strings.IndexAny(v, varnishVersionDelims); j >= 0 {
 		v = v[:j]
 	}
 	return v

@@ -18,6 +18,13 @@ import (
 // DefaultHost is the loopback host protocol probes use when config omits host.
 const DefaultHost = "127.0.0.1"
 
+const (
+	numericBaseDecimal = 10
+	protocolLineBreak  = '\n'
+	protocolTrimCRLF   = "\r\n"
+	xid32Bytes         = 4
+)
+
 // ProtocolName* constants are canonical connection protocol names shared by the
 // protocol registry and check builders.
 const (
@@ -493,8 +500,8 @@ func DefaultPort(name string) int {
 // readCRLFLine reads one CRLF/LF-terminated line, trimmed — the line shape
 // every text protocol probe (redis RESP, imap, nut, …) reads.
 func readCRLFLine(br *bufio.Reader) (string, error) {
-	s, err := br.ReadString('\n')
-	return strings.TrimRight(s, "\r\n"), err
+	s, err := br.ReadString(protocolLineBreak)
+	return strings.TrimRight(s, protocolTrimCRLF), err
 }
 
 // readGreetingLine reads one CR/LF-terminated greeting line from a fresh reader
@@ -503,17 +510,17 @@ func readCRLFLine(br *bufio.Reader) (string, error) {
 // the error only when nothing was read. For single-line greetings; a probe that
 // reads more lines must keep its own bufio.Reader.
 func readGreetingLine(r io.Reader) (string, error) {
-	line, err := bufio.NewReader(r).ReadString('\n')
+	line, err := bufio.NewReader(r).ReadString(protocolLineBreak)
 	if err != nil && line == "" {
 		return "", err
 	}
-	return strings.TrimRight(line, "\r\n"), nil
+	return strings.TrimRight(line, protocolTrimCRLF), nil
 }
 
 // randXID32 returns a random 32-bit transaction id with a fixed fallback when
 // the system RNG fails, shared by the rpcbind/nfs and dhcp probes.
 func randXID32() uint32 {
-	var b [4]byte
+	var b [xid32Bytes]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return fallbackXID32
 	}

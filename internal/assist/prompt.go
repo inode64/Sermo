@@ -37,6 +37,8 @@ func NewPrompt(in io.Reader, out io.Writer) *Prompt {
 // abort with this error.
 var ErrInputClosed = errors.New("input ended before the prompt was answered")
 
+const promptLineBreak = '\n'
+
 // promptAbort is the panic sentinel Recover translates into ErrInputClosed.
 type promptAbort struct{}
 
@@ -73,7 +75,7 @@ func (p *Prompt) printf(format string, a ...any) { fmt.Fprintf(p.w, format, a...
 // readLine reads one trimmed line; io.EOF yields an empty string and marks the
 // input as exhausted for abortIfClosed.
 func (p *Prompt) readLine() string {
-	line, err := p.r.ReadString('\n')
+	line, err := p.r.ReadString(promptLineBreak)
 	if err != nil {
 		p.eof = true
 	}

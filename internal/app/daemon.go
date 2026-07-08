@@ -24,6 +24,8 @@ import (
 	"sermo/internal/web"
 )
 
+const appVersionPreflightSuffix = "-version"
+
 // MonitorStore is the persistent monitoring-state store the daemon consults to
 // decide whether a service or watch is actively monitored. It is implemented by
 // internal/state.Store; kept as an interface so workers can be tested without a
@@ -401,10 +403,9 @@ func appVersionCmds(tree map[string]any) map[string]appVersionCmd {
 	if !ok {
 		return nil
 	}
-	const suffix = "-version"
 	cmds := map[string]appVersionCmd{}
 	for key, raw := range preflight {
-		app, ok := strings.CutSuffix(key, suffix)
+		app, ok := strings.CutSuffix(key, appVersionPreflightSuffix)
 		if !ok || app == "" {
 			continue
 		}

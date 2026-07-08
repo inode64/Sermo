@@ -151,7 +151,7 @@ func (c connCheck) Run(ctx context.Context) Result {
 		ok, msg = false, fmt.Sprintf("%s %s: %s", c.proto.Name(), addr, fail)
 	}
 	if ok && c.latencyOp != "" {
-		ms := strconv.FormatInt(elapsed.Milliseconds(), 10)
+		ms := strconv.FormatInt(elapsed.Milliseconds(), numericBaseDecimal)
 		pass, lerr := compareValue(ms, c.latencyOp, c.latencyValue)
 		switch {
 		case lerr != nil:

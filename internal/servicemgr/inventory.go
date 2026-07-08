@@ -21,6 +21,8 @@ const (
 	openRCStateNotStarted       = "not started"
 	openRCStateStopped          = "stopped"
 	openRCStateCrashed          = "crashed"
+	systemdListUnitNameIndex    = 0
+	openRCServiceNameIndex      = 0
 )
 
 // ListActiveUnits returns active service units for the selected init backend.
@@ -52,11 +54,11 @@ func ParseSystemdActiveUnits(stdout string) []string {
 	sc := bufio.NewScanner(strings.NewReader(stdout))
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
-		if len(fields) == 0 || fields[0] == systemdUnitHeader {
+		if len(fields) <= systemdListUnitNameIndex || fields[systemdListUnitNameIndex] == systemdUnitHeader {
 			continue
 		}
-		if strings.HasSuffix(fields[0], systemdServiceSuffix) {
-			out = append(out, fields[0])
+		if strings.HasSuffix(fields[systemdListUnitNameIndex], systemdServiceSuffix) {
+			out = append(out, fields[systemdListUnitNameIndex])
 		}
 	}
 	return uniqueStrings(nil, out...)
@@ -117,10 +119,10 @@ func openRCStartedService(line string) string {
 	}
 	beforeState, _, _ := strings.Cut(line, "[")
 	fields := strings.Fields(beforeState)
-	if len(fields) == 0 {
+	if len(fields) <= openRCServiceNameIndex {
 		return ""
 	}
-	return fields[0]
+	return fields[openRCServiceNameIndex]
 }
 
 func uniqueStrings(list []string, values ...string) []string {

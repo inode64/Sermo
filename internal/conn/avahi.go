@@ -14,6 +14,8 @@ func init() { Register(avahiProtocol{}, protocolAliasAvahiDaemon) }
 // AvahiServerState enum).
 const avahiServerRunning = 2
 
+const avahiVersionPrefix = "avahi "
+
 // avahiProtocol probes the Avahi mDNS/DNS-SD daemon natively over its D-Bus API
 // (org.freedesktop.Avahi) using the pure-Go godbus client. Connecting to the
 // system bus performs the SASL auth and Hello handshake; it then calls
@@ -94,9 +96,8 @@ func avahiProbe(ctx context.Context, addr string) (Result, error) {
 // avahiVersion extracts the numeric version from Avahi's version string
 // ("avahi 0.8" -> "0.8"), falling back to the last whitespace-separated field.
 func avahiVersion(s string) string {
-	const prefix = "avahi "
-	if strings.HasPrefix(s, prefix) {
-		return strings.TrimSpace(strings.TrimPrefix(s, prefix))
+	if strings.HasPrefix(s, avahiVersionPrefix) {
+		return strings.TrimSpace(strings.TrimPrefix(s, avahiVersionPrefix))
 	}
 	if f := strings.Fields(s); len(f) > 0 {
 		return f[len(f)-1]

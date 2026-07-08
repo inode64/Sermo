@@ -19,6 +19,29 @@ const (
 	tftpOACK  = 6
 )
 
+const (
+	tftpDefaultProbeFilename = "sermo-tftp-check"
+	tftpModeOctet            = "octet"
+	tftpReplyBufferBytes     = 1024
+	tftpReplyMinBytes        = 4
+	tftpWireByteShift        = 8
+	tftpWireZeroByte         = 0
+)
+
+const (
+	tftpReplyOpcodeHighOffset = 0
+	tftpReplyOpcodeLowOffset  = 1
+	tftpErrorCodeHighOffset   = 2
+	tftpErrorCodeLowOffset    = 3
+	tftpErrorMessageOffset    = 4
+)
+
+const (
+	tftpOpNameData  = "data"
+	tftpOpNameError = "error"
+	tftpOpNameOACK  = "oack"
+)
+
 // tftpProtocol probes a TFTP server natively (RFC 1350): it sends a read request
 // (RRQ) and verifies the server answers with a valid TFTP packet. A DATA reply
 // means the file is being served; an ERROR reply (e.g. "file not found") still
@@ -55,12 +78,12 @@ func (tftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 	filename := cfg.Query
 	if filename == "" {
-		filename = "sermo-tftp-check"
+		filename = tftpDefaultProbeFilename
 	}
 	if _, err := pc.WriteTo(buildTFTPReadRequest(filename), server); err != nil {
 		return Result{}, err
 	}
-	buf := make([]byte, 1024)
+	buf := make([]byte, tftpReplyBufferBytes)
 	n, _, err := pc.ReadFrom(buf)
 	if err != nil {
 		return Result{}, err
@@ -84,28 +107,28 @@ func (tftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // buildTFTPReadRequest builds an RRQ for filename in octet (binary) mode.
 func buildTFTPReadRequest(filename string) []byte {
 	var b bytes.Buffer
-	b.WriteByte(0)
+	b.WriteByte(tftpWireZeroByte)
 	b.WriteByte(tftpRRQ)
 	b.WriteString(filename)
-	b.WriteByte(0)
-	b.WriteString("octet")
-	b.WriteByte(0)
+	b.WriteByte(tftpWireZeroByte)
+	b.WriteString(tftpModeOctet)
+	b.WriteByte(tftpWireZeroByte)
 	return b.Bytes()
 }
 
 // parseTFTPReply reads the opcode of a TFTP reply, plus the error code and
 // message for an ERROR packet.
 func parseTFTPReply(b []byte) (opcode, errCode int, msg string, err error) {
-	if len(b) < 4 {
+	if len(b) < tftpReplyMinBytes {
 		return 0, 0, "", errors.New("short TFTP reply")
 	}
-	opcode = int(b[0])<<8 | int(b[1])
+	opcode = int(b[tftpReplyOpcodeHighOffset])<<tftpWireByteShift | int(b[tftpReplyOpcodeLowOffset])
 	if opcode == tftpERROR {
-		errCode = int(b[2])<<8 | int(b[3])
-		if i := bytes.IndexByte(b[4:], 0); i >= 0 {
-			msg = string(b[4 : 4+i])
+		errCode = int(b[tftpErrorCodeHighOffset])<<tftpWireByteShift | int(b[tftpErrorCodeLowOffset])
+		if i := bytes.IndexByte(b[tftpErrorMessageOffset:], tftpWireZeroByte); i >= 0 {
+			msg = string(b[tftpErrorMessageOffset : tftpErrorMessageOffset+i])
 		} else {
-			msg = string(b[4:])
+			msg = string(b[tftpErrorMessageOffset:])
 		}
 	}
 	return opcode, errCode, msg, nil
@@ -120,11 +143,11 @@ func tftpResponded(opcode int) bool {
 func tftpOpName(opcode int) string {
 	switch opcode {
 	case tftpDATA:
-		return "data"
+		return tftpOpNameData
 	case tftpERROR:
-		return "error"
+		return tftpOpNameError
 	case tftpOACK:
-		return "oack"
+		return tftpOpNameOACK
 	default:
 		return strconv.Itoa(opcode)
 	}

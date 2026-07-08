@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+const (
+	logDirMode  = 0o750
+	logFileMode = 0o640
+)
+
 // Writer appends one JSON-encoded record per line to a log file.
 type Writer struct {
 	path string
@@ -28,10 +33,10 @@ func Open(path string) (*Writer, error) {
 	if !filepath.IsAbs(path) {
 		return nil, fmt.Errorf("log path %q must be absolute", path)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), logDirMode); err != nil {
 		return nil, fmt.Errorf("create log directory: %w", err)
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o640) //nolint:gosec // G304: operator-configured audit path
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, logFileMode) //nolint:gosec // G304: operator-configured audit path
 	if err != nil {
 		return nil, fmt.Errorf("open log %q: %w", path, err)
 	}

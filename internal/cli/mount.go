@@ -16,6 +16,8 @@ import (
 	"sermo/internal/state"
 )
 
+const mountCommandTargetArgCount = 2
+
 func (a App) runMount(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
 		return a.commandUsageError(commandMount, "mount requires a target, or subcommand status/list")
@@ -27,7 +29,7 @@ func (a App) runMount(ctx context.Context, opts options) int {
 		}
 		return a.runMountList(opts)
 	case commandStatus:
-		if len(opts.args) != 2 {
+		if len(opts.args) != mountCommandTargetArgCount {
 			return a.commandUsageError(commandMount, "mount status requires exactly one mount name or path")
 		}
 		return a.runMountStatus(opts, opts.args[1])

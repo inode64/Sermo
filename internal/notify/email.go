@@ -262,16 +262,16 @@ func buildMailMessage(from string, to []string, msg Message) (*gomail.Msg, error
 }
 
 func crlfBody(body string) string {
-	body = strings.ReplaceAll(body, "\r\n", "\n")
-	body = strings.ReplaceAll(body, "\r", "\n")
-	body = strings.ReplaceAll(body, "\n", "\r\n")
-	if !strings.HasSuffix(body, "\r\n") {
-		body += "\r\n"
+	body = strings.ReplaceAll(body, notifyCRLF, notifyLF)
+	body = strings.ReplaceAll(body, notifyCR, notifyLF)
+	body = strings.ReplaceAll(body, notifyLF, notifyCRLF)
+	if !strings.HasSuffix(body, notifyCRLF) {
+		body += notifyCRLF
 	}
 	return body
 }
 
 // sanitizeHeader strips CR/LF to prevent header injection from a check message.
 func sanitizeHeader(s string) string {
-	return strings.NewReplacer("\r", " ", "\n", " ").Replace(s)
+	return strings.NewReplacer(notifyCR, notifySP, notifyLF, notifySP).Replace(s)
 }

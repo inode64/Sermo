@@ -35,6 +35,19 @@ const (
 	OnModeDelete = "delete"
 )
 
+const (
+	defaultHTTPStatusCode       = http.StatusOK
+	httpStatusClassPatternLen   = 3
+	httpStatusClassDigitIndex   = 0
+	httpStatusClassWildcard1    = 1
+	httpStatusClassWildcard2    = 2
+	httpStatusClassMinDigit     = '1'
+	httpStatusClassMaxDigit     = '5'
+	httpStatusClassWildcard     = 'x'
+	httpStatusClassWildcardCaps = 'X'
+	httpStatusClassDigitBase    = '0'
+)
+
 // net/icmp check metric names (the `metric:` selector of a net or icmp check).
 // The net ones are exported so the web backend labels its net-watch readings
 // with the same names the check evaluates.
@@ -737,12 +750,18 @@ func defaultCommandExport(name string) commandExport {
 var commandShortVersionRE = regexp.MustCompile(`[0-9]+\.[0-9]+(?:\.[0-9]+)?`)
 var commandShortIntegerVersionRE = regexp.MustCompile(`(?i)\b(?:version|v)\s*:?\s*([0-9]+)\b`)
 
+const (
+	commandRegexFullMatchGroup     = 0
+	commandRegexFirstCaptureGroup  = 1
+	commandRegexMinCapturedMatches = 2
+)
+
 func commandShortVersion(s string) string {
 	if dotted := commandShortVersionRE.FindString(s); dotted != "" {
 		return dotted
 	}
-	if match := commandShortIntegerVersionRE.FindStringSubmatch(s); len(match) > 1 {
-		return match[1]
+	if match := commandShortIntegerVersionRE.FindStringSubmatch(s); len(match) >= commandRegexMinCapturedMatches {
+		return match[commandRegexFirstCaptureGroup]
 	}
 	return ""
 }
@@ -768,10 +787,10 @@ func (e commandExport) value(stdout, stderr string) string {
 		match := e.regex.FindStringSubmatch(source)
 		if match == nil {
 			value = e.defaultValue
-		} else if len(match) > 1 {
-			value = match[1]
+		} else if len(match) >= commandRegexMinCapturedMatches {
+			value = match[commandRegexFirstCaptureGroup]
 		} else {
-			value = match[0]
+			value = match[commandRegexFullMatchGroup]
 		}
 	} else if e.shortVersion {
 		value = commandShortVersion(source)
@@ -935,7 +954,7 @@ func buildCountCheck(b base, entry map[string]any) (Check, string) {
 	if !cfgval.IsCompareOp(op) {
 		return nil, "count check requires a valid op (>=, >, <=, <, ==, !=)"
 	}
-	val, err := strconv.ParseFloat(cfgval.String(threshold[CheckKeyValue]), 64)
+	val, err := strconv.ParseFloat(cfgval.String(threshold[CheckKeyValue]), numericBits64)
 	if err != nil {
 		return nil, "count check value must be numeric"
 	}
@@ -968,7 +987,7 @@ func buildAutofsCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		if !cfgval.IsCompareOp(op) {
 			return nil, "autofs check count has an invalid op (>=, >, <=, <, ==, !=)"
 		}
-		v, err := strconv.ParseFloat(cfgval.String(m[CheckKeyValue]), 64)
+		v, err := strconv.ParseFloat(cfgval.String(m[CheckKeyValue]), numericBits64)
 		if err != nil {
 			return nil, "autofs check count value must be numeric"
 		}
@@ -1314,7 +1333,7 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	if host == "" {
 		return nil, "icmp check requires a host"
 	}
-	count := 3
+	count := DefaultPingCount
 	if v, ok := cfgval.Int(entry[CheckKeyCount]); ok {
 		if v <= 0 {
 			return nil, "icmp count must be a positive integer"
@@ -1353,13 +1372,13 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 			if !cfgval.IsCompareOp(op) {
 				return nil, "icmp latency threshold has an invalid op"
 			}
-			v, err := strconv.ParseFloat(cfgval.String(th[CheckKeyValue]), 64)
+			v, err := strconv.ParseFloat(cfgval.String(th[CheckKeyValue]), numericBits64)
 			if err != nil {
 				return nil, "icmp latency threshold value must be numeric"
 			}
 			c.hasThreshold, c.op, c.value = true, op, v
 		} else if hasCh {
-			d, err := strconv.ParseFloat(cfgval.String(ch[CheckKeyDelta]), 64)
+			d, err := strconv.ParseFloat(cfgval.String(ch[CheckKeyDelta]), numericBits64)
 			if err != nil {
 				return nil, "icmp latency change delta must be numeric"
 			}
@@ -1579,7 +1598,7 @@ func parseAssertionMap(v any, field string) ([]jsonAssertion, string) {
 // ("2xx"), or a list of either. Empty defaults to 200.
 func parseStatusMatcher(v any) (statusMatcher, error) {
 	if v == nil {
-		return statusMatcher{codes: []int{200}}, nil
+		return statusMatcher{codes: []int{defaultHTTPStatusCode}}, nil
 	}
 	// Operator form: {op, value} (e.g. status < 500).
 	if cond, ok := v.(map[string]any); ok {
@@ -1606,11 +1625,19 @@ func parseStatusMatcher(v any) (statusMatcher, error) {
 			continue
 		}
 		s := strings.TrimSpace(cfgval.AsString(item))
-		if len(s) == 3 && (s[1] == 'x' || s[1] == 'X') && (s[2] == 'x' || s[2] == 'X') && s[0] >= '1' && s[0] <= '5' {
-			m.classes = append(m.classes, int(s[0]-'0'))
+		if isHTTPStatusClassPattern(s) {
+			m.classes = append(m.classes, int(s[httpStatusClassDigitIndex]-httpStatusClassDigitBase))
 			continue
 		}
 		return statusMatcher{}, fmt.Errorf("invalid expect_status %q", s)
 	}
 	return m, nil
+}
+
+func isHTTPStatusClassPattern(s string) bool {
+	return len(s) == httpStatusClassPatternLen &&
+		(s[httpStatusClassWildcard1] == httpStatusClassWildcard || s[httpStatusClassWildcard1] == httpStatusClassWildcardCaps) &&
+		(s[httpStatusClassWildcard2] == httpStatusClassWildcard || s[httpStatusClassWildcard2] == httpStatusClassWildcardCaps) &&
+		s[httpStatusClassDigitIndex] >= httpStatusClassMinDigit &&
+		s[httpStatusClassDigitIndex] <= httpStatusClassMaxDigit
 }

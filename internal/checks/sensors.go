@@ -176,7 +176,7 @@ func readSensorKind(dir, chip, kind string, scale float64) []SensorReading {
 	files, _ := filepath.Glob(filepath.Join(dir, kind+"[0-9]*_input"))
 	var out []SensorReading
 	for _, f := range files {
-		v, err := strconv.ParseFloat(readTrim(f), 64)
+		v, err := strconv.ParseFloat(readTrim(f), numericBits64)
 		if err != nil {
 			continue
 		}

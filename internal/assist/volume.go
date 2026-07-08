@@ -2,7 +2,6 @@ package assist
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -158,19 +157,20 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 // enforces on *_pct predicates), accepting either "10" or "10%".
 func askPercent(p *Prompt, question string, def int) any {
 	for {
-		v := strings.TrimSpace(p.Ask(question+" (%)", strconv.Itoa(def)))
+		v := strings.TrimSpace(p.Ask(question+" (%)", cfgval.String(def)))
 		if v == "" {
 			return def
 		}
-		if strings.HasSuffix(v, "%") {
-			n := strings.TrimSpace(strings.TrimSuffix(v, "%"))
-			if f, err := strconv.ParseFloat(n, 64); err == nil && f >= 0 && f <= 100 {
+		if strings.HasSuffix(v, cfgval.PercentSuffix) {
+			if _, ok := cfgval.Percent(v); ok {
 				return v
 			}
-		} else if n, err := strconv.Atoi(v); err == nil && n >= 0 && n <= 100 {
-			return n
+		} else if n, ok := cfgval.Int(v); ok {
+			if _, ok := cfgval.Percent(n); ok {
+				return n
+			}
 		}
-		p.printf("  use a percentage in 0..100, like 10 or 10%%\n")
+		p.printf("  use a percentage in %s, like 10 or 10%%\n", cfgval.PercentRange())
 	}
 }
 

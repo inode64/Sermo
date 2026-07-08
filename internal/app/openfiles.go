@@ -19,8 +19,9 @@ import (
 const openFilesTallyTTL = time.Minute
 
 const (
-	procRootPath = "/proc"
-	procFDDir    = "fd"
+	procDeletedPathSuffix = " (deleted)"
+	procRootPath          = "/proc"
+	procFDDir             = "fd"
 )
 
 // openFilesByMountCached returns open-file counts keyed by mount point, computed
@@ -74,7 +75,7 @@ func scanOpenFilesByMount(mounts []checks.Mount) map[string]int64 {
 			if err != nil || !filepath.IsAbs(target) {
 				continue
 			}
-			target = strings.TrimSuffix(target, " (deleted)")
+			target = strings.TrimSuffix(target, procDeletedPathSuffix)
 			if m := checks.MountForPath(mounts, filepath.Clean(target)); m != nil {
 				tally[m.MountPoint]++
 			}

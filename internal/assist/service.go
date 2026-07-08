@@ -312,7 +312,7 @@ func detectedProcessSelector(c ServiceCandidate) (map[string]any, string) {
 
 // serviceLabel renders the candidate's detected facts for the selection menu.
 func serviceLabel(c ServiceCandidate) string {
-	details := []string{labelField("unit", c.Unit), labelField("status", c.Status)}
+	details := []string{labelField(labelFieldUnit, c.Unit), labelField(labelFieldStatus, c.Status)}
 	if c.Generic {
 		details = append(details, "not in catalog")
 	}
@@ -327,7 +327,7 @@ func serviceLabel(c ServiceCandidate) string {
 		details = append(details, labelField(config.VariableKeyHost, host))
 	}
 	if len(c.ConfigPaths) > 0 {
-		details = append(details, labelField("config", c.ConfigPaths[0]))
+		details = append(details, labelField(labelFieldConfig, c.ConfigPaths[0]))
 	}
 	if c.Pidfile != "" {
 		details = append(details, labelField(config.ServiceKeyPidfile, c.Pidfile))

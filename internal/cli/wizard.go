@@ -47,6 +47,12 @@ const (
 
 	loopbackIfaceName       = "lo"
 	wizardSysfsNetClassPath = "/sys/class/net"
+	wizardSysfsHexPrefix    = "0x"
+	wizardSysfsFlagsBase    = 16
+	wizardSysfsFlagsBits    = 64
+
+	wizardConfigDirMode  = 0o755
+	wizardConfigFileMode = 0o644
 
 	wizardNounMount   = wizardAssistantMount
 	wizardNounService = wizardAssistantService
@@ -346,8 +352,8 @@ func listIfacesFromSysfs(root string) ([]assist.Iface, error) {
 
 func sysfsIfaceFlags(path string) uint64 {
 	raw := strings.TrimSpace(readSmallFile(path))
-	raw = strings.TrimPrefix(raw, "0x")
-	flags, _ := strconv.ParseUint(raw, 16, 64)
+	raw = strings.TrimPrefix(raw, wizardSysfsHexPrefix)
+	flags, _ := strconv.ParseUint(raw, wizardSysfsFlagsBase, wizardSysfsFlagsBits)
 	return flags
 }
 
@@ -778,11 +784,11 @@ func writeConfigDocs(globalPath, pathKey, relDir, targetDir, noun string, docs m
 	if err != nil {
 		return nil, "", err
 	}
-	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+	if err := os.MkdirAll(targetDir, wizardConfigDirMode); err != nil {
 		return nil, "", fmt.Errorf("create %s: %w", targetDir, err)
 	}
 	for _, file := range files {
-		if err := os.WriteFile(file.path, file.data, 0o644); err != nil { //nolint:gosec // config is world-readable by design
+		if err := os.WriteFile(file.path, file.data, wizardConfigFileMode); err != nil { //nolint:gosec // config is world-readable by design
 			return nil, "", fmt.Errorf("write %s: %w", file.path, err)
 		}
 	}
@@ -825,10 +831,10 @@ func ensureConfigPathDir(globalPath, pathKey, relDir, targetDir string) (string,
 		return "", fmt.Errorf("render %s: %w", globalPath, err)
 	}
 	bak := globalPath + ".bak"
-	if err := os.WriteFile(bak, orig, 0o644); err != nil { //nolint:gosec // config is world-readable by design
+	if err := os.WriteFile(bak, orig, wizardConfigFileMode); err != nil { //nolint:gosec // config is world-readable by design
 		return "", fmt.Errorf("write backup %s: %w", bak, err)
 	}
-	if err := os.WriteFile(globalPath, out, 0o644); err != nil { //nolint:gosec // config is world-readable by design
+	if err := os.WriteFile(globalPath, out, wizardConfigFileMode); err != nil { //nolint:gosec // config is world-readable by design
 		return "", fmt.Errorf("write %s: %w", globalPath, err)
 	}
 	return bak, nil

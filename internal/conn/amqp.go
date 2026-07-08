@@ -25,9 +25,6 @@ func (amqpProtocol) Name() string       { return ProtocolNameAMQP }
 func (amqpProtocol) DefaultPort() int   { return defaultPortAMQP }
 func (amqpProtocol) RequiresUser() bool { return false }
 
-// amqpHeader is the protocol header for AMQP 0-9-1: "AMQP" then 0, 0, 9, 1.
-var amqpHeader = []byte{'A', 'M', 'Q', 'P', 0, 0, 9, 1}
-
 // maxAMQPFrame bounds the Connection.Start payload we are willing to read, so a
 // hostile or non-AMQP peer cannot make the probe allocate without limit. The
 // real frame is a few hundred bytes.
@@ -38,17 +35,75 @@ const (
 	amqpFrameEndSize               = 1
 	amqpFrameHeaderSize            = 7
 	amqpFrameMethod                = 1
+	amqpFrameTypeOffset            = 0
+	amqpFramePayloadSizeStart      = 3
+	amqpFramePayloadSizeEnd        = 7
 	amqpMethodHeaderSize           = 4
+	amqpMethodClassStart           = 0
+	amqpMethodClassEnd             = 2
+	amqpMethodIDStart              = 2
+	amqpMethodIDEnd                = 4
 	amqpMethodStart                = 10
 	amqpNegotiationVersionMismatch = "version-mismatch"
 	amqpServerPropertiesOffset     = 6
+	amqpVersionMajorOffset         = 5
+	amqpVersionMinorOffset         = 6
+	amqpRevisionOffset             = 0
+	amqpRevisionBytes              = 1
+	amqpProtocolID                 = 0
+	amqpProtocolMajor091           = 0
+	amqpProtocolMinor091           = 9
+	amqpProtocolRevision091        = 1
 )
 
 const (
+	amqpTableLengthBytes      = 4
+	amqpFieldNameLengthBytes  = 1
+	amqpFieldTypeTagBytes     = 1
+	amqpFieldNameLengthOffset = 0
+	amqpLongStringLengthBytes = 4
+	amqpFieldWidthOctet       = 1
+	amqpFieldWidthShort       = 2
+	amqpFieldWidthLong        = 4
+	amqpFieldWidthLongLong    = 8
+	amqpFieldWidthDecimal     = 5
+)
+
+const (
+	amqpFieldTypeBool        = 't'
+	amqpFieldTypeInt8        = 'b'
+	amqpFieldTypeUint8       = 'B'
+	amqpFieldTypeInt16       = 's'
+	amqpFieldTypeUint16      = 'u'
+	amqpFieldTypeInt32       = 'I'
+	amqpFieldTypeUint32      = 'i'
+	amqpFieldTypeFloat       = 'f'
+	amqpFieldTypeInt64       = 'l'
+	amqpFieldTypeDouble      = 'd'
+	amqpFieldTypeTimestamp   = 'T'
+	amqpFieldTypeDecimal     = 'D'
+	amqpFieldTypeVoid        = 'V'
+	amqpFieldTypeLongString  = 'S'
+	amqpFieldTypeByteArray   = 'x'
+	amqpFieldTypeArray       = 'A'
+	amqpFieldTypeNestedTable = 'F'
+)
+
+const (
+	amqpSignature       = "AMQP"
+	amqpVersionFormat   = "AMQP %d-%d-%d"
 	amqpPropClusterName = "cluster_name"
 	amqpPropPlatform    = "platform"
 	amqpPropProduct     = "product"
 	amqpPropVersion     = "version"
+)
+
+// amqpHeader is the protocol header for AMQP 0-9-1: "AMQP" then 0, 0, 9, 1.
+var amqpHeader = append([]byte(amqpSignature),
+	amqpProtocolID,
+	amqpProtocolMajor091,
+	amqpProtocolMinor091,
+	amqpProtocolRevision091,
 )
 
 func (amqpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
@@ -71,19 +126,19 @@ func (amqpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	// Version negotiation rejection: the broker replies with its own 8-byte
 	// "AMQP" protocol header (offering a version it supports) and closes. That is
 	// still proof of an AMQP broker, just one that declined 0-9-1.
-	if hdr[0] == 'A' && hdr[1] == 'M' && hdr[2] == 'Q' && hdr[3] == 'P' {
-		var rev [1]byte
+	if string(hdr[:len(amqpSignature)]) == amqpSignature {
+		var rev [amqpRevisionBytes]byte
 		_, _ = io.ReadFull(c, rev[:]) // drain the 8th byte; ignore errors
 		return Result{
-			Version: fmt.Sprintf("AMQP %d-%d-%d", hdr[5], hdr[6], rev[0]),
+			Version: fmt.Sprintf(amqpVersionFormat, hdr[amqpVersionMajorOffset], hdr[amqpVersionMinorOffset], rev[amqpRevisionOffset]),
 			Extra:   map[string]string{extraNegotiation: amqpNegotiationVersionMismatch},
 		}, nil
 	}
 
-	if hdr[0] != amqpFrameMethod {
-		return Result{}, fmt.Errorf("unexpected AMQP frame type %d (want method)", hdr[0])
+	if hdr[amqpFrameTypeOffset] != amqpFrameMethod {
+		return Result{}, fmt.Errorf("unexpected AMQP frame type %d (want method)", hdr[amqpFrameTypeOffset])
 	}
-	size := binary.BigEndian.Uint32(hdr[3:7])
+	size := binary.BigEndian.Uint32(hdr[amqpFramePayloadSizeStart:amqpFramePayloadSizeEnd])
 	if size > maxAMQPFrame {
 		return Result{}, fmt.Errorf("AMQP frame too large (%d bytes)", size)
 	}
@@ -103,7 +158,7 @@ func (amqpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if len(body) < amqpMethodHeaderSize {
 		return Result{}, fmt.Errorf("short AMQP method frame (%d bytes)", len(body))
 	}
-	if class, method := binary.BigEndian.Uint16(body[0:2]), binary.BigEndian.Uint16(body[2:4]); class != amqpClassConnection || method != amqpMethodStart {
+	if class, method := binary.BigEndian.Uint16(body[amqpMethodClassStart:amqpMethodClassEnd]), binary.BigEndian.Uint16(body[amqpMethodIDStart:amqpMethodIDEnd]); class != amqpClassConnection || method != amqpMethodStart {
 		return Result{}, fmt.Errorf("unexpected AMQP method %d.%d (want Connection.Start 10.10)", class, method)
 	}
 
@@ -130,23 +185,23 @@ func (amqpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // whatever was decoded so far (the caller treats extraction as best effort).
 func parseAMQPTable(b []byte) map[string]string {
 	out := map[string]string{}
-	if len(b) < 4 {
+	if len(b) < amqpTableLengthBytes {
 		return out
 	}
-	n := binary.BigEndian.Uint32(b[0:4])
-	b = b[4:]
+	n := binary.BigEndian.Uint32(b[:amqpTableLengthBytes])
+	b = b[amqpTableLengthBytes:]
 	if uint32(len(b)) > n {
 		b = b[:n] // ignore trailing bytes beyond the declared table length
 	}
 	for len(b) > 0 {
-		nameLen := int(b[0])
-		b = b[1:]
-		if len(b) < nameLen+1 { // name + at least the value type tag
+		nameLen := int(b[amqpFieldNameLengthOffset])
+		b = b[amqpFieldNameLengthBytes:]
+		if len(b) < nameLen+amqpFieldTypeTagBytes {
 			break
 		}
 		name := string(b[:nameLen])
 		typ := b[nameLen]
-		b = b[nameLen+1:]
+		b = b[nameLen+amqpFieldTypeTagBytes:]
 		s, isStr, used, ok := amqpFieldValue(typ, b)
 		if !ok {
 			break
@@ -172,31 +227,31 @@ func amqpFieldValue(typ byte, b []byte) (s string, isStr bool, n int, ok bool) {
 		return "", false, width, true
 	}
 	lenPrefixed := func() (string, bool, int, bool) {
-		if len(b) < 4 {
+		if len(b) < amqpLongStringLengthBytes {
 			return "", false, 0, false
 		}
-		size := int(binary.BigEndian.Uint32(b[0:4]))
-		if size < 0 || len(b) < 4+size {
+		size := int(binary.BigEndian.Uint32(b[:amqpLongStringLengthBytes]))
+		if size < 0 || len(b) < amqpLongStringLengthBytes+size {
 			return "", false, 0, false
 		}
-		return string(b[4 : 4+size]), true, 4 + size, true
+		return string(b[amqpLongStringLengthBytes : amqpLongStringLengthBytes+size]), true, amqpLongStringLengthBytes + size, true
 	}
 	switch typ {
-	case 't', 'b', 'B': // bool, int8, uint8
-		return fixed(1)
-	case 's', 'u': // int16, uint16
-		return fixed(2)
-	case 'I', 'i', 'f': // int32, uint32, float
-		return fixed(4)
-	case 'l', 'd', 'T': // int64, double, timestamp
-		return fixed(8)
-	case 'D': // decimal: scale octet + int32
-		return fixed(5)
-	case 'V': // void
+	case amqpFieldTypeBool, amqpFieldTypeInt8, amqpFieldTypeUint8:
+		return fixed(amqpFieldWidthOctet)
+	case amqpFieldTypeInt16, amqpFieldTypeUint16:
+		return fixed(amqpFieldWidthShort)
+	case amqpFieldTypeInt32, amqpFieldTypeUint32, amqpFieldTypeFloat:
+		return fixed(amqpFieldWidthLong)
+	case amqpFieldTypeInt64, amqpFieldTypeDouble, amqpFieldTypeTimestamp:
+		return fixed(amqpFieldWidthLongLong)
+	case amqpFieldTypeDecimal:
+		return fixed(amqpFieldWidthDecimal)
+	case amqpFieldTypeVoid:
 		return "", false, 0, true
-	case 'S', 'x': // long string, byte array
+	case amqpFieldTypeLongString, amqpFieldTypeByteArray:
 		return lenPrefixed()
-	case 'A', 'F': // field array, nested table — skip by length
+	case amqpFieldTypeArray, amqpFieldTypeNestedTable:
 		_, _, used, ok := lenPrefixed()
 		return "", false, used, ok
 	default:

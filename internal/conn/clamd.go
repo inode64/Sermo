@@ -20,6 +20,12 @@ func (clamdProtocol) Name() string       { return ProtocolNameClamd }
 func (clamdProtocol) DefaultPort() int   { return defaultPortClamd }
 func (clamdProtocol) RequiresUser() bool { return false }
 
+const (
+	clamdCommandVersion      = "nVERSION\n"
+	clamdVersionEngineSep    = '/'
+	clamdVersionStringPrefix = "ClamAV "
+)
+
 func (clamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	c, err := dialDeadline(ctx, cfg, defaultPortClamd)
 	if err != nil {
@@ -27,7 +33,7 @@ func (clamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	defer func() { _ = c.Close() }()
 
-	if _, err := io.WriteString(c, "nVERSION\n"); err != nil {
+	if _, err := io.WriteString(c, clamdCommandVersion); err != nil {
 		return Result{}, err
 	}
 	line, err := readGreetingLine(c)
@@ -46,12 +52,11 @@ func (clamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // version (not the daily signature database part) keeps on_version_change quiet
 // across routine database updates.
 func clamdVersion(line string) (string, bool) {
-	const prefix = "ClamAV "
-	if !strings.HasPrefix(line, prefix) {
+	if !strings.HasPrefix(line, clamdVersionStringPrefix) {
 		return "", false
 	}
-	v := strings.TrimPrefix(line, prefix)
-	if i := strings.IndexByte(v, '/'); i >= 0 {
+	v := strings.TrimPrefix(line, clamdVersionStringPrefix)
+	if i := strings.IndexByte(v, clamdVersionEngineSep); i >= 0 {
 		v = v[:i]
 	}
 	return strings.TrimSpace(v), true

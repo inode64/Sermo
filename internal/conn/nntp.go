@@ -21,6 +21,18 @@ func (nntpProtocol) Name() string       { return ProtocolNameNNTP }
 func (nntpProtocol) DefaultPort() int   { return defaultPortNNTP }
 func (nntpProtocol) RequiresUser() bool { return false }
 
+const (
+	// #nosec G101 -- PASS is the NNTP AUTHINFO command verb, not a credential.
+	nntpCommandAuthInfoPassFormat = "AUTHINFO PASS %s\r\n"
+	nntpCommandAuthInfoUserFormat = "AUTHINFO USER %s\r\n"
+	nntpCommandQuit               = "QUIT\r\n"
+	nntpExtraPostingAllowed       = "posting_allowed"
+	nntpStatusAuthAccepted        = 281
+	nntpStatusPasswordRequired    = 381
+	nntpStatusPostingAllowed      = 200
+	nntpStatusPostingProhibited   = 201
+)
+
 func (nntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	return probeBanner(ctx, cfg, defaultPortNNTP, nntpHandshake)
 }
@@ -34,35 +46,35 @@ func nntpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	if code != 200 && code != 201 {
+	if code != nntpStatusPostingAllowed && code != nntpStatusPostingProhibited {
 		return Result{}, fmt.Errorf("unexpected greeting: %d %s", code, greeting)
 	}
 	res := Result{Extra: map[string]string{
-		extraGreeting:     greeting,
-		"posting_allowed": strconv.FormatBool(code == 200),
+		extraGreeting:           greeting,
+		nntpExtraPostingAllowed: strconv.FormatBool(code == nntpStatusPostingAllowed),
 	}}
 
 	if cfg.User != "" {
-		if _, err := fmt.Fprintf(rw, "AUTHINFO USER %s\r\n", cfg.User); err != nil {
+		if _, err := fmt.Fprintf(rw, nntpCommandAuthInfoUserFormat, cfg.User); err != nil {
 			return Result{}, err
 		}
 		code, text, err := tp.ReadResponse(0)
 		if err != nil {
 			return Result{}, err
 		}
-		if code == 381 { // 381: password required
-			if _, err := fmt.Fprintf(rw, "AUTHINFO PASS %s\r\n", cfg.Password); err != nil {
+		if code == nntpStatusPasswordRequired {
+			if _, err := fmt.Fprintf(rw, nntpCommandAuthInfoPassFormat, cfg.Password); err != nil {
 				return Result{}, err
 			}
 			if code, text, err = tp.ReadResponse(0); err != nil {
 				return Result{}, err
 			}
 		}
-		if code != 281 { // 281: authentication accepted
+		if code != nntpStatusAuthAccepted {
 			return Result{}, fmt.Errorf("auth failed: %d %s", code, text)
 		}
 	}
 
-	_, _ = fmt.Fprint(rw, "QUIT\r\n") // best effort
+	_, _ = fmt.Fprint(rw, nntpCommandQuit) // best effort
 	return res, nil
 }
