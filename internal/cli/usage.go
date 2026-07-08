@@ -442,7 +442,7 @@ var commandUsages = []commandUsage{
 		},
 		Flags: []string{
 			"--limit N       maximum events to fetch",
-			"--before TIME   RFC3339 timestamp or duration such as 2h",
+			"--before TIME   non-future RFC3339 timestamp or positive duration such as 2h",
 		},
 		Examples: []string{
 			"sermoctl events mysql-main --limit 20",
@@ -456,7 +456,7 @@ var commandUsages = []commandUsage{
 			"sermoctl activity clear [--before TIME]",
 		},
 		Flags: []string{
-			"--before TIME  RFC3339 timestamp or duration such as 2h",
+			"--before TIME  non-future RFC3339 timestamp or positive duration such as 2h",
 		},
 	},
 	{
@@ -483,7 +483,7 @@ var commandUsages = []commandUsage{
 			"sermoctl state compact [--before TIME]",
 		},
 		Flags: []string{
-			"--before TIME  RFC3339 timestamp or duration; omitted means normal retention",
+			"--before TIME  non-future RFC3339 timestamp or positive duration; omitted means normal retention",
 		},
 		Examples: []string{
 			"sermoctl state compact",

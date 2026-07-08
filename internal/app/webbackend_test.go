@@ -2126,13 +2126,14 @@ func TestWebBackendStartingStateUnsettled(t *testing.T) {
 	}
 }
 
-// TestCachedWatchLiveViewDoesNotRunColdHeavyProbe verifies that /api/watches
-// never runs expensive external dashboard probes on a cold cache. Those checks
-// already run in the daemon watch cycle; the web handler may display cached data,
-// but opening the panel must not start extra hdparm/smart work.
-func TestCachedWatchLiveViewDoesNotRunColdHeavyProbe(t *testing.T) {
+// TestWatchSnapshotsFeedHeavyProbeView verifies that /api/watches renders
+// expensive disk checks from daemon-cycle snapshots and never starts hdparm/smart
+// from the web handler.
+func TestWatchSnapshotsFeedHeavyProbeView(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	runner := &countingWebRunner{}
+	snapshots := NewWatchSnapshots()
+	snapshots.now = func() time.Time { return now }
 	b := &WebBackend{
 		watchOrder: []string{"disk"},
 		watches: map[string]*webWatch{
@@ -2147,9 +2148,9 @@ func TestCachedWatchLiveViewDoesNotRunColdHeavyProbe(t *testing.T) {
 				},
 			},
 		},
-		liveViewCache: map[string]cachedLiveView{},
-		execRunner:    runner,
-		now:           func() time.Time { return now },
+		watchSnapshots: snapshots,
+		execRunner:     runner,
+		now:            func() time.Time { return now },
 	}
 
 	// Cold heavy probes are not run by the web handler.
@@ -2161,21 +2162,75 @@ func TestCachedWatchLiveViewDoesNotRunColdHeavyProbe(t *testing.T) {
 		t.Fatalf("cold heavy probe ran %d commands, want 0", runner.calls)
 	}
 
-	b.liveViewMu.Lock()
-	b.liveViewCache["disk"] = cachedLiveView{
-		at:      now,
-		summary: "hdparm /dev/sda read=500.0 MB/s",
-		readings: []web.WatchReading{
-			{Field: "read", Value: "500.0 MB/s"},
+	snapshots.Publish("disk", checks.CheckTypeHdparm, checks.Result{
+		Check:     "disk",
+		Condition: true,
+		Message:   "hdparm /dev/sda read=500.0 MB/s",
+		Data: map[string]any{
+			checks.DataKeyDevice:   "/dev/sda",
+			checks.HdparmFieldRead: 500.0,
 		},
-	}
-	b.liveViewMu.Unlock()
+	})
 	ws = b.Watches(context.Background())
-	if len(ws) != 1 || !strings.Contains(ws[0].Summary, "hdparm") || len(ws[0].Readings) != 1 {
-		t.Fatalf("cached Watches() = %+v, want cached hdparm summary/readings", ws)
+	if len(ws) != 1 || !strings.Contains(ws[0].Summary, "hdparm") || readingByField(ws[0].Readings, checks.HdparmFieldRead).Value == "" {
+		t.Fatalf("snapshot Watches() = %+v, want hdparm summary/readings", ws)
 	}
 	if runner.calls != 0 {
-		t.Fatalf("cached heavy probe ran %d commands, want 0", runner.calls)
+		t.Fatalf("snapshot heavy probe ran %d commands, want 0", runner.calls)
+	}
+}
+
+func TestWatchSnapshotsSuppressColdWebProbe(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	var samplerCalls int
+	snapshots := NewWatchSnapshots()
+	snapshots.now = func() time.Time { return now }
+	b := &WebBackend{
+		watchOrder: []string{"fw"},
+		watches: map[string]*webWatch{
+			"fw": {
+				name:      "fw",
+				checkType: checks.CheckTypeFirewallRules,
+				interval:  time.Minute,
+				check: map[string]any{
+					checks.CheckKeyType:     checks.CheckTypeFirewallRules,
+					checks.CheckKeyMinRules: 2,
+				},
+			},
+		},
+		watchSnapshots: snapshots,
+		firewallSampler: func(context.Context, string, execx.Runner) (checks.FirewallRulesSample, error) {
+			samplerCalls++
+			return checks.FirewallRulesSample{Backend: checks.FirewallBackendNftables, Rules: 3}, nil
+		},
+		now: func() time.Time { return now },
+	}
+
+	ws := b.Watches(context.Background())
+	if len(ws) != 1 || strings.Contains(ws[0].Summary, "firewall") {
+		t.Fatalf("cold Watches() = %+v, want no live firewall summary", ws)
+	}
+	if samplerCalls != 0 {
+		t.Fatalf("cold web probe sampled firewall %d times, want 0", samplerCalls)
+	}
+
+	snapshots.Publish("fw", checks.CheckTypeFirewallRules, checks.Result{
+		Check:     "fw",
+		OK:        true,
+		Condition: false,
+		Message:   "firewall nft has 3 rules",
+		Data: map[string]any{
+			checks.DataKeyBackend:  checks.FirewallBackendNftables,
+			checks.DataKeyRules:    3,
+			checks.DataKeyMinRules: 2,
+		},
+	})
+	ws = b.Watches(context.Background())
+	if len(ws) != 1 || !strings.Contains(ws[0].Summary, "firewall") || len(ws[0].Readings) != 3 {
+		t.Fatalf("snapshot Watches() = %+v, want firewall summary/readings", ws)
+	}
+	if samplerCalls != 0 {
+		t.Fatalf("snapshot web probe sampled firewall %d times, want 0", samplerCalls)
 	}
 }
 

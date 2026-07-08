@@ -1525,13 +1525,20 @@ func parseBefore(value string, now func() time.Time) (time.Time, error) {
 	if value == "" {
 		return time.Time{}, nil
 	}
+	at := now()
 	if d, err := time.ParseDuration(value); err == nil {
-		return now().Add(-d), nil
+		if d <= 0 {
+			return time.Time{}, fmt.Errorf("invalid --before: duration must be positive")
+		}
+		return at.Add(-d), nil
 	}
 	if t, err := time.Parse(time.RFC3339, value); err == nil {
+		if t.After(at) {
+			return time.Time{}, fmt.Errorf("invalid --before: timestamp must not be in the future")
+		}
 		return t, nil
 	}
-	return time.Time{}, fmt.Errorf("invalid --before: use RFC3339 (e.g. 2026-06-13T12:00:00Z) or duration (e.g. 1h, 30m)")
+	return time.Time{}, fmt.Errorf("invalid --before: use a non-future RFC3339 timestamp (e.g. 2026-06-13T12:00:00Z) or positive duration (e.g. 1h, 30m)")
 }
 
 // pruneDaemonEvents performs the HTTP call to the running sermod's web API

@@ -1002,6 +1002,19 @@ func TestParseBeforeQueryDurationIsPast(t *testing.T) {
 	}
 }
 
+func TestParseBeforeQueryRejectsUnsafeCutoffs(t *testing.T) {
+	tests := []string{
+		"0",
+		"-1h",
+		time.Now().Add(time.Hour).Format(time.RFC3339),
+	}
+	for _, input := range tests {
+		if got, err := parseBeforeQuery(input); err == nil {
+			t.Fatalf("parseBeforeQuery(%q) = %v, want error", input, got)
+		}
+	}
+}
+
 func TestEventLimitParsing(t *testing.T) {
 	mk := func(q string) *http.Request { return httptest.NewRequest(http.MethodGet, "/api/events?limit="+q, nil) }
 	if got := eventLimit(mk("5")); got != 5 {

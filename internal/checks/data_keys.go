@@ -35,6 +35,7 @@ const (
 	DataKeyLanguage       = "language"
 	DataKeyLatencyMS      = "latency_ms"
 	DataKeyMax            = "max"
+	DataKeyMetric         = fieldMetric
 	DataKeyMinRules       = "min_rules"
 	DataKeyMode           = "mode"
 	DataKeyMounted        = "mounted"

@@ -684,8 +684,8 @@ Read-only endpoints:
 - `GET /api/ops` — global operation slot usage: `{in_use, total}` for
   `engine.max_parallel_operations`.
 
-State-changing endpoints are CSRF-protected and require admin permissions when
-auth is enabled:
+State-changing endpoints are CSRF-protected for every non-GET/HEAD request and
+require admin permissions when auth is enabled:
 
 - `POST /api/services/{name}/preflight` — run the same preflight checks as
   `sermoctl preflight SERVICE`, without starting or stopping anything.
@@ -697,7 +697,8 @@ auth is enabled:
 - `POST /api/locks/{service}/release?name=NAME` — release an inactive
   stale/expired named runtime lock; active locks are refused.
 - `POST /api/events/clear?before=TIME` — clear the persisted event/activity log;
-  `before` may be RFC3339 or a duration. Omit it to clear all events.
+  `before` may be a positive duration or a non-future RFC3339 timestamp. Omit it
+  to clear all events.
 - `POST /api/state/compact?before=TIME` — prune old SLA, measurement, daemon
   metric, service runtime metric and event history, then vacuum the state
   database; matches `sermoctl state compact`.
@@ -708,15 +709,16 @@ auth is enabled:
 
 `GET /livez` is a liveness probe for the daemon: if its web server answers, the
 process is alive, so it always returns **200**. A plain request returns
-`text/plain` body `ok`; `GET /livez?verbose` returns JSON with `status`, `uptime`
-(and `uptime_seconds`), `started_at`, `now`, the number of `services`, and the Go
-runtime version. Unlike every other endpoint it is served **without
-authentication** (and is exempt from CSRF), so a monitor, load balancer, container
-orchestrator or the reverse proxy can probe it with no credentials:
+`text/plain` body `ok`; this plain probe is served **without authentication** so a
+monitor, load balancer, container orchestrator or reverse proxy can probe it with
+no credentials. `GET /livez?verbose` returns JSON with `status`, `uptime` (and
+`uptime_seconds`), `started_at`, `now`, the number of `services`, and the Go
+runtime version; when web auth is configured, the verbose form follows normal
+read authentication like the dashboard:
 
 ```sh
 curl -fsS http://127.0.0.1:9797/livez            # -> ok
-curl -fsS http://127.0.0.1:9797/livez?verbose    # -> {"status":"ok","uptime":"3h12m0s",...}
+curl -fsS -u admin:secret http://127.0.0.1:9797/livez?verbose
 ```
 
 It reports process liveness only; for configuration/host/database health use
@@ -751,12 +753,13 @@ daemon stays `ready` and the web header/favicon do not return to the grey
 `state: starting` individually until their first observation cycle completes. A
 plain request returns `ok` or `starting` / `shutting_down` as `text/plain`;
 `GET /readyz?verbose` returns JSON with `ready`, `status`, `backend`, `services`,
-`watches` (host watches plus installed-app monitors) and an optional `message`. Like `/livez`, it is served **without
-authentication**:
+`watches` (host watches plus installed-app monitors) and an optional `message`.
+Like `/livez`, only the plain probe is public; the verbose form follows normal
+read authentication when web auth is configured:
 
 ```sh
 curl -fsS http://127.0.0.1:9797/readyz                 # -> ok (when monitoring)
-curl -fsS http://127.0.0.1:9797/readyz?verbose         # -> {"ready":true,"status":"ok",...}
+curl -fsS -u admin:secret http://127.0.0.1:9797/readyz?verbose
 ```
 
 Use `/livez` to know the process is alive; use `/readyz` before sending traffic or
@@ -1418,8 +1421,9 @@ hook per metric) and the multi-target (`file`, `process`) types are watch-only;
 the single-metric form of `net`/`icmp`/`swap` (an explicit `metric:` field) also
 works as a service check-only watch or explicit `checks:` entry (see
 [Checks](rules.md#checks)).
-The WebUI shows live readings only for cheap local probes; command/network-heavy
-checks rely on their normal watch events.
+When the Web UI is enabled, `GET /api/watches` renders watch readings from the
+latest daemon watch cycle; it does not start its own command, network, SQL,
+firewall, count, disk I/O, `hdparm` or `smart` probes on each dashboard poll.
 
 ### Service watches (scoped to a service)
 
@@ -2441,4 +2445,5 @@ sermoctl state compact --before 2026-01-01T00:00:00Z
 runtime metric and event rows, then checkpoints and vacuums the SQLite state
 database so freed pages can return to the filesystem. Without `--before`, it
 applies the same 366-day (~1 year) retention window that `sermod` applies at
-startup.
+startup. When supplied, `--before` must be a positive duration or a non-future
+RFC3339 timestamp.

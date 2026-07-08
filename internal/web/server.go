@@ -1107,8 +1107,8 @@ func isErrorEvent(e Event) bool {
 	}
 }
 
-// csrfHeader must be present on every state-changing (POST) request. A cross-site
-// HTML form cannot set a custom header, and a cross-site fetch that tries to would
+// csrfHeader must be present on every state-changing request. A cross-site HTML
+// form cannot set a custom header, and a cross-site fetch that tries to would
 // trigger a CORS preflight we never answer — so requiring it blocks CSRF against
 // the (root-privileged) action endpoints, in both authenticated and open modes.
 const csrfHeader = "X-Sermo-CSRF"
@@ -1345,17 +1345,25 @@ func parseBeforeQuery(beforeStr string) (time.Time, error) {
 	if beforeStr == "" {
 		return time.Time{}, nil
 	}
+	now := time.Now()
 	if t, err := time.Parse(time.RFC3339, beforeStr); err == nil {
+		if t.After(now) {
+			return time.Time{}, fmt.Errorf("bad before: cutoff must not be in the future")
+		}
 		return t, nil
 	}
 	if d, err := time.ParseDuration(beforeStr); err == nil {
-		return time.Now().Add(-d), nil
+		if d <= 0 {
+			return time.Time{}, fmt.Errorf("bad before: duration must be positive")
+		}
+		return now.Add(-d), nil
 	}
 	return time.Time{}, fmt.Errorf("bad before: RFC3339 timestamp or duration (e.g. 1h, 30m)")
 }
 
 // handleEventsClear supports `sermoctl events clear [--before TIME]`.
-// TIME may be RFC3339 or a duration (e.g. "2h" means "before now-2h").
+// TIME may be a non-future RFC3339 timestamp or a positive duration (e.g. "2h"
+// means "before now-2h").
 func (s *Server) handleEventsClear(w http.ResponseWriter, r *http.Request) {
 	before, err := parseBeforeQuery(r.URL.Query().Get(apiQueryBefore))
 	if err != nil {

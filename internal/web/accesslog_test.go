@@ -45,7 +45,7 @@ func TestRecordWebAccessLogsMountActionAndQuery(t *testing.T) {
 	defer log.Close()
 	s := &Server{AccessLog: log}
 
-	r := httptest.NewRequest("POST", "/api/mounts/backup/umount?kill=1", nil)
+	r := httptest.NewRequest(http.MethodPost, "/api/mounts/backup/umount?kill=1", nil)
 	s.recordWebAccess(r, 200)
 
 	data, err := os.ReadFile(path)
@@ -67,7 +67,7 @@ func TestRecordWebAccessLogsMountActionAndQuery(t *testing.T) {
 	if err := os.Truncate(path, 0); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
-	s.recordWebAccess(httptest.NewRequest("POST", "/api/services/web/restart", nil), 200)
+	s.recordWebAccess(httptest.NewRequest(http.MethodPost, "/api/services/web/restart", nil), 200)
 	data, err = os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read access log: %v", err)
@@ -118,5 +118,43 @@ func TestAccessLogRecordsAuthDeniedPost(t *testing.T) {
 	}
 	if entry[accessFieldTarget] != "web" || entry[accessFieldAction] != "restart" {
 		t.Fatalf("access entry = %v, want target=web action=restart", entry)
+	}
+}
+
+func TestAccessLogRecordsUnsafeDeniedMethods(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "access.log")
+	log, err := logfile.Open(path)
+	if err != nil {
+		t.Fatalf("logfile.Open: %v", err)
+	}
+	defer log.Close()
+
+	s := &Server{
+		Backend:   &fakeBackend{services: []Service{{Name: "web"}}},
+		Auth:      Auth{AdminPassword: "secret"},
+		AccessLog: log,
+	}
+	h := s.Handler()
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/api/services/web/restart", nil))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("unsafe method without CSRF = %d, want 403", rec.Code)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read access log: %v", err)
+	}
+	var entry map[string]any
+	if err := json.Unmarshal(data, &entry); err != nil {
+		t.Fatalf("access log line = %q: %v", data, err)
+	}
+	if entry[accessFieldMethod] != http.MethodPut || entry[accessFieldActor] != accessActorAnonymous {
+		t.Fatalf("access entry = %v, want anonymous PUT", entry)
+	}
+	if entry[accessFieldStatus] != float64(http.StatusForbidden) ||
+		entry[accessFieldTarget] != "web" || entry[accessFieldAction] != "restart" {
+		t.Fatalf("access entry = %v, want denied web restart", entry)
 	}
 }

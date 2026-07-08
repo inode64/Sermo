@@ -711,8 +711,9 @@ Endpoints de solo lectura:
 - `GET /api/ops` — uso global de slots de operación: `{in_use, total}` para
   `engine.max_parallel_operations`.
 
-Los endpoints que cambian el estado están protegidos contra CSRF y requieren permisos de
-admin cuando la autenticación está habilitada:
+Los endpoints que cambian el estado están protegidos contra CSRF para toda petición
+que no sea GET/HEAD y requieren permisos de admin cuando la autenticación está
+habilitada:
 
 - `POST /api/services/{name}/preflight` — ejecuta las mismas comprobaciones de preflight
   que `sermoctl preflight SERVICE`, sin iniciar ni detener nada.
@@ -724,7 +725,8 @@ admin cuando la autenticación está habilitada:
 - `POST /api/locks/{service}/release?name=NAME` — libera un lock de runtime con nombre
   inactivo obsoleto/expirado; los locks activos se rechazan.
 - `POST /api/events/clear?before=TIME` — limpia el log persistido de eventos/actividad;
-  `before` puede ser RFC3339 o una duración. Omítelo para limpiar todos los eventos.
+  `before` puede ser una duración positiva o un timestamp RFC3339 no futuro.
+  Omítelo para limpiar todos los eventos.
 - `POST /api/state/compact?before=TIME` — poda el historial antiguo de SLA, mediciones,
   métricas de daemon, métricas de runtime de service y eventos, luego compacta la base
   de datos de estado; coincide con `sermoctl state compact`.
@@ -735,15 +737,16 @@ admin cuando la autenticación está habilitada:
 
 `GET /livez` es una sonda de liveness para el daemon: si su servidor web responde, el
 proceso está vivo, por lo que siempre devuelve **200**. Una petición plana devuelve un
-cuerpo `text/plain` `ok`; `GET /livez?verbose` devuelve JSON con `status`, `uptime`
-(y `uptime_seconds`), `started_at`, `now`, el número de `services` y la versión del
-runtime de Go. A diferencia de cualquier otro endpoint se sirve **sin autenticación**
-(y está exento de CSRF), de modo que un monitor, balanceador de carga, orquestador de
-contenedores o el proxy inverso puede sondearlo sin credenciales:
+cuerpo `text/plain` `ok`; esta sonda plana se sirve **sin autenticación** para que un
+monitor, balanceador de carga, orquestador de contenedores o proxy inverso pueda
+sondearla sin credenciales. `GET /livez?verbose` devuelve JSON con `status`,
+`uptime` (y `uptime_seconds`), `started_at`, `now`, el número de `services` y la
+versión del runtime de Go; cuando la autenticación web está configurada, la forma
+verbose sigue la autenticación normal de lectura como el panel:
 
 ```sh
 curl -fsS http://127.0.0.1:9797/livez            # -> ok
-curl -fsS http://127.0.0.1:9797/livez?verbose    # -> {"status":"ok","uptime":"3h12m0s",...}
+curl -fsS -u admin:secret http://127.0.0.1:9797/livez?verbose
 ```
 
 Reporta solo la liveness del proceso; para la salud de configuración/host/base de datos
@@ -781,12 +784,13 @@ cambiados aún pueden reportar `state: starting` individualmente hasta que su pr
 de observación se complete. Una
 petición plana devuelve `ok` o `starting` / `shutting_down` como `text/plain`;
 `GET /readyz?verbose` devuelve JSON con `ready`, `status`, `backend`, `services`,
-`watches` (host watches más monitores de app instaladas) y un `message` opcional. Como
-`/livez`, se sirve **sin autenticación**:
+`watches` (host watches más monitores de app instaladas) y un `message` opcional.
+Como `/livez`, solo la sonda plana es pública; la forma verbose sigue la
+autenticación normal de lectura cuando la autenticación web está configurada:
 
 ```sh
 curl -fsS http://127.0.0.1:9797/readyz                 # -> ok (when monitoring)
-curl -fsS http://127.0.0.1:9797/readyz?verbose         # -> {"ready":true,"status":"ok",...}
+curl -fsS -u admin:secret http://127.0.0.1:9797/readyz?verbose
 ```
 
 Usa `/livez` para saber que el proceso está vivo; usa `/readyz` antes de enviar tráfico
@@ -1468,8 +1472,10 @@ por métrica) y los tipos multidestino (`file`, `process`) son solo-watch;
 la forma de métrica única de `net`/`icmp`/`swap` (un campo `metric:` explícito) también
 funciona como watch solo-check de service o como entrada explícita `checks:` (ver
 [Checks](rules.es.md#checks)).
-La WebUI muestra lecturas en vivo solo para sondas locales baratas; las comprobaciones
-intensivas en comando/red dependen de sus eventos de watch normales.
+Cuando la Web UI está habilitada, `GET /api/watches` renderiza las lecturas del
+watch desde el último ciclo de watches del daemon; no inicia sondas propias de
+comandos, red, SQL, firewall, count, disk I/O, `hdparm` o `smart` en cada poll
+del dashboard.
 
 ### Watches de servicio (acotados a un servicio)
 
@@ -2475,4 +2481,5 @@ sermoctl state compact --before 2026-01-01T00:00:00Z
 daemon, métricas de runtime de service y eventos, luego hace checkpoint y vacía la base
 de datos de estado SQLite de modo que las páginas liberadas puedan volver al sistema de
 archivos. Sin `--before`, aplica la misma ventana de retención de 366 días (~1 año) que
-`sermod` aplica al arrancar.
+`sermod` aplica al arrancar. Cuando se suministra, `--before` debe ser una
+duración positiva o un timestamp RFC3339 no futuro.

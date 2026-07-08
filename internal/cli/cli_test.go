@@ -706,6 +706,20 @@ func TestActivityClearBefore(t *testing.T) {
 	}
 }
 
+func TestParseBeforeRejectsUnsafeCutoffs(t *testing.T) {
+	now := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
+	tests := []string{
+		"0",
+		"-1h",
+		now.Add(time.Hour).Format(time.RFC3339),
+	}
+	for _, input := range tests {
+		if got, err := parseBefore(input, func() time.Time { return now }); err == nil {
+			t.Fatalf("parseBefore(%q) = %v, want error", input, got)
+		}
+	}
+}
+
 func TestActivityRequiresClear(t *testing.T) {
 	var stderr bytes.Buffer
 	app := App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr}

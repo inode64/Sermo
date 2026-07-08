@@ -42,7 +42,7 @@ func (r *accessStatusRecorder) WriteHeader(code int) {
 
 func (s *Server) withAccessLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.AccessLog == nil || r.Method != http.MethodPost || !strings.HasPrefix(r.URL.Path, apiPathPrefix) {
+		if s.AccessLog == nil || isReadMethod(r.Method) || !strings.HasPrefix(r.URL.Path, apiPathPrefix) {
 			next.ServeHTTP(w, r)
 			return
 		}

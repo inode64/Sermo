@@ -69,7 +69,7 @@ la autenticación web está habilitada.
 | Acción de watch | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand` |
 | Acción de montaje | `POST /api/mounts/{name}/{action}[?kill=1]` | `mount`, `umount`, `blockers`, `alert`; `kill=1` habilita señalización de bloqueadores para `umount` solo si la política lo permite; `/` rechaza las rutas de desmontaje |
 | Liberación de lock | `POST /api/locks/{service}/release?name=NAME` | libera locks con nombre inactivos, obsoletos o caducados; los locks activos se rechazan |
-| Limpieza de eventos | `POST /api/events/clear?before=TIME` | borra las filas persistidas de eventos/actividad; `before` acepta RFC3339 o duración |
+| Limpieza de eventos | `POST /api/events/clear?before=TIME` | borra las filas persistidas de eventos/actividad; `before` acepta una duración positiva o un timestamp RFC3339 no futuro |
 | Compactación de estado | `POST /api/state/compact?before=TIME` | poda el historial antiguo de SLA/métricas/eventos y compacta la base de datos de estado; equivale a `sermoctl state compact` |
 | Recarga del daemon | `POST /api/reload` | solicita una recarga de configuración de `sermod` |
 
@@ -336,7 +336,8 @@ Columnas por panel (todos los paneles terminan con Last activity, State, Actions
 | Disk I/O watches | Name, Device, Util%, Read / Write, Await |
 | Host watches | Name, Type, Summary |
 
-Las columnas de Certificate y Disk I/O leen las lecturas en vivo del watch
+Las columnas de Certificate y Disk I/O leen las lecturas del watch publicadas
+por el último ciclo de watches del daemon
 (caducidad del certificado, días restantes, emisor y algoritmo de clave
 pública; dispositivo, utilización, throughput de lectura/escritura y latencia
 await).
@@ -398,7 +399,8 @@ Notas editables:
   en bruto sigue siendo útil.
 - **clear log** (solo admin) llama a `POST /api/events/clear` tras confirmación,
   igual que `sermoctl events clear`. Un campo opcional **before** pasa
-  `?before=TIME` (duración o RFC3339) para podar solo las filas más antiguas.
+  `?before=TIME` (duración positiva o RFC3339 no futuro) para podar solo las
+  filas más antiguas.
 - El filtro `kind` cubre los tipos de evento emitidos: `cycle`, `action`,
   `suppressed`, `alert`, `error`, `firing`, `recovered`, `dry-run`,
   `reload` (una recarga de configuración correcta del daemon en ejecución),
@@ -482,21 +484,6 @@ Columnas:
 | Blocks | acciones bloqueadas |
 | Reason | motivo suministrado por el operador |
 | Action | botón de liberación cuando está permitido |
-
-## Expansión de fila de servicio
-
-Contenedor: `tr.exp-row` bajo la fila de servicio seleccionada.
-
-Se abre desde una fila/nombre de servicio. No hay un panel de detalle inferior separado.
-
-| Área | Representación actual |
-| --- | --- |
-| Cabecera | nombre del servicio, unidad y estado; `starting` es la insignia orientada al operador — el detalle de la expansión puede ir un ciclo por detrás durante el asentamiento |
-| Acciones | botones de operación de la fila de servicio y preflight en línea |
-| Checks | estado de check resuelto |
-| Métricas | serie seleccionable de métrica/check |
-| Eventos | eventos de servicio recientes |
-| Reglas | reglas de remediación y alerta |
 
 ## Diálogo de confirmación de acción
 
