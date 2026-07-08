@@ -32,9 +32,14 @@ func detectOS() string {
 	return "linux"
 }
 
+// OSReleasePaths returns the os-release files checked in priority order.
+func OSReleasePaths() []string {
+	return []string{osReleaseEtcPath, osReleaseUsrPath}
+}
+
 // osReleaseID returns the lowercased ID= field of os-release, or "".
 func osReleaseID() string {
-	for _, path := range []string{osReleaseEtcPath, osReleaseUsrPath} {
+	for _, path := range OSReleasePaths() {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			continue
