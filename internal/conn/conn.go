@@ -15,6 +15,7 @@ import (
 	"sync"
 
 	"sermo/internal/netutil"
+	"sermo/internal/units"
 )
 
 // DefaultHost is the loopback host protocol probes use when config omits host.
@@ -298,9 +299,9 @@ const (
 	networkUnix   = netutil.NetworkUnix
 
 	// HTTP probe body limits keep service probes bounded against unexpected peers.
-	maxHTTPProbeBody      = 64 << 10
-	maxHTTPProbeLargeBody = 1 << 20
-	maxHTTPProbeShortBody = 4 << 10
+	maxHTTPProbeBody      = 64 * units.BytesPerKiB
+	maxHTTPProbeLargeBody = units.BytesPerMiB
+	maxHTTPProbeShortBody = 4 * units.BytesPerKiB
 
 	httpHeaderContentType   = "Content-Type"
 	httpHeaderServer        = "Server"

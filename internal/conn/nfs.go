@@ -7,6 +7,8 @@ import (
 	"io"
 	"net"
 	"strconv"
+
+	"sermo/internal/units"
 )
 
 func init() { Register(nfsProtocol{}, protocolAliasNFSServer, protocolAliasNFSD) }
@@ -19,7 +21,7 @@ const (
 
 const (
 	rpcFragmentLastMask    = 0x80000000
-	rpcTCPMaxFragmentBytes = 1 << 20
+	rpcTCPMaxFragmentBytes = units.BytesPerMiB
 )
 
 // nfsProtocol probes an NFS server natively over ONC RPC: it sends an RPC NULL

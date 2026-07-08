@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"sermo/internal/units"
 )
 
 const (
@@ -313,10 +315,10 @@ type byteSizeSuffix struct {
 
 func byteSizeSuffixes() [13]byteSizeSuffix {
 	return [...]byteSizeSuffix{
-		{"TIB", 1 << 40}, {"TB", 1 << 40}, {"T", 1 << 40},
-		{"GIB", 1 << 30}, {"GB", 1 << 30}, {"G", 1 << 30},
-		{"MIB", 1 << 20}, {"MB", 1 << 20}, {"M", 1 << 20},
-		{"KIB", 1 << 10}, {"KB", 1 << 10}, {"K", 1 << 10},
+		{"TIB", units.BytesPerTiB}, {"TB", units.BytesPerTiB}, {"T", units.BytesPerTiB},
+		{"GIB", units.BytesPerGiB}, {"GB", units.BytesPerGiB}, {"G", units.BytesPerGiB},
+		{"MIB", units.BytesPerMiB}, {"MB", units.BytesPerMiB}, {"M", units.BytesPerMiB},
+		{"KIB", units.BytesPerKiB}, {"KB", units.BytesPerKiB}, {"K", units.BytesPerKiB},
 		{"B", 1},
 	}
 }
