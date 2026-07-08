@@ -570,6 +570,20 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/units ./internal/metrics
   ./internal/checks ./internal/state ./internal/conn` y `make check` pasan.
 
+### Fase 31: Unidades metricas reutilizadas en lecturas
+
+- Mantener `internal/metrics` como owner de unidades canonicas de metricas.
+- Reutilizar solo unidades con contrato identico desde las lecturas del Web
+  backend, sin cambiar representaciones locales distintas.
+
+Estado ejecutado:
+
+- `internal/app/checkreadings.go` usa `metrics.MetricUnitMegabytesPerSecond`,
+  `metrics.MetricUnitCelsius` y `metrics.MetricUnitRPM`.
+- Se mantiene local `C` sin simbolo porque es una representacion distinta de la
+  lectura actual.
+- Validacion ejecutada: `go test ./internal/app` y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
