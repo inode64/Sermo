@@ -178,6 +178,15 @@ Estado ejecutado:
 - Añadir tests solo si el refactor descubre comportamiento ambiguo o un bug; no
   añadir fixtures con vocabulario retirado.
 
+Estado ejecutado:
+
+- `go test ./internal/config`: pasa.
+- `go test ./internal/app ./internal/web`: pasa.
+- `make check`: pasa completo (`go vet`, `staticcheck`, `revive`,
+  `golangci-lint`, `govulncheck`, `go test ./...`).
+- No se añadieron tests nuevos porque las fases 1-3 no introdujeron
+  comportamiento nuevo; fase 2 fue movimiento de helpers con cobertura existente.
+
 ### Fase 5: Documentacion lockstep
 
 - No actualizar docs de usuario cuando el refactor no cambia comportamiento.
