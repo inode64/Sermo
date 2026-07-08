@@ -31,6 +31,7 @@ const (
 		virt.ControlKeySocket + ", " +
 		virt.ControlKeyHost + ", " +
 		virt.ControlKeyPort
+	controlSocketHostConflictMessage = "control must not set both socket and host"
 )
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
@@ -356,7 +357,7 @@ func validateLibvirtControl(control map[string]any, add addFunc) {
 		add("%s must not be blank", controlPathHost)
 	}
 	if host != "" && cfgval.String(control[virt.ControlKeySocket]) != "" {
-		add("control must not set both socket and host")
+		add(controlSocketHostConflictMessage)
 	}
 	if _, present := control[virt.ControlKeyPort]; present {
 		port, ok := cfgval.Int(control[virt.ControlKeyPort])
@@ -378,7 +379,7 @@ func validateDockerControl(control map[string]any, add addFunc) {
 		add("%s must not be blank", controlPathHost)
 	}
 	if host != "" && cfgval.String(control[dockerctl.ControlKeySocket]) != "" {
-		add("control must not set both socket and host")
+		add(controlSocketHostConflictMessage)
 	}
 	if _, present := control[dockerctl.ControlKeyPort]; present {
 		port, ok := cfgval.Int(control[dockerctl.ControlKeyPort])
