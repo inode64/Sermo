@@ -488,6 +488,20 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/process ./internal/app ./internal/mountctl`
   y `make check` pasan.
 
+### Fase 25: Roots de recursos de checks compartidos
+
+- Mantener roots de recursos Linux usados por checks en `internal/checks`.
+- Reutilizarlos desde diagnosticos en vez de repetir `/proc/pressure` y
+  `/sys/class/block`.
+
+Estado ejecutado:
+
+- `checks.ProcPressureRootPath` expone el root PSI que usa el pressure check.
+- `checks.SysBlockPath` expone el root sysfs usado para validar dispositivos
+  `diskio` en diagnosticos.
+- Validacion ejecutada: `go test ./internal/checks ./internal/diag` y
+  `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.

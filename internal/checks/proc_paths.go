@@ -12,6 +12,13 @@ const (
 	procPressureRootPath = "/proc/pressure"
 	procRootPath         = "/proc"
 	procVMStatPath       = "/proc/vmstat"
+	sysBlockPath         = "/sys/class/block"
 	sysEDACPath          = "/sys/devices/system/edac"
 	sysHwmonPath         = "/sys/class/hwmon"
 )
+
+// ProcPressureRootPath is the Linux PSI pressure root directory.
+const ProcPressureRootPath = procPressureRootPath
+
+// SysBlockPath is Linux's sysfs block-device root directory.
+const SysBlockPath = sysBlockPath
