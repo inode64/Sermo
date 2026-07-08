@@ -321,6 +321,20 @@ Estado ejecutado:
 - El informe conserva el mismo contenido y estilos inline compatibles con email.
 - Validacion ejecutada: `go test ./internal/cli` y `make check` pasan.
 
+### Fase 13: Nombre del check de metricas del daemon
+
+- Mantener `daemonMetricCheck` como nombre canonico del check logico que agrupa
+  las metricas de `sermod`.
+- No reutilizarlo para nombres de logger ni otros conceptos que solo comparten
+  el texto `sermod`.
+
+Estado ejecutado:
+
+- `internal/app/daemonmetrics.go` usa `daemonMetricCheck` al devolver
+  `web.MetricSeries`.
+- Se dejaron locales los logger names de `internal/app/event.go`.
+- Validacion ejecutada: `go test ./internal/app` y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
