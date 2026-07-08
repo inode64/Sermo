@@ -556,6 +556,20 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/conn ./internal/virt` y
   `make check` pasan.
 
+### Fase 30: Factores binarios compartidos
+
+- Crear un owner estrecho para factores de conversion numericos que cruzan
+  paquetes y no pertenecen solo a metricas, checks, estado o libvirt.
+- Reutilizarlo en lecturas procfs, swap, cache SQLite y memoria libvirt.
+
+Estado ejecutado:
+
+- `internal/units` define `BytesPerKiB` y `KiBPerMiB`.
+- `internal/metrics`, `internal/checks`, `internal/state` e `internal/conn`
+  consumen esos factores en vez de duplicar `1024`.
+- Validacion ejecutada: `go test ./internal/units ./internal/metrics
+  ./internal/checks ./internal/state ./internal/conn` y `make check` pasan.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.
