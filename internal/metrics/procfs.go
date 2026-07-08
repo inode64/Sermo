@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"sermo/internal/process"
 )
 
 // LinuxClockTicks is the conventional kernel USER_HZ on Linux. The Go runtime does
@@ -22,16 +24,11 @@ const (
 	bytesPerKiB       = 1024
 )
 
-// procfs file names read under /proc and /proc/<pid>.
+// procfs file names read directly under /proc.
 const (
-	procFileFD      = "fd"
-	procFileIO      = "io"
 	procFileLoadavg = "loadavg"
 	procFileMeminfo = "meminfo"
 	procFileStat    = "stat"
-	procFileStatm   = "statm"
-	procFileStatus  = "status"
-	procFileTask    = "task"
 )
 
 const (
@@ -68,16 +65,12 @@ func procPath(name string) string {
 	return filepath.Join(procRoot, name)
 }
 
-func procPIDPath(pid int, name string) string {
-	return procPath(filepath.Join(strconv.Itoa(pid), name))
-}
-
 // OSReader reads metrics from the host /proc filesystem.
 type OSReader struct{}
 
 // ProcessCPU sums utime (field 14) and stime (field 15) of /proc/<pid>/stat.
 func (OSReader) ProcessCPU(pid int) (uint64, bool) {
-	data, err := os.ReadFile(procPIDPath(pid, procFileStat))
+	data, err := os.ReadFile(process.PIDPath(pid, process.ProcFileStat))
 	if err != nil {
 		return 0, false
 	}
@@ -103,7 +96,7 @@ func (OSReader) ProcessCPU(pid int) (uint64, bool) {
 // ProcessStartTime reads field 22 of /proc/<pid>/stat and converts it to a wall
 // clock timestamp using the system boot time from /proc/stat.
 func (OSReader) ProcessStartTime(pid int) (time.Time, bool) {
-	data, err := os.ReadFile(procPIDPath(pid, procFileStat))
+	data, err := os.ReadFile(process.PIDPath(pid, process.ProcFileStat))
 	if err != nil {
 		return time.Time{}, false
 	}
@@ -152,7 +145,7 @@ func procBootTime() (int64, bool) {
 
 // ProcessRSS reads resident pages (field 2 of /proc/<pid>/statm) as bytes.
 func (OSReader) ProcessRSS(pid int) (uint64, bool) {
-	data, err := os.ReadFile(procPIDPath(pid, procFileStatm))
+	data, err := os.ReadFile(process.PIDPath(pid, process.ProcFileStatm))
 	if err != nil {
 		return 0, false
 	}
@@ -172,7 +165,7 @@ func (OSReader) ProcessRSS(pid int) (uint64, bool) {
 // process without a VmSwap line (e.g. a kernel thread) also reports 0, true. ok
 // is false only when the file cannot be read.
 func (OSReader) ProcessSwap(pid int) (uint64, bool) {
-	data, err := os.ReadFile(procPIDPath(pid, procFileStatus))
+	data, err := os.ReadFile(process.PIDPath(pid, process.ProcFileStatus))
 	if err != nil {
 		return 0, false
 	}
@@ -188,7 +181,7 @@ func (OSReader) ProcessSwap(pid int) (uint64, bool) {
 // /proc/<pid>/io. Reading another user's io requires privilege, so ok is false
 // when the file cannot be read.
 func (OSReader) ProcessIO(pid int) (read, write uint64, ok bool) {
-	data, err := os.ReadFile(procPIDPath(pid, procFileIO))
+	data, err := os.ReadFile(process.PIDPath(pid, process.ProcFileIO))
 	if err != nil {
 		return 0, 0, false
 	}
@@ -222,7 +215,7 @@ func parseProcIO(data string) (read, write uint64, ok bool) {
 // Reading another user's fd dir requires privilege, so ok is false when it
 // cannot be read.
 func (OSReader) ProcessFDs(pid int) (uint64, bool) {
-	entries, err := os.ReadDir(procPIDPath(pid, procFileFD))
+	entries, err := os.ReadDir(process.PIDPath(pid, process.ProcFileFD))
 	if err != nil {
 		return 0, false
 	}
@@ -231,7 +224,7 @@ func (OSReader) ProcessFDs(pid int) (uint64, bool) {
 
 // ProcessThreads counts the entries in /proc/<pid>/task (the process's threads).
 func (OSReader) ProcessThreads(pid int) (uint64, bool) {
-	entries, err := os.ReadDir(procPIDPath(pid, procFileTask))
+	entries, err := os.ReadDir(process.PIDPath(pid, process.ProcFileTask))
 	if err != nil {
 		return 0, false
 	}
