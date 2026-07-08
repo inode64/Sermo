@@ -108,10 +108,10 @@ const (
 const (
 	watchReadingUnitBits               = "bits"
 	watchReadingUnitCelsius            = "C"
-	watchReadingUnitCelsiusSymbol      = "°C"
-	watchReadingUnitMegabytesPerSecond = "MB/s"
+	watchReadingUnitCelsiusSymbol      = metrics.MetricUnitCelsius
+	watchReadingUnitMegabytesPerSecond = metrics.MetricUnitMegabytesPerSecond
 	watchReadingUnitMegabitsPerSecond  = "Mbps"
-	watchReadingUnitRPM                = "RPM"
+	watchReadingUnitRPM                = metrics.MetricUnitRPM
 	watchReadingUnitVolt               = "V"
 )
 
