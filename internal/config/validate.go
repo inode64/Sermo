@@ -10,7 +10,6 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/process"
-	"sermo/internal/rules"
 )
 
 // Issue is a single validation finding, scoped to a document or "global".
@@ -48,62 +47,6 @@ const (
 	validationStringListFormat       = "%s must be a string or list of strings"
 	validationTCPPortRangeFormat     = "%s must be an integer in %s"
 )
-
-const (
-	enginePathBackend               = SectionEngine + "." + EngineKeyBackend
-	enginePathDiagnostics           = SectionEngine + "." + EngineKeyDiagnostics
-	enginePathDiagnosticsInterval   = SectionEngine + "." + EngineKeyDiagnosticsInterval
-	enginePathMaxParallelChecks     = SectionEngine + "." + EngineKeyMaxParallelChecks
-	enginePathMaxParallelOperations = SectionEngine + "." + EngineKeyMaxParallelOperations
-	enginePathStartupDelay          = SectionEngine + "." + EngineKeyStartupDelay
-	enginePathStateCacheSize        = SectionEngine + "." + EngineKeyStateCacheSize
-	enginePathUserLookup            = SectionEngine + "." + EngineKeyUserLookup
-	enginePathUserLookupTimeout     = SectionEngine + "." + EngineKeyUserLookupTimeout
-
-	pathsPathLocks     = SectionPaths + "." + pathKeyLocks
-	pathsPathRuntime   = SectionPaths + "." + pathKeyRuntime
-	pathsPathState     = SectionPaths + "." + pathKeyState
-	pathsPathTemplates = SectionPaths + "." + pathKeyTemplates
-
-	policyPathBackoff          = sectionPolicy + "." + rules.PolicyKeyBackoff
-	policyPathBackoffInitial   = policyPathBackoff + "." + rules.BackoffKeyInitial
-	policyPathBackoffMax       = policyPathBackoff + "." + rules.BackoffKeyMax
-	policyPathCooldown         = sectionPolicy + "." + rules.PolicyKeyCooldown
-	policyPathMaxActions       = sectionPolicy + "." + rules.PolicyKeyMaxActions
-	policyPathMaxActionsWindow = sectionPolicy + "." + rules.PolicyKeyMaxActionsWindow
-	defaultsPathPolicyCooldown = sectionDefaults + "." + policyPathCooldown
-	defaultsPathVariables      = sectionDefaults + "." + sectionVariables
-
-	versionsPathCurrentFrom = keyVersions + "." + keyVersionsCurrentFrom
-	versionsPathFrom        = keyVersions + "." + keyVersionsFrom
-
-	mountPath              = StorageKeyMount
-	mountPathRefcount      = mountPath + "." + MountKeyRefcount
-	mountPathStopPolicy    = mountPath + "." + MountKeyStopPolicy
-	mountPathStopPolicyKoi = mountPathStopPolicy + "." + keyKillOnlyIf
-	mountPathUmount        = mountPath + "." + MountKeyUmount
-	mountPathUmountSIGKILL = mountPathUmount + "." + MountKeyAllowSIGKILL
-)
-
-func engineFieldPath(field string) string {
-	return SectionEngine + "." + field
-}
-
-func pathsFieldPath(field string) string {
-	return SectionPaths + "." + field
-}
-
-func defaultsFieldPath(field string) string {
-	return sectionDefaults + "." + field
-}
-
-func securityFieldPath(field string) string {
-	return sectionSecurity + "." + field
-}
-
-func mountUmountFieldPath(field string) string {
-	return mountPathUmount + "." + field
-}
 
 // rejectedSecurityToggles are keys under `security:` that try to disable hard
 // safety invariants and must never be honored.

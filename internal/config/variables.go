@@ -38,14 +38,6 @@ const (
 
 var fromFileVariableKeys = set(varKeyFromFile, varKeyDirective, varKeyPattern, varKeyDefault)
 
-func variablePath(name string) string {
-	return SectionVariables + "." + name
-}
-
-func variableFieldPath(name, field string) string {
-	return variablePath(name) + "." + field
-}
-
 // collectVariables reads the merged `variables` section into a flat string map.
 // Values are stringified (a YAML int like `port: 8080` becomes "8080"). A
 // list-valued variable is treated as candidate paths and resolves to the first
