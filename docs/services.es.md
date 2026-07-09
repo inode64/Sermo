@@ -278,10 +278,11 @@ app conserva la propiedad del path real. Las entradas `variables:` locales en el
 o en el servicio configurado sobrescriben cualquiera de las formas; cuando se enlazan varias apps,
 use los nombres con prefijo.
 
-Como corren en **preflight**, un runtime ausente o de versión incorrecta hace fallar el
-preflight del servicio, que **bloquea start/restart/reload/resume** (una operación con preflight fallido
-nunca ejecuta la acción) — no arranca, reinicia, recarga ni
-resume un servicio cuyo runtime está ausente.
+Como corren en **preflight**, un runtime ausente, de versión incorrecta o con librerías
+compartidas sin resolver hace fallar el preflight del servicio, que **bloquea
+start/restart/reload/resume** (una operación con preflight fallido nunca ejecuta
+la acción) — no arranca, reinicia, recarga ni resume un servicio cuyo runtime
+está ausente o no puede cargar sus librerías compartidas.
 El enlace es muchos-a-muchos: un servicio lista varias apps, y una app es compartida por
 cada servicio que la lista. La validación reporta una entrada `apps:` que no
 resuelve a una app de catálogo, de modo que los enlaces de runtime colgantes se detectan antes del despliegue.
