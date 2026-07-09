@@ -345,6 +345,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		inPanic:   deps.Panic.Active,
 		runner:    OSHookRunner{Runner: deps.ExecxRunner},
 		emit:      deps.Emit,
+		publish:   publishWatchSnapshots(deps.WatchSnapshots),
 	}
 	return &Watch{
 		Name:      name,
@@ -406,6 +407,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		now:       deps.Now,
 		emit:      deps.Emit,
 		sampler:   procSamplerFromDeps(deps),
+		publish:   publishWatchSnapshots(deps.WatchSnapshots),
 	}
 	return &Watch{
 		Name:      name,

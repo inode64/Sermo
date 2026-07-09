@@ -5,7 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/checks"
 	"sermo/internal/execx"
+	"sermo/internal/metrics"
 	"sermo/internal/notify"
 )
 
@@ -80,6 +82,49 @@ func TestProcWatchMinAgeEdge(t *testing.T) {
 	}
 	if h.fired[0]["SERMO_PID"] != "42" {
 		t.Fatalf("missing/var pid: %v", h.fired[0])
+	}
+}
+
+func TestProcWatchPublishesSnapshot(t *testing.T) {
+	h := &procHarness{clock: time.Unix(1_000_000, 0)}
+	s := &fakeProcSampler{cycles: [][]ProcInfo{{
+		{PID: 42, CPUTicks: 20, RSS: 100, IOBytes: 500, HasIO: true},
+		{PID: 7, CPUTicks: 30, RSS: 200},
+	}}}
+	w := h.watcher(procCond{memOp: ">", memValue: 500}, s)
+	w.match.User = "apache"
+	var got checks.Result
+	w.publish = func(watch, checkType string, res checks.Result) {
+		if watch != "pw" || checkType != checks.CheckTypeProcess {
+			t.Fatalf("publish target = %s/%s", watch, checkType)
+		}
+		got = res
+	}
+
+	h.tick(w, 0)
+
+	if !got.OK || got.Data[watchReadingFieldProcess] != "worker" || got.Data[watchReadingFieldUser] != "apache" {
+		t.Fatalf("published process snapshot = %+v", got)
+	}
+	if got.Data[watchReadingFieldMatches] != 2 || got.Data[checks.DataKeyPIDs] != "7, 42" {
+		t.Fatalf("snapshot process list = %+v", got.Data)
+	}
+	if got.Data[watchReadingFieldRSS] != uint64(300) || got.Data[watchReadingFieldCPUTicks] != uint64(50) || got.Data[metrics.MetricIO] != uint64(500) {
+		t.Fatalf("snapshot counters = %+v", got.Data)
+	}
+}
+
+func TestProcWatchPublishesSampleFailure(t *testing.T) {
+	h := &procHarness{clock: time.Unix(1_000_000, 0)}
+	s := &fakeProcSampler{cycles: [][]ProcInfo{{}}, failCycles: []bool{true}}
+	w := h.watcher(procCond{onGone: true}, s)
+	var got checks.Result
+	w.publish = func(_, _ string, res checks.Result) { got = res }
+
+	h.tick(w, 0)
+
+	if got.OK || got.Message == "" || got.Data[watchReadingFieldProcess] != "worker" {
+		t.Fatalf("sample failure snapshot = %+v", got)
 	}
 }
 

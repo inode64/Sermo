@@ -33,6 +33,7 @@ func (c fileCond) any() bool {
 // fileState is the remembered attributes of one path across cycles.
 type fileState struct {
 	size     int64
+	kind     string
 	perm     uint32 // st_mode & 07777: permission bits plus setuid/setgid/sticky
 	uid, gid uint32
 	breached bool // previous size-threshold result, for edge detection
@@ -63,6 +64,7 @@ type fileWatcher struct {
 	inPanic   func() bool
 	runner    HookRunner
 	emit      func(Event)
+	publish   func(string, string, checks.Result)
 
 	baseline map[string]fileState
 }
@@ -75,6 +77,7 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 		w.baseline = map[string]fileState{}
 	}
 	current := w.scan()
+	defer w.publishSnapshot(current)
 
 	paths := make([]string, 0, len(current))
 	for p := range current {
@@ -116,6 +119,51 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 	}
 }
 
+func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
+	if w.publish == nil {
+		return
+	}
+	if len(current) == 0 {
+		w.publish(w.name, checks.CheckTypeFile, checks.Result{
+			Check:   w.name,
+			OK:      false,
+			Message: "file " + w.path + ": not found",
+			Data:    map[string]any{checks.DataKeyPath: w.path},
+		})
+		return
+	}
+	root, ok := current[w.path]
+	if !ok {
+		w.publish(w.name, checks.CheckTypeFile, checks.Result{
+			Check:   w.name,
+			OK:      false,
+			Message: "file " + w.path + ": not found",
+			Data:    map[string]any{checks.DataKeyPath: w.path},
+		})
+		return
+	}
+	data := map[string]any{
+		checks.DataKeyPath:   w.path,
+		checks.DataKeyKind:   root.kind,
+		checks.DataKeySize:   root.size,
+		checks.DataKeyMode:   fmt.Sprintf(fileModeFormat, root.perm),
+		checks.CheckKeyOwner: fmt.Sprintf(fileOwnerFormat, root.uid, root.gid),
+	}
+	if w.recursive {
+		entries := len(current) - 1
+		if entries < 0 {
+			entries = 0
+		}
+		data[watchReadingFieldEntries] = entries
+	}
+	w.publish(w.name, checks.CheckTypeFile, checks.Result{
+		Check:   w.name,
+		OK:      true,
+		Message: fmt.Sprintf("%s size %d", w.path, root.size),
+		Data:    data,
+	})
+}
+
 // scan returns the current attributes of the watched path and, when recursive
 // and the path is a directory, every entry in its subtree. Symlinks are stat'd
 // as links (never followed), so a link is watched as itself, not its target.
@@ -146,7 +194,7 @@ func (w *fileWatcher) scan() map[string]fileState {
 }
 
 func (w *fileWatcher) stateOf(info fs.FileInfo) fileState {
-	st := fileState{size: info.Size()}
+	st := fileState{size: info.Size(), kind: fileKindLabel(info.Mode())}
 	if sys, ok := info.Sys().(*syscall.Stat_t); ok {
 		st.perm = uint32(sys.Mode) & fileStatePermMask
 		st.uid, st.gid = sys.Uid, sys.Gid
