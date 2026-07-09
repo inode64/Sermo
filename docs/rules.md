@@ -1786,6 +1786,8 @@ Actions and types are coupled: the operation actions (`restart`, `start`,
 notify-only rule is `type: alert`) and rejected elsewhere. `alert` (with a
 `message`) may accompany any rule's actions; `block` is guard-only. A `then`
 may carry one `action` or an `actions` list (e.g. alert + restart together).
+Those operations use the same safety engine as manual CLI/Web actions, including
+the active-service exact process identity gate before `restart`.
 
 Conditions form a logical tree with `and`/`or`/`not` and leaves:
 
