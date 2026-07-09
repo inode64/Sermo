@@ -4,6 +4,9 @@ category: hardware
 service: acpid
 apps:
   - acpid
+restart_on_change:
+  apps:
+    - acpid
 pidfile: /run/acpid.pid
 processes:
   main:

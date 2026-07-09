@@ -11,6 +11,10 @@ service:
 apps:
   - python3
   - fail2ban
+restart_on_change:
+  apps:
+    - python3
+    - fail2ban
 preflight:
   config:
     type: command

@@ -2806,6 +2806,194 @@ restart_on_change:
 	}
 }
 
+func TestRestartOnChangeAppsDesugarToChangedVersionRules(t *testing.T) {
+	tests := []struct {
+		name            string
+		restartOnChange string
+		wantLevel       string
+	}{
+		{
+			name: "list defaults to patch",
+			restartOnChange: `
+restart_on_change:
+  apps: [containerd]
+`,
+			wantLevel: "patch",
+		},
+		{
+			name: "map carries level",
+			restartOnChange: `
+restart_on_change:
+  apps:
+    containerd:
+      level: minor
+`,
+			wantLevel: "minor",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			global := writeConfig(t, map[string]string{
+				"sermo.yml": baseGlobal,
+				"catalog/apps/containerd.yml": `
+name: containerd
+preflight:
+  version:
+    type: command
+    command: ["/usr/bin/containerd", "--version"]
+    timeout: 5s
+`,
+				"services/containerd.yml": `
+name: containerd
+service: containerd
+apps: [containerd]
+` + tt.restartOnChange,
+			})
+			cfg, err := loadConfig(t, global)
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if issues := Validate(cfg); len(issues) != 0 {
+				t.Fatalf("Validate() issues = %v, want none", issues)
+			}
+			resolved, errs := cfg.Resolve("containerd")
+			if len(errs) != 0 {
+				t.Fatalf("Resolve() errors = %v", errs)
+			}
+			if _, present := resolved.Tree["restart_on_change"]; present {
+				t.Errorf("restart_on_change should be desugared away")
+			}
+			rule := nested(t, resolved.Tree, "rules", "restart-on-change-containerd-version")
+			if got := cfgval.String(rule["type"]); got != "remediation" {
+				t.Fatalf("rule type = %q, want remediation", got)
+			}
+			changed := nested(t, rule, "if", "changed")
+			if got := cfgval.String(changed["app"]); got != "containerd" {
+				t.Fatalf("changed.app = %q, want containerd", got)
+			}
+			if got := cfgval.String(changed["level"]); got != tt.wantLevel {
+				t.Fatalf("changed.level = %q, want %q", got, tt.wantLevel)
+			}
+			if got := cfgval.String(nested(t, rule, "then")["action"]); got != "restart" {
+				t.Fatalf("then.action = %q, want restart", got)
+			}
+			if cfgval.String(nested(t, resolved.Tree, "preflight", "containerd-version")["type"]) != "command" {
+				t.Fatal("resolved service must expose containerd-version preflight for changed.app")
+			}
+		})
+	}
+}
+
+func TestRestartOnChangeAppVersionValidatesInputs(t *testing.T) {
+	baseApp := `
+name: containerd
+preflight:
+  version:
+    type: command
+    command: ["/usr/bin/containerd", "--version"]
+    timeout: 5s
+`
+	tests := []struct {
+		name    string
+		app     string
+		service string
+		want    string
+	}{
+		{
+			name: "app must be linked",
+			app:  baseApp,
+			service: `
+name: containerd
+service: containerd
+restart_on_change:
+  apps: [containerd]
+`,
+			want: `restart_on_change app "containerd" must also be listed in apps`,
+		},
+		{
+			name: "invalid level",
+			app:  baseApp,
+			service: `
+name: containerd
+service: containerd
+apps: [containerd]
+restart_on_change:
+  apps:
+    containerd:
+      level: revision
+`,
+			want: `restart_on_change.apps.containerd.level "revision" is not one of`,
+		},
+		{
+			name: "missing version command",
+			app: `
+name: containerd
+preflight:
+  health:
+    type: command
+    command: ["/usr/bin/containerd", "--help"]
+    timeout: 5s
+`,
+			service: `
+name: containerd
+service: containerd
+apps: [containerd]
+restart_on_change:
+  apps: [containerd]
+`,
+			want: `changed app "containerd" has no app version command`,
+		},
+		{
+			name: "generated rule collision",
+			app:  baseApp,
+			service: `
+name: containerd
+service: containerd
+apps: [containerd]
+restart_on_change:
+  apps: [containerd]
+rules:
+  restart-on-change-containerd-version:
+    type: remediation
+    if: { service: { state: failed } }
+    then: { action: restart }
+`,
+			want: `restart_on_change would overwrite existing rule "restart-on-change-containerd-version"`,
+		},
+		{
+			name: "map values must be mappings",
+			app:  baseApp,
+			service: `
+name: containerd
+service: containerd
+apps: [containerd]
+restart_on_change:
+  apps:
+    containerd: minor
+`,
+			want: `restart_on_change.apps.containerd must be a mapping`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			global := writeConfig(t, map[string]string{
+				"sermo.yml":                   baseGlobal,
+				"catalog/apps/containerd.yml": tt.app,
+				"services/containerd.yml":     tt.service,
+			})
+			cfg, err := loadConfig(t, global)
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if !hasIssue(Validate(cfg), tt.want) {
+				t.Fatalf("Validate() did not report %q", tt.want)
+			}
+		})
+	}
+}
+
 func TestRestartOnChangeUnknownLibraryErrors(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
