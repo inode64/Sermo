@@ -1344,12 +1344,7 @@ func (b *WebBackend) watchDashboardView(w *webWatch, system metrics.Snapshot) (*
 }
 
 func watchUsesDaemonSnapshot(checkType string) bool {
-	switch checkType {
-	case checks.CheckTypeFile, checks.CheckTypeProcess:
-		return false
-	default:
-		return true
-	}
+	return true
 }
 
 func (b *WebBackend) watchSnapshotView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {

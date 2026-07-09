@@ -120,6 +120,7 @@ type procWatcher struct {
 	now       func() time.Time
 	emit      func(Event)
 	sampler   ProcSampler
+	publish   func(string, string, checks.Result)
 
 	state map[int]*procState
 }
@@ -143,9 +144,11 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 		// Treating the empty result as "all matching PIDs vanished" would fire a
 		// spurious `gone` for every tracked PID and discard their state; instead
 		// keep the previous state untouched and retry next cycle.
+		w.publishSnapshot(nil, false)
 		return
 	}
 	sort.Slice(samples, func(i, j int) bool { return samples[i].PID < samples[j].PID })
+	defer w.publishSnapshot(samples, true)
 
 	t := now()
 	seen := make(map[int]bool, len(samples))
@@ -199,6 +202,58 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 		}
 		delete(w.state, pid)
 	}
+}
+
+func (w *procWatcher) publishSnapshot(samples []ProcInfo, ok bool) {
+	if w.publish == nil {
+		return
+	}
+	if !ok {
+		w.publish(w.name, checks.CheckTypeProcess, checks.Result{
+			Check:   w.name,
+			OK:      false,
+			Message: "process " + w.match.Name + ": sample unavailable",
+			Data:    map[string]any{watchReadingFieldProcess: w.match.Name},
+		})
+		return
+	}
+	var rssTotal, cpuTicksTotal, ioTotal uint64
+	ioKnown := false
+	for _, sample := range samples {
+		rssTotal += sample.RSS
+		cpuTicksTotal += sample.CPUTicks
+		if sample.HasIO {
+			ioKnown = true
+			ioTotal += sample.IOBytes
+		}
+	}
+	data := map[string]any{
+		watchReadingFieldProcess:  w.match.Name,
+		watchReadingFieldMatches:  len(samples),
+		checks.DataKeyPIDs:        processPIDList(samples),
+		watchReadingFieldRSS:      rssTotal,
+		watchReadingFieldCPUTicks: cpuTicksTotal,
+	}
+	if w.match.User != "" {
+		data[watchReadingFieldUser] = w.match.User
+	}
+	if ioKnown {
+		data[metrics.MetricIO] = ioTotal
+	}
+	target := "process " + w.match.Name
+	if w.match.User != "" {
+		target += " user " + w.match.User
+	}
+	summary := fmt.Sprintf("%s: %d matching process%s", target, len(samples), pluralSuffix(len(samples), "process"))
+	if len(samples) > 0 {
+		summary += fmt.Sprintf(", rss %d bytes", rssTotal)
+	}
+	w.publish(w.name, checks.CheckTypeProcess, checks.Result{
+		Check:   w.name,
+		OK:      true,
+		Message: summary,
+		Data:    data,
+	})
 }
 
 func procSamplerFromDeps(deps Deps) ProcSampler {
