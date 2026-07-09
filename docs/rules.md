@@ -402,6 +402,7 @@ checks:
     json:                              # request body as JSON (sets Content-Type
       probe: true                      # automatically; or use `body:` for raw text)
     expect_status: 200                 # code, class (2xx), list, or { op, value }
+    follow_redirects: true             # optional; false evaluates a 3xx as-is
     expect_body: { op: contains, value: "ready" } # body comparison (see below)
     expect_latency: { op: "<", value: 800 }   # optional: response time in ms
     proxy: "http://user:pass@squid:3128"   # optional: route the request through a proxy (Squid)
@@ -429,6 +430,10 @@ response is only read when `expect_body`/`expect_json` is set (capped at 1 MiB).
 `expect_json` looks up **dotted paths** into nested objects. A scalar value is an
 equality check (compared as a string); a `{op, value}` mapping uses an operator —
 `>`, `>=`, `<`, `<=` (numeric), `==`, `!=`, `contains` (string), or `=~` (regex).
+By default the check follows HTTP redirects using Go's standard client policy.
+Set `follow_redirects: false` when the redirect itself is the health signal, for
+example a local HTTP listener that intentionally redirects every request to
+HTTPS.
 
 **Response comparisons.** `expect_body` and `expect_latency` use an `{op, value}`
 mapping. `expect_status` accepts either a code/class/list form or the same

@@ -24,7 +24,7 @@ preflight:
       - -verify-config
       - -config.file=${config}
     timeout: 30s
-pidfile: /run/loki.pid
+pidfile: { path: /run/loki.pid, optional: true }
 processes:
   main:
     exe: ${loki_binary}

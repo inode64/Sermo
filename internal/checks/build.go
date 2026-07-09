@@ -577,7 +577,7 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 	}
 	hc := &httpCheck{
 		base:        b,
-		client:      reqClient,
+		client:      httpClientWithRedirectPolicy(reqClient, boolWithDefault(entry[CheckKeyFollowRedirects], true)),
 		url:         rawURL,
 		method:      method,
 		headers:     cfgval.StringMap(entry[CheckKeyHeaders]),
@@ -610,7 +610,31 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 	if warn := configureHTTPCert(hc, entry, rawURL); warn != "" {
 		return nil, warn
 	}
+	if hc.certClient != nil {
+		hc.certClient = httpClientWithRedirectPolicy(hc.certClient, boolWithDefault(entry[CheckKeyFollowRedirects], true))
+	}
 	return hc, ""
+}
+
+func boolWithDefault(v any, def bool) bool {
+	if b, ok := v.(bool); ok {
+		return b
+	}
+	return def
+}
+
+func httpClientWithRedirectPolicy(client *http.Client, follow bool) *http.Client {
+	if follow {
+		return client
+	}
+	if client == nil {
+		client = &http.Client{}
+	}
+	copied := *client
+	copied.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+	return &copied
 }
 
 // HTTPMethodList is the user-facing list of standard HTTP methods accepted by
