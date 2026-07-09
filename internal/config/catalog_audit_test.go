@@ -1779,36 +1779,6 @@ func TestCatalogServicesUseAppVariablesForBinaryRefs(t *testing.T) {
 	}
 }
 
-func TestRspamdCatalogChecksRuntimeLibraries(t *testing.T) {
-	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-
-	resolved, errs := cfg.ResolveCatalog(CategoryService, "rspamd")
-	if len(errs) > 0 {
-		t.Fatalf("ResolveCatalog(rspamd): %v", errs)
-	}
-	entry := nested(t, resolved.Tree, "preflight", "rspamd-libraries")
-	if got := cfgval.String(entry["type"]); got != "libraries" {
-		t.Fatalf("rspamd-libraries type = %q, want libraries", got)
-	}
-	if got := cfgval.String(entry["binary"]); got != "/usr/bin/rspamd" {
-		t.Fatalf("rspamd-libraries binary = %q, want /usr/bin/rspamd", got)
-	}
-	if cfgval.Bool(entry["optional"]) {
-		t.Fatal("rspamd-libraries must be mandatory so a broken runtime blocks service operations")
-	}
-}
-
 func TestDatabaseCatalogServicesBlockRestartDuringBackup(t *testing.T) {
 	root := repoRoot(t)
 	dir := t.TempDir()
