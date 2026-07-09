@@ -58,8 +58,9 @@ paths:
   # Volatile runtime data (locks, operation markers) on tmpfs; wiped on reboot.
   runtime: /run/sermo
   # Persistent state database (monitoring/remediation/rule-window control state,
-  # SLA history, measurements, runtime metrics). Lives under /var/lib so it
-  # survives reboots — required for `monitor: previous` and for automatic
+  # latest service/watch readings, SLA history, measurements, runtime metrics).
+  # Lives under /var/lib so it survives reboots — required for
+  # `monitor: previous`, for the dashboard to keep last real readings, and for automatic
   # remediation not to reset its cooldown/windows after a sermod restart.
   state: /var/lib/sermo
   # Notification templates. `make install` installs default-alert.yml here.

@@ -331,8 +331,8 @@ Columns per panel (every panel ends with Last activity, State, Actions):
 | Host watches | Name, Type, Summary |
 
 The Certificate and Disk I/O columns read the watch readings published by the
-latest daemon watch cycle
-(certificate expiry, days left, issuer and public-key algorithm; device,
+latest daemon watch cycle and rehydrated from persistent state after a daemon
+restart (certificate expiry, days left, issuer and public-key algorithm; device,
 utilization, read/write throughput and await latency).
 
 Shared columns:

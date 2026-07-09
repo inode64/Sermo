@@ -215,11 +215,13 @@ usa los nombres prefijados para evitar ambigüedad.
 persistente `sermo.db` (SQLite). A diferencia de `paths.runtime`, sobrevive a los
 reinicios, que es lo que permite que el flag `monitor: previous` de un service o watch
 restaure su último estado de monitorización. También almacena el cooldown/backoff de
-remediación automática y el progreso de las ventanas `for`/`within` de las reglas, de
-modo que reiniciar `sermod` no restablece cuándo una regla puede actuar de nuevo. Las
-mediciones de SLA y de comprobaciones, además del historial de métricas de proceso de
-service y daemon mostrado en la interfaz web, también viven ahí. El esquema está
-versionado y se migra automáticamente hacia adelante, de modo que las funciones futuras
+remediación automática, el progreso de las ventanas `for`/`within` de las reglas y las
+últimas lecturas de comprobaciones de service y watches de host, de modo que reiniciar
+`sermod` no restablece cuándo una regla puede actuar de nuevo ni hace que el panel pierda
+el último resultado real del ciclo del daemon. Las mediciones de SLA y de comprobaciones,
+además del historial de métricas de proceso de service y daemon mostrado en la interfaz
+web, también viven ahí. El esquema está versionado y se migra automáticamente hacia
+adelante, de modo que las funciones futuras
 pueden añadir tablas sin una actualización manual.
 
 Ambos directorios se crean **0700, propietario root**. En systemd provienen del
@@ -814,15 +816,18 @@ stop manual correcto pausa después la monitorización como se describe abajo. E
 asentamiento por service no vuelve a bloquear `/readyz`.
 
 Los eventos son la actividad del daemon — acciones, alertas, supresiones, resultados de
-hook/notify y errores — mantenidos en un anillo en memoria (los últimos 1000); también
-van al log del daemon. `limit` por defecto es 100 (máx 1000). El panel muestra un feed
-global; el detalle de un service muestra sus propios eventos.
+hook/notify y errores — mantenidos en el almacén de estado persistente y reflejados en el
+log del daemon. `limit` por defecto es 100 (máx 1000). El panel muestra un feed global;
+el detalle de un service muestra sus propios eventos.
 
 Los resultados de comprobación del detalle son los **últimos observados** por el worker
 (publicados cada ciclo), por lo que no cuesta nada verlos y reflejan la cadencia propia
-de cada comprobación (ver [intervalo por comprobación](#intervalo-por-comprobación)); una
-comprobación aún no ejecutada muestra "not run yet". La sección de gráficos usa un
-selector de ventana para las mediciones de SLA y runtime. Su línea de tiempo de SLA
+de cada comprobación (ver [intervalo por comprobación](#intervalo-por-comprobación)); se
+rehidratan desde `paths.state` tras un reinicio del daemon, y una comprobación aún no
+ejecutada muestra "not run yet". Las lecturas de watches de host usan la misma ruta de
+último valor persistido, con las muestras obsoletas ocultas tras su ventana normal de
+frescura. La sección de gráficos usa un selector de ventana para las mediciones de SLA y
+runtime. Su línea de tiempo de SLA
 proviene de los mismos datos que `sermoctl sla`: traza las muestras por minuto sobre la
 ventana seleccionada (1h/24h/7d/30d/1y), marca cada minuto degradado como un incidente a
 su hora local, y deja huecos donde el service estuvo sin monitorizar.

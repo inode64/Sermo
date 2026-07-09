@@ -234,6 +234,39 @@ var migrations = []string{
 		source     TEXT NOT NULL,
 		updated_at TEXT NOT NULL
 	);`,
+	// service_check_snapshot stores the latest service check result published by
+	// each worker. It is current observable state, not history, so the web UI can
+	// show the last real daemon-cycle reading immediately after a restart.
+	`CREATE TABLE service_check_snapshot (
+		service    TEXT NOT NULL,
+		check_name TEXT NOT NULL,
+		ok         INTEGER NOT NULL,
+		condition  INTEGER NOT NULL,
+		optional   INTEGER NOT NULL,
+		skipped    INTEGER NOT NULL,
+		message    TEXT NOT NULL,
+		data       TEXT NOT NULL,
+		ran        INTEGER NOT NULL,
+		at         INTEGER NOT NULL,
+		PRIMARY KEY (service, check_name)
+	);`,
+	// watch_check_snapshot stores the latest host-watch result per visible slot
+	// (for example one slot per metric). It keeps /api/watches backed by daemon
+	// cycle data across process restarts.
+	`CREATE TABLE watch_check_snapshot (
+		watch      TEXT NOT NULL,
+		slot       TEXT NOT NULL,
+		check_type TEXT NOT NULL,
+		ok         INTEGER NOT NULL,
+		condition  INTEGER NOT NULL,
+		optional   INTEGER NOT NULL,
+		skipped    INTEGER NOT NULL,
+		message    TEXT NOT NULL,
+		data       TEXT NOT NULL,
+		ran        INTEGER NOT NULL,
+		at         INTEGER NOT NULL,
+		PRIMARY KEY (watch, slot)
+	);`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -385,6 +418,21 @@ type OperationSettlingRecord struct {
 	UpdatedAt time.Time
 }
 
+// CheckSnapshotRecord is one persisted latest check result. Name is the service
+// check name or host-watch slot; CheckType is set for host-watch rows.
+type CheckSnapshotRecord struct {
+	Name      string
+	CheckType string
+	OK        bool
+	Condition bool
+	Optional  bool
+	Skipped   bool
+	Message   string
+	Data      map[string]any
+	Ran       bool
+	At        time.Time
+}
+
 // MonitorState returns a persisted monitoring row. found is false when the entry
 // has no recorded state yet.
 func (s *Store) MonitorState(service string) (MonitorRecord, bool, error) {
@@ -480,6 +528,191 @@ func (s *Store) OperationSettling(service string) (OperationSettlingRecord, bool
 func (s *Store) ClearOperationSettling(service string) error {
 	_, err := s.db.Exec(`DELETE FROM operation_settling WHERE service = ?;`, service)
 	return err
+}
+
+// ServiceCheckSnapshots returns every persisted service check snapshot, grouped
+// by service name and keyed by check name.
+func (s *Store) ServiceCheckSnapshots() (map[string]map[string]CheckSnapshotRecord, error) {
+	rows, err := s.db.Query(
+		`SELECT service, check_name, ok, condition, optional, skipped, message, data, ran, at
+		   FROM service_check_snapshot ORDER BY service, check_name;`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]map[string]CheckSnapshotRecord{}
+	for rows.Next() {
+		var (
+			service  string
+			name     string
+			ok       int
+			cond     int
+			optional int
+			skipped  int
+			message  string
+			rawData  string
+			ran      int
+			at       int64
+		)
+		if err := rows.Scan(&service, &name, &ok, &cond, &optional, &skipped, &message, &rawData, &ran, &at); err != nil {
+			return nil, err
+		}
+		data, err := decodeSnapshotData(rawData)
+		if err != nil {
+			return nil, err
+		}
+		rec := CheckSnapshotRecord{
+			Name: name, OK: intBool(ok), Condition: intBool(cond), Optional: intBool(optional),
+			Skipped: intBool(skipped), Message: message, Data: data, Ran: intBool(ran), At: unixNanoTime(at),
+		}
+		if out[service] == nil {
+			out[service] = map[string]CheckSnapshotRecord{}
+		}
+		out[service][name] = rec
+	}
+	return out, rows.Err()
+}
+
+// SetServiceCheckSnapshots replaces one service's latest check snapshots.
+func (s *Store) SetServiceCheckSnapshots(service string, records map[string]CheckSnapshotRecord) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM service_check_snapshot WHERE service = ?;`, service); err != nil {
+		return err
+	}
+	names := make([]string, 0, len(records))
+	for name := range records {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		rec := records[name]
+		data, err := encodeSnapshotData(rec.Data)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO service_check_snapshot
+			   (service, check_name, ok, condition, optional, skipped, message, data, ran, at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+			service, name, boolInt(rec.OK), boolInt(rec.Condition), boolInt(rec.Optional), boolInt(rec.Skipped),
+			rec.Message, data, boolInt(rec.Ran), timeUnixNano(rec.At),
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// WatchCheckSnapshots returns every persisted host-watch snapshot, grouped by
+// watch name and keyed by the stable result slot.
+func (s *Store) WatchCheckSnapshots() (map[string]map[string]CheckSnapshotRecord, error) {
+	rows, err := s.db.Query(
+		`SELECT watch, slot, check_type, ok, condition, optional, skipped, message, data, ran, at
+		   FROM watch_check_snapshot ORDER BY watch, slot;`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]map[string]CheckSnapshotRecord{}
+	for rows.Next() {
+		var (
+			watch     string
+			slot      string
+			checkType string
+			ok        int
+			cond      int
+			optional  int
+			skipped   int
+			message   string
+			rawData   string
+			ran       int
+			at        int64
+		)
+		if err := rows.Scan(&watch, &slot, &checkType, &ok, &cond, &optional, &skipped, &message, &rawData, &ran, &at); err != nil {
+			return nil, err
+		}
+		data, err := decodeSnapshotData(rawData)
+		if err != nil {
+			return nil, err
+		}
+		rec := CheckSnapshotRecord{
+			Name: slot, CheckType: checkType, OK: intBool(ok), Condition: intBool(cond), Optional: intBool(optional),
+			Skipped: intBool(skipped), Message: message, Data: data, Ran: intBool(ran), At: unixNanoTime(at),
+		}
+		if out[watch] == nil {
+			out[watch] = map[string]CheckSnapshotRecord{}
+		}
+		out[watch][slot] = rec
+	}
+	return out, rows.Err()
+}
+
+// SetWatchCheckSnapshot upserts one host-watch snapshot slot.
+func (s *Store) SetWatchCheckSnapshot(watch, slot string, rec CheckSnapshotRecord) error {
+	data, err := encodeSnapshotData(rec.Data)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(
+		`INSERT INTO watch_check_snapshot
+		   (watch, slot, check_type, ok, condition, optional, skipped, message, data, ran, at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(watch, slot) DO UPDATE SET
+		   check_type = excluded.check_type,
+		   ok         = excluded.ok,
+		   condition  = excluded.condition,
+		   optional   = excluded.optional,
+		   skipped    = excluded.skipped,
+		   message    = excluded.message,
+		   data       = excluded.data,
+		   ran        = excluded.ran,
+		   at         = excluded.at;`,
+		watch, slot, rec.CheckType, boolInt(rec.OK), boolInt(rec.Condition), boolInt(rec.Optional), boolInt(rec.Skipped),
+		rec.Message, data, boolInt(rec.Ran), timeUnixNano(rec.At),
+	)
+	return err
+}
+
+func encodeSnapshotData(data map[string]any) (string, error) {
+	if data == nil {
+		return "{}", nil
+	}
+	b, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func decodeSnapshotData(raw string) (map[string]any, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	var data map[string]any
+	if err := json.Unmarshal([]byte(raw), &data); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+func intBool(v int) bool {
+	return v != 0
 }
 
 // panicFlagKey is the global_state key for the panic-mode toggle.
