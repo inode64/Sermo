@@ -3612,6 +3612,11 @@ func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionRes
 		b.emitWatchExpandEvent(name, eventKindExpandFailed, eventStatusFailed, msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
+	if w.dryRun {
+		msg := watchDryRunMessage(HookSpec{}, nil, w.expand)
+		b.emitWatchExpandEvent(name, eventKindDryRun, eventStatusOK, msg)
+		return web.ActionResult{OK: true, Message: msg}
+	}
 	expander := b.expander
 	if expander == nil {
 		msg := "volume expander is unavailable"

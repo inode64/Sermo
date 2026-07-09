@@ -24,6 +24,7 @@ import (
 const (
 	mountBlockersNotifierName = "mount-blockers"
 	mountUsageTTL             = 15 * time.Second
+	mountDryRunAlertMessage   = "dry-run: would alert mount users"
 )
 
 // MountAlertDelivery reports which mount-blocking users were targeted by a
@@ -124,6 +125,23 @@ func (b *WebBackend) mountSpec(name string) (mountctl.Spec, bool, string) {
 		return mountctl.Spec{}, false, "storage watch " + name + " has no mount block"
 	}
 	return mountctl.SpecFromStorageTree(name, resolved.Tree), true, ""
+}
+
+func (b *WebBackend) mountDryRun(name string) bool {
+	if b == nil {
+		return false
+	}
+	if w, ok := b.watches[name]; ok {
+		return w.dryRun
+	}
+	if b.cfg == nil {
+		return false
+	}
+	resolved, errs := b.cfg.ResolveStorage(name)
+	if len(errs) > 0 {
+		return false
+	}
+	return config.DryRun(resolved.Tree)
 }
 
 // Mounts returns configured fstab-backed mount units with live mount/refcount status.
@@ -358,16 +376,9 @@ func (b *WebBackend) MountAction(ctx context.Context, name, action string, opts 
 	if !ok {
 		return web.MountActionResult{OK: false, Name: name, Action: action, Message: msg}
 	}
-	opCtx, cancel := b.mountContext(ctx)
-	defer cancel()
 	ctrl := b.mountController()
-	var (
-		res mountctl.Result
-		err error
-	)
 	switch action {
 	case mountctl.ActionMount:
-		res, err = ctrl.Acquire(opCtx, spec)
 	case mountctl.ActionUmount:
 		if reason := mountctl.UmountDisabledReason(spec.Path); reason != "" {
 			return web.MountActionResult{
@@ -390,18 +401,46 @@ func (b *WebBackend) MountAction(ctx context.Context, name, action string, opts 
 				Message: "kill blockers is not allowed by this mount policy",
 			}
 		}
+	default:
+		return web.MountActionResult{OK: false, Name: spec.Name, Path: spec.Path, Action: action, Message: "unknown mount action " + action}
+	}
+	if b.mountDryRun(name) {
+		return b.mountDryRunActionResult(ctrl, spec, action)
+	}
+	opCtx, cancel := b.mountContext(ctx)
+	defer cancel()
+	var (
+		res mountctl.Result
+		err error
+	)
+	switch action {
+	case mountctl.ActionMount:
+		res, err = ctrl.Acquire(opCtx, spec)
+	case mountctl.ActionUmount:
 		runSpec := spec
 		if !opts.KillBlockers {
 			runSpec.Umount.AllowSIGKILL = false
 		}
 		res, err = ctrl.Release(opCtx, runSpec)
-	default:
-		return web.MountActionResult{OK: false, Name: spec.Name, Path: spec.Path, Action: action, Message: "unknown mount action " + action}
 	}
 	b.invalidateMountUsage()
 	out := b.mountActionResult(spec, res, err)
 	b.syncStorageMountMonitoring(spec.Name, action, out.OK)
 	return out
+}
+
+func (b *WebBackend) mountDryRunActionResult(ctrl mountctl.Controller, spec mountctl.Spec, action string) web.MountActionResult {
+	status, _ := ctrl.ReadStatus(spec)
+	res := mountctl.Result{
+		Name:     spec.Name,
+		Path:     spec.Path,
+		Action:   action,
+		Status:   mountctl.ResultOK,
+		Message:  watchDryRunMessagePrefix + action,
+		Mounted:  status.Mounted,
+		Refcount: status.Refcount,
+	}
+	return b.mountActionResult(spec, res, nil)
 }
 
 func (b *WebBackend) syncStorageMountMonitoring(storage, action string, resultOK bool) {
@@ -436,6 +475,9 @@ func (b *WebBackend) AlertMountUsers(ctx context.Context, name string) web.Mount
 	}
 	if reason := mountctl.UmountDisabledReason(spec.Path); reason != "" {
 		return web.MountAlertResult{OK: false, Name: spec.Name, Path: spec.Path, Message: reason}
+	}
+	if b.mountDryRun(name) {
+		return web.MountAlertResult{OK: true, Name: spec.Name, Path: spec.Path, Message: mountDryRunAlertMessage}
 	}
 	opCtx, cancel := b.mountContext(ctx)
 	defer cancel()
