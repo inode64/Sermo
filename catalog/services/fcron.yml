@@ -4,6 +4,9 @@ category: system
 service: fcron
 apps:
   - fcron
+restart_on_change:
+  apps:
+    - fcron
 pidfile: /run/fcron.pid
 socket: /run/fcron.fifo
 processes:

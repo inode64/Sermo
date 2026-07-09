@@ -342,7 +342,7 @@ checks run, so the probe still executes but its result is suppressed; use a chec
 To **restart** a service when a library, file or app version is updated (the
 other half of the example — "if the pam library was updated, restart"), use a
 remediation rule with a [`changed:`](#rules) condition (or
-`restart_on_change: {libraries: […], apps: […]}`):
+`restart_on_change: {paths: […], libraries: […], apps: […]}`):
 
 ```yaml
 rules:

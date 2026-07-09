@@ -9,6 +9,9 @@ service:
     - grafana
 apps:
   - grafana
+restart_on_change:
+  apps:
+    - grafana
 variables:
   host: 127.0.0.1
   port: 3000

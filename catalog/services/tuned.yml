@@ -9,6 +9,9 @@ service:
     - tuned
 apps:
   - tuned
+restart_on_change:
+  apps:
+    - tuned
 pidfile:
   - /run/tuned/tuned.pid
   - /run/tuned.pid

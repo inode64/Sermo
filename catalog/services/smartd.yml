@@ -13,6 +13,9 @@ os:
         - smartmontools
 apps:
   - smartd
+restart_on_change:
+  apps:
+    - smartd
 pidfile:
   path: /run/smartd.pid
   optional: true

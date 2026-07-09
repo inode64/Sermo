@@ -7,6 +7,10 @@ service: ceph-osd@${n}
 apps:
   - ceph-osd
   - ceph
+restart_on_change:
+  apps:
+    - ceph-osd
+    - ceph
 variables:
   user: ceph
 socket: /run/ceph/ceph-osd.${n}.asok

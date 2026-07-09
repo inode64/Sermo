@@ -3,6 +3,9 @@ display_name: OpenVPN ${instance}
 category: vpn
 apps:
   - openvpn
+restart_on_change:
+  apps:
+    - openvpn
 service:
   openrc:
     - openvpn.${instance}

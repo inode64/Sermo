@@ -4,6 +4,9 @@ category: storage
 service: smbd
 apps:
   - smbd
+restart_on_change:
+  apps:
+    - smbd
 variables:
   port: 445
 preflight:

@@ -5,6 +5,9 @@ description: Backup storage Server
 service: bareos-sd
 apps:
   - bareos-sd
+restart_on_change:
+  apps:
+    - bareos-sd
 variables:
   port: 9103
 preflight:

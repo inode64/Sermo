@@ -8,6 +8,9 @@ service:
     - cupsd
 apps:
   - cupsd
+restart_on_change:
+  apps:
+    - cupsd
 variables:
   port: 631
 pidfile:

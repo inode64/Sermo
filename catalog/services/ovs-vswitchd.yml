@@ -4,6 +4,9 @@ category: virtualization
 service: ovs-vswitchd
 apps:
   - ovs-vswitchd
+restart_on_change:
+  apps:
+    - ovs-vswitchd
 processes:
   main:
     exe: ${ovs_vswitchd_binary}

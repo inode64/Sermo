@@ -11,6 +11,9 @@ service:
     - mysql
 apps:
   - mariadb
+restart_on_change:
+  apps:
+    - mariadb
 variables:
   user: mysql
   backup_user: mysql

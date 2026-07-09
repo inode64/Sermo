@@ -5,6 +5,9 @@ description: A JavaScript runtime built on Chrome's V8 JavaScript engine
 service: node
 apps:
   - node
+restart_on_change:
+  apps:
+    - node
 policy:
   cooldown: 15m
   max_actions: 2

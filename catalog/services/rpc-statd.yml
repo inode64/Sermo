@@ -9,6 +9,9 @@ service:
     - rpc-statd
 apps:
   - rpc-statd
+restart_on_change:
+  apps:
+    - rpc-statd
 variables:
   user: nobody
 pidfile: /run/rpc.statd.pid

@@ -342,7 +342,7 @@ comprobaciones del ciclo se ejecuten, así que la sonda todavía se ejecuta pero
 Para **reiniciar** un servicio cuando una biblioteca, archivo o versión de app se actualiza
 (la otra mitad del ejemplo — "si la biblioteca pam se actualizó, reinicia"), usa una regla de
 remediación con una condición [`changed:`](#reglas) (o
-`restart_on_change: {libraries: […], apps: […]}`):
+`restart_on_change: {paths: […], libraries: […], apps: […]}`):
 
 ```yaml
 rules:

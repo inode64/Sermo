@@ -4,6 +4,9 @@ category: hardware
 service: apcsmart
 apps:
   - apcsmart
+restart_on_change:
+  apps:
+    - apcsmart
 watches:
   service:
     check:

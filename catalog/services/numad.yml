@@ -4,6 +4,9 @@ category: hardware
 service: numad
 apps:
   - numad
+restart_on_change:
+  apps:
+    - numad
 watches:
   service:
     check:

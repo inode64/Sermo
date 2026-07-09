@@ -4,6 +4,9 @@ category: web
 service: squid
 apps:
   - squid
+restart_on_change:
+  apps:
+    - squid
 variables:
   port: 3128
   user: squid

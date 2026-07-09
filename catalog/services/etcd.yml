@@ -45,6 +45,8 @@ policy:
 restart_on_change:
   paths:
     - ${config}
+  apps:
+    - etcd
 watches:
   service:
     check:

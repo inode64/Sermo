@@ -4,6 +4,9 @@ category: virtualization
 service: virtlockd
 apps:
   - virtlockd
+restart_on_change:
+  apps:
+    - virtlockd
 policy:
   cooldown: 15m
   max_actions: 2

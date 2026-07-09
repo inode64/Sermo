@@ -7,6 +7,9 @@ service:
     - firewalld
 apps:
   - firewalld
+restart_on_change:
+  apps:
+    - firewalld
 variables:
   config_dir: /etc/firewalld
 config_files:

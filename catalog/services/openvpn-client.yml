@@ -3,6 +3,9 @@ display_name: OpenVPN client ${instance}
 category: vpn
 apps:
   - openvpn
+restart_on_change:
+  apps:
+    - openvpn
 service:
   systemd:
     - openvpn-client@${instance}

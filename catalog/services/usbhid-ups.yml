@@ -4,6 +4,9 @@ category: hardware
 service: usbhid-ups
 apps:
   - usbhid-ups
+restart_on_change:
+  apps:
+    - usbhid-ups
 watches:
   service:
     check:

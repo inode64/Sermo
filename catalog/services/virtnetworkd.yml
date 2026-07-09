@@ -7,6 +7,9 @@ service:
     - virtnetworkd
 apps:
   - virtnetworkd
+restart_on_change:
+  apps:
+    - virtnetworkd
 socket: /run/libvirt/virtnetworkd-sock
 processes:
   main:

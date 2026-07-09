@@ -11,6 +11,10 @@ service:
 apps:
   - erlang
   - rabbitmq
+restart_on_change:
+  apps:
+    - erlang
+    - rabbitmq
 variables:
   user: rabbitmq
   host: 127.0.0.1

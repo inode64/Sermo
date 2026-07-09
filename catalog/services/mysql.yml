@@ -11,6 +11,9 @@ service:
     - mysqld
 apps:
   - mysql
+restart_on_change:
+  apps:
+    - mysql
 variables:
   user: mysql
   backup_user: mysql

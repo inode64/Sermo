@@ -9,6 +9,9 @@ service:
     - mysqld_exporter
 apps:
   - mysqld_exporter
+restart_on_change:
+  apps:
+    - mysqld_exporter
 variables:
   host: 127.0.0.1
   port: 9104

@@ -4,6 +4,9 @@ category: storage
 service: afpd
 apps:
   - afpd
+restart_on_change:
+  apps:
+    - afpd
 variables:
   port: 548
 watches:

@@ -14,6 +14,9 @@ processes:
     exe: ${ceph_mgr_binary}
     user: ${user}
 restart_on_change:
+  apps:
+    - ceph-mgr
+    - ceph
 watches:
   service:
     check:

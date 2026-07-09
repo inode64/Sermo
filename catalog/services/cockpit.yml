@@ -10,6 +10,9 @@ also_service:
     - cockpit.socket
 apps:
   - cockpit
+restart_on_change:
+  apps:
+    - cockpit
 variables:
   host: 127.0.0.1
   port: 9090

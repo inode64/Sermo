@@ -69,6 +69,7 @@ var validGlobalPathKeys = set(
 
 var validDefaultsKeys = set(
 	keyDryRun,
+	keyRestartOnChange,
 	sectionPolicy,
 	sectionRuleWindow,
 	sectionStopPolicy,
@@ -211,6 +212,7 @@ func validateGlobal(cfg *Config) []Issue {
 
 	validateDefaultsKeys(cfg.Global.Defaults, add)
 	validateDefaultsVariables(cfg.Global.Defaults, add)
+	validateDefaultsRestartOnChange(cfg.Global.Defaults, add)
 	if v, present := cfg.Global.Defaults[keyDryRun]; present {
 		if _, ok := v.(bool); !ok {
 			add(validationBooleanFormat, defaultsFieldPath(keyDryRun))
@@ -240,6 +242,25 @@ func validateDefaultsKeys(defaults map[string]any, add func(string, ...any)) {
 			add("%s is not supported", defaultsFieldPath(key))
 		}
 	}
+}
+
+func validateDefaultsRestartOnChange(defaults map[string]any, add addFunc) {
+	raw, present := defaults[keyRestartOnChange]
+	if !present {
+		return
+	}
+	roc, ok := raw.(map[string]any)
+	if !ok {
+		add("%s must be a mapping", defaultsFieldPath(keyRestartOnChange))
+		return
+	}
+	allowed := set(keyRestartConfig, keyRestartVersion)
+	for _, key := range slices.Sorted(maps.Keys(roc)) {
+		if _, ok := allowed[key]; !ok {
+			add("%s is not supported", defaultsRestartOnChangeFieldPath(key))
+		}
+	}
+	validateRestartOnChangeFlags(defaultsFieldPath(keyRestartOnChange), roc, add)
 }
 
 // registryLabel turns a document's registry namespace (registryKey) into the

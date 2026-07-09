@@ -10,6 +10,9 @@ service:
     - keydb-server
 apps:
   - keydb
+restart_on_change:
+  apps:
+    - keydb
 variables:
   host: 127.0.0.1
   port: 6379

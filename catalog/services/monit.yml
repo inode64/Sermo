@@ -38,6 +38,8 @@ restart_on_change:
     - glibc
     - openssl
     - zlib
+  apps:
+    - monit
 config_files:
   - ${config}
   - /etc/monit/conf.d

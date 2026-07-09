@@ -5,6 +5,9 @@ description: Salt minion agent.
 service: salt-minion
 apps:
   - salt-minion
+restart_on_change:
+  apps:
+    - salt-minion
 pidfile: /run/salt-minion.pid
 watches:
   service:

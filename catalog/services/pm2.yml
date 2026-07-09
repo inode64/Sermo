@@ -11,6 +11,10 @@ service:
 apps:
   - pm2
   - node
+restart_on_change:
+  apps:
+    - pm2
+    - node
 variables:
   user: root
 pidfile:

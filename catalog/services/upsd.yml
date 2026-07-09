@@ -8,6 +8,9 @@ service:
     - upsd
 apps:
   - upsd
+restart_on_change:
+  apps:
+    - upsd
 variables:
   port: 3493
   user: nut

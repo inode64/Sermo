@@ -3,6 +3,9 @@ category: observability
 service: syslog-ng
 apps:
   - syslog-ng
+restart_on_change:
+  apps:
+    - syslog-ng
 variables:
   config: /etc/syslog-ng/syslog-ng.conf
 preflight:

@@ -9,6 +9,9 @@ service:
     - sshd
 apps:
   - ssh
+restart_on_change:
+  apps:
+    - ssh
 variables:
   user: root
   port: 22

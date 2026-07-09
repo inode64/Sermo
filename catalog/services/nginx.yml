@@ -4,6 +4,9 @@ category: web
 service: nginx
 apps:
   - nginx
+restart_on_change:
+  apps:
+    - nginx
 variables:
   host: 127.0.0.1
   port: 80

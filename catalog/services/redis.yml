@@ -44,6 +44,8 @@ restart_on_change:
   paths:
     - /etc/redis/redis.conf
     - /etc/redis.conf
+  apps:
+    - redis
 watches:
   service:
     check:

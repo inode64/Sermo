@@ -11,6 +11,9 @@ service:
     - dbus-daemon
 apps:
   - dbus
+restart_on_change:
+  apps:
+    - dbus
 variables:
   user: messagebus
 pidfile: /run/dbus.pid

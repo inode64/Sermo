@@ -2,7 +2,7 @@
 #
 # Engine-wide settings are not merged into individual targets. Only the
 # target-safe parts of `defaults` are: dry_run for services and watches;
-# stop_policy, policy and rule_window for services.
+# stop_policy, policy, rule_window and restart_on_change flags for services.
 # For source-tree development and local validation, build with SERMO_DATADIR=$PWD
 # and use examples/sermo-dev.yml; this file intentionally points at installed
 # /etc/sermo and /usr/share/sermo locations.
@@ -77,6 +77,12 @@ defaults:
   # cooldown unless it overrides this value.
   policy:
     cooldown: 5m
+
+  # Optional inherited permissions for generated restart_on_change rules. Sources
+  # (paths, apps, libraries) stay in each catalog service or configured service.
+  # restart_on_change:
+  #   config: false   # block restart_on_change.paths by default
+  #   version: true   # allow restart_on_change.apps/libraries by default
 
   # Fallback firing window for rules that declare neither `for` nor `within`.
   # The values below equal the built-in default (fire on the first true cycle),

@@ -5,6 +5,9 @@ description: Bluetooth daemon (bluetoothd).
 service: bluetooth
 apps:
   - bluetoothd
+restart_on_change:
+  apps:
+    - bluetoothd
 pidfile: /run/bluetoothd.pid
 watches:
   service:

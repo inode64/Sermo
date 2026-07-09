@@ -4,6 +4,9 @@ category: virtualization
 service: virtlogd
 apps:
   - virtlogd
+restart_on_change:
+  apps:
+    - virtlogd
 socket: /run/libvirt/virtlogd-sock
 processes:
   main:

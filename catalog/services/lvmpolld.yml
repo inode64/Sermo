@@ -4,6 +4,9 @@ category: storage
 service: lvmpolld
 apps:
   - lvmpolld
+restart_on_change:
+  apps:
+    - lvmpolld
 watches:
   service:
     check:

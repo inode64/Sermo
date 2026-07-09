@@ -4,6 +4,9 @@ category: network
 service: named
 apps:
   - named
+restart_on_change:
+  apps:
+    - named
 variables:
   host: 127.0.0.1
   port: 53

@@ -10,6 +10,9 @@ service:
     - qemu-ga
 apps:
   - qemu-ga
+restart_on_change:
+  apps:
+    - qemu-ga
 variables:
   user: root
 processes:
