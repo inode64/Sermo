@@ -1783,6 +1783,9 @@ Las acciones y los tipos están acoplados: las acciones de operación (`restart`
 regla solo de notificación es `type: alert`) y rechazadas en otros lugares. `alert` (con un
 `message`) puede acompañar las acciones de cualquier regla; `block` es solo de guard. Un `then`
 puede llevar un `action` o una lista `actions` (p. ej. alert + restart juntos).
+Esas operaciones usan el mismo motor de seguridad que las acciones manuales de CLI/Web,
+incluida la compuerta de identidad exacta de proceso para services activos antes de
+`restart`.
 
 Las condiciones forman un árbol lógico con `and`/`or`/`not` y hojas:
 

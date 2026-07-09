@@ -151,6 +151,7 @@ func New(c Config) Engine {
 		Guard:            guardClosure(tree, deps, c.MetricSample, c.Changed),
 		Preflight:        sectionRunner(tree, config.SectionPreflight, deps, c.MetricSample),
 		Postflight:       verifyRunner(tree, deps, c.MetricSample),
+		RestartIdentity:  restartIdentityClosure(c.Manager, c.Unit, discover, c.Discoverer, selectors),
 		ReloadFunc:       reloadClosure(tree, deps, c.Manager, c.Backend, c.Unit, c.Discoverer, selectors),
 		ResumeFunc:       resumeClosure(c.Manager, c.Unit),
 		Discover:         discover,
@@ -407,6 +408,40 @@ func hasCommandMatchSelector(selectors []process.Selector) bool {
 		}
 	}
 	return false
+}
+
+func hasExactProcessIdentitySelector(selectors []process.Selector) bool {
+	for _, sel := range selectors {
+		if sel.Type == process.SelectorCommandMatch && sel.Exe != "" && sel.User != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func restartIdentityClosure(mgr Manager, unit string, discover func() ([]process.Process, error), discoverer process.Discoverer, selectors []process.Selector) func(context.Context) (bool, string, error) {
+	if mgr == nil || discover == nil || !hasExactProcessIdentitySelector(selectors) {
+		return nil
+	}
+	return func(ctx context.Context) (bool, string, error) {
+		st, err := mgr.Status(ctx, unit)
+		if err != nil {
+			return false, "", fmt.Errorf("status %s: %w", unit, err)
+		}
+		if st.Status != servicemgr.StatusActive {
+			return true, "", nil
+		}
+		procs, err := discover()
+		if err != nil {
+			return false, "", err
+		}
+		for _, proc := range procs {
+			if _, ok := discoverer.StrictMatchPID(proc.PID, selectors); ok {
+				return true, "", nil
+			}
+		}
+		return false, "blocked: active service has no process matching configured exact exe/user selectors", nil
+	}
 }
 
 func warningError(prefix string, warnings []string) error {
