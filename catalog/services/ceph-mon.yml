@@ -6,6 +6,10 @@ service: ceph-mon@${hostname}
 apps:
   - ceph-mon
   - ceph
+restart_on_change:
+  apps:
+    - ceph-mon
+    - ceph
 variables:
   user: ceph
   host: 127.0.0.1

@@ -14,6 +14,11 @@ apps:
   - smbd
   - nmbd
   - winbindd
+restart_on_change:
+  apps:
+    - smbd
+    - nmbd
+    - winbindd
 variables:
   port: 445
   netbios_port: 139

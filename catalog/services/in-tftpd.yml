@@ -11,6 +11,9 @@ service:
     - in-tftpd
 apps:
   - in.tftpd
+restart_on_change:
+  apps:
+    - in.tftpd
 variables:
   port: 69
 watches:

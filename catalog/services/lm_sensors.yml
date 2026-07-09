@@ -11,6 +11,9 @@ service:
     - lm-sensors
 apps:
   - lm_sensors
+restart_on_change:
+  apps:
+    - lm_sensors
 processes: { }
 watches:
   service:

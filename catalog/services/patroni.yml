@@ -9,6 +9,9 @@ service:
     - patroni
 apps:
   - patroni
+restart_on_change:
+  apps:
+    - patroni
 variables:
   user: postgres
   host: 127.0.0.1

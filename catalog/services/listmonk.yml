@@ -9,6 +9,9 @@ service:
     - listmonk
 apps:
   - listmonk
+restart_on_change:
+  apps:
+    - listmonk
 variables:
   host: 127.0.0.1
   port: 9000

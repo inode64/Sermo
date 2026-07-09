@@ -7,6 +7,10 @@ service: ceph-mds@${hostname}
 apps:
   - ceph-mds
   - ceph
+restart_on_change:
+  apps:
+    - ceph-mds
+    - ceph
 variables:
   user: ceph
 socket: /run/ceph/ceph-mds.${hostname}.asok

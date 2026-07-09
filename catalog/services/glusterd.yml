@@ -5,6 +5,9 @@ description: GlusterFS
 service: glusterd
 apps:
   - glusterd
+restart_on_change:
+  apps:
+    - glusterd
 variables:
   port: 24007
 socket: /run/glusterd.socket

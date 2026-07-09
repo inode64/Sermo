@@ -10,6 +10,9 @@ service:
     - automount
 apps:
   - automount
+restart_on_change:
+  apps:
+    - automount
 watches:
   service:
     check:

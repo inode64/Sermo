@@ -9,6 +9,9 @@ service:
     - rest-server
 apps:
   - rest-server
+restart_on_change:
+  apps:
+    - rest-server
 variables:
   host: 127.0.0.1
   port: 8000

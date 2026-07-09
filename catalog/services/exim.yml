@@ -5,6 +5,9 @@ description: Gestor de correo SMTP Exim
 service: exim
 apps:
   - exim
+restart_on_change:
+  apps:
+    - exim
 variables:
   host: 127.0.0.1
   port: 25

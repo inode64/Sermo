@@ -23,6 +23,8 @@ preflight:
 restart_on_change:
   paths:
     - ${config}
+  apps:
+    - fetchmail
 watches:
   service:
     check:

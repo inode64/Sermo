@@ -9,6 +9,9 @@ service:
     - dhcpd
 apps:
   - dhcpd
+restart_on_change:
+  apps:
+    - dhcpd
 variables:
   port: 67
   user: dhcp

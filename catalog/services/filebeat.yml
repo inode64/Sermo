@@ -24,6 +24,8 @@ restart_on_change:
   paths:
     - ${config}
     - /etc/filebeat/modules.d
+  apps:
+    - filebeat
 watches:
   service:
     check:

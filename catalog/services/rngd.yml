@@ -23,3 +23,6 @@ watches:
         - service
 apps:
   - rngd
+restart_on_change:
+  apps:
+    - rngd

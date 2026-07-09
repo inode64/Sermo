@@ -5,6 +5,9 @@ description: systemd system and service manager
 service: systemd
 apps:
   - systemd
+restart_on_change:
+  apps:
+    - systemd
 reload:
   command:
     - systemctl

@@ -5,6 +5,9 @@ description: Backup file Server
 service: bacula-fd
 apps:
   - bacula-fd
+restart_on_change:
+  apps:
+    - bacula-fd
 variables:
   port: 9102
 preflight:

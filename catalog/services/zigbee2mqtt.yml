@@ -5,6 +5,9 @@ description: Zigbee to MQTT bridge.
 service: zigbee2mqtt
 apps:
   - node
+restart_on_change:
+  apps:
+    - node
 pidfile: /run/zigbee2mqtt.pid
 policy:
   cooldown: 15m

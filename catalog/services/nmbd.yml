@@ -4,6 +4,9 @@ category: storage
 service: nmbd
 apps:
   - nmbd
+restart_on_change:
+  apps:
+    - nmbd
 preflight:
   config:
     type: command

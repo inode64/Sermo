@@ -13,6 +13,9 @@ service:
     - postgres
 apps:
   - postgres-${version}
+restart_on_change:
+  apps:
+    - postgres-${version}
 variables:
   port: 5432
   user: postgres

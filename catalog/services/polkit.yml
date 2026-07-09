@@ -7,6 +7,9 @@ service:
     - polkit
 apps:
   - polkit
+restart_on_change:
+  apps:
+    - polkit
 variables:
   user: polkitd
 processes:

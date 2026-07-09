@@ -35,6 +35,8 @@ restart_on_change:
     - systemd-libs
     - nettle
     - libidn2
+  apps:
+    - dnsmasq
 config_files:
   - ${config}
   - /etc/dnsmasq.d

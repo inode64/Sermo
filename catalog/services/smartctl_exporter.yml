@@ -9,6 +9,9 @@ service:
     - smartctl_exporter
 apps:
   - smartctl_exporter
+restart_on_change:
+  apps:
+    - smartctl_exporter
 variables:
   host: 127.0.0.1
   port: 9633

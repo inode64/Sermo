@@ -23,6 +23,8 @@ restart_on_change:
     - glibc
     - openssl
     - systemd-libs
+  apps:
+    - mosquitto
 pidfile: /run/mosquitto.pid
 processes:
   main:

@@ -19,6 +19,9 @@ service:
     - php${version}
 apps:
   - php-fpm${version}
+restart_on_change:
+  apps:
+    - php-fpm${version}
 variables:
   user: www-data
   host: 127.0.0.1

@@ -5,6 +5,9 @@ description: Network Time Protocol Daemon
 service: ntpd
 apps:
   - ntpd
+restart_on_change:
+  apps:
+    - ntpd
 variables:
   port: 123
   user: ntp

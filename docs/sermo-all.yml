@@ -475,6 +475,9 @@ reload:  # native reload: signal OR command, not both
   # signal: HUP
 
 restart_on_change:  # desugars to remediation restart rules
+  config: true
+  version: true
+  paths: [/etc/demo/demo.conf]
   libraries: [demo-lib]
   apps:
     demo-app:

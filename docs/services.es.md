@@ -85,23 +85,33 @@ preflight:
 Un servicio configurado (o una definición de servicio de catálogo) se suscribe con
 `restart_on_change`. Los servicios del catálogo empaquetado que enlazan apps
 versionadas declaran la forma de app por defecto; los servicios personalizados
-pueden usar la misma forma:
+pueden usar la misma forma. `paths` es para ficheros de configuración que
+requieren un reinicio completo en lugar de un reload:
 
 ```yaml
 restart_on_change:
+  config: true
+  version: true
+  paths:
+    - ${config}
   libraries: [glibc, pam]
   apps:
     containerd:
       level: minor
 ```
 
-En la resolución esto se desazucara en una regla de remediación por librería que
-reinicia el servicio cuando el fichero de esa librería cambia, y en una regla por
-app que reinicia el servicio cuando la versión de la app enlazada cambia en el
-nivel elegido:
+En la resolución esto se desazucara en una regla de remediación por path que
+reinicia el servicio cuando cambia esa configuración, en una regla por librería
+que reinicia el servicio cuando el fichero de esa librería cambia, y en una
+regla por app que reinicia el servicio cuando la versión de la app enlazada
+cambia en el nivel elegido:
 
 ```yaml
 rules:
+  restart-on-change-config-1:
+    type: remediation
+    if: { changed: { path: /etc/containerd/config.toml } }
+    then: { action: restart }
   restart-on-change-glibc:
     type: remediation
     if: { changed: { library: glibc, path: /lib64/libc.so.6 } }
@@ -111,6 +121,22 @@ rules:
     if: { changed: { app: containerd, level: minor } }
     then: { action: restart }
 ```
+
+Los booleanos opcionales `config` y `version` son permisos heredables. Cuando no
+aparecen, se consideran permitidos para conservar el comportamiento actual del
+servicio. `config: false` suprime las reglas de reinicio generadas desde
+`paths`. `version: false` suprime las reglas de reinicio generadas desde `apps`
+y `libraries`. Los defaults globales solo pueden fijar esos dos booleanos:
+
+```yaml
+defaults:
+  restart_on_change:
+    config: false
+    version: true
+```
+
+Un servicio de catálogo o configurado puede sobrescribir cualquiera de los dos
+flags en su bloque local `restart_on_change`.
 
 El reinicio corre a través del motor seguro normal (guards, cooldown, max_actions),
 y el cambio se reconoce una vez que el reinicio tiene éxito, así que se dispara una vez por

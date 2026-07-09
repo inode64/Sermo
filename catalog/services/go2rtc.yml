@@ -10,6 +10,9 @@ service:
     - go2rtc
 apps:
   - go2rtc
+restart_on_change:
+  apps:
+    - go2rtc
 variables:
   host: 127.0.0.1
   port: 1984

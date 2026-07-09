@@ -12,6 +12,10 @@ service:
 apps:
   - perl
   - spamassassin
+restart_on_change:
+  apps:
+    - perl
+    - spamassassin
 variables:
   port: 783
 preflight:

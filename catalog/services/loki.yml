@@ -9,6 +9,9 @@ service:
     - loki
 apps:
   - loki
+restart_on_change:
+  apps:
+    - loki
 variables:
   user: loki
   host: 127.0.0.1

@@ -12,6 +12,9 @@ also_service:
     - docker.socket
 apps:
   - docker
+restart_on_change:
+  apps:
+    - docker
 variables:
   socket: /run/docker.sock
   config: /etc/docker/daemon.json

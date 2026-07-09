@@ -5,6 +5,9 @@ description: Backup director Server
 service: bareos-dir
 apps:
   - bareos-dir
+restart_on_change:
+  apps:
+    - bareos-dir
 variables:
   port: 9101
 preflight:

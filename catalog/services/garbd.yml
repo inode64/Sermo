@@ -5,6 +5,9 @@ description: Synchronous multi-master replication engine that provides the wsrep
 service: garbd
 apps:
   - garbd
+restart_on_change:
+  apps:
+    - garbd
 watches:
   service:
     check:

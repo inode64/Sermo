@@ -9,6 +9,9 @@ service:
     - rsync
 apps:
   - rsync
+restart_on_change:
+  apps:
+    - rsync
 variables:
   port: 873
 pidfile: /run/rsyncd.pid

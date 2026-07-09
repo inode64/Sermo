@@ -4,6 +4,9 @@ category: messaging
 service: asterisk
 apps:
   - asterisk
+restart_on_change:
+  apps:
+    - asterisk
 variables:
   port: 5038
 watches:

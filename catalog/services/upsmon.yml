@@ -8,6 +8,9 @@ service:
     - upsmon
 apps:
   - upsmon
+restart_on_change:
+  apps:
+    - upsmon
 variables:
   user: nut
 pidfile: /run/nut/upsmon.pid

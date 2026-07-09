@@ -4,6 +4,9 @@ category: network
 service: proftpd
 apps:
   - proftpd
+restart_on_change:
+  apps:
+    - proftpd
 variables:
   user: root
   port: 21

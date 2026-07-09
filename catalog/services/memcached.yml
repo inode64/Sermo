@@ -6,6 +6,9 @@ type: cache
 service: memcached
 apps:
   - memcached
+restart_on_change:
+  apps:
+    - memcached
 variables:
   host: 127.0.0.1
   port: 11211

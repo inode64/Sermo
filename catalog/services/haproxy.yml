@@ -9,6 +9,9 @@ service:
     - haproxy
 apps:
   - haproxy
+restart_on_change:
+  apps:
+    - haproxy
 variables:
   user: root
   host: 127.0.0.1

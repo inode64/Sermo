@@ -83,22 +83,32 @@ preflight:
 
 A configured service (or catalog service definition) opts in with
 `restart_on_change`. Packaged catalog services that link versioned apps declare
-the app form by default; custom services can use the same shape:
+the app form by default; custom services can use the same shape. `paths` is for
+configuration files that require a full restart rather than a reload:
 
 ```yaml
 restart_on_change:
+  config: true
+  version: true
+  paths:
+    - ${config}
   libraries: [glibc, pam]
   apps:
     containerd:
       level: minor
 ```
 
-On resolution this desugars into one remediation rule per library that restarts
-the service when that library's file changes, and one rule per app that restarts
-the service when the linked app's version changes at the selected level:
+On resolution this desugars into one remediation rule per path that restarts the
+service when that config path changes, one rule per library that restarts the
+service when that library's file changes, and one rule per app that restarts the
+service when the linked app's version changes at the selected level:
 
 ```yaml
 rules:
+  restart-on-change-config-1:
+    type: remediation
+    if: { changed: { path: /etc/containerd/config.toml } }
+    then: { action: restart }
   restart-on-change-glibc:
     type: remediation
     if: { changed: { library: glibc, path: /lib64/libc.so.6 } }
@@ -108,6 +118,22 @@ rules:
     if: { changed: { app: containerd, level: minor } }
     then: { action: restart }
 ```
+
+The optional `config` and `version` booleans are inherited permissions. When
+absent they default to allowed, preserving the current service behavior.
+`config: false` suppresses generated `paths` restart rules. `version: false`
+suppresses generated `apps` and `libraries` restart rules. Global defaults may
+set only these two booleans:
+
+```yaml
+defaults:
+  restart_on_change:
+    config: false
+    version: true
+```
+
+A catalog service or configured service may override either flag in its local
+`restart_on_change` block.
 
 The restart runs through the normal safe engine (guards, cooldown, max_actions),
 and the change is acknowledged once the restart succeeds, so it fires once per

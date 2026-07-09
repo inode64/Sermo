@@ -4,6 +4,9 @@ category: virtualization
 service: ovsdb-client
 apps:
   - ovsdb-client
+restart_on_change:
+  apps:
+    - ovsdb-client
 watches:
   service:
     check:

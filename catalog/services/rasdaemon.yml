@@ -7,6 +7,9 @@ service:
     - rasdaemon
 apps:
   - rasdaemon
+restart_on_change:
+  apps:
+    - rasdaemon
 processes:
   main:
     exe: ${rasdaemon_binary}
