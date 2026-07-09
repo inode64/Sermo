@@ -65,7 +65,7 @@ config_subst = sed -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
-.PHONY: all build test vet fmt fmt-check lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate web web-check validate check cover tidy clean \
+.PHONY: all build test vet fmt fmt-check lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check validate check cover tidy clean \
         install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
@@ -79,6 +79,7 @@ build:
 YAMLFMT ?= yamlfmt
 YAMLLINT ?= yamllint
 YAML_ROOTS = catalog examples templates docs .github
+MARKDOWNLINT ?= ./node_modules/.bin/markdownlint
 
 yaml-fmt:
 	@$(LINT_PATH) $(YAMLFMT) -conf .yamlfmt
@@ -91,6 +92,10 @@ yaml-lint:
 	@$(LINT_PATH) $(YAMLLINT) --strict -c .yamllint.yml $(YAML_ROOTS) .golangci.yml
 
 yaml-validate: yaml-fmt-check yaml-lint
+
+# Markdown lint for tracked docs and agent guidance (markdownlint-cli via npm).
+markdown-check:
+	@git ls-files -z -- '*.md' | $(LINT_PATH) xargs -0 -r $(MARKDOWNLINT) --config .markdownlint.yml
 
 # Regenerate the embedded dashboard (internal/web/index.html) from its sources
 # in internal/web/src using esbuild's Go API (in-process, no Node/npm). Run this
@@ -111,7 +116,7 @@ web-check:
 	rm -f "$$tmp"
 
 # Formatting and static analysis gates; make test and make check run this first.
-validate: lint yaml-validate web-check
+validate: lint yaml-validate markdown-check web-check
 
 test: validate
 	go test ./...

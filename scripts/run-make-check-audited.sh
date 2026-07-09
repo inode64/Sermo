@@ -14,6 +14,7 @@ run go vet ./...
 run make lint
 run make yaml-fmt-check
 run make yaml-lint
+run make markdown-check
 run make web-check
 run go test ./...
 echo "==> audited make check equivalent: ALL PASSED"

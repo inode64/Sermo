@@ -340,7 +340,7 @@ comprobaciones del ciclo se ejecuten, así que la sonda todavía se ejecuta pero
 
 Para **reiniciar** un servicio cuando una biblioteca o archivo se actualiza (la otra mitad del
 ejemplo — "si la biblioteca pam se actualizó, reinicia"), usa una regla de remediación con
-una condición [`changed:`](#rules) (o `restart_on_change: {libraries: […]}`):
+una condición [`changed:`](#reglas) (o `restart_on_change: {libraries: […]}`):
 
 ```yaml
 rules:
@@ -434,7 +434,7 @@ comprobación de igualdad (comparado como cadena); un mapeo `{op, value}` usa un
 `expect_status` acepta o bien una forma de código/clase/lista o el mismo
 mapeo `{op, value}`. Los operadores son `== != > >= < <=` (numérico, o cadena para
 `==`/`!=`), `contains` (subcadena) y `=~` (expresión regular Go/RE2) — los
-mismos operadores que la comprobación [`sql`](#sql-query-sql):
+mismos operadores que la comprobación [`sql`](#consulta-sql-sql):
 
 - `expect_status: { op: "<", value: 500 }` — comparar el código de estado numéricamente
   (además de las formas de código/clase/lista).
