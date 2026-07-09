@@ -85,10 +85,10 @@
   "83": "Sermo",
   "84": "renderWatchExpansion",
   "85": "mountMatches",
-  "86": "updateLiveOps",
   "87": "Plan de refactor",
   "88": "getWatchPanel",
+  "89": "renderOperationLive",
   "90": "$",
   "91": "initDelegatedHandlers",
-  "95": "Daemon / Engine settings panel"
+  "92": "mountMatches"
 }
