@@ -35,6 +35,19 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			want: map[string]string{"count": "12"},
 		},
 		{
+			name: "clock",
+			typ:  "clock",
+			data: map[string]any{
+				"server":             "time.example",
+				"offset_seconds":     -0.125,
+				"offset_abs_seconds": 0.125,
+				"stratum":            2,
+				"root_dispersion_ms": 10.5,
+				"reference_id":       "GPS",
+			},
+			want: map[string]string{"offset_seconds": "-0.125 s", "offset_abs_seconds": "0.125 s", "stratum": "2"},
+		},
+		{
 			name: "firewall_rules",
 			typ:  "firewall_rules",
 			data: map[string]any{"backend": "nftables", "rules": uint64(99), "min_rules": 1},

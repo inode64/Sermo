@@ -366,6 +366,32 @@ func validatePortsFields(prefix string, fields map[string]any, add addFunc) {
 	}
 }
 
+// validateClockFields validates a clock drift check: explicit NTP servers, a
+// positive max_offset threshold, and optional quality ceilings.
+func validateClockFields(prefix string, fields map[string]any, add addFunc) {
+	servers, err := cfgval.StrictStringList(fields[checks.CheckKeyServers])
+	if err != nil || len(servers) == 0 {
+		add("%s.servers must be a non-empty string or list of strings", prefix)
+	}
+	if !isPositiveDuration(cfgval.String(fields[checks.CheckKeyMaxOffset])) {
+		add("%s.max_offset must be a valid positive duration", prefix)
+	}
+	if raw, present := fields[checks.CheckKeyMaxStratum]; present {
+		n, ok := cfgval.Int(raw)
+		if !ok || n < checks.ClockMinStratum || n > checks.ClockMaxStratum {
+			add("%s.max_stratum must be an integer in %d..%d", prefix, checks.ClockMinStratum, checks.ClockMaxStratum)
+		}
+	}
+	if raw, present := fields[checks.CheckKeyMaxRootDispersion]; present && !isPositiveDuration(cfgval.String(raw)) {
+		add("%s.max_root_dispersion must be a valid positive duration", prefix)
+	}
+	if v, present := fields[checks.CheckKeyPort]; present {
+		if n, ok := cfgval.Int(v); !ok || !validTCPPort(n) {
+			add("%s.port %q must be an integer in %s", prefix, cfgval.String(v), cfgval.TCPPortRange())
+		}
+	}
+}
+
 // validatePortSpec returns "" when spec is a valid comma-separated list of ports
 // and inclusive ranges (e.g. "80,443,1024-4000"), else a short reason.
 func validatePortSpec(spec string) string {
@@ -690,6 +716,8 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		validatePortsFields(path, entry, add)
 	case checks.CheckTypeCommand:
 		validateCommandFields(path, entry, true, add)
+	case checks.CheckTypeClock:
+		validateClockFields(path, entry, add)
 	case checks.CheckTypeService:
 		st := cfgval.String(entry[checks.CheckKeyExpect])
 		if st == "" {

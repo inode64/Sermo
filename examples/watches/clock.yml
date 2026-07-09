@@ -1,0 +1,20 @@
+name: clock-drift
+category: host
+# Alert when local wall-clock drift exceeds policy; the hook owns correction.
+monitor: disabled
+interval: 5m
+check:
+  type: clock
+  servers:
+    - time.cloudflare.com
+    - pool.ntp.org
+  max_offset: 2s
+  max_stratum: 4
+  max_root_dispersion: 250ms
+  timeout: 3s
+for: { cycles: 2 }
+then:
+  hook:
+    command: [/usr/local/sbin/sermo-sync-clock.sh]
+    timeout: 2m
+    expect_exit: 0

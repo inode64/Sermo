@@ -341,6 +341,8 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildHTTPCheck(b, entry, client)
 	case CheckTypeCommand:
 		return buildCommandCheck(b, entry, runner)
+	case CheckTypeClock:
+		return buildClockCheck(b, entry)
 	case CheckTypeService:
 		return buildServiceCheck(b, entry, deps)
 	case CheckTypeFileExists:

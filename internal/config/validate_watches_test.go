@@ -137,6 +137,47 @@ func TestValidateWatchesSingleShotParity(t *testing.T) {
 	}
 }
 
+func TestValidateClockWatch(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"clock-drift": map[string]any{
+				"check": map[string]any{
+					"type":                "clock",
+					"servers":             []any{"time.cloudflare.com", "pool.ntp.org"},
+					"max_offset":          "2s",
+					"max_stratum":         4,
+					"max_root_dispersion": "250ms",
+				},
+				"for":  map[string]any{"cycles": 2},
+				"then": map[string]any{"hook": map[string]any{"command": []any{"/usr/local/sbin/sync-clock"}}},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("valid clock watch flagged: %v", w)
+	}
+
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"clock-drift": map[string]any{
+				"check": map[string]any{
+					"type":                "clock",
+					"servers":             42,
+					"max_offset":          "soon",
+					"max_stratum":         16,
+					"max_root_dispersion": "0s",
+					"port":                99999,
+				},
+			},
+		},
+	})
+	for _, want := range []string{"servers", "max_offset", "max_stratum", "max_root_dispersion", "port"} {
+		if !hasIssueContaining(watchIssues(bad), want) {
+			t.Fatalf("bad clock watch missing %q issue: %v", want, watchIssues(bad))
+		}
+	}
+}
+
 func TestValidateFileWatchGood(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{

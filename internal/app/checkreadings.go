@@ -83,6 +83,7 @@ const (
 	watchReadingLabelRTT               = "RTT"
 	watchReadingLabelRules             = "Rules"
 	watchReadingLabelSample            = "Sample"
+	watchReadingLabelServer            = "Server"
 	watchReadingLabelSize              = "Size"
 	watchReadingLabelSlowestFan        = "Slowest fan"
 	watchReadingLabelSocket            = "Socket"
@@ -93,6 +94,7 @@ const (
 	watchReadingLabelSpeed             = "Speed"
 	watchReadingLabelState             = "State"
 	watchReadingLabelStatus            = "Status"
+	watchReadingLabelStratum           = "Stratum"
 	watchReadingLabelUncorrectable     = "Uncorrectable"
 	watchReadingLabelUsed              = "Used"
 	watchReadingLabelUsedBytes         = "Used bytes"
@@ -103,6 +105,13 @@ const (
 	watchReadingLabelWindow            = "Window"
 	watchReadingLabelWrite             = "Write"
 	watchReadingLabelZombies           = "Zombies"
+	watchReadingLabelLeap              = "Leap"
+	watchReadingLabelOffset            = "Offset"
+	watchReadingLabelOffsetAbs         = "Offset abs"
+	watchReadingLabelPrecision         = "Precision"
+	watchReadingLabelReferenceID       = "Reference ID"
+	watchReadingLabelRootDelay         = "Root delay"
+	watchReadingLabelRootDispersion    = "Root dispersion"
 )
 
 const (
@@ -112,6 +121,7 @@ const (
 	watchReadingUnitMegabytesPerSecond = metrics.MetricUnitMegabytesPerSecond
 	watchReadingUnitMegabitsPerSecond  = metrics.MetricUnitMegabitsPerSecond
 	watchReadingUnitRPM                = metrics.MetricUnitRPM
+	watchReadingUnitSeconds            = "s"
 	watchReadingUnitVolt               = metrics.MetricUnitVolt
 )
 
@@ -122,6 +132,8 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 	switch checkType {
 	case checks.CheckTypeCert:
 		return certCheckReadings(data)
+	case checks.CheckTypeClock:
+		return clockCheckReadings(data)
 	case checks.CheckTypeCount:
 		return countCheckReadings(data)
 	case checks.CheckTypeFirewallRules:
@@ -225,6 +237,41 @@ func sizeCheckReadings(data map[string]any) []web.WatchReading {
 	}
 	if v, ok := cfgval.Int(data[checks.DataKeyGrowthBytes]); ok {
 		out = append(out, web.WatchReading{Field: checks.DataKeyGrowthBytes, Label: watchReadingLabelGrowth, Value: humanizeSigned(int64(v))})
+	}
+	return out
+}
+
+func clockCheckReadings(data map[string]any) []web.WatchReading {
+	var out []web.WatchReading
+	if v := cfgval.String(data[checks.DataKeyServer]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyServer, Label: watchReadingLabelServer, Value: v})
+	}
+	if v, ok := cfgval.Int(data[checks.DataKeyPort]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyPort, Label: watchReadingLabelPort, Value: strconv.Itoa(v)})
+	}
+	if v, ok := cfgval.Float(data[checks.DataKeyOffsetSeconds]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyOffsetSeconds, Label: watchReadingLabelOffset, Value: watchReadingMetricValue(v, 3, watchReadingUnitSeconds)})
+	}
+	if v, ok := cfgval.Float(data[checks.DataKeyOffsetAbsSeconds]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyOffsetAbsSeconds, Label: watchReadingLabelOffsetAbs, Value: watchReadingMetricValue(v, 3, watchReadingUnitSeconds)})
+	}
+	if v, ok := cfgval.Int(data[checks.DataKeyStratum]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyStratum, Label: watchReadingLabelStratum, Value: strconv.Itoa(v)})
+	}
+	if v := cfgval.String(data[checks.DataKeyLeap]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyLeap, Label: watchReadingLabelLeap, Value: v})
+	}
+	if v, ok := cfgval.Float(data[checks.DataKeyPrecisionSeconds]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyPrecisionSeconds, Label: watchReadingLabelPrecision, Value: watchReadingMetricValue(v, 6, watchReadingUnitSeconds)})
+	}
+	if v, ok := cfgval.Float(data[checks.DataKeyRootDelayMS]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyRootDelayMS, Label: watchReadingLabelRootDelay, Value: watchReadingMetricValue(v, 3, metrics.MetricUnitMilliseconds)})
+	}
+	if v, ok := cfgval.Float(data[checks.DataKeyRootDispersionMS]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyRootDispersionMS, Label: watchReadingLabelRootDispersion, Value: watchReadingMetricValue(v, 3, metrics.MetricUnitMilliseconds)})
+	}
+	if v := cfgval.String(data[checks.DataKeyReferenceID]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyReferenceID, Label: watchReadingLabelReferenceID, Value: v})
 	}
 	return out
 }

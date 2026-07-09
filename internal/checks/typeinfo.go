@@ -17,6 +17,7 @@ const (
 	CheckTypePorts         = "ports"
 	CheckTypeHTTP          = "http"
 	CheckTypeCommand       = "command"
+	CheckTypeClock         = "clock"
 	CheckTypeService       = "service"
 	CheckTypeFileExists    = "file_exists"
 	CheckTypeFile          = "file"
@@ -68,6 +69,7 @@ var typeInfos = []TypeInfo{
 	{Name: CheckTypePorts, Health: true},
 	{Name: CheckTypeHTTP, Health: true},
 	{Name: CheckTypeCommand, Health: true},
+	{Name: CheckTypeClock, Health: true},
 	{Name: CheckTypeService, Health: true, ServiceScoped: true},
 	{Name: CheckTypeFileExists, Health: true},
 	{Name: CheckTypeFile, Health: true},
