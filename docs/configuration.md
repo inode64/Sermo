@@ -1405,7 +1405,7 @@ host-resource ones below (`storage`, `memory`, `pressure`, `load`, `fds`,
 `pids`, `conntrack`, `entropy`, `zombies`, `oom`, among others) *and* the
 service checks (`tcp`, `ports`, `http`, `command`, `file_exists`, `file`,
 `lockfile`, `binary`, `pidfile`, `socket`, `libraries`, `config`, `autofs`, `route`,
-`firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`, `count`, and
+`clock`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`, `count`, and
 connection-protocol checks such as `mysql`/`smtp`) — can be used as a watch
 here, and
 the host-resource ones can equally be used in a service's check-only `watches:`
@@ -1723,6 +1723,43 @@ Hook extras: `SERMO_HOST`, `SERMO_METRIC`, and — for the change metrics —
 ICMP requires elevated privileges: the daemon needs the `CAP_NET_RAW` capability
 (or the host's `net.ipv4.ping_group_range` sysctl must include the daemon's gid)
 to open a raw ICMP socket. This iteration is **IPv4-only**.
+
+### `clock` — wall-clock drift
+
+A `clock` watch checks this host's wall-clock offset against external NTP servers.
+It is meant for hosts that may not run a local NTP daemon: Sermo sends client NTP
+queries itself, raises the alert when drift is outside policy, and leaves any time
+correction to your hook script.
+
+```yaml
+watches:
+  clock-drift:
+    monitor: disabled
+    interval: 5m
+    check:
+      type: clock
+      servers:
+        - time.cloudflare.com
+        - pool.ntp.org
+      max_offset: 2s
+      max_stratum: 4              # optional, default 15
+      max_root_dispersion: 250ms  # optional
+      timeout: 3s
+    for: { cycles: 2 }
+    then:
+      notify: [ops-email]
+      hook:
+        command: [/usr/local/sbin/sermo-sync-clock.sh]
+        timeout: 2m
+        expect_exit: 0
+```
+
+`servers` and `max_offset` are required. Optional `interface` /
+`interface_match` bind the NTP request through specific links, matching the other
+network checks. Hooks receive `SERMO_SERVER`, `SERMO_OFFSET_SECONDS`,
+`SERMO_OFFSET_ABS_SECONDS`, `SERMO_STRATUM`, `SERMO_ROOT_DISPERSION_MS` and the
+other returned NTP fields, so the script can decide whether to run `chronyc`,
+`ntpdate`, `timedatectl` or a site-local correction flow.
 
 ### `swap` — system swap
 
