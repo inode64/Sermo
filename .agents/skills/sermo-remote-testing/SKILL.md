@@ -6,10 +6,11 @@ description: >-
   builds, staged all-host runs, temporary /tmp validation, or explicit remote
   installations under /etc/sermo. Covers active-services-only config, unsupported
   active-service reports, all safely discoverable host watches, dry-run
-  deployments, storage <5% free with 5G expand, fstab-backed local/network/USB
-  mount units, SMART daily, hdparm every 6h, Web UI on 0.0.0.0:9797, reusable
-  scripts under scripts/remote-deploy, and safe alert/notification checks that
-  must not execute hooks or alter server behavior.
+  deployments, storage under 5 percent free with 5G expand, fstab-backed local/network/USB
+  mount units, Docker containers, libvirt/QEMU virtual machines, SMART daily,
+  hdparm every 6h, Web UI on 0.0.0.0:9797 with startup/readiness/access timing,
+  reusable scripts under scripts/remote-deploy, and safe alert/notification
+  checks that must not execute hooks or alter server behavior.
 ---
 
 # Sermo Remote Testing
@@ -225,6 +226,11 @@ requests. It overrides the validation-only `/tmp` restrictions above.
   local libvirt socket and a read-only `type: libvirt` watch. Keep them
   `dry_run: true`. Do not monitor stopped containers or shutoff domains unless
   the user explicitly asks for inactive targets; report them as skipped.
+- Treat Docker and libvirt/QEMU discovery as a required persistent-install
+  checklist item, not a best-effort afterthought. For every host, record running
+  containers/VMs generated, stopped containers/VMs skipped, missing socket/tool
+  evidence, and any duplicate generated service names that caused a target to be
+  skipped. Do not mark the host complete until this is present in the report.
 - For catalog services whose watches probe a local endpoint, derive
   host-specific `variables.host` and `variables.port` from the service's own
   configuration before falling back to catalog defaults. At minimum, discover
@@ -252,6 +258,12 @@ requests. It overrides the validation-only `/tmp` restrictions above.
 - Web UI defaults are `address: 0.0.0.0`, `port: 9797`, password
   `sermo-remote-admin`. Verify `/livez`, `/readyz`, HTML, `/api/services`,
   `/api/watches` and `/api/mounts` after apply.
+- Measure and report daemon/Web UI speed on every apply or update: seconds from
+  restart/start command completion until `/livez` succeeds, seconds until
+  `/readyz` returns `ready:true`, and the HTTP response time/status for the HTML
+  shell plus `/api/status` or equivalent Web UI API. If `/livez` is fast but
+  `/readyz` is still false, wait at least one scheduler cycle before treating it
+  as a failure, then report both the initial and final timings.
 - Storage defaults are `free_pct: { op: "<", value: "5%" }`, `mounted: true`
   for mount-point paths, `then.expand: { by: 5G }`, `then.notify: [none]`,
   sustained `for: { cycles: 3 }`, and a conservative cooldown policy.
@@ -563,7 +575,11 @@ Summarize:
 
 - hosts reached and hosts failed;
 - panel URLs started;
+- daemon startup and Web UI timing per host: `/livez` seconds, `/readyz.ready`
+  seconds, HTML/API response time and status;
 - active services configured;
+- Docker containers and libvirt/QEMU virtual machines generated or skipped, with
+  skip reasons;
 - unsupported active services per server;
 - alerts that fired or would fire in dry-run;
 - storage findings: filesystems below 5% free space, failed `mounted: true`
