@@ -796,6 +796,35 @@ func (r *countingPIDReader) Identity(pid int) (process.Identity, bool) {
 	return id, ok
 }
 
+type steppedPIDReader struct {
+	steps   []map[int]process.Identity
+	current map[int]process.Identity
+	walks   int
+}
+
+func (r *steppedPIDReader) PIDs() ([]int, error) {
+	if len(r.steps) == 0 {
+		r.current = nil
+		return nil, nil
+	}
+	idx := r.walks
+	if idx >= len(r.steps) {
+		idx = len(r.steps) - 1
+	}
+	r.current = r.steps[idx]
+	r.walks++
+	pids := make([]int, 0, len(r.current))
+	for pid := range r.current {
+		pids = append(pids, pid)
+	}
+	return pids, nil
+}
+
+func (r *steppedPIDReader) Identity(pid int) (process.Identity, bool) {
+	id, ok := r.current[pid]
+	return id, ok
+}
+
 func TestNewResidualDiscoveryReadsLiveProcfs(t *testing.T) {
 	// The residual-discovery closure must read live /proc on every call, never a
 	// cached monitoring snapshot — otherwise the reaper would SIGKILL PIDs that
@@ -861,6 +890,84 @@ func TestNewRuntimeDiscoveryWarningWithoutCommandMatchBlocksRestart(t *testing.T
 	}
 }
 
+func TestNewActiveServiceWithoutExactProcessMatchBlocksRestart(t *testing.T) {
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "rspamd")
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
+	mgr := &fakeManager{status: servicemgr.StatusActive}
+	engine := New(Config{
+		Service: "rspamd",
+		Unit:    "rspamd",
+		Backend: "systemd",
+		Tree: map[string]any{
+			"processes": map[string]any{
+				"main": map[string]any{"exe": exe, "user": "rspamd"},
+			},
+		},
+		Manager: mgr,
+		Locker:  &locker,
+		Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
+		Discoverer: process.Discoverer{
+			Reader: &countingPIDReader{ids: map[int]process.Identity{
+				200: {PID: 200, PPID: 1, UID: 1001, ExeOK: false, State: "S"},
+			}},
+			BackendPIDs: func() []int { return []int{200} },
+			ResolveUser: func(name string) (uint32, bool) { return 1001, name == "rspamd" },
+		},
+		Sleep: func(time.Duration) {},
+	})
+
+	res := engine.Restart(context.Background())
+	if res.Status != ResultBlocked {
+		t.Fatalf("status = %q (%s), want blocked", res.Status, res.Message)
+	}
+	if !strings.Contains(res.Message, "exact exe/user") {
+		t.Fatalf("message = %q, want exact identity reason", res.Message)
+	}
+	if mgr.did("stop rspamd") || mgr.did("start rspamd") {
+		t.Fatalf("restart must not call service manager when active process identity is untrusted, calls=%v", mgr.calls)
+	}
+}
+
+func TestNewFailedServiceWithoutExactProcessMatchCanRestart(t *testing.T) {
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "rspamd")
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
+	mgr := &fakeManager{status: servicemgr.StatusFailed}
+	engine := New(Config{
+		Service: "rspamd",
+		Unit:    "rspamd",
+		Backend: "systemd",
+		Tree: map[string]any{
+			"processes": map[string]any{
+				"main": map[string]any{"exe": exe, "user": "rspamd"},
+			},
+		},
+		Manager: mgr,
+		Locker:  &locker,
+		Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
+		Discoverer: process.Discoverer{
+			Reader:      &countingPIDReader{ids: map[int]process.Identity{}},
+			ResolveUser: func(name string) (uint32, bool) { return 1001, name == "rspamd" },
+		},
+		Sleep: func(time.Duration) {},
+	})
+
+	res := engine.Restart(context.Background())
+	if res.Status != ResultFailed || res.Message != "service failed after start" {
+		t.Fatalf("status = %q message=%q, want restart to reach backend and fail on post-start failed status", res.Status, res.Message)
+	}
+	if !mgr.did("stop rspamd") || !mgr.did("start rspamd") {
+		t.Fatalf("failed service restart should still reach backend, calls=%v", mgr.calls)
+	}
+}
+
 func TestNewRuntimeDiscoveryWarningWithCommandMatchDoesNotBlockRestart(t *testing.T) {
 	dir := t.TempDir()
 	exe := filepath.Join(dir, "mysqld")
@@ -883,7 +990,12 @@ func TestNewRuntimeDiscoveryWarningWithCommandMatchDoesNotBlockRestart(t *testin
 		Locker:  &locker,
 		Scanner: locks.NewScanner(locks.RuntimeLocksDir(dir)),
 		Discoverer: process.Discoverer{
-			Reader:      &countingPIDReader{ids: map[int]process.Identity{}},
+			Reader: &steppedPIDReader{steps: []map[int]process.Identity{
+				{
+					200: {PID: 200, PPID: 1, UID: 1001, Exe: exe, ExeOK: true, State: "S"},
+				},
+				{},
+			}},
 			ResolveUser: func(name string) (uint32, bool) { return 1001, name == "mysql" },
 		},
 		Sleep: func(time.Duration) {},

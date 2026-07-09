@@ -539,6 +539,13 @@ administradores pueden monitorizar/desmonitorizar ambos, y pueden
 iniciar/detener/reiniciar/recargar/reanudar services sobre el mismo motor de
 operaciones seguras que usa la CLI.
 
+Cuando un service activo declara identidad exacta en `processes:` (`exe` más `user`),
+`restart` verifica primero que al menos un proceso vivo siga coincidiendo con esa
+identidad. Si el backend de init dice que la unidad está activa pero Sermo no puede
+emparejar el ejecutable/usuario configurado, el restart se bloquea antes de stop/start
+para que una ruta de binario de daemon incorrecta no haga actuar a Sermo sobre una
+identidad de service no fiable.
+
 Un service normalmente se resuelve a una unidad de systemd/OpenRC. En su lugar puede
 declarar un destino `control:` por service para recursos que no son de init:
 `control.type: libvirt` para VMs de QEMU/libvirt o `control.type: docker` para

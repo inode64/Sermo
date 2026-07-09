@@ -66,6 +66,10 @@ type Engine struct {
 	Guard       func(ctx context.Context, action string) (blocked bool, reason string, err error)
 	Preflight   func(ctx context.Context) checks.Outcome
 	Postflight  func(ctx context.Context) checks.Outcome
+	// RestartIdentity verifies that an active service still has at least one
+	// trusted process identity before a restart stops it. Nil means no extra
+	// identity gate is available.
+	RestartIdentity func(ctx context.Context) (ok bool, reason string, err error)
 	// ReloadFunc reloads the service's config in place. When nil the engine falls
 	// back to Manager.Reload (the backend per-unit reload). A `reload:` block
 	// builds a richer closure: a native signal/command that either overrides the
@@ -233,6 +237,20 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 			return result
 		}
 		if blocked {
+			result.Status = ResultBlocked
+			result.Message = reason
+			return result
+		}
+	}
+
+	if p.stop && p.start && e.RestartIdentity != nil {
+		ok, reason, err := e.RestartIdentity(ctx)
+		if err != nil {
+			result.Status = ResultFailed
+			result.Message = "restart identity: " + err.Error()
+			return result
+		}
+		if !ok {
 			result.Status = ResultBlocked
 			result.Message = reason
 			return result

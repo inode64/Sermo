@@ -515,6 +515,12 @@ The daemon can serve a small web dashboard to view services and host watches.
 Admins can monitor/unmonitor both, and can start/stop/restart/reload/resume services
 over the same safe operation engine the CLI uses.
 
+When an active service declares exact `processes:` identity (`exe` plus `user`),
+`restart` first verifies that at least one live process still matches that
+identity. If the init backend says the unit is active but Sermo cannot match the
+configured executable/user, the restart is blocked before stop/start so a bad
+daemon binary path cannot make Sermo act on an untrusted service identity.
+
 A service normally resolves to a systemd/OpenRC unit. It can instead declare a
 per-service `control:` target for non-init resources: `control.type: libvirt`
 for QEMU/libvirt VMs or `control.type: docker` for Docker containers. Those
