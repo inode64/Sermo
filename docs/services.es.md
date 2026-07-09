@@ -1301,7 +1301,7 @@ variables:
 Una segunda instancia es el mismo fichero con su propio nombre/unidad y variables (p. ej.
 `name: db-inst2`, `service: db-inst2`, `port: 3307`, los paths `inst2.*`).
 
-Prefiera `uses` sobre [`clone`](#cloning) aquí: cada instancia deriva del
+Prefiera `uses` sobre [`clone`](#clonado) aquí: cada instancia deriva del
 *servicio de catálogo* y solo sobrescribe variables. Recurra a `clone` solo cuando una instancia
 deba copiar *otro servicio concreto* casi verbatim. Véase [`docs/sermo-all.yml`](sermo-all.yml)
 para una configuración trabajada completa.

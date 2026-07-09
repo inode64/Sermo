@@ -47,15 +47,18 @@ nivel de integración.
    make check        # vet + full test suite; transitively runs `make validate`,
                      # i.e. `make lint` (fmt-check, staticcheck, revive,
                      # golangci-lint, govulncheck) AND `make yaml-validate`
-                     # (yaml-fmt-check + yaml-lint)
+                     # (yaml-fmt-check + yaml-lint), `make markdown-check`
+                     # y `make web-check`
    ```
 
    `make check` es el único comando que cubre todo. Ejecutar `go test
    ./...` y/o `go vet` solos **no** es suficiente: se salta `make lint`
    (staticcheck/revive/golangci/govulncheck) y `make yaml-validate`
-   (yaml-fmt-check/yaml-lint), que detectan problemas que el toolchain de Go no detecta. Si
-   solo tocaste YAML, `make yaml-validate` es el mínimo; para cualquier cambio de Go,
-   ejecuta `make check`. Corrige cada problema reportado antes de reportar la tarea como hecha.
+   (yaml-fmt-check/yaml-lint), `make markdown-check` y `make web-check`, que
+   detectan problemas que el toolchain de Go no detecta. Si solo tocaste YAML,
+   `make yaml-validate` es el mínimo; si solo tocaste Markdown, `make
+   markdown-check` es el mínimo; para cualquier cambio de Go, ejecuta `make
+   check`. Corrige cada problema reportado antes de reportar la tarea como hecha.
 
 5. Haz commit cuando el usuario pida un commit, pida hacer merge a la rama principal,
    o la tarea incluya explícitamente el commit como parte del entregable:
@@ -372,10 +375,11 @@ Antes de finalizar cualquier cambio de código:
 - **Gate de validación — ejecuta `make check` antes de tratar cualquier cambio como completo**
   (el paso 4 del AI workflow lo detalla). `make check` = vet + tests completos, y
   ejecuta transitivamente `make lint` (fmt-check, staticcheck, revive, golangci-lint,
-  govulncheck) y `make yaml-validate` (yaml-fmt-check + yaml-lint). Nunca
-  sustituyas con un simple `go test ./...` / `go vet`: esos se saltan lint y yaml-lint y
-  pierden problemas reales (p. ej. reglas de stutter/comment de revive). Corrige cada hallazgo antes de
-  reportar como hecho.
+  govulncheck), `make yaml-validate` (yaml-fmt-check + yaml-lint),
+  `make markdown-check` y `make web-check`. Nunca sustituyas con un simple
+  `go test ./...` / `go vet`: esos se saltan lint, yaml-lint, markdown y checks
+  web y pierden problemas reales (p. ej. reglas de stutter/comment de revive).
+  Corrige cada hallazgo antes de reportar como hecho.
 - Para cambios de cara al daemon, comprueba el coste en runtime en el ciclo de estado estable
   y evita escaneos repetidos, llamadas bloqueantes o asignaciones evitables en rutas calientes.
 - Actualiza docs y ejemplos en el mismo cambio cuando el comportamiento cambie.
@@ -561,6 +565,13 @@ go install github.com/google/yamlfmt/cmd/yamlfmt@latest
 pip install yamllint            # or pipx install yamllint
 make yaml-fmt                   # format tracked YAML (catalog, examples, docs, …)
 make yaml-validate              # yamlfmt -lint + yamllint (also runs via make validate)
+```
+
+Toolchain de Markdown (instalar una vez):
+
+```sh
+npm ci
+make markdown-check             # higiene de Markdown versionado (también corre vía make validate)
 ```
 
 El YAML del catálogo y de ejemplos usa **secuencias de bloque indentadas** (`proxy_binary:` y luego `  - path`

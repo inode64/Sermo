@@ -1,0 +1,15 @@
+default: false
+
+# Keep this focused on structural Markdown issues that break rendered docs or
+# match IDE inspections. Broader prose/style checks belong in a separate pass.
+MD009: true   # no trailing spaces
+MD010: true   # no hard tabs
+MD018: true   # heading marker followed by a space
+MD019: true   # heading marker followed by one space
+MD029:
+  style: ordered
+MD047: true   # files end with one newline
+MD051: true   # link fragments resolve to headings
+MD055:
+  style: leading_and_trailing
+MD056: true   # table rows have a consistent column count

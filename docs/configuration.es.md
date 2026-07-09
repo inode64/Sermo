@@ -750,7 +750,7 @@ curl -fsS -u admin:secret http://127.0.0.1:9797/livez?verbose
 ```
 
 Reporta solo la liveness del proceso; para la salud de configuración/host/base de datos
-usa [diagnósticos](#diagnostics).
+usa [diagnósticos](#diagnósticos).
 
 ### Readiness (`/readyz`)
 
@@ -820,7 +820,7 @@ global; el detalle de un service muestra sus propios eventos.
 
 Los resultados de comprobación del detalle son los **últimos observados** por el worker
 (publicados cada ciclo), por lo que no cuesta nada verlos y reflejan la cadencia propia
-de cada comprobación (ver [intervalo por comprobación](#per-check-interval)); una
+de cada comprobación (ver [intervalo por comprobación](#intervalo-por-comprobación)); una
 comprobación aún no ejecutada muestra "not run yet". La sección de gráficos usa un
 selector de ventana para las mediciones de SLA y runtime. Su línea de tiempo de SLA
 proviene de los mismos datos que `sermoctl sla`: traza las muestras por minuto sobre la
@@ -843,7 +843,7 @@ una métrica numérica con nombre para comprobaciones que publican una, como `hd
 `ce`/`ue`; en ese caso `unit` es la unidad de la métrica en lugar de `ms`.
 Las mediciones se mantienen por minuto durante aproximadamente un año (podadas como las
 muestras de SLA); una comprobación que solo se ejecuta cada N ciclos ([intervalo por
-comprobación](#per-check-interval)) registra una muestra solo cuando realmente se
+comprobación](#intervalo-por-comprobación)) registra una muestra solo cuando realmente se
 ejecuta, de modo que el promedio no se sesga.
 
 Los gráficos de proceso de `Daemon / Engine settings` usan la misma base de datos de
@@ -1927,7 +1927,7 @@ planificación vivas (hilos; cada una consume un PID, del cuarto campo de
 `/proc/loadavg`) contra `kernel.pid_max`. Una tabla llena hace que cada
 `fork()`/`clone()` falle con `EAGAIN` en todo el host: el estado final que alcanza un
 bucle de fork descontrolado o un pool de hilos con fugas, y donde la advertencia de
-crecimiento de [`zombies`](#zombies--defunct-processes) termina llegando.
+crecimiento de [`zombies`](#zombies--procesos-difuntos) termina llegando.
 
 ```yaml
 check:                                   # in a watch body like `load` above
@@ -2453,7 +2453,7 @@ comprobaciones cubren:
 - **Configuración** — cada problema de `config validate` (errores).
 - **Alineación de intervalos** — los `interval` por comprobación que **no son un
   múltiplo de la resolución global** (`engine.interval`) o están por debajo de ella, de
-  modo que serán redondeados (ver [intervalo por comprobación](#per-check-interval)).
+  modo que serán redondeados (ver [intervalo por comprobación](#intervalo-por-comprobación)).
 - **Recursos del host** — cosas referenciadas que **no existen en este host**:
   interfaces de red (watches `net`), archivos/directorios (comprobaciones
   `storage`/`count`, watches `file`), **puntos de montaje** (una comprobación `storage`

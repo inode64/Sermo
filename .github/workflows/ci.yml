@@ -21,6 +21,10 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
       - name: Install analyzers
         run: |
           go install honnef.co/go/tools/cmd/staticcheck@latest
@@ -28,6 +32,7 @@ jobs:
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
           go install golang.org/x/vuln/cmd/govulncheck@latest
           go install github.com/google/yamlfmt/cmd/yamlfmt@v0.17.0
+          npm ci
           pip install yamllint
       - run: make build
       - run: make check
