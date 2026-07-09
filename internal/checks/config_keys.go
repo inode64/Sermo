@@ -47,6 +47,7 @@ const (
 	CheckKeyExport                = "export"
 	CheckKeyFamily                = "family"
 	CheckKeyFilter                = "filter"
+	CheckKeyFollowRedirects       = "follow_redirects"
 	CheckKeyFor                   = "for"
 	CheckKeyFrom                  = "from"
 	CheckKeyFSType                = "fstype"

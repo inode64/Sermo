@@ -86,6 +86,7 @@ watches:
     check:
       type: http
       url: http://${host}:${port}${health_path}
+      follow_redirects: false
       expect_status:
         op: <
         value: 500

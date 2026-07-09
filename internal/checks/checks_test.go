@@ -82,6 +82,34 @@ func TestHTTPCheck(t *testing.T) {
 	}
 }
 
+func TestHTTPCheckCanDisableRedirects(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer target.Close()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusMovedPermanently)
+	}))
+	defer srv.Close()
+
+	built, warns := Build(map[string]any{
+		"h": map[string]any{
+			"type":             "http",
+			"url":              srv.URL,
+			"follow_redirects": false,
+			"expect_status":    map[string]any{"op": "<", "value": 500},
+		},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("http check should build cleanly: built=%d warns=%v", len(built), warns)
+	}
+	res := built[0].Check.Run(context.Background())
+	if !res.OK || !strings.Contains(res.Message, "301") {
+		t.Fatalf("redirect response should be evaluated without following it: ok=%v msg=%q", res.OK, res.Message)
+	}
+}
+
 func TestBuildHTTPCertRequiresHTTPS(t *testing.T) {
 	built, warns := Build(map[string]any{
 		"h": map[string]any{"type": "http", "url": "http://example.com", "cert_expires_in_days": 14},
