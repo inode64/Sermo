@@ -1403,10 +1403,12 @@ func conditionByField(conditions []web.WatchCondition, field string) web.WatchCo
 type webProcSampler struct {
 	match   ProcMatch
 	samples []ProcInfo
+	calls   int
 }
 
 func (s *webProcSampler) Sample(match ProcMatch) ([]ProcInfo, bool) {
 	s.match = match
+	s.calls++
 	return s.samples, true
 }
 
@@ -2275,6 +2277,64 @@ func TestWatchSnapshotsSuppressColdWebProbe(t *testing.T) {
 	}
 	if samplerCalls != 0 {
 		t.Fatalf("snapshot web probe sampled firewall %d times, want 0", samplerCalls)
+	}
+}
+
+func TestWatchSnapshotsFeedProcessView(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	snapshots := NewWatchSnapshots()
+	snapshots.now = func() time.Time { return now }
+	sampler := &webProcSampler{samples: []ProcInfo{{PID: 1}}}
+	b := &WebBackend{
+		watchOrder: []string{"hot-workers"},
+		watches: map[string]*webWatch{
+			"hot-workers": {
+				name:      "hot-workers",
+				checkType: checks.CheckTypeProcess,
+				interval:  time.Minute,
+				check: map[string]any{
+					checks.CheckKeyType: checks.CheckTypeProcess,
+					checks.CheckKeyName: "apache2",
+					checks.CheckKeyUser: "apache",
+				},
+			},
+		},
+		watchSnapshots: snapshots,
+		procSampler:    sampler,
+		now:            func() time.Time { return now },
+	}
+
+	ws := b.Watches(context.Background())
+	if len(ws) != 1 || ws[0].Summary != "" || len(ws[0].Readings) != 0 {
+		t.Fatalf("cold process Watches() = %+v, want no live process summary", ws)
+	}
+	if sampler.calls != 0 {
+		t.Fatalf("cold web process sampled %d times, want 0", sampler.calls)
+	}
+
+	snapshots.Publish("hot-workers", checks.CheckTypeProcess, checks.Result{
+		Check:   "hot-workers",
+		OK:      true,
+		Message: "process apache2 user apache: 2 matching processes, rss 300 bytes",
+		Data: map[string]any{
+			watchReadingFieldProcess:  "apache2",
+			watchReadingFieldUser:     "apache",
+			watchReadingFieldMatches:  2,
+			checks.DataKeyPIDs:        "7, 42",
+			watchReadingFieldRSS:      uint64(300),
+			watchReadingFieldCPUTicks: uint64(50),
+			metrics.MetricIO:          uint64(500),
+		},
+	})
+	ws = b.Watches(context.Background())
+	if len(ws) != 1 || !strings.Contains(ws[0].Summary, "2 matching processes") {
+		t.Fatalf("snapshot process Watches() = %+v, want process summary", ws)
+	}
+	if got := readingByField(ws[0].Readings, checks.DataKeyPIDs).Value; got != "7, 42" {
+		t.Fatalf("process pids reading = %q, want snapshot pids", got)
+	}
+	if sampler.calls != 0 {
+		t.Fatalf("snapshot web process sampled %d times, want 0", sampler.calls)
 	}
 }
 

@@ -140,6 +140,8 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 		return firewallCheckReadings(data)
 	case checks.CheckTypeFile, checks.CheckTypeFileExists:
 		return fileCheckReadings(data)
+	case checks.CheckTypeProcess:
+		return processCheckReadings(data)
 	case checks.CheckTypeSize:
 		return sizeCheckReadings(data)
 	case checks.CheckTypeTCP, checks.CheckTypePorts:
@@ -221,8 +223,46 @@ func fileCheckReadings(data map[string]any) []web.WatchReading {
 	if v := cfgval.String(data[checks.DataKeyPath]); v != "" {
 		out = append(out, web.WatchReading{Field: checks.DataKeyPath, Label: watchReadingLabelPath, Value: v})
 	}
+	if v := cfgval.String(data[checks.DataKeyKind]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyKind, Label: watchReadingLabelKind, Value: v})
+	}
 	if v, ok := cfgval.Int(data[checks.DataKeySize]); ok {
 		out = append(out, web.WatchReading{Field: checks.DataKeySize, Label: watchReadingLabelSize, Value: humanize.Bytes(uint64(v))})
+	}
+	if v := cfgval.String(data[checks.DataKeyMode]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyMode, Label: watchReadingLabelMode, Value: v})
+	}
+	if v := cfgval.String(data[checks.CheckKeyOwner]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.CheckKeyOwner, Label: watchReadingLabelOwner, Value: v})
+	}
+	if v, ok := cfgval.Int(data[watchReadingFieldEntries]); ok {
+		out = append(out, web.WatchReading{Field: watchReadingFieldEntries, Label: watchReadingLabelEntries, Value: strconv.Itoa(v)})
+	}
+	return out
+}
+
+func processCheckReadings(data map[string]any) []web.WatchReading {
+	var out []web.WatchReading
+	if v := cfgval.String(data[watchReadingFieldProcess]); v != "" {
+		out = append(out, web.WatchReading{Field: watchReadingFieldProcess, Label: watchReadingLabelProcess, Value: v})
+	}
+	if v := cfgval.String(data[watchReadingFieldUser]); v != "" {
+		out = append(out, web.WatchReading{Field: watchReadingFieldUser, Label: watchReadingLabelUser, Value: v})
+	}
+	if v, ok := cfgval.Int(data[watchReadingFieldMatches]); ok {
+		out = append(out, web.WatchReading{Field: watchReadingFieldMatches, Label: watchReadingLabelMatches, Value: strconv.Itoa(v)})
+	}
+	if v := cfgval.String(data[checks.DataKeyPIDs]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyPIDs, Label: watchReadingLabelPIDs, Value: v})
+	}
+	if v, ok := cfgval.Int(data[watchReadingFieldRSS]); ok {
+		out = append(out, web.WatchReading{Field: watchReadingFieldRSS, Label: watchReadingLabelRSS, Value: fmt.Sprintf("%d %s", v, metrics.MetricUnitBytes)})
+	}
+	if v, ok := cfgval.Int(data[watchReadingFieldCPUTicks]); ok {
+		out = append(out, web.WatchReading{Field: watchReadingFieldCPUTicks, Label: watchReadingLabelCPUTicks, Value: strconv.Itoa(v)})
+	}
+	if v, ok := cfgval.Int(data[metrics.MetricIO]); ok {
+		out = append(out, web.WatchReading{Field: metrics.MetricIO, Label: watchReadingLabelIO, Value: fmt.Sprintf("%d %s", v, metrics.MetricUnitBytes)})
 	}
 	return out
 }

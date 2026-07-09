@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/checks"
 	"sermo/internal/notify"
 )
 
@@ -46,6 +47,45 @@ func TestFileWatchFirstCycleSilent(t *testing.T) {
 	w.runCycle(context.Background())
 	if len(h.fired) != 0 {
 		t.Fatalf("first cycle must adopt the baseline silently, fired %d hooks", len(h.fired))
+	}
+}
+
+func TestFileWatchPublishesSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	writeSize(t, filepath.Join(dir, "a.txt"), 10)
+	h := &fileWatchHarness{}
+	w := h.watcher(dir, true, fileCond{sizeChange: true})
+	var got checks.Result
+	w.publish = func(watch, checkType string, res checks.Result) {
+		if watch != "fw" || checkType != checks.CheckTypeFile {
+			t.Fatalf("publish target = %s/%s", watch, checkType)
+		}
+		got = res
+	}
+
+	w.runCycle(context.Background())
+
+	if !got.OK || got.Data[checks.DataKeyPath] != dir {
+		t.Fatalf("published snapshot = %+v", got)
+	}
+	if got.Data[checks.DataKeyKind] != watchReadingKindDir {
+		t.Fatalf("kind = %v, want directory", got.Data[checks.DataKeyKind])
+	}
+	if got.Data[watchReadingFieldEntries] != 1 {
+		t.Fatalf("entries = %v, want 1", got.Data[watchReadingFieldEntries])
+	}
+}
+
+func TestFileWatchPublishesMissingSnapshot(t *testing.T) {
+	h := &fileWatchHarness{}
+	w := h.watcher(filepath.Join(t.TempDir(), "missing"), false, fileCond{onDelete: true})
+	var got checks.Result
+	w.publish = func(_, _ string, res checks.Result) { got = res }
+
+	w.runCycle(context.Background())
+
+	if got.OK || got.Data[checks.DataKeyPath] != w.path || got.Message == "" {
+		t.Fatalf("missing snapshot = %+v", got)
 	}
 }
 
