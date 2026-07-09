@@ -24,6 +24,9 @@ The remote scripts must run as root on the target host:
   writes a minimal `/etc/sermo/sermo.yml`, and collects read-only host inventory.
 - `remote_apply.sh` replaces generated config directories under `/etc/sermo`,
   validates the config, enables/restarts `sermod`, and verifies the local Web UI.
+- `remote_update_payload.sh` refreshes binaries/catalog on an already configured
+  host, validates the current `/etc/sermo` with the detected init backend, then
+  restarts `sermod` and verifies the local Web UI.
 - `remote_repair_catalog.sh` replaces only the packaged catalog from a payload.
 - `remote_final_check.sh` validates `/etc/sermo`, service state, port `9797`,
   `/livez`, `/readyz`, and the HTML shell.

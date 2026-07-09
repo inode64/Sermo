@@ -180,9 +180,11 @@ def write_file(root: Path, rel: str, body: str) -> None:
     path.write_text(body.rstrip() + "\n", encoding="utf-8")
 
 
-def base_config(options: GenerationOptions) -> str:
+def base_config(options: GenerationOptions, backend: str = "auto") -> str:
+    if backend not in {"systemd", "openrc"}:
+        backend = "auto"
     return f"""engine:
-  backend: auto
+  backend: {backend}
   interval: 30s
   max_parallel_checks: 8
   max_parallel_operations: 2
@@ -454,7 +456,10 @@ def catalog_name_regex(pattern: str) -> re.Pattern[str]:
     while idx < len(pattern):
         token = pattern[idx : idx + 2]
         if token == "%v":
-            out.append(r"(?P<version>[A-Za-z0-9_.+-]+)")
+            rest = pattern[idx + 2 :]
+            terminal = not any(marker in rest for marker in ("%n", "%s", "%i"))
+            capture = r"[0-9][^/]*" if terminal else r"[0-9][^/_-]*"
+            out.append(rf"(?P<version>{capture})")
             idx += 2
             continue
         if token == "%n":
@@ -462,11 +467,11 @@ def catalog_name_regex(pattern: str) -> re.Pattern[str]:
             idx += 2
             continue
         if token == "%i":
-            out.append(r"(?P<instance>[A-Za-z0-9_.:+-]+)")
+            out.append(r"(?P<instance>(?:[A-Za-z0-9][A-Za-z0-9_.-]*)?)")
             idx += 2
             continue
         if token == "%s":
-            out.append(r"(?P<sep>[-.]?)")
+            out.append(r"(?P<sep>[-_]?)")
             idx += 2
             continue
         out.append(re.escape(pattern[idx]))
@@ -965,10 +970,13 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
     if root.exists():
         shutil.rmtree(root)
     ensure_dirs(root)
-    write_file(root, "etc/sermo/sermo.yml", base_config(options))
+    backend = read_text(stage / "init").strip()
+    config_backend = backend if backend in {"systemd", "openrc"} else "auto"
+    write_file(root, "etc/sermo/sermo.yml", base_config(options, config_backend))
 
     report = {
         "host": host_slug,
+        "init": config_backend,
         "services": {"enabled": [], "skipped": []},
         "containers": {"enabled": [], "skipped": []},
         "virtual_machines": {"enabled": [], "skipped": []},

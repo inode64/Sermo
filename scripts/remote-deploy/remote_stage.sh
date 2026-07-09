@@ -41,6 +41,11 @@ elif command -v rc-service >/dev/null 2>&1; then
 	init="openrc"
 fi
 printf '%s\n' "$init" >"${out}/init"
+config_backend="$init"
+case "$config_backend" in
+	systemd | openrc) ;;
+	*) config_backend="auto" ;;
+esac
 
 backup=""
 if [ -e /etc/sermo ]; then
@@ -66,9 +71,9 @@ mkdir -p /etc/sermo/services /etc/sermo/apps /etc/sermo/notifiers /etc/sermo/wat
 mkdir -p /run/sermo /var/lib/sermo
 chmod 0700 /run/sermo /var/lib/sermo 2>/dev/null || true
 
-cat >/etc/sermo/sermo.yml <<'YAML'
+cat >/etc/sermo/sermo.yml <<YAML
 engine:
-  backend: auto
+  backend: ${config_backend}
   interval: 30s
   max_parallel_checks: 8
   max_parallel_operations: 2
@@ -133,9 +138,9 @@ fi
 
 capture sermoctl_version /usr/bin/sermoctl --version
 capture sermod_version /usr/bin/sermod --version
-capture config_validate_base /usr/bin/sermoctl --config /etc/sermo/sermo.yml config validate
-capture services_json /usr/bin/sermoctl --config /etc/sermo/sermo.yml --json services
-capture services_all_json /usr/bin/sermoctl --config /etc/sermo/sermo.yml --json services all
+capture config_validate_base env SERMO_BACKEND="$config_backend" SERMO_INIT="$config_backend" /usr/bin/sermoctl --config /etc/sermo/sermo.yml config validate
+capture services_json env SERMO_BACKEND="$config_backend" SERMO_INIT="$config_backend" /usr/bin/sermoctl --config /etc/sermo/sermo.yml --json services
+capture services_all_json env SERMO_BACKEND="$config_backend" SERMO_INIT="$config_backend" /usr/bin/sermoctl --config /etc/sermo/sermo.yml --json services all
 
 findmnt -R -J >"${out}/findmnt.json" 2>/dev/null || true
 findmnt -R -P >"${out}/findmnt.pairs" 2>/dev/null || true
