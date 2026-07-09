@@ -1,6 +1,15 @@
 ---
 name: sermo-remote-testing
-description: Use when running safe Sermo validation or exploratory tests on remote Linux servers over SSH, using the host list from .env.ssh as the source of truth, local GOAMD64=v1 builds copied to /tmp, staged all-host runs that validate the first four hosts before continuing with the rest, Sermo wizards/tools for temporary setup, complete host discovery only for explicit remote installation or complete remote configuration requests, exposing the web UI with web.address 0.0.0.0 and reclaiming port 9797 from verified Sermo instances, configuring only currently active services, reporting unsupported active services per host, preserving database/LDAP dump stop blockers, limiting start/stop/restart/reload operation tests to acpid, full sermod runs with every available host watch that can be safely discovered on the host, and safe alert/notification checks that must not execute hooks or alter server behavior.
+description: >-
+  Use when running safe Sermo validation or exploratory tests on remote Linux
+  servers over SSH, using .env.ssh as the source of truth, local GOAMD64=v1
+  builds, staged all-host runs, temporary /tmp validation, or explicit remote
+  installations under /etc/sermo. Covers active-services-only config, unsupported
+  active-service reports, all safely discoverable host watches, dry-run
+  deployments, storage <5% free with 5G expand, fstab-backed local/network/USB
+  mount units, SMART daily, hdparm every 6h, Web UI on 0.0.0.0:9797, reusable
+  scripts under scripts/remote-deploy, and safe alert/notification checks that
+  must not execute hooks or alter server behavior.
 ---
 
 # Sermo Remote Testing
@@ -9,10 +18,12 @@ description: Use when running safe Sermo validation or exploratory tests on remo
 
 - Build Sermo test binaries locally with `GOAMD64=v1` for broad x86_64 compatibility.
 - Copy the locally built artifacts to remote servers and run them under `/tmp/`; never build on the remote server unless the user explicitly asks.
-- Never install into `/usr`, `/etc`, `/var/lib`, `/run` or a service manager during remote validation.
-- Generate remote config as a temporary `config.yml` under the test directory, with runtime paths also under that directory.
+- Never install into `/usr`, `/etc`, `/var/lib`, `/run` or a service manager during remote validation-only runs.
+- Install into `/etc/sermo`, `/usr`, `/var/lib`, `/run` or a service manager only when the user explicitly asks for remote installation, persistent configuration, or Web UI activation on the host. In that case follow the persistent installation workflow below instead of the temporary validation workflow.
+- For validation-only runs, generate remote config as a temporary `config.yml` under the test directory, with runtime paths also under that directory.
 - Use Sermo's own tools for the setup flow: `sermoctl` for validation/discovery/wizards and `sermod run` for the temporary daemon.
 - Configure only services that are currently active on the remote server according to its init backend. Do not configure inactive services, stopped units, disabled candidates, volumes, interfaces, or VMs unless the user explicitly expands the scope for that run.
+- If a code/catalog/schema change is required after any host has already been installed or configured, rebuild and redeploy the fixed payload/config to every already-touched host before continuing with new hosts. Do not leave earlier hosts on stale behavior.
 - To expose the panel, set:
 
 ```yaml
@@ -66,9 +77,13 @@ Use the current checkout as the source of truth. If remote findings require code
 - Treat each non-empty, non-comment line in `.env.ssh` as one SSH target.
 - Preserve the line value as provided, including user, host, port, aliases, or SSH options if present.
 - Do not invent, scan, or prompt for additional hosts while `.env.ssh` exists; if it is missing or has no usable hosts, stop and report that there are no remote targets to test.
+- When the user asks for the first `N` servers/hosts, use exactly the first `N`
+  usable non-comment entries from `.env.ssh`.
 - When the user asks to test **all servers**, **all hosts**, **the whole `.env.ssh` list**, or similar full-fleet scope, run in two stages:
   1. Test only the first four usable `.env.ssh` entries, end-to-end for the requested scope.
   2. Review the first-four results before continuing. Continue with the remaining entries only when the first stage has no critical failures: SSH/preflight works, `/tmp` setup works, generated config validates, requested one-shot checks pass, and no finding indicates a project/catalog bug that would invalidate the rest of the run.
+- Apply the same first-four gate to any selected set larger than four hosts,
+  including "first N" installation requests.
 - If the first-four stage has a critical failure, stop before touching the remaining hosts and report the exact failing host, command phase, output path, and whether any remote `/tmp/sermo-remote-test-*` directory was created. Continue anyway only when the user explicitly asks to proceed despite the failure.
 - Use batch SSH options and bounded connection timeouts:
 
@@ -181,6 +196,83 @@ host watches that match the server. Do not add these host-resource watches durin
 ordinary remote validation, service-specific checks, catalog/app probes, or any
 partial test run.
 
+## Persistent Remote Installation Defaults
+
+Use this section for explicit remote installation or persistent configuration
+requests. It overrides the validation-only `/tmp` restrictions above.
+
+- Keep reusable install/generation scripts in `scripts/remote-deploy/`. Extend
+  those scripts instead of rewriting one-off shell snippets when future installs
+  need the same behavior.
+- Build locally with `GOAMD64=v1` and `SERMO_DATADIR=/usr/share/sermo`, package
+  `sermoctl`, `sermod`, units and catalog locally, then copy the payload to the
+  host. Do not build on the host.
+- Stage read-only host evidence first: active init units, catalog service
+  discovery, `findmnt`, `/etc/fstab`, `/proc/mounts`, `/proc/swaps`, `lsblk`,
+  network inventory, cert candidates and feature probes.
+- Generate the installed config from scratch under `/etc/sermo` when requested.
+  List `/etc/sermo/watches`, `/etc/sermo/networks`, `/etc/sermo/storages` and
+  `/etc/sermo/mounts` under `paths.watches`.
+- Configure only catalog-supported services whose init unit is currently active.
+  Record active services that cannot be represented instead of inventing service
+  definitions.
+- Include running Docker containers and running libvirt/QEMU virtual machines in
+  complete persistent configurations. Generate them as controlled service
+  documents under `paths.services`, not as generic host watches: Docker services
+  use `category: docker`, `control.type: docker`, `control.container` and a
+  read-only `type: docker` watch; VM services use `category: virtual-machine`,
+  `control.type: libvirt`, `control.domain`, `uri: qemu:///system`, the detected
+  local libvirt socket and a read-only `type: libvirt` watch. Keep them
+  `dry_run: true`. Do not monitor stopped containers or shutoff domains unless
+  the user explicitly asks for inactive targets; report them as skipped.
+- For catalog services whose watches probe a local endpoint, derive
+  host-specific `variables.host` and `variables.port` from the service's own
+  configuration before falling back to catalog defaults. At minimum, discover
+  Cloudflare Tunnel from `/etc/cloudflared/config.yml` `metrics:`, BIND/named
+  from `listen-on` declarations matched against the host's real IPv4 addresses,
+  and Prometheus MySQL Exporter from `--web.listen-address` in service config
+  files. Use matching listening sockets only as a fallback. Do not assume
+  `127.0.0.1` when the config or socket shows the service binds another local
+  address.
+- For catalog services whose process selector uses `variables.user`, derive the
+  value from the active process owner when read-only `/proc` evidence is
+  available. This is required for Cloudflare Tunnel on hosts where the package
+  runs `cloudflared` as `root`: the endpoint check can pass while OpenRC hosts
+  still stay in `collecting` if runtime process metrics cannot match the
+  catalog default user.
+- If an OpenRC Cloudflare Tunnel process reports `/proc/<pid>/exe` as a deleted
+  binary, do not weaken operation kill safety. Override only the process-metrics
+  selector with a narrow command-line regex for `cloudflared ... tunnel run`;
+  leave stop/kill policy on the catalog exact executable guard so deleted or
+  untrusted executables remain fail-safe for operations.
+- Default every generated service and watch to `dry_run: true`. Before exposing
+  manual Web UI controls for expand, mount, umount or mount-user alerts, verify
+  those controls also respect target dry-run. If they do not, fix the project
+  code first, add tests, rebuild and redeploy.
+- Web UI defaults are `address: 0.0.0.0`, `port: 9797`, password
+  `sermo-remote-admin`. Verify `/livez`, `/readyz`, HTML, `/api/services`,
+  `/api/watches` and `/api/mounts` after apply.
+- Storage defaults are `free_pct: { op: "<", value: "5%" }`, `mounted: true`
+  for mount-point paths, `then.expand: { by: 5G }`, `then.notify: [none]`,
+  sustained `for: { cycles: 3 }`, and a conservative cooldown policy.
+- Generate SMART watches every `24h` and hdparm watches every `6h` when the host
+  exposes the corresponding tool/device safely.
+- Generate mount units for every currently mounted, non-pseudo, fstab-backed
+  target that can be represented safely:
+  - Local storage targets use the same `storage-*` watch file under
+    `/etc/sermo/storages` with an added top-level `mount:` block. This is what
+    makes the Web UI Mount units panel show `/`, `/boot/EFI`, `/var/lib/...`,
+    and similar local mount points without duplicate watches.
+  - Network and USB/removable fstab targets may use separate `mount-*` watch
+    files under `/etc/sermo/mounts` when keeping them mount-only avoids stale
+    `statfs` behavior.
+  - Never create mount units for pseudo filesystems, container/runtime mounts,
+    transient bind mounts, unmounted fstab guesses, or paths not declared in
+    `/etc/fstab`.
+- After applying config, run `sermoctl config validate`, restart/enable `sermod`
+  through the host init system, wait for `readyz.ready=true`, and report service
+  count, watch file count, monitored target count and generated mount units.
+
 Complete means complete for the exact Sermo checkout and test binaries used in
 that remote run, not a fixed hand-picked subset maintained in this skill. At the
 start of every complete remote installation/configuration run, before generating
@@ -221,8 +313,8 @@ this skill before remote installation runs start considering it.
   remote host exposes the required source data read-only; otherwise record the
   skip reason. Skip pseudo filesystems, bind mounts and transient
   container/runtime mounts unless the user explicitly asks for them.
-- Every generated storage watch must alert when free space is below 10%. Put
-  `free_pct: { op: "<", value: "10%" }` in the watch's `check:` block rather
+- Every generated storage watch must alert when free space is below 5%. Put
+  `free_pct: { op: "<", value: "5%" }` in the watch's `check:` block rather
   than an inverted `used_pct` threshold. For paths that are expected mount
   points, include `mounted: true` in that same `check:` block so an unmounted
   network or USB path alerts before `statfs` can report the parent filesystem.
@@ -236,22 +328,25 @@ check:
   type: storage
   path: /mnt/backup
   mounted: true
-  free_pct: { op: "<", value: "10%" }
+  free_pct: { op: "<", value: "5%" }
 ```
 
   If real notification delivery is part of the requested remote installation,
   attach the selected notifier or inherit the configured global notify. If the
   run is only validating routing, use target-level `dry_run: true`; otherwise keep the
   storage watch alert-only or monitor-only according to the requested mode.
-- Include `mount:` blocks for network and USB mount targets that are declared
-  in `/etc/fstab`, writing one storage watch file per target under a `mounts/`
-  directory listed in `paths.watches`. Detect them with read-only probes
-  (`findmnt --fstab`, `/etc/fstab`, `lsblk`, `/dev/disk/by-*` and
-  `/proc/self/mountinfo`); never mount or unmount them during discovery.
-  Network candidates include NFS/NFS4, CIFS/SMB, SSHFS/fuse.sshfs, Ceph,
-  GlusterFS and similar remote storage. USB candidates include removable devices
-  or filesystems whose source resolves through USB/removable block devices.
-  Keep the storage watch fstab-backed and policy-only for mount operations:
+- Include `mount:` blocks for fstab-backed mount targets that are safe to expose.
+  Detect them with read-only probes (`findmnt --fstab`, `/etc/fstab`, `lsblk`,
+  `/dev/disk/by-*` and `/proc/self/mountinfo`); never mount or unmount during
+  discovery. For mounted local storage targets, append `mount:` to the existing
+  `storage-*` watch under `storages/` so the Storage and Mount units panels share
+  the same target. For network and USB/removable fstab targets, write one
+  storage watch file per target under a `mounts/` directory listed in
+  `paths.watches` when mount-only handling is safer. Network candidates include
+  NFS/NFS4, CIFS/SMB, SSHFS/fuse.sshfs, Ceph, GlusterFS and similar remote
+  storage. USB candidates include removable devices or filesystems whose source
+  resolves through USB/removable block devices. Keep the mount policy
+  conservative:
 
 ```yaml
 # <paths.watches>/mounts/mount-mnt-backup.yml  → watch
@@ -270,9 +365,8 @@ mount:
 ```
 
   Do not write `source`, `fstype`, `options` or class metadata into the mount
-  YAML. If a network or USB target is not present in `/etc/fstab`, report it as
-  skipped instead of inventing a mount unit. Pair mounted network/USB targets
-  with the storage watch above when they are currently mounted.
+  YAML. If a target is not present in `/etc/fstab`, report it as skipped instead
+  of inventing a mount unit.
 - Include certificate watches for `/etc/ssl` on every complete config. Discover
   only candidate certificate-like regular files (`*.crt`, `*.cer`, `*.pem`) that
   are immediate children of `/etc/ssl`, using read-only commands equivalent to
@@ -357,9 +451,9 @@ apply to ordinary CLI-only validation.
   each discovered type that was skipped, carry forward the skip reason from
   configuration generation.
 - Include storage and mount watch results in the observation output. Report any
-  filesystem with less than 10% free space, any configured storage watch whose
-  mount condition failed, and any generated network/USB mount target
-  that was skipped because it was not fstab-backed.
+  filesystem with less than 5% free space, any configured storage watch whose
+  mount condition failed, and any generated local/network/USB mount target that
+  was skipped because it was not fstab-backed.
 - Include direct-file `/etc/ssl` certificate watch results and related events in
   the observation output. Report any certificate that is expired, not yet valid,
   under the 15-day expiry threshold, missing, unreadable, unparseable, or changed
@@ -472,8 +566,8 @@ Summarize:
 - active services configured;
 - unsupported active services per server;
 - alerts that fired or would fire in dry-run;
-- storage findings: filesystems below 10% free space, failed `mounted: true`
-  checks, and network/USB mount units generated or skipped;
+- storage findings: filesystems below 5% free space, failed `mounted: true`
+  checks, and local/network/USB mount units generated or skipped;
 - complete host-watch coverage: the run-time inventory source, every generated
   watch type/target and every discovered type skipped with its reason;
 - direct-file `/etc/ssl` certificate findings: expiring within 15 days,
