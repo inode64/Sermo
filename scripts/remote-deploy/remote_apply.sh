@@ -4,6 +4,7 @@ set -u
 run_id="${1:-}"
 config_tgz="${2:-}"
 web_password="${SERMO_WEB_PASSWORD:-sermo-remote-admin}"
+ready_wait_seconds="${SERMO_READY_WAIT_SECONDS:-240}"
 
 if [ -z "$run_id" ] || [ -z "$config_tgz" ]; then
 	echo "usage: $0 RUN_ID CONFIG_TGZ" >&2
@@ -102,12 +103,20 @@ else
 	exit 40
 fi
 
+case "$ready_wait_seconds" in
+	'' | *[!0-9]*)
+		ready_wait_seconds=240
+		;;
+esac
+
 ready_rc=1
-for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60; do
+ready_waited=0
+while [ "$ready_waited" -lt "$ready_wait_seconds" ]; do
 	if http_get "http://127.0.0.1:9797/livez?verbose" >"${out}/livez.out" 2>"${out}/livez.err"; then
 		ready_rc=0
 		break
 	fi
+	ready_waited=$((ready_waited + 1))
 	sleep 1
 done
 printf '%s\n' "$ready_rc" >"${out}/livez.rc"
