@@ -82,15 +82,23 @@ preflight:
   file: { type: file, path: "${binary}" }
 ```
 
-Un servicio configurado (o una definición de servicio de catálogo) se suscribe con `restart_on_change`:
+Un servicio configurado (o una definición de servicio de catálogo) se suscribe con
+`restart_on_change`. Los servicios del catálogo empaquetado que enlazan apps
+versionadas declaran la forma de app por defecto; los servicios personalizados
+pueden usar la misma forma:
 
 ```yaml
 restart_on_change:
   libraries: [glibc, pam]
+  apps:
+    containerd:
+      level: minor
 ```
 
-En la resolución esto se desazucara en una regla de remediación por librería que reinicia
-el servicio cuando el fichero de esa librería cambia:
+En la resolución esto se desazucara en una regla de remediación por librería que
+reinicia el servicio cuando el fichero de esa librería cambia, y en una regla por
+app que reinicia el servicio cuando la versión de la app enlazada cambia en el
+nivel elegido:
 
 ```yaml
 rules:
@@ -98,11 +106,21 @@ rules:
     type: remediation
     if: { changed: { library: glibc, path: /lib64/libc.so.6 } }
     then: { action: restart }
+  restart-on-change-containerd-version:
+    type: remediation
+    if: { changed: { app: containerd, level: minor } }
+    then: { action: restart }
 ```
 
 El reinicio corre a través del motor seguro normal (guards, cooldown, max_actions),
 y el cambio se reconoce una vez que el reinicio tiene éxito, así que se dispara una vez por
-actualización en lugar de cada ciclo. Los nombres referenciados deben ser servicios `library`.
+actualización en lugar de cada ciclo. Los nombres de librería referenciados deben
+ser servicios `library`. Los nombres de app referenciados también deben aparecer
+en `apps:` del servicio, y la app debe proporcionar un comando `version` o
+`version_short`. Los niveles de app son `major`, `minor` y `patch` (por defecto
+para la forma corta `apps: [containerd]`). Si el binario de la app o el comando
+de versión está roto, Sermo trata la muestra de versión como inválida, no
+actualiza la línea base de versión y no reinicia el servicio.
 
 ## Reload al cambiar la configuración (`reload_on_change`)
 

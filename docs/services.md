@@ -81,15 +81,21 @@ preflight:
   file: { type: file, path: "${binary}" }
 ```
 
-A configured service (or catalog service definition) opts in with `restart_on_change`:
+A configured service (or catalog service definition) opts in with
+`restart_on_change`. Packaged catalog services that link versioned apps declare
+the app form by default; custom services can use the same shape:
 
 ```yaml
 restart_on_change:
   libraries: [glibc, pam]
+  apps:
+    containerd:
+      level: minor
 ```
 
 On resolution this desugars into one remediation rule per library that restarts
-the service when that library's file changes:
+the service when that library's file changes, and one rule per app that restarts
+the service when the linked app's version changes at the selected level:
 
 ```yaml
 rules:
@@ -97,11 +103,21 @@ rules:
     type: remediation
     if: { changed: { library: glibc, path: /lib64/libc.so.6 } }
     then: { action: restart }
+  restart-on-change-containerd-version:
+    type: remediation
+    if: { changed: { app: containerd, level: minor } }
+    then: { action: restart }
 ```
 
 The restart runs through the normal safe engine (guards, cooldown, max_actions),
 and the change is acknowledged once the restart succeeds, so it fires once per
-upgrade rather than every cycle. Referenced names must be `library` services.
+upgrade rather than every cycle. Referenced library names must be `library`
+services. Referenced app names must also appear in the service's `apps:` list,
+and the app must provide a `version` or `version_short` command. App levels are
+`major`, `minor` and `patch` (default for the short form `apps: [containerd]`).
+If the app binary or version command is broken, Sermo treats the version sample
+as invalid, does not update the version baseline, and does not restart the
+service.
 
 ## Reload on config change (`reload_on_change`)
 

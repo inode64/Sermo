@@ -10,6 +10,9 @@ service:
     - homeassistant
 apps:
   - python3
+restart_on_change:
+  apps:
+    - python3
 variables:
   host: 127.0.0.1
   port: 8123

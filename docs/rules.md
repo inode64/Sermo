@@ -339,9 +339,10 @@ Both accept a single value or a list. Gates are evaluated **after** the cycle's
 checks run, so the probe still executes but its result is suppressed; use a check's
 `interval` or remove it to avoid running it at all.
 
-To **restart** a service when a library or file is updated (the other half of the
-example — "if the pam library was updated, restart"), use a remediation rule with
-a [`changed:`](#rules) condition (or `restart_on_change: {libraries: […]}`):
+To **restart** a service when a library, file or app version is updated (the
+other half of the example — "if the pam library was updated, restart"), use a
+remediation rule with a [`changed:`](#rules) condition (or
+`restart_on_change: {libraries: […], apps: […]}`):
 
 ```yaml
 rules:
@@ -1817,9 +1818,11 @@ named success/failure polarity.
 tracked across cycles, or when `app` names a linked app whose version command
 changed at the selected `level` (`major`, `minor` or `patch`; default `patch`).
 The first cycle adopts the current value (a daemon start never fires), and a
-successful `restart`/`start` re-baselines it. The `path` form is the primitive
-behind `restart_on_change` (see Daemons → Library daemons); the `app` form is for
-service-owned binaries such as `containerd`.
+successful `restart`/`start` re-baselines it. A failed app version command is an
+invalid sample: it does not fire and does not update the baseline. The `path`
+form is the primitive behind `restart_on_change.libraries` (see Services →
+Library services); the `app` form is the primitive behind
+`restart_on_change.apps` for service-owned binaries such as `containerd`.
 
 ### Windows
 

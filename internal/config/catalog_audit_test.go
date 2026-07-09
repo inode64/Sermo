@@ -11,6 +11,7 @@ import (
 	"github.com/goccy/go-yaml"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/rules"
 )
 
 // These audits load the real repo artifacts — the packaged catalog, the shipped
@@ -321,7 +322,7 @@ func TestContainerdCatalogRestartsOnVersionChange(t *testing.T) {
 	if len(errs) > 0 {
 		t.Fatalf("ResolveCatalog(containerd): %v", errs)
 	}
-	rule := nested(t, resolved.Tree, "rules", "restart-if-containerd-version-changed")
+	rule := nested(t, resolved.Tree, "rules", "restart-on-change-containerd-version")
 	if got := cfgval.String(rule["type"]); got != "remediation" {
 		t.Fatalf("rule type = %q, want remediation", got)
 	}
@@ -341,6 +342,51 @@ func TestContainerdCatalogRestartsOnVersionChange(t *testing.T) {
 	versionCmd := cfgval.StringList(nested(t, resolved.Tree, "preflight", "containerd-version")["command"])
 	if len(versionCmd) == 0 {
 		t.Fatal("preflight[containerd-version] must carry a command for the changed:{app} rule")
+	}
+}
+
+func TestCatalogServicesRestartOnLinkedAppVersionChanges(t *testing.T) {
+	root := repoRoot(t)
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  services: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	for name := range cfg.CatalogServices {
+		t.Run(name, func(t *testing.T) {
+			resolved, errs := cfg.ResolveCatalog(CategoryService, name)
+			if len(errs) > 0 {
+				t.Fatalf("ResolveCatalog(%s): %v", name, errs)
+			}
+			preflight, _ := resolved.Tree[sectionPreflight].(map[string]any)
+			rulesMap, _ := resolved.Tree[rules.SectionRules].(map[string]any)
+			for key := range preflight {
+				app, ok := strings.CutSuffix(key, ServiceMonitorVersionCheckSuffix)
+				if !ok || app == "" {
+					continue
+				}
+				ruleName := "restart-on-change-" + app + "-version"
+				rule, ok := rulesMap[ruleName].(map[string]any)
+				if !ok {
+					t.Fatalf("linked app %q has version preflight %q but no generated rule %q", app, key, ruleName)
+				}
+				changed := nested(t, rule, "if", "changed")
+				if got := cfgval.String(changed["app"]); got != app {
+					t.Fatalf("%s changed.app = %q, want %q", ruleName, got, app)
+				}
+				if got := cfgval.String(nested(t, rule, "then")["action"]); got != "restart" {
+					t.Fatalf("%s then.action = %q, want restart", ruleName, got)
+				}
+			}
+		})
 	}
 }
 
