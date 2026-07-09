@@ -394,6 +394,47 @@ func TestWebBackendMountActionPreservesManualUnmonitor(t *testing.T) {
 	}
 }
 
+func TestWebBackendMountActionDryRunDoesNotRunCommands(t *testing.T) {
+	mounted := true
+	store := newFakeStore()
+	store.active[watchMonitorKey("mount-backup")] = true
+	runner := &webMountRunner{mounted: &mounted}
+	cfg := dryRunMountTestConfig(t)
+	b, warns := NewWebBackend(cfg, Deps{
+		Monitor:     store,
+		ExecxRunner: runner,
+		MountSampler: func() ([]checks.Mount, error) {
+			if mounted {
+				return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
+			}
+			return nil, nil
+		},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	res := b.MountAction(context.Background(), "mount-backup", "umount", web.MountActionOptions{})
+	if !res.OK || res.Message != "dry-run: would run umount" || !res.Mounted || !mounted {
+		t.Fatalf("dry-run umount = %+v mounted=%t, want simulated mounted success", res, mounted)
+	}
+	if len(runner.calls) != 0 {
+		t.Fatalf("dry-run umount ran commands: %v", runner.calls)
+	}
+	if !store.active[watchMonitorKey("mount-backup")] {
+		t.Fatal("dry-run umount must not disable storage watch monitoring")
+	}
+
+	mounted = false
+	res = b.MountAction(context.Background(), "mount-backup", "mount", web.MountActionOptions{})
+	if !res.OK || res.Message != "dry-run: would run mount" || res.Mounted || mounted {
+		t.Fatalf("dry-run mount = %+v mounted=%t, want simulated unmounted success", res, mounted)
+	}
+	if len(runner.calls) != 0 {
+		t.Fatalf("dry-run mount ran commands: %v", runner.calls)
+	}
+}
+
 func TestWebBackendAlertMountUsers(t *testing.T) {
 	cfg := mountTestConfig(t)
 	alerter := &fakeMountAlerter{}
@@ -413,6 +454,30 @@ func TestWebBackendAlertMountUsers(t *testing.T) {
 	res := b.AlertMountUsers(context.Background(), "mount-backup")
 	if !res.OK || !alerter.called || res.Delivered != 1 || len(res.Users) != 1 || res.Users[0] != "backup" {
 		t.Fatalf("AlertMountUsers = %+v called=%v", res, alerter.called)
+	}
+}
+
+func TestWebBackendAlertMountUsersDryRunDoesNotNotify(t *testing.T) {
+	cfg := dryRunMountTestConfig(t)
+	alerter := &fakeMountAlerter{}
+	scans := 0
+	b, warns := NewWebBackend(cfg, Deps{
+		MountSampler: func() ([]checks.Mount, error) {
+			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
+		},
+		MountDiscoverUsers: func(string) ([]process.Process, error) {
+			scans++
+			return []process.Process{{PID: 123, User: "backup", UID: 1000}}, nil
+		},
+		MountUserAlerter: alerter,
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	res := b.AlertMountUsers(context.Background(), "mount-backup")
+	if !res.OK || res.Message != mountDryRunAlertMessage || alerter.called || scans != 0 {
+		t.Fatalf("dry-run AlertMountUsers = %+v called=%v scans=%d", res, alerter.called, scans)
 	}
 }
 
@@ -445,6 +510,15 @@ func mountTestConfig(t *testing.T) *config.Config {
 			},
 		}},
 	}
+}
+
+func dryRunMountTestConfig(t *testing.T) *config.Config {
+	t.Helper()
+	cfg := mountTestConfig(t)
+	watches, _ := cfg.Global.Raw["watches"].(map[string]any)
+	mountBackup, _ := watches["mount-backup"].(map[string]any)
+	mountBackup["dry_run"] = true
+	return cfg
 }
 
 func rootMountTestConfig(t *testing.T) *config.Config {
