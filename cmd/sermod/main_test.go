@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -204,6 +207,50 @@ func TestWebAuthFromConfig(t *testing.T) {
 		t.Fatalf("auth without web section = %+v, want zero value", empty)
 	}
 }
+
+func TestStartOldHistoryPruneDoesNotBlockStartup(t *testing.T) {
+	store := &blockingOldHistoryPruner{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	t.Cleanup(func() { close(store.release) })
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	done := make(chan struct{})
+	go func() {
+		startOldHistoryPrune(context.Background(), logger, store, time.Now())
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("startOldHistoryPrune blocked on history pruning")
+	}
+	select {
+	case <-store.started:
+	case <-time.After(time.Second):
+		t.Fatal("history pruning goroutine did not start")
+	}
+}
+
+type blockingOldHistoryPruner struct {
+	once    sync.Once
+	started chan struct{}
+	release chan struct{}
+}
+
+func (p *blockingOldHistoryPruner) PruneSLA(time.Time) (int64, error) {
+	p.once.Do(func() { close(p.started) })
+	<-p.release
+	return 0, nil
+}
+
+func (p *blockingOldHistoryPruner) PruneMeasurements(time.Time) (int64, error)   { return 0, nil }
+func (p *blockingOldHistoryPruner) PruneMetrics(time.Time) (int64, error)        { return 0, nil }
+func (p *blockingOldHistoryPruner) PruneDaemonMetrics(time.Time) (int64, error)  { return 0, nil }
+func (p *blockingOldHistoryPruner) PruneServiceMetrics(time.Time) (int64, error) { return 0, nil }
+func (p *blockingOldHistoryPruner) PruneEvents(time.Time) (int64, error)         { return 0, nil }
 
 func TestEngineAndNotifierAccessors(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{

@@ -209,27 +209,6 @@ func run(args []string) int {
 		logger.Warn("build notifiers", logFieldWarning, w)
 	}
 
-	// Bound persisted history to roughly a year of data before hydrating the
-	// recent-event ring.
-	cutoff := time.Now().Add(-state.DefaultHistoryRetention)
-	for _, p := range []struct {
-		what  string
-		prune func(time.Time) (int64, error)
-	}{
-		{"sla samples", store.PruneSLA},
-		{"measurements", store.PruneMeasurements},
-		{"metrics", store.PruneMetrics},
-		{"daemon metrics", store.PruneDaemonMetrics},
-		{"service metrics", store.PruneServiceMetrics},
-		{"events", store.PruneEvents},
-	} {
-		if n, err := p.prune(cutoff); err != nil {
-			logger.Warn("prune "+p.what, logFieldError, err)
-		} else if n > 0 {
-			logger.Info("pruned old "+p.what, logFieldRows, n)
-		}
-	}
-
 	eventLog, err := app.NewPersistentEventLog(1000, store, func(err error) {
 		logger.Warn("persist event failed", logFieldError, err)
 	})
@@ -400,6 +379,8 @@ func run(args []string) int {
 		logger.Warn("web ui disabled; no port will be opened", logFieldReason, webDisabledReason)
 	}
 
+	startOldHistoryPrune(ctx, logger, store, time.Now().Add(-state.DefaultHistoryRetention))
+
 	logger.Info("sermod starting", logFieldBackend, detection.Backend, logFieldServices, len(workers), logFieldWatches, len(watches))
 
 	monitor := app.NewMonitor(cfg, deps, app.Scheduler{
@@ -528,4 +509,47 @@ func openEngineLog(logger *slog.Logger, cfg *config.Config, key string) *logfile
 	}
 	logger.Info("engine log enabled", logFieldKey, key, logFieldPath, path)
 	return w
+}
+
+type oldHistoryPruner interface {
+	PruneSLA(time.Time) (int64, error)
+	PruneMeasurements(time.Time) (int64, error)
+	PruneMetrics(time.Time) (int64, error)
+	PruneDaemonMetrics(time.Time) (int64, error)
+	PruneServiceMetrics(time.Time) (int64, error)
+	PruneEvents(time.Time) (int64, error)
+}
+
+func startOldHistoryPrune(ctx context.Context, logger *slog.Logger, store oldHistoryPruner, cutoff time.Time) {
+	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		pruneOldHistory(logger, store, cutoff)
+	}()
+}
+
+func pruneOldHistory(logger *slog.Logger, store oldHistoryPruner, cutoff time.Time) {
+	// Retention can scan large history tables on long-lived installations. Keep it
+	// out of the startup critical path so health endpoints and the Web UI bind
+	// before old samples are removed.
+	for _, p := range []struct {
+		what  string
+		prune func(time.Time) (int64, error)
+	}{
+		{"sla samples", store.PruneSLA},
+		{"measurements", store.PruneMeasurements},
+		{"metrics", store.PruneMetrics},
+		{"daemon metrics", store.PruneDaemonMetrics},
+		{"service metrics", store.PruneServiceMetrics},
+		{"events", store.PruneEvents},
+	} {
+		if n, err := p.prune(cutoff); err != nil {
+			logger.Warn("prune "+p.what, logFieldError, err)
+		} else if n > 0 {
+			logger.Info("pruned old "+p.what, logFieldRows, n)
+		}
+	}
 }
