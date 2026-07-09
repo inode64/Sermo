@@ -215,6 +215,18 @@ func run(args []string) int {
 	if err != nil {
 		logger.Warn("load persisted events failed", logFieldError, err)
 	}
+	snapshots, err := app.NewPersistentSnapshots(store, func(err error) {
+		logger.Warn("persist service snapshots failed", logFieldError, err)
+	})
+	if err != nil {
+		logger.Warn("load persisted service snapshots failed", logFieldError, err)
+	}
+	watchSnapshots, err := app.NewPersistentWatchSnapshots(store, func(err error) {
+		logger.Warn("persist watch snapshots failed", logFieldError, err)
+	})
+	if err != nil {
+		logger.Warn("load persisted watch snapshots failed", logFieldError, err)
+	}
 
 	accessLog := openEngineLog(logger, cfg, config.EngineKeyAccess)
 	eventFile := openEngineLog(logger, cfg, config.EngineKeyEvents)
@@ -256,8 +268,8 @@ func run(args []string) int {
 		DaemonMetrics:     store,
 		Notifiers:         notifiers,
 		GlobalNotify:      config.NotifyDefault(cfg.Global.Raw),
-		Snapshots:         app.NewSnapshots(),
-		WatchSnapshots:    app.NewWatchSnapshots(),
+		Snapshots:         snapshots,
+		WatchSnapshots:    watchSnapshots,
 		Live:              app.NewLiveMetrics(),
 		ServiceMetrics:    app.NewServiceMetricSampler(store),
 		Observability:     app.NewObservabilityRegistry(),
