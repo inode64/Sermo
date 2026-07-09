@@ -339,9 +339,10 @@ Ambos aceptan un valor único o una lista. Las puertas se evalúan **después** 
 comprobaciones del ciclo se ejecuten, así que la sonda todavía se ejecuta pero su resultado se suprime; usa el
 `interval` de una comprobación o elimínala para evitar ejecutarla del todo.
 
-Para **reiniciar** un servicio cuando una biblioteca o archivo se actualiza (la otra mitad del
-ejemplo — "si la biblioteca pam se actualizó, reinicia"), usa una regla de remediación con
-una condición [`changed:`](#reglas) (o `restart_on_change: {libraries: […]}`):
+Para **reiniciar** un servicio cuando una biblioteca, archivo o versión de app se actualiza
+(la otra mitad del ejemplo — "si la biblioteca pam se actualizó, reinicia"), usa una regla de
+remediación con una condición [`changed:`](#reglas) (o
+`restart_on_change: {libraries: […], apps: […]}`):
 
 ```yaml
 rules:
@@ -1815,9 +1816,11 @@ polaridad de éxito/fallo con nombre.
 rastreada entre ciclos, o cuando `app` nombra una app enlazada cuyo comando de versión
 cambió en el `level` seleccionado (`major`, `minor` o `patch`; por defecto `patch`).
 El primer ciclo adopta el valor actual (un arranque del daemon nunca dispara), y un
-`restart`/`start` exitoso vuelve a establecer su línea base. La forma `path` es la primitiva
-detrás de `restart_on_change` (ver Daemons → Daemons de biblioteca); la forma `app` es para
-binarios propiedad del servicio como `containerd`.
+`restart`/`start` exitoso vuelve a establecer su línea base. Un comando de versión de app
+fallido es una muestra inválida: no dispara y no actualiza la línea base. La forma `path` es
+la primitiva detrás de `restart_on_change.libraries` (ver Services → Servicios de librería);
+la forma `app` es la primitiva detrás de `restart_on_change.apps` para binarios propiedad del
+servicio como `containerd`.
 
 ### Ventanas
 

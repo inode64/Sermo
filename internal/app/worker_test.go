@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
@@ -510,6 +511,54 @@ func TestCycleAppVersionChangeRespectsLevel(t *testing.T) {
 	w.RunCycle(context.Background()) // minor bump
 	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
 		t.Fatalf("minor bump must restart, ops=%v", h.ops)
+	}
+}
+
+type resultSequenceRunner struct {
+	results []execx.Result
+	calls   int
+}
+
+func (r *resultSequenceRunner) Run(context.Context, string, ...string) (execx.Result, error) {
+	if len(r.results) == 0 {
+		return execx.Result{ExitCode: execx.ExitCodeSuccess}, nil
+	}
+	idx := r.calls
+	if idx >= len(r.results) {
+		idx = len(r.results) - 1
+	}
+	r.calls++
+	return r.results[idx], nil
+}
+
+func TestCycleAppVersionCommandFailureDoesNotRestartOrAcknowledge(t *testing.T) {
+	runner := &resultSequenceRunner{results: []execx.Result{
+		{Stdout: "containerd v1.7.0", ExitCode: execx.ExitCodeSuccess},
+		{Stderr: "missing shared library", ExitCode: 127},
+		{Stdout: "containerd v1.7.1", ExitCode: execx.ExitCodeSuccess},
+		{Stdout: "containerd v1.7.1", ExitCode: execx.ExitCodeSuccess},
+	}}
+	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
+	w := appVersionWorker(h, nil, "patch")
+	w.CheckDeps = checks.Deps{Runner: runner}
+
+	w.RunCycle(context.Background()) // prime baseline at 1.7.0
+	w.RunCycle(context.Background()) // broken binary/version command
+	if len(h.ops) != 0 {
+		t.Fatalf("broken version command must not restart, ops=%v", h.ops)
+	}
+	if _, ok := h.eventOf(eventKindError); !ok {
+		t.Fatalf("broken version command should emit an error event, events=%+v", h.events)
+	}
+
+	w.RunCycle(context.Background()) // valid 1.7.1 still differs from 1.7.0
+	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
+		t.Fatalf("failed version sample must not acknowledge baseline, ops=%v", h.ops)
+	}
+
+	w.RunCycle(context.Background()) // acknowledged by successful restart
+	if len(h.ops) != 1 {
+		t.Fatalf("acknowledged version must not refire, ops=%v", h.ops)
 	}
 }
 

@@ -36,6 +36,9 @@ processes:
 restart_on_change:
   paths:
     - ${config}
+  apps:
+    containerd:
+      level: patch
 policy:
   cooldown: 15m
   max_actions: 2
@@ -43,15 +46,6 @@ policy:
   backoff:
     initial: 15m
     max: 1h
-rules:
-  restart-if-containerd-version-changed:
-    type: remediation
-    if:
-      changed:
-        app: containerd
-        level: patch
-    then:
-      action: restart
 watches:
   service:
     check:

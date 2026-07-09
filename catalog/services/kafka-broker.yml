@@ -13,6 +13,10 @@ service:
 apps:
   - java
   - kafka
+restart_on_change:
+  apps:
+    - java
+    - kafka
 variables:
   host: 127.0.0.1
   port: 9092

@@ -111,13 +111,13 @@ flowchart LR
   TREE --> PROCc["process discovery"]
 
   A -. "service apps: [app]" .-> S
-  L -. "app restart_on_change.libraries: [lib]" .-> A
+  L -. "service restart_on_change.libraries: [lib]" .-> S
   P -. "checks.*.analyze.use: [pattern]" .-> S
 ```
 
 **Composición:** un *service* enlaza *apps* con `apps: [..]` (fusiona su preflight
-y variables); una *app* enlaza *libs* con `restart_on_change.libraries: [..]`
-(genera watches de reinicio al cambiar la librería); los *patterns* se referencian
+y variables), y puede enlazar reinicios a cambios de librerías o versiones de app con
+`restart_on_change.libraries` / `restart_on_change.apps`; los *patterns* se referencian
 en `checks.*.analyze.use: [..]` para parsear la salida de los checks.
 
 **Selectores de SO:** `collapseOS` resuelve `os: { ubuntu: {...}, debian: {...},
