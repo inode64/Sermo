@@ -10,6 +10,9 @@ service:
     - freshclam
 apps:
   - freshclam
+restart_on_change:
+  apps:
+    - freshclam
 variables:
   user: clamav
 pidfile:

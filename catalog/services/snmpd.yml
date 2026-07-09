@@ -4,6 +4,9 @@ category: observability
 service: snmpd
 apps:
   - snmpd
+restart_on_change:
+  apps:
+    - snmpd
 variables:
   user: root
   port: 161

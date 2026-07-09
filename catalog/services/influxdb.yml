@@ -10,6 +10,9 @@ service:
     - influxdb
 apps:
   - influxdb
+restart_on_change:
+  apps:
+    - influxdb
 variables:
   host: 127.0.0.1
   port: 8086

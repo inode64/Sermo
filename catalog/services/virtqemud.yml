@@ -7,6 +7,9 @@ service:
     - virtqemud
 apps:
   - virtqemud
+restart_on_change:
+  apps:
+    - virtqemud
 processes:
   main:
     exe: ${virtqemud_binary}

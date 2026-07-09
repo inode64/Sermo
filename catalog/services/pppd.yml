@@ -21,6 +21,8 @@ policy:
 restart_on_change:
   libraries:
     - glibc
+  apps:
+    - pppd
 watches:
   service:
     check:

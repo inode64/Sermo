@@ -4,6 +4,9 @@ category: storage
 service: lvm
 apps:
   - lvm
+restart_on_change:
+  apps:
+    - lvm
 processes: { }
 watches:
   service:

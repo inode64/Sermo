@@ -4,6 +4,9 @@ category: virtualization
 service: libvirtd
 apps:
   - libvirtd
+restart_on_change:
+  apps:
+    - libvirtd
 policy:
   cooldown: 15m
   max_actions: 2

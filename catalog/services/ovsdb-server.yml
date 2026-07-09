@@ -8,6 +8,9 @@ service:
     - ovsdb-server
 apps:
   - ovsdb-server
+restart_on_change:
+  apps:
+    - ovsdb-server
 processes:
   main:
     exe: ${ovsdb_server_binary}

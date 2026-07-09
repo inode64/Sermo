@@ -7,6 +7,9 @@ service:
     - upower
 apps:
   - upower
+restart_on_change:
+  apps:
+    - upower
 variables:
   user: root
 processes:

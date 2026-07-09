@@ -10,6 +10,9 @@ service:
     - nfs
 apps:
   - rpc-mountd
+restart_on_change:
+  apps:
+    - rpc-mountd
 variables:
   host: 127.0.0.1
   port: 2049

@@ -4,6 +4,9 @@ category: messaging
 service: rspamd
 apps:
   - rspamd
+restart_on_change:
+  apps:
+    - rspamd
 variables:
   port: 11334
   user: rspamd

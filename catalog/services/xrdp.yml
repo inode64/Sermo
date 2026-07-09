@@ -7,6 +7,9 @@ service:
   openrc: [xrdp]
 apps: [xrdp]
 
+restart_on_change:
+  apps:
+    - xrdp
 variables:
   host: 127.0.0.1
   port: 3389

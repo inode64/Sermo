@@ -5,6 +5,9 @@ description: Backup storage Server
 service: bacula-sd
 apps:
   - bacula-sd
+restart_on_change:
+  apps:
+    - bacula-sd
 variables:
   port: 9103
 preflight:

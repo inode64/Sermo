@@ -9,6 +9,9 @@ service:
     - node_exporter
 apps:
   - node_exporter
+restart_on_change:
+  apps:
+    - node_exporter
 variables:
   host: 127.0.0.1
   port: 9100

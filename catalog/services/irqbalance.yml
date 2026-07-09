@@ -3,6 +3,9 @@ category: hardware
 service: irqbalance
 apps:
   - irqbalance
+restart_on_change:
+  apps:
+    - irqbalance
 watches:
   service:
     check:

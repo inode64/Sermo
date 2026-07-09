@@ -25,6 +25,8 @@ restart_on_change:
     - glibc
     - zlib
     - sqlite3
+  apps:
+    - syncthing
 watches:
   service:
     check:

@@ -26,6 +26,8 @@ pidfile: /run/tomcat-${version}${sep}${instance}.pid
 restart_on_change:
   paths:
     - ${config}
+  apps:
+    - tomcat-${version}
 watches:
   service:
     check:

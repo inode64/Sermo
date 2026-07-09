@@ -4,6 +4,9 @@ category: hardware
 service: snmp-ups
 apps:
   - snmp-ups
+restart_on_change:
+  apps:
+    - snmp-ups
 watches:
   service:
     check:

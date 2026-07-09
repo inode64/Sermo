@@ -2195,7 +2195,8 @@ watch/hook structure.
 
 Only target-safe parts of `defaults` merge into configured targets:
 `dry_run` applies to services and watches; `stop_policy`, `policy` and
-`rule_window` apply to services. Engine-wide settings (`interval`,
+`rule_window` apply to services; `restart_on_change` applies to services only
+for the inherited `config`/`version` permission flags. Engine-wide settings (`interval`,
 `max_parallel_checks`, `max_parallel_operations`, `default_timeout`,
 `operation_timeout`, `startup_delay`, `backend`, `user_lookup`,
 `user_lookup_timeout`, `state_cache_size`) are daemon configuration and never
@@ -2206,6 +2207,22 @@ override it with its own top-level `dry_run`.
 
 `defaults.policy.cooldown` is **required and positive**: every resolved service
 inherits a loop-prevention cooldown unless it overrides it.
+
+`defaults.restart_on_change` controls only the inherited permission flags for
+automatic restart-on-change sugar. It may not declare global `paths`, `apps` or
+`libraries`; those sources stay local to a catalog service or configured
+service.
+
+```yaml
+defaults:
+  restart_on_change:
+    config: false   # block generated restart_on_change.paths rules by default
+    version: true   # allow generated restart_on_change.apps/libraries rules
+```
+
+A service can override either flag in its own `restart_on_change` block. Missing
+flags default to allowed, so existing service-local `restart_on_change` entries
+keep their behavior.
 
 `defaults.rule_window` is the **fallback firing window** for any rule that
 declares neither its own `for` nor `within` (see the rules section). It accepts:

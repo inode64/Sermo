@@ -10,6 +10,9 @@ service:
     - cloudflared
 apps:
   - cloudflared
+restart_on_change:
+  apps:
+    - cloudflared
 variables:
   user: cloudflared
   host: 127.0.0.1

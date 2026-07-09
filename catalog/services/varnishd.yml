@@ -5,6 +5,9 @@ description: Varnish
 service: varnishd
 apps:
   - varnishd
+restart_on_change:
+  apps:
+    - varnishd
 variables:
   port: 6082
 preflight:

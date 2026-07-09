@@ -4,6 +4,9 @@ category: identity
 service: slapd
 apps:
   - slapd
+restart_on_change:
+  apps:
+    - slapd
 variables:
   host: 127.0.0.1
   port: 389

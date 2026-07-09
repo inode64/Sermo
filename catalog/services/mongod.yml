@@ -5,6 +5,9 @@ description: Mongo DB
 service: mongod
 apps:
   - mongod
+restart_on_change:
+  apps:
+    - mongod
 variables:
   host: 127.0.0.1
   port: 27017

@@ -5,6 +5,9 @@ description: Guacamole daemon
 service: guacd
 apps:
   - guacd
+restart_on_change:
+  apps:
+    - guacd
 variables:
   port: 4822
   user: guacamole

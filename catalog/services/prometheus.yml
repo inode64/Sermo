@@ -9,6 +9,9 @@ service:
     - prometheus
 apps:
   - prometheus
+restart_on_change:
+  apps:
+    - prometheus
 variables:
   user: prometheus
   host: 127.0.0.1

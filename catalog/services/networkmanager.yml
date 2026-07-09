@@ -10,6 +10,9 @@ service:
     - networkmanager
 apps:
   - networkmanager
+restart_on_change:
+  apps:
+    - networkmanager
 processes:
   main:
     exe: ${networkmanager_binary}

@@ -11,6 +11,9 @@ service:
     - nebula.${instance}
 apps:
   - nebula
+restart_on_change:
+  apps:
+    - nebula
 variables:
   config: /etc/nebula/${instance}.yml
   host:

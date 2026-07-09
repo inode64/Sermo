@@ -2885,6 +2885,187 @@ apps: [containerd]
 	}
 }
 
+func TestRestartOnChangePathsDesugarToRestartRule(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"services/web.yml": `
+name: web
+service: web
+variables:
+  config: /etc/web/web.conf
+restart_on_change:
+  paths:
+    - ${config}
+`,
+	})
+	cfg, err := loadConfig(t, global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if issues := Validate(cfg); len(issues) != 0 {
+		t.Fatalf("Validate() issues = %v, want none", issues)
+	}
+	resolved, errs := cfg.Resolve("web")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	if _, present := resolved.Tree["restart_on_change"]; present {
+		t.Errorf("restart_on_change should be desugared away")
+	}
+	rule := nested(t, resolved.Tree, "rules", "restart-on-change-config-1")
+	if got := cfgval.String(rule["type"]); got != "remediation" {
+		t.Fatalf("rule type = %q, want remediation", got)
+	}
+	if got := cfgval.String(nested(t, rule, "if", "changed")["path"]); got != "/etc/web/web.conf" {
+		t.Fatalf("changed.path = %q, want /etc/web/web.conf", got)
+	}
+	if got := cfgval.String(nested(t, rule, "then")["action"]); got != "restart" {
+		t.Fatalf("then.action = %q, want restart", got)
+	}
+}
+
+func TestRestartOnChangeFlagsOverrideDefaults(t *testing.T) {
+	app := `
+name: containerd
+preflight:
+  version:
+    type: command
+    command: ["/usr/bin/containerd", "--version"]
+    timeout: 5s
+`
+	tests := []struct {
+		name        string
+		globalFlags string
+		catalog     string
+		service     string
+		rule        string
+		wantRule    bool
+	}{
+		{
+			name:        "global blocks version",
+			globalFlags: "    version: false\n",
+			service: `
+name: containerd
+service: containerd
+apps: [containerd]
+restart_on_change:
+  apps: [containerd]
+`,
+			rule:     "restart-on-change-containerd-version",
+			wantRule: false,
+		},
+		{
+			name:        "service re-enables version",
+			globalFlags: "    version: false\n",
+			service: `
+name: containerd
+service: containerd
+apps: [containerd]
+restart_on_change:
+  version: true
+  apps: [containerd]
+`,
+			rule:     "restart-on-change-containerd-version",
+			wantRule: true,
+		},
+		{
+			name:        "service blocks inherited catalog version",
+			globalFlags: "    version: true\n",
+			catalog: `
+name: containerd
+service: containerd
+apps: [containerd]
+restart_on_change:
+  apps: [containerd]
+`,
+			service: `
+name: containerd-main
+uses: containerd
+restart_on_change:
+  version: false
+`,
+			rule:     "restart-on-change-containerd-version",
+			wantRule: false,
+		},
+		{
+			name:        "global blocks config",
+			globalFlags: "    config: false\n",
+			service: `
+name: web
+service: web
+restart_on_change:
+  paths: [/etc/web/web.conf]
+`,
+			rule:     "restart-on-change-config-1",
+			wantRule: false,
+		},
+		{
+			name:        "service re-enables config",
+			globalFlags: "    config: false\n",
+			service: `
+name: web
+service: web
+restart_on_change:
+  config: true
+  paths: [/etc/web/web.conf]
+`,
+			rule:     "restart-on-change-config-1",
+			wantRule: true,
+		},
+		{
+			name:        "service blocks inherited config",
+			globalFlags: "    config: true\n",
+			catalog: `
+name: web
+service: web
+restart_on_change:
+  paths: [/etc/web/web.conf]
+`,
+			service: `
+name: web-main
+uses: web
+restart_on_change:
+  config: false
+`,
+			rule:     "restart-on-change-config-1",
+			wantRule: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			files := map[string]string{
+				"sermo.yml":            strings.Replace(baseGlobal, "defaults:\n", "defaults:\n  restart_on_change:\n"+tt.globalFlags, 1),
+				"services/service.yml": tt.service,
+			}
+			if strings.Contains(tt.service, "containerd") || strings.Contains(tt.catalog, "containerd") {
+				files["catalog/apps/containerd.yml"] = app
+			}
+			if tt.catalog != "" {
+				files["catalog/services/catalog.yml"] = tt.catalog
+			}
+			global := writeConfig(t, files)
+			cfg, err := loadConfig(t, global)
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if issues := Validate(cfg); len(issues) != 0 {
+				t.Fatalf("Validate() issues = %v, want none", issues)
+			}
+			serviceName := cfg.ServiceNames[0]
+			resolved, errs := cfg.Resolve(serviceName)
+			if len(errs) != 0 {
+				t.Fatalf("Resolve() errors = %v", errs)
+			}
+			rulesMap, _ := resolved.Tree["rules"].(map[string]any)
+			_, gotRule := rulesMap[tt.rule]
+			if gotRule != tt.wantRule {
+				t.Fatalf("generated rule %q present = %v, want %v", tt.rule, gotRule, tt.wantRule)
+			}
+		})
+	}
+}
+
 func TestRestartOnChangeAppVersionValidatesInputs(t *testing.T) {
 	baseApp := `
 name: containerd
@@ -2982,6 +3163,147 @@ restart_on_change:
 				"sermo.yml":                   baseGlobal,
 				"catalog/apps/containerd.yml": tt.app,
 				"services/containerd.yml":     tt.service,
+			})
+			cfg, err := loadConfig(t, global)
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if !hasIssue(Validate(cfg), tt.want) {
+				t.Fatalf("Validate() did not report %q", tt.want)
+			}
+		})
+	}
+}
+
+func TestRestartOnChangeValidatesInputs(t *testing.T) {
+	tests := []struct {
+		name    string
+		service string
+		want    string
+	}{
+		{
+			name: "config flag must be bool",
+			service: `
+name: web
+service: web
+restart_on_change:
+  config: "false"
+  paths: [/etc/web/web.conf]
+`,
+			want: `restart_on_change.config must be true or false`,
+		},
+		{
+			name: "version flag must be bool",
+			service: `
+name: web
+service: web
+restart_on_change:
+  version: "true"
+`,
+			want: `restart_on_change.version must be true or false`,
+		},
+		{
+			name: "unknown key",
+			service: `
+name: web
+service: web
+restart_on_change:
+  mode: restart
+`,
+			want: `restart_on_change.mode is not supported`,
+		},
+		{
+			name: "paths must be string or list",
+			service: `
+name: web
+service: web
+restart_on_change:
+  paths: { config: /etc/web/web.conf }
+`,
+			want: `restart_on_change.paths must be a string or list of strings`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			global := writeConfig(t, map[string]string{
+				"sermo.yml":        baseGlobal,
+				"services/web.yml": tt.service,
+			})
+			cfg, err := loadConfig(t, global)
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if !hasIssue(Validate(cfg), tt.want) {
+				t.Fatalf("Validate() did not report %q", tt.want)
+			}
+		})
+	}
+}
+
+func TestDefaultsRestartOnChangeValidatesFlagsOnly(t *testing.T) {
+	tests := []struct {
+		name       string
+		defaultROC string
+		want       string
+	}{
+		{
+			name:       "must be mapping",
+			defaultROC: "true",
+			want:       `defaults.restart_on_change must be a mapping`,
+		},
+		{
+			name: "config flag must be bool",
+			defaultROC: `
+    config: "false"
+`,
+			want: `defaults.restart_on_change.config must be true or false`,
+		},
+		{
+			name: "version flag must be bool",
+			defaultROC: `
+    version: "true"
+`,
+			want: `defaults.restart_on_change.version must be true or false`,
+		},
+		{
+			name: "apps not allowed in defaults",
+			defaultROC: `
+    apps: [containerd]
+`,
+			want: `defaults.restart_on_change.apps is not supported`,
+		},
+		{
+			name: "paths not allowed in defaults",
+			defaultROC: `
+    paths: [/etc/web/web.conf]
+`,
+			want: `defaults.restart_on_change.paths is not supported`,
+		},
+		{
+			name: "libraries not allowed in defaults",
+			defaultROC: `
+    libraries: [glibc]
+`,
+			want: `defaults.restart_on_change.libraries is not supported`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			globalCfg := `
+engine:
+  backend: auto
+paths:
+  services: [ @ROOT@/services ]
+  runtime: /run/sermo
+defaults:
+  restart_on_change: ` + tt.defaultROC + `
+  policy:
+    cooldown: 5m
+`
+			global := writeConfig(t, map[string]string{
+				"sermo.yml": globalCfg,
 			})
 			cfg, err := loadConfig(t, global)
 			if err != nil {

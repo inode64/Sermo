@@ -9,6 +9,9 @@ service:
     - atftp
 apps:
   - atftp
+restart_on_change:
+  apps:
+    - atftp
 variables:
   port: 69
   user: nobody

@@ -11,6 +11,9 @@ service:
     - avahi-daemon
 apps:
   - avahi
+restart_on_change:
+  apps:
+    - avahi
 watches:
   service:
     check:

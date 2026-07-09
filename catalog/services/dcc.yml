@@ -5,6 +5,9 @@ description: DCC interface daemon used by mail filtering stacks.
 service: dcc
 apps:
   - dcc
+restart_on_change:
+  apps:
+    - dcc
 variables:
   user: root
 pidfile:

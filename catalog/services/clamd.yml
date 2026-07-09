@@ -9,6 +9,9 @@ service:
     - clamd
 apps:
   - clamd
+restart_on_change:
+  apps:
+    - clamd
 variables:
   user: root
   # clamd's LocalSocket path is deployment-specific; this default matches the

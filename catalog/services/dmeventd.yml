@@ -4,6 +4,9 @@ category: system
 service: dmeventd
 apps:
   - dmeventd
+restart_on_change:
+  apps:
+    - dmeventd
 watches:
   service:
     check:

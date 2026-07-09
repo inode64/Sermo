@@ -7,6 +7,9 @@ service:
     - mdmonitor
 apps:
   - mdadm
+restart_on_change:
+  apps:
+    - mdadm
 processes:
   main:
     exe: ${mdadm_binary}

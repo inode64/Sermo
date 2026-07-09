@@ -4,6 +4,9 @@ category: network
 service: pptpd
 apps:
   - pptpd
+restart_on_change:
+  apps:
+    - pptpd
 variables:
   port: 1723
 watches:

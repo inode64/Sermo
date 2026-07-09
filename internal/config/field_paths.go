@@ -81,6 +81,10 @@ func defaultsFieldPath(field string) string {
 	return sectionDefaults + "." + field
 }
 
+func defaultsRestartOnChangeFieldPath(field string) string {
+	return defaultsFieldPath(keyRestartOnChange) + "." + field
+}
+
 func defaultsVariablePath(name string) string {
 	return defaultsPathVariables + "." + name
 }

@@ -7,6 +7,9 @@ service:
   openrc: [postfix]
 apps: [postfix]
 
+restart_on_change:
+  apps:
+    - postfix
 variables:
   host: 127.0.0.1
   port: 25

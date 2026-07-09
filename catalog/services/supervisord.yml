@@ -4,6 +4,9 @@ category: system
 service: supervisord
 apps:
   - supervisord
+restart_on_change:
+  apps:
+    - supervisord
 preflight:
   config:
     type: command

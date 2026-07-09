@@ -9,6 +9,9 @@ service:
     - alloy
 apps:
   - alloy
+restart_on_change:
+  apps:
+    - alloy
 variables:
   host: 127.0.0.1
   port: 12345

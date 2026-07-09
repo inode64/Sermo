@@ -167,8 +167,11 @@ const (
 const (
 	keyReloadOnChange  = "reload_on_change"
 	keyRestartOnChange = "restart_on_change"
+	keyRestartConfig   = "config"
+	keyRestartVersion  = "version"
 	keyLibraries       = checks.CheckTypeLibraries
 	keyRestartApps     = keyRestartOnChange + "." + keyApps
+	keyRestartPaths    = keyRestartOnChange + "." + keyPaths
 	keyAnalyze         = checks.CheckKeyAnalyze
 	keyAnalyzeSilence  = "silence"
 	keyAnalyzeUse      = "use"
@@ -863,9 +866,11 @@ type restartOnChangeApp struct {
 }
 
 // expandRestartOnChange desugars `restart_on_change` into remediation restart
-// rules. `libraries` watches shared-library files. `apps` watches linked app
-// version probes at major/minor/patch granularity. The block is removed; unknown
-// or non-library references, unlinked apps and invalid app levels error.
+// rules. `paths` watches config files/directories. `libraries` watches shared
+// library files. `apps` watches linked app version probes at major/minor/patch
+// granularity. The block is removed; unknown or non-library references,
+// unlinked apps and invalid app levels error. Optional `config` and `version`
+// flags are inherited permissions; absent means allowed for compatibility.
 func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 	raw, present := tree[keyRestartOnChange]
 	if !present {
@@ -881,58 +886,137 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 	}
 
 	var errs []string
+	for _, key := range slices.Sorted(maps.Keys(roc)) {
+		if _, ok := restartOnChangeKeys[key]; !ok {
+			errs = append(errs, fmt.Sprintf("%s.%s is not supported", keyRestartOnChange, key))
+		}
+	}
+	errs = append(errs, validateRestartOnChangeFlags(keyRestartOnChange, roc, nil)...)
+	configAllowed := restartOnChangeAllowed(roc, keyRestartConfig)
+	versionAllowed := restartOnChangeAllowed(roc, keyRestartVersion)
+
 	rulesMap, _ := tree[rules.SectionRules].(map[string]any)
 	if rulesMap == nil {
 		rulesMap = map[string]any{}
 	}
-	for _, lib := range cfgval.StringList(roc[keyLibraries]) {
-		path, known := c.libraryPath(lib)
-		switch {
-		case !known:
-			errs = append(errs, fmt.Sprintf("restart_on_change references %q, which is not a library", lib))
-			continue
-		case path == "":
-			errs = append(errs, fmt.Sprintf("library %q has no binary to watch", lib))
-			continue
+	paths, pathErrs := restartOnChangePaths(roc[keyPaths])
+	errs = append(errs, pathErrs...)
+	if configAllowed {
+		for i, path := range paths {
+			key := fmt.Sprintf("restart-on-change-config-%d", i+1)
+			if _, exists := rulesMap[key]; exists {
+				errs = append(errs, fmt.Sprintf("restart_on_change would overwrite existing rule %q; rename that rule", key))
+				continue
+			}
+			rulesMap[key] = map[string]any{
+				rules.RuleFieldType: string(rules.RuleRemediation),
+				rules.RuleFieldIf:   map[string]any{rules.ConditionChanged: map[string]any{rules.FieldPath: path}},
+				rules.RuleFieldThen: map[string]any{rules.RuleFieldAction: string(rules.ActionRestart)},
+			}
 		}
-		key := "restart-on-change-" + lib
-		if _, exists := rulesMap[key]; exists {
-			errs = append(errs, fmt.Sprintf("restart_on_change would overwrite existing rule %q; rename that rule", key))
-			continue
-		}
-		rulesMap[key] = map[string]any{
-			rules.RuleFieldType: string(rules.RuleRemediation),
-			rules.RuleFieldIf: map[string]any{
-				rules.ConditionChanged: map[string]any{rules.FieldLibrary: lib, rules.FieldPath: path},
-			},
-			rules.RuleFieldThen: map[string]any{rules.RuleFieldAction: string(rules.ActionRestart)},
+	}
+	libraries, libraryErrs := restartOnChangeStringList(keyRestartOnChange+"."+keyLibraries, roc[keyLibraries])
+	errs = append(errs, libraryErrs...)
+	if versionAllowed {
+		for _, lib := range libraries {
+			path, known := c.libraryPath(lib)
+			switch {
+			case !known:
+				errs = append(errs, fmt.Sprintf("restart_on_change references %q, which is not a library", lib))
+				continue
+			case path == "":
+				errs = append(errs, fmt.Sprintf("library %q has no binary to watch", lib))
+				continue
+			}
+			key := "restart-on-change-" + lib
+			if _, exists := rulesMap[key]; exists {
+				errs = append(errs, fmt.Sprintf("restart_on_change would overwrite existing rule %q; rename that rule", key))
+				continue
+			}
+			rulesMap[key] = map[string]any{
+				rules.RuleFieldType: string(rules.RuleRemediation),
+				rules.RuleFieldIf: map[string]any{
+					rules.ConditionChanged: map[string]any{rules.FieldLibrary: lib, rules.FieldPath: path},
+				},
+				rules.RuleFieldThen: map[string]any{rules.RuleFieldAction: string(rules.ActionRestart)},
+			}
 		}
 	}
 	apps, appErrs := restartOnChangeApps(roc[keyApps])
 	errs = append(errs, appErrs...)
-	linkedApps := set(cfgval.StringList(tree[keyApps])...)
-	for _, app := range apps {
-		if _, linked := linkedApps[app.name]; !linked {
-			errs = append(errs, fmt.Sprintf("restart_on_change app %q must also be listed in apps", app.name))
-			continue
-		}
-		key := "restart-on-change-" + app.name + "-version"
-		if _, exists := rulesMap[key]; exists {
-			errs = append(errs, fmt.Sprintf("restart_on_change would overwrite existing rule %q; rename that rule", key))
-			continue
-		}
-		rulesMap[key] = map[string]any{
-			rules.RuleFieldType: string(rules.RuleRemediation),
-			rules.RuleFieldIf: map[string]any{
-				rules.ConditionChanged: map[string]any{rules.FieldApp: app.name, rules.FieldLevel: app.level},
-			},
-			rules.RuleFieldThen: map[string]any{rules.RuleFieldAction: string(rules.ActionRestart)},
+	if versionAllowed {
+		linkedApps := set(cfgval.StringList(tree[keyApps])...)
+		for _, app := range apps {
+			if _, linked := linkedApps[app.name]; !linked {
+				errs = append(errs, fmt.Sprintf("restart_on_change app %q must also be listed in apps", app.name))
+				continue
+			}
+			key := "restart-on-change-" + app.name + "-version"
+			if _, exists := rulesMap[key]; exists {
+				errs = append(errs, fmt.Sprintf("restart_on_change would overwrite existing rule %q; rename that rule", key))
+				continue
+			}
+			rulesMap[key] = map[string]any{
+				rules.RuleFieldType: string(rules.RuleRemediation),
+				rules.RuleFieldIf: map[string]any{
+					rules.ConditionChanged: map[string]any{rules.FieldApp: app.name, rules.FieldLevel: app.level},
+				},
+				rules.RuleFieldThen: map[string]any{rules.RuleFieldAction: string(rules.ActionRestart)},
+			}
 		}
 	}
 	if len(rulesMap) > 0 {
 		tree[rules.SectionRules] = rulesMap
 	}
 	return errs
+}
+
+var restartOnChangeKeys = set(
+	keyApps,
+	keyLibraries,
+	keyPaths,
+	keyRestartConfig,
+	keyRestartVersion,
+)
+
+func validateRestartOnChangeFlags(prefix string, roc map[string]any, add addFunc) []string {
+	var errs []string
+	for _, key := range []string{keyRestartConfig, keyRestartVersion} {
+		if _, present := roc[key]; !present {
+			continue
+		}
+		if _, ok := roc[key].(bool); ok {
+			continue
+		}
+		msg := fmt.Sprintf(validationBooleanLiteralFormat, prefix+"."+key)
+		if add != nil {
+			add("%s", msg)
+			continue
+		}
+		errs = append(errs, msg)
+	}
+	return errs
+}
+
+func restartOnChangeAllowed(roc map[string]any, key string) bool {
+	v, present := roc[key]
+	if !present {
+		return true
+	}
+	allowed, ok := v.(bool)
+	return ok && allowed
+}
+
+func restartOnChangePaths(raw any) ([]string, []string) {
+	return restartOnChangeStringList(keyRestartPaths, raw)
+}
+
+func restartOnChangeStringList(path string, raw any) ([]string, []string) {
+	names, err := cfgval.StrictStringList(raw)
+	if err != nil {
+		return nil, []string{fmt.Sprintf(validationStringListFormat, path)}
+	}
+	return names, nil
 }
 
 func restartOnChangeApps(raw any) ([]restartOnChangeApp, []string) {

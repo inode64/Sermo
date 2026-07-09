@@ -5,6 +5,9 @@ description: Dovecot IMAP/POP3
 service: dovecot
 apps:
   - dovecot
+restart_on_change:
+  apps:
+    - dovecot
 variables:
   host: 127.0.0.1
   port: 143

@@ -3,6 +3,9 @@ category: network
 service: xinetd
 apps:
   - xinetd
+restart_on_change:
+  apps:
+    - xinetd
 pidfile: /run/xinetd.pid
 processes:
   main:

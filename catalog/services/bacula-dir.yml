@@ -5,6 +5,9 @@ description: Backup director Server
 service: bacula-dir
 apps:
   - bacula-dir
+restart_on_change:
+  apps:
+    - bacula-dir
 variables:
   port: 9101
 preflight:
