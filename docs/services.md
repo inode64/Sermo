@@ -277,10 +277,11 @@ app keeps ownership of the actual path. Local `variables:` entries on the catalo
 service or configured service override either form; when several apps are linked,
 use the prefixed names.
 
-Because they run in **preflight**, a missing or wrong-version runtime fails the
-service's preflight, which **blocks start/restart/reload/resume** (a preflight-failed
-operation never executes the action) — you do not start, restart, reload or
-resume a service whose runtime is absent.
+Because they run in **preflight**, a missing, wrong-version runtime or one with
+unresolved shared libraries fails the service's preflight, which **blocks
+start/restart/reload/resume** (a preflight-failed operation never executes the
+action) — you do not start, restart, reload or resume a service whose runtime is
+absent or cannot load its shared libraries.
 The link is many-to-many: a service lists several apps, and one app is shared by
 every service that lists it. Validation reports an `apps:` entry that does not
 resolve to a catalog app, so dangling runtime links are caught before deployment.
