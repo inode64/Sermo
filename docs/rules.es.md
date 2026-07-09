@@ -46,6 +46,7 @@ Las comprobaciones de protocolo de conexión (MySQL, PostgreSQL, Redis, Docker, 
 | `conntrack`   | la tabla conntrack de netfilter frente a su máximo (used_pct/free/count)      |
 | `firewall_rules` | nftables/iptables tiene al menos `min_rules` reglas cargadas (ver Reglas de firewall) |
 | `route`       | existe una ruta por defecto activa, opcionalmente saliendo por una `interface` dada (ver Ruta por defecto)|
+| `clock`       | el desfase del reloj local se mantiene dentro de `max_offset` frente a uno de los `servers` NTP configurados |
 | `net`         | una métrica de interfaz (`metric: state\|speed\|errors\|address`) se cumple — forma de métrica única del watch net |
 | `icmp`        | una métrica de ping (`metric: state\|latency`) contra `host`, opcionalmente ligada a una `interface` |
 | `swap`        | una métrica de swap (`metric: usage\|io`) se cumple — forma de métrica única del watch swap |
@@ -1427,6 +1428,45 @@ watches:
 Se añaden más protocolos de la misma forma — el tipo de comprobación, el despacho y la validación
 son agnósticos al protocolo, así que un nuevo protocolo solo se registra a sí mismo.
 
+### Deriva de reloj (`clock`)
+
+La comprobación `clock` mide el desfase del reloj local consultando uno o más servidores
+NTP remotos como cliente. No requiere un daemon NTP local y no cambia la hora del sistema
+por sí misma; usa la ruta de alerta/hook para notificar o para ejecutar un script de
+sincronización propio del operador.
+
+```yaml
+watches:
+  clock-drift:
+    monitor: disabled
+    interval: 5m
+    check:
+      type: clock
+      servers:
+        - time.cloudflare.com
+        - pool.ntp.org
+      max_offset: 2s
+      max_stratum: 4              # optional, default 15
+      max_root_dispersion: 250ms  # optional
+      timeout: 3s
+    for: { cycles: 2 }
+    then:
+      notify: [ops-email]
+      hook:
+        command: [/usr/local/sbin/sermo-sync-clock.sh]
+        timeout: 2m
+        expect_exit: 0
+```
+
+`servers` y `max_offset` son obligatorios. La comprobación prueba los servidores por
+orden y pasa cuando uno responde con datos NTP sincronizados cuyo `offset_seconds`
+absoluto está dentro de `max_offset`, cuyo `stratum` es como máximo `max_stratum`, y
+cuyo `root_dispersion_ms` queda dentro de `max_root_dispersion` cuando se configura ese
+techo. Los datos del resultado llevan el `server`, `port`, `offset_seconds`,
+`offset_abs_seconds`, `stratum`, `leap`, `precision_seconds`, `root_delay_ms`,
+`root_dispersion_ms` y `reference_id` seleccionados; los hooks reciben los mismos
+valores como campos de entorno `SERMO_*`.
+
 Cada tipo de arriba es una **comprobación de un solo disparo** (`Check.Run → Result`) y es usable en
 **ambos** lugares:
 
@@ -1441,7 +1481,7 @@ estilo condición — `OK == true` significa que hay un problema — así que en
 `active: {check: x}` se dispara sobre ella, y como watch el hook se dispara sobre ella.
 Las comprobaciones de salud (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
 `file`, `lockfile`, `binary`, `pidfile`, `socket`, `process`, `libraries`, `config`,
-`autofs`, `route`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`,
+`autofs`, `route`, `clock`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`,
 `websocket`, y comprobaciones de protocolo de conexión como `mysql`/`smtp`) son lo
 opuesto (`OK == true` es sano), así que como watch disparan el hook sobre
 **fallo**.

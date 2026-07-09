@@ -46,6 +46,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `conntrack`   | the netfilter conntrack table vs its max (used_pct/free/count)      |
 | `firewall_rules` | nftables/iptables has at least `min_rules` loaded rules (see Firewall rules) |
 | `route`       | an up default route exists, optionally egressing a given `interface` (see Default route)|
+| `clock`       | local wall-clock offset stays within `max_offset` against one of the configured NTP `servers` |
 | `net`         | one interface metric (`metric: state\|speed\|errors\|address`) holds — single-metric form of the net watch |
 | `icmp`        | one ping metric (`metric: state\|latency`) against `host`, optionally bound to an `interface` |
 | `swap`        | one swap metric (`metric: usage\|io`) holds — single-metric form of the swap watch |
@@ -1428,6 +1429,45 @@ watches:
 More protocols are added the same way — the check type, dispatch and validation
 are protocol-agnostic, so a new protocol only registers itself.
 
+### Clock drift (`clock`)
+
+The `clock` check measures this host's wall-clock offset by querying one or more
+remote NTP servers as a client. It does **not** require a local NTP daemon and it
+does **not** set the system clock itself; use the alert/hook path to notify or to
+run an operator-owned sync script.
+
+```yaml
+watches:
+  clock-drift:
+    monitor: disabled
+    interval: 5m
+    check:
+      type: clock
+      servers:
+        - time.cloudflare.com
+        - pool.ntp.org
+      max_offset: 2s
+      max_stratum: 4              # optional, default 15
+      max_root_dispersion: 250ms  # optional
+      timeout: 3s
+    for: { cycles: 2 }
+    then:
+      notify: [ops-email]
+      hook:
+        command: [/usr/local/sbin/sermo-sync-clock.sh]
+        timeout: 2m
+        expect_exit: 0
+```
+
+`servers` and `max_offset` are required. The check tries the servers in order and
+passes when one server answers with synchronized NTP data whose absolute
+`offset_seconds` is within `max_offset`, whose `stratum` is at most
+`max_stratum`, and whose `root_dispersion_ms` is within
+`max_root_dispersion` when that ceiling is configured. Result data carries the
+selected `server`, `port`, `offset_seconds`, `offset_abs_seconds`, `stratum`,
+`leap`, `precision_seconds`, `root_delay_ms`, `root_dispersion_ms` and
+`reference_id`; hooks receive the same values as `SERMO_*` environment fields.
+
 Every type above is a **single-shot check** (`Check.Run → Result`) and is usable in
 **both** places:
 
@@ -1442,7 +1482,7 @@ condition-style — `OK == true` means there is a problem — so in rules
 `active: {check: x}` fires on it, and as a watch the hook fires on it.
 The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
 `file`, `lockfile`, `binary`, `pidfile`, `socket`, `process`, `libraries`, `config`,
-`autofs`, `route`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`,
+`autofs`, `route`, `clock`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`,
 `websocket`, and connection-protocol checks such as `mysql`/`smtp`) are the
 opposite (`OK == true` is healthy), so as a watch they fire the hook on
 **failure**.

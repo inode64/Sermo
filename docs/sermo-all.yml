@@ -171,6 +171,27 @@ watches:
       headers: { Authorization: "Bearer ${env:API_TOKEN:-demo}" }
     then: { notify: [ops-email] }
 
+  clock-drift:
+    monitor: disabled
+    interval: 5m
+    check:
+      type: clock
+      servers:
+        - time.cloudflare.com
+        - pool.ntp.org
+      max_offset: 2s
+      max_stratum: 4
+      max_root_dispersion: 250ms
+      timeout: 3s
+    for: { cycles: 2 }
+    then:
+      notify: [ops-email]
+      notify_interval: 30m
+      hook:
+        command: [/usr/local/sbin/sermo-sync-clock.sh]
+        timeout: 2m
+        expect_exit: 0
+
   audit-log-growth:
     monitor: disabled
     check: { type: size, path: /var/log/audit/audit.log, grow_by: 500M, within: 1h }
