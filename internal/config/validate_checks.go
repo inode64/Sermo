@@ -204,6 +204,11 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 			}
 		}
 	}
+	if v, present := fields[checks.CheckKeyFollowRedirects]; present {
+		if _, ok := v.(bool); !ok {
+			add(validationBooleanFormat, prefix+"."+checks.CheckKeyFollowRedirects)
+		}
+	}
 	if p := cfgval.String(fields[checks.CheckKeyProxy]); p != "" {
 		u, err := url.Parse(p)
 		if err != nil || u.Host == "" {

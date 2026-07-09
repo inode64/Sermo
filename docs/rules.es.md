@@ -402,6 +402,7 @@ checks:
     json:                              # request body as JSON (sets Content-Type
       probe: true                      # automatically; or use `body:` for raw text)
     expect_status: 200                 # code, class (2xx), list, or { op, value }
+    follow_redirects: true             # optional; false evalúa un 3xx tal cual
     expect_body: { op: contains, value: "ready" } # body comparison (see below)
     expect_latency: { op: "<", value: 800 }   # optional: response time in ms
     proxy: "http://user:pass@squid:3128"   # optional: route the request through a proxy (Squid)
@@ -429,6 +430,10 @@ respuesta solo se lee cuando `expect_body`/`expect_json` está establecido (limi
 `expect_json` busca **rutas con puntos** en objetos anidados. Un valor escalar es una
 comprobación de igualdad (comparado como cadena); un mapeo `{op, value}` usa un operador —
 `>`, `>=`, `<`, `<=` (numérico), `==`, `!=`, `contains` (cadena), o `=~` (regex).
+Por defecto la comprobación sigue redirecciones HTTP usando la política estándar
+del cliente Go. Configura `follow_redirects: false` cuando la redirección sea la
+propia señal de salud, por ejemplo un listener HTTP local que redirige todas las
+peticiones a HTTPS.
 
 **Comparaciones de respuesta.** `expect_body` y `expect_latency` usan un mapeo `{op, value}`.
 `expect_status` acepta o bien una forma de código/clase/lista o el mismo

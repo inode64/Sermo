@@ -78,6 +78,26 @@ checks:
 `), "http3 and interface are mutually exclusive")
 }
 
+func TestValidateHTTPFollowRedirectsIsBoolean(t *testing.T) {
+	issues := validateService(t, `
+name: web
+service: x
+checks:
+  api: { type: http, url: "http://h/", follow_redirects: false }
+`)
+	for _, is := range issues {
+		if hasIssue([]Issue{is}, "checks.api") {
+			t.Fatalf("boolean follow_redirects must be valid: %v", issues)
+		}
+	}
+	mustHave(t, validateService(t, `
+name: web
+service: x
+checks:
+  api: { type: http, url: "http://h/", follow_redirects: "no" }
+`), "checks.api.follow_redirects must be a boolean")
+}
+
 func TestValidateHTTPProxySchemeMessageIncludesSocks5h(t *testing.T) {
 	mustHave(t, validateService(t, `
 name: web
