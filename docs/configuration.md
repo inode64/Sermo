@@ -205,12 +205,13 @@ avoid ambiguity.
 `paths.state` (default `/var/lib/sermo`) is the root for the persistent state
 database `sermo.db` (SQLite). Unlike `paths.runtime`, it survives reboots, which
 is what lets a service's or watch's `monitor: previous` flag restore its last
-monitoring state. It also stores automatic-remediation cooldown/backoff and rule
-`for`/`within` window progress, so restarting `sermod` does not reset when a rule
-may act again. SLA and check measurements plus service and daemon process metric
-history shown in the web UI live there too. The schema is versioned and migrated
-forward automatically, so future features can add tables without a manual
-upgrade.
+monitoring state. It also stores automatic-remediation cooldown/backoff, rule
+`for`/`within` window progress and the latest service-check and host-watch
+readings, so restarting `sermod` does not reset when a rule may act again or make
+the dashboard lose the last real daemon-cycle result. SLA and check measurements
+plus service and daemon process metric history shown in the web UI live there
+too. The schema is versioned and migrated forward automatically, so future
+features can add tables without a manual upgrade.
 
 Both directories are created **0700, owner root**. On systemd they come from the
 shipped `tmpfiles.d/sermo.conf` (installed at `/usr/lib/tmpfiles.d/sermo.conf`),
@@ -782,14 +783,17 @@ running; a successful manual stop then pauses monitoring as described below.
 This per-service settling does not re-gate `/readyz`.
 
 Events are the daemon's activity — actions, alerts, suppressions, hook/notify
-results and errors — kept in an in-memory ring (the last 1000); they also go to
-the daemon log. `limit` defaults to 100 (max 1000). The dashboard shows a global
+results and errors — kept in the persistent state store and mirrored to the
+daemon log. `limit` defaults to 100 (max 1000). The dashboard shows a global
 feed; a service's detail shows its own events.
 
 The detail's check results are the **latest observed** by the worker (published
 each cycle), so they cost nothing to view and reflect each check's own cadence
-(see [per-check interval](#per-check-interval)); a check not run yet shows "not
-run yet". The Graphs section uses one window selector for SLA and runtime
+(see [per-check interval](#per-check-interval)); they are rehydrated from
+`paths.state` after a daemon restart, and a check not run yet shows "not run
+yet". Host-watch readings use the same persisted latest-observed path, with stale
+samples hidden after their normal freshness window. The Graphs section uses one
+window selector for SLA and runtime
 measurements. Its SLA timeline comes from the same data as `sermoctl sla`: it
 plots the per-minute samples over the selected window (1h/24h/7d/30d/1y), marks
 each degraded minute as an incident at its local time, and leaves gaps where the

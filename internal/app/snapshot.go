@@ -8,6 +8,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/state"
 )
 
 // CheckSnapshot is the last observed result of one check, for the web detail view.
@@ -33,14 +34,40 @@ func (c CheckSnapshot) healthy() bool {
 // them without re-running the checks. Workers publish after every cycle; the web
 // reads. Safe for concurrent use.
 type Snapshots struct {
-	mu        sync.RWMutex
-	now       func() time.Time
-	byService map[string]map[string]CheckSnapshot
+	mu          sync.RWMutex
+	now         func() time.Time
+	byService   map[string]map[string]CheckSnapshot
+	store       serviceSnapshotStore
+	reportError func(error)
 }
 
 // NewSnapshots returns an empty registry.
 func NewSnapshots() *Snapshots {
 	return &Snapshots{now: time.Now, byService: map[string]map[string]CheckSnapshot{}}
+}
+
+type serviceSnapshotStore interface {
+	ServiceCheckSnapshots() (map[string]map[string]state.CheckSnapshotRecord, error)
+	SetServiceCheckSnapshots(service string, records map[string]state.CheckSnapshotRecord) error
+}
+
+// NewPersistentSnapshots returns a registry hydrated from store and persists
+// future publishes back to it.
+func NewPersistentSnapshots(store serviceSnapshotStore, reportError func(error)) (*Snapshots, error) {
+	s := NewSnapshots()
+	s.store = store
+	s.reportError = reportError
+	if store == nil {
+		return s, nil
+	}
+	records, err := store.ServiceCheckSnapshots()
+	if err != nil {
+		return s, err
+	}
+	for service, checks := range records {
+		s.byService[service] = serviceSnapshotsFromRecords(checks)
+	}
+	return s, nil
 }
 
 // Publish replaces a service's snapshot with the given cycle's check cache. ran
@@ -61,7 +88,7 @@ func (s *Snapshots) Publish(service string, cache map[string]checks.Result, ran 
 	for name, r := range cache {
 		cs := CheckSnapshot{
 			OK: r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Message: r.Message,
-			Data: r.Data, Ran: ran[name],
+			Data: maps.Clone(r.Data), Ran: ran[name],
 		}
 		if ran[name] {
 			cs.At = at
@@ -72,6 +99,11 @@ func (s *Snapshots) Publish(service string, cache map[string]checks.Result, ran 
 	}
 	s.byService[service] = m
 	s.mu.Unlock()
+	if s.store != nil {
+		if err := s.store.SetServiceCheckSnapshots(service, serviceSnapshotRecords(m)); err != nil {
+			s.reportStoreError(err)
+		}
+	}
 }
 
 // Get returns a service's last check snapshot (check name -> result), or nil if it
@@ -94,14 +126,48 @@ type watchResultSnapshot struct {
 // WatchSnapshots holds each host watch's latest daemon-cycle check result. The
 // web UI reads this registry so /api/watches does not start probes of its own.
 type WatchSnapshots struct {
-	mu      sync.RWMutex
-	now     func() time.Time
-	byWatch map[string]map[string]watchResultSnapshot
+	mu          sync.RWMutex
+	now         func() time.Time
+	byWatch     map[string]map[string]watchResultSnapshot
+	store       watchSnapshotStore
+	reportError func(error)
 }
 
 // NewWatchSnapshots returns an empty host-watch result registry.
 func NewWatchSnapshots() *WatchSnapshots {
 	return &WatchSnapshots{now: time.Now, byWatch: map[string]map[string]watchResultSnapshot{}}
+}
+
+type watchSnapshotStore interface {
+	WatchCheckSnapshots() (map[string]map[string]state.CheckSnapshotRecord, error)
+	SetWatchCheckSnapshot(watch, slot string, rec state.CheckSnapshotRecord) error
+}
+
+// NewPersistentWatchSnapshots returns a host-watch registry hydrated from store
+// and persists future publishes back to it.
+func NewPersistentWatchSnapshots(store watchSnapshotStore, reportError func(error)) (*WatchSnapshots, error) {
+	s := NewWatchSnapshots()
+	s.store = store
+	s.reportError = reportError
+	if store == nil {
+		return s, nil
+	}
+	records, err := store.WatchCheckSnapshots()
+	if err != nil {
+		return s, err
+	}
+	for watch, slots := range records {
+		if s.byWatch[watch] == nil {
+			s.byWatch[watch] = map[string]watchResultSnapshot{}
+		}
+		for slot, rec := range slots {
+			s.byWatch[watch][slot] = watchResultSnapshot{
+				checkType: rec.CheckType,
+				result:    snapshotFromRecord(rec),
+			}
+		}
+	}
+	return s, nil
 }
 
 // Publish records one daemon-cycle result for a watch. Multi-metric watches
@@ -125,6 +191,13 @@ func (s *WatchSnapshots) Publish(watch, checkType string, r checks.Result) {
 	}
 	s.byWatch[watch][slot] = watchResultSnapshot{checkType: checkType, result: snap}
 	s.mu.Unlock()
+	if s.store != nil {
+		rec := snapshotRecord(snap)
+		rec.CheckType = checkType
+		if err := s.store.SetWatchCheckSnapshot(watch, slot, rec); err != nil {
+			s.reportStoreError(err)
+		}
+	}
 }
 
 // Get returns the latest result snapshots for a watch and check type, sorted by
@@ -160,4 +233,48 @@ func watchResultSlot(r checks.Result) string {
 		return r.Check
 	}
 	return checks.DataKeyResult
+}
+
+func serviceSnapshotsFromRecords(records map[string]state.CheckSnapshotRecord) map[string]CheckSnapshot {
+	out := make(map[string]CheckSnapshot, len(records))
+	for name, rec := range records {
+		out[name] = snapshotFromRecord(rec)
+	}
+	return out
+}
+
+func serviceSnapshotRecords(snaps map[string]CheckSnapshot) map[string]state.CheckSnapshotRecord {
+	out := make(map[string]state.CheckSnapshotRecord, len(snaps))
+	for name, snap := range snaps {
+		rec := snapshotRecord(snap)
+		rec.Name = name
+		out[name] = rec
+	}
+	return out
+}
+
+func snapshotFromRecord(rec state.CheckSnapshotRecord) CheckSnapshot {
+	return CheckSnapshot{
+		OK: rec.OK, Condition: rec.Condition, Optional: rec.Optional, Skipped: rec.Skipped,
+		Message: rec.Message, Data: maps.Clone(rec.Data), Ran: rec.Ran, At: rec.At,
+	}
+}
+
+func snapshotRecord(snap CheckSnapshot) state.CheckSnapshotRecord {
+	return state.CheckSnapshotRecord{
+		OK: snap.OK, Condition: snap.Condition, Optional: snap.Optional, Skipped: snap.Skipped,
+		Message: snap.Message, Data: maps.Clone(snap.Data), Ran: snap.Ran, At: snap.At,
+	}
+}
+
+func (s *Snapshots) reportStoreError(err error) {
+	if s.reportError != nil {
+		s.reportError(err)
+	}
+}
+
+func (s *WatchSnapshots) reportStoreError(err error) {
+	if s.reportError != nil {
+		s.reportError(err)
+	}
 }

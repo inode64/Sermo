@@ -69,6 +69,69 @@ func TestStoreOperationSettlingRoundTrip(t *testing.T) {
 	}
 }
 
+func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), Filename)
+	at := time.Date(2026, 7, 9, 11, 30, 0, 0, time.UTC)
+
+	first, err := Open(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if err := first.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{
+		"http": {
+			OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
+		},
+		"stale": {
+			OK: false, Message: "old", Ran: true, At: at.Add(-time.Minute),
+		},
+	}); err != nil {
+		t.Fatalf("SetServiceCheckSnapshots initial: %v", err)
+	}
+	if err := first.SetServiceCheckSnapshots("web", map[string]CheckSnapshotRecord{
+		"http": {
+			OK: true, Message: "status 200", Data: map[string]any{"status": float64(200)}, Ran: true, At: at,
+		},
+	}); err != nil {
+		t.Fatalf("SetServiceCheckSnapshots replace: %v", err)
+	}
+	if err := first.SetWatchCheckSnapshot("clock", "result", CheckSnapshotRecord{
+		CheckType: "clock", OK: false, Message: "offset 1200ms",
+		Data: map[string]any{"offset_ms": float64(1200)}, Ran: true, At: at,
+	}); err != nil {
+		t.Fatalf("SetWatchCheckSnapshot: %v", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	second, err := Open(path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer second.Close()
+
+	serviceSnapshots, err := second.ServiceCheckSnapshots()
+	if err != nil {
+		t.Fatalf("ServiceCheckSnapshots: %v", err)
+	}
+	service := serviceSnapshots["web"]
+	if len(service) != 1 {
+		t.Fatalf("service snapshots = %+v, want only current row", service)
+	}
+	if got := service["http"]; !got.OK || got.Message != "status 200" || got.Data["status"] != float64(200) || !got.Ran || !got.At.Equal(at) {
+		t.Fatalf("service snapshot did not round-trip: %+v", got)
+	}
+
+	watchSnapshots, err := second.WatchCheckSnapshots()
+	if err != nil {
+		t.Fatalf("WatchCheckSnapshots: %v", err)
+	}
+	got := watchSnapshots["clock"]["result"]
+	if got.CheckType != "clock" || got.OK || got.Message != "offset 1200ms" || got.Data["offset_ms"] != float64(1200) || !got.At.Equal(at) {
+		t.Fatalf("watch snapshot did not round-trip: %+v", got)
+	}
+}
+
 func TestStoreEventAppDimensionRoundTrip(t *testing.T) {
 	s := openTemp(t)
 	if err := s.RecordEvent(EventRecord{Service: "web", Kind: "action", Message: "restart"}); err != nil {
