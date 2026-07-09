@@ -30,8 +30,8 @@
     "semantic_hash": ""
   },
   "go.mod": {
-    "mtime": 1783533438.6674118,
-    "ast_hash": "cb5783bd23b3e27544323cb3766504a2",
+    "mtime": 1783574832.7328842,
+    "ast_hash": "481f21773296d7a65c283d626c42436e",
     "semantic_hash": ""
   },
   "internal/app/cascade.go": {
@@ -2705,8 +2705,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1783533438.65994,
-    "ast_hash": "7986e933581b37eeb1cfc3cd446a2fbe",
+    "mtime": 1783574947.3246386,
+    "ast_hash": "71fdfc70f3cb331bf8d8bfc902e62076",
     "semantic_hash": ""
   },
   ".golangci.yml": {
