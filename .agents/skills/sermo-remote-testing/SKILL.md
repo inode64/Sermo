@@ -18,7 +18,7 @@ description: Use when running safe Sermo validation or exploratory tests on remo
 ```yaml
 web:
   address: 0.0.0.0
-  password: "sermo-remote-admin"                                                                                                                                                                                                                                                 
+  password: "sermo-remote-admin"
   guest_password: "sermo-remote-readonly"
 ```
 
@@ -40,23 +40,23 @@ unverified listener.
 
 1. Inspect local state first:
 
-```sh
-git status --short --branch
-```
+   ```sh
+   git status --short --branch
+   ```
 
 2. Choose the absolute remote run directory before building, then build temporary
    binaries with the catalog directory compiled to that same remote path:
 
-```sh
-REMOTE_DIR=/tmp/sermo-remote-test-$(date +%Y%m%d%H%M%S)-$$
-GOAMD64=v1 SERMO_DATADIR="$REMOTE_DIR" make build
-```
+   ```sh
+   REMOTE_DIR=/tmp/sermo-remote-test-$(date +%Y%m%d%H%M%S)-$$
+   GOAMD64=v1 SERMO_DATADIR="$REMOTE_DIR" make build
+   ```
 
 3. Package the current catalog if the remote test needs catalog discovery:
 
-```sh
-tar -C "$PWD" -czf /tmp/sermo-catalog-remote-test.tgz catalog
-```
+   ```sh
+   tar -C "$PWD" -czf /tmp/sermo-catalog-remote-test.tgz catalog
+   ```
 
 Use the current checkout as the source of truth. If remote findings require code/catalog changes, modify only the local project and redeploy new `/tmp` artifacts.
 
