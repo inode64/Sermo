@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -51,12 +53,13 @@ func TestDaemonMetricSamplerSeries(t *testing.T) {
 		clockTick: 100,
 	}
 	now := time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC)
-	sampler := &daemonMetricSampler{
+	sampler := &DaemonMetricSampler{
 		reader: reader,
 		now:    func() time.Time { return now },
 		pid:    42,
 	}
 
+	sampler.sample()
 	first := sampler.Series(time.Hour)
 	if first.Current.PID != 42 || first.Current.CPUReady || first.Current.IOReady {
 		t.Fatalf("first current = %+v, want pid and not-ready rates", first.Current)
@@ -72,6 +75,7 @@ func TestDaemonMetricSamplerSeries(t *testing.T) {
 	reader.fds = 9
 	reader.threads = 4
 
+	sampler.sample()
 	second := sampler.Series(time.Hour)
 	if !second.Current.CPUReady || second.Current.CPU != 25 {
 		t.Fatalf("CPU = ready:%v %.2f, want 25%%", second.Current.CPUReady, second.Current.CPU)
@@ -113,18 +117,19 @@ func TestDaemonMetricSamplerReadsPersistedHistory(t *testing.T) {
 		clockTick: 100,
 	}
 	now := time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC)
-	first := &daemonMetricSampler{
+	first := &DaemonMetricSampler{
 		reader: reader,
 		store:  store,
 		now:    func() time.Time { return now },
 		pid:    42,
 	}
-	first.Series(time.Hour)
+	first.sample()
 
 	now = now.Add(time.Minute)
 	reader.cpu = 200
 	reader.ioRead += 6000
 	reader.ioWrite += 3000
+	first.sample()
 	recorded := first.Series(time.Hour)
 	if recorded.CPU.Summary.Count != 1 || recorded.IO.Summary.Count != 1 || recorded.Memory.Summary.Count == 0 {
 		t.Fatalf("recorded summaries = cpu:%+v io:%+v memory:%+v", recorded.CPU.Summary, recorded.IO.Summary, recorded.Memory.Summary)
@@ -132,12 +137,13 @@ func TestDaemonMetricSamplerReadsPersistedHistory(t *testing.T) {
 
 	now = now.Add(time.Minute)
 	reader.cpu = 300
-	second := &daemonMetricSampler{
+	second := &DaemonMetricSampler{
 		reader: reader,
 		store:  store,
 		now:    func() time.Time { return now },
 		pid:    42,
 	}
+	second.sample()
 	afterRestart := second.Series(time.Hour)
 	if afterRestart.Current.CPUReady {
 		t.Fatalf("fresh sampler current CPU should be measuring, got %+v", afterRestart.Current)
@@ -150,5 +156,62 @@ func TestDaemonMetricSamplerReadsPersistedHistory(t *testing.T) {
 	}
 	if afterRestart.Memory.Summary.Count < 3 {
 		t.Fatalf("memory history = %+v, want prior samples plus current", afterRestart.Memory.Summary)
+	}
+}
+
+func TestDaemonMetricSamplerSeriesDoesNotSampleDashboardReads(t *testing.T) {
+	reader := &fakeDaemonMetricReader{rss: 1024, memTotal: 4096, numCPU: 1, clockTick: 100}
+	now := time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC)
+	sampler := &DaemonMetricSampler{reader: reader, now: func() time.Time { return now }, pid: 42}
+	sampler.sample()
+
+	reader.rss = 4096
+	first := sampler.Series(time.Hour)
+	second := sampler.Series(time.Hour)
+	if first.Memory.Summary.Count != 1 || second.Memory.Summary.Count != 1 {
+		t.Fatalf("dashboard reads changed daemon samples: first=%d second=%d", first.Memory.Summary.Count, second.Memory.Summary.Count)
+	}
+	if first.Current.RSS != 1024 || second.Current.RSS != 1024 {
+		t.Fatalf("dashboard read sampled current RSS: first=%d second=%d", first.Current.RSS, second.Current.RSS)
+	}
+}
+
+type signalingDaemonMetricReader struct {
+	*fakeDaemonMetricReader
+	once    sync.Once
+	sampled chan struct{}
+}
+
+func (r *signalingDaemonMetricReader) ProcessRSS(pid int) (uint64, bool) {
+	r.once.Do(func() { close(r.sampled) })
+	return r.fakeDaemonMetricReader.ProcessRSS(pid)
+}
+
+func TestDaemonMetricSamplerRunSamplesWithoutDashboard(t *testing.T) {
+	reader := &signalingDaemonMetricReader{
+		fakeDaemonMetricReader: &fakeDaemonMetricReader{rss: 1024, memTotal: 4096, numCPU: 1, clockTick: 100},
+		sampled:                make(chan struct{}),
+	}
+	sampler := &DaemonMetricSampler{reader: reader, now: time.Now, pid: 42}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		sampler.Run(ctx, time.Hour)
+		close(done)
+	}()
+
+	select {
+	case <-reader.sampled:
+	case <-time.After(time.Second):
+		t.Fatal("daemon sampler did not take its startup sample")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("daemon sampler did not stop after cancellation")
+	}
+	if got := sampler.Series(time.Hour).Memory.Summary.Count; got != 1 {
+		t.Fatalf("background sample count = %d, want 1", got)
 	}
 }

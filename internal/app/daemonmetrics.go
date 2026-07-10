@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"os"
 	"sort"
 	"sync"
@@ -12,12 +13,15 @@ import (
 )
 
 const (
-	daemonMetricMaxInt64  = uint64(1<<63 - 1)
-	daemonMetricRetention = state.DefaultHistoryRetention
-	metricSeriesBucket    = time.Minute
+	daemonMetricMaxInt64              = uint64(1<<63 - 1)
+	daemonMetricRetention             = state.DefaultHistoryRetention
+	metricSeriesBucket                = time.Minute
+	defaultDaemonMetricSampleInterval = 30 * time.Second
 )
 
-type daemonMetricSampler struct {
+// DaemonMetricSampler records sermod process metrics independently from web
+// requests and serves their current and historical representation.
+type DaemonMetricSampler struct {
 	reader metrics.Reader
 	store  DaemonMetricStore
 	now    func() time.Time
@@ -64,7 +68,9 @@ type daemonMetricAgg struct {
 	max float64
 }
 
-func newDaemonMetricSampler(collector *metrics.Collector, now func() time.Time, store DaemonMetricStore) *daemonMetricSampler {
+// NewDaemonMetricSampler builds the process metric sampler shared by sermod and
+// the web backend.
+func NewDaemonMetricSampler(collector *metrics.Collector, now func() time.Time, store DaemonMetricStore) *DaemonMetricSampler {
 	reader := metrics.Reader(metrics.OSReader{})
 	if collector != nil && collector.Reader != nil {
 		reader = collector.Reader
@@ -72,22 +78,58 @@ func newDaemonMetricSampler(collector *metrics.Collector, now func() time.Time, 
 	if now == nil {
 		now = time.Now
 	}
-	return &daemonMetricSampler{reader: reader, store: store, now: now, pid: os.Getpid()}
+	return &DaemonMetricSampler{reader: reader, store: store, now: now, pid: os.Getpid()}
 }
 
-func (s *daemonMetricSampler) Series(since time.Duration) web.DaemonMetrics {
+// Run samples immediately and then at interval until ctx is cancelled.
+func (s *DaemonMetricSampler) Run(ctx context.Context, interval time.Duration) {
 	if s == nil {
-		return web.DaemonMetrics{Since: since.String()}
+		return
+	}
+	if interval <= 0 {
+		interval = defaultDaemonMetricSampleInterval
+	}
+	s.sample()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.sample()
+		}
+	}
+}
+
+func (s *DaemonMetricSampler) sample() {
+	if s == nil {
+		return
 	}
 	s.mu.Lock()
 	sample := s.sampleLocked()
 	s.samples = append(s.samples, sample)
 	s.trimLocked(sample.at.Add(-daemonMetricRetention))
+	s.mu.Unlock()
+	s.recordPersistent(sample)
+}
+
+// Series returns current and historical daemon metrics without taking or
+// recording a new sample.
+func (s *DaemonMetricSampler) Series(since time.Duration) web.DaemonMetrics {
+	if s == nil {
+		return web.DaemonMetrics{Since: since.String()}
+	}
+	s.mu.Lock()
+	if len(s.samples) == 0 {
+		s.mu.Unlock()
+		return web.DaemonMetrics{Since: since.String()}
+	}
+	sample := s.samples[len(s.samples)-1]
 	samples := samplesSince(s.samples, sample.at.Add(-since))
 	s.mu.Unlock()
 
 	if s.store != nil {
-		s.recordPersistent(sample)
 		if out, ok := s.persistentSeries(sample, since); ok {
 			return out
 		}
@@ -101,7 +143,7 @@ func (s *daemonMetricSampler) Series(since time.Duration) web.DaemonMetrics {
 	}
 }
 
-func (s *daemonMetricSampler) sampleLocked() daemonMetricSample {
+func (s *DaemonMetricSampler) sampleLocked() daemonMetricSample {
 	at := s.now()
 	pid := s.pid
 	cur := daemonMetricSample{at: at, pid: pid, numCPU: s.reader.NumCPU()}
@@ -150,7 +192,7 @@ func (s *daemonMetricSampler) sampleLocked() daemonMetricSample {
 	return cur
 }
 
-func (s *daemonMetricSampler) recordPersistent(sample daemonMetricSample) {
+func (s *DaemonMetricSampler) recordPersistent(sample daemonMetricSample) {
 	if s.store == nil {
 		return
 	}
@@ -165,7 +207,7 @@ func (s *daemonMetricSampler) recordPersistent(sample daemonMetricSample) {
 	}
 }
 
-func (s *daemonMetricSampler) persistentSeries(sample daemonMetricSample, since time.Duration) (web.DaemonMetrics, bool) {
+func (s *DaemonMetricSampler) persistentSeries(sample daemonMetricSample, since time.Duration) (web.DaemonMetrics, bool) {
 	if s.store == nil {
 		return web.DaemonMetrics{}, false
 	}
@@ -209,7 +251,7 @@ func (s *daemonMetricSampler) persistentSeries(sample daemonMetricSample, since 
 	}, true
 }
 
-func (s *daemonMetricSampler) trimLocked(cutoff time.Time) {
+func (s *DaemonMetricSampler) trimLocked(cutoff time.Time) {
 	i := 0
 	for i < len(s.samples) && s.samples[i].at.Before(cutoff) {
 		i++
