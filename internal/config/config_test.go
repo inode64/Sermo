@@ -2358,7 +2358,7 @@ rules:
     if: { failed: { check: ping } }
     then:
       action: alert
-      message: "${service} on ${host}: ${event}/${action} at ${date}"
+      message: "${service} on ${host}: ${event}/${action} at ${date}; ${rule.duration}/${rule.window}; ${check.name}/${check.type}/${check.metric}/${check.scope}/${check.op}/${check.threshold}/${check.value}"
 `,
 	})
 	cfg, err := loadConfig(t, global)
@@ -2378,7 +2378,20 @@ rules:
 	if !strings.Contains(msg, "nginx on myhost") {
 		t.Errorf("message = %q, want service/host substituted", msg)
 	}
-	for _, lit := range []string{"${event}", "${action}", "${date}"} {
+	for _, lit := range []string{
+		"${event}",
+		"${action}",
+		"${date}",
+		"${rule.duration}",
+		"${rule.window}",
+		"${check.name}",
+		"${check.type}",
+		"${check.metric}",
+		"${check.scope}",
+		"${check.op}",
+		"${check.threshold}",
+		"${check.value}",
+	} {
 		if !strings.Contains(msg, lit) {
 			t.Errorf("message = %q, want %s left for runtime", msg, lit)
 		}

@@ -1928,9 +1928,34 @@ rules:
 Guards are evaluated before remediation; a remediation action that a guard
 blocks never runs.
 
-`message:` strings may use the runtime built-ins `${date}` (RFC3339), `${event}`
-(the firing rule's name) and `${action}`, plus the resolved `${service}`/`${host}`
-— e.g. `message: "[${host}] ${service}: ${event} → ${action} at ${date}"`.
+`message:` strings may use runtime built-ins. `${date}` is the current RFC3339
+timestamp, `${event}` is the firing rule's name and `${action}` is the rule's
+primary action. `${rule.duration}` is the configured rule span (`10m`,
+`3 cycles`, or `current cycle`) and `${rule.window}` is the fuller window
+description (`for 10m`, `within 15 cycles (min 3)`, `immediate`). `${service}`
+and `${host}` are resolved during configuration.
+
+For rules whose condition has exactly one direct check or metric leaf, alert
+messages may also use `${check.name}`, `${check.type}`, `${check.metric}`,
+`${check.scope}`, `${check.op}`, `${check.threshold}` and `${check.value}`.
+Complex conditions with multiple checks leave those `${check.*}` values empty
+instead of guessing which check should describe the alert.
+
+```yaml
+rules:
+  alert-if-memory-high:
+    type: alert
+    if:
+      active:
+        check: memory-high
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: >-
+        During ${rule.duration}, ${service} ${check.metric} stayed above
+        ${check.threshold} (current ${check.value}) at ${date}
+```
 
 ## Remediation policy
 

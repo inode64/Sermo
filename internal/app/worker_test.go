@@ -317,11 +317,12 @@ func (h *workerHarness) worker(tree map[string]any, policy rules.Policy, state *
 		state = &rules.RemediationState{}
 	}
 	return &Worker{
-		Service: "web",
-		Rules:   ruleSet,
-		Policy:  policy,
-		State:   state,
-		Checks:  func(context.Context, checks.Deps) map[string]checks.Result { return h.cache },
+		Service:      "web",
+		Rules:        ruleSet,
+		Policy:       policy,
+		State:        state,
+		MetricChecks: rules.ReferencedChecks(tree),
+		Checks:       func(context.Context, checks.Deps) map[string]checks.Result { return h.cache },
 		Operate: func(_ context.Context, action string) operation.Result {
 			h.ops = append(h.ops, action)
 			res := h.opResult
@@ -780,6 +781,100 @@ func TestRuntimeVarsSubstitutedInMessage(t *testing.T) {
 	want := "web notify at " + t0.Format(time.RFC3339)
 	if e.Message != want {
 		t.Errorf("message = %q, want %q", e.Message, want)
+	}
+}
+
+func TestRuleMessageRuntimeContextForMetricCheck(t *testing.T) {
+	h := &workerHarness{cache: map[string]checks.Result{
+		"mem": {
+			Check: "mem",
+			OK:    true,
+			Data: map[string]any{
+				checks.DataKeyType:      checks.CheckTypeMetric,
+				checks.DataKeyScope:     checks.MetricScopeService,
+				checks.DataKeyMetric:    "memory",
+				checks.DataKeyOp:        ">",
+				checks.DataKeyThreshold: "60%",
+				checks.DataKeyValue:     73.5,
+				checks.DataKeyUnit:      metrics.MetricUnitPercent,
+			},
+		},
+	}}
+	tree := map[string]any{"rules": map[string]any{
+		"memory-high": map[string]any{
+			"type": "alert",
+			"if":   map[string]any{"active": map[string]any{"check": "mem"}},
+			"for":  map[string]any{"duration": "10m"},
+			"then": map[string]any{
+				"action":  "alert",
+				"message": "During ${rule.duration} (${rule.window}) ${check.name} ${check.type}/${check.metric} ${check.op} ${check.threshold} current ${check.value} on ${service} via ${action} at ${date}",
+			},
+		},
+	}}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+	now := t0
+	w.Now = func() time.Time { return now }
+	n := &fakeNotifier{name: "ops"}
+	w.Notifiers = map[string]notify.Notifier{"ops": n}
+	w.GlobalNotify = []string{"ops"}
+	w.GlobalEmission = emission.Policy{Events: emission.ModeEveryCycle, Notify: emission.ModeEveryCycle}
+
+	w.RunCycle(context.Background())
+	if _, ok := h.eventOf(eventKindAlert); ok {
+		t.Fatal("duration window must not fire on the first true cycle")
+	}
+	now = now.Add(10 * time.Minute)
+	w.RunCycle(context.Background())
+
+	want := "During 10m (for 10m) mem metric/memory > 60% current 73.5% on web via alert at " + now.Format(time.RFC3339)
+	e, ok := h.eventOf(eventKindAlert)
+	if !ok {
+		t.Fatalf("no alert emitted: %+v", h.events)
+	}
+	if e.Message != want {
+		t.Fatalf("event message = %q, want %q", e.Message, want)
+	}
+	if len(n.msgs) != 1 {
+		t.Fatalf("notifier messages = %d, want 1", len(n.msgs))
+	}
+	if n.msgs[0].Body != want {
+		t.Fatalf("notification body = %q, want %q", n.msgs[0].Body, want)
+	}
+	if strings.Contains(n.msgs[0].Subject, "${") {
+		t.Fatalf("notification subject kept placeholders: %q", n.msgs[0].Subject)
+	}
+}
+
+func TestRuleMessageRuntimeContextForInlineMetric(t *testing.T) {
+	h := &workerHarness{cache: map[string]checks.Result{}}
+	tree := map[string]any{"rules": map[string]any{
+		"memory-high": map[string]any{
+			"type": "alert",
+			"if": map[string]any{"metric": map[string]any{
+				"scope": checks.MetricScopeService,
+				"name":  "memory",
+				"op":    ">",
+				"value": "60%",
+			}},
+			"then": map[string]any{"action": "alert", "message": "${check.type}/${check.metric} ${check.op} ${check.threshold}: ${check.value}"},
+		},
+	}}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+	w.CheckDeps.Metrics = func(scope, name string) (metrics.Reading, bool) {
+		if scope != checks.MetricScopeService || name != "memory" {
+			return metrics.Reading{}, false
+		}
+		return metrics.Reading{Percent: 66.25, HasPercent: true, Ready: true}, true
+	}
+
+	w.RunCycle(context.Background())
+
+	e, ok := h.eventOf(eventKindAlert)
+	if !ok {
+		t.Fatalf("no alert emitted: %+v", h.events)
+	}
+	if want := "metric/memory > 60%: 66.25%"; e.Message != want {
+		t.Fatalf("message = %q, want %q", e.Message, want)
 	}
 }
 

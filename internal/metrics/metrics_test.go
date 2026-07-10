@@ -55,6 +55,22 @@ func TestCompareNotReadyIsFalse(t *testing.T) {
 	}
 }
 
+func TestReadingValueForThreshold(t *testing.T) {
+	r := Reading{Absolute: 2048, Percent: 73.5, HasAbsolute: true, HasPercent: true, Ready: true}
+	value, unit, ok, err := ReadingValueForThreshold(r, "60%")
+	if err != nil || !ok || value != 73.5 || unit != MetricUnitPercent {
+		t.Fatalf("percent value = %v %q ready=%v err=%v, want 73.5 %% ready", value, unit, ok, err)
+	}
+	value, unit, ok, err = ReadingValueForThreshold(r, "1024")
+	if err != nil || !ok || value != 2048 || unit != MetricUnitNone {
+		t.Fatalf("absolute value = %v %q ready=%v err=%v, want 2048 none ready", value, unit, ok, err)
+	}
+	value, _, ok, err = ReadingValueForThreshold(Reading{Percent: 99, HasPercent: true}, "1%")
+	if err != nil || ok || value != 0 {
+		t.Fatalf("not-ready value = %v ready=%v err=%v, want no value and no error", value, ok, err)
+	}
+}
+
 func TestCompareFormMismatchErrors(t *testing.T) {
 	// A percentage threshold against an absolute-only metric.
 	r := Reading{Absolute: 5, HasAbsolute: true, Ready: true}

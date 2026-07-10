@@ -100,6 +100,7 @@ const (
 	DataKeySerialNumber       = "serial_number"
 	DataKeySignatureAlgorithm = "signature_algorithm"
 	DataKeySize               = CheckKeySize
+	DataKeyScope              = CheckKeyScope
 	DataKeySocket             = conn.ExtraKeySocket
 	DataKeySource             = "source"
 	DataKeyStatus             = "status"
@@ -110,7 +111,9 @@ const (
 	DataKeyThreshold          = CheckKeyThreshold
 	DataKeyTotal              = fieldTotal
 	DataKeyTotalBytes         = fieldTotalBytes
+	DataKeyType               = CheckKeyType
 	DataKeyUE                 = fieldUE
+	DataKeyUnit               = "unit"
 	DataKeyUsedBytes          = fieldUsedBytes
 	DataKeyUsedPct            = fieldUsedPct
 	DataKeyValue              = fieldValue
