@@ -134,10 +134,10 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 
 func TestStoreEventAppDimensionRoundTrip(t *testing.T) {
 	s := openTemp(t)
-	if err := s.RecordEvent(EventRecord{Service: "web", Kind: "action", Message: "restart"}); err != nil {
+	if _, err := s.RecordEvent(EventRecord{Service: "web", Kind: "action", Message: "restart"}); err != nil {
 		t.Fatalf("RecordEvent service: %v", err)
 	}
-	if err := s.RecordEvent(EventRecord{App: "salt-minion", Kind: "firing", Message: "error: exit 1", Output: "stderr:\nImportError: no module"}); err != nil {
+	if _, err := s.RecordEvent(EventRecord{App: "salt-minion", Kind: "firing", Message: "error: exit 1", Output: "stderr:\nImportError: no module"}); err != nil {
 		t.Fatalf("RecordEvent app: %v", err)
 	}
 	recs, err := s.RecentEvents(0)
@@ -379,7 +379,7 @@ func TestPruneHistory(t *testing.T) {
 		if err := s.RecordServiceMetric("web", "cpu", 10, at); err != nil {
 			t.Fatalf("RecordServiceMetric(%s): %v", at, err)
 		}
-		if err := s.RecordEvent(EventRecord{At: at, Service: "web", Kind: "action", Message: "restart"}); err != nil {
+		if _, err := s.RecordEvent(EventRecord{At: at, Service: "web", Kind: "action", Message: "restart"}); err != nil {
 			t.Fatalf("RecordEvent(%s): %v", at, err)
 		}
 	}

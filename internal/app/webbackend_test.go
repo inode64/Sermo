@@ -88,6 +88,29 @@ func TestWebBackendEventsNilLog(t *testing.T) {
 	}
 }
 
+func TestWebBackendEventPageFiltersAndContinuesByID(t *testing.T) {
+	events := NewEventLog(10)
+	events.Add(Event{Service: "web", Kind: eventKindAction, Status: eventStatusOK, Message: "old ok"})
+	events.Add(Event{Service: "db", Kind: eventKindError, Status: eventStatusFailed, Message: "db failed"})
+	events.Add(Event{Service: "web", Kind: eventKindError, Status: eventStatusFailed, Message: "web failed"})
+	events.Add(Event{Service: "web", Kind: eventKindAction, Status: eventStatusOK, Message: "new ok"})
+
+	b := &WebBackend{events: events}
+	first := b.EventPage(context.Background(), web.EventQuery{Limit: 1, Service: "web", OnlyErrors: true})
+	if len(first.Events) != 1 || first.Events[0].Message != "web failed" || first.Events[0].ID <= 0 {
+		t.Fatalf("first page = %+v, want web failure with stable ID", first)
+	}
+	if !first.HasMore || first.NextBeforeID != first.Events[0].ID {
+		t.Fatalf("first cursor = %+v, want continuation after returned event", first)
+	}
+	second := b.EventPage(context.Background(), web.EventQuery{
+		BeforeID: first.NextBeforeID, Limit: 10, Service: "web", OnlyErrors: true,
+	})
+	if len(second.Events) != 0 || second.HasMore || second.NextBeforeID != 0 {
+		t.Fatalf("second page = %+v, want exhausted filtered feed", second)
+	}
+}
+
 func TestWebBackendDetailRanFlag(t *testing.T) {
 	snaps := NewSnapshots()
 	snaps.Publish("web", map[string]checks.Result{

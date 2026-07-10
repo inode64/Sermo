@@ -166,6 +166,7 @@ func TestIndexShellAnchors(t *testing.T) {
 		"storage-controls", "network-controls", "mount-controls",
 		"container-controls", "vm-controls", "container-rows", "vm-rows",
 		"event-clear", "event-before", "event-reset-filters", "activity-clear",
+		"event-more",
 		"state-compact-btn", "state-before", "app-rows", "locks-rows",
 		"mount-search", "mount-category", "mount-filters", "mount-filter-count",
 		"action-confirm", "confirm-no-cascade", "simple-confirm",
@@ -201,6 +202,25 @@ func TestIndexShellAnchors(t *testing.T) {
 	}
 	if headers["Source"] {
 		t.Errorf("shell still exposes static <th> Source")
+	}
+}
+
+func TestSourceUsesStableEventCursorPagination(t *testing.T) {
+	src, err := os.ReadFile("src/app.js")
+	if err != nil {
+		t.Fatalf("read src/app.js: %v", err)
+	}
+	text := string(src)
+	for _, marker := range []string{
+		`const apiQueryBeforeID = "before_id"`,
+		`const apiQueryPage = "page"`,
+		`params.set(apiQueryBeforeID, String(eventNextBeforeID))`,
+		`function loadOlderEvents()`,
+		`return e.id ?`,
+	} {
+		if !strings.Contains(text, marker) {
+			t.Errorf("source missing event pagination marker %q", marker)
+		}
 	}
 }
 

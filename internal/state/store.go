@@ -1145,6 +1145,7 @@ func unixNanoTime(n int64) time.Time {
 // service events, Watch for host-watch events; both are empty only for daemon-wide
 // events such as config reload failures.
 type EventRecord struct {
+	ID      int64
 	At      time.Time
 	Service string
 	Watch   string
@@ -1158,30 +1159,44 @@ type EventRecord struct {
 }
 
 // RecordEvent appends one event to the persistent event/activity feed.
-func (s *Store) RecordEvent(e EventRecord) error {
+func (s *Store) RecordEvent(e EventRecord) (int64, error) {
 	at := e.At
 	if at.IsZero() {
 		at = s.now()
 	}
-	_, err := s.db.Exec(
+	result, err := s.db.Exec(
 		`INSERT INTO event_log (at, service, watch, app, kind, rule, action, status, message, output)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
 		at.UTC().UnixNano(), e.Service, e.Watch, e.App, e.Kind, e.Rule, e.Action, e.Status, e.Message, e.Output,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
 }
 
 // RecentEvents returns the newest persisted events first. limit <= 0 returns all
 // persisted events.
 func (s *Store) RecentEvents(limit int) ([]EventRecord, error) {
+	return s.RecentEventsBefore(0, limit)
+}
+
+// RecentEventsBefore returns persisted events newest first. beforeID <= 0
+// starts at the newest event; otherwise only rows with a smaller ID are read.
+func (s *Store) RecentEventsBefore(beforeID int64, limit int) ([]EventRecord, error) {
 	if limit <= 0 {
 		limit = -1
 	}
-	rows, err := s.db.Query(
-		`SELECT at, service, watch, app, kind, rule, action, status, message, output
-		   FROM event_log ORDER BY at DESC, id DESC LIMIT ?;`,
-		limit,
-	)
+	query := `SELECT id, at, service, watch, app, kind, rule, action, status, message, output
+		   FROM event_log`
+	args := make([]any, 0, 2)
+	if beforeID > 0 {
+		query += ` WHERE id < ?`
+		args = append(args, beforeID)
+	}
+	query += ` ORDER BY id DESC LIMIT ?;`
+	args = append(args, limit)
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1191,7 +1206,7 @@ func (s *Store) RecentEvents(limit int) ([]EventRecord, error) {
 	for rows.Next() {
 		var rec EventRecord
 		var at int64
-		if err := rows.Scan(&at, &rec.Service, &rec.Watch, &rec.App, &rec.Kind, &rec.Rule, &rec.Action, &rec.Status, &rec.Message, &rec.Output); err != nil {
+		if err := rows.Scan(&rec.ID, &at, &rec.Service, &rec.Watch, &rec.App, &rec.Kind, &rec.Rule, &rec.Action, &rec.Status, &rec.Message, &rec.Output); err != nil {
 			return nil, err
 		}
 		rec.At = time.Unix(0, at).UTC()

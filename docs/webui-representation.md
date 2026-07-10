@@ -390,7 +390,7 @@ Section id: `events-section`
 | Title | `Events` plus dry-run note |
 | Controls | service, watch, kind, status, only errors, group actions, reset filters, optional `before` cutoff, clear log (admin) |
 | Table | event rows grouped by action when enabled |
-| Limit | latest matching events |
+| Limit | latest matching events; **load older** continues with a stable event-ID cursor |
 
 Editable notes:
 
@@ -399,6 +399,8 @@ Editable notes:
   or **reset filters** clears the filter fields. The `only errors` checkbox
   refetches on change. Grouping stays client-side and optional; raw chronology
   is still useful.
+- Event expansion state is keyed by the persisted event ID. Loading older rows
+  appends a cursor page without duplicating events or shifting open rows.
 - **clear log** (admin only) calls `POST /api/events/clear` after confirmation,
   matching `sermoctl events clear`. An optional **before** field passes
   `?before=TIME` (positive duration or non-future RFC3339) to prune only older

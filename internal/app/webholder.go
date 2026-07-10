@@ -207,6 +207,14 @@ func (h *WebBackendHolder) Events(ctx context.Context, limit int) []web.Event {
 	return nil
 }
 
+// EventPage returns a filtered cursor page from the active backend.
+func (h *WebBackendHolder) EventPage(ctx context.Context, query web.EventQuery) web.EventPage {
+	if b := h.backend(); b != nil {
+		return b.EventPage(ctx, query)
+	}
+	return web.EventPage{}
+}
+
 // Operations returns operation-slot usage from the active backend.
 func (h *WebBackendHolder) Operations(ctx context.Context) web.OperationSlots {
 	if b := h.backend(); b != nil {

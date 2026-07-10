@@ -28,6 +28,7 @@ type fakeBackend struct {
 	failOp          bool
 	seriesSince     time.Duration
 	eventLimit      int
+	eventQuery      EventQuery
 	metricCheck     string
 	metricSince     time.Duration
 	opsSlots        OperationSlots
@@ -118,6 +119,19 @@ func (f *fakeBackend) Events(_ context.Context, limit int) []Event {
 		return f.events
 	}
 	return []Event{{Time: "2026-06-07T10:00:00Z", Service: "web", Kind: eventKindAction, Action: apiActionRestart, Message: "restarted"}}
+}
+func (f *fakeBackend) EventPage(_ context.Context, query EventQuery) EventPage {
+	f.eventQuery = query
+	events := f.Events(context.Background(), query.Limit+1)
+	hasMore := len(events) > query.Limit
+	if hasMore {
+		events = events[:query.Limit]
+	}
+	page := EventPage{Events: events, HasMore: hasMore}
+	if hasMore && len(events) > 0 {
+		page.NextBeforeID = events[len(events)-1].ID
+	}
+	return page
 }
 func (f *fakeBackend) ServiceEvents(_ context.Context, name string, limit int) ([]Event, bool) {
 	for _, s := range f.services {
@@ -601,6 +615,38 @@ func TestGlobalEvents(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Kind != eventKindAction {
 		t.Fatalf("unexpected events: %+v", got)
+	}
+}
+
+func TestGlobalEventsCursorPage(t *testing.T) {
+	b := &fakeBackend{events: []Event{
+		{ID: 9, Service: "web", Kind: eventKindError, Status: eventStatusFailed},
+		{ID: 8, Service: "web", Kind: eventKindAction, Status: eventStatusOK},
+	}}
+	rec := httptest.NewRecorder()
+	query := testQueryParams(apiQueryPage, queryBoolOne, apiQueryBeforeID, "10", apiParamService, "web", apiQueryOnlyErrors, queryBoolOne, apiQueryLimit, queryBoolOne)
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(apiPathEvents, query), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("events page status %d: %s", rec.Code, rec.Body.String())
+	}
+	if b.eventQuery.BeforeID != 10 || b.eventQuery.Limit != 1 || b.eventQuery.Service != "web" || !b.eventQuery.OnlyErrors {
+		t.Fatalf("event query = %+v", b.eventQuery)
+	}
+	var got EventPage
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got.Events) != 1 || got.Events[0].ID != 9 || !got.HasMore || got.NextBeforeID != 9 {
+		t.Fatalf("event page = %+v", got)
+	}
+}
+
+func TestGlobalEventsRejectsInvalidCursor(t *testing.T) {
+	rec := httptest.NewRecorder()
+	query := testQueryParams(apiQueryPage, queryBoolOne, apiQueryBeforeID, "invalid")
+	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(apiPathEvents, query), nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid cursor status = %d, want 400", rec.Code)
 	}
 }
 

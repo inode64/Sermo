@@ -10,6 +10,7 @@ import (
 
 // LoggedEvent is an Event with the time it was recorded.
 type LoggedEvent struct {
+	ID   int64
 	Time time.Time
 	Event
 }
@@ -17,8 +18,9 @@ type LoggedEvent struct {
 // EventStore persists the operator-visible event/activity feed so sermod can
 // repopulate the web UI after a daemon restart.
 type EventStore interface {
-	RecordEvent(state.EventRecord) error
+	RecordEvent(state.EventRecord) (int64, error)
 	RecentEvents(limit int) ([]state.EventRecord, error)
+	RecentEventsBefore(beforeID int64, limit int) ([]state.EventRecord, error)
 	PruneEvents(before time.Time) (int64, error)
 }
 
@@ -40,6 +42,7 @@ type EventLog struct {
 	lastByService map[string]LoggedEvent
 	lastByWatch   map[string]LoggedEvent
 	lastByApp     map[string]LoggedEvent
+	localID       int64
 }
 
 // NewEventLog returns a log retaining the last size events (min 1).
@@ -92,15 +95,23 @@ func (l *EventLog) Add(e Event) {
 		now = time.Now
 	}
 	logged := LoggedEvent{Time: now(), Event: e}
-	l.mu.Lock()
-	l.addLocked(logged)
-	l.mu.Unlock()
-
 	if l.store != nil {
-		if err := l.store.RecordEvent(eventRecordFromLogged(logged)); err != nil {
+		id, err := l.store.RecordEvent(eventRecordFromLogged(logged))
+		if err != nil {
 			l.reportStoreError(err)
+		} else {
+			logged.ID = id
 		}
 	}
+	l.mu.Lock()
+	if logged.ID <= 0 {
+		l.localID++
+		logged.ID = l.localID
+	} else if logged.ID > l.localID {
+		l.localID = logged.ID
+	}
+	l.addLocked(logged)
+	l.mu.Unlock()
 	l.exportEvent(logged)
 }
 
@@ -151,6 +162,41 @@ func (l *EventLog) Recent(service string, limit int) []LoggedEvent {
 			continue
 		}
 		out = append(out, ordered[i])
+	}
+	return out
+}
+
+// Page returns up to limit events older than beforeID, newest first. A cursor
+// of zero starts at the newest event.
+func (l *EventLog) Page(beforeID int64, limit int) []LoggedEvent {
+	if l == nil {
+		return nil
+	}
+	if l.store != nil {
+		records, err := l.store.RecentEventsBefore(beforeID, limit)
+		if err == nil {
+			out := make([]LoggedEvent, 0, len(records))
+			for _, rec := range records {
+				out = append(out, loggedEventFromRecord(rec))
+			}
+			return out
+		}
+		l.reportStoreError(err)
+	}
+	all := l.Recent("", 0)
+	capacity := len(all)
+	if limit > 0 {
+		capacity = min(limit, capacity)
+	}
+	out := make([]LoggedEvent, 0, capacity)
+	for _, event := range all {
+		if beforeID > 0 && event.ID >= beforeID {
+			continue
+		}
+		out = append(out, event)
+		if limit > 0 && len(out) >= limit {
+			break
+		}
 	}
 	return out
 }
@@ -272,7 +318,11 @@ func (l *EventLog) loadRecentFromStore() error {
 	l.next = 0
 	l.count = 0
 	for i := len(records) - 1; i >= 0; i-- {
-		l.addLocked(loggedEventFromRecord(records[i]))
+		logged := loggedEventFromRecord(records[i])
+		l.addLocked(logged)
+		if logged.ID > l.localID {
+			l.localID = logged.ID
+		}
 	}
 	l.rebuildIndexesLocked()
 	return nil
@@ -368,6 +418,7 @@ func MultiEmit(emitters ...func(Event)) func(Event) {
 
 func eventRecordFromLogged(e LoggedEvent) state.EventRecord {
 	return state.EventRecord{
+		ID:      e.ID,
 		At:      e.Time,
 		Service: e.Service,
 		Watch:   e.Watch,
@@ -383,6 +434,7 @@ func eventRecordFromLogged(e LoggedEvent) state.EventRecord {
 
 func loggedEventFromRecord(e state.EventRecord) LoggedEvent {
 	return LoggedEvent{
+		ID:   e.ID,
 		Time: e.At,
 		Event: Event{
 			Service: e.Service,

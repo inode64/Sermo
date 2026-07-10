@@ -158,6 +158,7 @@ const (
 	apiParamName       = "name"
 	apiParamService    = "service"
 	apiQueryBefore     = "before"
+	apiQueryBeforeID   = "before_id"
 	apiQueryCheck      = "check"
 	apiQueryKind       = "kind"
 	apiQueryKill       = "kill"
@@ -165,6 +166,7 @@ const (
 	apiQueryMetric     = "metric"
 	apiQueryNoCascade  = "no_cascade"
 	apiQueryOnlyErrors = "only_errors"
+	apiQueryPage       = "page"
 	apiQuerySince      = "since"
 	apiQueryStatus     = "status"
 	apiQueryVerbose    = "verbose"
@@ -889,6 +891,7 @@ type ReadinessChecker interface {
 
 // Event is one recorded daemon event for the activity log.
 type Event struct {
+	ID      int64  `json:"id,omitempty"`
 	Time    string `json:"time"` // RFC3339
 	Service string `json:"service,omitempty"`
 	Watch   string `json:"watch,omitempty"`
@@ -901,6 +904,25 @@ type Event struct {
 	// Output is the bounded stdout/stderr of the failing command behind this event
 	// (app probe or service `command` check), shown expandable in the dashboard.
 	Output string `json:"output,omitempty"`
+}
+
+// EventQuery selects one cursor page from the global event feed.
+type EventQuery struct {
+	BeforeID   int64
+	Limit      int
+	Service    string
+	Watch      string
+	Kind       string
+	Status     string
+	OnlyErrors bool
+}
+
+// EventPage is a stable cursor page. NextBeforeID is passed as before_id to
+// continue toward older events.
+type EventPage struct {
+	Events       []Event `json:"events"`
+	NextBeforeID int64   `json:"next_before_id,omitempty"`
+	HasMore      bool    `json:"has_more"`
 }
 
 const (
@@ -960,6 +982,8 @@ type Backend interface {
 	ServiceRuntime(ctx context.Context, name string, since time.Duration) (ServiceRuntimeMetrics, bool)
 	// Events returns up to limit recent events, newest first (the global feed).
 	Events(ctx context.Context, limit int) []Event
+	// EventPage returns one filtered cursor page from the global feed.
+	EventPage(ctx context.Context, query EventQuery) EventPage
 	// Operations reports how many global operation slots are in use.
 	Operations(ctx context.Context) OperationSlots
 	// ServiceEvents returns up to limit recent events for one service, newest
@@ -1510,11 +1534,35 @@ func (s *Server) handleServiceRuntime(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	limit := eventLimit(r)
 	filter := parseEventFilter(r)
+	if queryBool(r, apiQueryPage) || r.URL.Query().Has(apiQueryBeforeID) {
+		beforeID, err := eventBeforeID(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, s.Backend.EventPage(r.Context(), EventQuery{
+			BeforeID: beforeID, Limit: limit, Service: filter.Service, Watch: filter.Watch,
+			Kind: filter.Kind, Status: filter.Status, OnlyErrors: filter.OnlyErrors,
+		}))
+		return
+	}
 	fetchLimit := limit
 	if filter.active() {
 		fetchLimit = maxEventLimit
 	}
 	writeJSON(w, http.StatusOK, filterEvents(s.Backend.Events(r.Context(), fetchLimit), filter, limit))
+}
+
+func eventBeforeID(r *http.Request) (int64, error) {
+	raw := r.URL.Query().Get(apiQueryBeforeID)
+	if raw == "" {
+		return 0, nil
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, fmt.Errorf("bad %s: must be a positive integer", apiQueryBeforeID)
+	}
+	return id, nil
 }
 
 // queryBool reports whether the query parameter key is set to a truthy value

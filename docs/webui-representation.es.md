@@ -397,7 +397,7 @@ Section id: `events-section`
 | Título | `Events` más nota de eventos dry-run |
 | Controles | service, watch, kind, status, only errors, acciones de grupo, restablecer filtros, corte `before` opcional, limpiar log (admin) |
 | Tabla | filas de evento agrupadas por acción cuando está habilitado |
-| Límite | últimos eventos coincidentes |
+| Límite | últimos eventos coincidentes; **load older** continúa con un cursor de ID estable |
 
 Notas editables:
 
@@ -406,6 +406,9 @@ Notas editables:
   o **restablecer filtros** limpia los campos de filtro. La casilla `only errors` vuelve
   a cargar al cambiar. La agrupación permanece en el cliente y es opcional; la cronología
   en bruto sigue siendo útil.
+- El estado de expansión usa el ID persistido del evento. Cargar filas más
+  antiguas añade una página por cursor sin duplicar eventos ni desplazar las
+  filas abiertas.
 - **clear log** (solo admin) llama a `POST /api/events/clear` tras confirmación,
   igual que `sermoctl events clear`. Un campo opcional **before** pasa
   `?before=TIME` (duración positiva o RFC3339 no futuro) para podar solo las

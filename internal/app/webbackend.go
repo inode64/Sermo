@@ -58,6 +58,7 @@ const (
 	// activitySummaryEventScanLimit bounds the recent event scan used for the
 	// dashboard rollup; event list endpoints keep their own request limits.
 	activitySummaryEventScanLimit = 500
+	webEventPageScanSize          = 500
 
 	procUptimePath         = "/proc/uptime"
 	procUptimeValueIndex   = 0
@@ -72,6 +73,7 @@ const (
 	remediationStatePending  = "pending"
 	remediationStateEligible = "eligible"
 	remediationStateBlocked  = "blocked"
+	webEventStatusError      = "error"
 )
 
 const (
@@ -3372,6 +3374,68 @@ func (b *WebBackend) Events(_ context.Context, limit int) []web.Event {
 	return toWebEvents(b.events.Recent("", limit))
 }
 
+// EventPage returns one stable, filtered cursor page from the persisted event
+// feed. It scans bounded raw batches so selective filters can still fill a page.
+func (b *WebBackend) EventPage(_ context.Context, query web.EventQuery) web.EventPage {
+	if b.events == nil || query.Limit <= 0 {
+		return web.EventPage{}
+	}
+	out := make([]web.Event, 0, query.Limit)
+	cursor := query.BeforeID
+	for {
+		batch := b.events.Page(cursor, webEventPageScanSize+1)
+		if len(batch) == 0 {
+			return web.EventPage{Events: out}
+		}
+		hasRawMore := len(batch) > webEventPageScanSize
+		if hasRawMore {
+			batch = batch[:webEventPageScanSize]
+		}
+		for i, logged := range batch {
+			cursor = logged.ID
+			event := loggedEventToWeb(logged)
+			if !webEventMatchesQuery(event, query) {
+				continue
+			}
+			out = append(out, event)
+			if len(out) >= query.Limit {
+				hasMore := i < len(batch)-1 || hasRawMore
+				page := web.EventPage{Events: out, HasMore: hasMore}
+				if hasMore {
+					page.NextBeforeID = cursor
+				}
+				return page
+			}
+		}
+		if !hasRawMore {
+			return web.EventPage{Events: out}
+		}
+	}
+}
+
+func webEventMatchesQuery(event web.Event, query web.EventQuery) bool {
+	if query.Service != "" && event.Service != query.Service ||
+		query.Watch != "" && event.Watch != query.Watch ||
+		query.Kind != "" && event.Kind != query.Kind ||
+		query.Status != "" && event.Status != query.Status {
+		return false
+	}
+	if !query.OnlyErrors {
+		return true
+	}
+	if event.Kind == eventKindError || strings.Contains(event.Kind, string(operation.ResultFailed)) {
+		return true
+	}
+	switch event.Status {
+	case eventStatusFailed, webEventStatusError, string(operation.ResultBlocked),
+		string(operation.ResultOrphanProcesses), string(operation.ResultPreflightFailed),
+		string(operation.ResultPostflightFailed):
+		return true
+	default:
+		return false
+	}
+}
+
 // ServiceEvents returns one service's recent events.
 func (b *WebBackend) ServiceEvents(_ context.Context, name string, limit int) ([]web.Event, bool) {
 	if _, ok := b.entries[name]; !ok {
@@ -3425,6 +3489,7 @@ func toWebEvents(events []LoggedEvent) []web.Event {
 
 func loggedEventToWeb(e LoggedEvent) web.Event {
 	return web.Event{
+		ID:      e.ID,
 		Time:    e.Time.Format(time.RFC3339),
 		Service: e.Service,
 		Watch:   e.Watch,
