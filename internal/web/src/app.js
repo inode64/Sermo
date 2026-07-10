@@ -1271,7 +1271,7 @@ function serviceStateBadge(s) {
 }
 
 function serviceStateCell(s) {
-  return serviceStateBadge(s);
+  return tpl`${serviceStateBadge(s)}${sampledAge(s && s.status_observed_at)}`;
 }
 
 const serviceSurfaceRegular = "service";
@@ -2507,14 +2507,15 @@ function slaChartYFloor(worstPct) {
 function renderSLAWindows(wins, compact) {
   wins = wins || [];
   if (!wins.length) return tpl`<span class="muted">No SLA data yet.</span>`;
+  const observedAt = wins.find((w) => w && w.observed_at)?.observed_at || "";
   const rows = wins.map((w) => {
     const pct = w.ratio == null ? null : Number(w.ratio) * percentScale;
     const label = slaWindowLabel(w.window);
     const pctText = pct == null ? "—" : fmtPct(pct);
     const count = `${Number(w.up || 0)}/${Number(w.total || 0)}`;
-    const title = `${label} · ${pctText} · ${count}`;
+    const title = `${label} · ${pctText} · ${count}${w.observed_at ? ` · sampled ${fmtAge(w.observed_at)}` : ""}`;
     const track = Array.isArray(w.segments) && w.segments.length
-      ? renderSLATimeline(w.segments, w.window)
+      ? renderSLATimeline(w.segments, w.window, w.observed_at)
       : renderSLAFill(pct);
     return tpl`<div class="sla-window" title="${title}">
       <span class="sla-label">${label}</span>
@@ -2523,7 +2524,7 @@ function renderSLAWindows(wins, compact) {
       <span class="sla-count">${count}</span>
     </div>`;
   });
-  return tpl`<div class="sla-windows${compact ? " sla-compact" : ""}">${rows}</div>`;
+  return tpl`<div class="sla-windows${compact ? " sla-compact" : ""}">${rows}${sampledAge(observedAt)}</div>`;
 }
 
 // renderSLAFill is the single-fill bar used when a window has no segment data.
@@ -2534,11 +2535,12 @@ function renderSLAFill(pct) {
   return tpl`<span class="sla-bar" aria-label="${label}"><span class="sla-fill${empty}" style="--sla-pct:${width.toFixed(2)}%; --sla-color:${slaColor(pct)}"></span></span>`;
 }
 
-function slaTimelineDataRows(segments, window) {
+function slaTimelineDataRows(segments, window, observedAt) {
   const n = segments.length;
   if (!n) return nothing;
   const spanMs = slaWindowSpanMs(window);
-  const endMs = Date.now();
+  const sampledMs = Date.parse(observedAt);
+  const endMs = Number.isFinite(sampledMs) ? sampledMs : Date.now();
   const startIdx = Math.max(0, n - chartDataTableMaxRows);
   return segments.slice(startIdx).map((ratio, i) => {
     const idx = startIdx + i;
@@ -2552,10 +2554,11 @@ function slaTimelineDataRows(segments, window) {
 
 // renderSLATimeline draws a contiguous status-page style availability band: one
 // colored cell per sub-span (oldest left), hatched where no data was observed.
-function renderSLATimeline(segments, window) {
+function renderSLATimeline(segments, window, observedAt) {
   const n = segments.length;
   const spanMs = slaWindowSpanMs(window);
-  const endMs = Date.now();
+  const sampledMs = Date.parse(observedAt);
+  const endMs = Number.isFinite(sampledMs) ? sampledMs : Date.now();
   const cells = segments.map((ratio, i) => {
     const pct = ratio == null ? null : Number(ratio) * percentScale;
     const segStart = endMs - spanMs + (i / n) * spanMs;
@@ -2565,7 +2568,7 @@ function renderSLATimeline(segments, window) {
     const pctText = fmtPct(pct);
     return tpl`<span class="sla-seg" style="--sla-color:${slaColor(pct)}" title="${when + " · " + pctText}" aria-label="${when}: ${pctText} available"></span>`;
   });
-  const dataRows = slaTimelineDataRows(segments, window);
+  const dataRows = slaTimelineDataRows(segments, window, observedAt);
   return tpl`<table class="chart-data visually-hidden"><caption>SLA timeline data</caption><thead><tr><th scope="col">Period</th><th scope="col">Availability</th></tr></thead><tbody>${dataRows}</tbody></table><span class="sla-timeline" role="img" aria-label="SLA availability timeline">${cells}</span>`;
 }
 
@@ -3876,7 +3879,7 @@ function appStatusLabel(a) {
 function appStatusCell(a) {
   const state = appStateText(a);
   const detail = (a && a.status && a.status !== targetStateOK) ? a.status : appStatusLabel(a);
-  return tpl`<td class="status-cell status-${state}" title="${detail}">${stateBadgeLabel(state, appStatusLabel(a))}</td>`;
+  return tpl`<td class="status-cell status-${state}" title="${detail}">${stateBadgeLabel(state, appStatusLabel(a))}${sampledAge(a && a.observed_at)}</td>`;
 }
 function appMatches(a) {
   const category = categoryOf(a, "app");
@@ -5715,6 +5718,10 @@ function fmtAge(t) {
   if (sec < 0) return "just now";
   if (sec < secondsPerDay) return shortDur(sec) + " ago";
   return fmtTime(t);
+}
+
+function sampledAge(t) {
+  return t ? tpl`<div class="muted sample-age">sampled ${fmtAge(t)}</div>` : nothing;
 }
 
 function esc(s) {

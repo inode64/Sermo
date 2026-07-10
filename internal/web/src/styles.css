@@ -387,6 +387,7 @@
   .sla-compact .sla-window { grid-template-columns: 2.8rem minmax(5.5rem, 1fr) 3.8rem; gap: .32rem; font-size: .76rem; }
   .sla-compact .sla-bar, .sla-compact .sla-timeline { height: .48rem; }
   .sla-compact .sla-count { display: none; }
+  .sample-age { font-weight: 400; font-variant-numeric: tabular-nums; }
   .app-sla { grid-column: 1 / -1; }
   .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem 1.15rem; margin: .25rem 0 .8rem; }
   .metric-panel { min-width: 0; }

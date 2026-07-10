@@ -565,8 +565,10 @@ hereda a través de `version_from`, la fila de la API incluye `version_source` c
 nombre de la app proveedora. Los services y aplicaciones pueden filtrarse y agruparse
 por su campo de metadatos `category` de nivel superior.
 Los mismos datos están disponibles desde `sermoctl apps` y `GET /api/applications`.
-El panel cachea la lista hasta 30 segundos, de modo que las autoactualizaciones no
-reejecutan cada sonda de versión de app.
+El panel cachea la lista hasta 5 minutos, de modo que las autoactualizaciones no
+reejecutan cada sonda de versión de app. Cada fila muestra cuándo se ejecutaron
+realmente esas sondas de versión/estado; servir una respuesta cacheada no adelanta la
+hora de la muestra.
 Para un mapa editable panel por panel, consulta
 [webui-representation.md](webui-representation.es.md).
 

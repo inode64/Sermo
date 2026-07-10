@@ -259,9 +259,10 @@ type Service struct {
 	Unit                 string   `json:"unit"`
 	State                string   `json:"state"`
 	Status               string   `json:"status"`
-	Interval             string   `json:"interval,omitempty"` // resolved per-service cycle cadence (own interval or engine default)
-	DryRun               bool     `json:"dry_run,omitempty"`  // true when automatic actions are simulated
-	Enabled              bool     `json:"enabled"`            // false when service document has `enabled: false`
+	StatusObservedAt     string   `json:"status_observed_at,omitempty"` // RFC3339 when init status was actually sampled
+	Interval             string   `json:"interval,omitempty"`           // resolved per-service cycle cadence (own interval or engine default)
+	DryRun               bool     `json:"dry_run,omitempty"`            // true when automatic actions are simulated
+	Enabled              bool     `json:"enabled"`                      // false when service document has `enabled: false`
 	Monitored            bool     `json:"monitored"`
 	MonitorSource        string   `json:"monitor_source,omitempty"`        // cli | web | config | daemon
 	MonitorChangedAt     string   `json:"monitor_changed_at,omitempty"`    // RFC3339 when monitoring state last changed
@@ -385,6 +386,7 @@ type Application struct {
 	VersionSource string      `json:"version_source,omitempty"` // app whose version probe supplied this version
 	Status        string      `json:"status"`                   // ok, or an error description
 	State         string      `json:"state,omitempty"`          // starting | ok | failed | warning
+	ObservedAt    string      `json:"observed_at,omitempty"`    // RFC3339 when version/status probes actually ran
 	SLA           []SLAWindow `json:"sla,omitempty"`            // service SLA when this app maps to a monitored service
 	LastEvent     *Event      `json:"last_event,omitempty"`     // newest application event, when retained
 }
@@ -672,11 +674,12 @@ type Check struct {
 // (oldest first) for the timeline strip; each entry is that sub-span's ratio in
 // [0,1], or nil for a gap (no cycle observed in it).
 type SLAWindow struct {
-	Window   string     `json:"window"`
-	Ratio    *float64   `json:"ratio"`
-	Up       int64      `json:"up"`
-	Total    int64      `json:"total"`
-	Segments []*float64 `json:"segments,omitempty"`
+	Window     string     `json:"window"`
+	Ratio      *float64   `json:"ratio"`
+	Up         int64      `json:"up"`
+	Total      int64      `json:"total"`
+	Segments   []*float64 `json:"segments,omitempty"`
+	ObservedAt string     `json:"observed_at,omitempty"` // RFC3339 when this rolling window was calculated
 }
 
 // Process is a discovered process belonging to a service (parity with
