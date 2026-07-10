@@ -72,7 +72,8 @@ watches:
       min_matches: 3
     then:
       action: alert
-      message: ${display_name} file descriptor usage is high
+      message: >-
+        During ${rule.duration}, ${display_name} file descriptor usage stayed above ${check.threshold} (current ${check.value})
   alert-if-memory-high:
     check:
       type: metric
@@ -85,7 +86,8 @@ watches:
       duration: 4m
     then:
       action: alert
-      message: ${display_name} memory usage is high
+      message: >-
+        During ${rule.duration}, ${display_name} memory usage stayed above ${check.threshold} (current ${check.value})
   alert-if-cpu-thread-high:
     check:
       type: metric
@@ -98,7 +100,8 @@ watches:
       duration: 5m
     then:
       action: alert
-      message: ${display_name} single-thread CPU usage is high
+      message: >-
+        During ${rule.duration}, ${display_name} single-thread CPU usage stayed above ${check.threshold} (current ${check.value})
   alert-if-io-high:
     check:
       type: metric
@@ -111,4 +114,5 @@ watches:
       duration: 5m
     then:
       action: alert
-      message: ${display_name} IO usage is high
+      message: >-
+        During ${rule.duration}, ${display_name} IO usage stayed above ${check.threshold} (current ${check.value})
