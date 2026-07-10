@@ -522,7 +522,7 @@ func TestIndexResponsiveTablesDoNotKeepDesktopMinWidth(t *testing.T) {
 	for _, needle := range []string{
 		"--topbar-h:0px",
 		"top:var(--topbar-h)",
-		".services-table.actions{min-width:14rem;max-width:22rem;white-space:normal}",
+		".services-table.actions{min-width:7.5rem;max-width:11rem;white-space:normal}",
 		".actionsbutton{margin-right:.25rem;margin-bottom:.25rem;",
 		"#notifiers-sectionth:nth-child(3)",
 		"#app-footer.footer-version{margin-left:0;flex-basis:100%;white-space:normal;overflow-wrap:anywhere;text-align:center}",
@@ -548,9 +548,30 @@ func TestIndexServiceActionsUseSinglePowerButton(t *testing.T) {
 		"service is already stopped",
 		"Start service ",
 		"Stop service ",
+		"row-action-menu",
 	} {
 		if !strings.Contains(script, needle) {
 			t.Errorf("bundled script missing service action marker %q", needle)
+		}
+	}
+}
+
+func TestSourceCompactsRowActionsWithoutChangingDispatch(t *testing.T) {
+	src, err := os.ReadFile("src/app.js")
+	if err != nil {
+		t.Fatalf("read src/app.js: %v", err)
+	}
+	text := string(src)
+	for _, marker := range []string{
+		`function rowActionMenu(label, actions)`,
+		`function closeRowActionMenu(control)`,
+		`data-service-action="${action}"`,
+		`data-watch-action="${actionUnmonitor}"`,
+		`data-mount-action="${actionKillUmount}"`,
+		`act(serviceAction.dataset.service || "", serviceAction.dataset.serviceAction || "")`,
+	} {
+		if !strings.Contains(text, marker) {
+			t.Errorf("source missing compact action marker %q", marker)
 		}
 	}
 }

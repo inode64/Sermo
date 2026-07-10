@@ -189,7 +189,7 @@ Columnas:
 | Memory | última memoria residente del árbol de procesos; vacío para servicios `no_resident_process` |
 | FDs | recuento de descriptores de archivo abiertos del árbol de procesos; vacío para servicios `no_resident_process` |
 | IO R/W | bytes acumulados de lectura/escritura en disco del árbol de procesos; vacío para servicios `no_resident_process` |
-| Actions | un botón start/stop según el estado, restart, reload, monitor/unmonitor; reload se desactiva cuando `can_reload` es false; el diálogo de confirmación de start/stop/restart ofrece **skip also_apply** cuando `also_apply` está definido |
+| Actions | botones icono compactos start/stop según estado y restart; reload, resume y monitor/unmonitor viven en el menú adicional de la fila; reload se desactiva cuando `can_reload` es false; el diálogo de confirmación de start/stop/restart ofrece **skip also_apply** cuando `also_apply` está definido |
 
 ## Paneles de contenedores y máquinas virtuales
 
@@ -294,7 +294,7 @@ Columnas:
 | Processes | lista compacta de procesos que usan actualmente la ruta de montaje |
 | Users | usuarios únicos de esos procesos |
 | State | insignia active/inactive/error |
-| Actions | `mount` solo para admin; cuando está montado, `umount`, `alert` y `kill+umount`; `/` renderiza estos botones del flujo de desmontaje deshabilitados |
+| Actions | icono compacto mount/umount solo para admin; `alert` y `kill+umount` viven en el menú adicional cuando está montado; `/` renderiza este flujo de desmontaje deshabilitado |
 
 Todas las cabeceras salvo Actions son ordenables.
 `GET /api/mounts` incluye un resumen read-only cacheado de blockers para la tabla.
@@ -360,7 +360,7 @@ Columnas compartidas:
 | Summary | resumen de estado específico del watch |
 | Last activity | última actividad de hook/notify |
 | State | estado normalizado único del watch: `disabled` cuando config/monitor state lo excluye de comprobaciones activas, `starting` antes de la primera muestra monitorizada, `failed` para un fallo activo y `ok` en el resto |
-| Actions | monitor/unmonitor y acciones admitidas |
+| Actions | acción principal admitida y menú adicional para monitor/unmonitor |
 
 Interval, polaridad (dispara en fallo / en umbral), hook y notifiers no son
 columnas de la tabla; viven en la rejilla de config de la expansión de fila y
