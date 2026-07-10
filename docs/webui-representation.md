@@ -213,9 +213,9 @@ Shared by the Services, Containers and Virtual machines panels.
 | Preflight | inline preflight runner and results |
 | Events | recent retained service events |
 
-Open expansions (service and watch) fetch fresh detail once per dashboard
+Open service expansions fetch and fully render fresh detail once per dashboard
 refresh; re-renders in between (filter keystrokes, sorting, the live-operations
-ticker) redraw from the cached detail without extra requests, and all expanded
+ticker) redraw from that cached detail without extra requests. All expanded
 watches share a single recent-events download per refresh.
 
 Empty states:

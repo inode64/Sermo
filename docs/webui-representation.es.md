@@ -38,14 +38,14 @@ Mantén los cambios concretos:
 | --- | --- | --- |
 | Usuario actual | `GET /api/whoami` | rol y permisos de acción |
 | Disponibilidad | `GET /readyz?verbose` | `status:` del daemon en la barra superior (`starting` / `ok` / …) |
-| Servicios | `GET /api/services` | servicios de runtime configurados cargados por sermod (no el inventario de catálogo de `sermoctl services`) |
+| Servicios | `GET /api/services` | servicios de runtime configurados cargados por sermod (no el inventario de catálogo de `sermoctl services`); `status_observed_at` identifica la muestra real de estado de init que hay detrás de una fila cacheada |
 | Expansión de servicio | `GET /api/services/{name}` | checks, información del proceso, reglas |
 | Métricas de check del servicio | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | gráfico de latencia cuando se omite `metric`; serie de métrica numérica con nombre cuando está presente |
 | Métricas de runtime del servicio | `GET /api/services/{name}/runtime` | historial persistido de CPU/memoria/IO del servicio, de solo lectura y muestreado exclusivamente por ciclos del worker |
 | SLA del servicio | `GET /api/services/{name}/sla` | historial de disponibilidad por minuto para la línea temporal de SLA del detalle del servicio y los clientes de la API |
 | Eventos del servicio | `GET /api/services/{name}/events` | feed de eventos por servicio |
 | Watches de host | `GET /api/watches` | watches a nivel de host |
-| Aplicaciones | `GET /api/applications` | aplicaciones de catálogo instaladas |
+| Aplicaciones | `GET /api/applications` | aplicaciones de catálogo instaladas; `observed_at` permanece fijo mientras el inventario de versión/estado se sirve desde caché |
 | Unidades de montaje | `GET /api/mounts` | watches de storage con `mount:` respaldadas por fstab |
 | Notifiers | `GET /api/notifiers` | destinos de notifiers |
 | Configuración del daemon | `GET /api/daemon` | configuración de engine/runtime |
@@ -56,6 +56,11 @@ Mantén los cambios concretos:
 | Actividad reciente | `GET /api/activity` | resumen de eventos recientes |
 | Recuentos de monitorización | `GET /api/monitoring` | recuentos de servicios monitorizados frente a pausados |
 | Operaciones en vivo | `GET /api/ops` | slots de operaciones activas |
+
+Las cachés de estado de init, inspección de aplicaciones y líneas temporales de
+SLA exponen sus horas de muestra reales. La UI muestra su antigüedad y las marcas
+de los segmentos SLA permanecen ancladas a `observed_at`, en lugar de avanzar
+con el reloj del navegador mientras están cacheadas.
 
 ## Endpoints de acción
 
@@ -212,11 +217,11 @@ Compartida por los paneles Services, Containers y Virtual machines:
 | Preflight | ejecutor de preflight en línea y resultados |
 | Eventos | eventos de servicio retenidos recientes |
 
-Las expansiones abiertas (de servicio y de watch) obtienen detalle fresco una
-vez por refresco del dashboard; los re-renders intermedios (teclas de filtro,
-ordenación, el ticker de operaciones en vivo) redibujan desde el detalle
-cacheado sin peticiones extra, y todos los watches expandidos comparten una
-única descarga de eventos recientes por refresco.
+Las expansiones abiertas de servicio obtienen y renderizan por completo detalle
+fresco una vez por refresco del dashboard; los re-renders intermedios (teclas de
+filtro, ordenación, el ticker de operaciones en vivo) redibujan desde ese detalle
+cacheado sin peticiones extra. Todos los watches expandidos comparten una única
+descarga de eventos recientes por refresco.
 
 Estados vacíos:
 
@@ -243,7 +248,7 @@ Columnas:
 | --- | --- |
 | Application | nombre para mostrar, con fallback al nombre, capitalizado |
 | Category | categoría YAML o fallback |
-| Status | estado de inspección de la aplicación (`Ok`, `Starting` mientras el daemon se asienta, warning, failed) |
+| Status | estado de inspección de la aplicación (`Ok`, `Starting` mientras el daemon se asienta, warning, failed) más la antigüedad de su sonda real |
 | Version | versión corta, con fallback a la versión en bruto |
 
 Expansión de fila:

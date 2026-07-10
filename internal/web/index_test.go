@@ -320,6 +320,40 @@ func TestSourceRendersBackendCacheObservationTimes(t *testing.T) {
 	}
 }
 
+func TestSourceFullyRefreshesExpandedServicesEveryDashboardPoll(t *testing.T) {
+	src, err := os.ReadFile("src/app.js")
+	if err != nil {
+		t.Fatalf("read src/app.js: %v", err)
+	}
+	text := string(src)
+	start := strings.Index(text, "function refreshExpandedServices(opts = {})")
+	if start < 0 {
+		t.Fatal("refreshExpandedServices source block not found")
+	}
+	end := strings.Index(text[start:], "async function refreshExpandedWatches()")
+	if end < 0 {
+		t.Fatal("refreshExpandedServices source block end not found")
+	}
+	body := text[start : start+end]
+	if !strings.Contains(body, "Promise.all(keys.map(loadExpansionFor))") {
+		t.Fatal("expanded services are not fully loaded on each dashboard refresh")
+	}
+	for _, marker := range []string{
+		"expandedServicesPromise = refreshExpandedServices()",
+		`["service details", { ok: expandedServicesOK }]`,
+		"const expLoading = new Map()",
+	} {
+		if !strings.Contains(text, marker) {
+			t.Errorf("source missing coordinated detail-refresh marker %q", marker)
+		}
+	}
+	for _, retired := range []string{"SVC_EXPAND_FULL_EVERY", "svcExpandRefreshTick", "refreshServiceExpansionLight", "periodicFull"} {
+		if strings.Contains(text, retired) {
+			t.Errorf("source still contains partial expansion refresh path %q", retired)
+		}
+	}
+}
+
 func TestSourceMetricChartRendersZeroValuedSeries(t *testing.T) {
 	src, err := os.ReadFile("src/app.js")
 	if err != nil {

@@ -401,6 +401,7 @@ function clearStatusAfterRefresh() {
 async function load() {
   const seq = ++loadSeq;
   healthIconReady = false;
+  let expandedServicesPromise = Promise.resolve(true);
   const sameLoad = () => seq === loadSeq;
   const [servicesResult, mountsResult, notifiersResult, daemonResult, daemonMetricsResult, locksResult, activityResult, readyResult, liveResult, monResult, opsResult, hostMetricsResult] = await Promise.all([
     getJSONResult(apiServicesPath, null),
@@ -437,7 +438,7 @@ async function load() {
     clearStatusAfterRefresh();
     // Open expansions fetch fresh detail once per poll here; re-renders in
     // between (filter keystrokes, ops ticker) only re-assert cached content.
-    refreshExpandedServices();
+    expandedServicesPromise = refreshExpandedServices();
   } else {
     connOK = false;
     showDisconnected();
@@ -470,10 +471,11 @@ async function load() {
     setFavicon(healthStatusWarning);
   }
 
-  const [watchesResult, appsResult, eventsOK] = await Promise.all([
+  const [watchesResult, appsResult, eventsOK, expandedServicesOK] = await Promise.all([
     getJSONResult(apiWatchesPath, null),
     getJSONResult(apiApplicationsPath, null),
     connOK ? loadEvents(seq) : Promise.resolve(false),
+    expandedServicesPromise,
   ]);
   if (!sameLoad()) return;
   if (watchesResult.ok) {
@@ -493,6 +495,7 @@ async function load() {
     ["readiness", readyResult], ["liveness", liveResult], ["monitoring", monResult],
     ["operations", opsResult], ["host metrics", hostMetricsResult], ["watches", watchesResult],
     ["applications", appsResult], ["events", { ok: eventsOK }],
+    ["service details", { ok: expandedServicesOK }],
   ];
   const failures = refreshResults.filter(([, result]) => !result.ok).map(([name]) => name);
   if (failures.length) {
@@ -1214,8 +1217,6 @@ restoreUIState();
 let allEvents = [];
 let expCache = {};         // last rendered expansion HTML per key (avoids flicker)
 let expDetailCache = {};   // last /api/services/{name} JSON per svc expansion key
-let svcExpandRefreshTick = 0;
-const SVC_EXPAND_FULL_EVERY = 6; // rebuild expansion HTML every N refresh cycles
 let eventExpanded = new Set();
 const liveOps = new Map(); // operations started from this browser session, keyed by service
 let liveOpsTimer = null;
@@ -2170,31 +2171,22 @@ function reassertExpansions() {
 
 // refreshExpandedServices reloads open service expansions once per dashboard
 // refresh (called from load(), not from re-renders — see reassertExpansions).
-// Service expansions skip the full HTML rebuild on most cycles (charts and
-// events are refreshed via hydrateServiceDetail only); a full renderServiceDetail
-// pass runs every SVC_EXPAND_FULL_EVERY polls or when the cache is empty.
+// Every dashboard refresh fetches and fully renders the detail so checks,
+// processes, rules and other non-chart fields cannot lag behind the row.
 // Skipped while the tab is hidden unless opts.force is set.
-function refreshExpandedServices(opts = {}) {
-  if (document.hidden && !opts.force) return;
+async function refreshExpandedServices(opts = {}) {
+  if (document.hidden && !opts.force) return true;
   if (opts.metricsOnly) {
     expanded.forEach((k) => {
       if (!isServiceExpansionKey(k)) return;
       const detail = expDetailCache[k];
       if (detail) hydrateServiceDetail(detail);
     });
-    return;
+    return true;
   }
-  const forceFull = !!opts.forceFull;
-  svcExpandRefreshTick++;
-  const periodicFull = forceFull || (svcExpandRefreshTick % SVC_EXPAND_FULL_EVERY === 0);
-  expanded.forEach((k) => {
-    if (!isServiceExpansionKey(k)) return;
-    if (!expCache[k] || periodicFull) {
-      loadExpansionFor(k);
-      return;
-    }
-    refreshServiceExpansionLight(k);
-  });
+  const keys = [...expanded].filter(isServiceExpansionKey);
+  const results = await Promise.all(keys.map(loadExpansionFor));
+  return results.every(Boolean);
 }
 
 // refreshExpandedWatches refetches recent events once per dashboard refresh and
@@ -2210,23 +2202,6 @@ async function refreshExpandedWatches() {
     const events = (await res.json()) || [];
     keys.forEach((k) => renderWatchExpansionInto(k, events));
   } catch (_) { /* keep the last content on a transient error */ }
-}
-
-async function refreshServiceExpansionLight(key) {
-  const name = expansionName(key, expansionPrefixService);
-  const tr = [...document.querySelectorAll("tr.exp-row")].find((r) => r.dataset.exp === key);
-  if (!tr) return;
-  // A structural re-render of #rows can recreate this row and blank its detail
-  // cell; re-assert the cached markup (a cheap no-op when already present) so the
-  // expansion survives expanding/collapsing other rows.
-  if (expCache[key]) litRender(expCache[key], tr.querySelector("td"));
-  try {
-    const res = await fetch(serviceAPI(name));
-    if (!res.ok) return;
-    const detailData = await res.json();
-    expDetailCache[key] = detailData;
-    hydrateServiceDetail(detailData);
-  } catch (_) { /* keep charts/events on a transient error */ }
 }
 
 // applyHash opens/scrolls to the target named in a #svc:|#wat:|#app: URL fragment
@@ -2318,18 +2293,17 @@ function renderWatchExpansionInto(key, events) {
   if (target) litRender(html, target);
 }
 
-const expLoading = new Set(); // keys with an in-flight detail fetch
+const expLoading = new Map(); // key -> shared in-flight detail fetch
 
-async function loadExpansionFor(key) {
-  if (expLoading.has(key)) return;
-  expLoading.add(key);
-  const cell = expansionCell(key);
-  if (cell && !expCache[key]) litRender(tpl`<span class="muted">loading…</span>`, cell);
-  try {
+function loadExpansionFor(key) {
+  if (expLoading.has(key)) return expLoading.get(key);
+  const pending = (async () => {
+    const cell = expansionCell(key);
+    if (cell && !expCache[key]) litRender(tpl`<span class="muted">loading…</span>`, cell);
     if (isServiceExpansionKey(key)) {
       const name = expansionName(key, expansionPrefixService);
       const res = await fetch(serviceAPI(name));
-      if (!res.ok) return;
+      if (!res.ok) return false;
       const detailData = await res.json();
       expDetailCache[key] = detailData;
       const html = renderServiceDetail(detailData);
@@ -2337,15 +2311,19 @@ async function loadExpansionFor(key) {
       const target = expansionCell(key);
       if (target) litRender(html, target);
       hydrateServiceDetail(detailData);
+      return true;
     } else if (isWatchExpansionKey(key)) {
       const res = await fetch(apiEventsRecentPath);
       const events = res.ok ? await res.json() : [];
       renderWatchExpansionInto(key, events);
+      return res.ok;
     }
-  } catch (_) { /* keep the last content on a transient error */
-  } finally {
+    return true;
+  })().catch(() => false).finally(() => {
     expLoading.delete(key);
-  }
+  });
+  expLoading.set(key, pending);
+  return pending;
 }
 
 // bucketize folds time-series points into cols buckets covering the last span
