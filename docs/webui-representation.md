@@ -186,7 +186,7 @@ Columns:
 | Memory | latest process-tree resident memory; blank for `no_resident_process` services |
 | FDs | open file-descriptor count from the process tree; blank for `no_resident_process` services |
 | IO R/W | cumulative process-tree disk read/write bytes; blank for `no_resident_process` services |
-| Actions | one state-aware start/stop button, restart, reload, monitor/unmonitor; reload is disabled when `can_reload` is false; the start/stop/restart confirm dialog offers **skip also_apply** when `also_apply` is set |
+| Actions | compact state-aware start/stop and restart icon buttons; reload, resume and monitor/unmonitor live in the row overflow menu; reload is disabled when `can_reload` is false; the start/stop/restart confirm dialog offers **skip also_apply** when `also_apply` is set |
 
 ## Containers and virtual machines panels
 
@@ -290,7 +290,7 @@ Columns:
 | Processes | compact list of processes currently using the mount path |
 | Users | unique users for those processes |
 | State | active/inactive/error pill |
-| Actions | admin-only `mount`; when mounted, `umount`, `alert`, and `kill+umount`; `/` renders these unmount-flow buttons disabled |
+| Actions | compact admin-only mount/umount icon; `alert` and `kill+umount` live in the overflow menu when mounted; `/` renders this unmount flow disabled |
 
 The column headers except Actions are sortable.
 `GET /api/mounts` includes a cached read-only blocker summary for the table.
@@ -353,7 +353,7 @@ Shared columns:
 | Summary | watch-specific status summary |
 | Last activity | latest hook/notify activity |
 | State | single normalized watch state: `disabled` when config/monitor state excludes it from active checks, `starting` before the first monitored sample, `failed` for an active failure, otherwise `ok` |
-| Actions | monitor/unmonitor and supported actions |
+| Actions | supported primary action plus an overflow menu for monitor/unmonitor |
 
 Interval, polarity (fires on fail / on threshold), hook and notifiers are not
 table columns; they live in the row expansion's config grid and remain
