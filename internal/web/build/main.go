@@ -75,8 +75,10 @@ type watchPanelDescriptor struct {
 
 var watchPanelTemplate = template.Must(template.New("watch-panel").Parse(`<h2 class="visually-hidden">{{.Heading}}</h2>
 <details id="{{.SectionID}}" open class="panel panel-hidden" data-panel="{{.Key}}">
-  <summary>{{.Title}} <span id="{{.CountID}}" class="muted"></span></summary>
+  <summary><span class="summary-title">{{.Title}} <span id="{{.CountID}}" class="muted"></span></span></summary>
   <div id="{{.ControlsID}}" class="panel-controls">
+    <button id="{{.Key}}-group-toggle" class="icon-btn" title="Group {{.Title}} by type" aria-label="Group {{.Title}} by type" aria-pressed="false">&#x25A6;</button>
+    <button id="{{.Key}}-groups-toggle" class="icon-btn" title="Collapse {{.Title}} groups" aria-label="Collapse {{.Title}} groups">&#x25BE;</button>
     <label for="{{.SearchID}}" class="visually-hidden">{{.SearchLabel}}</label>
     <input id="{{.SearchID}}" type="search" placeholder="{{.SearchPlaceholder}}" aria-describedby="search-shortcut-hint">
 {{if .TypeID}}    <select id="{{.TypeID}}" title="{{.TypeLabel}}" aria-label="{{.TypeLabel}}">

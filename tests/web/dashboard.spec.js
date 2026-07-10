@@ -20,6 +20,9 @@ const dashboard = {
   mounts: [{
     name: "data.mount", display_name: "Data", category: "storage", path: "/data",
     mounted: true, state: "active", refcount: 1, blockers: [], can_umount: true,
+  }, {
+    name: "backup.mount", display_name: "Backup", category: "backup", path: "/backup",
+    mounted: true, state: "active", refcount: 0, blockers: [], can_umount: true,
   }],
   notifiers: [],
   daemon: { backend: "systemd", hostname: "fixture", host_uptime_seconds: 86400 },
@@ -41,6 +44,20 @@ const watches = [{
   name: "net-wan", display_name: "WAN", category: "network",
   enabled: true, monitored: true, state: "ok", check_type: "net",
   summary: "wan state up", interval: "30s", status_observed_at: "2026-07-10T12:00:00Z",
+}, {
+  name: "icmp-gateway", display_name: "Gateway", category: "network",
+  enabled: true, monitored: true, state: "ok", check_type: "icmp",
+  summary: "gateway reachable", interval: "30s", status_observed_at: "2026-07-10T12:00:00Z",
+}, {
+  name: "storage-data", display_name: "Data volume", category: "storage",
+  enabled: true, monitored: true, state: "ok", check_type: "storage",
+  storage: { filesystem: "ext4", mount_point: "/data", used_bytes: 10, total_bytes: 100 },
+  summary: "10% used", interval: "1m", status_observed_at: "2026-07-10T12:00:00Z",
+}, {
+  name: "storage-backup", display_name: "Backup volume", category: "storage",
+  enabled: true, monitored: true, state: "ok", check_type: "storage",
+  storage: { filesystem: "xfs", mount_point: "/backup", used_bytes: 20, total_bytes: 100 },
+  summary: "20% used", interval: "1m", status_observed_at: "2026-07-10T12:00:00Z",
 }];
 
 const applications = [{
@@ -128,9 +145,20 @@ test("dashboard passes axe and fits the viewport", async ({ page }) => {
 });
 
 test("single-choice filters stay hidden", async ({ page }) => {
-  for (const selector of ["#svc-category", "#app-category", "#library-category", "#mount-category", "#network-type"]) {
+  for (const selector of ["#svc-category", "#app-category", "#library-category", "#watch-type"]) {
     await expect(page.locator(selector)).toBeHidden();
   }
+});
+
+test("inventory panels group by their meaningful type", async ({ page }) => {
+  await page.locator("#storage-group-toggle").click();
+  await expect(page.locator("#storage-rows .group-row")).toHaveCount(2);
+  await page.locator("#network-group-toggle").click();
+  await expect(page.locator("#network-rows .group-row")).toHaveCount(2);
+  await page.locator("#mount-group-toggle").click();
+  await expect(page.locator("#mount-rows .group-row")).toHaveCount(2);
+  await page.locator('#network-rows [data-group-name="icmp"]').click();
+  await expect(page.locator("#wat-row-icmp-gateway")).toBeHidden();
 });
 
 test("global search opens a service and exposes individual actions", async ({ page }) => {

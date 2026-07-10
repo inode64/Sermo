@@ -31,8 +31,9 @@ deterministas de la API.
   registro. Los IDs estáticos, columnas, controles y textos proceden de
   `internal/web/src/watch-panels.json`, compartido por el builder Go del shell y
   el registro en runtime.
-- Los servicios, aplicaciones y watches (incluidas las watches de storage) pueden
-  usar `category` para agrupar, filtrar o buscar según el panel.
+- Los servicios, contenedores, máquinas virtuales, aplicaciones, librerías y
+  unidades de montaje agrupan por `category`; los paneles de watches agrupan por
+  el tipo específico de cada panel.
 - Un campo YAML `category` de nivel superior es la fuente de la categoría. Si está ausente,
   los servicios recurren a `service`, las aplicaciones a `app`, las watches de
   storage a `storage` y el resto de watches a `watch`.
@@ -199,7 +200,7 @@ Columnas:
 | Memory | última memoria residente del árbol de procesos; vacío para servicios `no_resident_process` |
 | FDs | recuento de descriptores de archivo abiertos del árbol de procesos; vacío para servicios `no_resident_process` |
 | IO R/W | bytes acumulados de lectura/escritura en disco del árbol de procesos; vacío para servicios `no_resident_process` |
-| Actions | botones icono compactos start/stop según estado y restart; reload, resume y monitor/unmonitor viven en el menú adicional de la fila; reload se desactiva cuando `can_reload` es false; el diálogo de confirmación de start/stop/restart ofrece **skip also_apply** cuando `also_apply` está definido |
+| Actions | botones icono compactos e individuales para start/stop, restart, reload, resume y monitor/unmonitor; reload se desactiva cuando `can_reload` es false; el diálogo de confirmación de start/stop/restart ofrece **skip also_apply** cuando `also_apply` está definido |
 
 ## Paneles de contenedores y máquinas virtuales
 
@@ -215,6 +216,8 @@ ruta de operación de servicios.
 | --- | --- | --- |
 | Containers | `docker` | `resume` cuando el backend del contenedor informa `paused` |
 | Virtual machines | `virtual-machine` | `resume` cuando el backend de VM informa `paused` |
+
+Ambos paneles exponen los mismos controles de agrupación y plegado por categoría que Services.
 
 ## Expansión de fila de servicio
 
@@ -315,7 +318,9 @@ Section id: `mounts-section`
 | --- | --- |
 | Título | `Mount units` más el recuento total |
 | Visibilidad | oculto cuando no se devuelven unidades de montaje configuradas |
+| Iconos del título | agrupar por grupo del mount, contraer/expandir todos los grupos (ocultos cuando solo hay un grupo) |
 | Controles | búsqueda por texto del mount, selector de grupo cuando hay más de uno, filtros de estado (`all`, `active`, `inactive`) |
+| Agrupación | filas plegables por grupo del mount |
 
 Columnas:
 
@@ -363,8 +368,10 @@ aparecen en el detalle del servicio.
 | Parte | Representación actual |
 | --- | --- |
 | Título | nombre del panel más el recuento total del subconjunto de watches de ese panel |
+| Iconos del título | agrupar por tipo del panel, contraer/expandir todos los grupos de tipo (ocultos cuando solo hay un grupo) |
 | Controles | búsqueda, filtro de tipo (por panel, ver abajo), filtros de estado, recuento mostrado |
-| Filtro de tipo | `all ... types` específico del panel más los valores distintos presentes actualmente en ese panel; Storage filtra por tipo de sistema de archivos (todos sus watches comparten un mismo tipo de check), Certificate watches por algoritmo de clave pública (el desplegable solo aparece con 3+ tipos de clave distintos), Disk I/O no tiene desplegable de tipo |
+| Filtro de tipo | `all ... types` específico del panel más los valores distintos presentes actualmente en ese panel; Storage filtra por tipo de sistema de archivos (todos sus watches comparten un mismo tipo de check), Certificate watches por algoritmo de clave pública; el selector se oculta cuando solo hay un valor |
+| Agrupación | filas plegables por el mismo tipo específico del panel usado por el filtro de tipo |
 | Filtros de estado | all, disabled, ok, starting, failed |
 | Búsqueda | display name, nombre crudo, categoría, tipo, resumen, intervalo, polaridad, estado/comando del hook, nombres de notifiers, estado de expand/dry-run/monitorización y condiciones |
 | Ordenación | todas las cabeceras de columna excepto Actions son ordenables; Storage, Network, Certificate y Disk I/O ordenan por Name por defecto, Host watches mantiene el orden del servidor hasta que se pulsa una cabecera |
