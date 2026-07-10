@@ -14,8 +14,11 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"html/template"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,6 +35,7 @@ const (
 	webBuildShellFilename  = "index.html"
 	webBuildStylesFilename = "styles.css"
 	webBuildScriptFilename = "app.js"
+	watchPanelsFilename    = "watch-panels.json"
 
 	webBuildExpectedOutputFiles = 1
 	webBuildFailureExitCode     = 1
@@ -39,6 +43,63 @@ const (
 	webBuildOutputFileMode      = 0o600
 	webBuildReplaceOnce         = 1
 )
+
+type watchPanelColumn struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
+}
+
+type watchPanelDescriptor struct {
+	Key               string             `json:"key"`
+	SectionID         string             `json:"sectionId"`
+	Heading           string             `json:"heading"`
+	Title             string             `json:"title"`
+	CountID           string             `json:"countId"`
+	ControlsID        string             `json:"controlsId"`
+	SearchID          string             `json:"searchId"`
+	SearchLabel       string             `json:"searchLabel"`
+	SearchPlaceholder string             `json:"searchPlaceholder"`
+	TypeID            string             `json:"typeId"`
+	TypeLabel         string             `json:"typeLabel"`
+	AllTypesLabel     string             `json:"allTypesLabel"`
+	FiltersID         string             `json:"filtersId"`
+	FilterCountID     string             `json:"filterCountId"`
+	RowsID            string             `json:"rowsId"`
+	Caption           string             `json:"caption"`
+	Columns           []watchPanelColumn `json:"columns"`
+	Footnote          string             `json:"footnote"`
+	FootnotePrefix    string             `json:"footnotePrefix"`
+	FootnoteCode      string             `json:"footnoteCode"`
+	FootnoteSuffix    string             `json:"footnoteSuffix"`
+}
+
+var watchPanelTemplate = template.Must(template.New("watch-panel").Parse(`<h2 class="visually-hidden">{{.Heading}}</h2>
+<details id="{{.SectionID}}" open class="panel panel-hidden" data-panel="{{.Key}}">
+  <summary>{{.Title}} <span id="{{.CountID}}" class="muted"></span></summary>
+  <div id="{{.ControlsID}}" class="panel-controls">
+    <label for="{{.SearchID}}" class="visually-hidden">{{.SearchLabel}}</label>
+    <input id="{{.SearchID}}" type="search" placeholder="{{.SearchPlaceholder}}" aria-describedby="search-shortcut-hint">
+{{if .TypeID}}    <select id="{{.TypeID}}" title="{{.TypeLabel}}" aria-label="{{.TypeLabel}}">
+      <option value="all">{{.AllTypesLabel}}</option>
+    </select>{{end}}
+    <span id="{{.FiltersID}}" role="group" aria-label="{{.SearchLabel}} by state">
+      <button data-wf="all" class="f-active" aria-pressed="true">all</button>
+      <button data-wf="disabled" aria-pressed="false">disabled</button>
+      <button data-wf="ok" aria-pressed="false">ok</button>
+      <button data-wf="starting" aria-pressed="false">starting</button>
+      <button data-wf="failed" aria-pressed="false">failed</button>
+    </span>
+    <span id="{{.FilterCountID}}" class="muted"></span>
+  </div>
+  <table class="watch-table">
+    <caption class="visually-hidden">{{.Caption}}</caption>
+    <thead><tr>{{range .Columns}}
+      {{if .Key}}<th scope="col" class="sortable" data-watch-sort="{{.Key}}">{{.Label}}<span class="sort-ind" data-wi="{{.Key}}"></span></th>{{else}}<th scope="col">{{.Label}}</th>{{end}}{{end}}
+    </tr></thead>
+    <tbody id="{{.RowsID}}"></tbody>
+  </table>
+  <p class="muted panel-footnote">{{if .FootnoteCode}}{{.FootnotePrefix}}<code>{{.FootnoteCode}}</code>{{.FootnoteSuffix}}{{else}}{{.Footnote}}{{end}}</p>
+</details>`))
 
 func main() {
 	srcDir := flag.String("src", "internal/web/src", "dashboard source directory")
@@ -58,6 +119,10 @@ func build(srcDir, out string) error {
 	if err != nil {
 		return err
 	}
+	watchPanels, err := loadWatchPanels(filepath.Join(srcDir, watchPanelsFilename))
+	if err != nil {
+		return fmt.Errorf("watch panels: %w", err)
+	}
 	css, err := bundleCSS(filepath.Join(srcDir, webBuildStylesFilename))
 	if err != nil {
 		return fmt.Errorf("css: %w", err)
@@ -68,6 +133,17 @@ func build(srcDir, out string) error {
 	}
 
 	page := string(shell)
+	for _, panel := range watchPanels {
+		marker := watchPanelMarker(panel.Key)
+		if strings.Count(page, marker) != webBuildReplaceOnce {
+			return fmt.Errorf("watch panel marker %q must occur once", marker)
+		}
+		markup, err := renderWatchPanel(panel)
+		if err != nil {
+			return fmt.Errorf("watch panel %q: %w", panel.Key, err)
+		}
+		page = strings.Replace(page, marker, markup, webBuildReplaceOnce)
+	}
 	if !strings.Contains(page, cssMarker) {
 		return fmt.Errorf("css marker %q not found in shell", cssMarker)
 	}
@@ -93,6 +169,43 @@ func build(srcDir, out string) error {
 	}
 
 	return os.WriteFile(out, []byte(page), webBuildOutputFileMode) // #nosec G304 G703
+}
+
+func loadWatchPanels(path string) ([]watchPanelDescriptor, error) {
+	data, err := os.ReadFile(path) // #nosec G304
+	if err != nil {
+		return nil, err
+	}
+	var panels []watchPanelDescriptor
+	if err := json.Unmarshal(data, &panels); err != nil {
+		return nil, err
+	}
+	if len(panels) == 0 {
+		return nil, fmt.Errorf("no descriptors")
+	}
+	seen := make(map[string]bool, len(panels))
+	for _, panel := range panels {
+		if panel.Key == "" || panel.SectionID == "" || panel.RowsID == "" || len(panel.Columns) == 0 {
+			return nil, fmt.Errorf("descriptor has missing key, section, rows or columns")
+		}
+		if seen[panel.Key] {
+			return nil, fmt.Errorf("duplicate key %q", panel.Key)
+		}
+		seen[panel.Key] = true
+	}
+	return panels, nil
+}
+
+func watchPanelMarker(key string) string {
+	return "<!--__SERMO_WATCH_PANEL:" + key + "__-->"
+}
+
+func renderWatchPanel(panel watchPanelDescriptor) (string, error) {
+	var out bytes.Buffer
+	if err := watchPanelTemplate.Execute(&out, panel); err != nil {
+		return "", err
+	}
+	return out.String(), nil
 }
 
 func bundleJS(entry string) (string, error) {

@@ -298,6 +298,25 @@ func TestSourceSeparatesAPIAndFormattingModules(t *testing.T) {
 	}
 }
 
+func TestSourceSharesWatchPanelDescriptorsWithBuilder(t *testing.T) {
+	app, err := os.ReadFile("src/app.js")
+	if err != nil {
+		t.Fatalf("read src/app.js: %v", err)
+	}
+	descriptors, err := os.ReadFile("src/watch-panels.json")
+	if err != nil {
+		t.Fatalf("read src/watch-panels.json: %v", err)
+	}
+	if !strings.Contains(string(app), `import watchPanelDescriptors from "./watch-panels.json"`) {
+		t.Fatal("app does not import shared watch panel descriptors")
+	}
+	for _, key := range []string{`"storage"`, `"network"`, `"cert"`, `"diskio"`, `"host"`} {
+		if !strings.Contains(string(descriptors), `"key": `+key) {
+			t.Errorf("watch panel descriptors missing key %s", key)
+		}
+	}
+}
+
 func nodeByID(doc *html.Node, id string) *html.Node {
 	var found *html.Node
 	walk(doc, func(n *html.Node) {

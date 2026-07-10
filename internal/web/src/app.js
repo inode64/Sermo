@@ -1,4 +1,5 @@
 import { html as tpl, render as litRender, nothing } from "./vendor/lit-html.js";
+import watchPanelDescriptors from "./watch-panels.json";
 import {
   apiActionSuffix, apiActivityPath, apiApplicationsPath, apiDaemonPath,
   apiEventsRecentPath, apiHostPath, apiLocksPath,
@@ -1057,66 +1058,46 @@ let daemonMetricWindow = "24h";
 let allWatches = [];
 let globalTargetsByValue = new Map();
 let globalTargetSyncPending = false;
-// watchPanels is the single registry of the watch panels: classification
-// (match), section/controls selectors and filter state all live here, and the
-// section's <details data-panel="..."> attribute names the key. Rendering,
-// deep-link routing and attention navigation iterate this object, so adding a
-// panel means one entry here plus its HTML block — no other list to extend.
-// Panels are tried in declaration order; "host" has no match and is the
-// fallback for every remaining watch type.
-const watchPanels = {
+const watchPanelBehaviors = {
   storage: {
     match: isStorageWatch,
-    query: "", status: filterAll, type: filterAll, sort: { key: "", dir: 1 }, defaultSortByName: true,
-    section: "#storage-section", rows: "#storage-rows", count: "#storage-count",
-    filterCount: "#storage-filter-count", filters: "#storage-filters", search: "#storage-search", typeSelect: "#storage-type",
-    allTypesLabel: "all storage types", empty: "No storage watches.", emptyFiltered: "No storage watches match the filter.",
-    // Storage watches all share one check_type, so filter by filesystem type
-    // (xfs, ext4, vfat, …) instead — the dropdown lists every distinct filesystem.
     typeOf: (w) => (w.storage && w.storage.filesystem) || "",
-    cols: 7,
     rowHTML: storageRowHTML,
   },
   network: {
     match: isNetworkWatch,
-    query: "", status: filterAll, type: filterAll, sort: { key: "", dir: 1 }, defaultSortByName: true,
-    section: "#network-section", rows: "#network-rows", count: "#network-count",
-    filterCount: "#network-filter-count", filters: "#network-filters", search: "#network-search", typeSelect: "#network-type",
-    allTypesLabel: "all network types", empty: "No network watches.", emptyFiltered: "No network watches match the filter.",
-    cols: 6,
   },
   cert: {
     match: isCertWatch,
-    query: "", status: filterAll, type: filterAll, sort: { key: "", dir: 1 }, defaultSortByName: true,
-    section: "#cert-section", rows: "#cert-rows", count: "#cert-count",
-    filterCount: "#cert-filter-count", filters: "#cert-filters", search: "#cert-search", typeSelect: "#cert-type",
-    allTypesLabel: "all certificate types", empty: "No certificate watches.", emptyFiltered: "No certificate watches match the filter.",
-    // Certificate watches all share one check_type, so filter by public-key
-    // algorithm (RSA, ECDSA, Ed25519, …). The dropdown only appears once more
-    // than two distinct key types are present (typeFilterMin), and the panel has
-    // an extra Key type column so cols is 8 for its expansion/empty rows.
     typeOf: (w) => readingRaw(w, "public_key_algorithm"),
-    typeFilterMin: 3, cols: 8,
     rowHTML: certRowHTML,
   },
   diskio: {
     match: isDiskioWatch,
-    query: "", status: filterAll, type: filterAll, sort: { key: "", dir: 1 }, defaultSortByName: true,
-    section: "#diskio-section", rows: "#diskio-rows", count: "#diskio-count",
-    filterCount: "#diskio-filter-count", filters: "#diskio-filters", search: "#diskio-search",
-    // No type dropdown: disk I/O watches only ever have the one check type.
-    empty: "No disk I/O watches.", emptyFiltered: "No disk I/O watches match the filter.",
-    cols: 8,
     rowHTML: diskioRowHTML,
   },
-  host: {
-    query: "", status: filterAll, type: filterAll, sort: { key: "", dir: 1 }, defaultSortByName: false,
-    section: "#watches-section", rows: "#watch-rows", count: "#watches-count",
-    filterCount: "#watch-count", filters: "#watch-filters", search: "#watch-search", typeSelect: "#watch-type",
-    allTypesLabel: "all host types", empty: "No watches.", emptyFiltered: "No watches match the filter.",
-    cols: 6,
-  },
+  host: {},
 };
+
+// watchPanelDescriptors is shared with the Go web builder: one descriptor owns
+// static shell IDs/columns/text and the runtime selectors derived from them.
+// Behaviors stay as functions here because JSON intentionally carries no code.
+const watchPanels = Object.fromEntries(watchPanelDescriptors.map((descriptor) => [descriptor.key, {
+  ...descriptor,
+  ...watchPanelBehaviors[descriptor.key],
+  query: "",
+  status: filterAll,
+  type: filterAll,
+  sort: { key: "", dir: 1 },
+  section: "#" + descriptor.sectionId,
+  rows: "#" + descriptor.rowsId,
+  count: "#" + descriptor.countId,
+  filterCount: "#" + descriptor.filterCountId,
+  filters: "#" + descriptor.filtersId,
+  search: "#" + descriptor.searchId,
+  typeSelect: descriptor.typeId ? "#" + descriptor.typeId : undefined,
+  cols: descriptor.columns.length,
+}]));
 
 const UI_STATE_KEY = "sermo-ui-state";
 const KEYBOARD_SHORTCUTS_KEY = "sermo-keyboard-shortcuts";
