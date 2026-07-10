@@ -1141,6 +1141,16 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 		} else if op := cfgval.AsString(check[checks.CheckKeyOp]); op != "" {
 			out = append(out, web.WatchCondition{Field: checks.DataKeyCount, Op: op, Value: cfgval.String(check[checks.CheckKeyValue])})
 		}
+		if m, ok := check[checks.CheckKeyDelta].(map[string]any); ok {
+			out = append(out, web.WatchCondition{
+				Field: checks.CheckKeyDelta,
+				Op:    cfgval.AsString(m[checks.CheckKeyOp]),
+				Value: cfgval.String(m[checks.CheckKeyValue]),
+			})
+		}
+		if within := cfgval.String(check[checks.CheckKeyWithin]); within != "" {
+			out = append(out, web.WatchCondition{Field: checks.CheckKeyWithin, Value: within})
+		}
 	case checks.CheckTypeFile:
 		out = append(out, fileWatchConditions(check)...)
 	case checks.CheckTypeProcess:

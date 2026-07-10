@@ -787,12 +787,57 @@ checks:
   bad-op:   { type: count, path: /var/log, op: "=>", value: 1 }
   bad-val:  { type: count, path: /var/log, op: ">", value: lots }
   bad-rec:  { type: count, path: /var/log, recursive: "yes", op: ">", value: 1 }
+  delta-no-window:
+    type: count
+    path: /var/log
+    delta: { op: ">", value: 10 }
+  delta-bad-window:
+    type: count
+    path: /var/log
+    delta: { op: ">", value: 10 }
+    within: nope
+  delta-bad-op:
+    type: count
+    path: /var/log
+    delta: { op: "=>", value: 10 }
+    within: 2m
+  delta-bad-val:
+    type: count
+    path: /var/log
+    delta: { op: ">", value: many }
+    within: 2m
+  delta-mixed-count:
+    type: count
+    path: /var/log
+    count: { op: ">", value: 10 }
+    delta: { op: ">", value: 5 }
+    within: 2m
+  delta-mixed-top:
+    type: count
+    path: /var/log
+    op: ">"
+    value: 10
+    delta: { op: ">", value: 5 }
+    within: 2m
+  window-no-delta:
+    type: count
+    path: /var/log
+    op: ">"
+    value: 10
+    within: 2m
 `)
 	mustHave(t, bad, "count check requires a path")
 	mustHave(t, bad, `count `+"`of`"+` "pipe" is not one of`)
 	mustHave(t, bad, "count check requires a valid op")
 	mustHave(t, bad, `count check value "lots" must be numeric`)
 	mustHave(t, bad, "count recursive must be a boolean")
+	mustHave(t, bad, "within is required when count delta is set")
+	mustHave(t, bad, `within "nope" must be a valid positive duration`)
+	mustHave(t, bad, "delta has an invalid op")
+	mustHave(t, bad, `delta value "many" must be numeric`)
+	mustHave(t, bad, "count check must not mix a count threshold with delta")
+	mustHave(t, bad, "count check must not mix top-level op/value with delta")
+	mustHave(t, bad, "within requires delta")
 
 	good := validateService(t, `
 name: svc
@@ -800,6 +845,12 @@ service: x
 policy: { cooldown: 5m }
 checks:
   tmp-files: { type: count, path: /tmp, of: file, recursive: true, op: "<=", value: 100 }
+  tmp-growth:
+    type: count
+    path: /tmp
+    of: file
+    delta: { op: ">", value: 20 }
+    within: 2m
 `)
 	if hasIssue(good, "count") {
 		t.Fatalf("valid count check flagged: %v", good)

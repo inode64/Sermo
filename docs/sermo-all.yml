@@ -207,6 +207,16 @@ watches:
       count: { op: ">", value: 1000 }
     then: { notify: [ops-email] }
 
+  file-count-growth:
+    monitor: disabled
+    check:
+      type: count
+      path: /var/spool/demo
+      of: file
+      delta: { op: ">", value: 200 }
+      within: 2m
+    then: { notify: [ops-email] }
+
   sqlite-health:
     monitor: disabled
     check: { type: sqlite, path: /var/lib/demo/demo.db, quick: true }

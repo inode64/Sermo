@@ -12,6 +12,7 @@ const (
 	DataKeyAvail            = "avail"
 	DataKeyAvailableBytes   = fieldAvailableBytes
 	DataKeyBackend          = CheckKeyBackend
+	DataKeyBaselineCount    = "baseline_count"
 	DataKeyBaselineBytes    = "baseline_bytes"
 	DataKeyCE               = fieldCE
 	DataKeyChanged          = "changed"
@@ -35,6 +36,7 @@ const (
 	DataKeyFSType           = CheckKeyFSType
 	DataKeyGateway          = "gateway"
 	DataKeyGrowthBytes      = "growth_bytes"
+	DataKeyGrowthCount      = "growth_count"
 	DataKeyHealth           = "health"
 	DataKeyHost             = fieldHost
 	DataKeyInodesTotal      = "inodes_total"

@@ -104,6 +104,22 @@ func (b *WebBackend) countWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRe
 		{Field: checks.DataKeyOf, Label: watchReadingLabelOf, Value: kind},
 		{Field: checks.DataKeyCount, Label: watchReadingLabelCount, Value: strconv.Itoa(n)},
 	}
+	if m, ok := w.check[checks.CheckKeyDelta].(map[string]any); ok {
+		readings = append(readings, web.WatchReading{
+			Field: checks.CheckKeyDelta,
+			Label: watchReadingLabelGrowthLimit,
+			Value: watchConditionText(web.WatchCondition{
+				Field: checks.CheckKeyDelta,
+				Op:    cfgval.AsString(m[checks.CheckKeyOp]),
+				Value: cfgval.String(m[checks.CheckKeyValue]),
+			}),
+		})
+	}
+	if within := cfgval.String(w.check[checks.CheckKeyWithin]); within != "" {
+		readings = append(readings, web.WatchReading{
+			Field: checks.CheckKeyWithin, Label: watchReadingLabelWindow, Value: within,
+		})
+	}
 	return nil, readings, fmt.Sprintf("%d %s entries %s %s", n, kind, scope, path)
 }
 

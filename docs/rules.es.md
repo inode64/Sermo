@@ -1669,10 +1669,11 @@ checks:
 
 ### Count
 
-Una comprobación `count` cuenta las entradas en un directorio y compara el total con un
-umbral. Es de **estilo condición** (`OK == true` significa que la comparación se cumple),
-así que en reglas `active: {check: …}` se dispara cuando la comparación se cumple y
-`failed: {check: …}` se dispara cuando no.
+Una comprobación `count` cuenta las entradas en un directorio y compara el total
+con un umbral, o alerta cuando el total crece en un `delta` dentro de una
+ventana. Es de **estilo condición** (`OK == true` significa que la comparación se
+cumple), así que en reglas `active: {check: …}` se dispara cuando la comparación
+se cumple y `failed: {check: …}` se dispara cuando no.
 
 ```yaml
 checks:
@@ -1683,6 +1684,16 @@ checks:
     recursive: false              # optional, default false
     op: ">"                       # >=, >, <=, <, ==, !=
     value: 1000                   # numeric threshold
+```
+
+```yaml
+checks:
+  spool-growth:
+    type: count
+    path: /var/spool/myapp
+    of: file
+    delta: { op: ">", value: 200 } # alerta si el recuento crece en >200…
+    within: 2m                     # …dentro de esta ventana deslizante
 ```
 
 - **`of`** selecciona qué entradas se cuentan. Las entradas se clasifican por su propio
@@ -1696,6 +1707,13 @@ checks:
 - El umbral también puede escribirse como un predicado anidado —
   `count: { op: ">", value: 1000 }` — coincidiendo con la forma `{op, value}` que las otras
   comprobaciones usan. Usa una forma u otra, no ambas.
+- **`delta` + `within`** tiene estado. Cada ciclo muestrea el recuento, conserva
+  las muestras del último `within` y compara el recuento actual con la muestra más
+  antigua que sigue dentro de la ventana. El primer ciclo solo establece la línea
+  base (sin alerta), y solo los aumentos disparan la comprobación; un directorio
+  estable o decreciente pasa. Los datos del resultado llevan `count`,
+  `baseline_count`, `growth_count`, `window` y `value` (el crecimiento). Usa
+  `count`/`op`/`value` o `delta`/`within`, no ambos.
 
 ## Métricas
 

@@ -4,8 +4,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // countTree builds a temp dir:
@@ -47,6 +49,38 @@ func countOf(root, kind string, recursive bool, op string, value float64) countC
 	}
 }
 
+func addCountFiles(t *testing.T, root, prefix string, n int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		path := filepath.Join(root, prefix+"-"+strconv.Itoa(i))
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func removeCountFiles(t *testing.T, root, prefix string, n int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		if err := os.Remove(filepath.Join(root, prefix+"-"+strconv.Itoa(i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func deltaCountOf(root string, now *time.Time, op string, value float64, window time.Duration) countCheck {
+	return countCheck{
+		base:       base{name: "c"},
+		path:       root,
+		kind:       CountKindFile,
+		deltaOp:    op,
+		deltaValue: value,
+		window:     window,
+		clock:      func() time.Time { return *now },
+		state:      &countState{},
+	}
+}
+
 func TestCountClassifiesEntriesNonRecursive(t *testing.T) {
 	root := countTree(t)
 	cases := []struct {
@@ -80,6 +114,70 @@ func TestCountRecursiveDescendsSubtree(t *testing.T) {
 	// Recursive dirs: sub/, sub/nested/ = 2 (root itself never counted).
 	if n, _ := countOf(root, CountKindDir, true, "==", 0).tally(context.Background()); n != 2 {
 		t.Fatalf("recursive dir count = %d, want 2", n)
+	}
+}
+
+func TestCountDeltaWithinWindowAlertsOnGrowth(t *testing.T) {
+	root := t.TempDir()
+	addCountFiles(t, root, "base", 1)
+	now := time.Unix(0, 0)
+	c := deltaCountOf(root, &now, ">", 2, 2*time.Minute)
+
+	if res := c.Run(context.Background()); res.OK {
+		t.Fatalf("first cycle must only baseline: %s", res.Message)
+	}
+
+	now = now.Add(time.Minute)
+	addCountFiles(t, root, "batch-a", 2)
+	if res := c.Run(context.Background()); res.OK {
+		t.Fatalf("growth equal to the > threshold must not alert: %s", res.Message)
+	}
+
+	now = now.Add(time.Minute)
+	addCountFiles(t, root, "batch-b", 1)
+	res := c.Run(context.Background())
+	if !res.OK {
+		t.Fatalf("growth over the threshold should alert: %s", res.Message)
+	}
+	if res.Data[DataKeyCount] != 4 ||
+		res.Data[DataKeyBaselineCount] != 1 ||
+		res.Data[DataKeyGrowthCount] != 3 {
+		t.Fatalf("data = %+v, want count=4 baseline_count=1 growth_count=3", res.Data)
+	}
+	if res.Data[DataKeyWindow] != (2 * time.Minute).String() {
+		t.Fatalf("window data = %v, want 2m0s", res.Data[DataKeyWindow])
+	}
+}
+
+func TestCountDeltaWindowPrunesOldGrowth(t *testing.T) {
+	root := t.TempDir()
+	addCountFiles(t, root, "base", 1)
+	now := time.Unix(0, 0)
+	c := deltaCountOf(root, &now, ">", 2, 2*time.Minute)
+
+	_ = c.Run(context.Background())
+	now = now.Add(3 * time.Minute)
+	addCountFiles(t, root, "old", 3)
+	res := c.Run(context.Background())
+	if res.OK {
+		t.Fatalf("growth before the window must be pruned: %s", res.Message)
+	}
+	if res.Data[DataKeyBaselineCount] != 4 || res.Data[DataKeyGrowthCount] != 0 {
+		t.Fatalf("data = %+v, want baseline_count=4 growth_count=0", res.Data)
+	}
+}
+
+func TestCountDeltaDecreaseDoesNotAlert(t *testing.T) {
+	root := t.TempDir()
+	addCountFiles(t, root, "base", 4)
+	now := time.Unix(0, 0)
+	c := deltaCountOf(root, &now, "<", 10, 2*time.Minute)
+
+	_ = c.Run(context.Background())
+	now = now.Add(time.Minute)
+	removeCountFiles(t, root, "base", 3)
+	if res := c.Run(context.Background()); res.OK {
+		t.Fatalf("shrinking count must not alert even if the comparison would match: %s", res.Message)
 	}
 }
 
@@ -161,12 +259,70 @@ func TestBuildCountCheck(t *testing.T) {
 	}
 }
 
+func TestBuildCountDeltaCheck(t *testing.T) {
+	root := countTree(t)
+	section := map[string]any{
+		"growth": map[string]any{
+			"type":   "count",
+			"path":   root,
+			"of":     "file",
+			"delta":  map[string]any{"op": ">", "value": 2},
+			"within": "2m",
+		},
+	}
+	built, warns := Build(section, Deps{})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(built) != 1 {
+		t.Fatalf("built %d checks, want 1", len(built))
+	}
+	c, ok := built[0].Check.(countCheck)
+	if !ok {
+		t.Fatalf("built check = %T, want countCheck", built[0].Check)
+	}
+	if c.deltaOp != ">" || c.deltaValue != 2 || c.window != 2*time.Minute || c.state == nil {
+		t.Fatalf("built delta count = %+v, want op > value 2 window 2m state", c)
+	}
+	if res := c.Run(context.Background()); res.OK {
+		t.Fatalf("first delta run must baseline only: %s", res.Message)
+	}
+}
+
 func TestBuildCountCheckRejectsBadInput(t *testing.T) {
 	cases := []map[string]any{
 		{"type": "count", "op": ">", "value": 1},                               // no path
 		{"type": "count", "path": "/tmp", "op": "><", "value": 1},              // bad op
 		{"type": "count", "path": "/tmp", "op": ">", "value": "lots"},          // non-numeric value
 		{"type": "count", "path": "/tmp", "of": "pipe", "op": ">", "value": 1}, // bad kind
+		{
+			"type": "count", "path": "/tmp",
+			"delta": map[string]any{"op": ">", "value": 1},
+		}, // no within
+		{
+			"type": "count", "path": "/tmp",
+			"delta": map[string]any{"op": ">", "value": 1}, "within": "nope",
+		}, // bad within
+		{
+			"type": "count", "path": "/tmp",
+			"delta": map[string]any{"op": "><", "value": 1}, "within": "2m",
+		}, // bad delta op
+		{
+			"type": "count", "path": "/tmp",
+			"delta": map[string]any{"op": ">", "value": "lots"}, "within": "2m",
+		}, // bad delta value
+		{
+			"type": "count", "path": "/tmp",
+			"count": map[string]any{"op": ">", "value": 1},
+			"delta": map[string]any{"op": ">", "value": 1}, "within": "2m",
+		}, // mixed modes
+		{
+			"type": "count", "path": "/tmp", "op": ">", "value": 1,
+			"delta": map[string]any{"op": ">", "value": 1}, "within": "2m",
+		}, // mixed modes
+		{
+			"type": "count", "path": "/tmp", "op": ">", "value": 1, "within": "2m",
+		}, // window without delta
 	}
 	for i, entry := range cases {
 		_, warns := Build(map[string]any{"c": entry}, Deps{})
