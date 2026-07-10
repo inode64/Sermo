@@ -472,6 +472,31 @@ func TestSourceMetricChartRendersZeroValuedSeries(t *testing.T) {
 	}
 }
 
+func TestSourceKeepsMetricSelectionPerService(t *testing.T) {
+	src, err := os.ReadFile("src/app.js")
+	if err != nil {
+		t.Fatalf("read src/app.js: %v", err)
+	}
+	text := string(src)
+	for _, marker := range []string{
+		`const serviceMetricStates = new Map()`,
+		`function serviceMetricState(name)`,
+		`serviceMetricStates: Object.fromEntries(serviceMetricStates)`,
+		`data-window-service="${service || nothing}"`,
+		`setMetricWin(val, windowBtn.dataset.windowService || "")`,
+		`serviceMetricState(name).window !== win`,
+	} {
+		if !strings.Contains(text, marker) {
+			t.Errorf("source missing per-service metric state marker %q", marker)
+		}
+	}
+	for _, retired := range []string{`let metricCheck = ""`, `let metricWindow = "24h"`} {
+		if strings.Contains(text, retired) {
+			t.Errorf("source still contains global metric state %q", retired)
+		}
+	}
+}
+
 // TestIndexAccessibilityTargetSize pins WCAG 2.5.8 minimum hit targets in the
 // committed CSS bundle (row toggles, table action buttons, event more/less).
 func TestIndexAccessibilityTargetSize(t *testing.T) {
