@@ -958,11 +958,18 @@ def has_active_swap(stage: Path) -> bool:
 
 
 def tar_config(config_root: Path, tar_path: Path) -> None:
+    def root_owned(info: tarfile.TarInfo) -> tarfile.TarInfo:
+        info.uid = 0
+        info.gid = 0
+        info.uname = "root"
+        info.gname = "root"
+        return info
+
     with tarfile.open(tar_path, "w:gz") as tf:
         etc_sermo = config_root / "etc/sermo"
         for path in sorted(etc_sermo.rglob("*")):
             if path.is_file():
-                tf.add(path, arcname=str(path.relative_to(config_root)))
+                tf.add(path, arcname=str(path.relative_to(config_root)), filter=root_owned)
 
 
 def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: GenerationOptions) -> dict:

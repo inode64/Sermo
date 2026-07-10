@@ -56,3 +56,29 @@ watches:
     then:
       action: alert
       message: ${display_name} file descriptor usage is high
+  alert-if-memory-high:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 294706791
+      optional: true
+    for:
+      duration: 4m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high
+  alert-if-cpu-thread-high:
+    check:
+      type: metric
+      scope: service
+      name: cpu_thread
+      op: '>'
+      value: 0.44%
+      optional: true
+    for:
+      duration: 5m
+    then:
+      action: alert
+      message: ${display_name} single-thread CPU usage is high

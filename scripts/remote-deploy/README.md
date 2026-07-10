@@ -29,11 +29,23 @@ The remote scripts must run as root on the target host:
   restarts `sermod` and verifies the local Web UI.
 - `remote_repair_catalog.sh` replaces only the packaged catalog from a payload.
 - `remote_final_check.sh` validates `/etc/sermo`, service state, port `9797`,
-  `/livez`, `/readyz`, and the HTML shell.
+  `/livez`, `/readyz`, the HTML shell and current protected-path metadata.
 - `collect_endpoint_hints.sh` collects sanitized endpoint hints for already
   installed hosts without replacing `/etc/sermo`.
 - `collect_runtime_targets.sh` collects Docker containers and libvirt/QEMU
   domains for already installed hosts without replacing `/etc/sermo`.
+
+Remote payload/config extraction must never preserve local workstation
+ownership onto system paths. Payload tarballs are written with numeric
+`root:root` ownership, remote extraction uses `tar --no-same-owner`, and the
+remote scripts extract only the payload members needed for the detected init
+backend. Do not add archive entries for protected parent directories such as
+`/`, `/etc`, `/usr`, `/usr/lib`, `/etc/systemd`,
+`/usr/lib/tmpfiles.d`, `/etc/init.d` or `/usr/share`; extracting those entries
+as root can rewrite host metadata. Each mutating remote script records
+`protected_path_metadata.before`, `protected_path_metadata.after` and
+`protected_path_metadata.diff`, and exits with status `70` if any protected path
+changes type, mode, uid or gid.
 
 The generated config defaults to monitoring only installed catalog services
 whose init unit is active, `dry_run: true`, Web UI on `0.0.0.0:9797`, storage

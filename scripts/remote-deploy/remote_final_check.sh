@@ -12,6 +12,18 @@ line() {
 line host "$(hostname 2>/dev/null || echo unknown)"
 line fqdn "$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo unknown)"
 
+protected_metadata="/tmp/sermo-final-protected-path-metadata"
+: >"$protected_metadata"
+for path in / /etc /usr /usr/lib /etc/systemd /usr/lib/tmpfiles.d /etc/init.d /usr/share; do
+	if [ -e "$path" ]; then
+		stat -c '%n|%F|%a|%u|%g' "$path" >>"$protected_metadata" 2>/dev/null || printf '%s|stat-error\n' "$path" >>"$protected_metadata"
+	else
+		printf '%s|missing\n' "$path" >>"$protected_metadata"
+	fi
+done
+line protected_path_metadata "$protected_metadata"
+sed 's/^/protected_path: /' "$protected_metadata" >>"$out"
+
 if /usr/bin/sermoctl --config /etc/sermo/sermo.yml config validate >/tmp/sermo-final-validate.out 2>/tmp/sermo-final-validate.err; then
 	line config_validate ok
 else

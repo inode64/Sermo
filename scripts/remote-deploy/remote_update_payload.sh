@@ -28,6 +28,40 @@ capture() {
 	printf '%s\n' "$?" >"${out}/${name}.rc"
 }
 
+protected_paths="/ /etc /usr /usr/lib /etc/systemd /usr/lib/tmpfiles.d /etc/init.d /usr/share"
+
+snapshot_protected_paths() {
+	dest="$1"
+	: >"$dest"
+	for path in $protected_paths; do
+		if [ -e "$path" ]; then
+			stat -c '%n|%F|%a|%u|%g' "$path" >>"$dest" 2>/dev/null || printf '%s|stat-error\n' "$path" >>"$dest"
+		else
+			printf '%s|missing\n' "$path" >>"$dest"
+		fi
+	done
+}
+
+verify_protected_paths() {
+	snapshot_protected_paths "${out}/protected_path_metadata.after"
+	if diff -u "${out}/protected_path_metadata.before" "${out}/protected_path_metadata.after" >"${out}/protected_path_metadata.diff"; then
+		printf '0\n' >"${out}/protected_path_metadata.rc"
+		return 0
+	fi
+	printf '1\n' >"${out}/protected_path_metadata.rc"
+	return 1
+}
+
+finish() {
+	rc="$1"
+	date -Is >"${out}/finished_at" 2>/dev/null || true
+	if ! verify_protected_paths; then
+		rc=70
+	fi
+	tar -C "$work" -czf "${work}/out.tar.gz" out >/dev/null 2>&1 || true
+	exit "$rc"
+}
+
 http_get() {
 	url="$1"
 	if command -v curl >/dev/null 2>&1; then
@@ -45,6 +79,8 @@ if [ "$(id -u)" != "0" ]; then
 	echo "remote update must run as root" >&2
 	exit 10
 fi
+
+snapshot_protected_paths "${out}/protected_path_metadata.before"
 
 hostname -f >"${out}/hostname_fqdn" 2>/dev/null || hostname >"${out}/hostname_fqdn" 2>/dev/null || true
 hostname >"${out}/hostname" 2>/dev/null || true
@@ -64,21 +100,41 @@ case "$config_backend" in
 	*) config_backend="" ;;
 esac
 
+payload_members="usr/bin/sermoctl usr/bin/sermod usr/share/sermo/catalog etc/sermo/templates/default-alert.yml"
+: >"${out}/payload_skipped_members"
+if [ "$init" = "systemd" ]; then
+	if [ -d /etc/systemd/system ]; then
+		payload_members="${payload_members} etc/systemd/system/sermod.service"
+	else
+		printf '%s\n' "etc/systemd/system/sermod.service: /etc/systemd/system missing" >>"${out}/payload_skipped_members"
+	fi
+	if [ -d /usr/lib/tmpfiles.d ]; then
+		payload_members="${payload_members} usr/lib/tmpfiles.d/sermo.conf"
+	else
+		printf '%s\n' "usr/lib/tmpfiles.d/sermo.conf: /usr/lib/tmpfiles.d missing" >>"${out}/payload_skipped_members"
+	fi
+elif [ "$init" = "openrc" ]; then
+	if [ -d /etc/init.d ]; then
+		payload_members="${payload_members} etc/init.d/sermod"
+	else
+		printf '%s\n' "etc/init.d/sermod: /etc/init.d missing" >>"${out}/payload_skipped_members"
+	fi
+fi
+printf '%s\n' "$payload_members" >"${out}/payload_members"
+
 rm -rf /usr/share/sermo/catalog
-tar -C / -xzf "$payload" >"${out}/payload_extract.out" 2>"${out}/payload_extract.err"
+tar --no-same-owner -C / -xzf "$payload" $payload_members >"${out}/payload_extract.out" 2>"${out}/payload_extract.err"
 extract_rc=$?
 printf '%s\n' "$extract_rc" >"${out}/payload_extract.rc"
 if [ "$extract_rc" -ne 0 ]; then
-	tar -C "$work" -czf "${work}/out.tar.gz" out >/dev/null 2>&1 || true
-	exit 20
+	finish 20
 fi
 
 capture sermoctl_version /usr/bin/sermoctl --version
 capture sermod_version /usr/bin/sermod --version
 capture config_validate env SERMO_BACKEND="$config_backend" SERMO_INIT="$config_backend" /usr/bin/sermoctl --config /etc/sermo/sermo.yml config validate
 if [ "$(cat "${out}/config_validate.rc" 2>/dev/null || echo 1)" != "0" ]; then
-	tar -C "$work" -czf "${work}/out.tar.gz" out >/dev/null 2>&1 || true
-	exit 30
+	finish 30
 fi
 
 if [ "$init" = "systemd" ]; then
@@ -94,8 +150,7 @@ elif [ "$init" = "openrc" ]; then
 else
 	echo "unsupported init" >"${out}/sermod_restart.err"
 	echo 40 >"${out}/sermod_restart.rc"
-	tar -C "$work" -czf "${work}/out.tar.gz" out >/dev/null 2>&1 || true
-	exit 40
+	finish 40
 fi
 
 ready_rc=1
@@ -122,6 +177,4 @@ elif command -v netstat >/dev/null 2>&1; then
 	netstat -ltnp >"${out}/port9797_after" 2>&1 || true
 fi
 
-date -Is >"${out}/finished_at" 2>/dev/null || true
-tar -C "$work" -czf "${work}/out.tar.gz" out >/dev/null 2>&1 || true
-exit "$ready_rc"
+finish "$ready_rc"

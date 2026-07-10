@@ -37,3 +37,16 @@ watches:
       socket: ${clamd_socket}
       timeout: 3s
       optional: true
+  alert-if-memory-high:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 1218679194
+      optional: true
+    for:
+      duration: 4m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

@@ -24,10 +24,46 @@ capture() {
 	printf '%s\n' "$?" >"${out}/${name}.rc"
 }
 
+protected_paths="/ /etc /usr /usr/lib /etc/systemd /usr/lib/tmpfiles.d /etc/init.d /usr/share"
+
+snapshot_protected_paths() {
+	dest="$1"
+	: >"$dest"
+	for path in $protected_paths; do
+		if [ -e "$path" ]; then
+			stat -c '%n|%F|%a|%u|%g' "$path" >>"$dest" 2>/dev/null || printf '%s|stat-error\n' "$path" >>"$dest"
+		else
+			printf '%s|missing\n' "$path" >>"$dest"
+		fi
+	done
+}
+
+verify_protected_paths() {
+	snapshot_protected_paths "${out}/protected_path_metadata.after"
+	if diff -u "${out}/protected_path_metadata.before" "${out}/protected_path_metadata.after" >"${out}/protected_path_metadata.diff"; then
+		printf '0\n' >"${out}/protected_path_metadata.rc"
+		return 0
+	fi
+	printf '1\n' >"${out}/protected_path_metadata.rc"
+	return 1
+}
+
+finish() {
+	rc="$1"
+	if ! verify_protected_paths; then
+		log "protected path metadata changed"
+		rc=70
+	fi
+	tar -C "$work" -czf "${work}/out.tar.gz" out >/dev/null 2>&1 || true
+	exit "$rc"
+}
+
 if [ "$(id -u)" != "0" ]; then
 	echo "remote installer must run as root" >&2
 	exit 10
 fi
+
+snapshot_protected_paths "${out}/protected_path_metadata.before"
 
 hostname -f >"${out}/hostname_fqdn" 2>/dev/null || hostname >"${out}/hostname_fqdn" 2>/dev/null || true
 hostname >"${out}/hostname" 2>/dev/null || true
@@ -57,19 +93,39 @@ if [ -e /etc/sermo ]; then
 fi
 printf '%s\n' "$backup" >"${out}/backup_path"
 
+payload_members="usr/bin/sermoctl usr/bin/sermod usr/share/sermo/catalog etc/sermo/templates/default-alert.yml"
+: >"${out}/payload_skipped_members"
+if [ "$init" = "systemd" ]; then
+	if [ -d /etc/systemd/system ]; then
+		payload_members="${payload_members} etc/systemd/system/sermod.service"
+	else
+		printf '%s\n' "etc/systemd/system/sermod.service: /etc/systemd/system missing" >>"${out}/payload_skipped_members"
+	fi
+	if [ -d /usr/lib/tmpfiles.d ]; then
+		payload_members="${payload_members} usr/lib/tmpfiles.d/sermo.conf"
+	else
+		printf '%s\n' "usr/lib/tmpfiles.d/sermo.conf: /usr/lib/tmpfiles.d missing" >>"${out}/payload_skipped_members"
+	fi
+elif [ "$init" = "openrc" ]; then
+	if [ -d /etc/init.d ]; then
+		payload_members="${payload_members} etc/init.d/sermod"
+	else
+		printf '%s\n' "etc/init.d/sermod: /etc/init.d missing" >>"${out}/payload_skipped_members"
+	fi
+fi
+printf '%s\n' "$payload_members" >"${out}/payload_members"
+
 rm -rf /usr/share/sermo/catalog
-tar -C / -xzf "$payload" >"${out}/payload_extract.out" 2>"${out}/payload_extract.err"
+tar --no-same-owner -C / -xzf "$payload" $payload_members >"${out}/payload_extract.out" 2>"${out}/payload_extract.err"
 extract_rc=$?
 printf '%s\n' "$extract_rc" >"${out}/payload_extract.rc"
 if [ "$extract_rc" -ne 0 ]; then
 	log "payload extraction failed"
-	tar -C "$work" -czf "${work}/out.tar.gz" out >/dev/null 2>&1 || true
-	exit 20
+	finish 20
 fi
 
 mkdir -p /etc/sermo/services /etc/sermo/apps /etc/sermo/notifiers /etc/sermo/watches /etc/sermo/networks /etc/sermo/storages /etc/sermo/mounts /etc/sermo/templates
 mkdir -p /run/sermo /var/lib/sermo
-chmod 0700 /run/sermo /var/lib/sermo 2>/dev/null || true
 
 cat >/etc/sermo/sermo.yml <<YAML
 engine:
@@ -115,7 +171,7 @@ web:
   password: "sermo-remote-admin"
 YAML
 
-if command -v systemd-tmpfiles >/dev/null 2>&1; then
+if command -v systemd-tmpfiles >/dev/null 2>&1 && [ -f /usr/lib/tmpfiles.d/sermo.conf ]; then
 	capture systemd_tmpfiles systemd-tmpfiles --create /usr/lib/tmpfiles.d/sermo.conf
 fi
 
@@ -278,5 +334,5 @@ if command -v virsh >/dev/null 2>&1; then
 	fi
 fi
 
-tar -C "$work" -czf "${work}/out.tar.gz" out >/dev/null 2>&1 || true
 log "stage complete"
+finish 0
