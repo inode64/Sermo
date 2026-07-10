@@ -8,6 +8,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/emission"
 	"sermo/internal/metrics"
 	"sermo/internal/process"
 	"sermo/internal/rules"
@@ -185,6 +186,7 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 		if _, present := entry[rules.RuleFieldNotify]; present {
 			validateNotifySelection(path+".notify", entry[rules.RuleFieldNotify], notifiers, add)
 		}
+		validateEmission(entry, path+"."+emission.Section, add)
 
 		rtype := cfgval.String(entry[rules.RuleFieldType])
 		switch rtype {

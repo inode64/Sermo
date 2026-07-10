@@ -22,6 +22,7 @@ import (
 	"sermo/internal/buildinfo"
 	"sermo/internal/cfgval"
 	"sermo/internal/config"
+	"sermo/internal/emission"
 	"sermo/internal/execx"
 	"sermo/internal/logfile"
 	"sermo/internal/metrics"
@@ -268,6 +269,7 @@ func run(args []string) int {
 		DaemonMetrics:     store,
 		Notifiers:         notifiers,
 		GlobalNotify:      config.NotifyDefault(cfg.Global.Raw),
+		GlobalEmission:    emission.Merge(cfg.Global.Raw[emission.Section], emission.Default()),
 		Snapshots:         snapshots,
 		WatchSnapshots:    watchSnapshots,
 		Live:              app.NewLiveMetrics(),
