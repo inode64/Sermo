@@ -376,8 +376,9 @@ These fields are optional and behave differently when missing:
 - **`description`** is an optional free-text note. It has **no fallback**: when it
   is absent, nothing is shown for it — Sermo never substitutes `name`. Use it for
   a real sentence, not a restatement of the name.
-- **`category`** groups and filters Services and Installed applications in the
-  WebUI. When absent or blank, services use `service` and apps use `app`.
+- **`category`** groups and filters Services, Installed applications and
+  Installed libraries in the WebUI. When absent or blank, services use
+  `service`, apps use `app` and libraries use `library`.
 - **`type`** is an optional free-form classification label (e.g. `database`,
   `cache`, `queue`, `webserver`, `appserver`, `tunnel`) used in the catalog to
   organize entries. It is recorded but **not currently consumed** by the engine

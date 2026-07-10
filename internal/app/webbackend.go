@@ -32,14 +32,12 @@ import (
 )
 
 const (
-	// applicationsCacheTTL keeps the web app inventory from running version and
-	// health commands on ordinary dashboard refreshes. Apps change rarely, and
-	// app watches use a 5m default cadence for the same probes.
-	applicationsCacheTTL = 5 * time.Minute
-	// appInspectionParallelism bounds concurrent version/health probes for
-	// /api/applications so a cold dashboard load is faster without spawning one
-	// command per catalog app at once.
-	appInspectionParallelism = 4
+	// catalogInventoryCacheTTL keeps web software inventories from running
+	// version and health commands on ordinary dashboard refreshes.
+	catalogInventoryCacheTTL = 5 * time.Minute
+	// catalogInspectionParallelism bounds concurrent version/health probes so a
+	// cold dashboard load is faster without spawning one command per entry.
+	catalogInspectionParallelism = 4
 	// serviceStatusCacheTTL bounds how often the web list re-queries systemd/OpenRC.
 	// The dashboard refreshes every 30s by default, so keep status warm across
 	// ordinary refreshes instead of running one init status probe per service.
@@ -226,11 +224,8 @@ type WebBackend struct {
 	diskIOMu    sync.Mutex
 	diskIOState map[string]webDiskIOState
 
-	applicationsMu      sync.Mutex
-	applicationsAt      time.Time
-	applicationsCache   []web.Application
-	applicationsRefresh chan struct{} // non-nil while a scan is rebuilding the cache; closed when it finishes
-	applicationsList    func(context.Context) []web.Application
+	applications catalogInventoryCache
+	libraries    catalogInventoryCache
 
 	slaCacheMu sync.Mutex
 	slaCache   map[slaCacheKey]cachedSLATimelines
@@ -248,6 +243,14 @@ type WebBackend struct {
 type slaCacheKey struct {
 	service string
 	check   string // empty for service-level SLA
+}
+
+type catalogInventoryCache struct {
+	mu      sync.Mutex
+	at      time.Time
+	items   []web.CatalogItem
+	refresh chan struct{} // non-nil while a scan is rebuilding the cache; closed when it finishes
+	list    func(context.Context) []web.CatalogItem
 }
 
 type cachedSLATimelines struct {
@@ -2339,28 +2342,42 @@ func (b *WebBackend) Notifiers(ctx context.Context) []web.Notifier {
 // binary is present) with their version and binary location, reusing the same
 // inspection the sermoctl `apps` listing uses so both surfaces agree.
 func (b *WebBackend) Applications(ctx context.Context) []web.Application {
+	return b.decorateApplications(b.catalogItems(ctx, &b.applications, b.loadApplications))
+}
+
+// Libraries returns installed catalog libraries with their version and file
+// location, reusing the same inspection as sermoctl libs.
+func (b *WebBackend) Libraries(ctx context.Context) []web.Library {
+	return b.catalogItems(ctx, &b.libraries, b.loadLibraries)
+}
+
+func (b *WebBackend) catalogItems(
+	ctx context.Context,
+	inventory *catalogInventoryCache,
+	load func(context.Context) []web.CatalogItem,
+) []web.CatalogItem {
 	// The inventory scan runs version/binary probes and can take seconds, so it
-	// must not run under applicationsMu: only one request rebuilds the cache
-	// (applicationsRefresh) while every other viewer is served the previous
+	// must not run under the cache mutex: only one request rebuilds the cache
+	// while every other viewer is served the previous
 	// inventory — or, on a cold start, waits for that first scan.
 	for {
-		b.applicationsMu.Lock()
-		cached := slices.Clone(b.applicationsCache)
-		observedAt := b.applicationsAt
+		inventory.mu.Lock()
+		cached := slices.Clone(inventory.items)
+		observedAt := inventory.at
 		hasCache := !observedAt.IsZero()
-		if hasCache && time.Since(observedAt) < applicationsCacheTTL {
-			b.applicationsMu.Unlock()
-			return b.decorateApplications(cached, observedAt)
+		if hasCache && time.Since(observedAt) < catalogInventoryCacheTTL {
+			inventory.mu.Unlock()
+			return decorateCatalogItems(cached, observedAt)
 		}
-		refresh := b.applicationsRefresh
+		refresh := inventory.refresh
 		if refresh == nil {
 			break // become the rebuilding request; lock still held
 		}
-		b.applicationsMu.Unlock()
+		inventory.mu.Unlock()
 		if hasCache {
 			// An expired-but-complete inventory beats queueing every viewer
 			// behind the scan that is already refreshing it.
-			return b.decorateApplications(cached, observedAt)
+			return decorateCatalogItems(cached, observedAt)
 		}
 		select {
 		case <-refresh:
@@ -2370,48 +2387,59 @@ func (b *WebBackend) Applications(ctx context.Context) []web.Application {
 		}
 	}
 	done := make(chan struct{})
-	b.applicationsRefresh = done
-	b.applicationsMu.Unlock()
+	inventory.refresh = done
+	inventory.mu.Unlock()
 	// Clear the in-flight marker in a defer so even a panicking scan cannot
 	// leave cold-start viewers waiting on the channel forever. The deferred
 	// close runs after the cache update below, so woken viewers always
 	// re-check an already-updated cache.
 	defer func() {
-		b.applicationsMu.Lock()
-		b.applicationsRefresh = nil
-		b.applicationsMu.Unlock()
+		inventory.mu.Lock()
+		inventory.refresh = nil
+		inventory.mu.Unlock()
 		close(done)
 	}()
 
-	apps := b.loadApplications(ctx)
+	items := load(ctx)
 
-	b.applicationsMu.Lock()
+	inventory.mu.Lock()
 	if ctx.Err() != nil {
 		// A cancelled request yields a partial inventory; caching it would
-		// serve an incomplete app list to every viewer for the full TTL.
+		// serve an incomplete list to every viewer for the full TTL.
 		// Prefer the previous complete cache when there is one.
-		if !b.applicationsAt.IsZero() {
-			apps = slices.Clone(b.applicationsCache)
+		if !inventory.at.IsZero() {
+			items = slices.Clone(inventory.items)
 		}
-		observedAt := b.applicationsAt
-		b.applicationsMu.Unlock()
-		return b.decorateApplications(apps, observedAt)
+		observedAt := inventory.at
+		inventory.mu.Unlock()
+		return decorateCatalogItems(items, observedAt)
 	}
-	b.applicationsAt = time.Now()
-	observedAt := b.applicationsAt
-	b.applicationsCache = slices.Clone(apps)
-	b.applicationsMu.Unlock()
-	return b.decorateApplications(apps, observedAt)
+	inventory.at = time.Now()
+	observedAt := inventory.at
+	inventory.items = slices.Clone(items)
+	inventory.mu.Unlock()
+	return decorateCatalogItems(items, observedAt)
 }
 
-func (b *WebBackend) loadApplications(ctx context.Context) []web.Application {
-	if b.applicationsList != nil {
-		return b.withApplicationSLA(b.applicationsList(ctx))
+func (b *WebBackend) loadApplications(ctx context.Context) []web.CatalogItem {
+	if b.applications.list != nil {
+		return b.withApplicationSLA(b.applications.list(ctx))
 	}
+	return b.withApplicationSLA(b.loadCatalogItems(ctx, config.CategoryApp, true))
+}
+
+func (b *WebBackend) loadLibraries(ctx context.Context) []web.CatalogItem {
+	if b.libraries.list != nil {
+		return b.libraries.list(ctx)
+	}
+	return b.loadCatalogItems(ctx, config.CategoryLibrary, false)
+}
+
+func (b *WebBackend) loadCatalogItems(ctx context.Context, category string, exposeSettling bool) []web.CatalogItem {
 	if b.cfg == nil {
 		return nil
 	}
-	names := b.cfg.CatalogNamesInCategory(config.CategoryApp)
+	names := b.cfg.CatalogNamesInCategory(category)
 	if len(names) == 0 {
 		return nil
 	}
@@ -2420,20 +2448,20 @@ func (b *WebBackend) loadApplications(ctx context.Context) []web.Application {
 		runner = execx.CommandRunner{}
 	}
 	opts := appinspect.WithUserLookup(b.userLookup)
-	type appResult struct {
-		app web.Application
-		ok  bool
+	type catalogResult struct {
+		item web.CatalogItem
+		ok   bool
 	}
-	results := make([]appResult, len(names))
-	sem := make(chan struct{}, appInspectionParallelism)
+	results := make([]catalogResult, len(names))
+	sem := make(chan struct{}, catalogInspectionParallelism)
 	var wg sync.WaitGroup
 	for i, name := range names {
-		if b.settling != nil && !b.settling.Observed(SettlingAppKey(name)) {
-			resolved, _ := b.cfg.ResolveCatalog(config.CategoryApp, name)
-			results[i] = appResult{ok: true, app: web.Application{
+		if exposeSettling && b.settling != nil && !b.settling.Observed(SettlingAppKey(name)) {
+			resolved, _ := b.cfg.ResolveCatalog(category, name)
+			results[i] = catalogResult{ok: true, item: web.CatalogItem{
 				Name:        name,
 				DisplayName: config.DisplayName(resolved.Tree, name),
-				Category:    config.CategoryLabel(resolved.Tree, config.CategoryApp),
+				Category:    config.CategoryLabel(resolved.Tree, category),
 				State:       TargetStateStarting,
 			}}
 			continue
@@ -2447,24 +2475,24 @@ func (b *WebBackend) loadApplications(ctx context.Context) []web.Application {
 			case <-ctx.Done():
 				return
 			}
-			r := appinspect.InspectOne(ctx, runner, b.cfg, name, opts)
+			r := appinspect.InspectCategoryOne(ctx, runner, b.cfg, category, name, opts)
 			if r.Installed {
-				results[i] = appResult{app: applicationFromReport(r), ok: true}
+				results[i] = catalogResult{item: catalogItemFromReport(r), ok: true}
 			}
 		}()
 	}
 	wg.Wait()
-	out := make([]web.Application, 0, len(names))
+	out := make([]web.CatalogItem, 0, len(names))
 	for _, result := range results {
 		if result.ok {
-			out = append(out, result.app)
+			out = append(out, result.item)
 		}
 	}
-	return b.withApplicationSLA(out)
+	return out
 }
 
-func applicationFromReport(r appinspect.Report) web.Application {
-	return web.Application{
+func catalogItemFromReport(r appinspect.Report) web.CatalogItem {
+	return web.CatalogItem{
 		Name:          r.Name,
 		DisplayName:   r.DisplayName,
 		Category:      r.Category,
@@ -2505,15 +2533,23 @@ func (b *WebBackend) withApplicationSLA(apps []web.Application) []web.Applicatio
 	return out
 }
 
-func (b *WebBackend) decorateApplications(apps []web.Application, observedAt time.Time) []web.Application {
+func decorateCatalogItems(items []web.CatalogItem, observedAt time.Time) []web.CatalogItem {
+	if len(items) == 0 || observedAt.IsZero() {
+		return items
+	}
+	out := slices.Clone(items)
+	for i := range out {
+		out[i].ObservedAt = observedAt.UTC().Format(time.RFC3339)
+	}
+	return out
+}
+
+func (b *WebBackend) decorateApplications(apps []web.Application) []web.Application {
 	if len(apps) == 0 {
 		return apps
 	}
 	out := slices.Clone(apps)
 	for i := range out {
-		if !observedAt.IsZero() {
-			out[i].ObservedAt = observedAt.UTC().Format(time.RFC3339)
-		}
 		if b.events == nil {
 			continue
 		}

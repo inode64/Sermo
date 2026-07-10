@@ -99,6 +99,7 @@ const (
 	apiSegmentDaemon       = "daemon"
 	apiSegmentEvents       = "events"
 	apiSegmentHost         = "host"
+	apiSegmentLibraries    = "libraries"
 	apiSegmentLocks        = "locks"
 	apiSegmentMetrics      = "metrics"
 	apiSegmentMonitoring   = "monitoring"
@@ -188,6 +189,7 @@ const (
 	apiPathDaemon       = apiPathPrefix + apiSegmentDaemon
 	apiPathEvents       = apiPathPrefix + apiSegmentEvents
 	apiPathHost         = apiPathPrefix + apiSegmentHost
+	apiPathLibraries    = apiPathPrefix + apiSegmentLibraries
 	apiPathLocks        = apiPathPrefix + apiSegmentLocks
 	apiPathMonitoring   = apiPathPrefix + apiSegmentMonitoring
 	apiPathMounts       = apiPathPrefix + apiSegmentMounts
@@ -211,6 +213,7 @@ const (
 	routeAPIWatchAction    = routeMethodPost + apiPathWatches + "/" + routeVarName + "/" + routeVarAction
 	routeAPINotifiers      = routeMethodGet + apiPathNotifiers
 	routeAPIApplications   = routeMethodGet + apiPathApplications
+	routeAPILibraries      = routeMethodGet + apiPathLibraries
 	routeAPIDashboard      = routeMethodGet + apiPathDashboard
 	routeAPIMounts         = routeMethodGet + apiPathMounts
 	routeAPIMountAction    = routeMethodPost + apiPathMounts + "/" + routeVarName + "/" + routeVarAction
@@ -376,10 +379,10 @@ type MountAlertResult struct {
 	Message   string   `json:"message,omitempty"`
 }
 
-// Application is a view of one installed application (a catalog app daemon) for
-// the dashboard: its name, version and where its binary lives. It mirrors the
-// sermoctl `apps` report so both surfaces agree.
-type Application struct {
+// CatalogItem is the shared web view of one installed catalog application or
+// library. It mirrors the sermoctl `apps` and `libs` reports so every surface
+// agrees about versions, locations and inspection status.
+type CatalogItem struct {
 	Name          string      `json:"name"`
 	DisplayName   string      `json:"display_name"`
 	Category      string      `json:"category,omitempty"`
@@ -393,9 +396,15 @@ type Application struct {
 	Status        string      `json:"status"`                   // ok, or an error description
 	State         string      `json:"state,omitempty"`          // starting | ok | failed | warning
 	ObservedAt    string      `json:"observed_at,omitempty"`    // RFC3339 when version/status probes actually ran
-	SLA           []SLAWindow `json:"sla,omitempty"`            // service SLA when this app maps to a monitored service
-	LastEvent     *Event      `json:"last_event,omitempty"`     // newest application event, when retained
+	SLA           []SLAWindow `json:"sla,omitempty"`            // populated when an application maps to a monitored service
+	LastEvent     *Event      `json:"last_event,omitempty"`     // populated with the newest retained application event
 }
+
+// Application is an installed catalog application returned by the dashboard.
+type Application = CatalogItem
+
+// Library is an installed catalog library returned by the dashboard.
+type Library = CatalogItem
 
 // Watch is a view of a host watch for the dashboard (when services=0
 // the watches section is the main thing to show). Enriched with useful
@@ -962,6 +971,9 @@ type Backend interface {
 	// Applications returns the installed applications (catalog app daemons whose
 	// binary is present), with their version and binary location.
 	Applications(ctx context.Context) []Application
+	// Libraries returns installed catalog libraries with their version and file
+	// location, matching sermoctl libs.
+	Libraries(ctx context.Context) []Library
 	// Mounts returns configured fstab-backed mount units and their runtime status.
 	Mounts(ctx context.Context) []Mount
 	// MountAction runs mount|umount on a configured mount unit.
@@ -1104,6 +1116,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPIWatchAction, s.handleWatchAction)
 	mux.HandleFunc(routeAPINotifiers, s.handleNotifiers)
 	mux.HandleFunc(routeAPIApplications, s.handleApplications)
+	mux.HandleFunc(routeAPILibraries, s.handleLibraries)
 	mux.HandleFunc(routeAPIMounts, s.handleMounts)
 	mux.HandleFunc(routeAPIMountAction, s.handleMountAction)
 	mux.HandleFunc(routeAPIDaemon, s.handleDaemon)
@@ -1404,6 +1417,10 @@ func (s *Server) handleNotifiers(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleApplications(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.Applications(r.Context()))
+}
+
+func (s *Server) handleLibraries(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.Backend.Libraries(r.Context()))
 }
 
 func (s *Server) handleMounts(w http.ResponseWriter, r *http.Request) {

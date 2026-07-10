@@ -162,12 +162,12 @@ func TestIndexShellAnchors(t *testing.T) {
 
 	wantIDs := []string{
 		"topbar", "section-nav", "favicon", "attention", "events", "target-search", "target-search-options",
-		"services-section", "containers-section", "vms-section", "apps-section", "watches-section", "events-section",
+		"services-section", "containers-section", "vms-section", "apps-section", "libraries-section", "watches-section", "events-section",
 		"storage-controls", "network-controls", "mount-controls",
 		"container-controls", "vm-controls", "container-rows", "vm-rows",
 		"event-clear", "event-before", "event-reset-filters", "activity-clear",
 		"event-more", "event-service", "event-watch", "event-kind", "event-status", "event-range",
-		"state-compact-btn", "state-before", "app-rows", "locks-rows",
+		"state-compact-btn", "state-before", "app-rows", "library-rows", "locks-rows",
 		"mount-search", "mount-category", "mount-filters", "mount-filter-count",
 		"action-confirm", "confirm-no-cascade", "simple-confirm",
 	}
@@ -178,7 +178,7 @@ func TestIndexShellAnchors(t *testing.T) {
 	}
 	for _, id := range []string{
 		"services-section", "containers-section", "vms-section", "storage-section", "network-section", "mounts-section",
-		"apps-section", "cert-section", "diskio-section", "watches-section",
+		"apps-section", "libraries-section", "cert-section", "diskio-section", "watches-section",
 		"events-section", "locks-section", "notifiers-section", "daemon-section",
 		"activity-section",
 	} {
@@ -399,6 +399,7 @@ func TestSourceLoadReportsPartialRefreshBeforeAdvancingFreshness(t *testing.T) {
 		`getJSONResult(apiServicesPath, null)`,
 		`["watches", watchesResult]`,
 		`["applications", appsResult]`,
+		`["libraries", librariesResult]`,
 		`["events", { ok: eventsOK }]`,
 		`showPartialRefresh(failures)`,
 		`fully updated ${fmtSince`,
@@ -705,7 +706,7 @@ func TestIndexAccessibilitySectionHeadings(t *testing.T) {
 		headings[strings.TrimSpace(sb.String())] = true
 	})
 	for _, want := range []string{
-		"Storage", "Services", "Containers", "Virtual machines", "Network", "Installed applications",
+		"Storage", "Services", "Containers", "Virtual machines", "Network", "Installed applications", "Installed libraries",
 		"Host watches", "Events", "Mount units", "Notifiers",
 		"Daemon / Engine settings", "Recent activity",
 	} {
