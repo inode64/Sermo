@@ -140,4 +140,5 @@ watches:
       min_matches: 3
     then:
       action: alert
-      message: ${display_name} file descriptor usage is high
+      message: >-
+        During ${rule.duration}, ${display_name} file descriptor usage stayed above ${check.threshold} (current ${check.value})

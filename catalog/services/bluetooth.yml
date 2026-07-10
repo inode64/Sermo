@@ -36,4 +36,5 @@ watches:
       duration: 10m
     then:
       action: alert
-      message: ${display_name} memory usage is high
+      message: >-
+        During ${rule.duration}, ${display_name} memory usage stayed above ${check.threshold} (current ${check.value})
