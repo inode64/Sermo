@@ -61,39 +61,7 @@
 <div id="err" role="status" aria-live="polite" aria-atomic="true"></div>
 <div id="attention" role="alert" aria-live="assertive" aria-atomic="true"></div>
 <div id="op-live" role="status" aria-live="polite" aria-atomic="true"></div>
-<h2 class="visually-hidden">Storage</h2>
-<details id="storage-section" open class="panel panel-hidden" data-panel="storage">
-  <summary>Storage <span id="storage-count" class="muted"></span></summary>
-  <div id="storage-controls" class="panel-controls">
-    <label for="storage-search" class="visually-hidden">Filter storage watches</label>
-    <input id="storage-search" type="search" placeholder="filter storage watches…  ( / )" aria-describedby="search-shortcut-hint">
-    <select id="storage-type" title="Filter by type" aria-label="Filter storage watches by type">
-      <option value="all">all storage types</option>
-    </select>
-    <span id="storage-filters" role="group" aria-label="Filter storage watches by state">
-      <button data-wf="all" class="f-active" aria-pressed="true">all</button>
-      <button data-wf="disabled" aria-pressed="false">disabled</button>
-      <button data-wf="ok" aria-pressed="false">ok</button>
-      <button data-wf="starting" aria-pressed="false">starting</button>
-      <button data-wf="failed" aria-pressed="false">failed</button>
-    </span>
-    <span id="storage-filter-count" class="muted"></span>
-  </div>
-  <table class="watch-table">
-    <caption class="visually-hidden">Storage watches</caption>
-    <thead><tr>
-      <th scope="col" class="sortable" data-watch-sort="name">Name<span class="sort-ind" data-wi="name"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="usage">Usage<span class="sort-ind" data-wi="usage"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="filesystem">Filesystem<span class="sort-ind" data-wi="filesystem"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="mount">Mount point<span class="sort-ind" data-wi="mount"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="last">Last activity<span class="sort-ind" data-wi="last"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="state">State<span class="sort-ind" data-wi="state"></span></th>
-      <th scope="col">Actions</th>
-    </tr></thead>
-    <tbody id="storage-rows"></tbody>
-  </table>
-  <p class="muted panel-footnote">Storage host watches monitor volume usage and can grow volumes via <code>then.expand</code>. Other host watches are listed below.</p>
-</details>
+<!--__SERMO_WATCH_PANEL:storage__-->
 
 <h2 class="visually-hidden">Services</h2>
 <details id="services-section" open class="panel">
@@ -219,38 +187,7 @@
   </table>
 </details>
 
-<h2 class="visually-hidden">Network</h2>
-<details id="network-section" open class="panel panel-hidden" data-panel="network">
-  <summary>Network <span id="network-count" class="muted"></span></summary>
-  <div id="network-controls" class="panel-controls">
-    <label for="network-search" class="visually-hidden">Filter network watches</label>
-    <input id="network-search" type="search" placeholder="filter network watches…  ( / )" aria-describedby="search-shortcut-hint">
-    <select id="network-type" title="Filter by type" aria-label="Filter network watches by type">
-      <option value="all">all network types</option>
-    </select>
-    <span id="network-filters" role="group" aria-label="Filter network watches by state">
-      <button data-wf="all" class="f-active" aria-pressed="true">all</button>
-      <button data-wf="disabled" aria-pressed="false">disabled</button>
-      <button data-wf="ok" aria-pressed="false">ok</button>
-      <button data-wf="starting" aria-pressed="false">starting</button>
-      <button data-wf="failed" aria-pressed="false">failed</button>
-    </span>
-    <span id="network-filter-count" class="muted"></span>
-  </div>
-  <table class="watch-table">
-    <caption class="visually-hidden">Network watches</caption>
-    <thead><tr>
-      <th scope="col" class="sortable" data-watch-sort="name">Name<span class="sort-ind" data-wi="name"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="type">Type<span class="sort-ind" data-wi="type"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="summary">Summary<span class="sort-ind" data-wi="summary"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="last">Last activity<span class="sort-ind" data-wi="last"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="state">State<span class="sort-ind" data-wi="state"></span></th>
-      <th scope="col">Actions</th>
-    </tr></thead>
-    <tbody id="network-rows"></tbody>
-  </table>
-  <p class="muted panel-footnote">Network host watches (connectivity and reachability). Other host watches are listed below.</p>
-</details>
+<!--__SERMO_WATCH_PANEL:network__-->
 
 <h2 class="visually-hidden">Installed applications</h2>
 <details id="apps-section" open class="panel panel-hidden">
@@ -290,105 +227,11 @@
   <p class="muted panel-footnote">Applications installed on the host (their binary is present). Click a row for the full version, file location, permissions, user and group.</p>
 </details>
 
-<h2 class="visually-hidden">Certificate watches</h2>
-<details id="cert-section" open class="panel panel-hidden" data-panel="cert">
-  <summary>Certificate watches <span id="cert-count" class="muted"></span></summary>
-  <div id="cert-controls" class="panel-controls">
-    <label for="cert-search" class="visually-hidden">Filter certificate watches</label>
-    <input id="cert-search" type="search" placeholder="filter certificate watches…  ( / )" aria-describedby="search-shortcut-hint">
-    <select id="cert-type" title="Filter by type" aria-label="Filter certificate watches by type">
-      <option value="all">all certificate types</option>
-    </select>
-    <span id="cert-filters" role="group" aria-label="Filter certificate watches by state">
-      <button data-wf="all" class="f-active" aria-pressed="true">all</button>
-      <button data-wf="disabled" aria-pressed="false">disabled</button>
-      <button data-wf="ok" aria-pressed="false">ok</button>
-      <button data-wf="starting" aria-pressed="false">starting</button>
-      <button data-wf="failed" aria-pressed="false">failed</button>
-    </span>
-    <span id="cert-filter-count" class="muted"></span>
-  </div>
-  <table class="watch-table">
-    <caption class="visually-hidden">Certificate watches</caption>
-    <thead><tr>
-      <th scope="col" class="sortable" data-watch-sort="name">Name<span class="sort-ind" data-wi="name"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="expires">Expires<span class="sort-ind" data-wi="expires"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="days_left">Days left<span class="sort-ind" data-wi="days_left"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="issuer">Issuer<span class="sort-ind" data-wi="issuer"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="keytype">Key type<span class="sort-ind" data-wi="keytype"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="last">Last activity<span class="sort-ind" data-wi="last"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="state">State<span class="sort-ind" data-wi="state"></span></th>
-      <th scope="col">Actions</th>
-    </tr></thead>
-    <tbody id="cert-rows"></tbody>
-  </table>
-  <p class="muted panel-footnote">Certificate host watches track expiry and issuer of TLS/PKI material. Other host watches are listed below.</p>
-</details>
+<!--__SERMO_WATCH_PANEL:cert__-->
 
-<h2 class="visually-hidden">Disk I/O watches</h2>
-<details id="diskio-section" open class="panel panel-hidden" data-panel="diskio">
-  <summary>Disk I/O watches <span id="diskio-count" class="muted"></span></summary>
-  <div id="diskio-controls" class="panel-controls">
-    <label for="diskio-search" class="visually-hidden">Filter disk I/O watches</label>
-    <input id="diskio-search" type="search" placeholder="filter disk I/O watches…  ( / )" aria-describedby="search-shortcut-hint">
-    <span id="diskio-filters" role="group" aria-label="Filter disk I/O watches by state">
-      <button data-wf="all" class="f-active" aria-pressed="true">all</button>
-      <button data-wf="disabled" aria-pressed="false">disabled</button>
-      <button data-wf="ok" aria-pressed="false">ok</button>
-      <button data-wf="starting" aria-pressed="false">starting</button>
-      <button data-wf="failed" aria-pressed="false">failed</button>
-    </span>
-    <span id="diskio-filter-count" class="muted"></span>
-  </div>
-  <table class="watch-table">
-    <caption class="visually-hidden">Disk I/O watches</caption>
-    <thead><tr>
-      <th scope="col" class="sortable" data-watch-sort="name">Name<span class="sort-ind" data-wi="name"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="device">Device<span class="sort-ind" data-wi="device"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="util">Util%<span class="sort-ind" data-wi="util"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="readwrite">Read / Write<span class="sort-ind" data-wi="readwrite"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="await">Await<span class="sort-ind" data-wi="await"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="last">Last activity<span class="sort-ind" data-wi="last"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="state">State<span class="sort-ind" data-wi="state"></span></th>
-      <th scope="col">Actions</th>
-    </tr></thead>
-    <tbody id="diskio-rows"></tbody>
-  </table>
-  <p class="muted panel-footnote">Disk I/O host watches track per-device utilization, throughput and latency. Other host watches are listed below.</p>
-</details>
+<!--__SERMO_WATCH_PANEL:diskio__-->
 
-<h2 class="visually-hidden">Host watches</h2>
-<details id="watches-section" open class="panel panel-hidden" data-panel="host">
-  <summary>Host watches <span id="watches-count" class="muted"></span></summary>
-  <div id="watch-controls" class="panel-controls">
-    <label for="watch-search" class="visually-hidden">Filter host watches</label>
-    <input id="watch-search" type="search" placeholder="filter host watches…  ( / )" aria-describedby="search-shortcut-hint">
-    <select id="watch-type" title="Filter by type" aria-label="Filter watches by type">
-      <option value="all">all host types</option>
-    </select>
-    <span id="watch-filters" role="group" aria-label="Filter host watches by state">
-      <button data-wf="all" class="f-active" aria-pressed="true">all</button>
-      <button data-wf="disabled" aria-pressed="false">disabled</button>
-      <button data-wf="ok" aria-pressed="false">ok</button>
-      <button data-wf="starting" aria-pressed="false">starting</button>
-      <button data-wf="failed" aria-pressed="false">failed</button>
-    </span>
-    <span id="watch-count" class="muted"></span>
-  </div>
-  <table class="watch-table">
-    <caption class="visually-hidden">Host watches</caption>
-    <thead><tr>
-      <th scope="col" class="sortable" data-watch-sort="name">Name<span class="sort-ind" data-wi="name"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="type">Type<span class="sort-ind" data-wi="type"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="summary">Summary<span class="sort-ind" data-wi="summary"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="last">Last activity<span class="sort-ind" data-wi="last"></span></th>
-      <th scope="col" class="sortable" data-watch-sort="state">State<span class="sort-ind" data-wi="state"></span></th>
-      <th scope="col">Actions</th>
-    </tr></thead>
-    <tbody id="watch-rows"></tbody>
-  </table>
-  <p class="muted panel-footnote">Host watches run independently of services and fire hooks/notifiers on thresholds or changes. See the Events log for activity.</p>
-</details>
+<!--__SERMO_WATCH_PANEL:host__-->
 
 <h2 class="visually-hidden">Events</h2>
 <details id="events-section" open class="panel">

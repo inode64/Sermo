@@ -23,8 +23,9 @@ Mantén los cambios concretos:
   `<details>` de paneles de watches llevan además `data-panel="<clave>"` con el
   nombre de su entrada en el registro `watchPanels`; el renderizado, el routing
   de deep-links, la navegación de atención y el atajo de búsqueda `/` iteran ese
-  registro, de modo que un panel de watches nuevo solo necesita su entrada en el
-  registro y su bloque HTML.
+  registro. Los IDs estáticos, columnas, controles y textos proceden de
+  `internal/web/src/watch-panels.json`, compartido por el builder Go del shell y
+  el registro en runtime.
 - Los servicios, aplicaciones y watches (incluidas las watches de storage) pueden
   usar `category` para agrupar, filtrar o buscar según el panel.
 - Un campo YAML `category` de nivel superior es la fuente de la categoría. Si está ausente,
