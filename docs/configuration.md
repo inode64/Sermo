@@ -654,6 +654,9 @@ Read-only endpoints:
   show a **Starting** or **Shutting down** banner while monitoring is not active
   yet.
 - `GET /api/whoami` — caller role, permissions and feature visibility.
+- `GET /api/dashboard?since=24h` — aggregate snapshot used by the Web UI for
+  frequently refreshed service, host and daemon panels. Individual endpoints
+  below remain available and are used as a browser fallback.
 - `GET /api/services` — **configured runtime** service list (the service
   files under `paths.services`): name, `state` (`disabled`, `stopped`,
   `started`, `starting`, `collecting`, `monitored`, `failed`), backend status,

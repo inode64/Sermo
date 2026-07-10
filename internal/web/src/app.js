@@ -21,6 +21,7 @@ const csrfHeader = "X-Sermo-CSRF";
 const csrfHeaderValue = "1";
 const apiApplicationsPath = "api/applications";
 const apiActivityPath = "api/activity";
+const apiDashboardPath = "api/dashboard";
 const apiDaemonPath = "api/daemon";
 const apiDaemonMetricsPath = "api/daemon/metrics";
 const apiEventsPath = "api/events";
@@ -300,6 +301,7 @@ function apiLimitSuffix(base, limit) { return `${base}?${apiQueryLimit}=${limit}
 function apiSinceSuffix(base, since) { return `${base}?${apiQuerySince}=${since}`; }
 function applicationAPI(name, suffix = "") { return apiEntityPath(apiApplicationsPath, name, suffix); }
 function applicationEventsAPI(name, limit) { return applicationAPI(name, apiLimitSuffix(apiSuffixEvents, limit)); }
+function dashboardAPI(since) { return `${apiDashboardPath}?${apiQuerySince}=${since}`; }
 function daemonMetricsAPI(since) { return `${apiDaemonMetricsPath}?${apiQuerySince}=${since}`; }
 function eventsAPI(params) { return `${apiEventsPath}?${params.toString()}`; }
 function eventsClearAPI(query = "") { return `${apiEventsClearPath}${query}`; }
@@ -418,25 +420,62 @@ async function runLoadQueue() {
   }
 }
 
-async function performLoad() {
-  const seq = ++loadSeq;
-  healthIconReady = false;
-  let expandedServicesPromise = Promise.resolve(true);
-  const sameLoad = () => seq === loadSeq;
-  const [servicesResult, mountsResult, notifiersResult, daemonResult, daemonMetricsResult, locksResult, activityResult, readyResult, liveResult, monResult, opsResult, hostMetricsResult] = await Promise.all([
+function snapshotResult(snapshot, key, fallback) {
+  return snapshot && Object.prototype.hasOwnProperty.call(snapshot, key)
+    ? { ok: true, data: snapshot[key] }
+    : { ok: false, data: fallback };
+}
+
+async function loadPrimaryDashboard() {
+  const aggregate = await getJSONResult(dashboardAPI(daemonMetricWindow), null);
+  if (aggregate.ok) {
+    const snapshot = aggregate.data || {};
+    return {
+      servicesResult: snapshotResult(snapshot, "services", null),
+      mountsResult: snapshotResult(snapshot, "mounts", null),
+      notifiersResult: snapshotResult(snapshot, "notifiers", null),
+      daemonResult: snapshotResult(snapshot, "daemon", null),
+      daemonMetricsResult: snapshotResult(snapshot, "daemon_metrics", null),
+      locksResult: snapshotResult(snapshot, "locks", null),
+      activityResult: snapshotResult(snapshot, "activity", null),
+      readyResult: snapshotResult(snapshot, "ready", {}),
+      liveResult: snapshotResult(snapshot, "live", {}),
+      monResult: snapshotResult(snapshot, "monitoring", {}),
+      opsResult: snapshotResult(snapshot, "operations", {}),
+      hostMetricsResult: snapshotResult(snapshot, "host_metrics", []),
+    };
+  }
+
+  const results = await Promise.all([
     getJSONResult(apiServicesPath, null),
-    getJSONResult(apiMountsPath, null),       // configured mount units
-    getJSONResult(apiNotifiersPath, null),    // what watches can send to
-    getJSONResult(apiDaemonPath, null),       // daemon / engine settings panel
+    getJSONResult(apiMountsPath, null),
+    getJSONResult(apiNotifiersPath, null),
+    getJSONResult(apiDaemonPath, null),
     getJSONResult(daemonMetricsAPI(daemonMetricWindow), null),
-    getJSONResult(apiLocksPath, null),        // global runtime locks (active and stale)
-    getJSONResult(apiActivityPath, null),     // quick activity summary
+    getJSONResult(apiLocksPath, null),
+    getJSONResult(apiActivityPath, null),
     fetchReadyReportResult(),
     getJSONResult(liveVerbosePath, {}),
     getJSONResult(apiMonitoringPath, {}),
     getJSONResult(apiOpsPath, {}),
     getJSONResult(apiHostPath, []),
   ]);
+  const [servicesResult, mountsResult, notifiersResult, daemonResult, daemonMetricsResult,
+    locksResult, activityResult, readyResult, liveResult, monResult, opsResult,
+    hostMetricsResult] = results;
+  return { servicesResult, mountsResult, notifiersResult, daemonResult, daemonMetricsResult,
+    locksResult, activityResult, readyResult, liveResult, monResult, opsResult,
+    hostMetricsResult };
+}
+
+async function performLoad() {
+  const seq = ++loadSeq;
+  healthIconReady = false;
+  let expandedServicesPromise = Promise.resolve(true);
+  const sameLoad = () => seq === loadSeq;
+  const { servicesResult, mountsResult, notifiersResult, daemonResult,
+    daemonMetricsResult, locksResult, activityResult, readyResult, liveResult,
+    monResult, opsResult, hostMetricsResult } = await loadPrimaryDashboard();
   if (!sameLoad()) return;
   const services = servicesResult.data;
   const mounts = mountsResult.data;
