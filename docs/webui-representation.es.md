@@ -88,6 +88,7 @@ la autenticación web está habilitada.
 | --- | --- |
 | Marca | `Sermo` con punto de estado |
 | Rol | etiqueta admin / solo lectura |
+| Buscar target | autocompletado único sobre services, watches, aplicaciones y mounts cargados; la selección limpia solo los filtros de ese panel y abre el target |
 | Refresco | selector con intervalo de refresco, botón de refresco manual |
 | Estado | antigüedad del último refresco completo, errores de conexión o lista de paneles que conservan datos anteriores tras un refresco parcial; `#statusbar` termina con el `uptime:` del host y luego el `status:` del daemon (`ok` / `starting` / …) como una cola emparejada |
 | Estado del sistema | identidad del host, tipo de host, resumen de daemon/backend/runtime |
@@ -97,6 +98,8 @@ Notas editables:
 - Mantén la barra superior compacta y fija.
 - No muevas los controles operativos a bloques hero de estilo marketing.
 - Los controles de refresco deben permanecer visibles en pantallas estrechas.
+- `Ctrl+K`/`Cmd+K` enfoca la búsqueda global de targets. Usa el snapshot actual
+  del dashboard y no realiza otra petición.
 - La lectura `uptime:` de la línea de estado es el uptime del **host/servidor** (desde
   `/proc/uptime`, expuesto como `host_uptime` en `GET /api/daemon`), no el uptime del
   proceso sermod. El uptime del proceso sermod permanece en el panel del daemon y en

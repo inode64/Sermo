@@ -296,6 +296,7 @@
   .topbar-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
   .topbar-tools { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
   .topbar-tools label { color: var(--text-2); font-size: .82rem; white-space: nowrap; }
+  #target-search { width: min(19rem, 42vw); }
   #last-refresh { font-size: .78rem; white-space: nowrap; }
   #system-status, #statusbar { margin: .25rem 0 0; font-size: .82rem; display: flex; gap: .4rem 1.1rem; flex-wrap: wrap; align-items: center; color: var(--text-2); }
   #system-status b, #statusbar b { color: var(--text); font-weight: 600; }
