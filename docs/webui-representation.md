@@ -22,8 +22,9 @@ Keep changes concrete:
   disconnected dimming targets that class, not an id list). Watch panel
   `<details>` also carry `data-panel="<key>"` naming their entry in the
   `watchPanels` registry; rendering, deep-link routing, attention navigation
-  and the `/` search shortcut iterate that registry, so a new watch panel needs
-  only its registry entry and HTML block.
+  and the `/` search shortcut iterate that registry. Static IDs, columns,
+  controls and copy come from `internal/web/src/watch-panels.json`, shared by
+  the Go shell builder and the runtime registry.
 - Services, applications and watches (including storage watches) can use
   `category` for grouping, filtering or search depending on the panel.
 - A top-level YAML `category` field is the category source. If it is absent,
