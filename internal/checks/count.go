@@ -14,14 +14,29 @@ import (
 	"sermo/internal/execx"
 )
 
-// countCheck is condition-style: OK means the entry count matches op/value.
+// countCheck is condition-style: OK means the entry count or count growth
+// matches the configured predicate.
 type countCheck struct {
 	base
-	path      string
-	kind      string
-	recursive bool
-	op        string
-	value     float64
+	path       string
+	kind       string
+	recursive  bool
+	op         string
+	value      float64
+	deltaOp    string
+	deltaValue float64
+	window     time.Duration
+	clock      func() time.Time
+	state      *countState
+}
+
+type countSample struct {
+	t     time.Time
+	count int
+}
+
+type countState struct {
+	samples []countSample
 }
 
 func (c countCheck) Run(ctx context.Context) Result {
@@ -32,6 +47,9 @@ func (c countCheck) Run(ctx context.Context) Result {
 	n, err := c.tally(ctx)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("count %s: %s", c.path, execx.ContextFailure(err, c.timeout)), start)
+	}
+	if c.deltaOp != "" {
+		return c.runDelta(n, start)
 	}
 
 	ok := compareFloat(float64(n), c.op, c.value)
@@ -47,6 +65,49 @@ func (c countCheck) Run(ctx context.Context) Result {
 		DataKeyRecursive: c.recursive,
 		DataKeyCount:     n,
 		DataKeyValue:     n,
+	}
+	return res
+}
+
+func (c countCheck) runDelta(n int, start time.Time) Result {
+	clock := c.clock
+	if clock == nil {
+		clock = time.Now
+	}
+	if c.state == nil {
+		c.state = &countState{}
+	}
+	now := clock()
+	cutoff := now.Add(-c.window)
+	kept := c.state.samples[:0]
+	for _, s := range c.state.samples {
+		if !s.t.Before(cutoff) {
+			kept = append(kept, s)
+		}
+	}
+	c.state.samples = append(kept, countSample{t: now, count: n})
+
+	baseline := c.state.samples[0]
+	growth := n - baseline.count
+	ok := growth > 0 && compareFloat(float64(growth), c.deltaOp, c.deltaValue)
+
+	scope := "in"
+	if c.recursive {
+		scope = "under"
+	}
+	span := now.Sub(baseline.t)
+	res := c.result(ok, fmt.Sprintf("%d %s entries %s %s (%+d in %s, want %s %s)",
+		n, c.kind, scope, c.path, growth, span.Round(time.Second),
+		c.deltaOp, strconv.FormatFloat(c.deltaValue, floatFormatFixed, floatPrecisionAuto, numericBits64)), start)
+	res.Data = map[string]any{
+		DataKeyPath:          c.path,
+		DataKeyOf:            c.kind,
+		DataKeyRecursive:     c.recursive,
+		DataKeyCount:         n,
+		DataKeyBaselineCount: baseline.count,
+		DataKeyGrowthCount:   growth,
+		DataKeyWindow:        c.window.String(),
+		DataKeyValue:         growth,
 	}
 	return res
 }

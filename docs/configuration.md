@@ -1358,8 +1358,9 @@ These conventions keep the per-type sections below short:
   accepts a number or an explicit `%` suffix in 0–100 (`90` or `"90%"`), a
   `*_bytes` field **requires** a size suffix (`K`/`M`/`G`/`T`, e.g. `10G`), and
   any other field is a plain number. A
-  **stateful check** (counter deltas — net `errors`, swap `io`, `oom`; and change
-  detection — net/icmp `state`/`speed`/`latency`, `file`, `process`; and rate
+  **stateful check** (counter deltas — net `errors`, swap `io`, `oom`; count
+  growth with `delta`/`within`; and change detection — net/icmp
+  `state`/`speed`/`latency`, `file`, `process`; and rate
   computation — `diskio`) compares
   against a baseline carried across cycles: the **first cycle primes the baseline
   and never fires**, and a counter reset clamps the per-cycle delta to zero.

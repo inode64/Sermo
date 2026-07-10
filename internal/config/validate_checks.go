@@ -1219,9 +1219,9 @@ func validatePressureFields(prefix string, fields map[string]any, add addFunc) {
 }
 
 // validateCount checks a count entry: a path, an optional `of` kind, an optional
-// boolean `recursive`, and a required numeric threshold — flat op/value at the
-// top level, or nested under `count: {op, value}` like the other named
-// predicates (use one form, not both).
+// boolean `recursive`, and exactly one predicate mode: a numeric threshold
+// (flat op/value or nested `count: {op, value}`), or growth over a window
+// (`delta: {op, value}` plus `within`).
 func validateCount(entry map[string]any, path string, add addFunc) {
 	if cfgval.String(entry[checks.CheckKeyPath]) == "" {
 		add("%s count check requires a path", path)
@@ -1235,6 +1235,32 @@ func validateCount(entry map[string]any, path string, add addFunc) {
 		if _, ok := v.(bool); !ok {
 			add("%s count recursive must be a boolean", path)
 		}
+	}
+	if delta, hasDelta := entry[checks.CheckKeyDelta]; hasDelta {
+		if _, hasCount := entry[checks.CheckKeyCount]; hasCount {
+			add("%s count check must not mix a count threshold with delta", path)
+		}
+		_, hasOp := entry[checks.CheckKeyOp]
+		_, hasValue := entry[checks.CheckKeyValue]
+		if hasOp || hasValue {
+			add("%s count check must not mix top-level op/value with delta", path)
+		}
+		m, ok := delta.(map[string]any)
+		if !ok {
+			add("%s.delta must be a mapping {op, value}", path)
+		} else {
+			validateOpNumeric(path+".delta", m, add)
+		}
+		within := cfgval.String(entry[checks.CheckKeyWithin])
+		if within == "" {
+			add("%s.within is required when count delta is set (e.g. 2m)", path)
+		} else if !isPositiveDuration(within) {
+			add("%s.within %q must be a valid positive duration", path, within)
+		}
+		return
+	}
+	if cfgval.String(entry[checks.CheckKeyWithin]) != "" {
+		add("%s.within requires delta {op, value}", path)
 	}
 	threshold := entry
 	if m, ok := entry[checks.CheckKeyCount].(map[string]any); ok {

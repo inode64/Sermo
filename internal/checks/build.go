@@ -985,6 +985,38 @@ func buildCountCheck(b base, entry map[string]any) (Check, string) {
 	if !validCountKind(kind) {
 		return nil, "count check `of` must be " + CountKindSummary
 	}
+	if _, hasDelta := entry[CheckKeyDelta]; hasDelta {
+		if _, hasCount := entry[CheckKeyCount]; hasCount {
+			return nil, "count check must not mix a count threshold with delta"
+		}
+		_, hasOp := entry[CheckKeyOp]
+		_, hasValue := entry[CheckKeyValue]
+		if hasOp || hasValue {
+			return nil, "count check must not mix top-level op/value with delta"
+		}
+		op, val, errs := parseDeltaThreshold(entry[CheckKeyDelta], "count check")
+		if errs != "" {
+			return nil, errs
+		}
+		window := cfgval.DurationOr(entry[CheckKeyWithin], 0)
+		if window <= 0 {
+			return nil, "count check delta requires a positive within (e.g. 2m)"
+		}
+		return countCheck{
+			base:       b,
+			path:       path,
+			kind:       kind,
+			recursive:  cfgval.Bool(entry[CheckKeyRecursive]),
+			deltaOp:    op,
+			deltaValue: val,
+			window:     window,
+			clock:      time.Now,
+			state:      &countState{},
+		}, ""
+	}
+	if cfgval.String(entry[CheckKeyWithin]) != "" {
+		return nil, "count check within requires delta {op, value}"
+	}
 	// The threshold may sit at the top level (op/value) or be nested under
 	// `count: {op, value}` like every other named predicate.
 	threshold := entry

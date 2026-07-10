@@ -20,6 +20,7 @@ const (
 	watchReadingLabelAvailable         = "Available"
 	watchReadingLabelAwait             = "Await"
 	watchReadingLabelBackend           = "Backend"
+	watchReadingLabelBaselineCount     = "Baseline count"
 	watchReadingLabelChipFilter        = "Chip filter"
 	watchReadingLabelConfiguredPath    = "Configured path"
 	watchReadingLabelCount             = "Count"
@@ -200,6 +201,19 @@ func countCheckReadings(data map[string]any) []web.WatchReading {
 	}
 	if v, ok := cfgval.Int(data[checks.DataKeyCount]); ok {
 		out = append(out, web.WatchReading{Field: checks.DataKeyCount, Label: watchReadingLabelCount, Value: strconv.Itoa(v)})
+	}
+	if v, ok := cfgval.Int(data[checks.DataKeyBaselineCount]); ok {
+		out = append(out, web.WatchReading{
+			Field: checks.DataKeyBaselineCount, Label: watchReadingLabelBaselineCount, Value: strconv.Itoa(v),
+		})
+	}
+	if v, ok := cfgval.Int(data[checks.DataKeyGrowthCount]); ok {
+		out = append(out, web.WatchReading{
+			Field: checks.DataKeyGrowthCount, Label: watchReadingLabelGrowth, Value: fmt.Sprintf("%+d", v),
+		})
+	}
+	if v := cfgval.String(data[checks.DataKeyWindow]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyWindow, Label: watchReadingLabelWindow, Value: v})
 	}
 	return out
 }

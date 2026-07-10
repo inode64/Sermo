@@ -1410,8 +1410,9 @@ Estas convenciones mantienen cortas las secciones por tipo a continuación:
   `*_pct` acepta un número o un sufijo `%` explícito en 0–100 (`90` o `"90%"`), un campo
   `*_bytes` **requiere** un sufijo de tamaño (`K`/`M`/`G`/`T`, p. ej. `10G`), y
   cualquier otro campo es un número simple. Una
-  **comprobación con estado** (deltas de contador — net `errors`, swap `io`, `oom`; y
-  detección de cambios — net/icmp `state`/`speed`/`latency`, `file`, `process`; y cálculo
+  **comprobación con estado** (deltas de contador — net `errors`, swap `io`, `oom`;
+  crecimiento de `count` con `delta`/`within`; y detección de cambios — net/icmp
+  `state`/`speed`/`latency`, `file`, `process`; y cálculo
   de tasas — `diskio`) compara
   contra una línea base mantenida a través de los ciclos: el **primer ciclo prepara la
   línea base y nunca se dispara**, y un reset de contador limita el delta por ciclo a
