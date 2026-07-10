@@ -281,7 +281,8 @@ type Deps struct {
 	// other's rate deltas. Optional: nil disables live CPU sampling.
 	LiveCollector *metrics.Collector
 	// ServiceMetrics stores per-cycle service CPU, memory and IO samples for the
-	// web detail graphs. Optional: nil means the web backend samples on demand.
+	// web detail graphs. Optional: nil leaves history empty; the web backend still
+	// probes current process counters but never records samples from HTTP reads.
 	ServiceMetrics *ServiceMetricSampler
 	// Observability tracks when a service has completed a normal observed cycle
 	// and has fresh indicators available for the web/CLI state view.
