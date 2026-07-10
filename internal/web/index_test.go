@@ -657,7 +657,7 @@ func TestIndexServiceActionsUseSinglePowerButton(t *testing.T) {
 		"service is already stopped",
 		"Start service ",
 		"Stop service ",
-		"row-action-menu",
+		"Reload service ",
 	} {
 		if !strings.Contains(script, needle) {
 			t.Errorf("bundled script missing service action marker %q", needle)
@@ -672,8 +672,6 @@ func TestSourceCompactsRowActionsWithoutChangingDispatch(t *testing.T) {
 	}
 	text := string(src)
 	for _, marker := range []string{
-		`function rowActionMenu(label, actions)`,
-		`function closeRowActionMenu(control)`,
 		`data-service-action="${action}"`,
 		`data-watch-action="${actionUnmonitor}"`,
 		`data-mount-action="${actionKillUmount}"`,
