@@ -42,6 +42,12 @@ before signaling, record what was stopped, and never kill a non-Sermo or
 unverified listener.
 
 - Preserve remote system behavior: do not start, stop, restart, reload, kill, package-install, or write permanent host config unless the user explicitly asks.
+- Mutating remote install/update/apply scripts must never change type, mode, uid
+  or gid on protected parent system paths: `/`, `/etc`, `/usr`, `/usr/lib`,
+  `/etc/systemd`, `/usr/lib/tmpfiles.d`, `/etc/init.d` and `/usr/share`. Do not
+  `chown`, `chmod`, extract archive directory entries, or preserve local
+  workstation archive owners onto those paths. Capture before/after metadata for
+  that exact list and fail the run if any entry changes.
 - When problems are discovered, fix only the local project code, catalog, docs, or tests; redeploy new `/tmp` artifacts after the local change. Do not patch remote host files to make the test pass.
 - If a serious error appears, stop the run, do not continue with the next destructive or state-changing step, and report the actions already performed.
 - Treat broken basic commands (`cp`, `cat`, `ls`), failed remote shell startup, or an unexpected SSH disconnect during setup/validation as critical errors. Stop immediately and report what was already done.
@@ -102,7 +108,9 @@ scp -o BatchMode=yes -o ConnectTimeout=10 ...
 Run this before copying or executing Sermo artifacts on each host:
 
 - Confirm SSH connects with batch mode and a bounded timeout.
-- Confirm basic remote commands work: `cp`, `cat`, `ls`, `mkdir`, `chmod`, and `rm`.
+- Confirm basic remote commands work: `cp`, `cat`, `ls`, `mkdir`, and `rm`.
+  If an executable probe is needed, run it through the shell or under the
+  temporary run directory only; never use `chmod` on system paths.
 - Detect the init backend as `systemd` or `openrc`; if neither is reliable, record the host as unsupported for service setup.
 - Check architecture and skip hosts that cannot run the locally built `GOAMD64=v1` Linux amd64 binaries.
 - Check that `/tmp` is writable and executable, including a tiny executable probe; if `/tmp` is `noexec`, stop for that host.
@@ -207,7 +215,13 @@ requests. It overrides the validation-only `/tmp` restrictions above.
   need the same behavior.
 - Build locally with `GOAMD64=v1` and `SERMO_DATADIR=/usr/share/sermo`, package
   `sermoctl`, `sermod`, units and catalog locally, then copy the payload to the
-  host. Do not build on the host.
+  host. Do not build on the host. Payload/config tarballs must be root-owned
+  (`--owner=0 --group=0 --numeric-owner` or equivalent), must not contain
+  protected parent directory entries (`/`, `/etc`, `/usr`, `/usr/lib`,
+  `/etc/systemd`, `/usr/lib/tmpfiles.d`, `/etc/init.d`, `/usr/share`), and must
+  be extracted remotely with `tar --no-same-owner`. Extract only members needed
+  for the detected init backend; skip systemd/OpenRC/tmpfiles members whose
+  parent directory is absent instead of creating a protected parent path.
 - Stage read-only host evidence first: active init units, catalog service
   discovery, `findmnt`, `/etc/fstab`, `/proc/mounts`, `/proc/swaps`, `lsblk`,
   network inventory, cert candidates and feature probes.
@@ -283,7 +297,9 @@ requests. It overrides the validation-only `/tmp` restrictions above.
     `/etc/fstab`.
 - After applying config, run `sermoctl config validate`, restart/enable `sermod`
   through the host init system, wait for `readyz.ready=true`, and report service
-  count, watch file count, monitored target count and generated mount units.
+  count, watch file count, monitored target count, generated mount units and the
+  protected-path metadata check result. A difference in protected path metadata
+  is a critical failure; stop and report the before/after diff.
 
 Complete means complete for the exact Sermo checkout and test binaries used in
 that remote run, not a fixed hand-picked subset maintained in this skill. At the
@@ -593,4 +609,6 @@ Summarize:
 - missing paths, unsupported apps, or catalog gaps to fix locally;
 - serious errors encountered and the actions completed before stopping;
 - remote `/tmp` directories left behind, if any;
+- protected-path metadata check status for `/`, `/etc`, `/usr`, `/usr/lib`,
+  `/etc/systemd`, `/usr/lib/tmpfiles.d`, `/etc/init.d` and `/usr/share`;
 - commands/tests run locally.

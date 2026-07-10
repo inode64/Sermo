@@ -115,10 +115,23 @@ watches:
       scope: service
       name: memory
       op: '>'
-      value: 60%
+      value: 27538228
       optional: true
     for:
-      duration: 10m
+      duration: 4m
     then:
       action: alert
       message: ${display_name} memory usage is high
+  alert-if-cpu-thread-high:
+    check:
+      type: metric
+      scope: service
+      name: cpu_thread
+      op: '>'
+      value: 0.11%
+      optional: true
+    for:
+      duration: 5m
+    then:
+      action: alert
+      message: ${display_name} single-thread CPU usage is high

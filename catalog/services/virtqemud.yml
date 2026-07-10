@@ -24,3 +24,16 @@ watches:
       type: libvirt
       socket: /run/libvirt/virtqemud-sock
       timeout: 5s
+  alert-if-memory-high:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 57473434
+      optional: true
+    for:
+      duration: 4m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

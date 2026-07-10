@@ -21,6 +21,19 @@ watches:
       optional: true
       requires:
         - service
+  alert-if-memory-high:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 3338650
+      optional: true
+    for:
+      duration: 4m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high
 apps:
   - rngd
 restart_on_change:
