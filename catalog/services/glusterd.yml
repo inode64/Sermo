@@ -25,3 +25,42 @@ watches:
       type: glusterfs
       port: ${port}
       timeout: 3s
+  alert-if-memory-high:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 137492890
+      optional: true
+    for:
+      duration: 4m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high
+  alert-if-cpu-thread-high:
+    check:
+      type: metric
+      scope: service
+      name: cpu_thread
+      op: '>'
+      value: 1.09%
+      optional: true
+    for:
+      duration: 5m
+    then:
+      action: alert
+      message: ${display_name} single-thread CPU usage is high
+  alert-if-io-high:
+    check:
+      type: metric
+      scope: service
+      name: io
+      op: '>'
+      value: 3403879
+      optional: true
+    for:
+      duration: 5m
+    then:
+      action: alert
+      message: ${display_name} IO usage is high

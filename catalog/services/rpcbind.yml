@@ -24,3 +24,16 @@ watches:
       host: ${host}
       port: ${port}
       timeout: 3s
+  alert-if-memory-high:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 3604480
+      optional: true
+    for:
+      duration: 4m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

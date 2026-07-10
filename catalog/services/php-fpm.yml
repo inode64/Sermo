@@ -78,6 +78,19 @@ watches:
       port: ${port}
       status_path: ${status_path}
       timeout: 3s
+  alert-if-memory-high:
+    check:
+      type: metric
+      scope: service
+      name: memory
+      op: '>'
+      value: 5332287488
+      optional: true
+    for:
+      duration: 4m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high
 stop_policy:
   term_timeout: 10s
   force_kill: true
