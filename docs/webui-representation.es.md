@@ -49,7 +49,7 @@ Mantén los cambios concretos:
 | Unidades de montaje | `GET /api/mounts` | watches de storage con `mount:` respaldadas por fstab |
 | Notifiers | `GET /api/notifiers` | destinos de notifiers |
 | Configuración del daemon | `GET /api/daemon` | configuración de engine/runtime |
-| Métricas de proceso del daemon | `GET /api/daemon/metrics` | historial persistido de CPU/memoria/IO de sermod |
+| Métricas de proceso del daemon | `GET /api/daemon/metrics` | historial persistido de CPU/memoria/IO de sermod, de solo lectura y muestreado por el daemon independientemente de los clientes web |
 | Métricas de host | `GET /api/host` | valores actuales de CPU, memoria y carga del host |
 | Locks | `GET /api/locks` | locks de runtime con nombre |
 | Eventos | `GET /api/events` | actividad de servicios/watches; admite `limit`, `service`, `watch`, `kind`, `status`, `only_errors` |

@@ -165,6 +165,9 @@ type Deps struct {
 	// DaemonMetrics persists sermod's own process metric history for the web UI.
 	// Optional: nil keeps only in-memory history for this process lifetime.
 	DaemonMetrics DaemonMetricStore
+	// DaemonMetricSampler is the daemon-owned sampler read by the web backend.
+	// Optional: nil builds an unstarted read-only sampler for tests/non-daemon users.
+	DaemonMetricSampler *DaemonMetricSampler
 	// ProcSampler lists matching processes and their counters for `process`
 	// watches. Optional: nil uses the host /proc.
 	ProcSampler ProcSampler

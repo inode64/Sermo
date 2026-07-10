@@ -48,7 +48,7 @@ Keep changes concrete:
 | Mount units | `GET /api/mounts` | storage watches with `mount:` backed by fstab |
 | Notifiers | `GET /api/notifiers` | notifier targets |
 | Daemon settings | `GET /api/daemon` | engine/runtime config |
-| Daemon process metrics | `GET /api/daemon/metrics` | persisted sermod CPU/memory/IO history |
+| Daemon process metrics | `GET /api/daemon/metrics` | read-only persisted sermod CPU/memory/IO history sampled by the daemon independently of dashboard clients |
 | Host metrics | `GET /api/host` | current host CPU, memory and load values |
 | Locks | `GET /api/locks` | named runtime locks |
 | Events | `GET /api/events` | service/watch activity; supports `limit`, `service`, `watch`, `kind`, `status`, `only_errors` |
