@@ -694,7 +694,8 @@ Read-only endpoints:
   `service`, `watch`, `kind`, `status` and `only_errors=1`. Add `page=1` to
   receive `{events, next_before_id, has_more}`; pass `before_id` from that
   response to continue toward older rows. Without `page`/`before_id`, the
-  endpoint keeps returning the legacy event array.
+  endpoint keeps returning the legacy event array. Cursor pages also accept a
+  positive `since` duration such as `24h`.
 - `GET /api/ops` — global operation slot usage: `{in_use, total}` for
   `engine.max_parallel_operations`.
 

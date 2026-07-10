@@ -612,8 +612,6 @@ function renderOpsPanel(o) {
   el.innerHTML = `Operation slots: <span class="${cls}">${o.in_use}/${o.total}</span> in use`;
 }
 
-const EVENT_FILTER_DEBOUNCE_MS = 300;
-let eventFilterTimer = null;
 let eventNextBeforeID = 0;
 let eventHasMore = false;
 
@@ -629,6 +627,7 @@ async function loadEvents(seq = 0, append = false) {
     add("event-watch", apiQueryWatch);
     add("event-kind", apiQueryKind);
     add("event-status", apiQueryStatus);
+    add("event-range", apiQuerySince);
     if ($("#event-errors") && $("#event-errors").checked) params.set(apiQueryOnlyErrors, queryBoolOne);
     if (append && eventNextBeforeID > 0) params.set(apiQueryBeforeID, String(eventNextBeforeID));
     const res = await fetch(eventsAPI(params));
@@ -658,30 +657,17 @@ async function loadOlderEvents() {
   if (button) button.disabled = false;
 }
 
-function scheduleLoadEvents() {
-  if (eventFilterTimer) clearTimeout(eventFilterTimer);
-  eventFilterTimer = setTimeout(() => {
-    eventFilterTimer = null;
-    loadEvents();
-  }, EVENT_FILTER_DEBOUNCE_MS);
-}
-
 function flushLoadEvents() {
-  if (eventFilterTimer) {
-    clearTimeout(eventFilterTimer);
-    eventFilterTimer = null;
-  }
   saveUIState();
   loadEvents();
 }
 
 function eventFilterKey(e) {
-  if (e.key === keyEnter) flushLoadEvents();
   if (e.key === keyEscape) clearEventFilters();
 }
 
 function clearEventFilters() {
-  ["event-service", "event-watch", "event-kind", "event-status"].forEach((id) => {
+  ["event-service", "event-watch", "event-kind", "event-status", "event-range"].forEach((id) => {
     const el = $("#" + id);
     if (el) el.value = "";
   });
@@ -933,6 +919,7 @@ function renderGlobalEvents() {
   if (cnt) cnt.textContent = events.length ? `${events.length} shown` : "";
   const more = $("#event-more");
   if (more) more.hidden = !eventHasMore;
+  syncEventTargetFilters();
   updateSectionNav();
   const grouped = $("#event-group") && $("#event-group").checked;
   if (!grouped) {
@@ -959,6 +946,27 @@ function renderGlobalEvents() {
       open ? eventRows(g, true, { prefix: "group" + gi, panelId }) : nothing,
     ];
   }), tbody);
+}
+
+function syncEventTargetFilter(id, allLabel, names) {
+  const select = $(id);
+  if (!select) return;
+  const current = select.value;
+  const values = [...new Set(names.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  if (current && !values.includes(current)) values.push(current);
+  select.replaceChildren(new Option(allLabel, ""), ...values.map((value) => new Option(value, value)));
+  select.value = current;
+}
+
+function syncEventTargetFilters() {
+  syncEventTargetFilter("#event-service", "all services", [
+    ...(allServices || []).map((service) => service.name),
+    ...(allEvents || []).map((event) => event.service),
+  ]);
+  syncEventTargetFilter("#event-watch", "all watches", [
+    ...(allWatches || []).map((watch) => watch.name),
+    ...(allEvents || []).map((event) => event.watch),
+  ]);
 }
 
 function eventRows(events, withService, opts = {}) {
@@ -1234,11 +1242,19 @@ function restoreUIState() {
     if (Array.isArray(s.appCollapsedGroups)) appCollapsedGroups = new Set(s.appCollapsedGroups);
     if (s.eventFilters && typeof s.eventFilters === "object") {
       const ef = s.eventFilters;
-      const setVal = (id, v) => { const el = $(id); if (el && typeof v === "string") el.value = v; };
+      const setVal = (id, v) => {
+        const el = $(id);
+        if (!el || typeof v !== "string") return;
+        if (el.tagName === "SELECT" && v && ![...el.options].some((option) => option.value === v)) {
+          el.add(new Option(v, v));
+        }
+        el.value = v;
+      };
       setVal("#event-service", ef.service);
       setVal("#event-watch", ef.watch);
       setVal("#event-kind", ef.kind);
       setVal("#event-status", ef.status);
+      setVal("#event-range", ef.range);
       const err = $("#event-errors");
       if (err && typeof ef.onlyErrors === "boolean") err.checked = ef.onlyErrors;
       const grp = $("#event-group");
@@ -1262,6 +1278,7 @@ function saveUIState() {
         watch: ($("#event-watch") || {}).value || "",
         kind: ($("#event-kind") || {}).value || "",
         status: ($("#event-status") || {}).value || "",
+        range: ($("#event-range") || {}).value || "",
         onlyErrors: !!($("#event-errors") && $("#event-errors").checked),
         group: !($("#event-group") && !$("#event-group").checked),
       },
@@ -6116,10 +6133,10 @@ function initStaticHandlers() {
     bindSortHeader(th, () => setAppSort(th.dataset.appSort || ""));
   });
 
-  ["event-service", "event-watch", "event-kind", "event-status"].forEach((id) => {
+  ["event-service", "event-watch", "event-kind", "event-status", "event-range"].forEach((id) => {
     const el = $("#" + id);
     if (!el) return;
-    el.addEventListener(domEventInput, scheduleLoadEvents);
+    el.addEventListener(domEventChange, flushLoadEvents);
     el.addEventListener(domEventKeydown, eventFilterKey);
   });
   const onlyErrors = $("#event-errors");

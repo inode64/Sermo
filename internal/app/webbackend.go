@@ -59,6 +59,7 @@ const (
 	// dashboard rollup; event list endpoints keep their own request limits.
 	activitySummaryEventScanLimit = 500
 	webEventPageScanSize          = 500
+	webEventPageMaxScan           = 5000
 
 	procUptimePath         = "/proc/uptime"
 	procUptimeValueIndex   = 0
@@ -3382,6 +3383,15 @@ func (b *WebBackend) EventPage(_ context.Context, query web.EventQuery) web.Even
 	}
 	out := make([]web.Event, 0, query.Limit)
 	cursor := query.BeforeID
+	now := time.Now
+	if b.now != nil {
+		now = b.now
+	}
+	cutoff := time.Time{}
+	if query.Since > 0 {
+		cutoff = now().Add(-query.Since)
+	}
+	scanned := 0
 	for {
 		batch := b.events.Page(cursor, webEventPageScanSize+1)
 		if len(batch) == 0 {
@@ -3392,7 +3402,11 @@ func (b *WebBackend) EventPage(_ context.Context, query web.EventQuery) web.Even
 			batch = batch[:webEventPageScanSize]
 		}
 		for i, logged := range batch {
+			scanned++
 			cursor = logged.ID
+			if !cutoff.IsZero() && logged.Time.Before(cutoff) {
+				continue
+			}
 			event := loggedEventToWeb(logged)
 			if !webEventMatchesQuery(event, query) {
 				continue
@@ -3406,6 +3420,9 @@ func (b *WebBackend) EventPage(_ context.Context, query web.EventQuery) web.Even
 				}
 				return page
 			}
+		}
+		if scanned >= webEventPageMaxScan && hasRawMore {
+			return web.EventPage{Events: out, NextBeforeID: cursor, HasMore: true}
 		}
 		if !hasRawMore {
 			return web.EventPage{Events: out}
