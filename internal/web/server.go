@@ -25,6 +25,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"sermo/internal/buildinfo"
@@ -94,6 +95,7 @@ const (
 	apiSegmentRoot         = "api"
 	apiSegmentActivity     = "activity"
 	apiSegmentApplications = "applications"
+	apiSegmentDashboard    = "dashboard"
 	apiSegmentDaemon       = "daemon"
 	apiSegmentEvents       = "events"
 	apiSegmentHost         = "host"
@@ -180,6 +182,7 @@ const (
 const (
 	apiPathActivity     = apiPathPrefix + apiSegmentActivity
 	apiPathApplications = apiPathPrefix + apiSegmentApplications
+	apiPathDashboard    = apiPathPrefix + apiSegmentDashboard
 	apiPathDaemon       = apiPathPrefix + apiSegmentDaemon
 	apiPathEvents       = apiPathPrefix + apiSegmentEvents
 	apiPathHost         = apiPathPrefix + apiSegmentHost
@@ -206,6 +209,7 @@ const (
 	routeAPIWatchAction    = routeMethodPost + apiPathWatches + "/" + routeVarName + "/" + routeVarAction
 	routeAPINotifiers      = routeMethodGet + apiPathNotifiers
 	routeAPIApplications   = routeMethodGet + apiPathApplications
+	routeAPIDashboard      = routeMethodGet + apiPathDashboard
 	routeAPIMounts         = routeMethodGet + apiPathMounts
 	routeAPIMountAction    = routeMethodPost + apiPathMounts + "/" + routeVarName + "/" + routeVarAction
 	routeAPIDaemon         = routeMethodGet + apiPathDaemon
@@ -848,6 +852,36 @@ type ReadyReport struct {
 	Panic bool `json:"panic,omitempty"`
 }
 
+// LiveReport is the verbose liveness payload embedded in DashboardSnapshot.
+type LiveReport struct {
+	Status        string `json:"status"`
+	StartedAt     string `json:"started_at"`
+	Now           string `json:"now"`
+	Uptime        string `json:"uptime"`
+	UptimeSeconds int64  `json:"uptime_seconds"`
+	Services      int    `json:"services"`
+	Go            string `json:"go"`
+}
+
+// DashboardSnapshot combines the frequently refreshed, inexpensive dashboard
+// sections. Existing section endpoints remain available for API clients and as
+// a browser fallback when this aggregate request fails.
+type DashboardSnapshot struct {
+	GeneratedAt   string           `json:"generated_at"`
+	Services      []Service        `json:"services"`
+	Mounts        []Mount          `json:"mounts"`
+	Notifiers     []Notifier       `json:"notifiers"`
+	Daemon        DaemonInfo       `json:"daemon"`
+	DaemonMetrics DaemonMetrics    `json:"daemon_metrics"`
+	Locks         []Lock           `json:"locks"`
+	Activity      ActivitySummary  `json:"activity"`
+	Ready         ReadyReport      `json:"ready"`
+	Live          LiveReport       `json:"live"`
+	Monitoring    MonitoringStatus `json:"monitoring"`
+	Operations    OperationSlots   `json:"operations"`
+	HostMetrics   []HostMetric     `json:"host_metrics"`
+}
+
 // ReadinessChecker reports whether the daemon has begun monitoring.
 type ReadinessChecker interface {
 	Report(ctx context.Context) ReadyReport
@@ -1039,6 +1073,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeLivez, s.handleLivez)
 	mux.HandleFunc(routeReadyz, s.handleReadyz)
 	mux.HandleFunc(routeAPIWhoami, s.handleWhoami)
+	mux.HandleFunc(routeAPIDashboard, s.handleDashboard)
 	mux.HandleFunc(routeAPIServices, s.handleServices)
 	mux.HandleFunc(routeAPIWatches, s.handleWatches)
 	mux.HandleFunc(routeAPIWatchAction, s.handleWatchAction)
@@ -1280,6 +1315,54 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	// data. no-cache forces a revalidation on every load.
 	w.Header().Set(headerCacheControl, headerValueNoCache)
 	_, _ = w.Write(page)
+}
+
+func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.dashboardSnapshot(r.Context(), seriesSince(r)))
+}
+
+func (s *Server) dashboardSnapshot(ctx context.Context, since time.Duration) DashboardSnapshot {
+	var snapshot DashboardSnapshot
+	var wg sync.WaitGroup
+	run := func(fn func()) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			fn()
+		}()
+	}
+
+	run(func() { snapshot.Services = s.Backend.Services(ctx) })
+	run(func() { snapshot.Mounts = s.Backend.Mounts(ctx) })
+	run(func() { snapshot.Notifiers = s.Backend.Notifiers(ctx) })
+	run(func() { snapshot.Daemon = s.Backend.DaemonInfo(ctx) })
+	run(func() { snapshot.DaemonMetrics = s.Backend.DaemonMetrics(ctx, since) })
+	run(func() { snapshot.Locks = s.Backend.Locks(ctx) })
+	run(func() { snapshot.Activity = s.Backend.ActivitySummary(ctx) })
+	run(func() { snapshot.Monitoring = s.Backend.MonitoringStatus(ctx) })
+	run(func() { snapshot.Operations = s.Backend.Operations(ctx) })
+	run(func() { snapshot.HostMetrics = s.Backend.HostMetrics(ctx) })
+	if s.Readiness != nil {
+		run(func() { snapshot.Ready = s.Readiness.Report(ctx) })
+	}
+	wg.Wait()
+
+	if s.Readiness == nil {
+		snapshot.Ready = ReadyReport{Ready: true, Status: apiStatusOK, Services: len(snapshot.Services)}
+	}
+	now := time.Now()
+	uptime := now.Sub(s.started)
+	snapshot.GeneratedAt = now.UTC().Format(time.RFC3339)
+	snapshot.Live = LiveReport{
+		Status:        apiStatusOK,
+		StartedAt:     s.started.Format(time.RFC3339),
+		Now:           now.Format(time.RFC3339),
+		Uptime:        uptime.Round(time.Second).String(),
+		UptimeSeconds: int64(uptime.Seconds()),
+		Services:      len(snapshot.Services),
+		Go:            runtime.Version(),
+	}
+	return snapshot
 }
 
 func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
