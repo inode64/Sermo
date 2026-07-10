@@ -242,16 +242,58 @@ func TestSourceUsesStableEventCursorPagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read src/app.js: %v", err)
 	}
-	text := string(src)
+	api, err := os.ReadFile("src/api.js")
+	if err != nil {
+		t.Fatalf("read src/api.js: %v", err)
+	}
+	apiText := string(api)
 	for _, marker := range []string{
 		`const apiQueryBeforeID = "before_id"`,
 		`const apiQueryPage = "page"`,
+	} {
+		if !strings.Contains(apiText, marker) {
+			t.Errorf("API module missing event pagination marker %q", marker)
+		}
+	}
+	text := string(src)
+	for _, marker := range []string{
 		`params.set(apiQueryBeforeID, String(eventNextBeforeID))`,
 		`function loadOlderEvents()`,
 		`return e.id ?`,
 	} {
 		if !strings.Contains(text, marker) {
 			t.Errorf("source missing event pagination marker %q", marker)
+		}
+	}
+}
+
+func TestSourceSeparatesAPIAndFormattingModules(t *testing.T) {
+	app, err := os.ReadFile("src/app.js")
+	if err != nil {
+		t.Fatalf("read src/app.js: %v", err)
+	}
+	api, err := os.ReadFile("src/api.js")
+	if err != nil {
+		t.Fatalf("read src/api.js: %v", err)
+	}
+	format, err := os.ReadFile("src/format.js")
+	if err != nil {
+		t.Fatalf("read src/format.js: %v", err)
+	}
+	appText := string(app)
+	for _, marker := range []string{`from "./api.js"`, `from "./format.js"`} {
+		if !strings.Contains(appText, marker) {
+			t.Errorf("app source missing module import %q", marker)
+		}
+	}
+	for name, source := range map[string]string{"api": string(api), "format": string(format)} {
+		if !strings.Contains(source, "export function") {
+			t.Errorf("%s module exports no functions", name)
+		}
+	}
+	for _, retired := range []string{"function csrfPostOptions()", "function fmtNum("} {
+		if strings.Contains(appText, retired) {
+			t.Errorf("app source still owns extracted helper %q", retired)
 		}
 	}
 }
