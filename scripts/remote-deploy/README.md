@@ -31,6 +31,10 @@ The remote scripts must run as root on the target host:
   packaged catalog. It snapshots `/etc/sermo`, rejects payloads containing any
   other path, and rolls back the binaries and catalog if validation, restart or
   authenticated Web UI checks fail.
+- `remote_update_network_watches.sh` refreshes only `/etc/sermo/networks` from
+  a generated payload. It rejects any other archive member, validates the
+  retained configuration, restarts `sermod`, and restores the prior network
+  watches when validation or restart fails.
 - `remote_repair_catalog.sh` replaces only the packaged catalog from a payload.
 - `remote_final_check.sh` validates `/etc/sermo`, service state, port `9797`,
   `/livez`, `/readyz`, the HTML shell and current protected-path metadata.
