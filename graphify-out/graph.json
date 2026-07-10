@@ -4,6 +4,526 @@
   "graph": {},
   "nodes": [
     {
+      "label": "configuration.es.md",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "docs_configuration_es",
+      "community": 79,
+      "norm_label": "configuration.es.md"
+    },
+    {
+      "label": "Configuraci\u00f3n",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "docs_configuration_es_configuraci\u00f3n",
+      "community": 27,
+      "norm_label": "configuracion"
+    },
+    {
+      "label": "Cambios de esquema",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L43",
+      "_origin": "ast",
+      "id": "docs_configuration_es_cambios_de_esquema",
+      "community": 27,
+      "norm_label": "cambios de esquema"
+    },
+    {
+      "label": "Disposici\u00f3n",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L54",
+      "_origin": "ast",
+      "id": "docs_configuration_es_disposici\u00f3n",
+      "community": 27,
+      "norm_label": "disposicion"
+    },
+    {
+      "label": "Storage y unidades de montaje",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L240",
+      "_origin": "ast",
+      "id": "docs_configuration_es_storage_y_unidades_de_montaje",
+      "community": 27,
+      "norm_label": "storage y unidades de montaje"
+    },
+    {
+      "label": "Ajustes del motor",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L313",
+      "_origin": "ast",
+      "id": "docs_configuration_es_ajustes_del_motor",
+      "community": 58,
+      "norm_label": "ajustes del motor"
+    },
+    {
+      "label": "Intervalo por service",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L483",
+      "_origin": "ast",
+      "id": "docs_configuration_es_intervalo_por_service",
+      "community": 58,
+      "norm_label": "intervalo por service"
+    },
+    {
+      "label": "Intervalo por comprobaci\u00f3n",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L506",
+      "_origin": "ast",
+      "id": "docs_configuration_es_intervalo_por_comprobaci\u00f3n",
+      "community": 58,
+      "norm_label": "intervalo por comprobacion"
+    },
+    {
+      "label": "Interfaz web",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L535",
+      "_origin": "ast",
+      "id": "docs_configuration_es_interfaz_web",
+      "community": 49,
+      "norm_label": "interfaz web"
+    },
+    {
+      "label": "Autenticaci\u00f3n",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L594",
+      "_origin": "ast",
+      "id": "docs_configuration_es_autenticaci\u00f3n",
+      "community": 49,
+      "norm_label": "autenticacion"
+    },
+    {
+      "label": "Detr\u00e1s de un proxy inverso (requerido para exponerlo)",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L620",
+      "_origin": "ast",
+      "id": "docs_configuration_es_detr\u00e1s_de_un_proxy_inverso_requerido_para_exponerlo",
+      "community": 49,
+      "norm_label": "detras de un proxy inverso (requerido para exponerlo)"
+    },
+    {
+      "label": "Liveness (`/livez`)",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L745",
+      "_origin": "ast",
+      "id": "docs_configuration_es_liveness_livez",
+      "community": 49,
+      "norm_label": "liveness (`/livez`)"
+    },
+    {
+      "label": "Readiness (`/readyz`)",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L764",
+      "_origin": "ast",
+      "id": "docs_configuration_es_readiness_readyz",
+      "community": 49,
+      "norm_label": "readiness (`/readyz`)"
+    },
+    {
+      "label": "Gr\u00e1fico de latencia",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L842",
+      "_origin": "ast",
+      "id": "docs_configuration_es_gr\u00e1fico_de_latencia",
+      "community": 49,
+      "norm_label": "grafico de latencia"
+    },
+    {
+      "label": "Disponibilidad (SLA)",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L906",
+      "_origin": "ast",
+      "id": "docs_configuration_es_disponibilidad_sla",
+      "community": 27,
+      "norm_label": "disponibilidad (sla)"
+    },
+    {
+      "label": "Series temporales de disponibilidad",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L948",
+      "_origin": "ast",
+      "id": "docs_configuration_es_series_temporales_de_disponibilidad",
+      "community": 27,
+      "norm_label": "series temporales de disponibilidad"
+    },
+    {
+      "label": "Notificaciones",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L966",
+      "_origin": "ast",
+      "id": "docs_configuration_es_notificaciones",
+      "community": 60,
+      "norm_label": "notificaciones"
+    },
+    {
+      "label": "Plantillas de notificaci\u00f3n",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1080",
+      "_origin": "ast",
+      "id": "docs_configuration_es_plantillas_de_notificaci\u00f3n",
+      "community": 60,
+      "norm_label": "plantillas de notificacion"
+    },
+    {
+      "label": "Selecci\u00f3n por defecto y precedencia",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1121",
+      "_origin": "ast",
+      "id": "docs_configuration_es_selecci\u00f3n_por_defecto_y_precedencia",
+      "community": 60,
+      "norm_label": "seleccion por defecto y precedencia"
+    },
+    {
+      "label": "Host watches",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1151",
+      "_origin": "ast",
+      "id": "docs_configuration_es_host_watches",
+      "community": 24,
+      "norm_label": "host watches"
+    },
+    {
+      "label": "`then.expand` \u2014 crecimiento de volumen (watch de storage)",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1421",
+      "_origin": "ast",
+      "id": "docs_configuration_es_then_expand_crecimiento_de_volumen_watch_de_storage",
+      "community": 24,
+      "norm_label": "`then.expand` \u2014 crecimiento de volumen (watch de storage)"
+    },
+    {
+      "label": "Watches de servicio (acotados a un servicio)",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1493",
+      "_origin": "ast",
+      "id": "docs_configuration_es_watches_de_servicio_acotados_a_un_servicio",
+      "community": 59,
+      "norm_label": "watches de servicio (acotados a un servicio)"
+    },
+    {
+      "label": "`then.action` unificado (operaci\u00f3n / guard / alerta)",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1533",
+      "_origin": "ast",
+      "id": "docs_configuration_es_then_action_unificado_operaci\u00f3n_guard_alerta",
+      "community": 59,
+      "norm_label": "`then.action` unificado (operacion / guard / alerta)"
+    },
+    {
+      "label": "Condiciones de montaje",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1625",
+      "_origin": "ast",
+      "id": "docs_configuration_es_condiciones_de_montaje",
+      "community": 59,
+      "norm_label": "condiciones de montaje"
+    },
+    {
+      "label": "`net` \u2014 interfaz de red",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1660",
+      "_origin": "ast",
+      "id": "docs_configuration_es_net_interfaz_de_red",
+      "community": 24,
+      "norm_label": "`net` \u2014 interfaz de red"
+    },
+    {
+      "label": "`icmp` \u2014 host externo (ping)",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1718",
+      "_origin": "ast",
+      "id": "docs_configuration_es_icmp_host_externo_ping",
+      "community": 24,
+      "norm_label": "`icmp` \u2014 host externo (ping)"
+    },
+    {
+      "label": "`clock` \u2014 deriva del reloj",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1764",
+      "_origin": "ast",
+      "id": "docs_configuration_es_clock_deriva_del_reloj",
+      "community": 24,
+      "norm_label": "`clock` \u2014 deriva del reloj"
+    },
+    {
+      "label": "`swap` \u2014 swap del sistema",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1801",
+      "_origin": "ast",
+      "id": "docs_configuration_es_swap_swap_del_sistema",
+      "community": 24,
+      "norm_label": "`swap` \u2014 swap del sistema"
+    },
+    {
+      "label": "`load` \u2014 carga media del sistema",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1834",
+      "_origin": "ast",
+      "id": "docs_configuration_es_load_carga_media_del_sistema",
+      "community": 24,
+      "norm_label": "`load` \u2014 carga media del sistema"
+    },
+    {
+      "label": "`memory` \u2014 RAM del sistema",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1859",
+      "_origin": "ast",
+      "id": "docs_configuration_es_memory_ram_del_sistema",
+      "community": 24,
+      "norm_label": "`memory` \u2014 ram del sistema"
+    },
+    {
+      "label": "`pressure` \u2014 tiempo de stall PSI del kernel",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1880",
+      "_origin": "ast",
+      "id": "docs_configuration_es_pressure_tiempo_de_stall_psi_del_kernel",
+      "community": 24,
+      "norm_label": "`pressure` \u2014 tiempo de stall psi del kernel"
+    },
+    {
+      "label": "`oom` \u2014 OOM kills del kernel",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1905",
+      "_origin": "ast",
+      "id": "docs_configuration_es_oom_oom_kills_del_kernel",
+      "community": 24,
+      "norm_label": "`oom` \u2014 oom kills del kernel"
+    },
+    {
+      "label": "`fds` \u2014 descriptores de archivo del sistema",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1923",
+      "_origin": "ast",
+      "id": "docs_configuration_es_fds_descriptores_de_archivo_del_sistema",
+      "community": 24,
+      "norm_label": "`fds` \u2014 descriptores de archivo del sistema"
+    },
+    {
+      "label": "`diskio` \u2014 tasas de I/O de dispositivo de bloques",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1941",
+      "_origin": "ast",
+      "id": "docs_configuration_es_diskio_tasas_de_i_o_de_dispositivo_de_bloques",
+      "community": 24,
+      "norm_label": "`diskio` \u2014 tasas de i/o de dispositivo de bloques"
+    },
+    {
+      "label": "`pids` \u2014 tabla de PID del kernel",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1973",
+      "_origin": "ast",
+      "id": "docs_configuration_es_pids_tabla_de_pid_del_kernel",
+      "community": 24,
+      "norm_label": "`pids` \u2014 tabla de pid del kernel"
+    },
+    {
+      "label": "`conntrack` \u2014 tabla de conexiones de netfilter",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1994",
+      "_origin": "ast",
+      "id": "docs_configuration_es_conntrack_tabla_de_conexiones_de_netfilter",
+      "community": 24,
+      "norm_label": "`conntrack` \u2014 tabla de conexiones de netfilter"
+    },
+    {
+      "label": "`firewall_rules` \u2014 reglas de firewall cargadas",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2014",
+      "_origin": "ast",
+      "id": "docs_configuration_es_firewall_rules_reglas_de_firewall_cargadas",
+      "community": 24,
+      "norm_label": "`firewall_rules` \u2014 reglas de firewall cargadas"
+    },
+    {
+      "label": "`entropy` \u2014 pool de entrop\u00eda del kernel",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2030",
+      "_origin": "ast",
+      "id": "docs_configuration_es_entropy_pool_de_entrop\u00eda_del_kernel",
+      "community": 24,
+      "norm_label": "`entropy` \u2014 pool de entropia del kernel"
+    },
+    {
+      "label": "`zombies` \u2014 procesos difuntos",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2047",
+      "_origin": "ast",
+      "id": "docs_configuration_es_zombies_procesos_difuntos",
+      "community": 24,
+      "norm_label": "`zombies` \u2014 procesos difuntos"
+    },
+    {
+      "label": "`file` \u2014 atributos de archivo/directorio",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2064",
+      "_origin": "ast",
+      "id": "docs_configuration_es_file_atributos_de_archivo_directorio",
+      "community": 24,
+      "norm_label": "`file` \u2014 atributos de archivo/directorio"
+    },
+    {
+      "label": "`process` \u2014 proceso por nombre",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2115",
+      "_origin": "ast",
+      "id": "docs_configuration_es_process_proceso_por_nombre",
+      "community": 66,
+      "norm_label": "`process` \u2014 proceso por nombre"
+    },
+    {
+      "label": "`then.kill` \u2014 terminar el proceso coincidente",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2173",
+      "_origin": "ast",
+      "id": "docs_configuration_es_then_kill_terminar_el_proceso_coincidente",
+      "community": 66,
+      "norm_label": "`then.kill` \u2014 terminar el proceso coincidente"
+    },
+    {
+      "label": "Valores por defecto globales",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2229",
+      "_origin": "ast",
+      "id": "docs_configuration_es_valores_por_defecto_globales",
+      "community": 27,
+      "norm_label": "valores por defecto globales"
+    },
+    {
+      "label": "Orden de resoluci\u00f3n",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2266",
+      "_origin": "ast",
+      "id": "docs_configuration_es_orden_de_resoluci\u00f3n",
+      "community": 27,
+      "norm_label": "orden de resolucion"
+    },
+    {
+      "label": "Reglas de fusi\u00f3n",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2283",
+      "_origin": "ast",
+      "id": "docs_configuration_es_reglas_de_fusi\u00f3n",
+      "community": 27,
+      "norm_label": "reglas de fusion"
+    },
+    {
+      "label": "Variables de recurso de binario",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2316",
+      "_origin": "ast",
+      "id": "docs_configuration_es_variables_de_recurso_de_binario",
+      "community": 27,
+      "norm_label": "variables de recurso de binario"
+    },
+    {
+      "label": "Prefijo de b\u00fasqueda `${bindir}`",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2338",
+      "_origin": "ast",
+      "id": "docs_configuration_es_prefijo_de_b\u00fasqueda_bindir",
+      "community": 27,
+      "norm_label": "prefijo de busqueda `${bindir}`"
+    },
+    {
+      "label": "Variables",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2394",
+      "_origin": "ast",
+      "id": "docs_configuration_es_variables",
+      "community": 61,
+      "norm_label": "variables"
+    },
+    {
+      "label": "Variables personalizadas globales (`defaults.variables`)",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2416",
+      "_origin": "ast",
+      "id": "docs_configuration_es_variables_personalizadas_globales_defaults_variables",
+      "community": 61,
+      "norm_label": "variables personalizadas globales (`defaults.variables`)"
+    },
+    {
+      "label": "Secretos del entorno",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2452",
+      "_origin": "ast",
+      "id": "docs_configuration_es_secretos_del_entorno",
+      "community": 61,
+      "norm_label": "secretos del entorno"
+    },
+    {
+      "label": "Validaci\u00f3n",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2484",
+      "_origin": "ast",
+      "id": "docs_configuration_es_validaci\u00f3n",
+      "community": 27,
+      "norm_label": "validacion"
+    },
+    {
+      "label": "Diagn\u00f3sticos",
+      "file_type": "document",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2493",
+      "_origin": "ast",
+      "id": "docs_configuration_es_diagn\u00f3sticos",
+      "community": 27,
+      "norm_label": "diagnosticos"
+    },
+    {
       "label": "configuration.md",
       "file_type": "document",
       "source_file": "docs/configuration.md",
@@ -207,7 +727,7 @@
       "label": "`then.expand` \u2014 volume growth (storage watch)",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1367",
+      "source_location": "L1368",
       "_origin": "ast",
       "id": "docs_configuration_then_expand_volume_growth_storage_watch",
       "community": 23,
@@ -217,7 +737,7 @@
       "label": "Service watches (scoped to a service)",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1438",
+      "source_location": "L1439",
       "_origin": "ast",
       "id": "docs_configuration_service_watches_scoped_to_a_service",
       "community": 63,
@@ -227,7 +747,7 @@
       "label": "Unified `then.action` (operation / guard / alert)",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1480",
+      "source_location": "L1481",
       "_origin": "ast",
       "id": "docs_configuration_unified_then_action_operation_guard_alert",
       "community": 63,
@@ -237,7 +757,7 @@
       "label": "Mount conditions",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1601",
+      "source_location": "L1602",
       "_origin": "ast",
       "id": "docs_configuration_mount_conditions",
       "community": 63,
@@ -247,7 +767,7 @@
       "label": "`net` \u2014 network interface",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1635",
+      "source_location": "L1636",
       "_origin": "ast",
       "id": "docs_configuration_net_network_interface",
       "community": 23,
@@ -257,7 +777,7 @@
       "label": "`icmp` \u2014 external host (ping)",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1692",
+      "source_location": "L1693",
       "_origin": "ast",
       "id": "docs_configuration_icmp_external_host_ping",
       "community": 23,
@@ -267,7 +787,7 @@
       "label": "`clock` \u2014 wall-clock drift",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1737",
+      "source_location": "L1738",
       "_origin": "ast",
       "id": "docs_configuration_clock_wall_clock_drift",
       "community": 23,
@@ -277,7 +797,7 @@
       "label": "`swap` \u2014 system swap",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1774",
+      "source_location": "L1775",
       "_origin": "ast",
       "id": "docs_configuration_swap_system_swap",
       "community": 23,
@@ -287,7 +807,7 @@
       "label": "`load` \u2014 system load average",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1806",
+      "source_location": "L1807",
       "_origin": "ast",
       "id": "docs_configuration_load_system_load_average",
       "community": 23,
@@ -297,7 +817,7 @@
       "label": "`memory` \u2014 system RAM",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1831",
+      "source_location": "L1832",
       "_origin": "ast",
       "id": "docs_configuration_memory_system_ram",
       "community": 23,
@@ -307,7 +827,7 @@
       "label": "`pressure` \u2014 kernel PSI stall time",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1852",
+      "source_location": "L1853",
       "_origin": "ast",
       "id": "docs_configuration_pressure_kernel_psi_stall_time",
       "community": 23,
@@ -317,7 +837,7 @@
       "label": "`oom` \u2014 kernel OOM kills",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1877",
+      "source_location": "L1878",
       "_origin": "ast",
       "id": "docs_configuration_oom_kernel_oom_kills",
       "community": 23,
@@ -327,7 +847,7 @@
       "label": "`fds` \u2014 system file descriptors",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1894",
+      "source_location": "L1895",
       "_origin": "ast",
       "id": "docs_configuration_fds_system_file_descriptors",
       "community": 23,
@@ -337,7 +857,7 @@
       "label": "`diskio` \u2014 block-device I/O rates",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1912",
+      "source_location": "L1913",
       "_origin": "ast",
       "id": "docs_configuration_diskio_block_device_i_o_rates",
       "community": 23,
@@ -347,7 +867,7 @@
       "label": "`pids` \u2014 kernel PID table",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1944",
+      "source_location": "L1945",
       "_origin": "ast",
       "id": "docs_configuration_pids_kernel_pid_table",
       "community": 23,
@@ -357,7 +877,7 @@
       "label": "`conntrack` \u2014 netfilter connection table",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1965",
+      "source_location": "L1966",
       "_origin": "ast",
       "id": "docs_configuration_conntrack_netfilter_connection_table",
       "community": 23,
@@ -367,7 +887,7 @@
       "label": "`firewall_rules` \u2014 loaded firewall rules",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1984",
+      "source_location": "L1985",
       "_origin": "ast",
       "id": "docs_configuration_firewall_rules_loaded_firewall_rules",
       "community": 23,
@@ -377,7 +897,7 @@
       "label": "`entropy` \u2014 kernel entropy pool",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L2000",
+      "source_location": "L2001",
       "_origin": "ast",
       "id": "docs_configuration_entropy_kernel_entropy_pool",
       "community": 23,
@@ -387,7 +907,7 @@
       "label": "`zombies` \u2014 defunct processes",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L2017",
+      "source_location": "L2018",
       "_origin": "ast",
       "id": "docs_configuration_zombies_defunct_processes",
       "community": 23,
@@ -397,7 +917,7 @@
       "label": "`file` \u2014 file/directory attributes",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L2034",
+      "source_location": "L2035",
       "_origin": "ast",
       "id": "docs_configuration_file_file_directory_attributes",
       "community": 23,
@@ -407,7 +927,7 @@
       "label": "`process` \u2014 process by name",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L2084",
+      "source_location": "L2085",
       "_origin": "ast",
       "id": "docs_configuration_process_process_by_name",
       "community": 67,
@@ -417,7 +937,7 @@
       "label": "`then.kill` \u2014 terminate the matched process",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L2140",
+      "source_location": "L2141",
       "_origin": "ast",
       "id": "docs_configuration_then_kill_terminate_the_matched_process",
       "community": 67,
@@ -427,7 +947,7 @@
       "label": "Global defaults",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L2194",
+      "source_location": "L2195",
       "_origin": "ast",
       "id": "docs_configuration_global_defaults",
       "community": 26,
@@ -437,7 +957,7 @@
       "label": "Resolution order",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L2248",
+      "source_location": "L2249",
       "_origin": "ast",
       "id": "docs_configuration_resolution_order",
       "community": 26,
@@ -447,7 +967,7 @@
       "label": "Merge rules",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L2265",
+      "source_location": "L2266",
       "_origin": "ast",
       "id": "docs_configuration_merge_rules",
       "community": 26,
@@ -457,7 +977,7 @@
       "label": "Binary resource variables",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L2297",
+      "source_location": "L2298",
       "_origin": "ast",
       "id": "docs_configuration_binary_resource_variables",
       "community": 26,
@@ -467,7 +987,7 @@
       "label": "`${bindir}` search prefix",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L2319",
+      "source_location": "L2320",
       "_origin": "ast",
       "id": "docs_configuration_bindir_search_prefix",
       "community": 26,
@@ -477,7 +997,7 @@
       "label": "Variables",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L2376",
+      "source_location": "L2377",
       "_origin": "ast",
       "id": "docs_configuration_variables",
       "community": 62,
@@ -487,7 +1007,7 @@
       "label": "Global custom variables (`defaults.variables`)",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L2398",
+      "source_location": "L2399",
       "_origin": "ast",
       "id": "docs_configuration_global_custom_variables_defaults_variables",
       "community": 62,
@@ -497,7 +1017,7 @@
       "label": "Secrets from the environment",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L2432",
+      "source_location": "L2433",
       "_origin": "ast",
       "id": "docs_configuration_secrets_from_the_environment",
       "community": 62,
@@ -507,7 +1027,7 @@
       "label": "Validating",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L2463",
+      "source_location": "L2464",
       "_origin": "ast",
       "id": "docs_configuration_validating",
       "community": 26,
@@ -517,7 +1037,7 @@
       "label": "Diagnostics",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L2472",
+      "source_location": "L2473",
       "_origin": "ast",
       "id": "docs_configuration_diagnostics",
       "community": 26,
@@ -767,7 +1287,7 @@
       "label": "M\u00e9tricas",
       "file_type": "document",
       "source_file": "docs/rules.es.md",
-      "source_location": "L1700",
+      "source_location": "L1718",
       "_origin": "ast",
       "id": "docs_rules_es_m\u00e9tricas",
       "community": 17,
@@ -777,7 +1297,7 @@
       "label": "Reglas",
       "file_type": "document",
       "source_file": "docs/rules.es.md",
-      "source_location": "L1754",
+      "source_location": "L1772",
       "_origin": "ast",
       "id": "docs_rules_es_reglas",
       "community": 17,
@@ -787,7 +1307,7 @@
       "label": "Ventanas",
       "file_type": "document",
       "source_file": "docs/rules.es.md",
-      "source_location": "L1825",
+      "source_location": "L1843",
       "_origin": "ast",
       "id": "docs_rules_es_ventanas",
       "community": 17,
@@ -797,7 +1317,7 @@
       "label": "Guards",
       "file_type": "document",
       "source_file": "docs/rules.es.md",
-      "source_location": "L1843",
+      "source_location": "L1861",
       "_origin": "ast",
       "id": "docs_rules_es_guards",
       "community": 17,
@@ -807,7 +1327,7 @@
       "label": "Pol\u00edtica de remediaci\u00f3n",
       "file_type": "document",
       "source_file": "docs/rules.es.md",
-      "source_location": "L1910",
+      "source_location": "L1928",
       "_origin": "ast",
       "id": "docs_rules_es_pol\u00edtica_de_remediaci\u00f3n",
       "community": 17,
@@ -1057,7 +1577,7 @@
       "label": "Metrics",
       "file_type": "document",
       "source_file": "docs/rules.md",
-      "source_location": "L1701",
+      "source_location": "L1718",
       "_origin": "ast",
       "id": "docs_rules_metrics",
       "community": 75,
@@ -1067,7 +1587,7 @@
       "label": "Rules",
       "file_type": "document",
       "source_file": "docs/rules.md",
-      "source_location": "L1757",
+      "source_location": "L1774",
       "_origin": "ast",
       "id": "docs_rules_rules",
       "community": 75,
@@ -1077,7 +1597,7 @@
       "label": "Windows",
       "file_type": "document",
       "source_file": "docs/rules.md",
-      "source_location": "L1827",
+      "source_location": "L1844",
       "_origin": "ast",
       "id": "docs_rules_windows",
       "community": 75,
@@ -1087,7 +1607,7 @@
       "label": "Guards",
       "file_type": "document",
       "source_file": "docs/rules.md",
-      "source_location": "L1845",
+      "source_location": "L1862",
       "_origin": "ast",
       "id": "docs_rules_guards",
       "community": 75,
@@ -1097,7 +1617,7 @@
       "label": "Remediation policy",
       "file_type": "document",
       "source_file": "docs/rules.md",
-      "source_location": "L1912",
+      "source_location": "L1929",
       "_origin": "ast",
       "id": "docs_rules_remediation_policy",
       "community": 75,
@@ -1109,9 +1629,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "docs_services_es",
       "community": 79,
-      "norm_label": "services.es.md"
+      "norm_label": "services.es.md",
+      "id": "docs_services_es"
     },
     {
       "label": "Servicios",
@@ -1119,9 +1639,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "docs_services_es_servicios",
       "community": 12,
-      "norm_label": "servicios"
+      "norm_label": "servicios",
+      "id": "docs_services_es_servicios"
     },
     {
       "label": "Categor\u00edas",
@@ -1129,9 +1649,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L32",
       "_origin": "ast",
-      "id": "docs_services_es_categor\u00edas",
       "community": 12,
-      "norm_label": "categorias"
+      "norm_label": "categorias",
+      "id": "docs_services_es_categor\u00edas"
     },
     {
       "label": "Servicios de librer\u00eda",
@@ -1139,9 +1659,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L70",
       "_origin": "ast",
-      "id": "docs_services_es_servicios_de_librer\u00eda",
       "community": 12,
-      "norm_label": "servicios de libreria"
+      "norm_label": "servicios de libreria",
+      "id": "docs_services_es_servicios_de_librer\u00eda"
     },
     {
       "label": "Reload al cambiar la configuraci\u00f3n (`reload_on_change`)",
@@ -1149,9 +1669,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L151",
       "_origin": "ast",
-      "id": "docs_services_es_reload_al_cambiar_la_configuraci\u00f3n_reload_on_change",
       "community": 12,
-      "norm_label": "reload al cambiar la configuracion (`reload_on_change`)"
+      "norm_label": "reload al cambiar la configuracion (`reload_on_change`)",
+      "id": "docs_services_es_reload_al_cambiar_la_configuraci\u00f3n_reload_on_change"
     },
     {
       "label": "Reload nativo (`reload:`) \u2014 cuando el init no puede, Sermo s\u00ed",
@@ -1159,9 +1679,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L200",
       "_origin": "ast",
-      "id": "docs_services_es_reload_nativo_reload_cuando_el_init_no_puede_sermo_s\u00ed",
       "community": 12,
-      "norm_label": "reload nativo (`reload:`) \u2014 cuando el init no puede, sermo si"
+      "norm_label": "reload nativo (`reload:`) \u2014 cuando el init no puede, sermo si",
+      "id": "docs_services_es_reload_nativo_reload_cuando_el_init_no_puede_sermo_s\u00ed"
     },
     {
       "label": "Checklist para autores de cat\u00e1logo: init scripts y fallbacks",
@@ -1169,9 +1689,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L239",
       "_origin": "ast",
-      "id": "docs_services_es_checklist_para_autores_de_cat\u00e1logo_init_scripts_y_fallbacks",
       "community": 12,
-      "norm_label": "checklist para autores de catalogo: init scripts y fallbacks"
+      "norm_label": "checklist para autores de catalogo: init scripts y fallbacks",
+      "id": "docs_services_es_checklist_para_autores_de_cat\u00e1logo_init_scripts_y_fallbacks"
     },
     {
       "label": "Dependencias de app (`apps`)",
@@ -1179,9 +1699,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L289",
       "_origin": "ast",
-      "id": "docs_services_es_dependencias_de_app_apps",
       "community": 12,
-      "norm_label": "dependencias de app (`apps`)"
+      "norm_label": "dependencias de app (`apps`)",
+      "id": "docs_services_es_dependencias_de_app_apps"
     },
     {
       "label": "Campos de metadatos",
@@ -1189,9 +1709,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L336",
       "_origin": "ast",
-      "id": "docs_services_es_campos_de_metadatos",
       "community": 12,
-      "norm_label": "campos de metadatos"
+      "norm_label": "campos de metadatos",
+      "id": "docs_services_es_campos_de_metadatos"
     },
     {
       "label": "Variables integradas",
@@ -1199,9 +1719,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L369",
       "_origin": "ast",
-      "id": "docs_services_es_variables_integradas",
       "community": 12,
-      "norm_label": "variables integradas"
+      "norm_label": "variables integradas",
+      "id": "docs_services_es_variables_integradas"
     },
     {
       "label": "Bloques espec\u00edficos de OS (os:)",
@@ -1209,9 +1729,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L468",
       "_origin": "ast",
-      "id": "docs_services_es_bloques_espec\u00edficos_de_os_os",
       "community": 12,
-      "norm_label": "bloques especificos de os (os:)"
+      "norm_label": "bloques especificos de os (os:)",
+      "id": "docs_services_es_bloques_espec\u00edficos_de_os_os"
     },
     {
       "label": "`control: libvirt` \u2014 m\u00e1quinas virtuales QEMU/libvirt",
@@ -1219,9 +1739,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L522",
       "_origin": "ast",
-      "id": "docs_services_es_control_libvirt_m\u00e1quinas_virtuales_qemu_libvirt",
       "community": 12,
-      "norm_label": "`control: libvirt` \u2014 maquinas virtuales qemu/libvirt"
+      "norm_label": "`control: libvirt` \u2014 maquinas virtuales qemu/libvirt",
+      "id": "docs_services_es_control_libvirt_m\u00e1quinas_virtuales_qemu_libvirt"
     },
     {
       "label": "`control: docker` \u2014 contenedores Docker",
@@ -1229,9 +1749,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L587",
       "_origin": "ast",
-      "id": "docs_services_es_control_docker_contenedores_docker",
       "community": 12,
-      "norm_label": "`control: docker` \u2014 contenedores docker"
+      "norm_label": "`control: docker` \u2014 contenedores docker",
+      "id": "docs_services_es_control_docker_contenedores_docker"
     },
     {
       "label": "`also_service` \u2014 unidades init auxiliares",
@@ -1239,9 +1759,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L643",
       "_origin": "ast",
-      "id": "docs_services_es_also_service_unidades_init_auxiliares",
       "community": 12,
-      "norm_label": "`also_service` \u2014 unidades init auxiliares"
+      "norm_label": "`also_service` \u2014 unidades init auxiliares",
+      "id": "docs_services_es_also_service_unidades_init_auxiliares"
     },
     {
       "label": "`also_apply` \u2014 cascada a otros servicios",
@@ -1249,9 +1769,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L667",
       "_origin": "ast",
-      "id": "docs_services_es_also_apply_cascada_a_otros_servicios",
       "community": 12,
-      "norm_label": "`also_apply` \u2014 cascada a otros servicios"
+      "norm_label": "`also_apply` \u2014 cascada a otros servicios",
+      "id": "docs_services_es_also_apply_cascada_a_otros_servicios"
     },
     {
       "label": "`processes:` por ejecutable o cmdline",
@@ -1259,9 +1779,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L699",
       "_origin": "ast",
-      "id": "docs_services_es_processes_por_ejecutable_o_cmdline",
       "community": 12,
-      "norm_label": "`processes:` por ejecutable o cmdline"
+      "norm_label": "`processes:` por ejecutable o cmdline",
+      "id": "docs_services_es_processes_por_ejecutable_o_cmdline"
     },
     {
       "label": "Invariantes de estado parado (`stop_policy`)",
@@ -1269,9 +1789,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L723",
       "_origin": "ast",
-      "id": "docs_services_es_invariantes_de_estado_parado_stop_policy",
       "community": 12,
-      "norm_label": "invariantes de estado parado (`stop_policy`)"
+      "norm_label": "invariantes de estado parado (`stop_policy`)",
+      "id": "docs_services_es_invariantes_de_estado_parado_stop_policy"
     },
     {
       "label": "Atajo `pidfile:` y `pidfiles:` (selectores + health checks)",
@@ -1279,9 +1799,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L768",
       "_origin": "ast",
-      "id": "docs_services_es_atajo_pidfile_y_pidfiles_selectores_health_checks",
       "community": 12,
-      "norm_label": "atajo `pidfile:` y `pidfiles:` (selectores + health checks)"
+      "norm_label": "atajo `pidfile:` y `pidfiles:` (selectores + health checks)",
+      "id": "docs_services_es_atajo_pidfile_y_pidfiles_selectores_health_checks"
     },
     {
       "label": "Atajo `socket:` (health check controlado)",
@@ -1289,9 +1809,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L843",
       "_origin": "ast",
-      "id": "docs_services_es_atajo_socket_health_check_controlado",
       "community": 12,
-      "norm_label": "atajo `socket:` (health check controlado)"
+      "norm_label": "atajo `socket:` (health check controlado)",
+      "id": "docs_services_es_atajo_socket_health_check_controlado"
     },
     {
       "label": "Atajo `lockfile:` (health check controlado)",
@@ -1299,9 +1819,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L860",
       "_origin": "ast",
-      "id": "docs_services_es_atajo_lockfile_health_check_controlado",
       "community": 12,
-      "norm_label": "atajo `lockfile:` (health check controlado)"
+      "norm_label": "atajo `lockfile:` (health check controlado)",
+      "id": "docs_services_es_atajo_lockfile_health_check_controlado"
     },
     {
       "label": "Servicios versionados",
@@ -1309,9 +1829,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L875",
       "_origin": "ast",
-      "id": "docs_services_es_servicios_versionados",
       "community": 12,
-      "norm_label": "servicios versionados"
+      "norm_label": "servicios versionados",
+      "id": "docs_services_es_servicios_versionados"
     },
     {
       "label": "Placeholders de entero e instancia",
@@ -1319,9 +1839,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L955",
       "_origin": "ast",
-      "id": "docs_services_es_placeholders_de_entero_e_instancia",
       "community": 12,
-      "norm_label": "placeholders de entero e instancia"
+      "norm_label": "placeholders de entero e instancia",
+      "id": "docs_services_es_placeholders_de_entero_e_instancia"
     },
     {
       "label": "Nombres compuestos con un separador (`%s`)",
@@ -1329,9 +1849,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1031",
       "_origin": "ast",
-      "id": "docs_services_es_nombres_compuestos_con_un_separador_s",
       "community": 12,
-      "norm_label": "nombres compuestos con un separador (`%s`)"
+      "norm_label": "nombres compuestos con un separador (`%s`)",
+      "id": "docs_services_es_nombres_compuestos_con_un_separador_s"
     },
     {
       "label": "Descubrimiento propiedad del servicio",
@@ -1339,9 +1859,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1050",
       "_origin": "ast",
-      "id": "docs_services_es_descubrimiento_propiedad_del_servicio",
       "community": 12,
-      "norm_label": "descubrimiento propiedad del servicio"
+      "norm_label": "descubrimiento propiedad del servicio",
+      "id": "docs_services_es_descubrimiento_propiedad_del_servicio"
     },
     {
       "label": "Componentes opcionales (`enable_if`)",
@@ -1349,9 +1869,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1101",
       "_origin": "ast",
-      "id": "docs_services_es_componentes_opcionales_enable_if",
       "community": 12,
-      "norm_label": "componentes opcionales (`enable_if`)"
+      "norm_label": "componentes opcionales (`enable_if`)",
+      "id": "docs_services_es_componentes_opcionales_enable_if"
     },
     {
       "label": "Variables le\u00eddas desde un fichero de config (`from_file`)",
@@ -1359,9 +1879,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1136",
       "_origin": "ast",
-      "id": "docs_services_es_variables_le\u00eddas_desde_un_fichero_de_config_from_file",
       "community": 12,
-      "norm_label": "variables leidas desde un fichero de config (`from_file`)"
+      "norm_label": "variables leidas desde un fichero de config (`from_file`)",
+      "id": "docs_services_es_variables_le\u00eddas_desde_un_fichero_de_config_from_file"
     },
     {
       "label": "Listar aplicaciones instaladas",
@@ -1369,9 +1889,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1162",
       "_origin": "ast",
-      "id": "docs_services_es_listar_aplicaciones_instaladas",
       "community": 12,
-      "norm_label": "listar aplicaciones instaladas"
+      "norm_label": "listar aplicaciones instaladas",
+      "id": "docs_services_es_listar_aplicaciones_instaladas"
     },
     {
       "label": "Unidad de servicio",
@@ -1379,9 +1899,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1257",
       "_origin": "ast",
-      "id": "docs_services_es_unidad_de_servicio",
       "community": 12,
-      "norm_label": "unidad de servicio"
+      "norm_label": "unidad de servicio",
+      "id": "docs_services_es_unidad_de_servicio"
     },
     {
       "label": "Clonado",
@@ -1389,9 +1909,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1291",
       "_origin": "ast",
-      "id": "docs_services_es_clonado",
       "community": 12,
-      "norm_label": "clonado"
+      "norm_label": "clonado",
+      "id": "docs_services_es_clonado"
     },
     {
       "label": "M\u00faltiples instancias de una aplicaci\u00f3n",
@@ -1399,9 +1919,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1307",
       "_origin": "ast",
-      "id": "docs_services_es_m\u00faltiples_instancias_de_una_aplicaci\u00f3n",
       "community": 12,
-      "norm_label": "multiples instancias de una aplicacion"
+      "norm_label": "multiples instancias de una aplicacion",
+      "id": "docs_services_es_m\u00faltiples_instancias_de_una_aplicaci\u00f3n"
     },
     {
       "label": "Deshabilitar y borrar entradas heredadas",
@@ -1409,9 +1929,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1353",
       "_origin": "ast",
-      "id": "docs_services_es_deshabilitar_y_borrar_entradas_heredadas",
       "community": 12,
-      "norm_label": "deshabilitar y borrar entradas heredadas"
+      "norm_label": "deshabilitar y borrar entradas heredadas",
+      "id": "docs_services_es_deshabilitar_y_borrar_entradas_heredadas"
     },
     {
       "label": "Flag de monitorizaci\u00f3n",
@@ -1419,9 +1939,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1363",
       "_origin": "ast",
-      "id": "docs_services_es_flag_de_monitorizaci\u00f3n",
       "community": 12,
-      "norm_label": "flag de monitorizacion"
+      "norm_label": "flag de monitorizacion",
+      "id": "docs_services_es_flag_de_monitorizaci\u00f3n"
     },
     {
       "label": "Comandos auxiliares",
@@ -1429,9 +1949,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1398",
       "_origin": "ast",
-      "id": "docs_services_es_comandos_auxiliares",
       "community": 12,
-      "norm_label": "comandos auxiliares"
+      "norm_label": "comandos auxiliares",
+      "id": "docs_services_es_comandos_auxiliares"
     },
     {
       "label": "services.md",
@@ -1439,9 +1959,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "docs_services",
       "community": 75,
-      "norm_label": "services.md"
+      "norm_label": "services.md",
+      "id": "docs_services"
     },
     {
       "label": "Services",
@@ -1449,9 +1969,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "docs_services_services",
       "community": 11,
-      "norm_label": "services"
+      "norm_label": "services",
+      "id": "docs_services_services"
     },
     {
       "label": "Categories",
@@ -1459,9 +1979,9 @@
       "source_file": "docs/services.md",
       "source_location": "L31",
       "_origin": "ast",
-      "id": "docs_services_categories",
       "community": 11,
-      "norm_label": "categories"
+      "norm_label": "categories",
+      "id": "docs_services_categories"
     },
     {
       "label": "Library services",
@@ -1469,9 +1989,9 @@
       "source_file": "docs/services.md",
       "source_location": "L69",
       "_origin": "ast",
-      "id": "docs_services_library_services",
       "community": 11,
-      "norm_label": "library services"
+      "norm_label": "library services",
+      "id": "docs_services_library_services"
     },
     {
       "label": "Reload on config change (`reload_on_change`)",
@@ -1479,9 +1999,9 @@
       "source_file": "docs/services.md",
       "source_location": "L148",
       "_origin": "ast",
-      "id": "docs_services_reload_on_config_change_reload_on_change",
       "community": 11,
-      "norm_label": "reload on config change (`reload_on_change`)"
+      "norm_label": "reload on config change (`reload_on_change`)",
+      "id": "docs_services_reload_on_config_change_reload_on_change"
     },
     {
       "label": "Native reload (`reload:`) \u2014 when the init can't, Sermo can",
@@ -1489,9 +2009,9 @@
       "source_file": "docs/services.md",
       "source_location": "L197",
       "_origin": "ast",
-      "id": "docs_services_native_reload_reload_when_the_init_can_t_sermo_can",
       "community": 11,
-      "norm_label": "native reload (`reload:`) \u2014 when the init can't, sermo can"
+      "norm_label": "native reload (`reload:`) \u2014 when the init can't, sermo can",
+      "id": "docs_services_native_reload_reload_when_the_init_can_t_sermo_can"
     },
     {
       "label": "Catalog author checklist: init scripts and fallbacks",
@@ -1499,9 +2019,9 @@
       "source_file": "docs/services.md",
       "source_location": "L236",
       "_origin": "ast",
-      "id": "docs_services_catalog_author_checklist_init_scripts_and_fallbacks",
       "community": 11,
-      "norm_label": "catalog author checklist: init scripts and fallbacks"
+      "norm_label": "catalog author checklist: init scripts and fallbacks",
+      "id": "docs_services_catalog_author_checklist_init_scripts_and_fallbacks"
     },
     {
       "label": "App dependencies (`apps`)",
@@ -1509,9 +2029,9 @@
       "source_file": "docs/services.md",
       "source_location": "L286",
       "_origin": "ast",
-      "id": "docs_services_app_dependencies_apps",
       "community": 11,
-      "norm_label": "app dependencies (`apps`)"
+      "norm_label": "app dependencies (`apps`)",
+      "id": "docs_services_app_dependencies_apps"
     },
     {
       "label": "Metadata fields",
@@ -1519,9 +2039,9 @@
       "source_file": "docs/services.md",
       "source_location": "L333",
       "_origin": "ast",
-      "id": "docs_services_metadata_fields",
       "community": 11,
-      "norm_label": "metadata fields"
+      "norm_label": "metadata fields",
+      "id": "docs_services_metadata_fields"
     },
     {
       "label": "Built-in variables",
@@ -1529,9 +2049,9 @@
       "source_file": "docs/services.md",
       "source_location": "L366",
       "_origin": "ast",
-      "id": "docs_services_built_in_variables",
       "community": 11,
-      "norm_label": "built-in variables"
+      "norm_label": "built-in variables",
+      "id": "docs_services_built_in_variables"
     },
     {
       "label": "OS-specific blocks (os:)",
@@ -1539,9 +2059,9 @@
       "source_file": "docs/services.md",
       "source_location": "L465",
       "_origin": "ast",
-      "id": "docs_services_os_specific_blocks_os",
       "community": 11,
-      "norm_label": "os-specific blocks (os:)"
+      "norm_label": "os-specific blocks (os:)",
+      "id": "docs_services_os_specific_blocks_os"
     },
     {
       "label": "`control: libvirt` \u2014 QEMU/libvirt virtual machines",
@@ -1549,9 +2069,9 @@
       "source_file": "docs/services.md",
       "source_location": "L519",
       "_origin": "ast",
-      "id": "docs_services_control_libvirt_qemu_libvirt_virtual_machines",
       "community": 11,
-      "norm_label": "`control: libvirt` \u2014 qemu/libvirt virtual machines"
+      "norm_label": "`control: libvirt` \u2014 qemu/libvirt virtual machines",
+      "id": "docs_services_control_libvirt_qemu_libvirt_virtual_machines"
     },
     {
       "label": "`control: docker` \u2014 Docker containers",
@@ -1559,9 +2079,9 @@
       "source_file": "docs/services.md",
       "source_location": "L584",
       "_origin": "ast",
-      "id": "docs_services_control_docker_docker_containers",
       "community": 11,
-      "norm_label": "`control: docker` \u2014 docker containers"
+      "norm_label": "`control: docker` \u2014 docker containers",
+      "id": "docs_services_control_docker_docker_containers"
     },
     {
       "label": "`also_service` \u2014 auxiliary init units",
@@ -1569,9 +2089,9 @@
       "source_file": "docs/services.md",
       "source_location": "L641",
       "_origin": "ast",
-      "id": "docs_services_also_service_auxiliary_init_units",
       "community": 11,
-      "norm_label": "`also_service` \u2014 auxiliary init units"
+      "norm_label": "`also_service` \u2014 auxiliary init units",
+      "id": "docs_services_also_service_auxiliary_init_units"
     },
     {
       "label": "`also_apply` \u2014 cascade to other services",
@@ -1579,9 +2099,9 @@
       "source_file": "docs/services.md",
       "source_location": "L665",
       "_origin": "ast",
-      "id": "docs_services_also_apply_cascade_to_other_services",
       "community": 11,
-      "norm_label": "`also_apply` \u2014 cascade to other services"
+      "norm_label": "`also_apply` \u2014 cascade to other services",
+      "id": "docs_services_also_apply_cascade_to_other_services"
     },
     {
       "label": "`processes:` by executable or cmdline",
@@ -1589,9 +2109,9 @@
       "source_file": "docs/services.md",
       "source_location": "L697",
       "_origin": "ast",
-      "id": "docs_services_processes_by_executable_or_cmdline",
       "community": 11,
-      "norm_label": "`processes:` by executable or cmdline"
+      "norm_label": "`processes:` by executable or cmdline",
+      "id": "docs_services_processes_by_executable_or_cmdline"
     },
     {
       "label": "Stopped-state invariants (`stop_policy`)",
@@ -1599,9 +2119,9 @@
       "source_file": "docs/services.md",
       "source_location": "L721",
       "_origin": "ast",
-      "id": "docs_services_stopped_state_invariants_stop_policy",
       "community": 11,
-      "norm_label": "stopped-state invariants (`stop_policy`)"
+      "norm_label": "stopped-state invariants (`stop_policy`)",
+      "id": "docs_services_stopped_state_invariants_stop_policy"
     },
     {
       "label": "`pidfile:` and `pidfiles:` shorthand (selectors + health checks)",
@@ -1609,9 +2129,9 @@
       "source_file": "docs/services.md",
       "source_location": "L766",
       "_origin": "ast",
-      "id": "docs_services_pidfile_and_pidfiles_shorthand_selectors_health_checks",
       "community": 11,
-      "norm_label": "`pidfile:` and `pidfiles:` shorthand (selectors + health checks)"
+      "norm_label": "`pidfile:` and `pidfiles:` shorthand (selectors + health checks)",
+      "id": "docs_services_pidfile_and_pidfiles_shorthand_selectors_health_checks"
     },
     {
       "label": "`socket:` shorthand (gated health check)",
@@ -1619,9 +2139,9 @@
       "source_file": "docs/services.md",
       "source_location": "L841",
       "_origin": "ast",
-      "id": "docs_services_socket_shorthand_gated_health_check",
       "community": 11,
-      "norm_label": "`socket:` shorthand (gated health check)"
+      "norm_label": "`socket:` shorthand (gated health check)",
+      "id": "docs_services_socket_shorthand_gated_health_check"
     },
     {
       "label": "`lockfile:` shorthand (gated health check)",
@@ -1629,9 +2149,9 @@
       "source_file": "docs/services.md",
       "source_location": "L858",
       "_origin": "ast",
-      "id": "docs_services_lockfile_shorthand_gated_health_check",
       "community": 11,
-      "norm_label": "`lockfile:` shorthand (gated health check)"
+      "norm_label": "`lockfile:` shorthand (gated health check)",
+      "id": "docs_services_lockfile_shorthand_gated_health_check"
     },
     {
       "label": "Versioned services",
@@ -1639,9 +2159,9 @@
       "source_file": "docs/services.md",
       "source_location": "L873",
       "_origin": "ast",
-      "id": "docs_services_versioned_services",
       "community": 11,
-      "norm_label": "versioned services"
+      "norm_label": "versioned services",
+      "id": "docs_services_versioned_services"
     },
     {
       "label": "Integer and instance placeholders",
@@ -1649,9 +2169,9 @@
       "source_file": "docs/services.md",
       "source_location": "L953",
       "_origin": "ast",
-      "id": "docs_services_integer_and_instance_placeholders",
       "community": 11,
-      "norm_label": "integer and instance placeholders"
+      "norm_label": "integer and instance placeholders",
+      "id": "docs_services_integer_and_instance_placeholders"
     },
     {
       "label": "Composite names with a separator (`%s`)",
@@ -1659,9 +2179,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1029",
       "_origin": "ast",
-      "id": "docs_services_composite_names_with_a_separator_s",
       "community": 11,
-      "norm_label": "composite names with a separator (`%s`)"
+      "norm_label": "composite names with a separator (`%s`)",
+      "id": "docs_services_composite_names_with_a_separator_s"
     },
     {
       "label": "Service-owned discovery",
@@ -1669,9 +2189,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1048",
       "_origin": "ast",
-      "id": "docs_services_service_owned_discovery",
       "community": 11,
-      "norm_label": "service-owned discovery"
+      "norm_label": "service-owned discovery",
+      "id": "docs_services_service_owned_discovery"
     },
     {
       "label": "Optional components (`enable_if`)",
@@ -1679,9 +2199,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1099",
       "_origin": "ast",
-      "id": "docs_services_optional_components_enable_if",
       "community": 11,
-      "norm_label": "optional components (`enable_if`)"
+      "norm_label": "optional components (`enable_if`)",
+      "id": "docs_services_optional_components_enable_if"
     },
     {
       "label": "Variables read from a config file (`from_file`)",
@@ -1689,9 +2209,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1134",
       "_origin": "ast",
-      "id": "docs_services_variables_read_from_a_config_file_from_file",
       "community": 11,
-      "norm_label": "variables read from a config file (`from_file`)"
+      "norm_label": "variables read from a config file (`from_file`)",
+      "id": "docs_services_variables_read_from_a_config_file_from_file"
     },
     {
       "label": "Listing installed applications",
@@ -1699,9 +2219,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1160",
       "_origin": "ast",
-      "id": "docs_services_listing_installed_applications",
       "community": 11,
-      "norm_label": "listing installed applications"
+      "norm_label": "listing installed applications",
+      "id": "docs_services_listing_installed_applications"
     },
     {
       "label": "Service unit",
@@ -1709,9 +2229,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1255",
       "_origin": "ast",
-      "id": "docs_services_service_unit",
       "community": 11,
-      "norm_label": "service unit"
+      "norm_label": "service unit",
+      "id": "docs_services_service_unit"
     },
     {
       "label": "Cloning",
@@ -1719,9 +2239,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1289",
       "_origin": "ast",
-      "id": "docs_services_cloning",
       "community": 11,
-      "norm_label": "cloning"
+      "norm_label": "cloning",
+      "id": "docs_services_cloning"
     },
     {
       "label": "Multiple instances of one application",
@@ -1729,9 +2249,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1305",
       "_origin": "ast",
-      "id": "docs_services_multiple_instances_of_one_application",
       "community": 11,
-      "norm_label": "multiple instances of one application"
+      "norm_label": "multiple instances of one application",
+      "id": "docs_services_multiple_instances_of_one_application"
     },
     {
       "label": "Disabling and deleting inherited entries",
@@ -1739,9 +2259,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1351",
       "_origin": "ast",
-      "id": "docs_services_disabling_and_deleting_inherited_entries",
       "community": 11,
-      "norm_label": "disabling and deleting inherited entries"
+      "norm_label": "disabling and deleting inherited entries",
+      "id": "docs_services_disabling_and_deleting_inherited_entries"
     },
     {
       "label": "Monitoring flag",
@@ -1749,9 +2269,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1361",
       "_origin": "ast",
-      "id": "docs_services_monitoring_flag",
       "community": 11,
-      "norm_label": "monitoring flag"
+      "norm_label": "monitoring flag",
+      "id": "docs_services_monitoring_flag"
     },
     {
       "label": "Auxiliary commands",
@@ -1759,9 +2279,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1396",
       "_origin": "ast",
-      "id": "docs_services_auxiliary_commands",
       "community": 11,
-      "norm_label": "auxiliary commands"
+      "norm_label": "auxiliary commands",
+      "id": "docs_services_auxiliary_commands"
     },
     {
       "label": "architecture.es.md",
@@ -1842,526 +2362,6 @@
       "community": 42,
       "norm_label": "6. ciclo de un worker (por servicio)",
       "id": "docs_architecture_es_6_ciclo_de_un_worker_por_servicio"
-    },
-    {
-      "label": "configuration.es.md",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1",
-      "_origin": "ast",
-      "community": 79,
-      "norm_label": "configuration.es.md",
-      "id": "docs_configuration_es"
-    },
-    {
-      "label": "Configuraci\u00f3n",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1",
-      "_origin": "ast",
-      "community": 27,
-      "norm_label": "configuracion",
-      "id": "docs_configuration_es_configuraci\u00f3n"
-    },
-    {
-      "label": "Cambios de esquema",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L43",
-      "_origin": "ast",
-      "community": 27,
-      "norm_label": "cambios de esquema",
-      "id": "docs_configuration_es_cambios_de_esquema"
-    },
-    {
-      "label": "Disposici\u00f3n",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L54",
-      "_origin": "ast",
-      "community": 27,
-      "norm_label": "disposicion",
-      "id": "docs_configuration_es_disposici\u00f3n"
-    },
-    {
-      "label": "Storage y unidades de montaje",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L240",
-      "_origin": "ast",
-      "community": 27,
-      "norm_label": "storage y unidades de montaje",
-      "id": "docs_configuration_es_storage_y_unidades_de_montaje"
-    },
-    {
-      "label": "Ajustes del motor",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L313",
-      "_origin": "ast",
-      "community": 58,
-      "norm_label": "ajustes del motor",
-      "id": "docs_configuration_es_ajustes_del_motor"
-    },
-    {
-      "label": "Intervalo por service",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L483",
-      "_origin": "ast",
-      "community": 58,
-      "norm_label": "intervalo por service",
-      "id": "docs_configuration_es_intervalo_por_service"
-    },
-    {
-      "label": "Intervalo por comprobaci\u00f3n",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L506",
-      "_origin": "ast",
-      "community": 58,
-      "norm_label": "intervalo por comprobacion",
-      "id": "docs_configuration_es_intervalo_por_comprobaci\u00f3n"
-    },
-    {
-      "label": "Interfaz web",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L535",
-      "_origin": "ast",
-      "community": 49,
-      "norm_label": "interfaz web",
-      "id": "docs_configuration_es_interfaz_web"
-    },
-    {
-      "label": "Autenticaci\u00f3n",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L594",
-      "_origin": "ast",
-      "community": 49,
-      "norm_label": "autenticacion",
-      "id": "docs_configuration_es_autenticaci\u00f3n"
-    },
-    {
-      "label": "Detr\u00e1s de un proxy inverso (requerido para exponerlo)",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L620",
-      "_origin": "ast",
-      "community": 49,
-      "norm_label": "detras de un proxy inverso (requerido para exponerlo)",
-      "id": "docs_configuration_es_detr\u00e1s_de_un_proxy_inverso_requerido_para_exponerlo"
-    },
-    {
-      "label": "Liveness (`/livez`)",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L745",
-      "_origin": "ast",
-      "community": 49,
-      "norm_label": "liveness (`/livez`)",
-      "id": "docs_configuration_es_liveness_livez"
-    },
-    {
-      "label": "Readiness (`/readyz`)",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L764",
-      "_origin": "ast",
-      "community": 49,
-      "norm_label": "readiness (`/readyz`)",
-      "id": "docs_configuration_es_readiness_readyz"
-    },
-    {
-      "label": "Gr\u00e1fico de latencia",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L842",
-      "_origin": "ast",
-      "community": 49,
-      "norm_label": "grafico de latencia",
-      "id": "docs_configuration_es_gr\u00e1fico_de_latencia"
-    },
-    {
-      "label": "Disponibilidad (SLA)",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L906",
-      "_origin": "ast",
-      "community": 27,
-      "norm_label": "disponibilidad (sla)",
-      "id": "docs_configuration_es_disponibilidad_sla"
-    },
-    {
-      "label": "Series temporales de disponibilidad",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L948",
-      "_origin": "ast",
-      "community": 27,
-      "norm_label": "series temporales de disponibilidad",
-      "id": "docs_configuration_es_series_temporales_de_disponibilidad"
-    },
-    {
-      "label": "Notificaciones",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L966",
-      "_origin": "ast",
-      "community": 60,
-      "norm_label": "notificaciones",
-      "id": "docs_configuration_es_notificaciones"
-    },
-    {
-      "label": "Plantillas de notificaci\u00f3n",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1080",
-      "_origin": "ast",
-      "community": 60,
-      "norm_label": "plantillas de notificacion",
-      "id": "docs_configuration_es_plantillas_de_notificaci\u00f3n"
-    },
-    {
-      "label": "Selecci\u00f3n por defecto y precedencia",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1121",
-      "_origin": "ast",
-      "community": 60,
-      "norm_label": "seleccion por defecto y precedencia",
-      "id": "docs_configuration_es_selecci\u00f3n_por_defecto_y_precedencia"
-    },
-    {
-      "label": "Host watches",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1151",
-      "_origin": "ast",
-      "community": 24,
-      "norm_label": "host watches",
-      "id": "docs_configuration_es_host_watches"
-    },
-    {
-      "label": "`then.expand` \u2014 crecimiento de volumen (watch de storage)",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1420",
-      "_origin": "ast",
-      "community": 24,
-      "norm_label": "`then.expand` \u2014 crecimiento de volumen (watch de storage)",
-      "id": "docs_configuration_es_then_expand_crecimiento_de_volumen_watch_de_storage"
-    },
-    {
-      "label": "Watches de servicio (acotados a un servicio)",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1492",
-      "_origin": "ast",
-      "community": 59,
-      "norm_label": "watches de servicio (acotados a un servicio)",
-      "id": "docs_configuration_es_watches_de_servicio_acotados_a_un_servicio"
-    },
-    {
-      "label": "`then.action` unificado (operaci\u00f3n / guard / alerta)",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1532",
-      "_origin": "ast",
-      "community": 59,
-      "norm_label": "`then.action` unificado (operacion / guard / alerta)",
-      "id": "docs_configuration_es_then_action_unificado_operaci\u00f3n_guard_alerta"
-    },
-    {
-      "label": "Condiciones de montaje",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1624",
-      "_origin": "ast",
-      "community": 59,
-      "norm_label": "condiciones de montaje",
-      "id": "docs_configuration_es_condiciones_de_montaje"
-    },
-    {
-      "label": "`net` \u2014 interfaz de red",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1659",
-      "_origin": "ast",
-      "community": 24,
-      "norm_label": "`net` \u2014 interfaz de red",
-      "id": "docs_configuration_es_net_interfaz_de_red"
-    },
-    {
-      "label": "`icmp` \u2014 host externo (ping)",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1717",
-      "_origin": "ast",
-      "community": 24,
-      "norm_label": "`icmp` \u2014 host externo (ping)",
-      "id": "docs_configuration_es_icmp_host_externo_ping"
-    },
-    {
-      "label": "`clock` \u2014 deriva del reloj",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1763",
-      "_origin": "ast",
-      "community": 24,
-      "norm_label": "`clock` \u2014 deriva del reloj",
-      "id": "docs_configuration_es_clock_deriva_del_reloj"
-    },
-    {
-      "label": "`swap` \u2014 swap del sistema",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1800",
-      "_origin": "ast",
-      "community": 24,
-      "norm_label": "`swap` \u2014 swap del sistema",
-      "id": "docs_configuration_es_swap_swap_del_sistema"
-    },
-    {
-      "label": "`load` \u2014 carga media del sistema",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1833",
-      "_origin": "ast",
-      "community": 24,
-      "norm_label": "`load` \u2014 carga media del sistema",
-      "id": "docs_configuration_es_load_carga_media_del_sistema"
-    },
-    {
-      "label": "`memory` \u2014 RAM del sistema",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1858",
-      "_origin": "ast",
-      "community": 24,
-      "norm_label": "`memory` \u2014 ram del sistema",
-      "id": "docs_configuration_es_memory_ram_del_sistema"
-    },
-    {
-      "label": "`pressure` \u2014 tiempo de stall PSI del kernel",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1879",
-      "_origin": "ast",
-      "community": 24,
-      "norm_label": "`pressure` \u2014 tiempo de stall psi del kernel",
-      "id": "docs_configuration_es_pressure_tiempo_de_stall_psi_del_kernel"
-    },
-    {
-      "label": "`oom` \u2014 OOM kills del kernel",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1904",
-      "_origin": "ast",
-      "community": 24,
-      "norm_label": "`oom` \u2014 oom kills del kernel",
-      "id": "docs_configuration_es_oom_oom_kills_del_kernel"
-    },
-    {
-      "label": "`fds` \u2014 descriptores de archivo del sistema",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1922",
-      "_origin": "ast",
-      "community": 24,
-      "norm_label": "`fds` \u2014 descriptores de archivo del sistema",
-      "id": "docs_configuration_es_fds_descriptores_de_archivo_del_sistema"
-    },
-    {
-      "label": "`diskio` \u2014 tasas de I/O de dispositivo de bloques",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1940",
-      "_origin": "ast",
-      "community": 24,
-      "norm_label": "`diskio` \u2014 tasas de i/o de dispositivo de bloques",
-      "id": "docs_configuration_es_diskio_tasas_de_i_o_de_dispositivo_de_bloques"
-    },
-    {
-      "label": "`pids` \u2014 tabla de PID del kernel",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1972",
-      "_origin": "ast",
-      "community": 24,
-      "norm_label": "`pids` \u2014 tabla de pid del kernel",
-      "id": "docs_configuration_es_pids_tabla_de_pid_del_kernel"
-    },
-    {
-      "label": "`conntrack` \u2014 tabla de conexiones de netfilter",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1993",
-      "_origin": "ast",
-      "community": 24,
-      "norm_label": "`conntrack` \u2014 tabla de conexiones de netfilter",
-      "id": "docs_configuration_es_conntrack_tabla_de_conexiones_de_netfilter"
-    },
-    {
-      "label": "`firewall_rules` \u2014 reglas de firewall cargadas",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2013",
-      "_origin": "ast",
-      "community": 24,
-      "norm_label": "`firewall_rules` \u2014 reglas de firewall cargadas",
-      "id": "docs_configuration_es_firewall_rules_reglas_de_firewall_cargadas"
-    },
-    {
-      "label": "`entropy` \u2014 pool de entrop\u00eda del kernel",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2029",
-      "_origin": "ast",
-      "community": 24,
-      "norm_label": "`entropy` \u2014 pool de entropia del kernel",
-      "id": "docs_configuration_es_entropy_pool_de_entrop\u00eda_del_kernel"
-    },
-    {
-      "label": "`zombies` \u2014 procesos difuntos",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2046",
-      "_origin": "ast",
-      "community": 24,
-      "norm_label": "`zombies` \u2014 procesos difuntos",
-      "id": "docs_configuration_es_zombies_procesos_difuntos"
-    },
-    {
-      "label": "`file` \u2014 atributos de archivo/directorio",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2063",
-      "_origin": "ast",
-      "community": 24,
-      "norm_label": "`file` \u2014 atributos de archivo/directorio",
-      "id": "docs_configuration_es_file_atributos_de_archivo_directorio"
-    },
-    {
-      "label": "`process` \u2014 proceso por nombre",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2114",
-      "_origin": "ast",
-      "community": 66,
-      "norm_label": "`process` \u2014 proceso por nombre",
-      "id": "docs_configuration_es_process_proceso_por_nombre"
-    },
-    {
-      "label": "`then.kill` \u2014 terminar el proceso coincidente",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2172",
-      "_origin": "ast",
-      "community": 66,
-      "norm_label": "`then.kill` \u2014 terminar el proceso coincidente",
-      "id": "docs_configuration_es_then_kill_terminar_el_proceso_coincidente"
-    },
-    {
-      "label": "Valores por defecto globales",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2228",
-      "_origin": "ast",
-      "community": 27,
-      "norm_label": "valores por defecto globales",
-      "id": "docs_configuration_es_valores_por_defecto_globales"
-    },
-    {
-      "label": "Orden de resoluci\u00f3n",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2265",
-      "_origin": "ast",
-      "community": 27,
-      "norm_label": "orden de resolucion",
-      "id": "docs_configuration_es_orden_de_resoluci\u00f3n"
-    },
-    {
-      "label": "Reglas de fusi\u00f3n",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2282",
-      "_origin": "ast",
-      "community": 27,
-      "norm_label": "reglas de fusion",
-      "id": "docs_configuration_es_reglas_de_fusi\u00f3n"
-    },
-    {
-      "label": "Variables de recurso de binario",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2315",
-      "_origin": "ast",
-      "community": 27,
-      "norm_label": "variables de recurso de binario",
-      "id": "docs_configuration_es_variables_de_recurso_de_binario"
-    },
-    {
-      "label": "Prefijo de b\u00fasqueda `${bindir}`",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2337",
-      "_origin": "ast",
-      "community": 27,
-      "norm_label": "prefijo de busqueda `${bindir}`",
-      "id": "docs_configuration_es_prefijo_de_b\u00fasqueda_bindir"
-    },
-    {
-      "label": "Variables",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2393",
-      "_origin": "ast",
-      "community": 61,
-      "norm_label": "variables",
-      "id": "docs_configuration_es_variables"
-    },
-    {
-      "label": "Variables personalizadas globales (`defaults.variables`)",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2415",
-      "_origin": "ast",
-      "community": 61,
-      "norm_label": "variables personalizadas globales (`defaults.variables`)",
-      "id": "docs_configuration_es_variables_personalizadas_globales_defaults_variables"
-    },
-    {
-      "label": "Secretos del entorno",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2451",
-      "_origin": "ast",
-      "community": 61,
-      "norm_label": "secretos del entorno",
-      "id": "docs_configuration_es_secretos_del_entorno"
-    },
-    {
-      "label": "Validaci\u00f3n",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2483",
-      "_origin": "ast",
-      "community": 27,
-      "norm_label": "validacion",
-      "id": "docs_configuration_es_validaci\u00f3n"
-    },
-    {
-      "label": "Diagn\u00f3sticos",
-      "file_type": "document",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2492",
-      "_origin": "ast",
-      "community": 27,
-      "norm_label": "diagnosticos",
-      "id": "docs_configuration_es_diagn\u00f3sticos"
     },
     {
       "label": "webui-representation.md",
@@ -3421,7 +3421,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L293",
       "_origin": "ast",
-      "community": 84,
+      "community": 80,
       "norm_label": "apientitypath()",
       "id": "internal_web_src_app_apientitypath"
     },
@@ -3441,7 +3441,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L298",
       "_origin": "ast",
-      "community": 84,
+      "community": 91,
       "norm_label": "apilimitsuffix()",
       "id": "internal_web_src_app_apilimitsuffix"
     },
@@ -3451,7 +3451,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L299",
       "_origin": "ast",
-      "community": 15,
+      "community": 80,
       "norm_label": "apisincesuffix()",
       "id": "internal_web_src_app_apisincesuffix"
     },
@@ -3461,7 +3461,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L300",
       "_origin": "ast",
-      "community": 84,
+      "community": 91,
       "norm_label": "applicationapi()",
       "id": "internal_web_src_app_applicationapi"
     },
@@ -3471,7 +3471,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L301",
       "_origin": "ast",
-      "community": 84,
+      "community": 91,
       "norm_label": "applicationeventsapi()",
       "id": "internal_web_src_app_applicationeventsapi"
     },
@@ -3481,7 +3481,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L302",
       "_origin": "ast",
-      "community": 80,
+      "community": 84,
       "norm_label": "daemonmetricsapi()",
       "id": "internal_web_src_app_daemonmetricsapi"
     },
@@ -3511,7 +3511,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L305",
       "_origin": "ast",
-      "community": 84,
+      "community": 80,
       "norm_label": "lockreleaseapi()",
       "id": "internal_web_src_app_lockreleaseapi"
     },
@@ -3521,7 +3521,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L306",
       "_origin": "ast",
-      "community": 84,
+      "community": 80,
       "norm_label": "mountapi()",
       "id": "internal_web_src_app_mountapi"
     },
@@ -3531,7 +3531,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L307",
       "_origin": "ast",
-      "community": 84,
+      "community": 80,
       "norm_label": "mountblockersapi()",
       "id": "internal_web_src_app_mountblockersapi"
     },
@@ -3551,7 +3551,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L309",
       "_origin": "ast",
-      "community": 15,
+      "community": 80,
       "norm_label": "serviceapi()",
       "id": "internal_web_src_app_serviceapi"
     },
@@ -3561,7 +3561,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L310",
       "_origin": "ast",
-      "community": 84,
+      "community": 91,
       "norm_label": "serviceeventsapi()",
       "id": "internal_web_src_app_serviceeventsapi"
     },
@@ -3591,7 +3591,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L313",
       "_origin": "ast",
-      "community": 15,
+      "community": 80,
       "norm_label": "serviceruntimeapi()",
       "id": "internal_web_src_app_serviceruntimeapi"
     },
@@ -3601,7 +3601,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L314",
       "_origin": "ast",
-      "community": 15,
+      "community": 80,
       "norm_label": "serviceslaapi()",
       "id": "internal_web_src_app_serviceslaapi"
     },
@@ -3621,7 +3621,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L316",
       "_origin": "ast",
-      "community": 84,
+      "community": 80,
       "norm_label": "watchapi()",
       "id": "internal_web_src_app_watchapi"
     },
@@ -3631,7 +3631,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L317",
       "_origin": "ast",
-      "community": 78,
+      "community": 0,
       "norm_label": "expansionkey()",
       "id": "internal_web_src_app_expansionkey"
     },
@@ -3651,7 +3651,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L319",
       "_origin": "ast",
-      "community": 78,
+      "community": 0,
       "norm_label": "appexpansionkey()",
       "id": "internal_web_src_app_appexpansionkey"
     },
@@ -3661,7 +3661,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L320",
       "_origin": "ast",
-      "community": 78,
+      "community": 0,
       "norm_label": "serviceexpansionkey()",
       "id": "internal_web_src_app_serviceexpansionkey"
     },
@@ -3821,7 +3821,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L500",
       "_origin": "ast",
-      "community": 80,
+      "community": 84,
       "norm_label": "renderopspanel()",
       "id": "internal_web_src_app_renderopspanel"
     },
@@ -3981,7 +3981,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L732",
       "_origin": "ast",
-      "community": 84,
+      "community": 91,
       "norm_label": "eventkey()",
       "id": "internal_web_src_app_eventkey"
     },
@@ -4001,7 +4001,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L746",
       "_origin": "ast",
-      "community": 84,
+      "community": 91,
       "norm_label": "eventmessagehtml()",
       "id": "internal_web_src_app_eventmessagehtml"
     },
@@ -4011,7 +4011,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L766",
       "_origin": "ast",
-      "community": 18,
+      "community": 2,
       "norm_label": "eventsubject()",
       "id": "internal_web_src_app_eventsubject"
     },
@@ -4021,7 +4021,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L770",
       "_origin": "ast",
-      "community": 18,
+      "community": 2,
       "norm_label": "eventgroupkey()",
       "id": "internal_web_src_app_eventgroupkey"
     },
@@ -4031,7 +4031,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L775",
       "_origin": "ast",
-      "community": 18,
+      "community": 2,
       "norm_label": "groupedevents()",
       "id": "internal_web_src_app_groupedevents"
     },
@@ -4061,7 +4061,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L795",
       "_origin": "ast",
-      "community": 18,
+      "community": 2,
       "norm_label": "setevsort()",
       "id": "internal_web_src_app_setevsort"
     },
@@ -4071,7 +4071,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L796",
       "_origin": "ast",
-      "community": 1,
+      "community": 14,
       "norm_label": "updateevsortindicators()",
       "id": "internal_web_src_app_updateevsortindicators"
     },
@@ -4091,7 +4091,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L804",
       "_origin": "ast",
-      "community": 18,
+      "community": 2,
       "norm_label": "renderglobalevents()",
       "id": "internal_web_src_app_renderglobalevents"
     },
@@ -4101,7 +4101,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L839",
       "_origin": "ast",
-      "community": 84,
+      "community": 91,
       "norm_label": "eventrows()",
       "id": "internal_web_src_app_eventrows"
     },
@@ -4111,7 +4111,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L857",
       "_origin": "ast",
-      "community": 84,
+      "community": 91,
       "norm_label": "rendereventsloading()",
       "id": "internal_web_src_app_rendereventsloading"
     },
@@ -4121,7 +4121,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L863",
       "_origin": "ast",
-      "community": 82,
+      "community": 1,
       "norm_label": "fmtmonitorsource()",
       "id": "internal_web_src_app_fmtmonitorsource"
     },
@@ -4131,7 +4131,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L873",
       "_origin": "ast",
-      "community": 90,
+      "community": 82,
       "norm_label": "unitcell()",
       "id": "internal_web_src_app_unitcell"
     },
@@ -4161,7 +4161,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L902",
       "_origin": "ast",
-      "community": 90,
+      "community": 82,
       "norm_label": "lockscell()",
       "id": "internal_web_src_app_lockscell"
     },
@@ -4171,7 +4171,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L909",
       "_origin": "ast",
-      "community": 0,
+      "community": 82,
       "norm_label": "lasteventcell()",
       "id": "internal_web_src_app_lasteventcell"
     },
@@ -4191,7 +4191,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L917",
       "_origin": "ast",
-      "community": 0,
+      "community": 82,
       "norm_label": "activityseverity()",
       "id": "internal_web_src_app_activityseverity"
     },
@@ -4201,7 +4201,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L929",
       "_origin": "ast",
-      "community": 0,
+      "community": 82,
       "norm_label": "activitydatecell()",
       "id": "internal_web_src_app_activitydatecell"
     },
@@ -4351,7 +4351,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1125",
       "_origin": "ast",
-      "community": 76,
+      "community": 78,
       "norm_label": "saveuistate()",
       "id": "internal_web_src_app_saveuistate"
     },
@@ -4481,7 +4481,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1217",
       "_origin": "ast",
-      "community": 14,
+      "community": 1,
       "norm_label": "servicestate()",
       "id": "internal_web_src_app_servicestate"
     },
@@ -4531,7 +4531,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1249",
       "_origin": "ast",
-      "community": 14,
+      "community": 76,
       "norm_label": "servicesurfaceof()",
       "id": "internal_web_src_app_servicesurfaceof"
     },
@@ -4571,7 +4571,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1271",
       "_origin": "ast",
-      "community": 14,
+      "community": 76,
       "norm_label": "servicesectionfor()",
       "id": "internal_web_src_app_servicesectionfor"
     },
@@ -4581,7 +4581,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1278",
       "_origin": "ast",
-      "community": 14,
+      "community": 76,
       "norm_label": "opensectionforservice()",
       "id": "internal_web_src_app_opensectionforservice"
     },
@@ -4601,7 +4601,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1298",
       "_origin": "ast",
-      "community": 14,
+      "community": 1,
       "norm_label": "isfailing()",
       "id": "internal_web_src_app_isfailing"
     },
@@ -4611,7 +4611,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1299",
       "_origin": "ast",
-      "community": 14,
+      "community": 1,
       "norm_label": "isserviceattention()",
       "id": "internal_web_src_app_isserviceattention"
     },
@@ -4701,7 +4701,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1525",
       "_origin": "ast",
-      "community": 80,
+      "community": 84,
       "norm_label": "opelapsed()",
       "id": "internal_web_src_app_opelapsed"
     },
@@ -4711,7 +4711,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1529",
       "_origin": "ast",
-      "community": 0,
+      "community": 84,
       "norm_label": "opstatetext()",
       "id": "internal_web_src_app_opstatetext"
     },
@@ -4721,7 +4721,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1533",
       "_origin": "ast",
-      "community": 80,
+      "community": 84,
       "norm_label": "beginoperation()",
       "id": "internal_web_src_app_beginoperation"
     },
@@ -4731,7 +4731,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1547",
       "_origin": "ast",
-      "community": 80,
+      "community": 84,
       "norm_label": "finishoperation()",
       "id": "internal_web_src_app_finishoperation"
     },
@@ -4741,7 +4741,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1564",
       "_origin": "ast",
-      "community": 80,
+      "community": 84,
       "norm_label": "ensureliveopstimer()",
       "id": "internal_web_src_app_ensureliveopstimer"
     },
@@ -4751,7 +4751,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1567",
       "_origin": "ast",
-      "community": 80,
+      "community": 84,
       "norm_label": "stopliveopstimerifidle()",
       "id": "internal_web_src_app_stopliveopstimerifidle"
     },
@@ -4761,7 +4761,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1573",
       "_origin": "ast",
-      "community": 80,
+      "community": 84,
       "norm_label": "updateliveops()",
       "id": "internal_web_src_app_updateliveops"
     },
@@ -4771,7 +4771,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1579",
       "_origin": "ast",
-      "community": 80,
+      "community": 84,
       "norm_label": "renderoperationlive()",
       "id": "internal_web_src_app_renderoperationlive"
     },
@@ -4811,7 +4811,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1627",
       "_origin": "ast",
-      "community": 76,
+      "community": 78,
       "norm_label": "setsvcquery()",
       "id": "internal_web_src_app_setsvcquery"
     },
@@ -4821,7 +4821,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1628",
       "_origin": "ast",
-      "community": 76,
+      "community": 78,
       "norm_label": "setsvccategory()",
       "id": "internal_web_src_app_setsvccategory"
     },
@@ -4861,7 +4861,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1647",
       "_origin": "ast",
-      "community": 76,
+      "community": 78,
       "norm_label": "setsplitservicequery()",
       "id": "internal_web_src_app_setsplitservicequery"
     },
@@ -4921,7 +4921,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1701",
       "_origin": "ast",
-      "community": 92,
+      "community": 14,
       "norm_label": "renderfilterbuttoncounts()",
       "id": "internal_web_src_app_renderfilterbuttoncounts"
     },
@@ -4931,7 +4931,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1708",
       "_origin": "ast",
-      "community": 92,
+      "community": 14,
       "norm_label": "statecounts()",
       "id": "internal_web_src_app_statecounts"
     },
@@ -5011,7 +5011,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1773",
       "_origin": "ast",
-      "community": 1,
+      "community": 14,
       "norm_label": "sortariavalue()",
       "id": "internal_web_src_app_sortariavalue"
     },
@@ -5021,7 +5021,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1778",
       "_origin": "ast",
-      "community": 1,
+      "community": 14,
       "norm_label": "updatesortindicatorsfor()",
       "id": "internal_web_src_app_updatesortindicatorsfor"
     },
@@ -5031,7 +5031,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1788",
       "_origin": "ast",
-      "community": 1,
+      "community": 14,
       "norm_label": "updatesortindicators()",
       "id": "internal_web_src_app_updatesortindicators"
     },
@@ -5071,7 +5071,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1812",
       "_origin": "ast",
-      "community": 76,
+      "community": 78,
       "norm_label": "setsvcgrouped()",
       "id": "internal_web_src_app_setsvcgrouped"
     },
@@ -5081,7 +5081,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1818",
       "_origin": "ast",
-      "community": 76,
+      "community": 78,
       "norm_label": "toggleallsvcgroups()",
       "id": "internal_web_src_app_toggleallsvcgroups"
     },
@@ -5161,7 +5161,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1893",
       "_origin": "ast",
-      "community": 14,
+      "community": 88,
       "norm_label": "grouptogglearialabel()",
       "id": "internal_web_src_app_grouptogglearialabel"
     },
@@ -5171,7 +5171,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L1897",
       "_origin": "ast",
-      "community": 19,
+      "community": 0,
       "norm_label": "svcactionarialabel()",
       "id": "internal_web_src_app_svcactionarialabel"
     },
@@ -5261,7 +5261,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L2064",
       "_origin": "ast",
-      "community": 76,
+      "community": 78,
       "norm_label": "renderservices()",
       "id": "internal_web_src_app_renderservices"
     },
@@ -5281,7 +5281,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L2093",
       "_origin": "ast",
-      "community": 78,
+      "community": 76,
       "norm_label": "openserviceexpansion()",
       "id": "internal_web_src_app_openserviceexpansion"
     },
@@ -5441,7 +5441,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L2340",
       "_origin": "ast",
-      "community": 90,
+      "community": 82,
       "norm_label": "prociofdthreadcells()",
       "id": "internal_web_src_app_prociofdthreadcells"
     },
@@ -5471,7 +5471,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L2360",
       "_origin": "ast",
-      "community": 90,
+      "community": 82,
       "norm_label": "processrows()",
       "id": "internal_web_src_app_processrows"
     },
@@ -5581,7 +5581,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L2448",
       "_origin": "ast",
-      "community": 90,
+      "community": 86,
       "norm_label": "slawindowlabel()",
       "id": "internal_web_src_app_slawindowlabel"
     },
@@ -5601,7 +5601,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L2466",
       "_origin": "ast",
-      "community": 82,
+      "community": 15,
       "norm_label": "slachartyfloor()",
       "id": "internal_web_src_app_slachartyfloor"
     },
@@ -5611,7 +5611,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L2473",
       "_origin": "ast",
-      "community": 90,
+      "community": 86,
       "norm_label": "renderslawindows()",
       "id": "internal_web_src_app_renderslawindows"
     },
@@ -5631,7 +5631,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L2503",
       "_origin": "ast",
-      "community": 82,
+      "community": 86,
       "norm_label": "slatimelinedatarows()",
       "id": "internal_web_src_app_slatimelinedatarows"
     },
@@ -5641,7 +5641,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L2521",
       "_origin": "ast",
-      "community": 82,
+      "community": 86,
       "norm_label": "renderslatimeline()",
       "id": "internal_web_src_app_renderslatimeline"
     },
@@ -5651,7 +5651,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L2538",
       "_origin": "ast",
-      "community": 82,
+      "community": 86,
       "norm_label": "slawindowspanms()",
       "id": "internal_web_src_app_slawindowspanms"
     },
@@ -5661,7 +5661,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L2549",
       "_origin": "ast",
-      "community": 82,
+      "community": 15,
       "norm_label": "slapointpct()",
       "id": "internal_web_src_app_slapointpct"
     },
@@ -5671,7 +5671,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L2555",
       "_origin": "ast",
-      "community": 82,
+      "community": 15,
       "norm_label": "slapointtime()",
       "id": "internal_web_src_app_slapointtime"
     },
@@ -5681,7 +5681,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L2560",
       "_origin": "ast",
-      "community": 82,
+      "community": 15,
       "norm_label": "slaincidentpoints()",
       "id": "internal_web_src_app_slaincidentpoints"
     },
@@ -5691,7 +5691,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L2566",
       "_origin": "ast",
-      "community": 82,
+      "community": 15,
       "norm_label": "slaincidenttime()",
       "id": "internal_web_src_app_slaincidenttime"
     },
@@ -5711,7 +5711,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L2585",
       "_origin": "ast",
-      "community": 82,
+      "community": 15,
       "norm_label": "renderslaincidentlist()",
       "id": "internal_web_src_app_renderslaincidentlist"
     },
@@ -5731,7 +5731,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L2614",
       "_origin": "ast",
-      "community": 82,
+      "community": 15,
       "norm_label": "drawslachart()",
       "id": "internal_web_src_app_drawslachart"
     },
@@ -5741,7 +5741,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L2714",
       "_origin": "ast",
-      "community": 90,
+      "community": 82,
       "norm_label": "totalscpucell()",
       "id": "internal_web_src_app_totalscpucell"
     },
@@ -5791,7 +5791,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L2735",
       "_origin": "ast",
-      "community": 90,
+      "community": 82,
       "norm_label": "renderservicedetail()",
       "id": "internal_web_src_app_renderservicedetail"
     },
@@ -5901,7 +5901,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L3023",
       "_origin": "ast",
-      "community": 90,
+      "community": 82,
       "norm_label": "hostmemtotalbytes()",
       "id": "internal_web_src_app_hostmemtotalbytes"
     },
@@ -5941,7 +5941,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L3060",
       "_origin": "ast",
-      "community": 19,
+      "community": 85,
       "norm_label": "notifiernames()",
       "id": "internal_web_src_app_notifiernames"
     },
@@ -6011,7 +6011,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L3147",
       "_origin": "ast",
-      "community": 82,
+      "community": 1,
       "norm_label": "watchmonitorhint()",
       "id": "internal_web_src_app_watchmonitorhint"
     },
@@ -6021,7 +6021,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L3154",
       "_origin": "ast",
-      "community": 19,
+      "community": 85,
       "norm_label": "watchmonitormode()",
       "id": "internal_web_src_app_watchmonitormode"
     },
@@ -6031,7 +6031,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L3158",
       "_origin": "ast",
-      "community": 19,
+      "community": 85,
       "norm_label": "watchhasnotify()",
       "id": "internal_web_src_app_watchhasnotify"
     },
@@ -6091,7 +6091,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L3209",
       "_origin": "ast",
-      "community": 19,
+      "community": 85,
       "norm_label": "watchsearchtext()",
       "id": "internal_web_src_app_watchsearchtext"
     },
@@ -6281,7 +6281,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L3413",
       "_origin": "ast",
-      "community": 90,
+      "community": 85,
       "norm_label": "renderconditionrows()",
       "id": "internal_web_src_app_renderconditionrows"
     },
@@ -6311,7 +6311,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L3487",
       "_origin": "ast",
-      "community": 90,
+      "community": 85,
       "norm_label": "renderwatchreadings()",
       "id": "internal_web_src_app_renderwatchreadings"
     },
@@ -6411,7 +6411,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L3572",
       "_origin": "ast",
-      "community": 19,
+      "community": 0,
       "norm_label": "watchactionarialabel()",
       "id": "internal_web_src_app_watchactionarialabel"
     },
@@ -6621,7 +6621,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L3817",
       "_origin": "ast",
-      "community": 92,
+      "community": 88,
       "norm_label": "renderappfiltercounts()",
       "id": "internal_web_src_app_renderappfiltercounts"
     },
@@ -6631,7 +6631,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L3820",
       "_origin": "ast",
-      "community": 1,
+      "community": 14,
       "norm_label": "updateappsortindicators()",
       "id": "internal_web_src_app_updateappsortindicators"
     },
@@ -6711,7 +6711,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L3883",
       "_origin": "ast",
-      "community": 76,
+      "community": 78,
       "norm_label": "togglecategorygroup()",
       "id": "internal_web_src_app_togglecategorygroup"
     },
@@ -6731,7 +6731,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L3968",
       "_origin": "ast",
-      "community": 15,
+      "community": 86,
       "norm_label": "renderappexpansion()",
       "id": "internal_web_src_app_renderappexpansion"
     },
@@ -6741,7 +6741,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4004",
       "_origin": "ast",
-      "community": 84,
+      "community": 91,
       "norm_label": "loadappevents()",
       "id": "internal_web_src_app_loadappevents"
     },
@@ -6751,7 +6751,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4019",
       "_origin": "ast",
-      "community": 90,
+      "community": 85,
       "norm_label": "renderwatchexpansion()",
       "id": "internal_web_src_app_renderwatchexpansion"
     },
@@ -6791,7 +6791,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4075",
       "_origin": "ast",
-      "community": 18,
+      "community": 92,
       "norm_label": "mountblockers()",
       "id": "internal_web_src_app_mountblockers"
     },
@@ -6801,7 +6801,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4079",
       "_origin": "ast",
-      "community": 18,
+      "community": 92,
       "norm_label": "mountprocesslabel()",
       "id": "internal_web_src_app_mountprocesslabel"
     },
@@ -6811,7 +6811,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4085",
       "_origin": "ast",
-      "community": 18,
+      "community": 92,
       "norm_label": "mountusagecell()",
       "id": "internal_web_src_app_mountusagecell"
     },
@@ -6821,7 +6821,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4092",
       "_origin": "ast",
-      "community": 18,
+      "community": 92,
       "norm_label": "mountprocessescell()",
       "id": "internal_web_src_app_mountprocessescell"
     },
@@ -6831,7 +6831,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4097",
       "_origin": "ast",
-      "community": 18,
+      "community": 92,
       "norm_label": "mountuserscell()",
       "id": "internal_web_src_app_mountuserscell"
     },
@@ -6841,7 +6841,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4102",
       "_origin": "ast",
-      "community": 18,
+      "community": 92,
       "norm_label": "mountusernames()",
       "id": "internal_web_src_app_mountusernames"
     },
@@ -6911,7 +6911,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4139",
       "_origin": "ast",
-      "community": 18,
+      "community": 92,
       "norm_label": "mountmatches()",
       "id": "internal_web_src_app_mountmatches"
     },
@@ -6921,7 +6921,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4151",
       "_origin": "ast",
-      "community": 92,
+      "community": 14,
       "norm_label": "rendermountfiltercounts()",
       "id": "internal_web_src_app_rendermountfiltercounts"
     },
@@ -6941,7 +6941,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4171",
       "_origin": "ast",
-      "community": 1,
+      "community": 14,
       "norm_label": "updatemountsortindicators()",
       "id": "internal_web_src_app_updatemountsortindicators"
     },
@@ -6981,7 +6981,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4247",
       "_origin": "ast",
-      "community": 18,
+      "community": 80,
       "norm_label": "rendernotifiers()",
       "id": "internal_web_src_app_rendernotifiers"
     },
@@ -7051,7 +7051,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4345",
       "_origin": "ast",
-      "community": 85,
+      "community": 82,
       "norm_label": "lockname()",
       "id": "internal_web_src_app_lockname"
     },
@@ -7061,7 +7061,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4349",
       "_origin": "ast",
-      "community": 85,
+      "community": 82,
       "norm_label": "lockstatehtml()",
       "id": "internal_web_src_app_lockstatehtml"
     },
@@ -7081,7 +7081,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4360",
       "_origin": "ast",
-      "community": 85,
+      "community": 82,
       "norm_label": "lockowner()",
       "id": "internal_web_src_app_lockowner"
     },
@@ -7101,7 +7101,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4373",
       "_origin": "ast",
-      "community": 85,
+      "community": 82,
       "norm_label": "lockblocks()",
       "id": "internal_web_src_app_lockblocks"
     },
@@ -7111,7 +7111,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4378",
       "_origin": "ast",
-      "community": 85,
+      "community": 82,
       "norm_label": "lockreleasehintid()",
       "id": "internal_web_src_app_lockreleasehintid"
     },
@@ -7121,7 +7121,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4384",
       "_origin": "ast",
-      "community": 85,
+      "community": 82,
       "norm_label": "lockreleaselabel()",
       "id": "internal_web_src_app_lockreleaselabel"
     },
@@ -7131,7 +7131,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4390",
       "_origin": "ast",
-      "community": 85,
+      "community": 82,
       "norm_label": "lockreleasedisabled()",
       "id": "internal_web_src_app_lockreleasedisabled"
     },
@@ -7141,7 +7141,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4395",
       "_origin": "ast",
-      "community": 85,
+      "community": 82,
       "norm_label": "lockreleasedisabledreason()",
       "id": "internal_web_src_app_lockreleasedisabledreason"
     },
@@ -7151,7 +7151,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4402",
       "_origin": "ast",
-      "community": 85,
+      "community": 82,
       "norm_label": "lockreleasebutton()",
       "id": "internal_web_src_app_lockreleasebutton"
     },
@@ -7161,7 +7161,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4413",
       "_origin": "ast",
-      "community": 85,
+      "community": 82,
       "norm_label": "lockservicelink()",
       "id": "internal_web_src_app_lockservicelink"
     },
@@ -7181,7 +7181,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4440",
       "_origin": "ast",
-      "community": 85,
+      "community": 82,
       "norm_label": "renderlocks()",
       "id": "internal_web_src_app_renderlocks"
     },
@@ -7251,7 +7251,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4732",
       "_origin": "ast",
-      "community": 80,
+      "community": 84,
       "norm_label": "getjson()",
       "id": "internal_web_src_app_getjson"
     },
@@ -7301,7 +7301,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4770",
       "_origin": "ast",
-      "community": 18,
+      "community": 80,
       "norm_label": "updatetopbarheight()",
       "id": "internal_web_src_app_updatetopbarheight"
     },
@@ -7311,7 +7311,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4777",
       "_origin": "ast",
-      "community": 18,
+      "community": 80,
       "norm_label": "sectionnavcounttext()",
       "id": "internal_web_src_app_sectionnavcounttext"
     },
@@ -7321,7 +7321,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L4787",
       "_origin": "ast",
-      "community": 18,
+      "community": 80,
       "norm_label": "updatesectionnav()",
       "id": "internal_web_src_app_updatesectionnav"
     },
@@ -7571,7 +7571,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L5341",
       "_origin": "ast",
-      "community": 84,
+      "community": 91,
       "norm_label": "loadserviceevents()",
       "id": "internal_web_src_app_loadserviceevents"
     },
@@ -7641,7 +7641,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L5389",
       "_origin": "ast",
-      "community": 90,
+      "community": 82,
       "norm_label": "metriccheckbuttons()",
       "id": "internal_web_src_app_metriccheckbuttons"
     },
@@ -7711,7 +7711,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L5467",
       "_origin": "ast",
-      "community": 80,
+      "community": 84,
       "norm_label": "loaddaemonmetrics()",
       "id": "internal_web_src_app_loaddaemonmetrics"
     },
@@ -7751,7 +7751,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L5523",
       "_origin": "ast",
-      "community": 82,
+      "community": 15,
       "norm_label": "slachartdatatable()",
       "id": "internal_web_src_app_slachartdatatable"
     },
@@ -7861,7 +7861,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L5686",
       "_origin": "ast",
-      "community": 19,
+      "community": 0,
       "norm_label": "capfirst()",
       "id": "internal_web_src_app_capfirst"
     },
@@ -7871,7 +7871,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L5693",
       "_origin": "ast",
-      "community": 19,
+      "community": 0,
       "norm_label": "displayname()",
       "id": "internal_web_src_app_displayname"
     },
@@ -7881,7 +7881,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L5697",
       "_origin": "ast",
-      "community": 14,
+      "community": 88,
       "norm_label": "categoryof()",
       "id": "internal_web_src_app_categoryof"
     },
@@ -7891,7 +7891,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L5702",
       "_origin": "ast",
-      "community": 90,
+      "community": 85,
       "norm_label": "categorybadge()",
       "id": "internal_web_src_app_categorybadge"
     },
@@ -7931,7 +7931,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L5733",
       "_origin": "ast",
-      "community": 14,
+      "community": 88,
       "norm_label": "groupedpanelid()",
       "id": "internal_web_src_app_groupedpanelid"
     },
@@ -7941,7 +7941,7 @@
       "source_file": "internal/web/src/app.js",
       "source_location": "L5739",
       "_origin": "ast",
-      "community": 14,
+      "community": 88,
       "norm_label": "rendergroupedrows()",
       "id": "internal_web_src_app_rendergroupedrows"
     },
@@ -12878,6 +12878,546 @@
     {
       "relation": "references",
       "confidence": "EXTRACTED",
+      "source_file": "docs/cli.es.md",
+      "source_location": "L234",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_cli_es",
+      "target": "docs_configuration_es"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "docs_configuration_es",
+      "target": "docs_configuration_es_configuraci\u00f3n",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1400",
+      "weight": 1.0,
+      "source": "docs_configuration_es",
+      "target": "docs_rules_es",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "README.es.md",
+      "source_location": "L15",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "readme_es",
+      "target": "docs_configuration_es"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L313",
+      "weight": 1.0,
+      "source": "docs_configuration_es_configuraci\u00f3n",
+      "target": "docs_configuration_es_ajustes_del_motor",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L43",
+      "weight": 1.0,
+      "source": "docs_configuration_es_configuraci\u00f3n",
+      "target": "docs_configuration_es_cambios_de_esquema",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2493",
+      "weight": 1.0,
+      "source": "docs_configuration_es_configuraci\u00f3n",
+      "target": "docs_configuration_es_diagn\u00f3sticos",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L906",
+      "weight": 1.0,
+      "source": "docs_configuration_es_configuraci\u00f3n",
+      "target": "docs_configuration_es_disponibilidad_sla",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L54",
+      "weight": 1.0,
+      "source": "docs_configuration_es_configuraci\u00f3n",
+      "target": "docs_configuration_es_disposici\u00f3n",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1151",
+      "weight": 1.0,
+      "source": "docs_configuration_es_configuraci\u00f3n",
+      "target": "docs_configuration_es_host_watches",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L535",
+      "weight": 1.0,
+      "source": "docs_configuration_es_configuraci\u00f3n",
+      "target": "docs_configuration_es_interfaz_web",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L966",
+      "weight": 1.0,
+      "source": "docs_configuration_es_configuraci\u00f3n",
+      "target": "docs_configuration_es_notificaciones",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2266",
+      "weight": 1.0,
+      "source": "docs_configuration_es_configuraci\u00f3n",
+      "target": "docs_configuration_es_orden_de_resoluci\u00f3n",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2283",
+      "weight": 1.0,
+      "source": "docs_configuration_es_configuraci\u00f3n",
+      "target": "docs_configuration_es_reglas_de_fusi\u00f3n",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L240",
+      "weight": 1.0,
+      "source": "docs_configuration_es_configuraci\u00f3n",
+      "target": "docs_configuration_es_storage_y_unidades_de_montaje",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2484",
+      "weight": 1.0,
+      "source": "docs_configuration_es_configuraci\u00f3n",
+      "target": "docs_configuration_es_validaci\u00f3n",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2229",
+      "weight": 1.0,
+      "source": "docs_configuration_es_configuraci\u00f3n",
+      "target": "docs_configuration_es_valores_por_defecto_globales",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2394",
+      "weight": 1.0,
+      "source": "docs_configuration_es_configuraci\u00f3n",
+      "target": "docs_configuration_es_variables",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2316",
+      "weight": 1.0,
+      "source": "docs_configuration_es_configuraci\u00f3n",
+      "target": "docs_configuration_es_variables_de_recurso_de_binario",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L506",
+      "weight": 1.0,
+      "source": "docs_configuration_es_ajustes_del_motor",
+      "target": "docs_configuration_es_intervalo_por_comprobaci\u00f3n",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L483",
+      "weight": 1.0,
+      "source": "docs_configuration_es_ajustes_del_motor",
+      "target": "docs_configuration_es_intervalo_por_service",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L594",
+      "weight": 1.0,
+      "source": "docs_configuration_es_interfaz_web",
+      "target": "docs_configuration_es_autenticaci\u00f3n",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L620",
+      "weight": 1.0,
+      "source": "docs_configuration_es_interfaz_web",
+      "target": "docs_configuration_es_detr\u00e1s_de_un_proxy_inverso_requerido_para_exponerlo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L842",
+      "weight": 1.0,
+      "source": "docs_configuration_es_interfaz_web",
+      "target": "docs_configuration_es_gr\u00e1fico_de_latencia",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L745",
+      "weight": 1.0,
+      "source": "docs_configuration_es_interfaz_web",
+      "target": "docs_configuration_es_liveness_livez",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L764",
+      "weight": 1.0,
+      "source": "docs_configuration_es_interfaz_web",
+      "target": "docs_configuration_es_readiness_readyz",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L948",
+      "weight": 1.0,
+      "source": "docs_configuration_es_disponibilidad_sla",
+      "target": "docs_configuration_es_series_temporales_de_disponibilidad",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1080",
+      "weight": 1.0,
+      "source": "docs_configuration_es_notificaciones",
+      "target": "docs_configuration_es_plantillas_de_notificaci\u00f3n",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1121",
+      "weight": 1.0,
+      "source": "docs_configuration_es_notificaciones",
+      "target": "docs_configuration_es_selecci\u00f3n_por_defecto_y_precedencia",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1764",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_clock_deriva_del_reloj",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1994",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_conntrack_tabla_de_conexiones_de_netfilter",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1941",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_diskio_tasas_de_i_o_de_dispositivo_de_bloques",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2030",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_entropy_pool_de_entrop\u00eda_del_kernel",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1923",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_fds_descriptores_de_archivo_del_sistema",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2064",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_file_atributos_de_archivo_directorio",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2014",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_firewall_rules_reglas_de_firewall_cargadas",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1718",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_icmp_host_externo_ping",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1834",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_load_carga_media_del_sistema",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1859",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_memory_ram_del_sistema",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1660",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_net_interfaz_de_red",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1905",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_oom_oom_kills_del_kernel",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1973",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_pids_tabla_de_pid_del_kernel",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1880",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_pressure_tiempo_de_stall_psi_del_kernel",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2115",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_process_proceso_por_nombre",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1801",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_swap_swap_del_sistema",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1421",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_then_expand_crecimiento_de_volumen_watch_de_storage",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1493",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_watches_de_servicio_acotados_a_un_servicio",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2047",
+      "weight": 1.0,
+      "source": "docs_configuration_es_host_watches",
+      "target": "docs_configuration_es_zombies_procesos_difuntos",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1625",
+      "weight": 1.0,
+      "source": "docs_configuration_es_watches_de_servicio_acotados_a_un_servicio",
+      "target": "docs_configuration_es_condiciones_de_montaje",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L1533",
+      "weight": 1.0,
+      "source": "docs_configuration_es_watches_de_servicio_acotados_a_un_servicio",
+      "target": "docs_configuration_es_then_action_unificado_operaci\u00f3n_guard_alerta",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2173",
+      "weight": 1.0,
+      "source": "docs_configuration_es_process_proceso_por_nombre",
+      "target": "docs_configuration_es_then_kill_terminar_el_proceso_coincidente",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2338",
+      "weight": 1.0,
+      "source": "docs_configuration_es_variables_de_recurso_de_binario",
+      "target": "docs_configuration_es_prefijo_de_b\u00fasqueda_bindir",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2452",
+      "weight": 1.0,
+      "source": "docs_configuration_es_variables",
+      "target": "docs_configuration_es_secretos_del_entorno",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.es.md",
+      "source_location": "L2416",
+      "weight": 1.0,
+      "source": "docs_configuration_es_variables",
+      "target": "docs_configuration_es_variables_personalizadas_globales_defaults_variables",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
       "source_file": "docs/cli.md",
       "source_location": "L226",
       "weight": 1.0,
@@ -12906,16 +13446,6 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.md",
-      "source_location": "L459",
-      "weight": 1.0,
-      "source": "docs_configuration",
-      "target": "docs_services",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
@@ -12929,7 +13459,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L2297",
+      "source_location": "L2298",
       "weight": 1.0,
       "source": "docs_configuration_configuration",
       "target": "docs_configuration_binary_resource_variables",
@@ -12939,7 +13469,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L2472",
+      "source_location": "L2473",
       "weight": 1.0,
       "source": "docs_configuration_configuration",
       "target": "docs_configuration_diagnostics",
@@ -12959,7 +13489,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L2194",
+      "source_location": "L2195",
       "weight": 1.0,
       "source": "docs_configuration_configuration",
       "target": "docs_configuration_global_defaults",
@@ -12989,7 +13519,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L2265",
+      "source_location": "L2266",
       "weight": 1.0,
       "source": "docs_configuration_configuration",
       "target": "docs_configuration_merge_rules",
@@ -13009,7 +13539,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L2248",
+      "source_location": "L2249",
       "weight": 1.0,
       "source": "docs_configuration_configuration",
       "target": "docs_configuration_resolution_order",
@@ -13039,7 +13569,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L2463",
+      "source_location": "L2464",
       "weight": 1.0,
       "source": "docs_configuration_configuration",
       "target": "docs_configuration_validating",
@@ -13049,7 +13579,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L2376",
+      "source_location": "L2377",
       "weight": 1.0,
       "source": "docs_configuration_configuration",
       "target": "docs_configuration_variables",
@@ -13169,7 +13699,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L1737",
+      "source_location": "L1738",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_clock_wall_clock_drift",
@@ -13179,7 +13709,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L1965",
+      "source_location": "L1966",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_conntrack_netfilter_connection_table",
@@ -13189,7 +13719,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L1912",
+      "source_location": "L1913",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_diskio_block_device_i_o_rates",
@@ -13199,7 +13729,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L2000",
+      "source_location": "L2001",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_entropy_kernel_entropy_pool",
@@ -13209,7 +13739,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L1894",
+      "source_location": "L1895",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_fds_system_file_descriptors",
@@ -13219,7 +13749,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L2034",
+      "source_location": "L2035",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_file_file_directory_attributes",
@@ -13229,7 +13759,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L1984",
+      "source_location": "L1985",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_firewall_rules_loaded_firewall_rules",
@@ -13239,7 +13769,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L1692",
+      "source_location": "L1693",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_icmp_external_host_ping",
@@ -13249,7 +13779,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L1806",
+      "source_location": "L1807",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_load_system_load_average",
@@ -13259,7 +13789,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L1831",
+      "source_location": "L1832",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_memory_system_ram",
@@ -13269,7 +13799,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L1635",
+      "source_location": "L1636",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_net_network_interface",
@@ -13279,7 +13809,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L1877",
+      "source_location": "L1878",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_oom_kernel_oom_kills",
@@ -13289,7 +13819,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L1944",
+      "source_location": "L1945",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_pids_kernel_pid_table",
@@ -13299,7 +13829,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L1852",
+      "source_location": "L1853",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_pressure_kernel_psi_stall_time",
@@ -13309,7 +13839,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L2084",
+      "source_location": "L2085",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_process_process_by_name",
@@ -13319,7 +13849,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L1438",
+      "source_location": "L1439",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_service_watches_scoped_to_a_service",
@@ -13329,7 +13859,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L1774",
+      "source_location": "L1775",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_swap_system_swap",
@@ -13339,7 +13869,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L1367",
+      "source_location": "L1368",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_then_expand_volume_growth_storage_watch",
@@ -13349,7 +13879,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L2017",
+      "source_location": "L2018",
       "weight": 1.0,
       "source": "docs_configuration_host_watches",
       "target": "docs_configuration_zombies_defunct_processes",
@@ -13359,7 +13889,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L1601",
+      "source_location": "L1602",
       "weight": 1.0,
       "source": "docs_configuration_service_watches_scoped_to_a_service",
       "target": "docs_configuration_mount_conditions",
@@ -13369,7 +13899,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L1480",
+      "source_location": "L1481",
       "weight": 1.0,
       "source": "docs_configuration_service_watches_scoped_to_a_service",
       "target": "docs_configuration_unified_then_action_operation_guard_alert",
@@ -13379,7 +13909,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L2140",
+      "source_location": "L2141",
       "weight": 1.0,
       "source": "docs_configuration_process_process_by_name",
       "target": "docs_configuration_then_kill_terminate_the_matched_process",
@@ -13389,7 +13919,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L2319",
+      "source_location": "L2320",
       "weight": 1.0,
       "source": "docs_configuration_binary_resource_variables",
       "target": "docs_configuration_bindir_search_prefix",
@@ -13399,7 +13929,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L2398",
+      "source_location": "L2399",
       "weight": 1.0,
       "source": "docs_configuration_variables",
       "target": "docs_configuration_global_custom_variables_defaults_variables",
@@ -13409,21 +13939,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/configuration.md",
-      "source_location": "L2432",
+      "source_location": "L2433",
       "weight": 1.0,
       "source": "docs_configuration_variables",
       "target": "docs_configuration_secrets_from_the_environment",
       "confidence_score": 1.0
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1400",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es",
-      "target": "docs_rules_es"
     },
     {
       "relation": "contains",
@@ -13441,9 +13961,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L57",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es",
-      "target": "docs_rules_es",
-      "confidence_score": 1.0
+      "target": "docs_rules_es"
     },
     {
       "relation": "references",
@@ -13469,7 +13989,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/rules.es.md",
-      "source_location": "L1700",
+      "source_location": "L1718",
       "weight": 1.0,
       "source": "docs_rules_es_comprobaciones_condiciones_y_reglas",
       "target": "docs_rules_es_m\u00e9tricas",
@@ -13479,7 +13999,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/rules.es.md",
-      "source_location": "L1910",
+      "source_location": "L1928",
       "weight": 1.0,
       "source": "docs_rules_es_comprobaciones_condiciones_y_reglas",
       "target": "docs_rules_es_pol\u00edtica_de_remediaci\u00f3n",
@@ -13489,7 +14009,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/rules.es.md",
-      "source_location": "L1754",
+      "source_location": "L1772",
       "weight": 1.0,
       "source": "docs_rules_es_comprobaciones_condiciones_y_reglas",
       "target": "docs_rules_es_reglas",
@@ -13709,7 +14229,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/rules.es.md",
-      "source_location": "L1843",
+      "source_location": "L1861",
       "weight": 1.0,
       "source": "docs_rules_es_reglas",
       "target": "docs_rules_es_guards",
@@ -13719,7 +14239,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/rules.es.md",
-      "source_location": "L1825",
+      "source_location": "L1843",
       "weight": 1.0,
       "source": "docs_rules_es_reglas",
       "target": "docs_rules_es_ventanas",
@@ -13741,9 +14261,9 @@
       "source_file": "docs/services.md",
       "source_location": "L56",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services",
-      "target": "docs_rules",
-      "confidence_score": 1.0
+      "target": "docs_rules"
     },
     {
       "relation": "contains",
@@ -13759,7 +14279,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/rules.md",
-      "source_location": "L1701",
+      "source_location": "L1718",
       "weight": 1.0,
       "source": "docs_rules_checks_conditions_and_rules",
       "target": "docs_rules_metrics",
@@ -13769,7 +14289,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/rules.md",
-      "source_location": "L1912",
+      "source_location": "L1929",
       "weight": 1.0,
       "source": "docs_rules_checks_conditions_and_rules",
       "target": "docs_rules_remediation_policy",
@@ -13779,7 +14299,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/rules.md",
-      "source_location": "L1757",
+      "source_location": "L1774",
       "weight": 1.0,
       "source": "docs_rules_checks_conditions_and_rules",
       "target": "docs_rules_rules",
@@ -13999,7 +14519,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/rules.md",
-      "source_location": "L1845",
+      "source_location": "L1862",
       "weight": 1.0,
       "source": "docs_rules_rules",
       "target": "docs_rules_guards",
@@ -14009,7 +14529,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "docs/rules.md",
-      "source_location": "L1827",
+      "source_location": "L1844",
       "weight": 1.0,
       "source": "docs_rules_rules",
       "target": "docs_rules_windows",
@@ -14031,9 +14551,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es",
-      "target": "docs_services_es_servicios",
-      "confidence_score": 1.0
+      "target": "docs_services_es_servicios"
     },
     {
       "relation": "references",
@@ -14051,9 +14571,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L336",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_servicios",
-      "target": "docs_services_es_campos_de_metadatos",
-      "confidence_score": 1.0
+      "target": "docs_services_es_campos_de_metadatos"
     },
     {
       "relation": "contains",
@@ -14061,9 +14581,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L32",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_servicios",
-      "target": "docs_services_es_categor\u00edas",
-      "confidence_score": 1.0
+      "target": "docs_services_es_categor\u00edas"
     },
     {
       "relation": "contains",
@@ -14071,9 +14591,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1291",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_servicios",
-      "target": "docs_services_es_clonado",
-      "confidence_score": 1.0
+      "target": "docs_services_es_clonado"
     },
     {
       "relation": "contains",
@@ -14081,9 +14601,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1398",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_servicios",
-      "target": "docs_services_es_comandos_auxiliares",
-      "confidence_score": 1.0
+      "target": "docs_services_es_comandos_auxiliares"
     },
     {
       "relation": "contains",
@@ -14091,9 +14611,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L289",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_servicios",
-      "target": "docs_services_es_dependencias_de_app_apps",
-      "confidence_score": 1.0
+      "target": "docs_services_es_dependencias_de_app_apps"
     },
     {
       "relation": "contains",
@@ -14101,9 +14621,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1353",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_servicios",
-      "target": "docs_services_es_deshabilitar_y_borrar_entradas_heredadas",
-      "confidence_score": 1.0
+      "target": "docs_services_es_deshabilitar_y_borrar_entradas_heredadas"
     },
     {
       "relation": "contains",
@@ -14111,9 +14631,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1363",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_servicios",
-      "target": "docs_services_es_flag_de_monitorizaci\u00f3n",
-      "confidence_score": 1.0
+      "target": "docs_services_es_flag_de_monitorizaci\u00f3n"
     },
     {
       "relation": "contains",
@@ -14121,9 +14641,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1307",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_servicios",
-      "target": "docs_services_es_m\u00faltiples_instancias_de_una_aplicaci\u00f3n",
-      "confidence_score": 1.0
+      "target": "docs_services_es_m\u00faltiples_instancias_de_una_aplicaci\u00f3n"
     },
     {
       "relation": "contains",
@@ -14131,9 +14651,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L151",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_servicios",
-      "target": "docs_services_es_reload_al_cambiar_la_configuraci\u00f3n_reload_on_change",
-      "confidence_score": 1.0
+      "target": "docs_services_es_reload_al_cambiar_la_configuraci\u00f3n_reload_on_change"
     },
     {
       "relation": "contains",
@@ -14141,9 +14661,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L70",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_servicios",
-      "target": "docs_services_es_servicios_de_librer\u00eda",
-      "confidence_score": 1.0
+      "target": "docs_services_es_servicios_de_librer\u00eda"
     },
     {
       "relation": "contains",
@@ -14151,9 +14671,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L875",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_servicios",
-      "target": "docs_services_es_servicios_versionados",
-      "confidence_score": 1.0
+      "target": "docs_services_es_servicios_versionados"
     },
     {
       "relation": "contains",
@@ -14161,9 +14681,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1257",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_servicios",
-      "target": "docs_services_es_unidad_de_servicio",
-      "confidence_score": 1.0
+      "target": "docs_services_es_unidad_de_servicio"
     },
     {
       "relation": "contains",
@@ -14171,9 +14691,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L200",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_reload_al_cambiar_la_configuraci\u00f3n_reload_on_change",
-      "target": "docs_services_es_reload_nativo_reload_cuando_el_init_no_puede_sermo_s\u00ed",
-      "confidence_score": 1.0
+      "target": "docs_services_es_reload_nativo_reload_cuando_el_init_no_puede_sermo_s\u00ed"
     },
     {
       "relation": "contains",
@@ -14181,9 +14701,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L239",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_reload_nativo_reload_cuando_el_init_no_puede_sermo_s\u00ed",
-      "target": "docs_services_es_checklist_para_autores_de_cat\u00e1logo_init_scripts_y_fallbacks",
-      "confidence_score": 1.0
+      "target": "docs_services_es_checklist_para_autores_de_cat\u00e1logo_init_scripts_y_fallbacks"
     },
     {
       "relation": "contains",
@@ -14191,9 +14711,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L667",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_campos_de_metadatos",
-      "target": "docs_services_es_also_apply_cascada_a_otros_servicios",
-      "confidence_score": 1.0
+      "target": "docs_services_es_also_apply_cascada_a_otros_servicios"
     },
     {
       "relation": "contains",
@@ -14201,9 +14721,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L643",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_campos_de_metadatos",
-      "target": "docs_services_es_also_service_unidades_init_auxiliares",
-      "confidence_score": 1.0
+      "target": "docs_services_es_also_service_unidades_init_auxiliares"
     },
     {
       "relation": "contains",
@@ -14211,9 +14731,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L860",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_campos_de_metadatos",
-      "target": "docs_services_es_atajo_lockfile_health_check_controlado",
-      "confidence_score": 1.0
+      "target": "docs_services_es_atajo_lockfile_health_check_controlado"
     },
     {
       "relation": "contains",
@@ -14221,9 +14741,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L768",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_campos_de_metadatos",
-      "target": "docs_services_es_atajo_pidfile_y_pidfiles_selectores_health_checks",
-      "confidence_score": 1.0
+      "target": "docs_services_es_atajo_pidfile_y_pidfiles_selectores_health_checks"
     },
     {
       "relation": "contains",
@@ -14231,9 +14751,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L843",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_campos_de_metadatos",
-      "target": "docs_services_es_atajo_socket_health_check_controlado",
-      "confidence_score": 1.0
+      "target": "docs_services_es_atajo_socket_health_check_controlado"
     },
     {
       "relation": "contains",
@@ -14241,9 +14761,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L468",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_campos_de_metadatos",
-      "target": "docs_services_es_bloques_espec\u00edficos_de_os_os",
-      "confidence_score": 1.0
+      "target": "docs_services_es_bloques_espec\u00edficos_de_os_os"
     },
     {
       "relation": "contains",
@@ -14251,9 +14771,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L587",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_campos_de_metadatos",
-      "target": "docs_services_es_control_docker_contenedores_docker",
-      "confidence_score": 1.0
+      "target": "docs_services_es_control_docker_contenedores_docker"
     },
     {
       "relation": "contains",
@@ -14261,9 +14781,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L522",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_campos_de_metadatos",
-      "target": "docs_services_es_control_libvirt_m\u00e1quinas_virtuales_qemu_libvirt",
-      "confidence_score": 1.0
+      "target": "docs_services_es_control_libvirt_m\u00e1quinas_virtuales_qemu_libvirt"
     },
     {
       "relation": "contains",
@@ -14271,9 +14791,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L723",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_campos_de_metadatos",
-      "target": "docs_services_es_invariantes_de_estado_parado_stop_policy",
-      "confidence_score": 1.0
+      "target": "docs_services_es_invariantes_de_estado_parado_stop_policy"
     },
     {
       "relation": "contains",
@@ -14281,9 +14801,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L699",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_campos_de_metadatos",
-      "target": "docs_services_es_processes_por_ejecutable_o_cmdline",
-      "confidence_score": 1.0
+      "target": "docs_services_es_processes_por_ejecutable_o_cmdline"
     },
     {
       "relation": "contains",
@@ -14291,9 +14811,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L369",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_campos_de_metadatos",
-      "target": "docs_services_es_variables_integradas",
-      "confidence_score": 1.0
+      "target": "docs_services_es_variables_integradas"
     },
     {
       "relation": "contains",
@@ -14301,9 +14821,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1101",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_servicios_versionados",
-      "target": "docs_services_es_componentes_opcionales_enable_if",
-      "confidence_score": 1.0
+      "target": "docs_services_es_componentes_opcionales_enable_if"
     },
     {
       "relation": "contains",
@@ -14311,9 +14831,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1050",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_servicios_versionados",
-      "target": "docs_services_es_descubrimiento_propiedad_del_servicio",
-      "confidence_score": 1.0
+      "target": "docs_services_es_descubrimiento_propiedad_del_servicio"
     },
     {
       "relation": "contains",
@@ -14321,9 +14841,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1162",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_servicios_versionados",
-      "target": "docs_services_es_listar_aplicaciones_instaladas",
-      "confidence_score": 1.0
+      "target": "docs_services_es_listar_aplicaciones_instaladas"
     },
     {
       "relation": "contains",
@@ -14331,9 +14851,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1031",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_servicios_versionados",
-      "target": "docs_services_es_nombres_compuestos_con_un_separador_s",
-      "confidence_score": 1.0
+      "target": "docs_services_es_nombres_compuestos_con_un_separador_s"
     },
     {
       "relation": "contains",
@@ -14341,9 +14861,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L955",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_servicios_versionados",
-      "target": "docs_services_es_placeholders_de_entero_e_instancia",
-      "confidence_score": 1.0
+      "target": "docs_services_es_placeholders_de_entero_e_instancia"
     },
     {
       "relation": "contains",
@@ -14351,9 +14871,9 @@
       "source_file": "docs/services.es.md",
       "source_location": "L1136",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_es_servicios_versionados",
-      "target": "docs_services_es_variables_le\u00eddas_desde_un_fichero_de_config_from_file",
-      "confidence_score": 1.0
+      "target": "docs_services_es_variables_le\u00eddas_desde_un_fichero_de_config_from_file"
     },
     {
       "relation": "references",
@@ -14371,9 +14891,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services",
-      "target": "docs_services_services",
-      "confidence_score": 1.0
+      "target": "docs_services_services"
     },
     {
       "relation": "contains",
@@ -14381,9 +14901,9 @@
       "source_file": "docs/services.md",
       "source_location": "L286",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_services",
-      "target": "docs_services_app_dependencies_apps",
-      "confidence_score": 1.0
+      "target": "docs_services_app_dependencies_apps"
     },
     {
       "relation": "contains",
@@ -14391,9 +14911,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1396",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_services",
-      "target": "docs_services_auxiliary_commands",
-      "confidence_score": 1.0
+      "target": "docs_services_auxiliary_commands"
     },
     {
       "relation": "contains",
@@ -14401,9 +14921,9 @@
       "source_file": "docs/services.md",
       "source_location": "L31",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_services",
-      "target": "docs_services_categories",
-      "confidence_score": 1.0
+      "target": "docs_services_categories"
     },
     {
       "relation": "contains",
@@ -14411,9 +14931,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1289",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_services",
-      "target": "docs_services_cloning",
-      "confidence_score": 1.0
+      "target": "docs_services_cloning"
     },
     {
       "relation": "contains",
@@ -14421,9 +14941,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1351",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_services",
-      "target": "docs_services_disabling_and_deleting_inherited_entries",
-      "confidence_score": 1.0
+      "target": "docs_services_disabling_and_deleting_inherited_entries"
     },
     {
       "relation": "contains",
@@ -14431,9 +14951,9 @@
       "source_file": "docs/services.md",
       "source_location": "L69",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_services",
-      "target": "docs_services_library_services",
-      "confidence_score": 1.0
+      "target": "docs_services_library_services"
     },
     {
       "relation": "contains",
@@ -14441,9 +14961,9 @@
       "source_file": "docs/services.md",
       "source_location": "L333",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_services",
-      "target": "docs_services_metadata_fields",
-      "confidence_score": 1.0
+      "target": "docs_services_metadata_fields"
     },
     {
       "relation": "contains",
@@ -14451,9 +14971,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1361",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_services",
-      "target": "docs_services_monitoring_flag",
-      "confidence_score": 1.0
+      "target": "docs_services_monitoring_flag"
     },
     {
       "relation": "contains",
@@ -14461,9 +14981,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1305",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_services",
-      "target": "docs_services_multiple_instances_of_one_application",
-      "confidence_score": 1.0
+      "target": "docs_services_multiple_instances_of_one_application"
     },
     {
       "relation": "contains",
@@ -14471,9 +14991,9 @@
       "source_file": "docs/services.md",
       "source_location": "L148",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_services",
-      "target": "docs_services_reload_on_config_change_reload_on_change",
-      "confidence_score": 1.0
+      "target": "docs_services_reload_on_config_change_reload_on_change"
     },
     {
       "relation": "contains",
@@ -14481,9 +15001,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1255",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_services",
-      "target": "docs_services_service_unit",
-      "confidence_score": 1.0
+      "target": "docs_services_service_unit"
     },
     {
       "relation": "contains",
@@ -14491,9 +15011,9 @@
       "source_file": "docs/services.md",
       "source_location": "L873",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_services",
-      "target": "docs_services_versioned_services",
-      "confidence_score": 1.0
+      "target": "docs_services_versioned_services"
     },
     {
       "relation": "contains",
@@ -14501,9 +15021,9 @@
       "source_file": "docs/services.md",
       "source_location": "L197",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_reload_on_config_change_reload_on_change",
-      "target": "docs_services_native_reload_reload_when_the_init_can_t_sermo_can",
-      "confidence_score": 1.0
+      "target": "docs_services_native_reload_reload_when_the_init_can_t_sermo_can"
     },
     {
       "relation": "contains",
@@ -14511,9 +15031,9 @@
       "source_file": "docs/services.md",
       "source_location": "L236",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_native_reload_reload_when_the_init_can_t_sermo_can",
-      "target": "docs_services_catalog_author_checklist_init_scripts_and_fallbacks",
-      "confidence_score": 1.0
+      "target": "docs_services_catalog_author_checklist_init_scripts_and_fallbacks"
     },
     {
       "relation": "contains",
@@ -14521,9 +15041,9 @@
       "source_file": "docs/services.md",
       "source_location": "L665",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_metadata_fields",
-      "target": "docs_services_also_apply_cascade_to_other_services",
-      "confidence_score": 1.0
+      "target": "docs_services_also_apply_cascade_to_other_services"
     },
     {
       "relation": "contains",
@@ -14531,9 +15051,9 @@
       "source_file": "docs/services.md",
       "source_location": "L641",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_metadata_fields",
-      "target": "docs_services_also_service_auxiliary_init_units",
-      "confidence_score": 1.0
+      "target": "docs_services_also_service_auxiliary_init_units"
     },
     {
       "relation": "contains",
@@ -14541,9 +15061,9 @@
       "source_file": "docs/services.md",
       "source_location": "L366",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_metadata_fields",
-      "target": "docs_services_built_in_variables",
-      "confidence_score": 1.0
+      "target": "docs_services_built_in_variables"
     },
     {
       "relation": "contains",
@@ -14551,9 +15071,9 @@
       "source_file": "docs/services.md",
       "source_location": "L584",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_metadata_fields",
-      "target": "docs_services_control_docker_docker_containers",
-      "confidence_score": 1.0
+      "target": "docs_services_control_docker_docker_containers"
     },
     {
       "relation": "contains",
@@ -14561,9 +15081,9 @@
       "source_file": "docs/services.md",
       "source_location": "L519",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_metadata_fields",
-      "target": "docs_services_control_libvirt_qemu_libvirt_virtual_machines",
-      "confidence_score": 1.0
+      "target": "docs_services_control_libvirt_qemu_libvirt_virtual_machines"
     },
     {
       "relation": "contains",
@@ -14571,9 +15091,9 @@
       "source_file": "docs/services.md",
       "source_location": "L858",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_metadata_fields",
-      "target": "docs_services_lockfile_shorthand_gated_health_check",
-      "confidence_score": 1.0
+      "target": "docs_services_lockfile_shorthand_gated_health_check"
     },
     {
       "relation": "contains",
@@ -14581,9 +15101,9 @@
       "source_file": "docs/services.md",
       "source_location": "L465",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_metadata_fields",
-      "target": "docs_services_os_specific_blocks_os",
-      "confidence_score": 1.0
+      "target": "docs_services_os_specific_blocks_os"
     },
     {
       "relation": "contains",
@@ -14591,9 +15111,9 @@
       "source_file": "docs/services.md",
       "source_location": "L766",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_metadata_fields",
-      "target": "docs_services_pidfile_and_pidfiles_shorthand_selectors_health_checks",
-      "confidence_score": 1.0
+      "target": "docs_services_pidfile_and_pidfiles_shorthand_selectors_health_checks"
     },
     {
       "relation": "contains",
@@ -14601,9 +15121,9 @@
       "source_file": "docs/services.md",
       "source_location": "L697",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_metadata_fields",
-      "target": "docs_services_processes_by_executable_or_cmdline",
-      "confidence_score": 1.0
+      "target": "docs_services_processes_by_executable_or_cmdline"
     },
     {
       "relation": "contains",
@@ -14611,9 +15131,9 @@
       "source_file": "docs/services.md",
       "source_location": "L841",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_metadata_fields",
-      "target": "docs_services_socket_shorthand_gated_health_check",
-      "confidence_score": 1.0
+      "target": "docs_services_socket_shorthand_gated_health_check"
     },
     {
       "relation": "contains",
@@ -14621,9 +15141,9 @@
       "source_file": "docs/services.md",
       "source_location": "L721",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_metadata_fields",
-      "target": "docs_services_stopped_state_invariants_stop_policy",
-      "confidence_score": 1.0
+      "target": "docs_services_stopped_state_invariants_stop_policy"
     },
     {
       "relation": "contains",
@@ -14631,9 +15151,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1029",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_versioned_services",
-      "target": "docs_services_composite_names_with_a_separator_s",
-      "confidence_score": 1.0
+      "target": "docs_services_composite_names_with_a_separator_s"
     },
     {
       "relation": "contains",
@@ -14641,9 +15161,9 @@
       "source_file": "docs/services.md",
       "source_location": "L953",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_versioned_services",
-      "target": "docs_services_integer_and_instance_placeholders",
-      "confidence_score": 1.0
+      "target": "docs_services_integer_and_instance_placeholders"
     },
     {
       "relation": "contains",
@@ -14651,9 +15171,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1160",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_versioned_services",
-      "target": "docs_services_listing_installed_applications",
-      "confidence_score": 1.0
+      "target": "docs_services_listing_installed_applications"
     },
     {
       "relation": "contains",
@@ -14661,9 +15181,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1099",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_versioned_services",
-      "target": "docs_services_optional_components_enable_if",
-      "confidence_score": 1.0
+      "target": "docs_services_optional_components_enable_if"
     },
     {
       "relation": "contains",
@@ -14671,9 +15191,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1048",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_versioned_services",
-      "target": "docs_services_service_owned_discovery",
-      "confidence_score": 1.0
+      "target": "docs_services_service_owned_discovery"
     },
     {
       "relation": "contains",
@@ -14681,9 +15201,9 @@
       "source_file": "docs/services.md",
       "source_location": "L1134",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "docs_services_versioned_services",
-      "target": "docs_services_variables_read_from_a_config_file_from_file",
-      "confidence_score": 1.0
+      "target": "docs_services_variables_read_from_a_config_file_from_file"
     },
     {
       "relation": "contains",
@@ -14754,536 +15274,6 @@
       "confidence_score": 1.0,
       "source": "docs_architecture_es_arquitectura_de_sermo",
       "target": "docs_architecture_es_6_ciclo_de_un_worker_por_servicio"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/cli.es.md",
-      "source_location": "L234",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_cli_es",
-      "target": "docs_configuration_es"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es",
-      "target": "docs_configuration_es_configuraci\u00f3n"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "README.es.md",
-      "source_location": "L15",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "readme_es",
-      "target": "docs_configuration_es"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L313",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_configuraci\u00f3n",
-      "target": "docs_configuration_es_ajustes_del_motor"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L43",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_configuraci\u00f3n",
-      "target": "docs_configuration_es_cambios_de_esquema"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2492",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_configuraci\u00f3n",
-      "target": "docs_configuration_es_diagn\u00f3sticos"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L906",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_configuraci\u00f3n",
-      "target": "docs_configuration_es_disponibilidad_sla"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L54",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_configuraci\u00f3n",
-      "target": "docs_configuration_es_disposici\u00f3n"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1151",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_configuraci\u00f3n",
-      "target": "docs_configuration_es_host_watches"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L535",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_configuraci\u00f3n",
-      "target": "docs_configuration_es_interfaz_web"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L966",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_configuraci\u00f3n",
-      "target": "docs_configuration_es_notificaciones"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2265",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_configuraci\u00f3n",
-      "target": "docs_configuration_es_orden_de_resoluci\u00f3n"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2282",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_configuraci\u00f3n",
-      "target": "docs_configuration_es_reglas_de_fusi\u00f3n"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L240",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_configuraci\u00f3n",
-      "target": "docs_configuration_es_storage_y_unidades_de_montaje"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2483",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_configuraci\u00f3n",
-      "target": "docs_configuration_es_validaci\u00f3n"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2228",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_configuraci\u00f3n",
-      "target": "docs_configuration_es_valores_por_defecto_globales"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2393",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_configuraci\u00f3n",
-      "target": "docs_configuration_es_variables"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2315",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_configuraci\u00f3n",
-      "target": "docs_configuration_es_variables_de_recurso_de_binario"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L506",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_ajustes_del_motor",
-      "target": "docs_configuration_es_intervalo_por_comprobaci\u00f3n"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L483",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_ajustes_del_motor",
-      "target": "docs_configuration_es_intervalo_por_service"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L594",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_interfaz_web",
-      "target": "docs_configuration_es_autenticaci\u00f3n"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L620",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_interfaz_web",
-      "target": "docs_configuration_es_detr\u00e1s_de_un_proxy_inverso_requerido_para_exponerlo"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L842",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_interfaz_web",
-      "target": "docs_configuration_es_gr\u00e1fico_de_latencia"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L745",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_interfaz_web",
-      "target": "docs_configuration_es_liveness_livez"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L764",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_interfaz_web",
-      "target": "docs_configuration_es_readiness_readyz"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L948",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_disponibilidad_sla",
-      "target": "docs_configuration_es_series_temporales_de_disponibilidad"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1080",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_notificaciones",
-      "target": "docs_configuration_es_plantillas_de_notificaci\u00f3n"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1121",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_notificaciones",
-      "target": "docs_configuration_es_selecci\u00f3n_por_defecto_y_precedencia"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1763",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_clock_deriva_del_reloj"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1993",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_conntrack_tabla_de_conexiones_de_netfilter"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1940",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_diskio_tasas_de_i_o_de_dispositivo_de_bloques"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2029",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_entropy_pool_de_entrop\u00eda_del_kernel"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1922",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_fds_descriptores_de_archivo_del_sistema"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2063",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_file_atributos_de_archivo_directorio"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2013",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_firewall_rules_reglas_de_firewall_cargadas"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1717",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_icmp_host_externo_ping"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1833",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_load_carga_media_del_sistema"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1858",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_memory_ram_del_sistema"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1659",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_net_interfaz_de_red"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1904",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_oom_oom_kills_del_kernel"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1972",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_pids_tabla_de_pid_del_kernel"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1879",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_pressure_tiempo_de_stall_psi_del_kernel"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2114",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_process_proceso_por_nombre"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1800",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_swap_swap_del_sistema"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1420",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_then_expand_crecimiento_de_volumen_watch_de_storage"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1492",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_watches_de_servicio_acotados_a_un_servicio"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2046",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_host_watches",
-      "target": "docs_configuration_es_zombies_procesos_difuntos"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1624",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_watches_de_servicio_acotados_a_un_servicio",
-      "target": "docs_configuration_es_condiciones_de_montaje"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L1532",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_watches_de_servicio_acotados_a_un_servicio",
-      "target": "docs_configuration_es_then_action_unificado_operaci\u00f3n_guard_alerta"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2172",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_process_proceso_por_nombre",
-      "target": "docs_configuration_es_then_kill_terminar_el_proceso_coincidente"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2337",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_variables_de_recurso_de_binario",
-      "target": "docs_configuration_es_prefijo_de_b\u00fasqueda_bindir"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2451",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_variables",
-      "target": "docs_configuration_es_secretos_del_entorno"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.es.md",
-      "source_location": "L2415",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration_es_variables",
-      "target": "docs_configuration_es_variables_personalizadas_globales_defaults_variables"
     },
     {
       "relation": "contains",
@@ -37444,5 +37434,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "45e0a271fe2ac7ee9e0146337a733e79fa3735c7"
+  "built_at_commit": "af98ef8cc2c373fd7ddd1674718594cac92e1703"
 }
