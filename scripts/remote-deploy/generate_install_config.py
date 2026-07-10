@@ -1261,6 +1261,8 @@ dry_run: true
     interfaces = parse_interfaces(stage)
     for iface in interfaces:
         safe = slug(iface)
+        # Net/ICMP metric expectations are alert conditions: use the unhealthy
+        # value so healthy links and assigned addresses do not fire continuously.
         add_watch(
             "networks",
             f"net-{safe}",
@@ -1270,9 +1272,9 @@ dry_run: true
                 "30s",
                 ["type: net", f"interface: {yaml_quote(iface)}"],
                 [
-                    ("state", ["expect: up", "for: { cycles: 3 }", "then: { notify: [none] }"]),
+                    ("state", ["expect: down", "for: { cycles: 3 }", "then: { notify: [none] }"]),
                     ("errors", ['delta: { op: ">", value: 100 }', "for: { cycles: 3 }", "then: { notify: [none] }"]),
-                    ("address", ["expect: present", "for: { cycles: 3 }", "then: { notify: [none] }"]),
+                    ("address", ["expect: absent", "for: { cycles: 3 }", "then: { notify: [none] }"]),
                     ("speed", ["on: change", "then: { notify: [none] }"]),
                 ],
             ),
@@ -1294,7 +1296,7 @@ dry_run: true
                     "30s",
                     ["type: icmp", f"host: {yaml_quote(route['via'])}", "count: 3"],
                     [
-                        ("state", ["expect: up", "for: { cycles: 3 }", "then: { notify: [none] }"]),
+                        ("state", ["expect: down", "for: { cycles: 3 }", "then: { notify: [none] }"]),
                         ("latency", ['threshold: { op: ">", value: 100 }', "for: { cycles: 3 }", "then: { notify: [none] }"]),
                     ],
                 ),
