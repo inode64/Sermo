@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/emission"
 	"sermo/internal/execx"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
@@ -120,6 +121,8 @@ type Worker struct {
 	// GlobalNotify is the top-level `notify` default a rule alert inherits when it
 	// declares no `notify` of its own (see config.NotifyDefault).
 	GlobalNotify []string
+	// GlobalEmission is the top-level automatic event/notification cadence.
+	GlobalEmission emission.Policy
 
 	// Remediation publishes the policy gating view for the web detail. Optional.
 	Remediation *RemediationRegistry
@@ -454,13 +457,14 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 	// Update every remediation rule's window this cycle, then act on the first
 	// firing rule that is not guard-blocked. Updating all windows
 	// keeps consecutive/sliding counts correct even when an earlier rule acts.
-	var firing []rules.Rule
+	var firing []firingRule
 	for _, r := range w.Rules {
 		if r.Type != rules.RuleRemediation {
 			continue
 		}
-		if w.fires(ctx, ev, r, at, evals) {
-			firing = append(firing, r)
+		state := w.fires(ctx, ev, r, at, evals)
+		if state.firing {
+			firing = append(firing, firingRule{Rule: r, rising: state.rising})
 		}
 	}
 
@@ -474,15 +478,15 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 	}
 
 	for _, r := range firing {
-		op, hasOp := r.OperationAction()
+		op, hasOp := r.Rule.OperationAction()
 		if !hasOp {
 			// Validation rejects operation-less remediation rules; tolerate one
 			// that bypassed it (hand-built Rule) by at least delivering its
 			// alerts instead of silently doing nothing.
 			if w.DryRun {
-				w.emitDryRunAlerts(ctx, r)
+				w.emitDryRunAlerts(ctx, r.Rule, r.rising)
 			} else {
-				w.emitAlerts(ctx, r)
+				w.emitAlerts(ctx, r.Rule, r.rising)
 			}
 			continue
 		}
@@ -513,25 +517,31 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 			} else {
 				msg += " (would execute)"
 			}
-			w.emit(Event{Kind: eventKindDryRun, Rule: r.Name, Action: action, Message: msg})
+			if w.shouldEmitRuleEvent(r.Rule, r.rising) {
+				w.emit(Event{Kind: eventKindDryRun, Rule: r.Name, Action: action, Message: msg})
+			}
 			if suppress == "" {
-				w.emitDryRunAlerts(ctx, r)
+				w.emitDryRunAlerts(ctx, r.Rule, r.rising)
 			}
 			// Report all firing rules in dry-run mode for maximum observability.
 			continue
 		}
 
 		if suppress != "" {
-			w.emit(Event{Kind: eventKindSuppressed, Rule: r.Name, Action: action, Message: suppress})
+			if w.shouldEmitRuleEvent(r.Rule, r.rising) {
+				w.emit(Event{Kind: eventKindSuppressed, Rule: r.Name, Action: action, Message: suppress})
+			}
 			continue
 		}
 
 		// All actions of this rule run together: alerts notify, then the operation.
-		w.emitAlerts(ctx, r)
+		w.emitAlerts(ctx, r.Rule, true)
 		// Panic mode keeps the alert visible (emitAlerts above) but never performs
 		// the automatic action; the operator drives services manually instead.
 		if w.InPanic != nil && w.InPanic() {
-			w.emit(Event{Kind: eventKindSuppressed, Rule: r.Name, Action: action, Message: "panic mode: remediation suppressed"})
+			if w.shouldEmitRuleEvent(r.Rule, r.rising) {
+				w.emit(Event{Kind: eventKindSuppressed, Rule: r.Name, Action: action, Message: "panic mode: remediation suppressed"})
+			}
 			continue
 		}
 		// Cascade owns the primary's placement when also_apply is set (so stop can
@@ -572,12 +582,15 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 		if r.Type != rules.RuleAlert {
 			continue
 		}
-		if w.fires(ctx, ev, r, at, evals) {
+		state := w.fires(ctx, ev, r, at, evals)
+		if state.firing {
 			if w.DryRun {
-				w.emitDryRunAlerts(ctx, r)
+				w.emitDryRunAlerts(ctx, r, state.rising)
 			} else {
-				w.emitAlerts(ctx, r)
+				w.emitAlerts(ctx, r, state.rising)
 			}
+		} else if state.recovered && w.shouldEmitRuleEvent(r, true) {
+			w.emit(Event{Kind: eventKindRecovered, Rule: r.Name, Message: "rule condition recovered"})
 		}
 	}
 }
@@ -586,25 +599,33 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 // the rule resolves to one or more notifiers (its own `notify`, or the global
 // default it inherits, unless suppressed with `none`), delivers each message to
 // them best-effort.
-func (w *Worker) emitAlerts(ctx context.Context, r rules.Rule) {
-	w.emitAlertsFiltered(ctx, r, nil)
+func (w *Worker) emitAlerts(ctx context.Context, r rules.Rule, rising bool) {
+	w.emitAlertsFiltered(ctx, r, nil, rising)
 }
 
-func (w *Worker) emitDryRunAlerts(ctx context.Context, r rules.Rule) {
-	w.emitAlertsFiltered(ctx, r, dryRunConsoleNotifier)
+func (w *Worker) emitDryRunAlerts(ctx context.Context, r rules.Rule, rising bool) {
+	w.emitAlertsFiltered(ctx, r, dryRunConsoleNotifier, rising)
 }
 
-func (w *Worker) emitAlertsFiltered(ctx context.Context, r rules.Rule, allow func(notify.Notifier) bool) {
+func (w *Worker) emitAlertsFiltered(ctx context.Context, r rules.Rule, allow func(notify.Notifier) bool, rising bool) {
 	notifiers := resolveNotifiers(effectiveNotify(r.Notify, w.GlobalNotify), w.Notifiers)
 	panicking := w.InPanic != nil && w.InPanic()
 	output := w.cycleFailOutput
+	emitEvent := w.shouldEmitRuleEvent(r, rising)
+	emitNotify := w.shouldNotifyRule(r, rising)
 	for _, msg := range r.AlertMessages() {
-		// The alert event is always emitted so the condition stays visible; panic
-		// mode only suppresses the outbound notifications. Output carries the failing
-		// command's stdout/stderr so the operator can see why the rule fired.
-		w.emit(Event{Kind: eventKindAlert, Rule: r.Name, Message: msg, Output: output})
+		// Output carries the failing command's stdout/stderr so the operator can see
+		// why the rule fired on emitted cycles.
+		if emitEvent {
+			w.emit(Event{Kind: eventKindAlert, Rule: r.Name, Message: msg, Output: output})
+		}
 		if panicking {
-			w.emit(Event{Kind: eventKindNotifySuppressed, Rule: r.Name, Message: "panic mode: alert notification suppressed"})
+			if emitEvent {
+				w.emit(Event{Kind: eventKindNotifySuppressed, Rule: r.Name, Message: "panic mode: alert notification suppressed"})
+			}
+			continue
+		}
+		if !emitNotify {
 			continue
 		}
 		for _, n := range notifiers {
@@ -633,23 +654,48 @@ func alertMessage(service, rule, msg, output string) notify.Message {
 	}
 }
 
-// fires evaluates a rule's condition this cycle and advances its window state,
-// returning whether the rule fires now. An evaluation error counts
-// as a false cycle.
-func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, at time.Time, evals map[string]ruleEvalResult) bool {
+type ruleFiringState struct {
+	firing    bool
+	rising    bool
+	recovered bool
+}
+
+type firingRule struct {
+	rules.Rule
+	rising bool
+}
+
+// fires evaluates a rule's condition this cycle and advances its window state.
+// An evaluation error counts as a false cycle.
+func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, at time.Time, evals map[string]ruleEvalResult) ruleFiringState {
 	// Defense-in-depth for safety invariant 13: a system-scoped metric must
 	// never trigger anything but an alert. ParseRules already drops such
 	// rules; this catches one that bypassed parsing entirely.
 	if r.Type != rules.RuleAlert && rules.ConditionUsesSystemMetric(r.If, w.MetricChecks) {
 		w.emit(Event{Kind: eventKindError, Rule: r.Name, Message: "scope: system metric may only drive alert rules; rule suppressed"})
-		return false
+		return ruleFiringState{}
 	}
 	cond, err := w.evalRule(ctx, ev, r, evals)
 	if err != nil {
 		w.emit(Event{Kind: eventKindError, Rule: r.Name, Message: "evaluate: " + err.Error()})
 		cond = false
 	}
-	return w.windowState(r.Name).FiresAt(r, cond, at)
+	state := w.windowState(r.Name)
+	wasFiring := state.IsFiringAt(r, at)
+	firing := state.FiresAt(r, cond, at)
+	return ruleFiringState{firing: firing, rising: !wasFiring && firing, recovered: wasFiring && !firing}
+}
+
+func (w *Worker) ruleEmission(r rules.Rule) emission.Policy {
+	return emission.Resolve(r.Emission, emission.Resolve(w.GlobalEmission, emission.Default()))
+}
+
+func (w *Worker) shouldEmitRuleEvent(r rules.Rule, rising bool) bool {
+	return emission.ShouldRepeat(w.ruleEmission(r).Events, rising)
+}
+
+func (w *Worker) shouldNotifyRule(r rules.Rule, rising bool) bool {
+	return emission.ShouldRepeat(w.ruleEmission(r).Notify, rising)
 }
 
 func (w *Worker) evalRule(ctx context.Context, ev *rules.Evaluator, r rules.Rule, evals map[string]ruleEvalResult) (bool, error) {

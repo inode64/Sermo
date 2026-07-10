@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"sermo/internal/config"
+	"sermo/internal/emission"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/process"
@@ -182,6 +183,7 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	notifiers, warns := notify.Build(cfg.Notifiers(), notify.WithTemplateDir(cfg.Global.TemplateDir()))
 	m.deps.Notifiers = notifiers
 	m.deps.GlobalNotify = config.NotifyDefault(cfg.Global.Raw)
+	m.deps.GlobalEmission = emission.Merge(cfg.Global.Raw[emission.Section], emission.Default())
 	for _, w := range warns {
 		m.Logger.Warn("reload notifiers", monitorLogFieldWarning, w)
 	}

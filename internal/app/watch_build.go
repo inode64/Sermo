@@ -13,6 +13,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/emission"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
@@ -218,6 +219,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		Hook:           actions.hook,
 		Notifiers:      resolveNotifiers(actions.effectiveNames, deps.Notifiers),
 		NotifyInterval: actions.notifyInterval,
+		Emission:       emission.Merge(entry[emission.Section], deps.GlobalEmission),
 		DryRun:         config.DryRun(entry),
 		Runner:         OSHookRunner{Runner: deps.ExecxRunner},
 		Interval:       interval,
@@ -303,6 +305,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			Hook:           actions.hook,
 			Notifiers:      resolveNotifiers(actions.effectiveNames, deps.Notifiers),
 			NotifyInterval: actions.notifyInterval,
+			Emission:       emission.Merge(mEntry[emission.Section], emission.Merge(entry[emission.Section], deps.GlobalEmission)),
 			DryRun:         config.DryRun(entry),
 			Runner:         OSHookRunner{Runner: deps.ExecxRunner},
 			Interval:       interval,
@@ -887,6 +890,7 @@ func monitorWatch(name, checkType string, check checks.Check, notify []string, d
 		CheckType:  checkType,
 		Check:      check,
 		Notifiers:  resolveNotifiers(effectiveNotify(notify, deps.GlobalNotify), deps.Notifiers),
+		Emission:   deps.GlobalEmission,
 		DryRun:     dryRun,
 		Runner:     OSHookRunner{Runner: deps.ExecxRunner},
 		Interval:   interval,

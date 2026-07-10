@@ -12,6 +12,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/emission"
 )
 
 // RuleType classifies a rule.
@@ -89,6 +90,9 @@ type Rule struct {
 	// default. Resolution and delivery happen in the worker (the rules package has
 	// no notifier dependency).
 	Notify []string
+	// Emission optionally overrides the global event/notification cadence for this
+	// rule. Empty fields inherit from the daemon's global emission policy.
+	Emission emission.Policy
 }
 
 // Primary is the action other code treats as the rule's main one: the operation
@@ -257,14 +261,15 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 			}
 		}
 		rules = append(rules, Rule{
-			Name:    name,
-			Type:    RuleType(cfgval.AsString(entry[RuleFieldType])),
-			If:      ifNode,
-			For:     forWin,
-			Within:  withinWin,
-			Actions: actions,
-			Blocks:  cfgval.StringList(entry[RuleFieldBlocks]),
-			Notify:  cfgval.StringList(entry[RuleFieldNotify]),
+			Name:     name,
+			Type:     RuleType(cfgval.AsString(entry[RuleFieldType])),
+			If:       ifNode,
+			For:      forWin,
+			Within:   withinWin,
+			Actions:  actions,
+			Blocks:   cfgval.StringList(entry[RuleFieldBlocks]),
+			Notify:   cfgval.StringList(entry[RuleFieldNotify]),
+			Emission: emission.Merge(entry[emission.Section], emission.Policy{}),
 		})
 	}
 	return rules, warnings
