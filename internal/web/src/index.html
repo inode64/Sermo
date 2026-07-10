@@ -15,6 +15,9 @@
 <div class="topbar-row">
   <h1><span class="brand-dot" id="brand-dot" aria-hidden="true"></span>SERMO · Service Remediation Monitor<span id="me" class="muted"></span></h1>
   <div class="topbar-tools">
+    <label for="target-search" class="visually-hidden">Find a monitored target</label>
+    <input id="target-search" type="search" list="target-search-options" placeholder="find service, watch, app or mount" autocomplete="off" aria-label="Find a monitored target">
+    <datalist id="target-search-options"></datalist>
     <label for="refresh-select">Auto-refresh
       <select id="refresh-select" aria-label="Dashboard auto-refresh interval">
         <option value="5000">5s</option>
@@ -634,7 +637,7 @@
     <input id="state-before" type="text" class="admin-before-input admin-hidden" placeholder="before (e.g. 720h)" title="Optional state compact cutoff: positive duration or non-future RFC3339 timestamp" aria-describedby="state-before-hint">
     <span id="state-before-hint" class="visually-hidden">Optional positive duration (e.g. 720h) or non-future RFC3339 timestamp; leave empty for default retention.</span>
     <label class="muted shortcut-toggle" aria-describedby="shortcut-hint-desc"><input id="shortcut-toggle" type="checkbox" checked> keyboard shortcuts</label>
-    <span id="shortcut-hint-desc" class="visually-hidden">When enabled, press slash to focus the search box in the open panel.</span>
+    <span id="shortcut-hint-desc" class="visually-hidden">When enabled, press slash to focus the search box in the open panel or Control K to focus global target search.</span>
     <span id="search-shortcut-hint" class="visually-hidden">Press slash to focus this search when keyboard shortcuts are enabled.</span>
   </div>
   <div class="footer-version muted">sermo {{VERSION}}</div>

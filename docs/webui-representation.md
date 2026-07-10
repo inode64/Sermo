@@ -86,6 +86,7 @@ enabled.
 | --- | --- |
 | Brand | `Sermo` with status dot |
 | Role | admin / read-only label |
+| Find target | one autocomplete over loaded services, watches, applications and mounts; selection clears only that panel's filters and opens the target |
 | Refresh | select with refresh interval, manual refresh button |
 | Status | last complete refresh age, connection errors, or panels retaining older data after a partial refresh; `#statusbar` ends with host `uptime:` then daemon `status:` (`ok` / `starting` / …) as a paired tail |
 | System status | host identity, host type, daemon/backend/runtime summary |
@@ -95,6 +96,8 @@ Editable notes:
 - Keep top bar compact and sticky.
 - Do not move operational controls into marketing-style hero blocks.
 - Refresh controls should stay visible on narrow screens.
+- `Ctrl+K`/`Cmd+K` focuses the global target search. It uses the current
+  dashboard snapshot and does not issue another request.
 - The `uptime:` reading in the status line is the **host/server** uptime (from
   `/proc/uptime`, surfaced as `host_uptime` on `GET /api/daemon`), not the sermod
   process uptime. The sermod process uptime stays on the Daemon panel and
