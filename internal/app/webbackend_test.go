@@ -229,9 +229,9 @@ func TestWebBackendApplicationsIncludeServiceSLA(t *testing.T) {
 		sla: fakeSLAReader{
 			service: map[string][]state.SLAValue{"nginx": {{Window: "day", Up: 99, Total: 100}}},
 		},
-		applicationsList: func(context.Context) []web.Application {
+		applications: catalogInventoryCache{list: func(context.Context) []web.CatalogItem {
 			return []web.Application{{Name: "nginx", Status: appinspect.StatusOK}, {Name: "orphan", Status: appinspect.StatusOK}}
-		},
+		}},
 	}
 
 	apps := b.Applications(context.Background())
@@ -256,9 +256,9 @@ func TestWebBackendApplicationsIncludeLastEvent(t *testing.T) {
 
 	b := &WebBackend{
 		events: events,
-		applicationsList: func(context.Context) []web.Application {
+		applications: catalogInventoryCache{list: func(context.Context) []web.CatalogItem {
 			return []web.Application{{Name: "nginx", Status: appinspect.StatusOK}, {Name: "orphan", Status: appinspect.StatusOK}}
-		},
+		}},
 	}
 
 	apps := b.Applications(context.Background())
@@ -512,20 +512,20 @@ func TestWatchViewFailedIgnoresActivityBeforeMonitorChange(t *testing.T) {
 }
 
 func TestWebBackendApplicationsCache(t *testing.T) {
-	if applicationsCacheTTL < 5*time.Minute {
-		t.Fatalf("applicationsCacheTTL = %s, want at least 5m to avoid frequent version probes", applicationsCacheTTL)
+	if catalogInventoryCacheTTL < 5*time.Minute {
+		t.Fatalf("catalogInventoryCacheTTL = %s, want at least 5m to avoid frequent version probes", catalogInventoryCacheTTL)
 	}
 
 	calls := 0
 	b := &WebBackend{
-		applicationsList: func(context.Context) []web.Application {
+		applications: catalogInventoryCache{list: func(context.Context) []web.CatalogItem {
 			calls++
 			name := "first"
 			if calls > 1 {
 				name = "second"
 			}
 			return []web.Application{{Name: name}}
-		},
+		}},
 	}
 
 	first := b.Applications(context.Background())
@@ -545,7 +545,7 @@ func TestWebBackendApplicationsCache(t *testing.T) {
 		t.Fatalf("cached observed_at = %q, want original %q", second[0].ObservedAt, first[0].ObservedAt)
 	}
 
-	b.applicationsAt = time.Now().Add(-applicationsCacheTTL - time.Nanosecond)
+	b.applications.at = time.Now().Add(-catalogInventoryCacheTTL - time.Nanosecond)
 	third := b.Applications(context.Background())
 	if calls != 2 || len(third) != 1 || third[0].Name != "second" {
 		t.Fatalf("expired Applications = %v, calls=%d; want refreshed second", third, calls)
@@ -554,14 +554,14 @@ func TestWebBackendApplicationsCache(t *testing.T) {
 
 func TestWebBackendApplicationsCacheIgnoresCancelledRequests(t *testing.T) {
 	b := &WebBackend{
-		applicationsList: func(ctx context.Context) []web.Application {
+		applications: catalogInventoryCache{list: func(ctx context.Context) []web.CatalogItem {
 			if ctx.Err() != nil {
 				// A cancelled request aborts inspection early and yields a
 				// partial inventory; model that as an empty list.
 				return nil
 			}
 			return []web.Application{{Name: "complete"}}
-		},
+		}},
 	}
 
 	cancelled, cancel := context.WithCancel(context.Background())
@@ -570,15 +570,15 @@ func TestWebBackendApplicationsCacheIgnoresCancelledRequests(t *testing.T) {
 	if got := b.Applications(cancelled); len(got) != 0 {
 		t.Fatalf("cold cancelled Applications = %v, want empty partial result", got)
 	}
-	if !b.applicationsAt.IsZero() {
-		t.Fatalf("cancelled request populated applicationsAt = %v, want zero", b.applicationsAt)
+	if !b.applications.at.IsZero() {
+		t.Fatalf("cancelled request populated inventory time = %v, want zero", b.applications.at)
 	}
 
 	if got := b.Applications(context.Background()); len(got) != 1 || got[0].Name != "complete" {
 		t.Fatalf("Applications = %v, want complete inventory", got)
 	}
 
-	b.applicationsAt = time.Now().Add(-applicationsCacheTTL - time.Nanosecond)
+	b.applications.at = time.Now().Add(-catalogInventoryCacheTTL - time.Nanosecond)
 	if got := b.Applications(cancelled); len(got) != 1 || got[0].Name != "complete" {
 		t.Fatalf("cancelled Applications after expiry = %v, want previous complete cache", got)
 	}
@@ -589,16 +589,16 @@ func TestWebBackendApplicationsServeStaleWhileRefreshing(t *testing.T) {
 	release := make(chan struct{})
 	var calls atomic.Int32
 	b := &WebBackend{
-		applicationsList: func(context.Context) []web.Application {
+		applications: catalogInventoryCache{list: func(context.Context) []web.CatalogItem {
 			if calls.Add(1) == 1 {
 				close(scanning)
 				<-release
 			}
 			return []web.Application{{Name: "fresh"}}
-		},
+		}},
 	}
-	b.applicationsCache = []web.Application{{Name: "stale"}}
-	b.applicationsAt = time.Now().Add(-applicationsCacheTTL - time.Nanosecond)
+	b.applications.items = []web.CatalogItem{{Name: "stale"}}
+	b.applications.at = time.Now().Add(-catalogInventoryCacheTTL - time.Nanosecond)
 
 	leader := make(chan []web.Application)
 	go func() { leader <- b.Applications(context.Background()) }()
@@ -626,13 +626,13 @@ func TestWebBackendApplicationsColdStartSingleScan(t *testing.T) {
 	release := make(chan struct{})
 	var calls atomic.Int32
 	b := &WebBackend{
-		applicationsList: func(context.Context) []web.Application {
+		applications: catalogInventoryCache{list: func(context.Context) []web.CatalogItem {
 			if calls.Add(1) == 1 {
 				close(scanning)
 				<-release
 			}
 			return []web.Application{{Name: "fresh"}}
-		},
+		}},
 	}
 
 	leader := make(chan []web.Application)
@@ -724,6 +724,39 @@ func TestWebBackendApplicationsInspectInParallel(t *testing.T) {
 	}
 	if runner.Max() < 2 {
 		t.Fatalf("max concurrent app probes = %d, want at least 2", runner.Max())
+	}
+}
+
+func TestWebBackendLibrariesInspectInstalledCatalogFiles(t *testing.T) {
+	root := t.TempDir()
+	libraryPath := filepath.Join(root, "libdemo.so")
+	if err := os.WriteFile(libraryPath, []byte("library"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		LibraryNames: []string{"libdemo"},
+		Libraries: map[string]*config.Document{
+			"libdemo": {Name: "libdemo", Body: map[string]any{
+				"name":         "libdemo",
+				"display_name": "Demo library",
+				"category":     "runtime",
+				"preflight": map[string]any{
+					"file": map[string]any{"type": "file", "path": libraryPath},
+				},
+			}},
+		},
+	}
+	b := &WebBackend{cfg: cfg}
+	libraries := b.Libraries(context.Background())
+	if len(libraries) != 1 {
+		t.Fatalf("Libraries = %+v, want one installed library", libraries)
+	}
+	got := libraries[0]
+	if got.Name != "libdemo" || got.DisplayName != "Demo library" || got.Category != "runtime" || got.Binary != libraryPath {
+		t.Fatalf("library = %+v, want resolved installed catalog library", got)
+	}
+	if got.ObservedAt == "" {
+		t.Fatal("library inventory must expose its probe observation time")
 	}
 }
 

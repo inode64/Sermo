@@ -10,6 +10,7 @@ const apiDaemonMetricsPath = "api/daemon/metrics";
 const apiEventsPath = "api/events";
 const apiEventsClearPath = "api/events/clear";
 export const apiHostPath = "api/host";
+export const apiLibrariesPath = "api/libraries";
 export const apiLocksPath = "api/locks";
 export const apiMonitoringPath = "api/monitoring";
 export const apiOpsPath = "api/ops";

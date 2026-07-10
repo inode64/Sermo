@@ -45,6 +45,12 @@ const applications = [{
   observed_at: "2026-07-10T12:00:00Z",
 }];
 
+const libraries = [{
+  name: "openssl", display_name: "OpenSSL", category: "crypto", state: "ok",
+  status: "ok", version: "OpenSSL 3.5.1", version_short: "3.5.1",
+  binary: "/usr/lib64/libssl.so", observed_at: "2026-07-10T12:00:00Z",
+}];
+
 function serviceDetail(name) {
   const service = services.find((item) => item.name === name);
   return {
@@ -75,6 +81,9 @@ async function mockAPI(page) {
         break;
       case "/api/applications":
         body = applications;
+        break;
+      case "/api/libraries":
+        body = libraries;
         break;
       case "/api/events":
         body = {
@@ -123,6 +132,15 @@ test("global search opens a service and exposes compact actions", async ({ page 
   await expect(page.locator('[data-service-detail="db"]')).toBeVisible();
   await row.locator(".row-action-menu > summary").click();
   await expect(row.locator('[data-service-action="reload"]')).toBeVisible();
+});
+
+test("libraries inventory is visible and searchable", async ({ page }) => {
+  await expect(page.locator("#library-row-openssl")).toBeVisible();
+  await page.locator("#library-search").fill("OpenSSL");
+  await expect(page.locator("#library-row-openssl")).toBeVisible();
+  await page.locator("#library-row-openssl .row-toggle").click();
+  await expect(page.locator("#library-row-openssl")).toContainText("OpenSSL");
+  await expect(page.locator("#exp-lib\\:openssl")).toContainText("/usr/lib64/libssl.so");
 });
 
 test("graph selections remain isolated per service", async ({ page }) => {

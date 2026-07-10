@@ -554,21 +554,22 @@ comprobaciones de preflight y timeouts de operación; consulta
 [services](services.es.md#control-docker--docker-containers).
 
 Debajo de la tabla de services, el panel lista las **aplicaciones instaladas** (los
-daemons de app del catálogo cuyo binario está presente), mostrando el nombre y la
-versión corta de cada aplicación; un comando `health` de la app, cuando está
-configurado, decide OK/error a partir de su código de salida antes de considerar el
-comando de versión. Si no hay ningún comando `health` configurado, el comando `version`
-es la sonda alternativa mientras se obtiene la versión mostrada. La lista es ordenable
-por nombre, categoría o versión, y al expandir una fila se revela la cadena de versión
-completa, la ubicación del archivo del binario y sus permisos. Cuando una versión se
-hereda a través de `version_from`, la fila de la API incluye `version_source` con el
-nombre de la app proveedora. Los services y aplicaciones pueden filtrarse y agruparse
-por su campo de metadatos `category` de nivel superior.
-Los mismos datos están disponibles desde `sermoctl apps` y `GET /api/applications`.
-El panel cachea la lista hasta 5 minutos, de modo que las autoactualizaciones no
-reejecutan cada sonda de versión de app. Cada fila muestra cuándo se ejecutaron
-realmente esas sondas de versión/estado; servir una respuesta cacheada no adelanta la
-hora de la muestra.
+daemons de app del catálogo cuyo binario está presente) y las **librerías instaladas**
+(los ficheros de librería del catálogo cuyo `preflight.file` está presente). Ambos
+inventarios muestran el nombre y la versión corta cuando está disponible; un comando
+`health` de la app, cuando está configurado, decide OK/error a partir de su código de
+salida antes de considerar el comando de versión. Si no hay ningún comando `health`
+configurado, el comando `version` es la sonda alternativa mientras se obtiene la
+versión mostrada. Las listas son ordenables por nombre, categoría o versión, y al
+expandir una fila se revela la cadena de versión completa, la ubicación del archivo y
+sus permisos. Cuando una versión se hereda a través de `version_from`, la fila de la
+API incluye `version_source` con el nombre de la app proveedora. Los services,
+aplicaciones y librerías pueden filtrarse y agruparse por su campo de metadatos
+`category` de nivel superior. Los mismos datos están disponibles desde `sermoctl apps`,
+`sermoctl libs`, `GET /api/applications` y `GET /api/libraries`. El panel cachea cada
+inventario hasta 5 minutos, de modo que las autoactualizaciones no reejecutan cada
+sonda de versión. Cada fila muestra cuándo se ejecutaron realmente esas sondas de
+versión/estado; servir una respuesta cacheada no adelanta la hora de la muestra.
 Para un mapa editable panel por panel, consulta
 [webui-representation.md](webui-representation.es.md).
 
@@ -710,6 +711,7 @@ Endpoints de solo lectura:
   lecturas en vivo cuando están disponibles y actividad reciente.
 - `GET /api/notifiers` — destinos de notifier configurados.
 - `GET /api/applications` — aplicaciones del catálogo instaladas.
+- `GET /api/libraries` — librerías del catálogo instaladas.
 - `GET /api/daemon` — ajustes de daemon/backend/runtime y uptime del host.
 - `GET /api/daemon/metrics?since=24h` — historial persistente de CPU, memoria e IO de
   sermod para el proceso de daemon actual, más PID actual, descriptores de archivo e

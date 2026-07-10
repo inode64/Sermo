@@ -200,8 +200,9 @@ nombres coincidentes en el árbol de config global).
 | Historial de disponibilidad de los servicios configurados | `sermoctl sla [SERVICE]` |
 
 La web UI usa la misma división: **Services** muestra los servicios de runtime
-configurados; **Applications** (`GET /api/applications`) es el inventario de apps
-instaladas y se alinea con `sermoctl apps`, no con `sermoctl services`.
+configurados; **Applications** (`GET /api/applications`) y **Libraries**
+(`GET /api/libraries`) son los inventarios de catálogo instalados, alineados con
+`sermoctl apps` y `sermoctl libs`, no con `sermoctl services`.
 
 ## Códigos de salida
 

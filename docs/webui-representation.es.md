@@ -53,6 +53,7 @@ deterministas de la API.
 | Eventos del servicio | `GET /api/services/{name}/events` | feed de eventos por servicio |
 | Watches de host | `GET /api/watches` | watches a nivel de host |
 | Aplicaciones | `GET /api/applications` | aplicaciones de catálogo instaladas; `observed_at` permanece fijo mientras el inventario de versión/estado se sirve desde caché |
+| Librerías | `GET /api/libraries` | librerías de catálogo instaladas; `observed_at` permanece fijo mientras el inventario de fichero/versión se sirve desde caché |
 | Unidades de montaje | `GET /api/mounts` | watches de storage con `mount:` respaldadas por fstab |
 | Notifiers | `GET /api/notifiers` | destinos de notifiers |
 | Configuración del daemon | `GET /api/daemon` | configuración de engine/runtime |
@@ -282,6 +283,29 @@ Expansión de fila:
 Estado vacío:
 
 - `No applications match the filter.`
+
+## Panel de librerías instaladas
+
+Section id: `libraries-section`
+
+| Parte | Representación actual |
+| --- | --- |
+| Título | `Installed libraries` más el recuento total |
+| Iconos del título | agrupar por categoría, contraer/expandir todos los grupos |
+| Controles | búsqueda, selector de categoría, filtros de estado, recuento mostrado |
+| Filtros de estado | all, ok, warning, failed |
+| Ordenación | Library, Category, Status, Version |
+| Visibilidad | oculto cuando no se devuelve ningún fichero de librería instalado |
+| Agrupación | filas de grupo por categoría, contraíbles |
+
+Columnas: Library (nombre para mostrar), Category, Status (estado de inspección y
+antigüedad de la sonda) y Version (versión corta cuando está disponible). Al expandir
+una fila se muestran origen de versión, ubicación del fichero, permisos, usuario,
+grupo y estado completo. Las librerías no muestran SLA ni eventos de aplicación.
+
+Estado vacío:
+
+- `No libraries match the filter.`
 
 ## Panel de unidades de montaje
 
@@ -531,7 +555,7 @@ Copia esta sección al proponer un cambio en la interfaz web.
 
 ### Panel
 
-Services / Host watches / Installed applications / Events / Notifiers /
+Services / Host watches / Installed applications / Installed libraries / Events / Notifiers /
 Daemon settings / Recent activity / Runtime locks / Service detail /
 Action dialog / Overview
 

@@ -59,6 +59,30 @@ func TestInspectUsesNamespacedAppPreflight(t *testing.T) {
 	}
 }
 
+func TestInspectCategoryOneAcceptsInstalledLibraryFile(t *testing.T) {
+	root := t.TempDir()
+	libraryPath := filepath.Join(root, "libdemo.so")
+	if err := os.WriteFile(libraryPath, []byte("library"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		LibraryNames: []string{"libdemo"},
+		Libraries: map[string]*config.Document{
+			"libdemo": {Name: "libdemo", Body: map[string]any{
+				"name":     "libdemo",
+				"category": "runtime",
+				"preflight": map[string]any{
+					"file": map[string]any{"type": "file", "path": libraryPath},
+				},
+			}},
+		},
+	}
+	report := InspectCategoryOne(context.Background(), testRunner{}, cfg, config.CategoryLibrary, "libdemo")
+	if !report.Installed || !report.OK || report.Binary != libraryPath || report.Category != "runtime" {
+		t.Fatalf("InspectCategoryOne() = %+v, want installed library file", report)
+	}
+}
+
 func TestInspectCommandUser(t *testing.T) {
 	root := t.TempDir()
 	binary := filepath.Join(root, "postgres")

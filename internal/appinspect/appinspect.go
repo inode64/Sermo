@@ -88,9 +88,9 @@ func WithOptionalVersion() Option {
 	return func(o *options) { o.versionOptional = true }
 }
 
-// List inspects every catalog daemon in the category. When includeMissing is
-// false only installed applications (binary present) are returned. The order
-// follows config.CatalogNamesInCategory, which sorts by name.
+// List inspects every catalog entry in category. When includeMissing is false,
+// only installed entries are returned. The order follows
+// config.CatalogNamesInCategory, which sorts by name.
 func List(ctx context.Context, runner execx.Runner, cfg *config.Config, category string, includeMissing bool, opts ...Option) []Report {
 	if cfg == nil {
 		return nil
@@ -113,10 +113,17 @@ func List(ctx context.Context, runner execx.Runner, cfg *config.Config, category
 // per-app monitoring, which inspects one app per cycle rather than the whole
 // list.
 func InspectOne(ctx context.Context, runner execx.Runner, cfg *config.Config, name string, opts ...Option) Report {
+	return InspectCategoryOne(ctx, runner, cfg, config.CategoryApp, name, opts...)
+}
+
+// InspectCategoryOne inspects one catalog entry from category, resolving its
+// version_from chain. Web inventories use it to share the same bounded parallel
+// inspection path for applications and libraries.
+func InspectCategoryOne(ctx context.Context, runner execx.Runner, cfg *config.Config, category, name string, opts ...Option) Report {
 	if cfg == nil {
 		return Report{Name: name}
 	}
-	return inspectCatalog(ctx, runner, cfg, config.CategoryApp, name, map[string]Report{}, map[string]bool{}, opts...)
+	return inspectCatalog(ctx, runner, cfg, category, name, map[string]Report{}, map[string]bool{}, opts...)
 }
 
 func applyCurrentLabels(reports []Report, cfg *config.Config, category string) {
@@ -159,7 +166,7 @@ func hasCurrentLabel(displayName string) bool {
 func inspectCatalog(ctx context.Context, runner execx.Runner, cfg *config.Config, category, name string, cache map[string]Report, chain map[string]bool, opts ...Option) Report {
 	if category != config.CategoryApp {
 		resolved, _ := cfg.ResolveCatalog(category, name)
-		return Inspect(ctx, runner, name, resolved, opts...)
+		return inspectResolved(ctx, runner, name, resolved, category, opts...)
 	}
 	if doc, ok := cfg.Apps[name]; ok {
 		name = doc.Name
@@ -172,7 +179,7 @@ func inspectCatalog(ctx context.Context, runner execx.Runner, cfg *config.Config
 	}
 	chain[name] = true
 	resolved, _ := cfg.ResolveCatalog(category, name)
-	r := Inspect(ctx, runner, name, resolved, opts...)
+	r := inspectResolved(ctx, runner, name, resolved, category, opts...)
 	if r.Installed && r.OK && r.Version == "" {
 		fillVersionFrom(ctx, runner, cfg, &r, resolved.Tree, cache, chain, opts...)
 	}
@@ -199,9 +206,21 @@ func fillVersionFrom(ctx context.Context, runner execx.Runner, cfg *config.Confi
 	r.VersionSource = provider.Name
 }
 
-// Inspect probes a single resolved daemon: it stats the binary, runs health to
-// confirm it runs when configured, and captures the version when available.
+// Inspect probes a single resolved catalog application: it stats the binary,
+// runs health to confirm it runs when configured, and captures the version when
+// available.
 func Inspect(ctx context.Context, runner execx.Runner, name string, resolved config.Resolved, opts ...Option) Report {
+	return inspectResolved(ctx, runner, name, resolved, config.CategoryApp, opts...)
+}
+
+func inspectResolved(
+	ctx context.Context,
+	runner execx.Runner,
+	name string,
+	resolved config.Resolved,
+	category string,
+	opts ...Option,
+) Report {
 	options := inspectOptions(opts)
 	lookup := options.userLookup
 	if lookup == nil {
@@ -210,8 +229,8 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 	r := Report{
 		Name:        name,
 		DisplayName: config.DisplayName(resolved.Tree, name),
-		Category:    config.CategoryLabel(resolved.Tree, config.CategoryApp),
-		Binary:      binaryPath(resolved.Tree),
+		Category:    config.CategoryLabel(resolved.Tree, category),
+		Binary:      catalogPath(resolved.Tree, category),
 	}
 
 	var info os.FileInfo
@@ -227,7 +246,7 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 		r.Permissions = modeString(info)
 		r.Status = statusErrorPrefix + r.Binary + " is a directory"
 		return r
-	case fi.Mode().Perm()&binaryExecutableModeMask == 0:
+	case category != config.CategoryLibrary && fi.Mode().Perm()&binaryExecutableModeMask == 0:
 		info = fi
 		r.Permissions = modeString(info)
 		r.Installed = true
@@ -432,6 +451,22 @@ func runProbeCommand(ctx context.Context, runner execx.Runner, cmd probeCommand)
 		return execx.RunUser(ctx, runner, timeout, cmd.user, cmd.argv[0], cmd.argv[1:]...)
 	}
 	return execx.Run(ctx, runner, timeout, cmd.argv[0], cmd.argv[1:]...)
+}
+
+// catalogPath returns the resolved binary or library file path for a catalog
+// entry. Libraries prefer their preflight file check because shared objects are
+// expected to be readable files rather than executable binaries.
+func catalogPath(tree map[string]any, category string) string {
+	if category == config.CategoryLibrary {
+		if pf, ok := tree[config.SectionPreflight].(map[string]any); ok {
+			if file, ok := pf[checks.CheckTypeFile].(map[string]any); ok {
+				if p := cfgval.AsString(file[checks.CheckKeyPath]); p != "" {
+					return p
+				}
+			}
+		}
+	}
+	return binaryPath(tree)
 }
 
 // binaryPath returns the resolved binary path of a daemon: its preflight

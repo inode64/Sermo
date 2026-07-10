@@ -380,8 +380,9 @@ Estos campos son opcionales y se comportan de forma diferente cuando faltan:
 - **`description`** es una nota de texto libre opcional. **No tiene fallback**: cuando está
   ausente, no se muestra nada para ella — Sermo nunca sustituye `name`. Úsela para
   una frase real, no una repetición del nombre.
-- **`category`** agrupa y filtra Services y aplicaciones instaladas en la
-  WebUI. Cuando está ausente o en blanco, los servicios usan `service` y las apps usan `app`.
+- **`category`** agrupa y filtra Services, aplicaciones instaladas y
+  librerías instaladas en la WebUI. Cuando está ausente o en blanco, los
+  servicios usan `service`, las apps usan `app` y las librerías `library`.
 - **`type`** es una etiqueta de clasificación de texto libre opcional (p. ej. `database`,
   `cache`, `queue`, `webserver`, `appserver`, `tunnel`) usada en el catálogo para
   organizar entradas. Se registra pero **no se consume actualmente** por el motor

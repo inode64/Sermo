@@ -109,16 +109,16 @@
   .mount-table .mount-users { min-width: 8rem; max-width: 16rem; }
   .mount-usage-item, .mount-usage-extra { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mount-processes .mount-usage-item { font-family: var(--mono); font-size: .82em; }
-  #rows tr:hover > td, #container-rows tr:hover > td, #vm-rows tr:hover > td, #watch-rows tr:hover > td, #app-rows tr:hover > td, #mount-rows tr:hover > td { background: color-mix(in srgb, var(--text) 4%, transparent); }
-  #rows tr.group-row:hover > td, #app-rows tr.group-row:hover > td { background: color-mix(in srgb, var(--accent) 11%, transparent); }
+  #rows tr:hover > td, #container-rows tr:hover > td, #vm-rows tr:hover > td, #watch-rows tr:hover > td, #app-rows tr:hover > td, #library-rows tr:hover > td, #mount-rows tr:hover > td { background: color-mix(in srgb, var(--text) 4%, transparent); }
+  #rows tr.group-row:hover > td, #app-rows tr.group-row:hover > td, #library-rows tr.group-row:hover > td { background: color-mix(in srgb, var(--accent) 11%, transparent); }
   /* Firing/warning row highlight. Applies to services (#rows), applications
      (#app-rows) and every watch panel (host #watch-rows, storage, network,
      cert, diskio) so a firing certificate or host watch paints red like a
      failing service. */
-  #rows tr.row-warning > td, #app-rows tr.row-warning > td, #watch-rows tr.row-warning > td, #storage-rows tr.row-warning > td, #network-rows tr.row-warning > td, #cert-rows tr.row-warning > td, #diskio-rows tr.row-warning > td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
-  #rows tr.row-failing > td, #app-rows tr.row-failing > td, #watch-rows tr.row-failing > td, #storage-rows tr.row-failing > td, #network-rows tr.row-failing > td, #cert-rows tr.row-failing > td, #diskio-rows tr.row-failing > td { background: color-mix(in srgb, var(--crit) 9%, transparent); }
-  #rows tr.row-warning:hover > td, #app-rows tr.row-warning:hover > td, #watch-rows tr.row-warning:hover > td, #storage-rows tr.row-warning:hover > td, #network-rows tr.row-warning:hover > td, #cert-rows tr.row-warning:hover > td, #diskio-rows tr.row-warning:hover > td { background: color-mix(in srgb, var(--warn) 13%, transparent); }
-  #rows tr.row-failing:hover > td, #app-rows tr.row-failing:hover > td, #watch-rows tr.row-failing:hover > td, #storage-rows tr.row-failing:hover > td, #network-rows tr.row-failing:hover > td, #cert-rows tr.row-failing:hover > td, #diskio-rows tr.row-failing:hover > td { background: color-mix(in srgb, var(--crit) 13%, transparent); }
+  #rows tr.row-warning > td, #app-rows tr.row-warning > td, #library-rows tr.row-warning > td, #watch-rows tr.row-warning > td, #storage-rows tr.row-warning > td, #network-rows tr.row-warning > td, #cert-rows tr.row-warning > td, #diskio-rows tr.row-warning > td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
+  #rows tr.row-failing > td, #app-rows tr.row-failing > td, #library-rows tr.row-failing > td, #watch-rows tr.row-failing > td, #storage-rows tr.row-failing > td, #network-rows tr.row-failing > td, #cert-rows tr.row-failing > td, #diskio-rows tr.row-failing > td { background: color-mix(in srgb, var(--crit) 9%, transparent); }
+  #rows tr.row-warning:hover > td, #app-rows tr.row-warning:hover > td, #library-rows tr.row-warning:hover > td, #watch-rows tr.row-warning:hover > td, #storage-rows tr.row-warning:hover > td, #network-rows tr.row-warning:hover > td, #cert-rows tr.row-warning:hover > td, #diskio-rows tr.row-warning:hover > td { background: color-mix(in srgb, var(--warn) 13%, transparent); }
+  #rows tr.row-failing:hover > td, #app-rows tr.row-failing:hover > td, #library-rows tr.row-failing:hover > td, #watch-rows tr.row-failing:hover > td, #storage-rows tr.row-failing:hover > td, #network-rows tr.row-failing:hover > td, #cert-rows tr.row-failing:hover > td, #diskio-rows tr.row-failing:hover > td { background: color-mix(in srgb, var(--crit) 13%, transparent); }
   tr.clickable { cursor: pointer; }
   .exp { color: var(--text-2); margin-right: .35rem; user-select: none; font-size: .9em; display: inline-block; }
   .category-badge { display: inline-block; max-width: 8rem; overflow: hidden; text-overflow: ellipsis; vertical-align: top; color: var(--text-2); }
@@ -260,9 +260,9 @@
   #act-last { flex: 1; min-width: 180px; }
   section#locks-section { margin-top: 1rem; }
   .panel-controls input { min-width: 13rem; }
-  #svc-filters button, #container-filters button, #vm-filters button, #storage-filters button, #watch-filters button, #network-filters button, #mount-filters button, #app-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
-  #svc-filters button:hover, #container-filters button:hover, #vm-filters button:hover, #storage-filters button:hover, #watch-filters button:hover, #network-filters button:hover, #mount-filters button:hover, #app-filters button:hover { background: var(--panel-2); color: var(--text); }
-  #svc-filters button.f-active, #container-filters button.f-active, #vm-filters button.f-active, #storage-filters button.f-active, #watch-filters button.f-active, #network-filters button.f-active, #mount-filters button.f-active, #app-filters button.f-active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
+  #svc-filters button, #container-filters button, #vm-filters button, #storage-filters button, #watch-filters button, #network-filters button, #mount-filters button, #app-filters button, #library-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
+  #svc-filters button:hover, #container-filters button:hover, #vm-filters button:hover, #storage-filters button:hover, #watch-filters button:hover, #network-filters button:hover, #mount-filters button:hover, #app-filters button:hover, #library-filters button:hover { background: var(--panel-2); color: var(--text); }
+  #svc-filters button.f-active, #container-filters button.f-active, #vm-filters button.f-active, #storage-filters button.f-active, #watch-filters button.f-active, #network-filters button.f-active, #mount-filters button.f-active, #app-filters button.f-active, #library-filters button.f-active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
   #err { min-height: 1.2rem; }
   #err.status-err { color: var(--crit); }
   #err.status-ok { color: var(--ok); }
