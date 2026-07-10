@@ -721,7 +721,10 @@ Endpoints de solo lectura:
 - `GET /api/monitoring` — recuentos de monitorización activa frente a pausada
   para services no deshabilitados.
 - `GET /api/events?limit=N` — feed global de eventos, los más nuevos primero. Filtros
-  opcionales: `service`, `watch`, `kind`, `status` y `only_errors=1`.
+  opcionales: `service`, `watch`, `kind`, `status` y `only_errors=1`. Añade
+  `page=1` para recibir `{events, next_before_id, has_more}`; pasa el
+  `before_id` de esa respuesta para continuar hacia filas más antiguas. Sin
+  `page`/`before_id`, el endpoint mantiene el array de eventos anterior.
 - `GET /api/ops` — uso global de slots de operación: `{in_use, total}` para
   `engine.max_parallel_operations`.
 
