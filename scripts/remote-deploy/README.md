@@ -27,6 +27,10 @@ The remote scripts must run as root on the target host:
 - `remote_update_payload.sh` refreshes binaries/catalog on an already configured
   host, validates the current `/etc/sermo` with the detected init backend, then
   restarts `sermod` and verifies the local Web UI.
+- `remote_update_binary_catalog.sh` refreshes only `sermoctl`, `sermod` and the
+  packaged catalog. It snapshots `/etc/sermo`, rejects payloads containing any
+  other path, and rolls back the binaries and catalog if validation, restart or
+  authenticated Web UI checks fail.
 - `remote_repair_catalog.sh` replaces only the packaged catalog from a payload.
 - `remote_final_check.sh` validates `/etc/sermo`, service state, port `9797`,
   `/livez`, `/readyz`, the HTML shell and current protected-path metadata.
