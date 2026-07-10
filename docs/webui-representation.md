@@ -37,14 +37,14 @@ Keep changes concrete:
 | --- | --- | --- |
 | Current user | `GET /api/whoami` | role and action permissions |
 | Readiness | `GET /readyz?verbose` | daemon `status:` in the top bar (`starting` / `ok` / …) |
-| Services | `GET /api/services` | configured runtime services loaded by sermod (not `sermoctl services` catalog inventory) |
+| Services | `GET /api/services` | configured runtime services loaded by sermod (not `sermoctl services` catalog inventory); `status_observed_at` identifies the real init-status sample behind a cached row |
 | Service expansion | `GET /api/services/{name}` | checks, process info, rules |
 | Service check metrics | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | latency chart when `metric` is omitted; named numeric metric series when present |
 | Service runtime metrics | `GET /api/services/{name}/runtime` | read-only persisted service CPU/memory/IO history sampled exclusively by worker cycles |
 | Service SLA | `GET /api/services/{name}/sla` | per-minute availability history for the service detail SLA timeline and API clients |
 | Service events | `GET /api/services/{name}/events` | per-service event feed |
 | Host watches | `GET /api/watches` | host-level watches |
-| Applications | `GET /api/applications` | installed catalog apps |
+| Applications | `GET /api/applications` | installed catalog apps; `observed_at` remains fixed while the version/status inventory is served from cache |
 | Mount units | `GET /api/mounts` | storage watches with `mount:` backed by fstab |
 | Notifiers | `GET /api/notifiers` | notifier targets |
 | Daemon settings | `GET /api/daemon` | engine/runtime config |
@@ -55,6 +55,10 @@ Keep changes concrete:
 | Recent activity | `GET /api/activity` | summary of recent events |
 | Monitoring counts | `GET /api/monitoring` | monitored vs paused service counts |
 | Live operations | `GET /api/ops` | active operation slots |
+
+Init status, application inspection and SLA timeline caches expose their actual
+sample times. The UI labels their ages, and SLA segment timestamps stay anchored
+to `observed_at` instead of sliding forward on the browser clock while cached.
 
 ## Action Endpoints
 
@@ -239,7 +243,7 @@ Columns:
 | --- | --- |
 | Application | display name, falling back to name, capitalized |
 | Category | YAML category or fallback |
-| Status | app inspection state (`Ok`, `Starting` while the daemon settles, warning, failed) |
+| Status | app inspection state (`Ok`, `Starting` while the daemon settles, warning, failed) plus the age of its actual probe |
 | Version | short version, falling back to raw version |
 
 Row expansion:
