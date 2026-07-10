@@ -112,8 +112,10 @@
 
 <h2 class="visually-hidden">Containers</h2>
 <details id="containers-section" open class="panel panel-hidden">
-  <summary>Containers <span id="containers-count" class="muted"></span></summary>
+  <summary><span class="summary-title">Containers <span id="containers-count" class="muted"></span></span></summary>
   <div id="container-controls" class="panel-controls">
+    <button id="container-group-toggle" class="icon-btn" title="Group containers by category" aria-label="Group containers by category" aria-pressed="false">&#x25A6;</button>
+    <button id="container-groups-toggle" class="icon-btn" title="Collapse container groups" aria-label="Collapse container groups">&#x25BE;</button>
     <label for="container-search" class="visually-hidden">Filter containers</label>
     <input id="container-search" type="search" placeholder="filter containers…  ( / )" aria-describedby="search-shortcut-hint">
     <span id="container-filters" role="group" aria-label="Filter containers by state">
@@ -150,8 +152,10 @@
 
 <h2 class="visually-hidden">Virtual machines</h2>
 <details id="vms-section" open class="panel panel-hidden">
-  <summary>Virtual machines <span id="vms-count" class="muted"></span></summary>
+  <summary><span class="summary-title">Virtual machines <span id="vms-count" class="muted"></span></span></summary>
   <div id="vm-controls" class="panel-controls">
+    <button id="vm-group-toggle" class="icon-btn" title="Group virtual machines by category" aria-label="Group virtual machines by category" aria-pressed="false">&#x25A6;</button>
+    <button id="vm-groups-toggle" class="icon-btn" title="Collapse virtual machine groups" aria-label="Collapse virtual machine groups">&#x25BE;</button>
     <label for="vm-search" class="visually-hidden">Filter virtual machines</label>
     <input id="vm-search" type="search" placeholder="filter virtual machines…  ( / )" aria-describedby="search-shortcut-hint">
     <span id="vm-filters" role="group" aria-label="Filter virtual machines by state">
@@ -343,8 +347,10 @@
 
 <h2 class="visually-hidden">Mount units</h2>
 <details id="mounts-section" class="panel panel-hidden">
-  <summary>Mount units <span id="mounts-count" class="muted"></span></summary>
+  <summary><span class="summary-title">Mount units <span id="mounts-count" class="muted"></span></span></summary>
   <div id="mount-controls" class="panel-controls">
+    <button id="mount-group-toggle" class="icon-btn" title="Group mount units by group" aria-label="Group mount units by group" aria-pressed="false">&#x25A6;</button>
+    <button id="mount-groups-toggle" class="icon-btn" title="Collapse mount groups" aria-label="Collapse mount groups">&#x25BE;</button>
     <label for="mount-search" class="visually-hidden">Filter mount units</label>
     <input id="mount-search" type="search" placeholder="filter mount units…  ( / )" aria-describedby="search-shortcut-hint">
     <select id="mount-category" title="Filter by group" aria-label="Filter mount units by group">

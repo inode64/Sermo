@@ -1031,14 +1031,14 @@ let svcCollapsedGroups = new Set();
 let svcSort = { key: "", dir: 1 };
 const splitServicePanels = {
   container: {
-    query: "", status: filterAll, sort: { key: "", dir: 1 },
+    query: "", status: filterAll, grouped: false, collapsedGroups: new Set(), sort: { key: "", dir: 1 },
     surface: "container", section: "#containers-section", rows: "#container-rows", count: "#containers-count",
     filterCount: "#container-count", filters: "#container-filters", search: "#container-search",
     filterDataset: "cf", sortIndicator: "ci", sortAttr: "container-sort", sortDataset: "containerSort",
     label: "containers", empty: "No containers.", emptyFiltered: "No containers match the filter.",
   },
   vm: {
-    query: "", status: filterAll, sort: { key: "", dir: 1 },
+    query: "", status: filterAll, grouped: false, collapsedGroups: new Set(), sort: { key: "", dir: 1 },
     surface: "vm", section: "#vms-section", rows: "#vm-rows", count: "#vms-count",
     filterCount: "#vm-count", filters: "#vm-filters", search: "#vm-search",
     filterDataset: "vf", sortIndicator: "vi", sortAttr: "vm-sort", sortDataset: "vmSort",
@@ -1049,6 +1049,8 @@ let allMounts = [];
 let mountQuery = "";
 let mountStatus = filterAll;
 let mountCategory = filterAll;
+let mountGrouped = false;
+let mountCollapsedGroups = new Set();
 let mountSort = { key: "", dir: 1 };
 let expanded = new Set(); // open expansions, keyed "svc:<name>" / "wat:<name>" / "app:<name>"
 let allApps = [];
@@ -1101,6 +1103,11 @@ const watchPanels = Object.fromEntries(watchPanelDescriptors.map((descriptor) =>
   query: "",
   status: filterAll,
   type: filterAll,
+  grouped: false,
+  collapsedGroups: new Set(),
+  groupPrefix: descriptor.key,
+  groupPanel: "watch-" + descriptor.key,
+  groupLabel: descriptor.title.toLowerCase(),
   sort: { key: "", dir: 1 },
   section: "#" + descriptor.sectionId,
   rows: "#" + descriptor.rowsId,
@@ -1136,11 +1143,14 @@ function restoreUIState() {
         if (saved.sort && typeof saved.sort.key === "string") {
           panel.sort = { key: saved.sort.key, dir: saved.sort.dir === -1 ? -1 : 1 };
         }
+        if (typeof saved.grouped === "boolean") panel.grouped = saved.grouped;
+        if (Array.isArray(saved.collapsedGroups)) panel.collapsedGroups = new Set(saved.collapsedGroups);
       }
     }
     if (typeof s.mountQuery === "string") mountQuery = s.mountQuery;
     if (typeof s.mountStatus === "string") mountStatus = normalizeMountStatusFilter(s.mountStatus);
     if (typeof s.mountCategory === "string") mountCategory = s.mountCategory;
+    if (typeof s.mountGrouped === "boolean") mountGrouped = s.mountGrouped;
     if (s.mountSort && typeof s.mountSort.key === "string") {
       mountSort = { key: s.mountSort.key, dir: s.mountSort.dir === -1 ? -1 : 1 };
     }
@@ -1164,6 +1174,8 @@ function restoreUIState() {
         if (saved.sort && typeof saved.sort.key === "string") {
           panel.sort = { key: saved.sort.key, dir: saved.sort.dir === -1 ? -1 : 1 };
         }
+        if (typeof saved.grouped === "boolean") panel.grouped = saved.grouped;
+        if (Array.isArray(saved.collapsedGroups)) panel.collapsedGroups = new Set(saved.collapsedGroups);
       }
     }
     if (Array.isArray(s.expanded)) {
@@ -1184,6 +1196,7 @@ function restoreUIState() {
     if (Array.isArray(s.svcCollapsedGroups)) svcCollapsedGroups = new Set(s.svcCollapsedGroups);
     if (Array.isArray(s.appCollapsedGroups)) appCollapsedGroups = new Set(s.appCollapsedGroups);
     if (Array.isArray(s.libraryCollapsedGroups)) libraryCollapsedGroups = new Set(s.libraryCollapsedGroups);
+    if (Array.isArray(s.mountCollapsedGroups)) mountCollapsedGroups = new Set(s.mountCollapsedGroups);
     if (s.eventFilters && typeof s.eventFilters === "object") {
       const ef = s.eventFilters;
       const setVal = (id, v) => {
@@ -1211,7 +1224,7 @@ function saveUIState() {
   try {
     localStorage.setItem(UI_STATE_KEY, JSON.stringify({
       svcQuery, svcStatus, svcCategory, svcGrouped, svcSort,
-      mountQuery, mountStatus, mountCategory, mountSort,
+      mountQuery, mountStatus, mountCategory, mountGrouped, mountSort,
       appQuery, appStatus, appSort, appGrouped,
       libraryQuery, libraryStatus, librarySort, libraryGrouped,
       serviceMetricStates: Object.fromEntries(serviceMetricStates), daemonMetricWindow,
@@ -1219,6 +1232,7 @@ function saveUIState() {
       svcCollapsedGroups: [...svcCollapsedGroups],
       appCollapsedGroups: [...appCollapsedGroups],
       libraryCollapsedGroups: [...libraryCollapsedGroups],
+      mountCollapsedGroups: [...mountCollapsedGroups],
       eventFilters: {
         service: ($("#event-service") || {}).value || "",
         watch: ($("#event-watch") || {}).value || "",
@@ -1229,10 +1243,12 @@ function saveUIState() {
         group: !($("#event-group") && !$("#event-group").checked),
       },
       watchPanels: Object.fromEntries(Object.entries(watchPanels).map(([k, p]) => [k, {
-        query: p.query, status: p.status, type: p.type, sort: p.sort,
+        query: p.query, status: p.status, type: p.type, grouped: p.grouped,
+        collapsedGroups: [...p.collapsedGroups], sort: p.sort,
       }])),
       splitServicePanels: Object.fromEntries(Object.entries(splitServicePanels).map(([k, p]) => [k, {
-        query: p.query, status: p.status, sort: p.sort,
+        query: p.query, status: p.status, grouped: p.grouped,
+        collapsedGroups: [...p.collapsedGroups], sort: p.sort,
       }])),
     }));
   } catch (_) {}
@@ -1913,6 +1929,23 @@ function setSplitServiceSort(panelKey, key) {
   toggleSort(panel.sort, key, renderServices);
 }
 
+function setSplitServiceGrouped(panelKey, grouped) {
+  const panel = getSplitServicePanel(panelKey);
+  if (!panel) return;
+  panel.grouped = !!grouped;
+  renderServices();
+  saveUIState();
+}
+
+function toggleAllSplitServiceGroups(panelKey) {
+  const panel = getSplitServicePanel(panelKey);
+  if (!panel) return;
+  const groups = sortedCategories(servicesForSurface(panel.surface).filter((s) => splitServiceMatches(s, panel)), "service");
+  toggleAllGroups(groups, panel.collapsedGroups);
+  renderServices();
+  saveUIState();
+}
+
 function compareSortValues(a, b) {
   if (a == null) a = "";
   if (b == null) b = "";
@@ -2064,12 +2097,7 @@ function setSvcGrouped(v) {
 function toggleAllSvcGroups() {
   const list = (allServices || []).filter(serviceMatches);
   const categories = sortedCategories(list, "service");
-  const allCollapsed = categories.length > 0 && categories.every((category) => svcCollapsedGroups.has(category));
-  if (allCollapsed) {
-    categories.forEach((category) => svcCollapsedGroups.delete(category));
-  } else {
-    categories.forEach((category) => svcCollapsedGroups.add(category));
-  }
+  toggleAllGroups(categories, svcCollapsedGroups);
   renderServices();
   saveUIState();
 }
@@ -2284,6 +2312,7 @@ function renderPrimaryServices() {
   updateSortIndicators();
   const visibleCategories = sortedCategories(list, "service");
   svcCollapsedGroups.forEach((category) => { if (!visibleCategories.includes(category)) svcCollapsedGroups.delete(category); });
+  if (visibleCategories.length < 2) svcGrouped = false;
   updateGroupButtons("svc", svcGrouped, visibleCategories, svcCollapsedGroups, "services");
   const cnt = $("#svc-count");
   if (cnt) cnt.textContent = servicePanelFilterActive(svcQuery, svcStatus, svcCategory) ? `showing ${list.length} of ${total}` : "";
@@ -2294,7 +2323,7 @@ function renderPrimaryServices() {
       : tpl`<tr><td colspan="10" class="muted">No services.</td></tr>`;
   } else {
     content = svcGrouped
-      ? renderGroupedRows(list, svcCollapsedGroups, "svc", "service", 10, (s) => serviceRowHTML(s), svcSort.key === "category" ? svcSort.dir : 1)
+      ? renderGroupedRows(list, svcCollapsedGroups, "svc", "svc", (s) => categoryOf(s, "service"), 10, (s) => serviceRowHTML(s), svcSort.key === "category" ? svcSort.dir : 1)
       : list.flatMap((s) => serviceRowHTML(s));
   }
   litRender(content, rows);
@@ -2322,10 +2351,16 @@ function renderSplitServicePanel(panelKey) {
   const list = source.filter((s) => splitServiceMatches(s, panel));
   sortServiceList(list, panel.sort);
   updateSortIndicatorsFor(panel.sortIndicator, panel.sort, `${panel.section} .services-table th.sortable[data-${panel.sortAttr}]`, panel.sortDataset);
+  const groups = sortedCategories(list, "service");
+  panel.collapsedGroups.forEach((group) => { if (!groups.includes(group)) panel.collapsedGroups.delete(group); });
+  if (groups.length < 2) panel.grouped = false;
+  updateGroupButtons(panelKey, panel.grouped, groups, panel.collapsedGroups, panel.label);
   if (cnt) cnt.textContent = servicePanelFilterActive(panel.query, panel.status) ? `showing ${list.length} of ${total}` : "";
   const filtered = servicePanelFilterActive(panel.query, panel.status);
   const content = list.length
-    ? list.flatMap((s) => serviceRowHTML(s, { showResume: true }))
+    ? (panel.grouped
+      ? renderGroupedRows(list, panel.collapsedGroups, panelKey, "svc", (s) => categoryOf(s, "service"), 10, (s) => serviceRowHTML(s, { showResume: true }), panel.sort.key === "category" ? panel.sort.dir : 1)
+      : list.flatMap((s) => serviceRowHTML(s, { showResume: true })))
     : tpl`<tr><td colspan="10" class="muted">${filtered ? panel.emptyFiltered : panel.empty}</td></tr>`;
   litRender(content, rows);
 }
@@ -3523,6 +3558,22 @@ function setWatchType(panelKey, v) {
   saveUIState();
 }
 
+function setWatchGrouped(panelKey, grouped) {
+  const panel = getWatchPanel(panelKey);
+  panel.grouped = !!grouped;
+  renderWatches();
+  saveUIState();
+}
+
+function toggleAllWatchGroups(panelKey) {
+  const panel = getWatchPanel(panelKey);
+  const watches = (allWatches || []).filter((watch) => watchPanelKeyFor(watch) === panelKey && watchMatches(watch, panelKey));
+  const groups = sortedGroupValues(watches, (watch) => watchTypeValue(panel, watch) || "unknown");
+  toggleAllGroups(groups, panel.collapsedGroups);
+  renderWatches();
+  saveUIState();
+}
+
 // syncWatchTypeSelect repopulates one watch panel's type dropdown from the
 // distinct check types currently present in that panel (with per-type counts).
 // A single type cannot filter anything, so it is hidden and the selection is
@@ -4008,10 +4059,17 @@ function renderWatchPanel(panelKey, watches) {
     sortedBy(list, { key: "name", dir: 1 }, watchSortKeys, "name");
   }
   updateWatchSortIndicators(panelKey);
+  const groupOf = (watch) => watchTypeValue(panel, watch) || "unknown";
+  const groups = sortedGroupValues(list, groupOf);
+  panel.collapsedGroups.forEach((group) => { if (!groups.includes(group)) panel.collapsedGroups.delete(group); });
+  if (groups.length < 2) panel.grouped = false;
+  updateGroupButtons(panel.groupPrefix, panel.grouped, groups, panel.collapsedGroups, panel.groupLabel, "type");
   const filtered = watchPanelFilterActive(panel);
   if (filterCount) filterCount.textContent = filtered ? `showing ${list.length} of ${total}` : "";
   const content = list.length
-    ? list.flatMap(panel.rowHTML || watchRowHTML)
+    ? (panel.grouped
+      ? renderGroupedRows(list, panel.collapsedGroups, panel.groupPanel, "wat", groupOf, panel.cols || 9, panel.rowHTML || watchRowHTML, panel.sort.key === "type" ? panel.sort.dir : 1)
+      : list.flatMap(panel.rowHTML || watchRowHTML))
     : tpl`<tr><td colspan="${panel.cols || 9}" class="muted">${filtered ? panel.emptyFiltered : panel.empty}</td></tr>`;
   litRender(content, tbody);
 }
@@ -4105,28 +4163,37 @@ function toggleAllAppGroups() {
   saveUIState();
 }
 
-function toggleCategoryGroup(panel, category) {
-  if (!category) return;
+function toggleGroup(panel, group) {
+  if (!group) return;
+  let collapsedGroups;
+  let rerender;
   if (panel === "svc") {
-    if (svcCollapsedGroups.has(category)) svcCollapsedGroups.delete(category);
-    else svcCollapsedGroups.add(category);
-    renderServices();
-    saveUIState();
-    return;
+    collapsedGroups = svcCollapsedGroups;
+    rerender = renderServices;
+  } else if (panel === "app") {
+    collapsedGroups = appCollapsedGroups;
+    rerender = renderApps;
+  } else if (panel === "library") {
+    collapsedGroups = libraryCollapsedGroups;
+    rerender = renderLibraries;
+  } else if (panel === "mount") {
+    collapsedGroups = mountCollapsedGroups;
+    rerender = renderMounts;
+  } else if (splitServicePanels[panel]) {
+    collapsedGroups = splitServicePanels[panel].collapsedGroups;
+    rerender = renderServices;
+  } else if (panel.startsWith("watch-")) {
+    const key = panel.slice("watch-".length);
+    const watchPanel = watchPanels[key];
+    if (!watchPanel) return;
+    collapsedGroups = watchPanel.collapsedGroups;
+    rerender = renderWatches;
   }
-  if (panel === "app") {
-    if (appCollapsedGroups.has(category)) appCollapsedGroups.delete(category);
-    else appCollapsedGroups.add(category);
-    renderApps();
-    saveUIState();
-    return;
-  }
-  if (panel === "library") {
-    if (libraryCollapsedGroups.has(category)) libraryCollapsedGroups.delete(category);
-    else libraryCollapsedGroups.add(category);
-    renderLibraries();
-    saveUIState();
-  }
+  if (!collapsedGroups || !rerender) return;
+  if (collapsedGroups.has(group)) collapsedGroups.delete(group);
+  else collapsedGroups.add(group);
+  rerender();
+  saveUIState();
 }
 
 // renderApps lists the installed applications below the services table. The
@@ -4160,6 +4227,7 @@ function renderApps(apps) {
   updateAppSortIndicators();
   const visibleCategories = sortedCategories(list, "app");
   appCollapsedGroups.forEach((category) => { if (!visibleCategories.includes(category)) appCollapsedGroups.delete(category); });
+  if (visibleCategories.length < 2) appGrouped = false;
   updateGroupButtons("app", appGrouped, visibleCategories, appCollapsedGroups, "applications");
   if (filterCount) filterCount.textContent = (appQuery || appCategory !== filterAll || appStatus !== filterAll) ? `showing ${list.length} of ${total}` : "";
   const appRow = (a) => {
@@ -4185,7 +4253,7 @@ function renderApps(apps) {
   };
   const content = list.length
     ? (appGrouped
-      ? renderGroupedRows(list, appCollapsedGroups, "app", "app", 5, appRow, appSort.key === "category" ? appSort.dir : 1)
+      ? renderGroupedRows(list, appCollapsedGroups, "app", "app", (app) => categoryOf(app, "app"), 5, appRow, appSort.key === "category" ? appSort.dir : 1)
       : list.flatMap(appRow))
     : tpl`<tr><td colspan="5" class="muted">No applications match the filter.</td></tr>`;
   litRender(content, tbody);
@@ -4345,6 +4413,7 @@ function renderLibraries(libraries) {
   libraryCollapsedGroups.forEach((category) => {
     if (!visibleCategories.includes(category)) libraryCollapsedGroups.delete(category);
   });
+  if (visibleCategories.length < 2) libraryGrouped = false;
   updateGroupButtons("library", libraryGrouped, visibleCategories, libraryCollapsedGroups, "libraries");
   if (filterCount) {
     filterCount.textContent = (libraryQuery || libraryCategory !== filterAll || libraryStatus !== filterAll)
@@ -4372,7 +4441,7 @@ function renderLibraries(libraries) {
   };
   const content = list.length
     ? (libraryGrouped
-      ? renderGroupedRows(list, libraryCollapsedGroups, "library", "library", 4, libraryRow, librarySort.key === "category" ? librarySort.dir : 1)
+      ? renderGroupedRows(list, libraryCollapsedGroups, "library", "library", (library) => categoryOf(library, "library"), 4, libraryRow, librarySort.key === "category" ? librarySort.dir : 1)
       : list.flatMap(libraryRow))
     : tpl`<tr><td colspan="4" class="muted">No libraries match the filter.</td></tr>`;
   litRender(content, tbody);
@@ -4518,6 +4587,12 @@ const mountSortKeys = {
 function setMountSort(key) { toggleSort(mountSort, key, renderMounts); }
 function setMountQuery(v) { mountQuery = (v || "").trim().toLowerCase(); renderMounts(); saveUIState(); }
 function setMountCategory(v) { mountCategory = v || filterAll; renderMounts(); saveUIState(); }
+function setMountGrouped(grouped) { mountGrouped = !!grouped; renderMounts(); saveUIState(); }
+function toggleAllMountGroups() {
+  toggleAllGroups(sortedCategories((allMounts || []).filter(mountMatches), "storage"), mountCollapsedGroups);
+  renderMounts();
+  saveUIState();
+}
 function setMountStatus(v) {
   mountStatus = normalizeMountStatusFilter(v);
   syncFilterButtons("#mount-filters", "mf", mountStatus);
@@ -4549,6 +4624,47 @@ function updateMountSortIndicators() {
   updateSortIndicatorsFor("mi", mountSort, ".mount-table th.sortable[data-mount-sort]", "mountSort");
 }
 
+function mountRowHTML(m) {
+  const label = esc(m.display_name || m.name);
+  const category = categoryOf(m, "storage");
+  const mounted = !!m.mounted;
+  const state = m.state || (mounted ? mountStateActive : mountStateInactive);
+  const detail = m.message ? ` title="${esc(m.message)}"` : "";
+  const refcount = m.refcounted === false ? '<span class="muted">off</span>' : String(Number(m.refcount || 0));
+  const name = esc(m.name || "");
+  const actions = mountActionButtons(m, mounted);
+  return `<tr id="mount-row-${detailDomKey(m.name || m.path || "mount")}" tabindex="-1"${detail}>
+    <td>${label}</td>
+    <td>${mountCategoryCell(category)}</td>
+    <td><code>${esc(m.path || "")}</code></td>
+    <td>${mounted ? '<span class="ok">yes</span>' : '<span class="muted">no</span>'}</td>
+    <td>${refcount}</td>
+    <td class="mount-processes">${mountProcessesCell(m)}</td>
+    <td class="mount-users">${mountUsersCell(m)}</td>
+    <td><span class="target-state ${mountStateClass(state, mounted)}">${esc(state)}</span></td>
+    <td class="actions" data-mount-row="${name}">${actions}</td>
+  </tr>`;
+}
+
+function renderGroupedMountRows(list) {
+  const groups = new Map();
+  list.forEach((mount) => {
+    const group = categoryOf(mount, "storage");
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(mount);
+  });
+  const direction = mountSort.key === "category" ? mountSort.dir : 1;
+  return Array.from(groups.entries()).sort((a, b) =>
+    a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: "base" }) * direction
+  ).map(([group, mounts]) => {
+    const collapsed = mountCollapsedGroups.has(group);
+    const first = mounts[0];
+    const controls = `mount-row-${detailDomKey(first.name || first.path || "mount")}`;
+    const header = `<tr class="group-row"><td colspan="9"><button type="button" class="row-toggle group-toggle" data-group-panel="mount" data-group-name="${esc(group)}" aria-expanded="${collapsed ? domBoolFalse : domBoolTrue}" aria-controls="${controls}" aria-label="${esc(groupToggleAriaLabel(group, mounts.length, collapsed))}"><span class="exp" aria-hidden="true">${collapsed ? "▸" : "▾"}</span>${esc(group)} <span class="muted">${mounts.length}</span></button></td></tr>`;
+    return header + (collapsed ? "" : mounts.map(mountRowHTML).join(""));
+  }).join("");
+}
+
 function renderMounts(mounts) {
   if (mounts) allMounts = mounts;
   scheduleGlobalTargetSync();
@@ -4574,29 +4690,13 @@ function renderMounts(mounts) {
     sortedBy(list, mountSort, mountSortKeys, "name");
   }
   updateMountSortIndicators();
+  const groups = sortedCategories(list, "storage");
+  mountCollapsedGroups.forEach((group) => { if (!groups.includes(group)) mountCollapsedGroups.delete(group); });
+  if (groups.length < 2) mountGrouped = false;
+  updateGroupButtons("mount", mountGrouped, groups, mountCollapsedGroups, "mount units", "group");
   if (filterCount) filterCount.textContent = (mountQuery || mountStatus !== filterAll || mountCategory !== filterAll) ? `showing ${list.length} of ${total}` : "";
-  const rows = list.map((m) => {
-    const label = esc(m.display_name || m.name);
-    const category = categoryOf(m, "storage");
-    const mounted = !!m.mounted;
-    const state = m.state || (mounted ? mountStateActive : mountStateInactive);
-    const detail = m.message ? ` title="${esc(m.message)}"` : "";
-    const refcount = m.refcounted === false ? '<span class="muted">off</span>' : String(Number(m.refcount || 0));
-    const name = esc(m.name || "");
-    const actions = mountActionButtons(m, mounted);
-    return `<tr id="mount-row-${detailDomKey(m.name || m.path || "mount")}" tabindex="-1"${detail}>
-      <td>${label}</td>
-      <td>${mountCategoryCell(category)}</td>
-      <td><code>${esc(m.path || "")}</code></td>
-      <td>${mounted ? '<span class="ok">yes</span>' : '<span class="muted">no</span>'}</td>
-      <td>${refcount}</td>
-      <td class="mount-processes">${mountProcessesCell(m)}</td>
-      <td class="mount-users">${mountUsersCell(m)}</td>
-      <td><span class="target-state ${mountStateClass(state, mounted)}">${esc(state)}</span></td>
-      <td class="actions" data-mount-row="${name}">${actions}</td>
-    </tr>`;
-  });
-  tbody.innerHTML = rows.join("") || `<tr><td colspan="9" class="muted">No mount units match the filter.</td></tr>`;
+  const rows = mountGrouped ? renderGroupedMountRows(list) : list.map(mountRowHTML).join("");
+  tbody.innerHTML = rows || `<tr><td colspan="9" class="muted">No mount units match the filter.</td></tr>`;
   updateSectionNav();
 }
 
@@ -6074,48 +6174,62 @@ function syncCategorySelect(id, items, fallback, selected, allLabel = "all categ
   return next;
 }
 
-function groupedPanelId(panel, items) {
+function groupedPanelId(rowPrefix, items) {
   const first = items && items[0];
   if (!first || !first.name) return nothing;
-  return `${panel}-row-${first.name}`;
+  return `${rowPrefix}-row-${first.name}`;
 }
 
-function renderGroupedRows(list, collapsedGroups, panel, fallback, colspan, renderRow, groupDir) {
+function sortedGroupValues(list, groupOf) {
+  return [...new Set(list.map(groupOf))].sort((a, b) =>
+    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+}
+
+function toggleAllGroups(groups, collapsedGroups) {
+  const allCollapsed = groups.length > 0 && groups.every((group) => collapsedGroups.has(group));
+  if (allCollapsed) groups.forEach((group) => collapsedGroups.delete(group));
+  else groups.forEach((group) => collapsedGroups.add(group));
+}
+
+function renderGroupedRows(list, collapsedGroups, panel, rowPrefix, groupOf, colspan, renderRow, groupDir) {
   const groups = new Map();
   list.forEach((item) => {
-    const category = categoryOf(item, fallback);
-    if (!groups.has(category)) groups.set(category, []);
-    groups.get(category).push(item);
+    const group = groupOf(item);
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(item);
   });
   const dir = groupDir === -1 ? -1 : 1;
   return Array.from(groups.entries()).sort((a, b) =>
     a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: "base" }) * dir
-  ).map(([category, items]) => {
-    const collapsed = collapsedGroups.has(category);
-    const panelId = groupedPanelId(panel, items);
+  ).map(([group, items]) => {
+    const collapsed = collapsedGroups.has(group);
+    const panelId = groupedPanelId(rowPrefix, items);
     const header = tpl`<tr class="group-row">
-      <td colspan="${colspan}"><button type="button" class="row-toggle group-toggle" data-group-panel="${panel}" data-group-name="${category}" aria-expanded="${collapsed ? domBoolFalse : domBoolTrue}" aria-controls="${panelId}" aria-label="${groupToggleAriaLabel(category, items.length, collapsed)}"><span class="exp" aria-hidden="true">${collapsed ? "▸" : "▾"}</span>${category} <span class="muted">${items.length}</span></button></td>
+      <td colspan="${colspan}"><button type="button" class="row-toggle group-toggle" data-group-panel="${panel}" data-group-name="${group}" aria-expanded="${collapsed ? domBoolFalse : domBoolTrue}" aria-controls="${panelId}" aria-label="${groupToggleAriaLabel(group, items.length, collapsed)}"><span class="exp" aria-hidden="true">${collapsed ? "▸" : "▾"}</span>${group} <span class="muted">${items.length}</span></button></td>
     </tr>`;
     return [header, collapsed ? nothing : items.map(renderRow)];
   });
 }
 
-function updateGroupButtons(prefix, grouped, categories, collapsedGroups, label) {
+function updateGroupButtons(prefix, grouped, groups, collapsedGroups, label, groupBy = "category") {
   const group = $("#" + prefix + "-group-toggle");
+  const available = groups.length > 1;
   if (group) {
+    group.hidden = !available;
+    group.disabled = !available;
     group.setAttribute("aria-pressed", grouped ? domBoolTrue : domBoolFalse);
-    group.title = grouped ? `Ungroup ${label}` : `Group ${label} by category`;
+    group.title = grouped ? `Ungroup ${label}` : `Group ${label} by ${groupBy}`;
     group.setAttribute("aria-label", group.title);
   }
   const all = $("#" + prefix + "-groups-toggle");
   if (!all) return;
-  const any = categories.length > 0;
-  const allCollapsed = any && categories.every((category) => collapsedGroups.has(category));
-  all.disabled = !grouped || !any;
+  const allCollapsed = available && groups.every((groupName) => collapsedGroups.has(groupName));
+  all.hidden = !available;
+  all.disabled = !grouped || !available;
   all.innerHTML = allCollapsed ? "▾" : "▴";
   all.title = allCollapsed ? `Expand all ${label} groups` : `Collapse all ${label} groups`;
   all.setAttribute("aria-label", all.title);
-  all.setAttribute("aria-pressed", grouped && any && !allCollapsed ? domBoolTrue : domBoolFalse);
+  all.setAttribute("aria-pressed", grouped && available && !allCollapsed ? domBoolTrue : domBoolFalse);
 }
 
 function closestFrom(event, selector) {
@@ -6220,6 +6334,18 @@ function initStaticHandlers() {
         if (btn) setSplitServiceStatus(panelKey, btn.dataset[panel.filterDataset] || filterAll);
       });
     }
+    const groupToggle = $("#" + panelKey + "-group-toggle");
+    if (groupToggle) groupToggle.addEventListener(domEventClick, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setSplitServiceGrouped(panelKey, !panel.grouped);
+    });
+    const groupsToggle = $("#" + panelKey + "-groups-toggle");
+    if (groupsToggle) groupsToggle.addEventListener(domEventClick, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleAllSplitServiceGroups(panelKey);
+    });
     document.querySelectorAll(`${panel.section} .services-table th.sortable[data-${panel.sortAttr}]`).forEach((th) => {
       bindSortHeader(th, () => setSplitServiceSort(panelKey, th.dataset[panel.sortDataset] || ""));
     });
@@ -6252,6 +6378,19 @@ function initStaticHandlers() {
     const typeSelect = $(panel.typeSelect);
     if (typeSelect) typeSelect.addEventListener(domEventChange, () => setWatchType(panelKey, typeSelect.value));
 
+    const groupToggle = $("#" + panelKey + "-group-toggle");
+    if (groupToggle) groupToggle.addEventListener(domEventClick, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setWatchGrouped(panelKey, !panel.grouped);
+    });
+    const groupsToggle = $("#" + panelKey + "-groups-toggle");
+    if (groupsToggle) groupsToggle.addEventListener(domEventClick, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleAllWatchGroups(panelKey);
+    });
+
     const filters = $(panel.filters);
     if (filters) {
       filters.addEventListener(domEventClick, (e) => {
@@ -6279,6 +6418,18 @@ function initStaticHandlers() {
 
   const mountCategorySelect = $("#mount-category");
   if (mountCategorySelect) mountCategorySelect.addEventListener(domEventChange, () => setMountCategory(mountCategorySelect.value));
+  const mountGroupToggle = $("#mount-group-toggle");
+  if (mountGroupToggle) mountGroupToggle.addEventListener(domEventClick, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMountGrouped(!mountGrouped);
+  });
+  const mountGroupsToggle = $("#mount-groups-toggle");
+  if (mountGroupsToggle) mountGroupsToggle.addEventListener(domEventClick, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleAllMountGroups();
+  });
 
   const mountFilters = $("#mount-filters");
   if (mountFilters) {
@@ -6526,7 +6677,7 @@ function initDelegatedHandlers() {
 
     const group = closestFrom(e, "[data-group-panel][data-group-name]");
     if (group) {
-      toggleCategoryGroup(group.dataset.groupPanel || "", group.dataset.groupName || "");
+      toggleGroup(group.dataset.groupPanel || "", group.dataset.groupName || "");
       return;
     }
 

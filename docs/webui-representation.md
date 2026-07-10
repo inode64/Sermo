@@ -29,8 +29,8 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
   and the `/` search shortcut iterate that registry. Static IDs, columns,
   controls and copy come from `internal/web/src/watch-panels.json`, shared by
   the Go shell builder and the runtime registry.
-- Services, applications and watches (including storage watches) can use
-  `category` for grouping, filtering or search depending on the panel.
+- Services, containers, virtual machines, applications, libraries and mount
+  units group by `category`; watch panels group by their panel-specific type.
 - A top-level YAML `category` field is the category source. If it is absent,
   services fall back to `service`, applications to `app`, storage watches to
   `storage` and other watches to `watch`.
@@ -195,7 +195,7 @@ Columns:
 | Memory | latest process-tree resident memory; blank for `no_resident_process` services |
 | FDs | open file-descriptor count from the process tree; blank for `no_resident_process` services |
 | IO R/W | cumulative process-tree disk read/write bytes; blank for `no_resident_process` services |
-| Actions | compact state-aware start/stop and restart icon buttons; reload, resume and monitor/unmonitor live in the row overflow menu; reload is disabled when `can_reload` is false; the start/stop/restart confirm dialog offers **skip also_apply** when `also_apply` is set |
+| Actions | compact, individual state-aware icon buttons for start/stop, restart, reload, resume and monitor/unmonitor; reload is disabled when `can_reload` is false; the start/stop/restart confirm dialog offers **skip also_apply** when `also_apply` is set |
 
 ## Containers and virtual machines panels
 
@@ -210,6 +210,8 @@ containers and paused VMs can be resumed through the service operation path.
 | --- | --- | --- |
 | Containers | `docker` | `resume` when the container backend reports `paused` |
 | Virtual machines | `virtual-machine` | `resume` when the VM backend reports `paused` |
+
+Both panels expose the same category grouping and collapse controls as Services.
 
 ## Service row expansion
 
@@ -309,7 +311,9 @@ Section id: `mounts-section`
 | --- | --- |
 | Title | `Mount units` plus total count |
 | Visibility | hidden when no configured mount units are returned |
+| Title icons | group by mount group, collapse/expand all groups (hidden when only one group exists) |
 | Controls | search by mount text, group dropdown when more than one group exists, state filters (`all`, `active`, `inactive`) |
+| Grouping | mount group rows, collapsible |
 
 Columns:
 
@@ -355,8 +359,10 @@ column, from the same per-process totals already in the service detail.
 | Part | Current representation |
 | --- | --- |
 | Title | Panel name plus total count for that panel's watch subset |
+| Title icons | group by panel type, collapse/expand all type groups (hidden when only one group exists) |
 | Controls | search, type filter (per panel, see below), state filters, showing count |
-| Type filter | panel-specific `all ... types` plus the distinct values currently present in that panel; Storage filters by filesystem type (all its watches share one check type), Certificate watches by public-key algorithm (the dropdown only appears with 3+ distinct key types), Disk I/O has no type dropdown |
+| Type filter | panel-specific `all ... types` plus the distinct values currently present in that panel; Storage filters by filesystem type (all its watches share one check type), Certificate watches by public-key algorithm; the selector is hidden when only one value exists |
+| Grouping | collapsible rows by the same panel-specific type used by the type filter |
 | State filters | all, disabled, ok, starting, failed |
 | Search | display name, raw name, category, type, summary, interval, polarity, hook state/command, notifier names, expand/dry-run/monitoring state and conditions |
 | Sorting | every column header except Actions is sortable; Storage, Network, Certificate and Disk I/O default to Name order, Host watches keeps the server order until a header is clicked |
