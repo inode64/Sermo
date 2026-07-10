@@ -10,11 +10,16 @@ func TestStoreEventsRoundTripAndPrune(t *testing.T) {
 	old := time.Date(2026, 6, 13, 10, 0, 0, 0, time.UTC)
 	recent := old.Add(time.Hour)
 
-	if err := s.RecordEvent(EventRecord{At: old, Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "old"}); err != nil {
+	oldID, err := s.RecordEvent(EventRecord{At: old, Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "old"})
+	if err != nil {
 		t.Fatalf("RecordEvent(old): %v", err)
 	}
-	if err := s.RecordEvent(EventRecord{At: recent, Watch: "storage-root", Kind: "hook-failed", Message: "recent"}); err != nil {
+	recentID, err := s.RecordEvent(EventRecord{At: recent, Watch: "storage-root", Kind: "hook-failed", Message: "recent"})
+	if err != nil {
 		t.Fatalf("RecordEvent(recent): %v", err)
+	}
+	if oldID <= 0 || recentID <= oldID {
+		t.Fatalf("event IDs old=%d recent=%d, want increasing positive IDs", oldID, recentID)
 	}
 
 	events, err := s.RecentEvents(0)
@@ -23,6 +28,16 @@ func TestStoreEventsRoundTripAndPrune(t *testing.T) {
 	}
 	if len(events) != 2 || events[0].Message != "recent" || events[1].Service != "web" {
 		t.Fatalf("events = %+v, want newest first with service fields", events)
+	}
+	if events[0].ID != recentID || events[1].ID != oldID {
+		t.Fatalf("event IDs = [%d %d], want [%d %d]", events[0].ID, events[1].ID, recentID, oldID)
+	}
+	older, err := s.RecentEventsBefore(recentID, 10)
+	if err != nil {
+		t.Fatalf("RecentEventsBefore: %v", err)
+	}
+	if len(older) != 1 || older[0].ID != oldID {
+		t.Fatalf("older events = %+v, want only ID %d", older, oldID)
 	}
 	limited, err := s.RecentEvents(1)
 	if err != nil {

@@ -39,12 +39,14 @@ const apiStateCompactPath = "api/state/compact";
 const apiWatchesPath = "api/watches";
 const apiWhoamiPath = "api/whoami";
 const apiQueryCheck = "check";
+const apiQueryBeforeID = "before_id";
 const apiQueryKill = "kill";
 const apiQueryKind = "kind";
 const apiQueryLimit = "limit";
 const apiQueryName = "name";
 const apiQueryNoCascade = "no_cascade";
 const apiQueryOnlyErrors = "only_errors";
+const apiQueryPage = "page";
 const apiQueryService = "service";
 const apiQuerySince = "since";
 const apiQueryStatus = "status";
@@ -612,10 +614,12 @@ function renderOpsPanel(o) {
 
 const EVENT_FILTER_DEBOUNCE_MS = 300;
 let eventFilterTimer = null;
+let eventNextBeforeID = 0;
+let eventHasMore = false;
 
-async function loadEvents(seq = 0) {
+async function loadEvents(seq = 0, append = false) {
   try {
-    const params = new URLSearchParams({ [apiQueryLimit]: eventLogLimit });
+    const params = new URLSearchParams({ [apiQueryLimit]: eventLogLimit, [apiQueryPage]: queryBoolOne });
     const add = (id, key) => {
       const el = $("#" + id);
       const v = el ? el.value.trim() : "";
@@ -626,16 +630,32 @@ async function loadEvents(seq = 0) {
     add("event-kind", apiQueryKind);
     add("event-status", apiQueryStatus);
     if ($("#event-errors") && $("#event-errors").checked) params.set(apiQueryOnlyErrors, queryBoolOne);
+    if (append && eventNextBeforeID > 0) params.set(apiQueryBeforeID, String(eventNextBeforeID));
     const res = await fetch(eventsAPI(params));
     if (!res.ok) return false;
-    const events = await res.json();
+    const page = await res.json();
+    const events = Array.isArray(page.events) ? page.events : [];
     if (seq && seq !== loadSeq) return true;
-    allEvents = events;
+    if (append) {
+      const known = new Set(allEvents.map((event) => event.id));
+      allEvents = allEvents.concat(events.filter((event) => !known.has(event.id)));
+    } else {
+      allEvents = events;
+    }
+    eventNextBeforeID = Number(page.next_before_id) || 0;
+    eventHasMore = !!page.has_more;
     renderGlobalEvents();
     return true;
   } catch (e) {
     return false; // keep the last feed on a transient error
   }
+}
+
+async function loadOlderEvents() {
+  const button = $("#event-more");
+  if (button) button.disabled = true;
+  await loadEvents(0, true);
+  if (button) button.disabled = false;
 }
 
 function scheduleLoadEvents() {
@@ -833,7 +853,7 @@ async function compactState() {
 }
 
 function eventKey(prefix, e, i) {
-  return `${prefix}:${i}:${e.time || ""}:${e.service || ""}:${e.watch || ""}:${e.kind || ""}:${e.action || ""}:${e.status || ""}`;
+  return e.id ? `${prefix}:id:${e.id}` : `${prefix}:${i}:${e.time || ""}:${e.service || ""}:${e.watch || ""}:${e.kind || ""}:${e.action || ""}:${e.status || ""}`;
 }
 
 function toggleEventMsg(key) {
@@ -911,6 +931,8 @@ function renderGlobalEvents() {
   const events = sortedEvents(allEvents || []);
   const cnt = $("#event-count");
   if (cnt) cnt.textContent = events.length ? `${events.length} shown` : "";
+  const more = $("#event-more");
+  if (more) more.hidden = !eventHasMore;
   updateSectionNav();
   const grouped = $("#event-group") && $("#event-group").checked;
   if (!grouped) {
@@ -927,7 +949,7 @@ function renderGlobalEvents() {
     const who = eventSubject(head) || "system";
     const action = head.action || head.kind || "event";
     const statuses = [...new Set(g.map((e) => e.status).filter(Boolean))].join(", ");
-    const groupKey = `grp:${gi}:${eventGroupKey(head)}`;
+    const groupKey = `grp:${eventGroupKey(head)}`;
     const panelId = `event-grp-panel-${gi}`;
     const open = eventExpanded.has(groupKey);
     return [
@@ -6106,6 +6128,8 @@ function initStaticHandlers() {
   if (groupEvents) groupEvents.addEventListener(domEventChange, () => { saveUIState(); renderGlobalEvents(); });
   const eventResetFilters = $("#event-reset-filters");
   if (eventResetFilters) eventResetFilters.addEventListener(domEventClick, clearEventFilters);
+  const eventMore = $("#event-more");
+  if (eventMore) eventMore.addEventListener(domEventClick, loadOlderEvents);
   const eventClear = $("#event-clear");
   if (eventClear) {
     eventClear.addEventListener(domEventClick, (e) => {

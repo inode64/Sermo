@@ -691,7 +691,10 @@ Read-only endpoints:
 - `GET /api/monitoring` — monitoring-enabled vs paused counts for non-disabled
   services.
 - `GET /api/events?limit=N` — global event feed, newest first. Optional filters:
-  `service`, `watch`, `kind`, `status` and `only_errors=1`.
+  `service`, `watch`, `kind`, `status` and `only_errors=1`. Add `page=1` to
+  receive `{events, next_before_id, has_more}`; pass `before_id` from that
+  response to continue toward older rows. Without `page`/`before_id`, the
+  endpoint keeps returning the legacy event array.
 - `GET /api/ops` — global operation slot usage: `{in_use, total}` for
   `engine.max_parallel_operations`.
 

@@ -59,6 +59,13 @@ func TestEventLogRecentNewestFirst(t *testing.T) {
 	if got := l.Recent("", 2); len(got) != 2 || got[0].Message != "3" {
 		t.Fatalf("limit not applied: %+v", got)
 	}
+	if all[0].ID <= all[1].ID || all[1].ID <= all[2].ID || all[2].ID <= 0 {
+		t.Fatalf("event IDs are not positive and newest-first: %+v", all)
+	}
+	page := l.Page(all[1].ID, 2)
+	if len(page) != 1 || page[0].ID != all[2].ID {
+		t.Fatalf("cursor page = %+v, want oldest event", page)
+	}
 }
 
 func TestEventLogPerService(t *testing.T) {
@@ -200,6 +207,13 @@ func TestPersistentEventLogHydratesServiceEvents(t *testing.T) {
 	global := hydrated.Recent("", 10)
 	if len(global) != 2 || global[0].Watch != "storage-root" || global[1].Service != "web" {
 		t.Fatalf("hydrated global events = %+v", global)
+	}
+	if global[0].ID <= global[1].ID || global[1].ID <= 0 {
+		t.Fatalf("hydrated event IDs = [%d %d], want stable positive IDs", global[0].ID, global[1].ID)
+	}
+	page := hydrated.Page(global[0].ID, 10)
+	if len(page) != 1 || page[0].ID != global[1].ID {
+		t.Fatalf("hydrated cursor page = %+v, want older service event", page)
 	}
 	service := hydrated.Recent("web", 10)
 	if len(service) != 1 || service[0].Service != "web" || service[0].Action != string(rules.ActionRestart) {
