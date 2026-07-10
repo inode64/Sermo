@@ -92,8 +92,7 @@
     "footnote": "Certificate host watches track expiry and issuer of TLS/PKI material. Other host watches are listed below.",
     "empty": "No certificate watches.",
     "emptyFiltered": "No certificate watches match the filter.",
-    "defaultSortByName": true,
-    "typeFilterMin": 3
+    "defaultSortByName": true
   },
   {
     "key": "diskio",

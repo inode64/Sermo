@@ -3524,9 +3524,9 @@ function setWatchType(panelKey, v) {
 }
 
 // syncWatchTypeSelect repopulates one watch panel's type dropdown from the
-// distinct check types currently present in that panel (with per-type counts),
-// mirroring the apps category select. Returns the reconciled selection ("all" if
-// the chosen type no longer exists).
+// distinct check types currently present in that panel (with per-type counts).
+// A single type cannot filter anything, so it is hidden and the selection is
+// reset to all to prevent an invisible stale filter.
 function syncWatchTypeSelect(panelKey, watches) {
   const panel = getWatchPanel(panelKey);
   const select = $(panel.typeSelect);
@@ -3538,17 +3538,10 @@ function syncWatchTypeSelect(panelKey, watches) {
   });
   const types = [...counts.keys()].sort((a, b) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
-  // Some panels (certificates) only expose the type filter once enough distinct
-  // types exist to be worth choosing between. Below that threshold, hide the
-  // dropdown and force "all" so no stale selection keeps filtering.
-  if (panel.typeFilterMin && types.length < panel.typeFilterMin) {
-    select.hidden = true;
-    select.innerHTML = `<option value="${filterAll}">${esc(panel.allTypesLabel)}</option>`;
-    select.value = filterAll;
-    return filterAll;
-  }
-  select.hidden = false;
-  const next = panel.type !== filterAll && counts.has(panel.type) ? panel.type : filterAll;
+  const visible = types.length > 1;
+  select.hidden = !visible;
+  select.disabled = !visible;
+  const next = visible && panel.type !== filterAll && counts.has(panel.type) ? panel.type : filterAll;
   select.innerHTML = `<option value="${filterAll}">${esc(panel.allTypesLabel)}</option>` + types.map((t) =>
     `<option value="${esc(t)}">${esc(t)} (${counts.get(t)})</option>`).join("");
   select.value = next;
@@ -4549,19 +4542,7 @@ function renderMountFilterCounts() {
 }
 
 function syncMountCategorySelect() {
-  const select = $("#mount-category");
-  if (!select) return mountCategory || filterAll;
-  const categories = sortedCategories(allMounts || [], "storage");
-  const counts = categoryCounts(allMounts || [], "storage");
-  const visible = categories.length > 1;
-  select.classList.toggle("panel-hidden", !visible);
-  select.disabled = !visible;
-  const next = visible && mountCategory !== filterAll && categories.includes(mountCategory) ? mountCategory : filterAll;
-  select.innerHTML = `<option value="${filterAll}">all groups</option>` + categories.map((category) =>
-    `<option value="${esc(category)}">${esc(category)} (${counts.get(category) || 0})</option>`
-  ).join("");
-  select.value = next;
-  return next;
+  return syncCategorySelect("#mount-category", allMounts || [], "storage", mountCategory, "all groups");
 }
 
 function updateMountSortIndicators() {
@@ -6077,13 +6058,16 @@ function sortedCategories(items, fallback) {
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
 }
 
-function syncCategorySelect(id, items, fallback, selected) {
+function syncCategorySelect(id, items, fallback, selected, allLabel = "all categories") {
   const select = $(id);
   if (!select) return selected || filterAll;
   const categories = sortedCategories(items, fallback);
-  const next = selected !== filterAll && categories.includes(selected) ? selected : filterAll;
+  const visible = categories.length > 1;
+  select.hidden = !visible;
+  select.disabled = !visible;
+  const next = visible && selected !== filterAll && categories.includes(selected) ? selected : filterAll;
   const counts = categoryCounts(items, fallback);
-  select.innerHTML = `<option value="${filterAll}">all categories</option>` + categories.map((category) =>
+  select.innerHTML = `<option value="${filterAll}">${esc(allLabel)}</option>` + categories.map((category) =>
     `<option value="${esc(category)}">${esc(category)} (${counts.get(category) || 0})</option>`
   ).join("");
   select.value = next;

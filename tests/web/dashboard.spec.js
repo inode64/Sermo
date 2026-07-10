@@ -37,6 +37,10 @@ const watches = [{
   name: "process-queue", display_name: "Process queue", category: "watch",
   enabled: true, monitored: true, state: "ok", check_type: "process",
   summary: "2 processes", interval: "1m", status_observed_at: "2026-07-10T12:00:00Z",
+}, {
+  name: "net-wan", display_name: "WAN", category: "network",
+  enabled: true, monitored: true, state: "ok", check_type: "net",
+  summary: "wan state up", interval: "30s", status_observed_at: "2026-07-10T12:00:00Z",
 }];
 
 const applications = [{
@@ -121,6 +125,12 @@ test("dashboard passes axe and fits the viewport", async ({ page }) => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(1);
   await expect(page.locator("#target-search")).toBeVisible();
+});
+
+test("single-choice filters stay hidden", async ({ page }) => {
+  for (const selector of ["#svc-category", "#app-category", "#library-category", "#mount-category", "#network-type"]) {
+    await expect(page.locator(selector)).toBeHidden();
+  }
 });
 
 test("global search opens a service and exposes individual actions", async ({ page }) => {
