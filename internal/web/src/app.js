@@ -1,66 +1,38 @@
 import { html as tpl, render as litRender, nothing } from "./vendor/lit-html.js";
+import {
+  apiActionSuffix, apiActivityPath, apiApplicationsPath, apiDaemonPath,
+  apiEventsRecentPath, apiHostPath, apiLocksPath,
+  apiMonitoringPath, apiMountsPath, apiNotifiersPath, apiOpsPath, apiQueryBeforeID,
+  apiQueryKill, apiQueryKind, apiQueryLimit, apiQueryName, apiQueryNoCascade,
+  apiQueryOnlyErrors, apiQueryPage, apiQueryService, apiQuerySince, apiQueryStatus,
+  apiQueryWatch, apiReloadPath,
+  apiServicesPath, apiWatchesPath, apiWhoamiPath, applicationEventsAPI,
+  csrfPostOptions, dashboardAPI, daemonMetricsAPI, eventsAPI, eventsClearAPI,
+  liveVerbosePath, lockReleaseAPI, mountAPI, mountBlockersAPI, panicAPI,
+  readyVerbosePath, serviceAPI, serviceEventsAPI, serviceMetricsAPI,
+  servicePreflightAPI, serviceRuntimeAPI, serviceSLAAPI, stateCompactAPI, watchAPI,
+} from "./api.js";
+import {
+  fmtAge, fmtBytes, fmtMetricValue, fmtNum, fmtPct, fmtRemain, fmtSeconds,
+  fmtSince, fmtTime, fmtUntilShort, fmtUptime, hoursPerDay, millisecondsPerDay,
+  millisecondsPerHour, millisecondsPerMinute, millisecondsPerSecond,
+  metricUnitBytes, metricUnitBytesPerSecond, metricUnitMilliseconds,
+  metricUnitPercent, minutesPerHour, pctClamp, percentMax, percentMin,
+  percentScale, rollingMonthDays, rollingWeekDays, rollingYearDays,
+  secondsPerDay, secondsPerHour, secondsPerMinute, shortDur,
+} from "./format.js";
 
 const $ = (s) => document.querySelector(s);
 
 const metricNameCPU = "cpu";
 const metricNameMemory = "memory";
 const metricNameIO = "io";
-const metricUnitPercent = "%";
-const metricUnitBytes = "bytes";
-const metricUnitBytesPerSecond = "B/s";
-const metricUnitMilliseconds = "ms";
 const hostMetricTotalCPU = "total_cpu";
 const hostMetricTotalMemory = "total_memory";
 const hostMetricTotalSwap = "total_swap";
 const hostMetricLoad1 = "load1";
 const eventLogLimit = "500";
-const eventRecentLimit = "200";
-const httpMethodPost = "POST";
 const httpStatusServiceUnavailable = 503;
-const csrfHeader = "X-Sermo-CSRF";
-const csrfHeaderValue = "1";
-const apiApplicationsPath = "api/applications";
-const apiActivityPath = "api/activity";
-const apiDashboardPath = "api/dashboard";
-const apiDaemonPath = "api/daemon";
-const apiDaemonMetricsPath = "api/daemon/metrics";
-const apiEventsPath = "api/events";
-const apiEventsClearPath = "api/events/clear";
-const apiHostPath = "api/host";
-const apiLocksPath = "api/locks";
-const apiMonitoringPath = "api/monitoring";
-const apiOpsPath = "api/ops";
-const apiMountsPath = "api/mounts";
-const apiNotifiersPath = "api/notifiers";
-const apiPanicPath = "api/panic";
-const apiReloadPath = "api/reload";
-const apiServicesPath = "api/services";
-const apiStateCompactPath = "api/state/compact";
-const apiWatchesPath = "api/watches";
-const apiWhoamiPath = "api/whoami";
-const apiQueryCheck = "check";
-const apiQueryBeforeID = "before_id";
-const apiQueryKill = "kill";
-const apiQueryKind = "kind";
-const apiQueryLimit = "limit";
-const apiQueryName = "name";
-const apiQueryNoCascade = "no_cascade";
-const apiQueryOnlyErrors = "only_errors";
-const apiQueryPage = "page";
-const apiQueryService = "service";
-const apiQuerySince = "since";
-const apiQueryStatus = "status";
-const apiQueryWatch = "watch";
-const apiEventsRecentPath = `${apiEventsPath}?${apiQueryLimit}=${eventRecentLimit}`;
-const apiSuffixBlockers = "/blockers";
-const apiSuffixEvents = "/events";
-const apiSuffixMetrics = "/metrics";
-const apiSuffixPreflight = "/preflight";
-const apiSuffixRelease = "/release";
-const apiSuffixRuntime = "/runtime";
-const apiSuffixSLA = "/sla";
-const readyVerbosePath = "readyz?verbose";
-const liveVerbosePath = "livez?verbose";
 const expansionPrefixApp = "app:";
 const expansionPrefixService = "svc:";
 const expansionPrefixWatch = "wat:";
@@ -186,27 +158,12 @@ const serviceStatusFilterStates = [
 const watchStatusFilterStates = [targetStateDisabled, targetStateOK, targetStateStarting, targetStateFailed];
 const appStatusFilterStates = [targetStateOK, targetStateStarting, targetStateWarning, targetStateFailed];
 const mountStatusFilterStates = [mountStateActive, mountStateInactive];
-const percentMin = 0;
-const percentMax = 100;
-const percentScale = percentMax;
 const slaHealthyPct = 99;
 const slaWarningPct = 95;
 const usageCriticalPct = 95;
 const usageHighPct = 90;
 const usageWarnPct = 75;
 const loadWarnPct = 80;
-const secondsPerMinute = 60;
-const minutesPerHour = 60;
-const hoursPerDay = 24;
-const rollingWeekDays = 7;
-const rollingMonthDays = 30;
-const rollingYearDays = 365;
-const secondsPerHour = secondsPerMinute * minutesPerHour;
-const secondsPerDay = secondsPerHour * hoursPerDay;
-const millisecondsPerSecond = 1000;
-const millisecondsPerMinute = millisecondsPerSecond * secondsPerMinute;
-const millisecondsPerHour = millisecondsPerMinute * minutesPerHour;
-const millisecondsPerDay = millisecondsPerHour * hoursPerDay;
 const eventMessagePreviewChars = 160;
 const liveOpsTickMs = millisecondsPerSecond;
 const refreshAgeTickMs = millisecondsPerSecond;
@@ -294,35 +251,6 @@ const runtimeMetricDefs = [
   { key: metricNameIO, label: "IO", unit: metricUnitBytesPerSecond, chartLabel: "Daemon IO metric chart" },
 ];
 
-function csrfPostOptions() {
-  return { method: httpMethodPost, headers: { [csrfHeader]: csrfHeaderValue } };
-}
-
-function apiEntityPath(base, name, suffix = "") {
-  return `${base}/${encodeURIComponent(name)}${suffix}`;
-}
-
-function apiActionSuffix(action, query = "") { return `/${action}${query}`; }
-function apiLimitSuffix(base, limit) { return `${base}?${apiQueryLimit}=${limit}`; }
-function apiSinceSuffix(base, since) { return `${base}?${apiQuerySince}=${since}`; }
-function applicationAPI(name, suffix = "") { return apiEntityPath(apiApplicationsPath, name, suffix); }
-function applicationEventsAPI(name, limit) { return applicationAPI(name, apiLimitSuffix(apiSuffixEvents, limit)); }
-function dashboardAPI(since) { return `${apiDashboardPath}?${apiQuerySince}=${since}`; }
-function daemonMetricsAPI(since) { return `${apiDaemonMetricsPath}?${apiQuerySince}=${since}`; }
-function eventsAPI(params) { return `${apiEventsPath}?${params.toString()}`; }
-function eventsClearAPI(query = "") { return `${apiEventsClearPath}${query}`; }
-function lockReleaseAPI(service, query = "") { return apiEntityPath(apiLocksPath, service, `${apiSuffixRelease}${query}`); }
-function mountAPI(name, suffix = "") { return apiEntityPath(apiMountsPath, name, suffix); }
-function mountBlockersAPI(name) { return mountAPI(name, apiSuffixBlockers); }
-function panicAPI(enable) { return `${apiPanicPath}/${enable ? panicModeOn : panicModeOff}`; }
-function serviceAPI(name, suffix = "") { return apiEntityPath(apiServicesPath, name, suffix); }
-function serviceEventsAPI(name, limit) { return serviceAPI(name, apiLimitSuffix(apiSuffixEvents, limit)); }
-function serviceMetricsAPI(name, check, since) { return serviceAPI(name, `${apiSuffixMetrics}?${apiQueryCheck}=${encodeURIComponent(check)}&${apiQuerySince}=${since}`); }
-function servicePreflightAPI(name) { return serviceAPI(name, apiSuffixPreflight); }
-function serviceRuntimeAPI(name, since) { return serviceAPI(name, apiSinceSuffix(apiSuffixRuntime, since)); }
-function serviceSLAAPI(name, since) { return serviceAPI(name, apiSinceSuffix(apiSuffixSLA, since)); }
-function stateCompactAPI(query = "") { return `${apiStateCompactPath}${query}`; }
-function watchAPI(name, suffix = "") { return apiEntityPath(apiWatchesPath, name, suffix); }
 function expansionKey(prefix, name) { return `${prefix}${name}`; }
 function expansionName(key, prefix) { return key.slice(prefix.length); }
 function appExpansionKey(name) { return expansionKey(expansionPrefixApp, name); }
@@ -3255,62 +3183,6 @@ async function refreshServiceGraphs(d) {
   return results.every(Boolean);
 }
 
-// fmtNum renders a number with at most `max` decimals (default 2), dropping any
-// trailing zeros so 5.00 -> "5", 5.10 -> "5.1" and 5.125 -> "5.13". Non-finite
-// values render as `fallback`. This is the single canonical numeric formatter;
-// route every user-facing reading through it instead of bare toFixed (geometry —
-// SVG coordinates, CSS bar widths — keeps its own fixed precision).
-function fmtNum(n, max = 2, fallback = "—") {
-  n = Number(n);
-  if (!Number.isFinite(n)) return fallback;
-  return n.toFixed(max).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
-}
-
-// fmtUptime renders a duration given in whole seconds as "111d 22h 33m 44s",
-// dropping the leading units that are zero (95 -> "1m 35s", 44 -> "44s") while
-// always keeping every unit below the largest non-zero one down to seconds.
-// This is the single uptime format used everywhere in the UI. Returns "" for
-// missing/negative input so callers can fall back to "—".
-function fmtUptime(sec) {
-  sec = Math.floor(Number(sec));
-  if (!Number.isFinite(sec) || sec < 0) return "";
-  const d = Math.floor(sec / secondsPerDay);
-  const h = Math.floor((sec % secondsPerDay) / secondsPerHour);
-  const m = Math.floor((sec % secondsPerHour) / secondsPerMinute);
-  const s = sec % secondsPerMinute;
-  const parts = [];
-  if (d) parts.push(d + "d");
-  if (d || h) parts.push(h + "h");
-  if (d || h || m) parts.push(m + "m");
-  parts.push(s + "s");
-  return parts.join(" ");
-}
-
-function fmtBytes(n) {
-  n = Number(n);
-  // Guard non-finite/negative inputs (e.g. an inconsistent backend counter):
-  // dividing a negative repeatedly would otherwise render nonsense like "-1 KB".
-  if (!Number.isFinite(n) || n < 0) return "0 B";
-  const u = ["B", "KB", "MB", "GB", "TB"];
-  let i = 0;
-  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
-  // Route every unit through fmtNum (including raw bytes): integer byte counts
-  // still render clean (512 -> "512 B") while fractional rates lose the long tail
-  // (234.5678 B/s -> "234.57 B/s") instead of leaking full float precision.
-  return fmtNum(n, 2, "0") + " " + u[i];
-}
-
-function fmtPct(n) {
-  n = Number(n);
-  return Number.isFinite(n) ? fmtNum(n, 2) + metricUnitPercent : "—";
-}
-
-function pctClamp(n) {
-  n = Number(n);
-  if (!Number.isFinite(n)) return 0;
-  return Math.max(percentMin, Math.min(percentMax, n));
-}
-
 function usageLevel(pct) {
   pct = pctClamp(pct);
   if (pct <= 0) return "usage-empty";
@@ -4684,20 +4556,6 @@ function pctVal(metrics, name) {
   return m.ready === false ? v + " (stale)" : v;
 }
 
-// shortDur renders a second count on the shared s/m/h/d ladder ("37s", "5m",
-// "3h", "2d"); every age/remaining formatter builds on it.
-function shortDur(sec) {
-  sec = Math.max(0, Math.floor(Number(sec) || 0));
-  if (sec < secondsPerMinute) return sec + "s";
-  if (sec < secondsPerHour) return Math.floor(sec / secondsPerMinute) + "m";
-  if (sec < secondsPerDay) return Math.floor(sec / secondsPerHour) + "h";
-  return Math.floor(sec / secondsPerDay) + "d";
-}
-
-function fmtSeconds(n) {
-  return shortDur(n);
-}
-
 function lockName(l) {
   return l.name || "(default)";
 }
@@ -5956,45 +5814,6 @@ function drawMetricChart(points, unit, win, label) {
   return `${dataTable}<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(aria)}" style="max-width:${W}px"><title>${esc(aria)}</title>${axis}${band}${line}${hover}</svg>`;
 }
 
-function fmtMetricValue(v, unit) {
-  const n = Number(v || 0);
-  switch (unit) {
-    case metricUnitBytes:
-      return fmtBytes(n);
-    case metricUnitBytesPerSecond:
-      return fmtBytes(n) + "/s";
-    case metricUnitPercent:
-      return fmtNum(n, 2) + metricUnitPercent;
-    case metricUnitMilliseconds:
-      return fmtNum(n, 2) + metricUnitMilliseconds;
-    default:
-      return fmtNum(n, 2) + (unit || "");
-  }
-}
-
-function fmtTime(t) {
-  const d = new Date(t);
-  return isNaN(d) ? (t || "") : d.toLocaleString();
-}
-
-function fmtRemain(until) {
-  const d = new Date(until);
-  if (isNaN(d)) return "";
-  const sec = Math.floor((d - Date.now()) / millisecondsPerSecond);
-  if (sec <= 0) return "elapsed";
-  if (sec < secondsPerHour) return shortDur(sec) + " remaining";
-  return Math.floor(sec / secondsPerHour) + "h remaining · until " + fmtTime(until);
-}
-
-function fmtUntilShort(until) {
-  const d = new Date(until);
-  if (isNaN(d)) return "";
-  const sec = Math.floor((d - Date.now()) / millisecondsPerSecond);
-  if (sec <= 0) return "now";
-  if (sec < secondsPerDay) return "in " + shortDur(sec);
-  return d.toLocaleDateString();
-}
-
 function ruleState(r) {
   if (r.firing) return tpl`<span class="bad">firing</span>`;
   if (r.condition_true) return tpl`<span class="inactive">matching</span>`;
@@ -6043,15 +5862,6 @@ function renderRemediation(r) {
   if (r.last_action_at) parts.push(tpl`<span class="muted">last action ${fmtAge(r.last_action_at)}</span>`);
   // Intersperse " · " separators between the parts (TemplateResults can't be join()ed).
   return parts.map((p, i) => i ? [" · ", p] : p);
-}
-
-function fmtAge(t) {
-  const d = new Date(t);
-  if (isNaN(d)) return "";
-  const sec = Math.floor((Date.now() - d) / millisecondsPerSecond);
-  if (sec < 0) return "just now";
-  if (sec < secondsPerDay) return shortDur(sec) + " ago";
-  return fmtTime(t);
 }
 
 function sampledAge(t) {
@@ -6554,12 +6364,6 @@ function refreshNow() { load().finally(scheduleRefresh); }
 function showPartialRefresh(failures) {
   const age = lastRefresh ? ` (last full update ${fmtSince(Date.now() - lastRefresh)} ago)` : "";
   setStatus(`Partial refresh — stale: ${failures.join(", ")}${age}`, feedbackStatusWarn, false);
-}
-function fmtSince(ms) {
-  const s = Math.max(0, Math.round(ms / millisecondsPerSecond));
-  if (s < secondsPerMinute) return s + "s";
-  const m = Math.floor(s / secondsPerMinute), r = s % secondsPerMinute;
-  return r ? `${m}m ${r}s` : `${m}m`;
 }
 function tickRefreshAge() {
   if (!connOK) { showDisconnected(); return; } // keep the banner's age fresh

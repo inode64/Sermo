@@ -403,8 +403,9 @@ Before finishing any code change:
 
 **Sources live in `internal/web/src/`; `internal/web/index.html` is a generated,
 committed artifact — never edit it by hand.** The dashboard is authored as a
-shell (`src/index.html`), `src/styles.css`, and ES modules (`src/app.js` and the
-vendored `src/vendor/lit-html.js`). `make web` runs the in-process esbuild build
+shell (`src/index.html`), `src/styles.css`, and ES modules (`src/app.js`,
+`src/api.js`, `src/format.js` and the vendored `src/vendor/lit-html.js`).
+`make web` runs the in-process esbuild build
 (`internal/web/build`, the Go API — no Node/npm) to bundle + minify them into
 `internal/web/index.html`, leaving the `{{CSP_NONCE}}`/`{{VERSION}}` placeholders
 for the server to fill per request. **After editing anything under
@@ -495,7 +496,7 @@ The visual layer is a token-driven design system (June 2026 redesign):
   bar widths (`--usage-pct`, `--sla-pct`) keep their own fixed precision. When a
   value needs a representation no helper covers, add or extend a helper next to
   the others rather than formatting inline at the call site. See the `fmtNum`
-  banner comment in `internal/web/src/app.js`.
+  banner comment in `internal/web/src/format.js`.
 
 **CSP and inline styles:** `style-src` deliberately carries `'unsafe-inline'`
 **without** a nonce — per CSP2, a nonce in the list makes browsers ignore
