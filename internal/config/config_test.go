@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sermo/internal/cfgval"
+	"sermo/internal/rules"
 	"slices"
 	"strings"
 	"testing"
@@ -2328,6 +2329,31 @@ func nested(t *testing.T, tree map[string]any, keys ...string) map[string]any {
 	return cur
 }
 
+func mustHaveRestartOnChangeActions(t *testing.T, then map[string]any, wantMessage string) {
+	t.Helper()
+	actions, ok := then["actions"].([]any)
+	if !ok || len(actions) != 2 {
+		t.Fatalf("then.actions = %#v, want alert + restart", then["actions"])
+	}
+	alert, ok := actions[0].(map[string]any)
+	if !ok {
+		t.Fatalf("then.actions[0] = %#v, want mapping", actions[0])
+	}
+	if got := cfgval.String(alert["type"]); got != string(rules.ActionAlert) {
+		t.Fatalf("then.actions[0].type = %q, want alert", got)
+	}
+	if got := cfgval.String(alert["message"]); wantMessage != "" && got != wantMessage {
+		t.Fatalf("then.actions[0].message = %q, want %q", got, wantMessage)
+	}
+	restart, ok := actions[1].(map[string]any)
+	if !ok {
+		t.Fatalf("then.actions[1] = %#v, want mapping", actions[1])
+	}
+	if got := cfgval.String(restart["type"]); got != string(rules.ActionRestart) {
+		t.Fatalf("then.actions[1].type = %q, want restart", got)
+	}
+}
+
 func hasIssue(issues []Issue, substr string) bool {
 	for _, is := range issues {
 		if strings.Contains(is.Msg, substr) {
@@ -2810,9 +2836,7 @@ restart_on_change:
 		t.Errorf("restart_on_change should be desugared away")
 	}
 	then := nested(t, resolved.Tree, "rules", "restart-on-change-glibc", "then")
-	if cfgval.String(then["action"]) != "restart" {
-		t.Errorf("generated rule action = %v, want restart", then["action"])
-	}
+	mustHaveRestartOnChangeActions(t, then, "web will restart after library change: ${change.library} (${change.path})")
 	changed := nested(t, resolved.Tree, "rules", "restart-on-change-glibc", "if", "changed")
 	if cfgval.String(changed["path"]) != "/lib64/libc.so.6" {
 		t.Errorf("changed.path = %v, want /lib64/libc.so.6", changed["path"])
@@ -2888,9 +2912,7 @@ apps: [containerd]
 			if got := cfgval.String(changed["level"]); got != tt.wantLevel {
 				t.Fatalf("changed.level = %q, want %q", got, tt.wantLevel)
 			}
-			if got := cfgval.String(nested(t, rule, "then")["action"]); got != "restart" {
-				t.Fatalf("then.action = %q, want restart", got)
-			}
+			mustHaveRestartOnChangeActions(t, nested(t, rule, "then"), "containerd will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}")
 			if cfgval.String(nested(t, resolved.Tree, "preflight", "containerd-version")["type"]) != "command" {
 				t.Fatal("resolved service must expose containerd-version preflight for changed.app")
 			}
@@ -2932,9 +2954,53 @@ restart_on_change:
 	if got := cfgval.String(nested(t, rule, "if", "changed")["path"]); got != "/etc/web/web.conf" {
 		t.Fatalf("changed.path = %q, want /etc/web/web.conf", got)
 	}
-	if got := cfgval.String(nested(t, rule, "then")["action"]); got != "restart" {
-		t.Fatalf("then.action = %q, want restart", got)
+	mustHaveRestartOnChangeActions(t, nested(t, rule, "then"), "web will restart after config change: ${change.path}")
+}
+
+func TestRestartOnChangeMessagesCustomizeGeneratedAlerts(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/filebeat.yml": `
+name: filebeat
+preflight:
+  version:
+    type: command
+    command: ["/usr/bin/filebeat", "version"]
+    timeout: 5s
+`,
+		"services/filebeat.yml": `
+name: filebeat
+display_name: Filebeat
+service: filebeat
+apps: [filebeat]
+variables:
+  config: /etc/filebeat/filebeat.yml
+restart_on_change:
+  paths:
+    - ${config}
+    - /etc/filebeat/modules.d
+  apps:
+    - filebeat
+  messages:
+    path: "${display_name} will restart after config change: ${change.path}"
+    app: "${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}"
+`,
+	})
+	cfg, err := loadConfig(t, global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
 	}
+	if issues := Validate(cfg); len(issues) != 0 {
+		t.Fatalf("Validate() issues = %v, want none", issues)
+	}
+	resolved, errs := cfg.Resolve("filebeat")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	mustHaveRestartOnChangeActions(t, nested(t, resolved.Tree, "rules", "restart-on-change-config-1", "then"),
+		"Filebeat will restart after config change: ${change.path}")
+	mustHaveRestartOnChangeActions(t, nested(t, resolved.Tree, "rules", "restart-on-change-filebeat-version", "then"),
+		"Filebeat will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}")
 }
 
 func TestRestartOnChangeFlagsOverrideDefaults(t *testing.T) {
@@ -3235,6 +3301,41 @@ restart_on_change:
 `,
 			want: `restart_on_change.paths must be a string or list of strings`,
 		},
+		{
+			name: "messages must be mapping",
+			service: `
+name: web
+service: web
+restart_on_change:
+  paths: [/etc/web/web.conf]
+  messages: notify
+`,
+			want: `restart_on_change.messages must be a mapping`,
+		},
+		{
+			name: "messages reject unknown key",
+			service: `
+name: web
+service: web
+restart_on_change:
+  paths: [/etc/web/web.conf]
+  messages:
+    config: notify
+`,
+			want: `restart_on_change.messages.config is not supported`,
+		},
+		{
+			name: "messages require strings",
+			service: `
+name: web
+service: web
+restart_on_change:
+  paths: [/etc/web/web.conf]
+  messages:
+    path: 7
+`,
+			want: `restart_on_change.messages.path must be a non-empty string`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -3299,6 +3400,13 @@ func TestDefaultsRestartOnChangeValidatesFlagsOnly(t *testing.T) {
     libraries: [glibc]
 `,
 			want: `defaults.restart_on_change.libraries is not supported`,
+		},
+		{
+			name: "messages not allowed in defaults",
+			defaultROC: `
+    messages: { path: notify }
+`,
+			want: `defaults.restart_on_change.messages is not supported`,
 		},
 	}
 

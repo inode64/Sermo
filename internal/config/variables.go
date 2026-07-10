@@ -36,6 +36,12 @@ const (
 	runtimeVarCheckOp        = "check.op"
 	runtimeVarCheckThreshold = "check.threshold"
 	runtimeVarCheckValue     = "check.value"
+	runtimeVarChangePath     = "change.path"
+	runtimeVarChangeApp      = "change.app"
+	runtimeVarChangeLibrary  = "change.library"
+	runtimeVarChangeLevel    = "change.level"
+	runtimeVarChangeOld      = "change.old_version"
+	runtimeVarChangeNew      = "change.new_version"
 )
 
 const (
@@ -355,6 +361,12 @@ var runtimeVars = map[string]bool{
 	runtimeVarCheckOp:        true,
 	runtimeVarCheckThreshold: true,
 	runtimeVarCheckValue:     true,
+	runtimeVarChangePath:     true,
+	runtimeVarChangeApp:      true,
+	runtimeVarChangeLibrary:  true,
+	runtimeVarChangeLevel:    true,
+	runtimeVarChangeOld:      true,
+	runtimeVarChangeNew:      true,
 }
 
 func expandString(s string, vars map[string]string, path string, errs *[]string) string {

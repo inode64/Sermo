@@ -1525,8 +1525,9 @@ is exactly equivalent to writing that check + rule by hand and inherits every
 safety gate (including the rule that a `scope: system` metric can never drive a
 service action). Its `message` supports the rule runtime placeholders documented
 in [rules](rules.md), including `${rule.duration}`, `${check.threshold}` and
-`${check.value}` for single-check conditions. Because the result is a rule, not
-a watch-runtime notifier, `then.notify_interval` is not supported with
+`${check.value}` for single-check conditions and `${change.path}` /
+`${change.old_version}` for `changed:` conditions. Because the result is a rule,
+not a watch-runtime notifier, `then.notify_interval` is not supported with
 `then.action`. The `check:` is always
 **embedded** (`check: { type: http, … }`) and is generated as a check named after
 the watch. Two watches embedding the same endpoint probe it twice. If a
@@ -2241,9 +2242,9 @@ override it with its own top-level `dry_run`.
 inherits a loop-prevention cooldown unless it overrides it.
 
 `defaults.restart_on_change` controls only the inherited permission flags for
-automatic restart-on-change sugar. It may not declare global `paths`, `apps` or
-`libraries`; those sources stay local to a catalog service or configured
-service.
+automatic restart-on-change sugar. It may not declare global `paths`, `apps`,
+`libraries` or `messages`; those sources stay local to a catalog service or
+configured service.
 
 ```yaml
 defaults:

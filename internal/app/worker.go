@@ -441,8 +441,9 @@ func failingChecksOutput(cache map[string]checks.Result) string {
 }
 
 type ruleEvalResult struct {
-	cond bool
-	err  error
+	cond   bool
+	err    error
+	change rules.ChangeContext
 }
 
 func (w *Worker) ruleEvalCache() map[string]ruleEvalResult {
@@ -466,7 +467,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		}
 		state := w.fires(ctx, ev, r, at, evals)
 		if state.firing {
-			firing = append(firing, firingRule{Rule: r, rising: state.rising})
+			firing = append(firing, firingRule{Rule: r, rising: state.rising, change: state.change})
 		}
 	}
 
@@ -486,9 +487,9 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 			// that bypassed it (hand-built Rule) by at least delivering its
 			// alerts instead of silently doing nothing.
 			if w.DryRun {
-				w.emitDryRunAlerts(ctx, ev, r.Rule, r.rising)
+				w.emitDryRunAlerts(ctx, ev, r.Rule, r.rising, r.change)
 			} else {
-				w.emitAlerts(ctx, ev, r.Rule, r.rising)
+				w.emitAlerts(ctx, ev, r.Rule, r.rising, r.change)
 			}
 			continue
 		}
@@ -523,7 +524,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 				w.emit(Event{Kind: eventKindDryRun, Rule: r.Name, Action: action, Message: msg})
 			}
 			if suppress == "" {
-				w.emitDryRunAlerts(ctx, ev, r.Rule, r.rising)
+				w.emitDryRunAlerts(ctx, ev, r.Rule, r.rising, r.change)
 			}
 			// Report all firing rules in dry-run mode for maximum observability.
 			continue
@@ -537,7 +538,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		}
 
 		// All actions of this rule run together: alerts notify, then the operation.
-		w.emitAlerts(ctx, ev, r.Rule, true)
+		w.emitAlerts(ctx, ev, r.Rule, true, r.change)
 		// Panic mode keeps the alert visible (emitAlerts above) but never performs
 		// the automatic action; the operator drives services manually instead.
 		if w.InPanic != nil && w.InPanic() {
@@ -587,9 +588,9 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 		state := w.fires(ctx, ev, r, at, evals)
 		if state.firing {
 			if w.DryRun {
-				w.emitDryRunAlerts(ctx, ev, r, state.rising)
+				w.emitDryRunAlerts(ctx, ev, r, state.rising, state.change)
 			} else {
-				w.emitAlerts(ctx, ev, r, state.rising)
+				w.emitAlerts(ctx, ev, r, state.rising, state.change)
 			}
 		} else if state.recovered && w.shouldEmitRuleEvent(r, true) {
 			w.emit(Event{Kind: eventKindRecovered, Rule: r.Name, Message: "rule condition recovered"})
@@ -601,22 +602,22 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 // the rule resolves to one or more notifiers (its own `notify`, or the global
 // default it inherits, unless suppressed with `none`), delivers each message to
 // them best-effort.
-func (w *Worker) emitAlerts(ctx context.Context, ev *rules.Evaluator, r rules.Rule, rising bool) {
-	w.emitAlertsFiltered(ctx, ev, r, nil, rising)
+func (w *Worker) emitAlerts(ctx context.Context, ev *rules.Evaluator, r rules.Rule, rising bool, change rules.ChangeContext) {
+	w.emitAlertsFiltered(ctx, ev, r, nil, rising, change)
 }
 
-func (w *Worker) emitDryRunAlerts(ctx context.Context, ev *rules.Evaluator, r rules.Rule, rising bool) {
-	w.emitAlertsFiltered(ctx, ev, r, dryRunConsoleNotifier, rising)
+func (w *Worker) emitDryRunAlerts(ctx context.Context, ev *rules.Evaluator, r rules.Rule, rising bool, change rules.ChangeContext) {
+	w.emitAlertsFiltered(ctx, ev, r, dryRunConsoleNotifier, rising, change)
 }
 
-func (w *Worker) emitAlertsFiltered(ctx context.Context, ev *rules.Evaluator, r rules.Rule, allow func(notify.Notifier) bool, rising bool) {
+func (w *Worker) emitAlertsFiltered(ctx context.Context, ev *rules.Evaluator, r rules.Rule, allow func(notify.Notifier) bool, rising bool, change rules.ChangeContext) {
 	notifiers := resolveNotifiers(effectiveNotify(r.Notify, w.GlobalNotify), w.Notifiers)
 	panicking := w.InPanic != nil && w.InPanic()
 	output := w.cycleFailOutput
 	emitEvent := w.shouldEmitRuleEvent(r, rising)
 	emitNotify := w.shouldNotifyRule(r, rising)
 	for _, msg := range r.AlertMessages() {
-		msg = w.expandRuleRuntime(msg, ev, r)
+		msg = w.expandRuleRuntime(msg, ev, r, change)
 		// Output carries the failing command's stdout/stderr so the operator can see
 		// why the rule fired on emitted cycles.
 		if emitEvent {
@@ -661,11 +662,13 @@ type ruleFiringState struct {
 	firing    bool
 	rising    bool
 	recovered bool
+	change    rules.ChangeContext
 }
 
 type firingRule struct {
 	rules.Rule
 	rising bool
+	change rules.ChangeContext
 }
 
 // fires evaluates a rule's condition this cycle and advances its window state.
@@ -686,7 +689,7 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, a
 	state := w.windowState(r.Name)
 	wasFiring := state.IsFiringAt(r, at)
 	firing := state.FiresAt(r, cond, at)
-	return ruleFiringState{firing: firing, rising: !wasFiring && firing, recovered: wasFiring && !firing}
+	return ruleFiringState{firing: firing, rising: !wasFiring && firing, recovered: wasFiring && !firing, change: ev.Change}
 }
 
 func (w *Worker) ruleEmission(r rules.Rule) emission.Policy {
@@ -704,12 +707,22 @@ func (w *Worker) shouldNotifyRule(r rules.Rule, rising bool) bool {
 func (w *Worker) evalRule(ctx context.Context, ev *rules.Evaluator, r rules.Rule, evals map[string]ruleEvalResult) (bool, error) {
 	if evals != nil {
 		if res, ok := evals[r.Name]; ok {
+			if ev != nil {
+				ev.Change = res.change
+			}
 			return res.cond, res.err
 		}
 	}
+	if ev != nil {
+		ev.Change = rules.ChangeContext{}
+	}
 	cond, err := ev.Eval(ctx, r.If)
+	change := rules.ChangeContext{}
+	if ev != nil {
+		change = ev.Change
+	}
 	if evals != nil {
-		evals[r.Name] = ruleEvalResult{cond: cond, err: err}
+		evals[r.Name] = ruleEvalResult{cond: cond, err: err, change: change}
 	}
 	return cond, err
 }
@@ -896,6 +909,12 @@ const (
 	runtimePlaceholderCheckOp        = "${check.op}"
 	runtimePlaceholderCheckThreshold = "${check.threshold}"
 	runtimePlaceholderCheckValue     = "${check.value}"
+	runtimePlaceholderChangePath     = "${change.path}"
+	runtimePlaceholderChangeApp      = "${change.app}"
+	runtimePlaceholderChangeLibrary  = "${change.library}"
+	runtimePlaceholderChangeLevel    = "${change.level}"
+	runtimePlaceholderChangeOld      = "${change.old_version}"
+	runtimePlaceholderChangeNew      = "${change.new_version}"
 )
 
 type ruleRuntimeContext struct {
@@ -908,6 +927,12 @@ type ruleRuntimeContext struct {
 	checkOp        string
 	checkThreshold string
 	checkValue     string
+	changePath     string
+	changeApp      string
+	changeLibrary  string
+	changeLevel    string
+	changeOld      string
+	changeNew      string
 }
 
 type ruleCheckCandidate struct {
@@ -917,17 +942,17 @@ type ruleCheckCandidate struct {
 
 // expandRuleRuntime substitutes a rule alert message's runtime built-ins for
 // both the event log and notifier delivery.
-func (w *Worker) expandRuleRuntime(msg string, ev *rules.Evaluator, r rules.Rule) string {
+func (w *Worker) expandRuleRuntime(msg string, ev *rules.Evaluator, r rules.Rule, change rules.ChangeContext) string {
 	if !strings.Contains(msg, "${") {
 		return msg
 	}
 	event := Event{Rule: r.Name, Action: string(r.Primary().Type), Service: w.Service}
-	return w.expandRuntimeWithContext(msg, event, w.ruleRuntimeContext(ev, r))
+	return w.expandRuntimeWithContext(msg, event, w.ruleRuntimeContext(ev, r, change))
 }
 
-// expandRuntime substitutes the runtime built-ins a rule message may carry —
-// ${date} (now), ${event} (the firing rule), ${action} and ${service} — which
-// resolution left literal. ${host} was already substituted at resolution.
+// expandRuntime substitutes the runtime built-ins a message may carry: event
+// fields such as ${date}/${event}/${action}/${service}, and the rule context
+// supplied by expandRuleRuntime. ${host} was already substituted at resolution.
 func (w *Worker) expandRuntime(msg string, e Event) string {
 	return w.expandRuntimeWithContext(msg, e, ruleRuntimeContext{})
 }
@@ -958,15 +983,22 @@ func (w *Worker) expandRuntimeWithContext(msg string, e Event, rc ruleRuntimeCon
 		runtimePlaceholderCheckOp, rc.checkOp,
 		runtimePlaceholderCheckThreshold, rc.checkThreshold,
 		runtimePlaceholderCheckValue, rc.checkValue,
+		runtimePlaceholderChangePath, rc.changePath,
+		runtimePlaceholderChangeApp, rc.changeApp,
+		runtimePlaceholderChangeLibrary, rc.changeLibrary,
+		runtimePlaceholderChangeLevel, rc.changeLevel,
+		runtimePlaceholderChangeOld, rc.changeOld,
+		runtimePlaceholderChangeNew, rc.changeNew,
 	)
 	return r.Replace(msg)
 }
 
-func (w *Worker) ruleRuntimeContext(ev *rules.Evaluator, r rules.Rule) ruleRuntimeContext {
+func (w *Worker) ruleRuntimeContext(ev *rules.Evaluator, r rules.Rule, change rules.ChangeContext) ruleRuntimeContext {
 	rc := ruleRuntimeContext{
 		ruleDuration: rules.WindowDurationDescription(r),
 		ruleWindow:   rules.WindowDescription(r),
 	}
+	rc.applyChange(change, w.appVersions, w.appVersionsLast)
 	candidate, ok := singleRuleCheckCandidate(r.If)
 	if !ok {
 		return rc
@@ -987,6 +1019,25 @@ func (w *Worker) ruleRuntimeContext(ev *rules.Evaluator, r rules.Rule) ruleRunti
 		rc.applyInlineMetric(ev, candidate.inlineMetric)
 	}
 	return rc
+}
+
+func (rc *ruleRuntimeContext) applyChange(change rules.ChangeContext, base, last map[string]string) {
+	rc.changePath = change.Path
+	rc.changeApp = change.App
+	rc.changeLibrary = change.Library
+	rc.changeLevel = change.Level
+	rc.changeOld = change.OldVersion
+	rc.changeNew = change.NewVersion
+	if change.App == "" || change.LevelValue == 0 {
+		return
+	}
+	bkey := change.App + ":" + strconv.Itoa(change.LevelValue)
+	if rc.changeOld == "" {
+		rc.changeOld = base[bkey]
+	}
+	if rc.changeNew == "" {
+		rc.changeNew = last[bkey]
+	}
 }
 
 func (rc *ruleRuntimeContext) applyCheckEntry(entry map[string]any) {

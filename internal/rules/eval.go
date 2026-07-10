@@ -11,6 +11,19 @@ import (
 	"sermo/internal/metrics"
 )
 
+// ChangeContext describes the changed: leaf that made the current rule true.
+// It is runtime-only metadata for alert message expansion; the condition's
+// boolean result remains the evaluator's source of truth.
+type ChangeContext struct {
+	Path       string
+	App        string
+	Library    string
+	Level      string
+	LevelValue int
+	OldVersion string
+	NewVersion string
+}
+
 // Evaluator evaluates condition trees against the per-cycle check cache and, for
 // inline conditions, runs probes at most once each (memoized for the cycle).
 type Evaluator struct {
@@ -33,6 +46,9 @@ type Evaluator struct {
 	// 3=patch) differs from a baseline tracked across cycles. Injected by the
 	// worker; nil makes every `changed: {app}` condition false.
 	ChangedVersion func(ctx context.Context, app string, level int) (bool, error)
+	// Change is populated when a changed: leaf evaluates true, so callers can
+	// expand rule messages with the concrete changed path/app/library.
+	Change ChangeContext
 
 	memo map[string]checks.Result
 }
@@ -281,17 +297,23 @@ func (e *Evaluator) evalChanged(ctx context.Context, v any) (bool, error) {
 	}
 	if app := cfgval.AsString(m[FieldApp]); app != "" {
 		level := 3 // patch: any a.b.c change fires
+		levelName := checks.VersionLevelPatch
 		if name := cfgval.AsString(m[FieldLevel]); name != "" {
 			lvl, ok := checks.VersionLevel(name)
 			if !ok {
 				return false, fmt.Errorf("changed condition level %q is not one of %s", name, checks.VersionLevelSummary)
 			}
 			level = lvl
+			levelName = name
 		}
 		if e.ChangedVersion == nil {
 			return false, nil
 		}
-		return e.ChangedVersion(ctx, app, level)
+		changed, err := e.ChangedVersion(ctx, app, level)
+		if changed {
+			e.Change = ChangeContext{App: app, Level: levelName, LevelValue: level}
+		}
+		return changed, err
 	}
 	path := cfgval.AsString(m[FieldPath])
 	if path == "" {
@@ -300,7 +322,11 @@ func (e *Evaluator) evalChanged(ctx context.Context, v any) (bool, error) {
 	if e.Changed == nil {
 		return false, nil
 	}
-	return e.Changed(path)
+	changed, err := e.Changed(path)
+	if changed {
+		e.Change = ChangeContext{Path: path, Library: cfgval.AsString(m[FieldLibrary])}
+	}
+	return changed, err
 }
 
 // evalInline builds and runs a leaf check whose truth is the check's OK.

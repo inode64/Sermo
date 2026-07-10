@@ -349,7 +349,11 @@ rules:
   restart-on-pam:
     type: remediation
     if: { changed: { library: pam } }   # or { path: /lib64/security/pam_unix.so }
-    then: { action: restart }
+    then:
+      actions:
+        - type: alert
+          message: "${service} will restart after library change: ${change.library}"
+        - type: restart
 ```
 
 ### Ports
@@ -1940,6 +1944,11 @@ messages may also use `${check.name}`, `${check.type}`, `${check.metric}`,
 `${check.scope}`, `${check.op}`, `${check.threshold}` and `${check.value}`.
 Complex conditions with multiple checks leave those `${check.*}` values empty
 instead of guessing which check should describe the alert.
+
+For rules driven by a `changed:` leaf, alert messages may use
+`${change.path}`, `${change.library}`, `${change.app}`, `${change.level}`,
+`${change.old_version}` and `${change.new_version}`. Version old/new values are
+filled for `changed: {app: ...}` rules.
 
 ```yaml
 rules:
