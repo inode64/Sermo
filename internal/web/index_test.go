@@ -380,6 +380,24 @@ func TestSourceSerializesDashboardRefreshes(t *testing.T) {
 	}
 }
 
+func TestSourceUsesDashboardSnapshotWithGranularFallback(t *testing.T) {
+	src, err := os.ReadFile("src/app.js")
+	if err != nil {
+		t.Fatalf("read src/app.js: %v", err)
+	}
+	text := string(src)
+	for _, marker := range []string{
+		"getJSONResult(dashboardAPI(daemonMetricWindow), null)",
+		"if (aggregate.ok)",
+		`getJSONResult(apiServicesPath, null)`,
+		`snapshotResult(snapshot, "host_metrics", [])`,
+	} {
+		if !strings.Contains(text, marker) {
+			t.Errorf("source missing aggregate-dashboard marker %q", marker)
+		}
+	}
+}
+
 func TestSourceMetricChartRendersZeroValuedSeries(t *testing.T) {
 	src, err := os.ReadFile("src/app.js")
 	if err != nil {

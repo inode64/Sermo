@@ -684,6 +684,9 @@ Endpoints de solo lectura:
   un banner de **Starting** o **Shutting down** mientras la monitorización aún no está
   activa.
 - `GET /api/whoami` — rol del llamante, permisos y visibilidad de funciones.
+- `GET /api/dashboard?since=24h` — snapshot agregado que usa la Web UI para los
+  paneles de service, host y daemon que se refrescan con frecuencia. Los endpoints
+  individuales siguientes siguen disponibles y sirven como fallback del navegador.
 - `GET /api/services` — lista de services de **runtime configurado** (los archivos de
   service bajo `paths.services`): name, `state` (`disabled`, `stopped`,
   `started`, `starting`, `collecting`, `monitored`, `failed`), estado del backend,

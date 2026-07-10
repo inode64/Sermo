@@ -245,6 +245,32 @@ func newServer(b Backend) http.Handler {
 	return (&Server{Backend: b}).Handler()
 }
 
+func TestDashboardSnapshotEndpoint(t *testing.T) {
+	b := &fakeBackend{
+		services: []Service{{Name: "web", State: "monitored"}},
+		mounts:   []Mount{{Name: "data", Path: "/data"}},
+		opsSlots: OperationSlots{InUse: 1, Total: 4},
+	}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testAPIPath(apiSegmentDashboard), nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("dashboard status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var got DashboardSnapshot
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode dashboard: %v", err)
+	}
+	if len(got.Services) != 1 || got.Services[0].Name != "web" || len(got.Mounts) != 1 {
+		t.Fatalf("dashboard inventory = %+v", got)
+	}
+	if !got.Ready.Ready || got.Ready.Services != 1 || got.Live.Services != 1 {
+		t.Fatalf("dashboard probes = ready:%+v live:%+v", got.Ready, got.Live)
+	}
+	if got.Operations.InUse != 1 || got.Operations.Total != 4 || got.GeneratedAt == "" {
+		t.Fatalf("dashboard runtime = %+v", got)
+	}
+}
+
 // postReq is a POST request carrying the CSRF header (as the dashboard sends).
 func postReq(path string) *http.Request {
 	r := httptest.NewRequest(http.MethodPost, path, nil)
