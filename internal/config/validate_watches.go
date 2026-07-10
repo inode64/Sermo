@@ -487,6 +487,7 @@ func validateNetCheck(name string, check, entry map[string]any, defaultNotify []
 			continue
 		}
 		validateNetMetricCondition(prefix, key, m, add)
+		validateEmission(m, prefix+"."+emission.Section, add)
 		validateHookBlock(prefix, m, false, false, defaultNotify, add)
 		validateWindow(prefix, m, add)
 	}
@@ -558,6 +559,7 @@ func validateSwapCheck(name string, entry map[string]any, defaultNotify []string
 			continue
 		}
 		validateSwapMetricCondition(prefix, key, m, add)
+		validateEmission(m, prefix+"."+emission.Section, add)
 		validateHookBlock(prefix, m, false, false, defaultNotify, add)
 		validateWindow(prefix, m, add)
 	}
@@ -621,6 +623,7 @@ func validateICMPCheck(name string, check, entry map[string]any, defaultNotify [
 			continue
 		}
 		validateICMPMetricCondition(prefix, key, m, add)
+		validateEmission(m, prefix+"."+emission.Section, add)
 		validateHookBlock(prefix, m, false, false, defaultNotify, add)
 		validateWindow(prefix, m, add)
 	}
