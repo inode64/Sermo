@@ -16,6 +16,7 @@ const hostMetricLoad1 = "load1";
 const eventLogLimit = "500";
 const eventRecentLimit = "200";
 const httpMethodPost = "POST";
+const httpStatusServiceUnavailable = 503;
 const csrfHeader = "X-Sermo-CSRF";
 const csrfHeaderValue = "1";
 const apiApplicationsPath = "api/applications";
@@ -401,22 +402,34 @@ async function load() {
   const seq = ++loadSeq;
   healthIconReady = false;
   const sameLoad = () => seq === loadSeq;
-  const [services, mounts, notifiers, daemon, daemonMetrics, locks, activity, ready, live, mon, ops, hostMetrics] = await Promise.all([
-    fetch(apiServicesPath).then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).catch(() => null),
-    getJSON(apiMountsPath, null),       // configured mount units
-    getJSON(apiNotifiersPath, null),    // what watches can send to
-    getJSON(apiDaemonPath, null),       // daemon / engine settings panel
-    getJSON(daemonMetricsAPI(daemonMetricWindow), null),
-    getJSON(apiLocksPath, null),        // global runtime locks (active and stale)
-    getJSON(apiActivityPath, null),     // quick activity summary
-    fetchReadyReport(),
-    getJSON(liveVerbosePath, {}),
-    getJSON(apiMonitoringPath, {}),
-    getJSON(apiOpsPath, {}),
-    getJSON(apiHostPath, []),
+  const [servicesResult, mountsResult, notifiersResult, daemonResult, daemonMetricsResult, locksResult, activityResult, readyResult, liveResult, monResult, opsResult, hostMetricsResult] = await Promise.all([
+    getJSONResult(apiServicesPath, null),
+    getJSONResult(apiMountsPath, null),       // configured mount units
+    getJSONResult(apiNotifiersPath, null),    // what watches can send to
+    getJSONResult(apiDaemonPath, null),       // daemon / engine settings panel
+    getJSONResult(daemonMetricsAPI(daemonMetricWindow), null),
+    getJSONResult(apiLocksPath, null),        // global runtime locks (active and stale)
+    getJSONResult(apiActivityPath, null),     // quick activity summary
+    fetchReadyReportResult(),
+    getJSONResult(liveVerbosePath, {}),
+    getJSONResult(apiMonitoringPath, {}),
+    getJSONResult(apiOpsPath, {}),
+    getJSONResult(apiHostPath, []),
   ]);
   if (!sameLoad()) return;
-  if (services) {
+  const services = servicesResult.data;
+  const mounts = mountsResult.data;
+  const notifiers = notifiersResult.data;
+  const daemon = daemonResult.data;
+  const daemonMetrics = daemonMetricsResult.data;
+  const locks = locksResult.data;
+  const activity = activityResult.data;
+  const ready = readyResult.data;
+  const live = liveResult.data;
+  const mon = monResult.data;
+  const ops = opsResult.data;
+  const hostMetrics = hostMetricsResult.data;
+  if (servicesResult.ok) {
     render(services);
     connOK = true;
     lastLoadOk = Date.now();
@@ -450,7 +463,6 @@ async function load() {
   applyHash();
   if (connOK) {
     renderOpsPanel(ops);
-    loadEvents();
     healthIconReady = true;
     renderAttention();
   } else {
@@ -458,21 +470,38 @@ async function load() {
     setFavicon(healthStatusWarning);
   }
 
-  lastRefresh = Date.now();
-  tickRefreshAge();
-
-  getJSON(apiWatchesPath, null).then((watches) => {
-    if (!sameLoad() || !watches) return;
-    renderWatches(watches);
+  const [watchesResult, appsResult, eventsOK] = await Promise.all([
+    getJSONResult(apiWatchesPath, null),
+    getJSONResult(apiApplicationsPath, null),
+    connOK ? loadEvents(seq) : Promise.resolve(false),
+  ]);
+  if (!sameLoad()) return;
+  if (watchesResult.ok) {
+    renderWatches(watchesResult.data);
     if (connOK) renderAttention();
     refreshExpandedWatches();
-  });
-
-  getJSON(apiApplicationsPath, null).then((apps) => {
-    if (!sameLoad() || !apps) return;
-    renderApps(apps);
+  }
+  if (appsResult.ok) {
+    renderApps(appsResult.data);
     if (connOK) renderAttention();
-  });
+  }
+  if (!connOK) return;
+
+  const refreshResults = [
+    ["mounts", mountsResult], ["notifiers", notifiersResult], ["daemon", daemonResult],
+    ["daemon metrics", daemonMetricsResult], ["locks", locksResult], ["activity", activityResult],
+    ["readiness", readyResult], ["liveness", liveResult], ["monitoring", monResult],
+    ["operations", opsResult], ["host metrics", hostMetricsResult], ["watches", watchesResult],
+    ["applications", appsResult], ["events", { ok: eventsOK }],
+  ];
+  const failures = refreshResults.filter(([, result]) => !result.ok).map(([name]) => name);
+  if (failures.length) {
+    showPartialRefresh(failures);
+    return;
+  }
+  lastRefresh = Date.now();
+  tickRefreshAge();
+  clearStatusAfterRefresh();
 }
 
 async function reloadConfig() {
@@ -515,7 +544,7 @@ function renderOpsPanel(o) {
 const EVENT_FILTER_DEBOUNCE_MS = 300;
 let eventFilterTimer = null;
 
-async function loadEvents() {
+async function loadEvents(seq = 0) {
   try {
     const params = new URLSearchParams({ [apiQueryLimit]: eventLogLimit });
     const add = (id, key) => {
@@ -529,10 +558,15 @@ async function loadEvents() {
     add("event-status", apiQueryStatus);
     if ($("#event-errors") && $("#event-errors").checked) params.set(apiQueryOnlyErrors, queryBoolOne);
     const res = await fetch(eventsAPI(params));
-    if (!res.ok) return;
-    allEvents = await res.json();
+    if (!res.ok) return false;
+    const events = await res.json();
+    if (seq && seq !== loadSeq) return true;
+    allEvents = events;
     renderGlobalEvents();
-  } catch (e) { /* keep the last feed on a transient error */ }
+    return true;
+  } catch (e) {
+    return false; // keep the last feed on a transient error
+  }
 }
 
 function scheduleLoadEvents() {
@@ -4726,28 +4760,32 @@ function renderOverview(ctx) {
   litRender(tiles, band);
 }
 
-// getJSON fetches and parses one endpoint, returning dflt on any failure (network
-// error, non-2xx, bad JSON). It never throws, so one failing endpoint can't take
-// down the whole status line — each just degrades to its default for that cycle.
-async function getJSON(url, dflt) {
+// getJSONResult keeps failure information next to the fallback value so the
+// dashboard can retain the last panel render without claiming a full refresh.
+async function getJSONResult(url, dflt) {
   try {
     const r = await fetch(url);
-    return r.ok ? await r.json() : dflt;
+    return r.ok ? { ok: true, data: await r.json() } : { ok: false, data: dflt };
   } catch (_) {
-    return dflt;
+    return { ok: false, data: dflt };
   }
+}
+
+async function getJSON(url, dflt) {
+  return (await getJSONResult(url, dflt)).data;
 }
 
 // fetchReadyReport loads GET /readyz?verbose. Unlike getJSON, it parses the JSON
 // body even when the probe returns 503 (starting / shutting_down), so the header
 // status line keeps showing the daemon lifecycle state.
-async function fetchReadyReport() {
+async function fetchReadyReportResult() {
   try {
     const r = await fetch(readyVerbosePath);
     const data = await r.json();
-    return (data && typeof data === "object") ? data : {};
+    const validStatus = r.ok || r.status === httpStatusServiceUnavailable;
+    return (validStatus && data && typeof data === "object") ? { ok: true, data } : { ok: false, data: {} };
   } catch (_) {
-    return {};
+    return { ok: false, data: {} };
   }
 }
 
@@ -6154,6 +6192,10 @@ loadMe().then(() => { load(); });
 // auto-refresh is set to a long interval or stopped.
 let lastRefresh = 0;
 function refreshNow() { load(); }
+function showPartialRefresh(failures) {
+  const age = lastRefresh ? ` (last full update ${fmtSince(Date.now() - lastRefresh)} ago)` : "";
+  setStatus(`Partial refresh — stale: ${failures.join(", ")}${age}`, feedbackStatusWarn, false);
+}
 function fmtSince(ms) {
   const s = Math.max(0, Math.round(ms / millisecondsPerSecond));
   if (s < secondsPerMinute) return s + "s";
@@ -6164,7 +6206,7 @@ function tickRefreshAge() {
   if (!connOK) { showDisconnected(); return; } // keep the banner's age fresh
   const el = $("#last-refresh");
   if (!el) return;
-  const text = lastRefresh ? `updated ${fmtSince(Date.now() - lastRefresh)} ago` : "";
+  const text = lastRefresh ? `fully updated ${fmtSince(Date.now() - lastRefresh)} ago` : "";
   if (el.textContent === text) return;
   el.textContent = text;
 }
