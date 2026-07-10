@@ -34,6 +34,8 @@ jobs:
           go install github.com/google/yamlfmt/cmd/yamlfmt@v0.17.0
           npm ci
           pip install yamllint
+      - name: Install browser test runtime
+        run: npx playwright install --with-deps chromium
       - run: make build
       - run: make check
 

@@ -65,7 +65,7 @@ config_subst = sed -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
-.PHONY: all build test vet fmt fmt-check lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check validate check cover tidy clean \
+.PHONY: all build test vet fmt fmt-check lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-e2e validate check cover tidy clean \
         install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
@@ -80,6 +80,7 @@ YAMLFMT ?= yamlfmt
 YAMLLINT ?= yamllint
 YAML_ROOTS = catalog examples templates docs .github
 MARKDOWNLINT ?= ./node_modules/.bin/markdownlint
+PLAYWRIGHT ?= ./node_modules/.bin/playwright
 
 yaml-fmt:
 	@$(LINT_PATH) $(YAMLFMT) -conf .yamlfmt
@@ -115,8 +116,14 @@ web-check:
 	fi; \
 	rm -f "$$tmp"
 
+# Browser-level dashboard flows and WCAG 2.2 AA checks. The fixture server
+# serves the committed bundle and Playwright intercepts APIs with deterministic
+# data, so this never starts sermod or performs service operations.
+web-e2e: web-check
+	@$(PLAYWRIGHT) test
+
 # Formatting and static analysis gates; make test and make check run this first.
-validate: lint yaml-validate markdown-check web-check
+validate: lint yaml-validate markdown-check web-e2e
 
 test: validate
 	go test ./...
