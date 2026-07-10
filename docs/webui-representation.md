@@ -212,7 +212,7 @@ Shared by the Services, Containers and Virtual machines panels.
 | Area | Content |
 | --- | --- |
 | General data | state, category, unit/backend, uptime, interval, policy, locks, last event, next remediation, remediation state and process totals; while the row badge is `starting`, expansion may still show the raw init backend (`inactive`) and in-flight check samples from the observe-only cycle |
-| Graphs | full-width SLA timeline followed by latency, CPU, memory and IO charts; `no_resident_process` services show only SLA because they have no process runtime to chart |
+| Graphs | full-width SLA timeline followed by latency, CPU, memory and IO charts; each service persists its own time window and latency check; `no_resident_process` services show only SLA because they have no process runtime to chart |
 | Processes | full-width detected process tree table, with child processes marked in CMD and kept under their parent; omitted when `no_resident_process` is true |
 | Checks | configured checks and current result |
 | Named locks | runtime lock state |
@@ -224,7 +224,8 @@ Open service expansions fetch and fully render fresh detail once per dashboard
 refresh; SLA, metric, runtime and event subrequests plus open watch/application
 details must finish before the header advances `fully updated`. Re-renders in
 between (filter keystrokes, sorting, the live-operations ticker) redraw from
-cached detail without extra requests.
+cached detail without extra requests. A late response from an older graph
+selection is ignored instead of overwriting the service's current charts.
 
 Empty states:
 

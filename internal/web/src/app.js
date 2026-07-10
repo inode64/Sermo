@@ -1123,7 +1123,8 @@ let appStatus = filterAll;
 let appGrouped = false;
 let appCollapsedGroups = new Set();
 let appSort = { key: "", dir: 1 };
-let metricWindow = "24h";
+const defaultMetricWindow = "24h";
+const serviceMetricStates = new Map();
 let daemonMetricWindow = "24h";
 let allWatches = [];
 let globalTargetsByValue = new Map();
@@ -1241,7 +1242,15 @@ function restoreUIState() {
     if (Array.isArray(s.expanded)) {
       expanded = new Set(s.expanded.filter((k) => typeof k === "string"));
     }
-    if (typeof s.metricWindow === "string") metricWindow = s.metricWindow;
+    if (s.serviceMetricStates && typeof s.serviceMetricStates === "object") {
+      for (const [name, state] of Object.entries(s.serviceMetricStates)) {
+        if (!state || typeof state !== "object") continue;
+        serviceMetricStates.set(name, {
+          window: typeof state.window === "string" ? state.window : defaultMetricWindow,
+          check: typeof state.check === "string" ? state.check : "",
+        });
+      }
+    }
     if (typeof s.daemonMetricWindow === "string") daemonMetricWindow = s.daemonMetricWindow;
     if (typeof s.appGrouped === "boolean") appGrouped = s.appGrouped;
     if (Array.isArray(s.svcCollapsedGroups)) svcCollapsedGroups = new Set(s.svcCollapsedGroups);
@@ -1275,7 +1284,7 @@ function saveUIState() {
       svcQuery, svcStatus, svcCategory, svcGrouped, svcSort,
       mountQuery, mountStatus, mountCategory, mountSort,
       appQuery, appStatus, appSort, appGrouped,
-      metricWindow, daemonMetricWindow,
+      serviceMetricStates: Object.fromEntries(serviceMetricStates), daemonMetricWindow,
       expanded: [...expanded],
       svcCollapsedGroups: [...svcCollapsedGroups],
       appCollapsedGroups: [...appCollapsedGroups],
@@ -2899,15 +2908,18 @@ async function loadServiceSLA(name) {
   const summary = document.getElementById(detailDomId(name, "sla-summary"));
   const chart = document.getElementById(detailDomId(name, "sla-chart"));
   if (!summary || !chart) return true;
+  const win = serviceMetricState(name).window;
   try {
-    const res = await fetch(serviceSLAAPI(name, metricWindow));
+    const res = await fetch(serviceSLAAPI(name, win));
     if (!res.ok) throw new Error("HTTP " + res.status);
     const body = await res.json();
+    if (serviceMetricState(name).window !== win) return true;
     const points = body.points || [];
     summary.innerHTML = slaTimelineSummary(points);
-    chart.innerHTML = drawSLAChart(points, metricWindow);
+    chart.innerHTML = drawSLAChart(points, win);
     return true;
   } catch (e) {
+    if (serviceMetricState(name).window !== win) return true;
     summary.innerHTML = `<span class="bad">Failed to load SLA: ${esc(e.message)}</span>`;
     chart.innerHTML = "";
     return false;
@@ -2922,7 +2934,7 @@ function drawSLAChart(points, win) {
   const padT = slaChartPadTop;
   const padB = slaChartPadBottom;
   const cols = chartColumnCount;
-  const span = windowMs[win || metricWindow] || millisecondsPerDay;
+  const span = windowMs[win || defaultMetricWindow] || millisecondsPerDay;
   const endMs = Date.now();
   const startMs = endMs - span;
   const plotW = W - padL - padR;
@@ -3030,8 +3042,18 @@ function serviceMeasuredChecks(d) {
   return (d.checks || []).filter((c) => metricTypes.includes(c.type));
 }
 
-function selectedMetricCheck(measured) {
-  if (metricCheck && measured.some((c) => c.name === metricCheck)) return metricCheck;
+function serviceMetricState(name) {
+  let state = serviceMetricStates.get(name);
+  if (!state) {
+    state = { window: defaultMetricWindow, check: "" };
+    serviceMetricStates.set(name, state);
+  }
+  return state;
+}
+
+function selectedMetricCheck(service, measured) {
+  const selected = serviceMetricState(service).check;
+  if (selected && measured.some((c) => c.name === selected)) return selected;
   return measured.length ? measured[0].name : "";
 }
 
@@ -3112,7 +3134,8 @@ function renderServiceDetail(d) {
     : tpl`<div class="${procWarnings.length ? "bad" : "muted"}">${procWarnings.length ? "No processes discovered; check discovery warnings." : "No processes found."}</div>`;
 
   const measured = serviceMeasuredChecks(d);
-  const activeMetricCheck = selectedMetricCheck(measured);
+  const metricState = serviceMetricState(d.name);
+  const activeMetricCheck = selectedMetricCheck(d.name, measured);
   const checkBtns = measured.length
     ? metricCheckButtons(d.name, measured, activeMetricCheck)
     : tpl`<span class="muted">No latency checks</span>`;
@@ -3141,7 +3164,7 @@ function renderServiceDetail(d) {
         <div id="${detailDomId(d.name, "runtime-io-summary")}" class="muted">loading…</div>
         <div id="${detailDomId(d.name, "runtime-io-chart")}" class="muted chart-box"></div>
       </div>`;
-  const graphs = tpl`<h2>Graphs <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin", "Graph time window")}</span></h2>
+  const graphs = tpl`<h2>Graphs <span class="muted">${winButtons(metricWins, metricState.window, "setMetricWin", "Graph time window", d.name)}</span></h2>
     <div class="metric-grid">
       <div class="metric-panel metric-panel-wide">
         <div class="sla-chart-head">
@@ -3216,9 +3239,14 @@ function renderServiceDetail(d) {
 }
 
 async function hydrateServiceDetail(d) {
+  const results = await Promise.all([refreshServiceGraphs(d), loadServiceEvents(d.name)]);
+  return results.every(Boolean);
+}
+
+async function refreshServiceGraphs(d) {
   const measured = serviceMeasuredChecks(d);
-  syncWindowButtons("setMetricWin", metricWindow);
-  const pending = [loadServiceSLA(d.name), loadServiceEvents(d.name)];
+  syncWindowButtons("setMetricWin", serviceMetricState(d.name).window, d.name);
+  const pending = [loadServiceSLA(d.name)];
   if (!d.no_resident_process) {
     if (measured.length) pending.push(loadMetrics(d.name, measured));
     pending.push(loadServiceRuntimeMetrics(d.name));
@@ -5693,25 +5721,27 @@ const windowMs = {
   "8760h": rollingYearDays * millisecondsPerDay,
 };
 
-// Latency graph state: the selected measured check and its window.
-let metricCheck = "";
 const metricTypes = ["tcp", "http", "ports", "service"];
 const metricWins = [["1h", "1h"], ["24h", "24h"], ["7d", "168h"], ["30d", "720h"], ["1y", "8760h"]];
 
 function setMetricCheck(name, service) {
-  metricCheck = name;
+  if (!service) return;
+  serviceMetricState(service).check = name;
+  saveUIState();
   if (service) syncMetricCheckButtons(service, name);
   const key = service ? serviceExpansionKey(service) : "";
   const detail = key ? expDetailCache[key] : null;
   if (detail) loadMetrics(service, serviceMeasuredChecks(detail));
-  else if (service) loadExpansionFor(key);
-  else refreshExpandedServiceDetails();
+  else loadExpansionFor(key);
 }
-function setMetricWin(win) {
-  metricWindow = win;
+function setMetricWin(win, service) {
+  if (!service) return;
+  serviceMetricState(service).window = win;
   saveUIState();
-  syncWindowButtons("setMetricWin", metricWindow);
-  refreshExpandedServiceDetails();
+  syncWindowButtons("setMetricWin", win, service);
+  const detail = expDetailCache[serviceExpansionKey(service)];
+  if (detail) refreshServiceGraphs(detail);
+  else loadExpansionFor(serviceExpansionKey(service));
 }
 function setDaemonMetricWin(win) {
   daemonMetricWindow = win;
@@ -5735,15 +5765,16 @@ function syncMetricCheckButtons(serviceName, selected) {
   });
 }
 
-function winButtons(list, selected, fn, groupLabel) {
+function winButtons(list, selected, fn, groupLabel, service = "") {
   const btns = list.map(([label, val]) =>
-    tpl`<button data-window-kind="${fn}" data-window-value="${val}" aria-pressed=${val === selected ? domBoolTrue : domBoolFalse} class="${val === selected ? "win-btn-active" : nothing}">${label}</button> `);
+    tpl`<button data-window-kind="${fn}" data-window-value="${val}" data-window-service="${service || nothing}" aria-pressed=${val === selected ? domBoolTrue : domBoolFalse} class="${val === selected ? "win-btn-active" : nothing}">${label}</button> `);
   return tpl`<span role="group" aria-label="${groupLabel || "Time window"}">${btns}</span>`;
 }
 
-function syncWindowButtons(kind, selected) {
+function syncWindowButtons(kind, selected, service = "") {
   document.querySelectorAll("[data-window-kind][data-window-value]").forEach((btn) => {
     if (btn.dataset.windowKind !== kind) return;
+    if ((btn.dataset.windowService || "") !== service) return;
     const active = btn.dataset.windowValue === selected;
     btn.classList.toggle("win-btn-active", active);
     btn.setAttribute("aria-pressed", active ? domBoolTrue : domBoolFalse);
@@ -5751,22 +5782,25 @@ function syncWindowButtons(kind, selected) {
 }
 
 async function loadMetrics(name, measured) {
-  const check = selectedMetricCheck(measured || []);
+  const check = selectedMetricCheck(name, measured || []);
   if (!check) return true;
   const summary = document.getElementById(detailDomId(name, "lat-summary"));
   const chart = document.getElementById(detailDomId(name, "lat-chart"));
   if (!summary || !chart) return true;
+  const win = serviceMetricState(name).window;
   try {
-    const res = await fetch(serviceMetricsAPI(name, check, metricWindow));
+    const res = await fetch(serviceMetricsAPI(name, check, win));
     if (!res.ok) throw new Error("HTTP " + res.status);
     const body = await res.json();
+    if (serviceMetricState(name).window !== win || selectedMetricCheck(name, measured || []) !== check) return true;
     const s = body.summary || {};
     summary.innerHTML = s.count
       ? `avg <b>${fmtNum(s.avg, 2)}</b> ${metricUnitMilliseconds} &middot; min ${fmtNum(s.min, 2)} &middot; max ${fmtNum(s.max, 2)}`
       : '<span class="muted">No latency data yet for this window.</span>';
-    chart.innerHTML = drawMetricChart(body.points || [], body.unit || metricUnitMilliseconds, metricWindow, "Service latency metric chart");
+    chart.innerHTML = drawMetricChart(body.points || [], body.unit || metricUnitMilliseconds, win, "Service latency metric chart");
     return true;
   } catch (e) {
+    if (serviceMetricState(name).window !== win || selectedMetricCheck(name, measured || []) !== check) return true;
     chart.textContent = "Failed to load latency: " + e.message;
     return false;
   }
@@ -5780,26 +5814,29 @@ async function loadServiceRuntimeMetrics(name) {
     if (summary) summary.innerHTML = `<span class="muted">${esc(msg)}</span>`;
     if (chart) chart.innerHTML = "";
   });
+  const win = serviceMetricState(name).window;
   try {
-    const res = await fetch(serviceRuntimeAPI(name, metricWindow));
+    const res = await fetch(serviceRuntimeAPI(name, win));
     if (!res.ok) throw new Error("HTTP " + res.status);
     const body = await res.json();
+    if (serviceMetricState(name).window !== win) return true;
     runtimeMetricDefs.forEach(({ key, label, unit }) => {
-      renderServiceRuntimeMetric(name, key, body[key], label, unit);
+      renderServiceRuntimeMetric(name, key, body[key], label, unit, win);
     });
     return true;
   } catch (e) {
+    if (serviceMetricState(name).window !== win) return true;
     setAll("Failed to load runtime metrics: " + e.message);
     return false;
   }
 }
 
-function renderServiceRuntimeMetric(name, suffix, series, label, fallbackUnit) {
+function renderServiceRuntimeMetric(name, suffix, series, label, fallbackUnit, win) {
   const summary = document.getElementById(detailDomId(name, `runtime-${suffix}-summary`));
   const chart = document.getElementById(detailDomId(name, `runtime-${suffix}-chart`));
   const unit = (series && series.unit) || fallbackUnit || "";
   if (summary) summary.innerHTML = daemonMetricSummary(series, label);
-  if (chart) chart.innerHTML = drawMetricChart((series || {}).points || [], unit, metricWindow, `${label} runtime metric chart`);
+  if (chart) chart.innerHTML = drawMetricChart((series || {}).points || [], unit, win, `${label} runtime metric chart`);
 }
 
 async function loadDaemonMetrics() {
@@ -5875,7 +5912,7 @@ function drawMetricChart(points, unit, win, label) {
   const H = chartViewHeight;
   const pad = metricChartPad;
   const cols = chartColumnCount;
-  const span = windowMs[win || metricWindow] || millisecondsPerDay;
+  const span = windowMs[win || defaultMetricWindow] || millisecondsPerDay;
   const { buckets, startMs } = bucketize(points, span, cols,
     () => ({ n: 0, sum: 0, min: Infinity, max: -Infinity }),
     (b, p) => {
@@ -6477,7 +6514,7 @@ function initDelegatedHandlers() {
       const val = windowBtn.dataset.windowValue || "";
       switch (windowBtn.dataset.windowKind) {
         case "setMetricWin":
-          setMetricWin(val);
+          setMetricWin(val, windowBtn.dataset.windowService || "");
           break;
         case "setDaemonMetricWin":
           setDaemonMetricWin(val);
