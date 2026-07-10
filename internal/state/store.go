@@ -18,6 +18,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -265,6 +266,23 @@ var migrations = []string{
 		data       TEXT NOT NULL,
 		ran        INTEGER NOT NULL,
 		at         INTEGER NOT NULL,
+		PRIMARY KEY (watch, slot)
+	);`,
+	// watch_runtime_state persists one watch slot's firing episode, notification
+	// pacing, condition window and automatic-action policy state. This prevents a
+	// daemon restart from turning an unchanged condition into a new episode.
+	`CREATE TABLE watch_runtime_state (
+		watch              TEXT NOT NULL,
+		slot               TEXT NOT NULL,
+		firing             INTEGER NOT NULL DEFAULT 0,
+		last_notify_at     INTEGER NOT NULL DEFAULT 0,
+		consecutive        INTEGER NOT NULL DEFAULT 0,
+		history            TEXT NOT NULL DEFAULT '[]',
+		true_since         INTEGER NOT NULL DEFAULT 0,
+		timed_history      TEXT NOT NULL DEFAULT '[]',
+		last_action_at     INTEGER NOT NULL DEFAULT 0,
+		recent_actions     TEXT NOT NULL DEFAULT '[]',
+		current_backoff_ns INTEGER NOT NULL DEFAULT 0,
 		PRIMARY KEY (watch, slot)
 	);`,
 }
@@ -784,6 +802,125 @@ type RuleWindowRecord struct {
 type RuleWindowSample struct {
 	At    time.Time
 	Match bool
+}
+
+// WatchRuntimeRecord is the durable control state for one watch result slot.
+type WatchRuntimeRecord struct {
+	Firing       bool
+	LastNotifyAt time.Time
+	Window       RuleWindowRecord
+	Policy       RemediationRecord
+}
+
+// WatchRuntimeState returns one watch slot's persisted episode and pacing state.
+func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool, error) {
+	var (
+		firing             int
+		lastNotifyAt       int64
+		consecutive        int
+		rawHistory         string
+		trueSince          int64
+		rawTimed           string
+		lastActionAt       int64
+		rawRecentActions   string
+		currentBackoffNano int64
+	)
+	err := s.db.QueryRow(
+		`SELECT firing, last_notify_at, consecutive, history, true_since,
+		        timed_history, last_action_at, recent_actions, current_backoff_ns
+		   FROM watch_runtime_state WHERE watch = ? AND slot = ?;`,
+		watch, slot,
+	).Scan(
+		&firing, &lastNotifyAt, &consecutive, &rawHistory, &trueSince,
+		&rawTimed, &lastActionAt, &rawRecentActions, &currentBackoffNano,
+	)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return WatchRuntimeRecord{}, false, nil
+	case err != nil:
+		return WatchRuntimeRecord{}, false, err
+	}
+
+	var history []bool
+	if err := json.Unmarshal([]byte(rawHistory), &history); err != nil {
+		return WatchRuntimeRecord{}, false, err
+	}
+	timed, err := decodeRuleWindowSamples(rawTimed)
+	if err != nil {
+		return WatchRuntimeRecord{}, false, err
+	}
+	recent, err := decodeUnixNanos(rawRecentActions)
+	if err != nil {
+		return WatchRuntimeRecord{}, false, err
+	}
+	return WatchRuntimeRecord{
+		Firing:       firing != 0,
+		LastNotifyAt: unixNanoTime(lastNotifyAt),
+		Window: RuleWindowRecord{
+			Consecutive:  consecutive,
+			History:      history,
+			TrueSince:    unixNanoTime(trueSince),
+			TimedHistory: timed,
+		},
+		Policy: RemediationRecord{
+			LastActionAt:   unixNanoTime(lastActionAt),
+			RecentActions:  recent,
+			CurrentBackoff: time.Duration(currentBackoffNano),
+		},
+	}, true, nil
+}
+
+// SetWatchRuntimeState upserts one watch slot's episode and pacing state. An
+// empty record deletes any existing row.
+func (s *Store) SetWatchRuntimeState(watch, slot string, rec WatchRuntimeRecord) error {
+	if watchRuntimeRecordEmpty(rec) {
+		_, err := s.db.Exec(`DELETE FROM watch_runtime_state WHERE watch = ? AND slot = ?;`, watch, slot)
+		return err
+	}
+	history, err := json.Marshal(rec.Window.History)
+	if err != nil {
+		return err
+	}
+	timed, err := encodeRuleWindowSamples(rec.Window.TimedHistory)
+	if err != nil {
+		return err
+	}
+	recent, err := encodeUnixNanos(rec.Policy.RecentActions)
+	if err != nil {
+		return err
+	}
+	firing := 0
+	if rec.Firing {
+		firing = 1
+	}
+	_, err = s.db.Exec(
+		`INSERT INTO watch_runtime_state (
+		   watch, slot, firing, last_notify_at, consecutive, history, true_since,
+		   timed_history, last_action_at, recent_actions, current_backoff_ns
+		 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(watch, slot) DO UPDATE SET
+		   firing             = excluded.firing,
+		   last_notify_at      = excluded.last_notify_at,
+		   consecutive         = excluded.consecutive,
+		   history             = excluded.history,
+		   true_since          = excluded.true_since,
+		   timed_history       = excluded.timed_history,
+		   last_action_at      = excluded.last_action_at,
+		   recent_actions      = excluded.recent_actions,
+		   current_backoff_ns  = excluded.current_backoff_ns;`,
+		watch, slot, firing, timeUnixNano(rec.LastNotifyAt), rec.Window.Consecutive,
+		string(history), timeUnixNano(rec.Window.TrueSince), timed,
+		timeUnixNano(rec.Policy.LastActionAt), recent, int64(rec.Policy.CurrentBackoff),
+	)
+	return err
+}
+
+func watchRuntimeRecordEmpty(rec WatchRuntimeRecord) bool {
+	return !rec.Firing && rec.LastNotifyAt.IsZero() &&
+		rec.Window.Consecutive == 0 && len(rec.Window.History) == 0 &&
+		rec.Window.TrueSince.IsZero() && len(rec.Window.TimedHistory) == 0 &&
+		rec.Policy.LastActionAt.IsZero() && len(rec.Policy.RecentActions) == 0 &&
+		rec.Policy.CurrentBackoff == 0
 }
 
 // RemediationState returns a service's persisted automatic-remediation state.

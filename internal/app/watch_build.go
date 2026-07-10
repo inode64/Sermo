@@ -230,6 +230,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		Now:            deps.Now,
 		Emit:           deps.Emit,
 		Publish:        publishWatchSnapshots(deps.WatchSnapshots),
+		StateStore:     deps.WatchState,
 	}
 	if actions.expand != nil {
 		w.Expand = actions.expand
@@ -315,6 +316,8 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			Now:            deps.Now,
 			Emit:           deps.Emit,
 			Publish:        publishWatchSnapshots(deps.WatchSnapshots),
+			StateStore:     deps.WatchState,
+			StateSlot:      checks.DataKeyMetric + ":" + key,
 		})
 	}
 	return out, warns
@@ -900,6 +903,7 @@ func monitorWatch(name, checkType string, check checks.Check, notify []string, d
 		Now:        deps.Now,
 		Emit:       deps.Emit,
 		Publish:    publishWatchSnapshots(deps.WatchSnapshots),
+		StateStore: deps.WatchState,
 	}
 }
 
