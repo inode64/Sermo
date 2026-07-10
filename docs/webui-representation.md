@@ -13,6 +13,10 @@ Keep changes concrete:
 - empty states
 - ordering / grouping
 
+`make web-e2e` validates this representation in desktop and mobile Chromium,
+including global search, compact row actions, per-service graph state, viewport
+overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
+
 ## Global rules
 
 - The Web UI is one embedded document: `internal/web/index.html`.
