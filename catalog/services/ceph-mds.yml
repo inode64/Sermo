@@ -11,6 +11,9 @@ restart_on_change:
   apps:
     - ceph-mds
     - ceph
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 variables:
   user: ceph
 socket: /run/ceph/ceph-mds.${hostname}.asok

@@ -39,6 +39,11 @@ restart_on_change:
   apps:
     containerd:
       level: patch
+  messages:
+    path: >-
+      ${display_name} will restart after config change: ${change.path}
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 policy:
   cooldown: 15m
   max_actions: 2

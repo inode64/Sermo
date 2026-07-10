@@ -13,6 +13,9 @@ apps:
 restart_on_change:
   apps:
     - rpc-mountd
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 variables:
   host: 127.0.0.1
   port: 2049

@@ -7,6 +7,9 @@ apps:
 restart_on_change:
   apps:
     - fcron
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 pidfile: /run/fcron.pid
 socket: /run/fcron.fifo
 processes:

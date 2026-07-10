@@ -6,6 +6,9 @@ apps:
 restart_on_change:
   apps:
     - xinetd
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 pidfile: /run/xinetd.pid
 processes:
   main:

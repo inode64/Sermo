@@ -10,6 +10,9 @@ apps: [xrdp]
 restart_on_change:
   apps:
     - xrdp
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 variables:
   host: 127.0.0.1
   port: 3389
