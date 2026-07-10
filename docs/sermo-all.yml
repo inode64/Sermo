@@ -85,6 +85,10 @@ defaults:  # shared defaults for services and watches where applicable
     mode: consecutive  # consecutive | within
     # min_matches: 1           # only meaningful with mode: within
 
+emission:  # automatic firing/alert event and notification cadence
+  events: on_change  # on_change | every_cycle
+  notify: on_change  # on_change | every_cycle
+
 # Security invariants are hard-coded. Config keys such as
 # security.allow_sigkill_by_default are rejected rather than honored.
 
@@ -903,6 +907,7 @@ rules:
     then: { action: block, message: "demo config is invalid" }
   restart-if-http-failed:
     type: remediation
+    emission: { events: on_change, notify: on_change }
     if:
       and:
         - failed: { check: http }
@@ -1147,6 +1152,7 @@ display_name: Data volume
 category: storage
 monitor: disabled
 interval: 1m
+emission: { events: on_change, notify: on_change }
 check:
   type: storage
   path: /var/lib/data

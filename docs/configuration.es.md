@@ -1240,17 +1240,44 @@ sin entrega). Siempre es válido, esté o no configurado un valor por defecto gl
 
 **Cadencia de notificación.** Un watch disparado entrega su `notify` **una vez**, en el
 flanco de subida — cuando empieza la alerta. No re-notifica cada ciclo mientras la
-condición persiste (el evento `firing` aún se registra cada ciclo para la interfaz web, y
-el `hook` aún se ejecuta cada ciclo). Cuando el watch se limpia y luego se dispara de
-nuevo, el siguiente episodio notifica de nuevo. Para obtener un **recordatorio** periódico
-mientras un watch permanece disparado, establece `then.notify_interval` a una duración
-positiva: la notificación se reenvía una vez que ese intervalo transcurre. Solo afecta a
-la entrega, por lo que requiere destinos `notify`. Tanto el valor por defecto disparado
-por flancos como `notify_interval` se aplican a las watches de storage, las
-comprobaciones de service de un solo disparo y los watches de métrica
-`net`/`icmp`/`swap`. Los watches `file` y `process` tienen su propio modelo de
-notificación — un evento por ruta cambiada o pid coincidente — e ignoran
+condición persiste y, por defecto, el evento `firing` también se registra solo en ese
+flanco. El `hook` sigue ejecutándose en cada ciclo disparado. Cuando el watch se limpia y
+luego se dispara de nuevo, el siguiente episodio notifica de nuevo. Para obtener un
+**recordatorio** periódico mientras un watch permanece disparado, establece
+`then.notify_interval` a una duración positiva: la notificación se reenvía una vez que
+ese intervalo transcurre. Solo afecta a la entrega, por lo que requiere destinos
+`notify`. Tanto el valor por defecto disparado por flancos como `notify_interval` se
+aplican a las watches de storage, las comprobaciones de service de un solo disparo y los
+watches de métrica `net`/`icmp`/`swap`. Los watches `file` y `process` tienen su propio
+modelo de notificación — un evento por ruta cambiada o pid coincidente — e ignoran
 `notify_interval`.
+
+**Emisión de eventos/notificaciones.** Los eventos automáticos `firing`/`alert` y sus
+notificaciones usan `on_change` por defecto: emiten cuando un watch o regla entra en un
+episodio disparado, y luego emiten `recovered` cuando se limpia. Define `emission`
+global para restaurar la salida por ciclo en todo el daemon, o sobrescribe solo una regla
+o watch con su propio bloque `emission:`:
+
+```yaml
+emission:
+  events: on_change    # on_change | every_cycle
+  notify: on_change    # on_change | every_cycle
+
+watches:
+  storage-root:
+    emission: { events: every_cycle }
+    # ...
+
+rules:
+  warn-down:
+    emission: { notify: every_cycle }
+    # ...
+```
+
+`emission` solo es válido a nivel global, bajo `rules.*` y bajo `watches.*`; un service
+no tiene override de emisión a nivel de service. Los eventos reales de resultado de
+operación siguen siendo eventos de auditoría y se registran siempre que se intenta una
+operación.
 
 ```yaml
 # /etc/sermo/storages/storage-root.yml
@@ -1447,13 +1474,15 @@ libre la acción falla y se reporta — Sermo nunca reduce ni reformatea. Alcanc
 volúmenes lógicos LVM con un sistema de archivos ext2/3/4, xfs o btrfs; un volumen no-LVM
 o de otro modo no soportado falla limpiamente en lugar de adivinar.
 
-Como un watch se dispara **cada ciclo** que la condición se cumple, una acción `expand`
-siempre debería llevar un bloque **`policy`** a nivel de watch (los mismos campos que la
-remediación de service: `cooldown`, `backoff`, `max_actions`/`max_actions_window`) de
-modo que el volumen no se extienda en cada tick mientras permanece bajo. La acción se
-ejecuta como máximo una vez por ventana de cooldown; cada intento — éxito o fallo —
-inicia el cooldown, de modo que una expansión fallida no se reintenta cada ciclo. Los
-resultados se registran como eventos `expand` / `expand-skipped` / `expand-failed`.
+Como las acciones de watch se evalúan mientras la condición se cumple, una acción
+`expand` siempre debería llevar un bloque **`policy`** a nivel de watch (los mismos
+campos que la remediación de service: `cooldown`, `backoff`,
+`max_actions`/`max_actions_window`) de modo que el volumen no se extienda en cada tick
+mientras permanece bajo. La acción se ejecuta como máximo una vez por ventana de
+cooldown; cada intento — éxito o fallo — inicia el cooldown, de modo que una expansión
+fallida no se reintenta cada ciclo. Los resultados se registran como eventos `expand` /
+`expand-skipped` / `expand-failed`; los saltos por cooldown siguen la política de emisión
+de eventos del watch (`on_change` por defecto, `every_cycle` cuando se configura).
 
 Cuando la interfaz web está habilitada, un watch de storage con `then.expand` también
 muestra una acción **expand**. Esa acción manual usa los mismos valores configurados

@@ -1192,16 +1192,42 @@ global `notify` default is configured.
 
 **Notification cadence.** A firing watch delivers its `notify` **once**, on the
 rising edge — when the alert starts. It does not re-notify every cycle while the
-condition persists (the `firing` event is still recorded each cycle for the web
-UI, and the `hook` still runs each cycle). When the watch clears and later fires
-again, the next episode notifies afresh. To get a periodic **reminder** while a
-watch stays firing, set `then.notify_interval` to a positive duration: the
-notification is re-sent once that interval elapses. It only affects delivery, so
-it requires `notify` targets. Both the edge-triggered default and
-`notify_interval` apply to storage watches, the standard
+condition persists, and by default the `firing` event is also recorded only on
+that edge. The `hook` still runs each firing cycle. When the watch clears and
+later fires again, the next episode notifies afresh. To get a periodic
+**reminder** while a watch stays firing, set `then.notify_interval` to a
+positive duration: the notification is re-sent once that interval elapses. It
+only affects delivery, so it requires `notify` targets. Both the edge-triggered
+default and `notify_interval` apply to storage watches, the standard
 single-shot service checks, and the `net`/`icmp`/`swap` metric watches. The
 `file` and `process` watches have their own notification model — one event per
 changed path or matching pid — and ignore `notify_interval`.
+
+**Event/notification emission.** Automatic `firing`/`alert` events and their
+notifications default to `on_change`: emit when a watch or rule enters a firing
+episode, then emit `recovered` when it clears. Set top-level `emission` to
+restore per-cycle output globally, or override only a specific rule/watch with
+its own `emission:` block:
+
+```yaml
+emission:
+  events: on_change    # on_change | every_cycle
+  notify: on_change    # on_change | every_cycle
+
+watches:
+  storage-root:
+    emission: { events: every_cycle }
+    # ...
+
+rules:
+  warn-down:
+    emission: { notify: every_cycle }
+    # ...
+```
+
+`emission` is valid only globally, under `rules.*`, and under `watches.*`; a
+service does not have a service-wide emission override. Real operation result
+events remain audit events and are recorded whenever an operation is attempted.
 
 ```yaml
 # /etc/sermo/storages/storage-root.yml
@@ -1393,13 +1419,15 @@ the action fails and is reported — Sermo never shrinks or reformats. Scope:
 LVM logical volumes with an ext2/3/4, xfs or btrfs filesystem; a non-LVM or
 otherwise unsupported volume fails cleanly rather than guessing.
 
-Because a watch fires **every cycle** the condition holds, an `expand` action
-should always carry a watch-level **`policy`** block (same fields as service
-remediation: `cooldown`, `backoff`, `max_actions`/`max_actions_window`) so the
-volume is not extended on every tick while it stays low. The action runs at most
-once per cooldown window; each attempt — success or failure — starts the
+Because watch actions are evaluated while the condition holds, an `expand`
+action should always carry a watch-level **`policy`** block (same fields as
+service remediation: `cooldown`, `backoff`, `max_actions`/`max_actions_window`)
+so the volume is not extended on every tick while it stays low. The action runs
+at most once per cooldown window; each attempt — success or failure — starts the
 cooldown, so a failing expansion is not retried every cycle. Outcomes are
-recorded as `expand` / `expand-skipped` / `expand-failed` events.
+recorded as `expand` / `expand-skipped` / `expand-failed` events; cooldown skips
+follow the watch's event emission policy (`on_change` by default,
+`every_cycle` when configured).
 
 When the web UI is enabled, a storage watch with `then.expand` also shows an
 **expand** action. That manual action uses the same configured `check.path` and

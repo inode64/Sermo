@@ -1788,6 +1788,7 @@ rules:
     within: { cycles: 15, min_matches: 5 }  # sliding window (optional)
     # within: { duration: 30m, min_matches: 3 } # or a time window
     notify: [ops-email]           # who gets this rule's alert messages (optional)
+    emission: { events: on_change, notify: on_change } # or every_cycle
     then: { action: alert, message: "http is down" }
 ```
 
@@ -1795,7 +1796,13 @@ El **`notify`** de una regla selecciona qué notificadores reciben sus mensajes 
 sobreescribiendo el default global ([Notificaciones](configuration.es.md#default-selection-and-precedence)):
 una lista explícita gana, `notify: none` suprime, y omitirlo hereda el
 default global `notify`. Aplica a los mensajes de alerta de la regla; las operaciones de
-remediación se reportan como eventos, no como notificaciones.
+remediación se reportan como eventos, no como notificaciones. Por defecto esos eventos
+automáticos de alerta y sus notificaciones se emiten solo cuando la regla entra en un
+episodio disparado, y luego se emite `recovered` cuando se limpia. Usa
+`emission.events` o `emission.notify` a nivel de regla (`on_change` | `every_cycle`) para
+sobrescribir la política global de emisión para esa regla. Los eventos de resultado de
+operación siguen siendo eventos de auditoría y se registran siempre que se intenta la
+operación.
 
 Las acciones y los tipos están acoplados: las acciones de operación (`restart`, `start`,
 `stop`, `reload`, `resume`) pertenecen a reglas `type: remediation` — requeridas ahí (una
