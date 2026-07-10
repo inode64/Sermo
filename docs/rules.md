@@ -1670,9 +1670,10 @@ checks:
 
 ### Count
 
-A `count` check tallies the entries in a directory and compares the total to a
-threshold. It is **condition-style** (`OK == true` means the comparison holds),
-so in rules `active: {check: …}` fires when the comparison holds and
+A `count` check tallies the entries in a directory and either compares the total
+to a threshold, or alerts when the total grows by a `delta` within a time
+window. It is **condition-style** (`OK == true` means the comparison holds), so
+in rules `active: {check: …}` fires when the comparison holds and
 `failed: {check: …}` fires when it does not.
 
 ```yaml
@@ -1686,6 +1687,16 @@ checks:
     value: 1000                   # numeric threshold
 ```
 
+```yaml
+checks:
+  spool-growth:
+    type: count
+    path: /var/spool/myapp
+    of: file
+    delta: { op: ">", value: 200 } # alert if the count grows by >200…
+    within: 2m                     # …within this sliding window
+```
+
 - **`of`** selects which entries are counted. Entries are classified by their own
   type without following symlinks, so a symlink counts as `symlink` (never as the
   file or directory it points to); `any` counts every entry.
@@ -1697,6 +1708,12 @@ checks:
 - The threshold may also be written as a nested predicate —
   `count: { op: ">", value: 1000 }` — matching the `{op, value}` form the other
   checks use. Use one form or the other, not both.
+- **`delta` + `within`** is stateful. Each cycle samples the count, keeps samples
+  in the last `within`, and compares the current count against the oldest sample
+  still in the window. The first cycle only baselines (no alert), and only
+  increases can trip the check; steady or shrinking directories pass. Result data
+  carries `count`, `baseline_count`, `growth_count`, `window` and `value` (the
+  growth). Use either `count`/`op`/`value` or `delta`/`within`, not both.
 
 ## Metrics
 

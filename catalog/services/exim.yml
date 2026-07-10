@@ -13,6 +13,10 @@ variables:
   port: 25
   tls_port: 465
   user: mail
+  msglog_dir: /var/spool/exim/msglog
+  msglog_backlog_limit: "300"
+  msglog_growth_limit: "200"
+  msglog_growth_window: 2m
 preflight:
   config:
     type: command
@@ -50,6 +54,33 @@ watches:
       cert_verify: false
       expires_in_days: 21
       timeout: 5s
+  alert-if-msglog-backlog-high:
+    check:
+      type: count
+      path: ${msglog_dir}
+      of: file
+      count:
+        op: '>'
+        value: ${msglog_backlog_limit}
+      optional: true
+    then:
+      action: alert
+      message: >-
+        ${display_name} msglog backlog is above ${msglog_backlog_limit} files
+  alert-if-msglog-backlog-growing-fast:
+    check:
+      type: count
+      path: ${msglog_dir}
+      of: file
+      delta:
+        op: '>'
+        value: ${msglog_growth_limit}
+      within: ${msglog_growth_window}
+      optional: true
+    then:
+      action: alert
+      message: >-
+        ${display_name} msglog backlog grew by more than ${msglog_growth_limit} files in ${msglog_growth_window}
   restart-if-worker-thread-hot:
     check:
       type: metric
