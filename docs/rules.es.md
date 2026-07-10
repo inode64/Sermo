@@ -349,7 +349,11 @@ rules:
   restart-on-pam:
     type: remediation
     if: { changed: { library: pam } }   # or { path: /lib64/security/pam_unix.so }
-    then: { action: restart }
+    then:
+      actions:
+        - type: alert
+          message: "${service} will restart after library change: ${change.library}"
+        - type: restart
 ```
 
 ### Ports
@@ -1930,7 +1934,11 @@ bloquea nunca se ejecuta.
 
 Las cadenas `message:` pueden usar los built-ins de runtime `${date}` (RFC3339), `${event}`
 (el nombre de la regla que se dispara) y `${action}`, más los resueltos `${service}`/`${host}`
-— p. ej. `message: "[${host}] ${service}: ${event} → ${action} at ${date}"`.
+— p. ej. `message: "[${host}] ${service}: ${event} -> ${action} at ${date}"`.
+Las reglas con una hoja `changed:` también pueden usar `${change.path}`,
+`${change.library}`, `${change.app}`, `${change.level}`,
+`${change.old_version}` y `${change.new_version}`; old/new se rellenan para
+`changed: {app: ...}`.
 
 ## Política de remediación
 
