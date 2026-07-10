@@ -187,27 +187,6 @@
   button:disabled { opacity: .38; cursor: not-allowed; }
   button:disabled:hover { background: var(--panel); border-color: var(--line-2); }
   .actions button { margin-right: .25rem; margin-bottom: .25rem; min-width: 24px; min-height: 24px; }
-  .row-action-menu {
-    position: relative; display: inline-block; vertical-align: top;
-    background: transparent; border: 0; border-radius: 0; box-shadow: none;
-    margin: 0; padding: 0; scroll-margin: 0;
-  }
-  .row-action-menu[open] { padding: 0; }
-  .row-action-menu > summary,
-  .row-action-menu[open] > summary {
-    display: inline-grid; place-items: center; margin: 0 .25rem .25rem 0; padding: 0;
-    border: 1px solid var(--line-2); border-radius: var(--radius-s);
-    background: var(--panel); color: var(--text); font-size: .95rem; font-weight: 400;
-  }
-  .row-action-menu > summary::before { content: none; margin: 0; }
-  .row-action-menu[open] > summary { border-color: var(--text-2); background: var(--panel-2); }
-  .row-action-popover {
-    position: absolute; z-index: 8; right: 0; top: calc(100% + .2rem);
-    display: grid; gap: .3rem; min-width: 9.5rem; padding: .4rem;
-    border: 1px solid var(--line-2); border-radius: var(--radius-s);
-    background: var(--panel); box-shadow: var(--shadow);
-  }
-  .row-action-popover button { width: 100%; margin: 0; text-align: left; white-space: nowrap; }
   /* row-toggle: a real <button> that drives row/cross-ref expansion but reads as
      inline text, so the disclosure is keyboard-operable (Enter/Space, focusable)
      and exposes aria-expanded — without looking like a chrome button.

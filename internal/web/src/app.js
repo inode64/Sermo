@@ -2159,6 +2159,10 @@ function serviceActionGlyph(action) {
     case actionStart: return "▶";
     case actionStop: return "■";
     case actionRestart: return "↻";
+    case actionResume: return "▶";
+    case actionReload: return "⟳";
+    case actionMonitor: return "◉";
+    case actionUnmonitor: return "⊘";
     default: return "";
   }
 }
@@ -2167,13 +2171,6 @@ function serviceActionButton(s, action, busy, compact = false, title = "") {
   const label = svcActionAriaLabel(s, action);
   const glyph = compact ? serviceActionGlyph(action) : "";
   return tpl`${svcActionHint(s, action, busy)}<button class="${compact ? "icon-btn" : ""}" ?disabled=${serviceActionDisabled(s, action, busy)} data-service="${s.name}" data-service-action="${action}" title="${title || (compact ? label : nothing)}" aria-label="${label}" aria-describedby="${svcActionDescribedBy(s, action, busy)}">${glyph ? tpl`<span aria-hidden="true">${glyph}</span>` : action}</button>`;
-}
-
-function rowActionMenu(label, actions) {
-  return tpl`<details class="row-action-menu">
-    <summary class="icon-btn" aria-label="${label}" title="${label}"><span aria-hidden="true">⋯</span></summary>
-    <div class="row-action-popover" role="group" aria-label="${label}">${actions}</div>
-  </details>`;
 }
 
 // serviceRowParts builds one service's main and optional expansion <tr> HTML.
@@ -2198,16 +2195,16 @@ function serviceRowParts(s, opts = {}) {
       ? `${svcActionAriaLabel(s, powerAction)}; also applies to: ${s.also_apply.join(", ")}`
       : svcActionAriaLabel(s, powerAction);
     const overflowActions = [
-      showResume ? serviceActionButton(s, actionResume, busy) : nothing,
-      serviceActionButton(s, actionReload, busy),
+      showResume ? serviceActionButton(s, actionResume, busy, true) : nothing,
+      serviceActionButton(s, actionReload, busy, true),
       s.monitored
-        ? serviceActionButton(s, actionUnmonitor, busy)
-        : serviceActionButton(s, actionMonitor, busy),
+        ? serviceActionButton(s, actionUnmonitor, busy, true)
+        : serviceActionButton(s, actionMonitor, busy, true),
     ];
     actions = me.can_act ? tpl`
         ${serviceActionButton(s, powerAction, busy, true, powerTitle)}
         ${serviceActionButton(s, actionRestart, busy, true)}
-        ${rowActionMenu(`More actions for ${label}`, overflowActions)}`
+        ${overflowActions}`
       : tpl`<span class="muted">read-only</span>`;
   }
   const key = serviceExpansionKey(s.name);
@@ -2522,13 +2519,8 @@ window.addEventListener(domEventHashChange, () => { hashScrolled = false; applyH
 // rowClick expands a row from a click anywhere on it, except on interactive
 // elements (action buttons and links) which keep their own behaviour.
 function rowClick(event, key) {
-  if (closestFrom(event, "button, a, input, select, summary, details.row-action-menu")) return;
+  if (closestFrom(event, "button, a, input, select, summary")) return;
   toggleExpand(key);
-}
-
-function closeRowActionMenu(control) {
-  const menu = control && control.closest("details.row-action-menu");
-  if (menu) menu.open = false;
 }
 
 // Expansion detail cells are rendered only through litRender into the cell
@@ -3856,9 +3848,9 @@ function watchActionsCell(w) {
   const monitorBtn = !w.enabled
     ? tpl`<span class="muted">disabled in config</span>`
     : (me.can_act
-      ? rowActionMenu(`More actions for ${displayName(w)}`, w.monitored
-        ? tpl`${watchActionHint(w, actionUnmonitor)}<button ?disabled=${watchActionDisabled(w, actionUnmonitor)} data-watch="${w.name}" data-watch-action="${actionUnmonitor}" aria-label="${watchActionAriaLabel(w, actionUnmonitor)}" aria-describedby="${watchActionDescribedBy(w, actionUnmonitor)}">${actionUnmonitor}</button>`
-        : tpl`${watchActionHint(w, actionMonitor)}<button ?disabled=${watchActionDisabled(w, actionMonitor)} data-watch="${w.name}" data-watch-action="${actionMonitor}" aria-label="${watchActionAriaLabel(w, actionMonitor)}" aria-describedby="${watchActionDescribedBy(w, actionMonitor)}">${actionMonitor}</button>`)
+      ? (w.monitored
+        ? tpl`${watchActionHint(w, actionUnmonitor)}<button class="icon-btn" ?disabled=${watchActionDisabled(w, actionUnmonitor)} data-watch="${w.name}" data-watch-action="${actionUnmonitor}" title="${watchActionAriaLabel(w, actionUnmonitor)}" aria-label="${watchActionAriaLabel(w, actionUnmonitor)}" aria-describedby="${watchActionDescribedBy(w, actionUnmonitor)}"><span aria-hidden="true">⊘</span></button>`
+        : tpl`${watchActionHint(w, actionMonitor)}<button class="icon-btn" ?disabled=${watchActionDisabled(w, actionMonitor)} data-watch="${w.name}" data-watch-action="${actionMonitor}" title="${watchActionAriaLabel(w, actionMonitor)}" aria-label="${watchActionAriaLabel(w, actionMonitor)}" aria-describedby="${watchActionDescribedBy(w, actionMonitor)}"><span aria-hidden="true">◉</span></button>`)
       : tpl`<span class="muted">read-only</span>`);
   const actions = !w.enabled
     ? tpl`<span class="muted">disabled in config</span>`
@@ -4642,10 +4634,8 @@ function mountActionButtons(m, mounted) {
   const primaryTitle = disabledReason ? esc(disabledReason) : `Unmount ${label}`;
   return hint +
     `<button class="icon-btn" data-mount="${name}" data-mount-action="${actionUmount}" aria-label="Unmount ${label}" title="${primaryTitle}"${disabledAttrs}><span aria-hidden="true">⏏</span></button>` +
-    `<details class="row-action-menu"><summary class="icon-btn" aria-label="More actions for ${label}" title="More actions for ${label}"><span aria-hidden="true">⋯</span></summary>` +
-    `<div class="row-action-popover" role="group" aria-label="More actions for ${label}">` +
-    `<button data-mount="${name}" data-mount-action="${actionAlert}" aria-label="Alert users blocking ${label}"${disabledAttrs}${disabledTitle}>${actionAlert}</button>` +
-    `<button class="danger-btn" data-mount="${name}" data-mount-action="${actionKillUmount}" aria-label="Kill blockers and unmount ${label}"${disabledAttrs}${disabledTitle}>kill+umount</button></div></details>`;
+    `<button class="icon-btn" data-mount="${name}" data-mount-action="${actionAlert}" aria-label="Alert users blocking ${label}" title="Alert users blocking ${label}"${disabledAttrs}${disabledTitle}><span aria-hidden="true">!</span></button>` +
+    `<button class="icon-btn danger-btn" data-mount="${name}" data-mount-action="${actionKillUmount}" aria-label="Kill blockers and unmount ${label}" title="Kill blockers and unmount ${label}"${disabledAttrs}${disabledTitle}><span aria-hidden="true">✕</span></button>`;
 }
 
 function mountUmountDisabledReason(m) {
@@ -6490,21 +6480,18 @@ function initDelegatedHandlers() {
 
     const serviceAction = closestFrom(e, "[data-service-action][data-service]");
     if (serviceAction) {
-      closeRowActionMenu(serviceAction);
       act(serviceAction.dataset.service || "", serviceAction.dataset.serviceAction || "");
       return;
     }
 
     const watchAction = closestFrom(e, "[data-watch-action][data-watch]");
     if (watchAction) {
-      closeRowActionMenu(watchAction);
       actWatch(watchAction.dataset.watch || "", watchAction.dataset.watchAction || "");
       return;
     }
 
     const mountAction = closestFrom(e, "[data-mount-action][data-mount]");
     if (mountAction) {
-      closeRowActionMenu(mountAction);
       actMount(mountAction.dataset.mount || "", mountAction.dataset.mountAction || "");
       return;
     }
