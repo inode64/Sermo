@@ -13,6 +13,11 @@ Mantén los cambios concretos:
 - estados vacíos
 - ordenación / agrupación
 
+`make web-e2e` valida esta representación en Chromium de escritorio y móvil,
+incluyendo búsqueda global, acciones compactas por fila, estado de gráficas por
+servicio, desbordamiento del viewport y reglas axe WCAG 2.2 AA contra fixtures
+deterministas de la API.
+
 ## Reglas globales
 
 - La interfaz web es un único documento embebido: `internal/web/index.html`.

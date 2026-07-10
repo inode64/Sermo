@@ -220,7 +220,7 @@
     text-align: left; cursor: pointer; border-radius: var(--radius-s);
   }
   .row-toggle:hover { background: color-mix(in srgb, var(--text) 6%, transparent); border: 0; }
-  .danger-btn { border-color: color-mix(in srgb, var(--crit) 55%, transparent); background: color-mix(in srgb, var(--crit) 12%, transparent); color: var(--crit); }
+  .danger-btn { border-color: color-mix(in srgb, var(--crit) 55%, transparent); background: color-mix(in srgb, var(--crit) 12%, transparent); color: color-mix(in srgb, var(--crit) 82%, var(--text)); font-weight: 600; }
   .danger-btn:hover { background: color-mix(in srgb, var(--crit) 20%, transparent); }
   @keyframes panic-pulse { 50% { opacity: .6; } }
   .panic-btn { border-color: var(--crit); background: var(--crit); color: var(--bg); font-weight: 700; letter-spacing: .02em; }
@@ -352,7 +352,6 @@
   details[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: .65rem; }
   summary > button { font-weight: 400; margin-left: .4rem; }
   .summary-title { display: inline-flex; align-items: baseline; gap: .35rem; }
-  .panel-tools { margin-left: auto; display: inline-flex; gap: .3rem; align-items: center; }
   .icon-btn { width: 1.85rem; height: 1.85rem; display: inline-grid; place-items: center; padding: 0; font-size: .95rem; line-height: 1; }
   .icon-btn[aria-pressed="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line-2)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
   #app-footer {

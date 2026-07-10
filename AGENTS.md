@@ -415,7 +415,10 @@ row-render behavior stays in `watchPanelBehaviors` in `src/app.js`.
 for the server to fill per request. **After editing anything under
 `internal/web/src/`, run `make web` and commit the regenerated `index.html`.**
 `make web-check` (wired into `validate`/`check`/CI, modeled on `fmt-check`) fails
-if the committed file is stale.
+if the committed file is stale. `make web-e2e` serves that committed bundle with
+deterministic mocked APIs and runs the desktop/mobile Playwright flows plus axe
+WCAG 2.2 AA checks; it is also part of `validate`/`check`/CI. Install its browser
+once with `npx playwright install chromium` (CI uses `--with-deps`).
 
 **Rendering uses lit-html.** Build markup with `tpl\`...\`` (the `html` tag,
 imported aliased as `tpl`) and render into a container with `litRender(...)` (the
