@@ -166,7 +166,7 @@ func TestIndexShellAnchors(t *testing.T) {
 		"storage-controls", "network-controls", "mount-controls",
 		"container-controls", "vm-controls", "container-rows", "vm-rows",
 		"event-clear", "event-before", "event-reset-filters", "activity-clear",
-		"event-more",
+		"event-more", "event-service", "event-watch", "event-kind", "event-status", "event-range",
 		"state-compact-btn", "state-before", "app-rows", "locks-rows",
 		"mount-search", "mount-category", "mount-filters", "mount-filter-count",
 		"action-confirm", "confirm-no-cascade", "simple-confirm",
@@ -202,6 +202,16 @@ func TestIndexShellAnchors(t *testing.T) {
 	}
 	if headers["Source"] {
 		t.Errorf("shell still exposes static <th> Source")
+	}
+}
+
+func TestEventFiltersUseGuidedSelects(t *testing.T) {
+	doc, _ := parsedIndex(t)
+	for _, id := range []string{"event-service", "event-watch", "event-kind", "event-status", "event-range"} {
+		node := nodeByID(doc, id)
+		if node == nil || node.DataAtom != atom.Select {
+			t.Errorf("event filter %q is not a select", id)
+		}
 	}
 }
 

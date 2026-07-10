@@ -910,6 +910,7 @@ type Event struct {
 type EventQuery struct {
 	BeforeID   int64
 	Limit      int
+	Since      time.Duration
 	Service    string
 	Watch      string
 	Kind       string
@@ -1540,8 +1541,13 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		since, err := eventSince(r)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		writeJSON(w, http.StatusOK, s.Backend.EventPage(r.Context(), EventQuery{
-			BeforeID: beforeID, Limit: limit, Service: filter.Service, Watch: filter.Watch,
+			BeforeID: beforeID, Limit: limit, Since: since, Service: filter.Service, Watch: filter.Watch,
 			Kind: filter.Kind, Status: filter.Status, OnlyErrors: filter.OnlyErrors,
 		}))
 		return
@@ -1551,6 +1557,18 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		fetchLimit = maxEventLimit
 	}
 	writeJSON(w, http.StatusOK, filterEvents(s.Backend.Events(r.Context(), fetchLimit), filter, limit))
+}
+
+func eventSince(r *http.Request) (time.Duration, error) {
+	raw := r.URL.Query().Get(apiQuerySince)
+	if raw == "" {
+		return 0, nil
+	}
+	since, err := time.ParseDuration(raw)
+	if err != nil || since <= 0 {
+		return 0, fmt.Errorf("bad %s: must be a positive duration", apiQuerySince)
+	}
+	return since, nil
 }
 
 func eventBeforeID(r *http.Request) (int64, error) {

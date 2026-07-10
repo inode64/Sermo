@@ -395,17 +395,17 @@ Section id: `events-section`
 | Parte | Representación actual |
 | --- | --- |
 | Título | `Events` más nota de eventos dry-run |
-| Controles | service, watch, kind, status, only errors, acciones de grupo, restablecer filtros, corte `before` opcional, limpiar log (admin) |
+| Controles | selectores guiados de service, watch, kind, status y rango temporal; only errors, acciones de grupo, restablecer filtros, corte `before` opcional, limpiar log (admin) |
 | Tabla | filas de evento agrupadas por acción cuando está habilitado |
 | Límite | últimos eventos coincidentes; **load older** continúa con un cursor de ID estable |
 
 Notas editables:
 
-- Los filtros de service/watch/kind/status se aplican a medida que el operador escribe (debounce de 300ms),
-  igual que en los paneles de servicios y watches; Enter aplica inmediatamente, Escape
-  o **restablecer filtros** limpia los campos de filtro. La casilla `only errors` vuelve
-  a cargar al cambiar. La agrupación permanece en el cliente y es opcional; la cronología
-  en bruto sigue siendo útil.
+- Las opciones de service/watch siguen los targets conocidos y kind/status usan
+  el vocabulario de eventos del daemon. Los rangos temporales solicitan `since`
+  al backend. Escape o **restablecer filtros** limpia todos los filtros. La
+  casilla `only errors` vuelve a cargar al cambiar. La agrupación permanece en
+  el cliente y es opcional; la cronología en bruto sigue siendo útil.
 - El estado de expansión usa el ID persistido del evento. Cargar filas más
   antiguas añade una página por cursor sin duplicar eventos ni desplazar las
   filas abiertas.
@@ -413,11 +413,12 @@ Notas editables:
   igual que `sermoctl events clear`. Un campo opcional **before** pasa
   `?before=TIME` (duración positiva o RFC3339 no futuro) para podar solo las
   filas más antiguas.
-- El filtro `kind` cubre los tipos de evento emitidos: `cycle`, `action`,
-  `suppressed`, `alert`, `error`, `firing`, `recovered`, `dry-run`,
+- El filtro `kind` cubre los tipos de evento emitidos: `action`, `suppressed`,
+  `panic-suppressed`, `alert`, `error`, `firing`, `recovered`, `dry-run`,
   `reload` (una recarga de configuración correcta del daemon en ejecución),
-  `hook`/`hook-failed`, `notify`/`notify-failed`, `expand`/`expand-skipped`/`expand-failed`,
-  y `cascade` (una operación de servicio activada mediante una acción en cascada).
+  `hook`/`hook-failed`, `notify`/`notify-failed`/`notify-suppressed`,
+  `expand`/`expand-skipped`/`expand-failed`, `kill`/`kill-failed`, y `cascade`
+  (una operación de servicio activada mediante una acción en cascada).
 
 ## Panel de notifiers
 

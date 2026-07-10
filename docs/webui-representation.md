@@ -388,28 +388,29 @@ Section id: `events-section`
 | Part | Current representation |
 | --- | --- |
 | Title | `Events` plus dry-run note |
-| Controls | service, watch, kind, status, only errors, group actions, reset filters, optional `before` cutoff, clear log (admin) |
+| Controls | guided service, watch, kind, status and time-range selects; only errors, group actions, reset filters, optional `before` cutoff, clear log (admin) |
 | Table | event rows grouped by action when enabled |
 | Limit | latest matching events; **load older** continues with a stable event-ID cursor |
 
 Editable notes:
 
-- Service/watch/kind/status filter live as the operator types (300ms debounce),
-  matching the services and watches panels; Enter applies immediately, Escape
-  or **reset filters** clears the filter fields. The `only errors` checkbox
-  refetches on change. Grouping stays client-side and optional; raw chronology
-  is still useful.
+- Service/watch choices follow the currently known targets while kind/status
+  use the daemon event vocabulary. The time-range presets request `since` from
+  the backend. Escape or **reset filters** clears every filter. The `only
+  errors` checkbox refetches on change. Grouping stays client-side and optional;
+  raw chronology is still useful.
 - Event expansion state is keyed by the persisted event ID. Loading older rows
   appends a cursor page without duplicating events or shifting open rows.
 - **clear log** (admin only) calls `POST /api/events/clear` after confirmation,
   matching `sermoctl events clear`. An optional **before** field passes
   `?before=TIME` (positive duration or non-future RFC3339) to prune only older
   rows.
-- The `kind` filter covers the emitted event kinds: `cycle`, `action`,
-  `suppressed`, `alert`, `error`, `firing`, `recovered`, `dry-run`,
+- The `kind` filter covers the emitted event kinds: `action`, `suppressed`,
+  `panic-suppressed`, `alert`, `error`, `firing`, `recovered`, `dry-run`,
   `reload` (a successful config reload of the running daemon),
-  `hook`/`hook-failed`, `notify`/`notify-failed`, `expand`/`expand-skipped`/`expand-failed`,
-  and `cascade` (a service operation triggered through a cascade action).
+  `hook`/`hook-failed`, `notify`/`notify-failed`/`notify-suppressed`,
+  `expand`/`expand-skipped`/`expand-failed`, `kill`/`kill-failed`, and `cascade`
+  (a service operation triggered through a cascade action).
 
 ## Notifiers panel
 
