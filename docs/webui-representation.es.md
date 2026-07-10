@@ -80,7 +80,7 @@ la autenticación web está habilitada.
 | Marca | `Sermo` con punto de estado |
 | Rol | etiqueta admin / solo lectura |
 | Refresco | selector con intervalo de refresco, botón de refresco manual |
-| Estado | antigüedad del último refresco, errores de conexión; `#statusbar` termina con el `uptime:` del host y luego el `status:` del daemon (`ok` / `starting` / …) como una cola emparejada |
+| Estado | antigüedad del último refresco completo, errores de conexión o lista de paneles que conservan datos anteriores tras un refresco parcial; `#statusbar` termina con el `uptime:` del host y luego el `status:` del daemon (`ok` / `starting` / …) como una cola emparejada |
 | Estado del sistema | identidad del host, tipo de host, resumen de daemon/backend/runtime |
 
 Notas editables:

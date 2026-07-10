@@ -266,11 +266,38 @@ func TestSourceLoadDefersWatchesWithoutStaleFastPathReference(t *testing.T) {
 		t.Fatalf("read src/app.js: %v", err)
 	}
 	text := string(src)
-	if !strings.Contains(text, `getJSON(apiWatchesPath, null).then`) {
+	watchesFetch := strings.Index(text, `getJSONResult(apiWatchesPath, null)`)
+	primaryRender := strings.Index(text, `renderStatus({`)
+	if watchesFetch < 0 || watchesFetch < primaryRender {
 		t.Fatalf("load() no longer defers api/watches")
 	}
 	if strings.Contains(text, "if (watches) renderWatches(watches);") {
 		t.Fatalf("load() references stale watches binding before deferred fetch")
+	}
+}
+
+func TestSourceLoadReportsPartialRefreshBeforeAdvancingFreshness(t *testing.T) {
+	src, err := os.ReadFile("src/app.js")
+	if err != nil {
+		t.Fatalf("read src/app.js: %v", err)
+	}
+	text := string(src)
+	for _, needle := range []string{
+		`getJSONResult(apiServicesPath, null)`,
+		`["watches", watchesResult]`,
+		`["applications", appsResult]`,
+		`["events", { ok: eventsOK }]`,
+		`showPartialRefresh(failures)`,
+		`fully updated ${fmtSince`,
+	} {
+		if !strings.Contains(text, needle) {
+			t.Errorf("source missing partial-refresh marker %q", needle)
+		}
+	}
+	failureCheck := strings.Index(text, "if (failures.length)")
+	freshnessAdvance := strings.LastIndex(text, "lastRefresh = Date.now()")
+	if failureCheck < 0 || freshnessAdvance < failureCheck {
+		t.Fatalf("full-refresh timestamp advances before partial failures are handled")
 	}
 }
 
