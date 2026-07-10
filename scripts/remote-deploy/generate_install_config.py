@@ -605,6 +605,16 @@ def parse_interfaces(stage: Path) -> list[str]:
     return list(dict.fromkeys(interfaces))
 
 
+def interfaces_with_addresses(stage: Path) -> set[str]:
+    interfaces: set[str] = set()
+    for filename in ("ip_addr4", "ip_addr6"):
+        for line in read_text(stage / filename).splitlines():
+            match = re.match(r"\d+:\s+([^\s:]+).*\s(?:inet|inet6)\s+", line)
+            if match:
+                interfaces.add(match.group(1).split("@", 1)[0])
+    return interfaces
+
+
 def parse_default_routes(stage: Path) -> list[dict[str, str]]:
     routes: list[dict[str, str]] = []
     for line in read_text(stage / "ip_route4").splitlines():
@@ -1259,6 +1269,7 @@ dry_run: true
         skip("hdparm", "hdparm not installed")
 
     interfaces = parse_interfaces(stage)
+    addressed_interfaces = interfaces_with_addresses(stage)
     for iface in interfaces:
         safe = slug(iface)
         # Net/ICMP metric expectations are alert conditions: use the unhealthy
@@ -1274,9 +1285,11 @@ dry_run: true
                 [
                     ("state", ["expect: down", "for: { cycles: 3 }", "then: { notify: [none] }"]),
                     ("errors", ['delta: { op: ">", value: 100 }', "for: { cycles: 3 }", "then: { notify: [none] }"]),
-                    ("address", ["expect: absent", "for: { cycles: 3 }", "then: { notify: [none] }"]),
-                    ("speed", ["on: change", "then: { notify: [none] }"]),
-                ],
+                ] + (
+                    [("address", ["expect: absent", "for: { cycles: 3 }", "then: { notify: [none] }"])]
+                    if iface in addressed_interfaces
+                    else []
+                ) + [("speed", ["on: change", "then: { notify: [none] }"])],
             ),
         )
     if not interfaces:
