@@ -214,9 +214,10 @@ Shared by the Services, Containers and Virtual machines panels.
 | Events | recent retained service events |
 
 Open service expansions fetch and fully render fresh detail once per dashboard
-refresh; re-renders in between (filter keystrokes, sorting, the live-operations
-ticker) redraw from that cached detail without extra requests. All expanded
-watches share a single recent-events download per refresh.
+refresh; SLA, metric, runtime and event subrequests plus open watch/application
+details must finish before the header advances `fully updated`. Re-renders in
+between (filter keystrokes, sorting, the live-operations ticker) redraw from
+cached detail without extra requests.
 
 Empty states:
 
