@@ -341,6 +341,10 @@ func TestSourceFullyRefreshesExpandedServicesEveryDashboardPoll(t *testing.T) {
 	for _, marker := range []string{
 		"expandedServicesPromise = refreshExpandedServices()",
 		`["service details", { ok: expandedServicesOK }]`,
+		`["watch details", { ok: expandedWatchesOK }]`,
+		`["application details", { ok: expandedApplicationsOK }]`,
+		"const results = await Promise.all(pending)",
+		"return hydrateServiceDetail(detailData)",
 		"const expLoading = new Map()",
 	} {
 		if !strings.Contains(text, marker) {

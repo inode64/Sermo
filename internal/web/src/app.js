@@ -481,13 +481,18 @@ async function load() {
   if (watchesResult.ok) {
     renderWatches(watchesResult.data);
     if (connOK) renderAttention();
-    refreshExpandedWatches();
   }
   if (appsResult.ok) {
     renderApps(appsResult.data);
     if (connOK) renderAttention();
   }
   if (!connOK) return;
+
+  const [expandedWatchesOK, expandedApplicationsOK] = await Promise.all([
+    watchesResult.ok ? refreshExpandedWatches() : Promise.resolve(false),
+    appsResult.ok ? refreshExpandedApplications() : Promise.resolve(false),
+  ]);
+  if (!sameLoad()) return;
 
   const refreshResults = [
     ["mounts", mountsResult], ["notifiers", notifiersResult], ["daemon", daemonResult],
@@ -496,6 +501,8 @@ async function load() {
     ["operations", opsResult], ["host metrics", hostMetricsResult], ["watches", watchesResult],
     ["applications", appsResult], ["events", { ok: eventsOK }],
     ["service details", { ok: expandedServicesOK }],
+    ["watch details", { ok: expandedWatchesOK }],
+    ["application details", { ok: expandedApplicationsOK }],
   ];
   const failures = refreshResults.filter(([, result]) => !result.ok).map(([name]) => name);
   if (failures.length) {
@@ -2193,15 +2200,18 @@ async function refreshExpandedServices(opts = {}) {
 // re-renders every open watch expansion from that single response, instead of
 // one events download per expanded watch per render.
 async function refreshExpandedWatches() {
-  if (document.hidden) return;
+  if (document.hidden) return true;
   const keys = [...expanded].filter(isWatchExpansionKey);
-  if (!keys.length) return;
+  if (!keys.length) return true;
   try {
     const res = await fetch(apiEventsRecentPath);
-    if (!res.ok) return;
+    if (!res.ok) return false;
     const events = (await res.json()) || [];
     keys.forEach((k) => renderWatchExpansionInto(k, events));
-  } catch (_) { /* keep the last content on a transient error */ }
+    return true;
+  } catch (_) {
+    return false; // keep the last content on a transient error
+  }
 }
 
 // applyHash opens/scrolls to the target named in a #svc:|#wat:|#app: URL fragment
@@ -2310,8 +2320,7 @@ function loadExpansionFor(key) {
       expCache[key] = html;
       const target = expansionCell(key);
       if (target) litRender(html, target);
-      hydrateServiceDetail(detailData);
-      return true;
+      return hydrateServiceDetail(detailData);
     } else if (isWatchExpansionKey(key)) {
       const res = await fetch(apiEventsRecentPath);
       const events = res.ok ? await res.json() : [];
@@ -2612,7 +2621,7 @@ function renderSLAIncidentList(incidents) {
 async function loadServiceSLA(name) {
   const summary = document.getElementById(detailDomId(name, "sla-summary"));
   const chart = document.getElementById(detailDomId(name, "sla-chart"));
-  if (!summary || !chart) return;
+  if (!summary || !chart) return true;
   try {
     const res = await fetch(serviceSLAAPI(name, metricWindow));
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -2620,9 +2629,11 @@ async function loadServiceSLA(name) {
     const points = body.points || [];
     summary.innerHTML = slaTimelineSummary(points);
     chart.innerHTML = drawSLAChart(points, metricWindow);
+    return true;
   } catch (e) {
     summary.innerHTML = `<span class="bad">Failed to load SLA: ${esc(e.message)}</span>`;
     chart.innerHTML = "";
+    return false;
   }
 }
 
@@ -2927,15 +2938,16 @@ function renderServiceDetail(d) {
   </div>`;
 }
 
-function hydrateServiceDetail(d) {
+async function hydrateServiceDetail(d) {
   const measured = serviceMeasuredChecks(d);
   syncWindowButtons("setMetricWin", metricWindow);
-  loadServiceSLA(d.name);
+  const pending = [loadServiceSLA(d.name), loadServiceEvents(d.name)];
   if (!d.no_resident_process) {
-    if (measured.length) loadMetrics(d.name, measured);
-    loadServiceRuntimeMetrics(d.name);
+    if (measured.length) pending.push(loadMetrics(d.name, measured));
+    pending.push(loadServiceRuntimeMetrics(d.name));
   }
-  loadServiceEvents(d.name);
+  const results = await Promise.all(pending);
+  return results.every(Boolean);
 }
 
 // fmtNum renders a number with at most `max` decimals (default 2), dropping any
@@ -4016,17 +4028,34 @@ function renderAppExpansion(a) {
 
 // loadAppEvents fills an expanded application's "Recent events" table with its
 // monitoring history (errors/recoveries), mirroring loadServiceEvents.
-async function loadAppEvents(name) {
-  const target = document.getElementById(detailDomId(name, "app-events"));
-  if (!target) return;
-  renderEventsLoading(target);
-  try {
-    const res = await fetch(applicationEventsAPI(name, eventDetailLimit));
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    litRender(eventRows(await res.json(), false), target);
-  } catch (e) {
-    litRender(tpl`<tr><td colspan="3" class="muted">Failed to load events: ${e.message}</td></tr>`, target);
-  }
+const appEventLoads = new Map();
+function loadAppEvents(name) {
+  if (appEventLoads.has(name)) return appEventLoads.get(name);
+  const pending = (async () => {
+    const target = document.getElementById(detailDomId(name, "app-events"));
+    if (!target) return true;
+    renderEventsLoading(target);
+    try {
+      const res = await fetch(applicationEventsAPI(name, eventDetailLimit));
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      litRender(eventRows(await res.json(), false), target);
+      return true;
+    } catch (e) {
+      litRender(tpl`<tr><td colspan="3" class="muted">Failed to load events: ${e.message}</td></tr>`, target);
+      return false;
+    }
+  })().finally(() => appEventLoads.delete(name));
+  appEventLoads.set(name, pending);
+  return pending;
+}
+
+async function refreshExpandedApplications() {
+  if (document.hidden) return true;
+  const names = (allApps || [])
+    .filter((app) => expanded.has(appExpansionKey(app.name)))
+    .map((app) => app.name);
+  const results = await Promise.all(names.map(loadAppEvents));
+  return results.every(Boolean);
 }
 
 // renderWatchExpansion shows a host watch's config summary and its recent
@@ -5359,14 +5388,16 @@ async function runPreflight(name) {
 
 async function loadServiceEvents(name) {
   const target = document.getElementById(detailDomId(name, "events"));
-  if (!target) return;
+  if (!target) return true;
   renderEventsLoading(target);
   try {
     const res = await fetch(serviceEventsAPI(name, eventDetailLimit));
     if (!res.ok) throw new Error("HTTP " + res.status);
     litRender(eventRows(await res.json(), false), target);
+    return true;
   } catch (e) {
     litRender(tpl`<tr><td colspan="3" class="muted">Failed to load events: ${e.message}</td></tr>`, target);
+    return false;
   }
 }
 
@@ -5437,10 +5468,10 @@ function syncWindowButtons(kind, selected) {
 
 async function loadMetrics(name, measured) {
   const check = selectedMetricCheck(measured || []);
-  if (!check) return;
+  if (!check) return true;
   const summary = document.getElementById(detailDomId(name, "lat-summary"));
   const chart = document.getElementById(detailDomId(name, "lat-chart"));
-  if (!summary || !chart) return;
+  if (!summary || !chart) return true;
   try {
     const res = await fetch(serviceMetricsAPI(name, check, metricWindow));
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -5450,8 +5481,10 @@ async function loadMetrics(name, measured) {
       ? `avg <b>${fmtNum(s.avg, 2)}</b> ${metricUnitMilliseconds} &middot; min ${fmtNum(s.min, 2)} &middot; max ${fmtNum(s.max, 2)}`
       : '<span class="muted">No latency data yet for this window.</span>';
     chart.innerHTML = drawMetricChart(body.points || [], body.unit || metricUnitMilliseconds, metricWindow, "Service latency metric chart");
+    return true;
   } catch (e) {
     chart.textContent = "Failed to load latency: " + e.message;
+    return false;
   }
 }
 
@@ -5470,8 +5503,10 @@ async function loadServiceRuntimeMetrics(name) {
     runtimeMetricDefs.forEach(({ key, label, unit }) => {
       renderServiceRuntimeMetric(name, key, body[key], label, unit);
     });
+    return true;
   } catch (e) {
     setAll("Failed to load runtime metrics: " + e.message);
+    return false;
   }
 }
 
