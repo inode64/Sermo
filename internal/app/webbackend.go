@@ -193,7 +193,7 @@ type WebBackend struct {
 	hostType          *web.HostTypeInfo
 	measure           MeasurementReader
 	collector         *metrics.Collector
-	daemonMetrics     *daemonMetricSampler
+	daemonMetrics     *DaemonMetricSampler
 	serviceMetrics    *ServiceMetricSampler
 	live              *LiveMetrics
 	storageUsage      checks.StorageUsageFunc
@@ -282,6 +282,10 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			operationSettling = store
 		}
 	}
+	daemonMetrics := deps.DaemonMetricSampler
+	if daemonMetrics == nil {
+		daemonMetrics = NewDaemonMetricSampler(deps.Collector, deps.Now, deps.DaemonMetrics)
+	}
 	wb := &WebBackend{
 		entries:           map[string]*webEntry{},
 		watches:           map[string]*webWatch{},
@@ -298,7 +302,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		cfg:               cfg,
 		hostType:          hostTypeInfo(),
 		collector:         deps.Collector,
-		daemonMetrics:     newDaemonMetricSampler(deps.Collector, deps.Now, deps.DaemonMetrics),
+		daemonMetrics:     daemonMetrics,
 		serviceMetrics:    deps.ServiceMetrics,
 		live:              deps.Live,
 		storageUsage:      deps.StorageUsage,
