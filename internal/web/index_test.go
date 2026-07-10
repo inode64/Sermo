@@ -358,6 +358,28 @@ func TestSourceFullyRefreshesExpandedServicesEveryDashboardPoll(t *testing.T) {
 	}
 }
 
+func TestSourceSerializesDashboardRefreshes(t *testing.T) {
+	src, err := os.ReadFile("src/app.js")
+	if err != nil {
+		t.Fatalf("read src/app.js: %v", err)
+	}
+	text := string(src)
+	for _, marker := range []string{
+		"function load()",
+		"async function runLoadQueue()",
+		"await performLoad()",
+		"async function performLoad()",
+		"await load();\n    scheduleRefresh();",
+	} {
+		if !strings.Contains(text, marker) {
+			t.Errorf("source missing serialized-refresh marker %q", marker)
+		}
+	}
+	if strings.Contains(text, "setInterval(() => { if (document.hidden) return; load(); }") {
+		t.Fatal("dashboard polling can still overlap through setInterval")
+	}
+}
+
 func TestSourceMetricChartRendersZeroValuedSeries(t *testing.T) {
 	src, err := os.ReadFile("src/app.js")
 	if err != nil {

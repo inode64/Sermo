@@ -59,6 +59,9 @@ Keep changes concrete:
 Init status, application inspection and SLA timeline caches expose their actual
 sample times. The UI labels their ages, and SLA segment timestamps stay anchored
 to `observed_at` instead of sliding forward on the browser clock while cached.
+Dashboard refreshes are single-flight: automatic, manual and post-action reloads
+never execute concurrently, and the next automatic delay starts after the prior
+refresh completes.
 
 ## Action Endpoints
 
