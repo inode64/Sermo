@@ -123,15 +123,15 @@ test("dashboard passes axe and fits the viewport", async ({ page }) => {
   await expect(page.locator("#target-search")).toBeVisible();
 });
 
-test("global search opens a service and exposes compact actions", async ({ page }) => {
+test("global search opens a service and exposes individual actions", async ({ page }) => {
   await page.locator("#target-search").fill("service: db");
   await page.locator("#target-search").press("Enter");
 
   const row = page.locator("#svc-row-db");
   await expect(row).toBeVisible();
   await expect(page.locator('[data-service-detail="db"]')).toBeVisible();
-  await row.locator(".row-action-menu > summary").click();
   await expect(row.locator('[data-service-action="reload"]')).toBeVisible();
+  await expect(row.locator('[data-service-action="unmonitor"]')).toBeVisible();
 });
 
 test("libraries inventory is visible and searchable", async ({ page }) => {
