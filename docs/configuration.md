@@ -538,8 +538,9 @@ its permissions. When a version is inherited through `version_from`, the API row
 includes `version_source` with the provider app name. Services and applications
 can be filtered and grouped by their top-level `category` metadata field.
 The same data is available from `sermoctl apps` and `GET /api/applications`.
-The dashboard caches the list for up to 30 seconds, so auto-refreshes do not
-rerun every app version probe.
+The dashboard caches the list for up to 5 minutes, so auto-refreshes do not
+rerun every app version probe. Each row shows when those version/status probes
+actually ran; serving a cached response does not advance that sample time.
 For an editable panel-by-panel map, see
 [webui-representation.md](webui-representation.md).
 

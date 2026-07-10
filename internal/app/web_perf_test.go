@@ -134,8 +134,15 @@ func TestWebBackendBackendStatusCacheTTL(t *testing.T) {
 	if got := e.backendStatus(context.Background(), now.Add(5*time.Second)); got != "active" || calls.Load() != 1 {
 		t.Fatalf("cached status = %q calls=%d", got, calls.Load())
 	}
-	if got := e.backendStatus(context.Background(), now.Add(serviceStatusCacheTTL)); got != "active" || calls.Load() != 2 {
+	if status, observedAt := e.backendStatusSnapshot(context.Background(), now.Add(5*time.Second)); status != "active" || !observedAt.Equal(now) {
+		t.Fatalf("cached status snapshot = %q at %v, want active at %v", status, observedAt, now)
+	}
+	refreshedAt := now.Add(serviceStatusCacheTTL)
+	if got := e.backendStatus(context.Background(), refreshedAt); got != "active" || calls.Load() != 2 {
 		t.Fatalf("expired status = %q calls=%d", got, calls.Load())
+	}
+	if _, observedAt := e.backendStatusSnapshot(context.Background(), refreshedAt); !observedAt.Equal(refreshedAt) {
+		t.Fatalf("refreshed status observed at %v, want %v", observedAt, refreshedAt)
 	}
 	e.invalidateStatusCache()
 	if got := e.backendStatus(context.Background(), now.Add(serviceStatusCacheTTL)); got != "active" || calls.Load() != 3 {
@@ -183,9 +190,16 @@ func TestWebBackendSLATimelineCache(t *testing.T) {
 	if len(first) != len(second) || first[0].Window != second[0].Window {
 		t.Fatalf("cached windows differ: %+v vs %+v", first, second)
 	}
-	_ = b.serviceSLAWindows("web", now.Add(slaTimelineCacheTTL))
+	wantObservedAt := now.Format(time.RFC3339)
+	if first[0].ObservedAt != wantObservedAt || second[0].ObservedAt != wantObservedAt {
+		t.Fatalf("cached observed_at = %q then %q, want %q", first[0].ObservedAt, second[0].ObservedAt, wantObservedAt)
+	}
+	refreshed := b.serviceSLAWindows("web", now.Add(slaTimelineCacheTTL))
 	if calls != 2 {
 		t.Fatalf("after TTL SLATimelines called %d times, want 2", calls)
+	}
+	if refreshed[0].ObservedAt != now.Add(slaTimelineCacheTTL).Format(time.RFC3339) {
+		t.Fatalf("refreshed observed_at = %q", refreshed[0].ObservedAt)
 	}
 }
 

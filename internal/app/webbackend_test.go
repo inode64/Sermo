@@ -506,11 +506,17 @@ func TestWebBackendApplicationsCache(t *testing.T) {
 	if calls != 1 || len(first) != 1 || first[0].Name != "first" {
 		t.Fatalf("first Applications = %v, calls=%d", first, calls)
 	}
+	if first[0].ObservedAt == "" {
+		t.Fatal("first Applications response must expose observed_at")
+	}
 	first[0].Name = "mutated"
 
 	second := b.Applications(context.Background())
 	if calls != 1 || len(second) != 1 || second[0].Name != "first" {
 		t.Fatalf("cached Applications = %v, calls=%d; want cached first", second, calls)
+	}
+	if second[0].ObservedAt != first[0].ObservedAt {
+		t.Fatalf("cached observed_at = %q, want original %q", second[0].ObservedAt, first[0].ObservedAt)
 	}
 
 	b.applicationsAt = time.Now().Add(-applicationsCacheTTL - time.Nanosecond)

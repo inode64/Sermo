@@ -301,6 +301,25 @@ func TestSourceLoadReportsPartialRefreshBeforeAdvancingFreshness(t *testing.T) {
 	}
 }
 
+func TestSourceRendersBackendCacheObservationTimes(t *testing.T) {
+	src, err := os.ReadFile("src/app.js")
+	if err != nil {
+		t.Fatalf("read src/app.js: %v", err)
+	}
+	text := string(src)
+	for _, needle := range []string{
+		"s.status_observed_at",
+		"a.observed_at",
+		"w.observed_at",
+		"renderSLATimeline(w.segments, w.window, w.observed_at)",
+		"const sampledMs = Date.parse(observedAt)",
+	} {
+		if !strings.Contains(text, needle) {
+			t.Errorf("source missing cache-observation marker %q", needle)
+		}
+	}
+}
+
 func TestSourceMetricChartRendersZeroValuedSeries(t *testing.T) {
 	src, err := os.ReadFile("src/app.js")
 	if err != nil {

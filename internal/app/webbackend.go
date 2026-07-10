@@ -574,7 +574,11 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		svc.RemediationState = TargetStateDisabled
 		return svc
 	}
-	svc.Status = e.backendStatus(ctx, b.webNow())
+	status, statusAt := e.backendStatusSnapshot(ctx, b.webNow())
+	svc.Status = status
+	if !statusAt.IsZero() {
+		svc.StatusObservedAt = statusAt.UTC().Format(time.RFC3339)
+	}
 	if active, source, changed, ok := b.monitorView(name); ok {
 		svc.Monitored, svc.MonitorSource, svc.MonitorChangedAt = active, source, changed
 	}
@@ -961,13 +965,18 @@ func (b *WebBackend) lastWatchActivities() map[string]watchActivity {
 // backendStatus returns the init-system status for a service, reusing a short TTL
 // cache so the service list does not invoke systemctl/rc-status on every poll.
 func (e *webEntry) backendStatus(ctx context.Context, now time.Time) string {
+	status, _ := e.backendStatusSnapshot(ctx, now)
+	return status
+}
+
+func (e *webEntry) backendStatusSnapshot(ctx context.Context, now time.Time) (string, time.Time) {
 	if e == nil || e.status == nil {
-		return string(servicemgr.StatusUnknown)
+		return string(servicemgr.StatusUnknown), time.Time{}
 	}
 	e.statusMu.Lock()
 	defer e.statusMu.Unlock()
 	if !e.statusAt.IsZero() && now.Sub(e.statusAt) < serviceStatusCacheTTL {
-		return e.cachedStatus
+		return e.cachedStatus, e.statusAt
 	}
 	st, err := e.status(ctx)
 	if err != nil {
@@ -976,16 +985,16 @@ func (e *webEntry) backendStatus(ctx context.Context, now time.Time) string {
 			// Don't poison the shared cache with "error" for everyone else;
 			// keep the previous entry and let the next poll retry.
 			if !e.statusAt.IsZero() {
-				return e.cachedStatus
+				return e.cachedStatus, e.statusAt
 			}
-			return string(servicemgr.StatusUnknown)
+			return string(servicemgr.StatusUnknown), time.Time{}
 		}
 		e.cachedStatus = backendStatusError
 	} else {
 		e.cachedStatus = string(st)
 	}
 	e.statusAt = now
-	return e.cachedStatus
+	return e.cachedStatus, e.statusAt
 }
 
 func (e *webEntry) invalidateStatusCache() {
@@ -2341,10 +2350,11 @@ func (b *WebBackend) Applications(ctx context.Context) []web.Application {
 	for {
 		b.applicationsMu.Lock()
 		cached := slices.Clone(b.applicationsCache)
-		hasCache := !b.applicationsAt.IsZero()
-		if hasCache && time.Since(b.applicationsAt) < applicationsCacheTTL {
+		observedAt := b.applicationsAt
+		hasCache := !observedAt.IsZero()
+		if hasCache && time.Since(observedAt) < applicationsCacheTTL {
 			b.applicationsMu.Unlock()
-			return b.withApplicationLastEvents(cached)
+			return b.decorateApplications(cached, observedAt)
 		}
 		refresh := b.applicationsRefresh
 		if refresh == nil {
@@ -2354,7 +2364,7 @@ func (b *WebBackend) Applications(ctx context.Context) []web.Application {
 		if hasCache {
 			// An expired-but-complete inventory beats queueing every viewer
 			// behind the scan that is already refreshing it.
-			return b.withApplicationLastEvents(cached)
+			return b.decorateApplications(cached, observedAt)
 		}
 		select {
 		case <-refresh:
@@ -2387,13 +2397,15 @@ func (b *WebBackend) Applications(ctx context.Context) []web.Application {
 		if !b.applicationsAt.IsZero() {
 			apps = slices.Clone(b.applicationsCache)
 		}
+		observedAt := b.applicationsAt
 		b.applicationsMu.Unlock()
-		return b.withApplicationLastEvents(apps)
+		return b.decorateApplications(apps, observedAt)
 	}
 	b.applicationsAt = time.Now()
+	observedAt := b.applicationsAt
 	b.applicationsCache = slices.Clone(apps)
 	b.applicationsMu.Unlock()
-	return b.withApplicationLastEvents(apps)
+	return b.decorateApplications(apps, observedAt)
 }
 
 func (b *WebBackend) loadApplications(ctx context.Context) []web.Application {
@@ -2497,12 +2509,18 @@ func (b *WebBackend) withApplicationSLA(apps []web.Application) []web.Applicatio
 	return out
 }
 
-func (b *WebBackend) withApplicationLastEvents(apps []web.Application) []web.Application {
-	if len(apps) == 0 || b.events == nil {
+func (b *WebBackend) decorateApplications(apps []web.Application, observedAt time.Time) []web.Application {
+	if len(apps) == 0 {
 		return apps
 	}
 	out := slices.Clone(apps)
 	for i := range out {
+		if !observedAt.IsZero() {
+			out[i].ObservedAt = observedAt.UTC().Format(time.RFC3339)
+		}
+		if b.events == nil {
+			continue
+		}
 		ev, ok := b.events.LastApp(out[i].Name)
 		if !ok {
 			continue
@@ -2986,7 +3004,7 @@ func (b *WebBackend) cachedSLAWindows(service, check string, now time.Time) []we
 	if err != nil {
 		return nil
 	}
-	windows := toWebSLAWindows(tls)
+	windows := toWebSLAWindows(tls, now)
 
 	b.slaCacheMu.Lock()
 	b.slaCache[key] = cachedSLATimelines{windows: slices.Clone(windows), at: now}
@@ -2994,10 +3012,15 @@ func (b *WebBackend) cachedSLAWindows(service, check string, now time.Time) []we
 	return windows
 }
 
-func toWebSLAWindows(tls []state.SLAWindowTimeline) []web.SLAWindow {
+func toWebSLAWindows(tls []state.SLAWindowTimeline, observedAt time.Time) []web.SLAWindow {
 	out := make([]web.SLAWindow, 0, len(tls))
 	for _, t := range tls {
-		win := web.SLAWindow{Window: t.Window, Up: t.Up, Total: t.Total}
+		win := web.SLAWindow{
+			Window:     t.Window,
+			Up:         t.Up,
+			Total:      t.Total,
+			ObservedAt: observedAt.UTC().Format(time.RFC3339),
+		}
 		if t.Total > 0 {
 			ratio := float64(t.Up) / float64(t.Total)
 			win.Ratio = &ratio
