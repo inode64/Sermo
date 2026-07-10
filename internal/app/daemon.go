@@ -13,6 +13,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/control"
+	"sermo/internal/emission"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
@@ -244,6 +245,8 @@ type Deps struct {
 	// fallback for any notify site (watch or rule alert) that declares none of its
 	// own. Empty means no default. See config.NotifyDefault.
 	GlobalNotify []string
+	// GlobalEmission is the top-level automatic event/notification cadence.
+	GlobalEmission emission.Policy
 	// Snapshots collects each service's latest check results for the web detail
 	// view. Optional: nil disables publishing.
 	Snapshots *Snapshots
@@ -481,20 +484,21 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	warnings = append(warnings, stateWarnings...)
 
 	worker = &Worker{
-		Service:      name,
-		Rules:        ruleSet,
-		MetricChecks: rules.ReferencedChecks(tree),
-		Policy:       rules.ParsePolicy(tree),
-		State:        remediationState,
-		Notifiers:    deps.Notifiers,
-		GlobalNotify: deps.GlobalNotify,
-		Remediation:  deps.Remediation,
-		RuleWindows:  deps.RuleWindows,
-		CheckDeps:    checkDeps,
-		Interval:     cfgval.Duration(tree[config.EntryKeyInterval]),
-		Gates:        parseCheckGates(tree),
-		Sample:       sampleMetrics,
-		LiveSample:   liveSample,
+		Service:        name,
+		Rules:          ruleSet,
+		MetricChecks:   rules.ReferencedChecks(tree),
+		Policy:         rules.ParsePolicy(tree),
+		State:          remediationState,
+		Notifiers:      deps.Notifiers,
+		GlobalNotify:   deps.GlobalNotify,
+		GlobalEmission: deps.GlobalEmission,
+		Remediation:    deps.Remediation,
+		RuleWindows:    deps.RuleWindows,
+		CheckDeps:      checkDeps,
+		Interval:       cfgval.Duration(tree[config.EntryKeyInterval]),
+		Gates:          parseCheckGates(tree),
+		Sample:         sampleMetrics,
+		LiveSample:     liveSample,
 		Operate: func(ctx context.Context, action string) operation.Result {
 			return engine.Do(ctx, action)
 		},

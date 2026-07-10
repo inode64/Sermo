@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"sermo/internal/checks"
+	"sermo/internal/emission"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
 )
@@ -356,6 +357,32 @@ func TestParseRules(t *testing.T) {
 	}
 	if len(warnings) != 1 { // no-then warns; disabled is silent
 		t.Fatalf("warnings = %v, want 1", warnings)
+	}
+}
+
+func TestParseRulesStoresEmissionPolicy(t *testing.T) {
+	tree := map[string]any{
+		"rules": map[string]any{
+			"warn-down": map[string]any{
+				"type": "alert",
+				"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+				"then": map[string]any{"action": "alert", "message": "down"},
+				emission.Section: map[string]any{
+					emission.KeyEvents: emission.ModeEveryCycle,
+					emission.KeyNotify: emission.ModeEveryCycle,
+				},
+			},
+		},
+	}
+	ruleSet, warnings := ParseRules(tree)
+	if len(warnings) != 0 {
+		t.Fatalf("ParseRules warnings = %v", warnings)
+	}
+	if len(ruleSet) != 1 {
+		t.Fatalf("parsed %d rules, want 1", len(ruleSet))
+	}
+	if ruleSet[0].Emission.Events != emission.ModeEveryCycle || ruleSet[0].Emission.Notify != emission.ModeEveryCycle {
+		t.Fatalf("emission policy = %+v, want every_cycle/every_cycle", ruleSet[0].Emission)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/emission"
 	"sermo/internal/notify"
 	"sermo/internal/rules"
 	"sermo/internal/volume"
@@ -182,6 +183,7 @@ func TestWatchExpandFiresOnceThenCooldown(t *testing.T) {
 		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/mnt/backup", "free_pct": 5.0}},
 		Expand:    &ExpandSpec{By: 5 << 30},
 		Expander:  exp,
+		Emission:  emission.Policy{Events: emission.ModeEveryCycle},
 		Policy:    rules.Policy{Cooldown: 30 * time.Minute},
 		Now:       func() time.Time { return at },
 		Emit:      func(e Event) { events = append(events, e) },
@@ -347,6 +349,47 @@ func TestWatchNotifiesOnceByDefault(t *testing.T) {
 	}
 }
 
+func TestWatchEmitsFiringOnceByDefault(t *testing.T) {
+	var events []Event
+	w := &Watch{
+		Name:      "storage-root",
+		CheckType: "storage",
+		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/"}},
+		Emit:      func(e Event) { events = append(events, e) },
+	}
+	for i := 0; i < 3; i++ {
+		w.RunCycle(context.Background())
+	}
+	if got := countEvents(events, eventKindFiring); got != 1 {
+		t.Fatalf("default watch must emit firing once per episode, got %d events: %v", got, events)
+	}
+}
+
+func TestWatchEmissionEveryCycleRepeatsFiringAndNotify(t *testing.T) {
+	n := &fakeNotifier{name: "ops"}
+	var events []Event
+	w := &Watch{
+		Name:      "storage-root",
+		CheckType: "storage",
+		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/"}},
+		Notifiers: []notify.Notifier{n},
+		Emission: emission.Policy{
+			Events: emission.ModeEveryCycle,
+			Notify: emission.ModeEveryCycle,
+		},
+		Emit: func(e Event) { events = append(events, e) },
+	}
+	for i := 0; i < 3; i++ {
+		w.RunCycle(context.Background())
+	}
+	if got := countEvents(events, eventKindFiring); got != 3 {
+		t.Fatalf("every-cycle watch must emit firing every cycle, got %d events: %v", got, events)
+	}
+	if len(n.msgs) != 3 {
+		t.Fatalf("every-cycle watch must notify every cycle, got %d messages", len(n.msgs))
+	}
+}
+
 func TestWatchReNotifiesAfterInterval(t *testing.T) {
 	n := &fakeNotifier{name: "ops"}
 	now := time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC)
@@ -407,6 +450,16 @@ func hasEventKind(events []Event, kind string) bool {
 		}
 	}
 	return false
+}
+
+func countEvents(events []Event, kind string) int {
+	var count int
+	for _, e := range events {
+		if e.Kind == kind {
+			count++
+		}
+	}
+	return count
 }
 
 func eventKinds(events []Event) []string {

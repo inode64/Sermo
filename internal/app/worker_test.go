@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/emission"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
@@ -236,6 +237,56 @@ func TestCycleAlertNotifiesGlobalDefault(t *testing.T) {
 	}
 }
 
+func TestCycleAlertEmitsOnChangeByDefault(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http")}
+	w := h.worker(alertRuleTree(nil), rules.Policy{}, nil)
+	n := &fakeNotifier{name: "ops"}
+	w.Notifiers = map[string]notify.Notifier{"ops": n}
+	w.GlobalNotify = []string{"ops"}
+
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+	h.cache = map[string]checks.Result{"http": {Check: "http", OK: true}}
+	w.RunCycle(context.Background())
+
+	if got := h.countEvents(eventKindAlert); got != 1 {
+		t.Fatalf("default alert rule must emit once per firing episode, got %d events: %+v", got, h.events)
+	}
+	if got := h.countEvents(eventKindNotify); got != 1 {
+		t.Fatalf("default alert rule must notify once per firing episode, got %d events: %+v", got, h.events)
+	}
+	if len(n.msgs) != 1 {
+		t.Fatalf("default alert rule must send one notification per episode, got %d messages", len(n.msgs))
+	}
+	if got := h.countEvents(eventKindRecovered); got != 1 {
+		t.Fatalf("recovery must still emit a recovered event, got %d events: %+v", got, h.events)
+	}
+}
+
+func TestCycleAlertEmissionEveryCycleRepeats(t *testing.T) {
+	tree := alertRuleTree(nil)
+	rule := tree["rules"].(map[string]any)["warn-down"].(map[string]any)
+	rule[emission.Section] = map[string]any{
+		emission.KeyEvents: emission.ModeEveryCycle,
+		emission.KeyNotify: emission.ModeEveryCycle,
+	}
+	h := &workerHarness{cache: failedCache("http")}
+	w := h.worker(tree, rules.Policy{}, nil)
+	n := &fakeNotifier{name: "ops"}
+	w.Notifiers = map[string]notify.Notifier{"ops": n}
+	w.GlobalNotify = []string{"ops"}
+
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+
+	if got := h.countEvents(eventKindAlert); got != 2 {
+		t.Fatalf("every-cycle alert rule must emit every cycle, got %d events: %+v", got, h.events)
+	}
+	if len(n.msgs) != 2 {
+		t.Fatalf("every-cycle alert rule must notify every cycle, got %d messages", len(n.msgs))
+	}
+}
+
 func TestCycleAlertNotifyNoneSuppresses(t *testing.T) {
 	h := &workerHarness{cache: failedCache("http")}
 	w := h.worker(alertRuleTree("none"), rules.Policy{}, nil) // notify: none
@@ -289,6 +340,16 @@ func (h *workerHarness) eventOf(kind string) (Event, bool) {
 		}
 	}
 	return Event{}, false
+}
+
+func (h *workerHarness) countEvents(kind string) int {
+	var count int
+	for _, e := range h.events {
+		if e.Kind == kind {
+			count++
+		}
+	}
+	return count
 }
 
 func failedCache(check string) map[string]checks.Result {
@@ -1009,7 +1070,7 @@ func TestWorkerFiresSuppressesSystemMetricRemediation(t *testing.T) {
 		Type: rules.RuleRemediation,
 		If:   map[string]any{"metric": map[string]any{"scope": "system", "name": "total_memory", "op": ">", "value": "90%"}},
 	}
-	if w.fires(context.Background(), ev, r, t0, nil) {
+	if w.fires(context.Background(), ev, r, t0, nil).firing {
 		t.Fatal("a system-metric remediation rule must never fire")
 	}
 	if len(events) != 1 || events[0].Kind != eventKindError || !strings.Contains(events[0].Message, "alert rules") {
@@ -1024,7 +1085,7 @@ func TestWorkerFiresSuppressesSystemMetricRemediation(t *testing.T) {
 			"metric": map[string]any{"scope": "system", "name": "total_memory", "op": ">", "value": "90%"},
 		}},
 	}
-	if w.fires(context.Background(), ev, r, t0, nil) {
+	if w.fires(context.Background(), ev, r, t0, nil).firing {
 		t.Fatal("an inline system-metric remediation probe must never fire")
 	}
 	if len(events) != 1 || events[0].Kind != eventKindError || !strings.Contains(events[0].Message, "alert rules") {
@@ -1040,7 +1101,7 @@ func TestWorkerFiresSuppressesSystemMetricRemediation(t *testing.T) {
 		Type: rules.RuleRemediation,
 		If:   map[string]any{"active": map[string]any{"check": "machine-hot"}},
 	}
-	if w.fires(context.Background(), ev, r, t0, nil) {
+	if w.fires(context.Background(), ev, r, t0, nil).firing {
 		t.Fatal("a remediation rule referencing a system metric check must never fire")
 	}
 	if len(events) != 1 || events[0].Kind != eventKindError || !strings.Contains(events[0].Message, "alert rules") {
@@ -1050,7 +1111,7 @@ func TestWorkerFiresSuppressesSystemMetricRemediation(t *testing.T) {
 	// The same metric on an alert rule keeps working.
 	r.Type = rules.RuleAlert
 	r.If = map[string]any{"metric": map[string]any{"scope": "system", "name": "total_memory", "op": ">", "value": "90%"}}
-	if !w.fires(context.Background(), ev, r, t0, nil) {
+	if !w.fires(context.Background(), ev, r, t0, nil).firing {
 		t.Fatal("an alert rule on the same system metric must still fire")
 	}
 }

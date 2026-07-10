@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sermo/internal/config"
+	"sermo/internal/emission"
 	"sermo/internal/execx"
 	"sermo/internal/notify"
 	"sermo/internal/rules"
@@ -102,6 +103,38 @@ func TestBuildWatchesStorageExpandAction(t *testing.T) {
 	}
 	if w.CheckType != "storage" {
 		t.Fatalf("check type = %q, want storage", w.CheckType)
+	}
+}
+
+func TestBuildWatchesEmissionOverridesGlobal(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"storage-root": map[string]any{
+			"check": map[string]any{
+				"type":     "storage",
+				"path":     "/",
+				"used_pct": map[string]any{"op": ">", "value": 90},
+			},
+			"emission": map[string]any{"events": "every_cycle"},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{
+		DefaultTimeout: time.Second,
+		GlobalEmission: emission.Policy{
+			Events: emission.ModeOnChange,
+			Notify: emission.ModeEveryCycle,
+		},
+	}, 30*time.Second)
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(watches) != 1 {
+		t.Fatalf("expected 1 watch, got %d", len(watches))
+	}
+	if watches[0].Emission.Events != emission.ModeEveryCycle {
+		t.Fatalf("watch events emission = %q, want every_cycle", watches[0].Emission.Events)
+	}
+	if watches[0].Emission.Notify != emission.ModeEveryCycle {
+		t.Fatalf("watch notify emission = %q, want inherited every_cycle", watches[0].Emission.Notify)
 	}
 }
 

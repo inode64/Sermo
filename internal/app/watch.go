@@ -10,6 +10,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/emission"
 	"sermo/internal/notify"
 	"sermo/internal/output"
 	"sermo/internal/rules"
@@ -57,6 +58,9 @@ type Watch struct {
 	// when the alert starts. A positive value (`then.notify_interval`) re-sends
 	// the notification as a reminder once that interval elapses.
 	NotifyInterval time.Duration
+	// Emission controls automatic firing-event and notification cadence. Empty
+	// fields use the built-in on-change behavior.
+	Emission emission.Policy
 	// DryRun keeps watch evaluation and firing events active, but reports the
 	// configured actions without executing hook, non-console notify or expand side effects.
 	DryRun   bool
@@ -142,26 +146,29 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	}
 	wasFiring := w.firing
 	w.firing = true
-	// Always emit a "firing" event when the `for` (or `within`) window is
-	// satisfied. This makes the alert visible in the web UI (state=failed,
-	// Alerts/Watches counts, failed filter) and in the event log even for
-	// bare watches that have no `then` (pure monitor-only / alert-only case).
-	w.emit(Event{Watch: w.Name, Kind: eventKindFiring, Message: res.Message, Output: resultOutput(res)})
+	emitFiring := w.shouldEmitFiring(wasFiring)
+	if emitFiring {
+		w.emit(Event{Watch: w.Name, Kind: eventKindFiring, Message: res.Message, Output: resultOutput(res)})
+	}
 	env := hookEnv(w.Name, w.CheckType, res)
 	if w.DryRun {
-		w.emit(Event{Watch: w.Name, Kind: eventKindDryRun, Message: w.dryRunMessage()})
+		if emitFiring {
+			w.emit(Event{Watch: w.Name, Kind: eventKindDryRun, Message: w.dryRunMessage()})
+		}
 		if w.shouldNotify(wasFiring) {
 			dispatchDryRunNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
 		}
 		return
 	}
 	if w.InPanic != nil && w.InPanic() {
-		w.emit(Event{Watch: w.Name, Kind: eventKindPanicSuppressed, Message: "panic mode: hook/notify/expand suppressed"})
+		if emitFiring {
+			w.emit(Event{Watch: w.Name, Kind: eventKindPanicSuppressed, Message: "panic mode: hook/notify/expand suppressed"})
+		}
 		return
 	}
 
 	if w.Expand != nil && w.Expander != nil {
-		w.runExpand(ctx, res)
+		w.runExpand(ctx, res, emitFiring)
 	}
 	if len(w.Hook.Command) > 0 {
 		runner := defaultHookRunner(w.Runner)
@@ -218,6 +225,10 @@ func (w *Watch) clock() time.Time {
 // a fresh firing episode always notifies again.
 func (w *Watch) shouldNotify(wasFiring bool) bool {
 	now := w.clock()
+	if w.emissionPolicy().Notify == emission.ModeEveryCycle {
+		w.lastNotifyAt = now
+		return true
+	}
 	if !wasFiring {
 		w.lastNotifyAt = now
 		return true
@@ -229,18 +240,28 @@ func (w *Watch) shouldNotify(wasFiring bool) bool {
 	return false
 }
 
+func (w *Watch) shouldEmitFiring(wasFiring bool) bool {
+	return emission.ShouldRepeat(w.emissionPolicy().Events, !wasFiring)
+}
+
+func (w *Watch) emissionPolicy() emission.Policy {
+	return emission.Resolve(w.Emission, emission.Default())
+}
+
 // runExpand performs the native storage-expansion action on a firing cycle, gated
 // by Policy. The action is attempted at most once per cooldown window even while
 // the volume stays low; an attempt (success or failure) records the time so a
 // failing expansion is not retried every cycle.
-func (w *Watch) runExpand(ctx context.Context, res checks.Result) {
+func (w *Watch) runExpand(ctx context.Context, res checks.Result, emitSkipped bool) {
 	now := time.Now
 	if w.Now != nil {
 		now = w.Now
 	}
 	at := now()
 	if allowed, reason := w.Policy.Allow(&w.policyState, at); !allowed {
-		w.emit(Event{Watch: w.Name, Kind: eventKindExpandSkipped, Message: reason})
+		if emitSkipped {
+			w.emit(Event{Watch: w.Name, Kind: eventKindExpandSkipped, Message: reason})
+		}
 		return
 	}
 	path := cfgval.String(res.Data[checks.DataKeyPath])

@@ -9,6 +9,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/conn"
+	"sermo/internal/emission"
 	"sermo/internal/metrics"
 	"sermo/internal/process"
 	"sermo/internal/rules"
@@ -41,6 +42,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 				add(validationBooleanFormat, watchFieldPath(name, keyDryRun))
 			}
 		}
+		validateEmission(entry, watchFieldPath(name, emission.Section), add)
 		validateNotifyRefs(name, entry, notifiers, add)
 		validateWindow(prefix, entry, add)
 		validateWatchPolicy(prefix, entry, add)
@@ -145,6 +147,7 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 				add(validationBooleanFormat, watchFieldPath(name, keyDryRun))
 			}
 		}
+		validateEmission(entry, watchFieldPath(name, emission.Section), add)
 		if then, ok := entry[rules.RuleFieldThen].(map[string]any); ok {
 			if _, present := then[rules.RuleFieldNotify]; present {
 				validateNotifySelection(thenFieldPath(prefix, rules.RuleFieldNotify), then[rules.RuleFieldNotify], notifiers, add)

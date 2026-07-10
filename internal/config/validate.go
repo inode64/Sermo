@@ -9,6 +9,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/emission"
 	"sermo/internal/process"
 )
 
@@ -194,6 +195,7 @@ func validateGlobal(cfg *Config) []Issue {
 	if webCfg, ok := raw[SectionWeb].(map[string]any); ok {
 		validateWeb(webCfg, add)
 	}
+	validateEmission(raw, emission.Section, add)
 
 	notifiers := cfg.Notifiers()
 	validateNotifiers(notifiers, cfg.Global.TemplateDir(), add)
@@ -750,6 +752,9 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	}
 	if _, present := tree[keyUnsupportedRemediation]; present {
 		add("remediation is not supported; use top-level dry_run")
+	}
+	if _, present := tree[emission.Section]; present {
+		add("%s is not supported on services; configure global emission or a rules.*.emission override", emission.Section)
 	}
 
 	cooldown, present := policyCooldown(tree)
