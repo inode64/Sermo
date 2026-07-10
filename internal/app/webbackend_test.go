@@ -90,13 +90,16 @@ func TestWebBackendEventsNilLog(t *testing.T) {
 
 func TestWebBackendEventPageFiltersAndContinuesByID(t *testing.T) {
 	events := NewEventLog(10)
-	events.Add(Event{Service: "web", Kind: eventKindAction, Status: eventStatusOK, Message: "old ok"})
+	now := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
+	events.now = func() time.Time { return now.Add(-2 * time.Hour) }
+	events.Add(Event{Service: "web", Kind: eventKindError, Status: eventStatusFailed, Message: "old failed"})
+	events.now = func() time.Time { return now.Add(-30 * time.Minute) }
 	events.Add(Event{Service: "db", Kind: eventKindError, Status: eventStatusFailed, Message: "db failed"})
 	events.Add(Event{Service: "web", Kind: eventKindError, Status: eventStatusFailed, Message: "web failed"})
 	events.Add(Event{Service: "web", Kind: eventKindAction, Status: eventStatusOK, Message: "new ok"})
 
-	b := &WebBackend{events: events}
-	first := b.EventPage(context.Background(), web.EventQuery{Limit: 1, Service: "web", OnlyErrors: true})
+	b := &WebBackend{events: events, now: func() time.Time { return now }}
+	first := b.EventPage(context.Background(), web.EventQuery{Limit: 1, Since: time.Hour, Service: "web", OnlyErrors: true})
 	if len(first.Events) != 1 || first.Events[0].Message != "web failed" || first.Events[0].ID <= 0 {
 		t.Fatalf("first page = %+v, want web failure with stable ID", first)
 	}
@@ -104,7 +107,7 @@ func TestWebBackendEventPageFiltersAndContinuesByID(t *testing.T) {
 		t.Fatalf("first cursor = %+v, want continuation after returned event", first)
 	}
 	second := b.EventPage(context.Background(), web.EventQuery{
-		BeforeID: first.NextBeforeID, Limit: 10, Service: "web", OnlyErrors: true,
+		BeforeID: first.NextBeforeID, Limit: 10, Since: time.Hour, Service: "web", OnlyErrors: true,
 	})
 	if len(second.Events) != 0 || second.HasMore || second.NextBeforeID != 0 {
 		t.Fatalf("second page = %+v, want exhausted filtered feed", second)

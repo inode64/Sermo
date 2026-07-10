@@ -641,6 +641,23 @@ func TestGlobalEventsCursorPage(t *testing.T) {
 	}
 }
 
+func TestGlobalEventsPageParsesTimeRange(t *testing.T) {
+	b := &fakeBackend{}
+	rec := httptest.NewRecorder()
+	query := testQueryParams(apiQueryPage, queryBoolOne, apiQuerySince, "24h")
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(apiPathEvents, query), nil))
+	if rec.Code != http.StatusOK || b.eventQuery.Since != 24*time.Hour {
+		t.Fatalf("status=%d event query=%+v", rec.Code, b.eventQuery)
+	}
+
+	rec = httptest.NewRecorder()
+	query = testQueryParams(apiQueryPage, queryBoolOne, apiQuerySince, "forever")
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testPathQuery(apiPathEvents, query), nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid since status = %d, want 400", rec.Code)
+	}
+}
+
 func TestGlobalEventsRejectsInvalidCursor(t *testing.T) {
 	rec := httptest.NewRecorder()
 	query := testQueryParams(apiQueryPage, queryBoolOne, apiQueryBeforeID, "invalid")

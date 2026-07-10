@@ -724,7 +724,8 @@ Endpoints de solo lectura:
   opcionales: `service`, `watch`, `kind`, `status` y `only_errors=1`. Añade
   `page=1` para recibir `{events, next_before_id, has_more}`; pasa el
   `before_id` de esa respuesta para continuar hacia filas más antiguas. Sin
-  `page`/`before_id`, el endpoint mantiene el array de eventos anterior.
+  `page`/`before_id`, el endpoint mantiene el array de eventos anterior. Las
+  páginas por cursor también aceptan una duración positiva `since`, como `24h`.
 - `GET /api/ops` — uso global de slots de operación: `{in_use, total}` para
   `engine.max_parallel_operations`.
 
