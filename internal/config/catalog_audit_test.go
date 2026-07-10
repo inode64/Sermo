@@ -333,9 +333,7 @@ func TestContainerdCatalogRestartsOnVersionChange(t *testing.T) {
 	if got := cfgval.String(changed["level"]); got != "patch" {
 		t.Fatalf("changed.level = %q, want patch", got)
 	}
-	if got := cfgval.String(nested(t, rule, "then")["action"]); got != "restart" {
-		t.Fatalf("then.action = %q, want restart", got)
-	}
+	mustHaveRestartOnChangeActions(t, nested(t, rule, "then"), "")
 	// The named app's version command must be present in the resolved tree as
 	// preflight["containerd-version"] (merged from the app), since that is what
 	// the worker samples for the changed:{app} rule.
@@ -382,9 +380,7 @@ func TestCatalogServicesRestartOnLinkedAppVersionChanges(t *testing.T) {
 				if got := cfgval.String(changed["app"]); got != app {
 					t.Fatalf("%s changed.app = %q, want %q", ruleName, got, app)
 				}
-				if got := cfgval.String(nested(t, rule, "then")["action"]); got != "restart" {
-					t.Fatalf("%s then.action = %q, want restart", ruleName, got)
-				}
+				mustHaveRestartOnChangeActions(t, nested(t, rule, "then"), "")
 			}
 		})
 	}

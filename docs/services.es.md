@@ -98,28 +98,45 @@ restart_on_change:
   apps:
     containerd:
       level: minor
+  messages:
+    path: "${display_name} will restart after config change: ${change.path}"
+    app: "${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}"
 ```
 
 En la resolución esto se desazucara en una regla de remediación por path que
 reinicia el servicio cuando cambia esa configuración, en una regla por librería
 que reinicia el servicio cuando el fichero de esa librería cambia, y en una
 regla por app que reinicia el servicio cuando la versión de la app enlazada
-cambia en el nivel elegido:
+cambia en el nivel elegido. Cada regla generada alerta primero, heredando los
+notifiers normales de regla/globales, y después ejecuta `restart` a través del
+motor seguro de operaciones:
 
 ```yaml
 rules:
   restart-on-change-config-1:
     type: remediation
     if: { changed: { path: /etc/containerd/config.toml } }
-    then: { action: restart }
+    then:
+      actions:
+        - type: alert
+          message: "containerd will restart after config change: ${change.path}"
+        - type: restart
   restart-on-change-glibc:
     type: remediation
     if: { changed: { library: glibc, path: /lib64/libc.so.6 } }
-    then: { action: restart }
+    then:
+      actions:
+        - type: alert
+          message: "containerd will restart after library change: ${change.library} (${change.path})"
+        - type: restart
   restart-on-change-containerd-version:
     type: remediation
     if: { changed: { app: containerd, level: minor } }
-    then: { action: restart }
+    then:
+      actions:
+        - type: alert
+          message: "containerd will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}"
+        - type: restart
 ```
 
 Los booleanos opcionales `config` y `version` son permisos heredables. Cuando no
@@ -137,6 +154,13 @@ defaults:
 
 Un servicio de catálogo o configurado puede sobrescribir cualquiera de los dos
 flags en su bloque local `restart_on_change`.
+
+`messages` es opcional y local al servicio o servicio de catálogo. Acepta
+plantillas `path`, `app` y `library`. Las plantillas se expanden primero como
+cadenas normales de servicio (`${display_name}`, `${config}`, …), y los
+placeholders runtime de regla como `${change.path}`, `${change.app}`,
+`${change.old_version}` y `${change.new_version}` se rellenan al emitir la
+alerta.
 
 El reinicio corre a través del motor seguro normal (guards, cooldown, max_actions),
 y el cambio se reconoce una vez que el reinicio tiene éxito, así que se dispara una vez por

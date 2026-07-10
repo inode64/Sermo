@@ -784,6 +784,86 @@ func TestRuntimeVarsSubstitutedInMessage(t *testing.T) {
 	}
 }
 
+func TestRuleMessageRuntimeContextForChangedPath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "web.conf")
+	if err := os.WriteFile(path, []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
+	tree := map[string]any{"rules": map[string]any{
+		"restart-on-change": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"changed": map[string]any{"path": path, "library": "glibc"}},
+			"then": map[string]any{"actions": []any{
+				map[string]any{"type": "alert", "message": "${change.library} changed at ${change.path}"},
+				map[string]any{"type": "restart"},
+			}},
+		},
+	}}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+
+	w.RunCycle(context.Background())
+	if _, ok := h.eventOf(eventKindAlert); ok {
+		t.Fatal("baseline cycle must not alert")
+	}
+	if err := os.WriteFile(path, []byte("v2-larger"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().Add(time.Hour)
+	if err := os.Chtimes(path, future, future); err != nil {
+		t.Fatal(err)
+	}
+	w.RunCycle(context.Background())
+
+	e, ok := h.eventOf(eventKindAlert)
+	if !ok {
+		t.Fatalf("no alert emitted: %+v", h.events)
+	}
+	want := "glibc changed at " + path
+	if e.Message != want {
+		t.Fatalf("message = %q, want %q", e.Message, want)
+	}
+}
+
+func TestRuleMessageRuntimeContextForChangedAppVersion(t *testing.T) {
+	runner := &sequenceRunner{stdout: []string{
+		"containerd v1.7.0",
+		"containerd v1.7.1",
+	}}
+	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
+	tree := map[string]any{"rules": map[string]any{
+		"restart-on-version-change": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"changed": map[string]any{"app": "containerd", "level": "patch"}},
+			"then": map[string]any{"actions": []any{
+				map[string]any{"type": "alert", "message": "${change.app} ${change.level} ${change.old_version} -> ${change.new_version}"},
+				map[string]any{"type": "restart"},
+			}},
+		},
+	}}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+	w.CheckDeps = checks.Deps{Runner: runner}
+	w.appVersionCmd = map[string]appVersionCmd{"containerd": {argv: []string{"/usr/bin/containerd", "--version"}}}
+	w.appVersions = map[string]string{}
+	w.appVersionsLast = map[string]string{}
+
+	w.RunCycle(context.Background())
+	if _, ok := h.eventOf(eventKindAlert); ok {
+		t.Fatal("baseline cycle must not alert")
+	}
+	w.RunCycle(context.Background())
+
+	e, ok := h.eventOf(eventKindAlert)
+	if !ok {
+		t.Fatalf("no alert emitted: %+v", h.events)
+	}
+	const want = "containerd patch 1.7.0 -> 1.7.1"
+	if e.Message != want {
+		t.Fatalf("message = %q, want %q", e.Message, want)
+	}
+}
+
 func TestRuleMessageRuntimeContextForMetricCheck(t *testing.T) {
 	h := &workerHarness{cache: map[string]checks.Result{
 		"mem": {

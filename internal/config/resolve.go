@@ -168,6 +168,7 @@ const (
 	keyReloadOnChange  = "reload_on_change"
 	keyRestartOnChange = "restart_on_change"
 	keyRestartConfig   = "config"
+	keyRestartMessages = "messages"
 	keyRestartVersion  = "version"
 	keyLibraries       = checks.CheckTypeLibraries
 	keyRestartApps     = keyRestartOnChange + "." + keyApps
@@ -865,6 +866,12 @@ type restartOnChangeApp struct {
 	level string
 }
 
+type restartOnChangeMessages struct {
+	path    string
+	app     string
+	library string
+}
+
 // expandRestartOnChange desugars `restart_on_change` into remediation restart
 // rules. `paths` watches config files/directories. `libraries` watches shared
 // library files. `apps` watches linked app version probes at major/minor/patch
@@ -894,6 +901,9 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 	errs = append(errs, validateRestartOnChangeFlags(keyRestartOnChange, roc, nil)...)
 	configAllowed := restartOnChangeAllowed(roc, keyRestartConfig)
 	versionAllowed := restartOnChangeAllowed(roc, keyRestartVersion)
+	messages, messageErrs := restartOnChangeMessagesFrom(roc[keyRestartMessages])
+	errs = append(errs, messageErrs...)
+	displayName := restartOnChangeDisplayName(tree)
 
 	rulesMap, _ := tree[rules.SectionRules].(map[string]any)
 	if rulesMap == nil {
@@ -911,7 +921,7 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 			rulesMap[key] = map[string]any{
 				rules.RuleFieldType: string(rules.RuleRemediation),
 				rules.RuleFieldIf:   map[string]any{rules.ConditionChanged: map[string]any{rules.FieldPath: path}},
-				rules.RuleFieldThen: map[string]any{rules.RuleFieldAction: string(rules.ActionRestart)},
+				rules.RuleFieldThen: restartOnChangeThen(messages.pathMessage(displayName)),
 			}
 		}
 	}
@@ -938,7 +948,7 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 				rules.RuleFieldIf: map[string]any{
 					rules.ConditionChanged: map[string]any{rules.FieldLibrary: lib, rules.FieldPath: path},
 				},
-				rules.RuleFieldThen: map[string]any{rules.RuleFieldAction: string(rules.ActionRestart)},
+				rules.RuleFieldThen: restartOnChangeThen(messages.libraryMessage(displayName)),
 			}
 		}
 	}
@@ -961,7 +971,7 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 				rules.RuleFieldIf: map[string]any{
 					rules.ConditionChanged: map[string]any{rules.FieldApp: app.name, rules.FieldLevel: app.level},
 				},
-				rules.RuleFieldThen: map[string]any{rules.RuleFieldAction: string(rules.ActionRestart)},
+				rules.RuleFieldThen: restartOnChangeThen(messages.appMessage(displayName)),
 			}
 		}
 	}
@@ -974,10 +984,13 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 var restartOnChangeKeys = set(
 	keyApps,
 	keyLibraries,
+	keyRestartMessages,
 	keyPaths,
 	keyRestartConfig,
 	keyRestartVersion,
 )
+
+var restartOnChangeMessageKeys = set(rules.FieldApp, rules.FieldLibrary, rules.FieldPath)
 
 func validateRestartOnChangeFlags(prefix string, roc map[string]any, add addFunc) []string {
 	var errs []string
@@ -1009,6 +1022,79 @@ func restartOnChangeAllowed(roc map[string]any, key string) bool {
 
 func restartOnChangePaths(raw any) ([]string, []string) {
 	return restartOnChangeStringList(keyRestartPaths, raw)
+}
+
+func restartOnChangeThen(message string) map[string]any {
+	return map[string]any{rules.RuleFieldActions: []any{
+		map[string]any{rules.RuleFieldType: string(rules.ActionAlert), rules.RuleFieldMessage: message},
+		map[string]any{rules.RuleFieldType: string(rules.ActionRestart)},
+	}}
+}
+
+func restartOnChangeDisplayName(tree map[string]any) string {
+	if displayName := cfgval.String(tree[keyDisplayName]); displayName != "" {
+		return displayName
+	}
+	if name := cfgval.String(tree[keyName]); name != "" {
+		return name
+	}
+	if service := cfgval.String(tree[ServiceKeyService]); service != "" {
+		return service
+	}
+	return "service"
+}
+
+func restartOnChangeMessagesFrom(raw any) (restartOnChangeMessages, []string) {
+	if raw == nil {
+		return restartOnChangeMessages{}, nil
+	}
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return restartOnChangeMessages{}, []string{keyRestartOnChange + "." + keyRestartMessages + " must be a mapping"}
+	}
+	var out restartOnChangeMessages
+	var errs []string
+	for _, key := range slices.Sorted(maps.Keys(m)) {
+		if _, ok := restartOnChangeMessageKeys[key]; !ok {
+			errs = append(errs, fmt.Sprintf("%s.%s.%s is not supported", keyRestartOnChange, keyRestartMessages, key))
+			continue
+		}
+		value := cfgval.AsString(m[key])
+		if value == "" {
+			errs = append(errs, fmt.Sprintf("%s.%s.%s must be a non-empty string", keyRestartOnChange, keyRestartMessages, key))
+			continue
+		}
+		switch key {
+		case rules.FieldPath:
+			out.path = value
+		case rules.FieldApp:
+			out.app = value
+		case rules.FieldLibrary:
+			out.library = value
+		}
+	}
+	return out, errs
+}
+
+func (m restartOnChangeMessages) pathMessage(displayName string) string {
+	if m.path != "" {
+		return m.path
+	}
+	return fmt.Sprintf("%s will restart after config change: ${change.path}", displayName)
+}
+
+func (m restartOnChangeMessages) appMessage(displayName string) string {
+	if m.app != "" {
+		return m.app
+	}
+	return fmt.Sprintf("%s will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}", displayName)
+}
+
+func (m restartOnChangeMessages) libraryMessage(displayName string) string {
+	if m.library != "" {
+		return m.library
+	}
+	return fmt.Sprintf("%s will restart after library change: ${change.library} (${change.path})", displayName)
 }
 
 func restartOnChangeStringList(path string, raw any) ([]string, []string) {

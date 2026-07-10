@@ -96,27 +96,44 @@ restart_on_change:
   apps:
     containerd:
       level: minor
+  messages:
+    path: "${display_name} will restart after config change: ${change.path}"
+    app: "${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}"
 ```
 
 On resolution this desugars into one remediation rule per path that restarts the
 service when that config path changes, one rule per library that restarts the
 service when that library's file changes, and one rule per app that restarts the
-service when the linked app's version changes at the selected level:
+service when the linked app's version changes at the selected level. Each
+generated rule alerts first, inheriting the normal rule/global notifiers, then
+runs the restart action through the safe operation engine:
 
 ```yaml
 rules:
   restart-on-change-config-1:
     type: remediation
     if: { changed: { path: /etc/containerd/config.toml } }
-    then: { action: restart }
+    then:
+      actions:
+        - type: alert
+          message: "containerd will restart after config change: ${change.path}"
+        - type: restart
   restart-on-change-glibc:
     type: remediation
     if: { changed: { library: glibc, path: /lib64/libc.so.6 } }
-    then: { action: restart }
+    then:
+      actions:
+        - type: alert
+          message: "containerd will restart after library change: ${change.library} (${change.path})"
+        - type: restart
   restart-on-change-containerd-version:
     type: remediation
     if: { changed: { app: containerd, level: minor } }
-    then: { action: restart }
+    then:
+      actions:
+        - type: alert
+          message: "containerd will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}"
+        - type: restart
 ```
 
 The optional `config` and `version` booleans are inherited permissions. When
@@ -134,6 +151,12 @@ defaults:
 
 A catalog service or configured service may override either flag in its local
 `restart_on_change` block.
+
+`messages` is optional and local to the service or catalog service. It accepts
+`path`, `app` and `library` templates. The templates are expanded like normal
+service strings first (`${display_name}`, `${config}`, …), then rule runtime
+placeholders such as `${change.path}`, `${change.app}`, `${change.old_version}`
+and `${change.new_version}` are filled when the alert is emitted.
 
 The restart runs through the normal safe engine (guards, cooldown, max_actions),
 and the change is acknowledged once the restart succeeds, so it fires once per
