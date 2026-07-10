@@ -1209,6 +1209,10 @@ episode, then emit `recovered` when it clears. Set top-level `emission` to
 restore per-cycle output globally, or override only a specific rule/watch with
 its own `emission:` block:
 
+Watch episodes, `for`/`within` progress, reminder timing and automatic-action
+pacing survive daemon restarts; an unchanged active condition is not emitted or
+notified again merely because `sermod` restarted.
+
 ```yaml
 emission:
   events: on_change    # on_change | every_cycle

@@ -254,6 +254,25 @@ func TestStorePersistsAcrossReopen(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("SetRuleWindowStates: %v", err)
 	}
+	if err := first.SetWatchRuntimeState("storage-root", "metric:free", WatchRuntimeRecord{
+		Firing:       true,
+		LastNotifyAt: t0.Add(-time.Minute),
+		Window: RuleWindowRecord{
+			Consecutive: 2,
+			History:     []bool{true, false, true},
+			TrueSince:   t0.Add(-5 * time.Minute),
+			TimedHistory: []RuleWindowSample{
+				{At: t0.Add(-4 * time.Minute), Match: true},
+			},
+		},
+		Policy: RemediationRecord{
+			LastActionAt:   t0.Add(-2 * time.Minute),
+			RecentActions:  []time.Time{t0.Add(-2 * time.Minute)},
+			CurrentBackoff: 3 * time.Minute,
+		},
+	}); err != nil {
+		t.Fatalf("SetWatchRuntimeState: %v", err)
+	}
 	if err := first.SetOperationSettling("db", "restart", OperationSettlingSettling, SourceDaemon); err != nil {
 		t.Fatalf("SetOperationSettling: %v", err)
 	}
@@ -289,6 +308,18 @@ func TestStorePersistsAcrossReopen(t *testing.T) {
 		t.Fatalf("rule window state = %+v", windows)
 	} else if !rec.TrueSince.Equal(t0.Add(-5*time.Minute)) || len(rec.TimedHistory) != 2 || rec.TimedHistory[0].Match != true || !rec.TimedHistory[1].At.Equal(t0.Add(-2*time.Minute)) {
 		t.Fatalf("duration rule window state = %+v", rec)
+	}
+	watch, found, err := second.WatchRuntimeState("storage-root", "metric:free")
+	if err != nil || !found {
+		t.Fatalf("WatchRuntimeState after reopen: found=%v err=%v", found, err)
+	}
+	if !watch.Firing || !watch.LastNotifyAt.Equal(t0.Add(-time.Minute)) ||
+		watch.Window.Consecutive != 2 || len(watch.Window.History) != 3 ||
+		!watch.Window.TrueSince.Equal(t0.Add(-5*time.Minute)) ||
+		len(watch.Window.TimedHistory) != 1 ||
+		!watch.Policy.LastActionAt.Equal(t0.Add(-2*time.Minute)) ||
+		len(watch.Policy.RecentActions) != 1 || watch.Policy.CurrentBackoff != 3*time.Minute {
+		t.Fatalf("watch runtime state = %+v", watch)
 	}
 	op, found, err := second.OperationSettling("db")
 	if err != nil || !found {

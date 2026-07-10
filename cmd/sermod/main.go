@@ -265,6 +265,7 @@ func run(args []string) int {
 		OperationSettling: store,
 		Panic:             panicGate,
 		RuleState:         store,
+		WatchState:        store,
 		SLA:               store,
 		DaemonMetrics:     store,
 		Notifiers:         notifiers,
