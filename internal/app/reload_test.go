@@ -69,6 +69,27 @@ func TestCaptureAndApplyWatchState(t *testing.T) {
 	}
 }
 
+func TestCaptureAndApplyWatchStateKeepsMetricSlotsSeparate(t *testing.T) {
+	r := rules.Rule{For: &rules.ForWindow{Cycles: 4}}
+	rx := &Watch{Name: "uplink", StateSlot: "metric:rx", Window: r}
+	tx := &Watch{Name: "uplink", StateSlot: "metric:tx", Window: r}
+	rx.state.Fires(r, true)
+	tx.state.Fires(r, true)
+	tx.state.Fires(r, true)
+
+	saved := captureWatchState([]*Watch{rx, tx})
+	freshTX := &Watch{Name: "uplink", StateSlot: "metric:tx", Window: r}
+	freshRX := &Watch{Name: "uplink", StateSlot: "metric:rx", Window: r}
+	applyWatchState([]*Watch{freshTX, freshRX}, saved)
+
+	if got := freshRX.state.Progress(r); got != "1/4" {
+		t.Fatalf("rx progress = %q, want 1/4", got)
+	}
+	if got := freshTX.state.Progress(r); got != "2/4" {
+		t.Fatalf("tx progress = %q, want 2/4", got)
+	}
+}
+
 func TestResetRemovedServiceMetrics(t *testing.T) {
 	collector := metrics.New(metrics.OSReader{})
 	resetRemovedServiceMetrics(collector,

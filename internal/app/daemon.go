@@ -110,6 +110,13 @@ type RuleStateStore interface {
 	SetRuleWindowStates(service string, records map[string]state.RuleWindowRecord) error
 }
 
+// WatchStateStore persists watch firing episodes, rule windows and action
+// pacing so an unchanged condition does not fire again after a daemon restart.
+type WatchStateStore interface {
+	WatchRuntimeState(watch, slot string) (state.WatchRuntimeRecord, bool, error)
+	SetWatchRuntimeState(watch, slot string, record state.WatchRuntimeRecord) error
+}
+
 // measuredCheckTypes are the check types whose latency is recorded as a time
 // series (and graphed in the web), mirroring icmp's latency metric.
 var measuredCheckTypes = map[string]bool{
@@ -159,6 +166,9 @@ type Deps struct {
 	// RuleState persists automatic remediation cooldown/backoff and rule-window
 	// progress. Optional: nil keeps those states in memory for this process only.
 	RuleState RuleStateStore
+	// WatchState persists host/application watch episodes, windows and action
+	// pacing. Optional: nil keeps those states in memory for this process only.
+	WatchState WatchStateStore
 	// SLA persists per-cycle availability samples for SLA reporting. Optional: nil
 	// disables SLA tracking.
 	SLA SLARecorder

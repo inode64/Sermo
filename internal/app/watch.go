@@ -14,6 +14,7 @@ import (
 	"sermo/internal/notify"
 	"sermo/internal/output"
 	"sermo/internal/rules"
+	"sermo/internal/state"
 	"sermo/internal/volume"
 )
 
@@ -71,6 +72,10 @@ type Watch struct {
 	// intentionally best-effort: watch actions and alerts must not depend on the
 	// dashboard cache.
 	Publish func(watch, checkType string, result checks.Result)
+	// StateStore persists this watch's episode and pacing state. StateSlot
+	// distinguishes multiple result streams exposed under the same watch name.
+	StateStore WatchStateStore
+	StateSlot  string
 	// IsPaused reports whether this watch is currently paused by an operator.
 	// Paused watches skip checks/hooks/notifies/expand until monitored again.
 	IsPaused func() bool
@@ -99,11 +104,14 @@ type Watch struct {
 	Expander VolumeExpander
 	Policy   rules.Policy
 
-	state        rules.WindowState
-	policyState  rules.RemediationState
-	firing       bool
-	lastNotifyAt time.Time // when a notification was last dispatched this firing episode
-	settled      bool      // true after the startup observation cycle completed
+	state          rules.WindowState
+	policyState    rules.RemediationState
+	firing         bool
+	lastNotifyAt   time.Time // when a notification was last dispatched this firing episode
+	settled        bool      // true after the startup observation cycle completed
+	stateLoaded    bool
+	stateRestored  bool
+	persistedState state.WatchRuntimeRecord
 }
 
 const watchEnvAssignSeparator = "="
@@ -126,9 +134,12 @@ func (w *Watch) RunCycle(ctx context.Context) {
 		}
 		return
 	}
+	w.loadRuntimeState()
+	defer w.persistRuntimeState()
 	res := w.Check.Run(ctx)
 	w.publish(res)
 	if observeOnly {
+		w.reconcileRestoredEpisode(res)
 		w.markSettled()
 		return
 	}

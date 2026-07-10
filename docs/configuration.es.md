@@ -1258,6 +1258,10 @@ episodio disparado, y luego emiten `recovered` cuando se limpia. Define `emissio
 global para restaurar la salida por ciclo en todo el daemon, o sobrescribe solo una regla
 o watch con su propio bloque `emission:`:
 
+Los episodios de watch, el progreso `for`/`within`, el tiempo de recordatorio y el ritmo
+de las acciones automáticas sobreviven a los reinicios del daemon; una condición activa
+sin cambios no vuelve a emitir ni notificar solo porque `sermod` se haya reiniciado.
+
 ```yaml
 emission:
   events: on_change    # on_change | every_cycle

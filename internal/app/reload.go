@@ -7,35 +7,52 @@ import (
 
 	"sermo/internal/metrics"
 	"sermo/internal/rules"
+	"sermo/internal/state"
 )
 
 // watchSnapshot preserves per-watch window and policy pacing state across reload.
 type watchSnapshot struct {
-	state        rules.WindowState
-	policyState  *rules.RemediationState
-	firing       bool
-	lastNotifyAt time.Time
-	settled      bool
+	state          rules.WindowState
+	policyState    *rules.RemediationState
+	firing         bool
+	lastNotifyAt   time.Time
+	settled        bool
+	stateLoaded    bool
+	stateRestored  bool
+	persistedState state.WatchRuntimeRecord
 }
 
-func captureWatchState(watches []*Watch) map[string]watchSnapshot {
-	out := make(map[string]watchSnapshot, len(watches))
+type watchStateKey struct {
+	name string
+	slot string
+}
+
+func captureWatchState(watches []*Watch) map[watchStateKey]watchSnapshot {
+	out := make(map[watchStateKey]watchSnapshot, len(watches))
 	for _, w := range watches {
 		if w == nil {
 			continue
 		}
-		snap := watchSnapshot{firing: w.firing, lastNotifyAt: w.lastNotifyAt, settled: w.settled, policyState: cloneRemediationState(&w.policyState)}
+		snap := watchSnapshot{
+			firing:         w.firing,
+			lastNotifyAt:   w.lastNotifyAt,
+			settled:        w.settled,
+			stateLoaded:    w.stateLoaded,
+			stateRestored:  w.stateRestored,
+			persistedState: cloneWatchRuntimeRecord(w.persistedState),
+			policyState:    cloneRemediationState(&w.policyState),
+		}
 		if cloned := w.state.Clone(); cloned != nil {
 			snap.state = *cloned
 		}
-		out[w.Name] = snap
+		out[watchStateKey{name: w.runtimeStateName(), slot: w.runtimeStateSlot()}] = snap
 	}
 	return out
 }
 
-func applyWatchState(watches []*Watch, saved map[string]watchSnapshot) {
+func applyWatchState(watches []*Watch, saved map[watchStateKey]watchSnapshot) {
 	for _, w := range watches {
-		snap, ok := saved[w.Name]
+		snap, ok := saved[watchStateKey{name: w.runtimeStateName(), slot: w.runtimeStateSlot()}]
 		if !ok {
 			continue
 		}
@@ -43,6 +60,9 @@ func applyWatchState(watches []*Watch, saved map[string]watchSnapshot) {
 		w.firing = snap.firing
 		w.lastNotifyAt = snap.lastNotifyAt
 		w.settled = snap.settled
+		w.stateLoaded = snap.stateLoaded
+		w.stateRestored = snap.stateRestored
+		w.persistedState = cloneWatchRuntimeRecord(snap.persistedState)
 		if snap.policyState != nil {
 			w.policyState = *snap.policyState
 		}

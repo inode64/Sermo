@@ -349,6 +349,78 @@ func TestWatchNotifiesOnceByDefault(t *testing.T) {
 	}
 }
 
+func TestWatchDoesNotRepeatEpisodeAfterRestart(t *testing.T) {
+	store := openRuleStateStore(t)
+	at := time.Date(2026, 7, 10, 9, 0, 0, 0, time.UTC)
+	firstNotifier := &fakeNotifier{name: "ops"}
+	first := &Watch{
+		Name:       "storage-root",
+		CheckType:  "storage",
+		Check:      stubCheck{name: "storage", ok: true},
+		Notifiers:  []notify.Notifier{firstNotifier},
+		StateStore: store,
+		Now:        func() time.Time { return at },
+		Emit:       func(Event) {},
+	}
+	first.RunCycle(context.Background())
+	if len(firstNotifier.msgs) != 1 {
+		t.Fatalf("first episode notifications = %d, want 1", len(firstNotifier.msgs))
+	}
+
+	settling := NewSettling(nil)
+	settling.Reset([]string{SettlingWatchKey("storage-root")})
+	secondNotifier := &fakeNotifier{name: "ops"}
+	var events []Event
+	second := &Watch{
+		Name:       "storage-root",
+		CheckType:  "storage",
+		Check:      stubCheck{name: "storage", ok: true},
+		Notifiers:  []notify.Notifier{secondNotifier},
+		StateStore: store,
+		Settling:   settling,
+		Now:        func() time.Time { return at.Add(time.Minute) },
+		Emit:       func(e Event) { events = append(events, e) },
+	}
+	second.RunCycle(context.Background())
+	second.RunCycle(context.Background())
+
+	if len(secondNotifier.msgs) != 0 || countEvents(events, eventKindFiring) != 0 {
+		t.Fatalf("unchanged episode repeated after restart: notifications=%d events=%v", len(secondNotifier.msgs), events)
+	}
+}
+
+func TestWatchRecoversPersistedEpisodeDuringStartupObservation(t *testing.T) {
+	store := openRuleStateStore(t)
+	first := &Watch{
+		Name:       "storage-root",
+		CheckType:  "storage",
+		Check:      stubCheck{name: "storage", ok: true},
+		StateStore: store,
+		Emit:       func(Event) {},
+	}
+	first.RunCycle(context.Background())
+
+	settling := NewSettling(nil)
+	settling.Reset([]string{SettlingWatchKey("storage-root")})
+	var events []Event
+	second := &Watch{
+		Name:       "storage-root",
+		CheckType:  "storage",
+		Check:      stubCheck{name: "storage", ok: false, data: map[string]any{}},
+		StateStore: store,
+		Settling:   settling,
+		Emit:       func(e Event) { events = append(events, e) },
+	}
+	second.RunCycle(context.Background())
+
+	if countEvents(events, eventKindRecovered) != 1 {
+		t.Fatalf("startup recovery events = %v, want one recovered", events)
+	}
+	if _, found, err := store.WatchRuntimeState("storage-root", watchStateDefaultSlot); err != nil || found {
+		t.Fatalf("recovered runtime state found=%v err=%v, want deleted", found, err)
+	}
+}
+
 func TestWatchEmitsFiringOnceByDefault(t *testing.T) {
 	var events []Event
 	w := &Watch{

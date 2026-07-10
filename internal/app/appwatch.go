@@ -80,6 +80,7 @@ func BuildAppWatches(cfg *config.Config, deps Deps) []*Watch {
 			Settling:   deps.Settling,
 			Now:        deps.Now,
 			Emit:       deps.Emit,
+			StateStore: deps.WatchState,
 		})
 	}
 	return out
