@@ -161,7 +161,7 @@ func TestIndexShellAnchors(t *testing.T) {
 	})
 
 	wantIDs := []string{
-		"topbar", "section-nav", "favicon", "attention", "events",
+		"topbar", "section-nav", "favicon", "attention", "events", "target-search", "target-search-options",
 		"services-section", "containers-section", "vms-section", "apps-section", "watches-section", "events-section",
 		"storage-controls", "network-controls", "mount-controls",
 		"container-controls", "vm-controls", "container-rows", "vm-rows",
@@ -202,6 +202,28 @@ func TestIndexShellAnchors(t *testing.T) {
 	}
 	if headers["Source"] {
 		t.Errorf("shell still exposes static <th> Source")
+	}
+}
+
+func TestSourceProvidesGlobalTargetSearch(t *testing.T) {
+	src, err := os.ReadFile("src/app.js")
+	if err != nil {
+		t.Fatalf("read src/app.js: %v", err)
+	}
+	text := string(src)
+	for _, marker := range []string{
+		`function globalTargetRecords()`,
+		`function clearGlobalTargetFilters(target)`,
+		`function openGlobalTarget(target)`,
+		`function submitGlobalTargetSearch()`,
+		`history.replaceState(null, "", "#" + serviceExpansionKey(target.name))`,
+		`record.value.toLowerCase().includes(query)`,
+		`e.key.toLowerCase() === "k"`,
+		`id="mount-row-${detailDomKey(m.name || m.path || "mount")}"`,
+	} {
+		if !strings.Contains(text, marker) {
+			t.Errorf("source missing global target search marker %q", marker)
+		}
 	}
 }
 

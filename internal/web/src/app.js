@@ -64,6 +64,10 @@ const liveVerbosePath = "livez?verbose";
 const expansionPrefixApp = "app:";
 const expansionPrefixService = "svc:";
 const expansionPrefixWatch = "wat:";
+const globalTargetService = "service";
+const globalTargetWatch = "watch";
+const globalTargetApplication = "application";
+const globalTargetMount = "mount";
 const eventDetailLimit = "50";
 const eventContextLimit = "1";
 const queryBoolOne = "1";
@@ -1122,6 +1126,8 @@ let appSort = { key: "", dir: 1 };
 let metricWindow = "24h";
 let daemonMetricWindow = "24h";
 let allWatches = [];
+let globalTargetsByValue = new Map();
+let globalTargetSyncPending = false;
 // watchPanels is the single registry of the watch panels: classification
 // (match), section/controls selectors and filter state all live here, and the
 // section's <details data-panel="..."> attribute names the key. Rendering,
@@ -1523,6 +1529,148 @@ function openPanelTarget(target) {
   if (el.tagName === "DETAILS") el.open = true;
   el.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
 }
+
+function globalTargetValue(kind, name) {
+  return `${kind}: ${name}`;
+}
+
+function globalTargetRecords() {
+  const records = [];
+  (allServices || []).forEach((item) => records.push({
+    kind: globalTargetService, name: item.name, label: displayName(item), item,
+    rowID: `svc-row-${item.name}`,
+  }));
+  (allWatches || []).forEach((item) => records.push({
+    kind: globalTargetWatch, name: item.name, label: displayName(item), item,
+    rowID: `wat-row-${item.name}`,
+  }));
+  (allApps || []).forEach((item) => records.push({
+    kind: globalTargetApplication, name: item.name, label: displayName(item), item,
+    rowID: `app-row-${item.name}`,
+  }));
+  (allMounts || []).forEach((item) => records.push({
+    kind: globalTargetMount, name: item.name, label: displayName(item), item,
+    rowID: `mount-row-${detailDomKey(item.name || item.path || "mount")}`,
+  }));
+  records.forEach((record) => { record.value = globalTargetValue(record.kind, record.name); });
+  return records.sort((a, b) => a.value.localeCompare(b.value));
+}
+
+function syncGlobalTargetSearch() {
+  globalTargetSyncPending = false;
+  const datalist = $("#target-search-options");
+  if (!datalist) return;
+  const records = globalTargetRecords();
+  globalTargetsByValue = new Map(records.map((record) => [record.value, record]));
+  const options = records.map((record) => {
+    const option = new Option("", record.value);
+    option.label = record.label === record.name ? record.kind : `${record.label} · ${record.kind}`;
+    return option;
+  });
+  datalist.replaceChildren(...options);
+}
+
+function scheduleGlobalTargetSync() {
+  if (globalTargetSyncPending) return;
+  globalTargetSyncPending = true;
+  queueMicrotask(syncGlobalTargetSearch);
+}
+
+function clearGlobalTargetFilters(target) {
+  switch (target.kind) {
+    case globalTargetService: {
+      const surface = serviceSurfaceOf(target.item);
+      const panel = splitServicePanelBySurface(surface);
+      if (panel) {
+        panel.query = "";
+        panel.status = filterAll;
+      } else {
+        svcQuery = "";
+        svcStatus = filterAll;
+        svcCategory = filterAll;
+        svcCollapsedGroups.delete(categoryOf(target.item, "service"));
+      }
+      renderServices();
+      break;
+    }
+    case globalTargetWatch: {
+      const panel = getWatchPanel(watchPanelKeyFor(target.item));
+      panel.query = "";
+      panel.status = filterAll;
+      panel.type = filterAll;
+      renderWatches();
+      break;
+    }
+    case globalTargetApplication:
+      appQuery = "";
+      appStatus = filterAll;
+      appCategory = filterAll;
+      appCollapsedGroups.delete(categoryOf(target.item, "app"));
+      renderApps();
+      break;
+    case globalTargetMount:
+      mountQuery = "";
+      mountStatus = filterAll;
+      mountCategory = filterAll;
+      renderMounts();
+      break;
+  }
+  applyUIStateToControls();
+  saveUIState();
+}
+
+function focusGlobalTargetRow(rowID) {
+  requestAnimationFrame(() => {
+    const row = document.getElementById(rowID);
+    if (!row) return;
+    row.scrollIntoView({ block: "center", behavior: scrollBehaviorSmooth });
+    const control = row.querySelector("button, [tabindex]") || row;
+    if (typeof control.focus === "function") control.focus({ preventScroll: true });
+  });
+}
+
+function openGlobalTarget(target) {
+  if (!target) return;
+  clearGlobalTargetFilters(target);
+  hashScrolled = false;
+  switch (target.kind) {
+    case globalTargetService:
+      history.replaceState(null, "", "#" + serviceExpansionKey(target.name));
+      applyHash();
+      break;
+    case globalTargetWatch:
+      history.replaceState(null, "", "#" + watchExpansionKey(target.name));
+      applyHash();
+      break;
+    case globalTargetApplication:
+      history.replaceState(null, "", "#" + appExpansionKey(target.name));
+      applyHash();
+      break;
+    case globalTargetMount: {
+      const section = $("#mounts-section");
+      if (section) section.open = true;
+      history.replaceState(null, "", "#mounts-section");
+      break;
+    }
+  }
+  focusGlobalTargetRow(target.rowID);
+}
+
+function submitGlobalTargetSearch() {
+  const input = $("#target-search");
+  if (!input) return;
+  const raw = input.value.trim();
+  let target = globalTargetsByValue.get(raw);
+  if (!target && raw) {
+    const query = raw.toLowerCase();
+    target = [...globalTargetsByValue.values()].find((record) =>
+      record.value.toLowerCase().includes(query) || record.label.toLowerCase().includes(query));
+  }
+  if (!target) return;
+  input.value = "";
+  openGlobalTarget(target);
+}
+
 // themeHealthColor reads the active --ok/--warn/--crit tokens so the favicon and
 // brand dot track light/dark scheme instead of hard-coded palette literals.
 function themeHealthColor(status) {
@@ -2141,6 +2289,7 @@ function finishSvcRender() {
 // active filter. Calls with no argument re-render the cache (filter changes).
 function render(services) {
   if (services) allServices = services;
+  scheduleGlobalTargetSync();
   renderServices();
   applyHash();
 }
@@ -3899,6 +4048,7 @@ function diskioRowHTML(w) {
 
 function renderWatches(watches) {
   if (watches) allWatches = watches;
+  scheduleGlobalTargetSync();
   const all = allWatches || [];
   Object.keys(watchPanels).forEach((key) => {
     renderWatchPanel(key, all.filter((w) => watchPanelKeyFor(w) === key));
@@ -4058,6 +4208,7 @@ function toggleCategoryGroup(panel, category) {
 // hand, so no extra request is needed).
 function renderApps(apps) {
   if (apps) allApps = apps;
+  scheduleGlobalTargetSync();
   const section = $("#apps-section");
   const tbody = $("#app-rows");
   const cnt = $("#apps-count");
@@ -4346,6 +4497,7 @@ function updateMountSortIndicators() {
 
 function renderMounts(mounts) {
   if (mounts) allMounts = mounts;
+  scheduleGlobalTargetSync();
   const section = $("#mounts-section");
   const tbody = $("#mount-rows");
   const cnt = $("#mounts-count");
@@ -4378,7 +4530,7 @@ function renderMounts(mounts) {
     const refcount = m.refcounted === false ? '<span class="muted">off</span>' : String(Number(m.refcount || 0));
     const name = esc(m.name || "");
     const actions = mountActionButtons(m, mounted);
-    return `<tr${detail}>
+    return `<tr id="mount-row-${detailDomKey(m.name || m.path || "mount")}" tabindex="-1"${detail}>
       <td>${label}</td>
       <td>${mountCategoryCell(category)}</td>
       <td><code>${esc(m.path || "")}</code></td>
@@ -5982,6 +6134,19 @@ function bindSortHeader(th, action) {
 }
 
 function initStaticHandlers() {
+  const targetSearch = $("#target-search");
+  if (targetSearch) {
+    targetSearch.addEventListener(domEventChange, submitGlobalTargetSearch);
+    targetSearch.addEventListener(domEventKeydown, (e) => {
+      if (e.key === keyEnter) {
+        e.preventDefault();
+        submitGlobalTargetSearch();
+      } else if (e.key === keyEscape) {
+        targetSearch.value = "";
+      }
+    });
+  }
+
   const refreshSelect = $("#refresh-select");
   if (refreshSelect) refreshSelect.addEventListener(domEventChange, () => setRefresh(refreshSelect.value));
 
@@ -6435,10 +6600,18 @@ function activeSearchBox() {
   return fallback ? { section: $("#" + defaultServicePanelTarget()), box: fallback } : null;
 }
 
-// "/" focuses the visible panel search (unless already typing in a field).
+// Ctrl/Cmd+K focuses global target search; "/" focuses the visible panel search.
 document.addEventListener(domEventKeydown, (e) => {
-  if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
   if (!keyboardShortcutsEnabled()) return;
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") {
+    const globalSearch = $("#target-search");
+    if (!globalSearch) return;
+    e.preventDefault();
+    globalSearch.focus();
+    globalSearch.select();
+    return;
+  }
+  if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
   const tag = document.activeElement && document.activeElement.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
   const target = activeSearchBox();
