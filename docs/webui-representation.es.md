@@ -61,6 +61,9 @@ Las cachés de estado de init, inspección de aplicaciones y líneas temporales 
 SLA exponen sus horas de muestra reales. La UI muestra su antigüedad y las marcas
 de los segmentos SLA permanecen ancladas a `observed_at`, en lugar de avanzar
 con el reloj del navegador mientras están cacheadas.
+Los refrescos son single-flight: las recargas automáticas, manuales y posteriores
+a una acción nunca se ejecutan a la vez, y el siguiente intervalo automático
+empieza cuando termina el refresco anterior.
 
 ## Endpoints de acción
 
