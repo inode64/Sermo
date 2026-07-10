@@ -694,7 +694,19 @@ func (c metricCheck) Run(_ context.Context) Result {
 	if !reading.Ready {
 		return c.result(false, fmt.Sprintf("%s/%s not ready", c.scope, c.metric), start)
 	}
-	return c.result(met, fmt.Sprintf("%s/%s %s %s = %t", c.scope, c.metric, c.op, c.value, met), start)
+	res := c.result(met, fmt.Sprintf("%s/%s %s %s = %t", c.scope, c.metric, c.op, c.value, met), start)
+	res.Data = map[string]any{
+		DataKeyType:      CheckTypeMetric,
+		DataKeyScope:     c.scope,
+		DataKeyMetric:    c.metric,
+		DataKeyOp:        c.op,
+		DataKeyThreshold: c.value,
+	}
+	if value, unit, ok, err := metrics.ReadingValueForThreshold(reading, c.value); err == nil && ok {
+		res.Data[DataKeyValue] = value
+		res.Data[DataKeyUnit] = unit
+	}
+	return res
 }
 
 // processCheck passes when the observed state of processes matching its

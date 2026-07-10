@@ -9,9 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/emission"
 	"sermo/internal/execx"
+	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
 	"sermo/internal/output"
@@ -484,9 +486,9 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 			// that bypassed it (hand-built Rule) by at least delivering its
 			// alerts instead of silently doing nothing.
 			if w.DryRun {
-				w.emitDryRunAlerts(ctx, r.Rule, r.rising)
+				w.emitDryRunAlerts(ctx, ev, r.Rule, r.rising)
 			} else {
-				w.emitAlerts(ctx, r.Rule, r.rising)
+				w.emitAlerts(ctx, ev, r.Rule, r.rising)
 			}
 			continue
 		}
@@ -521,7 +523,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 				w.emit(Event{Kind: eventKindDryRun, Rule: r.Name, Action: action, Message: msg})
 			}
 			if suppress == "" {
-				w.emitDryRunAlerts(ctx, r.Rule, r.rising)
+				w.emitDryRunAlerts(ctx, ev, r.Rule, r.rising)
 			}
 			// Report all firing rules in dry-run mode for maximum observability.
 			continue
@@ -535,7 +537,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		}
 
 		// All actions of this rule run together: alerts notify, then the operation.
-		w.emitAlerts(ctx, r.Rule, true)
+		w.emitAlerts(ctx, ev, r.Rule, true)
 		// Panic mode keeps the alert visible (emitAlerts above) but never performs
 		// the automatic action; the operator drives services manually instead.
 		if w.InPanic != nil && w.InPanic() {
@@ -585,9 +587,9 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 		state := w.fires(ctx, ev, r, at, evals)
 		if state.firing {
 			if w.DryRun {
-				w.emitDryRunAlerts(ctx, r, state.rising)
+				w.emitDryRunAlerts(ctx, ev, r, state.rising)
 			} else {
-				w.emitAlerts(ctx, r, state.rising)
+				w.emitAlerts(ctx, ev, r, state.rising)
 			}
 		} else if state.recovered && w.shouldEmitRuleEvent(r, true) {
 			w.emit(Event{Kind: eventKindRecovered, Rule: r.Name, Message: "rule condition recovered"})
@@ -599,21 +601,22 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 // the rule resolves to one or more notifiers (its own `notify`, or the global
 // default it inherits, unless suppressed with `none`), delivers each message to
 // them best-effort.
-func (w *Worker) emitAlerts(ctx context.Context, r rules.Rule, rising bool) {
-	w.emitAlertsFiltered(ctx, r, nil, rising)
+func (w *Worker) emitAlerts(ctx context.Context, ev *rules.Evaluator, r rules.Rule, rising bool) {
+	w.emitAlertsFiltered(ctx, ev, r, nil, rising)
 }
 
-func (w *Worker) emitDryRunAlerts(ctx context.Context, r rules.Rule, rising bool) {
-	w.emitAlertsFiltered(ctx, r, dryRunConsoleNotifier, rising)
+func (w *Worker) emitDryRunAlerts(ctx context.Context, ev *rules.Evaluator, r rules.Rule, rising bool) {
+	w.emitAlertsFiltered(ctx, ev, r, dryRunConsoleNotifier, rising)
 }
 
-func (w *Worker) emitAlertsFiltered(ctx context.Context, r rules.Rule, allow func(notify.Notifier) bool, rising bool) {
+func (w *Worker) emitAlertsFiltered(ctx context.Context, ev *rules.Evaluator, r rules.Rule, allow func(notify.Notifier) bool, rising bool) {
 	notifiers := resolveNotifiers(effectiveNotify(r.Notify, w.GlobalNotify), w.Notifiers)
 	panicking := w.InPanic != nil && w.InPanic()
 	output := w.cycleFailOutput
 	emitEvent := w.shouldEmitRuleEvent(r, rising)
 	emitNotify := w.shouldNotifyRule(r, rising)
 	for _, msg := range r.AlertMessages() {
+		msg = w.expandRuleRuntime(msg, ev, r)
 		// Output carries the failing command's stdout/stderr so the operator can see
 		// why the rule fired on emitted cycles.
 		if emitEvent {
@@ -879,10 +882,57 @@ func (w *Worker) emit(e Event) {
 	}
 }
 
+const (
+	runtimePlaceholderDate           = "${date}"
+	runtimePlaceholderEvent          = "${event}"
+	runtimePlaceholderAction         = "${action}"
+	runtimePlaceholderService        = "${service}"
+	runtimePlaceholderRuleDuration   = "${rule.duration}"
+	runtimePlaceholderRuleWindow     = "${rule.window}"
+	runtimePlaceholderCheckName      = "${check.name}"
+	runtimePlaceholderCheckType      = "${check.type}"
+	runtimePlaceholderCheckMetric    = "${check.metric}"
+	runtimePlaceholderCheckScope     = "${check.scope}"
+	runtimePlaceholderCheckOp        = "${check.op}"
+	runtimePlaceholderCheckThreshold = "${check.threshold}"
+	runtimePlaceholderCheckValue     = "${check.value}"
+)
+
+type ruleRuntimeContext struct {
+	ruleDuration   string
+	ruleWindow     string
+	checkName      string
+	checkType      string
+	checkMetric    string
+	checkScope     string
+	checkOp        string
+	checkThreshold string
+	checkValue     string
+}
+
+type ruleCheckCandidate struct {
+	ref          string
+	inlineMetric map[string]any
+}
+
+// expandRuleRuntime substitutes a rule alert message's runtime built-ins for
+// both the event log and notifier delivery.
+func (w *Worker) expandRuleRuntime(msg string, ev *rules.Evaluator, r rules.Rule) string {
+	if !strings.Contains(msg, "${") {
+		return msg
+	}
+	event := Event{Rule: r.Name, Action: string(r.Primary().Type), Service: w.Service}
+	return w.expandRuntimeWithContext(msg, event, w.ruleRuntimeContext(ev, r))
+}
+
 // expandRuntime substitutes the runtime built-ins a rule message may carry —
-// ${date} (now), ${event} (the firing rule), ${action} — which resolution left
-// literal. ${host}/${service} were already substituted at resolution.
+// ${date} (now), ${event} (the firing rule), ${action} and ${service} — which
+// resolution left literal. ${host} was already substituted at resolution.
 func (w *Worker) expandRuntime(msg string, e Event) string {
+	return w.expandRuntimeWithContext(msg, e, ruleRuntimeContext{})
+}
+
+func (w *Worker) expandRuntimeWithContext(msg string, e Event, rc ruleRuntimeContext) string {
 	if !strings.Contains(msg, "${") {
 		return msg
 	}
@@ -890,11 +940,175 @@ func (w *Worker) expandRuntime(msg string, e Event) string {
 	if now == nil {
 		now = time.Now
 	}
+	service := e.Service
+	if service == "" {
+		service = w.Service
+	}
 	r := strings.NewReplacer(
-		"${date}", now().Format(time.RFC3339),
-		"${event}", e.Rule,
-		"${action}", e.Action,
-		"${service}", e.Service,
+		runtimePlaceholderDate, now().Format(time.RFC3339),
+		runtimePlaceholderEvent, e.Rule,
+		runtimePlaceholderAction, e.Action,
+		runtimePlaceholderService, service,
+		runtimePlaceholderRuleDuration, rc.ruleDuration,
+		runtimePlaceholderRuleWindow, rc.ruleWindow,
+		runtimePlaceholderCheckName, rc.checkName,
+		runtimePlaceholderCheckType, rc.checkType,
+		runtimePlaceholderCheckMetric, rc.checkMetric,
+		runtimePlaceholderCheckScope, rc.checkScope,
+		runtimePlaceholderCheckOp, rc.checkOp,
+		runtimePlaceholderCheckThreshold, rc.checkThreshold,
+		runtimePlaceholderCheckValue, rc.checkValue,
 	)
 	return r.Replace(msg)
+}
+
+func (w *Worker) ruleRuntimeContext(ev *rules.Evaluator, r rules.Rule) ruleRuntimeContext {
+	rc := ruleRuntimeContext{
+		ruleDuration: rules.WindowDurationDescription(r),
+		ruleWindow:   rules.WindowDescription(r),
+	}
+	candidate, ok := singleRuleCheckCandidate(r.If)
+	if !ok {
+		return rc
+	}
+	if candidate.ref != "" {
+		rc.checkName = candidate.ref
+		if entry, ok := w.MetricChecks[candidate.ref].(map[string]any); ok {
+			rc.applyCheckEntry(entry)
+		}
+		if ev != nil {
+			if res, ok := ev.Cache[candidate.ref]; ok {
+				rc.applyCheckResult(candidate.ref, res)
+			}
+		}
+		return rc
+	}
+	if candidate.inlineMetric != nil {
+		rc.applyInlineMetric(ev, candidate.inlineMetric)
+	}
+	return rc
+}
+
+func (rc *ruleRuntimeContext) applyCheckEntry(entry map[string]any) {
+	setRuntimeField(&rc.checkType, cfgval.String(entry[checks.CheckKeyType]))
+	if rc.checkType != checks.CheckTypeMetric {
+		return
+	}
+	scope := cfgval.AsString(entry[checks.CheckKeyScope])
+	if scope == "" {
+		scope = checks.MetricScopeService
+	}
+	setRuntimeField(&rc.checkMetric, cfgval.AsString(entry[checks.CheckKeyName]))
+	setRuntimeField(&rc.checkScope, scope)
+	setRuntimeField(&rc.checkOp, cfgval.AsString(entry[checks.CheckKeyOp]))
+	setRuntimeField(&rc.checkThreshold, cfgval.String(entry[checks.CheckKeyValue]))
+}
+
+func (rc *ruleRuntimeContext) applyCheckResult(name string, res checks.Result) {
+	rc.checkName = name
+	if res.Check != "" {
+		rc.checkName = res.Check
+	}
+	if len(res.Data) == 0 {
+		return
+	}
+	setRuntimeField(&rc.checkType, cfgval.String(res.Data[checks.DataKeyType]))
+	setRuntimeField(&rc.checkMetric, cfgval.String(res.Data[checks.DataKeyMetric]))
+	setRuntimeField(&rc.checkScope, cfgval.String(res.Data[checks.DataKeyScope]))
+	setRuntimeField(&rc.checkOp, cfgval.String(res.Data[checks.DataKeyOp]))
+	setRuntimeField(&rc.checkThreshold, cfgval.String(res.Data[checks.DataKeyThreshold]))
+	setRuntimeField(&rc.checkValue, formatRuntimeCheckValue(res.Data[checks.DataKeyValue], cfgval.String(res.Data[checks.DataKeyUnit])))
+}
+
+func (rc *ruleRuntimeContext) applyInlineMetric(ev *rules.Evaluator, metric map[string]any) {
+	scope := cfgval.AsString(metric[rules.FieldScope])
+	if scope == "" {
+		scope = checks.MetricScopeService
+	}
+	name := cfgval.AsString(metric[rules.FieldName])
+	threshold := cfgval.String(metric[rules.FieldValue])
+	rc.checkName = name
+	rc.checkType = checks.CheckTypeMetric
+	rc.checkMetric = name
+	rc.checkScope = scope
+	rc.checkOp = cfgval.AsString(metric[rules.FieldOp])
+	rc.checkThreshold = threshold
+	if ev == nil || ev.Deps.Metrics == nil || name == "" {
+		return
+	}
+	reading, ok := ev.Deps.Metrics(scope, name)
+	if !ok {
+		return
+	}
+	value, unit, ready, err := metrics.ReadingValueForThreshold(reading, threshold)
+	if err == nil && ready {
+		rc.checkValue = formatRuntimeCheckValue(value, unit)
+	}
+}
+
+func setRuntimeField(field *string, value string) {
+	if value != "" {
+		*field = value
+	}
+}
+
+func formatRuntimeCheckValue(value any, unit string) string {
+	out := cfgval.String(value)
+	if out == "" {
+		return ""
+	}
+	switch unit {
+	case "":
+		return out
+	case metrics.MetricUnitPercent:
+		return out + unit
+	default:
+		return out + " " + unit
+	}
+}
+
+func singleRuleCheckCandidate(node map[string]any) (ruleCheckCandidate, bool) {
+	var candidates []ruleCheckCandidate
+	collectRuleCheckCandidates(node, &candidates)
+	if len(candidates) != 1 {
+		return ruleCheckCandidate{}, false
+	}
+	return candidates[0], true
+}
+
+func collectRuleCheckCandidates(node map[string]any, candidates *[]ruleCheckCandidate) {
+	for op, v := range node {
+		switch op {
+		case rules.ConditionAnd, rules.ConditionOr:
+			items, ok := v.([]any)
+			if !ok {
+				continue
+			}
+			for _, item := range items {
+				if child, ok := item.(map[string]any); ok {
+					collectRuleCheckCandidates(child, candidates)
+				}
+			}
+		case rules.ConditionNot:
+			if child, ok := v.(map[string]any); ok {
+				collectRuleCheckCandidates(child, candidates)
+			}
+		case rules.ConditionFailed, rules.ConditionActive:
+			m, ok := v.(map[string]any)
+			if !ok {
+				continue
+			}
+			if ref := cfgval.AsString(m[rules.FieldCheck]); ref != "" {
+				*candidates = append(*candidates, ruleCheckCandidate{ref: ref})
+				continue
+			}
+			if metric, ok := m[rules.ConditionMetric].(map[string]any); ok {
+				*candidates = append(*candidates, ruleCheckCandidate{inlineMetric: metric})
+			}
+		case rules.ConditionMetric:
+			if metric, ok := v.(map[string]any); ok {
+				*candidates = append(*candidates, ruleCheckCandidate{inlineMetric: metric})
+			}
+		}
+	}
 }

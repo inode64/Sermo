@@ -24,9 +24,18 @@ const (
 )
 
 const (
-	runtimeVarDate   = "date"
-	runtimeVarEvent  = "event"
-	runtimeVarAction = "action"
+	runtimeVarDate           = "date"
+	runtimeVarEvent          = "event"
+	runtimeVarAction         = "action"
+	runtimeVarRuleDuration   = "rule.duration"
+	runtimeVarRuleWindow     = "rule.window"
+	runtimeVarCheckName      = "check.name"
+	runtimeVarCheckType      = "check.type"
+	runtimeVarCheckMetric    = "check.metric"
+	runtimeVarCheckScope     = "check.scope"
+	runtimeVarCheckOp        = "check.op"
+	runtimeVarCheckThreshold = "check.threshold"
+	runtimeVarCheckValue     = "check.value"
 )
 
 const (
@@ -333,7 +342,20 @@ func expandValue(v any, vars map[string]string, path string, errs *[]string) any
 // runtimeVars are substituted by the worker when an event is emitted, not during
 // resolution. expandString leaves them as literal ${...} (without erroring) so a
 // rule message can reference the firing event's context.
-var runtimeVars = map[string]bool{runtimeVarDate: true, runtimeVarEvent: true, runtimeVarAction: true}
+var runtimeVars = map[string]bool{
+	runtimeVarDate:           true,
+	runtimeVarEvent:          true,
+	runtimeVarAction:         true,
+	runtimeVarRuleDuration:   true,
+	runtimeVarRuleWindow:     true,
+	runtimeVarCheckName:      true,
+	runtimeVarCheckType:      true,
+	runtimeVarCheckMetric:    true,
+	runtimeVarCheckScope:     true,
+	runtimeVarCheckOp:        true,
+	runtimeVarCheckThreshold: true,
+	runtimeVarCheckValue:     true,
+}
 
 func expandString(s string, vars map[string]string, path string, errs *[]string) string {
 	return varRef.ReplaceAllStringFunc(s, func(match string) string {

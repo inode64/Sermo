@@ -1523,8 +1523,11 @@ remediation/guard/alert together:
 Such an entry is **desugared** to the equivalent `checks:` + `rules:` entry, so it
 is exactly equivalent to writing that check + rule by hand and inherits every
 safety gate (including the rule that a `scope: system` metric can never drive a
-service action). Because the result is a rule, not a watch-runtime notifier,
-`then.notify_interval` is not supported with `then.action`. The `check:` is always
+service action). Its `message` supports the rule runtime placeholders documented
+in [rules](rules.md), including `${rule.duration}`, `${check.threshold}` and
+`${check.value}` for single-check conditions. Because the result is a rule, not
+a watch-runtime notifier, `then.notify_interval` is not supported with
+`then.action`. The `check:` is always
 **embedded** (`check: { type: http, … }`) and is generated as a check named after
 the watch. Two watches embedding the same endpoint probe it twice. If a
 remediation must reuse an existing shared health/`verify: true` check without a

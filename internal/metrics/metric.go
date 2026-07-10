@@ -88,6 +88,27 @@ func Compare(r Reading, op, threshold string) (bool, error) {
 	return applyOp(actual, op, value)
 }
 
+// ReadingValueForThreshold returns the same numeric form Compare uses for a
+// threshold: percentage thresholds read Percent, bare thresholds read Absolute.
+// The bool is false only when the reading is not ready yet.
+func ReadingValueForThreshold(r Reading, threshold string) (float64, string, bool, error) {
+	if !r.Ready {
+		return 0, MetricUnitNone, false, nil
+	}
+	_, isPercent, err := parseThreshold(threshold)
+	if err != nil {
+		return 0, MetricUnitNone, false, err
+	}
+	actual, err := metricValue(r, isPercent, threshold)
+	if err != nil {
+		return 0, MetricUnitNone, false, err
+	}
+	if isPercent {
+		return actual, MetricUnitPercent, true, nil
+	}
+	return actual, MetricUnitNone, true, nil
+}
+
 func metricValue(r Reading, isPercent bool, threshold string) (float64, error) {
 	if isPercent {
 		if !r.HasPercent {
