@@ -210,6 +210,27 @@ func WindowDescription(r Rule) string {
 	return "immediate"
 }
 
+// WindowDurationDescription summarizes only the rule's configured time/span,
+// suitable for short alert templates. It returns "current cycle" for immediate
+// rules that have no explicit for/within window.
+func WindowDurationDescription(r Rule) string {
+	if cycles, duration, _, ok := r.withinWindow(); ok {
+		if duration > 0 {
+			return formatWindowDuration(duration)
+		}
+		return fmt.Sprintf("%d cycles", cycles)
+	}
+	if r.For != nil {
+		if r.For.Duration > 0 {
+			return formatWindowDuration(r.For.Duration)
+		}
+		if r.For.Cycles > 0 {
+			return fmt.Sprintf("%d cycles", r.For.Cycles)
+		}
+	}
+	return "current cycle"
+}
+
 func countTrue(history []bool) int {
 	n := 0
 	for _, v := range history {

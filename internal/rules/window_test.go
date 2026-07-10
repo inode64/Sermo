@@ -428,6 +428,25 @@ func TestFormatWindowDuration(t *testing.T) {
 	}
 }
 
+func TestWindowDurationDescription(t *testing.T) {
+	cases := []struct {
+		name string
+		rule Rule
+		want string
+	}{
+		{name: "immediate", rule: Rule{}, want: "current cycle"},
+		{name: "for duration", rule: Rule{For: &ForWindow{Duration: 10 * time.Minute}}, want: "10m"},
+		{name: "for cycles", rule: Rule{For: &ForWindow{Cycles: 3}}, want: "3 cycles"},
+		{name: "within duration", rule: Rule{Within: &WithinWindow{Duration: time.Hour, MinMatches: 2}}, want: "1h"},
+		{name: "within cycles", rule: Rule{Within: &WithinWindow{Cycles: 5, MinMatches: 2}}, want: "5 cycles"},
+	}
+	for _, tt := range cases {
+		if got := WindowDurationDescription(tt.rule); got != tt.want {
+			t.Errorf("%s: WindowDurationDescription = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
 func TestParseRuleWindowZeroIsInert(t *testing.T) {
 	// cycles 0 and duration 0 means "no window" even with mode: within — both
 	// thresholds must be non-positive to bail out.

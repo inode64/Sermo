@@ -30,6 +30,16 @@ func TestMetricCheckRun(t *testing.T) {
 	if !mk(src(true, 90)).Run(context.Background()).OK {
 		t.Error("a ready breach (90 > 50) should fire")
 	}
+	res := mk(src(true, 90)).Run(context.Background())
+	if res.Data[DataKeyType] != CheckTypeMetric ||
+		res.Data[DataKeyMetric] != "cpu" ||
+		res.Data[DataKeyScope] != "service" ||
+		res.Data[DataKeyOp] != ">" ||
+		res.Data[DataKeyThreshold] != "50" ||
+		res.Data[DataKeyValue] != float64(90) ||
+		res.Data[DataKeyUnit] != metrics.MetricUnitNone {
+		t.Fatalf("metric result data = %#v", res.Data)
+	}
 	if mk(src(true, 10)).Run(context.Background()).OK {
 		t.Error("a ready non-breach (10 > 50) must not fire")
 	}
