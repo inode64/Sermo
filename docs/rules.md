@@ -1790,6 +1790,7 @@ rules:
     within: { cycles: 15, min_matches: 5 }  # sliding window (optional)
     # within: { duration: 30m, min_matches: 3 } # or a time window
     notify: [ops-email]           # who gets this rule's alert messages (optional)
+    emission: { events: on_change, notify: on_change } # or every_cycle
     then: { action: alert, message: "http is down" }
 ```
 
@@ -1797,7 +1798,12 @@ A rule's **`notify`** selects which notifiers receive its `alert` messages,
 overriding the global default ([Notifications](configuration.md#default-selection-and-precedence)):
 an explicit list wins, `notify: none` suppresses, and omitting it inherits the
 global `notify` default. It applies to the rule's alert messages; remediation
-operations are reported as events, not notifications.
+operations are reported as events, not notifications. By default those automatic
+alert events and notifications are emitted only when the rule enters a firing
+episode, then `recovered` is emitted when it clears. Use rule-level
+`emission.events` or `emission.notify` (`on_change` | `every_cycle`) to override
+the global emission policy for that rule. Operation result events remain audit
+events and are recorded whenever the operation is attempted.
 
 Actions and types are coupled: the operation actions (`restart`, `start`,
 `stop`, `reload`, `resume`) belong to `type: remediation` rules — required there (a

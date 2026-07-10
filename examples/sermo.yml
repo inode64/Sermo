@@ -94,6 +94,13 @@ defaults:
   #   # duration: 6m       # choose cycles or duration, not both
   #   mode: consecutive    # consecutive | within (min_matches optional, default 1)
 
+# Automatic firing/alert events and notifications emit only when something
+# changes by default. Rules and watches may override this with their own
+# `emission:` block; services do not have a service-wide override.
+# emission:
+#   events: on_change      # on_change | every_cycle
+#   notify: on_change      # on_change | every_cycle
+
 # Web dashboard (view services; monitor/unmonitor and start/stop/restart/reload/resume;
 # per-service detail with checks, SLA history and events). Binds to loopback by
 # default.
