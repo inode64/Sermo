@@ -7,6 +7,9 @@ apps:
 restart_on_change:
   apps:
     - libvirtd
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 policy:
   cooldown: 15m
   max_actions: 2

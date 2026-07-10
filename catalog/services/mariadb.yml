@@ -14,6 +14,9 @@ apps:
 restart_on_change:
   apps:
     - mariadb
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 variables:
   user: mysql
   backup_user: mysql

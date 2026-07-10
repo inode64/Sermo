@@ -7,6 +7,9 @@ apps:
 restart_on_change:
   apps:
     - rspamd
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 variables:
   port: 11334
   user: rspamd

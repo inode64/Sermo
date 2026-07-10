@@ -11,6 +11,9 @@ apps:
 restart_on_change:
   apps:
     - upsmon
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 variables:
   user: nut
 pidfile: /run/nut/upsmon.pid

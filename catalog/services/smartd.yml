@@ -16,6 +16,9 @@ apps:
 restart_on_change:
   apps:
     - smartd
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 pidfile:
   path: /run/smartd.pid
   optional: true

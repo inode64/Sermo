@@ -46,6 +46,11 @@ restart_on_change:
     - /etc/redis.conf
   apps:
     - redis
+  messages:
+    path: >-
+      ${display_name} will restart after config change: ${change.path}
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 watches:
   service:
     check:

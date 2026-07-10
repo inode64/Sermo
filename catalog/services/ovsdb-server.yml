@@ -11,6 +11,9 @@ apps:
 restart_on_change:
   apps:
     - ovsdb-server
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 processes:
   main:
     exe: ${ovsdb_server_binary}
