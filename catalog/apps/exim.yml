@@ -3,6 +3,8 @@ display_name: "Exim"
 category: messaging
 variables:
   binary: ${bindir}/exim
+  tidydb: ${bindir}/exim_tidydb
 preflight:
   binary: { type: binary, path: "${binary}" }
+  tidydb: { type: binary, path: "${tidydb}" }
   version: { type: command, command: ["${binary}", "-bV"], timeout: 10s }

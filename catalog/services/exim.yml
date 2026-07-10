@@ -13,6 +13,12 @@ variables:
   port: 25
   tls_port: 465
   user: mail
+  spool_dir: /var/spool/exim
+  db_dir: /var/spool/exim/db
+  db_cleanup_record_limit: "100"
+  db_cleanup_age: 10d
+  db_cleanup_interval: 6h
+  db_cleanup_timeout: 5m
   msglog_dir: /var/spool/exim/msglog
   msglog_backlog_limit: "300"
   msglog_growth_limit: "200"
@@ -81,6 +87,46 @@ watches:
       action: alert
       message: >-
         ${display_name} msglog backlog grew by more than ${msglog_growth_limit} files in ${msglog_growth_window}
+  tidy-callout-db-if-large:
+    interval: ${db_cleanup_interval}
+    check:
+      type: sql
+      engine: sqlite
+      path: ${db_dir}/callout
+      query: "SELECT count(*) FROM tblblob"
+      op: '>'
+      value: ${db_cleanup_record_limit}
+      optional: true
+    then:
+      hook:
+        command:
+          - ${exim_tidydb}
+          - -t
+          - ${db_cleanup_age}
+          - ${spool_dir}
+          - callout
+        timeout: ${db_cleanup_timeout}
+        expect_exit: 0
+  tidy-retry-db-if-large:
+    interval: ${db_cleanup_interval}
+    check:
+      type: sql
+      engine: sqlite
+      path: ${db_dir}/retry
+      query: "SELECT count(*) FROM tblblob"
+      op: '>'
+      value: ${db_cleanup_record_limit}
+      optional: true
+    then:
+      hook:
+        command:
+          - ${exim_tidydb}
+          - -t
+          - ${db_cleanup_age}
+          - ${spool_dir}
+          - retry
+        timeout: ${db_cleanup_timeout}
+        expect_exit: 0
   restart-if-worker-thread-hot:
     check:
       type: metric
