@@ -40,7 +40,7 @@ Keep changes concrete:
 | Services | `GET /api/services` | configured runtime services loaded by sermod (not `sermoctl services` catalog inventory) |
 | Service expansion | `GET /api/services/{name}` | checks, process info, rules |
 | Service check metrics | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | latency chart when `metric` is omitted; named numeric metric series when present |
-| Service runtime metrics | `GET /api/services/{name}/runtime` | persisted service CPU/memory/IO history sampled by worker cycles |
+| Service runtime metrics | `GET /api/services/{name}/runtime` | read-only persisted service CPU/memory/IO history sampled exclusively by worker cycles |
 | Service SLA | `GET /api/services/{name}/sla` | per-minute availability history for the service detail SLA timeline and API clients |
 | Service events | `GET /api/services/{name}/events` | per-service event feed |
 | Host watches | `GET /api/watches` | host-level watches |
