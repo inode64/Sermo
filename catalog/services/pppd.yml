@@ -23,6 +23,11 @@ restart_on_change:
     - glibc
   apps:
     - pppd
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
+    library: >-
+      ${display_name} will restart after library change: ${change.library} (${change.path})
 watches:
   service:
     check:

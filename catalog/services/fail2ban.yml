@@ -15,6 +15,9 @@ restart_on_change:
   apps:
     - python3
     - fail2ban
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 preflight:
   config:
     type: command

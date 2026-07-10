@@ -15,6 +15,9 @@ restart_on_change:
   apps:
     - pm2
     - node
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 variables:
   user: root
 pidfile:

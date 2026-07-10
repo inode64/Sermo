@@ -25,6 +25,9 @@ restart_on_change:
     - glibc
     - systemd-libs
     - lzma
+  messages:
+    library: >-
+      ${display_name} will restart after library change: ${change.library} (${change.path})
 pidfile: /run/pcp/pmcd.pid
 socket:
   - /run/pcp/pmcd.socket

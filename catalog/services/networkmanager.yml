@@ -13,6 +13,9 @@ apps:
 restart_on_change:
   apps:
     - networkmanager
+  messages:
+    app: >-
+      ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
 processes:
   main:
     exe: ${networkmanager_binary}
