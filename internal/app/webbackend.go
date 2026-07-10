@@ -54,13 +54,7 @@ const (
 	// decide whether the dashboard should offer a per-service reload action.
 	serviceReloadCapabilityTimeout = 2 * time.Second
 	// slaTimelineCacheTTL caches SLA timeline strips for detail/expansion views.
-	slaTimelineCacheTTL = 45 * time.Second
-	// activitySummaryEventScanLimit bounds the recent event scan used for the
-	// dashboard rollup; event list endpoints keep their own request limits.
-	activitySummaryEventScanLimit = 500
-	webEventPageScanSize          = 500
-	webEventPageMaxScan           = 5000
-
+	slaTimelineCacheTTL    = 45 * time.Second
 	procUptimePath         = "/proc/uptime"
 	procUptimeValueIndex   = 0
 	procUptimeFloatBits    = 64
@@ -74,7 +68,6 @@ const (
 	remediationStatePending  = "pending"
 	remediationStateEligible = "eligible"
 	remediationStateBlocked  = "blocked"
-	webEventStatusError      = "error"
 )
 
 const (
@@ -2822,60 +2815,6 @@ func (b *WebBackend) emitLockReleaseEvent(service, name, kind, status, message s
 	})
 }
 
-func isServiceOperationAction(action string) bool {
-	switch rules.ActionType(action) {
-	case rules.ActionStart, rules.ActionStop, rules.ActionRestart, rules.ActionReload, rules.ActionResume:
-		return true
-	default:
-		return false
-	}
-}
-
-func serviceOperationActionList() []string {
-	return []string{
-		string(rules.ActionStart),
-		string(rules.ActionStop),
-		string(rules.ActionRestart),
-		string(rules.ActionReload),
-		string(rules.ActionResume),
-	}
-}
-
-// ActivitySummary returns a rollup of recent events for the dashboard.
-func (b *WebBackend) ActivitySummary(ctx context.Context) web.ActivitySummary {
-	summary := web.ActivitySummary{}
-
-	if b.events == nil {
-		return summary
-	}
-
-	events := b.events.Recent("", activitySummaryEventScanLimit)
-	summary.TotalEvents = len(events)
-
-	if len(events) > 0 {
-		latest := events[0]
-		summary.LastEventTime = latest.Time.Format(time.RFC3339)
-		summary.LastEventKind = latest.Kind
-		summary.LastEventService = latest.Service
-		summary.LastEventWatch = latest.Watch
-	}
-
-	for _, e := range events {
-		switch {
-		case e.Kind == eventKindAction && isServiceOperationAction(e.Action):
-			summary.ServiceActions++
-		case e.Kind == eventKindHook || e.Kind == eventKindHookFail:
-			summary.WatchHooks++
-		case e.Kind == eventKindNotify || e.Kind == eventKindNotifyFail:
-			summary.WatchNotifies++
-		case e.Kind == eventKindError:
-			summary.Errors++
-		}
-	}
-
-	return summary
-}
-
 // MonitoringStatus returns how many services are monitored versus paused.
 func (b *WebBackend) MonitoringStatus(_ context.Context) web.MonitoringStatus {
 	total := 0
@@ -3233,32 +3172,6 @@ func lockOwnerStatus(lk locks.Lock) string {
 	}
 }
 
-// Series returns a service's SLA availability series over the window.
-func (b *WebBackend) Series(_ context.Context, name string, since time.Duration) ([]web.SeriesPoint, bool) {
-	e := b.entries[name]
-	if e == nil {
-		return nil, false
-	}
-	if b.sla == nil {
-		return []web.SeriesPoint{}, true
-	}
-	now := time.Now()
-	pts, err := b.sla.SLASeries(name, now.Add(-since), now)
-	if err != nil {
-		return []web.SeriesPoint{}, true
-	}
-	out := make([]web.SeriesPoint, 0, len(pts))
-	for _, p := range pts {
-		sp := web.SeriesPoint{Start: p.Start.Format(time.RFC3339), Up: p.Up, Total: p.Total}
-		if p.Total > 0 {
-			ratio := float64(p.Up) / float64(p.Total)
-			sp.Ratio = &ratio
-		}
-		out = append(out, sp)
-	}
-	return out, true
-}
-
 // SetPanic enables or disables the daemon-wide panic mode, persisting the flag
 // so it survives daemon restarts. The running workers pick up the change within
 // the panic gate's refresh window.
@@ -3307,229 +3220,6 @@ func (b *WebBackend) Operations(_ context.Context) web.OperationSlots {
 	}
 	inUse, total := b.opGate.Usage()
 	return web.OperationSlots{InUse: inUse, Total: total, ActiveUsers: users}
-}
-
-// Metrics returns a check's measured metric series over the window.
-func (b *WebBackend) Metrics(_ context.Context, name, check, metric string, since time.Duration) (web.MetricSeries, bool) {
-	e := b.entries[name]
-	if e == nil || e.disabled {
-		return web.MetricSeries{}, false
-	}
-	typ, ok := e.checkTypes[check]
-	if !ok {
-		return web.MetricSeries{}, false
-	}
-	now := time.Now()
-
-	// metric == "" is the built-in latency series; otherwise a named metric the
-	// check type declares (e.g. hdparm read/cached).
-	if metric == "" {
-		if !measuredCheckTypes[typ] {
-			return web.MetricSeries{}, false
-		}
-		out := web.MetricSeries{Check: check, Since: since.String(), Unit: metrics.MetricUnitMilliseconds}
-		if b.measure == nil {
-			return out, true
-		}
-		if stat, err := b.measure.MeasurementSummary(name, check, since, now); err == nil {
-			out.Summary = web.MetricSummary{Count: stat.Count, Avg: stat.Avg, Min: stat.Min, Max: stat.Max}
-		}
-		points, err := b.measure.MeasurementSeries(name, check, now.Add(-since), now)
-		if err == nil {
-			out.Points = measurementPoints(points)
-		}
-		return out, true
-	}
-
-	unit := checks.GraphMetricUnit(typ, metric)
-	if unit == "" {
-		return web.MetricSeries{}, false // not a declared metric for this check type
-	}
-	out := web.MetricSeries{Check: check, Metric: metric, Since: since.String(), Unit: unit}
-	if b.measure == nil {
-		return out, true
-	}
-	if stat, err := b.measure.MetricSummary(name, check, metric, since, now); err == nil {
-		out.Summary = web.MetricSummary{Count: stat.Count, Avg: stat.Avg, Min: stat.Min, Max: stat.Max}
-	}
-	if points, err := b.measure.MetricSeries(name, check, metric, now.Add(-since), now); err == nil {
-		out.Points = measurementPoints(points)
-	}
-	return out, true
-}
-
-// measurementPoints converts store points to the web shape.
-func measurementPoints(points []state.MeasurementPoint) []web.MetricPoint {
-	out := make([]web.MetricPoint, 0, len(points))
-	for _, p := range points {
-		out = append(out, web.MetricPoint{Start: p.Start.Format(time.RFC3339), N: p.N, Avg: p.Avg, Min: p.Min, Max: p.Max})
-	}
-	return out
-}
-
-// Events returns the most recent events, newest first.
-func (b *WebBackend) Events(_ context.Context, limit int) []web.Event {
-	if b.events == nil {
-		return nil
-	}
-	return toWebEvents(b.events.Recent("", limit))
-}
-
-// EventPage returns one stable, filtered cursor page from the persisted event
-// feed. It scans bounded raw batches so selective filters can still fill a page.
-func (b *WebBackend) EventPage(_ context.Context, query web.EventQuery) web.EventPage {
-	if b.events == nil || query.Limit <= 0 {
-		return web.EventPage{}
-	}
-	out := make([]web.Event, 0, query.Limit)
-	cursor := query.BeforeID
-	now := time.Now
-	if b.now != nil {
-		now = b.now
-	}
-	cutoff := time.Time{}
-	if query.Since > 0 {
-		cutoff = now().Add(-query.Since)
-	}
-	scanned := 0
-	for {
-		batch := b.events.Page(cursor, webEventPageScanSize+1)
-		if len(batch) == 0 {
-			return web.EventPage{Events: out}
-		}
-		hasRawMore := len(batch) > webEventPageScanSize
-		if hasRawMore {
-			batch = batch[:webEventPageScanSize]
-		}
-		for i, logged := range batch {
-			scanned++
-			cursor = logged.ID
-			if !cutoff.IsZero() && logged.Time.Before(cutoff) {
-				continue
-			}
-			event := loggedEventToWeb(logged)
-			if !webEventMatchesQuery(event, query) {
-				continue
-			}
-			out = append(out, event)
-			if len(out) >= query.Limit {
-				hasMore := i < len(batch)-1 || hasRawMore
-				page := web.EventPage{Events: out, HasMore: hasMore}
-				if hasMore {
-					page.NextBeforeID = cursor
-				}
-				return page
-			}
-		}
-		if scanned >= webEventPageMaxScan && hasRawMore {
-			return web.EventPage{Events: out, NextBeforeID: cursor, HasMore: true}
-		}
-		if !hasRawMore {
-			return web.EventPage{Events: out}
-		}
-	}
-}
-
-func webEventMatchesQuery(event web.Event, query web.EventQuery) bool {
-	if query.Service != "" && event.Service != query.Service ||
-		query.Watch != "" && event.Watch != query.Watch ||
-		query.Kind != "" && event.Kind != query.Kind ||
-		query.Status != "" && event.Status != query.Status {
-		return false
-	}
-	if !query.OnlyErrors {
-		return true
-	}
-	if event.Kind == eventKindError || strings.Contains(event.Kind, string(operation.ResultFailed)) {
-		return true
-	}
-	switch event.Status {
-	case eventStatusFailed, webEventStatusError, string(operation.ResultBlocked),
-		string(operation.ResultOrphanProcesses), string(operation.ResultPreflightFailed),
-		string(operation.ResultPostflightFailed):
-		return true
-	default:
-		return false
-	}
-}
-
-// ServiceEvents returns one service's recent events.
-func (b *WebBackend) ServiceEvents(_ context.Context, name string, limit int) ([]web.Event, bool) {
-	if _, ok := b.entries[name]; !ok {
-		return nil, false
-	}
-	if b.events == nil {
-		return nil, true
-	}
-	return toWebEvents(b.events.Recent(name, limit)), true
-}
-
-// ApplicationEvents returns one application's recent monitoring events
-// (firing/recovered/notify on the App dimension); ok is false for unknown apps.
-func (b *WebBackend) ApplicationEvents(_ context.Context, name string, limit int) ([]web.Event, bool) {
-	if !b.knownApp(name) {
-		return nil, false
-	}
-	if b.events == nil {
-		return nil, true
-	}
-	return toWebEvents(b.events.RecentApp(name, limit)), true
-}
-
-func (b *WebBackend) knownApp(name string) bool {
-	if name == "" || b.cfg == nil {
-		return false
-	}
-	for _, n := range b.cfg.CatalogNamesInCategory(config.CategoryApp) {
-		if n == name {
-			return true
-		}
-	}
-	return false
-}
-
-// PruneEvents removes events older than 'before' (all if zero) from the live log.
-func (b *WebBackend) PruneEvents(_ context.Context, before time.Time) int {
-	if b.events == nil {
-		return 0
-	}
-	return b.events.Prune(before)
-}
-
-func toWebEvents(events []LoggedEvent) []web.Event {
-	out := make([]web.Event, 0, len(events))
-	for _, e := range events {
-		out = append(out, loggedEventToWeb(e))
-	}
-	return out
-}
-
-func loggedEventToWeb(e LoggedEvent) web.Event {
-	return web.Event{
-		ID:      e.ID,
-		Time:    e.Time.Format(time.RFC3339),
-		Service: e.Service,
-		Watch:   e.Watch,
-		App:     e.App,
-		Kind:    e.Kind,
-		Rule:    e.Rule,
-		Action:  e.Action,
-		Status:  e.Status,
-		Message: e.Message,
-		Output:  e.Output,
-	}
-}
-
-func (b *WebBackend) lastServiceEvent(name string) *web.Event {
-	if b.events == nil {
-		return nil
-	}
-	ev, ok := b.events.LastService(name)
-	if !ok {
-		return nil
-	}
-	webEv := loggedEventToWeb(ev)
-	return &webEv
 }
 
 // Operate runs a start/stop/restart/reload/resume action on a service.
