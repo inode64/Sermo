@@ -216,7 +216,7 @@ Compartida por los paneles Services, Containers y Virtual machines:
 | Área | Contenido |
 | --- | --- |
 | Datos generales | estado, categoría, unidad/backend, uptime, intervalo, política, locks, último evento, próxima remediación, estado de remediación y totales del proceso; mientras la insignia de la fila sea `starting`, la expansión puede mostrar todavía el backend de init en bruto (`inactive`) y muestras de check en curso del ciclo de solo observación |
-| Gráficos | línea temporal de SLA a ancho completo seguida de gráficos de latencia, CPU, memoria e IO; los servicios `no_resident_process` muestran solo SLA porque no tienen runtime de procesos para graficar |
+| Gráficos | línea temporal de SLA a ancho completo seguida de gráficos de latencia, CPU, memoria e IO; cada servicio persiste su propia ventana temporal y check de latencia; los servicios `no_resident_process` muestran solo SLA porque no tienen runtime de procesos para graficar |
 | Procesos | tabla del árbol de procesos detectado a ancho completo, con los procesos hijos marcados en CMD y mantenidos bajo su padre; se omite cuando `no_resident_process` es true |
 | Checks | checks configurados y resultado actual |
 | Locks con nombre | estado de los locks de runtime |
@@ -228,7 +228,9 @@ Las expansiones abiertas de servicio obtienen y renderizan por completo detalle
 fresco una vez por refresco del dashboard; las subpeticiones de SLA, métricas,
 runtime y eventos, además de los detalles abiertos de watches/aplicaciones,
 deben terminar antes de adelantar `fully updated`. Los re-renders intermedios
-(filtros, ordenación y operaciones en vivo) usan el detalle cacheado.
+(filtros, ordenación y operaciones en vivo) usan el detalle cacheado. Una
+respuesta tardía de una selección de gráfica anterior se ignora en lugar de
+sobrescribir las gráficas actuales del servicio.
 
 Estados vacíos:
 
