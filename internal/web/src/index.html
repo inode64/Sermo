@@ -42,6 +42,7 @@
   <a class="section-jump" href="#network-section" data-panel-target="network-section" data-count-source="network-count">Network <span class="nav-count" data-nav-count></span></a>
   <a class="section-jump" href="#mounts-section" data-panel-target="mounts-section" data-count-source="mounts-count">Mount units <span class="nav-count" data-nav-count></span></a>
   <a class="section-jump" href="#apps-section" data-panel-target="apps-section" data-count-source="apps-count">Apps <span class="nav-count" data-nav-count></span></a>
+  <a class="section-jump" href="#libraries-section" data-panel-target="libraries-section" data-count-source="libraries-count">Libraries <span class="nav-count" data-nav-count></span></a>
   <a class="section-jump" href="#cert-section" data-panel-target="cert-section" data-count-source="cert-count">Certs <span class="nav-count" data-nav-count></span></a>
   <a class="section-jump" href="#diskio-section" data-panel-target="diskio-section" data-count-source="diskio-count">Disk I/O <span class="nav-count" data-nav-count></span></a>
   <a class="section-jump" href="#watches-section" data-panel-target="watches-section" data-count-source="watches-count">Watches <span class="nav-count" data-nav-count></span></a>
@@ -221,6 +222,40 @@
     <tbody id="app-rows"></tbody>
   </table>
   <p class="muted panel-footnote">Applications installed on the host (their binary is present). Click a row for the full version, file location, permissions, user and group.</p>
+</details>
+
+<h2 class="visually-hidden">Installed libraries</h2>
+<details id="libraries-section" open class="panel panel-hidden">
+  <summary>
+    <span class="summary-title">Installed libraries <span id="libraries-count" class="muted"></span></span>
+  </summary>
+  <div id="library-controls" class="panel-controls">
+    <button id="library-group-toggle" class="icon-btn" title="Group libraries by category" aria-label="Group libraries by category" aria-pressed="false">&#x25A6;</button>
+    <button id="library-groups-toggle" class="icon-btn" title="Collapse library groups" aria-label="Collapse library groups">&#x25BE;</button>
+    <label for="library-search" class="visually-hidden">Filter libraries</label>
+    <input id="library-search" type="search" placeholder="filter libraries…  ( / )" aria-describedby="search-shortcut-hint">
+    <select id="library-category" title="Filter by category" aria-label="Filter libraries by category">
+      <option value="all">all categories</option>
+    </select>
+    <span id="library-filters" role="group" aria-label="Filter libraries by state">
+      <button data-lf="all" class="f-active" aria-pressed="true">all</button>
+      <button data-lf="ok" aria-pressed="false">ok</button>
+      <button data-lf="warning" aria-pressed="false">warning</button>
+      <button data-lf="failed" aria-pressed="false">failed</button>
+    </span>
+    <span id="library-count" class="muted"></span>
+  </div>
+  <table class="apps-table libraries-table">
+    <caption class="visually-hidden">Installed libraries</caption>
+    <thead><tr>
+      <th scope="col" class="sortable" data-library-sort="name">Library<span class="sort-ind" data-li="name"></span></th>
+      <th scope="col" class="sortable" data-library-sort="category">Category<span class="sort-ind" data-li="category"></span></th>
+      <th scope="col" class="sortable" data-library-sort="state">Status<span class="sort-ind" data-li="state"></span></th>
+      <th scope="col" class="sortable" data-library-sort="version">Version<span class="sort-ind" data-li="version"></span></th>
+    </tr></thead>
+    <tbody id="library-rows"></tbody>
+  </table>
+  <p class="muted panel-footnote">Libraries installed on the host. Click a row for the full version, file location, permissions, user and group.</p>
 </details>
 
 <!--__SERMO_WATCH_PANEL:cert__-->

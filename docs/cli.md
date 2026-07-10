@@ -193,8 +193,9 @@ matching names in the global config tree).
 | Availability history for configured services | `sermoctl sla [SERVICE]` |
 
 The web UI uses the same split: **Services** shows configured runtime services;
-**Applications** (`GET /api/applications`) is the installed-app inventory and
-aligns with `sermoctl apps`, not `sermoctl services`.
+**Applications** (`GET /api/applications`) and **Libraries**
+(`GET /api/libraries`) are installed catalog inventories, aligned with
+`sermoctl apps` and `sermoctl libs`, not `sermoctl services`.
 
 ## Exit codes
 

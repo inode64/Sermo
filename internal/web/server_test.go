@@ -15,6 +15,7 @@ import (
 type fakeBackend struct {
 	services        []Service
 	applications    []Application
+	libraries       []Library
 	mounts          []Mount
 	mountAction     MountActionResult
 	mountBlockers   MountBlockersResult
@@ -44,7 +45,8 @@ func (f *fakeBackend) Notifiers(context.Context) []Notifier { return nil }
 func (f *fakeBackend) Applications(context.Context) []Application {
 	return f.applications
 }
-func (f *fakeBackend) Mounts(context.Context) []Mount { return f.mounts }
+func (f *fakeBackend) Libraries(context.Context) []Library { return f.libraries }
+func (f *fakeBackend) Mounts(context.Context) []Mount      { return f.mounts }
 func (f *fakeBackend) MountAction(_ context.Context, name, action string, opts MountActionOptions) MountActionResult {
 	suffix := ""
 	if opts.KillBlockers {
@@ -422,6 +424,27 @@ func TestListApplications(t *testing.T) {
 		got[0].User != "root" || got[0].Group != "root" || got[0].Category != "web" ||
 		got[0].VersionSource != "nginx-bin" {
 		t.Fatalf("unexpected applications: %+v", got)
+	}
+}
+
+func TestListLibraries(t *testing.T) {
+	b := &fakeBackend{libraries: []Library{{
+		Name: "openssl", DisplayName: "OpenSSL", Category: "crypto", Binary: "/usr/lib64/libssl.so",
+		Permissions: "-rwxr-xr-x (0755)", User: "root", Group: "root",
+		Version: "OpenSSL 3.5.1", VersionShort: "3.5.1", Status: apiStatusOK,
+	}}}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, apiPathLibraries, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	var got []Library
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "openssl" || got[0].VersionShort != "3.5.1" ||
+		got[0].Binary != "/usr/lib64/libssl.so" || got[0].Category != "crypto" {
+		t.Fatalf("unexpected libraries: %+v", got)
 	}
 }
 

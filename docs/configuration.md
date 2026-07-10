@@ -527,20 +527,22 @@ for QEMU/libvirt VMs or `control.type: docker` for Docker containers. Those
 targets still use the same locks, guards, preflight checks and operation
 timeouts; see [services](services.md#control-docker--docker-containers).
 
-Below the services table the dashboard lists the **installed applications** (the
-catalog app daemons whose binary is present), showing each application's name and
-short version; an app `health` command, when configured, decides OK/error from
-its exit code before the version command is considered. If no `health` command
+Below the services table the dashboard lists **installed applications** (catalog
+app daemons whose binary is present) and **installed libraries** (catalog library
+files whose `preflight.file` is present). Both inventories show name and short
+version when available; an app `health` command, when configured, decides OK/error
+from its exit code before the version command is considered. If no `health` command
 is configured, the `version` command is the fallback probe while fetching the
-displayed version. The list is sortable by name, category or version, and
-expanding a row reveals the full version string, the binary's file location and
-its permissions. When a version is inherited through `version_from`, the API row
-includes `version_source` with the provider app name. Services and applications
-can be filtered and grouped by their top-level `category` metadata field.
-The same data is available from `sermoctl apps` and `GET /api/applications`.
-The dashboard caches the list for up to 5 minutes, so auto-refreshes do not
-rerun every app version probe. Each row shows when those version/status probes
-actually ran; serving a cached response does not advance that sample time.
+displayed version. The lists are sortable by name, category or version, and
+expanding a row reveals the full version string, file location and permissions.
+When a version is inherited through `version_from`, the API row includes
+`version_source` with the provider app name. Services, applications and libraries
+can be filtered and grouped by their top-level `category` metadata field. The same
+data is available from `sermoctl apps`, `sermoctl libs`, `GET /api/applications`
+and `GET /api/libraries`. The dashboard caches each inventory for up to 5 minutes,
+so auto-refreshes do not rerun every version probe. Each row shows when those
+version/status probes actually ran; serving a cached response does not advance that
+sample time.
 For an editable panel-by-panel map, see
 [webui-representation.md](webui-representation.md).
 
@@ -680,6 +682,7 @@ Read-only endpoints:
   live readings when available and recent activity.
 - `GET /api/notifiers` — configured notifier targets.
 - `GET /api/applications` — installed catalog applications.
+- `GET /api/libraries` — installed catalog libraries.
 - `GET /api/daemon` — daemon/backend/runtime settings and host uptime.
 - `GET /api/daemon/metrics?since=24h` — persistent sermod CPU, memory and IO
   history for the current daemon process, plus current PID, file descriptors and

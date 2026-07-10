@@ -2,7 +2,7 @@ import { html as tpl, render as litRender, nothing } from "./vendor/lit-html.js"
 import watchPanelDescriptors from "./watch-panels.json";
 import {
   apiActionSuffix, apiActivityPath, apiApplicationsPath, apiDaemonPath,
-  apiEventsRecentPath, apiHostPath, apiLocksPath,
+  apiEventsRecentPath, apiHostPath, apiLibrariesPath, apiLocksPath,
   apiMonitoringPath, apiMountsPath, apiNotifiersPath, apiOpsPath, apiQueryBeforeID,
   apiQueryKill, apiQueryKind, apiQueryLimit, apiQueryName, apiQueryNoCascade,
   apiQueryOnlyErrors, apiQueryPage, apiQueryService, apiQuerySince, apiQueryStatus,
@@ -35,11 +35,13 @@ const hostMetricLoad1 = "load1";
 const eventLogLimit = "500";
 const httpStatusServiceUnavailable = 503;
 const expansionPrefixApp = "app:";
+const expansionPrefixLibrary = "lib:";
 const expansionPrefixService = "svc:";
 const expansionPrefixWatch = "wat:";
 const globalTargetService = "service";
 const globalTargetWatch = "watch";
 const globalTargetApplication = "application";
+const globalTargetLibrary = "library";
 const globalTargetMount = "mount";
 const eventDetailLimit = "50";
 const eventContextLimit = "1";
@@ -255,13 +257,15 @@ const runtimeMetricDefs = [
 function expansionKey(prefix, name) { return `${prefix}${name}`; }
 function expansionName(key, prefix) { return key.slice(prefix.length); }
 function appExpansionKey(name) { return expansionKey(expansionPrefixApp, name); }
+function libraryExpansionKey(name) { return expansionKey(expansionPrefixLibrary, name); }
 function serviceExpansionKey(name) { return expansionKey(expansionPrefixService, name); }
 function watchExpansionKey(name) { return expansionKey(expansionPrefixWatch, name); }
 function isAppExpansionKey(key) { return key.startsWith(expansionPrefixApp); }
+function isLibraryExpansionKey(key) { return key.startsWith(expansionPrefixLibrary); }
 function isServiceExpansionKey(key) { return key.startsWith(expansionPrefixService); }
 function isWatchExpansionKey(key) { return key.startsWith(expansionPrefixWatch); }
 function isShareableExpansionKey(key) {
-  return isServiceExpansionKey(key) || isWatchExpansionKey(key) || isAppExpansionKey(key);
+  return isServiceExpansionKey(key) || isWatchExpansionKey(key) || isAppExpansionKey(key) || isLibraryExpansionKey(key);
 }
 function isServicePreflightAction(action) { return servicePreflightActions.includes(action); }
 function isDangerServiceAction(action) { return action === actionStop || action === actionRestart; }
@@ -465,9 +469,10 @@ async function performLoad() {
     setFavicon(healthStatusWarning);
   }
 
-  const [watchesResult, appsResult, eventsOK, expandedServicesOK] = await Promise.all([
+  const [watchesResult, appsResult, librariesResult, eventsOK, expandedServicesOK] = await Promise.all([
     getJSONResult(apiWatchesPath, null),
     getJSONResult(apiApplicationsPath, null),
+    getJSONResult(apiLibrariesPath, null),
     connOK ? loadEvents(seq) : Promise.resolve(false),
     expandedServicesPromise,
   ]);
@@ -480,6 +485,7 @@ async function performLoad() {
     renderApps(appsResult.data);
     if (connOK) renderAttention();
   }
+  if (librariesResult.ok) renderLibraries(librariesResult.data);
   if (!connOK) return;
 
   const [expandedWatchesOK, expandedApplicationsOK] = await Promise.all([
@@ -493,7 +499,7 @@ async function performLoad() {
     ["daemon metrics", daemonMetricsResult], ["locks", locksResult], ["activity", activityResult],
     ["readiness", readyResult], ["liveness", liveResult], ["monitoring", monResult],
     ["operations", opsResult], ["host metrics", hostMetricsResult], ["watches", watchesResult],
-    ["applications", appsResult], ["events", { ok: eventsOK }],
+    ["applications", appsResult], ["libraries", librariesResult], ["events", { ok: eventsOK }],
     ["service details", { ok: expandedServicesOK }],
     ["watch details", { ok: expandedWatchesOK }],
     ["application details", { ok: expandedApplicationsOK }],
@@ -1052,6 +1058,13 @@ let appStatus = filterAll;
 let appGrouped = false;
 let appCollapsedGroups = new Set();
 let appSort = { key: "", dir: 1 };
+let allLibraries = [];
+let libraryQuery = "";
+let libraryCategory = filterAll;
+let libraryStatus = filterAll;
+let libraryGrouped = false;
+let libraryCollapsedGroups = new Set();
+let librarySort = { key: "", dir: 1 };
 const defaultMetricWindow = "24h";
 const serviceMetricStates = new Map();
 let daemonMetricWindow = "24h";
@@ -1136,6 +1149,11 @@ function restoreUIState() {
     if (s.appSort && typeof s.appSort.key === "string") {
       appSort = { key: s.appSort.key, dir: s.appSort.dir === -1 ? -1 : 1 };
     }
+    if (typeof s.libraryQuery === "string") libraryQuery = s.libraryQuery;
+    if (typeof s.libraryStatus === "string") libraryStatus = s.libraryStatus;
+    if (s.librarySort && typeof s.librarySort.key === "string") {
+      librarySort = { key: s.librarySort.key, dir: s.librarySort.dir === -1 ? -1 : 1 };
+    }
     if (s.watchPanels && typeof s.watchPanels === "object") {
       for (const [key, saved] of Object.entries(s.watchPanels)) {
         const panel = watchPanels[key];
@@ -1162,8 +1180,10 @@ function restoreUIState() {
     }
     if (typeof s.daemonMetricWindow === "string") daemonMetricWindow = s.daemonMetricWindow;
     if (typeof s.appGrouped === "boolean") appGrouped = s.appGrouped;
+    if (typeof s.libraryGrouped === "boolean") libraryGrouped = s.libraryGrouped;
     if (Array.isArray(s.svcCollapsedGroups)) svcCollapsedGroups = new Set(s.svcCollapsedGroups);
     if (Array.isArray(s.appCollapsedGroups)) appCollapsedGroups = new Set(s.appCollapsedGroups);
+    if (Array.isArray(s.libraryCollapsedGroups)) libraryCollapsedGroups = new Set(s.libraryCollapsedGroups);
     if (s.eventFilters && typeof s.eventFilters === "object") {
       const ef = s.eventFilters;
       const setVal = (id, v) => {
@@ -1193,10 +1213,12 @@ function saveUIState() {
       svcQuery, svcStatus, svcCategory, svcGrouped, svcSort,
       mountQuery, mountStatus, mountCategory, mountSort,
       appQuery, appStatus, appSort, appGrouped,
+      libraryQuery, libraryStatus, librarySort, libraryGrouped,
       serviceMetricStates: Object.fromEntries(serviceMetricStates), daemonMetricWindow,
       expanded: [...expanded],
       svcCollapsedGroups: [...svcCollapsedGroups],
       appCollapsedGroups: [...appCollapsedGroups],
+      libraryCollapsedGroups: [...libraryCollapsedGroups],
       eventFilters: {
         service: ($("#event-service") || {}).value || "",
         watch: ($("#event-watch") || {}).value || "",
@@ -1231,6 +1253,9 @@ function applyUIStateToControls() {
   const appSearch = $("#app-search");
   if (appSearch) appSearch.value = appQuery;
   syncFilterButtons("#app-filters", "af", appStatus);
+  const librarySearch = $("#library-search");
+  if (librarySearch) librarySearch.value = libraryQuery;
+  syncFilterButtons("#library-filters", "lf", libraryStatus);
   for (const key of Object.keys(watchPanels)) {
     const panel = watchPanels[key];
     const search = $(panel.search);
@@ -1466,6 +1491,10 @@ function globalTargetRecords() {
     kind: globalTargetApplication, name: item.name, label: displayName(item), item,
     rowID: `app-row-${item.name}`,
   }));
+  (allLibraries || []).forEach((item) => records.push({
+    kind: globalTargetLibrary, name: item.name, label: displayName(item), item,
+    rowID: `library-row-${item.name}`,
+  }));
   (allMounts || []).forEach((item) => records.push({
     kind: globalTargetMount, name: item.name, label: displayName(item), item,
     rowID: `mount-row-${detailDomKey(item.name || item.path || "mount")}`,
@@ -1526,6 +1555,13 @@ function clearGlobalTargetFilters(target) {
       appCollapsedGroups.delete(categoryOf(target.item, "app"));
       renderApps();
       break;
+    case globalTargetLibrary:
+      libraryQuery = "";
+      libraryStatus = filterAll;
+      libraryCategory = filterAll;
+      libraryCollapsedGroups.delete(categoryOf(target.item, "library"));
+      renderLibraries();
+      break;
     case globalTargetMount:
       mountQuery = "";
       mountStatus = filterAll;
@@ -1562,6 +1598,10 @@ function openGlobalTarget(target) {
       break;
     case globalTargetApplication:
       history.replaceState(null, "", "#" + appExpansionKey(target.name));
+      applyHash();
+      break;
+    case globalTargetLibrary:
+      history.replaceState(null, "", "#" + libraryExpansionKey(target.name));
       applyHash();
       break;
     case globalTargetMount: {
@@ -2319,6 +2359,7 @@ function toggleExpand(key) {
   renderServices();
   renderWatches();
   renderApps();
+  renderLibraries();
   saveUIState();
 }
 
@@ -2458,6 +2499,19 @@ function applyHash() {
     if (!expanded.has(h)) { expanded.add(h); renderApps(); }
     if (!hashScrolled) {
       const el = document.getElementById("app-row-" + name);
+      if (el) el.scrollIntoView({ block: "center" });
+      hashScrolled = true;
+    }
+    return;
+  }
+  if (isLibraryExpansionKey(h)) {
+    const name = expansionName(h, expansionPrefixLibrary);
+    if (!(allLibraries || []).some((library) => library.name === name)) return;
+    const sec = $("#libraries-section");
+    if (sec) { setPanelVisible(sec, true); sec.open = true; }
+    if (!expanded.has(h)) { expanded.add(h); renderLibraries(); }
+    if (!hashScrolled) {
+      const el = document.getElementById("library-row-" + name);
       if (el) el.scrollIntoView({ block: "center" });
       hashScrolled = true;
     }
@@ -4080,6 +4134,13 @@ function toggleCategoryGroup(panel, category) {
     else appCollapsedGroups.add(category);
     renderApps();
     saveUIState();
+    return;
+  }
+  if (panel === "library") {
+    if (libraryCollapsedGroups.has(category)) libraryCollapsedGroups.delete(category);
+    else libraryCollapsedGroups.add(category);
+    renderLibraries();
+    saveUIState();
   }
 }
 
@@ -4216,6 +4277,145 @@ async function refreshExpandedApplications() {
     .map((app) => app.name);
   const results = await Promise.all(names.map(loadAppEvents));
   return results.every(Boolean);
+}
+
+// ---- Installed libraries --------------------------------------------------
+const librarySortKeys = {
+  name: (library) => displayName(library).toLowerCase(),
+  category: (library) => categoryOf(library, "library").toLowerCase(),
+  state: appStateRank,
+  version: (library) => (library.version_short || library.version || "").toLowerCase(),
+};
+const libraryStatusFilterStates = [targetStateOK, targetStateWarning, targetStateFailed];
+
+function setLibrarySort(key) { toggleSort(librarySort, key, renderLibraries); }
+function setLibraryQuery(q) { libraryQuery = q || ""; renderLibraries(); saveUIState(); }
+function setLibraryCategory(v) { libraryCategory = v || filterAll; renderLibraries(); saveUIState(); }
+function setLibraryStatus(v) {
+  libraryStatus = v || filterAll;
+  syncFilterButtons("#library-filters", "lf", libraryStatus);
+  renderLibraries();
+  saveUIState();
+}
+function renderLibraryFilterCounts() {
+  renderFilterButtonCounts("#library-filters", stateCounts(allLibraries, appStateText, libraryStatusFilterStates));
+}
+function updateLibrarySortIndicators() {
+  updateSortIndicatorsFor("li", librarySort, ".libraries-table th.sortable[data-library-sort]", "librarySort");
+}
+function libraryMatches(library) {
+  const category = categoryOf(library, "library");
+  if (libraryCategory !== filterAll && category !== libraryCategory) return false;
+  if (libraryStatusFilterStates.includes(libraryStatus) && appStateText(library) !== libraryStatus) return false;
+  if (!libraryQuery) return true;
+  const q = libraryQuery.toLowerCase();
+  return displayName(library).toLowerCase().includes(q)
+    || (library.name || "").toLowerCase().includes(q)
+    || (library.display_name || "").toLowerCase().includes(q)
+    || category.toLowerCase().includes(q)
+    || appStateText(library).includes(q)
+    || (library.status || "").toLowerCase().includes(q)
+    || (library.version || "").toLowerCase().includes(q)
+    || (library.user || "").toLowerCase().includes(q)
+    || (library.group || "").toLowerCase().includes(q);
+}
+function setLibraryGrouped(v) {
+  libraryGrouped = !!v;
+  renderLibraries();
+  saveUIState();
+}
+function toggleAllLibraryGroups() {
+  const categories = sortedCategories((allLibraries || []).filter(libraryMatches), "library");
+  const allCollapsed = categories.length > 0 && categories.every((category) => libraryCollapsedGroups.has(category));
+  if (allCollapsed) categories.forEach((category) => libraryCollapsedGroups.delete(category));
+  else categories.forEach((category) => libraryCollapsedGroups.add(category));
+  renderLibraries();
+  saveUIState();
+}
+
+function renderLibraries(libraries) {
+  if (libraries) allLibraries = libraries;
+  scheduleGlobalTargetSync();
+  const section = $("#libraries-section");
+  const tbody = $("#library-rows");
+  const cnt = $("#libraries-count");
+  const filterCount = $("#library-count");
+  if (!section || !tbody) return;
+  const total = (allLibraries || []).length;
+  if (total === 0) {
+    setPanelVisible(section, false);
+    if (cnt) cnt.textContent = "";
+    if (filterCount) filterCount.textContent = "";
+    updateSectionNav();
+    return;
+  }
+  setPanelVisible(section, true);
+  if (cnt) cnt.textContent = `(${total})`;
+  libraryCategory = syncCategorySelect("#library-category", allLibraries || [], "library", libraryCategory);
+  renderLibraryFilterCounts();
+  const list = (allLibraries || []).filter(libraryMatches);
+  if (librarySort.key && librarySortKeys[librarySort.key]) sortedBy(list, librarySort, librarySortKeys, "name");
+  updateLibrarySortIndicators();
+  const visibleCategories = sortedCategories(list, "library");
+  libraryCollapsedGroups.forEach((category) => {
+    if (!visibleCategories.includes(category)) libraryCollapsedGroups.delete(category);
+  });
+  updateGroupButtons("library", libraryGrouped, visibleCategories, libraryCollapsedGroups, "libraries");
+  if (filterCount) {
+    filterCount.textContent = (libraryQuery || libraryCategory !== filterAll || libraryStatus !== filterAll)
+      ? `showing ${list.length} of ${total}` : "";
+  }
+  const libraryRow = (library) => {
+    const category = categoryOf(library, "library");
+    const state = appStateText(library);
+    const rowClass = state === targetStateFailed ? "row-failing" : (state === targetStateWarning ? "row-warning" : "");
+    const label = displayName(library);
+    const key = libraryExpansionKey(library.name);
+    const open = expanded.has(key);
+    const chev = tpl`<span class="exp" aria-hidden="true">${open ? "▾" : "▸"}</span>`;
+    const version = library.version_short || library.version || "—";
+    const row = tpl`<tr id="library-row-${library.name}" class="clickable ${rowClass}" data-exp-key="${key}">
+      <td>${chev}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(label, open, "library details")}">${label}</button></td>
+      <td>${categoryBadge(category)}</td>
+      ${appStatusCell(library)}
+      <td>${version}</td>
+    </tr>`;
+    const expRow = open
+      ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="4">${renderLibraryExpansion(library)}</td></tr>`
+      : null;
+    return expRow ? [row, expRow] : [row];
+  };
+  const content = list.length
+    ? (libraryGrouped
+      ? renderGroupedRows(list, libraryCollapsedGroups, "library", "library", 4, libraryRow, librarySort.key === "category" ? librarySort.dir : 1)
+      : list.flatMap(libraryRow))
+    : tpl`<tr><td colspan="4" class="muted">No libraries match the filter.</td></tr>`;
+  litRender(content, tbody);
+  applyHash();
+  updateSectionNav();
+}
+
+function renderLibraryExpansion(library) {
+  const bin = library.binary ? tpl`<code>${library.binary}</code>` : tpl`<span class="muted">unknown</span>`;
+  const perm = library.permissions ? tpl`<code>${library.permissions}</code>` : tpl`<span class="muted">—</span>`;
+  const usr = library.user || tpl`<span class="muted">—</span>`;
+  const grp = library.group || tpl`<span class="muted">—</span>`;
+  const source = library.version_source
+    ? tpl`<code>${library.version_source}</code>`
+    : (library.version ? tpl`<span class="muted">local</span>` : tpl`<span class="muted">—</span>`);
+  const state = appStateText(library);
+  const statusClass = state === targetStateFailed ? "lvl-error" : (state === targetStateWarning ? "lvl-warning" : "");
+  const status = library.status ? tpl`<span class="${statusClass}">${library.status}</span>` : "—";
+  return tpl`<div class="watch-grid">
+    <div><span class="muted">Version</span><br>${library.version || "—"}</div>
+    <div><span class="muted">Version source</span><br>${source}</div>
+    <div><span class="muted">Category</span><br>${categoryOf(library, "library")}</div>
+    <div><span class="muted">Location</span><br>${bin}</div>
+    <div><span class="muted">Permissions</span><br>${perm}</div>
+    <div><span class="muted">User</span><br>${usr}</div>
+    <div><span class="muted">Group</span><br>${grp}</div>
+    <div><span class="muted">Status</span><br>${status}</div>
+  </div>`;
 }
 
 // renderWatchExpansion shows a host watch's config summary and its recent
@@ -6160,6 +6360,45 @@ function initStaticHandlers() {
     bindSortHeader(th, () => setAppSort(th.dataset.appSort || ""));
   });
 
+  const librarySearch = $("#library-search");
+  if (librarySearch) {
+    librarySearch.addEventListener(domEventInput, () => setLibraryQuery(librarySearch.value));
+    librarySearch.addEventListener(domEventKeydown, (e) => {
+      if (e.key === keyEscape) {
+        librarySearch.value = "";
+        setLibraryQuery("");
+      }
+    });
+  }
+  const libraryCategorySelect = $("#library-category");
+  if (libraryCategorySelect) libraryCategorySelect.addEventListener(domEventChange, () => setLibraryCategory(libraryCategorySelect.value));
+  const libraryFilters = $("#library-filters");
+  if (libraryFilters) {
+    libraryFilters.addEventListener(domEventClick, (e) => {
+      const btn = closestFrom(e, "button[data-lf]");
+      if (btn) setLibraryStatus(btn.dataset.lf || filterAll);
+    });
+  }
+  const libraryGroupToggle = $("#library-group-toggle");
+  if (libraryGroupToggle) {
+    libraryGroupToggle.addEventListener(domEventClick, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setLibraryGrouped(!libraryGrouped);
+    });
+  }
+  const libraryGroupsToggle = $("#library-groups-toggle");
+  if (libraryGroupsToggle) {
+    libraryGroupsToggle.addEventListener(domEventClick, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleAllLibraryGroups();
+    });
+  }
+  document.querySelectorAll(".libraries-table th.sortable[data-library-sort]").forEach((th) => {
+    bindSortHeader(th, () => setLibrarySort(th.dataset.librarySort || ""));
+  });
+
   ["event-service", "event-watch", "event-kind", "event-status", "event-range"].forEach((id) => {
     const el = $("#" + id);
     if (!el) return;
@@ -6411,6 +6650,7 @@ function activeSearchBox() {
     ["#vms-section", "#vm-search"],
     ...Object.values(watchPanels).map((p) => [p.section, p.search]),
     ["#apps-section", "#app-search"],
+    ["#libraries-section", "#library-search"],
   ];
   for (const [sectionSel, searchSel] of panels) {
     const section = $(sectionSel);

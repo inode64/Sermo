@@ -79,6 +79,14 @@ func (h *WebBackendHolder) Applications(ctx context.Context) []web.Application {
 	return nil
 }
 
+// Libraries returns the installed catalog libraries from the active backend.
+func (h *WebBackendHolder) Libraries(ctx context.Context) []web.Library {
+	if b := h.backend(); b != nil {
+		return b.Libraries(ctx)
+	}
+	return nil
+}
+
 // Mounts returns configured mount units from the active backend.
 func (h *WebBackendHolder) Mounts(ctx context.Context) []web.Mount {
 	if b := h.backend(); b != nil {

@@ -51,6 +51,7 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 | Service events | `GET /api/services/{name}/events` | per-service event feed |
 | Host watches | `GET /api/watches` | host-level watches |
 | Applications | `GET /api/applications` | installed catalog apps; `observed_at` remains fixed while the version/status inventory is served from cache |
+| Libraries | `GET /api/libraries` | installed catalog libraries; `observed_at` remains fixed while the file/version inventory is served from cache |
 | Mount units | `GET /api/mounts` | storage watches with `mount:` backed by fstab |
 | Notifiers | `GET /api/notifiers` | notifier targets |
 | Daemon settings | `GET /api/daemon` | engine/runtime config |
@@ -276,6 +277,29 @@ Row expansion:
 Empty state:
 
 - `No applications match the filter.`
+
+## Installed libraries panel
+
+Section id: `libraries-section`
+
+| Part | Current representation |
+| --- | --- |
+| Title | `Installed libraries` plus total count |
+| Title icons | group by category, collapse/expand all groups |
+| Controls | search, category select, status filters, showing count |
+| Status filters | all, ok, warning, failed |
+| Sorting | Library, Category, Status, Version |
+| Visibility | hidden when no installed library files are returned |
+| Grouping | category group rows, collapsible |
+
+Columns: Library (display name), Category, Status (inspection state and probe age),
+and Version (short version when available). Expanding a row shows version source,
+file location, permissions, user, group and full status. Library rows do not show
+application SLA or application events.
+
+Empty state:
+
+- `No libraries match the filter.`
 
 ## Mount units panel
 
@@ -522,7 +546,7 @@ Copy this section when proposing a Web UI change.
 
 ### Panel
 
-Services / Host watches / Installed applications / Events / Notifiers /
+Services / Host watches / Installed applications / Installed libraries / Events / Notifiers /
 Daemon settings / Recent activity / Runtime locks / Service detail /
 Action dialog / Overview
 
