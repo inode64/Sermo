@@ -218,10 +218,10 @@ Compartida por los paneles Services, Containers y Virtual machines:
 | Eventos | eventos de servicio retenidos recientes |
 
 Las expansiones abiertas de servicio obtienen y renderizan por completo detalle
-fresco una vez por refresco del dashboard; los re-renders intermedios (teclas de
-filtro, ordenación, el ticker de operaciones en vivo) redibujan desde ese detalle
-cacheado sin peticiones extra. Todos los watches expandidos comparten una única
-descarga de eventos recientes por refresco.
+fresco una vez por refresco del dashboard; las subpeticiones de SLA, métricas,
+runtime y eventos, además de los detalles abiertos de watches/aplicaciones,
+deben terminar antes de adelantar `fully updated`. Los re-renders intermedios
+(filtros, ordenación y operaciones en vivo) usan el detalle cacheado.
 
 Estados vacíos:
 
