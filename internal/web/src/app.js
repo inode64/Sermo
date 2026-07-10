@@ -398,7 +398,27 @@ function clearStatusAfterRefresh() {
 // first visit after daemon start from waiting on /api/watches before showing the
 // operator the main service/status view. Each endpoint still degrades
 // independently to "keep the last render" on a transient error.
-async function load() {
+let loadRequested = 0;
+let loadCompleted = 0;
+let loadWorker = null;
+
+function load() {
+  loadRequested++;
+  if (!loadWorker) {
+    loadWorker = runLoadQueue().finally(() => { loadWorker = null; });
+  }
+  return loadWorker;
+}
+
+async function runLoadQueue() {
+  while (loadCompleted < loadRequested) {
+    const target = loadRequested;
+    await performLoad();
+    loadCompleted = target;
+  }
+}
+
+async function performLoad() {
   const seq = ++loadSeq;
   healthIconReady = false;
   let expandedServicesPromise = Promise.resolve(true);
@@ -6211,7 +6231,7 @@ loadMe().then(() => { load(); });
 // independent of the auto-refresh interval, so it keeps counting up even when
 // auto-refresh is set to a long interval or stopped.
 let lastRefresh = 0;
-function refreshNow() { load(); }
+function refreshNow() { load().finally(scheduleRefresh); }
 function showPartialRefresh(failures) {
   const age = lastRefresh ? ` (last full update ${fmtSince(Date.now() - lastRefresh)} ago)` : "";
   setStatus(`Partial refresh — stale: ${failures.join(", ")}${age}`, feedbackStatusWarn, false);
@@ -6233,14 +6253,28 @@ function tickRefreshAge() {
 setInterval(tickRefreshAge, refreshAgeTickMs);
 
 let refreshTimer = null;
+let refreshDelay = 0;
+function scheduleRefresh() {
+  if (refreshTimer) clearTimeout(refreshTimer);
+  refreshTimer = null;
+  if (refreshDelay <= 0 || document.hidden) return;
+  refreshTimer = setTimeout(async () => {
+    refreshTimer = null;
+    await load();
+    scheduleRefresh();
+  }, refreshDelay);
+}
 function applyRefresh(ms) {
-  if (refreshTimer) clearInterval(refreshTimer);
-  // Skip polling while the tab is hidden (no one is looking); a visibilitychange
-  // handler refreshes immediately when it becomes visible again.
-  refreshTimer = ms > 0 ? setInterval(() => { if (document.hidden) return; load(); }, ms) : null;
+  refreshDelay = ms;
+  scheduleRefresh();
 }
 document.addEventListener(domEventVisibilityChange, () => {
-  if (!document.hidden) load();
+  if (document.hidden) {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = null;
+    return;
+  }
+  load().finally(scheduleRefresh);
 });
 function setRefresh(v) {
   const ms = parseInt(v, 10) || 0;
