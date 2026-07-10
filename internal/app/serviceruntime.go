@@ -123,8 +123,9 @@ func (s *ServiceMetricSampler) LatestWithAt(name string) (web.ServiceRuntime, ti
 	return last.current, last.at, true
 }
 
-// Series records the current runtime sample and returns the selected historical
-// window as web metric series for CPU, memory and IO.
+// Series returns the selected historical window for CPU, memory and IO without
+// recording cur. Worker cycles own history sampling; dashboard reads must not
+// change sample counts or weight averages by the number of connected clients.
 func (s *ServiceMetricSampler) Series(name string, cur web.ServiceRuntime, since time.Duration) web.ServiceRuntimeMetrics {
 	if s == nil {
 		return web.ServiceRuntimeMetrics{Since: since.String(), Current: cur}
@@ -136,10 +137,8 @@ func (s *ServiceMetricSampler) Series(name string, cur web.ServiceRuntime, since
 	}
 
 	s.mu.Lock()
-	cur = s.recordLocked(name, cur, at)
 	samples := serviceSamplesSince(s.samples[name], at.Add(-since))
 	s.mu.Unlock()
-	s.recordPersistent(name, cur, at)
 	if out, ok := s.persistentSeries(name, cur, at, since); ok {
 		return out
 	}
