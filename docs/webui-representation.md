@@ -459,7 +459,8 @@ Section id: `notifiers-section`
 | --- | --- |
 | Title | `Notifiers` plus total count |
 | Visibility | hidden when no notifiers are configured |
-| Columns | Name, Type, State |
+| Columns | Name, Type, Destination, Watches, State, Actions |
+| Actions | An administrator can send a clearly marked test message through one enabled notifier. |
 
 Empty state:
 

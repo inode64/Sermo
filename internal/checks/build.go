@@ -872,7 +872,7 @@ func buildFileCheck(b base, entry map[string]any) (Check, string) {
 	if path == "" {
 		return nil, "file check requires a path"
 	}
-	return fileCheck{base: b, path: path}, ""
+	return fileCheck{base: b, path: path, nonEmpty: cfgval.Bool(entry[CheckKeyNonEmpty])}, ""
 }
 
 // buildLockfileCheck builds a check that one service-owned lockfile candidate

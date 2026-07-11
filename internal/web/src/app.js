@@ -6,7 +6,7 @@ import {
   apiMonitoringPath, apiMountsPath, apiNotifiersPath, apiOpsPath, apiQueryBeforeID,
   apiQueryKill, apiQueryKind, apiQueryLimit, apiQueryName, apiQueryNoCascade,
   apiQueryOnlyErrors, apiQueryPage, apiQueryService, apiQuerySince, apiQueryStatus,
-  apiQueryWatch, apiReloadPath,
+  apiQueryWatch, apiReloadPath, notifierTestAPI,
   apiServicesPath, apiWatchesPath, apiWhoamiPath, applicationEventsAPI,
   csrfPostOptions, dashboardAPI, daemonMetricsAPI, eventsAPI, eventsClearAPI,
   liveVerbosePath, lockReleaseAPI, mountAPI, mountBlockersAPI, panicAPI,
@@ -4744,9 +4744,12 @@ function renderNotifiers(notifiers) {
     const dest = n.summary ? esc(n.summary) : '<span class="muted">—</span>';
     const used = Number(n.used_by || 0);
     const watches = used ? String(used) : '<span class="muted">—</span>';
-    return `<tr><td>${esc(n.name)}</td><td>${esc(n.type)}</td><td class="muted">${dest}</td><td>${watches}</td><td class="${cls}">${state}</td></tr>`;
+    const test = enabled && me.can_act
+      ? `<button class="icon-btn" data-notifier-test="${esc(n.name)}" aria-label="Send test notification to ${esc(n.name)}" title="Send test notification to ${esc(n.name)}"><span aria-hidden="true">▶</span></button>`
+      : '<span class="muted">—</span>';
+    return `<tr><td>${esc(n.name)}</td><td>${esc(n.type)}</td><td class="muted">${dest}</td><td>${watches}</td><td class="${cls}">${state}</td><td class="actions">${test}</td></tr>`;
   });
-  tbody.innerHTML = rows.join("") || `<tr><td colspan="5" class="muted">No notifiers.</td></tr>`;
+  tbody.innerHTML = rows.join("") || `<tr><td colspan="6" class="muted">No notifiers.</td></tr>`;
   updateSectionNav();
 }
 
@@ -5407,6 +5410,28 @@ async function actWatch(name, action) {
     }
   } catch (e) {
     setStatus(`${action} watch ${name}: ${e.message}`, feedbackStatusErr);
+  }
+  load();
+}
+
+async function testNotifier(name) {
+  if (!name) return;
+  if (!(await promptConfirm({
+    title: `Test notifier ${name}?`,
+    message: `Send a clearly marked test notification through "${name}"?`,
+    okLabel: "Send test",
+    danger: false,
+  }))) return;
+  setStatus("");
+  try {
+    const res = await fetch(notifierTestAPI(name), csrfPostOptions());
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.ok === false) {
+      throw new Error(body.message || ("HTTP " + res.status));
+    }
+    setStatus(body.message || `test notification sent to ${name}`, feedbackStatusOK);
+  } catch (e) {
+    setStatus(`test notifier ${name}: ${e.message}`, feedbackStatusErr);
   }
   load();
 }
@@ -6628,6 +6653,12 @@ function initDelegatedHandlers() {
     const mountAction = closestFrom(e, "[data-mount-action][data-mount]");
     if (mountAction) {
       actMount(mountAction.dataset.mount || "", mountAction.dataset.mountAction || "");
+      return;
+    }
+
+    const notifierTest = closestFrom(e, "[data-notifier-test]");
+    if (notifierTest) {
+      testNotifier(notifierTest.dataset.notifierTest || "");
       return;
     }
 

@@ -76,7 +76,7 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, libBaseli
 		ResolveUser:      discoverer.ResolveUser,
 		CheckDeps:        checkDeps,
 		MetricSample:     metricSample,
-		Changed:          LibChangedFunc(libBaseline),
+		Changed:          LibChangedFunc(libBaseline, deps.LibrarySamples),
 		Sleep:            deps.Sleep,
 		OperationTimeout: deps.OperationTimeout,
 		Emit:             recordOperation,

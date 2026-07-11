@@ -73,6 +73,7 @@ const (
 	CheckKeyMinRules              = "min_rules"
 	CheckKeyMounted               = "mounted"
 	CheckKeyName                  = "name"
+	CheckKeyNonEmpty              = "non_empty"
 	CheckKeyOf                    = "of"
 	CheckKeyOn                    = "on"
 	CheckKeyOnAlgorithmChange     = "on_algorithm_change"

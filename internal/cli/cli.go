@@ -181,9 +181,12 @@ type App struct {
 	// MountController builds the host mount controller for `sermoctl mount|umount`.
 	// nil uses the real host commands and /proc readers.
 	MountController func(*config.Config) mountctl.Controller
-	// BuildNotifiers constructs delivery targets for ad-hoc CLI reports. nil
-	// uses the configured notifiers without applying alert templates.
+	// BuildNotifiers constructs delivery targets for explicit CLI notifier tests.
+	// nil uses the configured notifier settings, including an optional template.
 	BuildNotifiers func(*config.Config) (map[string]notify.Notifier, []string)
+	// BuildReportNotifiers constructs delivery targets for ad-hoc CLI reports.
+	// nil uses the configured notifiers without applying alert templates.
+	BuildReportNotifiers func(*config.Config) (map[string]notify.Notifier, []string)
 	// InteractiveUser reports the local logged-in user for an interactive
 	// terminal session. Nil uses the process stdin and environment.
 	InteractiveUser func() (string, bool)
@@ -305,7 +308,10 @@ func (a App) Run(ctx context.Context, args []string) int {
 		a.Runner = execx.CommandRunner{}
 	}
 	if a.BuildNotifiers == nil {
-		a.BuildNotifiers = buildReportNotifiers
+		a.BuildNotifiers = buildConfiguredNotifiers
+	}
+	if a.BuildReportNotifiers == nil {
+		a.BuildReportNotifiers = buildReportNotifiers
 	}
 
 	opts, err := parseArgs(args)
@@ -373,6 +379,8 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runPreflight(ctx, opts)
 	case commandDaemon:
 		return a.runDaemon(ctx, opts)
+	case commandNotifier:
+		return a.runNotifier(ctx, opts)
 	case commandWatch:
 		return a.runWatch(ctx, opts)
 	case commandEvents:

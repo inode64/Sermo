@@ -89,7 +89,7 @@ func parseAPIAccessTarget(path string) (target, action string) {
 		return "", ""
 	}
 	switch parts[apiAccessResourceSegment] {
-	case apiSegmentServices, apiSegmentWatches, apiSegmentMounts:
+	case apiSegmentServices, apiSegmentWatches, apiSegmentMounts, apiSegmentNotifiers:
 		if len(parts) >= apiAccessTargetSegments {
 			target = parts[apiAccessTargetSegment]
 		}

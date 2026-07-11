@@ -65,6 +65,7 @@ const (
 	logFieldConfig                = "config"
 	logFieldConfigured            = "configured"
 	logFieldEnabledApps           = "enabled_apps"
+	logFieldEnabledLibraries      = "enabled_libraries"
 	logFieldEnabledServices       = "enabled_services"
 	logFieldEnabledServiceWatches = "enabled_service_watches"
 	logFieldEnabledWatches        = "enabled_watches"
@@ -303,6 +304,7 @@ func run(args []string) int {
 	// A second collector dedicated to the web's per-cycle live CPU sampling, kept
 	// separate from the engine's so their rate deltas never corrupt each other.
 	deps.LiveCollector = metrics.New(metrics.OSReader{})
+	deps.LibrarySamples = app.NewLibrarySamples()
 
 	workers, svcWatches, warnings := app.BuildWorkers(cfg, deps, collector)
 	for _, w := range warnings {
@@ -318,6 +320,10 @@ func run(args []string) int {
 	// runtime with per-service scoped check deps; they share the scheduler and
 	// readiness settling like host watches.
 	watches = append(watches, svcWatches...)
+	// Library watches use engine.libs_interval (or a per-library interval) and
+	// publish their observations to the shared cache consumed by service rules.
+	libWatches := app.BuildLibraryWatches(cfg, deps)
+	watches = append(watches, libWatches...)
 	// App-watches monitor installed applications for errors on a slower cadence.
 	// They share the scheduler/generation machinery and count toward readiness
 	// first-cycle settling alongside host watches.
@@ -327,6 +333,7 @@ func run(args []string) int {
 		logFieldEnabledServices, len(workers),
 		logFieldEnabledWatches, hostWatches,
 		logFieldEnabledServiceWatches, len(svcWatches),
+		logFieldEnabledLibraries, len(libWatches),
 		logFieldEnabledApps, len(appWatches),
 		logFieldConfigured, app.HasConfiguredTargets(cfg))
 

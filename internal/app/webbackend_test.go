@@ -23,6 +23,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
+	"sermo/internal/notify"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
@@ -1838,6 +1839,40 @@ func TestWebBackendNotifiersExposeEnabledState(t *testing.T) {
 	}
 	if !byName["wall"].Enabled || byName["wall"].Summary != "all active terminals" || byName["wall"].UsedBy != 0 {
 		t.Fatalf("wall notifier metadata = %+v", byName["wall"])
+	}
+}
+
+func TestWebBackendTestNotifier(t *testing.T) {
+	n := &fakeNotifier{name: "ops"}
+	var events []Event
+	b := &WebBackend{
+		notifiers:        map[string]*webNotifier{"ops": {name: "ops", enabled: true}},
+		notifierRegistry: map[string]notify.Notifier{"ops": n},
+		defaultTimeout:   time.Second,
+		emit:             func(e Event) { events = append(events, e) },
+	}
+	result := b.TestNotifier(context.Background(), "ops")
+	if !result.OK || result.Message != "test notification sent to ops" {
+		t.Fatalf("TestNotifier result = %+v", result)
+	}
+	if len(n.msgs) != 1 || n.msgs[0].Subject != notify.TestSubject {
+		t.Fatalf("notifier messages = %+v", n.msgs)
+	}
+	if len(events) != 1 || events[0].Kind != eventKindNotify || events[0].Action != eventActionNotifierTest {
+		t.Fatalf("events = %+v", events)
+	}
+}
+
+func TestWebBackendTestNotifierRejectsDisabledAndUnavailable(t *testing.T) {
+	b := &WebBackend{notifiers: map[string]*webNotifier{
+		"muted":  {name: "muted", enabled: false},
+		"broken": {name: "broken", enabled: true},
+	}}
+	if result := b.TestNotifier(context.Background(), "muted"); result.OK || !strings.Contains(result.Message, "disabled") {
+		t.Fatalf("disabled result = %+v", result)
+	}
+	if result := b.TestNotifier(context.Background(), "broken"); result.OK || !strings.Contains(result.Message, "unavailable") {
+		t.Fatalf("unavailable result = %+v", result)
 	}
 }
 

@@ -324,6 +324,7 @@ engine:
   default_timeout: 10s        # default per-check timeout
   operation_timeout: 90s        # outer deadline for safe service actions
   app_interval: 5m            # cadence for inspecting installed apps for errors
+  libs_interval: 5m           # cadencia para inspeccionar las bibliotecas instaladas del catálogo
   startup_delay: 0            # grace period before the first cycle (0 disables)
   user_lookup: auto           # auto | native | getent | numeric
   user_lookup_timeout: 250ms  # per-getent lookup timeout; cached in-process
@@ -366,6 +367,14 @@ vuelve a pasar — el mismo comportamiento disparado por flancos que los host wa
 apps cambian raramente y cada inspección ejecuta el binario de la app, por lo que el
 valor por defecto es lento; la interfaz web muestra los eventos recientes de cada app
 cuando expandes su fila.
+
+`engine.libs_interval` (por defecto `5m`) es la cadencia con la que el daemon
+inspecciona las bibliotecas instaladas del catálogo. Un perfil de biblioteca puede
+definir su propio `interval` de nivel superior para sustituirla. Las muestras se
+comparten entre todos los servicios que usan `restart_on_change.libraries`: una
+biblioteca compartida se observa una vez por su cadencia, no en cada ciclo de
+servicio. Las operaciones de servicio conservan sus comprobaciones de preflight
+directas.
 
 `engine.backend: auto` detecta el sistema de init: sondea systemd (`systemctl` existe,
 `/run/systemd/system` existe, `is-system-running` es utilizable — `degraded` cuenta
@@ -710,6 +719,7 @@ Endpoints de solo lectura:
 - `GET /api/watches` — host watches, estado de monitor, condiciones, notificaciones,
   lecturas en vivo cuando están disponibles y actividad reciente.
 - `GET /api/notifiers` — destinos de notifier configurados.
+- `POST /api/notifiers/{name}/test` — envía un mensaje de prueba explícito por un notifier habilitado.
 - `GET /api/applications` — aplicaciones del catálogo instaladas.
 - `GET /api/libraries` — librerías del catálogo instaladas.
 - `GET /api/daemon` — ajustes de daemon/backend/runtime y uptime del host.
@@ -1075,6 +1085,12 @@ Los tipos de notifier soportados hoy son `email`, `slack`, `teams`, `tty` y
 Establece **`enabled: false`** en cualquier notifier para mantenerlo definido pero
 omitir la entrega. Los notifiers deshabilitados aún pueden ser referenciados por las
 selecciones `notify`.
+
+Usa `sermoctl notifier test NAME` para enviar un mensaje claramente marcado como
+prueba por un notifier habilitado. El panel Notifiers ofrece la misma acción a
+los administradores de la WebUI. Ambas vías usan el destino y timeout
+configurados, no disparan watches, hooks ni remediación, y rechazan notifiers
+deshabilitados.
 
 `sermoctl services --notify NAME[,NAME]` envía un informe ad-hoc del inventario de
 services a través de los notifiers configurados. Los notifiers de email reciben un
@@ -2280,7 +2296,7 @@ Solo las partes seguras por target de `defaults` se fusionan con targets
 configurados: `dry_run` aplica a services y watches; `stop_policy`, `policy` y
 `rule_window` aplican a services. Los ajustes de ámbito de motor (`interval`,
 `max_parallel_checks`, `max_parallel_operations`, `default_timeout`,
-`operation_timeout`, `startup_delay`, `backend`, `user_lookup`,
+`operation_timeout`, `app_interval`, `libs_interval`, `startup_delay`, `backend`, `user_lookup`,
 `user_lookup_timeout`, `state_cache_size`) son configuración del daemon y nunca se
 fusionan con un service.
 
