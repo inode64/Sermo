@@ -723,7 +723,7 @@ func resolveNotifiers(names []string, reg map[string]notify.Notifier) []notify.N
 // each resolved service's `version:`/`config:` blocks, reusing the daemon's
 // `commands.version` and `preflight.config`. They are built once (like host
 // watches) so their on_change detection persists across cycles.
-func serviceMonitorWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) ([]*Watch, []string) {
+func serviceMonitorWatches(cfg *config.Config, deps Deps, _ time.Duration) ([]*Watch, []string) {
 	var watches []*Watch
 	var warnings []string
 	for _, name := range cfg.SortedServiceNames() {
@@ -732,10 +732,7 @@ func serviceMonitorWatches(cfg *config.Config, deps Deps, defaultInterval time.D
 			continue
 		}
 		tree := resolved.Tree
-		interval := defaultInterval
-		if d := cfgval.Duration(tree[config.EntryKeyInterval]); d > 0 {
-			interval = d
-		}
+		interval := serviceArtifactInterval(cfg, tree)
 		for _, m := range []struct {
 			suffix string
 			build  func(string, map[string]any, Deps, time.Duration) (*Watch, string)

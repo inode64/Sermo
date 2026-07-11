@@ -53,13 +53,13 @@ func TestApplyGatesRequires(t *testing.T) {
 	}
 }
 
-func TestLibChangedFuncSharesWorkerBaseline(t *testing.T) {
+func TestArtifactChangedFuncSharesWorkerBaseline(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/lib.so"
 	writeFile(t, path, "v1")
 
 	baseline := map[string]string{}
-	changed := LibChangedFunc(baseline)
+	changed := ArtifactChangedFunc(baseline)
 	w := &Worker{libBaseline: baseline}
 
 	if c, _ := changed(path); c {

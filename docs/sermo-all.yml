@@ -33,7 +33,7 @@ engine:
   max_parallel_operations: 2  # global start/stop/restart/reload/resume slots
   default_timeout: 10s  # per-check timeout when a check sets none
   operation_timeout: 90s  # outer deadline for safe start/stop/restart/reload/resume
-  libs_interval: 5m  # catalog library inspection cadence; a library may override interval
+  artifact_interval: 5m  # app/library/service artifact inspection cadence; a catalog entry may override interval
   startup_delay: 0  # grace before the first cycle after boot
   user_lookup: auto  # auto | native | getent | numeric
   user_lookup_timeout: 250ms  # per-getent lookup timeout; cached in-process

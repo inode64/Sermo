@@ -304,7 +304,7 @@ func run(args []string) int {
 	// A second collector dedicated to the web's per-cycle live CPU sampling, kept
 	// separate from the engine's so their rate deltas never corrupt each other.
 	deps.LiveCollector = metrics.New(metrics.OSReader{})
-	deps.LibrarySamples = app.NewLibrarySamples()
+	deps.ArtifactSamples = app.NewArtifactSamples()
 
 	workers, svcWatches, warnings := app.BuildWorkers(cfg, deps, collector)
 	for _, w := range warnings {
@@ -320,21 +320,16 @@ func run(args []string) int {
 	// runtime with per-service scoped check deps; they share the scheduler and
 	// readiness settling like host watches.
 	watches = append(watches, svcWatches...)
-	// Library watches use engine.libs_interval (or a per-library interval) and
-	// publish their observations to the shared cache consumed by service rules.
-	libWatches := app.BuildLibraryWatches(cfg, deps)
-	watches = append(watches, libWatches...)
-	// App-watches monitor installed applications for errors on a slower cadence.
-	// They share the scheduler/generation machinery and count toward readiness
-	// first-cycle settling alongside host watches.
-	appWatches := app.BuildAppWatches(cfg, deps)
-	watches = append(watches, appWatches...)
+	// Artifact watches share cadence-limited samples for catalog apps, libraries
+	// and changed service files.
+	artifactWatches := app.BuildArtifactWatches(cfg, deps)
+	watches = append(watches, artifactWatches...)
 	logger.Debug("built monitor targets",
 		logFieldEnabledServices, len(workers),
 		logFieldEnabledWatches, hostWatches,
 		logFieldEnabledServiceWatches, len(svcWatches),
-		logFieldEnabledLibraries, len(libWatches),
-		logFieldEnabledApps, len(appWatches),
+		logFieldEnabledLibraries, countArtifactWatches(artifactWatches, config.CategoryLibrary),
+		logFieldEnabledApps, countArtifactWatches(artifactWatches, config.CategoryApp),
 		logFieldConfigured, app.HasConfiguredTargets(cfg))
 
 	if len(workers) == 0 && len(watches) == 0 {
@@ -505,6 +500,16 @@ func webListenAddr(cfg *config.Config) (addr, reason string) {
 		address = defaultWebAddress
 	}
 	return net.JoinHostPort(address, strconv.Itoa(port)), ""
+}
+
+func countArtifactWatches(watches []*app.Watch, category string) int {
+	count := 0
+	for _, watch := range watches {
+		if watch != nil && watch.CheckType == category {
+			count++
+		}
+	}
+	return count
 }
 
 // webAuth builds the web access control from the `web` block (admin password,
