@@ -928,6 +928,10 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 	libraries, libraryErrs := restartOnChangeStringList(keyRestartOnChange+"."+keyLibraries, roc[keyLibraries])
 	errs = append(errs, libraryErrs...)
 	if versionAllowed {
+		preflight, _ := tree[sectionPreflight].(map[string]any)
+		if preflight == nil {
+			preflight = map[string]any{}
+		}
 		for _, lib := range libraries {
 			path, known := c.libraryPath(lib)
 			switch {
@@ -937,6 +941,16 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 			case path == "":
 				errs = append(errs, fmt.Sprintf("library %q has no binary to watch", lib))
 				continue
+			}
+			preflightKey := "library-" + lib + "-file"
+			if _, exists := preflight[preflightKey]; exists {
+				errs = append(errs, fmt.Sprintf("restart_on_change would overwrite preflight %q; rename that preflight", preflightKey))
+				continue
+			}
+			preflight[preflightKey] = map[string]any{
+				checks.CheckKeyType:     checks.CheckTypeFile,
+				checks.CheckKeyPath:     path,
+				checks.CheckKeyNonEmpty: true,
 			}
 			key := "restart-on-change-" + lib
 			if _, exists := rulesMap[key]; exists {
@@ -950,6 +964,9 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 				},
 				rules.RuleFieldThen: restartOnChangeThen(messages.libraryMessage(displayName)),
 			}
+		}
+		if len(preflight) > 0 {
+			tree[sectionPreflight] = preflight
 		}
 	}
 	apps, appErrs := restartOnChangeApps(roc[keyApps])

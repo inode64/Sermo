@@ -537,7 +537,8 @@ func (c fileExistsCheck) Run(_ context.Context) Result {
 // fileCheck passes when a path exists and is a regular file.
 type fileCheck struct {
 	base
-	path string
+	path     string
+	nonEmpty bool
 }
 
 func (c fileCheck) Run(_ context.Context) Result {
@@ -551,6 +552,9 @@ func (c fileCheck) Run(_ context.Context) Result {
 	}
 	if !info.Mode().IsRegular() {
 		return c.result(false, c.path+" is not a regular file", start)
+	}
+	if c.nonEmpty && info.Size() == 0 {
+		return c.result(false, c.path+" is empty", start)
 	}
 	res := c.result(true, c.path+" is a regular file", start)
 	res.Data = map[string]any{DataKeyPath: c.path, DataKeySize: info.Size()}

@@ -756,6 +756,11 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		if cfgval.String(entry[checks.CheckKeyPath]) == "" {
 			add("%s.path is required for a file check", path)
 		}
+		if v, present := entry[checks.CheckKeyNonEmpty]; present {
+			if _, ok := v.(bool); !ok {
+				add("%s.non_empty must be a boolean", path)
+			}
+		}
 	case checks.CheckTypeLockfile:
 		if !cfgval.IsNonEmptyStringList(entry[checks.CheckKeyPath]) {
 			add("%s.path is required for a lockfile check", path)

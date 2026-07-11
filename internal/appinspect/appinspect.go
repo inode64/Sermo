@@ -246,6 +246,12 @@ func inspectResolved(
 		r.Permissions = modeString(info)
 		r.Status = statusErrorPrefix + r.Binary + " is a directory"
 		return r
+	case category == config.CategoryLibrary && fi.Size() == 0:
+		info = fi
+		r.Permissions = modeString(info)
+		r.Installed = true
+		r.Status = statusErrorPrefix + r.Binary + " is empty"
+		return r
 	case category != config.CategoryLibrary && fi.Mode().Perm()&binaryExecutableModeMask == 0:
 		info = fi
 		r.Permissions = modeString(info)

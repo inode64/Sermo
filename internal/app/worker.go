@@ -140,6 +140,8 @@ type Worker struct {
 	// libBaseline holds the acknowledged fingerprint of each watched path (a
 	// `changed:` condition target, typically a library .so) across cycles.
 	libBaseline map[string]string
+	// librarySamples provides cadence-limited catalog library observations.
+	librarySamples *LibrarySamples
 
 	// appVersionCmd holds the resolved version command of each app the service
 	// declares (keyed by app name), so a `changed: {app}` condition can sample the
@@ -730,17 +732,29 @@ func (w *Worker) evalRule(ctx context.Context, ev *rules.Evaluator, r rules.Rule
 // LibChangedFunc returns a `changed:` evaluator backed by baseline. The worker
 // and operation engine share the same map so manual actions honor the same
 // acknowledged fingerprints as automatic remediation.
-func LibChangedFunc(baseline map[string]string) func(string) (bool, error) {
+func LibChangedFunc(baseline map[string]string, samples ...*LibrarySamples) func(string) (bool, error) {
 	if baseline == nil {
 		return nil
 	}
+	var librarySamples *LibrarySamples
+	if len(samples) > 0 {
+		librarySamples = samples[0]
+	}
 	return func(path string) (bool, error) {
-		return libPathChanged(baseline, path)
+		return libPathChanged(baseline, path, librarySamples)
 	}
 }
 
-func libPathChanged(baseline map[string]string, path string) (bool, error) {
+func libPathChanged(baseline map[string]string, path string, samples *LibrarySamples) (bool, error) {
 	cur := fileFingerprint(path)
+	if samples != nil {
+		if fingerprint, tracked, sampled := samples.Fingerprint(path); tracked {
+			if !sampled {
+				return false, nil
+			}
+			cur = fingerprint
+		}
+	}
 	base, seen := baseline[path]
 	if !seen {
 		baseline[path] = cur
@@ -756,7 +770,7 @@ func (w *Worker) changed(path string) (bool, error) {
 	if w.libBaseline == nil {
 		w.libBaseline = map[string]string{}
 	}
-	return libPathChanged(w.libBaseline, path)
+	return libPathChanged(w.libBaseline, path, w.librarySamples)
 }
 
 // acknowledgeChanges refreshes every watched baseline to the current fingerprint,

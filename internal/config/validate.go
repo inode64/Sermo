@@ -101,7 +101,7 @@ func validateGlobal(cfg *Config) []Issue {
 		if backend := cfgval.String(engine[EngineKeyBackend]); !isValidBackend(backend) {
 			add("%s %q is not one of %s", enginePathBackend, backend, backendSummary)
 		}
-		for _, field := range []string{keyInterval, EngineKeyDefaultTimeout, EngineKeyOperationTimeout} {
+		for _, field := range []string{keyInterval, EngineKeyDefaultTimeout, EngineKeyOperationTimeout, EngineKeyLibsInterval} {
 			if v, present := engine[field]; present && !isPositiveDuration(cfgval.String(v)) {
 				add("%s %q must be a valid positive duration", engineFieldPath(field), cfgval.String(v))
 			}
@@ -318,6 +318,11 @@ func validateDocuments(cfg *Config) []Issue {
 		issues = append(issues, validateVersionsCurrentFrom(doc, scope)...)
 		issues = append(issues, validateAppLinks(cfg, doc, scope)...)
 		issues = append(issues, validateVersionMatch(doc, scope)...)
+		if doc.Kind == kindLibrary {
+			if v, present := doc.Body[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
+				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("interval %q must be a valid positive duration", cfgval.String(v))})
+			}
+		}
 		switch doc.Kind {
 		case kindApp, kindLibrary, kindPatterns, kindService:
 		case "":

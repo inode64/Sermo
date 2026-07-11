@@ -566,6 +566,13 @@ func TestFileExistsAndBinaryChecks(t *testing.T) {
 	if res := (fileCheck{base: base{name: "file"}, path: flag}).Run(context.Background()); !res.OK {
 		t.Errorf("regular file should pass")
 	}
+	empty := filepath.Join(dir, "empty")
+	if err := os.WriteFile(empty, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if res := (fileCheck{base: base{name: "file"}, path: empty, nonEmpty: true}).Run(context.Background()); res.OK {
+		t.Errorf("empty file should fail a non-empty file check")
+	}
 	if res := (fileCheck{base: base{name: "file"}, path: dir}).Run(context.Background()); res.OK {
 		t.Errorf("directory should fail a regular file check")
 	}

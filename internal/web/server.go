@@ -134,6 +134,7 @@ const (
 	apiActionCompact   = "compact"
 	apiActionBlockers  = "blockers"
 	apiActionAlert     = string(rules.ActionAlert)
+	apiActionTest      = "test"
 
 	queryBoolOne  = "1"
 	queryBoolTrue = "true"
@@ -212,6 +213,7 @@ const (
 	routeAPIWatches        = routeMethodGet + apiPathWatches
 	routeAPIWatchAction    = routeMethodPost + apiPathWatches + "/" + routeVarName + "/" + routeVarAction
 	routeAPINotifiers      = routeMethodGet + apiPathNotifiers
+	routeAPINotifierTest   = routeMethodPost + apiPathNotifiers + "/" + routeVarName + "/" + apiActionTest
 	routeAPIApplications   = routeMethodGet + apiPathApplications
 	routeAPILibraries      = routeMethodGet + apiPathLibraries
 	routeAPIDashboard      = routeMethodGet + apiPathDashboard
@@ -968,6 +970,8 @@ type Backend interface {
 	Watches(ctx context.Context) []Watch
 	// Notifiers returns the named notifiers configured for use by watches.
 	Notifiers(ctx context.Context) []Notifier
+	// TestNotifier sends an explicit test message through one configured notifier.
+	TestNotifier(ctx context.Context, name string) ActionResult
 	// Applications returns the installed applications (catalog app daemons whose
 	// binary is present), with their version and binary location.
 	Applications(ctx context.Context) []Application
@@ -1115,6 +1119,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(routeAPIWatches, s.handleWatches)
 	mux.HandleFunc(routeAPIWatchAction, s.handleWatchAction)
 	mux.HandleFunc(routeAPINotifiers, s.handleNotifiers)
+	mux.HandleFunc(routeAPINotifierTest, s.handleNotifierTest)
 	mux.HandleFunc(routeAPIApplications, s.handleApplications)
 	mux.HandleFunc(routeAPILibraries, s.handleLibraries)
 	mux.HandleFunc(routeAPIMounts, s.handleMounts)
@@ -1413,6 +1418,15 @@ func (s *Server) handleWatches(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleNotifiers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.Notifiers(r.Context()))
+}
+
+func (s *Server) handleNotifierTest(w http.ResponseWriter, r *http.Request) {
+	res := s.Backend.TestNotifier(s.operateContext(), r.PathValue(apiParamName))
+	status := http.StatusOK
+	if !res.OK {
+		status = http.StatusConflict
+	}
+	writeJSON(w, status, res)
 }
 
 func (s *Server) handleApplications(w http.ResponseWriter, r *http.Request) {

@@ -309,6 +309,7 @@ engine:
   default_timeout: 10s        # default per-check timeout
   operation_timeout: 90s        # outer deadline for safe service actions
   app_interval: 5m            # cadence for inspecting installed apps for errors
+  libs_interval: 5m           # cadence for inspecting installed catalog libraries
   startup_delay: 0            # grace period before the first cycle (0 disables)
   user_lookup: auto           # auto | native | getent | numeric
   user_lookup_timeout: 250ms  # per-getent lookup timeout; cached in-process
@@ -351,6 +352,13 @@ and emits a `recovered` event when it passes again — the same edge-triggered
 behavior as host watches. Apps change rarely and each inspection runs the app's
 binary, so the default is slow; the web UI shows each app's recent events when you
 expand its row.
+
+`engine.libs_interval` (default `5m`) is the cadence at which the daemon inspects
+installed catalog libraries. A library profile may set its own top-level `interval`
+to override this cadence. Library observations are shared by every service that
+uses `restart_on_change.libraries`, so a shared object is sampled once at its
+library cadence rather than once per service cycle. Service operations still run
+their normal preflight checks directly.
 
 `engine.backend: auto` detects the init system: probe systemd (`systemctl`
 exists, `/run/systemd/system` exists, `is-system-running` usable — `degraded`
@@ -681,6 +689,7 @@ Read-only endpoints:
 - `GET /api/watches` — host watches, monitor state, conditions, notifications,
   live readings when available and recent activity.
 - `GET /api/notifiers` — configured notifier targets.
+- `POST /api/notifiers/{name}/test` — sends an explicit test message through one enabled notifier.
 - `GET /api/applications` — installed catalog applications.
 - `GET /api/libraries` — installed catalog libraries.
 - `GET /api/daemon` — daemon/backend/runtime settings and host uptime.
@@ -1030,6 +1039,11 @@ The supported notifier types today are `email`, `slack`, `teams`, `tty` and
 
 Set **`enabled: false`** on any notifier to keep it defined but skip delivery.
 Disabled notifiers may still be referenced by `notify` selections.
+
+Use `sermoctl notifier test NAME` to send a clearly marked test message through
+one enabled notifier. The Notifiers panel offers the same action to WebUI
+administrators. Both paths use the configured delivery target and timeout, do
+not trigger watches, hooks or remediation, and reject disabled notifiers.
 
 `sermoctl services --notify NAME[,NAME]` sends an ad-hoc services inventory
 report through configured notifiers. Email notifiers receive a multipart
@@ -2246,7 +2260,7 @@ Only target-safe parts of `defaults` merge into configured targets:
 `rule_window` apply to services; `restart_on_change` applies to services only
 for the inherited `config`/`version` permission flags. Engine-wide settings (`interval`,
 `max_parallel_checks`, `max_parallel_operations`, `default_timeout`,
-`operation_timeout`, `startup_delay`, `backend`, `user_lookup`,
+`operation_timeout`, `app_interval`, `libs_interval`, `startup_delay`, `backend`, `user_lookup`,
 `user_lookup_timeout`, `state_cache_size`) are daemon configuration and never
 merge into a service.
 

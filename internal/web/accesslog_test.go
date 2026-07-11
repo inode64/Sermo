@@ -22,6 +22,7 @@ func TestParseAPIAccessTarget(t *testing.T) {
 		{testWatchPath("storage-root", apiActionUnmonitor), "storage-root", apiActionUnmonitor},
 		{testMountPath("backup", mountctl.ActionUmount), "backup", mountctl.ActionUmount},
 		{testMountPath("backup", mountctl.ActionMount), "backup", mountctl.ActionMount},
+		{testTargetPath(apiSegmentNotifiers, "ops", apiActionTest), "ops", apiActionTest},
 		{testLockPath("mysql", apiActionRelease), "mysql", apiActionRelease},
 		{apiPathReload, "", apiActionReload},
 		// Three-part paths: the target is present even without a trailing action.

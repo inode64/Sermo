@@ -2,6 +2,13 @@ package notify
 
 import "testing"
 
+func TestTestMessage(t *testing.T) {
+	msg := TestMessage()
+	if msg.Subject != TestSubject || msg.Fields[TestField] != "true" || msg.Body == "" {
+		t.Fatalf("TestMessage() = %+v", msg)
+	}
+}
+
 func TestBuildRegistry(t *testing.T) {
 	notifiers, warns := Build(map[string]any{
 		"ops-email": map[string]any{

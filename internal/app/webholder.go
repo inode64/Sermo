@@ -71,6 +71,14 @@ func (h *WebBackendHolder) Notifiers(ctx context.Context) []web.Notifier {
 	return nil
 }
 
+// TestNotifier sends an explicit test message through a configured notifier.
+func (h *WebBackendHolder) TestNotifier(ctx context.Context, name string) web.ActionResult {
+	if b := h.backend(); b != nil {
+		return b.TestNotifier(ctx, name)
+	}
+	return web.ActionResult{OK: false, Message: webBackendUnavailableMessage}
+}
+
 // Applications returns the installed applications from the active backend.
 func (h *WebBackendHolder) Applications(ctx context.Context) []web.Application {
 	if b := h.backend(); b != nil {

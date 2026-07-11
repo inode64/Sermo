@@ -24,7 +24,7 @@ const dashboard = {
     name: "backup.mount", display_name: "Backup", category: "backup", path: "/backup",
     mounted: true, state: "active", refcount: 0, blockers: [], can_umount: true,
   }],
-  notifiers: [],
+  notifiers: [{ name: "ops", type: "slack", enabled: true, summary: "hooks.slack.com", used_by: 2 }],
   daemon: { backend: "systemd", hostname: "fixture", host_uptime_seconds: 86400 },
   daemon_metrics: null,
   locks: [],
@@ -170,6 +170,17 @@ test("global search opens a service and exposes individual actions", async ({ pa
   await expect(page.locator('[data-service-detail="db"]')).toBeVisible();
   await expect(row.locator('[data-service-action="reload"]')).toBeVisible();
   await expect(row.locator('[data-service-action="unmonitor"]')).toBeVisible();
+});
+
+test("notifier test asks for confirmation and posts one named notifier", async ({ page }) => {
+  await page.locator("#notifiers-section > summary").click();
+  const button = page.locator('[data-notifier-test="ops"]');
+  await expect(button).toBeVisible();
+  const request = page.waitForRequest((req) => req.method() === "POST" && new URL(req.url()).pathname === "/api/notifiers/ops/test");
+  await button.click();
+  await expect(page.locator("#simple-confirm")).toBeVisible();
+  await page.locator('[data-simple-result="true"]').click();
+  await request;
 });
 
 test("libraries inventory is visible and searchable", async ({ page }) => {
