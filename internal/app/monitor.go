@@ -116,16 +116,15 @@ func (m *Monitor) Reload() {
 	prevDeps := m.deps
 
 	m.applyConfig(newCfg)
-	if m.deps.LibrarySamples == nil {
-		m.deps.LibrarySamples = NewLibrarySamples()
+	if m.deps.ArtifactSamples == nil {
+		m.deps.ArtifactSamples = NewArtifactSamples()
 	}
 
 	workers, svcWatches, warnings := BuildWorkers(newCfg, m.deps, m.collector)
 	watches, watchWarnings := BuildWatches(newCfg, m.deps, m.deps.Interval)
 	hostWatches := len(watches)
 	watches = append(watches, svcWatches...)
-	watches = append(watches, BuildLibraryWatches(newCfg, m.deps)...)
-	watches = append(watches, BuildAppWatches(newCfg, m.deps)...)
+	watches = append(watches, BuildArtifactWatches(newCfg, m.deps)...)
 	if len(workers) == 0 && hostWatches == 0 && !HasConfiguredTargets(newCfg) {
 		// Rollback: restore previous generation and restart it (we stopped above).
 		m.cfg = prevCfg

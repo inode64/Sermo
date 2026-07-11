@@ -323,8 +323,7 @@ engine:
   max_parallel_operations: 2  # bound on concurrent start/stop/restart/reload/resume operations
   default_timeout: 10s        # default per-check timeout
   operation_timeout: 90s        # outer deadline for safe service actions
-  app_interval: 5m            # cadence for inspecting installed apps for errors
-  libs_interval: 5m           # cadencia para inspeccionar las bibliotecas instaladas del catálogo
+  artifact_interval: 5m       # cadencia de apps, librerías y artefactos config/versión de servicios
   startup_delay: 0            # grace period before the first cycle (0 disables)
   user_lookup: auto           # auto | native | getent | numeric
   user_lookup_timeout: 250ms  # per-getent lookup timeout; cached in-process
@@ -358,23 +357,14 @@ cuando se establece; los directorios padre se crean según sea necesario (direct
 `engine.interval` es la cadencia por defecto a la que se ejecutan las comprobaciones de
 cada service. Cada service ejecuta todas sus comprobaciones una vez por ciclo.
 
-`engine.app_interval` (por defecto `5m`) es la cadencia a la que el daemon inspecciona
-las aplicaciones instaladas (las apps del catálogo mostradas en la interfaz web) en
-busca de errores. Cuando la sonda de versión/salud de una app empieza a fallar, el
-daemon emite un evento con el detalle del error y notifica una vez (en el flanco de
-subida) al valor por defecto global `notify:`, y emite un evento `recovered` cuando
-vuelve a pasar — el mismo comportamiento disparado por flancos que los host watches. Las
-apps cambian raramente y cada inspección ejecuta el binario de la app, por lo que el
-valor por defecto es lento; la interfaz web muestra los eventos recientes de cada app
-cuando expandes su fila.
-
-`engine.libs_interval` (por defecto `5m`) es la cadencia con la que el daemon
-inspecciona las bibliotecas instaladas del catálogo. Un perfil de biblioteca puede
-definir su propio `interval` de nivel superior para sustituirla. Las muestras se
-comparten entre todos los servicios que usan `restart_on_change.libraries`: una
-biblioteca compartida se observa una vez por su cadencia, no en cada ciclo de
-servicio. Las operaciones de servicio conservan sus comprobaciones de preflight
-directas.
+`engine.artifact_interval` (por defecto `5m`) es la cadencia con la que el daemon
+inspecciona apps del catálogo instaladas, bibliotecas del catálogo y artefactos de
+versión/configuración de servicios. Un perfil de app o biblioteca puede definir
+`interval` de nivel superior; un servicio usa su propio `interval` para monitores
+de versión/configuración y paths cambiados. El worker puede ejecutarse más a
+menudo, pero lee la última muestra compartida sin volver a ejecutar un comando de
+versión o sonda de fichero en cada ciclo. Las operaciones conservan sus preflight
+directos.
 
 `engine.backend: auto` detecta el sistema de init: sondea systemd (`systemctl` existe,
 `/run/systemd/system` existe, `is-system-running` es utilizable — `degraded` cuenta
@@ -2296,7 +2286,7 @@ Solo las partes seguras por target de `defaults` se fusionan con targets
 configurados: `dry_run` aplica a services y watches; `stop_policy`, `policy` y
 `rule_window` aplican a services. Los ajustes de ámbito de motor (`interval`,
 `max_parallel_checks`, `max_parallel_operations`, `default_timeout`,
-`operation_timeout`, `app_interval`, `libs_interval`, `startup_delay`, `backend`, `user_lookup`,
+`operation_timeout`, `artifact_interval`, `startup_delay`, `backend`, `user_lookup`,
 `user_lookup_timeout`, `state_cache_size`) son configuración del daemon y nunca se
 fusionan con un service.
 

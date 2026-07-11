@@ -2,7 +2,7 @@ package app
 
 import (
 	"context"
-	"time"
+	"errors"
 
 	"sermo/internal/appinspect"
 	"sermo/internal/checks"
@@ -15,12 +15,14 @@ import (
 type appCheck struct {
 	name    string
 	inspect func(context.Context) appinspect.Report
+	samples *ArtifactSamples
 }
 
 func (c appCheck) Name() string { return c.name }
 
 func (c appCheck) Run(ctx context.Context) checks.Result {
 	rep := c.inspect(ctx)
+	storeAppSample(c.samples, c.name, rep)
 	res := checks.Result{
 		Check:   c.name,
 		OK:      rep.Status == appinspect.StatusOK,
@@ -32,17 +34,21 @@ func (c appCheck) Run(ctx context.Context) checks.Result {
 	return res
 }
 
-const appWatchCheckType = config.CategoryApp
-
-// appWatchInterval is the cadence at which installed apps are inspected for
-// errors (engine.app_interval, default 5m). Apps change rarely and each check
-// runs the app's version/health binary, so the default is slow.
-func appWatchInterval(cfg *config.Config) time.Duration {
-	return EngineDuration(cfg, config.EngineKeyAppInterval, DefaultEngineAppInterval)
+func storeAppSample(samples *ArtifactSamples, name string, report appinspect.Report) {
+	if samples == nil {
+		return
+	}
+	var err error
+	if report.Status != appinspect.StatusOK {
+		err = errors.New(report.Status)
+	}
+	samples.StoreAppVersion(name, report.Version, err)
 }
 
+const appWatchCheckType = config.CategoryApp
+
 // BuildAppWatches builds one app-watch per installed catalog application. Each
-// reuses the whole Watch cycle: every engine.app_interval it inspects its app,
+// reuses the whole Watch cycle: every engine.artifact_interval it inspects its app,
 // and because FireOnFail is set it "fires" when the app is not ok — emitting a
 // firing/recovered event on the App dimension and notifying the global default
 // once on the rising edge (NotifyInterval 0 = first time only). Only installed
@@ -51,7 +57,10 @@ func BuildAppWatches(cfg *config.Config, deps Deps) []*Watch {
 	if cfg == nil {
 		return nil
 	}
-	interval := appWatchInterval(cfg)
+	samples := deps.ArtifactSamples
+	if samples == nil {
+		samples = NewArtifactSamples()
+	}
 	runner := deps.ExecxRunner
 	reports := appinspect.List(context.Background(), runner, cfg, config.CategoryApp, false,
 		appinspect.WithUserLookup(deps.UserLookup))
@@ -62,8 +71,10 @@ func BuildAppWatches(cfg *config.Config, deps Deps) []*Watch {
 	out := make([]*Watch, 0, len(reports))
 	for _, r := range reports {
 		name := r.Name
+		samples.RegisterApp(name)
 		check := appCheck{
-			name: name,
+			name:    name,
+			samples: samples,
 			inspect: func(ctx context.Context) appinspect.Report {
 				return appinspect.InspectOne(ctx, runner, cfg, name,
 					appinspect.WithUserLookup(deps.UserLookup))
@@ -75,7 +86,7 @@ func BuildAppWatches(cfg *config.Config, deps Deps) []*Watch {
 			CheckType:  appWatchCheckType,
 			Check:      check,
 			FireOnFail: true,
-			Interval:   interval,
+			Interval:   artifactWatchInterval(cfg, config.CategoryApp, name),
 			Notifiers:  notifiers,
 			Settling:   deps.Settling,
 			Now:        deps.Now,

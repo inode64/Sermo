@@ -93,10 +93,8 @@ const (
 	SectionEngine = "engine"
 	// EngineKeyAccess is engine.access.
 	EngineKeyAccess = "access"
-	// EngineKeyAppInterval is engine.app_interval.
-	EngineKeyAppInterval = "app_interval"
-	// EngineKeyLibsInterval is engine.libs_interval.
-	EngineKeyLibsInterval = "libs_interval"
+	// EngineKeyArtifactInterval is engine.artifact_interval.
+	EngineKeyArtifactInterval = "artifact_interval"
 	// EngineKeyBackend is engine.backend.
 	EngineKeyBackend = "backend"
 	// EngineKeyDefaultTimeout is engine.default_timeout.

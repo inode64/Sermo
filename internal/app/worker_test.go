@@ -555,6 +555,27 @@ func TestCycleRestartsOnAppVersionChange(t *testing.T) {
 	}
 }
 
+func TestCycleAppVersionChangeUsesArtifactSample(t *testing.T) {
+	runner := &sequenceRunner{stdout: []string{"containerd v9.9.9"}}
+	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
+	w := appVersionWorker(h, runner, "patch")
+	samples := NewArtifactSamples()
+	samples.RegisterApp("containerd")
+	w.artifactSamples = samples
+
+	samples.StoreAppVersion("containerd", "containerd v1.7.0", nil)
+	w.RunCycle(context.Background()) // establish baseline from the artifact cache
+	samples.StoreAppVersion("containerd", "containerd v1.7.1", nil)
+	w.RunCycle(context.Background())
+
+	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
+		t.Fatalf("cached app change should restart once, ops=%v", h.ops)
+	}
+	if runner.calls != 0 {
+		t.Fatalf("worker must not re-run cached app version command, calls=%d", runner.calls)
+	}
+}
+
 func TestCycleAppVersionChangeRespectsLevel(t *testing.T) {
 	// At minor level a patch bump is ignored; only a minor bump fires.
 	runner := &sequenceRunner{stdout: []string{

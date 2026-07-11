@@ -878,7 +878,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		ResolveUser:      discoverer.ResolveUser,
 		CheckDeps:        checks.Deps{DefaultTimeout: engineDefaultTimeout(cfg), Runner: a.Runner, Processes: discoverer.ObserveState, ProcessesAny: discoverer.ObserveAnyState, ProcessCount: discoverer.CountMatching},
 		MetricSample:     metricSample,
-		Changed:          app.LibChangedFunc(libBaseline),
+		Changed:          app.ArtifactChangedFunc(libBaseline),
 		OperationTimeout: operation.ResolveTimeout(opts.timeout, resolved.Tree),
 	})
 
