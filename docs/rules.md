@@ -1842,7 +1842,7 @@ probe (`tcp`, `command`, ...) instead of a `check:` reference when you need the
 named success/failure polarity.
 
 `changed` is true when the file at `path` differs (size/mtime) from the baseline
-tracked across cycles, or when `app` names a linked app whose version command
+tracked across artifact samples, or when `app` names a linked app whose version
 changed at the selected `level` (`major`, `minor` or `patch`; default `patch`).
 The first cycle adopts the current value (a daemon start never fires), and a
 successful `restart`/`start` re-baselines it. A failed app version command is an
@@ -1850,6 +1850,8 @@ invalid sample: it does not fire and does not update the baseline. The `path`
 form is the primitive behind `restart_on_change.libraries` (see Services →
 Library services); the `app` form is the primitive behind
 `restart_on_change.apps` for service-owned binaries such as `containerd`.
+For service paths, linked apps and catalog libraries, the samples run at
+`engine.artifact_interval` (or their local `interval`), not on every service cycle.
 
 ### Windows
 

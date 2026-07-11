@@ -77,6 +77,24 @@ var validDefaultsKeys = set(
 	sectionVariables,
 )
 
+var validEngineKeys = set(
+	keyInterval,
+	EngineKeyAccess,
+	EngineKeyArtifactInterval,
+	EngineKeyBackend,
+	EngineKeyDefaultTimeout,
+	EngineKeyDiagnostics,
+	EngineKeyDiagnosticsInterval,
+	EngineKeyEvents,
+	EngineKeyMaxParallelChecks,
+	EngineKeyMaxParallelOperations,
+	EngineKeyOperationTimeout,
+	EngineKeyStartupDelay,
+	EngineKeyStateCacheSize,
+	EngineKeyUserLookup,
+	EngineKeyUserLookupTimeout,
+)
+
 // Validate returns all schema and safety issues for a loaded config. An empty
 // slice means the current validators accept the configuration.
 func Validate(cfg *Config) []Issue {
@@ -98,10 +116,15 @@ func validateGlobal(cfg *Config) []Issue {
 	validateEnableIfTree(raw, add)
 
 	if engine, ok := raw[SectionEngine].(map[string]any); ok {
+		for _, key := range slices.Sorted(maps.Keys(engine)) {
+			if _, allowed := validEngineKeys[key]; !allowed {
+				add("%s is not supported", engineFieldPath(key))
+			}
+		}
 		if backend := cfgval.String(engine[EngineKeyBackend]); !isValidBackend(backend) {
 			add("%s %q is not one of %s", enginePathBackend, backend, backendSummary)
 		}
-		for _, field := range []string{keyInterval, EngineKeyDefaultTimeout, EngineKeyOperationTimeout, EngineKeyLibsInterval} {
+		for _, field := range []string{keyInterval, EngineKeyArtifactInterval, EngineKeyDefaultTimeout, EngineKeyOperationTimeout} {
 			if v, present := engine[field]; present && !isPositiveDuration(cfgval.String(v)) {
 				add("%s %q must be a valid positive duration", engineFieldPath(field), cfgval.String(v))
 			}
@@ -318,7 +341,7 @@ func validateDocuments(cfg *Config) []Issue {
 		issues = append(issues, validateVersionsCurrentFrom(doc, scope)...)
 		issues = append(issues, validateAppLinks(cfg, doc, scope)...)
 		issues = append(issues, validateVersionMatch(doc, scope)...)
-		if doc.Kind == kindLibrary {
+		if doc.Kind == kindApp || doc.Kind == kindLibrary {
 			if v, present := doc.Body[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
 				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("interval %q must be a valid positive duration", cfgval.String(v))})
 			}

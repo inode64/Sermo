@@ -82,8 +82,8 @@ preflight:
   file: { type: file, path: "${binary}" }
 ```
 
-Un perfil de biblioteca puede definir `interval` en el nivel superior para
-sustituir `engine.libs_interval` (por defecto `5m`) durante su inspección.
+Un perfil de app o biblioteca puede definir `interval` en el nivel superior para
+sustituir `engine.artifact_interval` (por defecto `5m`) durante su inspección.
 Cuando un servicio se suscribe mediante `restart_on_change.libraries`, Sermo
 añade también ese fichero de biblioteca como preflight obligatorio para start,
 restart, reload y resume; un fichero ausente, no regular o vacío bloquea la
@@ -145,6 +145,11 @@ rules:
           message: "containerd will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}"
         - type: restart
 ```
+
+El daemon muestrea estos paths y versiones de apps enlazadas según
+`engine.artifact_interval` (o el `interval` local aplicable). Un servicio puede
+evaluar reglas más a menudo, pero reutiliza esa muestra; por tanto la detección
+puede retrasarse como máximo una cadencia de artefactos más un tick del scheduler.
 
 Los booleanos opcionales `config` y `version` son permisos heredables. Cuando no
 aparecen, se consideran permitidos para conservar el comportamiento actual del

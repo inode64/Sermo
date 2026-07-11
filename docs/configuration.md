@@ -308,8 +308,7 @@ engine:
   max_parallel_operations: 2  # bound on concurrent start/stop/restart/reload/resume operations
   default_timeout: 10s        # default per-check timeout
   operation_timeout: 90s        # outer deadline for safe service actions
-  app_interval: 5m            # cadence for inspecting installed apps for errors
-  libs_interval: 5m           # cadence for inspecting installed catalog libraries
+  artifact_interval: 5m       # cadence for apps, libraries and service config/version artifacts
   startup_delay: 0            # grace period before the first cycle (0 disables)
   user_lookup: auto           # auto | native | getent | numeric
   user_lookup_timeout: 250ms  # per-getent lookup timeout; cached in-process
@@ -344,21 +343,13 @@ Omit a key to leave that channel off.
 `engine.interval` is the default cadence at which every service's checks are
 run. Each service runs all of its checks once per cycle.
 
-`engine.app_interval` (default `5m`) is the cadence at which the daemon inspects
-installed applications (the catalog apps shown in the web UI) for errors. When an
-app's version/health probe starts failing, the daemon emits an event with the
-error detail and notifies the global `notify:` default once (on the rising edge),
-and emits a `recovered` event when it passes again — the same edge-triggered
-behavior as host watches. Apps change rarely and each inspection runs the app's
-binary, so the default is slow; the web UI shows each app's recent events when you
-expand its row.
-
-`engine.libs_interval` (default `5m`) is the cadence at which the daemon inspects
-installed catalog libraries. A library profile may set its own top-level `interval`
-to override this cadence. Library observations are shared by every service that
-uses `restart_on_change.libraries`, so a shared object is sampled once at its
-library cadence rather than once per service cycle. Service operations still run
-their normal preflight checks directly.
+`engine.artifact_interval` (default `5m`) is the cadence at which the daemon
+inspects installed catalog apps, catalog libraries, and service version/config
+artifacts. An app or library profile may set its top-level `interval`; a service
+uses its own top-level `interval` for version/config monitors and changed paths.
+A service worker may still run more often, but reads the latest shared artifact
+sample instead of re-running a version command or filesystem probe each cycle.
+Service operations still run their normal preflight checks directly.
 
 `engine.backend: auto` detects the init system: probe systemd (`systemctl`
 exists, `/run/systemd/system` exists, `is-system-running` usable — `degraded`
@@ -2260,7 +2251,7 @@ Only target-safe parts of `defaults` merge into configured targets:
 `rule_window` apply to services; `restart_on_change` applies to services only
 for the inherited `config`/`version` permission flags. Engine-wide settings (`interval`,
 `max_parallel_checks`, `max_parallel_operations`, `default_timeout`,
-`operation_timeout`, `app_interval`, `libs_interval`, `startup_delay`, `backend`, `user_lookup`,
+`operation_timeout`, `artifact_interval`, `startup_delay`, `backend`, `user_lookup`,
 `user_lookup_timeout`, `state_cache_size`) are daemon configuration and never
 merge into a service.
 

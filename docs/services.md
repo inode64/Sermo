@@ -81,8 +81,8 @@ preflight:
   file: { type: file, path: "${binary}" }
 ```
 
-Set a top-level `interval` on a library profile to override the global
-`engine.libs_interval` (default `5m`) used for catalog-library inspection.
+Set a top-level `interval` on an app or library profile to override the global
+`engine.artifact_interval` (default `5m`) used for artifact inspection.
 When a service subscribes through `restart_on_change.libraries`, Sermo also
 adds that library file as a required preflight check for start, restart, reload
 and resume; a missing, non-regular or empty library file blocks the operation.
@@ -141,6 +141,11 @@ rules:
           message: "containerd will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}"
         - type: restart
 ```
+
+The daemon samples these paths and linked app versions at `engine.artifact_interval`
+(or the applicable local `interval`). A service may evaluate rules more often,
+but it reuses that sample; detection is therefore delayed by at most one artifact
+cadence plus one scheduler tick.
 
 The optional `config` and `version` booleans are inherited permissions. When
 absent they default to allowed, preserving the current service behavior.

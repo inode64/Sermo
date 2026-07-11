@@ -1842,14 +1842,15 @@ libre de efectos secundarios. `failed`/`active` también pueden tomar una sonda 
 polaridad de éxito/fallo con nombre.
 
 `changed` es verdadero cuando el archivo en `path` difiere (tamaño/mtime) de la línea base
-rastreada entre ciclos, o cuando `app` nombra una app enlazada cuyo comando de versión
+rastreada entre muestras de artefactos, o cuando `app` nombra una app enlazada cuya versión
 cambió en el `level` seleccionado (`major`, `minor` o `patch`; por defecto `patch`).
 El primer ciclo adopta el valor actual (un arranque del daemon nunca dispara), y un
 `restart`/`start` exitoso vuelve a establecer su línea base. Un comando de versión de app
 fallido es una muestra inválida: no dispara y no actualiza la línea base. La forma `path` es
 la primitiva detrás de `restart_on_change.libraries` (ver Services → Servicios de librería);
 la forma `app` es la primitiva detrás de `restart_on_change.apps` para binarios propiedad del
-servicio como `containerd`.
+servicio como `containerd`. Para paths de servicio, apps enlazadas y librerías del catálogo,
+las muestras se ejecutan según `engine.artifact_interval` (o su `interval` local), no en cada ciclo.
 
 ### Ventanas
 
