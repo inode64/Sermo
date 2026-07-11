@@ -95,6 +95,8 @@ const (
 	EngineKeyAccess = "access"
 	// EngineKeyAppInterval is engine.app_interval.
 	EngineKeyAppInterval = "app_interval"
+	// EngineKeyLibsInterval is engine.libs_interval.
+	EngineKeyLibsInterval = "libs_interval"
 	// EngineKeyBackend is engine.backend.
 	EngineKeyBackend = "backend"
 	// EngineKeyDefaultTimeout is engine.default_timeout.

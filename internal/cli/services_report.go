@@ -56,8 +56,12 @@ func buildReportNotifiers(cfg *config.Config) (map[string]notify.Notifier, []str
 	return notify.Build(cfg.Notifiers(), notify.WithoutTemplates())
 }
 
+func buildConfiguredNotifiers(cfg *config.Config) (map[string]notify.Notifier, []string) {
+	return notify.Build(cfg.Notifiers(), notify.WithTemplateDir(cfg.Global.TemplateDir()))
+}
+
 func (a App) sendServicesReport(ctx context.Context, opts options, cfg *config.Config, reports []appinspect.Report, includeMissing bool) ([]string, int) {
-	registry, warnings := a.BuildNotifiers(cfg)
+	registry, warnings := a.BuildReportNotifiers(cfg)
 	for _, warning := range warnings {
 		fmt.Fprintf(a.Stderr, cliWarningFormat, warning)
 	}

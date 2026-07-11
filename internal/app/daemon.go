@@ -150,9 +150,12 @@ type Deps struct {
 	// round(interval/resolution) cycles). A service's own `interval` overrides it.
 	Interval    time.Duration
 	MaxParallel int
-	Sleep       func(time.Duration)
-	Now         func() time.Time
-	Emit        func(Event)
+	// LibrarySamples shares catalog-library observations with workers so a
+	// library change is sampled at its library cadence, not per service cycle.
+	LibrarySamples *LibrarySamples
+	Sleep          func(time.Duration)
+	Now            func() time.Time
+	Emit           func(Event)
 	// Monitor persists per-entry monitoring state (active/paused) across daemon
 	// restarts and reboots. Optional: nil means every service/watch is always
 	// monitored.
@@ -531,6 +534,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Emit:              deps.Emit,
 		windows:           windowStates,
 		libBaseline:       libBaseline,
+		librarySamples:    deps.LibrarySamples,
 
 		appVersionCmd:   appVersionCmds(tree),
 		appVersions:     map[string]string{},

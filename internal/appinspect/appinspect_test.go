@@ -83,6 +83,27 @@ func TestInspectCategoryOneAcceptsInstalledLibraryFile(t *testing.T) {
 	}
 }
 
+func TestInspectCategoryOneRejectsEmptyLibraryFile(t *testing.T) {
+	root := t.TempDir()
+	libraryPath := filepath.Join(root, "libempty.so")
+	if err := os.WriteFile(libraryPath, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		LibraryNames: []string{"libempty"},
+		Libraries: map[string]*config.Document{
+			"libempty": {Name: "libempty", Body: map[string]any{
+				"name":      "libempty",
+				"variables": map[string]any{"binary": libraryPath},
+			}},
+		},
+	}
+	report := InspectCategoryOne(context.Background(), testRunner{}, cfg, config.CategoryLibrary, "libempty")
+	if !report.Installed || report.OK || !strings.Contains(report.Status, "is empty") {
+		t.Fatalf("InspectCategoryOne() = %+v, want installed failed empty-library report", report)
+	}
+}
+
 func TestInspectCommandUser(t *testing.T) {
 	root := t.TempDir()
 	binary := filepath.Join(root, "postgres")

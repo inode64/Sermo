@@ -95,7 +95,7 @@ defaults: { policy: { cooldown: 5m } }
 		Stdout:     &stdout,
 		Stderr:     &bytes.Buffer{},
 		LoadConfig: testLoadConfigWithCatalog(catalogDir),
-		BuildNotifiers: func(*config.Config) (map[string]notify.Notifier, []string) {
+		BuildReportNotifiers: func(*config.Config) (map[string]notify.Notifier, []string) {
 			return map[string]notify.Notifier{"ops": notifier}, nil
 		},
 	}

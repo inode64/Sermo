@@ -13,6 +13,8 @@ import (
 const (
 	// DefaultEngineAppInterval is the application inspection cadence fallback.
 	DefaultEngineAppInterval = 5 * time.Minute
+	// DefaultEngineLibsInterval is the catalog library inspection cadence fallback.
+	DefaultEngineLibsInterval = 5 * time.Minute
 	// DefaultEngineCheckTimeout is the fallback for engine.default_timeout.
 	DefaultEngineCheckTimeout = 10 * time.Second
 	// DefaultEngineOperationTimeout is the fallback for engine.operation_timeout.

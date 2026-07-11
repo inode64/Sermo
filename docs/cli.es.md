@@ -78,6 +78,7 @@ sermoctl panic on|off|status          # daemon-wide emergency switch (see Panic 
 sermoctl config validate
 
 sermoctl daemon reload                 # reload sermod config, not services
+sermoctl notifier test NAME            # envía un mensaje de prueba explícito por un notifier
 
 sermoctl services [all] [--long] [--notify NAME[,NAME]|all]   # catalog inventory, not runtime config
 sermoctl apps [all] [--long]                                  # catalog apps (see Catalog inventory)
@@ -109,6 +110,7 @@ Ejemplos:
 sermoctl help restart
 sermoctl restart mysql-main
 sermoctl services --notify ops-email
+sermoctl notifier test ops-email
 sermoctl daemon reload
 sermoctl state compact --before 720h
 ```

@@ -29,6 +29,7 @@ const (
 	commandUmount    = mountctl.ActionUmount
 	commandConfig    = "config"
 	commandDaemon    = "daemon"
+	commandNotifier  = "notifier"
 	commandServices  = "services"
 	commandApps      = "apps"
 	commandLibs      = "libs"
@@ -44,6 +45,7 @@ const (
 
 const (
 	commandMountList    = "list"
+	commandNotifierTest = "test"
 	commandStateCompact = "compact"
 	commandArgAll       = config.SelectionKeywordAll
 	commandArgClear     = "clear"

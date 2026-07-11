@@ -33,6 +33,7 @@ engine:
   interval: notaduration
   default_timeout: 0s
   operation_timeout: bad
+  libs_interval: invalid
   max_parallel_checks: 0
   max_parallel_operations: -1
 paths:
@@ -49,6 +50,7 @@ defaults:
 		"engine.interval",
 		"engine.default_timeout",
 		"engine.operation_timeout",
+		"engine.libs_interval",
 		"engine.max_parallel_checks",
 		"engine.max_parallel_operations",
 	} {

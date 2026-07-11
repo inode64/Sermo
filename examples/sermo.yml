@@ -19,6 +19,9 @@ engine:
   # needs longer). sermoctl and the web UI use the same limit; the web server's
   # HTTP write timeout is derived from the longest resolved service deadline.
   operation_timeout: 90s
+  # Cadence for inspecting installed catalog libraries. A library profile may
+  # override this with its own top-level interval.
+  libs_interval: 5m
   # Grace period before the daemon starts its first check cycle. Gives the host
   # time to finish booting so services that are still coming up are not flagged
   # or remediated prematurely. 0 (the default) disables the wait.

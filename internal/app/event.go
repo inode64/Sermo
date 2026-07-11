@@ -74,6 +74,7 @@ const (
 	eventActionPanicOn           = "panic-on"
 	eventActionPanicOff          = "panic-off"
 	eventActionReload            = string(rules.ActionReload)
+	eventActionNotifierTest      = "test"
 )
 
 // Event message values shared by monitor-state transitions.

@@ -37,11 +37,20 @@ type fakeBackend struct {
 	events          []Event
 	releasedLocks   []string
 	releaseOK       bool
+	notifierTested  string
+	notifierResult  ActionResult
 }
 
 func (f *fakeBackend) Services(context.Context) []Service   { return f.services }
 func (f *fakeBackend) Watches(context.Context) []Watch      { return nil }
 func (f *fakeBackend) Notifiers(context.Context) []Notifier { return nil }
+func (f *fakeBackend) TestNotifier(_ context.Context, name string) ActionResult {
+	f.notifierTested = name
+	if f.notifierResult.Message != "" {
+		return f.notifierResult
+	}
+	return ActionResult{OK: true, Message: "test sent"}
+}
 func (f *fakeBackend) Applications(context.Context) []Application {
 	return f.applications
 }
@@ -319,6 +328,22 @@ func TestHandlePanicRejectsBadAction(t *testing.T) {
 	newServer(&fakeBackend{}).ServeHTTP(rec, postReq(testAPIPath(apiSegmentPanic, "maybe")))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("POST /api/panic/maybe = %d, want 400", rec.Code)
+	}
+}
+
+func TestHandleNotifierTest(t *testing.T) {
+	b := &fakeBackend{}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, postReq(testTargetPath(apiSegmentNotifiers, "ops", apiActionTest)))
+	if rec.Code != http.StatusOK || b.notifierTested != "ops" {
+		t.Fatalf("POST notifier test = %d, tested=%q", rec.Code, b.notifierTested)
+	}
+
+	b.notifierResult = ActionResult{OK: false, Message: "disabled"}
+	rec = httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, postReq(testTargetPath(apiSegmentNotifiers, "ops", apiActionTest)))
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("failed notifier test = %d, want %d", rec.Code, http.StatusConflict)
 	}
 }
 

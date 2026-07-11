@@ -82,6 +82,13 @@ preflight:
   file: { type: file, path: "${binary}" }
 ```
 
+Un perfil de biblioteca puede definir `interval` en el nivel superior para
+sustituir `engine.libs_interval` (por defecto `5m`) durante su inspección.
+Cuando un servicio se suscribe mediante `restart_on_change.libraries`, Sermo
+añade también ese fichero de biblioteca como preflight obligatorio para start,
+restart, reload y resume; un fichero ausente, no regular o vacío bloquea la
+operación.
+
 Un servicio configurado (o una definición de servicio de catálogo) se suscribe con
 `restart_on_change`. Los servicios del catálogo empaquetado que enlazan apps
 versionadas declaran la forma de app por defecto; los servicios personalizados

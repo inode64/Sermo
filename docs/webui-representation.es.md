@@ -470,7 +470,8 @@ Section id: `notifiers-section`
 | --- | --- |
 | Título | `Notifiers` más el recuento total |
 | Visibilidad | oculto cuando no hay notifiers configurados |
-| Columnas | Name, Type, State |
+| Columnas | Name, Type, Destination, Watches, State, Actions |
+| Acciones | Un administrador puede enviar un mensaje claramente marcado como prueba por un notifier habilitado. |
 
 Estado vacío:
 

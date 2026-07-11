@@ -18,6 +18,7 @@ engine:
   max_parallel_operations: 2
   default_timeout: 10s
   operation_timeout: 90s
+  libs_interval: 5m
   startup_delay: 0
   user_lookup: auto
   user_lookup_timeout: 250ms

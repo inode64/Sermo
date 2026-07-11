@@ -35,7 +35,7 @@ var commandGroups = []commandGroup{
 	},
 	{
 		Title:    "Configuration And Catalog",
-		Commands: []string{commandConfig, commandDaemon, commandServices, commandApps, commandLibs, commandPatterns, commandWizard},
+		Commands: []string{commandConfig, commandDaemon, commandNotifier, commandServices, commandApps, commandLibs, commandPatterns, commandWizard},
 	},
 	{
 		Title:    "History And State",
@@ -362,6 +362,20 @@ var commandUsages = []commandUsage{
 		},
 		Examples: []string{
 			"sermoctl daemon reload",
+		},
+	},
+	{
+		Name:    commandNotifier,
+		Summary: "Send an explicit test message through one configured notifier.",
+		Usage: []string{
+			"sermoctl notifier test NAME",
+		},
+		Notes: []string{
+			"Tests exactly one enabled notifier and sends a clearly marked test message.",
+			"The command does not trigger watches, hooks or automatic remediation.",
+		},
+		Examples: []string{
+			"sermoctl notifier test ops-email",
 		},
 	},
 	{

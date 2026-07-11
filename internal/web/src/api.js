@@ -46,6 +46,7 @@ const apiSuffixPreflight = "/preflight";
 const apiSuffixRelease = "/release";
 const apiSuffixRuntime = "/runtime";
 const apiSuffixSLA = "/sla";
+const apiSuffixTest = "/test";
 export const readyVerbosePath = "readyz?verbose";
 export const liveVerbosePath = "livez?verbose";
 
@@ -73,6 +74,7 @@ export function lockReleaseAPI(service, query = "") {
 }
 export function mountAPI(name, suffix = "") { return apiEntityPath(apiMountsPath, name, suffix); }
 export function mountBlockersAPI(name) { return mountAPI(name, apiSuffixBlockers); }
+export function notifierTestAPI(name) { return apiEntityPath(apiNotifiersPath, name, apiSuffixTest); }
 export function panicAPI(enable) { return `${apiPanicPath}/${enable ? "on" : "off"}`; }
 export function serviceAPI(name, suffix = "") { return apiEntityPath(apiServicesPath, name, suffix); }
 export function serviceEventsAPI(name, limit) { return serviceAPI(name, apiLimitSuffix(apiSuffixEvents, limit)); }

@@ -173,6 +173,7 @@ type WebBackend struct {
 	watches           map[string]*webWatch
 	notifierOrder     []string
 	notifiers         map[string]*webNotifier
+	notifierRegistry  map[string]notify.Notifier
 	store             MonitorStore
 	operationSettling OperationSettlingStore
 	snapshots         *Snapshots
@@ -289,6 +290,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		entries:           map[string]*webEntry{},
 		watches:           map[string]*webWatch{},
 		notifiers:         map[string]*webNotifier{},
+		notifierRegistry:  deps.Notifiers,
 		store:             deps.Monitor,
 		operationSettling: operationSettling,
 		snapshots:         deps.Snapshots,
@@ -2338,6 +2340,43 @@ func (b *WebBackend) Notifiers(ctx context.Context) []web.Notifier {
 	return out
 }
 
+// TestNotifier sends an explicit operator-requested test message through one
+// enabled notifier. It is independent of watch/rule delivery and is bounded by
+// the daemon's normal default timeout.
+func (b *WebBackend) TestNotifier(ctx context.Context, name string) web.ActionResult {
+	configured := b.notifiers[name]
+	if configured == nil {
+		msg := "unknown notifier " + name
+		b.emitNotifierTestEvent(eventKindError, eventStatusFailed, msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	if !configured.enabled {
+		msg := "notifier " + name + " is disabled in configuration"
+		b.emitNotifierTestEvent(eventKindError, eventStatusFailed, msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	n, ok := b.notifierRegistry[name]
+	if !ok {
+		msg := "notifier " + name + " is unavailable"
+		b.emitNotifierTestEvent(eventKindError, eventStatusFailed, msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	timeout := b.defaultTimeout
+	if timeout <= 0 {
+		timeout = DefaultEngineCheckTimeout
+	}
+	sendCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	if err := n.Send(sendCtx, notify.TestMessage()); err != nil {
+		msg := fmt.Sprintf("send test notification to %s: %v", name, err)
+		b.emitNotifierTestEvent(eventKindNotifyFail, eventStatusFailed, msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	msg := "test notification sent to " + name
+	b.emitNotifierTestEvent(eventKindNotify, eventStatusOK, msg)
+	return web.ActionResult{OK: true, Message: msg}
+}
+
 // Applications returns the installed applications (catalog app daemons whose
 // binary is present) with their version and binary location, reusing the same
 // inspection the sermoctl `apps` listing uses so both surfaces agree.
@@ -3602,6 +3641,18 @@ func (b *WebBackend) emitWatchExpandEvent(watch, kind, status, message string) {
 		Watch:   watch,
 		Kind:    kind,
 		Action:  eventActionExpand,
+		Status:  status,
+		Message: message,
+	})
+}
+
+func (b *WebBackend) emitNotifierTestEvent(kind, status, message string) {
+	if b.emit == nil {
+		return
+	}
+	b.emit(Event{
+		Kind:    kind,
+		Action:  eventActionNotifierTest,
 		Status:  status,
 		Message: message,
 	})

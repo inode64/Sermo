@@ -81,6 +81,12 @@ preflight:
   file: { type: file, path: "${binary}" }
 ```
 
+Set a top-level `interval` on a library profile to override the global
+`engine.libs_interval` (default `5m`) used for catalog-library inspection.
+When a service subscribes through `restart_on_change.libraries`, Sermo also
+adds that library file as a required preflight check for start, restart, reload
+and resume; a missing, non-regular or empty library file blocks the operation.
+
 A configured service (or catalog service definition) opts in with
 `restart_on_change`. Packaged catalog services that link versioned apps declare
 the app form by default; custom services can use the same shape. `paths` is for

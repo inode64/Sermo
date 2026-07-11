@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 	"sermo/internal/rules"
 	"slices"
 	"strings"
@@ -2840,6 +2842,10 @@ restart_on_change:
 	changed := nested(t, resolved.Tree, "rules", "restart-on-change-glibc", "if", "changed")
 	if cfgval.String(changed["path"]) != "/lib64/libc.so.6" {
 		t.Errorf("changed.path = %v, want /lib64/libc.so.6", changed["path"])
+	}
+	preflight := nested(t, resolved.Tree, "preflight", "library-glibc-file")
+	if cfgval.String(preflight["type"]) != checks.CheckTypeFile || cfgval.String(preflight["path"]) != "/lib64/libc.so.6" || !cfgval.Bool(preflight[checks.CheckKeyNonEmpty]) {
+		t.Errorf("library preflight = %v, want file /lib64/libc.so.6", preflight)
 	}
 }
 
