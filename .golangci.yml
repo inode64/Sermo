@@ -51,7 +51,7 @@ linters:
     - thelper  # t.Helper() in table-driven check callbacks and fakes
     - usestdlibvars  # prefer stdlib constants (http.StatusOK, ...)
     - wastedassign
-    - wrapcheck  # pilot: operation/ + app/ + cli/ + state/ + process/ + web/ + servicemgr/ + rules/ (see exclusions)
+    - wrapcheck  # pilot: operation/ + app/ + cli/ + state/ + process/ + web/ + servicemgr/ + rules/ + config/ (see exclusions)
   settings:
     depguard:
       rules:
@@ -114,7 +114,7 @@ linters:
       # Eclipse Mosquitto — real MQTT broker name in catalog/tests.
       ignore-rules:
         - mosquitto
-  # Considered and deliberately NOT enabled (wrapcheck pilot: operation/ + app/ + cli/ + state/ + process/ + web/ + servicemgr/ + rules/):
+  # Considered and deliberately NOT enabled (wrapcheck pilot covers operation/ through config/; see exclusions):
   #   wrapcheck (rest of tree) — later phases; hundreds of interface-boundary returns.
   #   makezero  — false positives on the conn/ packet builders, where a
   #               fixed-header make([]byte, N) followed by append(body) is intended.
@@ -156,13 +156,13 @@ linters:
         path: internal/state/
       - linters: [contextcheck]
         path: internal/cli/(monitor|panic|sla|state|watch)\.go
-      # wrapcheck pilot: operation/ + app/ + cli/ + state/ + process/ + web/ + servicemgr/ + rules/; expand later.
+      # wrapcheck pilot: operation/ + app/ + cli/ + state/ + process/ + web/ + servicemgr/ + rules/ + config/.
       - linters: [wrapcheck]
         path: _test\.go
       - linters: [wrapcheck]
         path: cmd/
       - linters: [wrapcheck]
-        path: internal/(appinspect|assist|buildinfo|cfgval|checks|config|conn|control|diag|dockerctl|emission|execx|httpx|locks|logfile|metrics|mountctl|mounts|netutil|notify|output|procnet|units|utmp|virt|volume)/
+        path: internal/(appinspect|assist|buildinfo|cfgval|checks|conn|control|diag|dockerctl|emission|execx|httpx|locks|logfile|metrics|mountctl|mounts|netutil|notify|output|procnet|units|utmp|virt|volume)/
       # ireturn: central builders and registries intentionally return interface types.
       - linters: [ireturn]
         path: _test\.go
