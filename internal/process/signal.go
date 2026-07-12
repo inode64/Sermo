@@ -27,7 +27,10 @@ func (OSSignaler) Signal(pid int, sig syscall.Signal) error {
 	if err := protectedSignalTarget(pid, sig, OSReader{}.Identity); err != nil {
 		return err
 	}
-	return syscall.Kill(pid, sig)
+	if err := syscall.Kill(pid, sig); err != nil {
+		return fmt.Errorf("signal pid %d with %v: %w", pid, sig, err)
+	}
+	return nil
 }
 
 // ReapResult is the outcome of signal escalation.
@@ -148,10 +151,13 @@ func (r Reaper) Signal(ctx context.Context, procs []Process, selector KillSelect
 // is the shared cancellable-sleep used by the reaper and the operation engine.
 func Wait(ctx context.Context, sleep func(time.Duration), d time.Duration) error {
 	if d <= 0 {
-		return ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("wait cancelled: %w", err)
+		}
+		return nil
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return fmt.Errorf("wait cancelled: %w", err)
 	}
 	if sleep == nil {
 		// Default: a stoppable timer so a cancelled Wait leaks no goroutine. An
@@ -162,9 +168,12 @@ func Wait(ctx context.Context, sleep func(time.Duration), d time.Duration) error
 		defer timer.Stop()
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf("wait cancelled: %w", ctx.Err())
 		case <-timer.C:
-			return ctx.Err()
+			if err := ctx.Err(); err != nil {
+				return fmt.Errorf("wait cancelled: %w", err)
+			}
+			return nil
 		}
 	}
 	done := make(chan struct{})
@@ -174,9 +183,12 @@ func Wait(ctx context.Context, sleep func(time.Duration), d time.Duration) error
 	}()
 	select {
 	case <-ctx.Done():
-		return ctx.Err()
+		return fmt.Errorf("wait cancelled: %w", ctx.Err())
 	case <-done:
-		return ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("wait cancelled: %w", err)
+		}
+		return nil
 	}
 }
 

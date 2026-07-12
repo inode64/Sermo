@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -37,7 +38,7 @@ func (c pidfileCheck) Run(_ context.Context) Result {
 	for _, path := range c.paths {
 		pid, err := process.ReadPidfile(path)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
 			failures = append(failures, fmt.Sprintf("%s: %v", path, err))

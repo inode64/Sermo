@@ -1,6 +1,7 @@
 package process
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,7 +22,7 @@ import (
 func PIDsByComm(name string) ([]int, error) {
 	entries, err := os.ReadDir(procRoot)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read %s: %w", procRoot, err)
 	}
 	var pids []int
 	for _, e := range entries {
