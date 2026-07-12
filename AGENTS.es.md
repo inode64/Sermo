@@ -609,8 +609,9 @@ Notas de herramientas:
   `modernize`, `depguard` (denegaciones acotadas — checks/conn/rules/config no
   importan `operation`; `rules/` de producción no importa `execx`), `wrapcheck`
   (piloto: `internal/operation/`, `internal/app/`, `internal/cli/`,
-  `internal/state/`, `internal/process/`, `internal/web/`, `internal/servicemgr/`
-  y `internal/rules/`; `*_test.go` y el resto de paquetes excluidos), `ireturn`
+  `internal/state/`, `internal/process/`, `internal/web/`, `internal/servicemgr/`,
+  `internal/rules/` y `internal/config/`; `*_test.go` y el resto de paquetes
+  excluidos), `ireturn`
   (activo; builders de checks/notify, registro conn,
   constructores de managers y fábricas similares excluidos — ver
   `.golangci.yml`), `nilerr`,
