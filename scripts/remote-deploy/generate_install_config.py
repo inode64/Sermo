@@ -1178,6 +1178,27 @@ dry_run: true
     for name, category, interval, check_lines in generic_watches:
         add_watch("watches", name, simple_watch(name, category, interval, check_lines))
 
+    add_watch(
+        "watches",
+        "watch-clock-drift",
+        simple_watch(
+            "watch-clock-drift",
+            "system",
+            "5m",
+            [
+                "type: clock",
+                "servers:",
+                "  - time.cloudflare.com",
+                "  - pool.ntp.org",
+                "max_offset: 3s",
+                "max_stratum: 4",
+                "max_root_dispersion: 250ms",
+                "timeout: 3s",
+            ],
+            cycles=2,
+        ),
+    )
+
     if features.get("pressure") == "1":
         for resource in ["cpu", "memory", "io"]:
             name = f"watch-pressure-{resource}"

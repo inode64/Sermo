@@ -63,6 +63,10 @@ every `24h`, and hdparm every `6h`. Use
 `--include-inactive-installed-services` only for catalog audits where inactive
 installed profiles are intentionally desired.
 
+Every generated configuration also includes an alert-only clock watch. It queries
+`time.cloudflare.com` and `pool.ntp.org` every five minutes and alerts after two
+consecutive samples whose wall-clock drift exceeds `3s`; it never corrects time.
+
 When `/usr/share/GeoIP` exists on a target, the generated configuration also
 adds an alert-only recursive file watch. It reports each GeoIP database file
 whose modification age exceeds `20` days (`older_than: 480h`); it has no hook
