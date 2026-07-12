@@ -115,6 +115,8 @@ const panicModeOn = "on";
 const panicModeOff = "off";
 const actionAlert = "alert";
 const actionExpand = "expand";
+const actionProbe = "probe";
+const actionPause = "pause";
 const actionKillUmount = "kill-umount";
 const actionMonitor = "monitor";
 const actionReload = "reload";
@@ -3807,6 +3809,9 @@ function watchActionDisabled(w, action) {
     case actionMonitor: return !!w.monitored;
     case actionUnmonitor: return !w.monitored;
     case actionExpand: return !watchHasExpand(w);
+	case actionProbe: return !w.can_probe;
+	case actionPause: return !w.can_control_raid;
+	case actionResume: return !w.can_control_raid;
     default: return false;
   }
 }
@@ -3823,6 +3828,11 @@ function watchActionDisabledReason(w, action) {
     case actionExpand:
       if (!watchHasExpand(w)) return "expand is not configured";
       return "";
+	case actionProbe:
+		return w.can_probe ? "" : "manual probe is not supported";
+	case actionPause:
+	case actionResume:
+		return w.can_control_raid ? "" : "RAID control is not configured";
     default: return "";
   }
 }
@@ -3848,6 +3858,9 @@ function watchActionAriaLabel(w, action) {
   const name = displayName(w) || w.name || "";
   switch (action) {
     case actionExpand: return `Expand storage for watch ${name}`;
+	case actionProbe: return `Probe watch ${name}`;
+	case actionPause: return `Pause RAID reconstruction for watch ${name}`;
+	case actionResume: return `Resume RAID reconstruction for watch ${name}`;
     case actionMonitor: return `Monitor watch ${name}`;
     case actionUnmonitor: return `Unmonitor watch ${name}`;
     default: return `${action} watch ${name}`;
@@ -3886,6 +3899,12 @@ function watchNameCell(w, key, open) {
 
 // watchActionsCell renders the shared actions cell (expand / monitor / unmonitor).
 function watchActionsCell(w) {
+	const probeBtn = (w.can_probe && me.can_act && w.enabled)
+	  ? tpl`${watchActionHint(w, actionProbe)}<button ?disabled=${watchActionDisabled(w, actionProbe)} data-watch="${w.name}" data-watch-action="${actionProbe}" aria-label="${watchActionAriaLabel(w, actionProbe)}">probe</button>`
+	  : nothing;
+	const raidButtons = (w.can_control_raid && me.can_act && w.enabled)
+	  ? tpl`${watchActionHint(w, actionPause)}<button ?disabled=${watchActionDisabled(w, actionPause)} data-watch="${w.name}" data-watch-action="${actionPause}" aria-label="${watchActionAriaLabel(w, actionPause)}">pause RAID</button> ${watchActionHint(w, actionResume)}<button ?disabled=${watchActionDisabled(w, actionResume)} data-watch="${w.name}" data-watch-action="${actionResume}" aria-label="${watchActionAriaLabel(w, actionResume)}">resume RAID</button>`
+	  : nothing;
   const expandBtn = (w.expand && Number(w.expand.by_bytes) > 0 && me.can_act && w.enabled)
     ? tpl`${watchActionHint(w, actionExpand)}<button ?disabled=${watchActionDisabled(w, actionExpand)} data-watch="${w.name}" data-watch-action="${actionExpand}" aria-label="${watchActionAriaLabel(w, actionExpand)}" aria-describedby="${watchActionDescribedBy(w, actionExpand)}">${actionExpand} ${fmtBytes(w.expand.by_bytes)}</button>`
     : nothing;
@@ -3898,7 +3917,7 @@ function watchActionsCell(w) {
       : tpl`<span class="muted">read-only</span>`);
   const actions = !w.enabled
     ? tpl`<span class="muted">disabled in config</span>`
-    : tpl`${expandBtn} ${monitorBtn}`;
+	: tpl`${probeBtn} ${raidButtons} ${expandBtn} ${monitorBtn}`;
   return tpl`<td class="actions">${actions}</td>`;
 }
 
@@ -5400,18 +5419,35 @@ async function act(name, action) {
 }
 
 async function actWatch(name, action) {
-  if (action === actionExpand && !(await confirmWatchExpand(name))) return;
+	let headers = {};
+	if (action === actionExpand && !(await confirmWatchExpand(name))) return;
+	if (action === actionPause) {
+		const w = (allWatches || []).find((item) => item && item.name === name) || {};
+		if (!(await confirmWatchRAIDPause(name, w.raid_array || ""))) return;
+		headers = { "X-Sermo-Confirm": w.raid_array || "" };
+	}
+	if (action === actionResume && !(await confirmWatchRAIDResume(name))) return;
   setStatus("");
   try {
-    const res = await fetch(watchAPI(name, apiActionSuffix(action)), csrfPostOptions());
+	const res = await fetch(watchAPI(name, apiActionSuffix(action)), csrfPostOptions(headers));
     const body = await res.json().catch(() => ({}));
     if (!res.ok || body.ok === false) {
       throw new Error(body.message || ("HTTP " + res.status));
     }
+	setStatus(`${action} watch ${name}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
   } catch (e) {
     setStatus(`${action} watch ${name}: ${e.message}`, feedbackStatusErr);
   }
   load();
+}
+
+async function confirmWatchRAIDPause(name, array) {
+	if (!(await promptConfirm({ title: `Pause RAID reconstruction for ${name}?`, message: `Pause the active reconstruction on ${array || name}. This delays redundancy recovery.`, okLabel: "Continue", danger: true }))) return false;
+	return promptConfirm({ title: "Confirm RAID pause", message: `Confirm pausing reconstruction for ${array || name}.`, okLabel: "Pause reconstruction", danger: true });
+}
+
+function confirmWatchRAIDResume(name) {
+	return promptConfirm({ title: `Resume RAID reconstruction for ${name}?`, message: "Resume the array's current reconstruction.", okLabel: "Resume reconstruction", danger: true });
 }
 
 async function testNotifier(name) {

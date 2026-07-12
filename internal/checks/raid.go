@@ -26,6 +26,7 @@ type RaidArrayStatus struct {
 	Degraded      bool
 	Recovering    bool
 	Operation     string
+	SyncAction    string
 	ProgressPct   float64
 	HasProgress   bool
 	MismatchCount string
@@ -228,10 +229,11 @@ func defaultRaidSampler() (RaidStatus, error) {
 }
 
 var (
-	mdHeadRe     = regexp.MustCompile(`^(md\w+)\s*:`)
-	mdRatioRe    = regexp.MustCompile(`\[(\d+)/(\d+)\]`)
-	mdStatusRe   = regexp.MustCompile(`\[([U_]+)\]`)
-	mdProgressRe = regexp.MustCompile(`\b(recovery|resync|reshape|check)\s*=\s*([0-9]+(?:\.[0-9]+)?)%`)
+	mdHeadRe      = regexp.MustCompile(`^(md\w+)\s*:`)
+	mdRatioRe     = regexp.MustCompile(`\[(\d+)/(\d+)\]`)
+	mdStatusRe    = regexp.MustCompile(`\[([U_]+)\]`)
+	mdProgressRe  = regexp.MustCompile(`\b(recovery|resync|reshape|check)\s*=\s*([0-9]+(?:\.[0-9]+)?)%`)
+	mdArrayNameRe = regexp.MustCompile(`^md[[:alnum:]_]+$`)
 )
 
 const (
@@ -243,6 +245,9 @@ const (
 	mdProgressValueGroup = 2
 	mdMemberPrefix       = "dev-"
 	raidSysBlockPath     = "/sys/block"
+	raidSyncActionFile   = "sync_action"
+	raidSyncActionIdle   = "idle"
+	raidSyncActionResync = "resync"
 )
 
 // parseMdstat parses /proc/mdstat. An array is degraded when its active count
@@ -308,6 +313,7 @@ func enrichRaidSysfs(st *RaidStatus, root string) {
 	for i := range st.Details {
 		detail := &st.Details[i]
 		mdPath := filepath.Join(root, detail.Name, "md")
+		detail.SyncAction = readRaidSysfsValue(filepath.Join(mdPath, raidSyncActionFile))
 		detail.MismatchCount = readRaidSysfsValue(filepath.Join(mdPath, "mismatch_cnt"))
 		entries, err := os.ReadDir(mdPath)
 		if err != nil {
@@ -325,6 +331,72 @@ func enrichRaidSysfs(st *RaidStatus, root string) {
 		}
 		sort.Slice(detail.Members, func(i, j int) bool { return detail.Members[i].Name < detail.Members[j].Name })
 	}
+}
+
+// SetRaidRebuildState pauses or resumes a Linux md reconstruction through its
+// sync_action sysfs attribute. It accepts only a discovered md array name and
+// checks the live state before writing, so callers cannot turn an arbitrary
+// sysfs path into a write target.
+func SetRaidRebuildState(ctx context.Context, array string, resume bool) (RaidArrayStatus, error) {
+	return setRaidRebuildState(ctx, array, resume, raidSysBlockPath, SampleRaid)
+}
+
+func setRaidRebuildState(ctx context.Context, array string, resume bool, root string, sample RaidSamplerFunc) (RaidArrayStatus, error) {
+	if !validRaidArrayName(array) {
+		return RaidArrayStatus{}, fmt.Errorf("invalid RAID array %q", array)
+	}
+	if err := ctx.Err(); err != nil {
+		return RaidArrayStatus{}, err
+	}
+	if sample == nil {
+		sample = SampleRaid
+	}
+	status, err := sample()
+	if err != nil {
+		return RaidArrayStatus{}, fmt.Errorf("sample RAID %s: %w", array, err)
+	}
+	detail, present := raidArray(status, array)
+	if !present {
+		return RaidArrayStatus{}, fmt.Errorf("RAID array %q was not found", array)
+	}
+	if resume {
+		if detail.SyncAction != raidSyncActionIdle {
+			return RaidArrayStatus{}, fmt.Errorf("RAID array %q is not paused (sync_action=%q)", array, detail.SyncAction)
+		}
+	} else if !isRaidRebuild(detail.Operation) {
+		return RaidArrayStatus{}, fmt.Errorf("RAID array %q is not reconstructing", array)
+	}
+
+	action := raidSyncActionIdle
+	if resume {
+		action = raidSyncActionResync
+	}
+	path := filepath.Join(root, array, "md", raidSyncActionFile)
+	if err := os.WriteFile(path, []byte(action+"\n"), 0); err != nil {
+		return RaidArrayStatus{}, fmt.Errorf("set RAID %s sync_action=%s: %w", array, action, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return RaidArrayStatus{}, err
+	}
+	verified, err := sample()
+	if err != nil {
+		return RaidArrayStatus{}, fmt.Errorf("verify RAID %s: %w", array, err)
+	}
+	detail, present = raidArray(verified, array)
+	if !present {
+		return RaidArrayStatus{}, fmt.Errorf("RAID array %q disappeared after setting sync_action", array)
+	}
+	if !resume && detail.SyncAction != raidSyncActionIdle {
+		return RaidArrayStatus{}, fmt.Errorf("RAID array %q did not pause (sync_action=%q)", array, detail.SyncAction)
+	}
+	if resume && detail.SyncAction == raidSyncActionIdle {
+		return RaidArrayStatus{}, fmt.Errorf("RAID array %q did not resume", array)
+	}
+	return detail, nil
+}
+
+func validRaidArrayName(array string) bool {
+	return mdArrayNameRe.MatchString(array)
 }
 
 func readRaidSysfsValue(path string) string {

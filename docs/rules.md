@@ -1638,6 +1638,10 @@ detail so gradual degradation is visible.
   old and new values; notifier templates can use those fields to render a
   different message.
 
+  A host watch can additionally opt into manual reconstruction pause/resume
+  with `raid_control: { pause_resume: true }`; see
+  [Manual RAID reconstruction control](configuration.md#manual-raid-reconstruction-control).
+
 - **`lvm`** — Linux LVM health and capacity from read-only `lvs` JSON. It is a
   health check: `ok` means the selected VG/LV is usable; `error` covers an absent,
   partial or suspended LV, or a configured capacity threshold. Select a target

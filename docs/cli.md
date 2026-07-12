@@ -56,6 +56,9 @@ sermoctl is-active SERVICE
 sermoctl watch status WATCH
 sermoctl watch monitor WATCH
 sermoctl watch unmonitor WATCH
+sermoctl watch probe WATCH
+sermoctl watch pause RAID_WATCH --confirm MD_ARRAY
+sermoctl watch resume RAID_WATCH
 sermoctl start SERVICE [--no-cascade]
 sermoctl stop SERVICE [--no-cascade]
 sermoctl restart SERVICE [--no-cascade]
@@ -169,6 +172,15 @@ persisted under `paths.state` and read live by the daemon. `WATCH` is a host
 watch name or a service-embedded watch `"<service>:<watch>"`; a watch's monitor
 state is independent of its service's, so `unmonitor` on a service never pauses
 its watches.
+
+`sermoctl watch probe WATCH` runs one fresh, read-only short sample for a host
+`lvm`, `raid` or `smart` watch. It does not alter daemon snapshots, rule windows
+or notification state. A RAID watch with `raid_control.pause_resume: true` and
+an explicit `check.array` also supports `watch pause` and `watch resume`.
+Pausing requires `--confirm MD_ARRAY` in addition to naming the watch; both
+actions re-check the array, use an exclusive runtime operation lock and verify
+the resulting kernel state. Resume accepts any currently paused configured
+array, including one paused outside Sermo.
 Sermo reads the service's `service:` candidates, picks the first unit known by
 the active backend, and normalizes systemd names with `.service` when needed.
 

@@ -69,6 +69,9 @@ const (
 	eventActionMonitor           = "monitor"
 	eventActionUnmonitor         = "unmonitor"
 	eventActionExpand            = config.WatchThenKeyExpand
+	eventActionProbe             = "probe"
+	eventActionRAIDPause         = "pause"
+	eventActionRAIDResume        = "resume"
 	eventActionReleaseLock       = "release-lock"
 	eventActionOperationSettling = "operation-settling"
 	eventActionPanicOn           = "panic-on"

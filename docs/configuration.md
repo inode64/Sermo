@@ -711,7 +711,9 @@ require admin permissions when auth is enabled:
   `unmonitor`, `start`, `stop`, `restart`, `reload` or `resume`;
   start/stop/restart/reload/resume go through the safe operation engine.
 - `POST /api/watches/{name}/{action}` — host watch action. `action` is
-  `monitor`, `unmonitor` or `expand`.
+  `monitor`, `unmonitor`, `expand`, `probe`, `pause` or `resume`. `probe` is
+  read-only and is available for LVM, RAID and SMART watches. `pause`/`resume`
+  require the RAID control block below.
 - `POST /api/locks/{service}/release?name=NAME` — release an inactive
   stale/expired named runtime lock; active locks are refused.
 - `POST /api/events/clear?before=TIME` — clear the persisted event/activity log;
@@ -1464,6 +1466,28 @@ targets receive delivery: `on_degraded`, `on_recovering`, `on_good`, or
 `on_array_change`. Define as many named notifiers and templates as needed; every
 selected notifier receives the structured RAID fields. It cannot be combined
 with `then.notify_interval`.
+
+### Manual RAID reconstruction control
+
+Manual RAID control is disabled unless a single-array RAID watch opts in:
+
+```yaml
+name: raid-md0
+check:
+  type: raid
+  array: md0
+raid_control:
+  pause_resume: true
+then:
+  notify: [ops]
+```
+
+The CLI and WebUI can run a short probe for this watch. Pausing reconstruction
+uses two confirmations in the WebUI (and `--confirm md0` in the CLI), then
+validates the live reconstruction state, locks the array and writes the native
+md `sync_action`. Resume has the same preflight, lock and post-write check, but
+can resume any paused configured array; Sermo does not require ownership of the
+original pause. `dry_run: true` reports the intended operation without writing.
 
 For an `lvm` watch, `then.notify_on: [on_change]` notifies only when its
 effective health changes between `ok` and `error`, including recovery. It cannot

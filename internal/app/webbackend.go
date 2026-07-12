@@ -142,6 +142,7 @@ type webWatch struct {
 	check         map[string]any
 	metrics       map[string]any
 	expand        *ExpandSpec
+	raidControl   bool
 	// serviceScoped marks a watch declared inside a service's `watches:` section
 	// (named "<service>:<watch>"). It is listed and controllable like any watch,
 	// but its live meter/readings are omitted: its checks are scoped to the
@@ -483,6 +484,10 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 	var notifierNames []string
 	var expand *ExpandSpec
 	var warn string
+	raidControl := false
+	if raidControlConfig, ok := entry[config.WatchKeyRAIDControl].(map[string]any); ok {
+		raidControl = cfgval.Bool(raidControlConfig[config.RAIDControlKeyPauseResume])
+	}
 	if then, ok := entry[rules.RuleFieldThen].(map[string]any); ok {
 		if h, ok := then[config.WatchThenKeyHook].(map[string]any); ok && len(h) > 0 {
 			if cmd := h[config.WatchHookKeyCommand]; cmd != nil {
@@ -514,6 +519,7 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 		check:         checkMap(entry),
 		metrics:       metricsMap(entry),
 		expand:        expand,
+		raidControl:   raidControl,
 		serviceScoped: serviceScoped,
 	}, warn
 }
@@ -875,26 +881,29 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 			monitorMode = config.MonitorEnabled
 		}
 		ww := web.Watch{
-			Name:          w.name,
-			DisplayName:   w.displayName,
-			Category:      w.category,
-			CheckType:     w.checkType,
-			Summary:       watchSummary(w, storage, liveSummary),
-			Interval:      iv,
-			Enabled:       !w.disabled,
-			Monitor:       monitorMode,
-			Monitored:     !w.disabled && monitorMode != config.MonitorDisabled,
-			FireOnFail:    w.fireOnFail,
-			HasHook:       w.hasHook,
-			HookCommand:   slices.Clone(w.hookCommand),
-			Notifiers:     slices.Clone(w.notifiers),
-			NotifierCount: w.notifierCount,
-			DryRun:        w.dryRun,
-			Conditions:    watchConditions(w.check, w.metrics),
-			Storage:       storage,
-			Swap:          swap,
-			Meter:         meter,
-			Readings:      readings,
+			Name:           w.name,
+			DisplayName:    w.displayName,
+			Category:       w.category,
+			CheckType:      w.checkType,
+			Summary:        watchSummary(w, storage, liveSummary),
+			Interval:       iv,
+			Enabled:        !w.disabled,
+			Monitor:        monitorMode,
+			Monitored:      !w.disabled && monitorMode != config.MonitorDisabled,
+			FireOnFail:     w.fireOnFail,
+			HasHook:        w.hasHook,
+			HookCommand:    slices.Clone(w.hookCommand),
+			Notifiers:      slices.Clone(w.notifiers),
+			NotifierCount:  w.notifierCount,
+			DryRun:         w.dryRun,
+			Conditions:     watchConditions(w.check, w.metrics),
+			Storage:        storage,
+			Swap:           swap,
+			Meter:          meter,
+			Readings:       readings,
+			CanProbe:       !w.disabled && !w.serviceScoped && manualProbeCheckType(w.checkType),
+			CanControlRAID: !w.disabled && w.raidControl,
+			RAIDArray:      cfgval.String(w.check[checks.CheckKeyArray]),
 		}
 		if w.expand != nil {
 			ww.Expand = &web.WatchExpand{ByBytes: w.expand.By}
@@ -3535,6 +3544,80 @@ func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionRes
 	msg := expandSuccessMessage(path, res)
 	b.emitWatchExpandEvent(name, eventKindExpand, eventStatusOK, msg)
 	return web.ActionResult{OK: true, Message: msg}
+}
+
+// ProbeWatch runs a fresh check instance for a supported host watch. It does
+// not publish a snapshot or dispatch watch actions, so an operator's manual
+// probe cannot alter the scheduler's stateful baseline.
+func (b *WebBackend) ProbeWatch(ctx context.Context, name string) web.ActionResult {
+	w := b.watches[name]
+	if w == nil {
+		return web.ActionResult{Message: fmt.Sprintf("unknown watch %q", name)}
+	}
+	if w.disabled || w.serviceScoped || !manualProbeCheckType(w.checkType) {
+		return web.ActionResult{Message: fmt.Sprintf("watch %q does not support manual probing", name)}
+	}
+	_, readings, summary := b.probeWatchView(ctx, w)
+	ok := true
+	for _, reading := range readings {
+		if reading.Error != "" {
+			ok = false
+			break
+		}
+	}
+	kind, status := eventKindAction, eventStatusOK
+	if !ok {
+		kind, status = eventKindError, eventStatusFailed
+	}
+	b.emitWatchMonitorEvent(name, eventActionProbe, kind, status, summary)
+	return web.ActionResult{OK: ok, Message: summary, Readings: readings}
+}
+
+// ControlRAID pauses or resumes a configured md reconstruction. Pause requires
+// the array name in confirmation; the browser obtains it only after its second
+// confirmation prompt and the backend independently validates it again.
+func (b *WebBackend) ControlRAID(ctx context.Context, name, action, confirmation string) web.ActionResult {
+	w := b.watches[name]
+	if w == nil {
+		return web.ActionResult{Message: fmt.Sprintf("unknown watch %q", name)}
+	}
+	if w.disabled || !w.raidControl || w.checkType != checks.CheckTypeRAID {
+		return web.ActionResult{Message: fmt.Sprintf("watch %q has no RAID pause/resume control configured", name)}
+	}
+	array := cfgval.String(w.check[checks.CheckKeyArray])
+	if array == "" {
+		return web.ActionResult{Message: fmt.Sprintf("watch %q has no RAID array", name)}
+	}
+	if action == RaidControlPause && confirmation != array {
+		msg := fmt.Sprintf("confirm RAID array %q before pausing reconstruction", array)
+		b.emitWatchMonitorEvent(name, eventActionRAIDPause, eventKindSuppressed, eventStatusBlocked, msg)
+		return web.ActionResult{Message: msg}
+	}
+	if w.dryRun {
+		msg := fmt.Sprintf("dry-run: would %s RAID reconstruction for %s", action, array)
+		b.emitWatchMonitorEvent(name, action, eventKindDryRun, eventStatusOK, msg)
+		return web.ActionResult{OK: true, Message: msg}
+	}
+	result := ControlRAID(ctx, b.cfg.Global.RuntimeDir(), array, action, b.operationTimeout)
+	kind, status := eventKindAction, eventStatusOK
+	if !result.OK {
+		kind, status = eventKindError, eventStatusFailed
+	}
+	eventAction := eventActionRAIDPause
+	if action == RaidControlResume {
+		eventAction = eventActionRAIDResume
+	}
+	b.emitWatchMonitorEvent(name, eventAction, kind, status, result.Message)
+	return web.ActionResult{OK: result.OK, Message: result.Message}
+}
+
+func manualProbeCheckType(checkType string) bool {
+	switch checkType {
+	case checks.CheckTypeLVM, checks.CheckTypeRAID, checks.CheckTypeSmart:
+		return true
+	default:
+		return false
+	}
 }
 
 // SetMonitored enables or disables monitoring for a service.

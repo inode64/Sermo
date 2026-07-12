@@ -92,6 +92,7 @@ const (
 	cliFlagBackend   = commandBackend
 	cliFlagBefore    = daemonAPIQueryBefore
 	cliFlagConfig    = commandConfig
+	cliFlagConfirm   = "confirm"
 	cliFlagHelp      = commandHelp
 	cliFlagJSON      = "json"
 	cliFlagLimit     = daemonAPIQueryLimit
@@ -212,6 +213,7 @@ type options struct {
 	// lock command flags
 	name        string
 	reason      string
+	confirm     string
 	ttl         time.Duration
 	commandArgs []string // tokens after `--`
 	// sla command flags
@@ -1938,6 +1940,7 @@ func parseArgs(args []string) (options, error) {
 	fs.StringVar(&opts.config, cliFlagConfig, "", "")
 	fs.StringVar(&opts.name, cliFlagName, "", "")
 	fs.StringVar(&opts.reason, cliFlagReason, "", "")
+	fs.StringVar(&opts.confirm, cliFlagConfirm, "", "")
 	fs.DurationVar(&opts.ttl, cliFlagTTL, 0, "")
 
 	if err := fs.Parse(flagArgs); err != nil {

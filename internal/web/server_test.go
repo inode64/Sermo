@@ -26,6 +26,8 @@ type fakeBackend struct {
 	watchMonitored  map[string]bool
 	panic           bool
 	watchExpanded   []string
+	watchProbed     []string
+	raidControlled  []string
 	failOp          bool
 	seriesSince     time.Duration
 	eventLimit      int
@@ -252,6 +254,14 @@ func (f *fakeBackend) SetPanic(_ context.Context, on bool) ActionResult {
 func (f *fakeBackend) ExpandWatch(_ context.Context, name string) ActionResult {
 	f.watchExpanded = append(f.watchExpanded, name)
 	return ActionResult{OK: true, Message: "expanded"}
+}
+func (f *fakeBackend) ProbeWatch(_ context.Context, name string) ActionResult {
+	f.watchProbed = append(f.watchProbed, name)
+	return ActionResult{OK: true, Message: "probed"}
+}
+func (f *fakeBackend) ControlRAID(_ context.Context, name, action, confirmation string) ActionResult {
+	f.raidControlled = append(f.raidControlled, name+"/"+action+"/"+confirmation)
+	return ActionResult{OK: true, Message: "controlled"}
 }
 func (f *fakeBackend) Preflight(_ context.Context, name string) (PreflightResult, bool) {
 	for _, s := range f.services {
@@ -1024,6 +1034,32 @@ func TestWatchExpandAction(t *testing.T) {
 	}
 	if len(b.watchExpanded) != 1 || b.watchExpanded[0] != "storage-root" {
 		t.Fatalf("watchExpanded = %v, want storage-root", b.watchExpanded)
+	}
+}
+
+func TestWatchProbeAndRAIDActions(t *testing.T) {
+	b := &fakeBackend{}
+	h := newServer(b)
+	for _, tc := range []struct{ action, confirmation string }{
+		{apiActionProbe, ""},
+		{apiActionPause, "md0"},
+		{apiActionResume, ""},
+	} {
+		rec := httptest.NewRecorder()
+		req := postReq(testWatchPath("raid-md0", tc.action))
+		if tc.confirmation != "" {
+			req.Header.Set("X-Sermo-Confirm", tc.confirmation)
+		}
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: code=%d body=%s", tc.action, rec.Code, rec.Body.String())
+		}
+	}
+	if got := b.watchProbed; len(got) != 1 || got[0] != "raid-md0" {
+		t.Fatalf("probed = %v", got)
+	}
+	if got := b.raidControlled; len(got) != 2 || got[0] != "raid-md0/pause/md0" || got[1] != "raid-md0/resume/" {
+		t.Fatalf("RAID controls = %v", got)
 	}
 }
 

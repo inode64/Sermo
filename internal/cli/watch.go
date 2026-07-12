@@ -6,7 +6,9 @@ import (
 	"path/filepath"
 
 	"sermo/internal/app"
+	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/execx"
 	"sermo/internal/state"
 )
 
@@ -29,7 +31,7 @@ const watchCommandTargetArgCount = 2
 // runWatch dispatches host-watch queries against the running daemon.
 func (a App) runWatch(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.commandUsageError(commandWatch, "watch requires subcommand status, monitor or unmonitor")
+		return a.commandUsageError(commandWatch, "watch requires subcommand status, monitor, unmonitor, probe, pause or resume")
 	}
 	switch opts.args[0] {
 	case commandStatus:
@@ -38,9 +40,119 @@ func (a App) runWatch(ctx context.Context, opts options) int {
 		return a.runWatchMonitor(ctx, opts, false)
 	case commandUnmonitor:
 		return a.runWatchMonitor(ctx, opts, true)
+	case "probe":
+		return a.runWatchProbe(ctx, opts)
+	case "pause", commandResume:
+		return a.runWatchRAIDControl(ctx, opts, opts.args[0])
 	default:
 		return a.commandUsageError(commandWatch, fmt.Sprintf("unknown watch subcommand %q", opts.args[0]))
 	}
+}
+
+func (a App) runWatchProbe(ctx context.Context, opts options) int {
+	if len(opts.args) != watchCommandTargetArgCount {
+		return a.commandUsageError(commandWatch, "watch probe requires exactly one watch name")
+	}
+	cfg, code := a.loadConfig(opts)
+	if code != exitSuccess {
+		return code
+	}
+	entry, ok := configuredHostWatch(cfg, opts.args[1])
+	if !ok {
+		return a.fail(opts, fmt.Sprintf("unknown host watch %q", opts.args[1]))
+	}
+	checkEntry, _ := entry[config.WatchKeyCheck].(map[string]any)
+	typ := fmt.Sprint(checkEntry[checks.CheckKeyType])
+	if typ != checks.CheckTypeLVM && typ != checks.CheckTypeRAID && typ != checks.CheckTypeSmart {
+		return a.fail(opts, fmt.Sprintf("watch %q (%s) does not support manual probing", opts.args[1], typ))
+	}
+	timeout := app.EngineDuration(cfg, config.EngineKeyDefaultTimeout, app.DefaultEngineCheckTimeout)
+	if opts.timeout > 0 {
+		timeout = opts.timeout
+	}
+	runner := a.Runner
+	if runner == nil {
+		runner = execx.CommandRunner{}
+	}
+	check, err := checks.BuildInline(opts.args[1], checkEntry, checks.Deps{DefaultTimeout: timeout, Runner: runner})
+	if err != nil {
+		return a.fail(opts, "build watch probe: "+err.Error())
+	}
+	res := check.Run(ctx)
+	healthy := res.Healthy()
+	if opts.json {
+		writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: opts.args[1], cliJSONKeyOK: healthy, "result": res})
+	} else {
+		status := cliTextOK
+		if !healthy {
+			status = cliTextFail
+		}
+		fmt.Fprintf(a.Stdout, "%s watch %s: %s\n", status, opts.args[1], res.Message)
+	}
+	if healthy {
+		return exitSuccess
+	}
+	return exitNotActive
+}
+
+func (a App) runWatchRAIDControl(ctx context.Context, opts options, action string) int {
+	if len(opts.args) != watchCommandTargetArgCount {
+		return a.commandUsageError(commandWatch, fmt.Sprintf("watch %s requires exactly one watch name", action))
+	}
+	cfg, code := a.loadConfig(opts)
+	if code != exitSuccess {
+		return code
+	}
+	entry, ok := configuredHostWatch(cfg, opts.args[1])
+	if !ok {
+		return a.fail(opts, fmt.Sprintf("unknown host watch %q", opts.args[1]))
+	}
+	checkEntry, _ := entry[config.WatchKeyCheck].(map[string]any)
+	if fmt.Sprint(checkEntry[checks.CheckKeyType]) != checks.CheckTypeRAID {
+		return a.fail(opts, fmt.Sprintf("watch %q is not a RAID watch", opts.args[1]))
+	}
+	control, _ := entry[config.WatchKeyRAIDControl].(map[string]any)
+	if !configBool(control, config.RAIDControlKeyPauseResume) {
+		return a.fail(opts, fmt.Sprintf("watch %q has no raid_control.pause_resume configured", opts.args[1]))
+	}
+	array := fmt.Sprint(checkEntry[checks.CheckKeyArray])
+	if action == "pause" && opts.confirm != array {
+		return a.commandUsageError(commandWatch, fmt.Sprintf("watch pause requires --confirm %s", array))
+	}
+	if config.DryRun(entry) {
+		msg := fmt.Sprintf("dry-run: would %s RAID reconstruction for %s", action, array)
+		if opts.json {
+			writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: opts.args[1], cliJSONKeyOK: true, cliJSONKeyMessage: msg})
+		} else {
+			fmt.Fprintln(a.Stdout, msg)
+		}
+		return exitSuccess
+	}
+	timeout := app.EngineDuration(cfg, config.EngineKeyOperationTimeout, app.DefaultEngineOperationTimeout)
+	if opts.timeout > 0 {
+		timeout = opts.timeout
+	}
+	result := app.ControlRAID(ctx, cfg.Global.RuntimeDir(), array, action, timeout)
+	if opts.json {
+		writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: opts.args[1], cliJSONKeyOK: result.OK, cliJSONKeyMessage: result.Message})
+	} else {
+		fmt.Fprintln(a.Stdout, result.Message)
+	}
+	if result.OK {
+		return exitSuccess
+	}
+	return exitBlocked
+}
+
+func configuredHostWatch(cfg *config.Config, name string) (map[string]any, bool) {
+	raw, _ := cfg.ResolveWatches()
+	entry, ok := raw[name].(map[string]any)
+	return entry, ok
+}
+
+func configBool(entry map[string]any, key string) bool {
+	v, _ := entry[key].(bool)
+	return v
 }
 
 // runWatchMonitor pauses (`unmonitor`) or resumes (`monitor`) a single watch by

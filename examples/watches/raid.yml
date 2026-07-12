@@ -16,6 +16,7 @@ then:
 
 # A per-array, notification-only watch can use the same check type:
 # check: { type: raid, array: md0, sysfs_changes: true }
+# raid_control: { pause_resume: true } # enables manual pause/resume for md0
 # then:
 #   notify: [ops]
 #   notify_on: [on_degraded, on_recovering, on_good, on_array_change]
