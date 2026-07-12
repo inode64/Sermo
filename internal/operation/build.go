@@ -71,7 +71,7 @@ func New(c Config) Engine {
 		deps.Status = func(ctx context.Context) (servicemgr.Status, error) {
 			st, err := mgr.Status(ctx, unit)
 			if err != nil {
-				return "", err
+				return "", fmt.Errorf("status %s: %w", unit, err)
 			}
 			return st.Status, nil
 		}
@@ -139,14 +139,17 @@ func New(c Config) Engine {
 		AcquireLock: func(t time.Duration) (func() error, error) {
 			h, err := c.Locker.Acquire(c.Service, t)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("acquire operation lock for %s: %w", c.Service, err)
 			}
 			return h.Release, nil
 		},
 		LockTTL: ttl,
 		NamedLocks: func() ([]locks.Lock, error) {
 			report, err := c.Scanner.Scan(c.Service)
-			return report.Locks, err
+			if err != nil {
+				return nil, fmt.Errorf("scan locks for %s: %w", c.Service, err)
+			}
+			return report.Locks, nil
 		},
 		Guard:            guardClosure(tree, deps, c.MetricSample, c.Changed),
 		Preflight:        sectionRunner(tree, config.SectionPreflight, deps, c.MetricSample),
@@ -247,7 +250,11 @@ func ReloadSupported(ctx context.Context, tree map[string]any, mgr Manager, unit
 	if unit == "" {
 		return false, errors.New("reload support unavailable: empty unit")
 	}
-	return mgr.SupportsReload(ctx, unit)
+	supported, err := mgr.SupportsReload(ctx, unit)
+	if err != nil {
+		return false, fmt.Errorf("reload support for %s: %w", unit, err)
+	}
+	return supported, nil
 }
 
 // reloadSpec is the parsed native-reload declaration: exactly one of command or
@@ -343,7 +350,7 @@ func nativeReloadFunc(spec *reloadSpec, deps checks.Deps, backend, unit string, 
 				}
 				return errors.New(msg)
 			}
-			return err
+			return fmt.Errorf("%s: %w", reloadCommandLabel, err)
 		}
 		if res.ExitCode == execx.ExitCodeRunFailure {
 			return errors.New(execx.CommandDidNotStart)
@@ -380,7 +387,10 @@ func reloadPID(ctx context.Context, runner execx.Runner, backend, unit, pidfile 
 	}
 	if pidfile != "" {
 		pid, err := process.ReadPidfile(pidfile)
-		return pid, reloadPIDPidfile, err
+		if err != nil {
+			return 0, "", fmt.Errorf("read pidfile %s: %w", pidfile, err)
+		}
+		return pid, reloadPIDPidfile, nil
 	}
 	return 0, "", fmt.Errorf("reload: cannot resolve a pid to signal: backend exposes no MainPID (OpenRC) and the service declares no %s; add %s: so the signal target can be found", config.ServiceKeyPidfile, config.ServiceKeyPidfile)
 }

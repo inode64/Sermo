@@ -607,7 +607,9 @@ Notas de herramientas:
   `contextcheck`, `goprintffuncname`, `iface`, `ineffassign`, `intrange`,
   `interfacebloat` (`internal/web/server.go` excluido), `mirror`, `misspell`,
   `modernize`, `depguard` (denegaciones acotadas — checks/conn/rules/config no
-  importan `operation`; `rules/` de producción no importa `execx`), `nilerr`,
+  importan `operation`; `rules/` de producción no importa `execx`), `wrapcheck`
+  (piloto: solo `internal/operation/`; `*_test.go` y el resto de paquetes
+  excluidos), `nilerr`,
   `nilnesserr`, `noctx` (desactivado en `internal/conn/`
   y `*_test.go`), `nolintlint`, `recvcheck`, `sloglint`, `thelper` y
   `wastedassign`.

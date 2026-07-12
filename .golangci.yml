@@ -50,6 +50,7 @@ linters:
     - thelper  # t.Helper() in table-driven check callbacks and fakes
     - usestdlibvars  # prefer stdlib constants (http.StatusOK, ...)
     - wastedassign
+    - wrapcheck  # pilot: enforced in internal/operation/ only (see exclusions)
   settings:
     depguard:
       rules:
@@ -112,7 +113,8 @@ linters:
       # Eclipse Mosquitto — real MQTT broker name in catalog/tests.
       ignore-rules:
         - mosquitto
-  # Considered and deliberately NOT enabled:
+  # Considered and deliberately NOT enabled (wrapcheck pilot is operation-only):
+  #   wrapcheck (rest of tree) — phase 10c+; hundreds of interface-boundary returns.
   #   makezero  — false positives on the conn/ packet builders, where a
   #               fixed-header make([]byte, N) followed by append(body) is intended.
   #   nilnil    — the (nil, nil) "nothing to build" returns in watch_build are
@@ -153,6 +155,13 @@ linters:
         path: internal/state/
       - linters: [contextcheck]
         path: internal/cli/(monitor|panic|sla|state|watch)\.go
+      # wrapcheck pilot: operation engine package only; expand in later phases.
+      - linters: [wrapcheck]
+        path: _test\.go
+      - linters: [wrapcheck]
+        path: cmd/
+      - linters: [wrapcheck]
+        path: internal/(app|appinspect|assist|buildinfo|cfgval|checks|cli|config|conn|control|diag|dockerctl|emission|execx|httpx|locks|logfile|metrics|mountctl|mounts|netutil|notify|output|process|procnet|rules|servicemgr|state|units|utmp|virt|volume|web)/
       # Test fixtures are written to throwaway temp dirs with 0644; not a concern.
       - linters: [gosec]
         path: _test\.go
