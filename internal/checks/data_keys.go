@@ -10,6 +10,7 @@ const (
 	DataKeyAddresses        = "addresses"
 	DataKeyAvailablePct     = fieldAvailablePct
 	DataKeyArrays           = fieldArrays
+	DataKeyArray            = CheckKeyArray
 	DataKeyAvail            = "avail"
 	DataKeyAvailableBytes   = fieldAvailableBytes
 	DataKeyBackend          = CheckKeyBackend
@@ -91,6 +92,11 @@ const (
 	DataKeyQuery              = CheckKeyQuery
 	DataKeyRecursive          = CheckKeyRecursive
 	DataKeyRecovering         = fieldRecovering
+	DataKeyRaidMembers        = "raid_members"
+	DataKeyRaidMismatchCount  = "raid_mismatch_cnt"
+	DataKeyRaidOperation      = "raid_operation"
+	DataKeyRaidProgressPct    = "raid_progress_pct"
+	DataKeyRaidTransitions    = "raid_transitions"
 	DataKeyReferenceID        = "reference_id"
 	DataKeyResult             = CheckKeyResult
 	DataKeyResource           = CheckKeyResource

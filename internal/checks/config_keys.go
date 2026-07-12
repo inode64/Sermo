@@ -6,6 +6,7 @@ import "sermo/internal/netutil"
 // names are part of Sermo's public configuration surface.
 const (
 	CheckKeyAnalyze               = "analyze"
+	CheckKeyArray                 = "array"
 	CheckKeyAuthSource            = "auth_source"
 	CheckKeyBackend               = "backend"
 	CheckKeyBinary                = "binary"
@@ -113,6 +114,7 @@ const (
 	CheckKeySize                  = "size"
 	CheckKeySocket                = "socket"
 	CheckKeyState                 = "state"
+	CheckKeySysfsChanges          = "sysfs_changes"
 	CheckKeyStatusPath            = "status_path"
 	CheckKeyStream                = "stream"
 	CheckKeySubprotocol           = "subprotocol"

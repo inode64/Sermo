@@ -45,6 +45,29 @@ func TestValidateWatchesGood(t *testing.T) {
 	}
 }
 
+func TestValidateRaidNotifyOn(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"notifiers": map[string]any{"ops": map[string]any{"type": "wall"}},
+		"watches": map[string]any{"raid-md0": map[string]any{
+			"check": map[string]any{"type": "raid", "array": "md0", "sysfs_changes": true},
+			"then":  map[string]any{"notify": []any{"ops"}, "notify_on": []any{"on_degraded", "on_array_change"}},
+		}},
+	})
+	if issues := watchIssues(good); len(issues) != 0 {
+		t.Fatalf("raid notify_on issues = %v", issues)
+	}
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{"load": map[string]any{
+			"check": map[string]any{"type": "load", "load1": map[string]any{"op": ">", "value": 1}},
+			"then":  map[string]any{"notify_on": []any{"on_change"}, "notify": []any{"none"}},
+		}},
+	})
+	issues := watchIssues(bad)
+	if !hasIssueContaining(issues, "only valid on a raid watch") {
+		t.Fatalf("invalid raid notify_on issues = %v", issues)
+	}
+}
+
 func TestValidateWatchesNotifyIntervalBadDuration(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{

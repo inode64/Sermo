@@ -165,6 +165,10 @@ WATCH` y a la columna STATUS de `sermoctl apps` para las aplicaciones instaladas
 monitorizadas por el daemon. Las apps de catálogo cuyo binario no está instalado
 se omiten de `sermoctl apps` y no participan en el asentamiento de arranque.
 
+Cuando el daemon dispone de lecturas actuales del watch, `sermoctl watch status
+WATCH` también las imprime (incluidas la operación RAID y el porcentaje de
+reconstrucción); `--json` expone las mismas lecturas en un array `readings`.
+
 `sermoctl watch monitor|unmonitor WATCH` pausa o reanuda un watch concreto,
 persistido bajo `paths.state` y leído en vivo por el daemon. `WATCH` es el nombre
 de un host watch o de un watch de servicio `"<servicio>:<watch>"`; el estado de

@@ -817,6 +817,19 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		validateSmartFields(path, entry, add)
 	case checks.CheckTypeRAID:
 		validatePresentThresholds(path, entry, checks.RaidPredFields, add)
+		if array, present := entry[checks.CheckKeyArray]; present && cfgval.String(array) == "" {
+			add("%s.%s must be a non-empty string", path, checks.CheckKeyArray)
+		}
+		if _, hasArray := entry[checks.CheckKeyArray]; hasArray {
+			if _, hasArrays := entry[checks.DataKeyArrays]; hasArrays {
+				add("%s.%s cannot be combined with %s", path, checks.CheckKeyArray, checks.DataKeyArrays)
+			}
+		}
+		if v, present := entry[checks.CheckKeySysfsChanges]; present {
+			if _, ok := v.(bool); !ok {
+				add(validationBooleanFormat, path+"."+checks.CheckKeySysfsChanges)
+			}
+		}
 	case checks.CheckTypeEDAC:
 		validatePresentThresholds(path, entry, checks.EdacPredFields, add)
 	case checks.CheckTypeConfig:

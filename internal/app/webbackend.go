@@ -1134,6 +1134,13 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 		})
 	}
 	switch cfgval.AsString(check[checks.CheckKeyType]) {
+	case checks.CheckTypeRAID:
+		if array := cfgval.AsString(check[checks.CheckKeyArray]); array != "" {
+			out = append(out, web.WatchCondition{Field: checks.DataKeyArray, Value: array})
+		}
+		if changes, ok := check[checks.CheckKeySysfsChanges].(bool); ok && changes {
+			out = append(out, web.WatchCondition{Field: checks.CheckKeySysfsChanges, Op: cfgval.CompareOpEqual, Value: strconv.FormatBool(changes)})
+		}
 	case checks.CheckTypeAutofs:
 		if path := cfgval.AsString(check[checks.CheckKeyPath]); path != "" {
 			out = append(out, web.WatchCondition{Field: checks.DataKeyPath, Op: cfgval.CompareOpEqual, Value: path})
@@ -1784,6 +1791,9 @@ func (b *WebBackend) raidWatchView() (*web.WatchMeter, []web.WatchReading, strin
 		names := strings.Join(st.DegradedNames, displayListSeparator)
 		readings = append(readings, web.WatchReading{Field: checks.DataKeyDegradedArrays, Label: watchReadingLabelDegradedArrays, Value: names})
 		summary += " (" + names + ")"
+	}
+	for _, detail := range st.Details {
+		readings = append(readings, web.WatchReading{Field: "raid_array_" + detail.Name, Label: detail.Name, Value: raidArrayReading(detail)})
 	}
 	return nil, readings, summary
 }

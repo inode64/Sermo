@@ -18,6 +18,7 @@ const (
 	WatchThenKeyExpand         = "expand"
 	WatchThenKeyKill           = "kill"
 	WatchThenKeyNotifyInterval = "notify_interval"
+	WatchThenKeyNotifyOn       = "notify_on"
 )
 
 // Watch hook keys mirror command-check command/expectation fields.
