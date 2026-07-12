@@ -145,6 +145,8 @@ fmt-check:
 # golangci-lint (runs gosec plus focused bug analyzers via .golangci.yml), and
 # govulncheck.
 lint: fmt-check
+	@echo "go fix -diff ./..."
+	@go fix -diff ./...
 	@echo "staticcheck ./..."
 	@$(LINT_CACHE_ENV) staticcheck ./...
 	@echo "revive -config revive.toml ./..."
@@ -153,6 +155,12 @@ lint: fmt-check
 	@$(LINT_CACHE_ENV) golangci-lint run
 	@echo "govulncheck ./..."
 	@$(LINT_CACHE_ENV) govulncheck ./...
+
+# Advisory only (not part of lint/check): unreachable-function report from
+# golang.org/x/tools/cmd/deadcode. Reflection and build tags cause false
+# positives, so findings need human triage before acting on them.
+deadcode:
+	@$(LINT_PATH) deadcode -test ./...
 
 # Everything CI enforces: vet, formatting, static analysis, YAML gates, and tests.
 # test depends on validate (Go lint + yaml-validate), so those gates always run first.

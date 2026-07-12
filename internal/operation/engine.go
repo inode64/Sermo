@@ -514,8 +514,7 @@ func (e Engine) clearResiduals(ctx context.Context) ([]process.Process, error) {
 }
 
 func applyLockError(r *Result, err error) {
-	var held *locks.HeldError
-	if errors.As(err, &held) {
+	if held, ok := errors.AsType[*locks.HeldError](err); ok {
 		r.Status = ResultBlocked
 		r.Message = held.Error()
 		if held.Lock.Path != "" {

@@ -21,8 +21,7 @@ func TestAcquireInstanceLockExclusive(t *testing.T) {
 	if err == nil {
 		t.Fatal("second acquire: want error, got nil")
 	}
-	var busy *alreadyRunningError
-	if !errors.As(err, &busy) {
+	if _, ok := errors.AsType[*alreadyRunningError](err); !ok {
 		t.Fatalf("second acquire: want *alreadyRunningError, got %T (%v)", err, err)
 	}
 }

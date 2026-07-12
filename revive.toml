@@ -28,6 +28,9 @@
 [rule.unreachable-code]
 [rule.var-declaration]
 [rule.var-naming]
+# revive v1.15 moved the package-name checks out of var-naming into this rule;
+# without it that coverage silently disappears.
+[rule.package-naming]
 [rule.unused-parameter]
 exclude = ["TEST"]
 [rule.struct-tag]

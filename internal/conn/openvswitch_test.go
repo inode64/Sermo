@@ -25,13 +25,17 @@ func serveOVSDB(c net.Conn, dbs []string, version string) {
 		}
 		switch req.Method {
 		case "list_dbs":
-			_ = enc.Encode(map[string]any{"id": req.ID, "result": dbs, "error": nil})
+			if err := enc.Encode(map[string]any{"id": req.ID, "result": dbs, "error": nil}); err != nil {
+				return
+			}
 		case "transact":
 			rows := []any{}
 			if version != "" {
 				rows = append(rows, map[string]any{"ovs_version": version})
 			}
-			_ = enc.Encode(map[string]any{"id": req.ID, "result": []any{map[string]any{"rows": rows}}, "error": nil})
+			if err := enc.Encode(map[string]any{"id": req.ID, "result": []any{map[string]any{"rows": rows}}, "error": nil}); err != nil {
+				return
+			}
 		default:
 			return
 		}

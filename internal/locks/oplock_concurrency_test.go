@@ -63,6 +63,6 @@ func TestReclaimStaleConcurrentSingleHolder(t *testing.T) {
 }
 
 func isHeld(err error) bool {
-	var he *HeldError
-	return errors.As(err, &he)
+	_, ok := errors.AsType[*HeldError](err)
+	return ok
 }

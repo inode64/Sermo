@@ -220,8 +220,9 @@ func isOperationAction(action string) bool {
 	switch rules.ActionType(action) {
 	case rules.ActionRestart, rules.ActionStart, rules.ActionStop, rules.ActionReload, rules.ActionResume:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 // validateWatchThenAction validates a unified service watch whose then declares a
