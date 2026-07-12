@@ -128,6 +128,8 @@ const (
 	apiActionMonitor   = "monitor"
 	apiActionUnmonitor = "unmonitor"
 	apiActionExpand    = "expand"
+	apiActionProbe     = "probe"
+	apiActionPause     = "pause"
 	apiActionPanicOn   = "on"
 	apiActionPanicOff  = "off"
 	apiActionRelease   = "release"
@@ -438,6 +440,9 @@ type Watch struct {
 	Meter            *WatchMeter       `json:"meter,omitempty"`
 	Readings         []WatchReading    `json:"readings,omitempty"`
 	Expand           *WatchExpand      `json:"expand,omitempty"`
+	CanProbe         bool              `json:"can_probe,omitempty"`
+	CanControlRAID   bool              `json:"can_control_raid,omitempty"`
+	RAIDArray        string            `json:"raid_array,omitempty"`
 	LastActivity     string            `json:"last_activity,omitempty"` // RFC3339 of last watch activity, if any
 	LastActivityKind string            `json:"last_activity_kind,omitempty"`
 }
@@ -641,8 +646,9 @@ type HostMetric struct {
 
 // ActionResult is the outcome of a state-changing web action.
 type ActionResult struct {
-	OK      bool   `json:"ok"`
-	Message string `json:"message,omitempty"`
+	OK       bool           `json:"ok"`
+	Message  string         `json:"message,omitempty"`
+	Readings []WatchReading `json:"readings,omitempty"`
 }
 
 // OperateOpts controls optional service-operation behavior from the web API.
@@ -1028,6 +1034,10 @@ type Backend interface {
 	SetWatchMonitored(ctx context.Context, name string, monitored bool) error
 	// ExpandWatch runs a configured storage watch's `then.expand` action on demand.
 	ExpandWatch(ctx context.Context, name string) ActionResult
+	// ProbeWatch runs a fresh, isolated read-only sample of a supported host watch.
+	ProbeWatch(ctx context.Context, name string) ActionResult
+	// ControlRAID pauses or resumes a configured RAID reconstruction.
+	ControlRAID(ctx context.Context, name, action, confirmation string) ActionResult
 	// DaemonInfo returns engine settings and basic daemon configuration.
 	DaemonInfo(ctx context.Context) DaemonInfo
 	// DaemonMetrics returns current and historical resource usage for sermod.
@@ -1058,7 +1068,7 @@ var operateActions = map[string]bool{
 	apiActionResume:  true,
 }
 var monitorActions = map[string]bool{apiActionMonitor: true, apiActionUnmonitor: true}
-var watchOperateActions = map[string]bool{apiActionExpand: true}
+var watchOperateActions = map[string]bool{apiActionExpand: true, apiActionProbe: true, apiActionPause: true, apiActionResume: true}
 
 // defaultOperationTimeout matches operation.DefaultOperationTimeout when sermod
 // does not set OperationTimeout on the server.
@@ -1806,7 +1816,15 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue(apiParamName)
 	action := r.PathValue(apiParamAction)
 	if watchOperateActions[action] {
-		res := s.Backend.ExpandWatch(s.operateContext(r), name) //nolint:contextcheck // see operateContext
+		var res ActionResult
+		switch action {
+		case apiActionExpand:
+			res = s.Backend.ExpandWatch(s.operateContext(r), name) //nolint:contextcheck // see operateContext
+		case apiActionProbe:
+			res = s.Backend.ProbeWatch(s.operateContext(r), name) //nolint:contextcheck // see operateContext
+		default:
+			res = s.Backend.ControlRAID(s.operateContext(r), name, action, r.Header.Get("X-Sermo-Confirm")) //nolint:contextcheck // see operateContext
+		}
 		status := http.StatusOK
 		if !res.OK {
 			status = http.StatusConflict

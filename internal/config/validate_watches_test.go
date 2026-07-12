@@ -69,6 +69,29 @@ func TestValidateRaidNotifyOn(t *testing.T) {
 	}
 }
 
+func TestValidateRAIDControl(t *testing.T) {
+	valid := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{"raid-md0": map[string]any{
+			"check":        map[string]any{"type": "raid", "array": "md0"},
+			"raid_control": map[string]any{"pause_resume": true},
+			"then":         map[string]any{"notify": []any{"none"}},
+		}},
+	})
+	if issues := watchIssues(valid); len(issues) != 0 {
+		t.Fatalf("valid RAID control issues = %v", issues)
+	}
+	invalid := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{"raid": map[string]any{
+			"check":        map[string]any{"type": "raid"},
+			"raid_control": map[string]any{"pause_resume": true},
+			"then":         map[string]any{"notify": []any{"none"}},
+		}},
+	})
+	if !hasIssueContaining(watchIssues(invalid), "requires check.array") {
+		t.Fatalf("missing array RAID control issues = %v", invalid)
+	}
+}
+
 func TestValidateWatchesNotifyIntervalBadDuration(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{

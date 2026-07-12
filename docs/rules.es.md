@@ -1636,6 +1636,10 @@ servicio de modo que la degradación gradual es visible.
   `SERMO_RAID_ARRAY`, operación/progreso y, para cambios sysfs, miembro, campo y
   valores anterior/nuevo; las plantillas del notifier pueden cambiar el mensaje.
 
+  Un host watch puede activar además la pausa/reanudación manual con
+  `raid_control: { pause_resume: true }`; consulta
+  [Control manual de reconstrucción RAID](configuration.es.md#control-manual-de-reconstrucción-raid).
+
 - **`lvm`** — salud y capacidad LVM de Linux desde JSON de `lvs` de sólo lectura.
   Es una comprobación de salud: `ok` significa que el VG/LV seleccionado es
   utilizable; `error` cubre un LV ausente, parcial o suspendido, o un umbral de

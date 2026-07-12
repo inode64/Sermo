@@ -2,6 +2,8 @@ package checks
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -140,5 +142,50 @@ func TestRaidCheckSysfsTransitionsAndMissingArray(t *testing.T) {
 	missing.array = "md1"
 	if got := missing.Run(context.Background()); !got.OK || got.Data[DataKeyPresent] != false {
 		t.Fatalf("missing array = %+v, want alert with present=false", got)
+	}
+}
+
+func TestSetRaidRebuildState(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "md0", "md", raidSyncActionFile)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("resync\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name   string
+		resume bool
+		before RaidArrayStatus
+		after  RaidArrayStatus
+		want   string
+	}{
+		{name: "pause", before: RaidArrayStatus{Name: "md0", Operation: "recovery", SyncAction: raidSyncActionResync}, after: RaidArrayStatus{Name: "md0", SyncAction: raidSyncActionIdle}, want: raidSyncActionIdle},
+		{name: "resume", resume: true, before: RaidArrayStatus{Name: "md0", SyncAction: raidSyncActionIdle}, after: RaidArrayStatus{Name: "md0", SyncAction: raidSyncActionResync}, want: raidSyncActionResync},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			sample := func() (RaidStatus, error) {
+				calls++
+				detail := tc.before
+				if calls > 1 {
+					detail = tc.after
+				}
+				return RaidStatus{Arrays: 1, Details: []RaidArrayStatus{detail}}, nil
+			}
+			if _, err := setRaidRebuildState(t.Context(), "md0", tc.resume, root, sample); err != nil {
+				t.Fatal(err)
+			}
+			got, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.TrimSpace(string(got)) != tc.want {
+				t.Fatalf("sync_action = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

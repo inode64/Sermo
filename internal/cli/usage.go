@@ -111,6 +111,9 @@ var commandUsages = []commandUsage{
 			"sermoctl watch status WATCH",
 			"sermoctl watch monitor WATCH",
 			"sermoctl watch unmonitor WATCH",
+			"sermoctl watch probe WATCH",
+			"sermoctl watch pause RAID_WATCH --confirm MD_ARRAY",
+			"sermoctl watch resume RAID_WATCH",
 		},
 		Flags: []string{
 			"--json  print the result as JSON",
@@ -123,6 +126,9 @@ var commandUsages = []commandUsage{
 			"paths.state and read live by the daemon. WATCH is a host watch name or",
 			"a service watch \"<service>:<watch>\"; a watch's monitor state is",
 			"independent of its service's.",
+			"probe is a read-only short sample for LVM, RAID and SMART host watches.",
+			"pause/resume control a RAID reconstruction only when raid_control.pause_resume",
+			"is configured. pause requires the configured md array again in --confirm.",
 		},
 		Examples: []string{
 			"sermoctl watch status storage-root",
