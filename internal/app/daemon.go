@@ -936,7 +936,7 @@ func metricSampler(service string, tree map[string]any, collector *metrics.Colle
 		pids = func() []int { return nil }
 	}
 
-	return func(ctx context.Context) checks.MetricReader {
+	return func(_ context.Context) checks.MetricReader {
 		var svc, sys metrics.Snapshot
 		if needService {
 			svc = collector.SampleService(service, pids())

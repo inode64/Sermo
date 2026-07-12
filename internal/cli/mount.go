@@ -179,7 +179,7 @@ func (a App) mountController(cfg *config.Config, opts options) mountctl.Controll
 	return mountctl.Controller{Runtime: cfg.Global.RuntimeDir(), Runner: a.Runner, ResolveUser: lookup.ResolveUser, UserLookup: lookup, CommandTimeout: opts.timeout}
 }
 
-func (a App) syncStorageMountMonitoring(opts options, cfg *config.Config, storage, action string, resultOK bool) {
+func (a App) syncStorageMountMonitoring(_ options, cfg *config.Config, storage, action string, resultOK bool) {
 	monitorMode, disabled, ok := storageMountWatchConfig(cfg, storage)
 	if !ok {
 		return

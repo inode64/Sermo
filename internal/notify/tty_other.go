@@ -10,6 +10,6 @@ func buildTTY(name string, entry map[string]any) (Notifier, error) {
 	return nil, errors.New("tty notifier is only supported on Linux")
 }
 
-func buildWall(name string, entry map[string]any) (Notifier, error) {
+func buildWall(name string, _ map[string]any) (Notifier, error) {
 	return nil, errors.New("wall notifier is only supported on Linux")
 }

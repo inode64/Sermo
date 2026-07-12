@@ -611,9 +611,10 @@ Tool notes:
   lint target itself. `govulncheck` may need network access to refresh the
   vulnerability DB; a network/DNS failure there is an environment issue, not a
   code finding.
-- **`revive`** (`revive.toml`): default rule set minus `unused-parameter` (many
-  methods implement interfaces whose `ctx` they legitimately ignore). Document
-  new exported symbols — the `exported` rule is on.
+- **`revive`** (`revive.toml`): default rule set plus `unused-parameter` on
+  production code (`exclude = ["TEST"]` skips `*_test.go`). Rename unused params
+  to `_` in non-test code. Document new exported symbols — the `exported` rule
+  is on.
 - **`golangci-lint`** uses `.golangci.yml` (**v2 format** — the binary must be
   v2) for `gosec`, `bodyclose`, `copyloopvar`, `ineffassign`, `nilerr` and
   `wastedassign`.

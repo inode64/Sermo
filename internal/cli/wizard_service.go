@@ -559,7 +559,7 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 	return exitSuccess
 }
 
-func serviceCleanupDirs(globalPath string, cfg *config.Config) []string {
+func serviceCleanupDirs(globalPath string, _ *config.Config) []string {
 	base := filepath.Dir(filepath.Clean(globalPath))
 	return []string{filepath.Join(base, servicesIncludeDir)}
 }

@@ -837,7 +837,7 @@ func (b *WebBackend) Services(ctx context.Context) []web.Service {
 }
 
 // Watches returns the configured host watches, including disabled ones.
-func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
+func (b *WebBackend) Watches(_ context.Context) []web.Watch {
 	if len(b.watchOrder) == 0 {
 		return []web.Watch{}
 	}
@@ -1381,7 +1381,7 @@ func (b *WebBackend) watchDashboardView(w *webWatch, system metrics.Snapshot) (*
 	return b.legacyWatchLiveView(w, system)
 }
 
-func watchUsesDaemonSnapshot(checkType string) bool {
+func watchUsesDaemonSnapshot(_ string) bool {
 	return true
 }
 
@@ -2327,7 +2327,7 @@ func storageMountExpectation(check map[string]any) (bool, bool) {
 }
 
 // Notifiers returns the configured notification targets.
-func (b *WebBackend) Notifiers(ctx context.Context) []web.Notifier {
+func (b *WebBackend) Notifiers(_ context.Context) []web.Notifier {
 	if len(b.notifierOrder) == 0 {
 		return nil
 	}
@@ -2620,7 +2620,7 @@ func (b *WebBackend) decorateApplications(apps []web.Application) []web.Applicat
 }
 
 // DaemonInfo returns the daemon's effective configuration and host identity.
-func (b *WebBackend) DaemonInfo(ctx context.Context) web.DaemonInfo {
+func (b *WebBackend) DaemonInfo(_ context.Context) web.DaemonInfo {
 	info := web.DaemonInfo{}
 
 	if h, err := os.Hostname(); err == nil {
@@ -2771,7 +2771,7 @@ func parseOSReleasePrettyName(data []byte) string {
 }
 
 // HostMetrics returns the current host-level readings from the collector.
-func (b *WebBackend) HostMetrics(ctx context.Context) []web.HostMetric {
+func (b *WebBackend) HostMetrics(_ context.Context) []web.HostMetric {
 	if b.collector == nil {
 		return nil
 	}
