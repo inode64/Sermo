@@ -40,6 +40,7 @@ linters:
     - misspell
     - nilerr
     - nilnesserr  # err checked nil but a different err value returned
+    - noctx  # blocking I/O must use *Context APIs; conn/ and *_test.go excluded
     - nolintlint  # //nolint: directives must name a linter and stay justified
     - reassign  # writes to other packages' package-level vars
     - recvcheck  # mixed value/pointer receivers on one type
@@ -63,8 +64,6 @@ linters:
       ignore-rules:
         - mosquitto
   # Considered and deliberately NOT enabled:
-  #   noctx     — ~150 hits; the conn/ probes dial net/http without a context by
-  #               design (tight per-probe deadlines are applied separately).
   #   makezero  — false positives on the conn/ packet builders, where a
   #               fixed-header make([]byte, N) followed by append(body) is intended.
   #   nilnil    — the (nil, nil) "nothing to build" returns in watch_build are
@@ -93,6 +92,18 @@ linters:
       # Dashboard API surface; splitting would fragment the web backend contract.
       - linters: [interfacebloat]
         path: internal/web/server\.go
+      # Protocol probes dial with per-probe deadlines, not context-aware transports.
+      - linters: [noctx]
+        path: internal/conn/
+      # Test fixtures spin up loopback listeners and httptest requests without ctx.
+      - linters: [noctx]
+        path: _test\.go
+      # Store binds ctx at OpenContext; *Context SQL reads it via Store.sqlCtx().
+      # contextcheck does not trace embedded store context through method receivers.
+      - linters: [contextcheck]
+        path: internal/state/
+      - linters: [contextcheck]
+        path: internal/cli/(monitor|panic|sla|state|watch)\.go
       # Test fixtures are written to throwaway temp dirs with 0644; not a concern.
       - linters: [gosec]
         path: _test\.go

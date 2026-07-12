@@ -35,9 +35,9 @@ func (a App) runWatch(ctx context.Context, opts options) int {
 	case commandStatus:
 		return a.runWatchStatus(ctx, opts)
 	case commandMonitor:
-		return a.runWatchMonitor(opts, false)
+		return a.runWatchMonitor(ctx, opts, false)
 	case commandUnmonitor:
-		return a.runWatchMonitor(opts, true)
+		return a.runWatchMonitor(ctx, opts, true)
 	default:
 		return a.commandUsageError(commandWatch, fmt.Sprintf("unknown watch subcommand %q", opts.args[0]))
 	}
@@ -48,7 +48,7 @@ func (a App) runWatch(ctx context.Context, opts options) int {
 // state persists under paths.state keyed independently of any service, so
 // unmonitoring a service never touches its watches and vice versa. The daemon
 // reads this key live each cycle.
-func (a App) runWatchMonitor(opts options, pause bool) int {
+func (a App) runWatchMonitor(ctx context.Context, opts options, pause bool) int {
 	verb := commandMonitor
 	if pause {
 		verb = commandUnmonitor
@@ -65,7 +65,7 @@ func (a App) runWatchMonitor(opts options, pause bool) int {
 	if !knownWatchName(cfg, name) {
 		return a.fail(opts, fmt.Sprintf("unknown watch %q", name))
 	}
-	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("watch %s failed: %v", verb, err))
 	}

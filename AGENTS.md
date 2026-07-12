@@ -628,10 +628,12 @@ Tool notes:
   `fatcontext`, `gocritic` (`appendAssign`, `unlambda` only), `contextcheck`,
   `goprintffuncname`, `iface`, `ineffassign`, `intrange`, `interfacebloat`
   (`internal/web/server.go` excluded), `mirror`, `misspell`, `modernize`,
-  `nilerr`, `nilnesserr`, `nolintlint`, `recvcheck`, `sloglint`, `thelper` and
-  `wastedassign`.
-  `noctx` is deliberately off: conn/ probes use per-probe deadlines instead of
-  context-aware dials.
+  `nilerr`, `nilnesserr`, `noctx` (off in `internal/conn/` and `*_test.go`),
+  `nolintlint`, `recvcheck`, `sloglint`, `thelper` and `wastedassign`.
+  Production `database/sql` in `internal/state` uses `*Context` methods with
+  `sqlCtx()` (ctx from `OpenContext` / `context.Background()` via `Open`).
+  `contextcheck` is off in `internal/state/` and store-touching CLI files
+  because the linter does not trace embedded store context.
   Accepted gosec exceptions live in that config: `G115`, and in test fixtures
   `G306`/`G101`/`G703`. By-design cases (`G204` operator-configured commands,
   intentional `0644` writes, bounded `args[i]` reads, shutdown-context `G118`)
