@@ -18,8 +18,8 @@ require (
 	github.com/quic-go/quic-go v0.60.0
 	github.com/spf13/pflag v1.0.10
 	github.com/vishvananda/netlink v1.3.1
-	github.com/wneessen/go-mail v0.8.0
-	go.mongodb.org/mongo-driver/v2 v2.7.0
+	github.com/wneessen/go-mail v0.8.1
+	go.mongodb.org/mongo-driver/v2 v2.8.0
 	golang.org/x/crypto v0.54.0
 	golang.org/x/net v0.57.0
 	golang.org/x/sys v0.47.0
