@@ -182,8 +182,7 @@ func run(args []string) int {
 
 	instanceLock, err := acquireInstanceLock(rt)
 	if err != nil {
-		var busy *alreadyRunningError
-		if errors.As(err, &busy) {
+		if busy, ok := errors.AsType[*alreadyRunningError](err); ok {
 			if busy.PID > 0 {
 				logger.Warn("refusing to start a second sermod instance", logFieldPID, busy.PID)
 			} else {
@@ -432,7 +431,13 @@ func run(args []string) int {
 
 	monitor.Run(ctx)
 	signal.Stop(hup) // stop SIGHUP delivery; the goroutine exits via ctx.Done()
-	logger.Info("sermod stopped")
+	// Since Go 1.26 NotifyContext records the received signal as the
+	// cancellation cause; name it so operators can tell SIGTERM from SIGINT.
+	if cause := context.Cause(ctx); cause != nil && !errors.Is(cause, context.Canceled) {
+		logger.Info("sermod stopped", logFieldReason, cause)
+	} else {
+		logger.Info("sermod stopped")
+	}
 	return 0
 }
 

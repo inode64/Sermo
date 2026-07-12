@@ -126,8 +126,7 @@ func runPrepared(ctx context.Context, cmd *exec.Cmd, start time.Time, displayNam
 		return result, fmt.Errorf(commandRunErrorFormat, displayName, ctxErr)
 	}
 
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 		result.ExitCode = exitErr.ExitCode()
 		return result, fmt.Errorf(commandRunExitCodeFormat, displayName, result.ExitCode)
 	}

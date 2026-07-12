@@ -588,16 +588,22 @@ Notas de herramientas:
   target de lint en sí. `govulncheck` puede necesitar acceso a red para refrescar la
   DB de vulnerabilidades; un fallo de red/DNS ahí es un problema de entorno, no un
   hallazgo de código.
+- **`go fix -diff ./...`** se ejecuta como parte de `make lint`: los modernizers
+  de Go 1.26 no deben proponer ningún cambio. Si falla, ejecuta `go fix ./...` y
+  revisa la reescritura en lugar de silenciarlo.
 - **`revive`** (`revive.toml`): conjunto de reglas por defecto más
-  `unused-parameter`, `struct-tag`, `import-shadowing` y `modifies-value-receiver`
+  `unused-parameter`, `struct-tag`, `import-shadowing`, `modifies-value-receiver`
+  y `package-naming` (separada de `var-naming` en revive v1.15)
   en código de producción (`exclude = ["TEST"]` en `unused-parameter` e
   `import-shadowing` omite `*_test.go`). Renombra parámetros no usados a `_`
   fuera de tests; evita locales que sombreen nombres de import. Documenta los
   nuevos símbolos exportados — la regla `exported` está activa.
 - **`golangci-lint`** usa `.golangci.yml` (**formato v2** — el binario debe ser
-  v2) para `gosec`, `bodyclose`, `copyloopvar`, `errcheck`, `gocritic`
-  (solo `appendAssign`, `unlambda`), `contextcheck`, `ineffassign`, `intrange`,
-  `mirror`, `misspell`, `modernize`, `nilerr` y `wastedassign`.
+  v2) para `gosec`, `bodyclose`, `copyloopvar`, `errcheck`, `errchkjson`,
+  `exhaustive` (un brazo `default:` cuenta como exhaustivo; desactivado en
+  `*_test.go`), `fatcontext`, `gocritic` (solo `appendAssign`, `unlambda`),
+  `contextcheck`, `iface`, `ineffassign`, `intrange`, `mirror`, `misspell`,
+  `modernize`, `nilerr`, `nilnesserr`, `recvcheck`, `sloglint` y `wastedassign`.
   `noctx` queda deliberadamente desactivado: las sondas de conn/ usan deadlines
   por sonda en lugar de dials con contexto.
   Las excepciones aceptadas de gosec viven en esa config: `G115`, y en fixtures de test
@@ -605,6 +611,10 @@ Notas de herramientas:
   escrituras `0644` intencionales, lecturas acotadas `args[i]`, `G118` de contexto de shutdown)
   se suprimen en el call site con `//nolint:gosec` más un comentario
   justificativo — prefiere eso sobre ampliar la config.
+- **`make deadcode`** (advisory, fuera de `lint`/`check`) imprime un informe de
+  funciones inalcanzables vía `golang.org/x/tools/cmd/deadcode`. La reflexión y
+  los build tags producen falsos positivos — tría los hallazgos a mano antes de
+  borrar nada.
 
 ## Testing
 

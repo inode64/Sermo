@@ -11,6 +11,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"embed"
@@ -144,6 +145,7 @@ const (
 
 const (
 	apiErrorCheckQueryRequired       = "check query parameter is required"
+	apiErrorEncodeResponse           = "failed to encode response"
 	apiErrorPanicAction              = "panic action must be on or off"
 	apiErrorReloadUnavailable        = "reload is not available for this daemon"
 	apiErrorUnknownActionPrefix      = "unknown action "
@@ -1836,11 +1838,18 @@ func (s *Server) handleReload(w http.ResponseWriter, _ *http.Request) {
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
+	// Encode into a buffer before touching the ResponseWriter so an encoding
+	// failure can still surface as a 500 instead of a truncated 200 body.
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		http.Error(w, apiErrorEncodeResponse, http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set(headerContentType, contentTypeJSON)
 	w.WriteHeader(status)
-	enc := json.NewEncoder(w)
-	enc.SetEscapeHTML(false)
-	_ = enc.Encode(v)
+	_, _ = buf.WriteTo(w)
 }
 
 // writeError replies with an ActionResult failure — the uniform error body

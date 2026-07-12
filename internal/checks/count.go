@@ -49,7 +49,7 @@ func (c countCheck) Run(ctx context.Context) Result {
 		return c.result(false, fmt.Sprintf("count %s: %s", c.path, execx.ContextFailure(err, c.timeout)), start)
 	}
 	if c.deltaOp != "" {
-		return (&c).runDelta(n, start)
+		return c.runDelta(n, start)
 	}
 
 	ok := compareFloat(float64(n), c.op, c.value)
@@ -69,26 +69,28 @@ func (c countCheck) Run(ctx context.Context) Result {
 	return res
 }
 
-func (c *countCheck) runDelta(n int, start time.Time) Result {
+func (c countCheck) runDelta(n int, start time.Time) Result {
 	clock := c.clock
 	if clock == nil {
 		clock = time.Now
 	}
-	if c.state == nil {
-		c.state = &countState{}
+	st := c.state
+	if st == nil {
+		// Defensive only: delta checks are always built with a shared state.
+		st = &countState{}
 	}
 	now := clock()
 	cutoff := now.Add(-c.window)
-	old := c.state.samples
-	c.state.samples = c.state.samples[:0]
+	old := st.samples
+	st.samples = st.samples[:0]
 	for _, s := range old {
 		if !s.t.Before(cutoff) {
-			c.state.samples = append(c.state.samples, s)
+			st.samples = append(st.samples, s)
 		}
 	}
-	c.state.samples = append(c.state.samples, countSample{t: now, count: n})
+	st.samples = append(st.samples, countSample{t: now, count: n})
 
-	baseline := c.state.samples[0]
+	baseline := st.samples[0]
 	growth := n - baseline.count
 	ok := growth > 0 && compareFloat(float64(growth), c.deltaOp, c.deltaValue)
 

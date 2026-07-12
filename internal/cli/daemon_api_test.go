@@ -143,5 +143,5 @@ func daemonAPITestConfig(t *testing.T, serverURL, template string) (root, global
 
 func writeDaemonAPITestJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v) //nolint:errchkjson // fake daemon fixture; an encode error would fail the test via the client side
 }

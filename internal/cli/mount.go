@@ -258,8 +258,7 @@ func mountExitCode(err error) int {
 	if err == nil {
 		return exitSuccess
 	}
-	var held *locks.HeldError
-	if errors.As(err, &held) {
+	if _, ok := errors.AsType[*locks.HeldError](err); ok {
 		return exitBlocked
 	}
 	return exitRuntimeError
