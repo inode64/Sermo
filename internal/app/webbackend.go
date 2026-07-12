@@ -272,7 +272,7 @@ type webDiskIOState struct {
 // so that the dashboard can show the full fleet and let operators see what can be
 // activated (by editing the service file and reloading). Only non-disabled services
 // get a full runtime engine, checks, and operation support.
-func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
+func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	if deps.UserLookup == nil {
 		deps.UserLookup = EngineUserLookup(cfg, deps.ExecxRunner)
 	}
@@ -358,7 +358,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			continue
 		}
 		disabled := cfgval.Disabled(doc.Body)
-		target, warn := control.ResolveWithFallback(context.Background(), name, resolved.Tree, deps.Backend, deps.Manager, resolver)
+		target, warn := control.ResolveWithFallback(ctx, name, resolved.Tree, deps.Backend, deps.Manager, resolver)
 		if warn != "" {
 			warnings = append(warnings, "service "+name+": "+warn)
 		}
@@ -387,10 +387,10 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			serviceDeps.Backend = target.Backend
 			serviceDeps.Manager = target.Manager
 			serviceDeps.BackendPIDs = target.BackendPIDs
-			engine, checkDeps, discoverer := serviceRuntime(name, target.Unit, resolved.Tree, serviceDeps, map[string]string{}, operationEventEmitter(deps.Emit))
-			selectors, processWarnings := serviceProcessSelectors(context.Background(), resolved.Tree, serviceDeps, target.Unit)
+			engine, checkDeps, discoverer := serviceRuntime(ctx, name, target.Unit, resolved.Tree, serviceDeps, map[string]string{}, operationEventEmitter(deps.Emit))
+			selectors, processWarnings := serviceProcessSelectors(ctx, resolved.Tree, serviceDeps, target.Unit)
 			names, types := checkCatalog(resolved.Tree)
-			entry.noResidentProcess = serviceNoResidentProcess(resolved.Tree, selectors, serviceBackendPIDs(serviceDeps, target.Unit))
+			entry.noResidentProcess = serviceNoResidentProcess(resolved.Tree, selectors, serviceBackendPIDs(ctx, serviceDeps, target.Unit))
 			entry.engine = engine
 			entry.status = checkDeps.Status
 			entry.checkNames = names
@@ -398,7 +398,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			entry.discoverer = discoverer
 			entry.selectors = selectors
 			entry.processWarnings = processWarnings
-			reloadCtx, cancel := context.WithTimeout(context.Background(), serviceReloadCapabilityTimeout)
+			reloadCtx, cancel := context.WithTimeout(ctx, serviceReloadCapabilityTimeout)
 			canReload, reloadErr := operation.ReloadSupported(reloadCtx, resolved.Tree, target.Manager, target.Unit)
 			cancel()
 			entry.canReload = canReload
@@ -837,7 +837,7 @@ func (b *WebBackend) Services(ctx context.Context) []web.Service {
 }
 
 // Watches returns the configured host watches, including disabled ones.
-func (b *WebBackend) Watches(_ context.Context) []web.Watch {
+func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 	if len(b.watchOrder) == 0 {
 		return []web.Watch{}
 	}
@@ -868,7 +868,7 @@ func (b *WebBackend) Watches(_ context.Context) []web.Watch {
 		var readings []web.WatchReading
 		liveSummary := ""
 		if !w.disabled && !w.serviceScoped {
-			meter, readings, liveSummary = b.watchDashboardView(w, system)
+			meter, readings, liveSummary = b.watchDashboardView(ctx, w, system)
 		}
 		monitorMode := w.monitorMode
 		if monitorMode == "" {
@@ -1371,14 +1371,14 @@ var heavyLiveViewTypes = map[string]bool{
 	checks.CheckTypeSmart:  true,
 }
 
-func (b *WebBackend) watchDashboardView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
+func (b *WebBackend) watchDashboardView(ctx context.Context, w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
 	if w == nil {
 		return nil, nil, ""
 	}
 	if b.watchSnapshots != nil && watchUsesDaemonSnapshot(w.checkType) {
 		return b.watchSnapshotView(w, system)
 	}
-	return b.legacyWatchLiveView(w, system)
+	return b.legacyWatchLiveView(ctx, w, system)
 }
 
 func watchUsesDaemonSnapshot(_ string) bool {
@@ -1525,17 +1525,17 @@ func uintField(v any) (uint64, bool) {
 // legacyWatchLiveView serves older in-process web backends that were not wired
 // with WatchSnapshots. Expensive disk commands are still blocked here; sermod
 // publishes their daemon-cycle results through WatchSnapshots instead.
-func (b *WebBackend) legacyWatchLiveView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
+func (b *WebBackend) legacyWatchLiveView(ctx context.Context, w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
 	if w == nil {
 		return nil, nil, ""
 	}
 	if heavyLiveViewTypes[w.checkType] {
 		return nil, nil, ""
 	}
-	return b.watchLiveView(w, system)
+	return b.watchLiveView(ctx, w, system)
 }
 
-func (b *WebBackend) watchLiveView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
+func (b *WebBackend) watchLiveView(ctx context.Context, w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
 	if w == nil {
 		return nil, nil, ""
 	}
@@ -1575,22 +1575,22 @@ func (b *WebBackend) watchLiveView(w *webWatch, system metrics.Snapshot) (*web.W
 	case checks.CheckTypeRoute:
 		return b.routeWatchView(w)
 	case checks.CheckTypeFile:
-		return b.fileWatchView(w)
+		return b.fileWatchView(ctx, w)
 	case checks.CheckTypeCount:
-		return b.countWatchView(w)
+		return b.countWatchView(ctx, w)
 	case checks.CheckTypeFirewallRules:
-		return b.firewallRulesWatchView(w)
+		return b.firewallRulesWatchView(ctx, w)
 	case checks.CheckTypeSize:
-		return b.sizeWatchView(w)
+		return b.sizeWatchView(ctx, w)
 	case checks.CheckTypeHdparm:
-		return b.hdparmWatchView(w)
+		return b.hdparmWatchView(ctx, w)
 	case checks.CheckTypeSmart:
-		return b.smartWatchView(w)
+		return b.smartWatchView(ctx, w)
 	default:
 		if m := watchMeter(w.checkType, system); m != nil {
 			return m, nil, ""
 		}
-		return b.probeWatchView(w)
+		return b.probeWatchView(ctx, w)
 	}
 }
 

@@ -21,7 +21,7 @@ func TestInterfaceBindingApplied(t *testing.T) {
 			if err != nil {
 				t.Fatalf("MongoConnect: %v", err)
 			}
-			MongoDisconnect(client)
+			MongoDisconnect(context.Background(), client)
 		}},
 		{"postgres-connector", func(t *testing.T) {
 			if _, err := postgresConnector(Config{User: "u", Interface: "eth0"}); err != nil {

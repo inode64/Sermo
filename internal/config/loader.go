@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -38,6 +39,7 @@ type loadOptions struct {
 	catalogDirs  []string
 	pathDirs     map[string][]string
 	serviceUnits map[string][]string
+	loadCtx      context.Context
 }
 
 // WithCatalogDirs overrides the compiled catalog search directory for tests and
@@ -54,6 +56,12 @@ func withPathDirs(kind string, dirs ...string) Option {
 		}
 		o.pathDirs[kind] = dirs
 	}
+}
+
+// WithLoadContext binds service-unit discovery during lazy catalog resolution to
+// the caller's context. Production callers pass the daemon lifetime context.
+func WithLoadContext(ctx context.Context) Option {
+	return func(o *loadOptions) { o.loadCtx = ctx }
 }
 
 // WithServiceUnits provides active backend units for service-derived catalog service
@@ -104,6 +112,10 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	notifierPaths := global.NotifierPaths
 	watchPaths := global.WatchPaths
 
+	loadCtx := o.loadCtx
+	if loadCtx == nil {
+		loadCtx = context.Background()
+	}
 	cfg := &Config{
 		Global:          global,
 		CatalogServices: map[string]*Document{},
@@ -142,7 +154,7 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	cfg.applyOSSelectors()
 	cfg.bakeBuiltins()
 	cfg.expandBindir()
-	cfg.materializeVersionTemplates()
+	cfg.materializeVersionTemplates(loadCtx)
 	return cfg, nil
 }
 

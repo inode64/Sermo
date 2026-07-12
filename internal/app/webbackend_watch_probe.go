@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"maps"
 
 	"sermo/internal/checks"
@@ -31,7 +32,7 @@ func (b *WebBackend) watchCheckDeps() checks.Deps {
 	})
 }
 
-func (b *WebBackend) probeWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
+func (b *WebBackend) probeWatchView(ctx context.Context, w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
 	if w == nil || len(w.check) == 0 {
 		return nil, nil, ""
 	}
@@ -41,9 +42,9 @@ func (b *WebBackend) probeWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRe
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), w.checkType + ": " + msg
 	}
-	ctx, cancel := b.probeContext()
+	probeCtx, cancel := b.probeContext(ctx)
 	defer cancel()
-	res := check.Run(ctx)
+	res := check.Run(probeCtx)
 	readings := checkReadings(w.checkType, res.Data)
 	if len(readings) == 0 && res.Message != "" {
 		readings = []web.WatchReading{{Field: watchReadingFieldResult, Label: watchReadingLabelResult, Value: res.Message}}

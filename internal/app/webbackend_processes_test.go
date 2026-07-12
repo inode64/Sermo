@@ -57,7 +57,7 @@ func TestWebBackendDetailProcessesRealPidfile(t *testing.T) {
 	}
 	cfg := writeWebProcessConfig(t, pidfile)
 
-	wb, warnings := NewWebBackend(cfg, Deps{Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{}})
+	wb, warnings := NewWebBackend(t.Context(), cfg, Deps{Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{}})
 	if len(warnings) > 0 {
 		t.Fatalf("NewWebBackend warnings: %v", warnings)
 	}
@@ -88,7 +88,7 @@ func TestWebBackendDetailProcessesRealPidfile(t *testing.T) {
 
 func TestWebBackendDetailProcessesNone(t *testing.T) {
 	cfg := writeWebProcessConfig(t, "/nonexistent/pidfile.pid")
-	wb, _ := NewWebBackend(cfg, Deps{Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{}})
+	wb, _ := NewWebBackend(t.Context(), cfg, Deps{Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{}})
 
 	detail, ok := wb.Detail(context.Background(), "mysql-main")
 	if !ok {
@@ -203,7 +203,7 @@ func TestServiceNoResidentProcessInfersInitServiceWithoutPIDs(t *testing.T) {
 	if len(selectors) != 0 {
 		t.Fatalf("selectors = %+v, want none", selectors)
 	}
-	if !serviceNoResidentProcess(tree, selectors, serviceBackendPIDs(deps, "wait-online.service")) {
+	if !serviceNoResidentProcess(tree, selectors, serviceBackendPIDs(t.Context(), deps, "wait-online.service")) {
 		t.Fatal("service without selectors or backend PIDs must be treated as no resident process")
 	}
 }
@@ -214,7 +214,7 @@ func TestServiceNoResidentProcessKeepsBackendPIDServiceResident(t *testing.T) {
 		ExecxRunner: systemdPIDRunner{pid: os.Getpid()},
 	}
 
-	if serviceNoResidentProcess(map[string]any{}, nil, serviceBackendPIDs(deps, "web.service")) {
+	if serviceNoResidentProcess(map[string]any{}, nil, serviceBackendPIDs(t.Context(), deps, "web.service")) {
 		t.Fatal("service with backend PIDs must not be treated as no resident process")
 	}
 }
@@ -246,7 +246,7 @@ processes: {}
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	wb, warnings := NewWebBackend(cfg, Deps{
+	wb, warnings := NewWebBackend(t.Context(), cfg, Deps{
 		Backend:     servicemgr.BackendSystemd,
 		Manager:     fakeManager{},
 		ExecxRunner: procInfoRunner{pidfile: filepath.Join(t.TempDir(), "firehol.pid")},
@@ -316,7 +316,7 @@ checks:
 	}, map[string]bool{"state": true})
 	observability := NewObservabilityRegistry()
 	observability.MarkReady("wait-online", time.Now())
-	wb, warnings := NewWebBackend(cfg, Deps{
+	wb, warnings := NewWebBackend(t.Context(), cfg, Deps{
 		Backend:       servicemgr.BackendSystemd,
 		Manager:       fakeManager{},
 		ExecxRunner:   procInfoRunner{},
@@ -352,7 +352,7 @@ func TestWorkerLiveCPUUsesInitDerivedProcessSelectors(t *testing.T) {
 	collector.Now = func() time.Time { return clock }
 	live := NewLiveMetrics()
 
-	w, _, warnings := buildWorker("web", "web.service", map[string]any{}, Deps{
+	w, _, warnings := buildWorker(t.Context(), "web", "web.service", map[string]any{}, Deps{
 		Backend:          servicemgr.BackendSystemd,
 		Manager:          fakeManager{},
 		Runtime:          t.TempDir(),
@@ -419,7 +419,7 @@ func TestWorkerRecordsServiceRuntimeMetricsForWebHistory(t *testing.T) {
 		Now:              func() time.Time { return clock },
 		Emit:             func(Event) {},
 	}
-	workers, _, warnings := BuildWorkers(cfg, deps, collector)
+	workers, _, warnings := BuildWorkers(t.Context(), cfg, deps, collector)
 	if len(warnings) != 0 {
 		t.Fatalf("BuildWorkers warnings = %v, want none", warnings)
 	}
@@ -435,7 +435,7 @@ func TestWorkerRecordsServiceRuntimeMetricsForWebHistory(t *testing.T) {
 	reader.ioWrite[pid] = 5000
 	workers[0].RunCycle(context.Background())
 
-	wb, warnings := NewWebBackend(cfg, deps)
+	wb, warnings := NewWebBackend(t.Context(), cfg, deps)
 	if len(warnings) != 0 {
 		t.Fatalf("NewWebBackend warnings = %v, want none", warnings)
 	}
@@ -455,7 +455,7 @@ func TestWorkerRecordsServiceRuntimeMetricsForWebHistory(t *testing.T) {
 }
 
 func TestServiceRuntimePidfileCheckUsesBackendFallbackWhenSystemdHasNoPIDFile(t *testing.T) {
-	_, checkDeps, _ := serviceRuntime("node_exporter", "node_exporter.service", map[string]any{}, Deps{
+	_, checkDeps, _ := serviceRuntime(t.Context(), "node_exporter", "node_exporter.service", map[string]any{}, Deps{
 		Backend:          servicemgr.BackendSystemd,
 		Manager:          fakeManager{},
 		Runtime:          t.TempDir(),
@@ -504,7 +504,7 @@ processes:
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	wb, warnings := NewWebBackend(cfg, Deps{Backend: servicemgr.BackendOpenRC, Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{}})
+	wb, warnings := NewWebBackend(t.Context(), cfg, Deps{Backend: servicemgr.BackendOpenRC, Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{}})
 	if len(warnings) > 0 {
 		t.Fatalf("NewWebBackend warnings: %v", warnings)
 	}

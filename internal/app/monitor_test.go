@@ -58,7 +58,7 @@ checks:
 	ready := NewReadiness(string(servicemgr.BackendSystemd), 1, 0)
 	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: execx.CommandRunner{}, Settling: NewSettling(ready)}
 	collector := metrics.New(metrics.OSReader{})
-	workers, _, _ := BuildWorkers(cfg, deps, collector)
+	workers, _, _ := BuildWorkers(t.Context(), cfg, deps, collector)
 	if len(workers) != 1 {
 		t.Fatalf("workers = %d, want 1", len(workers))
 	}
@@ -87,7 +87,7 @@ checks:
 	if err := os.WriteFile(filepath.Join(enabled, "web.yml"), []byte(service("web")), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	mon.Reload()
+	mon.Reload(ctx)
 
 	// Stop the generation so we can safely observe the (possibly new) worker's
 	// internal mutable state without racing the scheduler cyclers. Restart
@@ -154,7 +154,7 @@ checks:
 	ready := NewReadiness(string(servicemgr.BackendSystemd), 1, 0)
 	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: execx.CommandRunner{}, Settling: NewSettling(ready)}
 	collector := metrics.New(metrics.OSReader{})
-	workers, _, _ := BuildWorkers(cfg, deps, collector)
+	workers, _, _ := BuildWorkers(t.Context(), cfg, deps, collector)
 	forceWorkerBackendActive(workers)
 	workers[0].cycle = 5
 
@@ -182,7 +182,7 @@ defaults:
 	before := mon.workers[0].cycle
 	mon.mu.Unlock()
 
-	mon.Reload()
+	mon.Reload(ctx)
 
 	// Stop briefly for a race-free observation of live worker state (the reject
 	// path does not replace workers, the old generation keeps running).

@@ -35,7 +35,7 @@ func Resolve(ctx context.Context, name string, tree map[string]any, backend serv
 		return Target{}, err
 	}
 	if controlled {
-		return resolveControlledTarget(typ, tree)
+		return resolveControlledTarget(ctx, typ, tree)
 	}
 	candidates, trust := config.ServiceCandidates(tree, string(backend), name)
 	unit, err := resolver.Resolve(ctx, backend, candidates, trust)
@@ -45,7 +45,7 @@ func Resolve(ctx context.Context, name string, tree map[string]any, backend serv
 	return Target{Unit: unit, Backend: backend, Manager: manager}, nil
 }
 
-func resolveControlledTarget(typ string, tree map[string]any) (Target, error) {
+func resolveControlledTarget(ctx context.Context, typ string, tree map[string]any) (Target, error) {
 	switch typ {
 	case virt.ControlType:
 		spec, _, err := virt.SpecFromTree(tree)
@@ -67,7 +67,7 @@ func resolveControlledTarget(typ string, tree map[string]any) (Target, error) {
 			Unit:        spec.Container,
 			Backend:     servicemgr.BackendDocker,
 			Manager:     manager,
-			BackendPIDs: manager.BackendPIDs(),
+			BackendPIDs: manager.BackendPIDs(ctx),
 		}, nil
 	default:
 		return Target{}, fmt.Errorf("control.type %q is not one of %s", typ, controlTypeSummary)

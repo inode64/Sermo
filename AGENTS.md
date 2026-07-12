@@ -617,8 +617,10 @@ Tool notes:
   is on.
 - **`golangci-lint`** uses `.golangci.yml` (**v2 format** — the binary must be
   v2) for `gosec`, `bodyclose`, `copyloopvar`, `errcheck`, `gocritic`
-  (`appendAssign`, `unlambda` only), `ineffassign`, `intrange`, `mirror`,
-  `misspell`, `modernize`, `nilerr` and `wastedassign`.
+  (`appendAssign`, `unlambda` only), `contextcheck`, `ineffassign`, `intrange`,
+  `mirror`, `misspell`, `modernize`, `nilerr` and `wastedassign`.
+  `noctx` is deliberately off: conn/ probes use per-probe deadlines instead of
+  context-aware dials.
   Accepted gosec exceptions live in that config: `G115`, and in test fixtures
   `G306`/`G101`/`G703`. By-design cases (`G204` operator-configured commands,
   intentional `0644` writes, bounded `args[i]` reads, shutdown-context `G118`)

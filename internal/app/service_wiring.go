@@ -28,7 +28,7 @@ func MetricSampleForOperation(name string, tree map[string]any, collector *metri
 // web backend: a process discoverer, the check deps (with a backend-status
 // closure), and the safe operation engine. The engine's per-service operation
 // lock serializes start/stop/restart/reload/resume across the worker and the web.
-func serviceRuntime(name, unit string, tree map[string]any, deps Deps, libBaseline map[string]string, recordOperation func(operation.Result)) (operation.Engine, checks.Deps, process.Discoverer) {
+func serviceRuntime(ctx context.Context, name, unit string, tree map[string]any, deps Deps, libBaseline map[string]string, recordOperation func(operation.Result)) (operation.Engine, checks.Deps, process.Discoverer) {
 	lookup := deps.UserLookup
 	if lookup == nil {
 		lookup = process.DefaultUserLookup()
@@ -37,11 +37,11 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, libBaseli
 	if deps.ProcReader != nil {
 		discoverer.Reader = deps.ProcReader
 	}
-	backendPIDs := serviceBackendPIDs(deps, unit)
+	backendPIDs := serviceBackendPIDs(ctx, deps, unit)
 	if backendPIDs != nil {
 		discoverer.BackendPIDs = backendPIDs
 	}
-	selectors, _ := serviceProcessSelectors(context.Background(), tree, deps, unit)
+	selectors, _ := serviceProcessSelectors(ctx, tree, deps, unit)
 	noResident := serviceNoResidentProcess(tree, selectors, backendPIDs)
 	metricSample := MetricSampleForOperation(name, tree, deps.Collector, discoverer, selectors)
 	if noResident {
@@ -61,7 +61,7 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, libBaseli
 		Processes:           discoverer.ObserveState,
 		ProcessesAny:        discoverer.ObserveAnyState,
 		ProcessCount:        discoverer.CountMatching,
-		PidfileFallbackPIDs: pidfileFallbackPIDs(context.Background(), deps, unit, backendPIDs),
+		PidfileFallbackPIDs: pidfileFallbackPIDs(ctx, deps, unit, backendPIDs),
 	})
 	locker := configureOperationLocker(deps.Runtime, operationLockReclaimEvent(deps.Emit))
 	engine := operation.New(operation.Config{
@@ -95,14 +95,14 @@ func pidfileFallbackPIDs(ctx context.Context, deps Deps, unit string, backendPID
 	return backendPIDs
 }
 
-func serviceBackendPIDs(deps Deps, unit string) func() []int {
+func serviceBackendPIDs(ctx context.Context, deps Deps, unit string) func() []int {
 	if deps.BackendPIDs != nil {
 		return deps.BackendPIDs
 	}
 	if deps.Backend == servicemgr.BackendLibvirt || deps.Backend == servicemgr.BackendDocker {
 		return nil
 	}
-	return servicemgr.BackendPIDsFuncWithRunner(deps.Backend, unit, deps.ExecxRunner, nil)
+	return servicemgr.BackendPIDsFuncWithRunner(ctx, deps.Backend, unit, deps.ExecxRunner, nil)
 }
 
 // serviceProcessSelectors returns the process selectors a service should use

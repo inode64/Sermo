@@ -772,7 +772,7 @@ func TestWebBackendWatchPolarityUsesSharedHealthTypes(t *testing.T) {
 		},
 	}}}
 
-	b, warns := NewWebBackend(cfg, Deps{})
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -806,7 +806,7 @@ func TestWebBackendWatchesExposeMonitorMode(t *testing.T) {
 		},
 	}}}
 
-	b, warns := NewWebBackend(cfg, Deps{Monitor: store})
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{Monitor: store})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -842,7 +842,7 @@ func TestWebBackendKernelWatchReadings(t *testing.T) {
 		},
 	}}}
 
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		PressureSampler: func(resource string) (checks.PressureSample, error) {
 			if resource != "memory" {
 				t.Fatalf("pressure resource = %q, want memory", resource)
@@ -913,7 +913,7 @@ func TestWebBackendKernelWatchReadingErrorMarksWatchFailed(t *testing.T) {
 			}},
 		},
 	}}}
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		PressureSampler: func(string) (checks.PressureSample, error) {
 			return checks.PressureSample{}, errors.New("PSI disabled")
 		},
@@ -962,7 +962,7 @@ func TestWebBackendOomNetICMPAndPidsReadings(t *testing.T) {
 		},
 	}}}
 
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		OomSampler:  func() (uint64, bool) { return 7, true },
 		FdsSampler:  func() (checks.FdsSample, error) { return checks.FdsSample{Allocated: 8500, Max: 10000}, nil },
 		PidsSampler: func() (checks.PidsSample, error) { return checks.PidsSample{Threads: 123, Max: 1000}, nil },
@@ -1069,7 +1069,7 @@ func TestWebBackendProcessWatchReadings(t *testing.T) {
 		{PID: 42, CPUTicks: 20, RSS: 100, IOBytes: 500, HasIO: true},
 		{PID: 7, CPUTicks: 30, RSS: 200},
 	}}
-	b, warns := NewWebBackend(cfg, Deps{ProcSampler: sampler})
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{ProcSampler: sampler})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -1143,7 +1143,7 @@ func TestWebBackendAdditionalHostWatchReadings(t *testing.T) {
 		{ReadsCompleted: 20, SectorsRead: 102, ReadTicksMs: 130, WritesCompleted: 20, SectorsWritten: 204, WriteTicksMs: 120, IOTicksMs: 1500},
 	}
 	storageCalls := 0
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		MountSampler: func() ([]checks.Mount, error) {
 			return []checks.Mount{{MountPoint: "/net", FSType: "autofs"}}, nil
 		},
@@ -1294,7 +1294,7 @@ func TestWebBackendStatefulWatchReadings(t *testing.T) {
 	}}}
 	hdparmOut := " Timing buffered disk reads: 1 GB in 2.00 seconds = 500.00 MB/sec\n"
 	smartOut := `{"smart_status":{"passed":true},"temperature":{"current":41},"power_on_time":{"hours":1000}}`
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		DefaultTimeout: 5 * time.Second,
 		FirewallRulesSampler: func(context.Context, string, execx.Runner) (checks.FirewallRulesSample, error) {
 			return checks.FirewallRulesSample{Backend: checks.FirewallBackendNftables, Rules: 42}, nil
@@ -1361,7 +1361,7 @@ func TestWebBackendProbeWatchReadings(t *testing.T) {
 			}},
 		},
 	}}}
-	b, warns := NewWebBackend(cfg, Deps{DefaultTimeout: 5 * time.Second})
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{DefaultTimeout: 5 * time.Second})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -1404,7 +1404,7 @@ func TestWebBackendPidsReadingErrorMarksWatchFailed(t *testing.T) {
 			}},
 		},
 	}}}
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		PidsSampler: func() (checks.PidsSample, error) {
 			return checks.PidsSample{}, errors.New("loadavg failed")
 		},
@@ -1431,7 +1431,7 @@ func TestWebBackendFdsReadingErrorMarksWatchFailed(t *testing.T) {
 			}},
 		},
 	}}}
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		FdsSampler: func() (checks.FdsSample, error) {
 			return checks.FdsSample{}, errors.New("file-nr failed")
 		},
@@ -1565,7 +1565,7 @@ func TestWebBackendSwapWatchIncludesUsage(t *testing.T) {
 			},
 		},
 	}}}
-	b, warns := NewWebBackend(cfg, Deps{Collector: metrics.New(fakeSwapReader{total: 2048, used: 512})})
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{Collector: metrics.New(fakeSwapReader{total: 2048, used: 512})})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -1593,7 +1593,7 @@ func TestWebBackendWatchesShareSystemSnapshot(t *testing.T) {
 	reader := &countingSystemReader{}
 	collector := metrics.New(reader)
 	collector.SystemFreshness = 0
-	b, warns := NewWebBackend(cfg, Deps{Collector: collector})
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{Collector: collector})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -1618,7 +1618,7 @@ func TestWebBackendStorageOpenFiles(t *testing.T) {
 	}}}
 	scans := 0
 	now := time.Unix(1000, 0)
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		Now: func() time.Time { return now },
 		StorageUsage: func(string) (checks.StorageStats, error) {
 			return checks.StorageStats{TotalBytes: 1000, FreeBytes: 500, UsedPct: 50}, nil
@@ -1689,7 +1689,7 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 	}}}
 	usagePath := ""
 	mountSampled := false
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		StorageUsage: func(path string) (checks.StorageStats, error) {
 			usagePath = path
 			return checks.StorageStats{
@@ -1782,7 +1782,7 @@ func TestWebBackendStorageMountedExpectationDoesNotUseParentMount(t *testing.T) 
 		},
 	}}}
 	usageCalled := false
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		StorageUsage: func(string) (checks.StorageStats, error) {
 			usageCalled = true
 			return checks.StorageStats{TotalBytes: 1000, FreeBytes: 900, FreePct: 90}, nil
@@ -1830,7 +1830,7 @@ func TestWebBackendNotifiersExposeEnabledState(t *testing.T) {
 			},
 		},
 	}}}
-	b, warns := NewWebBackend(cfg, Deps{})
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -1912,7 +1912,7 @@ func TestWebBackendExpandWatchUsesConfiguredPathAndSize(t *testing.T) {
 	}}}
 	exp := &fakeExpander{res: volume.Result{VG: "vg0", LV: "data", GrewBytes: 5 << 30}}
 	var events []Event
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		VolumeExpander:   exp,
 		OperationTimeout: time.Second,
 		Emit:             func(e Event) { events = append(events, e) },
@@ -1949,7 +1949,7 @@ func TestWebBackendExpandWatchDryRunDoesNotExpand(t *testing.T) {
 	}}}
 	exp := &fakeExpander{res: volume.Result{VG: "vg0", LV: "data", GrewBytes: 5 << 30}}
 	var events []Event
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		VolumeExpander: exp,
 		Emit:           func(e Event) { events = append(events, e) },
 	})
@@ -1983,7 +1983,7 @@ func TestWebBackendExpandWatchRejectsUnconfiguredAction(t *testing.T) {
 		},
 	}}}
 	exp := &fakeExpander{res: volume.Result{VG: "vg0", LV: "data", GrewBytes: 5 << 30}}
-	b, warns := NewWebBackend(cfg, Deps{VolumeExpander: exp, OperationTimeout: time.Second})
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{VolumeExpander: exp, OperationTimeout: time.Second})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -2010,7 +2010,7 @@ func TestWebBackendStorageWatchReportsSamplerErrors(t *testing.T) {
 			},
 		},
 	}}}
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		StorageUsage: func(string) (checks.StorageStats, error) {
 			return checks.StorageStats{}, errors.New("statfs failed")
 		},
@@ -2200,7 +2200,7 @@ func TestWebBackendReloadSupportedByInitBackend(t *testing.T) {
 		},
 	}
 
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		Backend: servicemgr.BackendOpenRC,
 		Manager: fakeManager{},
 	})
@@ -2520,7 +2520,7 @@ watches:
 
 	// NewWebBackend will internally call BuildWatches with the deps, propagating ExecxRunner
 	// to the OSHookRunner for the watch.
-	_, warnings := NewWebBackend(cfg, deps)
+	_, warnings := NewWebBackend(t.Context(), cfg, deps)
 	if len(warnings) > 0 {
 		t.Fatalf("NewWebBackend warnings: %v", warnings)
 	}

@@ -76,7 +76,7 @@ func TestWebBackendMounts(t *testing.T) {
 			},
 		}},
 	}
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		MountSampler: func() ([]checks.Mount, error) {
 			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
 		},
@@ -100,7 +100,7 @@ func TestWebBackendMountsIncludesUsageAndCaches(t *testing.T) {
 	now := time.Unix(100, 0)
 	calls := 0
 	cfg := mountTestConfig(t)
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		Now: func() time.Time { return now },
 		MountSampler: func() ([]checks.Mount, error) {
 			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
@@ -145,7 +145,7 @@ func TestWebBackendMountUsageCacheIgnoresCancelledRequests(t *testing.T) {
 	now := time.Unix(100, 0)
 	calls := 0
 	cfg := mountTestConfig(t)
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		Now: func() time.Time { return now },
 		MountSampler: func() ([]checks.Mount, error) {
 			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
@@ -187,7 +187,7 @@ func TestWebBackendMountUsageCacheIgnoresCancelledRequests(t *testing.T) {
 
 func TestWebBackendMountsReportsUsageError(t *testing.T) {
 	cfg := mountTestConfig(t)
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		MountSampler: func() ([]checks.Mount, error) {
 			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
 		},
@@ -214,7 +214,7 @@ func TestWebBackendRootMountCannotUnmountOrScanBlockers(t *testing.T) {
 	scans := 0
 	runner := &webMountRunner{mounted: &mounted}
 	cfg := rootMountTestConfig(t)
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		ExecxRunner: runner,
 		MountSampler: func() ([]checks.Mount, error) {
 			return []checks.Mount{{MountPoint: "/", Device: "/dev/sda1"}}, nil
@@ -262,7 +262,7 @@ func TestWebBackendRootMountCannotUnmountOrScanBlockers(t *testing.T) {
 
 func TestWebBackendMountBlockersMarksPolicyKillable(t *testing.T) {
 	cfg := mountTestConfig(t)
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		MountSampler: func() ([]checks.Mount, error) {
 			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
 		},
@@ -289,7 +289,7 @@ func TestWebBackendUnmountDoesNotSignalUnlessRequested(t *testing.T) {
 	signalled := 0
 	runner := &webMountRunner{mounted: &mounted, busy: true, signalled: &signalled}
 	cfg := mountTestConfig(t)
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		ExecxRunner: runner,
 		MountSampler: func() ([]checks.Mount, error) {
 			if mounted {
@@ -328,7 +328,7 @@ func TestWebBackendMountActionSyncsStorageWatchMonitoring(t *testing.T) {
 	store.active[watchMonitorKey("mount-backup")] = true
 	var events []Event
 	cfg := mountTestConfig(t)
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		Monitor:     store,
 		ExecxRunner: &webMountRunner{mounted: &mounted},
 		MountSampler: func() ([]checks.Mount, error) {
@@ -374,7 +374,7 @@ func TestWebBackendMountActionPreservesManualUnmonitor(t *testing.T) {
 	store.active[watchMonitorKey("mount-backup")] = false
 	store.source[watchMonitorKey("mount-backup")] = state.SourceWeb
 	cfg := mountTestConfig(t)
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		Monitor:     store,
 		ExecxRunner: &webMountRunner{mounted: &mounted},
 		MountSampler: func() ([]checks.Mount, error) {
@@ -400,7 +400,7 @@ func TestWebBackendMountActionDryRunDoesNotRunCommands(t *testing.T) {
 	store.active[watchMonitorKey("mount-backup")] = true
 	runner := &webMountRunner{mounted: &mounted}
 	cfg := dryRunMountTestConfig(t)
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		Monitor:     store,
 		ExecxRunner: runner,
 		MountSampler: func() ([]checks.Mount, error) {
@@ -438,7 +438,7 @@ func TestWebBackendMountActionDryRunDoesNotRunCommands(t *testing.T) {
 func TestWebBackendAlertMountUsers(t *testing.T) {
 	cfg := mountTestConfig(t)
 	alerter := &fakeMountAlerter{}
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		MountSampler: func() ([]checks.Mount, error) {
 			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
 		},
@@ -461,7 +461,7 @@ func TestWebBackendAlertMountUsersDryRunDoesNotNotify(t *testing.T) {
 	cfg := dryRunMountTestConfig(t)
 	alerter := &fakeMountAlerter{}
 	scans := 0
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		MountSampler: func() ([]checks.Mount, error) {
 			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
 		},
