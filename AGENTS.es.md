@@ -609,7 +609,9 @@ Notas de herramientas:
   `modernize`, `depguard` (denegaciones acotadas — checks/conn/rules/config no
   importan `operation`; `rules/` de producción no importa `execx`), `wrapcheck`
   (piloto: solo `internal/operation/`; `*_test.go` y el resto de paquetes
-  excluidos), `nilerr`,
+  excluidos), `ireturn` (activo; builders de checks/notify, registro conn,
+  constructores de managers y fábricas similares excluidos — ver
+  `.golangci.yml`), `nilerr`,
   `nilnesserr`, `noctx` (desactivado en `internal/conn/`
   y `*_test.go`), `nolintlint`, `recvcheck`, `sloglint`, `thelper` y
   `wastedassign`.

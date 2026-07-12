@@ -34,6 +34,7 @@ linters:
     - gosec
     - interfacebloat  # interfaces with too many methods (web.Backend excluded below)
     - iface  # unused / duplicated interface declarations
+    - ireturn  # return-concrete; factories/registries excluded below
     - modernize  # Go 1.22+ idioms (range int, slices.*, min/max, …)
     - ineffassign
     - intrange  # for i := 0; i < n; i++ → for i := range n (Go 1.22+)
@@ -162,6 +163,23 @@ linters:
         path: cmd/
       - linters: [wrapcheck]
         path: internal/(app|appinspect|assist|buildinfo|cfgval|checks|cli|config|conn|control|diag|dockerctl|emission|execx|httpx|locks|logfile|metrics|mountctl|mounts|netutil|notify|output|process|procnet|rules|servicemgr|state|units|utmp|virt|volume|web)/
+      # ireturn: central builders and registries intentionally return interface types.
+      - linters: [ireturn]
+        path: _test\.go
+      - linters: [ireturn]
+        path: internal/checks/
+      - linters: [ireturn]
+        path: internal/notify/
+      - linters: [ireturn]
+        path: internal/conn/conn\.go
+      - linters: [ireturn]
+        path: internal/app/(hook|watch_build|procwatch|serviceruntime)\.go
+      - linters: [ireturn]
+        path: internal/assist/assist\.go
+      - linters: [ireturn]
+        path: internal/cli/wizard\.go
+      - linters: [ireturn]
+        path: internal/(servicemgr/manager|dockerctl/manager|virt/manager|mountctl/mountctl|locks/(named|scanner)|process/discover)\.go
       # Test fixtures are written to throwaway temp dirs with 0644; not a concern.
       - linters: [gosec]
         path: _test\.go
