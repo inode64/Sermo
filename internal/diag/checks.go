@@ -77,7 +77,7 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 			warnMissingInterface(b, scope, check, host)
 		case checks.CheckTypeFile:
 			if p := cfgval.AsString(check[checks.CheckKeyPath]); p != "" && !host.PathExists(p) {
-				b.add(LevelWarning, scope, diagMessagePathMissing, p)
+				b.addf(LevelWarning, scope, diagMessagePathMissing, p)
 			}
 		default:
 			// Every single-shot check type shares the same resource probes as a
@@ -95,28 +95,28 @@ func diagCheckResources(b *builder, scope string, entry map[string]any, host Hos
 		diagStorageResources(b, scope, entry, host)
 	case checks.CheckTypeCount:
 		if p := cfgval.AsString(entry[checks.CheckKeyPath]); p != "" && !host.PathExists(p) {
-			b.add(LevelWarning, scope, "directory %q does not exist", p)
+			b.addf(LevelWarning, scope, "directory %q does not exist", p)
 		}
 	case checks.CheckTypeDiskIO:
 		if dev := cfgval.AsString(entry[checks.CheckKeyDevice]); dev != "" && !host.PathExists(checks.SysBlockPath+"/"+dev) {
-			b.add(LevelWarning, scope, "block device %q does not exist (no /sys/class/block entry)", dev)
+			b.addf(LevelWarning, scope, "block device %q does not exist (no /sys/class/block entry)", dev)
 		}
 	case checks.CheckTypeHdparm, checks.CheckTypeSmart:
 		if dev := cfgval.AsString(entry[checks.CheckKeyDevice]); dev != "" && !host.PathExists(dev) {
-			b.add(LevelWarning, scope, "device %q does not exist", dev)
+			b.addf(LevelWarning, scope, "device %q does not exist", dev)
 		}
 	case checks.CheckTypeRoute:
 		warnMissingInterface(b, scope, entry, host)
 	case checks.CheckTypePressure:
 		if res := cfgval.AsString(entry[checks.CheckKeyResource]); res != "" && !host.PathExists(checks.ProcPressureRootPath+"/"+res) {
-			b.add(LevelWarning, scope, "kernel exposes no /proc/pressure/%s (CONFIG_PSI off?); this check will never fire", res)
+			b.addf(LevelWarning, scope, "kernel exposes no /proc/pressure/%s (CONFIG_PSI off?); this check will never fire", res)
 		}
 	}
 }
 
 func warnMissingInterface(b *builder, scope string, entry map[string]any, host Host) {
 	if iface := cfgval.AsString(entry[checks.CheckKeyInterface]); iface != "" && !host.InterfaceExists(iface) {
-		b.add(LevelWarning, scope, "network interface %q does not exist", iface)
+		b.addf(LevelWarning, scope, "network interface %q does not exist", iface)
 	}
 }
 
@@ -128,11 +128,11 @@ func diagStorageResources(b *builder, scope string, fields map[string]any, host 
 		return
 	}
 	if !host.PathExists(p) {
-		b.add(LevelWarning, scope, diagMessagePathMissing, p)
+		b.addf(LevelWarning, scope, diagMessagePathMissing, p)
 		return
 	}
 	if hasMountCondition(fields) && !host.IsMountPoint(p) {
-		b.add(LevelWarning, scope, "%q has mount conditions but is not currently a mount point", p)
+		b.addf(LevelWarning, scope, "%q has mount conditions but is not currently a mount point", p)
 	}
 }
 
@@ -152,8 +152,8 @@ func checkAlignment(b *builder, scope string, d, resolution time.Duration) {
 	n := int(math.Round(float64(d) / float64(resolution)))
 	switch {
 	case n < 1:
-		b.add(LevelWarning, scope, "interval %s is below the %s resolution; it will run every cycle", d, resolution)
+		b.addf(LevelWarning, scope, "interval %s is below the %s resolution; it will run every cycle", d, resolution)
 	case time.Duration(n)*resolution != d:
-		b.add(LevelWarning, scope, "interval %s is not a multiple of the %s resolution; it will run every %s", d, resolution, time.Duration(n)*resolution)
+		b.addf(LevelWarning, scope, "interval %s is not a multiple of the %s resolution; it will run every %s", d, resolution, time.Duration(n)*resolution)
 	}
 }

@@ -1309,7 +1309,7 @@ func serverWriteTimeout(maxOp time.Duration) time.Duration {
 // operateContext returns a context for start/stop/restart/reload/resume that is not tied to the
 // HTTP request. Client disconnect and the generic write deadline must not abort
 // an in-flight safe operation; the operation engine applies its own timeout.
-func (s *Server) operateContext(r *http.Request) context.Context { //nolint:contextcheck // safe ops outlive the HTTP request
+func (s *Server) operateContext(r *http.Request) context.Context {
 	if s.shutdown != nil {
 		return context.WithoutCancel(s.shutdown)
 	}
@@ -1330,7 +1330,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	go func() { //nolint:gosec // G118: the shutdown deadline must NOT derive from ctx — it is already cancelled here
 		<-ctx.Done()
-		shutCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout) //nolint:contextcheck // detached shutdown deadline; ctx is already cancelled
+		shutCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout)
 		defer cancel()
 		_ = srv.Shutdown(shutCtx) //nolint:contextcheck // detached shutdown deadline; ctx is already cancelled
 	}()

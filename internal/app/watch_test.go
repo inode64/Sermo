@@ -542,11 +542,11 @@ func eventKinds(events []Event) []string {
 	return kinds
 }
 
-var errExpandTest = errTest("boom")
+var errExpandTest = expandTestError("boom")
 
-type errTest string
+type expandTestError string
 
-func (e errTest) Error() string { return string(e) }
+func (e expandTestError) Error() string { return string(e) }
 
 func TestHookEnvMapsAllDataKeys(t *testing.T) {
 	res := checks.Result{

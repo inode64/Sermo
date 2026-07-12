@@ -40,7 +40,7 @@ func repoCatalogDir(root string) string {
 
 func readYAMLMap(t *testing.T, path string) map[string]any {
 	t.Helper()
-	data, err := os.ReadFile(path) //nolint:gosec // tests read YAML artifacts under the repository root.
+	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}

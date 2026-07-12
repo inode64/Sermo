@@ -436,7 +436,7 @@ func (e Engine) verifyStopped() []string {
 		}
 		for _, m := range matches {
 			if e.StopArtifacts.CleanEnabled {
-				if err := os.Remove(m); err != nil { //nolint:gosec // operator-listed stop artifact
+				if err := os.Remove(m); err != nil {
 					warns = append(warns, fmt.Sprintf("could not remove stale %s: %v", m, err))
 				}
 				continue
@@ -458,7 +458,7 @@ func (e Engine) verifyStopped() []string {
 	}
 	for _, c := range e.StopArtifacts.Clean {
 		if c.Recursive {
-			if err := os.RemoveAll(c.Path); err != nil { //nolint:gosec // operator-listed clean_on_stop path
+			if err := os.RemoveAll(c.Path); err != nil {
 				warns = append(warns, fmt.Sprintf("could not clean %s: %v", c.Path, err))
 			}
 			continue
@@ -474,7 +474,7 @@ func (e Engine) verifyStopped() []string {
 			}
 		}
 		for _, m := range matches {
-			if err := os.Remove(m); err != nil { //nolint:gosec // operator-listed clean_on_stop path
+			if err := os.Remove(m); err != nil {
 				warns = append(warns, fmt.Sprintf("could not clean %s: %v", m, err))
 			}
 		}

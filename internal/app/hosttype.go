@@ -252,7 +252,7 @@ func virtualPlatformFromCPU(cpuinfo string) (string, string) {
 		{"vmwarevmware", hostTypePlatformVMware, hostTypeLabelVMware},
 		{"vboxvboxvbox", hostTypePlatformVirtualBox, hostTypeLabelVirtualBox},
 		{"xenvmmxenvmm", hostTypePlatformXen, hostTypeLabelXen},
-		{"bhyve bhyve", hostTypePlatformBhyve, hostTypeLabelBhyve},
+		{"bhyve bhyve", hostTypePlatformBhyve, hostTypeLabelBhyve}, //nolint:dupword // CPUID vendor string repeats the hypervisor token
 		{"tcgtcgtcgtcg", hostTypePlatformQEMU, hostTypeLabelQEMU},
 	} {
 		if strings.Contains(normalized, match.needle) {

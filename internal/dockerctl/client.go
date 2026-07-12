@@ -221,7 +221,7 @@ func NewClient(spec Spec) (*Client, error) {
 		scheme = dockerSchemeHTTPS
 		tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
 		if mode == tlsModeSkipVerify {
-			tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
+			tc.InsecureSkipVerify = true // operator chose tls: skip-verify
 		}
 		tr.TLSClientConfig = tc
 	}

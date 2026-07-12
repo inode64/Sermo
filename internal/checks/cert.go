@@ -160,7 +160,7 @@ func (c *certCheck) Run(ctx context.Context) Result {
 	if c.path != "" {
 		// File source: a missing/unreadable/unparseable file is a configuration
 		// problem, so it is an alert (unlike a transient network error below).
-		data, err := os.ReadFile(c.path) //nolint:gosec // operator-configured path from check config
+		data, err := os.ReadFile(c.path)
 		if err != nil {
 			return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
 		}

@@ -78,7 +78,7 @@ func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		scheme = schemeHTTPS
 		tlsConfig := tlsClientConfig(host)
 		if mode == tlsSkipVerify {
-			tlsConfig.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
+			tlsConfig.InsecureSkipVerify = true // operator chose tls: skip-verify
 		}
 		client = httpProbeClient(cfg.Interface, tlsConfig)
 	}
