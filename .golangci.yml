@@ -51,7 +51,7 @@ linters:
     - thelper  # t.Helper() in table-driven check callbacks and fakes
     - usestdlibvars  # prefer stdlib constants (http.StatusOK, ...)
     - wastedassign
-    - wrapcheck  # pilot: internal/operation/ + internal/app/ (see exclusions)
+    - wrapcheck  # pilot: operation/ + app/ + cli/ (see exclusions)
   settings:
     depguard:
       rules:
@@ -114,7 +114,7 @@ linters:
       # Eclipse Mosquitto — real MQTT broker name in catalog/tests.
       ignore-rules:
         - mosquitto
-  # Considered and deliberately NOT enabled (wrapcheck pilot: operation/ + app/):
+  # Considered and deliberately NOT enabled (wrapcheck pilot: operation/ + app/ + cli/):
   #   wrapcheck (rest of tree) — later phases; hundreds of interface-boundary returns.
   #   makezero  — false positives on the conn/ packet builders, where a
   #               fixed-header make([]byte, N) followed by append(body) is intended.
@@ -156,13 +156,13 @@ linters:
         path: internal/state/
       - linters: [contextcheck]
         path: internal/cli/(monitor|panic|sla|state|watch)\.go
-      # wrapcheck pilot: operation/ + app/; expand in later phases.
+      # wrapcheck pilot: operation/ + app/ + cli/; expand in later phases.
       - linters: [wrapcheck]
         path: _test\.go
       - linters: [wrapcheck]
         path: cmd/
       - linters: [wrapcheck]
-        path: internal/(appinspect|assist|buildinfo|cfgval|checks|cli|config|conn|control|diag|dockerctl|emission|execx|httpx|locks|logfile|metrics|mountctl|mounts|netutil|notify|output|process|procnet|rules|servicemgr|state|units|utmp|virt|volume|web)/
+        path: internal/(appinspect|assist|buildinfo|cfgval|checks|config|conn|control|diag|dockerctl|emission|execx|httpx|locks|logfile|metrics|mountctl|mounts|netutil|notify|output|process|procnet|rules|servicemgr|state|units|utmp|virt|volume|web)/
       # ireturn: central builders and registries intentionally return interface types.
       - linters: [ireturn]
         path: _test\.go

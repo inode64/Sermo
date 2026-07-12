@@ -194,7 +194,7 @@ func resolveWizardServiceUnit(ctx context.Context, resolver servicemgr.UnitResol
 	}
 	unit, err := resolver.Resolve(ctx, backend, candidates, false)
 	if err != nil {
-		return "", servicemgr.StatusUnknown, err
+		return "", servicemgr.StatusUnknown, fmt.Errorf("resolve service unit: %w", err)
 	}
 	return unit, serviceUnitStatus(ctx, manager, unit), nil
 }
@@ -411,7 +411,10 @@ func parseProcSocketTable(r io.Reader, port int, states map[string]bool) (bool, 
 			return true, nil
 		}
 	}
-	return false, sc.Err()
+	if err := sc.Err(); err != nil {
+		return false, fmt.Errorf("read proc socket table: %w", err)
+	}
+	return false, nil
 }
 
 func parseProcSocketTableHosts(r io.Reader, port int, states map[string]bool, ipv6 bool) ([]string, error) {
