@@ -103,7 +103,7 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 	if errors.Is(err, assist.ErrInputClosed) {
 		// The assistants recover the mid-prompt EOF themselves; bubble it up to
 		// runWizard's "wizard aborted" usage exit, same as an EOF outside Run.
-		return 0, err
+		return 0, fmt.Errorf("wizard input closed: %w", err)
 	}
 	if err != nil {
 		a.reportError(opts, err.Error())
@@ -177,7 +177,11 @@ func renderWizardWatchPreview(_ string, entries map[string]any) ([]byte, error) 
 	if err != nil {
 		return nil, err
 	}
-	return yaml.Marshal(docsPreview(docs))
+	data, err := yaml.Marshal(docsPreview(docs))
+	if err != nil {
+		return nil, fmt.Errorf("marshal wizard preview: %w", err)
+	}
+	return data, nil
 }
 
 // selectAssistant resolves the assistant from the first positional argument, or
@@ -249,7 +253,7 @@ func notifierNames(cfg *config.Config) []string {
 func listVolumes() ([]assist.Volume, error) {
 	mounts, err := volume.List(nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list volumes: %w", err)
 	}
 	out := make([]assist.Volume, len(mounts))
 	for i, m := range mounts {
@@ -261,7 +265,7 @@ func listVolumes() ([]assist.Volume, error) {
 func listWizardMounts() ([]assist.MountCandidate, error) {
 	entries, err := mountctl.FstabEntries(mountctl.DefaultFstabPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read fstab %s: %w", mountctl.DefaultFstabPath, err)
 	}
 	mounted := map[string]bool{}
 	if mounts, err := checks.DefaultMounts(); err == nil {
@@ -327,7 +331,7 @@ func hasNonLoopbackIface(ifaces []assist.Iface) bool {
 func listIfacesFromSysfs(root string) ([]assist.Iface, error) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read network sysfs %s: %w", root, err)
 	}
 	out := make([]assist.Iface, 0, len(entries))
 	for _, entry := range entries {

@@ -608,9 +608,9 @@ Notas de herramientas:
   `interfacebloat` (`internal/web/server.go` excluido), `mirror`, `misspell`,
   `modernize`, `depguard` (denegaciones acotadas — checks/conn/rules/config no
   importan `operation`; `rules/` de producción no importa `execx`), `wrapcheck`
-  (piloto: `internal/operation/` + `internal/app/`; `*_test.go` y el resto de
-  paquetes excluidos), `ireturn` (activo; builders de checks/notify, registro
-  conn,
+  (piloto: `internal/operation/`, `internal/app/` y `internal/cli/`; `*_test.go`
+  y el resto de paquetes excluidos), `ireturn` (activo; builders de
+  checks/notify, registro conn,
   constructores de managers y fábricas similares excluidos — ver
   `.golangci.yml`), `nilerr`,
   `nilnesserr`, `noctx` (desactivado en `internal/conn/`
