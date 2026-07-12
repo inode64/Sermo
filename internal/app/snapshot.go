@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 	"sync"
@@ -62,7 +63,7 @@ func NewPersistentSnapshots(store serviceSnapshotStore, reportError func(error))
 	}
 	records, err := store.ServiceCheckSnapshots()
 	if err != nil {
-		return s, err
+		return s, fmt.Errorf("load service check snapshots: %w", err)
 	}
 	for service, checkRecords := range records {
 		s.byService[service] = serviceSnapshotsFromRecords(checkRecords)
@@ -154,7 +155,7 @@ func NewPersistentWatchSnapshots(store watchSnapshotStore, reportError func(erro
 	}
 	records, err := store.WatchCheckSnapshots()
 	if err != nil {
-		return s, err
+		return s, fmt.Errorf("load watch check snapshots: %w", err)
 	}
 	for watch, slots := range records {
 		if s.byWatch[watch] == nil {

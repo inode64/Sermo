@@ -50,7 +50,7 @@ func (h HookSpec) Run(ctx context.Context, runner HookRunner, env map[string]str
 			}
 			return errors.New(msg)
 		}
-		return err
+		return fmt.Errorf("run hook: %w", err)
 	}
 	if res.ExitCode == execx.ExitCodeRunFailure {
 		return errors.New(execx.CommandDidNotStart)
@@ -102,7 +102,7 @@ func (r OSHookRunner) RunHook(ctx context.Context, argv []string, env map[string
 	// RunEnv honors the custom environment and applies the timeout (if > 0).
 	res, err := execx.RunEnv(ctx, runner, fullEnv, timeout, argv[0], argv[1:]...)
 	if err != nil && res.ExitCode < 0 {
-		return res, err
+		return res, fmt.Errorf("run hook command %s: %w", argv[0], err)
 	}
 	return res, nil
 }
