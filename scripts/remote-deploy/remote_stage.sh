@@ -68,7 +68,9 @@ snapshot_protected_paths "${out}/protected_path_metadata.before"
 hostname -f >"${out}/hostname_fqdn" 2>/dev/null || hostname >"${out}/hostname_fqdn" 2>/dev/null || true
 hostname >"${out}/hostname" 2>/dev/null || true
 uname -a >"${out}/uname" 2>/dev/null || true
-[ -r /etc/os-release ] && cp /etc/os-release "${out}/os-release" || true
+if [ -r /etc/os-release ]; then
+	cp /etc/os-release "${out}/os-release" || true
+fi
 
 init="unknown"
 if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
@@ -202,13 +204,21 @@ capture services_all_json env SERMO_BACKEND="$config_backend" SERMO_INIT="$confi
 findmnt -R -J >"${out}/findmnt.json" 2>/dev/null || true
 findmnt -R -P >"${out}/findmnt.pairs" 2>/dev/null || true
 mount >"${out}/mount" 2>/dev/null || true
-[ -r /proc/mounts ] && cp /proc/mounts "${out}/proc_mounts" || true
-[ -r /proc/swaps ] && cp /proc/swaps "${out}/proc_swaps" || true
-[ -r /proc/mdstat ] && cp /proc/mdstat "${out}/proc_mdstat" || true
+if [ -r /proc/mounts ]; then
+	cp /proc/mounts "${out}/proc_mounts" || true
+fi
+if [ -r /proc/swaps ]; then
+	cp /proc/swaps "${out}/proc_swaps" || true
+fi
+if [ -r /proc/mdstat ]; then
+	cp /proc/mdstat "${out}/proc_mdstat" || true
+fi
 if command -v lvs >/dev/null 2>&1; then
 	lvs --reportformat json --units b --nosuffix -o vg_name,lv_name,lv_attr,lv_health_status,vg_free,vg_size,data_percent,metadata_percent >"${out}/lvs.json" 2>"${out}/lvs.err" || true
 fi
-[ -r /etc/fstab ] && cp /etc/fstab "${out}/fstab" || true
+if [ -r /etc/fstab ]; then
+	cp /etc/fstab "${out}/fstab" || true
+fi
 lsblk -J -O >"${out}/lsblk.json" 2>/dev/null || true
 lsblk -P -o NAME,KNAME,PATH,TYPE,FSTYPE,MOUNTPOINTS,RM,RO,TRAN,MODEL,SERIAL,SIZE,PKNAME >"${out}/lsblk.pairs" 2>/dev/null || true
 
