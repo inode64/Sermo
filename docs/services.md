@@ -19,7 +19,8 @@ watches:
 ```
 
 The packaged catalog covers common service families such as web servers,
-databases, container runtimes, NFS/libvirt helpers and hardware/system services.
+databases, container runtimes, NFS/libvirt helpers, observability daemons such
+as Rsyslog, and hardware/system services.
 In the source tree this is `catalog/`; in packaged builds Sermo reads the catalog
 directory compiled into the binary. Catalog profiles define variables,
 preflight, processes, watches, stop_policy, remediation policy and rules so a

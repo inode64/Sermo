@@ -1,0 +1,13 @@
+name: rsyslog
+display_name: Rsyslog
+category: observability
+description: Rsyslog system logging daemon.
+variables:
+  binary: /usr/sbin/rsyslogd
+os:
+  gentoo:
+    variables:
+      binary: /usr/bin/rsyslogd
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-v"], timeout: 10s }
