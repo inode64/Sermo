@@ -30,3 +30,7 @@
 [rule.var-naming]
 [rule.unused-parameter]
 exclude = ["TEST"]
+[rule.struct-tag]
+[rule.import-shadowing]
+exclude = ["TEST"]
+[rule.modifies-value-receiver]

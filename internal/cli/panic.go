@@ -85,13 +85,13 @@ func (a App) reportPanic(opts options, rec state.GlobalRecord, found bool) {
 	if found && !rec.UpdatedAt.IsZero() {
 		changedAt = rec.UpdatedAt.UTC().Format(time.RFC3339)
 	}
-	state := commandPanicOff
+	modeLine := commandPanicOff
 	if enabled {
-		state = "on (hooks, alerts and automatic remediation suspended)"
+		modeLine = "on (hooks, alerts and automatic remediation suspended)"
 	}
 	suffix := ""
 	if found {
 		suffix = metaSuffix(rec.Source, changedAt)
 	}
-	fmt.Fprintf(a.Stdout, "panic mode: %s%s\n", state, suffix)
+	fmt.Fprintf(a.Stdout, "panic mode: %s%s\n", modeLine, suffix)
 }

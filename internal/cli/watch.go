@@ -134,30 +134,30 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 		return a.commandUsageError(commandWatch, "watch status requires exactly one watch name")
 	}
 	name := opts.args[1]
-	state := app.TargetStateOK
+	watchState := app.TargetStateOK
 	var detail daemonWatchDetail
 	if a.FetchDaemonWatchDetail != nil {
 		if current, ok := a.FetchDaemonWatchDetail(ctx, opts, name); ok {
 			detail = current
 			if detail.State != "" {
-				state = detail.State
+				watchState = detail.State
 			}
 		}
 	}
 	if a.FetchDaemonWatchState != nil {
 		if st, ok := a.FetchDaemonWatchState(ctx, opts, name); ok && st != "" {
-			state = st
+			watchState = st
 		}
 	}
 	if opts.json {
-		out := map[string]any{cliJSONKeyWatch: name, cliJSONKeyState: state}
+		out := map[string]any{cliJSONKeyWatch: name, cliJSONKeyState: watchState}
 		if len(detail.Readings) > 0 {
 			out["readings"] = detail.Readings
 		}
 		writeJSON(a.Stdout, out)
 		return exitSuccess
 	}
-	fmt.Fprintf(a.Stdout, "%s state=%s\n", name, state)
+	fmt.Fprintf(a.Stdout, "%s state=%s\n", name, watchState)
 	for _, reading := range detail.Readings {
 		label := reading.Label
 		if label == "" {

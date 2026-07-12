@@ -51,8 +51,8 @@ func parseMountCond(entry map[string]any) mountCond {
 // evaluate checks the mount table for path against the expectations. problem is
 // true when the expectation is violated; info is the matching mount entry (nil
 // when not mounted).
-func (m mountCond) evaluate(mounts []Mount, path string) (mounted, problem bool, reason string, info *Mount) {
-	info = MountAtPath(mounts, path)
+func (m mountCond) evaluate(table []Mount, path string) (mounted, problem bool, reason string, info *Mount) {
+	info = MountAtPath(table, path)
 	mounted = info != nil
 
 	if !m.expectMount {
@@ -118,15 +118,15 @@ func MountForPath(table []Mount, path string) *Mount {
 
 // MountAtPath returns the mount whose mountpoint exactly matches path, preferring
 // a real filesystem over an autofs placeholder when both entries share the path.
-func MountAtPath(mounts []Mount, path string) *Mount {
+func MountAtPath(table []Mount, path string) *Mount {
 	cleanPath := filepath.Clean(path)
 	if !filepath.IsAbs(cleanPath) {
 		return nil
 	}
 	var best *Mount
-	for i := range mounts {
-		if filepath.Clean(mounts[i].MountPoint) == cleanPath {
-			best = betterMount(best, &mounts[i])
+	for i := range table {
+		if filepath.Clean(table[i].MountPoint) == cleanPath {
+			best = betterMount(best, &table[i])
 		}
 	}
 	return best

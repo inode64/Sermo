@@ -539,11 +539,11 @@ func (c Controller) run(ctx context.Context, name string, args ...string) error 
 }
 
 func (c Controller) isMounted(path string) (bool, error) {
-	mounts := c.Mounts
-	if mounts == nil {
-		mounts = checks.DefaultMounts
+	mountSampler := c.Mounts
+	if mountSampler == nil {
+		mountSampler = checks.DefaultMounts
 	}
-	entries, err := mounts()
+	entries, err := mountSampler()
 	if err != nil {
 		return false, err
 	}

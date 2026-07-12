@@ -355,8 +355,8 @@ func serviceArtifactPathValue(paths []string) any {
 // Check-only service watches are processed before they desugar into `checks:`.
 func (c *Config) expandAnalyze(tree map[string]any) []string {
 	var errs []string
-	if checks, ok := tree[sectionChecks].(map[string]any); ok {
-		errs = append(errs, c.expandAnalyzeSection(sectionChecks, checks)...)
+	if checkSection, ok := tree[sectionChecks].(map[string]any); ok {
+		errs = append(errs, c.expandAnalyzeSection(sectionChecks, checkSection)...)
 	}
 
 	watches, ok := tree[sectionWatches].(map[string]any)

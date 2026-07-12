@@ -102,16 +102,16 @@ func (p SlotPool) InUse() (int, error) {
 	if p.Dir == "" {
 		return 0, nil
 	}
-	p = p.withDefaults()
+	pool := p.withDefaults()
 	inUse := 0
-	for i := range p.Slots {
-		path := filepath.Join(p.Dir, fmt.Sprintf(slotLockFileNameFormat, i))
+	for i := range pool.Slots {
+		path := filepath.Join(pool.Dir, fmt.Sprintf(slotLockFileNameFormat, i))
 		existing, err := readLockFile(path)
 		if err != nil {
 			// A missing or unreadable slot file is not held.
 			continue
 		}
-		state, _ := classify(existing, p.Now(), p.Proc)
+		state, _ := classify(existing, pool.Now(), pool.Proc)
 		if state == StateActive {
 			inUse++
 		}
@@ -121,15 +121,15 @@ func (p SlotPool) InUse() (int, error) {
 
 // Acquire waits until a slot is available or ctx is cancelled.
 func (p SlotPool) Acquire(ctx context.Context) (*SlotHandle, error) {
-	p = p.withDefaults()
-	if err := os.MkdirAll(p.Dir, lockDirMode); err != nil {
-		return nil, fmt.Errorf("create op-slots dir %s: %w", p.Dir, err)
+	pool := p.withDefaults()
+	if err := os.MkdirAll(pool.Dir, lockDirMode); err != nil {
+		return nil, fmt.Errorf("create op-slots dir %s: %w", pool.Dir, err)
 	}
 
 	for {
-		for i := range p.Slots {
-			path := filepath.Join(p.Dir, fmt.Sprintf(slotLockFileNameFormat, i))
-			h, err := p.tryAcquire(path, i, p.Proc, p.Now, p.Self)
+		for i := range pool.Slots {
+			path := filepath.Join(pool.Dir, fmt.Sprintf(slotLockFileNameFormat, i))
+			h, err := pool.tryAcquire(path, i, pool.Proc, pool.Now, pool.Self)
 			if err == nil {
 				return h, nil
 			}
@@ -141,7 +141,7 @@ func (p SlotPool) Acquire(ctx context.Context) (*SlotHandle, error) {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		default:
-			p.Sleep(defaultAcquireRetryInterval)
+			pool.Sleep(defaultAcquireRetryInterval)
 		}
 	}
 }

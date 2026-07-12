@@ -256,7 +256,7 @@ func (o options) service() string {
 
 // Main runs sermoctl using process IO.
 func Main(ctx context.Context, args []string) int {
-	app := App{
+	cliApp := App{
 		Detector:   servicemgr.NewDetector(),
 		NewManager: servicemgr.NewManager,
 		LoadConfig: config.Load,
@@ -265,12 +265,11 @@ func Main(ctx context.Context, args []string) int {
 		Stderr:     os.Stderr,
 		Stdin:      os.Stdin,
 	}
-	app.Operate = app.defaultOperate
-	return app.Run(ctx, args)
+	cliApp.Operate = cliApp.defaultOperate
+	return cliApp.Run(ctx, args)
 }
 
-// Run executes the CLI.
-func (a App) Run(ctx context.Context, args []string) int {
+func (a App) withDefaults() App {
 	if a.Env == nil {
 		a.Env = os.Getenv
 	}
@@ -319,7 +318,15 @@ func (a App) Run(ctx context.Context, args []string) int {
 	if a.BuildReportNotifiers == nil {
 		a.BuildReportNotifiers = buildReportNotifiers
 	}
+	return a
+}
 
+// Run executes the CLI.
+func (a App) Run(ctx context.Context, args []string) int {
+	return a.withDefaults().run(ctx, args)
+}
+
+func (a App) run(ctx context.Context, args []string) int {
 	opts, err := parseArgs(args)
 	if err != nil {
 		fmt.Fprintf(a.Stderr, "usage error: %v\n", err)
@@ -471,14 +478,14 @@ func (a App) runStatus(ctx context.Context, opts options) int {
 	}
 
 	mon := a.serviceMonitorState(opts)
-	state := a.serviceDisplayState(ctx, opts, status, mon)
+	displayState := a.serviceDisplayState(ctx, opts, status, mon)
 	if opts.json {
-		writeJSON(a.Stdout, statusToJSON(status, mon, state))
+		writeJSON(a.Stdout, statusToJSON(status, mon, displayState))
 		return exitSuccess
 	}
 
 	fmt.Fprintf(a.Stdout, "%s state=%s backend=%s service=%s%s\n",
-		status.Service, state, status.Backend, status.Unit, formatStateMetadata(mon))
+		status.Service, displayState, status.Backend, status.Unit, formatStateMetadata(mon))
 	return exitSuccess
 }
 
@@ -1416,10 +1423,10 @@ func defaultTimeout(command string) time.Duration {
 	}
 }
 
-func statusToJSON(status servicemgr.ServiceStatus, mon monitorView, state string) statusJSON {
+func statusToJSON(status servicemgr.ServiceStatus, mon monitorView, displayState string) statusJSON {
 	out := statusJSON{
 		Service: status.Service,
-		State:   state,
+		State:   displayState,
 		Backend: string(status.Backend),
 		Status:  string(status.Status),
 		Unit:    status.Unit,
@@ -1798,9 +1805,9 @@ func (a App) fetchDaemonApplicationStates(ctx context.Context, opts options) map
 		return nil
 	}
 	out := make(map[string]string, len(apps))
-	for _, app := range apps {
-		if app.Name != "" && app.State != "" {
-			out[app.Name] = app.State
+	for _, application := range apps {
+		if application.Name != "" && application.State != "" {
+			out[application.Name] = application.State
 		}
 	}
 	if len(out) == 0 {

@@ -589,8 +589,10 @@ Notas de herramientas:
   DB de vulnerabilidades; un fallo de red/DNS ahí es un problema de entorno, no un
   hallazgo de código.
 - **`revive`** (`revive.toml`): conjunto de reglas por defecto más
-  `unused-parameter` en código de producción (`exclude = ["TEST"]` omite
-  `*_test.go`). Renombra parámetros no usados a `_` fuera de tests. Documenta los
+  `unused-parameter`, `struct-tag`, `import-shadowing` y `modifies-value-receiver`
+  en código de producción (`exclude = ["TEST"]` en `unused-parameter` e
+  `import-shadowing` omite `*_test.go`). Renombra parámetros no usados a `_`
+  fuera de tests; evita locales que sombreen nombres de import. Documenta los
   nuevos símbolos exportados — la regla `exported` está activa.
 - **`golangci-lint`** usa `.golangci.yml` (**formato v2** — el binario debe ser
   v2) para `gosec`, `bodyclose`, `copyloopvar`, `errcheck`, `gocritic`
