@@ -19,6 +19,7 @@ linters:
     - bodyclose
     - contextcheck  # context must flow into blocking I/O (not net/http dial — see noctx)
     - copyloopvar
+    - depguard  # architecture import boundaries (see settings.depguard.rules)
     - dupword  # duplicated words (typos); off in *_test.go (protocol/script fixtures)
     - durationcheck  # suspicious time.Duration multiplications
     - errcheck  # unchecked errors (defer Rollback/Release, I/O, …)
@@ -50,6 +51,54 @@ linters:
     - usestdlibvars  # prefer stdlib constants (http.StatusOK, ...)
     - wastedassign
   settings:
+    depguard:
+      rules:
+        # Baseline: stdlib + module imports unless a scoped deny rule matches.
+        default:
+          list-mode: lax
+          files:
+            - $all
+          allow:
+            - $gostd
+            - sermo
+        # Safety invariants: read-only layers must not import the operation engine.
+        checks-no-operation:
+          list-mode: lax
+          files:
+            - internal/checks/**
+          deny:
+            - pkg: sermo/internal/operation$
+              desc: checks are read-only predicates; service control goes through app/operation
+        conn-no-operation:
+          list-mode: lax
+          files:
+            - internal/conn/**
+          deny:
+            - pkg: sermo/internal/operation$
+              desc: protocol probes must not dispatch service operations
+        rules-no-operation:
+          list-mode: lax
+          files:
+            - internal/rules/**
+          deny:
+            - pkg: sermo/internal/operation$
+              desc: rule conditions are predicates; remediation dispatches through app/worker
+        config-no-operation:
+          list-mode: lax
+          files:
+            - internal/config/**
+          deny:
+            - pkg: sermo/internal/operation$
+              desc: config parsing/validation must not execute service control
+        # Rule evaluation must stay pure; command execution belongs in checks/actions.
+        rules-no-execx:
+          list-mode: lax
+          files:
+            - internal/rules/**
+            - "!**/*_test.go"
+          deny:
+            - pkg: sermo/internal/execx$
+              desc: rule conditions must not run commands; use checks or rule actions
     exhaustive:
       # A default: arm is an explicit statement that the remaining cases are
       # handled; only flag switches with neither all cases nor a default.

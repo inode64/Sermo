@@ -628,7 +628,9 @@ Tool notes:
   `fatcontext`, `gocritic` (`appendAssign`, `unlambda` only), `contextcheck`,
   `goprintffuncname`, `iface`, `ineffassign`, `intrange`, `interfacebloat`
   (`internal/web/server.go` excluded), `mirror`, `misspell`, `modernize`,
-  `nilerr`, `nilnesserr`, `noctx` (off in `internal/conn/` and `*_test.go`),
+  `depguard` (scoped deny rules — checks/conn/rules/config must not import
+  `operation`; production `rules/` must not import `execx`), `nilerr`, `nilnesserr`,
+  `noctx` (off in `internal/conn/` and `*_test.go`),
   `nolintlint`, `recvcheck`, `sloglint`, `thelper` and `wastedassign`.
   Production `database/sql` in `internal/state` uses `*Context` methods with
   `sqlCtx()` (ctx from `OpenContext` / `context.Background()` via `Open`).

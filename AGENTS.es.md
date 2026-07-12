@@ -606,7 +606,9 @@ Notas de herramientas:
   `*_test.go`), `fatcontext`, `gocritic` (solo `appendAssign`, `unlambda`),
   `contextcheck`, `goprintffuncname`, `iface`, `ineffassign`, `intrange`,
   `interfacebloat` (`internal/web/server.go` excluido), `mirror`, `misspell`,
-  `modernize`, `nilerr`, `nilnesserr`, `noctx` (desactivado en `internal/conn/`
+  `modernize`, `depguard` (denegaciones acotadas — checks/conn/rules/config no
+  importan `operation`; `rules/` de producción no importa `execx`), `nilerr`,
+  `nilnesserr`, `noctx` (desactivado en `internal/conn/`
   y `*_test.go`), `nolintlint`, `recvcheck`, `sloglint`, `thelper` y
   `wastedassign`.
   El `database/sql` de producción en `internal/state` usa métodos `*Context` con
