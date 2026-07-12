@@ -407,6 +407,15 @@ def parse_features(stage: Path) -> dict[str, str]:
     return features
 
 
+def parse_md_arrays(stage: Path) -> list[str]:
+    """Return every Linux md array named by the staged /proc/mdstat sample."""
+    names = {
+        match.group(1)
+        for match in re.finditer(r"^(md[A-Za-z0-9_.-]+)\s*:", read_text(stage / "proc_mdstat"), re.MULTILINE)
+    }
+    return sorted(names)
+
+
 def parse_active_units(stage: Path) -> set[str]:
     init = read_text(stage / "init").strip()
     active: set[str] = set()
@@ -1001,6 +1010,7 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
         "containers": {"enabled": [], "skipped": []},
         "virtual_machines": {"enabled": [], "skipped": []},
         "watches": {},
+        "raid_arrays": [],
         "mount_units": [],
         "skipped_watches": [],
         "config_tar": str(configs_dir / host_slug / "sermo-config.tgz"),
@@ -1243,9 +1253,22 @@ dry_run: true
     else:
         skip("autofs", "no autofs mountpoint discovered")
 
-    mdstat = read_text(stage / "proc_mdstat")
-    if re.search(r"^md\d+\s*:", mdstat, re.MULTILINE):
-        add_watch("watches", "watch-raid", simple_watch("watch-raid", "storage", "1m", ["type: raid"], cycles=3))
+    raid_arrays = parse_md_arrays(stage)
+    if raid_arrays:
+        for array in raid_arrays:
+            name = f"raid-{slug(array)}"
+            add_watch(
+                "watches",
+                name,
+                simple_watch(
+                    name,
+                    "storage",
+                    "1m",
+                    ["type: raid", f"array: {yaml_quote(array)}", "sysfs_changes: true"],
+                    cycles=0,
+                ),
+            )
+        report["raid_arrays"] = raid_arrays
     else:
         skip("raid", "no md raid array discovered")
 

@@ -67,6 +67,12 @@ Every generated configuration also includes an alert-only clock watch. It querie
 `time.cloudflare.com` and `pool.ntp.org` every five minutes and alerts after two
 consecutive samples whose wall-clock drift exceeds `3s`; it never corrects time.
 
+For every md array discovered in the staged `/proc/mdstat`, the generator writes
+one individual `raid-<array>` watch. It watches degradation and exposes rebuild
+progress, while `sysfs_changes: true` tracks the array's member `state`,
+`errors`, `bad_blocks` and `mismatch_cnt`. The generated install remains
+`dry_run: true` and has no hook or external notifier.
+
 When `/usr/share/GeoIP` exists on a target, the generated configuration also
 adds an alert-only recursive file watch. It reports each GeoIP database file
 whose modification age exceeds `20` days (`older_than: 480h`); it has no hook
