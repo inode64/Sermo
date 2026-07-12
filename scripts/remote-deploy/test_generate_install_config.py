@@ -62,8 +62,9 @@ class EndpointGenerationTest(unittest.TestCase):
 
     def test_disables_endpoint_watches_without_associated_listener(self):
         report, body = self.generate('socket tcp LISTEN 0 511 0.0.0.0:80 0.0.0.0:* users:(("other",pid=1,fd=6))\n')
-        self.assertIn("port:\n    enabled: false", body)
-        self.assertIn("http:\n    enabled: false", body)
+        self.assertIn("watches:\n", body)
+        self.assertIn("  port:\n    enabled: false", body)
+        self.assertIn("  http:\n    enabled: false", body)
         checks = report["services"]["enabled"][0]["endpoint_checks"]
         self.assertEqual([item["active"] for item in checks], [False, False])
 
@@ -84,9 +85,8 @@ class EndpointGenerationTest(unittest.TestCase):
             },
         }
         disabled, checks = generator.endpoint_watch_overrides(stage, doc, {})
-        self.assertEqual(disabled, {})
+        self.assertEqual(disabled, set())
         self.assertEqual([item["active"] for item in checks], [True, True])
-
 
 if __name__ == "__main__":
     unittest.main()

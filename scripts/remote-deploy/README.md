@@ -102,4 +102,6 @@ For active catalog services, the generator also cross-checks every profile
 service's process. A matching endpoint keeps the profile watch. Without that
 evidence the generated service explicitly disables that endpoint watch and
 records the reason in `config-report.json`; it never turns unrelated listeners
-into checks. HTTP and DNS therefore run only for discovered active endpoints.
+into checks. Disabled source watches are removed before catalog resolution can
+derive a check or remediation rule from them. HTTP and DNS therefore run only
+for discovered active endpoints.

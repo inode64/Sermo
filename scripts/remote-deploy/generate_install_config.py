@@ -1006,11 +1006,11 @@ def listener_matches(target: tuple[set[str], str, str], listener: dict[str, obje
     return str(listener["protocol"]) in protocols and str(listener["port"]) == port and host_matches and bool(listener_processes & processes)
 
 
-def endpoint_watch_overrides(stage: Path, doc: dict, variables: dict[str, str]) -> tuple[dict[str, bool], list[dict[str, object]]]:
+def endpoint_watch_overrides(stage: Path, doc: dict, variables: dict[str, str]) -> tuple[set[str], list[dict[str, object]]]:
     hints = read_text(stage / "service_endpoint_hints")
     listeners = socket_listeners(hints)
     processes = profile_process_names(doc)
-    disabled: dict[str, bool] = {}
+    disabled: set[str] = set()
     report: list[dict[str, object]] = []
     watches = doc.get("watches", {})
     if not isinstance(watches, dict):
@@ -1030,12 +1030,10 @@ def endpoint_watch_overrides(stage: Path, doc: dict, variables: dict[str, str]) 
         if active:
             item["source"] = "associated listening socket"
         else:
-            disabled[str(watch_name)] = True
+            disabled.add(str(watch_name))
             item["reason"] = reason or "no associated listening socket for configured endpoint"
         report.append(item)
     return disabled, report
-
-
 def docker_container_name(entry: dict) -> str:
     names = entry.get("Names")
     if isinstance(names, list):

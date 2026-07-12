@@ -544,6 +544,13 @@ func expandServiceWatches(tree map[string]any) []string {
 		if !ok {
 			continue
 		}
+		// A disabled service-watch override must be removed before a check or
+		// rule is generated. Otherwise a derived remediation rule can outlive
+		// its disabled check and continually report it as unknown.
+		if cfgval.Disabled(entry) {
+			delete(watches, name)
+			continue
+		}
 		rawThen, hasThen := entry[rules.RuleFieldThen]
 		then, _ := rawThen.(map[string]any)
 		action := cfgval.String(then[rules.RuleFieldAction])
