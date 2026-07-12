@@ -8,7 +8,6 @@ yamlfmt re-encodes flow mappings without interior spaces. Sermo catalog style:
 
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 

@@ -74,12 +74,6 @@ func finishOperationSettlingWithActive(store OperationSettlingStore, service, ac
 	return nil
 }
 
-// FinishOperationSettlingForCLI moves or clears a CLI operation-settling marker
-// after the operation result is known.
-func FinishOperationSettlingForCLI(store OperationSettlingStore, service, action string, result operation.Result, opErr error) error {
-	return finishOperationSettling(store, service, action, state.SourceCLI, result, opErr)
-}
-
 // FinishOperationSettlingForCLIWithActive keeps a CLI postflight-failed start
 // settling when a backend status check proves that the service is active.
 func FinishOperationSettlingForCLIWithActive(store OperationSettlingStore, service, action string, result operation.Result, opErr error, activeAfterStart bool) error {

@@ -116,7 +116,8 @@ fi
 printf '%s\n' "$payload_members" >"${out}/payload_members"
 
 rm -rf /usr/share/sermo/catalog
-tar --no-same-owner -C / -xzf "$payload" $payload_members >"${out}/payload_extract.out" 2>"${out}/payload_extract.err"
+read -r -a _payload_members <<< "$payload_members"
+tar --no-same-owner -C / -xzf "$payload" "${_payload_members[@]}" >"${out}/payload_extract.out" 2>"${out}/payload_extract.err"
 extract_rc=$?
 printf '%s\n' "$extract_rc" >"${out}/payload_extract.rc"
 if [ "$extract_rc" -ne 0 ]; then
