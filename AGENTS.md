@@ -631,8 +631,8 @@ Tool notes:
   `depguard` (scoped deny rules — checks/conn/rules/config must not import
   `operation`; production `rules/` must not import `execx`), `nilerr`, `nilnesserr`,
   `wrapcheck` (pilot: `internal/operation/`, `internal/app/`, `internal/cli/`,
-  `internal/state/`, `internal/process/`, `internal/web/` and
-  `internal/servicemgr/`; `*_test.go` and other packages excluded), `ireturn`
+  `internal/state/`, `internal/process/`, `internal/web/`, `internal/servicemgr/`
+  and `internal/rules/`; `*_test.go` and other packages excluded), `ireturn`
   (enabled;
   check/notify
   builders, conn
