@@ -58,7 +58,7 @@ func (a App) runUmount(ctx context.Context, opts options) int {
 	}
 	controller := a.mountController(cfg, opts)
 	res, err := controller.Release(ctx, spec)
-	a.syncStorageMountMonitoring(opts, cfg, spec.Name, mountctl.ActionUmount, err == nil && res.Status == mountctl.ResultOK)
+	a.syncStorageMountMonitoring(ctx, opts, cfg, spec.Name, mountctl.ActionUmount, err == nil && res.Status == mountctl.ResultOK)
 	if err != nil {
 		return a.printMountResult(opts, res, err)
 	}
@@ -76,7 +76,7 @@ func (a App) runMountAcquire(ctx context.Context, opts options, target string) i
 	}
 	controller := a.mountController(cfg, opts)
 	res, err := controller.Acquire(ctx, spec)
-	a.syncStorageMountMonitoring(opts, cfg, spec.Name, mountctl.ActionMount, err == nil && res.Status == mountctl.ResultOK)
+	a.syncStorageMountMonitoring(ctx, opts, cfg, spec.Name, mountctl.ActionMount, err == nil && res.Status == mountctl.ResultOK)
 	if err != nil {
 		return a.printMountResult(opts, res, err)
 	}
@@ -179,12 +179,12 @@ func (a App) mountController(cfg *config.Config, opts options) mountctl.Controll
 	return mountctl.Controller{Runtime: cfg.Global.RuntimeDir(), Runner: a.Runner, ResolveUser: lookup.ResolveUser, UserLookup: lookup, CommandTimeout: opts.timeout}
 }
 
-func (a App) syncStorageMountMonitoring(_ options, cfg *config.Config, storage, action string, resultOK bool) {
+func (a App) syncStorageMountMonitoring(ctx context.Context, _ options, cfg *config.Config, storage, action string, resultOK bool) {
 	monitorMode, disabled, ok := storageMountWatchConfig(cfg, storage)
 	if !ok {
 		return
 	}
-	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
 		msg := fmt.Sprintf("storage mount monitoring unavailable: %v", err)
 		fmt.Fprintf(a.Stderr, cliWarningFormat, msg)

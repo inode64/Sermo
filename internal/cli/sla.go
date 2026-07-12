@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -25,7 +26,7 @@ const cliTextNotAvailable = "n/a"
 // over --since (default 24h) — the raw time series a graph is built from. Minutes
 // where the service was not monitored (Sermo down, or the service paused or
 // disabled) are absent from the series, never counted as downtime.
-func (a App) runSLA(opts options) int {
+func (a App) runSLA(ctx context.Context, opts options) int {
 	if len(opts.args) > 1 {
 		return a.commandUsageError(commandSLA, "sla accepts at most one service name")
 	}
@@ -35,7 +36,7 @@ func (a App) runSLA(opts options) int {
 	}
 
 	if opts.series {
-		return a.runSLASeries(opts, cfg)
+		return a.runSLASeries(ctx, opts, cfg)
 	}
 
 	var services []string
@@ -49,7 +50,7 @@ func (a App) runSLA(opts options) int {
 		services = sortedUnique(cfg.Services)
 	}
 
-	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("sla failed: %v", err))
 	}
@@ -75,7 +76,7 @@ func (a App) runSLA(opts options) int {
 
 // runSLASeries emits one service's stored per-minute availability series, the
 // data a future graph plots.
-func (a App) runSLASeries(opts options, cfg *config.Config) int {
+func (a App) runSLASeries(ctx context.Context, opts options, cfg *config.Config) int {
 	service := opts.service()
 	if service == "" {
 		return a.commandUsageError(commandSLA, "sla --series requires a service name")
@@ -91,7 +92,7 @@ func (a App) runSLASeries(opts options, cfg *config.Config) int {
 		window = defaultSLASeriesWindow
 	}
 
-	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("sla failed: %v", err))
 	}

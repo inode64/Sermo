@@ -413,13 +413,13 @@ func (a App) run(ctx context.Context, args []string) int {
 	case commandLock:
 		return a.runLock(ctx, opts)
 	case commandUnmonitor:
-		return a.runMonitor(opts, true)
+		return a.runMonitor(ctx, opts, true)
 	case commandMonitor:
-		return a.runMonitor(opts, false)
+		return a.runMonitor(ctx, opts, false)
 	case commandPanic:
-		return a.runPanic(opts)
+		return a.runPanic(ctx, opts)
 	case commandSLA:
-		return a.runSLA(opts)
+		return a.runSLA(ctx, opts)
 	case commandReload:
 		if opts.service() == "" {
 			return a.commandUsageError(commandReload, "reload requires a service name; use `sermoctl daemon reload` to reload sermod config")
@@ -477,7 +477,7 @@ func (a App) runStatus(ctx context.Context, opts options) int {
 		return code
 	}
 
-	mon := a.serviceMonitorState(opts)
+	mon := a.serviceMonitorState(ctx, opts)
 	displayState := a.serviceDisplayState(ctx, opts, status, mon)
 	if opts.json {
 		writeJSON(a.Stdout, statusToJSON(status, mon, displayState))
@@ -521,7 +521,7 @@ func (m monitorView) Monitored() bool {
 // serviceMonitorState reads a service's monitoring row from the state store. It is
 // best-effort: status works without config, so a missing config or store yields
 // an empty view (not paused).
-func (a App) serviceMonitorState(opts options) monitorView {
+func (a App) serviceMonitorState(ctx context.Context, opts options) monitorView {
 	view := monitorView{Enabled: true}
 	globalPath := opts.globalPath()
 	cfg, err := a.LoadConfig(globalPath)
@@ -542,12 +542,12 @@ func (a App) serviceMonitorState(opts options) monitorView {
 			}
 		}
 	}
-	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
 		return view
 	}
 	defer store.Close()
-	rec, found, err := store.MonitorState(service)
+	rec, found, err := store.MonitorState(service) //nolint:contextcheck // ctx bound via OpenContext above
 	if err != nil || !found {
 		return view
 	}
@@ -595,7 +595,7 @@ func (a App) runIsActive(ctx context.Context, opts options) int {
 
 	switch {
 	case opts.json:
-		mon := a.serviceMonitorState(opts)
+		mon := a.serviceMonitorState(ctx, opts)
 		writeJSON(a.Stdout, statusToJSON(status, mon, a.serviceDisplayState(ctx, opts, status, mon)))
 	case !opts.quiet:
 		fmt.Fprintln(a.Stdout, status.Status)
@@ -645,7 +645,7 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 		}
 	}
 
-	actionStore := a.openManualActionStore(cfg, action)
+	actionStore := a.openManualActionStore(ctx, cfg, action)
 	if actionStore != nil {
 		defer func() { _ = actionStore.Close() }()
 	}
@@ -764,11 +764,11 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 	return app.DowngradePrimaryOnCascadeFailure(primary, cascadeFailed), primaryErr
 }
 
-func (a App) openManualActionStore(cfg *config.Config, action string) *state.Store {
+func (a App) openManualActionStore(ctx context.Context, cfg *config.Config, action string) *state.Store {
 	if !operationActionUsesState(action) {
 		return nil
 	}
-	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
 		fmt.Fprintf(a.Stderr, "warning: operation state unavailable: %v\n", err)
 		return nil

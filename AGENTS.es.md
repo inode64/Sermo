@@ -606,10 +606,13 @@ Notas de herramientas:
   `*_test.go`), `fatcontext`, `gocritic` (solo `appendAssign`, `unlambda`),
   `contextcheck`, `goprintffuncname`, `iface`, `ineffassign`, `intrange`,
   `interfacebloat` (`internal/web/server.go` excluido), `mirror`, `misspell`,
-  `modernize`, `nilerr`, `nilnesserr`, `nolintlint`, `recvcheck`, `sloglint`,
-  `thelper` y `wastedassign`.
-  `noctx` queda deliberadamente desactivado: las sondas de conn/ usan deadlines
-  por sonda en lugar de dials con contexto.
+  `modernize`, `nilerr`, `nilnesserr`, `noctx` (desactivado en `internal/conn/`
+  y `*_test.go`), `nolintlint`, `recvcheck`, `sloglint`, `thelper` y
+  `wastedassign`.
+  El `database/sql` de producción en `internal/state` usa métodos `*Context` con
+  `sqlCtx()` (ctx de `OpenContext` / `context.Background()` vía `Open`).
+  `contextcheck` está desactivado en `internal/state/` y en los CLI que tocan el
+  store porque el linter no sigue el contexto embebido.
   Las excepciones aceptadas de gosec viven en esa config: `G115`, y en fixtures de test
   `G306`/`G101`/`G703`. Los casos by-design (`G204` comandos configurados por el operador,
   escrituras `0644` intencionales, lecturas acotadas `args[i]`, `G118` de contexto de shutdown)

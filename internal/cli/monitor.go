@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -14,7 +15,7 @@ import (
 // under paths.state (default /var/lib/sermo), so it survives daemon restarts and
 // reboots — and a service whose `monitor` flag is `previous` is restored to it on
 // the next daemon start.
-func (a App) runMonitor(opts options, pause bool) int {
+func (a App) runMonitor(ctx context.Context, opts options, pause bool) int {
 	verb := commandMonitor
 	if pause {
 		verb = commandUnmonitor
@@ -36,7 +37,7 @@ func (a App) runMonitor(opts options, pause bool) int {
 		return code
 	}
 
-	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("%s failed: %v", verb, err))
 	}
