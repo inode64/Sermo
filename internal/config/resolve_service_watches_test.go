@@ -194,7 +194,7 @@ watches:
 	}
 }
 
-func TestExpandServiceWatchesCopiesCheckEntryFields(t *testing.T) {
+func TestExpandServiceWatchesDisabledSkipsDerivedCheckAndRule(t *testing.T) {
 	tree, errs := resolveWatchService(t, `
 watches:
   restart-if-http-failed:
@@ -208,18 +208,10 @@ watches:
 	if len(errs) != 0 {
 		t.Fatalf("resolve errors = %v", errs)
 	}
-	chk := nested(t, tree, "checks", "restart-if-http-failed")
-	if got := cfgval.String(chk["interval"]); got != "15s" {
-		t.Fatalf("generated check interval = %q, want 15s", got)
-	}
-	if got, ok := chk["enabled"]; !ok || cfgval.Bool(got) {
-		t.Fatalf("generated check enabled = %v (present %v), want false", got, ok)
-	}
-	if !cfgval.Bool(chk["optional"]) {
-		t.Fatalf("generated check optional = %v, want true", chk["optional"])
-	}
-	if !cfgval.Bool(chk["verify"]) {
-		t.Fatalf("generated check verify = %v, want true", chk["verify"])
+	for _, section := range []string{"checks", "rules", "watches"} {
+		if _, ok := tree[section]; ok {
+			t.Fatalf("disabled watch should not generate %s, got %v", section, tree[section])
+		}
 	}
 }
 
