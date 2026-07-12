@@ -83,7 +83,7 @@ func Diagnose(cfg *config.Config, host Host) Result {
 
 type builder struct{ findings []Finding }
 
-func (b *builder) add(level Level, scope, format string, args ...any) {
+func (b *builder) addf(level Level, scope, format string, args ...any) {
 	b.findings = append(b.findings, Finding{Level: level, Scope: scope, Message: fmt.Sprintf(format, args...)})
 }
 
@@ -110,6 +110,6 @@ func levelRank(level Level) int {
 
 func diagConfig(b *builder, cfg *config.Config) {
 	for _, iss := range config.Validate(cfg) {
-		b.add(LevelError, iss.Scope, "%s", iss.Msg)
+		b.addf(LevelError, iss.Scope, "%s", iss.Msg)
 	}
 }

@@ -109,7 +109,7 @@ func (c *websocketCheck) handshake(ctx context.Context, iface string, start time
 	if websocketSecure(c.scheme) {
 		tc := &tls.Config{ServerName: c.host, MinVersion: tls.VersionTLS12}
 		if wsSkipVerify(c.tls) {
-			tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
+			tc.InsecureSkipVerify = true // operator chose tls: skip-verify
 		}
 		tlsConn := tls.Client(nc, tc)
 		if err := tlsConn.HandshakeContext(ctx); err != nil {

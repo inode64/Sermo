@@ -11,10 +11,10 @@ import (
 // reversed severity/scope) is caught.
 func TestBuilderSort(t *testing.T) {
 	b := &builder{}
-	b.add(LevelWarning, "alpha", "w") // rank 1
-	b.add(LevelError, "zeta", "e1")   // rank 0
-	b.add(LevelError, "beta", "e2")   // rank 0
-	b.add(LevelInfo, "gamma", "i")    // rank 2
+	b.addf(LevelWarning, "alpha", "w") // rank 1
+	b.addf(LevelError, "zeta", "e1")   // rank 0
+	b.addf(LevelError, "beta", "e2")   // rank 0
+	b.addf(LevelInfo, "gamma", "i")    // rank 2
 	b.sort()
 
 	want := []Finding{

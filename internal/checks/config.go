@@ -80,7 +80,7 @@ func (c configCheck) runConfigCommand(ctx context.Context) (execx.Result, error)
 func configFingerprint(paths []string) string {
 	var b strings.Builder
 	for _, p := range paths {
-		fi, err := os.Stat(p) //nolint:gosec // operator-configured config path
+		fi, err := os.Stat(p)
 		if err != nil {
 			b.WriteString(p + ":missing;")
 			continue

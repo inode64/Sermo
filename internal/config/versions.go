@@ -655,7 +655,7 @@ func refineJavaReleaseVersion(values map[string]string, realPath string) map[str
 		return values
 	}
 	releasePath := filepath.Join(filepath.Dir(filepath.Dir(realPath)), "release")
-	data, err := os.ReadFile(releasePath) //nolint:gosec // release is metadata under a discovered JVM home.
+	data, err := os.ReadFile(releasePath)
 	if err != nil {
 		return values
 	}

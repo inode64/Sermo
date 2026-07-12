@@ -197,7 +197,7 @@ func readSensorKind(dir, chip, kind string, scale float64) []SensorReading {
 
 // readTrim reads a sysfs file and trims trailing whitespace, returning "" on error.
 func readTrim(path string) string {
-	b, err := os.ReadFile(path) //nolint:gosec // sysfs path derived from a fixed root
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return ""
 	}

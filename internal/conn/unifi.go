@@ -42,7 +42,7 @@ func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	// UniFi controllers ship a self-signed certificate; skip verification unless
 	// the operator explicitly opts into it with tls: true.
 	if normalizeTLS(cfg.TLS) != ParamValueTrue {
-		tc.InsecureSkipVerify = true //nolint:gosec // UniFi ships a self-signed cert; operator opts into verification with tls: true
+		tc.InsecureSkipVerify = true // UniFi ships a self-signed cert; operator opts into verification with tls: true
 	}
 	client := httpProbeClient(cfg.Interface, tc)
 
