@@ -1,0 +1,12 @@
+name: incoming-files-fresh
+category: files
+# Alert once per path when a file has not been modified within the expected age.
+interval: 5m
+check:
+  type: file
+  paths:
+    - /srv/incoming/orders.csv
+    - /srv/incoming/summary.csv
+  older_than: 24h
+then:
+  notify: [none]

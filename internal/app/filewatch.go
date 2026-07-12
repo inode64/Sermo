@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"syscall"
+	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
@@ -18,25 +19,30 @@ import (
 // fileCond is the set of attribute conditions a file watch evaluates per path.
 // An empty set is invalid (rejected at build time).
 type fileCond struct {
-	sizeChange  bool    // fire when size differs from the previous cycle
-	sizeOp      string  // edge-triggered size threshold op ("" = none)
-	sizeValue   float64 // threshold comparand
-	permChange  bool    // fire when the permission bits change
-	ownerChange bool    // fire when the owning uid/gid changes
-	onDelete    bool    // fire when a previously-seen path stops existing
+	sizeChange  bool          // fire when size differs from the previous cycle
+	sizeOp      string        // edge-triggered size threshold op ("" = none)
+	sizeValue   float64       // threshold comparand
+	permChange  bool          // fire when the permission bits change
+	ownerChange bool          // fire when the owning uid/gid changes
+	onDelete    bool          // fire when a previously-seen path stops existing
+	olderThan   time.Duration // fire when the modification age crosses this threshold
 }
 
 func (c fileCond) any() bool {
-	return c.sizeChange || c.sizeOp != "" || c.permChange || c.ownerChange || c.onDelete
+	return c.sizeChange || c.sizeOp != "" || c.permChange || c.ownerChange || c.onDelete || c.olderThan > 0
 }
 
 // fileState is the remembered attributes of one path across cycles.
 type fileState struct {
-	size     int64
-	kind     string
-	perm     uint32 // st_mode & 07777: permission bits plus setuid/setgid/sticky
-	uid, gid uint32
-	breached bool // previous size-threshold result, for edge detection
+	size       int64
+	kind       string
+	perm       uint32 // st_mode & 07777: permission bits plus setuid/setgid/sticky
+	uid, gid   uint32
+	breached   bool // previous size-threshold result, for edge detection
+	modifiedAt time.Time
+	age        time.Duration
+	older      bool
+	olderFired bool
 }
 
 const (
@@ -45,17 +51,18 @@ const (
 	fileChangeSizeThreshold = "size_threshold"
 	fileChangePermissions   = "permissions"
 	fileChangeOwner         = "owner"
+	fileChangeOlderThan     = "older_than"
 
 	fileStatePermMask = 0o7777
 )
 
-// fileWatcher monitors a file or directory (optionally its whole subtree) for
-// attribute changes and fires a hook once per change. It is stateful: it
+// fileWatcher monitors configured files/directories (optionally their whole
+// subtrees) for attribute changes and modification age. It is stateful: it
 // remembers each path's attributes across cycles and reports only transitions.
-// The baseline is adopted silently on first sight, so a daemon start never fires.
+// The baseline is adopted silently on first sight except for already-stale paths.
 type fileWatcher struct {
 	name      string
-	path      string
+	paths     []string
 	recursive bool
 	cond      fileCond
 	hook      HookSpec
@@ -65,18 +72,20 @@ type fileWatcher struct {
 	runner    HookRunner
 	emit      func(Event)
 	publish   func(string, string, checks.Result)
+	now       func() time.Time
 
 	baseline map[string]fileState
 }
 
-// runCycle scans the watched path(s), compares each against its baseline, and
-// fires one hook (and emits one event) per detected change. It is the Watch.Cycle
-// implementation for a file watch.
+// runCycle scans the watched paths, compares each against its baseline, and
+// fires one hook (and emits one event) per detected change or age breach. It is
+// the Watch.Cycle implementation for a file watch.
 func (w *fileWatcher) runCycle(ctx context.Context) {
 	if w.baseline == nil {
 		w.baseline = map[string]fileState{}
 	}
-	current := w.scan()
+	now := w.clock()
+	current := w.scan(now)
 	defer w.publishSnapshot(current)
 
 	paths := make([]string, 0, len(current))
@@ -91,11 +100,17 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 		}
 		cur := current[p]
 		prev, known := w.baseline[p]
+		if known && cur.older && prev.older {
+			cur.olderFired = prev.olderFired
+		}
+		if !observeOnlyCycle(ctx) && cur.older && !cur.olderFired {
+			w.fireOlderThan(ctx, p, cur)
+			cur.olderFired = true
+		}
 		w.baseline[p] = cur
 		if known && !observeOnlyCycle(ctx) {
 			w.diff(ctx, p, prev, cur)
 		}
-		// Unknown paths adopt the baseline silently (no event on first sight).
 	}
 
 	// Deletions: paths we tracked that are absent now.
@@ -127,27 +142,25 @@ func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
 		w.publish(w.name, checks.CheckTypeFile, checks.Result{
 			Check:   w.name,
 			OK:      false,
-			Message: "file " + w.path + ": not found",
-			Data:    map[string]any{checks.DataKeyPath: w.path},
+			Message: "file watch: no configured path found",
+			Data:    map[string]any{checks.DataKeyPaths: w.paths},
 		})
 		return
 	}
-	root, ok := current[w.path]
-	if !ok {
-		w.publish(w.name, checks.CheckTypeFile, checks.Result{
-			Check:   w.name,
-			OK:      false,
-			Message: "file " + w.path + ": not found",
-			Data:    map[string]any{checks.DataKeyPath: w.path},
-		})
-		return
-	}
+	root := firstFileWatchRoot(w.paths, current)
 	data := map[string]any{
-		checks.DataKeyPath:   w.path,
-		checks.DataKeyKind:   root.kind,
-		checks.DataKeySize:   root.size,
-		checks.DataKeyMode:   fmt.Sprintf(fileModeFormat, root.perm),
-		checks.CheckKeyOwner: fmt.Sprintf(fileOwnerFormat, root.uid, root.gid),
+		checks.DataKeyPaths:      w.paths,
+		checks.DataKeyKind:       root.kind,
+		checks.DataKeySize:       root.size,
+		checks.DataKeyMode:       fmt.Sprintf(fileModeFormat, root.perm),
+		checks.CheckKeyOwner:     fmt.Sprintf(fileOwnerFormat, root.uid, root.gid),
+		checks.DataKeyModifiedAt: root.modifiedAt.UTC().Format(time.RFC3339),
+	}
+	if len(w.paths) == 1 {
+		data[checks.DataKeyPath] = w.paths[0]
+	}
+	if w.cond.olderThan > 0 {
+		data[checks.DataKeyAge] = root.age.Round(time.Second).String()
 	}
 	if w.recursive {
 		entries := len(current) - 1
@@ -159,7 +172,7 @@ func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
 	w.publish(w.name, checks.CheckTypeFile, checks.Result{
 		Check:   w.name,
 		OK:      true,
-		Message: fmt.Sprintf("%s size %d", w.path, root.size),
+		Message: fmt.Sprintf("%s size %d", firstFileWatchPath(w.paths), root.size),
 		Data:    data,
 	})
 }
@@ -167,40 +180,46 @@ func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
 // scan returns the current attributes of the watched path and, when recursive
 // and the path is a directory, every entry in its subtree. Symlinks are stat'd
 // as links (never followed), so a link is watched as itself, not its target.
-func (w *fileWatcher) scan() map[string]fileState {
+func (w *fileWatcher) scan(now time.Time) map[string]fileState {
 	out := map[string]fileState{}
-	info, err := os.Lstat(w.path)
-	if err != nil {
-		return out // missing root: handled as a deletion against the baseline
-	}
-	out[w.path] = w.stateOf(info)
-	if w.recursive && info.IsDir() {
-		_ = filepath.WalkDir(w.path, func(p string, d fs.DirEntry, err error) error {
-			if p == w.path {
-				return nil // skip the root; it was already added above
-			}
-			if err != nil {
-				return nil //nolint:nilerr // unreadable entries are skipped during best-effort recursive scans
-			}
-			fi, err := d.Info()
-			if err != nil {
-				return nil //nolint:nilerr // entries that disappear during the scan are skipped
-			}
-			out[p] = w.stateOf(fi)
-			return nil
-		})
+	for _, root := range w.paths {
+		info, err := os.Lstat(root)
+		if err != nil {
+			continue // missing roots are handled as deletions against the baseline
+		}
+		out[root] = w.stateOf(info, now)
+		if w.recursive && info.IsDir() {
+			_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, walkErr error) error {
+				if p == root {
+					return nil // skip the root; it was already added above
+				}
+				if walkErr != nil {
+					return nil //nolint:nilerr // unreadable entries are skipped during best-effort recursive scans
+				}
+				fi, infoErr := d.Info()
+				if infoErr != nil {
+					return nil //nolint:nilerr // entries that disappear during the scan are skipped
+				}
+				out[p] = w.stateOf(fi, now)
+				return nil
+			})
+		}
 	}
 	return out
 }
 
-func (w *fileWatcher) stateOf(info fs.FileInfo) fileState {
-	st := fileState{size: info.Size(), kind: fileKindLabel(info.Mode())}
+func (w *fileWatcher) stateOf(info fs.FileInfo, now time.Time) fileState {
+	st := fileState{size: info.Size(), kind: fileKindLabel(info.Mode()), modifiedAt: info.ModTime()}
 	if sys, ok := info.Sys().(*syscall.Stat_t); ok {
 		st.perm = uint32(sys.Mode) & fileStatePermMask
 		st.uid, st.gid = sys.Uid, sys.Gid
 	}
 	if w.cond.sizeOp != "" {
 		st.breached = cfgval.CompareFloat(float64(st.size), w.cond.sizeOp, w.cond.sizeValue)
+	}
+	if w.cond.olderThan > 0 {
+		st.age = now.Sub(st.modifiedAt)
+		st.older = st.age > w.cond.olderThan
 	}
 	return st
 }
@@ -239,6 +258,42 @@ func (w *fileWatcher) diff(ctx context.Context, path string, prev, cur fileState
 				sermoEnvNew: fmt.Sprintf(fileOwnerFormat, cur.uid, cur.gid),
 			})
 	}
+}
+
+func (w *fileWatcher) fireOlderThan(ctx context.Context, path string, cur fileState) {
+	ageSeconds := strconv.FormatInt(int64(cur.age.Seconds()), envFormatBase)
+	w.fire(ctx, path, fileChangeOlderThan,
+		fmt.Sprintf("%s was modified at %s and is older than %s", path, cur.modifiedAt.UTC().Format(time.RFC3339), w.cond.olderThan), map[string]string{
+			sermoEnvModifiedAt: cur.modifiedAt.UTC().Format(time.RFC3339),
+			sermoEnvAgeSeconds: ageSeconds,
+			sermoEnvValue:      w.cond.olderThan.String(),
+		})
+}
+
+func (w *fileWatcher) clock() time.Time {
+	if w.now != nil {
+		return w.now()
+	}
+	return time.Now()
+}
+
+func firstFileWatchRoot(paths []string, current map[string]fileState) fileState {
+	for _, path := range paths {
+		if state, ok := current[path]; ok {
+			return state
+		}
+	}
+	for _, state := range current {
+		return state
+	}
+	return fileState{}
+}
+
+func firstFileWatchPath(paths []string) string {
+	if len(paths) == 0 {
+		return "file"
+	}
+	return paths[0]
 }
 
 // fire runs the watch's hook for one change and emits a matching event. A hook

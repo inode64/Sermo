@@ -2115,14 +2115,14 @@ El único predicado `count: {op, value}` es requerido; emparéjalo con una venta
 modo que una ráfaga momentánea de hijos saliendo no se dispare. Hook extras:
 `SERMO_ZOMBIES` (el mismo valor que `SERMO_VALUE`, el recuento).
 
-### `file` — atributos de archivo/directorio
+### `file` — atributos y vigencia de archivos/directorios
 
-Un watch `file` monitoriza un archivo o directorio en busca de cambios de atributos —
-tamaño, permisos, propietario y eliminación — y ejecuta el hook de la entrada **una vez
-por cambio**. Es con estado: recuerda los atributos de cada ruta a través de los ciclos y
-reporta solo las transiciones, adoptando la línea base silenciosamente en el primer ciclo
-(un arranque del daemon nunca se dispara). Con `recursive: true` vigila todo el subárbol,
-de modo que un hook se dispara por entrada cambiada.
+Un watch `file` monitoriza uno o varios archivos/directorios en busca de cambios de
+atributos — tamaño, permisos, propietario, eliminación y edad de modificación — y ejecuta
+el hook **una vez por cambio o por ruta vencida**. `paths:` es la lista no vacía
+preferida; el escalar histórico `path:` sigue siendo un alias compatible, pero una
+comprobación debe definir exactamente uno de ellos. Con `recursive: true` vigila cada
+subárbol, así que el hook se ejecuta por cada entrada modificada o vencida.
 
 ```yaml
 watches:
@@ -2131,8 +2131,11 @@ watches:
     interval: 30s
     check:
       type: file
-      path: /var/lib/myapp            # file or directory
+      paths:                          # uno o varios archivos/directorios
+        - /var/lib/myapp
+        - /srv/myapp/incoming
       recursive: true                 # optional, default false (whole subtree)
+      older_than: 24h                 # opcional: edad de mtime; dispara cualquier ruta vencida
       size: { op: ">", value: 1048576 }   # edge threshold; or `size: { on: change }`
       permissions: { on: change }     # mode bits (perm + setuid/setgid/sticky)
       owner: { on: change }           # owning uid/gid
@@ -2155,16 +2158,23 @@ Las condiciones (declara al menos una):
 - **`existence`** — `on: delete`; se dispara cuando una ruta que existía deja de existir
   (la recreación se adopta entonces silenciosamente). La eliminación es la única
   transición reportada.
+- **`older_than`** — una duración positiva como `24h`; se dispara cuando el tiempo
+  desde la modificación (`mtime`) de una ruta es mayor que esa duración. Una ruta
+  ya vencida en el primer ciclo dispara de inmediato; vuelve a armarse al modificarla
+  o eliminarla.
 
-Cuando `recursive: true` y la ruta es un directorio, cada entrada del subárbol se rastrea
-independientemente (los symlinks se vigilan como enlaces, nunca se siguen). Las nuevas
-entradas se adoptan silenciosamente; las entradas eliminadas disparan `existence` si está
-configurado. Cada cambio detectado es **un evento y una ejecución de hook**, de modo que
-un ciclo que encuentra varios cambios se dispara varias veces.
+Cuando `recursive: true` y una ruta seleccionada es un directorio, cada entrada del
+subárbol se rastrea de forma independiente (los enlaces simbólicos se vigilan como
+enlaces, nunca se siguen). Las entradas nuevas se adoptan silenciosamente salvo que
+ya estén vencidas; las eliminadas disparan `existence` si está configurado. Cada
+cambio o vencimiento produce **un evento y una ejecución de hook**, de modo que un
+ciclo que encuentra varias rutas se dispara varias veces.
 
-Hook extras: `SERMO_PATH` (la ruta cambiada), `SERMO_CHANGE`
-(`size`|`size_threshold`|`permissions`|`owner`|`deleted`), `SERMO_OLD`/`SERMO_NEW`
-(valor antiguo/nuevo), y `SERMO_SIZE`/`SERMO_OP` para condiciones de tamaño.
+Extras del hook: `SERMO_PATH` (la ruta cambiada), `SERMO_CHANGE`
+(`size`|`size_threshold`|`permissions`|`owner`|`deleted`|`older_than`),
+`SERMO_OLD`/`SERMO_NEW` (valor antiguo/nuevo), y `SERMO_SIZE`/`SERMO_OP` para
+condiciones de tamaño. Un evento `older_than` también establece `SERMO_MODIFIED_AT`,
+`SERMO_AGE_SECONDS` y `SERMO_VALUE` (la duración configurada).
 
 ### `process` — proceso por nombre
 

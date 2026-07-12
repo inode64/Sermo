@@ -20,7 +20,7 @@ type fileWatchHarness struct {
 func (h *fileWatchHarness) watcher(path string, recursive bool, cond fileCond) *fileWatcher {
 	return &fileWatcher{
 		name:      "fw",
-		path:      path,
+		paths:     []string{path},
 		recursive: recursive,
 		cond:      cond,
 		hook:      HookSpec{Command: []string{"/bin/true"}},
@@ -47,6 +47,71 @@ func TestFileWatchFirstCycleSilent(t *testing.T) {
 	w.runCycle(context.Background())
 	if len(h.fired) != 0 {
 		t.Fatalf("first cycle must adopt the baseline silently, fired %d hooks", len(h.fired))
+	}
+}
+
+func TestFileWatchOlderThanFiresPerPathAndRearms(t *testing.T) {
+	dir := t.TempDir()
+	oldPath := filepath.Join(dir, "old.txt")
+	freshPath := filepath.Join(dir, "fresh.txt")
+	writeSize(t, oldPath, 1)
+	writeSize(t, freshPath, 1)
+	now := time.Date(2026, time.July, 12, 12, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(oldPath, now.Add(-2*time.Hour), now.Add(-2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(freshPath, now.Add(-30*time.Minute), now.Add(-30*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &fileWatchHarness{}
+	w := h.watcher(oldPath, false, fileCond{olderThan: time.Hour})
+	w.paths = []string{oldPath, freshPath}
+	w.now = func() time.Time { return now }
+
+	w.runCycle(context.Background())
+	if len(h.fired) != 1 || h.fired[0][sermoEnvPath] != oldPath || h.fired[0][sermoEnvChange] != fileChangeOlderThan {
+		t.Fatalf("first stale path fire = %v, want only %s", h.fired, oldPath)
+	}
+	w.runCycle(context.Background())
+	if len(h.fired) != 1 {
+		t.Fatalf("stale path repeated without rearming: %v", h.fired)
+	}
+
+	if err := os.Chtimes(oldPath, now, now); err != nil {
+		t.Fatal(err)
+	}
+	w.runCycle(context.Background())
+	if len(h.fired) != 1 {
+		t.Fatalf("fresh path must only rearm, fired=%v", h.fired)
+	}
+	if err := os.Chtimes(oldPath, now.Add(-2*time.Hour), now.Add(-2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	w.runCycle(context.Background())
+	if len(h.fired) != 2 || h.fired[1][sermoEnvAgeSeconds] != "7200" {
+		t.Fatalf("re-armed stale path fire = %v", h.fired)
+	}
+}
+
+func TestFileWatchOlderThanFiresAfterObserveOnlyCycle(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.txt")
+	writeSize(t, path, 1)
+	now := time.Date(2026, time.July, 12, 12, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(path, now.Add(-2*time.Hour), now.Add(-2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	h := &fileWatchHarness{}
+	w := h.watcher(path, false, fileCond{olderThan: time.Hour})
+	w.now = func() time.Time { return now }
+
+	w.runCycle(withObserveOnly(context.Background(), true))
+	if len(h.fired) != 0 {
+		t.Fatalf("observe-only cycle fired=%v", h.fired)
+	}
+	w.runCycle(context.Background())
+	if len(h.fired) != 1 || h.fired[0][sermoEnvChange] != fileChangeOlderThan {
+		t.Fatalf("stale path did not fire after observe-only cycle: %v", h.fired)
 	}
 }
 
@@ -84,7 +149,7 @@ func TestFileWatchPublishesMissingSnapshot(t *testing.T) {
 
 	w.runCycle(context.Background())
 
-	if got.OK || got.Data[checks.DataKeyPath] != w.path || got.Message == "" {
+	if got.OK || got.Data[checks.DataKeyPaths] == nil || got.Message == "" {
 		t.Fatalf("missing snapshot = %+v", got)
 	}
 }
@@ -269,10 +334,10 @@ func TestFileWatchWithRealOSHookRunner(t *testing.T) {
 
 	var hookEvents []Event
 	w := &fileWatcher{
-		name: "fw-real",
-		path: f,
-		cond: fileCond{sizeChange: true},
-		hook: HookSpec{Command: []string{"/bin/true"}, Timeout: time.Second},
+		name:  "fw-real",
+		paths: []string{f},
+		cond:  fileCond{sizeChange: true},
+		hook:  HookSpec{Command: []string{"/bin/true"}, Timeout: time.Second},
 		// Use real OSHookRunner (not the test Func) to cover default path + execx.
 		runner: OSHookRunner{},
 		emit: func(e Event) {

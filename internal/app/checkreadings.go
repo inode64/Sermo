@@ -16,6 +16,7 @@ import (
 const (
 	watchReadingLabelAddresses         = "Addresses"
 	watchReadingLabelAllocated         = "Allocated"
+	watchReadingLabelAge               = "Age"
 	watchReadingLabelArrays            = "Arrays"
 	watchReadingLabelAvailable         = "Available"
 	watchReadingLabelAwait             = "Await"
@@ -63,6 +64,7 @@ const (
 	watchReadingLabelLatency           = "Latency"
 	watchReadingLabelLoad              = "Load"
 	watchReadingLabelMatches           = "Matches"
+	watchReadingLabelModifiedAt        = "Modified at"
 	watchReadingLabelMinRules          = "Min rules"
 	watchReadingLabelMode              = "Mode"
 	watchReadingLabelMountpoints       = "Mountpoints"

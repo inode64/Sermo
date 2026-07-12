@@ -327,8 +327,9 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 // baseline, conditions and hook) wired into a Watch through Watch.Cycle so it can
 // fire one hook per change. The Watch's check/window fields are unused.
 func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
-	if cfgval.AsString(checkEntry[checks.CheckKeyPath]) == "" {
-		return nil, "watch " + name + ": file check requires a path"
+	paths, err := config.FileWatchPaths(checkEntry)
+	if err != nil {
+		return nil, "watch " + name + ": " + err.Error()
 	}
 	cond, err := parseFileCond(checkEntry)
 	if err != nil {
@@ -342,7 +343,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	}
 	fw := &fileWatcher{
 		name:      name,
-		path:      cfgval.AsString(checkEntry[checks.CheckKeyPath]),
+		paths:     paths,
 		recursive: cfgval.Bool(checkEntry[checks.CheckKeyRecursive]),
 		cond:      cond,
 		hook:      actions.hook,
@@ -352,6 +353,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		runner:    OSHookRunner{Runner: deps.ExecxRunner},
 		emit:      deps.Emit,
 		publish:   publishWatchSnapshots(deps.WatchSnapshots),
+		now:       deps.Now,
 	}
 	return &Watch{
 		Name:      name,
@@ -523,6 +525,13 @@ func parseFileCond(check map[string]any) (fileCond, error) {
 			return c, fmt.Errorf("file existence requires on: delete")
 		}
 		c.onDelete = true
+	}
+	if v, present := check[checks.CheckKeyOlderThan]; present {
+		d := cfgval.Duration(v)
+		if d <= 0 {
+			return c, fmt.Errorf("file %s must be a positive duration", checks.CheckKeyOlderThan)
+		}
+		c.olderThan = d
 	}
 	if !c.any() {
 		return c, fmt.Errorf("file check requires at least one of %s", config.FileWatchConditionSummary)
