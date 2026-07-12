@@ -22,7 +22,7 @@ func TestReclaimStaleConcurrentSingleHolder(t *testing.T) {
 
 	const contenders = 8
 	alive := map[int]bool{}
-	for i := 0; i < contenders; i++ {
+	for i := range contenders {
 		alive[6000+i] = true // every contender is a live, distinct "process"
 	}
 	proc := fakeProc{alive: alive}
@@ -30,7 +30,7 @@ func TestReclaimStaleConcurrentSingleHolder(t *testing.T) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	successes, held := 0, 0
-	for i := 0; i < contenders; i++ {
+	for i := range contenders {
 		pid := 6000 + i
 		l := OperationLocker{
 			Dir:  dir,

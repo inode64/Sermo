@@ -469,7 +469,7 @@ func procIPv6Host(hexAddr string) (string, bool) {
 		return "", false
 	}
 	var b [net.IPv6len]byte
-	for i := 0; i < procnet.IPv6Words; i++ {
+	for i := range procnet.IPv6Words {
 		start := i * procnet.IPv6WordHexChars
 		raw, err := strconv.ParseUint(hexAddr[start:start+procnet.IPv6WordHexChars], procnet.HexBase, procnet.IPv6WordBits)
 		if err != nil {

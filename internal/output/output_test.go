@@ -16,7 +16,7 @@ func TestBounded(t *testing.T) {
 	}
 
 	var b strings.Builder
-	for i := 0; i < boundedMaxLines+20; i++ {
+	for range boundedMaxLines + 20 {
 		b.WriteString("line\n")
 	}
 	b.WriteString("LASTLINE")

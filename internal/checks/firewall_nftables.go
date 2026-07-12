@@ -5,8 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/nftables"
 	"sermo/internal/execx"
+
+	"github.com/google/nftables"
 )
 
 // nftablesRuleCounter reads the loaded nftables rule count. Tests override it to

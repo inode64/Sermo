@@ -142,7 +142,7 @@ func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ow
 	}
 
 	path := l.path(service, name)
-	for attempt := 0; attempt < maxAcquireAttempts; attempt++ {
+	for range maxAcquireAttempts {
 		lf := lockFile{
 			Service:         service,
 			Name:            name,

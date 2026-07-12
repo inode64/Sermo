@@ -341,7 +341,7 @@ func TestWatchNotifiesOnceByDefault(t *testing.T) {
 		Now:       func() time.Time { return at },
 		Emit:      func(Event) {},
 	}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		w.RunCycle(context.Background())
 	}
 	if len(n.msgs) != 1 {
@@ -429,7 +429,7 @@ func TestWatchEmitsFiringOnceByDefault(t *testing.T) {
 		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/"}},
 		Emit:      func(e Event) { events = append(events, e) },
 	}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		w.RunCycle(context.Background())
 	}
 	if got := countEvents(events, eventKindFiring); got != 1 {
@@ -451,7 +451,7 @@ func TestWatchEmissionEveryCycleRepeatsFiringAndNotify(t *testing.T) {
 		},
 		Emit: func(e Event) { events = append(events, e) },
 	}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		w.RunCycle(context.Background())
 	}
 	if got := countEvents(events, eventKindFiring); got != 3 {

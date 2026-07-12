@@ -95,7 +95,7 @@ func TestAcquireRefcountMountsOnlyOnFirstUse(t *testing.T) {
 	c := testController(t, &mounted, runner)
 	spec := EphemeralSpec("/mnt/backup")
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if _, err := c.Acquire(context.Background(), spec); err != nil {
 			t.Fatalf("Acquire #%d: %v", i+1, err)
 		}

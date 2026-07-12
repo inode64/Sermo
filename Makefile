@@ -132,11 +132,14 @@ vet:
 	go vet ./...
 
 fmt:
-	gofmt -w .
+	gofmt -w internal cmd
+	$(LINT_PATH) goimports -w internal cmd
 
 fmt-check:
 	@out="$$(gofmt -l internal cmd)"; \
 	if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
+	@out="$$( $(LINT_PATH) goimports -l internal cmd)"; \
+	if [ -n "$$out" ]; then echo "goimports needed:"; echo "$$out"; exit 1; fi
 
 # Static analysis. Finds Go-installed tools in ~/go/bin: staticcheck, revive,
 # golangci-lint (runs gosec plus focused bug analyzers via .golangci.yml), and

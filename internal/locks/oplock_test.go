@@ -177,7 +177,7 @@ func TestAcquireRealSelfBlocksSecond(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first Acquire() error = %v", err)
 	}
-	defer handle.Release()
+	defer func() { _ = handle.Release() }()
 
 	_, err = l.Acquire("mysql", time.Hour)
 	var held *HeldError

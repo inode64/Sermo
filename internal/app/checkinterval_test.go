@@ -124,7 +124,7 @@ func TestPausedCyclesAdvanceCheckInterval(t *testing.T) {
 		return cache
 	}
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		w.RunCycle(context.Background())
 	}
 	if w.cycle != 2 {
@@ -171,7 +171,7 @@ func TestWorkerChecksPreserveStateAcrossCycles(t *testing.T) {
 	w.Publish = func(cache map[string]checks.Result, _ map[string]bool) {
 		latest = cache["version"]
 	}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		w.RunCycle(context.Background())
 	}
 

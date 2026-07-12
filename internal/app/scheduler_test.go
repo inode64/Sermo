@@ -67,7 +67,7 @@ func TestSchedulerGateWaitsForFirstCycles(t *testing.T) {
 		}
 	}
 	// Give markFirstCycle a beat to flip readiness after the last RunCycle returns.
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		if ready.Report(context.Background()).Ready {
 			break
 		}

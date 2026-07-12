@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -313,7 +314,7 @@ func (OSReader) SystemCPU() (busy, total uint64, ok bool) {
 		return 0, 0, false
 	}
 	line := data
-	if i := strings.IndexByte(string(data), '\n'); i >= 0 {
+	if i := bytes.IndexByte(data, '\n'); i >= 0 {
 		line = data[:i]
 	}
 	fields := strings.Fields(string(line))

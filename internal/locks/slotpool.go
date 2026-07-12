@@ -104,7 +104,7 @@ func (p SlotPool) InUse() (int, error) {
 	}
 	p = p.withDefaults()
 	inUse := 0
-	for i := 0; i < p.Slots; i++ {
+	for i := range p.Slots {
 		path := filepath.Join(p.Dir, fmt.Sprintf(slotLockFileNameFormat, i))
 		existing, err := readLockFile(path)
 		if err != nil {
@@ -127,7 +127,7 @@ func (p SlotPool) Acquire(ctx context.Context) (*SlotHandle, error) {
 	}
 
 	for {
-		for i := 0; i < p.Slots; i++ {
+		for i := range p.Slots {
 			path := filepath.Join(p.Dir, fmt.Sprintf(slotLockFileNameFormat, i))
 			h, err := p.tryAcquire(path, i, p.Proc, p.Now, p.Self)
 			if err == nil {
@@ -157,7 +157,7 @@ func (p SlotPool) tryAcquire(path string, slot int, proc ProcessProber, now func
 	// of attempts before yielding errSlotBusy so the caller tries the next slot —
 	// a pathologically contended slot can no longer recurse until the stack
 	// overflows.
-	for attempt := 0; attempt < maxAcquireAttempts; attempt++ {
+	for range maxAcquireAttempts {
 		payload := lockFile{
 			Service:         fmt.Sprintf(slotLockServiceFormat, slot),
 			OwnerPID:        pid,

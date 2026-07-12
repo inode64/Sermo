@@ -118,7 +118,7 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 	path := filepath.Join(l.Dir, service+lockSuffix)
 	pid, ticks := self()
 
-	for attempt := 0; attempt < maxAcquireAttempts; attempt++ {
+	for range maxAcquireAttempts {
 		payload := lockFile{
 			Service:         service,
 			OwnerPID:        pid,

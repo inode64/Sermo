@@ -374,7 +374,7 @@ func (c Controller) withLock(spec Spec, fn func() (Result, error)) (Result, erro
 	if err != nil {
 		return Result{}, err
 	}
-	defer handle.Release()
+	defer func() { _ = handle.Release() }()
 	return fn()
 }
 
