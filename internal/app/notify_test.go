@@ -86,6 +86,30 @@ func TestWatchDispatchesSelectedRaidTransitions(t *testing.T) {
 	}
 }
 
+func TestWatchDispatchesLVMHealthChange(t *testing.T) {
+	n := &fakeNotifier{name: "ops"}
+	w := &Watch{
+		Name:              "lvm-vg0-root",
+		CheckType:         checks.CheckTypeLVM,
+		LVMNotifyOnChange: true,
+		Notifiers:         []notify.Notifier{n},
+		Check: &scriptedCheck{results: []checks.Result{{
+			Check: "lvm", Data: map[string]any{
+				"lvm_transition": checks.LVMTransition{OldState: checks.LVMHealthOK, NewState: checks.LVMHealthError, Reasons: "partial"},
+			}}}},
+	}
+	w.RunCycle(context.Background())
+	if len(n.msgs) != 1 {
+		t.Fatalf("LVM notification messages = %d", len(n.msgs))
+	}
+	if got := n.msgs[0].Fields["SERMO_NEW_STATE"]; got != checks.LVMHealthError {
+		t.Fatalf("LVM new state = %q, fields=%+v", got, n.msgs[0].Fields)
+	}
+	if got := n.msgs[0].Fields["SERMO_LVM_REASONS"]; got != "partial" {
+		t.Fatalf("LVM reasons = %q, fields=%+v", got, n.msgs[0].Fields)
+	}
+}
+
 func TestWatchPanicSuppressesNotify(t *testing.T) {
 	n := &fakeNotifier{name: "ops-email"}
 	var events []Event

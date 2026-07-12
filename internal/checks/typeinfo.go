@@ -38,6 +38,7 @@ const (
 	CheckTypeSensors       = "sensors"
 	CheckTypeSmart         = "smart"
 	CheckTypeRAID          = "raid"
+	CheckTypeLVM           = "lvm"
 	CheckTypeEDAC          = "edac"
 	CheckTypeConfig        = "config"
 	CheckTypeFDS           = "fds"
@@ -90,6 +91,7 @@ var typeInfos = []TypeInfo{
 	{Name: CheckTypeSensors},
 	{Name: CheckTypeSmart},
 	{Name: CheckTypeRAID},
+	{Name: CheckTypeLVM, Health: true},
 	{Name: CheckTypeEDAC},
 	{Name: CheckTypeConfig, Health: true},
 	{Name: CheckTypeFDS},

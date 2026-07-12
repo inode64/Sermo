@@ -389,16 +389,19 @@ func validateRaidNotifyOn(name, typ string, entry map[string]any, notifiers map[
 		return
 	}
 	prefix := thenFieldPath(watchPath(name), WatchThenKeyNotifyOn)
-	if typ != checks.CheckTypeRAID {
-		add("%s is only valid on a raid watch", prefix)
-		return
-	}
 	events, err := cfgval.StrictStringList(raw)
 	if err != nil || len(events) == 0 {
 		add("%s must be a non-empty event list", prefix)
 		return
 	}
 	allowed := set(checks.RaidNotifyEvents...)
+	if typ == checks.CheckTypeLVM {
+		allowed = set(checks.LVMNotifyOnChange)
+	}
+	if typ != checks.CheckTypeRAID && typ != checks.CheckTypeLVM {
+		add("%s is only valid on a raid or lvm watch", prefix)
+		return
+	}
 	for _, event := range events {
 		if _, ok := allowed[event]; !ok {
 			add("%s %q is not supported", prefix, event)

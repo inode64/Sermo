@@ -204,6 +204,9 @@ mount >"${out}/mount" 2>/dev/null || true
 [ -r /proc/mounts ] && cp /proc/mounts "${out}/proc_mounts" || true
 [ -r /proc/swaps ] && cp /proc/swaps "${out}/proc_swaps" || true
 [ -r /proc/mdstat ] && cp /proc/mdstat "${out}/proc_mdstat" || true
+if command -v lvs >/dev/null 2>&1; then
+	lvs --reportformat json --units b --nosuffix -o vg_name,lv_name,lv_attr,lv_health_status,vg_free,vg_size,data_percent,metadata_percent >"${out}/lvs.json" 2>"${out}/lvs.err" || true
+fi
 [ -r /etc/fstab ] && cp /etc/fstab "${out}/fstab" || true
 lsblk -J -O >"${out}/lsblk.json" 2>/dev/null || true
 lsblk -P -o NAME,KNAME,PATH,TYPE,FSTYPE,MOUNTPOINTS,RM,RO,TRAN,MODEL,SERIAL,SIZE,PKNAME >"${out}/lsblk.pairs" 2>/dev/null || true

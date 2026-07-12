@@ -1465,6 +1465,10 @@ targets receive delivery: `on_degraded`, `on_recovering`, `on_good`, or
 selected notifier receives the structured RAID fields. It cannot be combined
 with `then.notify_interval`.
 
+For an `lvm` watch, `then.notify_on: [on_change]` notifies only when its
+effective health changes between `ok` and `error`, including recovery. It cannot
+be combined with `then.notify_interval`.
+
 **Checks and watches share the same check types.** Any single-shot check — the
 host-resource ones below (`storage`, `memory`, `pressure`, `load`, `fds`,
 `pids`, `conntrack`, `entropy`, `zombies`, `oom`, among others) *and* the

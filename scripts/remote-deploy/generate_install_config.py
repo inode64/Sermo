@@ -416,6 +416,21 @@ def parse_md_arrays(stage: Path) -> list[str]:
     return sorted(names)
 
 
+def parse_lvm_volumes(stage: Path) -> list[dict]:
+    report = read_json(stage / "lvs.json")
+    volumes: list[dict] = []
+    for section in report.get("report", []):
+        if not isinstance(section, dict):
+            continue
+        for item in section.get("lv", []):
+            if not isinstance(item, dict):
+                continue
+            vg, lv = str(item.get("vg_name") or ""), str(item.get("lv_name") or "")
+            if vg and lv:
+                volumes.append(item)
+    return sorted(volumes, key=lambda item: (str(item.get("vg_name")), str(item.get("lv_name"))))
+
+
 def parse_active_units(stage: Path) -> set[str]:
     init = read_text(stage / "init").strip()
     active: set[str] = set()
@@ -1011,6 +1026,7 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
         "virtual_machines": {"enabled": [], "skipped": []},
         "watches": {},
         "raid_arrays": [],
+		"lvm_volumes": [],
         "mount_units": [],
         "skipped_watches": [],
         "config_tar": str(configs_dir / host_slug / "sermo-config.tgz"),
@@ -1271,6 +1287,26 @@ dry_run: true
         report["raid_arrays"] = raid_arrays
     else:
         skip("raid", "no md raid array discovered")
+
+    lvm_volumes = parse_lvm_volumes(stage)
+    if lvm_volumes:
+        seen_vgs: set[str] = set()
+        for volume in lvm_volumes:
+            vg, lv = str(volume["vg_name"]), str(volume["lv_name"])
+            if vg not in seen_vgs:
+                seen_vgs.add(vg)
+                name = f"lvm-{slug(vg)}-capacity"
+                add_watch("watches", name, simple_watch(name, "storage", "1m", ["type: lvm", f"volume_group: {yaml_quote(vg)}", 'free_pct: { op: "<", value: "10%" }'], cycles=0))
+            name = f"lvm-{slug(vg)}-{slug(lv)}"
+            lines = ["type: lvm", f"volume_group: {yaml_quote(vg)}", f"logical_volume: {yaml_quote(lv)}"]
+            if str(volume.get("data_percent") or "").strip() not in {"", "-"}:
+                lines.append('thin_data_pct: { op: ">=", value: "80%" }')
+            if str(volume.get("metadata_percent") or "").strip() not in {"", "-"}:
+                lines.append('thin_metadata_pct: { op: ">=", value: "80%" }')
+            add_watch("watches", name, simple_watch(name, "storage", "1m", lines, cycles=0))
+            report["lvm_volumes"].append({"volume_group": vg, "logical_volume": lv})
+    else:
+        skip("lvm", "no logical volumes discovered")
 
     if features.get("edac") == "1":
         add_watch("watches", "watch-edac", simple_watch("watch-edac", "hardware", "1m", ["type: edac", 'ce: { op: ">", value: 100 }'], cycles=3))

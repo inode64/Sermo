@@ -73,6 +73,11 @@ progress, while `sysfs_changes: true` tracks the array's member `state`,
 `errors`, `bad_blocks` and `mismatch_cnt`. The generated install remains
 `dry_run: true` and has no hook or external notifier.
 
+When `lvs` is available and reports logical volumes, the generator also creates
+one read-only health watch per VG/LV and one VG-capacity watch. Thin pools receive
+the `80%` data/metadata thresholds; every VG capacity watch alerts below `10%`
+free space. They remain `dry_run: true`, with no hook or external notifier.
+
 When `/usr/share/GeoIP` exists on a target, the generated configuration also
 adds an alert-only recursive file watch. It reports each GeoIP database file
 whose modification age exceeds `20` days (`older_than: 480h`); it has no hook

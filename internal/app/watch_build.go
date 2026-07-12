@@ -212,26 +212,27 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	w := &Watch{
-		Name:             name,
-		CheckType:        typ,
-		Check:            check,
-		Window:           rules.ParseWindowRule(entry),
-		Hook:             actions.hook,
-		Notifiers:        resolveNotifiers(actions.effectiveNames, deps.Notifiers),
-		RaidNotifyEvents: actions.raidNotifyEvents,
-		NotifyInterval:   actions.notifyInterval,
-		Emission:         emission.Merge(entry[emission.Section], deps.GlobalEmission),
-		DryRun:           config.DryRun(entry),
-		Runner:           OSHookRunner{Runner: deps.ExecxRunner},
-		Interval:         interval,
-		IsPaused:         monitorPaused(deps.Monitor, watchMonitorKey(name)),
-		InPanic:          deps.Panic.Active,
-		Settling:         deps.Settling,
-		FireOnFail:       checks.IsHealthType(typ),
-		Now:              deps.Now,
-		Emit:             deps.Emit,
-		Publish:          publishWatchSnapshots(deps.WatchSnapshots),
-		StateStore:       deps.WatchState,
+		Name:              name,
+		CheckType:         typ,
+		Check:             check,
+		Window:            rules.ParseWindowRule(entry),
+		Hook:              actions.hook,
+		Notifiers:         resolveNotifiers(actions.effectiveNames, deps.Notifiers),
+		RaidNotifyEvents:  actions.raidNotifyEvents,
+		LVMNotifyOnChange: actions.lvmNotifyOnChange,
+		NotifyInterval:    actions.notifyInterval,
+		Emission:          emission.Merge(entry[emission.Section], deps.GlobalEmission),
+		DryRun:            config.DryRun(entry),
+		Runner:            OSHookRunner{Runner: deps.ExecxRunner},
+		Interval:          interval,
+		IsPaused:          monitorPaused(deps.Monitor, watchMonitorKey(name)),
+		InPanic:           deps.Panic.Active,
+		Settling:          deps.Settling,
+		FireOnFail:        checks.IsHealthType(typ),
+		Now:               deps.Now,
+		Emit:              deps.Emit,
+		Publish:           publishWatchSnapshots(deps.WatchSnapshots),
+		StateStore:        deps.WatchState,
 	}
 	if actions.expand != nil {
 		w.Expand = actions.expand
@@ -599,12 +600,13 @@ func parseActions(then map[string]any) (HookSpec, []string, error) {
 }
 
 type watchActions struct {
-	hook             HookSpec
-	effectiveNames   []string
-	raidNotifyEvents map[string]bool
-	expand           *ExpandSpec
-	kill             *killSpec
-	notifyInterval   time.Duration
+	hook              HookSpec
+	effectiveNames    []string
+	raidNotifyEvents  map[string]bool
+	lvmNotifyOnChange bool
+	expand            *ExpandSpec
+	kill              *killSpec
+	notifyInterval    time.Duration
 }
 
 type watchActionOptions struct {
@@ -627,8 +629,9 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 	if err != nil {
 		return watchActions{}, err
 	}
+	lvmNotifyOnChange := raidNotifyEvents[checks.LVMNotifyOnChange]
 	if len(raidNotifyEvents) > 0 {
-		if opts.checkType != checks.CheckTypeRAID {
+		if opts.checkType != checks.CheckTypeRAID && !(opts.checkType == checks.CheckTypeLVM && lvmNotifyOnChange && len(raidNotifyEvents) == 1) {
 			return watchActions{}, errors.New("then.notify_on is only valid on a raid watch")
 		}
 	}
@@ -650,12 +653,13 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 		return watchActions{}, errors.New(opts.emptyMessage)
 	}
 	return watchActions{
-		hook:             hook,
-		effectiveNames:   effectiveNames,
-		raidNotifyEvents: raidNotifyEvents,
-		expand:           expand,
-		kill:             kill,
-		notifyInterval:   cfgval.Duration(thenBlock[config.WatchThenKeyNotifyInterval]),
+		hook:              hook,
+		effectiveNames:    effectiveNames,
+		raidNotifyEvents:  raidNotifyEvents,
+		lvmNotifyOnChange: lvmNotifyOnChange,
+		expand:            expand,
+		kill:              kill,
+		notifyInterval:    cfgval.Duration(thenBlock[config.WatchThenKeyNotifyInterval]),
 	}, nil
 }
 
