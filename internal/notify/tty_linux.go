@@ -54,7 +54,7 @@ func buildTTY(name string, entry map[string]any) (Notifier, error) {
 	}, nil
 }
 
-func buildWall(name string, entry map[string]any) (Notifier, error) {
+func buildWall(name string, _ map[string]any) (Notifier, error) {
 	return &ttyNotifier{
 		name:      name,
 		typ:       TypeWall,

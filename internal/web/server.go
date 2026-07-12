@@ -1825,7 +1825,7 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, ActionResult{OK: true})
 }
 
-func (s *Server) handleReload(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleReload(w http.ResponseWriter, _ *http.Request) {
 	if s.Reload == nil {
 		writeError(w, http.StatusServiceUnavailable, apiErrorReloadUnavailable)
 		return

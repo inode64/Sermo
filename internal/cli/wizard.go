@@ -172,7 +172,7 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 	return exitSuccess, nil
 }
 
-func renderWizardWatchPreview(wizard string, entries map[string]any) ([]byte, error) {
+func renderWizardWatchPreview(_ string, entries map[string]any) ([]byte, error) {
 	docs, err := watchDocsFromEntries(entries)
 	if err != nil {
 		return nil, err
@@ -468,7 +468,7 @@ func wizardTargetDir(path, wizard string, entries map[string]any) (string, strin
 	return dirName, filepath.Join(base, dirName)
 }
 
-func wizardPathKey(wizard string, entries map[string]any) string {
+func wizardPathKey(_ string, _ map[string]any) string {
 	return watchesConfigDir
 }
 
