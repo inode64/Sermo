@@ -279,11 +279,16 @@ func (e *Evaluator) evalMetric(v any) (bool, error) {
 	if scope == "" {
 		scope = checks.MetricScopeService
 	}
-	reading, ok := e.Deps.Metrics(scope, cfgval.AsString(m[FieldName]))
+	name := cfgval.AsString(m[FieldName])
+	reading, ok := e.Deps.Metrics(scope, name)
 	if !ok {
 		return false, nil
 	}
-	return metrics.Compare(reading, cfgval.AsString(m[FieldOp]), cfgval.String(m[FieldValue]))
+	match, err := metrics.Compare(reading, cfgval.AsString(m[FieldOp]), cfgval.String(m[FieldValue]))
+	if err != nil {
+		return false, fmt.Errorf("compare metric %s: %w", name, err)
+	}
+	return match, nil
 }
 
 // evalChanged is true when the watched signal differs from the baseline tracked
@@ -354,7 +359,7 @@ func (e *Evaluator) runInline(ctx context.Context, name string, entry map[string
 	}
 	check, err := checks.BuildInline(name, entry, e.Deps)
 	if err != nil {
-		return checks.Result{}, err
+		return checks.Result{}, fmt.Errorf("build inline %s check: %w", name, err)
 	}
 	res := check.Run(ctx)
 	if e.memo == nil {
