@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net"
 	"strconv"
 	"strings"
@@ -137,9 +138,7 @@ func (c connCheck) Run(ctx context.Context) Result {
 		if primed && len(problems) > 0 {
 			r := c.result(false, fmt.Sprintf("%s %s: %s", c.proto.Name(), addr, strings.Join(problems, "; ")), start)
 			r.Data = map[string]any{DataKeyProtocol: c.proto.Name(), DataKeyHost: c.cfg.Host, DataKeyPort: c.cfg.Port, DataKeyLatencyMS: elapsed.Milliseconds()}
-			for k, v := range extra {
-				r.Data[k] = v
-			}
+			maps.Copy(r.Data, extra)
 			return r
 		}
 	}

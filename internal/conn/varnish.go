@@ -83,11 +83,11 @@ func parseVarnishStatus(line string) (status, length int, err error) {
 // varnishVersion extracts the version from a CLI banner ("varnish-7.4.1
 // revision …" -> "7.4.1"). Empty when absent (e.g. an auth challenge).
 func varnishVersion(body string) string {
-	i := strings.Index(body, varnishVersionPrefix)
-	if i < 0 {
+	_, after, ok := strings.Cut(body, varnishVersionPrefix)
+	if !ok {
 		return ""
 	}
-	v := body[i+len(varnishVersionPrefix):]
+	v := after
 	if j := strings.IndexAny(v, varnishVersionDelims); j >= 0 {
 		v = v[:j]
 	}

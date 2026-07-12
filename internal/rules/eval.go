@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 
 	"sermo/internal/cfgval"
@@ -336,9 +337,7 @@ func (e *Evaluator) evalInline(ctx context.Context, typ string, v any) (bool, er
 		return false, err
 	}
 	entry := map[string]any{FieldType: typ}
-	for k, val := range m {
-		entry[k] = val
-	}
+	maps.Copy(entry, m)
 	res, err := e.runInline(ctx, typ, entry, m)
 	if err != nil {
 		return false, err
@@ -376,9 +375,7 @@ func inlineEntry(m map[string]any) (map[string]any, string, error) {
 			return nil, "", fmt.Errorf("inline %s probe must be a mapping", k)
 		}
 		entry := map[string]any{FieldType: k}
-		for pk, pv := range params {
-			entry[pk] = pv
-		}
+		maps.Copy(entry, params)
 		return entry, k, nil
 	}
 	return nil, "", fmt.Errorf("empty inline probe")

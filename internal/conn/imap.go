@@ -84,8 +84,8 @@ func readIMAPTagged(br *bufio.Reader, tag string) (ok bool, status string, err e
 		if err != nil {
 			return false, "", err
 		}
-		if strings.HasPrefix(line, tag+" ") {
-			rest := strings.TrimSpace(strings.TrimPrefix(line, tag+" "))
+		if after, ok0 := strings.CutPrefix(line, tag+" "); ok0 {
+			rest := strings.TrimSpace(after)
 			fields := strings.Fields(rest)
 			if len(fields) == 0 {
 				return false, line, nil

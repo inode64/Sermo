@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -35,14 +36,14 @@ func TestSchedulerGateWaitsForFirstCycles(t *testing.T) {
 	ready := NewReadiness(string(servicemgr.BackendSystemd), 0, 0)
 	settling := NewSettling(ready)
 	settling.Reset([]string{SettlingWatchKey("a"), SettlingWatchKey("b")})
-	var ran int32
+	var ran atomic.Int32
 	mkWatch := func(name string) *Watch {
 		return &Watch{
 			Name:     name,
 			Settling: settling,
 			Interval: time.Second, // slow; only the staggered first cycle runs in-window
 			Check: checkFunc(func(context.Context) checks.Result {
-				atomic.AddInt32(&ran, 1)
+				ran.Add(1)
 				return checks.Result{OK: true}
 			}),
 		}
@@ -57,12 +58,12 @@ func TestSchedulerGateWaitsForFirstCycles(t *testing.T) {
 
 	deadline := time.After(2 * time.Second)
 	for {
-		if atomic.LoadInt32(&ran) >= 2 {
+		if ran.Load() >= 2 {
 			break
 		}
 		select {
 		case <-deadline:
-			t.Fatalf("watches did not run their first cycle (ran=%d)", atomic.LoadInt32(&ran))
+			t.Fatalf("watches did not run their first cycle (ran=%d)", ran.Load())
 		case <-time.After(2 * time.Millisecond):
 		}
 	}
@@ -190,10 +191,10 @@ func TestSchedulerStartupDelayHoldsBeforeFirstCycle(t *testing.T) {
 }
 
 func TestSchedulerStartupDelayInterruptedByShutdown(t *testing.T) {
-	var n int32
+	var n atomic.Int32
 	workers := []*Worker{
 		{Service: "a", Checks: func(context.Context, checks.Deps) map[string]checks.Result {
-			atomic.AddInt32(&n, 1)
+			n.Add(1)
 			return nil
 		}},
 	}
@@ -213,7 +214,7 @@ func TestSchedulerStartupDelayInterruptedByShutdown(t *testing.T) {
 		t.Fatal("scheduler did not return when cancelled during startup delay")
 	}
 
-	if got := atomic.LoadInt32(&n); got != 0 {
+	if got := n.Load(); got != 0 {
 		t.Fatalf("worker cycled even though shutdown interrupted the startup delay: got %d", got)
 	}
 }
@@ -364,13 +365,7 @@ func TestSchedulerRunsWatchWithCustomInjectedRunnerVerifiesEnv(t *testing.T) {
 		t.Fatalf("bad argv: %s %v", call.name, call.args)
 	}
 	// Verify specific env from the stub check data
-	found := false
-	for _, e := range call.env {
-		if e == "SERMO_WATCH=storage-root" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(call.env, "SERMO_WATCH=storage-root")
 	if !found {
 		t.Fatalf("custom runner did not receive expected SERMO_WATCH env: %v", call.env)
 	}

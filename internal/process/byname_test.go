@@ -2,6 +2,7 @@ package process
 
 import (
 	"os"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -18,10 +19,8 @@ func TestPIDsByCommFindsSelf(t *testing.T) {
 		t.Fatalf("PIDsByComm(%q): %v", name, err)
 	}
 	self := os.Getpid()
-	for _, p := range pids {
-		if p == self {
-			return
-		}
+	if slices.Contains(pids, self) {
+		return
 	}
 	t.Fatalf("PIDsByComm(%q) = %v, want it to include self pid %d", name, pids, self)
 }

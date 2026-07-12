@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"strings"
 	"testing"
 )
@@ -1165,11 +1166,11 @@ func TestValidateWatchesMessageMentionsName(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{"storage-root": map[string]any{"check": map[string]any{"type": "storage"}}},
 	})
-	joined := ""
+	var joined strings.Builder
 	for _, i := range watchIssues(issues) {
-		joined += i.Msg
+		joined.WriteString(i.Msg)
 	}
-	if !strings.Contains(joined, "storage-root") {
+	if !strings.Contains(joined.String(), "storage-root") {
 		t.Fatalf("issue should name the watch: %v", issues)
 	}
 }
@@ -1195,12 +1196,8 @@ func TestValidateWatchesNetBad(t *testing.T) {
 	hook := map[string]any{"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}}
 	merge := func(m map[string]any) map[string]any {
 		out := map[string]any{}
-		for k, v := range hook {
-			out[k] = v
-		}
-		for k, v := range m {
-			out[k] = v
-		}
+		maps.Copy(out, hook)
+		maps.Copy(out, m)
 		return out
 	}
 	cases := map[string]map[string]any{
@@ -1246,12 +1243,8 @@ func TestValidateWatchesICMPBad(t *testing.T) {
 	hook := map[string]any{"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}}
 	merge := func(m map[string]any) map[string]any {
 		out := map[string]any{}
-		for k, v := range hook {
-			out[k] = v
-		}
-		for k, v := range m {
-			out[k] = v
-		}
+		maps.Copy(out, hook)
+		maps.Copy(out, m)
 		return out
 	}
 	cases := map[string]map[string]any{

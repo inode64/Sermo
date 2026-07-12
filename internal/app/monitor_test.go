@@ -80,8 +80,7 @@ checks:
 	mon.Logger = slog.Default()
 	mon.Init(workers, nil)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go mon.Run(ctx)
 	waitReady(t, ready)
 
@@ -164,8 +163,7 @@ checks:
 	mon.Logger = slog.Default()
 	mon.Init(workers, nil)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go mon.Run(ctx)
 	waitReady(t, ready)
 

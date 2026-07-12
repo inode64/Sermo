@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -77,12 +78,7 @@ func (m *fakeManager) ResetState(_ context.Context, s string) error {
 }
 
 func (m *fakeManager) did(call string) bool {
-	for _, c := range m.calls {
-		if c == call {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(m.calls, call)
 }
 
 type harness struct {

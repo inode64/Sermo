@@ -1,15 +1,14 @@
 package dockerctl
 
 import (
+	"maps"
 	"strings"
 	"testing"
 )
 
 func dockerControl(extra map[string]any) map[string]any {
 	c := map[string]any{ControlKeyType: ControlType}
-	for k, v := range extra {
-		c[k] = v
-	}
+	maps.Copy(c, extra)
 	return map[string]any{sectionControl: c}
 }
 

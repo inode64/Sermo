@@ -204,9 +204,7 @@ func ReferencedChecks(tree map[string]any) map[string]any {
 	out := map[string]any{}
 	for _, section := range []string{referencedChecksSectionChecks, referencedChecksSectionPreflight} {
 		if m, ok := tree[section].(map[string]any); ok {
-			for name, entry := range m {
-				out[name] = entry
-			}
+			maps.Copy(out, m)
 		}
 	}
 	return out

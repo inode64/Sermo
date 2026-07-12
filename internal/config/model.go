@@ -813,9 +813,7 @@ func (c *Config) Notifiers() map[string]any {
 		notify.TypeWall: map[string]any{notify.KeyType: notify.TypeWall},
 	}
 	m, _ := c.Global.Raw[pathKeyNotifiers].(map[string]any)
-	for name, entry := range m {
-		out[name] = entry
-	}
+	maps.Copy(out, m)
 	return out
 }
 

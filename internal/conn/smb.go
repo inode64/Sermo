@@ -145,11 +145,11 @@ func smbSession(ctx context.Context, addr string, cfg Config, extra map[string]s
 // splitSMBUser separates a domain from a user given as "DOMAIN\user" or
 // "user@domain".
 func splitSMBUser(s string) (user, domain string) {
-	if i := strings.IndexByte(s, '\\'); i >= 0 {
-		return s[i+1:], s[:i]
+	if before, after, ok := strings.Cut(s, "\\"); ok {
+		return after, before
 	}
-	if i := strings.IndexByte(s, '@'); i >= 0 {
-		return s[:i], s[i+1:]
+	if before, after, ok := strings.Cut(s, "@"); ok {
+		return before, after
 	}
 	return s, ""
 }

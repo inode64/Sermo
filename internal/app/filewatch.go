@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -163,10 +164,7 @@ func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
 		data[checks.DataKeyAge] = root.age.Round(time.Second).String()
 	}
 	if w.recursive {
-		entries := len(current) - 1
-		if entries < 0 {
-			entries = 0
-		}
+		entries := max(len(current)-1, 0)
 		data[watchReadingFieldEntries] = entries
 	}
 	w.publish(w.name, checks.CheckTypeFile, checks.Result{
@@ -306,9 +304,7 @@ func (w *fileWatcher) fire(ctx context.Context, path, change, msg string, extra 
 		sermoEnvChange:    change,
 		sermoEnvMessage:   msg,
 	}
-	for k, v := range extra {
-		env[k] = v
-	}
+	maps.Copy(env, extra)
 	if w.dryRun {
 		w.emitEvent(Event{Watch: w.name, Kind: eventKindDryRun, Message: watchDryRunMessage(w.hook, w.notifiers, nil) + ": " + msg})
 		dispatchDryRunNotify(ctx, w.notifiers, watchMessage(w.name, msg, env), w.name, w.emitEvent)

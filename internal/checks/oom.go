@@ -64,7 +64,7 @@ func defaultOomSampler() (uint64, bool) {
 	if err != nil {
 		return 0, false
 	}
-	for _, line := range strings.Split(string(data), checkLineSeparator) {
+	for line := range strings.SplitSeq(string(data), checkLineSeparator) {
 		if v, ok := strings.CutPrefix(line, oomVMStatKillPrefix); ok {
 			n, err := strconv.ParseUint(strings.TrimSpace(v), numericBaseDecimal, numericBits64)
 			return n, err == nil

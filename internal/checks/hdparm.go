@@ -107,7 +107,7 @@ func hdparmArgs(device string, wantCached, wantRead bool) []string {
 // the amount transferred, not the rate).
 func parseHdparm(out string) (map[string]float64, error) {
 	values := map[string]float64{}
-	for _, line := range strings.Split(out, checkLineSeparator) {
+	for line := range strings.SplitSeq(out, checkLineSeparator) {
 		eq := strings.LastIndex(line, "=")
 		unit := strings.Index(line, "MB/sec")
 		if eq < 0 || unit < 0 || unit < eq {

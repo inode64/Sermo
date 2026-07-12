@@ -198,7 +198,7 @@ func portState(open bool) string {
 // each must be a valid TCP port and a range must be ascending.
 func ParsePortSpec(spec string) ([]int, error) {
 	seen := map[int]bool{}
-	for _, tok := range strings.Split(spec, ",") {
+	for tok := range strings.SplitSeq(spec, ",") {
 		tok = strings.TrimSpace(tok)
 		if tok == "" {
 			continue

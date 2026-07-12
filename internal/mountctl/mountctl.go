@@ -616,7 +616,7 @@ func FstabEntries(fstabPath string) ([]FstabEntry, error) {
 		return nil, err
 	}
 	var entries []FstabEntry
-	for _, line := range strings.Split(string(data), fstabLineSeparator) {
+	for line := range strings.SplitSeq(string(data), fstabLineSeparator) {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, fstabCommentPrefix) {
 			continue

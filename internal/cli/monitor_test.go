@@ -97,11 +97,11 @@ func TestWatchMonitorUnmonitorCommand(t *testing.T) {
 			"    then: { hook: { command: [\"/bin/true\"] } }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "sermo.yml"), []byte(fmt.Sprintf(`
+	if err := os.WriteFile(filepath.Join(root, "sermo.yml"), fmt.Appendf(nil, `
 engine: { backend: auto }
 paths: { services: [ %s ], runtime: %s, state: %s }
 defaults: { policy: { cooldown: 5m } }
-`, servicesDir, runDir, stateDir)), 0o644); err != nil {
+`, servicesDir, runDir, stateDir), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	global := filepath.Join(root, "sermo.yml")

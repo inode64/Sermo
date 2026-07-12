@@ -214,7 +214,7 @@ func commandResultError(command string, res execx.Result, err error) error {
 
 func countIptablesRules(out string) uint64 {
 	var rules uint64
-	for _, line := range strings.Split(out, checkLineSeparator) {
+	for line := range strings.SplitSeq(out, checkLineSeparator) {
 		if strings.HasPrefix(strings.TrimSpace(line), "-A ") {
 			rules++
 		}

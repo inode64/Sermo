@@ -96,8 +96,8 @@ func avahiProbe(ctx context.Context, addr string) (Result, error) {
 // avahiVersion extracts the numeric version from Avahi's version string
 // ("avahi 0.8" -> "0.8"), falling back to the last whitespace-separated field.
 func avahiVersion(s string) string {
-	if strings.HasPrefix(s, avahiVersionPrefix) {
-		return strings.TrimSpace(strings.TrimPrefix(s, avahiVersionPrefix))
+	if after, ok := strings.CutPrefix(s, avahiVersionPrefix); ok {
+		return strings.TrimSpace(after)
 	}
 	if f := strings.Fields(s); len(f) > 0 {
 		return f[len(f)-1]

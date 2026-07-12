@@ -76,7 +76,7 @@ func defaultMemorySampler() (MemorySample, error) {
 		return MemorySample{}, err
 	}
 	var s MemorySample
-	for _, line := range strings.Split(string(data), checkLineSeparator) {
+	for line := range strings.SplitSeq(string(data), checkLineSeparator) {
 		if v, ok := strings.CutPrefix(line, meminfoMemTotalPrefix); ok {
 			s.TotalBytes = parseMeminfoKB(v)
 		} else if v, ok := strings.CutPrefix(line, meminfoMemAvailablePrefix); ok {

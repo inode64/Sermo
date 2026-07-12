@@ -153,7 +153,7 @@ func firstNameserver(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for _, line := range strings.Split(string(data), resolvConfLineSep) {
+	for line := range strings.SplitSeq(string(data), resolvConfLineSep) {
 		fields := strings.Fields(line)
 		if len(fields) >= resolvConfMinFields && fields[resolvConfKeyIndex] == resolvConfNameserver {
 			return fields[resolvConfValueIndex], nil

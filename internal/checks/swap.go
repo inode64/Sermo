@@ -128,7 +128,7 @@ func defaultSwapSampler() (SwapSample, error) {
 	if err != nil {
 		return s, err
 	}
-	for _, line := range strings.Split(string(mem), checkLineSeparator) {
+	for line := range strings.SplitSeq(string(mem), checkLineSeparator) {
 		if v, ok := strings.CutPrefix(line, swapMeminfoTotalPrefix); ok {
 			s.TotalBytes = parseMeminfoKB(v)
 		} else if v, ok := strings.CutPrefix(line, swapMeminfoFreePrefix); ok {
@@ -146,7 +146,7 @@ func defaultSwapSampler() (SwapSample, error) {
 }
 
 func parseSwapVMStat(vm string) (pagesIn, pagesOut uint64, err error) {
-	for _, line := range strings.Split(vm, checkLineSeparator) {
+	for line := range strings.SplitSeq(vm, checkLineSeparator) {
 		if v, ok := strings.CutPrefix(line, swapVMStatPagesInPrefix); ok {
 			pagesIn, err = parseSwapPageCounter(swapVMStatPagesIn, v)
 			if err != nil {

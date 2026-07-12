@@ -282,9 +282,8 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 				ce[k] = v
 			}
 		}
-		for k, v := range checkEntry { // base check fields win
-			ce[k] = v
-		}
+		// base check fields win
+		maps.Copy(ce, checkEntry)
 		ce[checks.CheckKeyMetric] = key
 
 		check, err := checks.BuildInline(name, ce, watchInlineDeps(deps))

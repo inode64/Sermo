@@ -501,24 +501,22 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	warnings = append(warnings, stateWarnings...)
 
 	worker = &Worker{
-		Service:        name,
-		Rules:          ruleSet,
-		MetricChecks:   rules.ReferencedChecks(tree),
-		Policy:         rules.ParsePolicy(tree),
-		State:          remediationState,
-		Notifiers:      deps.Notifiers,
-		GlobalNotify:   deps.GlobalNotify,
-		GlobalEmission: deps.GlobalEmission,
-		Remediation:    deps.Remediation,
-		RuleWindows:    deps.RuleWindows,
-		CheckDeps:      checkDeps,
-		Interval:       cfgval.Duration(tree[config.EntryKeyInterval]),
-		Gates:          parseCheckGates(tree),
-		Sample:         sampleMetrics,
-		LiveSample:     liveSample,
-		Operate: func(ctx context.Context, action string) operation.Result {
-			return engine.Do(ctx, action)
-		},
+		Service:           name,
+		Rules:             ruleSet,
+		MetricChecks:      rules.ReferencedChecks(tree),
+		Policy:            rules.ParsePolicy(tree),
+		State:             remediationState,
+		Notifiers:         deps.Notifiers,
+		GlobalNotify:      deps.GlobalNotify,
+		GlobalEmission:    deps.GlobalEmission,
+		Remediation:       deps.Remediation,
+		RuleWindows:       deps.RuleWindows,
+		CheckDeps:         checkDeps,
+		Interval:          cfgval.Duration(tree[config.EntryKeyInterval]),
+		Gates:             parseCheckGates(tree),
+		Sample:            sampleMetrics,
+		LiveSample:        liveSample,
+		Operate:           engine.Do,
 		IsPaused:          monitorPaused(deps.Monitor, name),
 		InPanic:           deps.Panic.Active,
 		Settling:          deps.Settling,
@@ -698,10 +696,7 @@ func dueChecks(cycle int, built []checks.Built, every map[string]int, cache map[
 				continue
 			}
 		}
-		n := every[name]
-		if n < 1 {
-			n = 1
-		}
+		n := max(every[name], 1)
 		if (cycle-1)%n == 0 {
 			due = append(due, b)
 		}

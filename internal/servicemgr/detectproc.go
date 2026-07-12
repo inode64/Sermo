@@ -224,7 +224,7 @@ func openRCAssignments(text, unit string) map[string]string {
 	}
 	active := true
 	var stack []openRCBranch
-	for _, line := range strings.Split(text, serviceOutputLineSeparator) {
+	for line := range strings.SplitSeq(text, serviceOutputLineSeparator) {
 		line = strings.TrimSpace(line)
 		if b, ok := openRCIfBranch(line, active, vars); ok {
 			stack = append(stack, b)
@@ -251,8 +251,8 @@ func openRCAssignments(text, unit string) map[string]string {
 		if !active {
 			continue
 		}
-		if strings.HasPrefix(line, shellNoOpPrefix) {
-			expr := strings.TrimSpace(strings.TrimPrefix(line, shellNoOpPrefix))
+		if after, ok := strings.CutPrefix(line, shellNoOpPrefix); ok {
+			expr := strings.TrimSpace(after)
 			name, _, ok := defaultExpr(expr)
 			if !ok {
 				continue
@@ -286,7 +286,7 @@ func openRCIfBranch(line string, active bool, vars map[string]string) (openRCBra
 
 func evalOpenRCCondition(expr string, vars map[string]string) (bool, bool) {
 	result := true
-	for _, part := range strings.Split(expr, shellConditionAnd) {
+	for part := range strings.SplitSeq(expr, shellConditionAnd) {
 		part = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(part), shellLineContinuation))
 		ok, known := evalOpenRCTerm(part, vars)
 		if !known {
@@ -362,13 +362,13 @@ func resolveOpenRCValue(raw string, vars map[string]string) (string, bool) {
 }
 
 func trimShellPrefixPattern(value, pattern string) string {
-	if strings.HasPrefix(pattern, shellGlobAny) {
-		suffix := strings.TrimPrefix(pattern, shellGlobAny)
+	if after, ok := strings.CutPrefix(pattern, shellGlobAny); ok {
+		suffix := after
 		if suffix == "" {
 			return value
 		}
-		if i := strings.Index(value, suffix); i >= 0 {
-			return value[i+len(suffix):]
+		if _, after, ok := strings.Cut(value, suffix); ok {
+			return after
 		}
 		return value
 	}
@@ -483,8 +483,8 @@ func cleanProcPath(s string) string {
 		if clean == legacyRunDir {
 			return runtimeRunDir
 		}
-		if strings.HasPrefix(clean, legacyRunDir+"/") {
-			return runtimeRunDir + "/" + strings.TrimPrefix(clean, legacyRunDir+"/")
+		if after, ok := strings.CutPrefix(clean, legacyRunDir+"/"); ok {
+			return runtimeRunDir + "/" + after
 		}
 		return clean
 	}

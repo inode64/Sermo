@@ -168,10 +168,9 @@ func (e Expander) Expand(ctx context.Context, t Target, by int64) (Result, error
 	if free <= 0 {
 		return Result{}, fmt.Errorf("no free space in volume group %q to expand %s", t.VG, t.Mountpoint)
 	}
-	grow := by
-	if grow > free {
-		grow = free // use all that is available, as the operator script does
-	}
+	grow := min(by,
+		// use all that is available, as the operator script does
+		free)
 	if grow <= 0 {
 		// Config validation already requires a positive expand.by, but Expand is
 		// exported: guard so a zero/negative request never reaches lvextend as a

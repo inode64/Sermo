@@ -31,11 +31,9 @@ func TestOpGateRunSerializes(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 4 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			gate.Run(context.Background(), "web", "restart", fn)
-		}()
+		})
 	}
 	wg.Wait()
 
