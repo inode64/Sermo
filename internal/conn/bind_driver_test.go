@@ -17,6 +17,7 @@ func TestInterfaceBindingApplied(t *testing.T) {
 		check func(t *testing.T)
 	}{
 		{"mongo", func(t *testing.T) {
+			t.Helper()
 			client, err := MongoConnect(Config{Host: "127.0.0.1", Interface: "eth0"})
 			if err != nil {
 				t.Fatalf("MongoConnect: %v", err)
@@ -24,35 +25,41 @@ func TestInterfaceBindingApplied(t *testing.T) {
 			MongoDisconnect(context.Background(), client)
 		}},
 		{"postgres-connector", func(t *testing.T) {
+			t.Helper()
 			if _, err := postgresConnector(Config{User: "u", Interface: "eth0"}); err != nil {
 				t.Fatalf("postgresConnector: %v", err)
 			}
 		}},
 		{"pq-dialer", func(t *testing.T) {
+			t.Helper()
 			d := pqDialer("eth0")
 			if d.Dialer == nil || d.Dialer.Control == nil {
 				t.Fatal("pq dialer must use BindDialer when interface is set")
 			}
 		}},
 		{"mysql-config", func(t *testing.T) {
+			t.Helper()
 			cfg := buildMySQLConfig(Config{User: "u", Password: "p", Interface: "eth0"})
 			if cfg.DialFunc == nil {
 				t.Fatal("mysql config must set DialFunc when interface is set")
 			}
 		}},
 		{"ldap-probe-dialer", func(t *testing.T) {
+			t.Helper()
 			d := probeDialer("eth0", time.Second)
 			if d.Control == nil {
 				t.Fatal("LDAP probe dialer must use BindDialer when interface is set")
 			}
 		}},
 		{"libvirt-remote-dialer", func(t *testing.T) {
+			t.Helper()
 			d := libvirtRemoteNetDialer("eth0", time.Second)
 			if d.Control == nil {
 				t.Fatal("libvirt remote dialer must use BindDialer when interface is set")
 			}
 		}},
 		{"http-probe-client", func(t *testing.T) {
+			t.Helper()
 			client := httpProbeClient("eth0", nil)
 			tr, ok := client.Transport.(*http.Transport)
 			if !ok || tr.DialContext == nil {
@@ -60,6 +67,7 @@ func TestInterfaceBindingApplied(t *testing.T) {
 			}
 		}},
 		{"snmp-params", func(t *testing.T) {
+			t.Helper()
 			params := buildSNMPParams(context.Background(), Config{Host: "dev", Interface: "eth0"}, time.Second)
 			if params.Control == nil {
 				t.Fatal("SNMP params must use BindDialer control hook when interface is set")

@@ -605,8 +605,8 @@ Notas de herramientas:
   `*_test.go`), `fatcontext`, `gocritic` (solo `appendAssign`, `unlambda`),
   `contextcheck`, `goprintffuncname`, `iface`, `ineffassign`, `intrange`,
   `interfacebloat` (`internal/web/server.go` excluido), `mirror`, `misspell`,
-  `modernize`, `nilerr`, `nilnesserr`, `nolintlint`, `recvcheck`, `sloglint` y
-  `wastedassign`.
+  `modernize`, `nilerr`, `nilnesserr`, `nolintlint`, `recvcheck`, `sloglint`,
+  `thelper` y `wastedassign`.
   `noctx` queda deliberadamente desactivado: las sondas de conn/ usan deadlines
   por sonda en lugar de dials con contexto.
   Las excepciones aceptadas de gosec viven en esa config: `G115`, y en fixtures de test
