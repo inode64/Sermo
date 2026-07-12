@@ -306,7 +306,7 @@ func run(args []string) int {
 	deps.LiveCollector = metrics.New(metrics.OSReader{})
 	deps.ArtifactSamples = app.NewArtifactSamples()
 
-	workers, svcWatches, warnings := app.BuildWorkers(cfg, deps, collector)
+	workers, svcWatches, warnings := app.BuildWorkers(ctx, cfg, deps, collector)
 	for _, w := range warnings {
 		logger.Warn("build workers", logFieldWarning, w)
 	}
@@ -322,7 +322,7 @@ func run(args []string) int {
 	watches = append(watches, svcWatches...)
 	// Artifact watches share cadence-limited samples for catalog apps, libraries
 	// and changed service files.
-	artifactWatches := app.BuildArtifactWatches(cfg, deps)
+	artifactWatches := app.BuildArtifactWatches(ctx, cfg, deps)
 	watches = append(watches, artifactWatches...)
 	logger.Debug("built monitor targets",
 		logFieldEnabledServices, len(workers),
@@ -364,7 +364,7 @@ func run(args []string) int {
 	addr, webDisabledReason := webListenAddr(cfg)
 	if addr != "" {
 		var webWarnings []string
-		webHolder, webWarnings = app.NewWebBackendHolder(cfg, deps)
+		webHolder, webWarnings = app.NewWebBackendHolder(ctx, cfg, deps)
 		for _, w := range webWarnings {
 			logger.Warn("build web backend", logFieldWarning, w)
 		}
@@ -425,7 +425,7 @@ func run(args []string) int {
 				if ctx.Err() != nil {
 					return
 				}
-				monitor.Reload()
+				monitor.Reload(ctx)
 			}
 		}
 	}()

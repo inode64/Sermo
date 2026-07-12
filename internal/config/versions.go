@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"maps"
 	"os"
 	"path/filepath"
@@ -117,16 +118,16 @@ func tokensFor(name string) []tmplToken {
 // is installed and no active slot is declared it yields nothing. A catalog service
 // template may `uses` a base catalog service (e.g. php-fpm%v uses php-fpm) to inherit its
 // checks, rules and processes.
-func (c *Config) materializeVersionTemplates() {
-	c.materializeRegistry(c.CatalogServiceNames, c.CatalogServices, kindService)
-	c.materializeRegistry(c.AppNames, c.Apps, kindApp)
-	c.materializeRegistry(c.LibraryNames, c.Libraries, kindLibrary)
+func (c *Config) materializeVersionTemplates(ctx context.Context) {
+	c.materializeRegistry(ctx, c.CatalogServiceNames, c.CatalogServices, kindService)
+	c.materializeRegistry(ctx, c.AppNames, c.Apps, kindApp)
+	c.materializeRegistry(ctx, c.LibraryNames, c.Libraries, kindLibrary)
 }
 
 // materializeRegistry materializes the version templates in one registry (the
 // catalog service/app/lib map), tagging each concrete instance with that kind so it is
 // indexed in the same registry as its template.
-func (c *Config) materializeRegistry(names []string, reg map[string]*Document, kind string) {
+func (c *Config) materializeRegistry(ctx context.Context, names []string, reg map[string]*Document, kind string) {
 	var templates []*Document
 	for _, name := range names {
 		if tokenFor(name) != nil {
@@ -141,10 +142,10 @@ func (c *Config) materializeRegistry(names []string, reg map[string]*Document, k
 		var instances []*Document
 		toks := tokensFor(tmpl.Name)
 		if len(toks) > 1 {
-			instances = c.materializeMultiToken(tmpl, body, toks, kind)
+			instances = c.materializeMultiToken(ctx, tmpl, body, toks, kind)
 		} else {
 			tok := toks[0]
-			source := c.versionDiscoverySource(body, tok, kind)
+			source := c.versionDiscoverySource(ctx, body, tok, kind)
 			matches := source.templateMatches(toks)
 			matches = c.withCurrentMatches(matches, tmpl.Name, toks, kind)
 			for _, match := range matches {
@@ -184,8 +185,8 @@ func (c *Config) recordMaterializedNameCollision(kind string, tmpl, inst, existi
 // token (e.g. tomcat-%v%s%i). All markers are discovered together from a single
 // glob whose matches yield one value per token; each present combination becomes
 // a concrete document with every token bound in the name and body at once.
-func (c *Config) materializeMultiToken(tmpl *Document, body map[string]any, toks []tmplToken, kind string) []*Document {
-	source := c.multiTokenDiscoverySource(body, toks, kind)
+func (c *Config) materializeMultiToken(ctx context.Context, tmpl *Document, body map[string]any, toks []tmplToken, kind string) []*Document {
+	source := c.multiTokenDiscoverySource(ctx, body, toks, kind)
 	if len(source.paths) == 0 && len(source.matches) == 0 && len(versionsCurrentFromCandidates(body)) == 0 {
 		return nil
 	}
@@ -236,9 +237,9 @@ func requireSatisfied(require []string, vals map[string]string, toks []tmplToken
 // all markers) that enumerate a multi-token template's instances. CatalogServices prefer
 // token-bearing service candidates; apps and libraries can discover from
 // `versions.from` or their own `variables.binary` candidates.
-func (c *Config) multiTokenDiscoverySource(body map[string]any, toks []tmplToken, kind string) versionDiscovery {
+func (c *Config) multiTokenDiscoverySource(ctx context.Context, body map[string]any, toks []tmplToken, kind string) versionDiscovery {
 	if kind == kindService {
-		if matches := c.serviceTemplateMatches(body, toks); len(matches) > 0 {
+		if matches := c.serviceTemplateMatches(ctx, body, toks); len(matches) > 0 {
 			return versionDiscovery{matches: matches, options: body}
 		}
 	}
@@ -293,12 +294,12 @@ func containsAllMarkers(path string, toks []tmplToken) bool {
 	return true
 }
 
-func (c *Config) serviceTemplateMatches(body map[string]any, toks []tmplToken) []templateMatch {
+func (c *Config) serviceTemplateMatches(ctx context.Context, body map[string]any, toks []tmplToken) []templateMatch {
 	backend := effectiveBackend(c)
 	if backend == "" || backend == string(servicemgr.BackendAuto) {
 		return nil
 	}
-	units := c.activeServiceUnits(backend)
+	units := c.activeServiceUnits(ctx, backend)
 	if len(units) == 0 {
 		return nil
 	}
@@ -881,14 +882,14 @@ func (d versionDiscovery) templateMatches(toks []tmplToken) []templateMatch {
 // the document whose `versions.unversioned` option controls active-slot
 // behavior. Apps and libraries own their discovery path directly. CatalogServices prefer
 // their active `service:` units; their binary remains owned by linked apps.
-func (c *Config) versionDiscoverySource(body map[string]any, tok tmplToken, kind string) versionDiscovery {
+func (c *Config) versionDiscoverySource(ctx context.Context, body map[string]any, tok tmplToken, kind string) versionDiscovery {
 	if kind != kindService {
 		if paths := c.versionsFromPaths(body); len(paths) > 0 {
 			return versionDiscovery{paths: paths, options: body}
 		}
 		return versionDiscovery{paths: documentBinaryCandidates(body), options: body, binary: true}
 	}
-	if matches := c.serviceTemplateMatches(body, []tmplToken{tok}); len(matches) > 0 {
+	if matches := c.serviceTemplateMatches(ctx, body, []tmplToken{tok}); len(matches) > 0 {
 		return versionDiscovery{matches: matches, options: body}
 	}
 	// A catalog service may own its discovery via an explicit token-bearing

@@ -18,17 +18,17 @@ type WebBackendHolder struct {
 }
 
 // NewWebBackendHolder builds the initial backend.
-func NewWebBackendHolder(cfg *config.Config, deps Deps) (*WebBackendHolder, []string) {
-	b, warnings := NewWebBackend(cfg, deps)
+func NewWebBackendHolder(ctx context.Context, cfg *config.Config, deps Deps) (*WebBackendHolder, []string) {
+	b, warnings := NewWebBackend(ctx, cfg, deps)
 	return &WebBackendHolder{b: b}, warnings
 }
 
 // Reload rebuilds the backend from the new config and swaps it in atomically.
-func (h *WebBackendHolder) Reload(cfg *config.Config, deps Deps) []string {
+func (h *WebBackendHolder) Reload(ctx context.Context, cfg *config.Config, deps Deps) []string {
 	if h == nil {
 		return nil
 	}
-	b, warnings := NewWebBackend(cfg, deps)
+	b, warnings := NewWebBackend(ctx, cfg, deps)
 	h.mu.Lock()
 	if h.b != nil && h.b.daemonMetrics != nil {
 		b.daemonMetrics = h.b.daemonMetrics

@@ -36,7 +36,7 @@ func TestMongoConnectBuilds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MongoConnect: %v", err)
 	}
-	MongoDisconnect(client)
+	MongoDisconnect(context.Background(), client)
 }
 
 func TestMongoProbeUnreachable(t *testing.T) {

@@ -262,7 +262,7 @@ func TestBuildWorkerEmitsServiceWatches(t *testing.T) {
 			},
 		},
 	}
-	_, watches, warnings := buildWorker("svc", "svc.service", tree, Deps{
+	_, watches, warnings := buildWorker(t.Context(), "svc", "svc.service", tree, Deps{
 		Manager:        fakeManager{},
 		Runtime:        t.TempDir(),
 		DefaultTimeout: time.Second,
@@ -310,7 +310,7 @@ func TestWebBackendListsAndControlsServiceWatches(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 	store := newFakeStore()
-	b, warns := NewWebBackend(cfg, Deps{
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		Backend: servicemgr.BackendSystemd, Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{},
 		DefaultTimeout: time.Second, Now: time.Now, Emit: func(Event) {}, Monitor: store,
 	})

@@ -166,7 +166,7 @@ func artifactWatchInterval(cfg *config.Config, category, name string) time.Durat
 // BuildLibraryWatches builds one monitor for every installed catalog library.
 // Library events are regular watches named "library:<name>" so they remain
 // distinct from application events without expanding the persisted event schema.
-func BuildLibraryWatches(cfg *config.Config, deps Deps) []*Watch {
+func BuildLibraryWatches(ctx context.Context, cfg *config.Config, deps Deps) []*Watch {
 	if cfg == nil {
 		return nil
 	}
@@ -175,7 +175,7 @@ func BuildLibraryWatches(cfg *config.Config, deps Deps) []*Watch {
 		samples = NewArtifactSamples()
 	}
 	runner := deps.ExecxRunner
-	reports := appinspect.List(context.Background(), runner, cfg, config.CategoryLibrary, false,
+	reports := appinspect.List(ctx, runner, cfg, config.CategoryLibrary, false,
 		appinspect.WithUserLookup(deps.UserLookup))
 	if len(reports) == 0 {
 		return nil
@@ -207,7 +207,7 @@ func BuildLibraryWatches(cfg *config.Config, deps Deps) []*Watch {
 // BuildArtifactWatches builds all cadence-limited catalog and service artifact
 // monitors. Service workers consume their samples rather than re-probing a
 // changed artifact on every service cycle.
-func BuildArtifactWatches(cfg *config.Config, deps Deps) []*Watch {
+func BuildArtifactWatches(ctx context.Context, cfg *config.Config, deps Deps) []*Watch {
 	if cfg == nil {
 		return nil
 	}
@@ -216,8 +216,8 @@ func BuildArtifactWatches(cfg *config.Config, deps Deps) []*Watch {
 		samples = NewArtifactSamples()
 		deps.ArtifactSamples = samples
 	}
-	out := BuildLibraryWatches(cfg, deps)
-	out = append(out, BuildAppWatches(cfg, deps)...)
+	out := BuildLibraryWatches(ctx, cfg, deps)
+	out = append(out, BuildAppWatches(ctx, cfg, deps)...)
 	out = append(out, buildArtifactAppWatches(cfg, deps, samples)...)
 	return append(out, buildArtifactPathWatches(cfg, deps, samples)...)
 }

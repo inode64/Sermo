@@ -243,7 +243,7 @@ func TestBuildArtifactWatchesSamplesChangedMissingApp(t *testing.T) {
 		},
 	}
 	samples := NewArtifactSamples()
-	watches := BuildArtifactWatches(cfg, Deps{ArtifactSamples: samples})
+	watches := BuildArtifactWatches(t.Context(), cfg, Deps{ArtifactSamples: samples})
 	var sampler *Watch
 	for _, watch := range watches {
 		if watch.Name == artifactWatchNamePrefix+"demo" {

@@ -330,7 +330,7 @@ type Deps struct {
 // BuildWorkers resolves every enabled service and wires a Worker for it: a check
 // cache producer and an operation-engine Operate closure. Services
 // that are disabled or fail to resolve are skipped with a warning.
-func BuildWorkers(cfg *config.Config, deps Deps, collector *metrics.Collector) ([]*Worker, []*Watch, []string) {
+func BuildWorkers(ctx context.Context, cfg *config.Config, deps Deps, collector *metrics.Collector) ([]*Worker, []*Watch, []string) {
 	var workers []*Worker
 	var serviceWatchList []*Watch
 	var warnings []string
@@ -359,7 +359,7 @@ func BuildWorkers(cfg *config.Config, deps Deps, collector *metrics.Collector) (
 			warnings = append(warnings, w)
 		}
 
-		target, warn := control.ResolveWithFallback(context.Background(), name, resolved.Tree, deps.Backend, deps.Manager, resolver)
+		target, warn := control.ResolveWithFallback(ctx, name, resolved.Tree, deps.Backend, deps.Manager, resolver)
 		if warn != "" {
 			warnings = append(warnings, "service "+name+": "+warn)
 		}
@@ -370,7 +370,7 @@ func BuildWorkers(cfg *config.Config, deps Deps, collector *metrics.Collector) (
 		serviceDeps.Backend = target.Backend
 		serviceDeps.Manager = target.Manager
 		serviceDeps.BackendPIDs = target.BackendPIDs
-		w, svcWatches, warns := buildWorker(name, target.Unit, resolved.Tree, serviceDeps, collector)
+		w, svcWatches, warns := buildWorker(ctx, name, target.Unit, resolved.Tree, serviceDeps, collector)
 		for _, x := range warns {
 			warnings = append(warnings, "service "+name+": "+x)
 		}
@@ -450,14 +450,14 @@ func appVersionCmds(tree map[string]any) map[string]appVersionCmd {
 	return cmds
 }
 
-func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *metrics.Collector) (*Worker, []*Watch, []string) {
+func buildWorker(ctx context.Context, name, unit string, tree map[string]any, deps Deps, collector *metrics.Collector) (*Worker, []*Watch, []string) {
 	libBaseline := map[string]string{}
-	engine, checkDeps, discoverer := serviceRuntime(name, unit, tree, deps, libBaseline, nil)
+	engine, checkDeps, discoverer := serviceRuntime(ctx, name, unit, tree, deps, libBaseline, nil)
 
 	maxParallel := deps.MaxParallel
 	ruleSet, _ := rules.ParseRules(tree)
-	selectors, _ := serviceProcessSelectors(context.Background(), tree, deps, unit)
-	noResident := serviceNoResidentProcess(tree, selectors, serviceBackendPIDs(deps, unit))
+	selectors, _ := serviceProcessSelectors(ctx, tree, deps, unit)
+	noResident := serviceNoResidentProcess(tree, selectors, serviceBackendPIDs(ctx, deps, unit))
 	var worker *Worker
 	pidsForCycle := cyclePIDSource(func() []int {
 		if noResident {

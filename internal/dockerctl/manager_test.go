@@ -110,7 +110,7 @@ func TestManagerPIDs(t *testing.T) {
 	if !slices.Equal(pids, []int{4321}) {
 		t.Fatalf("PIDs() = %v", pids)
 	}
-	if got := manager.BackendPIDs()(); !slices.Equal(got, []int{4321}) {
+	if got := manager.BackendPIDs(context.Background())(); !slices.Equal(got, []int{4321}) {
 		t.Fatalf("BackendPIDs() = %v", got)
 	}
 }
