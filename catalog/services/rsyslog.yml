@@ -1,0 +1,47 @@
+name: rsyslog
+display_name: Rsyslog
+category: observability
+description: Rsyslog system logging daemon.
+service:
+  systemd:
+    - rsyslog
+apps:
+  - rsyslog
+variables:
+  config: /etc/rsyslog.conf
+  user: syslog
+os:
+  gentoo:
+    variables:
+      user: root
+config_files:
+  - ${config}
+  - /etc/rsyslog.d
+preflight:
+  config:
+    type: command
+    command:
+      - ${rsyslog_binary}
+      - -N1
+      - -f
+      - ${config}
+    timeout: 30s
+processes:
+  main:
+    exe: ${rsyslog_binary}
+    user: ${user}
+watches:
+  service:
+    check:
+      type: service
+      expect: active
+      verify: true
+  process:
+    check:
+      type: process
+      exe: ${rsyslog_binary}
+      user: ${user}
+      state: running
+      optional: true
+      requires:
+        - service
