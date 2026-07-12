@@ -741,7 +741,9 @@ habilitada:
   `unmonitor`, `start`, `stop`, `restart`, `reload` o `resume`;
   start/stop/restart/reload/resume pasan por el motor de operaciones seguras.
 - `POST /api/watches/{name}/{action}` — acción de host watch. `action` es
-  `monitor`, `unmonitor` o `expand`.
+  `monitor`, `unmonitor`, `expand`, `probe`, `pause` o `resume`. `probe` es de
+  solo lectura para watches LVM, RAID y SMART; `pause`/`resume` requieren el
+  bloque RAID siguiente.
 - `POST /api/locks/{service}/release?name=NAME` — libera un lock de runtime con nombre
   inactivo obsoleto/expirado; los locks activos se rechazan.
 - `POST /api/events/clear?before=TIME` — limpia el log persistido de eventos/actividad;
@@ -1520,6 +1522,29 @@ En un watch `raid`, `then.notify_on` filtra cuándo los destinos normales de
 `on_array_change`. Se pueden definir tantos notifiers y plantillas como sea
 necesario; cada notifier seleccionado recibe los campos RAID estructurados. No
 puede combinarse con `then.notify_interval`.
+
+### Control manual de reconstrucción RAID
+
+El control RAID manual permanece desactivado salvo que un watch de un único
+array lo active explícitamente:
+
+```yaml
+name: raid-md0
+check:
+  type: raid
+  array: md0
+raid_control:
+  pause_resume: true
+then:
+  notify: [ops]
+```
+
+La CLI y la WebUI pueden realizar un sondeo corto de este watch. La pausa usa
+dos confirmaciones en la WebUI (y `--confirm md0` en la CLI), valida el estado
+vivo, bloquea el array y escribe el `sync_action` nativo de md. La reanudación
+repite preflight, lock y verificación posterior, pero puede reanudar cualquier
+array configurado pausado, aunque Sermo no hubiera originado la pausa.
+`dry_run: true` informa de la operación sin escribir.
 
 En un watch `lvm`, `then.notify_on: [on_change]` notifica sólo cuando la salud
 efectiva cambia entre `ok` y `error`, incluida la recuperación. No puede

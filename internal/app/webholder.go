@@ -318,3 +318,19 @@ func (h *WebBackendHolder) ExpandWatch(ctx context.Context, name string) web.Act
 	}
 	return web.ActionResult{OK: false, Message: webBackendUnavailableMessage}
 }
+
+// ProbeWatch runs an isolated manual watch sample through the active backend.
+func (h *WebBackendHolder) ProbeWatch(ctx context.Context, name string) web.ActionResult {
+	if b := h.backend(); b != nil {
+		return b.ProbeWatch(ctx, name)
+	}
+	return web.ActionResult{OK: false, Message: webBackendUnavailableMessage}
+}
+
+// ControlRAID pauses or resumes a configured RAID reconstruction through the active backend.
+func (h *WebBackendHolder) ControlRAID(ctx context.Context, name, action, confirmation string) web.ActionResult {
+	if b := h.backend(); b != nil {
+		return b.ControlRAID(ctx, name, action, confirmation)
+	}
+	return web.ActionResult{OK: false, Message: webBackendUnavailableMessage}
+}

@@ -54,6 +54,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		}
 		typ := cfgval.String(check[checks.CheckKeyType])
 		validateRaidNotifyOn(name, typ, entry, notifiers, defaultNotify, add)
+		validateRAIDControl(name, typ, entry, check, add)
 		validateWatchMountBlock(name, typ, entry, add)
 		switch typ {
 		case checks.CheckTypeStorage:
@@ -83,6 +84,36 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 				add("%s %q is not supported", watchCheckFieldPath(name, checks.CheckKeyType), typ)
 			}
 		}
+	}
+}
+
+func validateRAIDControl(name, typ string, entry, check map[string]any, add addFunc) {
+	prefix := watchFieldPath(name, WatchKeyRAIDControl)
+	value, present := entry[WatchKeyRAIDControl]
+	if !present {
+		return
+	}
+	control, ok := value.(map[string]any)
+	if !ok {
+		add("%s must be a mapping", prefix)
+		return
+	}
+	if typ != checks.CheckTypeRAID {
+		add("%s is only valid on a raid watch", prefix)
+		return
+	}
+	if cfgval.String(check[checks.CheckKeyArray]) == "" {
+		add("%s requires check.%s", prefix, checks.CheckKeyArray)
+	}
+	for key := range control {
+		if key != RAIDControlKeyPauseResume {
+			add("%s.%s is not supported", prefix, key)
+		}
+	}
+	if value, found := control[RAIDControlKeyPauseResume]; !found {
+		add("%s.%s is required", prefix, RAIDControlKeyPauseResume)
+	} else if _, ok := value.(bool); !ok {
+		add(validationBooleanFormat, prefix+"."+RAIDControlKeyPauseResume)
 	}
 }
 

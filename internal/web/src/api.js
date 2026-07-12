@@ -50,8 +50,8 @@ const apiSuffixTest = "/test";
 export const readyVerbosePath = "readyz?verbose";
 export const liveVerbosePath = "livez?verbose";
 
-export function csrfPostOptions() {
-  return { method: httpMethodPost, headers: { [csrfHeader]: csrfHeaderValue } };
+export function csrfPostOptions(headers = {}) {
+  return { method: httpMethodPost, headers: { [csrfHeader]: csrfHeaderValue, ...headers } };
 }
 
 function apiEntityPath(base, name, suffix = "") {

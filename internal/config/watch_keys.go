@@ -12,6 +12,15 @@ const WatchKeyCheck = "check"
 // WatchKeyThen is the watch entry key containing actions for a firing condition.
 const WatchKeyThen = rules.RuleFieldThen
 
+// WatchKeyRAIDControl enables explicit manual reconstruction control for a
+// single RAID watch.
+const WatchKeyRAIDControl = "raid_control"
+
+// RAID control keys configure a manual pause/resume capability.
+const (
+	RAIDControlKeyPauseResume = "pause_resume"
+)
+
 // Watch then-block keys shared by validation, builders and web projections.
 const (
 	WatchThenKeyHook           = "hook"
