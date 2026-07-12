@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -311,7 +312,7 @@ func (l *EventLog) rebuildIndexesLocked() {
 func (l *EventLog) loadRecentFromStore() error {
 	records, err := l.store.RecentEvents(l.size)
 	if err != nil {
-		return err
+		return fmt.Errorf("load recent events: %w", err)
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()

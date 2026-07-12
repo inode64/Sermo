@@ -734,7 +734,11 @@ func serviceLocksReport(cfg *config.Config, service string) (locks.Report, error
 	if cfg == nil {
 		return locks.Report{Service: service}, nil
 	}
-	return locksScanner(cfg).Scan(service)
+	report, err := locksScanner(cfg).Scan(service)
+	if err != nil {
+		return locks.Report{Service: service}, fmt.Errorf("scan locks for %s: %w", service, err)
+	}
+	return report, nil
 }
 
 // activeLockNames returns the names of named runtime locks currently blocking

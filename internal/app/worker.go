@@ -727,7 +727,10 @@ func (w *Worker) evalRule(ctx context.Context, ev *rules.Evaluator, r rules.Rule
 	if evals != nil {
 		evals[r.Name] = ruleEvalResult{cond: cond, err: err, change: change}
 	}
-	return cond, err
+	if err != nil {
+		return cond, fmt.Errorf("evaluate rule condition: %w", err)
+	}
+	return cond, nil
 }
 
 // ArtifactChangedFunc returns a `changed:` evaluator backed by baseline. The
@@ -879,7 +882,7 @@ func (w *Worker) sampleVersion(ctx context.Context, vc appVersionCmd) (string, e
 	}
 	if res.ExitCode != execx.ExitCodeSuccess {
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("version command %s: %w", vc.argv[0], err)
 		}
 		return "", fmt.Errorf("version command exit %d", res.ExitCode)
 	}
