@@ -111,9 +111,9 @@ func (m Manager) PIDs(ctx context.Context) ([]int, error) {
 }
 
 // BackendPIDs returns a bounded process-discovery source for Sermo's discoverer.
-func (m Manager) BackendPIDs() func() []int {
+func (m Manager) BackendPIDs(ctx context.Context) func() []int {
 	return func() []int {
-		ctx, cancel := context.WithTimeout(context.Background(), pidLookupTimeout)
+		ctx, cancel := context.WithTimeout(ctx, pidLookupTimeout)
 		defer cancel()
 		pids, err := m.PIDs(ctx)
 		if err != nil {

@@ -54,7 +54,7 @@ func (c mongoCheck) Run(ctx context.Context) Result {
 	if err != nil {
 		return c.result(false, "mongodb: "+err.Error(), start)
 	}
-	defer conn.MongoDisconnect(client)
+	defer func() { conn.MongoDisconnect(ctx, client) }()
 
 	result, err := c.scalar(ctx, client)
 	if err != nil {

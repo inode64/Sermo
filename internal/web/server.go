@@ -1307,11 +1307,11 @@ func serverWriteTimeout(maxOp time.Duration) time.Duration {
 // operateContext returns a context for start/stop/restart/reload/resume that is not tied to the
 // HTTP request. Client disconnect and the generic write deadline must not abort
 // an in-flight safe operation; the operation engine applies its own timeout.
-func (s *Server) operateContext() context.Context {
+func (s *Server) operateContext(r *http.Request) context.Context { //nolint:contextcheck // safe ops outlive the HTTP request
 	if s.shutdown != nil {
-		return s.shutdown
+		return context.WithoutCancel(s.shutdown)
 	}
-	return context.Background()
+	return context.WithoutCancel(r.Context())
 }
 
 // Run serves until ctx is cancelled, then shuts down gracefully. Timeouts bound
@@ -1328,9 +1328,9 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	go func() { //nolint:gosec // G118: the shutdown deadline must NOT derive from ctx — it is already cancelled here
 		<-ctx.Done()
-		shutCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout)
+		shutCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout) //nolint:contextcheck // detached shutdown deadline; ctx is already cancelled
 		defer cancel()
-		_ = srv.Shutdown(shutCtx)
+		_ = srv.Shutdown(shutCtx) //nolint:contextcheck // detached shutdown deadline; ctx is already cancelled
 	}()
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
@@ -1419,7 +1419,7 @@ func (s *Server) handleNotifiers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleNotifierTest(w http.ResponseWriter, r *http.Request) {
-	res := s.Backend.TestNotifier(s.operateContext(), r.PathValue(apiParamName))
+	res := s.Backend.TestNotifier(s.operateContext(r), r.PathValue(apiParamName)) //nolint:contextcheck // see operateContext
 	status := http.StatusOK
 	if !res.OK {
 		status = http.StatusConflict
@@ -1444,7 +1444,7 @@ func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
 	action := r.PathValue(apiParamAction)
 	switch action {
 	case mountctl.ActionMount, mountctl.ActionUmount:
-		res := s.Backend.MountAction(s.operateContext(), name, action, MountActionOptions{
+		res := s.Backend.MountAction(s.operateContext(r), name, action, MountActionOptions{ //nolint:contextcheck // see operateContext
 			KillBlockers: queryBool(r, apiQueryKill),
 		})
 		status := http.StatusOK
@@ -1460,7 +1460,7 @@ func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, status, res)
 	case apiActionAlert:
-		res := s.Backend.AlertMountUsers(s.operateContext(), name)
+		res := s.Backend.AlertMountUsers(s.operateContext(r), name) //nolint:contextcheck // see operateContext
 		status := http.StatusOK
 		if !res.OK {
 			status = http.StatusConflict
@@ -1661,7 +1661,7 @@ func (s *Server) handleStateCompact(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, StateCompactResult{OK: false, Message: err.Error()})
 		return
 	}
-	res := s.Backend.CompactState(s.operateContext(), before)
+	res := s.Backend.CompactState(s.operateContext(r), before) //nolint:contextcheck // see operateContext
 	status := http.StatusOK
 	if !res.OK {
 		status = http.StatusConflict
@@ -1682,7 +1682,7 @@ func (s *Server) handlePanic(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: apiErrorPanicAction})
 		return
 	}
-	res := s.Backend.SetPanic(s.operateContext(), on)
+	res := s.Backend.SetPanic(s.operateContext(r), on) //nolint:contextcheck // see operateContext
 	status := http.StatusOK
 	if !res.OK {
 		status = http.StatusConflict
@@ -1782,7 +1782,7 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case operateActions[action]:
 		opts := OperateOpts{NoCascade: queryBool(r, apiQueryNoCascade)}
-		res := s.Backend.Operate(s.operateContext(), name, action, opts)
+		res := s.Backend.Operate(s.operateContext(r), name, action, opts) //nolint:contextcheck // see operateContext
 		status := http.StatusOK
 		if !res.OK {
 			status = http.StatusConflict
@@ -1804,7 +1804,7 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue(apiParamName)
 	action := r.PathValue(apiParamAction)
 	if watchOperateActions[action] {
-		res := s.Backend.ExpandWatch(s.operateContext(), name)
+		res := s.Backend.ExpandWatch(s.operateContext(r), name) //nolint:contextcheck // see operateContext
 		status := http.StatusOK
 		if !res.OK {
 			status = http.StatusConflict

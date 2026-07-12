@@ -97,6 +97,11 @@ func MainPIDContext(ctx context.Context, runner execx.Runner, backend Backend, u
 // processes in it belong to the service — more complete than MainPID alone.
 // readFile defaults to os.ReadFile.
 func CgroupPIDs(runner execx.Runner, readFile func(string) ([]byte, error), backend Backend, unit string) ([]int, bool) {
+	return CgroupPIDsContext(context.Background(), runner, readFile, backend, unit)
+}
+
+// CgroupPIDsContext is CgroupPIDs bound to the caller's context.
+func CgroupPIDsContext(ctx context.Context, runner execx.Runner, readFile func(string) ([]byte, error), backend Backend, unit string) ([]int, bool) {
 	if backend != BackendSystemd {
 		return nil, false
 	}
@@ -106,7 +111,7 @@ func CgroupPIDs(runner execx.Runner, readFile func(string) ([]byte, error), back
 	if readFile == nil {
 		readFile = os.ReadFile
 	}
-	res, err := runSystemctlShow(context.Background(), runner, defaultDetectTimeout, systemctlPropertyCGroup, unit)
+	res, err := runSystemctlShow(ctx, runner, defaultDetectTimeout, systemctlPropertyCGroup, unit)
 	if err != nil {
 		return nil, false
 	}
@@ -137,7 +142,7 @@ func parseCgroupProcs(data []byte) []int {
 // a unit: it reports the cgroup process set (preferred) plus the MainPID,
 // deduplicated. The command and file readers are injectable for tests and for
 // callers that already carry an execx runner.
-func BackendPIDsFuncWithRunner(backend Backend, unit string, runner execx.Runner, readFile func(string) ([]byte, error)) func() []int {
+func BackendPIDsFuncWithRunner(ctx context.Context, backend Backend, unit string, runner execx.Runner, readFile func(string) ([]byte, error)) func() []int {
 	return func() []int {
 		seen := map[int]bool{}
 		var pids []int
@@ -147,12 +152,12 @@ func BackendPIDsFuncWithRunner(backend Backend, unit string, runner execx.Runner
 				pids = append(pids, pid)
 			}
 		}
-		if cg, ok := CgroupPIDs(runner, readFile, backend, unit); ok {
+		if cg, ok := CgroupPIDsContext(ctx, runner, readFile, backend, unit); ok {
 			for _, pid := range cg {
 				add(pid)
 			}
 		}
-		if pid, ok := MainPID(runner, backend, unit); ok {
+		if pid, ok := MainPIDContext(ctx, runner, backend, unit); ok {
 			add(pid)
 		}
 		return pids

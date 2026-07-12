@@ -131,9 +131,9 @@ func (f *fakeBackend) Events(_ context.Context, limit int) []Event {
 	}
 	return []Event{{Time: "2026-06-07T10:00:00Z", Service: "web", Kind: eventKindAction, Action: apiActionRestart, Message: "restarted"}}
 }
-func (f *fakeBackend) EventPage(_ context.Context, query EventQuery) EventPage {
+func (f *fakeBackend) EventPage(ctx context.Context, query EventQuery) EventPage {
 	f.eventQuery = query
-	events := f.Events(context.Background(), query.Limit+1)
+	events := f.Events(ctx, query.Limit+1)
 	hasMore := len(events) > query.Limit
 	if hasMore {
 		events = events[:query.Limit]

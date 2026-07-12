@@ -380,7 +380,7 @@ func (a App) Run(ctx context.Context, args []string) int {
 	case commandLocks:
 		return a.runLocks(opts)
 	case commandProcesses:
-		return a.runProcesses(opts)
+		return a.runProcesses(ctx, opts)
 	case commandPreflight:
 		return a.runPreflight(ctx, opts)
 	case commandDaemon:
@@ -865,7 +865,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		fmt.Fprintf(a.Stderr, "reclaimed stale operation lock for %s (%s)\n", service, reason)
 	}
 	discoverer := process.NewDiscovererWithUserLookup(app.EngineUserLookup(cfg, a.Runner))
-	if backendPIDs := backendPIDsForTarget(target, a.Runner); backendPIDs != nil {
+	if backendPIDs := backendPIDsForTarget(ctx, target, a.Runner); backendPIDs != nil {
 		discoverer.BackendPIDs = backendPIDs
 	}
 	collector := metrics.New(metrics.OSReader{})
@@ -1200,7 +1200,7 @@ func formatLock(lock locks.Lock) string {
 
 // runProcesses discovers and reports the processes belonging to a service
 // , reading the service's `processes` selectors from resolved config.
-func (a App) runProcesses(opts options) int {
+func (a App) runProcesses(ctx context.Context, opts options) int {
 	if opts.service() == "" {
 		return a.commandUsageError(commandProcesses, "processes requires a service name")
 	}
@@ -1224,7 +1224,7 @@ func (a App) runProcesses(opts options) int {
 	}
 
 	selectors, warnings := process.ParseSelectors(resolved.Tree)
-	procs, discWarnings := a.discoverProcesses(context.Background(), opts, cfg, resolved, service, selectors)
+	procs, discWarnings := a.discoverProcesses(ctx, opts, cfg, resolved, service, selectors)
 	warnings = append(warnings, discWarnings...)
 
 	for _, w := range warnings {
@@ -1265,19 +1265,19 @@ func (a App) discoverProcesses(ctx context.Context, opts options, cfg *config.Co
 	if err != nil {
 		return discoverer.Discover(selectors)
 	}
-	if backendPIDs := backendPIDsForTarget(target, a.Runner); backendPIDs != nil {
+	if backendPIDs := backendPIDsForTarget(ctx, target, a.Runner); backendPIDs != nil {
 		discoverer.BackendPIDs = backendPIDs
 	}
 	return discoverer.Discover(selectors)
 }
 
-func backendPIDsForTarget(target control.Target, runner execx.Runner) func() []int {
+func backendPIDsForTarget(ctx context.Context, target control.Target, runner execx.Runner) func() []int {
 	if target.BackendPIDs != nil {
 		return target.BackendPIDs
 	}
 	switch target.Backend {
 	case servicemgr.BackendSystemd, servicemgr.BackendOpenRC:
-		return servicemgr.BackendPIDsFuncWithRunner(target.Backend, target.Unit, runner, nil)
+		return servicemgr.BackendPIDsFuncWithRunner(ctx, target.Backend, target.Unit, runner, nil)
 	default:
 		return nil
 	}

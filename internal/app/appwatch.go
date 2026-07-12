@@ -53,7 +53,7 @@ const appWatchCheckType = config.CategoryApp
 // firing/recovered event on the App dimension and notifying the global default
 // once on the rising edge (NotifyInterval 0 = first time only). Only installed
 // apps are watched, matching the web Applications list.
-func BuildAppWatches(cfg *config.Config, deps Deps) []*Watch {
+func BuildAppWatches(ctx context.Context, cfg *config.Config, deps Deps) []*Watch {
 	if cfg == nil {
 		return nil
 	}
@@ -62,7 +62,7 @@ func BuildAppWatches(cfg *config.Config, deps Deps) []*Watch {
 		samples = NewArtifactSamples()
 	}
 	runner := deps.ExecxRunner
-	reports := appinspect.List(context.Background(), runner, cfg, config.CategoryApp, false,
+	reports := appinspect.List(ctx, runner, cfg, config.CategoryApp, false,
 		appinspect.WithUserLookup(deps.UserLookup))
 	if len(reports) == 0 {
 		return nil

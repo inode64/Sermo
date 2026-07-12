@@ -79,7 +79,7 @@ func (m *Monitor) Run(ctx context.Context) {
 // Reload loads config from disk, validates it, and swaps in a new worker
 // generation. Invalid config or an empty fleet is rejected and the current
 // generation keeps running.
-func (m *Monitor) Reload() {
+func (m *Monitor) Reload(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -92,7 +92,7 @@ func (m *Monitor) Reload() {
 		return
 	}
 
-	newCfg, err := config.Load(m.ConfigPath)
+	newCfg, err := config.Load(m.ConfigPath, config.WithLoadContext(ctx)) //nolint:contextcheck // WithLoadContext binds ctx for service-unit discovery
 	if err != nil {
 		m.emitReloadError(fmt.Sprintf("load config: %v", err))
 		return
@@ -120,11 +120,12 @@ func (m *Monitor) Reload() {
 		m.deps.ArtifactSamples = NewArtifactSamples()
 	}
 
-	workers, svcWatches, warnings := BuildWorkers(newCfg, m.deps, m.collector)
+	reloadDeps := m.deps
+	workers, svcWatches, warnings := BuildWorkers(ctx, newCfg, reloadDeps, m.collector)
 	watches, watchWarnings := BuildWatches(newCfg, m.deps, m.deps.Interval)
 	hostWatches := len(watches)
 	watches = append(watches, svcWatches...)
-	watches = append(watches, BuildArtifactWatches(newCfg, m.deps)...)
+	watches = append(watches, BuildArtifactWatches(ctx, newCfg, reloadDeps)...)
 	if len(workers) == 0 && hostWatches == 0 && !HasConfiguredTargets(newCfg) {
 		// Rollback: restore previous generation and restart it (we stopped above).
 		m.cfg = prevCfg
@@ -132,7 +133,7 @@ func (m *Monitor) Reload() {
 		m.workers = oldWorkers
 		m.watches = oldWatches
 		m.emitReloadError("no services or watches configured")
-		m.startGenerationLocked(m.parent, false)
+		m.startGenerationLocked(ctx, false)
 		return
 	}
 
@@ -147,7 +148,7 @@ func (m *Monitor) Reload() {
 		m.readiness.UpdateCounts(len(workers), len(watches))
 	}
 	if m.web != nil {
-		if warns := m.web.Reload(newCfg, m.deps); len(warns) > 0 {
+		if warns := m.web.Reload(ctx, newCfg, reloadDeps); len(warns) > 0 {
 			for _, w := range warns {
 				m.Logger.Warn("reload web backend", monitorLogFieldWarning, w)
 			}
@@ -157,7 +158,7 @@ func (m *Monitor) Reload() {
 		m.Logger.Warn("reload build", monitorLogFieldWarning, w)
 	}
 
-	m.startGenerationLocked(m.parent, false)
+	m.startGenerationLocked(ctx, false)
 
 	if m.deps.Emit != nil {
 		m.deps.Emit(Event{

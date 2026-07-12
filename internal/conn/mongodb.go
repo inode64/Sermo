@@ -41,7 +41,7 @@ func (mongodbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	defer MongoDisconnect(client)
+	defer func() { MongoDisconnect(ctx, client) }()
 
 	if err := client.Ping(ctx, readpref.Primary()); err != nil {
 		return Result{}, err
@@ -132,11 +132,11 @@ func MongoConnect(cfg Config) (*mongo.Client, error) {
 }
 
 // MongoDisconnect closes a MongoDB client with the bounded teardown timeout.
-func MongoDisconnect(client *mongo.Client) {
+func MongoDisconnect(ctx context.Context, client *mongo.Client) {
 	if client == nil {
 		return
 	}
-	dctx, cancel := context.WithTimeout(context.Background(), mongoDisconnectTimeout)
+	dctx, cancel := context.WithTimeout(ctx, mongoDisconnectTimeout)
 	defer cancel()
 	_ = client.Disconnect(dctx)
 }

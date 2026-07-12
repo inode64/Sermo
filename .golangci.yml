@@ -15,6 +15,7 @@ linters:
   enable:
     - asasalint  # []any accidentally passed to a variadic any
     - bodyclose
+    - contextcheck  # context must flow into blocking I/O (not net/http dial — see noctx)
     - copyloopvar
     - durationcheck  # suspicious time.Duration multiplications
     - errcheck  # unchecked errors (defer Rollback/Release, I/O, …)
@@ -43,7 +44,7 @@ linters:
       ignore-rules:
         - mosquitto
   # Considered and deliberately NOT enabled:
-  #   noctx     — 129 hits; the conn/ probes dial net/http without a context by
+  #   noctx     — ~150 hits; the conn/ probes dial net/http without a context by
   #               design (tight per-probe deadlines are applied separately).
   #   makezero  — false positives on the conn/ packet builders, where a
   #               fixed-header make([]byte, N) followed by append(body) is intended.

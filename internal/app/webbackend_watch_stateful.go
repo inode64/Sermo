@@ -26,7 +26,7 @@ const (
 	watchReadingNumericBase  = 10
 )
 
-func (b *WebBackend) fileWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
+func (b *WebBackend) fileWatchView(ctx context.Context, w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
 	paths, err := config.FileWatchPaths(w.check)
 	if err != nil {
 		msg := watchMissingPathMessage
@@ -62,8 +62,8 @@ func (b *WebBackend) fileWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 			readings = append(readings, web.WatchReading{Field: checks.CheckKeyOwner, Label: watchReadingLabelOwner, Value: fmt.Sprintf("%d:%d", sys.Uid, sys.Gid)})
 		}
 		if cfgval.Bool(w.check[checks.CheckKeyRecursive]) && info.IsDir() {
-			ctx, cancel := b.probeContext()
-			n, countErr := checks.TallyEntries(ctx, path, checks.CountKindAny, true, b.probeTimeout())
+			probeCtx, cancel := b.probeContext(ctx)
+			n, countErr := checks.TallyEntries(probeCtx, path, checks.CountKindAny, true, b.probeTimeout())
 			cancel()
 			if countErr != nil {
 				readings = append(readings, web.WatchReading{Field: watchReadingFieldEntries, Label: watchReadingLabelEntries, Error: countErr.Error()})
@@ -89,7 +89,7 @@ func fileKindLabel(mode os.FileMode) string {
 	}
 }
 
-func (b *WebBackend) countWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
+func (b *WebBackend) countWatchView(ctx context.Context, w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
 	path := cfgval.AsString(w.check[checks.CheckKeyPath])
 	if path == "" {
 		msg := watchMissingPathMessage
@@ -100,9 +100,9 @@ func (b *WebBackend) countWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRe
 		kind = checks.CountKindAny
 	}
 	recursive := cfgval.Bool(w.check[checks.CheckKeyRecursive])
-	ctx, cancel := b.probeContext()
+	probeCtx, cancel := b.probeContext(ctx)
 	defer cancel()
-	n, err := checks.TallyEntries(ctx, path, kind, recursive, b.probeTimeout())
+	n, err := checks.TallyEntries(probeCtx, path, kind, recursive, b.probeTimeout())
 	if err != nil {
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "count: " + msg
@@ -135,7 +135,7 @@ func (b *WebBackend) countWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRe
 	return nil, readings, fmt.Sprintf("%d %s entries %s %s", n, kind, scope, path)
 }
 
-func (b *WebBackend) firewallRulesWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
+func (b *WebBackend) firewallRulesWatchView(ctx context.Context, w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
 	backend := cfgval.AsString(w.check[checks.CheckKeyBackend])
 	if backend == "" {
 		backend = checks.FirewallBackendAuto
@@ -148,9 +148,9 @@ func (b *WebBackend) firewallRulesWatchView(w *webWatch) (*web.WatchMeter, []web
 	if runner == nil {
 		runner = execx.CommandRunner{}
 	}
-	ctx, cancel := b.probeContext()
+	probeCtx, cancel := b.probeContext(ctx)
 	defer cancel()
-	sample, err := sampler(ctx, backend, runner)
+	sample, err := sampler(probeCtx, backend, runner)
 	if err != nil {
 		msg := execx.FormatContextOrError(err, b.probeTimeout())
 		return nil, watchErrorReadings(msg), "firewall: " + msg
@@ -169,15 +169,15 @@ func (b *WebBackend) firewallRulesWatchView(w *webWatch) (*web.WatchMeter, []web
 	return nil, readings, fmt.Sprintf("firewall %s has %d rules", sample.Backend, sample.Rules)
 }
 
-func (b *WebBackend) sizeWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
+func (b *WebBackend) sizeWatchView(ctx context.Context, w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
 	path := cfgval.AsString(w.check[checks.CheckKeyPath])
 	if path == "" {
 		msg := watchMissingPathMessage
 		return nil, watchErrorReadings(msg), "size: " + msg
 	}
-	ctx, cancel := b.probeContext()
+	probeCtx, cancel := b.probeContext(ctx)
 	defer cancel()
-	size, err := checks.SamplePathSize(ctx, path, b.probeTimeout())
+	size, err := checks.SamplePathSize(probeCtx, path, b.probeTimeout())
 	if err != nil {
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "size: " + msg
@@ -195,7 +195,7 @@ func (b *WebBackend) sizeWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 	return nil, readings, fmt.Sprintf("%s size %s", path, humanize.Bytes(uint64(size)))
 }
 
-func (b *WebBackend) hdparmWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
+func (b *WebBackend) hdparmWatchView(ctx context.Context, w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
 	device := cfgval.AsString(w.check[checks.CheckKeyDevice])
 	if device == "" {
 		msg := watchMissingDeviceMessage
@@ -212,9 +212,9 @@ func (b *WebBackend) hdparmWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 			}
 		}
 	}
-	ctx, cancel := b.probeContext()
+	probeCtx, cancel := b.probeContext(ctx)
 	defer cancel()
-	values, err := checks.SampleHdparm(ctx, b.execRunner, device, wantCached, wantRead, b.probeTimeout())
+	values, err := checks.SampleHdparm(probeCtx, b.execRunner, device, wantCached, wantRead, b.probeTimeout())
 	if err != nil {
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "hdparm: " + msg
@@ -232,15 +232,15 @@ func (b *WebBackend) hdparmWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 	return nil, readings, fmt.Sprintf("hdparm %s %s MB/s", device, strings.Join(parts, " "))
 }
 
-func (b *WebBackend) smartWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
+func (b *WebBackend) smartWatchView(ctx context.Context, w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
 	device := cfgval.AsString(w.check[checks.CheckKeyDevice])
 	if device == "" {
 		msg := watchMissingDeviceMessage
 		return nil, watchErrorReadings(msg), "smart: " + msg
 	}
-	ctx, cancel := b.probeContext()
+	probeCtx, cancel := b.probeContext(ctx)
 	defer cancel()
-	sample, err := checks.SampleSmart(ctx, b.execRunner, device, b.probeTimeout())
+	sample, err := checks.SampleSmart(probeCtx, b.execRunner, device, b.probeTimeout())
 	if err != nil {
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "smart: " + msg
@@ -275,10 +275,10 @@ func (b *WebBackend) probeTimeout() time.Duration {
 	return timeout
 }
 
-func (b *WebBackend) probeContext() (context.Context, context.CancelFunc) {
+func (b *WebBackend) probeContext(parent context.Context) (context.Context, context.CancelFunc) {
 	timeout := b.probeTimeout()
 	if timeout <= 0 {
-		return context.WithCancel(context.Background())
+		return context.WithCancel(parent)
 	}
-	return context.WithTimeout(context.Background(), timeout)
+	return context.WithTimeout(parent, timeout)
 }
