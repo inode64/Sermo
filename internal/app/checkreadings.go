@@ -162,7 +162,7 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 	case checks.CheckTypeHdparm, checks.CheckTypeSmart, checks.CheckTypeSensors, checks.CheckTypeEDAC:
 		return metricCheckReadings(checkType, data)
 	default:
-		if metrics := checks.GraphMetrics(checkType); len(metrics) > 0 {
+		if graphMetrics := checks.GraphMetrics(checkType); len(graphMetrics) > 0 {
 			return metricCheckReadings(checkType, data)
 		}
 		return nil

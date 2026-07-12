@@ -221,11 +221,11 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 		}
 		listen = ip
 	}
-	conn, err := icmp.ListenPacket(networkIP4ICMP, listen)
+	icmpConn, err := icmp.ListenPacket(networkIP4ICMP, listen)
 	if err != nil {
 		return PingSample{}, err
 	}
-	defer conn.Close()
+	defer icmpConn.Close()
 
 	perPacket := timeout / time.Duration(count)
 	if perPacket <= 0 {
@@ -244,8 +244,8 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 			continue
 		}
 		sent := time.Now()
-		_ = conn.SetWriteDeadline(time.Now().Add(perPacket))
-		if _, err := conn.WriteTo(b, addr); err != nil {
+		_ = icmpConn.SetWriteDeadline(time.Now().Add(perPacket))
+		if _, err := icmpConn.WriteTo(b, addr); err != nil {
 			continue
 		}
 		// A raw ip4:icmp socket receives a copy of every echo reply on the host,
@@ -255,9 +255,9 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 		// per-packet deadline passes; skip everything else instead of mistaking
 		// a stray reply for ours.
 		deadline := time.Now().Add(perPacket)
-		_ = conn.SetReadDeadline(deadline)
+		_ = icmpConn.SetReadDeadline(deadline)
 		for {
-			n, peer, err := conn.ReadFrom(reply)
+			n, peer, err := icmpConn.ReadFrom(reply)
 			if err != nil {
 				break // deadline or read error: no matching reply for this seq
 			}

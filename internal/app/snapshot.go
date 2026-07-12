@@ -64,8 +64,8 @@ func NewPersistentSnapshots(store serviceSnapshotStore, reportError func(error))
 	if err != nil {
 		return s, err
 	}
-	for service, checks := range records {
-		s.byService[service] = serviceSnapshotsFromRecords(checks)
+	for service, checkRecords := range records {
+		s.byService[service] = serviceSnapshotsFromRecords(checkRecords)
 	}
 	return s, nil
 }

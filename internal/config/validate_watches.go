@@ -514,14 +514,14 @@ func validateNetCheck(name string, check, entry map[string]any, defaultNotify []
 	if cfgval.String(check[checks.CheckKeyInterface]) == "" {
 		add("%s is required for a net check", watchCheckFieldPath(name, checks.CheckKeyInterface))
 	}
-	metrics, ok := entry[sectionMetrics].(map[string]any)
-	if !ok || len(metrics) == 0 {
+	watchMetrics, ok := entry[sectionMetrics].(map[string]any)
+	if !ok || len(watchMetrics) == 0 {
 		add("%s is required and must be non-empty for a net check", watchMetricsPath(name))
 		return
 	}
-	for _, key := range slices.Sorted(maps.Keys(metrics)) {
+	for _, key := range slices.Sorted(maps.Keys(watchMetrics)) {
 		prefix := watchMetricPath(name, key)
-		m, ok := metrics[key].(map[string]any)
+		m, ok := watchMetrics[key].(map[string]any)
 		if !ok {
 			add(validationMappingFormat, prefix)
 			continue
@@ -586,14 +586,14 @@ func validateWatchableCheck(prefix, typ string, fields map[string]any, locksDir 
 // with its own hook (mirrors validateNetCheck).
 func validateSwapCheck(name string, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
 	validateMetricWatchEntry(name, entry, add)
-	metrics, ok := entry[sectionMetrics].(map[string]any)
-	if !ok || len(metrics) == 0 {
+	watchMetrics, ok := entry[sectionMetrics].(map[string]any)
+	if !ok || len(watchMetrics) == 0 {
 		add("%s is required and must be non-empty for a swap check", watchMetricsPath(name))
 		return
 	}
-	for _, key := range slices.Sorted(maps.Keys(metrics)) {
+	for _, key := range slices.Sorted(maps.Keys(watchMetrics)) {
 		prefix := watchMetricPath(name, key)
-		m, ok := metrics[key].(map[string]any)
+		m, ok := watchMetrics[key].(map[string]any)
 		if !ok {
 			add(validationMappingFormat, prefix)
 			continue
@@ -650,14 +650,14 @@ func validateICMPCheck(name string, check, entry map[string]any, defaultNotify [
 			add("%s must be a positive integer", watchCheckFieldPath(name, checks.CheckKeyCount))
 		}
 	}
-	metrics, ok := entry[sectionMetrics].(map[string]any)
-	if !ok || len(metrics) == 0 {
+	watchMetrics, ok := entry[sectionMetrics].(map[string]any)
+	if !ok || len(watchMetrics) == 0 {
 		add("%s is required and must be non-empty for an icmp check", watchMetricsPath(name))
 		return
 	}
-	for _, key := range slices.Sorted(maps.Keys(metrics)) {
+	for _, key := range slices.Sorted(maps.Keys(watchMetrics)) {
 		prefix := watchMetricPath(name, key)
-		m, ok := metrics[key].(map[string]any)
+		m, ok := watchMetrics[key].(map[string]any)
 		if !ok {
 			add(validationMappingFormat, prefix)
 			continue
