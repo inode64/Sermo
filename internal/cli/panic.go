@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -14,7 +15,7 @@ import (
 // hooks, alerts and automatic remediation. The flag lives in the persistent
 // store under paths.state, so it survives daemon restarts and the daemon picks
 // up the change within a second — no running web UI is required.
-func (a App) runPanic(opts options) int {
+func (a App) runPanic(ctx context.Context, opts options) int {
 	sub := ""
 	if len(opts.args) > 0 {
 		sub = strings.ToLower(opts.args[0])
@@ -40,7 +41,7 @@ func (a App) runPanic(opts options) int {
 		return code
 	}
 
-	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("panic failed: %v", err))
 	}

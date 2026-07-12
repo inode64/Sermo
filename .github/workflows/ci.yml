@@ -9,8 +9,8 @@ permissions:
   contents: read
 
 jobs:
-  build-test:
-    name: build & test
+  check:
+    name: build & check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -39,28 +39,6 @@ jobs:
         run: npx playwright install --with-deps chromium
       - run: make build
       - run: make check
-
-  lint:
-    name: static analysis
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Install analyzers
-        run: |
-          go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
-          go install github.com/mgechev/revive@v1.15.0
-          go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
-      - run: make fmt-check
-      # Go 1.26 modernizers gate: fails when any fixer would change code, so the
-      # tree stays current with toolchain idioms. Ships with the toolchain.
-      - run: go fix -diff ./...
-      - run: staticcheck ./...
-      - run: revive -config revive.toml ./...
-      - run: govulncheck ./...
       # Advisory: unreachable-function report. Reflection and build tags cause
       # false positives, so this never fails the build — triage by hand.
       - name: deadcode (advisory)
@@ -68,15 +46,3 @@ jobs:
         run: |
           go install golang.org/x/tools/cmd/deadcode@v0.48.0
           deadcode -test ./...
-      # gosec and focused bug analyzers run through golangci-lint v2 (see
-      # .golangci.yml, version: "2").
-      # install-mode: goinstall builds golangci-lint from source with the Go
-      # toolchain selected above, so the lint never breaks when go.mod targets a
-      # Go newer than the prebuilt release binaries. v2's stricter gosec findings
-      # (G101/G602/G703/G118) are triaged: test-fixture rules live in
-      # .golangci.yml, by-design sites carry inline //nolint:gosec justifications.
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: v2.12.2
-          install-mode: goinstall

@@ -293,6 +293,15 @@ var migrations = []string{
 type Store struct {
 	db  *sql.DB
 	now func() time.Time
+	ctx context.Context
+}
+
+// sqlCtx is the context passed to database/sql *Context methods.
+func (s *Store) sqlCtx() context.Context {
+	if s.ctx != nil {
+		return s.ctx
+	}
+	return context.Background()
 }
 
 const (
@@ -325,7 +334,12 @@ type PruneHistoryResult struct {
 // the daemon (long-lived reader/writer) and sermoctl (short-lived writer)
 // coexist across processes.
 func Open(path string) (*Store, error) {
-	return OpenWith(path, Options{})
+	return OpenContext(context.Background(), path)
+}
+
+// OpenContext is Open with an explicit context for migrations and SQL calls.
+func OpenContext(ctx context.Context, path string) (*Store, error) {
+	return OpenContextWith(ctx, path, Options{})
 }
 
 // DefaultCacheBytes is the SQLite page-cache size used when the caller does not
@@ -344,6 +358,11 @@ type Options struct {
 
 // OpenWith opens the store with explicit options. Open is the zero-option form.
 func OpenWith(path string, opts Options) (*Store, error) {
+	return OpenContextWith(context.Background(), path, opts)
+}
+
+// OpenContextWith opens the store with explicit context and options.
+func OpenContextWith(ctx context.Context, path string, opts Options) (*Store, error) {
 	if dir := filepath.Dir(path); dir != "" {
 		// Owner-only (root): the state DB holds control state and history, not
 		// secrets, but there is no reason for it to be world-traversable. Matches the
@@ -378,8 +397,8 @@ func OpenWith(path string, opts Options) (*Store, error) {
 	// lock contention; the state store sees little traffic so this costs nothing.
 	db.SetMaxOpenConns(1)
 
-	s := &Store{db: db, now: time.Now}
-	if err := s.migrate(); err != nil {
+	s := &Store{db: db, now: time.Now, ctx: ctx}
+	if err := s.migrate(ctx); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate state db %s: %w", path, err)
 	}
@@ -389,22 +408,22 @@ func OpenWith(path string, opts Options) (*Store, error) {
 // Close releases the database handle.
 func (s *Store) Close() error { return s.db.Close() }
 
-func (s *Store) migrate() error {
+func (s *Store) migrate(ctx context.Context) error {
 	var version int
-	if err := s.db.QueryRow("PRAGMA user_version;").Scan(&version); err != nil {
+	if err := s.db.QueryRowContext(ctx, "PRAGMA user_version;").Scan(&version); err != nil {
 		return err
 	}
 	for i := version; i < len(migrations); i++ {
-		tx, err := s.db.Begin()
+		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(migrations[i]); err != nil {
+		if _, err := tx.ExecContext(ctx, migrations[i]); err != nil {
 			_ = tx.Rollback()
 			return err
 		}
 		// user_version cannot be parameterized; i+1 is a trusted integer.
-		if _, err := tx.Exec(fmt.Sprintf("PRAGMA user_version=%d;", i+1)); err != nil {
+		if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version=%d;", i+1)); err != nil {
 			_ = tx.Rollback()
 			return err
 		}
@@ -456,7 +475,7 @@ type CheckSnapshotRecord struct {
 func (s *Store) MonitorState(service string) (MonitorRecord, bool, error) {
 	var active int
 	var source, updated string
-	err := s.db.QueryRow(
+	err := s.db.QueryRowContext(s.sqlCtx(),
 		`SELECT active, source, updated_at FROM monitor_state WHERE service = ?;`,
 		service,
 	).Scan(&active, &source, &updated)
@@ -478,7 +497,7 @@ func (s *Store) MonitorState(service string) (MonitorRecord, bool, error) {
 // default — typically "monitor on").
 func (s *Store) Active(service string) (active, found bool, err error) {
 	var v int
-	err = s.db.QueryRow("SELECT active FROM monitor_state WHERE service = ?;", service).Scan(&v)
+	err = s.db.QueryRowContext(s.sqlCtx(), "SELECT active FROM monitor_state WHERE service = ?;", service).Scan(&v)
 	switch {
 	case err == sql.ErrNoRows:
 		return false, false, nil
@@ -496,7 +515,7 @@ func (s *Store) SetActive(service string, active bool, source string) error {
 	if active {
 		v = 1
 	}
-	_, err := s.db.Exec(
+	_, err := s.db.ExecContext(s.sqlCtx(),
 		`INSERT INTO monitor_state (service, active, source, updated_at)
 		 VALUES (?, ?, ?, ?)
 		 ON CONFLICT(service) DO UPDATE SET
@@ -511,7 +530,7 @@ func (s *Store) SetActive(service string, active bool, source string) error {
 // SetOperationSettling records that a service operation is running or awaiting
 // its first post-operation observation cycle.
 func (s *Store) SetOperationSettling(service, action, phase, source string) error {
-	_, err := s.db.Exec(
+	_, err := s.db.ExecContext(s.sqlCtx(),
 		`INSERT INTO operation_settling (service, action, phase, source, updated_at)
 		 VALUES (?, ?, ?, ?, ?)
 		 ON CONFLICT(service) DO UPDATE SET
@@ -527,7 +546,7 @@ func (s *Store) SetOperationSettling(service, action, phase, source string) erro
 // OperationSettling returns a service's current operation-settling row.
 func (s *Store) OperationSettling(service string) (OperationSettlingRecord, bool, error) {
 	var action, phase, source, updated string
-	err := s.db.QueryRow(
+	err := s.db.QueryRowContext(s.sqlCtx(),
 		`SELECT action, phase, source, updated_at FROM operation_settling WHERE service = ?;`,
 		service,
 	).Scan(&action, &phase, &source, &updated)
@@ -544,14 +563,14 @@ func (s *Store) OperationSettling(service string) (OperationSettlingRecord, bool
 
 // ClearOperationSettling removes a service's operation-settling row.
 func (s *Store) ClearOperationSettling(service string) error {
-	_, err := s.db.Exec(`DELETE FROM operation_settling WHERE service = ?;`, service)
+	_, err := s.db.ExecContext(s.sqlCtx(), `DELETE FROM operation_settling WHERE service = ?;`, service)
 	return err
 }
 
 // ServiceCheckSnapshots returns every persisted service check snapshot, grouped
 // by service name and keyed by check name.
 func (s *Store) ServiceCheckSnapshots() (map[string]map[string]CheckSnapshotRecord, error) {
-	rows, err := s.db.Query(
+	rows, err := s.db.QueryContext(s.sqlCtx(),
 		`SELECT service, check_name, ok, condition, optional, skipped, message, data, ran, at
 		   FROM service_check_snapshot ORDER BY service, check_name;`,
 	)
@@ -595,13 +614,13 @@ func (s *Store) ServiceCheckSnapshots() (map[string]map[string]CheckSnapshotReco
 
 // SetServiceCheckSnapshots replaces one service's latest check snapshots.
 func (s *Store) SetServiceCheckSnapshots(service string, records map[string]CheckSnapshotRecord) error {
-	tx, err := s.db.Begin()
+	tx, err := s.db.BeginTx(s.sqlCtx(), nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.Exec(`DELETE FROM service_check_snapshot WHERE service = ?;`, service); err != nil {
+	if _, err := tx.ExecContext(s.sqlCtx(), `DELETE FROM service_check_snapshot WHERE service = ?;`, service); err != nil {
 		return err
 	}
 	names := make([]string, 0, len(records))
@@ -615,7 +634,7 @@ func (s *Store) SetServiceCheckSnapshots(service string, records map[string]Chec
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(
+		if _, err := tx.ExecContext(s.sqlCtx(),
 			`INSERT INTO service_check_snapshot
 			   (service, check_name, ok, condition, optional, skipped, message, data, ran, at)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
@@ -631,7 +650,7 @@ func (s *Store) SetServiceCheckSnapshots(service string, records map[string]Chec
 // WatchCheckSnapshots returns every persisted host-watch snapshot, grouped by
 // watch name and keyed by the stable result slot.
 func (s *Store) WatchCheckSnapshots() (map[string]map[string]CheckSnapshotRecord, error) {
-	rows, err := s.db.Query(
+	rows, err := s.db.QueryContext(s.sqlCtx(),
 		`SELECT watch, slot, check_type, ok, condition, optional, skipped, message, data, ran, at
 		   FROM watch_check_snapshot ORDER BY watch, slot;`,
 	)
@@ -680,7 +699,7 @@ func (s *Store) SetWatchCheckSnapshot(watch, slot string, rec CheckSnapshotRecor
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(
+	_, err = s.db.ExecContext(s.sqlCtx(),
 		`INSERT INTO watch_check_snapshot
 		   (watch, slot, check_type, ok, condition, optional, skipped, message, data, ran, at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -750,7 +769,7 @@ func (s *Store) SetPanic(on bool, source string) error {
 	if on {
 		v = 1
 	}
-	_, err := s.db.Exec(
+	_, err := s.db.ExecContext(s.sqlCtx(),
 		`INSERT INTO global_state (key, value, source, updated_at)
 		 VALUES (?, ?, ?, ?)
 		 ON CONFLICT(key) DO UPDATE SET
@@ -767,7 +786,7 @@ func (s *Store) SetPanic(on bool, source string) error {
 func (s *Store) Panic() (rec GlobalRecord, found bool, err error) {
 	var v int
 	var source, updated string
-	err = s.db.QueryRow(
+	err = s.db.QueryRowContext(s.sqlCtx(),
 		`SELECT value, source, updated_at FROM global_state WHERE key = ?;`,
 		panicFlagKey,
 	).Scan(&v, &source, &updated)
@@ -825,7 +844,7 @@ func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool,
 		rawRecentActions   string
 		currentBackoffNano int64
 	)
-	err := s.db.QueryRow(
+	err := s.db.QueryRowContext(s.sqlCtx(),
 		`SELECT firing, last_notify_at, consecutive, history, true_since,
 		        timed_history, last_action_at, recent_actions, current_backoff_ns
 		   FROM watch_runtime_state WHERE watch = ? AND slot = ?;`,
@@ -874,7 +893,7 @@ func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool,
 // empty record deletes any existing row.
 func (s *Store) SetWatchRuntimeState(watch, slot string, rec WatchRuntimeRecord) error {
 	if watchRuntimeRecordEmpty(rec) {
-		_, err := s.db.Exec(`DELETE FROM watch_runtime_state WHERE watch = ? AND slot = ?;`, watch, slot)
+		_, err := s.db.ExecContext(s.sqlCtx(), `DELETE FROM watch_runtime_state WHERE watch = ? AND slot = ?;`, watch, slot)
 		return err
 	}
 	history, err := json.Marshal(rec.Window.History)
@@ -893,7 +912,7 @@ func (s *Store) SetWatchRuntimeState(watch, slot string, rec WatchRuntimeRecord)
 	if rec.Firing {
 		firing = 1
 	}
-	_, err = s.db.Exec(
+	_, err = s.db.ExecContext(s.sqlCtx(),
 		`INSERT INTO watch_runtime_state (
 		   watch, slot, firing, last_notify_at, consecutive, history, true_since,
 		   timed_history, last_action_at, recent_actions, current_backoff_ns
@@ -931,7 +950,7 @@ func (s *Store) RemediationState(service string) (RemediationRecord, bool, error
 		recentActions    string
 		currentBackoffNS int64
 	)
-	err := s.db.QueryRow(
+	err := s.db.QueryRowContext(s.sqlCtx(),
 		`SELECT last_action_at, recent_actions, current_backoff_ns
 		   FROM remediation_state WHERE service = ?;`,
 		service,
@@ -958,14 +977,14 @@ func (s *Store) RemediationState(service string) (RemediationRecord, bool, error
 // record deletes any existing row.
 func (s *Store) SetRemediationState(service string, rec RemediationRecord) error {
 	if rec.LastActionAt.IsZero() && len(rec.RecentActions) == 0 && rec.CurrentBackoff == 0 {
-		_, err := s.db.Exec(`DELETE FROM remediation_state WHERE service = ?;`, service)
+		_, err := s.db.ExecContext(s.sqlCtx(), `DELETE FROM remediation_state WHERE service = ?;`, service)
 		return err
 	}
 	recent, err := encodeUnixNanos(rec.RecentActions)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(
+	_, err = s.db.ExecContext(s.sqlCtx(),
 		`INSERT INTO remediation_state (service, last_action_at, recent_actions, current_backoff_ns)
 		 VALUES (?, ?, ?, ?)
 		 ON CONFLICT(service) DO UPDATE SET
@@ -980,7 +999,7 @@ func (s *Store) SetRemediationState(service string, rec RemediationRecord) error
 // RuleWindowStates returns the persisted for/within progress for a service's
 // rules, keyed by rule name.
 func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, error) {
-	rows, err := s.db.Query(
+	rows, err := s.db.QueryContext(s.sqlCtx(),
 		`SELECT rule_name, consecutive, history, true_since, timed_history
 		   FROM rule_window_state WHERE service = ? ORDER BY rule_name;`,
 		service,
@@ -1023,13 +1042,13 @@ func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, e
 // SetRuleWindowStates replaces the persisted rule-window state for a service.
 // Passing an empty map removes stale rows for rules that no longer exist.
 func (s *Store) SetRuleWindowStates(service string, records map[string]RuleWindowRecord) error {
-	tx, err := s.db.Begin()
+	tx, err := s.db.BeginTx(s.sqlCtx(), nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.Exec(`DELETE FROM rule_window_state WHERE service = ?;`, service); err != nil {
+	if _, err := tx.ExecContext(s.sqlCtx(), `DELETE FROM rule_window_state WHERE service = ?;`, service); err != nil {
 		return err
 	}
 	names := make([]string, 0, len(records))
@@ -1047,7 +1066,7 @@ func (s *Store) SetRuleWindowStates(service string, records map[string]RuleWindo
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(
+		if _, err := tx.ExecContext(s.sqlCtx(),
 			`INSERT INTO rule_window_state (service, rule_name, consecutive, history, true_since, timed_history)
 			 VALUES (?, ?, ?, ?, ?, ?);`,
 			service, name, rec.Consecutive, string(history), timeUnixNano(rec.TrueSince), timed,
@@ -1164,7 +1183,7 @@ func (s *Store) RecordEvent(e EventRecord) (int64, error) {
 	if at.IsZero() {
 		at = s.now()
 	}
-	result, err := s.db.Exec(
+	result, err := s.db.ExecContext(s.sqlCtx(),
 		`INSERT INTO event_log (at, service, watch, app, kind, rule, action, status, message, output)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
 		at.UTC().UnixNano(), e.Service, e.Watch, e.App, e.Kind, e.Rule, e.Action, e.Status, e.Message, e.Output,
@@ -1196,7 +1215,7 @@ func (s *Store) RecentEventsBefore(beforeID int64, limit int) ([]EventRecord, er
 	}
 	query += ` ORDER BY id DESC LIMIT ?;`
 	args = append(args, limit)
-	rows, err := s.db.Query(query, args...)
+	rows, err := s.db.QueryContext(s.sqlCtx(), query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1223,9 +1242,9 @@ func (s *Store) PruneEvents(before time.Time) (int64, error) {
 		err error
 	)
 	if before.IsZero() {
-		res, err = s.db.Exec(`DELETE FROM event_log;`)
+		res, err = s.db.ExecContext(s.sqlCtx(), `DELETE FROM event_log;`)
 	} else {
-		res, err = s.db.Exec(`DELETE FROM event_log WHERE at < ?;`, before.UTC().UnixNano())
+		res, err = s.db.ExecContext(s.sqlCtx(), `DELETE FROM event_log WHERE at < ?;`, before.UTC().UnixNano())
 	}
 	if err != nil {
 		return 0, err
@@ -1308,7 +1327,7 @@ func (s *Store) RecordSLA(service string, up bool, at time.Time) error {
 	if up {
 		u = 1
 	}
-	_, err := s.db.Exec(
+	_, err := s.db.ExecContext(s.sqlCtx(),
 		`INSERT INTO sla_sample (service, bucket, up_count, total_count)
 		 VALUES (?, ?, ?, 1)
 		 ON CONFLICT(service, bucket) DO UPDATE SET
@@ -1327,7 +1346,7 @@ func (s *Store) RecordCheckSLA(service, check string, up bool, at time.Time) err
 	if up {
 		u = 1
 	}
-	_, err := s.db.Exec(
+	_, err := s.db.ExecContext(s.sqlCtx(),
 		`INSERT INTO check_sla_sample (service, check_name, bucket, up_count, total_count)
 		 VALUES (?, ?, ?, ?, 1)
 		 ON CONFLICT(service, check_name, bucket) DO UPDATE SET
@@ -1342,7 +1361,7 @@ func (s *Store) RecordCheckSLA(service, check string, up bool, at time.Time) err
 // ending at now (buckets with start >= now-span). total==0 means no data.
 func (s *Store) SLA(service string, span time.Duration, now time.Time) (up, total int64, err error) {
 	from := minuteBucket(now.Add(-span))
-	err = s.db.QueryRow(
+	err = s.db.QueryRowContext(s.sqlCtx(),
 		`SELECT COALESCE(SUM(up_count), 0), COALESCE(SUM(total_count), 0)
 		 FROM sla_sample WHERE service = ? AND bucket >= ?;`,
 		service, from,
@@ -1357,7 +1376,7 @@ func (s *Store) SLA(service string, span time.Duration, now time.Time) (up, tota
 // window ending at now. total==0 means no data.
 func (s *Store) CheckSLA(service, check string, span time.Duration, now time.Time) (up, total int64, err error) {
 	from := minuteBucket(now.Add(-span))
-	err = s.db.QueryRow(
+	err = s.db.QueryRowContext(s.sqlCtx(),
 		`SELECT COALESCE(SUM(up_count), 0), COALESCE(SUM(total_count), 0)
 		 FROM check_sla_sample WHERE service = ? AND check_name = ? AND bucket >= ?;`,
 		service, check, from,
@@ -1383,7 +1402,7 @@ type SLAPoint struct {
 // caller can render excluded periods distinctly from downtime. This is the stored
 // "control" a graph is built from later.
 func (s *Store) SLASeries(service string, from, to time.Time) ([]SLAPoint, error) {
-	rows, err := s.db.Query(
+	rows, err := s.db.QueryContext(s.sqlCtx(),
 		`SELECT bucket, up_count, total_count
 		   FROM sla_sample
 		  WHERE service = ? AND bucket >= ? AND bucket < ?
@@ -1409,7 +1428,7 @@ func (s *Store) SLASeries(service string, from, to time.Time) ([]SLAPoint, error
 // CheckSLASeries returns one check's per-minute availability points in [from,
 // to), oldest first. Unobserved minutes are absent.
 func (s *Store) CheckSLASeries(service, check string, from, to time.Time) ([]SLAPoint, error) {
-	rows, err := s.db.Query(
+	rows, err := s.db.QueryContext(s.sqlCtx(),
 		`SELECT bucket, up_count, total_count
 		   FROM check_sla_sample
 		  WHERE service = ? AND check_name = ? AND bucket >= ? AND bucket < ?
@@ -1533,7 +1552,7 @@ func (s *Store) slaTimelines(query string, keyArgs []any, now time.Time) ([]SLAW
 		args = append(args, startBucket, segSpan)
 		args = append(args, keyArgs...)
 		args = append(args, startBucket, endBucket)
-		rows, err := s.db.Query(query, args...)
+		rows, err := s.db.QueryContext(s.sqlCtx(), query, args...)
 		if err != nil {
 			return nil, err
 		}
@@ -1590,7 +1609,7 @@ type MeasurementStat struct {
 // service+check into its current UTC-minute bucket: n+1, sum+value, and the
 // running min/max.
 func (s *Store) RecordMeasurement(service, check string, valueMs float64, at time.Time) error {
-	_, err := s.db.Exec(
+	_, err := s.db.ExecContext(s.sqlCtx(),
 		`INSERT INTO measurement (service, check_name, bucket, n, sum_ms, min_ms, max_ms)
 		 VALUES (?, ?, ?, 1, ?, ?, ?)
 		 ON CONFLICT(service, check_name, bucket) DO UPDATE SET
@@ -1606,7 +1625,7 @@ func (s *Store) RecordMeasurement(service, check string, valueMs float64, at tim
 // MeasurementSummary returns the average/min/max and sample count for a check over
 // the rolling window ending at now (buckets with start >= now-span).
 func (s *Store) MeasurementSummary(service, check string, span time.Duration, now time.Time) (MeasurementStat, error) {
-	return summaryFromRow(s.db.QueryRow(
+	return summaryFromRow(s.db.QueryRowContext(s.sqlCtx(),
 		`SELECT COALESCE(SUM(n),0), SUM(sum_ms), MIN(min_ms), MAX(max_ms)
 		   FROM measurement WHERE service = ? AND check_name = ? AND bucket >= ?;`,
 		service, check, minuteBucket(now.Add(-span))))
@@ -1634,7 +1653,7 @@ func summaryFromRow(row *sql.Row) (MeasurementStat, error) {
 // MeasurementSeries returns a check's per-minute points in [from, to), oldest
 // first. Minutes with no observation are absent (gaps), as in SLASeries.
 func (s *Store) MeasurementSeries(service, check string, from, to time.Time) ([]MeasurementPoint, error) {
-	rows, err := s.db.Query(
+	rows, err := s.db.QueryContext(s.sqlCtx(),
 		`SELECT bucket, n, sum_ms, min_ms, max_ms
 		   FROM measurement
 		  WHERE service = ? AND check_name = ? AND bucket >= ? AND bucket < ?
@@ -1671,7 +1690,7 @@ func (s *Store) PruneMeasurements(before time.Time) (int64, error) {
 // per-minute bucket tables. table is always a compile-time literal, never
 // operator input.
 func (s *Store) pruneBuckets(table string, before time.Time) (int64, error) {
-	res, err := s.db.Exec(`DELETE FROM `+table+` WHERE bucket < ?;`, minuteBucket(before)) //nolint:gosec // table is a package-internal literal
+	res, err := s.db.ExecContext(s.sqlCtx(), `DELETE FROM `+table+` WHERE bucket < ?;`, minuteBucket(before)) //nolint:gosec // table is a package-internal literal
 	if err != nil {
 		return 0, err
 	}
@@ -1682,7 +1701,7 @@ func (s *Store) pruneBuckets(table string, before time.Time) (int64, error) {
 // hdparm "read" MB/s) into its current UTC-minute bucket: n+1, sum+value and the
 // running min/max. It is the generic counterpart of RecordMeasurement (latency).
 func (s *Store) RecordMetric(service, check, metric string, value float64, at time.Time) error {
-	_, err := s.db.Exec(
+	_, err := s.db.ExecContext(s.sqlCtx(),
 		`INSERT INTO measurement_metric (service, check_name, metric, bucket, n, sum_v, min_v, max_v)
 		 VALUES (?, ?, ?, ?, 1, ?, ?, ?)
 		 ON CONFLICT(service, check_name, metric, bucket) DO UPDATE SET
@@ -1698,7 +1717,7 @@ func (s *Store) RecordMetric(service, check, metric string, value float64, at ti
 // MetricSummary returns a named metric's average/min/max and sample count over the
 // rolling window ending at now.
 func (s *Store) MetricSummary(service, check, metric string, span time.Duration, now time.Time) (MeasurementStat, error) {
-	return summaryFromRow(s.db.QueryRow(
+	return summaryFromRow(s.db.QueryRowContext(s.sqlCtx(),
 		`SELECT COALESCE(SUM(n),0), SUM(sum_v), MIN(min_v), MAX(max_v)
 		   FROM measurement_metric WHERE service = ? AND check_name = ? AND metric = ? AND bucket >= ?;`,
 		service, check, metric, minuteBucket(now.Add(-span))))
@@ -1707,7 +1726,7 @@ func (s *Store) MetricSummary(service, check, metric string, span time.Duration,
 // MetricSeries returns a named metric's per-minute points in [from, to), oldest
 // first (minutes with no observation are absent).
 func (s *Store) MetricSeries(service, check, metric string, from, to time.Time) ([]MeasurementPoint, error) {
-	rows, err := s.db.Query(
+	rows, err := s.db.QueryContext(s.sqlCtx(),
 		`SELECT bucket, n, sum_v, min_v, max_v
 		   FROM measurement_metric
 		  WHERE service = ? AND check_name = ? AND metric = ? AND bucket >= ? AND bucket < ?
@@ -1743,7 +1762,7 @@ func (s *Store) PruneMetrics(before time.Time) (int64, error) {
 // RecordDaemonMetric accumulates one sermod process metric observation into its
 // current UTC-minute bucket: n+1, sum+value and running min/max.
 func (s *Store) RecordDaemonMetric(metric string, value float64, at time.Time) error {
-	_, err := s.db.Exec(
+	_, err := s.db.ExecContext(s.sqlCtx(),
 		`INSERT INTO daemon_metric (metric, bucket, n, sum_v, min_v, max_v)
 		 VALUES (?, ?, 1, ?, ?, ?)
 		 ON CONFLICT(metric, bucket) DO UPDATE SET
@@ -1759,7 +1778,7 @@ func (s *Store) RecordDaemonMetric(metric string, value float64, at time.Time) e
 // DaemonMetricSummary returns a daemon metric's average/min/max and sample count
 // over the rolling window ending at now.
 func (s *Store) DaemonMetricSummary(metric string, span time.Duration, now time.Time) (MeasurementStat, error) {
-	return summaryFromRow(s.db.QueryRow(
+	return summaryFromRow(s.db.QueryRowContext(s.sqlCtx(),
 		`SELECT COALESCE(SUM(n),0), SUM(sum_v), MIN(min_v), MAX(max_v)
 		   FROM daemon_metric WHERE metric = ? AND bucket >= ?;`,
 		metric, minuteBucket(now.Add(-span))))
@@ -1768,7 +1787,7 @@ func (s *Store) DaemonMetricSummary(metric string, span time.Duration, now time.
 // DaemonMetricSeries returns a daemon metric's per-minute points in [from, to),
 // oldest first.
 func (s *Store) DaemonMetricSeries(metric string, from, to time.Time) ([]MeasurementPoint, error) {
-	rows, err := s.db.Query(
+	rows, err := s.db.QueryContext(s.sqlCtx(),
 		`SELECT bucket, n, sum_v, min_v, max_v
 		   FROM daemon_metric
 		  WHERE metric = ? AND bucket >= ? AND bucket < ?
@@ -1804,7 +1823,7 @@ func (s *Store) PruneDaemonMetrics(before time.Time) (int64, error) {
 // RecordServiceMetric accumulates one service process-tree metric observation
 // into its current UTC-minute bucket: n+1, sum+value and running min/max.
 func (s *Store) RecordServiceMetric(service, metric string, value float64, at time.Time) error {
-	_, err := s.db.Exec(
+	_, err := s.db.ExecContext(s.sqlCtx(),
 		`INSERT INTO service_metric (service, metric, bucket, n, sum_v, min_v, max_v)
 		 VALUES (?, ?, ?, 1, ?, ?, ?)
 		 ON CONFLICT(service, metric, bucket) DO UPDATE SET
@@ -1820,7 +1839,7 @@ func (s *Store) RecordServiceMetric(service, metric string, value float64, at ti
 // ServiceMetricSummary returns a service runtime metric's average/min/max and
 // sample count over the rolling window ending at now.
 func (s *Store) ServiceMetricSummary(service, metric string, span time.Duration, now time.Time) (MeasurementStat, error) {
-	return summaryFromRow(s.db.QueryRow(
+	return summaryFromRow(s.db.QueryRowContext(s.sqlCtx(),
 		`SELECT COALESCE(SUM(n),0), SUM(sum_v), MIN(min_v), MAX(max_v)
 		   FROM service_metric WHERE service = ? AND metric = ? AND bucket >= ?;`,
 		service, metric, minuteBucket(now.Add(-span))))
@@ -1829,7 +1848,7 @@ func (s *Store) ServiceMetricSummary(service, metric string, span time.Duration,
 // ServiceMetricSeries returns a service runtime metric's per-minute points in
 // [from, to), oldest first.
 func (s *Store) ServiceMetricSeries(service, metric string, from, to time.Time) ([]MeasurementPoint, error) {
-	rows, err := s.db.Query(
+	rows, err := s.db.QueryContext(s.sqlCtx(),
 		`SELECT bucket, n, sum_v, min_v, max_v
 		   FROM service_metric
 		  WHERE service = ? AND metric = ? AND bucket >= ? AND bucket < ?

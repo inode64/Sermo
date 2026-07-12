@@ -36,7 +36,7 @@ func (a App) runStateCompact(ctx context.Context, opts options) int {
 		before = time.Now().Add(-state.DefaultHistoryRetention)
 	}
 
-	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("open state database: %v", err))
 	}
