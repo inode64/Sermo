@@ -103,6 +103,9 @@ SKIP_IFACE_PREFIXES = (
     "virbr",
 )
 
+GEOIP_DATABASE_DIRECTORY = "/usr/share/GeoIP"
+GEOIP_DATABASE_OLDER_THAN = "480h"
+
 
 @dataclass(frozen=True)
 class GenerationOptions:
@@ -1323,6 +1326,28 @@ dry_run: true
         add_watch("watches", name, simple_watch(name, "security", "6h", ["type: cert", f"path: {yaml_quote(path)}", "expires_in_days: 14", "on_algorithm_change: true"], cycles=1))
     if not certs:
         skip("cert", "no immediate certificate file under /etc/ssl")
+
+    geoip_directory = read_text(stage / "geoip_directory").strip()
+    if geoip_directory == GEOIP_DATABASE_DIRECTORY:
+        add_watch(
+            "watches",
+            "geoip-database-freshness",
+            simple_watch(
+                "geoip-database-freshness",
+                "network",
+                "6h",
+                [
+                    "type: file",
+                    "paths:",
+                    f"  - {yaml_quote(GEOIP_DATABASE_DIRECTORY)}",
+                    "recursive: true",
+                    f"older_than: {GEOIP_DATABASE_OLDER_THAN}",
+                ],
+                cycles=0,
+            ),
+        )
+    else:
+        skip("geoip", f"{GEOIP_DATABASE_DIRECTORY} is not present")
 
     tar_path = configs_dir / host_slug / "sermo-config.tgz"
     tar_config(root, tar_path)

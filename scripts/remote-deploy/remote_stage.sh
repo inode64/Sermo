@@ -300,6 +300,12 @@ else
 	: >"${out}/certs"
 fi
 
+if [ -d /usr/share/GeoIP ]; then
+	printf '%s\n' /usr/share/GeoIP >"${out}/geoip_directory"
+else
+	: >"${out}/geoip_directory"
+fi
+
 if [ -d /sys/class/hwmon ]; then
 	find /sys/class/hwmon -maxdepth 2 -type f -name 'temp*_input' -print >"${out}/hwmon_temp_inputs" 2>/dev/null || true
 else

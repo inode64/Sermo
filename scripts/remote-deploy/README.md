@@ -63,6 +63,11 @@ every `24h`, and hdparm every `6h`. Use
 `--include-inactive-installed-services` only for catalog audits where inactive
 installed profiles are intentionally desired.
 
+When `/usr/share/GeoIP` exists on a target, the generated configuration also
+adds an alert-only recursive file watch. It reports each GeoIP database file
+whose modification age exceeds `20` days (`older_than: 480h`); it has no hook
+or external notification action.
+
 When endpoint hints are available, generated service files override catalog
 `variables.host` and `variables.port` for Cloudflare Tunnel, BIND/named and
 Prometheus MySQL Exporter. For catalog profiles whose process selector depends
