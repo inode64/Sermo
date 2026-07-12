@@ -1265,8 +1265,12 @@ func watchConditionFields(check map[string]any) []string {
 
 func fileWatchConditions(check map[string]any) []web.WatchCondition {
 	var out []web.WatchCondition
-	if path := cfgval.AsString(check[checks.CheckKeyPath]); path != "" {
-		out = append(out, web.WatchCondition{Field: checks.DataKeyPath, Value: path})
+	if paths, err := config.FileWatchPaths(check); err == nil && len(paths) > 0 {
+		field := checks.DataKeyPaths
+		if len(paths) == 1 {
+			field = checks.DataKeyPath
+		}
+		out = append(out, web.WatchCondition{Field: field, Value: strings.Join(paths, displayListSeparator)})
 	}
 	if recursive, ok := check[checks.CheckKeyRecursive].(bool); ok {
 		out = append(out, web.WatchCondition{Field: checks.DataKeyRecursive, Op: cfgval.CompareOpEqual, Value: strconv.FormatBool(recursive)})
@@ -1285,6 +1289,9 @@ func fileWatchConditions(check map[string]any) []web.WatchCondition {
 	}
 	if m, ok := check[checks.CheckKeyExistence].(map[string]any); ok {
 		out = append(out, web.WatchCondition{Field: checks.CheckKeyExistence, Value: cfgval.AsString(m[checks.CheckKeyOn])})
+	}
+	if olderThan := cfgval.String(check[checks.CheckKeyOlderThan]); olderThan != "" {
+		out = append(out, web.WatchCondition{Field: checks.CheckKeyOlderThan, Op: cfgval.CompareOpGreater, Value: olderThan})
 	}
 	return out
 }

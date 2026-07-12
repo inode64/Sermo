@@ -44,7 +44,8 @@ const WatchExpandKeyBy = "by"
 const FileWatchConditionSummary = checks.CheckKeySize + ", " +
 	checks.CheckKeyPermissions + ", " +
 	checks.CheckKeyOwner + ", " +
-	checks.CheckKeyExistence
+	checks.CheckKeyExistence + ", " +
+	checks.CheckKeyOlderThan
 
 // ProcessWatchConditionSummary is the user-facing list of process-watch conditions.
 const ProcessWatchConditionSummary = checks.CheckKeyFor + ", " +

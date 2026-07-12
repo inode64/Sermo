@@ -1253,11 +1253,16 @@ func TestWebBackendStatefulWatchReadings(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	other := filepath.Join(t.TempDir(), "b.txt")
+	if err := os.WriteFile(other, []byte("world"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		config.SectionWatches: map[string]any{
 			"cfg-file": map[string]any{config.WatchKeyCheck: map[string]any{
-				checks.CheckKeyType: checks.CheckTypeFile,
-				checks.CheckKeyPath: filepath.Join(dir, "a.txt"),
+				checks.CheckKeyType:      checks.CheckTypeFile,
+				checks.CheckKeyPaths:     []any{filepath.Join(dir, "a.txt"), other},
+				checks.CheckKeyOlderThan: "24h",
 			}},
 			"entry-count": map[string]any{config.WatchKeyCheck: map[string]any{
 				checks.CheckKeyType: checks.CheckTypeCount,
@@ -1308,6 +1313,22 @@ func TestWebBackendStatefulWatchReadings(t *testing.T) {
 	}
 	if got := readingByField(byName["cfg-file"].Readings, "kind").Value; got != "file" {
 		t.Fatalf("file kind = %q, want file", got)
+	}
+	fileReadings := byName["cfg-file"].Readings
+	pathReadings := 0
+	for _, reading := range fileReadings {
+		if reading.Field == checks.DataKeyPath {
+			pathReadings++
+		}
+	}
+	if pathReadings != 2 {
+		t.Fatalf("file path readings = %d, want 2: %+v", pathReadings, fileReadings)
+	}
+	if got := readingByField(fileReadings, checks.DataKeyModifiedAt).Value; got == "" {
+		t.Fatalf("file modified_at missing: %+v", fileReadings)
+	}
+	if got := conditionByField(byName["cfg-file"].Conditions, checks.CheckKeyOlderThan).Value; got != "24h" {
+		t.Fatalf("file older_than condition = %q, want 24h", got)
 	}
 	if got := readingByField(byName["entry-count"].Readings, "count").Value; got != "1" {
 		t.Fatalf("count = %q, want 1", got)

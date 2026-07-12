@@ -13,6 +13,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/web"
@@ -26,42 +27,53 @@ const (
 )
 
 func (b *WebBackend) fileWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
-	path := cfgval.AsString(w.check[checks.CheckKeyPath])
-	if path == "" {
+	paths, err := config.FileWatchPaths(w.check)
+	if err != nil {
 		msg := watchMissingPathMessage
 		return nil, watchErrorReadings(msg), "file: " + msg
 	}
-	info, err := os.Lstat(path)
-	if err != nil {
-		msg := err.Error()
-		if os.IsNotExist(err) {
-			msg = "not found"
+	now := time.Now()
+	if b.now != nil {
+		now = b.now()
+	}
+	readings := make([]web.WatchReading, 0, len(paths)*6)
+	summaries := make([]string, 0, len(paths))
+	for _, path := range paths {
+		info, statErr := os.Lstat(path)
+		if statErr != nil {
+			msg := statErr.Error()
+			if os.IsNotExist(statErr) {
+				msg = "not found"
+			}
+			readings = append(readings, web.WatchReading{Field: checks.DataKeyPath, Label: watchReadingLabelPath, Value: path, Error: msg})
+			summaries = append(summaries, path+": "+msg)
+			continue
 		}
-		return nil, watchErrorReadings(msg), "file: " + msg
-	}
-	kind := fileKindLabel(info.Mode())
-	readings := []web.WatchReading{
-		{Field: checks.DataKeyPath, Label: watchReadingLabelPath, Value: path},
-		{Field: checks.DataKeyKind, Label: watchReadingLabelKind, Value: kind},
-		{Field: checks.DataKeySize, Label: watchReadingLabelSize, Value: humanize.Bytes(uint64(info.Size()))},
-		{Field: checks.DataKeyMode, Label: watchReadingLabelMode, Value: info.Mode().Perm().String()},
-	}
-	if sys, ok := info.Sys().(*syscall.Stat_t); ok {
-		readings = append(readings, web.WatchReading{
-			Field: checks.CheckKeyOwner, Label: watchReadingLabelOwner, Value: fmt.Sprintf("%d:%d", sys.Uid, sys.Gid),
-		})
-	}
-	if cfgval.Bool(w.check[checks.CheckKeyRecursive]) && info.IsDir() {
-		ctx, cancel := b.probeContext()
-		defer cancel()
-		n, err := checks.TallyEntries(ctx, path, checks.CountKindAny, true, b.probeTimeout())
-		if err != nil {
-			readings = append(readings, web.WatchReading{Field: watchReadingFieldEntries, Label: watchReadingLabelEntries, Error: err.Error()})
-		} else {
-			readings = append(readings, web.WatchReading{Field: watchReadingFieldEntries, Label: watchReadingLabelEntries, Value: strconv.Itoa(n)})
+		kind := fileKindLabel(info.Mode())
+		readings = append(readings,
+			web.WatchReading{Field: checks.DataKeyPath, Label: watchReadingLabelPath, Value: path},
+			web.WatchReading{Field: checks.DataKeyKind, Label: watchReadingLabelKind, Value: kind},
+			web.WatchReading{Field: checks.DataKeySize, Label: watchReadingLabelSize, Value: humanize.Bytes(uint64(info.Size()))},
+			web.WatchReading{Field: checks.DataKeyMode, Label: watchReadingLabelMode, Value: info.Mode().Perm().String()},
+			web.WatchReading{Field: checks.DataKeyModifiedAt, Label: watchReadingLabelModifiedAt, Value: info.ModTime().UTC().Format(time.RFC3339)},
+			web.WatchReading{Field: checks.DataKeyAge, Label: watchReadingLabelAge, Value: now.Sub(info.ModTime()).Round(time.Second).String()},
+		)
+		if sys, ok := info.Sys().(*syscall.Stat_t); ok {
+			readings = append(readings, web.WatchReading{Field: checks.CheckKeyOwner, Label: watchReadingLabelOwner, Value: fmt.Sprintf("%d:%d", sys.Uid, sys.Gid)})
 		}
+		if cfgval.Bool(w.check[checks.CheckKeyRecursive]) && info.IsDir() {
+			ctx, cancel := b.probeContext()
+			n, countErr := checks.TallyEntries(ctx, path, checks.CountKindAny, true, b.probeTimeout())
+			cancel()
+			if countErr != nil {
+				readings = append(readings, web.WatchReading{Field: watchReadingFieldEntries, Label: watchReadingLabelEntries, Error: countErr.Error()})
+			} else {
+				readings = append(readings, web.WatchReading{Field: watchReadingFieldEntries, Label: watchReadingLabelEntries, Value: strconv.Itoa(n)})
+			}
+		}
+		summaries = append(summaries, fmt.Sprintf("%s %s", path, kind))
 	}
-	return nil, readings, fmt.Sprintf("%s %s", path, kind)
+	return nil, readings, strings.Join(summaries, displayListSeparator)
 }
 
 func fileKindLabel(mode os.FileMode) string {

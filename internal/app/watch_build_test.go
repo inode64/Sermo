@@ -397,8 +397,9 @@ func TestBuildWatchesBuildsFile(t *testing.T) {
 		"app-data": map[string]any{
 			"check": map[string]any{
 				"type":        "file",
-				"path":        "/var/lib/app",
+				"paths":       []any{"/var/lib/app", "/srv/app"},
 				"recursive":   true,
+				"older_than":  "24h",
 				"size":        map[string]any{"op": ">", "value": 1024},
 				"permissions": map[string]any{"on": "change"},
 				"existence":   map[string]any{"on": "delete"},

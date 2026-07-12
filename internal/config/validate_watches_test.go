@@ -184,8 +184,9 @@ func TestValidateFileWatchGood(t *testing.T) {
 			"app-data": map[string]any{
 				"check": map[string]any{
 					"type":        "file",
-					"path":        "/var/lib/app",
+					"paths":       []any{"/var/lib/app", "/srv/app"},
 					"recursive":   true,
+					"older_than":  "24h",
 					"size":        map[string]any{"op": ">", "value": 1048576},
 					"permissions": map[string]any{"on": "change"},
 					"owner":       map[string]any{"on": "change"},
@@ -223,14 +224,24 @@ func TestValidateFileWatchErrors(t *testing.T) {
 				"check": map[string]any{"type": "file", "size": map[string]any{"on": "change"}},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
 			},
+			"bad-older-than": map[string]any{
+				"check": map[string]any{"type": "file", "path": "/x", "older_than": "soon"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
+			},
+			"both-path-aliases": map[string]any{
+				"check": map[string]any{"type": "file", "path": "/x", "paths": []any{"/y"}, "older_than": "1h"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
+			},
 		},
 	})
 	want := []string{
-		"watches.no-cond.check requires at least one of size, permissions, owner, existence",
+		"watches.no-cond.check requires at least one of size, permissions, owner, existence, older_than",
 		"watches.bad-size.check.size requires on: change or {op, value}",
 		"watches.bad-perm.check.permissions requires on: change",
 		"watches.bad-exist.check.existence requires on: delete",
-		"watches.no-path.check.path is required for a file check",
+		"watches.no-path.check: file check requires path or paths",
+		"watches.bad-older-than.check.older_than must be a valid positive duration",
+		"watches.both-path-aliases.check: file check must define only one of path or paths",
 	}
 	for _, w := range want {
 		if !hasIssue(issues, w) {
