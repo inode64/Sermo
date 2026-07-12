@@ -3,7 +3,7 @@ display_name: NUT UPS Daemon
 category: hardware
 service:
   systemd:
-    - upsd
+    - nut-server
   openrc:
     - upsd
 apps:
