@@ -135,7 +135,7 @@ func procBootTime() (int64, bool) {
 	if err != nil {
 		return 0, false
 	}
-	for _, line := range strings.Split(string(data), procLineSeparator) {
+	for line := range strings.SplitSeq(string(data), procLineSeparator) {
 		if v, ok := strings.CutPrefix(line, procStatBootTimePrefix); ok {
 			sec, err := strconv.ParseInt(strings.TrimSpace(v), procDecimalBase, procIntBits)
 			return sec, err == nil
@@ -170,7 +170,7 @@ func (OSReader) ProcessSwap(pid int) (uint64, bool) {
 	if err != nil {
 		return 0, false
 	}
-	for _, line := range strings.Split(string(data), procLineSeparator) {
+	for line := range strings.SplitSeq(string(data), procLineSeparator) {
 		if strings.HasPrefix(line, procStatusVMSwapPrefix) {
 			return parseMeminfoKB(line)
 		}
@@ -191,7 +191,7 @@ func (OSReader) ProcessIO(pid int) (read, write uint64, ok bool) {
 
 func parseProcIO(data string) (read, write uint64, ok bool) {
 	var haveR, haveW bool
-	for _, line := range strings.Split(data, procLineSeparator) {
+	for line := range strings.SplitSeq(data, procLineSeparator) {
 		if v, found := strings.CutPrefix(line, procIOReadBytesPrefix); found {
 			if n, err := strconv.ParseUint(strings.TrimSpace(v), procDecimalBase, procUintBits); err == nil {
 				read, haveR = n, true
@@ -279,7 +279,7 @@ func parseProcMeminfoTotals(data []byte) procMeminfoTotals {
 	var totals procMeminfoTotals
 	var memoryAvailable, swapFree uint64
 	var haveMemoryAvailable, haveSwapFree bool
-	for _, line := range strings.Split(string(data), procLineSeparator) {
+	for line := range strings.SplitSeq(string(data), procLineSeparator) {
 		switch {
 		case strings.HasPrefix(line, procMeminfoMemTotalPrefix):
 			totals.memoryTotal, totals.memoryOK = parseMeminfoKB(line)
@@ -314,8 +314,8 @@ func (OSReader) SystemCPU() (busy, total uint64, ok bool) {
 		return 0, 0, false
 	}
 	line := data
-	if i := bytes.IndexByte(data, '\n'); i >= 0 {
-		line = data[:i]
+	if before, _, ok := bytes.Cut(data, []byte{'\n'}); ok {
+		line = before
 	}
 	fields := strings.Fields(string(line))
 	if len(fields) < procStatAggregateMinFields || fields[procStatCPULabelIndex] != procStatCPUPrefix {
@@ -381,7 +381,7 @@ func procStatCPUCount() int {
 // aggregate "cpu" line, which has no digit after the prefix, is excluded).
 func countCPULines(data []byte) int {
 	n := 0
-	for _, line := range strings.Split(string(data), procLineSeparator) {
+	for line := range strings.SplitSeq(string(data), procLineSeparator) {
 		if len(line) > len(procStatCPUPrefix) && strings.HasPrefix(line, procStatCPUPrefix) && line[len(procStatCPUPrefix)] >= '0' && line[len(procStatCPUPrefix)] <= '9' {
 			n++
 		}

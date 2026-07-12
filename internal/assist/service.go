@@ -2,6 +2,7 @@ package assist
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strings"
 
@@ -237,9 +238,7 @@ func mergeServiceVariables(body map[string]any, vars map[string]any) {
 		dst = map[string]any{}
 		body[config.SectionVariables] = dst
 	}
-	for key, value := range vars {
-		dst[key] = value
-	}
+	maps.Copy(dst, vars)
 }
 
 func configWatchQuestion(c ServiceCandidate) string {
@@ -266,9 +265,7 @@ func addCheckOnlyWatch(body map[string]any, name string, check map[string]any, f
 	}
 	entry := map[string]any{config.WatchKeyCheck: check}
 	for _, fieldSet := range fields {
-		for key, value := range fieldSet {
-			entry[key] = value
-		}
+		maps.Copy(entry, fieldSet)
 	}
 	watches[name] = entry
 }

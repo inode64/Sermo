@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"sort"
 	"strconv"
@@ -807,9 +808,7 @@ func (w *Worker) acknowledgeChanges() {
 	// baseline. After a successful restart the service runs the upgraded app, so
 	// the last-seen version is the one to acknowledge; this clears the pending
 	// `changed: {app}` signal without re-running the version command.
-	for key, last := range w.appVersionsLast {
-		w.appVersions[key] = last
-	}
+	maps.Copy(w.appVersions, w.appVersionsLast)
 }
 
 // changedAppVersion reports whether the named app's version differs from the

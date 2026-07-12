@@ -23,7 +23,7 @@ func Trim(s string) string {
 // FirstNonEmptyLine returns the first non-empty line of s, trimmed.
 func FirstNonEmptyLine(s string) string {
 	clean := Trim(s)
-	for _, line := range strings.Split(clean, outputLineSeparator) {
+	for line := range strings.SplitSeq(clean, outputLineSeparator) {
 		if t := strings.TrimSpace(line); t != "" {
 			return t
 		}

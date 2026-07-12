@@ -402,10 +402,7 @@ func serviceRuntimeUptime(started, now time.Time) (startedAt string, uptime stri
 	if started.IsZero() || started.After(now) {
 		return "", "", 0
 	}
-	secs := int64(now.Sub(started).Seconds())
-	if secs < 0 {
-		secs = 0
-	}
+	secs := max(int64(now.Sub(started).Seconds()), 0)
 	return started.UTC().Format(time.RFC3339), formatInterval(time.Duration(secs) * time.Second), secs
 }
 

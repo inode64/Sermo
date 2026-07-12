@@ -153,7 +153,7 @@ func readStatus(pid int) (ppid int, uid, gid uint32, state string, ok bool) {
 		return 0, 0, 0, "", false
 	}
 	var gotPPID, gotUID bool
-	for _, line := range strings.Split(string(data), procLineSeparator) {
+	for line := range strings.SplitSeq(string(data), procLineSeparator) {
 		switch {
 		case strings.HasPrefix(line, procStatusStatePrefix):
 			if fields := strings.Fields(strings.TrimPrefix(line, procStatusStatePrefix)); len(fields) > procStatusFirstField {

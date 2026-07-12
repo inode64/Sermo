@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -183,12 +184,7 @@ func (b *WebBackend) knownApp(name string) bool {
 	if name == "" || b.cfg == nil {
 		return false
 	}
-	for _, candidate := range b.cfg.CatalogNamesInCategory(config.CategoryApp) {
-		if candidate == name {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(b.cfg.CatalogNamesInCategory(config.CategoryApp), name)
 }
 
 // PruneEvents removes events older than before (all if zero) from the live log.

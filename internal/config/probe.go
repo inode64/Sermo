@@ -65,7 +65,7 @@ func readOptionalFile(path string) ([]byte, bool) {
 // key and value are whitespace-separated (e.g. `port 1194`). Comment and blank
 // lines never match because their first field is not the key.
 func directiveValue(data []byte, key string) (string, bool) {
-	for _, line := range strings.Split(string(data), configLineSeparator) {
+	for line := range strings.SplitSeq(string(data), configLineSeparator) {
 		fields := strings.Fields(line)
 		if len(fields) >= directiveMinFields && fields[directiveKeyIndex] == key {
 			return fields[directiveValueIndex], true
@@ -82,7 +82,7 @@ func confdValue(path, key string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	for _, line := range strings.Split(string(data), configLineSeparator) {
+	for line := range strings.SplitSeq(string(data), configLineSeparator) {
 		line = strings.TrimSpace(line)
 		rest, ok := strings.CutPrefix(line, key+confdAssignSep)
 		if !ok {

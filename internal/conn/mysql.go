@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"maps"
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
@@ -156,9 +157,7 @@ func buildMySQLConfig(cfg Config) *mysql.Config {
 	}
 	if len(cfg.Params) > 0 {
 		c.Params = map[string]string{}
-		for k, v := range cfg.Params {
-			c.Params[k] = v
-		}
+		maps.Copy(c.Params, cfg.Params)
 	}
 	return c
 }

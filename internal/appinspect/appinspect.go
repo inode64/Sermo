@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
@@ -155,12 +156,7 @@ func applyCurrentLabels(reports []Report, cfg *config.Config, category string) {
 }
 
 func hasCurrentLabel(displayName string) bool {
-	for _, field := range strings.Fields(displayName) {
-		if field == statusCurrentLabel {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(strings.Fields(displayName), statusCurrentLabel)
 }
 
 func inspectCatalog(ctx context.Context, runner execx.Runner, cfg *config.Config, category, name string, cache map[string]Report, chain map[string]bool, opts ...Option) Report {

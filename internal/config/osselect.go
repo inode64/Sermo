@@ -44,7 +44,7 @@ func osReleaseID() string {
 		if err != nil {
 			continue
 		}
-		for _, line := range strings.Split(string(data), configLineSeparator) {
+		for line := range strings.SplitSeq(string(data), configLineSeparator) {
 			if v, ok := strings.CutPrefix(strings.TrimSpace(line), osReleaseIDKey); ok {
 				return strings.ToLower(strings.Trim(v, osReleaseTrimSet))
 			}

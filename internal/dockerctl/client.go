@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -375,10 +376,8 @@ func (c *Client) post(ctx context.Context, path string, body io.Reader, ok ...in
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	for _, code := range ok {
-		if resp.StatusCode == code {
-			return nil
-		}
+	if slices.Contains(ok, resp.StatusCode) {
+		return nil
 	}
 	return dockerStatusError(resp)
 }

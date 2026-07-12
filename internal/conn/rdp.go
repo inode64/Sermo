@@ -110,13 +110,13 @@ func buildRDPNegRequest(protocols uint32) []byte {
 	x224[x224LengthIndicatorOffset] = byte(x224RequestVariableLenBase + len(neg))
 	x224[x224RequestPDUTypeOffset] = x224ConnectionRequest
 	x224[len(x224)-1] = x224ClassByte
-	body := append(x224, neg...)
+	x224 = append(x224, neg...)
 
 	// TPKT header (version 3).
 	pkt := make([]byte, tpktHeaderBytes)
 	pkt[tpktVersionOffset] = tpktVersion
-	binary.BigEndian.PutUint16(pkt[tpktLengthOffset:], uint16(tpktHeaderBytes+len(body)))
-	return append(pkt, body...)
+	binary.BigEndian.PutUint16(pkt[tpktLengthOffset:], uint16(tpktHeaderBytes+len(x224)))
+	return append(pkt, x224...)
 }
 
 // parseRDPConfirm validates a TPKT + X.224 Connection Confirm and returns the

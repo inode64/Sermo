@@ -36,7 +36,7 @@ func TestBuildDNSQueryHeader(t *testing.T) {
 // zero byte, for crafting raw test messages.
 func dnsQNameBytes(name string) []byte {
 	var b []byte
-	for _, label := range strings.Split(name, ".") {
+	for label := range strings.SplitSeq(name, ".") {
 		b = append(b, byte(len(label)))
 		b = append(b, label...)
 	}

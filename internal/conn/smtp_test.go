@@ -35,11 +35,11 @@ func TestSMTPHandshakeAuthPlain(t *testing.T) {
 	}
 	sent := conn.out.String()
 	// Extract the AUTH PLAIN argument and verify it decodes to \0user\0pass.
-	idx := strings.Index(sent, "AUTH PLAIN ")
-	if idx < 0 {
+	_, after, ok := strings.Cut(sent, "AUTH PLAIN ")
+	if !ok {
 		t.Fatalf("AUTH PLAIN not sent: %q", sent)
 	}
-	arg := strings.SplitN(sent[idx+len("AUTH PLAIN "):], "\r\n", 2)[0]
+	arg := strings.SplitN(after, "\r\n", 2)[0]
 	raw, err := base64.StdEncoding.DecodeString(arg)
 	if err != nil {
 		t.Fatalf("auth arg not base64: %q", arg)

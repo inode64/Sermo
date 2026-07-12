@@ -1,6 +1,7 @@
 package assist
 
 import (
+	"maps"
 	"strings"
 	"testing"
 
@@ -48,9 +49,7 @@ func TestGeneratedWatchesPassConfigValidation(t *testing.T) {
 		"srv":                   volBytes,
 		netWatchPrefix + "eth0": netAll,
 	}
-	for name, entry := range uplink {
-		generated[name] = entry
-	}
+	maps.Copy(generated, uplink)
 	text, err := yaml.Marshal(generated)
 	if err != nil {
 		t.Fatalf("marshal generated watches: %v", err)

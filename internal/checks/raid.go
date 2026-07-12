@@ -266,7 +266,7 @@ func parseMdstat(s string) RaidStatus {
 		st.Details = append(st.Details, cur)
 		cur = RaidArrayStatus{}
 	}
-	for _, line := range strings.Split(s, checkLineSeparator) {
+	for line := range strings.SplitSeq(s, checkLineSeparator) {
 		trimmed := strings.TrimSpace(line)
 		if h := mdHeadRe.FindStringSubmatch(trimmed); h != nil {
 			flush()

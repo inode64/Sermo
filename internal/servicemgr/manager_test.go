@@ -304,11 +304,12 @@ type recordRunner struct {
 }
 
 func (r *recordRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
-	call := name
+	var call strings.Builder
+	call.WriteString(name)
 	for _, arg := range args {
-		call += " " + arg
+		call.WriteString(" " + arg)
 	}
-	r.calls = append(r.calls, call)
+	r.calls = append(r.calls, call.String())
 	return execx.Result{}, nil
 }
 
@@ -323,12 +324,13 @@ type multiResultRunner struct {
 }
 
 func (r *multiResultRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
-	call := name
+	var call strings.Builder
+	call.WriteString(name)
 	for _, arg := range args {
-		call += " " + arg
+		call.WriteString(" " + arg)
 	}
-	r.calls = append(r.calls, call)
-	res := r.results[call]
+	r.calls = append(r.calls, call.String())
+	res := r.results[call.String()]
 	return res.result, res.err
 }
 

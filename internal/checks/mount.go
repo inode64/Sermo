@@ -74,7 +74,7 @@ func defaultMountSampler() ([]Mount, error) {
 		return nil, err
 	}
 	var out []Mount
-	for _, line := range strings.Split(string(data), checkLineSeparator) {
+	for line := range strings.SplitSeq(string(data), checkLineSeparator) {
 		fields := strings.Fields(line)
 		if len(fields) < procMountsMinFields {
 			continue

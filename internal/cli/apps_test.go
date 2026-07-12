@@ -42,7 +42,7 @@ func TestAppsVersionShortCommand(t *testing.T) {
 		}
 	}
 	// nativeapp: a version_short command prints the bare version directly.
-	if err := os.WriteFile(filepath.Join(appsDir, "native.yml"), []byte(fmt.Sprintf(`
+	if err := os.WriteFile(filepath.Join(appsDir, "native.yml"), fmt.Appendf(nil, `
 name: nativeapp
 display_name: "NativeApp"
 variables:
@@ -52,11 +52,11 @@ preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
   version_short: { type: command, command: ["${shortprog}"], timeout: 10s }
-`, native, native+"-vs")), 0o644); err != nil {
+`, native, native+"-vs"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// fallbackapp: no version_short command — parse the raw version line.
-	if err := os.WriteFile(filepath.Join(appsDir, "fallback.yml"), []byte(fmt.Sprintf(`
+	if err := os.WriteFile(filepath.Join(appsDir, "fallback.yml"), fmt.Appendf(nil, `
 name: fallbackapp
 display_name: "FallbackApp"
 variables:
@@ -64,11 +64,11 @@ variables:
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
-`, fallback)), 0o644); err != nil {
+`, fallback), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// emptyapp: version_short command runs but prints nothing — fall back.
-	if err := os.WriteFile(filepath.Join(appsDir, "empty.yml"), []byte(fmt.Sprintf(`
+	if err := os.WriteFile(filepath.Join(appsDir, "empty.yml"), fmt.Appendf(nil, `
 name: emptyapp
 display_name: "EmptyApp"
 variables:
@@ -78,16 +78,16 @@ preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
   version_short: { type: command, command: ["${shortprog}"], timeout: 10s }
-`, empty, empty+"-vs")), 0o644); err != nil {
+`, empty, empty+"-vs"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	global := filepath.Join(root, "sermo.yml")
-	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+	if err := os.WriteFile(global, fmt.Appendf(nil, `
 engine: { backend: auto }
 paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, servicesDir)), 0o644); err != nil {
+`, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -176,11 +176,11 @@ preflight:
 	writeApp("gone.yml", "goneapp", "GoneApp", missing)
 
 	global := filepath.Join(root, "sermo.yml")
-	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+	if err := os.WriteFile(global, fmt.Appendf(nil, `
 engine: { backend: auto }
 paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, servicesDir)), 0o644); err != nil {
+`, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

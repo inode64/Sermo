@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -73,11 +74,8 @@ func (openvswitchProtocol) Probe(ctx context.Context, cfg Config) (Result, error
 	// When the Open_vSwitch database is present, read ovs_version for version
 	// tracking. A best-effort step: an empty/absent value leaves Version unset.
 	version := ""
-	for _, db := range dbs {
-		if db == ovsdbDatabaseOpenVSwitch {
-			version = ovsdbVersion(enc, dec)
-			break
-		}
+	if slices.Contains(dbs, ovsdbDatabaseOpenVSwitch) {
+		version = ovsdbVersion(enc, dec)
 	}
 	return Result{Version: version, Extra: extra}, nil
 }

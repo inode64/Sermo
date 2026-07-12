@@ -152,7 +152,7 @@ func defaultDiskIOSampler(device string) (DiskIOSample, error) {
 	if err != nil {
 		return DiskIOSample{}, err
 	}
-	for _, line := range strings.Split(string(data), checkLineSeparator) {
+	for line := range strings.SplitSeq(string(data), checkLineSeparator) {
 		fields := strings.Fields(line)
 		if len(fields) < diskStatsMinFields || fields[diskStatsDeviceFieldIndex] != device {
 			continue

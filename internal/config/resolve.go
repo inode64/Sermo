@@ -1393,11 +1393,9 @@ func (c *Config) mergedService(name string, chain []string) (map[string]any, err
 		return nil, fmt.Errorf(unknownServiceFormat, name)
 	}
 	name = canonicalName
-	for _, prev := range chain {
-		if prev == name {
-			cycle := append(append([]string{}, chain...), name)
-			return nil, fmt.Errorf("clone cycle detected: %s", strings.Join(cycle, " -> "))
-		}
+	if slices.Contains(chain, name) {
+		cycle := append(append([]string{}, chain...), name)
+		return nil, fmt.Errorf("clone cycle detected: %s", strings.Join(cycle, " -> "))
 	}
 
 	doc, ok := c.Services[name]

@@ -2,6 +2,7 @@ package assist
 
 import (
 	"fmt"
+	"maps"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
@@ -60,9 +61,7 @@ func (uplinkAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 
 	watches := map[string]any{}
 	for _, iface := range selected {
-		for name, entry := range buildUplinkWatches(iface.Name, s) {
-			watches[name] = entry
-		}
+		maps.Copy(watches, buildUplinkWatches(iface.Name, s))
 	}
 	return Result{Watches: watches, Summary: fmt.Sprintf("%d uplink watch(es)", len(watches))}, nil
 }
