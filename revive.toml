@@ -1,10 +1,9 @@
 # revive configuration for Sermo.
 #
-# This mirrors revive's default rule set, with one deliberate omission:
-# `unused-parameter` is disabled. Many methods implement interfaces (e.g.
-# web.Backend) whose signatures include a `ctx context.Context` the
-# implementation legitimately ignores; renaming those to `_` would hurt
-# readability and fight the interface contract, so the rule is off on purpose.
+# This mirrors revive's default rule set. `unused-parameter` is enabled for
+# production code but excluded from tests (`TEST` = **/*_test.go): fakes and
+# table-driven helpers often implement interfaces with ignored ctx/parameters;
+# production implementations should rename unused params to `_`.
 
 [rule.blank-imports]
 [rule.context-as-argument]
@@ -29,3 +28,5 @@
 [rule.unreachable-code]
 [rule.var-declaration]
 [rule.var-naming]
+[rule.unused-parameter]
+exclude = ["TEST"]

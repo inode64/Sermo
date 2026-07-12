@@ -811,7 +811,7 @@ func (a App) syncManualActionMonitoring(cfg *config.Config, store *state.Store, 
 	}
 }
 
-func (a App) manualActionActiveAfterStart(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string, result operation.Result, opErr error) bool {
+func (a App) manualActionActiveAfterStart(ctx context.Context, opts options, _ *config.Config, resolved config.Resolved, service, action string, result operation.Result, opErr error) bool {
 	if opErr != nil || result.Status != operation.ResultPostflightFailed || !cliManualStartLikeAction(action) {
 		return false
 	}
@@ -1837,7 +1837,7 @@ func defaultReloadPidfileFallbacks() []string {
 // equivalent). It prefers a pidfile written by the daemon under the configured
 // runtime dir. If no pidfile is found it falls back to a native /proc scan for
 // a running sermod process. This works whether or not the web UI is enabled.
-func (a App) runReload(ctx context.Context, opts options) int {
+func (a App) runReload(_ context.Context, opts options) int {
 	cfg, code := a.loadConfig(opts)
 	if cfg == nil {
 		return code
