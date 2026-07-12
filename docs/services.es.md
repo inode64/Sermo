@@ -19,8 +19,8 @@ watches:
 ```
 
 El catálogo empaquetado cubre familias de servicios comunes como servidores web,
-bases de datos, runtimes de contenedores, ayudantes NFS/libvirt y servicios de
-hardware/sistema. En el árbol de fuentes es `catalog/`; en builds empaquetados
+bases de datos, runtimes de contenedores, ayudantes NFS/libvirt, daemons de
+observabilidad como Rsyslog y servicios de hardware/sistema. En el árbol de fuentes es `catalog/`; en builds empaquetados
 Sermo lee el directorio de catálogo compilado en el binario. Los perfiles de
 catálogo definen variables, preflight, procesos, watches, stop_policy, política
 de remediación y reglas, de modo que un servicio configurado normalmente solo
