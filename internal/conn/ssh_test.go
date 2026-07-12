@@ -55,7 +55,7 @@ func TestPrefixConnReplaysThenReadsConn(t *testing.T) {
 	defer client.Close()
 	defer server.Close()
 	go func() {
-		server.Write([]byte("CD"))
+		_, _ = server.Write([]byte("CD"))
 		server.Close()
 	}()
 	pc := &prefixConn{Conn: client, pre: bytes.NewReader([]byte("AB"))}
@@ -77,8 +77,8 @@ func TestReadSSHBanner(t *testing.T) {
 	defer server.Close()
 	go func() {
 		// A pre-banner line (allowed by RFC 4253), then the SSH id, then kex bytes.
-		server.Write([]byte("hello there\r\nSSH-2.0-OpenSSH_9.6\r\n"))
-		server.Write([]byte{0x00, 0x01, 0x02}) // start of kex (must not be consumed)
+		_, _ = server.Write([]byte("hello there\r\nSSH-2.0-OpenSSH_9.6\r\n"))
+		_, _ = server.Write([]byte{0x00, 0x01, 0x02}) // start of kex (must not be consumed)
 	}()
 	raw, banner, err := readSSHBanner(client)
 	if err != nil {

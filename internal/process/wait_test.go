@@ -30,7 +30,7 @@ func TestWaitNilSleepCancelLeavesNoGoroutine(t *testing.T) {
 
 	// A leaked goroutine would still be blocked in time.Sleep(1h). Poll briefly
 	// to let the canceller goroutine exit, then confirm we are back near baseline.
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		if runtime.NumGoroutine() <= base+1 {
 			return
 		}

@@ -622,7 +622,7 @@ func refineMatchValuesFromRealPath(values map[string]string, pattern, realPath s
 	if len(realParts) < limit {
 		limit = len(realParts)
 	}
-	for offset := 0; offset < limit; offset++ {
+	for offset := range limit {
 		patternPart := patternParts[len(patternParts)-1-offset]
 		if !strings.Contains(patternPart, "${") {
 			continue

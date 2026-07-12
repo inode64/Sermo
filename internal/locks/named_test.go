@@ -89,7 +89,7 @@ func TestNamedHoldBlocksSecond(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Hold() error = %v", err)
 	}
-	defer h.Release()
+	defer func() { _ = h.Release() }()
 
 	_, err = l.Hold("mysql", "", "work", time.Hour)
 	var held *HeldError

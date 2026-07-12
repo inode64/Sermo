@@ -768,7 +768,7 @@ func TestPausedCycleAdvancesWithoutChecks(t *testing.T) {
 			return nil
 		},
 	}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		w.RunCycle(context.Background())
 	}
 	if checksCalled != 0 {

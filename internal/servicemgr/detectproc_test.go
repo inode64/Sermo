@@ -343,7 +343,7 @@ func TestSuffixVarPicksSortedFirstOnMultipleMatches(t *testing.T) {
 		"MIDDLE_PIDFILE": "/run/middle.pid",
 		"OTHER":          "ignored",
 	}
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		if got := suffixVar(vars, "_PIDFILE"); got != "/run/alpha.pid" {
 			t.Fatalf("suffixVar = %q, want /run/alpha.pid (deterministic sorted pick)", got)
 		}

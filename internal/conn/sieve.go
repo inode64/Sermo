@@ -42,7 +42,7 @@ func (sieveProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 	br := bufio.NewReader(c)
 	impl := ""
-	for i := 0; i < sieveGreetingLimit; i++ {
+	for range sieveGreetingLimit {
 		line, rerr := br.ReadString(protocolLineBreak)
 		line = strings.TrimRight(line, protocolTrimCRLF)
 		if line != "" {

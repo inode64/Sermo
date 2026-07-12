@@ -138,7 +138,7 @@ func TestProcWatchMemoryThreshold(t *testing.T) {
 		{{PID: 7, RSS: 900}}, // crosses again -> fire
 	}}
 	w := h.watcher(procCond{memOp: ">", memValue: 500}, s)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		h.tick(w, time.Second)
 	}
 	if len(h.fired) != 2 {
@@ -267,7 +267,7 @@ func TestProcWatchGone(t *testing.T) {
 		{},          // gone again -> fire
 	}}
 	w := h.watcher(procCond{onGone: true}, s)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		h.tick(w, time.Second)
 	}
 	if len(h.fired) != 2 {
@@ -290,7 +290,7 @@ func TestProcWatchUnreadableSampleDoesNotFireGone(t *testing.T) {
 		failCycles: []bool{false, true, false, false},
 	}
 	w := h.watcher(procCond{onGone: true}, s)
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		h.tick(w, time.Second)
 	}
 	if len(h.fired) != 1 {
@@ -323,7 +323,7 @@ func TestProcWatchReusedPIDReArms(t *testing.T) {
 		{{PID: 3, RSS: 900}}, // pid reused, still over -> fire again
 	}}
 	w := h.watcher(procCond{memOp: ">", memValue: 500}, s)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		h.tick(w, time.Second)
 	}
 	if len(h.fired) != 2 {

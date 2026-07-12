@@ -234,7 +234,7 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 	id := os.Getpid() & icmpIDMask
 	reply := make([]byte, icmpReplyBufferSize)
 	var rtts []float64
-	for seq := 0; seq < count; seq++ {
+	for seq := range count {
 		msg := icmp.Message{
 			Type: ipv4.ICMPTypeEcho, Code: icmpEchoCode,
 			Body: &icmp.Echo{ID: id, Seq: seq, Data: []byte(icmpPayload)},
