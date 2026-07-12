@@ -1521,6 +1521,10 @@ En un watch `raid`, `then.notify_on` filtra cuándo los destinos normales de
 necesario; cada notifier seleccionado recibe los campos RAID estructurados. No
 puede combinarse con `then.notify_interval`.
 
+En un watch `lvm`, `then.notify_on: [on_change]` notifica sólo cuando la salud
+efectiva cambia entre `ok` y `error`, incluida la recuperación. No puede
+combinarse con `then.notify_interval`.
+
 **Las checks y los watches comparten los mismos tipos de comprobación.** Cualquier
 comprobación de un solo disparo — las de recursos de host de abajo (`storage`, `memory`,
 `pressure`, `load`, `fds`, `pids`, `conntrack`, `entropy`, `zombies`, `oom`, entre otras) *y* las

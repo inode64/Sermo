@@ -1638,6 +1638,30 @@ detail so gradual degradation is visible.
   old and new values; notifier templates can use those fields to render a
   different message.
 
+- **`lvm`** — Linux LVM health and capacity from read-only `lvs` JSON. It is a
+  health check: `ok` means the selected VG/LV is usable; `error` covers an absent,
+  partial or suspended LV, or a configured capacity threshold. Select a target
+  with `volume_group` and optional `logical_volume`; `free_pct`, `thin_data_pct`
+  and `thin_metadata_pct` are ordinary numeric predicates.
+
+  ```yaml
+  watches:
+    lvm-vg0-root:
+      check:
+        type: lvm
+        volume_group: vg0
+        logical_volume: root
+        thin_data_pct: { op: ">=", value: "80%" }
+      then:
+        notify: [ops]
+        notify_on: [on_change]
+  ```
+
+  `on_change` is LVM-only and sends one notification when the effective health
+  changes `ok → error` or `error → ok`; it does not notify repeatedly while an
+  error persists. Templates receive VG/LV, current and previous states, current
+  reasons and recovered reasons.
+
 - **`edac`** — **ECC memory errors** from the kernel EDAC subsystem (native,
   `/sys/devices/system/edac`). `ce` is the cumulative correctable count and `ue`
   the uncorrectable count; with no predicate it alerts on `ue > 0`. The check fails

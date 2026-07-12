@@ -820,6 +820,19 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		if array, present := entry[checks.CheckKeyArray]; present && cfgval.String(array) == "" {
 			add("%s.%s must be a non-empty string", path, checks.CheckKeyArray)
 		}
+	case checks.CheckTypeLVM:
+		validatePresentThresholds(path, entry, checks.LVMPredFields, add)
+		vg := cfgval.String(entry[checks.CheckKeyVolumeGroup])
+		lv := cfgval.String(entry[checks.CheckKeyLogicalVolume])
+		if _, present := entry[checks.CheckKeyVolumeGroup]; present && vg == "" {
+			add("%s.%s must be a non-empty string", path, checks.CheckKeyVolumeGroup)
+		}
+		if _, present := entry[checks.CheckKeyLogicalVolume]; present && lv == "" {
+			add("%s.%s must be a non-empty string", path, checks.CheckKeyLogicalVolume)
+		}
+		if lv != "" && vg == "" {
+			add("%s.%s requires %s", path, checks.CheckKeyLogicalVolume, checks.CheckKeyVolumeGroup)
+		}
 		if _, hasArray := entry[checks.CheckKeyArray]; hasArray {
 			if _, hasArrays := entry[checks.DataKeyArrays]; hasArrays {
 				add("%s.%s cannot be combined with %s", path, checks.CheckKeyArray, checks.DataKeyArrays)

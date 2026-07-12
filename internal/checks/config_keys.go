@@ -7,6 +7,8 @@ import "sermo/internal/netutil"
 const (
 	CheckKeyAnalyze               = "analyze"
 	CheckKeyArray                 = "array"
+	CheckKeyLogicalVolume         = "logical_volume"
+	CheckKeyVolumeGroup           = "volume_group"
 	CheckKeyAuthSource            = "auth_source"
 	CheckKeyBackend               = "backend"
 	CheckKeyBinary                = "binary"

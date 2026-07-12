@@ -159,6 +159,8 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 		return diskioCheckReadings(data)
 	case checks.CheckTypeRAID:
 		return raidCheckReadings(data)
+	case checks.CheckTypeLVM:
+		return lvmCheckReadings(data)
 	case checks.CheckTypeHdparm, checks.CheckTypeSmart, checks.CheckTypeSensors, checks.CheckTypeEDAC:
 		return metricCheckReadings(checkType, data)
 	default:
@@ -167,6 +169,21 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 		}
 		return nil
 	}
+}
+
+func lvmCheckReadings(data map[string]any) []web.WatchReading {
+	var out []web.WatchReading
+	for _, item := range []struct{ field, label string }{{checks.DataKeyHealth, "Health"}, {checks.DataKeyVolumeGroup, "Volume group"}, {checks.DataKeyLogicalVolume, "Logical volume"}, {checks.DataKeyLVMReasons, "Reasons"}} {
+		if value := cfgval.String(data[item.field]); value != "" {
+			out = append(out, web.WatchReading{Field: item.field, Label: item.label, Value: value})
+		}
+	}
+	for _, item := range []struct{ field, label string }{{checks.DataKeyLVMFreePct, "VG free"}, {checks.DataKeyLVMThinDataPct, "Thin data"}, {checks.DataKeyLVMThinMetadataPct, "Thin metadata"}} {
+		if value, ok := cfgval.Float(data[item.field]); ok {
+			out = append(out, web.WatchReading{Field: item.field, Label: item.label, Value: fmt.Sprintf("%.1f%%", value)})
+		}
+	}
+	return out
 }
 
 func raidCheckReadings(data map[string]any) []web.WatchReading {

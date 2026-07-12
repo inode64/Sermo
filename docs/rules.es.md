@@ -1636,6 +1636,30 @@ servicio de modo que la degradación gradual es visible.
   `SERMO_RAID_ARRAY`, operación/progreso y, para cambios sysfs, miembro, campo y
   valores anterior/nuevo; las plantillas del notifier pueden cambiar el mensaje.
 
+- **`lvm`** — salud y capacidad LVM de Linux desde JSON de `lvs` de sólo lectura.
+  Es una comprobación de salud: `ok` significa que el VG/LV seleccionado es
+  utilizable; `error` cubre un LV ausente, parcial o suspendido, o un umbral de
+  capacidad configurado. Selecciona con `volume_group` y `logical_volume`
+  opcional; `free_pct`, `thin_data_pct` y `thin_metadata_pct` son predicados
+  numéricos normales.
+
+  ```yaml
+  watches:
+    lvm-vg0-root:
+      check:
+        type: lvm
+        volume_group: vg0
+        logical_volume: root
+        thin_data_pct: { op: ">=", value: "80%" }
+      then:
+        notify: [ops]
+        notify_on: [on_change]
+  ```
+
+  `on_change` es exclusivo de LVM y envía una notificación al cambiar la salud
+  efectiva `ok → error` o `error → ok`; no repite mientras el error persiste.
+  Las plantillas reciben VG/LV, estados actual/anterior y causas actuales o resueltas.
+
 - **`edac`** — **errores de memoria ECC** del subsistema EDAC del kernel (nativo,
   `/sys/devices/system/edac`). `ce` es el recuento acumulado de corregibles y `ue`
   el recuento de no corregibles; sin predicado alerta sobre `ue > 0`. La comprobación falla

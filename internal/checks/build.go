@@ -385,6 +385,8 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildSmartCheck(b, entry, runner)
 	case CheckTypeRAID:
 		return buildRaidCheck(b, entry, deps)
+	case CheckTypeLVM:
+		return buildLVMCheck(b, entry, runner)
 	case CheckTypeEDAC:
 		return buildEdacCheck(b, entry, deps)
 	case CheckTypeConfig:
@@ -1213,6 +1215,22 @@ func buildRaidCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		array:        cfgval.String(entry[CheckKeyArray]),
 		sysfsChanges: cfgval.Bool(entry[CheckKeySysfsChanges]),
 	}, ""
+}
+
+func buildLVMCheck(b base, entry map[string]any, runner execx.Runner) (Check, string) {
+	preds, err := parseLevelPreds(entry, LVMPredFields)
+	if err != nil {
+		return nil, "lvm check: " + err.Error()
+	}
+	vg := cfgval.String(entry[CheckKeyVolumeGroup])
+	lv := cfgval.String(entry[CheckKeyLogicalVolume])
+	if lv != "" && vg == "" {
+		return nil, "lvm check logical_volume requires volume_group"
+	}
+	if runner == nil {
+		runner = execx.CommandRunner{}
+	}
+	return &lvmCheck{base: b, runner: runner, volumeGroup: vg, logicalVolume: lv, preds: preds}, ""
 }
 
 // buildEdacCheck builds an ECC memory-error (EDAC) check.
