@@ -3,7 +3,7 @@ display_name: NUT UPS Monitor
 category: hardware
 service:
   systemd:
-    - upsmon
+    - nut-monitor
   openrc:
     - upsmon
 apps:
