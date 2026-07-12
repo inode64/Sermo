@@ -79,13 +79,14 @@ func (c countCheck) runDelta(n int, start time.Time) Result {
 	}
 	now := clock()
 	cutoff := now.Add(-c.window)
-	kept := c.state.samples[:0]
-	for _, s := range c.state.samples {
+	old := c.state.samples
+	c.state.samples = c.state.samples[:0]
+	for _, s := range old {
 		if !s.t.Before(cutoff) {
-			kept = append(kept, s)
+			c.state.samples = append(c.state.samples, s)
 		}
 	}
-	c.state.samples = append(kept, countSample{t: now, count: n})
+	c.state.samples = append(c.state.samples, countSample{t: now, count: n})
 
 	baseline := c.state.samples[0]
 	growth := n - baseline.count

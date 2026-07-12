@@ -113,7 +113,7 @@ func defaultPressureSampler(resource string) (PressureSample, error) {
 func parsePressure(data string) (PressureSample, error) {
 	var s PressureSample
 	seen := false
-	for _, line := range strings.Split(data, checkLineSeparator) {
+	for line := range strings.SplitSeq(data, checkLineSeparator) {
 		fields := strings.Fields(line)
 		if len(fields) < psiMinFields {
 			continue

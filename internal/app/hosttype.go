@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"sermo/internal/web"
@@ -262,17 +263,15 @@ func virtualPlatformFromCPU(cpuinfo string) (string, string) {
 }
 
 func cpuHasHypervisorFlag(cpuinfo string) bool {
-	for _, line := range strings.Split(cpuinfo, appLineSeparator) {
+	for line := range strings.SplitSeq(cpuinfo, appLineSeparator) {
 		name, flags, ok := strings.Cut(line, ":")
 		if !ok {
 			continue
 		}
 		switch strings.TrimSpace(strings.ToLower(name)) {
 		case "flags", "features":
-			for _, flag := range strings.Fields(flags) {
-				if flag == "hypervisor" {
-					return true
-				}
+			if slices.Contains(strings.Fields(flags), "hypervisor") {
+				return true
 			}
 		}
 	}

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -618,10 +619,7 @@ func refineMatchValuesFromRealPath(values map[string]string, pattern, realPath s
 	}
 	patternParts := splitCleanPath(pattern)
 	realParts := splitCleanPath(realPath)
-	limit := len(patternParts)
-	if len(realParts) < limit {
-		limit = len(realParts)
-	}
+	limit := min(len(realParts), len(patternParts))
 	for offset := range limit {
 		patternPart := patternParts[len(patternParts)-1-offset]
 		if !strings.Contains(patternPart, "${") {
@@ -670,7 +668,7 @@ func refineJavaReleaseVersion(values map[string]string, realPath string) map[str
 }
 
 func javaReleaseVersion(data string) string {
-	for _, line := range strings.Split(data, configLineSeparator) {
+	for line := range strings.SplitSeq(data, configLineSeparator) {
 		key, value, ok := strings.Cut(line, javaReleaseKeySeparator)
 		if !ok || key != javaReleaseVersionKey {
 			continue
@@ -689,9 +687,7 @@ func moreSpecificVersion(candidate, current string) bool {
 
 func cloneStringMap(in map[string]string) map[string]string {
 	out := make(map[string]string, len(in))
-	for key, value := range in {
-		out[key] = value
-	}
+	maps.Copy(out, in)
 	return out
 }
 

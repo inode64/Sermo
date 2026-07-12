@@ -38,9 +38,7 @@ func TestReclaimStaleConcurrentSingleHolder(t *testing.T) {
 			Now:  func() time.Time { return fixedNow },
 			Self: func() (int, uint64) { return pid, uint64(pid) },
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			h, err := l.Acquire("mysql", time.Hour)
 			mu.Lock()
 			defer mu.Unlock()
@@ -52,7 +50,7 @@ func TestReclaimStaleConcurrentSingleHolder(t *testing.T) {
 			default:
 				t.Errorf("unexpected Acquire result: handle=%v err=%v", h, err)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

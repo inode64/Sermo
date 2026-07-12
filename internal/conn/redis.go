@@ -177,7 +177,7 @@ func readRESP(br *bufio.Reader) (string, error) {
 // dropped; each field is split on its first ':'.
 func parseRedisInfo(info string) map[string]string {
 	out := map[string]string{}
-	for _, line := range strings.Split(info, redisInfoLineSeparator) {
+	for line := range strings.SplitSeq(info, redisInfoLineSeparator) {
 		line = strings.TrimRight(line, redisInfoTrimRight)
 		if line == "" || strings.HasPrefix(line, redisInfoCommentPrefix) {
 			continue

@@ -27,14 +27,15 @@ type scriptRunner struct {
 }
 
 func (r scriptRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
-	key := name
+	var key strings.Builder
+	key.WriteString(name)
 	for _, a := range args {
-		key += " " + a
+		key.WriteString(" " + a)
 	}
 	if r.calls != nil {
-		r.calls[key]++
+		r.calls[key.String()]++
 	}
-	res := r.results[key]
+	res := r.results[key.String()]
 	return execx.Result{ExitCode: res.exit}, res.err
 }
 

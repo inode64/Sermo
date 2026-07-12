@@ -272,11 +272,11 @@ func parseNUTVarLine(line string) (name, value string, ok bool) {
 	if !strings.HasPrefix(line, nutReplyVarPrefix) {
 		return "", "", false
 	}
-	q := strings.IndexByte(line, '"')
-	if q < 0 {
+	before, _, ok0 := strings.Cut(line, "\"")
+	if !ok0 {
 		return "", "", false
 	}
-	head := strings.Fields(line[:q]) // VAR <ups> <var>
+	head := strings.Fields(before) // VAR <ups> <var>
 	if len(head) < nutVarHeadMinFields {
 		return "", "", false
 	}

@@ -62,13 +62,14 @@ func (c *sizeCheck) Run(ctx context.Context) Result {
 	now := clock()
 
 	cutoff := now.Add(-c.window)
-	kept := c.state.samples[:0]
-	for _, s := range c.state.samples {
+	old := c.state.samples
+	c.state.samples = c.state.samples[:0]
+	for _, s := range old {
 		if !s.t.Before(cutoff) {
-			kept = append(kept, s)
+			c.state.samples = append(c.state.samples, s)
 		}
 	}
-	c.state.samples = append(kept, sizeSample{t: now, size: size})
+	c.state.samples = append(c.state.samples, sizeSample{t: now, size: size})
 
 	baseline := c.state.samples[0]
 	growth := size - baseline.size

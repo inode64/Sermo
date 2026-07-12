@@ -144,7 +144,7 @@ func TestListPolkitVersionFromPkexecIntegerOutput(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(catalogDir, "apps", "polkit.yml"), []byte(fmt.Sprintf(`
+	if err := os.WriteFile(filepath.Join(catalogDir, "apps", "polkit.yml"), fmt.Appendf(nil, `
 name: polkit
 display_name: "Polkit"
 category: system
@@ -155,7 +155,7 @@ preflight:
   binary: { type: binary, path: "${binary}" }
   pkexec: { type: binary, path: "${pkexec}" }
   version: { type: command, command: ["${pkexec}", "--version"], timeout: 10s }
-`, polkitd, pkexec)), 0o644); err != nil {
+`, polkitd, pkexec), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(catalogDir, "services", "polkit.yml"), []byte(`
@@ -171,11 +171,11 @@ checks:
 		t.Fatal(err)
 	}
 	global := filepath.Join(root, "sermo.yml")
-	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+	if err := os.WriteFile(global, fmt.Appendf(nil, `
 engine: { backend: systemd }
 paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, servicesDir)), 0o644); err != nil {
+`, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.Load(global, config.WithCatalogDirs(catalogDir))
@@ -223,7 +223,7 @@ func TestListMarksTemplateCurrentByBaseShortVersion(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(catalogDir, "apps", "java.yml"), []byte(fmt.Sprintf(`
+	if err := os.WriteFile(filepath.Join(catalogDir, "apps", "java.yml"), fmt.Appendf(nil, `
 name: java-%%i-%%v
 display_name: "Java ${instance} ${version} ${current}"
 versions:
@@ -232,15 +232,15 @@ versions:
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-version"], timeout: 10s }
-`, jvmDir, currentJava)), 0o644); err != nil {
+`, jvmDir, currentJava), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	global := filepath.Join(root, "sermo.yml")
-	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+	if err := os.WriteFile(global, fmt.Appendf(nil, `
 engine: { backend: auto }
 paths: { services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, servicesDir)), 0o644); err != nil {
+`, servicesDir), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.Load(global, config.WithCatalogDirs(catalogDir))

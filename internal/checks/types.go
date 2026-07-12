@@ -272,7 +272,7 @@ func jsonAssert(got any, op, want string) bool {
 // of nested objects.
 func jsonPath(doc any, path string) (any, bool) {
 	cur := doc
-	for _, key := range strings.Split(path, ".") {
+	for key := range strings.SplitSeq(path, ".") {
 		m, ok := cur.(map[string]any)
 		if !ok {
 			return nil, false
@@ -464,12 +464,7 @@ func ExitCodeExpected(got int, want []int) bool {
 	if len(want) == 0 {
 		want = []int{CommandDefaultExpectedExit}
 	}
-	for _, n := range want {
-		if got == n {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(want, got)
 }
 
 // ExpectExitText formats expected exit codes for operator-facing messages.
@@ -784,7 +779,7 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 	// LD_LIBRARY_PATH takes precedence (as the real dynamic linker does).
 	// We prepend it so it is searched first.
 	if lp := os.Getenv(ldLibraryPathEnv); lp != "" {
-		for _, p := range strings.Split(lp, ldPathSeparator) {
+		for p := range strings.SplitSeq(lp, ldPathSeparator) {
 			if p != "" {
 				dirs = append([]string{expandOrigin(p, c.binary)}, dirs...)
 			}
@@ -848,13 +843,13 @@ func collectLibrarySearchDirs(binary string, ef *elf.File) []string {
 
 	// Prefer RUNPATH, fall back to RPATH (older binaries).
 	if rps, _ := ef.DynString(elf.DT_RUNPATH); len(rps) > 0 && rps[0] != "" {
-		for _, p := range strings.Split(rps[0], ldPathSeparator) {
+		for p := range strings.SplitSeq(rps[0], ldPathSeparator) {
 			if p != "" {
 				dirs = append(dirs, expandOrigin(p, binary))
 			}
 		}
 	} else if rps, _ := ef.DynString(elf.DT_RPATH); len(rps) > 0 && rps[0] != "" {
-		for _, p := range strings.Split(rps[0], ldPathSeparator) {
+		for p := range strings.SplitSeq(rps[0], ldPathSeparator) {
 			if p != "" {
 				dirs = append(dirs, expandOrigin(p, binary))
 			}
@@ -926,7 +921,7 @@ func parseLdSoConf(path string) []string {
 		return nil
 	}
 	var out []string
-	for _, line := range strings.Split(string(data), checkLineSeparator) {
+	for line := range strings.SplitSeq(string(data), checkLineSeparator) {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, ldCommentHash) || strings.HasPrefix(line, ldCommentSemi) {
 			continue

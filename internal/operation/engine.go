@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -273,9 +274,9 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 		// stop, before residual handling — so the orphan_processes early-return below
 		// cannot skip them. Best-effort: a failure is recorded and folded into the
 		// final message, it does not fail an already-successful stop.
-		for i := len(e.AlsoUnits) - 1; i >= 0; i-- {
-			if err := e.Manager.Stop(ctx, e.AlsoUnits[i]); err != nil {
-				alsoStopErrs = append(alsoStopErrs, fmt.Sprintf("stop %s: %v", e.AlsoUnits[i], err))
+		for _, v := range slices.Backward(e.AlsoUnits) {
+			if err := e.Manager.Stop(ctx, v); err != nil {
+				alsoStopErrs = append(alsoStopErrs, fmt.Sprintf("stop %s: %v", v, err))
 			}
 		}
 		if err := process.Wait(ctx, e.Sleep, e.KillPolicy.GracefulTimeout); err != nil {

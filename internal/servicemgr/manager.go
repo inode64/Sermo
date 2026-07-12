@@ -125,7 +125,7 @@ func CgroupPIDs(runner execx.Runner, readFile func(string) ([]byte, error), back
 
 func parseCgroupProcs(data []byte) []int {
 	var pids []int
-	for _, line := range strings.Split(string(data), serviceOutputLineSeparator) {
+	for line := range strings.SplitSeq(string(data), serviceOutputLineSeparator) {
 		if pid, err := strconv.Atoi(strings.TrimSpace(line)); err == nil && pid > 0 {
 			pids = append(pids, pid)
 		}
@@ -396,7 +396,7 @@ func openrcStatus(result execx.Result) Status {
 }
 
 func openrcStatusLine(out, service string) (Status, bool) {
-	for _, line := range strings.Split(out, serviceOutputLineSeparator) {
+	for line := range strings.SplitSeq(out, serviceOutputLineSeparator) {
 		open := strings.Index(line, "[")
 		closeIdx := strings.Index(line, "]")
 		if open < 0 || closeIdx < open {

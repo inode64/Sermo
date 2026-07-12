@@ -139,7 +139,7 @@ func addWizardCatalogUnits(keys map[string]struct{}, backend servicemgr.Backend,
 			if !strings.Contains(unit, ".") {
 				keys[unit+servicemgr.SystemdServiceSuffix] = struct{}{}
 			}
-			if name := strings.TrimSuffix(unit, servicemgr.SystemdServiceSuffix); name != unit {
+			if name, ok := strings.CutSuffix(unit, servicemgr.SystemdServiceSuffix); ok {
 				keys[name] = struct{}{}
 			}
 		}
@@ -155,8 +155,8 @@ func wizardUnitKnown(keys map[string]struct{}, backend servicemgr.Backend, unit 
 		return true
 	}
 	if backend == servicemgr.BackendSystemd {
-		if strings.HasSuffix(unit, servicemgr.SystemdServiceSuffix) {
-			_, ok := keys[strings.TrimSuffix(unit, servicemgr.SystemdServiceSuffix)]
+		if before, ok := strings.CutSuffix(unit, servicemgr.SystemdServiceSuffix); ok {
+			_, ok := keys[before]
 			return ok
 		}
 		_, ok := keys[unit+servicemgr.SystemdServiceSuffix]
@@ -247,9 +247,7 @@ func mergeCandidateVariables(c *assist.ServiceCandidate, vars map[string]any) {
 	if c.Variables == nil {
 		c.Variables = map[string]any{}
 	}
-	for key, value := range vars {
-		c.Variables[key] = value
-	}
+	maps.Copy(c.Variables, vars)
 }
 
 type cephMonMetadata struct {
@@ -303,11 +301,11 @@ func parseCephAddrVersion(addrs, version string) (string, int, bool) {
 		return "", 0, false
 	}
 	rest := addrs[idx+len(version)+1:]
-	slash := strings.Index(rest, "/")
-	if slash < 0 {
+	before, _, ok := strings.Cut(rest, "/")
+	if !ok {
 		return "", 0, false
 	}
-	endpoint := strings.TrimSpace(rest[:slash])
+	endpoint := strings.TrimSpace(before)
 	host, portText, err := net.SplitHostPort(endpoint)
 	if err != nil {
 		colon := strings.LastIndex(endpoint, ":")
@@ -517,9 +515,7 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 		// The services directory determines the kind on load, so no `kind:` is written.
 		doc := map[string]any{wizardFieldName: name}
 		if b, ok := body.(map[string]any); ok {
-			for k, v := range b {
-				doc[k] = v
-			}
+			maps.Copy(doc, b)
 		}
 		docs[name] = doc
 	}

@@ -1368,11 +1368,9 @@ func (s *Server) dashboardSnapshot(ctx context.Context, since time.Duration) Das
 	var snapshot DashboardSnapshot
 	var wg sync.WaitGroup
 	run := func(fn func()) {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			fn()
-		}()
+		})
 	}
 
 	run(func() { snapshot.Services = s.Backend.Services(ctx) })

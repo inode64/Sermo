@@ -389,7 +389,7 @@ func (l *UserLookup) getent(database, query string) (string, bool) {
 	if err != nil || res.ExitCode != execx.ExitCodeSuccess {
 		return "", false
 	}
-	for _, line := range strings.Split(res.Stdout, procLineSeparator) {
+	for line := range strings.SplitSeq(res.Stdout, procLineSeparator) {
 		line = strings.TrimSpace(line)
 		if line != "" {
 			return line, true

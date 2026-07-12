@@ -158,7 +158,7 @@ func firstNonZeroDiskstatDevice(t *testing.T) string {
 	if err != nil {
 		t.Skipf("read /proc/diskstats: %v", err)
 	}
-	for _, line := range strings.Split(string(content), "\n") {
+	for line := range strings.SplitSeq(string(content), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < diskStatsMinFields {
 			continue

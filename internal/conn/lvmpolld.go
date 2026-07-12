@@ -100,8 +100,8 @@ func readLVMDaemonMessage(r io.Reader) (string, error) {
 		n, err := r.Read(tmp)
 		if n > 0 {
 			buf = append(buf, tmp[:n]...)
-			if i := bytes.Index(buf, delim); i >= 0 {
-				return string(buf[:i]), nil
+			if before, _, ok := bytes.Cut(buf, delim); ok {
+				return string(before), nil
 			}
 			if len(buf) > lvmDaemonMaxMessageBytes {
 				return "", errors.New("lvmpolld: reply exceeds size limit")
@@ -122,14 +122,14 @@ func readLVMDaemonMessage(r io.Reader) (string, error) {
 // do not occur here — are simply ignored.
 func parseLVMDaemonReply(s string) map[string]string {
 	out := map[string]string{}
-	for _, line := range strings.Split(s, lvmDaemonLineSeparator) {
+	for line := range strings.SplitSeq(s, lvmDaemonLineSeparator) {
 		line = strings.TrimSpace(line)
-		eq := strings.IndexByte(line, lvmDaemonFieldSeparator)
-		if eq < 0 {
+		before, after, ok := strings.Cut(line, "=")
+		if !ok {
 			continue
 		}
-		key := strings.TrimSpace(line[:eq])
-		val := strings.Trim(strings.TrimSpace(line[eq+1:]), lvmDaemonQuoteCutset)
+		key := strings.TrimSpace(before)
+		val := strings.Trim(strings.TrimSpace(after), lvmDaemonQuoteCutset)
 		if key != "" {
 			out[key] = val
 		}

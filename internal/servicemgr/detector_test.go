@@ -3,6 +3,7 @@ package servicemgr
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"sermo/internal/execx"
@@ -129,12 +130,13 @@ type fakeRunner struct {
 }
 
 func (r fakeRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
-	key := name
+	var key strings.Builder
+	key.WriteString(name)
 	for _, arg := range args {
-		key += " " + arg
+		key.WriteString(" " + arg)
 	}
-	result := r.results[key]
-	if err := r.errors[key]; err != nil {
+	result := r.results[key.String()]
+	if err := r.errors[key.String()]; err != nil {
 		return result, err
 	}
 	return result, nil

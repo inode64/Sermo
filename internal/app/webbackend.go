@@ -2522,9 +2522,7 @@ func (b *WebBackend) loadCatalogItems(ctx context.Context, category string, expo
 			}}
 			continue
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			select {
 			case sem <- struct{}{}:
 				defer func() { <-sem }()
@@ -2535,7 +2533,7 @@ func (b *WebBackend) loadCatalogItems(ctx context.Context, category string, expo
 			if r.Installed {
 				results[i] = catalogResult{item: catalogItemFromReport(r), ok: true}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	out := make([]web.CatalogItem, 0, len(names))
@@ -2760,7 +2758,7 @@ func osPrettyName() string {
 // os-release content, or "" when absent. Pure, so it is testable without the
 // host files.
 func parseOSReleasePrettyName(data []byte) string {
-	for _, line := range strings.Split(string(data), appLineSeparator) {
+	for line := range strings.SplitSeq(string(data), appLineSeparator) {
 		if v, ok := strings.CutPrefix(strings.TrimSpace(line), osReleasePrettyNameKey); ok {
 			if name := strings.Trim(v, osReleaseValueTrimSet); name != "" {
 				return name

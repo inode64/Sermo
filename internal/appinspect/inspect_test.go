@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -139,9 +140,7 @@ func TestInspectVersionCommandOutcomes(t *testing.T) {
 	bin := writeBinary(t, 0o755)
 	version := func(extra map[string]any) map[string]any {
 		v := map[string]any{"command": []any{bin, "--version"}}
-		for k, val := range extra {
-			v[k] = val
-		}
+		maps.Copy(v, extra)
 		return v
 	}
 

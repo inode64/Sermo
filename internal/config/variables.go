@@ -393,8 +393,8 @@ func expandString(s string, vars map[string]string, path string, errs *[]string)
 // config is merely validated.
 func resolveEnvRef(ref string) string {
 	name, def := ref, ""
-	if i := strings.Index(ref, varEnvDefaultSep); i >= 0 {
-		name, def = ref[:i], ref[i+len(varEnvDefaultSep):]
+	if before, after, ok := strings.Cut(ref, varEnvDefaultSep); ok {
+		name, def = before, after
 	}
 	if v := os.Getenv(strings.TrimSpace(name)); v != "" {
 		return v

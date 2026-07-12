@@ -20,7 +20,9 @@ linters:
     - errcheck  # unchecked errors (defer Rollback/Release, I/O, …)
     - errorlint  # error wrapping (%w) and errors.Is/As correctness
     - gocheckcompilerdirectives  # malformed //go: directives (typos that silently no-op)
+    - gocritic  # appendAssign + unlambda only (see settings)
     - gosec
+    - modernize  # Go 1.22+ idioms (range int, slices.*, min/max, …)
     - ineffassign
     - intrange  # for i := 0; i < n; i++ → for i := range n (Go 1.22+)
     - mirror  # bytes.Index vs bytes.IndexByte, …
@@ -31,6 +33,11 @@ linters:
     - usestdlibvars  # prefer stdlib constants (http.StatusOK, ...)
     - wastedassign
   settings:
+    gocritic:
+      disable-all: true
+      enabled-checks:
+        - appendAssign
+        - unlambda
     misspell:
       # Eclipse Mosquitto — real MQTT broker name in catalog/tests.
       ignore-rules:

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"sync"
 	"time"
 
@@ -154,14 +155,14 @@ func (l *EventLog) Recent(service string, limit int) []LoggedEvent {
 	// Size from the snapshot, not l.count: l.count is mutated by Add under the
 	// lock we just released, so reading it here would be a data race.
 	out := make([]LoggedEvent, 0, len(ordered))
-	for i := len(ordered) - 1; i >= 0; i-- {
+	for _, v := range slices.Backward(ordered) {
 		if limit > 0 && len(out) >= limit {
 			break
 		}
-		if service != "" && ordered[i].Service != service {
+		if service != "" && v.Service != service {
 			continue
 		}
-		out = append(out, ordered[i])
+		out = append(out, v)
 	}
 	return out
 }
@@ -212,14 +213,14 @@ func (l *EventLog) RecentApp(app string, limit int) []LoggedEvent {
 	l.mu.Unlock()
 
 	out := make([]LoggedEvent, 0, len(ordered))
-	for i := len(ordered) - 1; i >= 0; i-- {
+	for _, v := range slices.Backward(ordered) {
 		if limit > 0 && len(out) >= limit {
 			break
 		}
-		if ordered[i].App != app {
+		if v.App != app {
 			continue
 		}
-		out = append(out, ordered[i])
+		out = append(out, v)
 	}
 	return out
 }
@@ -317,8 +318,8 @@ func (l *EventLog) loadRecentFromStore() error {
 	l.buf = make([]LoggedEvent, l.size)
 	l.next = 0
 	l.count = 0
-	for i := len(records) - 1; i >= 0; i-- {
-		logged := loggedEventFromRecord(records[i])
+	for _, v := range slices.Backward(records) {
+		logged := loggedEventFromRecord(v)
 		l.addLocked(logged)
 		if logged.ID > l.localID {
 			l.localID = logged.ID

@@ -229,11 +229,9 @@ func (m *Monitor) startGenerationLocked(ctx context.Context, firstBoot bool) {
 		}
 	}
 
-	m.genWG.Add(1)
-	go func() {
-		defer m.genWG.Done()
+	m.genWG.Go(func() {
 		sched.Run(genCtx, m.workers, m.watches, m.deps.OpGate, m.readiness, false, firstGen)
-	}()
+	})
 }
 
 func (m *Monitor) stopGenerationLocked(final bool) {

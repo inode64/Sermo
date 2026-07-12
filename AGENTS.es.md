@@ -593,8 +593,9 @@ Notas de herramientas:
   `*_test.go`). Renombra parámetros no usados a `_` fuera de tests. Documenta los
   nuevos símbolos exportados — la regla `exported` está activa.
 - **`golangci-lint`** usa `.golangci.yml` (**formato v2** — el binario debe ser
-  v2) para `gosec`, `bodyclose`, `copyloopvar`, `errcheck`, `ineffassign`,
-  `intrange`, `mirror`, `misspell`, `nilerr` y `wastedassign`.
+  v2) para `gosec`, `bodyclose`, `copyloopvar`, `errcheck`, `gocritic`
+  (solo `appendAssign`, `unlambda`), `ineffassign`, `intrange`, `mirror`,
+  `misspell`, `modernize`, `nilerr` y `wastedassign`.
   Las excepciones aceptadas de gosec viven en esa config: `G115`, y en fixtures de test
   `G306`/`G101`/`G703`. Los casos by-design (`G204` comandos configurados por el operador,
   escrituras `0644` intencionales, lecturas acotadas `args[i]`, `G118` de contexto de shutdown)

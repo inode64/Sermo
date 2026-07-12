@@ -82,7 +82,7 @@ func (a *outputAnalyzer) Active() bool { return a != nil && len(a.rules) > 0 }
 // that reached it (for the result message).
 func (a *outputAnalyzer) Analyze(stdout, stderr string) (sev Severity, id, line string) {
 	scan := func(text, stream string) {
-		for _, ln := range strings.Split(text, checkLineSeparator) {
+		for ln := range strings.SplitSeq(text, checkLineSeparator) {
 			ln = strings.TrimRight(ln, "\r")
 			if ln == "" {
 				continue

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,9 +84,7 @@ func wizardMountStorageDoc(name string, body any) map[string]any {
 			}
 		}
 		if existing, ok := b[config.WatchKeyCheck].(map[string]any); ok {
-			for k, v := range existing {
-				check[k] = v
-			}
+			maps.Copy(check, existing)
 		}
 		for _, key := range []string{config.MountKeyRefcount, config.MountKeyUmount, config.MountKeyStopPolicy} {
 			if v, present := b[key]; present {
@@ -93,9 +92,7 @@ func wizardMountStorageDoc(name string, body any) map[string]any {
 			}
 		}
 		if existing, ok := b[config.StorageKeyMount].(map[string]any); ok {
-			for k, v := range existing {
-				mount[k] = v
-			}
+			maps.Copy(mount, existing)
 		}
 	}
 	if len(mount) == 0 {
