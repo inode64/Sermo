@@ -92,8 +92,7 @@ func NewDetector() Detector {
 	}
 }
 
-// Detect returns the requested backend or autodetects one when requested is auto.
-func (d Detector) Detect(ctx context.Context, requested Backend) (Detection, error) {
+func (d Detector) withDefaults() Detector {
 	if d.Runner == nil {
 		d.Runner = execx.CommandRunner{}
 	}
@@ -103,9 +102,15 @@ func (d Detector) Detect(ctx context.Context, requested Backend) (Detection, err
 	if d.Timeout <= 0 {
 		d.Timeout = defaultDetectTimeout
 	}
+	return d
+}
 
-	systemd := d.probeSystemd(ctx)
-	openrc := d.probeOpenRC(ctx)
+// Detect returns the requested backend or autodetects one when requested is auto.
+func (d Detector) Detect(ctx context.Context, requested Backend) (Detection, error) {
+	detector := d.withDefaults()
+
+	systemd := detector.probeSystemd(ctx)
+	openrc := detector.probeOpenRC(ctx)
 
 	switch requested {
 	case BackendSystemd:

@@ -468,9 +468,9 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		if r.Type != rules.RuleRemediation {
 			continue
 		}
-		state := w.fires(ctx, ev, r, at, evals)
-		if state.firing {
-			firing = append(firing, firingRule{Rule: r, rising: state.rising, change: state.change})
+		fireState := w.fires(ctx, ev, r, at, evals)
+		if fireState.firing {
+			firing = append(firing, firingRule{Rule: r, rising: fireState.rising, change: fireState.change})
 		}
 	}
 
@@ -588,14 +588,14 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 		if r.Type != rules.RuleAlert {
 			continue
 		}
-		state := w.fires(ctx, ev, r, at, evals)
-		if state.firing {
+		fireState := w.fires(ctx, ev, r, at, evals)
+		if fireState.firing {
 			if w.DryRun {
-				w.emitDryRunAlerts(ctx, ev, r, state.rising, state.change)
+				w.emitDryRunAlerts(ctx, ev, r, fireState.rising, fireState.change)
 			} else {
-				w.emitAlerts(ctx, ev, r, state.rising, state.change)
+				w.emitAlerts(ctx, ev, r, fireState.rising, fireState.change)
 			}
-		} else if state.recovered && w.shouldEmitRuleEvent(r, true) {
+		} else if fireState.recovered && w.shouldEmitRuleEvent(r, true) {
 			w.emit(Event{Kind: eventKindRecovered, Rule: r.Name, Message: "rule condition recovered"})
 		}
 	}
@@ -616,7 +616,7 @@ func (w *Worker) emitDryRunAlerts(ctx context.Context, ev *rules.Evaluator, r ru
 func (w *Worker) emitAlertsFiltered(ctx context.Context, ev *rules.Evaluator, r rules.Rule, allow func(notify.Notifier) bool, rising bool, change rules.ChangeContext) {
 	notifiers := resolveNotifiers(effectiveNotify(r.Notify, w.GlobalNotify), w.Notifiers)
 	panicking := w.InPanic != nil && w.InPanic()
-	output := w.cycleFailOutput
+	failOutput := w.cycleFailOutput
 	emitEvent := w.shouldEmitRuleEvent(r, rising)
 	emitNotify := w.shouldNotifyRule(r, rising)
 	for _, msg := range r.AlertMessages() {
@@ -624,7 +624,7 @@ func (w *Worker) emitAlertsFiltered(ctx context.Context, ev *rules.Evaluator, r 
 		// Output carries the failing command's stdout/stderr so the operator can see
 		// why the rule fired on emitted cycles.
 		if emitEvent {
-			w.emit(Event{Kind: eventKindAlert, Rule: r.Name, Message: msg, Output: output})
+			w.emit(Event{Kind: eventKindAlert, Rule: r.Name, Message: msg, Output: failOutput})
 		}
 		if panicking {
 			if emitEvent {
@@ -639,7 +639,7 @@ func (w *Worker) emitAlertsFiltered(ctx context.Context, ev *rules.Evaluator, r 
 			if allow != nil && !allow(n) {
 				continue
 			}
-			if err := n.Send(ctx, alertMessage(w.Service, r.Name, msg, output)); err != nil {
+			if err := n.Send(ctx, alertMessage(w.Service, r.Name, msg, failOutput)); err != nil {
 				w.emit(Event{Kind: eventKindNotifyFail, Rule: r.Name, Message: n.Name() + ": " + err.Error()})
 			} else {
 				w.emit(Event{Kind: eventKindNotify, Rule: r.Name, Message: "notified " + n.Name()})
@@ -649,10 +649,10 @@ func (w *Worker) emitAlertsFiltered(ctx context.Context, ev *rules.Evaluator, r 
 }
 
 // alertMessage builds the notification for a rule's alert message.
-func alertMessage(service, rule, msg, output string) notify.Message {
+func alertMessage(service, rule, msg, failOutput string) notify.Message {
 	body := msg
-	if output != "" {
-		body += "\n\n" + output
+	if failOutput != "" {
+		body += "\n\n" + failOutput
 	}
 	return notify.Message{
 		Subject: fmt.Sprintf("[sermo] %s: %s", service, msg),
@@ -689,9 +689,9 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, a
 		w.emit(Event{Kind: eventKindError, Rule: r.Name, Message: "evaluate: " + err.Error()})
 		cond = false
 	}
-	state := w.windowState(r.Name)
-	wasFiring := state.IsFiringAt(r, at)
-	firing := state.FiresAt(r, cond, at)
+	window := w.windowState(r.Name)
+	wasFiring := window.IsFiringAt(r, at)
+	firing := window.FiresAt(r, cond, at)
 	return ruleFiringState{firing: firing, rising: !wasFiring && firing, recovered: wasFiring && !firing, change: ev.Change}
 }
 

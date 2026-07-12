@@ -1073,8 +1073,8 @@ func checkMap(entry map[string]any) map[string]any {
 }
 
 func metricsMap(entry map[string]any) map[string]any {
-	metrics, _ := entry[config.SectionMetrics].(map[string]any)
-	return metrics
+	metricEntries, _ := entry[config.SectionMetrics].(map[string]any)
+	return metricEntries
 }
 
 func watchSummary(w *webWatch, storage *web.StorageWatchInfo, liveSummary string) string {
@@ -1117,7 +1117,7 @@ func watchConditionText(c web.WatchCondition) string {
 	}), " ")
 }
 
-func watchConditions(check, metrics map[string]any) []web.WatchCondition {
+func watchConditions(check, metricEntries map[string]any) []web.WatchCondition {
 	if check == nil {
 		return nil
 	}
@@ -1222,7 +1222,7 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 			out = append(out, web.WatchCondition{Field: checks.CheckKeyDelta, Op: cfgval.CompareOpGreater, Value: watchConditionDefaultDelta})
 		}
 	}
-	out = append(out, watchMetricConditions(metrics)...)
+	out = append(out, watchMetricConditions(metricEntries)...)
 	return out
 }
 
@@ -1303,13 +1303,13 @@ func fileWatchConditions(check map[string]any) []web.WatchCondition {
 	return out
 }
 
-func watchMetricConditions(metrics map[string]any) []web.WatchCondition {
-	if len(metrics) == 0 {
+func watchMetricConditions(metricEntries map[string]any) []web.WatchCondition {
+	if len(metricEntries) == 0 {
 		return nil
 	}
 	var out []web.WatchCondition
-	for _, metric := range slices.Sorted(maps.Keys(metrics)) {
-		entry, _ := metrics[metric].(map[string]any)
+	for _, metric := range slices.Sorted(maps.Keys(metricEntries)) {
+		entry, _ := metricEntries[metric].(map[string]any)
 		if len(entry) == 0 {
 			continue
 		}
@@ -1664,13 +1664,13 @@ func (b *WebBackend) autofsWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 		readings = append(readings, web.WatchReading{Field: checks.DataKeyMountpoints, Label: watchReadingLabelPaths, Value: strings.Join(points, displayListSeparator)})
 	}
 	if path := cfgval.AsString(w.check[checks.CheckKeyPath]); path != "" {
-		state := watchReadingStateMissing
+		pathState := watchReadingStateMissing
 		if slices.Contains(points, path) {
-			state = watchReadingStateActive
+			pathState = watchReadingStateActive
 		}
 		readings = append(readings, web.WatchReading{Field: checks.DataKeyPath, Label: watchReadingLabelConfiguredPath, Value: path})
-		readings = append(readings, web.WatchReading{Field: watchReadingFieldState, Label: watchReadingLabelState, Value: state})
-		return nil, readings, fmt.Sprintf("autofs %s %s (%d mountpoint%s)", path, state, len(points), pluralSuffix(len(points), "mountpoint"))
+		readings = append(readings, web.WatchReading{Field: watchReadingFieldState, Label: watchReadingLabelState, Value: pathState})
+		return nil, readings, fmt.Sprintf("autofs %s %s (%d mountpoint%s)", path, pathState, len(points), pluralSuffix(len(points), "mountpoint"))
 	}
 	return nil, readings, fmt.Sprintf("%d autofs mountpoint%s active", len(points), pluralSuffix(len(points), "mountpoint"))
 }
@@ -1927,15 +1927,15 @@ func (b *WebBackend) icmpWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "icmp " + host + ": " + msg
 	}
-	state := checks.NetStateDown
+	linkState := checks.NetStateDown
 	if s.Reachable {
-		state = checks.NetStateUp
+		linkState = checks.NetStateUp
 	}
 	readings := []web.WatchReading{
 		{Field: checks.DataKeyHost, Label: watchReadingLabelHost, Value: host},
-		{Field: checks.NetMetricState, Label: watchReadingLabelState, Value: state},
+		{Field: checks.NetMetricState, Label: watchReadingLabelState, Value: linkState},
 	}
-	parts := []string{host + " " + state}
+	parts := []string{host + " " + linkState}
 	if s.RTTKnown {
 		readings = append(readings, web.WatchReading{Field: checks.IcmpMetricLatency, Label: watchReadingLabelRTT, Value: watchReadingMetricValue(s.RTTms, 1, metrics.MetricUnitMilliseconds)})
 		parts = append(parts, fmt.Sprintf("rtt %.1f ms", s.RTTms))
@@ -2091,17 +2091,17 @@ func watchPercent(value float64) string {
 	return watchReadingMetricValue(value, 2, metrics.MetricUnitPercent)
 }
 
-func watchMetricEnabled(metrics map[string]any, metric string) bool {
-	if len(metrics) == 0 {
+func watchMetricEnabled(metricEntries map[string]any, metric string) bool {
+	if len(metricEntries) == 0 {
 		return true
 	}
-	_, ok := metrics[metric]
+	_, ok := metricEntries[metric]
 	return ok
 }
 
-func netErrorTotal(metrics map[string]any, counters map[string]uint64) uint64 {
+func netErrorTotal(metricEntries map[string]any, counters map[string]uint64) uint64 {
 	names := []string{checks.NetCounterRXErrors, checks.NetCounterTXErrors}
-	if entry, ok := metrics[checks.NetMetricErrors].(map[string]any); ok {
+	if entry, ok := metricEntries[checks.NetMetricErrors].(map[string]any); ok {
 		if configured := cfgval.StringArray(entry[checks.CheckKeyCounters]); len(configured) > 0 {
 			names = configured
 		}
@@ -2693,7 +2693,7 @@ func formatInterval(d time.Duration) string {
 		week   = units.DaysPerWeek * day
 		month  = units.DaysPerMonthApprox * day // display approximation
 	)
-	units := []struct {
+	durationUnits := []struct {
 		secs   int64
 		suffix string
 	}{
@@ -2705,7 +2705,7 @@ func formatInterval(d time.Duration) string {
 		{1, "s"},
 	}
 	var b strings.Builder
-	for _, u := range units {
+	for _, u := range durationUnits {
 		if total >= u.secs {
 			fmt.Fprintf(&b, "%d%s", total/u.secs, u.suffix)
 			total %= u.secs

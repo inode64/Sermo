@@ -262,14 +262,14 @@ func hasWatchAction(hook HookSpec, names, effectiveNames []string, expand *Expan
 // metric block's condition keys (everything except then/for/within). Builder-set
 // keys (type, host/interface, count, metric) take precedence over the block.
 func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) ([]*Watch, []string) {
-	metrics, ok := entry[config.SectionMetrics].(map[string]any)
-	if !ok || len(metrics) == 0 {
+	watchMetrics, ok := entry[config.SectionMetrics].(map[string]any)
+	if !ok || len(watchMetrics) == 0 {
 		return nil, []string{"watch " + name + ": " + cfgval.AsString(checkEntry[checks.CheckKeyType]) + " check requires a non-empty metrics map"}
 	}
 	var out []*Watch
 	var warns []string
-	for _, key := range slices.Sorted(maps.Keys(metrics)) {
-		mEntry, ok := metrics[key].(map[string]any)
+	for _, key := range slices.Sorted(maps.Keys(watchMetrics)) {
+		mEntry, ok := watchMetrics[key].(map[string]any)
 		if !ok {
 			warns = append(warns, "watch "+name+".metrics."+key+": not a mapping")
 			continue
@@ -788,7 +788,7 @@ func serviceMonitorWatches(cfg *config.Config, deps Deps, _ time.Duration) ([]*W
 // version changes, using the daemon's version command (preflight.version, then
 // commands.version). nil when the service declares no `version.on_change`.
 func versionMonitor(name string, tree map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
-	notify, ok := onChangeNotify(tree[config.ServiceMonitorKeyVersion])
+	notifyNames, ok := onChangeNotify(tree[config.ServiceMonitorKeyVersion])
 	if !ok {
 		return nil, ""
 	}
@@ -808,7 +808,7 @@ func versionMonitor(name string, tree map[string]any, deps Deps, interval time.D
 	if err != nil {
 		return nil, "service " + name + ": version monitor: " + err.Error()
 	}
-	return monitorWatch(watchName, checks.CheckTypeCommand, check, notify, config.DryRun(tree), deps, interval), ""
+	return monitorWatch(watchName, checks.CheckTypeCommand, check, notifyNames, config.DryRun(tree), deps, interval), ""
 }
 
 // configMonitor synthesizes a watch that alerts when the service's config is
@@ -816,7 +816,7 @@ func versionMonitor(name string, tree map[string]any, deps Deps, interval time.D
 // config file changes. nil when the service declares no `config.on_change`.
 func configMonitor(name string, tree map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
 	block, _ := tree[config.ServiceMonitorKeyConfig].(map[string]any)
-	notify, ok := onChangeNotify(tree[config.ServiceMonitorKeyConfig])
+	notifyNames, ok := onChangeNotify(tree[config.ServiceMonitorKeyConfig])
 	if !ok {
 		return nil, ""
 	}
@@ -840,7 +840,7 @@ func configMonitor(name string, tree map[string]any, deps Deps, interval time.Du
 	if err != nil {
 		return nil, "service " + name + ": config monitor: " + err.Error()
 	}
-	return monitorWatch(watchName, checks.CheckTypeConfig, check, notify, config.DryRun(tree), deps, interval), ""
+	return monitorWatch(watchName, checks.CheckTypeConfig, check, notifyNames, config.DryRun(tree), deps, interval), ""
 }
 
 // onChangeNotify reads an `{on_change: {notify: [...]}}` block, returning the
@@ -920,12 +920,12 @@ func monitorDeps(deps Deps) checks.Deps {
 }
 
 // monitorWatch assembles a notify-only watch around a synthesized check.
-func monitorWatch(name, checkType string, check checks.Check, notify []string, dryRun bool, deps Deps, interval time.Duration) *Watch {
+func monitorWatch(name, checkType string, check checks.Check, notifierNames []string, dryRun bool, deps Deps, interval time.Duration) *Watch {
 	return &Watch{
 		Name:       name,
 		CheckType:  checkType,
 		Check:      check,
-		Notifiers:  resolveNotifiers(effectiveNotify(notify, deps.GlobalNotify), deps.Notifiers),
+		Notifiers:  resolveNotifiers(effectiveNotify(notifierNames, deps.GlobalNotify), deps.Notifiers),
 		Emission:   deps.GlobalEmission,
 		DryRun:     dryRun,
 		Runner:     OSHookRunner{Runner: deps.ExecxRunner},
