@@ -65,7 +65,7 @@ config_subst = sed -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
-.PHONY: all build test vet fmt fmt-check lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-e2e validate check cover tidy clean \
+.PHONY: all build test vet fmt fmt-check lint scripts-lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-e2e validate check cover tidy clean \
         install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
@@ -81,6 +81,10 @@ YAMLLINT ?= yamllint
 YAML_ROOTS = catalog examples templates docs .github
 MARKDOWNLINT ?= ./node_modules/.bin/markdownlint
 PLAYWRIGHT ?= ./node_modules/.bin/playwright
+SHELLCHECK ?= shellcheck
+RUFF ?= ruff
+SCRIPT_SH = scripts/*.sh scripts/remote-deploy/*.sh
+SCRIPT_PY = scripts/*.py scripts/remote-deploy/*.py
 
 yaml-fmt:
 	@$(LINT_PATH) $(YAMLFMT) -conf .yamlfmt
@@ -122,8 +126,15 @@ web-check:
 web-e2e: web-check
 	@$(PLAYWRIGHT) test
 
+# Shell and Python helper scripts (deploy, mutation, YAML normalization).
+scripts-lint:
+	@echo "shellcheck $(SCRIPT_SH)"
+	@$(LINT_PATH) $(SHELLCHECK) $(SCRIPT_SH)
+	@echo "ruff check $(SCRIPT_PY)"
+	@$(LINT_PATH) $(RUFF) check $(SCRIPT_PY)
+
 # Formatting and static analysis gates; make test and make check run this first.
-validate: lint yaml-validate markdown-check web-e2e
+validate: lint scripts-lint yaml-validate markdown-check web-e2e
 
 test: validate
 	go test ./...

@@ -12,7 +12,7 @@ BASE="$(basename "$SRC")"
 
 # Build an exclude regexp matching every *other* .go file in the package directory,
 # so gremlins only mutates the target file.
-others="$(ls "$PKG_DIR"/*.go | sed 's#.*/##' | grep -vx "$BASE" | sed 's/\./\\./g' | paste -sd'|')"
+others="$(find "$PKG_DIR" -maxdepth 1 -name '*.go' -printf '%f\n' | grep -vx "$BASE" | sed 's/\./\\./g' | paste -sd'|')"
 
 # workers=1 avoids per-mutant compile contention; high coefficient prevents the
 # package recompile (seconds) from being clipped by a sub-second test baseline.

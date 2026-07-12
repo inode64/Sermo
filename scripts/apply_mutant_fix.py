@@ -2,7 +2,6 @@
 """Apply a minimal test fix for a go-mutesting survivor (FAIL line = escaped mutant)."""
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 

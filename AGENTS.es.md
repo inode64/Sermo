@@ -45,8 +45,9 @@ nivel de integración.
 
    ```sh
    make check        # vet + full test suite; transitively runs `make validate`,
-                     # i.e. `make lint` (fmt-check, staticcheck, revive,
-                     # golangci-lint, govulncheck) AND `make yaml-validate`
+                     # i.e. `make lint` (fmt-check, go fix -diff, staticcheck,
+                     # revive, golangci-lint, govulncheck), `make scripts-lint`
+                     # (shellcheck + ruff), `make yaml-validate`
                      # (yaml-fmt-check + yaml-lint), `make markdown-check`
                      # y `make web-check`
    ```
@@ -614,6 +615,9 @@ Notas de herramientas:
   escrituras `0644` intencionales, lecturas acotadas `args[i]`, `G118` de contexto de shutdown)
   se suprimen en el call site con `//nolint:gosec` más un comentario
   justificativo — prefiere eso sobre ampliar la config.
+- **`make scripts-lint`** ejecuta `shellcheck` en `scripts/*.sh` y
+  `scripts/remote-deploy/*.sh`, y luego `ruff check` en los helpers Python bajo
+  `scripts/`. Forma parte de `validate`/`check`.
 - **`make deadcode`** (advisory, fuera de `lint`/`check`) imprime un informe de
   funciones inalcanzables vía `golang.org/x/tools/cmd/deadcode`. La reflexión y
   los build tags producen falsos positivos — tría los hallazgos a mano antes de
