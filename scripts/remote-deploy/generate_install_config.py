@@ -28,6 +28,7 @@ import shutil
 import tarfile
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -105,6 +106,10 @@ SKIP_IFACE_PREFIXES = (
 
 GEOIP_DATABASE_DIRECTORY = "/usr/share/GeoIP"
 GEOIP_DATABASE_OLDER_THAN = "480h"
+ENDPOINT_CHECK_TYPES = {"dns", "http", "ports", "tcp"}
+TCP_PROTOCOL = "tcp"
+UDP_PROTOCOL = "udp"
+WILDCARD_LISTEN_HOSTS = {"0.0.0.0", "::"}
 
 
 @dataclass(frozen=True)
@@ -910,6 +915,127 @@ def service_variable_overrides(stage: Path, name: str) -> tuple[dict[str, str], 
     return overrides, ", ".join(dict.fromkeys(source for source in sources if source))
 
 
+def substitute_variables(value: object, variables: dict[str, str]) -> str:
+    return re.sub(r"\$\{([^}]+)\}", lambda match: variables.get(match.group(1), ""), str(value))
+
+
+def effective_service_variables(doc: dict, values: dict[str, str], overrides: dict[str, str]) -> dict[str, str]:
+    variables = {key: str(value) for key, value in doc.get("variables", {}).items() if isinstance(key, str)}
+    for key, value in values.items():
+        if value or key not in variables:
+            variables[key] = value
+    variables.update(overrides)
+    return {key: substitute_variables(value, variables) for key, value in variables.items()}
+
+
+def profile_process_names(doc: dict) -> set[str]:
+    names = {str(doc.get("name") or "")}
+    for key in ("aliases", "apps"):
+        value = doc.get(key)
+        if isinstance(value, list):
+            names.update(str(item) for item in value)
+    service = doc.get("service")
+    if isinstance(service, str):
+        names.add(service)
+    elif isinstance(service, dict):
+        for value in service.values():
+            if isinstance(value, str):
+                names.add(value)
+            elif isinstance(value, list):
+                names.update(str(item) for item in value)
+    return {name.removesuffix(".service").split("@", 1)[0] for name in names if name}
+
+
+def socket_listeners(hints: str) -> list[dict[str, object]]:
+    listeners: list[dict[str, object]] = []
+    for line in hints.splitlines():
+        if not line.startswith("socket "):
+            continue
+        fields = line.split()
+        if len(fields) < 2 or fields[1] not in {TCP_PROTOCOL, UDP_PROTOCOL}:
+            continue
+        endpoint = socket_line_endpoint(line, "0.0.0.0", "")
+        if endpoint is None:
+            continue
+        host, port = endpoint
+        if not port:
+            continue
+        processes = set(re.findall(r'\(\("([^"]+)"', line))
+        if not processes:
+            continue
+        listeners.append({"protocol": fields[1], "host": host, "port": port, "processes": processes})
+    return listeners
+
+
+def endpoint_target(check_type: str, check: dict, variables: dict[str, str]) -> tuple[list[tuple[set[str], str, str]], str]:
+    host = substitute_variables(check.get("host", variables.get("host", "127.0.0.1")), variables)
+    if check_type == "http":
+        url = substitute_variables(check.get("url", ""), variables)
+        try:
+            parsed = urlsplit(url)
+            port = str(parsed.port or (443 if parsed.scheme == "https" else 80))
+        except ValueError:
+            return [], "invalid HTTP URL"
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            return [], "HTTP URL has no usable local endpoint"
+        return [({TCP_PROTOCOL}, normalize_connect_host(parsed.hostname, "127.0.0.1"), port)], ""
+    if check_type == "dns":
+        port = substitute_variables(check.get("port", variables.get("port", "53")), variables)
+        if not port.isdigit():
+            return [], "invalid DNS port"
+        return [({TCP_PROTOCOL, UDP_PROTOCOL}, host, port)], ""
+    if check_type == "tcp":
+        port = substitute_variables(check.get("port", variables.get("port", "")), variables)
+        if not port.isdigit():
+            return [], "invalid TCP port"
+        return [({TCP_PROTOCOL}, host, port)], ""
+    values = substitute_variables(check.get("ports", ""), variables)
+    ports = [item.strip() for item in values.split(",") if item.strip()]
+    if any("-" in item for item in ports):
+        return [], "ports range cannot be proven from one listening endpoint"
+    if not ports or any(not item.isdigit() for item in ports):
+        return [], "invalid ports list"
+    return [({TCP_PROTOCOL}, host, port) for port in ports], ""
+
+
+def listener_matches(target: tuple[set[str], str, str], listener: dict[str, object], processes: set[str]) -> bool:
+    protocols, host, port = target
+    listener_host = str(listener["host"])
+    listener_processes = set(listener["processes"])
+    host_matches = listener_host in WILDCARD_LISTEN_HOSTS or listener_host == host
+    return str(listener["protocol"]) in protocols and str(listener["port"]) == port and host_matches and bool(listener_processes & processes)
+
+
+def endpoint_watch_overrides(stage: Path, doc: dict, variables: dict[str, str]) -> tuple[dict[str, bool], list[dict[str, object]]]:
+    hints = read_text(stage / "service_endpoint_hints")
+    listeners = socket_listeners(hints)
+    processes = profile_process_names(doc)
+    disabled: dict[str, bool] = {}
+    report: list[dict[str, object]] = []
+    watches = doc.get("watches", {})
+    if not isinstance(watches, dict):
+        return disabled, report
+    for watch_name, raw_watch in watches.items():
+        if not isinstance(raw_watch, dict):
+            continue
+        check = raw_watch.get("check")
+        if not isinstance(check, dict):
+            continue
+        check_type = str(check.get("type") or "")
+        if check_type not in ENDPOINT_CHECK_TYPES:
+            continue
+        targets, reason = endpoint_target(check_type, check, variables)
+        active = bool(targets) and all(any(listener_matches(target, listener, processes) for listener in listeners) for target in targets)
+        item: dict[str, object] = {"watch": str(watch_name), "type": check_type, "active": active}
+        if active:
+            item["source"] = "associated listening socket"
+        else:
+            disabled[str(watch_name)] = True
+            item["reason"] = reason or "no associated listening socket for configured endpoint"
+        report.append(item)
+    return disabled, report
+
+
 def docker_container_name(entry: dict) -> str:
     names = entry.get("Names")
     if isinstance(names, list):
@@ -1026,7 +1152,7 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
         "virtual_machines": {"enabled": [], "skipped": []},
         "watches": {},
         "raid_arrays": [],
-		"lvm_volumes": [],
+        "lvm_volumes": [],
         "mount_units": [],
         "skipped_watches": [],
         "config_tar": str(configs_dir / host_slug / "sermo-config.tgz"),
@@ -1034,10 +1160,14 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
 
     generated_service_names: set[str] = set()
     services, skipped_services = parse_services(stage, options)
+    catalog_docs = load_catalog_services(options.catalog_services_dir)
     for svc in services:
         name = svc["name"]
         generated_service_names.add(name)
         variable_overrides, variables_source = service_variable_overrides(stage, name)
+        doc, values = values_for_service(name, stage, catalog_docs)
+        effective_variables = effective_service_variables(doc or {}, values, variable_overrides)
+        disabled_endpoint_watches, endpoint_checks = endpoint_watch_overrides(stage, doc or {}, effective_variables)
         body = f"""name: {name}
 uses: {name}
 monitor: enabled
@@ -1050,6 +1180,10 @@ dry_run: true
         process_override = service_process_override(stage, name)
         if process_override:
             body += process_override
+        if disabled_endpoint_watches:
+            body += "watches:\n"
+            for watch_name in sorted(disabled_endpoint_watches):
+                body += f"  {watch_name}:\n    enabled: false\n"
         write_file(root, f"etc/sermo/services/{slug(name)}.yml", body)
         enabled = {"name": name, "status": svc.get("status", "")}
         if variable_overrides:
@@ -1057,6 +1191,8 @@ dry_run: true
             enabled["variables_source"] = variables_source
         if process_override:
             enabled["process_selector_source"] = "cloudflared deleted exe fallback"
+        if endpoint_checks:
+            enabled["endpoint_checks"] = endpoint_checks
         report["services"]["enabled"].append(enabled)
     report["services"]["skipped"] = skipped_services
 

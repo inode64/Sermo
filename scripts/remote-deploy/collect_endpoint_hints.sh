@@ -61,6 +61,7 @@ for path in /etc/named.conf /etc/bind/named.conf /etc/bind/named.conf.options /e
 done
 
 if command -v ss >/dev/null 2>&1; then
-	ss -H -ltnup 2>/dev/null | grep -E 'users:\(\("(cloudflared|mysqld_exporter|named)"' \
-		| sed 's#^#socket #'
+	# The generator associates these listeners with an already-active catalog
+	# service before using them; this is inventory, not a port scan.
+	ss -H -ltnup 2>/dev/null | sed 's#^#socket #'
 fi

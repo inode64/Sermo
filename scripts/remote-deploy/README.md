@@ -96,3 +96,10 @@ The generator prefers service config files such as
 `/etc/cloudflared/config.yml`, BIND `listen-on` declarations and
 `mysqld_exporter` `--web.listen-address`, then falls back to matching listening
 sockets.
+
+For active catalog services, the generator also cross-checks every profile
+`tcp`, `http`, `dns` and `ports` watch against a listening socket owned by that
+service's process. A matching endpoint keeps the profile watch. Without that
+evidence the generated service explicitly disables that endpoint watch and
+records the reason in `config-report.json`; it never turns unrelated listeners
+into checks. HTTP and DNS therefore run only for discovered active endpoints.

@@ -274,8 +274,9 @@ ip -o -6 route show >"${out}/ip_route6" 2>/dev/null || true
 	done
 
 	if command -v ss >/dev/null 2>&1; then
-		ss -H -ltnup 2>/dev/null | grep -E 'users:\(\("(cloudflared|mysqld_exporter|named)"' \
-			| sed 's#^#socket #'
+		# Endpoint selection remains restricted by active catalog service and
+		# process ownership in generate_install_config.py.
+		ss -H -ltnup 2>/dev/null | sed 's#^#socket #'
 	fi
 } >"${out}/service_endpoint_hints" 2>/dev/null || true
 
