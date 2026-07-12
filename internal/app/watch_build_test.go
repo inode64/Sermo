@@ -570,6 +570,26 @@ func TestBuildWatchesMetricHonorsNotifyInterval(t *testing.T) {
 	}
 }
 
+func TestBuildRaidWatchNotifyOn(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"raid-md0": map[string]any{
+			"check": map[string]any{"type": "raid", "array": "md0", "sysfs_changes": true},
+			"then":  map[string]any{"notify": []any{"ops"}, "notify_on": []any{"on_degraded", "on_array_change"}},
+		},
+	})
+	n := typedNotifier{name: "ops", typ: "wall"}
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, Notifiers: map[string]notify.Notifier{"ops": n}}, time.Minute)
+	if len(warns) != 0 || len(watches) != 1 {
+		t.Fatalf("raid notify_on build = watches=%v warnings=%v", watches, warns)
+	}
+	if !watches[0].RaidNotifyEvents["on_degraded"] || !watches[0].RaidNotifyEvents["on_array_change"] {
+		t.Fatalf("raid events = %+v", watches[0].RaidNotifyEvents)
+	}
+	if len(watches[0].Notifiers) != 1 {
+		t.Fatalf("notifiers = %v, want ops", watches[0].Notifiers)
+	}
+}
+
 func TestBuildWatchesServiceCheckAsWatch(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"health": map[string]any{

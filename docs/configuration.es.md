@@ -1515,6 +1515,12 @@ propio `then` de cada métrica, de modo que una métrica puede tener sus propios
 El asunto/cuerpo de la notificación llevan el mensaje del watch y los mismos campos
 `SERMO_*` que recibe un hook.
 
+En un watch `raid`, `then.notify_on` filtra cuándo los destinos normales de
+`then.notify` reciben entrega: `on_degraded`, `on_recovering`, `on_good` u
+`on_array_change`. Se pueden definir tantos notifiers y plantillas como sea
+necesario; cada notifier seleccionado recibe los campos RAID estructurados. No
+puede combinarse con `then.notify_interval`.
+
 **Las checks y los watches comparten los mismos tipos de comprobación.** Cualquier
 comprobación de un solo disparo — las de recursos de host de abajo (`storage`, `memory`,
 `pressure`, `load`, `fds`, `pids`, `conntrack`, `entropy`, `zombies`, `oom`, entre otras) *y* las

@@ -170,6 +170,9 @@ type App struct {
 	// FetchDaemonWatchState returns the daemon-computed watch state when sermod is
 	// running and the web API is reachable. ok is false when unavailable.
 	FetchDaemonWatchState func(ctx context.Context, opts options, watch string) (string, bool)
+	// FetchDaemonWatchDetail returns current daemon-published readings for one
+	// watch. It is optional so status retains its state-only fallback.
+	FetchDaemonWatchDetail func(ctx context.Context, opts options, watch string) (daemonWatchDetail, bool)
 	// FetchDaemonApplicationStates returns daemon-computed application states keyed
 	// by catalog name. An empty map means the web API was unavailable.
 	FetchDaemonApplicationStates func(ctx context.Context, opts options) map[string]string
@@ -297,6 +300,9 @@ func (a App) Run(ctx context.Context, args []string) int {
 	}
 	if a.FetchDaemonWatchState == nil {
 		a.FetchDaemonWatchState = a.fetchDaemonWatchState
+	}
+	if a.FetchDaemonWatchDetail == nil {
+		a.FetchDaemonWatchDetail = a.fetchDaemonWatchDetail
 	}
 	if a.FetchDaemonApplicationStates == nil {
 		a.FetchDaemonApplicationStates = a.fetchDaemonApplicationStates
@@ -1760,6 +1766,23 @@ func (a App) fetchDaemonWatchState(ctx context.Context, opts options, watch stri
 		}
 	}
 	return "", false
+}
+
+func (a App) fetchDaemonWatchDetail(ctx context.Context, opts options, watch string) (daemonWatchDetail, bool) {
+	body, status, err := a.daemonAPIGet(ctx, opts, daemonAPIPathWatches)
+	if err != nil || status != http.StatusOK {
+		return daemonWatchDetail{}, false
+	}
+	var watches []daemonWatchDetail
+	if err := json.Unmarshal(body, &watches); err != nil {
+		return daemonWatchDetail{}, false
+	}
+	for _, detail := range watches {
+		if detail.Name == watch {
+			return detail, true
+		}
+	}
+	return daemonWatchDetail{}, false
 }
 
 func (a App) fetchDaemonApplicationStates(ctx context.Context, opts options) map[string]string {

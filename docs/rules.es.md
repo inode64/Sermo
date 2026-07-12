@@ -1618,14 +1618,23 @@ servicio de modo que la degradación gradual es visible.
       wear: { op: ">", value: 90 }         # SSD/NVMe nearly worn out
   ```
 
-- **`raid`** — **RAID por software md** de Linux desde `/proc/mdstat` (nativo). Sin
-  predicado alerta cuando cualquier array está **degradado**; los predicados añaden recuentos `degraded`,
-  `recovering` y `arrays`. Un host sin arrays md nunca alerta.
+- **`raid`** — **RAID por software md** de Linux desde `/proc/mdstat` y datos de
+  sólo lectura de `/sys/block/md*/md` (nativo). Sin predicado alerta cuando
+  cualquier array está **degradado**; los predicados añaden recuentos `degraded`,
+  `recovering` y `arrays`. `array: md0` limita la comprobación a un array. Con
+  `sysfs_changes: true`, Sermo vigila entre ciclos `mismatch_cnt` y los campos
+  `state`, `errors` y `bad_blocks` de cada miembro. Un host sin arrays md nunca alerta.
 
   ```yaml
   checks:
     raid: { type: raid }                   # alert if any md array is degraded
   ```
+
+  Un watch RAID puede filtrar los destinos de `then.notify` a transiciones
+  concretas mediante `then.notify_on`: `on_degraded`, `on_recovering`, `on_good`
+  (reparación completada) y `on_array_change`. Las notificaciones reciben `SERMO_RAID_EVENT`,
+  `SERMO_RAID_ARRAY`, operación/progreso y, para cambios sysfs, miembro, campo y
+  valores anterior/nuevo; las plantillas del notifier pueden cambiar el mensaje.
 
 - **`edac`** — **errores de memoria ECC** del subsistema EDAC del kernel (nativo,
   `/sys/devices/system/edac`). `ce` es el recuento acumulado de corregibles y `ue`

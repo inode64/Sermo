@@ -212,25 +212,26 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	w := &Watch{
-		Name:           name,
-		CheckType:      typ,
-		Check:          check,
-		Window:         rules.ParseWindowRule(entry),
-		Hook:           actions.hook,
-		Notifiers:      resolveNotifiers(actions.effectiveNames, deps.Notifiers),
-		NotifyInterval: actions.notifyInterval,
-		Emission:       emission.Merge(entry[emission.Section], deps.GlobalEmission),
-		DryRun:         config.DryRun(entry),
-		Runner:         OSHookRunner{Runner: deps.ExecxRunner},
-		Interval:       interval,
-		IsPaused:       monitorPaused(deps.Monitor, watchMonitorKey(name)),
-		InPanic:        deps.Panic.Active,
-		Settling:       deps.Settling,
-		FireOnFail:     checks.IsHealthType(typ),
-		Now:            deps.Now,
-		Emit:           deps.Emit,
-		Publish:        publishWatchSnapshots(deps.WatchSnapshots),
-		StateStore:     deps.WatchState,
+		Name:             name,
+		CheckType:        typ,
+		Check:            check,
+		Window:           rules.ParseWindowRule(entry),
+		Hook:             actions.hook,
+		Notifiers:        resolveNotifiers(actions.effectiveNames, deps.Notifiers),
+		RaidNotifyEvents: actions.raidNotifyEvents,
+		NotifyInterval:   actions.notifyInterval,
+		Emission:         emission.Merge(entry[emission.Section], deps.GlobalEmission),
+		DryRun:           config.DryRun(entry),
+		Runner:           OSHookRunner{Runner: deps.ExecxRunner},
+		Interval:         interval,
+		IsPaused:         monitorPaused(deps.Monitor, watchMonitorKey(name)),
+		InPanic:          deps.Panic.Active,
+		Settling:         deps.Settling,
+		FireOnFail:       checks.IsHealthType(typ),
+		Now:              deps.Now,
+		Emit:             deps.Emit,
+		Publish:          publishWatchSnapshots(deps.WatchSnapshots),
+		StateStore:       deps.WatchState,
 	}
 	if actions.expand != nil {
 		w.Expand = actions.expand
@@ -599,11 +600,12 @@ func parseActions(then map[string]any) (HookSpec, []string, error) {
 }
 
 type watchActions struct {
-	hook           HookSpec
-	effectiveNames []string
-	expand         *ExpandSpec
-	kill           *killSpec
-	notifyInterval time.Duration
+	hook             HookSpec
+	effectiveNames   []string
+	raidNotifyEvents map[string]bool
+	expand           *ExpandSpec
+	kill             *killSpec
+	notifyInterval   time.Duration
 }
 
 type watchActionOptions struct {
@@ -622,6 +624,15 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 		return watchActions{}, nil
 	}
 	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
+	raidNotifyEvents, err := parseRaidNotifyEvents(thenBlock)
+	if err != nil {
+		return watchActions{}, err
+	}
+	if len(raidNotifyEvents) > 0 {
+		if opts.checkType != checks.CheckTypeRAID {
+			return watchActions{}, errors.New("then.notify_on is only valid on a raid watch")
+		}
+	}
 	var expand *ExpandSpec
 	if opts.parseExpand {
 		expand, err = parseExpand(thenBlock, opts.checkType)
@@ -640,12 +651,29 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 		return watchActions{}, errors.New(opts.emptyMessage)
 	}
 	return watchActions{
-		hook:           hook,
-		effectiveNames: effectiveNames,
-		expand:         expand,
-		kill:           kill,
-		notifyInterval: cfgval.Duration(thenBlock[config.WatchThenKeyNotifyInterval]),
+		hook:             hook,
+		effectiveNames:   effectiveNames,
+		raidNotifyEvents: raidNotifyEvents,
+		expand:           expand,
+		kill:             kill,
+		notifyInterval:   cfgval.Duration(thenBlock[config.WatchThenKeyNotifyInterval]),
 	}, nil
+}
+
+func parseRaidNotifyEvents(then map[string]any) (map[string]bool, error) {
+	raw, present := then[config.WatchThenKeyNotifyOn]
+	if !present {
+		return nil, nil
+	}
+	names, err := cfgval.StrictStringList(raw)
+	if err != nil || len(names) == 0 {
+		return nil, errors.New("then.notify_on must be a non-empty event list")
+	}
+	out := make(map[string]bool, len(names))
+	for _, event := range names {
+		out[event] = true
+	}
+	return out, nil
 }
 
 // parseKill reads a `then.kill` action — a native process-signal action for a
