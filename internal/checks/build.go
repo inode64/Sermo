@@ -1206,7 +1206,13 @@ func buildRaidCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	if err != nil {
 		return nil, "raid check: " + err.Error()
 	}
-	return raidCheck{base: b, preds: preds, sampler: deps.RaidSampler}, ""
+	return &raidCheck{
+		base:         b,
+		preds:        preds,
+		sampler:      deps.RaidSampler,
+		array:        cfgval.String(entry[CheckKeyArray]),
+		sysfsChanges: cfgval.Bool(entry[CheckKeySysfsChanges]),
+	}, ""
 }
 
 // buildEdacCheck builds an ECC memory-error (EDAC) check.

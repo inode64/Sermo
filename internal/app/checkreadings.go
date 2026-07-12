@@ -157,6 +157,8 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 		return pressureCheckReadings(data)
 	case checks.CheckTypeDiskIO:
 		return diskioCheckReadings(data)
+	case checks.CheckTypeRAID:
+		return raidCheckReadings(data)
 	case checks.CheckTypeHdparm, checks.CheckTypeSmart, checks.CheckTypeSensors, checks.CheckTypeEDAC:
 		return metricCheckReadings(checkType, data)
 	default:
@@ -165,6 +167,55 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 		}
 		return nil
 	}
+}
+
+func raidCheckReadings(data map[string]any) []web.WatchReading {
+	var out []web.WatchReading
+	for _, item := range []struct {
+		key   string
+		label string
+	}{
+		{checks.DataKeyArrays, watchReadingLabelArrays},
+		{checks.DataKeyDegraded, watchReadingLabelDegraded},
+		{checks.DataKeyRecovering, watchReadingLabelRecovering},
+	} {
+		if v := cfgval.String(data[item.key]); v != "" {
+			out = append(out, web.WatchReading{Field: item.key, Label: item.label, Value: v})
+		}
+	}
+	if array := cfgval.String(data[checks.DataKeyArray]); array != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyArray, Label: "Array", Value: array})
+	}
+	if operation := cfgval.String(data[checks.DataKeyRaidOperation]); operation != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyRaidOperation, Label: "Operation", Value: operation})
+	}
+	if progress, ok := cfgval.Float(data[checks.DataKeyRaidProgressPct]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyRaidProgressPct, Label: "Rebuild progress", Value: fmt.Sprintf("%.1f%%", progress)})
+	}
+	if mismatch := cfgval.String(data[checks.DataKeyRaidMismatchCount]); mismatch != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyRaidMismatchCount, Label: "Mismatch count", Value: mismatch})
+	}
+	if details, ok := data[checks.DataKeyRaidMembers].([]checks.RaidArrayStatus); ok {
+		for _, detail := range details {
+			value := raidArrayReading(detail)
+			out = append(out, web.WatchReading{Field: "raid_array_" + detail.Name, Label: detail.Name, Value: value})
+		}
+	}
+	return out
+}
+
+func raidArrayReading(detail checks.RaidArrayStatus) string {
+	state := "good"
+	if detail.Degraded {
+		state = "degraded"
+	}
+	if detail.Operation == "" {
+		return state
+	}
+	if detail.HasProgress {
+		return fmt.Sprintf("%s · %s %.1f%%", state, detail.Operation, detail.ProgressPct)
+	}
+	return state + " · " + detail.Operation
 }
 
 func certCheckReadings(data map[string]any) []web.WatchReading {

@@ -53,6 +53,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			continue
 		}
 		typ := cfgval.String(check[checks.CheckKeyType])
+		validateRaidNotifyOn(name, typ, entry, notifiers, defaultNotify, add)
 		validateWatchMountBlock(name, typ, entry, add)
 		switch typ {
 		case checks.CheckTypeStorage:
@@ -311,7 +312,7 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKi
 		add("%s must be a mapping", prefix+"."+rules.RuleFieldThen)
 		return
 	}
-	allowed := set(WatchThenKeyHook, rules.RuleFieldNotify, WatchThenKeyNotifyInterval, WatchThenKeyExpand, WatchThenKeyKill)
+	allowed := set(WatchThenKeyHook, rules.RuleFieldNotify, WatchThenKeyNotifyInterval, WatchThenKeyNotifyOn, WatchThenKeyExpand, WatchThenKeyKill)
 	for _, key := range slices.Sorted(maps.Keys(then)) {
 		if _, ok := allowed[key]; !ok {
 			add("%s is not supported", thenFieldPath(prefix, key))
@@ -319,12 +320,15 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKi
 	}
 	hook, hasHook := then[WatchThenKeyHook].(map[string]any)
 	notify := cfgval.StringList(then[rules.RuleFieldNotify])
+	_, hasNotifyOn := then[WatchThenKeyNotifyOn]
 	if v, present := then[WatchThenKeyNotifyInterval]; present {
 		// notify_interval re-sends the notification as a reminder while the watch
 		// stays firing; absent means notify once on the rising edge. It only
 		// affects delivery, so it is meaningless without notify targets.
 		if !isPositiveDuration(cfgval.String(v)) {
 			add("%s %q must be a valid positive duration", thenFieldPath(prefix, WatchThenKeyNotifyInterval), cfgval.String(v))
+		} else if hasNotifyOn {
+			add("%s is not supported with %s", thenFieldPath(prefix, WatchThenKeyNotifyInterval), thenFieldPath(prefix, WatchThenKeyNotifyOn))
 		} else if !HasEffectiveNotifyAction(notify, defaultNotify) {
 			add("%s has no effect without notify targets", thenFieldPath(prefix, WatchThenKeyNotifyInterval))
 		}
@@ -357,7 +361,7 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKi
 	// deliberate monitor-only watch (state in the dashboard and events, no
 	// delivery). A present `then` that selects nothing is rejected. Omitting the
 	// `then` key entirely is another supported way to get alert-only behavior.
-	if !hasHook && !HasEffectiveNotifyAction(notify, defaultNotify) && !hasExpand && !hasKill && !NotifyOptedOut(notify) {
+	if !hasHook && !hasNotifyOn && !HasEffectiveNotifyAction(notify, defaultNotify) && !hasExpand && !hasKill && !NotifyOptedOut(notify) {
 		add("%s requires a hook, notify, kill and/or expand", prefix+"."+rules.RuleFieldThen)
 		return
 	}
@@ -369,6 +373,42 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKi
 			add("%s %q must be a valid positive duration", thenHookPath(prefix)+"."+WatchHookKeyTimeout, cfgval.String(v))
 		}
 		validateCommandExpectations(thenHookPath(prefix), hook, add)
+	}
+}
+
+// validateRaidNotifyOn validates the RAID-only event-specific notification
+// mapping. It deliberately stays separate from then.notify: the latter keeps
+// its existing firing-episode semantics.
+func validateRaidNotifyOn(name, typ string, entry map[string]any, notifiers map[string]struct{}, defaultNotify []string, add addFunc) {
+	then, ok := entry[rules.RuleFieldThen].(map[string]any)
+	if !ok {
+		return
+	}
+	raw, present := then[WatchThenKeyNotifyOn]
+	if !present {
+		return
+	}
+	prefix := thenFieldPath(watchPath(name), WatchThenKeyNotifyOn)
+	if typ != checks.CheckTypeRAID {
+		add("%s is only valid on a raid watch", prefix)
+		return
+	}
+	events, err := cfgval.StrictStringList(raw)
+	if err != nil || len(events) == 0 {
+		add("%s must be a non-empty event list", prefix)
+		return
+	}
+	allowed := set(checks.RaidNotifyEvents...)
+	for _, event := range events {
+		if _, ok := allowed[event]; !ok {
+			add("%s %q is not supported", prefix, event)
+		}
+	}
+	if notify, present := then[rules.RuleFieldNotify]; present {
+		validateNotifySelection(thenFieldPath(watchPath(name), rules.RuleFieldNotify), notify, notifiers, add)
+	}
+	if !HasEffectiveNotifyAction(cfgval.StringList(then[rules.RuleFieldNotify]), defaultNotify) {
+		add("%s requires notify targets", prefix)
 	}
 }
 

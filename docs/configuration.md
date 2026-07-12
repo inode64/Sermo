@@ -1459,6 +1459,12 @@ metric's own `then`, so a metric can have its own targets. The notification's
 subject/body carry the watch's message and the same `SERMO_*` fields a hook
 receives.
 
+For a `raid` watch, `then.notify_on` filters when its normal `then.notify`
+targets receive delivery: `on_degraded`, `on_recovering`, `on_good`, or
+`on_array_change`. Define as many named notifiers and templates as needed; every
+selected notifier receives the structured RAID fields. It cannot be combined
+with `then.notify_interval`.
+
 **Checks and watches share the same check types.** Any single-shot check — the
 host-resource ones below (`storage`, `memory`, `pressure`, `load`, `fds`,
 `pids`, `conntrack`, `entropy`, `zombies`, `oom`, among others) *and* the

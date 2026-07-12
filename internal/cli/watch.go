@@ -10,6 +10,20 @@ import (
 	"sermo/internal/state"
 )
 
+type daemonWatchReading struct {
+	Field string `json:"field"`
+	Label string `json:"label"`
+	Value string `json:"value"`
+	Error string `json:"error"`
+}
+
+type daemonWatchDetail struct {
+	Name      string               `json:"name"`
+	State     string               `json:"state"`
+	CheckType string               `json:"check_type"`
+	Readings  []daemonWatchReading `json:"readings"`
+}
+
 const watchCommandTargetArgCount = 2
 
 // runWatch dispatches host-watch queries against the running daemon.
@@ -121,15 +135,41 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 	}
 	name := opts.args[1]
 	state := app.TargetStateOK
+	var detail daemonWatchDetail
+	if a.FetchDaemonWatchDetail != nil {
+		if current, ok := a.FetchDaemonWatchDetail(ctx, opts, name); ok {
+			detail = current
+			if detail.State != "" {
+				state = detail.State
+			}
+		}
+	}
 	if a.FetchDaemonWatchState != nil {
 		if st, ok := a.FetchDaemonWatchState(ctx, opts, name); ok && st != "" {
 			state = st
 		}
 	}
 	if opts.json {
-		writeJSON(a.Stdout, map[string]string{cliJSONKeyWatch: name, cliJSONKeyState: state})
+		out := map[string]any{cliJSONKeyWatch: name, cliJSONKeyState: state}
+		if len(detail.Readings) > 0 {
+			out["readings"] = detail.Readings
+		}
+		writeJSON(a.Stdout, out)
 		return exitSuccess
 	}
 	fmt.Fprintf(a.Stdout, "%s state=%s\n", name, state)
+	for _, reading := range detail.Readings {
+		label := reading.Label
+		if label == "" {
+			label = reading.Field
+		}
+		value := reading.Value
+		if reading.Error != "" {
+			value = reading.Error
+		}
+		if label != "" && value != "" {
+			fmt.Fprintf(a.Stdout, "  %s: %s\n", label, value)
+		}
+	}
 	return exitSuccess
 }

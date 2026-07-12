@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"time"
@@ -54,6 +55,10 @@ type Watch struct {
 	// Notifiers receive a notification when the watch fires (the resolved
 	// `then.notify` targets, or the inherited global default).
 	Notifiers []notify.Notifier
+	// RaidNotifyEvents filters RAID lifecycle transitions eligible for the
+	// ordinary `then.notify` targets. When set, firing notifications are replaced
+	// by these edge-triggered lifecycle notifications.
+	RaidNotifyEvents map[string]bool
 	// NotifyInterval paces re-notification while the watch stays firing. Zero
 	// (the default) means notify once per firing episode, on the rising edge
 	// when the alert starts. A positive value (`then.notify_interval`) re-sends
@@ -143,6 +148,7 @@ func (w *Watch) RunCycle(ctx context.Context) {
 		w.markSettled()
 		return
 	}
+	w.dispatchRaidTransitions(ctx, res)
 	fired := res.OK
 	if w.FireOnFail {
 		fired = !res.OK
@@ -166,7 +172,7 @@ func (w *Watch) RunCycle(ctx context.Context) {
 		if emitFiring {
 			w.emit(Event{Watch: w.Name, Kind: eventKindDryRun, Message: w.dryRunMessage()})
 		}
-		if w.shouldNotify(wasFiring) {
+		if len(w.RaidNotifyEvents) == 0 && w.shouldNotify(wasFiring) {
 			dispatchDryRunNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
 		}
 		return
@@ -189,8 +195,111 @@ func (w *Watch) RunCycle(ctx context.Context) {
 			w.emit(Event{Watch: w.Name, Kind: eventKindHook, Message: res.Message})
 		}
 	}
-	if w.shouldNotify(wasFiring) {
+	if len(w.RaidNotifyEvents) == 0 && w.shouldNotify(wasFiring) {
 		dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
+	}
+}
+
+func (w *Watch) dispatchRaidTransitions(ctx context.Context, res checks.Result) {
+	if len(w.RaidNotifyEvents) == 0 {
+		return
+	}
+	arrayChanges := map[string][]checks.RaidTransition{}
+	for _, transition := range checks.RaidTransitions(res) {
+		if !w.RaidNotifyEvents[transition.Event] {
+			continue
+		}
+		if transition.Event == checks.RaidNotifyOnArrayChange {
+			arrayChanges[transition.Array] = append(arrayChanges[transition.Array], transition)
+			continue
+		}
+		w.dispatchRaidTransition(ctx, res, transition)
+	}
+	for _, array := range sortedRaidArrays(arrayChanges) {
+		w.dispatchRaidTransition(ctx, res, combineRaidArrayChanges(array, arrayChanges[array]))
+	}
+}
+
+func (w *Watch) dispatchRaidTransition(ctx context.Context, res checks.Result, transition checks.RaidTransition) {
+	transitionResult := raidTransitionResult(res, transition)
+	env := hookEnv(w.Name, w.CheckType, transitionResult)
+	if w.DryRun {
+		dispatchDryRunNotify(ctx, w.Notifiers, watchMessage(w.Name, transitionResult.Message, env), w.Name, w.emit)
+		return
+	}
+	if w.InPanic != nil && w.InPanic() {
+		w.emit(Event{Watch: w.Name, Kind: eventKindPanicSuppressed, Message: "panic mode: RAID notification suppressed: " + transitionResult.Message})
+		return
+	}
+	dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, transitionResult.Message, env), w.Name, w.emit)
+}
+
+func sortedRaidArrays(changes map[string][]checks.RaidTransition) []string {
+	arrays := make([]string, 0, len(changes))
+	for array := range changes {
+		arrays = append(arrays, array)
+	}
+	sort.Strings(arrays)
+	return arrays
+}
+
+func combineRaidArrayChanges(array string, changes []checks.RaidTransition) checks.RaidTransition {
+	fields := make([]string, 0, len(changes))
+	oldValues := make([]string, 0, len(changes))
+	newValues := make([]string, 0, len(changes))
+	members := make([]string, 0, len(changes))
+	for _, change := range changes {
+		field := change.Field
+		if change.Member != "" {
+			members = append(members, change.Member)
+			field = change.Member + "." + field
+		}
+		fields = append(fields, field)
+		oldValues = append(oldValues, field+"="+change.Old)
+		newValues = append(newValues, field+"="+change.New)
+	}
+	return checks.RaidTransition{
+		Event: checks.RaidNotifyOnArrayChange, Array: array,
+		Member: strings.Join(members, ","), Field: strings.Join(fields, ","),
+		Old: strings.Join(oldValues, "; "), New: strings.Join(newValues, "; "),
+	}
+}
+
+func raidTransitionResult(base checks.Result, transition checks.RaidTransition) checks.Result {
+	result := base
+	result.Data = maps.Clone(base.Data)
+	delete(result.Data, checks.DataKeyRaidTransitions)
+	delete(result.Data, checks.DataKeyRaidMembers)
+	result.Data["raid_event"] = transition.Event
+	result.Data["raid_array"] = transition.Array
+	result.Data["raid_member"] = transition.Member
+	result.Data["raid_field"] = transition.Field
+	result.Data[checks.DataKeyOld] = transition.Old
+	result.Data[checks.DataKeyNew] = transition.New
+	result.Data["raid_operation"] = transition.Operation
+	if transition.HasProgress {
+		result.Data["raid_progress_pct"] = transition.Progress
+	}
+	result.Message = raidTransitionMessage(transition)
+	return result
+}
+
+func raidTransitionMessage(transition checks.RaidTransition) string {
+	switch transition.Event {
+	case checks.RaidNotifyOnDegraded:
+		return "raid " + transition.Array + " degraded"
+	case checks.RaidNotifyOnRecovering:
+		return "raid " + transition.Array + " reconstruction started"
+	case checks.RaidNotifyOnGood:
+		return "raid " + transition.Array + " is healthy after reconstruction"
+	case checks.RaidNotifyOnArrayChange:
+		target := "raid " + transition.Array
+		if transition.Member != "" {
+			target += " member " + transition.Member
+		}
+		return fmt.Sprintf("%s %s changed: %s -> %s", target, transition.Field, transition.Old, transition.New)
+	default:
+		return "raid " + transition.Array + " changed"
 	}
 }
 

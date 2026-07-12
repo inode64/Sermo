@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"sermo/internal/checks"
 	"sermo/internal/notify"
 )
 
@@ -51,6 +52,37 @@ func TestWatchDispatchesNotifyOnFire(t *testing.T) {
 	}
 	if !hasEvent(events, eventKindNotify) {
 		t.Fatalf("expected a notify event, got %v", events)
+	}
+}
+
+func TestWatchDispatchesSelectedRaidTransitions(t *testing.T) {
+	degraded := &fakeNotifier{name: "raid-critical"}
+	changes := &fakeNotifier{name: "raid-audit"}
+	check := &scriptedCheck{results: []checks.Result{{
+		Check: "raid", OK: false, Data: map[string]any{
+			checks.DataKeyRaidTransitions: []checks.RaidTransition{
+				{Event: checks.RaidNotifyOnDegraded, Array: "md0"},
+				{Event: checks.RaidNotifyOnArrayChange, Array: "md0", Member: "sda1", Field: "errors", Old: "0", New: "1"},
+				{Event: checks.RaidNotifyOnArrayChange, Array: "md0", Member: "sda1", Field: "bad_blocks", Old: "none", New: "8"},
+			},
+		},
+	}}}
+	w := &Watch{
+		Name: "raid-md0", CheckType: checks.CheckTypeRAID, Check: check,
+		Notifiers: []notify.Notifier{degraded, changes},
+		RaidNotifyEvents: map[string]bool{
+			checks.RaidNotifyOnDegraded: true, checks.RaidNotifyOnArrayChange: true,
+		},
+	}
+	w.RunCycle(context.Background())
+	if len(degraded.msgs) != 2 || len(changes.msgs) != 2 {
+		t.Fatalf("messages degraded=%d changes=%d", len(degraded.msgs), len(changes.msgs))
+	}
+	if got := changes.msgs[1].Fields["SERMO_RAID_FIELD"]; got != "sda1.errors,sda1.bad_blocks" {
+		t.Fatalf("raid transition fields = %+v", changes.msgs[1].Fields)
+	}
+	if got := changes.msgs[1].Fields["SERMO_OLD"]; got != "sda1.errors=0; sda1.bad_blocks=none" {
+		t.Fatalf("old value = %q, fields=%+v", got, changes.msgs[1].Fields)
 	}
 }
 

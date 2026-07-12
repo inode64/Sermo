@@ -13,3 +13,9 @@ for: { cycles: 2 }
 then:
   hook:
     command: [/usr/local/bin/sermo-raid-alert.sh]
+
+# A per-array, notification-only watch can use the same check type:
+# check: { type: raid, array: md0, sysfs_changes: true }
+# then:
+#   notify: [ops]
+#   notify_on: [on_degraded, on_recovering, on_good, on_array_change]
