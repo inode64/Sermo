@@ -477,7 +477,7 @@ func sortedPIDs(snapshot map[int]Identity) []int {
 func ReadPidfile(path string) (int, error) {
 	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("read pidfile %s: %w", path, err)
 	}
 	text := strings.TrimSpace(string(data))
 	line, _, _ := strings.Cut(text, procLineSeparator)

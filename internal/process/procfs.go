@@ -1,6 +1,7 @@
 package process
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -104,7 +105,7 @@ type OSReader struct {
 func (OSReader) PIDs() ([]int, error) {
 	entries, err := os.ReadDir(procRoot)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read %s: %w", procRoot, err)
 	}
 	pids := make([]int, 0, len(entries))
 	for _, e := range entries {

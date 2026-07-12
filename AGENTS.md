@@ -630,8 +630,9 @@ Tool notes:
   (`internal/web/server.go` excluded), `mirror`, `misspell`, `modernize`,
   `depguard` (scoped deny rules — checks/conn/rules/config must not import
   `operation`; production `rules/` must not import `execx`), `nilerr`, `nilnesserr`,
-  `wrapcheck` (pilot: `internal/operation/`, `internal/app/`, `internal/cli/` and
-  `internal/state/`; `*_test.go` and other packages excluded), `ireturn` (enabled;
+  `wrapcheck` (pilot: `internal/operation/`, `internal/app/`, `internal/cli/`,
+  `internal/state/` and `internal/process/`; `*_test.go` and other packages
+  excluded), `ireturn` (enabled;
   check/notify
   builders, conn
   registry, manager
