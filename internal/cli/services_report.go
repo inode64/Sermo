@@ -249,14 +249,21 @@ func writeReportCard(b *strings.Builder, label string, value int, color string) 
 		servicesReportColorBorder, servicesReportColorPanel, servicesReportColorMuted, esc(label), color, value)
 }
 
+func servicesReportDistributionSegment(pct float64, color string) string {
+	return fmt.Sprintf(`<span style="display:inline-block;height:12px;width:%.2f%%;background:%s;"></span>`, pct, color)
+}
+
 func writeDistributionBar(b *strings.Builder, stats servicesReportStats) {
 	total := max(stats.Total, 1)
 	okPct := float64(stats.OK) / float64(total) * metrics.PercentScale
 	issuePct := float64(stats.Issues) / float64(total) * metrics.PercentScale
 	missingPct := float64(stats.NotInstalled) / float64(total) * metrics.PercentScale
 	fmt.Fprintf(b, `<div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:%s;margin-bottom:8px;">Distribution</div>`, servicesReportColorMuted)
-	fmt.Fprintf(b, `<div style="height:12px;border-radius:999px;overflow:hidden;background:%s;"><span style="display:inline-block;height:12px;width:%.2f%%;background:%s;"></span><span style="display:inline-block;height:12px;width:%.2f%%;background:%s;"></span><span style="display:inline-block;height:12px;width:%.2f%%;background:%s;"></span></div>`,
-		servicesReportColorBorder, okPct, servicesReportColorOK, issuePct, servicesReportColorIssue, missingPct, servicesReportColorMuted)
+	fmt.Fprintf(b, `<div style="height:12px;border-radius:999px;overflow:hidden;background:%s;">%s%s%s</div>`,
+		servicesReportColorBorder,
+		servicesReportDistributionSegment(okPct, servicesReportColorOK),
+		servicesReportDistributionSegment(issuePct, servicesReportColorIssue),
+		servicesReportDistributionSegment(missingPct, servicesReportColorMuted))
 }
 
 func writeReportRow(b *strings.Builder, r appinspect.Report) {

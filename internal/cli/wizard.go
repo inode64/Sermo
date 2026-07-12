@@ -784,7 +784,7 @@ func writeConfigDocs(globalPath, pathKey, relDir, targetDir, noun string, docs m
 		return nil, "", fmt.Errorf("create %s: %w", targetDir, err)
 	}
 	for _, file := range files {
-		if err := os.WriteFile(file.path, file.data, wizardConfigFileMode); err != nil { //nolint:gosec // config is world-readable by design
+		if err := os.WriteFile(file.path, file.data, wizardConfigFileMode); err != nil {
 			return nil, "", fmt.Errorf("write %s: %w", file.path, err)
 		}
 	}
@@ -827,10 +827,10 @@ func ensureConfigPathDir(globalPath, pathKey, relDir, targetDir string) (string,
 		return "", fmt.Errorf("render %s: %w", globalPath, err)
 	}
 	bak := globalPath + ".bak"
-	if err := os.WriteFile(bak, orig, wizardConfigFileMode); err != nil { //nolint:gosec // config is world-readable by design
+	if err := os.WriteFile(bak, orig, wizardConfigFileMode); err != nil { //nolint:gosec // G703: backup path is derived from the operator-selected global config file
 		return "", fmt.Errorf("write backup %s: %w", bak, err)
 	}
-	if err := os.WriteFile(globalPath, out, wizardConfigFileMode); err != nil { //nolint:gosec // config is world-readable by design
+	if err := os.WriteFile(globalPath, out, wizardConfigFileMode); err != nil {
 		return "", fmt.Errorf("write %s: %w", globalPath, err)
 	}
 	return bak, nil

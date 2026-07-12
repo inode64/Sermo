@@ -14,18 +14,24 @@ linters:
   default: none
   enable:
     - asasalint  # []any accidentally passed to a variadic any
+    - asciicheck  # non-ASCII identifiers
+    - bidichk  # dangerous bidi unicode in source
     - bodyclose
     - contextcheck  # context must flow into blocking I/O (not net/http dial — see noctx)
     - copyloopvar
+    - dupword  # duplicated words (typos); off in *_test.go (protocol/script fixtures)
     - durationcheck  # suspicious time.Duration multiplications
     - errcheck  # unchecked errors (defer Rollback/Release, I/O, …)
     - errchkjson  # json.Marshal/Encode error dropped while the value can fail to encode
+    - errname  # sentinel Err* and *Error type naming
     - errorlint  # error wrapping (%w) and errors.Is/As correctness
     - exhaustive  # enum switches missing cases (check/watch/backend type dispatch)
     - fatcontext  # context accumulated inside loops
     - gocheckcompilerdirectives  # malformed //go: directives (typos that silently no-op)
     - gocritic  # appendAssign + unlambda only (see settings)
+    - goprintffuncname  # printf-like helpers must end in f
     - gosec
+    - interfacebloat  # interfaces with too many methods (web.Backend excluded below)
     - iface  # unused / duplicated interface declarations
     - modernize  # Go 1.22+ idioms (range int, slices.*, min/max, …)
     - ineffassign
@@ -34,6 +40,7 @@ linters:
     - misspell
     - nilerr
     - nilnesserr  # err checked nil but a different err value returned
+    - nolintlint  # //nolint: directives must name a linter and stay justified
     - reassign  # writes to other packages' package-level vars
     - recvcheck  # mixed value/pointer receivers on one type
     - rowserrcheck  # database/sql Rows.Err() left unchecked
@@ -78,6 +85,13 @@ linters:
       # exhaustiveness is meaningless noise.
       - linters: [exhaustive]
         path: _test\.go
+      # Test fixtures repeat protocol tokens (NUT UPS), YAML keys and scripted
+      # wizard answers — not prose typos.
+      - linters: [dupword]
+        path: _test\.go
+      # Dashboard API surface; splitting would fragment the web backend contract.
+      - linters: [interfacebloat]
+        path: internal/web/server\.go
       # Test fixtures are written to throwaway temp dirs with 0644; not a concern.
       - linters: [gosec]
         path: _test\.go

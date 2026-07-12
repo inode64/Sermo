@@ -29,7 +29,7 @@ import (
 	"github.com/goccy/go-yaml"
 )
 
-// listInstalledCatalogServices returns active service targets for the wizard: catalog
+// listInstalledCatalogServices returns active service targets for the wizard:
 // catalog services whose init unit exists, plus active backend units not backed by the
 // catalog. Catalog candidates keep their resolved unit/status/default port and
 // config-file hints; generic candidates write self-contained check-only service

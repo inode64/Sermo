@@ -621,11 +621,14 @@ Tool notes:
   `*_test.go`). Rename unused params to `_` in non-test code; avoid locals that
   shadow import names. Document new exported symbols — the `exported` rule is on.
 - **`golangci-lint`** uses `.golangci.yml` (**v2 format** — the binary must be
-  v2) for `gosec`, `bodyclose`, `copyloopvar`, `errcheck`, `errchkjson`,
+  v2) for `gosec`, `asciicheck`, `bidichk`, `bodyclose`, `copyloopvar`,
+  `dupword` (off in `*_test.go`), `errcheck`, `errchkjson`, `errname`,
   `exhaustive` (a `default:` arm counts as exhaustive; off in `*_test.go`),
   `fatcontext`, `gocritic` (`appendAssign`, `unlambda` only), `contextcheck`,
-  `iface`, `ineffassign`, `intrange`, `mirror`, `misspell`, `modernize`,
-  `nilerr`, `nilnesserr`, `recvcheck`, `sloglint` and `wastedassign`.
+  `goprintffuncname`, `iface`, `ineffassign`, `intrange`, `interfacebloat`
+  (`internal/web/server.go` excluded), `mirror`, `misspell`, `modernize`,
+  `nilerr`, `nilnesserr`, `nolintlint`, `recvcheck`, `sloglint` and
+  `wastedassign`.
   `noctx` is deliberately off: conn/ probes use per-probe deadlines instead of
   context-aware dials.
   Accepted gosec exceptions live in that config: `G115`, and in test fixtures

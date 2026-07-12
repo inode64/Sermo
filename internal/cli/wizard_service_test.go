@@ -378,11 +378,11 @@ func (p wizardProbe) CommandExists(string) bool { return false }
 func (p wizardProbe) PathExists(path string) bool {
 	return p.paths[path]
 }
-func (p wizardProbe) ReadFile(string) ([]byte, error) { return nil, errNotFoundForWizard{} }
+func (p wizardProbe) ReadFile(string) ([]byte, error) { return nil, wizardNotFoundError{} }
 
-type errNotFoundForWizard struct{}
+type wizardNotFoundError struct{}
 
-func (errNotFoundForWizard) Error() string { return "not found" }
+func (wizardNotFoundError) Error() string { return "not found" }
 
 type wizardManager struct {
 	statuses map[string]servicemgr.Status
