@@ -119,7 +119,7 @@ func build(srcDir, out string) error {
 	// input; this is a developer build tool, so path-traversal taint is moot.
 	shell, err := os.ReadFile(filepath.Join(srcDir, webBuildShellFilename)) // #nosec G304
 	if err != nil {
-		return err
+		return fmt.Errorf("read shell %s: %w", webBuildShellFilename, err)
 	}
 	watchPanels, err := loadWatchPanels(filepath.Join(srcDir, watchPanelsFilename))
 	if err != nil {
@@ -170,17 +170,20 @@ func build(srcDir, out string) error {
 		}
 	}
 
-	return os.WriteFile(out, []byte(page), webBuildOutputFileMode) // #nosec G304 G703
+	if err := os.WriteFile(out, []byte(page), webBuildOutputFileMode); err != nil { // #nosec G304 G703
+		return fmt.Errorf("write %s: %w", out, err)
+	}
+	return nil
 }
 
 func loadWatchPanels(path string) ([]watchPanelDescriptor, error) {
 	data, err := os.ReadFile(path) // #nosec G304
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read watch panels %s: %w", path, err)
 	}
 	var panels []watchPanelDescriptor
 	if err := json.Unmarshal(data, &panels); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode watch panels %s: %w", path, err)
 	}
 	if len(panels) == 0 {
 		return nil, fmt.Errorf("no descriptors")
@@ -205,7 +208,7 @@ func watchPanelMarker(key string) string {
 func renderWatchPanel(panel watchPanelDescriptor) (string, error) {
 	var out bytes.Buffer
 	if err := watchPanelTemplate.Execute(&out, panel); err != nil {
-		return "", err
+		return "", fmt.Errorf("render watch panel %q: %w", panel.Key, err)
 	}
 	return out.String(), nil
 }

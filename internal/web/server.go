@@ -1345,7 +1345,7 @@ func (s *Server) Run(ctx context.Context) error {
 		_ = srv.Shutdown(shutCtx) //nolint:contextcheck // detached shutdown deadline; ctx is already cancelled
 	}()
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err
+		return fmt.Errorf("web server listen: %w", err)
 	}
 	return nil
 }
