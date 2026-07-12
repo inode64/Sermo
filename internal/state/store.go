@@ -406,29 +406,34 @@ func OpenContextWith(ctx context.Context, path string, opts Options) (*Store, er
 }
 
 // Close releases the database handle.
-func (s *Store) Close() error { return s.db.Close() }
+func (s *Store) Close() error {
+	if err := s.db.Close(); err != nil {
+		return fmt.Errorf("close state store: %w", err)
+	}
+	return nil
+}
 
 func (s *Store) migrate(ctx context.Context) error {
 	var version int
 	if err := s.db.QueryRowContext(ctx, "PRAGMA user_version;").Scan(&version); err != nil {
-		return err
+		return fmt.Errorf("read state db user_version: %w", err)
 	}
 	for i := version; i < len(migrations); i++ {
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
-			return err
+			return fmt.Errorf("begin state db migration %d: %w", i+1, err)
 		}
 		if _, err := tx.ExecContext(ctx, migrations[i]); err != nil {
 			_ = tx.Rollback()
-			return err
+			return fmt.Errorf("apply state db migration %d: %w", i+1, err)
 		}
 		// user_version cannot be parameterized; i+1 is a trusted integer.
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version=%d;", i+1)); err != nil {
 			_ = tx.Rollback()
-			return err
+			return fmt.Errorf("set state db user_version %d: %w", i+1, err)
 		}
 		if err := tx.Commit(); err != nil {
-			return err
+			return fmt.Errorf("commit state db migration %d: %w", i+1, err)
 		}
 	}
 	return nil
@@ -483,7 +488,7 @@ func (s *Store) MonitorState(service string) (MonitorRecord, bool, error) {
 	case err == sql.ErrNoRows:
 		return MonitorRecord{}, false, nil
 	case err != nil:
-		return MonitorRecord{}, false, err
+		return MonitorRecord{}, false, fmt.Errorf("load monitor state for %s: %w", service, err)
 	default:
 		at, _ := time.Parse(time.RFC3339, updated)
 		return MonitorRecord{
@@ -502,7 +507,7 @@ func (s *Store) Active(service string) (active, found bool, err error) {
 	case err == sql.ErrNoRows:
 		return false, false, nil
 	case err != nil:
-		return false, false, err
+		return false, false, fmt.Errorf("load active monitor flag for %s: %w", service, err)
 	default:
 		return v != 0, true, nil
 	}
@@ -524,7 +529,10 @@ func (s *Store) SetActive(service string, active bool, source string) error {
 		   updated_at = excluded.updated_at;`,
 		service, v, source, s.now().UTC().Format(time.RFC3339),
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("set monitor state for %s: %w", service, err)
+	}
+	return nil
 }
 
 // SetOperationSettling records that a service operation is running or awaiting
@@ -540,7 +548,10 @@ func (s *Store) SetOperationSettling(service, action, phase, source string) erro
 		   updated_at = excluded.updated_at;`,
 		service, action, phase, source, s.now().UTC().Format(time.RFC3339),
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("set operation settling for %s: %w", service, err)
+	}
+	return nil
 }
 
 // OperationSettling returns a service's current operation-settling row.
@@ -554,7 +565,7 @@ func (s *Store) OperationSettling(service string) (OperationSettlingRecord, bool
 	case err == sql.ErrNoRows:
 		return OperationSettlingRecord{}, false, nil
 	case err != nil:
-		return OperationSettlingRecord{}, false, err
+		return OperationSettlingRecord{}, false, fmt.Errorf("load operation settling for %s: %w", service, err)
 	default:
 		at, _ := time.Parse(time.RFC3339, updated)
 		return OperationSettlingRecord{Action: action, Phase: phase, Source: source, UpdatedAt: at}, true, nil
@@ -564,7 +575,10 @@ func (s *Store) OperationSettling(service string) (OperationSettlingRecord, bool
 // ClearOperationSettling removes a service's operation-settling row.
 func (s *Store) ClearOperationSettling(service string) error {
 	_, err := s.db.ExecContext(s.sqlCtx(), `DELETE FROM operation_settling WHERE service = ?;`, service)
-	return err
+	if err != nil {
+		return fmt.Errorf("clear operation settling for %s: %w", service, err)
+	}
+	return nil
 }
 
 // ServiceCheckSnapshots returns every persisted service check snapshot, grouped
@@ -575,7 +589,7 @@ func (s *Store) ServiceCheckSnapshots() (map[string]map[string]CheckSnapshotReco
 		   FROM service_check_snapshot ORDER BY service, check_name;`,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load service check snapshots: %w", err)
 	}
 	defer rows.Close()
 
@@ -594,7 +608,7 @@ func (s *Store) ServiceCheckSnapshots() (map[string]map[string]CheckSnapshotReco
 			at       int64
 		)
 		if err := rows.Scan(&service, &name, &ok, &cond, &optional, &skipped, &message, &rawData, &ran, &at); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan service check snapshot: %w", err)
 		}
 		data, err := decodeSnapshotData(rawData)
 		if err != nil {
@@ -609,19 +623,22 @@ func (s *Store) ServiceCheckSnapshots() (map[string]map[string]CheckSnapshotReco
 		}
 		out[service][name] = rec
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate service check snapshots: %w", err)
+	}
+	return out, nil
 }
 
 // SetServiceCheckSnapshots replaces one service's latest check snapshots.
 func (s *Store) SetServiceCheckSnapshots(service string, records map[string]CheckSnapshotRecord) error {
 	tx, err := s.db.BeginTx(s.sqlCtx(), nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("begin service check snapshot update for %s: %w", service, err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(s.sqlCtx(), `DELETE FROM service_check_snapshot WHERE service = ?;`, service); err != nil {
-		return err
+		return fmt.Errorf("clear service check snapshots for %s: %w", service, err)
 	}
 	names := make([]string, 0, len(records))
 	for name := range records {
@@ -641,10 +658,13 @@ func (s *Store) SetServiceCheckSnapshots(service string, records map[string]Chec
 			service, name, boolInt(rec.OK), boolInt(rec.Condition), boolInt(rec.Optional), boolInt(rec.Skipped),
 			rec.Message, data, boolInt(rec.Ran), timeUnixNano(rec.At),
 		); err != nil {
-			return err
+			return fmt.Errorf("insert service check snapshot %s/%s: %w", service, name, err)
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit service check snapshots for %s: %w", service, err)
+	}
+	return nil
 }
 
 // WatchCheckSnapshots returns every persisted host-watch snapshot, grouped by
@@ -655,7 +675,7 @@ func (s *Store) WatchCheckSnapshots() (map[string]map[string]CheckSnapshotRecord
 		   FROM watch_check_snapshot ORDER BY watch, slot;`,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load watch check snapshots: %w", err)
 	}
 	defer rows.Close()
 
@@ -675,7 +695,7 @@ func (s *Store) WatchCheckSnapshots() (map[string]map[string]CheckSnapshotRecord
 			at        int64
 		)
 		if err := rows.Scan(&watch, &slot, &checkType, &ok, &cond, &optional, &skipped, &message, &rawData, &ran, &at); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan watch check snapshot: %w", err)
 		}
 		data, err := decodeSnapshotData(rawData)
 		if err != nil {
@@ -690,7 +710,10 @@ func (s *Store) WatchCheckSnapshots() (map[string]map[string]CheckSnapshotRecord
 		}
 		out[watch][slot] = rec
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate watch check snapshots: %w", err)
+	}
+	return out, nil
 }
 
 // SetWatchCheckSnapshot upserts one host-watch snapshot slot.
@@ -716,7 +739,10 @@ func (s *Store) SetWatchCheckSnapshot(watch, slot string, rec CheckSnapshotRecor
 		watch, slot, rec.CheckType, boolInt(rec.OK), boolInt(rec.Condition), boolInt(rec.Optional), boolInt(rec.Skipped),
 		rec.Message, data, boolInt(rec.Ran), timeUnixNano(rec.At),
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("set watch check snapshot %s/%s: %w", watch, slot, err)
+	}
+	return nil
 }
 
 func encodeSnapshotData(data map[string]any) (string, error) {
@@ -725,7 +751,7 @@ func encodeSnapshotData(data map[string]any) (string, error) {
 	}
 	b, err := json.Marshal(data)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("encode check snapshot data: %w", err)
 	}
 	return string(b), nil
 }
@@ -736,7 +762,7 @@ func decodeSnapshotData(raw string) (map[string]any, error) {
 	}
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode check snapshot data: %w", err)
 	}
 	return data, nil
 }
@@ -778,7 +804,10 @@ func (s *Store) SetPanic(on bool, source string) error {
 		   updated_at = excluded.updated_at;`,
 		panicFlagKey, v, source, s.now().UTC().Format(time.RFC3339),
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("set panic mode: %w", err)
+	}
+	return nil
 }
 
 // Panic returns the persisted panic-mode flag. found is false when no row has
@@ -794,7 +823,7 @@ func (s *Store) Panic() (rec GlobalRecord, found bool, err error) {
 	case err == sql.ErrNoRows:
 		return GlobalRecord{}, false, nil
 	case err != nil:
-		return GlobalRecord{}, false, err
+		return GlobalRecord{}, false, fmt.Errorf("load panic mode: %w", err)
 	default:
 		at, _ := time.Parse(time.RFC3339, updated)
 		return GlobalRecord{On: v != 0, Source: source, UpdatedAt: at}, true, nil
@@ -857,12 +886,12 @@ func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool,
 	case errors.Is(err, sql.ErrNoRows):
 		return WatchRuntimeRecord{}, false, nil
 	case err != nil:
-		return WatchRuntimeRecord{}, false, err
+		return WatchRuntimeRecord{}, false, fmt.Errorf("load watch runtime state for %s/%s: %w", watch, slot, err)
 	}
 
 	var history []bool
 	if err := json.Unmarshal([]byte(rawHistory), &history); err != nil {
-		return WatchRuntimeRecord{}, false, err
+		return WatchRuntimeRecord{}, false, fmt.Errorf("decode watch runtime history for %s/%s: %w", watch, slot, err)
 	}
 	timed, err := decodeRuleWindowSamples(rawTimed)
 	if err != nil {
@@ -894,11 +923,14 @@ func (s *Store) WatchRuntimeState(watch, slot string) (WatchRuntimeRecord, bool,
 func (s *Store) SetWatchRuntimeState(watch, slot string, rec WatchRuntimeRecord) error {
 	if watchRuntimeRecordEmpty(rec) {
 		_, err := s.db.ExecContext(s.sqlCtx(), `DELETE FROM watch_runtime_state WHERE watch = ? AND slot = ?;`, watch, slot)
-		return err
+		if err != nil {
+			return fmt.Errorf("clear watch runtime state for %s/%s: %w", watch, slot, err)
+		}
+		return nil
 	}
 	history, err := json.Marshal(rec.Window.History)
 	if err != nil {
-		return err
+		return fmt.Errorf("encode watch runtime history for %s/%s: %w", watch, slot, err)
 	}
 	timed, err := encodeRuleWindowSamples(rec.Window.TimedHistory)
 	if err != nil {
@@ -931,7 +963,10 @@ func (s *Store) SetWatchRuntimeState(watch, slot string, rec WatchRuntimeRecord)
 		string(history), timeUnixNano(rec.Window.TrueSince), timed,
 		timeUnixNano(rec.Policy.LastActionAt), recent, int64(rec.Policy.CurrentBackoff),
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("set watch runtime state for %s/%s: %w", watch, slot, err)
+	}
+	return nil
 }
 
 func watchRuntimeRecordEmpty(rec WatchRuntimeRecord) bool {
@@ -959,7 +994,7 @@ func (s *Store) RemediationState(service string) (RemediationRecord, bool, error
 	case err == sql.ErrNoRows:
 		return RemediationRecord{}, false, nil
 	case err != nil:
-		return RemediationRecord{}, false, err
+		return RemediationRecord{}, false, fmt.Errorf("load remediation state for %s: %w", service, err)
 	default:
 		recent, err := decodeUnixNanos(recentActions)
 		if err != nil {
@@ -978,7 +1013,10 @@ func (s *Store) RemediationState(service string) (RemediationRecord, bool, error
 func (s *Store) SetRemediationState(service string, rec RemediationRecord) error {
 	if rec.LastActionAt.IsZero() && len(rec.RecentActions) == 0 && rec.CurrentBackoff == 0 {
 		_, err := s.db.ExecContext(s.sqlCtx(), `DELETE FROM remediation_state WHERE service = ?;`, service)
-		return err
+		if err != nil {
+			return fmt.Errorf("clear remediation state for %s: %w", service, err)
+		}
+		return nil
 	}
 	recent, err := encodeUnixNanos(rec.RecentActions)
 	if err != nil {
@@ -993,7 +1031,10 @@ func (s *Store) SetRemediationState(service string, rec RemediationRecord) error
 		   current_backoff_ns = excluded.current_backoff_ns;`,
 		service, timeUnixNano(rec.LastActionAt), recent, int64(rec.CurrentBackoff),
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("set remediation state for %s: %w", service, err)
+	}
+	return nil
 }
 
 // RuleWindowStates returns the persisted for/within progress for a service's
@@ -1005,7 +1046,7 @@ func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, e
 		service,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load rule window states for %s: %w", service, err)
 	}
 	defer rows.Close()
 
@@ -1019,11 +1060,11 @@ func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, e
 			rawTimed    string
 		)
 		if err := rows.Scan(&name, &consecutive, &rawHistory, &trueSince, &rawTimed); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan rule window state for %s: %w", service, err)
 		}
 		var history []bool
 		if err := json.Unmarshal([]byte(rawHistory), &history); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("decode rule window history for %s/%s: %w", service, name, err)
 		}
 		timed, err := decodeRuleWindowSamples(rawTimed)
 		if err != nil {
@@ -1036,7 +1077,10 @@ func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, e
 			TimedHistory: timed,
 		}
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate rule window states for %s: %w", service, err)
+	}
+	return out, nil
 }
 
 // SetRuleWindowStates replaces the persisted rule-window state for a service.
@@ -1044,12 +1088,12 @@ func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, e
 func (s *Store) SetRuleWindowStates(service string, records map[string]RuleWindowRecord) error {
 	tx, err := s.db.BeginTx(s.sqlCtx(), nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("begin rule window state update for %s: %w", service, err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.ExecContext(s.sqlCtx(), `DELETE FROM rule_window_state WHERE service = ?;`, service); err != nil {
-		return err
+		return fmt.Errorf("clear rule window states for %s: %w", service, err)
 	}
 	names := make([]string, 0, len(records))
 	for name := range records {
@@ -1060,7 +1104,7 @@ func (s *Store) SetRuleWindowStates(service string, records map[string]RuleWindo
 		rec := records[name]
 		history, err := json.Marshal(rec.History)
 		if err != nil {
-			return err
+			return fmt.Errorf("encode rule window history for %s/%s: %w", service, name, err)
 		}
 		timed, err := encodeRuleWindowSamples(rec.TimedHistory)
 		if err != nil {
@@ -1071,10 +1115,13 @@ func (s *Store) SetRuleWindowStates(service string, records map[string]RuleWindo
 			 VALUES (?, ?, ?, ?, ?, ?);`,
 			service, name, rec.Consecutive, string(history), timeUnixNano(rec.TrueSince), timed,
 		); err != nil {
-			return err
+			return fmt.Errorf("insert rule window state for %s/%s: %w", service, name, err)
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit rule window states for %s: %w", service, err)
+	}
+	return nil
 }
 
 func encodeUnixNanos(times []time.Time) (string, error) {
@@ -1086,7 +1133,7 @@ func encodeUnixNanos(times []time.Time) (string, error) {
 	}
 	b, err := json.Marshal(nanos)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("encode unix nanos: %w", err)
 	}
 	return string(b), nil
 }
@@ -1097,7 +1144,7 @@ func decodeUnixNanos(raw string) ([]time.Time, error) {
 	}
 	var nanos []int64
 	if err := json.Unmarshal([]byte(raw), &nanos); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode unix nanos: %w", err)
 	}
 	out := make([]time.Time, 0, len(nanos))
 	for _, n := range nanos {
@@ -1123,7 +1170,7 @@ func encodeRuleWindowSamples(samples []RuleWindowSample) (string, error) {
 	}
 	b, err := json.Marshal(raw)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("encode rule window samples: %w", err)
 	}
 	return string(b), nil
 }
@@ -1134,7 +1181,7 @@ func decodeRuleWindowSamples(raw string) ([]RuleWindowSample, error) {
 	}
 	var encoded []ruleWindowSampleJSON
 	if err := json.Unmarshal([]byte(raw), &encoded); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode rule window samples: %w", err)
 	}
 	out := make([]RuleWindowSample, 0, len(encoded))
 	for _, sample := range encoded {
@@ -1189,9 +1236,13 @@ func (s *Store) RecordEvent(e EventRecord) (int64, error) {
 		at.UTC().UnixNano(), e.Service, e.Watch, e.App, e.Kind, e.Rule, e.Action, e.Status, e.Message, e.Output,
 	)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("insert event log row: %w", err)
 	}
-	return result.LastInsertId()
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("read event log last insert id: %w", err)
+	}
+	return id, nil
 }
 
 // RecentEvents returns the newest persisted events first. limit <= 0 returns all
@@ -1217,7 +1268,7 @@ func (s *Store) RecentEventsBefore(beforeID int64, limit int) ([]EventRecord, er
 	args = append(args, limit)
 	rows, err := s.db.QueryContext(s.sqlCtx(), query, args...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load recent events: %w", err)
 	}
 	defer rows.Close()
 
@@ -1226,12 +1277,15 @@ func (s *Store) RecentEventsBefore(beforeID int64, limit int) ([]EventRecord, er
 		var rec EventRecord
 		var at int64
 		if err := rows.Scan(&rec.ID, &at, &rec.Service, &rec.Watch, &rec.App, &rec.Kind, &rec.Rule, &rec.Action, &rec.Status, &rec.Message, &rec.Output); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan event log row: %w", err)
 		}
 		rec.At = time.Unix(0, at).UTC()
 		out = append(out, rec)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate event log rows: %w", err)
+	}
+	return out, nil
 }
 
 // PruneEvents deletes event rows older than before. If before is zero, every
@@ -1247,9 +1301,13 @@ func (s *Store) PruneEvents(before time.Time) (int64, error) {
 		res, err = s.db.ExecContext(s.sqlCtx(), `DELETE FROM event_log WHERE at < ?;`, before.UTC().UnixNano())
 	}
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("prune event log: %w", err)
 	}
-	return res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("read pruned event log row count: %w", err)
+	}
+	return n, nil
 }
 
 // SLAWindow names a rolling availability window and its length. The windows are
@@ -1335,7 +1393,10 @@ func (s *Store) RecordSLA(service string, up bool, at time.Time) error {
 		   total_count = total_count + excluded.total_count;`,
 		service, minuteBucket(at), u,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("record SLA for %s: %w", service, err)
+	}
+	return nil
 }
 
 // RecordCheckSLA accumulates one observed check execution into its current
@@ -1354,7 +1415,10 @@ func (s *Store) RecordCheckSLA(service, check string, up bool, at time.Time) err
 		   total_count = total_count + excluded.total_count;`,
 		service, check, minuteBucket(at), u,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("record check SLA for %s/%s: %w", service, check, err)
+	}
+	return nil
 }
 
 // SLA sums a service's up and total observed cycles over the rolling window
@@ -1367,7 +1431,7 @@ func (s *Store) SLA(service string, span time.Duration, now time.Time) (up, tota
 		service, from,
 	).Scan(&up, &total)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, fmt.Errorf("sum SLA for %s: %w", service, err)
 	}
 	return up, total, nil
 }
@@ -1382,7 +1446,7 @@ func (s *Store) CheckSLA(service, check string, span time.Duration, now time.Tim
 		service, check, from,
 	).Scan(&up, &total)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, fmt.Errorf("sum check SLA for %s/%s: %w", service, check, err)
 	}
 	return up, total, nil
 }
@@ -1410,7 +1474,7 @@ func (s *Store) SLASeries(service string, from, to time.Time) ([]SLAPoint, error
 		service, minuteBucket(from), minuteBucket(to),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load SLA series for %s: %w", service, err)
 	}
 	defer rows.Close()
 
@@ -1418,11 +1482,14 @@ func (s *Store) SLASeries(service string, from, to time.Time) ([]SLAPoint, error
 	for rows.Next() {
 		var bucket, up, total int64
 		if err := rows.Scan(&bucket, &up, &total); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan SLA series row for %s: %w", service, err)
 		}
 		out = append(out, SLAPoint{Start: time.Unix(bucket, 0).UTC(), Up: up, Total: total})
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate SLA series for %s: %w", service, err)
+	}
+	return out, nil
 }
 
 // CheckSLASeries returns one check's per-minute availability points in [from,
@@ -1436,7 +1503,7 @@ func (s *Store) CheckSLASeries(service, check string, from, to time.Time) ([]SLA
 		service, check, minuteBucket(from), minuteBucket(to),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load check SLA series for %s/%s: %w", service, check, err)
 	}
 	defer rows.Close()
 
@@ -1444,11 +1511,14 @@ func (s *Store) CheckSLASeries(service, check string, from, to time.Time) ([]SLA
 	for rows.Next() {
 		var bucket, up, total int64
 		if err := rows.Scan(&bucket, &up, &total); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan check SLA series row for %s/%s: %w", service, check, err)
 		}
 		out = append(out, SLAPoint{Start: time.Unix(bucket, 0).UTC(), Up: up, Total: total})
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate check SLA series for %s/%s: %w", service, check, err)
+	}
+	return out, nil
 }
 
 // SLAReport returns a service's availability across every SLAWindow, ordered as
@@ -1554,7 +1624,7 @@ func (s *Store) slaTimelines(query string, keyArgs []any, now time.Time) ([]SLAW
 		args = append(args, startBucket, endBucket)
 		rows, err := s.db.QueryContext(s.sqlCtx(), query, args...)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("load SLA timeline for %s: %w", w.Name, err)
 		}
 
 		segs := make([]SLASegment, segCount)
@@ -1563,7 +1633,7 @@ func (s *Store) slaTimelines(query string, keyArgs []any, now time.Time) ([]SLAW
 			var seg, up, total int64
 			if err := rows.Scan(&seg, &up, &total); err != nil {
 				rows.Close()
-				return nil, err
+				return nil, fmt.Errorf("scan SLA timeline row for %s: %w", w.Name, err)
 			}
 			if seg < 0 {
 				seg = 0
@@ -1577,7 +1647,7 @@ func (s *Store) slaTimelines(query string, keyArgs []any, now time.Time) ([]SLAW
 		}
 		if err := rows.Err(); err != nil {
 			rows.Close()
-			return nil, err
+			return nil, fmt.Errorf("iterate SLA timeline for %s: %w", w.Name, err)
 		}
 		rows.Close()
 
@@ -1619,7 +1689,10 @@ func (s *Store) RecordMeasurement(service, check string, valueMs float64, at tim
 		   max_ms = max(max_ms, excluded.max_ms);`,
 		service, check, minuteBucket(at), valueMs, valueMs, valueMs,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("record measurement for %s/%s: %w", service, check, err)
+	}
+	return nil
 }
 
 // MeasurementSummary returns the average/min/max and sample count for a check over
@@ -1639,7 +1712,7 @@ func summaryFromRow(row *sql.Row) (MeasurementStat, error) {
 	var count sql.NullInt64
 	var sum, minV, maxV sql.NullFloat64
 	if err := row.Scan(&count, &sum, &minV, &maxV); err != nil {
-		return MeasurementStat{}, err
+		return MeasurementStat{}, fmt.Errorf("scan measurement summary: %w", err)
 	}
 	stat := MeasurementStat{Count: count.Int64}
 	if count.Int64 > 0 && sum.Valid {
@@ -1661,7 +1734,7 @@ func (s *Store) MeasurementSeries(service, check string, from, to time.Time) ([]
 		service, check, minuteBucket(from), minuteBucket(to),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load measurement series for %s/%s: %w", service, check, err)
 	}
 	defer rows.Close()
 
@@ -1670,7 +1743,7 @@ func (s *Store) MeasurementSeries(service, check string, from, to time.Time) ([]
 		var bucket, n int64
 		var sum, minMs, maxMs float64
 		if err := rows.Scan(&bucket, &n, &sum, &minMs, &maxMs); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan measurement series row for %s/%s: %w", service, check, err)
 		}
 		avg := 0.0
 		if n > 0 {
@@ -1678,7 +1751,10 @@ func (s *Store) MeasurementSeries(service, check string, from, to time.Time) ([]
 		}
 		out = append(out, MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: n, Avg: avg, Min: minMs, Max: maxMs})
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate measurement series for %s/%s: %w", service, check, err)
+	}
+	return out, nil
 }
 
 // PruneMeasurements deletes measurement buckets older than before. Returns rows removed.
@@ -1692,9 +1768,13 @@ func (s *Store) PruneMeasurements(before time.Time) (int64, error) {
 func (s *Store) pruneBuckets(table string, before time.Time) (int64, error) {
 	res, err := s.db.ExecContext(s.sqlCtx(), `DELETE FROM `+table+` WHERE bucket < ?;`, minuteBucket(before)) //nolint:gosec // table is a package-internal literal
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("prune %s buckets before %s: %w", table, before.UTC().Format(time.RFC3339), err)
 	}
-	return res.RowsAffected()
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("read pruned %s row count: %w", table, err)
+	}
+	return n, nil
 }
 
 // RecordMetric accumulates one observation of a named per-check metric (e.g.
@@ -1711,7 +1791,10 @@ func (s *Store) RecordMetric(service, check, metric string, value float64, at ti
 		   max_v = max(max_v, excluded.max_v);`,
 		service, check, metric, minuteBucket(at), value, value, value,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("record metric for %s/%s/%s: %w", service, check, metric, err)
+	}
+	return nil
 }
 
 // MetricSummary returns a named metric's average/min/max and sample count over the
@@ -1734,7 +1817,7 @@ func (s *Store) MetricSeries(service, check, metric string, from, to time.Time) 
 		service, check, metric, minuteBucket(from), minuteBucket(to),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load metric series for %s/%s/%s: %w", service, check, metric, err)
 	}
 	defer rows.Close()
 
@@ -1743,7 +1826,7 @@ func (s *Store) MetricSeries(service, check, metric string, from, to time.Time) 
 		var bucket, n int64
 		var sum, minV, maxV float64
 		if err := rows.Scan(&bucket, &n, &sum, &minV, &maxV); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan metric series row for %s/%s/%s: %w", service, check, metric, err)
 		}
 		avg := 0.0
 		if n > 0 {
@@ -1751,7 +1834,10 @@ func (s *Store) MetricSeries(service, check, metric string, from, to time.Time) 
 		}
 		out = append(out, MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: n, Avg: avg, Min: minV, Max: maxV})
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate metric series for %s/%s/%s: %w", service, check, metric, err)
+	}
+	return out, nil
 }
 
 // PruneMetrics deletes named-metric buckets older than before. Returns rows removed.
@@ -1772,7 +1858,10 @@ func (s *Store) RecordDaemonMetric(metric string, value float64, at time.Time) e
 		   max_v = max(max_v, excluded.max_v);`,
 		metric, minuteBucket(at), value, value, value,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("record daemon metric %s: %w", metric, err)
+	}
+	return nil
 }
 
 // DaemonMetricSummary returns a daemon metric's average/min/max and sample count
@@ -1795,7 +1884,7 @@ func (s *Store) DaemonMetricSeries(metric string, from, to time.Time) ([]Measure
 		metric, minuteBucket(from), minuteBucket(to),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load daemon metric series for %s: %w", metric, err)
 	}
 	defer rows.Close()
 
@@ -1804,7 +1893,7 @@ func (s *Store) DaemonMetricSeries(metric string, from, to time.Time) ([]Measure
 		var bucket, n int64
 		var sum, minV, maxV float64
 		if err := rows.Scan(&bucket, &n, &sum, &minV, &maxV); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan daemon metric series row for %s: %w", metric, err)
 		}
 		avg := 0.0
 		if n > 0 {
@@ -1812,7 +1901,10 @@ func (s *Store) DaemonMetricSeries(metric string, from, to time.Time) ([]Measure
 		}
 		out = append(out, MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: n, Avg: avg, Min: minV, Max: maxV})
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate daemon metric series for %s: %w", metric, err)
+	}
+	return out, nil
 }
 
 // PruneDaemonMetrics deletes daemon metric buckets older than before. Returns rows removed.
@@ -1833,7 +1925,10 @@ func (s *Store) RecordServiceMetric(service, metric string, value float64, at ti
 		   max_v = max(max_v, excluded.max_v);`,
 		service, metric, minuteBucket(at), value, value, value,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("record service metric for %s/%s: %w", service, metric, err)
+	}
+	return nil
 }
 
 // ServiceMetricSummary returns a service runtime metric's average/min/max and
@@ -1856,7 +1951,7 @@ func (s *Store) ServiceMetricSeries(service, metric string, from, to time.Time) 
 		service, metric, minuteBucket(from), minuteBucket(to),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load service metric series for %s/%s: %w", service, metric, err)
 	}
 	defer rows.Close()
 
@@ -1865,7 +1960,7 @@ func (s *Store) ServiceMetricSeries(service, metric string, from, to time.Time) 
 		var bucket, n int64
 		var sum, minV, maxV float64
 		if err := rows.Scan(&bucket, &n, &sum, &minV, &maxV); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan service metric series row for %s/%s: %w", service, metric, err)
 		}
 		avg := 0.0
 		if n > 0 {
@@ -1873,7 +1968,10 @@ func (s *Store) ServiceMetricSeries(service, metric string, from, to time.Time) 
 		}
 		out = append(out, MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: n, Avg: avg, Min: minV, Max: maxV})
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate service metric series for %s/%s: %w", service, metric, err)
+	}
+	return out, nil
 }
 
 // PruneServiceMetrics deletes service runtime metric buckets older than before.
@@ -1927,10 +2025,10 @@ func (s *Store) PruneHistory(before time.Time) (PruneHistoryResult, error) {
 // freed by pruning can be returned to the filesystem.
 func (s *Store) Compact(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
-		return err
+		return fmt.Errorf("checkpoint state db WAL: %w", err)
 	}
 	if _, err := s.db.ExecContext(ctx, `VACUUM;`); err != nil {
-		return err
+		return fmt.Errorf("vacuum state db: %w", err)
 	}
 	return nil
 }
