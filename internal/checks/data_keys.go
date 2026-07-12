@@ -6,6 +6,7 @@ import "sermo/internal/conn"
 // names are part of the event/web surface that Result.Data exposes.
 const (
 	DataKeyAllocated        = "allocated"
+	DataKeyAge              = "age"
 	DataKeyAddresses        = "addresses"
 	DataKeyAvailablePct     = fieldAvailablePct
 	DataKeyArrays           = fieldArrays
@@ -60,6 +61,7 @@ const (
 	DataKeyMetric           = fieldMetric
 	DataKeyMinRules         = CheckKeyMinRules
 	DataKeyMode             = "mode"
+	DataKeyModifiedAt       = "modified_at"
 	DataKeyMounted          = CheckKeyMounted
 	DataKeyMountpoints      = "mountpoints"
 	DataKeyNew              = fieldNew

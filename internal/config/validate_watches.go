@@ -659,13 +659,13 @@ func validateICMPMetricCondition(prefix, metric string, m map[string]any, add ad
 	}
 }
 
-// validateFileCheck validates a file watch: a path, an optional boolean
+// validateFileCheck validates a file watch: path or paths, an optional boolean
 // recursive, and at least one attribute condition (size threshold/change,
-// permissions/owner on change, existence on delete), plus the entry's hook.
+// permissions/owner on change, existence on delete, older_than), plus the entry's hook.
 func validateFileCheck(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
 	validateStatefulWatchEntry(name, checks.CheckTypeFile, entry, add)
-	if cfgval.String(check[checks.CheckKeyPath]) == "" {
-		add("%s is required for a file check", watchCheckFieldPath(name, checks.CheckKeyPath))
+	if _, err := FileWatchPaths(check); err != nil {
+		add("%s: %s", watchCheckPath(name), err)
 	}
 	if v, present := check[checks.CheckKeyRecursive]; present {
 		if _, ok := v.(bool); !ok {
@@ -694,6 +694,12 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 		conds++
 		if cfgval.String(e[checks.CheckKeyOn]) != checks.OnModeDelete {
 			add("%s requires on: delete", watchCheckFieldPath(name, checks.CheckKeyExistence))
+		}
+	}
+	if v, present := check[checks.CheckKeyOlderThan]; present {
+		conds++
+		if !isPositiveDuration(cfgval.String(v)) {
+			add("%s must be a valid positive duration", watchCheckFieldPath(name, checks.CheckKeyOlderThan))
 		}
 	}
 	if conds == 0 {

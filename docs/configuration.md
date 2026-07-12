@@ -2084,14 +2084,14 @@ The single `count: {op, value}` predicate is required; pair it with a `for` wind
 so a momentary burst of exiting children does not fire. Hook extras:
 `SERMO_ZOMBIES` (the same value as `SERMO_VALUE`, the count).
 
-### `file` — file/directory attributes
+### `file` — file/directory attributes and freshness
 
-A `file` watch monitors a file or directory for attribute changes — size,
-permissions, owner, and deletion — and runs the entry's hook **once per change**.
-It is stateful: it remembers each path's attributes across cycles and reports only
-transitions, adopting the baseline silently on the first cycle (a daemon start
-never fires). With `recursive: true` it watches the whole subtree, so a hook fires
-per changed entry.
+A `file` watch monitors one or more files/directories for attribute changes —
+size, permissions, owner, deletion and modification age — and runs the entry's
+hook **once per path change or freshness breach**. `paths:` is the preferred
+non-empty list form; the legacy scalar `path:` remains a compatible alias, but a
+check must define exactly one of them. With `recursive: true` it watches every
+subtree, so a hook fires per changed or stale entry.
 
 ```yaml
 watches:
@@ -2100,8 +2100,11 @@ watches:
     interval: 30s
     check:
       type: file
-      path: /var/lib/myapp            # file or directory
+      paths:                          # one or more files/directories
+        - /var/lib/myapp
+        - /srv/myapp/incoming
       recursive: true                 # optional, default false (whole subtree)
+      older_than: 24h                 # optional: mtime age; any stale path fires
       size: { op: ">", value: 1048576 }   # edge threshold; or `size: { on: change }`
       permissions: { on: change }     # mode bits (perm + setuid/setgid/sticky)
       owner: { on: change }           # owning uid/gid
@@ -2123,16 +2126,22 @@ The conditions (declare at least one):
 - **`owner`** — `on: change`; fires when the owning uid or gid changes.
 - **`existence`** — `on: delete`; fires when a path that existed stops existing
   (re-creation is then adopted silently). Deletion is the only transition reported.
+- **`older_than`** — a positive duration such as `24h`; fires when the elapsed
+  time since a path's modification time (`mtime`) becomes greater than that
+  duration. A path already stale on the first cycle fires immediately; it re-arms
+  once the path is modified or removed.
 
-When `recursive: true` and the path is a directory, every entry in the subtree is
-tracked independently (symlinks are watched as links, never followed). New entries
-are adopted silently; deleted entries fire `existence` if configured. Each detected
-change is **one event and one hook run**, so a cycle that finds several changes
-fires several times.
+When `recursive: true` and a selected path is a directory, every entry in that
+subtree is tracked independently (symlinks are watched as links, never followed).
+New entries are adopted silently unless already stale; deleted entries fire
+`existence` if configured. Each detected change or freshness breach is **one event
+and one hook run**, so a cycle that finds several paths fires several times.
 
 Hook extras: `SERMO_PATH` (the changed path), `SERMO_CHANGE`
-(`size`|`size_threshold`|`permissions`|`owner`|`deleted`), `SERMO_OLD`/`SERMO_NEW`
-(old/new value), and `SERMO_SIZE`/`SERMO_OP` for size conditions.
+(`size`|`size_threshold`|`permissions`|`owner`|`deleted`|`older_than`),
+`SERMO_OLD`/`SERMO_NEW` (old/new value), and `SERMO_SIZE`/`SERMO_OP` for size
+conditions. An `older_than` event also sets `SERMO_MODIFIED_AT`,
+`SERMO_AGE_SECONDS` and `SERMO_VALUE` (the configured duration).
 
 ### `process` — process by name
 
