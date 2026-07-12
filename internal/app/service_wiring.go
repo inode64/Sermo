@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
@@ -54,7 +55,7 @@ func serviceRuntime(ctx context.Context, name, unit string, tree map[string]any,
 		Status: func(ctx context.Context) (servicemgr.Status, error) {
 			st, err := deps.Manager.Status(ctx, unit)
 			if err != nil {
-				return "", err
+				return "", fmt.Errorf("status %s: %w", unit, err)
 			}
 			return st.Status, nil
 		},

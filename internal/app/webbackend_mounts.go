@@ -72,7 +72,7 @@ func (ttyMountUserAlerter) AlertMountUsers(ctx context.Context, spec mountctl.Sp
 		),
 	}
 	if err := notifier.Send(ctx, msg); err != nil {
-		return MountAlertDelivery{Users: users}, err
+		return MountAlertDelivery{Users: users}, fmt.Errorf("send mount alert for %s: %w", spec.Name, err)
 	}
 	return MountAlertDelivery{Users: users, Delivered: len(users)}, nil
 }
