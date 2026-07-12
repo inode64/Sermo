@@ -45,6 +45,7 @@ linters:
     - recvcheck  # mixed value/pointer receivers on one type
     - rowserrcheck  # database/sql Rows.Err() left unchecked
     - sloglint  # consistent log/slog usage
+    - thelper  # t.Helper() in table-driven check callbacks and fakes
     - usestdlibvars  # prefer stdlib constants (http.StatusOK, ...)
     - wastedassign
   settings:

@@ -627,7 +627,7 @@ Tool notes:
   `fatcontext`, `gocritic` (`appendAssign`, `unlambda` only), `contextcheck`,
   `goprintffuncname`, `iface`, `ineffassign`, `intrange`, `interfacebloat`
   (`internal/web/server.go` excluded), `mirror`, `misspell`, `modernize`,
-  `nilerr`, `nilnesserr`, `nolintlint`, `recvcheck`, `sloglint` and
+  `nilerr`, `nilnesserr`, `nolintlint`, `recvcheck`, `sloglint`, `thelper` and
   `wastedassign`.
   `noctx` is deliberately off: conn/ probes use per-probe deadlines instead of
   context-aware dials.
