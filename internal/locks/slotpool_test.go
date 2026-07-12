@@ -127,7 +127,7 @@ func TestSlotPoolDefaultTTL(t *testing.T) {
 		if err != nil {
 			t.Fatalf("acquire: %v", err)
 		}
-		defer h.Release()
+		defer func() { _ = h.Release() }()
 		got, err := readLockFile(h.path)
 		if err != nil {
 			t.Fatalf("read: %v", err)
@@ -143,7 +143,7 @@ func TestSlotPoolDefaultTTL(t *testing.T) {
 		if err != nil {
 			t.Fatalf("acquire: %v", err)
 		}
-		defer h.Release()
+		defer func() { _ = h.Release() }()
 		got, err := readLockFile(h.path)
 		if err != nil {
 			t.Fatalf("read: %v", err)
@@ -183,7 +183,7 @@ func TestSlotPoolReclaimsExpiredSlot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("acquire expired slot: %v", err)
 	}
-	defer h.Release()
+	defer func() { _ = h.Release() }()
 
 	got, err := readLockFile(h.path)
 	if err != nil {
@@ -257,12 +257,12 @@ func TestSlotPoolInUseDefaultsSlots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer h1.Release()
+	defer func() { _ = h1.Release() }()
 	h2, err := pool.Acquire(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer h2.Release()
+	defer func() { _ = h2.Release() }()
 	// A pool view with Slots <= 0 defaults to 2 and still sees both held slots.
 	view := SlotPool{Dir: dir, Slots: 0, TTL: time.Hour, Proc: proc, Now: func() time.Time { return now }, Self: self}
 	if n, err := view.InUse(); err != nil || n != 2 {

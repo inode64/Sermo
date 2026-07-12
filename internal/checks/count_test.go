@@ -51,7 +51,7 @@ func countOf(root, kind string, recursive bool, op string, value float64) countC
 
 func addCountFiles(t *testing.T, root, prefix string, n int) {
 	t.Helper()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		path := filepath.Join(root, prefix+"-"+strconv.Itoa(i))
 		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
 			t.Fatal(err)
@@ -61,7 +61,7 @@ func addCountFiles(t *testing.T, root, prefix string, n int) {
 
 func removeCountFiles(t *testing.T, root, prefix string, n int) {
 	t.Helper()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if err := os.Remove(filepath.Join(root, prefix+"-"+strconv.Itoa(i))); err != nil {
 			t.Fatal(err)
 		}

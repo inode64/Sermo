@@ -400,12 +400,12 @@ func (s *Store) migrate() error {
 			return err
 		}
 		if _, err := tx.Exec(migrations[i]); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return err
 		}
 		// user_version cannot be parameterized; i+1 is a trusted integer.
 		if _, err := tx.Exec(fmt.Sprintf("PRAGMA user_version=%d;", i+1)); err != nil {
-			tx.Rollback()
+			_ = tx.Rollback()
 			return err
 		}
 		if err := tx.Commit(); err != nil {
@@ -599,7 +599,7 @@ func (s *Store) SetServiceCheckSnapshots(service string, records map[string]Chec
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.Exec(`DELETE FROM service_check_snapshot WHERE service = ?;`, service); err != nil {
 		return err
@@ -1027,7 +1027,7 @@ func (s *Store) SetRuleWindowStates(service string, records map[string]RuleWindo
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	if _, err := tx.Exec(`DELETE FROM rule_window_state WHERE service = ?;`, service); err != nil {
 		return err

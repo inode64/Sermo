@@ -72,7 +72,7 @@ func TestDNSAndDHCPIDs(t *testing.T) {
 	// stuck-at-zero regression cannot pass.
 	seenDNS := map[uint16]bool{}
 	seenDHCP := map[uint32]bool{}
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		seenDNS[dnsID()] = true
 		seenDHCP[randXID32()] = true
 	}

@@ -86,7 +86,7 @@ func TestSLAReportRatioAndNoData(t *testing.T) {
 
 	// 9 up, 1 down within the last few minutes -> 90% across every window that
 	// covers them; "web" never recorded before so all windows see the same data.
-	for i := 0; i < 9; i++ {
+	for i := range 9 {
 		mustRecord(t, s, "web", true, now.Add(-time.Duration(i)*time.Minute))
 	}
 	mustRecord(t, s, "web", false, now.Add(-time.Minute))

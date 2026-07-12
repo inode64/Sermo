@@ -79,7 +79,7 @@ func TestSizeWindowPrunesOldGrowth(t *testing.T) {
 	// so it must never alert even though the total over 2h is >1GiB.
 	fz := &fakeSizer{sizes: []int64{1 * gib, 1*gib + gib/2, 2 * gib, 2*gib + gib/2}, now: time.Unix(0, 0)}
 	c := newSizeCheck(1*gib, time.Hour, fz)
-	for step := 0; step < 4; step++ {
+	for step := range 4 {
 		if r := c.Run(context.Background()); r.OK {
 			t.Fatalf("step %d: slow growth within window must not alert: %s", step, r.Message)
 		}

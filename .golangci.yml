@@ -17,15 +17,24 @@ linters:
     - bodyclose
     - copyloopvar
     - durationcheck  # suspicious time.Duration multiplications
+    - errcheck  # unchecked errors (defer Rollback/Release, I/O, …)
     - errorlint  # error wrapping (%w) and errors.Is/As correctness
     - gocheckcompilerdirectives  # malformed //go: directives (typos that silently no-op)
     - gosec
     - ineffassign
+    - intrange  # for i := 0; i < n; i++ → for i := range n (Go 1.22+)
+    - mirror  # bytes.Index vs bytes.IndexByte, …
+    - misspell
     - nilerr
     - reassign  # writes to other packages' package-level vars
     - rowserrcheck  # database/sql Rows.Err() left unchecked
     - usestdlibvars  # prefer stdlib constants (http.StatusOK, ...)
     - wastedassign
+  settings:
+    misspell:
+      # Eclipse Mosquitto — real MQTT broker name in catalog/tests.
+      ignore-rules:
+        - mosquitto
   # Considered and deliberately NOT enabled:
   #   noctx     — 129 hits; the conn/ probes dial net/http without a context by
   #               design (tight per-probe deadlines are applied separately).

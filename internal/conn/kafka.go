@@ -122,7 +122,7 @@ func readKafkaAPIVersions(r io.Reader) (Result, error) {
 		return Result{}, fmt.Errorf("kafka: ApiVersions count %d exceeds payload (%d bytes)", count, len(body))
 	}
 	keys := make(map[uint16]bool, count)
-	for i := uint32(0); i < count; i++ {
+	for i := range count {
 		off := i * kafkaAPIVersionEntryBytes
 		keys[binary.BigEndian.Uint16(body[off+kafkaAPIKeyStart:off+kafkaAPIKeyEnd])] = true
 	}

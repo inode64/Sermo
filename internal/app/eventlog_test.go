@@ -160,7 +160,7 @@ func TestEventLogConcurrentAddRecent(t *testing.T) {
 	l := NewEventLog(64)
 	done := make(chan struct{})
 	go func() {
-		for i := 0; i < 5000; i++ {
+		for range 5000 {
 			l.Add(Event{Service: "a", Kind: eventKindAction, Message: "x"})
 		}
 		close(done)

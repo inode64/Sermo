@@ -98,7 +98,7 @@ func ovsdbCall(enc *json.Encoder, dec *json.Decoder, id, method string, params [
 	if err := enc.Encode(map[string]any{ovsdbFieldMethod: method, ovsdbFieldParams: params, ovsdbFieldID: id}); err != nil {
 		return err
 	}
-	for i := 0; i < ovsdbProbeMaxResponses; i++ {
+	for range ovsdbProbeMaxResponses {
 		var resp ovsdbResponse
 		if err := dec.Decode(&resp); err != nil {
 			return err

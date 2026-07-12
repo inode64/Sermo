@@ -566,10 +566,10 @@ Keep `docs/services.md` (built-in variable table) in step when adding a built-in
 
 Two rules, one battery:
 
-- **Every Go file must be `gofmt`-clean after any modification.** A Claude Code
-  `PostToolUse` hook (`.claude/settings.json`) runs `gofmt -w` on every edited
-  `.go` file; editing outside Claude Code, run it yourself (editor
-  format-on-save).
+- **Every Go file must be `gofmt`- and `goimports`-clean after any modification.**
+  A Claude Code `PostToolUse` hook (`.claude/settings.json`) runs `gofmt -w` on
+  every edited `.go` file; editing outside Claude Code, run `make fmt` yourself
+  (editor format-on-save, or `gofmt` + `goimports` on `internal` and `cmd`).
 - **Every change must pass the whole battery before committing** (the tools
   analyze the full module and are too slow per-edit). `make test` and `make check`
   always run `fmt-check` and `make lint` first via the `validate` target; the
@@ -616,8 +616,8 @@ Tool notes:
   to `_` in non-test code. Document new exported symbols — the `exported` rule
   is on.
 - **`golangci-lint`** uses `.golangci.yml` (**v2 format** — the binary must be
-  v2) for `gosec`, `bodyclose`, `copyloopvar`, `ineffassign`, `nilerr` and
-  `wastedassign`.
+  v2) for `gosec`, `bodyclose`, `copyloopvar`, `errcheck`, `ineffassign`,
+  `intrange`, `mirror`, `misspell`, `nilerr` and `wastedassign`.
   Accepted gosec exceptions live in that config: `G115`, and in test fixtures
   `G306`/`G101`/`G703`. By-design cases (`G204` operator-configured commands,
   intentional `0644` writes, bounded `args[i]` reads, shutdown-context `G118`)
