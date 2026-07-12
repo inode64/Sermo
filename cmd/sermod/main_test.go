@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -214,7 +213,7 @@ func TestStartOldHistoryPruneDoesNotBlockStartup(t *testing.T) {
 		release: make(chan struct{}),
 	}
 	t.Cleanup(func() { close(store.release) })
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	done := make(chan struct{})
 	go func() {

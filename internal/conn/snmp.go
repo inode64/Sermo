@@ -80,6 +80,7 @@ func (snmpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		switch up.Type {
 		case g.TimeTicks, g.Integer, g.Counter32, g.Gauge32, g.Counter64:
 			extra[extraSysUptimeSeconds] = strconv.FormatInt(g.ToBigInt(up.Value).Int64()/snmpTimeTicksPerSecond, numericBaseDecimal)
+		default: // non-numeric sysUpTime answers carry no usable uptime
 		}
 	}
 	return Result{Version: sysDescr, Extra: extra}, nil

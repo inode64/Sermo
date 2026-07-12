@@ -67,8 +67,8 @@ func TestAcquireBlockedWhenActive(t *testing.T) {
 	})
 
 	_, err := l.Acquire("mysql", time.Hour)
-	var held *HeldError
-	if !errors.As(err, &held) {
+	held, ok := errors.AsType[*HeldError](err)
+	if !ok {
 		t.Fatalf("Acquire() error = %v, want *HeldError", err)
 	}
 	if held.Lock.OwnerPID != 100 {
@@ -180,8 +180,7 @@ func TestAcquireRealSelfBlocksSecond(t *testing.T) {
 	defer func() { _ = handle.Release() }()
 
 	_, err = l.Acquire("mysql", time.Hour)
-	var held *HeldError
-	if !errors.As(err, &held) {
+	if _, ok := errors.AsType[*HeldError](err); !ok {
 		t.Fatalf("second Acquire() error = %v, want *HeldError", err)
 	}
 
@@ -222,8 +221,7 @@ func TestAcquireReclaimRaceAbortsAsHeld(t *testing.T) {
 	})
 
 	_, err := l.Acquire("mysql", time.Hour)
-	var held *HeldError
-	if !errors.As(err, &held) {
+	if _, ok := errors.AsType[*HeldError](err); !ok {
 		t.Fatalf("Acquire() error = %v, want *HeldError (race lost)", err)
 	}
 	if len(reclaimed) != 0 {

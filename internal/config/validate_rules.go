@@ -257,6 +257,7 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 				if rtype != string(rules.RuleRemediation) {
 					add("%s only remediation rules may use action %s", path, act.typ)
 				}
+			default: // alert/block actions are valid on any rule type
 			}
 		}
 		if rtype == string(rules.RuleRemediation) && hasThen && !hasOperation {

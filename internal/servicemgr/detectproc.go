@@ -143,8 +143,9 @@ func DetectProcInfo(ctx context.Context, runner execx.Runner, readFile func(stri
 		return detectSystemdProc(ctx, runner, unit)
 	case BackendOpenRC:
 		return detectOpenRCProc(readFile, unit)
+	default:
+		return ProcInfo{}
 	}
-	return ProcInfo{}
 }
 
 func detectSystemdProc(ctx context.Context, runner execx.Runner, unit string) ProcInfo {

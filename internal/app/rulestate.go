@@ -81,6 +81,7 @@ func newRuleStatePlan(ruleSet []rules.Rule) ruleStatePlan {
 			plan.hasRemediation = true
 		case rules.RuleAlert:
 			plan.names[r.Name] = true
+		default: // guard rules keep no persisted window state
 		}
 	}
 	return plan

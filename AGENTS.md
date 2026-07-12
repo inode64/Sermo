@@ -611,15 +611,21 @@ Tool notes:
   lint target itself. `govulncheck` may need network access to refresh the
   vulnerability DB; a network/DNS failure there is an environment issue, not a
   code finding.
+- **`go fix -diff ./...`** runs as part of `make lint`: the Go 1.26 modernizers
+  must propose no changes. If it fails, run `go fix ./...` and review the
+  rewrite instead of silencing it.
 - **`revive`** (`revive.toml`): default rule set plus `unused-parameter`,
-  `struct-tag`, `import-shadowing` and `modifies-value-receiver` on production
+  `struct-tag`, `import-shadowing`, `modifies-value-receiver` and
+  `package-naming` (split out of `var-naming` in revive v1.15) on production
   code (`exclude = ["TEST"]` on `unused-parameter` and `import-shadowing` skips
   `*_test.go`). Rename unused params to `_` in non-test code; avoid locals that
   shadow import names. Document new exported symbols — the `exported` rule is on.
 - **`golangci-lint`** uses `.golangci.yml` (**v2 format** — the binary must be
-  v2) for `gosec`, `bodyclose`, `copyloopvar`, `errcheck`, `gocritic`
-  (`appendAssign`, `unlambda` only), `contextcheck`, `ineffassign`, `intrange`,
-  `mirror`, `misspell`, `modernize`, `nilerr` and `wastedassign`.
+  v2) for `gosec`, `bodyclose`, `copyloopvar`, `errcheck`, `errchkjson`,
+  `exhaustive` (a `default:` arm counts as exhaustive; off in `*_test.go`),
+  `fatcontext`, `gocritic` (`appendAssign`, `unlambda` only), `contextcheck`,
+  `iface`, `ineffassign`, `intrange`, `mirror`, `misspell`, `modernize`,
+  `nilerr`, `nilnesserr`, `recvcheck`, `sloglint` and `wastedassign`.
   `noctx` is deliberately off: conn/ probes use per-probe deadlines instead of
   context-aware dials.
   Accepted gosec exceptions live in that config: `G115`, and in test fixtures
@@ -627,6 +633,10 @@ Tool notes:
   intentional `0644` writes, bounded `args[i]` reads, shutdown-context `G118`)
   are suppressed at the call site with `//nolint:gosec` plus a justifying
   comment — prefer that over widening the config.
+- **`make deadcode`** (advisory, not part of `lint`/`check`) prints an
+  unreachable-function report via `golang.org/x/tools/cmd/deadcode`. Reflection
+  and build tags cause false positives — triage findings by hand before
+  deleting anything.
 
 ## Testing
 

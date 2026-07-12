@@ -49,7 +49,7 @@ const (
 type webhookPoster func(ctx context.Context, label, webhook string, payload []byte) error
 
 func webhookPayload(v any) []byte {
-	b, _ := json.Marshal(v)
+	b, _ := json.Marshal(v) //nolint:errchkjson // callers pass maps of plain strings, which cannot fail to encode
 	return b
 }
 

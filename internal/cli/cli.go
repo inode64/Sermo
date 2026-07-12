@@ -1988,5 +1988,5 @@ func normalizePflagError(err error) error {
 func writeJSON(w io.Writer, value any) {
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
-	_ = encoder.Encode(value)
+	_ = encoder.Encode(value) //nolint:errchkjson // best-effort CLI output of internal result structs; a write error to stdout has no recovery
 }

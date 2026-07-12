@@ -102,6 +102,7 @@ func (r Rule) Primary() Action {
 		switch a.Type {
 		case ActionRestart, ActionStart, ActionStop, ActionReload, ActionResume:
 			return a
+		default: // alert/block actions are never the primary one
 		}
 	}
 	if len(r.Actions) > 0 {
@@ -116,6 +117,7 @@ func (r Rule) OperationAction() (ActionType, bool) {
 		switch a.Type {
 		case ActionRestart, ActionStart, ActionStop, ActionReload, ActionResume:
 			return a.Type, true
+		default: // alert/block actions are not operations
 		}
 	}
 	return "", false

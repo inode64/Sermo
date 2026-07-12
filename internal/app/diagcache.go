@@ -120,6 +120,7 @@ func countDiagFindingLevels(findings []diag.Finding) (errors, warnings int) {
 			errors++
 		case diag.LevelWarning:
 			warnings++
+		default: // info findings are not counted
 		}
 	}
 	return errors, warnings

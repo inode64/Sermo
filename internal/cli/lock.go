@@ -101,8 +101,7 @@ func (a App) runLockWrap(ctx context.Context, opts options, cfg *config.Config, 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			a.recordAccess(cfg, accessCommandLockWrap, service, accessStatusError, fmt.Sprintf("exit %d", exitErr.ExitCode()))
 			return exitErr.ExitCode()
 		}
@@ -124,8 +123,7 @@ func requireLockMeta(a App, opts options) int {
 }
 
 func (a App) reportLockError(opts options, err error) int {
-	var held *locks.HeldError
-	if errors.As(err, &held) {
+	if held, ok := errors.AsType[*locks.HeldError](err); ok {
 		if opts.json {
 			writeJSON(a.Stdout, map[string]string{cliJSONKeyStatus: string(operation.ResultBlocked), cliJSONKeyMessage: "lock already held"})
 		} else {

@@ -92,8 +92,7 @@ func TestNamedHoldBlocksSecond(t *testing.T) {
 	defer func() { _ = h.Release() }()
 
 	_, err = l.Hold("mysql", "", "work", time.Hour)
-	var held *HeldError
-	if !errors.As(err, &held) {
+	if _, ok := errors.AsType[*HeldError](err); !ok {
 		t.Fatalf("second Hold() error = %v, want *HeldError", err)
 	}
 }

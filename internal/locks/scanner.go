@@ -220,8 +220,8 @@ func isRetryableLockRead(err error) bool {
 	if isMissingLock(err) {
 		return true
 	}
-	var syntax *json.SyntaxError
-	return errors.As(err, &syntax)
+	_, ok := errors.AsType[*json.SyntaxError](err)
+	return ok
 }
 
 func orDefault(value, fallback string) string {

@@ -19,21 +19,32 @@ linters:
     - copyloopvar
     - durationcheck  # suspicious time.Duration multiplications
     - errcheck  # unchecked errors (defer Rollback/Release, I/O, …)
+    - errchkjson  # json.Marshal/Encode error dropped while the value can fail to encode
     - errorlint  # error wrapping (%w) and errors.Is/As correctness
+    - exhaustive  # enum switches missing cases (check/watch/backend type dispatch)
+    - fatcontext  # context accumulated inside loops
     - gocheckcompilerdirectives  # malformed //go: directives (typos that silently no-op)
     - gocritic  # appendAssign + unlambda only (see settings)
     - gosec
+    - iface  # unused / duplicated interface declarations
     - modernize  # Go 1.22+ idioms (range int, slices.*, min/max, …)
     - ineffassign
     - intrange  # for i := 0; i < n; i++ → for i := range n (Go 1.22+)
     - mirror  # bytes.Index vs bytes.IndexByte, …
     - misspell
     - nilerr
+    - nilnesserr  # err checked nil but a different err value returned
     - reassign  # writes to other packages' package-level vars
+    - recvcheck  # mixed value/pointer receivers on one type
     - rowserrcheck  # database/sql Rows.Err() left unchecked
+    - sloglint  # consistent log/slog usage
     - usestdlibvars  # prefer stdlib constants (http.StatusOK, ...)
     - wastedassign
   settings:
+    exhaustive:
+      # A default: arm is an explicit statement that the remaining cases are
+      # handled; only flag switches with neither all cases nor a default.
+      default-signifies-exhaustive: true
     gocritic:
       disable-all: true
       enabled-checks:
@@ -63,6 +74,10 @@ linters:
       - legacy
       - std-error-handling
     rules:
+      # Test helpers switch over third-party enums (x/net/html atom.Atom) where
+      # exhaustiveness is meaningless noise.
+      - linters: [exhaustive]
+        path: _test\.go
       # Test fixtures are written to throwaway temp dirs with 0644; not a concern.
       - linters: [gosec]
         path: _test\.go

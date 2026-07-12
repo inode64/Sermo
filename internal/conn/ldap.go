@@ -74,8 +74,7 @@ func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	bindOK := bindErr == nil
 	serverResponded := bindOK
 	if !bindOK {
-		var lerr *ldap.Error
-		if errors.As(bindErr, &lerr) && lerr.ResultCode != ldap.ErrorNetwork {
+		if lerr, ok := errors.AsType[*ldap.Error](bindErr); ok && lerr.ResultCode != ldap.ErrorNetwork {
 			serverResponded = true // the server replied with an LDAP result code
 		}
 	}

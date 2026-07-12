@@ -54,9 +54,19 @@ jobs:
           go install github.com/mgechev/revive@v1.15.0
           go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
       - run: make fmt-check
+      # Go 1.26 modernizers gate: fails when any fixer would change code, so the
+      # tree stays current with toolchain idioms. Ships with the toolchain.
+      - run: go fix -diff ./...
       - run: staticcheck ./...
       - run: revive -config revive.toml ./...
       - run: govulncheck ./...
+      # Advisory: unreachable-function report. Reflection and build tags cause
+      # false positives, so this never fails the build — triage by hand.
+      - name: deadcode (advisory)
+        continue-on-error: true
+        run: |
+          go install golang.org/x/tools/cmd/deadcode@v0.48.0
+          deadcode -test ./...
       # gosec and focused bug analyzers run through golangci-lint v2 (see
       # .golangci.yml, version: "2").
       # install-mode: goinstall builds golangci-lint from source with the Go
