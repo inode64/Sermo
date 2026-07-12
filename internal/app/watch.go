@@ -58,7 +58,8 @@ type Watch struct {
 	// RaidNotifyEvents filters RAID lifecycle transitions eligible for the
 	// ordinary `then.notify` targets. When set, firing notifications are replaced
 	// by these edge-triggered lifecycle notifications.
-	RaidNotifyEvents map[string]bool
+	RaidNotifyEvents  map[string]bool
+	LVMNotifyOnChange bool
 	// NotifyInterval paces re-notification while the watch stays firing. Zero
 	// (the default) means notify once per firing episode, on the rising edge
 	// when the alert starts. A positive value (`then.notify_interval`) re-sends
@@ -149,6 +150,7 @@ func (w *Watch) RunCycle(ctx context.Context) {
 		return
 	}
 	w.dispatchRaidTransitions(ctx, res)
+	w.dispatchLVMTransition(ctx, res)
 	fired := res.OK
 	if w.FireOnFail {
 		fired = !res.OK
@@ -172,7 +174,7 @@ func (w *Watch) RunCycle(ctx context.Context) {
 		if emitFiring {
 			w.emit(Event{Watch: w.Name, Kind: eventKindDryRun, Message: w.dryRunMessage()})
 		}
-		if len(w.RaidNotifyEvents) == 0 && w.shouldNotify(wasFiring) {
+		if len(w.RaidNotifyEvents) == 0 && !w.LVMNotifyOnChange && w.shouldNotify(wasFiring) {
 			dispatchDryRunNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
 		}
 		return
@@ -195,9 +197,34 @@ func (w *Watch) RunCycle(ctx context.Context) {
 			w.emit(Event{Watch: w.Name, Kind: eventKindHook, Message: res.Message})
 		}
 	}
-	if len(w.RaidNotifyEvents) == 0 && w.shouldNotify(wasFiring) {
+	if len(w.RaidNotifyEvents) == 0 && !w.LVMNotifyOnChange && w.shouldNotify(wasFiring) {
 		dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
 	}
+}
+
+func (w *Watch) dispatchLVMTransition(ctx context.Context, res checks.Result) {
+	if !w.LVMNotifyOnChange {
+		return
+	}
+	transition, ok := checks.LVMTransitionFromResult(res)
+	if !ok {
+		return
+	}
+	changed := res
+	changed.Data = maps.Clone(res.Data)
+	changed.Data["old_state"] = transition.OldState
+	changed.Data["new_state"] = transition.NewState
+	changed.Data["lvm_reasons"] = transition.Reasons
+	changed.Data["lvm_previous_reasons"] = transition.PreviousReasons
+	changed.Message = fmt.Sprintf("lvm state %s -> %s", transition.OldState, transition.NewState)
+	if w.DryRun {
+		dispatchDryRunNotify(ctx, w.Notifiers, watchMessage(w.Name, changed.Message, hookEnv(w.Name, w.CheckType, changed)), w.Name, w.emit)
+		return
+	}
+	if w.InPanic != nil && w.InPanic() {
+		return
+	}
+	dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, changed.Message, hookEnv(w.Name, w.CheckType, changed)), w.Name, w.emit)
 }
 
 func (w *Watch) dispatchRaidTransitions(ctx context.Context, res checks.Result) {

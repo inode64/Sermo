@@ -64,7 +64,7 @@ func TestValidateRaidNotifyOn(t *testing.T) {
 		}},
 	})
 	issues := watchIssues(bad)
-	if !hasIssueContaining(issues, "only valid on a raid watch") {
+	if !hasIssueContaining(issues, "only valid on a raid or lvm watch") {
 		t.Fatalf("invalid raid notify_on issues = %v", issues)
 	}
 }

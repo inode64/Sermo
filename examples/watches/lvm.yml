@@ -1,0 +1,16 @@
+name: lvm-vg0-root
+category: storage
+# Read-only LVM health and thin-pool capacity. Replace vg0/root with a detected
+# target; absence, partial or suspended volumes make the check unhealthy.
+monitor: disabled
+interval: 1m
+check:
+  type: lvm
+  volume_group: vg0
+  logical_volume: root
+  thin_data_pct: { op: ">=", value: "80%" }
+  thin_metadata_pct: { op: ">=", value: "80%" }
+# With a configured notifier, add:
+# then:
+#   notify: [ops]
+#   notify_on: [on_change]  # only ok -> error and error -> ok

@@ -193,6 +193,8 @@ var (
 	SmartPredFields = []string{SmartFieldTemperature, SmartFieldReallocated, SmartFieldWear, SmartFieldPowerOnHours}
 	// RaidPredFields are the optional predicates of a raid check.
 	RaidPredFields = []string{fieldDegraded, fieldRecovering, fieldArrays}
+	// LVMPredFields are capacity predicates for an LVM logical volume or volume group.
+	LVMPredFields = []string{DataKeyLVMFreePct, DataKeyLVMThinDataPct, DataKeyLVMThinMetadataPct}
 	// EdacPredFields are the optional predicates of an edac check.
 	EdacPredFields = []string{fieldCE, fieldUE}
 	// EntropyPredFields is the single required predicate of an entropy check.
