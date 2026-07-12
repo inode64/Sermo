@@ -1119,7 +1119,7 @@ func (a App) statusFunc(opts options, tree map[string]any, base string) func(con
 	return func(ctx context.Context) (servicemgr.Status, error) {
 		detection, err := a.Detector.Detect(ctx, opts.backend)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("detect service backend: %w", err)
 		}
 		manager, err := a.NewManager(detection.Backend)
 		if err != nil {
@@ -1133,7 +1133,7 @@ func (a App) statusFunc(opts options, tree map[string]any, base string) func(con
 		}
 		status, err := target.Manager.Status(ctx, target.Unit)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("status %s: %w", target.Unit, err)
 		}
 		return status.Status, nil
 	}
@@ -1610,7 +1610,7 @@ func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Ti
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("build clear events request: %w", err)
 	}
 	req.Header.Set(daemonWebCSRFHeader, daemonWebCSRFValue)
 
@@ -1661,7 +1661,7 @@ func (a App) fetchEvents(ctx context.Context, opts options, service string, limi
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("build events request: %w", err)
 	}
 	// no CSRF needed for GET; add auth if configured
 	applyDaemonWebAuth(req, cfg)
@@ -1715,18 +1715,18 @@ func (a App) daemonAPIGet(ctx context.Context, opts options, path string) ([]byt
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+path, nil)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("build daemon API request for %s: %w", path, err)
 	}
 	applyDaemonWebAuth(req, cfg)
 	client := &http.Client{Timeout: daemonWebClientTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("daemon API GET %s: %w", path, err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, resp.StatusCode, err
+		return nil, resp.StatusCode, fmt.Errorf("read daemon API response for %s: %w", path, err)
 	}
 	return body, resp.StatusCode, nil
 }
@@ -1955,7 +1955,7 @@ func parseArgs(args []string) (options, error) {
 	if backend != "" {
 		parsedBackend, err := servicemgr.ParseBackend(backend)
 		if err != nil {
-			return opts, err
+			return opts, fmt.Errorf("parse backend %q: %w", backend, err)
 		}
 		opts.backend = parsedBackend
 	}

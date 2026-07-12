@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"sort"
 	"strings"
@@ -17,18 +18,18 @@ func listWizardDockerContainers(ctx context.Context, timeout time.Duration) ([]a
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("stat docker socket %s: %w", dockerctl.DefaultSocket, err)
 	}
 	client, err := dockerctl.NewClient(dockerctl.Spec{Socket: dockerctl.DefaultSocket})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("connect docker socket %s: %w", dockerctl.DefaultSocket, err)
 	}
 	defer client.CloseIdleConnections()
 	ctx, cancel := context.WithTimeout(ctx, wizardDetectionTimeout(timeout))
 	defer cancel()
 	containers, err := client.ListContainers(ctx, true)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list docker containers: %w", err)
 	}
 	out := make([]assist.DockerCandidate, 0, len(containers))
 	for _, container := range containers {
@@ -65,7 +66,7 @@ func dockerWizardContainerName(container dockerctl.ContainerSummary) string {
 func listWizardVMs(ctx context.Context, timeout time.Duration) ([]assist.VMCandidate, error) {
 	socket, ok, err := virt.FirstExistingLocalSocket(localSocketExists)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find libvirt socket: %w", err)
 	}
 	if !ok {
 		return nil, nil
@@ -74,7 +75,7 @@ func listWizardVMs(ctx context.Context, timeout time.Duration) ([]assist.VMCandi
 	defer cancel()
 	domains, err := virt.ListDomains(ctx, virt.Spec{URI: virt.DefaultURI, Socket: socket})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list libvirt domains: %w", err)
 	}
 	out := make([]assist.VMCandidate, 0, len(domains))
 	for _, domain := range domains {
@@ -100,7 +101,7 @@ func localSocketExists(path string) (bool, error) {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
-		return false, err
+		return false, fmt.Errorf("stat %s: %w", path, err)
 	}
 	return true, nil
 }

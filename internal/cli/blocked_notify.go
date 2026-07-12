@@ -75,7 +75,7 @@ func notifyBlockedActionTTY(ctx context.Context, result operation.Result, userNa
 	if notifier == nil {
 		return fmt.Errorf("%s notifier unavailable", blockedActionTTYNotifierName)
 	}
-	return notifier.Send(ctx, notify.Message{
+	if err := notifier.Send(ctx, notify.Message{
 		Subject: fmt.Sprintf("Sermo denied %s restart", result.Service),
 		Body:    fmt.Sprintf("A restart request for %s was denied: %s.", result.Service, result.Message),
 		Fields: map[string]string{
@@ -83,5 +83,8 @@ func notifyBlockedActionTTY(ctx context.Context, result operation.Result, userNa
 			cliFieldSermoAction:  result.Action,
 			cliFieldSermoStatus:  string(result.Status),
 		},
-	})
+	}); err != nil {
+		return fmt.Errorf("send blocked-action notification: %w", err)
+	}
+	return nil
 }
