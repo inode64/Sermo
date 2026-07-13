@@ -95,6 +95,27 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 			data: map[string]any{"arrays": 1, "degraded": 0, "recovering": 1, "array": "md0", "raid_operation": "recovery", "raid_progress_pct": 12.6},
 			want: map[string]string{"raid_progress_pct": "12.6%"},
 		},
+		{
+			name: "lvm",
+			typ:  "lvm",
+			data: map[string]any{
+				"health":         "ok",
+				"volume_group":   "vg0",
+				"logical_volume": "root",
+				"lvm_reasons":    "",
+				"vg_free_bytes":  float64(50),
+				"vg_size_bytes":  float64(1000),
+				"vg_used_bytes":  float64(950),
+				"free_pct":       5.0,
+			},
+			want: map[string]string{
+				"volume_group":   "vg0",
+				"logical_volume": "root",
+				"lvm_reasons":    "none",
+				"vg_free_bytes":  "50 B",
+				"free_pct":       "5.0%",
+			},
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

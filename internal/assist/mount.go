@@ -77,10 +77,6 @@ func buildMountUnit(c MountCandidate, s mountSettings) map[string]any {
 		},
 		config.StorageKeyMount: map[string]any{
 			config.MountKeyRefcount: s.refcount,
-			config.MountKeyUmount: map[string]any{
-				config.MountKeyAllowSIGKILL: false,
-				config.MountKeyAllowLazy:    false,
-			},
 		},
 	}
 }

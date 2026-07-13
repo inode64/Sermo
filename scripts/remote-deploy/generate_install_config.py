@@ -243,15 +243,20 @@ def simple_watch(
     cycles: int = 10,
     then_lines: list[str] | None = None,
     policy: bool = False,
+    display_name: str | None = None,
 ) -> str:
     body = [
         f"name: {name}",
+    ]
+    if display_name and display_name != name:
+        body.append(f"display_name: {yaml_quote(display_name)}")
+    body.extend([
         f"category: {category}",
         "monitor: enabled",
         "dry_run: true",
         f"interval: {interval}",
         "check:",
-    ]
+    ])
     body.extend(f"  {line}" for line in check_lines)
     if cycles:
         body.append(f"for: {{ cycles: {cycles} }}")
@@ -264,7 +269,7 @@ def simple_watch(
 
 
 def mount_unit_block() -> str:
-    return "\nmount:\n  refcount: true\n  umount:\n    allow_sigkill: false\n    allow_lazy: false\n"
+    return "\nmount:\n  refcount: true\n"
 
 
 def metric_watch(name: str, category: str, interval: str, check_lines: list[str], metric_blocks: list[tuple[str, list[str]]]) -> str:
@@ -1430,15 +1435,31 @@ dry_run: true
             if vg not in seen_vgs:
                 seen_vgs.add(vg)
                 name = f"lvm-{slug(vg)}-capacity"
-                add_watch("watches", name, simple_watch(name, "storage", "1m", ["type: lvm", f"volume_group: {yaml_quote(vg)}", 'free_pct: { op: "<", value: "10%" }'], cycles=0))
+                add_watch(
+                    "watches",
+                    name,
+                    simple_watch(
+                        name,
+                        "storage",
+                        "1m",
+                        ["type: lvm", f"volume_group: {yaml_quote(vg)}", 'free_pct: { op: "<", value: "10%" }'],
+                        cycles=0,
+                        display_name=f"LVM {vg} capacity",
+                    ),
+                )
             name = f"lvm-{slug(vg)}-{slug(lv)}"
+            display_name = f"LVM {vg}/{lv}"
             lines = ["type: lvm", f"volume_group: {yaml_quote(vg)}", f"logical_volume: {yaml_quote(lv)}"]
             if str(volume.get("data_percent") or "").strip() not in {"", "-"}:
                 lines.append('thin_data_pct: { op: ">=", value: "80%" }')
             if str(volume.get("metadata_percent") or "").strip() not in {"", "-"}:
                 lines.append('thin_metadata_pct: { op: ">=", value: "80%" }')
-            add_watch("watches", name, simple_watch(name, "storage", "1m", lines, cycles=0))
-            report["lvm_volumes"].append({"volume_group": vg, "logical_volume": lv})
+            add_watch(
+                "watches",
+                name,
+                simple_watch(name, "storage", "1m", lines, cycles=0, display_name=display_name),
+            )
+            report["lvm_volumes"].append({"volume_group": vg, "logical_volume": lv, "display_name": display_name})
     else:
         skip("lvm", "no logical volumes discovered")
 

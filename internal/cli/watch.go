@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 
 	"sermo/internal/app"
@@ -88,6 +89,9 @@ func (a App) runWatchProbe(ctx context.Context, opts options) int {
 			status = cliTextFail
 		}
 		fmt.Fprintf(a.Stdout, "%s watch %s: %s\n", status, opts.args[1], res.Message)
+		for _, reading := range app.CheckReadings(typ, res.Data) {
+			printWatchReading(a.Stdout, reading.Field, reading.Label, reading.Value, reading.Error)
+		}
 	}
 	if healthy {
 		return exitSuccess
@@ -118,15 +122,6 @@ func (a App) runWatchRAIDControl(ctx context.Context, opts options, action strin
 	array := fmt.Sprint(checkEntry[checks.CheckKeyArray])
 	if action == "pause" && opts.confirm != array {
 		return a.commandUsageError(commandWatch, fmt.Sprintf("watch pause requires --confirm %s", array))
-	}
-	if config.DryRun(entry) {
-		msg := fmt.Sprintf("dry-run: would %s RAID reconstruction for %s", action, array)
-		if opts.json {
-			writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: opts.args[1], cliJSONKeyOK: true, cliJSONKeyMessage: msg})
-		} else {
-			fmt.Fprintln(a.Stdout, msg)
-		}
-		return exitSuccess
 	}
 	timeout := app.EngineDuration(cfg, config.EngineKeyOperationTimeout, app.DefaultEngineOperationTimeout)
 	if opts.timeout > 0 {
@@ -271,17 +266,19 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 	}
 	fmt.Fprintf(a.Stdout, "%s state=%s\n", name, watchState)
 	for _, reading := range detail.Readings {
-		label := reading.Label
-		if label == "" {
-			label = reading.Field
-		}
-		value := reading.Value
-		if reading.Error != "" {
-			value = reading.Error
-		}
-		if label != "" && value != "" {
-			fmt.Fprintf(a.Stdout, "  %s: %s\n", label, value)
-		}
+		printWatchReading(a.Stdout, reading.Field, reading.Label, reading.Value, reading.Error)
 	}
 	return exitSuccess
+}
+
+func printWatchReading(out io.Writer, field, label, value, errText string) {
+	if label == "" {
+		label = field
+	}
+	if errText != "" {
+		value = errText
+	}
+	if label != "" && value != "" {
+		fmt.Fprintf(out, "  %s: %s\n", label, value)
+	}
 }

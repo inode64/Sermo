@@ -189,10 +189,6 @@ const (
 	MountKeyUmount = keyUmount
 	// MountKeyRefcount is mount.refcount.
 	MountKeyRefcount = keyRefcount
-	// MountKeyAllowSIGKILL is mount.umount.allow_sigkill.
-	MountKeyAllowSIGKILL = keyAllowSIGKILL
-	// MountKeyAllowLazy is mount.umount.allow_lazy.
-	MountKeyAllowLazy = keyAllowLazy
 	// MountKeyStopPolicy is mount.stop_policy.
 	MountKeyStopPolicy = keyMountStopPolicy
 )
@@ -337,11 +333,9 @@ const (
 
 // storage mount / umount block field keys.
 const (
-	keyMount        = "mount"
-	keyRefcount     = "refcount"
-	keyUmount       = "umount"
-	keyAllowSIGKILL = "allow_sigkill"
-	keyAllowLazy    = "allow_lazy"
+	keyMount    = "mount"
+	keyRefcount = "refcount"
+	keyUmount   = "umount"
 )
 
 // StorageKeyMount is the fstab-backed storage watch mount block.

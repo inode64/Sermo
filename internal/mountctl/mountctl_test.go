@@ -19,6 +19,7 @@ import (
 type fakeRunner struct {
 	mounted   *bool
 	busy      bool
+	force     bool
 	calls     []string
 	signalled *int
 }
@@ -33,6 +34,13 @@ func (r *fakeRunner) Run(_ context.Context, name string, args ...string) (execx.
 		if len(args) > 0 && args[0] == "-l" {
 			*r.mounted = false
 			return execx.Result{}, nil
+		}
+		if len(args) > 0 && args[0] == "-f" {
+			if r.force {
+				*r.mounted = false
+				return execx.Result{}, nil
+			}
+			return execx.Result{ExitCode: 32}, fmt.Errorf("run umount: exit code 32")
 		}
 		if r.busy && (r.signalled == nil || *r.signalled == 0) {
 			return execx.Result{ExitCode: 32}, fmt.Errorf("run umount: exit code 32")
@@ -170,7 +178,6 @@ func TestReleaseRefusesRootMount(t *testing.T) {
 		return []process.Process{{PID: 123}}, nil
 	}
 	spec := EphemeralSpec("/")
-	spec.Umount.AllowSIGKILL = true
 
 	res, err := c.Release(context.Background(), spec)
 	if err == nil {
@@ -280,7 +287,6 @@ func TestReleaseBusySurfacesDiscoveryError(t *testing.T) {
 		return nil, errors.New("read /proc: permission denied")
 	}
 	spec := EphemeralSpec("/mnt/backup")
-	spec.Umount.AllowSIGKILL = true
 
 	res, err := c.Release(context.Background(), spec)
 	if err == nil {
@@ -296,9 +302,8 @@ func TestReleaseAllowsLazyOnlyWhenExplicit(t *testing.T) {
 	runner := &fakeRunner{mounted: &mounted, busy: true}
 	c := testController(t, &mounted, runner)
 	spec := EphemeralSpec("/mnt/backup")
-	spec.Umount.AllowLazy = true
 
-	res, err := c.Release(context.Background(), spec)
+	res, err := c.ReleaseWithOptions(context.Background(), spec, ReleaseOptions{AllowLazy: true})
 	if err != nil {
 		t.Fatalf("Release lazy: %v", err)
 	}
@@ -306,6 +311,24 @@ func TestReleaseAllowsLazyOnlyWhenExplicit(t *testing.T) {
 		t.Fatalf("Release = %+v mounted=%t, want lazy unmounted", res, mounted)
 	}
 	if got := strings.Join(runner.calls, "|"); got != "umount /mnt/backup|umount -l /mnt/backup" {
+		t.Fatalf("commands = %q", got)
+	}
+}
+
+func TestReleaseAllowsForceOnlyWhenRequested(t *testing.T) {
+	mounted := true
+	runner := &fakeRunner{mounted: &mounted, busy: true, force: true}
+	c := testController(t, &mounted, runner)
+	spec := EphemeralSpec("/mnt/backup")
+
+	res, err := c.ReleaseWithOptions(context.Background(), spec, ReleaseOptions{AllowForce: true})
+	if err != nil {
+		t.Fatalf("Release force: %v", err)
+	}
+	if !res.Forced || mounted {
+		t.Fatalf("Release = %+v mounted=%t, want forced unmounted", res, mounted)
+	}
+	if got := strings.Join(runner.calls, "|"); got != "umount /mnt/backup|umount -f /mnt/backup" {
 		t.Fatalf("commands = %q", got)
 	}
 }
@@ -331,15 +354,31 @@ func TestReleaseSignalsOnlyWithKillPolicy(t *testing.T) {
 		return []process.Process{{PID: 123, Exe: "/usr/bin/rsync", ExeOK: true, UID: 1000}}, nil
 	}
 	spec := EphemeralSpec("/mnt/backup")
-	spec.Umount.AllowSIGKILL = true
 	spec.KillOnlyIf = process.KillSelector{Users: []string{"backup"}, ExeAny: []string{"/usr/bin/rsync"}}
 
-	res, err := c.Release(context.Background(), spec)
+	res, err := c.ReleaseWithOptions(context.Background(), spec, ReleaseOptions{KillBlockers: true})
 	if err != nil {
 		t.Fatalf("Release with signalling: %v", err)
 	}
 	if sig.calls == 0 || mounted {
 		t.Fatalf("signals=%d mounted=%t res=%+v, want signalled and unmounted", sig.calls, mounted, res)
+	}
+}
+
+func TestReleaseKillBlockersRequiresSelector(t *testing.T) {
+	mounted := true
+	runner := &fakeRunner{mounted: &mounted, busy: true}
+	c := testController(t, &mounted, runner)
+	c.DiscoverUsers = func(string) ([]process.Process, error) {
+		return []process.Process{{PID: 123, Exe: "/usr/bin/rsync", ExeOK: true, UID: 1000}}, nil
+	}
+
+	res, err := c.ReleaseWithOptions(context.Background(), EphemeralSpec("/mnt/backup"), ReleaseOptions{KillBlockers: true})
+	if err == nil {
+		t.Fatal("Release with kill blockers and no selector succeeded")
+	}
+	if res.Message != mountMessageKillSelectorRequired || len(res.Blockers) != 1 {
+		t.Fatalf("Release = %+v, want selector error with blockers", res)
 	}
 }
 

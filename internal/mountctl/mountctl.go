@@ -64,6 +64,8 @@ const (
 
 	mountMessageAlreadyUnmounted      = "already unmounted"
 	mountMessageBusy                  = "mount is busy"
+	mountMessageForceUnmounted        = "force unmounted"
+	mountMessageKillSelectorRequired  = "kill blockers requires mount.stop_policy.kill_only_if"
 	mountMessageLazyUnmounted         = "lazy unmounted"
 	mountMessageMounted               = "mounted"
 	mountMessageRefcountAcquired      = "acquired, already mounted"
@@ -82,12 +84,17 @@ const (
 	fstabOptionsMinFields = fstabOptionsIndex + 1
 )
 
-// UmountSpec controls unmount escalation after a normal umount fails.
+// UmountSpec controls timeouts used when an unmount action signals blockers.
 type UmountSpec struct {
-	TermTimeout  time.Duration
-	KillTimeout  time.Duration
-	AllowSIGKILL bool
+	TermTimeout time.Duration
+	KillTimeout time.Duration
+}
+
+// ReleaseOptions controls explicit unmount escalation requested for one action.
+type ReleaseOptions struct {
+	AllowForce   bool
 	AllowLazy    bool
+	KillBlockers bool
 }
 
 // Spec is one fstab-backed mount unit.
@@ -118,6 +125,7 @@ type Result struct {
 	Message   string            `json:"message"`
 	Mounted   bool              `json:"mounted"`
 	Refcount  int               `json:"refcount"`
+	Forced    bool              `json:"forced,omitempty"`
 	Lazy      bool              `json:"lazy,omitempty"`
 	Signalled []int             `json:"signalled,omitempty"`
 	Blockers  []process.Process `json:"blockers,omitempty"`
@@ -177,16 +185,7 @@ func SpecFromStorageTree(name string, tree map[string]any) Spec {
 	if d := cfgval.Duration(umount[config.StopPolicyKeyKillTimeout]); d > 0 {
 		spec.Umount.KillTimeout = d
 	}
-	if b, ok := umount[config.MountKeyAllowSIGKILL].(bool); ok {
-		spec.Umount.AllowSIGKILL = b
-	}
-	if b, ok := umount[config.MountKeyAllowLazy].(bool); ok {
-		spec.Umount.AllowLazy = b
-	}
 	if sp, ok := mount[config.MountKeyStopPolicy].(map[string]any); ok {
-		if force, _ := sp[config.StopPolicyKeyForceKill].(bool); force {
-			spec.Umount.AllowSIGKILL = true
-		}
 		if koi, ok := sp[config.StopPolicyKeyKillOnlyIf].(map[string]any); ok {
 			spec.KillOnlyIf.Users = cfgval.StringList(koi[config.StopPolicyKeyUsers])
 			spec.KillOnlyIf.ExeAny = cfgval.StringList(koi[config.StopPolicyKeyExeAny])
@@ -300,6 +299,12 @@ func (c Controller) Acquire(ctx context.Context, spec Spec) (Result, error) {
 
 // Release decrements the mount refcount and unmounts the path when it reaches 0.
 func (c Controller) Release(ctx context.Context, spec Spec) (Result, error) {
+	return c.ReleaseWithOptions(ctx, spec, ReleaseOptions{})
+}
+
+// ReleaseWithOptions decrements the mount refcount and applies explicit unmount
+// escalation options when the real unmount is attempted.
+func (c Controller) ReleaseWithOptions(ctx context.Context, spec Spec, opts ReleaseOptions) (Result, error) {
 	if reason := UmountDisabledReason(spec.Path); reason != "" {
 		return disabledUmountResult(spec, reason), errors.New(reason)
 	}
@@ -319,7 +324,7 @@ func (c Controller) Release(ctx context.Context, spec Spec) (Result, error) {
 			return Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultOK, Message: mountMessageRefcountReleasedInUse, Mounted: mounted, Refcount: state.Refcount}, nil
 		}
 
-		unmount, err := c.unmount(ctx, spec)
+		unmount, err := c.unmount(ctx, spec, opts)
 		state.Refcount = 0
 		if werr := c.writeState(spec, state); werr != nil && err == nil {
 			err = werr
@@ -378,7 +383,7 @@ func (c Controller) withLock(spec Spec, fn func() (Result, error)) (Result, erro
 	return fn()
 }
 
-func (c Controller) unmount(ctx context.Context, spec Spec) (Result, error) {
+func (c Controller) unmount(ctx context.Context, spec Spec, opts ReleaseOptions) (Result, error) {
 	if reason := UmountDisabledReason(spec.Path); reason != "" {
 		return disabledUmountResult(spec, reason), errors.New(reason)
 	}
@@ -397,6 +402,14 @@ func (c Controller) unmount(ctx context.Context, spec Spec) (Result, error) {
 	if ok, rerr := c.isMounted(spec.Path); rerr == nil && !ok {
 		return Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultOK, Message: mountMessageUnmounted, Mounted: false}, nil
 	}
+	if opts.AllowForce {
+		if err := c.run(ctx, ActionUmount, "-f", spec.Path); err == nil {
+			return Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultOK, Message: mountMessageForceUnmounted, Mounted: false, Forced: true}, nil
+		}
+		if ok, rerr := c.isMounted(spec.Path); rerr == nil && !ok {
+			return Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultOK, Message: mountMessageForceUnmounted, Mounted: false, Forced: true}, nil
+		}
+	}
 
 	blockers, derr := c.discoverUsers(ctx, spec.Path)
 	result := Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultFailed, Message: mountMessageBusy, Mounted: true, Blockers: blockers}
@@ -410,7 +423,11 @@ func (c Controller) unmount(ctx context.Context, spec Spec) (Result, error) {
 		}
 		result.Message = fmt.Sprintf("mount is busy (could not enumerate blockers: %s)", execx.FormatContextOrError(derr, timeout))
 	}
-	if spec.Umount.AllowSIGKILL && len(blockers) > 0 {
+	if opts.KillBlockers && !spec.KillOnlyIf.Configured() {
+		result.Message = mountMessageKillSelectorRequired
+		return result, fmt.Errorf("%s", result.Message)
+	}
+	if opts.KillBlockers && len(blockers) > 0 {
 		reaper := process.Reaper{
 			Rediscover: func() []process.Process {
 				procs, _ := c.discoverUsers(ctx, spec.Path)
@@ -432,7 +449,7 @@ func (c Controller) unmount(ctx context.Context, spec Spec) (Result, error) {
 			return Result{Name: spec.Name, Path: spec.Path, Action: ActionUmount, Status: ResultOK, Message: mountMessageUnmountedAfterSignal, Mounted: false, Signalled: reaped.Signalled}, nil
 		}
 	}
-	if spec.Umount.AllowLazy {
+	if opts.AllowLazy {
 		if err := c.run(ctx, ActionUmount, "-l", spec.Path); err == nil {
 			result.Status = ResultOK
 			result.Message = mountMessageLazyUnmounted
@@ -670,7 +687,7 @@ func ProcessesByMount(ctx context.Context, mountPaths []string, lookup *process.
 	if lookup == nil {
 		lookup = process.DefaultUserLookup()
 	}
-	reader := process.OSReader{LookupUserName: lookup.Username}
+	reader := process.OSReader{LookupUserName: lookup.Username, LookupGroupName: lookup.GroupName}
 	pids, err := reader.PIDs()
 	if err != nil {
 		return nil, err
@@ -697,6 +714,8 @@ func ProcessesByMount(ctx context.Context, mountPaths []string, lookup *process.
 				PPID:    id.PPID,
 				User:    id.User,
 				UID:     id.UID,
+				Group:   id.Group,
+				GID:     id.GID,
 				Exe:     id.Exe,
 				ExeOK:   id.ExeOK,
 				Cmdline: id.Cmdline,

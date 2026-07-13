@@ -70,7 +70,7 @@ func (c *lvmCheck) Run(ctx context.Context) Result {
 	}
 	row, found := c.selectRow(report)
 	if !found {
-		return c.finish(start, LVMHealthError, "absent", map[string]float64{}, "lvm target absent")
+		return c.finish(start, lvmRow{}, LVMHealthError, "absent", map[string]float64{}, "lvm target absent")
 	}
 	values := lvmValues(row)
 	reasons := lvmReasons(row)
@@ -82,7 +82,7 @@ func (c *lvmCheck) Run(ctx context.Context) Result {
 		health = LVMHealthError
 	}
 	message := fmt.Sprintf("lvm %s/%s health=%s", row.VGName, row.LVName, health)
-	return c.finish(start, health, strings.Join(reasons, ","), values, message)
+	return c.finish(start, row, health, strings.Join(reasons, ","), values, message)
 }
 
 func (c *lvmCheck) selectRow(report lvmReport) (lvmRow, bool) {
@@ -100,9 +100,10 @@ func (c *lvmCheck) selectRow(report lvmReport) (lvmRow, bool) {
 	return lvmRow{}, false
 }
 
-func (c *lvmCheck) finish(start time.Time, health, reasons string, values map[string]float64, message string) Result {
+func (c *lvmCheck) finish(start time.Time, row lvmRow, health, reasons string, values map[string]float64, message string) Result {
 	r := c.result(health == LVMHealthOK, message, start)
-	r.Data = map[string]any{DataKeyHealth: health, DataKeyLVMReasons: reasons, DataKeyVolumeGroup: c.volumeGroup, DataKeyLogicalVolume: c.logicalVolume}
+	vg, lv := c.resultTarget(row)
+	r.Data = map[string]any{DataKeyHealth: health, DataKeyLVMReasons: reasons, DataKeyVolumeGroup: vg, DataKeyLogicalVolume: lv}
 	for key, value := range values {
 		r.Data[key] = value
 	}
@@ -113,10 +114,27 @@ func (c *lvmCheck) finish(start time.Time, health, reasons string, values map[st
 	return r
 }
 
+func (c *lvmCheck) resultTarget(row lvmRow) (string, string) {
+	vg := c.volumeGroup
+	if vg == "" {
+		vg = row.VGName
+	}
+	lv := c.logicalVolume
+	if row.LVName != "" && (c.logicalVolume != "" || c.volumeGroup == "") {
+		lv = row.LVName
+	}
+	return vg, lv
+}
+
 func lvmValues(row lvmRow) map[string]float64 {
 	values := map[string]float64{}
 	if free, ok := parseLVMNumber(row.VGFree); ok {
+		values[DataKeyLVMFreeBytes] = free
 		if size, ok := parseLVMNumber(row.VGSize); ok && size > 0 {
+			values[DataKeyLVMSizeBytes] = size
+			if used := size - free; used >= 0 {
+				values[DataKeyLVMUsedBytes] = used
+			}
 			values[DataKeyLVMFreePct] = free / size * 100
 		}
 	}

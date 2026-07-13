@@ -88,5 +88,48 @@ class EndpointGenerationTest(unittest.TestCase):
         self.assertEqual(disabled, set())
         self.assertEqual([item["active"] for item in checks], [True, True])
 
+    def test_lvm_watches_include_lv_display_name(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("", encoding="utf-8")
+        (stage / "lvs.json").write_text(
+            json.dumps({
+                "report": [{
+                    "lv": [{
+                        "vg_name": "vg0",
+                        "lv_name": "root",
+                        "data_percent": "-",
+                        "metadata_percent": "-",
+                    }],
+                }],
+            }),
+            encoding="utf-8",
+        )
+        options = generator.GenerationOptions(
+            web_port=9797,
+            web_password="test",
+            storage_free_pct="5%",
+            expand_by="5G",
+            smart_interval="24h",
+            hdparm_interval="6h",
+            users_watch=False,
+            active_services_only=True,
+            catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
+        )
+        report = generator.generate_for_host("host", stage, root / "configs", options)
+        lv_body = (root / "configs/host/root/etc/sermo/watches/lvm-vg0-root.yml").read_text(encoding="utf-8")
+        vg_body = (root / "configs/host/root/etc/sermo/watches/lvm-vg0-capacity.yml").read_text(encoding="utf-8")
+
+        self.assertIn('display_name: "LVM vg0/root"', lv_body)
+        self.assertIn('display_name: "LVM vg0 capacity"', vg_body)
+        self.assertEqual(
+            report["lvm_volumes"],
+            [{"volume_group": "vg0", "logical_volume": "root", "display_name": "LVM vg0/root"}],
+        )
+
 if __name__ == "__main__":
     unittest.main()

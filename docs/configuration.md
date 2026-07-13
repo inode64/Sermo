@@ -258,8 +258,10 @@ mount:
   umount:
     term_timeout: 12s
     kill_timeout: 5s
-    allow_sigkill: false
-    allow_lazy: false
+  stop_policy:
+    kill_only_if:
+      users: [backup]
+      exe_any: [/usr/bin/rsync]
 ```
 
 The CLI accepts either the configured storage name or the absolute mount path:
@@ -268,6 +270,8 @@ The CLI accepts either the configured storage name or the absolute mount path:
 sermoctl mount mount-backup
 sermoctl mount /mnt/backup
 sermoctl umount mount-backup
+sermoctl umount mount-backup --force --lazy
+sermoctl umount mount-backup --kill-blockers
 sermoctl umount /mnt/backup
 sermoctl mount status mount-backup
 sermoctl mount list
@@ -276,10 +280,13 @@ sermoctl mount list
 The Web UI's **Mount units** panel exposes storage watches that have a `mount:`
 block. It can mount/unmount, show the same busy-process blockers before
 unmounting, send a native TTY alert to logged-in users who are blocking the
-mount, and run `kill+umount` only through the explicit mount kill policy below.
+mount, and let the operator choose `force`, `lazy` and `kill blockers` for that
+single unmount attempt. The `kill blockers` option only signals current blockers
+that match `mount.stop_policy.kill_only_if`; every blocker remains visible in
+the confirmation table even when no kill policy is configured.
 The root filesystem (`path: /`) is read-only from mount operations: Sermo will
 show it as mounted, but CLI and Web/API `umount`, blocker alerts and
-`kill+umount` are rejected.
+blocker signalling are rejected.
 
 With `mount.refcount: true` (the default), every successful `mount` increments
 Sermo's runtime counter and `umount` decrements it. The real `umount` only runs
@@ -289,11 +296,12 @@ counter is kept under `<paths.runtime>/mounts/state`, and each mount operation
 uses a per-target lock under `<paths.runtime>/mounts/ops`.
 
 Normal unmount is conservative: Sermo first runs `umount <path>`. If the mount
-is busy, it reports the processes using the path. It only signals blockers when
-`mount.umount.allow_sigkill: true` or `mount.stop_policy.force_kill: true` is
-explicitly set, and validation then requires a restrictive
-`mount.stop_policy.kill_only_if` selector. Lazy unmount (`umount -l`) is also off
-by default and only used when `mount.umount.allow_lazy: true`.
+is still busy, `sermoctl umount --force` or the Web UI `force` checkbox permits
+`umount -f <path>`. `--kill-blockers` or the Web UI `kill blockers` checkbox
+then permits TERM/KILL only for blockers that match
+`mount.stop_policy.kill_only_if`; cmdline is display data and never authorizes a
+kill. `--lazy` or the Web UI `lazy` checkbox permits `umount -l <path>` as the
+last fallback.
 
 ## Engine settings
 
@@ -2237,7 +2245,7 @@ current matches, PIDs and aggregate RSS/IO counters.
 
 A process watch can **terminate the matched PID natively**, without an external
 hook script, with a `then.kill` action. It reuses the same guarded process
-reaper as service stop and mount `kill+umount` policies. Because it signals real
+reaper as service stop and mount blocker-signalling policies. Because it signals real
 processes, `then.kill` requires `check.name` to be an absolute resolved
 `/proc/<pid>/exe` path and `check.user` to be set; basename-only process watches
 may still monitor and notify, but cannot kill.

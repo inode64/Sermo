@@ -59,11 +59,21 @@ func (f *fakeBackend) Applications(context.Context) []Application {
 func (f *fakeBackend) Libraries(context.Context) []Library { return f.libraries }
 func (f *fakeBackend) Mounts(context.Context) []Mount      { return f.mounts }
 func (f *fakeBackend) MountAction(_ context.Context, name, action string, opts MountActionOptions) MountActionResult {
-	suffix := ""
-	if opts.KillBlockers {
-		suffix = "?kill"
+	var suffix []string
+	if opts.AllowForce {
+		suffix = append(suffix, "force")
 	}
-	f.mountOperated = append(f.mountOperated, name+"/"+action+suffix)
+	if opts.AllowLazy {
+		suffix = append(suffix, "lazy")
+	}
+	if opts.KillBlockers {
+		suffix = append(suffix, "kill")
+	}
+	flagText := ""
+	if len(suffix) > 0 {
+		flagText = "?" + strings.Join(suffix, "&")
+	}
+	f.mountOperated = append(f.mountOperated, name+"/"+action+flagText)
 	if f.mountAction.Message != "" || f.mountAction.Name != "" {
 		return f.mountAction
 	}
@@ -486,6 +496,7 @@ func TestListLibraries(t *testing.T) {
 func TestListMounts(t *testing.T) {
 	b := &fakeBackend{mounts: []Mount{{
 		Name: "mount-backup", Path: "/mnt/backup", Mounted: true, Refcount: 2, State: "active", Refcounted: true,
+		Operation: &MountOperation{Action: mountctl.ActionUmount, State: "unmounting", StartedAt: "2026-07-13T10:00:00Z"},
 	}}}
 	rec := httptest.NewRecorder()
 	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, apiPathMounts, nil))
@@ -502,18 +513,24 @@ func TestListMounts(t *testing.T) {
 	if len(got) != 1 || got[0].Name != "mount-backup" || !got[0].Mounted || got[0].Refcount != 2 {
 		t.Fatalf("unexpected mounts: %+v", got)
 	}
+	if got[0].Operation == nil || got[0].Operation.Action != mountctl.ActionUmount || got[0].Operation.State != "unmounting" {
+		t.Fatalf("mount operation = %+v, want unmounting", got[0].Operation)
+	}
 }
 
 func TestMountAction(t *testing.T) {
 	b := &fakeBackend{}
 	rec := httptest.NewRecorder()
+	q := testQueryParam(apiQueryKill, queryBoolOne)
+	q += "&" + apiQueryForce + "=" + queryBoolOne
+	q += "&" + apiQueryLazy + "=" + queryBoolOne
 	newServer(b).ServeHTTP(rec, postReq(
-		testPathQuery(testMountPath("mount-backup", mountctl.ActionUmount), testQueryParam(apiQueryKill, queryBoolOne)),
+		testPathQuery(testMountPath("mount-backup", mountctl.ActionUmount), q),
 	))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d", rec.Code)
 	}
-	if got := strings.Join(b.mountOperated, ","); got != "mount-backup/umount?kill" {
+	if got := strings.Join(b.mountOperated, ","); got != "mount-backup/umount?force&lazy&kill" {
 		t.Fatalf("mount actions = %q", got)
 	}
 	var res MountActionResult
@@ -535,13 +552,14 @@ func TestMountActionRejectsUnknown(t *testing.T) {
 
 func TestMountBlockers(t *testing.T) {
 	b := &fakeBackend{mountBlockers: MountBlockersResult{
-		OK:      true,
-		Name:    "mount-backup",
-		Path:    "/mnt/backup",
-		Mounted: true,
-		CanKill: true,
+		OK:            true,
+		Name:          "mount-backup",
+		Path:          "/mnt/backup",
+		Mounted:       true,
+		HasKillPolicy: true,
+		CanKill:       true,
 		Blockers: []MountBlocker{{
-			PID: 123, User: "backup", UID: 1000, Exe: "/usr/bin/rsync", ExeResolved: true, Killable: true,
+			PID: 123, User: "backup", UID: 1000, Group: "backup", GID: 1000, Exe: "/usr/bin/rsync", ExeResolved: true, Killable: true,
 		}},
 	}}
 	rec := httptest.NewRecorder()
@@ -553,7 +571,7 @@ func TestMountBlockers(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if !got.OK || !got.CanKill || len(got.Blockers) != 1 || !got.Blockers[0].Killable {
+	if !got.OK || !got.HasKillPolicy || !got.CanKill || len(got.Blockers) != 1 || !got.Blockers[0].Killable || got.Blockers[0].Group != "backup" {
 		t.Fatalf("unexpected blockers: %+v", got)
 	}
 }

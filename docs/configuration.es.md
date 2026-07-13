@@ -271,8 +271,10 @@ mount:
   umount:
     term_timeout: 12s
     kill_timeout: 5s
-    allow_sigkill: false
-    allow_lazy: false
+  stop_policy:
+    kill_only_if:
+      users: [backup]
+      exe_any: [/usr/bin/rsync]
 ```
 
 La CLI acepta o bien el nombre del storage configurado o la ruta de montaje absoluta:
@@ -281,6 +283,8 @@ La CLI acepta o bien el nombre del storage configurado o la ruta de montaje abso
 sermoctl mount mount-backup
 sermoctl mount /mnt/backup
 sermoctl umount mount-backup
+sermoctl umount mount-backup --force --lazy
+sermoctl umount mount-backup --kill-blockers
 sermoctl umount /mnt/backup
 sermoctl mount status mount-backup
 sermoctl mount list
@@ -289,11 +293,14 @@ sermoctl mount list
 El panel **Mount units** de la interfaz web expone los storages que tienen un
 bloque `mount:`. Puede montar/desmontar, mostrar los mismos procesos bloqueadores
 antes de desmontar, enviar una alerta TTY nativa a los usuarios con sesión que
-estén bloqueando el montaje, y ejecutar `kill+umount` solo mediante la política
-explícita de kill de montaje descrita abajo.
+estén bloqueando el montaje, y permitir que el operador elija `force`, `lazy` y
+`kill blockers` para ese intento concreto de desmontaje. La opción `kill
+blockers` solo señaliza bloqueadores actuales que coinciden con
+`mount.stop_policy.kill_only_if`; todos los blockers siguen visibles en la tabla
+de confirmación aunque no haya política de kill configurada.
 El filesystem raíz (`path: /`) es de solo lectura para operaciones de montaje:
 Sermo lo muestra como montado, pero rechaza `umount`, las alertas de blockers y
-`kill+umount` desde CLI y Web/API.
+la señalización de blockers desde CLI y Web/API.
 
 Con `mount.refcount: true` (el valor por defecto), cada `mount` exitoso incrementa el
 contador de runtime de Sermo y `umount` lo decrementa. El `umount` real solo se ejecuta
@@ -303,12 +310,12 @@ mantiene bajo `<paths.runtime>/mounts/state`, y cada operación de montaje usa u
 por destino bajo `<paths.runtime>/mounts/ops`.
 
 El desmontaje normal es conservador: Sermo primero ejecuta `umount <path>`. Si el
-montaje está ocupado, reporta los procesos que usan la ruta. Solo envía señales a los
-bloqueadores cuando `mount.umount.allow_sigkill: true` o
-`mount.stop_policy.force_kill: true` está explícitamente establecido, y la
-validación entonces requiere un selector restrictivo
-`mount.stop_policy.kill_only_if`. El desmontaje perezoso (`umount -l`) también está
-desactivado por defecto y solo se usa cuando `mount.umount.allow_lazy: true`.
+montaje sigue ocupado, `sermoctl umount --force` o el checkbox `force` de la Web
+UI permite `umount -f <path>`. `--kill-blockers` o el checkbox `kill blockers`
+permite entonces TERM/KILL solo a blockers que coincidan con
+`mount.stop_policy.kill_only_if`; cmdline es dato de visualización y nunca
+autoriza un kill. `--lazy` o el checkbox `lazy` permite `umount -l <path>` como
+último fallback.
 
 ## Ajustes del motor
 
@@ -2274,7 +2281,7 @@ contadores agregados RSS/IO.
 Un process watch puede **terminar el PID coincidente de forma nativa**, sin un
 script de hook externo, con una acción `then.kill`. Reutiliza el mismo reaper
 protegido de procesos que usan la parada de servicios y la política
-`kill+umount` de los mounts. Como señala procesos reales, `then.kill` requiere
+de señalización de blockers de los mounts. Como señala procesos reales, `then.kill` requiere
 que `check.name` sea una ruta absoluta del `/proc/<pid>/exe` resuelto y que
 `check.user` esté definido; los process watches por basename pueden seguir
 monitorizando y notificando, pero no pueden matar.

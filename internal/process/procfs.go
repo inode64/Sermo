@@ -99,6 +99,9 @@ type OSReader struct {
 	// LookupUserName maps a UID to a display name. Optional: nil uses native
 	// os/user lookups.
 	LookupUserName func(uint32) string
+	// LookupGroupName maps a GID to a display name. Optional: nil uses native
+	// os/user lookups.
+	LookupGroupName func(uint32) string
 }
 
 // PIDs lists numeric entries under /proc.
@@ -131,6 +134,7 @@ func (r OSReader) Identity(pid int) (Identity, bool) {
 		UID:     uid,
 		GID:     gid,
 		User:    r.userName(uid),
+		Group:   r.groupName(gid),
 		State:   state,
 		Cmdline: readCmdline(pid),
 	}
@@ -143,6 +147,16 @@ func (r OSReader) userName(uid uint32) string {
 		return r.LookupUserName(uid)
 	}
 	if name, ok := nativeUserName(uid); ok {
+		return name
+	}
+	return ""
+}
+
+func (r OSReader) groupName(gid uint32) string {
+	if r.LookupGroupName != nil {
+		return r.LookupGroupName(gid)
+	}
+	if name, ok := nativeGroupName(gid); ok {
 		return name
 	}
 	return ""

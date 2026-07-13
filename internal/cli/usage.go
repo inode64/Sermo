@@ -341,10 +341,16 @@ var commandUsages = []commandUsage{
 		Name:    commandUmount,
 		Summary: "Release a configured fstab-backed mount.",
 		Usage: []string{
-			"sermoctl umount TARGET",
+			"sermoctl umount TARGET [--force] [--lazy] [--kill-blockers]",
+		},
+		Flags: []string{
+			"--force         allow umount -f after a failed normal umount",
+			"--lazy          allow umount -l as the last fallback",
+			"--kill-blockers allow TERM/KILL only for blockers matching mount.stop_policy.kill_only_if",
 		},
 		Examples: []string{
 			"sermoctl umount mount-backup",
+			"sermoctl umount mount-backup --force --lazy",
 		},
 	},
 	{
