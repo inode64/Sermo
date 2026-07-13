@@ -316,6 +316,14 @@ For each watch type found in that run-time inventory:
 
 - Generate it when its target, predicates and thresholds can be derived safely
   from read-only host evidence or from an explicit user-selected target.
+- **Availability gate:** do not generate, install or retain a host-watch YAML
+  merely because Sermo supports its type. Require positive, read-only host
+  evidence that its backing kernel interface, device, daemon, tool or data source
+  is available and safe to probe. If that evidence is absent, omit the watch
+  entirely; do not configure it just to report that the capability is unavailable.
+  For example, create an `edac` watch only when the host exposes EDAC memory
+  controllers under `/sys/devices/system/edac/mc`; otherwise record
+  `edac: skipped — EDAC controllers not exposed` in the generation report.
 - Skip it when the host lacks the feature, the target would be guessed, the probe
   requires privileges the run does not have, the watch is service-scoped rather
   than host-scoped, or the user did not authorize the necessary target. Record the
