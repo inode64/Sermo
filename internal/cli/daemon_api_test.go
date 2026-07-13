@@ -91,6 +91,39 @@ paths:
 	}
 }
 
+func TestProbeDaemonWatchHTTP(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/watches/disk-speed/probe" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Header.Get(daemonWebCSRFHeader) != daemonWebCSRFValue {
+			http.Error(w, "missing csrf", http.StatusForbidden)
+			return
+		}
+		if auth := r.Header.Get("Authorization"); auth != "Basic YWRtaW46c2VjcmV0" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		writeDaemonAPITestJSON(w, daemonWatchProbe{OK: true, Message: "hdparm /dev/sda read=166.67 MB/s", Readings: []daemonWatchReading{{Field: "read", Label: "Read", Value: "166.67 MB/s"}}})
+	}))
+	defer srv.Close()
+
+	_, global, cfg := daemonAPITestConfig(t, srv.URL, `
+web:
+  address: HOST
+  port: PORT
+  password: secret
+paths:
+  watches: [WATCHES]
+`)
+	app := App{LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil }}
+	result, err := app.probeDaemonWatch(context.Background(), options{config: global}, "disk-speed")
+	if err != nil || !result.OK || len(result.Readings) != 1 || result.Readings[0].Value != "166.67 MB/s" {
+		t.Fatalf("probe result=%+v err=%v", result, err)
+	}
+}
+
 func TestFetchDaemonApplicationStatesHTTP(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/applications" {

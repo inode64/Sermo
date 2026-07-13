@@ -21,7 +21,7 @@ func (r *lvmRunner) Run(context.Context, string, ...string) (execx.Result, error
 
 func TestLVMCheckHealthTransition(t *testing.T) {
 	healthy := `{"report":[{"lv":[{"vg_name":"vg0","lv_name":"root","lv_attr":"-wi-a-----","lv_health_status":"healthy","vg_free":"100","vg_size":"1000"}]}]}`
-	partial := `{"report":[{"lv":[{"vg_name":"vg0","lv_name":"root","lv_attr":"pwi-a-----","lv_health_status":"healthy","vg_free":"100","vg_size":"1000"}]}]}`
+	partial := `{"report":[{"lv":[{"vg_name":"vg0","lv_name":"root","lv_attr":"-wi-a---p-","lv_health_status":"healthy","vg_free":"100","vg_size":"1000"}]}]}`
 	runner := &lvmRunner{outputs: []string{healthy, partial, healthy}}
 	check := &lvmCheck{base: base{name: "lvm", timeout: time.Second}, runner: runner, volumeGroup: "vg0", logicalVolume: "root"}
 	if result := check.Run(context.Background()); !result.OK {
@@ -39,6 +39,31 @@ func TestLVMCheckHealthTransition(t *testing.T) {
 	transition, ok = LVMTransitionFromResult(recovered)
 	if !recovered.OK || !ok || transition.OldState != LVMHealthError || transition.NewState != LVMHealthOK || transition.PreviousReasons != "partial" {
 		t.Fatalf("recovery = %+v transition=%+v ok=%v", recovered, transition, ok)
+	}
+}
+
+func TestLVMDeviceState(t *testing.T) {
+	tests := []struct {
+		name       string
+		row        lvmRow
+		wantState  string
+		wantPct    float64
+		wantActive bool
+	}{
+		{name: "idle", row: lvmRow{LVAttr: "-wi-a-----"}},
+		{name: "raid check", row: lvmRow{RaidSyncAction: "check", SyncPercent: "12.5"}, wantState: DeviceStateTesting, wantPct: 12.5, wantActive: true},
+		{name: "raid recovery", row: lvmRow{RaidSyncAction: "recover", SyncPercent: "50"}, wantState: DeviceStateRecovering, wantPct: 50, wantActive: true},
+		{name: "pvmove", row: lvmRow{LVAttr: "pwi-a-----", CopyPercent: "24"}, wantState: DeviceStateMoving, wantPct: 24, wantActive: true},
+		{name: "snapshot merge", row: lvmRow{LVAttr: "Swi-a-----"}, wantState: DeviceStateMerging},
+		{name: "raid reshape", row: lvmRow{LVAttr: "rwi-a---s-"}, wantState: DeviceStateRebuilding},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state, pct, active := lvmDeviceState(tt.row)
+			if state != tt.wantState || pct != tt.wantPct || active != tt.wantActive {
+				t.Fatalf("lvmDeviceState(%+v) = %q, %v, %v; want %q, %v, %v", tt.row, state, pct, active, tt.wantState, tt.wantPct, tt.wantActive)
+			}
+		})
 	}
 }
 

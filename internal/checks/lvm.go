@@ -47,13 +47,16 @@ type lvmRow struct {
 	VGSize          string `json:"vg_size"`
 	DataPercent     string `json:"data_percent"`
 	MetadataPercent string `json:"metadata_percent"`
+	RaidSyncAction  string `json:"raid_sync_action"`
+	SyncPercent     string `json:"sync_percent"`
+	CopyPercent     string `json:"copy_percent"`
 }
 
 func (c *lvmCheck) Run(ctx context.Context) Result {
 	start := time.Now()
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
-	res, runErr := c.runner.Run(ctx, lvsCommand, "--reportformat", "json", "--units", "b", "--nosuffix", "-o", "vg_name,lv_name,lv_attr,lv_health_status,vg_free,vg_size,data_percent,metadata_percent")
+	res, runErr := c.runner.Run(ctx, lvsCommand, "--reportformat", "json", "--units", "b", "--nosuffix", "-a", "-o", "vg_name,lv_name,lv_attr,lv_health_status,vg_free,vg_size,data_percent,metadata_percent,raid_sync_action,sync_percent,copy_percent")
 	if res.ExitCode == execx.ExitCodeRunFailure {
 		msg := execx.OperatorFailure(runErr, res, c.timeout)
 		if msg == "" {
@@ -104,6 +107,12 @@ func (c *lvmCheck) finish(start time.Time, row lvmRow, health, reasons string, v
 	r := c.result(health == LVMHealthOK, message, start)
 	vg, lv := c.resultTarget(row)
 	r.Data = map[string]any{DataKeyHealth: health, DataKeyLVMReasons: reasons, DataKeyVolumeGroup: vg, DataKeyLogicalVolume: lv}
+	if state, progress, hasProgress := lvmDeviceState(row); state != "" {
+		r.Data[DataKeyDeviceState] = state
+		if hasProgress {
+			r.Data[DataKeyProgressPct] = progress
+		}
+	}
 	for key, value := range values {
 		r.Data[key] = value
 	}
@@ -161,17 +170,61 @@ func parseLVMNumber(value string) (float64, bool) {
 
 func lvmReasons(row lvmRow) []string {
 	var reasons []string
-	attr := row.LVAttr
-	if strings.Contains(attr, "p") {
+	if lvmAttributeAt(row.LVAttr, 8) == 'p' {
 		reasons = append(reasons, "partial")
 	}
-	if strings.Contains(attr, "s") {
+	if lvmAttributeAt(row.LVAttr, 4) == 's' {
 		reasons = append(reasons, "suspended")
 	}
 	if status := strings.TrimSpace(row.LVHealth); status != "" && status != "healthy" {
 		reasons = append(reasons, status)
 	}
 	return reasons
+}
+
+// lvmDeviceState maps documented lvs activity fields to one concise device
+// state. It leaves ordinary healthy, idle volumes blank so their watch state
+// remains the monitoring health state.
+func lvmDeviceState(row lvmRow) (string, float64, bool) {
+	switch strings.ToLower(strings.TrimSpace(row.RaidSyncAction)) {
+	case "check":
+		return lvmProgressState(DeviceStateTesting, row)
+	case "repair":
+		return lvmProgressState(DeviceStateRepairing, row)
+	case "recover", "resync":
+		return lvmProgressState(DeviceStateRecovering, row)
+	case "reshape":
+		return lvmProgressState(DeviceStateRebuilding, row)
+	}
+
+	switch lvmAttributeAt(row.LVAttr, 0) {
+	case 'p':
+		return lvmProgressState(DeviceStateMoving, row)
+	case 'O', 'S':
+		return lvmProgressState(DeviceStateMerging, row)
+	case 'M', 'R':
+		return lvmProgressState(DeviceStateRebuilding, row)
+	}
+	if lvmAttributeAt(row.LVAttr, 8) == 's' {
+		return lvmProgressState(DeviceStateRebuilding, row)
+	}
+	return "", 0, false
+}
+
+func lvmProgressState(state string, row lvmRow) (string, float64, bool) {
+	for _, value := range []string{row.SyncPercent, row.CopyPercent} {
+		if progress, ok := parseLVMNumber(value); ok {
+			return state, progress, true
+		}
+	}
+	return state, 0, false
+}
+
+func lvmAttributeAt(attr string, index int) byte {
+	if index < 0 || index >= len(attr) {
+		return 0
+	}
+	return attr[index]
 }
 
 // LVMTransitionFromResult returns the state change, when this sample crossed it.

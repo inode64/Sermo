@@ -23,6 +23,7 @@ type RaidMemberStatus struct {
 // RaidArrayStatus is one Linux software-RAID array observation.
 type RaidArrayStatus struct {
 	Name          string
+	SizeBytes     uint64
 	Degraded      bool
 	Recovering    bool
 	Operation     string
@@ -183,6 +184,16 @@ func raidResultData(st RaidStatus, array string, detail RaidArrayStatus, present
 		DataKeyArrays: st.Arrays, DataKeyDegraded: st.Degraded, DataKeyRecovering: st.Recovering,
 		DataKeyRaidMembers: st.Details,
 	}
+	if array == "" {
+		data[DataKeyTotalBytes] = raidTotalBytes(st.Details)
+		state, progress, hasProgress := RaidDeviceState(st.Details)
+		if state != "" {
+			data[DataKeyDeviceState] = state
+		}
+		if hasProgress {
+			data[DataKeyProgressPct] = progress
+		}
+	}
 	if len(st.DegradedNames) > 0 {
 		data[DataKeyDegradedArrays] = strings.Join(st.DegradedNames, ",")
 	}
@@ -198,10 +209,50 @@ func raidResultData(st RaidStatus, array string, detail RaidArrayStatus, present
 	data[DataKeyRecovering] = boolFloat(detail.Recovering)
 	data[DataKeyRaidOperation] = detail.Operation
 	data[DataKeyRaidMismatchCount] = detail.MismatchCount
+	data[DataKeyTotalBytes] = detail.SizeBytes
 	if detail.HasProgress {
 		data[DataKeyRaidProgressPct] = detail.ProgressPct
+		data[DataKeyProgressPct] = detail.ProgressPct
+	}
+	if state := raidArrayDeviceState(detail); state != "" {
+		data[DataKeyDeviceState] = state
 	}
 	return data
+}
+
+// RaidDeviceState returns the most urgent active operation. Array names are
+// sorted by the sampler, making the selected same-priority operation stable.
+func RaidDeviceState(details []RaidArrayStatus) (string, float64, bool) {
+	for _, detail := range details {
+		if state := raidArrayDeviceState(detail); state != "" {
+			return state, detail.ProgressPct, detail.HasProgress
+		}
+	}
+	return "", 0, false
+}
+
+func raidArrayDeviceState(detail RaidArrayStatus) string {
+	switch detail.Operation {
+	case "check":
+		return DeviceStateTesting
+	case "recovery":
+		return DeviceStateRecovering
+	case "resync", "reshape":
+		return DeviceStateRebuilding
+	default:
+		return ""
+	}
+}
+
+func raidTotalBytes(details []RaidArrayStatus) uint64 {
+	var total uint64
+	for _, detail := range details {
+		if detail.SizeBytes > ^uint64(0)-total {
+			return ^uint64(0)
+		}
+		total += detail.SizeBytes
+	}
+	return total
 }
 
 // RaidTransitions returns the typed transition list from a RAID check result.
@@ -245,6 +296,7 @@ const (
 	mdProgressValueGroup = 2
 	mdMemberPrefix       = "dev-"
 	raidSysBlockPath     = "/sys/block"
+	raidSectorBytes      = uint64(512)
 	raidSyncActionFile   = "sync_action"
 	raidSyncActionIdle   = "idle"
 	raidSyncActionResync = "resync"
@@ -312,6 +364,7 @@ func enrichRaidSysfs(st *RaidStatus, root string) {
 	}
 	for i := range st.Details {
 		detail := &st.Details[i]
+		detail.SizeBytes = raidArraySizeBytes(filepath.Join(root, detail.Name, "size"))
 		mdPath := filepath.Join(root, detail.Name, "md")
 		detail.SyncAction = readRaidSysfsValue(filepath.Join(mdPath, raidSyncActionFile))
 		detail.MismatchCount = readRaidSysfsValue(filepath.Join(mdPath, "mismatch_cnt"))
@@ -331,6 +384,17 @@ func enrichRaidSysfs(st *RaidStatus, root string) {
 		}
 		sort.Slice(detail.Members, func(i, j int) bool { return detail.Members[i].Name < detail.Members[j].Name })
 	}
+}
+
+// raidArraySizeBytes reads the md device's sector count from sysfs. Linux
+// reports this block-device value in 512-byte sectors, independently of the
+// hardware's physical sector size.
+func raidArraySizeBytes(path string) uint64 {
+	sectors, err := strconv.ParseUint(strings.TrimSpace(readRaidSysfsValue(path)), 10, 64)
+	if err != nil || sectors > ^uint64(0)/raidSectorBytes {
+		return 0
+	}
+	return sectors * raidSectorBytes
 }
 
 // SetRaidRebuildState pauses or resumes a Linux md reconstruction through its

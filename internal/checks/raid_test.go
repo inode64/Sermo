@@ -47,6 +47,21 @@ func TestParseMdstat(t *testing.T) {
 	}
 }
 
+func TestEnrichRaidSysfsReadsArraySize(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "md0", "md"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "md0", "size"), []byte("2048\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st := RaidStatus{Details: []RaidArrayStatus{{Name: "md0"}}}
+	enrichRaidSysfs(&st, root)
+	if got, want := st.Details[0].SizeBytes, uint64(1<<20); got != want {
+		t.Fatalf("array size = %d, want %d", got, want)
+	}
+}
+
 func raidWith(st RaidStatus, preds ...levelPred) *raidCheck {
 	return &raidCheck{base: base{name: "r", timeout: time.Second}, sampler: func() (RaidStatus, error) { return st, nil }, preds: preds}
 }
@@ -67,6 +82,30 @@ func TestRaidCheck(t *testing.T) {
 	res := raidWith(RaidStatus{Arrays: 1, Recovering: 1}, levelPred{"recovering", ">", 0}).Run(context.Background())
 	if !res.OK {
 		t.Error("recovering>0 predicate should alert")
+	}
+}
+
+func TestRaidDeviceState(t *testing.T) {
+	tests := []struct {
+		name       string
+		detail     RaidArrayStatus
+		wantState  string
+		wantPct    float64
+		wantActive bool
+	}{
+		{name: "idle", detail: RaidArrayStatus{Name: "md0"}},
+		{name: "check", detail: RaidArrayStatus{Name: "md0", Operation: "check", ProgressPct: 12.5, HasProgress: true}, wantState: DeviceStateTesting, wantPct: 12.5, wantActive: true},
+		{name: "recovery", detail: RaidArrayStatus{Name: "md0", Operation: "recovery"}, wantState: DeviceStateRecovering, wantActive: false},
+		{name: "resync", detail: RaidArrayStatus{Name: "md0", Operation: "resync"}, wantState: DeviceStateRebuilding, wantActive: false},
+		{name: "reshape", detail: RaidArrayStatus{Name: "md0", Operation: "reshape"}, wantState: DeviceStateRebuilding, wantActive: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state, pct, active := RaidDeviceState([]RaidArrayStatus{tt.detail})
+			if state != tt.wantState || pct != tt.wantPct || active != tt.wantActive {
+				t.Fatalf("RaidDeviceState(%+v) = %q, %v, %v; want %q, %v, %v", tt.detail, state, pct, active, tt.wantState, tt.wantPct, tt.wantActive)
+			}
+		})
 	}
 }
 

@@ -58,6 +58,16 @@ const watches = [{
   enabled: true, monitored: true, state: "ok", check_type: "storage",
   storage: { filesystem: "xfs", mount_point: "/backup", used_bytes: 20, total_bytes: 100 },
   summary: "20% used", interval: "1m", status_observed_at: "2026-07-10T12:00:00Z",
+}, {
+  name: "hdparm-sda", display_name: "Disk speed", category: "storage",
+  enabled: true, monitored: true, state: "ok", check_type: "hdparm", can_probe: true,
+  probe: { state: "running", started_at: "2026-07-10T12:00:00Z" },
+  summary: "hdparm /dev/sda", interval: "6h", status_observed_at: "2026-07-10T12:00:00Z",
+}, {
+  name: "smart-sda", display_name: "Disk health", category: "storage",
+  enabled: true, monitored: true, state: "testing", check_type: "smart", can_probe: true,
+  readings: [{ field: "device", label: "Device", value: "/dev/sda" }, { field: "device_state", label: "State", value: "testing" }],
+  summary: "smart /dev/sda self-test", interval: "1d", status_observed_at: "2026-07-10T12:00:00Z",
 }];
 
 const applications = [{
@@ -145,20 +155,47 @@ test("dashboard passes axe and fits the viewport", async ({ page }) => {
 });
 
 test("single-choice filters stay hidden", async ({ page }) => {
-  for (const selector of ["#svc-category", "#app-category", "#library-category", "#watch-type"]) {
+  for (const selector of ["#svc-category", "#app-category", "#library-category"]) {
     await expect(page.locator(selector)).toBeHidden();
   }
+  await expect(page.locator("#watch-type")).toBeVisible();
 });
 
 test("inventory panels group by their meaningful type", async ({ page }) => {
-  await page.locator("#storage-group-toggle").click();
-  await expect(page.locator("#storage-rows .group-row")).toHaveCount(2);
-  await page.locator("#network-group-toggle").click();
-  await expect(page.locator("#network-rows .group-row")).toHaveCount(2);
+  await expect(page.locator("#watch-rows .group-row")).toHaveCount(3);
   await page.locator("#mount-group-toggle").click();
   await expect(page.locator("#mount-rows .group-row")).toHaveCount(2);
-  await page.locator('#network-rows [data-group-name="icmp"]').click();
+  await page.locator('#watch-rows [data-group-name="Network"]').click();
   await expect(page.locator("#wat-row-icmp-gateway")).toBeHidden();
+});
+
+test("storage watches filter by filesystem and sort their own columns", async ({ page }) => {
+  const filesystem = page.locator('[data-watch-type-filter="storage"]');
+  await expect(filesystem).toBeVisible();
+  await filesystem.selectOption("xfs");
+  await expect(page.locator("#wat-row-storage-backup")).toBeVisible();
+  await expect(page.locator("#wat-row-storage-data")).toBeHidden();
+
+  await filesystem.selectOption("all");
+  await page.locator('[data-watch-type-sort-type="storage"][data-watch-type-sort="usage"]').click();
+  await expect(page.locator('#watch-rows [data-watch-type-sort-type="storage"][data-watch-type-sort="usage"]')).toHaveAttribute("aria-sort", "ascending");
+  await expect(page.locator('#watch-rows tr[data-exp-key^="wat:storage"]')).toHaveCount(2);
+  await expect(page.locator('#watch-rows tr[data-exp-key^="wat:storage"]').first()).toHaveAttribute("id", "wat-row-storage-data");
+});
+
+test("a running manual probe keeps health visible and disables a duplicate", async ({ page }) => {
+  const row = page.locator("#wat-row-hdparm-sda");
+  await expect(row).toContainText("checking");
+  await expect(row).toContainText("previously ok");
+  await expect(row.locator('[data-watch-action="probe"]')).toBeDisabled();
+  await expect(row.locator("[data-probe-started-at]")).toBeVisible();
+});
+
+test("a SMART self-test remains the device state after its start command returns", async ({ page }) => {
+  const row = page.locator("#wat-row-smart-sda");
+  await expect(row).toContainText("testing");
+  await expect(row).not.toContainText("checking");
+  await expect(row.locator(".state-testing")).toBeVisible();
 });
 
 test("global search opens a service and exposes individual actions", async ({ page }) => {

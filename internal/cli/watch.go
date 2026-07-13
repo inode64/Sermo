@@ -2,14 +2,17 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"path/filepath"
+	"strings"
 
 	"sermo/internal/app"
 	"sermo/internal/checks"
 	"sermo/internal/config"
-	"sermo/internal/execx"
 	"sermo/internal/state"
 )
 
@@ -21,10 +24,17 @@ type daemonWatchReading struct {
 }
 
 type daemonWatchDetail struct {
-	Name      string               `json:"name"`
-	State     string               `json:"state"`
-	CheckType string               `json:"check_type"`
-	Readings  []daemonWatchReading `json:"readings"`
+	Name          string               `json:"name"`
+	State         string               `json:"state"`
+	CheckType     string               `json:"check_type"`
+	LastCheckedAt string               `json:"last_checked_at"`
+	Readings      []daemonWatchReading `json:"readings"`
+}
+
+type daemonWatchProbe struct {
+	OK       bool                 `json:"ok"`
+	Message  string               `json:"message"`
+	Readings []daemonWatchReading `json:"readings"`
 }
 
 const watchCommandTargetArgCount = 2
@@ -64,39 +74,64 @@ func (a App) runWatchProbe(ctx context.Context, opts options) int {
 	}
 	checkEntry, _ := entry[config.WatchKeyCheck].(map[string]any)
 	typ := fmt.Sprint(checkEntry[checks.CheckKeyType])
-	if typ != checks.CheckTypeLVM && typ != checks.CheckTypeRAID && typ != checks.CheckTypeSmart {
+	if typ != checks.CheckTypeHdparm && typ != checks.CheckTypeLVM && typ != checks.CheckTypeRAID && typ != checks.CheckTypeSmart {
 		return a.fail(opts, fmt.Sprintf("watch %q (%s) does not support manual probing", opts.args[1], typ))
 	}
-	timeout := app.EngineDuration(cfg, config.EngineKeyDefaultTimeout, app.DefaultEngineCheckTimeout)
-	if opts.timeout > 0 {
-		timeout = opts.timeout
-	}
-	runner := a.Runner
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
-	check, err := checks.BuildInline(opts.args[1], checkEntry, checks.Deps{DefaultTimeout: timeout, Runner: runner})
+	result, err := a.ProbeDaemonWatch(ctx, opts, opts.args[1])
 	if err != nil {
-		return a.fail(opts, "build watch probe: "+err.Error())
+		return a.fail(opts, "watch probe: "+err.Error())
 	}
-	res := check.Run(ctx)
-	healthy := res.Healthy()
 	if opts.json {
-		writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: opts.args[1], cliJSONKeyOK: healthy, "result": res})
+		writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: opts.args[1], cliJSONKeyOK: result.OK, cliJSONKeyMessage: result.Message, "readings": result.Readings})
 	} else {
 		status := cliTextOK
-		if !healthy {
+		if !result.OK {
 			status = cliTextFail
 		}
-		fmt.Fprintf(a.Stdout, "%s watch %s: %s\n", status, opts.args[1], res.Message)
-		for _, reading := range app.CheckReadings(typ, res.Data) {
+		fmt.Fprintf(a.Stdout, "%s watch %s: %s\n", status, opts.args[1], result.Message)
+		for _, reading := range result.Readings {
 			printWatchReading(a.Stdout, reading.Field, reading.Label, reading.Value, reading.Error)
 		}
 	}
-	if healthy {
+	if result.OK {
 		return exitSuccess
 	}
 	return exitNotActive
+}
+
+func (a App) probeDaemonWatch(ctx context.Context, opts options, watch string) (daemonWatchProbe, error) {
+	cfg, code := a.loadConfig(opts)
+	if code != exitSuccess || cfg == nil {
+		return daemonWatchProbe{}, fmt.Errorf("failed to load config")
+	}
+	base, err := webAPIBase(cfg)
+	if err != nil {
+		return daemonWatchProbe{}, err
+	}
+	path := daemonAPIPathWatches + "/" + url.PathEscape(watch) + "/probe"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+path, nil)
+	if err != nil {
+		return daemonWatchProbe{}, fmt.Errorf("build probe request: %w", err)
+	}
+	req.Header.Set(daemonWebCSRFHeader, daemonWebCSRFValue)
+	applyDaemonWebAuth(req, cfg)
+	client := &http.Client{Timeout: daemonWebClientTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return daemonWatchProbe{}, fmt.Errorf("talking to daemon web UI: %w (is sermod running with web.port set?)", err)
+	}
+	defer resp.Body.Close()
+	var result daemonWatchProbe
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return daemonWatchProbe{}, fmt.Errorf("decode probe response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		if result.Message == "" {
+			result.Message = resp.Status
+		}
+		return result, fmt.Errorf("probe failed (%d): %s", resp.StatusCode, strings.TrimSpace(result.Message))
+	}
+	return result, nil
 }
 
 func (a App) runWatchRAIDControl(ctx context.Context, opts options, action string) int {
@@ -258,6 +293,9 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 	}
 	if opts.json {
 		out := map[string]any{cliJSONKeyWatch: name, cliJSONKeyState: watchState}
+		if detail.LastCheckedAt != "" {
+			out["last_checked_at"] = detail.LastCheckedAt
+		}
 		if len(detail.Readings) > 0 {
 			out["readings"] = detail.Readings
 		}
@@ -265,6 +303,9 @@ func (a App) runWatchStatus(ctx context.Context, opts options) int {
 		return exitSuccess
 	}
 	fmt.Fprintf(a.Stdout, "%s state=%s\n", name, watchState)
+	if detail.LastCheckedAt != "" {
+		fmt.Fprintf(a.Stdout, "  Last checked: %s\n", detail.LastCheckedAt)
+	}
 	for _, reading := range detail.Readings {
 		printWatchReading(a.Stdout, reading.Field, reading.Label, reading.Value, reading.Error)
 	}

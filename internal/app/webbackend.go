@@ -226,6 +226,9 @@ type WebBackend struct {
 	diskIOMu    sync.Mutex
 	diskIOState map[string]webDiskIOState
 
+	probeMu sync.Mutex
+	probes  map[string]time.Time
+
 	applications catalogInventoryCache
 	libraries    catalogInventoryCache
 
@@ -341,6 +344,7 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		operationTimeout:  deps.OperationTimeout,
 		now:               deps.Now,
 		slaCache:          map[slaCacheKey]cachedSLATimelines{},
+		probes:            map[string]time.Time{},
 	}
 	if wb.serviceMetrics == nil {
 		wb.serviceMetrics = NewServiceMetricSampler()
@@ -920,6 +924,12 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 				ww.Monitored, ww.MonitorSource, ww.MonitorChangedAt = active, source, changed
 			}
 		}
+		if checkedAt := b.watchLastCheckedAt(name, w.checkType); !checkedAt.IsZero() {
+			ww.LastCheckedAt = checkedAt.Format(time.RFC3339)
+		}
+		if startedAt, running := b.watchProbeStartedAt(name); running {
+			ww.Probe = &web.WatchProbe{State: eventStatusRunning, StartedAt: startedAt.Format(time.RFC3339)}
+		}
 		// Compute last activity for this watch from the request-local event index.
 		if activity, ok := lastActivities[name]; ok {
 			ww.LastActivity = activity.At
@@ -928,9 +938,23 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		observed := b.settling == nil || b.settling.Observed(SettlingWatchKey(name))
 		failed := observed && watchViewFailed(ww)
 		ww.State = WatchState(ww.Enabled, ww.Monitored, failed, observed)
+		if state := watchDeviceState(ww.Readings); state != "" && ww.Enabled && ww.Monitored && observed {
+			// Device work is the current operator-facing state while preserving
+			// the underlying health signal for eventing and diagnostics.
+			ww.State = state
+		}
 		out = append(out, ww)
 	}
 	return out
+}
+
+func watchDeviceState(readings []web.WatchReading) string {
+	for _, reading := range readings {
+		if reading.Field == checks.DataKeyDeviceState && reading.Error == "" {
+			return reading.Value
+		}
+	}
+	return ""
 }
 
 func (b *WebBackend) watchSystemSnapshot() metrics.Snapshot {
@@ -1818,6 +1842,12 @@ func (b *WebBackend) raidWatchView() (*web.WatchMeter, []web.WatchReading, strin
 	}
 	for _, detail := range st.Details {
 		readings = append(readings, web.WatchReading{Field: "raid_array_" + detail.Name, Label: detail.Name, Value: raidArrayReading(detail)})
+	}
+	if state, progress, hasProgress := checks.RaidDeviceState(st.Details); state != "" {
+		readings = append(readings, web.WatchReading{Field: checks.DataKeyDeviceState, Label: watchReadingLabelState, Value: state})
+		if hasProgress {
+			readings = append(readings, web.WatchReading{Field: checks.DataKeyProgressPct, Label: "Progress", Value: fmt.Sprintf("%.1f%%", progress)})
+		}
 	}
 	return nil, readings, summary
 }
@@ -3565,9 +3595,9 @@ func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionRes
 	return web.ActionResult{OK: true, Message: msg}
 }
 
-// ProbeWatch runs a fresh check instance for a supported host watch. It does
-// not publish a snapshot or dispatch watch actions, so an operator's manual
-// probe cannot alter the scheduler's stateful baseline.
+// ProbeWatch runs and records a fresh check instance for a supported host watch.
+// It does not dispatch watch actions, so an operator's manual probe cannot alter
+// the scheduler's stateful baseline or trigger a rule, notification or remediation.
 func (b *WebBackend) ProbeWatch(ctx context.Context, name string) web.ActionResult {
 	w := b.watches[name]
 	if w == nil {
@@ -3576,19 +3606,33 @@ func (b *WebBackend) ProbeWatch(ctx context.Context, name string) web.ActionResu
 	if w.disabled || w.serviceScoped || !manualProbeCheckType(w.checkType) {
 		return web.ActionResult{Message: fmt.Sprintf("watch %q does not support manual probing", name)}
 	}
-	_, readings, summary := b.probeWatchView(ctx, w)
-	ok := true
-	for _, reading := range readings {
-		if reading.Error != "" {
-			ok = false
-			break
-		}
+	startedAt, started := b.beginWatchProbe(name)
+	if !started {
+		return web.ActionResult{Message: fmt.Sprintf("manual probe already running since %s", startedAt.Format(time.RFC3339))}
 	}
+	b.emitWatchMonitorEvent(name, eventActionProbe, eventKindAction, eventStatusRunning, eventMessageManualProbeStarted)
+	defer b.finishWatchProbe(name)
+	result, err := b.probeWatchResult(ctx, w)
+	duration := max(b.webNow().Sub(startedAt), 0)
+	if err != nil {
+		summary := w.checkType + ": " + err.Error()
+		b.emitWatchMonitorEvent(name, eventActionProbe, eventKindError, eventStatusFailed, manualProbeFailedMessage(summary, duration))
+		return web.ActionResult{Message: summary, Readings: watchErrorReadings(err.Error())}
+	}
+	if b.watchSnapshots != nil {
+		b.watchSnapshots.Publish(name, w.checkType, result)
+	}
+	snap := CheckSnapshot{OK: result.OK, Condition: result.Condition, Optional: result.Optional, Skipped: result.Skipped, Message: result.Message, Data: result.Data}
+	readings := watchSnapshotReadings(w.checkType, snap)
+	summary := watchSnapshotSummary(snap, readings)
+	ok := result.Healthy()
 	kind, status := eventKindAction, eventStatusOK
+	eventMessage := manualProbeCompletedMessage(summary, duration)
 	if !ok {
 		kind, status = eventKindError, eventStatusFailed
+		eventMessage = manualProbeFailedMessage(summary, duration)
 	}
-	b.emitWatchMonitorEvent(name, eventActionProbe, kind, status, summary)
+	b.emitWatchMonitorEvent(name, eventActionProbe, kind, status, eventMessage)
 	return web.ActionResult{OK: ok, Message: summary, Readings: readings}
 }
 
@@ -3627,11 +3671,24 @@ func (b *WebBackend) ControlRAID(ctx context.Context, name, action, confirmation
 
 func manualProbeCheckType(checkType string) bool {
 	switch checkType {
-	case checks.CheckTypeLVM, checks.CheckTypeRAID, checks.CheckTypeSmart:
+	case checks.CheckTypeHdparm, checks.CheckTypeLVM, checks.CheckTypeRAID, checks.CheckTypeSmart:
 		return true
 	default:
 		return false
 	}
+}
+
+func (b *WebBackend) watchLastCheckedAt(name, checkType string) time.Time {
+	if b.watchSnapshots == nil {
+		return time.Time{}
+	}
+	var latest time.Time
+	for _, snap := range b.watchSnapshots.Get(name, checkType) {
+		if snap.Ran && snap.At.After(latest) {
+			latest = snap.At
+		}
+	}
+	return latest
 }
 
 // SetMonitored enables or disables monitoring for a service.

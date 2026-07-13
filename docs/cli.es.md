@@ -170,7 +170,8 @@ se omiten de `sermoctl apps` y no participan en el asentamiento de arranque.
 
 Cuando el daemon dispone de lecturas actuales del watch, `sermoctl watch status
 WATCH` también las imprime (incluidas la operación RAID y el porcentaje de
-reconstrucción); `--json` expone las mismas lecturas en un array `readings`.
+reconstrucción) y la hora separada del último check; `--json` expone las mismas
+lecturas en un array `readings`.
 
 `sermoctl watch monitor|unmonitor WATCH` pausa o reanuda un watch concreto,
 persistido bajo `paths.state` y leído en vivo por el daemon. `WATCH` es el nombre
@@ -178,15 +179,30 @@ de un host watch o de un watch de servicio `"<servicio>:<watch>"`; el estado de
 monitorización de un watch es independiente del de su servicio, así que
 `unmonitor` sobre un servicio nunca pausa sus watches.
 
-`sermoctl watch probe WATCH` ejecuta una muestra corta y de solo lectura de un
-host watch `lvm`, `raid` o `smart` e imprime las lecturas de la muestra cuando
-el check las reporta (en LVM incluye salud, VG, LV, VG libre y razones). No
-modifica snapshots, ventanas de reglas ni notificaciones. Un watch RAID con
+`sermoctl watch probe WATCH` solicita al daemon en ejecución una muestra para
+un host watch `hdparm`, `lvm`, `raid` o `smart` e imprime las lecturas cuando
+están disponibles (en LVM incluye salud, VG, LV, VG libre y razones). Las tres
+primeras son de solo lectura. Una sonda `smart` inicia el autotest SMART corto
+del dispositivo con `smartctl --test=short DEVICE`; que tenga éxito significa
+que el dispositivo aceptó el test, no que lo haya superado. Los checks SMART
+periódicos siguen siendo lecturas no invasivas de salud y atributos. El comando
+registra un evento `probe` y la hora del último check, pero no ejecuta reglas,
+notificaciones ni remediación. Un watch RAID con
 `raid_control.pause_resume: true` y `check.array` explícito permite además
 `watch pause` y `watch resume`. Pausar requiere `--confirm MD_ARRAY`, vuelve a
 comprobar el array, toma un bloqueo de operación exclusivo y verifica el estado
 del kernel. Resume acepta cualquier array configurado actualmente pausado,
 aunque se hubiera pausado fuera de Sermo.
+
+El daemon registra `probe/running` al iniciar una muestra manual y el evento de
+fin `probe/ok` o `probe/failed` con el tiempo empleado. Un autotest SMART
+permanece como `testing` en `watch status` hasta que el dispositivo informa de
+que terminó. El trabajo de dispositivo RAID/LVM también se informa como
+`testing`, `recovering`, `rebuilding`, `repairing`, `moving` o `merging`, con el
+porcentaje reportado cuando existe; esos estados describen trabajo, no salud.
+Sólo puede ejecutarse una muestra manual por watch: `sermoctl watch probe`
+espera esa misma tarea del daemon e informa de una ya activa en vez de iniciar
+un segundo comando de disco, LVM, RAID o SMART.
 Sermo lee los candidatos `service:` del servicio, elige la primera unidad
 conocida por el backend activo, y normaliza los nombres de systemd con `.service`
 cuando es necesario.

@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 
 const (
 	smartctlCommand    = "smartctl"
+	smartctlShortTest  = "--test=short"
 	smartHealthUnknown = "unknown"
 	smartHealthPassed  = "PASSED"
 	smartHealthFailed  = "FAILED"
@@ -68,6 +70,9 @@ func (c smartCheck) Run(ctx context.Context) Result {
 	}
 	r := c.result(ok, prefix+" health="+health, start)
 	r.Data = map[string]any{DataKeyDevice: c.device, DataKeyHealth: health}
+	if data.selfTestRunning {
+		r.Data[DataKeyDeviceState] = DeviceStateTesting
+	}
 	for k, v := range data.values {
 		r.Data[k] = v
 	}
@@ -76,9 +81,10 @@ func (c smartCheck) Run(ctx context.Context) Result {
 
 // SmartSample is one smartctl observation for the web UI and tests.
 type SmartSample struct {
-	Health      string
-	HealthKnown bool
-	Values      map[string]float64
+	Health          string
+	HealthKnown     bool
+	SelfTestRunning bool
+	Values          map[string]float64
 }
 
 // SampleSmart runs smartctl -H -A -j on device. timeout is used for
@@ -104,14 +110,44 @@ func SampleSmart(ctx context.Context, runner execx.Runner, device string, timeou
 		return SmartSample{}, err
 	}
 	return SmartSample{
-		Health:      smartHealthLabel(data),
-		HealthKnown: data.healthKnown,
-		Values:      data.values,
+		Health:          smartHealthLabel(data),
+		HealthKnown:     data.healthKnown,
+		SelfTestRunning: data.selfTestRunning,
+		Values:          data.values,
 	}, nil
 }
 
 func smartctlArgs(device string) []string {
-	return []string{"-H", "-A", "-j", device}
+	// -c exposes ATA self-test progress; health and attribute readings stay the
+	// same. This makes a manually requested test observable on later cycles.
+	return []string{"-H", "-A", "-c", "-j", device}
+}
+
+// StartSmartShortTest asks a device to begin its built-in SMART short self-test.
+// The command normally returns after scheduling the test; callers must not treat
+// that acknowledgement as a new SMART-health verdict.
+func StartSmartShortTest(ctx context.Context, runner execx.Runner, device string, timeout time.Duration) error {
+	if runner == nil {
+		runner = execx.CommandRunner{}
+	}
+	res, runErr := runner.Run(ctx, smartctlCommand, smartctlShortTestArgs(device)...)
+	if res.ExitCode == execx.ExitCodeSuccess {
+		return nil
+	}
+	if msg := execx.OperatorFailure(runErr, res, timeout); msg != "" {
+		return errors.New(msg)
+	}
+	if msg := output.FirstNonEmptyLine(res.Stderr); msg != "" {
+		return errors.New(msg)
+	}
+	if msg := output.FirstNonEmptyLine(res.Stdout); msg != "" {
+		return errors.New(msg)
+	}
+	return fmt.Errorf("smartctl %s exited with code %d", smartctlShortTest, res.ExitCode)
+}
+
+func smartctlShortTestArgs(device string) []string {
+	return []string{smartctlShortTest, device}
 }
 
 func smartHealthLabel(data smartData) string {
@@ -126,9 +162,10 @@ func smartHealthLabel(data smartData) string {
 
 // smartData is the parsed subset of `smartctl -j` output.
 type smartData struct {
-	passed      bool
-	healthKnown bool
-	values      map[string]float64 // temperature, reallocated, wear, power_on_hours
+	passed          bool
+	healthKnown     bool
+	selfTestRunning bool
+	values          map[string]float64 // temperature, reallocated, wear, power_on_hours
 }
 
 // parseSmart extracts the health verdict and the graphable attributes from
@@ -155,6 +192,14 @@ func parseSmart(out string) (smartData, error) {
 				} `json:"raw"`
 			} `json:"table"`
 		} `json:"ata_smart_attributes"`
+		AtaSmartData struct {
+			SelfTest struct {
+				Status struct {
+					Value  *int   `json:"value"`
+					String string `json:"string"`
+				} `json:"status"`
+			} `json:"self_test"`
+		} `json:"ata_smart_data"`
 		NVMe struct {
 			PercentageUsed *float64 `json:"percentage_used"`
 		} `json:"nvme_smart_health_information_log"`
@@ -181,7 +226,18 @@ func parseSmart(out string) (smartData, error) {
 	if j.NVMe.PercentageUsed != nil {
 		d.values[fieldWear] = *j.NVMe.PercentageUsed
 	}
+	d.selfTestRunning = smartSelfTestRunning(j.AtaSmartData.SelfTest.Status.Value, j.AtaSmartData.SelfTest.Status.String)
 	return d, nil
+}
+
+// smartSelfTestRunning recognises both smartctl's stable JSON status text and
+// the ATA status low nibble (0xf means a self-test is in progress). The numeric
+// form keeps the result reliable when a smartctl version localises its text.
+func smartSelfTestRunning(value *int, status string) bool {
+	if value != nil && *value&0x0f == 0x0f {
+		return true
+	}
+	return strings.Contains(strings.ToLower(status), "in progress")
 }
 
 // parseSmartPreds reads the optional temperature/reallocated/wear/power_on_hours

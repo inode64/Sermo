@@ -1525,6 +1525,20 @@ works as a service check-only watch or explicit `checks:` entry (see
 When the Web UI is enabled, `GET /api/watches` renders watch readings from the
 latest daemon watch cycle; it does not start its own command, network, SQL,
 firewall, count, disk I/O, `hdparm` or `smart` probes on each dashboard poll.
+The Web UI and `sermoctl watch probe` can request one explicit sample for
+configured `hdparm`, `lvm`, `raid` and `smart` host watches. `hdparm`, `lvm`
+and `raid` are read-only samples; a manual `smart` probe instead starts the
+device's short self-test with `smartctl --test=short DEVICE`. Its successful
+command acknowledgement means the self-test was scheduled, not that the drive
+is healthy; scheduled SMART cycles continue to read health and attributes with
+`smartctl -H -A -c -j`. While a self-test is in progress, the shared Web/CLI
+state is `testing`; later daemon samples clear it when the device reports that
+the test ended. RAID and LVM watches likewise surface device work as
+`testing`, `recovering`, `rebuilding`, `repairing`, `moving` or `merging`, with
+their reported progress where available. These are device-operation states, not
+health verdicts. The daemon records the probe and event for the shared Web/CLI
+view, but does not evaluate its watch window or run a rule, notifier, hook or
+remediation action.
 
 ### Service watches (scoped to a service)
 
@@ -1719,7 +1733,10 @@ it is missing when `mounted: true` (or present when `mounted: false`), the check
 alerts on that and the space predicates are skipped (their numbers would be
 meaningless). `fstype`, `device` and `options` are not configurable predicates;
 they are reported as result data and shown in the Web UI as live filesystem
-information.
+information. This is the safe filesystem check for ext2/3/4, XFS, btrfs, vfat
+and other mounted filesystems: it checks the mounted path, capacity and inode
+data where the filesystem exposes it, and never runs a repair/`fsck` command on
+a live filesystem.
 
 When the condition holds for the `for`/`within` window, the hook runs (argv only,
 never a shell) and/or the notifiers fire, with these environment variables:

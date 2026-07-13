@@ -368,34 +368,49 @@ column, from the same per-process totals already in the service detail.
 | Grouping | collapsible rows by the same panel-specific type used by the type filter |
 | State filters | all, disabled, ok, starting, failed |
 | Search | display name, raw name, category, type, summary, interval, polarity, hook state/command, notifier names, expand/dry-run/monitoring state and conditions |
-| Sorting | every column header except Actions is sortable; Storage, Network, Certificate and Disk I/O default to Name order, Host watches keeps the server order until a header is clicked |
+| Sorting | every data column except Actions is sortable independently inside its check-type table; each table defaults to Name ascending |
 | Visibility | hidden when no watches are configured for that panel's subset |
 
-Columns per panel (every panel ends with Last activity, State, Actions):
+Host watches are grouped as System, Storage, Network and Security, then split
+into a check-type table. Every type table ends with Last checked, Last activity,
+State and Actions; it does not use a generic Summary column. Last checked is the
+latest completed daemon-cycle or manual sample, while Last activity is an event.
 
-| Panel | Panel-specific columns |
+| Check type | Type-specific columns |
 | --- | --- |
-| Storage | Name, Usage, Filesystem, Mount point |
-| Network | Name, Type, Summary |
-| Certificate watches | Name, Expires, Days left, Issuer, Key type |
-| Disk I/O watches | Name, Device, Util%, Read / Write, Await |
-| Host watches | Name, Type, Summary |
+| `storage` | Name, Usage, Filesystem, Mount point; filters by filesystem when more than one is present |
+| `file` | Name, Path, current age, configured age limit |
+| `net` | Name, interface, link, speed, errors |
+| `hdparm` | Name, device, buffered read, cached read |
+| `lvm` | Name, health, VG, LV, VG size, VG free, reasons |
+| `smart` | Name, device, health, temperature, wear, formatted power-on time |
+| `diskio` | Name, device, utilization, read, write, await |
+| `cert` | Name, source, days left, expiry, issuer |
+| `raid` | Name, array, size, degraded, recovering |
+| Other types | Name and their primary live value |
 
-The Certificate and Disk I/O columns read the watch readings published by the
-latest daemon watch cycle and rehydrated from persistent state after a daemon
-restart (certificate expiry, days left, issuer and public-key algorithm; device,
-utilization, read/write throughput and await latency).
+Those columns read the current watch readings published by the latest daemon
+cycle and rehydrated from persistent state after a daemon restart. File age is
+the already formatted value used by `older_than`; SQL service checks expose their
+observed scalar as `Value` and the effective comparison as `Condition` in their
+readings, so a result such as `51 > 50` is shown without parsing event text.
 
 Shared columns:
 
 | Column | Meaning |
 | --- | --- |
 | Name | display name, falling back to name, capitalized |
-| Type | check type |
-| Summary | watch-specific status summary |
-| Last activity | latest hook/notify activity |
-| State | single normalized watch state: `disabled` when config/monitor state excludes it from active checks, `starting` before the first monitored sample, `failed` for an active failure, otherwise `ok` |
+| Last checked | latest completed daemon-cycle or manual sample |
+| Last activity | latest watch event, such as a manual probe, notification or remediation |
+| State | normalized watch state: `disabled` when config/monitor state excludes it from active checks, `starting` before the first monitored sample, `failed` for an active failure, otherwise `ok`; active device work takes precedence as `testing`, `recovering`, `rebuilding`, `repairing`, `moving` or `merging` |
 | Actions | supported primary action plus an overflow menu for monitor/unmonitor |
+
+While a manual `hdparm`, `lvm`, `raid` or `smart` sample is running, State shows
+an amber **checking** badge, its elapsed time and the previous health state.
+The action is disabled until completion. The Events feed records both the start
+and the final result with its elapsed time. The UI shows a percentage only where
+the underlying check reports real progress; a probe without such a source uses
+the elapsed timer rather than a synthetic percentage.
 
 Interval, polarity (fires on fail / on threshold), hook and notifiers are not
 table columns; they live in the row expansion's config grid and remain

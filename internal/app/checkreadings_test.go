@@ -56,8 +56,8 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 		{
 			name: "file",
 			typ:  "file",
-			data: map[string]any{"path": "/etc/hosts", "size": int64(220)},
-			want: map[string]string{"size": "220 B"},
+			data: map[string]any{"path": "/etc/hosts", "size": int64(220), "age": "2d3h"},
+			want: map[string]string{"size": "220 B", "age": "2d3h"},
 		},
 		{
 			name: "tcp",
@@ -92,8 +92,8 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 		{
 			name: "raid",
 			typ:  "raid",
-			data: map[string]any{"arrays": 1, "degraded": 0, "recovering": 1, "array": "md0", "raid_operation": "recovery", "raid_progress_pct": 12.6},
-			want: map[string]string{"raid_progress_pct": "12.6%"},
+			data: map[string]any{"arrays": 1, "degraded": 0, "recovering": 1, "array": "md0", "raid_operation": "recovery", "raid_progress_pct": 12.6, "total_bytes": uint64(50)},
+			want: map[string]string{"raid_progress_pct": "12.6%", "total_bytes": "50 B"},
 		},
 		{
 			name: "lvm",
@@ -115,6 +115,24 @@ func TestCheckReadingsForAllTypes(t *testing.T) {
 				"vg_free_bytes":  "50 B",
 				"free_pct":       "5.0%",
 			},
+		},
+		{
+			name: "net exposes observed metric",
+			typ:  "net",
+			data: map[string]any{"interface": "eth0", "metric": "errors", "value": 3, "total": 51},
+			want: map[string]string{"interface": "eth0", "errors": "3 (total 51)"},
+		},
+		{
+			name: "smart formats power-on time as a duration",
+			typ:  "smart",
+			data: map[string]any{"power_on_hours": float64(12000)},
+			want: map[string]string{"power_on_hours": "16mo2w6d"},
+		},
+		{
+			name: "sql exposes observed scalar and condition",
+			typ:  "sql",
+			data: map[string]any{"result": "51", "op": ">", "threshold": "50"},
+			want: map[string]string{"result": "51", "threshold": "> 50"},
 		},
 	}
 	for _, c := range cases {

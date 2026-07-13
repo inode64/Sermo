@@ -463,6 +463,16 @@ type Watch struct {
 	RAIDArray        string            `json:"raid_array,omitempty"`
 	LastActivity     string            `json:"last_activity,omitempty"` // RFC3339 of last watch activity, if any
 	LastActivityKind string            `json:"last_activity_kind,omitempty"`
+	LastCheckedAt    string            `json:"last_checked_at,omitempty"` // RFC3339 of latest completed check sample
+	Probe            *WatchProbe       `json:"probe,omitempty"`           // current manual probe, if one is running
+}
+
+// WatchProbe reports a manual host-watch probe currently running in the daemon.
+// It is intentionally transient: the completed sample and audit event are the
+// durable record of a probe.
+type WatchProbe struct {
+	State     string `json:"state"`
+	StartedAt string `json:"started_at"` // RFC3339
 }
 
 // WatchCondition is one configured watch predicate, rendered in the WebUI.

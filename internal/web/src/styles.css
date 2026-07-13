@@ -151,6 +151,10 @@
   .state-paused { color: var(--warn); }
   .state-warning { color: var(--warn); }
   .state-collecting { color: var(--warn); }
+  .state-testing { color: var(--warn); }
+  .state-recovering, .state-rebuilding, .state-repairing, .state-moving, .state-merging { color: var(--info); }
+  .watch-probe { color: var(--warn); font-size: .85em; white-space: nowrap; }
+  .watch-probe::before { content: ""; display: inline-block; width: .48em; height: .48em; margin-right: .3em; border-radius: 50%; background: currentColor; animation: beat 1.2s ease-in-out infinite; }
   .state-ok, .state-monitored { color: var(--ok); }
   .state-failed { color: var(--crit); }
   .state-failed::before { animation: beat 1.2s ease-in-out infinite; }
@@ -448,6 +452,9 @@
   /* ---- watch widgets --------------------------------------------------------- */
   .watch-table { min-width: 72rem; font-size: .85rem; }
   .watch-table th, .watch-table td { vertical-align: top; }
+  .watch-type-heading { display: flex; align-items: baseline; justify-content: space-between; gap: .65rem; flex-wrap: wrap; }
+  .watch-type-heading h3 { margin-bottom: .35rem; }
+  .watch-type-filter { display: inline-flex; align-items: center; gap: .35rem; color: var(--text-2); font-size: .85rem; }
   /* Keep the certificate Expires date (RFC3339) on a single line. */
   .watch-table td.cert-expires { white-space: nowrap; }
   .apps-table { min-width: 36rem; font-size: .88rem; font-variant-numeric: tabular-nums; }
