@@ -315,7 +315,6 @@ async function loadMe() {
   const reloadBtn = $("#reload-btn");
   if (reloadBtn) reloadBtn.classList.toggle("admin-hidden", !me.can_act);
   updateEventAdminControls();
-  updateActivityAdminControls();
   updateStateCompactControls();
   updatePanicControls();
 }
@@ -630,11 +629,6 @@ function updateEventAdminControls() {
   const before = $("#event-before");
   if (btn) btn.classList.toggle("admin-hidden", !show);
   if (before) before.classList.toggle("admin-hidden", !show);
-}
-
-function updateActivityAdminControls() {
-  const btn = $("#activity-clear");
-  if (btn) btn.classList.toggle("admin-hidden", !me.can_act);
 }
 
 function updateStateCompactControls() {
@@ -1757,8 +1751,8 @@ function renderAttention() {
     items.push({
       level: healthStatusWarning,
       title: latestActivity.errors === 1 ? "1 recent error" : `${latestActivity.errors} recent errors`,
-      detail: latestActivity.last_event_kind ? `last: ${latestActivity.last_event_kind}` : "see recent activity",
-      target: "activity-section",
+      detail: latestActivity.last_event_kind ? `last: ${latestActivity.last_event_kind}` : "see events",
+      target: "events-section",
     });
   }
   // While the daemon is settling (starting), the tab favicon is neutral grey and
@@ -5072,24 +5066,6 @@ function renderLocks(locks) {
 function renderActivity(sum) {
   if (!sum) return;
   latestActivity = sum;
-  const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
-
-  set("#act-service", sum.service_actions || 0);
-  set("#act-hooks", sum.watch_hooks || 0);
-  set("#act-notify", sum.watch_notifies || 0);
-  set("#act-errors", sum.errors || 0);
-
-  const lastEl = $("#act-last");
-  if (lastEl) {
-    if (sum.last_event_time) {
-      let who = "";
-      if (sum.last_event_service) who = `service ${esc(sum.last_event_service)}`;
-      if (sum.last_event_watch) who = `watch ${esc(sum.last_event_watch)}`;
-      lastEl.innerHTML = `Last: <b>${esc(sum.last_event_kind || "")}</b> ${who} <span class="muted">(${esc(sum.last_event_time)})</span>`;
-    } else {
-      lastEl.textContent = "No recent events";
-    }
-  }
   renderAttention();
 }
 
@@ -5114,7 +5090,6 @@ function panelTargetLabel(target) {
     case "containers-section": return "containers panel";
     case "vms-section": return "virtual machines panel";
     case "daemon-section": return "daemon panel";
-    case "activity-section": return "recent activity panel";
     case "watches-section": return "host watches panel";
     case "services-section":
     default: return "services panel";
@@ -6819,13 +6794,6 @@ function initStaticHandlers() {
     reloadBtn.addEventListener(domEventClick, (e) => {
       e.stopPropagation();
       reloadConfig();
-    });
-  }
-  const activityClear = $("#activity-clear");
-  if (activityClear) {
-    activityClear.addEventListener(domEventClick, (e) => {
-      e.stopPropagation();
-      clearEventLog($("#event-before")?.value || "");
     });
   }
   const stateCompactBtn = $("#state-compact-btn");
