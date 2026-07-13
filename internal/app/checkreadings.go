@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dustin/go-humanize"
 
@@ -133,6 +134,7 @@ const (
 	watchReadingUnitRPM                = metrics.MetricUnitRPM
 	watchReadingUnitSeconds            = "s"
 	watchReadingUnitVolt               = metrics.MetricUnitVolt
+	maxWatchReadingDuration            = time.Duration(1<<63 - 1)
 )
 
 func checkReadings(checkType string, data map[string]any) []web.WatchReading {
@@ -168,6 +170,10 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 		return raidCheckReadings(data)
 	case checks.CheckTypeLVM:
 		return lvmCheckReadings(data)
+	case checks.CheckTypeNet:
+		return netCheckReadings(data)
+	case checks.CheckTypeSQL:
+		return scalarQueryCheckReadings(data)
 	case checks.CheckTypeHdparm, checks.CheckTypeSmart, checks.CheckTypeSensors, checks.CheckTypeEDAC:
 		return metricCheckReadings(checkType, data)
 	default:
@@ -178,6 +184,56 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 	}
 }
 
+// netCheckReadings keeps the metric value that the net check compared visible
+// after the daemon cycle, rather than requiring the dashboard to parse its
+// human-oriented event message.
+func netCheckReadings(data map[string]any) []web.WatchReading {
+	var out []web.WatchReading
+	if iface := cfgval.String(data[checks.DataKeyInterface]); iface != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyInterface, Label: watchReadingLabelInterface, Value: iface})
+	}
+	metric := cfgval.String(data[checks.DataKeyMetric])
+	value := cfgval.String(data[checks.DataKeyValue])
+	switch metric {
+	case checks.NetMetricState:
+		if value != "" {
+			out = append(out, web.WatchReading{Field: checks.NetMetricState, Label: watchReadingLabelState, Value: value})
+		}
+	case checks.NetMetricSpeed:
+		if value != "" {
+			out = append(out, web.WatchReading{Field: checks.NetMetricSpeed, Label: watchReadingLabelSpeed, Value: value + " " + watchReadingUnitMegabitsPerSecond})
+		}
+	case checks.NetMetricErrors:
+		if value != "" {
+			total := cfgval.String(data[checks.DataKeyTotal])
+			if total != "" {
+				value += " (total " + total + ")"
+			}
+			out = append(out, web.WatchReading{Field: checks.NetMetricErrors, Label: watchReadingLabelErrorsTotal, Value: value})
+		}
+	case checks.NetMetricAddress:
+		if value != "" {
+			out = append(out, web.WatchReading{Field: checks.NetMetricAddress, Label: watchReadingLabelAddresses, Value: value})
+		}
+	}
+	return out
+}
+
+// scalarQueryCheckReadings exposes the scalar observed by a query check and
+// its effective comparison without exposing the configured query text.
+func scalarQueryCheckReadings(data map[string]any) []web.WatchReading {
+	var out []web.WatchReading
+	if result := cfgval.String(data[checks.DataKeyResult]); result != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyResult, Label: "Value", Value: result})
+	}
+	if op := cfgval.String(data[checks.DataKeyOp]); op != "" {
+		if threshold := cfgval.String(data[checks.DataKeyThreshold]); threshold != "" {
+			out = append(out, web.WatchReading{Field: checks.DataKeyThreshold, Label: "Condition", Value: op + " " + threshold})
+		}
+	}
+	return out
+}
+
 // CheckReadings formats one check result data map for user-facing consumers
 // outside the daemon Web backend, such as `sermoctl watch probe`.
 func CheckReadings(checkType string, data map[string]any) []web.WatchReading {
@@ -186,6 +242,12 @@ func CheckReadings(checkType string, data map[string]any) []web.WatchReading {
 
 func lvmCheckReadings(data map[string]any) []web.WatchReading {
 	var out []web.WatchReading
+	if value := cfgval.String(data[checks.DataKeyDeviceState]); value != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyDeviceState, Label: watchReadingLabelState, Value: value})
+	}
+	if progress, ok := cfgval.Float(data[checks.DataKeyProgressPct]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyProgressPct, Label: "Progress", Value: fmt.Sprintf("%.1f%%", progress)})
+	}
 	for _, item := range []struct{ field, label string }{{checks.DataKeyHealth, watchReadingLabelHealth}, {checks.DataKeyVolumeGroup, watchReadingLabelVolumeGroup}, {checks.DataKeyLogicalVolume, watchReadingLabelLogicalVolume}} {
 		if value := cfgval.String(data[item.field]); value != "" {
 			out = append(out, web.WatchReading{Field: item.field, Label: item.label, Value: value})
@@ -213,6 +275,12 @@ func lvmCheckReadings(data map[string]any) []web.WatchReading {
 
 func raidCheckReadings(data map[string]any) []web.WatchReading {
 	var out []web.WatchReading
+	if value := cfgval.String(data[checks.DataKeyDeviceState]); value != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyDeviceState, Label: watchReadingLabelState, Value: value})
+	}
+	if progress, ok := cfgval.Float(data[checks.DataKeyProgressPct]); ok {
+		out = append(out, web.WatchReading{Field: checks.DataKeyProgressPct, Label: "Progress", Value: fmt.Sprintf("%.1f%%", progress)})
+	}
 	for _, item := range []struct {
 		key   string
 		label string
@@ -236,6 +304,9 @@ func raidCheckReadings(data map[string]any) []web.WatchReading {
 	}
 	if mismatch := cfgval.String(data[checks.DataKeyRaidMismatchCount]); mismatch != "" {
 		out = append(out, web.WatchReading{Field: checks.DataKeyRaidMismatchCount, Label: "Mismatch count", Value: mismatch})
+	}
+	if size, ok := byteField(data[checks.DataKeyTotalBytes]); ok && size > 0 {
+		out = append(out, web.WatchReading{Field: checks.DataKeyTotalBytes, Label: watchReadingLabelSize, Value: humanize.Bytes(size)})
 	}
 	if details, ok := data[checks.DataKeyRaidMembers].([]checks.RaidArrayStatus); ok {
 		for _, detail := range details {
@@ -340,6 +411,12 @@ func fileCheckReadings(data map[string]any) []web.WatchReading {
 	}
 	if v := cfgval.String(data[checks.DataKeyMode]); v != "" {
 		out = append(out, web.WatchReading{Field: checks.DataKeyMode, Label: watchReadingLabelMode, Value: v})
+	}
+	if v := cfgval.String(data[checks.DataKeyModifiedAt]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyModifiedAt, Label: watchReadingLabelModifiedAt, Value: v})
+	}
+	if v := cfgval.String(data[checks.DataKeyAge]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyAge, Label: watchReadingLabelAge, Value: v})
 	}
 	if v := cfgval.String(data[checks.CheckKeyOwner]); v != "" {
 		out = append(out, web.WatchReading{Field: checks.CheckKeyOwner, Label: watchReadingLabelOwner, Value: v})
@@ -525,13 +602,23 @@ func metricCheckReadings(checkType string, data map[string]any) []web.WatchReadi
 	if v := cfgval.String(data[checks.DataKeyDevice]); v != "" {
 		out = append(out, web.WatchReading{Field: checks.DataKeyDevice, Label: watchReadingLabelDevice, Value: v})
 	}
+	if v := cfgval.String(data[checks.DataKeyResult]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyResult, Label: watchReadingLabelResult, Value: v})
+	}
+	if v := cfgval.String(data[checks.DataKeyDeviceState]); v != "" {
+		out = append(out, web.WatchReading{Field: checks.DataKeyDeviceState, Label: watchReadingLabelState, Value: v})
+	}
 	if v := cfgval.String(data[checks.DataKeyHealth]); v != "" {
 		out = append(out, web.WatchReading{Field: checks.DataKeyHealth, Label: watchReadingLabelHealth, Value: v})
 	}
 	for _, m := range checks.GraphMetrics(checkType) {
 		if v, ok := data[m.Key].(float64); ok {
+			value := watchReadingMetricValue(v, 0, m.Unit)
+			if m.Unit == metrics.MetricUnitHours && v >= 0 && v <= float64(maxWatchReadingDuration)/float64(time.Hour) {
+				value = formatInterval(time.Duration(v * float64(time.Hour)))
+			}
 			out = append(out, web.WatchReading{
-				Field: m.Key, Label: m.Key, Value: watchReadingMetricValue(v, 0, m.Unit),
+				Field: m.Key, Label: m.Key, Value: value,
 			})
 		}
 	}

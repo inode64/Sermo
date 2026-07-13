@@ -177,6 +177,9 @@ type App struct {
 	// FetchDaemonWatchDetail returns current daemon-published readings for one
 	// watch. It is optional so status retains its state-only fallback.
 	FetchDaemonWatchDetail func(ctx context.Context, opts options, watch string) (daemonWatchDetail, bool)
+	// ProbeDaemonWatch asks the active daemon to run and record one safe manual
+	// host-watch sample through the authenticated Web API.
+	ProbeDaemonWatch func(ctx context.Context, opts options, watch string) (daemonWatchProbe, error)
 	// FetchDaemonApplicationStates returns daemon-computed application states keyed
 	// by catalog name. An empty map means the web API was unavailable.
 	FetchDaemonApplicationStates func(ctx context.Context, opts options) map[string]string
@@ -311,6 +314,9 @@ func (a App) withDefaults() App {
 	}
 	if a.FetchDaemonWatchDetail == nil {
 		a.FetchDaemonWatchDetail = a.fetchDaemonWatchDetail
+	}
+	if a.ProbeDaemonWatch == nil {
+		a.ProbeDaemonWatch = a.probeDaemonWatch
 	}
 	if a.FetchDaemonApplicationStates == nil {
 		a.FetchDaemonApplicationStates = a.fetchDaemonApplicationStates

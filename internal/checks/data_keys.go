@@ -95,6 +95,7 @@ const (
 	DataKeyPIDs               = "pids"
 	DataKeyPort               = fieldPort
 	DataKeyPresent            = "present"
+	DataKeyProgressPct        = "progress_pct"
 	DataKeyPrecisionSeconds   = "precision_seconds"
 	DataKeyProtocol           = "protocol"
 	DataKeyPublicKeyAlgorithm = "public_key_algorithm"
@@ -141,6 +142,10 @@ const (
 	DataKeyWindow             = "window"
 	DataKeyZombies            = "zombies"
 )
+
+// DataKeyDeviceState is an active, device-reported operation such as a SMART
+// self-test or RAID/LVM recovery. It is distinct from check health.
+const DataKeyDeviceState = "device_state"
 
 // Pattern analyzer result data keys.
 const (

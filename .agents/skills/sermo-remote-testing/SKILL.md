@@ -283,12 +283,14 @@ requests. It overrides the validation-only `/tmp` restrictions above.
   sustained `for: { cycles: 3 }`, and a conservative cooldown policy.
 - Generate SMART watches every `24h` and hdparm watches every `6h` when the host
   exposes the corresponding tool/device safely.
-- Generate mount units for every currently mounted, non-pseudo, fstab-backed
-  target that can be represented safely:
-  - Local storage targets use the same `storage-*` watch file under
-    `/etc/sermo/storages` with an added top-level `mount:` block. This is what
-    makes the Web UI Mount units panel show `/`, `/boot/EFI`, `/var/lib/...`,
-    and similar local mount points without duplicate watches.
+- Generate mount units for every currently mounted, non-root, non-pseudo,
+  fstab-backed target that can be represented safely. The root filesystem keeps
+  its capacity watch but must not receive a `mount:` block or appear in the Web
+  UI Mount units panel:
+  - Local non-root storage targets use the same `storage-*` watch file under
+    `/etc/sermo/storages` with an added top-level `mount:` block. This makes the
+    Web UI Mount units panel show `/boot/EFI`, `/var/lib/...`, and similar local
+    mount points without duplicate watches.
   - Network and USB/removable fstab targets may use separate `mount-*` watch
     files under `/etc/sermo/mounts` when keeping them mount-only avoids stale
     `statfs` behavior.
@@ -371,7 +373,8 @@ check:
   attach the selected notifier or inherit the configured global notify. If the
   run is only validating routing, use target-level `dry_run: true`; otherwise keep the
   storage watch alert-only or monitor-only according to the requested mode.
-- Include `mount:` blocks for fstab-backed mount targets that are safe to expose.
+- Include `mount:` blocks for non-root fstab-backed mount targets that are safe
+  to expose. Keep the root filesystem as a capacity-only storage watch.
   Detect them with read-only probes (`findmnt --fstab`, `/etc/fstab`, `lsblk`,
   `/dev/disk/by-*` and `/proc/self/mountinfo`); never mount or unmount during
   discovery. For mounted local storage targets, append `mount:` to the existing

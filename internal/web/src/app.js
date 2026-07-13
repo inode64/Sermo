@@ -77,6 +77,12 @@ const targetStateWarning = "warning";
 const targetStateOK = "ok";
 const targetStateMonitored = "monitored";
 const targetStateCollecting = "collecting";
+const targetStateTesting = "testing";
+const targetStateRecovering = "recovering";
+const targetStateRebuilding = "rebuilding";
+const targetStateRepairing = "repairing";
+const targetStateMoving = "moving";
+const targetStateMerging = "merging";
 const targetStateFailed = "failed";
 const targetStateStarting = "starting";
 const targetStateStopping = "stopping";
@@ -162,7 +168,7 @@ const serviceStatusFilterStates = [
   targetStateMonitored,
   targetStateFailed,
 ];
-const watchStatusFilterStates = [targetStateDisabled, targetStateOK, targetStateStarting, targetStateFailed];
+const watchStatusFilterStates = [targetStateDisabled, targetStateOK, targetStateStarting, targetStateTesting, targetStateRecovering, targetStateRebuilding, targetStateRepairing, targetStateMoving, targetStateMerging, targetStateFailed];
 const appStatusFilterStates = [targetStateOK, targetStateStarting, targetStateWarning, targetStateFailed];
 const mountStatusFilterStates = [mountStateActive, mountStateInactive];
 const slaHealthyPct = 99;
@@ -225,6 +231,12 @@ const targetStateClasses = {
   [targetStateOK]: "state-ok",
   [targetStateMonitored]: "state-monitored",
   [targetStateCollecting]: "state-collecting",
+  [targetStateTesting]: "state-testing",
+  [targetStateRecovering]: "state-recovering",
+  [targetStateRebuilding]: "state-rebuilding",
+  [targetStateRepairing]: "state-repairing",
+  [targetStateMoving]: "state-moving",
+  [targetStateMerging]: "state-merging",
   [targetStateFailed]: "state-failed",
   [targetStateStarting]: "state-starting",
   [targetStateStopping]: "state-starting",
@@ -237,6 +249,12 @@ const targetStateRanks = {
   [targetStateStopped]: 1,
   [targetStateStarting]: 2,
   [targetStateCollecting]: 3,
+  [targetStateTesting]: 3,
+  [targetStateRecovering]: 3,
+  [targetStateRebuilding]: 3,
+  [targetStateRepairing]: 3,
+  [targetStateMoving]: 3,
+  [targetStateMerging]: 3,
   [targetStateStarted]: 4,
   [targetStateMonitored]: 5,
   [targetStateFailed]: 7,
@@ -1075,46 +1093,22 @@ let daemonMetricWindow = "24h";
 let allWatches = [];
 let globalTargetsByValue = new Map();
 let globalTargetSyncPending = false;
-const watchPanelBehaviors = {
-  storage: {
-    match: isStorageWatch,
-    typeOf: (w) => (w.storage && w.storage.filesystem) || "",
-    rowHTML: storageRowHTML,
-  },
-  lvm: {
-    match: isLVMWatch,
-    rowHTML: lvmRowHTML,
-  },
-  network: {
-    match: isNetworkWatch,
-  },
-  cert: {
-    match: isCertWatch,
-    typeOf: (w) => readingRaw(w, "public_key_algorithm"),
-    rowHTML: certRowHTML,
-  },
-  diskio: {
-    match: isDiskioWatch,
-    rowHTML: diskioRowHTML,
-  },
-  host: {},
-};
-
 // watchPanelDescriptors is shared with the Go web builder: one descriptor owns
-// static shell IDs/columns/text and the runtime selectors derived from them.
-// Behaviors stay as functions here because JSON intentionally carries no code.
+// static shell IDs, columns and text. The one Host watches panel uses semantic
+// groups so a new check type does not need a parallel table or action layout.
 const watchPanels = Object.fromEntries(watchPanelDescriptors.map((descriptor) => [descriptor.key, {
   ...descriptor,
-  ...watchPanelBehaviors[descriptor.key],
   query: "",
   status: filterAll,
   type: filterAll,
-  grouped: false,
+  grouped: !!descriptor.grouped,
   collapsedGroups: new Set(),
   groupPrefix: descriptor.key,
   groupPanel: "watch-" + descriptor.key,
   groupLabel: descriptor.title.toLowerCase(),
   sort: { key: "", dir: 1 },
+  typeSorts: {},
+  typeFilters: {},
   section: "#" + descriptor.sectionId,
   rows: "#" + descriptor.rowsId,
   count: "#" + descriptor.countId,
@@ -1149,6 +1143,8 @@ function restoreUIState() {
         if (saved.sort && typeof saved.sort.key === "string") {
           panel.sort = { key: saved.sort.key, dir: saved.sort.dir === -1 ? -1 : 1 };
         }
+        if (saved.typeSorts && typeof saved.typeSorts === "object") panel.typeSorts = saved.typeSorts;
+        if (saved.typeFilters && typeof saved.typeFilters === "object") panel.typeFilters = saved.typeFilters;
         if (typeof saved.grouped === "boolean") panel.grouped = saved.grouped;
         if (Array.isArray(saved.collapsedGroups)) panel.collapsedGroups = new Set(saved.collapsedGroups);
       }
@@ -1250,7 +1246,7 @@ function saveUIState() {
       },
       watchPanels: Object.fromEntries(Object.entries(watchPanels).map(([k, p]) => [k, {
         query: p.query, status: p.status, type: p.type, grouped: p.grouped,
-        collapsedGroups: [...p.collapsedGroups], sort: p.sort,
+        collapsedGroups: [...p.collapsedGroups], sort: p.sort, typeSorts: p.typeSorts, typeFilters: p.typeFilters,
       }])),
       splitServicePanels: Object.fromEntries(Object.entries(splitServicePanels).map(([k, p]) => [k, {
         query: p.query, status: p.status, grouped: p.grouped,
@@ -3448,7 +3444,21 @@ function watchStateRank(w) {
 }
 
 function watchStateCell(w) {
+  if (watchProbeRunning(w)) {
+    const startedAt = w.probe.started_at;
+    return tpl`${stateBadgeLabel(targetStateCollecting, "checking")} <span class="watch-probe" data-probe-started-at="${startedAt}" role="status" aria-live="polite">· ${watchProbeElapsed(startedAt)}</span> <span class="muted">previously ${watchStateText(w)}</span>`;
+  }
   return stateBadge(watchStateText(w));
+}
+
+function watchProbeRunning(w) {
+  return !!(w && w.probe && w.probe.state === operationStateRunning && w.probe.started_at);
+}
+
+function watchProbeElapsed(startedAt) {
+  const started = new Date(startedAt);
+  if (Number.isNaN(started.getTime())) return "";
+  return fmtSince(Date.now() - started.getTime());
 }
 
 function watchSummaryText(w) {
@@ -3512,6 +3522,7 @@ function getWatchPanel(panel) {
 // filter by check_type; a panel can override with typeOf (e.g. Storage filters
 // by filesystem type since all its watches share one check_type).
 function watchTypeValue(panel, w) {
+  if (panel.key === "host") return watchGroupOf(w);
   return (panel.typeOf ? panel.typeOf(w) : w.check_type) || "";
 }
 
@@ -3575,7 +3586,7 @@ function setWatchGrouped(panelKey, grouped) {
 function toggleAllWatchGroups(panelKey) {
   const panel = getWatchPanel(panelKey);
   const watches = (allWatches || []).filter((watch) => watchPanelKeyFor(watch) === panelKey && watchMatches(watch, panelKey));
-  const groups = sortedGroupValues(watches, (watch) => watchTypeValue(panel, watch) || "unknown");
+  const groups = sortedGroupValues(watches, watchGroupOf);
   toggleAllGroups(groups, panel.collapsedGroups);
   renderWatches();
   saveUIState();
@@ -3639,7 +3650,9 @@ function parseDurationSeconds(raw) {
 
 const watchSortKeys = {
   name: (w) => displayName(w).toLowerCase(),
+  group: (w) => watchGroupOf(w).toLowerCase(),
   type: (w) => (w.check_type || "").toLowerCase(),
+  indicator: (w) => watchPrimaryMetricText(w).toLowerCase(),
   summary: (w) => watchSummaryText(w).toLowerCase(),
   interval: (w) => parseDurationSeconds(w.interval),
   polarity: (w) => w.fire_on_fail ? "fail" : "threshold",
@@ -3647,25 +3660,6 @@ const watchSortKeys = {
   notifiers: (w) => notifierNames(w).join(" ").toLowerCase() || Number(w.notifier_count || 0),
   last: (w) => w.last_activity || "",
   state: watchStateRank,
-  // Type-specific columns for the Certificate and Disk I/O panels, read from
-  // the watch's live readings (see readingRaw / checkreadings.go field names).
-  expires: (w) => readingRaw(w, "not_after"),
-  days_left: (w) => { const n = parseFloat(readingRaw(w, "days_left")); return Number.isFinite(n) ? n : Infinity; },
-  issuer: (w) => readingRaw(w, "issuer").toLowerCase(),
-  keytype: (w) => readingRaw(w, "public_key_algorithm").toLowerCase(),
-  device: (w) => readingRaw(w, "device").toLowerCase(),
-  util: (w) => parseFloat(readingRaw(w, "util_pct")) || 0,
-  readwrite: (w) => parseFloat(readingRaw(w, "read_bytes")) || 0,
-  await: (w) => parseFloat(readingRaw(w, "await_ms")) || 0,
-  lvmhealth: (w) => readingRaw(w, "health").toLowerCase(),
-  vg: (w) => readingRaw(w, "volume_group").toLowerCase(),
-  lv: (w) => readingRaw(w, "logical_volume").toLowerCase(),
-  vgfree: (w) => parseFloat(readingRaw(w, "free_pct")) || -1,
-  lvmreasons: (w) => readingRaw(w, "lvm_reasons").toLowerCase(),
-  // Storage panel columns.
-  usage: (w) => { const p = w.storage ? storageUsedPct(w.storage) : null; return p == null ? -1 : p; },
-  filesystem: (w) => ((w.storage && w.storage.filesystem) || "").toLowerCase(),
-  mount: (w) => ((w.storage && w.storage.mount_point) || "").toLowerCase(),
 };
 
 function setWatchSort(panelKey, key) { toggleSort(getWatchPanel(panelKey).sort, key, renderWatches); }
@@ -3680,12 +3674,7 @@ function updateWatchSortIndicators(panelKey) {
   });
 }
 
-// watchPanelKeyFor classifies a watch into its panel via the registry's match
-// predicates; watches no predicate claims belong to the Host watches panel.
 function watchPanelKeyFor(w) {
-  for (const [key, panel] of Object.entries(watchPanels)) {
-    if (panel.match && panel.match(w)) return key;
-  }
   return "host";
 }
 
@@ -3785,35 +3774,18 @@ function renderWatchReadings(readings) {
   return tpl`<div class="watch-grid">${cells}</div>`;
 }
 
-// isStorageWatch reports whether a watch is a storage/volume check. Storage
-// watches get their own panel above Services; every other type stays in the
-// Host watches table below. Matches the backend isStorageCheckType.
-function isStorageWatch(w) {
-  const t = ((w && w.check_type) || "").toLowerCase();
-  return t === "storage";
-}
+const storageWatchTypes = new Set(["diskio", "hdparm", "lvm", "raid", "smart", "storage"]);
+const networkWatchTypes = new Set(["conntrack", "firewall", "icmp", "net"]);
+const securityWatchTypes = new Set(["cert", "file"]);
 
-function isLVMWatch(w) {
-  return ((w && w.check_type) || "").toLowerCase() === "lvm";
-}
-
-// isNetworkWatch reports whether a watch is a network/connectivity check. These
-// get their own panel right after Services; every other (non-storage) type stays
-// in the Host watches table below.
-function isNetworkWatch(w) {
-  const t = ((w && w.check_type) || "").toLowerCase();
-  return t === "net" || t === "icmp";
-}
-
-// isCertWatch / isDiskioWatch report whether a watch is a certificate or disk
-// I/O check. Each gets its own panel (with type-specific columns); every other
-// non-storage/non-network type stays in the Host watches table below.
-function isCertWatch(w) {
-  return ((w && w.check_type) || "").toLowerCase() === "cert";
-}
-
-function isDiskioWatch(w) {
-  return ((w && w.check_type) || "").toLowerCase() === "diskio";
+// watchGroupOf is the presentation taxonomy for host watches. It deliberately
+// groups stable operator concepts instead of creating a new table per check.
+function watchGroupOf(w) {
+  const type = String((w && w.check_type) || "").toLowerCase();
+  if (storageWatchTypes.has(type)) return "Storage";
+  if (networkWatchTypes.has(type) || categoryOf(w, "watch").toLowerCase() === "network") return "Network";
+  if (securityWatchTypes.has(type) || categoryOf(w, "watch").toLowerCase() === "security") return "Security";
+  return "System";
 }
 
 function watchActionDisabled(w, action) {
@@ -3823,7 +3795,7 @@ function watchActionDisabled(w, action) {
     case actionMonitor: return !!w.monitored;
     case actionUnmonitor: return !w.monitored;
     case actionExpand: return !watchHasExpand(w);
-    case actionProbe: return !w.can_probe;
+    case actionProbe: return !w.can_probe || watchProbeRunning(w);
     case actionPause: return !w.can_control_raid;
     case actionResume: return !w.can_control_raid;
     default: return false;
@@ -3843,7 +3815,8 @@ function watchActionDisabledReason(w, action) {
       if (!watchHasExpand(w)) return "expand is not configured";
       return "";
     case actionProbe:
-      return w.can_probe ? "" : "manual probe is not supported";
+      if (!w.can_probe) return "manual probe is not supported";
+      return watchProbeRunning(w) ? "manual probe is already running" : "";
     case actionPause:
     case actionResume:
       return w.can_control_raid ? "" : "RAID control is not configured";
@@ -3905,6 +3878,10 @@ function watchLastCell(w) {
   });
 }
 
+function watchLastCheckedCell(w) {
+  return activityDateCell({ time: w && w.last_checked_at });
+}
+
 // watchNameCell renders the shared expandable name cell (chevron + toggle).
 function watchNameCell(w, key, open) {
   const chev = tpl`<span class="exp" aria-hidden="true">${open ? '▾' : '▸'}</span>`;
@@ -3960,13 +3937,16 @@ function watchRowHTML(w) {
   const open = expanded.has(key);
   const row = tpl`<tr id="wat-row-${w.name}" class="clickable ${watchRowClass(state)}" data-exp-key="${key}">
     ${watchNameCell(w, key, open)}
+    <td>${categoryBadge(watchGroupOf(w))}</td>
     <td>${w.check_type || ""}</td>
+    <td>${watchPrimaryMetric(w)}</td>
     <td class="watch-summary">${watchSummaryCell(w)}</td>
+    <td>${watchLastCheckedCell(w)}</td>
     <td>${watchLastCell(w)}</td>
     <td>${watchStateCell(w)}</td>
     ${watchActionsCell(w)}
   </tr>`;
-  const expRow = watchExpansionRow(key, open, 6);
+  const expRow = watchExpansionRow(key, open, 9);
   return expRow ? [row, expRow] : [row];
 }
 
@@ -3983,73 +3963,6 @@ function storageUsageCell(w) {
 
 // storageRowHTML renders a Storage-panel row, surfacing the occupied-space bar,
 // filesystem and mount point in place of the generic type/summary columns.
-function storageRowHTML(w) {
-  const state = watchStateText(w);
-  const d = w.storage || {};
-  const fs = d.filesystem ? tpl`<code>${d.filesystem}</code>` : tpl`<span class="muted">—</span>`;
-  const mount = d.mount_point
-    ? (d.mounted === false ? tpl`<span class="bad">${d.mount_point} (not mounted)</span>` : tpl`<code>${d.mount_point}</code>`)
-    : (w.storage && w.storage.mounted === false ? tpl`<span class="bad">not found</span>` : tpl`<span class="muted">—</span>`);
-  const key = watchExpansionKey(w.name);
-  const open = expanded.has(key);
-  const row = tpl`<tr id="wat-row-${w.name}" class="clickable ${watchRowClass(state)}" data-exp-key="${key}">
-    ${watchNameCell(w, key, open)}
-    <td class="watch-summary">${storageUsageCell(w)}</td>
-    <td>${fs}</td>
-    <td>${mount}</td>
-    <td>${watchLastCell(w)}</td>
-    <td>${watchStateCell(w)}</td>
-    ${watchActionsCell(w)}
-  </tr>`;
-  const expRow = watchExpansionRow(key, open, 7);
-  return expRow ? [row, expRow] : [row];
-}
-
-// certRowHTML renders a Certificate-panel row, surfacing the most relevant cert
-// readings (expiry date, days left, issuer) in place of the generic type/summary.
-function certRowHTML(w) {
-  const state = watchStateText(w);
-  const key = watchExpansionKey(w.name);
-  const open = expanded.has(key);
-  const algo = readingRaw(w, "public_key_algorithm");
-  const bits = readingRaw(w, "key_bits");
-  const keyType = algo
-    ? tpl`<code>${bits ? `${algo} ${bits}` : algo}</code>`
-    : tpl`<span class="muted">—</span>`;
-  const row = tpl`<tr id="wat-row-${w.name}" class="clickable ${watchRowClass(state)}" data-exp-key="${key}">
-    ${watchNameCell(w, key, open)}
-    <td class="cert-expires">${readingValue(w, "not_after")}</td>
-    <td>${readingValue(w, "days_left")}</td>
-    <td>${readingValue(w, "issuer")}</td>
-    <td>${keyType}</td>
-    <td>${watchLastCell(w)}</td>
-    <td>${watchStateCell(w)}</td>
-    ${watchActionsCell(w)}
-  </tr>`;
-  const expRow = watchExpansionRow(key, open, 8);
-  return expRow ? [row, expRow] : [row];
-}
-
-// diskioRowHTML renders a Disk I/O-panel row, surfacing the most relevant diskio
-// readings (device, utilization, read/write throughput, await latency).
-function diskioRowHTML(w) {
-  const state = watchStateText(w);
-  const key = watchExpansionKey(w.name);
-  const open = expanded.has(key);
-  const row = tpl`<tr id="wat-row-${w.name}" class="clickable ${watchRowClass(state)}" data-exp-key="${key}">
-    ${watchNameCell(w, key, open)}
-    <td>${readingValue(w, "device")}</td>
-    <td>${readingValue(w, "util_pct")}</td>
-    <td>${readingValue(w, "read_bytes")} / ${readingValue(w, "write_bytes")}</td>
-    <td>${readingValue(w, "await_ms")}</td>
-    <td>${watchLastCell(w)}</td>
-    <td>${watchStateCell(w)}</td>
-    ${watchActionsCell(w)}
-  </tr>`;
-  const expRow = watchExpansionRow(key, open, 8);
-  return expRow ? [row, expRow] : [row];
-}
-
 function lvmHealthCell(w) {
   const health = readingRaw(w, "health");
   if (!health) return tpl`<span class="muted">—</span>`;
@@ -4057,47 +3970,264 @@ function lvmHealthCell(w) {
   return tpl`<span class="${cls}">${health}</span>`;
 }
 
-function lvmVGFreeCell(w) {
-  const free = readingRaw(w, "vg_free_bytes");
-  const pct = readingRaw(w, "free_pct");
-  if (!free && !pct) return tpl`<span class="muted">—</span>`;
-  return tpl`${free || "—"}${pct ? tpl` <span class="muted">(${pct})</span>` : nothing}`;
+function watchPrimaryMetricText(w) {
+  const type = String((w && w.check_type) || "").toLowerCase();
+  if (type === "storage" && w.storage) return fmtPct(storageUsedPct(w.storage));
+  const fields = {
+    cert: "days_left",
+    diskio: "util_pct",
+    lvm: "health",
+    raid: "degraded",
+    smart: "health",
+  };
+  const field = fields[type];
+  if (field) return readingRaw(w, field);
+  const first = watchReadings(w)[0];
+  return first && first.value != null ? String(first.value) : "";
 }
 
-function lvmReasonCell(w) {
-  const reasons = readingRaw(w, "lvm_reasons");
-  return reasons && reasons !== "none" ? tpl`<span class="bad">${reasons}</span>` : tpl`<span class="muted">none</span>`;
+function watchPrimaryMetric(w) {
+  const type = String((w && w.check_type) || "").toLowerCase();
+  if (type === "storage") return storageUsageCell(w);
+  if (type === "lvm") return lvmHealthCell(w);
+  const text = watchPrimaryMetricText(w);
+  return text ? tpl`${text}` : tpl`<span class="muted">—</span>`;
 }
 
-// lvmRowHTML renders manual-probe-friendly LVM rows: VG/LV identity, free VG
-// capacity and health reasons are first-class columns instead of a generic
-// summary string.
-function lvmRowHTML(w) {
+function watchConditionValue(w, field) {
+  const condition = (w.conditions || []).find((item) => item && item.field === field);
+  if (!condition) return "—";
+  return [condition.op, condition.value].filter(Boolean).join(" ") || "—";
+}
+
+function readingSortValue(w, field) {
+  const raw = readingRaw(w, field);
+  const number = Number.parseFloat(raw);
+  return Number.isFinite(number) ? number : raw.toLowerCase();
+}
+
+function storageFilesystemCell(w) {
+  const filesystem = w.storage && w.storage.filesystem;
+  return filesystem ? tpl`<code>${filesystem}</code>` : tpl`<span class="muted">—</span>`;
+}
+
+function storageMountCell(w) {
+  const mount = w.storage && w.storage.mount_point;
+  return mount ? tpl`<code>${mount}</code>` : tpl`<span class="muted">—</span>`;
+}
+
+function typedReadingCell(w, field) {
+  return readingValue(w, field);
+}
+
+// watchTypeProfiles is the single presentation owner for every host-watch
+// subtype. A profile owns its useful live columns, sortable values and optional
+// subtype filter; generic summaries are deliberately not used in this view.
+const watchTypeProfiles = {
+  storage: {
+    label: "Filesystems",
+    filter: { label: "Filesystem", value: (w) => (w.storage && w.storage.filesystem) || "unknown" },
+    columns: [
+      { key: "usage", label: "Usage", cell: storageUsageCell, sort: (w) => numericSortValue(storageUsedPct(w.storage)) },
+      { key: "filesystem", label: "Filesystem", cell: storageFilesystemCell, sort: (w) => ((w.storage && w.storage.filesystem) || "").toLowerCase() },
+      { key: "mount", label: "Mount point", cell: storageMountCell, sort: (w) => (w.storage && w.storage.mount_point) || "" },
+    ],
+  },
+  file: {
+    label: "File checks",
+    columns: [
+      { key: "path", label: "Path", cell: (w) => typedReadingCell(w, "path"), sort: (w) => readingRaw(w, "path").toLowerCase() },
+      { key: "age", label: "Current age", cell: (w) => typedReadingCell(w, "age"), sort: (w) => parseDurationSeconds(readingRaw(w, "age")) },
+      { key: "older_than", label: "Limit", cell: (w) => watchConditionValue(w, "older_than"), sort: (w) => parseDurationSeconds(watchConditionValue(w, "older_than")) },
+    ],
+  },
+  net: {
+    label: "Network interfaces",
+    columns: [
+      { key: "interface", label: "Interface", cell: (w) => typedReadingCell(w, "interface"), sort: (w) => readingRaw(w, "interface").toLowerCase() },
+      { key: "state", label: "Link", cell: (w) => typedReadingCell(w, "state"), sort: (w) => readingRaw(w, "state").toLowerCase() },
+      { key: "speed", label: "Speed", cell: (w) => typedReadingCell(w, "speed"), sort: (w) => readingSortValue(w, "speed") },
+      { key: "errors", label: "Errors", cell: (w) => typedReadingCell(w, "errors"), sort: (w) => readingSortValue(w, "errors") },
+    ],
+  },
+  hdparm: {
+    label: "Disk speed",
+    columns: [
+      { key: "device", label: "Device", cell: (w) => typedReadingCell(w, "device"), sort: (w) => readingRaw(w, "device").toLowerCase() },
+      { key: "read", label: "Buffered read", cell: (w) => typedReadingCell(w, "read"), sort: (w) => readingSortValue(w, "read") },
+      { key: "cached", label: "Cached read", cell: (w) => typedReadingCell(w, "cached"), sort: (w) => readingSortValue(w, "cached") },
+    ],
+  },
+  lvm: {
+    label: "LVM",
+    columns: [
+      { key: "health", label: "Health", cell: lvmHealthCell, sort: (w) => readingRaw(w, "health").toLowerCase() },
+      { key: "vg", label: "VG", cell: (w) => typedReadingCell(w, "volume_group"), sort: (w) => readingRaw(w, "volume_group").toLowerCase() },
+      { key: "lv", label: "LV", cell: (w) => typedReadingCell(w, "logical_volume"), sort: (w) => readingRaw(w, "logical_volume").toLowerCase() },
+      { key: "size", label: "VG size", cell: (w) => typedReadingCell(w, "vg_size_bytes"), sort: (w) => readingSortValue(w, "vg_size_bytes") },
+      { key: "free", label: "VG free", cell: (w) => typedReadingCell(w, "vg_free_bytes"), sort: (w) => readingSortValue(w, "vg_free_bytes") },
+      { key: "reasons", label: "Reasons", cell: (w) => typedReadingCell(w, "lvm_reasons"), sort: (w) => readingRaw(w, "lvm_reasons").toLowerCase() },
+    ],
+  },
+  smart: {
+    label: "SMART",
+    columns: [
+      { key: "device", label: "Device", cell: (w) => typedReadingCell(w, "device"), sort: (w) => readingRaw(w, "device").toLowerCase() },
+      { key: "health", label: "Health", cell: lvmHealthCell, sort: (w) => readingRaw(w, "health").toLowerCase() },
+      { key: "temperature", label: "Temperature", cell: (w) => typedReadingCell(w, "temperature"), sort: (w) => readingSortValue(w, "temperature") },
+      { key: "wear", label: "Wear", cell: (w) => typedReadingCell(w, "wear"), sort: (w) => readingSortValue(w, "wear") },
+      { key: "power_on_hours", label: "Power-on time", cell: (w) => typedReadingCell(w, "power_on_hours"), sort: (w) => readingSortValue(w, "power_on_hours") },
+    ],
+  },
+  diskio: {
+    label: "Disk I/O",
+    columns: [
+      { key: "device", label: "Device", cell: (w) => typedReadingCell(w, "device"), sort: (w) => readingRaw(w, "device").toLowerCase() },
+      { key: "util", label: "Utilization", cell: (w) => typedReadingCell(w, "util_pct"), sort: (w) => readingSortValue(w, "util_pct") },
+      { key: "read", label: "Read", cell: (w) => typedReadingCell(w, "read_bytes"), sort: (w) => readingSortValue(w, "read_bytes") },
+      { key: "write", label: "Write", cell: (w) => typedReadingCell(w, "write_bytes"), sort: (w) => readingSortValue(w, "write_bytes") },
+      { key: "await", label: "Await", cell: (w) => typedReadingCell(w, "await_ms"), sort: (w) => readingSortValue(w, "await_ms") },
+    ],
+  },
+  cert: {
+    label: "Certificates",
+    columns: [
+      { key: "source", label: "Source", cell: (w) => typedReadingCell(w, "source"), sort: (w) => readingRaw(w, "source").toLowerCase() },
+      { key: "days", label: "Days left", cell: (w) => typedReadingCell(w, "days_left"), sort: (w) => readingSortValue(w, "days_left") },
+      { key: "expires", label: "Expires", cell: (w) => typedReadingCell(w, "not_after"), sort: (w) => readingRaw(w, "not_after") },
+      { key: "issuer", label: "Issuer", cell: (w) => typedReadingCell(w, "issuer"), sort: (w) => readingRaw(w, "issuer").toLowerCase() },
+    ],
+  },
+  raid: {
+    label: "RAID",
+    columns: [
+      { key: "array", label: "Array", cell: (w) => typedReadingCell(w, "array"), sort: (w) => readingRaw(w, "array").toLowerCase() },
+      { key: "size", label: "Size", cell: (w) => typedReadingCell(w, "total_bytes"), sort: (w) => readingSortValue(w, "total_bytes") },
+      { key: "degraded", label: "Degraded", cell: (w) => typedReadingCell(w, "degraded"), sort: (w) => readingSortValue(w, "degraded") },
+      { key: "recovering", label: "Recovering", cell: (w) => typedReadingCell(w, "recovering"), sort: (w) => readingSortValue(w, "recovering") },
+    ],
+  },
+};
+
+function watchTypeProfile(type) {
+  return watchTypeProfiles[type] || {
+    label: type || "Other",
+    columns: [{ key: "value", label: "Value", cell: watchPrimaryMetric, sort: watchPrimaryMetricText }],
+  };
+}
+
+function watchTypeLabel(type) { return watchTypeProfile(type).label; }
+
+function watchTypeSort(panel, type) {
+  const saved = panel.typeSorts[type];
+  return saved && typeof saved.key === "string" ? saved : { key: "name", dir: 1 };
+}
+
+function setWatchTypeSort(panelKey, type, key) {
+  const panel = getWatchPanel(panelKey);
+  const sort = watchTypeSort(panel, type);
+  if (sort.key === key) sort.dir = -sort.dir;
+  else { sort.key = key; sort.dir = 1; }
+  panel.typeSorts[type] = sort;
+  renderWatches();
+  saveUIState();
+}
+
+function setWatchTypeFilter(panelKey, type, value) {
+  getWatchPanel(panelKey).typeFilters[type] = value || filterAll;
+  renderWatches();
+  saveUIState();
+}
+
+function watchTypeRows(type, watches, panel) {
+  const profile = watchTypeProfile(type);
+  const filter = profile.filter;
+  const selected = panel.typeFilters[type] || filterAll;
+  const list = filter && selected !== filterAll ? watches.filter((w) => filter.value(w) === selected) : [...watches];
+  const sort = watchTypeSort(panel, type);
+  const column = profile.columns.find((item) => item.key === sort.key);
+  const sharedSorts = {
+    name: (w) => displayName(w).toLowerCase(),
+    checked: (w) => w.last_checked_at || "",
+    last: (w) => w.last_activity || "",
+    state: watchStateRank,
+  };
+  const sortValue = sharedSorts[sort.key] || (column && column.sort);
+  if (sortValue) {
+    list.sort((a, b) => {
+      const primary = compareSortValues(sortValue(a), sortValue(b)) * sort.dir;
+      return primary || compareSortValues(displayName(a), displayName(b));
+    });
+  }
+  return list;
+}
+
+function watchTypeFilterControl(panel, type, watches, profile) {
+  if (!profile.filter) return nothing;
+  const counts = new Map();
+  watches.forEach((w) => {
+    const value = profile.filter.value(w);
+    counts.set(value, (counts.get(value) || 0) + 1);
+  });
+  if (counts.size < 2) return nothing;
+  const selected = counts.has(panel.typeFilters[type]) ? panel.typeFilters[type] : filterAll;
+  return tpl`<label class="watch-type-filter">${profile.filter.label}
+    <select data-watch-type-filter-panel="${panel.key}" data-watch-type-filter="${type}" aria-label="Filter ${watchTypeLabel(type)} by ${profile.filter.label}">
+      <option value="${filterAll}" ?selected=${selected === filterAll}>all</option>
+      ${[...counts.keys()].sort().map((value) => tpl`<option value="${value}" ?selected=${selected === value}>${value} (${counts.get(value)})</option>`)}
+    </select>
+  </label>`;
+}
+
+function typedWatchRowHTML(w, profile) {
   const state = watchStateText(w);
   const key = watchExpansionKey(w.name);
   const open = expanded.has(key);
+  const colCount = profile.columns.length + 5;
   const row = tpl`<tr id="wat-row-${w.name}" class="clickable ${watchRowClass(state)}" data-exp-key="${key}">
     ${watchNameCell(w, key, open)}
-    <td>${lvmHealthCell(w)}</td>
-    <td>${readingValue(w, "volume_group")}</td>
-    <td>${readingValue(w, "logical_volume")}</td>
-    <td>${lvmVGFreeCell(w)}</td>
-    <td>${lvmReasonCell(w)}</td>
+    ${profile.columns.map((column) => tpl`<td>${column.cell(w)}</td>`)}
+    <td>${watchLastCheckedCell(w)}</td>
     <td>${watchLastCell(w)}</td>
     <td>${watchStateCell(w)}</td>
     ${watchActionsCell(w)}
   </tr>`;
-  const expRow = watchExpansionRow(key, open, 9);
+  const expRow = watchExpansionRow(key, open, colCount);
   return expRow ? [row, expRow] : [row];
+}
+
+function renderWatchTypeTable(panel, type, watches) {
+  const profile = watchTypeProfile(type);
+  const list = watchTypeRows(type, watches, panel);
+  const sort = watchTypeSort(panel, type);
+  const columns = [{ key: "name", label: "Name" }, ...profile.columns, { key: "checked", label: "Last checked" }, { key: "last", label: "Last activity" }, { key: "state", label: "State" }, { label: "Actions" }];
+  const rows = list.flatMap((watch) => typedWatchRowHTML(watch, profile));
+  return tpl`<section class="watch-type-group">
+    <div class="watch-type-heading"><h3>${watchTypeLabel(type)} <span class="muted">(${watches.length})</span></h3>${watchTypeFilterControl(panel, type, watches, profile)}</div>
+    <table class="watch-table">
+      <thead><tr>${columns.map((column) => column.key
+        ? tpl`<th scope="col" class="sortable" tabindex="0" data-watch-type-sort-panel="${panel.key}" data-watch-type-sort-type="${type}" data-watch-type-sort="${column.key}" aria-sort="${sortAriaValue(sort, column.key)}">${column.label}<span class="sort-ind" data-watch-type-sort-ind="${type}:${column.key}">${sort.key === column.key ? (sort.dir > 0 ? " ▲" : " ▼") : ""}</span></th>`
+        : tpl`<th scope="col">${column.label}</th>`)}</tr></thead>
+      <tbody>${rows.length ? rows : tpl`<tr><td colspan="${columns.length}" class="muted">No ${watchTypeLabel(type).toLowerCase()} watches match this filter.</td></tr>`}</tbody>
+    </table>
+  </section>`;
+}
+
+function renderWatchGroups(panel, watches) {
+  const groups = sortedGroupValues(watches, watchGroupOf);
+  return groups.flatMap((group) => {
+    const groupWatches = watches.filter((watch) => watchGroupOf(watch) === group);
+    const collapsed = panel.collapsedGroups.has(group);
+    const types = sortedGroupValues(groupWatches, (watch) => watch.check_type || "");
+    return [tpl`<tr class="group-row"><td colspan="${panel.cols}"><button type="button" class="row-toggle group-toggle" data-group-panel="${panel.groupPanel}" data-group-name="${group}" aria-expanded="${collapsed ? domBoolFalse : domBoolTrue}"><span class="exp" aria-hidden="true">${collapsed ? "▸" : "▾"}</span>${group} <span class="muted">${groupWatches.length}</span></button></td></tr>`,
+      collapsed ? nothing : tpl`<tr><td colspan="${panel.cols}">${types.map((type) => renderWatchTypeTable(panel, type, groupWatches.filter((watch) => (watch.check_type || "") === type)))}</td></tr>`];
+  });
 }
 
 function renderWatches(watches) {
   if (watches) allWatches = watches;
   scheduleGlobalTargetSync();
-  const all = allWatches || [];
-  Object.keys(watchPanels).forEach((key) => {
-    renderWatchPanel(key, all.filter((w) => watchPanelKeyFor(w) === key));
-  });
+  renderWatchPanel("host", allWatches || []);
   reassertExpansions();
   applyHash();
   updateSectionNav();
@@ -4113,6 +4243,8 @@ function renderWatchPanel(panelKey, watches) {
   const cnt = $(panel.count);
   const filterCount = $(panel.filterCount);
   if (!section || !tbody) return;
+  const outerHead = section.querySelector(".watch-table > thead");
+  if (outerHead) outerHead.hidden = true;
   const total = (watches || []).length;
   if (total === 0) {
     setPanelVisible(section, false);
@@ -4133,17 +4265,15 @@ function renderWatchPanel(panelKey, watches) {
     sortedBy(list, { key: "name", dir: 1 }, watchSortKeys, "name");
   }
   updateWatchSortIndicators(panelKey);
-  const groupOf = (watch) => watchTypeValue(panel, watch) || "unknown";
+  const groupOf = watchGroupOf;
   const groups = sortedGroupValues(list, groupOf);
   panel.collapsedGroups.forEach((group) => { if (!groups.includes(group)) panel.collapsedGroups.delete(group); });
   if (groups.length < 2) panel.grouped = false;
-  updateGroupButtons(panel.groupPrefix, panel.grouped, groups, panel.collapsedGroups, panel.groupLabel, "type");
+  updateGroupButtons(panel.groupPrefix, panel.grouped, groups, panel.collapsedGroups, panel.groupLabel, "group");
   const filtered = watchPanelFilterActive(panel);
   if (filterCount) filterCount.textContent = filtered ? `showing ${list.length} of ${total}` : "";
   const content = list.length
-    ? (panel.grouped
-      ? renderGroupedRows(list, panel.collapsedGroups, panel.groupPanel, "wat", groupOf, panel.cols || 9, panel.rowHTML || watchRowHTML, panel.sort.key === "type" ? panel.sort.dir : 1)
-      : list.flatMap(panel.rowHTML || watchRowHTML))
+    ? renderWatchGroups(panel, list)
     : tpl`<tr><td colspan="${panel.cols || 9}" class="muted">${filtered ? panel.emptyFiltered : panel.empty}</td></tr>`;
   litRender(content, tbody);
 }
@@ -5514,6 +5644,7 @@ async function actWatch(name, action) {
   }
   if (action === actionResume && !(await confirmWatchRAIDResume(name))) return;
   setStatus("");
+  if (action === actionProbe) beginWatchProbe(name);
   try {
     const res = await fetch(watchAPI(name, apiActionSuffix(action)), csrfPostOptions(headers));
     const body = await res.json().catch(() => ({}));
@@ -5529,6 +5660,7 @@ async function actWatch(name, action) {
     }
     setStatus(`${action} watch ${name}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
   } catch (e) {
+    if (action === actionProbe) finishWatchProbe(name);
     setStatus(`${action} watch ${name}: ${e.message}`, feedbackStatusErr);
   }
   load();
@@ -5541,7 +5673,27 @@ function applyWatchProbeResult(name, body, failed) {
   const next = { ...allWatches[idx] };
   if (Array.isArray(body.readings)) next.readings = body.readings;
   if (body.message) next.summary = body.message;
+  delete next.probe;
   next.state = failed ? targetStateFailed : targetStateOK;
+  allWatches = [...allWatches];
+  allWatches[idx] = next;
+  renderWatches(allWatches);
+}
+
+function beginWatchProbe(name) {
+  const idx = (allWatches || []).findIndex((item) => item && item.name === name);
+  if (idx < 0) return;
+  const next = { ...allWatches[idx], probe: { state: operationStateRunning, started_at: new Date().toISOString() } };
+  allWatches = [...allWatches];
+  allWatches[idx] = next;
+  renderWatches(allWatches);
+}
+
+function finishWatchProbe(name) {
+  const idx = (allWatches || []).findIndex((item) => item && item.name === name);
+  if (idx < 0 || !allWatches[idx].probe) return;
+  const next = { ...allWatches[idx] };
+  delete next.probe;
   allWatches = [...allWatches];
   allWatches[idx] = next;
   renderWatches(allWatches);
@@ -6636,7 +6788,7 @@ function initStaticHandlers() {
       });
     }
   }
-  ["storage", "network", "cert", "diskio", "host"].forEach(bindWatchPanelControls);
+  ["host"].forEach(bindWatchPanelControls);
 
   document.querySelectorAll(".watch-table th.sortable[data-watch-sort]").forEach((th) => {
     bindSortHeader(th, () => setWatchSort(watchPanelKeyForElement(th), th.dataset.watchSort || ""));
@@ -6844,6 +6996,11 @@ function initStaticHandlers() {
 }
 
 function initDelegatedHandlers() {
+  document.addEventListener(domEventChange, (e) => {
+    const typeFilter = closestFrom(e, "[data-watch-type-filter-panel][data-watch-type-filter]");
+    if (typeFilter) setWatchTypeFilter(typeFilter.dataset.watchTypeFilterPanel || "host", typeFilter.dataset.watchTypeFilter || "", typeFilter.value);
+  });
+
   document.addEventListener(domEventClick, (e) => {
     const eventToggle = closestFrom(e, "[data-event-toggle]");
     if (eventToggle) {
@@ -6925,6 +7082,12 @@ function initDelegatedHandlers() {
       return;
     }
 
+    const typeSort = closestFrom(e, "[data-watch-type-sort-panel][data-watch-type-sort-type][data-watch-type-sort]");
+    if (typeSort) {
+      setWatchTypeSort(typeSort.dataset.watchTypeSortPanel || "host", typeSort.dataset.watchTypeSortType || "", typeSort.dataset.watchTypeSort || "name");
+      return;
+    }
+
     const group = closestFrom(e, "[data-group-panel][data-group-name]");
     if (group) {
       toggleGroup(group.dataset.groupPanel || "", group.dataset.groupName || "");
@@ -6939,6 +7102,14 @@ function initDelegatedHandlers() {
 
     const row = closestFrom(e, "[data-exp-key]");
     if (row) rowClick(e, row.dataset.expKey || "");
+  });
+
+  document.addEventListener(domEventKeydown, (e) => {
+    if (e.key !== keyEnter && e.key !== keySpace) return;
+    const typeSort = closestFrom(e, "[data-watch-type-sort-panel][data-watch-type-sort-type][data-watch-type-sort]");
+    if (!typeSort) return;
+    e.preventDefault();
+    setWatchTypeSort(typeSort.dataset.watchTypeSortPanel || "host", typeSort.dataset.watchTypeSortType || "", typeSort.dataset.watchTypeSort || "name");
   });
 }
 
@@ -6959,11 +7130,19 @@ function showPartialRefresh(failures) {
 }
 function tickRefreshAge() {
   if (!connOK) { showDisconnected(); return; } // keep the banner's age fresh
+  updateWatchProbeElapsed();
   const el = $("#last-refresh");
   if (!el) return;
   const text = lastRefresh ? `fully updated ${fmtSince(Date.now() - lastRefresh)} ago` : "";
   if (el.textContent === text) return;
   el.textContent = text;
+}
+
+function updateWatchProbeElapsed() {
+  document.querySelectorAll("[data-probe-started-at]").forEach((el) => {
+    const text = "· " + watchProbeElapsed(el.dataset.probeStartedAt || "");
+    if (el.textContent !== text) el.textContent = text;
+  });
 }
 setInterval(tickRefreshAge, refreshAgeTickMs);
 

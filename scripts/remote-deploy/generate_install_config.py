@@ -106,6 +106,8 @@ SKIP_IFACE_PREFIXES = (
 
 GEOIP_DATABASE_DIRECTORY = "/usr/share/GeoIP"
 GEOIP_DATABASE_OLDER_THAN = "480h"
+ROOT_MOUNT_TARGET = "/"
+SUSPICIOUS_USER_COUNT = 20
 ENDPOINT_CHECK_TYPES = {"dns", "http", "ports", "tcp"}
 TCP_PROTOCOL = "tcp"
 UDP_PROTOCOL = "udp"
@@ -348,7 +350,7 @@ def mount_is_local_storage(mount: dict) -> bool:
     fstype = (mount.get("fstype") or "").lower()
     if not target.startswith("/"):
         return False
-    if target != "/" and any(target == prefix or target.startswith(prefix + "/") for prefix in SKIP_MOUNT_PREFIXES):
+    if target != ROOT_MOUNT_TARGET and any(target == prefix or target.startswith(prefix + "/") for prefix in SKIP_MOUNT_PREFIXES):
         return False
     if fstype in PSEUDO_FS or fstype in NETWORK_FS:
         return False
@@ -1154,6 +1156,7 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
         "containers": {"enabled": [], "skipped": []},
         "virtual_machines": {"enabled": [], "skipped": []},
         "watches": {},
+        "filesystems": [],
         "raid_arrays": [],
         "lvm_volumes": [],
         "mount_units": [],
@@ -1258,7 +1261,7 @@ dry_run: true
         if target in seen_targets or not mount_is_local_storage(mount):
             continue
         seen_targets.add(target)
-        name = "storage-root" if target == "/" else f"storage-{slug(target)}"
+        name = "storage-root" if target == ROOT_MOUNT_TARGET else f"storage-{slug(target)}"
         body = simple_watch(
             name,
             "storage",
@@ -1274,7 +1277,7 @@ dry_run: true
             policy=True,
         )
         fstab = fstab_targets.get(target)
-        if fstab:
+        if fstab and target != ROOT_MOUNT_TARGET:
             body += mount_unit_block()
             mount_count += 1
             mount_watch_targets.add(target)
@@ -1286,13 +1289,14 @@ dry_run: true
                 "folder": "storages",
             })
         add_watch("storages", name, body)
+        report["filesystems"].append({"name": name, "path": target, "fstype": (mount.get("fstype") or "").lower()})
         storage_count += 1
 
     for mount in mounts:
         target = mount.get("target") or ""
         if target in mount_watch_targets or not target.startswith("/"):
             continue
-        if target != "/" and any(target == prefix or target.startswith(prefix + "/") for prefix in SKIP_MOUNT_PREFIXES):
+        if target != ROOT_MOUNT_TARGET and any(target == prefix or target.startswith(prefix + "/") for prefix in SKIP_MOUNT_PREFIXES):
             continue
         fstab = fstab_targets.get(target)
         fstype = (mount.get("fstype") or "").lower()
@@ -1339,7 +1343,14 @@ dry_run: true
         ("watch-oom", "system", "30s", ["type: oom"]),
     ]
     if options.users_watch:
-        generic_watches.append(("watch-users", "system", "1m", ["type: users", 'count: { op: ">", value: 0 }']))
+        generic_watches.append(
+            (
+                "watch-users",
+                "system",
+                "1m",
+                ["type: users", f'count: {{ op: ">", value: {SUSPICIOUS_USER_COUNT} }}'],
+            )
+        )
     for name, category, interval, check_lines in generic_watches:
         add_watch("watches", name, simple_watch(name, category, interval, check_lines))
 

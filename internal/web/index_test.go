@@ -163,7 +163,7 @@ func TestIndexShellAnchors(t *testing.T) {
 	wantIDs := []string{
 		"topbar", "section-nav", "favicon", "attention", "events", "target-search", "target-search-options",
 		"services-section", "containers-section", "vms-section", "apps-section", "libraries-section", "watches-section", "events-section",
-		"storage-controls", "lvm-controls", "network-controls", "mount-controls",
+		"watch-controls", "mount-controls",
 		"container-controls", "vm-controls", "container-rows", "vm-rows",
 		"event-clear", "event-before", "event-reset-filters", "event-group",
 		"event-more", "event-service", "event-watch", "event-kind", "event-status", "event-range",
@@ -177,8 +177,7 @@ func TestIndexShellAnchors(t *testing.T) {
 		}
 	}
 	for _, id := range []string{
-		"services-section", "containers-section", "vms-section", "storage-section", "lvm-section", "network-section", "mounts-section",
-		"apps-section", "libraries-section", "cert-section", "diskio-section", "watches-section",
+		"services-section", "containers-section", "vms-section", "mounts-section", "apps-section", "libraries-section", "watches-section",
 		"events-section", "locks-section", "notifiers-section", "daemon-section",
 	} {
 		if sectionLinks[id] != "#"+id {
@@ -309,7 +308,7 @@ func TestSourceSharesWatchPanelDescriptorsWithBuilder(t *testing.T) {
 	if !strings.Contains(string(app), `import watchPanelDescriptors from "./watch-panels.json"`) {
 		t.Fatal("app does not import shared watch panel descriptors")
 	}
-	for _, key := range []string{`"storage"`, `"lvm"`, `"network"`, `"cert"`, `"diskio"`, `"host"`} {
+	for _, key := range []string{`"host"`} {
 		if !strings.Contains(string(descriptors), `"key": `+key) {
 			t.Errorf("watch panel descriptors missing key %s", key)
 		}
@@ -703,7 +702,7 @@ func TestIndexAccessibilitySectionHeadings(t *testing.T) {
 		headings[strings.TrimSpace(sb.String())] = true
 	})
 	for _, want := range []string{
-		"Storage", "Services", "Containers", "Virtual machines", "Network", "Installed applications", "Installed libraries",
+		"Services", "Containers", "Virtual machines", "Installed applications", "Installed libraries",
 		"Host watches", "Events", "Mount units", "Notifiers",
 		"Daemon / Engine settings",
 	} {
@@ -823,7 +822,7 @@ func TestIndexAccessibilityShell(t *testing.T) {
 	}
 
 	for _, id := range []string{
-		"svc-filters", "container-filters", "vm-filters", "storage-filters", "network-filters", "watch-filters", "app-filters",
+		"svc-filters", "container-filters", "vm-filters", "watch-filters", "app-filters",
 	} {
 		el := nodeByID(doc, id)
 		if el == nil {
@@ -1002,12 +1001,12 @@ func TestIndexAccessibilityShell(t *testing.T) {
 		t.Error(`shell missing #event-reset-filters`)
 	}
 
-	if storage := nodeByID(doc, "storage-section"); storage != nil {
-		if cls, ok := attr(storage, "class"); !ok || !strings.Contains(cls, "panel-hidden") {
-			t.Errorf(`#storage-section class = %q, want panel-hidden`, cls)
+	if watches := nodeByID(doc, "watches-section"); watches != nil {
+		if cls, ok := attr(watches, "class"); !ok || !strings.Contains(cls, "panel-hidden") {
+			t.Errorf(`#watches-section class = %q, want panel-hidden`, cls)
 		}
 	} else {
-		t.Error(`shell missing #storage-section`)
+		t.Error(`shell missing #watches-section`)
 	}
 
 	if eventClear := nodeByID(doc, "event-clear"); eventClear != nil {

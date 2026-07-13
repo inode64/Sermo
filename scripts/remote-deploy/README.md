@@ -57,11 +57,19 @@ changes type, mode, uid or gid.
 
 The generated config defaults to monitoring only installed catalog services
 whose init unit is active, `dry_run: true`, Web UI on `0.0.0.0:9797`, storage
-free-space threshold `< 5%`, expansion by `5G`, fstab-backed storage mount
-units, running Docker containers, running libvirt/QEMU virtual machines, SMART
-every `24h`, and hdparm every `6h`. Use
+free-space threshold `< 5%`, expansion by `5G`, fstab-backed non-root storage
+mount units, running Docker containers, running libvirt/QEMU virtual machines,
+SMART every `24h`, hdparm every `6h`, and a logged-in-user alert only above 20
+sessions. The root filesystem retains its storage-capacity watch but is not a
+mount unit. Use
 `--include-inactive-installed-services` only for catalog audits where inactive
 installed profiles are intentionally desired.
+
+Every locally mounted, non-pseudo filesystem discovered from `findmnt` gets a
+safe `storage` check with `mounted: true` and the free-space threshold. This
+covers ext2/3/4, XFS, btrfs, vfat/exfat and the other local filesystem types in
+the generator inventory without invoking filesystem repair tools. The generation
+report records each selected path and filesystem type under `filesystems`.
 
 Every generated configuration also includes an alert-only clock watch. It queries
 `time.cloudflare.com` and `pool.ntp.org` every five minutes and alerts after two

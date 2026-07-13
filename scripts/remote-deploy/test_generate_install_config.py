@@ -131,5 +131,83 @@ class EndpointGenerationTest(unittest.TestCase):
             [{"volume_group": "vg0", "logical_volume": "root", "display_name": "LVM vg0/root"}],
         )
 
+    def test_root_storage_watch_is_not_a_mount_unit(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("", encoding="utf-8")
+        (stage / "findmnt.json").write_text(
+            json.dumps({"filesystems": [{"target": "/", "fstype": "ext4"}]}),
+            encoding="utf-8",
+        )
+        (stage / "fstab").write_text("/dev/vda1 / ext4 defaults 0 1\n", encoding="utf-8")
+        options = generator.GenerationOptions(
+            web_port=9797,
+            web_password="test",
+            storage_free_pct="5%",
+            expand_by="5G",
+            smart_interval="24h",
+            hdparm_interval="6h",
+            users_watch=True,
+            active_services_only=True,
+            catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
+        )
+
+        report = generator.generate_for_host("host", stage, root / "configs", options)
+        storage_body = (root / "configs/host/root/etc/sermo/storages/storage-root.yml").read_text(encoding="utf-8")
+        users_body = (root / "configs/host/root/etc/sermo/watches/watch-users.yml").read_text(encoding="utf-8")
+
+        self.assertNotIn("mount:", storage_body)
+        self.assertEqual(report["mount_units"], [])
+        self.assertIn('count: { op: ">", value: 20 }', users_body)
+
+    def test_generates_safe_storage_checks_for_local_filesystem_types(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("", encoding="utf-8")
+        (stage / "findmnt.json").write_text(
+            json.dumps({"filesystems": [
+                {"target": "/", "fstype": "ext4"},
+                {"target": "/srv/xfs", "fstype": "xfs"},
+                {"target": "/media/fat", "fstype": "vfat"},
+                {"target": "/data", "fstype": "btrfs"},
+            ]}),
+            encoding="utf-8",
+        )
+        options = generator.GenerationOptions(
+            web_port=9797,
+            web_password="test",
+            storage_free_pct="5%",
+            expand_by="5G",
+            smart_interval="24h",
+            hdparm_interval="6h",
+            users_watch=False,
+            active_services_only=True,
+            catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
+        )
+
+        report = generator.generate_for_host("host", stage, root / "configs", options)
+
+        self.assertEqual(
+            report["filesystems"],
+            [
+                {"name": "storage-root", "path": "/", "fstype": "ext4"},
+                {"name": "storage-srv-xfs", "path": "/srv/xfs", "fstype": "xfs"},
+                {"name": "storage-media-fat", "path": "/media/fat", "fstype": "vfat"},
+                {"name": "storage-data", "path": "/data", "fstype": "btrfs"},
+            ],
+        )
+        for name in ["storage-root", "storage-srv-xfs", "storage-media-fat", "storage-data"]:
+            body = (root / f"configs/host/root/etc/sermo/storages/{name}.yml").read_text(encoding="utf-8")
+            self.assertIn("type: storage", body)
+            self.assertIn("mounted: true", body)
+
 if __name__ == "__main__":
     unittest.main()

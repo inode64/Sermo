@@ -378,35 +378,51 @@ aparecen en el detalle del servicio.
 | Agrupación | filas plegables por el mismo tipo específico del panel usado por el filtro de tipo |
 | Filtros de estado | all, disabled, ok, starting, failed |
 | Búsqueda | display name, nombre crudo, categoría, tipo, resumen, intervalo, polaridad, estado/comando del hook, nombres de notifiers, estado de expand/dry-run/monitorización y condiciones |
-| Ordenación | todas las cabeceras de columna excepto Actions son ordenables; Storage, Network, Certificate y Disk I/O ordenan por Name por defecto, Host watches mantiene el orden del servidor hasta que se pulsa una cabecera |
+| Ordenación | cada columna de datos salvo Actions es ordenable de forma independiente dentro de su tabla de tipo; cada tabla empieza por Name ascendente |
 | Visibilidad | oculto cuando no hay watches configurados para el subconjunto de ese panel |
 
-Columnas por panel (todos los paneles terminan con Last activity, State, Actions):
+Los host watches se agrupan en System, Storage, Network y Security y después se
+dividen en una tabla por tipo de check. Cada tabla termina en Last checked, Last
+activity, State y Actions; no usa una columna genérica Summary. Last checked es
+la última muestra completada por el ciclo del daemon o manual, mientras que Last
+activity es un evento.
 
-| Panel | Columnas específicas del panel |
+| Tipo de check | Columnas específicas |
 | --- | --- |
-| Storage | Name, Usage, Filesystem, Mount point |
-| Network | Name, Type, Summary |
-| Certificate watches | Name, Expires, Days left, Issuer, Key type |
-| Disk I/O watches | Name, Device, Util%, Read / Write, Await |
-| Host watches | Name, Type, Summary |
+| `storage` | Name, Usage, Filesystem, Mount point; filtra por filesystem si hay más de uno |
+| `file` | Name, Path, edad actual, límite de edad configurado |
+| `net` | Name, interfaz, enlace, velocidad, errores |
+| `hdparm` | Name, dispositivo, lectura buffered, lectura cached |
+| `lvm` | Name, salud, VG, LV, tamaño de VG, libre en VG, motivos |
+| `smart` | Name, dispositivo, salud, temperatura, desgaste, tiempo encendido formateado |
+| `diskio` | Name, dispositivo, utilización, lectura, escritura, await |
+| `cert` | Name, origen, días restantes, caducidad, emisor |
+| `raid` | Name, array, tamaño, degradado, recuperando |
+| Otros tipos | Name y su valor vivo principal |
 
-Las columnas de Certificate y Disk I/O leen las lecturas del watch publicadas
-por el último ciclo de watches del daemon
-(caducidad del certificado, días restantes, emisor y algoritmo de clave
-pública; dispositivo, utilización, throughput de lectura/escritura y latencia
-await).
+Estas columnas leen las lecturas actuales publicadas por el último ciclo del
+daemon y rehidratadas desde estado persistente tras reiniciar el daemon. La edad
+de file es el valor ya formateado que usa `older_than`; las comprobaciones SQL de
+servicio exponen el escalar observado como `Value` y la comparación efectiva
+como `Condition`, por lo que un resultado como `51 > 50` se ve sin analizar el
+texto de eventos.
 
 Columnas compartidas:
 
 | Columna | Significado |
 | --- | --- |
 | Name | nombre para mostrar, con fallback al nombre, capitalizado |
-| Type | tipo de check |
-| Summary | resumen de estado específico del watch |
-| Last activity | última actividad de hook/notify |
-| State | estado normalizado único del watch: `disabled` cuando config/monitor state lo excluye de comprobaciones activas, `starting` antes de la primera muestra monitorizada, `failed` para un fallo activo y `ok` en el resto |
+| Last checked | última muestra completada por el ciclo del daemon o manual |
+| Last activity | último evento del watch, como un probe manual, notificación o remediación |
+| State | estado normalizado del watch: `disabled` cuando config/monitor state lo excluye de comprobaciones activas, `starting` antes de la primera muestra monitorizada, `failed` para un fallo activo y `ok` en el resto; el trabajo activo del dispositivo tiene prioridad como `testing`, `recovering`, `rebuilding`, `repairing`, `moving` o `merging` |
 | Actions | acción principal admitida y menú adicional para monitor/unmonitor |
+
+Mientras se ejecuta una muestra manual de `hdparm`, `lvm`, `raid` o `smart`,
+State muestra la etiqueta ámbar **checking**, el tiempo transcurrido y el estado
+de salud previo. La acción queda desactivada hasta terminar. Events registra el
+inicio y el resultado final con su duración. La UI sólo muestra porcentaje cuando
+el check aporta progreso real; una sonda sin esa fuente usa el contador de tiempo
+en vez de un porcentaje inventado.
 
 Interval, polaridad (dispara en fallo / en umbral), hook y notifiers no son
 columnas de la tabla; viven en la rejilla de config de la expansión de fila y
