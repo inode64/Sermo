@@ -104,7 +104,6 @@
   "102": "renderSLAWindows",
   "103": "renderServiceDetail",
   "105": "remote_update_network_watches.sh",
-  "106": "renderFilterButtonCounts",
   "107": "Wizards (`sermoctl wizard`)",
   "108": "Panel de configuración de daemon / engine",
   "109": "package.json",
