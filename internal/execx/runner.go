@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -31,6 +32,7 @@ const (
 	commandRunExitCodeFormat     = commandRunErrorPrefix + "%s" + commandRunErrorSeparator + "exit code %d"
 	commandRunTimeoutAfterFormat = commandRunErrorPrefix + "%s" + commandRunErrorSeparator + "timeout after %s: %w"
 	commandRunTimeoutFormat      = commandRunErrorPrefix + "%s" + commandRunErrorSeparator + "timeout: %w"
+	commandWaitDelay             = 2 * time.Second
 )
 
 // Result contains the observable result of an external command.
@@ -68,6 +70,7 @@ type CommandRunner struct{}
 func (CommandRunner) Run(ctx context.Context, name string, args ...string) (Result, error) {
 	start := time.Now()
 	cmd := exec.CommandContext(ctx, name, args...)
+	prepareCommandRuntime(cmd)
 	return runPrepared(ctx, cmd, start, name)
 }
 
@@ -78,6 +81,7 @@ func (CommandRunner) RunUser(ctx context.Context, user, name string, args ...str
 	if err := prepareCommandUser(cmd, user); err != nil {
 		return Result{ExitCode: ExitCodeRunFailure, Duration: time.Since(start)}, err
 	}
+	prepareCommandRuntime(cmd)
 	return runPrepared(ctx, cmd, start, name)
 }
 
@@ -90,20 +94,48 @@ func (CommandRunner) RunEnv(ctx context.Context, env []string, name string, args
 	if len(env) > 0 {
 		cmd.Env = env
 	}
+	prepareCommandRuntime(cmd)
 	return runPrepared(ctx, cmd, start, name)
 }
 
+func prepareCommandRuntime(cmd *exec.Cmd) {
+	prepareCommandProcessGroup(cmd)
+	cmd.Cancel = func() error {
+		return cancelCommandProcessGroup(cmd)
+	}
+	cmd.WaitDelay = commandWaitDelay
+}
+
 // runPrepared executes a ready-to-run *exec.Cmd (with Stdout/Stderr and Env
-// already configured by the caller) and maps the result/error in the
-// standard execx way. The ctx passed must be the same one given to
-// CommandContext so that we can detect deadline errors.
+// already configured by the caller) and maps the result/error in the standard
+// execx way. It returns after the command context is cancelled even when a child
+// is stuck in uninterruptible kernel sleep and cannot be reaped immediately.
 func runPrepared(ctx context.Context, cmd *exec.Cmd, start time.Time, displayName string) (Result, error) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	var stdout lockedBuffer
+	var stderr lockedBuffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := cmd.Run()
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		result := Result{
+			Stdout:   stdout.String(),
+			Stderr:   stderr.String(),
+			ExitCode: ExitCodeRunFailure,
+			Duration: time.Since(start),
+		}
+		return result, commandContextError(displayName, result, ctxErr)
+	}
+	if err := cmd.Start(); err != nil {
+		result := Result{
+			Stdout:   stdout.String(),
+			Stderr:   stderr.String(),
+			ExitCode: ExitCodeRunFailure,
+			Duration: time.Since(start),
+		}
+		return result, fmt.Errorf(commandRunErrorFormat, displayName, err)
+	}
+
+	err := waitOrCancel(ctx, cmd)
 	result := Result{
 		Stdout:   stdout.String(),
 		Stderr:   stderr.String(),
@@ -117,13 +149,7 @@ func runPrepared(ctx context.Context, cmd *exec.Cmd, start time.Time, displayNam
 
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		result.ExitCode = ExitCodeRunFailure
-		if errors.Is(ctxErr, context.DeadlineExceeded) {
-			if d := result.Duration.Round(time.Millisecond); d > 0 {
-				return result, fmt.Errorf(commandRunTimeoutAfterFormat, displayName, d, ctxErr)
-			}
-			return result, fmt.Errorf(commandRunTimeoutFormat, displayName, ctxErr)
-		}
-		return result, fmt.Errorf(commandRunErrorFormat, displayName, ctxErr)
+		return result, commandContextError(displayName, result, ctxErr)
 	}
 
 	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
@@ -133,6 +159,54 @@ func runPrepared(ctx context.Context, cmd *exec.Cmd, start time.Time, displayNam
 
 	result.ExitCode = ExitCodeRunFailure
 	return result, fmt.Errorf(commandRunErrorFormat, displayName, err)
+}
+
+func waitOrCancel(ctx context.Context, cmd *exec.Cmd) error {
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		_ = cancelCommandProcessGroup(cmd)
+		timer := time.NewTimer(commandWaitDelay)
+		defer timer.Stop()
+		select {
+		case err := <-done:
+			return err
+		case <-timer.C:
+			return ctx.Err()
+		}
+	}
+}
+
+func commandContextError(displayName string, result Result, ctxErr error) error {
+	if errors.Is(ctxErr, context.DeadlineExceeded) {
+		if d := result.Duration.Round(time.Millisecond); d > 0 {
+			return fmt.Errorf(commandRunTimeoutAfterFormat, displayName, d, ctxErr)
+		}
+		return fmt.Errorf(commandRunTimeoutFormat, displayName, ctxErr)
+	}
+	return fmt.Errorf(commandRunErrorFormat, displayName, ctxErr)
+}
+
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 // CommandLookup finds executable commands.

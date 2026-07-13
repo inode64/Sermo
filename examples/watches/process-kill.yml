@@ -3,7 +3,7 @@ category: process
 # Terminate any root-owned `/usr/bin/sudo` process that has been alive longer than 120 minutes —
 # a stale-privileged-session hygiene policy. The kill is native (no external
 # script): `then.kill` reuses the daemon's own process signaller, the same
-# kill(2) path service-stop and mount kill+umount use.
+# kill(2) path service-stop and mount blocker signalling use.
 #
 # EXAMPLE — enable deliberately: it signals real processes, so the daemon
 # must run as root. A kill action requires an absolute resolved `name` path

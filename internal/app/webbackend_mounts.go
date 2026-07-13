@@ -24,7 +24,8 @@ import (
 const (
 	mountBlockersNotifierName = "mount-blockers"
 	mountUsageTTL             = 15 * time.Second
-	mountDryRunAlertMessage   = "dry-run: would alert mount users"
+	mountOperationStateMount  = "mounting"
+	mountOperationStateUmount = "unmounting"
 )
 
 // MountAlertDelivery reports which mount-blocking users were targeted by a
@@ -96,12 +97,9 @@ func (b *WebBackend) mountController() mountctl.Controller {
 }
 
 func (b *WebBackend) mountTimeout() time.Duration {
-	timeout := b.defaultTimeout
-	if timeout <= 0 {
+	timeout := mountctl.DefaultCommandTimeout
+	if b.operationTimeout > 0 && b.operationTimeout < timeout {
 		timeout = b.operationTimeout
-	}
-	if timeout <= 0 {
-		timeout = mountctl.DefaultCommandTimeout
 	}
 	return timeout
 }
@@ -111,6 +109,55 @@ func (b *WebBackend) mountContext(ctx context.Context) (context.Context, context
 		return ctx, func() {}
 	}
 	return context.WithTimeout(ctx, b.mountTimeout())
+}
+
+func mountOperationState(action string) string {
+	switch action {
+	case mountctl.ActionMount:
+		return mountOperationStateMount
+	case mountctl.ActionUmount:
+		return mountOperationStateUmount
+	default:
+		return action
+	}
+}
+
+func (b *WebBackend) beginMountOperation(spec mountctl.Spec, action string) (*web.MountOperation, bool) {
+	b.mountOperationsMu.Lock()
+	defer b.mountOperationsMu.Unlock()
+	if b.mountOperations == nil {
+		b.mountOperations = map[string]web.MountOperation{}
+	}
+	if op, ok := b.mountOperations[spec.Name]; ok {
+		operation := op
+		return &operation, false
+	}
+	op := web.MountOperation{
+		Action:    action,
+		State:     mountOperationState(action),
+		StartedAt: b.webNow().Format(time.RFC3339),
+		Message:   fmt.Sprintf("%s %s", mountOperationState(action), spec.Path),
+	}
+	b.mountOperations[spec.Name] = op
+	operation := op
+	return &operation, true
+}
+
+func (b *WebBackend) endMountOperation(name string) {
+	b.mountOperationsMu.Lock()
+	delete(b.mountOperations, name)
+	b.mountOperationsMu.Unlock()
+}
+
+func (b *WebBackend) mountOperation(name string) *web.MountOperation {
+	b.mountOperationsMu.Lock()
+	defer b.mountOperationsMu.Unlock()
+	op, ok := b.mountOperations[name]
+	if !ok {
+		return nil
+	}
+	operation := op
+	return &operation
 }
 
 func (b *WebBackend) mountSpec(name string) (mountctl.Spec, bool, string) {
@@ -125,23 +172,6 @@ func (b *WebBackend) mountSpec(name string) (mountctl.Spec, bool, string) {
 		return mountctl.Spec{}, false, "storage watch " + name + " has no mount block"
 	}
 	return mountctl.SpecFromStorageTree(name, resolved.Tree), true, ""
-}
-
-func (b *WebBackend) mountDryRun(name string) bool {
-	if b == nil {
-		return false
-	}
-	if w, ok := b.watches[name]; ok {
-		return w.dryRun
-	}
-	if b.cfg == nil {
-		return false
-	}
-	resolved, errs := b.cfg.ResolveStorage(name)
-	if len(errs) > 0 {
-		return false
-	}
-	return config.DryRun(resolved.Tree)
 }
 
 // Mounts returns configured fstab-backed mount units with live mount/refcount status.
@@ -191,6 +221,7 @@ func (b *WebBackend) Mounts(ctx context.Context) []web.Mount {
 				Category:     row.spec.Category,
 				Path:         row.spec.Path,
 				State:        backendStatusError,
+				Operation:    b.mountOperation(row.name),
 				Refcounted:   row.spec.Refcount,
 				CanUmount:    umountReason == "",
 				UmountReason: umountReason,
@@ -207,6 +238,7 @@ func (b *WebBackend) Mounts(ctx context.Context) []web.Mount {
 			Mounted:      row.status.Mounted,
 			Refcount:     row.status.Refcount,
 			State:        row.status.State,
+			Operation:    b.mountOperation(row.spec.Name),
 			Refcounted:   row.spec.Refcount,
 			CanUmount:    umountReason == "",
 			UmountReason: umountReason,
@@ -359,14 +391,15 @@ func (b *WebBackend) MountBlockers(ctx context.Context, name string) web.MountBl
 	}
 	webBlockers := b.mountBlockers(spec, blockers)
 	return web.MountBlockersResult{
-		OK:        true,
-		Name:      spec.Name,
-		Path:      spec.Path,
-		Mounted:   true,
-		CanUmount: true,
-		CanKill:   mountCanKill(webBlockers),
-		CanAlert:  len(uniqueBlockerUsers(blockers)) > 0,
-		Blockers:  webBlockers,
+		OK:            true,
+		Name:          spec.Name,
+		Path:          spec.Path,
+		Mounted:       true,
+		CanUmount:     true,
+		HasKillPolicy: spec.KillOnlyIf.Configured(),
+		CanKill:       mountCanKill(webBlockers),
+		CanAlert:      len(uniqueBlockerUsers(blockers)) > 0,
+		Blockers:      webBlockers,
 	}
 }
 
@@ -391,22 +424,32 @@ func (b *WebBackend) MountAction(ctx context.Context, name, action string, opts 
 				Mounted: true,
 			}
 		}
-		if opts.KillBlockers && !spec.Umount.AllowSIGKILL {
+		if opts.KillBlockers && !spec.KillOnlyIf.Configured() {
 			return web.MountActionResult{
 				OK:      false,
 				Name:    spec.Name,
 				Path:    spec.Path,
 				Action:  action,
 				Status:  mountctl.ResultFailed,
-				Message: "kill blockers is not allowed by this mount policy",
+				Message: "kill blockers requires mount.stop_policy.kill_only_if",
 			}
 		}
 	default:
 		return web.MountActionResult{OK: false, Name: spec.Name, Path: spec.Path, Action: action, Message: "unknown mount action " + action}
 	}
-	if b.mountDryRun(name) {
-		return b.mountDryRunActionResult(ctrl, spec, action)
+	operation, started := b.beginMountOperation(spec, action)
+	if !started {
+		return web.MountActionResult{
+			OK:        false,
+			Name:      spec.Name,
+			Path:      spec.Path,
+			Action:    action,
+			Status:    mountctl.ResultFailed,
+			Message:   "mount operation already running",
+			Operation: operation,
+		}
 	}
+	defer b.endMountOperation(spec.Name)
 	opCtx, cancel := b.mountContext(ctx)
 	defer cancel()
 	var (
@@ -417,30 +460,16 @@ func (b *WebBackend) MountAction(ctx context.Context, name, action string, opts 
 	case mountctl.ActionMount:
 		res, err = ctrl.Acquire(opCtx, spec)
 	case mountctl.ActionUmount:
-		runSpec := spec
-		if !opts.KillBlockers {
-			runSpec.Umount.AllowSIGKILL = false
-		}
-		res, err = ctrl.Release(opCtx, runSpec)
+		res, err = ctrl.ReleaseWithOptions(opCtx, spec, mountctl.ReleaseOptions{
+			AllowForce:   opts.AllowForce,
+			AllowLazy:    opts.AllowLazy,
+			KillBlockers: opts.KillBlockers,
+		})
 	}
 	b.invalidateMountUsage()
 	out := b.mountActionResult(spec, res, err)
 	b.syncStorageMountMonitoring(spec.Name, action, out.OK)
 	return out
-}
-
-func (b *WebBackend) mountDryRunActionResult(ctrl mountctl.Controller, spec mountctl.Spec, action string) web.MountActionResult {
-	status, _ := ctrl.ReadStatus(spec)
-	res := mountctl.Result{
-		Name:     spec.Name,
-		Path:     spec.Path,
-		Action:   action,
-		Status:   mountctl.ResultOK,
-		Message:  watchDryRunMessagePrefix + action,
-		Mounted:  status.Mounted,
-		Refcount: status.Refcount,
-	}
-	return b.mountActionResult(spec, res, nil)
 }
 
 func (b *WebBackend) syncStorageMountMonitoring(storage, action string, resultOK bool) {
@@ -475,9 +504,6 @@ func (b *WebBackend) AlertMountUsers(ctx context.Context, name string) web.Mount
 	}
 	if reason := mountctl.UmountDisabledReason(spec.Path); reason != "" {
 		return web.MountAlertResult{OK: false, Name: spec.Name, Path: spec.Path, Message: reason}
-	}
-	if b.mountDryRun(name) {
-		return web.MountAlertResult{OK: true, Name: spec.Name, Path: spec.Path, Message: mountDryRunAlertMessage}
 	}
 	opCtx, cancel := b.mountContext(ctx)
 	defer cancel()
@@ -531,6 +557,7 @@ func (b *WebBackend) mountActionResult(spec mountctl.Spec, res mountctl.Result, 
 		Message:   res.Message,
 		Mounted:   res.Mounted,
 		Refcount:  res.Refcount,
+		Forced:    res.Forced,
 		Lazy:      res.Lazy,
 		Signalled: res.Signalled,
 		Blockers:  b.mountBlockers(spec, res.Blockers),
@@ -553,10 +580,12 @@ func (b *WebBackend) mountBlockers(spec mountctl.Spec, blockers []process.Proces
 			PPID:        p.PPID,
 			User:        p.User,
 			UID:         p.UID,
+			Group:       p.Group,
+			GID:         p.GID,
 			Exe:         p.Exe,
 			ExeResolved: p.ExeOK,
 			Cmdline:     p.Cmdline,
-			Killable:    mountctl.CanUmountPath(spec.Path) && spec.Umount.AllowSIGKILL && spec.KillOnlyIf.Killable(p, resolve),
+			Killable:    mountctl.CanUmountPath(spec.Path) && spec.KillOnlyIf.Killable(p, resolve),
 		})
 	}
 	return out

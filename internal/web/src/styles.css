@@ -109,6 +109,9 @@
   .mount-table .mount-users { min-width: 8rem; max-width: 16rem; }
   .mount-usage-item, .mount-usage-extra { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mount-processes .mount-usage-item { font-family: var(--mono); font-size: .82em; }
+  .mount-row-operating > td { background: color-mix(in srgb, var(--info) 7%, transparent); }
+  .mount-operation { display: inline-flex; align-items: center; gap: .35rem; margin-left: .45rem; color: var(--text-2); font-size: .82em; white-space: nowrap; }
+  .mount-operation::before { content: ""; width: .55rem; height: .55rem; border-radius: 50%; background: currentColor; animation: beat 1.2s ease-in-out infinite; }
   #rows tr:hover > td, #container-rows tr:hover > td, #vm-rows tr:hover > td, #watch-rows tr:hover > td, #app-rows tr:hover > td, #library-rows tr:hover > td, #mount-rows tr:hover > td { background: color-mix(in srgb, var(--text) 4%, transparent); }
   #rows tr.group-row:hover > td, #app-rows tr.group-row:hover > td, #library-rows tr.group-row:hover > td { background: color-mix(in srgb, var(--accent) 11%, transparent); }
   /* Firing/warning row highlight. Applies to services (#rows), applications
@@ -584,3 +587,12 @@
   .modal-body { padding: 1rem; }
   .modal-grid { display: grid; grid-template-columns: max-content minmax(0,1fr); gap: .35rem .9rem; font-size: .92rem; }
   .modal-grid code, .modal-body code { font-size: .85rem; overflow-wrap: anywhere; }
+  .mount-umount-body { display: grid; gap: .75rem; }
+  .mount-umount-options { display: flex; gap: .75rem 1rem; flex-wrap: wrap; align-items: center; }
+  .mount-umount-options label { display: inline-flex; align-items: center; gap: .35rem; }
+  .mount-blockers-table { width: 100%; border-collapse: collapse; }
+  .mount-blockers-table caption { text-align: left; color: var(--text-2); font-size: .85rem; margin-bottom: .25rem; }
+  .mount-blockers-table th, .mount-blockers-table td { padding: .35rem .45rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  .mount-blockers-table .cmd { overflow-wrap: anywhere; }
+  .mount-blockers-table .will-signal { color: var(--crit); font-weight: 600; }
+  .mount-blockers-table .will-not-signal { color: var(--text-2); }

@@ -39,9 +39,8 @@ func TestMountAssistantGeneratesMountUnit(t *testing.T) {
 	if check[checks.CheckKeyPath] != "/mnt/backup" || check[checks.CheckKeyType] != checks.CheckTypeStorage || check[checks.CheckKeyMounted] != true || mount[config.MountKeyRefcount] != true {
 		t.Fatalf("mount body = %+v, want storage check/refcount", body)
 	}
-	umount, ok := mount[config.MountKeyUmount].(map[string]any)
-	if !ok || umount[config.MountKeyAllowSIGKILL] != false || umount[config.MountKeyAllowLazy] != false {
-		t.Fatalf("umount policy = %+v, want safe defaults", mount[config.MountKeyUmount])
+	if _, ok := mount[config.MountKeyUmount]; ok {
+		t.Fatalf("mount body = %+v, want no persistent umount escalation policy", body)
 	}
 }
 

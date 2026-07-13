@@ -216,20 +216,21 @@ seguridad:
   `umount` lo decrementa; el desmontaje real se intenta solo cuando el contador
   llega a cero.
 - Sermo nunca desmonta el filesystem raíz (`/`). CLI y Web/API rechazan
-  `umount`, las alertas de blockers y `kill+umount` para `/` antes de intentar
+  `umount`, las alertas de blockers y la señalización de blockers para `/` antes de intentar
   cualquier `umount`, discovery de procesos o señal.
 - Los desmontajes ocupados se reportan con los procesos que usan el montaje. Sermo no los
-  señaliza a menos que `mount.umount.allow_sigkill: true` o
-  `mount.stop_policy.force_kill: true` esté configurado explícitamente.
+  señaliza a menos que el operador solicite explícitamente `sermoctl umount
+  --kill-blockers` o marque `kill blockers` en la Web UI.
 - La interfaz web puede enviar una alerta TTY nativa a los usuarios con sesión
   que sean propietarios de bloqueadores actuales. Usa el mismo notifier TTY en
   Go que las notificaciones normales; no ejecuta `wall`, `write` ni un shell.
-- Cualquier política de montaje que pueda enviar SIGKILL debe definir
-  `stop_policy.kill_only_if` con selectores `users` y `exe_any` restrictivos.
-  La acotación por cmdline puede ayudar al descubrimiento, pero nunca autoriza un kill por
-  sí misma.
-- El desmontaje perezoso (`umount -l`) está desactivado a menos que se establezca `umount.allow_lazy: true`
-  en ese montaje.
+- La señalización de blockers de montaje requiere `mount.stop_policy.kill_only_if`
+  con selectores `users` y `exe_any` restrictivos. Solo se señalizan los blockers
+  que coinciden con ese selector; cmdline es dato de visualización y nunca
+  autoriza un kill.
+- El desmontaje forzado y perezoso son opciones por acción: `--force` / Web
+  `force` permite `umount -f`, y `--lazy` / Web `lazy` permite `umount -l` como
+  último fallback.
 
 ## Identidad de proceso y coincidencia
 

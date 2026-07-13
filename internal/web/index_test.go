@@ -163,7 +163,7 @@ func TestIndexShellAnchors(t *testing.T) {
 	wantIDs := []string{
 		"topbar", "section-nav", "favicon", "attention", "events", "target-search", "target-search-options",
 		"services-section", "containers-section", "vms-section", "apps-section", "libraries-section", "watches-section", "events-section",
-		"storage-controls", "network-controls", "mount-controls",
+		"storage-controls", "lvm-controls", "network-controls", "mount-controls",
 		"container-controls", "vm-controls", "container-rows", "vm-rows",
 		"event-clear", "event-before", "event-reset-filters", "activity-clear",
 		"event-more", "event-service", "event-watch", "event-kind", "event-status", "event-range",
@@ -177,7 +177,7 @@ func TestIndexShellAnchors(t *testing.T) {
 		}
 	}
 	for _, id := range []string{
-		"services-section", "containers-section", "vms-section", "storage-section", "network-section", "mounts-section",
+		"services-section", "containers-section", "vms-section", "storage-section", "lvm-section", "network-section", "mounts-section",
 		"apps-section", "libraries-section", "cert-section", "diskio-section", "watches-section",
 		"events-section", "locks-section", "notifiers-section", "daemon-section",
 		"activity-section",
@@ -190,9 +190,9 @@ func TestIndexShellAnchors(t *testing.T) {
 		t.Errorf("mount section nav label = %q, want Mount units", sectionLinkLabels["mounts-section"])
 	}
 
-	// action-confirm, panic-confirm and simple-confirm modals.
-	if dialogs != 3 {
-		t.Errorf("want 3 <dialog> elements, got %d", dialogs)
+	// action-confirm, panic-confirm, mount-umount-confirm and simple-confirm modals.
+	if dialogs != 4 {
+		t.Errorf("want 4 <dialog> elements, got %d", dialogs)
 	}
 
 	for _, h := range []string{"Uptime", "CPU total", "Memory", "FDs", "IO R/W", "State", "Type", "Group", "Processes", "Users", "Actions"} {
@@ -310,7 +310,7 @@ func TestSourceSharesWatchPanelDescriptorsWithBuilder(t *testing.T) {
 	if !strings.Contains(string(app), `import watchPanelDescriptors from "./watch-panels.json"`) {
 		t.Fatal("app does not import shared watch panel descriptors")
 	}
-	for _, key := range []string{`"storage"`, `"network"`, `"cert"`, `"diskio"`, `"host"`} {
+	for _, key := range []string{`"storage"`, `"lvm"`, `"network"`, `"cert"`, `"diskio"`, `"host"`} {
 		if !strings.Contains(string(descriptors), `"key": `+key) {
 			t.Errorf("watch panel descriptors missing key %s", key)
 		}
@@ -674,7 +674,7 @@ func TestSourceCompactsRowActionsWithoutChangingDispatch(t *testing.T) {
 	for _, marker := range []string{
 		`data-service-action="${action}"`,
 		`data-watch-action="${actionUnmonitor}"`,
-		`data-mount-action="${actionKillUmount}"`,
+		`data-mount-action="${actionUmount}"`,
 		`act(serviceAction.dataset.service || "", serviceAction.dataset.serviceAction || "")`,
 	} {
 		if !strings.Contains(text, marker) {

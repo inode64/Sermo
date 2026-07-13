@@ -33,6 +33,36 @@
     "defaultSortByName": true
   },
   {
+    "key": "lvm",
+    "sectionId": "lvm-section",
+    "heading": "LVM watches",
+    "title": "LVM watches",
+    "countId": "lvm-count",
+    "controlsId": "lvm-controls",
+    "searchId": "lvm-search",
+    "searchLabel": "Filter LVM watches",
+    "searchPlaceholder": "filter LVM watches\u2026  ( / )",
+    "filtersId": "lvm-filters",
+    "filterCountId": "lvm-filter-count",
+    "rowsId": "lvm-rows",
+    "caption": "LVM watches",
+    "columns": [
+      {"key": "name", "label": "Name"},
+      {"key": "lvmhealth", "label": "Health"},
+      {"key": "vg", "label": "VG"},
+      {"key": "lv", "label": "LV"},
+      {"key": "vgfree", "label": "VG free"},
+      {"key": "lvmreasons", "label": "Reasons"},
+      {"key": "last", "label": "Last activity"},
+      {"key": "state", "label": "State"},
+      {"label": "Actions"}
+    ],
+    "footnote": "LVM watches track VG capacity, LV health and thin-pool usage from read-only lvs samples.",
+    "empty": "No LVM watches.",
+    "emptyFiltered": "No LVM watches match the filter.",
+    "defaultSortByName": true
+  },
+  {
     "key": "network",
     "sectionId": "network-section",
     "heading": "Network",

@@ -13,6 +13,12 @@ type KillSelector struct {
 	ExeAny []string
 }
 
+// Configured reports whether the selector has the minimum fields required to
+// authorize signalling. Empty or partial selectors intentionally match nothing.
+func (s KillSelector) Configured() bool {
+	return len(s.Users) > 0 && len(s.ExeAny) > 0
+}
+
 // KillPolicy is the resolved stop_policy governing signal escalation.
 type KillPolicy struct {
 	GracefulTimeout time.Duration
@@ -27,6 +33,9 @@ type KillPolicy struct {
 // process with an unresolvable exe is never killable, and an empty selector
 // (no users or no exe) matches nothing — both fail-safe.
 func (s KillSelector) Killable(p Process, resolve UserResolver) bool {
+	if !s.Configured() {
+		return false
+	}
 	if protectedKillProcess(p) {
 		return false
 	}

@@ -349,11 +349,14 @@ func TestRunWizardMountWritesStorageMountUnit(t *testing.T) {
 		"path: /mnt/backup",
 		"mount:",
 		"refcount: true",
-		"allow_sigkill: false",
-		"allow_lazy: false",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("mount watch file missing %q:\n%s", want, text)
+		}
+	}
+	for _, retired := range []string{"allow_sigkill", "allow_lazy"} {
+		if strings.Contains(text, retired) {
+			t.Fatalf("mount watch file contains retired key %q:\n%s", retired, text)
 		}
 	}
 	if strings.Contains(text, "kind:") {

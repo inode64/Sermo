@@ -240,6 +240,9 @@ type WebBackend struct {
 	mountUsageAt     time.Time
 	mountUsage       map[string][]process.Process
 	mountUsageErrors map[string]string
+
+	mountOperationsMu sync.Mutex
+	mountOperations   map[string]web.MountOperation
 }
 
 type slaCacheKey struct {
@@ -3538,11 +3541,6 @@ func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionRes
 		b.emitWatchExpandEvent(name, eventKindExpandFailed, eventStatusFailed, msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
-	if w.dryRun {
-		msg := watchDryRunMessage(HookSpec{}, nil, w.expand)
-		b.emitWatchExpandEvent(name, eventKindDryRun, eventStatusOK, msg)
-		return web.ActionResult{OK: true, Message: msg}
-	}
 	expander := b.expander
 	if expander == nil {
 		msg := "volume expander is unavailable"
@@ -3613,11 +3611,6 @@ func (b *WebBackend) ControlRAID(ctx context.Context, name, action, confirmation
 		msg := fmt.Sprintf("confirm RAID array %q before pausing reconstruction", array)
 		b.emitWatchMonitorEvent(name, eventActionRAIDPause, eventKindSuppressed, eventStatusBlocked, msg)
 		return web.ActionResult{Message: msg}
-	}
-	if w.dryRun {
-		msg := fmt.Sprintf("dry-run: would %s RAID reconstruction for %s", action, array)
-		b.emitWatchMonitorEvent(name, action, eventKindDryRun, eventStatusOK, msg)
-		return web.ActionResult{OK: true, Message: msg}
 	}
 	result := ControlRAID(ctx, b.cfg.Global.RuntimeDir(), array, action, b.operationTimeout)
 	kind, status := eventKindAction, eventStatusOK

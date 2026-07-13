@@ -93,8 +93,11 @@ const (
 	cliFlagBefore    = daemonAPIQueryBefore
 	cliFlagConfig    = commandConfig
 	cliFlagConfirm   = "confirm"
+	cliFlagForce     = "force"
 	cliFlagHelp      = commandHelp
 	cliFlagJSON      = "json"
+	cliFlagKill      = "kill-blockers"
+	cliFlagLazy      = "lazy"
 	cliFlagLimit     = daemonAPIQueryLimit
 	cliFlagLong      = "long"
 	cliFlagName      = config.EntryKeyName
@@ -200,16 +203,20 @@ type App struct {
 }
 
 type options struct {
-	backend   servicemgr.Backend
-	json      bool
-	quiet     bool
-	noCascade bool // --no-cascade: act on exactly this service, skip also_apply
-	help      bool
-	version   bool // --version / -V
-	timeout   time.Duration
-	config    string
-	command   string
-	args      []string
+	backend    servicemgr.Backend
+	json       bool
+	quiet      bool
+	noCascade  bool // --no-cascade: act on exactly this service, skip also_apply
+	force      bool // --force: allow umount -f during `sermoctl umount`
+	lazy       bool // --lazy: allow umount -l during `sermoctl umount`
+	kill       bool // --kill-blockers: allow policy-gated signalling during `sermoctl umount`
+	help       bool
+	version    bool // --version / -V
+	timeout    time.Duration
+	timeoutSet bool
+	config     string
+	command    string
+	args       []string
 	// lock command flags
 	name        string
 	reason      string
@@ -364,6 +371,9 @@ func (a App) run(ctx context.Context, args []string) int {
 			return exitUsage
 		}
 		opts.backend = envBackend
+	}
+	if opts.command != commandUmount && (opts.force || opts.lazy || opts.kill) {
+		return a.commandUsageError(opts.command, "--force, --lazy and --kill-blockers are only supported by umount")
 	}
 
 	switch opts.command {
@@ -1929,6 +1939,9 @@ func parseArgs(args []string) (options, error) {
 	fs.BoolVar(&opts.json, cliFlagJSON, false, "")
 	fs.BoolVarP(&opts.quiet, cliFlagQuiet, "q", false, "")
 	fs.BoolVar(&opts.noCascade, cliFlagNoCascade, false, "")
+	fs.BoolVar(&opts.force, cliFlagForce, false, "")
+	fs.BoolVar(&opts.lazy, cliFlagLazy, false, "")
+	fs.BoolVar(&opts.kill, cliFlagKill, false, "")
 	fs.BoolVar(&opts.series, cliFlagSeries, false, "")
 	fs.BoolVar(&opts.long, cliFlagLong, false, "")
 	fs.StringArrayVar(&notifyValues, cliFlagNotify, nil, "")
@@ -1946,6 +1959,7 @@ func parseArgs(args []string) (options, error) {
 	if err := fs.Parse(flagArgs); err != nil {
 		return opts, normalizePflagError(err)
 	}
+	opts.timeoutSet = fs.Changed(cliFlagTimeout)
 	// --limit defaults to 0 (unset → runEvents applies its default). An explicit
 	// 0 or negative is rejected rather than silently falling back to the default,
 	// which the bare `> 0` guard could not distinguish from "unset".

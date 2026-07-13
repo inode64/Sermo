@@ -45,7 +45,38 @@ func TestLVMCheckHealthTransition(t *testing.T) {
 func TestLVMCheckCapacityPredicate(t *testing.T) {
 	data := `{"report":[{"lv":[{"vg_name":"vg0","lv_name":"root","lv_attr":"-wi-a-----","lv_health_status":"healthy","vg_free":"50","vg_size":"1000","data_percent":"85.5","metadata_percent":"81"}]}]}`
 	check := &lvmCheck{base: base{name: "lvm", timeout: time.Second}, runner: &lvmRunner{outputs: []string{data}}, volumeGroup: "vg0", logicalVolume: "root", preds: []levelPred{{field: DataKeyLVMFreePct, op: "<", value: 10}}}
-	if result := check.Run(context.Background()); result.OK || result.Data[DataKeyHealth] != LVMHealthError {
+	result := check.Run(context.Background())
+	if result.OK || result.Data[DataKeyHealth] != LVMHealthError {
 		t.Fatalf("capacity result = %+v", result)
+	}
+	if got := result.Data[DataKeyVolumeGroup]; got != "vg0" {
+		t.Fatalf("volume group = %v, want vg0", got)
+	}
+	if got := result.Data[DataKeyLogicalVolume]; got != "root" {
+		t.Fatalf("logical volume = %v, want root", got)
+	}
+	if got := result.Data[DataKeyLVMFreeBytes]; got != float64(50) {
+		t.Fatalf("free bytes = %v, want 50", got)
+	}
+	if got := result.Data[DataKeyLVMSizeBytes]; got != float64(1000) {
+		t.Fatalf("size bytes = %v, want 1000", got)
+	}
+	if got := result.Data[DataKeyLVMUsedBytes]; got != float64(950) {
+		t.Fatalf("used bytes = %v, want 950", got)
+	}
+}
+
+func TestLVMVolumeGroupCapacityWatchKeepsLogicalVolumeEmpty(t *testing.T) {
+	data := `{"report":[{"lv":[{"vg_name":"vg0","lv_name":"root","lv_attr":"-wi-a-----","lv_health_status":"healthy","vg_free":"50","vg_size":"1000"}]}]}`
+	check := &lvmCheck{base: base{name: "lvm", timeout: time.Second}, runner: &lvmRunner{outputs: []string{data}}, volumeGroup: "vg0"}
+	result := check.Run(context.Background())
+	if !result.OK {
+		t.Fatalf("result = %+v", result)
+	}
+	if got := result.Data[DataKeyVolumeGroup]; got != "vg0" {
+		t.Fatalf("volume group = %v, want vg0", got)
+	}
+	if got := result.Data[DataKeyLogicalVolume]; got != "" {
+		t.Fatalf("logical volume = %v, want empty for VG capacity watch", got)
 	}
 }

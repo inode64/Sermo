@@ -80,7 +80,7 @@ enabled.
 | Service action | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; `reload` is offered only when the service reports `can_reload` from init backend reload support or a valid `reload:` fallback; `no_cascade` skips `also_apply` targets on start/stop/restart |
 | Service preflight | `POST /api/services/{name}/preflight` | run preflight checks without changing service state |
 | Watch action | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand` |
-| Mount action | `POST /api/mounts/{name}/{action}[?kill=1]` | `mount`, `umount`, `blockers`, `alert`; `kill=1` enables policy-gated blocker signalling for `umount`; `/` rejects unmount paths |
+| Mount action | `POST /api/mounts/{name}/{action}[?force=1&lazy=1&kill=1]` | `mount`, `umount`, `blockers`, `alert`; `force=1` allows `umount -f`, `lazy=1` allows `umount -l` as the last fallback, and `kill=1` enables `kill_only_if`-gated blocker signalling for `umount`; `/` rejects unmount paths |
 | Lock release | `POST /api/locks/{service}/release?name=NAME` | releases inactive stale/expired named locks; active locks are refused |
 | Events clear | `POST /api/events/clear?before=TIME` | clears persisted event/activity rows; `before` accepts a positive duration or non-future RFC3339 timestamp |
 | State compact | `POST /api/state/compact?before=TIME` | prunes old SLA/metrics/event history and vacuums the state database; matches `sermoctl state compact` |
@@ -321,23 +321,26 @@ Columns:
 | --- | --- |
 | Name | display name, falling back to mount name |
 | Group | mount category/group label |
-| Path | configured mount path |
+| Path | configured mount path; appends `mounting` or `unmounting` while an operation is in progress |
 | Mounted | live mount state |
 | Refcount | Sermo runtime refcount, or `off` |
 | Processes | compact list of processes currently using the mount path |
 | Users | unique users for those processes |
-| State | active/inactive/error pill |
-| Actions | compact admin-only mount/umount icon; `alert` and `kill+umount` live in the overflow menu when mounted; `/` renders this unmount flow disabled |
+| State | active/inactive/error pill, or `mounting`/`unmounting` while an operation is in progress |
+| Actions | compact admin-only mount/umount icon plus alert; mounted rows open a single unmount dialog with force/lazy/kill-blockers choices; buttons for that row are disabled while a mount operation is in progress; `/` renders this unmount flow disabled |
 
 The column headers except Actions are sortable.
-`GET /api/mounts` includes a cached read-only blocker summary for the table.
-Before `umount`, `alert` or `kill+umount`, the UI asks
-`POST /api/mounts/{name}/blockers` and shows a fresh process list for the path.
-`alert` sends a native TTY message to logged-in blocking users. `kill+umount`
-requires the configured mount policy to mark at least one current blocker
-killable. For `path: /`, `GET /api/mounts` returns `can_umount: false`; the
-Web UI disables the unmount-flow buttons and the API rejects `umount?kill=1`
-without scanning blockers or sending signals.
+`GET /api/mounts` includes a cached read-only blocker summary for the table and
+an optional `operation` object (`action`, `state`, `started_at`, `message`) when
+the daemon is currently mounting or unmounting that unit.
+Before `umount` or `alert`, the UI asks `POST /api/mounts/{name}/blockers` and
+shows a fresh process list for the path. The unmount dialog always shows the
+blocker table; `kill blockers` is enabled only when `has_kill_policy` and
+`can_kill` are true, and only rows marked `killable` can be signalled. `alert`
+sends a native TTY message to logged-in blocking users. For `path: /`,
+`GET /api/mounts` returns `can_umount: false`; the Web UI disables the
+unmount-flow buttons and the API rejects `umount?kill=1` without scanning
+blockers or sending signals.
 
 ## Host watch panels
 

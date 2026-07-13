@@ -179,12 +179,14 @@ monitorización de un watch es independiente del de su servicio, así que
 `unmonitor` sobre un servicio nunca pausa sus watches.
 
 `sermoctl watch probe WATCH` ejecuta una muestra corta y de solo lectura de un
-host watch `lvm`, `raid` o `smart`; no modifica snapshots, ventanas de reglas ni
-notificaciones. Un watch RAID con `raid_control.pause_resume: true` y
-`check.array` explícito permite además `watch pause` y `watch resume`. Pausar
-requiere `--confirm MD_ARRAY`, vuelve a comprobar el array, toma un bloqueo de
-operación exclusivo y verifica el estado del kernel. Resume acepta cualquier
-array configurado actualmente pausado, aunque se hubiera pausado fuera de Sermo.
+host watch `lvm`, `raid` o `smart` e imprime las lecturas de la muestra cuando
+el check las reporta (en LVM incluye salud, VG, LV, VG libre y razones). No
+modifica snapshots, ventanas de reglas ni notificaciones. Un watch RAID con
+`raid_control.pause_resume: true` y `check.array` explícito permite además
+`watch pause` y `watch resume`. Pausar requiere `--confirm MD_ARRAY`, vuelve a
+comprobar el array, toma un bloqueo de operación exclusivo y verifica el estado
+del kernel. Resume acepta cualquier array configurado actualmente pausado,
+aunque se hubiera pausado fuera de Sermo.
 Sermo lee los candidatos `service:` del servicio, elige la primera unidad
 conocida por el backend activo, y normaliza los nombres de systemd con `.service`
 cuando es necesario.
@@ -251,6 +253,9 @@ asistente escribe `/etc/sermo/mounts` por defecto). Un destino de ruta que no
 esté configurado se sigue aceptando, pero usa valores por defecto seguros y debe
 existir en `/etc/fstab`. Ver [storage y unidades de montaje](configuration.es.md#storage-y-unidades-de-montaje).
 `sermoctl umount /` siempre se rechaza; Sermo nunca desmonta el filesystem raíz.
+`sermoctl umount TARGET --force` permite `umount -f` tras fallar el umount normal,
+`--lazy` permite `umount -l` como último fallback, y `--kill-blockers` señaliza
+solo blockers que coinciden con `mount.stop_policy.kill_only_if`.
 
 `sermoctl wizard mount` lista los puntos de montaje declarados en `/etc/fstab` y
 escribe archivos seguros de watch de storage bajo `mounts/`, añadiendo ese

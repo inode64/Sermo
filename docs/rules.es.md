@@ -1645,7 +1645,9 @@ servicio de modo que la degradación gradual es visible.
   utilizable; `error` cubre un LV ausente, parcial o suspendido, o un umbral de
   capacidad configurado. Selecciona con `volume_group` y `logical_volume`
   opcional; `free_pct`, `thin_data_pct` y `thin_metadata_pct` son predicados
-  numéricos normales.
+  numéricos normales. Las lecturas del resultado incluyen `health`,
+  `volume_group`, `logical_volume`, `lvm_reasons`, `vg_free_bytes`,
+  `vg_size_bytes`, `vg_used_bytes` y los campos de porcentaje configurados.
 
   ```yaml
   watches:

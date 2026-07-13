@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
@@ -91,6 +92,25 @@ func TestMountCommandByName(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "mount-backup: mounted") {
 		t.Fatalf("stdout = %q", out.String())
+	}
+}
+
+func TestMountControllerUsesMountDefaultTimeoutUnlessFlagSet(t *testing.T) {
+	global := writeMountConfig(t)
+	cfg, err := config.Load(global)
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := App{Runner: execx.CommandRunner{}}
+
+	ctrl := app.mountController(cfg, options{timeout: time.Hour})
+	if ctrl.CommandTimeout != 0 {
+		t.Fatalf("CommandTimeout without explicit flag = %s, want mountctl default", ctrl.CommandTimeout)
+	}
+
+	ctrl = app.mountController(cfg, options{timeout: 5 * time.Second, timeoutSet: true})
+	if ctrl.CommandTimeout != 5*time.Second {
+		t.Fatalf("CommandTimeout with explicit flag = %s, want 5s", ctrl.CommandTimeout)
 	}
 }
 

@@ -174,9 +174,11 @@ state is independent of its service's, so `unmonitor` on a service never pauses
 its watches.
 
 `sermoctl watch probe WATCH` runs one fresh, read-only short sample for a host
-`lvm`, `raid` or `smart` watch. It does not alter daemon snapshots, rule windows
-or notification state. A RAID watch with `raid_control.pause_resume: true` and
-an explicit `check.array` also supports `watch pause` and `watch resume`.
+`lvm`, `raid` or `smart` watch and prints the sample readings when the check
+reports them (for LVM this includes health, VG, LV, VG free and reasons). It
+does not alter daemon snapshots, rule windows or notification state. A RAID
+watch with `raid_control.pause_resume: true` and an explicit `check.array` also
+supports `watch pause` and `watch resume`.
 Pausing requires `--confirm MD_ARRAY` in addition to naming the watch; both
 actions re-check the array, use an exclusive runtime operation lock and verify
 the resulting kernel state. Resume accepts any currently paused configured
@@ -245,6 +247,10 @@ accepted, but it uses safe defaults and must exist in `/etc/fstab`. See
 [storage and mount units](configuration.md#storage-and-mount-units).
 `sermoctl umount /` is always rejected; Sermo never unmounts the root
 filesystem.
+`sermoctl umount TARGET --force` permits `umount -f` after the normal unmount
+fails, `--lazy` permits `umount -l` as the last fallback, and
+`--kill-blockers` signals only blockers that match
+`mount.stop_policy.kill_only_if`.
 
 `sermoctl wizard mount` lists mount points declared in `/etc/fstab` and writes
 safe storage watch files under `mounts/`, adding that directory to

@@ -14,5 +14,7 @@ mount:
   umount:
     term_timeout: 12s
     kill_timeout: 5s
-    allow_sigkill: false
-    allow_lazy: false
+  stop_policy:
+    kill_only_if:
+      users: [backup]
+      exe_any: [/usr/bin/rsync]

@@ -51,8 +51,8 @@ and the invariants below, and update this file in the same change.
    and the optional target-level `dry_run` flag when the generated watch has a
    real automatic action to skip. For services: ask whether automatic actions
    should start in dry-run mode after the shared monitor/interval answers. For
-   mounts: ask only mount-specific safety options such as whether Sermo should use refcounting; the wizard keeps
-   `allow_sigkill` and lazy unmount disabled.
+  mounts: ask only mount-specific safety options such as whether Sermo should
+  use refcounting; unmount force/lazy/kill choices are made per CLI/Web action.
 8. **Preview & accept.** Render the YAML that will be written and confirm.
 9. **Cleanup.** Offer to delete managed files whose target is **no longer
    detected** on the host (`planWizardWatchDeletes` / `planStaleServiceDeletes`

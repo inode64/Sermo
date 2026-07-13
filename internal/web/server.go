@@ -166,8 +166,10 @@ const (
 	apiQueryBefore     = "before"
 	apiQueryBeforeID   = "before_id"
 	apiQueryCheck      = "check"
+	apiQueryForce      = "force"
 	apiQueryKind       = "kind"
 	apiQueryKill       = "kill"
+	apiQueryLazy       = "lazy"
 	apiQueryLimit      = "limit"
 	apiQueryMetric     = "metric"
 	apiQueryNoCascade  = "no_cascade"
@@ -314,19 +316,28 @@ type Service struct {
 
 // Mount is a view of one configured fstab-backed mount unit for the dashboard.
 type Mount struct {
-	Name         string         `json:"name"`
-	DisplayName  string         `json:"display_name,omitempty"`
-	Category     string         `json:"category,omitempty"`
-	Path         string         `json:"path"`
-	Mounted      bool           `json:"mounted"`
-	Refcount     int            `json:"refcount"`
-	State        string         `json:"state"`
-	Refcounted   bool           `json:"refcounted"`
-	CanUmount    bool           `json:"can_umount"`
-	UmountReason string         `json:"umount_disabled_reason,omitempty"`
-	Message      string         `json:"message,omitempty"` // set when status sampling failed
-	Blockers     []MountBlocker `json:"blockers,omitempty"`
-	BlockerError string         `json:"blocker_error,omitempty"`
+	Name         string          `json:"name"`
+	DisplayName  string          `json:"display_name,omitempty"`
+	Category     string          `json:"category,omitempty"`
+	Path         string          `json:"path"`
+	Mounted      bool            `json:"mounted"`
+	Refcount     int             `json:"refcount"`
+	State        string          `json:"state"`
+	Operation    *MountOperation `json:"operation,omitempty"`
+	Refcounted   bool            `json:"refcounted"`
+	CanUmount    bool            `json:"can_umount"`
+	UmountReason string          `json:"umount_disabled_reason,omitempty"`
+	Message      string          `json:"message,omitempty"` // set when status sampling failed
+	Blockers     []MountBlocker  `json:"blockers,omitempty"`
+	BlockerError string          `json:"blocker_error,omitempty"`
+}
+
+// MountOperation reports a mount unit operation currently running in the daemon.
+type MountOperation struct {
+	Action    string `json:"action"`
+	State     string `json:"state"`
+	StartedAt string `json:"started_at,omitempty"` // RFC3339
+	Message   string `json:"message,omitempty"`
 }
 
 // MountBlocker is one process currently using a mount path.
@@ -335,6 +346,8 @@ type MountBlocker struct {
 	PPID        int      `json:"ppid"`
 	User        string   `json:"user,omitempty"`
 	UID         uint32   `json:"uid"`
+	Group       string   `json:"group,omitempty"`
+	GID         uint32   `json:"gid"`
 	Exe         string   `json:"exe,omitempty"`
 	ExeResolved bool     `json:"exe_resolved"`
 	Cmdline     []string `json:"cmdline,omitempty"`
@@ -343,36 +356,41 @@ type MountBlocker struct {
 
 // MountActionOptions controls mount unit operation behavior from the web API.
 type MountActionOptions struct {
+	AllowForce   bool // allow umount -f after a failed normal umount
+	AllowLazy    bool // allow umount -l as the last fallback
 	KillBlockers bool // allow policy-gated SIGTERM/SIGKILL escalation during umount
 }
 
 // MountActionResult is the outcome of a mount or unmount web action.
 type MountActionResult struct {
-	OK        bool           `json:"ok"`
-	Name      string         `json:"name,omitempty"`
-	Path      string         `json:"path,omitempty"`
-	Action    string         `json:"action,omitempty"`
-	Status    string         `json:"status,omitempty"`
-	Message   string         `json:"message,omitempty"`
-	Mounted   bool           `json:"mounted"`
-	Refcount  int            `json:"refcount"`
-	Lazy      bool           `json:"lazy,omitempty"`
-	Signalled []int          `json:"signalled,omitempty"`
-	Blockers  []MountBlocker `json:"blockers,omitempty"`
+	OK        bool            `json:"ok"`
+	Name      string          `json:"name,omitempty"`
+	Path      string          `json:"path,omitempty"`
+	Action    string          `json:"action,omitempty"`
+	Status    string          `json:"status,omitempty"`
+	Message   string          `json:"message,omitempty"`
+	Mounted   bool            `json:"mounted"`
+	Refcount  int             `json:"refcount"`
+	Operation *MountOperation `json:"operation,omitempty"`
+	Forced    bool            `json:"forced,omitempty"`
+	Lazy      bool            `json:"lazy,omitempty"`
+	Signalled []int           `json:"signalled,omitempty"`
+	Blockers  []MountBlocker  `json:"blockers,omitempty"`
 }
 
 // MountBlockersResult is a read-only preflight view for a mount unit.
 type MountBlockersResult struct {
-	OK           bool           `json:"ok"`
-	Name         string         `json:"name,omitempty"`
-	Path         string         `json:"path,omitempty"`
-	Mounted      bool           `json:"mounted"`
-	CanUmount    bool           `json:"can_umount"`
-	UmountReason string         `json:"umount_disabled_reason,omitempty"`
-	CanKill      bool           `json:"can_kill"`
-	CanAlert     bool           `json:"can_alert"`
-	Message      string         `json:"message,omitempty"`
-	Blockers     []MountBlocker `json:"blockers,omitempty"`
+	OK            bool           `json:"ok"`
+	Name          string         `json:"name,omitempty"`
+	Path          string         `json:"path,omitempty"`
+	Mounted       bool           `json:"mounted"`
+	CanUmount     bool           `json:"can_umount"`
+	UmountReason  string         `json:"umount_disabled_reason,omitempty"`
+	HasKillPolicy bool           `json:"has_kill_policy"`
+	CanKill       bool           `json:"can_kill"`
+	CanAlert      bool           `json:"can_alert"`
+	Message       string         `json:"message,omitempty"`
+	Blockers      []MountBlocker `json:"blockers,omitempty"`
 }
 
 // MountAlertResult is the outcome of notifying users that block a mount.
@@ -1457,6 +1475,8 @@ func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
 	switch action {
 	case mountctl.ActionMount, mountctl.ActionUmount:
 		res := s.Backend.MountAction(s.operateContext(r), name, action, MountActionOptions{ //nolint:contextcheck // see operateContext
+			AllowForce:   queryBool(r, apiQueryForce),
+			AllowLazy:    queryBool(r, apiQueryLazy),
 			KillBlockers: queryBool(r, apiQueryKill),
 		})
 		status := http.StatusOK

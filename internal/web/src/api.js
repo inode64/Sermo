@@ -25,7 +25,9 @@ export const apiWhoamiPath = "api/whoami";
 
 const apiQueryCheck = "check";
 export const apiQueryBeforeID = "before_id";
+export const apiQueryForce = "force";
 export const apiQueryKill = "kill";
+export const apiQueryLazy = "lazy";
 export const apiQueryKind = "kind";
 export const apiQueryLimit = "limit";
 export const apiQueryName = "name";

@@ -42,14 +42,14 @@ mount:
 	}
 }
 
-func TestMountValidationRejectsUnsafeSIGKILLWithoutSelector(t *testing.T) {
+func TestMountValidationRejectsRemovedUmountEscalationKeys(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": mountGlobal,
 		"mounts/backup.yml": `
 name: mount-backup
 check: { type: storage, path: /mnt/backup, mounted: true }
 mount:
-  umount: { allow_sigkill: true }
+  umount: { allow_sigkill: true, allow_lazy: true }
 `,
 	})
 	cfg, err := loadConfig(t, global)
@@ -57,8 +57,31 @@ mount:
 		t.Fatalf("Load: %v", err)
 	}
 	issues := Validate(cfg)
-	if !hasIssue(issues, "mount.umount.allow_sigkill=true requires mount.stop_policy.kill_only_if") {
-		t.Fatalf("Validate issues = %v, want allow_sigkill/kill_only_if error", issues)
+	if !hasIssue(issues, `mount.umount key "allow_sigkill" is not one of term_timeout, kill_timeout`) ||
+		!hasIssue(issues, `mount.umount key "allow_lazy" is not one of term_timeout, kill_timeout`) {
+		t.Fatalf("Validate issues = %v, want removed umount escalation keys rejected", issues)
+	}
+}
+
+func TestMountValidationRejectsStopPolicyActionPermission(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": mountGlobal,
+		"mounts/backup.yml": `
+name: mount-backup
+check: { type: storage, path: /mnt/backup, mounted: true }
+mount:
+  stop_policy:
+    force_kill: true
+    kill_only_if: { users: [root], exe_any: [/usr/bin/rsync] }
+`,
+	})
+	cfg, err := loadConfig(t, global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	issues := Validate(cfg)
+	if !hasIssue(issues, `mount.stop_policy key "force_kill" is not one of kill_only_if`) {
+		t.Fatalf("Validate issues = %v, want mount stop_policy force_kill rejected", issues)
 	}
 }
 
