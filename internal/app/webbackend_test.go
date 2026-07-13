@@ -1612,7 +1612,11 @@ func TestWebBackendStorageOpenFiles(t *testing.T) {
 		"watches": map[string]any{
 			"storage-data": map[string]any{
 				"interval": "45s",
-				"check":    map[string]any{"type": "storage", "path": "/data/app"},
+				"check": map[string]any{
+					"type":     "storage",
+					"path":     "/data/app",
+					"free_pct": map[string]any{"op": "<", "value": 10},
+				},
 			},
 		},
 	}}}
@@ -1765,6 +1769,56 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 	}
 	if w.Expand == nil || w.Expand.ByBytes != 5<<30 {
 		t.Fatalf("expand info = %+v, want 5G", w.Expand)
+	}
+}
+
+func TestWebBackendStorageMountOnlySkipsUsageProbe(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"mount-backup": map[string]any{
+				"check": map[string]any{
+					"type":    "storage",
+					"path":    "/mnt/backup",
+					"mounted": true,
+				},
+			},
+		},
+	}}}
+	b, warns := NewWebBackend(t.Context(), cfg, Deps{
+		StorageUsage: func(string) (checks.StorageStats, error) {
+			t.Fatal("mount-only storage watch must not statfs the target")
+			return checks.StorageStats{}, nil
+		},
+		MountSampler: func() ([]checks.Mount, error) {
+			return []checks.Mount{
+				{Device: "server:/backup", MountPoint: "/mnt/backup", FSType: "nfs4", Options: []string{"rw", "hard"}},
+			}, nil
+		},
+		OpenFilesByMount: func([]checks.Mount) map[string]int64 {
+			t.Fatal("mount-only storage watch must not scan open files")
+			return nil
+		},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	watches := b.Watches(context.Background())
+	if len(watches) != 1 {
+		t.Fatalf("got %d watches, want 1: %+v", len(watches), watches)
+	}
+	w := watches[0]
+	if w.State != TargetStateOK {
+		t.Fatalf("state = %q, want ok", w.State)
+	}
+	if w.Summary != "/mnt/backup: mounted on nfs4" {
+		t.Fatalf("summary = %q", w.Summary)
+	}
+	if w.Storage == nil || !w.Storage.Mounted || w.Storage.MountPoint != "/mnt/backup" || w.Storage.FileSystem != "nfs4" {
+		t.Fatalf("storage info = %+v", w.Storage)
+	}
+	if w.Storage.TotalBytes != 0 || w.Storage.FreeBytes != 0 || w.Storage.OpenFiles != 0 {
+		t.Fatalf("mount-only storage usage fields = %+v, want unset", w.Storage)
 	}
 }
 

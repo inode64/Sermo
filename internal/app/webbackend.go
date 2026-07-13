@@ -1108,6 +1108,12 @@ func watchSummary(w *webWatch, storage *web.StorageWatchInfo, liveSummary string
 		if fs == "" {
 			fs = watchFallbackFilesystem
 		}
+		if !storageUsagePredicatesConfigured(w.check) {
+			if storage.Mounted {
+				return fmt.Sprintf("%s: mounted on %s", storage.Path, fs)
+			}
+			return storage.Path + ": not mounted as expected"
+		}
 		return fmt.Sprintf("%s: %.1f%% free (%d bytes) on %s", storage.Path, storage.FreePct, storage.FreeBytes, fs)
 	}
 	if liveSummary != "" {
@@ -2306,9 +2312,11 @@ func storageWatchInfo(w *webWatch, b *WebBackend) *web.StorageWatchInfo {
 			info.Device = mount.Device
 			info.FileSystem = mount.FSType
 			info.Options = slices.Clone(mount.Options)
-			info.OpenFiles = b.openFilesByMountCached(mounts)[mount.MountPoint]
+			if storageUsagePredicatesConfigured(w.check) {
+				info.OpenFiles = b.openFilesByMountCached(mounts)[mount.MountPoint]
+			}
 		}
-		if _, ok := storageMountExpectation(w.check); ok && !info.Mounted {
+		if _, ok := storageMountExpectation(w.check); ok && (!info.Mounted || !storageUsagePredicatesConfigured(w.check)) {
 			return info
 		}
 	}
@@ -2339,6 +2347,15 @@ func storageWatchInfo(w *webWatch, b *WebBackend) *web.StorageWatchInfo {
 func storageMountExpectation(check map[string]any) (bool, bool) {
 	v, ok := check[checks.CheckKeyMounted].(bool)
 	return v, ok
+}
+
+func storageUsagePredicatesConfigured(check map[string]any) bool {
+	for _, field := range checks.StoragePredFields {
+		if _, ok := check[field]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // Notifiers returns the configured notification targets.
