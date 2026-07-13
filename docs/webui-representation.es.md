@@ -441,8 +441,8 @@ Section id: `events-section`
 | Parte | Representación actual |
 | --- | --- |
 | Título | `Events` más nota de eventos dry-run |
-| Controles | selectores guiados de service, watch, kind, status y rango temporal; only errors, acciones de grupo, restablecer filtros, corte `before` opcional, limpiar log (admin) |
-| Tabla | filas de evento agrupadas por acción cuando está habilitado |
+| Controles | selectores guiados de service, watch, kind, status y rango temporal; only errors, agrupar acciones opcional, restablecer filtros, corte `before` opcional, limpiar log (admin) |
+| Tabla | filas cronológicas por defecto; agrupación opcional en cliente por acción |
 | Límite | últimos eventos coincidentes; **load older** continúa con un cursor de ID estable |
 
 Notas editables:
@@ -451,7 +451,8 @@ Notas editables:
   el vocabulario de eventos del daemon. Los rangos temporales solicitan `since`
   al backend. Escape o **restablecer filtros** limpia todos los filtros. La
   casilla `only errors` vuelve a cargar al cambiar. La agrupación permanece en
-  el cliente y es opcional; la cronología en bruto sigue siendo útil.
+  el cliente, es opcional y está desactivada por defecto; la cronología en bruto
+  es la vista predeterminada.
 - El estado de expansión usa el ID persistido del evento. Cargar filas más
   antiguas añade una página por cursor sin duplicar eventos ni desplazar las
   filas abiertas.
@@ -508,19 +509,6 @@ sigue monitorizando mientras suprime hooks, notificaciones de alerta y remediaci
 automática. El mismo conmutador está disponible desde la CLI como `sermoctl panic
 on|off|status`. Consulta [cli.md](cli.es.md#panic-mode).
 
-## Panel de actividad reciente
-
-Section id: `activity-section`
-
-| Campo | Significado |
-| --- | --- |
-| Service actions | recuento reciente de operaciones de servicio |
-| Watch hooks | recuento reciente de hooks |
-| Watch notifies | recuento reciente de notifiers |
-| Errors | recuento reciente de errores |
-| Last activity | resumen de la actividad más nueva |
-| Actions | **clear log** (admin) — misma ruta `POST /api/events/clear` que el panel de eventos |
-
 ## Panel de locks de runtime
 
 Section id: `locks-section`
@@ -568,7 +556,7 @@ Copia esta sección al proponer un cambio en la interfaz web.
 ### Panel
 
 Services / Host watches / Installed applications / Installed libraries / Events / Notifiers /
-Daemon settings / Recent activity / Runtime locks / Service detail /
+Daemon settings / Runtime locks / Service detail /
 Action dialog / Overview
 
 ### Title
