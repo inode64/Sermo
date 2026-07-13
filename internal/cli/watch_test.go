@@ -13,6 +13,9 @@ func TestWatchStatusUsesDaemonStateWhenAvailable(t *testing.T) {
 	app.FetchDaemonWatchState = func(context.Context, options, string) (string, bool) {
 		return "starting", true
 	}
+	app.FetchDaemonWatchDetail = func(context.Context, options, string) (daemonWatchDetail, bool) {
+		return daemonWatchDetail{}, false
+	}
 
 	code := app.Run(context.Background(), []string{"watch", "status", "storage-root"})
 	if code != exitSuccess {
@@ -28,6 +31,9 @@ func TestWatchStatusJSON(t *testing.T) {
 	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
 	app.FetchDaemonWatchState = func(context.Context, options, string) (string, bool) {
 		return "failed", true
+	}
+	app.FetchDaemonWatchDetail = func(context.Context, options, string) (daemonWatchDetail, bool) {
+		return daemonWatchDetail{}, false
 	}
 
 	code := app.Run(context.Background(), []string{"--json", "watch", "status", "load"})
