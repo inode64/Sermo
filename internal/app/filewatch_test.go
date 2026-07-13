@@ -73,6 +73,9 @@ func TestFileWatchOlderThanFiresPerPathAndRearms(t *testing.T) {
 	if len(h.fired) != 1 || h.fired[0][sermoEnvPath] != oldPath || h.fired[0][sermoEnvChange] != fileChangeOlderThan {
 		t.Fatalf("first stale path fire = %v, want only %s", h.fired, oldPath)
 	}
+	if len(h.events) != 1 || h.events[0].Message != oldPath+" was modified at 2026-07-12T10:00:00Z and is older than 1h" {
+		t.Fatalf("stale path event = %+v", h.events)
+	}
 	w.runCycle(context.Background())
 	if len(h.fired) != 1 {
 		t.Fatalf("stale path repeated without rearming: %v", h.fired)
@@ -138,6 +141,26 @@ func TestFileWatchPublishesSnapshot(t *testing.T) {
 	}
 	if got.Data[watchReadingFieldEntries] != 1 {
 		t.Fatalf("entries = %v, want 1", got.Data[watchReadingFieldEntries])
+	}
+}
+
+func TestFileWatchSnapshotUsesReadableAge(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "a.txt")
+	writeSize(t, path, 10)
+	now := time.Date(2026, time.July, 12, 12, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(path, now.Add(-25*time.Hour), now.Add(-25*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	w := (&fileWatchHarness{}).watcher(path, false, fileCond{olderThan: time.Hour})
+	w.now = func() time.Time { return now }
+	var got checks.Result
+	w.publish = func(_, _ string, res checks.Result) { got = res }
+
+	w.runCycle(context.Background())
+
+	if age := got.Data[checks.DataKeyAge]; age != "1d1h" {
+		t.Fatalf("snapshot age = %v, want 1d1h", age)
 	}
 }
 

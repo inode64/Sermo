@@ -56,7 +56,7 @@ func (b *WebBackend) fileWatchView(ctx context.Context, w *webWatch) (*web.Watch
 			web.WatchReading{Field: checks.DataKeySize, Label: watchReadingLabelSize, Value: humanize.Bytes(uint64(info.Size()))},
 			web.WatchReading{Field: checks.DataKeyMode, Label: watchReadingLabelMode, Value: info.Mode().Perm().String()},
 			web.WatchReading{Field: checks.DataKeyModifiedAt, Label: watchReadingLabelModifiedAt, Value: info.ModTime().UTC().Format(time.RFC3339)},
-			web.WatchReading{Field: checks.DataKeyAge, Label: watchReadingLabelAge, Value: now.Sub(info.ModTime()).Round(time.Second).String()},
+			web.WatchReading{Field: checks.DataKeyAge, Label: watchReadingLabelAge, Value: formatInterval(now.Sub(info.ModTime()).Round(time.Second))},
 		)
 		if sys, ok := info.Sys().(*syscall.Stat_t); ok {
 			readings = append(readings, web.WatchReading{Field: checks.CheckKeyOwner, Label: watchReadingLabelOwner, Value: fmt.Sprintf("%d:%d", sys.Uid, sys.Gid)})
