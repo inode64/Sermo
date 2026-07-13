@@ -59,7 +59,7 @@ overflow and axe WCAG 2.2 AA rules against deterministic API fixtures.
 | Host metrics | `GET /api/host` | current host CPU, memory and load values |
 | Locks | `GET /api/locks` | named runtime locks |
 | Events | `GET /api/events` | service/watch activity; supports `limit`, `service`, `watch`, `kind`, `status`, `only_errors` |
-| Recent activity | `GET /api/activity` | summary of recent events |
+| Activity summary | `GET /api/activity` | internal recent-event rollup used for dashboard attention indicators |
 | Monitoring counts | `GET /api/monitoring` | monitored vs paused service counts |
 | Live operations | `GET /api/ops` | active operation slots |
 
@@ -430,8 +430,8 @@ Section id: `events-section`
 | Part | Current representation |
 | --- | --- |
 | Title | `Events` plus dry-run note |
-| Controls | guided service, watch, kind, status and time-range selects; only errors, group actions, reset filters, optional `before` cutoff, clear log (admin) |
-| Table | event rows grouped by action when enabled |
+| Controls | guided service, watch, kind, status and time-range selects; only errors, optional group actions, reset filters, optional `before` cutoff, clear log (admin) |
+| Table | chronological event rows by default; optional client-side grouping by action |
 | Limit | latest matching events; **load older** continues with a stable event-ID cursor |
 
 Editable notes:
@@ -439,8 +439,8 @@ Editable notes:
 - Service/watch choices follow the currently known targets while kind/status
   use the daemon event vocabulary. The time-range presets request `since` from
   the backend. Escape or **reset filters** clears every filter. The `only
-  errors` checkbox refetches on change. Grouping stays client-side and optional;
-  raw chronology is still useful.
+  errors` checkbox refetches on change. Grouping stays client-side, optional and
+  off by default; raw chronology is the default view.
 - Event expansion state is keyed by the persisted event ID. Loading older rows
   appends a cursor page without duplicating events or shifting open rows.
 - **clear log** (admin only) calls `POST /api/events/clear` after confirmation,
@@ -496,19 +496,6 @@ keeps monitoring while suppressing hooks, alert notifications and automatic
 remediation. The same toggle is available from the CLI as `sermoctl panic
 on|off|status`. See [cli.md](cli.md#panic-mode).
 
-## Recent activity panel
-
-Section id: `activity-section`
-
-| Field | Meaning |
-| --- | --- |
-| Service actions | recent service operation count |
-| Watch hooks | recent hook count |
-| Watch notifies | recent notifier count |
-| Errors | recent error count |
-| Last activity | newest activity summary |
-| Actions | **clear log** (admin) — same `POST /api/events/clear` path as the Events panel |
-
 ## Runtime locks panel
 
 Section id: `locks-section`
@@ -557,7 +544,7 @@ Copy this section when proposing a Web UI change.
 ### Panel
 
 Services / Host watches / Installed applications / Installed libraries / Events / Notifiers /
-Daemon settings / Recent activity / Runtime locks / Service detail /
+Daemon settings / Runtime locks / Service detail /
 Action dialog / Overview
 
 ### Title

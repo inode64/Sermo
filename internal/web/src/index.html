@@ -51,7 +51,6 @@
   <a class="section-jump" href="#locks-section" data-panel-target="locks-section" data-count-source="locks-count">Locks <span class="nav-count" data-nav-count></span></a>
   <a class="section-jump" href="#notifiers-section" data-panel-target="notifiers-section" data-count-source="notifiers-count">Notifiers <span class="nav-count" data-nav-count></span></a>
   <a class="section-jump" href="#daemon-section" data-panel-target="daemon-section">Daemon</a>
-  <a class="section-jump" href="#activity-section" data-panel-target="activity-section">Activity</a>
 </nav>
 </div><!-- /topbar -->
 <main id="main-content" tabindex="-1">
@@ -326,7 +325,7 @@
       <option value="720h">last 30 days</option>
     </select>
     <label class="muted"><input id="event-errors" type="checkbox"> only errors</label>
-    <label class="muted"><input id="event-group" type="checkbox" checked> group actions</label>
+    <label class="muted"><input id="event-group" type="checkbox"> group actions</label>
     <button id="event-reset-filters" type="button" aria-label="Reset event filters">reset filters</button>
     <label for="event-before" class="visually-hidden">Clear events before cutoff</label>
     <input id="event-before" type="text" class="admin-hidden" placeholder="before (e.g. 720h)" title="Optional: clear only events older than this positive duration or non-future RFC3339 timestamp" aria-describedby="event-before-hint">
@@ -439,19 +438,6 @@
       <div><div class="muted">Memory</div><div id="daemon-memory-chart" class="muted chart-box">loading…</div></div>
       <div><div class="muted">IO</div><div id="daemon-io-chart" class="muted chart-box">loading…</div></div>
     </div>
-  </div>
-</details>
-
-<h2 class="visually-hidden">Recent activity</h2>
-<details id="activity-section" class="panel">
-  <summary>Recent activity <span class="muted">(last 500 events)</span></summary>
-  <div class="activity-stats">
-    <div>Service actions: <b id="act-service"></b></div>
-    <div>Watch hooks: <b id="act-hooks"></b></div>
-    <div>Watch notifies: <b id="act-notify"></b></div>
-    <div>Errors: <b id="act-errors" class="bad"></b></div>
-    <div id="act-last" class="muted"></div>
-    <button id="activity-clear" class="danger-btn admin-hidden" type="button" aria-label="Clear activity log">clear log</button>
   </div>
 </details>
 

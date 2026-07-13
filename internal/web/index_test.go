@@ -165,7 +165,7 @@ func TestIndexShellAnchors(t *testing.T) {
 		"services-section", "containers-section", "vms-section", "apps-section", "libraries-section", "watches-section", "events-section",
 		"storage-controls", "lvm-controls", "network-controls", "mount-controls",
 		"container-controls", "vm-controls", "container-rows", "vm-rows",
-		"event-clear", "event-before", "event-reset-filters", "activity-clear",
+		"event-clear", "event-before", "event-reset-filters", "event-group",
 		"event-more", "event-service", "event-watch", "event-kind", "event-status", "event-range",
 		"state-compact-btn", "state-before", "app-rows", "library-rows", "locks-rows",
 		"mount-search", "mount-category", "mount-filters", "mount-filter-count",
@@ -180,7 +180,6 @@ func TestIndexShellAnchors(t *testing.T) {
 		"services-section", "containers-section", "vms-section", "storage-section", "lvm-section", "network-section", "mounts-section",
 		"apps-section", "libraries-section", "cert-section", "diskio-section", "watches-section",
 		"events-section", "locks-section", "notifiers-section", "daemon-section",
-		"activity-section",
 	} {
 		if sectionLinks[id] != "#"+id {
 			t.Errorf("section nav link %q href = %q, want %q", id, sectionLinks[id], "#"+id)
@@ -706,7 +705,7 @@ func TestIndexAccessibilitySectionHeadings(t *testing.T) {
 	for _, want := range []string{
 		"Storage", "Services", "Containers", "Virtual machines", "Network", "Installed applications", "Installed libraries",
 		"Host watches", "Events", "Mount units", "Notifiers",
-		"Daemon / Engine settings", "Recent activity",
+		"Daemon / Engine settings",
 	} {
 		if !headings[want] {
 			t.Errorf("missing section heading <h2> %q", want)
@@ -1018,13 +1017,19 @@ func TestIndexAccessibilityShell(t *testing.T) {
 	} else {
 		t.Error(`shell missing #event-clear`)
 	}
+	if eventGroup := nodeByID(doc, "event-group"); eventGroup != nil {
+		if _, checked := attr(eventGroup, "checked"); checked {
+			t.Error("#event-group is checked by default")
+		}
+	} else {
+		t.Error("shell missing #event-group")
+	}
 
 	for _, spec := range []struct {
 		id    string
 		label string
 	}{
 		{"event-clear", "Clear event log"},
-		{"activity-clear", "Clear activity log"},
 		{"state-compact-btn", "Compact persisted state"},
 		{"reload-btn", "Reload configuration"},
 		{"simple-confirm-ok", "Confirm action"},
