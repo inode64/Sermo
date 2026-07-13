@@ -5,7 +5,11 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -74,6 +78,44 @@ func TestCommandRunnerTimeout(t *testing.T) {
 	}
 }
 
+func TestCommandRunnerTimeoutKillsProcessGroup(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("process-group cancellation is linux-specific")
+	}
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	env := []string{
+		"PATH=/bin:/usr/bin",
+		"SERMO_CHILD_PID=" + pidFile,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := CommandRunner{}.RunEnv(ctx, env, "sh", "-c", `sleep 5 & printf '%s' "$!" > "$SERMO_CHILD_PID"; wait`)
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("error = %v, want context.DeadlineExceeded", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("took %v; child process kept command pipes open after timeout", elapsed)
+	}
+
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatalf("read child pid: %v", err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		t.Fatalf("parse child pid %q: %v", data, err)
+	}
+	if processStillExists(pid) {
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+		t.Fatalf("child process %d survived command timeout", pid)
+	}
+}
+
 func TestCommandRunnerNotFound(t *testing.T) {
 	res, err := CommandRunner{}.Run(context.Background(), "sermo-no-such-command-xyz")
 	if err == nil {
@@ -82,6 +124,17 @@ func TestCommandRunnerNotFound(t *testing.T) {
 	if res.ExitCode != -1 {
 		t.Errorf("exit code = %d, want -1 when the command cannot start", res.ExitCode)
 	}
+}
+
+func processStillExists(pid int) bool {
+	for range 20 {
+		err := syscall.Kill(pid, 0)
+		if errors.Is(err, syscall.ESRCH) {
+			return false
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return true
 }
 
 func TestOSLookup(t *testing.T) {

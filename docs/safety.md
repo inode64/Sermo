@@ -217,20 +217,20 @@ daemon-cycle remediation. They still use the same safety posture:
   `umount` decrements it; the real unmount is attempted only when the counter
   reaches zero.
 - The root filesystem (`/`) is never unmounted by Sermo. CLI and Web/API
-  `umount`, blocker alerts and `kill+umount` for `/` are rejected before any
+  `umount`, blocker alerts and blocker signalling for `/` are rejected before any
   `umount`, process discovery or signal is attempted.
 - Busy unmounts are reported with the processes using the mount. Sermo does not
-  signal them unless `mount.umount.allow_sigkill: true` or
-  `mount.stop_policy.force_kill: true` is explicitly configured.
+  signal them unless the operator explicitly requests `sermoctl umount
+  --kill-blockers` or checks `kill blockers` in the Web UI.
 - The Web UI can send a native TTY alert to logged-in users that own current
   blockers. This uses the same Go TTY notifier as normal notifications; it does
   not run `wall`, `write` or a shell.
-- Any mount policy that can send SIGKILL must define
-  `stop_policy.kill_only_if` with restrictive `users` and `exe_any` selectors.
-  Cmdline narrowing may help discovery, but it never authorizes a kill by
-  itself.
-- Lazy unmount (`umount -l`) is disabled unless `umount.allow_lazy: true` is set
-  on that mount.
+- Mount blocker signalling requires `mount.stop_policy.kill_only_if` with
+  restrictive `users` and `exe_any` selectors. Only blockers that match that
+  selector are signalled; cmdline is display data and never authorizes a kill.
+- Forced and lazy unmount are per-action choices: `--force` / Web `force`
+  permits `umount -f`, and `--lazy` / Web `lazy` permits `umount -l` as the last
+  fallback.
 
 ## Process identity and matching
 

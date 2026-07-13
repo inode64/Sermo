@@ -29,9 +29,7 @@ const (
 		process.UserLookupGetent + ", " +
 		process.UserLookupNumeric
 	mountUmountKeySummary = StopPolicyKeyTermTimeout + ", " +
-		StopPolicyKeyKillTimeout + ", " +
-		MountKeyAllowSIGKILL + ", " +
-		MountKeyAllowLazy
+		StopPolicyKeyKillTimeout
 
 	securityKeyAllowSIGKILLByDefault         = "allow_sigkill_by_default"
 	securityKeyBlockRestartOnActiveLock      = "block_restart_on_active_lock"
@@ -698,9 +696,8 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 	if _, present := mount[MountKeyUmount]; present && umount == nil {
 		add("%s must be a mapping", mountPathUmount)
 	}
-	allowSIGKILL := false
 	if umount != nil {
-		allowedUmount := set(StopPolicyKeyTermTimeout, StopPolicyKeyKillTimeout, MountKeyAllowSIGKILL, MountKeyAllowLazy)
+		allowedUmount := set(StopPolicyKeyTermTimeout, StopPolicyKeyKillTimeout)
 		for _, key := range slices.Sorted(maps.Keys(umount)) {
 			if _, ok := allowedUmount[key]; !ok {
 				add("%s key %q is not one of %s", mountPathUmount, key, mountUmountKeySummary)
@@ -711,23 +708,14 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 				add("%s %q must be a valid positive duration", mountUmountFieldPath(field), cfgval.String(v))
 			}
 		}
-		for _, field := range []string{MountKeyAllowSIGKILL, MountKeyAllowLazy} {
-			if v, present := umount[field]; present {
-				b, ok := v.(bool)
-				if !ok {
-					add(validationBooleanLiteralFormat, mountUmountFieldPath(field))
-				}
-				if field == MountKeyAllowSIGKILL && ok && b {
-					allowSIGKILL = true
-				}
-			}
-		}
 	}
 
 	if sp, ok := mount[sectionStopPolicy].(map[string]any); ok {
-		force, _ := sp[keyForceKill].(bool)
-		if force {
-			allowSIGKILL = true
+		allowedStopPolicy := set(keyKillOnlyIf)
+		for _, key := range slices.Sorted(maps.Keys(sp)) {
+			if _, ok := allowedStopPolicy[key]; !ok {
+				add("%s key %q is not one of %s", mountPathStopPolicy, key, keyKillOnlyIf)
+			}
 		}
 	} else if _, present := mount[sectionStopPolicy]; present {
 		add("%s must be a mapping", mountPathStopPolicy)
@@ -735,13 +723,6 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 	validateStopPolicy(map[string]any{sectionStopPolicy: mount[sectionStopPolicy]}, func(format string, args ...any) {
 		add(mountPath + "." + fmt.Sprintf(format, args...))
 	})
-	if allowSIGKILL {
-		sp, _ := mount[sectionStopPolicy].(map[string]any)
-		_, hasKoi := sp[keyKillOnlyIf].(map[string]any)
-		if !hasKoi {
-			add("%s=true requires %s", mountPathUmountSIGKILL, mountPathStopPolicyKoi)
-		}
-	}
 }
 
 // effectiveBackend returns the init backend validation should assume:

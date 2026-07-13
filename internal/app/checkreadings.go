@@ -63,6 +63,7 @@ const (
 	watchReadingLabelLabelFilter       = "Label filter"
 	watchReadingLabelLatency           = "Latency"
 	watchReadingLabelLoad              = "Load"
+	watchReadingLabelLogicalVolume     = "LV"
 	watchReadingLabelMatches           = "Matches"
 	watchReadingLabelModifiedAt        = "Modified at"
 	watchReadingLabelMinRules          = "Min rules"
@@ -82,6 +83,7 @@ const (
 	watchReadingLabelRequiredInterface = "Required interface"
 	watchReadingLabelResource          = "Resource"
 	watchReadingLabelResult            = "Result"
+	watchReadingLabelReasons           = "Reasons"
 	watchReadingLabelRSS               = "RSS total"
 	watchReadingLabelRTT               = "RTT"
 	watchReadingLabelRules             = "Rules"
@@ -104,6 +106,11 @@ const (
 	watchReadingLabelUtilization       = "Utilization"
 	watchReadingLabelUser              = "User"
 	watchReadingLabelValue             = "Value"
+	watchReadingLabelVGFree            = "VG free"
+	watchReadingLabelVGFreePct         = "VG free %"
+	watchReadingLabelVGSize            = "VG size"
+	watchReadingLabelVGUsed            = "VG used"
+	watchReadingLabelVolumeGroup       = "VG"
 	watchReadingLabelVoltage           = "Lowest voltage"
 	watchReadingLabelWindow            = "Window"
 	watchReadingLabelWrite             = "Write"
@@ -171,14 +178,32 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 	}
 }
 
+// CheckReadings formats one check result data map for user-facing consumers
+// outside the daemon Web backend, such as `sermoctl watch probe`.
+func CheckReadings(checkType string, data map[string]any) []web.WatchReading {
+	return checkReadings(checkType, data)
+}
+
 func lvmCheckReadings(data map[string]any) []web.WatchReading {
 	var out []web.WatchReading
-	for _, item := range []struct{ field, label string }{{checks.DataKeyHealth, "Health"}, {checks.DataKeyVolumeGroup, "Volume group"}, {checks.DataKeyLogicalVolume, "Logical volume"}, {checks.DataKeyLVMReasons, "Reasons"}} {
+	for _, item := range []struct{ field, label string }{{checks.DataKeyHealth, watchReadingLabelHealth}, {checks.DataKeyVolumeGroup, watchReadingLabelVolumeGroup}, {checks.DataKeyLogicalVolume, watchReadingLabelLogicalVolume}} {
 		if value := cfgval.String(data[item.field]); value != "" {
 			out = append(out, web.WatchReading{Field: item.field, Label: item.label, Value: value})
 		}
 	}
-	for _, item := range []struct{ field, label string }{{checks.DataKeyLVMFreePct, "VG free"}, {checks.DataKeyLVMThinDataPct, "Thin data"}, {checks.DataKeyLVMThinMetadataPct, "Thin metadata"}} {
+	if _, ok := data[checks.DataKeyLVMReasons]; ok {
+		value := cfgval.String(data[checks.DataKeyLVMReasons])
+		if value == "" {
+			value = watchReadingValueNone
+		}
+		out = append(out, web.WatchReading{Field: checks.DataKeyLVMReasons, Label: watchReadingLabelReasons, Value: value})
+	}
+	for _, item := range []struct{ field, label string }{{checks.DataKeyLVMFreeBytes, watchReadingLabelVGFree}, {checks.DataKeyLVMSizeBytes, watchReadingLabelVGSize}, {checks.DataKeyLVMUsedBytes, watchReadingLabelVGUsed}} {
+		if value, ok := byteField(data[item.field]); ok {
+			out = append(out, web.WatchReading{Field: item.field, Label: item.label, Value: humanize.Bytes(value)})
+		}
+	}
+	for _, item := range []struct{ field, label string }{{checks.DataKeyLVMFreePct, watchReadingLabelVGFreePct}, {checks.DataKeyLVMThinDataPct, "Thin data"}, {checks.DataKeyLVMThinMetadataPct, "Thin metadata"}} {
 		if value, ok := cfgval.Float(data[item.field]); ok {
 			out = append(out, web.WatchReading{Field: item.field, Label: item.label, Value: fmt.Sprintf("%.1f%%", value)})
 		}

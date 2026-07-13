@@ -1646,7 +1646,10 @@ detail so gradual degradation is visible.
   health check: `ok` means the selected VG/LV is usable; `error` covers an absent,
   partial or suspended LV, or a configured capacity threshold. Select a target
   with `volume_group` and optional `logical_volume`; `free_pct`, `thin_data_pct`
-  and `thin_metadata_pct` are ordinary numeric predicates.
+  and `thin_metadata_pct` are ordinary numeric predicates. Result readings
+  include `health`, `volume_group`, `logical_volume`, `lvm_reasons`,
+  `vg_free_bytes`, `vg_size_bytes`, `vg_used_bytes` and the configured
+  percentage fields.
 
   ```yaml
   watches:

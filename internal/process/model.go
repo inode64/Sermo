@@ -20,6 +20,8 @@ type Process struct {
 	PPID    int      `json:"ppid"`
 	User    string   `json:"user,omitempty"`
 	UID     uint32   `json:"uid"`
+	Group   string   `json:"group,omitempty"`
+	GID     uint32   `json:"gid"`
 	Exe     string   `json:"exe,omitempty"`     // resolved /proc/<pid>/exe; empty if unresolvable
 	ExeOK   bool     `json:"exe_resolved"`      // false when exe could not be trusted
 	Cmdline []string `json:"cmdline,omitempty"` // display data; an explicit process cmd may filter on it
@@ -116,6 +118,7 @@ type Identity struct {
 	UID     uint32
 	GID     uint32
 	User    string
+	Group   string
 	Exe     string
 	ExeOK   bool
 	State   string // /proc/<pid>/stat run state: R, S, D, Z (zombie), ...

@@ -59,9 +59,12 @@ const (
 	DataKeyLVMReasons         = "lvm_reasons"
 	DataKeyLogicalVolume      = CheckKeyLogicalVolume
 	DataKeyVolumeGroup        = CheckKeyVolumeGroup
+	DataKeyLVMFreeBytes       = "vg_free_bytes"
 	DataKeyLVMFreePct         = "free_pct"
+	DataKeyLVMSizeBytes       = "vg_size_bytes"
 	DataKeyLVMThinDataPct     = "thin_data_pct"
 	DataKeyLVMThinMetadataPct = "thin_metadata_pct"
+	DataKeyLVMUsedBytes       = "vg_used_bytes"
 	DataKeyLoad5              = fieldLoad5
 	DataKeyLoad15             = fieldLoad15
 	DataKeyMax                = "max"

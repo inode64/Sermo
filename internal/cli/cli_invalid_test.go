@@ -71,6 +71,7 @@ func TestCLIRejectsMalformedCommands(t *testing.T) {
 		{name: "mount status missing", args: []string{"mount", "status"}, want: "mount status requires exactly one mount name or path"},
 		{name: "mount status extra", args: []string{"mount", "status", "/mnt/data", "extra"}, want: "mount status requires exactly one mount name or path"},
 		{name: "mount target extra", args: []string{"mount", "/mnt/data", "extra"}, want: "mount takes exactly one target"},
+		{name: "mount force unsupported", args: []string{"mount", "--force", "/mnt/data"}, want: "--force, --lazy and --kill-blockers are only supported by umount"},
 		{name: "umount extra", args: []string{"umount", "/mnt/data", "extra"}, want: "umount takes exactly one mount name or path"},
 		{name: "events list extra", args: []string{"events", "web", "extra"}, want: "events accepts at most one service name"},
 		{name: "events clear extra", args: []string{"events", "clear", "extra"}, want: "events clear accepts only optional --before TIME"},

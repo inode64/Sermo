@@ -4,7 +4,7 @@ import {
   apiActionSuffix, apiActivityPath, apiApplicationsPath, apiDaemonPath,
   apiEventsRecentPath, apiHostPath, apiLibrariesPath, apiLocksPath,
   apiMonitoringPath, apiMountsPath, apiNotifiersPath, apiOpsPath, apiQueryBeforeID,
-  apiQueryKill, apiQueryKind, apiQueryLimit, apiQueryName, apiQueryNoCascade,
+  apiQueryForce, apiQueryKill, apiQueryKind, apiQueryLazy, apiQueryLimit, apiQueryName, apiQueryNoCascade,
   apiQueryOnlyErrors, apiQueryPage, apiQueryService, apiQuerySince, apiQueryStatus,
   apiQueryWatch, apiReloadPath, notifierTestAPI,
   apiServicesPath, apiWatchesPath, apiWhoamiPath, applicationEventsAPI,
@@ -104,6 +104,8 @@ const backendStatusUnknown = "unknown";
 const mountStateActive = "active";
 const mountStateInactive = "inactive";
 const mountStateError = "error";
+const mountStateMounting = "mounting";
+const mountStateUnmounting = "unmounting";
 const lockStateActive = "active";
 const lockStateStale = "stale";
 const lockOwnerStatusLive = "live";
@@ -117,7 +119,6 @@ const actionAlert = "alert";
 const actionExpand = "expand";
 const actionProbe = "probe";
 const actionPause = "pause";
-const actionKillUmount = "kill-umount";
 const actionMonitor = "monitor";
 const actionReload = "reload";
 const actionRestart = "restart";
@@ -125,6 +126,7 @@ const actionResume = "resume";
 const actionStart = "start";
 const actionStop = "stop";
 const actionUnmonitor = "unmonitor";
+const actionMount = "mount";
 const actionUmount = "umount";
 const eventKindAction = "action";
 const eventKindCascade = "cascade";
@@ -203,11 +205,15 @@ const mountStateClasses = {
   [mountStateActive]: "state-running",
   [mountStateInactive]: "state-stopped",
   [mountStateError]: "state-failed",
+  [mountStateMounting]: "state-starting",
+  [mountStateUnmounting]: "state-starting",
 };
 const mountStateRanks = {
   [mountStateActive]: 0,
   [mountStateInactive]: 1,
-  [mountStateError]: 2,
+  [mountStateMounting]: 2,
+  [mountStateUnmounting]: 2,
+  [mountStateError]: 3,
 };
 const targetStateClasses = {
   [targetStateDisabled]: "state-disabled",
@@ -1081,6 +1087,10 @@ const watchPanelBehaviors = {
     typeOf: (w) => (w.storage && w.storage.filesystem) || "",
     rowHTML: storageRowHTML,
   },
+  lvm: {
+    match: isLVMWatch,
+    rowHTML: lvmRowHTML,
+  },
   network: {
     match: isNetworkWatch,
   },
@@ -1291,6 +1301,7 @@ let expCache = {};         // last rendered expansion HTML per key (avoids flick
 let expDetailCache = {};   // last /api/services/{name} JSON per svc expansion key
 let eventExpanded = new Set();
 const liveOps = new Map(); // operations started from this browser session, keyed by service
+const liveMountOps = new Map(); // mount operations started from this browser session, keyed by mount name
 let liveOpsTimer = null;
 let liveOpsSlots = null;
 let latestLocks = [];
@@ -3652,6 +3663,11 @@ const watchSortKeys = {
   util: (w) => parseFloat(readingRaw(w, "util_pct")) || 0,
   readwrite: (w) => parseFloat(readingRaw(w, "read_bytes")) || 0,
   await: (w) => parseFloat(readingRaw(w, "await_ms")) || 0,
+  lvmhealth: (w) => readingRaw(w, "health").toLowerCase(),
+  vg: (w) => readingRaw(w, "volume_group").toLowerCase(),
+  lv: (w) => readingRaw(w, "logical_volume").toLowerCase(),
+  vgfree: (w) => parseFloat(readingRaw(w, "free_pct")) || -1,
+  lvmreasons: (w) => readingRaw(w, "lvm_reasons").toLowerCase(),
   // Storage panel columns.
   usage: (w) => { const p = w.storage ? storageUsedPct(w.storage) : null; return p == null ? -1 : p; },
   filesystem: (w) => ((w.storage && w.storage.filesystem) || "").toLowerCase(),
@@ -3783,6 +3799,10 @@ function isStorageWatch(w) {
   return t === "storage";
 }
 
+function isLVMWatch(w) {
+  return ((w && w.check_type) || "").toLowerCase() === "lvm";
+}
+
 // isNetworkWatch reports whether a watch is a network/connectivity check. These
 // get their own panel right after Services; every other (non-storage) type stays
 // in the Host watches table below.
@@ -3809,9 +3829,9 @@ function watchActionDisabled(w, action) {
     case actionMonitor: return !!w.monitored;
     case actionUnmonitor: return !w.monitored;
     case actionExpand: return !watchHasExpand(w);
-	case actionProbe: return !w.can_probe;
-	case actionPause: return !w.can_control_raid;
-	case actionResume: return !w.can_control_raid;
+    case actionProbe: return !w.can_probe;
+    case actionPause: return !w.can_control_raid;
+    case actionResume: return !w.can_control_raid;
     default: return false;
   }
 }
@@ -3828,11 +3848,11 @@ function watchActionDisabledReason(w, action) {
     case actionExpand:
       if (!watchHasExpand(w)) return "expand is not configured";
       return "";
-	case actionProbe:
-		return w.can_probe ? "" : "manual probe is not supported";
-	case actionPause:
-	case actionResume:
-		return w.can_control_raid ? "" : "RAID control is not configured";
+    case actionProbe:
+      return w.can_probe ? "" : "manual probe is not supported";
+    case actionPause:
+    case actionResume:
+      return w.can_control_raid ? "" : "RAID control is not configured";
     default: return "";
   }
 }
@@ -3858,9 +3878,9 @@ function watchActionAriaLabel(w, action) {
   const name = displayName(w) || w.name || "";
   switch (action) {
     case actionExpand: return `Expand storage for watch ${name}`;
-	case actionProbe: return `Probe watch ${name}`;
-	case actionPause: return `Pause RAID reconstruction for watch ${name}`;
-	case actionResume: return `Resume RAID reconstruction for watch ${name}`;
+    case actionProbe: return `Probe watch ${name}`;
+    case actionPause: return `Pause RAID reconstruction for watch ${name}`;
+    case actionResume: return `Resume RAID reconstruction for watch ${name}`;
     case actionMonitor: return `Monitor watch ${name}`;
     case actionUnmonitor: return `Unmonitor watch ${name}`;
     default: return `${action} watch ${name}`;
@@ -3899,12 +3919,12 @@ function watchNameCell(w, key, open) {
 
 // watchActionsCell renders the shared actions cell (expand / monitor / unmonitor).
 function watchActionsCell(w) {
-	const probeBtn = (w.can_probe && me.can_act && w.enabled)
-	  ? tpl`${watchActionHint(w, actionProbe)}<button ?disabled=${watchActionDisabled(w, actionProbe)} data-watch="${w.name}" data-watch-action="${actionProbe}" aria-label="${watchActionAriaLabel(w, actionProbe)}">probe</button>`
-	  : nothing;
-	const raidButtons = (w.can_control_raid && me.can_act && w.enabled)
-	  ? tpl`${watchActionHint(w, actionPause)}<button ?disabled=${watchActionDisabled(w, actionPause)} data-watch="${w.name}" data-watch-action="${actionPause}" aria-label="${watchActionAriaLabel(w, actionPause)}">pause RAID</button> ${watchActionHint(w, actionResume)}<button ?disabled=${watchActionDisabled(w, actionResume)} data-watch="${w.name}" data-watch-action="${actionResume}" aria-label="${watchActionAriaLabel(w, actionResume)}">resume RAID</button>`
-	  : nothing;
+  const probeBtn = (w.can_probe && me.can_act && w.enabled)
+    ? tpl`${watchActionHint(w, actionProbe)}<button class="icon-btn" ?disabled=${watchActionDisabled(w, actionProbe)} data-watch="${w.name}" data-watch-action="${actionProbe}" title="${watchActionAriaLabel(w, actionProbe)}" aria-label="${watchActionAriaLabel(w, actionProbe)}" aria-describedby="${watchActionDescribedBy(w, actionProbe)}"><span aria-hidden="true">◎</span></button>`
+    : nothing;
+  const raidButtons = (w.can_control_raid && me.can_act && w.enabled)
+    ? tpl`${watchActionHint(w, actionPause)}<button ?disabled=${watchActionDisabled(w, actionPause)} data-watch="${w.name}" data-watch-action="${actionPause}" aria-label="${watchActionAriaLabel(w, actionPause)}">pause RAID</button> ${watchActionHint(w, actionResume)}<button ?disabled=${watchActionDisabled(w, actionResume)} data-watch="${w.name}" data-watch-action="${actionResume}" aria-label="${watchActionAriaLabel(w, actionResume)}">resume RAID</button>`
+    : nothing;
   const expandBtn = (w.expand && Number(w.expand.by_bytes) > 0 && me.can_act && w.enabled)
     ? tpl`${watchActionHint(w, actionExpand)}<button ?disabled=${watchActionDisabled(w, actionExpand)} data-watch="${w.name}" data-watch-action="${actionExpand}" aria-label="${watchActionAriaLabel(w, actionExpand)}" aria-describedby="${watchActionDescribedBy(w, actionExpand)}">${actionExpand} ${fmtBytes(w.expand.by_bytes)}</button>`
     : nothing;
@@ -3917,7 +3937,7 @@ function watchActionsCell(w) {
       : tpl`<span class="muted">read-only</span>`);
   const actions = !w.enabled
     ? tpl`<span class="muted">disabled in config</span>`
-	: tpl`${probeBtn} ${raidButtons} ${expandBtn} ${monitorBtn}`;
+    : tpl`${probeBtn} ${raidButtons} ${expandBtn} ${monitorBtn}`;
   return tpl`<td class="actions">${actions}</td>`;
 }
 
@@ -4033,6 +4053,47 @@ function diskioRowHTML(w) {
     ${watchActionsCell(w)}
   </tr>`;
   const expRow = watchExpansionRow(key, open, 8);
+  return expRow ? [row, expRow] : [row];
+}
+
+function lvmHealthCell(w) {
+  const health = readingRaw(w, "health");
+  if (!health) return tpl`<span class="muted">—</span>`;
+  const cls = health === healthStatusOK ? healthStatusOK : "bad";
+  return tpl`<span class="${cls}">${health}</span>`;
+}
+
+function lvmVGFreeCell(w) {
+  const free = readingRaw(w, "vg_free_bytes");
+  const pct = readingRaw(w, "free_pct");
+  if (!free && !pct) return tpl`<span class="muted">—</span>`;
+  return tpl`${free || "—"}${pct ? tpl` <span class="muted">(${pct})</span>` : nothing}`;
+}
+
+function lvmReasonCell(w) {
+  const reasons = readingRaw(w, "lvm_reasons");
+  return reasons && reasons !== "none" ? tpl`<span class="bad">${reasons}</span>` : tpl`<span class="muted">none</span>`;
+}
+
+// lvmRowHTML renders manual-probe-friendly LVM rows: VG/LV identity, free VG
+// capacity and health reasons are first-class columns instead of a generic
+// summary string.
+function lvmRowHTML(w) {
+  const state = watchStateText(w);
+  const key = watchExpansionKey(w.name);
+  const open = expanded.has(key);
+  const row = tpl`<tr id="wat-row-${w.name}" class="clickable ${watchRowClass(state)}" data-exp-key="${key}">
+    ${watchNameCell(w, key, open)}
+    <td>${lvmHealthCell(w)}</td>
+    <td>${readingValue(w, "volume_group")}</td>
+    <td>${readingValue(w, "logical_volume")}</td>
+    <td>${lvmVGFreeCell(w)}</td>
+    <td>${lvmReasonCell(w)}</td>
+    <td>${watchLastCell(w)}</td>
+    <td>${watchStateCell(w)}</td>
+    ${watchActionsCell(w)}
+  </tr>`;
+  const expRow = watchExpansionRow(key, open, 9);
   return expRow ? [row, expRow] : [row];
 }
 
@@ -4534,15 +4595,47 @@ function renderWatchExpansion(w, events) {
 }
 
 function mountStateClass(state, mounted) {
+  if (state === mountStateMounting || state === mountStateUnmounting) return mountStateClasses[state];
   if (mounted) return mountStateClasses[mountStateActive];
   return mountStateClasses[state] || mountStateClasses[mountStateInactive];
 }
 
-function mountStateText(m) {
+function mountOperationState(action) {
+  return action === actionMount ? mountStateMounting : mountStateUnmounting;
+}
+
+function startMountOperation(name, action) {
+  liveMountOps.set(name, {
+    action,
+    state: mountOperationState(action),
+    started_at: new Date().toISOString(),
+  });
+  renderMounts();
+}
+
+function finishMountOperation(name) {
+  liveMountOps.delete(name);
+  renderMounts();
+}
+
+function mountOperation(m) {
+  if (!m) return null;
+  const local = liveMountOps.get(m.name);
+  if (local) return local;
+  return m.operation || null;
+}
+
+function mountBaseStateText(m) {
   const state = String((m && m.state) || "").toLowerCase();
   if (state === mountStateError) return mountStateError;
   if ((m && m.mounted) || state === mountStateActive) return mountStateActive;
   return mountStateInactive;
+}
+
+function mountStateText(m) {
+  const op = mountOperation(m);
+  if (op) return op.state || mountOperationState(op.action);
+  return mountBaseStateText(m);
 }
 
 function mountStateRank(m) {
@@ -4592,6 +4685,20 @@ function mountCategoryCell(category) {
   return `<span class="category-badge" title="${esc(category)}">${esc(category)}</span>`;
 }
 
+function mountOperationReason(op) {
+  if (!op) return "";
+  return op.message || `${op.state || mountOperationState(op.action)} in progress`;
+}
+
+function mountPathCell(m) {
+  const path = `<code>${esc(m.path || "")}</code>`;
+  const op = mountOperation(m);
+  if (!op) return path;
+  const label = op.state || mountOperationState(op.action);
+  const title = mountOperationReason(op);
+  return `${path}<span class="mount-operation" title="${esc(title)}">${esc(label)}</span>`;
+}
+
 const mountSortKeys = {
   name: (m) => displayName(m).toLowerCase(),
   category: (m) => categoryOf(m, "storage").toLowerCase(),
@@ -4622,7 +4729,7 @@ function setMountStatus(v) {
 function mountMatches(m) {
   const category = categoryOf(m, "storage");
   if (mountCategory !== filterAll && category !== mountCategory) return false;
-  if (mountStatus !== filterAll && mountStateText(m) !== mountStatus) return false;
+  if (mountStatus !== filterAll && mountStateText(m) !== mountStatus && mountBaseStateText(m) !== mountStatus) return false;
   if (!mountQuery) return true;
   const hay = [
     displayName(m), m.name || "", m.display_name || "", category, m.path || "",
@@ -4647,15 +4754,17 @@ function mountRowHTML(m) {
   const label = esc(m.display_name || m.name);
   const category = categoryOf(m, "storage");
   const mounted = !!m.mounted;
-  const state = m.state || (mounted ? mountStateActive : mountStateInactive);
+  const state = mountStateText(m);
   const detail = m.message ? ` title="${esc(m.message)}"` : "";
   const refcount = m.refcounted === false ? '<span class="muted">off</span>' : String(Number(m.refcount || 0));
   const name = esc(m.name || "");
   const actions = mountActionButtons(m, mounted);
-  return `<tr id="mount-row-${detailDomKey(m.name || m.path || "mount")}" tabindex="-1"${detail}>
+  const operation = mountOperation(m);
+  const rowClass = operation ? ' class="mount-row-operating"' : "";
+  return `<tr id="mount-row-${detailDomKey(m.name || m.path || "mount")}" tabindex="-1"${detail}${rowClass}>
     <td>${label}</td>
     <td>${mountCategoryCell(category)}</td>
-    <td><code>${esc(m.path || "")}</code></td>
+    <td>${mountPathCell(m)}</td>
     <td>${mounted ? '<span class="ok">yes</span>' : '<span class="muted">no</span>'}</td>
     <td>${refcount}</td>
     <td class="mount-processes">${mountProcessesCell(m)}</td>
@@ -4723,19 +4832,21 @@ function mountActionButtons(m, mounted) {
   if (!me.can_act) return '<span class="muted">read-only</span>';
   const name = esc(m.name || "");
   const label = esc(m.display_name || m.name || m.path || "mount");
+  const operation = mountOperation(m);
+  const operationReason = mountOperationReason(operation);
+  const operationDisabled = operation ? " disabled" : "";
   if (!mounted) {
-    return `<button class="icon-btn" data-mount="${name}" data-mount-action="mount" aria-label="Mount ${label}" title="Mount ${label}"><span aria-hidden="true">▶</span></button>`;
+    return `<button class="icon-btn" data-mount="${name}" data-mount-action="${actionMount}" aria-label="Mount ${label}" title="${operation ? esc(operationReason) : `Mount ${label}`}"${operationDisabled}><span aria-hidden="true">▶</span></button>`;
   }
   const disabledReason = mountUmountDisabledReason(m);
   const hintId = `mount-${detailDomKey(m.name || m.path || "mount")}-umount-hint`;
   const hint = disabledReason ? `<span id="${hintId}" class="visually-hidden">${esc(disabledReason)}</span>` : "";
-  const disabledAttrs = disabledReason ? ` disabled aria-describedby="${hintId}"` : "";
-  const disabledTitle = disabledReason ? ` title="${esc(disabledReason)}"` : "";
-  const primaryTitle = disabledReason ? esc(disabledReason) : `Unmount ${label}`;
+  const disabledAttrs = disabledReason ? ` disabled aria-describedby="${hintId}"` : operationDisabled;
+  const primaryTitle = disabledReason ? esc(disabledReason) : (operation ? esc(operationReason) : `Unmount ${label}`);
+  const alertTitle = disabledReason ? esc(disabledReason) : (operation ? esc(operationReason) : `Alert users blocking ${label}`);
   return hint +
     `<button class="icon-btn" data-mount="${name}" data-mount-action="${actionUmount}" aria-label="Unmount ${label}" title="${primaryTitle}"${disabledAttrs}><span aria-hidden="true">⏏</span></button>` +
-    `<button class="icon-btn" data-mount="${name}" data-mount-action="${actionAlert}" aria-label="Alert users blocking ${label}" title="Alert users blocking ${label}"${disabledAttrs}${disabledTitle}><span aria-hidden="true">!</span></button>` +
-    `<button class="icon-btn danger-btn" data-mount="${name}" data-mount-action="${actionKillUmount}" aria-label="Kill blockers and unmount ${label}" title="Kill blockers and unmount ${label}"${disabledAttrs}${disabledTitle}><span aria-hidden="true">✕</span></button>`;
+    `<button class="icon-btn" data-mount="${name}" data-mount-action="${actionAlert}" aria-label="Alert users blocking ${label}" title="${alertTitle}"${disabledAttrs}><span aria-hidden="true">!</span></button>`;
 }
 
 function mountUmountDisabledReason(m) {
@@ -5419,35 +5530,55 @@ async function act(name, action) {
 }
 
 async function actWatch(name, action) {
-	let headers = {};
-	if (action === actionExpand && !(await confirmWatchExpand(name))) return;
-	if (action === actionPause) {
-		const w = (allWatches || []).find((item) => item && item.name === name) || {};
-		if (!(await confirmWatchRAIDPause(name, w.raid_array || ""))) return;
-		headers = { "X-Sermo-Confirm": w.raid_array || "" };
-	}
-	if (action === actionResume && !(await confirmWatchRAIDResume(name))) return;
+  let headers = {};
+  if (action === actionExpand && !(await confirmWatchExpand(name))) return;
+  if (action === actionPause) {
+    const w = (allWatches || []).find((item) => item && item.name === name) || {};
+    if (!(await confirmWatchRAIDPause(name, w.raid_array || ""))) return;
+    headers = { "X-Sermo-Confirm": w.raid_array || "" };
+  }
+  if (action === actionResume && !(await confirmWatchRAIDResume(name))) return;
   setStatus("");
   try {
-	const res = await fetch(watchAPI(name, apiActionSuffix(action)), csrfPostOptions(headers));
+    const res = await fetch(watchAPI(name, apiActionSuffix(action)), csrfPostOptions(headers));
     const body = await res.json().catch(() => ({}));
-    if (!res.ok || body.ok === false) {
+    const failed = !res.ok || body.ok === false;
+    if (action === actionProbe) {
+      applyWatchProbeResult(name, body, failed);
+      setStatus(`${action} watch ${name}: ${body.message || (failed ? "failed" : feedbackStatusOK)}`, failed ? feedbackStatusErr : feedbackStatusOK);
+      load();
+      return;
+    }
+    if (failed) {
       throw new Error(body.message || ("HTTP " + res.status));
     }
-	setStatus(`${action} watch ${name}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
+    setStatus(`${action} watch ${name}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
   } catch (e) {
     setStatus(`${action} watch ${name}: ${e.message}`, feedbackStatusErr);
   }
   load();
 }
 
+function applyWatchProbeResult(name, body, failed) {
+  const idx = (allWatches || []).findIndex((item) => item && item.name === name);
+  if (idx < 0 || !body || typeof body !== "object") return;
+  if (!Array.isArray(body.readings) && !body.message) return;
+  const next = { ...allWatches[idx] };
+  if (Array.isArray(body.readings)) next.readings = body.readings;
+  if (body.message) next.summary = body.message;
+  next.state = failed ? targetStateFailed : targetStateOK;
+  allWatches = [...allWatches];
+  allWatches[idx] = next;
+  renderWatches(allWatches);
+}
+
 async function confirmWatchRAIDPause(name, array) {
-	if (!(await promptConfirm({ title: `Pause RAID reconstruction for ${name}?`, message: `Pause the active reconstruction on ${array || name}. This delays redundancy recovery.`, okLabel: "Continue", danger: true }))) return false;
-	return promptConfirm({ title: "Confirm RAID pause", message: `Confirm pausing reconstruction for ${array || name}.`, okLabel: "Pause reconstruction", danger: true });
+  if (!(await promptConfirm({ title: `Pause RAID reconstruction for ${name}?`, message: `Pause the active reconstruction on ${array || name}. This delays redundancy recovery.`, okLabel: "Continue", danger: true }))) return false;
+  return promptConfirm({ title: "Confirm RAID pause", message: `Confirm pausing reconstruction for ${array || name}.`, okLabel: "Pause reconstruction", danger: true });
 }
 
 function confirmWatchRAIDResume(name) {
-	return promptConfirm({ title: `Resume RAID reconstruction for ${name}?`, message: "Resume the array's current reconstruction.", okLabel: "Resume reconstruction", danger: true });
+  return promptConfirm({ title: `Resume RAID reconstruction for ${name}?`, message: "Resume the array's current reconstruction.", okLabel: "Resume reconstruction", danger: true });
 }
 
 async function testNotifier(name) {
@@ -5492,49 +5623,111 @@ function mountBlockerSummary(blockers) {
   return rows.join("\n") + extra;
 }
 
+function mountBlockerUser(p) {
+  return p.user || `uid ${p.uid ?? "?"}`;
+}
+
+function mountBlockerGroup(p) {
+  return p.group || `gid ${p.gid ?? "?"}`;
+}
+
+function mountBlockerCommand(p) {
+  const cmd = Array.isArray(p.cmdline) ? p.cmdline.filter(Boolean).join(" ") : "";
+  return cmd || p.exe || "unknown";
+}
+
+function mountBlockerRowsHTML(blockers, killSelected) {
+  if (!blockers.length) {
+    return '<tr><td colspan="5" class="muted">No current blockers.</td></tr>';
+  }
+  return blockers.map((p) => {
+    const willSignal = killSelected && !!p.killable;
+    const status = willSignal ? "will signal" : "will not signal";
+    const cls = willSignal ? "will-signal" : "will-not-signal";
+    return `<tr>
+      <td class="${cls}">${esc(status)}</td>
+      <td>${esc(mountBlockerUser(p))}</td>
+      <td>${esc(mountBlockerGroup(p))}</td>
+      <td>${esc(String(p.pid || "?"))}</td>
+      <td class="cmd">${esc(mountBlockerCommand(p))}</td>
+    </tr>`;
+  }).join("");
+}
+
+function mountKillNote(info) {
+  if (!info.has_kill_policy) {
+    return "No stop_policy.kill_only_if is configured; blockers are shown but none can be signalled.";
+  }
+  if (!info.can_kill) {
+    return "stop_policy.kill_only_if is configured, but no current blocker matches it.";
+  }
+  return "Only blockers matching stop_policy.kill_only_if can receive TERM/KILL; all other rows remain untouched.";
+}
+
+function updateMountUnmountBlockers(info) {
+  const tbody = $("#mount-umount-blockers");
+  if (!tbody) return;
+  const killSelected = !!$("#mount-umount-kill")?.checked;
+  tbody.innerHTML = mountBlockerRowsHTML(info.blockers || [], killSelected);
+}
+
+let mountUnmountConfirmResolve = null;
+let mountUnmountConfirmInfo = null;
+
+function promptMountUnmount(name, info) {
+  const dlg = $("#mount-umount-confirm");
+  if (!dlg || typeof dlg.showModal !== "function") {
+    return Promise.resolve(window.confirm(`Unmount "${name}"?`) ? { force: false, lazy: false, kill: false } : null);
+  }
+  mountUnmountConfirmInfo = info || {};
+  const title = $("#mount-umount-title");
+  const path = $("#mount-umount-path");
+  const msg = $("#mount-umount-message");
+  const note = $("#mount-umount-kill-note");
+  const force = $("#mount-umount-force");
+  const lazy = $("#mount-umount-lazy");
+  const kill = $("#mount-umount-kill");
+  if (title) title.textContent = `Unmount ${name}?`;
+  if (path) path.textContent = info.path || "";
+  const count = (info.blockers || []).length;
+  if (msg) msg.textContent = count ? `${count} current blocker${count === 1 ? "" : "s"} detected.` : "No current blockers detected.";
+  if (force) force.checked = false;
+  if (lazy) lazy.checked = false;
+  if (kill) {
+    kill.checked = false;
+    kill.disabled = !info.has_kill_policy || !info.can_kill;
+    kill.title = kill.disabled ? mountKillNote(info) : "";
+  }
+  if (note) note.textContent = mountKillNote(info);
+  updateMountUnmountBlockers(info);
+  return new Promise((resolve) => {
+    mountUnmountConfirmResolve = resolve;
+    dlg.oncancel = () => closeMountUnmountConfirm(false);
+    dlg.showModal();
+  });
+}
+
+function closeMountUnmountConfirm(ok) {
+  const dlg = $("#mount-umount-confirm");
+  if (dlg && dlg.open) dlg.close();
+  const resolve = mountUnmountConfirmResolve;
+  mountUnmountConfirmResolve = null;
+  const result = ok ? {
+    force: !!$("#mount-umount-force")?.checked,
+    lazy: !!$("#mount-umount-lazy")?.checked,
+    kill: !!$("#mount-umount-kill")?.checked,
+  } : null;
+  mountUnmountConfirmInfo = null;
+  if (resolve) resolve(result);
+}
+
 async function confirmMountUnmount(name) {
   const info = await fetchMountBlockers(name);
   if (info.can_umount === false) {
     setStatus(`umount ${name}: ${info.umount_disabled_reason || info.message || "unmount is disabled"}`, feedbackStatusWarn);
-    return false;
+    return null;
   }
-  const blockers = info.blockers || [];
-  const message = blockers.length
-    ? `Mount "${name}" is currently used by:\n${mountBlockerSummary(blockers)}\n\nThis will try a normal unmount only. Use alert first to message users, or kill+umount for policy-gated signal escalation.`
-    : `Unmount "${name}"?`;
-  return promptConfirm({
-    title: `Unmount ${name}?`,
-    message,
-    okLabel: actionUmount,
-    danger: true,
-  });
-}
-
-async function confirmMountKillUnmount(name) {
-  const info = await fetchMountBlockers(name);
-  if (info.can_umount === false) {
-    setStatus(`kill+umount ${name}: ${info.umount_disabled_reason || info.message || "unmount is disabled"}`, feedbackStatusWarn);
-    return false;
-  }
-  const blockers = info.blockers || [];
-  if (!blockers.length) {
-    return promptConfirm({
-      title: `Unmount ${name}?`,
-      message: `No blocking processes are using "${name}" right now. Unmount normally?`,
-      okLabel: actionUmount,
-      danger: true,
-    });
-  }
-  if (!info.can_kill) {
-    setStatus(`kill+umount ${name}: no current blocker is killable by this mount policy`, feedbackStatusWarn);
-    return false;
-  }
-  return promptConfirm({
-    title: `Kill blockers and unmount ${name}?`,
-    message: `Sermo will send TERM/KILL only to blockers allowed by stop_policy.kill_only_if, then retry umount.\n\n${mountBlockerSummary(blockers)}`,
-    okLabel: "kill+umount",
-    danger: true,
-  });
+  return promptMountUnmount(name, info);
 }
 
 async function confirmMountAlert(name) {
@@ -5564,12 +5757,17 @@ async function actMount(name, action) {
   if (!name) return;
   let postAction = action;
   let query = "";
+  const tracked = action === actionMount || action === actionUmount;
   try {
-    if (action === actionUmount && !(await confirmMountUnmount(name))) return;
-    if (action === actionKillUmount) {
-      if (!(await confirmMountKillUnmount(name))) return;
-      postAction = actionUmount;
-      query = `?${apiQueryKill}=${queryBoolOne}`;
+    if (action === actionUmount) {
+      const opts = await confirmMountUnmount(name);
+      if (!opts) return;
+      const params = new URLSearchParams();
+      if (opts.force) params.set(apiQueryForce, queryBoolOne);
+      if (opts.lazy) params.set(apiQueryLazy, queryBoolOne);
+      if (opts.kill) params.set(apiQueryKill, queryBoolOne);
+      const encoded = params.toString();
+      query = encoded ? `?${encoded}` : "";
     }
     if (action === actionAlert && !(await confirmMountAlert(name))) return;
   } catch (e) {
@@ -5578,6 +5776,7 @@ async function actMount(name, action) {
   }
 
   setStatus("");
+  if (tracked) startMountOperation(name, action);
   try {
     const res = await fetch(mountAPI(name, apiActionSuffix(postAction, query)), csrfPostOptions());
     const body = await res.json().catch(() => ({}));
@@ -5588,6 +5787,8 @@ async function actMount(name, action) {
     setStatus(`${action} ${name}: ${body.message || feedbackStatusOK}`, feedbackStatusOK);
   } catch (e) {
     setStatus(`${action} ${name}: ${e.message}`, feedbackStatusErr);
+  } finally {
+    if (tracked) finishMountOperation(name);
   }
   load();
 }
@@ -6657,6 +6858,20 @@ function initStaticHandlers() {
       if (b) closePromptConfirm(b.dataset.simpleResult === domBoolTrue);
     });
     simpleDlg.addEventListener(domEventClose, () => { if (promptConfirmResolve) closePromptConfirm(false); });
+  }
+  const mountUmountDlg = $("#mount-umount-confirm");
+  if (mountUmountDlg) {
+    mountUmountDlg.addEventListener(domEventClick, (e) => {
+      const b = closestFrom(e, "[data-mount-umount-result]");
+      if (b) closeMountUnmountConfirm(b.dataset.mountUmountResult === domBoolTrue);
+    });
+    mountUmountDlg.addEventListener(domEventClose, () => { if (mountUnmountConfirmResolve) closeMountUnmountConfirm(false); });
+  }
+  const mountUmountKill = $("#mount-umount-kill");
+  if (mountUmountKill) {
+    mountUmountKill.addEventListener(domEventChange, () => {
+      if (mountUnmountConfirmInfo) updateMountUnmountBlockers(mountUnmountConfirmInfo);
+    });
   }
 }
 

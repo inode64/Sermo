@@ -1136,8 +1136,6 @@ mount:
   umount:
     term_timeout: 12s  # wait after SIGTERM when signalling is enabled
     kill_timeout: 5s  # wait after SIGKILL when signalling is enabled
-    allow_sigkill: true  # escalate to SIGKILL; requires stop_policy.kill_only_if below
-    allow_lazy: false  # default; true allows umount -l as the last fallback
   stop_policy:
     kill_only_if:  # restrict which processes a SIGKILL may target
       users: [root]

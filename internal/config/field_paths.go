@@ -42,12 +42,10 @@ const (
 	versionsPathCurrentFrom = keyVersions + "." + keyVersionsCurrentFrom
 	versionsPathFrom        = keyVersions + "." + keyVersionsFrom
 
-	mountPath              = StorageKeyMount
-	mountPathRefcount      = mountPath + "." + MountKeyRefcount
-	mountPathStopPolicy    = mountPath + "." + MountKeyStopPolicy
-	mountPathStopPolicyKoi = mountPathStopPolicy + "." + keyKillOnlyIf
-	mountPathUmount        = mountPath + "." + MountKeyUmount
-	mountPathUmountSIGKILL = mountPathUmount + "." + MountKeyAllowSIGKILL
+	mountPath           = StorageKeyMount
+	mountPathRefcount   = mountPath + "." + MountKeyRefcount
+	mountPathStopPolicy = mountPath + "." + MountKeyStopPolicy
+	mountPathUmount     = mountPath + "." + MountKeyUmount
 
 	controlPathContainer = SectionControl + "." + dockerctl.ControlKeyContainer
 	controlPathDomain    = SectionControl + "." + virt.ControlKeyDomain

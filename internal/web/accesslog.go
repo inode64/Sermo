@@ -74,9 +74,9 @@ func (s *Server) recordWebAccess(r *http.Request, status int) {
 		accessFieldTarget: target,
 		accessFieldAction: action,
 	}
-	// Query parameters change what an action does (umount?kill=1, clear?before=,
-	// release?name=), so the audit record must keep them. CSRF travels in a
-	// header, never in the query, so logging the raw string is safe.
+	// Query parameters change what an action does (umount?force=1&lazy=1&kill=1,
+	// clear?before=, release?name=), so the audit record must keep them. CSRF
+	// travels in a header, never in the query, so logging the raw string is safe.
 	if q := r.URL.RawQuery; q != "" {
 		entry[accessFieldQuery] = q
 	}

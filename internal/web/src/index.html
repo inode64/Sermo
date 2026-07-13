@@ -39,6 +39,7 @@
   <a class="section-jump" href="#containers-section" data-panel-target="containers-section" data-count-source="containers-count">Containers <span class="nav-count" data-nav-count></span></a>
   <a class="section-jump" href="#vms-section" data-panel-target="vms-section" data-count-source="vms-count">VMs <span class="nav-count" data-nav-count></span></a>
   <a class="section-jump" href="#storage-section" data-panel-target="storage-section" data-count-source="storage-count">Storage <span class="nav-count" data-nav-count></span></a>
+  <a class="section-jump" href="#lvm-section" data-panel-target="lvm-section" data-count-source="lvm-count">LVM <span class="nav-count" data-nav-count></span></a>
   <a class="section-jump" href="#network-section" data-panel-target="network-section" data-count-source="network-count">Network <span class="nav-count" data-nav-count></span></a>
   <a class="section-jump" href="#mounts-section" data-panel-target="mounts-section" data-count-source="mounts-count">Mount units <span class="nav-count" data-nav-count></span></a>
   <a class="section-jump" href="#apps-section" data-panel-target="apps-section" data-count-source="apps-count">Apps <span class="nav-count" data-nav-count></span></a>
@@ -63,6 +64,7 @@
 <div id="attention" role="alert" aria-live="assertive" aria-atomic="true"></div>
 <div id="op-live" role="status" aria-live="polite" aria-atomic="true"></div>
 <!--__SERMO_WATCH_PANEL:storage__-->
+<!--__SERMO_WATCH_PANEL:lvm__-->
 
 <h2 class="visually-hidden">Services</h2>
 <details id="services-section" open class="panel">
@@ -492,6 +494,31 @@
   <div class="modal-foot">
     <button id="panic-cancel-btn" data-panic-result="false" aria-label="Cancel panic mode change">cancel</button>
     <button id="panic-confirm-btn" class="panic-btn" data-panic-result="true" aria-label="Confirm panic mode change"></button>
+  </div>
+</dialog>
+
+<dialog id="mount-umount-confirm" aria-labelledby="mount-umount-title" aria-describedby="mount-umount-message mount-umount-kill-note">
+  <div class="modal-head">
+    <h2 id="mount-umount-title" class="modal-title"></h2>
+    <div id="mount-umount-path" class="muted modal-subtitle"></div>
+  </div>
+  <div class="modal-body mount-umount-body">
+    <p id="mount-umount-message" class="modal-message"></p>
+    <div class="mount-umount-options">
+      <label><input id="mount-umount-force" type="checkbox"> force</label>
+      <label><input id="mount-umount-lazy" type="checkbox"> lazy</label>
+      <label><input id="mount-umount-kill" type="checkbox"> kill blockers</label>
+    </div>
+    <p id="mount-umount-kill-note" class="muted modal-message"></p>
+    <table class="mount-blockers-table">
+      <caption>Current blockers</caption>
+      <thead><tr><th scope="col">Status</th><th scope="col">User</th><th scope="col">Group</th><th scope="col">PID</th><th scope="col">Command</th></tr></thead>
+      <tbody id="mount-umount-blockers"></tbody>
+    </table>
+  </div>
+  <div class="modal-foot">
+    <button type="button" data-mount-umount-result="false" aria-label="Cancel unmount">cancel</button>
+    <button type="button" id="mount-umount-ok" class="danger-btn" data-mount-umount-result="true" aria-label="Confirm unmount">umount</button>
   </div>
 </dialog>
 

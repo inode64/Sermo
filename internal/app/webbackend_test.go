@@ -1987,7 +1987,7 @@ func TestWebBackendExpandWatchUsesConfiguredPathAndSize(t *testing.T) {
 	}
 }
 
-func TestWebBackendExpandWatchDryRunDoesNotExpand(t *testing.T) {
+func TestWebBackendExpandWatchIgnoresDryRunForManualCommand(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{
 			"storage-data": map[string]any{
@@ -2012,14 +2012,14 @@ func TestWebBackendExpandWatchDryRunDoesNotExpand(t *testing.T) {
 	}
 
 	res := b.ExpandWatch(context.Background(), "storage-data")
-	if !res.OK || res.Message != "dry-run: would run expand" {
-		t.Fatalf("ExpandWatch = %+v, want dry-run success", res)
+	if !res.OK {
+		t.Fatalf("ExpandWatch = %+v, want success", res)
 	}
-	if len(exp.calls) != 0 {
-		t.Fatalf("dry-run expand must not call expander, calls = %v", exp.calls)
+	if !slices.Equal(exp.calls, []string{"/data/app:5368709120"}) {
+		t.Fatalf("manual dry-run expand calls = %v, want configured path and 5G", exp.calls)
 	}
-	if len(events) != 1 || events[0].Watch != "storage-data" || events[0].Kind != eventKindDryRun || events[0].Action != eventActionExpand || events[0].Status != eventStatusOK {
-		t.Fatalf("events = %+v, want dry-run expand event", events)
+	if len(events) != 1 || events[0].Watch != "storage-data" || events[0].Kind != eventKindExpand || events[0].Action != eventActionExpand || events[0].Status != eventStatusOK {
+		t.Fatalf("events = %+v, want successful expand event", events)
 	}
 }
 

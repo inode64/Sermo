@@ -57,7 +57,11 @@ func (a App) runUmount(ctx context.Context, opts options) int {
 		return code
 	}
 	controller := a.mountController(cfg, opts)
-	res, err := controller.Release(ctx, spec)
+	res, err := controller.ReleaseWithOptions(ctx, spec, mountctl.ReleaseOptions{
+		AllowForce:   opts.force,
+		AllowLazy:    opts.lazy,
+		KillBlockers: opts.kill,
+	})
 	a.syncStorageMountMonitoring(ctx, opts, cfg, spec.Name, mountctl.ActionUmount, err == nil && res.Status == mountctl.ResultOK)
 	if err != nil {
 		return a.printMountResult(opts, res, err)
@@ -165,7 +169,7 @@ func (a App) mountController(cfg *config.Config, opts options) mountctl.Controll
 	lookup := app.EngineUserLookup(cfg, a.Runner)
 	if a.MountController != nil {
 		c := a.MountController(cfg)
-		if c.CommandTimeout <= 0 {
+		if c.CommandTimeout <= 0 && opts.timeoutSet {
 			c.CommandTimeout = opts.timeout
 		}
 		if c.ResolveUser == nil {
@@ -176,7 +180,11 @@ func (a App) mountController(cfg *config.Config, opts options) mountctl.Controll
 		}
 		return c
 	}
-	return mountctl.Controller{Runtime: cfg.Global.RuntimeDir(), Runner: a.Runner, ResolveUser: lookup.ResolveUser, UserLookup: lookup, CommandTimeout: opts.timeout}
+	commandTimeout := opts.timeout
+	if !opts.timeoutSet {
+		commandTimeout = 0
+	}
+	return mountctl.Controller{Runtime: cfg.Global.RuntimeDir(), Runner: a.Runner, ResolveUser: lookup.ResolveUser, UserLookup: lookup, CommandTimeout: commandTimeout}
 }
 
 func (a App) syncStorageMountMonitoring(ctx context.Context, _ options, cfg *config.Config, storage, action string, resultOK bool) {
@@ -243,6 +251,9 @@ func (a App) printMountResult(opts options, res mountctl.Result, err error) int 
 		fmt.Fprintf(a.Stdout, "%s: %s %s", res.Name, res.Action, res.Status)
 	}
 	fmt.Fprintf(a.Stdout, ", refcount=%d", res.Refcount)
+	if res.Forced {
+		fmt.Fprint(a.Stdout, ", forced=true")
+	}
 	if res.Lazy {
 		fmt.Fprint(a.Stdout, ", lazy=true")
 	}

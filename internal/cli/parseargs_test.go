@@ -41,6 +41,12 @@ func TestParseArgsSuccess(t *testing.T) {
 				t.Fatalf("got %+v", o)
 			}
 		}},
+		{"umount escalation flags", []string{"umount", "--force", "--lazy", "--kill-blockers", "mount-backup"}, func(t *testing.T, o options) {
+			t.Helper()
+			if !o.force || !o.lazy || !o.kill {
+				t.Fatalf("got %+v", o)
+			}
+		}},
 		{"--since duration", []string{"sla", "--since", "24h"}, func(t *testing.T, o options) {
 			t.Helper()
 			if o.since != 24*time.Hour {

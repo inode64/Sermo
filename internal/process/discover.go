@@ -396,6 +396,8 @@ func toProcess(id Identity, role, source string) Process {
 		PPID:    id.PPID,
 		User:    id.User,
 		UID:     id.UID,
+		Group:   id.Group,
+		GID:     id.GID,
 		Exe:     id.Exe,
 		ExeOK:   id.ExeOK,
 		Cmdline: id.Cmdline,
