@@ -307,7 +307,7 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 		ok = false
 	}
 
-	msg := fmt.Sprintf("%s pid %d matches (age %ds, rss %d)", w.match.Name, s.PID, int64(age.Seconds()), s.RSS)
+	msg := fmt.Sprintf("%s pid %d matches (age %s, rss %d)", w.match.Name, s.PID, formatInterval(age), s.RSS)
 	return ok, env, msg
 }
 

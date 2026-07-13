@@ -161,7 +161,7 @@ func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
 		data[checks.DataKeyPath] = w.paths[0]
 	}
 	if w.cond.olderThan > 0 {
-		data[checks.DataKeyAge] = root.age.Round(time.Second).String()
+		data[checks.DataKeyAge] = formatInterval(root.age.Round(time.Second))
 	}
 	if w.recursive {
 		entries := max(len(current)-1, 0)
@@ -261,7 +261,7 @@ func (w *fileWatcher) diff(ctx context.Context, path string, prev, cur fileState
 func (w *fileWatcher) fireOlderThan(ctx context.Context, path string, cur fileState) {
 	ageSeconds := strconv.FormatInt(int64(cur.age.Seconds()), envFormatBase)
 	w.fire(ctx, path, fileChangeOlderThan,
-		fmt.Sprintf("%s was modified at %s and is older than %s", path, cur.modifiedAt.UTC().Format(time.RFC3339), w.cond.olderThan), map[string]string{
+		fmt.Sprintf("%s was modified at %s and is older than %s", path, cur.modifiedAt.UTC().Format(time.RFC3339), formatInterval(w.cond.olderThan)), map[string]string{
 			sermoEnvModifiedAt: cur.modifiedAt.UTC().Format(time.RFC3339),
 			sermoEnvAgeSeconds: ageSeconds,
 			sermoEnvValue:      w.cond.olderThan.String(),

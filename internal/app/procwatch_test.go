@@ -237,6 +237,19 @@ func TestProcWatchEventPerPID(t *testing.T) {
 	}
 }
 
+func TestProcWatchEventUsesReadableAge(t *testing.T) {
+	h := &procHarness{clock: time.Unix(1_000_000, 0)}
+	s := &fakeProcSampler{cycles: [][]ProcInfo{{{PID: 42, RSS: 100}}, {{PID: 42, RSS: 100}}}}
+	w := h.watcher(procCond{minAge: 25 * time.Hour, memOp: ">", memValue: 50}, s)
+
+	h.tick(w, 0)
+	h.tick(w, 25*time.Hour)
+
+	if len(h.events) != 1 || h.events[0].Message != "worker pid 42 matches (age 1d1h, rss 100)" {
+		t.Fatalf("process events = %+v", h.events)
+	}
+}
+
 func TestProcWatchCombinedConditionsAND(t *testing.T) {
 	h := &procHarness{clock: time.Unix(1_000_000, 0)}
 	// memory over threshold throughout, but age only crosses on the 3rd cycle.
