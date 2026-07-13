@@ -249,6 +249,9 @@ func (b *WebBackend) smartWatchView(ctx context.Context, w *webWatch) (*web.Watc
 		{Field: checks.DataKeyDevice, Label: watchReadingLabelDevice, Value: device},
 		{Field: checks.DataKeyHealth, Label: watchReadingLabelHealth, Value: sample.Health},
 	}
+	if sample.SelfTestRunning {
+		readings = append(readings, web.WatchReading{Field: checks.DataKeyDeviceState, Label: watchReadingLabelState, Value: checks.DeviceStateTesting})
+	}
 	for _, field := range checks.SmartPredFields {
 		if v, ok := sample.Values[field]; ok {
 			label := field

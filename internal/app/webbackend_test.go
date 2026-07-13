@@ -1374,6 +1374,182 @@ func TestWebBackendProbeWatchReadings(t *testing.T) {
 	}
 }
 
+func TestWebBackendProbeWatchRecordsSnapshotAndEvent(t *testing.T) {
+	now := time.Date(2026, 7, 13, 9, 30, 0, 0, time.UTC)
+	snapshots := NewWatchSnapshots()
+	snapshots.now = func() time.Time { return now }
+	var events []Event
+	b := &WebBackend{
+		watchOrder: []string{"disk-speed"},
+		watches: map[string]*webWatch{
+			"disk-speed": {
+				name:      "disk-speed",
+				checkType: checks.CheckTypeHdparm,
+				check: map[string]any{
+					checks.CheckKeyType:   checks.CheckTypeHdparm,
+					checks.CheckKeyDevice: "/dev/sda",
+					checks.HdparmFieldRead: map[string]any{
+						checks.CheckKeyOp:    ">",
+						checks.CheckKeyValue: 200,
+					},
+				},
+			},
+		},
+		watchSnapshots: snapshots,
+		execRunner: webBackendTestRunner{byCommand: map[string]execx.Result{
+			checks.CheckTypeHdparm: {ExitCode: 0, Stdout: " Timing buffered disk reads: 500 MB in 3.00 seconds = 166.67 MB/sec\n"},
+		}},
+		emit: func(event Event) { events = append(events, event) },
+	}
+
+	result := b.ProbeWatch(context.Background(), "disk-speed")
+	if !result.OK || readingByField(result.Readings, checks.HdparmFieldRead).Value == "" {
+		t.Fatalf("probe result = %+v, want healthy hdparm reading", result)
+	}
+	if len(events) != 2 || events[0].Watch != "disk-speed" || events[0].Action != eventActionProbe || events[0].Status != eventStatusRunning || events[1].Kind != eventKindAction || events[1].Status != eventStatusOK || !strings.Contains(events[1].Message, "completed in") {
+		t.Fatalf("probe events = %+v", events)
+	}
+	if got := snapshots.Get("disk-speed", checks.CheckTypeHdparm); len(got) != 1 || !got[0].Ran || got[0].At != now {
+		t.Fatalf("probe snapshots = %+v", got)
+	}
+	watches := b.Watches(context.Background())
+	if len(watches) != 1 || watches[0].LastCheckedAt != now.Format(time.RFC3339) {
+		t.Fatalf("watch last checked = %+v, want %s", watches, now.Format(time.RFC3339))
+	}
+}
+
+func TestWebBackendProbeWatchShowsRunningStateAndRejectsDuplicate(t *testing.T) {
+	startedAt := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	runner := &blockingProbeRunner{started: make(chan struct{}, 1), release: make(chan struct{})}
+	var events []Event
+	b := &WebBackend{
+		watchOrder: []string{"disk-speed"},
+		watches: map[string]*webWatch{
+			"disk-speed": {
+				name:      "disk-speed",
+				checkType: checks.CheckTypeHdparm,
+				check: map[string]any{
+					checks.CheckKeyType:   checks.CheckTypeHdparm,
+					checks.CheckKeyDevice: "/dev/sda",
+					checks.HdparmFieldRead: map[string]any{
+						checks.CheckKeyOp:    ">",
+						checks.CheckKeyValue: 200,
+					},
+				},
+			},
+		},
+		execRunner: runner,
+		now:        func() time.Time { return startedAt },
+		emit:       func(event Event) { events = append(events, event) },
+	}
+	resultCh := make(chan web.ActionResult, 1)
+	go func() { resultCh <- b.ProbeWatch(context.Background(), "disk-speed") }()
+
+	select {
+	case <-runner.started:
+	case <-time.After(time.Second):
+		t.Fatal("manual probe did not start")
+	}
+	watches := b.Watches(context.Background())
+	if len(watches) != 1 || watches[0].Probe == nil || watches[0].Probe.State != eventStatusRunning || watches[0].Probe.StartedAt != startedAt.Format(time.RFC3339) {
+		t.Fatalf("running probe watch = %+v", watches)
+	}
+	duplicate := b.ProbeWatch(context.Background(), "disk-speed")
+	if duplicate.OK || !strings.Contains(duplicate.Message, "already running") || len(events) != 1 || events[0].Status != eventStatusRunning {
+		t.Fatalf("duplicate probe = %+v events=%+v", duplicate, events)
+	}
+
+	close(runner.release)
+	result := <-resultCh
+	if !result.OK || len(events) != 2 || events[1].Status != eventStatusOK || !strings.Contains(events[1].Message, "completed in") {
+		t.Fatalf("completed probe = %+v events=%+v", result, events)
+	}
+	if watches := b.Watches(context.Background()); watches[0].Probe != nil {
+		t.Fatalf("completed probe remained visible: %+v", watches[0].Probe)
+	}
+}
+
+func TestWebBackendProbeWatchFailureEventIncludesDuration(t *testing.T) {
+	startedAt := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	finishedAt := startedAt.Add(1500 * time.Millisecond)
+	nowCalls := 0
+	var events []Event
+	b := &WebBackend{
+		watches: map[string]*webWatch{
+			"disk-speed": {
+				name:      "disk-speed",
+				checkType: checks.CheckTypeHdparm,
+				check: map[string]any{
+					checks.CheckKeyType:   checks.CheckTypeHdparm,
+					checks.CheckKeyDevice: "/dev/sda",
+					checks.HdparmFieldRead: map[string]any{
+						checks.CheckKeyOp:    ">",
+						checks.CheckKeyValue: 100,
+					},
+				},
+			},
+		},
+		execRunner: webBackendTestRunner{byCommand: map[string]execx.Result{
+			checks.CheckTypeHdparm: {ExitCode: 0, Stdout: " Timing buffered disk reads: 500 MB in 3.00 seconds = 166.67 MB/sec\n"},
+		}},
+		now: func() time.Time {
+			nowCalls++
+			if nowCalls == 1 {
+				return startedAt
+			}
+			return finishedAt
+		},
+		emit: func(event Event) { events = append(events, event) },
+	}
+
+	result := b.ProbeWatch(context.Background(), "disk-speed")
+	if result.OK || len(events) != 2 || events[0].Status != eventStatusRunning || events[1].Status != eventStatusFailed || !strings.Contains(events[1].Message, "failed after") {
+		t.Fatalf("failed probe result=%+v events=%+v", result, events)
+	}
+}
+
+func TestWebBackendProbeSmartStartsShortSelfTest(t *testing.T) {
+	now := time.Date(2026, 7, 13, 10, 0, 0, 0, time.UTC)
+	snapshots := NewWatchSnapshots()
+	snapshots.now = func() time.Time { return now }
+	runner := &recordingWebRunner{result: execx.Result{ExitCode: execx.ExitCodeSuccess}}
+	var events []Event
+	b := &WebBackend{
+		watchOrder: []string{"smart-sda"},
+		watches: map[string]*webWatch{
+			"smart-sda": {
+				name:      "smart-sda",
+				checkType: checks.CheckTypeSmart,
+				check: map[string]any{
+					checks.CheckKeyType:   checks.CheckTypeSmart,
+					checks.CheckKeyDevice: "/dev/sda",
+				},
+			},
+		},
+		watchSnapshots: snapshots,
+		execRunner:     runner,
+		now:            func() time.Time { return now },
+		emit:           func(event Event) { events = append(events, event) },
+	}
+
+	result := b.ProbeWatch(context.Background(), "smart-sda")
+	if !result.OK || result.Message != "smart /dev/sda short self-test started" || readingByField(result.Readings, checks.DataKeyResult).Value != "short self-test started" {
+		t.Fatalf("SMART short test result = %+v", result)
+	}
+	if runner.name != "smartctl" || len(runner.args) != 2 || runner.args[0] != "--test=short" || runner.args[1] != "/dev/sda" {
+		t.Fatalf("smartctl invocation = %q %v", runner.name, runner.args)
+	}
+	if got := snapshots.Get("smart-sda", checks.CheckTypeSmart); len(got) != 1 || got[0].Message != result.Message || got[0].At != now {
+		t.Fatalf("SMART short test snapshot = %+v", got)
+	}
+	if got := b.Watches(context.Background()); len(got) != 1 || got[0].State != checks.DeviceStateTesting {
+		t.Fatalf("SMART short test watch state = %+v, want testing", got)
+	}
+	if len(events) != 2 || events[0].Status != eventStatusRunning || events[1].Status != eventStatusOK || !strings.Contains(events[1].Message, "completed in") {
+		t.Fatalf("SMART short test events = %+v", events)
+	}
+}
+
 func mustProbeCertPEM(t *testing.T) []byte {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -1462,6 +1638,36 @@ func (r webBackendTestRunner) Run(_ context.Context, name string, _ ...string) (
 
 type countingWebRunner struct {
 	calls int
+}
+
+type blockingProbeRunner struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+type recordingWebRunner struct {
+	result execx.Result
+	name   string
+	args   []string
+}
+
+func (r *recordingWebRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
+	r.name = name
+	r.args = append([]string(nil), args...)
+	return r.result, nil
+}
+
+func (r *blockingProbeRunner) Run(ctx context.Context, _ string, _ ...string) (execx.Result, error) {
+	select {
+	case r.started <- struct{}{}:
+	default:
+	}
+	select {
+	case <-r.release:
+		return execx.Result{ExitCode: 0, Stdout: " Timing buffered disk reads: 500 MB in 3.00 seconds = 166.67 MB/sec\n"}, nil
+	case <-ctx.Done():
+		return execx.Result{}, ctx.Err()
+	}
 }
 
 func (r *countingWebRunner) Run(_ context.Context, _ string, _ ...string) (execx.Result, error) {

@@ -61,6 +61,7 @@ const (
 	eventStatusOK      = string(operation.ResultOK)
 	eventStatusBlocked = string(operation.ResultBlocked)
 	eventStatusFailed  = string(operation.ResultFailed)
+	eventStatusRunning = "running"
 )
 
 // Event action values emitted by daemon-side monitoring adjustments and web
@@ -91,6 +92,7 @@ const (
 	eventMessageMonitoringResumedAfterManualStart  = "monitoring resumed after manual start"
 	eventMessageMonitoringPausedAfterStorageUmount = "monitoring paused after storage umount"
 	eventMessageMonitoringResumedAfterStorageMount = "monitoring resumed after storage mount"
+	eventMessageManualProbeStarted                 = "manual probe started"
 )
 
 // Event field names are shared by structured logs and JSON event export.
