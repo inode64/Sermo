@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -143,7 +144,7 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 	}
 	m, ok := raw.(map[string]any)
 	if !ok {
-		return Spec{}, true, fmt.Errorf("control must be a mapping")
+		return Spec{}, true, errors.New("control must be a mapping")
 	}
 	if typ := cfgval.String(m[ControlKeyType]); typ != ControlType {
 		return Spec{}, false, nil
@@ -158,7 +159,7 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 		return Spec{}, true, fmt.Errorf("%s is not supported for docker control", controlPathInterface)
 	}
 	if spec.Socket != "" && spec.Host != "" {
-		return Spec{}, true, fmt.Errorf("control must not set both socket and host")
+		return Spec{}, true, errors.New("control must not set both socket and host")
 	}
 	if spec.Socket != "" && !filepath.IsAbs(spec.Socket) {
 		return Spec{}, true, fmt.Errorf("%s %q must be an absolute path", controlPathSocket, spec.Socket)

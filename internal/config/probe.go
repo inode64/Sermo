@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -42,7 +43,7 @@ func extractFileValue(path string, spec map[string]any) (string, bool, error) {
 			return "", false, fmt.Errorf("pattern is not a valid regex: %w", err)
 		}
 		if re.NumSubexp() < 1 {
-			return "", false, fmt.Errorf("pattern must define at least one capture group")
+			return "", false, errors.New("pattern must define at least one capture group")
 		}
 		if sub := re.FindSubmatch(data); len(sub) >= patternCaptureMinGroups {
 			return string(sub[patternCaptureGroup]), true, nil

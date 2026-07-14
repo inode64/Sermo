@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -80,7 +81,7 @@ func (c *Config) applyOSSelectors() error {
 		}
 		selected, ok := raw.(map[string]any)
 		if !ok {
-			return fmt.Errorf("collapse os selector in global config: document must resolve to a mapping")
+			return errors.New("collapse os selector in global config: document must resolve to a mapping")
 		}
 		c.Global.Raw = selected
 	}

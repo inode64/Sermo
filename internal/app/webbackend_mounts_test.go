@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -35,7 +36,7 @@ func (r *webMountRunner) Run(_ context.Context, name string, args ...string) (ex
 		return execx.Result{}, nil
 	case "umount":
 		if r.busy && (r.signalled == nil || *r.signalled == 0) {
-			return execx.Result{ExitCode: 32}, fmt.Errorf("run umount: exit code 32")
+			return execx.Result{ExitCode: 32}, errors.New("run umount: exit code 32")
 		}
 		*r.mounted = false
 		return execx.Result{}, nil
@@ -237,7 +238,7 @@ func TestWebBackendMountsReportsUsageError(t *testing.T) {
 			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
 		},
 		MountDiscoverUsers: func(string) ([]process.Process, error) {
-			return nil, fmt.Errorf("proc scan failed")
+			return nil, errors.New("proc scan failed")
 		},
 	})
 	if len(warns) != 0 {

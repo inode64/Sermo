@@ -1,6 +1,7 @@
 package assist
 
 import (
+	"errors"
 	"fmt"
 
 	"sermo/internal/cfgval"
@@ -31,7 +32,7 @@ func (netAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	}
 	cands := nonLoopbackIfaces(ifaces)
 	if len(cands) == 0 {
-		return Result{}, fmt.Errorf("no non-loopback network interfaces found")
+		return Result{}, errors.New("no non-loopback network interfaces found")
 	}
 	selected := chooseIfaces(p, "Which interfaces do you want to monitor?", cands, env.DefaultIfaces, false)
 

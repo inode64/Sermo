@@ -1,6 +1,7 @@
 package assist
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -32,7 +33,7 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	// Run is driven directly (the CLI also recovers at its own boundary).
 	defer Recover(&err)
 	if env.CatalogServices == nil {
-		return Result{}, fmt.Errorf("service detection is unavailable")
+		return Result{}, errors.New("service detection is unavailable")
 	}
 	cands, err := env.CatalogServices()
 	if err != nil {
@@ -43,7 +44,7 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	}
 	activeCatalog, generic := splitServiceCandidates(cands)
 	if len(activeCatalog) == 0 && len(generic) == 0 {
-		return Result{}, fmt.Errorf("no active services were detected on this host")
+		return Result{}, errors.New("no active services were detected on this host")
 	}
 
 	// Per-service properties first. Catalog services inherit PID/process

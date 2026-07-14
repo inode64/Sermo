@@ -2,7 +2,7 @@ package conn
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -64,7 +64,7 @@ func (snmpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	sysDescr := snmpString(by[oidSysDescr])
 	sysObjectID := snmpString(by[oidSysObjectID])
 	if sysDescr == "" && sysObjectID == "" {
-		return Result{}, fmt.Errorf("snmp: no system MIB values returned (wrong community/credentials?)")
+		return Result{}, errors.New("snmp: no system MIB values returned (wrong community/credentials?)")
 	}
 	extra := map[string]string{
 		ExtraKeyFingerprint: sysObjectID, // device identity; watched by on_change

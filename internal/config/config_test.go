@@ -4936,7 +4936,7 @@ service: php-fpm
 		t.Errorf("message = %q, want %q", got, "PHP-FPM 8.3 configuration is invalid")
 	}
 	binaryCheck := nested(t, resolved.Tree, "preflight", "php-fpm-8.3-binary")
-	wantBinary := fmt.Sprintf("%s/php8.3/bin/php-fpm", binRoot)
+	wantBinary := binRoot + "/php8.3/bin/php-fpm"
 	if got := cfgval.String(binaryCheck["path"]); got != wantBinary {
 		t.Errorf("linked app binary path = %q, want %q", got, wantBinary)
 	}

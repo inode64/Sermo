@@ -172,7 +172,7 @@ type smartData struct {
 // smartctl's JSON (ATA and NVMe shapes).
 func parseSmart(out string) (smartData, error) {
 	if strings.TrimSpace(out) == "" {
-		return smartData{}, fmt.Errorf("no smartctl output")
+		return smartData{}, errors.New("no smartctl output")
 	}
 	var j struct {
 		SmartStatus *struct {

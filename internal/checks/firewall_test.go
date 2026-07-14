@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -58,7 +59,7 @@ func TestFirewallRulesCheckRun(t *testing.T) {
 		},
 		{
 			name:    "sampler error",
-			err:     fmt.Errorf("nft failed"),
+			err:     errors.New("nft failed"),
 			wantOK:  false,
 			wantMsg: "nft failed",
 		},
@@ -121,7 +122,7 @@ func TestDefaultFirewallRulesSampler(t *testing.T) {
 		{
 			name:    "explicit nftables netlink error",
 			backend: FirewallBackendNftables,
-			nft:     func(context.Context) (uint64, error) { return 0, fmt.Errorf("permission denied") },
+			nft:     func(context.Context) (uint64, error) { return 0, errors.New("permission denied") },
 			wantErr: "nftables: permission denied",
 		},
 	}

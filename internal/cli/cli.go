@@ -458,7 +458,7 @@ func (a App) run(ctx context.Context, args []string) int {
 
 func (a App) runBackend(ctx context.Context, opts options) int {
 	if len(opts.args) > 0 {
-		return a.commandUsageError(opts.command, fmt.Sprintf("%s takes no arguments", opts.command))
+		return a.commandUsageError(opts.command, opts.command+" takes no arguments")
 	}
 	ctx, cancel := context.WithTimeout(ctx, opts.timeout)
 	defer cancel()
@@ -632,10 +632,10 @@ func (a App) runIsActive(ctx context.Context, opts options) int {
 // fully guarded.
 func (a App) runAction(ctx context.Context, opts options, action string) int {
 	if opts.service() == "" {
-		return a.commandUsageError(action, fmt.Sprintf("%s requires a service name", action))
+		return a.commandUsageError(action, action+" requires a service name")
 	}
 	if len(opts.args) > 1 {
-		return a.commandUsageError(action, fmt.Sprintf("%s takes exactly one service name", action))
+		return a.commandUsageError(action, action+" takes exactly one service name")
 	}
 	service := opts.service()
 
@@ -1593,17 +1593,17 @@ func parseBefore(value string, now func() time.Time) (time.Time, error) {
 	at := now()
 	if d, err := time.ParseDuration(value); err == nil {
 		if d <= 0 {
-			return time.Time{}, fmt.Errorf("invalid --before: duration must be positive")
+			return time.Time{}, errors.New("invalid --before: duration must be positive")
 		}
 		return at.Add(-d), nil
 	}
 	if t, err := time.Parse(time.RFC3339, value); err == nil {
 		if t.After(at) {
-			return time.Time{}, fmt.Errorf("invalid --before: timestamp must not be in the future")
+			return time.Time{}, errors.New("invalid --before: timestamp must not be in the future")
 		}
 		return t, nil
 	}
-	return time.Time{}, fmt.Errorf("invalid --before: use a non-future RFC3339 timestamp (e.g. 2026-06-13T12:00:00Z) or positive duration (e.g. 1h, 30m)")
+	return time.Time{}, errors.New("invalid --before: use a non-future RFC3339 timestamp (e.g. 2026-06-13T12:00:00Z) or positive duration (e.g. 1h, 30m)")
 }
 
 // pruneDaemonEvents performs the HTTP call to the running sermod's web API
@@ -1613,7 +1613,7 @@ func parseBefore(value string, now func() time.Time) (time.Time, error) {
 func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Time) (int, error) {
 	cfg, code := a.loadConfig(opts)
 	if code != exitSuccess || cfg == nil {
-		return 0, fmt.Errorf("failed to load config")
+		return 0, errors.New("failed to load config")
 	}
 	base, err := webAPIBase(cfg)
 	if err != nil {
@@ -1661,7 +1661,7 @@ func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Ti
 func (a App) fetchEvents(ctx context.Context, opts options, service string, limit int) ([]event, error) {
 	cfg, code := a.loadConfig(opts)
 	if code != exitSuccess || cfg == nil {
-		return nil, fmt.Errorf("failed to load config")
+		return nil, errors.New("failed to load config")
 	}
 	base, err := webAPIBase(cfg)
 	if err != nil {
@@ -1837,7 +1837,7 @@ func (a App) fetchDaemonApplicationStates(ctx context.Context, opts options) map
 func webAPIBase(cfg *config.Config) (string, error) {
 	wraw, _ := cfg.Global.Raw[config.SectionWeb].(map[string]any)
 	if wraw == nil {
-		return "", fmt.Errorf("web UI is not enabled in config (no web: block or no port); the event API is exposed by the running daemon")
+		return "", errors.New("web UI is not enabled in config (no web: block or no port); the event API is exposed by the running daemon")
 	}
 	addr := cfgval.String(wraw[config.WebKeyAddress])
 	if addr == "" {
@@ -1845,7 +1845,7 @@ func webAPIBase(cfg *config.Config) (string, error) {
 	}
 	p, ok := cfgval.Int(wraw[config.WebKeyPort])
 	if !ok || p <= 0 {
-		return "", fmt.Errorf("web.port is not set in config")
+		return "", errors.New("web.port is not set in config")
 	}
 	port := p
 	return fmt.Sprintf("%s://%s:%d", daemonWebSchemeHTTP, addr, port), nil
@@ -1970,7 +1970,7 @@ func parseArgs(args []string) (options, error) {
 	// 0 or negative is rejected rather than silently falling back to the default,
 	// which the bare `> 0` guard could not distinguish from "unset".
 	if fs.Changed(cliFlagLimit) && opts.eventLimit < 1 {
-		return opts, fmt.Errorf("--limit must be a positive integer")
+		return opts, errors.New("--limit must be a positive integer")
 	}
 	if backend != "" {
 		parsedBackend, err := servicemgr.ParseBackend(backend)

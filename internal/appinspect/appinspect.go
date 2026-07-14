@@ -11,6 +11,7 @@ import (
 	"os"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -340,7 +341,7 @@ func lookupIDName(id uint32, lookup func(uint32) string) string {
 	if name := lookup(id); name != "" {
 		return name
 	}
-	return fmt.Sprintf("%d", id)
+	return strconv.FormatUint(uint64(id), 10)
 }
 
 func inspectOptions(opts []Option) options {

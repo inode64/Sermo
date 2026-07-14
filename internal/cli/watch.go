@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -102,7 +103,7 @@ func (a App) runWatchProbe(ctx context.Context, opts options) int {
 func (a App) probeDaemonWatch(ctx context.Context, opts options, watch string) (daemonWatchProbe, error) {
 	cfg, code := a.loadConfig(opts)
 	if code != exitSuccess || cfg == nil {
-		return daemonWatchProbe{}, fmt.Errorf("failed to load config")
+		return daemonWatchProbe{}, errors.New("failed to load config")
 	}
 	base, err := webAPIBase(cfg)
 	if err != nil {
@@ -156,7 +157,7 @@ func (a App) runWatchRAIDControl(ctx context.Context, opts options, action strin
 	}
 	array := fmt.Sprint(checkEntry[checks.CheckKeyArray])
 	if action == "pause" && opts.confirm != array {
-		return a.commandUsageError(commandWatch, fmt.Sprintf("watch pause requires --confirm %s", array))
+		return a.commandUsageError(commandWatch, "watch pause requires --confirm "+array)
 	}
 	timeout := app.EngineDuration(cfg, config.EngineKeyOperationTimeout, app.DefaultEngineOperationTimeout)
 	if opts.timeout > 0 {

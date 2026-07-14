@@ -40,10 +40,10 @@ func (r *fakeRunner) Run(_ context.Context, name string, args ...string) (execx.
 				*r.mounted = false
 				return execx.Result{}, nil
 			}
-			return execx.Result{ExitCode: 32}, fmt.Errorf("run umount: exit code 32")
+			return execx.Result{ExitCode: 32}, errors.New("run umount: exit code 32")
 		}
 		if r.busy && (r.signalled == nil || *r.signalled == 0) {
-			return execx.Result{ExitCode: 32}, fmt.Errorf("run umount: exit code 32")
+			return execx.Result{ExitCode: 32}, errors.New("run umount: exit code 32")
 		}
 		*r.mounted = false
 		return execx.Result{}, nil

@@ -5,6 +5,7 @@ package logfile
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,7 +29,7 @@ type Writer struct {
 // Open creates parent directories as needed and opens path for append.
 func Open(path string) (*Writer, error) {
 	if path == "" {
-		return nil, fmt.Errorf("log path is empty")
+		return nil, errors.New("log path is empty")
 	}
 	if !filepath.IsAbs(path) {
 		return nil, fmt.Errorf("log path %q must be absolute", path)
