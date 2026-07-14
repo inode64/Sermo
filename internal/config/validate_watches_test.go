@@ -766,11 +766,12 @@ func TestValidateServiceCheckAsWatch(t *testing.T) {
 	}
 }
 
-func TestValidateZombiesWatch(t *testing.T) {
+func assertRequiredWatchPredicate(t *testing.T, name, checkType string, goodCheck map[string]any, wantIssue string) {
+	t.Helper()
 	good := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
-			"zombies": map[string]any{
-				"check": map[string]any{"type": "zombies", "count": map[string]any{"op": ">", "value": 20}},
+			name: map[string]any{
+				"check": goodCheck,
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
 			},
 		},
@@ -781,15 +782,19 @@ func TestValidateZombiesWatch(t *testing.T) {
 
 	bad := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
-			"z": map[string]any{
-				"check": map[string]any{"type": "zombies"},
+			"missing": map[string]any{
+				"check": map[string]any{"type": checkType},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
 			},
 		},
 	})
-	if !hasIssue(bad, "watches.z.check requires at least one of count") {
-		t.Fatalf("expected missing-count issue, got %v", bad)
+	if !hasIssue(bad, wantIssue) {
+		t.Fatalf("expected missing-predicate issue %q, got %v", wantIssue, bad)
 	}
+}
+
+func TestValidateZombiesWatch(t *testing.T) {
+	assertRequiredWatchPredicate(t, "zombies", "zombies", map[string]any{"type": "zombies", "count": map[string]any{"op": ">", "value": 20}}, "watches.missing.check requires at least one of count")
 }
 
 func TestValidatePortsWatch(t *testing.T) {
@@ -929,32 +934,7 @@ func TestValidateStorageMountWatch(t *testing.T) {
 }
 
 func TestValidateConntrackWatch(t *testing.T) {
-	good := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"conntrack": map[string]any{
-				"check": map[string]any{
-					"type":     "conntrack",
-					"used_pct": map[string]any{"op": ">=", "value": 90},
-				},
-				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("expected no watch issues, got %v", w)
-	}
-
-	bad := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"ct": map[string]any{
-				"check": map[string]any{"type": "conntrack"},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	if !hasIssue(bad, "watches.ct.check requires at least one of used_pct/free/count") {
-		t.Fatalf("expected missing-predicate issue, got %v", bad)
-	}
+	assertRequiredWatchPredicate(t, "conntrack", "conntrack", map[string]any{"type": "conntrack", "used_pct": map[string]any{"op": ">=", "value": 90}}, "watches.missing.check requires at least one of used_pct/free/count")
 }
 
 func TestValidateFdsWatch(t *testing.T) {

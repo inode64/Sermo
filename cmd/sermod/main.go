@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -89,29 +90,50 @@ func main() {
 	os.Exit(run(os.Args[1:]))
 }
 
-func run(args []string) int {
-	// `version` is a subcommand: honor it only as the first argument, never when
-	// it appears as a flag value (e.g. `--config version`). The flag forms may
-	// appear anywhere.
+func versionRequested(args []string) bool {
 	if len(args) > 0 && args[0] == commandVersion {
-		fmt.Println(buildinfo.String())
-		return 0
+		return true
 	}
-	for _, a := range args {
-		if a == flagVersion || a == flagVersionAlt {
-			fmt.Println(buildinfo.String())
-			return 0
-		}
-	}
+	return slices.Contains(args, flagVersion) || slices.Contains(args, flagVersionAlt)
+}
+
+func parseRunArgs(args []string) (cliArgs, error) {
 	parsed, err := parseArgs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "usage error: %v\n", err)
 		fmt.Fprintln(os.Stderr, "usage: sermod run [--config /etc/sermo/sermo.yml] [--verbose|-v]")
 		fmt.Fprintln(os.Stderr, "       sermod version")
-		return exitUsage
+		return cliArgs{}, err
 	}
 	if parsed.command != commandRun {
 		fmt.Fprintf(os.Stderr, "usage error: unknown command %q\n", parsed.command)
+		return cliArgs{}, errors.New("unknown command")
+	}
+	return parsed, nil
+}
+
+func loadDaemonConfig(logger *slog.Logger, globalPath string) (*config.Config, int) {
+	cfg, err := config.Load(globalPath)
+	if err != nil {
+		logger.Error("load config", logFieldError, err)
+		return nil, 2
+	}
+	if issues := config.Validate(cfg); len(issues) > 0 {
+		for _, issue := range issues {
+			logger.Error("config invalid", logFieldScope, issue.Scope, logFieldMessage, issue.Msg)
+		}
+		return nil, exitConfigInvalid
+	}
+	return cfg, 0
+}
+
+func run(args []string) int {
+	if versionRequested(args) {
+		fmt.Println(buildinfo.String())
+		return 0
+	}
+	parsed, err := parseRunArgs(args)
+	if err != nil {
 		return exitUsage
 	}
 	globalPath := parsed.globalPath
@@ -135,73 +157,30 @@ func run(args []string) int {
 			logFieldAffected, "service control, signalling other users' processes, icmp checks, per-process IO, cross-user /proc inspection")
 	}
 
-	cfg, err := config.Load(globalPath)
-	if err != nil {
-		logger.Error("load config", logFieldError, err)
-		return 2
-	}
-	if issues := config.Validate(cfg); len(issues) > 0 {
-		for _, is := range issues {
-			logger.Error("config invalid", logFieldScope, is.Scope, logFieldMessage, is.Msg)
-		}
-		return exitConfigInvalid
+	cfg, exitCode := loadDaemonConfig(logger, globalPath)
+	if exitCode != 0 {
+		return exitCode
 	}
 	logger.Debug("config loaded", logFieldPath, globalPath, logFieldServices, len(cfg.Services))
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	detector := servicemgr.NewDetector()
-	backend, err := servicemgr.ParseBackend(app.EngineString(cfg, config.EngineKeyBackend))
-	if err != nil {
-		logger.Error("backend", logFieldError, err)
-		return 2
-	}
-	detection, err := detector.Detect(ctx, backend)
-	if err != nil {
-		logger.Error("detect backend", logFieldError, err)
-		return 2
-	}
-	manager, err := servicemgr.NewManager(detection.Backend)
-	if err != nil {
-		logger.Error("service manager", logFieldError, err)
-		return 2
+	detection, manager, exitCode := detectServiceManager(ctx, cfg, logger)
+	if exitCode != 0 {
+		return exitCode
 	}
 	logger.Debug("service backend detected", logFieldBackend, detection.Backend)
 
-	// Ensure the runtime root exists owner-only (root) before any lock dir or the
-	// pidfile is created under it, so it stays 0700 even when the packaging
-	// (tmpfiles.d / OpenRC) has not pre-created it. Best-effort.
-	rt := cfg.Global.RuntimeDir()
-	if rt == "" {
-		rt = defaultRuntimeDir
-	}
-	if err := os.MkdirAll(rt, 0o700); err != nil {
-		logger.Warn("create runtime dir failed", logFieldPath, rt, logFieldError, err)
-	}
-
-	instanceLock, err := acquireInstanceLock(rt)
-	if err != nil {
-		if busy, ok := errors.AsType[*alreadyRunningError](err); ok {
-			if busy.PID > 0 {
-				logger.Warn("refusing to start a second sermod instance", logFieldPID, busy.PID)
-			} else {
-				logger.Warn("refusing to start a second sermod instance")
-			}
-		} else {
-			logger.Warn("acquire sermod instance lock failed", logFieldError, err)
-		}
-		return exitAlreadyRunning
+	rt, instanceLock, exitCode := acquireDaemonRuntimeLock(cfg, logger)
+	if exitCode != 0 {
+		return exitCode
 	}
 	defer instanceLock.Close()
 
-	store, err := state.OpenWith(
-		filepath.Join(cfg.Global.StateDir(), state.Filename),
-		state.Options{CacheBytes: app.EngineByteSize(cfg, config.EngineKeyStateCacheSize, state.DefaultCacheBytes)},
-	)
-	if err != nil {
-		logger.Error("open state store", logFieldError, err)
-		return 2
+	store, exitCode := openDaemonStore(cfg, logger)
+	if exitCode != 0 {
+		return exitCode
 	}
 	defer store.Close()
 
@@ -439,6 +418,56 @@ func run(args []string) int {
 		logger.Info("sermod stopped")
 	}
 	return 0
+}
+
+func openDaemonStore(cfg *config.Config, logger *slog.Logger) (*state.Store, int) {
+	store, err := state.OpenWith(filepath.Join(cfg.Global.StateDir(), state.Filename), state.Options{CacheBytes: app.EngineByteSize(cfg, config.EngineKeyStateCacheSize, state.DefaultCacheBytes)})
+	if err != nil {
+		logger.Error("open state store", logFieldError, err)
+		return nil, 2
+	}
+	return store, 0
+}
+
+func acquireDaemonRuntimeLock(cfg *config.Config, logger *slog.Logger) (string, io.Closer, int) {
+	runtimeDir := cfg.Global.RuntimeDir()
+	if runtimeDir == "" {
+		runtimeDir = defaultRuntimeDir
+	}
+	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
+		logger.Warn("create runtime dir failed", logFieldPath, runtimeDir, logFieldError, err)
+	}
+	lock, err := acquireInstanceLock(runtimeDir)
+	if err == nil {
+		return runtimeDir, lock, 0
+	}
+	if busy, ok := errors.AsType[*alreadyRunningError](err); ok && busy.PID > 0 {
+		logger.Warn("refusing to start a second sermod instance", logFieldPID, busy.PID)
+	} else if ok {
+		logger.Warn("refusing to start a second sermod instance")
+	} else {
+		logger.Warn("acquire sermod instance lock failed", logFieldError, err)
+	}
+	return runtimeDir, nil, exitAlreadyRunning
+}
+
+func detectServiceManager(ctx context.Context, cfg *config.Config, logger *slog.Logger) (servicemgr.Detection, servicemgr.Manager, int) {
+	backend, err := servicemgr.ParseBackend(app.EngineString(cfg, config.EngineKeyBackend))
+	if err != nil {
+		logger.Error("backend", logFieldError, err)
+		return servicemgr.Detection{}, nil, 2
+	}
+	detection, err := servicemgr.NewDetector().Detect(ctx, backend)
+	if err != nil {
+		logger.Error("detect backend", logFieldError, err)
+		return servicemgr.Detection{}, nil, 2
+	}
+	manager, err := servicemgr.NewManager(detection.Backend)
+	if err != nil {
+		logger.Error("service manager", logFieldError, err)
+		return servicemgr.Detection{}, nil, 2
+	}
+	return detection, manager, 0
 }
 
 // cliArgs holds the parsed `sermod` command line.

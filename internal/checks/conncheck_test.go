@@ -19,6 +19,49 @@ func (fakeProto) Probe(context.Context, conn.Config) (conn.Result, error) {
 	return conn.Result{}, nil
 }
 
+func buildConnCheckForTest(t *testing.T, name string, entry map[string]any) connCheck {
+	t.Helper()
+	built, warns := Build(map[string]any{name: entry}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("%s check should build: warns=%v", name, warns)
+	}
+	return built[0].Check.(connCheck)
+}
+
+func assertCredentialTLSCheck(t *testing.T, name, protocol string, defaultPort, tlsPort int) {
+	t.Helper()
+	plain := buildConnCheckForTest(t, name, map[string]any{"type": protocol, "host": "127.0.0.1"})
+	if plain.proto.Name() != protocol || plain.cfg.Port != defaultPort {
+		t.Fatalf("plain cfg = %+v", plain.cfg)
+	}
+	secure := buildConnCheckForTest(t, name, map[string]any{"type": protocol, "port": tlsPort, "tls": true, "user": "u", "password": "p"})
+	if secure.cfg.Port != tlsPort || secure.cfg.User != "u" || secure.cfg.TLS != "true" {
+		t.Fatalf("secure cfg = %+v", secure.cfg)
+	}
+}
+
+func assertProtocolAliases(t *testing.T, name string, types []string, protocol string, port int) {
+	t.Helper()
+	for _, typ := range types {
+		cc := buildConnCheckForTest(t, name, map[string]any{"type": typ, "host": "127.0.0.1"})
+		if cc.proto.Name() != protocol || cc.cfg.Port != port {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+}
+
+func assertUnixSocketCheck(t *testing.T, name, protocol, socket string) {
+	t.Helper()
+	defaultCheck := buildConnCheckForTest(t, name, map[string]any{"type": protocol})
+	if defaultCheck.proto.Name() != protocol || defaultCheck.cfg.Port != 0 || defaultCheck.cfg.Socket != socket {
+		t.Fatalf("default cfg = %+v", defaultCheck.cfg)
+	}
+	explicit := buildConnCheckForTest(t, name, map[string]any{"type": protocol, "socket": socket})
+	if explicit.cfg.Socket != socket {
+		t.Fatalf("explicit socket = %q, want %q", explicit.cfg.Socket, socket)
+	}
+}
+
 func TestConnCheckRunOKWithVersion(t *testing.T) {
 	var gotCfg conn.Config
 	c := connCheck{
@@ -362,24 +405,7 @@ func TestBuildDNSCheck(t *testing.T) {
 }
 
 func TestBuildFTPCheck(t *testing.T) {
-	// Anonymous (no user), default port 21.
-	built, warns := Build(map[string]any{
-		"ftp": map[string]any{"type": "ftp", "host": "ftp.example"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("anonymous ftp should build: warns=%v", warns)
-	}
-	cc := built[0].Check.(connCheck)
-	if cc.proto.Name() != "ftp" || cc.cfg.Port != 21 {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
-	// With credentials + implicit FTPS on 990.
-	built, _ = Build(map[string]any{
-		"ftp": map[string]any{"type": "ftp", "port": 990, "tls": true, "user": "joe", "password": "p"},
-	}, Deps{DefaultTimeout: time.Second})
-	if cc := built[0].Check.(connCheck); cc.cfg.Port != 990 || cc.cfg.User != "joe" || cc.cfg.TLS != "true" {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
+	assertCredentialTLSCheck(t, "ftp", "ftp", 21, 990)
 }
 
 func TestBuildSSHCheck(t *testing.T) {
@@ -572,23 +598,9 @@ func TestBuildCloudflaredCheck(t *testing.T) {
 }
 
 func TestBuildInfluxdbCheck(t *testing.T) {
-	for _, typ := range []string{"influxdb", "influx"} {
-		built, warns := Build(map[string]any{
-			"tsdb": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "influxdb" || cc.cfg.Port != 8086 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "tsdb", []string{"influxdb", "influx"}, "influxdb", 8086)
 	// https via tls is carried through.
-	built, _ := Build(map[string]any{
-		"tsdb": map[string]any{"type": "influxdb", "host": "127.0.0.1", "tls": "skip-verify"},
-	}, Deps{DefaultTimeout: time.Second})
-	if cc := built[0].Check.(connCheck); cc.cfg.TLS != "skip-verify" {
+	if cc := buildConnCheckForTest(t, "tsdb", map[string]any{"type": "influxdb", "host": "127.0.0.1", "tls": "skip-verify"}); cc.cfg.TLS != "skip-verify" {
 		t.Fatalf("tls = %q", cc.cfg.TLS)
 	}
 }
@@ -930,23 +942,7 @@ func TestBuildOpenvswitchCheck(t *testing.T) {
 }
 
 func TestBuildMQTTCheck(t *testing.T) {
-	built, warns := Build(map[string]any{
-		"broker": map[string]any{"type": "mqtt", "host": "127.0.0.1"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("mqtt check should build: warns=%v", warns)
-	}
-	cc := built[0].Check.(connCheck)
-	if cc.proto.Name() != "mqtt" || cc.cfg.Port != 1883 {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
-	// With credentials + MQTTS.
-	built, _ = Build(map[string]any{
-		"broker": map[string]any{"type": "mqtt", "port": 8883, "tls": true, "user": "u", "password": "p"},
-	}, Deps{DefaultTimeout: time.Second})
-	if cc := built[0].Check.(connCheck); cc.cfg.Port != 8883 || cc.cfg.User != "u" || cc.cfg.TLS != "true" {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
+	assertCredentialTLSCheck(t, "broker", "mqtt", 1883, 8883)
 }
 
 func TestBuildSieveCheck(t *testing.T) {
@@ -980,24 +976,10 @@ func TestBuildAsteriskCheck(t *testing.T) {
 }
 
 func TestBuildGuacdCheck(t *testing.T) {
-	for _, typ := range []string{"guacd", "guacamole"} {
-		built, warns := Build(map[string]any{
-			"guac": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "guacd" || cc.cfg.Port != 4822 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "guac", []string{"guacd", "guacamole"}, "guacd", 4822)
 
 	// query selects the Guacamole protocol to handshake with.
-	built, _ := Build(map[string]any{
-		"guac": map[string]any{"type": "guacd", "host": "127.0.0.1", "query": "rdp"},
-	}, Deps{DefaultTimeout: time.Second})
-	if cc := built[0].Check.(connCheck); cc.cfg.Query != "rdp" {
+	if cc := buildConnCheckForTest(t, "guac", map[string]any{"type": "guacd", "host": "127.0.0.1", "query": "rdp"}); cc.cfg.Query != "rdp" {
 		t.Fatalf("query = %q, want rdp", cc.cfg.Query)
 	}
 }
@@ -1137,78 +1119,17 @@ func TestBuildRpcbindCheck(t *testing.T) {
 	}
 }
 
-func TestBuildFail2banCheck(t *testing.T) {
-	// Socket-only: default port 0 and the well-known control socket by default.
-	built, warns := Build(map[string]any{
-		"f2b": map[string]any{"type": "fail2ban"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("fail2ban check should build: warns=%v", warns)
-	}
-	cc := built[0].Check.(connCheck)
-	if cc.proto.Name() != "fail2ban" || cc.cfg.Port != 0 {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
-	if cc.cfg.Socket != "/run/fail2ban/fail2ban.sock" {
-		t.Fatalf("default socket = %q", cc.cfg.Socket)
-	}
-
-	// An explicit socket is kept.
-	built, _ = Build(map[string]any{
-		"f2b": map[string]any{"type": "fail2ban", "socket": "/run/fail2ban/fail2ban.sock"},
-	}, Deps{DefaultTimeout: time.Second})
-	if cc := built[0].Check.(connCheck); cc.cfg.Socket != "/run/fail2ban/fail2ban.sock" {
-		t.Fatalf("socket = %q", cc.cfg.Socket)
-	}
-}
-
-func TestBuildLvmpolldCheck(t *testing.T) {
-	// Socket-only: default port 0 and the well-known control socket by default.
-	built, warns := Build(map[string]any{
-		"lvm": map[string]any{"type": "lvmpolld"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("lvmpolld check should build: warns=%v", warns)
-	}
-	cc := built[0].Check.(connCheck)
-	if cc.proto.Name() != "lvmpolld" || cc.cfg.Port != 0 {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
-	if cc.cfg.Socket != "/run/lvm/lvmpolld.socket" {
-		t.Fatalf("default socket = %q", cc.cfg.Socket)
-	}
-
-	// An explicit socket is kept.
-	built, _ = Build(map[string]any{
-		"lvm": map[string]any{"type": "lvmpolld", "socket": "/run/lvm/lvmpolld.socket"},
-	}, Deps{DefaultTimeout: time.Second})
-	if cc := built[0].Check.(connCheck); cc.cfg.Socket != "/run/lvm/lvmpolld.socket" {
-		t.Fatalf("socket = %q", cc.cfg.Socket)
-	}
-}
-
-func TestBuildAcpidCheck(t *testing.T) {
-	// Socket-only: default port 0 and the well-known socket when none is given.
-	built, warns := Build(map[string]any{
-		"acpi": map[string]any{"type": "acpid"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("acpid check should build: warns=%v", warns)
-	}
-	cc := built[0].Check.(connCheck)
-	if cc.proto.Name() != "acpid" || cc.cfg.Port != 0 {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
-	if cc.cfg.Socket != "/run/acpid.socket" {
-		t.Fatalf("default socket = %q", cc.cfg.Socket)
-	}
-
-	// An explicit socket is kept.
-	built, _ = Build(map[string]any{
-		"acpi": map[string]any{"type": "acpid", "socket": "/run/acpid.socket"},
-	}, Deps{DefaultTimeout: time.Second})
-	if cc := built[0].Check.(connCheck); cc.cfg.Socket != "/run/acpid.socket" {
-		t.Fatalf("socket = %q", cc.cfg.Socket)
+func TestBuildUnixSocketChecks(t *testing.T) {
+	for _, tc := range []struct {
+		name, protocol, socket string
+	}{
+		{"fail2ban", "fail2ban", "/run/fail2ban/fail2ban.sock"},
+		{"lvmpolld", "lvmpolld", "/run/lvm/lvmpolld.socket"},
+		{"acpid", "acpid", "/run/acpid.socket"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assertUnixSocketCheck(t, tc.name, tc.protocol, tc.socket)
+		})
 	}
 }
 

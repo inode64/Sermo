@@ -4267,6 +4267,11 @@ defaults: { policy: { cooldown: 5m } }
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
+	assertUnversionedVersionTemplate(t, cfg, bin)
+}
+
+func assertUnversionedVersionTemplate(t *testing.T, cfg *Config, bin string) {
+	t.Helper()
 	if got := strings.Join(cfg.CatalogNamesInCategory(CategoryApp), ","); got != "php,php8.4,python,python3" {
 		t.Fatalf("app names = %s, want php,php8.4,python,python3", got)
 	}
@@ -4503,6 +4508,11 @@ defaults: { policy: { cooldown: 5m } }
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
+	assertJavaVersionTemplate(t, cfg, bin, jvm)
+}
+
+func assertJavaVersionTemplate(t *testing.T, cfg *Config, bin, jvm string) {
+	t.Helper()
 	tests := []struct {
 		name        string
 		binary      string
@@ -5419,44 +5429,44 @@ checks:
 	}
 }
 
-func TestExpandSocketDesugars(t *testing.T) {
-	global := writeConfig(t, map[string]string{
-		"sermo.yml": baseGlobal,
-		"catalog/services/svc.yml": `
-name: svc
-socket:
-  path:
-    - /run/svc-main.sock
-    - /run/svc-legacy.sock
-  optional: true
-checks:
-  service: { type: service, expect: active }
-`,
-		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
+func TestExpandFileShorthandsDesugar(t *testing.T) {
+	tests := []struct {
+		name, shorthand string
+		paths           []string
+	}{
+		{"socket", "socket", []string{"/run/svc-main.sock", "/run/svc-legacy.sock"}},
+		{"lockfile", "lockfile", []string{"/run/lock/svc-main.lock", "/run/lock/svc-legacy.lock"}},
 	}
-	resolved, errs := cfg.Resolve("svc-main")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
-	if _, present := resolved.Tree["socket"]; present {
-		t.Errorf("top-level socket key must be consumed")
-	}
-	checks := resolved.Tree["checks"].(map[string]any)
-	chk := checks["socket"].(map[string]any)
-	want := []string{"/run/svc-main.sock", "/run/svc-legacy.sock"}
-	if chk["type"] != "socket" || !slices.Equal(cfgval.StringList(chk["path"]), want) {
-		t.Fatalf("socket check = %v, want candidate list %v", chk, want)
-	}
-	if optional, _ := chk["optional"].(bool); !optional {
-		t.Fatalf("socket check optional = %v, want true", chk["optional"])
-	}
-	req, _ := chk["requires"].([]any)
-	if len(req) != 1 || req[0] != "service" {
-		t.Fatalf("socket check requires = %v, want [service]", chk["requires"])
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			global := writeConfig(t, map[string]string{
+				"sermo.yml":                baseGlobal,
+				"catalog/services/svc.yml": fmt.Sprintf("name: svc\n%s:\n  path:\n    - %s\n    - %s\n  optional: true\nchecks:\n  service: { type: service, expect: active }\n", tc.shorthand, tc.paths[0], tc.paths[1]),
+				"services/svc-main.yml":    "name: svc-main\nuses: svc\n",
+			})
+			cfg, err := loadConfig(t, global)
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			resolved, errs := cfg.Resolve("svc-main")
+			if len(errs) != 0 {
+				t.Fatalf("Resolve() errors = %v", errs)
+			}
+			if _, present := resolved.Tree[tc.shorthand]; present {
+				t.Errorf("top-level %s key must be consumed", tc.shorthand)
+			}
+			chk := nested(t, resolved.Tree, "checks", tc.shorthand)
+			if chk["type"] != tc.shorthand || !slices.Equal(cfgval.StringList(chk["path"]), tc.paths) {
+				t.Fatalf("%s check = %v, want candidate list %v", tc.shorthand, chk, tc.paths)
+			}
+			if optional, _ := chk["optional"].(bool); !optional {
+				t.Fatalf("%s optional = %v, want true", tc.shorthand, chk["optional"])
+			}
+			req, _ := chk["requires"].([]any)
+			if len(req) != 1 || req[0] != "service" {
+				t.Fatalf("%s requires = %v, want [service]", tc.shorthand, chk["requires"])
+			}
+		})
 	}
 }
 
@@ -5484,47 +5494,6 @@ checks:
 	chk := nested(t, resolved.Tree, "checks", "socket")
 	if got := cfgval.String(chk["path"]); got != "/run/svc.sock" {
 		t.Fatalf("socket check path = %q, want /run/svc.sock", got)
-	}
-}
-
-func TestExpandLockfileDesugars(t *testing.T) {
-	global := writeConfig(t, map[string]string{
-		"sermo.yml": baseGlobal,
-		"catalog/services/svc.yml": `
-name: svc
-lockfile:
-  path:
-    - /run/lock/svc-main.lock
-    - /run/lock/svc-legacy.lock
-  optional: true
-checks:
-  service: { type: service, expect: active }
-`,
-		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, errs := cfg.Resolve("svc-main")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
-	if _, present := resolved.Tree["lockfile"]; present {
-		t.Errorf("top-level lockfile key must be consumed")
-	}
-	checks := resolved.Tree["checks"].(map[string]any)
-	chk := checks["lockfile"].(map[string]any)
-	want := []string{"/run/lock/svc-main.lock", "/run/lock/svc-legacy.lock"}
-	if chk["type"] != "lockfile" || !slices.Equal(cfgval.StringList(chk["path"]), want) {
-		t.Fatalf("lockfile check = %v, want candidate list %v", chk, want)
-	}
-	if optional, _ := chk["optional"].(bool); !optional {
-		t.Fatalf("lockfile check optional = %v, want true", chk["optional"])
-	}
-	req, _ := chk["requires"].([]any)
-	if len(req) != 1 || req[0] != "service" {
-		t.Fatalf("lockfile check requires = %v, want [service]", chk["requires"])
 	}
 }
 

@@ -7,19 +7,35 @@ import (
 
 func TestFormatCondition(t *testing.T) {
 	cases := []struct {
+		name string
 		node map[string]any
 		want string
 	}{
-		{map[string]any{"failed": map[string]any{"check": "http"}}, "failed:http"},
-		{map[string]any{"and": []any{
+		{"empty", map[string]any{}, ""},
+		{"multiple operators", map[string]any{"failed": map[string]any{}, "active": map[string]any{}}, "?"},
+		{"failed", map[string]any{"failed": map[string]any{"check": "http"}}, "failed:http"},
+		{"active", map[string]any{"active": map[string]any{"check": "backup"}}, "active:backup"},
+		{"metric name", map[string]any{"metric": map[string]any{"name": "memory"}}, "metric:memory"},
+		{"metric legacy key", map[string]any{"metric": map[string]any{"metric": "memory"}}, "metric:memory"},
+		{"service", map[string]any{"service": map[string]any{"service": "active"}}, "service:active"},
+		{"process", map[string]any{"process": map[string]any{"name": "worker"}}, "process:worker"},
+		{"file", map[string]any{"file": map[string]any{"path": "/run/app.pid"}}, "file:/run/app.pid"},
+		{"command", map[string]any{"command": map[string]any{}}, "command"},
+		{"changed", map[string]any{"changed": map[string]any{"path": "/etc/app.conf"}}, "changed:/etc/app.conf"},
+		{"and", map[string]any{"and": []any{
 			map[string]any{"failed": map[string]any{"check": "http"}},
 			map[string]any{"not": map[string]any{"active": map[string]any{"check": "backup"}}},
 		}}, "and(failed:http, not(active:backup))"},
+		{"or", map[string]any{"or": []any{map[string]any{"command": map[string]any{}}}}, "or(command)"},
+		{"invalid branch", map[string]any{"and": "nope"}, "and"},
+		{"unknown", map[string]any{"unknown": map[string]any{}}, "unknown"},
 	}
 	for _, tc := range cases {
-		if got := FormatCondition(tc.node); got != tc.want {
-			t.Fatalf("FormatCondition(%v) = %q, want %q", tc.node, got, tc.want)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			if got := FormatCondition(tc.node); got != tc.want {
+				t.Fatalf("FormatCondition(%v) = %q, want %q", tc.node, got, tc.want)
+			}
+		})
 	}
 }
 

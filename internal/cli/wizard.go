@@ -615,62 +615,44 @@ func detectedTargetKeys(env assist.Env, wizard string) map[string]bool {
 	keys := map[string]bool{}
 	switch wizard {
 	case wizardAssistantVolume:
-		if env.Volumes != nil {
-			if vols, err := env.Volumes(); err == nil {
-				for _, v := range vols {
-					keys[v.Mountpoint] = true
-				}
-			}
-		}
+		addDetectedTargetKeys(keys, env.Volumes, func(volume assist.Volume) string { return volume.Mountpoint })
 	case wizardAssistantMount:
-		if env.Mounts != nil {
-			if mounts, err := env.Mounts(); err == nil {
-				for _, m := range mounts {
-					keys[filepath.Clean(m.Path)] = true
-				}
-			}
-		}
+		addDetectedTargetKeys(keys, env.Mounts, func(mount assist.MountCandidate) string { return filepath.Clean(mount.Path) })
 	case wizardAssistantNet, wizardAssistantUplink:
-		if env.Ifaces != nil {
-			if ifs, err := env.Ifaces(); err == nil {
-				for _, i := range ifs {
-					keys[i.Name] = true
-				}
-			}
-		}
+		addDetectedTargetKeys(keys, env.Ifaces, func(iface assist.Iface) string { return iface.Name })
 	case wizardAssistantService:
-		if env.CatalogServices != nil {
-			if ds, err := env.CatalogServices(); err == nil {
-				if len(ds) > 0 {
-					keys[serviceDetectedFamilyKey(wizardNounService)] = true
-					for _, d := range ds {
-						keys[serviceTargetKey(wizardNounService, d.Name)] = true
-					}
-				}
-			}
-		}
-		if env.DockerContainers != nil {
-			if containers, err := env.DockerContainers(); err == nil {
-				if len(containers) > 0 {
-					keys[serviceDetectedFamilyKey(serviceFamilyDocker)] = true
-					for _, c := range containers {
-						keys[serviceTargetKey(serviceFamilyDocker, c.Container)] = true
-					}
-				}
-			}
-		}
-		if env.VMs != nil {
-			if vms, err := env.VMs(); err == nil {
-				if len(vms) > 0 {
-					keys[serviceDetectedFamilyKey(serviceFamilyVM)] = true
-					for _, vm := range vms {
-						keys[serviceTargetKey(serviceFamilyVM, vm.Domain)] = true
-					}
-				}
-			}
-		}
+		addDetectedServiceKeys(keys, wizardNounService, env.CatalogServices, func(service assist.ServiceCandidate) string { return service.Name })
+		addDetectedServiceKeys(keys, serviceFamilyDocker, env.DockerContainers, func(container assist.DockerCandidate) string { return container.Container })
+		addDetectedServiceKeys(keys, serviceFamilyVM, env.VMs, func(vm assist.VMCandidate) string { return vm.Domain })
 	}
 	return keys
+}
+
+func addDetectedTargetKeys[T any](keys map[string]bool, detect func() ([]T, error), target func(T) string) {
+	if detect == nil {
+		return
+	}
+	items, err := detect()
+	if err != nil {
+		return
+	}
+	for _, item := range items {
+		keys[target(item)] = true
+	}
+}
+
+func addDetectedServiceKeys[T any](keys map[string]bool, family string, detect func() ([]T, error), target func(T) string) {
+	if detect == nil {
+		return
+	}
+	items, err := detect()
+	if err != nil || len(items) == 0 {
+		return
+	}
+	keys[serviceDetectedFamilyKey(family)] = true
+	for _, item := range items {
+		keys[serviceTargetKey(family, target(item))] = true
+	}
 }
 
 func existingWizardWatchFiles(targetDir string) ([]wizardWatchFile, error) {

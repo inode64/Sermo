@@ -119,83 +119,101 @@ func TestIndexCSPHygiene(t *testing.T) {
 // dialogs, and table headers that the JS and server reference. These survive
 // minification because they live in the src/index.html shell, not the bundle.
 func TestIndexShellAnchors(t *testing.T) {
-	doc, _ := parsedIndex(t)
+	anchors := collectIndexShellAnchors(t)
+	assertIndexShellIDs(t, anchors.ids)
+	assertIndexShellSectionLinks(t, anchors.sectionLinks, anchors.sectionLinkLabels)
+	assertIndexShellTable(t, anchors.headers, anchors.dialogs)
+}
 
-	ids := map[string]bool{}
-	headers := map[string]bool{}
-	sectionLinks := map[string]string{}
-	sectionLinkLabels := map[string]string{}
-	dialogs := 0
-	walk(doc, func(n *html.Node) {
-		if n.Type != html.ElementNode {
+type indexShellAnchors struct {
+	ids               map[string]bool
+	headers           map[string]bool
+	sectionLinks      map[string]string
+	sectionLinkLabels map[string]string
+	dialogs           int
+}
+
+func collectIndexShellAnchors(t *testing.T) indexShellAnchors {
+	t.Helper()
+	doc, _ := parsedIndex(t)
+	anchors := indexShellAnchors{ids: map[string]bool{}, headers: map[string]bool{}, sectionLinks: map[string]string{}, sectionLinkLabels: map[string]string{}}
+	walk(doc, func(node *html.Node) {
+		if node.Type != html.ElementNode {
 			return
 		}
-		if id, ok := attr(n, "id"); ok {
-			ids[id] = true
+		if id, ok := attr(node, "id"); ok {
+			anchors.ids[id] = true
 		}
-		switch n.DataAtom {
+		switch node.DataAtom {
 		case atom.Dialog:
-			dialogs++
+			anchors.dialogs++
 		case atom.Th:
-			if n.FirstChild != nil && n.FirstChild.Type == html.TextNode {
-				headers[strings.TrimSpace(n.FirstChild.Data)] = true
+			if node.FirstChild != nil && node.FirstChild.Type == html.TextNode {
+				anchors.headers[strings.TrimSpace(node.FirstChild.Data)] = true
 			}
 		case atom.A:
-			className, hasClass := attr(n, "class")
-			if !hasClass || !strings.Contains(" "+className+" ", " section-jump ") {
-				break
-			}
-			target, hasTarget := attr(n, "data-panel-target")
-			href, hasHref := attr(n, "href")
-			if hasTarget && hasHref {
-				sectionLinks[target] = href
-				var sb strings.Builder
-				walk(n, func(c *html.Node) {
-					if c.Type == html.TextNode {
-						sb.WriteString(c.Data)
-					}
-				})
-				sectionLinkLabels[target] = strings.TrimSpace(sb.String())
-			}
+			collectIndexSectionLink(node, &anchors)
 		}
 	})
+	return anchors
+}
 
-	wantIDs := []string{
+func collectIndexSectionLink(node *html.Node, anchors *indexShellAnchors) {
+	className, hasClass := attr(node, "class")
+	if !hasClass || !strings.Contains(" "+className+" ", " section-jump ") {
+		return
+	}
+	target, hasTarget := attr(node, "data-panel-target")
+	href, hasHref := attr(node, "href")
+	if !hasTarget || !hasHref {
+		return
+	}
+	anchors.sectionLinks[target] = href
+	var label strings.Builder
+	walk(node, func(child *html.Node) {
+		if child.Type == html.TextNode {
+			label.WriteString(child.Data)
+		}
+	})
+	anchors.sectionLinkLabels[target] = strings.TrimSpace(label.String())
+}
+
+func assertIndexShellIDs(t *testing.T, ids map[string]bool) {
+	t.Helper()
+	for _, id := range []string{
 		"topbar", "section-nav", "favicon", "attention", "events", "target-search", "target-search-options",
 		"services-section", "containers-section", "vms-section", "apps-section", "libraries-section", "watches-section", "events-section",
-		"watch-controls", "mount-controls",
-		"container-controls", "vm-controls", "container-rows", "vm-rows",
-		"event-clear", "event-before", "event-reset-filters", "event-group",
-		"event-more", "event-service", "event-watch", "event-kind", "event-status", "event-range",
-		"state-compact-btn", "state-before", "app-rows", "library-rows", "locks-rows",
-		"mount-search", "mount-category", "mount-filters", "mount-filter-count",
+		"watch-controls", "mount-controls", "container-controls", "vm-controls", "container-rows", "vm-rows",
+		"event-clear", "event-before", "event-reset-filters", "event-group", "event-more", "event-service", "event-watch", "event-kind", "event-status", "event-range",
+		"state-compact-btn", "state-before", "app-rows", "library-rows", "locks-rows", "mount-search", "mount-category", "mount-filters", "mount-filter-count",
 		"action-confirm", "confirm-no-cascade", "simple-confirm",
-	}
-	for _, id := range wantIDs {
+	} {
 		if !ids[id] {
 			t.Errorf("shell missing element id %q", id)
 		}
 	}
-	for _, id := range []string{
-		"services-section", "containers-section", "vms-section", "mounts-section", "apps-section", "libraries-section", "watches-section",
-		"events-section", "locks-section", "notifiers-section", "daemon-section",
-	} {
-		if sectionLinks[id] != "#"+id {
-			t.Errorf("section nav link %q href = %q, want %q", id, sectionLinks[id], "#"+id)
+}
+
+func assertIndexShellSectionLinks(t *testing.T, links, labels map[string]string) {
+	t.Helper()
+	for _, id := range []string{"services-section", "containers-section", "vms-section", "mounts-section", "apps-section", "libraries-section", "watches-section", "events-section", "locks-section", "notifiers-section", "daemon-section"} {
+		if links[id] != "#"+id {
+			t.Errorf("section nav link %q href = %q, want %q", id, links[id], "#"+id)
 		}
 	}
-	if sectionLinkLabels["mounts-section"] != "Mount units" {
-		t.Errorf("mount section nav label = %q, want Mount units", sectionLinkLabels["mounts-section"])
+	if labels["mounts-section"] != "Mount units" {
+		t.Errorf("mount section nav label = %q, want Mount units", labels["mounts-section"])
 	}
+}
 
-	// action-confirm, panic-confirm, mount-umount-confirm and simple-confirm modals.
+func assertIndexShellTable(t *testing.T, headers map[string]bool, dialogs int) {
+	t.Helper()
 	if dialogs != 4 {
 		t.Errorf("want 4 <dialog> elements, got %d", dialogs)
 	}
-
-	for _, h := range []string{"Uptime", "CPU total", "Memory", "FDs", "IO R/W", "State", "Type", "Group", "Processes", "Users", "Actions"} {
-		if !headers[h] {
-			t.Errorf("shell missing static <th> %q", h)
+	for _, header := range []string{"Uptime", "CPU total", "Memory", "FDs", "IO R/W", "State", "Type", "Group", "Processes", "Users", "Actions"} {
+		if !headers[header] {
+			t.Errorf("shell missing static <th> %q", header)
 		}
 	}
 	if headers["Source"] {

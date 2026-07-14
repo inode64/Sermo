@@ -112,119 +112,137 @@ func validateGlobal(cfg *Config) []Issue {
 	}
 
 	validateEnableIfTree(raw, add)
+	validateGlobalEngine(raw, add)
+	validateGlobalPaths(cfg, raw, add)
+	validateGlobalSecurity(raw, add)
+	validateGlobalWebAndEmission(raw, add)
+	validateGlobalDefaults(cfg, raw, add)
 
-	if engine, ok := raw[SectionEngine].(map[string]any); ok {
-		for _, key := range slices.Sorted(maps.Keys(engine)) {
-			if _, allowed := validEngineKeys[key]; !allowed {
-				add("%s is not supported", engineFieldPath(key))
-			}
+	return issues
+}
+
+func validateGlobalEngine(raw map[string]any, add addFunc) {
+	engine, ok := raw[SectionEngine].(map[string]any)
+	if !ok {
+		return
+	}
+	for _, key := range slices.Sorted(maps.Keys(engine)) {
+		if _, allowed := validEngineKeys[key]; !allowed {
+			add("%s is not supported", engineFieldPath(key))
 		}
-		if backend := cfgval.String(engine[EngineKeyBackend]); !isValidBackend(backend) {
-			add("%s %q is not one of %s", enginePathBackend, backend, backendSummary)
+	}
+	if backend := cfgval.String(engine[EngineKeyBackend]); !isValidBackend(backend) {
+		add("%s %q is not one of %s", enginePathBackend, backend, backendSummary)
+	}
+	for _, field := range []string{keyInterval, EngineKeyArtifactInterval, EngineKeyDefaultTimeout, EngineKeyOperationTimeout} {
+		if v, present := engine[field]; present && !isPositiveDuration(cfgval.String(v)) {
+			add("%s %q must be a valid positive duration", engineFieldPath(field), cfgval.String(v))
 		}
-		for _, field := range []string{keyInterval, EngineKeyArtifactInterval, EngineKeyDefaultTimeout, EngineKeyOperationTimeout} {
-			if v, present := engine[field]; present && !isPositiveDuration(cfgval.String(v)) {
-				add("%s %q must be a valid positive duration", engineFieldPath(field), cfgval.String(v))
-			}
+	}
+	if v, present := engine[EngineKeyStartupDelay]; present && !isNonNegativeDuration(cfgval.String(v)) {
+		add("%s %q must be a valid non-negative duration (0 disables the wait)", enginePathStartupDelay, cfgval.String(v))
+	}
+	if mode := cfgval.String(engine[EngineKeyUserLookup]); !process.ValidUserLookupMode(mode) {
+		add("%s %q is not one of %s", enginePathUserLookup, mode, userLookupModeSummary)
+	}
+	if v, present := engine[EngineKeyUserLookupTimeout]; present && !isPositiveDuration(cfgval.String(v)) {
+		add("%s %q must be a valid positive duration", enginePathUserLookupTimeout, cfgval.String(v))
+	}
+	validateGlobalEnginePositiveInt(engine, EngineKeyMaxParallelChecks, enginePathMaxParallelChecks, add)
+	validateGlobalEnginePositiveInt(engine, EngineKeyMaxParallelOperations, enginePathMaxParallelOperations, add)
+	if v, present := engine[EngineKeyStateCacheSize]; present {
+		if n, ok := cfgval.ByteSize(v); !ok || n == 0 {
+			add("%s must be a positive size with a K/M/G suffix (e.g. 64M)", enginePathStateCacheSize)
 		}
-		if v, present := engine[EngineKeyStartupDelay]; present && !isNonNegativeDuration(cfgval.String(v)) {
-			add("%s %q must be a valid non-negative duration (0 disables the wait)", enginePathStartupDelay, cfgval.String(v))
-		}
-		if mode := cfgval.String(engine[EngineKeyUserLookup]); !process.ValidUserLookupMode(mode) {
-			add("%s %q is not one of %s", enginePathUserLookup, mode, userLookupModeSummary)
-		}
-		if v, present := engine[EngineKeyUserLookupTimeout]; present && !isPositiveDuration(cfgval.String(v)) {
-			add("%s %q must be a valid positive duration", enginePathUserLookupTimeout, cfgval.String(v))
-		}
-		if v, present := engine[EngineKeyMaxParallelChecks]; present {
-			if n, ok := cfgval.Int(v); !ok || n <= 0 {
-				add("%s must be an integer > 0", enginePathMaxParallelChecks)
-			}
-		}
-		if v, present := engine[EngineKeyMaxParallelOperations]; present {
-			if n, ok := cfgval.Int(v); !ok || n <= 0 {
-				add("%s must be an integer > 0", enginePathMaxParallelOperations)
-			}
-		}
-		if v, present := engine[EngineKeyStateCacheSize]; present {
-			if n, ok := cfgval.ByteSize(v); !ok || n == 0 {
-				add("%s must be a positive size with a K/M/G suffix (e.g. 64M)", enginePathStateCacheSize)
-			}
-		}
-		for _, key := range []string{EngineKeyAccess, EngineKeyEvents, EngineKeyDiagnostics} {
-			if v, present := engine[key]; present {
-				field := engineFieldPath(key)
-				path := cfgval.AsString(v)
-				if path == "" {
-					add("%s must be a non-empty absolute path when set", field)
-				} else if !filepath.IsAbs(path) {
-					add("%s %q must be an absolute path", field, path)
-				}
-			}
-		}
-		if v, present := engine[EngineKeyDiagnosticsInterval]; present {
-			if cfgval.String(engine[EngineKeyDiagnostics]) == "" {
-				add("%s is set but %s is not configured", enginePathDiagnosticsInterval, enginePathDiagnostics)
-			} else if !isPositiveDuration(cfgval.String(v)) {
-				add("%s %q must be a valid positive duration", enginePathDiagnosticsInterval, cfgval.String(v))
+	}
+	for _, key := range []string{EngineKeyAccess, EngineKeyEvents, EngineKeyDiagnostics} {
+		if v, present := engine[key]; present {
+			field := engineFieldPath(key)
+			path := cfgval.AsString(v)
+			if path == "" {
+				add("%s must be a non-empty absolute path when set", field)
+			} else if !filepath.IsAbs(path) {
+				add("%s %q must be an absolute path", field, path)
 			}
 		}
 	}
+	if v, present := engine[EngineKeyDiagnosticsInterval]; present {
+		if cfgval.String(engine[EngineKeyDiagnostics]) == "" {
+			add("%s is set but %s is not configured", enginePathDiagnosticsInterval, enginePathDiagnostics)
+		} else if !isPositiveDuration(cfgval.String(v)) {
+			add("%s %q must be a valid positive duration", enginePathDiagnosticsInterval, cfgval.String(v))
+		}
+	}
+}
 
-	if paths, ok := raw[sectionPaths].(map[string]any); ok {
-		for _, key := range slices.Sorted(maps.Keys(paths)) {
-			if key == pathKeyLocks {
-				add("%s is not supported; runtime locks derive from %s", pathsPathLocks, pathsPathRuntime)
-				continue
-			}
-			if _, known := validGlobalPathKeys[key]; !known {
-				add("%s is not supported", pathsFieldPath(key))
-			}
+func validateGlobalEnginePositiveInt(engine map[string]any, key, path string, add addFunc) {
+	if v, present := engine[key]; present {
+		if n, ok := cfgval.Int(v); !ok || n <= 0 {
+			add("%s must be an integer > 0", path)
 		}
-		if runtime := cfgval.String(paths[pathKeyRuntime]); runtime != "" && !filepath.IsAbs(runtime) {
-			add("%s %q must be an absolute directory", pathsPathRuntime, runtime)
+	}
+}
+
+func validateGlobalPaths(cfg *Config, raw map[string]any, add addFunc) {
+	paths, ok := raw[sectionPaths].(map[string]any)
+	if !ok {
+		return
+	}
+	for _, key := range slices.Sorted(maps.Keys(paths)) {
+		if key == pathKeyLocks {
+			add("%s is not supported; runtime locks derive from %s", pathsPathLocks, pathsPathRuntime)
+			continue
 		}
-		if stateDir := cfgval.String(paths[pathKeyState]); stateDir != "" && !filepath.IsAbs(stateDir) {
-			add("%s %q must be an absolute directory", pathsPathState, stateDir)
+		if _, known := validGlobalPathKeys[key]; !known {
+			add("%s is not supported", pathsFieldPath(key))
 		}
-		if templateDir := cfgval.String(paths[pathKeyTemplates]); templateDir != "" && !filepath.IsAbs(templateDir) {
-			add("%s %q must be an absolute directory", pathsPathTemplates, templateDir)
+	}
+	for _, path := range []struct{ key, value string }{
+		{pathKeyRuntime, cfgval.String(paths[pathKeyRuntime])},
+		{pathKeyState, cfgval.String(paths[pathKeyState])},
+		{pathKeyTemplates, cfgval.String(paths[pathKeyTemplates])},
+	} {
+		if path.value != "" && !filepath.IsAbs(path.value) {
+			add("%s %q must be an absolute directory", pathsFieldPath(path.key), path.value)
 		}
-		pathLists := map[string][]string{
-			pathKeyApps:      cfg.Global.Apps,
-			pathKeyNotifiers: cfg.Global.Notifiers,
-			pathKeyServices:  cfg.Global.Services,
-			pathKeyWatches:   cfg.Global.Watches,
-		}
-		for name, dirs := range pathLists {
-			for _, dir := range dirs {
-				if dir != "" && !filepath.IsAbs(dir) {
-					add("%s entry %q must be an absolute directory", pathsFieldPath(name), dir)
-				}
+	}
+	for name, dirs := range map[string][]string{
+		pathKeyApps: cfg.Global.Apps, pathKeyNotifiers: cfg.Global.Notifiers,
+		pathKeyServices: cfg.Global.Services, pathKeyWatches: cfg.Global.Watches,
+	} {
+		for _, dir := range dirs {
+			if dir != "" && !filepath.IsAbs(dir) {
+				add("%s entry %q must be an absolute directory", pathsFieldPath(name), dir)
 			}
 		}
 	}
+}
 
-	if security, ok := raw[sectionSecurity].(map[string]any); ok {
-		for _, key := range rejectedSecurityToggles {
-			if _, present := security[key]; present {
-				add("%s is a hard safety invariant and cannot be configured", securityFieldPath(key))
-			}
+func validateGlobalSecurity(raw map[string]any, add addFunc) {
+	security, ok := raw[sectionSecurity].(map[string]any)
+	if !ok {
+		return
+	}
+	for _, key := range rejectedSecurityToggles {
+		if _, present := security[key]; present {
+			add("%s is a hard safety invariant and cannot be configured", securityFieldPath(key))
 		}
 	}
+}
 
+func validateGlobalWebAndEmission(raw map[string]any, add addFunc) {
 	if webCfg, ok := raw[SectionWeb].(map[string]any); ok {
 		validateWeb(webCfg, add)
 	}
 	validateEmission(raw, emission.Section, add)
+}
 
+func validateGlobalDefaults(cfg *Config, raw map[string]any, add addFunc) {
 	notifiers := cfg.Notifiers()
 	validateNotifiers(notifiers, cfg.Global.TemplateDir(), add)
-
 	if _, present := raw[sectionNotify]; present {
 		validateNotifySelection(sectionNotify, raw[sectionNotify], notifierNames(notifiers), add)
 	}
-
 	cooldown, present := defaultsCooldown(cfg.Global.Defaults)
 	switch {
 	case !present:
@@ -232,7 +250,6 @@ func validateGlobal(cfg *Config) []Issue {
 	case !isPositiveDuration(cooldown):
 		add("%s %q must be a valid positive duration", defaultsPathPolicyCooldown, cooldown)
 	}
-
 	validateDefaultsKeys(cfg.Global.Defaults, add)
 	validateDefaultsVariables(cfg.Global.Defaults, add)
 	validateDefaultsRestartOnChange(cfg.Global.Defaults, add)
@@ -241,22 +258,16 @@ func validateGlobal(cfg *Config) []Issue {
 			add(validationBooleanFormat, defaultsFieldPath(keyDryRun))
 		}
 	}
-	// Nested-${} in a custom variable value, and any undefined ${var} used in a
-	// watch, surface here (services get this via validateServices->Resolve).
 	for _, e := range validateVariableValues(cfg.globalVars()) {
 		add("%s: %s", defaultsPathVariables, e)
 	}
 	watches, watchErrs := cfg.ResolveWatches()
-	if len(watchErrs) > 0 {
-		for _, e := range watchErrs {
-			add("watches: %s", e)
-		}
+	for _, e := range watchErrs {
+		add("watches: %s", e)
 	}
 	if len(watches) > 0 {
 		validateWatches(watches, filepath.Join(cfg.Global.RuntimeDir(), pathKeyLocks), notifierNames(notifiers), NotifyDefault(raw), add)
 	}
-
-	return issues
 }
 
 func validateDefaultsKeys(defaults map[string]any, add func(string, ...any)) {
@@ -312,98 +323,15 @@ func validateDocuments(cfg *Config) []Issue {
 	}
 
 	for _, doc := range cfg.docs {
-		scope := documentScope(doc)
-		if d, present := doc.Body[keyDescription]; present {
-			if _, ok := d.(string); !ok {
-				issues = append(issues, Issue{Scope: scope, Msg: "description must be a string"})
-			}
+		docIssues, countName := validateDocument(cfg, doc)
+		issues = append(issues, docIssues...)
+		if countName {
+			counts[doc.registryKey()][doc.Name]++
 		}
-		if d, present := doc.Body[keyDisplayName]; present {
-			if _, ok := d.(string); !ok {
-				issues = append(issues, Issue{Scope: scope, Msg: "display_name must be a string"})
-			}
-		}
-		if d, present := doc.Body[keyCategory]; present {
-			if _, ok := d.(string); !ok {
-				issues = append(issues, Issue{Scope: scope, Msg: "category must be a string"})
-			}
-		}
-		addDoc := func(format string, args ...any) {
-			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf(format, args...)})
-		}
-		validateEnableIfTree(doc.Body, addDoc)
-		validateFromFileVariables(doc.Body[sectionVariables], addDoc)
-		issues = append(issues, validateBinaryVariables(doc, scope)...)
-		issues = append(issues, validateVersionFrom(cfg, doc, scope)...)
-		issues = append(issues, validateVersionsFrom(doc, scope)...)
-		issues = append(issues, validateVersionsCurrentFrom(doc, scope)...)
-		issues = append(issues, validateAppLinks(cfg, doc, scope)...)
-		issues = append(issues, validateVersionMatch(doc, scope)...)
-		if doc.Kind == kindApp || doc.Kind == kindLibrary {
-			if v, present := doc.Body[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
-				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("interval %q must be a valid positive duration", cfgval.String(v))})
-			}
-		}
-		switch doc.Kind {
-		case kindApp, kindLibrary, kindPatterns, kindService:
-		case "":
-			issues = append(issues, Issue{Scope: scope, Msg: "document has no kind (expected " + kindSummary + ")"})
-			continue
-		default:
-			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected %s)", doc.Kind, kindSummary)})
-			continue
-		}
-		if doc.Name == "" {
-			issues = append(issues, Issue{Scope: scope, Msg: "document has no name"})
-			continue
-		}
-		if !validDocumentName(doc.Name) {
-			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("document name %q must be a simple name without path separators", doc.Name)})
-		}
-		counts[doc.registryKey()][doc.Name]++
 	}
 
 	for _, doc := range cfg.docs {
-		kindCounts, knownKind := counts[doc.registryKey()]
-		if !knownKind || doc.Name == "" {
-			continue
-		}
-		scope := documentScope(doc)
-		raw, present := doc.Body[keyAliases]
-		if !present {
-			continue
-		}
-		aliases, err := cfgval.StrictStringArray(raw)
-		if err != nil {
-			issues = append(issues, Issue{Scope: scope, Msg: "aliases must be a list of simple names"})
-			continue
-		}
-		seen := map[string]bool{}
-		for _, alias := range aliases {
-			switch {
-			case alias == "":
-				issues = append(issues, Issue{Scope: scope, Msg: "aliases must not contain empty names"})
-				continue
-			case !validDocumentName(alias):
-				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("alias %q must be a simple name without path separators", alias)})
-				continue
-			case alias == doc.Name:
-				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("alias %q duplicates the document name", alias)})
-				continue
-			case kindCounts[alias] > 0:
-				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("alias %q conflicts with a %s name", alias, registryLabel(doc.registryKey()))})
-				continue
-			case seen[alias]:
-				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("duplicate alias %q", alias)})
-				continue
-			}
-			seen[alias] = true
-			if owner := aliasOwners[doc.registryKey()][alias]; owner != "" && owner != doc.Name {
-				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("alias %q is already used by %s %q", alias, registryLabel(doc.registryKey()), owner)})
-				continue
-			}
-			aliasOwners[doc.registryKey()][alias] = doc.Name
-		}
+		issues = append(issues, validateDocumentAliases(doc, counts, aliasOwners)...)
 	}
 
 	for _, key := range registryKeys {
@@ -416,6 +344,125 @@ func validateDocuments(cfg *Config) []Issue {
 	}
 	issues = append(issues, validateMaterializedNameCollisions(cfg)...)
 	return issues
+}
+
+func validateDocument(cfg *Config, doc *Document) ([]Issue, bool) {
+	scope := documentScope(doc)
+	issues := validateDocumentMetadata(doc, scope)
+	addDoc := func(format string, args ...any) {
+		issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf(format, args...)})
+	}
+	validateEnableIfTree(doc.Body, addDoc)
+	validateFromFileVariables(doc.Body[sectionVariables], addDoc)
+	issues = append(issues, validateBinaryVariables(doc, scope)...)
+	issues = append(issues, validateVersionFrom(cfg, doc, scope)...)
+	issues = append(issues, validateVersionsFrom(doc, scope)...)
+	issues = append(issues, validateVersionsCurrentFrom(doc, scope)...)
+	issues = append(issues, validateAppLinks(cfg, doc, scope)...)
+	issues = append(issues, validateVersionMatch(doc, scope)...)
+	issues = append(issues, validateDocumentInterval(doc, scope)...)
+	if !validDocumentKind(doc.Kind) {
+		return append(issues, invalidDocumentKindIssue(doc, scope)), false
+	}
+	if doc.Name == "" {
+		return append(issues, Issue{Scope: scope, Msg: "document has no name"}), false
+	}
+	if !validDocumentName(doc.Name) {
+		issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("document name %q must be a simple name without path separators", doc.Name)})
+	}
+	return issues, true
+}
+
+func validateDocumentMetadata(doc *Document, scope string) []Issue {
+	fields := []struct{ key, label string }{
+		{keyDescription, "description"},
+		{keyDisplayName, "display_name"},
+		{keyCategory, "category"},
+	}
+	var issues []Issue
+	for _, field := range fields {
+		if value, present := doc.Body[field.key]; present {
+			if _, ok := value.(string); !ok {
+				issues = append(issues, Issue{Scope: scope, Msg: field.label + " must be a string"})
+			}
+		}
+	}
+	return issues
+}
+
+func validateDocumentInterval(doc *Document, scope string) []Issue {
+	if doc.Kind != kindApp && doc.Kind != kindLibrary {
+		return nil
+	}
+	if value, present := doc.Body[keyInterval]; present && !isPositiveDuration(cfgval.String(value)) {
+		return []Issue{{Scope: scope, Msg: fmt.Sprintf("interval %q must be a valid positive duration", cfgval.String(value))}}
+	}
+	return nil
+}
+
+func validDocumentKind(kind string) bool {
+	switch kind {
+	case kindApp, kindLibrary, kindPatterns, kindService:
+		return true
+	default:
+		return false
+	}
+}
+
+func invalidDocumentKindIssue(doc *Document, scope string) Issue {
+	if doc.Kind == "" {
+		return Issue{Scope: scope, Msg: "document has no kind (expected " + kindSummary + ")"}
+	}
+	return Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected %s)", doc.Kind, kindSummary)}
+}
+
+func validateDocumentAliases(doc *Document, counts map[string]map[string]int, aliasOwners map[string]map[string]string) []Issue {
+	kindCounts, knownKind := counts[doc.registryKey()]
+	if !knownKind || doc.Name == "" {
+		return nil
+	}
+	scope := documentScope(doc)
+	raw, present := doc.Body[keyAliases]
+	if !present {
+		return nil
+	}
+	aliases, err := cfgval.StrictStringArray(raw)
+	if err != nil {
+		return []Issue{{Scope: scope, Msg: "aliases must be a list of simple names"}}
+	}
+	var issues []Issue
+	seen := map[string]bool{}
+	for _, alias := range aliases {
+		if issue := validateDocumentAlias(alias, doc, kindCounts, aliasOwners[doc.registryKey()], seen, scope); issue != nil {
+			issues = append(issues, *issue)
+			continue
+		}
+		seen[alias] = true
+		aliasOwners[doc.registryKey()][alias] = doc.Name
+	}
+	return issues
+}
+
+func validateDocumentAlias(alias string, doc *Document, kindCounts map[string]int, aliasOwners map[string]string, seen map[string]bool, scope string) *Issue {
+	var message string
+	switch {
+	case alias == "":
+		message = "aliases must not contain empty names"
+	case !validDocumentName(alias):
+		message = fmt.Sprintf("alias %q must be a simple name without path separators", alias)
+	case alias == doc.Name:
+		message = fmt.Sprintf("alias %q duplicates the document name", alias)
+	case kindCounts[alias] > 0:
+		message = fmt.Sprintf("alias %q conflicts with a %s name", alias, registryLabel(doc.registryKey()))
+	case seen[alias]:
+		message = fmt.Sprintf("duplicate alias %q", alias)
+	case aliasOwners[alias] != "" && aliasOwners[alias] != doc.Name:
+		message = fmt.Sprintf("alias %q is already used by %s %q", alias, registryLabel(doc.registryKey()), aliasOwners[alias])
+	}
+	if message == "" {
+		return nil
+	}
+	return &Issue{Scope: scope, Msg: message}
 }
 
 func validateMaterializedNameCollisions(cfg *Config) []Issue {

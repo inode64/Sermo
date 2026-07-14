@@ -3,9 +3,10 @@ package rules
 import (
 	"context"
 	"fmt"
-	"sermo/internal/cfgval"
 	"strings"
 	"time"
+
+	"sermo/internal/cfgval"
 )
 
 // RuleWindowReport is a read-only operator view of one rule's window progress.
@@ -22,74 +23,92 @@ type RuleWindowReport struct {
 
 // FormatCondition renders a rule's if-tree as a compact one-line summary.
 func FormatCondition(node map[string]any) string {
+	op, body, ok := conditionOperator(node)
+	if !ok {
+		return invalidCondition(node)
+	}
+	if formatted := formatConditionLeaf(op, body); formatted != "" {
+		return formatted
+	}
+	return formatConditionBranch(op, body)
+}
+
+func conditionOperator(node map[string]any) (string, any, bool) {
+	if len(node) != 1 {
+		return "", nil, false
+	}
+	for op, body := range node {
+		return op, body, true
+	}
+	return "", nil, false
+}
+
+func invalidCondition(node map[string]any) string {
 	if len(node) == 0 {
 		return ""
 	}
-	if len(node) != 1 {
-		return "?"
-	}
-	for op, body := range node {
-		switch op {
-		case ConditionFailed, ConditionActive:
-			if m, ok := body.(map[string]any); ok {
-				if c := cfgval.AsString(m[FieldCheck]); c != "" {
-					return op + ":" + c
-				}
-			}
-		case ConditionMetric:
-			if m, ok := body.(map[string]any); ok {
-				name := cfgval.AsString(m[FieldName])
-				if name == "" {
-					name = cfgval.AsString(m[FieldMetric])
-				}
-				if name != "" {
-					return "metric:" + name
-				}
-			}
-		case ConditionService:
-			if m, ok := body.(map[string]any); ok {
-				if s := cfgval.AsString(m[ConditionService]); s != "" {
-					return "service:" + s
-				}
-			}
-		case ConditionProcess:
-			if m, ok := body.(map[string]any); ok {
-				if n := cfgval.AsString(m[FieldName]); n != "" {
-					return "process:" + n
-				}
-			}
-		case ConditionFile:
-			if m, ok := body.(map[string]any); ok {
-				if p := cfgval.AsString(m[FieldPath]); p != "" {
-					return "file:" + p
-				}
-			}
-		case ConditionCommand:
-			return "command"
-		case ConditionChanged:
-			if m, ok := body.(map[string]any); ok {
-				if p := cfgval.AsString(m[FieldPath]); p != "" {
-					return "changed:" + p
-				}
-			}
-		case ConditionAnd, ConditionOr:
-			if list, ok := body.([]any); ok {
-				parts := make([]string, 0, len(list))
-				for _, item := range list {
-					if sub, ok := item.(map[string]any); ok {
-						parts = append(parts, FormatCondition(sub))
-					}
-				}
-				return op + "(" + strings.Join(parts, ", ") + ")"
-			}
-		case ConditionNot:
-			if sub, ok := body.(map[string]any); ok {
-				return "not(" + FormatCondition(sub) + ")"
-			}
+	return "?"
+}
+
+func formatConditionLeaf(op string, body any) string {
+	switch op {
+	case ConditionFailed, ConditionActive:
+		return formatConditionField(op, body, FieldCheck)
+	case ConditionMetric:
+		if name := formatConditionField("metric", body, FieldName); name != "" {
+			return name
 		}
-		return op
+		return formatConditionField("metric", body, FieldMetric)
+	case ConditionService:
+		return formatConditionField("service", body, ConditionService)
+	case ConditionProcess:
+		return formatConditionField("process", body, FieldName)
+	case ConditionFile:
+		return formatConditionField("file", body, FieldPath)
+	case ConditionCommand:
+		return "command"
+	case ConditionChanged:
+		return formatConditionField("changed", body, FieldPath)
+	default:
+		return ""
+	}
+}
+
+func formatConditionField(label string, body any, field string) string {
+	m, ok := body.(map[string]any)
+	if !ok {
+		return ""
+	}
+	if value := cfgval.AsString(m[field]); value != "" {
+		return label + ":" + value
 	}
 	return ""
+}
+
+func formatConditionBranch(op string, body any) string {
+	switch op {
+	case ConditionAnd, ConditionOr:
+		return formatConditionList(op, body)
+	case ConditionNot:
+		if sub, ok := body.(map[string]any); ok {
+			return "not(" + FormatCondition(sub) + ")"
+		}
+	}
+	return op
+}
+
+func formatConditionList(op string, body any) string {
+	list, ok := body.([]any)
+	if !ok {
+		return op
+	}
+	parts := make([]string, 0, len(list))
+	for _, item := range list {
+		if sub, ok := item.(map[string]any); ok {
+			parts = append(parts, FormatCondition(sub))
+		}
+	}
+	return op + "(" + strings.Join(parts, ", ") + ")"
 }
 
 // BuildRuleWindowReports snapshots remediation and alert rules after their
