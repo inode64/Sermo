@@ -137,9 +137,21 @@ func (s *DaemonMetricSampler) Series(since time.Duration) web.DaemonMetrics {
 	return web.DaemonMetrics{
 		Since:   since.String(),
 		Current: daemonRuntime(sample),
-		CPU:     daemonMetricSeries(metrics.MetricCPU, metrics.MetricUnitPercent, since, samples, func(p daemonMetricSample) (float64, bool) { return p.cpu, p.cpuReady }),
-		Memory:  daemonMetricSeries(metrics.MetricMemory, metrics.MetricUnitBytes, since, samples, func(p daemonMetricSample) (float64, bool) { return float64(p.rss), p.rssOK }),
-		IO:      daemonMetricSeries(metrics.MetricIO, metrics.MetricUnitBytesPerSecond, since, samples, func(p daemonMetricSample) (float64, bool) { return p.io, p.ioReady }),
+		CPU: metricSeries(
+			daemonMetricCheck, metrics.MetricCPU, metrics.MetricUnitPercent, since, samples,
+			func(p daemonMetricSample) time.Time { return p.at },
+			func(p daemonMetricSample) (float64, bool) { return p.cpu, p.cpuReady },
+		),
+		Memory: metricSeries(
+			daemonMetricCheck, metrics.MetricMemory, metrics.MetricUnitBytes, since, samples,
+			func(p daemonMetricSample) time.Time { return p.at },
+			func(p daemonMetricSample) (float64, bool) { return float64(p.rss), p.rssOK },
+		),
+		IO: metricSeries(
+			daemonMetricCheck, metrics.MetricIO, metrics.MetricUnitBytesPerSecond, since, samples,
+			func(p daemonMetricSample) time.Time { return p.at },
+			func(p daemonMetricSample) (float64, bool) { return p.io, p.ioReady },
+		),
 	}
 }
 
@@ -299,7 +311,7 @@ func daemonRuntime(sample daemonMetricSample) web.DaemonRuntime {
 	return out
 }
 
-func daemonMetricSeries(metric, unit string, since time.Duration, samples []daemonMetricSample, value func(daemonMetricSample) (float64, bool)) web.MetricSeries {
+func metricSeries[T any](check, metric, unit string, since time.Duration, samples []T, at func(T) time.Time, value func(T) (float64, bool)) web.MetricSeries {
 	byMinute := map[time.Time]*daemonMetricAgg{}
 	var summary daemonMetricAgg
 	for _, sample := range samples {
@@ -308,7 +320,7 @@ func daemonMetricSeries(metric, unit string, since time.Duration, samples []daem
 			continue
 		}
 		addDaemonMetric(&summary, v)
-		minute := sample.at.UTC().Truncate(metricSeriesBucket)
+		minute := at(sample).UTC().Truncate(metricSeriesBucket)
 		agg := byMinute[minute]
 		if agg == nil {
 			agg = &daemonMetricAgg{}
@@ -335,7 +347,7 @@ func daemonMetricSeries(metric, unit string, since time.Duration, samples []daem
 		})
 	}
 	return web.MetricSeries{
-		Check:   daemonMetricCheck,
+		Check:   check,
 		Metric:  metric,
 		Since:   since.String(),
 		Unit:    unit,
