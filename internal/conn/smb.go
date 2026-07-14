@@ -251,12 +251,11 @@ func buildSMBNegotiate() ([]byte, error) {
 	b.Write(salt[:])
 
 	msg := b.Bytes()
-	frame := []byte{
-		smbDirectTCPMessageType,
-		byte(len(msg) >> smbLengthHighShift),
-		byte(len(msg) >> smbLengthByteShift),
-		byte(len(msg)),
-	}
+	frame := make([]byte, smbDirectTCPHeaderBytes, smbDirectTCPHeaderBytes+len(msg))
+	frame[0] = smbDirectTCPMessageType
+	frame[smbDirectTCPLengthHighOffset] = byte(len(msg) >> smbLengthHighShift)
+	frame[smbDirectTCPLengthMiddleOffset] = byte(len(msg) >> smbLengthByteShift)
+	frame[smbDirectTCPLengthLowOffset] = byte(len(msg))
 	return append(frame, msg...), nil
 }
 
