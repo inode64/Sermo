@@ -155,9 +155,11 @@ linters:
         - offBy1
         - regexpMust
         - sloppyLen
+        - sloppyReassign
         - sloppyTypeAssert
         - singleCaseSwitch
         - stringXbytes
+        - truncateCmp
         - typeSwitchVar
         - underef
         - unlambda
