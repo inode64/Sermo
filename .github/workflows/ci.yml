@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -33,6 +36,7 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
           go install golang.org/x/tools/cmd/goimports@v0.48.0
           go install golang.org/x/tools/cmd/deadcode@v0.48.0
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           go install github.com/google/yamlfmt/cmd/yamlfmt@v0.17.0
           npm ci
           pip install yamllint ruff
@@ -46,3 +50,26 @@ jobs:
       - name: deadcode (advisory)
         continue-on-error: true
         run: make deadcode
+
+  race:
+    name: race detector
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: make race
+
+  fuzz:
+    name: configuration fuzzing
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: make fuzz FUZZ_TIME=60s
