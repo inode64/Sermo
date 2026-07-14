@@ -2026,45 +2026,33 @@ func (b *WebBackend) oomWatchView() (*web.WatchMeter, []web.WatchReading, string
 }
 
 func (b *WebBackend) fdsWatchView() (*web.WatchMeter, []web.WatchReading, string) {
-	sampler := b.fdsSampler
-	if sampler == nil {
-		sampler = checks.SampleFds
-	}
-	s, err := sampler()
-	if err != nil {
-		msg := err.Error()
-		return nil, watchErrorReadings(msg), "fds: " + msg
-	}
-	summary := fmt.Sprintf("fds %d allocated", s.Allocated)
-	if s.Max > 0 {
-		usedPct := float64(s.Allocated) / float64(s.Max) * metrics.PercentScale
-		summary = fmt.Sprintf("fds %d/%d allocated (%.1f%%)", s.Allocated, s.Max, usedPct)
-	}
-	if meter := countMeter(checks.CheckTypeFDS, s.Allocated, s.Max); meter != nil {
-		return meter, nil, summary
-	}
-	return nil, []web.WatchReading{{Field: checks.DataKeyCount, Label: watchReadingLabelAllocated, Value: strconv.FormatUint(s.Allocated, 10)}}, summary
+	return countWatchView(countWatchViewSpec[checks.FdsSample]{
+		kind:       checks.CheckTypeFDS,
+		resource:   checks.CheckTypeFDS,
+		usage:      "allocated",
+		field:      checks.DataKeyCount,
+		label:      watchReadingLabelAllocated,
+		sampler:    b.fdsSampler,
+		fallback:   checks.SampleFds,
+		count:      func(sample checks.FdsSample) uint64 { return sample.Allocated },
+		limit:      func(sample checks.FdsSample) uint64 { return sample.Max },
+		formatRead: formatCountReading,
+	})
 }
 
 func (b *WebBackend) pidsWatchView() (*web.WatchMeter, []web.WatchReading, string) {
-	sampler := b.pidsSampler
-	if sampler == nil {
-		sampler = checks.SamplePids
-	}
-	s, err := sampler()
-	if err != nil {
-		msg := err.Error()
-		return nil, watchErrorReadings(msg), "pids: " + msg
-	}
-	summary := fmt.Sprintf("pids %d in use", s.Threads)
-	if s.Max > 0 {
-		usedPct := float64(s.Threads) / float64(s.Max) * metrics.PercentScale
-		summary = fmt.Sprintf("pids %d/%d in use (%.1f%%)", s.Threads, s.Max, usedPct)
-	}
-	if meter := countMeter(checks.CheckTypePIDs, s.Threads, s.Max); meter != nil {
-		return meter, nil, summary
-	}
-	return nil, []web.WatchReading{{Field: checks.DataKeyCount, Label: watchReadingLabelInUse, Value: strconv.FormatUint(s.Threads, 10)}}, summary
+	return countWatchView(countWatchViewSpec[checks.PidsSample]{
+		kind:       checks.CheckTypePIDs,
+		resource:   checks.CheckTypePIDs,
+		usage:      "in use",
+		field:      checks.DataKeyCount,
+		label:      watchReadingLabelInUse,
+		sampler:    b.pidsSampler,
+		fallback:   checks.SamplePids,
+		count:      func(sample checks.PidsSample) uint64 { return sample.Threads },
+		limit:      func(sample checks.PidsSample) uint64 { return sample.Max },
+		formatRead: formatCountReading,
+	})
 }
 
 func (b *WebBackend) pressureWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
@@ -2097,25 +2085,59 @@ func (b *WebBackend) pressureWatchView(w *webWatch) (*web.WatchMeter, []web.Watc
 }
 
 func (b *WebBackend) conntrackWatchView() (*web.WatchMeter, []web.WatchReading, string) {
-	sampler := b.conntrackSampler
+	return countWatchView(countWatchViewSpec[checks.ConntrackSample]{
+		kind:       checks.CheckTypeConntrack,
+		resource:   checks.CheckTypeConntrack,
+		usage:      "entries",
+		field:      checks.DataKeyCount,
+		label:      watchReadingLabelCount,
+		sampler:    b.conntrackSampler,
+		fallback:   checks.SampleConntrack,
+		count:      func(sample checks.ConntrackSample) uint64 { return sample.Count },
+		limit:      func(sample checks.ConntrackSample) uint64 { return sample.Max },
+		formatRead: formatEntriesReading,
+	})
+}
+
+type countWatchViewSpec[T any] struct {
+	kind       string
+	resource   string
+	usage      string
+	field      string
+	label      string
+	sampler    func() (T, error)
+	fallback   func() (T, error)
+	count      func(T) uint64
+	limit      func(T) uint64
+	formatRead func(uint64) string
+}
+
+func countWatchView[T any](spec countWatchViewSpec[T]) (*web.WatchMeter, []web.WatchReading, string) {
+	sampler := spec.sampler
 	if sampler == nil {
-		sampler = checks.SampleConntrack
+		sampler = spec.fallback
 	}
-	s, err := sampler()
+	sample, err := sampler()
 	if err != nil {
-		msg := err.Error()
-		return nil, watchErrorReadings(msg), "conntrack: " + msg
+		message := err.Error()
+		return nil, watchErrorReadings(message), spec.resource + ": " + message
 	}
-	summary := fmt.Sprintf("conntrack %d entries", s.Count)
-	if s.Max > 0 {
-		usedPct := float64(s.Count) / float64(s.Max) * metrics.PercentScale
-		summary = fmt.Sprintf("conntrack %d/%d entries (%.1f%%)", s.Count, s.Max, usedPct)
+	count := spec.count(sample)
+	limit := spec.limit(sample)
+	summary := fmt.Sprintf("%s %d %s", spec.resource, count, spec.usage)
+	if limit > 0 {
+		usedPct := float64(count) / float64(limit) * metrics.PercentScale
+		summary = fmt.Sprintf("%s %d/%d %s (%.1f%%)", spec.resource, count, limit, spec.usage, usedPct)
 	}
-	if meter := countMeter(checks.CheckTypeConntrack, s.Count, s.Max); meter != nil {
+	if meter := countMeter(spec.kind, count, limit); meter != nil {
 		return meter, nil, summary
 	}
-	return nil, []web.WatchReading{{Field: checks.DataKeyCount, Label: watchReadingLabelCount, Value: fmt.Sprintf("%d entries", s.Count)}}, summary
+	return nil, []web.WatchReading{{Field: spec.field, Label: spec.label, Value: spec.formatRead(count)}}, summary
 }
+
+func formatCountReading(count uint64) string { return strconv.FormatUint(count, 10) }
+
+func formatEntriesReading(count uint64) string { return formatCountReading(count) + " entries" }
 
 func (b *WebBackend) entropyWatchView() (*web.WatchMeter, []web.WatchReading, string) {
 	sampler := b.entropySampler
