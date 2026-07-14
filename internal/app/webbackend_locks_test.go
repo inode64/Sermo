@@ -242,14 +242,14 @@ func TestWebBackendLocksContext(t *testing.T) {
 		cfg:     &config.Config{Global: config.Global{Runtime: runtime}},
 	}
 
-	locks := b.Locks(context.Background())
+	lockViews := b.Locks(context.Background())
 	byName := map[string]struct {
 		state       string
 		owner       string
 		releaseable bool
 		blocks      []string
 	}{}
-	for _, lk := range locks {
+	for _, lk := range lockViews {
 		byName[lk.Name] = struct {
 			state       string
 			owner       string
@@ -306,16 +306,16 @@ func TestWebBackendLocksSeveralServices(t *testing.T) {
 		cfg: &config.Config{Global: config.Global{Runtime: runtime}},
 	}
 
-	locks := b.Locks(context.Background())
+	lockViews := b.Locks(context.Background())
 	got := map[string]string{}
-	for _, lk := range locks {
+	for _, lk := range lockViews {
 		got[lk.Service] = lk.Name
 	}
 	if got["mysql"] != "" || got["redis"] != "cache" {
-		t.Fatalf("locks = %+v, want mysql default and redis cache", locks)
+		t.Fatalf("locks = %+v, want mysql default and redis cache", lockViews)
 	}
 	if _, ok := got["disabled"]; ok {
-		t.Fatalf("disabled service lock should not be listed: %+v", locks)
+		t.Fatalf("disabled service lock should not be listed: %+v", lockViews)
 	}
 }
 

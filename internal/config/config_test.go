@@ -2309,11 +2309,11 @@ func TestApplyDeletesRemovesEntry(t *testing.T) {
 		},
 	}
 	applyDeletes(tree)
-	checks := tree["checks"].(map[string]any)
-	if _, ok := checks["http"]; ok {
+	checkEntries := tree["checks"].(map[string]any)
+	if _, ok := checkEntries["http"]; ok {
 		t.Errorf("http should be deleted")
 	}
-	if _, ok := checks["tcp"]; !ok {
+	if _, ok := checkEntries["tcp"]; !ok {
 		t.Errorf("tcp should remain")
 	}
 }
@@ -5190,13 +5190,13 @@ watches:
 	if len(errs) != 0 {
 		t.Fatalf("Resolve() errors = %v", errs)
 	}
-	checks := resolved.Tree["checks"].(map[string]any)
-	analyze := checks["config-files"].(map[string]any)["analyze"].(map[string]any)
-	rules := analyze["rules"].([]any)
-	if len(rules) != 2 {
-		t.Fatalf("want 2 resolved rules (note + local), got %d: %v", len(rules), rules)
+	checkEntries := resolved.Tree["checks"].(map[string]any)
+	analyze := checkEntries["config-files"].(map[string]any)["analyze"].(map[string]any)
+	ruleEntries := analyze["rules"].([]any)
+	if len(ruleEntries) != 2 {
+		t.Fatalf("want 2 resolved rules (note + local), got %d: %v", len(ruleEntries), ruleEntries)
 	}
-	ids := []string{idOf(rules[0]), idOf(rules[1])}
+	ids := []string{idOf(ruleEntries[0]), idOf(ruleEntries[1])}
 	if ids[0] != "local" || ids[1] != "note" {
 		t.Fatalf("resolved rule order = %v, want [local note] (local first for precedence, dep silenced)", ids)
 	}
@@ -5268,8 +5268,8 @@ checks:
 		t.Fatalf("pidfile must not create public processes entry: %v", resolved.Tree["processes"])
 	}
 	// Gated health check.
-	checks := resolved.Tree["checks"].(map[string]any)
-	chk := checks["pidfile"].(map[string]any)
+	checkEntries := resolved.Tree["checks"].(map[string]any)
+	chk := checkEntries["pidfile"].(map[string]any)
 	if chk["type"] != "pidfile" || chk["path"] != "/run/svc.pid" {
 		t.Fatalf("pidfile check = %v", chk)
 	}
@@ -5304,8 +5304,8 @@ checks:
 	if got := cfgval.StringList(resolved.Tree["pidfile"]); !slices.Equal(got, want) {
 		t.Fatalf("pidfile paths = %v, want %v", got, want)
 	}
-	checks := resolved.Tree["checks"].(map[string]any)
-	chk := checks["pidfile"].(map[string]any)
+	checkEntries := resolved.Tree["checks"].(map[string]any)
+	chk := checkEntries["pidfile"].(map[string]any)
 	if got := cfgval.StringList(chk["path"]); !slices.Equal(got, want) {
 		t.Fatalf("check pidfile paths = %v, want %v", got, want)
 	}
@@ -5378,12 +5378,12 @@ checks:
 	if got := cfgval.String(pidfiles["helper"]); got != "/run/svc-helper.pid" {
 		t.Fatalf("pidfiles.helper = %q, want /run/svc-helper.pid", got)
 	}
-	checks := resolved.Tree["checks"].(map[string]any)
-	main := checks["pidfile-main"].(map[string]any)
+	checkEntries := resolved.Tree["checks"].(map[string]any)
+	main := checkEntries["pidfile-main"].(map[string]any)
 	if got := cfgval.StringList(main["path"]); !slices.Equal(got, []string{"/run/svc-main.pid", "/run/svc.pid"}) {
 		t.Fatalf("check pidfile-main path = %v", got)
 	}
-	helper := checks["pidfile-helper"].(map[string]any)
+	helper := checkEntries["pidfile-helper"].(map[string]any)
 	if got := cfgval.String(helper["path"]); got != "/run/svc-helper.pid" {
 		t.Fatalf("check pidfile-helper path = %v", got)
 	}
@@ -5641,12 +5641,12 @@ checks:
 	if len(errs) != 0 {
 		t.Fatalf("resolve a: %v", errs)
 	}
-	checks := ra.Tree["checks"].(map[string]any)
-	if got := checks["f"].(map[string]any)["path"]; got != "/opt/data/file" {
+	checkEntries := ra.Tree["checks"].(map[string]any)
+	if got := checkEntries["f"].(map[string]any)["path"]; got != "/opt/data/file" {
 		t.Fatalf("custom var not expanded: %v", got)
 	}
 	// custom host overrides the builtin host (custom > builtins).
-	if got := checks["h"].(map[string]any)["command"].([]any)[1]; got != "10.0.0.9" {
+	if got := checkEntries["h"].(map[string]any)["command"].([]any)[1]; got != "10.0.0.9" {
 		t.Fatalf("custom host should override builtin, got %v", got)
 	}
 	// a service's own variable overrides the custom one (service > custom).
@@ -6197,12 +6197,12 @@ defaults: { policy: { cooldown: 5m } }
 			t.Fatalf("Resolve(%s) errors = %v", tc.svc, errs)
 		}
 		procs := nested(t, resolved.Tree, "processes")
-		checks := nested(t, resolved.Tree, "checks")
+		checkEntries := nested(t, resolved.Tree, "checks")
 		win, ok := procs["winbindd"]
 		if ok != tc.winbindd {
 			t.Errorf("%s: winbindd present = %v, want %v", tc.svc, ok, tc.winbindd)
 		}
-		if _, ok := checks["winbindd"]; ok != tc.winbindd {
+		if _, ok := checkEntries["winbindd"]; ok != tc.winbindd {
 			t.Errorf("%s: winbindd check present = %v, want %v", tc.svc, ok, tc.winbindd)
 		}
 		if _, ok := procs["smbd"]; !ok {

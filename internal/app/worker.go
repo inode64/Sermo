@@ -594,9 +594,9 @@ func (w *Worker) firingRemediationRules(ctx context.Context, ev *rules.Evaluator
 		if rule.Type != rules.RuleRemediation {
 			continue
 		}
-		state := w.fires(ctx, ev, rule, at, evals)
-		if state.firing {
-			firing = append(firing, firingRule{Rule: rule, rising: state.rising, change: state.change})
+		evaluation := w.fires(ctx, ev, rule, at, evals)
+		if evaluation.firing {
+			firing = append(firing, firingRule{Rule: rule, rising: evaluation.rising, change: evaluation.change})
 		}
 	}
 	return firing

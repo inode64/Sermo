@@ -37,14 +37,14 @@ func TestEffectiveNotify(t *testing.T) {
 	}
 }
 
-func alertRuleTree(notify any) map[string]any {
+func alertRuleTree(notifierValue any) map[string]any {
 	rule := map[string]any{
 		"type": "alert",
 		"if":   map[string]any{"failed": map[string]any{"check": "http"}},
 		"then": map[string]any{"action": "alert", "message": "http is down"},
 	}
-	if notify != nil {
-		rule["notify"] = notify
+	if notifierValue != nil {
+		rule["notify"] = notifierValue
 	}
 	return map[string]any{"rules": map[string]any{"warn-down": rule}}
 }
@@ -311,16 +311,16 @@ type workerHarness struct {
 	events   []Event
 }
 
-func (h *workerHarness) worker(tree map[string]any, policy rules.Policy, state *rules.RemediationState) *Worker {
+func (h *workerHarness) worker(tree map[string]any, policy rules.Policy, remediationState *rules.RemediationState) *Worker {
 	ruleSet, _ := rules.ParseRules(tree)
-	if state == nil {
-		state = &rules.RemediationState{}
+	if remediationState == nil {
+		remediationState = &rules.RemediationState{}
 	}
 	return &Worker{
 		Service:      "web",
 		Rules:        ruleSet,
 		Policy:       policy,
-		State:        state,
+		State:        remediationState,
 		MetricChecks: rules.ReferencedChecks(tree),
 		Checks:       func(context.Context, checks.Deps) map[string]checks.Result { return h.cache },
 		Operate: func(_ context.Context, action string) operation.Result {
@@ -1101,8 +1101,8 @@ func TestCycleNoFireWhenHealthy(t *testing.T) {
 
 func TestCycleCooldownSuppresses(t *testing.T) {
 	h := &workerHarness{cache: failedCache("http")}
-	state := &rules.RemediationState{LastActionAt: t0.Add(-30 * time.Second)} // within a 1m cooldown
-	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, state)
+	remediationState := &rules.RemediationState{LastActionAt: t0.Add(-30 * time.Second)} // within a 1m cooldown
+	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, remediationState)
 
 	w.RunCycle(context.Background())
 	if len(h.ops) != 0 {
@@ -1128,8 +1128,8 @@ func TestCycleCooldownSkipsToNextFiringRule(t *testing.T) {
 		},
 	}}
 	h := &workerHarness{cache: failedCache("http")}
-	state := &rules.RemediationState{LastActionAt: t0.Add(-30 * time.Second)}
-	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, state)
+	remediationState := &rules.RemediationState{LastActionAt: t0.Add(-30 * time.Second)}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, remediationState)
 
 	w.RunCycle(context.Background())
 	if len(h.ops) != 0 {
@@ -1277,20 +1277,20 @@ func TestCycleBackoffGrowsAndRecovers(t *testing.T) {
 	tree := remediationTree("restart-if-down", "http", "restart")
 	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
 	policy := rules.Policy{Cooldown: time.Minute, Backoff: &rules.Backoff{Initial: 2 * time.Minute, Factor: 2}}
-	state := &rules.RemediationState{}
-	w := h.worker(tree, policy, state)
+	remediationState := &rules.RemediationState{}
+	w := h.worker(tree, policy, remediationState)
 
 	// First failing cycle acts and arms the backoff.
 	w.RunCycle(context.Background())
-	if len(h.ops) != 1 || state.CurrentBackoff != 2*time.Minute {
-		t.Fatalf("after first action: ops=%v backoff=%v", h.ops, state.CurrentBackoff)
+	if len(h.ops) != 1 || remediationState.CurrentBackoff != 2*time.Minute {
+		t.Fatalf("after first action: ops=%v backoff=%v", h.ops, remediationState.CurrentBackoff)
 	}
 
 	// A healthy cycle resets the backoff.
 	h.cache = map[string]checks.Result{"http": {Check: "http", OK: true}}
 	w.RunCycle(context.Background())
-	if state.CurrentBackoff != 0 {
-		t.Fatalf("healthy cycle should reset backoff, got %v", state.CurrentBackoff)
+	if remediationState.CurrentBackoff != 0 {
+		t.Fatalf("healthy cycle should reset backoff, got %v", remediationState.CurrentBackoff)
 	}
 }
 
@@ -1335,8 +1335,8 @@ func TestCycleMultiActionSuppressedDoesNotAlert(t *testing.T) {
 		},
 	}}
 	h := &workerHarness{cache: failedCache("http")}
-	state := &rules.RemediationState{LastActionAt: t0.Add(-30 * time.Second)}
-	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, state)
+	remediationState := &rules.RemediationState{LastActionAt: t0.Add(-30 * time.Second)}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, remediationState)
 
 	w.RunCycle(context.Background())
 	if len(h.ops) != 0 {
@@ -1475,9 +1475,9 @@ func TestWorkerDryRunEvaluatesButDoesNotAct(t *testing.T) {
 // that the seeded cooldown state is left untouched.
 func TestWorkerDryRunReportsSuppression(t *testing.T) {
 	h := &workerHarness{cache: failedCache("http")}
-	state := &rules.RemediationState{LastActionAt: t0.Add(-30 * time.Second)} // within a 1m cooldown
+	remediationState := &rules.RemediationState{LastActionAt: t0.Add(-30 * time.Second)} // within a 1m cooldown
 	tree := remediationTree("restart-if-down", "http", "restart")
-	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, state)
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, remediationState)
 	w.DryRun = true
 
 	w.RunCycle(context.Background())
@@ -1502,9 +1502,9 @@ func TestWorkerDryRunReportsSuppression(t *testing.T) {
 
 func TestWorkerDryRunHealthyCycleDoesNotRecoverBackoff(t *testing.T) {
 	h := &workerHarness{cache: map[string]checks.Result{"http": {Check: "http", OK: true}}}
-	state := &rules.RemediationState{CurrentBackoff: 5 * time.Minute}
+	remediationState := &rules.RemediationState{CurrentBackoff: 5 * time.Minute}
 	tree := remediationTree("restart-if-down", "http", "restart")
-	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, state)
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, remediationState)
 	w.DryRun = true
 
 	w.RunCycle(context.Background())
