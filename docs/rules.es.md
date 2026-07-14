@@ -1851,6 +1851,11 @@ sobrescribir la política global de emisión para esa regla. Los eventos de resu
 operación siguen siendo eventos de auditoría y se registran siempre que se intenta la
 operación.
 
+Cuando una regla recuperada tiene exactamente una hoja directa de check o métrica, el
+evento también registra el valor actual formateado, el operador y el umbral configurado.
+Así se ve una oscilación alrededor del umbral sin tener que reconstruir la lectura desde
+el histórico de métricas.
+
 Las acciones y los tipos están acoplados: las acciones de operación (`restart`, `start`,
 `stop`, `reload`, `resume`) pertenecen a reglas `type: remediation` — requeridas ahí (una
 regla solo de notificación es `type: alert`) y rechazadas en otros lugares. `alert` (con un

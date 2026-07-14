@@ -927,7 +927,7 @@ func TestRuleMessageRuntimeContextForMetricCheck(t *testing.T) {
 	now = now.Add(10 * time.Minute)
 	w.RunCycle(context.Background())
 
-	want := "During 10m (for 10m) mem metric/memory > 60% current 73.5% on web via alert at " + now.Format(time.RFC3339)
+	want := "During 10m (for 10m) mem metric/memory > 60% current 73,5% on web via alert at " + now.Format(time.RFC3339)
 	e, ok := h.eventOf(eventKindAlert)
 	if !ok {
 		t.Fatalf("no alert emitted: %+v", h.events)
@@ -974,8 +974,58 @@ func TestRuleMessageRuntimeContextForInlineMetric(t *testing.T) {
 	if !ok {
 		t.Fatalf("no alert emitted: %+v", h.events)
 	}
-	if want := "metric/memory > 60%: 66.25%"; e.Message != want {
+	if want := "metric/memory > 60%: 66,25%"; e.Message != want {
 		t.Fatalf("message = %q, want %q", e.Message, want)
+	}
+}
+
+func TestCycleAlertRecoveryCarriesMetricContext(t *testing.T) {
+	h := &workerHarness{cache: map[string]checks.Result{
+		"cpu-thread-high": {
+			Check: "cpu-thread-high",
+			OK:    false,
+			Data: map[string]any{
+				checks.DataKeyType:      checks.CheckTypeMetric,
+				checks.DataKeyScope:     checks.MetricScopeService,
+				checks.DataKeyMetric:    "cpu_thread",
+				checks.DataKeyOp:        ">",
+				checks.DataKeyThreshold: "90%",
+				checks.DataKeyValue:     91.25,
+				checks.DataKeyUnit:      metrics.MetricUnitPercent,
+			},
+		},
+	}}
+	tree := map[string]any{"rules": map[string]any{
+		"alert-if-cpu-thread-high": map[string]any{
+			"type": "alert",
+			"if":   map[string]any{"failed": map[string]any{"check": "cpu-thread-high"}},
+			"then": map[string]any{"action": "alert", "message": "CPU usage is high"},
+		},
+	}}
+	w := h.worker(tree, rules.Policy{}, nil)
+	w.RunCycle(context.Background())
+
+	h.cache["cpu-thread-high"] = checks.Result{
+		Check: "cpu-thread-high",
+		OK:    true,
+		Data: map[string]any{
+			checks.DataKeyType:      checks.CheckTypeMetric,
+			checks.DataKeyScope:     checks.MetricScopeService,
+			checks.DataKeyMetric:    "cpu_thread",
+			checks.DataKeyOp:        ">",
+			checks.DataKeyThreshold: "90%",
+			checks.DataKeyValue:     0.1998902696035153,
+			checks.DataKeyUnit:      metrics.MetricUnitPercent,
+		},
+	}
+	w.RunCycle(context.Background())
+
+	e, ok := h.eventOf(eventKindRecovered)
+	if !ok {
+		t.Fatalf("no recovered event emitted: %+v", h.events)
+	}
+	if want := "rule condition recovered: metric cpu_thread current 0,2% (threshold > 90%)"; e.Message != want {
+		t.Fatalf("recovered message = %q, want %q", e.Message, want)
 	}
 }
 
