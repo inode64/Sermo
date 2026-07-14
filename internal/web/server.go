@@ -4,7 +4,7 @@
 // only through the Backend interface, so it stays decoupled and testable.
 //
 // Access is optional HTTP Basic auth with admin (read+act) and guest (read-only)
-// roles; state-changing POST requests also require an X-Sermo-CSRF header. When
+// roles; state-changing POST requests also require an X-Sermo-Csrf header. When
 // no passwords are configured the UI is open — bind to a trusted interface
 // (loopback by default) or set passwords / front it with an authenticating reverse
 // proxy. GET /livez and GET /readyz are always public for health probes.
@@ -46,7 +46,7 @@ const (
 	headerContentSecurityPolicy = "Content-Security-Policy"
 	headerContentType           = httpx.HeaderContentType
 	headerReferrerPolicy        = "Referrer-Policy"
-	headerSermoCSRF             = "X-Sermo-CSRF"
+	headerSermoCSRF             = "X-Sermo-Csrf"
 	headerWWWAuthenticate       = "WWW-Authenticate"
 	headerXContentTypeOptions   = "X-Content-Type-Options"
 	headerXFrameOptions         = "X-Frame-Options"

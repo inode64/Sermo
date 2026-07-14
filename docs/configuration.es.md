@@ -675,7 +675,7 @@ server {
 
 Notas:
 
-- El proxy y el panel comparten un **origen**, de modo que la cabecera `X-Sermo-CSRF` y
+- El proxy y el panel comparten un **origen**, de modo que la cabecera `X-Sermo-Csrf` y
   la propia autenticación admin/guest de Sermo siguen funcionando a través de él — el
   navegador reenvía la cabecera `Authorization`. Puedes confiar en los roles de Sermo,
   añadir la propia autenticación del proxy (basic/OIDC/mTLS) por encima, o ambas.
@@ -918,8 +918,8 @@ muestra posterior a la operación.
 
 Como el daemon se ejecuta como root, la interfaz está endurecida: se enlaza a loopback
 por defecto, soporta autenticación (arriba), establece timeouts HTTP y requiere una
-cabecera **`X-Sermo-CSRF`** en cada petición de acción (POST) — el panel la envía; un
-cliente de API también debe hacerlo (p. ej. `curl -H 'X-Sermo-CSRF: 1' -X POST …`). Esto
+cabecera **`X-Sermo-Csrf`** en cada petición de acción (POST) — el panel la envía; un
+cliente de API también debe hacerlo (p. ej. `curl -H 'X-Sermo-Csrf: 1' -X POST …`). Esto
 bloquea la falsificación de peticiones entre sitios desde un navegador. Consulta
 [safety](safety.es.md#trust-model).
 

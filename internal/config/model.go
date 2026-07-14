@@ -756,8 +756,10 @@ func StopInvariants(tree map[string]any) (pidfilePaths, files []string, clean bo
 	files = cfgval.StringList(sp[keyFilesAbsent])
 	if pa, _ := sp[keyPidfileAbsent].(bool); pa {
 		pidfilePaths = append(pidfilePaths, cfgval.StringList(tree[ServiceKeyPidfile])...)
-		for _, role := range sortedPidfileRoles(tree) {
-			pidfilePaths = append(pidfilePaths, cfgval.StringList(tree[ServiceKeyPidfiles].(map[string]any)[role])...)
+		if pidfiles, ok := tree[ServiceKeyPidfiles].(map[string]any); ok {
+			for _, role := range sortedPidfileRoles(tree) {
+				pidfilePaths = append(pidfilePaths, cfgval.StringList(pidfiles[role])...)
+			}
 		}
 	}
 	if raw, ok := sp[keyCleanOnStop].([]any); ok {

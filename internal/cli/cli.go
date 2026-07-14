@@ -69,7 +69,7 @@ const (
 	daemonProcessName            = "sermod"
 	daemonWebSchemeHTTP          = checks.URLSchemeHTTP
 	daemonWebAuthUserPrefix      = "admin:"
-	daemonWebCSRFHeader          = "X-Sermo-CSRF"
+	daemonWebCSRFHeader          = "X-Sermo-Csrf"
 	daemonWebCSRFValue           = "1"
 	daemonWebHeaderAuthorization = httpx.HeaderAuthorization
 	daemonWebBasicAuthPrefix     = "Basic "

@@ -647,7 +647,7 @@ server {
 
 Notes:
 
-- The proxy and the dashboard share an **origin**, so the `X-Sermo-CSRF` header and
+- The proxy and the dashboard share an **origin**, so the `X-Sermo-Csrf` header and
   Sermo's own admin/guest auth keep working through it — the browser forwards the
   `Authorization` header. You can rely on Sermo's roles, add the proxy's own auth
   (basic/OIDC/mTLS) on top, or both.
@@ -881,8 +881,8 @@ hold back service alerts until the daemon has a post-operation sample.
 
 Because the daemon runs as root, the UI is hardened: it binds to loopback by
 default, supports auth (above), sets HTTP timeouts, and requires an
-**`X-Sermo-CSRF`** header on every action (POST) request — the dashboard sends it;
-an API client must too (e.g. `curl -H 'X-Sermo-CSRF: 1' -X POST …`). This blocks
+**`X-Sermo-Csrf`** header on every action (POST) request — the dashboard sends it;
+an API client must too (e.g. `curl -H 'X-Sermo-Csrf: 1' -X POST …`). This blocks
 cross-site request forgery from a browser. See
 [safety](safety.md#trust-model).
 

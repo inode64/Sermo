@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strings"
 )
@@ -58,18 +59,35 @@ func osReleaseID() string {
 // OS (or a `default` branch), merges it into the surrounding map, and discards the
 // rest. It works at any depth — service, checks, processes, policy, ... — and runs
 // at load, before resolution.
-func (c *Config) applyOSSelectors() {
+func (c *Config) applyOSSelectors() error {
 	for _, doc := range c.docs {
-		doc.Body = collapseOS(doc.Body, detectedOS).(map[string]any)
+		body, err := collapseOS(doc.Body, detectedOS)
+		if err != nil {
+			return fmt.Errorf("collapse os selector in %s: %w", doc.Path, err)
+		}
+		selected, ok := body.(map[string]any)
+		if !ok {
+			return fmt.Errorf("collapse os selector in %s: document must resolve to a mapping", doc.Path)
+		}
+		doc.Body = selected
 	}
 	// The global document (defaults, watches, …) lives in Global.Raw, not c.docs,
 	// so collapse os: selectors there too.
 	if c.Global.Raw != nil {
-		c.Global.Raw = collapseOS(c.Global.Raw, detectedOS).(map[string]any)
+		raw, err := collapseOS(c.Global.Raw, detectedOS)
+		if err != nil {
+			return fmt.Errorf("collapse os selector in global config: %w", err)
+		}
+		selected, ok := raw.(map[string]any)
+		if !ok {
+			return fmt.Errorf("collapse os selector in global config: document must resolve to a mapping")
+		}
+		c.Global.Raw = selected
 	}
+	return nil
 }
 
-func collapseOS(v any, osID string) any {
+func collapseOS(v any, osID string) (any, error) {
 	switch t := v.(type) {
 	case map[string]any:
 		out := make(map[string]any, len(t))
@@ -81,12 +99,24 @@ func collapseOS(v any, osID string) any {
 					continue
 				}
 			}
-			out[k] = collapseOS(e, osID)
+			collapsed, err := collapseOS(e, osID)
+			if err != nil {
+				return nil, err
+			}
+			out[k] = collapsed
 		}
 		if selector != nil {
 			if branch := selectOSBranch(selector, osID); branch != nil {
 				if bm, ok := branch.(map[string]any); ok {
-					out = mergeMaps(out, collapseOS(bm, osID).(map[string]any))
+					collapsed, err := collapseOS(bm, osID)
+					if err != nil {
+						return nil, err
+					}
+					selected, ok := collapsed.(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("os branch %q must resolve to a mapping when merged", osID)
+					}
+					out = mergeMaps(out, selected)
 				} else if len(out) == 0 {
 					// A list/scalar branch (e.g. os-specific pidfile path
 					// candidates) replaces the value when `os:` is the only key.
@@ -94,14 +124,19 @@ func collapseOS(v any, osID string) any {
 				}
 			}
 		}
-		return out
+		return out, nil
 	case []any:
-		for i := range t {
-			t[i] = collapseOS(t[i], osID)
+		out := make([]any, len(t))
+		for i, value := range t {
+			collapsed, err := collapseOS(value, osID)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = collapsed
 		}
-		return t
+		return out, nil
 	default:
-		return t
+		return t, nil
 	}
 }
 

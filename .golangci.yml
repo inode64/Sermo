@@ -17,6 +17,7 @@ linters:
     - asciicheck  # non-ASCII identifiers
     - bidichk  # dangerous bidi unicode in source
     - bodyclose
+    - canonicalheader  # HTTP header spelling must use net/http's canonical form
     - contextcheck  # context must flow into blocking I/O (not net/http dial — see noctx)
     - copyloopvar
     - depguard  # architecture import boundaries (see settings.depguard.rules)
@@ -28,10 +29,12 @@ linters:
     - errorlint  # error wrapping (%w) and errors.Is/As correctness
     - exhaustive  # enum switches missing cases (check/watch/backend type dispatch)
     - fatcontext  # context accumulated inside loops
+    - forcetypeassert  # prevent panics when values with static type any are asserted
     - gocheckcompilerdirectives  # malformed //go: directives (typos that silently no-op)
     - gocritic  # appendAssign + unlambda only (see settings)
     - goprintffuncname  # printf-like helpers must end in f
     - gosec
+    - gomoddirectives  # reject unexpected replace/exclude/retract directives
     - interfacebloat  # interfaces with too many methods (web.Backend excluded below)
     - iface  # unused / duplicated interface declarations
     - ireturn  # return-concrete; factories/registries excluded below
@@ -43,11 +46,14 @@ linters:
     - nilerr
     - nilnesserr  # err checked nil but a different err value returned
     - noctx  # blocking I/O must use *Context APIs; conn/ and *_test.go excluded
+    - nosprintfhostport  # host:port construction must preserve IPv6 correctness
     - nolintlint  # //nolint: directives must name a linter and stay justified
     - reassign  # writes to other packages' package-level vars
     - recvcheck  # mixed value/pointer receivers on one type
     - rowserrcheck  # database/sql Rows.Err() left unchecked
     - sloglint  # consistent log/slog usage
+    - loggercheck  # log key/value pairs must match the logger API
+    - sqlclosecheck  # SQL cursors/statements must be closed on every path
     - thelper  # t.Helper() in table-driven check callbacks and fakes
     - usestdlibvars  # prefer stdlib constants (http.StatusOK, ...)
     - wastedassign
@@ -120,9 +126,6 @@ linters:
   #               fixed-header make([]byte, N) followed by append(body) is intended.
   #   nilnil    — the (nil, nil) "nothing to build" returns in watch_build are
   #               deliberate signals, not a sentinel-error case.
-  #   sqlclosecheck — its one hit is a loop-scoped rows.Close() that is correct
-  #               (a defer would leak handles across iterations); rowserrcheck
-  #               already covers the Rows.Err() case.
   #   unconvert — flags arch-dependent syscall.Stat_t/Statfs_t conversions that
   #               are needed on non-amd64 Linux; removing them would break ports.
   exclusions:
@@ -136,6 +139,10 @@ linters:
       # Test helpers switch over third-party enums (x/net/html atom.Atom) where
       # exhaustiveness is meaningless noise.
       - linters: [exhaustive]
+        path: _test\.go
+      # Tests intentionally assert their own fixtures and concrete builders;
+      # production values crossing an any boundary must still be checked.
+      - linters: [forcetypeassert]
         path: _test\.go
       # Test fixtures repeat protocol tokens (NUT UPS), YAML keys and scripted
       # wizard answers — not prose typos.
