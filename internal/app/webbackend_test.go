@@ -1915,7 +1915,17 @@ func TestWebBackendStorageOpenFiles(t *testing.T) {
 }
 
 func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+	usagePath := ""
+	mountSampled := false
+	b, warns := NewWebBackend(t.Context(), storageWatchFilesystemConfig(), storageWatchFilesystemDeps(&usagePath, &mountSampled))
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	assertStorageWatchFilesystemDetails(t, storageWatch(t, b), usagePath, mountSampled)
+}
+
+func storageWatchFilesystemConfig() *config.Config {
+	return &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{
 			"storage-data": map[string]any{
 				"interval": "45s",
@@ -1940,11 +1950,12 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 			},
 		},
 	}}}
-	usagePath := ""
-	mountSampled := false
-	b, warns := NewWebBackend(t.Context(), cfg, Deps{
+}
+
+func storageWatchFilesystemDeps(usagePath *string, mountSampled *bool) Deps {
+	return Deps{
 		StorageUsage: func(path string) (checks.StorageStats, error) {
-			usagePath = path
+			*usagePath = path
 			return checks.StorageStats{
 				UsedPct:       87.5,
 				FreePct:       12.5,
@@ -1957,22 +1968,26 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 			}, nil
 		},
 		MountSampler: func() ([]checks.Mount, error) {
-			mountSampled = true
+			*mountSampled = true
 			return []checks.Mount{
 				{Device: "/dev/root", MountPoint: "/", FSType: "ext4", Options: []string{"rw"}},
 				{Device: "/dev/mapper/data", MountPoint: "/data", FSType: "xfs", Options: []string{"rw", "noatime"}},
 			}, nil
 		},
-	})
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
 	}
+}
 
+func storageWatch(t *testing.T, b *WebBackend) web.Watch {
+	t.Helper()
 	watches := b.Watches(context.Background())
 	if len(watches) != 1 {
 		t.Fatalf("got %d watches, want 1: %+v", len(watches), watches)
 	}
-	w := watches[0]
+	return watches[0]
+}
+
+func assertStorageWatchFilesystemDetails(t *testing.T, w web.Watch, usagePath string, mountSampled bool) {
+	t.Helper()
 	if usagePath != "/data" || !mountSampled {
 		t.Fatalf("samplers not called as expected: usagePath=%q mountSampled=%v", usagePath, mountSampled)
 	}
@@ -1994,10 +2009,7 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 	if len(w.Conditions) != 3 {
 		t.Fatalf("conditions = %+v, want free_pct/free_bytes/mounted", w.Conditions)
 	}
-	cond := map[string]web.WatchCondition{}
-	for _, c := range w.Conditions {
-		cond[c.Field] = c
-	}
+	cond := storageWatchConditions(w.Conditions)
 	if cond["free_pct"].Op != "<" || cond["free_pct"].Value != "15" {
 		t.Fatalf("free_pct condition = %+v", cond["free_pct"])
 	}
@@ -2019,6 +2031,14 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 	if w.Expand == nil || w.Expand.ByBytes != 5<<30 {
 		t.Fatalf("expand info = %+v, want 5G", w.Expand)
 	}
+}
+
+func storageWatchConditions(conditions []web.WatchCondition) map[string]web.WatchCondition {
+	byField := make(map[string]web.WatchCondition, len(conditions))
+	for _, condition := range conditions {
+		byField[condition.Field] = condition
+	}
+	return byField
 }
 
 func TestWebBackendStorageMountOnlySkipsUsageProbe(t *testing.T) {

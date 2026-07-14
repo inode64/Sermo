@@ -231,51 +231,7 @@ func TestStorePersistsAcrossReopen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	if err := first.SetActive("db", false, SourceCLI); err != nil {
-		t.Fatalf("SetActive: %v", err)
-	}
-	if err := first.SetRemediationState("db", RemediationRecord{
-		LastActionAt:   t0,
-		RecentActions:  []time.Time{t0.Add(-time.Minute), t0},
-		CurrentBackoff: 2 * time.Minute,
-	}); err != nil {
-		t.Fatalf("SetRemediationState: %v", err)
-	}
-	if err := first.SetRuleWindowStates("db", map[string]RuleWindowRecord{
-		"restart-if-down": {
-			Consecutive: 2,
-			History:     []bool{true, false, true},
-			TrueSince:   t0.Add(-5 * time.Minute),
-			TimedHistory: []RuleWindowSample{
-				{At: t0.Add(-4 * time.Minute), Match: true},
-				{At: t0.Add(-2 * time.Minute), Match: false},
-			},
-		},
-	}); err != nil {
-		t.Fatalf("SetRuleWindowStates: %v", err)
-	}
-	if err := first.SetWatchRuntimeState("storage-root", "metric:free", WatchRuntimeRecord{
-		Firing:       true,
-		LastNotifyAt: t0.Add(-time.Minute),
-		Window: RuleWindowRecord{
-			Consecutive: 2,
-			History:     []bool{true, false, true},
-			TrueSince:   t0.Add(-5 * time.Minute),
-			TimedHistory: []RuleWindowSample{
-				{At: t0.Add(-4 * time.Minute), Match: true},
-			},
-		},
-		Policy: RemediationRecord{
-			LastActionAt:   t0.Add(-2 * time.Minute),
-			RecentActions:  []time.Time{t0.Add(-2 * time.Minute)},
-			CurrentBackoff: 3 * time.Minute,
-		},
-	}); err != nil {
-		t.Fatalf("SetWatchRuntimeState: %v", err)
-	}
-	if err := first.SetOperationSettling("db", "restart", OperationSettlingSettling, SourceDaemon); err != nil {
-		t.Fatalf("SetOperationSettling: %v", err)
-	}
+	writePersistentStoreState(t, first, t0)
 	if err := first.Close(); err != nil {
 		t.Fatalf("close: %v", err)
 	}
@@ -285,43 +241,121 @@ func TestStorePersistsAcrossReopen(t *testing.T) {
 		t.Fatalf("reopen: %v", err)
 	}
 	defer second.Close()
+	assertPersistentStoreState(t, second, t0)
+}
 
-	active, found, err := second.Active("db")
+func writePersistentStoreState(t *testing.T, store *Store, at time.Time) {
+	t.Helper()
+	if err := store.SetActive("db", false, SourceCLI); err != nil {
+		t.Fatalf("SetActive: %v", err)
+	}
+	if err := store.SetRemediationState("db", RemediationRecord{
+		LastActionAt:   at,
+		RecentActions:  []time.Time{at.Add(-time.Minute), at},
+		CurrentBackoff: 2 * time.Minute,
+	}); err != nil {
+		t.Fatalf("SetRemediationState: %v", err)
+	}
+	if err := store.SetRuleWindowStates("db", map[string]RuleWindowRecord{
+		"restart-if-down": {
+			Consecutive: 2,
+			History:     []bool{true, false, true},
+			TrueSince:   at.Add(-5 * time.Minute),
+			TimedHistory: []RuleWindowSample{
+				{At: at.Add(-4 * time.Minute), Match: true},
+				{At: at.Add(-2 * time.Minute), Match: false},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("SetRuleWindowStates: %v", err)
+	}
+	if err := store.SetWatchRuntimeState("storage-root", "metric:free", WatchRuntimeRecord{
+		Firing:       true,
+		LastNotifyAt: at.Add(-time.Minute),
+		Window: RuleWindowRecord{
+			Consecutive: 2,
+			History:     []bool{true, false, true},
+			TrueSince:   at.Add(-5 * time.Minute),
+			TimedHistory: []RuleWindowSample{
+				{At: at.Add(-4 * time.Minute), Match: true},
+			},
+		},
+		Policy: RemediationRecord{
+			LastActionAt:   at.Add(-2 * time.Minute),
+			RecentActions:  []time.Time{at.Add(-2 * time.Minute)},
+			CurrentBackoff: 3 * time.Minute,
+		},
+	}); err != nil {
+		t.Fatalf("SetWatchRuntimeState: %v", err)
+	}
+	if err := store.SetOperationSettling("db", "restart", OperationSettlingSettling, SourceDaemon); err != nil {
+		t.Fatalf("SetOperationSettling: %v", err)
+	}
+}
+
+func assertPersistentStoreState(t *testing.T, store *Store, at time.Time) {
+	t.Helper()
+	assertPersistedActiveState(t, store)
+	assertPersistedRemediationState(t, store, at)
+	assertPersistedRuleWindowState(t, store, at)
+	assertPersistedWatchRuntimeState(t, store, at)
+	assertPersistedOperationSettling(t, store)
+}
+
+func assertPersistedActiveState(t *testing.T, store *Store) {
+	t.Helper()
+	active, found, err := store.Active("db")
 	if err != nil {
 		t.Fatalf("Active: %v", err)
 	}
 	if !found || active {
 		t.Errorf("state did not persist across reopen: found=%v active=%v", found, active)
 	}
-	rem, found, err := second.RemediationState("db")
+}
+
+func assertPersistedRemediationState(t *testing.T, store *Store, at time.Time) {
+	t.Helper()
+	rem, found, err := store.RemediationState("db")
 	if err != nil || !found {
 		t.Fatalf("RemediationState after reopen: found=%v err=%v", found, err)
 	}
-	if !rem.LastActionAt.Equal(t0) || rem.CurrentBackoff != 2*time.Minute || len(rem.RecentActions) != 2 {
+	if !rem.LastActionAt.Equal(at) || rem.CurrentBackoff != 2*time.Minute || len(rem.RecentActions) != 2 {
 		t.Fatalf("remediation state = %+v", rem)
 	}
-	windows, err := second.RuleWindowStates("db")
+}
+
+func assertPersistedRuleWindowState(t *testing.T, store *Store, at time.Time) {
+	t.Helper()
+	windows, err := store.RuleWindowStates("db")
 	if err != nil {
 		t.Fatalf("RuleWindowStates after reopen: %v", err)
 	}
 	if rec, ok := windows["restart-if-down"]; !ok || rec.Consecutive != 2 || len(rec.History) != 3 || !rec.History[2] {
 		t.Fatalf("rule window state = %+v", windows)
-	} else if !rec.TrueSince.Equal(t0.Add(-5*time.Minute)) || len(rec.TimedHistory) != 2 || rec.TimedHistory[0].Match != true || !rec.TimedHistory[1].At.Equal(t0.Add(-2*time.Minute)) {
+	} else if !rec.TrueSince.Equal(at.Add(-5*time.Minute)) || len(rec.TimedHistory) != 2 || rec.TimedHistory[0].Match != true || !rec.TimedHistory[1].At.Equal(at.Add(-2*time.Minute)) {
 		t.Fatalf("duration rule window state = %+v", rec)
 	}
-	watch, found, err := second.WatchRuntimeState("storage-root", "metric:free")
+}
+
+func assertPersistedWatchRuntimeState(t *testing.T, store *Store, at time.Time) {
+	t.Helper()
+	watch, found, err := store.WatchRuntimeState("storage-root", "metric:free")
 	if err != nil || !found {
 		t.Fatalf("WatchRuntimeState after reopen: found=%v err=%v", found, err)
 	}
-	if !watch.Firing || !watch.LastNotifyAt.Equal(t0.Add(-time.Minute)) ||
+	if !watch.Firing || !watch.LastNotifyAt.Equal(at.Add(-time.Minute)) ||
 		watch.Window.Consecutive != 2 || len(watch.Window.History) != 3 ||
-		!watch.Window.TrueSince.Equal(t0.Add(-5*time.Minute)) ||
+		!watch.Window.TrueSince.Equal(at.Add(-5*time.Minute)) ||
 		len(watch.Window.TimedHistory) != 1 ||
-		!watch.Policy.LastActionAt.Equal(t0.Add(-2*time.Minute)) ||
+		!watch.Policy.LastActionAt.Equal(at.Add(-2*time.Minute)) ||
 		len(watch.Policy.RecentActions) != 1 || watch.Policy.CurrentBackoff != 3*time.Minute {
 		t.Fatalf("watch runtime state = %+v", watch)
 	}
-	op, found, err := second.OperationSettling("db")
+}
+
+func assertPersistedOperationSettling(t *testing.T, store *Store) {
+	t.Helper()
+	op, found, err := store.OperationSettling("db")
 	if err != nil || !found {
 		t.Fatalf("OperationSettling after reopen: found=%v err=%v", found, err)
 	}
