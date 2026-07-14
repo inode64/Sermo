@@ -158,7 +158,7 @@ func (scan *webEventPageScan) addBatch(batch []LoggedEvent, hasRawMore bool) (we
 	return web.EventPage{}, false
 }
 
-func (scan webEventPageScan) page(hasMore bool) web.EventPage {
+func (scan *webEventPageScan) page(hasMore bool) web.EventPage {
 	page := web.EventPage{Events: scan.events, HasMore: hasMore}
 	if hasMore {
 		page.NextBeforeID = scan.cursor

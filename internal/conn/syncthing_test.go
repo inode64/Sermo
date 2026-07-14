@@ -17,7 +17,7 @@ func syncthingTestServer(apiKey string) *httptest.Server {
 		case "/rest/noauth/health":
 			_, _ = w.Write([]byte(`{"status":"OK"}`))
 		case "/rest/system/version":
-			if apiKey == "" || r.Header.Get("X-API-Key") != apiKey {
+			if apiKey == "" || r.Header.Get(httpHeaderSyncthingAuth) != apiKey {
 				w.WriteHeader(http.StatusForbidden)
 				return
 			}
