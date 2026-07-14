@@ -227,51 +227,78 @@ func openRCAssignments(text, unit string) map[string]string {
 	var stack []openRCBranch
 	for line := range strings.SplitSeq(text, serviceOutputLineSeparator) {
 		line = strings.TrimSpace(line)
-		if b, ok := openRCIfBranch(line, active, vars); ok {
-			stack = append(stack, b)
-			if b.known {
-				active = b.parent && b.cond
-			}
+		if updateOpenRCBranch(line, &active, &stack, vars) {
 			continue
 		}
-		if line == shellKeywordElse && len(stack) > 0 {
-			b := stack[len(stack)-1]
-			if b.known {
-				active = b.parent && !b.cond
-			} else {
-				active = b.parent
-			}
-			continue
-		}
-		if line == shellKeywordFi && len(stack) > 0 {
-			b := stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
-			active = b.parent
-			continue
-		}
-		if !active {
-			continue
-		}
-		if after, ok := strings.CutPrefix(line, shellNoOpPrefix); ok {
-			expr := strings.TrimSpace(after)
-			name, _, ok := defaultExpr(expr)
-			if !ok {
-				continue
-			}
-			if value, ok := resolveOpenRCValue(expr, vars); ok {
-				vars[name] = value
-			}
-			continue
-		}
-		if m := openrcAssign.FindStringSubmatch(line); m != nil {
-			name := m[openRCAssignNameGroup]
-			value, ok := resolveOpenRCValue(m[openRCAssignValueGroup], vars)
-			if ok {
-				vars[name] = value
-			}
+		if active {
+			applyOpenRCAssignment(line, vars)
 		}
 	}
 	return vars
+}
+
+func updateOpenRCBranch(line string, active *bool, stack *[]openRCBranch, vars map[string]string) bool {
+	if branch, ok := openRCIfBranch(line, *active, vars); ok {
+		*stack = append(*stack, branch)
+		if branch.known {
+			*active = branch.parent && branch.cond
+		}
+		return true
+	}
+	switch line {
+	case shellKeywordElse:
+		return switchOpenRCBranch(active, *stack)
+	case shellKeywordFi:
+		return closeOpenRCBranch(active, stack)
+	default:
+		return false
+	}
+}
+
+func switchOpenRCBranch(active *bool, stack []openRCBranch) bool {
+	if len(stack) == 0 {
+		return false
+	}
+	branch := stack[len(stack)-1]
+	if branch.known {
+		*active = branch.parent && !branch.cond
+	} else {
+		*active = branch.parent
+	}
+	return true
+}
+
+func closeOpenRCBranch(active *bool, stack *[]openRCBranch) bool {
+	if len(*stack) == 0 {
+		return false
+	}
+	branch := (*stack)[len(*stack)-1]
+	*stack = (*stack)[:len(*stack)-1]
+	*active = branch.parent
+	return true
+}
+
+func applyOpenRCAssignment(line string, vars map[string]string) {
+	if after, ok := strings.CutPrefix(line, shellNoOpPrefix); ok {
+		applyOpenRCDefault(strings.TrimSpace(after), vars)
+		return
+	}
+	if match := openrcAssign.FindStringSubmatch(line); match != nil {
+		assignOpenRCValue(match[openRCAssignNameGroup], match[openRCAssignValueGroup], vars)
+	}
+}
+
+func applyOpenRCDefault(expr string, vars map[string]string) {
+	name, _, ok := defaultExpr(expr)
+	if ok {
+		assignOpenRCValue(name, expr, vars)
+	}
+}
+
+func assignOpenRCValue(name, expr string, vars map[string]string) {
+	if value, ok := resolveOpenRCValue(expr, vars); ok {
+		vars[name] = value
+	}
 }
 
 func openRCIfBranch(line string, active bool, vars map[string]string) (openRCBranch, bool) {
