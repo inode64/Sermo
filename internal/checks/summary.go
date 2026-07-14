@@ -237,13 +237,13 @@ func formatSummaryBytes(number float64) string {
 	if math.IsNaN(number) || math.IsInf(number, 0) {
 		return "-"
 	}
-	units := []string{"B", "KB", "MB", "GB", "TB"}
+	byteUnits := []string{"B", "KB", "MB", "GB", "TB"}
 	unit := 0
-	for number >= summaryByteBase && unit < len(units)-1 {
+	for number >= summaryByteBase && unit < len(byteUnits)-1 {
 		number /= summaryByteBase
 		unit++
 	}
-	return formatSummaryNumber(number) + " " + units[unit]
+	return formatSummaryNumber(number) + " " + byteUnits[unit]
 }
 
 func formatSummaryString(name, value string) string {
@@ -279,7 +279,7 @@ func formatSummaryDuration(duration time.Duration) string {
 		return duration.String()
 	}
 	total := int64(duration / time.Second)
-	units := []struct {
+	durationUnits := []struct {
 		seconds int64
 		suffix  string
 	}{
@@ -291,7 +291,7 @@ func formatSummaryDuration(duration time.Duration) string {
 		{1, "s"},
 	}
 	var rendered strings.Builder
-	for _, unit := range units {
+	for _, unit := range durationUnits {
 		if total >= unit.seconds {
 			fmt.Fprintf(&rendered, "%d%s", total/unit.seconds, unit.suffix)
 			total %= unit.seconds
