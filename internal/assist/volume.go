@@ -49,10 +49,7 @@ func (volumeAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 
 	var shared *volSettings
 	if len(selected) > 1 && p.Confirm("Apply the same settings to all selected volumes?", true) {
-		s, err := askVolSettings(p, env, "the selected volumes")
-		if err != nil {
-			return Result{}, err
-		}
+		s := askVolSettings(p, env, "the selected volumes")
 		shared = &s
 	}
 
@@ -60,10 +57,7 @@ func (volumeAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	for _, v := range selected {
 		s := shared
 		if s == nil {
-			t, err := askVolSettings(p, env, v.Mountpoint)
-			if err != nil {
-				return Result{}, err
-			}
+			t := askVolSettings(p, env, v.Mountpoint)
 			s = &t
 		}
 		watches[watchName(config.WatchCategoryStorage, v.Mountpoint)] = buildVolWatch(v, *s)
@@ -103,7 +97,7 @@ type volSettings struct {
 	cooldown   string
 }
 
-func askVolSettings(p *Prompt, env Env, label string) (volSettings, error) {
+func askVolSettings(p *Prompt, env Env, label string) volSettings {
 	var s volSettings
 	s.Monitoring = p.AskMonitoring(label)
 	switch p.Choose("Alert on which condition for "+label+"?", []string{
@@ -133,7 +127,7 @@ func askVolSettings(p *Prompt, env Env, label string) (volSettings, error) {
 		s.cooldown = askDuration(p, "Minimum time between expansions (cooldown)", volumeDefaultExpandCooldown)
 	}
 	s.dryRun = p.AskWatchDryRun(label, env, s.notifiers, s.expand)
-	return s, nil
+	return s
 }
 
 func buildVolWatch(v Volume, s volSettings) map[string]any {

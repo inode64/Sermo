@@ -948,7 +948,7 @@ func TestReleaseLockEndpoint(t *testing.T) {
 	b := &fakeBackend{releaseOK: true}
 	rec := httptest.NewRecorder()
 	newServer(b).ServeHTTP(rec, postReq(
-		testPathQuery(testLockPath("mysql", apiActionRelease), testQueryParam(apiParamName, "backup")),
+		testPathQuery(testLockPath(apiActionRelease), testQueryParam(apiParamName, "backup")),
 	))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("release status = %d, body = %s", rec.Code, rec.Body.String())
@@ -960,7 +960,7 @@ func TestReleaseLockEndpoint(t *testing.T) {
 
 func TestReleaseLockEndpointConflict(t *testing.T) {
 	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{}).ServeHTTP(rec, postReq(testLockPath("mysql", apiActionRelease)))
+	newServer(&fakeBackend{}).ServeHTTP(rec, postReq(testLockPath(apiActionRelease)))
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("blocked release status = %d, want 409", rec.Code)
 	}

@@ -38,10 +38,7 @@ func (netAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 
 	var shared *netSettings
 	if len(selected) > 1 && p.Confirm("Apply the same settings to all selected interfaces?", true) {
-		s, err := askNetSettings(p, env, "the selected interfaces")
-		if err != nil {
-			return Result{}, err
-		}
+		s := askNetSettings(p, env, "the selected interfaces")
 		shared = &s
 	}
 
@@ -49,10 +46,7 @@ func (netAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	for _, c := range selected {
 		s := shared
 		if s == nil {
-			t, err := askNetSettings(p, env, c.Name)
-			if err != nil {
-				return Result{}, err
-			}
+			t := askNetSettings(p, env, c.Name)
 			s = &t
 		}
 		watches[netWatchPrefix+c.Name] = buildNetWatch(c, *s)
@@ -137,7 +131,7 @@ type netSettings struct {
 	dryRun     bool
 }
 
-func askNetSettings(p *Prompt, env Env, label string) (netSettings, error) {
+func askNetSettings(p *Prompt, env Env, label string) netSettings {
 	var s netSettings
 	s.Monitoring = p.AskMonitoring(label)
 	options := []string{"link up/down", "link errors", "link speed changes", "IP address (lost or changed)"}
@@ -157,7 +151,7 @@ func askNetSettings(p *Prompt, env Env, label string) (netSettings, error) {
 	}
 	s.notifiers = chooseNotifiers(p, env)
 	s.dryRun = p.AskWatchDryRun(label, env, s.notifiers, false)
-	return s, nil
+	return s
 }
 
 func buildNetWatch(iface Iface, s netSettings) map[string]any {

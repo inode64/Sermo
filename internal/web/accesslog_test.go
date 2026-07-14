@@ -23,12 +23,12 @@ func TestParseAPIAccessTarget(t *testing.T) {
 		{testMountPath("backup", mountctl.ActionUmount), "backup", mountctl.ActionUmount},
 		{testMountPath("backup", mountctl.ActionMount), "backup", mountctl.ActionMount},
 		{testTargetPath(apiSegmentNotifiers, "ops", apiActionTest), "ops", apiActionTest},
-		{testLockPath("mysql", apiActionRelease), "mysql", apiActionRelease},
+		{testLockPath(apiActionRelease), "mysql", apiActionRelease},
 		{apiPathReload, "", apiActionReload},
 		// Three-part paths: the target is present even without a trailing action.
 		{testServicePath("web"), "web", ""},
 		{testMountPath("backup"), "backup", ""},
-		{testLockPath("mysql"), "mysql", apiActionRelease},
+		{testLockPath(), "mysql", apiActionRelease},
 	}
 	for _, tc := range tests {
 		target, action := parseAPIAccessTarget(tc.path)

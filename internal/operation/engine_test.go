@@ -187,7 +187,7 @@ func TestSectionRunnerBuildWarningBlocksRequiredPreflight(t *testing.T) {
 		},
 	}
 
-	out := sectionRunner(tree, "preflight", checks.Deps{Service: "web", DefaultTimeout: time.Second}, nil)(context.Background())
+	out := sectionRunner(tree, checks.Deps{Service: "web", DefaultTimeout: time.Second}, nil)(context.Background())
 	if out.OK {
 		t.Fatalf("outcome OK = true, want required build warning to fail: %+v", out)
 	}
@@ -283,7 +283,7 @@ func TestSectionRunnerMetricSampleEnablesMetricPreflight(t *testing.T) {
 		}
 	}
 
-	out := sectionRunner(tree, "preflight", checks.Deps{Service: "web", DefaultTimeout: time.Second}, sample)(context.Background())
+	out := sectionRunner(tree, checks.Deps{Service: "web", DefaultTimeout: time.Second}, sample)(context.Background())
 	if !out.OK {
 		t.Fatalf("outcome OK = false, want metric preflight to pass with MetricSample: %+v", out)
 	}
@@ -296,7 +296,7 @@ func TestSectionRunnerOptionalBuildWarningDoesNotBlock(t *testing.T) {
 		},
 	}
 
-	out := sectionRunner(tree, "preflight", checks.Deps{Service: "web", DefaultTimeout: time.Second}, nil)(context.Background())
+	out := sectionRunner(tree, checks.Deps{Service: "web", DefaultTimeout: time.Second}, nil)(context.Background())
 	if !out.OK {
 		t.Fatalf("outcome OK = false, want optional build warning to pass: %+v", out)
 	}

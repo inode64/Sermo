@@ -62,8 +62,10 @@ linters:
     - loggercheck  # log key/value pairs must match the logger API
     - sqlclosecheck  # SQL cursors/statements must be closed on every path
     - thelper  # t.Helper() in table-driven check callbacks and fakes
+    - unparam  # unused function parameters and always-nil results
     - usestdlibvars  # prefer stdlib constants (http.StatusOK, ...)
     - unqueryvet  # prohibit SELECT * in production SQL queries
+    - usetesting  # prefer testing.T cleanup-aware helpers
     - wastedassign
     - wrapcheck  # pilot: operation/ + app/ + cli/ + state/ + process/ + web/ + servicemgr/ + rules/ + config/ (see exclusions)
   settings:
