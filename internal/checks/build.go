@@ -832,11 +832,12 @@ func (e commandExport) value(stdout, stderr string) string {
 	value := source
 	if e.regex != nil {
 		match := e.regex.FindStringSubmatch(source)
-		if match == nil {
+		switch {
+		case match == nil:
 			value = e.defaultValue
-		} else if len(match) >= commandRegexMinCapturedMatches {
+		case len(match) >= commandRegexMinCapturedMatches:
 			value = match[commandRegexFirstCaptureGroup]
-		} else {
+		default:
 			value = match[commandRegexFullMatchGroup]
 		}
 	} else if e.shortVersion {
