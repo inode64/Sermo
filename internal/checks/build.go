@@ -1477,48 +1477,64 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		return nil, "icmp check: " + iwarn
 	}
 	c := &icmpCheck{base: b, host: host, ifaces: parseInterfaces(entry[CheckKeyInterface]), ifaceAll: allIf, count: count, metric: metric, sampler: deps.PingSampler}
-	switch metric {
-	case NetMetricState:
-		expect := cfgval.AsString(entry[CheckKeyExpect])
-		onChange := cfgval.AsString(entry[CheckKeyOn]) == OnModeChange
-		if expect == "" && !onChange {
-			return nil, "icmp state requires expect: up|down or on: change"
-		}
-		if expect != "" {
-			if expect != NetStateUp && expect != NetStateDown {
-				return nil, "icmp state expect must be " + NetStateSummary
-			}
-			c.expect = expect
-		} else if onChange {
-			c.onChange = true
-		}
-	case IcmpMetricLatency:
-		th, hasTh := entry[CheckKeyThreshold].(map[string]any)
-		ch, hasCh := entry[CheckKeyChange].(map[string]any)
-		if !hasTh && !hasCh {
-			return nil, "icmp latency requires threshold {op, value} or change {delta}"
-		}
-		if hasTh {
-			op := cfgval.AsString(th[CheckKeyOp])
-			if !cfgval.IsCompareOp(op) {
-				return nil, "icmp latency threshold has an invalid op"
-			}
-			v, err := strconv.ParseFloat(cfgval.String(th[CheckKeyValue]), numericBits64)
-			if err != nil {
-				return nil, "icmp latency threshold value must be numeric"
-			}
-			c.hasThreshold, c.op, c.value = true, op, v
-		} else if hasCh {
-			d, err := strconv.ParseFloat(cfgval.String(ch[CheckKeyDelta]), numericBits64)
-			if err != nil {
-				return nil, "icmp latency change delta must be numeric"
-			}
-			c.hasChange, c.delta = true, d
-		}
-	default:
-		return nil, "icmp check metric must be " + ICMPMetricSummary
+	if warn := configureICMPMetric(c, entry); warn != "" {
+		return nil, warn
 	}
 	return c, ""
+}
+
+func configureICMPMetric(check *icmpCheck, entry map[string]any) string {
+	switch check.metric {
+	case NetMetricState:
+		return configureICMPState(check, entry)
+	case IcmpMetricLatency:
+		return configureICMPLatency(check, entry)
+	default:
+		return "icmp check metric must be " + ICMPMetricSummary
+	}
+}
+
+func configureICMPState(check *icmpCheck, entry map[string]any) string {
+	expect := cfgval.AsString(entry[CheckKeyExpect])
+	onChange := cfgval.AsString(entry[CheckKeyOn]) == OnModeChange
+	if expect == "" && !onChange {
+		return "icmp state requires expect: up|down or on: change"
+	}
+	if expect != "" {
+		if expect != NetStateUp && expect != NetStateDown {
+			return "icmp state expect must be " + NetStateSummary
+		}
+		check.expect = expect
+		return ""
+	}
+	check.onChange = true
+	return ""
+}
+
+func configureICMPLatency(check *icmpCheck, entry map[string]any) string {
+	threshold, hasThreshold := entry[CheckKeyThreshold].(map[string]any)
+	change, hasChange := entry[CheckKeyChange].(map[string]any)
+	if !hasThreshold && !hasChange {
+		return "icmp latency requires threshold {op, value} or change {delta}"
+	}
+	if hasThreshold {
+		op := cfgval.AsString(threshold[CheckKeyOp])
+		if !cfgval.IsCompareOp(op) {
+			return "icmp latency threshold has an invalid op"
+		}
+		value, err := strconv.ParseFloat(cfgval.String(threshold[CheckKeyValue]), numericBits64)
+		if err != nil {
+			return "icmp latency threshold value must be numeric"
+		}
+		check.hasThreshold, check.op, check.value = true, op, value
+		return ""
+	}
+	delta, err := strconv.ParseFloat(cfgval.String(change[CheckKeyDelta]), numericBits64)
+	if err != nil {
+		return "icmp latency change delta must be numeric"
+	}
+	check.hasChange, check.delta = true, delta
+	return ""
 }
 
 // buildRouteCheck builds a default-route presence check.

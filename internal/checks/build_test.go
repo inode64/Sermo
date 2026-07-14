@@ -408,6 +408,42 @@ func TestBuildICMPStateRequiresExpectOrOnChange(t *testing.T) {
 	}
 }
 
+func TestBuildICMPCheckConfiguresMetrics(t *testing.T) {
+	tests := []struct {
+		name  string
+		entry map[string]any
+		check func(*icmpCheck) bool
+	}{
+		{
+			name:  "state on change",
+			entry: map[string]any{"host": "127.0.0.1", "metric": "state", "on": "change"},
+			check: func(c *icmpCheck) bool { return c.onChange && c.expect == "" },
+		},
+		{
+			name:  "latency threshold",
+			entry: map[string]any{"host": "127.0.0.1", "metric": "latency", "threshold": map[string]any{"op": ">", "value": 10}},
+			check: func(c *icmpCheck) bool { return c.hasThreshold && c.op == ">" && c.value == 10 },
+		},
+		{
+			name:  "latency change",
+			entry: map[string]any{"host": "127.0.0.1", "metric": "latency", "change": map[string]any{"delta": 5}},
+			check: func(c *icmpCheck) bool { return c.hasChange && c.delta == 5 },
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			built, warn := buildICMPCheck(base{}, tc.entry, Deps{})
+			if warn != "" {
+				t.Fatalf("buildICMPCheck warning = %q", warn)
+			}
+			check := built.(*icmpCheck)
+			if !tc.check(check) {
+				t.Fatalf("icmp check = %+v", check)
+			}
+		})
+	}
+}
+
 func TestBuildNetStateRequiresExpectOrOnChange(t *testing.T) {
 	if _, w := buildNetCheck(base{}, map[string]any{"interface": "eth0", "metric": "state"}, Deps{}); !strings.Contains(w, "requires expect") {
 		t.Fatalf("net state w/o expect warning = %q, want it to require expect/on", w)
