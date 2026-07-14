@@ -65,8 +65,8 @@ func (ajpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	// Read the full reply, not a single Read: TCP may split the small CPong across
 	// segments, and a short Read would falsely report a live connector as down.
-	header := make([]byte, ajpHeaderBytes)
-	if _, err := io.ReadFull(c, header); err != nil {
+	var header [ajpHeaderBytes]byte
+	if _, err := io.ReadFull(c, header[:]); err != nil {
 		return Result{}, err
 	}
 	if header[ajpMagicHighOffset] != ajpMagicResponseHigh || header[ajpMagicLowOffset] != ajpMagicResponseLow {
@@ -76,11 +76,12 @@ func (ajpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if length < ajpCPingPayloadLength || length > ajpMaxPacketBytes {
 		return Result{}, errors.New("invalid AJP response length")
 	}
-	payload := make([]byte, length)
-	if _, err := io.ReadFull(c, payload); err != nil {
+	packet := make([]byte, ajpHeaderBytes+length)
+	copy(packet, header[:])
+	if _, err := io.ReadFull(c, packet[ajpPayloadOffset:]); err != nil {
 		return Result{}, err
 	}
-	prefix, err := parseAJPResponse(append(header, payload...))
+	prefix, err := parseAJPResponse(packet)
 	if err != nil {
 		return Result{}, err
 	}
