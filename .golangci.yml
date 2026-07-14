@@ -32,8 +32,9 @@ linters:
     - fatcontext  # context accumulated inside loops
     - forcetypeassert  # prevent panics when values with static type any are asserted
     - gocheckcompilerdirectives  # malformed //go: directives (typos that silently no-op)
+    - gochecksumtype  # exhaustive switches over documented sum types
     - gocognit  # cognitive complexity; documented exceptions preserve ordered contracts
-    - gocritic  # appendAssign + unlambda only (see settings)
+    - gocritic  # focused stable bug and duplication checks (see settings)
     - goprintffuncname  # printf-like helpers must end in f
     - gosec
     - gomoddirectives  # reject unexpected replace/exclude/retract directives
@@ -59,6 +60,7 @@ linters:
     - sqlclosecheck  # SQL cursors/statements must be closed on every path
     - thelper  # t.Helper() in table-driven check callbacks and fakes
     - usestdlibvars  # prefer stdlib constants (http.StatusOK, ...)
+    - unqueryvet  # prohibit SELECT * in production SQL queries
     - wastedassign
     - wrapcheck  # pilot: operation/ + app/ + cli/ + state/ + process/ + web/ + servicemgr/ + rules/ + config/ (see exclusions)
   settings:
@@ -118,7 +120,23 @@ linters:
       disable-all: true
       enabled-checks:
         - appendAssign
+        - argOrder
+        - badCall
+        - badCond
+        - dupArg
+        - dupBranchBody
+        - dupCase
+        - dupSubExpr
+        - flagDeref
+        - mapKey
+        - newDeref
+        - regexpMust
+        - sloppyLen
+        - sloppyTypeAssert
+        - typeSwitchVar
+        - underef
         - unlambda
+        - weakCond
     misspell:
       # Eclipse Mosquitto — real MQTT broker name in catalog/tests.
       ignore-rules:
