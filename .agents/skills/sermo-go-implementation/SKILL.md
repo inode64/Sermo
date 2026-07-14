@@ -30,10 +30,15 @@ You are implementing Go code for Sermo.
 14. Keep documentation, catalog examples and `docs/configuration.md` / `docs/rules.md`
     in step with any config, check, notifier or behavior change. See AGENTS.md
     "Documentation lockstep".
-15. Introduce new check types, watches, notifiers and rule actions only through
+15. Treat examples, failing tests and bug reports as use-case signals. After
+    adding or changing a function, type, helper, parser, builder or logic for
+    one sample, search for equivalent call sites and surfaces; apply the shared
+    behavior through the existing owner or document why it is intentionally
+    scoped. See AGENTS.md "Reuse and shared behavior".
+16. Introduce new check types, watches, notifiers and rule actions only through
     the central builder functions. Do not scatter construction logic. See
     AGENTS.md "Central builders".
-16. Bound every blocking operation with a timeout from configuration or a named
+17. Bound every blocking operation with a timeout from configuration or a named
     constant. No magic durations in application logic. See AGENTS.md "Timeout
     discipline".
 
