@@ -939,10 +939,10 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		observed := b.settling == nil || b.settling.Observed(SettlingWatchKey(name))
 		failed := observed && watchViewFailed(ww)
 		ww.State = WatchState(ww.Enabled, ww.Monitored, failed, observed)
-		if state := watchDeviceState(ww.Readings); state != "" && ww.Enabled && ww.Monitored && observed {
+		if deviceState := watchDeviceState(ww.Readings); deviceState != "" && ww.Enabled && ww.Monitored && observed {
 			// Device work is the current operator-facing state while preserving
 			// the underlying health signal for eventing and diagnostics.
-			ww.State = state
+			ww.State = deviceState
 		}
 		out = append(out, ww)
 	}
@@ -1853,8 +1853,8 @@ func (b *WebBackend) raidWatchView() (*web.WatchMeter, []web.WatchReading, strin
 	for _, detail := range st.Details {
 		readings = append(readings, web.WatchReading{Field: "raid_array_" + detail.Name, Label: detail.Name, Value: raidArrayReading(detail)})
 	}
-	if state, progress, hasProgress := checks.RaidDeviceState(st.Details); state != "" {
-		readings = append(readings, web.WatchReading{Field: checks.DataKeyDeviceState, Label: watchReadingLabelState, Value: state})
+	if raidState, progress, hasProgress := checks.RaidDeviceState(st.Details); raidState != "" {
+		readings = append(readings, web.WatchReading{Field: checks.DataKeyDeviceState, Label: watchReadingLabelState, Value: raidState})
 		if hasProgress {
 			readings = append(readings, web.WatchReading{Field: checks.DataKeyProgressPct, Label: "Progress", Value: fmt.Sprintf("%.1f%%", progress)})
 		}
