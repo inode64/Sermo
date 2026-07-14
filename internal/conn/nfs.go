@@ -36,13 +36,20 @@ func (nfsProtocol) DefaultPort() int   { return defaultPortNFS }
 func (nfsProtocol) RequiresUser() bool { return false }
 
 func (nfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
+	return probeRPCNull(ctx, cfg, defaultPortNFS, nfsProg, nfsVers, strconv.Itoa(nfsProg))
+}
+
+// probeRPCNull dials an ONC RPC service over TCP, sends a NULL procedure call,
+// and verifies its reply. It binds egress through cfg.Interface and applies the
+// context deadline, matching the behavior required by NFS-family RPC probes.
+func probeRPCNull(ctx context.Context, cfg Config, defaultPort int, program, version uint32, programName string) (Result, error) {
 	host := cfg.Host
 	if host == "" {
 		host = DefaultHost
 	}
 	port := cfg.Port
 	if port == 0 {
-		port = defaultPortNFS
+		port = defaultPort
 	}
 
 	xid := randXID32()
@@ -53,7 +60,7 @@ func (nfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	defer func() { _ = c.Close() }()
 	applyDeadline(ctx, c)
 
-	reply, err := rpcCallTCP(c, buildRPCNull(xid, nfsProg, nfsVers))
+	reply, err := rpcCallTCP(c, buildRPCNull(xid, program, version))
 	if err != nil {
 		return Result{}, err
 	}
@@ -61,7 +68,7 @@ func (nfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Extra: map[string]string{extraProgram: strconv.Itoa(nfsProg), extraRPCStatus: status}}, nil
+	return Result{Extra: map[string]string{extraProgram: programName, extraRPCStatus: status}}, nil
 }
 
 // rpcCallTCP sends an RPC message over a TCP connection using record marking

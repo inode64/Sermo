@@ -31,30 +31,5 @@ func (statdProtocol) DefaultPort() int   { return defaultPortStatd }
 func (statdProtocol) RequiresUser() bool { return false }
 
 func (statdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortStatd
-	}
-
-	xid := randXID32()
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, hostPort(host, port))
-	if err != nil {
-		return Result{}, err
-	}
-	defer func() { _ = c.Close() }()
-	applyDeadline(ctx, c)
-
-	reply, err := rpcCallTCP(c, buildRPCNull(xid, statdProg, statdVers))
-	if err != nil {
-		return Result{}, err
-	}
-	status, err := parseRPCReply(reply, xid)
-	if err != nil {
-		return Result{}, err
-	}
-	return Result{Extra: map[string]string{extraProgram: strconv.Itoa(statdProg), extraRPCStatus: status}}, nil
+	return probeRPCNull(ctx, cfg, defaultPortStatd, statdProg, statdVers, strconv.Itoa(statdProg))
 }
