@@ -1472,28 +1472,41 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 		return a.commandUsageError(commandEvents, "events accepts at most one service name")
 	}
 
-	// list mode: `sermoctl events [SERVICE] [--limit N]`
-	limit := defaultEventsListLimit
-	if opts.eventLimit > 0 {
-		limit = opts.eventLimit
-	}
-	service := ""
-	if len(args) > 0 {
-		service = args[0]
-		if a.LoadConfig != nil {
-			if cfg, err := a.LoadConfig(opts.globalPath()); err == nil {
-				service = canonicalServiceIfKnown(cfg, service)
-			}
-		}
-	}
-
+	service, limit := a.eventListTarget(opts)
 	evs, err := a.FetchEvents(ctx, opts, service, limit)
 	if err != nil {
 		return a.fail(opts, err.Error())
 	}
+	a.writeEvents(opts, service, evs)
+	return exitSuccess
+}
+
+// eventListTarget returns the service filter and limit for `sermoctl events`.
+// Config loading is best effort so the daemon can still serve events when the
+// local configuration is unavailable.
+func (a App) eventListTarget(opts options) (string, int) {
+	limit := defaultEventsListLimit
+	if opts.eventLimit > 0 {
+		limit = opts.eventLimit
+	}
+	if len(opts.args) == 0 {
+		return "", limit
+	}
+
+	service := opts.args[0]
+	if a.LoadConfig == nil {
+		return service, limit
+	}
+	if cfg, err := a.LoadConfig(opts.globalPath()); err == nil {
+		service = canonicalServiceIfKnown(cfg, service)
+	}
+	return service, limit
+}
+
+func (a App) writeEvents(opts options, service string, evs []event) {
 	if opts.json {
 		writeJSON(a.Stdout, evs)
-		return exitSuccess
+		return
 	}
 
 	if len(evs) == 0 {
@@ -1502,47 +1515,59 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 		} else {
 			fmt.Fprintln(a.Stdout, "no recent events")
 		}
-		return exitSuccess
+		return
 	}
+	a.writeEventsTable(evs)
+}
 
+func (a App) writeEventsTable(evs []event) {
 	tw := tabwriter.NewWriter(a.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "TIME\tTARGET\tKIND\tACTION\tMESSAGE")
 	for _, e := range evs {
-		ts := e.Time
-		if len(ts) >= eventsTableTimestampWidth {
-			ts = ts[:eventsTableTimestampWidth]
-		}
-		target := e.Service
-		if target == "" {
-			target = e.Watch
-		}
-		if target == "" {
-			target = "-"
-		}
-		if len(target) > eventsTableTargetWidth {
-			target = target[:eventsTableTargetWidth]
-		}
-		kind := e.Kind
-		if len(kind) > eventsTableKindWidth {
-			kind = kind[:eventsTableKindWidth]
-		}
-		action := e.Action
-		if action == "" {
-			action = e.Status
-		}
-		if len(action) > eventsTableActionWidth {
-			action = action[:eventsTableActionWidth]
-		}
-		// The message column is capped for terminal readability; tabwriter sizes
-		// the rest to content.
-		msg := e.Message
-		if len(msg) > eventsTableMessageWidth {
-			msg = msg[:eventsTableMessageWidth-eventsTableEllipsisWidth] + eventsTableEllipsis
-		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", ts, target, kind, action, msg)
+		timestamp, target, kind, action, message := eventTableFields(e)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", timestamp, target, kind, action, message)
 	}
 	_ = tw.Flush()
-	return exitSuccess
+}
+
+func eventTableFields(e event) (string, string, string, string, string) {
+	timestamp := e.Time
+	if len(timestamp) >= eventsTableTimestampWidth {
+		timestamp = timestamp[:eventsTableTimestampWidth]
+	}
+
+	target := e.Service
+	if target == "" {
+		target = e.Watch
+	}
+	if target == "" {
+		target = "-"
+	}
+	target = eventTableValue(target, eventsTableTargetWidth)
+
+	kind := eventTableValue(e.Kind, eventsTableKindWidth)
+	action := e.Action
+	if action == "" {
+		action = e.Status
+	}
+	action = eventTableValue(action, eventsTableActionWidth)
+	return timestamp, target, kind, action, eventTableMessage(e.Message)
+}
+
+func eventTableValue(value string, width int) string {
+	if len(value) > width {
+		return value[:width]
+	}
+	return value
+}
+
+func eventTableMessage(message string) string {
+	// The message column is capped for terminal readability; tabwriter sizes
+	// the rest to content.
+	if len(message) > eventsTableMessageWidth {
+		return message[:eventsTableMessageWidth-eventsTableEllipsisWidth] + eventsTableEllipsis
+	}
+	return message
 }
 
 // runActivity dispatches activity subcommands. Activity is the dashboard's

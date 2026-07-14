@@ -594,12 +594,16 @@ func TestDaemonReloadNoPid(t *testing.T) {
 
 func TestEventsList(t *testing.T) {
 	var stdout, stderr bytes.Buffer
+	var gotService string
+	var gotLimit int
 	sample := []event{
 		{Time: "2026-06-13T10:05:00Z", Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "restarted"},
 		{Time: "2026-06-13T10:00:00Z", Watch: "storage-root", Kind: "alert", Message: "high usage"},
 	}
 	app := App{
 		FetchEvents: func(ctx context.Context, opts options, service string, limit int) ([]event, error) {
+			gotService = service
+			gotLimit = limit
 			return sample, nil
 		},
 		Stdout: &stdout,
@@ -616,15 +620,21 @@ func TestEventsList(t *testing.T) {
 	if !strings.Contains(out, "web") || !strings.Contains(out, "storage-root") || !strings.Contains(out, "restart") {
 		t.Fatalf("events list output missing data:\n%s", out)
 	}
+	if gotService != "" || gotLimit != defaultEventsListLimit {
+		t.Fatalf("events list query = (%q, %d), want (%q, %d)", gotService, gotLimit, "", defaultEventsListLimit)
+	}
 
 	// json
 	stdout.Reset()
-	code = app.runEvents(context.Background(), options{args: []string{"web"}, json: true})
+	code = app.runEvents(context.Background(), options{args: []string{"web"}, eventLimit: 7, json: true})
 	if code != exitSuccess {
 		t.Fatalf("events json exit=%d", code)
 	}
 	if !strings.Contains(stdout.String(), `"service":"web"`) {
 		t.Fatalf("json events missing service: %s", stdout.String())
+	}
+	if gotService != "web" || gotLimit != 7 {
+		t.Fatalf("events json query = (%q, %d), want (%q, %d)", gotService, gotLimit, "web", 7)
 	}
 }
 

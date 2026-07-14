@@ -303,7 +303,7 @@ const (
 
 	httpHeaderContentType   = httpx.HeaderContentType
 	httpHeaderServer        = httpx.HeaderServer
-	httpHeaderSyncthingAuth = "X-API-Key"
+	httpHeaderSyncthingAuth = "X-Api-Key"
 
 	tlsSkipVerify = TLSModeSkipVerify
 	tlsModeFalse  = "false"
