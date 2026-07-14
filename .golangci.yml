@@ -45,6 +45,7 @@ linters:
     - ineffassign
     - intrange  # for i := 0; i < n; i++ → for i := range n (Go 1.22+)
     - inamedparam  # interface parameters must name their domain role
+    - maintidx  # minimum maintainability index per function
     - mirror  # bytes.Index vs bytes.IndexByte, …
     - misspell
     - nilerr
