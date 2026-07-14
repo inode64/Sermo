@@ -20,8 +20,7 @@ const resourceExecutableModeMask = 0o111
 // type, and command exports declare variables with their configured defaults.
 // Command execution itself stays out of config resolution.
 func prepareExpansionInputs(tree map[string]any) []string {
-	var errs []string
-	errs = append(errs, resolvePreflightResourceVariables(tree)...)
+	errs := resolvePreflightResourceVariables(tree)
 	applyCommandExportDefaults(tree)
 	return errs
 }
@@ -31,7 +30,6 @@ func resolvePreflightResourceVariables(tree map[string]any) []string {
 	if !ok {
 		return nil
 	}
-	var errs []string
 	for _, name := range slices.Sorted(maps.Keys(preflight)) {
 		entry, ok := preflight[name].(map[string]any)
 		if !ok {
@@ -62,7 +60,7 @@ func resolvePreflightResourceVariables(tree map[string]any) []string {
 			entry[checks.CheckKeyPath] = selected
 		}
 	}
-	return errs
+	return nil
 }
 
 func ensureVariables(tree map[string]any) map[string]any {

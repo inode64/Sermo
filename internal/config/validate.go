@@ -96,7 +96,7 @@ var validEngineKeys = set(
 // Validate returns all schema and safety issues for a loaded config. An empty
 // slice means the current validators accept the configuration.
 func Validate(cfg *Config) []Issue {
-	var issues []Issue
+	issues := make([]Issue, 0, len(cfg.validationIssues))
 	issues = append(issues, validateGlobal(cfg)...)
 	issues = append(issues, cfg.validationIssues...)
 	issues = append(issues, validateDocuments(cfg)...)
@@ -466,7 +466,7 @@ func validateDocumentAlias(alias string, doc *Document, kindCounts map[string]in
 }
 
 func validateMaterializedNameCollisions(cfg *Config) []Issue {
-	var issues []Issue
+	issues := make([]Issue, 0, len(cfg.materializedNameCollisions))
 	for _, collision := range cfg.materializedNameCollisions {
 		scope := collision.Kind + " " + collision.Name
 		msg := fmt.Sprintf("materialized %s name %q from template %q conflicts with existing %s name", collision.Kind, collision.Name, collision.TemplateName, collision.Kind)

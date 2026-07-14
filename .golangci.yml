@@ -56,6 +56,7 @@ linters:
     - nosprintfhostport  # host:port construction must preserve IPv6 correctness
     - nolintlint  # //nolint: directives must name a linter and stay justified
     - perfsprint  # avoid needless fmt allocations (errors.New, strconv, concatenation)
+    - prealloc  # reserve known output capacity in production hot paths
     - predeclared  # avoid shadowing Go predeclared identifiers
     - reassign  # writes to other packages' package-level vars
     - recvcheck  # mixed value/pointer receivers on one type
@@ -199,6 +200,10 @@ linters:
       - linters: [gocritic]
         path: _test\.go
         text: httpNoBody
+      # Fixtures favor direct byte-slice construction; allocation tuning belongs
+      # to the production paths that execute in the daemon or CLI.
+      - linters: [prealloc]
+        path: _test\.go
       # Dashboard API surface; splitting would fragment the web backend contract.
       - linters: [interfacebloat]
         path: internal/web/server\.go
