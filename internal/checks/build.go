@@ -331,117 +331,86 @@ func BuildWithWarnings(section map[string]any, deps Deps) ([]Built, []BuildWarni
 	return built, warnings
 }
 
+type checkBuildInput struct {
+	base   base
+	entry  map[string]any
+	runner execx.Runner
+	client *http.Client
+	deps   Deps
+}
+
+type checkBuilder func(checkBuildInput) (Check, string)
+
+// checkBuilders is the central registry for built-in checks. Connection
+// protocols remain in conn's own registry because their types are extensible.
+var checkBuilders = map[string]checkBuilder{
+	CheckTypeTCP:          func(in checkBuildInput) (Check, string) { return buildTCPCheck(in.base, in.entry) },
+	CheckTypePorts:        func(in checkBuildInput) (Check, string) { return buildPortsCheck(in.base, in.entry) },
+	CheckTypeHTTP:         func(in checkBuildInput) (Check, string) { return buildHTTPCheck(in.base, in.entry, in.client) },
+	CheckTypeCommand:      func(in checkBuildInput) (Check, string) { return buildCommandCheck(in.base, in.entry, in.runner) },
+	CheckTypeClock:        func(in checkBuildInput) (Check, string) { return buildClockCheck(in.base, in.entry) },
+	CheckTypeService:      func(in checkBuildInput) (Check, string) { return buildServiceCheck(in.base, in.entry, in.deps) },
+	CheckTypeFileExists:   func(in checkBuildInput) (Check, string) { return buildFileExistsCheck(in.base, in.entry) },
+	CheckTypeFile:         func(in checkBuildInput) (Check, string) { return buildFileCheck(in.base, in.entry) },
+	CheckTypeLockfile:     func(in checkBuildInput) (Check, string) { return buildLockfileCheck(in.base, in.entry) },
+	CheckTypeBinary:       func(in checkBuildInput) (Check, string) { return buildBinaryCheck(in.base, in.entry) },
+	CheckTypePidfile:      func(in checkBuildInput) (Check, string) { return buildPidfileCheck(in.base, in.entry, in.deps) },
+	CheckTypeSocket:       func(in checkBuildInput) (Check, string) { return buildSocketCheck(in.base, in.entry) },
+	CheckTypeLibraries:    func(in checkBuildInput) (Check, string) { return buildLibrariesCheck(in.base, in.entry) },
+	CheckTypeMetric:       func(in checkBuildInput) (Check, string) { return buildMetricCheck(in.base, in.entry, in.deps) },
+	CheckTypeProcess:      func(in checkBuildInput) (Check, string) { return buildProcessCheck(in.base, in.entry, in.deps) },
+	CheckTypeCount:        func(in checkBuildInput) (Check, string) { return buildCountCheck(in.base, in.entry) },
+	CheckTypeStorage:      func(in checkBuildInput) (Check, string) { return buildStorageCheck(in.base, in.entry, in.deps) },
+	CheckTypeAutofs:       func(in checkBuildInput) (Check, string) { return buildAutofsCheck(in.base, in.entry, in.deps) },
+	CheckTypeNet:          func(in checkBuildInput) (Check, string) { return buildNetCheck(in.base, in.entry, in.deps) },
+	CheckTypeLoad:         func(in checkBuildInput) (Check, string) { return buildLoadCheck(in.base, in.entry, in.deps) },
+	CheckTypeUsers:        func(in checkBuildInput) (Check, string) { return buildUsersCheck(in.base, in.entry, in.deps) },
+	CheckTypeProcessCount: func(in checkBuildInput) (Check, string) { return buildProcessCountCheck(in.base, in.entry, in.deps) },
+	CheckTypeHdparm:       func(in checkBuildInput) (Check, string) { return buildHdparmCheck(in.base, in.entry, in.runner) },
+	CheckTypeSensors:      func(in checkBuildInput) (Check, string) { return buildSensorsCheck(in.base, in.entry, in.deps) },
+	CheckTypeSmart:        func(in checkBuildInput) (Check, string) { return buildSmartCheck(in.base, in.entry, in.runner) },
+	CheckTypeRAID:         func(in checkBuildInput) (Check, string) { return buildRaidCheck(in.base, in.entry, in.deps) },
+	CheckTypeLVM:          func(in checkBuildInput) (Check, string) { return buildLVMCheck(in.base, in.entry, in.runner) },
+	CheckTypeEDAC:         func(in checkBuildInput) (Check, string) { return buildEdacCheck(in.base, in.entry, in.deps) },
+	CheckTypeConfig:       func(in checkBuildInput) (Check, string) { return buildConfigCheck(in.base, in.entry, in.runner) },
+	CheckTypeFDS:          func(in checkBuildInput) (Check, string) { return buildFdsCheck(in.base, in.entry, in.deps) },
+	CheckTypeMemory:       func(in checkBuildInput) (Check, string) { return buildMemoryCheck(in.base, in.entry, in.deps) },
+	CheckTypePressure:     func(in checkBuildInput) (Check, string) { return buildPressureCheck(in.base, in.entry, in.deps) },
+	CheckTypePIDs:         func(in checkBuildInput) (Check, string) { return buildPidsCheck(in.base, in.entry, in.deps) },
+	CheckTypeDiskIO:       func(in checkBuildInput) (Check, string) { return buildDiskIOCheck(in.base, in.entry, in.deps) },
+	CheckTypeConntrack:    func(in checkBuildInput) (Check, string) { return buildConntrackCheck(in.base, in.entry, in.deps) },
+	CheckTypeFirewallRules: func(in checkBuildInput) (Check, string) {
+		return buildFirewallRulesCheck(in.base, in.entry, in.runner, in.deps)
+	},
+	CheckTypeEntropy:       func(in checkBuildInput) (Check, string) { return buildEntropyCheck(in.base, in.entry, in.deps) },
+	CheckTypeZombies:       func(in checkBuildInput) (Check, string) { return buildZombieCheck(in.base, in.entry, in.deps) },
+	CheckTypeOOM:           func(in checkBuildInput) (Check, string) { return buildOomCheck(in.base, in.entry, in.deps) },
+	CheckTypeCert:          func(in checkBuildInput) (Check, string) { return buildCertCheck(in.base, in.entry, in.deps) },
+	CheckTypeSQLite:        func(in checkBuildInput) (Check, string) { return buildSqliteCheck(in.base, in.entry) },
+	CheckTypeSQLite3:       func(in checkBuildInput) (Check, string) { return buildSqliteCheck(in.base, in.entry) },
+	CheckTypeSwap:          func(in checkBuildInput) (Check, string) { return buildSwapCheck(in.base, in.entry, in.deps) },
+	CheckTypeICMP:          func(in checkBuildInput) (Check, string) { return buildICMPCheck(in.base, in.entry, in.deps) },
+	CheckTypeRoute:         func(in checkBuildInput) (Check, string) { return buildRouteCheck(in.base, in.entry, in.deps) },
+	CheckTypeSQL:           func(in checkBuildInput) (Check, string) { return buildSQLCheck(in.base, in.entry) },
+	CheckTypeMongoDBQuery:  func(in checkBuildInput) (Check, string) { return buildMongoCheck(in.base, in.entry) },
+	CheckTypeInfluxDBQuery: func(in checkBuildInput) (Check, string) { return buildInfluxCheck(in.base, in.entry) },
+	CheckTypeWebsocket:     func(in checkBuildInput) (Check, string) { return buildWebsocketCheck(in.base, in.entry) },
+	CheckTypeSize:          func(in checkBuildInput) (Check, string) { return buildSizeCheck(in.base, in.entry, in.deps) },
+}
+
 func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, client *http.Client, deps Deps) (Check, string) {
-	switch typ {
-	case CheckTypeTCP:
-		return buildTCPCheck(b, entry)
-	case CheckTypePorts:
-		return buildPortsCheck(b, entry)
-	case CheckTypeHTTP:
-		return buildHTTPCheck(b, entry, client)
-	case CheckTypeCommand:
-		return buildCommandCheck(b, entry, runner)
-	case CheckTypeClock:
-		return buildClockCheck(b, entry)
-	case CheckTypeService:
-		return buildServiceCheck(b, entry, deps)
-	case CheckTypeFileExists:
-		return buildFileExistsCheck(b, entry)
-	case CheckTypeFile:
-		return buildFileCheck(b, entry)
-	case CheckTypeLockfile:
-		return buildLockfileCheck(b, entry)
-	case CheckTypeBinary:
-		return buildBinaryCheck(b, entry)
-	case CheckTypePidfile:
-		return buildPidfileCheck(b, entry, deps)
-	case CheckTypeSocket:
-		return buildSocketCheck(b, entry)
-	case CheckTypeLibraries:
-		return buildLibrariesCheck(b, entry)
-	case CheckTypeMetric:
-		return buildMetricCheck(b, entry, deps)
-	case CheckTypeProcess:
-		return buildProcessCheck(b, entry, deps)
-	case CheckTypeCount:
-		return buildCountCheck(b, entry)
-	case CheckTypeStorage:
-		return buildStorageCheck(b, entry, deps)
-	case CheckTypeAutofs:
-		return buildAutofsCheck(b, entry, deps)
-	case CheckTypeNet:
-		return buildNetCheck(b, entry, deps)
-	case CheckTypeLoad:
-		return buildLoadCheck(b, entry, deps)
-	case CheckTypeUsers:
-		return buildUsersCheck(b, entry, deps)
-	case CheckTypeProcessCount:
-		return buildProcessCountCheck(b, entry, deps)
-	case CheckTypeHdparm:
-		return buildHdparmCheck(b, entry, runner)
-	case CheckTypeSensors:
-		return buildSensorsCheck(b, entry, deps)
-	case CheckTypeSmart:
-		return buildSmartCheck(b, entry, runner)
-	case CheckTypeRAID:
-		return buildRaidCheck(b, entry, deps)
-	case CheckTypeLVM:
-		return buildLVMCheck(b, entry, runner)
-	case CheckTypeEDAC:
-		return buildEdacCheck(b, entry, deps)
-	case CheckTypeConfig:
-		return buildConfigCheck(b, entry, runner)
-	case CheckTypeFDS:
-		return buildFdsCheck(b, entry, deps)
-	case CheckTypeMemory:
-		return buildMemoryCheck(b, entry, deps)
-	case CheckTypePressure:
-		return buildPressureCheck(b, entry, deps)
-	case CheckTypePIDs:
-		return buildPidsCheck(b, entry, deps)
-	case CheckTypeDiskIO:
-		return buildDiskIOCheck(b, entry, deps)
-	case CheckTypeConntrack:
-		return buildConntrackCheck(b, entry, deps)
-	case CheckTypeFirewallRules:
-		return buildFirewallRulesCheck(b, entry, runner, deps)
-	case CheckTypeEntropy:
-		return buildEntropyCheck(b, entry, deps)
-	case CheckTypeZombies:
-		return buildZombieCheck(b, entry, deps)
-	case CheckTypeOOM:
-		return buildOomCheck(b, entry, deps)
-	case CheckTypeCert:
-		return buildCertCheck(b, entry, deps)
-	case CheckTypeSQLite, CheckTypeSQLite3:
-		return buildSqliteCheck(b, entry)
-	case CheckTypeSwap:
-		return buildSwapCheck(b, entry, deps)
-	case CheckTypeICMP:
-		return buildICMPCheck(b, entry, deps)
-	case CheckTypeRoute:
-		return buildRouteCheck(b, entry, deps)
-	case CheckTypeSQL:
-		return buildSQLCheck(b, entry)
-	case CheckTypeMongoDBQuery:
-		return buildMongoCheck(b, entry)
-	case CheckTypeInfluxDBQuery:
-		return buildInfluxCheck(b, entry)
-	case CheckTypeWebsocket:
-		return buildWebsocketCheck(b, entry)
-	case CheckTypeSize:
-		return buildSizeCheck(b, entry, deps)
-	case "":
+	if typ == "" {
 		return nil, "missing type"
-	default:
-		// A connection-protocol check (mysql, …): the type names a protocol in
-		// the conn registry. New protocols register themselves and need no case
-		// here.
-		if proto, ok := conn.Lookup(typ); ok {
-			return buildConnCheck(b, proto, entry)
-		}
-		return nil, fmt.Sprintf("unsupported type %q", typ)
 	}
+	if builder, ok := checkBuilders[typ]; ok {
+		return builder(checkBuildInput{base: b, entry: entry, runner: runner, client: client, deps: deps})
+	}
+	// A connection-protocol check (mysql, …) is owned by conn's extensible
+	// registry, so new protocols need no change in this builder.
+	if proto, ok := conn.Lookup(typ); ok {
+		return buildConnCheck(b, proto, entry)
+	}
+	return nil, fmt.Sprintf("unsupported type %q", typ)
 }
 
 // buildTCPCheck builds a tcp connectivity check.
