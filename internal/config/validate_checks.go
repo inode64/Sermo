@@ -466,6 +466,13 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 	if requireUser && cfgval.String(fields[checks.CheckKeyUser]) == "" {
 		add("%s.user is required for a connection check", prefix)
 	}
+	validateConnPort(prefix, fields, add)
+	validateConnTLS(prefix, fields, add)
+	validateConnExpectations(prefix, fields, add)
+	validateConnChangeFlags(prefix, fields, add)
+}
+
+func validateConnPort(prefix string, fields map[string]any, add addFunc) {
 	// The same TCP port range walkScalars enforces on resolved services, so a
 	// connection check behaves identically as a host watch.
 	if v, present := fields[checks.CheckKeyPort]; present {
@@ -473,6 +480,9 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 			add("%s.port %q must be an integer in %s", prefix, cfgval.String(v), cfgval.TCPPortRange())
 		}
 	}
+}
+
+func validateConnTLS(prefix string, fields map[string]any, add addFunc) {
 	if v, present := fields[checks.CheckKeyTLS]; present {
 		switch t := v.(type) {
 		case bool:
@@ -485,6 +495,9 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 			add("%s.tls must be a boolean or a string (%s)", prefix, conn.TLSScalarSummary)
 		}
 	}
+}
+
+func validateConnExpectations(prefix string, fields map[string]any, add addFunc) {
 	// expect: optional response assertions (field -> value | {op, value}),
 	// compared against the probe's version / Extra fields.
 	if v, present := fields[checks.CheckKeyExpect]; present {
@@ -506,6 +519,9 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 			add("%s.expect_latency must be an {op, value} mapping", prefix)
 		}
 	}
+}
+
+func validateConnChangeFlags(prefix string, fields map[string]any, add addFunc) {
 	for _, key := range []string{checks.CheckKeyOnChange, checks.CheckKeyOnVersionChange} {
 		if v, present := fields[key]; present {
 			if _, ok := v.(bool); !ok {
