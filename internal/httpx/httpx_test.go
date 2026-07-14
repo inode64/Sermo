@@ -1,6 +1,7 @@
 package httpx
 
 import (
+	"errors"
 	"net/http"
 	"testing"
 )
@@ -14,7 +15,9 @@ func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 func TestCloneDefaultTransportFallsBackForCustomRoundTripper(t *testing.T) {
 	original := http.DefaultTransport
 	t.Cleanup(func() { http.DefaultTransport = original })
-	http.DefaultTransport = roundTripperFunc(func(*http.Request) (*http.Response, error) { return nil, nil })
+	http.DefaultTransport = roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("unexpected RoundTrip call")
+	})
 
 	if transport := CloneDefaultTransport(); transport == nil {
 		t.Fatal("CloneDefaultTransport() = nil")
