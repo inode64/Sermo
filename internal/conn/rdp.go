@@ -106,14 +106,14 @@ func buildRDPNegRequest(protocols uint32) []byte {
 	binary.LittleEndian.PutUint32(neg[rdpProtocolListOffset:], protocols)
 
 	// X.224 Connection Request: LI, CR(0xE0), DST-REF, SRC-REF, class.
-	x224 := make([]byte, x224HeaderBytes)
+	x224 := make([]byte, x224HeaderBytes, x224HeaderBytes+len(neg))
 	x224[x224LengthIndicatorOffset] = byte(x224RequestVariableLenBase + len(neg))
 	x224[x224RequestPDUTypeOffset] = x224ConnectionRequest
 	x224[len(x224)-1] = x224ClassByte
 	x224 = append(x224, neg...)
 
 	// TPKT header (version 3).
-	pkt := make([]byte, tpktHeaderBytes)
+	pkt := make([]byte, tpktHeaderBytes, tpktHeaderBytes+len(x224))
 	pkt[tpktVersionOffset] = tpktVersion
 	binary.BigEndian.PutUint16(pkt[tpktLengthOffset:], uint16(tpktHeaderBytes+len(x224)))
 	return append(pkt, x224...)

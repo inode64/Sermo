@@ -372,8 +372,9 @@ func procPortListening(path string, port int, states map[string]bool) bool {
 }
 
 func portListenerHost(port int) (string, bool) {
-	var hosts []string
-	for _, table := range procSocketTables() {
+	tables := procSocketTables()
+	hosts := make([]string, 0, len(tables))
+	for _, table := range tables {
 		hosts = append(hosts, procPortListenerHosts(table.path, port, table.states, table.ipv6)...)
 	}
 	return specificListenerHost(hosts)

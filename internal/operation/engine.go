@@ -438,7 +438,7 @@ func (e Engine) verifyStopped() []string {
 }
 
 func (e Engine) stoppedArtifactWarnings() []string {
-	var warns []string
+	warns := make([]string, 0, len(e.StopArtifacts.PidfilePaths)+len(e.StopArtifacts.Files))
 	for _, p := range e.StopArtifacts.PidfilePaths {
 		warns = append(warns, e.stoppedPathWarnings(p, false)...)
 	}
@@ -477,7 +477,7 @@ func stoppedPathMatches(path string, isGlob bool) ([]string, []string) {
 }
 
 func (e Engine) cleanOnStopWarnings() []string {
-	var warns []string
+	warns := make([]string, 0, len(e.StopArtifacts.Clean))
 	for _, c := range e.StopArtifacts.Clean {
 		warns = append(warns, cleanStopPath(c)...)
 	}

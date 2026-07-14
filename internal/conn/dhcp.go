@@ -46,6 +46,7 @@ const (
 
 const (
 	dhcpPacketMinBytes            = 240
+	dhcpDiscoverOptionsBytes      = 10
 	dhcpOpOffset                  = 0
 	dhcpHardwareTypeOffset        = 1
 	dhcpHardwareLengthOffset      = 2
@@ -174,7 +175,7 @@ func dhcpClientMAC(s string) (net.HardwareAddr, error) {
 // list). The broadcast flag is set so the server broadcasts the OFFER back to
 // port 68, where the probe can receive it.
 func buildDHCPDiscover(xid uint32, mac net.HardwareAddr) []byte {
-	msg := make([]byte, dhcpPacketMinBytes)
+	msg := make([]byte, dhcpPacketMinBytes, dhcpPacketMinBytes+dhcpDiscoverOptionsBytes)
 	msg[dhcpOpOffset] = dhcpOpBootRequest
 	msg[dhcpHardwareTypeOffset] = dhcpHTypeEthernet
 	msg[dhcpHardwareLengthOffset] = dhcpHLenEthernet
