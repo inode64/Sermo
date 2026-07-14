@@ -30,30 +30,5 @@ func (glusterfsProtocol) DefaultPort() int   { return defaultPortGlusterFS }
 func (glusterfsProtocol) RequiresUser() bool { return false }
 
 func (glusterfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortGlusterFS
-	}
-
-	xid := randXID32()
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, hostPort(host, port))
-	if err != nil {
-		return Result{}, err
-	}
-	defer func() { _ = c.Close() }()
-	applyDeadline(ctx, c)
-
-	reply, err := rpcCallTCP(c, buildRPCNull(xid, glusterHandshakeProg, glusterHandshakeVers))
-	if err != nil {
-		return Result{}, err
-	}
-	status, err := parseRPCReply(reply, xid)
-	if err != nil {
-		return Result{}, err
-	}
-	return Result{Extra: map[string]string{extraProgram: glusterHandshakeName, extraRPCStatus: status}}, nil
+	return probeRPCNull(ctx, cfg, defaultPortGlusterFS, glusterHandshakeProg, glusterHandshakeVers, glusterHandshakeName)
 }
