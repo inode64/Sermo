@@ -290,7 +290,9 @@
   #section-nav {
     display: flex; align-items: center; gap: .35rem;
     margin: .45rem 0 0; padding-bottom: .08rem;
-    overflow-x: auto; scrollbar-width: thin;
+    max-width: 100%; overflow-x: auto; overflow-y: hidden;
+    overscroll-behavior-inline: contain; scrollbar-width: thin;
+    scroll-snap-type: x proximity;
   }
   .section-jump {
     flex: 0 0 auto; display: inline-flex; align-items: baseline; gap: .25rem;
@@ -299,6 +301,7 @@
     color: var(--text-2); text-decoration: none;
     background: color-mix(in srgb, var(--panel) 88%, transparent);
     font-size: .78rem; line-height: 1.2;
+    scroll-snap-align: start;
   }
   .section-jump:hover { color: var(--text); border-color: var(--line-2); background: var(--panel-2); }
   .section-jump .nav-count { color: var(--text); font-size: .74rem; font-variant-numeric: tabular-nums; }
@@ -515,6 +518,22 @@
     /* mount units: hide Refcount first; usage remains visible on tablet widths. */
     .mount-table th:nth-child(5), .mount-table td:nth-child(5) { display: none; }
   }
+  @media (max-width: 1024px) {
+    /* A single nav rail only exposes a few sections on touch screens. Fill two
+       compact rows by column instead, retaining horizontal scrolling for the
+       full inventory without growing the sticky header into a long menu. */
+    #section-nav {
+      display: grid;
+      grid-auto-flow: column;
+      grid-template-rows: repeat(2, minmax(1.85rem, auto));
+      grid-auto-columns: max-content;
+      align-items: stretch;
+      gap: .3rem .4rem;
+      padding: .05rem .05rem .28rem;
+      scroll-padding-inline: .05rem;
+    }
+    .section-jump { align-items: center; }
+  }
   @media (max-width: 760px) { .metric-grid { grid-template-columns: 1fr; } }
   @media (max-width: 640px) {
     body { padding: 0 .7rem 1rem; }
@@ -522,6 +541,8 @@
     #overview { grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: .5rem; }
     .tile { min-height: 5.4rem; padding: .5rem .6rem .55rem; }
     .tile .t-value { font-size: 1.2rem; }
+    #section-nav { gap: .25rem .32rem; }
+    .section-jump { min-height: 2rem; padding: .18rem .45rem; font-size: .76rem; }
     details, section#locks-section { padding: 0 .7rem; }
     summary { padding: .6rem .7rem; margin: 0 -.7rem; }
     .panel-controls input { min-width: 0; flex: 1 1 100%; }
