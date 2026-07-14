@@ -1,5 +1,5 @@
 const httpMethodPost = "POST";
-const csrfHeader = "X-Sermo-CSRF";
+const csrfHeader = "X-Sermo-Csrf";
 const csrfHeaderValue = "1";
 
 export const apiApplicationsPath = "api/applications";

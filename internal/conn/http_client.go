@@ -3,6 +3,8 @@ package conn
 import (
 	"crypto/tls"
 	"net/http"
+
+	"sermo/internal/httpx"
 )
 
 // httpProbeClient returns an HTTP client for connection probes. When iface is
@@ -12,7 +14,7 @@ func httpProbeClient(iface string, tlsConfig *tls.Config) *http.Client {
 	if iface == "" && tlsConfig == nil {
 		return &http.Client{}
 	}
-	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr := httpx.CloneDefaultTransport()
 	if iface != "" {
 		tr.DialContext = BindDialer(iface).DialContext
 	}

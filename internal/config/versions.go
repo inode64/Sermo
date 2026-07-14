@@ -467,7 +467,7 @@ func instantiateMulti(body map[string]any, templateName string, match templateMa
 		bodyPairs = append(bodyPairs, t.marker(), v)
 	}
 	bodyPairs = append(bodyPairs, templateCurrentMarker, templateCurrentValue(match.current))
-	out := bindTokens(cloneMap(body), strings.NewReplacer(bodyPairs...)).(map[string]any)
+	out := bindTokensMap(cloneMap(body), strings.NewReplacer(bodyPairs...))
 	if templateMatchHasEmptyValue(match, toks) {
 		applyUnversionedOverrides(out)
 	}
@@ -1082,7 +1082,7 @@ func discoverVersions(discoverPath string, tok tmplToken) []string {
 func instantiateVersion(body map[string]any, templateName string, match templateMatch, tok tmplToken, path, kind string) *Document {
 	value := match.values[tok.variable]
 	name := materializedTemplateName(templateName, match, []tmplToken{tok})
-	out := bindTokens(cloneMap(body), strings.NewReplacer(tok.marker(), value, templateCurrentMarker, templateCurrentValue(match.current))).(map[string]any)
+	out := bindTokensMap(cloneMap(body), strings.NewReplacer(tok.marker(), value, templateCurrentMarker, templateCurrentValue(match.current)))
 	if value == "" {
 		applyUnversionedOverrides(out)
 	}
@@ -1194,11 +1194,7 @@ func bindTokens(v any, repl *strings.Replacer) any {
 	case string:
 		return repl.Replace(t)
 	case map[string]any:
-		out := make(map[string]any, len(t))
-		for k, e := range t {
-			out[k] = bindTokens(e, repl)
-		}
-		return out
+		return bindTokensMap(t, repl)
 	case []any:
 		out := make([]any, len(t))
 		for i, e := range t {
@@ -1208,6 +1204,14 @@ func bindTokens(v any, repl *strings.Replacer) any {
 	default:
 		return t
 	}
+}
+
+func bindTokensMap(tree map[string]any, repl *strings.Replacer) map[string]any {
+	out := make(map[string]any, len(tree))
+	for key, value := range tree {
+		out[key] = bindTokens(value, repl)
+	}
+	return out
 }
 
 // dropTemplate removes a version template (and its document) from its registry

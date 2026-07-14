@@ -63,13 +63,13 @@ func goarchToUname(goarch string) string {
 func (c *Config) bakeBuiltins() {
 	repl := strings.NewReplacer(archMarker, detectedArch, osMarker, detectedOS)
 	for _, doc := range c.docs {
-		doc.Body = bindTokens(doc.Body, repl).(map[string]any)
+		doc.Body = bindTokensMap(doc.Body, repl)
 	}
 	// The global document (defaults.variables, watches, …) lives in Global.Raw,
 	// not c.docs. Bake there too so ${arch}/${os} work consistently everywhere
 	// instead of surviving as literal tokens that later trip variable validation.
 	if c.Global.Raw != nil {
-		c.Global.Raw = bindTokens(c.Global.Raw, repl).(map[string]any)
+		c.Global.Raw = bindTokensMap(c.Global.Raw, repl)
 		// collapseOS/bindTokens build fresh maps, so re-point the extracted
 		// Defaults view (it aliased the pre-bake Raw["defaults"] sub-map).
 		if defaults, ok := c.Global.Raw[sectionDefaults].(map[string]any); ok {

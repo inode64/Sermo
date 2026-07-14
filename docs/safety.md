@@ -133,7 +133,7 @@ Because the daemon runs as root:
 - **The web UI** (when enabled) can start/stop/restart/reload/resume services and
   monitor/unmonitor targets as root, so it is hardened by default: it **binds to
   loopback** (`127.0.0.1`), supports
-  **authentication** with a read-only guest role, requires the **`X-Sermo-CSRF`
+  **authentication** with a read-only guest role, requires the **`X-Sermo-Csrf`
   header** on every state-changing request (blocking cross-site forgery from a
   browser), and sets HTTP timeouts. It speaks plain HTTP, so to reach it from off
   the host you **must** put it behind a TLS-terminating reverse proxy
