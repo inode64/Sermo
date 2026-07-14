@@ -63,6 +63,7 @@ const (
 	defaultListCommandTimeout  = 30 * time.Second
 	daemonWebClientTimeout     = 10 * time.Second
 	defaultEventsListLimit     = 50
+	tabwriterPadding           = 2
 )
 
 const (
@@ -1522,7 +1523,7 @@ func (a App) writeEvents(opts options, service string, evs []event) {
 }
 
 func (a App) writeEventsTable(evs []event) {
-	tw := tabwriter.NewWriter(a.Stdout, 0, 0, 2, ' ', 0)
+	tw := tabwriter.NewWriter(a.Stdout, 0, 0, tabwriterPadding, ' ', 0)
 	fmt.Fprintln(tw, "TIME\tTARGET\tKIND\tACTION\tMESSAGE")
 	for _, e := range evs {
 		timestamp, target, kind, action, message := eventTableFields(e)

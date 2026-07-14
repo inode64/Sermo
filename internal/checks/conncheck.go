@@ -140,7 +140,9 @@ func (c connCheck) changed(res conn.Result) (problems []string, extra map[string
 	if c.state == nil {
 		return nil, nil, false
 	}
-	extra = make(map[string]any, 2)
+	const connChangeExtraInitialCapacity = 2
+
+	extra = make(map[string]any, connChangeExtraInitialCapacity)
 	if c.onChange {
 		fingerprint := res.Extra[conn.ExtraKeyFingerprint]
 		if c.state.primed && fingerprint != c.state.lastFingerprint {

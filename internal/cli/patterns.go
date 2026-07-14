@@ -57,7 +57,7 @@ func (a App) runPatterns(opts options) int {
 		fmt.Fprintln(a.Stdout, "no pattern sets")
 		return exitSuccess
 	}
-	tw := tabwriter.NewWriter(a.Stdout, 0, 0, 2, ' ', 0)
+	tw := tabwriter.NewWriter(a.Stdout, 0, 0, tabwriterPadding, ' ', 0)
 	fmt.Fprintln(tw, "PATTERNS\tRULES\tDESCRIPTION")
 	for _, r := range reports {
 		fmt.Fprintf(tw, "%s\t%d\t%s\n", r.Name, r.Rules, r.Description)

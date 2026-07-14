@@ -633,7 +633,9 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, status, chec
 		return false, nil
 	}
 
-	missing := make([]string, 0, 3)
+	const observabilityMissingCapacity = 3
+
+	missing := make([]string, 0, observabilityMissingCapacity)
 	addMissing := func(label string) {
 		if !slices.Contains(missing, label) {
 			missing = append(missing, label)
@@ -1843,7 +1845,9 @@ func (b *WebBackend) sensorsWatchView(w *webWatch) (*web.WatchMeter, []web.Watch
 	if label != "" {
 		out = append(out, web.WatchReading{Field: checks.DataKeyLabel, Label: watchReadingLabelLabelFilter, Value: label})
 	}
-	parts := make([]string, 0, 3)
+	const sensorSummaryPartCapacity = 3
+
+	parts := make([]string, 0, sensorSummaryPartCapacity)
 	if values.HasTemp {
 		out = append(out, web.WatchReading{Field: checks.DataKeyTemp, Label: watchReadingLabelHottestTemp, Value: watchReadingMetricValue(values.Temp, 1, watchReadingUnitCelsius)})
 		parts = append(parts, fmt.Sprintf("temp=%.1fC", values.Temp))
@@ -1853,7 +1857,7 @@ func (b *WebBackend) sensorsWatchView(w *webWatch) (*web.WatchMeter, []web.Watch
 		parts = append(parts, fmt.Sprintf("fan=%.0fRPM", values.Fan))
 	}
 	if values.HasVoltage {
-		out = append(out, web.WatchReading{Field: checks.DataKeyVoltage, Label: watchReadingLabelVoltage, Value: watchReadingMetricValue(values.Voltage, 2, watchReadingUnitVolt)})
+		out = append(out, web.WatchReading{Field: checks.DataKeyVoltage, Label: watchReadingLabelVoltage, Value: watchReadingMetricValue(values.Voltage, watchReadingDefaultMetricDecimals, watchReadingUnitVolt)})
 		parts = append(parts, fmt.Sprintf("voltage=%.2fV", values.Voltage))
 	}
 	if len(parts) == 0 {
@@ -2207,7 +2211,7 @@ func watchErrorReadings(message string) []web.WatchReading {
 }
 
 func watchPercent(value float64) string {
-	return watchReadingMetricValue(value, 2, metrics.MetricUnitPercent)
+	return watchReadingMetricValue(value, watchReadingDefaultMetricDecimals, metrics.MetricUnitPercent)
 }
 
 func watchMetricEnabled(metricEntries map[string]any, metric string) bool {

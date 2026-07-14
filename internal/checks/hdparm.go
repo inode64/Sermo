@@ -91,7 +91,9 @@ func SampleHdparm(ctx context.Context, runner execx.Runner, device string, wantC
 }
 
 func hdparmArgs(device string, wantCached, wantRead bool) []string {
-	args := make([]string, 0, 3)
+	const hdparmArgumentCapacity = 3
+
+	args := make([]string, 0, hdparmArgumentCapacity)
 	if wantCached {
 		args = append(args, "-T")
 	}
@@ -132,7 +134,9 @@ func parseHdparm(out string) (map[string]float64, error) {
 
 // hdparmMessage renders the measured rates in a stable order.
 func hdparmMessage(device string, values map[string]float64) string {
-	parts := make([]string, 0, 2)
+	const hdparmMeasuredFieldCapacity = 2
+
+	parts := make([]string, 0, hdparmMeasuredFieldCapacity)
 	for _, f := range []string{fieldRead, fieldCached} {
 		if v, ok := values[f]; ok {
 			parts = append(parts, fmt.Sprintf("%s=%.1f", f, v))

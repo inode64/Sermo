@@ -20,6 +20,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"sermo/internal/conn"
+	"sermo/internal/units"
 )
 
 const (
@@ -39,9 +40,11 @@ const (
 	certPEMTypePublicKey             = "PUBLIC KEY"
 	certPEMTypeOpenSSHPrivateKey     = "OPENSSH PRIVATE KEY"
 
-	keyAlgorithmRSA     = "RSA"
-	keyAlgorithmECDSA   = "ECDSA"
-	keyAlgorithmEd25519 = "Ed25519"
+	keyAlgorithmRSA      = "RSA"
+	keyAlgorithmECDSA    = "ECDSA"
+	keyAlgorithmEd25519  = "Ed25519"
+	ed25519KeyBits       = 256
+	certSerialNumberBase = 16
 )
 
 // CertSample is one observation of TLS material — a leaf certificate read from a
@@ -92,7 +95,7 @@ type certEvaluator struct {
 func (e *certEvaluator) evaluate(s CertSample, opts certOptions, now time.Time) (problems []string, daysLeft int, hasExpiry bool) {
 	hasExpiry = !s.NotAfter.IsZero()
 	if hasExpiry {
-		daysLeft = int(s.NotAfter.Sub(now).Hours() / 24)
+		daysLeft = int(s.NotAfter.Sub(now).Hours() / units.HoursPerDay)
 		switch {
 		case now.After(s.NotAfter):
 			problems = append(problems, "expired")
@@ -374,7 +377,7 @@ func keyAlgoBits(key any) (string, int) {
 	case *ecdsa.PublicKey:
 		return keyAlgorithmECDSA, k.Curve.Params().BitSize
 	case ed25519.PrivateKey, *ed25519.PrivateKey, ed25519.PublicKey, *ed25519.PublicKey:
-		return keyAlgorithmEd25519, 256
+		return keyAlgorithmEd25519, ed25519KeyBits
 	default:
 		return "", 0
 	}
@@ -385,7 +388,7 @@ func certSampleFromCert(leaf *x509.Certificate) CertSample {
 	sum := sha256.Sum256(leaf.Raw)
 	var serial string
 	if leaf.SerialNumber != nil {
-		serial = leaf.SerialNumber.Text(16)
+		serial = leaf.SerialNumber.Text(certSerialNumberBase)
 	}
 	_, bits := keyAlgoBits(leaf.PublicKey)
 	return CertSample{

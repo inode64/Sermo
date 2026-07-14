@@ -782,7 +782,9 @@ func parseCommandExports(checkName string, raw any) ([]commandExport, string) {
 }
 
 func commandExportPath(name string, fields ...string) string {
-	parts := make([]string, 0, len(fields)+2)
+	const commandExportPathPrefixParts = 2
+
+	parts := make([]string, 0, len(fields)+commandExportPathPrefixParts)
 	parts = append(parts, CheckKeyExport, name)
 	parts = append(parts, fields...)
 	return strings.Join(parts, ".")

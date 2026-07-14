@@ -18,7 +18,10 @@ const (
 	// LVMHealthError is the normalised failing state exposed by the LVM check.
 	LVMHealthError = "error"
 	// LVMNotifyOnChange is the state-transition selector for LVM watches.
-	LVMNotifyOnChange = "on_change"
+	LVMNotifyOnChange       = "on_change"
+	lvmLVAttrTypeIndex      = 0
+	lvmLVAttrSuspendedIndex = 4
+	lvmLVAttrHealthIndex    = 8
 )
 
 // LVMTransition carries the effective health-state change for a LVM watch.
@@ -144,7 +147,7 @@ func lvmValues(row lvmRow) map[string]float64 {
 			if used := size - free; used >= 0 {
 				values[DataKeyLVMUsedBytes] = used
 			}
-			values[DataKeyLVMFreePct] = free / size * 100
+			values[DataKeyLVMFreePct] = free / size * percentScale
 		}
 	}
 	if value, ok := parseLVMNumber(row.DataPercent); ok {
@@ -170,10 +173,10 @@ func parseLVMNumber(value string) (float64, bool) {
 
 func lvmReasons(row lvmRow) []string {
 	var reasons []string
-	if lvmAttributeAt(row.LVAttr, 8) == 'p' {
+	if lvmAttributeAt(row.LVAttr, lvmLVAttrHealthIndex) == 'p' {
 		reasons = append(reasons, "partial")
 	}
-	if lvmAttributeAt(row.LVAttr, 4) == 's' {
+	if lvmAttributeAt(row.LVAttr, lvmLVAttrSuspendedIndex) == 's' {
 		reasons = append(reasons, "suspended")
 	}
 	if status := strings.TrimSpace(row.LVHealth); status != "" && status != "healthy" {
@@ -197,7 +200,7 @@ func lvmDeviceState(row lvmRow) (string, float64, bool) {
 		return lvmProgressState(DeviceStateRebuilding, row)
 	}
 
-	switch lvmAttributeAt(row.LVAttr, 0) {
+	switch lvmAttributeAt(row.LVAttr, lvmLVAttrTypeIndex) {
 	case 'p':
 		return lvmProgressState(DeviceStateMoving, row)
 	case 'O', 'S':
@@ -205,7 +208,7 @@ func lvmDeviceState(row lvmRow) (string, float64, bool) {
 	case 'M', 'R':
 		return lvmProgressState(DeviceStateRebuilding, row)
 	}
-	if lvmAttributeAt(row.LVAttr, 8) == 's' {
+	if lvmAttributeAt(row.LVAttr, lvmLVAttrHealthIndex) == 's' {
 		return lvmProgressState(DeviceStateRebuilding, row)
 	}
 	return "", 0, false

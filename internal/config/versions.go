@@ -40,13 +40,14 @@ var tmplTokens = []tmplToken{
 }
 
 const (
-	templateCurrentMarker   = "${current}"
-	templateCurrentLabel    = "current"
-	templateCaptureGroup    = 1
-	templateCaptureOffset   = 1
-	javaReleaseKeySeparator = "="
-	javaReleaseValueTrimSet = `"`
-	javaReleaseVersionKey   = "JAVA_VERSION"
+	templateCurrentMarker       = "${current}"
+	templateCurrentLabel        = "current"
+	templateCaptureGroup        = 1
+	templateCaptureOffset       = 1
+	templateReplacementPairSize = 2
+	javaReleaseKeySeparator     = "="
+	javaReleaseValueTrimSet     = `"`
+	javaReleaseVersionKey       = "JAVA_VERSION"
 	// keyVersions is the discovery-metadata map key holding the version instances
 	// a service exposes; it is stripped from a concrete resolved definition.
 	keyVersions            = "versions"
@@ -220,7 +221,7 @@ func requireSatisfied(require []string, vals map[string]string, toks []tmplToken
 	if len(require) == 0 {
 		return true
 	}
-	pairs := make([]string, 0, len(toks)*2)
+	pairs := make([]string, 0, len(toks)*templateReplacementPairSize)
 	for _, t := range toks {
 		pairs = append(pairs, t.marker(), vals[t.variable])
 	}
@@ -387,7 +388,7 @@ func materializedServiceUnitMatches(patterns, units []string, toks []tmplToken) 
 }
 
 func linkedAppTemplateNameMulti(name string, toks []tmplToken) string {
-	pairs := make([]string, 0, len(toks)*2)
+	pairs := make([]string, 0, len(toks)*templateReplacementPairSize)
 	for _, t := range toks {
 		pairs = append(pairs, t.marker(), t.placeholder)
 	}
@@ -461,7 +462,7 @@ func tupleKey(toks []tmplToken, vals map[string]string) string {
 // its captured value in a single pass.
 func instantiateMulti(body map[string]any, templateName string, match templateMatch, toks []tmplToken, path, kind string) *Document {
 	name := materializedTemplateName(templateName, match, toks)
-	bodyPairs := make([]string, 0, len(toks)*2+2)
+	bodyPairs := make([]string, 0, (len(toks)+1)*templateReplacementPairSize)
 	for _, t := range toks {
 		v := match.values[t.variable]
 		bodyPairs = append(bodyPairs, t.marker(), v)
@@ -556,7 +557,7 @@ func discoverTokenMatches(paths []string, toks []tmplToken, matchedBinary bool) 
 		if !containsAllMarkers(path, toks) {
 			continue
 		}
-		pairs := make([]string, 0, len(toks)*2)
+		pairs := make([]string, 0, len(toks)*templateReplacementPairSize)
 		for _, t := range toks {
 			pairs = append(pairs, t.marker(), "*")
 		}

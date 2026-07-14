@@ -50,6 +50,7 @@ linters:
     - maintidx  # minimum maintainability index per function
     - mirror  # bytes.Index vs bytes.IndexByte, …
     - misspell
+    - mnd  # require names for domain numbers (timeouts, units, protocol fields, exit codes)
     - nilerr
     - nilnesserr  # err checked nil but a different err value returned
     - noctx  # blocking I/O must use *Context APIs; conn/ and *_test.go excluded

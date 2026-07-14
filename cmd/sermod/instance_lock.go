@@ -9,6 +9,8 @@ import (
 	"syscall"
 )
 
+const instanceLockMode = 0o600
+
 // alreadyRunningError is returned when another sermod instance holds the
 // runtime singleton lock.
 type alreadyRunningError struct {
@@ -30,7 +32,7 @@ func acquireInstanceLock(runtimeDir string) (*os.File, error) {
 		runtimeDir = defaultRuntimeDir
 	}
 	path := filepath.Join(runtimeDir, instanceLockFilename)
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, instanceLockMode)
 	if err != nil {
 		return nil, fmt.Errorf("open instance lock %s: %w", path, err)
 	}
