@@ -1,6 +1,7 @@
 package conn
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"io"
@@ -18,7 +19,7 @@ func TestOpenVPNClientReset(t *testing.T) {
 	if b[0] != 0x38 { // opcode 7 (high 5 bits), key id 0
 		t.Fatalf("byte0 = %#x, want 0x38", b[0])
 	}
-	if string(b[1:9]) != string(sid) || b[9] != 0 {
+	if !bytes.Equal(b[1:9], sid) || b[9] != 0 {
 		t.Fatalf("packet = % x", b)
 	}
 }
