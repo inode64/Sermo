@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -356,7 +357,7 @@ func TestWriteServiceFilesRejectsExistingFileBeforeUpdatingConfig(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(after) != string(original) {
+	if !bytes.Equal(after, original) {
 		t.Fatalf("global config changed after rejected service write:\n%s", after)
 	}
 	if _, err := os.Stat(cfgPath + ".bak"); !os.IsNotExist(err) {

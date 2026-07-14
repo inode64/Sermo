@@ -1,6 +1,7 @@
 package conn
 
 import (
+	"bytes"
 	"testing"
 )
 
@@ -8,7 +9,7 @@ func TestBuildTFTPReadRequest(t *testing.T) {
 	req := buildTFTPReadRequest("boot/pxelinux.0")
 	// opcode 1 (RRQ), then filename\0octet\0
 	want := append([]byte{0, 1}, []byte("boot/pxelinux.0\x00octet\x00")...)
-	if string(req) != string(want) {
+	if !bytes.Equal(req, want) {
 		t.Fatalf("RRQ = %q, want %q", req, want)
 	}
 }

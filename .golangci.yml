@@ -144,6 +144,7 @@ linters:
         - dupBranchBody
         - dupCase
         - dupSubExpr
+        - deferInLoop
         - exitAfterDefer
         - flagDeref
         - httpNoBody
@@ -155,12 +156,14 @@ linters:
         - sloppyLen
         - sloppyTypeAssert
         - singleCaseSwitch
+        - stringXbytes
         - typeSwitchVar
         - underef
         - unlambda
         - unnecessaryDefer
         - unslice
         - weakCond
+        - whyNoLint
     misspell:
       # Eclipse Mosquitto — real MQTT broker name in catalog/tests.
       ignore-rules:
