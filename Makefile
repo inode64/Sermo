@@ -65,7 +65,7 @@ config_subst = sed -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
-.PHONY: all build test vet fmt fmt-check lint scripts-lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-e2e validate check cover tidy clean \
+.PHONY: all build test vet fmt fmt-check lint modules-check actions-lint race fuzz scripts-lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-e2e validate check cover tidy clean \
         install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
@@ -83,6 +83,8 @@ MARKDOWNLINT ?= ./node_modules/.bin/markdownlint
 PLAYWRIGHT ?= ./node_modules/.bin/playwright
 SHELLCHECK ?= shellcheck
 RUFF ?= ruff
+ACTIONLINT ?= actionlint
+FUZZ_TIME ?= 15s
 SCRIPT_SH = scripts/*.sh scripts/remote-deploy/*.sh
 SCRIPT_PY = scripts/*.py scripts/remote-deploy/*.py
 
@@ -134,7 +136,7 @@ scripts-lint:
 	@$(LINT_PATH) $(RUFF) check $(SCRIPT_PY)
 
 # Formatting and static analysis gates; make test and make check run this first.
-validate: lint scripts-lint yaml-validate markdown-check web-e2e
+validate: modules-check lint actions-lint scripts-lint yaml-validate markdown-check web-e2e
 
 test: validate
 	go test ./...
@@ -166,6 +168,25 @@ lint: fmt-check
 	@$(LINT_CACHE_ENV) golangci-lint run
 	@echo "govulncheck ./..."
 	@$(LINT_CACHE_ENV) govulncheck ./...
+
+# Verify module checksums and fail when the dependency manifests are not tidy.
+modules-check:
+	@go mod verify
+	@go mod tidy -diff
+
+# Validate GitHub Actions syntax, expressions, action inputs, and unsafe shell use.
+actions-lint:
+	@$(LINT_PATH) $(ACTIONLINT)
+
+# Race instrumentation is substantially slower than normal tests, so CI runs it
+# in its own job instead of extending the default PR gate.
+race:
+	go test -race -count=1 ./...
+
+# Keep fuzzing bounded and focused on untrusted configuration input. Scheduled
+# CI can override FUZZ_TIME for a longer campaign.
+fuzz:
+	go test -run '^$$' -fuzz '^FuzzLoadGlobal$$' -fuzztime=$(FUZZ_TIME) ./internal/config
 
 # Advisory only (not part of lint/check): unreachable-function report from
 # golang.org/x/tools/cmd/deadcode. Reflection and build tags cause false
