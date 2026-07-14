@@ -2,7 +2,7 @@ package checks
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"net"
 	"reflect"
 	"strings"
@@ -99,7 +99,7 @@ func TestRouteCheckRun(t *testing.T) {
 	if r := res.Run(context.Background()); r.OK || !strings.Contains(r.Message, "no ipv4 default route") {
 		t.Fatalf("no routes must fail: %+v", r)
 	}
-	res = mk(nil, fmt.Errorf("boom"), "")
+	res = mk(nil, errors.New("boom"), "")
 	if r := res.Run(context.Background()); r.OK || !strings.Contains(r.Message, "boom") {
 		t.Fatalf("sampler error must fail: %+v", r)
 	}

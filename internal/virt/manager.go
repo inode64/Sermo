@@ -4,6 +4,7 @@ package virt
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net"
 	"path/filepath"
@@ -79,7 +80,7 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 	}
 	m, ok := raw.(map[string]any)
 	if !ok {
-		return Spec{}, true, fmt.Errorf("control must be a mapping")
+		return Spec{}, true, errors.New("control must be a mapping")
 	}
 	if typ := cfgval.String(m[ControlKeyType]); typ != ControlType {
 		return Spec{}, true, fmt.Errorf("%s %q is not supported", controlPathType, typ)
@@ -206,12 +207,12 @@ func (m Manager) Stop(ctx context.Context, _ string) error {
 // Restart is not used by the safe operation engine; it composes restart as
 // Stop+Start so residual-process handling stays between the phases.
 func (m Manager) Restart(context.Context, string) error {
-	return fmt.Errorf("restart is composed by the operation engine")
+	return errors.New("restart is composed by the operation engine")
 }
 
 // Reload is not meaningful for a VM domain.
 func (m Manager) Reload(context.Context, string) error {
-	return fmt.Errorf("reload is not supported for libvirt domains")
+	return errors.New("reload is not supported for libvirt domains")
 }
 
 // SupportsReload reports false for VM domains.
@@ -378,7 +379,7 @@ func ParseUUID(value string) (libvirt.UUID, error) {
 	var out libvirt.UUID
 	compact := strings.ReplaceAll(strings.TrimSpace(value), "-", "")
 	if len(compact) != len(out)*2 {
-		return out, fmt.Errorf("expected 32 hexadecimal digits")
+		return out, errors.New("expected 32 hexadecimal digits")
 	}
 	if _, err := hex.Decode(out[:], []byte(compact)); err != nil {
 		return out, err

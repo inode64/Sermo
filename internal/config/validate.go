@@ -424,10 +424,10 @@ func validateMaterializedNameCollisions(cfg *Config) []Issue {
 		scope := collision.Kind + " " + collision.Name
 		msg := fmt.Sprintf("materialized %s name %q from template %q conflicts with existing %s name", collision.Kind, collision.Name, collision.TemplateName, collision.Kind)
 		if collision.ExistingPath != "" {
-			msg += fmt.Sprintf(" at %s", collision.ExistingPath)
+			msg += " at " + collision.ExistingPath
 		}
 		if collision.TemplatePath != "" {
-			msg += fmt.Sprintf("; template path %s", collision.TemplatePath)
+			msg += "; template path " + collision.TemplatePath
 		}
 		msg += "; remove one definition or adjust the template discovery"
 		issues = append(issues, Issue{Scope: scope, Msg: msg})

@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -134,7 +135,7 @@ func (c clockCheck) probeServer(ctx context.Context, server string) (clockSample
 	if probe == nil {
 		proto, ok := conn.Lookup(conn.ProtocolNameNTP)
 		if !ok {
-			return clockSample{}, fmt.Errorf("ntp protocol unavailable")
+			return clockSample{}, errors.New("ntp protocol unavailable")
 		}
 		probe = proto.Probe
 	}
@@ -238,7 +239,7 @@ func (c clockCheck) failureMessage(sample clockSample) string {
 	if fail := c.sampleFailure(sample); fail != "" {
 		return fmt.Sprintf("clock %s via %s%s", fail, netutil.JoinHostPort(sample.server, c.port), ifaceSuffix(sample.iface))
 	}
-	return fmt.Sprintf("clock has no healthy NTP sample via %s", netutil.JoinHostPort(sample.server, c.port))
+	return "clock has no healthy NTP sample via " + netutil.JoinHostPort(sample.server, c.port)
 }
 
 func requiredFloatExtra(res conn.Result, key string) (float64, error) {

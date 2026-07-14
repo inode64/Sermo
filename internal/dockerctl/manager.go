@@ -2,6 +2,7 @@ package dockerctl
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -70,12 +71,12 @@ func (m Manager) Stop(ctx context.Context, _ string) error {
 
 // Restart is composed by the safe operation engine as Stop+Start.
 func (m Manager) Restart(context.Context, string) error {
-	return fmt.Errorf("restart is composed by the operation engine")
+	return errors.New("restart is composed by the operation engine")
 }
 
 // Reload is not meaningful for a Docker container.
 func (m Manager) Reload(context.Context, string) error {
-	return fmt.Errorf("reload is not supported for Docker containers")
+	return errors.New("reload is not supported for Docker containers")
 }
 
 // SupportsReload reports false for Docker containers.

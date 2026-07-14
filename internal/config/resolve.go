@@ -228,7 +228,7 @@ func expandPidfiles(tree map[string]any) []string {
 	for _, role := range slices.Sorted(maps.Keys(pidfiles)) {
 		path := pidfilesRolePath(role)
 		if !validDocumentName(role) {
-			errs = append(errs, fmt.Sprintf("%s role must be a simple name without path separators", path))
+			errs = append(errs, path+" role must be a simple name without path separators")
 			continue
 		}
 		paths := cfgval.StringList(pidfiles[role])
@@ -305,7 +305,7 @@ func parseServiceArtifactPaths(kind string, raw any) (serviceArtifactPaths, []st
 	}
 	paths := cfgval.StringList(pathRaw)
 	if len(paths) == 0 {
-		return serviceArtifactPaths{}, []string{fmt.Sprintf("%s must be a non-empty path string, list or {path: ...} mapping", kind)}
+		return serviceArtifactPaths{}, []string{kind + " must be a non-empty path string, list or {path: ...} mapping"}
 	}
 	var errs []string
 	for _, path := range paths {
@@ -1104,21 +1104,21 @@ func (m restartOnChangeMessages) pathMessage(displayName string) string {
 	if m.path != "" {
 		return m.path
 	}
-	return fmt.Sprintf("%s will restart after config change: ${change.path}", displayName)
+	return displayName + " will restart after config change: ${change.path}"
 }
 
 func (m restartOnChangeMessages) appMessage(displayName string) string {
 	if m.app != "" {
 		return m.app
 	}
-	return fmt.Sprintf("%s will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}", displayName)
+	return displayName + " will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}"
 }
 
 func (m restartOnChangeMessages) libraryMessage(displayName string) string {
 	if m.library != "" {
 		return m.library
 	}
-	return fmt.Sprintf("%s will restart after library change: ${change.library} (${change.path})", displayName)
+	return displayName + " will restart after library change: ${change.library} (${change.path})"
 }
 
 func restartOnChangeStringList(path string, raw any) ([]string, []string) {
@@ -1136,7 +1136,7 @@ func restartOnChangeApps(raw any) ([]restartOnChangeApp, []string) {
 	case string, []any, []string:
 		names, err := cfgval.StrictStringList(v)
 		if err != nil {
-			return nil, []string{fmt.Sprintf("%s must be a string, list of strings, or mapping", keyRestartApps)}
+			return nil, []string{keyRestartApps + " must be a string, list of strings, or mapping"}
 		}
 		apps := make([]restartOnChangeApp, 0, len(names))
 		for _, name := range names {
@@ -1169,7 +1169,7 @@ func restartOnChangeApps(raw any) ([]restartOnChangeApp, []string) {
 		}
 		return apps, errs
 	default:
-		return nil, []string{fmt.Sprintf("%s must be a string, list of strings, or mapping", keyRestartApps)}
+		return nil, []string{keyRestartApps + " must be a string, list of strings, or mapping"}
 	}
 }
 
@@ -1274,7 +1274,7 @@ func (c *Config) expandAppsChain(tree map[string]any, chain []string) []string {
 	for _, name := range names {
 		if slices.Contains(chain, name) {
 			cycle := append(append([]string{}, chain...), name)
-			errs = append(errs, fmt.Sprintf("apps cycle detected: %s", strings.Join(cycle, " -> ")))
+			errs = append(errs, "apps cycle detected: "+strings.Join(cycle, " -> "))
 			continue
 		}
 		doc, ok := c.Apps[name]

@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sort"
@@ -226,7 +227,7 @@ func ParsePortSpec(spec string) ([]int, error) {
 		}
 	}
 	if len(seen) == 0 {
-		return nil, fmt.Errorf("no ports specified")
+		return nil, errors.New("no ports specified")
 	}
 	out := make([]int, 0, len(seen))
 	for p := range seen {

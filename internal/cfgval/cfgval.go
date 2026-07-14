@@ -6,6 +6,7 @@
 package cfgval
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -136,7 +137,7 @@ func StrictStringList(v any) ([]string, error) {
 	case []string:
 		return append([]string(nil), t...), nil
 	default:
-		return nil, fmt.Errorf("unsupported")
+		return nil, errors.New("unsupported")
 	}
 }
 
@@ -149,7 +150,7 @@ func StrictStringArray(v any) ([]string, error) {
 	case []string:
 		return append([]string(nil), t...), nil
 	default:
-		return nil, fmt.Errorf("unsupported")
+		return nil, errors.New("unsupported")
 	}
 }
 
@@ -158,7 +159,7 @@ func strictStrings(list []any, keepEmpty bool) ([]string, error) {
 	for _, item := range list {
 		s, ok := item.(string)
 		if !ok {
-			return nil, fmt.Errorf("non-string item")
+			return nil, errors.New("non-string item")
 		}
 		if s != "" || keepEmpty {
 			out = append(out, s)

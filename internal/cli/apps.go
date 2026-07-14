@@ -35,7 +35,7 @@ func (a App) runServices(ctx context.Context, opts options) int {
 
 func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, empty, heading string) int {
 	if len(opts.args) > 1 || (len(opts.args) == 1 && opts.args[0] != commandArgAll) {
-		return a.commandUsageError(jsonKey, fmt.Sprintf("%s accepts only optional `all`", jsonKey))
+		return a.commandUsageError(jsonKey, jsonKey+" accepts only optional `all`")
 	}
 	if len(opts.notifyNames) > 0 && category != config.CategoryService {
 		return a.commandUsageError(jsonKey, "--notify is only supported by services")

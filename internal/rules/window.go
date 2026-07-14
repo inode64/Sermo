@@ -201,7 +201,7 @@ func WindowDescription(r Rule) string {
 	}
 	if r.For != nil {
 		if r.For.Duration > 0 {
-			return fmt.Sprintf("for %s", formatWindowDuration(r.For.Duration))
+			return "for " + formatWindowDuration(r.For.Duration)
 		}
 		if r.For.Cycles > 0 {
 			return fmt.Sprintf("for %d consecutive", r.For.Cycles)

@@ -453,7 +453,7 @@ func (w *procWatcher) emitSignalResult(msg string, sig syscall.Signal, result pr
 		w.emitEvent(Event{Watch: w.name, Kind: eventKindKillFailed, Message: fmt.Sprintf("%s: %s pid %d: %v", msg, sigName(sig), failure.PID, failure.Err)})
 		return false
 	}
-	w.emitEvent(Event{Watch: w.name, Kind: eventKindKillFailed, Message: fmt.Sprintf("%s: pid did not match kill selector", msg)})
+	w.emitEvent(Event{Watch: w.name, Kind: eventKindKillFailed, Message: msg + ": pid did not match kill selector"})
 	return false
 }
 

@@ -1669,17 +1669,17 @@ func parseBeforeQuery(beforeStr string) (time.Time, error) {
 	now := time.Now()
 	if t, err := time.Parse(time.RFC3339, beforeStr); err == nil {
 		if t.After(now) {
-			return time.Time{}, fmt.Errorf("bad before: cutoff must not be in the future")
+			return time.Time{}, errors.New("bad before: cutoff must not be in the future")
 		}
 		return t, nil
 	}
 	if d, err := time.ParseDuration(beforeStr); err == nil {
 		if d <= 0 {
-			return time.Time{}, fmt.Errorf("bad before: duration must be positive")
+			return time.Time{}, errors.New("bad before: duration must be positive")
 		}
 		return now.Add(-d), nil
 	}
-	return time.Time{}, fmt.Errorf("bad before: RFC3339 timestamp or duration (e.g. 1h, 30m)")
+	return time.Time{}, errors.New("bad before: RFC3339 timestamp or duration (e.g. 1h, 30m)")
 }
 
 // handleEventsClear supports `sermoctl events clear [--before TIME]`.

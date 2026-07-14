@@ -3,6 +3,7 @@ package control
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"sermo/internal/cfgval"
@@ -101,7 +102,7 @@ func controlType(tree map[string]any) (string, bool, error) {
 	}
 	control, ok := raw.(map[string]any)
 	if !ok {
-		return "", true, fmt.Errorf("control must be a mapping")
+		return "", true, errors.New("control must be a mapping")
 	}
 	return cfgval.String(control[controlKeyType]), true, nil
 }

@@ -1,7 +1,7 @@
 package app
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 
 	"sermo/internal/operation"
@@ -50,7 +50,7 @@ func TestOperationSettlingLifecycle(t *testing.T) {
 		t.Fatalf("begin failed start: %v", err)
 	}
 	result = operation.Result{Service: "web", Action: string(rules.ActionStart), Status: operation.ResultFailed}
-	if err := finishOperationSettling(store, "web", string(rules.ActionStart), state.SourceCLI, result, fmt.Errorf("failed")); err != nil {
+	if err := finishOperationSettling(store, "web", string(rules.ActionStart), state.SourceCLI, result, errors.New("failed")); err != nil {
 		t.Fatalf("finish failed start: %v", err)
 	}
 	if _, found, _ = store.OperationSettling("web"); found {

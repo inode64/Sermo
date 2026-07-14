@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime"
 	"sermo/internal/metrics"
@@ -71,7 +72,7 @@ func (c loadCheck) Run(_ context.Context) Result {
 func defaultLoadSampler() (LoadSample, error) {
 	l1, l5, l15, ok := metrics.OSReader{}.LoadAverages()
 	if !ok {
-		return LoadSample{}, fmt.Errorf("malformed /proc/loadavg")
+		return LoadSample{}, errors.New("malformed /proc/loadavg")
 	}
 	return LoadSample{Load1: l1, Load5: l5, Load15: l15, NumCPU: runtime.NumCPU()}, nil
 }

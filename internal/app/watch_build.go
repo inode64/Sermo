@@ -454,7 +454,7 @@ func parseProcCond(check map[string]any) (procCond, error) {
 	if _, present := check[checks.CheckKeyFor]; present {
 		d := cfgval.Duration(check[checks.CheckKeyFor])
 		if d <= 0 {
-			return c, fmt.Errorf("process for must be a positive duration")
+			return c, errors.New("process for must be a positive duration")
 		}
 		c.minAge = d
 	}
@@ -485,7 +485,7 @@ func parseProcCond(check map[string]any) (procCond, error) {
 	if v, present := check[checks.CheckKeyGone]; present {
 		b, ok := v.(bool)
 		if !ok {
-			return c, fmt.Errorf("process gone must be a boolean")
+			return c, errors.New("process gone must be a boolean")
 		}
 		c.onGone = b
 	}
@@ -505,30 +505,30 @@ func parseFileCond(check map[string]any) (fileCond, error) {
 		} else {
 			op := cfgval.AsString(sz[checks.CheckKeyOp])
 			if !cfgval.IsCompareOp(op) {
-				return c, fmt.Errorf("file size requires on: change or {op, value}")
+				return c, errors.New("file size requires on: change or {op, value}")
 			}
 			v, ok := cfgval.Float(sz[checks.CheckKeyValue])
 			if !ok {
-				return c, fmt.Errorf("file size value must be numeric")
+				return c, errors.New("file size value must be numeric")
 			}
 			c.sizeOp, c.sizeValue = op, v
 		}
 	}
 	if p, ok := check[checks.CheckKeyPermissions].(map[string]any); ok {
 		if cfgval.AsString(p[checks.CheckKeyOn]) != checks.OnModeChange {
-			return c, fmt.Errorf("file permissions requires on: change")
+			return c, errors.New("file permissions requires on: change")
 		}
 		c.permChange = true
 	}
 	if o, ok := check[checks.CheckKeyOwner].(map[string]any); ok {
 		if cfgval.AsString(o[checks.CheckKeyOn]) != checks.OnModeChange {
-			return c, fmt.Errorf("file owner requires on: change")
+			return c, errors.New("file owner requires on: change")
 		}
 		c.ownerChange = true
 	}
 	if e, ok := check[checks.CheckKeyExistence].(map[string]any); ok {
 		if cfgval.AsString(e[checks.CheckKeyOn]) != checks.OnModeDelete {
-			return c, fmt.Errorf("file existence requires on: delete")
+			return c, errors.New("file existence requires on: delete")
 		}
 		c.onDelete = true
 	}
@@ -572,7 +572,7 @@ func thenMap(entry map[string]any) (map[string]any, error) {
 	}
 	then, ok := raw.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("then must be a mapping")
+		return nil, errors.New("then must be a mapping")
 	}
 	return then, nil
 }
@@ -585,7 +585,7 @@ func parseActions(then map[string]any) (HookSpec, []string, error) {
 	if h, ok := then[config.WatchThenKeyHook].(map[string]any); ok {
 		cmd := cfgval.StringArray(h[config.WatchHookKeyCommand])
 		if len(cmd) == 0 {
-			return HookSpec{}, nil, fmt.Errorf("hook requires a non-empty command")
+			return HookSpec{}, nil, errors.New("hook requires a non-empty command")
 		}
 		hook = HookSpec{Command: cmd, Timeout: cfgval.Duration(h[config.WatchHookKeyTimeout])}
 		if v, ok := cfgval.IntList(h[config.WatchHookKeyExpectExit]); ok {
@@ -696,7 +696,7 @@ func parseKill(then map[string]any) (*killSpec, error) {
 	}
 	m, ok := raw.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("then.kill must be a mapping")
+		return nil, errors.New("then.kill must be a mapping")
 	}
 	ks := &killSpec{signal: syscall.SIGTERM}
 	if s := cfgval.AsString(m[config.WatchKillKeySignal]); s != "" {
@@ -732,7 +732,7 @@ func parseExpand(then map[string]any, checkType string) (*ExpandSpec, error) {
 	// required so a raw byte count is never confused with another unit.
 	n, ok := cfgval.ByteSize(raw[config.WatchExpandKeyBy])
 	if !ok || n == 0 || n > math.MaxInt64 {
-		return nil, fmt.Errorf("then.expand requires a positive `by` size with a K/M/G/T suffix (e.g. 5G)")
+		return nil, errors.New("then.expand requires a positive `by` size with a K/M/G/T suffix (e.g. 5G)")
 	}
 	return &ExpandSpec{By: int64(n)}, nil
 }

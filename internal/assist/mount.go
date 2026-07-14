@@ -1,6 +1,7 @@
 package assist
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -26,7 +27,7 @@ func (mountAssistant) Title() string {
 func (mountAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	defer Recover(&err)
 	if env.Mounts == nil {
-		return Result{}, fmt.Errorf("mount detection is unavailable")
+		return Result{}, errors.New("mount detection is unavailable")
 	}
 	cands, err := env.Mounts()
 	if err != nil {
@@ -34,7 +35,7 @@ func (mountAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	}
 	cands = sortedMountCandidates(cands)
 	if len(cands) == 0 {
-		return Result{}, fmt.Errorf("no fstab mount points were detected on this host")
+		return Result{}, errors.New("no fstab mount points were detected on this host")
 	}
 
 	selected := chooseCandidates(p, "Which fstab mount points do you want Sermo to manage?", cands, mountCandidateLabel)
