@@ -65,7 +65,7 @@ config_subst = sed -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
-.PHONY: all build test vet fmt fmt-check lint modules-check actions-lint race fuzz scripts-lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-e2e validate check cover tidy clean \
+.PHONY: all build test vet fmt fmt-check lint modules-check actions-lint race fuzz deadcode quality-report scripts-lint yaml-fmt yaml-fmt-check yaml-lint yaml-validate markdown-check web web-check web-e2e validate check cover tidy clean \
         install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
@@ -85,6 +85,7 @@ SHELLCHECK ?= shellcheck
 RUFF ?= ruff
 ACTIONLINT ?= actionlint
 FUZZ_TIME ?= 15s
+QUALITY_REPORT_LINTERS = gocognit,dupl,perfsprint
 SCRIPT_SH = scripts/*.sh scripts/remote-deploy/*.sh
 SCRIPT_PY = scripts/*.py scripts/remote-deploy/*.py
 
@@ -193,6 +194,17 @@ fuzz:
 # positives, so findings need human triage before acting on them.
 deadcode:
 	@$(LINT_PATH) deadcode -test ./...
+
+# Advisory only (not part of lint/check): establish a visible baseline for
+# complexity, duplicate code, and formatting allocations before promoting any
+# focused findings to blocking checks. golangci-lint uses exit code 1 when it
+# reports findings; preserve other non-zero codes as analyzer failures.
+quality-report:
+	@out="$$(mktemp)"; status=0; \
+	$(LINT_CACHE_ENV) golangci-lint run --enable-only=$(QUALITY_REPORT_LINTERS) --output.text.path "$$out" || status="$$?"; \
+	cat "$$out"; \
+	rm -f "$$out"; \
+	if [ "$$status" -ne 0 ] && [ "$$status" -ne 1 ]; then exit "$$status"; fi
 
 # Everything CI enforces: vet, formatting, static analysis, YAML gates, and tests.
 # test depends on validate (Go lint + yaml-validate), so those gates always run first.
