@@ -576,12 +576,12 @@ func openEngineLog(logger *slog.Logger, cfg *config.Config, key string) *logfile
 }
 
 type oldHistoryPruner interface {
-	PruneSLA(time.Time) (int64, error)
-	PruneMeasurements(time.Time) (int64, error)
-	PruneMetrics(time.Time) (int64, error)
-	PruneDaemonMetrics(time.Time) (int64, error)
-	PruneServiceMetrics(time.Time) (int64, error)
-	PruneEvents(time.Time) (int64, error)
+	PruneSLA(before time.Time) (int64, error)
+	PruneMeasurements(before time.Time) (int64, error)
+	PruneMetrics(before time.Time) (int64, error)
+	PruneDaemonMetrics(before time.Time) (int64, error)
+	PruneServiceMetrics(before time.Time) (int64, error)
+	PruneEvents(before time.Time) (int64, error)
 }
 
 func startOldHistoryPrune(ctx context.Context, logger *slog.Logger, store oldHistoryPruner, cutoff time.Time) {

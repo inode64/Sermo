@@ -20,7 +20,7 @@ type LoggedEvent struct {
 // EventStore persists the operator-visible event/activity feed so sermod can
 // repopulate the web UI after a daemon restart.
 type EventStore interface {
-	RecordEvent(state.EventRecord) (int64, error)
+	RecordEvent(record state.EventRecord) (int64, error)
 	RecentEvents(limit int) ([]state.EventRecord, error)
 	RecentEventsBefore(beforeID int64, limit int) ([]state.EventRecord, error)
 	PruneEvents(before time.Time) (int64, error)
