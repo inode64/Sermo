@@ -68,6 +68,7 @@ linters:
     - testableexamples  # examples must provide verifiable output
     - thelper  # t.Helper() in table-driven check callbacks and fakes
     - tparallel  # detect unsafe uses of t.Parallel
+    - unconvert  # redundant conversions hide the source type and add noise
     - unparam  # unused function parameters and always-nil results
     - usestdlibvars  # prefer stdlib constants (http.StatusOK, ...)
     - unqueryvet  # prohibit SELECT * in production SQL queries
@@ -175,8 +176,6 @@ linters:
   #               fixed-header make([]byte, N) followed by append(body) is intended.
   #   nilnil    — the (nil, nil) "nothing to build" returns in watch_build are
   #               deliberate signals, not a sentinel-error case.
-  #   unconvert — flags arch-dependent syscall.Stat_t/Statfs_t conversions that
-  #               are needed on non-amd64 Linux; removing them would break ports.
   exclusions:
     generated: lax
     presets:
@@ -206,6 +205,12 @@ linters:
       # to the production paths that execute in the daemon or CLI.
       - linters: [prealloc]
         path: _test\.go
+      # syscall field widths vary between Linux architectures, so these
+      # conversions preserve the portable storage type despite amd64 redundancy.
+      - linters: [unconvert]
+        path: internal/app/filewatch\.go
+      - linters: [unconvert]
+        path: internal/checks/storage\.go
       # Dashboard API surface; splitting would fragment the web backend contract.
       - linters: [interfacebloat]
         path: internal/web/server\.go
