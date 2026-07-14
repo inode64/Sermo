@@ -320,11 +320,12 @@ func serviceLabel(c ServiceCandidate) string {
 	if len(c.ConfigPaths) > 0 {
 		details = append(details, labelField(labelFieldConfig, c.ConfigPaths[0]))
 	}
-	if c.Pidfile != "" {
+	switch {
+	case c.Pidfile != "":
 		details = append(details, labelField(config.ServiceKeyPidfile, c.Pidfile))
-	} else if c.Cmd != "" {
+	case c.Cmd != "":
 		details = append(details, "cmd match")
-	} else if c.Exe != "" {
+	case c.Exe != "":
 		details = append(details, labelField(process.SelectorKeyExe, c.Exe))
 	}
 	if !c.UnitPresent {
