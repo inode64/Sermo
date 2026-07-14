@@ -140,6 +140,7 @@ linters:
         - argOrder
         - badCall
         - badCond
+        - caseOrder
         - dupArg
         - dupBranchBody
         - dupCase
@@ -152,7 +153,9 @@ linters:
         - importShadow
         - mapKey
         - newDeref
+        - nilValReturn
         - offBy1
+        - rangeAppendAll
         - regexpMust
         - sloppyLen
         - sloppyReassign
