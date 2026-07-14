@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1640,6 +1641,28 @@ func TestWebBackendFdsReadingErrorMarksWatchFailed(t *testing.T) {
 	w := watches[0]
 	if w.State != TargetStateFailed || len(w.Readings) != 1 || w.Readings[0].Error != "file-nr failed" {
 		t.Fatalf("watch = %+v, want failed with fds error reading", w)
+	}
+}
+
+func TestCountWatchViewUsesFallbackWithoutLimit(t *testing.T) {
+	meter, readings, summary := countWatchView(countWatchViewSpec[int]{
+		kind:     "test",
+		resource: "widgets",
+		usage:    "used",
+		field:    checks.DataKeyCount,
+		label:    watchReadingLabelCount,
+		fallback: func() (int, error) { return 17, nil },
+		count:    func(value int) uint64 { return uint64(value) },
+		limit:    func(int) uint64 { return 0 },
+		formatRead: func(value uint64) string {
+			return strconv.FormatUint(value, 10) + " widgets"
+		},
+	})
+	if meter != nil || summary != "widgets 17 used" {
+		t.Fatalf("meter=%+v summary=%q", meter, summary)
+	}
+	if len(readings) != 1 || readings[0].Field != checks.DataKeyCount || readings[0].Label != watchReadingLabelCount || readings[0].Value != "17 widgets" {
+		t.Fatalf("readings = %+v", readings)
 	}
 }
 
