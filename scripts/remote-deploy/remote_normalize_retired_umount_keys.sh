@@ -158,7 +158,7 @@ fi
 
 tar -C / -czf "$backup" etc/sermo
 while IFS= read -r -d '' file; do
-	relative="${file#${rendered}/}"
+	relative="${file#"${rendered}"/}"
 	cp --preserve=mode,ownership,timestamps "$file" "/etc/sermo/${relative}"
 done < <(find "$rendered" -type f -print0)
 
