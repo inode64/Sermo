@@ -166,6 +166,12 @@ type appVersionCmd struct {
 	timeout time.Duration
 }
 
+type workerCycleMode struct {
+	observeOnly bool
+	startup     bool
+	operation   bool
+}
+
 // RunCycle runs one monitoring cycle for the service: build the
 // check cache, evaluate remediation rules in name order, and run the first
 // firing rule whose action is not guard-blocked and is allowed by policy. Then
@@ -175,70 +181,19 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	w.cycle++
 	defer w.publishRemediation()
 	settleKey := SettlingServiceKey(w.Service)
-	if w.IsPaused != nil && w.IsPaused() {
-		w.clearObservability()
-		if w.Settling != nil && !w.Settling.Observed(settleKey) {
-			w.Settling.MarkObserved(settleKey)
-		}
-		return // monitoring paused for this service
-	}
-
 	now := w.Now
 	if now == nil {
 		now = time.Now
 	}
-
-	startupObserveOnly := w.Settling != nil && !w.Settling.Observed(settleKey)
-	operationObserveOnly, operationRunning := w.operationSettlingState(now())
-	if operationRunning {
-		w.clearObservability()
-		if startupObserveOnly && w.Settling != nil {
-			w.Settling.MarkObserved(settleKey)
-		}
-		return
-	}
-	observeOnly := startupObserveOnly || operationObserveOnly
-	if observeOnly && !w.backendActive(ctx) {
-		// The init backend is inactive: complete startup observation without
-		// running checks so stopped services do not block daemon readiness or
-		// stay in state "starting" forever. The web/CLI surface the inactive
-		// backend as failed once observed.
-		if startupObserveOnly && w.Settling != nil {
-			w.Settling.MarkObserved(settleKey)
-		}
-		w.clearObservability()
+	mode, skip := w.prepareCycle(ctx, settleKey, now)
+	if skip {
 		return
 	}
 
-	deps := w.CheckDeps
-	if w.LiveSample != nil {
-		w.LiveSample(ctx) // live CPU gauge for the web; runs every monitored cycle
-	}
-	if w.Sample != nil {
-		deps.Metrics = w.Sample(ctx)
-	}
-	cache := w.Checks(ctx, deps)
-	w.applyGates(cache)
-	w.cycleFailOutput = failingChecksOutput(cache)
-	if !observeOnly {
-		if w.RecordChecks != nil {
-			w.RecordChecks(cache, w.cycleRan)
-		}
-		if w.RecordHealth != nil {
-			w.RecordHealth(requiredChecksOK(cache))
-		}
-	}
-	if w.Publish != nil {
-		w.Publish(cache, w.cycleRan)
-	}
-	if observeOnly {
-		if startupObserveOnly && w.Settling != nil {
-			w.Settling.MarkObserved(settleKey)
-		}
-		if operationObserveOnly {
-			w.clearOperationSettling()
-		}
-		w.clearObservability()
+	deps, cache := w.runChecks(ctx)
+	w.publishCycle(cache, mode.observeOnly)
+	if mode.observeOnly {
+		w.completeObserveCycle(settleKey, mode)
 		return // first active cycle: publish data only, no rules or SLA side effects
 	}
 	at := now()
@@ -254,6 +209,77 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	w.runAlerts(ctx, ev, at, evals)
 	w.publishRuleWindows(ctx, ev, at, evals)
 	w.persistRuleState()
+}
+
+func (w *Worker) prepareCycle(ctx context.Context, settleKey string, now func() time.Time) (workerCycleMode, bool) {
+	if w.IsPaused != nil && w.IsPaused() {
+		w.clearObservability()
+		if w.Settling != nil && !w.Settling.Observed(settleKey) {
+			w.Settling.MarkObserved(settleKey)
+		}
+		return workerCycleMode{}, true // monitoring paused for this service
+	}
+
+	mode := workerCycleMode{startup: w.Settling != nil && !w.Settling.Observed(settleKey)}
+	var running bool
+	mode.operation, running = w.operationSettlingState(now())
+	if running {
+		w.clearObservability()
+		if mode.startup && w.Settling != nil {
+			w.Settling.MarkObserved(settleKey)
+		}
+		return workerCycleMode{}, true
+	}
+	mode.observeOnly = mode.startup || mode.operation
+	if !mode.observeOnly || w.backendActive(ctx) {
+		return mode, false
+	}
+
+	// The init backend is inactive: complete startup observation without running
+	// checks so stopped services do not block daemon readiness or stay "starting".
+	if mode.startup && w.Settling != nil {
+		w.Settling.MarkObserved(settleKey)
+	}
+	w.clearObservability()
+	return workerCycleMode{}, true
+}
+
+func (w *Worker) runChecks(ctx context.Context) (checks.Deps, map[string]checks.Result) {
+	deps := w.CheckDeps
+	if w.LiveSample != nil {
+		w.LiveSample(ctx) // live CPU gauge for the web; runs every monitored cycle
+	}
+	if w.Sample != nil {
+		deps.Metrics = w.Sample(ctx)
+	}
+	cache := w.Checks(ctx, deps)
+	w.applyGates(cache)
+	w.cycleFailOutput = failingChecksOutput(cache)
+	return deps, cache
+}
+
+func (w *Worker) publishCycle(cache map[string]checks.Result, observeOnly bool) {
+	if !observeOnly {
+		if w.RecordChecks != nil {
+			w.RecordChecks(cache, w.cycleRan)
+		}
+		if w.RecordHealth != nil {
+			w.RecordHealth(requiredChecksOK(cache))
+		}
+	}
+	if w.Publish != nil {
+		w.Publish(cache, w.cycleRan)
+	}
+}
+
+func (w *Worker) completeObserveCycle(settleKey string, mode workerCycleMode) {
+	if mode.startup && w.Settling != nil {
+		w.Settling.MarkObserved(settleKey)
+	}
+	if mode.operation {
+		w.clearOperationSettling()
+	}
+	w.clearObservability()
 }
 
 func (w *Worker) operationSettlingState(now time.Time) (observeOnly, running bool) {
