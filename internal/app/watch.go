@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
@@ -461,7 +462,9 @@ func expandSuccessMessage(path string, r volume.Result) string {
 }
 
 func watchDryRunMessage(hook HookSpec, notifiers []notify.Notifier, expand *ExpandSpec) string {
-	actions := make([]string, 0, 3)
+	const watchDryRunActionCapacity = 3
+
+	actions := make([]string, 0, watchDryRunActionCapacity)
 	if expand != nil {
 		actions = append(actions, eventActionExpand)
 	}
@@ -576,7 +579,7 @@ func envKey(k string) string {
 	for _, r := range k {
 		switch {
 		case r >= 'a' && r <= 'z':
-			b.WriteRune(r - 32)
+			b.WriteRune(unicode.ToUpper(r))
 		case (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'):
 			b.WriteRune(r)
 		default:

@@ -13,6 +13,12 @@ import (
 	volumeinfo "sermo/internal/volume"
 )
 
+const (
+	volumeConditionFreePct = iota
+	volumeConditionUsedPct
+	volumeConditionFreeBytes
+)
+
 // volumeAssistant creates storage watches: a free/used-space threshold with
 // notifications and an optional native auto-expand action.
 type volumeAssistant struct{}
@@ -106,13 +112,13 @@ func askVolSettings(p *Prompt, env Env, label string) volSettings {
 		"free space below a size (K/M/G/T)",
 		"used space at/above a size (K/M/G/T)",
 	}) {
-	case 0:
+	case volumeConditionFreePct:
 		s.metric, s.op = checks.LevelFieldFreePct, cfgval.CompareOpLess
 		s.value = askPercent(p, "Alert when free space drops below", volumeDefaultFreePct)
-	case 1:
+	case volumeConditionUsedPct:
 		s.metric, s.op = checks.LevelFieldUsedPct, cfgval.CompareOpGreaterEqual
 		s.value = askPercent(p, "Alert when used space reaches/exceeds", volumeDefaultUsedPct)
-	case 2:
+	case volumeConditionFreeBytes:
 		s.metric, s.op = checks.LevelFieldFreeBytes, cfgval.CompareOpLess
 		s.value = askSize(p, "Alert when free space drops below (e.g. 10G)", volumeDefaultFreeSize)
 	default:

@@ -28,8 +28,9 @@ const (
 	diagFieldWarnings = "warnings"
 	diagFieldFindings = "findings"
 
-	diagScopeLocks      = "locks"
-	diagScopeOperations = "operations"
+	diagScopeLocks                 = "locks"
+	diagScopeOperations            = "operations"
+	diagnosticExtraFindingCapacity = 4
 )
 
 // NewDiagnosticLog builds a scheduled diagnostics exporter. file must be set.
@@ -103,7 +104,7 @@ func (l *DiagnosticLog) Run(ctx context.Context, interval time.Duration) {
 
 func collectDiagnosticFindings(cfg *config.Config, host diag.Host, opGate *OpGate) []diag.Finding {
 	r := diag.Diagnose(cfg, host)
-	out := make([]diag.Finding, 0, len(r.Findings)+4)
+	out := make([]diag.Finding, 0, len(r.Findings)+diagnosticExtraFindingCapacity)
 	out = append(out, r.Findings...)
 	if opGate != nil {
 		inUse, total := opGate.Usage()

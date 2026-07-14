@@ -14,7 +14,10 @@ import (
 
 // minRuntimePublishMaxAge is the minimum age after which a worker-published
 // runtime sample is treated as stale for the service list (fallback to probe).
-const minRuntimePublishMaxAge = 30 * time.Second
+const (
+	minRuntimePublishMaxAge    = 30 * time.Second
+	runtimePublishMaxAgeCycles = 2
+)
 
 // runtimePublishMaxAge returns how long the web list reuses a worker-published
 // runtime sample before probing again. It tracks twice the service cycle interval.
@@ -22,7 +25,7 @@ func runtimePublishMaxAge(interval time.Duration) time.Duration {
 	if interval <= 0 {
 		interval = minRuntimePublishMaxAge
 	}
-	age := interval * 2
+	age := interval * runtimePublishMaxAgeCycles
 	if age < minRuntimePublishMaxAge {
 		return minRuntimePublishMaxAge
 	}

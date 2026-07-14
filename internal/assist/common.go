@@ -11,6 +11,11 @@ import (
 	"sermo/internal/rules"
 )
 
+const (
+	monitorStateChoiceDisabled = 1
+	monitorStateChoicePrevious = 2
+)
+
 // Monitoring is the shared monitor-state + interval answer every wizard asks
 // once the targets are chosen. It is injected verbatim into each generated
 // entry (a watch entry or a service body) by the assistants, so the question
@@ -38,9 +43,9 @@ func (p *Prompt) AskMonitorState(label string) string {
 		"do not monitor (disabled)",
 		"restore previous state",
 	}) {
-	case 1:
+	case monitorStateChoiceDisabled:
 		return config.MonitorDisabled
-	case 2:
+	case monitorStateChoicePrevious:
 		return config.MonitorPrevious
 	default:
 		return config.MonitorEnabled

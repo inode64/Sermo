@@ -13,6 +13,8 @@ import (
 	"strings"
 )
 
+const shortRevisionLength = 12
+
 // Version is the release version. Empty by default; set via -ldflags for a
 // tagged build, otherwise the module version from build info is used.
 var Version = ""
@@ -37,8 +39,8 @@ func resolve() (version, revision, date string) {
 	if version == "" || version == "(devel)" {
 		version = "dev"
 	}
-	if len(revision) > 12 {
-		revision = revision[:12]
+	if len(revision) > shortRevisionLength {
+		revision = revision[:shortRevisionLength]
 	}
 	return version, revision, date
 }

@@ -279,7 +279,7 @@ func smbDialectName(d uint16) string {
 }
 
 func smbProtocolName(d uint16) string {
-	if d >= 0x0300 {
+	if d >= smb2Dialect300 {
 		return "SMB3"
 	}
 	return "SMB2"
