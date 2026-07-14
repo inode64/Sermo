@@ -56,14 +56,14 @@ func TestCompareNotReadyIsFalse(t *testing.T) {
 }
 
 func TestReadingValueForThreshold(t *testing.T) {
-	r := Reading{Absolute: 2048, Percent: 73.5, HasAbsolute: true, HasPercent: true, Ready: true}
+	r := Reading{Absolute: 2048, Percent: 73.5, Unit: MetricUnitBytes, HasAbsolute: true, HasPercent: true, Ready: true}
 	value, unit, ok, err := ReadingValueForThreshold(r, "60%")
 	if err != nil || !ok || value != 73.5 || unit != MetricUnitPercent {
 		t.Fatalf("percent value = %v %q ready=%v err=%v, want 73.5 %% ready", value, unit, ok, err)
 	}
 	value, unit, ok, err = ReadingValueForThreshold(r, "1024")
-	if err != nil || !ok || value != 2048 || unit != MetricUnitNone {
-		t.Fatalf("absolute value = %v %q ready=%v err=%v, want 2048 none ready", value, unit, ok, err)
+	if err != nil || !ok || value != 2048 || unit != MetricUnitBytes {
+		t.Fatalf("absolute value = %v %q ready=%v err=%v, want 2048 bytes ready", value, unit, ok, err)
 	}
 	value, _, ok, err = ReadingValueForThreshold(Reading{Percent: 99, HasPercent: true}, "1%")
 	if err != nil || ok || value != 0 {
@@ -191,7 +191,7 @@ func TestServiceIOFDsThreadsAggregateOverTree(t *testing.T) {
 	c.Reader = reader
 	snap = c.SampleService("svc", []int{10, 20})
 
-	if !snap["io"].Ready || snap["io"].Absolute != float64(3<<20) {
+	if !snap["io"].Ready || snap["io"].Unit != MetricUnitBytesPerSecond || snap["io"].Absolute != float64(3<<20) {
 		t.Fatalf("io = %+v, want 3MiB/s aggregated", snap["io"])
 	}
 	if snap["io_read"].Absolute != float64(1<<20) || snap["io_write"].Absolute != float64(2<<20) {
@@ -221,7 +221,7 @@ func TestServiceMemoryAndCount(t *testing.T) {
 	c := New(reader)
 	snap := c.SampleService("svc", []int{10, 20})
 
-	if snap["memory"].Absolute != 400 || !snap["memory"].HasPercent || snap["memory"].Percent != 40 {
+	if snap["memory"].Absolute != 400 || snap["memory"].Unit != MetricUnitBytes || !snap["memory"].HasPercent || snap["memory"].Percent != 40 {
 		t.Fatalf("memory = %+v, want 400 bytes / 40%%", snap["memory"])
 	}
 	if snap["process_count"].Absolute != 2 {

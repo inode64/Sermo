@@ -1856,8 +1856,9 @@ events and are recorded whenever the operation is attempted.
 
 For a recovered rule with exactly one direct check or metric leaf, the event also
 records the current formatted value and its configured operator and threshold.
-This makes threshold flapping visible without having to reconstruct the sample
-from the metrics history.
+Byte values use `B`, `KB`, `MB`, `GB` or `TB` (and byte rates add `/s`), including
+the configured threshold. This makes threshold flapping visible without having
+to reconstruct the sample from the metrics history.
 
 Actions and types are coupled: the operation actions (`restart`, `start`,
 `stop`, `reload`, `resume`) belong to `type: remediation` rules — required there (a
@@ -1996,6 +1997,8 @@ messages may also use `${check.name}`, `${check.type}`, `${check.metric}`,
 `${check.scope}`, `${check.op}`, `${check.threshold}` and `${check.value}`.
 Complex conditions with multiple checks leave those `${check.*}` values empty
 instead of guessing which check should describe the alert.
+Byte-valued metric placeholders use the same `B` through `TB` presentation as
+recovery events, for both the current value and the threshold.
 
 For rules driven by a `changed:` leaf, alert messages may use
 `${change.path}`, `${change.library}`, `${change.app}`, `${change.level}`,

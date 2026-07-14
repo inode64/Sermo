@@ -979,6 +979,74 @@ func TestRuleMessageRuntimeContextForInlineMetric(t *testing.T) {
 	}
 }
 
+func TestRuleMessageRuntimeContextFormatsInlineByteMetric(t *testing.T) {
+	h := &workerHarness{cache: map[string]checks.Result{}}
+	tree := map[string]any{"rules": map[string]any{
+		"memory-high": map[string]any{
+			"type": "alert",
+			"if": map[string]any{"metric": map[string]any{
+				"scope": checks.MetricScopeService,
+				"name":  "memory",
+				"op":    ">",
+				"value": "1741594",
+			}},
+			"then": map[string]any{"action": "alert", "message": "${check.type}/${check.metric} ${check.op} ${check.threshold}: ${check.value}"},
+		},
+	}}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+	w.CheckDeps.Metrics = func(scope, name string) (metrics.Reading, bool) {
+		if scope != checks.MetricScopeService || name != "memory" {
+			return metrics.Reading{}, false
+		}
+		return metrics.Reading{Absolute: 2555904, Unit: metrics.MetricUnitBytes, HasAbsolute: true, Ready: true}, true
+	}
+
+	w.RunCycle(context.Background())
+
+	e, ok := h.eventOf(eventKindAlert)
+	if !ok {
+		t.Fatalf("no alert emitted: %+v", h.events)
+	}
+	if want := "metric/memory > 1,66 MB: 2,44 MB"; e.Message != want {
+		t.Fatalf("message = %q, want %q", e.Message, want)
+	}
+}
+
+func TestRuleMessageRuntimeContextFormatsByteMetric(t *testing.T) {
+	h := &workerHarness{cache: map[string]checks.Result{
+		"memory-high": {
+			Check: "memory-high",
+			OK:    true,
+			Data: map[string]any{
+				checks.DataKeyType:      checks.CheckTypeMetric,
+				checks.DataKeyScope:     checks.MetricScopeService,
+				checks.DataKeyMetric:    "memory",
+				checks.DataKeyOp:        ">",
+				checks.DataKeyThreshold: "174159463",
+				checks.DataKeyValue:     2555904,
+				checks.DataKeyUnit:      metrics.MetricUnitBytes,
+			},
+		},
+	}}
+	tree := map[string]any{"rules": map[string]any{
+		"memory-high": map[string]any{
+			"type": "alert",
+			"if":   map[string]any{"active": map[string]any{"check": "memory-high"}},
+			"then": map[string]any{"action": "alert", "message": "${check.type}/${check.metric} ${check.op} ${check.threshold}: ${check.value}"},
+		},
+	}}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+	w.RunCycle(context.Background())
+
+	e, ok := h.eventOf(eventKindAlert)
+	if !ok {
+		t.Fatalf("no alert emitted: %+v", h.events)
+	}
+	if want := "metric/memory > 166,09 MB: 2,44 MB"; e.Message != want {
+		t.Fatalf("message = %q, want %q", e.Message, want)
+	}
+}
+
 func TestCycleAlertRecoveryCarriesMetricContext(t *testing.T) {
 	h := &workerHarness{cache: map[string]checks.Result{
 		"cpu-thread-high": {
@@ -1025,6 +1093,56 @@ func TestCycleAlertRecoveryCarriesMetricContext(t *testing.T) {
 		t.Fatalf("no recovered event emitted: %+v", h.events)
 	}
 	if want := "rule condition recovered: metric cpu_thread current 0,2% (threshold > 90%)"; e.Message != want {
+		t.Fatalf("recovered message = %q, want %q", e.Message, want)
+	}
+}
+
+func TestCycleAlertRecoveryFormatsByteMetricContext(t *testing.T) {
+	h := &workerHarness{cache: map[string]checks.Result{
+		"memory-high": {
+			Check: "memory-high",
+			OK:    false,
+			Data: map[string]any{
+				checks.DataKeyType:      checks.CheckTypeMetric,
+				checks.DataKeyScope:     checks.MetricScopeService,
+				checks.DataKeyMetric:    "memory",
+				checks.DataKeyOp:        ">",
+				checks.DataKeyThreshold: "174159463",
+				checks.DataKeyValue:     2555904,
+				checks.DataKeyUnit:      metrics.MetricUnitBytes,
+			},
+		},
+	}}
+	tree := map[string]any{"rules": map[string]any{
+		"alert-if-memory-high": map[string]any{
+			"type": "alert",
+			"if":   map[string]any{"failed": map[string]any{"check": "memory-high"}},
+			"then": map[string]any{"action": "alert", "message": "memory is high"},
+		},
+	}}
+	w := h.worker(tree, rules.Policy{}, nil)
+	w.RunCycle(context.Background())
+
+	h.cache["memory-high"] = checks.Result{
+		Check: "memory-high",
+		OK:    true,
+		Data: map[string]any{
+			checks.DataKeyType:      checks.CheckTypeMetric,
+			checks.DataKeyScope:     checks.MetricScopeService,
+			checks.DataKeyMetric:    "memory",
+			checks.DataKeyOp:        ">",
+			checks.DataKeyThreshold: "174159463",
+			checks.DataKeyValue:     2555904,
+			checks.DataKeyUnit:      metrics.MetricUnitBytes,
+		},
+	}
+	w.RunCycle(context.Background())
+
+	e, ok := h.eventOf(eventKindRecovered)
+	if !ok {
+		t.Fatalf("no recovered event emitted: %+v", h.events)
+	}
+	if want := "rule condition recovered: metric memory current 2,44 MB (threshold > 166,09 MB)"; e.Message != want {
 		t.Fatalf("recovered message = %q, want %q", e.Message, want)
 	}
 }
