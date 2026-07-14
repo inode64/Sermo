@@ -695,11 +695,12 @@ func (b *WebBackend) decorateRemediation(name string, svc *web.Service) {
 		svc.RemediationState = remediationStatePending
 		return
 	}
-	if rep.Allowed {
+	switch {
+	case rep.Allowed:
 		svc.RemediationState = remediationStateEligible
-	} else if rep.Reason != "" {
+	case rep.Reason != "":
 		svc.RemediationState = rep.Reason
-	} else {
+	default:
 		svc.RemediationState = remediationStateBlocked
 	}
 	if !rep.NextEligibleAt.IsZero() {

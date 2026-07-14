@@ -1602,11 +1602,12 @@ func (a App) runEventsClear(ctx context.Context, opts options, noun string) int 
 		a.recordAccess(cfg, accessCommandEventsClear, "", accessStatusError, err.Error())
 		return a.fail(opts, err.Error())
 	}
-	if opts.json {
+	switch {
+	case opts.json:
 		writeJSON(a.Stdout, map[string]any{cliJSONKeyPruned: n})
-	} else if before.IsZero() {
+	case before.IsZero():
 		fmt.Fprintf(a.Stdout, "cleared %d %s\n", n, noun)
-	} else {
+	default:
 		fmt.Fprintf(a.Stdout, "cleared %d %s before %s\n", n, noun, before.Format(time.RFC3339))
 	}
 	a.recordAccess(cfg, accessCommandEventsClear, "", accessStatusOK, fmt.Sprintf("pruned %d %s", n, noun))

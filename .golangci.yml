@@ -141,6 +141,7 @@ linters:
         - exitAfterDefer
         - flagDeref
         - httpNoBody
+        - ifElseChain
         - mapKey
         - newDeref
         - offBy1

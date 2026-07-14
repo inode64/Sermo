@@ -395,11 +395,12 @@ func validateWatchNotifyInterval(prefix string, then map[string]any, hasNotifyOn
 	}
 	// notify_interval re-sends while a watch remains firing. It requires targets
 	// and cannot be combined with event-specific notification routing.
-	if !isPositiveDuration(cfgval.String(v)) {
+	switch {
+	case !isPositiveDuration(cfgval.String(v)):
 		add("%s %q must be a valid positive duration", thenFieldPath(prefix, WatchThenKeyNotifyInterval), cfgval.String(v))
-	} else if hasNotifyOn {
+	case hasNotifyOn:
 		add("%s is not supported with %s", thenFieldPath(prefix, WatchThenKeyNotifyInterval), thenFieldPath(prefix, WatchThenKeyNotifyOn))
-	} else if !HasEffectiveNotifyAction(notify, defaultNotify) {
+	case !HasEffectiveNotifyAction(notify, defaultNotify):
 		add("%s has no effect without notify targets", thenFieldPath(prefix, WatchThenKeyNotifyInterval))
 	}
 }
