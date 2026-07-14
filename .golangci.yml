@@ -41,7 +41,9 @@ linters:
     - interfacebloat  # interfaces with too many methods (web.Backend excluded below)
     - iface  # unused / duplicated interface declarations
     - ireturn  # return-concrete; factories/registries excluded below
+    - iotamixing  # reject mixed iota and explicit constant declarations
     - modernize  # Go 1.22+ idioms (range int, slices.*, min/max, …)
+    - musttag  # serialized fields must carry explicit tags
     - ineffassign
     - intrange  # for i := 0; i < n; i++ → for i := range n (Go 1.22+)
     - inamedparam  # interface parameters must name their domain role
@@ -61,7 +63,9 @@ linters:
     - sloglint  # consistent log/slog usage
     - loggercheck  # log key/value pairs must match the logger API
     - sqlclosecheck  # SQL cursors/statements must be closed on every path
+    - testableexamples  # examples must provide verifiable output
     - thelper  # t.Helper() in table-driven check callbacks and fakes
+    - tparallel  # detect unsafe uses of t.Parallel
     - unparam  # unused function parameters and always-nil results
     - usestdlibvars  # prefer stdlib constants (http.StatusOK, ...)
     - unqueryvet  # prohibit SELECT * in production SQL queries
@@ -149,7 +153,15 @@ linters:
   # Considered and deliberately NOT enabled (wrapcheck pilot covers operation/ through config/; see exclusions):
   #   containedctx — daemon-lifetime contexts are intentionally held by monitor,
   #                  loader, state and web server owners.
+  #   embeddedstructfieldcheck — 69 field-ordering/whitespace findings; the
+  #                  existing compact embedded check types are intentionally uniform.
+  #   err113 — operator-facing configuration errors need their concrete context,
+  #             not a sentinel type for every message.
   #   gochecknoinits — internal/conn uses init solely for static protocol registration.
+  #   gochecknoglobals — registries, host detection and test injection are owned
+  #                  package state, not mutable ambient application state.
+  #   nilnil — optional watch actions and absent persisted state use (nil, nil)
+  #             as an explicit no-value signal.
   #   wrapcheck (rest of tree) — later phases; hundreds of interface-boundary returns.
   #   makezero  — false positives on the conn/ packet builders, where a
   #               fixed-header make([]byte, N) followed by append(body) is intended.
