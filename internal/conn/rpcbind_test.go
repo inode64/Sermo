@@ -3,6 +3,7 @@ package conn
 import (
 	"context"
 	"encoding/binary"
+	"io"
 	"net"
 	"strconv"
 	"testing"
@@ -30,6 +31,52 @@ func rpcAcceptedReply(xid, acceptStat uint32) []byte {
 	binary.BigEndian.PutUint32(b[16:], 0)           // verf length
 	binary.BigEndian.PutUint32(b[20:], acceptStat)
 	return b
+}
+
+func rpcAcceptedTCPTestPort(t *testing.T, acceptStat uint32) int {
+	t.Helper()
+	return rpcTCPTestPort(t, func(xid uint32) []byte { return rpcAcceptedReply(xid, acceptStat) })
+}
+
+func rpcTCPTestPort(t *testing.T, reply func(uint32) []byte) int {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		var marker [rpcWordBytes]byte
+		if _, err := io.ReadFull(conn, marker[:]); err != nil {
+			return
+		}
+		n := int(binary.BigEndian.Uint32(marker[:]) &^ rpcFragmentLastMask)
+		if n < rpcWordBytes {
+			return
+		}
+		call := make([]byte, n)
+		if _, err := io.ReadFull(conn, call); err != nil {
+			return
+		}
+		response := reply(binary.BigEndian.Uint32(call[:rpcWordBytes]))
+		binary.BigEndian.PutUint32(marker[:], uint32(len(response))|rpcFragmentLastMask)
+		_, _ = conn.Write(append(marker[:], response...))
+	}()
+
+	_, portText, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return port
 }
 
 func TestParseRPCReply(t *testing.T) {
