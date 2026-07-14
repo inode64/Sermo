@@ -74,9 +74,10 @@ func probeRPCNull(ctx context.Context, cfg Config, defaultPort int, program, ver
 // rpcCallTCP sends an RPC message over a TCP connection using record marking
 // (RFC 5531 §11) and reads the (possibly fragmented) reply.
 func rpcCallTCP(c net.Conn, payload []byte) ([]byte, error) {
-	hdr := make([]byte, rpcWordBytes)
-	binary.BigEndian.PutUint32(hdr, uint32(len(payload))|rpcFragmentLastMask)
-	if _, err := c.Write(append(hdr, payload...)); err != nil {
+	frame := make([]byte, rpcWordBytes+len(payload))
+	binary.BigEndian.PutUint32(frame, uint32(len(payload))|rpcFragmentLastMask)
+	copy(frame[rpcWordBytes:], payload)
+	if _, err := c.Write(frame); err != nil {
 		return nil, err
 	}
 	var reply []byte

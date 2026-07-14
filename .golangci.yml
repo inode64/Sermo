@@ -32,6 +32,7 @@ linters:
     - fatcontext  # context accumulated inside loops
     - forcetypeassert  # prevent panics when values with static type any are asserted
     - gocheckcompilerdirectives  # malformed //go: directives (typos that silently no-op)
+    - gochecknoinits  # package initialization is forbidden outside static protocol registration
     - gochecksumtype  # exhaustive switches over documented sum types
     - gocognit  # cognitive complexity; documented exceptions preserve ordered contracts
     - gocyclo  # reject functions above the established cyclomatic complexity budget
@@ -65,6 +66,7 @@ linters:
     - rowserrcheck  # database/sql Rows.Err() left unchecked
     - sloglint  # consistent log/slog usage
     - loggercheck  # log key/value pairs must match the logger API
+    - makezero  # prevent append from discarding an already allocated slice length
     - sqlclosecheck  # SQL cursors/statements must be closed on every path
     - testableexamples  # examples must provide verifiable output
     - thelper  # t.Helper() in table-driven check callbacks and fakes
@@ -168,14 +170,11 @@ linters:
   #                  existing compact embedded check types are intentionally uniform.
   #   err113 — operator-facing configuration errors need their concrete context,
   #             not a sentinel type for every message.
-  #   gochecknoinits — internal/conn uses init solely for static protocol registration.
   #   gochecknoglobals — registries, host detection and test injection are owned
   #                  package state, not mutable ambient application state.
   #   nilnil — optional watch actions and absent persisted state use (nil, nil)
   #             as an explicit no-value signal.
   #   wrapcheck (rest of tree) — later phases; hundreds of interface-boundary returns.
-  #   makezero  — false positives on the conn/ packet builders, where a
-  #               fixed-header make([]byte, N) followed by append(body) is intended.
   #   nilnil    — the (nil, nil) "nothing to build" returns in watch_build are
   #               deliberate signals, not a sentinel-error case.
   exclusions:
@@ -207,6 +206,10 @@ linters:
       # to the production paths that execute in the daemon or CLI.
       - linters: [prealloc]
         path: _test\.go
+      # Protocols register static builders during package initialization; all
+      # other packages must keep initialization explicit and injectable.
+      - linters: [gochecknoinits]
+        path: internal/conn/
       # syscall field widths vary between Linux architectures, so these
       # conversions preserve the portable storage type despite amd64 redundancy.
       - linters: [unconvert]
