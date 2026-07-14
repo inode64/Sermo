@@ -85,8 +85,8 @@ SHELLCHECK ?= shellcheck
 RUFF ?= ruff
 ACTIONLINT ?= actionlint
 FUZZ_TIME ?= 15s
-# gocognit, dupl and perfsprint are blocking linters. Keep unresolved
-# cyclomatic-complexity debt visible without making unrelated changes fail CI.
+# gocognit, gocyclo, dupl and perfsprint are blocking linters. Keep a focused
+# cyclomatic-complexity report available for direct inspection.
 QUALITY_REPORT_LINTERS = gocyclo
 SCRIPT_SH = scripts/*.sh scripts/remote-deploy/*.sh
 SCRIPT_PY = scripts/*.py scripts/remote-deploy/*.py
