@@ -51,8 +51,7 @@ func TestDetectProcSystemdNormalizesLegacyVarRun(t *testing.T) {
 
 func TestDetectProcOpenRCPidfile(t *testing.T) {
 	read := func(path string) ([]byte, error) {
-		switch path {
-		case "/etc/init.d/nginx":
+		if path == "/etc/init.d/nginx" {
 			return []byte("#!/sbin/openrc-run\ncommand=\"/usr/sbin/nginx\"\npidfile=\"/run/nginx.pid\"\n"), nil
 		}
 		return nil, errNotFound
@@ -69,8 +68,7 @@ func TestDetectProcOpenRCPidfile(t *testing.T) {
 func TestDetectProcOpenRCStartStopDaemonArg(t *testing.T) {
 	// pidfile passed as a start-stop-daemon argument, command in conf.d.
 	read := func(path string) ([]byte, error) {
-		switch path {
-		case "/etc/init.d/foo":
+		if path == "/etc/init.d/foo" {
 			return []byte("start() {\n  start-stop-daemon --start --pidfile /run/foo/foo.pid --exec /usr/bin/foo\n}\n"), nil
 		}
 		return nil, errNotFound
@@ -83,8 +81,7 @@ func TestDetectProcOpenRCStartStopDaemonArg(t *testing.T) {
 
 func TestDetectProcOpenRCCleansAbsolutePaths(t *testing.T) {
 	read := func(path string) ([]byte, error) {
-		switch path {
-		case "/etc/init.d/dhcpd":
+		if path == "/etc/init.d/dhcpd" {
 			return []byte(`pidfile="//run/dhcp/dhcpd.pid"
 command="//usr/sbin/dhcpd"
 `), nil
@@ -105,8 +102,7 @@ command="//usr/sbin/dhcpd"
 
 func TestDetectProcNormalizesLegacyVarRun(t *testing.T) {
 	read := func(path string) ([]byte, error) {
-		switch path {
-		case "/etc/init.d/apache2":
+		if path == "/etc/init.d/apache2" {
 			return []byte(`pidfile="/var/run/apache2.pid"
 command="/usr/sbin/apache2"
 `), nil
@@ -121,8 +117,7 @@ command="/usr/sbin/apache2"
 
 func TestDetectProcOpenRCSkipsNonAbsoluteExec(t *testing.T) {
 	read := func(path string) ([]byte, error) {
-		switch path {
-		case "/etc/init.d/net.eth0":
+		if path == "/etc/init.d/net.eth0" {
 			return []byte(`command="' config_index='"
 start-stop-daemon --start --exec ' config_index='
 `), nil
@@ -137,8 +132,7 @@ start-stop-daemon --start --exec ' config_index='
 
 func TestDetectProcOpenRCApacheGentooDefaults(t *testing.T) {
 	read := func(path string) ([]byte, error) {
-		switch path {
-		case "/etc/init.d/apache2":
+		if path == "/etc/init.d/apache2" {
 			return []byte(`PIDFILE="${PIDFILE:-/run/apache2.pid}"
 APACHE2="/usr/sbin/apache2"
 start() {
@@ -160,8 +154,7 @@ start() {
 
 func TestDetectProcOpenRCExpandsServiceNameAndEmptyRoots(t *testing.T) {
 	read := func(path string) ([]byte, error) {
-		switch path {
-		case "/etc/init.d/sshd":
+		if path == "/etc/init.d/sshd" {
 			return []byte(`: ${SSHD_PIDFILE:=${RC_PREFIX%/}/run/${SVCNAME}.pid}
 : ${SSHD_BINARY:=${RC_PREFIX%/}/usr/sbin/sshd}
 command="${SSHD_BINARY}"
@@ -185,8 +178,7 @@ command_args="${SSHD_OPTS} -o PidFile=${pidfile}"
 
 func TestDetectProcOpenRCPrefixRemoval(t *testing.T) {
 	read := func(path string) ([]byte, error) {
-		switch path {
-		case "/etc/init.d/php8.2":
+		if path == "/etc/init.d/php8.2" {
 			return []byte(`PHP_SLOT="${SVCNAME#php-fpm-}"
 command="/usr/lib64/${PHP_SLOT}/bin/php-fpm"
 pidfile="/run/php-fpm-${PHP_SLOT}.pid"
@@ -205,8 +197,7 @@ pidfile="/run/php-fpm-${PHP_SLOT}.pid"
 
 func TestDetectProcOpenRCPatternPrefixRemoval(t *testing.T) {
 	read := func(path string) ([]byte, error) {
-		switch path {
-		case "/etc/init.d/openvpn.tun1":
+		if path == "/etc/init.d/openvpn.tun1" {
 			return []byte(`VPN=${SVCNAME#*.}
 if [ -n "${VPN}" ] && [ ${SVCNAME} != "openvpn" ]; then
 	VPNPID="/run/openvpn.${VPN}.pid"
@@ -230,8 +221,7 @@ start-stop-daemon --start --exec /usr/sbin/openvpn -- \
 
 func TestDetectProcOpenRCChrootDefaultsToHostRoot(t *testing.T) {
 	read := func(path string) ([]byte, error) {
-		switch path {
-		case "/etc/init.d/named":
+		if path == "/etc/init.d/named" {
 			return []byte(`PIDFILE="${CHROOT}/run/named/named.pid"
 start-stop-daemon --start --pidfile ${PIDFILE} --exec /usr/sbin/named
 `), nil
@@ -249,8 +239,7 @@ start-stop-daemon --start --pidfile ${PIDFILE} --exec /usr/sbin/named
 
 func TestDetectProcOpenRCCommandUser(t *testing.T) {
 	read := func(path string) ([]byte, error) {
-		switch path {
-		case "/etc/init.d/influxdb":
+		if path == "/etc/init.d/influxdb" {
 			return []byte(`user=${user:-influxdb}
 group=${group:-influxdb}
 command=/usr/bin/influxd
