@@ -4218,7 +4218,7 @@ function renderWatchTypeTable(panel, type, watches) {
   const rows = list.flatMap((watch) => typedWatchRowHTML(watch, profile));
   return tpl`<section class="watch-type-group">
     <div class="watch-type-heading"><h3>${watchTypeLabel(type)} <span class="muted">(${watches.length})</span></h3>${watchTypeFilterControl(panel, type, watches, profile)}</div>
-    <table class="watch-table">
+    <table class="watch-table watch-type-table">
       <thead><tr>${columns.map((column) => column.key
         ? tpl`<th scope="col" class="sortable" tabindex="0" data-watch-type-sort-panel="${panel.key}" data-watch-type-sort-type="${type}" data-watch-type-sort="${column.key}" aria-sort="${sortAriaValue(sort, column.key)}">${column.label}<span class="sort-ind" data-watch-type-sort-ind="${type}:${column.key}">${sort.key === column.key ? (sort.dir > 0 ? " ▲" : " ▼") : ""}</span></th>`
         : tpl`<th scope="col">${column.label}</th>`)}</tr></thead>
