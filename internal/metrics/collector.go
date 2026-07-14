@@ -172,7 +172,7 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	// when PIDs were requested but none could be read (measurement failure).
 	measured := func(ok bool) bool { return len(pids) == 0 || ok }
 
-	mem := Reading{Absolute: float64(rss), HasAbsolute: true, Ready: measured(present > 0)}
+	mem := Reading{Absolute: float64(rss), Unit: MetricUnitBytes, HasAbsolute: true, Ready: measured(present > 0)}
 	totals := readerMemoryTotals(c.Reader, hasSwap)
 	if totals.memoryOK {
 		mem.Percent = float64(rss) / float64(totals.memoryTotal) * PercentScale
@@ -183,7 +183,7 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	// Per-service swap: total swapped-out memory of the process tree (bytes), and
 	// — when a swap device exists — its share of total swap.
 	if hasSwap {
-		sw := Reading{Absolute: float64(swap), HasAbsolute: true, Ready: measured(present > 0)}
+		sw := Reading{Absolute: float64(swap), Unit: MetricUnitBytes, HasAbsolute: true, Ready: measured(present > 0)}
 		if totals.swapOK && totals.swapTotal > 0 {
 			sw.Percent = float64(swap) / float64(totals.swapTotal) * PercentScale
 			sw.HasPercent = true
@@ -219,7 +219,7 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 		snap[MetricIOWrite] = ioRate(prev.write, curIO.write, prev.at, curIO.at)
 		snap[MetricIO] = ioRate(prev.read+prev.write, curIO.read+curIO.write, prev.at, curIO.at)
 	} else {
-		notReady := Reading{HasAbsolute: true}
+		notReady := Reading{Unit: MetricUnitBytesPerSecond, HasAbsolute: true}
 		snap[MetricIORead], snap[MetricIOWrite], snap[MetricIO] = notReady, notReady, notReady
 	}
 	c.prevServiceIO[service] = curIO
@@ -291,13 +291,13 @@ func (c *Collector) SampleServiceCPU(service string, pids []int) ServiceCPU {
 func ioRate(prevBytes, curBytes uint64, prevAt, curAt time.Time) Reading {
 	wall := curAt.Sub(prevAt).Seconds()
 	if wall <= 0 {
-		return Reading{HasAbsolute: true, Ready: false}
+		return Reading{Unit: MetricUnitBytesPerSecond, HasAbsolute: true, Ready: false}
 	}
 	var rate float64
 	if curBytes > prevBytes {
 		rate = float64(curBytes-prevBytes) / wall
 	}
-	return Reading{Absolute: rate, HasAbsolute: true, Ready: true}
+	return Reading{Absolute: rate, Unit: MetricUnitBytesPerSecond, HasAbsolute: true, Ready: true}
 }
 
 // SampleSystem computes the machine-scope metrics: total_memory (bytes and %),
@@ -315,7 +315,7 @@ func (c *Collector) SampleSystem() Snapshot {
 	snap := Snapshot{}
 	totals := readerMemoryTotals(c.Reader, true)
 	if totals.memoryOK {
-		r := Reading{Absolute: float64(totals.memoryUsed), HasAbsolute: true, Ready: true}
+		r := Reading{Absolute: float64(totals.memoryUsed), Unit: MetricUnitBytes, HasAbsolute: true, Ready: true}
 		r.Percent = float64(totals.memoryUsed) / float64(totals.memoryTotal) * PercentScale
 		r.HasPercent = true
 		r.Total, r.HasTotal = float64(totals.memoryTotal), true
@@ -350,6 +350,7 @@ func (c *Collector) SampleSystem() Snapshot {
 	if totals.swapOK && totals.swapTotal > 0 {
 		snap[MetricTotalSwap] = Reading{
 			Absolute:    float64(totals.swapUsed),
+			Unit:        MetricUnitBytes,
 			HasAbsolute: true,
 			Percent:     float64(totals.swapUsed) / float64(totals.swapTotal) * PercentScale,
 			HasPercent:  true,
