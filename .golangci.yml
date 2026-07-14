@@ -167,7 +167,9 @@ linters:
         - typeAssertChain
         - typeSwitchVar
         - underef
+        - unlabelStmt
         - unlambda
+        - unnecessaryBlock
         - unnecessaryDefer
         - unslice
         - weakCond
