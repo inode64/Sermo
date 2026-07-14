@@ -92,6 +92,32 @@ checks:
 	mustHave(t, issues, "tls")
 }
 
+func TestValidateConnSharedFieldErrors(t *testing.T) {
+	issues := validateService(t, `
+name: dns
+service: x
+checks:
+  resolver:
+    type: dns
+    port: 0
+    tls: 1
+    expect: scalar
+    expect_latency: fast
+    on_change: yes
+    on_version_change: no
+`)
+	for _, want := range []string{
+		"port \"0\" must be an integer",
+		"tls must be a boolean or a string",
+		"expect must be a mapping",
+		"expect_latency must be an {op, value} mapping",
+		"on_change must be a boolean",
+		"on_version_change must be a boolean",
+	} {
+		mustHave(t, issues, want)
+	}
+}
+
 func TestValidateConnExpectValid(t *testing.T) {
 	issues := validateService(t, `
 name: dns
