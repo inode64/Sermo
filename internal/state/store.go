@@ -1737,25 +1737,11 @@ func (s *Store) MeasurementSeries(service, check string, from, to time.Time) ([]
 	if err != nil {
 		return nil, fmt.Errorf("load measurement series for %s/%s: %w", service, check, err)
 	}
-	defer rows.Close()
-
-	var out []MeasurementPoint
-	for rows.Next() {
-		var bucket, n int64
-		var sum, minMs, maxMs float64
-		if err := rows.Scan(&bucket, &n, &sum, &minMs, &maxMs); err != nil {
-			return nil, fmt.Errorf("scan measurement series row for %s/%s: %w", service, check, err)
-		}
-		avg := 0.0
-		if n > 0 {
-			avg = sum / float64(n)
-		}
-		out = append(out, MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: n, Avg: avg, Min: minMs, Max: maxMs})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate measurement series for %s/%s: %w", service, check, err)
-	}
-	return out, nil
+	return measurementPointsFromRows(
+		rows,
+		"measurement series row for "+service+"/"+check,
+		"measurement series for "+service+"/"+check,
+	)
 }
 
 // PruneMeasurements deletes measurement buckets older than before. Returns rows removed.
@@ -1820,25 +1806,11 @@ func (s *Store) MetricSeries(service, check, metric string, from, to time.Time) 
 	if err != nil {
 		return nil, fmt.Errorf("load metric series for %s/%s/%s: %w", service, check, metric, err)
 	}
-	defer rows.Close()
-
-	var out []MeasurementPoint
-	for rows.Next() {
-		var bucket, n int64
-		var sum, minV, maxV float64
-		if err := rows.Scan(&bucket, &n, &sum, &minV, &maxV); err != nil {
-			return nil, fmt.Errorf("scan metric series row for %s/%s/%s: %w", service, check, metric, err)
-		}
-		avg := 0.0
-		if n > 0 {
-			avg = sum / float64(n)
-		}
-		out = append(out, MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: n, Avg: avg, Min: minV, Max: maxV})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate metric series for %s/%s/%s: %w", service, check, metric, err)
-	}
-	return out, nil
+	return measurementPointsFromRows(
+		rows,
+		"metric series row for "+service+"/"+check+"/"+metric,
+		"metric series for "+service+"/"+check+"/"+metric,
+	)
 }
 
 // PruneMetrics deletes named-metric buckets older than before. Returns rows removed.
@@ -1887,25 +1859,11 @@ func (s *Store) DaemonMetricSeries(metric string, from, to time.Time) ([]Measure
 	if err != nil {
 		return nil, fmt.Errorf("load daemon metric series for %s: %w", metric, err)
 	}
-	defer rows.Close()
-
-	var out []MeasurementPoint
-	for rows.Next() {
-		var bucket, n int64
-		var sum, minV, maxV float64
-		if err := rows.Scan(&bucket, &n, &sum, &minV, &maxV); err != nil {
-			return nil, fmt.Errorf("scan daemon metric series row for %s: %w", metric, err)
-		}
-		avg := 0.0
-		if n > 0 {
-			avg = sum / float64(n)
-		}
-		out = append(out, MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: n, Avg: avg, Min: minV, Max: maxV})
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate daemon metric series for %s: %w", metric, err)
-	}
-	return out, nil
+	return measurementPointsFromRows(
+		rows,
+		"daemon metric series row for "+metric,
+		"daemon metric series for "+metric,
+	)
 }
 
 // PruneDaemonMetrics deletes daemon metric buckets older than before. Returns rows removed.
@@ -1954,23 +1912,33 @@ func (s *Store) ServiceMetricSeries(service, metric string, from, to time.Time) 
 	if err != nil {
 		return nil, fmt.Errorf("load service metric series for %s/%s: %w", service, metric, err)
 	}
+	return measurementPointsFromRows(
+		rows,
+		"service metric series row for "+service+"/"+metric,
+		"service metric series for "+service+"/"+metric,
+	)
+}
+
+// measurementPointsFromRows scans per-minute aggregate rows shared by every
+// metric history table. The callers keep their distinct SQL and error context.
+func measurementPointsFromRows(rows *sql.Rows, scanContext, iterateContext string) ([]MeasurementPoint, error) {
 	defer rows.Close()
 
 	var out []MeasurementPoint
 	for rows.Next() {
 		var bucket, n int64
-		var sum, minV, maxV float64
-		if err := rows.Scan(&bucket, &n, &sum, &minV, &maxV); err != nil {
-			return nil, fmt.Errorf("scan service metric series row for %s/%s: %w", service, metric, err)
+		var sum, minValue, maxValue float64
+		if err := rows.Scan(&bucket, &n, &sum, &minValue, &maxValue); err != nil {
+			return nil, fmt.Errorf("scan %s: %w", scanContext, err)
 		}
 		avg := 0.0
 		if n > 0 {
 			avg = sum / float64(n)
 		}
-		out = append(out, MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: n, Avg: avg, Min: minV, Max: maxV})
+		out = append(out, MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: n, Avg: avg, Min: minValue, Max: maxValue})
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate service metric series for %s/%s: %w", service, metric, err)
+		return nil, fmt.Errorf("iterate %s: %w", iterateContext, err)
 	}
 	return out, nil
 }
