@@ -545,6 +545,7 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 				add(validationBooleanFormat, path+"."+checks.CheckKeyOptional)
 			}
 		}
+		validateCheckSummary(path, entry, add)
 		// A per-check interval runs the check every N cycles (N rounded from
 		// interval/resolution). It must be a positive duration; the daemon warns at
 		// startup if it is below the resolution or not an exact multiple.
@@ -573,6 +574,14 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 		if !validateSingleShotCheckFields(path, typ, entry, locksDir, add) {
 			add("%s has unknown type %q", path, typ)
 			continue
+		}
+	}
+}
+
+func validateCheckSummary(path string, entry map[string]any, add addFunc) {
+	if value, present := entry[checks.CheckKeySummary]; present {
+		if _, ok := value.(string); !ok {
+			add("%s.%s must be a string", path, checks.CheckKeySummary)
 		}
 	}
 }

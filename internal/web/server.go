@@ -434,37 +434,38 @@ type Library = CatalogItem
 // the watches section is the main thing to show). Enriched with useful
 // runtime/config info for operators.
 type Watch struct {
-	Name             string            `json:"name"`
-	DisplayName      string            `json:"display_name,omitempty"`
-	Category         string            `json:"category,omitempty"`
-	CheckType        string            `json:"check_type,omitempty"`
-	Summary          string            `json:"summary,omitempty"`
-	Interval         string            `json:"interval,omitempty"`
-	State            string            `json:"state"`
-	Enabled          bool              `json:"enabled"`
-	Monitor          string            `json:"monitor,omitempty"` // enabled | disabled | previous
-	Monitored        bool              `json:"monitored"`
-	MonitorSource    string            `json:"monitor_source,omitempty"`
-	MonitorChangedAt string            `json:"monitor_changed_at,omitempty"`
-	FireOnFail       bool              `json:"fire_on_fail"` // true = fires when check fails (e.g. health checks); false = fires on condition (e.g. load/storage)
-	HasHook          bool              `json:"has_hook"`
-	HookCommand      []string          `json:"hook_command,omitempty"`
-	Notifiers        []string          `json:"notifiers,omitempty"`
-	NotifierCount    int               `json:"notifier_count"`
-	DryRun           bool              `json:"dry_run"`
-	Conditions       []WatchCondition  `json:"conditions,omitempty"`
-	Storage          *StorageWatchInfo `json:"storage,omitempty"`
-	Swap             *SwapWatchInfo    `json:"swap,omitempty"`
-	Meter            *WatchMeter       `json:"meter,omitempty"`
-	Readings         []WatchReading    `json:"readings,omitempty"`
-	Expand           *WatchExpand      `json:"expand,omitempty"`
-	CanProbe         bool              `json:"can_probe,omitempty"`
-	CanControlRAID   bool              `json:"can_control_raid,omitempty"`
-	RAIDArray        string            `json:"raid_array,omitempty"`
-	LastActivity     string            `json:"last_activity,omitempty"` // RFC3339 of last watch activity, if any
-	LastActivityKind string            `json:"last_activity_kind,omitempty"`
-	LastCheckedAt    string            `json:"last_checked_at,omitempty"` // RFC3339 of latest completed check sample
-	Probe            *WatchProbe       `json:"probe,omitempty"`           // current manual probe, if one is running
+	Name              string            `json:"name"`
+	DisplayName       string            `json:"display_name,omitempty"`
+	Category          string            `json:"category,omitempty"`
+	CheckType         string            `json:"check_type,omitempty"`
+	Summary           string            `json:"summary,omitempty"`
+	SummaryConfigured bool              `json:"summary_configured,omitempty"`
+	Interval          string            `json:"interval,omitempty"`
+	State             string            `json:"state"`
+	Enabled           bool              `json:"enabled"`
+	Monitor           string            `json:"monitor,omitempty"` // enabled | disabled | previous
+	Monitored         bool              `json:"monitored"`
+	MonitorSource     string            `json:"monitor_source,omitempty"`
+	MonitorChangedAt  string            `json:"monitor_changed_at,omitempty"`
+	FireOnFail        bool              `json:"fire_on_fail"` // true = fires when check fails (e.g. health checks); false = fires on condition (e.g. load/storage)
+	HasHook           bool              `json:"has_hook"`
+	HookCommand       []string          `json:"hook_command,omitempty"`
+	Notifiers         []string          `json:"notifiers,omitempty"`
+	NotifierCount     int               `json:"notifier_count"`
+	DryRun            bool              `json:"dry_run"`
+	Conditions        []WatchCondition  `json:"conditions,omitempty"`
+	Storage           *StorageWatchInfo `json:"storage,omitempty"`
+	Swap              *SwapWatchInfo    `json:"swap,omitempty"`
+	Meter             *WatchMeter       `json:"meter,omitempty"`
+	Readings          []WatchReading    `json:"readings,omitempty"`
+	Expand            *WatchExpand      `json:"expand,omitempty"`
+	CanProbe          bool              `json:"can_probe,omitempty"`
+	CanControlRAID    bool              `json:"can_control_raid,omitempty"`
+	RAIDArray         string            `json:"raid_array,omitempty"`
+	LastActivity      string            `json:"last_activity,omitempty"` // RFC3339 of last watch activity, if any
+	LastActivityKind  string            `json:"last_activity_kind,omitempty"`
+	LastCheckedAt     string            `json:"last_checked_at,omitempty"` // RFC3339 of latest completed check sample
+	Probe             *WatchProbe       `json:"probe,omitempty"`           // current manual probe, if one is running
 }
 
 // WatchProbe reports a manual host-watch probe currently running in the daemon.

@@ -2143,6 +2143,46 @@ The single `count: {op, value}` predicate is required; pair it with a `for` wind
 so a momentary burst of exiting children does not fire. Hook extras:
 `SERMO_ZOMBIES` (the same value as `SERMO_VALUE`, the count).
 
+### Check summaries
+
+Every check accepts an optional `summary` string. When present, it replaces the
+check's normal message in the dashboard, emitted events, notifications and
+`SERMO_MESSAGE` for hooks. Without it, Sermo keeps the existing checker-specific
+message and display.
+
+`summary` is rendered after the check runs. `${value}` is the observed value used
+by the comparison, `${trigger}` is the active trigger when the checker exposes
+one, and every resolved check field can be referenced directly or through
+`${check.<field>}`. Result data is also available as `${result.<field>}`. Numbers
+use dot thousands separators; durations and timestamps use the normal readable
+format. Unknown references remain visible, which makes a mistaken field name
+easy to identify.
+
+```yaml
+check:
+  type: file
+  paths: [/usr/share/GeoIP]
+  recursive: true
+  older_than: 480h
+  summary: "GeoIP ${value} is older than ${older_than} in ${number_files} files"
+```
+
+For a non-recursive regular file, `${number_files}` is `1`; with a recursive
+directory it is the number of regular files scanned. Normal configuration
+variables are resolved before the summary runs, so service checks can combine
+runtime values with service variables:
+
+```yaml
+check:
+  type: sql
+  engine: sqlite
+  path: ${db_dir}/retry
+  query: "SELECT count(*) FROM tblblob"
+  op: ">"
+  value: ${db_cleanup_record_limit}
+  summary: "Retry DB has ${value} records (limit ${check.value}); cleanup age ${db_cleanup_age}"
+```
+
 ### `file` — file/directory attributes and freshness
 
 A `file` watch monitors one or more files/directories for attribute changes —
@@ -2164,6 +2204,7 @@ watches:
         - /srv/myapp/incoming
       recursive: true                 # optional, default false (whole subtree)
       older_than: 24h                 # optional: mtime age; any stale path fires
+      summary: "${path} age ${value}, limit ${older_than}, files ${number_files}"
       size: { op: ">", value: 1048576 }   # edge threshold; or `size: { on: change }`
       permissions: { on: change }     # mode bits (perm + setuid/setgid/sticky)
       owner: { on: change }           # owning uid/gid

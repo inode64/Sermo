@@ -326,7 +326,7 @@ func BuildWithWarnings(section map[string]any, deps Deps) ([]Built, []BuildWarni
 			})
 			continue
 		}
-		built = append(built, Built{Check: check, Optional: cfgval.Bool(entry[CheckKeyOptional])})
+		built = append(built, Built{Check: withSummary(check, entry), Optional: cfgval.Bool(entry[CheckKeyOptional])})
 	}
 	return built, warnings
 }
@@ -1637,7 +1637,7 @@ func BuildInline(name string, entry map[string]any, deps Deps) (Check, error) {
 	if warn != "" {
 		return nil, errors.New(warn)
 	}
-	return check, nil
+	return withSummary(check, entry), nil
 }
 
 // Outcome summarizes a preflight or verification run.

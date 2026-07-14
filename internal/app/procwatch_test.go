@@ -85,6 +85,20 @@ func TestProcWatchMinAgeEdge(t *testing.T) {
 	}
 }
 
+func TestProcWatchSummaryUsesObservedThresholdValue(t *testing.T) {
+	h := &procHarness{clock: time.Unix(1_000_000, 0)}
+	w := h.watcher(procCond{memOp: ">", memValue: 1000}, &fakeProcSampler{cycles: [][]ProcInfo{{{PID: 42, RSS: 2000}}}})
+	w.summary = "worker memory ${value}, limit ${memory.value}"
+	w.check = map[string]any{metrics.MetricMemory: map[string]any{checks.CheckKeyValue: 1000}}
+
+	h.tick(w, 0)
+
+	const want = "worker memory 2.000, limit 1.000"
+	if len(h.fired) != 1 || h.fired[0][sermoEnvMessage] != want {
+		t.Fatalf("hook env = %v, want summary %q", h.fired, want)
+	}
+}
+
 func TestProcWatchPublishesSnapshot(t *testing.T) {
 	h := &procHarness{clock: time.Unix(1_000_000, 0)}
 	s := &fakeProcSampler{cycles: [][]ProcInfo{{
