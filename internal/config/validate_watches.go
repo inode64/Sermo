@@ -342,65 +342,17 @@ func validateWatchMetadata(name string, entry map[string]any, add func(string, .
 // references are checked separately by validateNotifyRefs (which has the
 // configured notifier set).
 func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKill bool, defaultNotify []string, add func(string, ...any)) {
-	rawThen, present := block[rules.RuleFieldThen]
-	if !present {
-		// Absent `then` is valid: the watch is alert/monitor-only. Its `check` +
-		// `for` (or per-metric conditions) will still produce "firing" state
-		// visible in the web UI (Alerts/Watches tiles, failed filter, state badge)
-		// and event log entries, but no hook runs and no notifications are
-		// delivered (global defaults are not inherited for bare watches).
-		return
-	}
-	then, ok := rawThen.(map[string]any)
+	then, ok := watchThenMapping(prefix, block, add)
 	if !ok {
-		add("%s must be a mapping", prefix+"."+rules.RuleFieldThen)
 		return
 	}
-	allowed := set(WatchThenKeyHook, rules.RuleFieldNotify, WatchThenKeyNotifyInterval, WatchThenKeyNotifyOn, WatchThenKeyExpand, WatchThenKeyKill)
-	for _, key := range slices.Sorted(maps.Keys(then)) {
-		if _, ok := allowed[key]; !ok {
-			add("%s is not supported", thenFieldPath(prefix, key))
-		}
-	}
+	validateWatchThenKeys(prefix, then, add)
 	hook, hasHook := then[WatchThenKeyHook].(map[string]any)
 	notify := cfgval.StringList(then[rules.RuleFieldNotify])
 	_, hasNotifyOn := then[WatchThenKeyNotifyOn]
-	if v, present := then[WatchThenKeyNotifyInterval]; present {
-		// notify_interval re-sends the notification as a reminder while the watch
-		// stays firing; absent means notify once on the rising edge. It only
-		// affects delivery, so it is meaningless without notify targets.
-		if !isPositiveDuration(cfgval.String(v)) {
-			add("%s %q must be a valid positive duration", thenFieldPath(prefix, WatchThenKeyNotifyInterval), cfgval.String(v))
-		} else if hasNotifyOn {
-			add("%s is not supported with %s", thenFieldPath(prefix, WatchThenKeyNotifyInterval), thenFieldPath(prefix, WatchThenKeyNotifyOn))
-		} else if !HasEffectiveNotifyAction(notify, defaultNotify) {
-			add("%s has no effect without notify targets", thenFieldPath(prefix, WatchThenKeyNotifyInterval))
-		}
-	}
-	rawExpand, expandPresent := then[WatchThenKeyExpand]
-	expand, hasExpand := rawExpand.(map[string]any)
-	switch {
-	case expandPresent && !hasExpand:
-		add("%s must be a mapping with a `by` size", thenFieldPath(prefix, WatchThenKeyExpand))
-	case hasExpand && !allowExpand:
-		add("%s is only valid on a storage watch", thenFieldPath(prefix, WatchThenKeyExpand))
-	case hasExpand:
-		// The same grammar the daemon's parseExpand applies, so a bad size fails
-		// `config validate` instead of the next start/reload.
-		if by, ok := cfgval.ByteSize(expand[WatchExpandKeyBy]); !ok || by == 0 {
-			add("%s %q must be a positive size with a K/M/G/T suffix (e.g. 5G)", thenFieldPath(prefix, WatchThenKeyExpand)+"."+WatchExpandKeyBy, cfgval.String(expand[WatchExpandKeyBy]))
-		}
-	}
-	rawKill, killPresent := then[WatchThenKeyKill]
-	kill, hasKill := rawKill.(map[string]any)
-	switch {
-	case killPresent && !hasKill:
-		add("%s must be a mapping", thenKillPath(prefix))
-	case hasKill && !allowKill:
-		add("%s is only valid on a process watch", thenKillPath(prefix))
-	case hasKill:
-		validateKillAction(prefix, kill, add)
-	}
+	validateWatchNotifyInterval(prefix, then, hasNotifyOn, notify, defaultNotify, add)
+	hasExpand := validateWatchExpandAction(prefix, then, allowExpand, add)
+	hasKill := validateWatchKillAction(prefix, then, allowKill, add)
 	// An explicit `then: { notify: [none] }` (or with a hook/expand/kill too) is a
 	// deliberate monitor-only watch (state in the dashboard and events, no
 	// delivery). A present `then` that selects nothing is rejected. Omitting the
@@ -409,15 +361,90 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand, allowKi
 		add("%s requires a hook, notify, kill and/or expand", prefix+"."+rules.RuleFieldThen)
 		return
 	}
-	if hasHook {
-		if !cfgval.IsNonEmptyStringArray(hook[WatchHookKeyCommand]) {
-			add("%s must be a non-empty array", thenHookPath(prefix)+"."+WatchHookKeyCommand)
-		}
-		if v, present := hook[WatchHookKeyTimeout]; present && !isPositiveDuration(cfgval.String(v)) {
-			add("%s %q must be a valid positive duration", thenHookPath(prefix)+"."+WatchHookKeyTimeout, cfgval.String(v))
-		}
-		validateCommandExpectations(thenHookPath(prefix), hook, add)
+	validateWatchHookAction(prefix, hook, hasHook, add)
+}
+
+func watchThenMapping(prefix string, block map[string]any, add func(string, ...any)) (map[string]any, bool) {
+	rawThen, present := block[rules.RuleFieldThen]
+	if !present {
+		// Absent `then` is valid: the watch is alert/monitor-only. Its `check` +
+		// `for` (or per-metric conditions) still produces firing state and events,
+		// but does not inherit global notifications or run a hook.
+		return nil, false
 	}
+	then, ok := rawThen.(map[string]any)
+	if !ok {
+		add("%s must be a mapping", prefix+"."+rules.RuleFieldThen)
+	}
+	return then, ok
+}
+
+func validateWatchThenKeys(prefix string, then map[string]any, add func(string, ...any)) {
+	allowed := set(WatchThenKeyHook, rules.RuleFieldNotify, WatchThenKeyNotifyInterval, WatchThenKeyNotifyOn, WatchThenKeyExpand, WatchThenKeyKill)
+	for _, key := range slices.Sorted(maps.Keys(then)) {
+		if _, ok := allowed[key]; !ok {
+			add("%s is not supported", thenFieldPath(prefix, key))
+		}
+	}
+}
+
+func validateWatchNotifyInterval(prefix string, then map[string]any, hasNotifyOn bool, notify, defaultNotify []string, add func(string, ...any)) {
+	v, present := then[WatchThenKeyNotifyInterval]
+	if !present {
+		return
+	}
+	// notify_interval re-sends while a watch remains firing. It requires targets
+	// and cannot be combined with event-specific notification routing.
+	if !isPositiveDuration(cfgval.String(v)) {
+		add("%s %q must be a valid positive duration", thenFieldPath(prefix, WatchThenKeyNotifyInterval), cfgval.String(v))
+	} else if hasNotifyOn {
+		add("%s is not supported with %s", thenFieldPath(prefix, WatchThenKeyNotifyInterval), thenFieldPath(prefix, WatchThenKeyNotifyOn))
+	} else if !HasEffectiveNotifyAction(notify, defaultNotify) {
+		add("%s has no effect without notify targets", thenFieldPath(prefix, WatchThenKeyNotifyInterval))
+	}
+}
+
+func validateWatchExpandAction(prefix string, then map[string]any, allowExpand bool, add func(string, ...any)) bool {
+	rawExpand, present := then[WatchThenKeyExpand]
+	expand, hasExpand := rawExpand.(map[string]any)
+	switch {
+	case present && !hasExpand:
+		add("%s must be a mapping with a `by` size", thenFieldPath(prefix, WatchThenKeyExpand))
+	case hasExpand && !allowExpand:
+		add("%s is only valid on a storage watch", thenFieldPath(prefix, WatchThenKeyExpand))
+	case hasExpand:
+		if by, ok := cfgval.ByteSize(expand[WatchExpandKeyBy]); !ok || by == 0 {
+			add("%s %q must be a positive size with a K/M/G/T suffix (e.g. 5G)", thenFieldPath(prefix, WatchThenKeyExpand)+"."+WatchExpandKeyBy, cfgval.String(expand[WatchExpandKeyBy]))
+		}
+	}
+	return hasExpand
+}
+
+func validateWatchKillAction(prefix string, then map[string]any, allowKill bool, add func(string, ...any)) bool {
+	rawKill, present := then[WatchThenKeyKill]
+	kill, hasKill := rawKill.(map[string]any)
+	switch {
+	case present && !hasKill:
+		add("%s must be a mapping", thenKillPath(prefix))
+	case hasKill && !allowKill:
+		add("%s is only valid on a process watch", thenKillPath(prefix))
+	case hasKill:
+		validateKillAction(prefix, kill, add)
+	}
+	return hasKill
+}
+
+func validateWatchHookAction(prefix string, hook map[string]any, hasHook bool, add func(string, ...any)) {
+	if !hasHook {
+		return
+	}
+	if !cfgval.IsNonEmptyStringArray(hook[WatchHookKeyCommand]) {
+		add("%s must be a non-empty array", thenHookPath(prefix)+"."+WatchHookKeyCommand)
+	}
+	if v, present := hook[WatchHookKeyTimeout]; present && !isPositiveDuration(cfgval.String(v)) {
+		add("%s %q must be a valid positive duration", thenHookPath(prefix)+"."+WatchHookKeyTimeout, cfgval.String(v))
+	}
+	validateCommandExpectations(thenHookPath(prefix), hook, add)
 }
 
 // validateRaidNotifyOn validates the RAID-only event-specific notification
