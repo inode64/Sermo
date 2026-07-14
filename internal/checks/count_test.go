@@ -117,6 +117,32 @@ func TestCountRecursiveDescendsSubtree(t *testing.T) {
 	}
 }
 
+func TestCountRecursiveSkipsHiddenEntriesByDefault(t *testing.T) {
+	root := t.TempDir()
+	for path, body := range map[string]string{
+		"visible.txt":       "visible",
+		".hidden.txt":       "hidden",
+		".cache/nested.txt": "nested",
+	} {
+		fullPath := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(fullPath, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	c := countOf(root, CountKindFile, true, "==", 0)
+	if n, err := c.tally(context.Background()); err != nil || n != 1 {
+		t.Fatalf("default recursive count = %d, %v; want 1, nil", n, err)
+	}
+	c.includeHidden = true
+	if n, err := c.tally(context.Background()); err != nil || n != 3 {
+		t.Fatalf("include_hidden recursive count = %d, %v; want 3, nil", n, err)
+	}
+}
+
 func TestCountDeltaWithinWindowAlertsOnGrowth(t *testing.T) {
 	root := t.TempDir()
 	addCountFiles(t, root, "base", 1)
@@ -219,11 +245,11 @@ func TestCountCheckPredicate(t *testing.T) {
 func TestTallyEntriesEmptyKindDefaultsToAny(t *testing.T) {
 	root := countTree(t)
 	// Empty kind must default to "any" (4 entries: a.txt, b.txt, sub/, link).
-	if n, err := TallyEntries(context.Background(), root, "", false, 0); err != nil || n != 4 {
+	if n, err := TallyEntries(context.Background(), root, "", false, false, 0); err != nil || n != 4 {
 		t.Fatalf("TallyEntries(\"\") = %d, %v; want 4, nil", n, err)
 	}
 	// A non-empty kind must be honored, not coerced to "any".
-	if n, err := TallyEntries(context.Background(), root, CountKindFile, false, 0); err != nil || n != 2 {
+	if n, err := TallyEntries(context.Background(), root, CountKindFile, false, false, 0); err != nil || n != 2 {
 		t.Fatalf("TallyEntries(%q) = %d, %v; want 2, nil", CountKindFile, n, err)
 	}
 }
@@ -239,12 +265,13 @@ func TestBuildCountCheck(t *testing.T) {
 	root := countTree(t)
 	section := map[string]any{
 		"files": map[string]any{
-			"type":      "count",
-			"path":      root,
-			"of":        "file",
-			"recursive": true,
-			"op":        "<=",
-			"value":     10,
+			"type":           "count",
+			"path":           root,
+			"of":             "file",
+			"recursive":      true,
+			"include_hidden": true,
+			"op":             "<=",
+			"value":          10,
 		},
 	}
 	built, warns := Build(section, Deps{})
@@ -253,6 +280,10 @@ func TestBuildCountCheck(t *testing.T) {
 	}
 	if len(built) != 1 {
 		t.Fatalf("built %d checks, want 1", len(built))
+	}
+	count, ok := built[0].Check.(countCheck)
+	if !ok || !count.includeHidden {
+		t.Fatalf("built = %T %+v, want include_hidden", built[0].Check, built[0].Check)
 	}
 	if !built[0].Check.Run(context.Background()).OK {
 		t.Fatal("3 files <= 10 should pass")

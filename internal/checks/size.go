@@ -17,7 +17,7 @@ import (
 )
 
 // SizeSamplerFunc measures a file or directory in bytes.
-type SizeSamplerFunc func(ctx context.Context, path string) (int64, error)
+type SizeSamplerFunc func(ctx context.Context, path string, includeHidden bool) (int64, error)
 
 // sizeSample is one timestamped size observation.
 type sizeSample struct {
@@ -33,12 +33,13 @@ type sizeState struct {
 // sizeCheck is stateful: OK means path grew by growBy within window.
 type sizeCheck struct {
 	base
-	path    string
-	growBy  int64
-	window  time.Duration
-	sampler SizeSamplerFunc
-	clock   func() time.Time
-	state   *sizeState
+	path          string
+	growBy        int64
+	window        time.Duration
+	includeHidden bool
+	sampler       SizeSamplerFunc
+	clock         func() time.Time
+	state         *sizeState
 }
 
 func (c *sizeCheck) Run(ctx context.Context) Result {
@@ -55,7 +56,7 @@ func (c *sizeCheck) Run(ctx context.Context) Result {
 		clock = time.Now
 	}
 
-	size, err := sampler(ctx, c.path)
+	size, err := sampler(ctx, c.path, c.includeHidden)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("size %s: %s", c.path, execx.ContextFailure(err, c.timeout)), start)
 	}
@@ -81,12 +82,13 @@ func (c *sizeCheck) Run(ctx context.Context) Result {
 		humanize.Bytes(uint64(c.growBy)), c.window)
 	res := c.result(ok, msg, start)
 	res.Data = map[string]any{
-		DataKeyPath:          c.path,
-		DataKeyCurrentBytes:  size,
-		DataKeyBaselineBytes: baseline.size,
-		DataKeyGrowthBytes:   growth,
-		DataKeyWindow:        c.window.String(),
-		DataKeyValue:         growth,
+		DataKeyPath:           c.path,
+		CheckKeyIncludeHidden: c.includeHidden,
+		DataKeyCurrentBytes:   size,
+		DataKeyBaselineBytes:  baseline.size,
+		DataKeyGrowthBytes:    growth,
+		DataKeyWindow:         c.window.String(),
+		DataKeyValue:          growth,
 	}
 	return res
 }
@@ -102,8 +104,8 @@ func humanizeSigned(n int64) string {
 // SamplePathSize returns the size of a regular file, or the recursive sum of
 // regular-file sizes under a directory. Used by size checks and the web UI.
 // timeout bounds the probe context and is used for operator-facing timeout messages.
-func SamplePathSize(ctx context.Context, path string, timeout time.Duration) (int64, error) {
-	size, err := dirOrFileSize(ctx, path)
+func SamplePathSize(ctx context.Context, path string, includeHidden bool, timeout time.Duration) (int64, error) {
+	size, err := dirOrFileSize(ctx, path, includeHidden)
 	if err != nil {
 		return 0, errors.New(execx.ContextFailure(err, timeout))
 	}
@@ -112,7 +114,7 @@ func SamplePathSize(ctx context.Context, path string, timeout time.Duration) (in
 
 // dirOrFileSize returns the size of a regular file, or the recursive sum of
 // regular-file sizes under a directory.
-func dirOrFileSize(ctx context.Context, path string) (int64, error) {
+func dirOrFileSize(ctx context.Context, path string, includeHidden bool) (int64, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
@@ -127,12 +129,18 @@ func dirOrFileSize(ctx context.Context, path string) (int64, error) {
 		return info.Size(), nil
 	}
 	var total int64
-	err = filepath.WalkDir(path, func(_ string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(path, func(entryPath string, d fs.DirEntry, err error) error {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
 		if err != nil {
 			return err
+		}
+		if !includeHidden && IsHiddenDescendant(path, entryPath, d) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if d.Type().IsRegular() {
 			fi, err := d.Info()

@@ -96,7 +96,7 @@ func summaryValue(name string, entry, data map[string]any) (any, bool) {
 
 func summaryMapValue(values map[string]any, path string) (any, bool) {
 	var value any = values
-	for _, key := range strings.Split(path, ".") {
+	for key := range strings.SplitSeq(path, ".") {
 		m, ok := value.(map[string]any)
 		if !ok {
 			return nil, false

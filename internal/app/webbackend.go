@@ -1204,6 +1204,9 @@ func watchConditions(check, metricEntries map[string]any) []web.WatchCondition {
 		if recursive, ok := check[checks.CheckKeyRecursive].(bool); ok {
 			out = append(out, web.WatchCondition{Field: checks.DataKeyRecursive, Op: cfgval.CompareOpEqual, Value: strconv.FormatBool(recursive)})
 		}
+		if includeHidden, ok := check[checks.CheckKeyIncludeHidden].(bool); ok {
+			out = append(out, web.WatchCondition{Field: checks.CheckKeyIncludeHidden, Op: cfgval.CompareOpEqual, Value: strconv.FormatBool(includeHidden)})
+		}
 		if m, ok := check[checks.CheckKeyCount].(map[string]any); ok {
 			out = append(out, web.WatchCondition{Field: checks.DataKeyCount, Op: cfgval.AsString(m[checks.CheckKeyOp]), Value: cfgval.String(m[checks.CheckKeyValue])})
 		} else if op := cfgval.AsString(check[checks.CheckKeyOp]); op != "" {
@@ -1259,6 +1262,9 @@ func watchConditions(check, metricEntries map[string]any) []web.WatchCondition {
 		}
 		if within := cfgval.String(check[checks.CheckKeyWithin]); within != "" {
 			out = append(out, web.WatchCondition{Field: checks.CheckKeyWithin, Value: within})
+		}
+		if includeHidden, ok := check[checks.CheckKeyIncludeHidden].(bool); ok {
+			out = append(out, web.WatchCondition{Field: checks.CheckKeyIncludeHidden, Op: cfgval.CompareOpEqual, Value: strconv.FormatBool(includeHidden)})
 		}
 	}
 	if v, ok := check[checks.CheckKeyMounted].(bool); ok {
@@ -1330,6 +1336,9 @@ func fileWatchConditions(check map[string]any) []web.WatchCondition {
 	}
 	if recursive, ok := check[checks.CheckKeyRecursive].(bool); ok {
 		out = append(out, web.WatchCondition{Field: checks.DataKeyRecursive, Op: cfgval.CompareOpEqual, Value: strconv.FormatBool(recursive)})
+	}
+	if includeHidden, ok := check[checks.CheckKeyIncludeHidden].(bool); ok {
+		out = append(out, web.WatchCondition{Field: checks.CheckKeyIncludeHidden, Op: cfgval.CompareOpEqual, Value: strconv.FormatBool(includeHidden)})
 	}
 	if size, ok := check[checks.CheckKeySize].(map[string]any); ok {
 		if on := cfgval.AsString(size[checks.CheckKeyOn]); on != "" {

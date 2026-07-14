@@ -230,14 +230,15 @@ func TestValidateFileWatchGood(t *testing.T) {
 		"watches": map[string]any{
 			"app-data": map[string]any{
 				"check": map[string]any{
-					"type":        "file",
-					"paths":       []any{"/var/lib/app", "/srv/app"},
-					"recursive":   true,
-					"older_than":  "24h",
-					"size":        map[string]any{"op": ">", "value": 1048576},
-					"permissions": map[string]any{"on": "change"},
-					"owner":       map[string]any{"on": "change"},
-					"existence":   map[string]any{"on": "delete"},
+					"type":           "file",
+					"paths":          []any{"/var/lib/app", "/srv/app"},
+					"recursive":      true,
+					"include_hidden": true,
+					"older_than":     "24h",
+					"size":           map[string]any{"op": ">", "value": 1048576},
+					"permissions":    map[string]any{"on": "change"},
+					"owner":          map[string]any{"on": "change"},
+					"existence":      map[string]any{"on": "delete"},
 				},
 				"then": map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/file.sh"}}},
 			},
@@ -275,6 +276,10 @@ func TestValidateFileWatchErrors(t *testing.T) {
 				"check": map[string]any{"type": "file", "path": "/x", "older_than": "soon"},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
 			},
+			"bad-include-hidden": map[string]any{
+				"check": map[string]any{"type": "file", "path": "/x", "older_than": "1h", "include_hidden": "yes"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
+			},
 			"both-path-aliases": map[string]any{
 				"check": map[string]any{"type": "file", "path": "/x", "paths": []any{"/y"}, "older_than": "1h"},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
@@ -288,6 +293,7 @@ func TestValidateFileWatchErrors(t *testing.T) {
 		"watches.bad-exist.check.existence requires on: delete",
 		"watches.no-path.check: file check requires path or paths",
 		"watches.bad-older-than.check.older_than must be a valid positive duration",
+		"watches.bad-include-hidden.check.include_hidden must be a boolean",
 		"watches.both-path-aliases.check: file check must define only one of path or paths",
 	}
 	for _, w := range want {

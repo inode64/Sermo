@@ -1005,15 +1005,16 @@ func buildCountCheck(b base, entry map[string]any) (Check, string) {
 			return nil, "count check delta requires a positive within (e.g. 2m)"
 		}
 		return countCheck{
-			base:       b,
-			path:       path,
-			kind:       kind,
-			recursive:  cfgval.Bool(entry[CheckKeyRecursive]),
-			deltaOp:    op,
-			deltaValue: val,
-			window:     window,
-			clock:      time.Now,
-			state:      &countState{},
+			base:          b,
+			path:          path,
+			kind:          kind,
+			recursive:     cfgval.Bool(entry[CheckKeyRecursive]),
+			includeHidden: cfgval.Bool(entry[CheckKeyIncludeHidden]),
+			deltaOp:       op,
+			deltaValue:    val,
+			window:        window,
+			clock:         time.Now,
+			state:         &countState{},
 		}, ""
 	}
 	if cfgval.String(entry[CheckKeyWithin]) != "" {
@@ -1033,7 +1034,7 @@ func buildCountCheck(b base, entry map[string]any) (Check, string) {
 	if err != nil {
 		return nil, "count check value must be numeric"
 	}
-	return countCheck{base: b, path: path, kind: kind, recursive: cfgval.Bool(entry[CheckKeyRecursive]), op: op, value: val}, ""
+	return countCheck{base: b, path: path, kind: kind, recursive: cfgval.Bool(entry[CheckKeyRecursive]), includeHidden: cfgval.Bool(entry[CheckKeyIncludeHidden]), op: op, value: val}, ""
 }
 
 // buildStorageCheck builds a storage space/inode and/or mount check.
@@ -1516,7 +1517,7 @@ func buildSizeCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	if window <= 0 {
 		return nil, "size check requires a positive within (e.g. 1h)"
 	}
-	return &sizeCheck{base: b, path: path, growBy: growBy, window: window, sampler: deps.SizeSampler, clock: time.Now, state: &sizeState{}}, ""
+	return &sizeCheck{base: b, path: path, growBy: growBy, window: window, includeHidden: cfgval.Bool(entry[CheckKeyIncludeHidden]), sampler: deps.SizeSampler, clock: time.Now, state: &sizeState{}}, ""
 }
 
 // HTTPProxySchemeList is the user-facing list of accepted HTTP check proxy

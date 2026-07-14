@@ -60,6 +60,7 @@ const (
 	CheckKeyHost                  = "host"
 	CheckKeyHTTP3                 = "http3"
 	CheckKeyID                    = "id"
+	CheckKeyIncludeHidden         = "include_hidden"
 	CheckKeyInterface             = "interface"
 	CheckKeyInterfaceMatch        = "interface_match"
 	CheckKeyJSON                  = "json"
