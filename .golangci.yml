@@ -150,6 +150,7 @@ linters:
         - regexpMust
         - sloppyLen
         - sloppyTypeAssert
+        - singleCaseSwitch
         - typeSwitchVar
         - underef
         - unlambda
