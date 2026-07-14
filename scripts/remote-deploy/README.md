@@ -89,7 +89,8 @@ free space. They remain `dry_run: true`, with no hook or external notifier.
 When `/usr/share/GeoIP` exists on a target, the generated configuration also
 adds an alert-only recursive file watch. It reports each GeoIP database file
 whose modification age exceeds `20` days (`older_than: 480h`); it has no hook
-or external notification action.
+or external notification action. Its summary includes the observed age, limit
+and number of regular database files scanned.
 
 When endpoint hints are available, generated service files override catalog
 `variables.host` and `variables.port` for Cloudflare Tunnel, BIND/named and

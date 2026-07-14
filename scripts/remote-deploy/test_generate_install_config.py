@@ -209,5 +209,31 @@ class EndpointGenerationTest(unittest.TestCase):
             self.assertIn("type: storage", body)
             self.assertIn("mounted: true", body)
 
+    def test_generates_geoip_summary_when_database_directory_exists(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("", encoding="utf-8")
+        (stage / "geoip_directory").write_text(f"{generator.GEOIP_DATABASE_DIRECTORY}\n", encoding="utf-8")
+        options = generator.GenerationOptions(
+            web_port=9797,
+            web_password="test",
+            storage_free_pct="5%",
+            expand_by="5G",
+            smart_interval="24h",
+            hdparm_interval="6h",
+            users_watch=False,
+            active_services_only=True,
+            catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
+        )
+
+        generator.generate_for_host("host", stage, root / "configs", options)
+
+        body = (root / "configs/host/root/etc/sermo/watches/geoip-database-freshness.yml").read_text(encoding="utf-8")
+        self.assertIn('summary: "GeoIP ${value} is older than ${older_than} in ${number_files} files"', body)
+
 if __name__ == "__main__":
     unittest.main()

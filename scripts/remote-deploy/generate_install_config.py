@@ -1588,6 +1588,7 @@ dry_run: true
                     f"  - {yaml_quote(GEOIP_DATABASE_DIRECTORY)}",
                     "recursive: true",
                     f"older_than: {GEOIP_DATABASE_OLDER_THAN}",
+                    'summary: "GeoIP ${value} is older than ${older_than} in ${number_files} files"',
                 ],
                 cycles=0,
             ),
