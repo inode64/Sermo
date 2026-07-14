@@ -152,7 +152,7 @@ func New(c Config) Engine {
 			return report.Locks, nil
 		},
 		Guard:            guardClosure(tree, deps, c.MetricSample, c.Changed),
-		Preflight:        sectionRunner(tree, config.SectionPreflight, deps, c.MetricSample),
+		Preflight:        sectionRunner(tree, deps, c.MetricSample),
 		Postflight:       verifyRunner(tree, deps, c.MetricSample),
 		RestartIdentity:  restartIdentityClosure(c.Manager, c.Unit, discover, c.Discoverer, selectors),
 		ReloadFunc:       reloadClosure(tree, deps, c.Manager, c.Backend, c.Unit, c.Discoverer, selectors),
@@ -493,11 +493,11 @@ func checkDepsForEval(ctx context.Context, deps checks.Deps, sample func(context
 	return deps
 }
 
-// sectionRunner builds and runs a checks/preflight section, returning its
+// sectionRunner builds and runs the checks/preflight section, returning its
 // evaluated outcome. A missing section is a trivial pass.
-func sectionRunner(tree map[string]any, section string, deps checks.Deps, sample func(context.Context) checks.MetricReader) func(context.Context) checks.Outcome {
+func sectionRunner(tree map[string]any, deps checks.Deps, sample func(context.Context) checks.MetricReader) func(context.Context) checks.Outcome {
 	return func(ctx context.Context) checks.Outcome {
-		entries, _ := tree[section].(map[string]any)
+		entries, _ := tree[config.SectionPreflight].(map[string]any)
 		built, warnings := checks.BuildWithWarnings(entries, checkDepsForEval(ctx, deps, sample))
 		results := checks.BuildWarningResults(warnings)
 		results = append(results, checks.Run(ctx, built, 0)...)

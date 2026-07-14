@@ -26,12 +26,12 @@ func (f *fakeSizer) sample(context.Context, string, bool) (int64, error) {
 
 func (f *fakeSizer) clock() time.Time { return f.now }
 
-func newSizeCheck(grow int64, window time.Duration, fz *fakeSizer) *sizeCheck {
+func newSizeCheck(fz *fakeSizer) *sizeCheck {
 	return &sizeCheck{
 		base:    base{name: "s", timeout: time.Second},
 		path:    "/x",
-		growBy:  grow,
-		window:  window,
+		growBy:  gib,
+		window:  time.Hour,
 		sampler: fz.sample,
 		clock:   fz.clock,
 		state:   &sizeState{},
@@ -42,7 +42,7 @@ const gib = 1 << 30
 
 func TestSizeGrowthAlerts(t *testing.T) {
 	fz := &fakeSizer{sizes: []int64{1 * gib, 1 * gib, 3 * gib}, now: time.Unix(0, 0)}
-	c := newSizeCheck(1*gib, time.Hour, fz)
+	c := newSizeCheck(fz)
 
 	// First cycle: baseline only, no growth -> ok (no alert).
 	if r := c.Run(context.Background()); r.OK {
@@ -66,7 +66,7 @@ func TestSizeGrowthAlerts(t *testing.T) {
 
 func TestSizeDecreaseDoesNotAlert(t *testing.T) {
 	fz := &fakeSizer{sizes: []int64{5 * gib, 1 * gib}, now: time.Unix(0, 0)}
-	c := newSizeCheck(1*gib, time.Hour, fz)
+	c := newSizeCheck(fz)
 	_ = c.Run(context.Background()) // baseline 5GiB
 	fz.now = fz.now.Add(10 * time.Minute)
 	if r := c.Run(context.Background()); r.OK {
@@ -78,7 +78,7 @@ func TestSizeWindowPrunesOldGrowth(t *testing.T) {
 	// Grows slowly: +0.5GiB every 40min. Over any 1h window the growth is <1GiB,
 	// so it must never alert even though the total over 2h is >1GiB.
 	fz := &fakeSizer{sizes: []int64{1 * gib, 1*gib + gib/2, 2 * gib, 2*gib + gib/2}, now: time.Unix(0, 0)}
-	c := newSizeCheck(1*gib, time.Hour, fz)
+	c := newSizeCheck(fz)
 	for step := range 4 {
 		if r := c.Run(context.Background()); r.OK {
 			t.Fatalf("step %d: slow growth within window must not alert: %s", step, r.Message)
@@ -198,7 +198,7 @@ func TestHumanizeSigned(t *testing.T) {
 func TestSizeGrowthAtExactThreshold(t *testing.T) {
 	// Growth of exactly grow_by trips the check (growth >= growBy, not >).
 	fz := &fakeSizer{sizes: []int64{1 * gib, 2 * gib}, now: time.Unix(0, 0)}
-	c := newSizeCheck(1*gib, time.Hour, fz)
+	c := newSizeCheck(fz)
 	if r := c.Run(context.Background()); r.OK {
 		t.Fatalf("baseline cycle must not alert: %s", r.Message)
 	}

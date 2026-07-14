@@ -49,8 +49,8 @@ func (r *scriptedRunner) ran(name string) bool {
 
 func depsWith(runner execx.Runner) checks.Deps { return checks.Deps{Runner: runner} }
 
-func reloadClosureForTest(tree map[string]any, deps checks.Deps, mgr Manager, backend, unit string) func(context.Context) error {
-	return reloadClosure(tree, deps, mgr, backend, unit, process.Discoverer{}, nil)
+func reloadClosureForTest(tree map[string]any, deps checks.Deps, mgr Manager, unit string) func(context.Context) error {
+	return reloadClosure(tree, deps, mgr, "systemd", unit, process.Discoverer{}, nil)
 }
 
 type reloadProcessReader struct {
@@ -84,7 +84,7 @@ func reloadDiscoverer(ids map[int]process.Identity) process.Discoverer {
 
 func TestReloadClosureNoSpecUsesBackendReload(t *testing.T) {
 	mgr := &fakeManager{canReload: true}
-	reload := reloadClosureForTest(map[string]any{}, depsWith(&scriptedRunner{}), mgr, "systemd", "mysqld")
+	reload := reloadClosureForTest(map[string]any{}, depsWith(&scriptedRunner{}), mgr, "mysqld")
 	if err := reload(context.Background()); err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestReloadClosureNoSpecUsesBackendReload(t *testing.T) {
 
 func TestReloadClosureNoSpecRejectsUnsupportedBackendReload(t *testing.T) {
 	mgr := &fakeManager{canReload: false}
-	reload := reloadClosureForTest(map[string]any{}, depsWith(&scriptedRunner{}), mgr, "systemd", "mysqld")
+	reload := reloadClosureForTest(map[string]any{}, depsWith(&scriptedRunner{}), mgr, "mysqld")
 
 	err := reload(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "does not support reload") {
@@ -113,7 +113,7 @@ func TestReloadClosureAutoCommandPrefersBackendWhenSupported(t *testing.T) {
 	mgr := &fakeManager{canReload: true}
 	runner := &scriptedRunner{}
 	tree := map[string]any{"reload": map[string]any{"command": []any{"nginx", "-s", "reload"}, "when": "auto"}}
-	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "systemd", "nginx")
+	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "nginx")
 	if err := reload(context.Background()); err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestReloadClosureAutoCommandFallsBackWhenUnsupported(t *testing.T) {
 	mgr := &fakeManager{canReload: false} // the unit has no ExecReload / reload()
 	runner := &scriptedRunner{}
 	tree := map[string]any{"reload": map[string]any{"command": []any{"nginx", "-s", "reload"}}}
-	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "systemd", "nginx")
+	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "nginx")
 	if err := reload(context.Background()); err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestReloadClosureAutoCommandReportsBackendSupportError(t *testing.T) {
 	mgr := &fakeManager{reloadSupportErr: errors.New("systemctl unavailable")}
 	runner := &scriptedRunner{}
 	tree := map[string]any{"reload": map[string]any{"command": []any{"nginx", "-s", "reload"}}}
-	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "systemd", "nginx")
+	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "nginx")
 
 	err := reload(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "reload support: systemctl unavailable") {
@@ -159,7 +159,7 @@ func TestReloadClosureAutoCommandReportsBackendSupportError(t *testing.T) {
 func TestReloadClosureCommandWithoutRunnerReturnsError(t *testing.T) {
 	mgr := &fakeManager{canReload: false}
 	tree := map[string]any{"reload": map[string]any{"command": []any{"sermo-no-such-command-xyz"}, "when": "always"}}
-	reload := reloadClosureForTest(tree, checks.Deps{}, mgr, "systemd", "svc")
+	reload := reloadClosureForTest(tree, checks.Deps{}, mgr, "svc")
 
 	if err := reload(context.Background()); err == nil {
 		t.Fatal("reload without an injected runner returned nil, want command error")
@@ -179,7 +179,7 @@ func TestReloadClosureCommandDidNotStartWithoutRunnerError(t *testing.T) {
 		"reloadctl": {ExitCode: -1},
 	}}
 	tree := map[string]any{"reload": map[string]any{"command": []any{"reloadctl"}, "when": "always"}}
-	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "systemd", "svc")
+	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "svc")
 
 	err := reload(context.Background())
 	if err == nil || err.Error() != execx.CommandDidNotStart {
@@ -194,7 +194,7 @@ func TestReloadClosureCommandStartErrorUsesOperatorMessage(t *testing.T) {
 		errs:    map[string]error{"reloadctl": errors.New("run reloadctl: executable file not found")},
 	}
 	tree := map[string]any{"reload": map[string]any{"command": []any{"reloadctl"}, "when": "always"}}
-	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "systemd", "svc")
+	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "svc")
 
 	err := reload(context.Background())
 	if err == nil || err.Error() != "executable file not found" {
@@ -214,7 +214,7 @@ func TestReloadClosureSignalSentToMainPID(t *testing.T) {
 	defer signal.Stop(got)
 
 	tree := map[string]any{"reload": map[string]any{"signal": "USR1", "when": "always"}}
-	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "systemd", "myd")
+	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "myd")
 	if err := reload(context.Background()); err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestReloadClosureSignalHonorsCanceledContext(t *testing.T) {
 		respectContext: true,
 	}
 	tree := map[string]any{"reload": map[string]any{"signal": "USR1", "when": "always"}}
-	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "systemd", "myd")
+	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "myd")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 

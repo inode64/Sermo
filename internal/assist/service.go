@@ -62,7 +62,7 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	if len(generic) > 0 && p.Confirm("Review active services without catalog profiles?", false) {
 		addServiceGroup(p, env, services, generic, "Which uncataloged active services do you want to monitor?", true)
 	}
-	return controlledResult(services)
+	return controlledResult(services), nil
 }
 
 // addServiceGroup gathers the per-service properties before asking about shared

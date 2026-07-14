@@ -140,8 +140,8 @@ func servePlainSMTP(t *testing.T, ln net.Listener, commands chan<- string) {
 	}
 	defer c.Close()
 	br := bufio.NewReader(c)
-	write := func(format string, args ...any) {
-		_, _ = fmt.Fprintf(c, format+"\r\n", args...)
+	write := func(text string) {
+		_, _ = fmt.Fprint(c, text+"\r\n")
 	}
 	write("220 local test smtp")
 	for {
@@ -298,7 +298,7 @@ func TestEmailSendDispatchesToSender(t *testing.T) {
 }
 
 func TestBuildMailMessageHeadersAndInjectionGuard(t *testing.T) {
-	raw := renderMailMessage(t, "sermo@example.com", []string{"a@example.com", "b@example.com"}, Message{
+	raw := renderMailMessage(t, []string{"a@example.com", "b@example.com"}, Message{
 		Subject: "alert\r\nBcc: evil@example.com", // header-injection attempt
 		Body:    "line1\nline2",
 	})
@@ -337,7 +337,7 @@ func TestCRLFBodyNormalizesLineEndings(t *testing.T) {
 }
 
 func TestBuildMailMessageEncodesNonASCIISubject(t *testing.T) {
-	raw := renderMailMessage(t, "sermo@example.com", []string{"a@example.com"}, Message{
+	raw := renderMailMessage(t, []string{"a@example.com"}, Message{
 		Subject: "Alerta de memoria: 95% en café",
 		Body:    "b",
 	})
@@ -349,14 +349,14 @@ func TestBuildMailMessageEncodesNonASCIISubject(t *testing.T) {
 		t.Fatalf("subject not RFC 2047 encoded:\n%s", raw)
 	}
 	// A plain ASCII subject is still passed through readably.
-	ascii := renderMailMessage(t, "sermo@example.com", []string{"a@example.com"}, Message{Subject: "plain alert", Body: "b"})
+	ascii := renderMailMessage(t, []string{"a@example.com"}, Message{Subject: "plain alert", Body: "b"})
 	if !strings.Contains(ascii, "Subject: plain alert\r\n") {
 		t.Fatalf("ASCII subject should be unchanged:\n%s", ascii)
 	}
 }
 
 func TestBuildMailMessageHTMLMultipart(t *testing.T) {
-	raw := renderMailMessage(t, "sermo@example.com", []string{"ops@example.com"}, Message{
+	raw := renderMailMessage(t, []string{"ops@example.com"}, Message{
 		Subject: "report",
 		Body:    "plain body",
 		HTML:    "<strong>html body</strong>",
@@ -381,9 +381,9 @@ func TestBuildMailMessageValidatesAddresses(t *testing.T) {
 	}
 }
 
-func renderMailMessage(t *testing.T, from string, to []string, msg Message) string {
+func renderMailMessage(t *testing.T, to []string, msg Message) string {
 	t.Helper()
-	m, err := buildMailMessage(from, to, msg)
+	m, err := buildMailMessage("sermo@example.com", to, msg)
 	if err != nil {
 		t.Fatal(err)
 	}
