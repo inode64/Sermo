@@ -596,7 +596,7 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Tim
 				w.emitAlerts(ctx, ev, r, fireState.rising, fireState.change)
 			}
 		} else if fireState.recovered && w.shouldEmitRuleEvent(r, true) {
-			w.emit(Event{Kind: eventKindRecovered, Rule: r.Name, Message: "rule condition recovered"})
+			w.emit(Event{Kind: eventKindRecovered, Rule: r.Name, Message: w.recoveredRuleMessage(ev, r, fireState.change)})
 		}
 	}
 }
@@ -1002,6 +1002,30 @@ func (w *Worker) expandRuleRuntime(msg string, ev *rules.Evaluator, r rules.Rule
 	return w.expandRuntimeWithContext(msg, event, w.ruleRuntimeContext(ev, r, change))
 }
 
+// recoveredRuleMessage records the current reading for a simple check condition,
+// so an operator can distinguish a genuine recovery from a noisy threshold.
+func (w *Worker) recoveredRuleMessage(ev *rules.Evaluator, r rules.Rule, change rules.ChangeContext) string {
+	const prefix = "rule condition recovered"
+	rc := w.ruleRuntimeContext(ev, r, change)
+	if rc.checkValue == "" {
+		return prefix
+	}
+
+	label := strings.TrimSpace(strings.Join([]string{rc.checkType, rc.checkMetric}, " "))
+	if label == "" {
+		label = rc.checkName
+	}
+	if label == "" {
+		return prefix
+	}
+
+	message := prefix + ": " + label + " current " + rc.checkValue
+	if rc.checkOp != "" && rc.checkThreshold != "" {
+		message += " (threshold " + rc.checkOp + " " + rc.checkThreshold + ")"
+	}
+	return message
+}
+
 // expandRuntime substitutes the runtime built-ins a message may carry: event
 // fields such as ${date}/${event}/${action}/${service}, and the rule context
 // supplied by expandRuleRuntime. ${host} was already substituted at resolution.
@@ -1156,7 +1180,7 @@ func setRuntimeField(field *string, value string) {
 }
 
 func formatRuntimeCheckValue(value any, unit string) string {
-	out := cfgval.String(value)
+	out := checks.FormatDisplayValue(checks.DataKeyValue, value)
 	if out == "" {
 		return ""
 	}

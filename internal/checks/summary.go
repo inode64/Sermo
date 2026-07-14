@@ -22,6 +22,7 @@ const (
 	summarySecondsPerWeek   = summaryDaysPerWeek * summarySecondsPerDay
 	summarySecondsPerMonth  = summaryDaysPerMonth * summarySecondsPerDay
 	summaryNumberBase       = 10
+	summaryNumberPrecision  = 2
 )
 
 var summaryReference = regexp.MustCompile(`\$\{([^}]+)\}`)
@@ -62,7 +63,7 @@ func ApplySummary(template string, entry map[string]any, result Result) Result {
 		if !ok {
 			return match
 		}
-		return formatSummaryValue(name, value)
+		return FormatDisplayValue(name, value)
 	})
 	return result
 }
@@ -109,7 +110,11 @@ func summaryMapValue(values map[string]any, path string) (any, bool) {
 	return value, true
 }
 
-func formatSummaryValue(name string, value any) string {
+// FormatDisplayValue renders a check value consistently for summaries, rule
+// events and notifications. Numeric values use grouped thousands and at most
+// two decimal places; duration and timestamp values retain their type-aware
+// presentation.
+func FormatDisplayValue(name string, value any) string {
 	switch v := value.(type) {
 	case time.Duration:
 		return formatSummaryDuration(v)
@@ -146,7 +151,7 @@ func formatSummaryValue(name string, value any) string {
 	case []any:
 		parts := make([]string, 0, len(v))
 		for _, item := range v {
-			parts = append(parts, formatSummaryValue(name, item))
+			parts = append(parts, FormatDisplayValue(name, item))
 		}
 		return strings.Join(parts, ", ")
 	default:
@@ -212,7 +217,8 @@ func formatSummaryNumber(number float64) string {
 	if math.IsNaN(number) || math.IsInf(number, 0) {
 		return "-"
 	}
-	raw := strconv.FormatFloat(number, 'f', -1, 64)
+	raw := strconv.FormatFloat(number, 'f', summaryNumberPrecision, 64)
+	raw = strings.TrimRight(strings.TrimRight(raw, "0"), ".")
 	return formatSummaryDecimal(raw)
 }
 

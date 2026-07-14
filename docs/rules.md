@@ -1854,6 +1854,11 @@ episode, then `recovered` is emitted when it clears. Use rule-level
 the global emission policy for that rule. Operation result events remain audit
 events and are recorded whenever the operation is attempted.
 
+For a recovered rule with exactly one direct check or metric leaf, the event also
+records the current formatted value and its configured operator and threshold.
+This makes threshold flapping visible without having to reconstruct the sample
+from the metrics history.
+
 Actions and types are coupled: the operation actions (`restart`, `start`,
 `stop`, `reload`, `resume`) belong to `type: remediation` rules — required there (a
 notify-only rule is `type: alert`) and rejected elsewhere. `alert` (with a

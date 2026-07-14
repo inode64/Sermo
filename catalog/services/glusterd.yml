@@ -48,7 +48,7 @@ watches:
       scope: service
       name: cpu_thread
       op: '>'
-      value: 1.09%
+      value: 90%
       optional: true
     for:
       duration: 5m

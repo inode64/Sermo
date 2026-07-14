@@ -42,3 +42,9 @@ func TestSummaryCheckKeepsUnknownReferencesVisible(t *testing.T) {
 		t.Fatalf("summary = %q", result.Message)
 	}
 }
+
+func TestFormatDisplayValueFormatsDecimalsAndThousands(t *testing.T) {
+	if got, want := FormatDisplayValue(DataKeyValue, 12345.678), "12.345,68"; got != want {
+		t.Fatalf("formatted number = %q, want %q", got, want)
+	}
+}
