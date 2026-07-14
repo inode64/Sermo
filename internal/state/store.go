@@ -759,7 +759,7 @@ func encodeSnapshotData(data map[string]any) (string, error) {
 
 func decodeSnapshotData(raw string) (map[string]any, error) {
 	if raw == "" {
-		return nil, nil
+		return nil, nil //nolint:nilnil // empty persisted data represents an absent snapshot
 	}
 	var data map[string]any
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
