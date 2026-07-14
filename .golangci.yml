@@ -44,6 +44,7 @@ linters:
     - modernize  # Go 1.22+ idioms (range int, slices.*, min/max, …)
     - ineffassign
     - intrange  # for i := 0; i < n; i++ → for i := range n (Go 1.22+)
+    - inamedparam  # interface parameters must name their domain role
     - mirror  # bytes.Index vs bytes.IndexByte, …
     - misspell
     - nilerr
@@ -52,6 +53,7 @@ linters:
     - nosprintfhostport  # host:port construction must preserve IPv6 correctness
     - nolintlint  # //nolint: directives must name a linter and stay justified
     - perfsprint  # avoid needless fmt allocations (errors.New, strconv, concatenation)
+    - predeclared  # avoid shadowing Go predeclared identifiers
     - reassign  # writes to other packages' package-level vars
     - recvcheck  # mixed value/pointer receivers on one type
     - rowserrcheck  # database/sql Rows.Err() left unchecked
@@ -142,6 +144,9 @@ linters:
       ignore-rules:
         - mosquitto
   # Considered and deliberately NOT enabled (wrapcheck pilot covers operation/ through config/; see exclusions):
+  #   containedctx — daemon-lifetime contexts are intentionally held by monitor,
+  #                  loader, state and web server owners.
+  #   gochecknoinits — internal/conn uses init solely for static protocol registration.
   #   wrapcheck (rest of tree) — later phases; hundreds of interface-boundary returns.
   #   makezero  — false positives on the conn/ packet builders, where a
   #               fixed-header make([]byte, N) followed by append(body) is intended.
