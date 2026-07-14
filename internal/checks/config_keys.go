@@ -119,6 +119,7 @@ const (
 	CheckKeySysfsChanges          = "sysfs_changes"
 	CheckKeyStatusPath            = "status_path"
 	CheckKeyStream                = "stream"
+	CheckKeySummary               = "summary"
 	CheckKeySubprotocol           = "subprotocol"
 	CheckKeyThreshold             = "threshold"
 	CheckKeyTimeout               = "timeout"

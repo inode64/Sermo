@@ -2157,6 +2157,47 @@ El único predicado `count: {op, value}` es requerido; emparéjalo con una venta
 modo que una ráfaga momentánea de hijos saliendo no se dispare. Hook extras:
 `SERMO_ZOMBIES` (el mismo valor que `SERMO_VALUE`, el recuento).
 
+### Resúmenes de checks
+
+Cada check acepta un texto opcional `summary`. Cuando existe, sustituye el
+mensaje normal del checker en el panel web, eventos emitidos, notificaciones y
+`SERMO_MESSAGE` de los hooks. Sin `summary`, Sermo mantiene el mensaje y la
+presentación específicos actuales del checker.
+
+`summary` se renderiza después de ejecutar el check. `${value}` es el valor
+observado usado por la comparación, `${trigger}` es el disparador activo cuando
+el checker lo expone, y cada campo resuelto del check puede referenciarse de
+forma directa o mediante `${check.<campo>}`. Los datos del resultado también
+están disponibles como `${result.<campo>}`. Los números usan puntos de miles;
+las duraciones y marcas de tiempo usan el formato legible habitual. Las
+referencias desconocidas permanecen visibles para identificar errores de nombre.
+
+```yaml
+check:
+  type: file
+  paths: [/usr/share/GeoIP]
+  recursive: true
+  older_than: 480h
+  summary: "GeoIP ${value} is older than ${older_than} in ${number_files} files"
+```
+
+Para un archivo regular no recursivo, `${number_files}` es `1`; para un
+directorio recursivo, es el número de archivos regulares explorados. Las
+variables normales de configuración se resuelven antes de renderizar el resumen,
+por lo que los checks de servicio pueden combinar valores de ejecución y
+variables del servicio:
+
+```yaml
+check:
+  type: sql
+  engine: sqlite
+  path: ${db_dir}/retry
+  query: "SELECT count(*) FROM tblblob"
+  op: ">"
+  value: ${db_cleanup_record_limit}
+  summary: "Retry DB has ${value} records (limit ${check.value}); cleanup age ${db_cleanup_age}"
+```
+
 ### `file` — atributos y vigencia de archivos/directorios
 
 Un watch `file` monitoriza uno o varios archivos/directorios en busca de cambios de
@@ -2178,6 +2219,7 @@ watches:
         - /srv/myapp/incoming
       recursive: true                 # optional, default false (whole subtree)
       older_than: 24h                 # opcional: edad de mtime; dispara cualquier ruta vencida
+      summary: "${path} edad ${value}, límite ${older_than}, archivos ${number_files}"
       size: { op: ">", value: 1048576 }   # edge threshold; or `size: { on: change }`
       permissions: { on: change }     # mode bits (perm + setuid/setgid/sticky)
       owner: { on: change }           # owning uid/gid

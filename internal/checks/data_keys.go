@@ -127,6 +127,7 @@ const (
 	DataKeySubprotocol        = CheckKeySubprotocol
 	DataKeyTemp               = sensorTemp
 	DataKeyThreshold          = CheckKeyThreshold
+	DataKeyTrigger            = "trigger"
 	DataKeyTotal              = fieldTotal
 	DataKeyTotalBytes         = fieldTotalBytes
 	DataKeyType               = CheckKeyType
@@ -140,6 +141,7 @@ const (
 	DataKeyVersionShort       = "version_short"
 	DataKeyVoltage            = sensorVoltage
 	DataKeyWindow             = "window"
+	DataKeyNumberFiles        = "number_files"
 	DataKeyZombies            = "zombies"
 )
 

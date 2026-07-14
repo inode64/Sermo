@@ -402,7 +402,8 @@ activity es un evento.
 
 Estas columnas leen las lecturas actuales publicadas por el último ciclo del
 daemon y rehidratadas desde estado persistente tras reiniciar el daemon. La edad
-de file es el valor ya formateado que usa `older_than`; las comprobaciones SQL de
+de file es el valor ya formateado que usa `older_than`; un `summary` configurado
+del check sustituye las columnas de edad y límite por Summary; las comprobaciones SQL de
 servicio exponen el escalar observado como `Value` y la comparación efectiva
 como `Condition`, por lo que un resultado como `51 > 50` se ve sin analizar el
 texto de eventos.

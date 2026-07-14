@@ -97,6 +97,30 @@ func TestFileWatchOlderThanFiresPerPathAndRearms(t *testing.T) {
 	}
 }
 
+func TestFileWatchSummaryUsesObservedAgeAndFileCount(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.txt")
+	writeSize(t, path, 1)
+	now := time.Date(2026, time.July, 12, 12, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(path, now.Add(-2*time.Hour), now.Add(-2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	h := &fileWatchHarness{}
+	w := h.watcher(path, false, fileCond{olderThan: time.Hour})
+	w.summary = "GeoIP ${value} is older than ${older_than} in ${number_files} files"
+	w.check = map[string]any{checks.CheckKeyOlderThan: "1h"}
+	w.now = func() time.Time { return now }
+
+	w.runCycle(context.Background())
+
+	const want = "GeoIP 2h is older than 1h in 1 files"
+	if len(h.fired) != 1 || h.fired[0][sermoEnvMessage] != want {
+		t.Fatalf("hook env = %v, want summary %q", h.fired, want)
+	}
+	if len(h.events) != 1 || h.events[0].Message != want {
+		t.Fatalf("events = %+v, want summary %q", h.events, want)
+	}
+}
+
 func TestFileWatchOlderThanFiresAfterObserveOnlyCycle(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "old.txt")
 	writeSize(t, path, 1)

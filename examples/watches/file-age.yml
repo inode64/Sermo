@@ -8,5 +8,6 @@ check:
     - /srv/incoming/orders.csv
     - /srv/incoming/summary.csv
   older_than: 24h
+  summary: "Incoming file age ${value}; limit ${older_than}; files ${number_files}"
 then:
   notify: [none]
