@@ -510,6 +510,72 @@ func TestParseRulesDropsSystemMetricRemediation(t *testing.T) {
 	}
 }
 
+func TestConditionUsesSystemMetric(t *testing.T) {
+	systemMetric := map[string]any{FieldScope: checks.MetricScopeSystem}
+	systemMetricCheck := map[string]any{FieldType: checks.CheckTypeMetric, FieldScope: checks.MetricScopeSystem}
+	tests := []struct {
+		name      string
+		node      map[string]any
+		refChecks map[string]any
+		want      bool
+	}{
+		{
+			name: "direct metric",
+			node: map[string]any{
+				ConditionMetric: systemMetric,
+			},
+			want: true,
+		},
+		{
+			name: "nested condition",
+			node: map[string]any{
+				ConditionAnd: []any{
+					map[string]any{ConditionMetric: map[string]any{FieldScope: checks.MetricScopeService}},
+					map[string]any{ConditionNot: map[string]any{ConditionMetric: systemMetric}},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "referenced metric check",
+			node: map[string]any{
+				ConditionFailed: map[string]any{FieldCheck: "host-cpu"},
+			},
+			refChecks: map[string]any{"host-cpu": systemMetricCheck},
+			want:      true,
+		},
+		{
+			name: "reference without check map remains conservative",
+			node: map[string]any{
+				ConditionActive: map[string]any{FieldCheck: "host-cpu", ConditionMetric: systemMetric},
+			},
+			want: false,
+		},
+		{
+			name: "inline failed metric",
+			node: map[string]any{
+				ConditionFailed: map[string]any{ConditionMetric: systemMetric},
+			},
+			want: true,
+		},
+		{
+			name: "malformed values",
+			node: map[string]any{
+				ConditionOr:     "not a list",
+				ConditionMetric: "not a mapping",
+			},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ConditionUsesSystemMetric(tt.node, tt.refChecks); got != tt.want {
+				t.Fatalf("ConditionUsesSystemMetric() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestNormalizeKeyIsSortedJSON(t *testing.T) {
 	// normalizeKey marshals to JSON (sorted keys) for a stable cache key, only
 	// falling back to %v formatting on a marshal error.

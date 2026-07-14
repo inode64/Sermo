@@ -157,47 +157,71 @@ func parseActions(then map[string]any) []Action {
 // only drive alert rules, never remediation, even if a rule slips past static
 // validation (catalog bug, partial reload, hand-built Rule).
 func ConditionUsesSystemMetric(node map[string]any, refChecks map[string]any) bool {
-	for key, v := range node {
-		switch key {
-		case ConditionAnd, ConditionOr:
-			list, ok := v.([]any)
-			if !ok {
-				continue
-			}
-			for _, c := range list {
-				if m, ok := c.(map[string]any); ok && ConditionUsesSystemMetric(m, refChecks) {
-					return true
-				}
-			}
-		case ConditionNot:
-			if m, ok := v.(map[string]any); ok && ConditionUsesSystemMetric(m, refChecks) {
-				return true
-			}
-		case ConditionMetric:
-			if m, ok := v.(map[string]any); ok && cfgval.AsString(m[FieldScope]) == checks.MetricScopeSystem {
-				return true
-			}
-		case ConditionFailed, ConditionActive:
-			m, ok := v.(map[string]any)
-			if !ok {
-				continue
-			}
-			if ref := cfgval.AsString(m[FieldCheck]); ref != "" {
-				if refChecks == nil {
-					continue
-				}
-				if c, ok := refChecks[ref].(map[string]any); ok &&
-					cfgval.AsString(c[FieldType]) == checks.CheckTypeMetric && cfgval.AsString(c[FieldScope]) == checks.MetricScopeSystem {
-					return true
-				}
-				continue
-			}
-			if c, ok := m[ConditionMetric].(map[string]any); ok && cfgval.AsString(c[FieldScope]) == checks.MetricScopeSystem {
-				return true
-			}
+	for key, value := range node {
+		if conditionEntryUsesSystemMetric(key, value, refChecks) {
+			return true
 		}
 	}
 	return false
+}
+
+func conditionEntryUsesSystemMetric(key string, value any, refChecks map[string]any) bool {
+	switch key {
+	case ConditionAnd, ConditionOr:
+		return conditionListUsesSystemMetric(value, refChecks)
+	case ConditionNot:
+		return conditionNodeUsesSystemMetric(value, refChecks)
+	case ConditionMetric:
+		return metricNodeUsesSystemScope(value)
+	case ConditionFailed, ConditionActive:
+		return conditionReferenceUsesSystemMetric(value, refChecks)
+	}
+	return false
+}
+
+func conditionListUsesSystemMetric(value any, refChecks map[string]any) bool {
+	list, ok := value.([]any)
+	if !ok {
+		return false
+	}
+	for _, child := range list {
+		if conditionNodeUsesSystemMetric(child, refChecks) {
+			return true
+		}
+	}
+	return false
+}
+
+func conditionNodeUsesSystemMetric(value any, refChecks map[string]any) bool {
+	node, ok := value.(map[string]any)
+	return ok && ConditionUsesSystemMetric(node, refChecks)
+}
+
+func metricNodeUsesSystemScope(value any) bool {
+	metric, ok := value.(map[string]any)
+	return ok && cfgval.AsString(metric[FieldScope]) == checks.MetricScopeSystem
+}
+
+func conditionReferenceUsesSystemMetric(value any, refChecks map[string]any) bool {
+	condition, ok := value.(map[string]any)
+	if !ok {
+		return false
+	}
+	if ref := cfgval.AsString(condition[FieldCheck]); ref != "" {
+		return referencedCheckUsesSystemMetric(ref, refChecks)
+	}
+	return metricNodeUsesSystemScope(condition[ConditionMetric])
+}
+
+func referencedCheckUsesSystemMetric(name string, refChecks map[string]any) bool {
+	if refChecks == nil {
+		return false
+	}
+	check, ok := refChecks[name].(map[string]any)
+	if !ok {
+		return false
+	}
+	return cfgval.AsString(check[FieldType]) == checks.CheckTypeMetric && cfgval.AsString(check[FieldScope]) == checks.MetricScopeSystem
 }
 
 // ReferencedChecks merges the sections a rule's failed/active references may
