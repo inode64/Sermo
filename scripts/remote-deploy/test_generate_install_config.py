@@ -209,6 +209,91 @@ class EndpointGenerationTest(unittest.TestCase):
             self.assertIn("type: storage", body)
             self.assertIn("mounted: true", body)
 
+    def test_generates_nfs_endpoint_check_for_fstab_mount(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("", encoding="utf-8")
+        (stage / "findmnt.json").write_text(
+            json.dumps({"filesystems": [{"target": "/mnt/portage", "fstype": "nfs4"}]}),
+            encoding="utf-8",
+        )
+        (stage / "fstab").write_text(
+            "k2keu3.intranet:/usr/portage /mnt/portage nfs4 defaults,_netdev 0 0\n",
+            encoding="utf-8",
+        )
+        (stage / "nfs_routes").write_text("k2keu3.intranet\t172.31.28.4\tintranet\n", encoding="utf-8")
+        options = generator.GenerationOptions(
+            web_port=9797,
+            web_password="test",
+            storage_free_pct="5%",
+            expand_by="5G",
+            smart_interval="24h",
+            hdparm_interval="6h",
+            users_watch=False,
+            active_services_only=True,
+            catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
+        )
+
+        report = generator.generate_for_host("host", stage, root / "configs", options)
+
+        mount_body = (root / "configs/host/root/etc/sermo/mounts/mount-mnt-portage.yml").read_text(encoding="utf-8")
+        endpoint_body = (root / "configs/host/root/etc/sermo/networks/nfs-k2keu3-intranet.yml").read_text(encoding="utf-8")
+        self.assertIn("type: storage", mount_body)
+        self.assertIn("type: nfs", endpoint_body)
+        self.assertIn('host: "k2keu3.intranet"', endpoint_body)
+        self.assertIn('interface: "intranet"', endpoint_body)
+        self.assertEqual(
+            report["nfs_endpoints"],
+            [{
+                "name": "nfs-k2keu3-intranet",
+                "host": "k2keu3.intranet",
+                "address": "172.31.28.4",
+                "interface": "intranet",
+                "paths": ["/mnt/portage"],
+            }],
+        )
+
+    def test_parses_ipv6_nfs_fstab_source(self):
+        self.assertEqual(generator.nfs_server_from_source("[fd00:41d0::4]:/srv/backup"), "fd00:41d0::4")
+        self.assertEqual(generator.nfs_server_from_source("invalid-source"), "")
+
+    def test_generates_nfs_endpoint_for_unmounted_fstab_entry(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        stage = root / "stage" / "host" / "out"
+        stage.mkdir(parents=True)
+        (stage / "init").write_text("systemd\n", encoding="utf-8")
+        (stage / "active_units").write_text("", encoding="utf-8")
+        (stage / "fstab").write_text(
+            "k2keu3.intranet:/srv/backup /mnt/backup nfs defaults,_netdev 0 0\n",
+            encoding="utf-8",
+        )
+        options = generator.GenerationOptions(
+            web_port=9797,
+            web_password="test",
+            storage_free_pct="5%",
+            expand_by="5G",
+            smart_interval="24h",
+            hdparm_interval="6h",
+            users_watch=False,
+            active_services_only=True,
+            catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
+        )
+
+        report = generator.generate_for_host("host", stage, root / "configs", options)
+
+        endpoint_body = (root / "configs/host/root/etc/sermo/networks/nfs-k2keu3-intranet.yml").read_text(encoding="utf-8")
+        mount_body = (root / "configs/host/root/etc/sermo/mounts/mount-mnt-backup.yml").read_text(encoding="utf-8")
+        self.assertIn("type: nfs", endpoint_body)
+        self.assertIn("type: storage", mount_body)
+        self.assertIn("mounted: true", mount_body)
+        self.assertEqual(report["nfs_endpoints"][0]["paths"], ["/mnt/backup"])
+
     def test_generates_geoip_summary_when_database_directory_exists(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)

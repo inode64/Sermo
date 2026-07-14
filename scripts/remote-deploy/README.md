@@ -70,6 +70,15 @@ safe `storage` check with `mounted: true` and the free-space threshold. This
 covers ext2/3/4, XFS, btrfs, vfat/exfat and the other local filesystem types in
 the generator inventory without invoking filesystem repair tools. The generation
 report records each selected path and filesystem type under `filesystems`.
+Network filesystems remain mount-only checks, but every `nfs` or `nfs4` entry in
+`/etc/fstab` also gets a native read-only NFS endpoint check against the server
+named in its source. This catches a reachable-but-stale mount, DNS or routing
+failure, and an unavailable NFS listener without mounting or touching the share;
+the generated endpoints are listed under `nfs_endpoints` in the report. The
+staging inventory resolves the NFS source and records its route, so the generated
+probe binds to that egress interface when one is known. Every fstab-backed
+network filesystem also receives its `mounted: true` watch even when it is not
+currently listed by `findmnt`, so an already-failed mount remains visible.
 
 Every generated configuration also includes an alert-only clock watch. It queries
 `time.cloudflare.com` and `pool.ntp.org` every five minutes and alerts after two

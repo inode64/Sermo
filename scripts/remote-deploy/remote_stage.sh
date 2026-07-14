@@ -218,6 +218,26 @@ if command -v lvs >/dev/null 2>&1; then
 fi
 if [ -r /etc/fstab ]; then
 	cp /etc/fstab "${out}/fstab" || true
+	: >"${out}/nfs_routes"
+	while IFS= read -r source; do
+		case "$source" in
+			\[*\]:/*)
+				host="${source#\[}"
+				host="${host%%\]:/*}"
+				;;
+			*:/*) host="${source%%:/*}" ;;
+			*) continue ;;
+		esac
+		address="$(getent ahostsv4 "$host" 2>/dev/null | awk 'NR == 1 { print $1 }')"
+		if [ -z "$address" ]; then
+			address="$(getent ahostsv6 "$host" 2>/dev/null | awk 'NR == 1 { print $1 }')"
+		fi
+		iface=""
+		if [ -n "$address" ]; then
+			iface="$(ip route get "$address" 2>/dev/null | awk '{ for (i = 1; i < NF; i++) if ($i == "dev") { print $(i + 1); exit } }')"
+		fi
+		printf '%s\t%s\t%s\n' "$host" "$address" "$iface" >>"${out}/nfs_routes"
+	done < <(awk '$1 !~ /^#/ && ($3 == "nfs" || $3 == "nfs4") { print $1 }' /etc/fstab)
 fi
 lsblk -J -O >"${out}/lsblk.json" 2>/dev/null || true
 lsblk -P -o NAME,KNAME,PATH,TYPE,FSTYPE,MOUNTPOINTS,RM,RO,TRAN,MODEL,SERIAL,SIZE,PKNAME >"${out}/lsblk.pairs" 2>/dev/null || true

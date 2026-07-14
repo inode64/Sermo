@@ -15,7 +15,8 @@ The generated configuration is intentionally dry-run by default. Local storage
 capacity watches may emit ``then.expand`` actions, but dry-run prevents automatic
 execution. Fstab-backed local storage watches also expose mount units. Network
 filesystems are generated as mount-only watches so a stale NFS/CIFS mount cannot
-block the daemon in ``statfs``.
+block the daemon in ``statfs``. NFS mounts also receive a separate native NFS
+endpoint check against their configured server.
 """
 
 from __future__ import annotations
@@ -84,6 +85,7 @@ REAL_STORAGE_FS = {
 }
 
 NETWORK_FS = {"nfs", "nfs4", "cifs", "smb3", "fuse.sshfs", "sshfs", "ceph", "glusterfs"}
+NFS_FILESYSTEMS = {"nfs", "nfs4"}
 SKIP_MOUNT_PREFIXES = (
     "/dev",
     "/proc",
@@ -108,6 +110,7 @@ GEOIP_DATABASE_DIRECTORY = "/usr/share/GeoIP"
 GEOIP_DATABASE_OLDER_THAN = "480h"
 ROOT_MOUNT_TARGET = "/"
 SUSPICIOUS_USER_COUNT = 20
+NFS_ENDPOINT_TIMEOUT = "5s"
 ENDPOINT_CHECK_TYPES = {"dns", "http", "ports", "tcp"}
 TCP_PROTOCOL = "tcp"
 UDP_PROTOCOL = "udp"
@@ -372,6 +375,29 @@ def parse_fstab(text: str) -> list[dict[str, str]]:
         if target != "none" and target.startswith("/"):
             entries.append({"source": source, "target": target, "fstype": fstype.lower()})
     return entries
+
+
+def nfs_server_from_source(source: str) -> str:
+    """Return the server portion of an NFS fstab source, if it is unambiguous."""
+    source = source.strip()
+    if source.startswith("["):
+        end = source.find("]")
+        if end > 1 and source[end + 1 :].startswith(":/"):
+            return source[1:end]
+        return ""
+    host, separator, path = source.partition(":")
+    if not separator or not host or not path.startswith("/"):
+        return ""
+    return host
+
+
+def parse_nfs_routes(text: str) -> dict[str, dict[str, str]]:
+    routes: dict[str, dict[str, str]] = {}
+    for line in text.splitlines():
+        host, address, iface = (line.split("\t") + ["", "", ""])[:3]
+        if host and iface:
+            routes[host] = {"address": address, "interface": iface}
+    return routes
 
 
 def walk_lsblk_devices(devices: list[dict] | None) -> list[dict]:
@@ -1160,6 +1186,7 @@ def generate_for_host(host_slug: str, stage: Path, configs_dir: Path, options: G
         "raid_arrays": [],
         "lvm_volumes": [],
         "mount_units": [],
+        "nfs_endpoints": [],
         "skipped_watches": [],
         "config_tar": str(configs_dir / host_slug / "sermo-config.tgz"),
     }
@@ -1244,6 +1271,50 @@ dry_run: true
     def skip(kind: str, reason: str) -> None:
         report["skipped_watches"].append({"kind": kind, "reason": reason})
 
+    nfs_routes = parse_nfs_routes(read_text(stage / "nfs_routes"))
+    nfs_endpoint_reports: dict[str, dict] = {}
+
+    def add_nfs_endpoint(fstab: dict[str, str]) -> None:
+        if fstab["fstype"] not in NFS_FILESYSTEMS:
+            return
+        host = nfs_server_from_source(fstab["source"])
+        if not host:
+            skip("nfs_endpoint", f"cannot parse NFS server from {fstab['source']} for {fstab['target']}")
+            return
+        endpoint = nfs_endpoint_reports.get(host)
+        if endpoint:
+            if fstab["target"] not in endpoint["paths"]:
+                endpoint["paths"].append(fstab["target"])
+            return
+        endpoint_name = f"nfs-{slug(host)}"
+        route = nfs_routes.get(host, {})
+        check_lines = [
+            "type: nfs",
+            f"host: {yaml_quote(host)}",
+            f"timeout: {NFS_ENDPOINT_TIMEOUT}",
+        ]
+        if route.get("interface"):
+            check_lines.append(f"interface: {yaml_quote(route['interface'])}")
+        add_watch(
+            "networks",
+            endpoint_name,
+            simple_watch(
+                endpoint_name,
+                "network",
+                "1m",
+                check_lines,
+                cycles=3,
+                display_name=f"NFS {host}",
+            ),
+        )
+        endpoint = {"name": endpoint_name, "host": host, "paths": [fstab["target"]]}
+        if route.get("address"):
+            endpoint["address"] = route["address"]
+        if route.get("interface"):
+            endpoint["interface"] = route["interface"]
+        nfs_endpoint_reports[host] = endpoint
+        report["nfs_endpoints"].append(endpoint)
+
     features = parse_features(stage)
     disks, usb_targets = block_inventory(stage)
 
@@ -1255,6 +1326,39 @@ dry_run: true
     fstab_entries = parse_fstab(read_text(stage / "fstab"))
     fstab_targets = {entry["target"]: entry for entry in fstab_entries}
     mount_watch_targets: set[str] = set()
+
+    def add_mount_watch(fstab: dict[str, str]) -> None:
+        nonlocal mount_count
+        target = fstab["target"]
+        if target in mount_watch_targets or not target.startswith("/"):
+            return
+        if target != ROOT_MOUNT_TARGET and any(target == prefix or target.startswith(prefix + "/") for prefix in SKIP_MOUNT_PREFIXES):
+            return
+        name = f"mount-{slug(target)}"
+        body = (
+            simple_watch(
+                name,
+                "storage",
+                "1m",
+                [
+                    "type: storage",
+                    f"path: {yaml_quote(target)}",
+                    "mounted: true",
+                ],
+                cycles=3,
+            )
+            + mount_unit_block()
+        )
+        add_watch("mounts", name, body)
+        mount_count += 1
+        mount_watch_targets.add(target)
+        report["mount_units"].append({
+            "name": name,
+            "path": target,
+            "source": fstab["source"],
+            "fstype": fstab["fstype"],
+            "folder": "mounts",
+        })
 
     for mount in mounts:
         target = mount.get("target") or ""
@@ -1302,31 +1406,14 @@ dry_run: true
         fstype = (mount.get("fstype") or "").lower()
         if not fstab or (fstype not in NETWORK_FS and fstab["fstype"] not in NETWORK_FS and target not in usb_targets):
             continue
-        name = f"mount-{slug(target)}"
-        body = (
-            simple_watch(
-                name,
-                "storage",
-                "1m",
-                [
-                    "type: storage",
-                    f"path: {yaml_quote(target)}",
-                    "mounted: true",
-                ],
-                cycles=3,
-            )
-            + mount_unit_block()
-        )
-        add_watch("mounts", name, body)
-        mount_count += 1
-        mount_watch_targets.add(target)
-        report["mount_units"].append({
-            "name": name,
-            "path": target,
-            "source": fstab["source"],
-            "fstype": fstab["fstype"],
-            "folder": "mounts",
-        })
+        add_mount_watch(fstab)
+
+        add_nfs_endpoint(fstab)
+
+    for fstab in fstab_entries:
+        if fstab["fstype"] in NETWORK_FS:
+            add_mount_watch(fstab)
+        add_nfs_endpoint(fstab)
 
     if storage_count == 0:
         skip("storage", "no local mounted storage filesystem discovered")
