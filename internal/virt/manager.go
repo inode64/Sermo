@@ -130,7 +130,7 @@ func NewManager(spec Spec) Manager {
 
 // Client is the small libvirt surface Manager needs. Tests inject a fake.
 type Client interface {
-	ConnectToURI(libvirt.ConnectURI) error
+	ConnectToURI(uri libvirt.ConnectURI) error
 	Disconnect() error
 	Domains() ([]libvirt.Domain, error)
 	DomainLookupByName(name string) (libvirt.Domain, error)

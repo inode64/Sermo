@@ -80,7 +80,9 @@ func tlsClientConfig(host string) *tls.Config {
 // net.PacketConn — both satisfy the SetDeadline interface) when the context
 // carries one. A context without a deadline is a no-op. It centralizes the
 // "propagate the probe timeout to the socket" step every protocol repeats.
-func applyDeadline(ctx context.Context, c interface{ SetDeadline(time.Time) error }) {
+func applyDeadline(ctx context.Context, c interface {
+	SetDeadline(deadline time.Time) error
+}) {
 	if dl, ok := ctx.Deadline(); ok {
 		_ = c.SetDeadline(dl)
 	}
