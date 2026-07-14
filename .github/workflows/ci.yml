@@ -50,6 +50,10 @@ jobs:
       - name: deadcode (advisory)
         continue-on-error: true
         run: make deadcode
+      # Advisory baseline: report complexity, duplication, and avoidable
+      # formatting allocations without failing PRs on existing debt.
+      - name: quality report (advisory)
+        run: make quality-report
 
   race:
     name: race detector
