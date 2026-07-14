@@ -108,6 +108,8 @@ type procWatcher struct {
 	name      string
 	match     ProcMatch
 	cond      procCond
+	summary   string
+	check     map[string]any
 	hook      HookSpec
 	kill      *killSpec
 	notifiers []notify.Notifier
@@ -248,12 +250,13 @@ func (w *procWatcher) publishSnapshot(samples []ProcInfo, ok bool) {
 	if len(samples) > 0 {
 		summary += fmt.Sprintf(", rss %d bytes", rssTotal)
 	}
-	w.publish(w.name, checks.CheckTypeProcess, checks.Result{
+	result := checks.Result{
 		Check:   w.name,
 		OK:      true,
 		Message: summary,
 		Data:    data,
-	})
+	}
+	w.publish(w.name, checks.CheckTypeProcess, checks.ApplySummary(w.summary, w.check, result))
 }
 
 func procSamplerFromDeps(deps Deps) ProcSampler {
@@ -312,6 +315,7 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 }
 
 func (w *procWatcher) fire(ctx context.Context, info ProcInfo, msg string, env map[string]string) {
+	msg = w.summaryMessage(info, msg, env)
 	env[sermoEnvWatch] = w.name
 	env[sermoEnvCheckType] = checks.CheckTypeProcess
 	env[sermoEnvMessage] = msg
@@ -340,6 +344,39 @@ func (w *procWatcher) fire(ctx context.Context, info ProcInfo, msg string, env m
 		w.doKill(ctx, info, msg)
 	}
 	dispatchNotify(ctx, w.notifiers, watchMessage(w.name, msg, env), w.name, w.emitEvent)
+}
+
+func (w *procWatcher) summaryMessage(info ProcInfo, message string, env map[string]string) string {
+	if w.summary == "" {
+		return message
+	}
+	data := map[string]any{
+		checks.DataKeyPID:        info.PID,
+		checks.DataKeyTrigger:    env[sermoEnvChange],
+		watchReadingFieldProcess: w.match.Name,
+	}
+	if ageSeconds, ok := env[sermoEnvAgeSeconds]; ok {
+		if seconds, err := strconv.ParseInt(ageSeconds, envFormatBase, envFloatBits); err == nil {
+			data[checks.DataKeyAge] = time.Duration(seconds) * time.Second
+			data[checks.DataKeyValue] = data[checks.DataKeyAge]
+		}
+	}
+	for _, field := range []struct {
+		envKey  string
+		dataKey string
+	}{
+		{sermoEnvCPU, "cpu"},
+		{sermoEnvMemory, "memory"},
+		{sermoEnvIO, "io"},
+	} {
+		if raw, ok := env[field.envKey]; ok {
+			if value, err := strconv.ParseFloat(raw, envFloatBits); err == nil {
+				data[field.dataKey] = value
+				data[checks.DataKeyValue] = value
+			}
+		}
+	}
+	return checks.ApplySummary(w.summary, w.check, checks.Result{Check: w.name, Message: message, Data: data}).Message
 }
 
 // dryRunActions describes the actions the watch would take, including the native

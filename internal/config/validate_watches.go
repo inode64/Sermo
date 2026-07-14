@@ -52,6 +52,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			add("%s is required", checkPath)
 			continue
 		}
+		validateCheckSummary(checkPath, check, add)
 		typ := cfgval.String(check[checks.CheckKeyType])
 		validateRaidNotifyOn(name, typ, entry, notifiers, defaultNotify, add)
 		validateRAIDControl(name, typ, entry, check, add)
@@ -193,6 +194,7 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 			add("%s is required", checkPath)
 			continue
 		}
+		validateCheckSummary(checkPath, check, add)
 		typ := cfgval.String(check[checks.CheckKeyType])
 		switch {
 		case typ == "":

@@ -3777,6 +3777,7 @@ function renderWatchReadings(readings) {
 const storageWatchTypes = new Set(["diskio", "hdparm", "lvm", "raid", "smart", "storage"]);
 const networkWatchTypes = new Set(["conntrack", "firewall", "icmp", "net"]);
 const securityWatchTypes = new Set(["cert", "file"]);
+const summaryFileWatchType = "file-summary";
 
 // watchGroupOf is the presentation taxonomy for host watches. It deliberately
 // groups stable operator concepts instead of creating a new table per check.
@@ -3786,6 +3787,11 @@ function watchGroupOf(w) {
   if (networkWatchTypes.has(type) || categoryOf(w, "watch").toLowerCase() === "network") return "Network";
   if (securityWatchTypes.has(type) || categoryOf(w, "watch").toLowerCase() === "security") return "Security";
   return "System";
+}
+
+function watchTypeKey(w) {
+  if (w && w.check_type === "file" && w.summary_configured) return summaryFileWatchType;
+  return (w && w.check_type) || "";
 }
 
 function watchActionDisabled(w, action) {
@@ -4110,6 +4116,15 @@ const watchTypeProfiles = {
 };
 
 function watchTypeProfile(type) {
+  if (type === summaryFileWatchType) {
+    return {
+      label: "File summaries",
+      columns: [
+        { key: "path", label: "Path", cell: (w) => typedReadingCell(w, "path"), sort: (w) => readingRaw(w, "path").toLowerCase() },
+        { key: "summary", label: "Summary", cell: (w) => w.summary || "—", sort: (w) => w.summary || "" },
+      ],
+    };
+  }
   return watchTypeProfiles[type] || {
     label: type || "Other",
     columns: [{ key: "value", label: "Value", cell: watchPrimaryMetric, sort: watchPrimaryMetricText }],
@@ -4139,8 +4154,7 @@ function setWatchTypeFilter(panelKey, type, value) {
   saveUIState();
 }
 
-function watchTypeRows(type, watches, panel) {
-  const profile = watchTypeProfile(type);
+function watchTypeRows(type, watches, panel, profile) {
   const filter = profile.filter;
   const selected = panel.typeFilters[type] || filterAll;
   const list = filter && selected !== filterAll ? watches.filter((w) => filter.value(w) === selected) : [...watches];
@@ -4198,7 +4212,7 @@ function typedWatchRowHTML(w, profile) {
 
 function renderWatchTypeTable(panel, type, watches) {
   const profile = watchTypeProfile(type);
-  const list = watchTypeRows(type, watches, panel);
+  const list = watchTypeRows(type, watches, panel, profile);
   const sort = watchTypeSort(panel, type);
   const columns = [{ key: "name", label: "Name" }, ...profile.columns, { key: "checked", label: "Last checked" }, { key: "last", label: "Last activity" }, { key: "state", label: "State" }, { label: "Actions" }];
   const rows = list.flatMap((watch) => typedWatchRowHTML(watch, profile));
@@ -4218,9 +4232,9 @@ function renderWatchGroups(panel, watches) {
   return groups.flatMap((group) => {
     const groupWatches = watches.filter((watch) => watchGroupOf(watch) === group);
     const collapsed = panel.collapsedGroups.has(group);
-    const types = sortedGroupValues(groupWatches, (watch) => watch.check_type || "");
+    const types = sortedGroupValues(groupWatches, watchTypeKey);
     return [tpl`<tr class="group-row"><td colspan="${panel.cols}"><button type="button" class="row-toggle group-toggle" data-group-panel="${panel.groupPanel}" data-group-name="${group}" aria-expanded="${collapsed ? domBoolFalse : domBoolTrue}"><span class="exp" aria-hidden="true">${collapsed ? "▸" : "▾"}</span>${group} <span class="muted">${groupWatches.length}</span></button></td></tr>`,
-      collapsed ? nothing : tpl`<tr><td colspan="${panel.cols}">${types.map((type) => renderWatchTypeTable(panel, type, groupWatches.filter((watch) => (watch.check_type || "") === type)))}</td></tr>`];
+      collapsed ? nothing : tpl`<tr><td colspan="${panel.cols}">${types.map((type) => renderWatchTypeTable(panel, type, groupWatches.filter((watch) => watchTypeKey(watch) === type)))}</td></tr>`];
   });
 }
 

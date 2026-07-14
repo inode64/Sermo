@@ -381,9 +381,20 @@ func expandString(s string, vars map[string]string, path string, errs *[]string)
 		if runtimeVars[name] {
 			return match // resolved at emit time by the worker
 		}
+		if isCheckSummaryPath(path) {
+			return match // resolved from the check result after the probe runs
+		}
 		*errs = append(*errs, fmt.Sprintf("variable ${%s} used in %s but not defined", name, path))
 		return match
 	})
+}
+
+// isCheckSummaryPath permits check-result placeholders in a summary. Normal
+// variables have already been resolved above, so this only defers names such as
+// ${value}, ${older_than}, ${check.value}, and ${result.count} until a check has
+// produced its runtime data.
+func isCheckSummaryPath(path string) bool {
+	return strings.HasSuffix(path, ".summary")
 }
 
 // resolveEnvRef resolves the body of an ${env:...} reference (the text after

@@ -1263,6 +1263,7 @@ func TestWebBackendStatefulWatchReadings(t *testing.T) {
 				checks.CheckKeyType:      checks.CheckTypeFile,
 				checks.CheckKeyPaths:     []any{filepath.Join(dir, "a.txt"), other},
 				checks.CheckKeyOlderThan: "24h",
+				checks.CheckKeySummary:   "Files ${number_files}",
 			}},
 			"entry-count": map[string]any{config.WatchKeyCheck: map[string]any{
 				checks.CheckKeyType: checks.CheckTypeCount,
@@ -1329,6 +1330,9 @@ func TestWebBackendStatefulWatchReadings(t *testing.T) {
 	}
 	if got := conditionByField(byName["cfg-file"].Conditions, checks.CheckKeyOlderThan).Value; got != "24h" {
 		t.Fatalf("file older_than condition = %q, want 24h", got)
+	}
+	if !byName["cfg-file"].SummaryConfigured {
+		t.Fatalf("file summary configuration was not exposed to the web view: %+v", byName["cfg-file"])
 	}
 	if got := readingByField(byName["entry-count"].Readings, "count").Value; got != "1" {
 		t.Fatalf("count = %q, want 1", got)

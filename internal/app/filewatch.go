@@ -66,6 +66,8 @@ type fileWatcher struct {
 	paths     []string
 	recursive bool
 	cond      fileCond
+	summary   string
+	check     map[string]any
 	hook      HookSpec
 	notifiers []notify.Notifier
 	dryRun    bool
@@ -75,7 +77,8 @@ type fileWatcher struct {
 	publish   func(string, string, checks.Result)
 	now       func() time.Time
 
-	baseline map[string]fileState
+	baseline    map[string]fileState
+	numberFiles int
 }
 
 // runCycle scans the watched paths, compares each against its baseline, and
@@ -87,6 +90,7 @@ func (w *fileWatcher) runCycle(ctx context.Context) {
 	}
 	now := w.clock()
 	current := w.scan(now)
+	w.numberFiles = fileWatchNumberFiles(current)
 	defer w.publishSnapshot(current)
 
 	paths := make([]string, 0, len(current))
@@ -140,12 +144,13 @@ func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
 		return
 	}
 	if len(current) == 0 {
-		w.publish(w.name, checks.CheckTypeFile, checks.Result{
+		result := checks.Result{
 			Check:   w.name,
 			OK:      false,
 			Message: "file watch: no configured path found",
 			Data:    map[string]any{checks.DataKeyPaths: w.paths},
-		})
+		}
+		w.publish(w.name, checks.CheckTypeFile, checks.ApplySummary(w.summary, w.check, result))
 		return
 	}
 	root := firstFileWatchRoot(w.paths, current)
@@ -167,12 +172,30 @@ func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
 		entries := max(len(current)-1, 0)
 		data[watchReadingFieldEntries] = entries
 	}
-	w.publish(w.name, checks.CheckTypeFile, checks.Result{
+	result := checks.Result{
 		Check:   w.name,
 		OK:      true,
 		Message: fmt.Sprintf("%s size %d", firstFileWatchPath(w.paths), root.size),
 		Data:    data,
-	})
+	}
+	if w.summary != "" {
+		data[checks.DataKeyNumberFiles] = w.numberFiles
+		if w.cond.olderThan > 0 {
+			data[checks.DataKeyTrigger] = fileChangeOlderThan
+			data[checks.DataKeyValue] = root.age
+		}
+	}
+	w.publish(w.name, checks.CheckTypeFile, checks.ApplySummary(w.summary, w.check, result))
+}
+
+func fileWatchNumberFiles(current map[string]fileState) int {
+	count := 0
+	for _, state := range current {
+		if state.kind == checks.CountKindFile {
+			count++
+		}
+	}
+	return count
 }
 
 // scan returns the current attributes of the watched path and, when recursive
@@ -297,6 +320,7 @@ func firstFileWatchPath(paths []string) string {
 // fire runs the watch's hook for one change and emits a matching event. A hook
 // failure is reported but never aborts the cycle (other changes still fire).
 func (w *fileWatcher) fire(ctx context.Context, path, change, msg string, extra map[string]string) {
+	msg = w.summaryMessage(path, change, msg, extra)
 	env := map[string]string{
 		sermoEnvWatch:     w.name,
 		sermoEnvCheckType: checks.CheckTypeFile,
@@ -323,6 +347,35 @@ func (w *fileWatcher) fire(ctx context.Context, path, change, msg string, extra 
 		}
 	}
 	dispatchNotify(ctx, w.notifiers, watchMessage(w.name, msg, env), w.name, w.emitEvent)
+}
+
+func (w *fileWatcher) summaryMessage(path, change, message string, extra map[string]string) string {
+	if w.summary == "" {
+		return message
+	}
+	data := map[string]any{
+		checks.DataKeyPath:        path,
+		checks.DataKeyTrigger:     change,
+		checks.DataKeyNumberFiles: w.numberFiles,
+	}
+	if ageSeconds, ok := extra[sermoEnvAgeSeconds]; ok {
+		if seconds, err := strconv.ParseInt(ageSeconds, envFormatBase, envFloatBits); err == nil {
+			data[checks.DataKeyAge] = time.Duration(seconds) * time.Second
+			data[checks.DataKeyValue] = data[checks.DataKeyAge]
+		}
+	}
+	if size, ok := extra[sermoEnvSize]; ok {
+		if value, err := strconv.ParseInt(size, envFormatBase, envFloatBits); err == nil {
+			data[checks.DataKeySize] = value
+			data[checks.DataKeyValue] = value
+		}
+	}
+	if value, ok := extra[sermoEnvValue]; ok {
+		if _, found := data[checks.DataKeyValue]; !found {
+			data[checks.DataKeyValue] = value
+		}
+	}
+	return checks.ApplySummary(w.summary, w.check, checks.Result{Check: w.name, Message: message, Data: data}).Message
 }
 
 func (w *fileWatcher) emitEvent(e Event) {

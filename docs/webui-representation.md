@@ -379,7 +379,7 @@ latest completed daemon-cycle or manual sample, while Last activity is an event.
 | Check type | Type-specific columns |
 | --- | --- |
 | `storage` | Name, Usage, Filesystem, Mount point; filters by filesystem when more than one is present |
-| `file` | Name, Path, current age, configured age limit |
+| `file` | Name, Path, current age, configured age limit; a configured check `summary` replaces the age and limit columns with Summary |
 | `net` | Name, interface, link, speed, errors |
 | `hdparm` | Name, device, buffered read, cached read |
 | `lvm` | Name, health, VG, LV, VG size, VG free, reasons |
