@@ -283,6 +283,7 @@ func validateRuleOperationActions(path, ruleType string, actions []valAction, ad
 			if ruleType != string(rules.RuleRemediation) {
 				add("%s only remediation rules may use action %s", path, action.typ)
 			}
+		case rules.ActionAlert, rules.ActionBlock:
 		}
 	}
 	return hasOperation

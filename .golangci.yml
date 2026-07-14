@@ -23,6 +23,7 @@ linters:
     - depguard  # architecture import boundaries (see settings.depguard.rules)
     - dupword  # duplicated words (typos); off in *_test.go (protocol/script fixtures)
     - durationcheck  # suspicious time.Duration multiplications
+    - dupl  # duplicate code fragments
     - errcheck  # unchecked errors (defer Rollback/Release, I/O, …)
     - errchkjson  # json.Marshal/Encode error dropped while the value can fail to encode
     - errname  # sentinel Err* and *Error type naming
@@ -31,6 +32,7 @@ linters:
     - fatcontext  # context accumulated inside loops
     - forcetypeassert  # prevent panics when values with static type any are asserted
     - gocheckcompilerdirectives  # malformed //go: directives (typos that silently no-op)
+    - gocognit  # cognitive complexity; documented exceptions preserve ordered contracts
     - gocritic  # appendAssign + unlambda only (see settings)
     - goprintffuncname  # printf-like helpers must end in f
     - gosec
