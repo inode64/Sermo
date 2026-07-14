@@ -341,31 +341,80 @@ func (a App) Run(ctx context.Context, args []string) int {
 	return a.withDefaults().run(ctx, args)
 }
 
+type commandHandler func(App, context.Context, options) int
+
+// commandHandlers centralizes command dispatch. Commands with a narrower
+// signature adapt here while their implementation stays in its owning module.
+var commandHandlers = map[string]commandHandler{
+	commandHelp: func(a App, _ context.Context, opts options) int { return runHelp(a, opts) },
+	commandVersion: func(a App, _ context.Context, _ options) int {
+		fmt.Fprintln(a.Stdout, buildinfo.String())
+		return exitSuccess
+	},
+	commandBackend:   App.runBackend,
+	commandStatus:    App.runStatus,
+	commandIsActive:  App.runIsActive,
+	commandStart:     func(a App, ctx context.Context, opts options) int { return a.runAction(ctx, opts, opts.command) },
+	commandStop:      func(a App, ctx context.Context, opts options) int { return a.runAction(ctx, opts, opts.command) },
+	commandRestart:   func(a App, ctx context.Context, opts options) int { return a.runAction(ctx, opts, opts.command) },
+	commandResume:    func(a App, ctx context.Context, opts options) int { return a.runAction(ctx, opts, opts.command) },
+	commandMount:     App.runMount,
+	commandUmount:    App.runUmount,
+	commandConfig:    func(a App, _ context.Context, opts options) int { return a.runConfig(opts) },
+	commandLocks:     func(a App, _ context.Context, opts options) int { return a.runLocks(opts) },
+	commandProcesses: App.runProcesses,
+	commandPreflight: App.runPreflight,
+	commandDaemon:    App.runDaemon,
+	commandNotifier:  App.runNotifier,
+	commandWatch:     App.runWatch,
+	commandEvents:    App.runEvents,
+	commandActivity:  App.runActivity,
+	commandApps:      App.runApps,
+	commandLibs:      App.runLibs,
+	commandPatterns:  func(a App, _ context.Context, opts options) int { return a.runPatterns(opts) },
+	commandServices:  App.runServices,
+	commandState:     App.runState,
+	commandLock:      App.runLock,
+	commandUnmonitor: func(a App, ctx context.Context, opts options) int { return a.runMonitor(ctx, opts, true) },
+	commandMonitor:   func(a App, ctx context.Context, opts options) int { return a.runMonitor(ctx, opts, false) },
+	commandPanic:     App.runPanic,
+	commandSLA:       App.runSLA,
+	commandWizard:    App.runWizard,
+}
+
 func (a App) run(ctx context.Context, args []string) int {
+	opts, code, done := a.prepareOptions(args)
+	if done {
+		return code
+	}
+	return a.dispatchCommand(ctx, opts)
+}
+
+func (a App) prepareOptions(args []string) (options, int, bool) {
 	opts, err := parseArgs(args)
 	if err != nil {
 		fmt.Fprintf(a.Stderr, "usage error: %v\n", err)
 		writeUsage(a.Stderr)
-		return exitUsage
+		return options{}, exitUsage, true
 	}
 	// `--version`/`-V` is parsed as a global flag (so it is never mistaken for the
 	// *value* of another flag, e.g. `lock svc --reason -V`); the `version`
 	// subcommand is handled in the command switch below.
 	if opts.version {
 		fmt.Fprintln(a.Stdout, buildinfo.String())
-		return exitSuccess
+		return options{}, exitSuccess, true
 	}
 	if opts.help {
 		if opts.command != "" {
 			if !writeCommandUsage(a.Stdout, opts.command) {
 				fmt.Fprintf(a.Stderr, "usage error: unknown help topic %q\n", opts.command)
 				writeUsage(a.Stderr)
-				return exitUsage
+				return options{}, exitUsage, true
 			}
 		} else {
 			writeUsage(a.Stdout)
 		}
-		return exitSuccess
+		return options{}, exitSuccess, true
 	}
 	if opts.timeout <= 0 {
 		opts.timeout = defaultTimeout(opts.command)
@@ -374,86 +423,38 @@ func (a App) run(ctx context.Context, args []string) int {
 		envBackend, err := servicemgr.ParseBackend(a.Env(config.EnvBackendOverride))
 		if err != nil {
 			fmt.Fprintf(a.Stderr, "usage error: %s: %v\n", config.EnvBackendOverride, err)
-			return exitUsage
+			return options{}, exitUsage, true
 		}
 		opts.backend = envBackend
 	}
 	if opts.command != commandUmount && (opts.force || opts.lazy || opts.kill) {
-		return a.commandUsageError(opts.command, "--force, --lazy and --kill-blockers are only supported by umount")
+		return options{}, a.commandUsageError(opts.command, "--force, --lazy and --kill-blockers are only supported by umount"), true
 	}
+	return opts, exitSuccess, false
+}
 
-	switch opts.command {
-	case commandHelp:
-		return runHelp(a, opts)
-	case commandVersion:
-		fmt.Fprintln(a.Stdout, buildinfo.String())
-		return exitSuccess
-	case commandBackend:
-		return a.runBackend(ctx, opts)
-	case commandStatus:
-		return a.runStatus(ctx, opts)
-	case commandIsActive:
-		return a.runIsActive(ctx, opts)
-	case commandStart, commandStop, commandRestart, commandResume:
-		return a.runAction(ctx, opts, opts.command)
-	case commandMount:
-		return a.runMount(ctx, opts)
-	case commandUmount:
-		return a.runUmount(ctx, opts)
-	case commandConfig:
-		return a.runConfig(opts)
-	case commandLocks:
-		return a.runLocks(opts)
-	case commandProcesses:
-		return a.runProcesses(ctx, opts)
-	case commandPreflight:
-		return a.runPreflight(ctx, opts)
-	case commandDaemon:
-		return a.runDaemon(ctx, opts)
-	case commandNotifier:
-		return a.runNotifier(ctx, opts)
-	case commandWatch:
-		return a.runWatch(ctx, opts)
-	case commandEvents:
-		return a.runEvents(ctx, opts)
-	case commandActivity:
-		return a.runActivity(ctx, opts)
-	case commandApps:
-		return a.runApps(ctx, opts)
-	case commandLibs:
-		return a.runLibs(ctx, opts)
-	case commandPatterns:
-		return a.runPatterns(opts)
-	case commandServices:
-		return a.runServices(ctx, opts)
-	case commandState:
-		return a.runState(ctx, opts)
-	case commandLock:
-		return a.runLock(ctx, opts)
-	case commandUnmonitor:
-		return a.runMonitor(ctx, opts, true)
-	case commandMonitor:
-		return a.runMonitor(ctx, opts, false)
-	case commandPanic:
-		return a.runPanic(ctx, opts)
-	case commandSLA:
-		return a.runSLA(ctx, opts)
-	case commandReload:
-		if opts.service() == "" {
-			return a.commandUsageError(commandReload, "reload requires a service name; use `sermoctl daemon reload` to reload sermod config")
-		}
-		return a.runAction(ctx, opts, commandReload)
-	case commandWizard:
-		return a.runWizard(ctx, opts)
-	case "":
+func (a App) dispatchCommand(ctx context.Context, opts options) int {
+	if handler, ok := commandHandlers[opts.command]; ok {
+		return handler(a, ctx, opts)
+	}
+	if opts.command == commandReload {
+		return a.runServiceReload(ctx, opts)
+	}
+	if opts.command == "" {
 		fmt.Fprintln(a.Stderr, "usage error: missing command")
 		writeUsage(a.Stderr)
 		return exitUsage
-	default:
-		fmt.Fprintf(a.Stderr, "usage error: unknown command %q\n", opts.command)
-		writeUsage(a.Stderr)
-		return exitUsage
 	}
+	fmt.Fprintf(a.Stderr, "usage error: unknown command %q\n", opts.command)
+	writeUsage(a.Stderr)
+	return exitUsage
+}
+
+func (a App) runServiceReload(ctx context.Context, opts options) int {
+	if opts.service() == "" {
+		return a.commandUsageError(commandReload, "reload requires a service name; use `sermoctl daemon reload` to reload sermod config")
+	}
+	return a.runAction(ctx, opts, commandReload)
 }
 
 func (a App) runBackend(ctx context.Context, opts options) int {
