@@ -234,12 +234,6 @@ func scalarQueryCheckReadings(data map[string]any) []web.WatchReading {
 	return out
 }
 
-// CheckReadings formats one check result data map for user-facing consumers
-// outside the daemon Web backend, such as `sermoctl watch probe`.
-func CheckReadings(checkType string, data map[string]any) []web.WatchReading {
-	return checkReadings(checkType, data)
-}
-
 func lvmCheckReadings(data map[string]any) []web.WatchReading {
 	var out []web.WatchReading
 	if value := cfgval.String(data[checks.DataKeyDeviceState]); value != "" {
