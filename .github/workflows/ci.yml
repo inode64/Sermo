@@ -50,8 +50,8 @@ jobs:
       - name: deadcode (advisory)
         continue-on-error: true
         run: make deadcode
-      # Advisory baseline: report complexity, duplication, and avoidable
-      # formatting allocations without failing PRs on existing debt.
+      # Advisory baseline: report remaining cyclomatic complexity without
+      # failing PRs on existing debt.
       - name: quality report (advisory)
         run: make quality-report
 
