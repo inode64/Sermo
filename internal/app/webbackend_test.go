@@ -116,6 +116,19 @@ func TestWebBackendEventPageFiltersAndContinuesByID(t *testing.T) {
 	}
 }
 
+func TestWebBackendEventPageStopsAtBoundedScan(t *testing.T) {
+	events := NewEventLog(webEventPageMaxScan + 1)
+	events.now = func() time.Time { return time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC) }
+	for range webEventPageMaxScan + 1 {
+		events.Add(Event{Service: "db", Kind: eventKindAction, Status: eventStatusOK})
+	}
+
+	page := (&WebBackend{events: events}).EventPage(context.Background(), web.EventQuery{Limit: 1, Service: "web"})
+	if len(page.Events) != 0 || !page.HasMore || page.NextBeforeID <= 0 {
+		t.Fatalf("bounded scan page = %+v, want an empty resumable page", page)
+	}
+}
+
 func TestWebBackendDetailRanFlag(t *testing.T) {
 	snaps := NewSnapshots()
 	snaps.Publish("web", map[string]checks.Result{
