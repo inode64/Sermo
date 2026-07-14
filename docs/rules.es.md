@@ -1853,8 +1853,9 @@ operación.
 
 Cuando una regla recuperada tiene exactamente una hoja directa de check o métrica, el
 evento también registra el valor actual formateado, el operador y el umbral configurado.
-Así se ve una oscilación alrededor del umbral sin tener que reconstruir la lectura desde
-el histórico de métricas.
+Los valores de bytes usan `B`, `KB`, `MB`, `GB` o `TB` (y las tasas de bytes añaden
+`/s`), incluido el umbral configurado. Así se ve una oscilación alrededor del
+umbral sin tener que reconstruir la lectura desde el histórico de métricas.
 
 Las acciones y los tipos están acoplados: las acciones de operación (`restart`, `start`,
 `stop`, `reload`, `resume`) pertenecen a reglas `type: remediation` — requeridas ahí (una
@@ -1988,6 +1989,9 @@ Las reglas con una hoja `changed:` también pueden usar `${change.path}`,
 `${change.library}`, `${change.app}`, `${change.level}`,
 `${change.old_version}` y `${change.new_version}`; old/new se rellenan para
 `changed: {app: ...}`.
+
+Los marcadores `${check.threshold}` y `${check.value}` de una métrica expresada
+en bytes usan la misma presentación de `B` a `TB` que los eventos de recuperación.
 
 ## Política de remediación
 

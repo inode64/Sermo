@@ -1143,8 +1143,9 @@ func (rc *ruleRuntimeContext) applyCheckResult(name string, res checks.Result) {
 	setRuntimeField(&rc.checkMetric, cfgval.String(res.Data[checks.DataKeyMetric]))
 	setRuntimeField(&rc.checkScope, cfgval.String(res.Data[checks.DataKeyScope]))
 	setRuntimeField(&rc.checkOp, cfgval.String(res.Data[checks.DataKeyOp]))
-	setRuntimeField(&rc.checkThreshold, cfgval.String(res.Data[checks.DataKeyThreshold]))
-	setRuntimeField(&rc.checkValue, formatRuntimeCheckValue(res.Data[checks.DataKeyValue], cfgval.String(res.Data[checks.DataKeyUnit])))
+	unit := cfgval.String(res.Data[checks.DataKeyUnit])
+	setRuntimeField(&rc.checkThreshold, formatRuntimeCheckValue(res.Data[checks.DataKeyThreshold], unit))
+	setRuntimeField(&rc.checkValue, formatRuntimeCheckValue(res.Data[checks.DataKeyValue], unit))
 }
 
 func (rc *ruleRuntimeContext) applyInlineMetric(ev *rules.Evaluator, metric map[string]any) {
@@ -1169,6 +1170,7 @@ func (rc *ruleRuntimeContext) applyInlineMetric(ev *rules.Evaluator, metric map[
 	}
 	value, unit, ready, err := metrics.ReadingValueForThreshold(reading, threshold)
 	if err == nil && ready {
+		rc.checkThreshold = formatRuntimeCheckValue(threshold, unit)
 		rc.checkValue = formatRuntimeCheckValue(value, unit)
 	}
 }
@@ -1180,18 +1182,7 @@ func setRuntimeField(field *string, value string) {
 }
 
 func formatRuntimeCheckValue(value any, unit string) string {
-	out := checks.FormatDisplayValue(checks.DataKeyValue, value)
-	if out == "" {
-		return ""
-	}
-	switch unit {
-	case "":
-		return out
-	case metrics.MetricUnitPercent:
-		return out + unit
-	default:
-		return out + " " + unit
-	}
+	return checks.FormatDisplayValueWithUnit(checks.DataKeyValue, value, unit)
 }
 
 func singleRuleCheckCandidate(node map[string]any) (ruleCheckCandidate, bool) {

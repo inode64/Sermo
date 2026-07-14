@@ -53,8 +53,11 @@ const (
 // a percentage form, or both. Rate metrics are not Ready on the
 // first cycle, before a delta can be computed.
 type Reading struct {
-	Absolute    float64
-	Percent     float64
+	Absolute float64
+	Percent  float64
+	// Unit describes Absolute when it has a display unit. Percent always uses
+	// MetricUnitPercent when selected by a percentage threshold.
+	Unit        string
 	HasAbsolute bool
 	HasPercent  bool
 	Ready       bool
@@ -106,7 +109,7 @@ func ReadingValueForThreshold(r Reading, threshold string) (float64, string, boo
 	if isPercent {
 		return actual, MetricUnitPercent, true, nil
 	}
-	return actual, MetricUnitNone, true, nil
+	return actual, r.Unit, true, nil
 }
 
 func metricValue(r Reading, isPercent bool, threshold string) (float64, error) {

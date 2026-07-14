@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"sermo/internal/metrics"
 )
 
 const (
@@ -23,6 +25,8 @@ const (
 	summarySecondsPerMonth  = summaryDaysPerMonth * summarySecondsPerDay
 	summaryNumberBase       = 10
 	summaryNumberPrecision  = 2
+	summaryFloatBits        = 64
+	summaryByteBase         = 1024
 )
 
 var summaryReference = regexp.MustCompile(`\$\{([^}]+)\}`)
@@ -63,9 +67,20 @@ func ApplySummary(template string, entry map[string]any, result Result) Result {
 		if !ok {
 			return match
 		}
-		return FormatDisplayValue(name, value)
+		return FormatDisplayValueWithUnit(name, value, summaryValueUnit(name, result.Data))
 	})
 	return result
+}
+
+func summaryValueUnit(name string, data map[string]any) string {
+	switch name {
+	case DataKeyValue, DataKeyThreshold, "check." + DataKeyValue,
+		"result." + DataKeyValue, "result." + DataKeyThreshold:
+		unit, _ := data[DataKeyUnit].(string)
+		return unit
+	default:
+		return ""
+	}
 }
 
 func summaryValue(name string, entry, data map[string]any) (any, bool) {
@@ -157,6 +172,76 @@ func FormatDisplayValue(name string, value any) string {
 	default:
 		return fmt.Sprint(value)
 	}
+}
+
+// FormatDisplayValueWithUnit renders a check value with its canonical unit.
+// It keeps summaries, rule events and notifications consistent for percentage,
+// byte and byte-rate values.
+func FormatDisplayValueWithUnit(name string, value any, unit string) string {
+	if number, ok := displayNumber(value); ok {
+		switch unit {
+		case metrics.MetricUnitBytes:
+			return formatSummaryBytes(number)
+		case metrics.MetricUnitBytesPerSecond:
+			return formatSummaryBytes(number) + "/s"
+		}
+	}
+
+	rendered := FormatDisplayValue(name, value)
+	if rendered == "" || unit == "" || strings.HasSuffix(rendered, unit) {
+		return rendered
+	}
+	if unit == metrics.MetricUnitPercent {
+		return rendered + unit
+	}
+	return rendered + " " + unit
+}
+
+func displayNumber(value any) (float64, bool) {
+	switch v := value.(type) {
+	case int:
+		return float64(v), true
+	case int8:
+		return float64(v), true
+	case int16:
+		return float64(v), true
+	case int32:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case uint:
+		return float64(v), true
+	case uint8:
+		return float64(v), true
+	case uint16:
+		return float64(v), true
+	case uint32:
+		return float64(v), true
+	case uint64:
+		return float64(v), true
+	case float32:
+		return float64(v), true
+	case float64:
+		return v, true
+	case string:
+		number, err := strconv.ParseFloat(v, summaryFloatBits)
+		return number, err == nil
+	default:
+		return 0, false
+	}
+}
+
+func formatSummaryBytes(number float64) string {
+	if math.IsNaN(number) || math.IsInf(number, 0) {
+		return "-"
+	}
+	units := []string{"B", "KB", "MB", "GB", "TB"}
+	unit := 0
+	for number >= summaryByteBase && unit < len(units)-1 {
+		number /= summaryByteBase
+		unit++
+	}
+	return formatSummaryNumber(number) + " " + units[unit]
 }
 
 func formatSummaryString(name, value string) string {
