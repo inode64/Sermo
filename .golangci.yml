@@ -34,6 +34,7 @@ linters:
     - gocheckcompilerdirectives  # malformed //go: directives (typos that silently no-op)
     - gochecksumtype  # exhaustive switches over documented sum types
     - gocognit  # cognitive complexity; documented exceptions preserve ordered contracts
+    - gocyclo  # reject functions above the established cyclomatic complexity budget
     - gocritic  # focused stable bug and duplication checks (see settings)
     - goprintffuncname  # printf-like helpers must end in f
     - gosec
