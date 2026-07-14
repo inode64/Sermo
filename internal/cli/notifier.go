@@ -7,6 +7,8 @@ import (
 	"sermo/internal/notify"
 )
 
+const notifierTestArgumentCount = 2
+
 // runNotifier executes explicit operator actions for one configured notifier.
 func (a App) runNotifier(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
@@ -15,7 +17,7 @@ func (a App) runNotifier(ctx context.Context, opts options) int {
 	if opts.args[0] != commandNotifierTest {
 		return a.commandUsageError(commandNotifier, fmt.Sprintf("unknown notifier subcommand %q", opts.args[0]))
 	}
-	if len(opts.args) != 2 {
+	if len(opts.args) != notifierTestArgumentCount {
 		return a.commandUsageError(commandNotifier, "notifier test requires one notifier name")
 	}
 

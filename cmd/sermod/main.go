@@ -37,6 +37,7 @@ import (
 const (
 	exitConfigInvalid  = 78
 	exitAlreadyRunning = 1
+	exitFailure        = 2
 	exitUsage          = 64
 )
 
@@ -56,6 +57,9 @@ const (
 	defaultWebAddress    = "127.0.0.1"
 	daemonPIDFilename    = config.DaemonPIDFilename
 	instanceLockFilename = "sermod.lock"
+	daemonEventLogLimit  = 1000
+	daemonPIDFileMode    = 0o644
+	daemonRuntimeDirMode = 0o700
 )
 
 const (
@@ -116,7 +120,7 @@ func loadDaemonConfig(logger *slog.Logger, globalPath string) (*config.Config, i
 	cfg, err := config.Load(globalPath)
 	if err != nil {
 		logger.Error("load config", logFieldError, err)
-		return nil, 2
+		return nil, exitFailure
 	}
 	if issues := config.Validate(cfg); len(issues) > 0 {
 		for _, issue := range issues {
@@ -175,7 +179,7 @@ func run(args []string) int {
 	manager, err := servicemgr.NewManager(detection.Backend)
 	if err != nil {
 		logger.Error("service manager", logFieldError, err)
-		return 2
+		return exitFailure
 	}
 
 	rt, instanceLock, exitCode := acquireDaemonRuntimeLock(cfg, logger)
@@ -195,7 +199,7 @@ func run(args []string) int {
 		logger.Warn("build notifiers", logFieldWarning, w)
 	}
 
-	eventLog, err := app.NewPersistentEventLog(1000, store, func(err error) {
+	eventLog, err := app.NewPersistentEventLog(daemonEventLogLimit, store, func(err error) {
 		logger.Warn("persist event failed", logFieldError, err)
 	})
 	if err != nil {
@@ -265,7 +269,7 @@ func run(args []string) int {
 		RuleWindows:       app.NewRuleWindowRegistry(),
 		Events:            eventLog,
 		DiagnosticLog:     diagnosticLog,
-		SystemFreshness:   interval / 2,
+		SystemFreshness:   interval / app.SystemFreshnessIntervalDivisor,
 		OpGate:            opGate,
 		ExecxRunner:       runner,
 		UserLookup:        userLookup,
@@ -319,7 +323,7 @@ func run(args []string) int {
 	if len(workers) == 0 && len(watches) == 0 {
 		if !app.HasConfiguredTargets(cfg) {
 			logger.Error("no services or watches configured to monitor")
-			return 2
+			return exitFailure
 		}
 		logger.Warn("all services and watches are disabled; starting with nothing to monitor")
 	}
@@ -336,7 +340,7 @@ func run(args []string) int {
 	// systemd's $MAINPID. Best-effort; failure is only logged.
 	{
 		pidPath := filepath.Join(rt, daemonPIDFilename)
-		if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644); err != nil { //nolint:gosec // G306: pidfile is intentionally world-readable (0644)
+		if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())+"\n"), daemonPIDFileMode); err != nil {
 			logger.Warn("write pidfile failed (daemon reload via sermoctl may need to fall back)", logFieldPath, pidPath, logFieldError, err)
 		} else {
 			// Best effort cleanup on normal exit (init systems may manage their own).
@@ -430,7 +434,7 @@ func openDaemonStore(cfg *config.Config, logger *slog.Logger) (*state.Store, int
 	store, err := state.OpenWith(filepath.Join(cfg.Global.StateDir(), state.Filename), state.Options{CacheBytes: app.EngineByteSize(cfg, config.EngineKeyStateCacheSize, state.DefaultCacheBytes)})
 	if err != nil {
 		logger.Error("open state store", logFieldError, err)
-		return nil, 2
+		return nil, exitFailure
 	}
 	return store, 0
 }
@@ -440,7 +444,7 @@ func acquireDaemonRuntimeLock(cfg *config.Config, logger *slog.Logger) (string, 
 	if runtimeDir == "" {
 		runtimeDir = defaultRuntimeDir
 	}
-	if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
+	if err := os.MkdirAll(runtimeDir, daemonRuntimeDirMode); err != nil {
 		logger.Warn("create runtime dir failed", logFieldPath, runtimeDir, logFieldError, err)
 	}
 	lock, err := acquireInstanceLock(runtimeDir)
@@ -461,12 +465,12 @@ func detectServiceManager(ctx context.Context, cfg *config.Config, logger *slog.
 	backend, err := servicemgr.ParseBackend(app.EngineString(cfg, config.EngineKeyBackend))
 	if err != nil {
 		logger.Error("backend", logFieldError, err)
-		return servicemgr.Detection{}, 2
+		return servicemgr.Detection{}, exitFailure
 	}
 	detection, err := servicemgr.NewDetector().Detect(ctx, backend)
 	if err != nil {
 		logger.Error("detect backend", logFieldError, err)
-		return servicemgr.Detection{}, 2
+		return servicemgr.Detection{}, exitFailure
 	}
 	return detection, 0
 }

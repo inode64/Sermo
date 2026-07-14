@@ -85,7 +85,9 @@ func (c sensorsCheck) Run(_ context.Context) Result {
 
 	ok := levelPredsHold(c.preds, values)
 
-	parts := make([]string, 0, 3)
+	const sensorSummaryMetricCapacity = 3
+
+	parts := make([]string, 0, sensorSummaryMetricCapacity)
 	appendSensorPart := func(field string, value float64, ok bool) {
 		if ok {
 			parts = append(parts, fmt.Sprintf("%s=%.1f", field, value))

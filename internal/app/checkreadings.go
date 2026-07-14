@@ -15,6 +15,10 @@ import (
 )
 
 const (
+	watchReadingClockDecimals          = 3
+	watchReadingClockPrecisionDecimals = 6
+	watchReadingDefaultMetricDecimals  = 2
+
 	watchReadingLabelAddresses         = "Addresses"
 	watchReadingLabelAllocated         = "Allocated"
 	watchReadingLabelAge               = "Age"
@@ -470,10 +474,10 @@ func clockCheckReadings(data map[string]any) []web.WatchReading {
 		out = append(out, web.WatchReading{Field: checks.DataKeyPort, Label: watchReadingLabelPort, Value: strconv.Itoa(v)})
 	}
 	if v, ok := cfgval.Float(data[checks.DataKeyOffsetSeconds]); ok {
-		out = append(out, web.WatchReading{Field: checks.DataKeyOffsetSeconds, Label: watchReadingLabelOffset, Value: watchReadingMetricValue(v, 3, watchReadingUnitSeconds)})
+		out = append(out, web.WatchReading{Field: checks.DataKeyOffsetSeconds, Label: watchReadingLabelOffset, Value: watchReadingMetricValue(v, watchReadingClockDecimals, watchReadingUnitSeconds)})
 	}
 	if v, ok := cfgval.Float(data[checks.DataKeyOffsetAbsSeconds]); ok {
-		out = append(out, web.WatchReading{Field: checks.DataKeyOffsetAbsSeconds, Label: watchReadingLabelOffsetAbs, Value: watchReadingMetricValue(v, 3, watchReadingUnitSeconds)})
+		out = append(out, web.WatchReading{Field: checks.DataKeyOffsetAbsSeconds, Label: watchReadingLabelOffsetAbs, Value: watchReadingMetricValue(v, watchReadingClockDecimals, watchReadingUnitSeconds)})
 	}
 	if v, ok := cfgval.Int(data[checks.DataKeyStratum]); ok {
 		out = append(out, web.WatchReading{Field: checks.DataKeyStratum, Label: watchReadingLabelStratum, Value: strconv.Itoa(v)})
@@ -482,13 +486,13 @@ func clockCheckReadings(data map[string]any) []web.WatchReading {
 		out = append(out, web.WatchReading{Field: checks.DataKeyLeap, Label: watchReadingLabelLeap, Value: v})
 	}
 	if v, ok := cfgval.Float(data[checks.DataKeyPrecisionSeconds]); ok {
-		out = append(out, web.WatchReading{Field: checks.DataKeyPrecisionSeconds, Label: watchReadingLabelPrecision, Value: watchReadingMetricValue(v, 6, watchReadingUnitSeconds)})
+		out = append(out, web.WatchReading{Field: checks.DataKeyPrecisionSeconds, Label: watchReadingLabelPrecision, Value: watchReadingMetricValue(v, watchReadingClockPrecisionDecimals, watchReadingUnitSeconds)})
 	}
 	if v, ok := cfgval.Float(data[checks.DataKeyRootDelayMS]); ok {
-		out = append(out, web.WatchReading{Field: checks.DataKeyRootDelayMS, Label: watchReadingLabelRootDelay, Value: watchReadingMetricValue(v, 3, metrics.MetricUnitMilliseconds)})
+		out = append(out, web.WatchReading{Field: checks.DataKeyRootDelayMS, Label: watchReadingLabelRootDelay, Value: watchReadingMetricValue(v, watchReadingClockDecimals, metrics.MetricUnitMilliseconds)})
 	}
 	if v, ok := cfgval.Float(data[checks.DataKeyRootDispersionMS]); ok {
-		out = append(out, web.WatchReading{Field: checks.DataKeyRootDispersionMS, Label: watchReadingLabelRootDispersion, Value: watchReadingMetricValue(v, 3, metrics.MetricUnitMilliseconds)})
+		out = append(out, web.WatchReading{Field: checks.DataKeyRootDispersionMS, Label: watchReadingLabelRootDispersion, Value: watchReadingMetricValue(v, watchReadingClockDecimals, metrics.MetricUnitMilliseconds)})
 	}
 	if v := cfgval.String(data[checks.DataKeyReferenceID]); v != "" {
 		out = append(out, web.WatchReading{Field: checks.DataKeyReferenceID, Label: watchReadingLabelReferenceID, Value: v})
@@ -530,7 +534,7 @@ func resourceCheckReadings(checkType string, data map[string]any) []web.WatchRea
 		out = append(out, web.WatchReading{Field: checks.DataKeyPath, Label: watchReadingLabelPath, Value: v})
 	}
 	if v, ok := cfgval.Float(data[checks.DataKeyUsedPct]); ok {
-		out = append(out, web.WatchReading{Field: checks.DataKeyUsedPct, Label: watchReadingLabelUsed, Value: watchReadingMetricValue(v, 2, metrics.MetricUnitPercent)})
+		out = append(out, web.WatchReading{Field: checks.DataKeyUsedPct, Label: watchReadingLabelUsed, Value: watchReadingMetricValue(v, watchReadingDefaultMetricDecimals, metrics.MetricUnitPercent)})
 	}
 	if v, ok := byteField(data[checks.DataKeyUsedBytes]); ok {
 		out = append(out, web.WatchReading{Field: checks.DataKeyUsedBytes, Label: watchReadingLabelUsedBytes, Value: humanize.Bytes(v)})
@@ -560,11 +564,11 @@ func pressureCheckReadings(data map[string]any) []web.WatchReading {
 	var out []web.WatchReading
 	for _, field := range checks.PressurePredFields {
 		if v, ok := cfgval.Float(data[field]); ok {
-			out = append(out, web.WatchReading{Field: field, Label: field, Value: watchReadingMetricValue(v, 2, metrics.MetricUnitPercent)})
+			out = append(out, web.WatchReading{Field: field, Label: field, Value: watchReadingMetricValue(v, watchReadingDefaultMetricDecimals, metrics.MetricUnitPercent)})
 		}
 	}
 	if v, ok := cfgval.Float(data[checks.DataKeyValue]); ok {
-		out = append(out, web.WatchReading{Field: checks.DataKeyValue, Label: watchReadingLabelValue, Value: watchReadingMetricValue(v, 2, metrics.MetricUnitPercent)})
+		out = append(out, web.WatchReading{Field: checks.DataKeyValue, Label: watchReadingLabelValue, Value: watchReadingMetricValue(v, watchReadingDefaultMetricDecimals, metrics.MetricUnitPercent)})
 	}
 	return out
 }
@@ -584,7 +588,7 @@ func diskioCheckReadings(data map[string]any) []web.WatchReading {
 	} {
 		if v, ok := cfgval.Float(data[field.key]); ok {
 			out = append(out, web.WatchReading{
-				Field: field.key, Label: field.label, Value: watchReadingMetricValue(v, 2, field.unit),
+				Field: field.key, Label: field.label, Value: watchReadingMetricValue(v, watchReadingDefaultMetricDecimals, field.unit),
 			})
 		}
 	}

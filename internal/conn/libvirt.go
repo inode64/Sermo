@@ -23,7 +23,11 @@ const defaultLibvirtTimeout = 10 * time.Second
 // DefaultLibvirtTimeout is the fallback timeout for libvirt connections.
 const DefaultLibvirtTimeout = defaultLibvirtTimeout
 
-const libvirtTransportSocket = "socket"
+const (
+	libvirtTransportSocket        = "socket"
+	libvirtVersionMajorMultiplier = 1_000_000
+	libvirtVersionMinorMultiplier = 1_000
+)
 
 // libvirtProtocol probes a libvirt daemon (libvirtd) natively over its RPC
 // protocol using the pure-Go github.com/digitalocean/go-libvirt client. It opens
@@ -213,5 +217,5 @@ func libvirtTimeout(ctx context.Context) time.Duration {
 // formatLibvirtVersion renders libvirt's packed version (major*1e6 + minor*1e3 +
 // micro) as "major.minor.micro".
 func formatLibvirtVersion(v uint64) string {
-	return fmt.Sprintf("%d.%d.%d", v/1_000_000, (v%1_000_000)/1_000, v%1_000)
+	return fmt.Sprintf("%d.%d.%d", v/libvirtVersionMajorMultiplier, (v%libvirtVersionMajorMultiplier)/libvirtVersionMinorMultiplier, v%libvirtVersionMinorMultiplier)
 }

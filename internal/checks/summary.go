@@ -11,12 +11,13 @@ import (
 	"time"
 
 	"sermo/internal/metrics"
+	"sermo/internal/units"
 )
 
 const (
 	summarySecondsPerMinute = 60
 	summaryMinutesPerHour   = 60
-	summaryHoursPerDay      = 24
+	summaryHoursPerDay      = units.HoursPerDay
 	summaryDaysPerWeek      = 7
 	summaryDaysPerMonth     = 30
 	summarySecondsPerHour   = summaryMinutesPerHour * summarySecondsPerMinute
@@ -27,6 +28,7 @@ const (
 	summaryNumberPrecision  = 2
 	summaryFloatBits        = 64
 	summaryByteBase         = 1024
+	summaryNumberGroupSize  = 3
 )
 
 var summaryReference = regexp.MustCompile(`\$\{([^}]+)\}`)
@@ -319,7 +321,7 @@ func formatSummaryDecimal(raw string) string {
 	negative := strings.HasPrefix(raw, "-")
 	raw = strings.TrimPrefix(raw, "-")
 	whole, fraction, hasFraction := strings.Cut(raw, ".")
-	for index := len(whole) - 3; index > 0; index -= 3 {
+	for index := len(whole) - summaryNumberGroupSize; index > 0; index -= summaryNumberGroupSize {
 		whole = whole[:index] + "." + whole[index:]
 	}
 	if negative {

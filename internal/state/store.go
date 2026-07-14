@@ -307,6 +307,7 @@ func (s *Store) sqlCtx() context.Context {
 const (
 	hoursPerDay          = units.HoursPerDay
 	historyRetentionDays = 366
+	eventQueryMaxArgs    = 2
 )
 
 // DefaultHistoryRetention is the normal SLA/metrics/event history window kept
@@ -1259,7 +1260,7 @@ func (s *Store) RecentEventsBefore(beforeID int64, limit int) ([]EventRecord, er
 	}
 	query := `SELECT id, at, service, watch, app, kind, rule, action, status, message, output
 		   FROM event_log`
-	args := make([]any, 0, 2)
+	args := make([]any, 0, eventQueryMaxArgs)
 	if beforeID > 0 {
 		query += ` WHERE id < ?`
 		args = append(args, beforeID)
@@ -1341,6 +1342,8 @@ const (
 	slaSegmentsWeek  = 28
 	slaSegmentsMonth = 30
 	slaSegmentsYear  = 12
+
+	slaTimelineFixedQueryArgs = 4
 )
 
 // SLAWindows are the reported rolling windows, shortest first. Segment counts
@@ -1618,7 +1621,7 @@ func (s *Store) slaTimelines(query string, keyArgs []any, now time.Time) ([]SLAW
 
 		// Placeholder order matches the SQL left-to-right: the SELECT segment
 		// expression (start, span) first, then the WHERE key args, then the range.
-		args := make([]any, 0, len(keyArgs)+4)
+		args := make([]any, 0, len(keyArgs)+slaTimelineFixedQueryArgs)
 		args = append(args, startBucket, segSpan)
 		args = append(args, keyArgs...)
 		args = append(args, startBucket, endBucket)

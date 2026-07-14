@@ -13,6 +13,8 @@ import (
 	"sermo/internal/virt"
 )
 
+const dockerContainerIDShortLength = 12
+
 func listWizardDockerContainers(ctx context.Context, timeout time.Duration) ([]assist.DockerCandidate, error) {
 	if _, err := os.Stat(dockerctl.DefaultSocket); err != nil {
 		if os.IsNotExist(err) {
@@ -57,8 +59,8 @@ func dockerWizardContainerName(container dockerctl.ContainerSummary) string {
 		}
 	}
 	id := strings.TrimSpace(container.ID)
-	if len(id) > 12 {
-		id = id[:12]
+	if len(id) > dockerContainerIDShortLength {
+		id = id[:dockerContainerIDShortLength]
 	}
 	return id
 }

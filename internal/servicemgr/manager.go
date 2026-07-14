@@ -13,7 +13,10 @@ import (
 )
 
 // cgroupRoot is the unified cgroup v2 mount point.
-const cgroupRoot = "/sys/fs/cgroup"
+const (
+	cgroupRoot               = "/sys/fs/cgroup"
+	openrcExitStatusInactive = 3
+)
 
 // ServiceStatus is the resolved status of a single service on a backend.
 type ServiceStatus struct {
@@ -393,7 +396,7 @@ func openrcStatus(result execx.Result) Status {
 	switch result.ExitCode {
 	case 0:
 		return StatusActive
-	case 3:
+	case openrcExitStatusInactive:
 		return StatusInactive
 	default:
 		return StatusUnknown

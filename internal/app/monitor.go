@@ -49,6 +49,10 @@ const (
 	validationIssuePreviewLimit = 5
 )
 
+// SystemFreshnessIntervalDivisor derives the shared system-sample freshness
+// from an engine interval.
+const SystemFreshnessIntervalDivisor = 2
+
 // NewMonitor wires a monitor from the initial validated config and shared deps.
 func NewMonitor(cfg *config.Config, deps Deps, scheduler Scheduler, readiness *Readiness, collector *metrics.Collector, web *WebBackendHolder) *Monitor {
 	return &Monitor{
@@ -177,7 +181,7 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	m.deps.OperationTimeout = EngineDuration(cfg, config.EngineKeyOperationTimeout, DefaultEngineOperationTimeout)
 	m.deps.MaxParallel = EngineInt(cfg, config.EngineKeyMaxParallelChecks, DefaultEngineMaxParallelChecks)
 	m.deps.UserLookup = EngineUserLookup(cfg, m.deps.ExecxRunner)
-	m.deps.SystemFreshness = m.deps.Interval / 2
+	m.deps.SystemFreshness = m.deps.Interval / SystemFreshnessIntervalDivisor
 	if m.collector != nil && m.deps.SystemFreshness > 0 {
 		m.collector.SystemFreshness = m.deps.SystemFreshness
 	}

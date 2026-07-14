@@ -24,6 +24,7 @@ const (
 	watchReadingKindDir      = "directory"
 	watchReadingKindOther    = "other"
 	watchReadingNumericBase  = 10
+	fileWatchReadingsPerPath = 6
 )
 
 func (b *WebBackend) fileWatchView(ctx context.Context, w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
@@ -36,7 +37,7 @@ func (b *WebBackend) fileWatchView(ctx context.Context, w *webWatch) (*web.Watch
 	if b.now != nil {
 		now = b.now()
 	}
-	readings := make([]web.WatchReading, 0, len(paths)*6)
+	readings := make([]web.WatchReading, 0, len(paths)*fileWatchReadingsPerPath)
 	summaries := make([]string, 0, len(paths))
 	for _, path := range paths {
 		info, statErr := os.Lstat(path)
@@ -221,7 +222,9 @@ func (b *WebBackend) hdparmWatchView(ctx context.Context, w *webWatch) (*web.Wat
 		return nil, watchErrorReadings(msg), "hdparm: " + msg
 	}
 	readings := []web.WatchReading{{Field: checks.DataKeyDevice, Label: watchReadingLabelDevice, Value: device}}
-	parts := make([]string, 0, 2)
+	const hdparmSummaryPartCapacity = 2
+
+	parts := make([]string, 0, hdparmSummaryPartCapacity)
 	for _, field := range []string{checks.HdparmFieldRead, checks.HdparmFieldCached} {
 		if v, ok := values[field]; ok {
 			readings = append(readings, web.WatchReading{
