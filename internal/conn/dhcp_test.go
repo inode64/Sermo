@@ -71,7 +71,7 @@ func TestParseDHCPOffer(t *testing.T) {
 	const xid = uint32(0xdeadbeef)
 	mac, _ := net.ParseMAC("aa:bb:cc:dd:ee:ff")
 
-	offer := make([]byte, 240)
+	offer := make([]byte, dhcpPacketMinBytes, dhcpPacketMinBytes+dhcpOfferOptionsBytes)
 	offer[0] = dhcpOpBootReply
 	offer[1] = dhcpHTypeEthernet
 	offer[2] = dhcpHLenEthernet
