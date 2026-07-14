@@ -31,6 +31,10 @@ The remote scripts must run as root on the target host:
   packaged catalog. It snapshots `/etc/sermo`, rejects payloads containing any
   other path, and rolls back the binaries and catalog if validation, restart or
   authenticated Web UI checks fail.
+- `remote_normalize_retired_umount_keys.sh` removes only the retired
+  `mount.umount.allow_lazy: false` and `allow_sigkill: false` keys from existing
+  YAML. It rejects non-false values, validates with the candidate binary and
+  restores `/etc/sermo` if validation fails.
 - `remote_update_network_watches.sh` refreshes only `/etc/sermo/networks` from
   a generated payload. It rejects any other archive member, validates the
   retained configuration, restarts `sermod`, and restores the prior network
