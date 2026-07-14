@@ -16,7 +16,7 @@ type fakeSizer struct {
 	now   time.Time
 }
 
-func (f *fakeSizer) sample(context.Context, string) (int64, error) {
+func (f *fakeSizer) sample(context.Context, string, bool) (int64, error) {
 	s := f.sizes[f.i]
 	if f.i < len(f.sizes)-1 {
 		f.i++
@@ -94,13 +94,13 @@ func TestBuildAndRunSizeCheckRealFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	built, warns := Build(map[string]any{
-		"grow": map[string]any{"type": "size", "path": path, "grow_by": "1GB", "within": "1h"},
+		"grow": map[string]any{"type": "size", "path": path, "include_hidden": true, "grow_by": "1GB", "within": "1h"},
 	}, Deps{DefaultTimeout: time.Second})
 	if len(warns) != 0 || len(built) != 1 {
 		t.Fatalf("size check should build: warns=%v", warns)
 	}
 	sc, ok := built[0].Check.(*sizeCheck)
-	if !ok || sc.growBy != 1<<30 || sc.window != time.Hour {
+	if !ok || sc.growBy != 1<<30 || sc.window != time.Hour || !sc.includeHidden {
 		t.Fatalf("built = %T %+v", built[0].Check, built[0].Check)
 	}
 	// First run baselines a small file: no alert, and it reads the real size.
@@ -110,6 +110,34 @@ func TestBuildAndRunSizeCheckRealFile(t *testing.T) {
 	}
 	if r.Data["current_bytes"].(int64) != 1024 {
 		t.Fatalf("current_bytes = %v, want 1024", r.Data["current_bytes"])
+	}
+}
+
+func TestDirOrFileSizeSkipsHiddenEntriesByDefault(t *testing.T) {
+	root := t.TempDir()
+	for path, size := range map[string]int{
+		"visible.txt":       3,
+		".hidden.txt":       5,
+		".cache/nested.txt": 7,
+	} {
+		fullPath := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(fullPath, make([]byte, size), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if size, err := dirOrFileSize(context.Background(), root, false); err != nil || size != 3 {
+		t.Fatalf("default recursive size = %d, %v; want 3, nil", size, err)
+	}
+	if size, err := dirOrFileSize(context.Background(), root, true); err != nil || size != 15 {
+		t.Fatalf("include_hidden recursive size = %d, %v; want 15, nil", size, err)
+	}
+	hiddenPath := filepath.Join(root, ".hidden.txt")
+	if size, err := dirOrFileSize(context.Background(), hiddenPath, false); err != nil || size != 5 {
+		t.Fatalf("explicit hidden file size = %d, %v; want 5, nil", size, err)
 	}
 }
 

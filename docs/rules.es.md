@@ -1315,7 +1315,9 @@ tamaño (`free_bytes`, `expand.by`): un sufijo explícito `K`/`M`/`G`/`T` (opcio
 `B`/`iB`), unidades binarias (`1G` = 2³⁰), con recuentos de bytes simples rechazados. Los datos
 del resultado llevan `current_bytes`, `baseline_bytes`,
 `growth_bytes`, la `window` y `value` (el crecimiento) para hooks/reglas. Un
-recorrido de directorio lee todo el subárbol cada ciclo, así que apúntala a una ruta acotada.
+recorrido de directorio omite descendientes ocultos por defecto; usa
+`include_hidden: true` para incluirlos. Una ruta oculta indicada directamente siempre
+se muestrea. Apúntala a una ruta acotada.
 
 ### WebSocket (`websocket`)
 
@@ -1725,6 +1727,7 @@ checks:
     path: /var/spool/myapp        # required: directory to scan
     of: file                      # any (default) | file | dir | symlink
     recursive: false              # optional, default false
+    include_hidden: false         # opcional, false por defecto en recorridos recursivos
     op: ">"                       # >=, >, <=, <, ==, !=
     value: 1000                   # numeric threshold
 ```
@@ -1743,8 +1746,9 @@ checks:
   tipo sin seguir symlinks, así que un symlink cuenta como `symlink` (nunca como el
   archivo o directorio al que apunta); `any` cuenta cada entrada.
 - **`recursive: true`** desciende por todo el subárbol (el directorio en sí nunca se
-  cuenta); los subdirectorios ilegibles se omiten. Por defecto cuenta solo las
-  entradas inmediatas.
+  cuenta); los subdirectorios ilegibles se omiten. Los descendientes ocultos (nombres
+  que empiezan por `.`) y sus subárboles se omiten por defecto; usa
+  `include_hidden: true` para contarlos. Por defecto cuenta solo las entradas inmediatas.
 - Una `path` ausente o ilegible hace fallar la comprobación. El total observado se
   expone en los datos del resultado de la comprobación como `count`.
 - El umbral también puede escribirse como un predicado anidado —

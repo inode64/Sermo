@@ -16,11 +16,11 @@ func TestSampleTimeouts(t *testing.T) {
 		fn   func(ctx context.Context, dur time.Duration) error
 	}{
 		{"TallyEntries", func(ctx context.Context, dur time.Duration) error {
-			_, err := TallyEntries(ctx, t.TempDir(), "any", false, dur)
+			_, err := TallyEntries(ctx, t.TempDir(), "any", false, false, dur)
 			return err
 		}},
 		{"SamplePathSize", func(ctx context.Context, dur time.Duration) error {
-			_, err := SamplePathSize(ctx, t.TempDir(), dur)
+			_, err := SamplePathSize(ctx, t.TempDir(), false, dur)
 			return err
 		}},
 		{"SampleHdparm", func(ctx context.Context, dur time.Duration) error {

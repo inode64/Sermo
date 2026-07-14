@@ -1260,24 +1260,29 @@ func TestWebBackendStatefulWatchReadings(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		config.SectionWatches: map[string]any{
 			"cfg-file": map[string]any{config.WatchKeyCheck: map[string]any{
-				checks.CheckKeyType:      checks.CheckTypeFile,
-				checks.CheckKeyPaths:     []any{filepath.Join(dir, "a.txt"), other},
-				checks.CheckKeyOlderThan: "24h",
-				checks.CheckKeySummary:   "Files ${number_files}",
+				checks.CheckKeyType:          checks.CheckTypeFile,
+				checks.CheckKeyPaths:         []any{filepath.Join(dir, "a.txt"), other},
+				checks.CheckKeyRecursive:     true,
+				checks.CheckKeyIncludeHidden: true,
+				checks.CheckKeyOlderThan:     "24h",
+				checks.CheckKeySummary:       "Files ${number_files}",
 			}},
 			"entry-count": map[string]any{config.WatchKeyCheck: map[string]any{
-				checks.CheckKeyType: checks.CheckTypeCount,
-				checks.CheckKeyPath: dir,
-				checks.CheckKeyOf:   checks.CountKindFile,
+				checks.CheckKeyType:          checks.CheckTypeCount,
+				checks.CheckKeyPath:          dir,
+				checks.CheckKeyOf:            checks.CountKindFile,
+				checks.CheckKeyRecursive:     true,
+				checks.CheckKeyIncludeHidden: true,
 			}},
 			"fw": map[string]any{config.WatchKeyCheck: map[string]any{
 				checks.CheckKeyType: checks.CheckTypeFirewallRules,
 			}},
 			"grow": map[string]any{config.WatchKeyCheck: map[string]any{
-				checks.CheckKeyType:   checks.CheckTypeSize,
-				checks.CheckKeyPath:   filepath.Join(dir, "a.txt"),
-				checks.CheckKeyGrowBy: "1M",
-				checks.CheckKeyWithin: "1h",
+				checks.CheckKeyType:          checks.CheckTypeSize,
+				checks.CheckKeyPath:          filepath.Join(dir, "a.txt"),
+				checks.CheckKeyIncludeHidden: true,
+				checks.CheckKeyGrowBy:        "1M",
+				checks.CheckKeyWithin:        "1h",
 			}},
 			"disk-speed": map[string]any{config.WatchKeyCheck: map[string]any{
 				checks.CheckKeyType:   checks.CheckTypeHdparm,
@@ -1331,17 +1336,26 @@ func TestWebBackendStatefulWatchReadings(t *testing.T) {
 	if got := conditionByField(byName["cfg-file"].Conditions, checks.CheckKeyOlderThan).Value; got != "24h" {
 		t.Fatalf("file older_than condition = %q, want 24h", got)
 	}
+	if got := conditionByField(byName["cfg-file"].Conditions, checks.CheckKeyIncludeHidden).Value; got != "true" {
+		t.Fatalf("file include_hidden condition = %q, want true", got)
+	}
 	if !byName["cfg-file"].SummaryConfigured {
 		t.Fatalf("file summary configuration was not exposed to the web view: %+v", byName["cfg-file"])
 	}
 	if got := readingByField(byName["entry-count"].Readings, "count").Value; got != "1" {
 		t.Fatalf("count = %q, want 1", got)
 	}
+	if got := conditionByField(byName["entry-count"].Conditions, checks.CheckKeyIncludeHidden).Value; got != "true" {
+		t.Fatalf("count include_hidden condition = %q, want true", got)
+	}
 	if got := readingByField(byName["fw"].Readings, "rules").Value; got != "42" {
 		t.Fatalf("firewall rules = %q, want 42", got)
 	}
 	if got := readingByField(byName["grow"].Readings, "current_bytes").Value; got != "5 B" {
 		t.Fatalf("size = %q, want 5 B", got)
+	}
+	if got := conditionByField(byName["grow"].Conditions, checks.CheckKeyIncludeHidden).Value; got != "true" {
+		t.Fatalf("size include_hidden condition = %q, want true", got)
 	}
 	if got := readingByField(byName["disk-speed"].Readings, "read").Value; got != "" {
 		t.Fatalf("hdparm read = %q, want no cold web probe", got)

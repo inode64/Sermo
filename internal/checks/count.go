@@ -18,16 +18,17 @@ import (
 // matches the configured predicate.
 type countCheck struct {
 	base
-	path       string
-	kind       string
-	recursive  bool
-	op         string
-	value      float64
-	deltaOp    string
-	deltaValue float64
-	window     time.Duration
-	clock      func() time.Time
-	state      *countState
+	path          string
+	kind          string
+	recursive     bool
+	includeHidden bool
+	op            string
+	value         float64
+	deltaOp       string
+	deltaValue    float64
+	window        time.Duration
+	clock         func() time.Time
+	state         *countState
 }
 
 type countSample struct {
@@ -60,11 +61,12 @@ func (c countCheck) Run(ctx context.Context) Result {
 	res := c.result(ok, fmt.Sprintf("%d %s entries %s %s (want %s %s)",
 		n, c.kind, scope, c.path, c.op, strconv.FormatFloat(c.value, floatFormatFixed, floatPrecisionAuto, numericBits64)), start)
 	res.Data = map[string]any{
-		DataKeyPath:      c.path,
-		DataKeyOf:        c.kind,
-		DataKeyRecursive: c.recursive,
-		DataKeyCount:     n,
-		DataKeyValue:     n,
+		DataKeyPath:           c.path,
+		DataKeyOf:             c.kind,
+		DataKeyRecursive:      c.recursive,
+		CheckKeyIncludeHidden: c.includeHidden,
+		DataKeyCount:          n,
+		DataKeyValue:          n,
 	}
 	return res
 }
@@ -103,14 +105,15 @@ func (c countCheck) runDelta(n int, start time.Time) Result {
 		n, c.kind, scope, c.path, growth, span.Round(time.Second),
 		c.deltaOp, strconv.FormatFloat(c.deltaValue, floatFormatFixed, floatPrecisionAuto, numericBits64)), start)
 	res.Data = map[string]any{
-		DataKeyPath:          c.path,
-		DataKeyOf:            c.kind,
-		DataKeyRecursive:     c.recursive,
-		DataKeyCount:         n,
-		DataKeyBaselineCount: baseline.count,
-		DataKeyGrowthCount:   growth,
-		DataKeyWindow:        c.window.String(),
-		DataKeyValue:         growth,
+		DataKeyPath:           c.path,
+		DataKeyOf:             c.kind,
+		DataKeyRecursive:      c.recursive,
+		CheckKeyIncludeHidden: c.includeHidden,
+		DataKeyCount:          n,
+		DataKeyBaselineCount:  baseline.count,
+		DataKeyGrowthCount:    growth,
+		DataKeyWindow:         c.window.String(),
+		DataKeyValue:          growth,
 	}
 	return res
 }
@@ -159,6 +162,12 @@ func (c countCheck) tallyRecursive(ctx context.Context) (int, error) {
 		if path == c.path {
 			return nil // never count the root directory itself
 		}
+		if !c.includeHidden && IsHiddenDescendant(c.path, path, d) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		if c.matches(d.Type()) {
 			n++
 		}
@@ -187,11 +196,11 @@ func (c countCheck) matches(typ fs.FileMode) bool {
 // root path itself is never included. Used by the web UI for live count-watch
 // readings without re-running the full check. timeout bounds the probe context
 // and is used for operator-facing timeout messages.
-func TallyEntries(ctx context.Context, path, kind string, recursive bool, timeout time.Duration) (int, error) {
+func TallyEntries(ctx context.Context, path, kind string, recursive, includeHidden bool, timeout time.Duration) (int, error) {
 	if kind == "" {
 		kind = CountKindAny
 	}
-	c := countCheck{base: base{timeout: timeout}, path: path, kind: kind, recursive: recursive, op: cfgval.CompareOpGreaterEqual, value: 0}
+	c := countCheck{base: base{timeout: timeout}, path: path, kind: kind, recursive: recursive, includeHidden: includeHidden, op: cfgval.CompareOpGreaterEqual, value: 0}
 	n, err := c.tally(ctx)
 	if err != nil {
 		return 0, errors.New(execx.ContextFailure(err, timeout))

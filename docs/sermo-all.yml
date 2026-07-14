@@ -353,6 +353,7 @@ watches:
       type: file
       path: /var/lib/myapp
       recursive: true
+      include_hidden: false  # default: skip hidden descendants during recursive scans
       size: { op: ">", value: 1048576 }  # or size: { on: change }
       permissions: { on: change }
       owner: { on: change }

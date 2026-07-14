@@ -2203,6 +2203,7 @@ watches:
         - /var/lib/myapp
         - /srv/myapp/incoming
       recursive: true                 # optional, default false (whole subtree)
+      include_hidden: true            # optional, default false (include .files/.dirs)
       older_than: 24h                 # optional: mtime age; any stale path fires
       summary: "${path} age ${value}, limit ${older_than}, files ${number_files}"
       size: { op: ">", value: 1048576 }   # edge threshold; or `size: { on: change }`
@@ -2233,6 +2234,9 @@ The conditions (declare at least one):
 
 When `recursive: true` and a selected path is a directory, every entry in that
 subtree is tracked independently (symlinks are watched as links, never followed).
+By default, descendants whose name starts with `.` are skipped, including their
+subtrees. Set `include_hidden: true` to track them. A hidden path named directly
+in `path` or `paths` is always tracked.
 New entries are adopted silently unless already stale; deleted entries fire
 `existence` if configured. Each detected change or freshness breach is **one event
 and one hook run**, so a cycle that finds several paths fires several times.

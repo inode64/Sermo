@@ -1315,7 +1315,9 @@ field (`free_bytes`, `expand.by`): an explicit `K`/`M`/`G`/`T` suffix (optional
 `B`/`iB`), binary units (`1G` = 2³⁰), with plain byte counts rejected. Result
 data carries `current_bytes`, `baseline_bytes`,
 `growth_bytes`, the `window` and `value` (the growth) for hooks/rules. A
-directory walk reads the whole subtree each cycle, so point it at a bounded path.
+directory walk skips hidden descendants by default; set `include_hidden: true` to
+include them. A hidden path named directly is always sampled. Point it at a bounded
+path.
 
 ### WebSocket (`websocket`)
 
@@ -1728,6 +1730,7 @@ checks:
     path: /var/spool/myapp        # required: directory to scan
     of: file                      # any (default) | file | dir | symlink
     recursive: false              # optional, default false
+    include_hidden: false         # optional, default false for recursive scans
     op: ">"                       # >=, >, <=, <, ==, !=
     value: 1000                   # numeric threshold
 ```
@@ -1746,8 +1749,9 @@ checks:
   type without following symlinks, so a symlink counts as `symlink` (never as the
   file or directory it points to); `any` counts every entry.
 - **`recursive: true`** descends the whole subtree (the directory itself is never
-  counted); unreadable subdirectories are skipped. Default counts only the
-  immediate entries.
+  counted); unreadable subdirectories are skipped. Hidden descendants (names starting
+  with `.`) and their subtrees are skipped by default; set `include_hidden: true` to
+  count them. Default counts only the immediate entries.
 - A missing or unreadable `path` makes the check fail. The observed total is
   exposed in the check's result data as `count`.
 - The threshold may also be written as a nested predicate —
