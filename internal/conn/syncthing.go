@@ -88,7 +88,7 @@ func (syncthingProtocol) Probe(ctx context.Context, cfg Config) (Result, error) 
 // syncthingGet performs a GET, optionally with an X-API-Key header, and decodes
 // the JSON body into out. A non-200 status is an error.
 func syncthingGet(ctx context.Context, client *http.Client, url, apiKey string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return err
 	}

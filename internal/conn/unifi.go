@@ -47,7 +47,7 @@ func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	client := httpProbeClient(cfg.Interface, tc)
 
 	url := schemeHTTPS + urlSchemeSeparator + hostPort(host, port) + unifiStatusEndpoint
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return Result{}, err
 	}
