@@ -406,3 +406,29 @@ func TestOpenRCAssignmentsIfElseFi(t *testing.T) {
 		t.Fatalf("AFTER = %q, want c (active restored after fi)", fiVars["AFTER"])
 	}
 }
+
+func TestOpenRCAssignmentsNestedBranches(t *testing.T) {
+	vars := openRCAssignments(`
+OUTER=yes
+MISSING=
+if [ -n "${OUTER}" ]; then
+  BEFORE=ok
+  if [ -n "${MISSING}" ]; then
+    WRONG=inner
+  else
+    INNER=ok
+  fi
+else
+  WRONG=outer
+fi
+AFTER=ok
+`, "svc")
+	for name, want := range map[string]string{"BEFORE": "ok", "INNER": "ok", "AFTER": "ok"} {
+		if got := vars[name]; got != want {
+			t.Fatalf("%s = %q, want %q", name, got, want)
+		}
+	}
+	if got := vars["WRONG"]; got != "" {
+		t.Fatalf("inactive branch assigned WRONG=%q", got)
+	}
+}
