@@ -1,7 +1,7 @@
 package app
 
 import (
-	"fmt"
+	"errors"
 	"time"
 
 	"sermo/internal/state"
@@ -42,7 +42,7 @@ func (f *fakeStore) SetActive(service string, active bool, source string) error 
 		return nil
 	}
 	if f.failSet {
-		return fmt.Errorf("set active failed")
+		return errors.New("set active failed")
 	}
 	f.active[service] = active
 	f.source[service] = source
@@ -62,7 +62,7 @@ func (f *fakeStore) SetPanic(on bool, source string) error {
 		return nil
 	}
 	if f.failSet {
-		return fmt.Errorf("set panic failed")
+		return errors.New("set panic failed")
 	}
 	f.panicOn = on
 	f.panicFound = true
@@ -90,7 +90,7 @@ func (f *fakeStore) SetOperationSettling(service, action, phase, source string) 
 		return nil
 	}
 	if f.failSet {
-		return fmt.Errorf("set operation settling failed")
+		return errors.New("set operation settling failed")
 	}
 	f.settling[service] = state.OperationSettlingRecord{
 		Action:    action,
@@ -114,7 +114,7 @@ func (f *fakeStore) ClearOperationSettling(service string) error {
 		return nil
 	}
 	if f.failSet {
-		return fmt.Errorf("clear operation settling failed")
+		return errors.New("clear operation settling failed")
 	}
 	delete(f.settling, service)
 	return nil

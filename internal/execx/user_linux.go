@@ -3,6 +3,7 @@
 package execx
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -20,7 +21,7 @@ const (
 func prepareCommandUser(cmd *exec.Cmd, userName string) error {
 	userName = strings.TrimSpace(userName)
 	if userName == "" {
-		return fmt.Errorf("execx: command user is empty")
+		return errors.New("execx: command user is empty")
 	}
 	u, err := lookupCommandUser(userName)
 	if err != nil {

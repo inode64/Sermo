@@ -137,7 +137,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 
 	case NetMetricSpeed:
 		if !s.SpeedKnown {
-			res := c.result(false, fmt.Sprintf("%s speed unknown", c.iface), start)
+			res := c.result(false, c.iface+" speed unknown", start)
 			res.Data = data
 			return res
 		}

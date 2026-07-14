@@ -98,7 +98,7 @@ func (m *Monitor) Reload(ctx context.Context) {
 		return
 	}
 	if issues := config.Validate(newCfg); len(issues) > 0 {
-		m.emitReloadError(fmt.Sprintf("config invalid: %s", formatValidationIssues(issues)))
+		m.emitReloadError("config invalid: " + formatValidationIssues(issues))
 		return
 	}
 

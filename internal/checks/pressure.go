@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -148,7 +149,7 @@ func parsePressure(data string) (PressureSample, error) {
 		}
 	}
 	if !seen {
-		return s, fmt.Errorf("unrecognized PSI format")
+		return s, errors.New("unrecognized PSI format")
 	}
 	return s, nil
 }

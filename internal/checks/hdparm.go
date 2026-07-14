@@ -125,7 +125,7 @@ func parseHdparm(out string) (map[string]float64, error) {
 		}
 	}
 	if len(values) == 0 {
-		return nil, fmt.Errorf("no timing in output")
+		return nil, errors.New("no timing in output")
 	}
 	return values, nil
 }

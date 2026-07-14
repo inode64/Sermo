@@ -48,6 +48,7 @@ linters:
     - noctx  # blocking I/O must use *Context APIs; conn/ and *_test.go excluded
     - nosprintfhostport  # host:port construction must preserve IPv6 correctness
     - nolintlint  # //nolint: directives must name a linter and stay justified
+    - perfsprint  # avoid needless fmt allocations (errors.New, strconv, concatenation)
     - reassign  # writes to other packages' package-level vars
     - recvcheck  # mixed value/pointer receivers on one type
     - rowserrcheck  # database/sql Rows.Err() left unchecked

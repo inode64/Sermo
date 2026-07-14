@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -112,8 +113,8 @@ func TestInspectUsesConfiguredUserLookupForOwners(t *testing.T) {
 		t.Fatal("stat did not return syscall.Stat_t")
 	}
 	runner := fakeRunner{byCommand: map[string]execx.Result{
-		commandKey("getent", "passwd", fmt.Sprintf("%d", st.Uid)): {Stdout: "ldap-owner:x:4242:4243::/home/ldap-owner:/bin/bash\n"},
-		commandKey("getent", "group", fmt.Sprintf("%d", st.Gid)):  {Stdout: "ldap-group:x:4243:ldap-owner\n"},
+		commandKey("getent", "passwd", strconv.FormatUint(uint64(st.Uid), 10)): {Stdout: "ldap-owner:x:4242:4243::/home/ldap-owner:/bin/bash\n"},
+		commandKey("getent", "group", strconv.FormatUint(uint64(st.Gid), 10)):  {Stdout: "ldap-group:x:4243:ldap-owner\n"},
 	}}
 	lookup := process.NewUserLookup(process.UserLookupConfig{
 		Mode:   process.UserLookupGetent,

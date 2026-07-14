@@ -1,6 +1,7 @@
 package assist
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 
@@ -48,7 +49,7 @@ func (uplinkAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	}
 	cands := nonLoopbackIfaces(ifaces)
 	if len(cands) == 0 {
-		return Result{}, fmt.Errorf("no candidate interfaces found")
+		return Result{}, errors.New("no candidate interfaces found")
 	}
 	selected := chooseIfaces(p, "Which uplink interfaces do you want to monitor?", cands, env.DefaultIfaces, true)
 

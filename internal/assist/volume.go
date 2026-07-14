@@ -1,6 +1,7 @@
 package assist
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -42,7 +43,7 @@ func (volumeAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	}
 	vols = storageVolumeCandidates(vols)
 	if len(vols) == 0 {
-		return Result{}, fmt.Errorf("no storage volumes found to monitor")
+		return Result{}, errors.New("no storage volumes found to monitor")
 	}
 	selected := chooseCandidates(p, "Which volumes do you want to monitor?", vols, volumeLabel)
 

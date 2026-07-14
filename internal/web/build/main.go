@@ -16,6 +16,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"html/template"
@@ -158,10 +159,10 @@ func build(srcDir, out string) error {
 	// A bundle that smuggled in a literal </script> or </style> would break the
 	// inline blocks; esbuild never emits one, but guard regardless.
 	if strings.Contains(js, "</script") {
-		return fmt.Errorf("js bundle contains </script")
+		return errors.New("js bundle contains </script")
 	}
 	if strings.Contains(css, "</style") {
-		return fmt.Errorf("css bundle contains </style")
+		return errors.New("css bundle contains </style")
 	}
 	// The server fills these per request; they must survive the build.
 	for _, ph := range []string{"{{CSP_NONCE}}", "{{VERSION}}"} {
@@ -186,12 +187,12 @@ func loadWatchPanels(path string) ([]watchPanelDescriptor, error) {
 		return nil, fmt.Errorf("decode watch panels %s: %w", path, err)
 	}
 	if len(panels) == 0 {
-		return nil, fmt.Errorf("no descriptors")
+		return nil, errors.New("no descriptors")
 	}
 	seen := make(map[string]bool, len(panels))
 	for _, panel := range panels {
 		if panel.Key == "" || panel.SectionID == "" || panel.RowsID == "" || len(panel.Columns) == 0 {
-			return nil, fmt.Errorf("descriptor has missing key, section, rows or columns")
+			return nil, errors.New("descriptor has missing key, section, rows or columns")
 		}
 		if seen[panel.Key] {
 			return nil, fmt.Errorf("duplicate key %q", panel.Key)

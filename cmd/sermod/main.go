@@ -467,7 +467,7 @@ func parseArgs(args []string) (cliArgs, error) {
 		return cliArgs{}, fmt.Errorf("unexpected argument %q", rest[1])
 	}
 	if parsed.command == "" {
-		return cliArgs{}, fmt.Errorf("missing command")
+		return cliArgs{}, errors.New("missing command")
 	}
 	return parsed, nil
 }

@@ -149,7 +149,7 @@ func ParseVersionMatcher(v any) (VersionMatcher, string) {
 	for _, key := range slices.Sorted(maps.Keys(spec)) {
 		values := cfgval.StringList(spec[key])
 		if len(values) == 0 {
-			return VersionMatcher{}, fmt.Sprintf("%s must be a non-empty string or list", key)
+			return VersionMatcher{}, key + " must be a non-empty string or list"
 		}
 		switch key {
 		case VersionMatchKeyContains:

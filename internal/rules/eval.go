@@ -3,6 +3,7 @@ package rules
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -92,7 +93,7 @@ func NewCheckResolver(built []checks.Built, maxParallel int) RefResolver {
 // caller (guard/remediation) can treat it conservatively.
 func (e *Evaluator) Eval(ctx context.Context, node map[string]any) (bool, error) {
 	if len(node) == 0 {
-		return false, fmt.Errorf("empty condition")
+		return false, errors.New("empty condition")
 	}
 
 	if v, ok := node[ConditionAnd]; ok {
@@ -104,7 +105,7 @@ func (e *Evaluator) Eval(ctx context.Context, node map[string]any) (bool, error)
 	if v, ok := node[ConditionNot]; ok {
 		child, ok := v.(map[string]any)
 		if !ok {
-			return false, fmt.Errorf("not: must be a condition mapping")
+			return false, errors.New("not: must be a condition mapping")
 		}
 		r, err := e.Eval(ctx, child)
 		return !r, err
@@ -135,7 +136,7 @@ func (e *Evaluator) Eval(ctx context.Context, node map[string]any) (bool, error)
 	if v, ok := node[ConditionChanged]; ok {
 		return e.evalChanged(ctx, v)
 	}
-	return false, fmt.Errorf("condition has no recognized operator")
+	return false, errors.New("condition has no recognized operator")
 }
 
 // condMap asserts a condition operand is a mapping, returning a "<label> must be
@@ -152,12 +153,12 @@ func condMap(v any, label string) (map[string]any, error) {
 func (e *Evaluator) evalList(ctx context.Context, v any, and bool) (bool, error) {
 	items, ok := v.([]any)
 	if !ok || len(items) == 0 {
-		return false, fmt.Errorf("and/or requires a non-empty list")
+		return false, errors.New("and/or requires a non-empty list")
 	}
 	for _, item := range items {
 		node, ok := item.(map[string]any)
 		if !ok {
-			return false, fmt.Errorf("and/or item must be a condition mapping")
+			return false, errors.New("and/or item must be a condition mapping")
 		}
 		r, err := e.Eval(ctx, node)
 		if err != nil {
@@ -217,7 +218,7 @@ func (e *Evaluator) evalFile(ctx context.Context, v any) (bool, error) {
 	}
 	path := cfgval.AsString(m[FieldPath])
 	if path == "" {
-		return false, fmt.Errorf("file condition requires a path")
+		return false, errors.New("file condition requires a path")
 	}
 	wantExists := true
 	if b, ok := m[FieldExists].(bool); ok {
@@ -237,7 +238,7 @@ func (e *Evaluator) evalService(ctx context.Context, v any) (bool, error) {
 	}
 	state := cfgval.AsString(m[FieldState])
 	if state == "" {
-		return false, fmt.Errorf("service condition requires a state")
+		return false, errors.New("service condition requires a state")
 	}
 	res, err := e.runInline(ctx, checks.CheckTypeService, map[string]any{FieldType: checks.CheckTypeService, FieldExpect: state}, m)
 	if err != nil {
@@ -323,7 +324,7 @@ func (e *Evaluator) evalChanged(ctx context.Context, v any) (bool, error) {
 	}
 	path := cfgval.AsString(m[FieldPath])
 	if path == "" {
-		return false, fmt.Errorf("changed condition requires a path or app")
+		return false, errors.New("changed condition requires a path or app")
 	}
 	if e.Changed == nil {
 		return false, nil
@@ -372,7 +373,7 @@ func (e *Evaluator) runInline(ctx context.Context, name string, entry map[string
 // inlineEntry converts an inline {<type>: params} operand into a check entry.
 func inlineEntry(m map[string]any) (map[string]any, string, error) {
 	if len(m) != 1 {
-		return nil, "", fmt.Errorf("inline probe must have exactly one type key")
+		return nil, "", errors.New("inline probe must have exactly one type key")
 	}
 	for k, v := range m {
 		params, ok := v.(map[string]any)
@@ -383,7 +384,7 @@ func inlineEntry(m map[string]any) (map[string]any, string, error) {
 		maps.Copy(entry, params)
 		return entry, k, nil
 	}
-	return nil, "", fmt.Errorf("empty inline probe")
+	return nil, "", errors.New("empty inline probe")
 }
 
 func normalizeKey(m map[string]any) string {

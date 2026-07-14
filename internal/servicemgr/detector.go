@@ -115,12 +115,12 @@ func (d Detector) Detect(ctx context.Context, requested Backend) (Detection, err
 	switch requested {
 	case BackendSystemd:
 		if !systemd.Available {
-			return Detection{}, fmt.Errorf("requested backend systemd is not available")
+			return Detection{}, errors.New("requested backend systemd is not available")
 		}
 		return Detection{Backend: BackendSystemd, Source: SourceRequested, Systemd: systemd, OpenRC: openrc}, nil
 	case BackendOpenRC:
 		if !openrc.Available {
-			return Detection{}, fmt.Errorf("requested backend openrc is not available")
+			return Detection{}, errors.New("requested backend openrc is not available")
 		}
 		return Detection{Backend: BackendOpenRC, Source: SourceRequested, Systemd: systemd, OpenRC: openrc}, nil
 	case BackendAuto:

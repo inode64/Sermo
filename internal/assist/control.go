@@ -1,6 +1,7 @@
 package assist
 
 import (
+	"errors"
 	"fmt"
 
 	"sermo/internal/cfgval"
@@ -21,14 +22,14 @@ func (dockerAssistant) Title() string {
 func (dockerAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	defer Recover(&err)
 	if env.DockerContainers == nil {
-		return Result{}, fmt.Errorf("docker detection is unavailable")
+		return Result{}, errors.New("docker detection is unavailable")
 	}
 	cands, err := env.DockerContainers()
 	if err != nil {
 		return Result{}, fmt.Errorf("detect Docker containers: %w", err)
 	}
 	if len(cands) == 0 {
-		return Result{}, fmt.Errorf("no Docker containers were detected on this host")
+		return Result{}, errors.New("no Docker containers were detected on this host")
 	}
 	selected := chooseDockerContainers(p, "Which Docker containers do you want Sermo to monitor and manage?", cands)
 	return controlledResult(buildControlledServices(p, env, selected, dockerName, buildDockerService))
@@ -44,14 +45,14 @@ func (vmAssistant) Title() string {
 func (vmAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	defer Recover(&err)
 	if env.VMs == nil {
-		return Result{}, fmt.Errorf("VM detection is unavailable")
+		return Result{}, errors.New("VM detection is unavailable")
 	}
 	cands, err := env.VMs()
 	if err != nil {
 		return Result{}, fmt.Errorf("detect libvirt domains: %w", err)
 	}
 	if len(cands) == 0 {
-		return Result{}, fmt.Errorf("no libvirt/QEMU domains were detected on this host")
+		return Result{}, errors.New("no libvirt/QEMU domains were detected on this host")
 	}
 	selected := chooseVMs(p, "Which virtual machines do you want Sermo to monitor and manage?", cands)
 	return controlledResult(buildControlledServices(p, env, selected, vmName, buildVMService))

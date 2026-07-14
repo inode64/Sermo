@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -865,7 +866,7 @@ func (w *Worker) compareAppVersion(app string, level int, raw string) (bool, err
 func (w *Worker) sampleVersion(ctx context.Context, vc appVersionCmd) (string, error) {
 	runner := w.CheckDeps.Runner
 	if runner == nil {
-		return "", fmt.Errorf("no command runner configured")
+		return "", errors.New("no command runner configured")
 	}
 	timeout := vc.timeout
 	if timeout <= 0 {
