@@ -344,7 +344,7 @@ func parseMdstat(s string) RaidStatus {
 				cur.Degraded = true
 			}
 		}
-		if m := mdStatusRe.FindStringSubmatch(line); m != nil && strings.Contains(m[mdStatusMapGroup], "_") {
+		if m := mdStatusRe.FindStringSubmatch(line); len(m) > mdStatusMapGroup && strings.Contains(m[mdStatusMapGroup], "_") {
 			cur.Degraded = true
 		}
 		if m := mdProgressRe.FindStringSubmatch(line); m != nil {

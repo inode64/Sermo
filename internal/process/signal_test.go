@@ -10,12 +10,13 @@ import (
 )
 
 func TestParseSignal(t *testing.T) {
+	paddedUSR1 := " usr1 "
 	cases := map[string]syscall.Signal{
-		"HUP":    syscall.SIGHUP,
-		"sighup": syscall.SIGHUP,
-		"SIGHUP": syscall.SIGHUP,
-		" usr1 ": syscall.SIGUSR1,
-		"USR2":   syscall.SIGUSR2,
+		"HUP":      syscall.SIGHUP,
+		"sighup":   syscall.SIGHUP,
+		"SIGHUP":   syscall.SIGHUP,
+		paddedUSR1: syscall.SIGUSR1,
+		"USR2":     syscall.SIGUSR2,
 	}
 	for in, want := range cases {
 		got, err := ParseSignal(in)
