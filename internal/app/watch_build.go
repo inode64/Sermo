@@ -568,7 +568,7 @@ func parseThenAndExplicit(entry map[string]any) (HookSpec, []string, map[string]
 func thenMap(entry map[string]any) (map[string]any, error) {
 	raw, present := entry[rules.RuleFieldThen]
 	if !present {
-		return nil, nil
+		return nil, nil //nolint:nilnil // absent optional then block has no parse error
 	}
 	then, ok := raw.(map[string]any)
 	if !ok {
@@ -671,7 +671,7 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 func parseRaidNotifyEvents(then map[string]any) (map[string]bool, error) {
 	raw, present := then[config.WatchThenKeyNotifyOn]
 	if !present {
-		return nil, nil
+		return nil, nil //nolint:nilnil // absent optional notify_on selector has no parse error
 	}
 	names, err := cfgval.StrictStringList(raw)
 	if err != nil || len(names) == 0 {
@@ -692,7 +692,7 @@ func parseRaidNotifyEvents(then map[string]any) (map[string]bool, error) {
 func parseKill(then map[string]any) (*killSpec, error) {
 	raw, present := then[config.WatchThenKeyKill]
 	if !present {
-		return nil, nil
+		return nil, nil //nolint:nilnil // absent optional kill action has no parse error
 	}
 	m, ok := raw.(map[string]any)
 	if !ok {
@@ -723,7 +723,7 @@ func parseKill(then map[string]any) (*killSpec, error) {
 func parseExpand(then map[string]any, checkType string) (*ExpandSpec, error) {
 	raw, ok := then[config.WatchThenKeyExpand].(map[string]any)
 	if !ok {
-		return nil, nil
+		return nil, nil //nolint:nilnil // absent optional expand action has no parse error
 	}
 	if !isStorageCheckType(checkType) {
 		return nil, fmt.Errorf("then.expand is only valid on a storage watch, not %q", checkType)

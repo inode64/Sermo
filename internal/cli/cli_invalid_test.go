@@ -145,7 +145,7 @@ func TestConfigValidateRejectsServiceArgumentBeforeLoadingConfig(t *testing.T) {
 		Stderr: &stderr,
 		LoadConfig: func(string, ...config.Option) (*config.Config, error) {
 			t.Fatal("config validate with a positional argument must fail before loading config")
-			return nil, nil
+			panic("unreachable")
 		},
 	}
 
