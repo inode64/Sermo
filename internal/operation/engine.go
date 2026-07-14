@@ -202,205 +202,30 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	// Step 4: release only after a successful acquire.
 	defer func() { _ = release() }()
 
-	// Step 5: active named runtime locks block the action automatically.
-	if e.NamedLocks != nil {
-		active, err := e.NamedLocks()
-		if err != nil {
-			result.Status = ResultFailed
-			result.Message = "lock scan: " + err.Error()
-			return result
-		}
-		if active = activeOnly(active); len(active) > 0 {
-			result.Status = ResultBlocked
-			result.Message = "blocked by active runtime lock"
-			result.Locks = active
-			return result
-		}
+	if !e.checkNamedLocks(&result) || !e.runPreflight(ctx, p, &result) || !e.checkGuards(ctx, p, &result) {
+		return result
 	}
 
-	// Step 6: required preflight (start/restart/reload/resume).
-	if p.preflight && e.Preflight != nil {
-		out := e.Preflight(ctx)
-		result.Checks = append(result.Checks, out.Results...)
-		if !out.OK {
-			result.Status = ResultPreflightFailed
-			result.Message = "preflight failed"
-			return result
-		}
-	}
-
-	// Step 7: guards.
-	if e.Guard != nil {
-		blocked, reason, err := e.Guard(ctx, p.action)
-		if err != nil {
-			result.Status = ResultFailed
-			result.Message = "guard: " + err.Error()
-			return result
-		}
-		if blocked {
-			result.Status = ResultBlocked
-			result.Message = reason
-			return result
-		}
-	}
-
-	if p.stop && p.start && e.RestartIdentity != nil {
-		ok, reason, err := e.RestartIdentity(ctx)
-		if err != nil {
-			result.Status = ResultFailed
-			result.Message = "restart identity: " + err.Error()
-			return result
-		}
-		if !ok {
-			result.Status = ResultBlocked
-			result.Message = reason
-			return result
-		}
-	}
-
-	// Steps 8-11: stop and residual-process handling.
+	var stopped bool
 	if p.stop {
-		if err := e.Manager.Stop(ctx, e.Unit); err != nil {
-			result.Status = ResultFailed
-			if timedOut(ctx) {
-				result.Message = "operation timed out during stop"
-			} else {
-				result.Message = "stop: " + err.Error()
-			}
-			return result
-		}
-		// Auxiliary units (also_service) go down AFTER the primary, in reverse
-		// declaration order (LIFO nesting). Placed here — right after the primary
-		// stop, before residual handling — so the orphan_processes early-return below
-		// cannot skip them. Best-effort: a failure is recorded and folded into the
-		// final message, it does not fail an already-successful stop.
-		for _, v := range slices.Backward(e.AlsoUnits) {
-			if err := e.Manager.Stop(ctx, v); err != nil {
-				alsoStopErrs = append(alsoStopErrs, fmt.Sprintf("stop %s: %v", v, err))
-			}
-		}
-		if err := process.Wait(ctx, e.Sleep, e.KillPolicy.GracefulTimeout); err != nil {
-			result.Status = ResultFailed
-			result.Message = "operation timed out during graceful stop wait"
-			return result
-		}
-		remaining, err := e.clearResiduals(ctx)
-		if err != nil {
-			result.Status = ResultFailed
-			result.Message = "process discovery: " + err.Error()
-			result.Processes = remaining
-			return result
-		}
-		if len(remaining) > 0 {
-			if timedOut(ctx) {
-				result.Status = ResultFailed
-				result.Message = "operation timed out during residual process handling"
-				result.Processes = remaining
-				return result
-			}
-			result.Status = ResultOrphanProcesses
-			result.Processes = remaining
-			result.Message = fmt.Sprintf("%d residual process(es) remain after stop", len(remaining))
-			return result // do NOT start
-		}
-		// Reconcile the init's recorded state with reality: after a clean stop
-		// with no residuals the service is genuinely down, so clear any lingering
-		// failed/stuck marker (systemd reset-failed, OpenRC zap) — otherwise the
-		// init keeps reporting a state that no longer matches the processes. Best
-		// effort: a stop that already succeeded must not fail on reconciliation.
-		_ = e.Manager.ResetState(ctx, e.Unit)
-		// Clean stop reached: verify stopped-state invariants (pidfile/files gone).
-		staleWarn = append(staleWarn, e.verifyStopped()...)
-	}
-
-	// Steps 12-13: start and verify status.
-	if p.start {
-		// Auxiliary units (also_service) come up BEFORE the primary, in declaration
-		// order (socket activation). Strict: a failure aborts the operation before
-		// the primary is started, leaving a clean "not started" state.
-		for _, unit := range e.AlsoUnits {
-			if err := e.Manager.Start(ctx, unit); err != nil {
-				result.Status = ResultFailed
-				if timedOut(ctx) {
-					result.Message = "operation timed out starting also_service " + unit
-				} else {
-					result.Message = "start " + unit + ": " + err.Error()
-				}
-				return result
-			}
-		}
-		if err := e.Manager.Start(ctx, e.Unit); err != nil {
-			result.Status = ResultFailed
-			if timedOut(ctx) {
-				result.Message = "operation timed out during start"
-			} else {
-				result.Message = "start: " + err.Error()
-			}
-			return result
-		}
-		if st, err := e.Manager.Status(ctx, e.Unit); err == nil && st.Status == servicemgr.StatusFailed {
-			result.Status = ResultFailed
-			result.Message = "service failed after start"
+		alsoStopErrs, staleWarn, stopped = e.stopService(ctx, &result)
+		if !stopped {
 			return result
 		}
 	}
 
-	// Resume a paused target in place. This is intentionally a separate optional
-	// primitive because init backends do not expose it, while libvirt does.
-	if p.resume {
-		if e.ResumeFunc == nil {
-			result.Status = ResultFailed
-			result.Message = "resume: operation unsupported by backend"
-			return result
-		}
-		if err := e.ResumeFunc(ctx); err != nil {
-			result.Status = ResultFailed
-			if timedOut(ctx) {
-				result.Message = "operation timed out during resume"
-			} else {
-				result.Message = "resume: " + err.Error()
-			}
-			return result
-		}
-		if st, err := e.Manager.Status(ctx, e.Unit); err == nil && st.Status == servicemgr.StatusFailed {
-			result.Status = ResultFailed
-			result.Message = "service failed after resume"
-			return result
-		}
+	if p.start && !e.startService(ctx, &result) {
+		return result
 	}
 
-	// Reload config in place (no stop/start). Used by the reload action for
-	// daemons that re-read their configuration without a disruptive restart.
-	if p.reload {
-		reload := e.ReloadFunc
-		if reload == nil {
-			reload = func(ctx context.Context) error { return e.Manager.Reload(ctx, e.Unit) }
-		}
-		if err := reload(ctx); err != nil {
-			result.Status = ResultFailed
-			if timedOut(ctx) {
-				result.Message = "operation timed out during reload"
-			} else {
-				result.Message = "reload: " + err.Error()
-			}
-			return result
-		}
-		if st, err := e.Manager.Status(ctx, e.Unit); err == nil && st.Status == servicemgr.StatusFailed {
-			result.Status = ResultFailed
-			result.Message = "service failed after reload"
-			return result
-		}
+	if p.resume && !e.resumeService(ctx, &result) {
+		return result
 	}
-
-	// Step 14: required postflight (start/restart/reload/resume).
-	if p.postflight && e.Postflight != nil {
-		out := e.Postflight(ctx)
-		result.Checks = append(result.Checks, out.Results...)
-		if !out.OK {
-			result.Status = ResultPostflightFailed
-			result.Message = "postflight failed"
-			return result
-		}
+	if p.reload && !e.reloadService(ctx, &result) {
+		return result
+	}
+	if !e.runPostflight(ctx, p, &result) {
+		return result
 	}
 
 	result.Message = p.action + " ok"
@@ -413,6 +238,190 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	return result
 }
 
+func (e Engine) resumeService(ctx context.Context, result *Result) bool {
+	if e.ResumeFunc == nil {
+		result.Status, result.Message = ResultFailed, "resume: operation unsupported by backend"
+		return false
+	}
+	if err := e.ResumeFunc(ctx); err != nil {
+		result.Status = ResultFailed
+		if timedOut(ctx) {
+			result.Message = "operation timed out during resume"
+		} else {
+			result.Message = "resume: " + err.Error()
+		}
+		return false
+	}
+	return e.ensureServiceHealthy(ctx, result, "resume")
+}
+
+func (e Engine) reloadService(ctx context.Context, result *Result) bool {
+	reload := e.ReloadFunc
+	if reload == nil {
+		reload = func(ctx context.Context) error { return e.Manager.Reload(ctx, e.Unit) }
+	}
+	if err := reload(ctx); err != nil {
+		result.Status = ResultFailed
+		if timedOut(ctx) {
+			result.Message = "operation timed out during reload"
+		} else {
+			result.Message = "reload: " + err.Error()
+		}
+		return false
+	}
+	return e.ensureServiceHealthy(ctx, result, "reload")
+}
+
+func (e Engine) ensureServiceHealthy(ctx context.Context, result *Result, action string) bool {
+	if status, err := e.Manager.Status(ctx, e.Unit); err == nil && status.Status == servicemgr.StatusFailed {
+		result.Status, result.Message = ResultFailed, "service failed after "+action
+		return false
+	}
+	return true
+}
+
+func (e Engine) runPostflight(ctx context.Context, p plan, result *Result) bool {
+	if !p.postflight || e.Postflight == nil {
+		return true
+	}
+	out := e.Postflight(ctx)
+	result.Checks = append(result.Checks, out.Results...)
+	if out.OK {
+		return true
+	}
+	result.Status, result.Message = ResultPostflightFailed, "postflight failed"
+	return false
+}
+
+func (e Engine) startService(ctx context.Context, result *Result) bool {
+	for _, unit := range e.AlsoUnits {
+		if err := e.Manager.Start(ctx, unit); err != nil {
+			result.Status = ResultFailed
+			if timedOut(ctx) {
+				result.Message = "operation timed out starting also_service " + unit
+			} else {
+				result.Message = "start " + unit + ": " + err.Error()
+			}
+			return false
+		}
+	}
+	if err := e.Manager.Start(ctx, e.Unit); err != nil {
+		result.Status = ResultFailed
+		if timedOut(ctx) {
+			result.Message = "operation timed out during start"
+		} else {
+			result.Message = "start: " + err.Error()
+		}
+		return false
+	}
+	if status, err := e.Manager.Status(ctx, e.Unit); err == nil && status.Status == servicemgr.StatusFailed {
+		result.Status, result.Message = ResultFailed, "service failed after start"
+		return false
+	}
+	return true
+}
+
+func (e Engine) stopService(ctx context.Context, result *Result) (alsoStopErrs, staleWarn []string, stopped bool) {
+	if err := e.Manager.Stop(ctx, e.Unit); err != nil {
+		result.Status = ResultFailed
+		if timedOut(ctx) {
+			result.Message = "operation timed out during stop"
+		} else {
+			result.Message = "stop: " + err.Error()
+		}
+		return nil, nil, false
+	}
+	for _, unit := range slices.Backward(e.AlsoUnits) {
+		if err := e.Manager.Stop(ctx, unit); err != nil {
+			alsoStopErrs = append(alsoStopErrs, fmt.Sprintf("stop %s: %v", unit, err))
+		}
+	}
+	if err := process.Wait(ctx, e.Sleep, e.KillPolicy.GracefulTimeout); err != nil {
+		result.Status, result.Message = ResultFailed, "operation timed out during graceful stop wait"
+		return alsoStopErrs, nil, false
+	}
+	remaining, err := e.clearResiduals(ctx)
+	if err != nil {
+		result.Status, result.Message, result.Processes = ResultFailed, "process discovery: "+err.Error(), remaining
+		return alsoStopErrs, nil, false
+	}
+	if len(remaining) > 0 {
+		result.Processes = remaining
+		if timedOut(ctx) {
+			result.Status, result.Message = ResultFailed, "operation timed out during residual process handling"
+		} else {
+			result.Status, result.Message = ResultOrphanProcesses, fmt.Sprintf("%d residual process(es) remain after stop", len(remaining))
+		}
+		return alsoStopErrs, nil, false
+	}
+	_ = e.Manager.ResetState(ctx, e.Unit)
+	return alsoStopErrs, e.verifyStopped(), true
+}
+
+func (e Engine) checkNamedLocks(result *Result) bool {
+	if e.NamedLocks == nil {
+		return true
+	}
+	active, err := e.NamedLocks()
+	if err != nil {
+		result.Status = ResultFailed
+		result.Message = "lock scan: " + err.Error()
+		return false
+	}
+	if active = activeOnly(active); len(active) > 0 {
+		result.Status = ResultBlocked
+		result.Message = "blocked by active runtime lock"
+		result.Locks = active
+		return false
+	}
+	return true
+}
+
+func (e Engine) runPreflight(ctx context.Context, p plan, result *Result) bool {
+	if !p.preflight || e.Preflight == nil {
+		return true
+	}
+	out := e.Preflight(ctx)
+	result.Checks = append(result.Checks, out.Results...)
+	if out.OK {
+		return true
+	}
+	result.Status = ResultPreflightFailed
+	result.Message = "preflight failed"
+	return false
+}
+
+func (e Engine) checkGuards(ctx context.Context, p plan, result *Result) bool {
+	if e.Guard != nil {
+		blocked, reason, err := e.Guard(ctx, p.action)
+		if err != nil {
+			result.Status = ResultFailed
+			result.Message = "guard: " + err.Error()
+			return false
+		}
+		if blocked {
+			result.Status = ResultBlocked
+			result.Message = reason
+			return false
+		}
+	}
+	if !p.stop || !p.start || e.RestartIdentity == nil {
+		return true
+	}
+	ok, reason, err := e.RestartIdentity(ctx)
+	if err != nil {
+		result.Status = ResultFailed
+		result.Message = "restart identity: " + err.Error()
+		return false
+	}
+	if !ok {
+		result.Status = ResultBlocked
+		result.Message = reason
+		return false
+	}
+	return true
+}
+
 // verifyStopped checks the stopped-state invariants after a clean stop: every
 // declared pidfile path and every files_absent glob must no longer exist. With
 // StopArtifacts.CleanEnabled set (`clean_after_stop`), a lingering file is deleted
@@ -421,62 +430,80 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 // Returns one warning per still-present (or unremovable) artifact, for folding
 // into the result message.
 func (e Engine) verifyStopped() []string {
-	var warns []string
-	flag := func(path string, isGlob bool) {
-		var matches []string
-		if isGlob {
-			m, err := filepath.Glob(path)
-			if err != nil {
-				warns = append(warns, fmt.Sprintf("bad files_absent pattern %q: %v", path, err))
-				return
-			}
-			matches = m
-		} else if _, err := os.Stat(path); err == nil {
-			matches = []string{path}
-		}
-		for _, m := range matches {
-			if e.StopArtifacts.CleanEnabled {
-				if err := os.Remove(m); err != nil {
-					warns = append(warns, fmt.Sprintf("could not remove stale %s: %v", m, err))
-				}
-				continue
-			}
-			warns = append(warns, "stale "+m)
-		}
-	}
-	for _, p := range e.StopArtifacts.PidfilePaths {
-		flag(p, false)
-	}
-	for _, g := range e.StopArtifacts.Files {
-		flag(g, true)
-	}
-	// clean_on_stop: actively delete the listed files/dirs (recursive trees with
-	// RemoveAll, plain paths/globs with Remove), but only when the master
-	// clean_after_stop opt-in is set. A failure is a warning.
+	warns := e.stoppedArtifactWarnings()
 	if !e.StopArtifacts.CleanEnabled {
 		return warns
 	}
-	for _, c := range e.StopArtifacts.Clean {
-		if c.Recursive {
-			if err := os.RemoveAll(c.Path); err != nil {
-				warns = append(warns, fmt.Sprintf("could not clean %s: %v", c.Path, err))
+	return append(warns, e.cleanOnStopWarnings()...)
+}
+
+func (e Engine) stoppedArtifactWarnings() []string {
+	var warns []string
+	for _, p := range e.StopArtifacts.PidfilePaths {
+		warns = append(warns, e.stoppedPathWarnings(p, false)...)
+	}
+	for _, g := range e.StopArtifacts.Files {
+		warns = append(warns, e.stoppedPathWarnings(g, true)...)
+	}
+	return warns
+}
+
+func (e Engine) stoppedPathWarnings(path string, isGlob bool) []string {
+	matches, warns := stoppedPathMatches(path, isGlob)
+	for _, match := range matches {
+		if e.StopArtifacts.CleanEnabled {
+			if err := os.Remove(match); err != nil {
+				warns = append(warns, fmt.Sprintf("could not remove stale %s: %v", match, err))
 			}
 			continue
 		}
-		matches, err := filepath.Glob(c.Path)
+		warns = append(warns, "stale "+match)
+	}
+	return warns
+}
+
+func stoppedPathMatches(path string, isGlob bool) ([]string, []string) {
+	if isGlob {
+		matches, err := filepath.Glob(path)
 		if err != nil {
-			warns = append(warns, fmt.Sprintf("bad clean_on_stop pattern %q: %v", c.Path, err))
-			continue
+			return nil, []string{fmt.Sprintf("bad files_absent pattern %q: %v", path, err)}
 		}
-		if matches == nil {
-			if _, statErr := os.Stat(c.Path); statErr == nil {
-				matches = []string{c.Path}
-			}
+		return matches, nil
+	}
+	if _, err := os.Stat(path); err == nil {
+		return []string{path}, nil
+	}
+	return nil, nil
+}
+
+func (e Engine) cleanOnStopWarnings() []string {
+	var warns []string
+	for _, c := range e.StopArtifacts.Clean {
+		warns = append(warns, cleanStopPath(c)...)
+	}
+	return warns
+}
+
+func cleanStopPath(path CleanPath) []string {
+	if path.Recursive {
+		if err := os.RemoveAll(path.Path); err != nil {
+			return []string{fmt.Sprintf("could not clean %s: %v", path.Path, err)}
 		}
-		for _, m := range matches {
-			if err := os.Remove(m); err != nil {
-				warns = append(warns, fmt.Sprintf("could not clean %s: %v", m, err))
-			}
+		return nil
+	}
+	matches, err := filepath.Glob(path.Path)
+	if err != nil {
+		return []string{fmt.Sprintf("bad clean_on_stop pattern %q: %v", path.Path, err)}
+	}
+	if matches == nil {
+		if _, err := os.Stat(path.Path); err == nil {
+			matches = []string{path.Path}
+		}
+	}
+	var warns []string
+	for _, match := range matches {
+		if err := os.Remove(match); err != nil {
+			warns = append(warns, fmt.Sprintf("could not clean %s: %v", match, err))
 		}
 	}
 	return warns

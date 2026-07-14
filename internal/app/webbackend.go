@@ -417,60 +417,60 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		wb.entries[name] = entry
 		wb.order = append(wb.order, name)
 
-		// Surface this service's embedded watches ("<service>:<watch>") so they are
-		// listed and controllable (monitor/unmonitor) in the web UI like host
-		// watches. Their live meter is omitted — the checks are scoped to the
-		// service PID tree, which the host-scoped web live-view path does not model.
-		if watchesSection, ok := resolved.Tree[config.SectionWatches].(map[string]any); ok {
-			for _, wn := range slices.Sorted(maps.Keys(watchesSection)) {
-				wentry, ok := watchesSection[wn].(map[string]any)
-				if !ok || reservedServiceWatchName(wn) || unsupportedServiceWatchType(wentry) != "" {
-					continue
-				}
-				full := name + ":" + wn
-				ww, _ := newWebWatch(full, wentry, deps.GlobalNotify, iv, true)
-				if disabled {
-					ww.disabled = true
-				}
-				wb.watches[full] = ww
-				wb.watchOrder = append(wb.watchOrder, full)
-			}
-		}
+		wb.registerServiceWatches(name, resolved.Tree, deps.GlobalNotify, iv, disabled)
 	}
 
-	// Also surface host watches in the web UI (including disabled ones). This is
-	// important when services=0 but watches=N (the main dashboard would otherwise
-	// be empty). We read the raw global watches section (same source BuildWatches
-	// uses) so listing is independent of whether the watch runner is active.
-	if raw, _ := cfg.ResolveWatches(); len(raw) > 0 {
-		for _, name := range slices.Sorted(maps.Keys(raw)) {
-			entry, _ := raw[name].(map[string]any)
-			ww, warn := newWebWatch(name, entry, deps.GlobalNotify, config.DefaultEngineInterval, false)
-			if warn != "" {
-				warnings = append(warnings, "watch "+name+": "+warn)
-			}
-			wb.watches[name] = ww
-			wb.watchOrder = append(wb.watchOrder, name)
-		}
-	}
-
-	// Surface configured notifiers (useful to know what watches can notify to).
-	if raw := cfg.Notifiers(); len(raw) > 0 {
-		for _, name := range slices.Sorted(maps.Keys(raw)) {
-			entry, _ := raw[name].(map[string]any)
-			typ := cfgval.AsString(entry[notify.KeyType])
-			wn := &webNotifier{
-				name:    name,
-				typ:     typ,
-				enabled: notify.Enabled(entry),
-				summary: notify.ConfigSummary(typ, entry),
-			}
-			wb.notifiers[name] = wn
-			wb.notifierOrder = append(wb.notifierOrder, name)
-		}
-	}
+	warnings = append(warnings, wb.registerHostWatches(cfg, deps)...)
+	wb.registerNotifiers(cfg)
 
 	return wb, warnings
+}
+
+func (wb *WebBackend) registerServiceWatches(service string, tree map[string]any, globalNotify []string, interval time.Duration, disabled bool) {
+	watches, ok := tree[config.SectionWatches].(map[string]any)
+	if !ok {
+		return
+	}
+	for _, name := range slices.Sorted(maps.Keys(watches)) {
+		entry, ok := watches[name].(map[string]any)
+		if !ok || reservedServiceWatchName(name) || unsupportedServiceWatchType(entry) != "" {
+			continue
+		}
+		fullName := service + ":" + name
+		watch, _ := newWebWatch(fullName, entry, globalNotify, interval, true)
+		if disabled {
+			watch.disabled = true
+		}
+		wb.watches[fullName] = watch
+		wb.watchOrder = append(wb.watchOrder, fullName)
+	}
+}
+
+func (wb *WebBackend) registerHostWatches(cfg *config.Config, deps Deps) []string {
+	raw, _ := cfg.ResolveWatches()
+	if len(raw) == 0 {
+		return nil
+	}
+	var warnings []string
+	for _, name := range slices.Sorted(maps.Keys(raw)) {
+		entry, _ := raw[name].(map[string]any)
+		watch, warn := newWebWatch(name, entry, deps.GlobalNotify, config.DefaultEngineInterval, false)
+		if warn != "" {
+			warnings = append(warnings, "watch "+name+": "+warn)
+		}
+		wb.watches[name] = watch
+		wb.watchOrder = append(wb.watchOrder, name)
+	}
+	return warnings
+}
+
+func (wb *WebBackend) registerNotifiers(cfg *config.Config) {
+	for _, name := range slices.Sorted(maps.Keys(cfg.Notifiers())) {
+		entry, _ := cfg.Notifiers()[name].(map[string]any)
+		typ := cfgval.AsString(entry[notify.KeyType])
+		wb.notifiers[name] = &webNotifier{name: name, typ: typ, enabled: notify.Enabled(entry), summary: notify.ConfigSummary(typ, entry)}
+		wb.notifierOrder = append(wb.notifierOrder, name)
+	}
 }
 
 // newWebWatch builds the web-listing model for one watch entry, shared by host
@@ -866,87 +866,74 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		if w == nil {
 			continue
 		}
-		iv := formatInterval(w.interval)
-		var storage *web.StorageWatchInfo
-		// A disabled watch is config, not a live concern: skip the statfs/mount
-		// sampling so the UI never surfaces sample errors (or pays the probe)
-		// for something the operator has switched off.
-		if isStorageCheckType(w.checkType) && !w.disabled {
-			storage = storageWatchInfo(w, b)
-		}
-		var swap *web.SwapWatchInfo
-		if w.checkType == checks.CheckTypeSwap && !w.disabled {
-			swap = swapWatchInfo(system)
-		}
-		// memory/load/fds/pids carry a natural capacity, so render them with the
-		// same progress bar as swap. Skip disabled watches (config, not a live
-		// concern) so the UI never probes /proc for something switched off.
-		var meter *web.WatchMeter
-		var readings []web.WatchReading
-		liveSummary := ""
-		if !w.disabled && !w.serviceScoped {
-			meter, readings, liveSummary = b.watchDashboardView(ctx, w, system)
-		}
-		monitorMode := w.monitorMode
-		if monitorMode == "" {
-			monitorMode = config.MonitorEnabled
-		}
-		ww := web.Watch{
-			Name:              w.name,
-			DisplayName:       w.displayName,
-			Category:          w.category,
-			CheckType:         w.checkType,
-			Summary:           watchSummary(w, storage, liveSummary),
-			SummaryConfigured: cfgval.String(w.check[checks.CheckKeySummary]) != "",
-			Interval:          iv,
-			Enabled:           !w.disabled,
-			Monitor:           monitorMode,
-			Monitored:         !w.disabled && monitorMode != config.MonitorDisabled,
-			FireOnFail:        w.fireOnFail,
-			HasHook:           w.hasHook,
-			HookCommand:       slices.Clone(w.hookCommand),
-			Notifiers:         slices.Clone(w.notifiers),
-			NotifierCount:     w.notifierCount,
-			DryRun:            w.dryRun,
-			Conditions:        watchConditions(w.check, w.metrics),
-			Storage:           storage,
-			Swap:              swap,
-			Meter:             meter,
-			Readings:          readings,
-			CanProbe:          !w.disabled && !w.serviceScoped && manualProbeCheckType(w.checkType),
-			CanControlRAID:    !w.disabled && w.raidControl,
-			RAIDArray:         cfgval.String(w.check[checks.CheckKeyArray]),
-		}
-		if w.expand != nil {
-			ww.Expand = &web.WatchExpand{ByBytes: w.expand.By}
-		}
-		if !w.disabled {
-			if active, source, changed, ok := b.monitorView(watchMonitorKey(name)); ok {
-				ww.Monitored, ww.MonitorSource, ww.MonitorChangedAt = active, source, changed
-			}
-		}
-		if checkedAt := b.watchLastCheckedAt(name, w.checkType); !checkedAt.IsZero() {
-			ww.LastCheckedAt = checkedAt.Format(time.RFC3339)
-		}
-		if startedAt, running := b.watchProbeStartedAt(name); running {
-			ww.Probe = &web.WatchProbe{State: eventStatusRunning, StartedAt: startedAt.Format(time.RFC3339)}
-		}
-		// Compute last activity for this watch from the request-local event index.
-		if activity, ok := lastActivities[name]; ok {
-			ww.LastActivity = activity.At
-			ww.LastActivityKind = activity.Kind
-		}
-		observed := b.settling == nil || b.settling.Observed(SettlingWatchKey(name))
-		failed := observed && watchViewFailed(ww)
-		ww.State = WatchState(ww.Enabled, ww.Monitored, failed, observed)
-		if deviceState := watchDeviceState(ww.Readings); deviceState != "" && ww.Enabled && ww.Monitored && observed {
-			// Device work is the current operator-facing state while preserving
-			// the underlying health signal for eventing and diagnostics.
-			ww.State = deviceState
-		}
-		out = append(out, ww)
+		out = append(out, b.watchView(ctx, w, system, lastActivities[name]))
 	}
 	return out
+}
+
+func (b *WebBackend) watchView(ctx context.Context, w *webWatch, system metrics.Snapshot, activity watchActivity) web.Watch {
+	storage, swap, meter, readings, liveSummary := b.watchPresentationLiveView(ctx, w, system)
+	monitorMode := w.monitorMode
+	if monitorMode == "" {
+		monitorMode = config.MonitorEnabled
+	}
+	view := web.Watch{
+		Name: w.name, DisplayName: w.displayName, Category: w.category, CheckType: w.checkType,
+		Summary: watchSummary(w, storage, liveSummary), SummaryConfigured: cfgval.String(w.check[checks.CheckKeySummary]) != "",
+		Interval: formatInterval(w.interval), Enabled: !w.disabled, Monitor: monitorMode,
+		Monitored: !w.disabled && monitorMode != config.MonitorDisabled, FireOnFail: w.fireOnFail,
+		HasHook: w.hasHook, HookCommand: slices.Clone(w.hookCommand), Notifiers: slices.Clone(w.notifiers),
+		NotifierCount: w.notifierCount, DryRun: w.dryRun, Conditions: watchConditions(w.check, w.metrics),
+		Storage: storage, Swap: swap, Meter: meter, Readings: readings,
+		CanProbe:       !w.disabled && !w.serviceScoped && manualProbeCheckType(w.checkType),
+		CanControlRAID: !w.disabled && w.raidControl, RAIDArray: cfgval.String(w.check[checks.CheckKeyArray]),
+	}
+	b.applyWatchRuntimeView(&view, w, activity)
+	return view
+}
+
+func (b *WebBackend) watchPresentationLiveView(ctx context.Context, w *webWatch, system metrics.Snapshot) (*web.StorageWatchInfo, *web.SwapWatchInfo, *web.WatchMeter, []web.WatchReading, string) {
+	if w.disabled {
+		return nil, nil, nil, nil, ""
+	}
+	var storage *web.StorageWatchInfo
+	if isStorageCheckType(w.checkType) {
+		storage = storageWatchInfo(w, b)
+	}
+	var swap *web.SwapWatchInfo
+	if w.checkType == checks.CheckTypeSwap {
+		swap = swapWatchInfo(system)
+	}
+	if w.serviceScoped {
+		return storage, swap, nil, nil, ""
+	}
+	meter, readings, summary := b.watchDashboardView(ctx, w, system)
+	return storage, swap, meter, readings, summary
+}
+
+func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activity watchActivity) {
+	if w.expand != nil {
+		view.Expand = &web.WatchExpand{ByBytes: w.expand.By}
+	}
+	if !w.disabled {
+		if active, source, changed, ok := b.monitorView(watchMonitorKey(w.name)); ok {
+			view.Monitored, view.MonitorSource, view.MonitorChangedAt = active, source, changed
+		}
+	}
+	if checkedAt := b.watchLastCheckedAt(w.name, w.checkType); !checkedAt.IsZero() {
+		view.LastCheckedAt = checkedAt.Format(time.RFC3339)
+	}
+	if startedAt, running := b.watchProbeStartedAt(w.name); running {
+		view.Probe = &web.WatchProbe{State: eventStatusRunning, StartedAt: startedAt.Format(time.RFC3339)}
+	}
+	if activity.At != "" {
+		view.LastActivity, view.LastActivityKind = activity.At, activity.Kind
+	}
+	observed := b.settling == nil || b.settling.Observed(SettlingWatchKey(w.name))
+	view.State = WatchState(view.Enabled, view.Monitored, observed && watchViewFailed(*view), observed)
+	if deviceState := watchDeviceState(view.Readings); deviceState != "" && view.Enabled && view.Monitored && observed {
+		view.State = deviceState
+	}
 }
 
 func watchDeviceState(readings []web.WatchReading) string {
@@ -1180,102 +1167,148 @@ func watchConditions(check, metricEntries map[string]any) []web.WatchCondition {
 			Value: cfgval.String(m[checks.CheckKeyValue]),
 		})
 	}
-	switch cfgval.AsString(check[checks.CheckKeyType]) {
-	case checks.CheckTypeRAID:
-		if array := cfgval.AsString(check[checks.CheckKeyArray]); array != "" {
-			out = append(out, web.WatchCondition{Field: checks.DataKeyArray, Value: array})
-		}
-		if changes, ok := check[checks.CheckKeySysfsChanges].(bool); ok && changes {
-			out = append(out, web.WatchCondition{Field: checks.CheckKeySysfsChanges, Op: cfgval.CompareOpEqual, Value: strconv.FormatBool(changes)})
-		}
-	case checks.CheckTypeAutofs:
-		if path := cfgval.AsString(check[checks.CheckKeyPath]); path != "" {
-			out = append(out, web.WatchCondition{Field: checks.DataKeyPath, Op: cfgval.CompareOpEqual, Value: path})
-		} else if _, ok := check[checks.CheckKeyCount].(map[string]any); !ok {
-			out = append(out, web.WatchCondition{Field: checks.DataKeyCount, Op: cfgval.CompareOpGreaterEqual, Value: watchConditionDefaultMinimum})
-		}
-	case checks.CheckTypeCount:
-		if path := cfgval.AsString(check[checks.CheckKeyPath]); path != "" {
-			out = append(out, web.WatchCondition{Field: checks.DataKeyPath, Value: path})
-		}
-		if kind := cfgval.AsString(check[checks.CheckKeyOf]); kind != "" {
-			out = append(out, web.WatchCondition{Field: checks.DataKeyOf, Value: kind})
-		}
-		if recursive, ok := check[checks.CheckKeyRecursive].(bool); ok {
-			out = append(out, web.WatchCondition{Field: checks.DataKeyRecursive, Op: cfgval.CompareOpEqual, Value: strconv.FormatBool(recursive)})
-		}
-		if includeHidden, ok := check[checks.CheckKeyIncludeHidden].(bool); ok {
-			out = append(out, web.WatchCondition{Field: checks.CheckKeyIncludeHidden, Op: cfgval.CompareOpEqual, Value: strconv.FormatBool(includeHidden)})
-		}
-		if m, ok := check[checks.CheckKeyCount].(map[string]any); ok {
-			out = append(out, web.WatchCondition{Field: checks.DataKeyCount, Op: cfgval.AsString(m[checks.CheckKeyOp]), Value: cfgval.String(m[checks.CheckKeyValue])})
-		} else if op := cfgval.AsString(check[checks.CheckKeyOp]); op != "" {
-			out = append(out, web.WatchCondition{Field: checks.DataKeyCount, Op: op, Value: cfgval.String(check[checks.CheckKeyValue])})
-		}
-		if m, ok := check[checks.CheckKeyDelta].(map[string]any); ok {
-			out = append(out, web.WatchCondition{
-				Field: checks.CheckKeyDelta,
-				Op:    cfgval.AsString(m[checks.CheckKeyOp]),
-				Value: cfgval.String(m[checks.CheckKeyValue]),
-			})
-		}
-		if within := cfgval.String(check[checks.CheckKeyWithin]); within != "" {
-			out = append(out, web.WatchCondition{Field: checks.CheckKeyWithin, Value: within})
-		}
-	case checks.CheckTypeFile:
-		out = append(out, fileWatchConditions(check)...)
-	case checks.CheckTypeProcess:
-		if value := cfgval.String(check[checks.CheckKeyFor]); value != "" {
-			out = append(out, web.WatchCondition{Field: checks.CheckKeyFor, Op: cfgval.CompareOpGreaterEqual, Value: value})
-		}
-		if gone, ok := check[checks.CheckKeyGone].(bool); ok && gone {
-			out = append(out, web.WatchCondition{Field: checks.CheckKeyGone, Op: cfgval.CompareOpEqual, Value: strconv.FormatBool(true)})
-		}
-	case checks.CheckTypeRoute:
-		family := cfgval.AsString(check[checks.CheckKeyFamily])
-		if family == "" {
-			family = checks.FamilyIPv4
-		}
-		out = append(out, web.WatchCondition{Field: checks.DataKeyFamily, Op: cfgval.CompareOpEqual, Value: family})
-		if iface := cfgval.AsString(check[checks.CheckKeyInterface]); iface != "" {
-			out = append(out, web.WatchCondition{Field: checks.DataKeyInterface, Op: cfgval.CompareOpEqual, Value: iface})
-		}
-	case checks.CheckTypeFirewallRules:
-		backend := cfgval.AsString(check[checks.CheckKeyBackend])
-		if backend == "" {
-			backend = checks.FirewallBackendAuto
-		}
-		minRules := cfgval.String(check[checks.CheckKeyMinRules])
-		if minRules == "" {
-			minRules = strconv.FormatUint(watchFirewallDefaultMinRules, watchReadingNumericBase)
-		}
-		out = append(out,
-			web.WatchCondition{Field: checks.DataKeyBackend, Op: cfgval.CompareOpEqual, Value: backend},
-			web.WatchCondition{Field: checks.DataKeyRules, Op: cfgval.CompareOpGreaterEqual, Value: minRules},
-		)
-	case checks.CheckTypeSize:
-		if path := cfgval.AsString(check[checks.CheckKeyPath]); path != "" {
-			out = append(out, web.WatchCondition{Field: checks.DataKeyPath, Value: path})
-		}
-		if growBy := cfgval.String(check[checks.CheckKeyGrowBy]); growBy != "" {
-			out = append(out, web.WatchCondition{Field: watchConditionFieldGrowth, Op: cfgval.CompareOpGreaterEqual, Value: growBy})
-		}
-		if within := cfgval.String(check[checks.CheckKeyWithin]); within != "" {
-			out = append(out, web.WatchCondition{Field: checks.CheckKeyWithin, Value: within})
-		}
-		if includeHidden, ok := check[checks.CheckKeyIncludeHidden].(bool); ok {
-			out = append(out, web.WatchCondition{Field: checks.CheckKeyIncludeHidden, Op: cfgval.CompareOpEqual, Value: strconv.FormatBool(includeHidden)})
+	out = append(out, watchTypeConditions(check)...)
+	out = append(out, watchCommonConditions(check)...)
+	out = append(out, watchMetricConditions(metricEntries)...)
+	return out
+}
+
+func watchTypeConditions(check map[string]any) []web.WatchCondition {
+	if builder := watchTypeConditionBuilders[cfgval.AsString(check[checks.CheckKeyType])]; builder != nil {
+		return builder(check)
+	}
+	return nil
+}
+
+var watchTypeConditionBuilders = map[string]func(map[string]any) []web.WatchCondition{
+	checks.CheckTypeRAID:          raidWatchConditions,
+	checks.CheckTypeAutofs:        autofsWatchConditions,
+	checks.CheckTypeCount:         countWatchConditions,
+	checks.CheckTypeFile:          fileWatchConditions,
+	checks.CheckTypeProcess:       processWatchConditions,
+	checks.CheckTypeRoute:         routeWatchConditions,
+	checks.CheckTypeFirewallRules: firewallWatchConditions,
+	checks.CheckTypeSize:          sizeWatchConditions,
+}
+
+func raidWatchConditions(check map[string]any) []web.WatchCondition {
+	var out []web.WatchCondition
+	if array := cfgval.AsString(check[checks.CheckKeyArray]); array != "" {
+		out = append(out, web.WatchCondition{Field: checks.DataKeyArray, Value: array})
+	}
+	if changes, ok := check[checks.CheckKeySysfsChanges].(bool); ok && changes {
+		out = append(out, web.WatchCondition{Field: checks.CheckKeySysfsChanges, Op: cfgval.CompareOpEqual, Value: strconv.FormatBool(changes)})
+	}
+	return out
+}
+
+func autofsWatchConditions(check map[string]any) []web.WatchCondition {
+	if path := cfgval.AsString(check[checks.CheckKeyPath]); path != "" {
+		return []web.WatchCondition{{Field: checks.DataKeyPath, Op: cfgval.CompareOpEqual, Value: path}}
+	}
+	if _, ok := check[checks.CheckKeyCount].(map[string]any); !ok {
+		return []web.WatchCondition{{Field: checks.DataKeyCount, Op: cfgval.CompareOpGreaterEqual, Value: watchConditionDefaultMinimum}}
+	}
+	return nil
+}
+
+func countWatchConditions(check map[string]any) []web.WatchCondition {
+	var out []web.WatchCondition
+	for _, condition := range []struct{ field, value string }{
+		{checks.DataKeyPath, cfgval.AsString(check[checks.CheckKeyPath])},
+		{checks.DataKeyOf, cfgval.AsString(check[checks.CheckKeyOf])},
+	} {
+		if condition.value != "" {
+			out = append(out, web.WatchCondition{Field: condition.field, Value: condition.value})
 		}
 	}
-	if v, ok := check[checks.CheckKeyMounted].(bool); ok {
-		out = append(out, web.WatchCondition{Field: checks.DataKeyMounted, Op: cfgval.CompareOpEqual, Value: strconv.FormatBool(v)})
+	for _, condition := range []struct{ source, field string }{
+		{checks.CheckKeyRecursive, checks.DataKeyRecursive},
+		{checks.CheckKeyIncludeHidden, checks.CheckKeyIncludeHidden},
+	} {
+		if value, ok := check[condition.source].(bool); ok {
+			out = append(out, web.WatchCondition{Field: condition.field, Op: cfgval.CompareOpEqual, Value: strconv.FormatBool(value)})
+		}
+	}
+	if count, ok := check[checks.CheckKeyCount].(map[string]any); ok {
+		out = append(out, web.WatchCondition{Field: checks.DataKeyCount, Op: cfgval.AsString(count[checks.CheckKeyOp]), Value: cfgval.String(count[checks.CheckKeyValue])})
+	} else if op := cfgval.AsString(check[checks.CheckKeyOp]); op != "" {
+		out = append(out, web.WatchCondition{Field: checks.DataKeyCount, Op: op, Value: cfgval.String(check[checks.CheckKeyValue])})
+	}
+	if delta, ok := check[checks.CheckKeyDelta].(map[string]any); ok {
+		out = append(out, web.WatchCondition{Field: checks.CheckKeyDelta, Op: cfgval.AsString(delta[checks.CheckKeyOp]), Value: cfgval.String(delta[checks.CheckKeyValue])})
+	}
+	if within := cfgval.String(check[checks.CheckKeyWithin]); within != "" {
+		out = append(out, web.WatchCondition{Field: checks.CheckKeyWithin, Value: within})
+	}
+	return out
+}
+
+func processWatchConditions(check map[string]any) []web.WatchCondition {
+	var out []web.WatchCondition
+	if value := cfgval.String(check[checks.CheckKeyFor]); value != "" {
+		out = append(out, web.WatchCondition{Field: checks.CheckKeyFor, Op: cfgval.CompareOpGreaterEqual, Value: value})
+	}
+	if gone, ok := check[checks.CheckKeyGone].(bool); ok && gone {
+		out = append(out, web.WatchCondition{Field: checks.CheckKeyGone, Op: cfgval.CompareOpEqual, Value: strconv.FormatBool(true)})
+	}
+	return out
+}
+
+func routeWatchConditions(check map[string]any) []web.WatchCondition {
+	family := cfgval.AsString(check[checks.CheckKeyFamily])
+	if family == "" {
+		family = checks.FamilyIPv4
+	}
+	out := []web.WatchCondition{{Field: checks.DataKeyFamily, Op: cfgval.CompareOpEqual, Value: family}}
+	if iface := cfgval.AsString(check[checks.CheckKeyInterface]); iface != "" {
+		out = append(out, web.WatchCondition{Field: checks.DataKeyInterface, Op: cfgval.CompareOpEqual, Value: iface})
+	}
+	return out
+}
+
+func firewallWatchConditions(check map[string]any) []web.WatchCondition {
+	backend := cfgval.AsString(check[checks.CheckKeyBackend])
+	if backend == "" {
+		backend = checks.FirewallBackendAuto
+	}
+	minRules := cfgval.String(check[checks.CheckKeyMinRules])
+	if minRules == "" {
+		minRules = strconv.FormatUint(watchFirewallDefaultMinRules, watchReadingNumericBase)
+	}
+	return []web.WatchCondition{
+		{Field: checks.DataKeyBackend, Op: cfgval.CompareOpEqual, Value: backend},
+		{Field: checks.DataKeyRules, Op: cfgval.CompareOpGreaterEqual, Value: minRules},
+	}
+}
+
+func sizeWatchConditions(check map[string]any) []web.WatchCondition {
+	var out []web.WatchCondition
+	if path := cfgval.AsString(check[checks.CheckKeyPath]); path != "" {
+		out = append(out, web.WatchCondition{Field: checks.DataKeyPath, Value: path})
+	}
+	if growBy := cfgval.String(check[checks.CheckKeyGrowBy]); growBy != "" {
+		out = append(out, web.WatchCondition{Field: watchConditionFieldGrowth, Op: cfgval.CompareOpGreaterEqual, Value: growBy})
+	}
+	if within := cfgval.String(check[checks.CheckKeyWithin]); within != "" {
+		out = append(out, web.WatchCondition{Field: checks.CheckKeyWithin, Value: within})
+	}
+	if includeHidden, ok := check[checks.CheckKeyIncludeHidden].(bool); ok {
+		out = append(out, web.WatchCondition{Field: checks.CheckKeyIncludeHidden, Op: cfgval.CompareOpEqual, Value: strconv.FormatBool(includeHidden)})
+	}
+	return out
+}
+
+func watchCommonConditions(check map[string]any) []web.WatchCondition {
+	var out []web.WatchCondition
+	if mounted, ok := check[checks.CheckKeyMounted].(bool); ok {
+		out = append(out, web.WatchCondition{Field: checks.DataKeyMounted, Op: cfgval.CompareOpEqual, Value: strconv.FormatBool(mounted)})
 	}
 	if cfgval.AsString(check[checks.CheckKeyType]) == checks.CheckTypeOOM {
 		if _, ok := check[checks.CheckKeyDelta].(map[string]any); !ok {
 			out = append(out, web.WatchCondition{Field: checks.CheckKeyDelta, Op: cfgval.CompareOpGreater, Value: watchConditionDefaultDelta})
 		}
 	}
-	out = append(out, watchMetricConditions(metricEntries)...)
 	return out
 }
 

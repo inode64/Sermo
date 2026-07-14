@@ -182,94 +182,110 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 			add(validationMappingFormat, path)
 			continue
 		}
+		validateRule(path, entry, notifiers, checkNames, systemMetricChecks, add)
+	}
+}
 
-		if _, present := entry[rules.RuleFieldNotify]; present {
-			validateNotifySelection(path+".notify", entry[rules.RuleFieldNotify], notifiers, add)
-		}
-		validateEmission(entry, path+"."+emission.Section, add)
+func validateRule(path string, entry map[string]any, notifiers, checkNames, systemMetricChecks map[string]struct{}, add addFunc) {
+	if _, present := entry[rules.RuleFieldNotify]; present {
+		validateNotifySelection(path+".notify", entry[rules.RuleFieldNotify], notifiers, add)
+	}
+	validateEmission(entry, path+"."+emission.Section, add)
+	ruleType := validateRuleType(path, entry, add)
+	ifNode, hasIf := entry[rules.RuleFieldIf].(map[string]any)
+	if !hasIf {
+		add("%s has no if condition", path)
+	}
+	then, hasThen := entry[rules.RuleFieldThen].(map[string]any)
+	if !hasThen {
+		add("%s has no then action", path)
+	}
+	actions := ruleActions(then)
+	validateRuleActions(path, entry, ruleType, actions, hasThen, add)
+	validateWindow(path, entry, add)
+	if hasIf {
+		validateCondition(ifNode, path+".if", checkNames, systemMetricChecks, ruleType == string(rules.RuleAlert), add)
+	}
+}
 
-		rtype := cfgval.String(entry[rules.RuleFieldType])
-		switch rtype {
-		case string(rules.RuleRemediation), string(rules.RuleGuard), string(rules.RuleAlert):
-		default:
-			add("%s type %q is not one of %s", path, rtype, rules.RuleTypeSummary)
-		}
+func validateRuleType(path string, entry map[string]any, add addFunc) string {
+	ruleType := cfgval.String(entry[rules.RuleFieldType])
+	switch ruleType {
+	case string(rules.RuleRemediation), string(rules.RuleGuard), string(rules.RuleAlert):
+	default:
+		add("%s type %q is not one of %s", path, ruleType, rules.RuleTypeSummary)
+	}
+	return ruleType
+}
 
-		ifNode, hasIf := entry[rules.RuleFieldIf].(map[string]any)
-		if !hasIf {
-			add("%s has no if condition", path)
-		}
-		then, hasThen := entry[rules.RuleFieldThen].(map[string]any)
-		if !hasThen {
-			add("%s has no then action", path)
-		}
-		actions := ruleActions(then)
-		isGuard := rtype == string(rules.RuleGuard)
-		blocks, blocksErr := cfgval.StrictStringList(entry[rules.RuleFieldBlocks])
-		if _, present := entry[rules.RuleFieldBlocks]; present && blocksErr != nil {
-			add(validationStringListFormat, path+"."+rules.RuleFieldBlocks)
-		}
-		hasBlock := false
-		for _, act := range actions {
-			if act.typ != "" {
-				if _, ok := validActions[act.typ]; !ok {
-					add("%s then.action %q is not one of %s", path, act.typ, rules.RuleActionSummary)
-				}
-			}
-			if act.typ == string(rules.ActionBlock) {
-				hasBlock = true
-				if !isGuard {
-					add("%s only guard rules may use action block", path)
-				}
-			}
-			if (act.typ == string(rules.ActionBlock) || act.typ == string(rules.ActionAlert)) && act.message == "" {
-				add("%s action %s requires a non-empty message", path, act.typ)
-			}
-		}
-		if isGuard {
-			if blocksErr != nil || len(blocks) == 0 {
-				add("%s guard requires a non-empty blocks list", path)
-			}
-			if !hasBlock {
-				add("%s guard rules must use action block", path)
-			}
-			// A guard is evaluated on demand during an operation and blocks the
-			// instant its condition holds; for/within windows are never advanced
-			// for guards, so they would be silently ignored. Reject them.
-			if _, ok := entry[rules.RuleFieldFor]; ok {
-				add("%s guard rules do not support a for window", path)
-			}
-			if _, ok := entry[rules.RuleFieldWithin]; ok {
-				add("%s guard rules do not support a within window", path)
-			}
-		} else if len(blocks) > 0 {
-			add("%s only guard rules may set blocks", path)
-		}
+func validateRuleActions(path string, entry map[string]any, ruleType string, actions []valAction, hasThen bool, add addFunc) {
+	isGuard := ruleType == string(rules.RuleGuard)
+	blocks, blocksErr := cfgval.StrictStringList(entry[rules.RuleFieldBlocks])
+	if _, present := entry[rules.RuleFieldBlocks]; present && blocksErr != nil {
+		add(validationStringListFormat, path+"."+rules.RuleFieldBlocks)
+	}
+	hasBlock := validateRuleActionForms(path, actions, isGuard, add)
+	validateRuleGuardActions(path, entry, isGuard, blocks, blocksErr, hasBlock, add)
+	hasOperation := validateRuleOperationActions(path, ruleType, actions, add)
+	if ruleType == string(rules.RuleRemediation) && hasThen && !hasOperation {
+		add("%s remediation requires an operation action (restart, start, stop, reload, resume); use type: alert for notify-only rules", path)
+	}
+}
 
-		// Operation actions belong to remediation rules: an alert/guard rule
-		// carrying one would validate and then silently never run it, and a
-		// remediation rule without one is an alert in disguise.
-		hasOperation := false
-		for _, act := range actions {
-			switch rules.ActionType(act.typ) {
-			case rules.ActionRestart, rules.ActionStart, rules.ActionStop, rules.ActionReload, rules.ActionResume:
-				hasOperation = true
-				if rtype != string(rules.RuleRemediation) {
-					add("%s only remediation rules may use action %s", path, act.typ)
-				}
-			default: // alert/block actions are valid on any rule type
+func validateRuleActionForms(path string, actions []valAction, isGuard bool, add addFunc) bool {
+	hasBlock := false
+	for _, action := range actions {
+		if action.typ != "" {
+			if _, ok := validActions[action.typ]; !ok {
+				add("%s then.action %q is not one of %s", path, action.typ, rules.RuleActionSummary)
 			}
 		}
-		if rtype == string(rules.RuleRemediation) && hasThen && !hasOperation {
-			add("%s remediation requires an operation action (restart, start, stop, reload, resume); use type: alert for notify-only rules", path)
+		if action.typ == string(rules.ActionBlock) {
+			hasBlock = true
+			if !isGuard {
+				add("%s only guard rules may use action block", path)
+			}
 		}
-
-		validateWindow(path, entry, add)
-
-		if hasIf {
-			validateCondition(ifNode, path+".if", checkNames, systemMetricChecks, rtype == string(rules.RuleAlert), add)
+		if (action.typ == string(rules.ActionBlock) || action.typ == string(rules.ActionAlert)) && action.message == "" {
+			add("%s action %s requires a non-empty message", path, action.typ)
 		}
 	}
+	return hasBlock
+}
+
+func validateRuleGuardActions(path string, entry map[string]any, isGuard bool, blocks []string, blocksErr error, hasBlock bool, add addFunc) {
+	if !isGuard {
+		if len(blocks) > 0 {
+			add("%s only guard rules may set blocks", path)
+		}
+		return
+	}
+	if blocksErr != nil || len(blocks) == 0 {
+		add("%s guard requires a non-empty blocks list", path)
+	}
+	if !hasBlock {
+		add("%s guard rules must use action block", path)
+	}
+	if _, ok := entry[rules.RuleFieldFor]; ok {
+		add("%s guard rules do not support a for window", path)
+	}
+	if _, ok := entry[rules.RuleFieldWithin]; ok {
+		add("%s guard rules do not support a within window", path)
+	}
+}
+
+func validateRuleOperationActions(path, ruleType string, actions []valAction, add addFunc) bool {
+	hasOperation := false
+	for _, action := range actions {
+		switch rules.ActionType(action.typ) {
+		case rules.ActionRestart, rules.ActionStart, rules.ActionStop, rules.ActionReload, rules.ActionResume:
+			hasOperation = true
+			if ruleType != string(rules.RuleRemediation) {
+				add("%s only remediation rules may use action %s", path, action.typ)
+			}
+		}
+	}
+	return hasOperation
 }
 
 var conditionOperators = []string{
@@ -299,26 +315,9 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 
 	switch key {
 	case rules.ConditionAnd, rules.ConditionOr:
-		items, ok := node[key].([]any)
-		if !ok || len(items) == 0 {
-			add("%s.%s requires a non-empty list", path, key)
-			return
-		}
-		for i, item := range items {
-			child, ok := item.(map[string]any)
-			if !ok {
-				add("%s.%s[%d] must be a condition", path, key, i)
-				continue
-			}
-			validateCondition(child, fmt.Sprintf("%s.%s[%d]", path, key, i), checkNames, systemMetricChecks, allowSystemMetric, add)
-		}
+		validateLogicalCondition(node[key], key, path, checkNames, systemMetricChecks, allowSystemMetric, add)
 	case rules.ConditionNot:
-		child, ok := node[rules.ConditionNot].(map[string]any)
-		if !ok {
-			add("%s.not must be a condition", path)
-			return
-		}
-		validateCondition(child, path+".not", checkNames, systemMetricChecks, allowSystemMetric, add)
+		validateNotCondition(node[key], path, checkNames, systemMetricChecks, allowSystemMetric, add)
 	case rules.ConditionFailed, rules.ConditionActive:
 		validateProbe(node[key], path+"."+key, checkNames, systemMetricChecks, allowSystemMetric, add)
 	case rules.ConditionService:
@@ -326,37 +325,71 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 	case rules.ConditionProcess:
 		validateState(node[rules.ConditionProcess], rules.FieldState, processStates, process.StateSummary, path+".process", add)
 	case rules.ConditionFile:
-		m, ok := node[rules.ConditionFile].(map[string]any)
-		if !ok || cfgval.String(m[rules.FieldPath]) == "" {
-			add("%s.file requires a path", path)
-		}
-		if ok {
-			// `exists` defaults to true at runtime; a non-boolean (e.g. the
-			// string "false") would silently act as true.
-			if v, present := m[rules.FieldExists]; present {
-				if _, isBool := v.(bool); !isBool {
-					add(validationBooleanFormat, path+"."+rules.ConditionFile+"."+rules.FieldExists)
-				}
-			}
-		}
+		validateFileCondition(node[key], path, add)
 	case rules.ConditionCommand:
-		m, ok := node[rules.ConditionCommand].(map[string]any)
-		if !ok {
-			add("%s.command must be a mapping", path)
-			return
-		}
-		entry := maps.Clone(m)
-		entry[checks.CheckKeyType] = checks.CheckTypeCommand
-		validateSingleShotCheckFields(path+".command", checks.CheckTypeCommand, entry, "", add)
-		if cfgval.String(m[checks.CheckKeyTimeout]) == "" {
-			add("%s.command condition must declare a timeout", path)
-		}
+		validateCommandCondition(node[key], path, add)
 	case rules.ConditionMetric:
 		if m, ok := node[rules.ConditionMetric].(map[string]any); ok {
 			validateMetric(m, path+".metric", allowSystemMetric, add)
 		}
 	case rules.ConditionChanged:
 		validateChanged(node[rules.ConditionChanged], path+".changed", treeAppVersionChecks(checkNames), add)
+	}
+}
+
+func validateLogicalCondition(value any, operator, path string, checkNames, systemMetricChecks map[string]struct{}, allowSystemMetric bool, add addFunc) {
+	items, ok := value.([]any)
+	if !ok || len(items) == 0 {
+		add("%s.%s requires a non-empty list", path, operator)
+		return
+	}
+	for i, item := range items {
+		child, ok := item.(map[string]any)
+		if !ok {
+			add("%s.%s[%d] must be a condition", path, operator, i)
+			continue
+		}
+		validateCondition(child, fmt.Sprintf("%s.%s[%d]", path, operator, i), checkNames, systemMetricChecks, allowSystemMetric, add)
+	}
+}
+
+func validateNotCondition(value any, path string, checkNames, systemMetricChecks map[string]struct{}, allowSystemMetric bool, add addFunc) {
+	child, ok := value.(map[string]any)
+	if !ok {
+		add("%s.not must be a condition", path)
+		return
+	}
+	validateCondition(child, path+".not", checkNames, systemMetricChecks, allowSystemMetric, add)
+}
+
+func validateFileCondition(value any, path string, add addFunc) {
+	m, ok := value.(map[string]any)
+	if !ok || cfgval.String(m[rules.FieldPath]) == "" {
+		add("%s.file requires a path", path)
+	}
+	if !ok {
+		return
+	}
+	// `exists` defaults to true at runtime; a non-boolean (e.g. the string
+	// "false") would silently act as true.
+	if v, present := m[rules.FieldExists]; present {
+		if _, isBool := v.(bool); !isBool {
+			add(validationBooleanFormat, path+"."+rules.ConditionFile+"."+rules.FieldExists)
+		}
+	}
+}
+
+func validateCommandCondition(value any, path string, add addFunc) {
+	m, ok := value.(map[string]any)
+	if !ok {
+		add("%s.command must be a mapping", path)
+		return
+	}
+	entry := maps.Clone(m)
+	entry[checks.CheckKeyType] = checks.CheckTypeCommand
+	validateSingleShotCheckFields(path+".command", checks.CheckTypeCommand, entry, "", add)
+	if cfgval.String(m[checks.CheckKeyTimeout]) == "" {
+		add("%s.command condition must declare a timeout", path)
 	}
 }
 

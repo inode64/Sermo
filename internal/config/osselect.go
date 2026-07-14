@@ -91,54 +91,75 @@ func (c *Config) applyOSSelectors() error {
 func collapseOS(v any, osID string) (any, error) {
 	switch t := v.(type) {
 	case map[string]any:
-		out := make(map[string]any, len(t))
-		var selector map[string]any
-		for k, e := range t {
-			if k == keyOS {
-				if m, ok := e.(map[string]any); ok {
-					selector = m
-					continue
-				}
-			}
-			collapsed, err := collapseOS(e, osID)
-			if err != nil {
-				return nil, err
-			}
-			out[k] = collapsed
-		}
-		if selector != nil {
-			if branch := selectOSBranch(selector, osID); branch != nil {
-				if bm, ok := branch.(map[string]any); ok {
-					collapsed, err := collapseOS(bm, osID)
-					if err != nil {
-						return nil, err
-					}
-					selected, ok := collapsed.(map[string]any)
-					if !ok {
-						return nil, fmt.Errorf("os branch %q must resolve to a mapping when merged", osID)
-					}
-					out = mergeMaps(out, selected)
-				} else if len(out) == 0 {
-					// A list/scalar branch (e.g. os-specific pidfile path
-					// candidates) replaces the value when `os:` is the only key.
-					return collapseOS(branch, osID)
-				}
-			}
-		}
-		return out, nil
+		return collapseOSMap(t, osID)
 	case []any:
-		out := make([]any, len(t))
-		for i, value := range t {
-			collapsed, err := collapseOS(value, osID)
-			if err != nil {
-				return nil, err
-			}
-			out[i] = collapsed
-		}
-		return out, nil
+		return collapseOSList(t, osID)
 	default:
 		return t, nil
 	}
+}
+
+func collapseOSMap(values map[string]any, osID string) (any, error) {
+	out, selector, err := collapseOSMapEntries(values, osID)
+	if err != nil || selector == nil {
+		return out, err
+	}
+	branch := selectOSBranch(selector, osID)
+	if branch == nil {
+		return out, nil
+	}
+	if selected, ok := branch.(map[string]any); ok {
+		return mergeOSMapBranch(out, selected, osID)
+	}
+	if len(out) == 0 {
+		// A list/scalar branch (e.g. os-specific pidfile path candidates) replaces
+		// the value when `os:` is the only key.
+		return collapseOS(branch, osID)
+	}
+	return out, nil
+}
+
+func collapseOSMapEntries(values map[string]any, osID string) (map[string]any, map[string]any, error) {
+	out := make(map[string]any, len(values))
+	var selector map[string]any
+	for key, value := range values {
+		if key == keyOS {
+			if selected, ok := value.(map[string]any); ok {
+				selector = selected
+				continue
+			}
+		}
+		collapsed, err := collapseOS(value, osID)
+		if err != nil {
+			return nil, nil, err
+		}
+		out[key] = collapsed
+	}
+	return out, selector, nil
+}
+
+func mergeOSMapBranch(out, branch map[string]any, osID string) (map[string]any, error) {
+	collapsed, err := collapseOS(branch, osID)
+	if err != nil {
+		return nil, err
+	}
+	selected, ok := collapsed.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("os branch %q must resolve to a mapping when merged", osID)
+	}
+	return mergeMaps(out, selected), nil
+}
+
+func collapseOSList(values []any, osID string) ([]any, error) {
+	out := make([]any, len(values))
+	for i, value := range values {
+		collapsed, err := collapseOS(value, osID)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = collapsed
+	}
+	return out, nil
 }
 
 // selectOSBranch returns the branch for osID, else a `default` branch, else nil.

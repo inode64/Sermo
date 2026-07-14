@@ -313,57 +313,73 @@ func parseReloadSpec(tree map[string]any) *reloadSpec {
 // running its command, or sending its signal to the service's main process.
 func nativeReloadFunc(spec *reloadSpec, deps checks.Deps, backend, unit string, tree map[string]any, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) error {
 	if spec.hasSig {
-		pidfile := reloadPidfile(tree)
-		return func(ctx context.Context) error {
-			pid, source, err := reloadPID(ctx, deps.Runner, backend, unit, pidfile)
-			if err != nil {
-				return err
-			}
-			if source == reloadPIDPidfile {
-				if _, ok := discoverer.StrictMatchPID(pid, selectors); !ok {
-					return fmt.Errorf("reload: pidfile %q resolved pid %d, but it does not match any process selector with exact exe and user", pidfile, pid)
-				}
-			}
-			if source == reloadPIDMain && hasCommandMatchSelector(selectors) {
-				if _, ok := discoverer.StrictMatchPID(pid, selectors); !ok {
-					return fmt.Errorf("reload: MainPID %d does not match any process selector with exact exe and user", pid)
-				}
-			}
-			if err := ctx.Err(); err != nil {
-				return reloadContextError(err)
-			}
-			return process.OSSignaler{}.Signal(pid, spec.signal)
+		return nativeSignalReloadFunc(spec.signal, deps.Runner, backend, unit, reloadPidfile(tree), discoverer, selectors)
+	}
+	return nativeCommandReloadFunc(spec.command, deps.Runner)
+}
+
+func nativeSignalReloadFunc(signal syscall.Signal, runner execx.Runner, backend, unit, pidfile string, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) error {
+	return func(ctx context.Context) error {
+		pid, source, err := reloadPID(ctx, runner, backend, unit, pidfile)
+		if err != nil {
+			return err
+		}
+		if err := verifyReloadPID(pid, source, pidfile, discoverer, selectors); err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return reloadContextError(err)
+		}
+		return process.OSSignaler{}.Signal(pid, signal)
+	}
+}
+
+func verifyReloadPID(pid int, source reloadPIDSource, pidfile string, discoverer process.Discoverer, selectors []process.Selector) error {
+	if source == reloadPIDPidfile {
+		if _, ok := discoverer.StrictMatchPID(pid, selectors); !ok {
+			return fmt.Errorf("reload: pidfile %q resolved pid %d, but it does not match any process selector with exact exe and user", pidfile, pid)
 		}
 	}
-	argv := spec.command
-	runner := deps.Runner
+	if source == reloadPIDMain && hasCommandMatchSelector(selectors) {
+		if _, ok := discoverer.StrictMatchPID(pid, selectors); !ok {
+			return fmt.Errorf("reload: MainPID %d does not match any process selector with exact exe and user", pid)
+		}
+	}
+	return nil
+}
+
+func nativeCommandReloadFunc(argv []string, runner execx.Runner) func(context.Context) error {
 	if runner == nil {
 		runner = execx.CommandRunner{}
 	}
 	return func(ctx context.Context) error {
 		res, err := runner.Run(ctx, argv[0], argv[1:]...)
-		if err != nil {
-			if res.ExitCode == execx.ExitCodeRunFailure {
-				msg := execx.OperatorFailure(err, res, execx.NoTimeout)
-				if msg == "" {
-					msg = execx.CommandDidNotStart
-				}
-				return errors.New(msg)
-			}
-			return fmt.Errorf("%s: %w", reloadCommandLabel, err)
-		}
-		if res.ExitCode == execx.ExitCodeRunFailure {
-			return errors.New(execx.CommandDidNotStart)
-		}
-		if res.ExitCode != execx.ExitCodeSuccess {
-			msg := strings.TrimSpace(res.Stderr)
-			if msg == "" {
-				msg = strings.TrimSpace(res.Stdout)
-			}
-			return fmt.Errorf("%s exited %d: %s", reloadCommandLabel, res.ExitCode, msg)
-		}
-		return nil
+		return reloadCommandError(res, err)
 	}
+}
+
+func reloadCommandError(res execx.Result, err error) error {
+	if err != nil {
+		if res.ExitCode == execx.ExitCodeRunFailure {
+			msg := execx.OperatorFailure(err, res, execx.NoTimeout)
+			if msg == "" {
+				msg = execx.CommandDidNotStart
+			}
+			return errors.New(msg)
+		}
+		return fmt.Errorf("%s: %w", reloadCommandLabel, err)
+	}
+	if res.ExitCode == execx.ExitCodeRunFailure {
+		return errors.New(execx.CommandDidNotStart)
+	}
+	if res.ExitCode != execx.ExitCodeSuccess {
+		message := strings.TrimSpace(res.Stderr)
+		if message == "" {
+			message = strings.TrimSpace(res.Stdout)
+		}
+		return fmt.Errorf("%s exited %d: %s", reloadCommandLabel, res.ExitCode, message)
+	}
+	return nil
 }
 
 // reloadPID resolves the process to signal for a native reload: systemd's MainPID

@@ -487,19 +487,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 	if w.State == nil {
 		w.State = &rules.RemediationState{}
 	}
-	// Update every remediation rule's window this cycle, then act on the first
-	// firing rule that is not guard-blocked. Updating all windows
-	// keeps consecutive/sliding counts correct even when an earlier rule acts.
-	var firing []firingRule
-	for _, r := range w.Rules {
-		if r.Type != rules.RuleRemediation {
-			continue
-		}
-		fireState := w.fires(ctx, ev, r, at, evals)
-		if fireState.firing {
-			firing = append(firing, firingRule{Rule: r, rising: fireState.rising, change: fireState.change})
-		}
-	}
+	firing := w.firingRemediationRules(ctx, ev, at, evals)
 
 	// A healthy cycle (no remediation rule fired) decays the backoff. Dry-run
 	// cycles must not mutate the real remediation policy state.
@@ -511,92 +499,107 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 	}
 
 	for _, r := range firing {
-		op, hasOp := r.Rule.OperationAction()
-		if !hasOp {
-			// Validation rejects operation-less remediation rules; tolerate one
-			// that bypassed it (hand-built Rule) by at least delivering its
-			// alerts instead of silently doing nothing.
-			if w.DryRun {
-				w.emitDryRunAlerts(ctx, ev, r.Rule, r.rising, r.change)
-			} else {
-				w.emitAlerts(ctx, ev, r.Rule, r.rising, r.change)
-			}
-			continue
+		if w.runFiringRemediation(ctx, ev, now, r) {
+			return
 		}
-		action := string(op)
-		// A remediation rule must never bypass guards. If a guard
-		// blocks this action, try the next firing rule (first non-blocked wins).
-		blocked, reason, err := rules.Guard(ctx, w.Rules, action, ev)
-		if err != nil {
-			w.emit(Event{Kind: eventKindError, Rule: r.Name, Action: action, Message: "guard: " + err.Error()})
-			continue
-		}
-
-		suppress := ""
-		if blocked {
-			suppress = "guard: " + reason
-		} else if ok, why := w.Policy.Allow(w.State, now()); !ok {
-			suppress = why
-		}
-
-		if w.DryRun {
-			// Full evaluation + window advance + guard + policy happened. Emit a
-			// rich dry-run event so the operator sees exactly what Sermo would have
-			// done (and why it would have been suppressed, if at all). Never execute
-			// the action and never Record (real cooldowns unaffected).
-			msg := "would " + action
-			if suppress != "" {
-				msg += " (suppressed: " + suppress + ")"
-			} else {
-				msg += " (would execute)"
-			}
-			if w.shouldEmitRuleEvent(r.Rule, r.rising) {
-				w.emit(Event{Kind: eventKindDryRun, Rule: r.Name, Action: action, Message: msg})
-			}
-			if suppress == "" {
-				w.emitDryRunAlerts(ctx, ev, r.Rule, r.rising, r.change)
-			}
-			// Report all firing rules in dry-run mode for maximum observability.
-			continue
-		}
-
-		if suppress != "" {
-			if w.shouldEmitRuleEvent(r.Rule, r.rising) {
-				w.emit(Event{Kind: eventKindSuppressed, Rule: r.Name, Action: action, Message: suppress})
-			}
-			continue
-		}
-
-		// All actions of this rule run together: alerts notify, then the operation.
-		w.emitAlerts(ctx, ev, r.Rule, true, r.change)
-		// Panic mode keeps the alert visible (emitAlerts above) but never performs
-		// the automatic action; the operator drives services manually instead.
-		if w.InPanic != nil && w.InPanic() {
-			if w.shouldEmitRuleEvent(r.Rule, r.rising) {
-				w.emit(Event{Kind: eventKindSuppressed, Rule: r.Name, Action: action, Message: "panic mode: remediation suppressed"})
-			}
-			continue
-		}
-		// Cascade owns the primary's placement when also_apply is set (so stop can
-		// take additionals down first); it returns this service's own Result, which
-		// drives the bookkeeping below exactly as a bare Operate would.
-		operate := w.operateForRemediation
-		if w.Cascade != nil && (action == string(rules.ActionStart) || action == string(rules.ActionStop) || action == string(rules.ActionRestart)) {
-			operate = w.Cascade
-		}
-		result := operate(ctx, action)
-		if result.RecordsRemediation() {
-			w.State.Record(now(), w.Policy)
-		}
-		// A successful (re)launch, reload or resume now runs against the current files,
-		// so refresh the watched baselines — otherwise a `changed:`-driven
-		// restart/reload would fire again every cycle.
-		if result.OK() && (action == string(rules.ActionRestart) || action == string(rules.ActionStart) || action == string(rules.ActionReload) || action == string(rules.ActionResume)) {
-			w.acknowledgeChanges()
-		}
-		w.emit(Event{Kind: eventKindForResult(result), Rule: r.Name, Action: action, Status: string(result.Status), Message: result.Message})
-		return // at most one remediation action per cycle
 	}
+}
+
+func (w *Worker) runFiringRemediation(ctx context.Context, ev *rules.Evaluator, now func() time.Time, firing firingRule) bool {
+	op, hasOperation := firing.Rule.OperationAction()
+	if !hasOperation {
+		w.emitRemediationAlerts(ctx, ev, firing)
+		return false
+	}
+	action := string(op)
+	suppress, skip := w.remediationSuppression(ctx, ev, firing, action, now)
+	if skip {
+		return false
+	}
+	if w.DryRun {
+		w.emitDryRunRemediation(ctx, ev, firing, action, suppress)
+		return false
+	}
+	if suppress != "" {
+		if w.shouldEmitRuleEvent(firing.Rule, firing.rising) {
+			w.emit(Event{Kind: eventKindSuppressed, Rule: firing.Name, Action: action, Message: suppress})
+		}
+		return false
+	}
+	w.emitAlerts(ctx, ev, firing.Rule, true, firing.change)
+	if w.InPanic != nil && w.InPanic() {
+		if w.shouldEmitRuleEvent(firing.Rule, firing.rising) {
+			w.emit(Event{Kind: eventKindSuppressed, Rule: firing.Name, Action: action, Message: "panic mode: remediation suppressed"})
+		}
+		return false
+	}
+	w.executeRemediation(ctx, now, firing, action)
+	return true
+}
+
+func (w *Worker) emitRemediationAlerts(ctx context.Context, ev *rules.Evaluator, firing firingRule) {
+	if w.DryRun {
+		w.emitDryRunAlerts(ctx, ev, firing.Rule, firing.rising, firing.change)
+		return
+	}
+	w.emitAlerts(ctx, ev, firing.Rule, firing.rising, firing.change)
+}
+
+func (w *Worker) remediationSuppression(ctx context.Context, ev *rules.Evaluator, firing firingRule, action string, now func() time.Time) (string, bool) {
+	blocked, reason, err := rules.Guard(ctx, w.Rules, action, ev)
+	if err != nil {
+		w.emit(Event{Kind: eventKindError, Rule: firing.Name, Action: action, Message: "guard: " + err.Error()})
+		return "", true
+	}
+	if blocked {
+		return "guard: " + reason, false
+	}
+	if ok, reason := w.Policy.Allow(w.State, now()); !ok {
+		return reason, false
+	}
+	return "", false
+}
+
+func (w *Worker) emitDryRunRemediation(ctx context.Context, ev *rules.Evaluator, firing firingRule, action, suppress string) {
+	message := "would " + action + " (would execute)"
+	if suppress != "" {
+		message = "would " + action + " (suppressed: " + suppress + ")"
+	}
+	if w.shouldEmitRuleEvent(firing.Rule, firing.rising) {
+		w.emit(Event{Kind: eventKindDryRun, Rule: firing.Name, Action: action, Message: message})
+	}
+	if suppress == "" {
+		w.emitDryRunAlerts(ctx, ev, firing.Rule, firing.rising, firing.change)
+	}
+}
+
+func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, firing firingRule, action string) {
+	operate := w.operateForRemediation
+	if w.Cascade != nil && (action == string(rules.ActionStart) || action == string(rules.ActionStop) || action == string(rules.ActionRestart)) {
+		operate = w.Cascade
+	}
+	result := operate(ctx, action)
+	if result.RecordsRemediation() {
+		w.State.Record(now(), w.Policy)
+	}
+	if result.OK() && (action == string(rules.ActionRestart) || action == string(rules.ActionStart) || action == string(rules.ActionReload) || action == string(rules.ActionResume)) {
+		w.acknowledgeChanges()
+	}
+	w.emit(Event{Kind: eventKindForResult(result), Rule: firing.Name, Action: action, Status: string(result.Status), Message: result.Message})
+}
+
+func (w *Worker) firingRemediationRules(ctx context.Context, ev *rules.Evaluator, at time.Time, evals map[string]ruleEvalResult) []firingRule {
+	var firing []firingRule
+	for _, rule := range w.Rules {
+		if rule.Type != rules.RuleRemediation {
+			continue
+		}
+		state := w.fires(ctx, ev, rule, at, evals)
+		if state.firing {
+			firing = append(firing, firingRule{Rule: rule, rising: state.rising, change: state.change})
+		}
+	}
+	return firing
 }
 
 func (w *Worker) operateForRemediation(ctx context.Context, action string) operation.Result {

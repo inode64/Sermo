@@ -919,88 +919,98 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 	paths, pathErrs := restartOnChangePaths(roc[keyPaths])
 	errs = append(errs, pathErrs...)
 	if configAllowed {
-		for i, path := range paths {
-			key := fmt.Sprintf("restart-on-change-config-%d", i+1)
-			if _, exists := rulesMap[key]; exists {
-				errs = append(errs, fmt.Sprintf("restart_on_change would overwrite existing rule %q; rename that rule", key))
-				continue
-			}
-			rulesMap[key] = map[string]any{
-				rules.RuleFieldType: string(rules.RuleRemediation),
-				rules.RuleFieldIf:   map[string]any{rules.ConditionChanged: map[string]any{rules.FieldPath: path}},
-				rules.RuleFieldThen: restartOnChangeThen(messages.pathMessage(displayName)),
-			}
-		}
+		errs = append(errs, addRestartOnChangePathRules(rulesMap, paths, messages.pathMessage(displayName))...)
 	}
 	libraries, libraryErrs := restartOnChangeStringList(keyRestartOnChange+"."+keyLibraries, roc[keyLibraries])
 	errs = append(errs, libraryErrs...)
 	if versionAllowed {
-		preflight, _ := tree[sectionPreflight].(map[string]any)
-		if preflight == nil {
-			preflight = map[string]any{}
-		}
-		for _, lib := range libraries {
-			path, known := c.libraryPath(lib)
-			switch {
-			case !known:
-				errs = append(errs, fmt.Sprintf("restart_on_change references %q, which is not a library", lib))
-				continue
-			case path == "":
-				errs = append(errs, fmt.Sprintf("library %q has no binary to watch", lib))
-				continue
-			}
-			preflightKey := "library-" + lib + "-file"
-			if _, exists := preflight[preflightKey]; exists {
-				errs = append(errs, fmt.Sprintf("restart_on_change would overwrite preflight %q; rename that preflight", preflightKey))
-				continue
-			}
-			preflight[preflightKey] = map[string]any{
-				checks.CheckKeyType:     checks.CheckTypeFile,
-				checks.CheckKeyPath:     path,
-				checks.CheckKeyNonEmpty: true,
-			}
-			key := "restart-on-change-" + lib
-			if _, exists := rulesMap[key]; exists {
-				errs = append(errs, fmt.Sprintf("restart_on_change would overwrite existing rule %q; rename that rule", key))
-				continue
-			}
-			rulesMap[key] = map[string]any{
-				rules.RuleFieldType: string(rules.RuleRemediation),
-				rules.RuleFieldIf: map[string]any{
-					rules.ConditionChanged: map[string]any{rules.FieldLibrary: lib, rules.FieldPath: path},
-				},
-				rules.RuleFieldThen: restartOnChangeThen(messages.libraryMessage(displayName)),
-			}
-		}
-		if len(preflight) > 0 {
-			tree[sectionPreflight] = preflight
-		}
+		errs = append(errs, c.addRestartOnChangeLibraryRules(tree, rulesMap, libraries, messages.libraryMessage(displayName))...)
 	}
 	apps, appErrs := restartOnChangeApps(roc[keyApps])
 	errs = append(errs, appErrs...)
 	if versionAllowed {
-		linkedApps := set(cfgval.StringList(tree[keyApps])...)
-		for _, app := range apps {
-			if _, linked := linkedApps[app.name]; !linked {
-				errs = append(errs, fmt.Sprintf("restart_on_change app %q must also be listed in apps", app.name))
-				continue
-			}
-			key := "restart-on-change-" + app.name + "-version"
-			if _, exists := rulesMap[key]; exists {
-				errs = append(errs, fmt.Sprintf("restart_on_change would overwrite existing rule %q; rename that rule", key))
-				continue
-			}
-			rulesMap[key] = map[string]any{
-				rules.RuleFieldType: string(rules.RuleRemediation),
-				rules.RuleFieldIf: map[string]any{
-					rules.ConditionChanged: map[string]any{rules.FieldApp: app.name, rules.FieldLevel: app.level},
-				},
-				rules.RuleFieldThen: restartOnChangeThen(messages.appMessage(displayName)),
-			}
-		}
+		errs = append(errs, addRestartOnChangeAppRules(tree, rulesMap, apps, messages.appMessage(displayName))...)
 	}
 	if len(rulesMap) > 0 {
 		tree[rules.SectionRules] = rulesMap
+	}
+	return errs
+}
+
+func addRestartOnChangePathRules(rulesMap map[string]any, paths []string, message string) []string {
+	var errs []string
+	for i, path := range paths {
+		key := fmt.Sprintf("restart-on-change-config-%d", i+1)
+		if _, exists := rulesMap[key]; exists {
+			errs = append(errs, fmt.Sprintf("restart_on_change would overwrite existing rule %q; rename that rule", key))
+			continue
+		}
+		rulesMap[key] = map[string]any{
+			rules.RuleFieldType: string(rules.RuleRemediation),
+			rules.RuleFieldIf:   map[string]any{rules.ConditionChanged: map[string]any{rules.FieldPath: path}},
+			rules.RuleFieldThen: restartOnChangeThen(message),
+		}
+	}
+	return errs
+}
+
+func (c *Config) addRestartOnChangeLibraryRules(tree, rulesMap map[string]any, libraries []string, message string) []string {
+	preflight, _ := tree[sectionPreflight].(map[string]any)
+	if preflight == nil {
+		preflight = map[string]any{}
+	}
+	var errs []string
+	for _, library := range libraries {
+		path, known := c.libraryPath(library)
+		switch {
+		case !known:
+			errs = append(errs, fmt.Sprintf("restart_on_change references %q, which is not a library", library))
+			continue
+		case path == "":
+			errs = append(errs, fmt.Sprintf("library %q has no binary to watch", library))
+			continue
+		}
+		preflightKey := "library-" + library + "-file"
+		if _, exists := preflight[preflightKey]; exists {
+			errs = append(errs, fmt.Sprintf("restart_on_change would overwrite preflight %q; rename that preflight", preflightKey))
+			continue
+		}
+		preflight[preflightKey] = map[string]any{checks.CheckKeyType: checks.CheckTypeFile, checks.CheckKeyPath: path, checks.CheckKeyNonEmpty: true}
+		key := "restart-on-change-" + library
+		if _, exists := rulesMap[key]; exists {
+			errs = append(errs, fmt.Sprintf("restart_on_change would overwrite existing rule %q; rename that rule", key))
+			continue
+		}
+		rulesMap[key] = map[string]any{
+			rules.RuleFieldType: string(rules.RuleRemediation),
+			rules.RuleFieldIf:   map[string]any{rules.ConditionChanged: map[string]any{rules.FieldLibrary: library, rules.FieldPath: path}},
+			rules.RuleFieldThen: restartOnChangeThen(message),
+		}
+	}
+	if len(preflight) > 0 {
+		tree[sectionPreflight] = preflight
+	}
+	return errs
+}
+
+func addRestartOnChangeAppRules(tree, rulesMap map[string]any, apps []restartOnChangeApp, message string) []string {
+	linkedApps := set(cfgval.StringList(tree[keyApps])...)
+	var errs []string
+	for _, app := range apps {
+		if _, linked := linkedApps[app.name]; !linked {
+			errs = append(errs, fmt.Sprintf("restart_on_change app %q must also be listed in apps", app.name))
+			continue
+		}
+		key := "restart-on-change-" + app.name + "-version"
+		if _, exists := rulesMap[key]; exists {
+			errs = append(errs, fmt.Sprintf("restart_on_change would overwrite existing rule %q; rename that rule", key))
+			continue
+		}
+		rulesMap[key] = map[string]any{
+			rules.RuleFieldType: string(rules.RuleRemediation),
+			rules.RuleFieldIf:   map[string]any{rules.ConditionChanged: map[string]any{rules.FieldApp: app.name, rules.FieldLevel: app.level}},
+			rules.RuleFieldThen: restartOnChangeThen(message),
+		}
 	}
 	return errs
 }

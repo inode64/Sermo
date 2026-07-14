@@ -186,6 +186,12 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 			add("%s.%s", prefix, warn)
 		}
 	}
+	validateHTTPTransport(prefix, fields, add)
+	validateHTTPRequest(prefix, fields, add)
+	validateHTTPExpectations(prefix, fields, add)
+}
+
+func validateHTTPTransport(prefix string, fields map[string]any, add addFunc) {
 	if v, present := fields[checks.CheckKeyHTTP3]; present {
 		if h3, ok := v.(bool); !ok {
 			add(validationBooleanFormat, prefix+"."+checks.CheckKeyHTTP3)
@@ -217,6 +223,9 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 			add("%s.proxy scheme must be %s", prefix, checks.HTTPProxySchemeList)
 		}
 	}
+}
+
+func validateHTTPRequest(prefix string, fields map[string]any, add addFunc) {
 	if v, present := fields[checks.CheckKeyBody]; present {
 		if _, ok := v.(string); !ok {
 			add("%s.body must be a string", prefix)
@@ -232,6 +241,9 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 			add("%s.headers must be a mapping", prefix)
 		}
 	}
+}
+
+func validateHTTPExpectations(prefix string, fields map[string]any, add addFunc) {
 	if v, present := fields[checks.CheckKeyExpectBody]; present {
 		if m, ok := v.(map[string]any); ok {
 			validateOpValue(prefix, checks.CheckKeyExpectBody, m, add)
@@ -249,26 +261,34 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 			add("%s.expect_latency must be an {op, value} mapping", prefix)
 		}
 	}
-	if v, present := fields[checks.CheckKeyExpectJSON]; present {
-		m, ok := v.(map[string]any)
+	value, present := fields[checks.CheckKeyExpectJSON]
+	validateHTTPJSONExpectations(prefix, value, present, add)
+}
+
+func validateHTTPJSONExpectations(prefix string, value any, present bool, add addFunc) {
+	if !present {
+		return
+	}
+	m, ok := value.(map[string]any)
+	if !ok {
+		add("%s.expect_json must be a mapping", prefix)
+		return
+	}
+	for _, path := range slices.Sorted(maps.Keys(m)) {
+		cond, ok := m[path].(map[string]any)
 		if !ok {
-			add("%s.expect_json must be a mapping", prefix)
-		} else {
-			for _, path := range slices.Sorted(maps.Keys(m)) {
-				if cond, ok := m[path].(map[string]any); ok {
-					op := cfgval.String(cond[checks.CheckKeyOp])
-					if op == "" {
-						op = cfgval.CompareOpEqual
-					}
-					if !cfgval.IsAssertOp(op) {
-						add("%s.expect_json.%s op %q is not one of %s", prefix, path, op, cfgval.AssertOpSummary)
-						continue
-					}
-					if err := checks.ValidateAssertionValue(prefix+"."+checks.CheckKeyExpectJSON+"."+path, op, cfgval.String(cond[checks.CheckKeyValue])); err != nil {
-						add("%s", err)
-					}
-				}
-			}
+			continue
+		}
+		op := cfgval.String(cond[checks.CheckKeyOp])
+		if op == "" {
+			op = cfgval.CompareOpEqual
+		}
+		if !cfgval.IsAssertOp(op) {
+			add("%s.expect_json.%s op %q is not one of %s", prefix, path, op, cfgval.AssertOpSummary)
+			continue
+		}
+		if err := checks.ValidateAssertionValue(prefix+"."+checks.CheckKeyExpectJSON+"."+path, op, cfgval.String(cond[checks.CheckKeyValue])); err != nil {
+			add("%s", err)
 		}
 	}
 }
@@ -709,6 +729,73 @@ func validVariableName(name string) bool {
 	return true
 }
 
+type singleShotCheckValidator func(path string, entry map[string]any, locksDir string, add addFunc)
+
+var singleShotCheckValidators = map[string]singleShotCheckValidator{
+	checks.CheckTypeTCP:           validateTCPCheck,
+	checks.CheckTypeHTTP:          singleShotNoLock(validateHTTPFields),
+	checks.CheckTypePorts:         singleShotNoLock(validatePortsFields),
+	checks.CheckTypeCommand:       validateSingleShotCommand,
+	checks.CheckTypeClock:         singleShotNoLock(validateClockFields),
+	checks.CheckTypeService:       validateServiceCheck,
+	checks.CheckTypeProcess:       validateProcessCheck,
+	checks.CheckTypeFileExists:    validateFileExistsCheck,
+	checks.CheckTypeFile:          validateSingleShotFileCheck,
+	checks.CheckTypeLockfile:      validateLockfileCheck,
+	checks.CheckTypeBinary:        validateBinaryCheck,
+	checks.CheckTypePidfile:       validatePidfileCheck,
+	checks.CheckTypeSocket:        validateSocketCheck,
+	checks.CheckTypeLibraries:     validateLibrariesCheck,
+	checks.CheckTypeMetric:        validateSingleShotMetric,
+	checks.CheckTypeCount:         validateSingleShotCount,
+	checks.CheckTypeStorage:       singleShotNoLock(validateStorageFields),
+	checks.CheckTypeAutofs:        singleShotNoLock(validateAutofsFields),
+	checks.CheckTypeLoad:          singleShotNoLock(validateLoadFields),
+	checks.CheckTypeUsers:         singleShotThreshold(checks.UsersPredFields),
+	checks.CheckTypeProcessCount:  validateProcessCountCheck,
+	checks.CheckTypeHdparm:        singleShotNoLock(validateHdparmFields),
+	checks.CheckTypeSensors:       validateSensorsCheck,
+	checks.CheckTypeSmart:         singleShotNoLock(validateSmartFields),
+	checks.CheckTypeRAID:          validateRAIDCheck,
+	checks.CheckTypeLVM:           validateLVMCheck,
+	checks.CheckTypeEDAC:          singleShotThreshold(checks.EdacPredFields),
+	checks.CheckTypeConfig:        validateConfigCheck,
+	checks.CheckTypeFDS:           singleShotThreshold(checks.FdsPredFields),
+	checks.CheckTypeMemory:        singleShotThreshold(checks.MemoryPredFields),
+	checks.CheckTypePressure:      singleShotNoLock(validatePressureFields),
+	checks.CheckTypePIDs:          singleShotThreshold(checks.PidsPredFields),
+	checks.CheckTypeDiskIO:        singleShotNoLock(validateDiskIOFields),
+	checks.CheckTypeConntrack:     singleShotThreshold(checks.ConntrackPredFields),
+	checks.CheckTypeFirewallRules: singleShotNoLock(validateFirewallRulesFields),
+	checks.CheckTypeNet:           validateNetSingleShotCheck,
+	checks.CheckTypeICMP:          validateICMPSingleShotCheck,
+	checks.CheckTypeSwap:          validateSwapSingleShotCheck,
+	checks.CheckTypeRoute:         validateRouteCheck,
+	checks.CheckTypeEntropy:       singleShotThreshold(checks.EntropyPredFields),
+	checks.CheckTypeZombies:       singleShotThreshold(checks.ZombiePredFields),
+	checks.CheckTypeOOM:           singleShotNoLock(validateOomFields),
+	checks.CheckTypeCert:          singleShotNoLock(validateCertFields),
+	checks.CheckTypeSQLite:        validateSQLiteCheck,
+	checks.CheckTypeSQLite3:       validateSQLiteCheck,
+	checks.CheckTypeSQL:           singleShotNoLock(validateSQLFields),
+	checks.CheckTypeMongoDBQuery:  singleShotNoLock(validateMongoFields),
+	checks.CheckTypeInfluxDBQuery: singleShotNoLock(validateInfluxFields),
+	checks.CheckTypeSize:          singleShotNoLock(validateSizeFields),
+	checks.CheckTypeWebsocket:     singleShotNoLock(validateWebsocketFields),
+}
+
+func singleShotNoLock(validate func(string, map[string]any, addFunc)) singleShotCheckValidator {
+	return func(path string, entry map[string]any, _ string, add addFunc) {
+		validate(path, entry, add)
+	}
+}
+
+func singleShotThreshold(fields []string) singleShotCheckValidator {
+	return func(path string, entry map[string]any, _ string, add addFunc) {
+		validateThresholdPreds(path, entry, fields, add)
+	}
+}
+
 func validateSingleShotCheckFields(path, typ string, entry map[string]any, locksDir string, add addFunc) bool {
 	if !checks.IsSingleShotType(typ) {
 		// A connection-protocol check (mysql, …): the type names a protocol in
@@ -730,235 +817,230 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		return false
 	}
 	validateInterfaceFields(path, entry, add)
-	switch typ {
-	case checks.CheckTypeTCP:
-		if n, ok := cfgval.Int(entry[checks.CheckKeyPort]); !ok || !validTCPPort(n) {
-			add("%s.port is required and must be a port in %s for a tcp check", path, cfgval.TCPPortRange())
-		}
-	case checks.CheckTypeHTTP:
-		validateHTTPFields(path, entry, add)
-	case checks.CheckTypePorts:
-		validatePortsFields(path, entry, add)
-	case checks.CheckTypeCommand:
-		validateCommandFields(path, entry, true, add)
-	case checks.CheckTypeClock:
-		validateClockFields(path, entry, add)
-	case checks.CheckTypeService:
-		st := cfgval.String(entry[checks.CheckKeyExpect])
-		if st == "" {
-			add("%s.expect is required for a service check", path)
-		} else {
-			if _, ok := serviceStates[st]; !ok {
-				add("%s expect %q is not one of %s", path, st, servicemgr.StatusSummary)
-			}
-		}
-	case checks.CheckTypeProcess:
-		hasExe := cfgval.String(entry[checks.CheckKeyExe]) != ""
-		exeAny, hasExeAnyField := entry[checks.CheckKeyExeAny]
-		hasExeAny := cfgval.IsNonEmptyStringList(exeAny)
-		if hasExeAnyField && !hasExeAny {
-			add("%s.exe_any must be a string or non-empty list of strings", path)
-		}
-		switch {
-		case !hasExe && !hasExeAnyField:
-			add("%s.exe or exe_any is required for a process check", path)
-		case hasExe && hasExeAny:
-			add("%s must define only one of exe or exe_any", path)
-		}
-		if st := cfgval.String(entry[checks.CheckKeyState]); st != "" {
-			if _, ok := processStates[st]; !ok {
-				add("%s state %q is not one of %s", path, st, process.StateSummary)
-			}
-		}
-	case checks.CheckTypeFileExists:
-		p := cfgval.String(entry[checks.CheckKeyPath])
-		if p == "" {
-			add("%s.path is required for a file_exists check", path)
-		} else if underDir(p, locksDir) {
-			add("%s file_exists must not point under the runtime lock dir %s", path, locksDir)
-		}
-	case checks.CheckTypeFile:
-		if cfgval.String(entry[checks.CheckKeyPath]) == "" {
-			add("%s.path is required for a file check", path)
-		}
-		if v, present := entry[checks.CheckKeyNonEmpty]; present {
-			if _, ok := v.(bool); !ok {
-				add("%s.non_empty must be a boolean", path)
-			}
-		}
-	case checks.CheckTypeLockfile:
-		if !cfgval.IsNonEmptyStringList(entry[checks.CheckKeyPath]) {
-			add("%s.path is required for a lockfile check", path)
-		} else {
-			for _, p := range cfgval.StringList(entry[checks.CheckKeyPath]) {
-				if underDir(p, locksDir) {
-					add("%s lockfile must not point under the runtime lock dir %s", path, locksDir)
-					break
-				}
-			}
-		}
-	case checks.CheckTypeBinary:
-		if cfgval.String(entry[checks.CheckKeyPath]) == "" {
-			add("%s.path is required for a binary check", path)
-		}
-	case checks.CheckTypePidfile:
-		if !cfgval.IsNonEmptyStringList(entry[checks.CheckKeyPath]) {
-			add("%s.path is required for a pidfile check", path)
-		}
-	case checks.CheckTypeSocket:
-		if !cfgval.IsNonEmptyStringList(entry[checks.CheckKeyPath]) {
-			add("%s.path is required for a socket check", path)
-		}
-	case checks.CheckTypeLibraries:
-		if cfgval.String(entry[checks.CheckKeyBinary]) == "" {
-			add("%s.binary is required for a libraries check", path)
-		}
-	case checks.CheckTypeMetric:
-		validateMetric(entry, path, true, add)
-	case checks.CheckTypeCount:
-		validateCount(entry, path, add)
-	case checks.CheckTypeStorage:
-		validateStorageFields(path, entry, add)
-	case checks.CheckTypeAutofs:
-		validateAutofsFields(path, entry, add)
-	case checks.CheckTypeLoad:
-		validateLoadFields(path, entry, add)
-	case checks.CheckTypeUsers:
-		validateThresholdPreds(path, entry, checks.UsersPredFields, add)
-	case checks.CheckTypeProcessCount:
-		validateThresholdPreds(path, entry, checks.ProcessCountPredFields, add)
-		for _, f := range []string{checks.CheckKeyExe, checks.CheckKeyExeDir} {
-			if p := cfgval.String(entry[f]); p != "" && !filepath.IsAbs(p) {
-				add("%s.%s must be an absolute path", path, f)
-			}
-		}
-	case checks.CheckTypeHdparm:
-		validateHdparmFields(path, entry, add)
-	case checks.CheckTypeSensors:
-		if validatePresentThresholds(path, entry, checks.SensorPredFields, add) == 0 {
-			add("%s requires at least one of %s {op, value}", path, strings.Join(checks.SensorPredFields, "/"))
-		}
-	case checks.CheckTypeSmart:
-		validateSmartFields(path, entry, add)
-	case checks.CheckTypeRAID:
-		validatePresentThresholds(path, entry, checks.RaidPredFields, add)
-		if array, present := entry[checks.CheckKeyArray]; present && cfgval.String(array) == "" {
-			add("%s.%s must be a non-empty string", path, checks.CheckKeyArray)
-		}
-	case checks.CheckTypeLVM:
-		validatePresentThresholds(path, entry, checks.LVMPredFields, add)
-		vg := cfgval.String(entry[checks.CheckKeyVolumeGroup])
-		lv := cfgval.String(entry[checks.CheckKeyLogicalVolume])
-		if _, present := entry[checks.CheckKeyVolumeGroup]; present && vg == "" {
-			add("%s.%s must be a non-empty string", path, checks.CheckKeyVolumeGroup)
-		}
-		if _, present := entry[checks.CheckKeyLogicalVolume]; present && lv == "" {
-			add("%s.%s must be a non-empty string", path, checks.CheckKeyLogicalVolume)
-		}
-		if lv != "" && vg == "" {
-			add("%s.%s requires %s", path, checks.CheckKeyLogicalVolume, checks.CheckKeyVolumeGroup)
-		}
-		if _, hasArray := entry[checks.CheckKeyArray]; hasArray {
-			if _, hasArrays := entry[checks.DataKeyArrays]; hasArrays {
-				add("%s.%s cannot be combined with %s", path, checks.CheckKeyArray, checks.DataKeyArrays)
-			}
-		}
-		if v, present := entry[checks.CheckKeySysfsChanges]; present {
-			if _, ok := v.(bool); !ok {
-				add(validationBooleanFormat, path+"."+checks.CheckKeySysfsChanges)
-			}
-		}
-	case checks.CheckTypeEDAC:
-		validatePresentThresholds(path, entry, checks.EdacPredFields, add)
-	case checks.CheckTypeConfig:
-		_, hasCmd := entry[checks.CheckKeyCommand]
-		_, hasPath := entry[checks.CheckKeyPath]
-		if !hasCmd && !hasPath {
-			add("%s requires a command and/or path", path)
-		}
-		if hasCmd && !cfgval.IsNonEmptyStringArray(entry[checks.CheckKeyCommand]) {
-			add("%s command must be an array, not a shell string", path)
-		}
-		if hasPath && !cfgval.IsNonEmptyStringList(entry[checks.CheckKeyPath]) {
-			add("%s.path must be a string or non-empty list of strings", path)
-		}
-		if v, present := entry[checks.CheckKeyOnChange]; present {
-			if _, ok := v.(bool); !ok {
-				add(validationBooleanFormat, path+"."+checks.CheckKeyOnChange)
-			}
-		}
-		if hasCmd {
-			validateCommandUser(path, entry, add)
-		}
-	case checks.CheckTypeFDS:
-		validateThresholdPreds(path, entry, checks.FdsPredFields, add)
-	case checks.CheckTypeMemory:
-		validateThresholdPreds(path, entry, checks.MemoryPredFields, add)
-	case checks.CheckTypePressure:
-		validatePressureFields(path, entry, add)
-	case checks.CheckTypePIDs:
-		validateThresholdPreds(path, entry, checks.PidsPredFields, add)
-	case checks.CheckTypeDiskIO:
-		validateDiskIOFields(path, entry, add)
-	case checks.CheckTypeConntrack:
-		validateThresholdPreds(path, entry, checks.ConntrackPredFields, add)
-	case checks.CheckTypeFirewallRules:
-		validateFirewallRulesFields(path, entry, add)
-	case checks.CheckTypeNet:
-		if cfgval.String(entry[checks.CheckKeyInterface]) == "" {
-			add("%s.interface is required for a net check", path)
-		}
-		validateNetMetricCondition(path, cfgval.String(entry[checks.CheckKeyMetric]), entry, add)
-	case checks.CheckTypeICMP:
-		if cfgval.String(entry[checks.CheckKeyHost]) == "" {
-			add("%s.host is required for an icmp check", path)
-		}
-		if v, present := entry[checks.CheckKeyCount]; present {
-			if n, ok := cfgval.Int(v); !ok || n <= 0 {
-				add("%s.count must be a positive integer", path)
-			}
-		}
-		validateICMPMetricCondition(path, cfgval.String(entry[checks.CheckKeyMetric]), entry, add)
-	case checks.CheckTypeSwap:
-		validateSwapMetricCondition(path, cfgval.String(entry[checks.CheckKeyMetric]), entry, add)
-	case checks.CheckTypeRoute:
-		if f := cfgval.String(entry[checks.CheckKeyFamily]); f != "" && f != checks.FamilyIPv4 && f != checks.FamilyIPv6 {
-			add("%s.family must be %s", path, checks.RouteFamilySummary)
-		}
-		if v, present := entry[checks.CheckKeyInterface]; present {
-			if _, ok := v.(string); !ok {
-				add("%s.interface must be a single interface name for a route check", path)
-			}
-		}
-	case checks.CheckTypeEntropy:
-		validateThresholdPreds(path, entry, checks.EntropyPredFields, add)
-	case checks.CheckTypeZombies:
-		validateThresholdPreds(path, entry, checks.ZombiePredFields, add)
-	case checks.CheckTypeOOM:
-		validateOomFields(path, entry, add)
-	case checks.CheckTypeCert:
-		validateCertFields(path, entry, add)
-	case checks.CheckTypeSQLite, checks.CheckTypeSQLite3:
-		if cfgval.String(entry[checks.CheckKeyPath]) == "" {
-			add("%s.path is required for a sqlite check", path)
-		}
-		if v, present := entry[checks.CheckKeyQuick]; present {
-			if _, ok := v.(bool); !ok {
-				add(validationBooleanFormat, path+"."+checks.CheckKeyQuick)
-			}
-		}
-	case checks.CheckTypeSQL:
-		validateSQLFields(path, entry, add)
-	case checks.CheckTypeMongoDBQuery:
-		validateMongoFields(path, entry, add)
-	case checks.CheckTypeInfluxDBQuery:
-		validateInfluxFields(path, entry, add)
-	case checks.CheckTypeSize:
-		validateSizeFields(path, entry, add)
-	case checks.CheckTypeWebsocket:
-		validateWebsocketFields(path, entry, add)
+	if validate := singleShotCheckValidators[typ]; validate != nil {
+		validate(path, entry, locksDir, add)
 	}
 	return true
+}
+
+func validateTCPCheck(path string, entry map[string]any, _ string, add addFunc) {
+	if n, ok := cfgval.Int(entry[checks.CheckKeyPort]); !ok || !validTCPPort(n) {
+		add("%s.port is required and must be a port in %s for a tcp check", path, cfgval.TCPPortRange())
+	}
+}
+
+func validateSingleShotCommand(path string, entry map[string]any, _ string, add addFunc) {
+	validateCommandFields(path, entry, true, add)
+}
+
+func validateServiceCheck(path string, entry map[string]any, _ string, add addFunc) {
+	state := cfgval.String(entry[checks.CheckKeyExpect])
+	if state == "" {
+		add("%s.expect is required for a service check", path)
+		return
+	}
+	if _, ok := serviceStates[state]; !ok {
+		add("%s expect %q is not one of %s", path, state, servicemgr.StatusSummary)
+	}
+}
+
+func validateProcessCheck(path string, entry map[string]any, _ string, add addFunc) {
+	hasExe := cfgval.String(entry[checks.CheckKeyExe]) != ""
+	exeAny, hasExeAnyField := entry[checks.CheckKeyExeAny]
+	hasExeAny := cfgval.IsNonEmptyStringList(exeAny)
+	if hasExeAnyField && !hasExeAny {
+		add("%s.exe_any must be a string or non-empty list of strings", path)
+	}
+	switch {
+	case !hasExe && !hasExeAnyField:
+		add("%s.exe or exe_any is required for a process check", path)
+	case hasExe && hasExeAny:
+		add("%s must define only one of exe or exe_any", path)
+	}
+	if state := cfgval.String(entry[checks.CheckKeyState]); state != "" {
+		if _, ok := processStates[state]; !ok {
+			add("%s state %q is not one of %s", path, state, process.StateSummary)
+		}
+	}
+}
+
+func validateFileExistsCheck(path string, entry map[string]any, locksDir string, add addFunc) {
+	filePath := cfgval.String(entry[checks.CheckKeyPath])
+	if filePath == "" {
+		add("%s.path is required for a file_exists check", path)
+	} else if underDir(filePath, locksDir) {
+		add("%s file_exists must not point under the runtime lock dir %s", path, locksDir)
+	}
+}
+
+func validateSingleShotFileCheck(path string, entry map[string]any, _ string, add addFunc) {
+	if cfgval.String(entry[checks.CheckKeyPath]) == "" {
+		add("%s.path is required for a file check", path)
+	}
+	if v, present := entry[checks.CheckKeyNonEmpty]; present {
+		if _, ok := v.(bool); !ok {
+			add("%s.non_empty must be a boolean", path)
+		}
+	}
+}
+
+func validateLockfileCheck(path string, entry map[string]any, locksDir string, add addFunc) {
+	if !cfgval.IsNonEmptyStringList(entry[checks.CheckKeyPath]) {
+		add("%s.path is required for a lockfile check", path)
+		return
+	}
+	for _, lockfile := range cfgval.StringList(entry[checks.CheckKeyPath]) {
+		if underDir(lockfile, locksDir) {
+			add("%s lockfile must not point under the runtime lock dir %s", path, locksDir)
+			return
+		}
+	}
+}
+
+func validateBinaryCheck(path string, entry map[string]any, _ string, add addFunc) {
+	if cfgval.String(entry[checks.CheckKeyPath]) == "" {
+		add("%s.path is required for a binary check", path)
+	}
+}
+
+func validatePidfileCheck(path string, entry map[string]any, _ string, add addFunc) {
+	if !cfgval.IsNonEmptyStringList(entry[checks.CheckKeyPath]) {
+		add("%s.path is required for a pidfile check", path)
+	}
+}
+
+func validateSocketCheck(path string, entry map[string]any, _ string, add addFunc) {
+	if !cfgval.IsNonEmptyStringList(entry[checks.CheckKeyPath]) {
+		add("%s.path is required for a socket check", path)
+	}
+}
+
+func validateLibrariesCheck(path string, entry map[string]any, _ string, add addFunc) {
+	if cfgval.String(entry[checks.CheckKeyBinary]) == "" {
+		add("%s.binary is required for a libraries check", path)
+	}
+}
+
+func validateSingleShotMetric(path string, entry map[string]any, _ string, add addFunc) {
+	validateMetric(entry, path, true, add)
+}
+
+func validateSingleShotCount(path string, entry map[string]any, _ string, add addFunc) {
+	validateCount(entry, path, add)
+}
+
+func validateProcessCountCheck(path string, entry map[string]any, _ string, add addFunc) {
+	validateThresholdPreds(path, entry, checks.ProcessCountPredFields, add)
+	for _, field := range []string{checks.CheckKeyExe, checks.CheckKeyExeDir} {
+		if value := cfgval.String(entry[field]); value != "" && !filepath.IsAbs(value) {
+			add("%s.%s must be an absolute path", path, field)
+		}
+	}
+}
+
+func validateSensorsCheck(path string, entry map[string]any, _ string, add addFunc) {
+	if validatePresentThresholds(path, entry, checks.SensorPredFields, add) == 0 {
+		add("%s requires at least one of %s {op, value}", path, strings.Join(checks.SensorPredFields, "/"))
+	}
+}
+
+func validateRAIDCheck(path string, entry map[string]any, _ string, add addFunc) {
+	validatePresentThresholds(path, entry, checks.RaidPredFields, add)
+	if array, present := entry[checks.CheckKeyArray]; present && cfgval.String(array) == "" {
+		add("%s.%s must be a non-empty string", path, checks.CheckKeyArray)
+	}
+}
+
+func validateLVMCheck(path string, entry map[string]any, _ string, add addFunc) {
+	validatePresentThresholds(path, entry, checks.LVMPredFields, add)
+	volumeGroup := cfgval.String(entry[checks.CheckKeyVolumeGroup])
+	logicalVolume := cfgval.String(entry[checks.CheckKeyLogicalVolume])
+	if _, present := entry[checks.CheckKeyVolumeGroup]; present && volumeGroup == "" {
+		add("%s.%s must be a non-empty string", path, checks.CheckKeyVolumeGroup)
+	}
+	if _, present := entry[checks.CheckKeyLogicalVolume]; present && logicalVolume == "" {
+		add("%s.%s must be a non-empty string", path, checks.CheckKeyLogicalVolume)
+	}
+	if logicalVolume != "" && volumeGroup == "" {
+		add("%s.%s requires %s", path, checks.CheckKeyLogicalVolume, checks.CheckKeyVolumeGroup)
+	}
+	if _, hasArray := entry[checks.CheckKeyArray]; hasArray {
+		if _, hasArrays := entry[checks.DataKeyArrays]; hasArrays {
+			add("%s.%s cannot be combined with %s", path, checks.CheckKeyArray, checks.DataKeyArrays)
+		}
+	}
+	if v, present := entry[checks.CheckKeySysfsChanges]; present {
+		if _, ok := v.(bool); !ok {
+			add(validationBooleanFormat, path+"."+checks.CheckKeySysfsChanges)
+		}
+	}
+}
+
+func validateConfigCheck(path string, entry map[string]any, _ string, add addFunc) {
+	_, hasCommand := entry[checks.CheckKeyCommand]
+	_, hasPath := entry[checks.CheckKeyPath]
+	if !hasCommand && !hasPath {
+		add("%s requires a command and/or path", path)
+	}
+	if hasCommand && !cfgval.IsNonEmptyStringArray(entry[checks.CheckKeyCommand]) {
+		add("%s command must be an array, not a shell string", path)
+	}
+	if hasPath && !cfgval.IsNonEmptyStringList(entry[checks.CheckKeyPath]) {
+		add("%s.path must be a string or non-empty list of strings", path)
+	}
+	if v, present := entry[checks.CheckKeyOnChange]; present {
+		if _, ok := v.(bool); !ok {
+			add(validationBooleanFormat, path+"."+checks.CheckKeyOnChange)
+		}
+	}
+	if hasCommand {
+		validateCommandUser(path, entry, add)
+	}
+}
+
+func validateNetSingleShotCheck(path string, entry map[string]any, _ string, add addFunc) {
+	if cfgval.String(entry[checks.CheckKeyInterface]) == "" {
+		add("%s.interface is required for a net check", path)
+	}
+	validateNetMetricCondition(path, cfgval.String(entry[checks.CheckKeyMetric]), entry, add)
+}
+
+func validateICMPSingleShotCheck(path string, entry map[string]any, _ string, add addFunc) {
+	if cfgval.String(entry[checks.CheckKeyHost]) == "" {
+		add("%s.host is required for an icmp check", path)
+	}
+	if v, present := entry[checks.CheckKeyCount]; present {
+		if n, ok := cfgval.Int(v); !ok || n <= 0 {
+			add("%s.count must be a positive integer", path)
+		}
+	}
+	validateICMPMetricCondition(path, cfgval.String(entry[checks.CheckKeyMetric]), entry, add)
+}
+
+func validateSwapSingleShotCheck(path string, entry map[string]any, _ string, add addFunc) {
+	validateSwapMetricCondition(path, cfgval.String(entry[checks.CheckKeyMetric]), entry, add)
+}
+
+func validateRouteCheck(path string, entry map[string]any, _ string, add addFunc) {
+	if family := cfgval.String(entry[checks.CheckKeyFamily]); family != "" && family != checks.FamilyIPv4 && family != checks.FamilyIPv6 {
+		add("%s.family must be %s", path, checks.RouteFamilySummary)
+	}
+	if v, present := entry[checks.CheckKeyInterface]; present {
+		if _, ok := v.(string); !ok {
+			add("%s.interface must be a single interface name for a route check", path)
+		}
+	}
+}
+
+func validateSQLiteCheck(path string, entry map[string]any, _ string, add addFunc) {
+	if cfgval.String(entry[checks.CheckKeyPath]) == "" {
+		add("%s.path is required for a sqlite check", path)
+	}
+	if v, present := entry[checks.CheckKeyQuick]; present {
+		if _, ok := v.(bool); !ok {
+			add(validationBooleanFormat, path+"."+checks.CheckKeyQuick)
+		}
+	}
 }
 
 func validateCommandUser(path string, entry map[string]any, add addFunc) {
