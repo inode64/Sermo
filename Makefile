@@ -85,7 +85,9 @@ SHELLCHECK ?= shellcheck
 RUFF ?= ruff
 ACTIONLINT ?= actionlint
 FUZZ_TIME ?= 15s
-QUALITY_REPORT_LINTERS = gocognit,dupl,perfsprint
+# gocognit, dupl and perfsprint are blocking linters. Keep unresolved
+# cyclomatic-complexity debt visible without making unrelated changes fail CI.
+QUALITY_REPORT_LINTERS = gocyclo
 SCRIPT_SH = scripts/*.sh scripts/remote-deploy/*.sh
 SCRIPT_PY = scripts/*.py scripts/remote-deploy/*.py
 
@@ -195,10 +197,10 @@ fuzz:
 deadcode:
 	@$(LINT_PATH) deadcode -test ./...
 
-# Advisory only (not part of lint/check): establish a visible baseline for
-# complexity, duplicate code, and formatting allocations before promoting any
-# focused findings to blocking checks. golangci-lint uses exit code 1 when it
-# reports findings; preserve other non-zero codes as analyzer failures.
+# Advisory only (not part of lint/check): keep the remaining cyclomatic
+# complexity baseline visible while it is reduced in focused refactors.
+# golangci-lint uses exit code 1 when it reports findings; preserve other
+# non-zero codes as analyzer failures.
 quality-report:
 	@out="$$(mktemp)"; status=0; \
 	$(LINT_CACHE_ENV) golangci-lint run --enable-only=$(QUALITY_REPORT_LINTERS) --output.text.path "$$out" || status="$$?"; \

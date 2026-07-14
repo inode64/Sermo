@@ -776,7 +776,7 @@ func TestIndexAccessibilityBundle(t *testing.T) {
 // shell: page language, skip link, live regions, labelled filter groups, and
 // table captions with column scope.
 //
-//nolint:gocognit // The test intentionally keeps the complete shell accessibility contract in one reviewable specification.
+//nolint:gocognit,gocyclo,maintidx // The test intentionally keeps the complete shell accessibility contract in one reviewable specification.
 func TestIndexAccessibilityShell(t *testing.T) {
 	doc, _ := parsedIndex(t)
 

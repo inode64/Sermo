@@ -127,7 +127,7 @@ func loadDaemonConfig(logger *slog.Logger, globalPath string) (*config.Config, i
 	return cfg, 0
 }
 
-//nolint:gocognit // Daemon startup is intentionally ordered: locks, persistence, workers and shutdown must remain visible in one flow.
+//nolint:gocognit,gocyclo,maintidx // Daemon startup is intentionally ordered: locks, persistence, workers and shutdown must remain visible in one flow.
 func run(args []string) int {
 	if versionRequested(args) {
 		fmt.Println(buildinfo.String())
