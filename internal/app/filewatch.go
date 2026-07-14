@@ -62,20 +62,21 @@ const (
 // remembers each path's attributes across cycles and reports only transitions.
 // The baseline is adopted silently on first sight except for already-stale paths.
 type fileWatcher struct {
-	name      string
-	paths     []string
-	recursive bool
-	cond      fileCond
-	summary   string
-	check     map[string]any
-	hook      HookSpec
-	notifiers []notify.Notifier
-	dryRun    bool
-	inPanic   func() bool
-	runner    HookRunner
-	emit      func(Event)
-	publish   func(string, string, checks.Result)
-	now       func() time.Time
+	name          string
+	paths         []string
+	recursive     bool
+	includeHidden bool
+	cond          fileCond
+	summary       string
+	check         map[string]any
+	hook          HookSpec
+	notifiers     []notify.Notifier
+	dryRun        bool
+	inPanic       func() bool
+	runner        HookRunner
+	emit          func(Event)
+	publish       func(string, string, checks.Result)
+	now           func() time.Time
 
 	baseline    map[string]fileState
 	numberFiles int
@@ -216,6 +217,12 @@ func (w *fileWatcher) scan(now time.Time) map[string]fileState {
 				}
 				if walkErr != nil {
 					return nil //nolint:nilerr // unreadable entries are skipped during best-effort recursive scans
+				}
+				if !w.includeHidden && checks.IsHiddenDescendant(root, p, d) {
+					if d.IsDir() {
+						return filepath.SkipDir
+					}
+					return nil
 				}
 				fi, infoErr := d.Info()
 				if infoErr != nil {

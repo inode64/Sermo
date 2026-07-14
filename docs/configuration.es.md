@@ -2218,6 +2218,7 @@ watches:
         - /var/lib/myapp
         - /srv/myapp/incoming
       recursive: true                 # optional, default false (whole subtree)
+      include_hidden: true            # opcional, false por defecto (incluye .archivos/.directorios)
       older_than: 24h                 # opcional: edad de mtime; dispara cualquier ruta vencida
       summary: "${path} edad ${value}, límite ${older_than}, archivos ${number_files}"
       size: { op: ">", value: 1048576 }   # edge threshold; or `size: { on: change }`
@@ -2249,7 +2250,9 @@ Las condiciones (declara al menos una):
 
 Cuando `recursive: true` y una ruta seleccionada es un directorio, cada entrada del
 subárbol se rastrea de forma independiente (los enlaces simbólicos se vigilan como
-enlaces, nunca se siguen). Las entradas nuevas se adoptan silenciosamente salvo que
+enlaces, nunca se siguen). Por defecto se omiten los descendientes cuyo nombre empieza
+por `.`, incluidos sus subárboles. Usa `include_hidden: true` para vigilarlos. Una ruta
+oculta indicada directamente en `path` o `paths` siempre se vigila. Las entradas nuevas se adoptan silenciosamente salvo que
 ya estén vencidas; las eliminadas disparan `existence` si está configurado. Cada
 cambio o vencimiento produce **un evento y una ejecución de hook**, de modo que un
 ciclo que encuentra varias rutas se dispara varias veces.

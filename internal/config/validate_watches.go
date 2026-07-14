@@ -736,8 +736,8 @@ func validateICMPMetricCondition(prefix, metric string, m map[string]any, add ad
 	}
 }
 
-// validateFileCheck validates a file watch: path or paths, an optional boolean
-// recursive, and at least one attribute condition (size threshold/change,
+// validateFileCheck validates a file watch: path or paths, optional recursive
+// traversal flags, and at least one attribute condition (size threshold/change,
 // permissions/owner on change, existence on delete, older_than), plus the entry's hook.
 func validateFileCheck(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
 	validateStatefulWatchEntry(name, checks.CheckTypeFile, entry, add)
@@ -747,6 +747,11 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 	if v, present := check[checks.CheckKeyRecursive]; present {
 		if _, ok := v.(bool); !ok {
 			add(validationBooleanFormat, watchCheckFieldPath(name, checks.CheckKeyRecursive))
+		}
+	}
+	if v, present := check[checks.CheckKeyIncludeHidden]; present {
+		if _, ok := v.(bool); !ok {
+			add(validationBooleanFormat, watchCheckFieldPath(name, checks.CheckKeyIncludeHidden))
 		}
 	}
 

@@ -168,6 +168,41 @@ func TestFileWatchPublishesSnapshot(t *testing.T) {
 	}
 }
 
+func TestFileWatchRecursiveSkipsHiddenEntriesByDefault(t *testing.T) {
+	root := t.TempDir()
+	for path, size := range map[string]int{
+		"visible.txt":       1,
+		".hidden.txt":       1,
+		".cache/nested.txt": 1,
+	} {
+		fullPath := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeSize(t, fullPath, size)
+	}
+
+	w := (&fileWatchHarness{}).watcher(root, true, fileCond{sizeChange: true})
+	if got := fileWatchNumberFiles(w.scan(time.Now())); got != 1 {
+		t.Fatalf("default recursive files = %d, want 1", got)
+	}
+	w.includeHidden = true
+	if got := fileWatchNumberFiles(w.scan(time.Now())); got != 3 {
+		t.Fatalf("include_hidden recursive files = %d, want 3", got)
+	}
+
+	hiddenRoot := filepath.Join(root, ".explicit")
+	if err := os.Mkdir(hiddenRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeSize(t, filepath.Join(hiddenRoot, "visible.txt"), 1)
+	w.paths = []string{hiddenRoot}
+	w.includeHidden = false
+	if got := fileWatchNumberFiles(w.scan(time.Now())); got != 1 {
+		t.Fatalf("explicit hidden root files = %d, want 1", got)
+	}
+}
+
 func TestFileWatchSnapshotUsesReadableAge(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "a.txt")
 	writeSize(t, path, 10)

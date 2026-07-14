@@ -63,7 +63,7 @@ func (b *WebBackend) fileWatchView(ctx context.Context, w *webWatch) (*web.Watch
 		}
 		if cfgval.Bool(w.check[checks.CheckKeyRecursive]) && info.IsDir() {
 			probeCtx, cancel := b.probeContext(ctx)
-			n, countErr := checks.TallyEntries(probeCtx, path, checks.CountKindAny, true, b.probeTimeout())
+			n, countErr := checks.TallyEntries(probeCtx, path, checks.CountKindAny, true, cfgval.Bool(w.check[checks.CheckKeyIncludeHidden]), b.probeTimeout())
 			cancel()
 			if countErr != nil {
 				readings = append(readings, web.WatchReading{Field: watchReadingFieldEntries, Label: watchReadingLabelEntries, Error: countErr.Error()})
@@ -100,9 +100,10 @@ func (b *WebBackend) countWatchView(ctx context.Context, w *webWatch) (*web.Watc
 		kind = checks.CountKindAny
 	}
 	recursive := cfgval.Bool(w.check[checks.CheckKeyRecursive])
+	includeHidden := cfgval.Bool(w.check[checks.CheckKeyIncludeHidden])
 	probeCtx, cancel := b.probeContext(ctx)
 	defer cancel()
-	n, err := checks.TallyEntries(probeCtx, path, kind, recursive, b.probeTimeout())
+	n, err := checks.TallyEntries(probeCtx, path, kind, recursive, includeHidden, b.probeTimeout())
 	if err != nil {
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "count: " + msg
@@ -177,7 +178,7 @@ func (b *WebBackend) sizeWatchView(ctx context.Context, w *webWatch) (*web.Watch
 	}
 	probeCtx, cancel := b.probeContext(ctx)
 	defer cancel()
-	size, err := checks.SamplePathSize(probeCtx, path, b.probeTimeout())
+	size, err := checks.SamplePathSize(probeCtx, path, cfgval.Bool(w.check[checks.CheckKeyIncludeHidden]), b.probeTimeout())
 	if err != nil {
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "size: " + msg

@@ -1019,6 +1019,11 @@ func validateSizeFields(prefix string, fields map[string]any, add addFunc) {
 	if cfgval.String(fields[checks.CheckKeyPath]) == "" {
 		add("%s.path is required for a size check", prefix)
 	}
+	if v, present := fields[checks.CheckKeyIncludeHidden]; present {
+		if _, ok := v.(bool); !ok {
+			add(validationBooleanFormat, prefix+"."+checks.CheckKeyIncludeHidden)
+		}
+	}
 	gb := cfgval.String(fields[checks.CheckKeyGrowBy])
 	if gb == "" {
 		add("%s.grow_by is required for a size check (e.g. 1G)", prefix)
@@ -1274,6 +1279,11 @@ func validateCount(entry map[string]any, path string, add addFunc) {
 	if v, present := entry[checks.CheckKeyRecursive]; present {
 		if _, ok := v.(bool); !ok {
 			add("%s count recursive must be a boolean", path)
+		}
+	}
+	if v, present := entry[checks.CheckKeyIncludeHidden]; present {
+		if _, ok := v.(bool); !ok {
+			add("%s count include_hidden must be a boolean", path)
 		}
 	}
 	if delta, hasDelta := entry[checks.CheckKeyDelta]; hasDelta {
