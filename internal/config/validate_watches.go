@@ -154,84 +154,94 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 		return
 	}
 	for _, name := range slices.Sorted(maps.Keys(watches)) {
-		prefix := watchPath(name)
-		checkPath := watchCheckPath(name)
 		entry, ok := watches[name].(map[string]any)
 		if !ok {
-			add("%s must be a mapping", prefix)
+			add("%s must be a mapping", watchPath(name))
 			continue
 		}
-		if name == ServiceMonitorKeyVersion || name == ServiceMonitorKeyConfig {
-			add("%s name is reserved for the version/config monitor; rename it", prefix)
-			continue
-		}
-		if v, ok := entry[keyEnabled].(bool); ok && !v {
-			continue
-		}
-		validateWatchMetadata(name, entry, add)
-		if mode, present := entry[keyMonitor]; present {
-			validateMonitorMode(watchFieldPath(name, keyMonitor), mode, add)
-		}
-		if v, present := entry[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
-			add("%s %q must be a valid positive duration", watchFieldPath(name, keyInterval), cfgval.String(v))
-		}
-		if v, present := entry[keyDryRun]; present {
-			if _, ok := v.(bool); !ok {
-				add(validationBooleanFormat, watchFieldPath(name, keyDryRun))
-			}
-		}
-		validateEmission(entry, watchFieldPath(name, emission.Section), add)
-		if then, ok := entry[rules.RuleFieldThen].(map[string]any); ok {
-			if _, present := then[rules.RuleFieldNotify]; present {
-				validateNotifySelection(thenFieldPath(prefix, rules.RuleFieldNotify), then[rules.RuleFieldNotify], notifiers, add)
-			}
-		}
-		validateWindow(prefix, entry, add)
-		validateWatchPolicy(prefix, entry, add)
+		validateServiceWatch(name, entry, locksDir, notifiers, defaultNotify, add)
+	}
+}
 
-		check, ok := entry[WatchKeyCheck].(map[string]any)
-		if !ok {
-			add("%s is required", checkPath)
-			continue
-		}
-		validateCheckSummary(checkPath, check, add)
-		typ := cfgval.String(check[checks.CheckKeyType])
-		switch {
-		case typ == "":
-			add("%s is required", watchCheckFieldPath(name, checks.CheckKeyType))
-			continue
-		}
-		rawThen, hasThen := entry[rules.RuleFieldThen]
-		then, _ := rawThen.(map[string]any)
-		if !hasThen {
-			if !validateSingleShotCheckFields(checkPath, typ, check, locksDir, add) {
-				add("%s %q is not supported", watchCheckFieldPath(name, checks.CheckKeyType), typ)
-			}
-			continue
-		}
-		switch {
-		case typ == checks.CheckTypeNet || typ == checks.CheckTypeICMP || typ == checks.CheckTypeSwap:
-			add("%s %q is host-scoped; declare it under the global watches: section", watchCheckFieldPath(name, checks.CheckKeyType), typ)
-			continue
-		case typ == checks.CheckTypeProcess:
-			add("%s \"process\" matches host-wide (and can kill); use process_count or metric for service-scoped process monitoring, or a host watch", watchCheckFieldPath(name, checks.CheckKeyType))
-			continue
-		case !serviceWatchableType(typ):
+func validateServiceWatch(name string, entry map[string]any, locksDir string, notifiers map[string]struct{}, defaultNotify []string, add addFunc) {
+	prefix := watchPath(name)
+	if name == ServiceMonitorKeyVersion || name == ServiceMonitorKeyConfig {
+		add("%s name is reserved for the version/config monitor; rename it", prefix)
+		return
+	}
+	if v, ok := entry[keyEnabled].(bool); ok && !v {
+		return
+	}
+	validateServiceWatchEntry(name, entry, notifiers, add)
+	checkPath := watchCheckPath(name)
+	check, ok := entry[WatchKeyCheck].(map[string]any)
+	if !ok {
+		add("%s is required", checkPath)
+		return
+	}
+	validateCheckSummary(checkPath, check, add)
+	typ := cfgval.String(check[checks.CheckKeyType])
+	if typ == "" {
+		add("%s is required", watchCheckFieldPath(name, checks.CheckKeyType))
+		return
+	}
+	rawThen, hasThen := entry[rules.RuleFieldThen]
+	then, _ := rawThen.(map[string]any)
+	if !hasThen {
+		if !validateSingleShotCheckFields(checkPath, typ, check, locksDir, add) {
 			add("%s %q is not supported", watchCheckFieldPath(name, checks.CheckKeyType), typ)
-			continue
 		}
-		validateSingleShotCheckFields(checkPath, typ, check, locksDir, add)
-		if action := cfgval.String(then[rules.RuleFieldAction]); action != "" {
-			// A rule-class action (restart/…/block/alert) makes this watch a
-			// checks:+rules: desugar target (see expandServiceWatches); validate the
-			// action semantics instead of the fire-and-forget hook block.
-			validateWatchThenAction(prefix, action, then, add)
-		} else {
-			// A service watch has no kill action (the process watch is rejected above);
-			// a storage watch may still carry a then.expand.
-			validateHookBlock(prefix, entry, typ == checks.CheckTypeStorage, false, defaultNotify, add)
+		return
+	}
+	if !validateServiceWatchType(name, typ, checkPath, check, locksDir, add) {
+		return
+	}
+	if action := cfgval.String(then[rules.RuleFieldAction]); action != "" {
+		validateWatchThenAction(prefix, action, then, add)
+		return
+	}
+	validateHookBlock(prefix, entry, typ == checks.CheckTypeStorage, false, defaultNotify, add)
+}
+
+func validateServiceWatchEntry(name string, entry map[string]any, notifiers map[string]struct{}, add addFunc) {
+	prefix := watchPath(name)
+	validateWatchMetadata(name, entry, add)
+	if mode, present := entry[keyMonitor]; present {
+		validateMonitorMode(watchFieldPath(name, keyMonitor), mode, add)
+	}
+	if v, present := entry[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
+		add("%s %q must be a valid positive duration", watchFieldPath(name, keyInterval), cfgval.String(v))
+	}
+	if v, present := entry[keyDryRun]; present {
+		if _, ok := v.(bool); !ok {
+			add(validationBooleanFormat, watchFieldPath(name, keyDryRun))
 		}
 	}
+	validateEmission(entry, watchFieldPath(name, emission.Section), add)
+	if then, ok := entry[rules.RuleFieldThen].(map[string]any); ok {
+		if _, present := then[rules.RuleFieldNotify]; present {
+			validateNotifySelection(thenFieldPath(prefix, rules.RuleFieldNotify), then[rules.RuleFieldNotify], notifiers, add)
+		}
+	}
+	validateWindow(prefix, entry, add)
+	validateWatchPolicy(prefix, entry, add)
+}
+
+func validateServiceWatchType(name, typ, checkPath string, check map[string]any, locksDir string, add addFunc) bool {
+	checkTypePath := watchCheckFieldPath(name, checks.CheckKeyType)
+	switch {
+	case typ == checks.CheckTypeNet || typ == checks.CheckTypeICMP || typ == checks.CheckTypeSwap:
+		add("%s %q is host-scoped; declare it under the global watches: section", checkTypePath, typ)
+		return false
+	case typ == checks.CheckTypeProcess:
+		add("%s \"process\" matches host-wide (and can kill); use process_count or metric for service-scoped process monitoring, or a host watch", checkTypePath)
+		return false
+	case !serviceWatchableType(typ):
+		add("%s %q is not supported", checkTypePath, typ)
+		return false
+	}
+	validateSingleShotCheckFields(checkPath, typ, check, locksDir, add)
+	return true
 }
 
 // isRuleClassAction reports whether a then.action turns a service watch into a

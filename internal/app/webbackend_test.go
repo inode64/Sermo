@@ -1603,20 +1603,14 @@ func mustProbeCertPEM(t *testing.T) []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 }
 
-func TestWebBackendPidsReadingErrorMarksWatchFailed(t *testing.T) {
+func assertWebBackendReadingErrorMarksWatchFailed(t *testing.T, name string, check map[string]any, deps Deps, wantError string) {
+	t.Helper()
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{
-			"pid-table": map[string]any{"check": map[string]any{
-				"type":     "pids",
-				"used_pct": map[string]any{"op": ">=", "value": 90},
-			}},
+			name: map[string]any{"check": check},
 		},
 	}}}
-	b, warns := NewWebBackend(t.Context(), cfg, Deps{
-		PidsSampler: func() (checks.PidsSample, error) {
-			return checks.PidsSample{}, errors.New("loadavg failed")
-		},
-	})
+	b, warns := NewWebBackend(t.Context(), cfg, deps)
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -1625,36 +1619,31 @@ func TestWebBackendPidsReadingErrorMarksWatchFailed(t *testing.T) {
 		t.Fatalf("watches = %+v, want one", watches)
 	}
 	w := watches[0]
-	if w.State != TargetStateFailed || len(w.Readings) != 1 || w.Readings[0].Error != "loadavg failed" {
-		t.Fatalf("watch = %+v, want failed with pids error reading", w)
+	if w.State != TargetStateFailed || len(w.Readings) != 1 || w.Readings[0].Error != wantError {
+		t.Fatalf("watch = %+v, want failed with reading error %q", w, wantError)
 	}
 }
 
-func TestWebBackendFdsReadingErrorMarksWatchFailed(t *testing.T) {
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"fd-table": map[string]any{"check": map[string]any{
-				"type":     "fds",
-				"used_pct": map[string]any{"op": ">=", "value": 80},
-			}},
+func TestWebBackendPidsReadingErrorMarksWatchFailed(t *testing.T) {
+	assertWebBackendReadingErrorMarksWatchFailed(t, "pid-table", map[string]any{
+		"type":     "pids",
+		"used_pct": map[string]any{"op": ">=", "value": 90},
+	}, Deps{
+		PidsSampler: func() (checks.PidsSample, error) {
+			return checks.PidsSample{}, errors.New("loadavg failed")
 		},
-	}}}
-	b, warns := NewWebBackend(t.Context(), cfg, Deps{
+	}, "loadavg failed")
+}
+
+func TestWebBackendFdsReadingErrorMarksWatchFailed(t *testing.T) {
+	assertWebBackendReadingErrorMarksWatchFailed(t, "fd-table", map[string]any{
+		"type":     "fds",
+		"used_pct": map[string]any{"op": ">=", "value": 80},
+	}, Deps{
 		FdsSampler: func() (checks.FdsSample, error) {
 			return checks.FdsSample{}, errors.New("file-nr failed")
 		},
-	})
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
-	}
-	watches := b.Watches(context.Background())
-	if len(watches) != 1 {
-		t.Fatalf("watches = %+v, want one", watches)
-	}
-	w := watches[0]
-	if w.State != TargetStateFailed || len(w.Readings) != 1 || w.Readings[0].Error != "file-nr failed" {
-		t.Fatalf("watch = %+v, want failed with fds error reading", w)
-	}
+	}, "file-nr failed")
 }
 
 func TestCountWatchViewUsesFallbackWithoutLimit(t *testing.T) {

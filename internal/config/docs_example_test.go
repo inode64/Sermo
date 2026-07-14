@@ -23,9 +23,32 @@ func TestDocsSermoAllValidates(t *testing.T) {
 	if err != nil {
 		t.Skipf("docs/sermo-all.yml not found: %v", err)
 	}
+	layout := materializeDocsExample(t, raw)
+	cfg, err := Load(layout.globalPath, WithCatalogDirs(filepath.Join(root, "catalog"), layout.catalogExtra))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if issues := Validate(cfg); len(issues) != 0 {
+		t.Fatalf("docs/sermo-all.yml must validate cleanly, got: %v", issues)
+	}
+	assertDocsExampleServices(t, cfg, layout.services)
+	assertDocsExampleWatches(t, cfg, layout.watches, layout.storageWatches)
+}
 
+type docsExampleLayout struct {
+	catalogExtra   string
+	globalPath     string
+	services       []string
+	watches        []string
+	storageWatches []string
+}
+
+func materializeDocsExample(t *testing.T, raw []byte) docsExampleLayout {
+	t.Helper()
 	dir := t.TempDir()
-	catalogExtra := filepath.Join(dir, "catalog-extra")
+	layout := docsExampleLayout{
+		catalogExtra: filepath.Join(dir, "catalog-extra"),
+	}
 	servicesDir := filepath.Join(dir, "services")
 	watchDirs := map[string]string{
 		"watches":  filepath.Join(dir, "watches"),
@@ -33,70 +56,77 @@ func TestDocsSermoAllValidates(t *testing.T) {
 		"storages": filepath.Join(dir, "storages"),
 		"mounts":   filepath.Join(dir, "mounts"),
 	}
-	for _, d := range append([]string{servicesDir, catalogExtra}, mapValues(watchDirs)...) {
-		if err := os.MkdirAll(d, 0o755); err != nil {
+	createDocsExampleDirs(t, layout.catalogExtra, servicesDir, watchDirs)
+	globalDoc := writeDocsExampleDocuments(t, raw, layout.catalogExtra, servicesDir, watchDirs, &layout)
+	layout.globalPath = writeDocsExampleGlobal(t, dir, globalDoc, servicesDir, watchDirs)
+	return layout
+}
+
+func createDocsExampleDirs(t *testing.T, catalogExtra, servicesDir string, watchDirs map[string]string) {
+	t.Helper()
+	for _, dir := range append([]string{servicesDir, catalogExtra}, mapValues(watchDirs)...) {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	// Catalog documents are classified by subdirectory, mirroring the packaged
-	// layout (catalog/{services,apps,libs,patterns}).
 	for _, sub := range []string{"services", "apps", "libs", "patterns"} {
 		if err := os.MkdirAll(filepath.Join(catalogExtra, sub), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
+}
 
-	// Each bundled document carries no `kind:` (it is derived from location, like
-	// real config); a `# location: <dir>` marker says where it would live so the
-	// test can lay it out on disk. The global document has no marker.
+func writeDocsExampleDocuments(t *testing.T, raw []byte, catalogExtra, servicesDir string, watchDirs map[string]string, layout *docsExampleLayout) string {
+	t.Helper()
 	locMarker := regexp.MustCompile(`(?m)^# location:[[:space:]]*(\S+)`)
 	var globalDoc string
-	var services []string
-	var watches []string
-	var storageWatches []string
-	for i, doc := range strings.Split(string(raw), "\n---\n") {
+	for index, doc := range strings.Split(string(raw), "\n---\n") {
 		var body map[string]any
 		if err := yaml.Unmarshal([]byte(doc), &body); err != nil {
-			t.Fatalf("document %d does not parse: %v", i+1, err)
+			t.Fatalf("document %d does not parse: %v", index+1, err)
 		}
 		name, _ := body["name"].(string)
-		m := locMarker.FindStringSubmatch(doc)
-		if m == nil {
+		location := locMarker.FindStringSubmatch(doc)
+		if location == nil {
 			if globalDoc != "" {
-				t.Fatalf("document %d: second location-less (global) document", i+1)
+				t.Fatalf("document %d: second location-less (global) document", index+1)
 			}
 			globalDoc = doc
 			continue
 		}
-		switch loc := m[1]; loc {
-		case "catalog/services", "catalog/apps", "catalog/libs", "catalog/patterns":
-			sub := strings.TrimPrefix(loc, "catalog/")
-			if err := os.WriteFile(filepath.Join(catalogExtra, sub, name+".yml"), []byte(doc), 0o644); err != nil {
-				t.Fatal(err)
-			}
-		case "services":
-			services = append(services, name)
-			if err := os.WriteFile(filepath.Join(servicesDir, name+".yml"), []byte(doc), 0o644); err != nil {
-				t.Fatal(err)
-			}
-		case "watches", "networks", "storages", "mounts":
-			watches = append(watches, name)
-			if loc == "storages" || loc == "mounts" {
-				storageWatches = append(storageWatches, name)
-			}
-			if err := os.WriteFile(filepath.Join(watchDirs[loc], name+".yml"), []byte(doc), 0o644); err != nil {
-				t.Fatal(err)
-			}
-		default:
-			t.Fatalf("document %d: unknown location marker %q", i+1, loc)
-		}
+		writeDocsExampleDocument(t, doc, name, location[1], catalogExtra, servicesDir, watchDirs, layout, index+1)
 	}
-	if globalDoc == "" || len(services) == 0 {
-		t.Fatalf("expected a global document and services, got global=%v services=%v", globalDoc != "", services)
+	if globalDoc == "" || len(layout.services) == 0 {
+		t.Fatalf("expected a global document and services, got global=%v services=%v", globalDoc != "", layout.services)
 	}
+	return globalDoc
+}
 
-	// Re-point the example's deployment paths at the sandbox. Catalog documents
-	// are loaded through the internal test override below, not YAML.
+func writeDocsExampleDocument(t *testing.T, doc, name, location, catalogExtra, servicesDir string, watchDirs map[string]string, layout *docsExampleLayout, index int) {
+	t.Helper()
+	var path string
+	switch location {
+	case "catalog/services", "catalog/apps", "catalog/libs", "catalog/patterns":
+		path = filepath.Join(catalogExtra, strings.TrimPrefix(location, "catalog/"), name+".yml")
+	case "services":
+		layout.services = append(layout.services, name)
+		path = filepath.Join(servicesDir, name+".yml")
+	case "watches", "networks", "storages", "mounts":
+		layout.watches = append(layout.watches, name)
+		if location == "storages" || location == "mounts" {
+			layout.storageWatches = append(layout.storageWatches, name)
+		}
+		path = filepath.Join(watchDirs[location], name+".yml")
+	default:
+		t.Fatalf("document %d: unknown location marker %q", index, location)
+	}
+	if err := os.WriteFile(path, []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeDocsExampleGlobal(t *testing.T, dir, globalDoc, servicesDir string, watchDirs map[string]string) string {
+	t.Helper()
 	var global map[string]any
 	if err := yaml.Unmarshal([]byte(globalDoc), &global); err != nil {
 		t.Fatalf("global document: %v", err)
@@ -115,14 +145,11 @@ func TestDocsSermoAllValidates(t *testing.T) {
 	if err := os.WriteFile(globalPath, patched, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	return globalPath
+}
 
-	cfg, err := Load(globalPath, WithCatalogDirs(filepath.Join(root, "catalog"), catalogExtra))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if issues := Validate(cfg); len(issues) != 0 {
-		t.Fatalf("docs/sermo-all.yml must validate cleanly, got: %v", issues)
-	}
+func assertDocsExampleServices(t *testing.T, cfg *Config, services []string) {
+	t.Helper()
 	for _, name := range services {
 		resolved, errs := cfg.Resolve(name)
 		if len(errs) != 0 {
@@ -133,6 +160,10 @@ func TestDocsSermoAllValidates(t *testing.T) {
 			t.Errorf("service %s: empty resolved tree", name)
 		}
 	}
+}
+
+func assertDocsExampleWatches(t *testing.T, cfg *Config, watches, storageWatches []string) {
+	t.Helper()
 	resolvedWatches, errs := cfg.ResolveWatches()
 	if len(errs) != 0 {
 		t.Fatalf("resolve watches: %v", errs)

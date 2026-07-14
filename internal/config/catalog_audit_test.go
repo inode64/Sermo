@@ -158,60 +158,66 @@ func TestCatalogServicesNoArtifactCheckCollision(t *testing.T) {
 // be materialized off-host, so only the concrete service names are exercised.
 func TestRealCatalogAllServicesValidate(t *testing.T) {
 	root := repoRoot(t)
-
-	writeGlobal := func(dir, enabled, backend string) string {
-		global := filepath.Join(dir, "sermo.yml")
-		body := "engine: { backend: " + backend + " }\n" +
-			"paths:\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
-			"defaults:\n  policy: { cooldown: 5m }\n"
-		if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		return global
-	}
-
 	for _, backend := range []string{"systemd", "openrc"} {
 		t.Run(backend, func(t *testing.T) {
-			// Enumerate and validate each backend separately: version-template
-			// materialization may legitimately differ by active init branch.
-			probeDir := t.TempDir()
-			emptyEnabled := filepath.Join(probeDir, "services")
-			if err := os.MkdirAll(emptyEnabled, 0o755); err != nil {
-				t.Fatal(err)
-			}
-			probe, err := Load(writeGlobal(probeDir, emptyEnabled, backend), WithCatalogDirs(repoCatalogDir(root)))
-			if err != nil {
-				t.Fatalf("Load (probe): %v", err)
-			}
-
-			dir := t.TempDir()
-			enabled := filepath.Join(dir, "services")
-			if err := os.MkdirAll(enabled, 0o755); err != nil {
-				t.Fatal(err)
-			}
-			count := 0
-			for _, name := range probe.CatalogServiceNames {
-				if strings.Contains(name, "%") {
-					continue
-				}
-				svc := "name: " + name + "-audit\nuses: " + name + "\n"
-				if err := os.WriteFile(filepath.Join(enabled, name+".yml"), []byte(svc), 0o644); err != nil {
-					t.Fatal(err)
-				}
-				count++
-			}
-			if count == 0 {
-				t.Fatal("no instantiable catalog services found")
-			}
-
-			cfg, err := Load(writeGlobal(dir, enabled, backend), WithCatalogDirs(repoCatalogDir(root)))
-			if err != nil {
-				t.Fatalf("Load: %v", err)
-			}
-			for _, issue := range Validate(cfg) {
-				t.Errorf("catalog service fails validation: %s", issue)
-			}
+			validateAllCatalogServices(t, repoCatalogDir(root), backend)
 		})
+	}
+}
+
+func validateAllCatalogServices(t *testing.T, catalogDir, backend string) {
+	t.Helper()
+	probeDir := t.TempDir()
+	emptyEnabled := filepath.Join(probeDir, "services")
+	if err := os.MkdirAll(emptyEnabled, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	probe, err := Load(writeCatalogAuditGlobal(t, probeDir, emptyEnabled, backend), WithCatalogDirs(catalogDir))
+	if err != nil {
+		t.Fatalf("Load (probe): %v", err)
+	}
+	dir := t.TempDir()
+	enabled := filepath.Join(dir, "services")
+	if err := os.MkdirAll(enabled, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeAllCatalogAuditServices(t, enabled, probe.CatalogServiceNames)
+	cfg, err := Load(writeCatalogAuditGlobal(t, dir, enabled, backend), WithCatalogDirs(catalogDir))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for _, issue := range Validate(cfg) {
+		t.Errorf("catalog service fails validation: %s", issue)
+	}
+}
+
+func writeCatalogAuditGlobal(t *testing.T, dir, enabled, backend string) string {
+	t.Helper()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "engine: { backend: " + backend + " }\n" +
+		"paths:\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return global
+}
+
+func writeAllCatalogAuditServices(t *testing.T, enabled string, names []string) {
+	t.Helper()
+	count := 0
+	for _, name := range names {
+		if strings.Contains(name, "%") {
+			continue
+		}
+		body := "name: " + name + "-audit\nuses: " + name + "\n"
+		if err := os.WriteFile(filepath.Join(enabled, name+".yml"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		count++
+	}
+	if count == 0 {
+		t.Fatal("no instantiable catalog services found")
 	}
 }
 
@@ -1243,49 +1249,53 @@ func TestRequestedHostProfilesExist(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			doc, ok := cfg.CatalogServices[tc.name]
-			if !ok {
-				t.Fatalf("service catalog %q not found", tc.name)
-			}
-			if _, ok := cfg.Apps[tc.app]; !ok {
-				t.Fatalf("app catalog %q not found", tc.app)
-			}
-			if !slices.Contains(cfgval.StringList(doc.Body["apps"]), tc.app) {
-				t.Fatalf("%s apps = %v, want %s", tc.name, doc.Body["apps"], tc.app)
-			}
-			resolved, errs := cfg.ResolveCatalog(CategoryService, tc.name)
-			if len(errs) > 0 {
-				t.Fatalf("ResolveCatalog(%s): %v", tc.name, errs)
-			}
-			check := nested(t, resolved.Tree, "checks", "service")
-			if got := cfgval.String(check["type"]); got != "service" {
-				t.Fatalf("%s service check type = %q, want service", tc.name, got)
-			}
-			if got := cfgval.String(check["expect"]); got != "active" {
-				t.Fatalf("%s service check expect = %q, want active", tc.name, got)
-			}
-			processes, ok := doc.Body["processes"].(map[string]any)
-			if !tc.wantProcess {
-				if !ok || len(processes) != 0 {
-					t.Fatalf("%s processes = %v, want empty map for oneshot service", tc.name, doc.Body["processes"])
-				}
-				return
-			}
-			if !ok {
-				t.Fatalf("%s missing process selector", tc.name)
-			}
-			role := tc.processRole
-			if role == "" {
-				role = "main"
-			}
-			main := nested(t, doc.Body, "processes", role)
-			if got := cfgval.String(main["exe"]); got != tc.binaryVar {
-				t.Fatalf("%s process exe = %q, want %q", tc.name, got, tc.binaryVar)
-			}
-			if got := cfgval.String(main["user"]); got != "${user}" {
-				t.Fatalf("%s process user = %q, want ${user}", tc.name, got)
-			}
+			assertRequestedHostProfile(t, cfg, tc.name, tc.app, tc.binaryVar, tc.processRole, tc.wantProcess)
 		})
+	}
+}
+
+func assertRequestedHostProfile(t *testing.T, cfg *Config, name, app, binaryVar, processRole string, wantProcess bool) {
+	t.Helper()
+	doc, ok := cfg.CatalogServices[name]
+	if !ok {
+		t.Fatalf("service catalog %q not found", name)
+	}
+	if _, ok := cfg.Apps[app]; !ok {
+		t.Fatalf("app catalog %q not found", app)
+	}
+	if !slices.Contains(cfgval.StringList(doc.Body["apps"]), app) {
+		t.Fatalf("%s apps = %v, want %s", name, doc.Body["apps"], app)
+	}
+	resolved, errs := cfg.ResolveCatalog(CategoryService, name)
+	if len(errs) > 0 {
+		t.Fatalf("ResolveCatalog(%s): %v", name, errs)
+	}
+	check := nested(t, resolved.Tree, "checks", "service")
+	if got := cfgval.String(check["type"]); got != "service" {
+		t.Fatalf("%s service check type = %q, want service", name, got)
+	}
+	if got := cfgval.String(check["expect"]); got != "active" {
+		t.Fatalf("%s service check expect = %q, want active", name, got)
+	}
+	processes, hasProcesses := doc.Body["processes"].(map[string]any)
+	if !wantProcess {
+		if !hasProcesses || len(processes) != 0 {
+			t.Fatalf("%s processes = %v, want empty map for oneshot service", name, doc.Body["processes"])
+		}
+		return
+	}
+	if !hasProcesses {
+		t.Fatalf("%s missing process selector", name)
+	}
+	if processRole == "" {
+		processRole = "main"
+	}
+	main := nested(t, doc.Body, "processes", processRole)
+	if got := cfgval.String(main["exe"]); got != binaryVar {
+		t.Fatalf("%s process exe = %q, want %q", name, got, binaryVar)
+	}
+	if got := cfgval.String(main["user"]); got != "${user}" {
+		t.Fatalf("%s process user = %q, want ${user}", name, got)
 	}
 }
 
@@ -1599,7 +1609,8 @@ func TestCatalogForegroundPidfilesAreOptional(t *testing.T) {
 	}
 }
 
-func TestCatalogRRDCachedUsesUnixSocketHealth(t *testing.T) {
+func assertCatalogUnixSocketHealth(t *testing.T, service, forbiddenCheck, socketPath string) {
+	t.Helper()
 	root := repoRoot(t)
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
@@ -1612,22 +1623,26 @@ func TestCatalogRRDCachedUsesUnixSocketHealth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	resolved, errs := cfg.ResolveCatalog(CategoryService, "rrdcached")
+	resolved, errs := cfg.ResolveCatalog(CategoryService, service)
 	if len(errs) > 0 {
-		t.Fatalf("ResolveCatalog(rrdcached): %v", errs)
+		t.Fatalf("ResolveCatalog(%s): %v", service, errs)
 	}
 	checks := nested(t, resolved.Tree, "checks")
-	if _, ok := checks["tcp"]; ok {
-		t.Fatalf("rrdcached must not require a TCP listener by default: %v", checks["tcp"])
+	if _, ok := checks[forbiddenCheck]; ok {
+		t.Fatalf("%s must not require %s by default: %v", service, forbiddenCheck, checks[forbiddenCheck])
 	}
 	socket := nested(t, checks, "restart-if-socket-missing")
-	if got := cfgval.String(socket["path"]); got != "/run/rrdcached.sock" {
-		t.Fatalf("rrdcached socket check path = %q, want /run/rrdcached.sock", got)
+	if got := cfgval.String(socket["path"]); got != socketPath {
+		t.Fatalf("%s socket check path = %q, want %q", service, got, socketPath)
 	}
 	rule := nested(t, resolved.Tree, "rules", "restart-if-socket-missing", "if", "failed")
 	if got := cfgval.String(rule["check"]); got != "restart-if-socket-missing" {
-		t.Fatalf("rrdcached remediation check = %q, want restart-if-socket-missing", got)
+		t.Fatalf("%s remediation check = %q, want restart-if-socket-missing", service, got)
 	}
+}
+
+func TestCatalogRRDCachedUsesUnixSocketHealth(t *testing.T) {
+	assertCatalogUnixSocketHealth(t, "rrdcached", "tcp", "/run/rrdcached.sock")
 }
 
 func TestCatalogPMLFarmUsesResidentHelperProcessHealth(t *testing.T) {
@@ -1680,34 +1695,7 @@ func TestNoPostflightSectionRemains(t *testing.T) {
 }
 
 func TestCatalogVirtlogdUsesSocketHealth(t *testing.T) {
-	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	resolved, errs := cfg.ResolveCatalog(CategoryService, "virtlogd")
-	if len(errs) > 0 {
-		t.Fatalf("ResolveCatalog(virtlogd): %v", errs)
-	}
-	checks := nested(t, resolved.Tree, "checks")
-	if _, ok := checks["libvirt"]; ok {
-		t.Fatalf("virtlogd must not run libvirt protocol checks against its log socket: %v", checks["libvirt"])
-	}
-	socket := nested(t, checks, "restart-if-socket-missing")
-	if got := cfgval.String(socket["path"]); got != "/run/libvirt/virtlogd-sock" {
-		t.Fatalf("virtlogd socket check path = %q, want /run/libvirt/virtlogd-sock", got)
-	}
-	rule := nested(t, resolved.Tree, "rules", "restart-if-socket-missing", "if", "failed")
-	if got := cfgval.String(rule["check"]); got != "restart-if-socket-missing" {
-		t.Fatalf("virtlogd remediation check = %q, want restart-if-socket-missing", got)
-	}
+	assertCatalogUnixSocketHealth(t, "virtlogd", "libvirt", "/run/libvirt/virtlogd-sock")
 }
 
 func TestCatalogServicesUseAppVariablesForBinaryRefs(t *testing.T) {
@@ -2169,50 +2157,54 @@ func TestWALGBackupAppsResolveRequiredBinaryPreflight(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			doc, ok := cfg.Apps[tt.name]
-			if !ok {
-				t.Fatalf("app %q not found", tt.name)
-			}
-			vars, _ := doc.Body["variables"].(map[string]any)
-			got := cfgval.StringList(vars["binary"])
-			for _, want := range tt.binaries {
-				if !slices.Contains(got, want) {
-					t.Fatalf("%s binary candidates = %v, missing %s", tt.name, got, want)
-				}
-			}
-			resolved, errs := cfg.ResolveCatalog(CategoryApp, tt.name)
-			if len(errs) > 0 {
-				t.Fatalf("ResolveCatalog(%s): %v", tt.name, errs)
-			}
-			binary := cfgval.String(valueAt(t, resolved.Tree, "variables", "binary"))
-			if !slices.Contains(tt.binaries, binary) {
-				t.Fatalf("%s resolved binary = %q, want one of %v", tt.name, binary, tt.binaries)
-			}
-			preflight := nested(t, resolved.Tree, "preflight")
-			binaryPreflight, ok := preflight["binary"].(map[string]any)
-			if !ok {
-				t.Fatalf("%s lacks preflight \"binary\": %v", tt.name, preflight)
-			}
-			if got := cfgval.Bool(binaryPreflight["optional"]); got {
-				t.Fatalf("%s preflight \"binary\" optional = %v, want false", tt.name, got)
-			}
-
-			versionPreflight, ok := preflight["version"].(map[string]any)
-			if !ok {
-				t.Fatalf("%s lacks preflight \"version\": %v", tt.name, preflight)
-			}
-			if got := cfgval.Bool(versionPreflight["optional"]); got {
-				t.Fatalf("%s preflight \"version\" optional = %v, want false", tt.name, got)
-			}
-			versionCommand, ok := nested(t, preflight, "version")["command"].([]any)
-			if !ok || len(versionCommand) == 0 {
-				t.Fatalf("%s version command missing: %v", tt.name, preflight["version"])
-			}
-			if got := cfgval.String(versionCommand[0]); got != binary {
-				t.Fatalf("%s version command binary = %q, want %q", tt.name, got, binary)
-			}
+			assertWALGRequiredBinaryPreflight(t, cfg, tt.name, tt.binaries)
 		})
 	}
+}
+
+func assertWALGRequiredBinaryPreflight(t *testing.T, cfg *Config, name string, binaries []string) {
+	t.Helper()
+	doc, ok := cfg.Apps[name]
+	if !ok {
+		t.Fatalf("app %q not found", name)
+	}
+	vars, _ := doc.Body["variables"].(map[string]any)
+	candidates := cfgval.StringList(vars["binary"])
+	for _, binary := range binaries {
+		if !slices.Contains(candidates, binary) {
+			t.Fatalf("%s binary candidates = %v, missing %s", name, candidates, binary)
+		}
+	}
+	resolved, errs := cfg.ResolveCatalog(CategoryApp, name)
+	if len(errs) > 0 {
+		t.Fatalf("ResolveCatalog(%s): %v", name, errs)
+	}
+	binary := cfgval.String(valueAt(t, resolved.Tree, "variables", "binary"))
+	if !slices.Contains(binaries, binary) {
+		t.Fatalf("%s resolved binary = %q, want one of %v", name, binary, binaries)
+	}
+	preflight := nested(t, resolved.Tree, "preflight")
+	assertRequiredWALGPreflight(t, name, preflight, "binary")
+	version := assertRequiredWALGPreflight(t, name, preflight, "version")
+	command, ok := version["command"].([]any)
+	if !ok || len(command) == 0 {
+		t.Fatalf("%s version command missing: %v", name, version)
+	}
+	if got := cfgval.String(command[0]); got != binary {
+		t.Fatalf("%s version command binary = %q, want %q", name, got, binary)
+	}
+}
+
+func assertRequiredWALGPreflight(t *testing.T, name string, preflight map[string]any, key string) map[string]any {
+	t.Helper()
+	entry, ok := preflight[key].(map[string]any)
+	if !ok {
+		t.Fatalf("%s lacks preflight %q: %v", name, key, preflight)
+	}
+	if cfgval.Bool(entry["optional"]) {
+		t.Fatalf("%s preflight %q optional = true, want false", name, key)
+	}
+	return entry
 }
 
 func TestCatalogServicesReuseLinkedAppBinaries(t *testing.T) {
@@ -2274,74 +2266,79 @@ func TestCatalogServicesDoNotOwnRuntimeResourcePreflight(t *testing.T) {
 func TestCatalogVersionedServicesHaveDiscoverySource(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := repoCatalogDir(root)
-
-	apps := map[string]map[string]any{}
-	appFiles, err := yamlFiles(filepath.Join(catalogDir, "apps"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, file := range appFiles {
-		path := filepath.Join(catalogDir, "apps", file)
-		doc := readYAMLMap(t, path)
-		if name := cfgval.String(doc["name"]); name != "" {
-			apps[name] = doc
-		}
-	}
-
+	apps := catalogAppsByName(t, catalogDir)
 	serviceFiles, err := yamlFiles(filepath.Join(catalogDir, "services"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, file := range serviceFiles {
 		path := filepath.Join(catalogDir, "services", file)
+		validateVersionedCatalogService(t, path, readYAMLMap(t, path), apps)
+	}
+}
+
+func catalogAppsByName(t *testing.T, catalogDir string) map[string]map[string]any {
+	t.Helper()
+	files, err := yamlFiles(filepath.Join(catalogDir, "apps"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	apps := make(map[string]map[string]any, len(files))
+	for _, file := range files {
+		path := filepath.Join(catalogDir, "apps", file)
 		doc := readYAMLMap(t, path)
-		toks := tokensFor(cfgval.String(doc["name"]))
-		if len(toks) == 0 {
-			if _, hasVersions := doc["versions"]; hasVersions {
-				t.Errorf("%s declares versions but its name carries no template token", path)
-			}
-			continue
-		}
-		discoversAll := func(sources []string) bool {
-			for _, s := range sources {
-				if containsAllMarkers(s, toks) {
-					return true
-				}
-			}
-			return false
-		}
-		serviceDiscovers := false
-		for _, backend := range []string{"systemd", "openrc"} {
-			candidates, _ := ServiceCandidates(doc, backend, "")
-			if len(serviceUnitPatternsForBackend(backend, candidates, toks)) > 0 {
-				serviceDiscovers = true
-				break
-			}
-		}
-		if serviceDiscovers {
-			continue
-		}
-		// A template either owns non-service discovery (`variables.binary` or
-		// `versions.from` carrying every marker) or links an app template whose
-		// discovery source carries them.
-		if discoversAll(directVersionDiscoverySources(doc)) {
-			continue
-		}
-		hasLinkedDiscovery := false
-		for _, appName := range cfgval.StringList(doc["apps"]) {
-			app, ok := apps[linkedAppTemplateNameMulti(appName, toks)]
-			if !ok {
-				continue
-			}
-			if discoversAll(directVersionDiscoverySources(app)) {
-				hasLinkedDiscovery = true
-				break
-			}
-		}
-		if !hasLinkedDiscovery {
-			t.Errorf("%s is a template but neither has token-bearing service candidates nor links an app template that can discover its tokens", path)
+		if name := cfgval.String(doc["name"]); name != "" {
+			apps[name] = doc
 		}
 	}
+	return apps
+}
+
+func validateVersionedCatalogService(t *testing.T, path string, doc map[string]any, apps map[string]map[string]any) {
+	t.Helper()
+	tokens := tokensFor(cfgval.String(doc["name"]))
+	if len(tokens) == 0 {
+		if _, hasVersions := doc["versions"]; hasVersions {
+			t.Errorf("%s declares versions but its name carries no template token", path)
+		}
+		return
+	}
+	if serviceTemplateDiscoversTokens(doc, tokens) || discoverySourcesHaveTokens(directVersionDiscoverySources(doc), tokens) {
+		return
+	}
+	if linkedAppTemplateDiscoversTokens(doc, apps, tokens) {
+		return
+	}
+	t.Errorf("%s is a template but neither has token-bearing service candidates nor links an app template that can discover its tokens", path)
+}
+
+func serviceTemplateDiscoversTokens(doc map[string]any, tokens []tmplToken) bool {
+	for _, backend := range []string{"systemd", "openrc"} {
+		candidates, _ := ServiceCandidates(doc, backend, "")
+		if len(serviceUnitPatternsForBackend(backend, candidates, tokens)) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func discoverySourcesHaveTokens(sources []string, tokens []tmplToken) bool {
+	for _, source := range sources {
+		if containsAllMarkers(source, tokens) {
+			return true
+		}
+	}
+	return false
+}
+
+func linkedAppTemplateDiscoversTokens(doc map[string]any, apps map[string]map[string]any, tokens []tmplToken) bool {
+	for _, appName := range cfgval.StringList(doc["apps"]) {
+		app, ok := apps[linkedAppTemplateNameMulti(appName, tokens)]
+		if ok && discoverySourcesHaveTokens(directVersionDiscoverySources(app), tokens) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestCatalogCommandEntriesDoNotUseArgumentKeys(t *testing.T) {

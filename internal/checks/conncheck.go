@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"net"
@@ -83,13 +84,36 @@ func (c connCheck) Run(ctx context.Context) Result {
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
+	addr := c.address()
+	res, elapsed, perIface, err := c.probeResult(ctx)
+	if err != nil {
+		r := c.result(false, fmt.Sprintf("%s %s: %v", c.proto.Name(), addr, err), start)
+		r.Data = ifaceData(perIface)
+		return r
+	}
+	if problems, extra, changed := c.changed(res); changed {
+		r := c.result(false, fmt.Sprintf("%s %s: %s", c.proto.Name(), addr, strings.Join(problems, "; ")), start)
+		r.Data = c.changeData(elapsed)
+		maps.Copy(r.Data, extra)
+		return r
+	}
+	ok, msg := c.evaluateResponse(res, elapsed, addr)
+	r := c.result(ok, msg, start)
+	r.Data = c.resultData(elapsed, perIface, res)
+	return r
+}
+
+func (c connCheck) address() string {
+	if c.cfg.Socket != "" {
+		return c.cfg.Socket
+	}
+	return netutil.JoinHostPort(c.cfg.Host, c.cfg.Port)
+}
+
+func (c connCheck) probeResult(ctx context.Context) (conn.Result, time.Duration, map[string]any, error) {
 	probe := c.probe
 	if probe == nil {
 		probe = c.proto.Probe
-	}
-	addr := c.cfg.Socket
-	if addr == "" {
-		addr = netutil.JoinHostPort(c.cfg.Host, c.cfg.Port)
 	}
 	var res conn.Result
 	var elapsed time.Duration
@@ -109,39 +133,36 @@ func (c connCheck) Run(ctx context.Context) Result {
 		}
 		return e
 	})
-	if err != nil {
-		r := c.result(false, fmt.Sprintf("%s %s: %v", c.proto.Name(), addr, err), start)
-		r.Data = ifaceData(perIface)
-		return r
+	return res, elapsed, perIface, err
+}
+
+func (c connCheck) changed(res conn.Result) (problems []string, extra map[string]any, changed bool) {
+	if c.state == nil {
+		return nil, nil, false
 	}
-	if c.state != nil {
-		var problems []string
-		extra := map[string]any{}
-		if c.onChange {
-			fp := res.Extra[conn.ExtraKeyFingerprint]
-			if c.state.primed && fp != c.state.lastFingerprint {
-				problems = append(problems, fmt.Sprintf("fingerprint changed (%s -> %s)", c.state.lastFingerprint, fp))
-				extra[DataKeyFingerprintOld] = c.state.lastFingerprint
-			}
-			c.state.lastFingerprint, extra[DataKeyFingerprint] = fp, fp
+	extra = make(map[string]any, 2)
+	if c.onChange {
+		fingerprint := res.Extra[conn.ExtraKeyFingerprint]
+		if c.state.primed && fingerprint != c.state.lastFingerprint {
+			problems = append(problems, fmt.Sprintf("fingerprint changed (%s -> %s)", c.state.lastFingerprint, fingerprint))
+			extra[DataKeyFingerprintOld] = c.state.lastFingerprint
 		}
-		if c.onVersionChange {
-			v := versionIdentity(res)
-			if c.state.primed && v != c.state.lastVersion {
-				problems = append(problems, fmt.Sprintf("version changed (%s -> %s)", c.state.lastVersion, v))
-				extra[DataKeyVersionOld] = c.state.lastVersion
-			}
-			c.state.lastVersion, extra[DataKeyVersion] = v, v
-		}
-		primed := c.state.primed
-		c.state.primed = true
-		if primed && len(problems) > 0 {
-			r := c.result(false, fmt.Sprintf("%s %s: %s", c.proto.Name(), addr, strings.Join(problems, "; ")), start)
-			r.Data = map[string]any{DataKeyProtocol: c.proto.Name(), DataKeyHost: c.cfg.Host, DataKeyPort: c.cfg.Port, DataKeyLatencyMS: elapsed.Milliseconds()}
-			maps.Copy(r.Data, extra)
-			return r
-		}
+		c.state.lastFingerprint, extra[DataKeyFingerprint] = fingerprint, fingerprint
 	}
+	if c.onVersionChange {
+		version := versionIdentity(res)
+		if c.state.primed && version != c.state.lastVersion {
+			problems = append(problems, fmt.Sprintf("version changed (%s -> %s)", c.state.lastVersion, version))
+			extra[DataKeyVersionOld] = c.state.lastVersion
+		}
+		c.state.lastVersion, extra[DataKeyVersion] = version, version
+	}
+	primed := c.state.primed
+	c.state.primed = true
+	return problems, extra, primed && len(problems) > 0
+}
+
+func (c connCheck) evaluateResponse(res conn.Result, elapsed time.Duration, addr string) (bool, string) {
 	msg := fmt.Sprintf("%s %s ok", c.proto.Name(), addr)
 	if res.Version != "" {
 		msg += " (" + res.Version + ")"
@@ -160,23 +181,35 @@ func (c connCheck) Run(ctx context.Context) Result {
 			ok, msg = false, fmt.Sprintf("%s %s: latency %sms not %s %s", c.proto.Name(), addr, ms, c.latencyOp, c.latencyValue)
 		}
 	}
-	r := c.result(ok, msg, start)
-	r.Data = map[string]any{DataKeyProtocol: c.proto.Name(), DataKeyLatencyMS: elapsed.Milliseconds()}
+	return ok, msg
+}
+
+func (c connCheck) resultData(elapsed time.Duration, perIface map[string]any, res conn.Result) map[string]any {
+	data := map[string]any{DataKeyProtocol: c.proto.Name(), DataKeyLatencyMS: elapsed.Milliseconds()}
 	if c.cfg.Socket != "" {
-		r.Data[DataKeySocket] = c.cfg.Socket
+		data[DataKeySocket] = c.cfg.Socket
 	} else {
-		r.Data[DataKeyHost], r.Data[DataKeyPort] = c.cfg.Host, c.cfg.Port
+		data[DataKeyHost], data[DataKeyPort] = c.cfg.Host, c.cfg.Port
 	}
 	if perIface != nil {
-		r.Data[DataKeyInterfaces] = perIface
+		data[DataKeyInterfaces] = perIface
 	}
 	if res.Version != "" {
-		r.Data[DataKeyVersion] = res.Version
+		data[DataKeyVersion] = res.Version
 	}
 	for k, v := range res.Extra {
-		r.Data[k] = v
+		data[k] = v
 	}
-	return r
+	return data
+}
+
+func (c connCheck) changeData(elapsed time.Duration) map[string]any {
+	return map[string]any{
+		DataKeyProtocol:  c.proto.Name(),
+		DataKeyHost:      c.cfg.Host,
+		DataKeyPort:      c.cfg.Port,
+		DataKeyLatencyMS: elapsed.Milliseconds(),
+	}
 }
 
 // evalExpect checks every configured assertion against the probe result and
@@ -233,100 +266,8 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 		// cfg.Interface is set per-attempt by connCheck.Run from the interface set;
 		// it pins the probe's egress (SO_BINDTODEVICE) on multi-homed hosts.
 	}
-	switch protoName {
-	case conn.ProtocolNameDNS:
-		// dns takes an optional `resolvconf: true`, querying the first nameserver of
-		// /etc/resolv.conf instead of a fixed host (with pppd's usepeerdns, the
-		// provider's resolver). Scoped here so it never leaks into other protocols.
-		if cfgval.Bool(entry[CheckKeyResolvconf]) {
-			if cfgval.AsString(entry[CheckKeyHost]) != "" {
-				return nil, "dns check: host and resolvconf are mutually exclusive"
-			}
-			cfg.Params = map[string]string{conn.ParamKeyResolvconf: conn.ParamValueTrue}
-		}
-	case conn.ProtocolNameDHCP:
-		// dhcp takes an optional fixed client MAC (absent -> a random anonymous MAC).
-		// Scoped to dhcp so it never leaks into the driver params other protocols pass
-		// through cfg.Params. Its egress interface uses the shared cfg.Interface.
-		if mac := cfgval.AsString(entry[CheckKeyMAC]); mac != "" {
-			if _, err := net.ParseMAC(mac); err != nil {
-				return nil, fmt.Sprintf("dhcp check: invalid mac %q", mac)
-			}
-			cfg.Params = map[string]string{conn.ParamKeyMAC: mac}
-		}
-	case conn.ProtocolNameDHClient:
-		// dhclient can optionally validate an active ISC dhclient lease file.
-		if leaseFile := cfgval.AsString(entry[CheckKeyLeaseFile]); leaseFile != "" {
-			cfg.Query = leaseFile
-		}
-	case conn.ProtocolNameOpenVPN:
-		// openvpn defaults to UDP; `transport: tcp` selects TCP (length-prefixed
-		// framing). Scoped here so it never leaks into other protocols' params.
-		if tr := strings.ToLower(cfgval.AsString(entry[CheckKeyTransport])); tr != "" {
-			if tr != conn.TransportUDP && tr != conn.TransportTCP {
-				return nil, fmt.Sprintf("openvpn check: transport must be %s, got %q", conn.TransportSummary, tr)
-			}
-			cfg.Params = map[string]string{conn.ParamKeyTransport: tr}
-		}
-	case conn.ProtocolNameMongoDB:
-		// mongodb takes an optional auth_source (the credentials database);
-		// MongoConnect defaults it to the target database, then admin. Scoped here
-		// so it never leaks into other protocols' params.
-		if as := cfgval.AsString(entry[CheckKeyAuthSource]); as != "" {
-			cfg.Params = map[string]string{conn.ParamKeyAuthSource: as}
-		}
-	case conn.ProtocolNameFPM:
-		// fpm takes an optional `status_path` (the pool's pm.status_path); set, the
-		// probe fetches the status page and exposes the pool metrics, carried in
-		// cfg.Query. Absent, the probe does a plain /ping liveness check.
-		if sp := cfgval.AsString(entry[CheckKeyStatusPath]); sp != "" {
-			cfg.Query = sp
-		}
-	case conn.ProtocolNameNUT:
-		// nut takes an optional `ups` (the UPS to read variables from / LOGIN to),
-		// carried in cfg.Query; absent, the probe auto-detects a single configured UPS.
-		if u := cfgval.AsString(entry[CheckKeyUPS]); u != "" {
-			cfg.Query = u
-		}
-	case conn.ProtocolNameDocker:
-		// docker takes an optional `container` (name/id whose state/health to read),
-		// carried in cfg.Query, and defaults to the local Engine Unix socket.
-		if c := cfgval.AsString(entry[CheckKeyContainer]); c != "" {
-			cfg.Query = c
-		}
-		if cfg.Socket == "" && cfgval.AsString(entry[CheckKeyHost]) == "" {
-			cfg.Socket = conn.DefaultDockerSocket
-		}
-	case conn.ProtocolNameLibvirt:
-		// libvirt defaults to the local Unix socket; an explicit host selects TCP.
-		// An optional `domain` selects a single VM whose state to read (the connect
-		// URI stays in cfg.Query, so the VM name is carried in cfg.Params).
-		if cfg.Socket == "" && cfgval.AsString(entry[CheckKeyHost]) == "" {
-			cfg.Socket = conn.DefaultLibvirtSocket
-		}
-		if d := cfgval.AsString(entry[CheckKeyDomain]); d != "" {
-			cfg.Params = map[string]string{conn.ParamKeyDomain: d}
-		}
-	case conn.ProtocolNameACPID:
-		// acpid is socket-only; default to its well-known event socket.
-		if cfg.Socket == "" {
-			cfg.Socket = conn.DefaultACPIDSocket
-		}
-	case conn.ProtocolNameFail2ban:
-		// fail2ban is socket-only; default to its well-known control socket.
-		if cfg.Socket == "" {
-			cfg.Socket = conn.DefaultFail2banSocket
-		}
-	case conn.ProtocolNameLVMPolld:
-		// lvmpolld is socket-only; default to its well-known control socket.
-		if cfg.Socket == "" {
-			cfg.Socket = conn.DefaultLVMPolldSocket
-		}
-	case conn.ProtocolNameDBus, conn.ProtocolNameAvahi:
-		// dbus and avahi (probed over D-Bus) resolve to a single D-Bus address
-		// (socket path or full address), stored in Socket so the check message shows
-		// it instead of host:port.
-		cfg.Socket = conn.DBusAddress(cfgval.AsString(entry[CheckKeySocket]), cfgval.AsString(entry[CheckKeyQuery]))
+	if err := configureConnProtocol(&cfg, protoName, entry); err != nil {
+		return nil, err.Error()
 	}
 	c := connCheck{base: b, proto: proto, cfg: cfg, probe: proto.Probe}
 	// Optional response assertions: a mapping of field -> value | {op, value},
@@ -353,6 +294,99 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	}
 	c.ifaceAll = all
 	return c, ""
+}
+
+func configureConnProtocol(cfg *conn.Config, protoName string, entry map[string]any) error {
+	if socket, ok := defaultConnSockets[protoName]; ok {
+		if cfg.Socket == "" {
+			cfg.Socket = socket
+		}
+		return nil
+	}
+	switch protoName {
+	case conn.ProtocolNameDNS:
+		return configureDNS(cfg, entry)
+	case conn.ProtocolNameDHCP:
+		return configureDHCP(cfg, entry)
+	case conn.ProtocolNameDHClient:
+		setConnQuery(cfg, entry, CheckKeyLeaseFile)
+	case conn.ProtocolNameOpenVPN:
+		return configureOpenVPN(cfg, entry)
+	case conn.ProtocolNameMongoDB:
+		setConnParam(cfg, conn.ParamKeyAuthSource, cfgval.AsString(entry[CheckKeyAuthSource]))
+	case conn.ProtocolNameFPM:
+		setConnQuery(cfg, entry, CheckKeyStatusPath)
+	case conn.ProtocolNameNUT:
+		setConnQuery(cfg, entry, CheckKeyUPS)
+	case conn.ProtocolNameDocker:
+		setConnQuery(cfg, entry, CheckKeyContainer)
+		setLocalConnSocket(cfg, entry, conn.DefaultDockerSocket)
+	case conn.ProtocolNameLibvirt:
+		setLocalConnSocket(cfg, entry, conn.DefaultLibvirtSocket)
+		setConnParam(cfg, conn.ParamKeyDomain, cfgval.AsString(entry[CheckKeyDomain]))
+	case conn.ProtocolNameDBus, conn.ProtocolNameAvahi:
+		cfg.Socket = conn.DBusAddress(cfgval.AsString(entry[CheckKeySocket]), cfgval.AsString(entry[CheckKeyQuery]))
+	}
+	return nil
+}
+
+var defaultConnSockets = map[string]string{
+	conn.ProtocolNameACPID:    conn.DefaultACPIDSocket,
+	conn.ProtocolNameFail2ban: conn.DefaultFail2banSocket,
+	conn.ProtocolNameLVMPolld: conn.DefaultLVMPolldSocket,
+}
+
+func configureDNS(cfg *conn.Config, entry map[string]any) error {
+	if !cfgval.Bool(entry[CheckKeyResolvconf]) {
+		return nil
+	}
+	if cfgval.AsString(entry[CheckKeyHost]) != "" {
+		return errors.New("dns check: host and resolvconf are mutually exclusive")
+	}
+	setConnParam(cfg, conn.ParamKeyResolvconf, conn.ParamValueTrue)
+	return nil
+}
+
+func configureDHCP(cfg *conn.Config, entry map[string]any) error {
+	mac := cfgval.AsString(entry[CheckKeyMAC])
+	if mac == "" {
+		return nil
+	}
+	if _, err := net.ParseMAC(mac); err != nil {
+		return fmt.Errorf("dhcp check: invalid mac %q", mac)
+	}
+	setConnParam(cfg, conn.ParamKeyMAC, mac)
+	return nil
+}
+
+func configureOpenVPN(cfg *conn.Config, entry map[string]any) error {
+	transport := strings.ToLower(cfgval.AsString(entry[CheckKeyTransport]))
+	if transport == "" {
+		return nil
+	}
+	if transport != conn.TransportUDP && transport != conn.TransportTCP {
+		return fmt.Errorf("openvpn check: transport must be %s, got %q", conn.TransportSummary, transport)
+	}
+	setConnParam(cfg, conn.ParamKeyTransport, transport)
+	return nil
+}
+
+func setConnQuery(cfg *conn.Config, entry map[string]any, key string) {
+	if value := cfgval.AsString(entry[key]); value != "" {
+		cfg.Query = value
+	}
+}
+
+func setConnParam(cfg *conn.Config, key, value string) {
+	if value != "" {
+		cfg.Params = map[string]string{key: value}
+	}
+}
+
+func setLocalConnSocket(cfg *conn.Config, entry map[string]any, socket string) {
+	if cfg.Socket == "" && cfgval.AsString(entry[CheckKeyHost]) == "" {
+		cfg.Socket = socket
+	}
 }
 
 // tlsString reads a tls field that may be a YAML bool (true/false) or a string

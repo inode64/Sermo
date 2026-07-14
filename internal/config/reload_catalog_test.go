@@ -24,74 +24,91 @@ type reloadSignalService struct {
 func TestRealCatalogReloadServicesResolve(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")
-	writeGlobal := func(dir, enabled, backend string) string {
-		t.Helper()
-		global := filepath.Join(dir, "sermo.yml")
-		body := "engine: { backend: " + backend + " }\n" +
-			"paths:\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
-			"defaults:\n  policy: { cooldown: 5m }\n"
-		if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		return global
-	}
-
 	for _, backend := range []string{"systemd", "openrc"} {
 		t.Run(backend, func(t *testing.T) {
-			probeDir := t.TempDir()
-			probeEnabled := filepath.Join(probeDir, "services")
-			if err := os.MkdirAll(probeEnabled, 0o755); err != nil {
-				t.Fatal(err)
-			}
-			probe, err := Load(writeGlobal(probeDir, probeEnabled, backend), WithCatalogDirs(catalogDir))
-			if err != nil {
-				t.Fatalf("Load (probe): %v", err)
-			}
-			services := catalogReloadSignalServices(probe)
-			if len(services) == 0 {
-				t.Fatal("no catalog services with reload.signal found")
-			}
-
-			dir := t.TempDir()
-			enabled := filepath.Join(dir, "services")
-			if err := os.MkdirAll(enabled, 0o755); err != nil {
-				t.Fatal(err)
-			}
-			for _, d := range services {
-				svc := "name: " + d.name + "-main\nuses: " + d.name + "\n"
-				if err := os.WriteFile(filepath.Join(enabled, d.name+".yml"), []byte(svc), 0o644); err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			cfg, err := Load(writeGlobal(dir, enabled, backend), WithCatalogDirs(catalogDir))
-			if err != nil {
-				t.Fatalf("Load: %v", err)
-			}
-			if issues := Validate(cfg); len(issues) != 0 {
-				t.Fatalf("Validate issues = %v, want none", issues)
-			}
-			for _, d := range services {
-				resolved, errs := cfg.Resolve(d.name + "-main")
-				if len(errs) != 0 {
-					t.Errorf("%s: resolve errors = %v", d.name, errs)
-					continue
-				}
-				r, ok := resolved.Tree["reload"].(map[string]any)
-				if !ok {
-					t.Errorf("%s: resolved tree has no reload block", d.name)
-					continue
-				}
-				// The catalog leaves `when` unset — absent means the default auto mode,
-				// so any explicit value here would be a redundancy regression.
-				if cfgvalString(r["signal"]) != d.signal {
-					t.Errorf("%s: reload = %v, want signal %s", d.name, r, d.signal)
-				}
-				if _, ok := r["when"]; ok {
-					t.Errorf("%s: reload restates when (%v); absent means auto", d.name, r["when"])
-				}
-			}
+			validateCatalogReloadServices(t, catalogDir, backend)
 		})
+	}
+}
+
+func validateCatalogReloadServices(t *testing.T, catalogDir, backend string) {
+	t.Helper()
+	services := loadCatalogReloadSignalServices(t, catalogDir, backend)
+	dir := t.TempDir()
+	enabled := filepath.Join(dir, "services")
+	if err := os.MkdirAll(enabled, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeReloadTestServices(t, enabled, services)
+	cfg, err := Load(writeReloadTestGlobal(t, dir, enabled, backend), WithCatalogDirs(catalogDir))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if issues := Validate(cfg); len(issues) != 0 {
+		t.Fatalf("Validate issues = %v, want none", issues)
+	}
+	assertCatalogReloadServices(t, cfg, services)
+}
+
+func loadCatalogReloadSignalServices(t *testing.T, catalogDir, backend string) []reloadSignalService {
+	t.Helper()
+	dir := t.TempDir()
+	enabled := filepath.Join(dir, "services")
+	if err := os.MkdirAll(enabled, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(writeReloadTestGlobal(t, dir, enabled, backend), WithCatalogDirs(catalogDir))
+	if err != nil {
+		t.Fatalf("Load (probe): %v", err)
+	}
+	services := catalogReloadSignalServices(cfg)
+	if len(services) == 0 {
+		t.Fatal("no catalog services with reload.signal found")
+	}
+	return services
+}
+
+func writeReloadTestGlobal(t *testing.T, dir, enabled, backend string) string {
+	t.Helper()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "engine: { backend: " + backend + " }\n" +
+		"paths:\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return global
+}
+
+func writeReloadTestServices(t *testing.T, enabled string, services []reloadSignalService) {
+	t.Helper()
+	for _, service := range services {
+		body := "name: " + service.name + "-main\nuses: " + service.name + "\n"
+		if err := os.WriteFile(filepath.Join(enabled, service.name+".yml"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func assertCatalogReloadServices(t *testing.T, cfg *Config, services []reloadSignalService) {
+	t.Helper()
+	for _, service := range services {
+		resolved, errs := cfg.Resolve(service.name + "-main")
+		if len(errs) != 0 {
+			t.Errorf("%s: resolve errors = %v", service.name, errs)
+			continue
+		}
+		reload, ok := resolved.Tree["reload"].(map[string]any)
+		if !ok {
+			t.Errorf("%s: resolved tree has no reload block", service.name)
+			continue
+		}
+		if cfgvalString(reload["signal"]) != service.signal {
+			t.Errorf("%s: reload = %v, want signal %s", service.name, reload, service.signal)
+		}
+		if _, ok := reload["when"]; ok {
+			t.Errorf("%s: reload restates when (%v); absent means auto", service.name, reload["when"])
+		}
 	}
 }
 

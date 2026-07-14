@@ -1047,103 +1047,45 @@ func TestRuleMessageRuntimeContextFormatsByteMetric(t *testing.T) {
 	}
 }
 
-func TestCycleAlertRecoveryCarriesMetricContext(t *testing.T) {
-	h := &workerHarness{cache: map[string]checks.Result{
-		"cpu-thread-high": {
-			Check: "cpu-thread-high",
-			OK:    false,
-			Data: map[string]any{
-				checks.DataKeyType:      checks.CheckTypeMetric,
-				checks.DataKeyScope:     checks.MetricScopeService,
-				checks.DataKeyMetric:    "cpu_thread",
-				checks.DataKeyOp:        ">",
-				checks.DataKeyThreshold: "90%",
-				checks.DataKeyValue:     91.25,
-				checks.DataKeyUnit:      metrics.MetricUnitPercent,
-			},
+func TestCycleAlertRecoveryFormatsMetricContext(t *testing.T) {
+	tests := []struct {
+		name      string
+		check     string
+		firing    map[string]any
+		recovered map[string]any
+		want      string
+	}{
+		{
+			name:      "percent",
+			check:     "cpu-thread-high",
+			firing:    map[string]any{checks.DataKeyType: checks.CheckTypeMetric, checks.DataKeyScope: checks.MetricScopeService, checks.DataKeyMetric: "cpu_thread", checks.DataKeyOp: ">", checks.DataKeyThreshold: "90%", checks.DataKeyValue: 91.25, checks.DataKeyUnit: metrics.MetricUnitPercent},
+			recovered: map[string]any{checks.DataKeyType: checks.CheckTypeMetric, checks.DataKeyScope: checks.MetricScopeService, checks.DataKeyMetric: "cpu_thread", checks.DataKeyOp: ">", checks.DataKeyThreshold: "90%", checks.DataKeyValue: 0.1998902696035153, checks.DataKeyUnit: metrics.MetricUnitPercent},
+			want:      "rule condition recovered: metric cpu_thread current 0,2% (threshold > 90%)",
 		},
-	}}
-	tree := map[string]any{"rules": map[string]any{
-		"alert-if-cpu-thread-high": map[string]any{
-			"type": "alert",
-			"if":   map[string]any{"failed": map[string]any{"check": "cpu-thread-high"}},
-			"then": map[string]any{"action": "alert", "message": "CPU usage is high"},
-		},
-	}}
-	w := h.worker(tree, rules.Policy{}, nil)
-	w.RunCycle(context.Background())
-
-	h.cache["cpu-thread-high"] = checks.Result{
-		Check: "cpu-thread-high",
-		OK:    true,
-		Data: map[string]any{
-			checks.DataKeyType:      checks.CheckTypeMetric,
-			checks.DataKeyScope:     checks.MetricScopeService,
-			checks.DataKeyMetric:    "cpu_thread",
-			checks.DataKeyOp:        ">",
-			checks.DataKeyThreshold: "90%",
-			checks.DataKeyValue:     0.1998902696035153,
-			checks.DataKeyUnit:      metrics.MetricUnitPercent,
+		{
+			name:      "bytes",
+			check:     "memory-high",
+			firing:    map[string]any{checks.DataKeyType: checks.CheckTypeMetric, checks.DataKeyScope: checks.MetricScopeService, checks.DataKeyMetric: "memory", checks.DataKeyOp: ">", checks.DataKeyThreshold: "174159463", checks.DataKeyValue: 2555904, checks.DataKeyUnit: metrics.MetricUnitBytes},
+			recovered: map[string]any{checks.DataKeyType: checks.CheckTypeMetric, checks.DataKeyScope: checks.MetricScopeService, checks.DataKeyMetric: "memory", checks.DataKeyOp: ">", checks.DataKeyThreshold: "174159463", checks.DataKeyValue: 2555904, checks.DataKeyUnit: metrics.MetricUnitBytes},
+			want:      "rule condition recovered: metric memory current 2,44 MB (threshold > 166,09 MB)",
 		},
 	}
-	w.RunCycle(context.Background())
-
-	e, ok := h.eventOf(eventKindRecovered)
-	if !ok {
-		t.Fatalf("no recovered event emitted: %+v", h.events)
-	}
-	if want := "rule condition recovered: metric cpu_thread current 0,2% (threshold > 90%)"; e.Message != want {
-		t.Fatalf("recovered message = %q, want %q", e.Message, want)
-	}
-}
-
-func TestCycleAlertRecoveryFormatsByteMetricContext(t *testing.T) {
-	h := &workerHarness{cache: map[string]checks.Result{
-		"memory-high": {
-			Check: "memory-high",
-			OK:    false,
-			Data: map[string]any{
-				checks.DataKeyType:      checks.CheckTypeMetric,
-				checks.DataKeyScope:     checks.MetricScopeService,
-				checks.DataKeyMetric:    "memory",
-				checks.DataKeyOp:        ">",
-				checks.DataKeyThreshold: "174159463",
-				checks.DataKeyValue:     2555904,
-				checks.DataKeyUnit:      metrics.MetricUnitBytes,
-			},
-		},
-	}}
-	tree := map[string]any{"rules": map[string]any{
-		"alert-if-memory-high": map[string]any{
-			"type": "alert",
-			"if":   map[string]any{"failed": map[string]any{"check": "memory-high"}},
-			"then": map[string]any{"action": "alert", "message": "memory is high"},
-		},
-	}}
-	w := h.worker(tree, rules.Policy{}, nil)
-	w.RunCycle(context.Background())
-
-	h.cache["memory-high"] = checks.Result{
-		Check: "memory-high",
-		OK:    true,
-		Data: map[string]any{
-			checks.DataKeyType:      checks.CheckTypeMetric,
-			checks.DataKeyScope:     checks.MetricScopeService,
-			checks.DataKeyMetric:    "memory",
-			checks.DataKeyOp:        ">",
-			checks.DataKeyThreshold: "174159463",
-			checks.DataKeyValue:     2555904,
-			checks.DataKeyUnit:      metrics.MetricUnitBytes,
-		},
-	}
-	w.RunCycle(context.Background())
-
-	e, ok := h.eventOf(eventKindRecovered)
-	if !ok {
-		t.Fatalf("no recovered event emitted: %+v", h.events)
-	}
-	if want := "rule condition recovered: metric memory current 2,44 MB (threshold > 166,09 MB)"; e.Message != want {
-		t.Fatalf("recovered message = %q, want %q", e.Message, want)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &workerHarness{cache: map[string]checks.Result{tc.check: {Check: tc.check, Data: tc.firing}}}
+			tree := map[string]any{"rules": map[string]any{"alert-if-" + tc.check: map[string]any{"type": "alert", "if": map[string]any{"failed": map[string]any{"check": tc.check}}, "then": map[string]any{"action": "alert", "message": tc.check + " is high"}}}}
+			w := h.worker(tree, rules.Policy{}, nil)
+			w.RunCycle(context.Background())
+			h.cache[tc.check] = checks.Result{Check: tc.check, OK: true, Data: tc.recovered}
+			w.RunCycle(context.Background())
+			e, ok := h.eventOf(eventKindRecovered)
+			if !ok {
+				t.Fatalf("no recovered event emitted: %+v", h.events)
+			}
+			if e.Message != tc.want {
+				t.Fatalf("recovered message = %q, want %q", e.Message, tc.want)
+			}
+		})
 	}
 }
 

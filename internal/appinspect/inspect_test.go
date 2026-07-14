@@ -289,6 +289,7 @@ func TestListVersionMatchDistinguishesMySQLAndMariaDB(t *testing.T) {
 		wantApps     string
 		wantServices string
 		wantRejected string
+		wantBinary   string
 	}{
 		{
 			name:         "old MariaDB only has mysqld",
@@ -303,6 +304,7 @@ func TestListVersionMatchDistinguishesMySQLAndMariaDB(t *testing.T) {
 			wantApps:     "mariadb",
 			wantServices: "mariadb",
 			wantRejected: "mysql",
+			wantBinary:   "mariadbd",
 		},
 		{
 			name:         "Oracle MySQL mysqld is not MariaDB",
@@ -314,77 +316,7 @@ func TestListVersionMatchDistinguishesMySQLAndMariaDB(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			root := t.TempDir()
-			binDir := filepath.Join(root, "bin")
-			catalogDir := filepath.Join(root, "catalog")
-			servicesDir := filepath.Join(root, "services")
-			for _, dir := range []string{binDir, filepath.Join(catalogDir, "apps"), filepath.Join(catalogDir, "services"), servicesDir} {
-				if err := os.MkdirAll(dir, 0o755); err != nil {
-					t.Fatal(err)
-				}
-			}
-			pathFor := func(name string) string { return filepath.Join(binDir, name) }
-			for name := range tc.versionByBin {
-				if err := os.WriteFile(pathFor(name), []byte("x"), 0o755); err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			files := map[string]string{
-				"catalog/apps/mariadb.yml": fmt.Sprintf(`
-name: mariadb
-display_name: "MariaDB"
-version_match: { contains: MariaDB }
-variables:
-  binary: [%q, %q]
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}", "--version"] }
-`, pathFor("mariadbd"), pathFor("mysqld")),
-				"catalog/apps/mysql.yml": fmt.Sprintf(`
-name: mysql
-display_name: "MySQL"
-version_match: { excludes: MariaDB }
-variables:
-  binary: %q
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}", "--version"] }
-`, pathFor("mysqld")),
-				"catalog/services/mariadb.yml": `
-name: mariadb
-display_name: "MariaDB"
-service: { systemd: [mariadb] }
-apps: [mariadb]
-`,
-				"catalog/services/mysql.yml": `
-name: mysql
-display_name: "MySQL"
-service: { systemd: [mysql] }
-apps: [mysql]
-`,
-				"sermo.yml": "engine: { backend: systemd }\n" +
-					"paths:\n  services: [" + servicesDir + "]\n  runtime: /run/sermo\n" +
-					"defaults:\n  policy: { cooldown: 5m }\n",
-			}
-			for rel, content := range files {
-				path := filepath.Join(root, rel)
-				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-					t.Fatal(err)
-				}
-			}
-			cfg, err := config.Load(filepath.Join(root, "sermo.yml"), config.WithCatalogDirs(catalogDir))
-			if err != nil {
-				t.Fatalf("Load: %v", err)
-			}
-
-			runner := fakeRunner{byCommand: map[string]execx.Result{}}
-			for name, output := range tc.versionByBin {
-				runner.byCommand[commandKey(pathFor(name), "--version")] = execx.Result{Stdout: output, ExitCode: 0}
-			}
+			cfg, runner, binDir := setupVersionMatchCatalog(t, tc.versionByBin)
 
 			apps := List(context.Background(), runner, cfg, config.CategoryApp, false)
 			if got := strings.Join(reportNames(apps), ","); got != tc.wantApps {
@@ -400,12 +332,80 @@ apps: [mysql]
 			if rejected.Installed || !strings.HasPrefix(rejected.Status, "not installed: version ") {
 				t.Fatalf("rejected app %q report = %+v, want version identity rejection", tc.wantRejected, rejected)
 			}
-			if tc.name == "new MariaDB has mariadbd and compatibility mysqld" {
-				if got, want := allApps["mariadb"].Binary, pathFor("mariadbd"); got != want {
-					t.Fatalf("new MariaDB binary = %q, want official %q", got, want)
+			if tc.wantBinary != "" {
+				if got, want := allApps["mariadb"].Binary, filepath.Join(binDir, tc.wantBinary); got != want {
+					t.Fatalf("MariaDB binary = %q, want official %q", got, want)
 				}
 			}
 		})
+	}
+}
+
+func setupVersionMatchCatalog(t *testing.T, versionByBin map[string]string) (*config.Config, fakeRunner, string) {
+	t.Helper()
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	catalogDir := filepath.Join(root, "catalog")
+	servicesDir := filepath.Join(root, "services")
+	for _, dir := range []string{binDir, filepath.Join(catalogDir, "apps"), filepath.Join(catalogDir, "services"), servicesDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name := range versionByBin {
+		if err := os.WriteFile(filepath.Join(binDir, name), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeVersionMatchCatalog(t, root, binDir, servicesDir)
+	cfg, err := config.Load(filepath.Join(root, "sermo.yml"), config.WithCatalogDirs(catalogDir))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	runner := fakeRunner{byCommand: map[string]execx.Result{}}
+	for name, output := range versionByBin {
+		runner.byCommand[commandKey(filepath.Join(binDir, name), "--version")] = execx.Result{Stdout: output, ExitCode: 0}
+	}
+	return cfg, runner, binDir
+}
+
+func writeVersionMatchCatalog(t *testing.T, root, binDir, servicesDir string) {
+	t.Helper()
+	files := map[string]string{
+		"catalog/apps/mariadb.yml": fmt.Sprintf(`
+name: mariadb
+display_name: "MariaDB"
+version_match: { contains: MariaDB }
+variables:
+  binary: [%q, %q]
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"] }
+`, filepath.Join(binDir, "mariadbd"), filepath.Join(binDir, "mysqld")),
+		"catalog/apps/mysql.yml": fmt.Sprintf(`
+name: mysql
+display_name: "MySQL"
+version_match: { excludes: MariaDB }
+variables:
+  binary: %q
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"] }
+`, filepath.Join(binDir, "mysqld")),
+		"catalog/services/mariadb.yml": "name: mariadb\ndisplay_name: \"MariaDB\"\nservice: { systemd: [mariadb] }\napps: [mariadb]\n",
+		"catalog/services/mysql.yml":   "name: mysql\ndisplay_name: \"MySQL\"\nservice: { systemd: [mysql] }\napps: [mysql]\n",
+		"sermo.yml": "engine: { backend: systemd }\n" +
+			"paths:\n  services: [" + servicesDir + "]\n  runtime: /run/sermo\n" +
+			"defaults:\n  policy: { cooldown: 5m }\n",
+	}
+	for relativePath, content := range files {
+		path := filepath.Join(root, relativePath)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

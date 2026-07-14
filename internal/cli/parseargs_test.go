@@ -1,103 +1,47 @@
 package cli
 
 import (
+	"reflect"
 	"testing"
 	"time"
 )
 
+type parsedOptionsView struct {
+	command, config, service string
+	json, quiet, noCascade   bool
+	force, lazy, kill, help  bool
+	since                    time.Duration
+	notify, commandArgs      []string
+	eventLimit               int
+}
+
+func optionsView(o options) parsedOptionsView {
+	return parsedOptionsView{
+		command: o.command, config: o.config, service: o.service(), json: o.json, quiet: o.quiet, noCascade: o.noCascade,
+		force: o.force, lazy: o.lazy, kill: o.kill, help: o.help, since: o.since,
+		notify: o.notifyNames, commandArgs: o.commandArgs, eventLimit: o.eventLimit,
+	}
+}
+
 func TestParseArgsSuccess(t *testing.T) {
 	cases := []struct {
-		name  string
-		args  []string
-		check func(t *testing.T, o options)
+		name string
+		args []string
+		want parsedOptionsView
 	}{
-		{"command only", []string{"status"}, func(t *testing.T, o options) {
-			t.Helper()
-			if o.command != "status" || len(o.args) != 0 {
-				t.Fatalf("got %+v", o)
-			}
-		}},
-		{"command + positional", []string{"start", "nginx"}, func(t *testing.T, o options) {
-			t.Helper()
-			if o.command != "start" || o.service() != "nginx" {
-				t.Fatalf("got command=%q service=%q", o.command, o.service())
-			}
-		}},
-		{"--config= form", []string{"--config=/etc/s.yml", "status"}, func(t *testing.T, o options) {
-			t.Helper()
-			if o.config != "/etc/s.yml" || o.command != "status" {
-				t.Fatalf("got %+v", o)
-			}
-		}},
-		{"--config space form", []string{"--config", "/etc/s.yml", "status"}, func(t *testing.T, o options) {
-			t.Helper()
-			if o.config != "/etc/s.yml" {
-				t.Fatalf("config = %q", o.config)
-			}
-		}},
-		{"bool flags", []string{"--json", "--quiet", "--no-cascade", "status"}, func(t *testing.T, o options) {
-			t.Helper()
-			if !o.json || !o.quiet || !o.noCascade {
-				t.Fatalf("got %+v", o)
-			}
-		}},
-		{"umount escalation flags", []string{"umount", "--force", "--lazy", "--kill-blockers", "mount-backup"}, func(t *testing.T, o options) {
-			t.Helper()
-			if !o.force || !o.lazy || !o.kill {
-				t.Fatalf("got %+v", o)
-			}
-		}},
-		{"--since duration", []string{"sla", "--since", "24h"}, func(t *testing.T, o options) {
-			t.Helper()
-			if o.since != 24*time.Hour {
-				t.Fatalf("since = %v", o.since)
-			}
-		}},
-		{"--notify list", []string{"services", "--notify", "ops,pager", "--notify=team"}, func(t *testing.T, o options) {
-			t.Helper()
-			want := []string{"ops", "pager", "team"}
-			if len(o.notifyNames) != len(want) {
-				t.Fatalf("notifyNames = %v", o.notifyNames)
-			}
-			for i := range want {
-				if o.notifyNames[i] != want[i] {
-					t.Fatalf("notifyNames = %v, want %v", o.notifyNames, want)
-				}
-			}
-		}},
-		{"-- captures literal command", []string{"lock", "build", "--", "echo", "hi"}, func(t *testing.T, o options) {
-			t.Helper()
-			if o.command != "lock" || o.service() != "build" {
-				t.Fatalf("command/service = %q/%q", o.command, o.service())
-			}
-			if len(o.commandArgs) != 2 || o.commandArgs[0] != "echo" || o.commandArgs[1] != "hi" {
-				t.Fatalf("commandArgs = %v", o.commandArgs)
-			}
-		}},
-		{"-- at end is empty, not a panic", []string{"lock", "build", "--"}, func(t *testing.T, o options) {
-			t.Helper()
-			if len(o.commandArgs) != 0 {
-				t.Fatalf("commandArgs = %v, want empty", o.commandArgs)
-			}
-		}},
-		{"--help", []string{"--help"}, func(t *testing.T, o options) {
-			t.Helper()
-			if !o.help {
-				t.Fatal("help not set")
-			}
-		}},
-		{"--limit positive", []string{"events", "--limit", "10"}, func(t *testing.T, o options) {
-			t.Helper()
-			if o.eventLimit != 10 {
-				t.Fatalf("eventLimit = %d, want 10", o.eventLimit)
-			}
-		}},
-		{"--limit unset stays default sentinel", []string{"events"}, func(t *testing.T, o options) {
-			t.Helper()
-			if o.eventLimit != 0 {
-				t.Fatalf("eventLimit = %d, want 0 (unset)", o.eventLimit)
-			}
-		}},
+		{"command only", []string{"status"}, parsedOptionsView{command: "status"}},
+		{"command + positional", []string{"start", "nginx"}, parsedOptionsView{command: "start", service: "nginx"}},
+		{"--config= form", []string{"--config=/etc/s.yml", "status"}, parsedOptionsView{command: "status", config: "/etc/s.yml"}},
+		{"--config space form", []string{"--config", "/etc/s.yml", "status"}, parsedOptionsView{command: "status", config: "/etc/s.yml"}},
+		{"bool flags", []string{"--json", "--quiet", "--no-cascade", "status"}, parsedOptionsView{command: "status", json: true, quiet: true, noCascade: true}},
+		{"umount escalation flags", []string{"umount", "--force", "--lazy", "--kill-blockers", "mount-backup"}, parsedOptionsView{command: "umount", service: "mount-backup", force: true, lazy: true, kill: true}},
+		{"--since duration", []string{"sla", "--since", "24h"}, parsedOptionsView{command: "sla", since: 24 * time.Hour}},
+		{"--notify list", []string{"services", "--notify", "ops,pager", "--notify=team"}, parsedOptionsView{command: "services", notify: []string{"ops", "pager", "team"}}},
+		{"-- captures literal command", []string{"lock", "build", "--", "echo", "hi"}, parsedOptionsView{command: "lock", service: "build", commandArgs: []string{"echo", "hi"}}},
+		{"-- at end is empty", []string{"lock", "build", "--"}, parsedOptionsView{command: "lock", service: "build"}},
+		{"--help", []string{"--help"}, parsedOptionsView{help: true}},
+		{"--limit positive", []string{"events", "--limit", "10"}, parsedOptionsView{command: "events", eventLimit: 10}},
+		{"--limit unset", []string{"events"}, parsedOptionsView{command: "events"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -105,7 +49,9 @@ func TestParseArgsSuccess(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parseArgs(%v) error = %v", c.args, err)
 			}
-			c.check(t, o)
+			if got := optionsView(o); !reflect.DeepEqual(got, c.want) {
+				t.Fatalf("options = %+v, want %+v", got, c.want)
+			}
 		})
 	}
 }

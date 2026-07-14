@@ -65,63 +65,77 @@ const (
 // type with the fields that type needs. New transports validate here too.
 func validateNotifiers(notifiers map[string]any, templateDir string, add func(string, ...any)) {
 	for _, name := range slices.Sorted(maps.Keys(notifiers)) {
-		path := notifierPath(name)
-		if name == NotifyNone {
-			add("%s: %q is a reserved keyword and cannot name a notifier", path, NotifyNone)
-			continue
+		validateNotifier(name, notifiers[name], templateDir, add)
+	}
+}
+
+func validateNotifier(name string, raw any, templateDir string, add func(string, ...any)) {
+	if name == NotifyNone {
+		add("%s: %q is a reserved keyword and cannot name a notifier", notifierPath(name), NotifyNone)
+		return
+	}
+	entry, ok := raw.(map[string]any)
+	if !ok {
+		add("%s must be a mapping", notifierPath(name))
+		return
+	}
+	if value, present := entry[keyEnabled]; present {
+		if _, ok := value.(bool); !ok {
+			add(validationBooleanFormat, notifierFieldPath(name, keyEnabled))
 		}
-		entry, ok := notifiers[name].(map[string]any)
-		if !ok {
-			add("%s must be a mapping", path)
-			continue
+	}
+	if enabled, ok := entry[keyEnabled].(bool); ok && !enabled {
+		return
+	}
+	validateNotifierTemplate(name, entry, templateDir, add)
+	validateNotifierType(name, entry, add)
+}
+
+func validateNotifierType(name string, entry map[string]any, add func(string, ...any)) {
+	typ := cfgval.String(entry[notify.KeyType])
+	switch typ {
+	case notify.TypeEmail:
+		validateEmailNotifier(name, entry, add)
+	case notify.TypeSlack, notify.TypeTeams:
+		validateWebhookNotifier(name, typ, entry, add)
+	case notify.TypeTTY:
+		if users, present := entry[notify.KeyUsers]; present && !cfgval.IsStringOrStringList(users) {
+			add(validationStringListFormat, notifierFieldPath(name, notify.KeyUsers))
 		}
-		if v, present := entry[keyEnabled]; present {
-			if _, ok := v.(bool); !ok {
-				add(validationBooleanFormat, notifierFieldPath(name, keyEnabled))
-			}
+	case notify.TypeWall:
+		if _, present := entry[notify.KeyUsers]; present {
+			add("%s is not supported for a wall notifier; use type tty to target specific users", notifierFieldPath(name, notify.KeyUsers))
 		}
-		if enabled, ok := entry[keyEnabled].(bool); ok && !enabled {
-			continue
+	case "":
+		add("%s is required", notifierFieldPath(name, notify.KeyType))
+	default:
+		if !slices.Contains(notify.SupportedTypes(), typ) {
+			add("%s %q is not supported (%s)", notifierFieldPath(name, notify.KeyType), typ, strings.Join(notify.SupportedTypes(), ", "))
 		}
-		validateNotifierTemplate(name, entry, templateDir, add)
-		switch typ := cfgval.String(entry[notify.KeyType]); typ {
-		case notify.TypeEmail:
-			dsn := cfgval.String(entry[notify.KeyDSN])
-			if dsn == "" {
-				add("%s is required for an email notifier", notifierFieldPath(name, notify.KeyDSN))
-			} else if !strings.HasPrefix(dsn, notify.EmailDSNPrefixSMTP) && !strings.HasPrefix(dsn, notify.EmailDSNPrefixSMTPS) {
-				add("%s must be an smtp:// or smtps:// URL", notifierFieldPath(name, notify.KeyDSN))
-			}
-			if cfgval.String(entry[notify.KeyFrom]) == "" {
-				add("%s is required for an email notifier", notifierFieldPath(name, notify.KeyFrom))
-			}
-			if !cfgval.IsNonEmptyStringList(entry[notify.KeyTo]) {
-				add("%s must list at least one address", notifierFieldPath(name, notify.KeyTo))
-			}
-		case notify.TypeSlack, notify.TypeTeams:
-			wh := cfgval.String(entry[notify.KeyWebhook])
-			if wh == "" {
-				add("%s is required for a %s notifier", notifierFieldPath(name, notify.KeyWebhook), typ)
-			} else if !strings.HasPrefix(wh, notify.WebhookURLPrefixHTTP) && !strings.HasPrefix(wh, notify.WebhookURLPrefixHTTPS) {
-				add("%s must be an http(s) URL", notifierFieldPath(name, notify.KeyWebhook))
-			}
-		case notify.TypeTTY:
-			if users, present := entry[notify.KeyUsers]; present && !cfgval.IsStringOrStringList(users) {
-				add(validationStringListFormat, notifierFieldPath(name, notify.KeyUsers))
-			}
-		case notify.TypeWall:
-			if _, present := entry[notify.KeyUsers]; present {
-				add("%s is not supported for a wall notifier; use type tty to target specific users", notifierFieldPath(name, notify.KeyUsers))
-			}
-		case "":
-			add("%s is required", notifierFieldPath(name, notify.KeyType))
-		default:
-			// The vocabulary comes from the notify registry, so adding a
-			// transport there cannot leave validation rejecting it by drift.
-			if !slices.Contains(notify.SupportedTypes(), typ) {
-				add("%s %q is not supported (%s)", notifierFieldPath(name, notify.KeyType), typ, strings.Join(notify.SupportedTypes(), ", "))
-			}
-		}
+	}
+}
+
+func validateEmailNotifier(name string, entry map[string]any, add func(string, ...any)) {
+	dsn := cfgval.String(entry[notify.KeyDSN])
+	if dsn == "" {
+		add("%s is required for an email notifier", notifierFieldPath(name, notify.KeyDSN))
+	} else if !strings.HasPrefix(dsn, notify.EmailDSNPrefixSMTP) && !strings.HasPrefix(dsn, notify.EmailDSNPrefixSMTPS) {
+		add("%s must be an smtp:// or smtps:// URL", notifierFieldPath(name, notify.KeyDSN))
+	}
+	if cfgval.String(entry[notify.KeyFrom]) == "" {
+		add("%s is required for an email notifier", notifierFieldPath(name, notify.KeyFrom))
+	}
+	if !cfgval.IsNonEmptyStringList(entry[notify.KeyTo]) {
+		add("%s must list at least one address", notifierFieldPath(name, notify.KeyTo))
+	}
+}
+
+func validateWebhookNotifier(name, typ string, entry map[string]any, add func(string, ...any)) {
+	webhook := cfgval.String(entry[notify.KeyWebhook])
+	if webhook == "" {
+		add("%s is required for a %s notifier", notifierFieldPath(name, notify.KeyWebhook), typ)
+	} else if !strings.HasPrefix(webhook, notify.WebhookURLPrefixHTTP) && !strings.HasPrefix(webhook, notify.WebhookURLPrefixHTTPS) {
+		add("%s must be an http(s) URL", notifierFieldPath(name, notify.KeyWebhook))
 	}
 }
 
