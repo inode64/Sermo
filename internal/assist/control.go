@@ -32,7 +32,7 @@ func (dockerAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		return Result{}, errors.New("no Docker containers were detected on this host")
 	}
 	selected := chooseDockerContainers(p, "Which Docker containers do you want Sermo to monitor and manage?", cands)
-	return controlledResult(buildControlledServices(p, env, selected, dockerName, buildDockerService))
+	return controlledResult(buildControlledServices(p, env, selected, dockerName, buildDockerService)), nil
 }
 
 type vmAssistant struct{}
@@ -55,7 +55,7 @@ func (vmAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		return Result{}, errors.New("no libvirt/QEMU domains were detected on this host")
 	}
 	selected := chooseVMs(p, "Which virtual machines do you want Sermo to monitor and manage?", cands)
-	return controlledResult(buildControlledServices(p, env, selected, vmName, buildVMService))
+	return controlledResult(buildControlledServices(p, env, selected, vmName, buildVMService)), nil
 }
 
 func buildControlledServices[T any](p *Prompt, env Env, selected []T, name func(T) string, build func(T) map[string]any) map[string]any {
@@ -108,14 +108,14 @@ func addControlledService(p *Prompt, env Env, services map[string]any, name stri
 	return true
 }
 
-func controlledResult(services map[string]any) (Result, error) {
+func controlledResult(services map[string]any) Result {
 	if len(services) == 0 {
-		return Result{}, nil
+		return Result{}
 	}
 	return Result{
 		Services: services,
 		Summary:  resultSummary(AssistantNameService, services),
-	}, nil
+	}
 }
 
 func chooseDockerContainers(p *Prompt, question string, cands []DockerCandidate) []DockerCandidate {

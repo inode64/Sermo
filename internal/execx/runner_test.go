@@ -234,8 +234,7 @@ func TestCommandRunnerRunEnv(t *testing.T) {
 	t.Run("nil env inherits process environment (like normal Run)", func(t *testing.T) {
 		// We set a unique var in the test process and verify the child sees it.
 		unique := "SERMO_TEST_HOOK_ENV_" + time.Now().Format("20060102150405")
-		os.Setenv(unique, "inherited")
-		defer os.Unsetenv(unique)
+		t.Setenv(unique, "inherited")
 
 		res, err := CommandRunner{}.RunEnv(context.Background(), nil, "sh", "-c", "printf %s $"+unique)
 		if err != nil {

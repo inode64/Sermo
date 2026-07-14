@@ -55,7 +55,7 @@ func (mountAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		}
 		mounts[mountUnitName(c.Path)] = buildMountUnit(c, *settings)
 	}
-	return mountResult(mounts)
+	return mountResult(mounts), nil
 }
 
 type mountSettings struct {
@@ -82,14 +82,14 @@ func buildMountUnit(c MountCandidate, s mountSettings) map[string]any {
 	}
 }
 
-func mountResult(mounts map[string]any) (Result, error) {
+func mountResult(mounts map[string]any) Result {
 	if len(mounts) == 0 {
-		return Result{}, nil
+		return Result{}
 	}
 	return Result{
 		Mounts:  mounts,
 		Summary: resultSummary("mount unit", mounts),
-	}, nil
+	}
 }
 
 func mountUnitName(path string) string {

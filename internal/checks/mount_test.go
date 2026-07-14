@@ -11,10 +11,10 @@ func fakeMounts(ms ...Mount) MountSamplerFunc {
 
 var dataMount = Mount{Device: "/dev/sdb1", MountPoint: "/data", FSType: "ext4", Options: []string{"rw", "noatime"}}
 
-// storageMount builds a storage check with a mount condition (and optional space preds)
-// for the integrated mount tests.
-func storageMount(m mountCond, sampler MountSamplerFunc, preds ...levelPred) storageCheck {
-	return storageCheck{base: base{name: "fs"}, path: "/data", preds: preds, mount: m, mountSampler: sampler}
+// storageMount builds a storage check with a mount condition for the integrated
+// mount tests.
+func storageMount(m mountCond, sampler MountSamplerFunc) storageCheck {
+	return storageCheck{base: base{name: "fs"}, path: "/data", mount: m, mountSampler: sampler}
 }
 
 func TestStorageMountedOK(t *testing.T) {

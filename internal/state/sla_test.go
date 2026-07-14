@@ -10,9 +10,9 @@ func TestRecordSLAAccumulatesPerMinuteBucket(t *testing.T) {
 	base := time.Date(2026, 6, 7, 10, 0, 30, 0, time.UTC)
 
 	// Three cycles in the same minute: two up, one down -> 2/3 in that bucket.
-	mustRecord(t, s, "web", true, base)
-	mustRecord(t, s, "web", false, base.Add(20*time.Second))
-	mustRecord(t, s, "web", true, base.Add(40*time.Second))
+	mustRecord(t, s, true, base)
+	mustRecord(t, s, false, base.Add(20*time.Second))
+	mustRecord(t, s, true, base.Add(40*time.Second))
 
 	up, total, err := s.SLA("web", time.Hour, base.Add(time.Minute))
 	if err != nil {
@@ -60,8 +60,8 @@ func TestSLAWindowsSumOnlyWithinSpan(t *testing.T) {
 
 	// One down sample 30 minutes ago (inside the hour, outside nothing here),
 	// one up sample 2 hours ago (outside the hour window, inside the day window).
-	mustRecord(t, s, "web", false, now.Add(-30*time.Minute))
-	mustRecord(t, s, "web", true, now.Add(-2*time.Hour))
+	mustRecord(t, s, false, now.Add(-30*time.Minute))
+	mustRecord(t, s, true, now.Add(-2*time.Hour))
 
 	hourUp, hourTotal, err := s.SLA("web", time.Hour, now)
 	if err != nil {
@@ -87,9 +87,9 @@ func TestSLAReportRatioAndNoData(t *testing.T) {
 	// 9 up, 1 down within the last few minutes -> 90% across every window that
 	// covers them; "web" never recorded before so all windows see the same data.
 	for i := range 9 {
-		mustRecord(t, s, "web", true, now.Add(-time.Duration(i)*time.Minute))
+		mustRecord(t, s, true, now.Add(-time.Duration(i)*time.Minute))
 	}
-	mustRecord(t, s, "web", false, now.Add(-time.Minute))
+	mustRecord(t, s, false, now.Add(-time.Minute))
 
 	report, err := s.SLAReport("web", now)
 	if err != nil {
@@ -155,8 +155,8 @@ func TestPruneSLARemovesOldBuckets(t *testing.T) {
 	s := openTemp(t)
 	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
 
-	mustRecord(t, s, "web", true, now.Add(-400*24*time.Hour)) // old
-	mustRecord(t, s, "web", true, now.Add(-1*time.Hour))      // recent
+	mustRecord(t, s, true, now.Add(-400*24*time.Hour)) // old
+	mustRecord(t, s, true, now.Add(-1*time.Hour))      // recent
 	if err := s.RecordCheckSLA("web", "http", true, now.Add(-400*24*time.Hour)); err != nil {
 		t.Fatalf("RecordCheckSLA old: %v", err)
 	}
@@ -194,9 +194,9 @@ func TestSLASeriesReturnsOrderedBucketsWithGaps(t *testing.T) {
 
 	// Two adjacent monitored minutes, then a gap (service paused / Sermo down: no
 	// samples), then another monitored minute. The gap must not appear as a row.
-	mustRecord(t, s, "web", true, now.Add(-10*time.Minute))
-	mustRecord(t, s, "web", false, now.Add(-9*time.Minute))
-	mustRecord(t, s, "web", true, now.Add(-2*time.Minute))
+	mustRecord(t, s, true, now.Add(-10*time.Minute))
+	mustRecord(t, s, false, now.Add(-9*time.Minute))
+	mustRecord(t, s, true, now.Add(-2*time.Minute))
 
 	points, err := s.SLASeries("web", now.Add(-time.Hour), now)
 	if err != nil {
@@ -232,8 +232,8 @@ func TestSLATimelinesBucketsSegmentsIntoSubSpans(t *testing.T) {
 	// Two samples inside the hour window (12 five-minute segments): a down sample
 	// 2 minutes ago lands in the newest segment, an up sample 58 minutes ago lands
 	// in the oldest. The minutes between them are gaps (no samples recorded).
-	mustRecord(t, s, "web", false, now.Add(-2*time.Minute))
-	mustRecord(t, s, "web", true, now.Add(-58*time.Minute))
+	mustRecord(t, s, false, now.Add(-2*time.Minute))
+	mustRecord(t, s, true, now.Add(-58*time.Minute))
 
 	tls, err := s.SLATimelines("web", now)
 	if err != nil {
@@ -276,8 +276,8 @@ func TestSLATimelinesIncludeCurrentMinuteMatchingSLA(t *testing.T) {
 	s := openTemp(t)
 	now := time.Date(2026, 6, 7, 12, 30, 30, 0, time.UTC) // mid-minute
 
-	mustRecord(t, s, "web", true, now) // current (partial) minute
-	mustRecord(t, s, "web", false, now.Add(-10*time.Minute))
+	mustRecord(t, s, true, now) // current (partial) minute
+	mustRecord(t, s, false, now.Add(-10*time.Minute))
 
 	tls, err := s.SLATimelines("web", now)
 	if err != nil {
@@ -328,9 +328,9 @@ func TestCheckSLATimelinesScopeToCheck(t *testing.T) {
 	}
 }
 
-func mustRecord(t *testing.T, s *Store, service string, up bool, at time.Time) {
+func mustRecord(t *testing.T, s *Store, up bool, at time.Time) {
 	t.Helper()
-	if err := s.RecordSLA(service, up, at); err != nil {
+	if err := s.RecordSLA("web", up, at); err != nil {
 		t.Fatalf("RecordSLA: %v", err)
 	}
 }

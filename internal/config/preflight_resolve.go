@@ -41,7 +41,7 @@ func resolvePreflightResourceVariables(tree map[string]any) []string {
 		if !isResourcePreflightType(typ) {
 			continue
 		}
-		selected, _, ok := selectResourcePath(typ, entry[checks.CheckKeyPath])
+		selected, ok := selectResourcePath(typ, entry[checks.CheckKeyPath])
 		if !ok {
 			continue
 		}
@@ -54,7 +54,7 @@ func resolvePreflightResourceVariables(tree map[string]any) []string {
 			if !exists {
 				continue
 			}
-			selected, _, ok = selectResourcePath(typ, raw)
+			selected, ok = selectResourcePath(typ, raw)
 			if !ok {
 				continue
 			}
@@ -99,10 +99,10 @@ func variablePathRef(raw any) (string, bool) {
 	return name, true
 }
 
-func selectResourcePath(typ string, raw any) (selected string, matched bool, ok bool) {
+func selectResourcePath(typ string, raw any) (selected string, ok bool) {
 	candidates := cfgval.StringList(raw)
 	if len(candidates) == 0 {
-		return "", false, false
+		return "", false
 	}
 	for _, candidate := range candidates {
 		path := expandEnvString(candidate)
@@ -113,10 +113,10 @@ func selectResourcePath(typ string, raw any) (selected string, matched bool, ok 
 			selected = path
 		}
 		if resourceCandidateMatches(typ, path) {
-			return path, true, true
+			return path, true
 		}
 	}
-	return selected, false, true
+	return selected, true
 }
 
 func resourceCandidateMatches(typ, path string) bool {

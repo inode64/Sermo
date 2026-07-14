@@ -44,9 +44,9 @@ func loadCfg(t *testing.T, global, svc string) *config.Config {
 	return cfg
 }
 
-func has(r Result, level Level, substr string) bool {
+func has(r Result, substr string) bool {
 	for _, f := range r.Findings {
-		if f.Level == level && strings.Contains(f.Message, substr) {
+		if f.Level == LevelWarning && strings.Contains(f.Message, substr) {
 			return true
 		}
 	}
@@ -70,13 +70,13 @@ checks:
   small: { type: tcp, host: 127.0.0.1, port: 80, interval: 10s }
 `)
 	r := Diagnose(cfg, fakeHost{})
-	if has(r, LevelWarning, "check ok") {
+	if has(r, "check ok") {
 		t.Fatal("5m is a multiple of 30s; should not warn")
 	}
-	if !has(r, LevelWarning, "not a multiple") {
+	if !has(r, "not a multiple") {
 		t.Fatalf("40s should warn as non-multiple: %+v", r.Findings)
 	}
-	if !has(r, LevelWarning, "below the 30s resolution") {
+	if !has(r, "below the 30s resolution") {
 		t.Fatalf("10s should warn as below resolution: %+v", r.Findings)
 	}
 }
@@ -94,10 +94,10 @@ watches:
 	cfg := loadCfg(t, global, "")
 	// eth0 absent, /data exists but is not a mount point
 	r := Diagnose(cfg, fakeHost{paths: map[string]bool{"/data": true}})
-	if !has(r, LevelWarning, `interface "eth0" does not exist`) {
+	if !has(r, `interface "eth0" does not exist`) {
 		t.Fatalf("expected missing-interface warning: %+v", r.Findings)
 	}
-	if !has(r, LevelWarning, "not currently a mount point") {
+	if !has(r, "not currently a mount point") {
 		t.Fatalf("expected not-a-mount warning: %+v", r.Findings)
 	}
 
@@ -140,11 +140,11 @@ watches:
 		"no /proc/pressure/memory",
 		`device "/dev/sdz" does not exist`,
 	} {
-		if !has(r, LevelWarning, want) {
+		if !has(r, want) {
 			t.Fatalf("missing warning %q in %+v", want, r.Findings)
 		}
 	}
-	if has(r, LevelWarning, "watch disabled-mem-stall") {
+	if has(r, "watch disabled-mem-stall") {
 		t.Fatalf("disabled watch should not be diagnosed: %+v", r.Findings)
 	}
 
@@ -169,7 +169,7 @@ checks:
 `
 	cfg := loadCfg(t, baseGlobal, svc)
 	r := Diagnose(cfg, fakeHost{})
-	if !has(r, LevelWarning, `block device "sdz" does not exist`) {
+	if !has(r, `block device "sdz" does not exist`) {
 		t.Fatalf("expected service-check diskio warning: %+v", r.Findings)
 	}
 }

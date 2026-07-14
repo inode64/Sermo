@@ -21,8 +21,8 @@ func testMountPath(name string, segments ...string) string {
 	return testTargetPath(apiSegmentMounts, name, segments...)
 }
 
-func testLockPath(name string, segments ...string) string {
-	return testTargetPath(apiSegmentLocks, name, segments...)
+func testLockPath(segments ...string) string {
+	return testTargetPath(apiSegmentLocks, "mysql", segments...)
 }
 
 func testTargetPath(segment, name string, segments ...string) string {
@@ -39,8 +39,8 @@ func testPathQuery(path, query string) string {
 	return path + "?" + query
 }
 
-func testFlagQuery(path, name string) string {
-	return testPathQuery(path, name)
+func testFlagQuery(path string) string {
+	return testPathQuery(path, apiQueryVerbose)
 }
 
 func testQueryParam(name, value string) string {

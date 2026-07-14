@@ -49,12 +49,12 @@ func WithCatalogDirs(dirs ...string) Option {
 	return func(o *loadOptions) { o.catalogDirs = dirs }
 }
 
-func withPathDirs(kind string, dirs ...string) Option {
+func withPathDirs(kind string) Option {
 	return func(o *loadOptions) {
 		if o.pathDirs == nil {
 			o.pathDirs = map[string][]string{}
 		}
-		o.pathDirs[kind] = dirs
+		o.pathDirs[kind] = nil
 	}
 }
 

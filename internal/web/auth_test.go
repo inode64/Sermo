@@ -69,8 +69,8 @@ func TestVerboseHealthRequiresAuth(t *testing.T) {
 		Readiness: fakeReadiness{rep: ReadyReport{Ready: true, Status: apiStatusOK, Services: 1}},
 	}).Handler()
 	for _, path := range []string{
-		testFlagQuery(routePathLivez, apiQueryVerbose),
-		testFlagQuery(routePathReadyz, apiQueryVerbose),
+		testFlagQuery(routePathLivez),
+		testFlagQuery(routePathReadyz),
 	} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
@@ -94,7 +94,7 @@ func TestReadyzStartingReturns503(t *testing.T) {
 		}},
 	}).Handler()
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testFlagQuery(routePathReadyz, apiQueryVerbose), nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testFlagQuery(routePathReadyz), nil))
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("/readyz starting = %d, want 503", rec.Code)
 	}
@@ -110,7 +110,7 @@ func TestReadyzStartingReturns503(t *testing.T) {
 func TestLivezVerbose(t *testing.T) {
 	h := authServer(Auth{}) // open
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testFlagQuery(routePathLivez, apiQueryVerbose), nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, testFlagQuery(routePathLivez), nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("/livez?verbose = %d, want 200", rec.Code)
 	}
