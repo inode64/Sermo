@@ -154,6 +154,28 @@ test("dashboard passes axe and fits the viewport", async ({ page }) => {
   await expect(page.locator("#target-search")).toBeVisible();
 });
 
+test("section navigation uses two scrollable rows on compact screens", async ({ page }) => {
+  const nav = page.locator("#section-nav");
+  const layout = await nav.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      display: style.display,
+      gridAutoFlow: style.gridAutoFlow,
+      rows: style.gridTemplateRows,
+      overflowX: style.overflowX,
+    };
+  });
+
+  expect(layout.overflowX).toBe("auto");
+  if ((page.viewportSize() || {}).width <= 1024) {
+    expect(layout.display).toBe("grid");
+    expect(layout.gridAutoFlow).toBe("column");
+    expect(layout.rows.split(" ")).toHaveLength(2);
+  } else {
+    expect(layout.display).toBe("flex");
+  }
+});
+
 test("single-choice filters stay hidden", async ({ page }) => {
   for (const selector of ["#svc-category", "#app-category", "#library-category"]) {
     await expect(page.locator(selector)).toBeHidden();
