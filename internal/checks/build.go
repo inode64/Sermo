@@ -524,56 +524,13 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 	if err != nil {
 		return nil, "http check: " + err.Error()
 	}
-	if j, hasJSON := entry[CheckKeyJSON]; hasJSON && j != nil {
-		if _, hasBody := entry[CheckKeyBody]; hasBody {
-			return nil, "http check: body and json are mutually exclusive"
-		}
+	body, contentType, warn := httpRequestBody(entry)
+	if warn != "" {
+		return nil, warn
 	}
-	var body []byte
-	contentType := ""
-	if j, ok := entry[CheckKeyJSON]; ok && j != nil {
-		raw, err := json.Marshal(j)
-		if err != nil {
-			return nil, "http check: invalid json body: " + err.Error()
-		}
-		body, contentType = raw, httpContentTypeJSON
-	} else if s := cfgval.AsString(entry[CheckKeyBody]); s != "" {
-		body = []byte(s)
-	}
-	reqClient := client
-	proxyURL, pwarn := parseProxyURL(entry)
-	if pwarn != "" {
-		return nil, pwarn
-	}
-	if cfgval.Bool(entry[CheckKeyHTTP3]) {
-		// HTTP/3 runs over QUIC (always TLS 1.3) and cannot use an HTTP
-		// forward proxy. The transport never falls back to TCP, so a failure
-		// to reach the endpoint over QUIC fails (alerts) the check.
-		if u, err := url.Parse(rawURL); err != nil || u.Scheme != URLSchemeHTTPS {
-			return nil, "http check: http3 requires an https url"
-		}
-		if proxyURL != nil {
-			return nil, "http check: http3 and proxy are mutually exclusive"
-		}
-		reqClient = &http.Client{Transport: &http3.Transport{}}
-	} else if proxyURL != nil {
-		tr := httpx.CloneDefaultTransport()
-		tr.Proxy = http.ProxyURL(proxyURL)
-		reqClient = &http.Client{Transport: tr}
-	}
-	// interface: egress the HTTP request (and any proxy connection) through a
-	// specific interface by binding the transport's dialer. The http client has
-	// one fixed transport, so it honors a single interface (the first listed).
-	if ifaces := parseInterfaces(entry[CheckKeyInterface]); len(ifaces) > 0 {
-		if cfgval.Bool(entry[CheckKeyHTTP3]) {
-			return nil, "http check: http3 and interface are mutually exclusive"
-		}
-		tr := httpx.CloneDefaultTransport()
-		if proxyURL != nil {
-			tr.Proxy = http.ProxyURL(proxyURL)
-		}
-		tr.DialContext = conn.BindDialer(ifaces[0]).DialContext
-		reqClient = &http.Client{Transport: tr}
+	reqClient, warn := httpRequestClient(rawURL, entry, client)
+	if warn != "" {
+		return nil, warn
 	}
 	expectJSON, warn := parseAssertionMap(entry[CheckKeyExpectJSON], CheckKeyExpectJSON)
 	if warn != "" {
@@ -590,27 +547,12 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 		expect:      expect,
 		expectJSON:  expectJSON,
 	}
-	// expect_body is an {op, value} operator comparison against the trimmed body.
-	if eb, present := entry[CheckKeyExpectBody]; present {
-		bodyMatch, ok := eb.(map[string]any)
-		if !ok {
-			return nil, "http expect_body must be an {op, value} mapping"
-		}
-		op := cfgval.AsString(bodyMatch[CheckKeyOp])
-		if !validCompareOp(op) {
-			return nil, "http expect_body op must be one of " + cfgval.AssertOpSummary
-		}
-		value := cfgval.String(bodyMatch[CheckKeyValue])
-		if err := ValidateAssertionValue(CheckKeyExpectBody, op, value); err != nil {
-			return nil, "http " + err.Error()
-		}
-		hc.bodyOp, hc.bodyValue = op, value
+	if warn := configureHTTPBodyAssertion(hc, entry); warn != "" {
+		return nil, warn
 	}
-	lop, lval, lwarn := parseExpectLatency(entry)
-	if lwarn != "" {
-		return nil, "http " + lwarn
+	if warn := configureHTTPLatency(hc, entry); warn != "" {
+		return nil, warn
 	}
-	hc.latencyOp, hc.latencyValue = lop, lval
 	if warn := configureHTTPCert(hc, entry, rawURL); warn != "" {
 		return nil, warn
 	}
@@ -618,6 +560,97 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 		hc.certClient = httpClientWithRedirectPolicy(hc.certClient, boolWithDefault(entry[CheckKeyFollowRedirects], true))
 	}
 	return hc, ""
+}
+
+func httpRequestBody(entry map[string]any) ([]byte, string, string) {
+	jsonBody, hasJSON := entry[CheckKeyJSON]
+	if hasJSON && jsonBody != nil {
+		if _, hasBody := entry[CheckKeyBody]; hasBody {
+			return nil, "", "http check: body and json are mutually exclusive"
+		}
+		raw, err := json.Marshal(jsonBody)
+		if err != nil {
+			return nil, "", "http check: invalid json body: " + err.Error()
+		}
+		return raw, httpContentTypeJSON, ""
+	}
+	if body := cfgval.AsString(entry[CheckKeyBody]); body != "" {
+		return []byte(body), "", ""
+	}
+	return nil, "", ""
+}
+
+// httpRequestClient configures the per-check transport. HTTP/3 always uses
+// QUIC, while proxy and interface routing use an HTTP transport dialer.
+func httpRequestClient(rawURL string, entry map[string]any, client *http.Client) (*http.Client, string) {
+	proxyURL, warn := parseProxyURL(entry)
+	if warn != "" {
+		return nil, warn
+	}
+	http3Enabled := cfgval.Bool(entry[CheckKeyHTTP3])
+	if http3Enabled {
+		if u, err := url.Parse(rawURL); err != nil || u.Scheme != URLSchemeHTTPS {
+			return nil, "http check: http3 requires an https url"
+		}
+		if proxyURL != nil {
+			return nil, "http check: http3 and proxy are mutually exclusive"
+		}
+		client = &http.Client{Transport: &http3.Transport{}}
+	} else if proxyURL != nil {
+		client = httpClientWithTransport(proxyURL, "")
+	}
+	// interface: egress the HTTP request (and any proxy connection) through a
+	// specific interface by binding the transport's dialer. The http client has
+	// one fixed transport, so it honors a single interface (the first listed).
+	if ifaces := parseInterfaces(entry[CheckKeyInterface]); len(ifaces) > 0 {
+		if http3Enabled {
+			return nil, "http check: http3 and interface are mutually exclusive"
+		}
+		return httpClientWithTransport(proxyURL, ifaces[0]), ""
+	}
+	return client, ""
+}
+
+func httpClientWithTransport(proxyURL *url.URL, iface string) *http.Client {
+	tr := httpx.CloneDefaultTransport()
+	if proxyURL != nil {
+		tr.Proxy = http.ProxyURL(proxyURL)
+	}
+	if iface != "" {
+		tr.DialContext = conn.BindDialer(iface).DialContext
+	}
+	return &http.Client{Transport: tr}
+}
+
+func configureHTTPBodyAssertion(check *httpCheck, entry map[string]any) string {
+	// expect_body is an {op, value} operator comparison against the trimmed body.
+	bodyMatch, present := entry[CheckKeyExpectBody]
+	if !present {
+		return ""
+	}
+	fields, ok := bodyMatch.(map[string]any)
+	if !ok {
+		return "http expect_body must be an {op, value} mapping"
+	}
+	op := cfgval.AsString(fields[CheckKeyOp])
+	if !validCompareOp(op) {
+		return "http expect_body op must be one of " + cfgval.AssertOpSummary
+	}
+	value := cfgval.String(fields[CheckKeyValue])
+	if err := ValidateAssertionValue(CheckKeyExpectBody, op, value); err != nil {
+		return "http " + err.Error()
+	}
+	check.bodyOp, check.bodyValue = op, value
+	return ""
+}
+
+func configureHTTPLatency(check *httpCheck, entry map[string]any) string {
+	op, value, warn := parseExpectLatency(entry)
+	if warn != "" {
+		return "http " + warn
+	}
+	check.latencyOp, check.latencyValue = op, value
+	return ""
 }
 
 func boolWithDefault(v any, def bool) bool {

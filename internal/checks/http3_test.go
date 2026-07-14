@@ -104,6 +104,14 @@ func TestBuildHTTP3Client(t *testing.T) {
 	}, Deps{DefaultTimeout: time.Second}); len(warns) == 0 {
 		t.Fatal("http3 with a proxy should warn")
 	}
+
+	// HTTP/3 bypasses the HTTP transport dialer, so it cannot honor interface
+	// binding that is mandatory for normal protocol probes.
+	if _, warns := Build(map[string]any{
+		"a": map[string]any{"type": "http", "url": "https://example.com/", "http3": true, "interface": "lo"},
+	}, Deps{DefaultTimeout: time.Second}); len(warns) == 0 {
+		t.Fatal("http3 with an interface should warn")
+	}
 }
 
 func TestHTTPProtocolExposed(t *testing.T) {
