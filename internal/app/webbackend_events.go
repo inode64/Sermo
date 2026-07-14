@@ -85,53 +85,85 @@ func (b *WebBackend) EventPage(_ context.Context, query web.EventQuery) web.Even
 	if b.events == nil || query.Limit <= 0 {
 		return web.EventPage{}
 	}
-	out := make([]web.Event, 0, query.Limit)
-	cursor := query.BeforeID
+	scan := newWebEventPageScan(query, b.eventPageCutoff(query))
+	for {
+		batch := b.events.Page(scan.cursor, webEventPageScanSize+1)
+		if len(batch) == 0 {
+			return scan.page(false)
+		}
+		batch, hasRawMore := trimWebEventPageBatch(batch)
+		if page, complete := scan.addBatch(batch, hasRawMore); complete {
+			return page
+		}
+		if scan.scanned >= webEventPageMaxScan && hasRawMore {
+			return scan.page(true)
+		}
+		if !hasRawMore {
+			return scan.page(false)
+		}
+	}
+}
+
+func (b *WebBackend) eventPageCutoff(query web.EventQuery) time.Time {
+	if query.Since <= 0 {
+		return time.Time{}
+	}
 	now := time.Now
 	if b.now != nil {
 		now = b.now
 	}
-	cutoff := time.Time{}
-	if query.Since > 0 {
-		cutoff = now().Add(-query.Since)
+	return now().Add(-query.Since)
+}
+
+func trimWebEventPageBatch(batch []LoggedEvent) ([]LoggedEvent, bool) {
+	if len(batch) <= webEventPageScanSize {
+		return batch, false
 	}
-	scanned := 0
-	for {
-		batch := b.events.Page(cursor, webEventPageScanSize+1)
-		if len(batch) == 0 {
-			return web.EventPage{Events: out}
+	return batch[:webEventPageScanSize], true
+}
+
+type webEventPageScan struct {
+	query   web.EventQuery
+	cutoff  time.Time
+	events  []web.Event
+	cursor  int64
+	scanned int
+}
+
+func newWebEventPageScan(query web.EventQuery, cutoff time.Time) webEventPageScan {
+	return webEventPageScan{
+		query:  query,
+		cutoff: cutoff,
+		events: make([]web.Event, 0, query.Limit),
+		cursor: query.BeforeID,
+	}
+}
+
+func (scan *webEventPageScan) addBatch(batch []LoggedEvent, hasRawMore bool) (web.EventPage, bool) {
+	for i, logged := range batch {
+		scan.scanned++
+		scan.cursor = logged.ID
+		if !scan.cutoff.IsZero() && logged.Time.Before(scan.cutoff) {
+			continue
 		}
-		hasRawMore := len(batch) > webEventPageScanSize
-		if hasRawMore {
-			batch = batch[:webEventPageScanSize]
+		event := loggedEventToWeb(logged)
+		if !webEventMatchesQuery(event, scan.query) {
+			continue
 		}
-		for i, logged := range batch {
-			scanned++
-			cursor = logged.ID
-			if !cutoff.IsZero() && logged.Time.Before(cutoff) {
-				continue
-			}
-			event := loggedEventToWeb(logged)
-			if !webEventMatchesQuery(event, query) {
-				continue
-			}
-			out = append(out, event)
-			if len(out) >= query.Limit {
-				hasMore := i < len(batch)-1 || hasRawMore
-				page := web.EventPage{Events: out, HasMore: hasMore}
-				if hasMore {
-					page.NextBeforeID = cursor
-				}
-				return page
-			}
-		}
-		if scanned >= webEventPageMaxScan && hasRawMore {
-			return web.EventPage{Events: out, NextBeforeID: cursor, HasMore: true}
-		}
-		if !hasRawMore {
-			return web.EventPage{Events: out}
+		scan.events = append(scan.events, event)
+		if len(scan.events) >= scan.query.Limit {
+			return scan.page(i < len(batch)-1 || hasRawMore), true
 		}
 	}
+	return web.EventPage{}, false
+}
+
+func (scan webEventPageScan) page(hasMore bool) web.EventPage {
+	page := web.EventPage{Events: scan.events, HasMore: hasMore}
+	if hasMore {
+		page.NextBeforeID = scan.cursor
+	}
+	return page
 }
 
 func webEventMatchesQuery(event web.Event, query web.EventQuery) bool {
