@@ -140,6 +140,7 @@ linters:
         - argOrder
         - badCall
         - badCond
+        - boolExprSimplify
         - caseOrder
         - dupArg
         - dupBranchBody
@@ -163,6 +164,7 @@ linters:
         - singleCaseSwitch
         - stringXbytes
         - truncateCmp
+        - typeAssertChain
         - typeSwitchVar
         - underef
         - unlambda
