@@ -167,11 +167,16 @@ func run(args []string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	detection, manager, exitCode := detectServiceManager(ctx, cfg, logger)
+	detection, exitCode := detectServiceManager(ctx, cfg, logger)
 	if exitCode != 0 {
 		return exitCode
 	}
 	logger.Debug("service backend detected", logFieldBackend, detection.Backend)
+	manager, err := servicemgr.NewManager(detection.Backend)
+	if err != nil {
+		logger.Error("service manager", logFieldError, err)
+		return 2
+	}
 
 	rt, instanceLock, exitCode := acquireDaemonRuntimeLock(cfg, logger)
 	if exitCode != 0 {
@@ -452,23 +457,18 @@ func acquireDaemonRuntimeLock(cfg *config.Config, logger *slog.Logger) (string, 
 	return runtimeDir, nil, exitAlreadyRunning
 }
 
-func detectServiceManager(ctx context.Context, cfg *config.Config, logger *slog.Logger) (servicemgr.Detection, servicemgr.Manager, int) {
+func detectServiceManager(ctx context.Context, cfg *config.Config, logger *slog.Logger) (servicemgr.Detection, int) {
 	backend, err := servicemgr.ParseBackend(app.EngineString(cfg, config.EngineKeyBackend))
 	if err != nil {
 		logger.Error("backend", logFieldError, err)
-		return servicemgr.Detection{}, nil, 2
+		return servicemgr.Detection{}, 2
 	}
 	detection, err := servicemgr.NewDetector().Detect(ctx, backend)
 	if err != nil {
 		logger.Error("detect backend", logFieldError, err)
-		return servicemgr.Detection{}, nil, 2
+		return servicemgr.Detection{}, 2
 	}
-	manager, err := servicemgr.NewManager(detection.Backend)
-	if err != nil {
-		logger.Error("service manager", logFieldError, err)
-		return servicemgr.Detection{}, nil, 2
-	}
-	return detection, manager, 0
+	return detection, 0
 }
 
 // cliArgs holds the parsed `sermod` command line.
