@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -145,9 +144,21 @@ func (s *ServiceMetricSampler) Series(name string, cur web.ServiceRuntime, since
 	return web.ServiceRuntimeMetrics{
 		Since:   since.String(),
 		Current: cur,
-		CPU:     serviceMetricSeries(metrics.MetricCPU, metrics.MetricUnitPercent, since, samples, func(p serviceMetricSample) (float64, bool) { return p.current.CPU, p.current.HasCPU }),
-		Memory:  serviceMetricSeries(metrics.MetricMemory, metrics.MetricUnitBytes, since, samples, func(p serviceMetricSample) (float64, bool) { return float64(p.current.RSS), p.current.Count > 0 }),
-		IO:      serviceMetricSeries(metrics.MetricIO, metrics.MetricUnitBytesPerSecond, since, samples, func(p serviceMetricSample) (float64, bool) { return p.current.IORate, p.current.IOReady }),
+		CPU: metricSeries(
+			runtimeMetricCheck, metrics.MetricCPU, metrics.MetricUnitPercent, since, samples,
+			func(p serviceMetricSample) time.Time { return p.at },
+			func(p serviceMetricSample) (float64, bool) { return p.current.CPU, p.current.HasCPU },
+		),
+		Memory: metricSeries(
+			runtimeMetricCheck, metrics.MetricMemory, metrics.MetricUnitBytes, since, samples,
+			func(p serviceMetricSample) time.Time { return p.at },
+			func(p serviceMetricSample) (float64, bool) { return float64(p.current.RSS), p.current.Count > 0 },
+		),
+		IO: metricSeries(
+			runtimeMetricCheck, metrics.MetricIO, metrics.MetricUnitBytesPerSecond, since, samples,
+			func(p serviceMetricSample) time.Time { return p.at },
+			func(p serviceMetricSample) (float64, bool) { return p.current.IORate, p.current.IOReady },
+		),
 	}
 }
 
@@ -230,51 +241,6 @@ func serviceSamplesSince(samples []serviceMetricSample, cutoff time.Time) []serv
 		}
 	}
 	return out
-}
-
-func serviceMetricSeries(metric, unit string, since time.Duration, samples []serviceMetricSample, value func(serviceMetricSample) (float64, bool)) web.MetricSeries {
-	byMinute := map[time.Time]*daemonMetricAgg{}
-	var summary daemonMetricAgg
-	for _, sample := range samples {
-		v, ok := value(sample)
-		if !ok {
-			continue
-		}
-		addDaemonMetric(&summary, v)
-		minute := sample.at.UTC().Truncate(metricSeriesBucket)
-		agg := byMinute[minute]
-		if agg == nil {
-			agg = &daemonMetricAgg{}
-			byMinute[minute] = agg
-		}
-		addDaemonMetric(agg, v)
-	}
-
-	keys := make([]time.Time, 0, len(byMinute))
-	for k := range byMinute {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i].Before(keys[j]) })
-
-	points := make([]web.MetricPoint, 0, len(keys))
-	for _, k := range keys {
-		agg := byMinute[k]
-		points = append(points, web.MetricPoint{
-			Start: k.Format(time.RFC3339),
-			N:     agg.n,
-			Avg:   agg.sum / float64(agg.n),
-			Min:   agg.min,
-			Max:   agg.max,
-		})
-	}
-	return web.MetricSeries{
-		Check:   runtimeMetricCheck,
-		Metric:  metric,
-		Since:   since.String(),
-		Unit:    unit,
-		Summary: daemonMetricSummary(summary),
-		Points:  points,
-	}
 }
 
 // ServiceRuntime returns current and historical process-tree metrics for one service.

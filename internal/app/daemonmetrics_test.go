@@ -23,6 +23,12 @@ type fakeDaemonMetricReader struct {
 	clockTick float64
 }
 
+type metricSeriesTestSample struct {
+	at    time.Time
+	value float64
+	ok    bool
+}
+
 func (r *fakeDaemonMetricReader) ProcessCPU(int) (uint64, bool) { return r.cpu, true }
 func (r *fakeDaemonMetricReader) ProcessRSS(int) (uint64, bool) { return r.rss, true }
 func (r *fakeDaemonMetricReader) ProcessIO(int) (uint64, uint64, bool) {
@@ -39,6 +45,37 @@ func (r *fakeDaemonMetricReader) LoadAverages() (float64, float64, float64, bool
 }
 func (r *fakeDaemonMetricReader) NumCPU() int         { return r.numCPU }
 func (r *fakeDaemonMetricReader) ClockTicks() float64 { return r.clockTick }
+
+func TestMetricSeriesAggregatesValidSamplesByMinute(t *testing.T) {
+	base := time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC)
+	series := metricSeries(
+		"test", "custom", "widgets", 2*time.Hour,
+		[]metricSeriesTestSample{
+			{at: base.Add(2 * time.Second), value: 2, ok: true},
+			{at: base.Add(45 * time.Second), value: 4, ok: true},
+			{at: base.Add(time.Minute), value: 8, ok: true},
+			{at: base.Add(2 * time.Minute), value: 16, ok: false},
+		},
+		func(sample metricSeriesTestSample) time.Time { return sample.at },
+		func(sample metricSeriesTestSample) (float64, bool) { return sample.value, sample.ok },
+	)
+
+	if series.Check != "test" || series.Metric != "custom" || series.Unit != "widgets" || series.Since != "2h0m0s" {
+		t.Fatalf("series metadata = %+v", series)
+	}
+	if series.Summary.Count != 3 || series.Summary.Avg != 14.0/3.0 || series.Summary.Min != 2 || series.Summary.Max != 8 {
+		t.Fatalf("series summary = %+v", series.Summary)
+	}
+	if len(series.Points) != 2 {
+		t.Fatalf("series points = %+v, want 2 points", series.Points)
+	}
+	if first := series.Points[0]; first.Start != base.Format(time.RFC3339) || first.N != 2 || first.Avg != 3 || first.Min != 2 || first.Max != 4 {
+		t.Fatalf("first point = %+v", first)
+	}
+	if second := series.Points[1]; second.Start != base.Add(time.Minute).Format(time.RFC3339) || second.N != 1 || second.Avg != 8 || second.Min != 8 || second.Max != 8 {
+		t.Fatalf("second point = %+v", second)
+	}
+}
 
 func TestDaemonMetricSamplerSeries(t *testing.T) {
 	reader := &fakeDaemonMetricReader{
