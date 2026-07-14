@@ -99,6 +99,7 @@ watches:
       query: "SELECT count(*) FROM tblblob"
       op: '>'
       value: ${db_cleanup_record_limit}
+      summary: "Exim callout DB has ${value} records (limit ${check.value}); cleanup age ${db_cleanup_age}"
       optional: true
     then:
       hook:
@@ -119,6 +120,7 @@ watches:
       query: "SELECT count(*) FROM tblblob"
       op: '>'
       value: ${db_cleanup_record_limit}
+      summary: "Exim retry DB has ${value} records (limit ${check.value}); cleanup age ${db_cleanup_age}"
       optional: true
     then:
       hook:
