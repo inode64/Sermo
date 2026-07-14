@@ -1359,8 +1359,8 @@ func TestCatalogPHPFPMVersionedConfigTestUsesConfigFile(t *testing.T) {
 			t.Fatalf("php-fpm config command = %v, want %v", command, want)
 		}
 	}
-	if rules, ok := body["rules"].(map[string]any); ok {
-		if _, ok := rules["restart-if-tcp-failed"]; ok {
+	if ruleEntries, ok := body["rules"].(map[string]any); ok {
+		if _, ok := ruleEntries["restart-if-tcp-failed"]; ok {
 			t.Fatal("php-fpm must not remediate on the optional tcp check by default")
 		}
 	}
@@ -1394,8 +1394,8 @@ func TestCatalogNetworkManagerStatusIsAuxiliary(t *testing.T) {
 	if !slices.Equal(command, want) {
 		t.Fatalf("networkmanager checks.status command = %v, want %v", command, want)
 	}
-	if rules, ok := body["rules"].(map[string]any); ok {
-		if _, ok := rules["restart-if-status-failed"]; ok {
+	if ruleEntries, ok := body["rules"].(map[string]any); ok {
+		if _, ok := ruleEntries["restart-if-status-failed"]; ok {
 			t.Fatal("networkmanager must not remediate on the auxiliary nmcli status check")
 		}
 	}
@@ -2048,8 +2048,8 @@ func TestCatalogConfigInvalidHandledByPreflight(t *testing.T) {
 			if m, ok := cfg.(map[string]any); ok && cfgval.Bool(m["optional"]) {
 				t.Fatalf("%s config preflight must be required (it replaces the removed guard)", name)
 			}
-			if rules, ok := body["rules"].(map[string]any); ok {
-				if _, present := rules["block-restart-if-config-invalid"]; present {
+			if ruleEntries, ok := body["rules"].(map[string]any); ok {
+				if _, present := ruleEntries["block-restart-if-config-invalid"]; present {
 					t.Fatalf("%s still carries the redundant block-restart-if-config-invalid guard", name)
 				}
 			}

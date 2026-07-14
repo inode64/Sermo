@@ -149,6 +149,7 @@ linters:
         - flagDeref
         - httpNoBody
         - ifElseChain
+        - importShadow
         - mapKey
         - newDeref
         - offBy1
