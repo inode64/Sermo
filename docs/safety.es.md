@@ -131,7 +131,7 @@ Dado que el daemon se ejecuta como root:
 - **La interfaz web** (cuando está habilitada) puede start/stop/restart/reload/resume servicios y
   monitor/unmonitor objetivos como root, así que está endurecida por defecto: **se enlaza a
   loopback** (`127.0.0.1`), soporta
-  **autenticación** con un rol de invitado de solo lectura, requiere la cabecera **`X-Sermo-CSRF`**
+  **autenticación** con un rol de invitado de solo lectura, requiere la cabecera **`X-Sermo-Csrf`**
   en cada petición que cambia estado (bloqueando la falsificación entre sitios desde un
   navegador), y establece timeouts HTTP. Habla HTTP plano, así que para alcanzarla desde fuera
   del host **debes** ponerla detrás de un reverse proxy con terminación TLS

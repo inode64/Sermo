@@ -1632,6 +1632,7 @@ func (s *Store) slaTimelines(query string, keyArgs []any, now time.Time) ([]SLAW
 		for rows.Next() {
 			var seg, up, total int64
 			if err := rows.Scan(&seg, &up, &total); err != nil {
+				//nolint:sqlclosecheck // this loop opens rows per SLA window; defer would retain every cursor until return.
 				rows.Close()
 				return nil, fmt.Errorf("scan SLA timeline row for %s: %w", w.Name, err)
 			}

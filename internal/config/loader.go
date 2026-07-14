@@ -151,7 +151,9 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 			return nil, err
 		}
 	}
-	cfg.applyOSSelectors()
+	if err := cfg.applyOSSelectors(); err != nil {
+		return nil, err
+	}
 	cfg.bakeBuiltins()
 	cfg.expandBindir()
 	cfg.materializeVersionTemplates(loadCtx)

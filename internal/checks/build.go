@@ -557,7 +557,7 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 		}
 		reqClient = &http.Client{Transport: &http3.Transport{}}
 	} else if proxyURL != nil {
-		tr := http.DefaultTransport.(*http.Transport).Clone()
+		tr := httpx.CloneDefaultTransport()
 		tr.Proxy = http.ProxyURL(proxyURL)
 		reqClient = &http.Client{Transport: tr}
 	}
@@ -568,7 +568,7 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 		if cfgval.Bool(entry[CheckKeyHTTP3]) {
 			return nil, "http check: http3 and interface are mutually exclusive"
 		}
-		tr := http.DefaultTransport.(*http.Transport).Clone()
+		tr := httpx.CloneDefaultTransport()
 		if proxyURL != nil {
 			tr.Proxy = http.ProxyURL(proxyURL)
 		}
@@ -1606,7 +1606,7 @@ func configureHTTPCert(hc *httpCheck, entry map[string]any, rawURL string) strin
 		}}
 		return ""
 	}
-	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr := httpx.CloneDefaultTransport()
 	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // leaf inspected and verified manually via verifyCertChain
 	if pu, _ := parseProxyURL(entry); pu != nil {
 		tr.Proxy = http.ProxyURL(pu) // cert inspection also goes through the proxy (CONNECT for https)

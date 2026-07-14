@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/httpx"
 	"sermo/internal/netutil"
 	"sermo/internal/units"
 )
@@ -212,7 +213,7 @@ func NewClient(spec Spec) (*Client, error) {
 	if port == 0 {
 		port = DefaultPort
 	}
-	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr := httpx.CloneDefaultTransport()
 	if spec.DialContext != nil {
 		tr.DialContext = spec.DialContext
 	}

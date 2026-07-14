@@ -43,7 +43,7 @@ func (c *Config) resolveService(name string, pruneOptional bool) (Resolved, []st
 		return Resolved{Name: name}, []string{err.Error()}
 	}
 	if pruneOptional {
-		merged = pruneEnableIf(merged, nil).(map[string]any)
+		merged = pruneEnableIfMap(merged, nil)
 	}
 
 	errs := prepareExpansionInputs(merged)
@@ -1297,8 +1297,9 @@ func (c *Config) expandAppsChain(tree map[string]any, chain []string) []string {
 			if checkName == checks.DataKeyVersion {
 				if match, present := resolved.Tree[checks.CheckKeyVersionMatch]; present {
 					if checkMap, ok := check.(map[string]any); ok {
-						check = maps.Clone(checkMap)
-						check.(map[string]any)[checks.CheckKeyVersionMatch] = match
+						checkMap = maps.Clone(checkMap)
+						checkMap[checks.CheckKeyVersionMatch] = match
+						check = checkMap
 					}
 				}
 			}
@@ -1372,7 +1373,7 @@ func (c *Config) resolveDoc(doc *Document, name string) (Resolved, []string) {
 // detect a cyclic apps: linkage instead of recursing into a stack overflow.
 func (c *Config) resolveDocBody(doc *Document, name string, appChain []string) (Resolved, []string) {
 	body := stripMeta(doc.Body)
-	body = pruneEnableIf(body, nil).(map[string]any)
+	body = pruneEnableIfMap(body, nil)
 	errs := prepareExpansionInputs(body)
 	vars, varErrs := c.expansionVariablesForKind(body, name, doc.Kind)
 	errs = append(errs, varErrs...)

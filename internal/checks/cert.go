@@ -428,7 +428,11 @@ func defaultCertSampler(ctx context.Context, host, port, serverName string, veri
 		return CertSample{}, err
 	}
 	defer nc.Close()
-	state := nc.(*tls.Conn).ConnectionState()
+	tlsConn, ok := nc.(*tls.Conn)
+	if !ok {
+		return CertSample{}, fmt.Errorf("TLS dialer returned %T, want *tls.Conn", nc)
+	}
+	state := tlsConn.ConnectionState()
 	if len(state.PeerCertificates) == 0 {
 		return CertSample{}, errors.New("no certificate presented")
 	}

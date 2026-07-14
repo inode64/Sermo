@@ -31,27 +31,7 @@ var (
 func pruneEnableIf(v any, path []string) any {
 	switch t := v.(type) {
 	case map[string]any:
-		out := make(map[string]any, len(t))
-		for k, e := range t {
-			childPath := appendPath(path, k)
-			if child, ok := e.(map[string]any); ok {
-				if spec, has := child[keyEnableIf]; has {
-					if !enableIfAllowedAt(childPath) {
-						out[k] = pruneEnableIf(child, childPath)
-						continue
-					}
-					if !enableIfHolds(spec) {
-						continue // predicate failed: drop the optional branch
-					}
-					child = cloneMap(child)
-					delete(child, keyEnableIf)
-					out[k] = pruneEnableIf(child, childPath)
-					continue
-				}
-			}
-			out[k] = pruneEnableIf(e, childPath)
-		}
-		return out
+		return pruneEnableIfMap(t, path)
 	case []any:
 		for i := range t {
 			t[i] = pruneEnableIf(t[i], path)
@@ -60,6 +40,30 @@ func pruneEnableIf(v any, path []string) any {
 	default:
 		return t
 	}
+}
+
+func pruneEnableIfMap(tree map[string]any, path []string) map[string]any {
+	out := make(map[string]any, len(tree))
+	for key, value := range tree {
+		childPath := appendPath(path, key)
+		if child, ok := value.(map[string]any); ok {
+			if spec, has := child[keyEnableIf]; has {
+				if !enableIfAllowedAt(childPath) {
+					out[key] = pruneEnableIfMap(child, childPath)
+					continue
+				}
+				if !enableIfHolds(spec) {
+					continue // predicate failed: drop the optional branch
+				}
+				child = cloneMap(child)
+				delete(child, keyEnableIf)
+				out[key] = pruneEnableIfMap(child, childPath)
+				continue
+			}
+		}
+		out[key] = pruneEnableIf(value, childPath)
+	}
+	return out
 }
 
 func appendPath(path []string, key string) []string {
