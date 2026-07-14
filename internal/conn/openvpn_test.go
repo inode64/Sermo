@@ -27,12 +27,14 @@ func TestOpenVPNClientReset(t *testing.T) {
 // openvpnServerReply builds a P_CONTROL_HARD_RESET_SERVER_V2 acknowledging the
 // client's reset (ack length 1, echoing the client session id).
 func openvpnServerReply(clientSID []byte) []byte {
-	b := []byte{openvpnHardResetServerV2 << 3}                    // opcode 8, key id 0
-	b = append(b, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7) // server session id
-	b = append(b, 0x01)                                           // ACK array length = 1
-	b = append(b, 0, 0, 0, 0)                                     // acked packet-id = 0
-	b = append(b, clientSID...)                                   // remote session id = client's
-	b = append(b, 0, 0, 0, 0)                                     // server message packet-id = 0
+	b := []byte{openvpnHardResetServerV2 << 3} // opcode 8, key id 0
+	b = append(b,
+		0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7, // server session id
+		0x01,       // ACK array length = 1
+		0, 0, 0, 0, // acked packet-id = 0
+	)
+	b = append(b, clientSID...) // remote session id = client's
+	b = append(b, 0, 0, 0, 0)   // server message packet-id = 0
 	return b
 }
 
