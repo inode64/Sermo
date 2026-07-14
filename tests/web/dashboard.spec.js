@@ -177,7 +177,9 @@ test("storage watches filter by filesystem and sort their own columns", async ({
   await expect(page.locator("#wat-row-storage-data")).toBeHidden();
 
   await filesystem.selectOption("all");
-  await page.locator('[data-watch-type-sort-type="storage"][data-watch-type-sort="usage"]').click();
+  const usage = page.locator('[data-watch-type-sort-type="storage"][data-watch-type-sort="usage"]');
+  await expect(usage).toBeVisible();
+  await usage.click();
   await expect(page.locator('#watch-rows [data-watch-type-sort-type="storage"][data-watch-type-sort="usage"]')).toHaveAttribute("aria-sort", "ascending");
   await expect(page.locator('#watch-rows tr[data-exp-key^="wat:storage"]')).toHaveCount(2);
   await expect(page.locator('#watch-rows tr[data-exp-key^="wat:storage"]').first()).toHaveAttribute("id", "wat-row-storage-data");

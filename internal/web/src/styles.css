@@ -507,9 +507,11 @@
       white-space: normal;
       overflow-wrap: anywhere;
     }
-    /* watches: keep Name and the trailing Last activity · State · Actions. */
+    /* watches: keep Name and the trailing Last activity · State · Actions.
+       Type-specific tables also retain their leading live metric. */
     .watch-table th:not(:first-child):not(:nth-last-child(-n+3)),
     .watch-table td:not(:first-child):not(:nth-last-child(-n+3)) { display: none; }
+    .watch-table.watch-type-table th:nth-child(2), .watch-table.watch-type-table td:nth-child(2) { display: table-cell; }
     /* mount units: hide Refcount first; usage remains visible on tablet widths. */
     .mount-table th:nth-child(5), .mount-table td:nth-child(5) { display: none; }
   }
@@ -535,9 +537,10 @@
     .services-table th:nth-child(9), .services-table td:nth-child(9) { display: none; }
     .services-table td { white-space: normal; }
     .services-table .svc-sub, .services-table .unit-cell, .services-table .event-cell, .apps-table .event-cell { max-width: 60vw; }
-    /* watches -> Name · State · Actions. */
+    /* watches -> Name · State · Actions; typed tables keep their live metric. */
     .watch-table th:not(:first-child):not(:nth-last-child(-n+2)),
     .watch-table td:not(:first-child):not(:nth-last-child(-n+2)) { display: none; }
+    .watch-table.watch-type-table th:nth-child(2), .watch-table.watch-type-table td:nth-child(2) { display: table-cell; }
     /* apps -> Application · Status · Version · Last activity. */
     .apps-table th:nth-child(2), .apps-table td:nth-child(2) { display: none; }
     /* mount units -> Name · Path · Mounted · State · Actions. */
