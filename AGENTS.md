@@ -105,6 +105,16 @@ Do not introduce a second way to express the same concept just because the new
 call site is slightly different. If the new behavior needs a different path,
 document why at the dispatch or validation point.
 
+Treat the user's example, failing test, catalog entry, UI panel, service profile
+or local bug report as evidence of a use case, not as the full scope of the
+change. The use case is the behavior or invariant implied by that example across
+equivalent code paths, target types and user-facing surfaces. After implementing
+a function, type, helper, parser, builder or logic for one example, search for
+the same concept elsewhere and decide whether the behavior should apply there
+too. If it should, extend the existing owner in the same change; if it should
+not, document the limitation at the decision point and, when user-visible, in
+the docs.
+
 When a new check, option, monitor flag, notification behavior or web action is
 generally useful to both host `watches:` and services, implement it for
 both surfaces in the same change unless there is a documented reason not to. If
@@ -384,6 +394,9 @@ Before finishing any code change:
   editing, preserve unrelated user changes, commit only when requested or when
   the task includes committing, and never push unless explicitly asked.
 - Search for the existing owner with `rg` before adding a new helper or switch.
+- Treat the prompt, example or failing fixture as a use-case signal: search for
+  equivalent concepts and surfaces before finishing, and avoid fixing only the
+  literal sample unless the behavior is intentionally sample-specific.
 - Keep the patch close to that owner; avoid unrelated refactors.
 - Preserve public YAML, JSON, CLI and web field names unless the change is
   explicitly a migration.
