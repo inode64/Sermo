@@ -1650,7 +1650,7 @@ func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Ti
 		u += "?" + daemonAPIQueryBefore + "=" + before.Format(time.RFC3339)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, http.NoBody)
 	if err != nil {
 		return 0, fmt.Errorf("build clear events request: %w", err)
 	}
@@ -1701,7 +1701,7 @@ func (a App) fetchEvents(ctx context.Context, opts options, service string, limi
 		u = fmt.Sprintf("%s%s?%s=%d", base, daemonAPIPathEvents, daemonAPIQueryLimit, limit)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("build events request: %w", err)
 	}
@@ -1755,7 +1755,7 @@ func (a App) daemonAPIGet(ctx context.Context, opts options, path string) ([]byt
 	if err != nil {
 		return nil, 0, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+path, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+path, http.NoBody)
 	if err != nil {
 		return nil, 0, fmt.Errorf("build daemon API request for %s: %w", path, err)
 	}

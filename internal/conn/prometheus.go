@@ -69,7 +69,7 @@ func PrometheusClient(cfg Config) (*http.Client, string) {
 // false only when the endpoint is missing/not Prometheus, signalling a /-/healthy
 // fallback.
 func promBuildInfo(ctx context.Context, client *http.Client, base string, cfg Config) (res Result, handled bool, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+promBuildInfoEndpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+promBuildInfoEndpoint, http.NoBody)
 	if err != nil {
 		return Result{}, true, err
 	}
@@ -106,7 +106,7 @@ func promBuildInfo(ctx context.Context, client *http.Client, base string, cfg Co
 
 // promHealthy queries /-/healthy, the always-available liveness endpoint.
 func promHealthy(ctx context.Context, client *http.Client, base string, cfg Config) (Result, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+promHealthyEndpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+promHealthyEndpoint, http.NoBody)
 	if err != nil {
 		return Result{}, err
 	}

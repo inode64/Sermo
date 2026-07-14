@@ -110,7 +110,7 @@ func (a App) probeDaemonWatch(ctx context.Context, opts options, watch string) (
 		return daemonWatchProbe{}, err
 	}
 	path := daemonAPIPathWatches + "/" + url.PathEscape(watch) + "/probe"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+path, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+path, http.NoBody)
 	if err != nil {
 		return daemonWatchProbe{}, fmt.Errorf("build probe request: %w", err)
 	}
