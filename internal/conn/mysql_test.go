@@ -26,8 +26,7 @@ func TestMySQLNoUserOptional(t *testing.T) {
 func buildMySQLHandshake(version string) []byte {
 	payload := []byte{0x0a}
 	payload = append(payload, version...)
-	payload = append(payload, 0)               // null terminator
-	payload = append(payload, 0, 0, 0, 0)      // connection id (unused by the probe)
+	payload = append(payload, 0, 0, 0, 0, 0)   // null terminator plus unused connection id
 	hdr := []byte{byte(len(payload)), 0, 0, 0} // 3-byte LE length + seq id
 	return append(hdr, payload...)
 }

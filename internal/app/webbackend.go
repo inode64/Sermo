@@ -1762,8 +1762,10 @@ func (b *WebBackend) autofsWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 		if slices.Contains(points, path) {
 			pathState = watchReadingStateActive
 		}
-		readings = append(readings, web.WatchReading{Field: checks.DataKeyPath, Label: watchReadingLabelConfiguredPath, Value: path})
-		readings = append(readings, web.WatchReading{Field: watchReadingFieldState, Label: watchReadingLabelState, Value: pathState})
+		readings = append(readings,
+			web.WatchReading{Field: checks.DataKeyPath, Label: watchReadingLabelConfiguredPath, Value: path},
+			web.WatchReading{Field: watchReadingFieldState, Label: watchReadingLabelState, Value: pathState},
+		)
 		return nil, readings, fmt.Sprintf("autofs %s %s (%d mountpoint%s)", path, pathState, len(points), pluralSuffix(len(points), "mountpoint"))
 	}
 	return nil, readings, fmt.Sprintf("%d autofs mountpoint%s active", len(points), pluralSuffix(len(points), "mountpoint"))

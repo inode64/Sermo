@@ -137,6 +137,7 @@ linters:
       disable-all: true
       enabled-checks:
         - appendAssign
+        - appendCombine
         - argOrder
         - badCall
         - badCond
@@ -158,6 +159,7 @@ linters:
         - offBy1
         - rangeAppendAll
         - regexpMust
+        - rangeExprCopy
         - sloppyLen
         - sloppyReassign
         - sloppyTypeAssert
