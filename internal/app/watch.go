@@ -125,25 +125,40 @@ const watchEnvAssignSeparator = "="
 // RunCycle runs the check, advances the window, and fires the hook on a firing
 // cycle. An evaluation/hook error is emitted, never fatal.
 func (w *Watch) RunCycle(ctx context.Context) {
-	settleKey := settlingKeyForWatch(w)
-	if w.IsPaused != nil && w.IsPaused() {
-		if w.Settling != nil && !w.Settling.Observed(settleKey) {
-			w.markSettled()
-		}
+	observeOnly, skip := w.prepareCycle()
+	if skip {
 		return
 	}
-	observeOnly := w.Settling != nil && !w.Settling.Observed(settleKey)
 	if w.Cycle != nil {
-		w.Cycle(withObserveOnly(ctx, observeOnly))
-		if observeOnly {
-			w.markSettled()
-		}
+		w.runCustomCycle(ctx, observeOnly)
 		return
 	}
 	w.loadRuntimeState()
 	defer w.persistRuntimeState()
 	res := w.Check.Run(ctx)
 	w.publish(res)
+	w.runCheckCycle(ctx, res, observeOnly)
+}
+
+func (w *Watch) prepareCycle() (observeOnly, skip bool) {
+	settleKey := settlingKeyForWatch(w)
+	if w.IsPaused != nil && w.IsPaused() {
+		if w.Settling != nil && !w.Settling.Observed(settleKey) {
+			w.markSettled()
+		}
+		return false, true
+	}
+	return w.Settling != nil && !w.Settling.Observed(settleKey), false
+}
+
+func (w *Watch) runCustomCycle(ctx context.Context, observeOnly bool) {
+	w.Cycle(withObserveOnly(ctx, observeOnly))
+	if observeOnly {
+		w.markSettled()
+	}
+}
+
+func (w *Watch) runCheckCycle(ctx context.Context, res checks.Result, observeOnly bool) {
 	if observeOnly {
 		w.reconcileRestoredEpisode(res)
 		w.markSettled()
@@ -151,21 +166,37 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	}
 	w.dispatchRaidTransitions(ctx, res)
 	w.dispatchLVMTransition(ctx, res)
+	wasFiring, emitFiring, firing := w.evaluateFiring(res)
+	if !firing {
+		return
+	}
+	w.dispatchFiringActions(ctx, res, wasFiring, emitFiring)
+}
+
+func (w *Watch) evaluateFiring(res checks.Result) (wasFiring, emitFiring, firing bool) {
 	fired := res.OK
 	if w.FireOnFail {
 		fired = !res.OK
 	}
 	if !w.state.FiresAt(w.Window, fired, w.clock()) {
-		if w.firing {
-			w.firing = false
-			w.lastNotifyAt = time.Time{}
-			w.emit(Event{Watch: w.Name, Kind: eventKindRecovered, Message: res.Message})
-		}
+		w.recover(res)
+		return false, false, false
+	}
+	wasFiring = w.firing
+	w.firing = true
+	return wasFiring, w.shouldEmitFiring(wasFiring), true
+}
+
+func (w *Watch) recover(res checks.Result) {
+	if !w.firing {
 		return
 	}
-	wasFiring := w.firing
-	w.firing = true
-	emitFiring := w.shouldEmitFiring(wasFiring)
+	w.firing = false
+	w.lastNotifyAt = time.Time{}
+	w.emit(Event{Watch: w.Name, Kind: eventKindRecovered, Message: res.Message})
+}
+
+func (w *Watch) dispatchFiringActions(ctx context.Context, res checks.Result, wasFiring, emitFiring bool) {
 	if emitFiring {
 		w.emit(Event{Watch: w.Name, Kind: eventKindFiring, Message: res.Message, Output: resultOutput(res)})
 	}
@@ -189,6 +220,13 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	if w.Expand != nil && w.Expander != nil {
 		w.runExpand(ctx, res, emitFiring)
 	}
+	w.runHook(ctx, res, env)
+	if len(w.RaidNotifyEvents) == 0 && !w.LVMNotifyOnChange && w.shouldNotify(wasFiring) {
+		dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
+	}
+}
+
+func (w *Watch) runHook(ctx context.Context, res checks.Result, env map[string]string) {
 	if len(w.Hook.Command) > 0 {
 		runner := defaultHookRunner(w.Runner)
 		if err := w.Hook.Run(ctx, runner, env); err != nil {
@@ -196,9 +234,6 @@ func (w *Watch) RunCycle(ctx context.Context) {
 		} else {
 			w.emit(Event{Watch: w.Name, Kind: eventKindHook, Message: res.Message})
 		}
-	}
-	if len(w.RaidNotifyEvents) == 0 && !w.LVMNotifyOnChange && w.shouldNotify(wasFiring) {
-		dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
 	}
 }
 
