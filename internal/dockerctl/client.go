@@ -347,7 +347,7 @@ func (c *Client) Unpause(ctx context.Context, container string) error {
 func (c *Client) get(ctx context.Context, path string, out any) error {
 	ctx, cancel := ensureDeadline(ctx)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.Base+path, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.Base+path, http.NoBody)
 	if err != nil {
 		return err
 	}

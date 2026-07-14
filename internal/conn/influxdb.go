@@ -70,7 +70,7 @@ func InfluxClient(cfg Config) (*http.Client, string) {
 // transport error, or a recognised InfluxDB health JSON); it is false only when
 // the endpoint is missing/not InfluxDB, signalling a /ping fallback.
 func influxHealth(ctx context.Context, client *http.Client, base string) (res Result, handled bool, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+influxHealthEndpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+influxHealthEndpoint, http.NoBody)
 	if err != nil {
 		return Result{}, true, err
 	}
@@ -103,7 +103,7 @@ func influxHealth(ctx context.Context, client *http.Client, base string) (res Re
 // influxPing queries /ping, the universal liveness endpoint; the version is in
 // the X-Influxdb-Version response header.
 func influxPing(ctx context.Context, client *http.Client, base string) (Result, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+influxPingEndpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+influxPingEndpoint, http.NoBody)
 	if err != nil {
 		return Result{}, err
 	}

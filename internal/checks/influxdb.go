@@ -96,7 +96,7 @@ func (c influxCheck) queryScalar(ctx context.Context, client *http.Client, base 
 // influxqlScalar runs the InfluxQL query over the 1.x GET /query API.
 func (c influxCheck) influxqlScalar(ctx context.Context, client *http.Client, base string) (string, bool, error) {
 	q := url.Values{"db": {c.database}, "q": {c.query}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+influxQLQueryPath+"?"+q.Encode(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+influxQLQueryPath+"?"+q.Encode(), http.NoBody)
 	if err != nil {
 		return "", false, err
 	}

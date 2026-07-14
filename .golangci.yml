@@ -136,15 +136,20 @@ linters:
         - dupBranchBody
         - dupCase
         - dupSubExpr
+        - exitAfterDefer
         - flagDeref
+        - httpNoBody
         - mapKey
         - newDeref
+        - offBy1
         - regexpMust
         - sloppyLen
         - sloppyTypeAssert
         - typeSwitchVar
         - underef
         - unlambda
+        - unnecessaryDefer
+        - unslice
         - weakCond
     misspell:
       # Eclipse Mosquitto — real MQTT broker name in catalog/tests.
@@ -189,6 +194,11 @@ linters:
       # wizard answers — not prose typos.
       - linters: [dupword]
         path: _test\.go
+      # Test request fixtures deliberately use nil for an absent body; production
+      # requests use http.NoBody so the request metadata stays explicit.
+      - linters: [gocritic]
+        path: _test\.go
+        text: httpNoBody
       # Dashboard API surface; splitting would fragment the web backend contract.
       - linters: [interfacebloat]
         path: internal/web/server\.go

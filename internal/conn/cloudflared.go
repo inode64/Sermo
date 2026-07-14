@@ -27,7 +27,7 @@ const (
 
 func (cloudflaredProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	client, base := cloudflaredClient(cfg)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+cloudflaredMetricsEndpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+cloudflaredMetricsEndpoint, http.NoBody)
 	if err != nil {
 		return Result{}, err
 	}
