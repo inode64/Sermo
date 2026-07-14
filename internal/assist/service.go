@@ -23,6 +23,11 @@ const serviceConfigWatchInterval = "60m"
 const serviceConfigWatchName = "config-files"
 const serviceStatusWatchName = AssistantNameService
 
+type pendingService struct {
+	name string
+	body map[string]any
+}
+
 func (serviceAssistant) Name() string { return AssistantNameService }
 func (serviceAssistant) Title() string {
 	return "Monitor a system service (apache, nginx, mysql, …)"
@@ -47,73 +52,61 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		return Result{}, errors.New("no active services were detected on this host")
 	}
 
-	// Per-service properties first. Catalog services inherit PID/process
-	// detection from their catalog service profile, while generic services still need a
-	// local PID source because they have no catalog owner. The shared
-	// monitor-state + interval + dry-run mode come after, batched.
-	type pending struct {
-		name string
-		body map[string]any
-	}
 	services := map[string]any{}
-	addGroup := func(cands []ServiceCandidate, question string, allowNone bool) {
-		if len(cands) == 0 {
-			return
-		}
-		selected := chooseServices(p, question, cands, allowNone)
-		if len(selected) == 0 {
-			return
-		}
-		reviewPorts := len(selected) == 1
-		if len(selected) > 1 && groupHasPortDefaults(selected) {
-			reviewPorts = p.Confirm("Review per-service port overrides?", false)
-		}
-		var items []pending
-		for _, c := range selected {
-			name, body := askServiceProps(p, env, c, reviewPorts)
-			if name != "" {
-				items = append(items, pending{name, body})
-			}
-		}
-		if len(items) == 0 {
-			return
-		}
-
-		// Batch: when more than one service was selected, offer to answer the shared
-		// service questions once and apply them to all (docs/wizards.md step 4).
-		var shared *serviceSettings
-		if len(items) > 1 && p.Confirm("Apply the same monitor state, interval and dry-run mode to all selected services?", true) {
-			s := askServiceSettings(p, "all selected services")
-			shared = &s
-		}
-
-		for _, it := range items {
-			s := shared
-			if s == nil {
-				ss := askServiceSettings(p, it.name)
-				s = &ss
-			}
-			s.apply(it.body)
-			services[it.name] = it.body
-		}
-	}
 
 	if len(activeCatalog) > 0 {
-		addGroup(activeCatalog, "Which active catalog services do you want to monitor?", false)
+		addServiceGroup(p, env, services, activeCatalog, "Which active catalog services do you want to monitor?", false)
 	} else {
 		p.printf("No active catalog services were detected.\n\n")
 	}
 	if len(generic) > 0 && p.Confirm("Review active services without catalog profiles?", false) {
-		addGroup(generic, "Which uncataloged active services do you want to monitor?", true)
+		addServiceGroup(p, env, services, generic, "Which uncataloged active services do you want to monitor?", true)
 	}
-	if len(services) == 0 {
-		return Result{}, nil
-	}
+	return controlledResult(services)
+}
 
-	return Result{
-		Services: services,
-		Summary:  resultSummary(AssistantNameService, services),
-	}, nil
+// addServiceGroup gathers the per-service properties before asking about shared
+// monitoring settings, so services already present in the configuration are
+// skipped without consuming further wizard answers.
+func addServiceGroup(p *Prompt, env Env, services map[string]any, cands []ServiceCandidate, question string, allowNone bool) {
+	selected := chooseServices(p, question, cands, allowNone)
+	items := pendingServiceItems(p, env, selected)
+	applyPendingServiceSettings(p, items, services)
+}
+
+func pendingServiceItems(p *Prompt, env Env, selected []ServiceCandidate) []pendingService {
+	if len(selected) == 0 {
+		return nil
+	}
+	reviewPorts := len(selected) == 1
+	if len(selected) > 1 && groupHasPortDefaults(selected) {
+		reviewPorts = p.Confirm("Review per-service port overrides?", false)
+	}
+	items := make([]pendingService, 0, len(selected))
+	for _, candidate := range selected {
+		name, body := askServiceProps(p, env, candidate, reviewPorts)
+		if name != "" {
+			items = append(items, pendingService{name, body})
+		}
+	}
+	return items
+}
+
+func applyPendingServiceSettings(p *Prompt, items []pendingService, services map[string]any) {
+	names := make([]string, len(items))
+	for i, item := range items {
+		names[i] = item.name
+	}
+	applyControlledSettings(p, names, func(name string, settings serviceSettings) {
+		for _, item := range items {
+			if item.name != name {
+				continue
+			}
+			settings.apply(item.body)
+			services[name] = item.body
+			return
+		}
+	})
 }
 
 type serviceSettings struct {
