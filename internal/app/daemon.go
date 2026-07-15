@@ -489,7 +489,6 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	}
 	every, warnings := checkIntervals(tree, resolution)
 
-	cache := map[string]checks.Result{}
 	recordMeasurement := measurementRecorder(deps, name, tree)
 	section, _ := tree[config.SectionChecks].(map[string]any)
 	built, checkWarnings, setCycleMetrics := buildWorkerCheckSet(section, checkDeps, sampleMetrics != nil)
@@ -538,7 +537,29 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		appVersions:     map[string]string{},
 		appVersionsLast: map[string]string{},
 	}
-	worker.Checks = func(ctx context.Context, d checks.Deps) map[string]checks.Result {
+	worker.Checks = workerCheckRunner(worker, built, every, maxParallel, recordMeasurement, setCycleMetrics)
+	watchDeps := serviceWatchCheckDeps(checkDeps, discoverer, selectors)
+	newMetricSource := watchMetricSourceFactory(name, discoverer, selectors, deps.SystemFreshness)
+	watches, watchWarnings := serviceWatches(name, tree, watchDeps, newMetricSource, deps, resolution)
+	warnings = append(warnings, watchWarnings...)
+	return worker, watches, warnings
+}
+
+// workerCheckRunner returns the worker's per-cycle check runner. Each cycle it
+// runs the checks due (per-check intervals skip cycles; skipped checks reuse
+// the cached result so the cache stays complete), then any gate-triggered
+// extras, recording measurements as results land.
+func workerCheckRunner(worker *Worker, built []checks.Built, every map[string]int, maxParallel int, recordMeasurement func(checks.Result), setCycleMetrics func(checks.MetricReader)) func(context.Context, checks.Deps) map[string]checks.Result {
+	cache := map[string]checks.Result{}
+	runAndCache := func(ctx context.Context, due []checks.Built) {
+		for _, r := range checks.Run(ctx, due, maxParallel) {
+			cache[r.Check] = r
+			if recordMeasurement != nil {
+				recordMeasurement(r)
+			}
+		}
+	}
+	return func(ctx context.Context, d checks.Deps) map[string]checks.Result {
 		setCycleMetrics(d.Metrics)
 		due := dueChecks(worker.cycle, built, every, cache)
 		ran := make(map[string]bool, len(due))
@@ -546,30 +567,15 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 			ran[b.Check.Name()] = true
 		}
 		worker.cycleRan = ran
-		for _, r := range checks.Run(ctx, due, maxParallel) {
-			cache[r.Check] = r
-			if recordMeasurement != nil {
-				recordMeasurement(r)
-			}
-		}
+		runAndCache(ctx, due)
 		extra := worker.gatedChecksDue(built, cache)
 		for _, b := range extra {
 			ran[b.Check.Name()] = true
 		}
 		worker.cycleRan = ran
-		for _, r := range checks.Run(ctx, extra, maxParallel) {
-			cache[r.Check] = r
-			if recordMeasurement != nil {
-				recordMeasurement(r)
-			}
-		}
+		runAndCache(ctx, extra)
 		return cache
 	}
-	watchDeps := serviceWatchCheckDeps(checkDeps, discoverer, selectors)
-	newMetricSource := watchMetricSourceFactory(name, discoverer, selectors, deps.SystemFreshness)
-	watches, watchWarnings := serviceWatches(name, tree, watchDeps, newMetricSource, deps, resolution)
-	warnings = append(warnings, watchWarnings...)
-	return worker, watches, warnings
 }
 
 // serviceWatchCheckDeps derives the check deps a service's embedded watches use

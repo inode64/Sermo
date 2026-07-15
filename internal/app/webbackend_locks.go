@@ -1,10 +1,13 @@
 package app
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"sermo/internal/config"
 	"sermo/internal/locks"
+	"sermo/internal/web"
 )
 
 // lockProcProber answers lock-owner liveness for the web backend's lock views.
@@ -86,4 +89,129 @@ func (b *WebBackend) lockReportsByService() map[string]locks.Report {
 		return nil
 	}
 	return reports
+}
+
+// Locks returns the active and stale runtime locks across services.
+func (b *WebBackend) Locks(_ context.Context) []web.Lock {
+	var out []web.Lock
+	now := time.Now()
+	reports := b.lockReportsByService()
+	for _, name := range b.order {
+		e := b.entries[name]
+		if e == nil || e.disabled {
+			continue
+		}
+		report := reports[name]
+		for i := range report.Locks {
+			out = append(out, lockToWebAt(report.Locks[i], name, now))
+		}
+	}
+	return out
+}
+
+// ReleaseLock explicitly removes a stale or expired named runtime lock. Active
+// locks continue to block service actions until their owner releases them or the
+// TTL/staleness rules make them inactive.
+func (b *WebBackend) ReleaseLock(_ context.Context, service, name string) web.ActionResult {
+	if _, ok := b.entries[service]; !ok {
+		msg := unknownServiceMessage + service
+		b.emitLockReleaseEvent(service, name, eventKindError, eventStatusFailed, msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	if b.cfg == nil {
+		msg := "runtime locks are unavailable"
+		b.emitLockReleaseEvent(service, name, eventKindError, eventStatusFailed, msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	locker := locks.NewNamedLocker(locks.RuntimeLocksDir(b.cfg.Global.RuntimeDir()))
+	locker.Proc = lockProcProber
+	lk, err := locker.ReleaseInactive(service, name)
+	if err != nil {
+		msg := err.Error()
+		if lk.State == locks.StateActive {
+			b.emitLockReleaseEvent(service, name, eventKindSuppressed, eventStatusBlocked, msg)
+		} else {
+			b.emitLockReleaseEvent(service, name, eventKindError, eventStatusFailed, msg)
+		}
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	id := service
+	if name != "" {
+		id += "." + name
+	}
+	msg := "released inactive runtime lock " + id
+	b.emitLockReleaseEvent(service, name, eventKindAction, eventStatusOK, msg)
+	return web.ActionResult{OK: true, Message: msg}
+}
+
+func (b *WebBackend) emitLockReleaseEvent(service, name, kind, status, message string) {
+	if b.emit == nil {
+		return
+	}
+	rule := name
+	if rule == "" {
+		rule = lockReleaseDefaultRule
+	}
+	b.emit(Event{
+		Service: service,
+		Kind:    kind,
+		Rule:    rule,
+		Action:  eventActionReleaseLock,
+		Status:  status,
+		Message: message,
+	})
+}
+
+// attachLiveCPU folds the per-cycle live CPU sample into a service's detail: the
+// per-process single-core rate onto each Process, and the whole-machine /
+// single-core aggregates onto ProcessTotals. No-op when no sample exists yet
+// (CPU stays unset and the UI shows "measuring"). aggregateProcesses can't
+// compute these — a CPU rate needs two samples over time, which the live
+func lockToWeb(lk locks.Lock, service string) web.Lock {
+	return lockToWebAt(lk, service, time.Now())
+}
+
+func lockToWebAt(lk locks.Lock, service string, now time.Time) web.Lock {
+	w := web.Lock{
+		Service:     service,
+		Name:        lk.Name,
+		Reason:      lk.Reason,
+		State:       string(lk.State),
+		OwnerPID:    lk.OwnerPID,
+		OwnerStatus: lockOwnerStatus(lk),
+		StaleReason: lk.StaleReason,
+		Releaseable: lk.State == locks.StateExpired || lk.State == locks.StateStale,
+	}
+	if lk.State == locks.StateActive {
+		w.BlockedActions = serviceOperationActionList()
+	}
+	if !lk.CreatedAt.IsZero() {
+		w.CreatedAt = lk.CreatedAt.UTC().Format(time.RFC3339)
+		if now.After(lk.CreatedAt) {
+			w.CreatedAgeSeconds = int64(now.Sub(lk.CreatedAt).Seconds())
+		}
+	}
+	if !lk.ExpiresAt.IsZero() {
+		w.ExpiresAt = lk.ExpiresAt.UTC().Format(time.RFC3339)
+		if lk.ExpiresAt.After(now) {
+			w.TTLRemainingSeconds = int64(lk.ExpiresAt.Sub(now).Seconds())
+		}
+	}
+	return w
+}
+
+func lockOwnerStatus(lk locks.Lock) string {
+	if lk.OwnerPID <= 0 {
+		return watchReadingValueNone
+	}
+	switch lk.State {
+	case locks.StateActive:
+		return lockOwnerStatusLive
+	case locks.StateStale:
+		return string(locks.StateStale)
+	case locks.StateExpired:
+		return string(locks.StateExpired)
+	default:
+		return string(lk.State)
+	}
 }

@@ -95,14 +95,8 @@ func (m *Monitor) Reload(ctx context.Context) {
 		m.emitReloadError("monitor is not running")
 		return
 	}
-
-	newCfg, err := config.Load(m.ConfigPath, config.WithLoadContext(ctx)) //nolint:contextcheck // WithLoadContext binds ctx for service-unit discovery
-	if err != nil {
-		m.emitReloadError(fmt.Sprintf("load config: %v", err))
-		return
-	}
-	if issues := config.Validate(newCfg); len(issues) > 0 {
-		m.emitReloadError("config invalid: " + formatValidationIssues(issues))
+	newCfg := m.loadReloadConfig(ctx)
+	if newCfg == nil {
 		return
 	}
 
@@ -119,17 +113,7 @@ func (m *Monitor) Reload(ctx context.Context) {
 	prevCfg := m.cfg
 	prevDeps := m.deps
 
-	m.applyConfig(newCfg)
-	if m.deps.ArtifactSamples == nil {
-		m.deps.ArtifactSamples = NewArtifactSamples()
-	}
-
-	reloadDeps := m.deps
-	workers, svcWatches, warnings := BuildWorkers(ctx, newCfg, reloadDeps, m.collector)
-	watches, watchWarnings := BuildWatches(newCfg, m.deps, m.deps.Interval)
-	hostWatches := len(watches)
-	watches = append(watches, svcWatches...)
-	watches = append(watches, BuildArtifactWatches(ctx, newCfg, reloadDeps)...)
+	workers, watches, hostWatches, warnings := m.buildGenerationLocked(ctx, newCfg)
 	if len(workers) == 0 && hostWatches == 0 && !HasConfiguredTargets(newCfg) {
 		// Rollback: restore previous generation and restart it (we stopped above).
 		m.cfg = prevCfg
@@ -145,6 +129,45 @@ func (m *Monitor) Reload(ctx context.Context) {
 	applyWatchState(watches, savedWatches)
 	resetRemovedServiceMetrics(m.collector, oldWorkers, workers)
 
+	m.installGenerationLocked(ctx, newCfg, workers, watches, warnings)
+}
+
+// loadReloadConfig loads and validates the config for a reload, emitting a
+// reload error and returning nil when the current generation must keep running.
+func (m *Monitor) loadReloadConfig(ctx context.Context) *config.Config {
+	newCfg, err := config.Load(m.ConfigPath, config.WithLoadContext(ctx)) //nolint:contextcheck // WithLoadContext binds ctx for service-unit discovery
+	if err != nil {
+		m.emitReloadError(fmt.Sprintf("load config: %v", err))
+		return nil
+	}
+	if issues := config.Validate(newCfg); len(issues) > 0 {
+		m.emitReloadError("config invalid: " + formatValidationIssues(issues))
+		return nil
+	}
+	return newCfg
+}
+
+// buildGenerationLocked applies the new config to the monitor's deps and builds
+// the replacement workers and watches. hostWatches counts only the host-scoped
+// watches, which the empty-fleet rollback check inspects separately.
+func (m *Monitor) buildGenerationLocked(ctx context.Context, newCfg *config.Config) (workers []*Worker, watches []*Watch, hostWatches int, warnings []string) {
+	m.applyConfig(newCfg)
+	if m.deps.ArtifactSamples == nil {
+		m.deps.ArtifactSamples = NewArtifactSamples()
+	}
+
+	reloadDeps := m.deps
+	workers, svcWatches, warnings := BuildWorkers(ctx, newCfg, reloadDeps, m.collector)
+	watches, watchWarnings := BuildWatches(newCfg, m.deps, m.deps.Interval)
+	hostWatches = len(watches)
+	watches = append(watches, svcWatches...)
+	watches = append(watches, BuildArtifactWatches(ctx, newCfg, reloadDeps)...)
+	return workers, watches, hostWatches, append(warnings, watchWarnings...)
+}
+
+// installGenerationLocked swaps in the already-built generation, propagates the
+// reload to the web backend, starts the schedulers, and reports the outcome.
+func (m *Monitor) installGenerationLocked(ctx context.Context, newCfg *config.Config, workers []*Worker, watches []*Watch, warnings []string) {
 	m.cfg = newCfg
 	m.workers = workers
 	m.watches = watches
@@ -152,13 +175,11 @@ func (m *Monitor) Reload(ctx context.Context) {
 		m.readiness.UpdateCounts(len(workers), len(watches))
 	}
 	if m.web != nil {
-		if warns := m.web.Reload(ctx, newCfg, reloadDeps); len(warns) > 0 {
-			for _, w := range warns {
-				m.Logger.Warn("reload web backend", monitorLogFieldWarning, w)
-			}
+		for _, w := range m.web.Reload(ctx, newCfg, m.deps) {
+			m.Logger.Warn("reload web backend", monitorLogFieldWarning, w)
 		}
 	}
-	for _, w := range append(warnings, watchWarnings...) {
+	for _, w := range warnings {
 		m.Logger.Warn("reload build", monitorLogFieldWarning, w)
 	}
 
