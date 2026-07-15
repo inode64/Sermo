@@ -2347,42 +2347,6 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 // single-core aggregates onto ProcessTotals. No-op when no sample exists yet
 // (CPU stays unset and the UI shows "measuring"). aggregateProcesses can't
 // compute these — a CPU rate needs two samples over time, which the live
-// collector tracks; a one-shot /proc read cannot.
-func attachLiveCPU(d *web.Detail, live *LiveMetrics, service string) {
-	if live == nil {
-		return
-	}
-	sl, ok := live.Get(service)
-	if !ok {
-		return
-	}
-	if sl.PerProcCPU != nil {
-		for i := range d.Processes {
-			if pct, ok := sl.PerProcCPU[d.Processes[i].PID]; ok {
-				d.Processes[i].CPU = pct
-				d.Processes[i].HasCPU = true
-			}
-		}
-	}
-	attachLiveTotals(d.ProcessTotals, live, service)
-}
-
-func attachLiveTotals(totals *web.ProcessTotals, live *LiveMetrics, service string) {
-	if totals == nil || live == nil {
-		return
-	}
-	sl, ok := live.Get(service)
-	if !ok {
-		return
-	}
-	totals.NumCPU = sl.NumCPU
-	if sl.CPUReady {
-		totals.CPU = sl.CPU
-		totals.CPUThread = sl.CPUThread
-		totals.HasCPU = true
-	}
-}
-
 func lockToWeb(lk locks.Lock, service string) web.Lock {
 	return lockToWebAt(lk, service, time.Now())
 }
