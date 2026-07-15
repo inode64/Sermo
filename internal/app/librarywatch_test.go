@@ -278,3 +278,63 @@ func TestBuildArtifactWatchesSamplesChangedMissingApp(t *testing.T) {
 		t.Fatalf("missing app sample = sampled:%t status:%q, want true %q", sampled, status, appinspect.StatusNotInstalled)
 	}
 }
+
+func TestBuildArtifactPathWatchesSampleSilently(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "demo.conf")
+	if err := os.WriteFile(path, []byte("first"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		ServiceNames: []string{"web"},
+		Services: map[string]*config.Document{
+			"web": {Name: "web", Kind: config.CategoryService, Body: map[string]any{
+				"service": "web",
+				"rules": map[string]any{
+					"restart-after-config-change": map[string]any{
+						rules.RuleFieldIf: map[string]any{rules.ConditionChanged: map[string]any{rules.FieldPath: path}},
+					},
+				},
+			}},
+		},
+	}
+	samples := NewArtifactSamples()
+	var events []Event
+	watches := BuildArtifactWatches(t.Context(), cfg, Deps{
+		ArtifactSamples: samples,
+		Emit:            func(event Event) { events = append(events, event) },
+	})
+	name := artifactWatchNamePrefix + path
+	var sampler *Watch
+	for _, watch := range watches {
+		if watch.Name == name {
+			sampler = watch
+			break
+		}
+	}
+	if sampler == nil || sampler.Cycle == nil || sampler.Check != nil {
+		t.Fatalf("artifact path sampler = %+v, want a custom sampling cycle", sampler)
+	}
+
+	sampler.RunCycle(context.Background())
+	if _, tracked, sampled := samples.FileFingerprint(path); !tracked || !sampled {
+		t.Fatalf("artifact path sample = tracked:%t sampled:%t, want true true", tracked, sampled)
+	}
+	if len(events) != 0 {
+		t.Fatalf("artifact path sampler must not emit events, got %+v", events)
+	}
+
+	baseline := map[string]string{}
+	if changed, err := artifactPathChanged(baseline, path, samples); err != nil || changed {
+		t.Fatalf("first artifact sample = changed:%t err:%v, want false nil", changed, err)
+	}
+	if err := os.WriteFile(path, []byte("updated"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sampler.RunCycle(context.Background())
+	if changed, err := artifactPathChanged(baseline, path, samples); err != nil || !changed {
+		t.Fatalf("updated artifact sample = changed:%t err:%v, want true nil", changed, err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("artifact path sampler must remain silent after a change, got %+v", events)
+	}
+}
