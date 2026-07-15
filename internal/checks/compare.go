@@ -267,3 +267,39 @@ func ValidateAssertionValue(label, op, value string) error {
 	}
 	return nil
 }
+
+// parseAssertionMap reads a field -> value/{op,value} mapping into ordered
+// assertions. It is shared by HTTP JSON checks and connection-protocol checks.
+func parseAssertionMap(v any, field string) ([]jsonAssertion, string) {
+	if v == nil {
+		return nil, ""
+	}
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil, field + " must be a mapping"
+	}
+	if len(m) == 0 {
+		return nil, ""
+	}
+	out := make([]jsonAssertion, 0, len(m))
+	for _, path := range slices.Sorted(maps.Keys(m)) {
+		raw := m[path]
+		if cond, ok := raw.(map[string]any); ok {
+			op := cfgval.AsString(cond[CheckKeyOp])
+			if op == "" {
+				op = cfgval.CompareOpEqual
+			}
+			if !validCompareOp(op) {
+				return nil, fmt.Sprintf("%s.%s op must be one of %s", field, path, cfgval.AssertOpSummary)
+			}
+			value := cfgval.String(cond[CheckKeyValue])
+			if err := ValidateAssertionValue(field+"."+path, op, value); err != nil {
+				return nil, err.Error()
+			}
+			out = append(out, jsonAssertion{path: path, op: op, value: value})
+			continue
+		}
+		out = append(out, jsonAssertion{path: path, op: cfgval.CompareOpEqual, value: cfgval.String(raw)})
+	}
+	return out, ""
+}
