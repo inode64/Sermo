@@ -452,29 +452,6 @@ func buildSqliteCheck(b base, entry map[string]any) (Check, string) {
 	return sqliteCheck{base: b, path: path, quick: cfgval.Bool(entry[CheckKeyQuick])}, ""
 }
 
-// buildSwapCheck builds a swap usage or io check.
-func buildSwapCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	metric := cfgval.AsString(entry[CheckKeyMetric])
-	c := &swapCheck{base: b, metric: metric, sampler: deps.SwapSampler}
-	switch metric {
-	case SwapMetricUsage:
-		preds, errs := requireLevelPreds(entry, SwapUsageFields, "swap usage")
-		if errs != "" {
-			return nil, errs
-		}
-		c.preds = preds
-	case SwapMetricIO:
-		op, v, errs := parseDeltaThreshold(entry[CheckKeyDelta], "swap io")
-		if errs != "" {
-			return nil, errs
-		}
-		c.op, c.value = op, v
-	default:
-		return nil, "swap check metric must be " + SwapMetricSummary
-	}
-	return c, ""
-}
-
 // BuildInline builds a single check from an inline entry (type + fields), used
 // by inline rule conditions. It returns an error rather than a
 // warning so the caller can surface a malformed inline probe.
