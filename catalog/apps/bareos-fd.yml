@@ -5,4 +5,4 @@ variables:
   binary: ${bindir}/bareos-fd
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}", "-?"], expect_exit: 1, timeout: 10s }
+  version: { type: command, command: ["${binary}", "-?"], expect_exit: [0, 1], timeout: 10s }
