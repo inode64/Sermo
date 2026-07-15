@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/metrics"
 	"sermo/internal/web"
@@ -65,4 +66,34 @@ func (b *WebBackend) watchLiveView(ctx context.Context, w *webWatch, system metr
 		}
 		return b.probeWatchView(ctx, w)
 	}
+}
+
+func watchErrorReadings(message string) []web.WatchReading {
+	return []web.WatchReading{{Field: watchReadingFieldSample, Label: watchReadingLabelSample, Error: message}}
+}
+
+func watchPercent(value float64) string {
+	return watchReadingMetricValue(value, watchReadingDefaultMetricDecimals, metrics.MetricUnitPercent)
+}
+
+func watchMetricEnabled(metricEntries map[string]any, metric string) bool {
+	if len(metricEntries) == 0 {
+		return true
+	}
+	_, ok := metricEntries[metric]
+	return ok
+}
+
+func netErrorTotal(metricEntries map[string]any, counters map[string]uint64) uint64 {
+	names := []string{checks.NetCounterRXErrors, checks.NetCounterTXErrors}
+	if entry, ok := metricEntries[checks.NetMetricErrors].(map[string]any); ok {
+		if configured := cfgval.StringArray(entry[checks.CheckKeyCounters]); len(configured) > 0 {
+			names = configured
+		}
+	}
+	var total uint64
+	for _, name := range names {
+		total += counters[name]
+	}
+	return total
 }
