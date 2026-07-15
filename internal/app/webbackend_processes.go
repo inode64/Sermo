@@ -60,3 +60,39 @@ func aggregateProcesses(procs []process.Process, r procMetricReader) ([]web.Proc
 	}
 	return out, &totals
 }
+
+// attachLiveCPU folds the per-cycle live CPU sample into a service's detail.
+func attachLiveCPU(d *web.Detail, live *LiveMetrics, service string) {
+	if live == nil {
+		return
+	}
+	sample, ok := live.Get(service)
+	if !ok {
+		return
+	}
+	if sample.PerProcCPU != nil {
+		for i := range d.Processes {
+			if pct, ok := sample.PerProcCPU[d.Processes[i].PID]; ok {
+				d.Processes[i].CPU = pct
+				d.Processes[i].HasCPU = true
+			}
+		}
+	}
+	attachLiveTotals(d.ProcessTotals, live, service)
+}
+
+func attachLiveTotals(totals *web.ProcessTotals, live *LiveMetrics, service string) {
+	if totals == nil || live == nil {
+		return
+	}
+	sample, ok := live.Get(service)
+	if !ok {
+		return
+	}
+	totals.NumCPU = sample.NumCPU
+	if sample.CPUReady {
+		totals.CPU = sample.CPU
+		totals.CPUThread = sample.CPUThread
+		totals.HasCPU = true
+	}
+}
