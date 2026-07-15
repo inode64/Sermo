@@ -46,8 +46,17 @@ func (c *Config) resolveService(name string, pruneOptional bool) (Resolved, []st
 		merged = pruneEnableIfMap(merged, nil)
 	}
 
+	expanded, errs := c.resolveExpandedService(merged, canonicalName)
+
+	return Resolved{Name: canonicalName, Tree: expanded}, errs
+}
+
+// resolveExpandedService applies the one canonical resolution pipeline after a
+// service tree has been merged. Keep post-expansion catalog sugar here so every
+// resolved service has the same normalized shape.
+func (c *Config) resolveExpandedService(merged map[string]any, name string) (map[string]any, []string) {
 	errs := prepareExpansionInputs(merged)
-	vars, varErrs := c.expansionVariables(merged, canonicalName)
+	vars, varErrs := c.expansionVariables(merged, name)
 	errs = append(errs, varErrs...)
 	expanded, expErrs := expandTree(merged, vars)
 	errs = append(errs, expErrs...)
@@ -61,8 +70,7 @@ func (c *Config) resolveService(name string, pruneOptional bool) (Resolved, []st
 	errs = append(errs, expandSocket(expanded)...)
 	errs = append(errs, expandLockfile(expanded)...)
 	errs = append(errs, expandServiceWatches(expanded)...)
-
-	return Resolved{Name: canonicalName, Tree: expanded}, errs
+	return expanded, errs
 }
 
 // ResolveStorage returns one resolved storage watch in the tree shape mount
