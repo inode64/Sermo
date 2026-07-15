@@ -41,7 +41,7 @@ func Resolve(ctx context.Context, name string, tree map[string]any, backend serv
 	candidates, trust := config.ServiceCandidates(tree, string(backend), name)
 	unit, err := resolver.Resolve(ctx, backend, candidates, trust)
 	if err != nil {
-		return Target{}, err
+		return Target{}, fmt.Errorf("resolve service unit for %s: %w", name, err)
 	}
 	return Target{Unit: unit, Backend: backend, Manager: manager}, nil
 }
@@ -51,7 +51,7 @@ func resolveControlledTarget(ctx context.Context, typ string, tree map[string]an
 	case virt.ControlType:
 		spec, _, err := virt.SpecFromTree(tree)
 		if err != nil {
-			return Target{}, err
+			return Target{}, fmt.Errorf("resolve libvirt control: %w", err)
 		}
 		return Target{
 			Unit:    spec.Domain,
@@ -61,7 +61,7 @@ func resolveControlledTarget(ctx context.Context, typ string, tree map[string]an
 	case dockerctl.ControlType:
 		spec, _, err := dockerctl.SpecFromTree(tree)
 		if err != nil {
-			return Target{}, err
+			return Target{}, fmt.Errorf("resolve docker control: %w", err)
 		}
 		manager := dockerctl.NewManager(spec)
 		return Target{
