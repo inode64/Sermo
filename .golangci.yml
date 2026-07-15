@@ -161,6 +161,7 @@ linters:
         - nilValReturn
         - offBy1
         - paramTypeCombine
+        - preferFilepathJoin
         - rangeAppendAll
         - regexpMust
         - rangeExprCopy
