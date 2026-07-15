@@ -156,14 +156,14 @@ func (l *EventLog) Recent(service string, limit int) []LoggedEvent {
 	// Size from the snapshot, not l.count: l.count is mutated by Add under the
 	// lock we just released, so reading it here would be a data race.
 	out := make([]LoggedEvent, 0, len(ordered))
-	for _, v := range slices.Backward(ordered) {
+	for i := range slices.Backward(ordered) {
 		if limit > 0 && len(out) >= limit {
 			break
 		}
-		if service != "" && v.Service != service {
+		if service != "" && ordered[i].Service != service {
 			continue
 		}
-		out = append(out, v)
+		out = append(out, ordered[i])
 	}
 	return out
 }
@@ -178,8 +178,8 @@ func (l *EventLog) Page(beforeID int64, limit int) []LoggedEvent {
 		records, err := l.store.RecentEventsBefore(beforeID, limit)
 		if err == nil {
 			out := make([]LoggedEvent, 0, len(records))
-			for _, rec := range records {
-				out = append(out, loggedEventFromRecord(rec))
+			for i := range records {
+				out = append(out, loggedEventFromRecord(records[i]))
 			}
 			return out
 		}
@@ -191,11 +191,11 @@ func (l *EventLog) Page(beforeID int64, limit int) []LoggedEvent {
 		capacity = min(limit, capacity)
 	}
 	out := make([]LoggedEvent, 0, capacity)
-	for _, event := range all {
-		if beforeID > 0 && event.ID >= beforeID {
+	for i := range all {
+		if beforeID > 0 && all[i].ID >= beforeID {
 			continue
 		}
-		out = append(out, event)
+		out = append(out, all[i])
 		if limit > 0 && len(out) >= limit {
 			break
 		}
@@ -214,14 +214,14 @@ func (l *EventLog) RecentApp(app string, limit int) []LoggedEvent {
 	l.mu.Unlock()
 
 	out := make([]LoggedEvent, 0, len(ordered))
-	for _, v := range slices.Backward(ordered) {
+	for i := range slices.Backward(ordered) {
 		if limit > 0 && len(out) >= limit {
 			break
 		}
-		if v.App != app {
+		if ordered[i].App != app {
 			continue
 		}
-		out = append(out, v)
+		out = append(out, ordered[i])
 	}
 	return out
 }
@@ -304,8 +304,9 @@ func (l *EventLog) rebuildIndexesLocked() {
 	l.lastByService = map[string]LoggedEvent{}
 	l.lastByWatch = map[string]LoggedEvent{}
 	l.lastByApp = map[string]LoggedEvent{}
-	for _, e := range l.orderedLocked() {
-		l.indexLocked(e)
+	ordered := l.orderedLocked()
+	for i := range ordered {
+		l.indexLocked(ordered[i])
 	}
 }
 
@@ -319,8 +320,8 @@ func (l *EventLog) loadRecentFromStore() error {
 	l.buf = make([]LoggedEvent, l.size)
 	l.next = 0
 	l.count = 0
-	for _, v := range slices.Backward(records) {
-		logged := loggedEventFromRecord(v)
+	for i := range slices.Backward(records) {
+		logged := loggedEventFromRecord(records[i])
 		l.addLocked(logged)
 		if logged.ID > l.localID {
 			l.localID = logged.ID
@@ -367,9 +368,9 @@ func (l *EventLog) Prune(before time.Time) int {
 
 	// Rebuild the ring with kept events (oldest at [0]).
 	newBuf := make([]LoggedEvent, l.size)
-	for i, e := range kept {
+	for i := range kept {
 		if i < l.size {
-			newBuf[i] = e
+			newBuf[i] = kept[i]
 		}
 	}
 	l.buf = newBuf
