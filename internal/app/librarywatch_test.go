@@ -2,12 +2,12 @@ package app
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"sermo/internal/appinspect"
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/rules"
@@ -72,11 +72,11 @@ func TestArtifactSamplesShareAppVersion(t *testing.T) {
 	samples.RegisterApp("demo")
 	w := &Worker{artifactSamples: samples, appVersions: map[string]string{}, appVersionsLast: map[string]string{}}
 
-	samples.StoreAppVersion("demo", "1.2.3", nil)
+	samples.StoreAppVersion("demo", "1.2.3", appinspect.StatusOK)
 	if changed, err := w.changedAppVersion(context.Background(), "demo", 3); err != nil || changed {
 		t.Fatalf("first app sample = changed:%t err:%v, want false nil", changed, err)
 	}
-	samples.StoreAppVersion("demo", "1.3.0", nil)
+	samples.StoreAppVersion("demo", "1.3.0", appinspect.StatusOK)
 	if changed, err := w.changedAppVersion(context.Background(), "demo", 3); err != nil || !changed {
 		t.Fatalf("updated app sample = changed:%t err:%v, want true nil", changed, err)
 	}
@@ -193,24 +193,38 @@ func TestAcknowledgeChangesRefreshesArtifactSample(t *testing.T) {
 	}
 }
 
-func TestArtifactSamplesCacheFailedApp(t *testing.T) {
-	samples := NewArtifactSamples()
-	samples.RegisterApp("demo")
-	runner := &sequenceRunner{stdout: []string{"demo v1.2.3"}}
-	w := &Worker{
-		artifactSamples: samples,
-		appVersionCmd:   map[string]appVersionCmd{"demo": {argv: []string{"demo", "--version"}}},
-		appVersions:     map[string]string{},
-		appVersionsLast: map[string]string{},
-		CheckDeps:       checks.Deps{Runner: runner},
+func TestArtifactSamplesCacheAppStatus(t *testing.T) {
+	tests := []struct {
+		name    string
+		status  string
+		wantErr bool
+	}{
+		{name: "missing binary", status: appinspect.StatusNotInstalled},
+		{name: "missing required version", status: appinspect.StatusPrefixNotInstalled + " version mismatch"},
+		{name: "probe failure", status: appinspect.StatusPrefixError + " exit 1", wantErr: true},
 	}
-	samples.StoreAppVersion("demo", "", errors.New("not installed"))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			samples := NewArtifactSamples()
+			samples.RegisterApp("demo")
+			runner := &sequenceRunner{stdout: []string{"demo v1.2.3"}}
+			w := &Worker{
+				artifactSamples: samples,
+				appVersionCmd:   map[string]appVersionCmd{"demo": {argv: []string{"demo", "--version"}}},
+				appVersions:     map[string]string{},
+				appVersionsLast: map[string]string{},
+				CheckDeps:       checks.Deps{Runner: runner},
+			}
+			samples.StoreAppVersion("demo", "", tt.status)
 
-	if changed, err := w.changedAppVersion(context.Background(), "demo", 3); err == nil || changed {
-		t.Fatalf("failed app sample = changed:%t err:%v, want false error", changed, err)
-	}
-	if runner.calls != 0 {
-		t.Fatalf("worker must not re-run a failed cached app probe, calls=%d", runner.calls)
+			changed, err := w.changedAppVersion(context.Background(), "demo", 3)
+			if changed || (err != nil) != tt.wantErr {
+				t.Fatalf("cached app status %q = changed:%t err:%v, want false error:%t", tt.status, changed, err, tt.wantErr)
+			}
+			if runner.calls != 0 {
+				t.Fatalf("worker must not re-run a cached app probe, calls=%d", runner.calls)
+			}
+		})
 	}
 }
 
@@ -259,8 +273,8 @@ func TestBuildArtifactWatchesSamplesChangedMissingApp(t *testing.T) {
 	}
 
 	sampler.Cycle(context.Background())
-	_, sampled, err := samples.AppVersion("demo")
-	if !sampled || err == nil {
-		t.Fatalf("missing app sample = sampled:%t err:%v, want true non-nil", sampled, err)
+	_, status, sampled := samples.AppVersion("demo")
+	if !sampled || status != appinspect.StatusNotInstalled {
+		t.Fatalf("missing app sample = sampled:%t status:%q, want true %q", sampled, status, appinspect.StatusNotInstalled)
 	}
 }
