@@ -238,9 +238,9 @@ func (s *ServiceMetricSampler) trimLocked(name string, cutoff time.Time) {
 
 func serviceSamplesSince(samples []serviceMetricSample, cutoff time.Time) []serviceMetricSample {
 	out := make([]serviceMetricSample, 0, len(samples))
-	for _, sample := range samples {
-		if !sample.at.Before(cutoff) {
-			out = append(out, sample)
+	for i := range samples {
+		if !samples[i].at.Before(cutoff) {
+			out = append(out, samples[i])
 		}
 	}
 	return out
@@ -381,8 +381,8 @@ func oldestProcessStart(procs []process.Process, r metrics.Reader, now time.Time
 		return time.Time{}, false
 	}
 	var oldest time.Time
-	for _, p := range procs {
-		started, ok := sr.ProcessStartTime(p.PID)
+	for i := range procs {
+		started, ok := sr.ProcessStartTime(procs[i].PID)
 		if !ok || started.After(now) {
 			continue
 		}
