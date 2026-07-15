@@ -178,6 +178,7 @@ linters:
         - singleCaseSwitch
         - sortSlice
         - stringXbytes
+        - syncMapLoadAndDelete
         - truncateCmp
         - typeAssertChain
         - typeSwitchVar
