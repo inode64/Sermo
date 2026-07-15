@@ -59,14 +59,17 @@ func (w *Writer) Write(v any) error {
 	}
 	data, err := json.Marshal(v)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal log record: %w", err)
 	}
 	data = append(data, '\n')
 
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	_, err = w.f.Write(data)
-	return err
+	if err != nil {
+		return fmt.Errorf("append log %q: %w", w.path, err)
+	}
+	return nil
 }
 
 // Close closes the underlying file.
@@ -78,5 +81,8 @@ func (w *Writer) Close() error {
 	defer w.mu.Unlock()
 	err := w.f.Close()
 	w.f = nil
-	return err
+	if err != nil {
+		return fmt.Errorf("close log %q: %w", w.path, err)
+	}
+	return nil
 }
