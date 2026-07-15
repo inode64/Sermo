@@ -11,8 +11,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/dustin/go-humanize"
 )
 
 // pluralSuffix returns the suffix to append to singular to form its plural for
@@ -269,11 +267,4 @@ func watchReadingMetricValue(value float64, decimals int, unit string) string {
 
 func watchPercent(value float64) string {
 	return watchReadingMetricValue(value, watchReadingDefaultMetricDecimals, metrics.MetricUnitPercent)
-}
-
-func humanizeSigned(n int64) string {
-	if n < 0 {
-		return "-" + humanize.Bytes(uint64(-n))
-	}
-	return humanize.Bytes(uint64(n))
 }

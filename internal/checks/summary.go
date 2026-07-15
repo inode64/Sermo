@@ -237,7 +237,7 @@ func formatSummaryBytes(number float64) string {
 	if math.IsNaN(number) || math.IsInf(number, 0) {
 		return "-"
 	}
-	byteUnits := []string{"B", "KB", "MB", "GB", "TB"}
+	byteUnits := []string{"B", "KiB", "MiB", "GiB", "TiB"}
 	unit := 0
 	for number >= summaryByteBase && unit < len(byteUnits)-1 {
 		number /= summaryByteBase

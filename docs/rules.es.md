@@ -1853,8 +1853,9 @@ operación.
 
 Cuando una regla recuperada tiene exactamente una hoja directa de check o métrica, el
 evento también registra el valor actual formateado, el operador y el umbral configurado.
-Los valores de bytes usan `B`, `KB`, `MB`, `GB` o `TB` (y las tasas de bytes añaden
-`/s`), incluido el umbral configurado. Así se ve una oscilación alrededor del
+Los valores de bytes usan unidades binarias IEC — `B`, `KiB`, `MiB`, `GiB` o `TiB`
+(y las tasas de bytes añaden `/s`) — igual que se interpretan los sufijos de tamaño
+en la configuración, incluido el umbral configurado. Así se ve una oscilación alrededor del
 umbral sin tener que reconstruir la lectura desde el histórico de métricas.
 
 Las acciones y los tipos están acoplados: las acciones de operación (`restart`, `start`,

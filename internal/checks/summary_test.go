@@ -58,9 +58,9 @@ func TestFormatDisplayValueWithUnitFormatsBytes(t *testing.T) {
 		unit  string
 		want  string
 	}{
-		{name: "bytes", value: 2555904, unit: metrics.MetricUnitBytes, want: "2,44 MB"},
-		{name: "threshold", value: "174159463", unit: metrics.MetricUnitBytes, want: "166,09 MB"},
-		{name: "rate", value: 1048576, unit: metrics.MetricUnitBytesPerSecond, want: "1 MB/s"},
+		{name: "bytes", value: 2555904, unit: metrics.MetricUnitBytes, want: "2,44 MiB"},
+		{name: "threshold", value: "174159463", unit: metrics.MetricUnitBytes, want: "166,09 MiB"},
+		{name: "rate", value: 1048576, unit: metrics.MetricUnitBytesPerSecond, want: "1 MiB/s"},
 		{name: "percent", value: 73.5, unit: metrics.MetricUnitPercent, want: "73,5%"},
 	}
 	for _, tt := range tests {
@@ -80,7 +80,7 @@ func TestSummaryFormatsMetricValuesAndThresholdsWithTheirUnit(t *testing.T) {
 		DataKeyThreshold: "174159463",
 		DataKeyUnit:      metrics.MetricUnitBytes,
 	}})
-	const want = "current 2,44 MB; threshold 166,09 MB; configured 166,09 MB"
+	const want = "current 2,44 MiB; threshold 166,09 MiB; configured 166,09 MiB"
 	if result.Message != want {
 		t.Fatalf("summary = %q, want %q", result.Message, want)
 	}

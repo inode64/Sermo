@@ -45,7 +45,7 @@ export function fmtUptime(value) {
 export function fmtBytes(value) {
   let number = Number(value);
   if (!Number.isFinite(number) || number < 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
   let unit = 0;
   while (number >= 1024 && unit < units.length - 1) {
     number /= 1024;
