@@ -26,14 +26,10 @@ func (b *WebBackend) watchDashboardView(ctx context.Context, w *webWatch, system
 	if w == nil {
 		return nil, nil, ""
 	}
-	if b.watchSnapshots != nil && watchUsesDaemonSnapshot(w.checkType) {
+	if b.watchSnapshots != nil {
 		return b.watchSnapshotView(w, system)
 	}
 	return b.legacyWatchLiveView(ctx, w, system)
-}
-
-func watchUsesDaemonSnapshot(_ string) bool {
-	return true
 }
 
 func (b *WebBackend) watchSnapshotView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
