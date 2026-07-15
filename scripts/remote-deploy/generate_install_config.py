@@ -109,7 +109,6 @@ SKIP_IFACE_PREFIXES = (
 GEOIP_DATABASE_DIRECTORY = "/usr/share/GeoIP"
 GEOIP_DATABASE_OLDER_THAN = "480h"
 ROOT_MOUNT_TARGET = "/"
-SUSPICIOUS_USER_COUNT = 20
 NFS_ENDPOINT_TIMEOUT = "5s"
 ENDPOINT_CHECK_TYPES = {"dns", "http", "ports", "tcp"}
 TCP_PROTOCOL = "tcp"
@@ -125,7 +124,6 @@ class GenerationOptions:
     expand_by: str
     smart_interval: str
     hdparm_interval: str
-    users_watch: bool
     active_services_only: bool
     catalog_services_dir: Path
 
@@ -452,21 +450,6 @@ def parse_md_arrays(stage: Path) -> list[str]:
         for match in re.finditer(r"^(md[A-Za-z0-9_.-]+)\s*:", read_text(stage / "proc_mdstat"), re.MULTILINE)
     }
     return sorted(names)
-
-
-def parse_lvm_volumes(stage: Path) -> list[dict]:
-    report = read_json(stage / "lvs.json")
-    volumes: list[dict] = []
-    for section in report.get("report", []):
-        if not isinstance(section, dict):
-            continue
-        for item in section.get("lv", []):
-            if not isinstance(item, dict):
-                continue
-            vg, lv = str(item.get("vg_name") or ""), str(item.get("lv_name") or "")
-            if vg and lv:
-                volumes.append(item)
-    return sorted(volumes, key=lambda item: (str(item.get("vg_name")), str(item.get("lv_name"))))
 
 
 def parse_active_units(stage: Path) -> set[str]:
@@ -1429,15 +1412,6 @@ dry_run: true
         ("watch-zombies", "system", "30s", ["type: zombies", 'count: { op: ">", value: 0 }']),
         ("watch-oom", "system", "30s", ["type: oom"]),
     ]
-    if options.users_watch:
-        generic_watches.append(
-            (
-                "watch-users",
-                "system",
-                "1m",
-                ["type: users", f'count: {{ op: ">", value: {SUSPICIOUS_USER_COUNT} }}'],
-            )
-        )
     for name, category, interval, check_lines in generic_watches:
         add_watch("watches", name, simple_watch(name, category, interval, check_lines))
 
@@ -1525,41 +1499,7 @@ dry_run: true
     else:
         skip("raid", "no md raid array discovered")
 
-    lvm_volumes = parse_lvm_volumes(stage)
-    if lvm_volumes:
-        seen_vgs: set[str] = set()
-        for volume in lvm_volumes:
-            vg, lv = str(volume["vg_name"]), str(volume["lv_name"])
-            if vg not in seen_vgs:
-                seen_vgs.add(vg)
-                name = f"lvm-{slug(vg)}-capacity"
-                add_watch(
-                    "watches",
-                    name,
-                    simple_watch(
-                        name,
-                        "storage",
-                        "1m",
-                        ["type: lvm", f"volume_group: {yaml_quote(vg)}", 'free_pct: { op: "<", value: "10%" }'],
-                        cycles=0,
-                        display_name=f"LVM {vg} capacity",
-                    ),
-                )
-            name = f"lvm-{slug(vg)}-{slug(lv)}"
-            display_name = f"LVM {vg}/{lv}"
-            lines = ["type: lvm", f"volume_group: {yaml_quote(vg)}", f"logical_volume: {yaml_quote(lv)}"]
-            if str(volume.get("data_percent") or "").strip() not in {"", "-"}:
-                lines.append('thin_data_pct: { op: ">=", value: "80%" }')
-            if str(volume.get("metadata_percent") or "").strip() not in {"", "-"}:
-                lines.append('thin_metadata_pct: { op: ">=", value: "80%" }')
-            add_watch(
-                "watches",
-                name,
-                simple_watch(name, "storage", "1m", lines, cycles=0, display_name=display_name),
-            )
-            report["lvm_volumes"].append({"volume_group": vg, "logical_volume": lv, "display_name": display_name})
-    else:
-        skip("lvm", "no logical volumes discovered")
+    skip("lvm", "LVM space watches disabled by configuration")
 
     if features.get("edac") == "1":
         add_watch("watches", "watch-edac", simple_watch("watch-edac", "hardware", "1m", ["type: edac", 'ce: { op: ">", value: 100 }'], cycles=3))
@@ -1699,7 +1639,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expand-by", default="5G")
     parser.add_argument("--smart-interval", default="24h")
     parser.add_argument("--hdparm-interval", default="6h")
-    parser.add_argument("--no-users-watch", action="store_true", help="Do not generate the logged-in users watch.")
     parser.add_argument(
         "--catalog-services-dir",
         default=str(Path(__file__).resolve().parents[2] / "catalog/services"),
@@ -1725,7 +1664,6 @@ def main() -> int:
         expand_by=args.expand_by,
         smart_interval=args.smart_interval,
         hdparm_interval=args.hdparm_interval,
-        users_watch=not args.no_users_watch,
         active_services_only=not args.include_inactive_installed_services,
         catalog_services_dir=Path(args.catalog_services_dir),
     )

@@ -357,7 +357,9 @@ artifacts. An app or library profile may set its top-level `interval`; a service
 uses its own top-level `interval` for version/config monitors and changed paths.
 A service worker may still run more often, but reads the latest shared artifact
 sample instead of re-running a version command or filesystem probe each cycle.
-Service operations still run their normal preflight checks directly.
+The internal `artifact:*` samplers only refresh those shared samples: they do
+not emit firing/recovered events or notifications. Service operations still run
+their normal preflight checks directly.
 
 `engine.backend: auto` detects the init system: probe systemd (`systemctl`
 exists, `/run/systemd/system` exists, `is-system-running` usable — `degraded`

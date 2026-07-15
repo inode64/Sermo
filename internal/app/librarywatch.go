@@ -137,19 +137,6 @@ func (c libraryCheck) Run(ctx context.Context) checks.Result {
 	return result
 }
 
-type artifactFileCheck struct {
-	name    string
-	path    string
-	samples *ArtifactSamples
-}
-
-func (c artifactFileCheck) Name() string { return c.name }
-
-func (c artifactFileCheck) Run(context.Context) checks.Result {
-	c.samples.StoreFile(c.path)
-	return checks.Result{Check: c.name, OK: true, Message: "sampled"}
-}
-
 // artifactWatchInterval resolves a catalog app or library's explicit interval,
 // falling back to engine.artifact_interval and then the documented five-minute default.
 func artifactWatchInterval(cfg *config.Config, category, name string) time.Duration {
@@ -291,15 +278,13 @@ func buildArtifactPathWatches(cfg *config.Config, deps Deps, samples *ArtifactSa
 		}
 		samples.RegisterFile(path)
 		name := artifactWatchNamePrefix + path
+		artifactPath := path
 		out = append(out, &Watch{
-			Name:       name,
-			CheckType:  artifactWatchCheckType,
-			Check:      artifactFileCheck{name: name, path: path, samples: samples},
-			Interval:   paths[path],
-			Settling:   deps.Settling,
-			Now:        deps.Now,
-			Emit:       deps.Emit,
-			StateStore: deps.WatchState,
+			Name:      name,
+			CheckType: artifactWatchCheckType,
+			Cycle:     func(context.Context) { samples.StoreFile(artifactPath) },
+			Interval:  paths[path],
+			Settling:  deps.Settling,
 		})
 	}
 	return out

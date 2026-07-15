@@ -63,8 +63,8 @@ The generated config defaults to monitoring only installed catalog services
 whose init unit is active, `dry_run: true`, Web UI on `0.0.0.0:9797`, storage
 free-space threshold `< 5%`, expansion by `5G`, fstab-backed non-root storage
 mount units, running Docker containers, running libvirt/QEMU virtual machines,
-SMART every `24h`, hdparm every `6h`, and a logged-in-user alert only above 20
-sessions. The root filesystem retains its storage-capacity watch but is not a
+SMART every `24h` and hdparm every `6h`. LVM space and logged-in-user checks are
+disabled. The root filesystem retains its storage-capacity watch but is not a
 mount unit. Use
 `--include-inactive-installed-services` only for catalog audits where inactive
 installed profiles are intentionally desired.
@@ -94,10 +94,8 @@ progress, while `sysfs_changes: true` tracks the array's member `state`,
 `errors`, `bad_blocks` and `mismatch_cnt`. The generated install remains
 `dry_run: true` and has no hook or external notifier.
 
-When `lvs` is available and reports logical volumes, the generator also creates
-one read-only health watch per VG/LV and one VG-capacity watch. Thin pools receive
-the `80%` data/metadata thresholds; every VG capacity watch alerts below `10%`
-free space. They remain `dry_run: true`, with no hook or external notifier.
+LVM space watches are disabled, even when `lvs` reports logical volumes. The
+generation report records that exclusion under `skipped_watches`.
 
 When `/usr/share/GeoIP` exists on a target, the generated configuration also
 adds an alert-only recursive file watch. It reports each GeoIP database file

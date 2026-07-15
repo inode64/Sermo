@@ -46,7 +46,6 @@ class EndpointGenerationTest(unittest.TestCase):
             expand_by="5G",
             smart_interval="24h",
             hdparm_interval="6h",
-            users_watch=False,
             active_services_only=True,
             catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
         )
@@ -88,7 +87,7 @@ class EndpointGenerationTest(unittest.TestCase):
         self.assertEqual(disabled, set())
         self.assertEqual([item["active"] for item in checks], [True, True])
 
-    def test_lvm_watches_include_lv_display_name(self):
+    def test_lvm_space_watches_are_not_generated(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         root = Path(temp.name)
@@ -116,19 +115,16 @@ class EndpointGenerationTest(unittest.TestCase):
             expand_by="5G",
             smart_interval="24h",
             hdparm_interval="6h",
-            users_watch=False,
             active_services_only=True,
             catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
         )
         report = generator.generate_for_host("host", stage, root / "configs", options)
-        lv_body = (root / "configs/host/root/etc/sermo/watches/lvm-vg0-root.yml").read_text(encoding="utf-8")
-        vg_body = (root / "configs/host/root/etc/sermo/watches/lvm-vg0-capacity.yml").read_text(encoding="utf-8")
-
-        self.assertIn('display_name: "LVM vg0/root"', lv_body)
-        self.assertIn('display_name: "LVM vg0 capacity"', vg_body)
-        self.assertEqual(
-            report["lvm_volumes"],
-            [{"volume_group": "vg0", "logical_volume": "root", "display_name": "LVM vg0/root"}],
+        self.assertFalse((root / "configs/host/root/etc/sermo/watches/lvm-vg0-root.yml").exists())
+        self.assertFalse((root / "configs/host/root/etc/sermo/watches/lvm-vg0-capacity.yml").exists())
+        self.assertEqual(report["lvm_volumes"], [])
+        self.assertIn(
+            {"kind": "lvm", "reason": "LVM space watches disabled by configuration"},
+            report["skipped_watches"],
         )
 
     def test_root_storage_watch_is_not_a_mount_unit(self):
@@ -151,18 +147,16 @@ class EndpointGenerationTest(unittest.TestCase):
             expand_by="5G",
             smart_interval="24h",
             hdparm_interval="6h",
-            users_watch=True,
             active_services_only=True,
             catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
         )
 
         report = generator.generate_for_host("host", stage, root / "configs", options)
         storage_body = (root / "configs/host/root/etc/sermo/storages/storage-root.yml").read_text(encoding="utf-8")
-        users_body = (root / "configs/host/root/etc/sermo/watches/watch-users.yml").read_text(encoding="utf-8")
 
         self.assertNotIn("mount:", storage_body)
         self.assertEqual(report["mount_units"], [])
-        self.assertIn('count: { op: ">", value: 20 }', users_body)
+        self.assertFalse((root / "configs/host/root/etc/sermo/watches/watch-users.yml").exists())
 
     def test_generates_safe_storage_checks_for_local_filesystem_types(self):
         temp = tempfile.TemporaryDirectory()
@@ -188,7 +182,6 @@ class EndpointGenerationTest(unittest.TestCase):
             expand_by="5G",
             smart_interval="24h",
             hdparm_interval="6h",
-            users_watch=False,
             active_services_only=True,
             catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
         )
@@ -233,7 +226,6 @@ class EndpointGenerationTest(unittest.TestCase):
             expand_by="5G",
             smart_interval="24h",
             hdparm_interval="6h",
-            users_watch=False,
             active_services_only=True,
             catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
         )
@@ -280,7 +272,6 @@ class EndpointGenerationTest(unittest.TestCase):
             expand_by="5G",
             smart_interval="24h",
             hdparm_interval="6h",
-            users_watch=False,
             active_services_only=True,
             catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
         )
@@ -310,7 +301,6 @@ class EndpointGenerationTest(unittest.TestCase):
             expand_by="5G",
             smart_interval="24h",
             hdparm_interval="6h",
-            users_watch=False,
             active_services_only=True,
             catalog_services_dir=Path(__file__).parents[2] / "catalog/services",
         )
