@@ -1007,7 +1007,7 @@ func TestRuleMessageRuntimeContextFormatsInlineByteMetric(t *testing.T) {
 	if !ok {
 		t.Fatalf("no alert emitted: %+v", h.events)
 	}
-	if want := "metric/memory > 1,66 MB: 2,44 MB"; e.Message != want {
+	if want := "metric/memory > 1,66 MiB: 2,44 MiB"; e.Message != want {
 		t.Fatalf("message = %q, want %q", e.Message, want)
 	}
 }
@@ -1042,7 +1042,7 @@ func TestRuleMessageRuntimeContextFormatsByteMetric(t *testing.T) {
 	if !ok {
 		t.Fatalf("no alert emitted: %+v", h.events)
 	}
-	if want := "metric/memory > 166,09 MB: 2,44 MB"; e.Message != want {
+	if want := "metric/memory > 166,09 MiB: 2,44 MiB"; e.Message != want {
 		t.Fatalf("message = %q, want %q", e.Message, want)
 	}
 }
@@ -1067,7 +1067,7 @@ func TestCycleAlertRecoveryFormatsMetricContext(t *testing.T) {
 			check:     "memory-high",
 			firing:    map[string]any{checks.DataKeyType: checks.CheckTypeMetric, checks.DataKeyScope: checks.MetricScopeService, checks.DataKeyMetric: "memory", checks.DataKeyOp: ">", checks.DataKeyThreshold: "174159463", checks.DataKeyValue: 2555904, checks.DataKeyUnit: metrics.MetricUnitBytes},
 			recovered: map[string]any{checks.DataKeyType: checks.CheckTypeMetric, checks.DataKeyScope: checks.MetricScopeService, checks.DataKeyMetric: "memory", checks.DataKeyOp: ">", checks.DataKeyThreshold: "174159463", checks.DataKeyValue: 2555904, checks.DataKeyUnit: metrics.MetricUnitBytes},
-			want:      "rule condition recovered: metric memory current 2,44 MB (threshold > 166,09 MB)",
+			want:      "rule condition recovered: metric memory current 2,44 MiB (threshold > 166,09 MiB)",
 		},
 	}
 	for _, tc := range tests {

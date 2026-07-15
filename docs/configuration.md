@@ -2172,8 +2172,9 @@ directory it is the number of regular files scanned. Normal configuration
 variables are resolved before the summary runs, so service checks can combine
 runtime values with service variables:
 
-Metric summaries preserve the metric unit: byte values render as `B`, `KB`,
-`MB`, `GB` or `TB`, and byte rates add `/s`.
+Metric summaries preserve the metric unit: byte values render in IEC binary
+units (`B`, `KiB`, `MiB`, `GiB` or `TiB`, matching how size suffixes are parsed
+in configuration), and byte rates add `/s`.
 
 ```yaml
 check:

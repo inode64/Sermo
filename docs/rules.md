@@ -1856,7 +1856,8 @@ events and are recorded whenever the operation is attempted.
 
 For a recovered rule with exactly one direct check or metric leaf, the event also
 records the current formatted value and its configured operator and threshold.
-Byte values use `B`, `KB`, `MB`, `GB` or `TB` (and byte rates add `/s`), including
+Byte values use IEC binary units — `B`, `KiB`, `MiB`, `GiB` or `TiB` (and byte
+rates add `/s`) — matching how size suffixes are parsed in configuration, including
 the configured threshold. This makes threshold flapping visible without having
 to reconstruct the sample from the metrics history.
 

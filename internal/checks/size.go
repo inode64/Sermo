@@ -78,8 +78,8 @@ func (c *sizeCheck) Run(ctx context.Context) Result {
 
 	span := now.Sub(baseline.t)
 	msg := fmt.Sprintf("%s grew %s in %s (limit %s/%s)",
-		c.path, humanizeSigned(growth), span.Round(time.Second),
-		humanize.Bytes(uint64(c.growBy)), c.window)
+		c.path, HumanizeSignedBytes(growth), span.Round(time.Second),
+		humanize.IBytes(uint64(c.growBy)), c.window)
 	res := c.result(ok, msg, start)
 	res.Data = map[string]any{
 		DataKeyPath:           c.path,
@@ -93,12 +93,13 @@ func (c *sizeCheck) Run(ctx context.Context) Result {
 	return res
 }
 
-// humanizeSigned renders a possibly-negative byte delta for the message.
-func humanizeSigned(n int64) string {
+// HumanizeSignedBytes renders a possibly-negative byte delta in IEC binary
+// units (KiB/MiB/GiB), the display convention for every byte value.
+func HumanizeSignedBytes(n int64) string {
 	if n < 0 {
-		return "-" + humanize.Bytes(uint64(-n))
+		return "-" + humanize.IBytes(uint64(-n))
 	}
-	return humanize.Bytes(uint64(n))
+	return humanize.IBytes(uint64(n))
 }
 
 // SamplePathSize returns the size of a regular file, or the recursive sum of
