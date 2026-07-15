@@ -183,7 +183,7 @@ linters:
       # Eclipse Mosquitto — real MQTT broker name in catalog/tests.
       ignore-rules:
         - mosquitto
-  # Considered and deliberately NOT enabled (wrapcheck pilot covers operation/ through config/; see exclusions):
+  # Considered and deliberately NOT enabled (wrapcheck is active outside checks/ and conn/; see exclusions):
   #   containedctx — daemon-lifetime contexts are intentionally held by monitor,
   #                  loader, state and web server owners.
   #   embeddedstructfieldcheck — 69 field-ordering/whitespace findings; the
@@ -247,13 +247,14 @@ linters:
         path: internal/state/
       - linters: [contextcheck]
         path: internal/cli/(monitor|panic|sla|state|watch)\.go
-      # wrapcheck pilot: operation/ + app/ + cli/ + state/ + process/ + web/ + servicemgr/ + rules/ + config/ + notify/ + execx/ + utmp/ + logfile/ + volume/ + metrics/ + control/ + virt/ + dockerctl/ + locks/ + mountctl/.
+      # wrapcheck is active across production packages except checks/ and conn/;
+      # their broad external API surfaces need dedicated phases.
       - linters: [wrapcheck]
         path: _test\.go
       - linters: [wrapcheck]
         path: cmd/
       - linters: [wrapcheck]
-        path: internal/(appinspect|assist|buildinfo|cfgval|checks|conn|diag|emission|httpx|mounts|netutil|output|procnet|units)/
+        path: internal/(checks|conn)/
       # ireturn: central builders and registries intentionally return interface types.
       - linters: [ireturn]
         path: _test\.go
