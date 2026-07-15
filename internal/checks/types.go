@@ -373,7 +373,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
-	res, err := c.runCommand(ctx)
+	res, err := runCheckCommand(ctx, c.runner, c.user, c.argv)
 	// fail builds a failing result and attaches the bounded command output so the
 	// emitted event can show WHY the command failed.
 	fail := func(msg string) Result {
@@ -452,11 +452,12 @@ func (c commandCheck) changeKey(raw string) string {
 	return raw
 }
 
-func (c commandCheck) runCommand(ctx context.Context) (execx.Result, error) {
-	if c.user != "" {
-		return execx.RunUser(ctx, c.runner, execx.NoTimeout, c.user, c.argv[0], c.argv[1:]...)
+// runCheckCommand runs a check's argv, switching to user when configured.
+func runCheckCommand(ctx context.Context, runner execx.Runner, user string, argv []string) (execx.Result, error) {
+	if user != "" {
+		return execx.RunUser(ctx, runner, execx.NoTimeout, user, argv[0], argv[1:]...)
 	}
-	return c.runner.Run(ctx, c.argv[0], c.argv[1:]...)
+	return runner.Run(ctx, argv[0], argv[1:]...)
 }
 
 // ExitCodeExpected reports whether got matches one of the expected command exit

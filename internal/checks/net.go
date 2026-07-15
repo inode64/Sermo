@@ -289,18 +289,20 @@ func sysfsIfaceDir(root, iface string) string {
 
 func sysfsIfaceUp(dir string) bool {
 	flags := sysfsIfaceFlagBits(filepath.Join(dir, SysfsIfaceFlagsFile))
-	operstate := strings.TrimSpace(readTextFile(filepath.Join(dir, SysfsIfaceOperstateFile)))
+	operstate := strings.TrimSpace(ReadTextFile(filepath.Join(dir, SysfsIfaceOperstateFile)))
 	return flags&SysfsIfaceFlagUp != 0 && (flags&SysfsIfaceFlagRunning != 0 || operstate == NetStateUp || operstate == NetStateUnknown)
 }
 
 func sysfsIfaceFlagBits(path string) uint64 {
-	raw := strings.TrimSpace(readTextFile(path))
+	raw := strings.TrimSpace(ReadTextFile(path))
 	raw = strings.TrimPrefix(raw, SysfsIfaceHexValuePrefix)
 	flags, _ := strconv.ParseUint(raw, SysfsIfaceFlagsBase, SysfsIfaceFlagsBits)
 	return flags
 }
 
-func readTextFile(path string) string {
+// ReadTextFile reads a small text file (typically sysfs), returning "" on any
+// error.
+func ReadTextFile(path string) string {
 	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return ""

@@ -35,7 +35,7 @@ func (c configCheck) Run(ctx context.Context) Result {
 
 	// Validity: a non-zero exit from the config-test command means invalid config.
 	if len(c.argv) > 0 {
-		res, err := c.runConfigCommand(ctx)
+		res, err := runCheckCommand(ctx, c.runner, c.user, c.argv)
 		if res.ExitCode == execx.ExitCodeRunFailure {
 			msg := execx.OperatorFailure(err, res, c.timeout)
 			if msg == "" {
@@ -66,13 +66,6 @@ func (c configCheck) Run(ctx context.Context) Result {
 		c.state.last, c.state.primed = fp, true
 	}
 	return c.result(true, "config ok", start)
-}
-
-func (c configCheck) runConfigCommand(ctx context.Context) (execx.Result, error) {
-	if c.user != "" {
-		return execx.RunUser(ctx, c.runner, execx.NoTimeout, c.user, c.argv[0], c.argv[1:]...)
-	}
-	return c.runner.Run(ctx, c.argv[0], c.argv[1:]...)
 }
 
 // configFingerprint summarizes the watched paths by size and mtime so a change is

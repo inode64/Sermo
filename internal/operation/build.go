@@ -411,8 +411,9 @@ func reloadPID(ctx context.Context, runner execx.Runner, backend, unit, pidfile 
 	return 0, "", fmt.Errorf("reload: cannot resolve a pid to signal: backend exposes no MainPID (OpenRC) and the service declares no %s; add %s: so the signal target can be found", config.ServiceKeyPidfile, config.ServiceKeyPidfile)
 }
 
-// reloadPidfile returns the service's top-level pidfile path, used as the signal
-// target when the backend has no MainPID (OpenRC).
+// reloadContextError builds the operator-facing context failure as a
+// package-local error (wrapcheck requires returned errors to originate here);
+// callers outside such a constraint can use execx.ContextError directly.
 func reloadContextError(err error) error {
 	if err == nil {
 		return nil
@@ -420,6 +421,8 @@ func reloadContextError(err error) error {
 	return errors.New(execx.ContextFailure(err, execx.NoTimeout))
 }
 
+// reloadPidfile returns the service's top-level pidfile path, used as the signal
+// target when the backend has no MainPID (OpenRC).
 func reloadPidfile(tree map[string]any) string {
 	if paths := cfgval.StringList(tree[config.ServiceKeyPidfile]); len(paths) > 0 {
 		return paths[0]

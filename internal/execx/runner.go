@@ -305,6 +305,15 @@ func ContextFailure(err error, timeout time.Duration) string {
 	return OperatorFailure(err, Result{ExitCode: ExitCodeRunFailure}, timeout)
 }
 
+// ContextError wraps ContextFailure as an error, preserving a nil err. For
+// callers that propagate the operator-facing message as an error value.
+func ContextError(err error) error {
+	if err == nil {
+		return nil
+	}
+	return errors.New(ContextFailure(err, NoTimeout))
+}
+
 // FormatContextOrError returns an operator-facing message for context errors, or
 // err.Error() for other failures.
 func FormatContextOrError(err error, timeout time.Duration) string {

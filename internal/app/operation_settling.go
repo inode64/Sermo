@@ -11,15 +11,6 @@ import (
 
 const operationSettlingMaxAge = 15 * time.Minute
 
-func operationActionTracked(action string) bool {
-	switch rules.ActionType(action) {
-	case rules.ActionStart, rules.ActionStop, rules.ActionRestart, rules.ActionReload, rules.ActionResume:
-		return true
-	default:
-		return false
-	}
-}
-
 func operationActionSettlesAfter(action string) bool {
 	switch rules.ActionType(action) {
 	case rules.ActionStart, rules.ActionRestart, rules.ActionReload, rules.ActionResume:
@@ -39,7 +30,7 @@ func manualStartLikeAction(action string) bool {
 }
 
 func beginOperationSettling(store OperationSettlingStore, service, action, source string) error {
-	if store == nil || !operationActionTracked(action) {
+	if store == nil || !isServiceOperationAction(action) {
 		return nil
 	}
 	if err := store.SetOperationSettling(service, action, state.OperationSettlingRunning, source); err != nil {
@@ -58,7 +49,7 @@ func finishOperationSettling(store OperationSettlingStore, service, action, sour
 }
 
 func finishOperationSettlingWithActive(store OperationSettlingStore, service, action, source string, result operation.Result, opErr error, activeAfterStart bool) error {
-	if store == nil || !operationActionTracked(action) {
+	if store == nil || !isServiceOperationAction(action) {
 		return nil
 	}
 	settleAfter := result.OK() || (activeAfterStart && result.Status == operation.ResultPostflightFailed && manualStartLikeAction(action))

@@ -341,7 +341,7 @@ func listIfacesFromSysfs(root string) ([]assist.Iface, error) {
 		name := entry.Name()
 		dir := filepath.Join(root, name)
 		flags := sysfsIfaceFlags(filepath.Join(dir, checks.SysfsIfaceFlagsFile))
-		operstate := strings.TrimSpace(readSmallFile(filepath.Join(dir, checks.SysfsIfaceOperstateFile)))
+		operstate := strings.TrimSpace(checks.ReadTextFile(filepath.Join(dir, checks.SysfsIfaceOperstateFile)))
 		loopback := flags&checks.SysfsIfaceFlagLoopback != 0 || name == loopbackIfaceName
 		up := flags&checks.SysfsIfaceFlagUp != 0 && (flags&checks.SysfsIfaceFlagRunning != 0 || operstate == checks.NetStateUp || operstate == checks.NetStateUnknown)
 		out = append(out, assist.Iface{Name: name, Up: up, Loopback: loopback})
@@ -351,18 +351,10 @@ func listIfacesFromSysfs(root string) ([]assist.Iface, error) {
 }
 
 func sysfsIfaceFlags(path string) uint64 {
-	raw := strings.TrimSpace(readSmallFile(path))
+	raw := strings.TrimSpace(checks.ReadTextFile(path))
 	raw = strings.TrimPrefix(raw, checks.SysfsIfaceHexValuePrefix)
 	flags, _ := strconv.ParseUint(raw, checks.SysfsIfaceFlagsBase, checks.SysfsIfaceFlagsBits)
 	return flags
-}
-
-func readSmallFile(path string) string {
-	data, err := os.ReadFile(filepath.Clean(path))
-	if err != nil {
-		return ""
-	}
-	return string(data)
 }
 
 func defaultRouteIfaces() []string {
