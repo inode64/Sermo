@@ -372,8 +372,8 @@ func enrichRaidSysfs(st *RaidStatus, root string) {
 		detail := &st.Details[i]
 		detail.SizeBytes = raidArraySizeBytes(filepath.Join(root, detail.Name, "size"))
 		mdPath := filepath.Join(root, detail.Name, "md")
-		detail.SyncAction = readRaidSysfsValue(filepath.Join(mdPath, raidSyncActionFile))
-		detail.MismatchCount = readRaidSysfsValue(filepath.Join(mdPath, "mismatch_cnt"))
+		detail.SyncAction = readTrim(filepath.Join(mdPath, raidSyncActionFile))
+		detail.MismatchCount = readTrim(filepath.Join(mdPath, "mismatch_cnt"))
 		entries, err := os.ReadDir(mdPath)
 		if err != nil {
 			continue
@@ -384,8 +384,8 @@ func enrichRaidSysfs(st *RaidStatus, root string) {
 			}
 			memberPath := filepath.Join(mdPath, entries[i].Name())
 			detail.Members = append(detail.Members, RaidMemberStatus{
-				Name: strings.TrimPrefix(entries[i].Name(), mdMemberPrefix), State: readRaidSysfsValue(filepath.Join(memberPath, "state")),
-				Errors: readRaidSysfsValue(filepath.Join(memberPath, "errors")), BadBlocks: readRaidSysfsValue(filepath.Join(memberPath, "bad_blocks")),
+				Name: strings.TrimPrefix(entries[i].Name(), mdMemberPrefix), State: readTrim(filepath.Join(memberPath, "state")),
+				Errors: readTrim(filepath.Join(memberPath, "errors")), BadBlocks: readTrim(filepath.Join(memberPath, "bad_blocks")),
 			})
 		}
 		sort.Slice(detail.Members, func(i, j int) bool { return detail.Members[i].Name < detail.Members[j].Name })
@@ -396,7 +396,7 @@ func enrichRaidSysfs(st *RaidStatus, root string) {
 // reports this block-device value in 512-byte sectors, independently of the
 // hardware's physical sector size.
 func raidArraySizeBytes(path string) uint64 {
-	sectors, err := strconv.ParseUint(strings.TrimSpace(readRaidSysfsValue(path)), 10, 64)
+	sectors, err := strconv.ParseUint(strings.TrimSpace(readTrim(path)), 10, 64)
 	if err != nil || sectors > ^uint64(0)/raidSectorBytes {
 		return 0
 	}
@@ -467,14 +467,6 @@ func setRaidRebuildState(ctx context.Context, array string, resume bool, root st
 
 func validRaidArrayName(array string) bool {
 	return mdArrayNameRe.MatchString(array)
-}
-
-func readRaidSysfsValue(path string) string {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(b))
 }
 
 func raidDetailsByName(details []RaidArrayStatus) map[string]RaidArrayStatus {

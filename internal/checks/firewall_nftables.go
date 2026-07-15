@@ -2,7 +2,6 @@ package checks
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"sermo/internal/execx"
@@ -18,7 +17,7 @@ var nftablesRuleCounter = countLoadedNftablesRules
 // caller's context bounds the netlink walk; cancellation stops between chains.
 func countLoadedNftablesRules(ctx context.Context) (uint64, error) {
 	if err := ctx.Err(); err != nil {
-		return 0, nftablesContextError(err)
+		return 0, execx.ContextError(err)
 	}
 	type out struct {
 		n   uint64
@@ -31,17 +30,10 @@ func countLoadedNftablesRules(ctx context.Context) (uint64, error) {
 	}()
 	select {
 	case <-ctx.Done():
-		return 0, nftablesContextError(ctx.Err())
+		return 0, execx.ContextError(ctx.Err())
 	case r := <-ch:
 		return r.n, r.err
 	}
-}
-
-func nftablesContextError(err error) error {
-	if err == nil {
-		return nil
-	}
-	return errors.New(execx.ContextFailure(err, execx.NoTimeout))
 }
 
 func listNftablesRules() (uint64, error) {
