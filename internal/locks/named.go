@@ -69,7 +69,7 @@ func (l NamedLocker) ReleaseInactive(service, name string) (Lock, error) {
 	existing, err := readLockFile(path)
 	if err != nil {
 		if isMissingLock(err) {
-			return Lock{}, fmt.Errorf("lock %s not found", lockID(service, name))
+			return Lock{}, fmt.Errorf("lock %s not found", LockID(service, name))
 		}
 		return Lock{}, err
 	}
@@ -82,7 +82,7 @@ func (l NamedLocker) ReleaseInactive(service, name string) (Lock, error) {
 		lock.Name = name
 	}
 	if state == StateActive {
-		return lock, fmt.Errorf("lock %s is active; refusing release", lockID(service, name))
+		return lock, fmt.Errorf("lock %s is active; refusing release", LockID(service, name))
 	}
 	if reclaimStale(path, existing, proc, now) {
 		return lock, nil
@@ -96,9 +96,9 @@ func (l NamedLocker) ReleaseInactive(service, name string) (Lock, error) {
 	}
 	state, reason = classify(current, now(), proc)
 	if state == StateActive {
-		return toLock(current, path, state, reason), fmt.Errorf("lock %s became active; refusing release", lockID(service, name))
+		return toLock(current, path, state, reason), fmt.Errorf("lock %s became active; refusing release", LockID(service, name))
 	}
-	return toLock(current, path, state, reason), fmt.Errorf("lock %s changed while releasing; retry", lockID(service, name))
+	return toLock(current, path, state, reason), fmt.Errorf("lock %s changed while releasing; retry", LockID(service, name))
 }
 
 func (l NamedLocker) path(service, name string) string {
@@ -191,7 +191,9 @@ func validateLockIDs(service, name string) error {
 	return validateIdentifier(lockIdentifierName, name, true)
 }
 
-func lockID(service, name string) string {
+// LockID is the canonical identifier of a named lock: "service" or
+// "service.name".
+func LockID(service, name string) string {
 	parts := []string{service}
 	if name != "" {
 		parts = append(parts, name)

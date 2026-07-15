@@ -15,20 +15,11 @@ import (
 )
 
 const (
-	summarySecondsPerMinute = 60
-	summaryMinutesPerHour   = 60
-	summaryHoursPerDay      = units.HoursPerDay
-	summaryDaysPerWeek      = 7
-	summaryDaysPerMonth     = 30
-	summarySecondsPerHour   = summaryMinutesPerHour * summarySecondsPerMinute
-	summarySecondsPerDay    = summaryHoursPerDay * summarySecondsPerHour
-	summarySecondsPerWeek   = summaryDaysPerWeek * summarySecondsPerDay
-	summarySecondsPerMonth  = summaryDaysPerMonth * summarySecondsPerDay
-	summaryNumberBase       = 10
-	summaryNumberPrecision  = 2
-	summaryFloatBits        = 64
-	summaryByteBase         = 1024
-	summaryNumberGroupSize  = 3
+	summaryNumberBase      = 10
+	summaryNumberPrecision = 2
+	summaryFloatBits       = 64
+	summaryByteBase        = 1024
+	summaryNumberGroupSize = 3
 )
 
 var summaryReference = regexp.MustCompile(`\$\{([^}]+)\}`)
@@ -134,7 +125,7 @@ func summaryMapValue(values map[string]any, path string) (any, bool) {
 func FormatDisplayValue(name string, value any) string {
 	switch v := value.(type) {
 	case time.Duration:
-		return formatSummaryDuration(v)
+		return units.HumanizeDuration(v)
 	case time.Time:
 		return v.UTC().Format("2006-01-02 15:04:05 UTC")
 	case string:
@@ -248,7 +239,7 @@ func formatSummaryBytes(number float64) string {
 
 func formatSummaryString(name, value string) string {
 	if duration, err := time.ParseDuration(value); err == nil && summaryDurationName(name) {
-		return formatSummaryDuration(duration)
+		return units.HumanizeDuration(duration)
 	}
 	if timestamp, err := time.Parse(time.RFC3339, value); err == nil && summaryTimestampName(name) {
 		return timestamp.UTC().Format("2006-01-02 15:04:05 UTC")
@@ -269,35 +260,6 @@ func summaryTimestampName(name string) bool {
 
 func summaryNumericName(name string) bool {
 	return name == DataKeyValue || name == DataKeyNumberFiles || strings.HasSuffix(name, ".value") || strings.HasSuffix(name, "_count") || strings.HasSuffix(name, "_bytes") || strings.HasSuffix(name, "_seconds")
-}
-
-func formatSummaryDuration(duration time.Duration) string {
-	if duration <= 0 {
-		return "0s"
-	}
-	if duration%time.Second != 0 {
-		return duration.String()
-	}
-	total := int64(duration / time.Second)
-	durationUnits := []struct {
-		seconds int64
-		suffix  string
-	}{
-		{summarySecondsPerMonth, "mo"},
-		{summarySecondsPerWeek, "w"},
-		{summarySecondsPerDay, "d"},
-		{summarySecondsPerHour, "h"},
-		{summarySecondsPerMinute, "m"},
-		{1, "s"},
-	}
-	var rendered strings.Builder
-	for _, unit := range durationUnits {
-		if total >= unit.seconds {
-			fmt.Fprintf(&rendered, "%d%s", total/unit.seconds, unit.suffix)
-			total %= unit.seconds
-		}
-	}
-	return rendered.String()
 }
 
 func formatSummaryNumber(number float64) string {

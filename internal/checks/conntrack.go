@@ -6,7 +6,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 const (
@@ -36,16 +35,14 @@ type conntrackCheck struct {
 }
 
 func (c conntrackCheck) Run(_ context.Context) Result {
-	start := time.Now()
 	sampler := c.sampler
 	if sampler == nil {
 		sampler = defaultConntrackSampler
 	}
-	s, err := sampler()
-	if err != nil {
-		return c.result(false, "conntrack: "+err.Error(), start)
-	}
-	return levelCountResult(c.base, c.preds, "conntrack", "entries", DataKeyCount, s.Count, s.Max, start)
+	return runLevelCountCheck(c.base, c.preds, func() (uint64, uint64, error) {
+		s, err := sampler()
+		return s.Count, s.Max, err
+	}, "conntrack", "entries", DataKeyCount)
 }
 
 // SampleConntrack returns one live netfilter conntrack observation using the

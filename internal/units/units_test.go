@@ -1,11 +1,11 @@
-package app
+package units
 
 import (
 	"testing"
 	"time"
 )
 
-func TestFormatInterval(t *testing.T) {
+func TestHumanizeDuration(t *testing.T) {
 	cases := []struct {
 		in   time.Duration
 		want string
@@ -31,8 +31,8 @@ func TestFormatInterval(t *testing.T) {
 		{1500 * time.Millisecond, "1.5s"},        // sub-second falls back to stdlib
 	}
 	for _, c := range cases {
-		if got := formatInterval(c.in); got != c.want {
-			t.Errorf("formatInterval(%v) = %q, want %q", c.in, got, c.want)
+		if got := HumanizeDuration(c.in); got != c.want {
+			t.Errorf("HumanizeDuration(%v) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }

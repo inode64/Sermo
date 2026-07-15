@@ -135,6 +135,34 @@ func (b base) result(ok bool, message string, start time.Time) Result {
 // lowercase local is `limit`, not `max`, only to avoid shadowing the Go `max`
 // builtin — keep it that way. When it is 0 the maximum is unknown, so used_pct/
 // free are omitted and a predicate on them cannot hold (the level check is an AND).
+// runLevelCountCheck samples one count/max observation and evaluates the level
+// predicates against it — the shared Run body of the count-vs-limit level
+// checks (fds, pids, conntrack).
+func runLevelCountCheck(b base, preds []levelPred, sample func() (count, limit uint64, err error), label, unit, countField string) Result {
+	start := time.Now()
+	count, limit, err := sample()
+	if err != nil {
+		return b.result(false, label+": "+err.Error(), start)
+	}
+	return levelCountResult(b, preds, label, unit, countField, count, limit, start)
+}
+
+// runThresholdCheck samples one gauge and compares it against the configured
+// threshold — the shared Run body of the single-value level checks (entropy,
+// zombies). unavailableMsg is the failure message when the sampler reports no
+// reading; message renders the sampled value for the result.
+func runThresholdCheck(b base, op string, value float64, sample func() (uint64, bool), unavailableMsg string, message func(uint64) string, dataKey string) Result {
+	start := time.Now()
+	v, ok := sample()
+	if !ok {
+		return b.result(false, unavailableMsg, start)
+	}
+	met := compareFloat(float64(v), op, value)
+	res := b.result(met, message(v), start)
+	res.Data = map[string]any{dataKey: v, DataKeyValue: v}
+	return res
+}
+
 func levelCountResult(b base, preds []levelPred, label, unit, countField string, count, limit uint64, start time.Time) Result {
 	values := map[string]float64{countField: float64(count)}
 	usedPct := 0.0

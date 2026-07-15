@@ -837,8 +837,8 @@ maximum** plus a line (average over time) with a min–max band. The data is at
 `GET /api/services/{name}/metrics?check=NAME&since=DURATION` as `{summary:{count,
 avg,min,max}, points:[{start,n,avg,min,max}], unit:"ms"}`. Add `metric=KEY` to
 read a named numeric metric for checks that publish one, such as `hdparm`
-`read`/`cached`, `sensors` `temp`/`fan`, `smart` `temperature`/`wear` or `edac`
-`ce`/`ue`; in that case `unit` is the metric's unit instead of `ms`.
+`read`/`cached`, `sensors` `temp`/`fan`/`voltage`, `smart` `temperature`/`wear`
+or `edac` `ce`/`ue`; in that case `unit` is the metric's unit instead of `ms`.
 Measurements are kept per minute for roughly a year (pruned like the SLA
 samples); a check that only runs every N cycles ([per-check
 interval](#per-check-interval)) records a sample only when it actually runs, so

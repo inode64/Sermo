@@ -2718,9 +2718,9 @@ preflight:
 	if got := DocumentBinary(cfg.CatalogServices["qemu"].Body); got != "/usr/bin/qemu-system-aarch64" {
 		t.Errorf("baked binary = %q, want /usr/bin/qemu-system-aarch64", got)
 	}
-	resolved, errs := cfg.ResolveCatalogService("qemu")
+	resolved, errs := cfg.ResolveCatalog(CategoryService, "qemu")
 	if len(errs) != 0 {
-		t.Fatalf("ResolveCatalogService() errors = %v", errs)
+		t.Fatalf("ResolveCatalog() errors = %v", errs)
 	}
 	bin := nested(t, resolved.Tree, "preflight", "binary")
 	if cfgval.String(bin["path"]) != "/usr/bin/qemu-system-aarch64" {

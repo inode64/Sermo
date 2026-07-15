@@ -538,6 +538,48 @@ func dryRunConsoleNotifier(n notify.Notifier) bool {
 }
 
 // watchMessage builds a notification from a fired watch's message and hook env.
+// watchFireSpec carries the shared wiring a watcher needs to dispatch one
+// fire: the dry-run/panic gates, the hook, an optional extra action, and the
+// notify fan-out.
+type watchFireSpec struct {
+	name        string
+	hook        HookSpec
+	runner      HookRunner
+	notifiers   []notify.Notifier
+	inPanic     func() bool
+	dryRun      bool
+	emit        func(Event)
+	dryRunLabel string // rendered actions for the dry-run event
+	panicLabel  string // suppression notice for panic mode
+	action      func() // runs between the hook and the notify fan-out (e.g. kill)
+}
+
+// dispatchWatchFire applies the dry-run → panic → hook → action → notify tail
+// every watcher fire ends with.
+func dispatchWatchFire(ctx context.Context, spec watchFireSpec, msg string, env map[string]string) {
+	if spec.dryRun {
+		spec.emit(Event{Watch: spec.name, Kind: eventKindDryRun, Message: spec.dryRunLabel + ": " + msg})
+		dispatchDryRunNotify(ctx, spec.notifiers, watchMessage(spec.name, msg, env), spec.name, spec.emit)
+		return
+	}
+	if spec.inPanic != nil && spec.inPanic() {
+		spec.emit(Event{Watch: spec.name, Kind: eventKindPanicSuppressed, Message: spec.panicLabel + ": " + msg})
+		return
+	}
+	if len(spec.hook.Command) > 0 {
+		runner := defaultHookRunner(spec.runner)
+		if err := spec.hook.Run(ctx, runner, env); err != nil {
+			spec.emit(Event{Watch: spec.name, Kind: eventKindHookFail, Message: msg + ": " + err.Error()})
+		} else {
+			spec.emit(Event{Watch: spec.name, Kind: eventKindHook, Message: msg})
+		}
+	}
+	if spec.action != nil {
+		spec.action()
+	}
+	dispatchNotify(ctx, spec.notifiers, watchMessage(spec.name, msg, env), spec.name, spec.emit)
+}
+
 func watchMessage(name, message string, env map[string]string) notify.Message {
 	var body strings.Builder
 	body.WriteString(message)

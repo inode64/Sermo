@@ -79,8 +79,16 @@ func (c pressureCheck) Run(_ context.Context) Result {
 
 	res := c.result(ok, fmt.Sprintf("pressure %s some %.2f/%.2f/%.2f full %.2f/%.2f/%.2f",
 		c.resource, s.Some.Avg10, s.Some.Avg60, s.Some.Avg300, s.Full.Avg10, s.Full.Avg60, s.Full.Avg300), start)
-	res.Data = map[string]any{
-		DataKeyResource: c.resource,
+	res.Data = PressureResultData(c.resource, s)
+	res.Data[DataKeyValue] = firstPredValue(c.preds, values, s.Some.Avg10)
+	return res
+}
+
+// PressureResultData is the persisted reading data for one PSI observation,
+// shared by the check cycle and the live watch view.
+func PressureResultData(resource string, s PressureSample) map[string]any {
+	return map[string]any{
+		DataKeyResource: resource,
 		fieldSomeAvg10:  s.Some.Avg10,
 		fieldSomeAvg60:  s.Some.Avg60,
 		fieldSomeAvg300: s.Some.Avg300,
@@ -88,8 +96,6 @@ func (c pressureCheck) Run(_ context.Context) Result {
 		fieldFullAvg60:  s.Full.Avg60,
 		fieldFullAvg300: s.Full.Avg300,
 	}
-	res.Data[DataKeyValue] = firstPredValue(c.preds, values, s.Some.Avg10)
-	return res
 }
 
 // SamplePressure returns one live PSI observation for resource using the default

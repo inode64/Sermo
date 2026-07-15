@@ -57,7 +57,8 @@ type SensorSamplerFunc func() ([]SensorReading, error)
 // condition). `temp` is the hottest matching temperature (°C), `fan` the slowest
 // matching fan (RPM, to catch a stalled fan) and `voltage` the lowest matching
 // rail (V, to catch a brown-out). Optional `chip`/`label` substrings narrow which
-// inputs are considered. Temperatures are recorded as a time series for graphing.
+// inputs are considered. Temperature, fan and voltage aggregates are recorded
+// as time series for graphing.
 type sensorsCheck struct {
 	base
 	sampler SensorSamplerFunc
@@ -97,11 +98,25 @@ func (c sensorsCheck) Run(_ context.Context) Result {
 	appendSensorPart(sensorFan, summary.Fan, summary.HasFan)
 	appendSensorPart(sensorVoltage, summary.Voltage, summary.HasVoltage)
 	r := c.result(ok, "sensors "+strings.Join(parts, " "), start)
-	r.Data = map[string]any{}
-	for k, v := range values {
-		r.Data[k] = v
-	}
+	r.Data = SensorsResultData(summary, c.chip, c.label)
 	return r
+}
+
+// SensorsResultData is the persisted reading data for one aggregated sensors
+// sample, shared by the check cycle and the live watch view: the matching-input
+// count, the configured chip/label filters when set, and the aggregate values.
+func SensorsResultData(summary SensorValues, chip, label string) map[string]any {
+	data := map[string]any{DataKeyInputs: summary.Count}
+	if chip != "" {
+		data[DataKeyChip] = chip
+	}
+	if label != "" {
+		data[DataKeyLabel] = label
+	}
+	for k, v := range sensorValueMap(summary) {
+		data[k] = v
+	}
+	return data
 }
 
 // SummarizeSensors filters sensor readings by chip/label substring and returns

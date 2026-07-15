@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"sermo/internal/metrics"
 	"strings"
 	"testing"
 )
@@ -143,8 +144,8 @@ func TestParseMeminfoKB(t *testing.T) {
 		"bogus kB":    0, // non-numeric first field -> 0, never a parse panic
 	}
 	for in, want := range cases {
-		if got := parseMeminfoKB(in); got != want {
-			t.Errorf("parseMeminfoKB(%q) = %d, want %d", in, got, want)
+		if got, _ := metrics.MeminfoKB(in); got != want {
+			t.Errorf("MeminfoKB(%q) = %d, want %d", in, got, want)
 		}
 	}
 }
