@@ -212,7 +212,8 @@ func (b *WebBackend) Mounts(ctx context.Context) []web.Mount {
 	}
 	usage, usageErrors := b.mountUsageCached(ctx, specs, mounted)
 	out := make([]web.Mount, 0, len(rows))
-	for _, row := range rows {
+	for i := range rows {
+		row := &rows[i]
 		if row.err != nil {
 			umountReason := mountctl.UmountDisabledReason(row.spec.Path)
 			out = append(out, web.Mount{
@@ -317,18 +318,18 @@ func ensureMountUsagePaths(usage map[string][]process.Process, paths []string) m
 func mountedMountPaths(specs []mountctl.Spec, mounted map[string]bool) []string {
 	seen := map[string]struct{}{}
 	paths := make([]string, 0, len(specs))
-	for _, spec := range specs {
-		if !mountctl.CanUmountPath(spec.Path) {
+	for i := range specs {
+		if !mountctl.CanUmountPath(specs[i].Path) {
 			continue
 		}
-		if !mounted[spec.Path] {
+		if !mounted[specs[i].Path] {
 			continue
 		}
-		if _, ok := seen[spec.Path]; ok {
+		if _, ok := seen[specs[i].Path]; ok {
 			continue
 		}
-		seen[spec.Path] = struct{}{}
-		paths = append(paths, spec.Path)
+		seen[specs[i].Path] = struct{}{}
+		paths = append(paths, specs[i].Path)
 	}
 	sort.Strings(paths)
 	return paths
@@ -574,18 +575,18 @@ func (b *WebBackend) mountBlockers(spec mountctl.Spec, blockers []process.Proces
 	}
 	resolve := b.resolveUser
 	out := make([]web.MountBlocker, 0, len(blockers))
-	for _, p := range blockers {
+	for i := range blockers {
 		out = append(out, web.MountBlocker{
-			PID:         p.PID,
-			PPID:        p.PPID,
-			User:        p.User,
-			UID:         p.UID,
-			Group:       p.Group,
-			GID:         p.GID,
-			Exe:         p.Exe,
-			ExeResolved: p.ExeOK,
-			Cmdline:     p.Cmdline,
-			Killable:    mountctl.CanUmountPath(spec.Path) && spec.KillOnlyIf.Killable(p, resolve),
+			PID:         blockers[i].PID,
+			PPID:        blockers[i].PPID,
+			User:        blockers[i].User,
+			UID:         blockers[i].UID,
+			Group:       blockers[i].Group,
+			GID:         blockers[i].GID,
+			Exe:         blockers[i].Exe,
+			ExeResolved: blockers[i].ExeOK,
+			Cmdline:     blockers[i].Cmdline,
+			Killable:    mountctl.CanUmountPath(spec.Path) && spec.KillOnlyIf.Killable(blockers[i], resolve),
 		})
 	}
 	return out
@@ -609,8 +610,8 @@ func mountCanKill(blockers []web.MountBlocker) bool {
 
 func uniqueBlockerUsers(blockers []process.Process) []string {
 	seen := map[string]struct{}{}
-	for _, p := range blockers {
-		user := strings.TrimSpace(p.User)
+	for i := range blockers {
+		user := strings.TrimSpace(blockers[i].User)
 		if user == "" {
 			continue
 		}
