@@ -92,15 +92,15 @@ func (c *lvmCheck) Run(ctx context.Context) Result {
 }
 
 func (c *lvmCheck) selectRow(report lvmReport) (lvmRow, bool) {
-	for _, group := range report.Report {
-		for _, row := range group.LV {
-			if c.volumeGroup != "" && row.VGName != c.volumeGroup {
+	for i := range report.Report {
+		for j := range report.Report[i].LV {
+			if c.volumeGroup != "" && report.Report[i].LV[j].VGName != c.volumeGroup {
 				continue
 			}
-			if c.logicalVolume != "" && row.LVName != c.logicalVolume {
+			if c.logicalVolume != "" && report.Report[i].LV[j].LVName != c.logicalVolume {
 				continue
 			}
-			return row, true
+			return report.Report[i].LV[j], true
 		}
 	}
 	return lvmRow{}, false
