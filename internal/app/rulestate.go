@@ -74,13 +74,13 @@ type ruleStatePlan struct {
 
 func newRuleStatePlan(ruleSet []rules.Rule) ruleStatePlan {
 	plan := ruleStatePlan{names: make(map[string]bool, len(ruleSet))}
-	for _, r := range ruleSet {
-		switch r.Type {
+	for i := range ruleSet {
+		switch ruleSet[i].Type {
 		case rules.RuleRemediation:
-			plan.names[r.Name] = true
+			plan.names[ruleSet[i].Name] = true
 			plan.hasRemediation = true
 		case rules.RuleAlert:
-			plan.names[r.Name] = true
+			plan.names[ruleSet[i].Name] = true
 		default: // guard rules keep no persisted window state
 		}
 	}

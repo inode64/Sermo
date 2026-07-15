@@ -400,18 +400,18 @@ func normalizeKey(m map[string]any) string {
 // blocking guard wins. An evaluation error is returned so the caller can fail
 // safe rather than silently proceed.
 func Guard(ctx context.Context, ruleSet []Rule, action string, ev *Evaluator) (blocked bool, reason string, err error) {
-	for _, r := range ruleSet {
-		if r.Type != RuleGuard || !slices.Contains(r.Blocks, action) {
+	for i := range ruleSet {
+		if ruleSet[i].Type != RuleGuard || !slices.Contains(ruleSet[i].Blocks, action) {
 			continue
 		}
-		ok, err := ev.Eval(ctx, r.If)
+		ok, err := ev.Eval(ctx, ruleSet[i].If)
 		if err != nil {
-			return false, "", fmt.Errorf("guard %s: %w", r.Name, err)
+			return false, "", fmt.Errorf("guard %s: %w", ruleSet[i].Name, err)
 		}
 		if ok {
-			reason := r.Primary().Message
+			reason := ruleSet[i].Primary().Message
 			if reason == "" {
-				reason = "blocked by guard " + r.Name
+				reason = "blocked by guard " + ruleSet[i].Name
 			}
 			return true, reason, nil
 		}
