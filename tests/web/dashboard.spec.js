@@ -211,7 +211,10 @@ test("a running manual probe keeps health visible and disables a duplicate", asy
   const row = page.locator("#wat-row-hdparm-sda");
   await expect(row).toContainText("checking");
   await expect(row).toContainText("previously ok");
-  await expect(row.locator('[data-watch-action="probe"]')).toBeDisabled();
+  const probe = row.locator('[data-watch-action="probe"]');
+  await expect(probe).toBeDisabled();
+  await expect(probe).toHaveAttribute("aria-describedby", "wat-hdparm-sda-probe-hint");
+  await expect(page.locator("#wat-hdparm-sda-probe-hint")).toHaveText("manual probe is already running");
   await expect(row.locator("[data-probe-started-at]")).toBeVisible();
 });
 
