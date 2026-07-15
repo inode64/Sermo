@@ -48,9 +48,7 @@ const (
 	// serviceReloadCapabilityTimeout bounds init metadata checks used only to
 	// decide whether the dashboard should offer a per-service reload action.
 	serviceReloadCapabilityTimeout = 2 * time.Second
-	// slaTimelineCacheTTL caches SLA timeline strips for detail/expansion views.
-	slaTimelineCacheTTL = 45 * time.Second
-	processPIDListLimit = 20
+	processPIDListLimit            = 20
 )
 
 const (
@@ -231,16 +229,6 @@ type WebBackend struct {
 
 	mountOperationsMu sync.Mutex
 	mountOperations   map[string]web.MountOperation
-}
-
-type slaCacheKey struct {
-	service string
-	check   string // empty for service-level SLA
-}
-
-type cachedSLATimelines struct {
-	windows []web.SLAWindow
-	at      time.Time
 }
 
 type webDiskIOState struct {
