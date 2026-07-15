@@ -322,7 +322,7 @@ func runWithClient[T any](ctx context.Context, m Manager, fn func(Client) (T, er
 	select {
 	case <-ctx.Done():
 		var zero T
-		return zero, ctx.Err()
+		return zero, fmt.Errorf("wait for libvirt operation: %w", ctx.Err())
 	case result := <-ch:
 		return result.value, result.err
 	}
@@ -382,7 +382,7 @@ func ParseUUID(value string) (libvirt.UUID, error) {
 		return out, errors.New("expected 32 hexadecimal digits")
 	}
 	if _, err := hex.Decode(out[:], []byte(compact)); err != nil {
-		return out, err
+		return out, fmt.Errorf("decode UUID: %w", err)
 	}
 	return out, nil
 }
