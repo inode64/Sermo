@@ -1461,11 +1461,7 @@ func (s *Server) handleNotifiers(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleNotifierTest(w http.ResponseWriter, r *http.Request) {
 	res := s.Backend.TestNotifier(s.operateContext(r), r.PathValue(apiParamName)) //nolint:contextcheck // see operateContext
-	status := http.StatusOK
-	if !res.OK {
-		status = http.StatusConflict
-	}
-	writeJSON(w, status, res)
+	writeActionResult(w, res.OK, res)
 }
 
 func (s *Server) handleApplications(w http.ResponseWriter, r *http.Request) {
@@ -1490,25 +1486,13 @@ func (s *Server) handleMountAction(w http.ResponseWriter, r *http.Request) {
 			AllowLazy:    queryBool(r, apiQueryLazy),
 			KillBlockers: queryBool(r, apiQueryKill),
 		})
-		status := http.StatusOK
-		if !res.OK {
-			status = http.StatusConflict
-		}
-		writeJSON(w, status, res)
+		writeActionResult(w, res.OK, res)
 	case apiActionBlockers:
 		res := s.Backend.MountBlockers(r.Context(), name)
-		status := http.StatusOK
-		if !res.OK {
-			status = http.StatusConflict
-		}
-		writeJSON(w, status, res)
+		writeActionResult(w, res.OK, res)
 	case apiActionAlert:
 		res := s.Backend.AlertMountUsers(s.operateContext(r), name) //nolint:contextcheck // see operateContext
-		status := http.StatusOK
-		if !res.OK {
-			status = http.StatusConflict
-		}
-		writeJSON(w, status, res)
+		writeActionResult(w, res.OK, res)
 	default:
 		writeError(w, http.StatusBadRequest, apiErrorUnknownMountActionPrefix+action)
 	}
@@ -1533,11 +1517,7 @@ func (s *Server) handleLocks(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleLockRelease(w http.ResponseWriter, r *http.Request) {
 	res := s.Backend.ReleaseLock(r.Context(), r.PathValue(apiParamService), r.URL.Query().Get(apiParamName))
-	status := http.StatusOK
-	if !res.OK {
-		status = http.StatusConflict
-	}
-	writeJSON(w, status, res)
+	writeActionResult(w, res.OK, res)
 }
 
 func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
@@ -1705,11 +1685,7 @@ func (s *Server) handleStateCompact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res := s.Backend.CompactState(s.operateContext(r), before) //nolint:contextcheck // see operateContext
-	status := http.StatusOK
-	if !res.OK {
-		status = http.StatusConflict
-	}
-	writeJSON(w, status, res)
+	writeActionResult(w, res.OK, res)
 }
 
 // handlePanic enables (action "on") or disables (action "off") the daemon-wide
@@ -1726,11 +1702,7 @@ func (s *Server) handlePanic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res := s.Backend.SetPanic(s.operateContext(r), on) //nolint:contextcheck // see operateContext
-	status := http.StatusOK
-	if !res.OK {
-		status = http.StatusConflict
-	}
-	writeJSON(w, status, res)
+	writeActionResult(w, res.OK, res)
 }
 
 func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
@@ -1826,11 +1798,7 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	case operateActions[action]:
 		opts := OperateOpts{NoCascade: queryBool(r, apiQueryNoCascade)}
 		res := s.Backend.Operate(s.operateContext(r), name, action, opts) //nolint:contextcheck // see operateContext
-		status := http.StatusOK
-		if !res.OK {
-			status = http.StatusConflict
-		}
-		writeJSON(w, status, res)
+		writeActionResult(w, res.OK, res)
 	case monitorActions[action]:
 		err := s.Backend.SetMonitored(r.Context(), name, action == apiActionMonitor)
 		if err != nil {
@@ -1856,11 +1824,7 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 		default:
 			res = s.Backend.ControlRAID(s.operateContext(r), name, action, r.Header.Get("X-Sermo-Confirm")) //nolint:contextcheck // see operateContext
 		}
-		status := http.StatusOK
-		if !res.OK {
-			status = http.StatusConflict
-		}
-		writeJSON(w, status, res)
+		writeActionResult(w, res.OK, res)
 		return
 	}
 	if !monitorActions[action] {
@@ -1884,6 +1848,16 @@ func (s *Server) handleReload(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, ActionResult{OK: true, Message: apiMessageReloadRequested})
+}
+
+// writeActionResult writes an action outcome as JSON: 200 when the backend
+// accepted it, 409 Conflict when it was rejected.
+func writeActionResult(w http.ResponseWriter, ok bool, res any) {
+	status := http.StatusOK
+	if !ok {
+		status = http.StatusConflict
+	}
+	writeJSON(w, status, res)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

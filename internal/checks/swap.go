@@ -4,11 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sermo/internal/metrics"
 	"strconv"
 	"strings"
 	"time"
-
-	"sermo/internal/units"
 )
 
 const (
@@ -18,7 +17,6 @@ const (
 	swapVMStatPagesOut       = "pswpout"
 	swapVMStatPagesInPrefix  = swapVMStatPagesIn + " "
 	swapVMStatPagesOutPrefix = swapVMStatPagesOut + " "
-	swapMeminfoKBIndex       = 0
 )
 
 // SwapSample is one observation of system swap: total/free bytes and the
@@ -130,9 +128,9 @@ func defaultSwapSampler() (SwapSample, error) {
 	}
 	for line := range strings.SplitSeq(string(mem), checkLineSeparator) {
 		if v, ok := strings.CutPrefix(line, swapMeminfoTotalPrefix); ok {
-			s.TotalBytes = parseMeminfoKB(v)
+			s.TotalBytes, _ = metrics.MeminfoKB(v)
 		} else if v, ok := strings.CutPrefix(line, swapMeminfoFreePrefix); ok {
-			s.FreeBytes = parseMeminfoKB(v)
+			s.FreeBytes, _ = metrics.MeminfoKB(v)
 		}
 	}
 	if vm, err := os.ReadFile(procVMStatPath); err == nil {
@@ -168,17 +166,4 @@ func parseSwapPageCounter(name, value string) (uint64, error) {
 		return 0, fmt.Errorf("%s: %w", name, err)
 	}
 	return n, nil
-}
-
-// parseMeminfoKB parses the leading kB value of a "Field:   N kB" line to bytes.
-func parseMeminfoKB(s string) uint64 {
-	fields := strings.Fields(s)
-	if len(fields) == 0 {
-		return 0
-	}
-	kb, err := strconv.ParseUint(fields[swapMeminfoKBIndex], numericBaseDecimal, numericBits64)
-	if err != nil {
-		return 0
-	}
-	return kb * units.BytesPerKiB
 }

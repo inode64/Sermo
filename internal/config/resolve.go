@@ -14,9 +14,8 @@ import (
 )
 
 const (
-	unknownCatalogFormat        = "unknown %s %q"
-	unknownCatalogServiceFormat = "unknown catalog service %q"
-	unknownServiceFormat        = "unknown service %q"
+	unknownCatalogFormat = "unknown %s %q"
+	unknownServiceFormat = "unknown service %q"
 )
 
 // Resolved is a fully flattened, variable-expanded service definition.
@@ -67,8 +66,8 @@ func (c *Config) resolveExpandedService(merged map[string]any, name string) (map
 	errs = append(errs, c.expandAnalyze(expanded)...)
 	errs = append(errs, expandPidfile(expanded)...)
 	errs = append(errs, expandPidfiles(expanded)...)
-	errs = append(errs, expandSocket(expanded)...)
-	errs = append(errs, expandLockfile(expanded)...)
+	errs = append(errs, expandServiceArtifact(expanded, artifactSocket)...)
+	errs = append(errs, expandServiceArtifact(expanded, artifactLockfile)...)
 	errs = append(errs, expandServiceWatches(expanded)...)
 	return expanded, errs
 }
@@ -265,36 +264,21 @@ func expandPidfiles(tree map[string]any) []string {
 	return errs
 }
 
-// expandSocket desugars a top-level `socket:` declaration into a gated health
-// check. A service-created runtime socket should not block start/restart
-// preflight: it is checked while the service is active, like pidfiles.
-func expandSocket(tree map[string]any) []string {
-	raw, present := tree[artifactSocket]
+// expandServiceArtifact desugars a top-level runtime-artifact declaration
+// (`socket:` or `lockfile:`) into a gated health check. A service-created
+// runtime artifact should not block start/restart preflight: it is checked
+// while the service is active, like pidfiles. `lockfile:` is for
+// service-owned runtime lock artifacts, not Sermo operation locks.
+func expandServiceArtifact(tree map[string]any, artifact string) []string {
+	raw, present := tree[artifact]
 	if !present {
 		return nil
 	}
-	delete(tree, artifactSocket)
+	delete(tree, artifact)
 
-	decl, errs := parseServiceArtifactPaths(artifactSocket, raw)
+	decl, errs := parseServiceArtifactPaths(artifact, raw)
 	if len(decl.paths) > 0 {
-		ensureServiceArtifactCheck(tree, artifactSocket, artifactSocket, serviceArtifactPathValue(decl.paths), decl.optional)
-	}
-	return errs
-}
-
-// expandLockfile desugars a top-level `lockfile:` declaration into a gated
-// health check. It is for service-owned runtime lock artifacts, not Sermo
-// operation locks.
-func expandLockfile(tree map[string]any) []string {
-	raw, present := tree[artifactLockfile]
-	if !present {
-		return nil
-	}
-	delete(tree, artifactLockfile)
-
-	decl, errs := parseServiceArtifactPaths(artifactLockfile, raw)
-	if len(decl.paths) > 0 {
-		ensureServiceArtifactCheck(tree, artifactLockfile, artifactLockfile, serviceArtifactPathValue(decl.paths), decl.optional)
+		ensureServiceArtifactCheck(tree, artifact, artifact, serviceArtifactPathValue(decl.paths), decl.optional)
 	}
 	return errs
 }
@@ -1330,22 +1314,6 @@ func (c *Config) expandAppsChain(tree map[string]any, chain []string) []string {
 	return errs
 }
 
-// ResolveCatalogService expands a catalog service's own body — no service merge
-// — so its concrete values (notably the binary path and preflight commands) can
-// be inspected directly, as the `apps` command does. ${name} and ${display_name}
-// are available; the returned errors mirror Resolve's.
-func (c *Config) ResolveCatalogService(name string) (Resolved, []string) {
-	canonicalName, ok := c.CanonicalCatalogName(CategoryService, name)
-	if !ok {
-		return Resolved{Name: name}, []string{fmt.Sprintf(unknownCatalogServiceFormat, name)}
-	}
-	doc, ok := c.CatalogServices[canonicalName]
-	if !ok {
-		return Resolved{Name: name}, []string{fmt.Sprintf(unknownCatalogServiceFormat, name)}
-	}
-	return c.resolveDoc(doc, canonicalName)
-}
-
 // catalogRegistry returns the registry that holds a given category's
 // definitions (apps, libraries, patterns, else the catalog services).
 func (c *Config) catalogRegistry(category string) map[string]*Document {
@@ -1378,7 +1346,7 @@ func (c *Config) ResolveCatalog(category, name string) (Resolved, []string) {
 }
 
 // resolveDoc expands a single catalog document's own body (no service merge),
-// shared by ResolveCatalogService and the `apps` linkage (which resolves app documents).
+// shared by ResolveCatalog and the `apps` linkage (which resolves app documents).
 func (c *Config) resolveDoc(doc *Document, name string) (Resolved, []string) {
 	// Top level (catalog service / service): its apps: links start a fresh app
 	// chain. The top-level name is a different namespace than apps, so a catalog service
@@ -1404,8 +1372,8 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string) (
 	errs = append(errs, c.expandAnalyze(expanded)...)
 	errs = append(errs, expandPidfile(expanded)...)
 	errs = append(errs, expandPidfiles(expanded)...)
-	errs = append(errs, expandSocket(expanded)...)
-	errs = append(errs, expandLockfile(expanded)...)
+	errs = append(errs, expandServiceArtifact(expanded, artifactSocket)...)
+	errs = append(errs, expandServiceArtifact(expanded, artifactLockfile)...)
 	errs = append(errs, expandServiceWatches(expanded)...)
 	return Resolved{Name: name, Tree: expanded}, errs
 }

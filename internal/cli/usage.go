@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"io"
-	"text/tabwriter"
 )
 
 type commandUsage struct {
@@ -542,7 +541,7 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "  sermoctl COMMAND --help")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Global Flags:")
-	tw := tabwriter.NewWriter(w, 0, 0, tabwriterPadding, ' ', 0)
+	tw := newTabWriter(w)
 	fmt.Fprintln(tw, "  --config PATH\tconfig file (default /etc/sermo/sermo.yml)")
 	fmt.Fprintln(tw, "  --backend auto|systemd|openrc\tservice-manager backend; default is auto")
 	fmt.Fprintln(tw, "  --json\tmachine-readable output where supported")
@@ -554,7 +553,7 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "Commands:")
 	for _, group := range commandGroups {
 		fmt.Fprintf(w, "  %s:\n", group.Title)
-		tw = tabwriter.NewWriter(w, 0, 0, tabwriterPadding, ' ', 0)
+		tw = newTabWriter(w)
 		for _, name := range group.Commands {
 			help, _ := lookupCommandUsage(name)
 			fmt.Fprintf(tw, "    %s\t%s\n", help.Name, help.Summary)

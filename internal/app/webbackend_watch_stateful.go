@@ -6,7 +6,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -15,14 +14,12 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
-	"sermo/internal/metrics"
+	"sermo/internal/units"
 	"sermo/internal/web"
 )
 
 const (
 	watchReadingFieldEntries = "entries"
-	watchReadingKindDir      = "directory"
-	watchReadingKindOther    = "other"
 	watchReadingNumericBase  = 10
 	fileWatchReadingsPerPath = 6
 )
@@ -50,44 +47,26 @@ func (b *WebBackend) fileWatchView(ctx context.Context, w *webWatch) (*web.Watch
 			summaries = append(summaries, path+": "+msg)
 			continue
 		}
-		kind := fileKindLabel(info.Mode())
-		readings = append(readings,
-			web.WatchReading{Field: checks.DataKeyPath, Label: watchReadingLabelPath, Value: path},
-			web.WatchReading{Field: checks.DataKeyKind, Label: watchReadingLabelKind, Value: kind},
-			web.WatchReading{Field: checks.DataKeySize, Label: watchReadingLabelSize, Value: humanize.IBytes(uint64(info.Size()))},
-			web.WatchReading{Field: checks.DataKeyMode, Label: watchReadingLabelMode, Value: info.Mode().Perm().String()},
-			web.WatchReading{Field: checks.DataKeyModifiedAt, Label: watchReadingLabelModifiedAt, Value: info.ModTime().UTC().Format(time.RFC3339)},
-			web.WatchReading{Field: checks.DataKeyAge, Label: watchReadingLabelAge, Value: formatInterval(now.Sub(info.ModTime()).Round(time.Second))},
-		)
-		if sys, ok := info.Sys().(*syscall.Stat_t); ok {
-			readings = append(readings, web.WatchReading{Field: checks.CheckKeyOwner, Label: watchReadingLabelOwner, Value: fmt.Sprintf("%d:%d", sys.Uid, sys.Gid)})
-		}
+		data := checks.FileResultData(path, info)
+		data[checks.DataKeyAge] = units.HumanizeDuration(now.Sub(info.ModTime()).Round(time.Second))
+		var entriesErr error
 		if cfgval.Bool(w.check[checks.CheckKeyRecursive]) && info.IsDir() {
 			probeCtx, cancel := b.probeContext(ctx)
 			n, countErr := checks.TallyEntries(probeCtx, path, checks.CountKindAny, true, cfgval.Bool(w.check[checks.CheckKeyIncludeHidden]), b.probeTimeout())
 			cancel()
 			if countErr != nil {
-				readings = append(readings, web.WatchReading{Field: watchReadingFieldEntries, Label: watchReadingLabelEntries, Error: countErr.Error()})
+				entriesErr = countErr
 			} else {
-				readings = append(readings, web.WatchReading{Field: watchReadingFieldEntries, Label: watchReadingLabelEntries, Value: strconv.Itoa(n)})
+				data[watchReadingFieldEntries] = n
 			}
 		}
-		summaries = append(summaries, fmt.Sprintf("%s %s", path, kind))
+		readings = append(readings, checkReadings(checks.CheckTypeFile, data)...)
+		if entriesErr != nil {
+			readings = append(readings, web.WatchReading{Field: watchReadingFieldEntries, Label: watchReadingLabelEntries, Error: entriesErr.Error()})
+		}
+		summaries = append(summaries, fmt.Sprintf("%s %s", path, data[checks.DataKeyKind]))
 	}
 	return nil, readings, strings.Join(summaries, displayListSeparator)
-}
-
-func fileKindLabel(mode os.FileMode) string {
-	switch {
-	case mode&os.ModeSymlink != 0:
-		return checks.CountKindSymlink
-	case mode.IsRegular():
-		return checks.CountKindFile
-	case mode.IsDir():
-		return watchReadingKindDir
-	default:
-		return watchReadingKindOther
-	}
 }
 
 func (b *WebBackend) countWatchView(ctx context.Context, w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
@@ -163,12 +142,12 @@ func (b *WebBackend) firewallRulesWatchView(ctx context.Context, w *webWatch) (*
 			minRules = uint64(n)
 		}
 	}
-	readings := []web.WatchReading{
-		{Field: checks.DataKeyBackend, Label: watchReadingLabelBackend, Value: sample.Backend},
-		{Field: checks.DataKeyRules, Label: watchReadingLabelRules, Value: strconv.FormatUint(sample.Rules, watchReadingNumericBase)},
-		{Field: checks.DataKeyMinRules, Label: watchReadingLabelMinRules, Value: strconv.FormatUint(minRules, watchReadingNumericBase)},
+	data := map[string]any{
+		checks.DataKeyBackend:  sample.Backend,
+		checks.DataKeyRules:    sample.Rules,
+		checks.DataKeyMinRules: minRules,
 	}
-	return nil, readings, fmt.Sprintf("firewall %s has %d rules", sample.Backend, sample.Rules)
+	return nil, checkReadings(checks.CheckTypeFirewallRules, data), fmt.Sprintf("firewall %s has %d rules", sample.Backend, sample.Rules)
 }
 
 func (b *WebBackend) sizeWatchView(ctx context.Context, w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
@@ -221,19 +200,16 @@ func (b *WebBackend) hdparmWatchView(ctx context.Context, w *webWatch) (*web.Wat
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "hdparm: " + msg
 	}
-	readings := []web.WatchReading{{Field: checks.DataKeyDevice, Label: watchReadingLabelDevice, Value: device}}
 	const hdparmSummaryPartCapacity = 2
 
 	parts := make([]string, 0, hdparmSummaryPartCapacity)
 	for _, field := range []string{checks.HdparmFieldRead, checks.HdparmFieldCached} {
 		if v, ok := values[field]; ok {
-			readings = append(readings, web.WatchReading{
-				Field: field, Label: field, Value: watchReadingMetricValue(v, 1, watchReadingUnitMegabytesPerSecond),
-			})
 			parts = append(parts, fmt.Sprintf("%s=%.1f", field, v))
 		}
 	}
-	return nil, readings, fmt.Sprintf("hdparm %s %s MB/s", device, strings.Join(parts, " "))
+	return nil, checkReadings(checks.CheckTypeHdparm, checks.HdparmResultData(device, values)),
+		fmt.Sprintf("hdparm %s %s MB/s", device, strings.Join(parts, " "))
 }
 
 func (b *WebBackend) smartWatchView(ctx context.Context, w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
@@ -249,29 +225,8 @@ func (b *WebBackend) smartWatchView(ctx context.Context, w *webWatch) (*web.Watc
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "smart: " + msg
 	}
-	readings := []web.WatchReading{
-		{Field: checks.DataKeyDevice, Label: watchReadingLabelDevice, Value: device},
-		{Field: checks.DataKeyHealth, Label: watchReadingLabelHealth, Value: sample.Health},
-	}
-	if sample.SelfTestRunning {
-		readings = append(readings, web.WatchReading{Field: checks.DataKeyDeviceState, Label: watchReadingLabelState, Value: checks.DeviceStateTesting})
-	}
-	for _, field := range checks.SmartPredFields {
-		if v, ok := sample.Values[field]; ok {
-			label := field
-			unit := ""
-			switch field {
-			case checks.SmartFieldTemperature:
-				unit = watchReadingUnitCelsiusSymbol
-			case checks.SmartFieldWear:
-				unit = metrics.MetricUnitPercent
-			}
-			readings = append(readings, web.WatchReading{
-				Field: field, Label: label, Value: watchReadingMetricValue(v, 0, unit),
-			})
-		}
-	}
-	return nil, readings, fmt.Sprintf("smart %s health=%s", device, sample.Health)
+	data := checks.SmartResultData(device, sample.Health, sample.SelfTestRunning, sample.Values)
+	return nil, checkReadings(checks.CheckTypeSmart, data), fmt.Sprintf("smart %s health=%s", device, sample.Health)
 }
 
 func (b *WebBackend) probeTimeout() time.Duration {

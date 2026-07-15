@@ -15,6 +15,7 @@ import (
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/process"
+	"sermo/internal/units"
 )
 
 // ProcMatch selects which processes a process watch tracks: by name (the exe
@@ -219,6 +220,27 @@ func (w *procWatcher) publishSnapshot(samples []ProcInfo, ok bool) {
 		})
 		return
 	}
+	data := processWatchData(w.match.Name, w.match.User, samples)
+	target := "process " + w.match.Name
+	if w.match.User != "" {
+		target += " user " + w.match.User
+	}
+	summary := fmt.Sprintf("%s: %d matching process%s", target, len(samples), pluralSuffix(len(samples), "process"))
+	if len(samples) > 0 {
+		summary += fmt.Sprintf(", rss %d bytes", data[watchReadingFieldRSS])
+	}
+	result := checks.Result{
+		Check:   w.name,
+		OK:      true,
+		Message: summary,
+		Data:    data,
+	}
+	w.publish(w.name, checks.CheckTypeProcess, checks.ApplySummary(w.summary, w.check, result))
+}
+
+// processWatchData is the persisted reading data for one process-watch sample,
+// shared by the daemon cycle snapshot and the live watch view.
+func processWatchData(name, user string, samples []ProcInfo) map[string]any {
 	var rssTotal, cpuTicksTotal, ioTotal uint64
 	ioKnown := false
 	for _, sample := range samples {
@@ -230,33 +252,19 @@ func (w *procWatcher) publishSnapshot(samples []ProcInfo, ok bool) {
 		}
 	}
 	data := map[string]any{
-		watchReadingFieldProcess:  w.match.Name,
+		watchReadingFieldProcess:  name,
 		watchReadingFieldMatches:  len(samples),
 		checks.DataKeyPIDs:        processPIDList(samples),
 		watchReadingFieldRSS:      rssTotal,
 		watchReadingFieldCPUTicks: cpuTicksTotal,
 	}
-	if w.match.User != "" {
-		data[watchReadingFieldUser] = w.match.User
+	if user != "" {
+		data[watchReadingFieldUser] = user
 	}
 	if ioKnown {
 		data[metrics.MetricIO] = ioTotal
 	}
-	target := "process " + w.match.Name
-	if w.match.User != "" {
-		target += " user " + w.match.User
-	}
-	summary := fmt.Sprintf("%s: %d matching process%s", target, len(samples), pluralSuffix(len(samples), "process"))
-	if len(samples) > 0 {
-		summary += fmt.Sprintf(", rss %d bytes", rssTotal)
-	}
-	result := checks.Result{
-		Check:   w.name,
-		OK:      true,
-		Message: summary,
-		Data:    data,
-	}
-	w.publish(w.name, checks.CheckTypeProcess, checks.ApplySummary(w.summary, w.check, result))
+	return data
 }
 
 func procSamplerFromDeps(deps Deps) ProcSampler {
@@ -310,7 +318,7 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 		ok = false
 	}
 
-	msg := fmt.Sprintf("%s pid %d matches (age %s, rss %d)", w.match.Name, s.PID, formatInterval(age), s.RSS)
+	msg := fmt.Sprintf("%s pid %d matches (age %s, rss %d)", w.match.Name, s.PID, units.HumanizeDuration(age), s.RSS)
 	return ok, env, msg
 }
 
@@ -322,28 +330,21 @@ func (w *procWatcher) fire(ctx context.Context, info ProcInfo, msg string, env m
 	// The kill action only applies to a presence fire (a matched, still-present
 	// PID); a `gone` fire has nothing to signal.
 	killable := w.kill != nil && env[sermoEnvChange] == procChangeThreshold
-	if w.dryRun {
-		w.emitEvent(Event{Watch: w.name, Kind: eventKindDryRun, Message: w.dryRunActions(killable) + ": " + msg})
-		dispatchDryRunNotify(ctx, w.notifiers, watchMessage(w.name, msg, env), w.name, w.emitEvent)
-		return
-	}
-	if w.inPanic != nil && w.inPanic() {
-		w.emitEvent(Event{Watch: w.name, Kind: eventKindPanicSuppressed, Message: "panic mode: hook/notify/kill suppressed: " + msg})
-		return
-	}
-
-	if len(w.hook.Command) > 0 {
-		runner := defaultHookRunner(w.runner)
-		if err := w.hook.Run(ctx, runner, env); err != nil {
-			w.emitEvent(Event{Watch: w.name, Kind: eventKindHookFail, Message: msg + ": " + err.Error()})
-		} else {
-			w.emitEvent(Event{Watch: w.name, Kind: eventKindHook, Message: msg})
-		}
+	spec := watchFireSpec{
+		name:        w.name,
+		hook:        w.hook,
+		runner:      w.runner,
+		notifiers:   w.notifiers,
+		inPanic:     w.inPanic,
+		dryRun:      w.dryRun,
+		emit:        w.emitEvent,
+		dryRunLabel: w.dryRunActions(killable),
+		panicLabel:  "panic mode: hook/notify/kill suppressed",
 	}
 	if killable {
-		w.doKill(ctx, info, msg)
+		spec.action = func() { w.doKill(ctx, info, msg) }
 	}
-	dispatchNotify(ctx, w.notifiers, watchMessage(w.name, msg, env), w.name, w.emitEvent)
+	dispatchWatchFire(ctx, spec, msg, env)
 }
 
 func (w *procWatcher) summaryMessage(info ProcInfo, message string, env map[string]string) string {
@@ -444,13 +445,13 @@ func (w *procWatcher) emitSignalResult(msg string, sig syscall.Signal, result pr
 		if sig == syscall.SIGKILL && w.kill.signal != syscall.SIGKILL {
 			w.emitEvent(Event{Watch: w.name, Kind: eventKindKill, Message: fmt.Sprintf("%s: escalated to SIGKILL for pid %d", msg, pid)})
 		} else {
-			w.emitEvent(Event{Watch: w.name, Kind: eventKindKill, Message: fmt.Sprintf("%s: sent %s to pid %d", msg, sigName(sig), pid)})
+			w.emitEvent(Event{Watch: w.name, Kind: eventKindKill, Message: fmt.Sprintf("%s: sent %s to pid %d", msg, process.SignalName(sig), pid)})
 		}
 		return true
 	}
 	if len(result.Failed) > 0 {
 		failure := result.Failed[0]
-		w.emitEvent(Event{Watch: w.name, Kind: eventKindKillFailed, Message: fmt.Sprintf("%s: %s pid %d: %v", msg, sigName(sig), failure.PID, failure.Err)})
+		w.emitEvent(Event{Watch: w.name, Kind: eventKindKillFailed, Message: fmt.Sprintf("%s: %s pid %d: %v", msg, process.SignalName(sig), failure.PID, failure.Err)})
 		return false
 	}
 	w.emitEvent(Event{Watch: w.name, Kind: eventKindKillFailed, Message: msg + ": pid did not match kill selector"})
@@ -484,19 +485,6 @@ func (s ProcInfo) asProcess() process.Process {
 		UID:   s.UID,
 		Exe:   s.Exe,
 		ExeOK: s.ExeOK,
-	}
-}
-
-// sigName renders the termination signals a kill action can send with their
-// conventional names (Signal.String() would say "terminated"/"killed").
-func sigName(sig syscall.Signal) string {
-	switch sig {
-	case syscall.SIGTERM:
-		return "SIGTERM"
-	case syscall.SIGKILL:
-		return "SIGKILL"
-	default:
-		return sig.String()
 	}
 }
 

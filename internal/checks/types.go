@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -552,8 +553,51 @@ func (c fileCheck) Run(_ context.Context) Result {
 		return c.result(false, c.path+" is empty", start)
 	}
 	res := c.result(true, c.path+" is a regular file", start)
-	res.Data = map[string]any{DataKeyPath: c.path, DataKeySize: info.Size()}
+	res.Data = FileResultData(c.path, info)
 	return res
+}
+
+const (
+	// FileModeFormat renders permission bits the way hooks and readings show them.
+	FileModeFormat = "%04o"
+	// FileOwnerFormat renders a uid:gid pair for hooks and readings.
+	FileOwnerFormat = "%d:%d"
+	// FileKindDirectory extends the count kinds with the display-only
+	// classification for directories.
+	FileKindDirectory = "directory"
+	// FileKindOther classifies paths that are neither files, directories nor
+	// symlinks (sockets, devices, pipes).
+	FileKindOther = "other"
+)
+
+// FileKind classifies a file mode for display: symlink, file, directory or other.
+func FileKind(mode os.FileMode) string {
+	switch {
+	case mode&os.ModeSymlink != 0:
+		return CountKindSymlink
+	case mode.IsRegular():
+		return CountKindFile
+	case mode.IsDir():
+		return FileKindDirectory
+	default:
+		return FileKindOther
+	}
+}
+
+// FileResultData is the persisted reading data for one inspected path, shared
+// by the file check and the live file watch view.
+func FileResultData(path string, info os.FileInfo) map[string]any {
+	data := map[string]any{
+		DataKeyPath:       path,
+		DataKeyKind:       FileKind(info.Mode()),
+		DataKeySize:       info.Size(),
+		DataKeyMode:       fmt.Sprintf(FileModeFormat, info.Mode().Perm()),
+		DataKeyModifiedAt: info.ModTime().UTC().Format(time.RFC3339),
+	}
+	if sys, ok := info.Sys().(*syscall.Stat_t); ok {
+		data[CheckKeyOwner] = fmt.Sprintf(FileOwnerFormat, sys.Uid, sys.Gid)
+	}
+	return data
 }
 
 // lockfileCheck passes when any configured candidate exists and is a regular

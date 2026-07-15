@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sermo/internal/metrics"
 	"strings"
 	"time"
 )
@@ -78,9 +79,9 @@ func defaultMemorySampler() (MemorySample, error) {
 	var s MemorySample
 	for line := range strings.SplitSeq(string(data), checkLineSeparator) {
 		if v, ok := strings.CutPrefix(line, meminfoMemTotalPrefix); ok {
-			s.TotalBytes = parseMeminfoKB(v)
+			s.TotalBytes, _ = metrics.MeminfoKB(v)
 		} else if v, ok := strings.CutPrefix(line, meminfoMemAvailablePrefix); ok {
-			s.AvailableBytes = parseMeminfoKB(v)
+			s.AvailableBytes, _ = metrics.MeminfoKB(v)
 		}
 	}
 	return s, nil

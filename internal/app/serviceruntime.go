@@ -9,6 +9,7 @@ import (
 	"sermo/internal/metrics"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
+	"sermo/internal/units"
 	"sermo/internal/web"
 )
 
@@ -372,7 +373,7 @@ func serviceRuntimeUptime(started, now time.Time) (startedAt, uptime string, upt
 		return "", "", 0
 	}
 	secs := max(int64(now.Sub(started).Seconds()), 0)
-	return started.UTC().Format(time.RFC3339), formatInterval(time.Duration(secs) * time.Second), secs
+	return started.UTC().Format(time.RFC3339), units.HumanizeDuration(time.Duration(secs) * time.Second), secs
 }
 
 func oldestProcessStart(procs []process.Process, r metrics.Reader, now time.Time) (time.Time, bool) {

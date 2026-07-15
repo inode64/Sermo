@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"text/tabwriter"
 
 	"sermo/internal/app"
 	"sermo/internal/appinspect"
@@ -92,7 +91,7 @@ func (a App) printApps(reports []appinspect.Report, empty string, long bool, hea
 		fmt.Fprintf(a.Stdout, "no %s\n", empty)
 		return
 	}
-	tw := tabwriter.NewWriter(a.Stdout, 0, 0, tabwriterPadding, ' ', 0)
+	tw := newTabWriter(a.Stdout)
 	fmt.Fprintf(tw, "%s\tVERSION\tSTATUS\n", heading)
 	for _, r := range reports {
 		version := r.VersionShort

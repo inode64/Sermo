@@ -51,8 +51,14 @@ func (c edacCheck) Run(_ context.Context) Result {
 	}
 
 	r := c.result(ok, fmt.Sprintf("edac: %d correctable, %d uncorrectable", st.CE, st.UE), start)
-	r.Data = map[string]any{fieldCE: float64(st.CE), fieldUE: float64(st.UE)}
+	r.Data = EdacResultData(st)
 	return r
+}
+
+// EdacResultData is the persisted reading data for one EDAC counter sample,
+// shared by the check cycle and the live watch view.
+func EdacResultData(st EdacCounts) map[string]any {
+	return map[string]any{fieldCE: float64(st.CE), fieldUE: float64(st.UE)}
 }
 
 // SampleEdac returns one live EDAC memory-error observation using the default

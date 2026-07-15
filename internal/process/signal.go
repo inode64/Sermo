@@ -223,14 +223,14 @@ func protectedSignalTarget(pid int, sig syscall.Signal, probe signalTargetProbe)
 		return nil
 	}
 	if pid == 1 {
-		return fmt.Errorf("refusing to send %s to protected pid 1", sigName(sig))
+		return fmt.Errorf("refusing to send %s to protected pid 1", SignalName(sig))
 	}
 	id, ok := probe(pid)
 	if pid == 2 && !ok {
-		return fmt.Errorf("refusing to send %s to protected kernel pid 2", sigName(sig))
+		return fmt.Errorf("refusing to send %s to protected kernel pid 2", SignalName(sig))
 	}
 	if ok && protectedKernelProcess(id.PID, id.PPID, id.ExeOK, id.Cmdline) {
-		return fmt.Errorf("refusing to send %s to protected kernel process pid %d", sigName(sig), pid)
+		return fmt.Errorf("refusing to send %s to protected kernel process pid %d", SignalName(sig), pid)
 	}
 	return nil
 }
@@ -244,7 +244,9 @@ func terminatingSignal(sig syscall.Signal) bool {
 	}
 }
 
-func sigName(sig syscall.Signal) string {
+// SignalName renders a signal with its conventional name (Signal.String()
+// would say "terminated"/"killed"); unmapped signals fall back to String().
+func SignalName(sig syscall.Signal) string {
 	switch sig {
 	case syscall.SIGKILL:
 		return "SIGKILL"

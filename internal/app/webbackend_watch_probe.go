@@ -9,6 +9,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/units"
 	"sermo/internal/web"
 )
 
@@ -140,11 +141,11 @@ func (b *WebBackend) watchProbeStartedAt(name string) (time.Time, bool) {
 }
 
 func manualProbeCompletedMessage(summary string, duration time.Duration) string {
-	return fmt.Sprintf("manual probe completed in %s: %s", formatInterval(duration), summary)
+	return fmt.Sprintf("manual probe completed in %s: %s", units.HumanizeDuration(duration), summary)
 }
 
 func manualProbeFailedMessage(summary string, duration time.Duration) string {
-	return fmt.Sprintf("manual probe failed after %s: %s", formatInterval(duration), summary)
+	return fmt.Sprintf("manual probe failed after %s: %s", units.HumanizeDuration(duration), summary)
 }
 
 // ProbeWatch runs and records a fresh check instance for a supported host watch.

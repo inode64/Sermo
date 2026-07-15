@@ -1,5 +1,7 @@
 package app
 
+import "sermo/internal/checks"
+
 const (
 	sermoEnvPrefix = "SERMO_"
 
@@ -32,6 +34,6 @@ const (
 	envFloatPrecisionAuto = -1
 	procWatchCPUPrecision = 2
 	procWatchIOPrecision  = 0
-	fileModeFormat        = "%04o"
-	fileOwnerFormat       = "%d:%d"
+	fileModeFormat        = checks.FileModeFormat
+	fileOwnerFormat       = checks.FileOwnerFormat
 )

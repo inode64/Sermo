@@ -15,6 +15,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/notify"
+	"sermo/internal/units"
 )
 
 // fileCond is the set of attribute conditions a file watch evaluates per path.
@@ -167,7 +168,7 @@ func (w *fileWatcher) publishSnapshot(current map[string]fileState) {
 		data[checks.DataKeyPath] = w.paths[0]
 	}
 	if w.cond.olderThan > 0 {
-		data[checks.DataKeyAge] = formatInterval(root.age.Round(time.Second))
+		data[checks.DataKeyAge] = units.HumanizeDuration(root.age.Round(time.Second))
 	}
 	if w.recursive {
 		entries := max(len(current)-1, 0)
@@ -237,7 +238,7 @@ func (w *fileWatcher) scan(now time.Time) map[string]fileState {
 }
 
 func (w *fileWatcher) stateOf(info fs.FileInfo, now time.Time) fileState {
-	st := fileState{size: info.Size(), kind: fileKindLabel(info.Mode()), modifiedAt: info.ModTime()}
+	st := fileState{size: info.Size(), kind: checks.FileKind(info.Mode()), modifiedAt: info.ModTime()}
 	if sys, ok := info.Sys().(*syscall.Stat_t); ok {
 		st.perm = uint32(sys.Mode) & fileStatePermMask
 		st.uid, st.gid = sys.Uid, sys.Gid
@@ -291,7 +292,7 @@ func (w *fileWatcher) diff(ctx context.Context, path string, prev, cur fileState
 func (w *fileWatcher) fireOlderThan(ctx context.Context, path string, cur fileState) {
 	ageSeconds := strconv.FormatInt(int64(cur.age.Seconds()), envFormatBase)
 	w.fire(ctx, path, fileChangeOlderThan,
-		fmt.Sprintf("%s was modified at %s and is older than %s", path, cur.modifiedAt.UTC().Format(time.RFC3339), formatInterval(w.cond.olderThan)), map[string]string{
+		fmt.Sprintf("%s was modified at %s and is older than %s", path, cur.modifiedAt.UTC().Format(time.RFC3339), units.HumanizeDuration(w.cond.olderThan)), map[string]string{
 			sermoEnvModifiedAt: cur.modifiedAt.UTC().Format(time.RFC3339),
 			sermoEnvAgeSeconds: ageSeconds,
 			sermoEnvValue:      w.cond.olderThan.String(),
@@ -336,24 +337,17 @@ func (w *fileWatcher) fire(ctx context.Context, path, change, msg string, extra 
 		sermoEnvMessage:   msg,
 	}
 	maps.Copy(env, extra)
-	if w.dryRun {
-		w.emitEvent(Event{Watch: w.name, Kind: eventKindDryRun, Message: watchDryRunMessage(w.hook, w.notifiers, nil) + ": " + msg})
-		dispatchDryRunNotify(ctx, w.notifiers, watchMessage(w.name, msg, env), w.name, w.emitEvent)
-		return
-	}
-	if w.inPanic != nil && w.inPanic() {
-		w.emitEvent(Event{Watch: w.name, Kind: eventKindPanicSuppressed, Message: "panic mode: hook/notify suppressed: " + msg})
-		return
-	}
-	if len(w.hook.Command) > 0 {
-		runner := defaultHookRunner(w.runner)
-		if err := w.hook.Run(ctx, runner, env); err != nil {
-			w.emitEvent(Event{Watch: w.name, Kind: eventKindHookFail, Message: msg + ": " + err.Error()})
-		} else {
-			w.emitEvent(Event{Watch: w.name, Kind: eventKindHook, Message: msg})
-		}
-	}
-	dispatchNotify(ctx, w.notifiers, watchMessage(w.name, msg, env), w.name, w.emitEvent)
+	dispatchWatchFire(ctx, watchFireSpec{
+		name:        w.name,
+		hook:        w.hook,
+		runner:      w.runner,
+		notifiers:   w.notifiers,
+		inPanic:     w.inPanic,
+		dryRun:      w.dryRun,
+		emit:        w.emitEvent,
+		dryRunLabel: watchDryRunMessage(w.hook, w.notifiers, nil),
+		panicLabel:  "panic mode: hook/notify suppressed",
+	}, msg, env)
 }
 
 func (w *fileWatcher) summaryMessage(path, change, message string, extra map[string]string) string {

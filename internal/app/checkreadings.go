@@ -11,6 +11,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/metrics"
+	"sermo/internal/units"
 	"sermo/internal/web"
 )
 
@@ -31,7 +32,6 @@ const (
 	watchReadingLabelChipFilter        = "Chip filter"
 	watchReadingLabelConfiguredPath    = "Configured path"
 	watchReadingLabelCount             = "Count"
-	watchReadingLabelCorrectable       = "Correctable"
 	watchReadingLabelCPUTicks          = "CPU ticks"
 	watchReadingLabelCurrentSize       = "Current size"
 	watchReadingLabelDaysLeft          = "Days left"
@@ -57,7 +57,6 @@ const (
 	watchReadingLabelGrowthLimit       = "Growth limit"
 	watchReadingLabelHealth            = "Health"
 	watchReadingLabelHost              = "Host"
-	watchReadingLabelHottestTemp       = "Hottest temp"
 	watchReadingLabelInputs            = "Inputs"
 	watchReadingLabelInterface         = "Interface"
 	watchReadingLabelIO                = "IO total"
@@ -96,7 +95,6 @@ const (
 	watchReadingLabelSample            = "Sample"
 	watchReadingLabelServer            = "Server"
 	watchReadingLabelSize              = "Size"
-	watchReadingLabelSlowestFan        = "Slowest fan"
 	watchReadingLabelSocket            = "Socket"
 	watchReadingLabelSomeAvg10         = "Some avg10"
 	watchReadingLabelSomeAvg60         = "Some avg60"
@@ -106,7 +104,6 @@ const (
 	watchReadingLabelState             = "State"
 	watchReadingLabelStatus            = "Status"
 	watchReadingLabelStratum           = "Stratum"
-	watchReadingLabelUncorrectable     = "Uncorrectable"
 	watchReadingLabelUsed              = "Used"
 	watchReadingLabelUsedBytes         = "Used bytes"
 	watchReadingLabelUtilization       = "Utilization"
@@ -117,7 +114,6 @@ const (
 	watchReadingLabelVGSize            = "VG size"
 	watchReadingLabelVGUsed            = "VG used"
 	watchReadingLabelVolumeGroup       = "VG"
-	watchReadingLabelVoltage           = "Lowest voltage"
 	watchReadingLabelWindow            = "Window"
 	watchReadingLabelWrite             = "Write"
 	watchReadingLabelZombies           = "Zombies"
@@ -131,15 +127,10 @@ const (
 )
 
 const (
-	watchReadingUnitBits               = metrics.MetricUnitBits
-	watchReadingUnitCelsius            = "C"
-	watchReadingUnitCelsiusSymbol      = metrics.MetricUnitCelsius
-	watchReadingUnitMegabytesPerSecond = metrics.MetricUnitMegabytesPerSecond
-	watchReadingUnitMegabitsPerSecond  = metrics.MetricUnitMegabitsPerSecond
-	watchReadingUnitRPM                = metrics.MetricUnitRPM
-	watchReadingUnitSeconds            = "s"
-	watchReadingUnitVolt               = metrics.MetricUnitVolt
-	maxWatchReadingDuration            = time.Duration(1<<63 - 1)
+	watchReadingUnitBits              = metrics.MetricUnitBits
+	watchReadingUnitMegabitsPerSecond = metrics.MetricUnitMegabitsPerSecond
+	watchReadingUnitSeconds           = "s"
+	maxWatchReadingDuration           = time.Duration(1<<63 - 1)
 )
 
 // readingBuilder accumulates the WatchReading list a *CheckReadings builder
@@ -239,7 +230,9 @@ func checkReadings(checkType string, data map[string]any) []web.WatchReading {
 		return netCheckReadings(data)
 	case checks.CheckTypeSQL:
 		return scalarQueryCheckReadings(data)
-	case checks.CheckTypeHdparm, checks.CheckTypeSmart, checks.CheckTypeSensors, checks.CheckTypeEDAC:
+	case checks.CheckTypeSensors:
+		return sensorsCheckReadings(data)
+	case checks.CheckTypeHdparm, checks.CheckTypeSmart, checks.CheckTypeEDAC:
 		return metricCheckReadings(checkType, data)
 	default:
 		if graphMetrics := checks.GraphMetrics(checkType); len(graphMetrics) > 0 {
@@ -327,6 +320,7 @@ func raidCheckReadings(data map[string]any) []web.WatchReading {
 		addString(checks.DataKeyArrays, watchReadingLabelArrays).
 		addString(checks.DataKeyDegraded, watchReadingLabelDegraded).
 		addString(checks.DataKeyRecovering, watchReadingLabelRecovering).
+		addString(checks.DataKeyDegradedArrays, watchReadingLabelDegradedArrays).
 		addString(checks.DataKeyArray, "Array").
 		addString(checks.DataKeyRaidOperation, "Operation").
 		addMetric(checks.DataKeyRaidProgressPct, "Rebuild progress", watchReadingProgressDecimals, metrics.MetricUnitPercent).
@@ -476,27 +470,54 @@ func resourceCheckReadings(checkType string, data map[string]any) []web.WatchRea
 	return rb.addMetric(checks.DataKeyValue, label, watchReadingDefaultMetricDecimals, "").readings()
 }
 
+// pressureFieldLabels maps PSI data fields to their dashboard labels.
+var pressureFieldLabels = map[string]string{
+	checks.PressureFieldSomeAvg10:  watchReadingLabelSomeAvg10,
+	checks.PressureFieldSomeAvg60:  watchReadingLabelSomeAvg60,
+	checks.PressureFieldSomeAvg300: watchReadingLabelSomeAvg300,
+	checks.PressureFieldFullAvg10:  watchReadingLabelFullAvg10,
+	checks.PressureFieldFullAvg60:  watchReadingLabelFullAvg60,
+	checks.PressureFieldFullAvg300: watchReadingLabelFullAvg300,
+}
+
 func pressureCheckReadings(data map[string]any) []web.WatchReading {
-	rb := readingsFrom(data)
+	rb := readingsFrom(data).addString(checks.DataKeyResource, watchReadingLabelResource)
 	for _, field := range checks.PressurePredFields {
-		rb.addMetric(field, field, watchReadingDefaultMetricDecimals, metrics.MetricUnitPercent)
+		label := pressureFieldLabels[field]
+		if label == "" {
+			label = field
+		}
+		rb.addMetric(field, label, watchReadingDefaultMetricDecimals, metrics.MetricUnitPercent)
 	}
 	return rb.addMetric(checks.DataKeyValue, watchReadingLabelValue, watchReadingDefaultMetricDecimals, metrics.MetricUnitPercent).readings()
 }
 
+// diskioCheckReadings formats rates with the same precision as the check's own
+// summary message: whole bytes per second, tenths of a millisecond for await.
 func diskioCheckReadings(data map[string]any) []web.WatchReading {
 	rb := readingsFrom(data).addString(checks.DataKeyDevice, watchReadingLabelDevice)
 	for _, field := range []struct {
 		key, label, unit string
+		decimals         int
 	}{
-		{checks.DiskIOFieldUtilPct, watchReadingLabelUtilization, metrics.MetricUnitPercent},
-		{checks.DiskIOFieldReadBytes, watchReadingLabelRead, metrics.MetricUnitBytesPerSecond},
-		{checks.DiskIOFieldWriteBytes, watchReadingLabelWrite, metrics.MetricUnitBytesPerSecond},
-		{checks.DiskIOFieldAwaitMs, watchReadingLabelAwait, metrics.MetricUnitMilliseconds},
+		{checks.DiskIOFieldUtilPct, watchReadingLabelUtilization, metrics.MetricUnitPercent, watchReadingDefaultMetricDecimals},
+		{checks.DiskIOFieldReadBytes, watchReadingLabelRead, metrics.MetricUnitBytesPerSecond, 0},
+		{checks.DiskIOFieldWriteBytes, watchReadingLabelWrite, metrics.MetricUnitBytesPerSecond, 0},
+		{checks.DiskIOFieldAwaitMs, watchReadingLabelAwait, metrics.MetricUnitMilliseconds, 1},
 	} {
-		rb.addMetric(field.key, field.label, watchReadingDefaultMetricDecimals, field.unit)
+		rb.addMetric(field.key, field.label, field.decimals, field.unit)
 	}
 	return rb.readings()
+}
+
+// sensorsCheckReadings prepends the matching-input count and the configured
+// chip/label filters to the graphable sensor aggregates.
+func sensorsCheckReadings(data map[string]any) []web.WatchReading {
+	rb := readingsFrom(data).
+		addInt(checks.DataKeyInputs, watchReadingLabelInputs).
+		addString(checks.DataKeyChip, watchReadingLabelChipFilter).
+		addString(checks.DataKeyLabel, watchReadingLabelLabelFilter)
+	return append(rb.readings(), metricCheckReadings(checks.CheckTypeSensors, data)...)
 }
 
 func metricCheckReadings(checkType string, data map[string]any) []web.WatchReading {
@@ -510,11 +531,15 @@ func metricCheckReadings(checkType string, data map[string]any) []web.WatchReadi
 		if !ok {
 			continue
 		}
-		value := watchReadingMetricValue(v, 0, m.Unit)
+		value := watchReadingMetricValue(v, m.Decimals, m.Unit)
 		if m.Unit == metrics.MetricUnitHours && v >= 0 && v <= float64(maxWatchReadingDuration)/float64(time.Hour) {
-			value = formatInterval(time.Duration(v * float64(time.Hour)))
+			value = units.HumanizeDuration(time.Duration(v * float64(time.Hour)))
 		}
-		rb.add(m.Key, m.Key, value)
+		label := m.Label
+		if label == "" {
+			label = m.Key
+		}
+		rb.add(m.Key, label, value)
 	}
 	return rb.readings()
 }
