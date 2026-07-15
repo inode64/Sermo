@@ -50,8 +50,9 @@ func (l NamedLocker) Release(service, name string) error {
 	if err := validateLockIDs(service, name); err != nil {
 		return err
 	}
-	if err := os.Remove(l.path(service, name)); err != nil && !os.IsNotExist(err) {
-		return err
+	path := l.path(service, name)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("release named lock %s: %w", path, err)
 	}
 	return nil
 }
