@@ -6,7 +6,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 const (
@@ -34,16 +33,14 @@ type fdsCheck struct {
 }
 
 func (c fdsCheck) Run(_ context.Context) Result {
-	start := time.Now()
 	sampler := c.sampler
 	if sampler == nil {
 		sampler = defaultFdsSampler
 	}
-	s, err := sampler()
-	if err != nil {
-		return c.result(false, "fds: "+err.Error(), start)
-	}
-	return levelCountResult(c.base, c.preds, "fds", "allocated", DataKeyAllocated, s.Allocated, s.Max, start)
+	return runLevelCountCheck(c.base, c.preds, func() (uint64, uint64, error) {
+		s, err := sampler()
+		return s.Allocated, s.Max, err
+	}, "fds", "allocated", DataKeyAllocated)
 }
 
 // SampleFds returns one live system-wide fd observation (allocated/max) using

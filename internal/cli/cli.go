@@ -1432,7 +1432,7 @@ func (a App) writeEvents(opts options, service string, evs []event) {
 }
 
 func (a App) writeEventsTable(evs []event) {
-	tw := tabwriter.NewWriter(a.Stdout, 0, 0, tabwriterPadding, ' ', 0)
+	tw := newTabWriter(a.Stdout)
 	fmt.Fprintln(tw, "TIME\tTARGET\tKIND\tACTION\tMESSAGE")
 	for _, e := range evs {
 		timestamp, target, kind, action, message := eventTableFields(e)
@@ -1949,4 +1949,9 @@ func writeJSON(w io.Writer, value any) {
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
 	_ = encoder.Encode(value) //nolint:errchkjson // best-effort CLI output of internal result structs; a write error to stdout has no recovery
+}
+
+// newTabWriter builds the standard column writer used for CLI tables.
+func newTabWriter(w io.Writer) *tabwriter.Writer {
+	return tabwriter.NewWriter(w, 0, 0, tabwriterPadding, ' ', 0)
 }

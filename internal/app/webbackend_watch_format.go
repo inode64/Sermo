@@ -264,7 +264,3 @@ func watchReadingMetricValue(value float64, decimals int, unit string) string {
 	}
 	return fmt.Sprintf("%.*f %s", decimals, value, unit)
 }
-
-func watchPercent(value float64) string {
-	return watchReadingMetricValue(value, watchReadingDefaultMetricDecimals, metrics.MetricUnitPercent)
-}

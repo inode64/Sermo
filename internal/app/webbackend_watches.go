@@ -8,6 +8,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/metrics"
 	"sermo/internal/servicemgr"
+	"sermo/internal/units"
 	"sermo/internal/web"
 	"slices"
 	"strconv"
@@ -42,7 +43,7 @@ func (b *WebBackend) watchView(ctx context.Context, w *webWatch, system metrics.
 	view := web.Watch{
 		Name: w.name, DisplayName: w.displayName, Category: w.category, CheckType: w.checkType,
 		Summary: watchSummary(w, storage, liveSummary), SummaryConfigured: cfgval.String(w.check[checks.CheckKeySummary]) != "",
-		Interval: formatInterval(w.interval), Enabled: !w.disabled, Monitor: monitorMode,
+		Interval: units.HumanizeDuration(w.interval), Enabled: !w.disabled, Monitor: monitorMode,
 		Monitored: !w.disabled && monitorMode != config.MonitorDisabled, FireOnFail: w.fireOnFail,
 		HasHook: w.hasHook, HookCommand: slices.Clone(w.hookCommand), Notifiers: slices.Clone(w.notifiers),
 		NotifierCount: w.notifierCount, DryRun: w.dryRun, Conditions: watchConditions(w.check, w.metrics),

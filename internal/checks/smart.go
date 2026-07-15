@@ -69,14 +69,21 @@ func (c smartCheck) Run(ctx context.Context) Result {
 		}
 	}
 	r := c.result(ok, prefix+" health="+health, start)
-	r.Data = map[string]any{DataKeyDevice: c.device, DataKeyHealth: health}
-	if data.selfTestRunning {
-		r.Data[DataKeyDeviceState] = DeviceStateTesting
-	}
-	for k, v := range data.values {
-		r.Data[k] = v
-	}
+	r.Data = SmartResultData(c.device, health, data.selfTestRunning, data.values)
 	return r
+}
+
+// SmartResultData is the persisted reading data for one SMART sample, shared
+// by the check cycle and the live watch view.
+func SmartResultData(device, health string, selfTestRunning bool, values map[string]float64) map[string]any {
+	data := map[string]any{DataKeyDevice: device, DataKeyHealth: health}
+	if selfTestRunning {
+		data[DataKeyDeviceState] = DeviceStateTesting
+	}
+	for k, v := range values {
+		data[k] = v
+	}
+	return data
 }
 
 // SmartSample is one smartctl observation for the web UI and tests.

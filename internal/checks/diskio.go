@@ -109,15 +109,21 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 
 	res := c.result(ok, fmt.Sprintf("diskio %s util %.1f%% read %.0fB/s write %.0fB/s await %.1fms",
 		c.device, rates.UtilPct, rates.ReadBytes, rates.WriteBytes, rates.AwaitMs), start)
-	res.Data = map[string]any{
-		DataKeyDevice:   c.device,
+	res.Data = DiskIOResultData(c.device, rates)
+	res.Data[DataKeyValue] = firstPredValue(c.preds, values, rates.UtilPct)
+	return res
+}
+
+// DiskIOResultData is the persisted reading data for one disk I/O rate window,
+// shared by the check cycle and the live watch view.
+func DiskIOResultData(device string, rates DiskIORates) map[string]any {
+	return map[string]any{
+		DataKeyDevice:   device,
 		fieldUtilPct:    rates.UtilPct,
 		fieldReadBytes:  rates.ReadBytes,
 		fieldWriteBytes: rates.WriteBytes,
 		fieldAwaitMs:    rates.AwaitMs,
 	}
-	res.Data[DataKeyValue] = firstPredValue(c.preds, values, rates.UtilPct)
-	return res
 }
 
 // CalculateDiskIORates derives the same per-second rates used by the diskio

@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"sermo/internal/process"
 )
@@ -30,19 +29,12 @@ type zombieCheck struct {
 }
 
 func (c zombieCheck) Run(_ context.Context) Result {
-	start := time.Now()
 	sampler := c.sampler
 	if sampler == nil {
 		sampler = defaultZombieSampler
 	}
-	count, ok := sampler()
-	if !ok {
-		return c.result(false, "zombies: cannot read /proc", start)
-	}
-	met := compareFloat(float64(count), c.op, c.value)
-	res := c.result(met, fmt.Sprintf("%d zombie processes", count), start)
-	res.Data = map[string]any{DataKeyZombies: count, DataKeyValue: count}
-	return res
+	return runThresholdCheck(c.base, c.op, c.value, sampler, "zombies: cannot read /proc",
+		func(count uint64) string { return fmt.Sprintf("%d zombie processes", count) }, DataKeyZombies)
 }
 
 // SampleZombies returns one live count of zombie processes using the default

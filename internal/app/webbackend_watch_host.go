@@ -35,44 +35,16 @@ func (b *WebBackend) processWatchView(w *webWatch) (*web.WatchMeter, []web.Watch
 	samples, _ := sampler.Sample(ProcMatch{Name: name, User: user})
 	sort.Slice(samples, func(i, j int) bool { return samples[i].PID < samples[j].PID })
 
-	var rssTotal, cpuTicksTotal, ioTotal uint64
-	ioKnown := false
-	for _, sample := range samples {
-		rssTotal += sample.RSS
-		cpuTicksTotal += sample.CPUTicks
-		if sample.HasIO {
-			ioKnown = true
-			ioTotal += sample.IOBytes
-		}
-	}
-
-	readings := []web.WatchReading{
-		{Field: watchReadingFieldProcess, Label: watchReadingLabelProcess, Value: name},
-		{Field: watchReadingFieldMatches, Label: watchReadingLabelMatches, Value: strconv.Itoa(len(samples))},
-	}
-	if user != "" {
-		readings = append(readings, web.WatchReading{Field: watchReadingFieldUser, Label: watchReadingLabelUser, Value: user})
-	}
-	if len(samples) > 0 {
-		readings = append(readings,
-			web.WatchReading{Field: checks.DataKeyPIDs, Label: watchReadingLabelPIDs, Value: processPIDList(samples)},
-			web.WatchReading{Field: watchReadingFieldRSS, Label: watchReadingLabelRSS, Value: fmt.Sprintf("%d %s", rssTotal, metrics.MetricUnitBytes)},
-			web.WatchReading{Field: watchReadingFieldCPUTicks, Label: watchReadingLabelCPUTicks, Value: strconv.FormatUint(cpuTicksTotal, 10)},
-		)
-		if ioKnown {
-			readings = append(readings, web.WatchReading{Field: metrics.MetricIO, Label: watchReadingLabelIO, Value: fmt.Sprintf("%d %s", ioTotal, metrics.MetricUnitBytes)})
-		}
-	}
-
+	data := processWatchData(name, user, samples)
 	target := "process " + name
 	if user != "" {
 		target += " user " + user
 	}
 	summary := fmt.Sprintf("%s: %d matching process%s", target, len(samples), pluralSuffix(len(samples), "process"))
 	if len(samples) > 0 {
-		summary += fmt.Sprintf(", rss %d bytes", rssTotal)
+		summary += fmt.Sprintf(", rss %d bytes", data[watchReadingFieldRSS])
 	}
-	return nil, readings, summary
+	return nil, checkReadings(checks.CheckTypeProcess, data), summary
 }
 
 func (b *WebBackend) autofsWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
@@ -145,20 +117,17 @@ func (b *WebBackend) diskIOWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 	// its last computed rates (st unchanged).
 	b.diskIOMu.Unlock()
 
-	readings := []web.WatchReading{{Field: checks.DataKeyDevice, Label: watchReadingLabelDevice, Value: device}}
 	if !st.hasRates {
-		readings = append(readings, web.WatchReading{Field: watchReadingFieldState, Label: watchReadingLabelState, Value: watchReadingStateBaseline})
+		readings := []web.WatchReading{
+			{Field: checks.DataKeyDevice, Label: watchReadingLabelDevice, Value: device},
+			{Field: watchReadingFieldState, Label: watchReadingLabelState, Value: watchReadingStateBaseline},
+		}
 		return nil, readings, "diskio " + device + " baseline"
 	}
 	rates := st.rates
-	readings = append(readings,
-		web.WatchReading{Field: checks.DiskIOFieldUtilPct, Label: watchReadingLabelUtilization, Value: watchPercent(rates.UtilPct)},
-		web.WatchReading{Field: checks.DiskIOFieldReadBytes, Label: watchReadingLabelRead, Value: watchReadingMetricValue(rates.ReadBytes, 0, metrics.MetricUnitBytesPerSecond)},
-		web.WatchReading{Field: checks.DiskIOFieldWriteBytes, Label: watchReadingLabelWrite, Value: watchReadingMetricValue(rates.WriteBytes, 0, metrics.MetricUnitBytesPerSecond)},
-		web.WatchReading{Field: checks.DiskIOFieldAwaitMs, Label: watchReadingLabelAwait, Value: watchReadingMetricValue(rates.AwaitMs, 1, metrics.MetricUnitMilliseconds)},
-	)
-	return nil, readings, fmt.Sprintf("diskio %s util %.1f%% read %.0fB/s write %.0fB/s await %.1fms",
-		device, rates.UtilPct, rates.ReadBytes, rates.WriteBytes, rates.AwaitMs)
+	return nil, checkReadings(checks.CheckTypeDiskIO, checks.DiskIOResultData(device, rates)),
+		fmt.Sprintf("diskio %s util %.1f%% read %.0fB/s write %.0fB/s await %.1fms",
+			device, rates.UtilPct, rates.ReadBytes, rates.WriteBytes, rates.AwaitMs)
 }
 
 func (b *WebBackend) sensorsWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
@@ -174,26 +143,17 @@ func (b *WebBackend) sensorsWatchView(w *webWatch) (*web.WatchMeter, []web.Watch
 	chip := cfgval.AsString(w.check[checks.CheckKeyChip])
 	label := cfgval.AsString(w.check[checks.CheckKeyLabel])
 	values := checks.SummarizeSensors(readings, chip, label)
-	out := []web.WatchReading{{Field: checks.DataKeyInputs, Label: watchReadingLabelInputs, Value: strconv.Itoa(values.Count)}}
-	if chip != "" {
-		out = append(out, web.WatchReading{Field: checks.DataKeyChip, Label: watchReadingLabelChipFilter, Value: chip})
-	}
-	if label != "" {
-		out = append(out, web.WatchReading{Field: checks.DataKeyLabel, Label: watchReadingLabelLabelFilter, Value: label})
-	}
+	out := checkReadings(checks.CheckTypeSensors, checks.SensorsResultData(values, chip, label))
 	const sensorSummaryPartCapacity = 3
 
 	parts := make([]string, 0, sensorSummaryPartCapacity)
 	if values.HasTemp {
-		out = append(out, web.WatchReading{Field: checks.DataKeyTemp, Label: watchReadingLabelHottestTemp, Value: watchReadingMetricValue(values.Temp, 1, watchReadingUnitCelsius)})
 		parts = append(parts, fmt.Sprintf("temp=%.1fC", values.Temp))
 	}
 	if values.HasFan {
-		out = append(out, web.WatchReading{Field: checks.DataKeyFan, Label: watchReadingLabelSlowestFan, Value: watchReadingMetricValue(values.Fan, 0, watchReadingUnitRPM)})
 		parts = append(parts, fmt.Sprintf("fan=%.0fRPM", values.Fan))
 	}
 	if values.HasVoltage {
-		out = append(out, web.WatchReading{Field: checks.DataKeyVoltage, Label: watchReadingLabelVoltage, Value: watchReadingMetricValue(values.Voltage, watchReadingDefaultMetricDecimals, watchReadingUnitVolt)})
 		parts = append(parts, fmt.Sprintf("voltage=%.2fV", values.Voltage))
 	}
 	if len(parts) == 0 {
@@ -212,27 +172,11 @@ func (b *WebBackend) raidWatchView() (*web.WatchMeter, []web.WatchReading, strin
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "raid: " + msg
 	}
-	readings := []web.WatchReading{
-		{Field: checks.DataKeyArrays, Label: watchReadingLabelArrays, Value: strconv.Itoa(st.Arrays)},
-		{Field: checks.DataKeyDegraded, Label: watchReadingLabelDegraded, Value: strconv.Itoa(st.Degraded)},
-		{Field: checks.DataKeyRecovering, Label: watchReadingLabelRecovering, Value: strconv.Itoa(st.Recovering)},
-	}
 	summary := fmt.Sprintf("raid: %d arrays, %d degraded, %d recovering", st.Arrays, st.Degraded, st.Recovering)
 	if len(st.DegradedNames) > 0 {
-		names := strings.Join(st.DegradedNames, displayListSeparator)
-		readings = append(readings, web.WatchReading{Field: checks.DataKeyDegradedArrays, Label: watchReadingLabelDegradedArrays, Value: names})
-		summary += " (" + names + ")"
+		summary += " (" + strings.Join(st.DegradedNames, displayListSeparator) + ")"
 	}
-	for _, detail := range st.Details {
-		readings = append(readings, web.WatchReading{Field: watchReadingFieldRAIDArrayPrefix + detail.Name, Label: detail.Name, Value: raidArrayReading(detail)})
-	}
-	if raidState, progress, hasProgress := checks.RaidDeviceState(st.Details); raidState != "" {
-		readings = append(readings, web.WatchReading{Field: checks.DataKeyDeviceState, Label: watchReadingLabelState, Value: raidState})
-		if hasProgress {
-			readings = append(readings, web.WatchReading{Field: checks.DataKeyProgressPct, Label: "Progress", Value: fmt.Sprintf("%.1f%%", progress)})
-		}
-	}
-	return nil, readings, summary
+	return nil, checkReadings(checks.CheckTypeRAID, checks.RaidResultData(st)), summary
 }
 
 func (b *WebBackend) edacWatchView() (*web.WatchMeter, []web.WatchReading, string) {
@@ -249,11 +193,7 @@ func (b *WebBackend) edacWatchView() (*web.WatchMeter, []web.WatchReading, strin
 		msg := "no EDAC controllers"
 		return nil, []web.WatchReading{{Field: checks.DataKeyPresent, Label: watchReadingLabelEDAC, Error: msg}}, "edac: " + msg
 	}
-	return nil,
-		[]web.WatchReading{
-			{Field: checks.DataKeyCE, Label: watchReadingLabelCorrectable, Value: strconv.FormatInt(st.CE, 10)},
-			{Field: checks.DataKeyUE, Label: watchReadingLabelUncorrectable, Value: strconv.FormatInt(st.UE, 10)},
-		},
+	return nil, checkReadings(checks.CheckTypeEDAC, checks.EdacResultData(st)),
 		fmt.Sprintf("edac: %d correctable, %d uncorrectable", st.CE, st.UE)
 }
 
@@ -443,18 +383,9 @@ func (b *WebBackend) pressureWatchView(w *webWatch) (*web.WatchMeter, []web.Watc
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "pressure " + resource + ": " + msg
 	}
-	readings := []web.WatchReading{
-		{Field: checks.DataKeyResource, Label: watchReadingLabelResource, Value: resource},
-		{Field: checks.PressureFieldSomeAvg10, Label: watchReadingLabelSomeAvg10, Value: watchPercent(s.Some.Avg10)},
-		{Field: checks.PressureFieldSomeAvg60, Label: watchReadingLabelSomeAvg60, Value: watchPercent(s.Some.Avg60)},
-		{Field: checks.PressureFieldSomeAvg300, Label: watchReadingLabelSomeAvg300, Value: watchPercent(s.Some.Avg300)},
-		{Field: checks.PressureFieldFullAvg10, Label: watchReadingLabelFullAvg10, Value: watchPercent(s.Full.Avg10)},
-		{Field: checks.PressureFieldFullAvg60, Label: watchReadingLabelFullAvg60, Value: watchPercent(s.Full.Avg60)},
-		{Field: checks.PressureFieldFullAvg300, Label: watchReadingLabelFullAvg300, Value: watchPercent(s.Full.Avg300)},
-	}
 	summary := fmt.Sprintf("pressure %s some %.2f/%.2f/%.2f full %.2f/%.2f/%.2f",
 		resource, s.Some.Avg10, s.Some.Avg60, s.Some.Avg300, s.Full.Avg10, s.Full.Avg60, s.Full.Avg300)
-	return nil, readings, summary
+	return nil, checkReadings(checks.CheckTypePressure, checks.PressureResultData(resource, s)), summary
 }
 
 func (b *WebBackend) conntrackWatchView() (*web.WatchMeter, []web.WatchReading, string) {

@@ -1254,8 +1254,8 @@ func TestWebBackendAdditionalHostWatchReadings(t *testing.T) {
 	}
 
 	sensors := byName["sensors"]
-	if got := readingByField(sensors.Readings, "temp").Value; got != "82.5 C" {
-		t.Fatalf("sensors temp = %q, want 82.5 C", got)
+	if got := readingByField(sensors.Readings, "temp").Value; got != "82.5 °C" {
+		t.Fatalf("sensors temp = %q, want 82.5 °C", got)
 	}
 	if got := readingByField(sensors.Readings, "fan").Value; got != "900 RPM" {
 		t.Fatalf("sensors fan = %q, want 900 RPM", got)

@@ -57,7 +57,7 @@ func (b *WebBackend) Metrics(_ context.Context, name, check, metric string, sinc
 			return out, true
 		}
 		if summary, err := b.measure.MeasurementSummary(name, check, since, now); err == nil {
-			out.Summary = web.MetricSummary{Count: summary.Count, Avg: summary.Avg, Min: summary.Min, Max: summary.Max}
+			out.Summary = metricSummary(summary)
 		}
 		points, err := b.measure.MeasurementSeries(name, check, now.Add(-since), now)
 		if err == nil {
@@ -75,7 +75,7 @@ func (b *WebBackend) Metrics(_ context.Context, name, check, metric string, sinc
 		return out, true
 	}
 	if summary, err := b.measure.MetricSummary(name, check, metric, since, now); err == nil {
-		out.Summary = web.MetricSummary{Count: summary.Count, Avg: summary.Avg, Min: summary.Min, Max: summary.Max}
+		out.Summary = metricSummary(summary)
 	}
 	if points, err := b.measure.MetricSeries(name, check, metric, now.Add(-since), now); err == nil {
 		out.Points = measurementPoints(points)

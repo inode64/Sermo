@@ -5,11 +5,11 @@ import "testing"
 // lockID joins service and (optional) name with a dot; an empty name yields just
 // the service.
 func TestLockID(t *testing.T) {
-	if got := lockID("svc", ""); got != "svc" {
-		t.Errorf("lockID(svc, \"\") = %q, want \"svc\"", got)
+	if got := LockID("svc", ""); got != "svc" {
+		t.Errorf("LockID(svc, \"\") = %q, want \"svc\"", got)
 	}
-	if got := lockID("svc", "default"); got != "svc.default" {
-		t.Errorf("lockID(svc, default) = %q, want \"svc.default\"", got)
+	if got := LockID("svc", "default"); got != "svc.default" {
+		t.Errorf("LockID(svc, default) = %q, want \"svc.default\"", got)
 	}
 }
 

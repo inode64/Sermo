@@ -160,7 +160,7 @@ func TestFileWatchPublishesSnapshot(t *testing.T) {
 	if !got.OK || got.Data[checks.DataKeyPath] != dir {
 		t.Fatalf("published snapshot = %+v", got)
 	}
-	if got.Data[checks.DataKeyKind] != watchReadingKindDir {
+	if got.Data[checks.DataKeyKind] != checks.FileKindDirectory {
 		t.Fatalf("kind = %v, want directory", got.Data[checks.DataKeyKind])
 	}
 	if got.Data[watchReadingFieldEntries] != 1 {

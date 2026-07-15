@@ -55,11 +55,18 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 	ok := levelPredsHold(c.preds, values)
 
 	r := c.result(ok, hdparmMessage(c.device, values), start)
-	r.Data = map[string]any{DataKeyDevice: c.device}
-	for k, v := range values {
-		r.Data[k] = v
-	}
+	r.Data = HdparmResultData(c.device, values)
 	return r
+}
+
+// HdparmResultData is the persisted reading data for one hdparm throughput
+// probe, shared by the check cycle and the live watch view.
+func HdparmResultData(device string, values map[string]float64) map[string]any {
+	data := map[string]any{DataKeyDevice: device}
+	for k, v := range values {
+		data[k] = v
+	}
+	return data
 }
 
 // SampleHdparm runs hdparm -t and/or -T on device and returns MB/s rates.

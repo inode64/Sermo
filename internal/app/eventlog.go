@@ -149,6 +149,12 @@ func (l *EventLog) Recent(service string, limit int) []LoggedEvent {
 	if l == nil {
 		return nil
 	}
+	return l.recentFiltered(func(e LoggedEvent) bool { return service == "" || e.Service == service }, limit)
+}
+
+// recentFiltered returns up to limit retained events matching match, newest
+// first. limit <= 0 returns every match.
+func (l *EventLog) recentFiltered(match func(LoggedEvent) bool, limit int) []LoggedEvent {
 	l.mu.Lock()
 	ordered := l.orderedLocked() // oldest..newest
 	l.mu.Unlock()
@@ -160,7 +166,7 @@ func (l *EventLog) Recent(service string, limit int) []LoggedEvent {
 		if limit > 0 && len(out) >= limit {
 			break
 		}
-		if service != "" && ordered[i].Service != service {
+		if !match(ordered[i]) {
 			continue
 		}
 		out = append(out, ordered[i])
@@ -209,53 +215,41 @@ func (l *EventLog) RecentApp(app string, limit int) []LoggedEvent {
 	if l == nil || app == "" {
 		return nil
 	}
-	l.mu.Lock()
-	ordered := l.orderedLocked() // oldest..newest
-	l.mu.Unlock()
-
-	out := make([]LoggedEvent, 0, len(ordered))
-	for i := range slices.Backward(ordered) {
-		if limit > 0 && len(out) >= limit {
-			break
-		}
-		if ordered[i].App != app {
-			continue
-		}
-		out = append(out, ordered[i])
-	}
-	return out
+	return l.recentFiltered(func(e LoggedEvent) bool { return e.App == app }, limit)
 }
 
 // LastService returns the newest retained event for service, if any.
 func (l *EventLog) LastService(service string) (LoggedEvent, bool) {
-	if l == nil || service == "" {
+	if l == nil {
 		return LoggedEvent{}, false
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	ev, ok := l.lastByService[service]
-	return ev, ok
+	return l.lastBy(l.lastByService, service)
 }
 
 // LastWatchActivity returns the newest retained watch-activity event for watch.
 func (l *EventLog) LastWatchActivity(watch string) (LoggedEvent, bool) {
-	if l == nil || watch == "" {
+	if l == nil {
 		return LoggedEvent{}, false
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	ev, ok := l.lastByWatch[watch]
-	return ev, ok
+	return l.lastBy(l.lastByWatch, watch)
 }
 
 // LastApp returns the newest retained event for an installed application.
 func (l *EventLog) LastApp(app string) (LoggedEvent, bool) {
-	if l == nil || app == "" {
+	if l == nil {
+		return LoggedEvent{}, false
+	}
+	return l.lastBy(l.lastByApp, app)
+}
+
+// lastBy returns the newest retained event indexed under key, if any.
+func (l *EventLog) lastBy(index map[string]LoggedEvent, key string) (LoggedEvent, bool) {
+	if key == "" {
 		return LoggedEvent{}, false
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	ev, ok := l.lastByApp[app]
+	ev, ok := index[key]
 	return ev, ok
 }
 

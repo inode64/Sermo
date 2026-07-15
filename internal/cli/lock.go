@@ -72,8 +72,8 @@ func (a App) runLockRelease(opts options, cfg *config.Config, locker locks.Named
 		a.recordAccess(cfg, accessCommandLockRelease, service, accessStatusError, err.Error())
 		return a.fail(opts, fmt.Sprintf("release failed: %v", err))
 	}
-	a.recordAccess(cfg, accessCommandLockRelease, service, accessStatusOK, lockID(service, opts.name))
-	fmt.Fprintf(a.Stdout, "released %s\n", lockID(service, opts.name))
+	a.recordAccess(cfg, accessCommandLockRelease, service, accessStatusOK, locks.LockID(service, opts.name))
+	fmt.Fprintf(a.Stdout, "released %s\n", locks.LockID(service, opts.name))
 	return exitSuccess
 }
 
@@ -132,11 +132,4 @@ func (a App) reportLockError(opts options, err error) int {
 		return exitBlocked
 	}
 	return a.fail(opts, fmt.Sprintf("lock failed: %v", err))
-}
-
-func lockID(service, name string) string {
-	if name != "" {
-		return service + "." + name
-	}
-	return service
 }

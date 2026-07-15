@@ -6,7 +6,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 )
 
 const (
@@ -34,16 +33,14 @@ type pidsCheck struct {
 }
 
 func (c pidsCheck) Run(_ context.Context) Result {
-	start := time.Now()
 	sampler := c.sampler
 	if sampler == nil {
 		sampler = defaultPidsSampler
 	}
-	s, err := sampler()
-	if err != nil {
-		return c.result(false, "pids: "+err.Error(), start)
-	}
-	return levelCountResult(c.base, c.preds, "pids", "in use", DataKeyCount, s.Threads, s.Max, start)
+	return runLevelCountCheck(c.base, c.preds, func() (uint64, uint64, error) {
+		s, err := sampler()
+		return s.Threads, s.Max, err
+	}, "pids", "in use", DataKeyCount)
 }
 
 // SamplePids returns one live PID-table observation (count/max) using the

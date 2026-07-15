@@ -6,6 +6,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
+	"sermo/internal/units"
 	"sermo/internal/web"
 	"slices"
 	"strings"
@@ -34,10 +35,10 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		NoResidentProcess: e.noResidentProcess,
 	}
 	if e.interval > 0 {
-		svc.Interval = formatInterval(e.interval)
+		svc.Interval = units.HumanizeDuration(e.interval)
 	}
 	if e.policyCooldown > 0 {
-		svc.PolicyCooldown = formatInterval(e.policyCooldown)
+		svc.PolicyCooldown = units.HumanizeDuration(e.policyCooldown)
 	}
 	svc.LastEvent = lastEvent
 	if e.disabled {

@@ -3,7 +3,6 @@ package checks
 import (
 	"context"
 	"fmt"
-	"time"
 )
 
 // EntropySamplerFunc reads the available entropy in bits, reporting ok = false
@@ -23,19 +22,12 @@ type entropyCheck struct {
 }
 
 func (c entropyCheck) Run(_ context.Context) Result {
-	start := time.Now()
 	sampler := c.sampler
 	if sampler == nil {
 		sampler = defaultEntropySampler
 	}
-	avail, ok := sampler()
-	if !ok {
-		return c.result(false, "entropy: entropy_avail unavailable", start)
-	}
-	met := compareFloat(float64(avail), c.op, c.value)
-	res := c.result(met, fmt.Sprintf("entropy_avail %d bits", avail), start)
-	res.Data = map[string]any{DataKeyAvail: avail, DataKeyValue: avail}
-	return res
+	return runThresholdCheck(c.base, c.op, c.value, sampler, "entropy: entropy_avail unavailable",
+		func(avail uint64) string { return fmt.Sprintf("entropy_avail %d bits", avail) }, DataKeyAvail)
 }
 
 // SampleEntropy returns one live kernel entropy observation using the default
