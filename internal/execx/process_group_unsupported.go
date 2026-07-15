@@ -3,6 +3,7 @@
 package execx
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 )
@@ -13,5 +14,8 @@ func cancelCommandProcessGroup(cmd *exec.Cmd) error {
 	if cmd.Process == nil {
 		return os.ErrProcessDone
 	}
-	return cmd.Process.Kill()
+	if err := cmd.Process.Kill(); err != nil {
+		return fmt.Errorf("kill command process: %w", err)
+	}
+	return nil
 }

@@ -177,7 +177,7 @@ func waitOrCancel(ctx context.Context, cmd *exec.Cmd) error {
 		case err := <-done:
 			return err
 		case <-timer.C:
-			return ctx.Err()
+			return fmt.Errorf("wait for cancelled command: %w", ctx.Err())
 		}
 	}
 }
@@ -200,7 +200,8 @@ type lockedBuffer struct {
 func (b *lockedBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.buf.Write(p)
+	_, _ = b.buf.Write(p) // bytes.Buffer writes all bytes and never returns an error.
+	return len(p), nil
 }
 
 func (b *lockedBuffer) String() string {
@@ -249,6 +250,7 @@ func deadline(ctx context.Context, timeout time.Duration) (context.Context, cont
 func Run(ctx context.Context, r Runner, timeout time.Duration, name string, args ...string) (Result, error) {
 	ctx, cancel := deadline(ctx, timeout)
 	defer cancel()
+	//nolint:wrapcheck // CommandRunner already attaches the canonical command context; preserve injected runner errors for callers.
 	return r.Run(ctx, name, args...)
 }
 
@@ -259,6 +261,7 @@ func RunUser(ctx context.Context, r Runner, timeout time.Duration, user, name st
 	defer cancel()
 
 	if ur, ok := r.(UserRunner); ok {
+		//nolint:wrapcheck // CommandRunner already attaches the canonical command context; preserve injected runner errors for callers.
 		return ur.RunUser(ctx, user, name, args...)
 	}
 	return Result{ExitCode: ExitCodeRunFailure}, fmt.Errorf("execx: runner does not support user %q", user)
@@ -284,6 +287,7 @@ func RunEnv(ctx context.Context, r Runner, env []string, timeout time.Duration, 
 	defer cancel()
 
 	if er, ok := r.(EnvRunner); ok {
+		//nolint:wrapcheck // CommandRunner already attaches the canonical command context; preserve injected runner errors for callers.
 		return er.RunEnv(ctx, env, name, args...)
 	}
 	return Result{}, fmt.Errorf("execx: runner does not support custom environment (got %T)", r)
