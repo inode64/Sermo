@@ -247,13 +247,13 @@ linters:
         path: internal/state/
       - linters: [contextcheck]
         path: internal/cli/(monitor|panic|sla|state|watch)\.go
-      # wrapcheck pilot: operation/ + app/ + cli/ + state/ + process/ + web/ + servicemgr/ + rules/ + config/ + notify/ + execx/ + utmp/ + logfile/ + volume/ + metrics/ + control/ + virt/.
+      # wrapcheck pilot: operation/ + app/ + cli/ + state/ + process/ + web/ + servicemgr/ + rules/ + config/ + notify/ + execx/ + utmp/ + logfile/ + volume/ + metrics/ + control/ + virt/ + dockerctl/.
       - linters: [wrapcheck]
         path: _test\.go
       - linters: [wrapcheck]
         path: cmd/
       - linters: [wrapcheck]
-        path: internal/(appinspect|assist|buildinfo|cfgval|checks|conn|diag|dockerctl|emission|httpx|locks|mountctl|mounts|netutil|output|procnet|units)/
+        path: internal/(appinspect|assist|buildinfo|cfgval|checks|conn|diag|emission|httpx|locks|mountctl|mounts|netutil|output|procnet|units)/
       # ireturn: central builders and registries intentionally return interface types.
       - linters: [ireturn]
         path: _test\.go

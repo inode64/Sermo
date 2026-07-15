@@ -349,11 +349,11 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.Base+path, http.NoBody)
 	if err != nil {
-		return err
+		return fmt.Errorf("build Docker GET %s request: %w", path, err)
 	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("send Docker GET %s request: %w", path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
@@ -371,11 +371,11 @@ func (c *Client) post(ctx context.Context, path string, body io.Reader, ok ...in
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Base+path, body)
 	if err != nil {
-		return err
+		return fmt.Errorf("build Docker POST %s request: %w", path, err)
 	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("send Docker POST %s request: %w", path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if slices.Contains(ok, resp.StatusCode) {
