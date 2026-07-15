@@ -144,11 +144,13 @@ linters:
         - badRegexp
         - boolExprSimplify
         - caseOrder
+        - defaultCaseOrder
         - dupArg
         - dupBranchBody
         - dupCase
         - dupSubExpr
         - deferInLoop
+        - emptyFallthrough
         - exitAfterDefer
         - flagDeref
         - httpNoBody
