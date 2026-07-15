@@ -56,15 +56,15 @@ func (b *WebBackend) ActivitySummary(_ context.Context) web.ActivitySummary {
 		summary.LastEventService = latest.Service
 		summary.LastEventWatch = latest.Watch
 	}
-	for _, event := range events {
+	for i := range events {
 		switch {
-		case event.Kind == eventKindAction && isServiceOperationAction(event.Action):
+		case events[i].Kind == eventKindAction && isServiceOperationAction(events[i].Action):
 			summary.ServiceActions++
-		case event.Kind == eventKindHook || event.Kind == eventKindHookFail:
+		case events[i].Kind == eventKindHook || events[i].Kind == eventKindHookFail:
 			summary.WatchHooks++
-		case event.Kind == eventKindNotify || event.Kind == eventKindNotifyFail:
+		case events[i].Kind == eventKindNotify || events[i].Kind == eventKindNotifyFail:
 			summary.WatchNotifies++
-		case event.Kind == eventKindError:
+		case events[i].Kind == eventKindError:
 			summary.Errors++
 		}
 	}
@@ -140,13 +140,13 @@ func newWebEventPageScan(query web.EventQuery, cutoff time.Time) webEventPageSca
 }
 
 func (scan *webEventPageScan) addBatch(batch []LoggedEvent, hasRawMore bool) (web.EventPage, bool) {
-	for i, logged := range batch {
+	for i := range batch {
 		scan.scanned++
-		scan.cursor = logged.ID
-		if !scan.cutoff.IsZero() && logged.Time.Before(scan.cutoff) {
+		scan.cursor = batch[i].ID
+		if !scan.cutoff.IsZero() && batch[i].Time.Before(scan.cutoff) {
 			continue
 		}
-		event := loggedEventToWeb(logged)
+		event := loggedEventToWeb(batch[i])
 		if !webEventMatchesQuery(event, scan.query) {
 			continue
 		}
@@ -229,8 +229,8 @@ func (b *WebBackend) PruneEvents(_ context.Context, before time.Time) int {
 
 func toWebEvents(events []LoggedEvent) []web.Event {
 	out := make([]web.Event, 0, len(events))
-	for _, event := range events {
-		out = append(out, loggedEventToWeb(event))
+	for i := range events {
+		out = append(out, loggedEventToWeb(events[i]))
 	}
 	return out
 }
