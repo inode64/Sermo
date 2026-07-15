@@ -29,6 +29,7 @@ linters:
     - errname  # sentinel Err* and *Error type naming
     - errorlint  # error wrapping (%w) and errors.Is/As correctness
     - exhaustive  # enum switches missing cases (check/watch/backend type dispatch)
+    - exptostd  # experimental APIs that now have a standard-library equivalent
     - fatcontext  # context accumulated inside loops
     - forcetypeassert  # prevent panics when values with static type any are asserted
     - gocheckcompilerdirectives  # malformed //go: directives (typos that silently no-op)
