@@ -209,3 +209,26 @@ func buildOomCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	}
 	return &oomCheck{base: b, op: op, value: value, sampler: deps.OomSampler}, ""
 }
+
+// buildSwapCheck builds a swap usage or io check.
+func buildSwapCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	metric := cfgval.AsString(entry[CheckKeyMetric])
+	c := &swapCheck{base: b, metric: metric, sampler: deps.SwapSampler}
+	switch metric {
+	case SwapMetricUsage:
+		preds, errs := requireLevelPreds(entry, SwapUsageFields, "swap usage")
+		if errs != "" {
+			return nil, errs
+		}
+		c.preds = preds
+	case SwapMetricIO:
+		op, v, errs := parseDeltaThreshold(entry[CheckKeyDelta], "swap io")
+		if errs != "" {
+			return nil, errs
+		}
+		c.op, c.value = op, v
+	default:
+		return nil, "swap check metric must be " + SwapMetricSummary
+	}
+	return c, ""
+}
