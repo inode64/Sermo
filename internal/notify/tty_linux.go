@@ -78,7 +78,7 @@ func (n *ttyNotifier) Type() string {
 func (n *ttyNotifier) Send(ctx context.Context, msg Message) error {
 	sessions, err := utmp.SessionsFrom(n.utmpPaths)
 	if err != nil {
-		return err
+		return fmt.Errorf("load terminal sessions: %w", err)
 	}
 	targets := n.targetTTYs(sessions)
 	if len(targets) == 0 {
@@ -105,7 +105,7 @@ func (n *ttyNotifier) sendToTargets(ctx context.Context, targets []string, msg M
 	delivered := 0
 	for _, target := range targets {
 		if err := ctx.Err(); err != nil {
-			return err
+			return fmt.Errorf("check terminal delivery context: %w", err)
 		}
 		if err := writeTTY(ctx, target, payload); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", target, err))
@@ -202,28 +202,28 @@ func terminalSafe(s string) string {
 
 func writeTTYLinux(ctx context.Context, path string, payload []byte) error {
 	if err := ctx.Err(); err != nil {
-		return err
+		return fmt.Errorf("check terminal write context: %w", err)
 	}
 	fd, err := syscall.Open(path, syscall.O_WRONLY|syscall.O_NOCTTY|syscall.O_NONBLOCK|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
 	if err != nil {
-		return err
+		return fmt.Errorf("open terminal %s: %w", path, err)
 	}
 	defer func() { _ = syscall.Close(fd) }()
 
 	var st syscall.Stat_t
 	if err := syscall.Fstat(fd, &st); err != nil {
-		return err
+		return fmt.Errorf("inspect terminal %s: %w", path, err)
 	}
 	if st.Mode&syscall.S_IFMT != syscall.S_IFCHR {
 		return errors.New("not a character device")
 	}
 	for len(payload) > 0 {
 		if err := ctx.Err(); err != nil {
-			return err
+			return fmt.Errorf("check terminal write context: %w", err)
 		}
 		n, err := syscall.Write(fd, payload)
 		if err != nil {
-			return err
+			return fmt.Errorf("write terminal %s: %w", path, err)
 		}
 		if n == 0 {
 			return errors.New("short write to terminal")
