@@ -91,7 +91,7 @@
   "89": "renderOperationLive",
   "90": "Notifications",
   "91": "Sermo",
-  "92": "syncFilterButtons",
+  "92": "detailDomId",
   "93": "remote_update_payload.sh",
   "94": "renderFilterButtonCounts",
   "95": "remote_repair_catalog.sh",
@@ -103,7 +103,9 @@
   "101": "Sermo TODO — future improvements",
   "102": "renderSLAWindows",
   "103": "renderServiceDetail",
+  "104": "openServiceStatusTarget",
   "105": "remote_update_network_watches.sh",
+  "106": "openGlobalTarget",
   "107": "Wizards (`sermoctl wizard`)",
   "108": "Ajustes del motor",
   "109": "package.json",
@@ -113,8 +115,12 @@
   "113": "percentScale",
   "114": "dashboard.spec.js",
   "115": "Notificaciones",
+  "116": "serviceActionButton",
   "117": "playwright.config.js",
   "118": "server.mjs",
   "119": "`process` — proceso por nombre",
-  "120": "drawSLAChart"
+  "120": "drawSLAChart",
+  "121": "initDelegatedHandlers",
+  "122": "mountProcessesCell",
+  "123": "showDisconnected"
 }
