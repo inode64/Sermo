@@ -54,7 +54,7 @@ func (b *WebBackend) fileWatchView(ctx context.Context, w *webWatch) (*web.Watch
 		readings = append(readings,
 			web.WatchReading{Field: checks.DataKeyPath, Label: watchReadingLabelPath, Value: path},
 			web.WatchReading{Field: checks.DataKeyKind, Label: watchReadingLabelKind, Value: kind},
-			web.WatchReading{Field: checks.DataKeySize, Label: watchReadingLabelSize, Value: humanize.Bytes(uint64(info.Size()))},
+			web.WatchReading{Field: checks.DataKeySize, Label: watchReadingLabelSize, Value: humanize.IBytes(uint64(info.Size()))},
 			web.WatchReading{Field: checks.DataKeyMode, Label: watchReadingLabelMode, Value: info.Mode().Perm().String()},
 			web.WatchReading{Field: checks.DataKeyModifiedAt, Label: watchReadingLabelModifiedAt, Value: info.ModTime().UTC().Format(time.RFC3339)},
 			web.WatchReading{Field: checks.DataKeyAge, Label: watchReadingLabelAge, Value: formatInterval(now.Sub(info.ModTime()).Round(time.Second))},
@@ -186,7 +186,7 @@ func (b *WebBackend) sizeWatchView(ctx context.Context, w *webWatch) (*web.Watch
 	}
 	readings := []web.WatchReading{
 		{Field: checks.DataKeyPath, Label: watchReadingLabelPath, Value: path},
-		{Field: checks.DataKeyCurrentBytes, Label: watchReadingLabelCurrentSize, Value: humanize.Bytes(uint64(size))},
+		{Field: checks.DataKeyCurrentBytes, Label: watchReadingLabelCurrentSize, Value: humanize.IBytes(uint64(size))},
 	}
 	if growBy := cfgval.String(w.check[checks.CheckKeyGrowBy]); growBy != "" {
 		readings = append(readings, web.WatchReading{Field: checks.CheckKeyGrowBy, Label: watchReadingLabelGrowthLimit, Value: growBy})
@@ -194,7 +194,7 @@ func (b *WebBackend) sizeWatchView(ctx context.Context, w *webWatch) (*web.Watch
 	if within := cfgval.String(w.check[checks.CheckKeyWithin]); within != "" {
 		readings = append(readings, web.WatchReading{Field: checks.CheckKeyWithin, Label: watchReadingLabelWindow, Value: within})
 	}
-	return nil, readings, fmt.Sprintf("%s size %s", path, humanize.Bytes(uint64(size)))
+	return nil, readings, fmt.Sprintf("%s size %s", path, humanize.IBytes(uint64(size)))
 }
 
 func (b *WebBackend) hdparmWatchView(ctx context.Context, w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {

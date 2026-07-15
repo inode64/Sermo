@@ -186,7 +186,7 @@ func (rb *readingBuilder) addIntMetric(field, label, unit string) *readingBuilde
 // addBytes appends the field's non-negative byte count, humanized.
 func (rb *readingBuilder) addBytes(field, label string) *readingBuilder {
 	if v, ok := uintField(rb.data[field]); ok {
-		rb.out = append(rb.out, web.WatchReading{Field: field, Label: label, Value: humanize.Bytes(v)})
+		rb.out = append(rb.out, web.WatchReading{Field: field, Label: label, Value: humanize.IBytes(v)})
 	}
 	return rb
 }
@@ -332,7 +332,7 @@ func raidCheckReadings(data map[string]any) []web.WatchReading {
 		addMetric(checks.DataKeyRaidProgressPct, "Rebuild progress", watchReadingProgressDecimals, metrics.MetricUnitPercent).
 		addString(checks.DataKeyRaidMismatchCount, "Mismatch count")
 	if size, ok := uintField(data[checks.DataKeyTotalBytes]); ok && size > 0 {
-		rb.add(checks.DataKeyTotalBytes, watchReadingLabelSize, humanize.Bytes(size))
+		rb.add(checks.DataKeyTotalBytes, watchReadingLabelSize, humanize.IBytes(size))
 	}
 	if details, ok := data[checks.DataKeyRaidMembers].([]checks.RaidArrayStatus); ok {
 		for _, detail := range details {
@@ -419,7 +419,7 @@ func sizeCheckReadings(data map[string]any) []web.WatchReading {
 		addString(checks.DataKeyPath, watchReadingLabelPath).
 		addBytes(checks.DataKeyCurrentBytes, watchReadingLabelCurrentSize)
 	if v, ok := cfgval.Int(data[checks.DataKeyGrowthBytes]); ok {
-		rb.add(checks.DataKeyGrowthBytes, watchReadingLabelGrowth, humanizeSigned(int64(v)))
+		rb.add(checks.DataKeyGrowthBytes, watchReadingLabelGrowth, checks.HumanizeSignedBytes(int64(v)))
 	}
 	return rb.readings()
 }

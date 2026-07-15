@@ -2188,7 +2188,9 @@ por lo que los checks de servicio pueden combinar valores de ejecución y
 variables del servicio:
 
 Los summaries de métricas conservan la unidad: los valores en bytes se muestran
-como `B`, `KB`, `MB`, `GB` o `TB`, y las tasas de bytes añaden `/s`.
+en unidades binarias IEC (`B`, `KiB`, `MiB`, `GiB` o `TiB`, igual que se
+interpretan los sufijos de tamaño en la configuración), y las tasas de bytes
+añaden `/s`.
 
 ```yaml
 check:
