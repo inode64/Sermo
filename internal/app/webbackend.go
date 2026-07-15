@@ -763,11 +763,11 @@ func activeLockNames(cfg *config.Config, service string) []string {
 
 func activeLockNamesFromReport(report locks.Report) []string {
 	var names []string
-	for _, lk := range report.Locks {
-		if lk.State != locks.StateActive {
+	for i := range report.Locks {
+		if report.Locks[i].State != locks.StateActive {
 			continue
 		}
-		n := lk.Name
+		n := report.Locks[i].Name
 		if n == "" {
 			n = watchDefaultLockName
 		}
@@ -2674,9 +2674,9 @@ func (b *WebBackend) loadCatalogItems(ctx context.Context, category string, expo
 	}
 	wg.Wait()
 	out := make([]web.CatalogItem, 0, len(names))
-	for _, result := range results {
-		if result.ok {
-			out = append(out, result.item)
+	for i := range results {
+		if results[i].ok {
+			out = append(out, results[i].item)
 		}
 	}
 	return out
@@ -2982,8 +2982,8 @@ func (b *WebBackend) Locks(_ context.Context) []web.Lock {
 			continue
 		}
 		report := reports[name]
-		for _, lk := range report.Locks {
-			out = append(out, lockToWebAt(lk, name, now))
+		for i := range report.Locks {
+			out = append(out, lockToWebAt(report.Locks[i], name, now))
 		}
 	}
 	return out
@@ -3105,8 +3105,8 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 	d.SLA = b.serviceSLAWindows(name, now)
 
 	if report, err := serviceLocksReport(b.cfg, name); err == nil {
-		for _, lk := range report.Locks {
-			d.Locks = append(d.Locks, lockToWeb(lk, name))
+		for i := range report.Locks {
+			d.Locks = append(d.Locks, lockToWeb(report.Locks[i], name))
 		}
 		if len(report.Warnings) > 0 {
 			d.LockWarnings = slices.Clone(report.Warnings)
@@ -3285,22 +3285,22 @@ func aggregateProcesses(procs []process.Process, r procMetricReader) ([]web.Proc
 	}
 	out := make([]web.Process, 0, len(procs))
 	totals := web.ProcessTotals{Count: len(procs)}
-	for _, p := range procs {
-		wp := processToWeb(p)
-		if rss, ok := r.ProcessRSS(p.PID); ok {
+	for i := range procs {
+		wp := processToWeb(procs[i])
+		if rss, ok := r.ProcessRSS(procs[i].PID); ok {
 			wp.RSS = int64(rss)
 			totals.RSS += int64(rss)
 		}
-		if rd, wr, ok := r.ProcessIO(p.PID); ok {
+		if rd, wr, ok := r.ProcessIO(procs[i].PID); ok {
 			wp.IORead, wp.IOWrite = int64(rd), int64(wr)
 			totals.IORead += int64(rd)
 			totals.IOWrite += int64(wr)
 		}
-		if n, ok := r.ProcessFDs(p.PID); ok {
+		if n, ok := r.ProcessFDs(procs[i].PID); ok {
 			wp.FDs = int64(n)
 			totals.FDs += int64(n)
 		}
-		if n, ok := r.ProcessThreads(p.PID); ok {
+		if n, ok := r.ProcessThreads(procs[i].PID); ok {
 			wp.Threads = int64(n)
 			totals.Threads += int64(n)
 		}
