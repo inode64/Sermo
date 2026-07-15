@@ -182,9 +182,9 @@ func BuildLibraryWatches(ctx context.Context, cfg *config.Config, deps Deps) []*
 	}
 	notifiers := resolveNotifiers(deps.GlobalNotify, deps.Notifiers)
 	out := make([]*Watch, 0, len(reports))
-	for _, report := range reports {
-		name := report.Name
-		samples.RegisterFile(report.Binary)
+	for i := range reports {
+		name := reports[i].Name
+		samples.RegisterFile(reports[i].Binary)
 		out = append(out, &Watch{
 			Name:      libraryWatchNamePrefix + name,
 			CheckType: config.CategoryLibrary,
