@@ -12,7 +12,10 @@ import (
 
 const (
 	autofsDefaultMinMountpoints = 1
-	autofsFSType                = "autofs"
+
+	// FSTypeAutofs is the filesystem type the automounter's map roots report in
+	// the mount table.
+	FSTypeAutofs = "autofs"
 )
 
 // autofsCheck verifies the autofs automounter is active by inspecting the mount
@@ -45,7 +48,7 @@ func (c autofsCheck) Run(_ context.Context) Result {
 
 	var points []string
 	for i := range mounts {
-		if mounts[i].FSType == autofsFSType {
+		if mounts[i].FSType == FSTypeAutofs {
 			points = append(points, mounts[i].MountPoint)
 		}
 	}
@@ -53,9 +56,9 @@ func (c autofsCheck) Run(_ context.Context) Result {
 
 	if c.path != "" {
 		ok := slices.Contains(points, c.path)
-		msg := autofsFSType + " mountpoint " + c.path + " is active"
+		msg := FSTypeAutofs + " mountpoint " + c.path + " is active"
 		if !ok {
-			msg = autofsFSType + " mountpoint " + c.path + " is not active"
+			msg = FSTypeAutofs + " mountpoint " + c.path + " is not active"
 		}
 		res := c.result(ok, msg, start)
 		res.Data = data
@@ -67,7 +70,7 @@ func (c autofsCheck) Run(_ context.Context) Result {
 		op, value = cfgval.CompareOpGreaterEqual, autofsDefaultMinMountpoints
 	}
 	ok := compareFloat(float64(len(points)), op, value)
-	res := c.result(ok, fmt.Sprintf("%d %s mountpoint(s) active", len(points), autofsFSType), start)
+	res := c.result(ok, fmt.Sprintf("%d %s mountpoint(s) active", len(points), FSTypeAutofs), start)
 	res.Data = data
 	return res
 }
