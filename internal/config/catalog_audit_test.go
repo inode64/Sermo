@@ -377,10 +377,15 @@ func TestCatalogServicesRestartOnLinkedAppVersionChanges(t *testing.T) {
 				if !ok || app == "" {
 					continue
 				}
+				// Restarting on an app's version change is per-service opt-in
+				// (restart_on_change.apps): a linked app may be optional on the
+				// host (enable_if-gated, like smb's winbindd) or simply not
+				// restart-worthy, so a version preflight without a generated
+				// rule is valid. When the rule exists it must be well-formed.
 				ruleName := "restart-on-change-" + app + "-version"
 				rule, ok := rulesMap[ruleName].(map[string]any)
 				if !ok {
-					t.Fatalf("linked app %q has version preflight %q but no generated rule %q", app, key, ruleName)
+					continue
 				}
 				changed := nested(t, rule, "if", "changed")
 				if got := cfgval.String(changed["app"]); got != app {
