@@ -17,9 +17,9 @@ import (
 // Deliberately excluded: cheap/proc/sys views (memory/load/net/sensors/process),
 // filesystem state views used by tests and operators, and rate-based diskio,
 // which must sample on every poll to compute deltas.
-var heavyLiveViewTypes = map[string]bool{
-	checks.CheckTypeHdparm: true,
-	checks.CheckTypeSmart:  true,
+var heavyLiveViewTypes = map[string]struct{}{
+	checks.CheckTypeHdparm: {},
+	checks.CheckTypeSmart:  {},
 }
 
 func (b *WebBackend) watchDashboardView(ctx context.Context, w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
@@ -176,7 +176,7 @@ func (b *WebBackend) legacyWatchLiveView(ctx context.Context, w *webWatch, syste
 	if w == nil {
 		return nil, nil, ""
 	}
-	if heavyLiveViewTypes[w.checkType] {
+	if _, heavy := heavyLiveViewTypes[w.checkType]; heavy {
 		return nil, nil, ""
 	}
 	return b.watchLiveView(ctx, w, system)
