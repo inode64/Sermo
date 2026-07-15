@@ -175,6 +175,7 @@ linters:
         - sloppyReassign
         - sloppyTypeAssert
         - singleCaseSwitch
+        - sortSlice
         - stringXbytes
         - truncateCmp
         - typeAssertChain
