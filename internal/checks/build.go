@@ -794,8 +794,8 @@ func defaultCommandExport(name string) commandExport {
 	return commandExport{name: name, from: AnalyzeStreamStdout, trim: true}
 }
 
-var commandShortVersionRE = regexp.MustCompile(`[0-9]+\.[0-9]+(?:\.[0-9]+)?`)
-var commandShortIntegerVersionRE = regexp.MustCompile(`(?i)\b(?:version|v)\s*:?\s*([0-9]+)\b`)
+var commandShortVersionRE = regexp.MustCompile(`\d+\.\d+(?:\.\d+)?`)
+var commandShortIntegerVersionRE = regexp.MustCompile(`(?i)\b(?:version|v)\s*:?\s*(\d+)\b`)
 
 const (
 	commandRegexFullMatchGroup     = 0

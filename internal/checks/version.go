@@ -59,22 +59,22 @@ func VersionCommandEntry(tree map[string]any, key string) map[string]any {
 // the normalized value; the surrounding match may include a non-version prefix
 // character so formats such as `go1.26.2` still parse while suffixes and extra
 // build components are left out.
-var shortVersionRE = regexp.MustCompile(`(?:^|[^0-9.])([0-9]+\.[0-9]+(?:\.[0-9]+)?)`)
+var shortVersionRE = regexp.MustCompile(`(?:^|[^0-9.])(\d+\.\d+(?:\.\d+)?)`)
 
 var shortVersionSpecificREs = []*regexp.Regexp{
-	regexp.MustCompile(`\bisc-dh(?:client|cpd)-([0-9]+\.[0-9]+\.[0-9]+-P[0-9]+)\b`),
-	regexp.MustCompile(`\bOpenSSH[_ ]([0-9]+\.[0-9]+p[0-9]+)\b`),
+	regexp.MustCompile(`\bisc-dh(?:client|cpd)-(\d+\.\d+\.\d+-P\d+)\b`),
+	regexp.MustCompile(`\bOpenSSH[_ ](\d+\.\d+p\d+)\b`),
 	regexp.MustCompile(`\bNET-SNMP version:\s*([0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+|\.pre[0-9]*)?)\b`),
 	regexp.MustCompile(`\bNetwork UPS Tools (?:upsd|upsmon)\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\b`),
-	regexp.MustCompile(`\bxinetd\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\b`),
+	regexp.MustCompile(`\bxinetd\s+(\d+\.\d+\.\d+\.\d+)\b`),
 }
 
-var ntpPatchVersionRE = regexp.MustCompile(`^([0-9]+\.[0-9]+\.[0-9]+p[0-9]+)(?:@.*)?$`)
+var ntpPatchVersionRE = regexp.MustCompile(`^(\d+\.\d+\.\d+p\d+)(?:@.*)?$`)
 
 // shortIntegerVersionRE covers projects that publish integer-only releases in
 // version output, such as "pkexec version 126". It only runs after the dotted
 // matcher misses so a line like "systemd 260 (260.1)" still reports "260.1".
-var shortIntegerVersionRE = regexp.MustCompile(`(?i)\b(?:version|v)\s*:?\s*([0-9]+)\b`)
+var shortIntegerVersionRE = regexp.MustCompile(`(?i)\b(?:version|v)\s*:?\s*(\d+)\b`)
 
 // ShortVersion reduces a raw version line (as captured in Report.Version) to
 // just its numeric version, keeping at most three components
