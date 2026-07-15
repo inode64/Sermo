@@ -18,7 +18,6 @@ restart_on_change:
   apps:
     - smbd
     - nmbd
-    - winbindd
   messages:
     app: >-
       ${display_name} will restart after version change of ${change.app}: ${change.old_version} -> ${change.new_version}
