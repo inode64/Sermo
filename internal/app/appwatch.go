@@ -69,8 +69,8 @@ func BuildAppWatches(ctx context.Context, cfg *config.Config, deps Deps) []*Watc
 	}
 	notifiers := resolveNotifiers(deps.GlobalNotify, deps.Notifiers)
 	out := make([]*Watch, 0, len(reports))
-	for _, r := range reports {
-		name := r.Name
+	for i := range reports {
+		name := reports[i].Name
 		samples.RegisterApp(name)
 		check := appCheck{
 			name:    name,
