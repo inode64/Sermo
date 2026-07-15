@@ -1543,36 +1543,6 @@ func (b *WebBackend) zombieWatchView() (*web.WatchMeter, []web.WatchReading, str
 		fmt.Sprintf("%d zombie processes", count)
 }
 
-func watchErrorReadings(message string) []web.WatchReading {
-	return []web.WatchReading{{Field: watchReadingFieldSample, Label: watchReadingLabelSample, Error: message}}
-}
-
-func watchPercent(value float64) string {
-	return watchReadingMetricValue(value, watchReadingDefaultMetricDecimals, metrics.MetricUnitPercent)
-}
-
-func watchMetricEnabled(metricEntries map[string]any, metric string) bool {
-	if len(metricEntries) == 0 {
-		return true
-	}
-	_, ok := metricEntries[metric]
-	return ok
-}
-
-func netErrorTotal(metricEntries map[string]any, counters map[string]uint64) uint64 {
-	names := []string{checks.NetCounterRXErrors, checks.NetCounterTXErrors}
-	if entry, ok := metricEntries[checks.NetMetricErrors].(map[string]any); ok {
-		if configured := cfgval.StringArray(entry[checks.CheckKeyCounters]); len(configured) > 0 {
-			names = configured
-		}
-	}
-	var total uint64
-	for _, name := range names {
-		total += counters[name]
-	}
-	return total
-}
-
 // pluralSuffix returns the suffix to append to singular to form its plural for
 // count items: "" when count is 1, "es" for sibilant endings (process ->
 // processes, address -> addresses) and "s" otherwise (mountpoint -> mountpoints).
