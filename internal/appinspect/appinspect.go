@@ -451,8 +451,10 @@ func runProbeCommand(ctx context.Context, runner execx.Runner, cmd probeCommand)
 		timeout = probeTimeout
 	}
 	if cmd.user != "" {
+		//nolint:wrapcheck // execx returns the canonical command error consumed by OperatorFailure.
 		return execx.RunUser(ctx, runner, timeout, cmd.user, cmd.argv[0], cmd.argv[1:]...)
 	}
+	//nolint:wrapcheck // execx returns the canonical command error consumed by OperatorFailure.
 	return execx.Run(ctx, runner, timeout, cmd.argv[0], cmd.argv[1:]...)
 }
 
