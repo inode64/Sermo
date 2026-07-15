@@ -36,8 +36,8 @@ type artifactFileSample struct {
 
 type artifactAppSample struct {
 	version string
+	status  string
 	sampled bool
-	err     error
 }
 
 // NewArtifactSamples creates an empty artifact sample cache.
@@ -94,29 +94,29 @@ func (s *ArtifactSamples) RegisterApp(name string) bool {
 	return false
 }
 
-// StoreAppVersion records one app version observation. A failed probe remains a
-// sampled observation so workers can return its error rather than re-running it.
-func (s *ArtifactSamples) StoreAppVersion(name, version string, err error) {
+// StoreAppVersion records one app version observation and its inspection status.
+// A non-OK observation remains sampled so workers do not re-run its probe.
+func (s *ArtifactSamples) StoreAppVersion(name, version, status string) {
 	if s == nil || name == "" {
 		return
 	}
 	s.mu.Lock()
-	s.appVersions[name] = artifactAppSample{version: version, sampled: true, err: err}
+	s.appVersions[name] = artifactAppSample{version: version, status: status, sampled: true}
 	s.mu.Unlock()
 }
 
 // AppVersion returns the latest sampled app version and its probe outcome.
-func (s *ArtifactSamples) AppVersion(name string) (string, bool, error) {
+func (s *ArtifactSamples) AppVersion(name string) (string, string, bool) {
 	if s == nil {
-		return "", false, nil
+		return "", "", false
 	}
 	s.mu.RLock()
 	entry, tracked := s.appVersions[name]
 	s.mu.RUnlock()
 	if !tracked || !entry.sampled {
-		return "", false, nil
+		return "", "", false
 	}
-	return entry.version, true, entry.err
+	return entry.version, entry.status, true
 }
 
 type libraryCheck struct {

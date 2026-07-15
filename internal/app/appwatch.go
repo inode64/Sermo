@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"errors"
 
 	"sermo/internal/appinspect"
 	"sermo/internal/checks"
@@ -38,11 +37,7 @@ func storeAppSample(samples *ArtifactSamples, name string, report appinspect.Rep
 	if samples == nil {
 		return
 	}
-	var err error
-	if report.Status != appinspect.StatusOK {
-		err = errors.New(report.Status)
-	}
-	samples.StoreAppVersion(name, report.Version, err)
+	samples.StoreAppVersion(name, report.Version, report.Status)
 }
 
 const appWatchCheckType = config.CategoryApp

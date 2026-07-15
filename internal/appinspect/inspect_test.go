@@ -102,6 +102,24 @@ func TestInspectBinaryStates(t *testing.T) {
 	}
 }
 
+func TestIsNotInstalledStatus(t *testing.T) {
+	tests := []struct {
+		status string
+		want   bool
+	}{
+		{status: StatusNotInstalled, want: true},
+		{status: StatusPrefixNotInstalled + " version mismatch", want: true},
+		{status: StatusNoBinaryConfigured},
+		{status: StatusPrefixError + " exit 1"},
+		{status: StatusOK},
+	}
+	for _, tt := range tests {
+		if got := IsNotInstalledStatus(tt.status); got != tt.want {
+			t.Errorf("IsNotInstalledStatus(%q) = %t, want %t", tt.status, got, tt.want)
+		}
+	}
+}
+
 func TestInspectUsesConfiguredUserLookupForOwners(t *testing.T) {
 	path := writeBinary(t, 0o755)
 	info, err := os.Stat(path)
