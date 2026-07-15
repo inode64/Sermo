@@ -498,8 +498,8 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		return
 	}
 
-	for _, r := range firing {
-		if w.runFiringRemediation(ctx, ev, now, r) {
+	for i := range firing {
+		if w.runFiringRemediation(ctx, ev, now, firing[i]) {
 			return
 		}
 	}
@@ -590,13 +590,14 @@ func (w *Worker) executeRemediation(ctx context.Context, now func() time.Time, f
 
 func (w *Worker) firingRemediationRules(ctx context.Context, ev *rules.Evaluator, at time.Time, evals map[string]ruleEvalResult) []firingRule {
 	var firing []firingRule
-	for _, rule := range w.Rules {
+	for i := range w.Rules {
+		rule := &w.Rules[i]
 		if rule.Type != rules.RuleRemediation {
 			continue
 		}
-		evaluation := w.fires(ctx, ev, rule, at, evals)
+		evaluation := w.fires(ctx, ev, *rule, at, evals)
 		if evaluation.firing {
-			firing = append(firing, firingRule{Rule: rule, rising: evaluation.rising, change: evaluation.change})
+			firing = append(firing, firingRule{Rule: *rule, rising: evaluation.rising, change: evaluation.change})
 		}
 	}
 	return firing
@@ -614,19 +615,20 @@ func (w *Worker) operateForRemediation(ctx context.Context, action string) opera
 }
 
 func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Time, evals map[string]ruleEvalResult) {
-	for _, r := range w.Rules {
-		if r.Type != rules.RuleAlert {
+	for i := range w.Rules {
+		rule := &w.Rules[i]
+		if rule.Type != rules.RuleAlert {
 			continue
 		}
-		fireState := w.fires(ctx, ev, r, at, evals)
+		fireState := w.fires(ctx, ev, *rule, at, evals)
 		if fireState.firing {
 			if w.DryRun {
-				w.emitDryRunAlerts(ctx, ev, r, fireState.rising, fireState.change)
+				w.emitDryRunAlerts(ctx, ev, *rule, fireState.rising, fireState.change)
 			} else {
-				w.emitAlerts(ctx, ev, r, fireState.rising, fireState.change)
+				w.emitAlerts(ctx, ev, *rule, fireState.rising, fireState.change)
 			}
-		} else if fireState.recovered && w.shouldEmitRuleEvent(r, true) {
-			w.emit(Event{Kind: eventKindRecovered, Rule: r.Name, Message: w.recoveredRuleMessage(ev, r, fireState.change)})
+		} else if fireState.recovered && w.shouldEmitRuleEvent(*rule, true) {
+			w.emit(Event{Kind: eventKindRecovered, Rule: rule.Name, Message: w.recoveredRuleMessage(ev, *rule, fireState.change)})
 		}
 	}
 }
