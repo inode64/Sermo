@@ -2141,21 +2141,17 @@ function serviceActionDisabledReason(s, action, busy) {
   }
 }
 
-function svcActionHintId(s, action) {
-  return `svc-${s.name}-${action}-hint`;
+function actionHintID(kind, name, action) {
+  return `${kind}-${name}-${action}-hint`;
 }
 
-function svcActionHint(s, action, busy) {
-  const disabled = serviceActionDisabled(s, action, busy);
-  const reason = serviceActionDisabledReason(s, action, busy);
+function actionHint(id, disabled, reason) {
   if (!disabled || !reason) return nothing;
-  return tpl`<span id="${svcActionHintId(s, action)}" class="visually-hidden">${reason}</span>`;
+  return tpl`<span id="${id}" class="visually-hidden">${reason}</span>`;
 }
 
-function svcActionDescribedBy(s, action, busy) {
-  const disabled = serviceActionDisabled(s, action, busy);
-  const reason = serviceActionDisabledReason(s, action, busy);
-  return disabled && reason ? svcActionHintId(s, action) : nothing;
+function actionDescribedBy(id, disabled, reason) {
+  return disabled && reason ? id : nothing;
 }
 
 function servicePowerAction(s) {
@@ -2201,7 +2197,10 @@ function serviceActionGlyph(action) {
 function serviceActionButton(s, action, busy, compact = false, title = "") {
   const label = svcActionAriaLabel(s, action);
   const glyph = compact ? serviceActionGlyph(action) : "";
-  return tpl`${svcActionHint(s, action, busy)}<button class="${compact ? "icon-btn" : ""}" ?disabled=${serviceActionDisabled(s, action, busy)} data-service="${s.name}" data-service-action="${action}" title="${title || (compact ? label : nothing)}" aria-label="${label}" aria-describedby="${svcActionDescribedBy(s, action, busy)}">${glyph ? tpl`<span aria-hidden="true">${glyph}</span>` : action}</button>`;
+  const disabled = serviceActionDisabled(s, action, busy);
+  const reason = serviceActionDisabledReason(s, action, busy);
+  const hintID = actionHintID("svc", s.name, action);
+  return tpl`${actionHint(hintID, disabled, reason)}<button class="${compact ? "icon-btn" : ""}" ?disabled=${disabled} data-service="${s.name}" data-service-action="${action}" title="${title || (compact ? label : nothing)}" aria-label="${label}" aria-describedby="${actionDescribedBy(hintID, disabled, reason)}">${glyph ? tpl`<span aria-hidden="true">${glyph}</span>` : action}</button>`;
 }
 
 // serviceRowParts builds one service's main and optional expansion <tr> HTML.
@@ -3830,21 +3829,18 @@ function watchActionDisabledReason(w, action) {
   }
 }
 
-function watchActionHintId(w, action) {
-  return `wat-${w.name}-${action}-hint`;
-}
-
-function watchActionHint(w, action) {
+function watchActionAccessibility(w, action) {
   const disabled = watchActionDisabled(w, action);
   const reason = watchActionDisabledReason(w, action);
-  if (!disabled || !reason) return nothing;
-  return tpl`<span id="${watchActionHintId(w, action)}" class="visually-hidden">${reason}</span>`;
+  const hintID = actionHintID("wat", w.name, action);
+  return { disabled, hint: actionHint(hintID, disabled, reason), describedBy: actionDescribedBy(hintID, disabled, reason) };
 }
 
-function watchActionDescribedBy(w, action) {
-  const disabled = watchActionDisabled(w, action);
-  const reason = watchActionDisabledReason(w, action);
-  return disabled && reason ? watchActionHintId(w, action) : nothing;
+function watchActionButton(w, action, content, compact = false) {
+  const label = watchActionAriaLabel(w, action);
+  const accessibility = watchActionAccessibility(w, action);
+  const className = compact ? "icon-btn" : nothing;
+  return tpl`${accessibility.hint}<button class="${className}" ?disabled=${accessibility.disabled} data-watch="${w.name}" data-watch-action="${action}" title="${compact ? label : nothing}" aria-label="${label}" aria-describedby="${accessibility.describedBy}">${content}</button>`;
 }
 
 function watchActionAriaLabel(w, action) {
@@ -3897,20 +3893,20 @@ function watchNameCell(w, key, open) {
 // watchActionsCell renders the shared actions cell (expand / monitor / unmonitor).
 function watchActionsCell(w) {
   const probeBtn = (w.can_probe && me.can_act && w.enabled)
-    ? tpl`${watchActionHint(w, actionProbe)}<button class="icon-btn" ?disabled=${watchActionDisabled(w, actionProbe)} data-watch="${w.name}" data-watch-action="${actionProbe}" title="${watchActionAriaLabel(w, actionProbe)}" aria-label="${watchActionAriaLabel(w, actionProbe)}" aria-describedby="${watchActionDescribedBy(w, actionProbe)}"><span aria-hidden="true">◎</span></button>`
+    ? watchActionButton(w, actionProbe, tpl`<span aria-hidden="true">◎</span>`, true)
     : nothing;
   const raidButtons = (w.can_control_raid && me.can_act && w.enabled)
-    ? tpl`${watchActionHint(w, actionPause)}<button ?disabled=${watchActionDisabled(w, actionPause)} data-watch="${w.name}" data-watch-action="${actionPause}" aria-label="${watchActionAriaLabel(w, actionPause)}">pause RAID</button> ${watchActionHint(w, actionResume)}<button ?disabled=${watchActionDisabled(w, actionResume)} data-watch="${w.name}" data-watch-action="${actionResume}" aria-label="${watchActionAriaLabel(w, actionResume)}">resume RAID</button>`
+    ? tpl`${watchActionButton(w, actionPause, "pause RAID")} ${watchActionButton(w, actionResume, "resume RAID")}`
     : nothing;
   const expandBtn = (w.expand && Number(w.expand.by_bytes) > 0 && me.can_act && w.enabled)
-    ? tpl`${watchActionHint(w, actionExpand)}<button ?disabled=${watchActionDisabled(w, actionExpand)} data-watch="${w.name}" data-watch-action="${actionExpand}" aria-label="${watchActionAriaLabel(w, actionExpand)}" aria-describedby="${watchActionDescribedBy(w, actionExpand)}">${actionExpand} ${fmtBytes(w.expand.by_bytes)}</button>`
+    ? watchActionButton(w, actionExpand, `${actionExpand} ${fmtBytes(w.expand.by_bytes)}`)
     : nothing;
   const monitorBtn = !w.enabled
     ? tpl`<span class="muted">disabled in config</span>`
     : (me.can_act
       ? (w.monitored
-        ? tpl`${watchActionHint(w, actionUnmonitor)}<button class="icon-btn" ?disabled=${watchActionDisabled(w, actionUnmonitor)} data-watch="${w.name}" data-watch-action="${actionUnmonitor}" title="${watchActionAriaLabel(w, actionUnmonitor)}" aria-label="${watchActionAriaLabel(w, actionUnmonitor)}" aria-describedby="${watchActionDescribedBy(w, actionUnmonitor)}"><span aria-hidden="true">⊘</span></button>`
-        : tpl`${watchActionHint(w, actionMonitor)}<button class="icon-btn" ?disabled=${watchActionDisabled(w, actionMonitor)} data-watch="${w.name}" data-watch-action="${actionMonitor}" title="${watchActionAriaLabel(w, actionMonitor)}" aria-label="${watchActionAriaLabel(w, actionMonitor)}" aria-describedby="${watchActionDescribedBy(w, actionMonitor)}"><span aria-hidden="true">◉</span></button>`)
+        ? watchActionButton(w, actionUnmonitor, tpl`<span aria-hidden="true">⊘</span>`, true)
+        : watchActionButton(w, actionMonitor, tpl`<span aria-hidden="true">◉</span>`, true))
       : tpl`<span class="muted">read-only</span>`);
   const actions = !w.enabled
     ? tpl`<span class="muted">disabled in config</span>`
@@ -3934,26 +3930,34 @@ function watchExpansionRow(key, open, cols = 9) {
     : null;
 }
 
-// watchRowHTML builds the table row(s) for one watch — the main row plus its
-// expansion row when open. Shared by the Storage, Network and Host watches
-// panels so they render identically (including the expand action).
-function watchRowHTML(w) {
+// watchRowParts builds the shared watch row shell and its optional expansion.
+// Callers supply only the cells that vary between the generic and typed views.
+function watchRowParts(w, cells, colCount) {
   const state = watchStateText(w);
   const key = watchExpansionKey(w.name);
   const open = expanded.has(key);
   const row = tpl`<tr id="wat-row-${w.name}" class="clickable ${watchRowClass(state)}" data-exp-key="${key}">
     ${watchNameCell(w, key, open)}
-    <td>${categoryBadge(watchGroupOf(w))}</td>
-    <td>${w.check_type || ""}</td>
-    <td>${watchPrimaryMetric(w)}</td>
-    <td class="watch-summary">${watchSummaryCell(w)}</td>
+    ${cells}
     <td>${watchLastCheckedCell(w)}</td>
     <td>${watchLastCell(w)}</td>
     <td>${watchStateCell(w)}</td>
     ${watchActionsCell(w)}
   </tr>`;
-  const expRow = watchExpansionRow(key, open, 9);
-  return expRow ? [row, expRow] : [row];
+  return { row, expRow: watchExpansionRow(key, open, colCount) };
+}
+
+// watchRowHTML builds the table row(s) for one watch — the main row plus its
+// expansion row when open. Shared by the Storage, Network and Host watches
+// panels so they render identically (including the expand action).
+function watchRowHTML(w) {
+  const parts = watchRowParts(w, [
+    tpl`<td>${categoryBadge(watchGroupOf(w))}</td>`,
+    tpl`<td>${w.check_type || ""}</td>`,
+    tpl`<td>${watchPrimaryMetric(w)}</td>`,
+    tpl`<td class="watch-summary">${watchSummaryCell(w)}</td>`,
+  ], 9);
+  return parts.expRow ? [parts.row, parts.expRow] : [parts.row];
 }
 
 // storageUsageCell renders the occupied-space progress bar (with used/total
@@ -4026,6 +4030,14 @@ function typedReadingCell(w, field) {
   return readingValue(w, field);
 }
 
+function textReadingColumn(key, label) {
+  return { key, label, cell: (w) => typedReadingCell(w, key), sort: (w) => readingRaw(w, key).toLowerCase() };
+}
+
+function numericReadingColumn(key, label) {
+  return { key, label, cell: (w) => typedReadingCell(w, key), sort: (w) => readingSortValue(w, key) };
+}
+
 // watchTypeProfiles is the single presentation owner for every host-watch
 // subtype. A profile owns its useful live columns, sortable values and optional
 // subtype filter; generic summaries are deliberately not used in this view.
@@ -4042,7 +4054,7 @@ const watchTypeProfiles = {
   file: {
     label: "File checks",
     columns: [
-      { key: "path", label: "Path", cell: (w) => typedReadingCell(w, "path"), sort: (w) => readingRaw(w, "path").toLowerCase() },
+      textReadingColumn("path", "Path"),
       { key: "age", label: "Current age", cell: (w) => typedReadingCell(w, "age"), sort: (w) => parseDurationSeconds(readingRaw(w, "age")) },
       { key: "older_than", label: "Limit", cell: (w) => watchConditionValue(w, "older_than"), sort: (w) => parseDurationSeconds(watchConditionValue(w, "older_than")) },
     ],
@@ -4050,67 +4062,67 @@ const watchTypeProfiles = {
   net: {
     label: "Network interfaces",
     columns: [
-      { key: "interface", label: "Interface", cell: (w) => typedReadingCell(w, "interface"), sort: (w) => readingRaw(w, "interface").toLowerCase() },
-      { key: "state", label: "Link", cell: (w) => typedReadingCell(w, "state"), sort: (w) => readingRaw(w, "state").toLowerCase() },
-      { key: "speed", label: "Speed", cell: (w) => typedReadingCell(w, "speed"), sort: (w) => readingSortValue(w, "speed") },
-      { key: "errors", label: "Errors", cell: (w) => typedReadingCell(w, "errors"), sort: (w) => readingSortValue(w, "errors") },
+      textReadingColumn("interface", "Interface"),
+      textReadingColumn("state", "Link"),
+      numericReadingColumn("speed", "Speed"),
+      numericReadingColumn("errors", "Errors"),
     ],
   },
   hdparm: {
     label: "Disk speed",
     columns: [
-      { key: "device", label: "Device", cell: (w) => typedReadingCell(w, "device"), sort: (w) => readingRaw(w, "device").toLowerCase() },
-      { key: "read", label: "Buffered read", cell: (w) => typedReadingCell(w, "read"), sort: (w) => readingSortValue(w, "read") },
-      { key: "cached", label: "Cached read", cell: (w) => typedReadingCell(w, "cached"), sort: (w) => readingSortValue(w, "cached") },
+      textReadingColumn("device", "Device"),
+      numericReadingColumn("read", "Buffered read"),
+      numericReadingColumn("cached", "Cached read"),
     ],
   },
   lvm: {
     label: "LVM",
     columns: [
       { key: "health", label: "Health", cell: lvmHealthCell, sort: (w) => readingRaw(w, "health").toLowerCase() },
-      { key: "vg", label: "VG", cell: (w) => typedReadingCell(w, "volume_group"), sort: (w) => readingRaw(w, "volume_group").toLowerCase() },
-      { key: "lv", label: "LV", cell: (w) => typedReadingCell(w, "logical_volume"), sort: (w) => readingRaw(w, "logical_volume").toLowerCase() },
-      { key: "size", label: "VG size", cell: (w) => typedReadingCell(w, "vg_size_bytes"), sort: (w) => readingSortValue(w, "vg_size_bytes") },
-      { key: "free", label: "VG free", cell: (w) => typedReadingCell(w, "vg_free_bytes"), sort: (w) => readingSortValue(w, "vg_free_bytes") },
-      { key: "reasons", label: "Reasons", cell: (w) => typedReadingCell(w, "lvm_reasons"), sort: (w) => readingRaw(w, "lvm_reasons").toLowerCase() },
+      textReadingColumn("volume_group", "VG"),
+      textReadingColumn("logical_volume", "LV"),
+      numericReadingColumn("vg_size_bytes", "VG size"),
+      numericReadingColumn("vg_free_bytes", "VG free"),
+      textReadingColumn("lvm_reasons", "Reasons"),
     ],
   },
   smart: {
     label: "SMART",
     columns: [
-      { key: "device", label: "Device", cell: (w) => typedReadingCell(w, "device"), sort: (w) => readingRaw(w, "device").toLowerCase() },
+      textReadingColumn("device", "Device"),
       { key: "health", label: "Health", cell: lvmHealthCell, sort: (w) => readingRaw(w, "health").toLowerCase() },
-      { key: "temperature", label: "Temperature", cell: (w) => typedReadingCell(w, "temperature"), sort: (w) => readingSortValue(w, "temperature") },
-      { key: "wear", label: "Wear", cell: (w) => typedReadingCell(w, "wear"), sort: (w) => readingSortValue(w, "wear") },
-      { key: "power_on_hours", label: "Power-on time", cell: (w) => typedReadingCell(w, "power_on_hours"), sort: (w) => readingSortValue(w, "power_on_hours") },
+      numericReadingColumn("temperature", "Temperature"),
+      numericReadingColumn("wear", "Wear"),
+      numericReadingColumn("power_on_hours", "Power-on time"),
     ],
   },
   diskio: {
     label: "Disk I/O",
     columns: [
-      { key: "device", label: "Device", cell: (w) => typedReadingCell(w, "device"), sort: (w) => readingRaw(w, "device").toLowerCase() },
-      { key: "util", label: "Utilization", cell: (w) => typedReadingCell(w, "util_pct"), sort: (w) => readingSortValue(w, "util_pct") },
-      { key: "read", label: "Read", cell: (w) => typedReadingCell(w, "read_bytes"), sort: (w) => readingSortValue(w, "read_bytes") },
-      { key: "write", label: "Write", cell: (w) => typedReadingCell(w, "write_bytes"), sort: (w) => readingSortValue(w, "write_bytes") },
-      { key: "await", label: "Await", cell: (w) => typedReadingCell(w, "await_ms"), sort: (w) => readingSortValue(w, "await_ms") },
+      textReadingColumn("device", "Device"),
+      numericReadingColumn("util_pct", "Utilization"),
+      numericReadingColumn("read_bytes", "Read"),
+      numericReadingColumn("write_bytes", "Write"),
+      numericReadingColumn("await_ms", "Await"),
     ],
   },
   cert: {
     label: "Certificates",
     columns: [
-      { key: "source", label: "Source", cell: (w) => typedReadingCell(w, "source"), sort: (w) => readingRaw(w, "source").toLowerCase() },
-      { key: "days", label: "Days left", cell: (w) => typedReadingCell(w, "days_left"), sort: (w) => readingSortValue(w, "days_left") },
+      textReadingColumn("source", "Source"),
+      numericReadingColumn("days_left", "Days left"),
       { key: "expires", label: "Expires", cell: (w) => typedReadingCell(w, "not_after"), sort: (w) => readingRaw(w, "not_after") },
-      { key: "issuer", label: "Issuer", cell: (w) => typedReadingCell(w, "issuer"), sort: (w) => readingRaw(w, "issuer").toLowerCase() },
+      textReadingColumn("issuer", "Issuer"),
     ],
   },
   raid: {
     label: "RAID",
     columns: [
-      { key: "array", label: "Array", cell: (w) => typedReadingCell(w, "array"), sort: (w) => readingRaw(w, "array").toLowerCase() },
-      { key: "size", label: "Size", cell: (w) => typedReadingCell(w, "total_bytes"), sort: (w) => readingSortValue(w, "total_bytes") },
-      { key: "degraded", label: "Degraded", cell: (w) => typedReadingCell(w, "degraded"), sort: (w) => readingSortValue(w, "degraded") },
-      { key: "recovering", label: "Recovering", cell: (w) => typedReadingCell(w, "recovering"), sort: (w) => readingSortValue(w, "recovering") },
+      textReadingColumn("array", "Array"),
+      numericReadingColumn("total_bytes", "Size"),
+      numericReadingColumn("degraded", "Degraded"),
+      numericReadingColumn("recovering", "Recovering"),
     ],
   },
 };
@@ -4120,7 +4132,7 @@ function watchTypeProfile(type) {
     return {
       label: "File summaries",
       columns: [
-        { key: "path", label: "Path", cell: (w) => typedReadingCell(w, "path"), sort: (w) => readingRaw(w, "path").toLowerCase() },
+        textReadingColumn("path", "Path"),
         { key: "summary", label: "Summary", cell: (w) => w.summary || "—", sort: (w) => w.summary || "" },
       ],
     };
@@ -4194,20 +4206,9 @@ function watchTypeFilterControl(panel, type, watches, profile) {
 }
 
 function typedWatchRowHTML(w, profile) {
-  const state = watchStateText(w);
-  const key = watchExpansionKey(w.name);
-  const open = expanded.has(key);
   const colCount = profile.columns.length + 5;
-  const row = tpl`<tr id="wat-row-${w.name}" class="clickable ${watchRowClass(state)}" data-exp-key="${key}">
-    ${watchNameCell(w, key, open)}
-    ${profile.columns.map((column) => tpl`<td>${column.cell(w)}</td>`)}
-    <td>${watchLastCheckedCell(w)}</td>
-    <td>${watchLastCell(w)}</td>
-    <td>${watchStateCell(w)}</td>
-    ${watchActionsCell(w)}
-  </tr>`;
-  const expRow = watchExpansionRow(key, open, colCount);
-  return expRow ? [row, expRow] : [row];
+  const parts = watchRowParts(w, profile.columns.map((column) => tpl`<td>${column.cell(w)}</td>`), colCount);
+  return parts.expRow ? [parts.row, parts.expRow] : [parts.row];
 }
 
 function renderWatchTypeTable(panel, type, watches) {
