@@ -139,17 +139,21 @@ func TestConfiguredStatusRejectsUnknownService(t *testing.T) {
 
 func TestConfigValidateRejectsServiceArgumentBeforeLoadingConfig(t *testing.T) {
 	var stderr bytes.Buffer
+	loadCalled := false
 	app := App{
 		Env:    func(string) string { return "" },
 		Stdout: &bytes.Buffer{},
 		Stderr: &stderr,
 		LoadConfig: func(string, ...config.Option) (*config.Config, error) {
-			t.Fatal("config validate with a positional argument must fail before loading config")
-			panic("unreachable")
+			loadCalled = true
+			return nil, errNoConfigForInvalidTest
 		},
 	}
 
 	code := app.Run(context.Background(), []string{"--config", "/tmp/missing-sermo.yml", "config", "validate", "ghost"})
+	if loadCalled {
+		t.Fatal("config validate with a positional argument must fail before loading config")
+	}
 	if code != exitUsage {
 		t.Fatalf("config validate ghost exit = %d, want %d", code, exitUsage)
 	}
