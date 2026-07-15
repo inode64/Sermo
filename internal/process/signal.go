@@ -203,12 +203,12 @@ func sortedInts(set map[int]bool) []int {
 
 func signalRound(set []Process, selector KillSelector, resolve UserResolver, signaler Signaler, sig syscall.Signal, signalled map[int]bool) []SignalFailure {
 	var failed []SignalFailure
-	for _, p := range set {
-		if selector.Killable(p, resolve) {
-			if err := signaler.Signal(p.PID, sig); err == nil {
-				signalled[p.PID] = true
+	for i := range set {
+		if selector.Killable(set[i], resolve) {
+			if err := signaler.Signal(set[i].PID, sig); err == nil {
+				signalled[set[i].PID] = true
 			} else {
-				failed = append(failed, SignalFailure{PID: p.PID, Signal: sig, Err: err})
+				failed = append(failed, SignalFailure{PID: set[i].PID, Signal: sig, Err: err})
 			}
 		}
 	}
