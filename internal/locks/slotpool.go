@@ -139,7 +139,7 @@ func (p SlotPool) Acquire(ctx context.Context) (*SlotHandle, error) {
 		}
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, fmt.Errorf("wait for operation slot: %w", ctx.Err())
 		default:
 			pool.Sleep(defaultAcquireRetryInterval)
 		}

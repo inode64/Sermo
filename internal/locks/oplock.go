@@ -48,7 +48,7 @@ func (h *ownedLock) release() error {
 	}
 	if current.OwnerPID == h.ownerPID && current.OwnerStartTicks == h.ownerStartTicks {
 		if err := os.Remove(h.path); err != nil && !os.IsNotExist(err) {
-			return err
+			return fmt.Errorf("release lock %s: %w", h.path, err)
 		}
 	}
 	h.released = true
@@ -205,13 +205,14 @@ func reclaimStale(path string, expected lockFile, proc ProcessProber, now func()
 // directory cannot be opened or locked, reclaim proceeds unserialized (the prior
 // behavior) rather than failing the acquire.
 func lockReclaimDir(path string) (func(), error) {
-	d, err := os.Open(filepath.Dir(path))
+	dir := filepath.Dir(path)
+	d, err := os.Open(dir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open lock directory %s: %w", dir, err)
 	}
 	if err := unix.Flock(int(d.Fd()), unix.LOCK_EX); err != nil {
 		d.Close()
-		return nil, err
+		return nil, fmt.Errorf("lock directory %s: %w", dir, err)
 	}
 	return func() {
 		_ = unix.Flock(int(d.Fd()), unix.LOCK_UN)
@@ -225,23 +226,23 @@ func lockReclaimDir(path string) (func(), error) {
 func writeLockFileExclusive(path string, lf lockFile) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, lockFileMode)
 	if err != nil {
-		return err
+		return fmt.Errorf("create lock %s: %w", path, err)
 	}
 	data, err := json.Marshal(lf)
 	if err != nil {
 		f.Close()
-		return err
+		return fmt.Errorf("marshal lock %s: %w", path, err)
 	}
 	if _, err := f.Write(data); err != nil {
 		f.Close()
-		return err
+		return fmt.Errorf("write lock %s: %w", path, err)
 	}
 	if err := f.Sync(); err != nil {
 		f.Close()
-		return err
+		return fmt.Errorf("sync lock %s: %w", path, err)
 	}
 	if err := f.Close(); err != nil {
-		return err
+		return fmt.Errorf("close lock %s: %w", path, err)
 	}
 	syncDir(filepath.Dir(path))
 	return nil
