@@ -1898,8 +1898,12 @@ tracked across artifact samples, or when `app` names a linked app whose version
 changed at the selected `level` (`major`, `minor` or `patch`; default `patch`).
 The first cycle adopts the current value (a daemon start never fires), and a
 successful `restart`/`start` re-baselines it. A failed app version command is an
-invalid sample: it does not fire and does not update the baseline. The `path`
-form is the primitive behind `restart_on_change.libraries` (see Services →
+invalid sample: it does not fire and does not update the baseline. An app that
+is not installed (including a failed `version_match`) is an unavailable sample:
+it is false without a rule-evaluation error and does not set a baseline. When it
+is later installed, its first version establishes that baseline. This does not
+relax the linked app's normal operation preflight. The `path` form is the
+primitive behind `restart_on_change.libraries` (see Services →
 Library services); the `app` form is the primitive behind
 `restart_on_change.apps` for service-owned binaries such as `containerd`.
 For service paths, linked apps and catalog libraries, the samples run at

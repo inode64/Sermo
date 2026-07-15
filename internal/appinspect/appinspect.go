@@ -42,6 +42,11 @@ const (
 	StatusPrefixNotInstalled = StatusNotInstalled + ":"
 )
 
+// IsNotInstalledStatus reports whether status represents a known absent app.
+func IsNotInstalledStatus(status string) bool {
+	return status == StatusNotInstalled || strings.HasPrefix(status, StatusPrefixNotInstalled)
+}
+
 const (
 	statusErrorPrefix               = StatusPrefixError + " "
 	statusNotInstalledVersionPrefix = StatusPrefixNotInstalled + " version "

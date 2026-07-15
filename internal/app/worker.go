@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/appinspect"
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/emission"
@@ -854,9 +855,12 @@ func (w *Worker) acknowledgeChanges() {
 // first non-empty line, so a change is never silently missed.
 func (w *Worker) changedAppVersion(ctx context.Context, app string, level int) (bool, error) {
 	if w.artifactSamples != nil {
-		if raw, sampled, err := w.artifactSamples.AppVersion(app); sampled {
-			if err != nil {
-				return false, err
+		if raw, status, sampled := w.artifactSamples.AppVersion(app); sampled {
+			if appinspect.IsNotInstalledStatus(status) {
+				return false, nil
+			}
+			if status != appinspect.StatusOK {
+				return false, errors.New(status)
 			}
 			return w.compareAppVersion(app, level, raw)
 		}

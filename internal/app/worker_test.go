@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/appinspect"
 	"sermo/internal/checks"
 	"sermo/internal/emission"
 	"sermo/internal/execx"
@@ -563,9 +564,9 @@ func TestCycleAppVersionChangeUsesArtifactSample(t *testing.T) {
 	samples.RegisterApp("containerd")
 	w.artifactSamples = samples
 
-	samples.StoreAppVersion("containerd", "containerd v1.7.0", nil)
+	samples.StoreAppVersion("containerd", "containerd v1.7.0", appinspect.StatusOK)
 	w.RunCycle(context.Background()) // establish baseline from the artifact cache
-	samples.StoreAppVersion("containerd", "containerd v1.7.1", nil)
+	samples.StoreAppVersion("containerd", "containerd v1.7.1", appinspect.StatusOK)
 	w.RunCycle(context.Background())
 
 	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
@@ -573,6 +574,40 @@ func TestCycleAppVersionChangeUsesArtifactSample(t *testing.T) {
 	}
 	if runner.calls != 0 {
 		t.Fatalf("worker must not re-run cached app version command, calls=%d", runner.calls)
+	}
+}
+
+func TestCycleMissingArtifactAppSkipsChangedRule(t *testing.T) {
+	runner := &sequenceRunner{stdout: []string{"containerd v9.9.9"}}
+	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
+	w := appVersionWorker(h, runner, "patch")
+	samples := NewArtifactSamples()
+	samples.RegisterApp("containerd")
+	w.artifactSamples = samples
+
+	samples.StoreAppVersion("containerd", "", appinspect.StatusNotInstalled)
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+	if len(h.ops) != 0 {
+		t.Fatalf("missing app must not restart, ops=%v", h.ops)
+	}
+	if _, ok := h.eventOf(eventKindError); ok {
+		t.Fatalf("missing app must not emit a rule evaluation error, events=%+v", h.events)
+	}
+	if runner.calls != 0 {
+		t.Fatalf("worker must not re-run a cached missing app probe, calls=%d", runner.calls)
+	}
+
+	samples.StoreAppVersion("containerd", "containerd v1.7.0", appinspect.StatusOK)
+	w.RunCycle(context.Background())
+	if len(h.ops) != 0 {
+		t.Fatalf("first available app sample must establish a baseline, ops=%v", h.ops)
+	}
+
+	samples.StoreAppVersion("containerd", "containerd v1.7.1", appinspect.StatusOK)
+	w.RunCycle(context.Background())
+	if len(h.ops) != 1 || h.ops[0] != string(rules.ActionRestart) {
+		t.Fatalf("version change after app installation must restart once, ops=%v", h.ops)
 	}
 }
 
