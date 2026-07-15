@@ -507,20 +507,20 @@ func TestMatchesCmdAndGroup(t *testing.T) {
 	id := Identity{PID: 7, UID: 1000, GID: 2000, ExeOK: true, Exe: "/usr/bin/java", Cmdline: []string{"java", "-jar", "/opt/unifi/lib/ace.jar"}}
 
 	// cmd regex matches the joined cmdline; user/group also AND-checked.
-	if !d.matches(Selector{Type: "command_match", Cmd: "unifi", User: "u", Group: "g"}, id, d.ResolveUser) {
+	if !d.matches(&Selector{Type: "command_match", Cmd: "unifi", User: "u", Group: "g"}, id, d.ResolveUser) {
 		t.Fatal("cmd+user+group selector should match")
 	}
 	// cmd that does not appear in cmdline must not match.
-	if d.matches(Selector{Type: "command_match", Cmd: "postgres"}, id, d.ResolveUser) {
+	if d.matches(&Selector{Type: "command_match", Cmd: "postgres"}, id, d.ResolveUser) {
 		t.Fatal("non-matching cmd must not match")
 	}
 	// group mismatch fails even when cmd matches.
 	d2 := Discoverer{ResolveUser: d.ResolveUser, ResolveGroup: func(string) (uint32, bool) { return 9999, true }}
-	if d2.matches(Selector{Type: "command_match", Cmd: "unifi", Group: "g"}, id, d2.ResolveUser) {
+	if d2.matches(&Selector{Type: "command_match", Cmd: "unifi", Group: "g"}, id, d2.ResolveUser) {
 		t.Fatal("group mismatch must fail the match")
 	}
 	// a selector with neither exe nor cmd never matches.
-	if d.matches(Selector{Type: "command_match", User: "u"}, id, d.ResolveUser) {
+	if d.matches(&Selector{Type: "command_match", User: "u"}, id, d.ResolveUser) {
 		t.Fatal("user-only selector must never match")
 	}
 }

@@ -93,7 +93,8 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	// 1. pidfiles. Candidate paths (e.g. per-OS variants) are tried in order; the
 	// first that points at a running process wins. Only when none do is the most
 	// relevant failure reported.
-	for _, sel := range selectors {
+	for i := range selectors {
+		sel := &selectors[i]
 		if sel.Type != SelectorPidfile {
 			continue
 		}
@@ -122,9 +123,9 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	// 2. command_match across the snapshot.
 	for _, pid := range sortedPIDs(snapshot) {
 		id := snapshot[pid]
-		for _, sel := range selectors {
-			if sel.Type == SelectorCommandMatch && d.matches(sel, id, resolve) {
-				add(id, sel.Name, sourceCommand)
+		for i := range selectors {
+			if selectors[i].Type == SelectorCommandMatch && d.matches(&selectors[i], id, resolve) {
+				add(id, selectors[i].Name, sourceCommand)
 				break
 			}
 		}
@@ -245,8 +246,8 @@ func (d Discoverer) CountInTree(selectors []Selector, user, exe, exeDir string) 
 	}
 	procs, _ := d.Discover(selectors)
 	n := 0
-	for _, p := range procs {
-		if f.matchesProcess(p) {
+	for i := range procs {
+		if f.matchesProcess(&procs[i]) {
 			n++
 		}
 	}
@@ -299,7 +300,7 @@ func (f processFilter) matchesIdentity(id Identity) bool {
 	return f.match(id.UID, id.ExeOK, id.Exe)
 }
 
-func (f processFilter) matchesProcess(p Process) bool {
+func (f processFilter) matchesProcess(p *Process) bool {
 	return f.match(p.UID, p.ExeOK, p.Exe)
 }
 
@@ -310,8 +311,8 @@ func pathUnder(p, dir string) bool {
 }
 
 func (d Discoverer) matchesAny(selectors []Selector, id Identity, resolve UserResolver) bool {
-	for _, sel := range selectors {
-		if d.matches(sel, id, resolve) {
+	for i := range selectors {
+		if d.matches(&selectors[i], id, resolve) {
 			return true
 		}
 	}
@@ -331,12 +332,12 @@ func (d Discoverer) StrictMatchPID(pid int, selectors []Selector) (Process, bool
 		return Process{}, false
 	}
 	resolve := d.resolveUser()
-	for _, sel := range selectors {
-		if sel.Type != SelectorCommandMatch || sel.Exe == "" || sel.User == "" {
+	for i := range selectors {
+		if selectors[i].Type != SelectorCommandMatch || selectors[i].Exe == "" || selectors[i].User == "" {
 			continue
 		}
-		if d.matches(sel, id, resolve) {
-			return toProcess(id, sel.Name, sourceCommand), true
+		if d.matches(&selectors[i], id, resolve) {
+			return toProcess(id, selectors[i].Name, sourceCommand), true
 		}
 	}
 	return Process{}, false
@@ -346,7 +347,7 @@ func (d Discoverer) StrictMatchPID(pid int, selectors []Selector) (Process, bool
 // configured field is ANDed. Exe is matched by exact resolved /proc/<pid>/exe;
 // cmd is an explicit regex over argv used only to narrow discovery for shared
 // binaries, not to authorize signaling.
-func (d Discoverer) matches(sel Selector, id Identity, resolve UserResolver) bool {
+func (d Discoverer) matches(sel *Selector, id Identity, resolve UserResolver) bool {
 	// At least one process-shape matcher is required; a selector is never user/group-only
 	// (so a bare owner can never select unrelated processes).
 	if sel.Exe == "" && sel.Cmd == "" {
