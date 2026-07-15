@@ -123,15 +123,15 @@ func BuildRuleWindowReports(ctx context.Context, ruleSet []Rule, windows map[str
 // for duration-based windows.
 func BuildRuleWindowReportsAt(ctx context.Context, ruleSet []Rule, windows map[string]*WindowState, at time.Time, eval func(context.Context, Rule) (bool, error)) []RuleWindowReport {
 	var out []RuleWindowReport
-	for _, r := range ruleSet {
-		if r.Type != RuleRemediation && r.Type != RuleAlert {
+	for i := range ruleSet {
+		if ruleSet[i].Type != RuleRemediation && ruleSet[i].Type != RuleAlert {
 			continue
 		}
-		ws := windows[r.Name]
+		ws := windows[ruleSet[i].Name]
 		cond := false
 		if eval != nil {
 			var err error
-			cond, err = eval(ctx, r)
+			cond, err = eval(ctx, ruleSet[i])
 			if err != nil {
 				cond = false
 			}
@@ -139,14 +139,14 @@ func BuildRuleWindowReportsAt(ctx context.Context, ruleSet []Rule, windows map[s
 		// Primary is the operation if any, else the first action; its type is the
 		// reported action.
 		out = append(out, RuleWindowReport{
-			Name:          r.Name,
-			Type:          string(r.Type),
-			Action:        string(r.Primary().Type),
-			Condition:     FormatCondition(r.If),
+			Name:          ruleSet[i].Name,
+			Type:          string(ruleSet[i].Type),
+			Action:        string(ruleSet[i].Primary().Type),
+			Condition:     FormatCondition(ruleSet[i].If),
 			ConditionTrue: cond,
-			Window:        WindowDescription(r),
-			Progress:      ws.ProgressAt(r, at), // ProgressAt/IsFiringAt are nil-safe
-			Firing:        ws.IsFiringAt(r, at),
+			Window:        WindowDescription(ruleSet[i]),
+			Progress:      ws.ProgressAt(ruleSet[i], at), // ProgressAt/IsFiringAt are nil-safe
+			Firing:        ws.IsFiringAt(ruleSet[i], at),
 		})
 	}
 	return out
