@@ -78,7 +78,7 @@ func createDocsExampleDirs(t *testing.T, catalogExtra, servicesDir string, watch
 
 func writeDocsExampleDocuments(t *testing.T, raw []byte, catalogExtra, servicesDir string, watchDirs map[string]string, layout *docsExampleLayout) string {
 	t.Helper()
-	locMarker := regexp.MustCompile(`(?m)^# location:[[:space:]]*(\S+)`)
+	locMarker := regexp.MustCompile(`(?m)^# location:\s*(\S+)`)
 	var globalDoc string
 	for index, doc := range strings.Split(string(raw), "\n---\n") {
 		var body map[string]any

@@ -101,7 +101,7 @@ var (
 	// OpenRC start-stop-daemon command after `--`, possibly on the next line.
 	openrcCommandAfterDash = regexp.MustCompile(`--[[:space:]]*\\?[[:space:]]*(?:\r?\n[[:space:]]*)?("[^"]+"|'[^']+'|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|/[^[:space:]\\]+)`)
 	openrcSimpleVarRef     = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(%/)|#([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
-	openrcNonEmptyCond     = regexp.MustCompile(`^\[[[:space:]]+-n[[:space:]]+(.+)[[:space:]]+\]$`)
+	openrcNonEmptyCond     = regexp.MustCompile(`^\[\s+-n\s+(.+)\s+\]$`)
 	openrcNotEqualCond     = regexp.MustCompile(`^\[[[:space:]]+(.+)[[:space:]]+!=[[:space:]]+(.+)[[:space:]]+\]$`)
 )
 

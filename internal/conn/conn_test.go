@@ -98,7 +98,7 @@ func documentedProtocolsFromRules(t *testing.T) map[string][]string {
 	}
 	text = text[:end]
 
-	lineRE := regexp.MustCompile("^[-] `([^`]+)`(?: \\((?:alias|aliases) ([^)]*)\\))?")
+	lineRE := regexp.MustCompile("^- `([^`]+)`(?: \\((?:alias|aliases) ([^)]*)\\))?")
 	aliasRE := regexp.MustCompile("`([^`]+)`")
 	out := map[string][]string{}
 	for line := range strings.SplitSeq(text, "\n") {

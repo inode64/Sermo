@@ -167,6 +167,7 @@ linters:
         - preferStringWriter
         - rangeAppendAll
         - regexpMust
+        - regexpSimplify
         - rangeExprCopy
         - regexpPattern
         - sloppyLen
