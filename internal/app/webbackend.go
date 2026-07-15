@@ -391,7 +391,7 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 	return wb, warnings
 }
 
-func (wb *WebBackend) registerServiceWatches(service string, tree map[string]any, globalNotify []string, interval time.Duration, disabled bool) {
+func (b *WebBackend) registerServiceWatches(service string, tree map[string]any, globalNotify []string, interval time.Duration, disabled bool) {
 	watches, ok := tree[config.SectionWatches].(map[string]any)
 	if !ok {
 		return
@@ -406,12 +406,12 @@ func (wb *WebBackend) registerServiceWatches(service string, tree map[string]any
 		if disabled {
 			watch.disabled = true
 		}
-		wb.watches[fullName] = watch
-		wb.watchOrder = append(wb.watchOrder, fullName)
+		b.watches[fullName] = watch
+		b.watchOrder = append(b.watchOrder, fullName)
 	}
 }
 
-func (wb *WebBackend) registerHostWatches(cfg *config.Config, deps Deps) []string {
+func (b *WebBackend) registerHostWatches(cfg *config.Config, deps Deps) []string {
 	raw, _ := cfg.ResolveWatches()
 	if len(raw) == 0 {
 		return nil
@@ -423,18 +423,18 @@ func (wb *WebBackend) registerHostWatches(cfg *config.Config, deps Deps) []strin
 		if warn != "" {
 			warnings = append(warnings, "watch "+name+": "+warn)
 		}
-		wb.watches[name] = watch
-		wb.watchOrder = append(wb.watchOrder, name)
+		b.watches[name] = watch
+		b.watchOrder = append(b.watchOrder, name)
 	}
 	return warnings
 }
 
-func (wb *WebBackend) registerNotifiers(cfg *config.Config) {
+func (b *WebBackend) registerNotifiers(cfg *config.Config) {
 	for _, name := range slices.Sorted(maps.Keys(cfg.Notifiers())) {
 		entry, _ := cfg.Notifiers()[name].(map[string]any)
 		typ := cfgval.AsString(entry[notify.KeyType])
-		wb.notifiers[name] = &webNotifier{name: name, typ: typ, enabled: notify.Enabled(entry), summary: notify.ConfigSummary(typ, entry)}
-		wb.notifierOrder = append(wb.notifierOrder, name)
+		b.notifiers[name] = &webNotifier{name: name, typ: typ, enabled: notify.Enabled(entry), summary: notify.ConfigSummary(typ, entry)}
+		b.notifierOrder = append(b.notifierOrder, name)
 	}
 }
 
