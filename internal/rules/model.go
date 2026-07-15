@@ -156,7 +156,7 @@ func parseActions(then map[string]any) []Action {
 // Runtime defense-in-depth for safety invariant 13: a system-wide metric may
 // only drive alert rules, never remediation, even if a rule slips past static
 // validation (catalog bug, partial reload, hand-built Rule).
-func ConditionUsesSystemMetric(node map[string]any, refChecks map[string]any) bool {
+func ConditionUsesSystemMetric(node, refChecks map[string]any) bool {
 	for key, value := range node {
 		if conditionEntryUsesSystemMetric(key, value, refChecks) {
 			return true

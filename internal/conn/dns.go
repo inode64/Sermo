@@ -274,7 +274,7 @@ func dnsFQDN(name string) string {
 // too-short message or a query (QR=0). The answer section is parsed leniently —
 // a malformed record stops collection and yields what was read so far — so a
 // truncated reply still reports liveness rather than failing the probe.
-func parseDNSReply(b []byte) (id uint16, rcode int, answers int, addrs []string, err error) {
+func parseDNSReply(b []byte) (id uint16, rcode, answers int, addrs []string, err error) {
 	var p dnsmessage.Parser
 	hdr, err := p.Start(b)
 	if err != nil {

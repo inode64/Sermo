@@ -223,7 +223,7 @@ func askServiceProps(p *Prompt, env Env, c ServiceCandidate, reviewPort bool) (s
 	return c.Name, body
 }
 
-func mergeServiceVariables(body map[string]any, vars map[string]any) {
+func mergeServiceVariables(body, vars map[string]any) {
 	if len(vars) == 0 {
 		return
 	}

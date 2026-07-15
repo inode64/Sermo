@@ -788,7 +788,7 @@ func effectiveBackend(cfg *Config) string {
 
 const keyUnsupportedRemediation = "remediation"
 
-func validateResolved(name string, tree map[string]any, runtime string, notifiers map[string]struct{}, services map[string]struct{}, backend string) []Issue {
+func validateResolved(name string, tree map[string]any, runtime string, notifiers, services map[string]struct{}, backend string) []Issue {
 	var issues []Issue
 	add := func(format string, args ...any) {
 		issues = append(issues, Issue{Scope: name, Msg: fmt.Sprintf(format, args...)})
