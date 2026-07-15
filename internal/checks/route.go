@@ -141,17 +141,17 @@ func netlinkLinkNames(links []netlink.Link) map[int]string {
 
 func defaultRoutesFromNetlink(family string, routes []netlink.Route, linkNames map[int]string) []DefaultRoute {
 	var out []DefaultRoute
-	for _, route := range routes {
-		if !isDefaultNetlinkRoute(family, route) {
+	for i := range routes {
+		if !isDefaultNetlinkRoute(family, routes[i]) {
 			continue
 		}
-		if len(route.MultiPath) > 0 {
-			for _, hop := range route.MultiPath {
+		if len(routes[i].MultiPath) > 0 {
+			for _, hop := range routes[i].MultiPath {
 				out = appendDefaultRoute(out, family, linkNames[hop.LinkIndex], hop.Gw)
 			}
 			continue
 		}
-		out = appendDefaultRoute(out, family, linkNames[route.LinkIndex], route.Gw)
+		out = appendDefaultRoute(out, family, linkNames[routes[i].LinkIndex], routes[i].Gw)
 	}
 	return out
 }
