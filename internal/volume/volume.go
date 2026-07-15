@@ -372,7 +372,7 @@ func cleanMountpoint(path string) string {
 func procMounts() ([]Mount, error) {
 	entries, err := checks.DefaultMounts()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read /proc/mounts: %w", err)
 	}
 	out := make([]Mount, 0, len(entries))
 	for _, m := range entries {
@@ -383,5 +383,9 @@ func procMounts() ([]Mount, error) {
 
 // parseInt trims and parses a decimal integer from command output.
 func parseInt(s string) (int64, error) {
-	return strconv.ParseInt(strings.TrimSpace(s), volumeNumericBaseDecimal, volumeNumericBits64)
+	value, err := strconv.ParseInt(strings.TrimSpace(s), volumeNumericBaseDecimal, volumeNumericBits64)
+	if err != nil {
+		return 0, fmt.Errorf("parse volume size %q: %w", s, err)
+	}
+	return value, nil
 }
