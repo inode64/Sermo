@@ -141,6 +141,7 @@ linters:
         - argOrder
         - badCall
         - badCond
+        - badRegexp
         - boolExprSimplify
         - caseOrder
         - dupArg
@@ -160,7 +161,9 @@ linters:
         - rangeAppendAll
         - regexpMust
         - rangeExprCopy
+        - regexpPattern
         - sloppyLen
+        - sqlQuery
         - sloppyReassign
         - sloppyTypeAssert
         - singleCaseSwitch
