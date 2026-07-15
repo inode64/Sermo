@@ -5,15 +5,43 @@ run_id="${1:-}"
 payload="${2:-}"
 web_password="${SERMO_WEB_PASSWORD:-sermo-remote-admin}"
 ready_wait_seconds="${SERMO_READY_WAIT_SECONDS:-240}"
+http_timeout_seconds="${SERMO_HTTP_TIMEOUT_SECONDS:-5}"
+keep_remote_artifacts="${SERMO_KEEP_REMOTE_ARTIFACTS:-0}"
 
 if [ -z "$run_id" ] || [ -z "$payload" ]; then
 	echo "usage: $0 RUN_ID PAYLOAD_TGZ" >&2
 	exit 64
 fi
 
+case "$run_id" in
+	*[![:alnum:]._-]*)
+		echo "RUN_ID may contain only letters, numbers, dot, underscore and hyphen" >&2
+		exit 64
+		;;
+esac
+
+if ! [[ "$payload" =~ ^/tmp/sermo-[[:alnum:]._-]+/[[:alnum:]._-]+\.tgz$ ]]; then
+	echo "PAYLOAD_TGZ must be a direct .tgz file in a managed /tmp/sermo-* directory" >&2
+	exit 64
+fi
+
 case "$ready_wait_seconds" in
 	'' | *[!0-9]*)
 		ready_wait_seconds=240
+		;;
+esac
+
+case "$http_timeout_seconds" in
+	'' | *[!0-9]*)
+		http_timeout_seconds=5
+		;;
+esac
+
+case "$keep_remote_artifacts" in
+	0 | 1) ;;
+	*)
+		echo "SERMO_KEEP_REMOTE_ARTIFACTS must be 0 or 1" >&2
+		exit 64
 		;;
 esac
 
@@ -52,24 +80,44 @@ verify_protected_paths() {
 	return 1
 }
 
+cleanup_success() {
+	[ "$keep_remote_artifacts" = "0" ] || return 0
+
+	case "$work" in
+		/tmp/sermo-update-*) ;;
+		*)
+		echo "refusing to remove unexpected work path: $work" >&2
+		return 1
+		;;
+	esac
+	rm -f -- "$payload" || return 1
+	rm -rf -- "$work" || return 1
+}
+
 finish() {
 	rc="$1"
 	date -Is >"${out}/finished_at" 2>/dev/null || true
 	if ! verify_protected_paths; then
 		rc=70
 	fi
-	tar -C "$work" -czf "${work}/out.tar.gz" out >/dev/null 2>&1 || true
+	if [ "$rc" -ne 0 ] || [ "$keep_remote_artifacts" = "1" ]; then
+		tar -C "$work" -czf "${work}/out.tar.gz" out >/dev/null 2>&1 || true
+	fi
+	if [ "$rc" -eq 0 ] && ! cleanup_success; then
+		echo "Sermo updated, but temporary artifact cleanup failed" >&2
+		rc=71
+	fi
 	exit "$rc"
 }
 
 http_get() {
 	url="$1"
 	if command -v curl >/dev/null 2>&1; then
-		curl -fsS -u "admin:${web_password}" "$url"
+		curl --connect-timeout "$http_timeout_seconds" --max-time "$http_timeout_seconds" -fsS -u "admin:${web_password}" "$url"
 		return $?
 	fi
 	if command -v wget >/dev/null 2>&1; then
-		wget -qO- --user=admin --password="$web_password" "$url"
+		wget -qO- -T "$http_timeout_seconds" --user=admin --password="$web_password" "$url"
 		return $?
 	fi
 	return 127
@@ -86,7 +134,8 @@ hostname -f >"${out}/hostname_fqdn" 2>/dev/null || hostname >"${out}/hostname_fq
 hostname >"${out}/hostname" 2>/dev/null || true
 date -Is >"${out}/started_at" 2>/dev/null || true
 
-if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+if command -v systemctl >/dev/null 2>&1 \
+	&& { [ -d /run/systemd/system ] || [ "$(cat /proc/1/comm 2>/dev/null)" = "systemd" ]; }; then
 	init="systemd"
 elif command -v rc-service >/dev/null 2>&1; then
 	init="openrc"
@@ -155,15 +204,16 @@ else
 fi
 
 ready_rc=1
-ready_waited=0
-while [ "$ready_waited" -lt "$ready_wait_seconds" ]; do
+ready_started_at="$(date +%s)"
+ready_deadline=$((ready_started_at + ready_wait_seconds))
+while [ "$(date +%s)" -lt "$ready_deadline" ]; do
 	if http_get "http://127.0.0.1:9797/livez?verbose" >"${out}/livez.out" 2>"${out}/livez.err"; then
 		ready_rc=0
 		break
 	fi
-	ready_waited=$((ready_waited + 1))
 	sleep 1
 done
+ready_waited=$(($(date +%s) - ready_started_at))
 printf '%s\n' "$ready_rc" >"${out}/livez.rc"
 printf '%s\n' "$ready_waited" >"${out}/livez_waited_seconds"
 

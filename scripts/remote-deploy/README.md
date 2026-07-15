@@ -26,7 +26,29 @@ The remote scripts must run as root on the target host:
   validates the config, enables/restarts `sermod`, and verifies the local Web UI.
 - `remote_update_payload.sh` refreshes binaries/catalog on an already configured
   host, validates the current `/etc/sermo` with the detected init backend, then
-  restarts `sermod` and verifies the local Web UI.
+  restarts `sermod` and verifies the local Web UI. HTTP probes are bounded to
+  five seconds by default (`SERMO_HTTP_TIMEOUT_SECONDS`). After a successful
+  update it deletes only its exact `/tmp/sermo-update-<run-id>` work directory
+  and the uploaded `/tmp/sermo-*/<payload>.tgz`, freeing the payload and captured
+  output. Failed updates keep those artifacts for diagnosis. Set
+  `SERMO_KEEP_REMOTE_ARTIFACTS=1` to retain successful-update artifacts too;
+  after copying any required evidence locally, remove the exact staging directory
+  created for that run.
+
+## Fleet failure handling
+
+For a fleet run, record and skip a host that cannot be reached, cannot execute
+from `/tmp`, lacks temporary disk space or inodes, or has a pre-existing local
+configuration/service problem. Continue with the next host; do not delete data,
+alter storage or relax validation to force it through. The final report must
+include the host, phase, command evidence, whether it changed state and the safe
+remediation. For example: `kvm5 — preflight: /tmp is on /dev/root with 0 bytes
+available; skipped before upload; free space before retrying`.
+
+Stop the fleet only for a Sermo blocker: a defect reproducible from the same
+binary, catalog, generated configuration or deployment script, an invalid Sermo
+artifact, or a protected-path metadata change. Fix and validate that defect
+locally before redeploying every host already touched.
 - `remote_update_binary_catalog.sh` refreshes only `sermoctl`, `sermod` and the
   packaged catalog. It snapshots `/etc/sermo`, rejects payloads containing any
   other path, and rolls back the binaries and catalog if validation, restart or
