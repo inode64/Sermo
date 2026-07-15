@@ -428,8 +428,8 @@ func reloadPidfile(tree map[string]any) string {
 }
 
 func hasCommandMatchSelector(selectors []process.Selector) bool {
-	for _, sel := range selectors {
-		if sel.Type == process.SelectorCommandMatch {
+	for i := range selectors {
+		if selectors[i].Type == process.SelectorCommandMatch {
 			return true
 		}
 	}
@@ -437,8 +437,8 @@ func hasCommandMatchSelector(selectors []process.Selector) bool {
 }
 
 func hasExactProcessIdentitySelector(selectors []process.Selector) bool {
-	for _, sel := range selectors {
-		if sel.Type == process.SelectorCommandMatch && sel.Exe != "" && sel.User != "" {
+	for i := range selectors {
+		if selectors[i].Type == process.SelectorCommandMatch && selectors[i].Exe != "" && selectors[i].User != "" {
 			return true
 		}
 	}
@@ -461,8 +461,8 @@ func restartIdentityClosure(mgr Manager, unit string, discover func() ([]process
 		if err != nil {
 			return false, "", err
 		}
-		for _, proc := range procs {
-			if _, ok := discoverer.StrictMatchPID(proc.PID, selectors); ok {
+		for i := range procs {
+			if _, ok := discoverer.StrictMatchPID(procs[i].PID, selectors); ok {
 				return true, "", nil
 			}
 		}
