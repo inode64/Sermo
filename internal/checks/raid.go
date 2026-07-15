@@ -372,13 +372,13 @@ func enrichRaidSysfs(st *RaidStatus, root string) {
 		if err != nil {
 			continue
 		}
-		for _, entry := range entries {
-			if !entry.IsDir() || !strings.HasPrefix(entry.Name(), mdMemberPrefix) {
+		for i := range entries {
+			if !entries[i].IsDir() || !strings.HasPrefix(entries[i].Name(), mdMemberPrefix) {
 				continue
 			}
-			memberPath := filepath.Join(mdPath, entry.Name())
+			memberPath := filepath.Join(mdPath, entries[i].Name())
 			detail.Members = append(detail.Members, RaidMemberStatus{
-				Name: strings.TrimPrefix(entry.Name(), mdMemberPrefix), State: readRaidSysfsValue(filepath.Join(memberPath, "state")),
+				Name: strings.TrimPrefix(entries[i].Name(), mdMemberPrefix), State: readRaidSysfsValue(filepath.Join(memberPath, "state")),
 				Errors: readRaidSysfsValue(filepath.Join(memberPath, "errors")), BadBlocks: readRaidSysfsValue(filepath.Join(memberPath, "bad_blocks")),
 			})
 		}
