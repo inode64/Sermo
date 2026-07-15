@@ -16,11 +16,11 @@ import (
 const (
 	watchConditionFieldGrowth  = "growth"
 	watchMetricFieldSeparator  = "."
-	watchMetricSuffixChange    = "change"
+	watchMetricSuffixChange    = checks.CheckKeyChange
 	watchMetricSuffixDelta     = checks.CheckKeyDelta
 	watchMetricSuffixExpect    = checks.CheckKeyExpect
 	watchMetricSuffixOn        = checks.CheckKeyOn
-	watchMetricSuffixThreshold = "threshold"
+	watchMetricSuffixThreshold = checks.CheckKeyThreshold
 )
 
 func checkMap(entry map[string]any) map[string]any {

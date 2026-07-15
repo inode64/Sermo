@@ -146,3 +146,66 @@ func manualProbeCompletedMessage(summary string, duration time.Duration) string 
 func manualProbeFailedMessage(summary string, duration time.Duration) string {
 	return fmt.Sprintf("manual probe failed after %s: %s", formatInterval(duration), summary)
 }
+
+// ProbeWatch runs and records a fresh check instance for a supported host watch.
+// It does not dispatch watch actions, so an operator's manual probe cannot alter
+// the scheduler's stateful baseline or trigger a rule, notification or remediation.
+func (b *WebBackend) ProbeWatch(ctx context.Context, name string) web.ActionResult {
+	w := b.watches[name]
+	if w == nil {
+		return web.ActionResult{Message: fmt.Sprintf("unknown watch %q", name)}
+	}
+	if w.disabled || w.serviceScoped || !manualProbeCheckType(w.checkType) {
+		return web.ActionResult{Message: fmt.Sprintf("watch %q does not support manual probing", name)}
+	}
+	startedAt, started := b.beginWatchProbe(name)
+	if !started {
+		return web.ActionResult{Message: "manual probe already running since " + startedAt.Format(time.RFC3339)}
+	}
+	b.emitWatchMonitorEvent(name, eventActionProbe, eventKindAction, eventStatusRunning, eventMessageManualProbeStarted)
+	defer b.finishWatchProbe(name)
+	result, err := b.probeWatchResult(ctx, w)
+	duration := max(b.webNow().Sub(startedAt), 0)
+	if err != nil {
+		summary := w.checkType + ": " + err.Error()
+		b.emitWatchMonitorEvent(name, eventActionProbe, eventKindError, eventStatusFailed, manualProbeFailedMessage(summary, duration))
+		return web.ActionResult{Message: summary, Readings: watchErrorReadings(err.Error())}
+	}
+	if b.watchSnapshots != nil {
+		b.watchSnapshots.Publish(name, w.checkType, result)
+	}
+	snap := CheckSnapshot{OK: result.OK, Condition: result.Condition, Optional: result.Optional, Skipped: result.Skipped, Message: result.Message, Data: result.Data}
+	readings := watchSnapshotReadings(w.checkType, snap)
+	summary := watchSnapshotSummary(snap, readings)
+	ok := result.Healthy()
+	kind, status := eventKindAction, eventStatusOK
+	eventMessage := manualProbeCompletedMessage(summary, duration)
+	if !ok {
+		kind, status = eventKindError, eventStatusFailed
+		eventMessage = manualProbeFailedMessage(summary, duration)
+	}
+	b.emitWatchMonitorEvent(name, eventActionProbe, kind, status, eventMessage)
+	return web.ActionResult{OK: ok, Message: summary, Readings: readings}
+}
+
+func manualProbeCheckType(checkType string) bool {
+	switch checkType {
+	case checks.CheckTypeHdparm, checks.CheckTypeLVM, checks.CheckTypeRAID, checks.CheckTypeSmart:
+		return true
+	default:
+		return false
+	}
+}
+
+func (b *WebBackend) watchLastCheckedAt(name, checkType string) time.Time {
+	if b.watchSnapshots == nil {
+		return time.Time{}
+	}
+	var latest time.Time
+	for _, snap := range b.watchSnapshots.Get(name, checkType) {
+		if snap.Ran && snap.At.After(latest) {
+			latest = snap.At
+		}
+	}
+	return latest
+}

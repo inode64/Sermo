@@ -136,7 +136,7 @@ func betterMount(current, candidate *Mount) *Mount {
 	if current == nil {
 		return candidate
 	}
-	if current.FSType == "autofs" && candidate.FSType != "autofs" {
+	if current.FSType == FSTypeAutofs && candidate.FSType != FSTypeAutofs {
 		return candidate
 	}
 	return current

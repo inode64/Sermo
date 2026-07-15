@@ -72,10 +72,6 @@ func watchErrorReadings(message string) []web.WatchReading {
 	return []web.WatchReading{{Field: watchReadingFieldSample, Label: watchReadingLabelSample, Error: message}}
 }
 
-func watchPercent(value float64) string {
-	return watchReadingMetricValue(value, watchReadingDefaultMetricDecimals, metrics.MetricUnitPercent)
-}
-
 func watchMetricEnabled(metricEntries map[string]any, metric string) bool {
 	if len(metricEntries) == 0 {
 		return true

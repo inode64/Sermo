@@ -149,26 +149,6 @@ func watchCountMeter(kind string, data map[string]any, countKey string) *web.Wat
 	return &web.WatchMeter{Kind: kind, UsedPct: usedPct, Count: count, Max: limit}
 }
 
-func uintField(v any) (uint64, bool) {
-	switch n := v.(type) {
-	case uint64:
-		return n, true
-	case int:
-		if n >= 0 {
-			return uint64(n), true
-		}
-	case int64:
-		if n >= 0 {
-			return uint64(n), true
-		}
-	case float64:
-		if n >= 0 {
-			return uint64(n), true
-		}
-	}
-	return 0, false
-}
-
 // legacyWatchLiveView serves older in-process web backends that were not wired
 // with WatchSnapshots. Expensive disk commands are still blocked here; sermod
 // publishes their daemon-cycle results through WatchSnapshots instead.
