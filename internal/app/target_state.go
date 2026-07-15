@@ -71,7 +71,7 @@ func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, ob
 // operator-facing health state shown for host watches. Watches are not
 // service-manager units, so a paused watch is disabled from the active checking
 // set rather than started/stopped.
-func WatchState(enabled, monitored, failed bool, observed bool) string {
+func WatchState(enabled, monitored, failed, observed bool) string {
 	if !enabled || !monitored {
 		return TargetStateDisabled
 	}

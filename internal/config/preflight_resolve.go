@@ -144,7 +144,7 @@ func applyCommandExportDefaults(tree map[string]any) {
 	}
 }
 
-func applyCommandExportDefaultsFromSection(tree map[string]any, section map[string]any) {
+func applyCommandExportDefaultsFromSection(tree, section map[string]any) {
 	for _, name := range slices.Sorted(maps.Keys(section)) {
 		entry, ok := section[name].(map[string]any)
 		if !ok || len(cfgval.StringArray(entry[checks.CheckKeyCommand])) == 0 {

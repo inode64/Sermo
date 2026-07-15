@@ -128,7 +128,7 @@ func (r *fakeUserRunner) Run(context.Context, string, ...string) (execx.Result, 
 	return execx.Result{ExitCode: -1}, nil
 }
 
-func (r *fakeUserRunner) RunUser(_ context.Context, user string, name string, args ...string) (execx.Result, error) {
+func (r *fakeUserRunner) RunUser(_ context.Context, user, name string, args ...string) (execx.Result, error) {
 	r.user = user
 	r.name = name
 	r.args = append([]string(nil), args...)

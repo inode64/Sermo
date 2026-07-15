@@ -353,7 +353,7 @@ func (e *Evaluator) evalInline(ctx context.Context, typ string, v any) (bool, er
 
 // runInline builds, runs and memoizes an inline check keyed by its normalized
 // parameters so identical probes run at most once per cycle.
-func (e *Evaluator) runInline(ctx context.Context, name string, entry map[string]any, keyParams map[string]any) (checks.Result, error) {
+func (e *Evaluator) runInline(ctx context.Context, name string, entry, keyParams map[string]any) (checks.Result, error) {
 	key := name + ":" + normalizeKey(keyParams)
 	if res, ok := e.memo[key]; ok {
 		return res, nil

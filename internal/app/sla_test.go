@@ -18,7 +18,7 @@ type checkSLARecord struct {
 }
 
 func (c *checkSLACapture) RecordSLA(string, bool, time.Time) error { return nil }
-func (c *checkSLACapture) RecordCheckSLA(_ string, check string, up bool, _ time.Time) error {
+func (c *checkSLACapture) RecordCheckSLA(_, check string, up bool, _ time.Time) error {
 	c.records = append(c.records, checkSLARecord{check: check, up: up})
 	return nil
 }

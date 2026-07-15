@@ -160,6 +160,7 @@ linters:
         - newDeref
         - nilValReturn
         - offBy1
+        - paramTypeCombine
         - rangeAppendAll
         - regexpMust
         - rangeExprCopy
