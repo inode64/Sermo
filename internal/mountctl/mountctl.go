@@ -377,7 +377,7 @@ func (c Controller) withLock(spec Spec, fn func() (Result, error)) (Result, erro
 	locker := locks.NewOperationLocker(mountOpsDir(c.runtime()))
 	handle, err := locker.Acquire(stateID(spec), ttl)
 	if err != nil {
-		return Result{}, err
+		return Result{}, fmt.Errorf("acquire mount operation lock for %s: %w", spec.Path, err)
 	}
 	defer func() { _ = handle.Release() }()
 	return fn()
@@ -503,7 +503,7 @@ func (c Controller) writeState(spec Spec, state State) error {
 	state.UpdatedAt = c.now()
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal mount state %s: %w", spec.Path, err)
 	}
 	path := c.statePath(spec)
 	tmp := path + tmpFileExt
@@ -630,7 +630,7 @@ func FstabEntries(fstabPath string) ([]FstabEntry, error) {
 	}
 	data, err := os.ReadFile(fstabPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read fstab %s: %w", fstabPath, err)
 	}
 	var entries []FstabEntry
 	for line := range strings.SplitSeq(string(data), fstabLineSeparator) {
@@ -690,7 +690,7 @@ func ProcessesByMount(ctx context.Context, mountPaths []string, lookup *process.
 	reader := process.OSReader{LookupUserName: lookup.Username, LookupGroupName: lookup.GroupName}
 	pids, err := reader.PIDs()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list process IDs for mount scan: %w", err)
 	}
 	cleanMounts := cleanMountPaths(mountPaths)
 	out := make(map[string][]process.Process, len(cleanMounts))
@@ -699,7 +699,7 @@ func ProcessesByMount(ctx context.Context, mountPaths []string, lookup *process.
 	}
 	for _, pid := range pids {
 		if err := ctx.Err(); err != nil {
-			return out, err
+			return out, fmt.Errorf("scan mount users: %w", err)
 		}
 		matches, err := pidUsesMounts(ctx, pid, cleanMounts)
 		if err != nil {
@@ -753,7 +753,7 @@ func cleanMountPaths(mountPaths []string) []string {
 
 func pidUsesMounts(ctx context.Context, pid int, mountPaths []string) ([]string, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("scan process %d mount usage: %w", pid, err)
 	}
 	matches := map[string]struct{}{}
 	for _, name := range []string{process.ProcFileCWD, process.ProcFileRoot} {
@@ -775,7 +775,7 @@ func pidUsesMounts(ctx context.Context, pid int, mountPaths []string) ([]string,
 
 func linkMountMatches(ctx context.Context, link string, mountPaths []string, matches map[string]struct{}) error {
 	if err := ctx.Err(); err != nil {
-		return err
+		return fmt.Errorf("inspect mount link context: %w", err)
 	}
 	target, err := os.Readlink(link)
 	if err == nil && filepath.IsAbs(target) {
