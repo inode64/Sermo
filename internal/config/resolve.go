@@ -750,7 +750,7 @@ func (c *Config) expansionVariables(tree map[string]any, name string) (map[strin
 	return c.expansionVariablesForKind(tree, name, cfgval.String(tree[keyKind]))
 }
 
-func (c *Config) expansionVariablesForKind(tree map[string]any, name string, kind string) (map[string]string, []string) {
+func (c *Config) expansionVariablesForKind(tree map[string]any, name, kind string) (map[string]string, []string) {
 	vars := c.globalVars()
 	appVars, errs := c.appVariables(tree)
 	maps.Copy(vars, appVars)

@@ -212,7 +212,7 @@ func (a App) syncStorageMountMonitoring(ctx context.Context, _ options, cfg *con
 	}
 }
 
-func storageMountWatchConfig(cfg *config.Config, storage string) (monitorMode string, disabled bool, ok bool) {
+func storageMountWatchConfig(cfg *config.Config, storage string) (monitorMode string, disabled, ok bool) {
 	if cfg == nil {
 		return "", false, false
 	}

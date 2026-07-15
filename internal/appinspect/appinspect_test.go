@@ -29,7 +29,7 @@ type testUserRunner struct {
 	names []string
 }
 
-func (r *testUserRunner) RunUser(ctx context.Context, user string, name string, args ...string) (execx.Result, error) {
+func (r *testUserRunner) RunUser(ctx context.Context, user, name string, args ...string) (execx.Result, error) {
 	r.users = append(r.users, user)
 	r.names = append(r.names, name)
 	return r.Run(ctx, name, args...)

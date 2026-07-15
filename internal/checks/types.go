@@ -800,7 +800,7 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 // resolveNeeded recursively resolves DT_NEEDED entries (including transitive
 // dependencies of the resolved libraries). It returns the list of sonames
 // that could not be located.
-func resolveNeeded(ctx context.Context, needed []string, dirs []string, seen map[string]bool) []string {
+func resolveNeeded(ctx context.Context, needed, dirs []string, seen map[string]bool) []string {
 	var missing []string
 	for _, soname := range needed {
 		if err := ctx.Err(); err != nil {

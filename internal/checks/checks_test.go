@@ -369,7 +369,7 @@ func (r *recordingUserRunner) Run(context.Context, string, ...string) (execx.Res
 	return execx.Result{ExitCode: -1}, nil
 }
 
-func (r *recordingUserRunner) RunUser(_ context.Context, user string, name string, args ...string) (execx.Result, error) {
+func (r *recordingUserRunner) RunUser(_ context.Context, user, name string, args ...string) (execx.Result, error) {
 	r.user = user
 	r.name = name
 	r.args = append([]string(nil), args...)

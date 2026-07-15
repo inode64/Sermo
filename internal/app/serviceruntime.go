@@ -367,7 +367,7 @@ func oldestPIDStart(pids []int, r metrics.Reader, now time.Time) (time.Time, boo
 	return oldestProcessStart(procs, r, now)
 }
 
-func serviceRuntimeUptime(started, now time.Time) (startedAt string, uptime string, uptimeSeconds int64) {
+func serviceRuntimeUptime(started, now time.Time) (startedAt, uptime string, uptimeSeconds int64) {
 	if started.IsZero() || started.After(now) {
 		return "", "", 0
 	}

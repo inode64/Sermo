@@ -14,7 +14,7 @@ import (
 
 // serveInflux runs a fake InfluxDB /query endpoint returning body, optionally
 // requiring HTTP Basic auth.
-func serveInflux(t *testing.T, body string, wantUser string) (host string, port int) {
+func serveInflux(t *testing.T, body, wantUser string) (host string, port int) {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if wantUser != "" {
