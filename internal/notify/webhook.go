@@ -65,7 +65,7 @@ func sendWebhook(ctx context.Context, post webhookPoster, label, webhook string,
 func postWebhook(ctx context.Context, label, webhook string, payload []byte) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhook, bytes.NewReader(payload))
 	if err != nil {
-		return err
+		return fmt.Errorf("build %s webhook request: %w", label, err)
 	}
 	req.Header.Set(webhookHeaderContentType, webhookContentTypeJSON)
 

@@ -214,7 +214,7 @@ func smtpDialContext(timeout time.Duration) gomail.DialContextFunc {
 		dialer := &net.Dialer{Timeout: timeout}
 		conn, err := dialer.DialContext(ctx, network, address)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("dial SMTP %s: %w", address, err)
 		}
 		if deadline, ok := ctx.Deadline(); ok {
 			conn = &boundedDeadlineConn{Conn: conn, limit: deadline}
@@ -229,15 +229,24 @@ type boundedDeadlineConn struct {
 }
 
 func (c *boundedDeadlineConn) SetDeadline(t time.Time) error {
-	return c.Conn.SetDeadline(c.deadline(t))
+	if err := c.Conn.SetDeadline(c.deadline(t)); err != nil {
+		return fmt.Errorf("set connection deadline: %w", err)
+	}
+	return nil
 }
 
 func (c *boundedDeadlineConn) SetReadDeadline(t time.Time) error {
-	return c.Conn.SetReadDeadline(c.deadline(t))
+	if err := c.Conn.SetReadDeadline(c.deadline(t)); err != nil {
+		return fmt.Errorf("set read deadline: %w", err)
+	}
+	return nil
 }
 
 func (c *boundedDeadlineConn) SetWriteDeadline(t time.Time) error {
-	return c.Conn.SetWriteDeadline(c.deadline(t))
+	if err := c.Conn.SetWriteDeadline(c.deadline(t)); err != nil {
+		return fmt.Errorf("set write deadline: %w", err)
+	}
+	return nil
 }
 
 func (c *boundedDeadlineConn) deadline(t time.Time) time.Time {

@@ -101,11 +101,11 @@ func LoadTemplate(dir, name string) (*Template, error) {
 	path := filepath.Join(dir, name+templateFileSuffix)
 	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read template %s: %w", path, err)
 	}
 	tmpl, err := parseTemplate(name, data)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", path, err)
+		return nil, fmt.Errorf("parse template %s: %w", path, err)
 	}
 	return tmpl, nil
 }
@@ -164,7 +164,7 @@ func (t *Template) Render(msg Message) (Message, error) {
 func renderTemplate(t *template.Template, data templateData) (string, error) {
 	var buf bytes.Buffer
 	if err := t.Execute(&buf, data); err != nil {
-		return "", err
+		return "", fmt.Errorf("execute template: %w", err)
 	}
 	return buf.String(), nil
 }
@@ -191,5 +191,8 @@ func (n *templatedNotifier) Send(ctx context.Context, msg Message) error {
 	if err != nil {
 		return fmt.Errorf("render template %s: %w", n.template.Name(), err)
 	}
-	return n.inner.Send(ctx, rendered)
+	if err := n.inner.Send(ctx, rendered); err != nil {
+		return fmt.Errorf("send through notifier %s: %w", n.inner.Name(), err)
+	}
+	return nil
 }
