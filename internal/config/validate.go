@@ -435,6 +435,13 @@ func validateDocumentAliases(doc *Document, counts map[string]map[string]int, al
 	for _, alias := range aliases {
 		if issue := validateDocumentAlias(alias, doc, kindCounts, aliasOwners[doc.registryKey()], seen, scope); issue != nil {
 			issues = append(issues, *issue)
+			// A syntactically valid alias still belongs to this document's input
+			// set even when it collides with another document. Record it so a
+			// later repetition reports the local duplicate instead of repeating
+			// the external collision.
+			if validDocumentName(alias) {
+				seen[alias] = true
+			}
 			continue
 		}
 		seen[alias] = true
