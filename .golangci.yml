@@ -156,6 +156,7 @@ linters:
         - httpNoBody
         - ifElseChain
         - importShadow
+        - indexAlloc
         - mapKey
         - newDeref
         - nilValReturn
@@ -163,6 +164,7 @@ linters:
         - octalLiteral
         - paramTypeCombine
         - preferFilepathJoin
+        - preferStringWriter
         - rangeAppendAll
         - regexpMust
         - rangeExprCopy
@@ -176,6 +178,7 @@ linters:
         - truncateCmp
         - typeAssertChain
         - typeSwitchVar
+        - timeExprSimplify
         - underef
         - unlabelStmt
         - unlambda
