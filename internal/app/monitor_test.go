@@ -200,8 +200,11 @@ defaults:
 	}
 }
 
-func TestReloadConfigCompatibilityRejectsRuntimeAndStateChanges(t *testing.T) {
-	current := &config.Config{Global: config.Global{Runtime: "/run/sermo", State: "/var/lib/sermo"}}
+func TestReloadConfigCompatibilityRejectsProcessLifetimeChanges(t *testing.T) {
+	current := &config.Config{Global: config.Global{
+		Runtime: "/run/sermo", State: "/var/lib/sermo",
+		Raw: map[string]any{config.SectionWeb: map[string]any{config.WebKeyPort: 9797, config.WebKeyPassword: "current"}},
+	}}
 	tests := []struct {
 		name string
 		next *config.Config
@@ -209,17 +212,34 @@ func TestReloadConfigCompatibilityRejectsRuntimeAndStateChanges(t *testing.T) {
 	}{
 		{
 			name: "unchanged paths",
-			next: &config.Config{Global: config.Global{Runtime: "/run/sermo", State: "/var/lib/sermo"}},
+			next: &config.Config{Global: config.Global{
+				Runtime: "/run/sermo", State: "/var/lib/sermo",
+				Raw: map[string]any{config.SectionWeb: map[string]any{config.WebKeyPort: 9797, config.WebKeyPassword: "current"}},
+			}},
 		},
 		{
 			name: "runtime changed",
-			next: &config.Config{Global: config.Global{Runtime: "/run/sermo-next", State: "/var/lib/sermo"}},
+			next: &config.Config{Global: config.Global{
+				Runtime: "/run/sermo-next", State: "/var/lib/sermo",
+				Raw: map[string]any{config.SectionWeb: map[string]any{config.WebKeyPort: 9797, config.WebKeyPassword: "current"}},
+			}},
 			want: "paths.runtime changed; restart sermod",
 		},
 		{
 			name: "state changed",
-			next: &config.Config{Global: config.Global{Runtime: "/run/sermo", State: "/var/lib/sermo-next"}},
+			next: &config.Config{Global: config.Global{
+				Runtime: "/run/sermo", State: "/var/lib/sermo-next",
+				Raw: map[string]any{config.SectionWeb: map[string]any{config.WebKeyPort: 9797, config.WebKeyPassword: "current"}},
+			}},
 			want: "paths.state changed; restart sermod",
+		},
+		{
+			name: "web auth changed",
+			next: &config.Config{Global: config.Global{
+				Runtime: "/run/sermo", State: "/var/lib/sermo",
+				Raw: map[string]any{config.SectionWeb: map[string]any{config.WebKeyPort: 9797, config.WebKeyPassword: "next"}},
+			}},
+			want: "web configuration changed; restart sermod",
 		},
 	}
 
