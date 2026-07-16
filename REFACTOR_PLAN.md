@@ -476,8 +476,8 @@ Estado ejecutado:
 
 - Mantener la construccion de paths `/proc/<pid>/...` en `internal/process`,
   owner de la lectura de identidades de procesos.
-- Reutilizar esos helpers desde los scans de open files y blockers de mounts sin
-  cambiar los criterios de matching ni la politica de senales.
+- Reutilizar esos helpers desde los scans de blockers de mounts sin cambiar los
+  criterios de matching ni la politica de senales.
 
 Estado ejecutado:
 

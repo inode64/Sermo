@@ -71,8 +71,10 @@ const (
 	DataKeyMetric             = fieldMetric
 	DataKeyMinRules           = CheckKeyMinRules
 	DataKeyMode               = "mode"
+	DataKeyMountSampleError   = "mount_sample_error"
 	DataKeyModifiedAt         = "modified_at"
 	DataKeyMounted            = CheckKeyMounted
+	DataKeyMountPoint         = "mount_point"
 	DataKeyMountpoints        = "mountpoints"
 	DataKeyNew                = fieldNew
 	DataKeyNumCPU             = "num_cpu"
@@ -114,6 +116,7 @@ const (
 	DataKeyRootDispersionMS   = "root_dispersion_ms"
 	DataKeyRoutes             = "routes"
 	DataKeyRules              = CheckKeyRules
+	DataKeySampleError        = "sample_error"
 	DataKeyServer             = "server"
 	DataKeySerialNumber       = "serial_number"
 	DataKeySignatureAlgorithm = "signature_algorithm"

@@ -93,8 +93,31 @@ func TestStorageCheckStatError(t *testing.T) {
 		preds: []levelPred{{"used_pct", ">=", 90}},
 		usage: func(string) (StorageStats, error) { return StorageStats{}, context.DeadlineExceeded },
 	}
-	if c.Run(context.Background()).OK {
+	res := c.Run(context.Background())
+	if res.OK {
 		t.Fatal("expected not OK on stat error")
+	}
+	if res.Data[DataKeyPath] != "/nope" || res.Data[DataKeySampleError] != context.DeadlineExceeded.Error() {
+		t.Fatalf("stat error data = %+v", res.Data)
+	}
+}
+
+func TestStorageCheckPublishesMountDataForUsage(t *testing.T) {
+	c := storageCheck{
+		base:  base{name: "storage"},
+		path:  "/data/logs",
+		preds: []levelPred{{field: "used_pct", op: ">=", value: 90}},
+		usage: fakeStorage(50, 50, 500, 1000),
+		mountSampler: func() ([]Mount, error) {
+			return []Mount{{Device: "/dev/data", MountPoint: "/data", FSType: "xfs", Options: []string{"rw", "noatime"}}}, nil
+		},
+	}
+	res := c.Run(context.Background())
+	if res.OK {
+		t.Fatalf("usage below threshold should not alert: %+v", res)
+	}
+	if res.Data[DataKeyMounted] != true || res.Data[DataKeyMountPoint] != "/data" || res.Data[DataKeyFSType] != "xfs" || res.Data[DataKeyOptions] != "rw,noatime" {
+		t.Fatalf("mount presentation data = %+v", res.Data)
 	}
 }
 

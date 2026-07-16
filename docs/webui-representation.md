@@ -352,12 +352,12 @@ Section ids: `storage-section`, `network-section`, `cert-section`,
 `diskio` watches, and `Host watches` contains the remaining host watch types.
 
 A `storage` watch summary shows the path, filesystem, mount point and used/free
-space, plus — when any exist — the count of **open files** on that filesystem
-(fds whose target resolves under the mount). That count comes from a cached
-host-wide `/proc/<pid>/fd` scan shared by all storage watches and refreshed at
-most once per minute; it is display only (no threshold/alert). The service list
-row likewise shows a service's open file-descriptor count (`fds`) in its own
-column, from the same per-process totals already in the service detail.
+space from the latest fresh daemon-cycle snapshot. The Web UI does not rescan
+mounts, filesystems or open file descriptors for this panel; before the first
+cycle or after a stale snapshot it reflects the watch's collecting/stale state.
+The service list row likewise shows a service's open file-descriptor count
+(`fds`) in its own column, from the same per-process totals already in the
+service detail.
 
 | Part | Current representation |
 | --- | --- |
