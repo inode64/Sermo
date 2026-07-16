@@ -2,6 +2,7 @@ package state
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -435,6 +436,33 @@ func TestPruneHistory(t *testing.T) {
 	}
 	if stat, err := s.ServiceMetricSummary("web", "cpu", 2*time.Minute, now); err != nil || stat.Count != 1 {
 		t.Fatalf("recent service metric = %+v err=%v, want 1", stat, err)
+	}
+}
+
+func TestRecordAggregatesPreserveErrorContext(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), Filename))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	at := time.Unix(0, 0)
+	for name, test := range map[string]struct {
+		record func() error
+		want   string
+	}{
+		"measurement": {func() error { return s.RecordMeasurement("web", "http", 1, at) }, "record measurement for web/http:"},
+		"metric":      {func() error { return s.RecordMetric("web", "http", "latency", 1, at) }, "record metric for web/http/latency:"},
+		"daemon":      {func() error { return s.RecordDaemonMetric("cpu", 1, at) }, "record daemon metric cpu:"},
+		"service":     {func() error { return s.RecordServiceMetric("web", "cpu", 1, at) }, "record service metric for web/cpu:"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := test.record(); err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("record error = %v, want context %q", err, test.want)
+			}
+		})
 	}
 }
 

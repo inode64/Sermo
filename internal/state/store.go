@@ -1679,24 +1679,75 @@ type MeasurementStat struct {
 	Max   float64 `json:"max"`
 }
 
-// RecordMeasurement accumulates one numeric observation (milliseconds) for a
-// service+check into its current UTC-minute bucket: n+1, sum+value, and the
-// running min/max.
-func (s *Store) RecordMeasurement(service, check string, valueMs float64, at time.Time) error {
-	_, err := s.db.ExecContext(s.sqlCtx(),
-		`INSERT INTO measurement (service, check_name, bucket, n, sum_ms, min_ms, max_ms)
+type aggregateRecordSpec struct {
+	query, kind, targetPrefix string
+}
+
+var (
+	measurementRecordSpec = aggregateRecordSpec{
+		query: `INSERT INTO measurement (service, check_name, bucket, n, sum_ms, min_ms, max_ms)
 		 VALUES (?, ?, ?, 1, ?, ?, ?)
 		 ON CONFLICT(service, check_name, bucket) DO UPDATE SET
 		   n      = n + 1,
 		   sum_ms = sum_ms + excluded.sum_ms,
 		   min_ms = min(min_ms, excluded.min_ms),
 		   max_ms = max(max_ms, excluded.max_ms);`,
-		service, check, minuteBucket(at), valueMs, valueMs, valueMs,
-	)
-	if err != nil {
-		return fmt.Errorf("record measurement for %s/%s: %w", service, check, err)
+		kind: "measurement", targetPrefix: " for ",
+	}
+	metricRecordSpec = aggregateRecordSpec{
+		query: `INSERT INTO measurement_metric (service, check_name, metric, bucket, n, sum_v, min_v, max_v)
+		 VALUES (?, ?, ?, ?, 1, ?, ?, ?)
+		 ON CONFLICT(service, check_name, metric, bucket) DO UPDATE SET
+		   n     = n + 1,
+		   sum_v = sum_v + excluded.sum_v,
+		   min_v = min(min_v, excluded.min_v),
+		   max_v = max(max_v, excluded.max_v);`,
+		kind: "metric", targetPrefix: " for ",
+	}
+	daemonMetricRecordSpec = aggregateRecordSpec{
+		query: `INSERT INTO daemon_metric (metric, bucket, n, sum_v, min_v, max_v)
+		 VALUES (?, ?, 1, ?, ?, ?)
+		 ON CONFLICT(metric, bucket) DO UPDATE SET
+		   n     = n + 1,
+		   sum_v = sum_v + excluded.sum_v,
+		   min_v = min(min_v, excluded.min_v),
+		   max_v = max(max_v, excluded.max_v);`,
+		kind: "daemon metric", targetPrefix: " ",
+	}
+	serviceMetricRecordSpec = aggregateRecordSpec{
+		query: `INSERT INTO service_metric (service, metric, bucket, n, sum_v, min_v, max_v)
+		 VALUES (?, ?, ?, 1, ?, ?, ?)
+		 ON CONFLICT(service, metric, bucket) DO UPDATE SET
+		   n     = n + 1,
+		   sum_v = sum_v + excluded.sum_v,
+		   min_v = min(min_v, excluded.min_v),
+		   max_v = max(max_v, excluded.max_v);`,
+		kind: "service metric", targetPrefix: " for ",
+	}
+)
+
+func (s *Store) recordAggregate(spec aggregateRecordSpec, first, second, third string, values ...any) error {
+	if _, err := s.db.ExecContext(s.sqlCtx(), spec.query, values...); err != nil {
+		return fmt.Errorf("record %s%s%s: %w", spec.kind, spec.targetPrefix, aggregateRecordTarget(first, second, third), err)
 	}
 	return nil
+}
+
+func aggregateRecordTarget(first, second, third string) string {
+	if third != "" {
+		return first + "/" + second + "/" + third
+	}
+	if second != "" {
+		return first + "/" + second
+	}
+	return first
+}
+
+// RecordMeasurement accumulates one numeric observation (milliseconds) for a
+// service+check into its current UTC-minute bucket: n+1, sum+value, and the
+// running min/max.
+func (s *Store) RecordMeasurement(service, check string, valueMs float64, at time.Time) error {
+	return s.recordAggregate(measurementRecordSpec, service, check, "", service, check, minuteBucket(at), valueMs, valueMs, valueMs)
 }
 
 // MeasurementSummary returns the average/min/max and sample count for a check over
@@ -1764,20 +1815,7 @@ func (s *Store) pruneBuckets(table string, before time.Time) (int64, error) {
 // hdparm "read" MB/s) into its current UTC-minute bucket: n+1, sum+value and the
 // running min/max. It is the generic counterpart of RecordMeasurement (latency).
 func (s *Store) RecordMetric(service, check, metric string, value float64, at time.Time) error {
-	_, err := s.db.ExecContext(s.sqlCtx(),
-		`INSERT INTO measurement_metric (service, check_name, metric, bucket, n, sum_v, min_v, max_v)
-		 VALUES (?, ?, ?, ?, 1, ?, ?, ?)
-		 ON CONFLICT(service, check_name, metric, bucket) DO UPDATE SET
-		   n     = n + 1,
-		   sum_v = sum_v + excluded.sum_v,
-		   min_v = min(min_v, excluded.min_v),
-		   max_v = max(max_v, excluded.max_v);`,
-		service, check, metric, minuteBucket(at), value, value, value,
-	)
-	if err != nil {
-		return fmt.Errorf("record metric for %s/%s/%s: %w", service, check, metric, err)
-	}
-	return nil
+	return s.recordAggregate(metricRecordSpec, service, check, metric, service, check, metric, minuteBucket(at), value, value, value)
 }
 
 // MetricSummary returns a named metric's average/min/max and sample count over the
@@ -1810,20 +1848,7 @@ func (s *Store) PruneMetrics(before time.Time) (int64, error) {
 // RecordDaemonMetric accumulates one sermod process metric observation into its
 // current UTC-minute bucket: n+1, sum+value and running min/max.
 func (s *Store) RecordDaemonMetric(metric string, value float64, at time.Time) error {
-	_, err := s.db.ExecContext(s.sqlCtx(),
-		`INSERT INTO daemon_metric (metric, bucket, n, sum_v, min_v, max_v)
-		 VALUES (?, ?, 1, ?, ?, ?)
-		 ON CONFLICT(metric, bucket) DO UPDATE SET
-		   n     = n + 1,
-		   sum_v = sum_v + excluded.sum_v,
-		   min_v = min(min_v, excluded.min_v),
-		   max_v = max(max_v, excluded.max_v);`,
-		metric, minuteBucket(at), value, value, value,
-	)
-	if err != nil {
-		return fmt.Errorf("record daemon metric %s: %w", metric, err)
-	}
-	return nil
+	return s.recordAggregate(daemonMetricRecordSpec, metric, "", "", metric, minuteBucket(at), value, value, value)
 }
 
 // DaemonMetricSummary returns a daemon metric's average/min/max and sample count
@@ -1856,20 +1881,7 @@ func (s *Store) PruneDaemonMetrics(before time.Time) (int64, error) {
 // RecordServiceMetric accumulates one service process-tree metric observation
 // into its current UTC-minute bucket: n+1, sum+value and running min/max.
 func (s *Store) RecordServiceMetric(service, metric string, value float64, at time.Time) error {
-	_, err := s.db.ExecContext(s.sqlCtx(),
-		`INSERT INTO service_metric (service, metric, bucket, n, sum_v, min_v, max_v)
-		 VALUES (?, ?, ?, 1, ?, ?, ?)
-		 ON CONFLICT(service, metric, bucket) DO UPDATE SET
-		   n     = n + 1,
-		   sum_v = sum_v + excluded.sum_v,
-		   min_v = min(min_v, excluded.min_v),
-		   max_v = max(max_v, excluded.max_v);`,
-		service, metric, minuteBucket(at), value, value, value,
-	)
-	if err != nil {
-		return fmt.Errorf("record service metric for %s/%s: %w", service, metric, err)
-	}
-	return nil
+	return s.recordAggregate(serviceMetricRecordSpec, service, metric, "", service, metric, minuteBucket(at), value, value, value)
 }
 
 // ServiceMetricSummary returns a service runtime metric's average/min/max and
