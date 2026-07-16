@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -74,7 +75,7 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), Filename)
 	at := time.Date(2026, 7, 9, 11, 30, 0, 0, time.UTC)
 
-	first, err := Open(path)
+	first, err := OpenContext(context.Background(), path)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -105,7 +106,7 @@ func TestStoreCheckSnapshotsPersistAcrossReopen(t *testing.T) {
 		t.Fatalf("close: %v", err)
 	}
 
-	second, err := Open(path)
+	second, err := OpenContext(context.Background(), path)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -228,7 +229,7 @@ func TestStorePersistsAcrossReopen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), Filename)
 	t0 := time.Date(2026, 6, 7, 9, 0, 0, 0, time.UTC)
 
-	first, err := Open(path)
+	first, err := OpenContext(context.Background(), path)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -237,7 +238,7 @@ func TestStorePersistsAcrossReopen(t *testing.T) {
 		t.Fatalf("close: %v", err)
 	}
 
-	second, err := Open(path)
+	second, err := OpenContext(context.Background(), path)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -440,7 +441,7 @@ func TestPruneHistory(t *testing.T) {
 }
 
 func TestRecordAggregatesPreserveErrorContext(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), Filename))
+	s, err := OpenContext(context.Background(), filepath.Join(t.TempDir(), Filename))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -468,7 +469,7 @@ func TestRecordAggregatesPreserveErrorContext(t *testing.T) {
 
 func openTemp(t *testing.T) *Store {
 	t.Helper()
-	s, err := Open(filepath.Join(t.TempDir(), Filename))
+	s, err := OpenContext(context.Background(), filepath.Join(t.TempDir(), Filename))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -477,7 +478,7 @@ func openTemp(t *testing.T) *Store {
 }
 
 func TestSetRemediationStatePersistsPartialRecords(t *testing.T) {
-	s, err := Open(filepath.Join(t.TempDir(), Filename))
+	s, err := OpenContext(context.Background(), filepath.Join(t.TempDir(), Filename))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -509,7 +510,7 @@ func TestSetRemediationStatePersistsPartialRecords(t *testing.T) {
 func TestOpenCreatesParentDir(t *testing.T) {
 	// Open must create a missing parent directory for the DB path.
 	path := filepath.Join(t.TempDir(), "nested", "deeper", Filename)
-	s, err := Open(path)
+	s, err := OpenContext(context.Background(), path)
 	if err != nil {
 		t.Fatalf("Open must create the parent dir, got: %v", err)
 	}

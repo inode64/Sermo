@@ -12,7 +12,7 @@ func TestSyncManualActionMonitoringPausesAndRestores(t *testing.T) {
 	store := newFakeStore()
 	result := operation.Result{Service: "web", Action: string(rules.ActionStop), Status: operation.ResultOK}
 
-	change, err := SyncManualActionMonitoring(store, "web", string(rules.ActionStop), result, state.SourceCLIManualStop, state.SourceCLI)
+	change, err := SyncManualActionMonitoringWithActive(store, "web", string(rules.ActionStop), result, state.SourceCLIManualStop, state.SourceCLI, false)
 	if err != nil {
 		t.Fatalf("stop sync: %v", err)
 	}
@@ -24,7 +24,7 @@ func TestSyncManualActionMonitoringPausesAndRestores(t *testing.T) {
 	}
 
 	result = operation.Result{Service: "web", Action: string(rules.ActionStart), Status: operation.ResultOK}
-	change, err = SyncManualActionMonitoring(store, "web", string(rules.ActionStart), result, state.SourceWebManualStop, state.SourceWeb)
+	change, err = SyncManualActionMonitoringWithActive(store, "web", string(rules.ActionStart), result, state.SourceWebManualStop, state.SourceWeb, false)
 	if err != nil {
 		t.Fatalf("start sync: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestSyncManualActionMonitoringPreservesExistingUnmonitor(t *testing.T) {
 	store.source["web"] = state.SourceCLI
 
 	result := operation.Result{Service: "web", Action: string(rules.ActionStop), Status: operation.ResultOK}
-	change, err := SyncManualActionMonitoring(store, "web", string(rules.ActionStop), result, state.SourceWebManualStop, state.SourceWeb)
+	change, err := SyncManualActionMonitoringWithActive(store, "web", string(rules.ActionStop), result, state.SourceWebManualStop, state.SourceWeb, false)
 	if err != nil {
 		t.Fatalf("stop sync: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestSyncManualActionMonitoringPreservesExistingUnmonitor(t *testing.T) {
 	}
 
 	result = operation.Result{Service: "web", Action: string(rules.ActionStart), Status: operation.ResultOK}
-	change, err = SyncManualActionMonitoring(store, "web", string(rules.ActionStart), result, state.SourceWebManualStop, state.SourceWeb)
+	change, err = SyncManualActionMonitoringWithActive(store, "web", string(rules.ActionStart), result, state.SourceWebManualStop, state.SourceWeb, false)
 	if err != nil {
 		t.Fatalf("start sync: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestSyncManualActionMonitoringIgnoresFailedOperation(t *testing.T) {
 	store := newFakeStore()
 	result := operation.Result{Service: "web", Action: string(rules.ActionStop), Status: operation.ResultFailed}
 
-	change, err := SyncManualActionMonitoring(store, "web", string(rules.ActionStop), result, state.SourceCLIManualStop, state.SourceCLI)
+	change, err := SyncManualActionMonitoringWithActive(store, "web", string(rules.ActionStop), result, state.SourceCLIManualStop, state.SourceCLI, false)
 	if err != nil {
 		t.Fatalf("failed op sync: %v", err)
 	}

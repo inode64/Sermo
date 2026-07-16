@@ -64,11 +64,11 @@ func TestInspectUsesNamespacedAppPreflight(t *testing.T) {
 		},
 	}}
 
-	report := Inspect(context.Background(), testRunner{
+	report := inspectResolved(context.Background(), testRunner{
 		binary: {Stdout: "Webd 1.2.3\n", ExitCode: 0},
-	}, "web", resolved)
+	}, "web", resolved, config.CategoryApp)
 	if !report.Installed || !report.OK || report.Binary != binary || report.Status != StatusOK {
-		t.Fatalf("Inspect() = %+v, want installed ok report for namespaced binary", report)
+		t.Fatalf("inspectResolved() = %+v, want installed ok report for namespaced binary", report)
 	}
 	if report.Version != "Webd 1.2.3" || report.VersionShort != "1.2.3" {
 		t.Fatalf("version = %q short=%q, want Webd 1.2.3 / 1.2.3", report.Version, report.VersionShort)
@@ -134,9 +134,9 @@ func TestInspectCommandUser(t *testing.T) {
 	}}
 	runner := &testUserRunner{testRunner: testRunner{binary: {Stdout: "postgres 17.5\n", ExitCode: 0}}}
 
-	report := Inspect(context.Background(), runner, "postgres", resolved)
+	report := inspectResolved(context.Background(), runner, "postgres", resolved, config.CategoryApp)
 	if !report.OK || report.VersionShort != "17.5" {
-		t.Fatalf("Inspect() = %+v, want ok postgres version", report)
+		t.Fatalf("inspectResolved() = %+v, want ok postgres version", report)
 	}
 	if !slices.Equal(runner.users, []string{"postgres"}) || !slices.Equal(runner.names, []string{binary}) {
 		t.Fatalf("RunUser calls users=%v names=%v", runner.users, runner.names)
@@ -293,22 +293,22 @@ func TestInspectCanTreatVersionFailureAsOptional(t *testing.T) {
 	resolved := preflightResolved(binary, "")
 	runner := testRunner{binary: {Stderr: "bad flag\n", ExitCode: 2}}
 
-	strict := Inspect(context.Background(), runner, "web", resolved)
+	strict := inspectResolved(context.Background(), runner, "web", resolved, config.CategoryApp)
 	if strict.OK || strict.Status == StatusOK {
-		t.Fatalf("strict Inspect() = %+v, want version failure", strict)
+		t.Fatalf("strict inspectResolved() = %+v, want version failure", strict)
 	}
 	if !strings.Contains(strict.Output, "bad flag") {
 		t.Fatalf("a failing probe must capture the command output, got %q", strict.Output)
 	}
-	optional := Inspect(context.Background(), runner, "web", resolved, WithOptionalVersion())
+	optional := inspectResolved(context.Background(), runner, "web", resolved, config.CategoryApp, WithOptionalVersion())
 	if !optional.OK || optional.Status != StatusOK {
-		t.Fatalf("optional Inspect() = %+v, want ok with unknown version", optional)
+		t.Fatalf("optional inspectResolved() = %+v, want ok with unknown version", optional)
 	}
 
 	resolved.Tree["version_match"] = map[string]any{"contains": "Webd"}
-	matched := Inspect(context.Background(), runner, "web", resolved, WithOptionalVersion())
+	matched := inspectResolved(context.Background(), runner, "web", resolved, config.CategoryApp, WithOptionalVersion())
 	if matched.Installed || !strings.HasPrefix(matched.Status, statusNotInstalledVersionPrefix) {
-		t.Fatalf("version_match Inspect() = %+v, want identity failure despite optional version", matched)
+		t.Fatalf("version_match inspectResolved() = %+v, want identity failure despite optional version", matched)
 	}
 }
 
@@ -386,9 +386,9 @@ func TestInspectUsesCatalogProbeTimeout(t *testing.T) {
 	}
 	resolved := preflightResolved(binary, "10s")
 	obs := &timeoutObserver{}
-	report := Inspect(context.Background(), obs, "salt-minion", resolved)
+	report := inspectResolved(context.Background(), obs, "salt-minion", resolved, config.CategoryApp)
 	if !report.OK || report.VersionShort != "1.2.3" {
-		t.Fatalf("Inspect() = %+v, want ok version 1.2.3", report)
+		t.Fatalf("inspectResolved() = %+v, want ok version 1.2.3", report)
 	}
 	if obs.timeout < 9*time.Second || obs.timeout > 10*time.Second {
 		t.Fatalf("probe timeout = %v, want ~10s from catalog entry", obs.timeout)
@@ -409,9 +409,9 @@ func TestInspectProbeTimeoutFailureReportsUnderlyingError(t *testing.T) {
 		t.Fatal(err)
 	}
 	resolved := preflightResolved(binary, "1ms")
-	report := Inspect(context.Background(), slowRunner{}, "slow-tool", resolved)
+	report := inspectResolved(context.Background(), slowRunner{}, "slow-tool", resolved, config.CategoryApp)
 	if report.OK {
-		t.Fatalf("Inspect() = %+v, want version probe failure", report)
+		t.Fatalf("inspectResolved() = %+v, want version probe failure", report)
 	}
 	if !strings.Contains(report.Status, "timeout after 1ms") {
 		t.Fatalf("status = %q, want timeout after duration instead of exit -1", report.Status)

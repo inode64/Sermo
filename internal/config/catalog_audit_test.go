@@ -2302,7 +2302,7 @@ func validateVersionedCatalogService(t *testing.T, path string, doc map[string]a
 		}
 		return
 	}
-	if serviceTemplateDiscoversTokens(doc, tokens) || discoverySourcesHaveTokens(directVersionDiscoverySources(doc), tokens) {
+	if serviceTemplateDiscoversTokens(doc, tokens) || discoverySourcesHaveTokens(versionDiscoverySources(doc), tokens) {
 		return
 	}
 	if linkedAppTemplateDiscoversTokens(doc, apps, tokens) {
@@ -2330,10 +2330,40 @@ func discoverySourcesHaveTokens(sources []string, tokens []tmplToken) bool {
 	return false
 }
 
+// versionDiscoverySources is the catalog-audit view of discovery globs: every
+// backend branch of versions.from plus binary candidates. Production materializes
+// with the active backend only; audit needs both so OpenRC-only templates still
+// validate on a systemd host (and vice versa).
+func versionDiscoverySources(body map[string]any) []string {
+	if from := allVersionsFromPaths(body); len(from) > 0 {
+		return from
+	}
+	return documentBinaryCandidates(body)
+}
+
+func allVersionsFromPaths(body map[string]any) []string {
+	if v, ok := body[keyVersions].(map[string]any); ok {
+		return allVersionFromPaths(v[keyVersionsFrom])
+	}
+	return nil
+}
+
+func allVersionFromPaths(raw any) []string {
+	if m, ok := raw.(map[string]any); ok {
+		systemd := cfgval.StringList(m[backendSystemd])
+		openrc := cfgval.StringList(m[backendOpenRC])
+		out := make([]string, 0, len(systemd)+len(openrc))
+		out = append(out, systemd...)
+		out = append(out, openrc...)
+		return out
+	}
+	return cfgval.StringList(raw)
+}
+
 func linkedAppTemplateDiscoversTokens(doc map[string]any, apps map[string]map[string]any, tokens []tmplToken) bool {
 	for _, appName := range cfgval.StringList(doc["apps"]) {
 		app, ok := apps[linkedAppTemplateNameMulti(appName, tokens)]
-		if ok && discoverySourcesHaveTokens(directVersionDiscoverySources(app), tokens) {
+		if ok && discoverySourcesHaveTokens(versionDiscoverySources(app), tokens) {
 			return true
 		}
 	}

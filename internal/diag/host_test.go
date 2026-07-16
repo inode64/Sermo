@@ -37,15 +37,3 @@ func TestOSHostIsMountPoint(t *testing.T) {
 		t.Fatal("a fresh temp dir must not be a mount point")
 	}
 }
-
-func TestResultCounts(t *testing.T) {
-	r := Result{Findings: []Finding{
-		{Level: LevelError},
-		{Level: LevelWarning},
-		{Level: LevelError},
-		{Level: LevelInfo},
-	}}
-	if r.Errors() != 2 || r.Warnings() != 1 {
-		t.Fatalf("Errors = %d, Warnings = %d, want 2/1", r.Errors(), r.Warnings())
-	}
-}

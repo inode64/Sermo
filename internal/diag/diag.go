@@ -44,20 +44,6 @@ type Result struct {
 	Findings []Finding `json:"findings"`
 }
 
-// Errors returns the number of error-level findings.
-func (r Result) Errors() int { return r.count(LevelError) }
-
-// Warnings returns the number of warning-level findings.
-func (r Result) Warnings() int { return r.count(LevelWarning) }
-func (r Result) count(level Level) (count int) {
-	for _, finding := range r.Findings {
-		if finding.Level == level {
-			count++
-		}
-	}
-	return count
-}
-
 // Host is the host access diagnostics need (implemented by OSHost).
 type Host interface {
 	PathExists(path string) bool

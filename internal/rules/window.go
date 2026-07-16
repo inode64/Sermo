@@ -35,7 +35,7 @@ type WindowStateSnapshot struct {
 
 // withinWindow returns a within-window's cycle count and effective minimum
 // matches (defaulting to 1), and whether a within window is configured. It is the
-// single source of the within defaults shared by Fires/IsFiring/Progress.
+// single source of the within defaults shared by FiresAt/IsFiringAt/ProgressAt.
 func (r Rule) withinWindow() (cycles int, duration time.Duration, minMatches int, ok bool) {
 	if r.Within != nil && (r.Within.Cycles > 0 || r.Within.Duration > 0) {
 		mm := r.Within.MinMatches
@@ -61,14 +61,10 @@ func (r Rule) forWindow() (cycles int, duration time.Duration) {
 	return 1, 0
 }
 
-// Fires updates the window with this cycle's condition value and reports whether
-// the rule fires. With neither for nor within, the default is `for 1 cycle`.
-func (s *WindowState) Fires(r Rule, conditionTrue bool) bool {
-	return s.FiresAt(r, conditionTrue, time.Now())
-}
-
-// FiresAt is Fires with an explicit observation time. Workers and watches use it
-// so duration-based windows share the same injected clock as policy/cooldown
+// FiresAt updates the window with this cycle's condition value and reports
+// whether the rule fires. With neither for nor within, the default is
+// `for 1 cycle`. Workers and watches pass an explicit observation time so
+// duration-based windows share the same injected clock as policy/cooldown
 // logic and tests can avoid wall-clock sleeps.
 func (s *WindowState) FiresAt(r Rule, conditionTrue bool, at time.Time) bool {
 	if cycles, duration, minMatches, ok := r.withinWindow(); ok {
@@ -113,13 +109,9 @@ func (s *WindowState) counters() (consecutive int, history []bool, trueSince tim
 	return s.consecutive, s.history, s.trueSince, s.timedHistory
 }
 
-// IsFiring reports whether the rule would fire from the current window state
-// without advancing it (read-only, nil-safe; use Fires during evaluation).
-func (s *WindowState) IsFiring(r Rule) bool {
-	return s.IsFiringAt(r, time.Now())
-}
-
-// IsFiringAt is IsFiring with an explicit read time for duration windows.
+// IsFiringAt reports whether the rule would fire from the current window state
+// without advancing it (read-only, nil-safe; use FiresAt during evaluation).
+// at is the read time for duration windows.
 func (s *WindowState) IsFiringAt(r Rule, at time.Time) bool {
 	consecutive, history, trueSince, timedHistory := s.counters()
 	if _, duration, minMatches, ok := r.withinWindow(); ok {
@@ -135,14 +127,9 @@ func (s *WindowState) IsFiringAt(r Rule, at time.Time) bool {
 	return consecutive >= cycles
 }
 
-// Progress returns an operator-facing window counter such as "2/3" for
+// ProgressAt returns an operator-facing window counter such as "2/3" for
 // consecutive windows, "2m/6m" for duration windows, or "2/3 in 15 cycles" for
-// within windows. Nil-safe.
-func (s *WindowState) Progress(r Rule) string {
-	return s.ProgressAt(r, time.Now())
-}
-
-// ProgressAt is Progress with an explicit read time for duration windows.
+// within windows. Nil-safe. at is the read time for duration windows.
 func (s *WindowState) ProgressAt(r Rule, at time.Time) string {
 	consecutive, history, trueSince, timedHistory := s.counters()
 	if cycles, duration, minMatches, ok := r.withinWindow(); ok {

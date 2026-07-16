@@ -21,8 +21,8 @@ func TestCaptureAndApplyWorkerState(t *testing.T) {
 		windows: func() map[string]*rules.WindowState {
 			r := rules.Rule{For: &rules.ForWindow{Cycles: 3}}
 			ws := &rules.WindowState{}
-			ws.Fires(r, true)
-			ws.Fires(r, true)
+			ws.FiresAt(r, true, time.Now())
+			ws.FiresAt(r, true, time.Now())
 			return map[string]*rules.WindowState{"restart-if-down": ws}
 		}(),
 		libBaseline: map[string]string{"/etc/app.conf": "1:2"},
@@ -39,8 +39,8 @@ func TestCaptureAndApplyWorkerState(t *testing.T) {
 		t.Fatalf("remediation state = %+v", fresh.State)
 	}
 	r := rules.Rule{For: &rules.ForWindow{Cycles: 3}}
-	if fresh.windows["restart-if-down"].Progress(r) != "2/3" {
-		t.Fatalf("windows = %+v", fresh.windows["restart-if-down"].Progress(r))
+	if fresh.windows["restart-if-down"].ProgressAt(r, time.Now()) != "2/3" {
+		t.Fatalf("windows = %+v", fresh.windows["restart-if-down"].ProgressAt(r, time.Now()))
 	}
 	if fresh.libBaseline["/etc/app.conf"] != "1:2" {
 		t.Fatalf("baseline = %+v", fresh.libBaseline)
@@ -53,8 +53,8 @@ func TestCaptureAndApplyWatchState(t *testing.T) {
 		Name:   "load-high",
 		Window: r,
 	}
-	old.state.Fires(r, true)
-	old.state.Fires(r, true)
+	old.state.FiresAt(r, true, time.Now())
+	old.state.FiresAt(r, true, time.Now())
 	old.firing = true
 
 	saved := captureWatchState([]*Watch{old})
@@ -64,8 +64,8 @@ func TestCaptureAndApplyWatchState(t *testing.T) {
 	if fresh.firing != true {
 		t.Fatalf("firing = %v, want preserved", fresh.firing)
 	}
-	if fresh.state.Progress(r) != "2/3" {
-		t.Fatalf("window progress = %q, want 2/3", fresh.state.Progress(r))
+	if fresh.state.ProgressAt(r, time.Now()) != "2/3" {
+		t.Fatalf("window progress = %q, want 2/3", fresh.state.ProgressAt(r, time.Now()))
 	}
 }
 
@@ -73,19 +73,19 @@ func TestCaptureAndApplyWatchStateKeepsMetricSlotsSeparate(t *testing.T) {
 	r := rules.Rule{For: &rules.ForWindow{Cycles: 4}}
 	rx := &Watch{Name: "uplink", StateSlot: "metric:rx", Window: r}
 	tx := &Watch{Name: "uplink", StateSlot: "metric:tx", Window: r}
-	rx.state.Fires(r, true)
-	tx.state.Fires(r, true)
-	tx.state.Fires(r, true)
+	rx.state.FiresAt(r, true, time.Now())
+	tx.state.FiresAt(r, true, time.Now())
+	tx.state.FiresAt(r, true, time.Now())
 
 	saved := captureWatchState([]*Watch{rx, tx})
 	freshTX := &Watch{Name: "uplink", StateSlot: "metric:tx", Window: r}
 	freshRX := &Watch{Name: "uplink", StateSlot: "metric:rx", Window: r}
 	applyWatchState([]*Watch{freshTX, freshRX}, saved)
 
-	if got := freshRX.state.Progress(r); got != "1/4" {
+	if got := freshRX.state.ProgressAt(r, time.Now()); got != "1/4" {
 		t.Fatalf("rx progress = %q, want 1/4", got)
 	}
-	if got := freshTX.state.Progress(r); got != "2/4" {
+	if got := freshTX.state.ProgressAt(r, time.Now()); got != "2/4" {
 		t.Fatalf("tx progress = %q, want 2/4", got)
 	}
 }

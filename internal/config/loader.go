@@ -42,13 +42,15 @@ type loadOptions struct {
 	loadCtx      context.Context
 }
 
-// WithCatalogDirs overrides the compiled catalog search directory for tests and
-// staged packaging checks. It is intentionally not exposed in YAML or daemon
-// flags: production loads catalog definitions from defaultCatalogDir.
+// WithCatalogDirs overrides the compiled catalog search directory. Production
+// always uses defaultCatalogDir; this option is the inject seam for tests and
+// staged packaging checks (not exposed in YAML or daemon flags).
 func WithCatalogDirs(dirs ...string) Option {
 	return func(o *loadOptions) { o.catalogDirs = dirs }
 }
 
+// withPathDirs clears a paths.<kind> list for catalog-audit loads that exercise
+// only the compiled catalog. Test-only inject seam.
 func withPathDirs(kind string) Option {
 	return func(o *loadOptions) {
 		if o.pathDirs == nil {
@@ -64,9 +66,10 @@ func WithLoadContext(ctx context.Context) Option {
 	return func(o *loadOptions) { o.loadCtx = ctx }
 }
 
-// WithServiceUnits provides active backend units for service-derived catalog service
-// template materialization. It is mainly used by tests; production loads query
-// the active init backend lazily.
+// WithServiceUnits provides active backend units for service-derived catalog
+// service template materialization. Production loads query the active init
+// backend lazily; this option is the inject seam so tests can pin units without
+// probing the host.
 func WithServiceUnits(backend string, units []string) Option {
 	return func(o *loadOptions) {
 		if o.serviceUnits == nil {

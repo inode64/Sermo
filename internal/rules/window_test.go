@@ -23,7 +23,7 @@ func feed(r Rule, values []bool) []int {
 	s := &WindowState{}
 	var fired []int
 	for i, v := range values {
-		if s.Fires(r, v) {
+		if s.FiresAt(r, v, time.Now()) {
 			fired = append(fired, i+1)
 		}
 	}
@@ -111,43 +111,43 @@ func TestWithinDurationWindow(t *testing.T) {
 func TestWindowProgressAndIsFiring(t *testing.T) {
 	forRule := Rule{For: &ForWindow{Cycles: 3}}
 	s := &WindowState{}
-	if s.IsFiring(forRule) || s.Progress(forRule) != "0/3" {
-		t.Fatalf("empty state: firing=%v progress=%q", s.IsFiring(forRule), s.Progress(forRule))
+	if s.IsFiringAt(forRule, time.Now()) || s.ProgressAt(forRule, time.Now()) != "0/3" {
+		t.Fatalf("empty state: firing=%v progress=%q", s.IsFiringAt(forRule, time.Now()), s.ProgressAt(forRule, time.Now()))
 	}
-	s.Fires(forRule, true)
-	s.Fires(forRule, true)
-	if s.IsFiring(forRule) || s.Progress(forRule) != "2/3" {
-		t.Fatalf("after 2 trues: firing=%v progress=%q", s.IsFiring(forRule), s.Progress(forRule))
+	s.FiresAt(forRule, true, time.Now())
+	s.FiresAt(forRule, true, time.Now())
+	if s.IsFiringAt(forRule, time.Now()) || s.ProgressAt(forRule, time.Now()) != "2/3" {
+		t.Fatalf("after 2 trues: firing=%v progress=%q", s.IsFiringAt(forRule, time.Now()), s.ProgressAt(forRule, time.Now()))
 	}
-	s.Fires(forRule, true)
-	if !s.IsFiring(forRule) || s.Progress(forRule) != "3/3" {
-		t.Fatalf("after 3 trues: firing=%v progress=%q", s.IsFiring(forRule), s.Progress(forRule))
+	s.FiresAt(forRule, true, time.Now())
+	if !s.IsFiringAt(forRule, time.Now()) || s.ProgressAt(forRule, time.Now()) != "3/3" {
+		t.Fatalf("after 3 trues: firing=%v progress=%q", s.IsFiringAt(forRule, time.Now()), s.ProgressAt(forRule, time.Now()))
 	}
 
 	withinRule := Rule{Within: &WithinWindow{Cycles: 4, MinMatches: 2}}
 	s2 := &WindowState{}
-	s2.Fires(withinRule, true)
-	s2.Fires(withinRule, false)
-	if s2.IsFiring(withinRule) || s2.Progress(withinRule) != "1/2 in 4 cycles" {
-		t.Fatalf("within partial: firing=%v progress=%q", s2.IsFiring(withinRule), s2.Progress(withinRule))
+	s2.FiresAt(withinRule, true, time.Now())
+	s2.FiresAt(withinRule, false, time.Now())
+	if s2.IsFiringAt(withinRule, time.Now()) || s2.ProgressAt(withinRule, time.Now()) != "1/2 in 4 cycles" {
+		t.Fatalf("within partial: firing=%v progress=%q", s2.IsFiringAt(withinRule, time.Now()), s2.ProgressAt(withinRule, time.Now()))
 	}
-	s2.Fires(withinRule, true)
-	if !s2.IsFiring(withinRule) || s2.Progress(withinRule) != "2/2 in 4 cycles" {
-		t.Fatalf("within fire: firing=%v progress=%q", s2.IsFiring(withinRule), s2.Progress(withinRule))
+	s2.FiresAt(withinRule, true, time.Now())
+	if !s2.IsFiringAt(withinRule, time.Now()) || s2.ProgressAt(withinRule, time.Now()) != "2/2 in 4 cycles" {
+		t.Fatalf("within fire: firing=%v progress=%q", s2.IsFiringAt(withinRule, time.Now()), s2.ProgressAt(withinRule, time.Now()))
 	}
 }
 
 func TestWindowStateClone(t *testing.T) {
 	r := Rule{Within: &WithinWindow{Cycles: 4, MinMatches: 2}}
 	s := &WindowState{}
-	s.Fires(r, true)
-	s.Fires(r, false)
+	s.FiresAt(r, true, time.Now())
+	s.FiresAt(r, false, time.Now())
 	cp := s.Clone()
-	if cp == s || cp.Progress(r) != s.Progress(r) {
-		t.Fatalf("clone progress = %q, want %q", cp.Progress(r), s.Progress(r))
+	if cp == s || cp.ProgressAt(r, time.Now()) != s.ProgressAt(r, time.Now()) {
+		t.Fatalf("clone progress = %q, want %q", cp.ProgressAt(r, time.Now()), s.ProgressAt(r, time.Now()))
 	}
-	s.Fires(r, true)
-	if cp.Progress(r) == s.Progress(r) {
+	s.FiresAt(r, true, time.Now())
+	if cp.ProgressAt(r, time.Now()) == s.ProgressAt(r, time.Now()) {
 		t.Fatal("clone should not alias live state")
 	}
 	// clone must be independent even for history used by within-window
@@ -157,24 +157,24 @@ func TestWindowStateClone(t *testing.T) {
 func TestWindowStateSnapshotRoundTrip(t *testing.T) {
 	forRule := Rule{For: &ForWindow{Cycles: 3}}
 	s := &WindowState{}
-	s.Fires(forRule, true)
-	s.Fires(forRule, true)
+	s.FiresAt(forRule, true, time.Now())
+	s.FiresAt(forRule, true, time.Now())
 	restored := WindowStateFromSnapshot(s.Snapshot())
-	if restored.Progress(forRule) != "2/3" {
-		t.Fatalf("restored for progress = %q, want 2/3", restored.Progress(forRule))
+	if restored.ProgressAt(forRule, time.Now()) != "2/3" {
+		t.Fatalf("restored for progress = %q, want 2/3", restored.ProgressAt(forRule, time.Now()))
 	}
 
 	withinRule := Rule{Within: &WithinWindow{Cycles: 4, MinMatches: 2}}
 	w := &WindowState{}
-	w.Fires(withinRule, true)
-	w.Fires(withinRule, false)
+	w.FiresAt(withinRule, true, time.Now())
+	w.FiresAt(withinRule, false, time.Now())
 	snapshot := w.Snapshot()
 	restored = WindowStateFromSnapshot(snapshot)
-	w.Fires(withinRule, true)
-	if restored.Progress(withinRule) != "1/2 in 4 cycles" {
-		t.Fatalf("restored within progress = %q, want 1/2 in 4 cycles", restored.Progress(withinRule))
+	w.FiresAt(withinRule, true, time.Now())
+	if restored.ProgressAt(withinRule, time.Now()) != "1/2 in 4 cycles" {
+		t.Fatalf("restored within progress = %q, want 1/2 in 4 cycles", restored.ProgressAt(withinRule, time.Now()))
 	}
-	if restored.Progress(withinRule) == w.Progress(withinRule) {
+	if restored.ProgressAt(withinRule, time.Now()) == w.ProgressAt(withinRule, time.Now()) {
 		t.Fatal("snapshot restore should not alias live history")
 	}
 
@@ -388,18 +388,18 @@ func TestWindowStateNilReceiver(t *testing.T) {
 	var s *WindowState
 
 	forRule := Rule{For: &ForWindow{Cycles: 3}}
-	if s.IsFiring(forRule) {
+	if s.IsFiringAt(forRule, time.Now()) {
 		t.Fatal("nil state must not read as firing")
 	}
-	if got := s.Progress(forRule); got != "0/3" {
+	if got := s.ProgressAt(forRule, time.Now()); got != "0/3" {
 		t.Fatalf("Progress = %q, want 0/3", got)
 	}
 
 	withinRule := Rule{Within: &WithinWindow{Cycles: 15, MinMatches: 5}}
-	if s.IsFiring(withinRule) {
+	if s.IsFiringAt(withinRule, time.Now()) {
 		t.Fatal("nil state must not read as firing (within)")
 	}
-	if got := s.Progress(withinRule); got != "0/5 in 15 cycles" {
+	if got := s.ProgressAt(withinRule, time.Now()); got != "0/5 in 15 cycles" {
 		t.Fatalf("Progress = %q, want 0/5 in 15 cycles", got)
 	}
 

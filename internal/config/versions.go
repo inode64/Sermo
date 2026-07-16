@@ -42,7 +42,6 @@ var tmplTokens = []tmplToken{
 const (
 	templateCurrentMarker       = "${current}"
 	templateCurrentLabel        = "current"
-	templateCaptureGroup        = 1
 	templateCaptureOffset       = 1
 	templateReplacementPairSize = 2
 	javaReleaseKeySeparator     = "="
@@ -982,13 +981,6 @@ func (c *Config) versionDiscoverySource(ctx context.Context, body map[string]any
 	return versionDiscovery{options: body}
 }
 
-func directVersionDiscoverySources(body map[string]any) []string {
-	if from := allVersionsFromPaths(body); len(from) > 0 {
-		return from
-	}
-	return documentBinaryCandidates(body)
-}
-
 func pathsContainingMarker(paths []string, marker string) []string {
 	var out []string
 	for _, path := range paths {
@@ -1014,28 +1006,9 @@ func versionsFromPathsForBackend(body map[string]any, backend string) []string {
 	return nil
 }
 
-func allVersionsFromPaths(body map[string]any) []string {
-	if v, ok := body[keyVersions].(map[string]any); ok {
-		return allVersionFromPaths(v[keyVersionsFrom])
-	}
-	return nil
-}
-
 func versionFromPaths(raw any, backend string) []string {
 	if m, ok := raw.(map[string]any); ok {
 		return cfgval.StringList(m[backend])
-	}
-	return cfgval.StringList(raw)
-}
-
-func allVersionFromPaths(raw any) []string {
-	if m, ok := raw.(map[string]any); ok {
-		systemd := cfgval.StringList(m[backendSystemd])
-		openrc := cfgval.StringList(m[backendOpenRC])
-		out := make([]string, 0, len(systemd)+len(openrc))
-		out = append(out, systemd...)
-		out = append(out, openrc...)
-		return out
 	}
 	return cfgval.StringList(raw)
 }
@@ -1106,39 +1079,6 @@ func (c *Config) templateBody(tmpl *Document, kind string) map[string]any {
 		}
 	}
 	return body
-}
-
-// discoverVersions globs the discovery path with the token's `${...}` replaced by
-// a filesystem wildcard and extracts the value that filled it from each match.
-// Values are de-duplicated and sorted for stable ordering.
-func discoverVersions(discoverPath string, tok tmplToken) []string {
-	marker := tok.marker()
-	if !strings.Contains(discoverPath, marker) {
-		return nil
-	}
-	matches, err := filepath.Glob(strings.ReplaceAll(discoverPath, marker, "*"))
-	if err != nil {
-		return nil
-	}
-	// The captured value never spans a path separator. Its shape comes from the
-	// token (`capture`), which keeps an unbounded trailing placeholder (e.g.
-	// /usr/sbin/php-fpm${version}) from mistaking siblings like php-fpm.conf or a
-	// bare symlink for a value.
-	re := regexp.MustCompile("^" + strings.ReplaceAll(regexp.QuoteMeta(discoverPath), regexp.QuoteMeta(marker), "("+tok.capture+")") + "$")
-	seen := map[string]bool{}
-	var out []string
-	for _, m := range matches {
-		sub := re.FindStringSubmatch(m)
-		if sub == nil {
-			continue
-		}
-		if v := sub[templateCaptureGroup]; !seen[v] {
-			seen[v] = true
-			out = append(out, v)
-		}
-	}
-	sort.Strings(out)
-	return out
 }
 
 // instantiateVersion bakes a concrete value into a copy of the template body: the

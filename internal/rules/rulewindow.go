@@ -111,16 +111,11 @@ func formatConditionList(op string, body any) string {
 	return op + "(" + strings.Join(parts, ", ") + ")"
 }
 
-// BuildRuleWindowReports snapshots remediation and alert rules after their
+// BuildRuleWindowReportsAt snapshots remediation and alert rules after their
 // windows were updated for the cycle, evaluating conditions under the caller's
 // cycle context (the probes are memoized, but a cancelled cycle must not be
-// outlived). eval may be nil (condition stays false).
-func BuildRuleWindowReports(ctx context.Context, ruleSet []Rule, windows map[string]*WindowState, eval func(context.Context, Rule) (bool, error)) []RuleWindowReport {
-	return BuildRuleWindowReportsAt(ctx, ruleSet, windows, time.Now(), eval)
-}
-
-// BuildRuleWindowReportsAt is BuildRuleWindowReports with an explicit read time
-// for duration-based windows.
+// outlived). at is the read time for duration-based windows. eval may be nil
+// (condition stays false).
 func BuildRuleWindowReportsAt(ctx context.Context, ruleSet []Rule, windows map[string]*WindowState, at time.Time, eval func(context.Context, Rule) (bool, error)) []RuleWindowReport {
 	var out []RuleWindowReport
 	for i := range ruleSet {

@@ -208,13 +208,6 @@ func fillVersionFrom(ctx context.Context, runner execx.Runner, cfg *config.Confi
 	r.VersionSource = provider.Name
 }
 
-// Inspect probes a single resolved catalog application: it stats the binary,
-// runs health to confirm it runs when configured, and captures the version when
-// available.
-func Inspect(ctx context.Context, runner execx.Runner, name string, resolved config.Resolved, opts ...Option) Report {
-	return inspectResolved(ctx, runner, name, resolved, config.CategoryApp, opts...)
-}
-
 func inspectResolved(
 	ctx context.Context,
 	runner execx.Runner,
