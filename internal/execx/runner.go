@@ -57,6 +57,8 @@ type Runner interface {
 }
 
 // RunnerOrDefault returns runner, or the native command runner when runner is nil.
+//
+//nolint:ireturn // The function preserves the caller-supplied Runner abstraction.
 func RunnerOrDefault(runner Runner) Runner {
 	if runner == nil {
 		return CommandRunner{}
