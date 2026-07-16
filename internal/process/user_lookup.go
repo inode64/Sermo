@@ -195,6 +195,7 @@ func (l *UserLookup) lookupName(id uint32, native, getent nameResolver) (string,
 	return lookupWithMode(l.mode, id, native, getent)
 }
 
+//nolint:ireturn // The generic result preserves the typed resolver contract.
 func lookupWithMode[query, result any](mode string, value query, native, getent func(query) (result, bool)) (result, bool) {
 	var zero result
 	switch mode {
