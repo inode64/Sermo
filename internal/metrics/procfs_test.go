@@ -52,6 +52,12 @@ func TestOSReaderProcfs(t *testing.T) {
 	if _, _, ok := r.ProcessIO(pid); !ok {
 		t.Error("ProcessIO(self) not ok")
 	}
+	if count, ok := r.ProcessFDs(pid); !ok || count == 0 {
+		t.Errorf("ProcessFDs(self) = (%d, %v); want ok with count > 0", count, ok)
+	}
+	if count, ok := r.ProcessThreads(pid); !ok || count == 0 {
+		t.Errorf("ProcessThreads(self) = (%d, %v); want ok with count > 0", count, ok)
+	}
 }
 
 func TestParseProcMeminfoTotals(t *testing.T) {
