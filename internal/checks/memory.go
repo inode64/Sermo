@@ -3,15 +3,7 @@ package checks
 import (
 	"context"
 	"fmt"
-	"os"
-	"sermo/internal/metrics"
-	"strings"
 	"time"
-)
-
-const (
-	meminfoMemTotalPrefix     = "MemTotal:"
-	meminfoMemAvailablePrefix = "MemAvailable:"
 )
 
 // MemorySample is one observation of system RAM: total bytes and the kernel's
@@ -72,17 +64,9 @@ func (c memoryCheck) Run(_ context.Context) Result {
 
 // defaultMemorySampler reads MemTotal/MemAvailable from meminfo.
 func defaultMemorySampler() (MemorySample, error) {
-	data, err := os.ReadFile(procMeminfoPath)
+	info, err := readMeminfo()
 	if err != nil {
 		return MemorySample{}, err
 	}
-	var s MemorySample
-	for line := range strings.SplitSeq(string(data), checkLineSeparator) {
-		if v, ok := strings.CutPrefix(line, meminfoMemTotalPrefix); ok {
-			s.TotalBytes, _ = metrics.MeminfoKB(v)
-		} else if v, ok := strings.CutPrefix(line, meminfoMemAvailablePrefix); ok {
-			s.AvailableBytes, _ = metrics.MeminfoKB(v)
-		}
-	}
-	return s, nil
+	return MemorySample{TotalBytes: info.memoryTotalBytes, AvailableBytes: info.memoryAvailableBytes}, nil
 }
