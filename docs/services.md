@@ -331,13 +331,14 @@ apps: [java, "tomcat-${version}"]
 
 On resolution each linked app's preflight checks are injected into the service's
 preflight under keys namespaced by the app name (`<app>-<check>`), carrying the
-app's own `variables.binary` path, health probe and version command. When a
-service links
-several apps, each one's checks stay distinct — e.g. `backrest`'s
-`apps: [backrest, restic]`
-yields `backrest-binary`, `backrest-health`, `backrest-version`,
-`restic-binary`, `restic-health`, `restic-version`, so a missing or unhealthy
-`restic` raises its own alert separate from `backrest`:
+app's own `variables.binary` path, health probe and version command. Link an app
+only when the service action itself requires it. For example, Backrest can be
+monitored and restarted without `restic`; `restic` is required by a backup
+operation, which reports its own error if the binary is absent. Likewise,
+Samba's `winbindd` belongs in an `enable_if`-guarded process/watch, not in
+`apps`, because it depends on the host's Samba configuration.
+
+When a service links several required apps, each one's checks stay distinct:
 
 ```yaml
 preflight:
@@ -1137,9 +1138,10 @@ optional because some systemd units publish `MainPID` even when the declared
 An entry under `processes`, `watches` or `preflight` may carry an
 `enable_if` guard that keeps it only when a key in a distro config file satisfies
 a predicate; otherwise the entry is dropped during service resolution. This
-models components that are optional per host — e.g. a Samba profile that links a
-`winbindd` app can monitor `winbindd` only when `/etc/conf.d/samba`'s
-`daemon_list` names it:
+models components that are optional per host — e.g. a Samba profile monitors
+`winbindd` only when `/etc/conf.d/samba`'s `daemon_list` names it. Do not link
+such a component under `apps`, because linked apps are mandatory preflight
+dependencies for service operations:
 
 ```yaml
 processes:

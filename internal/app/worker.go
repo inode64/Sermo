@@ -855,15 +855,19 @@ func (w *Worker) acknowledgeChanges() {
 // first non-empty line, so a change is never silently missed.
 func (w *Worker) changedAppVersion(ctx context.Context, app string, level int) (bool, error) {
 	if w.artifactSamples != nil {
-		if raw, status, sampled := w.artifactSamples.AppVersion(app); sampled {
-			if appinspect.IsNotInstalledStatus(status) {
-				return false, nil
-			}
-			if status != appinspect.StatusOK {
-				return false, errors.New(status)
-			}
-			return w.compareAppVersion(app, level, raw)
+		raw, status, sampled := w.artifactSamples.AppVersion(app)
+		if !sampled {
+			// Artifact watches own app probes. Waiting for the first sample avoids
+			// turning an absent optional binary into a service-rule error.
+			return false, nil
 		}
+		if appinspect.IsNotInstalledStatus(status) {
+			return false, nil
+		}
+		if status != appinspect.StatusOK {
+			return false, errors.New(status)
+		}
+		return w.compareAppVersion(app, level, raw)
 	}
 	vc, ok := w.appVersionCmd[app]
 	if !ok || len(vc.argv) == 0 {

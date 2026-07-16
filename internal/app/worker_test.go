@@ -577,6 +577,27 @@ func TestCycleAppVersionChangeUsesArtifactSample(t *testing.T) {
 	}
 }
 
+func TestCycleUnsampledArtifactAppDefersChangedRule(t *testing.T) {
+	runner := &sequenceRunner{stdout: []string{"containerd v9.9.9"}}
+	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
+	w := appVersionWorker(h, runner, "patch")
+	samples := NewArtifactSamples()
+	samples.RegisterApp("containerd")
+	w.artifactSamples = samples
+
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+	if len(h.ops) != 0 {
+		t.Fatalf("unsampled app must not restart, ops=%v", h.ops)
+	}
+	if _, ok := h.eventOf(eventKindError); ok {
+		t.Fatalf("unsampled app must not emit a rule evaluation error, events=%+v", h.events)
+	}
+	if runner.calls != 0 {
+		t.Fatalf("worker must wait for the artifact sample, calls=%d", runner.calls)
+	}
+}
+
 func TestCycleMissingArtifactAppSkipsChangedRule(t *testing.T) {
 	runner := &sequenceRunner{stdout: []string{"containerd v9.9.9"}}
 	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
