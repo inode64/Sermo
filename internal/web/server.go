@@ -1450,45 +1450,57 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.dashboardSnapshot(r.Context(), seriesSince(r)))
 }
 
-func (s *Server) dashboardSnapshot(ctx context.Context, since time.Duration) DashboardSnapshot {
+// CollectDashboardSnapshot collects the reload-sensitive dashboard sections in
+// parallel from one backend instance. It intentionally omits server-owned
+// readiness and liveness fields, which Server adds around the aggregate.
+func CollectDashboardSnapshot(ctx context.Context, backend Backend, since time.Duration) DashboardSnapshot {
 	var snapshot DashboardSnapshot
-	if source, ok := s.Backend.(dashboardSnapshotSource); ok {
-		if s.Readiness == nil {
-			snapshot = source.DashboardSnapshot(ctx, since)
-		} else {
-			var sourceSnapshot DashboardSnapshot
-			var ready ReadyReport
-			var wg sync.WaitGroup
-			wg.Go(func() { sourceSnapshot = source.DashboardSnapshot(ctx, since) })
-			wg.Go(func() { ready = s.Readiness.Report(ctx) })
-			wg.Wait()
-			snapshot = sourceSnapshot
-			snapshot.Ready = ready
-		}
-	} else {
-		var wg sync.WaitGroup
-		run := func(fn func()) {
-			wg.Go(fn)
-		}
-		run(func() { snapshot.Services = s.Backend.Services(ctx) })
-		run(func() { snapshot.Mounts = s.Backend.Mounts(ctx) })
-		run(func() { snapshot.Notifiers = s.Backend.Notifiers(ctx) })
-		run(func() { snapshot.Daemon = s.Backend.DaemonInfo(ctx) })
-		run(func() { snapshot.DaemonMetrics = s.Backend.DaemonMetrics(ctx, since) })
-		run(func() { snapshot.Locks = s.Backend.Locks(ctx) })
-		run(func() { snapshot.Activity = s.Backend.ActivitySummary(ctx) })
-		run(func() { snapshot.Monitoring = s.Backend.MonitoringStatus(ctx) })
-		run(func() { snapshot.Operations = s.Backend.Operations(ctx) })
-		run(func() { snapshot.HostMetrics = s.Backend.HostMetrics(ctx) })
-		if s.Readiness != nil {
-			run(func() { snapshot.Ready = s.Readiness.Report(ctx) })
-		}
-		wg.Wait()
+	var wg sync.WaitGroup
+	run := func(fn func()) {
+		wg.Go(fn)
 	}
+	run(func() { snapshot.Services = backend.Services(ctx) })
+	run(func() { snapshot.Mounts = backend.Mounts(ctx) })
+	run(func() { snapshot.Notifiers = backend.Notifiers(ctx) })
+	run(func() { snapshot.Daemon = backend.DaemonInfo(ctx) })
+	run(func() { snapshot.DaemonMetrics = backend.DaemonMetrics(ctx, since) })
+	run(func() { snapshot.Locks = backend.Locks(ctx) })
+	run(func() { snapshot.Activity = backend.ActivitySummary(ctx) })
+	run(func() { snapshot.Monitoring = backend.MonitoringStatus(ctx) })
+	run(func() { snapshot.Operations = backend.Operations(ctx) })
+	run(func() { snapshot.HostMetrics = backend.HostMetrics(ctx) })
+	wg.Wait()
+	return snapshot
+}
 
-	if s.Readiness == nil {
-		snapshot.Ready = ReadyReport{Ready: true, Status: apiStatusOK, Services: len(snapshot.Services)}
+func (s *Server) dashboardSnapshot(ctx context.Context, since time.Duration) DashboardSnapshot {
+	if source, ok := s.Backend.(dashboardSnapshotSource); ok {
+		return s.dashboardSnapshotWithReadiness(ctx, func() DashboardSnapshot {
+			return source.DashboardSnapshot(ctx, since)
+		})
 	}
+	return s.dashboardSnapshotWithReadiness(ctx, func() DashboardSnapshot {
+		return CollectDashboardSnapshot(ctx, s.Backend, since)
+	})
+}
+
+func (s *Server) dashboardSnapshotWithReadiness(ctx context.Context, collect func() DashboardSnapshot) DashboardSnapshot {
+	if s.Readiness == nil {
+		snapshot := collect()
+		snapshot.Ready = ReadyReport{Ready: true, Status: apiStatusOK, Services: len(snapshot.Services)}
+		return s.finishDashboardSnapshot(snapshot)
+	}
+	var snapshot DashboardSnapshot
+	var ready ReadyReport
+	var wg sync.WaitGroup
+	wg.Go(func() { snapshot = collect() })
+	wg.Go(func() { ready = s.Readiness.Report(ctx) })
+	wg.Wait()
+	snapshot.Ready = ready
+	return s.finishDashboardSnapshot(snapshot)
+}
+
+func (s *Server) finishDashboardSnapshot(snapshot DashboardSnapshot) DashboardSnapshot {
 	now := time.Now()
 	uptime := now.Sub(s.started)
 	snapshot.GeneratedAt = now.UTC().Format(time.RFC3339)
