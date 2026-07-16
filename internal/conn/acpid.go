@@ -23,14 +23,5 @@ func (acpidProtocol) DefaultPort() int   { return defaultPortNone }
 func (acpidProtocol) RequiresUser() bool { return false }
 
 func (acpidProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	socket := cfg.Socket
-	if socket == "" {
-		socket = DefaultACPIDSocket
-	}
-	c, err := dialUnix(ctx, socket)
-	if err != nil {
-		return Result{}, err
-	}
-	_ = c.Close()
-	return Result{Extra: map[string]string{extraSocket: socket}}, nil
+	return probeUnixSocket(ctx, cfg, DefaultACPIDSocket)
 }
