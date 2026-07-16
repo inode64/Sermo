@@ -179,7 +179,9 @@ func (e *webEntry) backendStatusSnapshot(ctx context.Context, now time.Time) (st
 	if !e.statusAt.IsZero() && now.Sub(e.statusAt) < serviceStatusCacheTTL {
 		return e.cachedStatus, e.statusAt
 	}
-	st, err := e.status(ctx)
+	statusCtx, cancel := context.WithTimeout(ctx, serviceInitQueryTimeout)
+	defer cancel()
+	st, err := e.status(statusCtx)
 	if err != nil {
 		if ctx.Err() != nil {
 			// The viewer cancelled the request mid-probe (e.g. closed the tab).
