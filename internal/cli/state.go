@@ -63,6 +63,7 @@ func (a App) runStateCompact(ctx context.Context, opts options) int {
 			cliJSONKeyMetrics:        result.Metrics,
 			cliJSONKeyDaemonMetrics:  result.DaemonMetrics,
 			cliJSONKeyServiceMetrics: result.ServiceMetrics,
+			cliJSONKeyProcessUptime:  result.ProcessUptime,
 			cliJSONKeyEvents:         result.Events,
 			cliJSONKeyVacuum:         true,
 		})
@@ -71,7 +72,7 @@ func (a App) runStateCompact(ctx context.Context, opts options) int {
 
 	fmt.Fprintf(
 		a.Stdout,
-		"compacted state before %s: pruned %d row(s) (sla=%d measurements=%d metrics=%d daemon_metrics=%d service_metrics=%d events=%d)\n",
+		"compacted state before %s: pruned %d row(s) (sla=%d measurements=%d metrics=%d daemon_metrics=%d service_metrics=%d process_uptime=%d events=%d)\n",
 		before.UTC().Format(time.RFC3339),
 		result.Rows,
 		result.SLA,
@@ -79,6 +80,7 @@ func (a App) runStateCompact(ctx context.Context, opts options) int {
 		result.Metrics,
 		result.DaemonMetrics,
 		result.ServiceMetrics,
+		result.ProcessUptime,
 		result.Events,
 	)
 	a.recordAccess(cfg, accessCommandStateCompact, "", accessStatusOK, fmt.Sprintf("pruned %d rows", result.Rows))

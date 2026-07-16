@@ -702,6 +702,7 @@ type StateCompactResult struct {
 	Metrics        int64  `json:"metrics,omitempty"`
 	DaemonMetrics  int64  `json:"daemon_metrics,omitempty"`
 	ServiceMetrics int64  `json:"service_metrics,omitempty"`
+	ProcessUptime  int64  `json:"process_uptime,omitempty"`
 	Events         int64  `json:"events,omitempty"`
 	Vacuum         bool   `json:"vacuum"`
 }
