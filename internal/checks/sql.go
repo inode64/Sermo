@@ -157,21 +157,11 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 // sqlConnConfig builds a conn.Config for a mysql/postgres sql check, defaulting
 // the port to the engine's standard port (via the conn registry).
 func sqlConnConfig(engine string, entry map[string]any) conn.Config {
-	cfg := conn.Config{
-		Host:     cfgval.AsString(entry[CheckKeyHost]),
-		User:     cfgval.AsString(entry[CheckKeyUser]),
-		Password: cfgval.AsString(entry[CheckKeyPassword]),
-		Database: cfgval.AsString(entry[CheckKeyDatabase]),
-		TLS:      tlsString(entry[CheckKeyTLS]),
-	}
-	if cfg.Host == "" {
-		cfg.Host = conn.DefaultHost
-	}
+	cfg := databaseConnectionConfig(entry)
 	if proto, ok := conn.Lookup(engine); ok {
-		cfg.Port = proto.DefaultPort()
-	}
-	if p, ok := cfgval.Int(entry[CheckKeyPort]); ok {
-		cfg.Port = p
+		cfg.Port = connectionPort(entry, proto.DefaultPort())
+	} else {
+		cfg.Port = connectionPort(entry, cfg.Port)
 	}
 	return cfg
 }

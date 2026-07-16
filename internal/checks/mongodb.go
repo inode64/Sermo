@@ -214,20 +214,8 @@ func buildMongoCheck(b base, entry map[string]any) (Check, string) {
 // port to MongoDB's standard port (via the conn registry) and carrying an
 // optional auth_source.
 func mongoConnConfig(entry map[string]any) conn.Config {
-	cfg := conn.Config{
-		Host:     cfgval.AsString(entry[CheckKeyHost]),
-		User:     cfgval.AsString(entry[CheckKeyUser]),
-		Password: cfgval.AsString(entry[CheckKeyPassword]),
-		Database: cfgval.AsString(entry[CheckKeyDatabase]),
-		TLS:      tlsString(entry[CheckKeyTLS]),
-	}
-	if cfg.Host == "" {
-		cfg.Host = conn.DefaultHost
-	}
-	cfg.Port = conn.DefaultPort(conn.ProtocolNameMongoDB)
-	if p, ok := cfgval.Int(entry[CheckKeyPort]); ok {
-		cfg.Port = p
-	}
+	cfg := databaseConnectionConfig(entry)
+	cfg.Port = connectionPort(entry, conn.DefaultPort(conn.ProtocolNameMongoDB))
 	if as := cfgval.AsString(entry[CheckKeyAuthSource]); as != "" {
 		cfg.Params = map[string]string{conn.ParamKeyAuthSource: as}
 	}
