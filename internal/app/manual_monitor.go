@@ -26,9 +26,9 @@ type ManualMonitorChange struct {
 // SyncManualActionMonitoringWithActive pauses monitoring after a successful
 // manual stop and restores it after a successful manual start when the stop
 // created the pause. Existing manual unmonitor state is preserved.
-// activeAfterStart restores monitoring for starts that reached the backend but
+// activeAfterPostflightFailure restores monitoring for starts that reached the backend but
 // failed postflight when the service is still active.
-func SyncManualActionMonitoringWithActive(store MonitorStore, service, action string, result operation.Result, stopSource, restoreSource string, activeAfterStart bool) (ManualMonitorChange, error) {
+func SyncManualActionMonitoringWithActive(store MonitorStore, service, action string, result operation.Result, stopSource, restoreSource string, activeAfterPostflightFailure bool) (ManualMonitorChange, error) {
 	if store == nil {
 		return ManualMonitorChange{}, nil
 	}
@@ -39,7 +39,7 @@ func SyncManualActionMonitoringWithActive(store MonitorStore, service, action st
 		}
 		return syncMonitorPause(store, service, service, stopSource, eventMessageMonitoringPausedAfterManualStop)
 	case rules.ActionStart, rules.ActionRestart, rules.ActionResume:
-		if !result.OK() && !activeAfterStart {
+		if !result.OK() && !activeAfterPostflightFailure {
 			return ManualMonitorChange{}, nil
 		}
 		return syncMonitorRestore(store, service, service, restoreSource,
