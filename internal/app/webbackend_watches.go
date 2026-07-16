@@ -17,7 +17,7 @@ import (
 )
 
 // Watches returns the configured host watches, including disabled ones.
-func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
+func (b *WebBackend) Watches(_ context.Context) []web.Watch {
 	if len(b.watchOrder) == 0 {
 		return []web.Watch{}
 	}
@@ -29,12 +29,12 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		if w == nil {
 			continue
 		}
-		out = append(out, b.watchView(ctx, w, system, lastActivities[name]))
+		out = append(out, b.watchView(w, system, lastActivities[name]))
 	}
 	return out
 }
 
-func (b *WebBackend) watchView(ctx context.Context, w *webWatch, system metrics.Snapshot, activity watchActivity) web.Watch {
+func (b *WebBackend) watchView(w *webWatch, system metrics.Snapshot, activity watchActivity) web.Watch {
 	storage, swap, meter, readings, summary := b.watchPresentation(w, system)
 	monitorMode := w.monitorMode
 	if monitorMode == "" {
