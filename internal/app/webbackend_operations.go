@@ -130,15 +130,12 @@ func (b *WebBackend) operationResultWithMonitor(ctx context.Context, name, actio
 		b.emitMonitorEvent(name, action, eventKindError, "", err.Error())
 	}
 	r := b.operationResult(ctx, name, action)
-	activeAfterStart := b.manualActionActiveAfterStart(ctx, name, action, r)
-	change, err := SyncManualActionMonitoringWithActive(b.store, name, action, r, state.SourceWebManualStop, state.SourceWeb, activeAfterStart)
+	activeAfterPostflightFailure := b.manualActionActiveAfterStart(ctx, name, action, r)
+	change, err := CompleteManualOperation(b.store, b.operationSettling, name, action, r, nil, ManualOperationSources{Stop: state.SourceWebManualStop, Restore: state.SourceWeb, Settling: state.SourceWeb}, activeAfterPostflightFailure)
 	if err != nil {
 		b.emitMonitorEvent(name, action, eventKindError, "", err.Error())
 	} else if change.Changed {
 		b.emitMonitorEvent(name, change.Action, eventKindAction, eventStatusOK, change.Message)
-	}
-	if err := finishOperationSettlingWithActive(b.operationSettling, name, action, state.SourceWeb, r, nil, activeAfterStart); err != nil {
-		b.emitMonitorEvent(name, action, eventKindError, "", err.Error())
 	}
 	return r
 }

@@ -1,12 +1,18 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 
 	"sermo/internal/operation"
 	"sermo/internal/rules"
 	"sermo/internal/state"
 )
+
+// ManualOperationSources identifies the caller that owns a manual operation.
+type ManualOperationSources struct {
+	Stop, Restore, Settling string
+}
 
 // ManualMonitorChange describes an automatic monitoring-state adjustment caused
 // by a successful manual service start or stop.
@@ -41,6 +47,19 @@ func SyncManualActionMonitoringWithActive(store MonitorStore, service, action st
 	default:
 		return ManualMonitorChange{}, nil
 	}
+}
+
+// CompleteManualOperation applies the common post-operation state transition.
+// It always finalizes observation settling even when monitoring state storage
+// fails, so a storage error cannot leave alerts suppressed indefinitely.
+func CompleteManualOperation(monitor MonitorStore, settling OperationSettlingStore, service, action string, result operation.Result, opErr error, sources ManualOperationSources, activeAfterPostflightFailure bool) (ManualMonitorChange, error) {
+	var change ManualMonitorChange
+	var monitorErr error
+	if opErr == nil {
+		change, monitorErr = SyncManualActionMonitoringWithActive(monitor, service, action, result, sources.Stop, sources.Restore, activeAfterPostflightFailure)
+	}
+	settlingErr := finishOperationSettlingWithActive(settling, service, action, sources.Settling, result, opErr, activeAfterPostflightFailure)
+	return change, errors.Join(monitorErr, settlingErr)
 }
 
 // syncMonitorPause records a monitoring pause for key unless the subject is
