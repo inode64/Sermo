@@ -98,13 +98,6 @@ func PressureResultData(resource string, s PressureSample) map[string]any {
 	}
 }
 
-// SamplePressure returns one live PSI observation for resource using the default
-// /proc/pressure/<resource> reader. Exposed so callers like the web backend can
-// render pressure data without running a full pressure check.
-func SamplePressure(resource string) (PressureSample, error) {
-	return defaultPressureSampler(resource)
-}
-
 // defaultPressureSampler reads and parses /proc/pressure/<resource>.
 func defaultPressureSampler(resource string) (PressureSample, error) {
 	data, err := os.ReadFile(filepath.Join(procPressureRootPath, resource))
