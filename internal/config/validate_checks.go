@@ -405,11 +405,7 @@ func validateClockFields(prefix string, fields map[string]any, add addFunc) {
 	if raw, present := fields[checks.CheckKeyMaxRootDispersion]; present && !isPositiveDuration(cfgval.String(raw)) {
 		add("%s.max_root_dispersion must be a valid positive duration", prefix)
 	}
-	if v, present := fields[checks.CheckKeyPort]; present {
-		if n, ok := cfgval.Int(v); !ok || !validTCPPort(n) {
-			add("%s.port %q must be an integer in %s", prefix, cfgval.String(v), cfgval.TCPPortRange())
-		}
-	}
+	validateOptionalTCPPort(prefix, fields, add)
 }
 
 // validatePortSpec returns "" when spec is a valid comma-separated list of ports
@@ -495,6 +491,12 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 func validateConnPort(prefix string, fields map[string]any, add addFunc) {
 	// The same TCP port range walkScalars enforces on resolved services, so a
 	// connection check behaves identically as a host watch.
+	validateOptionalTCPPort(prefix, fields, add)
+}
+
+// validateOptionalTCPPort validates a present port field using the shared
+// connection and clock-check grammar.
+func validateOptionalTCPPort(prefix string, fields map[string]any, add addFunc) {
 	if v, present := fields[checks.CheckKeyPort]; present {
 		if n, ok := cfgval.Int(v); !ok || !validTCPPort(n) {
 			add("%s.port %q must be an integer in %s", prefix, cfgval.String(v), cfgval.TCPPortRange())
