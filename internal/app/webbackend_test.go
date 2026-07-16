@@ -1736,6 +1736,24 @@ func conditionByField(conditions []web.WatchCondition, field string) web.WatchCo
 	return web.WatchCondition{}
 }
 
+func TestWatchMetricConditionsComparisons(t *testing.T) {
+	conditions := watchMetricConditions(map[string]any{
+		"errors": map[string]any{
+			checks.CheckKeyDelta:     map[string]any{checks.CheckKeyOp: ">", checks.CheckKeyValue: 10},
+			checks.CheckKeyThreshold: map[string]any{checks.CheckKeyOp: ">=", checks.CheckKeyValue: 20},
+			checks.LevelFieldUsedPct: map[string]any{checks.CheckKeyOp: ">", checks.CheckKeyValue: 80},
+		},
+	})
+	want := []web.WatchCondition{
+		{Field: "errors.delta", Op: ">", Value: "10"},
+		{Field: "errors.threshold", Op: ">=", Value: "20"},
+		{Field: "errors.used_pct", Op: ">", Value: "80"},
+	}
+	if !slices.Equal(conditions, want) {
+		t.Fatalf("watchMetricConditions = %+v, want %+v", conditions, want)
+	}
+}
+
 type webProcSampler struct {
 	match   ProcMatch
 	samples []ProcInfo

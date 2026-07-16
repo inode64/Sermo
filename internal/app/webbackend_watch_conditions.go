@@ -298,19 +298,13 @@ func watchMetricConditions(metricEntries map[string]any) []web.WatchCondition {
 		if expect := cfgval.AsString(entry[checks.CheckKeyExpect]); expect != "" {
 			out = append(out, web.WatchCondition{Field: watchMetricConditionField(metric, watchMetricSuffixExpect), Op: cfgval.CompareOpEqual, Value: expect})
 		}
-		if delta, ok := entry[checks.CheckKeyDelta].(map[string]any); ok {
-			out = append(out, web.WatchCondition{
-				Field: watchMetricConditionField(metric, watchMetricSuffixDelta),
-				Op:    cfgval.AsString(delta[checks.CheckKeyOp]),
-				Value: cfgval.String(delta[checks.CheckKeyValue]),
-			})
-		}
-		if threshold, ok := entry[checks.CheckKeyThreshold].(map[string]any); ok {
-			out = append(out, web.WatchCondition{
-				Field: watchMetricConditionField(metric, watchMetricSuffixThreshold),
-				Op:    cfgval.AsString(threshold[checks.CheckKeyOp]),
-				Value: cfgval.String(threshold[checks.CheckKeyValue]),
-			})
+		for _, comparison := range []struct{ source, suffix string }{
+			{checks.CheckKeyDelta, watchMetricSuffixDelta},
+			{checks.CheckKeyThreshold, watchMetricSuffixThreshold},
+		} {
+			if values, ok := entry[comparison.source].(map[string]any); ok {
+				out = append(out, watchMetricComparisonCondition(metric, comparison.suffix, values))
+			}
 		}
 		if change, ok := entry[checks.CheckKeyChange].(map[string]any); ok {
 			out = append(out, web.WatchCondition{
@@ -324,14 +318,18 @@ func watchMetricConditions(metricEntries map[string]any) []web.WatchCondition {
 			if !ok {
 				continue
 			}
-			out = append(out, web.WatchCondition{
-				Field: watchMetricConditionField(metric, field),
-				Op:    cfgval.AsString(m[checks.CheckKeyOp]),
-				Value: cfgval.String(m[checks.CheckKeyValue]),
-			})
+			out = append(out, watchMetricComparisonCondition(metric, field, m))
 		}
 	}
 	return out
+}
+
+func watchMetricComparisonCondition(metric, suffix string, values map[string]any) web.WatchCondition {
+	return web.WatchCondition{
+		Field: watchMetricConditionField(metric, suffix),
+		Op:    cfgval.AsString(values[checks.CheckKeyOp]),
+		Value: cfgval.String(values[checks.CheckKeyValue]),
+	}
 }
 
 func watchMetricConditionField(metric, suffix string) string {
