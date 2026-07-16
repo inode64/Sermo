@@ -60,7 +60,7 @@ type SLARecorder interface {
 // deliberately separate from SLARecorder because a running process does not
 // prove check health or produce a synthetic check result.
 type ProcessUptimeRecorder interface {
-	RecordProcessUptime(service string, startedAt, confirmedAt time.Time, source string) error
+	RecordProcessUptime(service string, startedAt, confirmedAt time.Time) error
 }
 
 // SLAReader reports a service's availability for the web detail view: the rolling
@@ -827,11 +827,11 @@ func processUptimeRecorder(deps Deps, name string, selectors []process.Selector,
 	}
 	return func(_ context.Context) {
 		confirmedAt := now()
-		startedAt, source, ok := trustedProcessUptimeStart(processes(), selectors, reader, confirmedAt)
+		startedAt, ok := trustedProcessUptimeStart(processes(), selectors, reader, confirmedAt)
 		if !ok {
 			return
 		}
-		if err := deps.ProcessUptime.RecordProcessUptime(name, startedAt, confirmedAt, source); err != nil && deps.Emit != nil {
+		if err := deps.ProcessUptime.RecordProcessUptime(name, startedAt, confirmedAt); err != nil && deps.Emit != nil {
 			deps.Emit(Event{Service: name, Kind: eventKindError, Message: "record process uptime: " + err.Error()})
 		}
 	}
@@ -843,17 +843,15 @@ func processUptimeRecorder(deps Deps, name string, selectors []process.Selector,
 // exact executable and real-user selector. Descendants and pidfile-only roots
 // are intentionally excluded: they are useful runtime data but not reliable
 // enough to backfill a daemon outage.
-func trustedProcessUptimeStart(procs []process.Process, selectors []process.Selector, reader metrics.Reader, confirmedAt time.Time) (time.Time, string, bool) {
+func trustedProcessUptimeStart(procs []process.Process, selectors []process.Selector, reader metrics.Reader, confirmedAt time.Time) (time.Time, bool) {
 	startReader, ok := reader.(processStartReader)
 	if !ok || confirmedAt.IsZero() {
-		return time.Time{}, "", false
+		return time.Time{}, false
 	}
 	strictRoles := strictProcessRoles(selectors)
 	var startedAt time.Time
-	var source string
 	for _, proc := range procs {
-		candidateSource, trusted := trustedProcessSource(proc, strictRoles)
-		if !trusted {
+		if !trustedProcess(proc, strictRoles) {
 			continue
 		}
 		processStart, found := startReader.ProcessStartTime(proc.PID)
@@ -862,13 +860,12 @@ func trustedProcessUptimeStart(procs []process.Process, selectors []process.Sele
 		}
 		if startedAt.IsZero() || processStart.Before(startedAt) {
 			startedAt = processStart
-			source = candidateSource
 		}
 	}
 	if startedAt.IsZero() {
-		return time.Time{}, "", false
+		return time.Time{}, false
 	}
-	return startedAt, source, true
+	return startedAt, true
 }
 
 func strictProcessRoles(selectors []process.Selector) map[string]bool {
@@ -881,14 +878,14 @@ func strictProcessRoles(selectors []process.Selector) map[string]bool {
 	return roles
 }
 
-func trustedProcessSource(proc process.Process, strictRoles map[string]bool) (string, bool) {
+func trustedProcess(proc process.Process, strictRoles map[string]bool) bool {
 	switch proc.Source {
 	case process.SourceBackend:
-		return process.SourceBackend, true
+		return true
 	case process.SelectorCommandMatch:
-		return process.SelectorCommandMatch, strictRoles[proc.Role]
+		return strictRoles[proc.Role]
 	default:
-		return "", false
+		return false
 	}
 }
 

@@ -11,10 +11,10 @@ func TestRecordProcessUptimeExtendsSameProcess(t *testing.T) {
 	first := started.Add(time.Hour)
 	last := first.Add(10 * time.Minute)
 
-	if err := s.RecordProcessUptime("web", started, first, "backend-main"); err != nil {
+	if err := s.RecordProcessUptime("web", started, first); err != nil {
 		t.Fatalf("RecordProcessUptime first: %v", err)
 	}
-	if err := s.RecordProcessUptime("web", started, last, "backend-main"); err != nil {
+	if err := s.RecordProcessUptime("web", started, last); err != nil {
 		t.Fatalf("RecordProcessUptime extend: %v", err)
 	}
 
@@ -25,21 +25,21 @@ func TestRecordProcessUptimeExtendsSameProcess(t *testing.T) {
 	if len(spans) != 1 {
 		t.Fatalf("got %d spans, want 1: %+v", len(spans), spans)
 	}
-	if got := spans[0]; !got.StartedAt.Equal(started) || !got.ConfirmedAt.Equal(last) || got.Source != "backend-main" {
-		t.Fatalf("span = %+v, want start=%s confirmed=%s source=backend-main", got, started, last)
+	if got := spans[0]; !got.StartedAt.Equal(started) || !got.ConfirmedAt.Equal(last) {
+		t.Fatalf("span = %+v, want start=%s confirmed=%s", got, started, last)
 	}
 }
 
 func TestProcessUptimeSpansOnlyReturnsIntersectingRanges(t *testing.T) {
 	s := openTemp(t)
 	base := time.Date(2026, 7, 16, 8, 0, 0, 0, time.UTC)
-	if err := s.RecordProcessUptime("web", base, base.Add(time.Hour), "backend-main"); err != nil {
+	if err := s.RecordProcessUptime("web", base, base.Add(time.Hour)); err != nil {
 		t.Fatalf("RecordProcessUptime web: %v", err)
 	}
-	if err := s.RecordProcessUptime("web", base.Add(2*time.Hour), base.Add(3*time.Hour), "backend-main"); err != nil {
+	if err := s.RecordProcessUptime("web", base.Add(2*time.Hour), base.Add(3*time.Hour)); err != nil {
 		t.Fatalf("RecordProcessUptime later: %v", err)
 	}
-	if err := s.RecordProcessUptime("db", base, base.Add(3*time.Hour), "backend-main"); err != nil {
+	if err := s.RecordProcessUptime("db", base, base.Add(3*time.Hour)); err != nil {
 		t.Fatalf("RecordProcessUptime other service: %v", err)
 	}
 
@@ -61,16 +61,14 @@ func TestRecordProcessUptimeRejectsInvalidSpan(t *testing.T) {
 		service   string
 		startedAt time.Time
 		confirmed time.Time
-		source    string
 	}{
-		{name: "empty service", startedAt: at, confirmed: at, source: "backend-main"},
-		{name: "zero start", service: "web", confirmed: at, source: "backend-main"},
-		{name: "zero confirmation", service: "web", startedAt: at, source: "backend-main"},
-		{name: "reversed", service: "web", startedAt: at, confirmed: at.Add(-time.Second), source: "backend-main"},
-		{name: "empty source", service: "web", startedAt: at, confirmed: at},
+		{name: "empty service", startedAt: at, confirmed: at},
+		{name: "zero start", service: "web", confirmed: at},
+		{name: "zero confirmation", service: "web", startedAt: at},
+		{name: "reversed", service: "web", startedAt: at, confirmed: at.Add(-time.Second)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := s.RecordProcessUptime(tc.service, tc.startedAt, tc.confirmed, tc.source); err == nil {
+			if err := s.RecordProcessUptime(tc.service, tc.startedAt, tc.confirmed); err == nil {
 				t.Fatal("RecordProcessUptime error = nil, want validation error")
 			}
 		})
@@ -80,10 +78,10 @@ func TestRecordProcessUptimeRejectsInvalidSpan(t *testing.T) {
 func TestPruneProcessUptimeKeepsSpanConfirmedAtCutoff(t *testing.T) {
 	s := openTemp(t)
 	cutoff := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
-	if err := s.RecordProcessUptime("old", cutoff.Add(-2*time.Hour), cutoff.Add(-time.Second), "backend-main"); err != nil {
+	if err := s.RecordProcessUptime("old", cutoff.Add(-2*time.Hour), cutoff.Add(-time.Second)); err != nil {
 		t.Fatalf("RecordProcessUptime old: %v", err)
 	}
-	if err := s.RecordProcessUptime("current", cutoff.Add(-time.Hour), cutoff, "backend-main"); err != nil {
+	if err := s.RecordProcessUptime("current", cutoff.Add(-time.Hour), cutoff); err != nil {
 		t.Fatalf("RecordProcessUptime current: %v", err)
 	}
 
@@ -106,12 +104,12 @@ func TestPruneProcessUptimeKeepsSpanConfirmedAtCutoff(t *testing.T) {
 func TestProcessUptimeReportShowsWindowCoverageWithoutDoubleCounting(t *testing.T) {
 	s := openTemp(t)
 	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
-	if err := s.RecordProcessUptime("web", now.Add(-30*time.Minute), now, "backend-main"); err != nil {
+	if err := s.RecordProcessUptime("web", now.Add(-30*time.Minute), now); err != nil {
 		t.Fatalf("RecordProcessUptime first: %v", err)
 	}
 	// An overlapping confirmation for the same service must not make the 1-hour
 	// coverage exceed the actual 30-minute process lifetime.
-	if err := s.RecordProcessUptime("web", now.Add(-20*time.Minute), now.Add(-10*time.Minute), "backend-main"); err != nil {
+	if err := s.RecordProcessUptime("web", now.Add(-20*time.Minute), now.Add(-10*time.Minute)); err != nil {
 		t.Fatalf("RecordProcessUptime overlap: %v", err)
 	}
 
