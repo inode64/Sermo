@@ -79,10 +79,17 @@ const (
 
 // Discovery source labels.
 const (
-	sourceBackend = "backend"
+	// SourceBackend identifies a process reported by the service backend (for
+	// example systemd's control group or a container's init PID set).
+	SourceBackend = "backend"
+	// SourceChild identifies a descendant added while expanding a discovered
+	// service process tree.
+	SourceChild = RoleChild
+
+	sourceBackend = SourceBackend
 	sourcePidfile = SelectorPidfile
 	sourceCommand = SelectorCommandMatch
-	sourceChild   = RoleChild
+	sourceChild   = SourceChild
 )
 
 // Process Role labels for non-selector members: backend seeds are the service's

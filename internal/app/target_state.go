@@ -10,6 +10,7 @@ import (
 // the web dashboard.
 const (
 	TargetStateDisabled   = "disabled"
+	TargetStateActive     = "active"
 	TargetStateStarted    = "started"
 	TargetStatePaused     = "paused"
 	TargetStateStopped    = "stopped"
@@ -29,14 +30,17 @@ const (
 
 // ServiceState folds config, backend status and monitoring health into the
 // operator-facing activity state shown by sermoctl and the web dashboard. The
-// state is intentionally a single service-axis value: "monitored" means the
-// service is active, monitoring is active and the current daemon generation has
-// the indicators needed to show it as observed.
-func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, observed, observabilityReady bool) string {
+// state is intentionally a single service-axis value: "active" means a trusted
+// service process is currently confirmed, while "monitored" additionally means
+// the current daemon generation has every indicator needed to show it observed.
+func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, observed, observabilityReady, processActive bool) string {
 	if !enabled {
 		return TargetStateDisabled
 	}
 	if monitored && !observed {
+		if processActive && strings.EqualFold(backendStatus, string(servicemgr.StatusActive)) {
+			return TargetStateActive
+		}
 		return TargetStateStarting
 	}
 	active := strings.EqualFold(backendStatus, string(servicemgr.StatusActive))
@@ -60,9 +64,15 @@ func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, ob
 	case checkHealthFailing:
 		return TargetStateFailed
 	case checkHealthUnknown:
+		if processActive {
+			return TargetStateActive
+		}
 		return TargetStateCollecting
 	}
 	if !observabilityReady {
+		if processActive {
+			return TargetStateActive
+		}
 		return TargetStateCollecting
 	}
 	return TargetStateMonitored

@@ -15,6 +15,7 @@ func TestServiceState(t *testing.T) {
 		checkHealth   string
 		observed      bool
 		ready         bool
+		processActive bool
 		want          string
 	}{
 		{name: "disabled", enabled: false, monitored: false, backendStatus: string(servicemgr.StatusActive), observed: true, want: TargetStateDisabled},
@@ -24,6 +25,8 @@ func TestServiceState(t *testing.T) {
 		{name: "stopped unmonitored", enabled: true, monitored: false, backendStatus: string(servicemgr.StatusInactive), observed: true, want: TargetStateStopped},
 		{name: "failed unmonitored", enabled: true, monitored: false, backendStatus: string(servicemgr.StatusFailed), observed: true, want: TargetStateStopped},
 		{name: "collecting active healthy without observability", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: TargetStateOK, observed: true, want: TargetStateCollecting},
+		{name: "active trusted process without observability", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: TargetStateOK, observed: true, processActive: true, want: TargetStateActive},
+		{name: "active trusted process before observed cycle", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), processActive: true, want: TargetStateActive},
 		{name: "monitored active healthy", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: TargetStateOK, observed: true, ready: true, want: TargetStateMonitored},
 		{name: "paused monitored", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusPaused), checkHealth: TargetStateOK, observed: true, want: TargetStateFailed},
 		{name: "collecting active unknown checks", enabled: true, monitored: true, backendStatus: string(servicemgr.StatusActive), checkHealth: checkHealthUnknown, observed: true, ready: true, want: TargetStateCollecting},
@@ -32,7 +35,7 @@ func TestServiceState(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := ServiceState(tt.enabled, tt.monitored, tt.backendStatus, tt.checkHealth, tt.observed, tt.ready); got != tt.want {
+			if got := ServiceState(tt.enabled, tt.monitored, tt.backendStatus, tt.checkHealth, tt.observed, tt.ready, tt.processActive); got != tt.want {
 				t.Fatalf("ServiceState() = %q, want %q", got, tt.want)
 			}
 		})

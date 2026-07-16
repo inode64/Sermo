@@ -69,6 +69,9 @@ type Worker struct {
 	// aggregate) into the LiveMetrics registry for the web UI. Nil when no live
 	// metrics registry is wired.
 	LiveSample func(ctx context.Context)
+	// RecordProcessUptime records continuity evidence for one trusted process
+	// instance. It never records a check result, metric, or SLA sample.
+	RecordProcessUptime func(ctx context.Context)
 	// Operate runs an action through the operation engine.
 	Operate func(ctx context.Context, action string) operation.Result
 	// Cascade, when set (the service declares also_apply), runs the action across
@@ -247,6 +250,9 @@ func (w *Worker) prepareCycle(ctx context.Context, settleKey string, now func() 
 
 func (w *Worker) runChecks(ctx context.Context) (checks.Deps, map[string]checks.Result) {
 	deps := w.CheckDeps
+	if w.RecordProcessUptime != nil {
+		w.RecordProcessUptime(ctx)
+	}
 	if w.LiveSample != nil {
 		w.LiveSample(ctx) // live CPU gauge for the web; runs every monitored cycle
 	}
