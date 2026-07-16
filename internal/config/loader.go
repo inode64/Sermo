@@ -452,16 +452,7 @@ func (c *Config) loadAppDirEntries(dir string, recursive bool) error {
 }
 
 func (c *Config) loadNotifierDirEntries(dir string, recursive bool) error {
-	names, subdirs, err := configDirEntries(dir, pathKeyNotifiers)
-	if err != nil {
-		return err
-	}
-
-	for _, name := range names {
-		doc, err := loadDocument(filepath.Join(dir, name))
-		if err != nil {
-			return err
-		}
+	return loadDocumentTree(dir, pathKeyNotifiers, recursive, func(doc *Document) error {
 		handled, err := c.mergeNotifierFragment(doc)
 		if err != nil {
 			return err
@@ -469,65 +460,45 @@ func (c *Config) loadNotifierDirEntries(dir string, recursive bool) error {
 		if !handled {
 			return fmt.Errorf("%s: %s config directories only support top-level %s", doc.Path, pathKeyNotifiers, pathKeyNotifiers)
 		}
-	}
-	if !recursive {
 		return nil
-	}
-	for _, name := range subdirs {
-		if err := c.loadNotifierDirEntries(filepath.Join(dir, name), recursive); err != nil {
-			return err
-		}
-	}
-	return nil
+	})
 }
 
 func (c *Config) loadWatchDirEntries(dir string, recursive bool) error {
-	names, subdirs, err := configDirEntries(dir, pathKeyWatches)
-	if err != nil {
-		return err
-	}
-
-	for _, name := range names {
-		doc, err := loadDocument(filepath.Join(dir, name))
-		if err != nil {
-			return err
-		}
-		if err := c.mergeWatchDocument(doc); err != nil {
-			return err
-		}
-	}
-	if !recursive {
-		return nil
-	}
-	for _, name := range subdirs {
-		if err := c.loadWatchDirEntries(filepath.Join(dir, name), recursive); err != nil {
-			return err
-		}
-	}
-	return nil
+	return loadDocumentTree(dir, pathKeyWatches, recursive, c.mergeWatchDocument)
 }
 
 func (c *Config) loadKindDirEntries(dir, label, kind string, recursive bool) error {
-	names, subdirs, err := configDirEntries(dir, label)
-	if err != nil {
-		return err
-	}
-
-	for _, name := range names {
-		doc, err := loadDocument(filepath.Join(dir, name))
-		if err != nil {
-			return err
-		}
+	return loadDocumentTree(dir, label, recursive, func(doc *Document) error {
 		if err := assignKind(doc, kind); err != nil {
 			return err
 		}
 		c.add(doc)
+		return nil
+	})
+}
+
+// loadDocumentTree reads YAML documents from dir, optionally descending into
+// its subdirectories. consume owns the kind-specific merge or registration.
+func loadDocumentTree(dir, label string, recursive bool, consume func(*Document) error) error {
+	names, subdirs, err := configDirEntries(dir, label)
+	if err != nil {
+		return err
+	}
+	for _, name := range names {
+		doc, err := loadDocument(filepath.Join(dir, name))
+		if err != nil {
+			return err
+		}
+		if err := consume(doc); err != nil {
+			return err
+		}
 	}
 	if !recursive {
 		return nil
 	}
 	for _, name := range subdirs {
-		if err := c.loadKindDirEntries(filepath.Join(dir, name), label, kind, recursive); err != nil {
+		if err := loadDocumentTree(filepath.Join(dir, name), label, recursive, consume); err != nil {
 			return err
 		}
 	}
