@@ -245,14 +245,7 @@ func BuildWithWarnings(section map[string]any, deps Deps) ([]Built, []BuildWarni
 		return nil, nil
 	}
 
-	runner := deps.Runner
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
-	client := deps.HTTPClient
-	if client == nil {
-		client = &http.Client{}
-	}
+	runner, client := buildDependencies(deps)
 
 	var built []Built
 	var warnings []BuildWarning
@@ -456,14 +449,7 @@ func buildSqliteCheck(b base, entry map[string]any) (Check, string) {
 // by inline rule conditions. It returns an error rather than a
 // warning so the caller can surface a malformed inline probe.
 func BuildInline(name string, entry map[string]any, deps Deps) (Check, error) {
-	runner := deps.Runner
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
-	client := deps.HTTPClient
-	if client == nil {
-		client = &http.Client{}
-	}
+	runner, client := buildDependencies(deps)
 	typ := cfgval.AsString(entry[CheckKeyType])
 	b := base{
 		name:      name,
@@ -476,6 +462,18 @@ func BuildInline(name string, entry map[string]any, deps Deps) (Check, error) {
 		return nil, errors.New(warn)
 	}
 	return withSummary(check, entry), nil
+}
+
+func buildDependencies(deps Deps) (execx.Runner, *http.Client) {
+	runner := deps.Runner
+	if runner == nil {
+		runner = execx.CommandRunner{}
+	}
+	client := deps.HTTPClient
+	if client == nil {
+		client = &http.Client{}
+	}
+	return runner, client
 }
 
 // Outcome summarizes a preflight or verification run.
