@@ -522,14 +522,13 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 		docs[name] = doc
 	}
 
-	preview, err := yaml.Marshal(docsPreview(docs))
-	if err != nil {
-		return a.fail(opts, fmt.Sprintf("render services: %v", err))
-	}
-	fmt.Fprintf(a.Stdout, "\nGenerated services (%s):\n\n%s\n", res.Summary, preview)
-	if !p.Confirm("Write these service files and enable them?", false) {
-		fmt.Fprintln(a.Stdout, "Not written — paste the blocks above into files under a paths.services directory.")
-		return exitSuccess
+	confirmed, code := a.confirmWizardDocs(
+		p, opts, docs, "Generated services", res.Summary, "services",
+		"Write these service files and enable them?",
+		"Not written — paste the blocks above into files under a paths.services directory.",
+	)
+	if !confirmed {
+		return code
 	}
 
 	// Step-9 cleanup: offer to delete managed service files whose catalog service
@@ -567,33 +566,15 @@ func serviceCleanupDirs(globalPath string, _ *config.Config) []string {
 // set. Mirrors planWizardWatchDeletes for the service wizard; a no-op when
 // detection is empty so a valid file is never proposed for deletion.
 func planStaleServiceDeletes(p *assist.Prompt, dir string, detected map[string]bool) ([]string, error) {
-	if len(detected) == 0 {
-		return nil, nil
+	return planStaleDeletes(p, dir, wizardNounService, "services", detected, serviceStaleFile)
+}
+
+func serviceStaleFile(path string, detected map[string]bool) staleFile {
+	target := serviceFileTarget(path)
+	if target == "" || !serviceTargetFamilyDetected(target, detected) || detected[target] {
+		return staleFile{}
 	}
-	entries, err := os.ReadDir(dir)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read services directory %s: %w", dir, err)
-	}
-	var stale []staleFile
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		if !strings.HasSuffix(name, yamlFileExt) && !strings.HasSuffix(name, yamlLongFileExt) {
-			continue
-		}
-		path := filepath.Join(dir, name)
-		target := serviceFileTarget(path)
-		if target == "" || !serviceTargetFamilyDetected(target, detected) || detected[target] {
-			continue
-		}
-		stale = append(stale, staleFile{path: path, label: path + " (" + target + ")"})
-	}
-	return confirmStaleDeletes(p, dir, wizardNounService, stale), nil
+	return staleFile{path: path, label: path + " (" + target + ")"}
 }
 
 // serviceFileTarget returns the typed target a managed service file controls.

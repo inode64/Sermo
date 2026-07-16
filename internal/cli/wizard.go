@@ -521,12 +521,6 @@ func watchTypeDirName(checkType string) string {
 	}
 }
 
-type wizardWatchFile struct {
-	Path    string
-	Names   []string // watch names declared in the file
-	Targets []string // host targets monitored (storage paths, interface names)
-}
-
 // planWizardWatchDeletes offers to delete managed wizard output files whose
 // target is no longer present on the host — the step-9 cleanup of
 // docs/wizards.md ("delete the files whose target we no longer detect").
@@ -536,22 +530,7 @@ type wizardWatchFile struct {
 // without host targets) nothing is offered, so a valid file is never proposed
 // for deletion.
 func planWizardWatchDeletes(p *assist.Prompt, targetDir string, detected map[string]bool, noun string) ([]string, error) {
-	files, err := existingWizardWatchFiles(targetDir)
-	if err != nil {
-		return nil, err
-	}
-	var stale []staleFile
-	for _, f := range files {
-		if !targetsStale(f.Targets, detected) {
-			continue
-		}
-		label := f.Path
-		if len(f.Names) > 0 {
-			label += " (" + strings.Join(f.Names, ", ") + ")"
-		}
-		stale = append(stale, staleFile{path: f.Path, label: label})
-	}
-	return confirmStaleDeletes(p, targetDir, noun, stale), nil
+	return planStaleDeletes(p, targetDir, noun, "existing watch", detected, wizardWatchStaleFile)
 }
 
 // staleFile is a managed config file whose target is no longer detected on the
@@ -560,6 +539,40 @@ func planWizardWatchDeletes(p *assist.Prompt, targetDir string, detected map[str
 type staleFile struct {
 	path  string
 	label string
+}
+
+type staleFilePlanner func(path string, detected map[string]bool) staleFile
+
+// planStaleDeletes finds managed YAML files whose planner can prove their
+// target is no longer detected, then delegates the interactive confirmation.
+// Each wizard keeps its own target parser and stale policy; only filesystem
+// traversal and operator prompts are shared.
+func planStaleDeletes(p *assist.Prompt, dir, noun, directoryLabel string, detected map[string]bool, plan staleFilePlanner) ([]string, error) {
+	if len(detected) == 0 {
+		return nil, nil
+	}
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read %s directory %s: %w", directoryLabel, dir, err)
+	}
+	var stale []staleFile
+	for _, entry := range entries {
+		if entry.IsDir() || !isYAMLFile(entry.Name()) {
+			continue
+		}
+		file := plan(filepath.Join(dir, entry.Name()), detected)
+		if file.path != "" {
+			stale = append(stale, file)
+		}
+	}
+	return confirmStaleDeletes(p, dir, noun, stale), nil
+}
+
+func isYAMLFile(name string) bool {
+	return strings.HasSuffix(name, yamlFileExt) || strings.HasSuffix(name, yamlLongFileExt)
 }
 
 // confirmStaleDeletes asks whether to review the stale files, then confirms each
@@ -647,33 +660,22 @@ func addDetectedServiceKeys[T any](keys map[string]bool, family string, detect f
 	}
 }
 
-func existingWizardWatchFiles(targetDir string) ([]wizardWatchFile, error) {
-	entries, err := os.ReadDir(targetDir)
-	if os.IsNotExist(err) {
-		return nil, nil
+// wizardWatchStaleFile returns a stale-file candidate only when every target
+// from the managed watch document is absent from the detected set.
+func wizardWatchStaleFile(path string, detected map[string]bool) staleFile {
+	names, targets := parseWatchFile(path)
+	if !targetsStale(targets, detected) {
+		return staleFile{}
 	}
-	if err != nil {
-		return nil, fmt.Errorf("read existing watch directory %s: %w", targetDir, err)
+	label := path
+	if len(names) > 0 {
+		label += " (" + strings.Join(names, ", ") + ")"
 	}
-	var files []wizardWatchFile
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if !strings.HasSuffix(name, yamlFileExt) && !strings.HasSuffix(name, yamlLongFileExt) {
-			continue
-		}
-		path := filepath.Join(targetDir, name)
-		names, targets := parseWatchFile(path)
-		files = append(files, wizardWatchFile{Path: path, Names: names, Targets: targets})
-	}
-	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
-	return files, nil
+	return staleFile{path: path, label: label}
 }
 
-// parseWatchFile reads a managed watch document once and
-// returns both the names it declares and the host targets they monitor (the
+// parseWatchFile reads a managed watch document once and returns the names it
+// declares and the host targets they monitor (the
 // `check.path` of storage watches and the `check.interface` of
 // net/route/icmp/dns watches — keys that match detectedTargetKeys). nil/nil
 // on any read or parse error.
@@ -699,7 +701,6 @@ func parseWatchFile(path string) (names, targets []string) {
 		if s, _ := check[wizardFieldInterface].(string); s != "" {
 			targets = append(targets, s)
 		}
-		return names, targets
 	}
 	return names, targets
 }
@@ -711,6 +712,21 @@ func deleteWizardConfigFiles(files []string) error {
 		}
 	}
 	return nil
+}
+
+// confirmWizardDocs renders the generated documents and asks for the one
+// explicit write confirmation shared by service and mount wizard output.
+func (a App) confirmWizardDocs(p *assist.Prompt, opts options, docs map[string]map[string]any, heading, summary, renderLabel, question, declined string) (bool, int) {
+	preview, err := yaml.Marshal(docsPreview(docs))
+	if err != nil {
+		return false, a.fail(opts, fmt.Sprintf("render %s: %v", renderLabel, err))
+	}
+	fmt.Fprintf(a.Stdout, "\n%s (%s):\n\n%s\n", heading, summary, preview)
+	if p.Confirm(question, false) {
+		return true, exitSuccess
+	}
+	fmt.Fprintln(a.Stdout, declined)
+	return false, exitSuccess
 }
 
 func watchConfigFileName(name string) string {

@@ -5,7 +5,6 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/goccy/go-yaml"
 
@@ -40,14 +39,13 @@ func (a App) writeWizardMounts(p *assist.Prompt, opts options, globalPath string
 		docs[name] = doc
 	}
 
-	preview, err := yaml.Marshal(docsPreview(docs))
-	if err != nil {
-		return a.fail(opts, fmt.Sprintf("render mounts: %v", err))
-	}
-	fmt.Fprintf(a.Stdout, "\nGenerated mount watches (%s):\n\n%s\n", res.Summary, preview)
-	if !p.Confirm("Write these mount watch files and enable them?", false) {
-		fmt.Fprintln(a.Stdout, "Not written — paste the blocks above into files under a directory listed in paths.watches.")
-		return exitSuccess
+	confirmed, code := a.confirmWizardDocs(
+		p, opts, docs, "Generated mount watches", res.Summary, "mounts",
+		"Write these mount watch files and enable them?",
+		"Not written — paste the blocks above into files under a directory listed in paths.watches.",
+	)
+	if !confirmed {
+		return code
 	}
 
 	targetDir := wizardMountTargetDir(globalPath)
@@ -117,33 +115,15 @@ func writeMountFiles(globalPath string, docs map[string]map[string]any) (string,
 }
 
 func planStaleMountDeletes(p *assist.Prompt, dir string, detected map[string]bool) ([]string, error) {
-	if len(detected) == 0 {
-		return nil, nil
+	return planStaleDeletes(p, dir, wizardNounMount, "mount watches", detected, mountStaleFile)
+}
+
+func mountStaleFile(path string, detected map[string]bool) staleFile {
+	target := mountFileTarget(path)
+	if target == "" || detected[target] {
+		return staleFile{}
 	}
-	entries, err := os.ReadDir(dir)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read mount watches directory %s: %w", dir, err)
-	}
-	var stale []staleFile
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
-		if !strings.HasSuffix(name, yamlFileExt) && !strings.HasSuffix(name, yamlLongFileExt) {
-			continue
-		}
-		path := filepath.Join(dir, name)
-		target := mountFileTarget(path)
-		if target == "" || detected[target] {
-			continue
-		}
-		stale = append(stale, staleFile{path: path, label: path + " (" + target + ")"})
-	}
-	return confirmStaleDeletes(p, dir, wizardNounMount, stale), nil
+	return staleFile{path: path, label: path + " (" + target + ")"}
 }
 
 func mountFileTarget(path string) string {
