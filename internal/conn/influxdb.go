@@ -44,26 +44,7 @@ func (influxdbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // (host/port/tls — https when tls is set). Exported so the influxdb-query check
 // reuses the same transport and addressing as the connection check.
 func InfluxClient(cfg Config) (*http.Client, string) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortInfluxDB
-	}
-	scheme := schemeHTTP
-	client := httpProbeClient(cfg.Interface, nil)
-	mode := normalizeTLS(cfg.TLS)
-	if mode != "" {
-		scheme = schemeHTTPS
-		tlsConfig := tlsClientConfig(host)
-		if mode == tlsSkipVerify {
-			tlsConfig.InsecureSkipVerify = true // operator chose tls: skip-verify
-		}
-		client = httpProbeClient(cfg.Interface, tlsConfig)
-	}
-	return client, scheme + urlSchemeSeparator + hostPort(host, port)
+	return httpProbeBase(cfg, defaultPortInfluxDB)
 }
 
 // influxHealth queries /health. handled is true when the result is conclusive (a

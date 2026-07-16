@@ -23,3 +23,30 @@ func httpProbeClient(iface string, tlsConfig *tls.Config) *http.Client {
 	}
 	return &http.Client{Transport: tr}
 }
+
+// httpProbeBase builds the shared client and base URL for HTTP connection
+// probes. Its client always preserves cfg.Interface through httpProbeClient;
+// TLS follows the normal probe policy (plaintext by default, or HTTPS with an
+// optional operator-selected skip-verify mode).
+func httpProbeBase(cfg Config, defaultPort int) (*http.Client, string) {
+	host := cfg.Host
+	if host == "" {
+		host = DefaultHost
+	}
+	port := cfg.Port
+	if port == 0 {
+		port = defaultPort
+	}
+	scheme := schemeHTTP
+	client := httpProbeClient(cfg.Interface, nil)
+	mode := normalizeTLS(cfg.TLS)
+	if mode != "" {
+		scheme = schemeHTTPS
+		tlsConfig := tlsClientConfig(host)
+		if mode == tlsSkipVerify {
+			tlsConfig.InsecureSkipVerify = true // operator chose tls: skip-verify
+		}
+		client = httpProbeClient(cfg.Interface, tlsConfig)
+	}
+	return client, scheme + urlSchemeSeparator + hostPort(host, port)
+}
