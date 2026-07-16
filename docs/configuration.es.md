@@ -399,8 +399,9 @@ seguro. El motor puede aumentarlo por service cuando el `stop_policy` resuelto n
 más tiempo (parada elegante más escalado de señales). El mismo límite se aplica a la
 remediación automática, las acciones de `sermoctl` y las operaciones iniciadas desde la
 web. Cuando la interfaz web está habilitada, `sermod` también establece el timeout de
-escritura del servidor HTTP a partir del plazo resuelto más largo, de modo que una
-operación larga no se corte a mitad de la petición. El valor por defecto es `90s`.
+escritura inicial del servidor HTTP a partir del plazo resuelto más largo y extiende
+cada respuesta de acción larga desde la configuración activa tras una recarga, de modo
+que una operación no se corte a mitad de la petición. El valor por defecto es `90s`.
 
 `engine.startup_delay` es una duración no negativa que retiene el daemon antes de
 iniciar su primer ciclo de comprobación, dando al host tiempo para terminar de arrancar
@@ -468,7 +469,9 @@ procesos. Cambiar su capacidad también requiere un reinicio completo, por lo
 que la recarga lo rechaza en vez de exceder brevemente un límite de seguridad
 reducido mientras operaciones antiguas conservan sus slots. `engine.interval`
 sigue siendo recargable y replanifica inmediatamente los services que heredan
-la cadencia global.
+la cadencia global. `engine.operation_timeout` también es recargable; las
+respuestas de acciones web extienden su plazo desde la configuración activa,
+incluido el timeout `stop_policy` resuelto por service.
 Las líneas base de tasa de CPU por service solo se restablecen cuando un service se
 elimina de la config en ejecución; el historial de métricas y eventos persistido
 permanece en `paths.state` hasta la retención normal o un `sermoctl state compact`

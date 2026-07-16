@@ -385,8 +385,9 @@ start/stop/restart/reload/resume. The engine may raise it per service when the r
 `stop_policy` needs longer (graceful stop plus signal escalation). The same
 limit applies to automatic remediation, `sermoctl` actions and web-initiated
 operations. When the web UI is enabled, `sermod` also sets the HTTP server's
-write timeout from the longest resolved deadline so a long operation is not cut
-off mid-request. The default is `90s`.
+initial write timeout from the longest resolved deadline and extends each long
+action response from the active configuration after a reload, so an operation is
+not cut off mid-request. The default is `90s`.
 
 `engine.startup_delay` is a non-negative duration that holds the daemon before
 it starts its first check cycle, giving the host time to finish booting so
@@ -451,7 +452,9 @@ than leaving the old web access policy active.
 Changing its capacity also requires a full restart, so a reload rejects it
 rather than briefly exceeding a reduced safety limit while old operations hold
 the previous slots. `engine.interval` remains reloadable and immediately
-reschedules services that inherit the global cadence.
+reschedules services that inherit the global cadence. `engine.operation_timeout`
+is also reloadable; web action responses extend their deadline from the active
+configuration, including a resolved per-service `stop_policy` timeout.
 Per-service CPU rate baselines are reset only when a service is removed from the
 running config; persisted metric and event history remains in `paths.state`
 until normal retention or an explicit `sermoctl state compact`.

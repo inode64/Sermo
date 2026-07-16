@@ -197,6 +197,16 @@ type WebBackend struct {
 	mountOperations   map[string]web.MountOperation
 }
 
+func (b *WebBackend) maxOperationTimeout() time.Duration {
+	if b == nil {
+		return 0
+	}
+	if b.cfg == nil {
+		return b.operationTimeout
+	}
+	return MaxOperationTimeout(b.cfg, b.operationTimeout)
+}
+
 // NewWebBackend resolves services for the web UI. All services present in the
 // loaded configuration are included in the listing (even those with `enabled: false`)
 // so that the dashboard can show the full fleet and let operators see what can be
