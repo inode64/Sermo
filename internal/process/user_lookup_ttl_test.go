@@ -15,26 +15,26 @@ func TestUserLookupNegativeCacheExpires(t *testing.T) {
 	l.now = func() time.Time { return now }
 	l.negTTL = 30 * time.Second
 
-	storeID(l, l.users, "ghost", idLookupResult{ok: false})
-	if _, cached := cachedID(l, l.users, "ghost"); !cached {
+	storeLookup(l, l.users, "ghost", lookupCacheResult[uint32]{ok: false})
+	if _, cached := cachedLookup(l, l.users, "ghost"); !cached {
 		t.Fatal("a fresh negative entry should be served from cache")
 	}
 	now = now.Add(31 * time.Second)
-	if _, cached := cachedID(l, l.users, "ghost"); cached {
+	if _, cached := cachedLookup(l, l.users, "ghost"); cached {
 		t.Fatal("an expired negative entry must be re-resolved, not served from cache")
 	}
 
 	// Positive entries never expire.
-	storeID(l, l.users, "root", idLookupResult{id: 0, ok: true})
+	storeLookup(l, l.users, "root", lookupCacheResult[uint32]{value: 0, ok: true})
 	now = now.Add(time.Hour)
-	if _, cached := cachedID(l, l.users, "root"); !cached {
+	if _, cached := cachedLookup(l, l.users, "root"); !cached {
 		t.Fatal("a positive entry must remain cached")
 	}
 
 	// The same applies to the name caches.
-	storeName(l, l.userNames, 4242, nameLookupResult{ok: false})
+	storeLookup(l, l.userNames, 4242, lookupCacheResult[string]{ok: false})
 	now = now.Add(31 * time.Second)
-	if _, cached := cachedName(l, l.userNames, 4242); cached {
+	if _, cached := cachedLookup(l, l.userNames, 4242); cached {
 		t.Fatal("an expired negative name entry must be re-resolved")
 	}
 }
