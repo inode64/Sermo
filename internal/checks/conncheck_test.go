@@ -28,6 +28,31 @@ func buildConnCheckForTest(t *testing.T, name string, entry map[string]any) conn
 	return built[0].Check.(connCheck)
 }
 
+func TestConnectionConfigDefaultsAndOverrides(t *testing.T) {
+	entry := map[string]any{
+		"host":     "db.internal",
+		"user":     "monitor",
+		"password": "secret",
+		"database": "metrics",
+		"tls":      "skip-verify",
+		"port":     7443,
+	}
+	base := baseConnectionConfig(entry)
+	if base.Host != "db.internal" || base.User != "monitor" || base.Password != "secret" || base.TLS != "skip-verify" {
+		t.Fatalf("baseConnectionConfig = %+v", base)
+	}
+	database := databaseConnectionConfig(entry)
+	if database.Database != "metrics" {
+		t.Fatalf("databaseConnectionConfig = %+v", database)
+	}
+	if port := connectionPort(entry, 1234); port != 7443 {
+		t.Fatalf("connectionPort override = %d, want 7443", port)
+	}
+	if port := connectionPort(map[string]any{}, 1234); port != 1234 {
+		t.Fatalf("connectionPort default = %d, want 1234", port)
+	}
+}
+
 func assertCredentialTLSCheck(t *testing.T, name, protocol string, defaultPort, tlsPort int) {
 	t.Helper()
 	plain := buildConnCheckForTest(t, name, map[string]any{"type": protocol, "host": "127.0.0.1"})
