@@ -715,7 +715,7 @@ func (a App) beginManualOperationSettling(cfg *config.Config, store *state.Store
 	if store == nil {
 		return
 	}
-	if err := app.BeginOperationSettlingForCLI(store, service, action); err != nil {
+	if err := app.BeginOperationSettling(store, service, action, state.SourceCLI); err != nil {
 		msg := err.Error()
 		fmt.Fprintf(a.Stderr, cliWarningFormat, msg)
 		a.recordAccess(cfg, action+"-settling", service, accessStatusError, msg)
