@@ -60,7 +60,7 @@ paths:
   # Volatile runtime data (locks, operation markers) on tmpfs; wiped on reboot.
   runtime: /run/sermo
   # Persistent state database (monitoring/remediation/rule-window control state,
-  # latest service/watch readings, SLA history, measurements, runtime metrics).
+  # latest service/watch readings, SLA and process-continuity history, measurements, runtime metrics).
   # Lives under /var/lib so it survives reboots — required for
   # `monitor: previous`, for the dashboard to keep last real readings, and for automatic
   # remediation not to reset its cooldown/windows after a sermod restart.
@@ -104,7 +104,7 @@ defaults:
 #   notify: on_change      # on_change | every_cycle
 
 # Web dashboard (view services; monitor/unmonitor and start/stop/restart/reload/resume;
-# per-service detail with checks, SLA history and events). Binds to loopback by
+# per-service detail with checks, observed SLA, process continuity and events). Binds to loopback by
 # default.
 #
 # IMPORTANT: the web UI is NOT activated unless `port` is defined.
