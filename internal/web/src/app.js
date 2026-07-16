@@ -4473,20 +4473,10 @@ function renderAppExpansion(a) {
 const appEventLoads = new Map();
 function loadAppEvents(name) {
   if (appEventLoads.has(name)) return appEventLoads.get(name);
-  const pending = (async () => {
-    const target = document.getElementById(detailDomId(name, "app-events"));
-    if (!target) return true;
-    renderEventsLoading(target);
-    try {
-      const res = await fetch(applicationEventsAPI(name, eventDetailLimit));
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      litRender(eventRows(await res.json(), false), target);
-      return true;
-    } catch (e) {
-      litRender(tpl`<tr><td colspan="3" class="muted">Failed to load events: ${e.message}</td></tr>`, target);
-      return false;
-    }
-  })().finally(() => appEventLoads.delete(name));
+  const pending = loadEventRows(
+    detailDomId(name, "app-events"),
+    applicationEventsAPI(name, eventDetailLimit),
+  ).finally(() => appEventLoads.delete(name));
   appEventLoads.set(name, pending);
   return pending;
 }
@@ -6194,12 +6184,12 @@ async function runPreflight(name) {
   }
 }
 
-async function loadServiceEvents(name) {
-  const target = document.getElementById(detailDomId(name, "events"));
+async function loadEventRows(targetID, url) {
+  const target = document.getElementById(targetID);
   if (!target) return true;
   renderEventsLoading(target);
   try {
-    const res = await fetch(serviceEventsAPI(name, eventDetailLimit));
+    const res = await fetch(url);
     if (!res.ok) throw new Error("HTTP " + res.status);
     litRender(eventRows(await res.json(), false), target);
     return true;
@@ -6207,6 +6197,13 @@ async function loadServiceEvents(name) {
     litRender(tpl`<tr><td colspan="3" class="muted">Failed to load events: ${e.message}</td></tr>`, target);
     return false;
   }
+}
+
+async function loadServiceEvents(name) {
+  return loadEventRows(
+    detailDomId(name, "events"),
+    serviceEventsAPI(name, eventDetailLimit),
+  );
 }
 
 const windowMs = {
