@@ -79,6 +79,44 @@ func TestWebBackendViewCheckHealth(t *testing.T) {
 	}
 }
 
+func TestWebBackendServiceCheckSnapshotRequiresFreshMatchingType(t *testing.T) {
+	at := time.Date(2026, 7, 16, 18, 0, 0, 0, time.UTC)
+	snaps := NewSnapshots()
+	snaps.now = func() time.Time { return at }
+	snaps.PublishWithCheckTypes("web", map[string]checks.Result{
+		"probe": {Check: "probe", OK: false, Message: "connection refused"},
+	}, map[string]bool{"probe": true}, map[string]string{"probe": checks.CheckTypeTCP})
+
+	entry := &webEntry{
+		checkNames:     []string{"probe"},
+		checkTypes:     map[string]string{"probe": checks.CheckTypeHTTP},
+		checkIntervals: map[string]time.Duration{"probe": time.Minute},
+		status:         func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
+	}
+	b := &WebBackend{
+		order:     []string{"web"},
+		entries:   map[string]*webEntry{"web": entry},
+		snapshots: snaps,
+		now:       func() time.Time { return at.Add(time.Minute) },
+	}
+
+	svc := b.view(context.Background(), "web", entry)
+	if svc.CheckHealth != checkHealthUnknown || svc.ChecksFailing != 0 || svc.State != TargetStateCollecting {
+		t.Fatalf("mismatched snapshot service = %+v, want collecting with unknown health", svc)
+	}
+	detail, ok := b.Detail(context.Background(), "web")
+	if !ok || len(detail.Checks) != 1 || !detail.Checks[0].Stale || detail.Checks[0].Ran || len(detail.Checks[0].Readings) != 0 {
+		t.Fatalf("mismatched snapshot detail = %+v, want stale check without readings", detail.Checks)
+	}
+
+	entry.checkTypes["probe"] = checks.CheckTypeTCP
+	b.now = func() time.Time { return at.Add(2*time.Minute + time.Nanosecond) }
+	svc = b.view(context.Background(), "web", entry)
+	if svc.CheckHealth != checkHealthUnknown || svc.State != TargetStateCollecting {
+		t.Fatalf("expired snapshot service = %+v, want collecting with unknown health", svc)
+	}
+}
+
 func TestWebBackendViewCheckHealthPaused(t *testing.T) {
 	at := time.Date(2026, 6, 7, 14, 0, 0, 0, time.UTC)
 	store := newFakeStore()

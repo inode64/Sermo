@@ -276,9 +276,9 @@ checks:
     expect: active
 `)
 	snaps := NewSnapshots()
-	snaps.Publish("wait-online", map[string]checks.Result{
+	snaps.PublishWithCheckTypes("wait-online", map[string]checks.Result{
 		"state": {Check: "state", OK: true},
-	}, map[string]bool{"state": true})
+	}, map[string]bool{"state": true}, map[string]string{"state": checks.CheckTypeService})
 	observability := NewObservabilityRegistry()
 	observability.MarkReady("wait-online", time.Now())
 	wb, warnings := NewWebBackend(t.Context(), cfg, Deps{

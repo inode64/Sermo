@@ -3081,7 +3081,8 @@ function renderServiceDetail(d) {
   const noResidentProcess = !!d.no_resident_process;
   const checkRows = (d.checks || []).map((c) => {
     const age = c.at ? tpl` <span class="muted">· ${fmtAge(c.at)}</span>` : nothing;
-    const state = !c.ran
+    const state = c.stale ? tpl`<span class="inactive">stale</span>${age}`
+      : !c.ran
       ? (c.at ? tpl`<span class="muted">cached</span>${age}` : tpl`<span class="muted">not run yet</span>`)
       : c.skipped ? tpl`<span class="muted">skipped</span>${age}`
       : c.ok ? tpl`<span class="ok">ok</span>${age}` : tpl`<span class="bad">fail</span>${age}`;

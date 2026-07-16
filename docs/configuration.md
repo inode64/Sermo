@@ -833,7 +833,11 @@ The detail's check results are the **latest observed** by the worker (published
 each cycle), so they cost nothing to view and reflect each check's own cadence
 (see [per-check interval](#per-check-interval)); they are rehydrated from
 `paths.state` after a daemon restart, and a check not run yet shows "not run
-yet". Host-watch readings use the same persisted latest-observed path, with stale
+yet". A service result is used only through its normal freshness window (two
+effective check intervals, with a 30-second minimum) and while it still matches
+the configured check type; otherwise the detail marks it stale and waits for a
+new cycle rather than showing old values.
+Host-watch readings use the same persisted latest-observed path, with stale
 samples hidden after their normal freshness window. The Graphs section uses one
 window selector for SLA and runtime
 measurements. Its SLA timeline comes from the same data as `sermoctl sla`: it

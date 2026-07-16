@@ -285,6 +285,10 @@ var migrations = []string{
 		current_backoff_ns INTEGER NOT NULL DEFAULT 0,
 		PRIMARY KEY (watch, slot)
 	);`,
+	// Service snapshots initially persisted only their check name. Keep the type
+	// too: a reload may retain a name while changing its check implementation.
+	// The web layer must then wait for a result from the new implementation.
+	`ALTER TABLE service_check_snapshot ADD COLUMN check_type TEXT NOT NULL DEFAULT '';`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -452,7 +456,8 @@ type OperationSettlingRecord struct {
 }
 
 // CheckSnapshotRecord is one persisted latest check result. Name is the service
-// check name or host-watch slot; CheckType is set for host-watch rows.
+// check name or host-watch slot; CheckType identifies the check that produced
+// the data so callers never decode a prior result as a new check type.
 type CheckSnapshotRecord struct {
 	Name      string
 	CheckType string
@@ -588,7 +593,7 @@ func (s *Store) ClearOperationSettling(service string) error {
 // by service name and keyed by check name.
 func (s *Store) ServiceCheckSnapshots() (map[string]map[string]CheckSnapshotRecord, error) {
 	return s.groupedCheckSnapshots(
-		`SELECT service, check_name, ok, condition, optional, skipped, message, data, ran, at
+		`SELECT service, check_name, check_type, ok, condition, optional, skipped, message, data, ran, at
 		   FROM service_check_snapshot ORDER BY service, check_name;`,
 		"service check snapshots", scanServiceCheckSnapshot,
 	)
@@ -604,9 +609,9 @@ func (s *Store) SetServiceCheckSnapshots(service string, records map[string]Chec
 			}
 			if _, err := tx.ExecContext(s.sqlCtx(),
 				`INSERT INTO service_check_snapshot
-				   (service, check_name, ok, condition, optional, skipped, message, data, ran, at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-				service, name, boolInt(rec.OK), boolInt(rec.Condition), boolInt(rec.Optional), boolInt(rec.Skipped),
+				   (service, check_name, check_type, ok, condition, optional, skipped, message, data, ran, at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+				service, name, rec.CheckType, boolInt(rec.OK), boolInt(rec.Condition), boolInt(rec.Optional), boolInt(rec.Skipped),
 				rec.Message, data, boolInt(rec.Ran), timeUnixNano(rec.At),
 			); err != nil {
 				return fmt.Errorf("insert service check snapshot %s/%s: %w", service, name, err)
@@ -684,21 +689,22 @@ func (s *Store) groupedCheckSnapshots(query, label string, scan checkSnapshotSca
 
 func scanServiceCheckSnapshot(rows *sql.Rows) (string, string, CheckSnapshotRecord, error) {
 	var (
-		service  string
-		name     string
-		ok       int
-		cond     int
-		optional int
-		skipped  int
-		message  string
-		rawData  string
-		ran      int
-		at       int64
+		service   string
+		name      string
+		checkType string
+		ok        int
+		cond      int
+		optional  int
+		skipped   int
+		message   string
+		rawData   string
+		ran       int
+		at        int64
 	)
-	if err := rows.Scan(&service, &name, &ok, &cond, &optional, &skipped, &message, &rawData, &ran, &at); err != nil {
+	if err := rows.Scan(&service, &name, &checkType, &ok, &cond, &optional, &skipped, &message, &rawData, &ran, &at); err != nil {
 		return "", "", CheckSnapshotRecord{}, fmt.Errorf("scan service check snapshot: %w", err)
 	}
-	record, err := newCheckSnapshotRecord(name, "", ok, cond, optional, skipped, message, rawData, ran, at)
+	record, err := newCheckSnapshotRecord(name, checkType, ok, cond, optional, skipped, message, rawData, ran, at)
 	return service, name, record, err
 }
 
