@@ -44,7 +44,7 @@ deterministas de la API.
 | Área | Endpoint | Notas |
 | --- | --- | --- |
 | Usuario actual | `GET /api/whoami` | rol y permisos de acción |
-| Snapshot del dashboard | `GET /api/dashboard?since=WINDOW` | agregado de los paneles de servicio/runtime que se refrescan con frecuencia; el navegador vuelve a los endpoints individuales si no está disponible |
+| Snapshot del dashboard | `GET /api/dashboard?since=WINDOW` | agregado de los paneles de servicio/runtime que se refrescan con frecuencia y provienen de una generación activa de configuración del daemon; el navegador vuelve a los endpoints individuales si no está disponible |
 | Disponibilidad | `GET /readyz?verbose` | `status:` del daemon en la barra superior (`starting` / `ok` / …) |
 | Servicios | `GET /api/services` | servicios de runtime configurados cargados por sermod (no el inventario de catálogo de `sermoctl services`); `status_observed_at` identifica la muestra real de estado de init que hay detrás de una fila cacheada |
 | Expansión de servicio | `GET /api/services/{name}` | checks, información del proceso, reglas |

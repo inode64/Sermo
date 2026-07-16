@@ -55,6 +55,14 @@ func (h *WebBackendHolder) MaxOperationTimeout() time.Duration {
 	})
 }
 
+// DashboardSnapshot collects the aggregate dashboard from exactly one active
+// backend generation, even if Reload swaps the holder while the request runs.
+func (h *WebBackendHolder) DashboardSnapshot(ctx context.Context, since time.Duration) web.DashboardSnapshot {
+	return webCall(h, web.DashboardSnapshot{}, func(b *WebBackend) web.DashboardSnapshot {
+		return b.DashboardSnapshot(ctx, since)
+	})
+}
+
 // webCall runs fn against the active backend, returning zero when no backend
 // is installed; the nil-guard shared by every delegate below.
 //
