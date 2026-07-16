@@ -47,6 +47,8 @@ type nameLookupResult struct {
 	at   time.Time
 }
 
+type nameResolver func(uint32) (string, bool)
+
 // negativeCacheTTL bounds how long a failed (ok=false) lookup is cached. Positive
 // results are cached for the lookup's lifetime, but caching a miss forever means
 // a user created after the first probe — e.g. one named in kill_only_if or a
@@ -137,157 +139,101 @@ func DefaultUserLookup() *UserLookup {
 
 // ResolveUser resolves a user name or numeric UID to a UID.
 func (l *UserLookup) ResolveUser(name string) (uint32, bool) {
-	if uid, ok := parseUint32(name); ok {
-		return uid, true
-	}
 	if l == nil {
 		return OSUserResolver(name)
 	}
-	if got, cached := cachedID(l, l.users, name); cached {
-		return got.id, got.ok
-	}
-	uid, ok := l.lookupUserID(name)
-	storeID(l, l.users, name, idLookupResult{id: uid, ok: ok})
-	return uid, ok
+	return l.resolveID(name, l.users, nativeUserID, l.getentUserID)
 }
 
 // ResolveGroup resolves a group name or numeric GID to a GID.
 func (l *UserLookup) ResolveGroup(name string) (uint32, bool) {
-	if gid, ok := parseUint32(name); ok {
-		return gid, true
-	}
 	if l == nil {
 		return OSGroupResolver(name)
 	}
-	if got, cached := cachedID(l, l.groups, name); cached {
-		return got.id, got.ok
-	}
-	gid, ok := l.lookupGroupID(name)
-	storeID(l, l.groups, name, idLookupResult{id: gid, ok: ok})
-	return gid, ok
+	return l.resolveID(name, l.groups, nativeGroupID, l.getentGroupID)
 }
 
 // Username returns a display name for uid, or an empty string when unknown.
 func (l *UserLookup) Username(uid uint32) string {
 	if l == nil {
-		if name, ok := nativeUserName(uid); ok {
-			return name
-		}
-		return ""
+		name, _ := nativeUserName(uid)
+		return name
 	}
-	if got, cached := cachedName(l, l.userNames, uid); cached {
-		if got.ok {
-			return got.name
-		}
-		return ""
-	}
-	name, ok := l.lookupUserName(uid)
-	storeName(l, l.userNames, uid, nameLookupResult{name: name, ok: ok})
-	return name
+	return l.resolveName(uid, l.userNames, nativeUserName, l.getentUserName)
 }
 
 // GroupName returns a display name for gid, or an empty string when unknown.
 func (l *UserLookup) GroupName(gid uint32) string {
 	if l == nil {
-		if name, ok := nativeGroupName(gid); ok {
-			return name
-		}
-		return ""
+		name, _ := nativeGroupName(gid)
+		return name
 	}
-	if got, cached := cachedName(l, l.groupNames, gid); cached {
+	return l.resolveName(gid, l.groupNames, nativeGroupName, l.getentGroupName)
+}
+
+func (l *UserLookup) resolveID(name string, cache map[string]idLookupResult, native, getent UserResolver) (uint32, bool) {
+	if id, ok := parseUint32(name); ok {
+		return id, true
+	}
+	if got, cached := cachedID(l, cache, name); cached {
+		return got.id, got.ok
+	}
+	id, ok := l.lookupID(name, native, getent)
+	storeID(l, cache, name, idLookupResult{id: id, ok: ok})
+	return id, ok
+}
+
+func (l *UserLookup) resolveName(id uint32, cache map[uint32]nameLookupResult, native, getent nameResolver) string {
+	if got, cached := cachedName(l, cache, id); cached {
 		if got.ok {
 			return got.name
 		}
 		return ""
 	}
-	name, ok := l.lookupGroupName(gid)
-	storeName(l, l.groupNames, gid, nameLookupResult{name: name, ok: ok})
+	name, ok := l.lookupName(id, native, getent)
+	storeName(l, cache, id, nameLookupResult{name: name, ok: ok})
 	return name
 }
 
-func (l *UserLookup) lookupUserID(name string) (uint32, bool) {
+func (l *UserLookup) lookupID(name string, native, getent UserResolver) (uint32, bool) {
 	switch l.mode {
 	case UserLookupNumeric:
 		return 0, false
 	case UserLookupNative:
-		return nativeUserID(name)
+		return native(name)
 	case UserLookupGetent:
-		if uid, ok := l.getentUserID(name); ok {
-			return uid, true
+		if id, ok := getent(name); ok {
+			return id, true
 		}
-		return nativeUserID(name)
+		return native(name)
 	default: // auto
-		if uid, ok := nativeUserID(name); ok {
-			return uid, true
+		if id, ok := native(name); ok {
+			return id, true
 		}
 		if !cgoEnabled {
-			return l.getentUserID(name)
-		}
-		return 0, false
-	}
-}
-
-func (l *UserLookup) lookupGroupID(name string) (uint32, bool) {
-	switch l.mode {
-	case UserLookupNumeric:
-		return 0, false
-	case UserLookupNative:
-		return nativeGroupID(name)
-	case UserLookupGetent:
-		if gid, ok := l.getentGroupID(name); ok {
-			return gid, true
-		}
-		return nativeGroupID(name)
-	default: // auto
-		if gid, ok := nativeGroupID(name); ok {
-			return gid, true
-		}
-		if !cgoEnabled {
-			return l.getentGroupID(name)
+			return getent(name)
 		}
 		return 0, false
 	}
 }
 
-func (l *UserLookup) lookupUserName(uid uint32) (string, bool) {
+func (l *UserLookup) lookupName(id uint32, native, getent nameResolver) (string, bool) {
 	switch l.mode {
 	case UserLookupNumeric:
 		return "", false
 	case UserLookupNative:
-		return nativeUserName(uid)
+		return native(id)
 	case UserLookupGetent:
-		if name, ok := l.getentUserName(uid); ok {
+		if name, ok := getent(id); ok {
 			return name, true
 		}
-		return nativeUserName(uid)
+		return native(id)
 	default: // auto
-		if name, ok := nativeUserName(uid); ok {
+		if name, ok := native(id); ok {
 			return name, true
 		}
 		if !cgoEnabled {
-			return l.getentUserName(uid)
-		}
-		return "", false
-	}
-}
-
-func (l *UserLookup) lookupGroupName(gid uint32) (string, bool) {
-	switch l.mode {
-	case UserLookupNumeric:
-		return "", false
-	case UserLookupNative:
-		return nativeGroupName(gid)
-	case UserLookupGetent:
-		if name, ok := l.getentGroupName(gid); ok {
-			return name, true
-		}
-		return nativeGroupName(gid)
-	default: // auto
-		if name, ok := nativeGroupName(gid); ok {
-			return name, true
-		}
-		if !cgoEnabled {
-			return l.getentGroupName(gid)
+			return getent(id)
 		}
 		return "", false
 	}
