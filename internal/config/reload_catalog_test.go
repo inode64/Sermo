@@ -40,7 +40,7 @@ func validateCatalogReloadServices(t *testing.T, catalogDir, backend string) {
 		t.Fatal(err)
 	}
 	writeReloadTestServices(t, enabled, services)
-	cfg, err := Load(writeReloadTestGlobal(t, dir, enabled, backend), WithCatalogDirs(catalogDir))
+	cfg, err := Load(writeServicesGlobal(t, dir, enabled, backend), WithCatalogDirs(catalogDir))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -57,7 +57,7 @@ func loadCatalogReloadSignalServices(t *testing.T, catalogDir, backend string) [
 	if err := os.MkdirAll(enabled, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(writeReloadTestGlobal(t, dir, enabled, backend), WithCatalogDirs(catalogDir))
+	cfg, err := Load(writeServicesGlobal(t, dir, enabled, backend), WithCatalogDirs(catalogDir))
 	if err != nil {
 		t.Fatalf("Load (probe): %v", err)
 	}
@@ -66,18 +66,6 @@ func loadCatalogReloadSignalServices(t *testing.T, catalogDir, backend string) [
 		t.Fatal("no catalog services with reload.signal found")
 	}
 	return services
-}
-
-func writeReloadTestGlobal(t *testing.T, dir, enabled, backend string) string {
-	t.Helper()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "engine: { backend: " + backend + " }\n" +
-		"paths:\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	return global
 }
 
 func writeReloadTestServices(t *testing.T, enabled string, services []reloadSignalService) {

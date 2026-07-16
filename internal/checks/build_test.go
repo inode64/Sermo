@@ -230,18 +230,52 @@ func TestBuildPortsCheckMatchValidation(t *testing.T) {
 	}
 }
 
-func TestBuildFileExistsCheckPathRequired(t *testing.T) {
-	// A path is required; when present it is carried onto the check.
-	c, w := buildFileExistsCheck(base{}, map[string]any{"path": "/etc/hostname"})
+// buildOneCheck injects typ into entry, builds the single named section with
+// deps, and returns the built check; the caller casts to the concrete type.
+func buildOneCheck(t *testing.T, name, typ string, entry map[string]any, deps Deps) Check {
+	t.Helper()
+	entry["type"] = typ
+	built, warns := Build(map[string]any{name: entry}, deps)
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("%s check should build: warns=%v", typ, warns)
+	}
+	return built[0].Check
+}
+
+// assertRequiredStringField asserts build carries the present entry's field
+// onto the check without warning, and warns when the entry is empty.
+func assertRequiredStringField(t *testing.T, build func(map[string]any) (Check, string), present map[string]any, field func(Check) string, want string) {
+	t.Helper()
+	c, w := build(present)
 	if w != "" {
 		t.Fatalf("unexpected warning: %q", w)
 	}
-	if got := c.(fileExistsCheck).path; got != "/etc/hostname" {
-		t.Fatalf("path = %q, want /etc/hostname", got)
+	if got := field(c); got != want {
+		t.Fatalf("field = %q, want %q", got, want)
 	}
-	if _, w := buildFileExistsCheck(base{}, map[string]any{}); w == "" {
-		t.Fatal("missing path must warn")
+	if _, w := build(map[string]any{}); w == "" {
+		t.Fatal("missing field must warn")
 	}
+}
+
+// assertRequiredField asserts build warns (containing substr) for the absent
+// entry and does not emit that warning for the present entry.
+func assertRequiredField(t *testing.T, build func(map[string]any) (Check, string), absent, present map[string]any, substr string) {
+	t.Helper()
+	if _, w := build(absent); !strings.Contains(w, substr) {
+		t.Fatalf("missing-field warning = %q, want it to contain %q", w, substr)
+	}
+	if _, w := build(present); strings.Contains(w, substr) {
+		t.Fatalf("present field must not warn %q, got %q", substr, w)
+	}
+}
+
+func TestBuildFileExistsCheckPathRequired(t *testing.T) {
+	// A path is required; when present it is carried onto the check.
+	assertRequiredStringField(t,
+		func(e map[string]any) (Check, string) { return buildFileExistsCheck(base{}, e) },
+		map[string]any{"path": "/etc/hostname"},
+		func(c Check) string { return c.(fileExistsCheck).path }, "/etc/hostname")
 }
 
 func TestRequireCheckPaths(t *testing.T) {
@@ -262,16 +296,10 @@ func TestRequireCheckPaths(t *testing.T) {
 }
 
 func TestBuildLibrariesCheckBinaryRequired(t *testing.T) {
-	c, w := buildLibrariesCheck(base{}, map[string]any{"binary": "/usr/bin/ssh"})
-	if w != "" {
-		t.Fatalf("unexpected warning: %q", w)
-	}
-	if got := c.(librariesCheck).binary; got != "/usr/bin/ssh" {
-		t.Fatalf("binary = %q, want /usr/bin/ssh", got)
-	}
-	if _, w := buildLibrariesCheck(base{}, map[string]any{}); w == "" {
-		t.Fatal("missing binary must warn")
-	}
+	assertRequiredStringField(t,
+		func(e map[string]any) (Check, string) { return buildLibrariesCheck(base{}, e) },
+		map[string]any{"binary": "/usr/bin/ssh"},
+		func(c Check) string { return c.(librariesCheck).binary }, "/usr/bin/ssh")
 }
 
 func TestBuildProcessCheckStateDefault(t *testing.T) {
@@ -370,73 +398,61 @@ func TestBuildCertCheckServerNameDefaultsToHost(t *testing.T) {
 	}
 }
 
+// buildMetricForTest adapts buildMetricCheck to the assertRequiredField shape.
+func buildMetricForTest(e map[string]any) (Check, string) { return buildMetricCheck(base{}, e, Deps{}) }
+
+// buildICMPForTest adapts buildICMPCheck to the assertRequiredField shape.
+func buildICMPForTest(e map[string]any) (Check, string) { return buildICMPCheck(base{}, e, Deps{}) }
+
 func TestBuildMetricCheckNameRequired(t *testing.T) {
-	// Missing name is rejected with a name-specific warning...
-	if _, w := buildMetricCheck(base{}, map[string]any{"op": ">"}, Deps{}); !strings.Contains(w, "requires a name") {
-		t.Fatalf("missing name warning = %q, want it to mention requiring a name", w)
-	}
-	// ...and a present name does not trigger that warning.
-	if _, w := buildMetricCheck(base{}, map[string]any{"name": "cpu", "op": ">"}, Deps{}); strings.Contains(w, "requires a name") {
-		t.Fatalf("present name must not warn about a missing name, got %q", w)
-	}
+	// Missing name is rejected with a name-specific warning; a present name
+	// does not trigger that warning.
+	assertRequiredField(t, buildMetricForTest,
+		map[string]any{"op": ">"},
+		map[string]any{"name": "cpu", "op": ">"}, "requires a name")
 }
 
 func TestBuildMetricCheckOpRequired(t *testing.T) {
-	if _, w := buildMetricCheck(base{}, map[string]any{"name": "cpu"}, Deps{}); !strings.Contains(w, "requires an op") {
-		t.Fatalf("missing op warning = %q, want it to mention requiring an op", w)
-	}
-	if _, w := buildMetricCheck(base{}, map[string]any{"name": "cpu", "op": ">"}, Deps{}); strings.Contains(w, "requires an op") {
-		t.Fatalf("present op must not warn about a missing op, got %q", w)
-	}
+	assertRequiredField(t, buildMetricForTest,
+		map[string]any{"name": "cpu"},
+		map[string]any{"name": "cpu", "op": ">"}, "requires an op")
 }
 
 func TestBuildHdparmCheckDeviceRequired(t *testing.T) {
-	if _, w := buildHdparmCheck(base{}, map[string]any{}, nil); !strings.Contains(w, "requires a device") {
-		t.Fatalf("missing device warning = %q, want it to mention requiring a device", w)
-	}
-	if _, w := buildHdparmCheck(base{}, map[string]any{"device": "/dev/sda", "read": map[string]any{"op": "<", "value": 1}}, nil); strings.Contains(w, "requires a device") {
-		t.Fatalf("present device must not warn about a missing device, got %q", w)
-	}
+	assertRequiredField(t,
+		func(e map[string]any) (Check, string) { return buildHdparmCheck(base{}, e, nil) },
+		map[string]any{},
+		map[string]any{"device": "/dev/sda", "read": map[string]any{"op": "<", "value": 1}},
+		"requires a device")
 }
 
 func TestBuildSmartCheckDeviceRequired(t *testing.T) {
-	if _, w := buildSmartCheck(base{}, map[string]any{}, nil); !strings.Contains(w, "requires a device") {
-		t.Fatalf("missing device warning = %q, want it to mention requiring a device", w)
-	}
-	if _, w := buildSmartCheck(base{}, map[string]any{"device": "/dev/sda"}, nil); strings.Contains(w, "requires a device") {
-		t.Fatalf("present device must not warn about a missing device, got %q", w)
-	}
+	assertRequiredField(t,
+		func(e map[string]any) (Check, string) { return buildSmartCheck(base{}, e, nil) },
+		map[string]any{},
+		map[string]any{"device": "/dev/sda"}, "requires a device")
 }
 
 func TestBuildICMPCheckHostRequired(t *testing.T) {
-	if _, w := buildICMPCheck(base{}, map[string]any{"metric": "state", "expect": "up"}, Deps{}); !strings.Contains(w, "requires a host") {
-		t.Fatalf("missing host warning = %q, want it to mention requiring a host", w)
-	}
-	if _, w := buildICMPCheck(base{}, map[string]any{"host": "127.0.0.1", "metric": "state", "expect": "up"}, Deps{}); strings.Contains(w, "requires a host") {
-		t.Fatalf("present host must not warn about a missing host, got %q", w)
-	}
+	assertRequiredField(t, buildICMPForTest,
+		map[string]any{"metric": "state", "expect": "up"},
+		map[string]any{"host": "127.0.0.1", "metric": "state", "expect": "up"}, "requires a host")
 }
 
 func TestBuildICMPCheckCountPositive(t *testing.T) {
-	// count == 0 is rejected (v <= 0, not v < 0)...
-	if _, w := buildICMPCheck(base{}, map[string]any{"host": "127.0.0.1", "count": 0, "metric": "state", "expect": "up"}, Deps{}); !strings.Contains(w, "positive integer") {
-		t.Fatalf("count 0 warning = %q, want it to demand a positive integer", w)
-	}
-	// ...a positive count is accepted.
-	if _, w := buildICMPCheck(base{}, map[string]any{"host": "127.0.0.1", "count": 3, "metric": "state", "expect": "up"}, Deps{}); strings.Contains(w, "positive integer") {
-		t.Fatalf("positive count must not warn, got %q", w)
-	}
+	// count == 0 is rejected (v <= 0, not v < 0); a positive count is accepted.
+	assertRequiredField(t, buildICMPForTest,
+		map[string]any{"host": "127.0.0.1", "count": 0, "metric": "state", "expect": "up"},
+		map[string]any{"host": "127.0.0.1", "count": 3, "metric": "state", "expect": "up"},
+		"positive integer")
 }
 
 func TestBuildICMPStateRequiresExpectOrOnChange(t *testing.T) {
-	// metric=state with neither expect nor on:change is rejected.
-	if _, w := buildICMPCheck(base{}, map[string]any{"host": "127.0.0.1", "metric": "state"}, Deps{}); !strings.Contains(w, "requires expect") {
-		t.Fatalf("icmp state w/o expect warning = %q, want it to require expect/on", w)
-	}
-	// With an expect it is accepted.
-	if _, w := buildICMPCheck(base{}, map[string]any{"host": "127.0.0.1", "metric": "state", "expect": "up"}, Deps{}); strings.Contains(w, "requires expect") {
-		t.Fatalf("icmp state with expect must not warn, got %q", w)
-	}
+	// metric=state with neither expect nor on:change is rejected; with an
+	// expect it is accepted.
+	assertRequiredField(t, buildICMPForTest,
+		map[string]any{"host": "127.0.0.1", "metric": "state"},
+		map[string]any{"host": "127.0.0.1", "metric": "state", "expect": "up"}, "requires expect")
 }
 
 func TestBuildICMPCheckConfiguresMetrics(t *testing.T) {
@@ -476,12 +492,10 @@ func TestBuildICMPCheckConfiguresMetrics(t *testing.T) {
 }
 
 func TestBuildNetStateRequiresExpectOrOnChange(t *testing.T) {
-	if _, w := buildNetCheck(base{}, map[string]any{"interface": "eth0", "metric": "state"}, Deps{}); !strings.Contains(w, "requires expect") {
-		t.Fatalf("net state w/o expect warning = %q, want it to require expect/on", w)
-	}
-	if _, w := buildNetCheck(base{}, map[string]any{"interface": "eth0", "metric": "state", "expect": "up"}, Deps{}); strings.Contains(w, "requires expect") {
-		t.Fatalf("net state with expect must not warn, got %q", w)
-	}
+	assertRequiredField(t,
+		func(e map[string]any) (Check, string) { return buildNetCheck(base{}, e, Deps{}) },
+		map[string]any{"interface": "eth0", "metric": "state"},
+		map[string]any{"interface": "eth0", "metric": "state", "expect": "up"}, "requires expect")
 }
 
 func TestBuildNetStateExpectValidated(t *testing.T) {

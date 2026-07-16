@@ -1,7 +1,6 @@
 package checks
 
 import (
-	"context"
 	"testing"
 )
 
@@ -9,59 +8,32 @@ func fakeFds(s FdsSample) FdsSamplerFunc {
 	return func() (FdsSample, error) { return s, nil }
 }
 
-func TestFdsUsedPct(t *testing.T) {
-	// 9000/10000 = 90%.
-	sample := FdsSample{Allocated: 9000, Max: 10000}
-	breach := fdsCheck{base: base{name: "f"}, preds: []levelPred{{"used_pct", ">=", 90}}, sampler: fakeFds(sample)}
-	if res := breach.Run(context.Background()); !res.OK {
-		t.Fatalf("90%% used should breach >= 90, got %q", res.Message)
-	}
-	ok := fdsCheck{base: base{name: "f"}, preds: []levelPred{{"used_pct", ">=", 95}}, sampler: fakeFds(sample)}
-	if ok.Run(context.Background()).OK {
-		t.Fatal("90%% used should not breach >= 95")
+func fdsWith(allocated, limit uint64) func(preds []levelPred) Check {
+	return func(preds []levelPred) Check {
+		return fdsCheck{base: base{name: "f"}, preds: preds, sampler: fakeFds(FdsSample{Allocated: allocated, Max: limit})}
 	}
 }
 
+func TestFdsUsedPct(t *testing.T) {
+	assertUsedPctWindow(t, fdsWith(9000, 10000), 90, 95) // 9000/10000 = 90%
+}
+
 func TestFdsFreeAbsolute(t *testing.T) {
-	c := fdsCheck{base: base{name: "f"}, preds: []levelPred{{"free", "<", 2000}}, sampler: fakeFds(FdsSample{Allocated: 9000, Max: 10000})}
-	res := c.Run(context.Background())
-	if !res.OK {
-		t.Fatalf("1000 free < 2000 should fire, got %q", res.Message)
-	}
-	if res.Data["free"] != uint64(1000) {
-		t.Fatalf("data free = %v, want 1000", res.Data["free"])
-	}
+	assertFreeFires(t, fdsWith(9000, 10000)([]levelPred{{"free", "<", 2000}}), 1000)
 }
 
 func TestFdsUnknownMaxNeverFires(t *testing.T) {
 	// Max == 0 leaves used_pct/free unknown, so the predicate cannot hold.
-	c := fdsCheck{base: base{name: "f"}, preds: []levelPred{{"free", "<", 2000}}, sampler: fakeFds(FdsSample{Allocated: 9000, Max: 0})}
-	if c.Run(context.Background()).OK {
-		t.Fatal("a used_pct/free predicate must not fire when the limit is unknown")
-	}
+	assertUnknownMaxNeverFires(t, fdsWith(9000, 0)([]levelPred{{"free", "<", 2000}}))
 }
 
 func TestFdsFreeClampsWhenAllocatedExceedsMax(t *testing.T) {
 	// allocated > max (a transient or misreported sample) must clamp free to 0,
 	// not underflow the unsigned subtraction into a huge bogus value.
-	c := fdsCheck{base: base{name: "f"}, sampler: fakeFds(FdsSample{Allocated: 12000, Max: 10000})}
-	if got := c.Run(context.Background()).Data["free"]; got != uint64(0) {
-		t.Fatalf("data free = %v, want 0 (clamped)", got)
-	}
+	assertFreeClamps(t, fdsWith(12000, 10000)(nil))
 }
 
 func TestBuildFdsCheck(t *testing.T) {
-	built, warns := Build(map[string]any{
-		"f": map[string]any{"type": "fds", "used_pct": map[string]any{"op": ">=", "value": 80}},
-	}, Deps{FdsSampler: fakeFds(FdsSample{Allocated: 8500, Max: 10000})})
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
-	}
-	if len(built) != 1 || !built[0].Check.Run(context.Background()).OK {
-		t.Fatal("85%% used should build and fire >= 80")
-	}
-
-	if _, warns := Build(map[string]any{"f": map[string]any{"type": "fds"}}, Deps{}); len(warns) == 0 {
-		t.Fatal("fds check without a predicate should warn")
-	}
+	assertBuildLimitCheck(t, "fds",
+		Deps{FdsSampler: fakeFds(FdsSample{Allocated: 8500, Max: 10000})})
 }

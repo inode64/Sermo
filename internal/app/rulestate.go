@@ -130,25 +130,15 @@ func ruleWindowRecord(window *rules.WindowState) state.RuleWindowRecord {
 }
 
 func ruleSamplesFromRecords(records []state.RuleWindowSample) []rules.WindowSample {
-	if len(records) == 0 {
-		return nil
-	}
-	out := make([]rules.WindowSample, 0, len(records))
-	for _, rec := range records {
-		out = append(out, rules.WindowSample{At: rec.At, Match: rec.Match})
-	}
-	return out
+	return mapSlice(records, func(rec state.RuleWindowSample) rules.WindowSample {
+		return rules.WindowSample{At: rec.At, Match: rec.Match}
+	})
 }
 
 func ruleRecordsFromSamples(samples []rules.WindowSample) []state.RuleWindowSample {
-	if len(samples) == 0 {
-		return nil
-	}
-	out := make([]state.RuleWindowSample, 0, len(samples))
-	for _, sample := range samples {
-		out = append(out, state.RuleWindowSample{At: sample.At, Match: sample.Match})
-	}
-	return out
+	return mapSlice(samples, func(sample rules.WindowSample) state.RuleWindowSample {
+		return state.RuleWindowSample{At: sample.At, Match: sample.Match}
+	})
 }
 
 func emitRuleStateError(emit func(Event), service, action string, err error) {

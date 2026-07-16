@@ -42,23 +42,11 @@ func serveCeph(t *testing.T, banner string) int {
 
 func TestCephProbeMsgrV2(t *testing.T) {
 	// "ceph v2\n" + the le16 length and feature bits that follow on the wire.
-	res, err := cephProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: serveCeph(t, "ceph v2\n\x10\x00abcdefgh")})
-	if err != nil {
-		t.Fatalf("probe: %v", err)
-	}
-	if res.Extra["messenger"] != "v2" {
-		t.Fatalf("messenger = %q, want v2", res.Extra["messenger"])
-	}
+	assertProbeExtra(t, cephProtocol{}, serveCeph(t, "ceph v2\n\x10\x00abcdefgh"), "messenger", "v2")
 }
 
 func TestCephProbeMsgrV1(t *testing.T) {
-	res, err := cephProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: serveCeph(t, "ceph v027\x00\x00")})
-	if err != nil {
-		t.Fatalf("probe: %v", err)
-	}
-	if res.Extra["messenger"] != "v1" {
-		t.Fatalf("messenger = %q, want v1", res.Extra["messenger"])
-	}
+	assertProbeExtra(t, cephProtocol{}, serveCeph(t, "ceph v027\x00\x00"), "messenger", "v1")
 }
 
 func TestCephProbeNotCeph(t *testing.T) {

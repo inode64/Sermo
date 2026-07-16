@@ -43,23 +43,22 @@ func TestParseOutputMatcher(t *testing.T) {
 	}
 }
 
-func TestOutputMatcherMatch(t *testing.T) {
-	cases := []struct {
-		name   string
-		m      OutputMatcher
-		output string
-		want   bool
-	}{
-		{"inactive matches anything", OutputMatcher{}, "whatever", true},
-		{"substring present", OutputMatcher{Substring: "ready"}, "service ready now", true},
-		{"substring absent", OutputMatcher{Substring: "ready"}, "service down", false},
-		{"numeric op pass", OutputMatcher{Op: ">", Value: "10"}, " 42 ", true},
-		{"numeric op fail", OutputMatcher{Op: ">", Value: "10"}, "3", false},
-		{"equality string", OutputMatcher{Op: "==", Value: "done"}, "done", true},
-		{"regex pass", OutputMatcher{Op: "=~", Value: "^v[0-9]+"}, "v12 build", true},
-		{"regex fail", OutputMatcher{Op: "=~", Value: "^v[0-9]+"}, "broken", false},
-		{"non-numeric for ordering op", OutputMatcher{Op: ">", Value: "10"}, "abc", false},
-	}
+// matchCase is a table row for runMatchCases.
+type matchCase[M interface {
+	Match(output string) (bool, string)
+}] struct {
+	name   string
+	m      M
+	output string
+	want   bool
+}
+
+// runMatchCases runs Match over each case and asserts the verdict plus a
+// non-empty detail on every failed match.
+func runMatchCases[M interface {
+	Match(output string) (bool, string)
+}](t *testing.T, cases []matchCase[M]) {
+	t.Helper()
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			ok, detail := c.m.Match(c.output)
@@ -71,6 +70,20 @@ func TestOutputMatcherMatch(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestOutputMatcherMatch(t *testing.T) {
+	runMatchCases(t, []matchCase[OutputMatcher]{
+		{"inactive matches anything", OutputMatcher{}, "whatever", true},
+		{"substring present", OutputMatcher{Substring: "ready"}, "service ready now", true},
+		{"substring absent", OutputMatcher{Substring: "ready"}, "service down", false},
+		{"numeric op pass", OutputMatcher{Op: ">", Value: "10"}, " 42 ", true},
+		{"numeric op fail", OutputMatcher{Op: ">", Value: "10"}, "3", false},
+		{"equality string", OutputMatcher{Op: "==", Value: "done"}, "done", true},
+		{"regex pass", OutputMatcher{Op: "=~", Value: "^v[0-9]+"}, "v12 build", true},
+		{"regex fail", OutputMatcher{Op: "=~", Value: "^v[0-9]+"}, "broken", false},
+		{"non-numeric for ordering op", OutputMatcher{Op: ">", Value: "10"}, "abc", false},
+	})
 }
 
 func TestValidateAssertionValue(t *testing.T) {
@@ -127,12 +140,7 @@ func TestParseVersionMatcher(t *testing.T) {
 }
 
 func TestVersionMatcherMatch(t *testing.T) {
-	cases := []struct {
-		name   string
-		m      VersionMatcher
-		output string
-		want   bool
-	}{
+	runMatchCases(t, []matchCase[VersionMatcher]{
 		{"inactive matches anything", VersionMatcher{}, "", true},
 		{"contains passes", VersionMatcher{Contains: []string{"MariaDB"}}, "mysqld Ver 11.8.5-MariaDB", true},
 		{"contains fails", VersionMatcher{Contains: []string{"MariaDB"}}, "mysqld Ver 8.0.36", false},
@@ -144,18 +152,7 @@ func TestVersionMatcherMatch(t *testing.T) {
 		{"regex fails", VersionMatcher{Regex: []string{`Ver 8\.`}}, "mysqld Ver 11.8.5-MariaDB", false},
 		{"all regexes checked", VersionMatcher{Regex: []string{`mysqld`, `MariaDB`}}, "mysqld Ver 8.0.36", false},
 		{"empty output fails active matcher", VersionMatcher{Excludes: []string{"MariaDB"}}, "", false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			ok, detail := c.m.Match(c.output)
-			if ok != c.want {
-				t.Errorf("Match(%q) = (%v, %q), want %v", c.output, ok, detail, c.want)
-			}
-			if !ok && detail == "" {
-				t.Error("a failed match must return a non-empty detail")
-			}
-		})
-	}
+	})
 }
 
 func TestVersionOutput(t *testing.T) {

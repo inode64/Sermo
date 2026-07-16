@@ -120,27 +120,22 @@ func monitorMessage(monitored bool, active, paused string) string {
 }
 
 func (b *WebBackend) emitMonitorEvent(service, action, kind, status, message string) {
-	if b.emit == nil {
-		return
-	}
-	b.emit(Event{
-		Service: service,
-		Kind:    kind,
-		Action:  action,
-		Status:  status,
-		Message: message,
-	})
+	b.emitMonitorSubjectEvent(Event{Service: service}, action, kind, status, message)
 }
 
 func (b *WebBackend) emitWatchMonitorEvent(watch, action, kind, status, message string) {
+	b.emitMonitorSubjectEvent(Event{Watch: watch}, action, kind, status, message)
+}
+
+// emitMonitorSubjectEvent fills the shared monitor-event fields onto an event
+// that already carries its subject (Service or Watch) and emits it.
+func (b *WebBackend) emitMonitorSubjectEvent(ev Event, action, kind, status, message string) {
 	if b.emit == nil {
 		return
 	}
-	b.emit(Event{
-		Watch:   watch,
-		Kind:    kind,
-		Action:  action,
-		Status:  status,
-		Message: message,
-	})
+	ev.Kind = kind
+	ev.Action = action
+	ev.Status = status
+	ev.Message = message
+	b.emit(ev)
 }

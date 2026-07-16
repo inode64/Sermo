@@ -75,6 +75,16 @@ func assertProtocolAliases(t *testing.T, name string, types []string, protocol s
 	}
 }
 
+// assertBuildConnCheck builds a single conn check entry and asserts the
+// resolved protocol and port, plus an optional extra predicate on the config.
+func assertBuildConnCheck(t *testing.T, name string, entry map[string]any, wantProto string, wantPort int, extra func(conn.Config) bool) {
+	t.Helper()
+	cc := buildConnCheckForTest(t, name, entry)
+	if cc.proto.Name() != wantProto || cc.cfg.Port != wantPort || (extra != nil && !extra(cc.cfg)) {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+}
+
 func assertUnixSocketCheck(t *testing.T, name, protocol, socket string) {
 	t.Helper()
 	defaultCheck := buildConnCheckForTest(t, name, map[string]any{"type": protocol})
@@ -395,16 +405,9 @@ func TestBuildFPMCheck(t *testing.T) {
 }
 
 func TestBuildDNSCheck(t *testing.T) {
-	built, warns := Build(map[string]any{
-		"resolver": map[string]any{"type": "dns", "host": "1.1.1.1", "query": "example.com"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("dns check should build: warns=%v", warns)
-	}
-	cc := built[0].Check.(connCheck)
-	if cc.proto.Name() != "dns" || cc.cfg.Port != 53 || cc.cfg.Query != "example.com" {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
+	assertBuildConnCheck(t, "resolver",
+		map[string]any{"type": "dns", "host": "1.1.1.1", "query": "example.com"},
+		"dns", 53, func(c conn.Config) bool { return c.Query == "example.com" })
 }
 
 func TestBuildFTPCheck(t *testing.T) {
@@ -437,16 +440,8 @@ func TestBuildSSHCheck(t *testing.T) {
 }
 
 func TestBuildNTPCheck(t *testing.T) {
-	built, warns := Build(map[string]any{
-		"clock": map[string]any{"type": "ntp", "host": "pool.ntp.org"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("ntp check should build: warns=%v", warns)
-	}
-	cc := built[0].Check.(connCheck)
-	if cc.proto.Name() != "ntp" || cc.cfg.Port != 123 {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
+	assertBuildConnCheck(t, "clock",
+		map[string]any{"type": "ntp", "host": "pool.ntp.org"}, "ntp", 123, nil)
 }
 
 func TestBuildSNMPCheck(t *testing.T) {
@@ -471,16 +466,9 @@ func TestBuildSNMPCheck(t *testing.T) {
 }
 
 func TestBuildTFTPCheck(t *testing.T) {
-	built, warns := Build(map[string]any{
-		"pxe": map[string]any{"type": "tftp", "host": "10.0.0.2", "query": "pxelinux.0"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("tftp check should build: warns=%v", warns)
-	}
-	cc := built[0].Check.(connCheck)
-	if cc.proto.Name() != "tftp" || cc.cfg.Port != 69 || cc.cfg.Query != "pxelinux.0" {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
+	assertBuildConnCheck(t, "pxe",
+		map[string]any{"type": "tftp", "host": "10.0.0.2", "query": "pxelinux.0"},
+		"tftp", 69, func(c conn.Config) bool { return c.Query == "pxelinux.0" })
 }
 
 func TestBuildLDAPCheck(t *testing.T) {
@@ -506,16 +494,8 @@ func TestBuildLDAPCheck(t *testing.T) {
 }
 
 func TestBuildAJPCheck(t *testing.T) {
-	built, warns := Build(map[string]any{
-		"tomcat": map[string]any{"type": "ajp", "host": "127.0.0.1"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("ajp check should build: warns=%v", warns)
-	}
-	cc := built[0].Check.(connCheck)
-	if cc.proto.Name() != "ajp" || cc.cfg.Port != 8009 {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
+	assertBuildConnCheck(t, "tomcat",
+		map[string]any{"type": "ajp", "host": "127.0.0.1"}, "ajp", 8009, nil)
 }
 
 func TestBuildIPPCheck(t *testing.T) {
@@ -677,16 +657,9 @@ func TestBuildLibvirtCheck(t *testing.T) {
 }
 
 func TestBuildRspamdCheck(t *testing.T) {
-	built, warns := Build(map[string]any{
-		"spam": map[string]any{"type": "rspamd", "host": "127.0.0.1", "tls": "skip-verify"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("rspamd check should build: warns=%v", warns)
-	}
-	cc := built[0].Check.(connCheck)
-	if cc.proto.Name() != "rspamd" || cc.cfg.Port != 11334 || cc.cfg.TLS != "skip-verify" {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
+	assertBuildConnCheck(t, "spam",
+		map[string]any{"type": "rspamd", "host": "127.0.0.1", "tls": "skip-verify"},
+		"rspamd", 11334, func(c conn.Config) bool { return c.TLS == "skip-verify" })
 }
 
 func TestBuildDHCPCheck(t *testing.T) {

@@ -172,7 +172,7 @@ func validateAllCatalogServices(t *testing.T, catalogDir, backend string) {
 	if err := os.MkdirAll(emptyEnabled, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	probe, err := Load(writeCatalogAuditGlobal(t, probeDir, emptyEnabled, backend), WithCatalogDirs(catalogDir))
+	probe, err := Load(writeServicesGlobal(t, probeDir, emptyEnabled, backend), WithCatalogDirs(catalogDir))
 	if err != nil {
 		t.Fatalf("Load (probe): %v", err)
 	}
@@ -182,7 +182,7 @@ func validateAllCatalogServices(t *testing.T, catalogDir, backend string) {
 		t.Fatal(err)
 	}
 	writeAllCatalogAuditServices(t, enabled, probe.CatalogServiceNames)
-	cfg, err := Load(writeCatalogAuditGlobal(t, dir, enabled, backend), WithCatalogDirs(catalogDir))
+	cfg, err := Load(writeServicesGlobal(t, dir, enabled, backend), WithCatalogDirs(catalogDir))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -191,7 +191,9 @@ func validateAllCatalogServices(t *testing.T, catalogDir, backend string) {
 	}
 }
 
-func writeCatalogAuditGlobal(t *testing.T, dir, enabled, backend string) string {
+// writeServicesGlobal writes a minimal sermo.yml with the given backend and
+// enabled services directory; shared by the catalog audit and reload tests.
+func writeServicesGlobal(t *testing.T, dir, enabled, backend string) string {
 	t.Helper()
 	global := filepath.Join(dir, "sermo.yml")
 	body := "engine: { backend: " + backend + " }\n" +

@@ -1,10 +1,6 @@
 package conn
 
-import (
-	"context"
-)
-
-func init() { Register(fail2banProtocol{}) }
+func init() { Register(fail2banProtocol) }
 
 // DefaultFail2banSocket is fail2ban-server's well-known control socket.
 const DefaultFail2banSocket = "/run/fail2ban/fail2ban.sock"
@@ -15,12 +11,4 @@ const DefaultFail2banSocket = "/run/fail2ban/fail2ban.sock"
 // creates and listens on the socket, so a successful connection proves it is
 // running (a stale socket left by a dead server refuses the connection). It
 // exchanges no commands. Socket-only (no TCP port), no auth.
-type fail2banProtocol struct{}
-
-func (fail2banProtocol) Name() string       { return ProtocolNameFail2ban }
-func (fail2banProtocol) DefaultPort() int   { return defaultPortNone }
-func (fail2banProtocol) RequiresUser() bool { return false }
-
-func (fail2banProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	return probeUnixSocket(ctx, cfg, DefaultFail2banSocket)
-}
+var fail2banProtocol = socketOnlyProtocol{name: ProtocolNameFail2ban, socket: DefaultFail2banSocket}

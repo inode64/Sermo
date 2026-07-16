@@ -49,6 +49,66 @@ func loadConfig(t *testing.T, global string, opts ...Option) (*Config, error) {
 	return Load(global, opts...)
 }
 
+// assertValidateIssue loads a config from files and asserts Validate reports
+// an issue containing want.
+func assertValidateIssue(t *testing.T, files map[string]string, want string) {
+	t.Helper()
+	cfg, err := loadConfig(t, writeConfig(t, files))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !hasIssue(Validate(cfg), want) {
+		t.Fatalf("Validate() did not report %q", want)
+	}
+}
+
+// assertResolvedCheckField loads a config from files, resolves instance, and
+// asserts the given field of the named check resolved to want.
+func assertResolvedCheckField(t *testing.T, files map[string]string, instance, check, field, want string) {
+	t.Helper()
+	cfg, err := loadConfig(t, writeConfig(t, files))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve(instance)
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	if got := cfgval.String(nested(t, resolved.Tree, "checks", check)[field]); got != want {
+		t.Errorf("%s.%s = %q, want %q", check, field, got, want)
+	}
+}
+
+// assertLoadDirError writes a sermo.yml exposing the dirKey path plus one
+// fragment file inside it, and asserts Load fails with an error containing want.
+func assertLoadDirError(t *testing.T, dirKey, file, body, want string) {
+	t.Helper()
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+paths:
+  ` + dirKey + `: [ @ROOT@/` + dirKey + ` ]
+defaults:
+  policy: { cooldown: 5m }
+`,
+		file: body,
+	})
+	if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("Load() error = %v, want %q", err, want)
+	}
+}
+
+// assertExpandedVar asserts a catalog variable referenced from the top-level
+// convenience key (socket, lockfile, ...) expands into the derived check path.
+func assertExpandedVar(t *testing.T, key, value string) {
+	t.Helper()
+	assertResolvedCheckField(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/services/svc.yml": "name: svc\nvariables:\n  " + key + ": " + value + "\n" +
+			key + ": \"${" + key + "}\"\nchecks:\n  service: { type: service, expect: active }\n",
+		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
+	}, "svc-main", key, "path", value)
+}
+
 const baseGlobal = `
 engine:
   backend: auto
@@ -335,7 +395,7 @@ aliases: nope
 }
 
 func TestCloneOverridesVariableBeforeExpansion(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	assertResolvedCheckField(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"services/redis-main.yml": `
 name: redis-main
@@ -352,20 +412,7 @@ clone: redis-main
 variables:
   port: 6380
 `,
-	})
-
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, errs := cfg.Resolve("redis-cache")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
-	ping := nested(t, resolved.Tree, "checks", "ping")
-	if got := cfgval.String(ping["port"]); got != "6380" {
-		t.Errorf("cloned port = %v, want overridden 6380", got)
-	}
+	}, "redis-cache", "ping", "port", "6380")
 }
 
 func TestMultiInstanceServiceOverridesPerInstance(t *testing.T) {
@@ -1461,19 +1508,7 @@ check: { type: load, load5: { op: ">", value: 3 } }
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			global := writeConfig(t, map[string]string{
-				"sermo.yml": `
-paths:
-  watches: [ @ROOT@/watches ]
-defaults:
-  policy: { cooldown: 5m }
-`,
-				"watches/load.yml": tc.body,
-			})
-
-			if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("Load() error = %v, want %q", err, tc.want)
-			}
+			assertLoadDirError(t, "watches", "watches/load.yml", tc.body, tc.want)
 		})
 	}
 }
@@ -1698,19 +1733,7 @@ type: email
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			global := writeConfig(t, map[string]string{
-				"sermo.yml": `
-paths:
-  notifiers: [ @ROOT@/notifiers ]
-defaults:
-  policy: { cooldown: 5m }
-`,
-				"notifiers/ops.yml": tc.body,
-			})
-
-			if _, err := loadConfig(t, global); err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("Load() error = %v, want %q", err, tc.want)
-			}
+			assertLoadDirError(t, "notifiers", "notifiers/ops.yml", tc.body, tc.want)
 		})
 	}
 }
@@ -2493,7 +2516,7 @@ checks:
 }
 
 func TestUserHostVariableOverridesBuiltin(t *testing.T) {
-	global := writeConfig(t, map[string]string{
+	assertResolvedCheckField(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"services/web.yml": `
 name: web
@@ -2503,20 +2526,12 @@ variables:
 checks:
   ping: { type: tcp, host: "${host}", port: "80" }
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, _ := cfg.Resolve("web")
-	if got := cfgval.String(nested(t, resolved.Tree, "checks", "ping")["host"]); got != "127.0.0.1" {
-		t.Errorf("ping host = %q, want user-defined 127.0.0.1", got)
-	}
+	}, "web", "ping", "host", "127.0.0.1")
 }
 
 func TestBuiltinPortVariable(t *testing.T) {
 	// A top-level `port:` field feeds the built-in ${port}.
-	global := writeConfig(t, map[string]string{
+	assertResolvedCheckField(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"services/db.yml": `
 name: db
@@ -2525,23 +2540,12 @@ port: 6379
 checks:
   ping: { type: tcp, host: "127.0.0.1", port: "${port}" }
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, errs := cfg.Resolve("db")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
-	if got := cfgval.String(nested(t, resolved.Tree, "checks", "ping")["port"]); got != "6379" {
-		t.Errorf("ping port = %q, want 6379 (from top-level port)", got)
-	}
+	}, "db", "ping", "port", "6379")
 }
 
 func TestUserPortVariableOverridesBuiltin(t *testing.T) {
 	// An explicit variables.port wins over the top-level `port:` field.
-	global := writeConfig(t, map[string]string{
+	assertResolvedCheckField(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"services/db.yml": `
 name: db
@@ -2551,15 +2555,7 @@ variables: { port: 7000 }
 checks:
   ping: { type: tcp, host: "127.0.0.1", port: "${port}" }
 `,
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, _ := cfg.Resolve("db")
-	if got := cfgval.String(nested(t, resolved.Tree, "checks", "ping")["port"]); got != "7000" {
-		t.Errorf("ping port = %q, want user-defined 7000", got)
-	}
+	}, "db", "ping", "port", "7000")
 }
 
 func TestUndefinedPortVariableErrors(t *testing.T) {
@@ -3264,18 +3260,11 @@ restart_on_change:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			global := writeConfig(t, map[string]string{
+			assertValidateIssue(t, map[string]string{
 				"sermo.yml":                   baseGlobal,
 				"catalog/apps/containerd.yml": tt.app,
 				"services/containerd.yml":     tt.service,
-			})
-			cfg, err := loadConfig(t, global)
-			if err != nil {
-				t.Fatalf("Load() error = %v", err)
-			}
-			if !hasIssue(Validate(cfg), tt.want) {
-				t.Fatalf("Validate() did not report %q", tt.want)
-			}
+			}, tt.want)
 		})
 	}
 }
@@ -3366,17 +3355,10 @@ restart_on_change:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			global := writeConfig(t, map[string]string{
+			assertValidateIssue(t, map[string]string{
 				"sermo.yml":        baseGlobal,
 				"services/web.yml": tt.service,
-			})
-			cfg, err := loadConfig(t, global)
-			if err != nil {
-				t.Fatalf("Load() error = %v", err)
-			}
-			if !hasIssue(Validate(cfg), tt.want) {
-				t.Fatalf("Validate() did not report %q", tt.want)
-			}
+			}, tt.want)
 		})
 	}
 }
@@ -3449,16 +3431,7 @@ defaults:
   policy:
     cooldown: 5m
 `
-			global := writeConfig(t, map[string]string{
-				"sermo.yml": globalCfg,
-			})
-			cfg, err := loadConfig(t, global)
-			if err != nil {
-				t.Fatalf("Load() error = %v", err)
-			}
-			if !hasIssue(Validate(cfg), tt.want) {
-				t.Fatalf("Validate() did not report %q", tt.want)
-			}
+			assertValidateIssue(t, map[string]string{"sermo.yml": globalCfg}, tt.want)
 		})
 	}
 }
@@ -5611,57 +5584,11 @@ func TestExpandFileShorthandsDesugar(t *testing.T) {
 }
 
 func TestExpandSocketUsesVariable(t *testing.T) {
-	global := writeConfig(t, map[string]string{
-		"sermo.yml": baseGlobal,
-		"catalog/services/svc.yml": `
-name: svc
-variables:
-  socket: /run/svc.sock
-socket: "${socket}"
-checks:
-  service: { type: service, expect: active }
-`,
-		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, errs := cfg.Resolve("svc-main")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
-	chk := nested(t, resolved.Tree, "checks", "socket")
-	if got := cfgval.String(chk["path"]); got != "/run/svc.sock" {
-		t.Fatalf("socket check path = %q, want /run/svc.sock", got)
-	}
+	assertExpandedVar(t, "socket", "/run/svc.sock")
 }
 
 func TestExpandLockfileUsesVariable(t *testing.T) {
-	global := writeConfig(t, map[string]string{
-		"sermo.yml": baseGlobal,
-		"catalog/services/svc.yml": `
-name: svc
-variables:
-  lockfile: /run/lock/svc.lock
-lockfile: "${lockfile}"
-checks:
-  service: { type: service, expect: active }
-`,
-		"services/svc-main.yml": "name: svc-main\nuses: svc\n",
-	})
-	cfg, err := loadConfig(t, global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	resolved, errs := cfg.Resolve("svc-main")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
-	chk := nested(t, resolved.Tree, "checks", "lockfile")
-	if got := cfgval.String(chk["path"]); got != "/run/lock/svc.lock" {
-		t.Fatalf("lockfile check path = %q, want /run/lock/svc.lock", got)
-	}
+	assertExpandedVar(t, "lockfile", "/run/lock/svc.lock")
 }
 
 func TestExpandLockfileRejectsRelativeCandidate(t *testing.T) {

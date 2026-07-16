@@ -54,12 +54,83 @@ func TestString(t *testing.T) {
 	}
 }
 
+type stringListCase struct {
+	name string
+	in   any
+	want []string
+}
+
+// runStringListCases exercises a lenient list accessor over the table.
+func runStringListCases(t *testing.T, fnName string, fn func(any) []string, cases []stringListCase) {
+	t.Helper()
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := fn(c.in); !slices.Equal(got, c.want) {
+				t.Errorf("%s(%#v) = %#v, want %#v", fnName, c.in, got, c.want)
+			}
+		})
+	}
+}
+
+type strictStringCase struct {
+	name    string
+	in      any
+	want    []string
+	wantErr bool
+}
+
+// runStrictStringCases exercises a strict list accessor over the table,
+// asserting the error verdict and the resulting slice.
+func runStrictStringCases(t *testing.T, fnName string, fn func(any) ([]string, error), cases []strictStringCase) {
+	t.Helper()
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := fn(c.in)
+			if (err != nil) != c.wantErr {
+				t.Fatalf("%s(%#v) error = %v, wantErr %v", fnName, c.in, err, c.wantErr)
+			}
+			if !slices.Equal(got, c.want) {
+				t.Errorf("%s(%#v) = %#v, want %#v", fnName, c.in, got, c.want)
+			}
+		})
+	}
+}
+
+// assertStringSliceCopied asserts fn copies a native string slice instead of
+// aliasing it.
+func assertStringSliceCopied(t *testing.T, fnName string, fn func(any) ([]string, error)) {
+	t.Helper()
+	in := []string{"a"}
+	got, err := fn(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got[0] = "changed"
+	if in[0] != "a" {
+		t.Fatalf("%s reused input slice, got source %#v", fnName, in)
+	}
+}
+
+type boolCase struct {
+	name string
+	in   any
+	want bool
+}
+
+// runBoolCases exercises a shape predicate over the table.
+func runBoolCases(t *testing.T, fnName string, fn func(any) bool, cases []boolCase) {
+	t.Helper()
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := fn(c.in); got != c.want {
+				t.Errorf("%s(%#v) = %v, want %v", fnName, c.in, got, c.want)
+			}
+		})
+	}
+}
+
 func TestStringList(t *testing.T) {
-	cases := []struct {
-		name string
-		in   any
-		want []string
-	}{
+	runStringListCases(t, "StringList", StringList, []stringListCase{
 		{"list of strings", []any{"a", "b"}, []string{"a", "b"}},
 		{"skips non-strings and empties", []any{"a", "", 7, "b"}, []string{"a", "b"}},
 		{"bare string becomes single element", "solo", []string{"solo"}},
@@ -67,23 +138,11 @@ func TestStringList(t *testing.T) {
 		{"nil is nil", nil, nil},
 		{"non-list non-string is nil", 42, nil},
 		{"empty list is empty (non-nil)", []any{}, []string{}},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			if got := StringList(c.in); !slices.Equal(got, c.want) {
-				t.Errorf("StringList(%#v) = %#v, want %#v", c.in, got, c.want)
-			}
-		})
-	}
+	})
 }
 
 func TestStrictStringList(t *testing.T) {
-	cases := []struct {
-		name    string
-		in      any
-		want    []string
-		wantErr bool
-	}{
+	runStrictStringCases(t, "StrictStringList", StrictStringList, []strictStringCase{
 		{"list of strings", []any{"a", "b"}, []string{"a", "b"}, false},
 		{"skips empties", []any{"a", "", "b"}, []string{"a", "b"}, false},
 		{"bare string becomes single element", "solo", []string{"solo"}, false},
@@ -92,77 +151,30 @@ func TestStrictStringList(t *testing.T) {
 		{"native string slice is copied", []string{"a", "b"}, []string{"a", "b"}, false},
 		{"rejects non-string item", []any{"a", 7}, nil, true},
 		{"rejects non-list non-string", 42, nil, true},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got, err := StrictStringList(c.in)
-			if (err != nil) != c.wantErr {
-				t.Fatalf("StrictStringList(%#v) error = %v, wantErr %v", c.in, err, c.wantErr)
-			}
-			if !slices.Equal(got, c.want) {
-				t.Errorf("StrictStringList(%#v) = %#v, want %#v", c.in, got, c.want)
-			}
-		})
-	}
+	})
 }
 
 func TestStrictStringListStringSliceIsCopied(t *testing.T) {
-	in := []string{"a"}
-	got, err := StrictStringList(in)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got[0] = "changed"
-	if in[0] != "a" {
-		t.Fatalf("StrictStringList reused input slice, got source %#v", in)
-	}
+	assertStringSliceCopied(t, "StrictStringList", StrictStringList)
 }
 
 func TestStrictStringArray(t *testing.T) {
-	cases := []struct {
-		name    string
-		in      any
-		want    []string
-		wantErr bool
-	}{
+	runStrictStringCases(t, "StrictStringArray", StrictStringArray, []strictStringCase{
 		{"list of strings", []any{"a", "b"}, []string{"a", "b"}, false},
 		{"preserves empties", []any{"a", "", "b"}, []string{"a", "", "b"}, false},
 		{"native string slice is copied", []string{"a", "b"}, []string{"a", "b"}, false},
 		{"rejects non-string item", []any{"a", 7}, nil, true},
 		{"rejects bare string", "solo", nil, true},
 		{"rejects nil", nil, nil, true},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got, err := StrictStringArray(c.in)
-			if (err != nil) != c.wantErr {
-				t.Fatalf("StrictStringArray(%#v) error = %v, wantErr %v", c.in, err, c.wantErr)
-			}
-			if !slices.Equal(got, c.want) {
-				t.Errorf("StrictStringArray(%#v) = %#v, want %#v", c.in, got, c.want)
-			}
-		})
-	}
+	})
 }
 
 func TestStrictStringArrayStringSliceIsCopied(t *testing.T) {
-	in := []string{"a"}
-	got, err := StrictStringArray(in)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got[0] = "changed"
-	if in[0] != "a" {
-		t.Fatalf("StrictStringArray reused input slice, got source %#v", in)
-	}
+	assertStringSliceCopied(t, "StrictStringArray", StrictStringArray)
 }
 
 func TestIsStringOrStringList(t *testing.T) {
-	cases := []struct {
-		name string
-		in   any
-		want bool
-	}{
+	runBoolCases(t, "IsStringOrStringList", IsStringOrStringList, []boolCase{
 		{"string", "solo", true},
 		{"empty string", "", true},
 		{"list of strings", []any{"a", ""}, true},
@@ -171,22 +183,11 @@ func TestIsStringOrStringList(t *testing.T) {
 		{"nil", nil, false},
 		{"integer", 1, false},
 		{"native string slice", []string{"a"}, false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			if got := IsStringOrStringList(c.in); got != c.want {
-				t.Errorf("IsStringOrStringList(%#v) = %v, want %v", c.in, got, c.want)
-			}
-		})
-	}
+	})
 }
 
 func TestIsNonEmptyStringList(t *testing.T) {
-	cases := []struct {
-		name string
-		in   any
-		want bool
-	}{
+	runBoolCases(t, "IsNonEmptyStringList", IsNonEmptyStringList, []boolCase{
 		{"string", "solo", true},
 		{"empty string", "", false},
 		{"list of strings", []any{"a", ""}, true},
@@ -195,22 +196,11 @@ func TestIsNonEmptyStringList(t *testing.T) {
 		{"list with non-string", []any{"a", 1}, false},
 		{"nil", nil, false},
 		{"integer", 1, false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			if got := IsNonEmptyStringList(c.in); got != c.want {
-				t.Errorf("IsNonEmptyStringList(%#v) = %v, want %v", c.in, got, c.want)
-			}
-		})
-	}
+	})
 }
 
 func TestIsNonEmptyStringArray(t *testing.T) {
-	cases := []struct {
-		name string
-		in   any
-		want bool
-	}{
+	runBoolCases(t, "IsNonEmptyStringArray", IsNonEmptyStringArray, []boolCase{
 		{"list of strings", []any{"a", "b"}, true},
 		{"list with empty string", []any{"a", ""}, false},
 		{"list with only empty string", []any{""}, false},
@@ -219,35 +209,17 @@ func TestIsNonEmptyStringArray(t *testing.T) {
 		{"string", "solo", false},
 		{"nil", nil, false},
 		{"native string slice", []string{"a"}, false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			if got := IsNonEmptyStringArray(c.in); got != c.want {
-				t.Errorf("IsNonEmptyStringArray(%#v) = %v, want %v", c.in, got, c.want)
-			}
-		})
-	}
+	})
 }
 
 func TestStringArray(t *testing.T) {
-	cases := []struct {
-		name string
-		in   any
-		want []string
-	}{
+	runStringListCases(t, "StringArray", StringArray, []stringListCase{
 		{"list of strings", []any{"a", "b"}, []string{"a", "b"}},
 		{"skips non-strings and empties", []any{"a", "", 7, "b"}, []string{"a", "b"}},
 		{"bare string is NOT accepted", "solo", nil},
 		{"nil is nil", nil, nil},
 		{"empty list is empty (non-nil)", []any{}, []string{}},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			if got := StringArray(c.in); !slices.Equal(got, c.want) {
-				t.Errorf("StringArray(%#v) = %#v, want %#v", c.in, got, c.want)
-			}
-		})
-	}
+	})
 }
 
 // TestStringArrayBareStringNil pins StringArray !ok -> nil (mutant .19).

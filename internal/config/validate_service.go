@@ -337,6 +337,29 @@ func validateControlKeys(control map[string]any, allowed map[string]struct{}, la
 	}
 }
 
+// validateControlSocketHostPort checks the socket/host/port trio shared by the
+// external control backends: absolute socket path, non-blank host, the
+// socket+host conflict, and the port range. validPort receives the host so
+// libvirt can require one for remote ports.
+func validateControlSocketHostPort(control map[string]any, socketKey, hostKey, portKey string, validSocket func(string) bool, validPort func(host string, port int) bool, add addFunc) {
+	if socket := cfgval.String(control[socketKey]); socket != "" && !validSocket(socket) {
+		add("%s %q must be an absolute path", controlPathSocket, socket)
+	}
+	host := cfgval.String(control[hostKey])
+	if host != "" && strings.TrimSpace(host) == "" {
+		add("%s must not be blank", controlPathHost)
+	}
+	if host != "" && cfgval.String(control[socketKey]) != "" {
+		add(controlSocketHostConflictMessage)
+	}
+	if _, present := control[portKey]; present {
+		port, ok := cfgval.Int(control[portKey])
+		if !ok || !validPort(host, port) {
+			add(validationTCPPortRangeFormat, controlPathPort, cfgval.TCPPortRange())
+		}
+	}
+}
+
 func validateLibvirtControl(control map[string]any, add addFunc) {
 	if domain := cfgval.String(control[virt.ControlKeyDomain]); domain == "" {
 		add("%s is required for libvirt", controlPathDomain)
@@ -349,44 +372,16 @@ func validateLibvirtControl(control map[string]any, add addFunc) {
 			add("%s %q must be a canonical UUID or 32 hex digits", controlPathUUID, uuid)
 		}
 	}
-	if socket := cfgval.String(control[virt.ControlKeySocket]); socket != "" && !virt.ValidSocketPath(socket) {
-		add("%s %q must be an absolute path", controlPathSocket, socket)
-	}
-	host := cfgval.String(control[virt.ControlKeyHost])
-	if host != "" && strings.TrimSpace(host) == "" {
-		add("%s must not be blank", controlPathHost)
-	}
-	if host != "" && cfgval.String(control[virt.ControlKeySocket]) != "" {
-		add(controlSocketHostConflictMessage)
-	}
-	if _, present := control[virt.ControlKeyPort]; present {
-		port, ok := cfgval.Int(control[virt.ControlKeyPort])
-		if !ok || !virt.ValidHostPort(host, port) {
-			add(validationTCPPortRangeFormat, controlPathPort, cfgval.TCPPortRange())
-		}
-	}
+	validateControlSocketHostPort(control, virt.ControlKeySocket, virt.ControlKeyHost, virt.ControlKeyPort,
+		virt.ValidSocketPath, virt.ValidHostPort, add)
 }
 
 func validateDockerControl(control map[string]any, add addFunc) {
 	if container := cfgval.String(control[dockerctl.ControlKeyContainer]); container == "" {
 		add("%s is required for docker", controlPathContainer)
 	}
-	if socket := cfgval.String(control[dockerctl.ControlKeySocket]); socket != "" && !filepath.IsAbs(socket) {
-		add("%s %q must be an absolute path", controlPathSocket, socket)
-	}
-	host := cfgval.String(control[dockerctl.ControlKeyHost])
-	if host != "" && strings.TrimSpace(host) == "" {
-		add("%s must not be blank", controlPathHost)
-	}
-	if host != "" && cfgval.String(control[dockerctl.ControlKeySocket]) != "" {
-		add(controlSocketHostConflictMessage)
-	}
-	if _, present := control[dockerctl.ControlKeyPort]; present {
-		port, ok := cfgval.Int(control[dockerctl.ControlKeyPort])
-		if !ok || !validTCPPort(port) {
-			add(validationTCPPortRangeFormat, controlPathPort, cfgval.TCPPortRange())
-		}
-	}
+	validateControlSocketHostPort(control, dockerctl.ControlKeySocket, dockerctl.ControlKeyHost, dockerctl.ControlKeyPort,
+		filepath.IsAbs, func(_ string, port int) bool { return validTCPPort(port) }, add)
 	if !dockerctl.ValidTLSValue(control[dockerctl.ControlKeyTLS]) {
 		add("%s %q is not one of %s", controlPathTLS, cfgval.String(control[dockerctl.ControlKeyTLS]), dockerctl.TLSValueSummary)
 	}

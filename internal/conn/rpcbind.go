@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"strconv"
 )
 
@@ -155,21 +154,16 @@ func parseRPCReply(b []byte, xid uint32) (string, error) {
 	return rpcAcceptStatName(binary.BigEndian.Uint32(b[off : off+rpcWordBytes])), nil
 }
 
+// rpcAcceptStatNames names each RPC accept_stat code.
+var rpcAcceptStatNames = map[uint32]string{
+	rpcAcceptSuccess:      rpcAcceptNameSuccess,
+	rpcAcceptProgUnavail:  rpcAcceptNameProgUnavail,
+	rpcAcceptProgMismatch: rpcAcceptNameProgMismatch,
+	rpcAcceptProcUnavail:  rpcAcceptNameProcUnavail,
+	rpcAcceptGarbageArgs:  rpcAcceptNameGarbageArgs,
+	rpcAcceptSystemErr:    rpcAcceptNameSystemErr,
+}
+
 func rpcAcceptStatName(code uint32) string {
-	switch code {
-	case rpcAcceptSuccess:
-		return rpcAcceptNameSuccess
-	case rpcAcceptProgUnavail:
-		return rpcAcceptNameProgUnavail
-	case rpcAcceptProgMismatch:
-		return rpcAcceptNameProgMismatch
-	case rpcAcceptProcUnavail:
-		return rpcAcceptNameProcUnavail
-	case rpcAcceptGarbageArgs:
-		return rpcAcceptNameGarbageArgs
-	case rpcAcceptSystemErr:
-		return rpcAcceptNameSystemErr
-	default:
-		return fmt.Sprintf("accept_stat_%d", code)
-	}
+	return codeName(code, rpcAcceptStatNames, "accept_stat_%d")
 }

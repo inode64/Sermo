@@ -4,6 +4,7 @@ module.exports = defineConfig({
   testDir: "./tests/web",
   outputDir: "./test-results/playwright",
   fullyParallel: true,
+  workers: 4,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: "line",

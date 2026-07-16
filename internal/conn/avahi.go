@@ -33,18 +33,7 @@ func (avahiProtocol) DefaultPort() int   { return defaultPortNone }
 func (avahiProtocol) RequiresUser() bool { return false }
 
 func (avahiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	// buildConnCheck pre-resolves the address into Socket; fall back here so a
-	// direct Probe call (e.g. from a test) still resolves query/default.
-	addr := cfg.Socket
-	if addr == "" {
-		addr = DBusAddress("", cfg.Query)
-	}
-
-	// godbus' connect/call are context-aware; keep an outer backstop for a
-	// stuck handshake.
-	return probeWithDeadline(ctx, func(ctx context.Context) (Result, error) {
-		return avahiProbe(ctx, addr)
-	})
+	return probeBusWithDeadline(ctx, cfg, avahiProbe)
 }
 
 // avahiProbe connects to the bus and queries the Avahi server object.

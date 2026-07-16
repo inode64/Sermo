@@ -691,11 +691,17 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 	return app.DowngradePrimaryOnCascadeFailure(primary, cascadeFailed), primaryErr
 }
 
+// openStateStore opens the persistent state store under paths.state.
+func openStateStore(ctx context.Context, cfg *config.Config) (*state.Store, error) {
+	//nolint:wrapcheck // each command prefixes its own "<verb> failed:" context.
+	return state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
+}
+
 func (a App) openManualActionStore(ctx context.Context, cfg *config.Config, action string) *state.Store {
 	if !operationActionUsesState(action) {
 		return nil
 	}
-	store, err := state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := openStateStore(ctx, cfg)
 	if err != nil {
 		fmt.Fprintf(a.Stderr, "warning: operation state unavailable: %v\n", err)
 		return nil
