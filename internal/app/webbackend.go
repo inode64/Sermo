@@ -155,6 +155,7 @@ type WebBackend struct {
 	settling          *Settling
 	observability     *ObservabilityRegistry
 	sla               SLAReader
+	processUptime     ProcessUptimeReader
 	events            *EventLog
 	remediation       *RemediationRegistry
 	ruleWindows       *RuleWindowRegistry
@@ -273,6 +274,7 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		wb.serviceMetrics = NewServiceMetricSampler()
 	}
 	wb.sla, _ = deps.SLA.(SLAReader)
+	wb.processUptime, _ = deps.ProcessUptime.(ProcessUptimeReader)
 	wb.measure, _ = deps.SLA.(MeasurementReader)
 	resolver := servicemgr.NewUnitResolver()
 	resolver.Manager = deps.Manager

@@ -102,3 +102,34 @@ func TestPruneProcessUptimeKeepsSpanConfirmedAtCutoff(t *testing.T) {
 		t.Fatalf("current spans = %+v, want one retained span", spans)
 	}
 }
+
+func TestProcessUptimeReportShowsWindowCoverageWithoutDoubleCounting(t *testing.T) {
+	s := openTemp(t)
+	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	if err := s.RecordProcessUptime("web", now.Add(-30*time.Minute), now, "backend-main"); err != nil {
+		t.Fatalf("RecordProcessUptime first: %v", err)
+	}
+	// An overlapping confirmation for the same service must not make the 1-hour
+	// coverage exceed the actual 30-minute process lifetime.
+	if err := s.RecordProcessUptime("web", now.Add(-20*time.Minute), now.Add(-10*time.Minute), "backend-main"); err != nil {
+		t.Fatalf("RecordProcessUptime overlap: %v", err)
+	}
+
+	windows, err := s.ProcessUptimeReport("web", now)
+	if err != nil {
+		t.Fatalf("ProcessUptimeReport: %v", err)
+	}
+	if len(windows) != len(SLAWindows) {
+		t.Fatalf("got %d windows, want %d", len(windows), len(SLAWindows))
+	}
+	hour := windows[0]
+	if !hour.Known || hour.CoveredSeconds != int64((30*time.Minute).Seconds()) || hour.TotalSeconds != int64(time.Hour.Seconds()) {
+		t.Fatalf("hour coverage = %+v, want 1800/3600 seconds", hour)
+	}
+	if len(hour.Segments) != SLAWindows[0].Segments {
+		t.Fatalf("hour segments = %d, want %d", len(hour.Segments), SLAWindows[0].Segments)
+	}
+	if hour.Segments[0] != 0 || hour.Segments[len(hour.Segments)-1] != 1 {
+		t.Fatalf("hour segment coverage = %v, want oldest gap and newest full", hour.Segments)
+	}
+}
