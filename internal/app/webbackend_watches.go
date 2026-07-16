@@ -67,9 +67,6 @@ func (b *WebBackend) watchPresentation(w *webWatch, system metrics.Snapshot) (*w
 	if w.checkType == checks.CheckTypeSwap {
 		swap = swapWatchInfo(system)
 	}
-	if w.serviceScoped {
-		return storage, swap, nil, nil, ""
-	}
 	meter, readings, summary := b.watchDashboardView(w, system)
 	return storage, swap, meter, readings, summary
 }

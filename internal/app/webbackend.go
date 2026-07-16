@@ -118,8 +118,7 @@ type webWatch struct {
 	raidControl   bool
 	// serviceScoped marks a watch declared inside a service's `watches:` section
 	// (named "<service>:<watch>"). It is listed and controllable like any watch,
-	// but its live meter/readings are omitted: its checks are scoped to the
-	// service's PID tree, which the host-scoped web live-view path does not model.
+	// but does not support manual host-watch probes.
 	serviceScoped bool
 }
 
@@ -397,8 +396,8 @@ func (b *WebBackend) registerNotifiers(cfg *config.Config) {
 
 // newWebWatch builds the web-listing model for one watch entry, shared by host
 // watches and service-embedded watches. defaultInterval is used when the entry
-// sets no interval; serviceScoped marks it as a service watch (live view
-// omitted). warn is a non-empty message when the expand action is malformed.
+// sets no interval; serviceScoped marks it as a service watch (manual probing
+// disabled). warn is a non-empty message when the expand action is malformed.
 func newWebWatch(name string, entry map[string]any, globalNotify []string, defaultInterval time.Duration, serviceScoped bool) (*webWatch, string) {
 	ctype := ""
 	if ce, ok := entry[config.WatchKeyCheck].(map[string]any); ok {
