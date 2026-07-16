@@ -361,7 +361,7 @@ func BuildWorkers(ctx context.Context, cfg *config.Config, deps Deps, collector 
 
 		target, warn := control.ResolveWithFallback(ctx, name, resolved.Tree, deps.Backend, deps.Manager, resolver)
 		if warn != "" {
-			warnings = append(warnings, "service "+name+": "+warn)
+			warnings = append(warnings, serviceSubjectPrefix+name+": "+warn)
 		}
 		if target.Unit == "" {
 			continue
@@ -372,7 +372,7 @@ func BuildWorkers(ctx context.Context, cfg *config.Config, deps Deps, collector 
 		serviceDeps.BackendPIDs = target.BackendPIDs
 		w, svcWatches, warns := buildWorker(ctx, name, target.Unit, resolved.Tree, serviceDeps, collector)
 		for _, x := range warns {
-			warnings = append(warnings, "service "+name+": "+x)
+			warnings = append(warnings, serviceSubjectPrefix+name+": "+x)
 		}
 		if t := config.CascadeTargets(resolved.Tree); len(t) > 0 {
 			cascadeMap[name] = t
@@ -866,11 +866,11 @@ func healthRecorder(deps Deps, name string) func(up bool) {
 //   - disabled: force monitoring off
 //   - previous: keep the persisted state; first run defaults to on
 func applyMonitorMode(store MonitorStore, name, mode string) string {
-	return applyMonitorModeFor(store, "service "+name, name, mode)
+	return applyMonitorModeFor(store, serviceSubjectPrefix+name, name, mode)
 }
 
 func applyWatchMonitorMode(store MonitorStore, name, mode string) string {
-	return applyMonitorModeFor(store, "watch "+name, watchMonitorKey(name), mode)
+	return applyMonitorModeFor(store, watchSubjectPrefix+name, watchMonitorKey(name), mode)
 }
 
 func applyMonitorModeFor(store MonitorStore, label, key, mode string) string {

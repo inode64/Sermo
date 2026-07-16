@@ -319,7 +319,7 @@ func pathSpecList(v any, field string) ([]PathSpec, error) {
 	case []any:
 		out := make([]PathSpec, 0, len(t))
 		for i, item := range t {
-			spec, ok, err := pathSpecFromListItem(item, fmt.Sprintf("%s[%d]", field, i))
+			spec, ok, err := pathSpecFromListItem(item, fmt.Sprintf(validationListIndexFormat, field, i))
 			if err != nil {
 				return nil, err
 			}

@@ -17,6 +17,10 @@ const (
 	sysHwmonPath         = "/sys/class/hwmon"
 )
 
+// malformedFileFormat reports a procfs/sysfs file whose contents did not parse,
+// shared by the samplers that read these paths.
+const malformedFileFormat = "malformed %s"
+
 // ProcPressureRootPath is the Linux PSI pressure root directory.
 const ProcPressureRootPath = procPressureRootPath
 

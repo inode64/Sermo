@@ -81,6 +81,17 @@ const (
 	eventActionNotifierTest      = "test"
 )
 
+// Subject prefixes name the entity a warning, event message or monitor label is
+// about, e.g. "service <name>: ..." or "watch <name>: ...". They are human-facing
+// text only; the persisted monitor-state keys are separate (see WatchMonitorKey).
+const (
+	serviceSubjectPrefix = "service "
+	watchSubjectPrefix   = "watch "
+	// watchUnderServiceSubject prefixes a service-embedded watch under its service
+	// subject, e.g. "service <svc>: watch <name>".
+	watchUnderServiceSubject = ": " + watchSubjectPrefix
+)
+
 // Event message values shared by monitor-state transitions.
 const (
 	eventMessageMonitoringPaused                   = "monitoring paused"

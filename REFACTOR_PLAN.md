@@ -785,6 +785,78 @@ Estado ejecutado:
 - Validacion ejecutada: `go test ./internal/units ./internal/state
   ./internal/app` y `make check` pasan.
 
+### Fase 44: Constantes de formatos de mensaje de validacion
+
+- Extraer a constantes los formatos de mensaje de validacion repetidos en
+  `internal/config` productivo, reutilizando el owner existente (el bloque const
+  de `validate.go` donde vive `validationTCPPortRangeFormat`).
+- Los textos visibles quedan byte-identicos (sustitucion textual exacta); no se
+  tocan variantes de un solo uso ni el owner de `internal/rules`.
+
+Estado ejecutado:
+
+- Nuevas constantes en el owner: `validationPositiveDurationFormat`,
+  `validationRequiredFormat`, `validationNotOneOfFormat`,
+  `validationPathAbsoluteFormat`, `validationNotSupportedFormat`,
+  `validationValueNotSupportedFormat` y `validationListIndexFormat`; los 13
+  sitios de `"%s must be a mapping"` pasan al `validationMappingFormat` ya
+  existente.
+- 63 sitios migrados en total (15 duracion positiva, 13 mapping, 8 required, 7
+  not-one-of, 5 path-absolute, 5 not-supported, 4 value-not-supported, 6
+  indice de lista) sin cambiar ningun texto emitido.
+- Los 4 field paths `+".delta"` derivan ahora de `checks.CheckKeyDelta`, como el
+  resto de `field_paths.go`.
+- No se fusionan `"%s path %q must be absolute"` y
+  `"%s %q must be an absolute path"` (textos visibles distintos).
+- Validacion ejecutada: `go test ./internal/config -count=1`, `gofmt -l
+  internal/config` limpio y `go vet ./internal/config` sin hallazgos.
+
+### Fase 45: Prefijos de sujeto en app
+
+- Nombrar en `internal/app` los prefijos de sujeto humano repetidos en warnings,
+  eventos y labels, manteniendo separadas las claves persistidas.
+- Nombrar el separador de resumenes de lecturas del dashboard y el mensaje de
+  watch desconocido del backend web.
+
+Estado ejecutado:
+
+- `event.go` (owner del vocabulario de eventos) define `serviceSubjectPrefix`
+  (17 sitios), `watchSubjectPrefix` (18) y `watchUnderServiceSubject` (4).
+- Contrato verificado: `"watch "` con espacio es siempre texto humano; la clave
+  persistida `"watch:"` (`WatchMonitorKey`) no comparte constante.
+- `watch.go` define `raidSubjectPrefix` (5 sitios);
+  `webbackend_watch_host.go` define `readingSummarySeparator` (" · ", 4 sitios
+  standalone; el `·` embebido en un format template queda local);
+  `webbackend.go` define `unknownWatchMessageFmt` (4 sitios), espejo del
+  `unknownServiceMessageFmt` existente.
+- El `"unknown watch %q"` de `internal/cli` queda local: superficie distinta y
+  uso unico; compartirlo acoplaria cli→app por un solo string.
+- Validacion ejecutada: `go test ./internal/app ./internal/cli` y gofmt/vet
+  limpios.
+
+### Fase 46: Formato de espera cancelada en process
+
+- Nombrar el formato de error repetido del sleep cancelable de `process.Wait`.
+
+Estado ejecutado:
+
+- `signal.go` define `waitCancelledFormat` ("wait cancelled: %w", 6 sitios).
+- Validacion ejecutada: `go test ./internal/process` y gofmt/vet limpios.
+
+### Fase 47: Vocabulario local de checks y rules
+
+- Nombrar formatos repetidos locales sin compartirlos con `internal/config`
+  (construccion y superficie distintas, contrato distinto).
+
+Estado ejecutado:
+
+- `checks/proc_paths.go` define `malformedFileFormat` ("malformed %s", 4 sitios
+  en los samplers procfs/sysfs); `checks/compare.go` define
+  `mustBeMappingSuffix` (" must be a mapping", 4 sitios de build/analyze).
+- `rules/model.go` define `ruleSubjectPrefix` ("rule ", 4 sitios en ParseRules).
+- Validacion ejecutada: `go test ./internal/checks ./internal/rules` y
+  gofmt/vet limpios.
+
 ## Guardrails
 
 - No cambiar YAML, JSON, CLI ni Web API publicos durante este refactor.

@@ -70,7 +70,7 @@ func (b *WebBackend) SetWatchMonitored(_ context.Context, name string, monitored
 		b.emitWatchMonitorEvent(name, action, kind, status, message)
 	}
 	if _, ok := b.watches[name]; !ok {
-		msg := fmt.Sprintf("unknown watch %q", name)
+		msg := fmt.Sprintf(unknownWatchMessageFmt, name)
 		emit(monitorAction(monitored), eventKindError, "", msg)
 		return fmt.Errorf("%s", msg)
 	}

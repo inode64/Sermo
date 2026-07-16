@@ -50,7 +50,7 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 	for _, name := range slices.Sorted(maps.Keys(raw)) {
 		entry, ok := raw[name].(map[string]any)
 		if !ok {
-			warnings = append(warnings, "watch "+name+" is not a mapping")
+			warnings = append(warnings, watchSubjectPrefix+name+" is not a mapping")
 			continue
 		}
 		ws, warns := buildWatchEntry(name, entry, deps, defaultInterval)
@@ -72,7 +72,7 @@ func buildWatchEntry(name string, entry map[string]any, deps Deps, defaultInterv
 	}
 	checkEntry, ok := entry[config.WatchKeyCheck].(map[string]any)
 	if !ok {
-		return nil, []string{"watch " + name + ": missing check"}
+		return nil, []string{watchSubjectPrefix + name + ": missing check"}
 	}
 	interval := defaultInterval
 	if d := cfgval.Duration(entry[config.EntryKeyInterval]); d > 0 {
@@ -128,15 +128,15 @@ func serviceWatches(service string, tree map[string]any, checkDeps checks.Deps, 
 	for _, wn := range slices.Sorted(maps.Keys(section)) {
 		entry, ok := section[wn].(map[string]any)
 		if !ok {
-			warnings = append(warnings, "service "+service+": watch "+wn+" is not a mapping")
+			warnings = append(warnings, serviceSubjectPrefix+service+watchUnderServiceSubject+wn+" is not a mapping")
 			continue
 		}
 		if reservedServiceWatchName(wn) {
-			warnings = append(warnings, "service "+service+": watch "+wn+": name is reserved for the version/config monitor; rename it")
+			warnings = append(warnings, serviceSubjectPrefix+service+watchUnderServiceSubject+wn+": name is reserved for the version/config monitor; rename it")
 			continue
 		}
 		if warn := unsupportedServiceWatchType(entry); warn != "" {
-			warnings = append(warnings, "service "+service+": watch "+wn+": "+warn)
+			warnings = append(warnings, serviceSubjectPrefix+service+watchUnderServiceSubject+wn+": "+warn)
 			continue
 		}
 		// A metric check reads a dedicated per-watch collector so its rate deltas
@@ -144,7 +144,7 @@ func serviceWatches(service string, tree map[string]any, checkDeps checks.Deps, 
 		entryDeps := checkDeps
 		if isMetricWatch(entry) {
 			if newMetricSource == nil {
-				warnings = append(warnings, "service "+service+": watch "+wn+": metric source unavailable")
+				warnings = append(warnings, serviceSubjectPrefix+service+watchUnderServiceSubject+wn+": metric source unavailable")
 				continue
 			}
 			entryDeps.Metrics = newMetricSource()
@@ -202,7 +202,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 	typ := cfgval.AsString(checkEntry[checks.CheckKeyType])
 	check, err := checks.BuildInline(name, checkEntry, watchInlineDeps(deps))
 	if err != nil {
-		return nil, "watch " + name + ": " + err.Error()
+		return nil, watchSubjectPrefix + name + ": " + err.Error()
 	}
 	actions, err := resolveWatchActions(entry, deps, watchActionOptions{
 		checkType:    typ,
@@ -210,7 +210,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		emptyMessage: "then requires a hook, notify and/or expand",
 	})
 	if err != nil {
-		return nil, "watch " + name + ": " + err.Error()
+		return nil, watchSubjectPrefix + name + ": " + err.Error()
 	}
 	w := newCheckWatch(checkWatchSpec{
 		name:      name,
@@ -251,14 +251,14 @@ func hasWatchAction(hook HookSpec, names, effectiveNames []string, expand *Expan
 func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) ([]*Watch, []string) {
 	watchMetrics, ok := entry[config.SectionMetrics].(map[string]any)
 	if !ok || len(watchMetrics) == 0 {
-		return nil, []string{"watch " + name + ": " + cfgval.AsString(checkEntry[checks.CheckKeyType]) + " check requires a non-empty metrics map"}
+		return nil, []string{watchSubjectPrefix + name + ": " + cfgval.AsString(checkEntry[checks.CheckKeyType]) + " check requires a non-empty metrics map"}
 	}
 	var out []*Watch
 	var warns []string
 	for _, key := range slices.Sorted(maps.Keys(watchMetrics)) {
 		mEntry, ok := watchMetrics[key].(map[string]any)
 		if !ok {
-			warns = append(warns, "watch "+name+".metrics."+key+": not a mapping")
+			warns = append(warns, watchSubjectPrefix+name+".metrics."+key+": not a mapping")
 			continue
 		}
 		ce := map[string]any{}
@@ -275,14 +275,14 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 
 		check, err := checks.BuildInline(name, ce, watchInlineDeps(deps))
 		if err != nil {
-			warns = append(warns, "watch "+name+".metrics."+key+": "+err.Error())
+			warns = append(warns, watchSubjectPrefix+name+".metrics."+key+": "+err.Error())
 			continue
 		}
 		actions, err := resolveWatchActions(mEntry, deps, watchActionOptions{
 			emptyMessage: "then requires a hook and/or notify",
 		})
 		if err != nil {
-			warns = append(warns, "watch "+name+".metrics."+key+": "+err.Error())
+			warns = append(warns, watchSubjectPrefix+name+".metrics."+key+": "+err.Error())
 			continue
 		}
 		out = append(out, newCheckWatch(checkWatchSpec{
@@ -347,17 +347,17 @@ func newCheckWatch(spec checkWatchSpec, deps Deps) *Watch {
 func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
 	paths, err := config.FileWatchPaths(checkEntry)
 	if err != nil {
-		return nil, "watch " + name + ": " + err.Error()
+		return nil, watchSubjectPrefix + name + ": " + err.Error()
 	}
 	cond, err := parseFileCond(checkEntry)
 	if err != nil {
-		return nil, "watch " + name + ": " + err.Error()
+		return nil, watchSubjectPrefix + name + ": " + err.Error()
 	}
 	actions, err := resolveWatchActions(entry, deps, watchActionOptions{
 		emptyMessage: "then requires a hook and/or notify",
 	})
 	if err != nil {
-		return nil, "watch " + name + ": " + err.Error()
+		return nil, watchSubjectPrefix + name + ": " + err.Error()
 	}
 	fw := &fileWatcher{
 		name:          name,
@@ -385,11 +385,11 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
 	pname := cfgval.AsString(checkEntry[checks.CheckKeyName])
 	if pname == "" {
-		return nil, "watch " + name + ": process check requires a name"
+		return nil, watchSubjectPrefix + name + ": process check requires a name"
 	}
 	cond, err := parseProcCond(checkEntry)
 	if err != nil {
-		return nil, "watch " + name + ": " + err.Error()
+		return nil, watchSubjectPrefix + name + ": " + err.Error()
 	}
 	match := ProcMatch{Name: pname, User: cfgval.AsString(checkEntry[checks.CheckKeyUser])}
 	actions, err := resolveWatchActions(entry, deps, watchActionOptions{
@@ -398,12 +398,12 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		emptyMessage: "then requires a hook, notify and/or kill",
 	})
 	if err != nil {
-		return nil, "watch " + name + ": " + err.Error()
+		return nil, watchSubjectPrefix + name + ": " + err.Error()
 	}
 	if actions.kill != nil {
 		selector, err := processWatchKillSelector(match)
 		if err != nil {
-			return nil, "watch " + name + ": " + err.Error()
+			return nil, watchSubjectPrefix + name + ": " + err.Error()
 		}
 		actions.kill.selector = selector
 	}
@@ -815,11 +815,11 @@ func versionMonitor(name string, tree map[string]any, deps Deps, interval time.D
 	}
 	entry := versionCommandEntry(tree)
 	if entry == nil {
-		return nil, "service " + name + ": version monitor needs commands.version (or preflight.version) in the daemon"
+		return nil, serviceSubjectPrefix + name + ": version monitor needs commands.version (or preflight.version) in the daemon"
 	}
 	level, lerr := onChangeVersionLevel(tree[config.ServiceMonitorKeyVersion])
 	if lerr != "" {
-		return nil, "service " + name + ": version monitor: " + lerr
+		return nil, serviceSubjectPrefix + name + ": version monitor: " + lerr
 	}
 	entry[checks.CheckKeyType] = checks.CheckTypeCommand
 	entry[checks.CheckKeyOnChange] = true
@@ -827,7 +827,7 @@ func versionMonitor(name string, tree map[string]any, deps Deps, interval time.D
 	watchName := serviceMonitorWatchName(name, config.ServiceMonitorKeyVersion)
 	check, err := checks.BuildInline(watchName, entry, monitorDeps(deps))
 	if err != nil {
-		return nil, "service " + name + ": version monitor: " + err.Error()
+		return nil, serviceSubjectPrefix + name + ": version monitor: " + err.Error()
 	}
 	return monitorWatch(watchName, checks.CheckTypeCommand, check, notifyNames, config.DryRun(tree), deps, interval), ""
 }
@@ -854,12 +854,12 @@ func configMonitor(name string, tree map[string]any, deps Deps, interval time.Du
 		entry[checks.CheckKeyPath] = p
 	}
 	if entry[checks.CheckKeyCommand] == nil && entry[checks.CheckKeyPath] == nil {
-		return nil, "service " + name + ": config monitor needs preflight.config (or a path)"
+		return nil, serviceSubjectPrefix + name + ": config monitor needs preflight.config (or a path)"
 	}
 	watchName := serviceMonitorWatchName(name, config.ServiceMonitorKeyConfig)
 	check, err := checks.BuildInline(watchName, entry, monitorDeps(deps))
 	if err != nil {
-		return nil, "service " + name + ": config monitor: " + err.Error()
+		return nil, serviceSubjectPrefix + name + ": config monitor: " + err.Error()
 	}
 	return monitorWatch(watchName, checks.CheckTypeConfig, check, notifyNames, config.DryRun(tree), deps, interval), ""
 }

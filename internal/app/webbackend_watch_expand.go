@@ -13,7 +13,7 @@ import (
 func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionResult {
 	w := b.watches[name]
 	if w == nil {
-		msg := fmt.Sprintf("unknown watch %q", name)
+		msg := fmt.Sprintf(unknownWatchMessageFmt, name)
 		b.emitWatchExpandEvent(name, eventKindExpandFailed, eventStatusFailed, msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}

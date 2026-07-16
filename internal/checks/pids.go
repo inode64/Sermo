@@ -57,7 +57,7 @@ func defaultPidsSampler() (PidsSample, error) {
 	}
 	fields := strings.Fields(string(data))
 	if len(fields) < procLoadavgMinFields {
-		return PidsSample{}, fmt.Errorf("malformed %s", procLoadavgPath)
+		return PidsSample{}, fmt.Errorf(malformedFileFormat, procLoadavgPath)
 	}
 	entities := fields[procLoadavgEntitiesIndex]
 	_, total, ok := strings.Cut(entities, procLoadavgEntitiesSep)

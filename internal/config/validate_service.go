@@ -48,7 +48,7 @@ var validProcessSelectorKeys = set(
 func validateMonitorMode(path string, mode any, add addFunc) {
 	s, isStr := mode.(string)
 	if _, ok := validMonitorModes[s]; !isStr || !ok {
-		add("%s %q is not one of %s", path, cfgval.String(mode), MonitorModeSummary)
+		add(validationNotOneOfFormat, path, cfgval.String(mode), MonitorModeSummary)
 	}
 }
 
@@ -68,7 +68,7 @@ func validateServiceMonitors(tree map[string]any, notifiers map[string]struct{},
 		}
 		ocMap, ok := oc.(map[string]any)
 		if !ok {
-			add("%s must be a mapping", serviceMonitorOnChangePath(key))
+			add(validationMappingFormat, serviceMonitorOnChangePath(key))
 			continue
 		}
 		if _, present := ocMap[rules.RuleFieldNotify]; present {
@@ -80,7 +80,7 @@ func validateServiceMonitors(tree map[string]any, notifiers map[string]struct{},
 			if key != ServiceMonitorKeyVersion {
 				add("%s is only supported for the version monitor", serviceMonitorOnChangeFieldPath(key, ServiceMonitorKeyLevel))
 			} else if _, ok := checks.VersionLevel(cfgval.String(lv)); !ok {
-				add("%s %q is not one of %s", serviceMonitorOnChangeFieldPath(ServiceMonitorKeyVersion, ServiceMonitorKeyLevel), cfgval.String(lv), checks.VersionLevelSummary)
+				add(validationNotOneOfFormat, serviceMonitorOnChangeFieldPath(ServiceMonitorKeyVersion, ServiceMonitorKeyLevel), cfgval.String(lv), checks.VersionLevelSummary)
 			}
 		}
 	}
@@ -93,7 +93,7 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 	}
 	for _, field := range []string{keyGracefulTimeout, keyTermTimeout, keyKillTimeout} {
 		if v, present := sp[field]; present && !isPositiveDuration(cfgval.String(v)) {
-			add("%s %q must be a valid positive duration", stopPolicyFieldPath(field), cfgval.String(v))
+			add(validationPositiveDurationFormat, stopPolicyFieldPath(field), cfgval.String(v))
 		}
 	}
 	force, _ := sp[keyForceKill].(bool)
@@ -167,7 +167,7 @@ func validateCleanOnStop(raw any, add addFunc) {
 			continue
 		}
 		if !filepath.IsAbs(path) {
-			add("%s path %q must be absolute", entryPath, path)
+			add(validationPathAbsoluteFormat, entryPath, path)
 			continue
 		}
 		if recursive {
@@ -249,7 +249,7 @@ func validatePidfiles(tree map[string]any, add addFunc) {
 		}
 		for _, path := range paths {
 			if !filepath.IsAbs(path) {
-				add("%s path %q must be absolute", pidfilesRolePath(role), path)
+				add(validationPathAbsoluteFormat, pidfilesRolePath(role), path)
 			}
 		}
 		entry, ok := processes[role].(map[string]any)
@@ -280,7 +280,7 @@ func validatePolicyExtras(tree map[string]any, add addFunc) {
 		}
 	}
 	if v, present := policy[rules.PolicyKeyMaxActionsWindow]; present && !isPositiveDuration(cfgval.String(v)) {
-		add("%s %q must be a valid positive duration", policyPathMaxActionsWindow, cfgval.String(v))
+		add(validationPositiveDurationFormat, policyPathMaxActionsWindow, cfgval.String(v))
 	}
 	if bo, ok := policy[rules.PolicyKeyBackoff].(map[string]any); ok {
 		initial := cfgval.String(bo[rules.BackoffKeyInitial])
@@ -325,7 +325,7 @@ func validateControl(tree map[string]any, add addFunc) {
 		validateControlKeys(control, set(dockerctl.ControlKeyType, dockerctl.ControlKeySocket, dockerctl.ControlKeyHost, dockerctl.ControlKeyPort, dockerctl.ControlKeyTLS, dockerctl.ControlKeyContainer), dockerControlKeySummary, add)
 		validateDockerControl(control, add)
 	default:
-		add("%s %q is not one of %s", controlPathType, typ, controlTypeSummary)
+		add(validationNotOneOfFormat, controlPathType, typ, controlTypeSummary)
 	}
 }
 
@@ -383,7 +383,7 @@ func validateDockerControl(control map[string]any, add addFunc) {
 	validateControlSocketHostPort(control, dockerctl.ControlKeySocket, dockerctl.ControlKeyHost, dockerctl.ControlKeyPort,
 		filepath.IsAbs, func(_ string, port int) bool { return validTCPPort(port) }, add)
 	if !dockerctl.ValidTLSValue(control[dockerctl.ControlKeyTLS]) {
-		add("%s %q is not one of %s", controlPathTLS, cfgval.String(control[dockerctl.ControlKeyTLS]), dockerctl.TLSValueSummary)
+		add(validationNotOneOfFormat, controlPathTLS, cfgval.String(control[dockerctl.ControlKeyTLS]), dockerctl.TLSValueSummary)
 	}
 }
 
@@ -484,7 +484,7 @@ func validateCommands(tree map[string]any, add addFunc) {
 		path := sectionCommands + "." + name
 		entry, ok := commands[name].(map[string]any)
 		if !ok {
-			add("%s must be a mapping", path)
+			add(validationMappingFormat, path)
 			continue
 		}
 		validateCommandFields(path, entry, false, add)
