@@ -2,6 +2,7 @@ package app
 
 import (
 	"strings"
+	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
@@ -52,10 +53,29 @@ func (b *WebBackend) watchSnapshotView(w *webWatch, system metrics.Snapshot) (*w
 }
 
 func (b *WebBackend) watchSnapshotCurrent(w *webWatch, snap CheckSnapshot) bool {
-	if snap.At.IsZero() {
+	return b.watchSampleCurrent(w, snap.At)
+}
+
+func (b *WebBackend) watchSampleCurrent(w *webWatch, at time.Time) bool {
+	if w == nil || at.IsZero() {
 		return false
 	}
-	return b.webNow().Sub(snap.At) <= runtimePublishMaxAge(w.interval)
+	return b.webNow().Sub(at) <= runtimePublishMaxAge(w.interval)
+}
+
+// watchSampleState classifies the newest daemon-published result without
+// exposing stale data or asking the web handler to run the watch itself.
+func (b *WebBackend) watchSampleState(w *webWatch, checkedAt time.Time) string {
+	if b.watchSnapshots == nil || w == nil {
+		return ""
+	}
+	if checkedAt.IsZero() {
+		return web.WatchSampleStateCollecting
+	}
+	if b.watchSampleCurrent(w, checkedAt) {
+		return web.WatchSampleStateFresh
+	}
+	return web.WatchSampleStateStale
 }
 
 func watchSnapshotMetricConfigured(w *webWatch, snap CheckSnapshot) bool {

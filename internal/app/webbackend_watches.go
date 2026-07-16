@@ -83,7 +83,8 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 			view.Monitored, view.MonitorSource, view.MonitorChangedAt = active, source, changed
 		}
 	}
-	if checkedAt := b.watchLastCheckedAt(w.name, w.checkType); !checkedAt.IsZero() {
+	checkedAt := b.watchLastCheckedAt(w.name, w.checkType)
+	if !checkedAt.IsZero() {
 		view.LastCheckedAt = checkedAt.Format(time.RFC3339)
 	}
 	if startedAt, running := b.watchProbeStartedAt(w.name); running {
@@ -92,8 +93,19 @@ func (b *WebBackend) applyWatchRuntimeView(view *web.Watch, w *webWatch, activit
 	if activity.At != "" {
 		view.LastActivity, view.LastActivityKind = activity.At, activity.Kind
 	}
+	if view.Enabled && view.Monitored {
+		view.SampleState = b.watchSampleState(w, checkedAt)
+	}
 	observed := b.settling == nil || b.settling.Observed(SettlingWatchKey(w.name))
 	view.State = WatchState(view.Enabled, view.Monitored, observed && watchViewFailed(*view), observed)
+	if view.State == TargetStateOK {
+		switch view.SampleState {
+		case web.WatchSampleStateCollecting:
+			view.State = TargetStateCollecting
+		case web.WatchSampleStateStale:
+			view.State = TargetStateStale
+		}
+	}
 	if deviceState := watchDeviceState(view.Readings); deviceState != "" && view.Enabled && view.Monitored && observed {
 		view.State = deviceState
 	}

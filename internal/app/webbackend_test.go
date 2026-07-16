@@ -2581,6 +2581,69 @@ func TestWatchSnapshotsFeedHeavyProbeView(t *testing.T) {
 	}
 }
 
+func TestWebBackendWatchSampleState(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	tests := []struct {
+		name        string
+		age         time.Duration
+		publish     bool
+		monitorMode string
+		wantState   string
+		wantSample  string
+		wantReading bool
+	}{
+		{name: "awaiting first sample", wantState: TargetStateCollecting, wantSample: web.WatchSampleStateCollecting},
+		{name: "fresh sample", age: time.Minute, publish: true, wantState: TargetStateOK, wantSample: web.WatchSampleStateFresh, wantReading: true},
+		{name: "stale sample", age: 2*time.Minute + time.Nanosecond, publish: true, wantState: TargetStateStale, wantSample: web.WatchSampleStateStale},
+		{name: "paused watch", age: 2*time.Minute + time.Nanosecond, publish: true, monitorMode: config.MonitorDisabled, wantState: TargetStateDisabled},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			snapshots := NewWatchSnapshots()
+			snapshots.now = func() time.Time { return now.Add(-tt.age) }
+			if tt.publish {
+				snapshots.Publish("firewall", checks.CheckTypeFirewallRules, checks.Result{
+					Check:   "firewall",
+					OK:      true,
+					Message: "firewall nft has 3 rules",
+					Data: map[string]any{
+						checks.DataKeyBackend: checks.FirewallBackendNftables,
+						checks.DataKeyRules:   3,
+					},
+				})
+			}
+			b := &WebBackend{
+				watchOrder: []string{"firewall"},
+				watches: map[string]*webWatch{
+					"firewall": {
+						name: "firewall", checkType: checks.CheckTypeFirewallRules, interval: time.Minute,
+						monitorMode: tt.monitorMode,
+						check:       map[string]any{checks.CheckKeyType: checks.CheckTypeFirewallRules},
+					},
+				},
+				watchSnapshots: snapshots,
+				now:            func() time.Time { return now },
+			}
+
+			watches := b.Watches(context.Background())
+			if len(watches) != 1 {
+				t.Fatalf("Watches() = %+v, want one watch", watches)
+			}
+			got := watches[0]
+			if got.State != tt.wantState || got.SampleState != tt.wantSample {
+				t.Fatalf("watch state/sample = %q/%q, want %q/%q", got.State, got.SampleState, tt.wantState, tt.wantSample)
+			}
+			if (len(got.Readings) > 0) != tt.wantReading {
+				t.Fatalf("watch readings = %+v, want present=%v", got.Readings, tt.wantReading)
+			}
+			if tt.publish && got.LastCheckedAt != now.Add(-tt.age).Format(time.RFC3339) {
+				t.Fatalf("last checked = %q, want %q", got.LastCheckedAt, now.Add(-tt.age).Format(time.RFC3339))
+			}
+		})
+	}
+}
+
 func TestWatchDashboardViewNeverRunsLiveFallback(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	runner := &countingWebRunner{}

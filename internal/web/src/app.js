@@ -74,6 +74,8 @@ const targetStateStarted = "started";
 const targetStatePaused = "paused";
 const targetStateStopped = "stopped";
 const targetStateWarning = "warning";
+const targetStateStale = "stale";
+const watchSampleStateFresh = "fresh";
 const targetStateOK = "ok";
 const targetStateMonitored = "monitored";
 const targetStateCollecting = "collecting";
@@ -168,7 +170,7 @@ const serviceStatusFilterStates = [
   targetStateMonitored,
   targetStateFailed,
 ];
-const watchStatusFilterStates = [targetStateDisabled, targetStateOK, targetStateStarting, targetStateTesting, targetStateRecovering, targetStateRebuilding, targetStateRepairing, targetStateMoving, targetStateMerging, targetStateFailed];
+const watchStatusFilterStates = [targetStateDisabled, targetStateOK, targetStateStarting, targetStateStale, targetStateTesting, targetStateRecovering, targetStateRebuilding, targetStateRepairing, targetStateMoving, targetStateMerging, targetStateFailed];
 const appStatusFilterStates = [targetStateOK, targetStateStarting, targetStateWarning, targetStateFailed];
 const mountStatusFilterStates = [mountStateActive, mountStateInactive];
 const slaHealthyPct = 99;
@@ -228,6 +230,7 @@ const targetStateClasses = {
   [targetStatePaused]: "state-paused",
   [targetStateStopped]: "state-stopped",
   [targetStateWarning]: "state-warning",
+  [targetStateStale]: "state-stale",
   [targetStateOK]: "state-ok",
   [targetStateMonitored]: "state-monitored",
   [targetStateCollecting]: "state-collecting",
@@ -262,6 +265,7 @@ const targetStateRanks = {
   [targetStatePaused]: 3,
   [targetStateOK]: 5,
   [targetStateWarning]: 6,
+  [targetStateStale]: 6,
   [targetStateStopping]: 1,
   [targetStateRestarting]: 1,
   [targetStateResuming]: 1,
@@ -1415,6 +1419,10 @@ function isWatchAttention(w) {
   return st === targetStateFailed;
 }
 
+function isWatchSampleStale(w) {
+  return watchStateText(w) === targetStateStale;
+}
+
 function openServiceStatusTarget(status) {
   const normalized = normalizeServiceStatusFilter(status);
   const surface = serviceSurfaceWithStatus(normalized);
@@ -1484,6 +1492,13 @@ function openPanelTarget(target) {
   if (target === "starting-watches") {
     openAllWatchPanels();
     setAllWatchStatuses(targetStateStarting);
+    const sec = $(getWatchPanel("host").section);
+    sec && sec.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
+    return;
+  }
+  if (target === "stale-watches") {
+    openAllWatchPanels();
+    setAllWatchStatuses(targetStateStale);
     const sec = $(getWatchPanel("host").section);
     sec && sec.scrollIntoView({ block: scrollBlockStart, behavior: scrollBehaviorSmooth });
     return;
@@ -1695,6 +1710,15 @@ function renderAttention() {
       title: failingWatches.length === 1 ? "1 watch firing" : `${failingWatches.length} watches firing`,
       detail: failingWatches.slice(0, 4).map((w) => displayName(w) || w.name).join(", ") + (failingWatches.length > 4 ? ` and ${failingWatches.length - 4} more` : ""),
       target: "failed-watches",
+    });
+  }
+  const staleWatches = (allWatches || []).filter(isWatchSampleStale);
+  if (staleWatches.length) {
+    items.push({
+      level: healthStatusWarning,
+      title: staleWatches.length === 1 ? "1 watch sample is stale" : `${staleWatches.length} watch samples are stale`,
+      detail: staleWatches.slice(0, 4).map((w) => displayName(w) || w.name).join(", ") + (staleWatches.length > 4 ? ` and ${staleWatches.length - 4} more` : ""),
+      target: "stale-watches",
     });
   }
   const failingApps = (allApps || []).filter((a) => appStateText(a) === targetStateFailed);
@@ -3433,11 +3457,15 @@ function watchHasExpand(w) {
   return !!(w && w.expand && Number(w.expand.by_bytes) > 0);
 }
 
-// watchStateText reads the server-computed health state (app.WatchState:
-// disabled, starting, failed or ok). Monitor state remains available to actions
-// and search, but the State column renders one state badge.
+// watchStateText reads the server-computed health state, including stale
+// daemon-published samples. Monitor state remains available to actions and
+// search, but the State column renders one state badge.
 function watchStateText(w) {
   return (w && w.state) || backendStatusUnknown;
+}
+
+function watchSampleState(w) {
+  return (w && w.sample_state) || "";
 }
 
 function watchStateRank(w) {
@@ -3883,7 +3911,9 @@ function watchLastCell(w) {
 }
 
 function watchLastCheckedCell(w) {
-  return activityDateCell({ time: w && w.last_checked_at });
+  const checked = activityDateCell({ time: w && w.last_checked_at });
+  if (watchSampleState(w) !== targetStateStale) return checked;
+  return tpl`${checked}<span class="watch-sample-note" title="The latest completed watch sample is older than its freshness limit.">${stateBadgeLabel(targetStateStale, targetStateStale)}</span>`;
 }
 
 // watchNameCell renders the shared expandable name cell (chevron + toggle).
@@ -3920,7 +3950,7 @@ function watchActionsCell(w) {
 // "failed") paints the row red, a warning amber, matching serviceRowParts so
 // certificate and every other host-watch panel follow the same visual line.
 function watchRowClass(state) {
-  return state === targetStateFailed ? "row-failing" : (state === targetStateWarning ? "row-warning" : "");
+  return state === targetStateFailed ? "row-failing" : (state === targetStateWarning || state === targetStateStale ? "row-warning" : "");
 }
 
 // watchExpansionRow returns the inline expansion row when open. Its colspan must
@@ -5202,6 +5232,7 @@ function panelTargetLabel(target) {
     case "monitored-services": return "service targets panel, monitored filter";
     case "failed-watches": return "watches panel, failed filter";
     case "starting-watches": return "watches panel, starting filter";
+    case "stale-watches": return "watches panel, stale filter";
     case "failed-apps": return "applications panel, failed filter";
     case "starting-apps": return "applications panel, starting filter";
     case "locks-section": return "runtime locks panel";
@@ -5242,6 +5273,7 @@ function renderOverview(ctx) {
   const watches = allWatches || [];
   const enabledWatches = watches.filter((w) => w && w.enabled);
   const failedWatches = watches.filter((w) => watchStateText(w) === targetStateFailed);
+  const staleWatches = watches.filter(isWatchSampleStale);
   const startingWatches = watches.filter((w) => watchStateText(w) === targetStateStarting);
   const startingApps = (allApps || []).filter((a) => appStateText(a) === targetStateStarting);
   const daemonStarting = ready && ready.status === daemonStatusStarting && ready.ready === false;
@@ -5265,7 +5297,7 @@ function renderOverview(ctx) {
     if (startingApps.length) parts.push(`${startingApps.length} app starting`);
     return parts.length ? parts.join(" · ") : "";
   };
-  const watchesSettling = settling && !failedWatches.length;
+  const watchesSettling = settling && !failedWatches.length && !staleWatches.length;
   const defaultServiceTarget = defaultServicePanelTarget();
   const servicesTarget = failedSvcs.length ? "failed-services"
     : (startingSvcs.length || daemonStarting ? "starting-services"
@@ -5273,9 +5305,10 @@ function renderOverview(ctx) {
         : (startingWatches.length ? "starting-watches"
           : (startingApps.length ? "starting-apps" : defaultServiceTarget))));
   const watchesTarget = failedWatches.length ? "failed-watches"
-    : (startingWatches.length ? "starting-watches"
-      : (startingApps.length && !startingSvcs.length && !daemonStarting ? "starting-apps"
-        : (settling ? "starting-services" : "watches-section")));
+    : (staleWatches.length ? "stale-watches"
+      : (startingWatches.length ? "starting-watches"
+        : (startingApps.length && !startingSvcs.length && !daemonStarting ? "starting-apps"
+          : (settling ? "starting-services" : "watches-section"))));
 
   const tile = (opts) => tpl`
     <button class="tile ${opts.cls || ""}" data-panel-target="${opts.target || defaultServiceTarget}" aria-label="${opts.ariaLabel || opts.label}" aria-describedby="${opts.describedBy || nothing}">
@@ -5300,12 +5333,13 @@ function renderOverview(ctx) {
   if (watches.length) {
     const watchesSub = failedWatches.length
       ? `${failedWatches.length} firing`
-      : (watchesSettlingSub() || "quiet");
-    const watchesUp = enabledWatches.length - failedWatches.length;
+      : (staleWatches.length ? `${staleWatches.length} stale`
+        : (watchesSettlingSub() || "quiet"));
+    const watchesUp = enabledWatches.length - failedWatches.length - staleWatches.length;
     tiles.push(tile({
       label: "Watches",
       value: tpl`${watchesUp}<small> / ${enabledWatches.length}</small>`,
-      cls: failedWatches.length ? "t-crit" : (watchesSettling ? "" : "t-ok"),
+      cls: failedWatches.length ? "t-crit" : (staleWatches.length ? "t-warn" : (watchesSettling ? "" : "t-ok")),
       sub: watchesSub,
       target: watchesTarget,
       ariaLabel: tileAriaLabel("Watches", `${watchesUp} of ${enabledWatches.length}`, watchesSub, watchesTarget),
@@ -5659,6 +5693,8 @@ function applyWatchProbeResult(name, body, failed) {
   if (Array.isArray(body.readings)) next.readings = body.readings;
   if (body.message) next.summary = body.message;
   delete next.probe;
+  next.sample_state = watchSampleStateFresh;
+  next.last_checked_at = new Date().toISOString();
   next.state = failed ? targetStateFailed : targetStateOK;
   allWatches = [...allWatches];
   allWatches[idx] = next;
