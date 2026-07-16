@@ -43,32 +43,38 @@ func (a App) runMonitor(ctx context.Context, opts options, pause bool) int {
 	}
 	defer store.Close()
 
-	if pause {
-		if err := store.SetActive(service, false, state.SourceCLI); err != nil {
-			a.recordAccess(cfg, verb, service, accessStatusError, err.Error())
-			return a.fail(opts, fmt.Sprintf("unmonitor failed: %v", err))
-		}
-		a.recordAccess(cfg, verb, service, accessStatusOK, monitorStatusPaused)
-		a.reportMonitor(opts, store, service, monitorStatusPaused)
-		return exitSuccess
-	}
-
-	active, found, err := store.Active(service)
+	status, err := updateMonitorState(store, service, pause)
 	if err != nil {
 		a.recordAccess(cfg, verb, service, accessStatusError, err.Error())
-		return a.fail(opts, fmt.Sprintf("monitor failed: %v", err))
-	}
-	if err := store.SetActive(service, true, state.SourceCLI); err != nil {
-		a.recordAccess(cfg, verb, service, accessStatusError, err.Error())
-		return a.fail(opts, fmt.Sprintf("monitor failed: %v", err))
-	}
-	status := monitorStatusResumed
-	if !found || active {
-		status = monitorStatusNotPaused
+		return a.fail(opts, fmt.Sprintf("%s failed: %v", verb, err))
 	}
 	a.recordAccess(cfg, verb, service, accessStatusOK, status)
 	a.reportMonitor(opts, store, service, status)
 	return exitSuccess
+}
+
+// updateMonitorState persists a monitor/unmonitor request and reports whether
+// it paused an entry, resumed a paused entry, or found monitoring already on.
+// Service and watch commands use independent keys but share these semantics.
+func updateMonitorState(store *state.Store, key string, pause bool) (string, error) {
+	if pause {
+		if err := store.SetActive(key, false, state.SourceCLI); err != nil {
+			return "", err
+		}
+		return monitorStatusPaused, nil
+	}
+
+	active, found, err := store.Active(key)
+	if err != nil {
+		return "", err
+	}
+	if err := store.SetActive(key, true, state.SourceCLI); err != nil {
+		return "", err
+	}
+	if !found || active {
+		return monitorStatusNotPaused, nil
+	}
+	return monitorStatusResumed, nil
 }
 
 func (a App) reportMonitor(opts options, store *state.Store, service, status string) {
