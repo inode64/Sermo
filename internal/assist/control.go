@@ -21,18 +21,16 @@ func (dockerAssistant) Title() string {
 
 func (dockerAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	defer Recover(&err)
-	if env.DockerContainers == nil {
-		return Result{}, errors.New("docker detection is unavailable")
-	}
-	cands, err := env.DockerContainers()
-	if err != nil {
-		return Result{}, fmt.Errorf("detect Docker containers: %w", err)
-	}
-	if len(cands) == 0 {
-		return Result{}, errors.New("no Docker containers were detected on this host")
-	}
-	selected := chooseDockerContainers(p, "Which Docker containers do you want Sermo to monitor and manage?", cands)
-	return controlledResult(buildControlledServices(p, env, selected, dockerName, buildDockerService)), nil
+	return runControlledAssistant(p, env, controlledAssistantSpec[DockerCandidate]{
+		detect:      env.DockerContainers,
+		unavailable: "docker detection is unavailable",
+		detectLabel: "detect Docker containers",
+		noneFound:   "no Docker containers were detected on this host",
+		question:    "Which Docker containers do you want Sermo to monitor and manage?",
+		choose:      chooseDockerContainers,
+		name:        dockerName,
+		build:       buildDockerService,
+	})
 }
 
 type vmAssistant struct{}
@@ -44,18 +42,42 @@ func (vmAssistant) Title() string {
 
 func (vmAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	defer Recover(&err)
-	if env.VMs == nil {
-		return Result{}, errors.New("VM detection is unavailable")
+	return runControlledAssistant(p, env, controlledAssistantSpec[VMCandidate]{
+		detect:      env.VMs,
+		unavailable: "VM detection is unavailable",
+		detectLabel: "detect libvirt domains",
+		noneFound:   "no libvirt/QEMU domains were detected on this host",
+		question:    "Which virtual machines do you want Sermo to monitor and manage?",
+		choose:      chooseVMs,
+		name:        vmName,
+		build:       buildVMService,
+	})
+}
+
+type controlledAssistantSpec[T any] struct {
+	detect      func() ([]T, error)
+	unavailable string
+	detectLabel string
+	noneFound   string
+	question    string
+	choose      func(*Prompt, string, []T) []T
+	name        func(T) string
+	build       func(T) map[string]any
+}
+
+func runControlledAssistant[T any](p *Prompt, env Env, spec controlledAssistantSpec[T]) (Result, error) {
+	if spec.detect == nil {
+		return Result{}, errors.New(spec.unavailable)
 	}
-	cands, err := env.VMs()
+	candidates, err := spec.detect()
 	if err != nil {
-		return Result{}, fmt.Errorf("detect libvirt domains: %w", err)
+		return Result{}, fmt.Errorf("%s: %w", spec.detectLabel, err)
 	}
-	if len(cands) == 0 {
-		return Result{}, errors.New("no libvirt/QEMU domains were detected on this host")
+	if len(candidates) == 0 {
+		return Result{}, errors.New(spec.noneFound)
 	}
-	selected := chooseVMs(p, "Which virtual machines do you want Sermo to monitor and manage?", cands)
-	return controlledResult(buildControlledServices(p, env, selected, vmName, buildVMService)), nil
+	selected := spec.choose(p, spec.question, candidates)
+	return controlledResult(buildControlledServices(p, env, selected, spec.name, spec.build)), nil
 }
 
 func buildControlledServices[T any](p *Prompt, env Env, selected []T, name func(T) string, build func(T) map[string]any) map[string]any {

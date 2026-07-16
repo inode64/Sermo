@@ -1,6 +1,7 @@
 package assist
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -87,5 +88,37 @@ func TestVMAssistant(t *testing.T) {
 	check := svc[config.SectionWatches].(map[string]any)[AssistantNameVM].(map[string]any)[config.WatchKeyCheck].(map[string]any)
 	if check[checks.CheckKeyType] != virt.ControlType || check[checks.CheckKeyDomain] != "web01" || check[checks.CheckKeyQuery] != "qemu:///system" {
 		t.Fatalf("vm check = %v", check)
+	}
+}
+
+func TestDockerAssistantDetectionErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		env  Env
+		want string
+	}{
+		{name: "unavailable", want: "docker detection is unavailable"},
+		{
+			name: "failure",
+			env: Env{DockerContainers: func() ([]DockerCandidate, error) {
+				return nil, errors.New("socket unavailable")
+			}},
+			want: "detect Docker containers: socket unavailable",
+		},
+		{
+			name: "none found",
+			env: Env{DockerContainers: func() ([]DockerCandidate, error) {
+				return nil, nil
+			}},
+			want: "no Docker containers were detected on this host",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := dockerAssistant{}.Run(NewPrompt(strings.NewReader(""), &strings.Builder{}), tc.env)
+			if err == nil || err.Error() != tc.want {
+				t.Fatalf("Run error = %v, want %q", err, tc.want)
+			}
+		})
 	}
 }
