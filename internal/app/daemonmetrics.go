@@ -68,6 +68,23 @@ type daemonMetricAgg struct {
 	max float64
 }
 
+type persistentMetricValue struct {
+	name  string
+	value float64
+	ready bool
+}
+
+type persistentMetricReader struct {
+	summary func(metric string, span time.Duration, now time.Time) (state.MeasurementStat, error)
+	series  func(metric string, from, to time.Time) ([]state.MeasurementPoint, error)
+}
+
+type persistentMetricTriplet struct {
+	cpu    web.MetricSeries
+	memory web.MetricSeries
+	io     web.MetricSeries
+}
+
 // NewDaemonMetricSampler builds the process metric sampler shared by sermod and
 // the web backend.
 func NewDaemonMetricSampler(collector *metrics.Collector, now func() time.Time, store DaemonMetricStore) *DaemonMetricSampler {
@@ -208,33 +225,54 @@ func (s *DaemonMetricSampler) recordPersistent(sample daemonMetricSample) {
 	if s.store == nil {
 		return
 	}
-	if sample.rssOK {
-		_ = s.store.RecordDaemonMetric(metrics.MetricMemory, float64(sample.rss), sample.at)
-	}
-	if sample.cpuReady {
-		_ = s.store.RecordDaemonMetric(metrics.MetricCPU, sample.cpu, sample.at)
-	}
-	if sample.ioReady {
-		_ = s.store.RecordDaemonMetric(metrics.MetricIO, sample.io, sample.at)
-	}
+	recordPersistentMetrics(s.store.RecordDaemonMetric, sample.at, [3]persistentMetricValue{
+		{name: metrics.MetricMemory, value: float64(sample.rss), ready: sample.rssOK},
+		{name: metrics.MetricCPU, value: sample.cpu, ready: sample.cpuReady},
+		{name: metrics.MetricIO, value: sample.io, ready: sample.ioReady},
+	})
 }
 
 func (s *DaemonMetricSampler) persistentSeries(sample daemonMetricSample, since time.Duration) (web.DaemonMetrics, bool) {
 	if s.store == nil {
 		return web.DaemonMetrics{}, false
 	}
-	now := sample.at.Add(metricSeriesBucket)
-	series := func(metric, unit string) (web.MetricSeries, bool) {
-		stat, err := s.store.DaemonMetricSummary(metric, since+metricSeriesBucket, now)
+	triplet, ok := loadPersistentMetricTriplet(daemonMetricCheck, sample.at, since, persistentMetricReader{
+		summary: s.store.DaemonMetricSummary,
+		series:  s.store.DaemonMetricSeries,
+	})
+	if !ok {
+		return web.DaemonMetrics{}, false
+	}
+	return web.DaemonMetrics{
+		Since:   since.String(),
+		Current: daemonRuntime(sample),
+		CPU:     triplet.cpu,
+		Memory:  triplet.memory,
+		IO:      triplet.io,
+	}, true
+}
+
+func recordPersistentMetrics(record func(string, float64, time.Time) error, at time.Time, values [3]persistentMetricValue) {
+	for _, value := range values {
+		if value.ready {
+			_ = record(value.name, value.value, at)
+		}
+	}
+}
+
+func loadPersistentMetricTriplet(check string, at time.Time, since time.Duration, reader persistentMetricReader) (persistentMetricTriplet, bool) {
+	now := at.Add(metricSeriesBucket)
+	load := func(metric, unit string) (web.MetricSeries, bool) {
+		stat, err := reader.summary(metric, since+metricSeriesBucket, now)
 		if err != nil {
 			return web.MetricSeries{}, false
 		}
-		points, err := s.store.DaemonMetricSeries(metric, sample.at.Add(-since), now)
+		points, err := reader.series(metric, at.Add(-since), now)
 		if err != nil {
 			return web.MetricSeries{}, false
 		}
 		return web.MetricSeries{
-			Check:   daemonMetricCheck,
+			Check:   check,
 			Metric:  metric,
 			Since:   since.String(),
 			Unit:    unit,
@@ -242,25 +280,19 @@ func (s *DaemonMetricSampler) persistentSeries(sample daemonMetricSample, since 
 			Points:  measurementPoints(points),
 		}, true
 	}
-	cpu, ok := series(metrics.MetricCPU, metrics.MetricUnitPercent)
+	cpu, ok := load(metrics.MetricCPU, metrics.MetricUnitPercent)
 	if !ok {
-		return web.DaemonMetrics{}, false
+		return persistentMetricTriplet{}, false
 	}
-	memory, ok := series(metrics.MetricMemory, metrics.MetricUnitBytes)
+	memory, ok := load(metrics.MetricMemory, metrics.MetricUnitBytes)
 	if !ok {
-		return web.DaemonMetrics{}, false
+		return persistentMetricTriplet{}, false
 	}
-	io, ok := series(metrics.MetricIO, metrics.MetricUnitBytesPerSecond)
+	io, ok := load(metrics.MetricIO, metrics.MetricUnitBytesPerSecond)
 	if !ok {
-		return web.DaemonMetrics{}, false
+		return persistentMetricTriplet{}, false
 	}
-	return web.DaemonMetrics{
-		Since:   since.String(),
-		Current: daemonRuntime(sample),
-		CPU:     cpu,
-		Memory:  memory,
-		IO:      io,
-	}, true
+	return persistentMetricTriplet{cpu: cpu, memory: memory, io: io}, true
 }
 
 func (s *DaemonMetricSampler) trimLocked(cutoff time.Time) {

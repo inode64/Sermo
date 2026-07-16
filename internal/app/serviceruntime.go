@@ -9,6 +9,7 @@ import (
 	"sermo/internal/metrics"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
+	"sermo/internal/state"
 	"sermo/internal/units"
 	"sermo/internal/web"
 )
@@ -170,58 +171,36 @@ func (s *ServiceMetricSampler) recordPersistent(name string, cur web.ServiceRunt
 	if s == nil || s.store == nil {
 		return
 	}
-	if cur.HasCPU {
-		_ = s.store.RecordServiceMetric(name, metrics.MetricCPU, cur.CPU, at)
-	}
-	if cur.Count > 0 {
-		_ = s.store.RecordServiceMetric(name, metrics.MetricMemory, float64(cur.RSS), at)
-	}
-	if cur.IOReady {
-		_ = s.store.RecordServiceMetric(name, metrics.MetricIO, cur.IORate, at)
-	}
+	recordPersistentMetrics(func(metric string, value float64, at time.Time) error {
+		return s.store.RecordServiceMetric(name, metric, value, at)
+	}, at, [3]persistentMetricValue{
+		{name: metrics.MetricCPU, value: cur.CPU, ready: cur.HasCPU},
+		{name: metrics.MetricMemory, value: float64(cur.RSS), ready: cur.Count > 0},
+		{name: metrics.MetricIO, value: cur.IORate, ready: cur.IOReady},
+	})
 }
 
 func (s *ServiceMetricSampler) persistentSeries(name string, cur web.ServiceRuntime, at time.Time, since time.Duration) (web.ServiceRuntimeMetrics, bool) {
 	if s == nil || s.store == nil {
 		return web.ServiceRuntimeMetrics{}, false
 	}
-	now := at.Add(metricSeriesBucket)
-	series := func(metric, unit string) (web.MetricSeries, bool) {
-		stat, err := s.store.ServiceMetricSummary(name, metric, since+metricSeriesBucket, now)
-		if err != nil {
-			return web.MetricSeries{}, false
-		}
-		points, err := s.store.ServiceMetricSeries(name, metric, at.Add(-since), now)
-		if err != nil {
-			return web.MetricSeries{}, false
-		}
-		return web.MetricSeries{
-			Check:   runtimeMetricCheck,
-			Metric:  metric,
-			Since:   since.String(),
-			Unit:    unit,
-			Summary: metricSummary(stat),
-			Points:  measurementPoints(points),
-		}, true
-	}
-	cpu, ok := series(metrics.MetricCPU, metrics.MetricUnitPercent)
-	if !ok {
-		return web.ServiceRuntimeMetrics{}, false
-	}
-	memory, ok := series(metrics.MetricMemory, metrics.MetricUnitBytes)
-	if !ok {
-		return web.ServiceRuntimeMetrics{}, false
-	}
-	io, ok := series(metrics.MetricIO, metrics.MetricUnitBytesPerSecond)
+	triplet, ok := loadPersistentMetricTriplet(runtimeMetricCheck, at, since, persistentMetricReader{
+		summary: func(metric string, span time.Duration, now time.Time) (state.MeasurementStat, error) {
+			return s.store.ServiceMetricSummary(name, metric, span, now)
+		},
+		series: func(metric string, from, to time.Time) ([]state.MeasurementPoint, error) {
+			return s.store.ServiceMetricSeries(name, metric, from, to)
+		},
+	})
 	if !ok {
 		return web.ServiceRuntimeMetrics{}, false
 	}
 	return web.ServiceRuntimeMetrics{
 		Since:   since.String(),
 		Current: cur,
-		CPU:     cpu,
-		Memory:  memory,
-		IO:      io,
+		CPU:     triplet.cpu,
+		Memory:  triplet.memory,
+		IO:      triplet.io,
 	}, true
 }
 

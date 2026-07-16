@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -74,6 +75,44 @@ func TestMetricSeriesAggregatesValidSamplesByMinute(t *testing.T) {
 	}
 	if second := series.Points[1]; second.Start != base.Add(time.Minute).Format(time.RFC3339) || second.N != 1 || second.Avg != 8 || second.Min != 8 || second.Max != 8 {
 		t.Fatalf("second point = %+v", second)
+	}
+}
+
+func TestLoadPersistentMetricTriplet(t *testing.T) {
+	at := time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name         string
+		summaryError bool
+		seriesError  bool
+		wantOK       bool
+	}{
+		{name: "success", wantOK: true},
+		{name: "summary error", summaryError: true},
+		{name: "series error", seriesError: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			triplet, ok := loadPersistentMetricTriplet("runtime", at, time.Hour, persistentMetricReader{
+				summary: func(string, time.Duration, time.Time) (state.MeasurementStat, error) {
+					if test.summaryError {
+						return state.MeasurementStat{}, errors.New("summary unavailable")
+					}
+					return state.MeasurementStat{Count: 1, Avg: 2, Min: 2, Max: 2}, nil
+				},
+				series: func(string, time.Time, time.Time) ([]state.MeasurementPoint, error) {
+					if test.seriesError {
+						return nil, errors.New("series unavailable")
+					}
+					return []state.MeasurementPoint{{Start: at, N: 1, Avg: 2, Min: 2, Max: 2}}, nil
+				},
+			})
+			if ok != test.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, test.wantOK)
+			}
+			if test.wantOK && (triplet.cpu.Check != "runtime" || triplet.memory.Metric != "memory" || triplet.io.Unit != "B/s") {
+				t.Fatalf("triplet metadata = %+v", triplet)
+			}
+		})
 	}
 }
 
