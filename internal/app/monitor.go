@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 
@@ -295,6 +296,9 @@ func reloadConfigCompatibilityError(current, next *config.Config) string {
 	}
 	if current.Global.StateDir() != next.Global.StateDir() {
 		return "paths.state changed; restart sermod"
+	}
+	if !reflect.DeepEqual(current.Global.Raw[config.SectionWeb], next.Global.Raw[config.SectionWeb]) {
+		return "web configuration changed; restart sermod"
 	}
 	return ""
 }

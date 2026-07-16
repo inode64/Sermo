@@ -459,6 +459,10 @@ repite `startup_delay` ni marca `/readyz` como apagándose.
 contienen los locks de instancia/operación y el almacén persistente abierto del
 daemon. Cambiar cualquiera requiere reiniciar completamente `sermod`; la
 recarga rechaza el cambio y mantiene la generación actual.
+El bloque `web` también se aplica solo al arrancar: la dirección/puerto del
+listener, autenticación y política guest se instalan en el servidor HTTP al
+iniciar `sermod`. Cambia esos ajustes con un reinicio completo; la recarga los
+rechaza en vez de dejar activa la política de acceso web anterior.
 Las líneas base de tasa de CPU por service solo se restablecen cuando un service se
 elimina de la config en ejecución; el historial de métricas y eventos persistido
 permanece en `paths.state` hasta la retención normal o un `sermoctl state compact`

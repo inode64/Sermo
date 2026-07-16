@@ -443,6 +443,10 @@ not repeat `startup_delay` and does not mark `/readyz` as shutting down.
 the daemon singleton/operation locks and its open persistent store. Changing
 either requires a full `sermod` restart; a configuration reload rejects that
 change and leaves the current generation running.
+The `web` block is also startup-only: its listener address/port, authentication
+and guest policy are installed on the HTTP server when `sermod` starts. Change
+those settings with a full restart; a configuration reload rejects them rather
+than leaving the old web access policy active.
 Per-service CPU rate baselines are reset only when a service is removed from the
 running config; persisted metric and event history remains in `paths.state`
 until normal retention or an explicit `sermoctl state compact`.
