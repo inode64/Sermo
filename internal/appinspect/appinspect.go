@@ -361,10 +361,7 @@ func runExitProbe(ctx context.Context, runner execx.Runner, cmd probeCommand) (b
 	res, err := runProbeCommand(ctx, runner, cmd)
 	switch {
 	case res.ExitCode == execx.ExitCodeRunFailure:
-		msg := execx.OperatorFailure(err, res, cmd.timeout)
-		if msg == "" {
-			msg = execx.CommandDidNotStart
-		}
+		msg := execx.OperatorFailureOr(err, res, cmd.timeout, execx.CommandDidNotStart)
 		return false, statusErrorPrefix + msg, output.Bounded(res.Stdout, res.Stderr)
 	case err != nil && res.ExitCode == checks.CommandDefaultExpectedExit:
 		return false, statusErrorPrefix + err.Error(), output.Bounded(res.Stdout, res.Stderr)
@@ -391,10 +388,7 @@ func runVersionProbe(ctx context.Context, runner execx.Runner, tree map[string]a
 	}
 	switch {
 	case res.ExitCode == execx.ExitCodeRunFailure:
-		msg := execx.OperatorFailure(err, res, cmd.timeout)
-		if msg == "" {
-			msg = execx.CommandDidNotStart
-		}
+		msg := execx.OperatorFailureOr(err, res, cmd.timeout, execx.CommandDidNotStart)
 		return fail(statusErrorPrefix + msg)
 	case err != nil && res.ExitCode == checks.CommandDefaultExpectedExit:
 		return fail(statusErrorPrefix + err.Error())
