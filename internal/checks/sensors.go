@@ -171,10 +171,6 @@ func sensorValueMap(summary SensorValues) map[string]float64 {
 // defaultSensorSampler reads /sys/class/hwmon.
 func defaultSensorSampler() ([]SensorReading, error) { return readHwmon(sysHwmonPath) }
 
-// SampleSensors returns one live hardware-sensor observation using the default
-// hwmon sampler.
-func SampleSensors() ([]SensorReading, error) { return defaultSensorSampler() }
-
 // readHwmon parses the hwmon tree at root into temperature (°C), fan (RPM) and
 // voltage (V) readings.
 func readHwmon(root string) ([]SensorReading, error) {

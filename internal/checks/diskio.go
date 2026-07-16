@@ -146,10 +146,6 @@ func CalculateDiskIORates(prev, cur DiskIOSample, elapsed time.Duration) (DiskIO
 	return rates, true
 }
 
-// SampleDiskIO returns one live block-device counter observation using the
-// default /proc/diskstats sampler.
-func SampleDiskIO(device string) (DiskIOSample, error) { return defaultDiskIOSampler(device) }
-
 // defaultDiskIOSampler finds device in /proc/diskstats. Field order after the
 // device name: reads, reads-merged, sectors-read, ms-reading, writes,
 // writes-merged, sectors-written, ms-writing, in-flight, io-ticks-ms, ….

@@ -61,10 +61,6 @@ func EdacResultData(st EdacCounts) map[string]any {
 	return map[string]any{fieldCE: float64(st.CE), fieldUE: float64(st.UE)}
 }
 
-// SampleEdac returns one live EDAC memory-error observation using the default
-// sysfs sampler.
-func SampleEdac() (EdacCounts, error) { return defaultEdacSampler() }
-
 // defaultEdacSampler reads /sys/devices/system/edac.
 func defaultEdacSampler() (EdacCounts, error) { return readEDAC(sysEDACPath) }
 

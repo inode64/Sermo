@@ -43,11 +43,6 @@ func (c fdsCheck) Run(_ context.Context) Result {
 	}, "fds", "allocated", DataKeyAllocated)
 }
 
-// SampleFds returns one live system-wide fd observation (allocated/max) using
-// the default /proc/sys/fs/file-nr reader. Exposed so callers like the web
-// backend can render an fds gauge without running a full fds check.
-func SampleFds() (FdsSample, error) { return defaultFdsSampler() }
-
 // defaultFdsSampler reads allocated (field 1) and max (field 3). The middle
 // field (free handles) is always 0 on modern kernels, so allocated is the
 // in-use count.
