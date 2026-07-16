@@ -638,8 +638,8 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 	if opts.noCascade || action == actionReload || action == actionResume || len(targets) == 0 {
 		a.beginManualOperationSettling(cfg, actionStore, service, action)
 		out, err := a.Operate(ctx, opts, cfg, resolved, service, action)
-		activeAfterStart := a.activeAfterPostflightFailure(ctx, opts, cfg, resolved, service, action, out, err)
-		a.finishManualOperationSettling(cfg, actionStore, service, action, out, err, activeAfterStart)
+		activeAfterPostflightFailure := a.activeAfterPostflightFailure(ctx, opts, cfg, resolved, service, action, out, err)
+		a.finishManualOperationSettling(cfg, actionStore, service, action, out, err, activeAfterPostflightFailure)
 		return out, err
 	}
 	lookup := func(svc string) []string {
@@ -665,8 +665,8 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 		}
 		a.beginManualOperationSettling(cfg, actionStore, svc, action)
 		out, err := a.Operate(ctx, opts, cfg, res, svc, action)
-		activeAfterStart := a.activeAfterPostflightFailure(ctx, opts, cfg, res, svc, action, out, err)
-		a.finishManualOperationSettling(cfg, actionStore, svc, action, out, err, activeAfterStart)
+		activeAfterPostflightFailure := a.activeAfterPostflightFailure(ctx, opts, cfg, res, svc, action, out, err)
+		a.finishManualOperationSettling(cfg, actionStore, svc, action, out, err, activeAfterPostflightFailure)
 		if svc == service {
 			primary, primaryErr = out, err
 			continue
@@ -722,12 +722,12 @@ func (a App) beginManualOperationSettling(cfg *config.Config, store *state.Store
 	}
 }
 
-func (a App) finishManualOperationSettling(cfg *config.Config, store *state.Store, service, action string, result operation.Result, opErr error, activeAfterStart bool) {
+func (a App) finishManualOperationSettling(cfg *config.Config, store *state.Store, service, action string, result operation.Result, opErr error, activeAfterPostflightFailure bool) {
 	if store == nil {
 		return
 	}
 	change, err := app.CompleteManualOperation(store, store, service, action, result, opErr,
-		app.ManualOperationSources{Stop: state.SourceCLIManualStop, Restore: state.SourceCLI, Settling: state.SourceCLI}, activeAfterStart)
+		app.ManualOperationSources{Stop: state.SourceCLIManualStop, Restore: state.SourceCLI, Settling: state.SourceCLI}, activeAfterPostflightFailure)
 	if err != nil {
 		msg := err.Error()
 		fmt.Fprintf(a.Stderr, cliWarningFormat, msg)
