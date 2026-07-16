@@ -1542,6 +1542,119 @@ func (s *Store) ProcessUptimeSpans(service string, from, to time.Time) ([]Proces
 	return spans, nil
 }
 
+// ProcessUptimeWindow is the portion of one rolling SLA window for which a
+// trusted process instance was continuously confirmed. It is process evidence,
+// not observed service health: Known is false when no such evidence overlaps
+// the window, and Segments retain those unknown gaps for the dashboard.
+type ProcessUptimeWindow struct {
+	Window         string
+	Known          bool
+	CoveredSeconds int64
+	TotalSeconds   int64
+	Segments       []float64
+}
+
+// ProcessUptimeReport returns process-continuity coverage across every
+// SLAWindow. Overlapping process intervals are unioned before calculating a
+// duration, so concurrent roots or repeated confirmations never double-count.
+func (s *Store) ProcessUptimeReport(service string, now time.Time) ([]ProcessUptimeWindow, error) {
+	if service == "" {
+		return nil, errors.New("load process uptime report: service is empty")
+	}
+	from := now.Add(-slaSpanYear)
+	spans, err := s.ProcessUptimeSpans(service, from, now)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ProcessUptimeWindow, 0, len(SLAWindows))
+	for _, window := range SLAWindows {
+		out = append(out, processUptimeWindow(spans, window, now))
+	}
+	return out, nil
+}
+
+func processUptimeWindow(spans []ProcessUptimeSpan, window SLAWindow, now time.Time) ProcessUptimeWindow {
+	start := now.Add(-window.Span)
+	totalSeconds := int64(window.Span / time.Second)
+	segments := window.Segments
+	if segments <= 0 {
+		segments = 1
+	}
+	segmentSpan := window.Span / time.Duration(segments)
+	if segmentSpan <= 0 {
+		segmentSpan = time.Second
+	}
+
+	out := ProcessUptimeWindow{
+		Window:       window.Name,
+		TotalSeconds: totalSeconds,
+		Segments:     make([]float64, segments),
+	}
+	covered := processUptimeCoverage(spans, start, now)
+	if covered <= 0 {
+		return out
+	}
+	out.Known = true
+	out.CoveredSeconds = int64(covered / time.Second)
+	for i := range out.Segments {
+		segmentStart := start.Add(time.Duration(i) * segmentSpan)
+		segmentEnd := segmentStart.Add(segmentSpan)
+		if i == len(out.Segments)-1 || segmentEnd.After(now) {
+			segmentEnd = now
+		}
+		span := segmentEnd.Sub(segmentStart)
+		if span <= 0 {
+			continue
+		}
+		out.Segments[i] = min(float64(processUptimeCoverage(spans, segmentStart, segmentEnd))/float64(span), 1)
+	}
+	return out
+}
+
+type processUptimeRange struct {
+	start time.Time
+	end   time.Time
+}
+
+func processUptimeCoverage(spans []ProcessUptimeSpan, from, to time.Time) time.Duration {
+	if !to.After(from) {
+		return 0
+	}
+	ranges := make([]processUptimeRange, 0, len(spans))
+	for _, span := range spans {
+		start := span.StartedAt
+		if start.Before(from) {
+			start = from
+		}
+		end := span.ConfirmedAt
+		if end.After(to) {
+			end = to
+		}
+		if end.After(start) {
+			ranges = append(ranges, processUptimeRange{start: start, end: end})
+		}
+	}
+	if len(ranges) == 0 {
+		return 0
+	}
+	sort.Slice(ranges, func(i, j int) bool {
+		return ranges[i].start.Before(ranges[j].start)
+	})
+	current := ranges[0]
+	var covered time.Duration
+	for _, next := range ranges[1:] {
+		if next.start.After(current.end) {
+			covered += current.end.Sub(current.start)
+			current = next
+			continue
+		}
+		if next.end.After(current.end) {
+			current.end = next.end
+		}
+	}
+	return covered + current.end.Sub(current.start)
+}
+
 func (s *Store) recordSLABucket(query string, keys []any, up bool, at time.Time, kind, target string) error {
 	upCount := 0
 	if up {

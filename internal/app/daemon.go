@@ -74,6 +74,13 @@ type SLAReader interface {
 	CheckSLATimelines(service, check string, now time.Time) ([]state.SLAWindowTimeline, error)
 }
 
+// ProcessUptimeReader reports process-continuity coverage for the web and CLI.
+// Unlike SLAReader, it contains no check outcome: a process interval is only
+// evidence that a trusted process was alive for part of a rolling window.
+type ProcessUptimeReader interface {
+	ProcessUptimeReport(service string, now time.Time) ([]state.ProcessUptimeWindow, error)
+}
+
 // MeasurementRecorder persists per-check observations per observed cycle: the
 // latency (ms) for measured check types, and any named metrics a check publishes
 // in Result.Data (e.g. hdparm read/cached). Implemented by internal/state.Store.
@@ -482,7 +489,13 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 	pidsForCycle := func() []int { return processPIDs(processesForCycle()) }
 	sampleMetrics := metricSampler(name, tree, collector, pidsForCycle)
 	liveSample := liveSampler(name, deps.LiveCollector, deps.Live, deps.ServiceMetrics, pidsForCycle, deps.Now)
-	recordProcessUptime := processUptimeRecorder(deps, name, selectors, processesForCycle, processUptimeReader(collector, deps.LiveCollector))
+	uptimeReader := metrics.Reader(metrics.OSReader{})
+	for _, candidate := range []*metrics.Collector{collector, deps.LiveCollector} {
+		if candidate != nil && candidate.Reader != nil {
+			uptimeReader = candidate.Reader
+		}
+	}
+	recordProcessUptime := processUptimeRecorder(deps, name, selectors, processesForCycle, uptimeReader)
 	if noResident {
 		liveSample = nil
 		recordProcessUptime = nil
@@ -1135,15 +1148,6 @@ func processPIDs(procs []process.Process) []int {
 		pids = append(pids, p.PID)
 	}
 	return pids
-}
-
-func processUptimeReader(collectors ...*metrics.Collector) metrics.Reader {
-	for _, collector := range collectors {
-		if collector != nil && collector.Reader != nil {
-			return collector.Reader
-		}
-	}
-	return metrics.OSReader{}
 }
 
 // liveSampler returns a per-cycle closure that discovers the service's process

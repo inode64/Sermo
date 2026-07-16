@@ -71,6 +71,7 @@ const feedbackStatusErr = "err";
 const targetStateDisabled = "disabled";
 const targetStateRunning = "running";
 const targetStateStarted = "started";
+const targetStateActive = "active";
 const targetStatePaused = "paused";
 const targetStateStopped = "stopped";
 const targetStateWarning = "warning";
@@ -165,6 +166,7 @@ const serviceStatusFilterStates = [
   targetStateDisabled,
   targetStateStopped,
   targetStateStarted,
+  targetStateActive,
   targetStateStarting,
   targetStateCollecting,
   targetStateMonitored,
@@ -208,7 +210,7 @@ const slaChartYMinSteps = [
   { threshold: 70, floor: 60 },
   { threshold: 40, floor: 30 },
 ];
-const overviewActiveServiceStates = [targetStateStarted, targetStateCollecting, targetStateMonitored];
+const overviewActiveServiceStates = [targetStateStarted, targetStateActive, targetStateCollecting, targetStateMonitored];
 const mountStateClasses = {
   [mountStateActive]: "state-running",
   [mountStateInactive]: "state-stopped",
@@ -227,6 +229,7 @@ const targetStateClasses = {
   [targetStateDisabled]: "state-disabled",
   [targetStateRunning]: "state-running",
   [targetStateStarted]: "state-started",
+  [targetStateActive]: "state-running",
   [targetStatePaused]: "state-paused",
   [targetStateStopped]: "state-stopped",
   [targetStateWarning]: "state-warning",
@@ -259,6 +262,7 @@ const targetStateRanks = {
   [targetStateMoving]: 3,
   [targetStateMerging]: 3,
   [targetStateStarted]: 4,
+  [targetStateActive]: 4,
   [targetStateMonitored]: 5,
   [targetStateFailed]: 7,
   [targetStateRunning]: 2,
@@ -1347,7 +1351,11 @@ function serviceStateBadge(s) {
   const missing = (st === targetStateCollecting && s && Array.isArray(s.observability_missing) && s.observability_missing.length)
     ? `Collecting ${s.observability_missing.join(", ")}`
     : "";
-  return missing ? tpl`<span title="${missing}">${stateBadge(st)}</span>` : stateBadge(st);
+  const active = st === targetStateActive
+    ? "Process confirmed; checks and runtime metrics are not available yet"
+    : "";
+  const title = missing || active;
+  return title ? tpl`<span title="${title}">${stateBadge(st)}</span>` : stateBadge(st);
 }
 
 function serviceStateCell(s) {
@@ -2818,6 +2826,34 @@ function renderSLAWindows(wins, compact) {
   return tpl`<div class="sla-windows${compact ? " sla-compact" : ""}">${rows}${sampledAge(observedAt)}</div>`;
 }
 
+// renderProcessUptimeWindows shows trusted process continuity separately from
+// observed SLA. An uncovered segment means no continuity was confirmed; it is
+// never rendered as a failed health check.
+function renderProcessUptimeWindows(wins) {
+  wins = wins || [];
+  if (!wins.some((w) => w && w.ratio != null)) {
+    return tpl`<p class="muted">No process continuity confirmed yet.</p>`;
+  }
+  const rows = wins.map((w) => {
+    const pct = w.ratio == null ? null : Number(w.ratio) * percentScale;
+    const label = slaWindowLabel(w.window);
+    const coverage = pct == null ? "—" : fmtPct(pct);
+    const duration = `${fmtSeconds(Number(w.up || 0))} / ${fmtSeconds(Number(w.total || 0))}`;
+    const title = `${label} · ${coverage} process continuity confirmed · ${duration}`;
+    const track = Array.isArray(w.segments) && w.segments.length
+      ? renderProcessUptimeTimeline(w.segments, w.window, w.observed_at)
+      : renderProcessUptimeFill(pct);
+    return tpl`<div class="sla-window" title="${title}">
+      <span class="sla-label">${label}</span>
+      ${track}
+      <span class="sla-pct">${coverage}</span>
+      <span class="sla-count">${duration}</span>
+    </div>`;
+  });
+  return tpl`<div class="sla-windows">${rows}</div>
+    <p class="muted">Confirmed process continuity, not observed check health.</p>`;
+}
+
 // renderSLAFill is the single-fill bar used when a window has no segment data.
 function renderSLAFill(pct) {
   const width = pct == null ? 0 : pctClamp(pct);
@@ -2826,7 +2862,14 @@ function renderSLAFill(pct) {
   return tpl`<span class="sla-bar" aria-label="${label}"><span class="sla-fill${empty}" style="--sla-pct:${width.toFixed(2)}%; --sla-color:${slaColor(pct)}"></span></span>`;
 }
 
-function slaTimelineDataRows(segments, window, observedAt) {
+function renderProcessUptimeFill(pct) {
+  const width = pct == null ? 0 : pctClamp(pct);
+  const empty = pct == null ? " sla-empty" : "";
+  const label = pct == null ? "No process continuity confirmed" : `${fmtPct(pct)} process continuity confirmed`;
+  return tpl`<span class="sla-bar" aria-label="${label}"><span class="sla-fill${empty}" style="--sla-pct:${width.toFixed(2)}%; --sla-color:var(--info)"></span></span>`;
+}
+
+function slaTimelineDataRows(segments, window, observedAt, unavailable = "no data") {
   const n = segments.length;
   if (!n) return nothing;
   const spanMs = slaWindowSpanMs(window);
@@ -2838,7 +2881,7 @@ function slaTimelineDataRows(segments, window, observedAt) {
     const segStart = endMs - spanMs + (idx / n) * spanMs;
     const segEnd = endMs - spanMs + ((idx + 1) / n) * spanMs;
     const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
-    const pctText = ratio == null ? "no data" : fmtPct(Number(ratio) * percentScale);
+    const pctText = ratio == null ? unavailable : fmtPct(Number(ratio) * percentScale);
     return tpl`<tr><td>${when}</td><td>${pctText}</td></tr>`;
   });
 }
@@ -2861,6 +2904,24 @@ function renderSLATimeline(segments, window, observedAt) {
   });
   const dataRows = slaTimelineDataRows(segments, window, observedAt);
   return tpl`<table class="chart-data visually-hidden"><caption>SLA timeline data</caption><thead><tr><th scope="col">Period</th><th scope="col">Availability</th></tr></thead><tbody>${dataRows}</tbody></table><span class="sla-timeline" role="img" aria-label="SLA availability timeline">${cells}</span>`;
+}
+
+function renderProcessUptimeTimeline(segments, window, observedAt) {
+  const n = segments.length;
+  const spanMs = slaWindowSpanMs(window);
+  const sampledMs = Date.parse(observedAt);
+  const endMs = Number.isFinite(sampledMs) ? sampledMs : Date.now();
+  const cells = segments.map((ratio, i) => {
+    const pct = ratio == null ? null : Number(ratio) * percentScale;
+    const segStart = endMs - spanMs + (i / n) * spanMs;
+    const segEnd = endMs - spanMs + ((i + 1) / n) * spanMs;
+    const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
+    if (pct == null) return tpl`<span class="sla-seg sla-gap" title="${when + " · not confirmed"}" aria-label="${when}: process continuity not confirmed"></span>`;
+    const pctText = fmtPct(pct);
+    return tpl`<span class="sla-seg" style="--sla-color:var(--info)" title="${when + " · " + pctText + " process continuity confirmed"}" aria-label="${when}: ${pctText} process continuity confirmed"></span>`;
+  });
+  const dataRows = slaTimelineDataRows(segments, window, observedAt, "not confirmed");
+  return tpl`<table class="chart-data visually-hidden"><caption>Process continuity timeline data</caption><thead><tr><th scope="col">Period</th><th scope="col">Continuity</th></tr></thead><tbody>${dataRows}</tbody></table><span class="sla-timeline" role="img" aria-label="Process continuity timeline">${cells}</span>`;
 }
 
 function slaWindowSpanMs(window) {
@@ -3229,10 +3290,14 @@ function renderServiceDetail(d) {
     ? nothing
     : tpl`<h2>Processes</h2>
       ${procSummary}${totals}${procWarns}${procTable}`;
+  const processContinuity = d.process_uptime && d.process_uptime.length
+    ? tpl`<h2>Process continuity</h2>${renderProcessUptimeWindows(d.process_uptime)}`
+    : nothing;
   return tpl`<div class="service-detail" data-service-detail="${d.name}">
     <h2>${displayName(d)} <span class="muted">${d.unit || ""}</span></h2>
     ${disabledNote}
     ${general}
+    ${processContinuity}
     ${graphs}
     ${processSection}
     <h2>Checks</h2>

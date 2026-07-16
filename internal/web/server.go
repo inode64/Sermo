@@ -730,12 +730,14 @@ type Check struct {
 	SLA     []SLAWindow   `json:"sla,omitempty"`
 }
 
-// SLAWindow is a service's availability over one rolling window. Ratio is nil
-// when the window has no data. Segments is the window split into equal sub-spans
-// (oldest first) for the timeline strip; each entry is that sub-span's ratio in
-// [0,1], or nil for a gap (no cycle observed in it).
+// SLAWindow is one rolling availability or process-continuity window. Evidence
+// is empty for observed check SLA and "process" for inferred process
+// continuity. Ratio is nil when the window has no data. Segments is the window
+// split into equal sub-spans (oldest first); each entry is its coverage ratio in
+// [0,1], or nil for a gap.
 type SLAWindow struct {
 	Window     string     `json:"window"`
+	Evidence   string     `json:"evidence,omitempty"`
 	Ratio      *float64   `json:"ratio"`
 	Up         int64      `json:"up"`
 	Total      int64      `json:"total"`
@@ -832,6 +834,7 @@ type Detail struct {
 	Service
 	Checks            []Check        `json:"checks"`
 	SLA               []SLAWindow    `json:"sla"`
+	ProcessUptime     []SLAWindow    `json:"process_uptime,omitempty"`
 	Locks             []Lock         `json:"locks,omitempty"`
 	LockWarnings      []string       `json:"lock_warnings,omitempty"`
 	NoResidentProcess bool           `json:"no_resident_process,omitempty"`
