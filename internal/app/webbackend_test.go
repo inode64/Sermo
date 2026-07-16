@@ -378,6 +378,25 @@ func TestWebBackendStatusCacheIgnoresCancelledRequests(t *testing.T) {
 	}
 }
 
+func TestWebBackendStatusProbeHasInitQueryDeadline(t *testing.T) {
+	called := false
+	e := &webEntry{status: func(ctx context.Context) (servicemgr.Status, error) {
+		called = true
+		deadline, ok := ctx.Deadline()
+		if !ok || time.Until(deadline) > serviceInitQueryTimeout {
+			t.Fatalf("status context deadline = %v, %t; want bounded init query", deadline, ok)
+		}
+		return "", context.DeadlineExceeded
+	}}
+
+	if got := e.backendStatus(context.Background(), time.Now()); got != backendStatusError {
+		t.Fatalf("status after bounded query failure = %q, want %q", got, backendStatusError)
+	}
+	if !called {
+		t.Fatal("status query was not called")
+	}
+}
+
 func TestWebBackendLastEventIndexes(t *testing.T) {
 	events := NewEventLog(10)
 	t0 := time.Date(2026, 6, 7, 14, 0, 0, 0, time.UTC)

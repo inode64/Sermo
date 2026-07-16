@@ -31,10 +31,10 @@ const (
 	// The dashboard refreshes every 30s by default, so keep status warm across
 	// ordinary refreshes instead of running one init status probe per service.
 	serviceStatusCacheTTL = 2 * time.Minute
-	// serviceReloadCapabilityTimeout bounds init metadata checks used only to
-	// decide whether the dashboard should offer a per-service reload action.
-	serviceReloadCapabilityTimeout = 2 * time.Second
-	processPIDListLimit            = 20
+	// serviceInitQueryTimeout bounds every init-system query from the web
+	// backend, including status polling and reload-capability detection.
+	serviceInitQueryTimeout = 2 * time.Second
+	processPIDListLimit     = 20
 )
 
 const (
@@ -339,7 +339,7 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	entry.discoverer = discoverer
 	entry.selectors = selectors
 	entry.processWarnings = processWarnings
-	reloadCtx, cancel := context.WithTimeout(ctx, serviceReloadCapabilityTimeout)
+	reloadCtx, cancel := context.WithTimeout(ctx, serviceInitQueryTimeout)
 	canReload, reloadErr := operation.ReloadSupported(reloadCtx, tree, target.Manager, target.Unit)
 	cancel()
 	entry.canReload = canReload
