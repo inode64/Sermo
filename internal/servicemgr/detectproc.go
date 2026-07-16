@@ -132,9 +132,7 @@ func DetectProcInfo(ctx context.Context, runner execx.Runner, readFile func(stri
 	if unit == "" {
 		return ProcInfo{}
 	}
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 	if readFile == nil {
 		readFile = os.ReadFile
 	}

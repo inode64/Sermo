@@ -98,9 +98,7 @@ type SmartSample struct {
 // operator-facing timeout messages when the probe context expires before the
 // command finishes.
 func SampleSmart(ctx context.Context, runner execx.Runner, device string, timeout time.Duration) (SmartSample, error) {
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 	res, runErr := runner.Run(ctx, smartctlCommand, smartctlArgs(device)...)
 	if res.ExitCode == execx.ExitCodeRunFailure {
 		msg := execx.OperatorFailure(runErr, res, timeout)
@@ -134,9 +132,7 @@ func smartctlArgs(device string) []string {
 // The command normally returns after scheduling the test; callers must not treat
 // that acknowledgement as a new SMART-health verdict.
 func StartSmartShortTest(ctx context.Context, runner execx.Runner, device string, timeout time.Duration) error {
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 	res, runErr := runner.Run(ctx, smartctlCommand, smartctlShortTestArgs(device)...)
 	if res.ExitCode == execx.ExitCodeSuccess {
 		return nil

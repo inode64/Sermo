@@ -93,9 +93,7 @@ func NewDetector() Detector {
 }
 
 func (d Detector) withDefaults() Detector {
-	if d.Runner == nil {
-		d.Runner = execx.CommandRunner{}
-	}
+	d.Runner = execx.RunnerOrDefault(d.Runner)
 	if d.Probe == nil {
 		d.Probe = OSProbe{}
 	}

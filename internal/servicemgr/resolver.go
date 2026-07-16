@@ -32,9 +32,7 @@ func NewUnitResolver() UnitResolver {
 // fails; an empty candidate list means the service is not available on backend.
 func (r UnitResolver) Resolve(ctx context.Context, backend Backend, candidates []string, trust bool) (string, error) {
 	runner := r.Runner
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 	probe := r.Probe
 	if probe == nil {
 		probe = OSProbe{}

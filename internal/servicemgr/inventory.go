@@ -27,9 +27,7 @@ const (
 
 // ListActiveUnits returns active service units for the selected init backend.
 func ListActiveUnits(ctx context.Context, backend Backend, runner execx.Runner, timeout time.Duration) ([]string, error) {
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 	switch backend {
 	case BackendSystemd:
 		res, err := execx.Run(ctx, runner, timeout, cmdSystemctl, systemctlCmdListUnits, systemctlFlagTypeService, systemctlFlagStateActive, systemctlFlagNoLegend, systemctlFlagNoPager)
