@@ -15,57 +15,10 @@ import (
 
 func (b *WebBackend) watchCheckDeps() checks.Deps {
 	return watchInlineDeps(Deps{
-		DefaultTimeout:       b.defaultTimeout,
-		ExecxRunner:          b.execRunner,
-		StorageUsage:         b.storageUsage,
-		MountSampler:         b.mountSampler,
-		NetSampler:           b.netSampler,
-		PingSampler:          b.pingSampler,
-		OomSampler:           b.oomSampler,
-		FdsSampler:           b.fdsSampler,
-		PidsSampler:          b.pidsSampler,
-		PressureSampler:      b.pressureSampler,
-		ConntrackSampler:     b.conntrackSampler,
-		EntropySampler:       b.entropySampler,
-		ZombieSampler:        b.zombieSampler,
-		DiskIOSampler:        b.diskIOSampler,
-		SensorSampler:        b.sensorSampler,
-		RaidSampler:          b.raidSampler,
-		EdacSampler:          b.edacSampler,
-		RouteSampler:         b.routeSampler,
-		FirewallRulesSampler: b.firewallSampler,
+		DefaultTimeout: b.defaultTimeout,
+		ExecxRunner:    b.execRunner,
+		RaidSampler:    b.raidSampler,
 	})
-}
-
-func (b *WebBackend) probeWatchView(ctx context.Context, w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
-	if w == nil || len(w.check) == 0 {
-		return nil, nil, ""
-	}
-	res, err := b.probeWatchResult(ctx, w)
-	if err != nil {
-		msg := err.Error()
-		checkType := "watch"
-		if w != nil {
-			checkType = w.checkType
-		}
-		return nil, watchErrorReadings(msg), checkType + ": " + msg
-	}
-	readings := checkReadings(w.checkType, res.Data)
-	if len(readings) == 0 && res.Message != "" {
-		readings = []web.WatchReading{{Field: watchReadingFieldResult, Label: watchReadingLabelResult, Value: res.Message}}
-	}
-	if !res.Healthy() && res.Message != "" {
-		readings = append([]web.WatchReading{{Field: watchReadingFieldError, Label: watchReadingLabelError, Error: res.Message}}, readings...)
-	}
-	summary := res.Message
-	if summary == "" && len(readings) > 0 {
-		if readings[0].Error != "" {
-			summary = readings[0].Error
-		} else {
-			summary = readings[0].Value
-		}
-	}
-	return nil, readings, summary
 }
 
 // probeWatchResult runs one fresh standalone sample. It deliberately does not
@@ -108,6 +61,26 @@ func (b *WebBackend) startSmartShortTest(ctx context.Context, w *webWatch) (chec
 			checks.DataKeyResult:      "short self-test started",
 		},
 	}, nil
+}
+
+func watchErrorReadings(message string) []web.WatchReading {
+	return []web.WatchReading{{Field: watchReadingFieldSample, Label: watchReadingLabelSample, Error: message}}
+}
+
+func (b *WebBackend) probeTimeout() time.Duration {
+	timeout := b.defaultTimeout
+	if timeout <= 0 {
+		timeout = b.operationTimeout
+	}
+	return timeout
+}
+
+func (b *WebBackend) probeContext(parent context.Context) (context.Context, context.CancelFunc) {
+	timeout := b.probeTimeout()
+	if timeout <= 0 {
+		return context.WithCancel(parent)
+	}
+	return context.WithTimeout(parent, timeout)
 }
 
 // beginWatchProbe marks one manual probe as active. A watch accepts only one

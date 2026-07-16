@@ -8,9 +8,13 @@ import (
 	"sermo/internal/metrics"
 	"sermo/internal/web"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
+)
+
+const (
+	watchReadingFieldEntries = "entries"
+	watchReadingNumericBase  = 10
 )
 
 // pluralSuffix returns the suffix to append to singular to form its plural for
@@ -42,30 +46,6 @@ func processPIDList(samples []ProcInfo) string {
 		parts = append(parts, fmt.Sprintf("+%d more", extra))
 	}
 	return strings.Join(parts, displayListSeparator)
-}
-
-func autofsMountpoints(mounts []checks.Mount) []string {
-	var points []string
-	for _, mount := range mounts {
-		if mount.FSType == checks.FSTypeAutofs {
-			points = append(points, mount.MountPoint)
-		}
-	}
-	sort.Strings(points)
-	return points
-}
-
-func matchingDefaultRoutes(routes []checks.DefaultRoute, iface string) []checks.DefaultRoute {
-	if iface == "" {
-		return routes
-	}
-	var matched []checks.DefaultRoute
-	for _, route := range routes {
-		if route.Iface == iface {
-			matched = append(matched, route)
-		}
-	}
-	return matched
 }
 
 // swapWatchInfo reads the host swap usage from the collector's cached system

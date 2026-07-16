@@ -13,7 +13,7 @@ import (
 // from the dashboard. The scan walks every process's /proc/<pid>/fd, so it is the
 // most expensive host probe; caching it for this window means all storage watches
 // on one dashboard poll share a single scan, and repeated polls re-scan at most
-// once per TTL (the smart/hdparm interval-bound pattern, see heavyLiveViewTypes).
+// once per TTL, while dashboard reads use daemon-cycle watch snapshots.
 const openFilesTallyTTL = time.Minute
 
 // openFilesByMountCached returns open-file counts keyed by mount point, computed
