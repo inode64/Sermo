@@ -84,6 +84,7 @@ type webEntry struct {
 	status            func(context.Context) (servicemgr.Status, error)
 	checkNames        []string          // sorted
 	checkTypes        map[string]string // check name -> type
+	checkIntervals    map[string]time.Duration
 	discoverer        process.Discoverer
 	selectors         []process.Selector
 	processWarnings   []string
@@ -328,12 +329,13 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	serviceDeps.BackendPIDs = target.BackendPIDs
 	engine, checkDeps, discoverer := serviceRuntime(ctx, name, target.Unit, tree, serviceDeps, map[string]string{}, operationEventEmitter(deps.Emit))
 	selectors, processWarnings := serviceProcessSelectors(ctx, tree, serviceDeps, target.Unit)
-	names, types := checkCatalog(tree)
+	names, types, intervals := checkCatalog(tree, entry.interval)
 	entry.noResidentProcess = serviceNoResidentProcess(tree, selectors, serviceBackendPIDs(ctx, serviceDeps, target.Unit))
 	entry.engine = engine
 	entry.status = checkDeps.Status
 	entry.checkNames = names
 	entry.checkTypes = types
+	entry.checkIntervals = intervals
 	entry.discoverer = discoverer
 	entry.selectors = selectors
 	entry.processWarnings = processWarnings
@@ -452,23 +454,27 @@ func newWebWatch(name string, entry map[string]any, globalNotify []string, defau
 	}, warn
 }
 
-// checkCatalog returns a service's check names (sorted) and their types, from the
-// resolved `checks` section.
-func checkCatalog(tree map[string]any) ([]string, map[string]string) {
+// checkCatalog returns a service's check names (sorted), types and effective
+// intervals from the resolved `checks` section.
+func checkCatalog(tree map[string]any, defaultInterval time.Duration) ([]string, map[string]string, map[string]time.Duration) {
 	section, ok := tree[config.SectionChecks].(map[string]any)
 	if !ok {
-		return nil, nil
+		return nil, nil, nil
 	}
 	types := make(map[string]string, len(section))
+	intervals := make(map[string]time.Duration, len(section))
 	names := make([]string, 0, len(section))
 	for name, raw := range section {
 		typ := ""
 		if m, ok := raw.(map[string]any); ok {
 			typ, _ = m[checks.CheckKeyType].(string)
+			intervals[name] = effectiveCheckInterval(cfgval.Duration(m[config.EntryKeyInterval]), defaultInterval)
+		} else {
+			intervals[name] = defaultInterval
 		}
 		types[name] = typ
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	return names, types
+	return names, types, intervals
 }

@@ -717,6 +717,7 @@ type Check struct {
 	Name     string         `json:"name"`
 	Type     string         `json:"type"`
 	OK       bool           `json:"ok"`
+	Stale    bool           `json:"stale,omitempty"`
 	Optional bool           `json:"optional"`
 	Skipped  bool           `json:"skipped,omitempty"` // gated off (requires/skip_when_changed)
 	Message  string         `json:"message,omitempty"`

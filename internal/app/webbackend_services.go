@@ -57,7 +57,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	if active, source, changed, ok := b.monitorView(name); ok {
 		svc.Monitored, svc.MonitorSource, svc.MonitorChangedAt = active, source, changed
 	}
-	failing, health := checkHealthSummary(b.snapshots.Get(name), e.checkNames, svc.Monitored)
+	failing, health := b.serviceCheckHealth(name, e, svc.Monitored)
 	svc.CheckHealth = health
 	if failing > 0 {
 		svc.ChecksFailing = failing
@@ -105,7 +105,8 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, status, chec
 	if len(e.checkNames) > 0 {
 		snap := b.snapshots.Get(name)
 		for _, check := range e.checkNames {
-			if _, ok := snap[check]; !ok {
+			cs, ok := snap[check]
+			if !ok || !b.serviceCheckSnapshotCurrent(e, check, cs) {
 				addMissing(config.SectionChecks)
 				break
 			}
@@ -126,6 +127,29 @@ func (b *WebBackend) serviceObservability(name string, e *webEntry, status, chec
 		return false, missing
 	}
 	return true, nil
+}
+
+func (b *WebBackend) serviceCheckHealth(name string, e *webEntry, monitored bool) (int, string) {
+	if e == nil {
+		return 0, checkHealthUnknown
+	}
+	return checkHealthSummaryCurrent(b.snapshots.Get(name), e.checkNames, monitored, func(check string, snap CheckSnapshot) bool {
+		return b.serviceCheckSnapshotCurrent(e, check, snap)
+	})
+}
+
+// serviceCheckSnapshotCurrent accepts only a result produced by the configured
+// check type and no older than two effective check intervals. A reload may keep
+// a check name while changing either its type or cadence.
+func (b *WebBackend) serviceCheckSnapshotCurrent(e *webEntry, name string, snap CheckSnapshot) bool {
+	if e == nil || snap.At.IsZero() || snap.CheckType != e.checkTypes[name] {
+		return false
+	}
+	interval := e.checkIntervals[name]
+	if interval <= 0 {
+		interval = e.interval
+	}
+	return b.webNow().Sub(snap.At) <= runtimePublishMaxAge(interval)
 }
 
 func (b *WebBackend) serviceRuntimeObservabilityReady(name string, e *webEntry) bool {
@@ -195,6 +219,10 @@ func (b *WebBackend) operationSettlingPending(name string) bool {
 // counts as failing; optional failures are ignored. Paused services are "paused";
 // services with no observed checks yet are "unknown".
 func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, monitored bool) (failing int, health string) {
+	return checkHealthSummaryCurrent(snap, checkNames, monitored, nil)
+}
+
+func checkHealthSummaryCurrent(snap map[string]CheckSnapshot, checkNames []string, monitored bool, current func(string, CheckSnapshot) bool) (failing int, health string) {
 	if !monitored {
 		return 0, TargetStatePaused
 	}
@@ -207,7 +235,7 @@ func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, moni
 	observed := false
 	for _, name := range checkNames {
 		cs, seen := snap[name]
-		if !seen {
+		if !seen || (current != nil && !current(name, cs)) {
 			continue
 		}
 		observed = true
@@ -246,20 +274,24 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		return web.Detail{Service: b.view(ctx, name, e), NoResidentProcess: e.noResidentProcess}, true
 	}
 	d := web.Detail{Service: b.view(ctx, name, e), NoResidentProcess: e.noResidentProcess}
-	now := time.Now()
+	now := b.webNow()
 
 	snap := b.snapshots.Get(name)
 	for _, cn := range e.checkNames {
 		cs, seen := snap[cn]
+		current := seen && b.serviceCheckSnapshotCurrent(e, cn, cs)
 		ch := web.Check{
-			Name:     cn,
-			Type:     e.checkTypes[cn],
-			OK:       cs.OK,
-			Optional: cs.Optional,
-			Skipped:  cs.Skipped,
-			Message:  cs.Message,
-			Readings: checkReadings(e.checkTypes[cn], cs.Data),
-			Ran:      seen && cs.Ran,
+			Name:  cn,
+			Type:  e.checkTypes[cn],
+			Stale: seen && !current,
+			Ran:   current && cs.Ran,
+		}
+		if current {
+			ch.OK = cs.OK
+			ch.Optional = cs.Optional
+			ch.Skipped = cs.Skipped
+			ch.Message = cs.Message
+			ch.Readings = checkReadings(e.checkTypes[cn], cs.Data)
 		}
 		if seen && !cs.At.IsZero() {
 			ch.At = cs.At.UTC().Format(time.RFC3339)

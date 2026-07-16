@@ -488,6 +488,7 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 
 	recordMeasurement := measurementRecorder(deps, name, tree)
 	section, _ := tree[config.SectionChecks].(map[string]any)
+	_, checkTypes, _ := checkCatalog(tree, resolution)
 	built, checkWarnings, setCycleMetrics := buildWorkerCheckSet(section, checkDeps, sampleMetrics != nil)
 	warnings = append(warnings, checkWarnings...)
 	preflightSection, _ := tree[config.SectionPreflight].(map[string]any)
@@ -522,7 +523,7 @@ func buildWorker(ctx context.Context, name, unit string, tree map[string]any, de
 		ResolveRefs:       func() rules.RefResolver { return rules.NewCheckResolver(preflightBuilt, maxParallel) },
 		RecordHealth:      healthRecorder(deps, name),
 		RecordChecks:      checkSLARecorder(deps, name),
-		Publish:           publishSnapshots(deps.Snapshots, name),
+		Publish:           publishSnapshots(deps.Snapshots, name, checkTypes),
 		PersistState:      ruleStatePersister(deps.RuleState, deps.Emit, name, ruleSet),
 		Now:               deps.Now,
 		Emit:              deps.Emit,
@@ -638,12 +639,12 @@ func buildWorkerCheckSet(section map[string]any, deps checks.Deps, dynamicMetric
 
 // publishSnapshots returns the worker's per-cycle check-cache publisher, or nil
 // when no snapshot registry is wired.
-func publishSnapshots(s *Snapshots, name string) func(map[string]checks.Result, map[string]bool) {
+func publishSnapshots(s *Snapshots, name string, checkTypes map[string]string) func(map[string]checks.Result, map[string]bool) {
 	if s == nil {
 		return nil
 	}
 	return func(cache map[string]checks.Result, ran map[string]bool) {
-		s.Publish(name, cache, ran)
+		s.PublishWithCheckTypes(name, cache, ran, checkTypes)
 	}
 }
 
@@ -683,6 +684,23 @@ func checkIntervals(tree map[string]any, resolution time.Duration) (map[string]i
 		every[name] = n
 	}
 	return every, warnings
+}
+
+// checkIntervalCycles returns the worker-cycle spacing for a configured check
+// interval. Both scheduling and snapshot freshness use it, so the web does not
+// expire a result before the worker considers the next run due.
+func checkIntervalCycles(interval, resolution time.Duration) int {
+	if interval <= 0 || resolution <= 0 {
+		return 1
+	}
+	return max(int(math.Round(float64(interval)/float64(resolution))), 1)
+}
+
+func effectiveCheckInterval(interval, resolution time.Duration) time.Duration {
+	if resolution <= 0 {
+		return interval
+	}
+	return time.Duration(checkIntervalCycles(interval, resolution)) * resolution
 }
 
 // dueChecks selects the checks to run on a given cycle: a check with `every` N

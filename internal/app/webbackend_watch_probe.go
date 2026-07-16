@@ -171,13 +171,13 @@ func manualProbeCheckType(checkType string) bool {
 	}
 }
 
-func (b *WebBackend) watchLastCheckedAt(name, checkType string) time.Time {
-	if b.watchSnapshots == nil {
+func (b *WebBackend) watchLastCheckedAt(w *webWatch) time.Time {
+	if b.watchSnapshots == nil || w == nil {
 		return time.Time{}
 	}
 	var latest time.Time
-	for _, snap := range b.watchSnapshots.Get(name, checkType) {
-		if snap.Ran && snap.At.After(latest) {
+	for _, snap := range b.watchSnapshots.Get(w.name, w.checkType) {
+		if snap.Ran && watchSnapshotMetricConfigured(w, snap) && snap.At.After(latest) {
 			latest = snap.At
 		}
 	}
