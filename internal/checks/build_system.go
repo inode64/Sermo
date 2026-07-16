@@ -181,20 +181,20 @@ func buildConntrackCheck(b base, entry map[string]any, deps Deps) (Check, string
 
 // buildEntropyCheck builds an available-entropy check.
 func buildEntropyCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	preds, errs := requireLevelPreds(entry, EntropyPredFields, "entropy check")
+	pred, errs := requireSingleLevelPred(entry, EntropyPredFields, "entropy check")
 	if errs != "" {
 		return nil, errs
 	}
-	return entropyCheck{base: b, op: preds[0].op, value: preds[0].value, sampler: deps.EntropySampler}, ""
+	return entropyCheck{base: b, op: pred.op, value: pred.value, sampler: deps.EntropySampler}, ""
 }
 
 // buildZombieCheck builds a zombie-process count check.
 func buildZombieCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	preds, errs := requireLevelPreds(entry, ZombiePredFields, "zombies check")
+	pred, errs := requireSingleLevelPred(entry, ZombiePredFields, "zombies check")
 	if errs != "" {
 		return nil, errs
 	}
-	return zombieCheck{base: b, op: preds[0].op, value: preds[0].value, sampler: deps.ZombieSampler}, ""
+	return zombieCheck{base: b, op: pred.op, value: pred.value, sampler: deps.ZombieSampler}, ""
 }
 
 // buildOomCheck builds an OOM-kill delta check (defaults to firing on any kill).
