@@ -5,6 +5,7 @@ import (
 
 	"sermo/internal/appinspect"
 	"sermo/internal/config"
+	"sermo/internal/execx"
 )
 
 func storeAppSample(samples *ArtifactSamples, name string, report appinspect.Report) {
@@ -23,46 +24,16 @@ const appWatchCheckType = config.CategoryApp
 // once on the rising edge (NotifyInterval 0 = first time only). Only installed
 // apps are watched, matching the web Applications list.
 func BuildAppWatches(ctx context.Context, cfg *config.Config, deps Deps) []*Watch {
-	if cfg == nil {
-		return nil
-	}
-	samples := deps.ArtifactSamples
-	if samples == nil {
-		samples = NewArtifactSamples()
-	}
-	runner := deps.ExecxRunner
-	reports := appinspect.List(ctx, runner, cfg, config.CategoryApp, false,
-		appinspect.WithUserLookup(deps.UserLookup))
-	if len(reports) == 0 {
-		return nil
-	}
-	notifiers := resolveNotifiers(deps.GlobalNotify, deps.Notifiers)
-	out := make([]*Watch, 0, len(reports))
-	for i := range reports {
-		name := reports[i].Name
-		samples.RegisterApp(name)
-		check := artifactCheck{
-			name:    name,
-			samples: samples,
-			store:   storeAppSample,
-			inspect: func(ctx context.Context) appinspect.Report {
-				return appinspect.InspectOne(ctx, runner, cfg, name,
-					appinspect.WithUserLookup(deps.UserLookup))
-			},
-		}
-		out = append(out, &Watch{
-			Name:       name,
-			App:        name,
-			CheckType:  appWatchCheckType,
-			Check:      check,
-			FireOnFail: true,
-			Interval:   artifactWatchInterval(cfg, config.CategoryApp, name),
-			Notifiers:  notifiers,
-			Settling:   deps.Settling,
-			Now:        deps.Now,
-			Emit:       deps.Emit,
-			StateStore: deps.WatchState,
-		})
-	}
-	return out
+	return buildCatalogArtifactWatches(ctx, cfg, deps, catalogArtifactWatchSpec{
+		category:  config.CategoryApp,
+		watchName: func(name string) string { return name },
+		appName:   func(name string) string { return name },
+		register: func(samples *ArtifactSamples, report appinspect.Report) {
+			samples.RegisterApp(report.Name)
+		},
+		store: storeAppSample,
+		inspect: func(ctx context.Context, runner execx.Runner, cfg *config.Config, name string, lookup appinspect.Option) appinspect.Report {
+			return appinspect.InspectOne(ctx, runner, cfg, name, lookup)
+		},
+	})
 }
