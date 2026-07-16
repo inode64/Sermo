@@ -359,12 +359,7 @@ func (w *fileWatcher) summaryMessage(path, change, message string, extra map[str
 		checks.DataKeyTrigger:     change,
 		checks.DataKeyNumberFiles: w.numberFiles,
 	}
-	if ageSeconds, ok := extra[sermoEnvAgeSeconds]; ok {
-		if seconds, err := strconv.ParseInt(ageSeconds, envFormatBase, envFloatBits); err == nil {
-			data[checks.DataKeyAge] = time.Duration(seconds) * time.Second
-			data[checks.DataKeyValue] = data[checks.DataKeyAge]
-		}
-	}
+	addSummaryAge(data, extra)
 	if size, ok := extra[sermoEnvSize]; ok {
 		if value, err := strconv.ParseInt(size, envFormatBase, envFloatBits); err == nil {
 			data[checks.DataKeySize] = value
