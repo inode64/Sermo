@@ -90,6 +90,7 @@ sermoctl patterns
 
 sermoctl sla [SERVICE]                  # service availability windows (all services, or one)
 sermoctl sla --series SERVICE [--since DURATION]  # per-minute series; --since default 24h
+sermoctl sla --process-uptime [SERVICE] # separately confirmed process-continuity coverage
 
 sermoctl events [SERVICE] [--limit N]   # list recent events (global or for SERVICE)
 sermoctl events clear [--before TIME]   # omit TIME to clear all; TIME may be non-future RFC3339 or positive duration
@@ -106,6 +107,19 @@ sermoctl lock release SERVICE [--name NAME]
 sermoctl wizard
 sermoctl wizard service|docker|vm|mount|volume|net|uplink
 ```
+
+## Availability and process continuity
+
+`sermoctl sla` is observed check availability: it only counts monitored daemon
+cycles. `sermoctl sla --process-uptime` instead reports how much of each rolling
+window Sermo can confirm a trusted service process was alive. It can include
+time before a `sermod` restart when the process's start time proves that the
+same process predates the new daemon.
+
+This is evidence of process continuity, **not** a synthetic SLA sample or a
+health result: it cannot make HTTP, TCP, command or any other check pass, and
+it does not hide a recorded check failure. A window with no confirmed process
+interval is `n/a`, not downtime.
 
 Examples:
 
