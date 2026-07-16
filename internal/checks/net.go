@@ -115,23 +115,11 @@ func (c *netCheck) Run(_ context.Context) Result {
 
 	switch c.metric {
 	case NetMetricState:
-		if c.expect != "" {
-			data[DataKeyValue] = s.State
-			res := c.result(s.State == c.expect, fmt.Sprintf("%s state %s (want %s)", c.iface, s.State, c.expect), start)
-			res.Data = data
-			return res
-		}
-		if !c.primed {
-			c.primed, c.lastState = true, s.State
-			res := c.result(false, fmt.Sprintf("%s state baseline %s", c.iface, s.State), start)
-			res.Data = data
-			return res
-		}
-		changed := s.State != c.lastState
-		data[DataKeyOld], data[DataKeyNew], data[DataKeyValue] = c.lastState, s.State, s.State
-		msg := fmt.Sprintf("%s state %s->%s", c.iface, c.lastState, s.State)
-		c.lastState = s.State
-		res := c.result(changed, msg, start)
+		ok, message := evaluateStateTransition(stateTransitionSpec{
+			target: c.iface, current: s.State, expected: c.expect, expectedLabel: NetMetricState,
+			data: data, primed: &c.primed, previous: &c.lastState,
+		})
+		res := c.result(ok, message, start)
 		res.Data = data
 		return res
 

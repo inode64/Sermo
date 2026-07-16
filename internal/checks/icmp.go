@@ -84,23 +84,11 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 		if s.Reachable {
 			state = NetStateUp
 		}
-		if c.expect != "" {
-			data[DataKeyValue] = state
-			res := c.result(state == c.expect, fmt.Sprintf("%s %s (want %s)", c.host, state, c.expect), start)
-			res.Data = data
-			return res
-		}
-		if !c.primed {
-			c.primed, c.lastState = true, state
-			res := c.result(false, fmt.Sprintf("%s state baseline %s", c.host, state), start)
-			res.Data = data
-			return res
-		}
-		changed := state != c.lastState
-		data[DataKeyOld], data[DataKeyNew], data[DataKeyValue] = c.lastState, state, state
-		msg := fmt.Sprintf("%s state %s->%s", c.host, c.lastState, state)
-		c.lastState = state
-		res := c.result(changed, msg, start)
+		ok, message := evaluateStateTransition(stateTransitionSpec{
+			target: c.host, current: state, expected: c.expect,
+			data: data, primed: &c.primed, previous: &c.lastState,
+		})
+		res := c.result(ok, message, start)
 		res.Data = data
 		return res
 
