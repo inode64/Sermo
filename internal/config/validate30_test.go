@@ -1656,6 +1656,57 @@ checks:
 	mustHave(t, invalidList, "path is required for a socket check")
 }
 
+func TestValidateRequiredScalarCheckFields(t *testing.T) {
+	tests := []struct {
+		name  string
+		entry string
+		want  string
+	}{
+		{
+			name:  "file missing path",
+			entry: "type: file",
+			want:  "path is required for a file check",
+		},
+		{
+			name:  "file empty path",
+			entry: `type: file, path: ""`,
+			want:  "path is required for a file check",
+		},
+		{
+			name:  "binary missing path",
+			entry: "type: binary",
+			want:  "path is required for a binary check",
+		},
+		{
+			name:  "binary empty path",
+			entry: `type: binary, path: ""`,
+			want:  "path is required for a binary check",
+		},
+		{
+			name:  "libraries missing binary",
+			entry: "type: libraries",
+			want:  "binary is required for a libraries check",
+		},
+		{
+			name:  "libraries empty binary",
+			entry: `type: libraries, binary: ""`,
+			want:  "binary is required for a libraries check",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			issues := validateService(t, `
+name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  target: { `+tt.entry+` }
+`)
+			mustHave(t, issues, tt.want)
+		})
+	}
+}
+
 func TestValidateLockfileCheckRequiresPath(t *testing.T) {
 	issues := validateService(t, `
 name: svc
