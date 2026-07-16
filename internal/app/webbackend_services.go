@@ -318,6 +318,7 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 	}
 
 	d.SLA = b.serviceSLAWindows(name, now)
+	d.ProcessUptime = b.processUptimeWindows(name, now)
 
 	if report, err := serviceLocksReport(b.cfg, name); err == nil {
 		for i := range report.Locks {

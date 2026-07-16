@@ -89,28 +89,29 @@ const (
 )
 
 const (
-	cliFlagSetName   = "sermoctl"
-	cliFlagBackend   = commandBackend
-	cliFlagBefore    = daemonAPIQueryBefore
-	cliFlagConfig    = commandConfig
-	cliFlagConfirm   = "confirm"
-	cliFlagForce     = "force"
-	cliFlagHelp      = commandHelp
-	cliFlagJSON      = "json"
-	cliFlagKill      = "kill-blockers"
-	cliFlagLazy      = "lazy"
-	cliFlagLimit     = daemonAPIQueryLimit
-	cliFlagLong      = "long"
-	cliFlagName      = config.EntryKeyName
-	cliFlagNoCascade = "no-cascade"
-	cliFlagNotify    = rules.RuleFieldNotify
-	cliFlagQuiet     = "quiet"
-	cliFlagReason    = "reason"
-	cliFlagSeries    = "series"
-	cliFlagSince     = "since"
-	cliFlagTimeout   = checks.CheckKeyTimeout
-	cliFlagTTL       = "ttl"
-	cliFlagVersion   = commandVersion
+	cliFlagSetName       = "sermoctl"
+	cliFlagBackend       = commandBackend
+	cliFlagBefore        = daemonAPIQueryBefore
+	cliFlagConfig        = commandConfig
+	cliFlagConfirm       = "confirm"
+	cliFlagForce         = "force"
+	cliFlagHelp          = commandHelp
+	cliFlagJSON          = "json"
+	cliFlagKill          = "kill-blockers"
+	cliFlagLazy          = "lazy"
+	cliFlagLimit         = daemonAPIQueryLimit
+	cliFlagLong          = "long"
+	cliFlagName          = config.EntryKeyName
+	cliFlagNoCascade     = "no-cascade"
+	cliFlagNotify        = rules.RuleFieldNotify
+	cliFlagProcessUptime = "process-uptime"
+	cliFlagQuiet         = "quiet"
+	cliFlagReason        = "reason"
+	cliFlagSeries        = "series"
+	cliFlagSince         = "since"
+	cliFlagTimeout       = checks.CheckKeyTimeout
+	cliFlagTTL           = "ttl"
+	cliFlagVersion       = commandVersion
 )
 
 const (
@@ -228,8 +229,9 @@ type options struct {
 	ttl         time.Duration
 	commandArgs []string // tokens after `--`
 	// sla command flags
-	series bool          // emit the per-minute availability series instead of a summary
-	since  time.Duration // series lookback window (0 means the command's default)
+	series        bool          // emit the per-minute availability series instead of a summary
+	processUptime bool          // emit trusted process-continuity coverage instead of observed SLA
+	since         time.Duration // series lookback window (0 means the command's default)
 	// apps/libs/services flags
 	long        bool     // show the full raw version string instead of the short one
 	notifyNames []string // --notify selection for `services` reports
@@ -1848,6 +1850,7 @@ func parseArgs(args []string) (options, error) {
 	fs.BoolVar(&opts.lazy, cliFlagLazy, false, "")
 	fs.BoolVar(&opts.kill, cliFlagKill, false, "")
 	fs.BoolVar(&opts.series, cliFlagSeries, false, "")
+	fs.BoolVar(&opts.processUptime, cliFlagProcessUptime, false, "")
 	fs.BoolVar(&opts.long, cliFlagLong, false, "")
 	fs.StringArrayVar(&notifyValues, cliFlagNotify, nil, "")
 	fs.DurationVar(&opts.since, cliFlagSince, 0, "")

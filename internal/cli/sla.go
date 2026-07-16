@@ -9,6 +9,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/metrics"
 	"sermo/internal/state"
+	"sermo/internal/units"
 )
 
 // defaultSLASeriesWindow is the series lookback used when --since is omitted.
@@ -22,9 +23,9 @@ const cliTextNotAvailable = "n/a"
 // observed cycles reads "n/a" rather than 0%.
 //
 // With --series it instead emits SERVICE's stored per-minute availability series
-// over --since (default 24h) — the raw time series a graph is built from. Minutes
-// where the service was not monitored (Sermo down, or the service paused or
-// disabled) are absent from the series, never counted as downtime.
+// over --since (default 24h) — the raw time series a graph is built from. With
+// --process-uptime it reports separately confirmed process-continuity coverage.
+// Neither form turns daemon downtime or missing data into observed downtime.
 func (a App) runSLA(ctx context.Context, opts options) int {
 	if len(opts.args) > 1 {
 		return a.commandUsageError(commandSLA, "sla accepts at most one service name")
@@ -34,19 +35,19 @@ func (a App) runSLA(ctx context.Context, opts options) int {
 		return code
 	}
 
+	if opts.series && opts.processUptime {
+		return a.commandUsageError(commandSLA, "sla --series and --process-uptime cannot be used together")
+	}
 	if opts.series {
 		return a.runSLASeries(ctx, opts, cfg)
 	}
+	if opts.processUptime {
+		return a.runProcessUptime(ctx, opts, cfg)
+	}
 
-	var services []string
-	if s := opts.service(); s != "" {
-		canonical, ok := cfg.CanonicalServiceName(s)
-		if !ok {
-			return a.fail(opts, fmt.Sprintf(cliUnknownServiceFormat, s))
-		}
-		services = []string{canonical}
-	} else {
-		services = sortedUnique(cfg.Services)
+	services, code := a.slaServices(opts, cfg)
+	if code != exitSuccess {
+		return code
 	}
 
 	store, err := openStateStore(ctx, cfg)
@@ -69,6 +70,47 @@ func (a App) runSLA(ctx context.Context, opts options) int {
 		a.writeSLAJSON(reports)
 	} else {
 		a.writeSLATable(reports)
+	}
+	return exitSuccess
+}
+
+func (a App) slaServices(opts options, cfg *config.Config) ([]string, int) {
+	if service := opts.service(); service != "" {
+		canonical, ok := cfg.CanonicalServiceName(service)
+		if !ok {
+			return nil, a.fail(opts, fmt.Sprintf(cliUnknownServiceFormat, service))
+		}
+		return []string{canonical}, exitSuccess
+	}
+	return sortedUnique(cfg.Services), exitSuccess
+}
+
+// runProcessUptime reports trusted process-continuity coverage. It remains
+// separate from SLA because a process being alive cannot prove check health.
+func (a App) runProcessUptime(ctx context.Context, opts options, cfg *config.Config) int {
+	services, code := a.slaServices(opts, cfg)
+	if code != exitSuccess {
+		return code
+	}
+	store, err := openStateStore(ctx, cfg)
+	if err != nil {
+		return a.fail(opts, fmt.Sprintf("sla failed: %v", err))
+	}
+	defer store.Close()
+
+	now := time.Now()
+	reports := make([]serviceProcessUptime, 0, len(services))
+	for _, name := range services {
+		values, err := store.ProcessUptimeReport(name, now)
+		if err != nil {
+			return a.fail(opts, fmt.Sprintf("sla %s failed: %v", name, err))
+		}
+		reports = append(reports, serviceProcessUptime{Service: name, Windows: values})
+	}
+	if opts.json {
+		a.writeProcessUptimeJSON(reports)
+	} else {
+		a.writeProcessUptimeTable(reports)
 	}
 	return exitSuccess
 }
@@ -116,6 +158,11 @@ type serviceSLA struct {
 	Windows []state.SLAValue
 }
 
+type serviceProcessUptime struct {
+	Service string
+	Windows []state.ProcessUptimeWindow
+}
+
 func (a App) writeSLAJSON(reports []serviceSLA) {
 	out := make([]map[string]any, 0, len(reports))
 	for _, r := range reports {
@@ -132,6 +179,30 @@ func slaValueJSON(v state.SLAValue) map[string]any {
 	entry := map[string]any{cliJSONKeyUp: v.Up, cliJSONKeyTotal: v.Total, cliJSONKeyRatio: nil}
 	if ratio, ok := v.Ratio(); ok {
 		entry[cliJSONKeyRatio] = ratio
+	}
+	return entry
+}
+
+func (a App) writeProcessUptimeJSON(reports []serviceProcessUptime) {
+	out := make([]map[string]any, 0, len(reports))
+	for _, r := range reports {
+		windows := make(map[string]any, len(r.Windows))
+		for _, v := range r.Windows {
+			windows[v.Window] = processUptimeValueJSON(v)
+		}
+		out = append(out, map[string]any{cliJSONKeyService: r.Service, cliJSONKeyWindows: windows})
+	}
+	writeJSON(a.Stdout, map[string]any{cliJSONKeyProcessUptime: out})
+}
+
+func processUptimeValueJSON(v state.ProcessUptimeWindow) map[string]any {
+	entry := map[string]any{
+		cliJSONKeyCoveredSeconds: v.CoveredSeconds,
+		cliJSONKeyTotalSeconds:   v.TotalSeconds,
+		cliJSONKeyRatio:          nil,
+	}
+	if v.Known && v.TotalSeconds > 0 {
+		entry[cliJSONKeyRatio] = float64(v.CoveredSeconds) / float64(v.TotalSeconds)
 	}
 	return entry
 }
@@ -158,6 +229,27 @@ func (a App) writeSLATable(reports []serviceSLA) {
 	}
 }
 
+func (a App) writeProcessUptimeTable(reports []serviceProcessUptime) {
+	if len(reports) == 0 {
+		fmt.Fprintln(a.Stdout, "no services")
+		return
+	}
+	cols := make([]string, 0, len(state.SLAWindows)+1)
+	cols = append(cols, "SERVICE")
+	for _, window := range state.SLAWindows {
+		cols = append(cols, strings.ToUpper(window.Name))
+	}
+	fmt.Fprintln(a.Stdout, strings.Join(cols, "\t"))
+	for _, report := range reports {
+		row := make([]string, 0, len(report.Windows)+1)
+		row = append(row, report.Service)
+		for _, window := range report.Windows {
+			row = append(row, formatProcessUptime(window))
+		}
+		fmt.Fprintln(a.Stdout, strings.Join(row, "\t"))
+	}
+}
+
 // formatSLA renders one window as a percentage, or "n/a" when it has no data.
 func formatSLA(v state.SLAValue) string {
 	ratio, ok := v.Ratio()
@@ -165,6 +257,15 @@ func formatSLA(v state.SLAValue) string {
 		return cliTextNotAvailable
 	}
 	return fmt.Sprintf("%.2f%%", ratio*metrics.PercentScale)
+}
+
+func formatProcessUptime(v state.ProcessUptimeWindow) string {
+	if !v.Known || v.TotalSeconds <= 0 {
+		return cliTextNotAvailable
+	}
+	covered := units.HumanizeDuration(time.Duration(v.CoveredSeconds) * time.Second)
+	total := units.HumanizeDuration(time.Duration(v.TotalSeconds) * time.Second)
+	return covered + "/" + total
 }
 
 func (a App) writeSLASeriesTable(service string, points []state.SLAPoint) {
