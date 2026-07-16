@@ -22,6 +22,23 @@ func TestParseTemplateRequiresSubjectOrBody(t *testing.T) {
 	}
 }
 
+func TestParseTemplateReportsInvalidPart(t *testing.T) {
+	tests := []struct {
+		name, source, want string
+	}{
+		{name: "subject", source: "subject: '{{'\n", want: "parse subject"},
+		{name: "body", source: "body: '{{'\n", want: "parse body"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseTemplate("t", []byte(tc.source))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("parseTemplate error = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
 // LoadTemplate fails closed when no template directory is configured.
 func TestLoadTemplateRequiresDir(t *testing.T) {
 	_, err := LoadTemplate("", "default-alert")

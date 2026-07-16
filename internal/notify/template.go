@@ -120,20 +120,28 @@ func parseTemplate(name string, data []byte) (*Template, error) {
 	}
 	t := &Template{name: name}
 	if strings.TrimSpace(raw.Subject) != "" {
-		parsed, err := template.New(name + templateSubjectNameSuffix).Option(templateOptionMissingKey).Parse(raw.Subject)
+		parsed, err := parseTemplatePart(name, "subject", templateSubjectNameSuffix, raw.Subject)
 		if err != nil {
-			return nil, fmt.Errorf("parse subject: %w", err)
+			return nil, err
 		}
 		t.subject = parsed
 	}
 	if strings.TrimSpace(raw.Body) != "" {
-		parsed, err := template.New(name + templateBodyNameSuffix).Option(templateOptionMissingKey).Parse(raw.Body)
+		parsed, err := parseTemplatePart(name, "body", templateBodyNameSuffix, raw.Body)
 		if err != nil {
-			return nil, fmt.Errorf("parse body: %w", err)
+			return nil, err
 		}
 		t.body = parsed
 	}
 	return t, nil
+}
+
+func parseTemplatePart(name, label, suffix, source string) (*template.Template, error) {
+	parsed, err := template.New(name + suffix).Option(templateOptionMissingKey).Parse(source)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: %w", label, err)
+	}
+	return parsed, nil
 }
 
 // Render applies the template. Missing subject or body fields keep the original
