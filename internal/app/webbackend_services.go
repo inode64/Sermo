@@ -43,7 +43,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	svc.LastEvent = lastEvent
 	if e.disabled {
 		svc.Status = TargetStateDisabled
-		svc.State = ServiceState(false, false, svc.Status, "", true, false)
+		svc.State = ServiceState(false, false, svc.Status, "", true, false, false)
 		svc.Monitored = false
 		svc.CheckHealth = ""
 		svc.RemediationState = TargetStateDisabled
@@ -71,7 +71,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	b.decorateRemediation(name, &svc)
 	observed := (b.settling == nil || b.settling.Observed(SettlingServiceKey(name))) && !b.operationSettlingPending(name)
 	svc.ObservabilityReady, svc.ObservabilityMissing = b.serviceObservability(name, e, svc.Status, svc.CheckHealth, svc.Monitored, observed)
-	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth, observed, svc.ObservabilityReady)
+	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth, observed, svc.ObservabilityReady, b.serviceProcessActive(name, e))
 	if len(e.alsoApply) > 0 {
 		svc.AlsoApply = slices.Clone(e.alsoApply)
 	}
@@ -161,6 +161,20 @@ func (b *WebBackend) serviceRuntimeObservabilityReady(name string, e *webEntry) 
 		return false
 	}
 	return cur.Count > 0 && cur.HasCPU && cur.IOReady
+}
+
+// serviceProcessActive only reads the worker-published runtime sample. The web
+// request must not scan /proc to turn an unobserved service into active: daemon
+// cycles own process-continuity evidence and its freshness boundary.
+func (b *WebBackend) serviceProcessActive(name string, e *webEntry) bool {
+	if e == nil || e.noResidentProcess || b.serviceMetrics == nil {
+		return false
+	}
+	cur, at, ok := b.serviceMetrics.LatestWithAt(name)
+	if !ok || b.webNow().Sub(at) > runtimePublishMaxAge(e.interval) {
+		return false
+	}
+	return cur.StartedAt != ""
 }
 
 func (b *WebBackend) decorateRemediation(name string, svc *web.Service) {

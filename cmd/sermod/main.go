@@ -256,6 +256,7 @@ func run(args []string) int {
 		RuleState:         store,
 		WatchState:        store,
 		SLA:               store,
+		ProcessUptime:     store,
 		DaemonMetrics:     store,
 		Notifiers:         notifiers,
 		GlobalNotify:      config.NotifyDefault(cfg.Global.Raw),
