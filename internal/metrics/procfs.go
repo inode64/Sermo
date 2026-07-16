@@ -216,16 +216,16 @@ func parseProcIO(data string) (read, write uint64, ok bool) {
 // Reading another user's fd dir requires privilege, so ok is false when it
 // cannot be read.
 func (OSReader) ProcessFDs(pid int) (uint64, bool) {
-	entries, err := os.ReadDir(process.PIDPath(pid, process.ProcFileFD))
-	if err != nil {
-		return 0, false
-	}
-	return uint64(len(entries)), true
+	return processEntryCount(pid, process.ProcFileFD)
 }
 
 // ProcessThreads counts the entries in /proc/<pid>/task (the process's threads).
 func (OSReader) ProcessThreads(pid int) (uint64, bool) {
-	entries, err := os.ReadDir(process.PIDPath(pid, process.ProcFileTask))
+	return processEntryCount(pid, process.ProcFileTask)
+}
+
+func processEntryCount(pid int, name string) (uint64, bool) {
+	entries, err := os.ReadDir(process.PIDPath(pid, name))
 	if err != nil {
 		return 0, false
 	}
