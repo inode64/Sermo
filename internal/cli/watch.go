@@ -215,19 +215,9 @@ func (a App) runWatchMonitor(ctx context.Context, opts options, pause bool) int 
 	defer store.Close()
 
 	key := app.WatchMonitorKey(name)
-	active, found, err := store.Active(key)
+	status, err := updateMonitorState(store, key, pause)
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("watch %s failed: %v", verb, err))
-	}
-	if err := store.SetActive(key, !pause, state.SourceCLI); err != nil {
-		return a.fail(opts, fmt.Sprintf("watch %s failed: %v", verb, err))
-	}
-	status := monitorStatusResumed
-	switch {
-	case pause:
-		status = monitorStatusPaused
-	case !found || active:
-		status = monitorStatusNotPaused
 	}
 	if opts.json {
 		writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: name, cliJSONKeyMonitoring: status})
