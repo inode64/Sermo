@@ -115,34 +115,34 @@ func TestApplyGatesRequiresIgnoresStaleDependency(t *testing.T) {
 	}
 }
 
-func TestGatedChecksDueWhenSkipClears(t *testing.T) {
-	w := &Worker{
-		Gates:    map[string]CheckGate{"query": {Requires: []string{"tcp"}}},
-		cycleRan: ranChecks("tcp"),
-	}
-	cache := map[string]checks.Result{
-		"tcp":   {Check: "tcp", OK: true},
-		"query": {Check: "query", OK: true, Skipped: true, Message: "skipped: requires check tcp"},
-	}
-	built := []checks.Built{{Check: stubCheck{name: "query", ok: false}}}
-	extra := w.gatedChecksDue(built, cache)
-	if len(extra) != 1 || extra[0].Check.Name() != "query" {
-		t.Fatalf("extra = %+v, want query re-run", extra)
-	}
-}
-
-func TestGatedChecksDueWhenStillSkipped(t *testing.T) {
-	w := &Worker{
-		Gates:    map[string]CheckGate{"query": {Requires: []string{"tcp"}}},
-		cycleRan: ranChecks("tcp"),
-	}
-	cache := map[string]checks.Result{
-		"tcp":   {Check: "tcp", OK: false},
-		"query": {Check: "query", OK: true, Skipped: true, Message: "skipped: requires check tcp"},
-	}
-	built := []checks.Built{{Check: stubCheck{name: "query"}}}
-	if len(w.gatedChecksDue(built, cache)) != 0 {
-		t.Fatal("dependency still failing — query must stay deferred")
+func TestGatedChecksDue(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		tcpOK     bool
+		wantRerun bool
+	}{
+		{"skip clears when dependency recovers", true, true},
+		{"still skipped when dependency failing", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := &Worker{
+				Gates:    map[string]CheckGate{"query": {Requires: []string{"tcp"}}},
+				cycleRan: ranChecks("tcp"),
+			}
+			cache := map[string]checks.Result{
+				"tcp":   {Check: "tcp", OK: tc.tcpOK},
+				"query": {Check: "query", OK: true, Skipped: true, Message: "skipped: requires check tcp"},
+			}
+			built := []checks.Built{{Check: stubCheck{name: "query"}}}
+			extra := w.gatedChecksDue(built, cache)
+			if tc.wantRerun {
+				if len(extra) != 1 || extra[0].Check.Name() != "query" {
+					t.Fatalf("extra = %+v, want query re-run", extra)
+				}
+			} else if len(extra) != 0 {
+				t.Fatal("dependency still failing — query must stay deferred")
+			}
+		})
 	}
 }
 

@@ -33,24 +33,23 @@ type fakeManager struct {
 	reloadSupportErr error
 }
 
-func (m *fakeManager) Start(_ context.Context, s string) error {
-	m.calls = append(m.calls, "start "+s)
-	if m.errOn != nil {
-		if err, ok := m.errOn["start "+s]; ok {
-			return err
-		}
+// record logs a "verb unit" call and returns the per-call errOn override if set,
+// otherwise dflt.
+func (m *fakeManager) record(verb, s string, dflt error) error {
+	call := verb + " " + s
+	m.calls = append(m.calls, call)
+	if err, ok := m.errOn[call]; ok {
+		return err
 	}
-	return m.startErr
+	return dflt
+}
+
+func (m *fakeManager) Start(_ context.Context, s string) error {
+	return m.record("start", s, m.startErr)
 }
 
 func (m *fakeManager) Stop(_ context.Context, s string) error {
-	m.calls = append(m.calls, "stop "+s)
-	if m.errOn != nil {
-		if err, ok := m.errOn["stop "+s]; ok {
-			return err
-		}
-	}
-	return m.stopErr
+	return m.record("stop", s, m.stopErr)
 }
 
 func (m *fakeManager) Reload(_ context.Context, s string) error {
@@ -164,6 +163,29 @@ func (h *harness) action(t *testing.T, action string) Result {
 func (h *harness) restart(t *testing.T) Result {
 	t.Helper()
 	return h.action(t, "restart")
+}
+
+// newInvalidTreeEngine builds an Engine over a real locker/scanner/discoverer on a
+// throwaway TempDir with the given config Tree, returning the engine and its fake
+// manager so callers can assert on manager calls. defaultHarness cannot cover a
+// custom Tree, which is what these config-validation tests exercise.
+func newInvalidTreeEngine(t *testing.T, service, unit string, tree map[string]any) (Engine, *fakeManager) {
+	t.Helper()
+	dir := t.TempDir()
+	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
+	mgr := &fakeManager{status: servicemgr.StatusActive}
+	engine := New(Config{
+		Service:    service,
+		Unit:       unit,
+		Backend:    "systemd",
+		Tree:       tree,
+		Manager:    mgr,
+		Locker:     &locker,
+		Scanner:    locks.NewScanner(locks.RuntimeLocksDir(dir)),
+		Discoverer: process.NewDiscovererWithUserLookup(nil),
+		Sleep:      func(time.Duration) {},
+	})
+	return engine, mgr
 }
 
 func TestRestartOK(t *testing.T) {
@@ -332,12 +354,24 @@ func TestResumeUnsupported(t *testing.T) {
 	}
 }
 
-func TestResumeServiceFailedAfterResume(t *testing.T) {
-	h := defaultHarness()
-	h.mgr.status = servicemgr.StatusFailed
-	res := h.engine().Resume(context.Background())
-	if res.Status != ResultFailed || res.Message != "service failed after resume" {
-		t.Fatalf("res = %+v, want failed after resume", res)
+func TestServiceFailedAfterVerb(t *testing.T) {
+	cases := []struct {
+		verb string
+		call func(Engine, context.Context) Result
+	}{
+		{"resume", func(e Engine, ctx context.Context) Result { return e.Resume(ctx) }},
+		{"reload", func(e Engine, ctx context.Context) Result { return e.Reload(ctx) }},
+	}
+	for _, c := range cases {
+		t.Run(c.verb, func(t *testing.T) {
+			h := defaultHarness()
+			h.mgr.status = servicemgr.StatusFailed
+			res := c.call(h.engine(), context.Background())
+			want := "service failed after " + c.verb
+			if res.Status != ResultFailed || res.Message != want {
+				t.Fatalf("res = %+v, want failed with %q", res, want)
+			}
+		})
 	}
 }
 
@@ -557,15 +591,6 @@ func TestReloadFailureSurfaces(t *testing.T) {
 	}
 }
 
-func TestReloadServiceFailedAfterReload(t *testing.T) {
-	h := defaultHarness()
-	h.mgr.status = servicemgr.StatusFailed
-	res := h.engine().Reload(context.Background())
-	if res.Status != ResultFailed || res.Message != "service failed after reload" {
-		t.Fatalf("res = %+v, want failed after reload", res)
-	}
-}
-
 func TestRestartPreflightFailed(t *testing.T) {
 	h := defaultHarness()
 	h.preflight = checks.Outcome{OK: false, Results: []checks.Result{{Check: "config", OK: false}}}
@@ -716,20 +741,8 @@ func TestRestartRediscoveryErrorDoesNotStart(t *testing.T) {
 }
 
 func TestNewInvalidReloadBlocksRestart(t *testing.T) {
-	dir := t.TempDir()
-	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
-	mgr := &fakeManager{status: servicemgr.StatusActive}
-	engine := New(Config{
-		Service:    "web",
-		Unit:       "nginx",
-		Backend:    "systemd",
-		Tree:       map[string]any{"reload": map[string]any{"signal": "NOTASIGNAL"}},
-		Manager:    mgr,
-		Locker:     &locker,
-		Scanner:    locks.NewScanner(locks.RuntimeLocksDir(dir)),
-		Discoverer: process.NewDiscovererWithUserLookup(nil),
-		Sleep:      func(time.Duration) {},
-	})
+	engine, mgr := newInvalidTreeEngine(t, "web", "nginx",
+		map[string]any{"reload": map[string]any{"signal": "NOTASIGNAL"}})
 
 	res := engine.Restart(context.Background())
 	if res.Status != ResultFailed {
@@ -744,20 +757,8 @@ func TestNewInvalidReloadBlocksRestart(t *testing.T) {
 }
 
 func TestNewInvalidProcessSelectorBlocksRestart(t *testing.T) {
-	dir := t.TempDir()
-	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
-	mgr := &fakeManager{status: servicemgr.StatusActive}
-	engine := New(Config{
-		Service:    "mysql-main",
-		Unit:       "mysqld",
-		Backend:    "systemd",
-		Tree:       map[string]any{"processes": map[string]any{"main": map[string]any{"user": "mysql"}}},
-		Manager:    mgr,
-		Locker:     &locker,
-		Scanner:    locks.NewScanner(locks.RuntimeLocksDir(dir)),
-		Discoverer: process.NewDiscovererWithUserLookup(nil),
-		Sleep:      func(time.Duration) {},
-	})
+	engine, mgr := newInvalidTreeEngine(t, "mysql-main", "mysqld",
+		map[string]any{"processes": map[string]any{"main": map[string]any{"user": "mysql"}}})
 
 	res := engine.Restart(context.Background())
 	if res.Status != ResultFailed {
@@ -1007,22 +1008,8 @@ func TestNewRuntimeDiscoveryWarningWithCommandMatchDoesNotBlockRestart(t *testin
 }
 
 func TestNewInvalidStopPolicyDurationBlocksBeforeServiceAction(t *testing.T) {
-	dir := t.TempDir()
-	locker := locks.NewOperationLocker(locks.RuntimeOpsDir(dir))
-	mgr := &fakeManager{status: servicemgr.StatusActive}
-	engine := New(Config{
-		Service: "mysql-main",
-		Unit:    "mysqld",
-		Backend: "systemd",
-		Tree: map[string]any{
-			"stop_policy": map[string]any{"term_timeout": "notaduration"},
-		},
-		Manager:    mgr,
-		Locker:     &locker,
-		Scanner:    locks.NewScanner(locks.RuntimeLocksDir(dir)),
-		Discoverer: process.NewDiscovererWithUserLookup(nil),
-		Sleep:      func(time.Duration) {},
-	})
+	engine, mgr := newInvalidTreeEngine(t, "mysql-main", "mysqld",
+		map[string]any{"stop_policy": map[string]any{"term_timeout": "notaduration"}})
 
 	res := engine.Restart(context.Background())
 	if res.Status != ResultFailed {
@@ -1172,58 +1159,44 @@ type noopSignaler struct{}
 
 func (noopSignaler) Signal(int, syscall.Signal) error { return nil }
 
-func TestAlsoServiceRestartWrapOrder(t *testing.T) {
+// assertAlsoServiceWrapOrder restarts with the given also_service units and
+// asserts the stop/start calls (filtered to the expected set) occur in exactly
+// want order.
+func assertAlsoServiceWrapOrder(t *testing.T, alsoUnits, want []string) {
+	t.Helper()
 	h := defaultHarness()
 	e := h.engine()
-	e.AlsoUnits = []string{"docker.socket"}
-	res := e.Restart(context.Background())
-	if res.Status != ResultOK {
+	e.AlsoUnits = alsoUnits
+	if res := e.Restart(context.Background()); res.Status != ResultOK {
 		t.Fatalf("status = %q (%s)", res.Status, res.Message)
 	}
-	// Wrap order: primary down first then also; also up first then primary.
+	wantSet := make(map[string]bool, len(want))
+	for _, c := range want {
+		wantSet[c] = true
+	}
 	var seq []string
 	for _, c := range h.mgr.calls {
-		if c == "stop mysqld" || c == "stop docker.socket" || c == "start docker.socket" || c == "start mysqld" {
+		if wantSet[c] {
 			seq = append(seq, c)
 		}
 	}
-	want := []string{"stop mysqld", "stop docker.socket", "start docker.socket", "start mysqld"}
-	if len(seq) != len(want) {
+	if !slices.Equal(seq, want) {
 		t.Fatalf("call seq = %v, want %v", seq, want)
 	}
-	for i := range want {
-		if seq[i] != want[i] {
-			t.Fatalf("call seq = %v, want %v", seq, want)
-		}
-	}
+}
+
+func TestAlsoServiceRestartWrapOrder(t *testing.T) {
+	// Wrap order: primary down first then also; also up first then primary.
+	assertAlsoServiceWrapOrder(t, []string{"docker.socket"},
+		[]string{"stop mysqld", "stop docker.socket", "start docker.socket", "start mysqld"})
 }
 
 // With more than one also_service unit the teardown order matters: down in
 // REVERSE declaration order (LIFO nesting), up in declaration order. A
 // single-unit test cannot catch a forward-iteration regression.
 func TestAlsoServiceMultiUnitWrapOrder(t *testing.T) {
-	h := defaultHarness()
-	e := h.engine()
-	e.AlsoUnits = []string{"a.socket", "b.socket"}
-	if res := e.Restart(context.Background()); res.Status != ResultOK {
-		t.Fatalf("status = %q (%s)", res.Status, res.Message)
-	}
-	var seq []string
-	for _, c := range h.mgr.calls {
-		switch c {
-		case "stop mysqld", "stop a.socket", "stop b.socket", "start a.socket", "start b.socket", "start mysqld":
-			seq = append(seq, c)
-		}
-	}
-	want := []string{"stop mysqld", "stop b.socket", "stop a.socket", "start a.socket", "start b.socket", "start mysqld"}
-	if len(seq) != len(want) {
-		t.Fatalf("call seq = %v, want %v", seq, want)
-	}
-	for i := range want {
-		if seq[i] != want[i] {
-			t.Fatalf("call seq = %v, want %v", seq, want)
-		}
-	}
+	assertAlsoServiceWrapOrder(t, []string{"a.socket", "b.socket"},
+		[]string{"stop mysqld", "stop b.socket", "stop a.socket", "start a.socket", "start b.socket", "start mysqld"})
 }
 
 func TestAlsoServiceStartStrictAborts(t *testing.T) {

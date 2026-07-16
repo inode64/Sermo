@@ -1,9 +1,6 @@
 package config
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
 // TestGlobalBuiltinsBakedInDefaults pins that ${arch}/${os} are substituted in
 // the global document (defaults.variables, watches, …), not only in catalog/
@@ -37,9 +34,7 @@ service: svc
 	if got := vars["osdir"]; got != "/etc/"+detectedOS {
 		t.Fatalf("osdir = %v, want baked %q", got, "/etc/"+detectedOS)
 	}
-	for _, is := range Validate(cfg) {
-		if strings.Contains(is.Msg, "nested variable") || strings.Contains(is.Msg, "references another variable") {
-			t.Fatalf("unexpected nested-variable issue: %v", is)
-		}
-	}
+	issues := Validate(cfg)
+	mustNotHave(t, issues, "nested variable")
+	mustNotHave(t, issues, "references another variable")
 }

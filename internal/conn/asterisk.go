@@ -2,7 +2,6 @@ package conn
 
 import (
 	"context"
-	"fmt"
 	"strings"
 )
 
@@ -21,21 +20,10 @@ func (asteriskProtocol) RequiresUser() bool { return false }
 const asteriskGreetingPrefix = "Asterisk Call Manager/"
 
 func (asteriskProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, defaultPortAsterisk)
-	if err != nil {
-		return Result{}, err
-	}
-	defer func() { _ = c.Close() }()
-
-	line, err := readGreetingLine(c)
-	if err != nil {
-		return Result{}, err
-	}
-	version, ok := asteriskGreetingVersion(line)
-	if !ok {
-		return Result{}, fmt.Errorf("not an Asterisk AMI greeting: %q", line)
-	}
-	return Result{Version: version, Extra: map[string]string{extraBanner: line}}, nil
+	return probeLineCommand(ctx, cfg, defaultPortAsterisk, "", func(line string) (Result, bool) {
+		version, ok := asteriskGreetingVersion(line)
+		return Result{Version: version, Extra: map[string]string{extraBanner: line}}, ok
+	}, "not an Asterisk AMI greeting: %q")
 }
 
 // asteriskGreetingVersion extracts the manager version from an AMI greeting

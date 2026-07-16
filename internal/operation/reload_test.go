@@ -109,36 +109,33 @@ func TestReloadClosureNoSpecRejectsUnsupportedBackendReload(t *testing.T) {
 	}
 }
 
-func TestReloadClosureAutoCommandPrefersBackendWhenSupported(t *testing.T) {
-	mgr := &fakeManager{canReload: true}
+// assertReloadAutoBackend runs an auto-mode reload closure and asserts that the
+// backend is used exactly when it supports reload, and the native command runs
+// only otherwise.
+func assertReloadAutoBackend(t *testing.T, canReload bool, tree map[string]any) {
+	t.Helper()
+	mgr := &fakeManager{canReload: canReload}
 	runner := &scriptedRunner{}
-	tree := map[string]any{"reload": map[string]any{"command": []any{"nginx", "-s", "reload"}, "when": "auto"}}
 	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "nginx")
 	if err := reload(context.Background()); err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if runner.ran("nginx") {
-		t.Errorf("auto reload must use the backend when it supports reload; calls=%v", runner.calls)
+	if mgr.did("reload nginx") != canReload {
+		t.Errorf("Manager.Reload called=%t, want %t; calls=%v", mgr.did("reload nginx"), canReload, mgr.calls)
 	}
-	if !mgr.did("reload nginx") {
-		t.Errorf("auto reload must call Manager.Reload when supported; calls=%v", mgr.calls)
+	if runner.ran("nginx") == canReload {
+		t.Errorf("native command ran=%t, want %t; calls=%v", runner.ran("nginx"), !canReload, runner.calls)
 	}
 }
 
+func TestReloadClosureAutoCommandPrefersBackendWhenSupported(t *testing.T) {
+	assertReloadAutoBackend(t, true,
+		map[string]any{"reload": map[string]any{"command": []any{"nginx", "-s", "reload"}, "when": "auto"}})
+}
+
 func TestReloadClosureAutoCommandFallsBackWhenUnsupported(t *testing.T) {
-	mgr := &fakeManager{canReload: false} // the unit has no ExecReload / reload()
-	runner := &scriptedRunner{}
-	tree := map[string]any{"reload": map[string]any{"command": []any{"nginx", "-s", "reload"}}}
-	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "nginx")
-	if err := reload(context.Background()); err != nil {
-		t.Fatalf("reload: %v", err)
-	}
-	if mgr.did("reload nginx") {
-		t.Errorf("auto reload must NOT call the backend when it cannot reload; calls=%v", mgr.calls)
-	}
-	if !runner.ran("nginx") {
-		t.Errorf("auto reload must run the native command when the init cannot reload; calls=%v", runner.calls)
-	}
+	assertReloadAutoBackend(t, false, // the unit has no ExecReload / reload()
+		map[string]any{"reload": map[string]any{"command": []any{"nginx", "-s", "reload"}}})
 }
 
 func TestReloadClosureAutoCommandReportsBackendSupportError(t *testing.T) {

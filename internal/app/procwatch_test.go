@@ -284,47 +284,55 @@ func TestProcWatchCombinedConditionsAND(t *testing.T) {
 	}
 }
 
-func TestProcWatchGone(t *testing.T) {
-	h := &procHarness{clock: time.Unix(1_000_000, 0)}
-	s := &fakeProcSampler{cycles: [][]ProcInfo{
-		{{PID: 11}}, // present, adopt
-		{},          // gone -> fire once
-		{},          // still gone (state dropped) -> no re-fire
-		{{PID: 11}}, // reappears, adopt -> no fire
-		{},          // gone again -> fire
-	}}
-	w := h.watcher(procCond{onGone: true}, s)
-	for range 5 {
-		h.tick(w, time.Second)
-	}
-	if len(h.fired) != 2 {
-		t.Fatalf("gone fired %d times, want 2", len(h.fired))
-	}
-	if h.fired[0]["SERMO_CHANGE"] != "gone" || h.fired[0]["SERMO_PID"] != "11" {
-		t.Fatalf("unexpected gone env: %v", h.fired[0])
-	}
-}
-
-func TestProcWatchUnreadableSampleDoesNotFireGone(t *testing.T) {
-	h := &procHarness{clock: time.Unix(1_000_000, 0)}
-	s := &fakeProcSampler{
-		cycles: [][]ProcInfo{
-			{{PID: 11}}, // present, adopt
-			{},          // /proc unreadable this cycle -> must NOT fire gone
-			{{PID: 11}}, // readable again, still present -> no fire
-			{},          // genuinely gone -> fire once
+func TestProcWatchGoneFires(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		sampler    *fakeProcSampler
+		ticks      int
+		wantFired  int
+		wantChange string
+	}{
+		{
+			name: "gone and reappear fire twice",
+			sampler: &fakeProcSampler{cycles: [][]ProcInfo{
+				{{PID: 11}}, // present, adopt
+				{},          // gone -> fire once
+				{},          // still gone (state dropped) -> no re-fire
+				{{PID: 11}}, // reappears, adopt -> no fire
+				{},          // gone again -> fire
+			}},
+			ticks: 5, wantFired: 2, wantChange: "gone",
 		},
-		failCycles: []bool{false, true, false, false},
-	}
-	w := h.watcher(procCond{onGone: true}, s)
-	for range 4 {
-		h.tick(w, time.Second)
-	}
-	if len(h.fired) != 1 {
-		t.Fatalf("gone fired %d times, want 1 (transient read failure must not fire gone)", len(h.fired))
-	}
-	if h.fired[0]["SERMO_PID"] != "11" {
-		t.Fatalf("unexpected gone env: %v", h.fired[0])
+		{
+			name: "transient read failure does not fire",
+			sampler: &fakeProcSampler{
+				cycles: [][]ProcInfo{
+					{{PID: 11}}, // present, adopt
+					{},          // /proc unreadable this cycle -> must NOT fire gone
+					{{PID: 11}}, // readable again, still present -> no fire
+					{},          // genuinely gone -> fire once
+				},
+				failCycles: []bool{false, true, false, false},
+			},
+			ticks: 4, wantFired: 1,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &procHarness{clock: time.Unix(1_000_000, 0)}
+			w := h.watcher(procCond{onGone: true}, tc.sampler)
+			for range tc.ticks {
+				h.tick(w, time.Second)
+			}
+			if len(h.fired) != tc.wantFired {
+				t.Fatalf("gone fired %d times, want %d", len(h.fired), tc.wantFired)
+			}
+			if tc.wantChange != "" && h.fired[0]["SERMO_CHANGE"] != tc.wantChange {
+				t.Fatalf("unexpected gone change: %v", h.fired[0])
+			}
+			if h.fired[0]["SERMO_PID"] != "11" {
+				t.Fatalf("unexpected gone env: %v", h.fired[0])
+			}
+		})
 	}
 }
 

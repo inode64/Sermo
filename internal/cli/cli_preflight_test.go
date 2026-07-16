@@ -14,22 +14,14 @@ import (
 // binPath and an optional file_exists at a missing path.
 func writePreflightConfig(t *testing.T, binPath string) string {
 	t.Helper()
-	root := t.TempDir()
-	global := filepath.Join(root, "sermo.yml")
-	mustWrite(t, global, `
+	global := writeServiceConfig(t, `
 engine:
-  default_timeout: 3s
-paths:
-  services: [ `+root+`/services ]
-defaults:
-  policy:
-    cooldown: 5m
-`)
-	mustWrite(t, filepath.Join(root, "services", "apache-main.yml"), `
+  default_timeout: 3s`+servicesDirGlobal, map[string]string{
+		"services/apache-main.yml": `
 name: apache-main
 service: apache2
 variables:
-  binary: `+binPath+`
+  binary: ` + binPath + `
 preflight:
   binary:
     type: binary
@@ -38,7 +30,8 @@ preflight:
     type: file_exists
     path: /definitely/missing/flag
     optional: true
-`)
+`,
+	})
 	return global
 }
 

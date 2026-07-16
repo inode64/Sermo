@@ -46,22 +46,8 @@ func TestProcessCountPassesFilterAndScopeMessage(t *testing.T) {
 }
 
 func TestBuildProcessCountCheck(t *testing.T) {
-	built, warns := Build(map[string]any{
-		"p": map[string]any{
-			"type":  "process_count",
-			"user":  "www-data",
-			"count": map[string]any{"op": ">", "value": 100.0},
-		},
-	}, Deps{ProcessCount: func(string, string, string) int { return 200 }})
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
-	}
-	if len(built) != 1 || !built[0].Check.Run(context.Background()).OK {
-		t.Fatal("200 processes should build and satisfy > 100")
-	}
-
-	// A process_count check without a threshold is meaningless and must warn.
-	if _, warns := Build(map[string]any{"p": map[string]any{"type": "process_count"}}, Deps{}); len(warns) == 0 {
-		t.Fatal("process_count without a predicate should warn")
-	}
+	// 200 processes satisfies > 100; a threshold-less process_count check warns.
+	assertBuildThresholdFires(t, "process_count",
+		map[string]any{"user": "www-data", "count": map[string]any{"op": ">", "value": 100.0}},
+		Deps{ProcessCount: func(string, string, string) int { return 200 }})
 }

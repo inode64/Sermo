@@ -2,18 +2,9 @@ package locks
 
 import (
 	"errors"
-	"os"
-	"strconv"
-	"strings"
 	"syscall"
 
 	"sermo/internal/process"
-)
-
-const (
-	procStatNumericBase    = 10
-	procStatStartTimeBits  = 64
-	procStatStartTimeIndex = 19
 )
 
 // OSProcessProber probes real processes via signal 0 and /proc.
@@ -33,24 +24,5 @@ func (OSProcessProber) Alive(pid int) bool {
 // (field 2) may contain spaces and parentheses, so parsing resumes after the
 // final ')'.
 func (OSProcessProber) StartTicks(pid int) (uint64, bool) {
-	data, err := os.ReadFile(process.PIDPath(pid, process.ProcFileStat))
-	if err != nil {
-		return 0, false
-	}
-	stat := string(data)
-	closeParen := strings.LastIndex(stat, ")")
-	if closeParen < 0 || closeParen+1 >= len(stat) {
-		return 0, false
-	}
-	// After ')', fields begin at field 3 (state); starttime (field 22) is the
-	// 20th of these (index 19).
-	fields := strings.Fields(stat[closeParen+1:])
-	if len(fields) <= procStatStartTimeIndex {
-		return 0, false
-	}
-	ticks, err := strconv.ParseUint(fields[procStatStartTimeIndex], procStatNumericBase, procStatStartTimeBits)
-	if err != nil {
-		return 0, false
-	}
-	return ticks, true
+	return process.StartTicks(pid)
 }

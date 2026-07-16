@@ -527,11 +527,20 @@ func instantiateMulti(body map[string]any, templateName string, match templateMa
 	if templateMatchHasEmptyValue(match, toks) {
 		applyUnversionedOverrides(out)
 	}
+	return finalizeMaterialized(out, body, name, path, kind, templateName, match)
+}
+
+// finalizeMaterialized bakes the shared tail of instantiateMulti and
+// instantiateVersion: out is the already token-bound body, body the original
+// template body (read for binary resolution and the current-label check). It
+// injects the resolved binary, stamps kind/name, strips discovery metadata and
+// wraps the result in a concrete Document.
+func finalizeMaterialized(out, body map[string]any, name, path, kind, templateName string, match templateMatch) *Document {
 	injectMaterializedBinary(out, materializedBinaryFromMatch(body, kind, match))
 	out[keyKind] = kind
 	out[keyName] = name
 	trimMaterializedMetadata(out)
-	delete(out, keyVersions)
+	delete(out, keyVersions) // discovery metadata, not part of the concrete definition
 	return &Document{
 		Kind:                 kind,
 		Name:                 name,
@@ -1143,19 +1152,7 @@ func instantiateVersion(body map[string]any, templateName string, match template
 	if value == "" {
 		applyUnversionedOverrides(out)
 	}
-	injectMaterializedBinary(out, materializedBinaryFromMatch(body, kind, match))
-	out[keyKind] = kind
-	out[keyName] = name
-	trimMaterializedMetadata(out)
-	delete(out, keyVersions) // discovery metadata, not part of the concrete definition
-	return &Document{
-		Kind:                 kind,
-		Name:                 name,
-		Path:                 path,
-		Body:                 out,
-		TemplateBaseName:     templateBaseName(templateName),
-		TemplateCurrentLabel: templateUsesCurrentLabel(body),
-	}
+	return finalizeMaterialized(out, body, name, path, kind, templateName, match)
 }
 
 func templateUsesCurrentLabel(body map[string]any) bool {

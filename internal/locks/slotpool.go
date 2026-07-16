@@ -82,12 +82,7 @@ func (p SlotPool) withDefaults() SlotPool {
 	if p.Slots <= 0 {
 		p.Slots = defaultSlotCount
 	}
-	if p.Proc == nil {
-		p.Proc = OSProcessProber{}
-	}
-	if p.Now == nil {
-		p.Now = time.Now
-	}
+	p.Proc, p.Now = procNowDefaults(p.Proc, p.Now)
 	if p.Self == nil {
 		p.Self = selfIdentity
 	}
@@ -152,40 +147,21 @@ func (p SlotPool) tryAcquire(path string, slot int, proc ProcessProber, now func
 		ttl = defaultSlotTTL
 	}
 	pid, ticks := self()
-	// Bounded retry (no recursion): a slot file that vanishes between create and
-	// read, or one we reclaim as stale, is retried in-place up to a fixed number
-	// of attempts before yielding errSlotBusy so the caller tries the next slot —
-	// a pathologically contended slot can no longer recurse until the stack
-	// overflows.
-	for range maxAcquireAttempts {
-		payload := lockFile{
+	// The shared spine bounds retries at maxAcquireAttempts and, with recheck
+	// false, yields errSlotBusy the moment a slot is active or a reclaim race is
+	// lost — the caller then moves on to the next slot rather than waiting here.
+	held := func(lockFile, State, string) error { return errSlotBusy }
+	ol, err := acquireExclusive(path, func() lockFile {
+		return lockFile{
 			Service:         fmt.Sprintf(slotLockServiceFormat, slot),
 			OwnerPID:        pid,
 			OwnerStartTicks: ticks,
 			CreatedAt:       now(),
 			ExpiresAt:       now().Add(ttl),
 		}
-		if err := writeLockFileExclusive(path, payload); err == nil {
-			return &SlotHandle{ownedLock{path: path, ownerPID: pid, ownerStartTicks: ticks}}, nil
-		} else if !errors.Is(err, os.ErrExist) {
-			return nil, fmt.Errorf(lockAcquireErrorFormat, path, err)
-		}
-
-		existing, rerr := readLockFile(path)
-		if rerr != nil {
-			if isRetryableLockRead(rerr) {
-				continue // vanished or still being written; retry this slot
-			}
-			return nil, fmt.Errorf(lockAcquireErrorFormat, path, rerr)
-		}
-		state, _ := classify(existing, now(), proc)
-		if state == StateActive {
-			return nil, errSlotBusy
-		}
-		if !reclaimStale(path, existing, proc, now) {
-			return nil, errSlotBusy
-		}
-		// reclaimed; retry the exclusive create
+	}, proc, now, held, nil, false, errSlotBusy)
+	if err != nil {
+		return nil, err
 	}
-	return nil, errSlotBusy
+	return &SlotHandle{ol}, nil
 }

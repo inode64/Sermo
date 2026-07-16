@@ -67,20 +67,11 @@ func (rdpProtocol) DefaultPort() int   { return defaultPortRDP }
 func (rdpProtocol) RequiresUser() bool { return false }
 
 func (rdpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortRDP
-	}
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, hostPort(host, port))
+	c, err := dialTCPDeadline(ctx, cfg, defaultPortRDP)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	applyDeadline(ctx, c)
 
 	if _, err := c.Write(buildRDPNegRequest(rdpRequestedProtocols)); err != nil {
 		return Result{}, err
@@ -143,17 +134,14 @@ func parseRDPConfirm(b []byte) (string, error) {
 	return ProtocolNameRDP, nil // CC with no negotiation response: standard RDP security
 }
 
+// rdpProtocolNames maps the negotiated RDP security protocols; others render as hex.
+var rdpProtocolNames = map[uint32]string{
+	rdpSecurityStandard:        ProtocolNameRDP,
+	rdpSecurityTLS:             rdpProtocolTLS,
+	rdpSecurityCredSSPHybrid:   rdpProtocolHybrid,
+	rdpSecurityCredSSPHybridEx: rdpProtocolHybridEx,
+}
+
 func rdpProtocolName(p uint32) string {
-	switch p {
-	case rdpSecurityStandard:
-		return ProtocolNameRDP
-	case rdpSecurityTLS:
-		return rdpProtocolTLS
-	case rdpSecurityCredSSPHybrid:
-		return rdpProtocolHybrid
-	case rdpSecurityCredSSPHybridEx:
-		return rdpProtocolHybridEx
-	default:
-		return fmt.Sprintf("0x%08x", p)
-	}
+	return codeName(p, rdpProtocolNames, "0x%08x")
 }

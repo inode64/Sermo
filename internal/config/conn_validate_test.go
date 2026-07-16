@@ -9,11 +9,7 @@ service: x
 checks:
   conn: { type: mysql, user: monitor, password: secret, port: 3306, tls: false }
 `)
-	for _, is := range issues {
-		if hasIssue([]Issue{is}, "checks.conn") {
-			t.Fatalf("a valid mysql check must produce no issue: %v", issues)
-		}
-	}
+	mustNotHave(t, issues, "checks.conn")
 }
 
 func TestValidateMySQLCheckNoUserOK(t *testing.T) {
@@ -24,11 +20,7 @@ service: x
 checks:
   conn: { type: mysql, port: 3306 }
 `)
-	for _, is := range issues {
-		if hasIssue([]Issue{is}, "checks.conn") {
-			t.Fatalf("mysql without a user must be valid (greeting mode): %v", issues)
-		}
-	}
+	mustNotHave(t, issues, "checks.conn")
 }
 
 func TestValidatePostgresCheckRequiresUser(t *testing.T) {
@@ -47,11 +39,7 @@ service: x
 checks:
   conn: { type: postgres, user: monitor, tls: verify-full }
 `)
-	for _, is := range issues {
-		if hasIssue([]Issue{is}, "checks.conn") {
-			t.Fatalf("postgres tls=verify-full must be valid: %v", issues)
-		}
-	}
+	mustNotHave(t, issues, "checks.conn")
 }
 
 func TestValidateCloudflaredCheckValid(t *testing.T) {
@@ -61,11 +49,7 @@ service: cloudflared
 checks:
   protocol: { type: cloudflared, host: 127.0.0.1, port: 60123, tls: false }
 `)
-	for _, is := range issues {
-		if hasIssue([]Issue{is}, "checks.protocol") {
-			t.Fatalf("a valid cloudflared check must produce no issue: %v", issues)
-		}
-	}
+	mustNotHave(t, issues, "checks.protocol")
 }
 
 func TestValidateDHClientCheckValid(t *testing.T) {
@@ -75,11 +59,7 @@ service: dhclient
 checks:
   protocol: { type: dhclient, host: 0.0.0.0, port: 68, lease_file: /var/lib/dhcp/dhclient.leases }
 `)
-	for _, is := range issues {
-		if hasIssue([]Issue{is}, "checks.protocol") {
-			t.Fatalf("a valid dhclient check must produce no issue: %v", issues)
-		}
-	}
+	mustNotHave(t, issues, "checks.protocol")
 }
 
 func TestValidateMySQLCheckBadTLS(t *testing.T) {
@@ -130,11 +110,7 @@ checks:
       rcode: NOERROR
       answers: { op: ">", value: 0 }
 `)
-	for _, is := range issues {
-		if hasIssue([]Issue{is}, "checks.resolver") {
-			t.Fatalf("valid conn expect must produce no issue: %v", issues)
-		}
-	}
+	mustNotHave(t, issues, "checks.resolver")
 }
 
 func TestValidateConnExpectErrors(t *testing.T) {
@@ -207,11 +183,7 @@ checks:
     command: ["true"]
     analyze: { rules: [ { id: a, match: "(?i)deprecated", severity: warning } ] }
 `)
-	for _, is := range issues {
-		if hasIssue([]Issue{is}, "checks.config") {
-			t.Fatalf("a valid analyze block must produce no issue: %v", issues)
-		}
-	}
+	mustNotHave(t, issues, "checks.config")
 }
 
 func TestValidateCascadeTargets(t *testing.T) {
@@ -261,9 +233,5 @@ stop_policy:
     - /tmp/svc-*.lock
     - { path: /var/cache/svc, recursive: true }
 `)
-	for _, is := range ok {
-		if hasIssue([]Issue{is}, "clean_on_stop") {
-			t.Fatalf("valid clean_on_stop must produce no issue: %v", ok)
-		}
-	}
+	mustNotHave(t, ok, "clean_on_stop")
 }

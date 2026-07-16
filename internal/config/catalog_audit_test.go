@@ -51,6 +51,44 @@ func readYAMLMap(t *testing.T, path string) map[string]any {
 	return body
 }
 
+// loadRepoCatalog loads the repository's real catalog under an empty-services
+// global, failing on any load error.
+func loadRepoCatalog(t *testing.T) *Config {
+	t.Helper()
+	root := repoRoot(t)
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  services: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	return cfg
+}
+
+// walkCatalogDocs walks dir and calls fn with each YAML document's path and
+// decoded top-level map, skipping directories and non-YAML files.
+func walkCatalogDocs(t *testing.T, dir string, fn func(path string, body map[string]any)) {
+	t.Helper()
+	err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || !isYAML(entry.Name()) {
+			return nil
+		}
+		fn(path, readYAMLMap(t, path))
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func catalogDocByName(t *testing.T, root, category, name string) map[string]any {
 	t.Helper()
 	dir := filepath.Join(root, "catalog", category)
@@ -84,25 +122,12 @@ func catalogWatchCheck(t *testing.T, body map[string]any, name string) map[strin
 }
 
 func TestCatalogServicesDoNotDeclareVersionsFrom(t *testing.T) {
-	root := repoRoot(t)
-	dir := filepath.Join(root, "catalog", "services")
-	err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() || !isYAML(entry.Name()) {
-			return nil
-		}
-		body := readYAMLMap(t, path)
+	walkCatalogDocs(t, filepath.Join(repoRoot(t), "catalog", "services"), func(path string, body map[string]any) {
 		versions, _ := body["versions"].(map[string]any)
 		if _, ok := versions["from"]; ok {
 			t.Fatalf("%s declares versions.from; catalog/services must discover service templates from service:", path)
 		}
-		return nil
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 }
 
 // TestCatalogServicesNoArtifactCheckCollision guards, host-independently, against
@@ -862,18 +887,7 @@ func TestCatalogServicesUseCanonicalServiceNames(t *testing.T) {
 }
 
 func TestCatalogAppsDeclareVersionSource(t *testing.T) {
-	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 
 	noLocalVersion := map[string]string{
 		"libvirt-dbus": "upstream documents no version option for libvirt-dbus",
@@ -897,18 +911,7 @@ func TestCatalogAppsDeclareVersionSource(t *testing.T) {
 }
 
 func TestCatalogAppsDeclareHealthOrVersionSource(t *testing.T) {
-	root := repoRoot(t)
-	dir := t.TempDir()
-	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  services: []\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := loadConfig(t, global, WithCatalogDirs(repoCatalogDir(root)))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	cfg := loadRepoCatalog(t)
 
 	noSafeHealth := map[string]string{
 		"nfsdcld": "upstream documents no help/version option; version comes from rpc-mountd",
@@ -1691,21 +1694,11 @@ func TestCatalogPMLFarmUsesResidentHelperProcessHealth(t *testing.T) {
 func TestNoPostflightSectionRemains(t *testing.T) {
 	root := repoRoot(t)
 	for _, base := range []string{"catalog", "examples"} {
-		err := filepath.WalkDir(filepath.Join(root, base), func(path string, entry os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if entry.IsDir() || !isYAML(entry.Name()) {
-				return nil
-			}
-			if _, ok := readYAMLMap(t, path)["postflight"]; ok {
+		walkCatalogDocs(t, filepath.Join(root, base), func(path string, body map[string]any) {
+			if _, ok := body["postflight"]; ok {
 				t.Errorf("%s still has a postflight: section — migrate its check to verify: true", path)
 			}
-			return nil
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
 	}
 }
 
@@ -2075,22 +2068,13 @@ func TestCatalogConfigInvalidHandledByPreflight(t *testing.T) {
 // TestCatalogHasNoConfigInvalidGuard asserts the redundant guard is gone from the
 // whole catalog, not just the representative services above.
 func TestCatalogHasNoConfigInvalidGuard(t *testing.T) {
-	root := repoRoot(t)
-	err := filepath.WalkDir(filepath.Join(root, "catalog", "services"), func(path string, entry os.DirEntry, err error) error {
-		if err != nil || entry.IsDir() || !isYAML(entry.Name()) {
-			return err
-		}
-		body := readYAMLMap(t, path)
-		if rules, ok := body["rules"].(map[string]any); ok {
-			if _, present := rules["block-restart-if-config-invalid"]; present {
+	walkCatalogDocs(t, filepath.Join(repoRoot(t), "catalog", "services"), func(path string, body map[string]any) {
+		if ruleSection, ok := body["rules"].(map[string]any); ok {
+			if _, present := ruleSection["block-restart-if-config-invalid"]; present {
 				t.Errorf("%s still carries block-restart-if-config-invalid (redundant with required config preflight)", path)
 			}
 		}
-		return nil
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 }
 
 func TestNamedCatalogUsesBackendNeutralConfigPreflight(t *testing.T) {

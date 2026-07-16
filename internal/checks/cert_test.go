@@ -204,18 +204,10 @@ func TestCertSamplerErrorIsNotAlert(t *testing.T) {
 }
 
 func TestBuildCertCheck(t *testing.T) {
-	built, warns := Build(map[string]any{
-		"api": map[string]any{"type": "cert", "host": "api.example.com", "expires_in_days": 14, "on_algorithm_change": true},
-	}, Deps{CertSampler: fakeCert(healthyCert())})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("cert check should build: warns=%v built=%d", warns, len(built))
-	}
-	if !built[0].Check.Run(context.Background()).OK {
-		t.Fatal("a healthy cert should pass")
-	}
-	if _, warns := Build(map[string]any{"c": map[string]any{"type": "cert"}}, Deps{}); len(warns) == 0 {
-		t.Fatal("a cert check without a host should warn")
-	}
+	// A healthy cert passes; a cert check without a host warns.
+	assertBuildThresholdFires(t, "cert",
+		map[string]any{"host": "api.example.com", "expires_in_days": 14, "on_algorithm_change": true},
+		Deps{CertSampler: fakeCert(healthyCert())})
 }
 
 func TestCertCheckSource(t *testing.T) {

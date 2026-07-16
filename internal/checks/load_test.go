@@ -57,21 +57,8 @@ func TestLoadMultiPredAnd(t *testing.T) {
 }
 
 func TestBuildLoadCheck(t *testing.T) {
-	built, warns := Build(map[string]any{
-		"l": map[string]any{
-			CheckKeyType:   CheckTypeLoad,
-			CheckKeyPerCPU: true,
-			fieldLoad5:     map[string]any{CheckKeyOp: ">", CheckKeyValue: 1.0},
-		},
-	}, Deps{LoadSampler: fakeLoad(LoadSample{Load5: 8, NumCPU: 4})})
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
-	}
-	if len(built) != 1 || !built[0].Check.Run(context.Background()).OK {
-		t.Fatal("load5 8/4=2.0 per core should build and fire > 1.0")
-	}
-
-	if _, warns := Build(map[string]any{"l": map[string]any{"type": "load"}}, Deps{}); len(warns) == 0 {
-		t.Fatal("load check without a predicate should warn")
-	}
+	// load5 8/4 = 2.0 per core fires > 1.0; a predicate-less load check warns.
+	assertBuildThresholdFires(t, CheckTypeLoad,
+		map[string]any{CheckKeyPerCPU: true, fieldLoad5: map[string]any{CheckKeyOp: ">", CheckKeyValue: 1.0}},
+		Deps{LoadSampler: fakeLoad(LoadSample{Load5: 8, NumCPU: 4})})
 }

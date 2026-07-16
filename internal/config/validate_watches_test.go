@@ -31,8 +31,59 @@ func watchIssues(issues []Issue) []Issue {
 	return out
 }
 
+// watchConfigs wraps several named checks in the raw-global shape, giving each a
+// hook-only then block ({"hook": {"command": ["/x"]}}).
+func watchConfigs(checks map[string]any) map[string]any {
+	watches := make(map[string]any, len(checks))
+	for name, check := range checks {
+		watches[name] = map[string]any{
+			"check": check,
+			"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+		}
+	}
+	return map[string]any{"watches": watches}
+}
+
+// watchConfig wraps a single named watch's check in the raw-global shape, using
+// the common hook-only then block ({"hook": {"command": ["/x"]}}).
+func watchConfig(name string, check map[string]any) map[string]any {
+	return watchConfigs(map[string]any{name: check})
+}
+
+// assertNoWatchIssues asserts the given raw global produces no watch issues.
+func assertNoWatchIssues(t *testing.T, global map[string]any) {
+	t.Helper()
+	if w := watchIssues(validateRawGlobal(t, global)); len(w) != 0 {
+		t.Fatalf("expected no watch issues, got %v", w)
+	}
+}
+
+// assertWatchIssues asserts each want appears in some watch issue.
+func assertWatchIssues(t *testing.T, global map[string]any, want ...string) {
+	t.Helper()
+	issues := watchIssues(validateRawGlobal(t, global))
+	for _, w := range want {
+		if !hasIssueContaining(issues, w) {
+			t.Fatalf("expected a watch issue containing %q, got %v", w, issues)
+		}
+	}
+}
+
+// assertEachWatchInvalid runs each named case as a subtest, asserting the single
+// watch (keyed by watchName) produces at least one watch issue.
+func assertEachWatchInvalid(t *testing.T, watchName string, cases map[string]map[string]any) {
+	t.Helper()
+	for name, w := range cases {
+		t.Run(name, func(t *testing.T) {
+			if issues := watchIssues(validateRawGlobal(t, map[string]any{"watches": map[string]any{watchName: w}})); len(issues) == 0 {
+				t.Fatalf("%s: expected a watch issue", name)
+			}
+		})
+	}
+}
+
 func TestValidateWatchesGood(t *testing.T) {
-	issues := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"storage-root": map[string]any{
 				"monitor": "previous",
@@ -41,55 +92,41 @@ func TestValidateWatchesGood(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(issues); len(w) != 0 {
-		t.Fatalf("expected no watch issues, got %v", w)
-	}
 }
 
 func TestValidateRaidNotifyOn(t *testing.T) {
-	good := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"notifiers": map[string]any{"ops": map[string]any{"type": "wall"}},
 		"watches": map[string]any{"raid-md0": map[string]any{
 			"check": map[string]any{"type": "raid", "array": "md0", "sysfs_changes": true},
 			"then":  map[string]any{"notify": []any{"ops"}, "notify_on": []any{"on_degraded", "on_array_change"}},
 		}},
 	})
-	if issues := watchIssues(good); len(issues) != 0 {
-		t.Fatalf("raid notify_on issues = %v", issues)
-	}
-	bad := validateRawGlobal(t, map[string]any{
+	assertWatchIssues(t, map[string]any{
 		"watches": map[string]any{"load": map[string]any{
 			"check": map[string]any{"type": "load", "load1": map[string]any{"op": ">", "value": 1}},
 			"then":  map[string]any{"notify_on": []any{"on_change"}, "notify": []any{"none"}},
 		}},
-	})
-	issues := watchIssues(bad)
-	if !hasIssueContaining(issues, "only valid on a raid or lvm watch") {
-		t.Fatalf("invalid raid notify_on issues = %v", issues)
-	}
+	},
+		"only valid on a raid or lvm watch")
 }
 
 func TestValidateRAIDControl(t *testing.T) {
-	valid := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{"raid-md0": map[string]any{
 			"check":        map[string]any{"type": "raid", "array": "md0"},
 			"raid_control": map[string]any{"pause_resume": true},
 			"then":         map[string]any{"notify": []any{"none"}},
 		}},
 	})
-	if issues := watchIssues(valid); len(issues) != 0 {
-		t.Fatalf("valid RAID control issues = %v", issues)
-	}
-	invalid := validateRawGlobal(t, map[string]any{
+	assertWatchIssues(t, map[string]any{
 		"watches": map[string]any{"raid": map[string]any{
 			"check":        map[string]any{"type": "raid"},
 			"raid_control": map[string]any{"pause_resume": true},
 			"then":         map[string]any{"notify": []any{"none"}},
 		}},
-	})
-	if !hasIssueContaining(watchIssues(invalid), "requires check.array") {
-		t.Fatalf("missing array RAID control issues = %v", invalid)
-	}
+	},
+		"requires check.array")
 }
 
 // assertWatchNotifyIntervalIssue validates a hook-only storage watch with the
@@ -131,7 +168,7 @@ func hasIssueContaining(issues []Issue, substr string) bool {
 }
 
 func TestValidateWatchesSingleShotParity(t *testing.T) {
-	good := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"automount": map[string]any{
 				"check": map[string]any{"type": "autofs"},
@@ -151,34 +188,17 @@ func TestValidateWatchesSingleShotParity(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("single-shot watches should validate, got %v", w)
-	}
 
-	bad := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"metric": map[string]any{
-				"check": map[string]any{"type": "metric", "name": "cpu", "op": ">", "value": "90"},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-			"service": map[string]any{
-				"check": map[string]any{"type": "service", "expect": "active"},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	for _, want := range []string{
+	assertWatchIssues(t, watchConfigs(map[string]any{
+		"metric":  map[string]any{"type": "metric", "name": "cpu", "op": ">", "value": "90"},
+		"service": map[string]any{"type": "service", "expect": "active"},
+	}),
 		`watches.metric.check.type "metric" is not supported`,
-		`watches.service.check.type "service" is not supported`,
-	} {
-		if !hasIssue(bad, want) {
-			t.Fatalf("missing issue %q in %v", want, bad)
-		}
-	}
+		`watches.service.check.type "service" is not supported`)
 }
 
 func TestValidateClockWatch(t *testing.T) {
-	good := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"clock-drift": map[string]any{
 				"check": map[string]any{
@@ -193,11 +213,8 @@ func TestValidateClockWatch(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("valid clock watch flagged: %v", w)
-	}
 
-	bad := validateRawGlobal(t, map[string]any{
+	assertWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"clock-drift": map[string]any{
 				"check": map[string]any{
@@ -210,16 +227,12 @@ func TestValidateClockWatch(t *testing.T) {
 				},
 			},
 		},
-	})
-	for _, want := range []string{"servers", "max_offset", "max_stratum", "max_root_dispersion", "port"} {
-		if !hasIssueContaining(watchIssues(bad), want) {
-			t.Fatalf("bad clock watch missing %q issue: %v", want, watchIssues(bad))
-		}
-	}
+	},
+		"servers", "max_offset", "max_stratum", "max_root_dispersion", "port")
 }
 
 func TestValidateFileWatchGood(t *testing.T) {
-	issues := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"app-data": map[string]any{
 				"check": map[string]any{
@@ -237,13 +250,10 @@ func TestValidateFileWatchGood(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(issues); len(w) != 0 {
-		t.Fatalf("expected no watch issues, got %v", w)
-	}
 }
 
 func TestValidateFileWatchErrors(t *testing.T) {
-	issues := validateRawGlobal(t, map[string]any{
+	assertWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"no-cond": map[string]any{
 				"check": map[string]any{"type": "file", "path": "/x"},
@@ -278,8 +288,7 @@ func TestValidateFileWatchErrors(t *testing.T) {
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
 			},
 		},
-	})
-	want := []string{
+	},
 		"watches.no-cond.check requires at least one of size, permissions, owner, existence, older_than",
 		"watches.bad-size.check.size requires on: change or {op, value}",
 		"watches.bad-perm.check.permissions requires on: change",
@@ -287,17 +296,11 @@ func TestValidateFileWatchErrors(t *testing.T) {
 		"watches.no-path.check: file check requires path or paths",
 		"watches.bad-older-than.check.older_than must be a valid positive duration",
 		"watches.bad-include-hidden.check.include_hidden must be a boolean",
-		"watches.both-path-aliases.check: file check must define only one of path or paths",
-	}
-	for _, w := range want {
-		if !hasIssue(issues, w) {
-			t.Fatalf("missing issue %q in %v", w, issues)
-		}
-	}
+		"watches.both-path-aliases.check: file check must define only one of path or paths")
 }
 
 func TestValidateProcessWatchGood(t *testing.T) {
-	issues := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"hot-workers": map[string]any{
 				"check": map[string]any{
@@ -313,13 +316,10 @@ func TestValidateProcessWatchGood(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(issues); len(w) != 0 {
-		t.Fatalf("expected no watch issues, got %v", w)
-	}
 }
 
 func TestValidateProcessWatchGoneOnly(t *testing.T) {
-	issues := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"liveness": map[string]any{
 				"check": map[string]any{"type": "process", "name": "nginx", "gone": true},
@@ -327,13 +327,10 @@ func TestValidateProcessWatchGoneOnly(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(issues); len(w) != 0 {
-		t.Fatalf("a gone-only process watch should be valid, got %v", w)
-	}
 }
 
 func TestValidateProcessWatchErrors(t *testing.T) {
-	issues := validateRawGlobal(t, map[string]any{
+	assertWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"no-name": map[string]any{
 				"check": map[string]any{"type": "process", "cpu": map[string]any{"op": ">", "value": 1}},
@@ -352,22 +349,15 @@ func TestValidateProcessWatchErrors(t *testing.T) {
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
 			},
 		},
-	})
-	want := []string{
+	},
 		"watches.no-name.check.name is required for a process check",
 		"watches.no-cond.check requires at least one of for, cpu, memory, io",
 		"watches.bad-for.check.for \"soon\" must be a valid positive duration",
-		"watches.bad-cpu.check.cpu requires {op, value} with a numeric value",
-	}
-	for _, w := range want {
-		if !hasIssue(issues, w) {
-			t.Fatalf("missing issue %q in %v", w, issues)
-		}
-	}
+		"watches.bad-cpu.check.cpu requires {op, value} with a numeric value")
 }
 
 func TestValidateProcessWatchKillGood(t *testing.T) {
-	issues := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"kill-stale-sudo": map[string]any{
 				"check": map[string]any{"type": "process", "name": "/usr/bin/sudo", "user": "root", "for": "120m"},
@@ -384,13 +374,10 @@ func TestValidateProcessWatchKillGood(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(issues); len(w) != 0 {
-		t.Fatalf("a kill-only process watch should be valid, got %v", w)
-	}
 }
 
 func TestValidateProcessWatchKillErrors(t *testing.T) {
-	issues := validateRawGlobal(t, map[string]any{
+	assertWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"bad-signal": map[string]any{
 				"check": map[string]any{"type": "process", "name": "sudo", "for": "1m"},
@@ -418,110 +405,46 @@ func TestValidateProcessWatchKillErrors(t *testing.T) {
 				"then":  map[string]any{"kill": map[string]any{"signal": "TERM"}},
 			},
 		},
-	})
-	want := []string{
+	},
 		"watches.bad-signal.then.kill.signal \"HUP\" must be TERM or KILL",
 		"watches.bad-escalate.then.kill.escalate must be a boolean",
 		"watches.bad-timeout.then.kill.term_timeout \"soon\" must be a valid positive duration",
 		"watches.basename-kill.then.kill requires check.name to be an absolute resolved exe path",
 		"watches.missing-user-kill.then.kill requires check.user",
-		"watches.kill-on-storage.then.kill is only valid on a process watch",
-	}
-	for _, w := range want {
-		if !hasIssue(issues, w) {
-			t.Fatalf("missing issue %q in %v", w, watchIssues(issues))
-		}
-	}
+		"watches.kill-on-storage.then.kill is only valid on a process watch")
 }
 
 func TestValidateStorageInodesWatch(t *testing.T) {
-	good := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"storage-inodes": map[string]any{
-				"check": map[string]any{
-					"type":            "storage",
-					"path":            "/",
-					"inodes_used_pct": map[string]any{"op": ">=", "value": 90},
-					"inodes_free":     map[string]any{"op": "<", "value": 10000},
-				},
-				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("inode predicates should be valid, got %v", w)
-	}
+	assertNoWatchIssues(t, watchConfig("storage-inodes", map[string]any{
+		"type":            "storage",
+		"path":            "/",
+		"inodes_used_pct": map[string]any{"op": ">=", "value": 90},
+		"inodes_free":     map[string]any{"op": "<", "value": 10000},
+	}))
 
-	bad := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"storage-inodes": map[string]any{
-				"check": map[string]any{"type": "storage", "path": "/", "inodes_used_pct": map[string]any{"op": "=>", "value": "lots"}},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	if !hasIssue(bad, "watches.storage-inodes.check.inodes_used_pct has an invalid op") {
-		t.Fatalf("expected invalid inode op issue, got %v", bad)
-	}
+	assertWatchIssues(t, watchConfig("storage-inodes", map[string]any{"type": "storage", "path": "/", "inodes_used_pct": map[string]any{"op": "=>", "value": "lots"}}),
+		"watches.storage-inodes.check.inodes_used_pct has an invalid op")
 }
 
 func TestValidateStorageBytePredicates(t *testing.T) {
-	good := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"storage-bytes": map[string]any{
-				"check": map[string]any{
-					"type":       "storage",
-					"path":       "/",
-					"free_bytes": map[string]any{"op": "<", "value": "10G"},
-					"used_bytes": map[string]any{"op": ">=", "value": "100G"},
-				},
-				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("byte predicates should be valid, got %v", w)
-	}
+	assertNoWatchIssues(t, watchConfig("storage-bytes", map[string]any{
+		"type":       "storage",
+		"path":       "/",
+		"free_bytes": map[string]any{"op": "<", "value": "10G"},
+		"used_bytes": map[string]any{"op": ">=", "value": "100G"},
+	}))
 
-	percent := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"storage-percent": map[string]any{
-				"check": map[string]any{
-					"type":     "storage",
-					"path":     "/",
-					"used_pct": map[string]any{"op": ">=", "value": "90%"},
-				},
-				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	if w := watchIssues(percent); len(w) != 0 {
-		t.Fatalf("percent-suffixed predicate should be valid, got %v", w)
-	}
+	assertNoWatchIssues(t, watchConfig("storage-percent", map[string]any{
+		"type":     "storage",
+		"path":     "/",
+		"used_pct": map[string]any{"op": ">=", "value": "90%"},
+	}))
 
-	bad := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"storage-bytes": map[string]any{
-				"check": map[string]any{"type": "storage", "path": "/", "free_bytes": map[string]any{"op": "<", "value": "lots"}},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	if !hasIssue(bad, "watches.storage-bytes.check.free_bytes value \"lots\" must include a size suffix") {
-		t.Fatalf("expected invalid byte-size issue, got %v", bad)
-	}
+	assertWatchIssues(t, watchConfig("storage-bytes", map[string]any{"type": "storage", "path": "/", "free_bytes": map[string]any{"op": "<", "value": "lots"}}),
+		"watches.storage-bytes.check.free_bytes value \"lots\" must include a size suffix")
 
-	unitless := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"storage-bytes": map[string]any{
-				"check": map[string]any{"type": "storage", "path": "/", "free_bytes": map[string]any{"op": "<", "value": 10}},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	if !hasIssue(unitless, "watches.storage-bytes.check.free_bytes value \"10\" must include a size suffix") {
-		t.Fatalf("expected missing suffix issue, got %v", unitless)
-	}
+	assertWatchIssues(t, watchConfig("storage-bytes", map[string]any{"type": "storage", "path": "/", "free_bytes": map[string]any{"op": "<", "value": 10}}),
+		"watches.storage-bytes.check.free_bytes value \"10\" must include a size suffix")
 }
 
 func TestValidateNotifiers(t *testing.T) {
@@ -550,11 +473,7 @@ func TestValidateNotifiers(t *testing.T) {
 		},
 		"notify": []any{"staged", "tty-root", "wall"},
 	})
-	for _, i := range good {
-		if strings.Contains(i.Msg, "notifiers.") {
-			t.Fatalf("valid notifier flagged: %v", good)
-		}
-	}
+	mustNotHave(t, good, "notifiers.")
 
 	bad := validateRawGlobal(t, map[string]any{
 		"notifiers": map[string]any{
@@ -596,7 +515,7 @@ func TestValidateNotifyReferences(t *testing.T) {
 	}
 	storageCheck := map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}
 
-	good := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"notifiers": notifiers,
 		"notify":    []any{"ops-email"},
 		"watches": map[string]any{
@@ -622,9 +541,6 @@ func TestValidateNotifyReferences(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("a notify-only watch with a valid reference should pass, got %v", w)
-	}
 
 	bad := validateRawGlobal(t, map[string]any{
 		"notifiers": notifiers,
@@ -690,7 +606,7 @@ func TestValidateNotifyReferences(t *testing.T) {
 
 	// Bare watch (no "then" key at all) with check+for is valid as alert-only:
 	// produces firing events / web state but no actions (even if globals exist).
-	bare := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"notify": []any{"ops-email"}, // globals should be ignored for bare
 		"watches": map[string]any{
 			"mem-high": map[string]any{
@@ -703,13 +619,10 @@ func TestValidateNotifyReferences(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(bare); len(w) != 0 {
-		t.Fatalf("bare watch (no then) should be valid alert-only, got issues: %v", w)
-	}
 }
 
 func TestValidateServiceCheckAsWatch(t *testing.T) {
-	good := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"health": map[string]any{
 				"check": map[string]any{"type": "http", "url": "http://127.0.0.1/health", "expect_status": 200},
@@ -721,42 +634,23 @@ func TestValidateServiceCheckAsWatch(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("service checks should be valid as watches, got %v", w)
-	}
 
-	badExpand := validateRawGlobal(t, map[string]any{
+	assertWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"load": map[string]any{
 				"check": map[string]any{"type": "load", "load1": map[string]any{"op": ">", "value": 8}},
 				"then":  map[string]any{"expand": map[string]any{"by": "5G"}},
 			},
 		},
-	})
-	if !hasIssue(badExpand, "watches.load.then.expand is only valid on a storage watch") {
-		t.Fatalf("non-storage expand should be rejected: %v", badExpand)
-	}
+	},
+		"watches.load.then.expand is only valid on a storage watch")
 
-	bad := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"no-url": map[string]any{
-				"check": map[string]any{"type": "http"},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-			"weird": map[string]any{
-				"check": map[string]any{"type": "definitely-not-a-check"},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	for _, w := range []string{
+	assertWatchIssues(t, watchConfigs(map[string]any{
+		"no-url": map[string]any{"type": "http"},
+		"weird":  map[string]any{"type": "definitely-not-a-check"},
+	}),
 		"watches.no-url.check.url is required for an http check",
-		"watches.weird.check.type \"definitely-not-a-check\" is not supported",
-	} {
-		if !hasIssue(bad, w) {
-			t.Fatalf("missing issue %q in %v", w, bad)
-		}
-	}
+		"watches.weird.check.type \"definitely-not-a-check\" is not supported")
 }
 
 func assertRequiredWatchPredicate(t *testing.T, name, checkType string, goodCheck map[string]any, wantIssue string) {
@@ -791,33 +685,14 @@ func TestValidateZombiesWatch(t *testing.T) {
 }
 
 func TestValidatePortsWatch(t *testing.T) {
-	good := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"scan": map[string]any{
-				"check": map[string]any{"type": "ports", "host": "10.0.0.1", "ports": "22,80,443", "match": "all"},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("a ports watch should be valid, got %v", w)
-	}
+	assertNoWatchIssues(t, watchConfig("scan", map[string]any{"type": "ports", "host": "10.0.0.1", "ports": "22,80,443", "match": "all"}))
 
-	bad := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"scan": map[string]any{
-				"check": map[string]any{"type": "ports", "ports": "bad"},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	if !hasIssue(bad, `watches.scan.check.ports has an invalid port`) {
-		t.Fatalf("expected invalid-ports issue, got %v", bad)
-	}
+	assertWatchIssues(t, watchConfig("scan", map[string]any{"type": "ports", "ports": "bad"}),
+		`watches.scan.check.ports has an invalid port`)
 }
 
 func TestValidateCertWatch(t *testing.T) {
-	good := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"api-cert": map[string]any{
 				"check": map[string]any{"type": "cert", "host": "api.example.com", "expires_in_days": 14, "on_issuer_change": true},
@@ -826,104 +701,42 @@ func TestValidateCertWatch(t *testing.T) {
 		},
 		"notifiers": map[string]any{"x": map[string]any{"type": "slack", "webhook": "https://h/x"}},
 	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("a cert watch should be valid, got %v", w)
-	}
 
-	bad := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"c": map[string]any{
-				"check": map[string]any{"type": "cert"},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	if !hasIssue(bad, "watches.c.check requires a host or a path") {
-		t.Fatalf("expected missing-host issue, got %v", bad)
-	}
+	assertWatchIssues(t, watchConfig("c", map[string]any{"type": "cert"}),
+		"watches.c.check requires a host or a path")
 }
 
 func TestValidateEntropyWatch(t *testing.T) {
-	good := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"entropy": map[string]any{
-				"check": map[string]any{"type": "entropy", "avail": map[string]any{"op": "<", "value": 200}},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("expected no watch issues, got %v", w)
-	}
+	assertNoWatchIssues(t, watchConfig("entropy", map[string]any{"type": "entropy", "avail": map[string]any{"op": "<", "value": 200}}))
 
-	bad := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"no-avail": map[string]any{
-				"check": map[string]any{"type": "entropy"},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-			"bad-op": map[string]any{
-				"check": map[string]any{"type": "entropy", "avail": map[string]any{"op": "=<", "value": "x"}},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	for _, w := range []string{
+	assertWatchIssues(t, watchConfigs(map[string]any{
+		"no-avail": map[string]any{"type": "entropy"},
+		"bad-op":   map[string]any{"type": "entropy", "avail": map[string]any{"op": "=<", "value": "x"}},
+	}),
 		"watches.no-avail.check requires at least one of avail",
 		"watches.bad-op.check.avail has an invalid op",
-		"watches.bad-op.check.avail value \"x\" must be numeric",
-	} {
-		if !hasIssue(bad, w) {
-			t.Fatalf("missing issue %q in %v", w, bad)
-		}
-	}
+		"watches.bad-op.check.avail value \"x\" must be numeric")
 }
 
 func TestValidateStorageMountWatch(t *testing.T) {
 	// A storage watch can carry a mount condition (mount + space in one entry).
-	good := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"data-mount": map[string]any{
-				"check": map[string]any{"type": "storage", "path": "/data", "mounted": true},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("a disk+mount watch should be valid, got %v", w)
-	}
+	assertNoWatchIssues(t, watchConfig("data-mount", map[string]any{"type": "storage", "path": "/data", "mounted": true}))
 
-	bad := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"m": map[string]any{
-				"check": map[string]any{"type": "storage", "path": "/data"}, // no predicate, no mount condition
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-			"unsupported-mount-controls": map[string]any{
-				"check": map[string]any{
-					"type":    "storage",
-					"path":    "/data",
-					"mounted": true,
-					"fstype":  "ext4",
-					"device":  "/dev/sdb1",
-					"options": []any{"rw"},
-				},
-				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
+	assertWatchIssues(t, watchConfigs(map[string]any{
+		"m": map[string]any{"type": "storage", "path": "/data"}, // no predicate, no mount condition
+		"unsupported-mount-controls": map[string]any{
+			"type":    "storage",
+			"path":    "/data",
+			"mounted": true,
+			"fstype":  "ext4",
+			"device":  "/dev/sdb1",
+			"options": []any{"rw"},
 		},
-	})
-	if !hasIssue(bad, "watches.m.check requires a space/inode predicate") {
-		t.Fatalf("expected combined-requirement issue, got %v", bad)
-	}
-	for _, want := range []string{
+	}),
+		"watches.m.check requires a space/inode predicate",
 		"watches.unsupported-mount-controls.check.fstype is not supported for a storage check",
 		"watches.unsupported-mount-controls.check.device is not supported for a storage check",
-		"watches.unsupported-mount-controls.check.options is not supported for a storage check",
-	} {
-		if !hasIssue(bad, want) {
-			t.Fatalf("missing issue %q in %v", want, bad)
-		}
-	}
+		"watches.unsupported-mount-controls.check.options is not supported for a storage check")
 }
 
 func TestValidateConntrackWatch(t *testing.T) {
@@ -931,47 +744,23 @@ func TestValidateConntrackWatch(t *testing.T) {
 }
 
 func TestValidateFdsWatch(t *testing.T) {
-	good := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"fds": map[string]any{
-				"check": map[string]any{
-					"type":     "fds",
-					"used_pct": map[string]any{"op": ">=", "value": 85},
-					"free":     map[string]any{"op": "<", "value": 10000},
-				},
-				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("expected no watch issues, got %v", w)
-	}
+	assertNoWatchIssues(t, watchConfig("fds", map[string]any{
+		"type":     "fds",
+		"used_pct": map[string]any{"op": ">=", "value": 85},
+		"free":     map[string]any{"op": "<", "value": 10000},
+	}))
 
-	bad := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"no-pred": map[string]any{
-				"check": map[string]any{"type": "fds"},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-			"bad-op": map[string]any{
-				"check": map[string]any{"type": "fds", "used_pct": map[string]any{"op": "=>", "value": "lots"}},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	for _, w := range []string{
+	assertWatchIssues(t, watchConfigs(map[string]any{
+		"no-pred": map[string]any{"type": "fds"},
+		"bad-op":  map[string]any{"type": "fds", "used_pct": map[string]any{"op": "=>", "value": "lots"}},
+	}),
 		"watches.no-pred.check requires at least one of used_pct/free/allocated",
 		"watches.bad-op.check.used_pct has an invalid op",
-		"watches.bad-op.check.used_pct value \"lots\" must be a percentage in 0..100",
-	} {
-		if !hasIssue(bad, w) {
-			t.Fatalf("missing issue %q in %v", w, bad)
-		}
-	}
+		"watches.bad-op.check.used_pct value \"lots\" must be a percentage in 0..100")
 }
 
 func TestValidateOomWatch(t *testing.T) {
-	good := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"oom-bare": map[string]any{ // no delta: defaults to any kill
 				"check": map[string]any{"type": "oom"},
@@ -983,66 +772,27 @@ func TestValidateOomWatch(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("expected no watch issues, got %v", w)
-	}
 
-	bad := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"oom": map[string]any{
-				"check": map[string]any{"type": "oom", "delta": map[string]any{"op": "=>", "value": "many"}},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	for _, w := range []string{
+	assertWatchIssues(t, watchConfig("oom", map[string]any{"type": "oom", "delta": map[string]any{"op": "=>", "value": "many"}}),
 		"watches.oom.check.delta has an invalid op",
-		"watches.oom.check.delta value \"many\" must be numeric",
-	} {
-		if !hasIssue(bad, w) {
-			t.Fatalf("missing issue %q in %v", w, bad)
-		}
-	}
+		"watches.oom.check.delta value \"many\" must be numeric")
 }
 
 func TestValidateLoadWatch(t *testing.T) {
-	good := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"load": map[string]any{
-				"check": map[string]any{
-					"type":    "load",
-					"per_cpu": true,
-					"load5":   map[string]any{"op": ">", "value": 1.0},
-					"load15":  map[string]any{"op": ">", "value": 0.8},
-				},
-				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("expected no watch issues, got %v", w)
-	}
+	assertNoWatchIssues(t, watchConfig("load", map[string]any{
+		"type":    "load",
+		"per_cpu": true,
+		"load5":   map[string]any{"op": ">", "value": 1.0},
+		"load15":  map[string]any{"op": ">", "value": 0.8},
+	}))
 
-	bad := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"no-pred": map[string]any{
-				"check": map[string]any{"type": "load", "per_cpu": "yes"},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	for _, w := range []string{
+	assertWatchIssues(t, watchConfig("no-pred", map[string]any{"type": "load", "per_cpu": "yes"}),
 		"watches.no-pred.check.per_cpu must be a boolean",
-		"watches.no-pred.check requires at least one of load1/load5/load15",
-	} {
-		if !hasIssue(bad, w) {
-			t.Fatalf("missing issue %q in %v", w, bad)
-		}
-	}
+		"watches.no-pred.check requires at least one of load1/load5/load15")
 }
 
 func TestValidateSwapWatchGood(t *testing.T) {
-	issues := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"swap": map[string]any{
 				"check": map[string]any{"type": "swap"},
@@ -1060,13 +810,10 @@ func TestValidateSwapWatchGood(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(issues); len(w) != 0 {
-		t.Fatalf("expected no watch issues, got %v", w)
-	}
 }
 
 func TestValidateSwapWatchErrors(t *testing.T) {
-	issues := validateRawGlobal(t, map[string]any{
+	assertWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"no-metrics": map[string]any{
 				"check": map[string]any{"type": "swap"},
@@ -1091,22 +838,15 @@ func TestValidateSwapWatchErrors(t *testing.T) {
 				},
 			},
 		},
-	})
-	want := []string{
+	},
 		"watches.no-metrics.metrics is required and must be non-empty for a swap check",
 		"watches.empty-usage.metrics.usage requires at least one of used_pct/free_pct/free_bytes",
 		"watches.bad-io.metrics.io.delta has an invalid op",
-		"watches.bad-metric.metrics.bogus is not a supported swap metric (usage or io)",
-	}
-	for _, w := range want {
-		if !hasIssue(issues, w) {
-			t.Fatalf("missing issue %q in %v", w, issues)
-		}
-	}
+		"watches.bad-metric.metrics.bogus is not a supported swap metric (usage or io)")
 }
 
 func TestValidateWatchesGoodForWindow(t *testing.T) {
-	issues := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"storage-root": map[string]any{
 				"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
@@ -1125,9 +865,6 @@ func TestValidateWatchesGoodForWindow(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(issues); len(w) != 0 {
-		t.Fatalf("expected no watch issues, got %v", w)
-	}
 }
 
 func TestValidateWatchesBad(t *testing.T) {
@@ -1154,14 +891,7 @@ func TestValidateWatchesBad(t *testing.T) {
 		"hook bad expect_exit":   {"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}, "expect_exit": "nope"}}},
 		"hook bad expect_stdout": {"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}, "expect_stdout": map[string]any{"op": "=>", "value": "1"}}}},
 	}
-	for name, w := range cases {
-		t.Run(name, func(t *testing.T) {
-			issues := watchIssues(validateRawGlobal(t, map[string]any{"watches": map[string]any{"w": w}}))
-			if len(issues) == 0 {
-				t.Fatalf("%s: expected a watch issue", name)
-			}
-		})
-	}
+	assertEachWatchInvalid(t, "w", cases)
 }
 
 func TestValidateWatchesMessageMentionsName(t *testing.T) {
@@ -1178,7 +908,7 @@ func TestValidateWatchesMessageMentionsName(t *testing.T) {
 }
 
 func TestValidateWatchesNetGood(t *testing.T) {
-	issues := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"net-eth0": map[string]any{
 				"check": map[string]any{"type": "net", "interface": "eth0"},
@@ -1189,9 +919,6 @@ func TestValidateWatchesNetGood(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(issues); len(w) != 0 {
-		t.Fatalf("expected no watch issues, got %v", w)
-	}
 }
 
 func TestValidateWatchesNetBad(t *testing.T) {
@@ -1214,18 +941,11 @@ func TestValidateWatchesNetBad(t *testing.T) {
 		"empty hook cmd": {"check": map[string]any{"type": "net", "interface": "eth0"},
 			"metrics": map[string]any{"state": map[string]any{"on": "change", "then": map[string]any{"hook": map[string]any{"command": []any{}}}}}},
 	}
-	for name, w := range cases {
-		t.Run(name, func(t *testing.T) {
-			issues := watchIssues(validateRawGlobal(t, map[string]any{"watches": map[string]any{"net-eth0": w}}))
-			if len(issues) == 0 {
-				t.Fatalf("%s: expected a watch issue", name)
-			}
-		})
-	}
+	assertEachWatchInvalid(t, "net-eth0", cases)
 }
 
 func TestValidateWatchesICMPGood(t *testing.T) {
-	issues := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"ping-gw": map[string]any{
 				"check": map[string]any{"type": "icmp", "host": "8.8.8.8", "count": 3},
@@ -1236,9 +956,6 @@ func TestValidateWatchesICMPGood(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(issues); len(w) != 0 {
-		t.Fatalf("expected no watch issues, got %v", w)
-	}
 }
 
 func TestValidateWatchesICMPBad(t *testing.T) {
@@ -1264,18 +981,11 @@ func TestValidateWatchesICMPBad(t *testing.T) {
 		"bad change delta": {"check": map[string]any{"type": "icmp", "host": "h"},
 			"metrics": map[string]any{"latency": merge(map[string]any{"change": map[string]any{"delta": "abc"}})}},
 	}
-	for name, w := range cases {
-		t.Run(name, func(t *testing.T) {
-			issues := watchIssues(validateRawGlobal(t, map[string]any{"watches": map[string]any{"ping-gw": w}}))
-			if len(issues) == 0 {
-				t.Fatalf("%s: expected a watch issue", name)
-			}
-		})
-	}
+	assertEachWatchInvalid(t, "ping-gw", cases)
 }
 
 func TestValidateWatchPolicy(t *testing.T) {
-	good := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"grow": map[string]any{
 				"check":  map[string]any{"type": "storage", "path": "/data", "free_pct": map[string]any{"op": "<", "value": 10}},
@@ -1284,11 +994,8 @@ func TestValidateWatchPolicy(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("valid watch policy flagged: %v", w)
-	}
 
-	bad := validateRawGlobal(t, map[string]any{
+	assertWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"bad-cooldown": map[string]any{
 				"check":  map[string]any{"type": "storage", "path": "/data", "free_pct": map[string]any{"op": "<", "value": 10}},
@@ -1306,21 +1013,15 @@ func TestValidateWatchPolicy(t *testing.T) {
 				"then":   map[string]any{"expand": map[string]any{"by": "5G"}},
 			},
 		},
-	})
-	for _, w := range []string{
+	},
 		`watches.bad-cooldown.policy.cooldown "-5m" must be a valid positive duration`,
 		"watches.bad-shape.policy must be a mapping",
-		"watches.bad-actions.policy.max_actions requires policy.max_actions_window",
-	} {
-		if !hasIssue(bad, w) {
-			t.Fatalf("missing issue %q in %v", w, bad)
-		}
-	}
+		"watches.bad-actions.policy.max_actions requires policy.max_actions_window")
 }
 
 func TestValidateExpandBy(t *testing.T) {
 	storageCheck := map[string]any{"type": "storage", "path": "/data", "free_pct": map[string]any{"op": "<", "value": 10}}
-	bad := validateRawGlobal(t, map[string]any{
+	assertWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"no-by": map[string]any{
 				"check": storageCheck,
@@ -1335,22 +1036,16 @@ func TestValidateExpandBy(t *testing.T) {
 				"then":  map[string]any{"expand": "5G"},
 			},
 		},
-	})
-	for _, w := range []string{
+	},
 		`watches.no-by.then.expand.by "" must be a positive size with a K/M/G/T suffix`,
 		`watches.unitless.then.expand.by "1024" must be a positive size with a K/M/G/T suffix`,
-		"watches.bad-shape.then.expand must be a mapping with a `by` size",
-	} {
-		if !hasIssue(bad, w) {
-			t.Fatalf("missing issue %q in %v", w, bad)
-		}
-	}
+		"watches.bad-shape.then.expand must be a mapping with a `by` size")
 }
 
 func TestValidateSwapUsageSharedGrammar(t *testing.T) {
 	// Percent and byte-size forms work in swap usage exactly like in storage
 	// (section: unified checks — one predicate grammar for every level check).
-	good := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"swap": map[string]any{
 				"check": map[string]any{"type": "swap"},
@@ -1364,11 +1059,8 @@ func TestValidateSwapUsageSharedGrammar(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("percent/size forms should be valid in swap usage, got %v", w)
-	}
 
-	bad := validateRawGlobal(t, map[string]any{
+	assertWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"swap": map[string]any{
 				"check": map[string]any{"type": "swap"},
@@ -1381,21 +1073,15 @@ func TestValidateSwapUsageSharedGrammar(t *testing.T) {
 				},
 			},
 		},
-	})
-	for _, w := range []string{
+	},
 		`used_pct value "150%" must be a percentage in 0..100`,
-		`free_bytes value "1024" must include a size suffix`,
-	} {
-		if !hasIssue(bad, w) {
-			t.Fatalf("missing issue %q in %v", w, bad)
-		}
-	}
+		`free_bytes value "1024" must include a size suffix`)
 }
 
 func TestValidateMetricWatchEntryLevelBlocks(t *testing.T) {
 	// then/for/within on a multi-metric watch entry belong in each metric's own
 	// block, so validation must reject entry-level copies.
-	bad := validateRawGlobal(t, map[string]any{
+	assertWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"swap": map[string]any{
 				"check": map[string]any{"type": "swap"},
@@ -1419,18 +1105,12 @@ func TestValidateMetricWatchEntryLevelBlocks(t *testing.T) {
 				},
 			},
 		},
-	})
-	for _, w := range []string{
+	},
 		"watches.swap.then is not valid on a multi-metric watch",
 		"watches.swap.for is not valid on a multi-metric watch",
-		"watches.net.then is not valid on a multi-metric watch",
-	} {
-		if !hasIssue(bad, w) {
-			t.Fatalf("missing issue %q in %v", w, bad)
-		}
-	}
+		"watches.net.then is not valid on a multi-metric watch")
 
-	good := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"swap": map[string]any{
 				"check": map[string]any{"type": "swap"},
@@ -1444,14 +1124,11 @@ func TestValidateMetricWatchEntryLevelBlocks(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("per-metric then/for should be valid, got %v", w)
-	}
 }
 
 func TestValidateWithinMinMatchesOptional(t *testing.T) {
 	// min_matches defaults to 1; only an explicit invalid value is an error.
-	good := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"root": map[string]any{
 				"check":  map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
@@ -1460,15 +1137,12 @@ func TestValidateWithinMinMatchesOptional(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("within without min_matches should be valid, got %v", w)
-	}
 }
 
 func TestValidateWatchWithoutCheckStillValidatesEntry(t *testing.T) {
 	// A missing check must not mask the entry-level problems: everything is
 	// reported in one validation pass.
-	bad := validateRawGlobal(t, map[string]any{
+	assertWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"broken": map[string]any{
 				"interval": "soon",
@@ -1477,22 +1151,16 @@ func TestValidateWatchWithoutCheckStillValidatesEntry(t *testing.T) {
 				"then":     map[string]any{"notify": []any{"ghost"}},
 			},
 		},
-	})
-	for _, w := range []string{
+	},
 		"watches.broken.check is required",
 		`watches.broken.interval "soon" must be a valid positive duration`,
 		"watches.broken.within.cycles must be > 0",
 		`watches.broken.policy.cooldown "-1m" must be a valid positive duration`,
-		`watches.broken.then.notify references unknown notifier "ghost"`,
-	} {
-		if !hasIssue(bad, w) {
-			t.Fatalf("missing issue %q in %v", w, bad)
-		}
-	}
+		`watches.broken.then.notify references unknown notifier "ghost"`)
 }
 
 func TestValidateScalarWithinRejectedOnWatch(t *testing.T) {
-	bad := validateRawGlobal(t, map[string]any{
+	assertWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"root": map[string]any{
 				"check":  map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
@@ -1500,14 +1168,12 @@ func TestValidateScalarWithinRejectedOnWatch(t *testing.T) {
 				"then":   map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
 			},
 		},
-	})
-	if !hasIssue(bad, "watches.root.within must be a mapping") {
-		t.Fatalf("scalar within should be rejected, got %v", bad)
-	}
+	},
+		"watches.root.within must be a mapping")
 }
 
 func TestValidateMemoryWatch(t *testing.T) {
-	good := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"ram": map[string]any{
 				"check": map[string]any{
@@ -1520,13 +1186,10 @@ func TestValidateMemoryWatch(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("valid memory watch flagged: %v", w)
-	}
 }
 
 func TestValidatePressureWatch(t *testing.T) {
-	good := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"mem-stall": map[string]any{
 				"check": map[string]any{
@@ -1539,13 +1202,10 @@ func TestValidatePressureWatch(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("valid pressure watch flagged: %v", w)
-	}
 }
 
 func TestValidatePidsWatch(t *testing.T) {
-	good := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"pid-table": map[string]any{
 				"check": map[string]any{"type": "pids", "used_pct": map[string]any{"op": ">=", "value": 90}},
@@ -1554,13 +1214,10 @@ func TestValidatePidsWatch(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("valid pids watch flagged: %v", w)
-	}
 }
 
 func TestValidateDiskIOWatch(t *testing.T) {
-	good := validateRawGlobal(t, map[string]any{
+	assertNoWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"sda-busy": map[string]any{
 				"check": map[string]any{
@@ -1574,38 +1231,21 @@ func TestValidateDiskIOWatch(t *testing.T) {
 			},
 		},
 	})
-	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("valid diskio watch flagged: %v", w)
-	}
 }
 
 func TestValidateWatchPortRangeMatchesServices(t *testing.T) {
 	// A tcp/connection check used as a watch enforces the same 1..65535 port
 	// range walkScalars applies to resolved services.
-	bad := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{
-			"tcp-high": map[string]any{
-				"check": map[string]any{"type": "tcp", "port": 99999},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-			"conn-high": map[string]any{
-				"check": map[string]any{"type": "smtp", "host": "127.0.0.1", "port": 99999},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-			},
-		},
-	})
-	for _, w := range []string{
+	assertWatchIssues(t, watchConfigs(map[string]any{
+		"tcp-high":  map[string]any{"type": "tcp", "port": 99999},
+		"conn-high": map[string]any{"type": "smtp", "host": "127.0.0.1", "port": 99999},
+	}),
 		"watches.tcp-high.check.port is required and must be a port in 1..65535",
-		`watches.conn-high.check.port "99999" must be an integer in 1..65535`,
-	} {
-		if !hasIssue(bad, w) {
-			t.Fatalf("missing issue %q in %v", w, bad)
-		}
-	}
+		`watches.conn-high.check.port "99999" must be an integer in 1..65535`)
 }
 
 func TestValidateFileProcessWatchRejectsEntryLevelWindow(t *testing.T) {
-	bad := validateRawGlobal(t, map[string]any{
+	assertWatchIssues(t, map[string]any{
 		"watches": map[string]any{
 			"cfg": map[string]any{
 				"check": map[string]any{
@@ -1621,13 +1261,7 @@ func TestValidateFileProcessWatchRejectsEntryLevelWindow(t *testing.T) {
 				"then":   map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
 			},
 		},
-	})
-	for _, w := range []string{
+	},
 		"watches.cfg.for is not valid on a file watch",
-		"watches.proc.within is not valid on a process watch",
-	} {
-		if !hasIssue(bad, w) {
-			t.Fatalf("missing issue %q in %v", w, bad)
-		}
-	}
+		"watches.proc.within is not valid on a process watch")
 }

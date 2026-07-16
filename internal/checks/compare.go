@@ -53,6 +53,25 @@ func compareValue(result, op, value string) (bool, error) {
 	}
 }
 
+// assertOpValue reads and validates the op/value pair shared by the database
+// query checks: op must be a known compare op and value a non-empty assertion
+// value valid for that op. noun is the check label used in the error strings
+// (e.g. "influxdb-query", "mongodb-query"); errMsg is empty on success.
+func assertOpValue(entry map[string]any, noun string) (op, value, errMsg string) {
+	op = cfgval.AsString(entry[CheckKeyOp])
+	if !validCompareOp(op) {
+		return "", "", noun + " check op must be one of " + cfgval.AssertOpSummary
+	}
+	value = cfgval.String(entry[CheckKeyValue])
+	if value == "" {
+		return "", "", noun + " check requires a value"
+	}
+	if err := ValidateAssertionValue(CheckKeyValue, op, value); err != nil {
+		return "", "", noun + " check " + err.Error()
+	}
+	return op, value, ""
+}
+
 // finishScalarCompare applies the common condition-check comparison and emits
 // the standard scalar reading data. Each database check keeps its own I/O and
 // supplies only its label and protocol-specific readings.

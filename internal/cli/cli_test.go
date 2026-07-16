@@ -48,91 +48,81 @@ func TestVersionFlagNotTriggeredAsFlagValue(t *testing.T) {
 	}
 }
 
-func TestHelpCommandPrintsStructuredUsage(t *testing.T) {
-	var stdout bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
-
-	code := app.Run(context.Background(), []string{"--help"})
-	if code != exitSuccess {
-		t.Fatalf("--help exit = %d, want %d", code, exitSuccess)
-	}
-	out := stdout.String()
-	for _, want := range []string{
-		"Sermo operator CLI",
-		"Usage:",
-		"Global Flags:",
-		"Safe Service Operations:",
-		"sermoctl help [COMMAND]",
-		"Use `sermoctl help COMMAND`",
+func TestHelpTopics(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		args         []string
+		wantExit     int
+		useStderr    bool
+		wantContains []string
+		wantNoPrefix string
+	}{
+		{
+			name:     "root usage",
+			args:     []string{"--help"},
+			wantExit: exitSuccess,
+			wantContains: []string{
+				"Sermo operator CLI",
+				"Usage:",
+				"Global Flags:",
+				"Safe Service Operations:",
+				"sermoctl help [COMMAND]",
+				"Use `sermoctl help COMMAND`",
+			},
+		},
+		{
+			name:     "command topic",
+			args:     []string{"help", "restart"},
+			wantExit: exitSuccess,
+			wantContains: []string{
+				"Command: sermoctl restart",
+				"sermoctl restart SERVICE [--no-cascade]",
+				"--no-cascade",
+				"Manual restarts are not remediation-rate-limited",
+			},
+		},
+		{
+			name:         "version topic omits banner",
+			args:         []string{"help", "version"},
+			wantExit:     exitSuccess,
+			wantContains: []string{"Command: sermoctl version"},
+			wantNoPrefix: "sermo ",
+		},
+		{
+			name:         "command --help flag",
+			args:         []string{"status", "--help"},
+			wantExit:     exitSuccess,
+			wantContains: []string{"Command: sermoctl status", "sermoctl status SERVICE"},
+		},
+		{
+			name:         "unknown topic",
+			args:         []string{"help", "not-a-command"},
+			wantExit:     exitUsage,
+			useStderr:    true,
+			wantContains: []string{`unknown help topic "not-a-command"`, "Command: sermoctl help"},
+		},
 	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("--help output missing %q:\n%s", want, out)
-		}
-	}
-}
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr}
 
-func TestHelpCommandTopic(t *testing.T) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr}
-
-	code := app.Run(context.Background(), []string{"help", "restart"})
-	if code != exitSuccess {
-		t.Fatalf("help restart exit = %d, want %d; stderr=%s", code, exitSuccess, stderr.String())
-	}
-	out := stdout.String()
-	for _, want := range []string{
-		"Command: sermoctl restart",
-		"sermoctl restart SERVICE [--no-cascade]",
-		"--no-cascade",
-		"Manual restarts are not remediation-rate-limited",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("help restart output missing %q:\n%s", want, out)
-		}
-	}
-}
-
-func TestHelpVersionTopicDoesNotPrintVersion(t *testing.T) {
-	var stdout bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
-
-	code := app.Run(context.Background(), []string{"help", "version"})
-	if code != exitSuccess {
-		t.Fatalf("help version exit = %d, want %d", code, exitSuccess)
-	}
-	out := stdout.String()
-	if !strings.Contains(out, "Command: sermoctl version") || strings.HasPrefix(out, "sermo ") {
-		t.Fatalf("help version output = %q", out)
-	}
-}
-
-func TestCommandHelpFlagShowsFocusedHelp(t *testing.T) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr}
-
-	code := app.Run(context.Background(), []string{"status", "--help"})
-	if code != exitSuccess {
-		t.Fatalf("status --help exit = %d, want %d; stderr=%s", code, exitSuccess, stderr.String())
-	}
-	out := stdout.String()
-	if !strings.Contains(out, "Command: sermoctl status") || !strings.Contains(out, "sermoctl status SERVICE") {
-		t.Fatalf("status --help output = %q", out)
-	}
-}
-
-func TestUnknownHelpTopicIsUsageError(t *testing.T) {
-	var stderr bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr}
-
-	code := app.Run(context.Background(), []string{"help", "not-a-command"})
-	if code != exitUsage {
-		t.Fatalf("help not-a-command exit = %d, want %d", code, exitUsage)
-	}
-	out := stderr.String()
-	if !strings.Contains(out, `unknown help topic "not-a-command"`) || !strings.Contains(out, "Command: sermoctl help") {
-		t.Fatalf("unknown help topic stderr = %q", out)
+			code := app.Run(context.Background(), tc.args)
+			if code != tc.wantExit {
+				t.Fatalf("%v exit = %d, want %d; stderr=%s", tc.args, code, tc.wantExit, stderr.String())
+			}
+			out := stdout.String()
+			if tc.useStderr {
+				out = stderr.String()
+			}
+			for _, want := range tc.wantContains {
+				if !strings.Contains(out, want) {
+					t.Fatalf("%v output missing %q:\n%s", tc.args, want, out)
+				}
+			}
+			if tc.wantNoPrefix != "" && strings.HasPrefix(out, tc.wantNoPrefix) {
+				t.Fatalf("%v output must not start with %q:\n%s", tc.args, tc.wantNoPrefix, out)
+			}
+		})
 	}
 }
 
@@ -189,19 +179,30 @@ func TestBackendDetectionFailureExitCode(t *testing.T) {
 	}
 }
 
-func TestStatusCommandText(t *testing.T) {
-	var stdout bytes.Buffer
-	app := statusApp(servicemgr.ServiceStatus{
-		Service: "mysql", Backend: servicemgr.BackendSystemd,
-		Unit: "mysql.service", Status: servicemgr.StatusActive,
-	}, nil, &stdout, nil)
+func TestActiveServiceCommandText(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cmd  string
+		want string
+	}{
+		{"status", "status", "mysql state=started backend=systemd service=mysql.service"},
+		{"is-active", "is-active", "active"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			app := statusApp(servicemgr.ServiceStatus{
+				Service: "mysql", Backend: servicemgr.BackendSystemd,
+				Unit: "mysql.service", Status: servicemgr.StatusActive,
+			}, nil, &stdout, nil)
 
-	code := app.Run(context.Background(), []string{"status", "mysql"})
-	if code != exitSuccess {
-		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
-	}
-	if got := strings.TrimSpace(stdout.String()); got != "mysql state=started backend=systemd service=mysql.service" {
-		t.Fatalf("stdout = %q", got)
+			code := app.Run(context.Background(), []string{tc.cmd, "mysql"})
+			if code != exitSuccess {
+				t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+			}
+			if got := strings.TrimSpace(stdout.String()); got != tc.want {
+				t.Fatalf("stdout = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -295,15 +296,10 @@ uses: rpc-mountd
 	var statusCalls []string
 	app := App{
 		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
-		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
-			return fakeManager{
-				status: servicemgr.ServiceStatus{
-					Service: "rpc-mountd", Backend: servicemgr.BackendSystemd,
-					Unit: "nfs-mountd.service", Status: servicemgr.StatusActive,
-				},
-				statusCalls: &statusCalls,
-			}, nil
-		},
+		NewManager: fakeStatusManager(servicemgr.ServiceStatus{
+			Service: "rpc-mountd", Backend: servicemgr.BackendSystemd,
+			Unit: "nfs-mountd.service", Status: servicemgr.StatusActive,
+		}, &statusCalls),
 		LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil },
 		Runner:     statusUnitRunner{known: "nfs-mountd.service"},
 		Env:        func(string) string { return "" },
@@ -355,15 +351,10 @@ func TestStatusFallsBackToConfiguredServiceUnit(t *testing.T) {
 	app := App{
 		LoadConfig: config.Load,
 		Detector:   fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
-		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
-			return fakeManager{
-				status: servicemgr.ServiceStatus{
-					Service: "legacy", Backend: servicemgr.BackendSystemd,
-					Unit: "legacy-daemon", Status: servicemgr.StatusActive,
-				},
-				statusCalls: &statusCalls,
-			}, nil
-		},
+		NewManager: fakeStatusManager(servicemgr.ServiceStatus{
+			Service: "legacy", Backend: servicemgr.BackendSystemd,
+			Unit: "legacy-daemon", Status: servicemgr.StatusActive,
+		}, &statusCalls),
 		Runner: statusUnitRunner{},
 		Env:    func(string) string { return "" },
 		Stdout: &stdout,
@@ -393,22 +384,6 @@ func TestStatusRequiresService(t *testing.T) {
 	out := stderr.String()
 	if !strings.Contains(out, "status requires a service name") || !strings.Contains(out, "Command: sermoctl status") {
 		t.Fatalf("stderr = %q, want focused status usage", out)
-	}
-}
-
-func TestIsActiveActiveExitZero(t *testing.T) {
-	var stdout bytes.Buffer
-	app := statusApp(servicemgr.ServiceStatus{
-		Service: "mysql", Backend: servicemgr.BackendSystemd,
-		Unit: "mysql.service", Status: servicemgr.StatusActive,
-	}, nil, &stdout, nil)
-
-	code := app.Run(context.Background(), []string{"is-active", "mysql"})
-	if code != exitSuccess {
-		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
-	}
-	if got := strings.TrimSpace(stdout.String()); got != "active" {
-		t.Fatalf("stdout = %q, want active", got)
 	}
 }
 
@@ -493,6 +468,14 @@ type fakeBackendDetector struct {
 
 func (d fakeBackendDetector) Detect(context.Context, servicemgr.Backend) (servicemgr.Detection, error) {
 	return d.detection, d.err
+}
+
+// fakeStatusManager builds a NewManager factory whose manager reports the given
+// status and records every Status call into calls.
+func fakeStatusManager(status servicemgr.ServiceStatus, calls *[]string) func(servicemgr.Backend) (servicemgr.Manager, error) {
+	return func(servicemgr.Backend) (servicemgr.Manager, error) {
+		return fakeManager{status: status, statusCalls: calls}, nil
+	}
 }
 
 type fakeManager struct {
@@ -638,81 +621,47 @@ func TestEventsList(t *testing.T) {
 	}
 }
 
-func TestEventsClear(t *testing.T) {
-	var stdout bytes.Buffer
-	app := App{
-		Env:        func(string) string { return "" },
-		LoadConfig: func(string, ...config.Option) (*config.Config, error) { return &config.Config{}, nil },
-		PruneEvents: func(ctx context.Context, opts options, before time.Time) (int, error) {
-			if !before.IsZero() {
-				t.Fatalf("before = %v, want zero time", before)
+func TestEventActivityClear(t *testing.T) {
+	cutoff := time.Date(2026, 6, 13, 10, 30, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name    string
+		args    []string
+		before  time.Time // expected cutoff passed to PruneEvents (zero => none)
+		ret     int
+		wantOut string
+	}{
+		{"events", []string{"events", "clear"}, time.Time{}, 3, "cleared 3 events\n"},
+		{"activity", []string{"activity", "clear"}, time.Time{}, 4, "cleared 4 activity entries\n"},
+		{"activity before", []string{"activity", "clear", "--before", cutoff.Format(time.RFC3339)}, cutoff, 2, "cleared 2 activity entries before 2026-06-13T10:30:00Z\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			called := false
+			app := App{
+				Env:        func(string) string { return "" },
+				LoadConfig: func(string, ...config.Option) (*config.Config, error) { return &config.Config{}, nil },
+				PruneEvents: func(_ context.Context, _ options, before time.Time) (int, error) {
+					called = true
+					if !before.Equal(tc.before) {
+						t.Fatalf("before = %v, want %v", before, tc.before)
+					}
+					return tc.ret, nil
+				},
+				Stdout: &stdout,
+				Stderr: &stderr,
+				Stdin:  strings.NewReader(""),
 			}
-			return 3, nil
-		},
-		Stdout: &stdout,
-		Stderr: &bytes.Buffer{},
-		Stdin:  strings.NewReader(""),
-	}
-	code := app.Run(context.Background(), []string{"events", "clear"})
-	if code != exitSuccess {
-		t.Fatalf("events clear exit=%d", code)
-	}
-	if got := stdout.String(); got != "cleared 3 events\n" {
-		t.Fatalf("events clear output = %q", got)
-	}
-}
-
-func TestActivityClear(t *testing.T) {
-	var stdout, stderr bytes.Buffer
-	var called bool
-	app := App{
-		Env:        func(string) string { return "" },
-		LoadConfig: func(string, ...config.Option) (*config.Config, error) { return &config.Config{}, nil },
-		PruneEvents: func(ctx context.Context, opts options, before time.Time) (int, error) {
-			called = true
-			if !before.IsZero() {
-				t.Fatalf("before = %v, want zero time", before)
+			code := app.Run(context.Background(), tc.args)
+			if code != exitSuccess {
+				t.Fatalf("%v exit=%d stderr=%s", tc.args, code, stderr.String())
 			}
-			return 4, nil
-		},
-		Stdout: &stdout,
-		Stderr: &stderr,
-		Stdin:  strings.NewReader(""),
-	}
-	code := app.Run(context.Background(), []string{"activity", "clear"})
-	if code != exitSuccess {
-		t.Fatalf("activity clear exit=%d stderr=%s", code, stderr.String())
-	}
-	if !called {
-		t.Fatal("activity clear did not prune events")
-	}
-	if got := stdout.String(); got != "cleared 4 activity entries\n" {
-		t.Fatalf("activity clear output = %q", got)
-	}
-}
-
-func TestActivityClearBefore(t *testing.T) {
-	var stdout bytes.Buffer
-	want := time.Date(2026, 6, 13, 10, 30, 0, 0, time.UTC)
-	app := App{
-		Env:        func(string) string { return "" },
-		LoadConfig: func(string, ...config.Option) (*config.Config, error) { return &config.Config{}, nil },
-		PruneEvents: func(ctx context.Context, opts options, before time.Time) (int, error) {
-			if !before.Equal(want) {
-				t.Fatalf("before = %s, want %s", before.Format(time.RFC3339), want.Format(time.RFC3339))
+			if !called {
+				t.Fatal("clear did not prune events")
 			}
-			return 2, nil
-		},
-		Stdout: &stdout,
-		Stderr: &bytes.Buffer{},
-		Stdin:  strings.NewReader(""),
-	}
-	code := app.Run(context.Background(), []string{"activity", "clear", "--before", want.Format(time.RFC3339)})
-	if code != exitSuccess {
-		t.Fatalf("activity clear --before exit=%d", code)
-	}
-	if got := stdout.String(); got != "cleared 2 activity entries before 2026-06-13T10:30:00Z\n" {
-		t.Fatalf("activity clear --before output = %q", got)
+			if got := stdout.String(); got != tc.wantOut {
+				t.Fatalf("output = %q, want %q", got, tc.wantOut)
+			}
+		})
 	}
 }
 

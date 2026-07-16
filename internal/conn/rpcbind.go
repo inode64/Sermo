@@ -72,32 +72,12 @@ func (rpcbindProtocol) DefaultPort() int   { return defaultPortRPCBind }
 func (rpcbindProtocol) RequiresUser() bool { return false }
 
 func (rpcbindProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortRPCBind
-	}
-
 	xid := randXID32()
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkUDP, hostPort(host, port))
+	reply, err := exchangeUDP(ctx, cfg, defaultPortRPCBind, buildRPCNull(xid, portmapProg, portmapVers), rpcUDPReplyBufferBytes)
 	if err != nil {
 		return Result{}, err
 	}
-	defer func() { _ = c.Close() }()
-	applyDeadline(ctx, c)
-
-	if _, err := c.Write(buildRPCNull(xid, portmapProg, portmapVers)); err != nil {
-		return Result{}, err
-	}
-	buf := make([]byte, rpcUDPReplyBufferBytes)
-	n, err := c.Read(buf)
-	if err != nil {
-		return Result{}, err
-	}
-	status, err := parseRPCReply(buf[:n], xid)
+	status, err := parseRPCReply(reply, xid)
 	if err != nil {
 		return Result{}, err
 	}

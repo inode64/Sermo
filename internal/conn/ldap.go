@@ -48,7 +48,7 @@ func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	opts := []ldap.DialOpt{ldap.DialWithDialer(probeDialer(cfg.Interface, timeout))}
 	if useTLS {
 		tc := tlsClientConfig(host)
-		if normalizeTLS(cfg.TLS) == tlsSkipVerify {
+		if NormalizeTLS(cfg.TLS) == tlsSkipVerify {
 			tc.InsecureSkipVerify = true // operator chose tls: skip-verify
 		}
 		opts = append(opts, ldap.DialWithTLSConfig(tc))
@@ -93,7 +93,7 @@ func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 // buildLDAPURL builds the dial URL and reports whether TLS (LDAPS) is used.
 func buildLDAPURL(host string, port int, tlsMode string) (url string, useTLS bool) {
-	useTLS = normalizeTLS(tlsMode) != ""
+	useTLS = NormalizeTLS(tlsMode) != ""
 	scheme := "ldap"
 	if useTLS {
 		scheme = "ldaps"

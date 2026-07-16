@@ -35,6 +35,22 @@ func (r *testUserRunner) RunUser(ctx context.Context, user, name string, args ..
 	return r.Run(ctx, name, args...)
 }
 
+// preflightResolved builds a Resolved with default binary + version-command
+// preflight checks for binary. A non-empty versionTimeout adds a timeout to the
+// version command.
+func preflightResolved(binary, versionTimeout string) config.Resolved {
+	version := map[string]any{"type": "command", "command": []any{binary, "--version"}}
+	if versionTimeout != "" {
+		version["timeout"] = versionTimeout
+	}
+	return config.Resolved{Tree: map[string]any{
+		"preflight": map[string]any{
+			"binary":  map[string]any{"type": "binary", "path": binary},
+			"version": version,
+		},
+	}}
+}
+
 func TestInspectUsesNamespacedAppPreflight(t *testing.T) {
 	root := t.TempDir()
 	binary := filepath.Join(root, "webd")
@@ -274,12 +290,7 @@ func TestInspectCanTreatVersionFailureAsOptional(t *testing.T) {
 	if err := os.WriteFile(binary, []byte("x"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	resolved := config.Resolved{Tree: map[string]any{
-		"preflight": map[string]any{
-			"binary":  map[string]any{"type": "binary", "path": binary},
-			"version": map[string]any{"type": "command", "command": []any{binary, "--version"}},
-		},
-	}}
+	resolved := preflightResolved(binary, "")
 	runner := testRunner{binary: {Stderr: "bad flag\n", ExitCode: 2}}
 
 	strict := Inspect(context.Background(), runner, "web", resolved)
@@ -373,12 +384,7 @@ func TestInspectUsesCatalogProbeTimeout(t *testing.T) {
 	if err := os.WriteFile(binary, []byte("x"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	resolved := config.Resolved{Tree: map[string]any{
-		"preflight": map[string]any{
-			"binary":  map[string]any{"type": "binary", "path": binary},
-			"version": map[string]any{"type": "command", "command": []any{binary, "--version"}, "timeout": "10s"},
-		},
-	}}
+	resolved := preflightResolved(binary, "10s")
 	obs := &timeoutObserver{}
 	report := Inspect(context.Background(), obs, "salt-minion", resolved)
 	if !report.OK || report.VersionShort != "1.2.3" {
@@ -402,12 +408,7 @@ func TestInspectProbeTimeoutFailureReportsUnderlyingError(t *testing.T) {
 	if err := os.WriteFile(binary, []byte("x"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	resolved := config.Resolved{Tree: map[string]any{
-		"preflight": map[string]any{
-			"binary":  map[string]any{"type": "binary", "path": binary},
-			"version": map[string]any{"type": "command", "command": []any{binary, "--version"}, "timeout": "1ms"},
-		},
-	}}
+	resolved := preflightResolved(binary, "1ms")
 	report := Inspect(context.Background(), slowRunner{}, "slow-tool", resolved)
 	if report.OK {
 		t.Fatalf("Inspect() = %+v, want version probe failure", report)

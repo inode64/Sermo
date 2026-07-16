@@ -432,17 +432,25 @@ func TestSecurityHeaders(t *testing.T) {
 	}
 }
 
-func TestListServices(t *testing.T) {
-	b := &fakeBackend{services: []Service{{Name: "web", Category: "frontend", Status: "active", Monitored: true}}}
+// getJSON issues a GET against b's server at path, asserts a 200, and decodes the
+// JSON body into T.
+func getJSON[T any](t *testing.T, b Backend, path string) T {
+	t.Helper()
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, apiPathServices, nil))
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d", rec.Code)
 	}
-	var got []Service
+	var got T
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
+	return got
+}
+
+func TestListServices(t *testing.T) {
+	b := &fakeBackend{services: []Service{{Name: "web", Category: "frontend", Status: "active", Monitored: true}}}
+	got := getJSON[[]Service](t, b, apiPathServices)
 	if len(got) != 1 || got[0].Name != "web" || got[0].Category != "frontend" || !got[0].Monitored {
 		t.Fatalf("unexpected services: %+v", got)
 	}
@@ -455,15 +463,7 @@ func TestListApplications(t *testing.T) {
 		Version:      "nginx version: nginx/1.30.2",
 		VersionShort: "1.30.2", VersionSource: "nginx-bin", Status: apiStatusOK,
 	}}}
-	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, apiPathApplications, nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status %d", rec.Code)
-	}
-	var got []Application
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := getJSON[[]Application](t, b, apiPathApplications)
 	if len(got) != 1 || got[0].Name != "nginx" || got[0].VersionShort != "1.30.2" ||
 		got[0].Binary != "/usr/bin/nginx" || got[0].Permissions != "-rwxr-xr-x (0755)" ||
 		got[0].User != "root" || got[0].Group != "root" || got[0].Category != "web" ||
@@ -478,15 +478,7 @@ func TestListLibraries(t *testing.T) {
 		Permissions: "-rwxr-xr-x (0755)", User: "root", Group: "root",
 		Version: "OpenSSL 3.5.1", VersionShort: "3.5.1", Status: apiStatusOK,
 	}}}
-	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, apiPathLibraries, nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status %d", rec.Code)
-	}
-	var got []Library
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := getJSON[[]Library](t, b, apiPathLibraries)
 	if len(got) != 1 || got[0].Name != "openssl" || got[0].VersionShort != "3.5.1" ||
 		got[0].Binary != "/usr/lib64/libssl.so" || got[0].Category != "crypto" {
 		t.Fatalf("unexpected libraries: %+v", got)
@@ -1253,37 +1245,34 @@ func TestParseBeforeQueryRejectsUnsafeCutoffs(t *testing.T) {
 	}
 }
 
-func TestEventLimitParsing(t *testing.T) {
-	mk := func(q string) *http.Request {
-		return httptest.NewRequest(http.MethodGet, testPathQuery(apiPathEvents, testQueryParam(apiQueryLimit, q)), nil)
-	}
-	if got := eventLimit(mk("5")); got != 5 {
-		t.Errorf("limit=5 -> %d, want 5", got)
-	}
-	// A non-positive limit is ignored (n > 0 guard), keeping the default.
-	if got := eventLimit(mk("0")); got != defaultEventLimit {
-		t.Errorf("limit=0 -> %d, want default %d", got, defaultEventLimit)
-	}
-	// Over the cap is clamped.
-	if got := eventLimit(mk("100000")); got != maxEventLimit {
-		t.Errorf("limit=100000 -> %d, want cap %d", got, maxEventLimit)
+// assertQueryParse feeds in as query param on path and checks parse returns want.
+func assertQueryParse[T comparable](t *testing.T, path, param, in string, parse func(*http.Request) T, want T) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, testPathQuery(path, testQueryParam(param, in)), nil)
+	if got := parse(req); got != want {
+		t.Errorf("%s=%s -> %v, want %v", param, in, got, want)
 	}
 }
 
+func TestEventLimitParsing(t *testing.T) {
+	check := func(in string, want int) {
+		assertQueryParse(t, apiPathEvents, apiQueryLimit, in, eventLimit, want)
+	}
+	check("5", 5)
+	// A non-positive limit is ignored (n > 0 guard), keeping the default.
+	check("0", defaultEventLimit)
+	// Over the cap is clamped.
+	check("100000", maxEventLimit)
+}
+
 func TestSeriesSinceParsing(t *testing.T) {
-	mk := func(q string) *http.Request {
-		return httptest.NewRequest(http.MethodGet, testPathQuery(routePathRoot, testQueryParam(apiQuerySince, q)), nil)
+	check := func(in string, want time.Duration) {
+		assertQueryParse(t, routePathRoot, apiQuerySince, in, seriesSince, want)
 	}
-	if got := seriesSince(mk("2h")); got != 2*time.Hour {
-		t.Errorf("since=2h -> %v, want 2h", got)
-	}
+	check("2h", 2*time.Hour)
 	// A non-positive duration is ignored (d > 0 guard), keeping the default.
-	if got := seriesSince(mk("0s")); got != defaultSeriesWindow {
-		t.Errorf("since=0s -> %v, want default %v", got, defaultSeriesWindow)
-	}
-	if got := seriesSince(mk("100000h")); got != maxSeriesWindow {
-		t.Errorf("since=100000h -> %v, want cap %v", got, maxSeriesWindow)
-	}
+	check("0s", defaultSeriesWindow)
+	check("100000h", maxSeriesWindow)
 }
 
 func TestFilterEventsByKind(t *testing.T) {

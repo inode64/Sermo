@@ -10,23 +10,29 @@ import (
 	"sermo/internal/operation"
 )
 
+// trackPeakConcurrency records the peak number of overlapping calls into peak
+// (guarded by mu), sleeping briefly so concurrent callers overlap.
+func trackPeakConcurrency(mu *sync.Mutex, inFlight, peak *int) operation.Result {
+	mu.Lock()
+	*inFlight++
+	if *inFlight > *peak {
+		*peak = *inFlight
+	}
+	mu.Unlock()
+	time.Sleep(10 * time.Millisecond)
+	mu.Lock()
+	*inFlight--
+	mu.Unlock()
+	return operation.Result{Status: operation.ResultOK}
+}
+
 func TestOpGateRunSerializes(t *testing.T) {
 	gate := NewOpGate(1, "")
 
 	var mu sync.Mutex
 	var inFlight, maxInFlight int
 	fn := func(context.Context) operation.Result {
-		mu.Lock()
-		inFlight++
-		if inFlight > maxInFlight {
-			maxInFlight = inFlight
-		}
-		mu.Unlock()
-		time.Sleep(10 * time.Millisecond)
-		mu.Lock()
-		inFlight--
-		mu.Unlock()
-		return operation.Result{Status: operation.ResultOK}
+		return trackPeakConcurrency(&mu, &inFlight, &maxInFlight)
 	}
 
 	var wg sync.WaitGroup

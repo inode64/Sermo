@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -350,6 +351,24 @@ func TestWebBackendListsAndControlsServiceWatches(t *testing.T) {
 // TestServiceWatchFiresHookViaRunCycle drives a built service watch through its
 // real Watch.RunCycle and asserts the hook fires with the service-qualified name
 // in the environment — the end-to-end runtime, not just Check.Run.
+// buildServiceCountWatch builds a single "mail:backlog" service watch that fires a
+// hook when dir holds >= 1 file, merging any extra keys (e.g. a "for" window) into
+// the watch entry. It returns the built watch.
+func buildServiceCountWatch(t *testing.T, dir string, extra map[string]any) *Watch {
+	t.Helper()
+	watch := map[string]any{
+		"check": map[string]any{"type": "count", "path": dir, "of": "file", "count": map[string]any{"op": ">=", "value": 1}},
+		"then":  map[string]any{"hook": map[string]any{"command": []any{"/bin/true"}}},
+	}
+	maps.Copy(watch, extra)
+	tree := map[string]any{"watches": map[string]any{"backlog": watch}}
+	watches, warns := serviceWatches("mail", tree, checks.Deps{DefaultTimeout: time.Second}, nil, monitorTestDeps(), time.Minute)
+	if len(warns) != 0 || len(watches) != 1 {
+		t.Fatalf("build: warns=%v watches=%d", warns, len(watches))
+	}
+	return watches[0]
+}
+
 func TestServiceWatchFiresHookViaRunCycle(t *testing.T) {
 	dir := t.TempDir()
 	for _, n := range []string{"a", "b"} {
@@ -357,19 +376,7 @@ func TestServiceWatchFiresHookViaRunCycle(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	tree := map[string]any{
-		"watches": map[string]any{
-			"backlog": map[string]any{
-				"check": map[string]any{"type": "count", "path": dir, "of": "file", "count": map[string]any{"op": ">=", "value": 1}},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/bin/true"}}},
-			},
-		},
-	}
-	watches, warns := serviceWatches("mail", tree, checks.Deps{DefaultTimeout: time.Second}, nil, monitorTestDeps(), time.Minute)
-	if len(warns) != 0 || len(watches) != 1 {
-		t.Fatalf("build: warns=%v watches=%d", warns, len(watches))
-	}
-	w := watches[0]
+	w := buildServiceCountWatch(t, dir, nil)
 	var calls int
 	var env map[string]string
 	w.Runner = HookRunnerFunc(func(_ context.Context, _ []string, e map[string]string, _ time.Duration) error {
@@ -393,20 +400,7 @@ func TestServiceWatchForWindow(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "a"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	tree := map[string]any{
-		"watches": map[string]any{
-			"backlog": map[string]any{
-				"check": map[string]any{"type": "count", "path": dir, "of": "file", "count": map[string]any{"op": ">=", "value": 1}},
-				"for":   map[string]any{"cycles": 2},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/bin/true"}}},
-			},
-		},
-	}
-	watches, warns := serviceWatches("mail", tree, checks.Deps{DefaultTimeout: time.Second}, nil, monitorTestDeps(), time.Minute)
-	if len(warns) != 0 || len(watches) != 1 {
-		t.Fatalf("build: warns=%v watches=%d", warns, len(watches))
-	}
-	w := watches[0]
+	w := buildServiceCountWatch(t, dir, map[string]any{"for": map[string]any{"cycles": 2}})
 	var calls int
 	w.Runner = HookRunnerFunc(func(context.Context, []string, map[string]string, time.Duration) error {
 		calls++

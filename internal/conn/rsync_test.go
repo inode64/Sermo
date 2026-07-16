@@ -2,8 +2,6 @@ package conn
 
 import (
 	"context"
-	"net"
-	"strconv"
 	"testing"
 )
 
@@ -18,22 +16,7 @@ func TestRsyncGreetingVersion(t *testing.T) {
 }
 
 func TestRsyncProbeAgainstFakeServer(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ln.Close()
-	go func() {
-		c, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		_, _ = c.Write([]byte("@RSYNCD: 31.0\n"))
-		_ = c.Close()
-	}()
-
-	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
-	port, _ := strconv.Atoi(portStr)
+	port := serveBanner(t, "@RSYNCD: 31.0\n", nil)
 	res, err := rsyncProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: port})
 	if err != nil {
 		t.Fatalf("probe: %v", err)

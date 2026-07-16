@@ -30,20 +30,11 @@ const (
 )
 
 func (cephProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortCeph
-	}
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, hostPort(host, port))
+	c, err := dialTCPDeadline(ctx, cfg, defaultPortCeph)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	applyDeadline(ctx, c)
 
 	buf := make([]byte, cephBannerBytes)
 	if _, err := io.ReadFull(c, buf); err != nil {

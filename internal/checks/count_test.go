@@ -117,21 +117,25 @@ func TestCountRecursiveDescendsSubtree(t *testing.T) {
 	}
 }
 
-func TestCountRecursiveSkipsHiddenEntriesByDefault(t *testing.T) {
-	root := t.TempDir()
-	for path, body := range map[string]string{
-		"visible.txt":       "visible",
-		".hidden.txt":       "hidden",
-		".cache/nested.txt": "nested",
-	} {
-		fullPath := filepath.Join(root, path)
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+// writeSizedTree writes each file (path relative to root) with the given byte
+// size, creating parent directories.
+func writeSizedTree(t *testing.T, root string, files map[string]int) {
+	t.Helper()
+	for path, size := range files {
+		full := filepath.Join(root, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(fullPath, []byte(body), 0o644); err != nil {
+		if err := os.WriteFile(full, make([]byte, size), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
+}
+
+func TestCountRecursiveSkipsHiddenEntriesByDefault(t *testing.T) {
+	root := t.TempDir()
+	// Content size is irrelevant to counting — only visibility matters.
+	writeSizedTree(t, root, map[string]int{"visible.txt": 1, ".hidden.txt": 1, ".cache/nested.txt": 1})
 
 	c := countOf(root, CountKindFile, true, "==", 0)
 	if n, err := c.tally(context.Background()); err != nil || n != 1 {

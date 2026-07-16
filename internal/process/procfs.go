@@ -67,6 +67,41 @@ const ProcFileStatus = procFileStatus
 // ProcFileTask is the /proc/<pid>/task directory name.
 const ProcFileTask = procFileTask
 
+// StatFields reads /proc/<pid>/stat and returns the fields after the ')' that
+// closes the comm field (so a comm containing spaces or parentheses cannot
+// shift them): index 0 is field 3 (state), utime is index 11, stime index 12,
+// starttime index 19. Shared by every /proc stat consumer so the comm-splitting
+// subtlety lives in one place.
+func StatFields(pid int) ([]string, bool) {
+	data, err := os.ReadFile(PIDPath(pid, ProcFileStat))
+	if err != nil {
+		return nil, false
+	}
+	stat := string(data)
+	closeParen := strings.LastIndex(stat, ")")
+	if closeParen < 0 || closeParen+1 >= len(stat) {
+		return nil, false
+	}
+	return strings.Fields(stat[closeParen+1:]), true
+}
+
+// procStatStartTimeIndex is starttime (stat field 22) in the post-comm fields.
+const procStatStartTimeIndex = 19
+
+// StartTicks reads a process's starttime (clock ticks since boot, stat field
+// 22); the single decoder shared by the lock prober and the metrics reader.
+func StartTicks(pid int) (uint64, bool) {
+	fields, ok := StatFields(pid)
+	if !ok || len(fields) <= procStatStartTimeIndex {
+		return 0, false
+	}
+	ticks, err := strconv.ParseUint(fields[procStatStartTimeIndex], 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return ticks, true
+}
+
 // PIDPath returns a path under /proc/<pid>.
 func PIDPath(pid int, name string) string {
 	return procPIDPath(pid, name)

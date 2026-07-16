@@ -92,30 +92,15 @@ func summaryValue(name string, entry, data map[string]any) (any, bool) {
 		return value, ok
 	}
 	if key, ok := strings.CutPrefix(name, "check."); ok {
-		return summaryMapValue(entry, key)
+		return jsonPath(entry, key)
 	}
 	if key, ok := strings.CutPrefix(name, "result."); ok {
-		return summaryMapValue(data, key)
+		return jsonPath(data, key)
 	}
 	if value, ok := data[name]; ok {
 		return value, true
 	}
-	return summaryMapValue(entry, name)
-}
-
-func summaryMapValue(values map[string]any, path string) (any, bool) {
-	var value any = values
-	for key := range strings.SplitSeq(path, ".") {
-		m, ok := value.(map[string]any)
-		if !ok {
-			return nil, false
-		}
-		value, ok = m[key]
-		if !ok {
-			return nil, false
-		}
-	}
-	return value, true
+	return jsonPath(entry, name)
 }
 
 // FormatDisplayValue renders a check value consistently for summaries, rule

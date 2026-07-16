@@ -64,26 +64,8 @@ func (ippProtocol) DefaultPort() int   { return defaultPortIPP }
 func (ippProtocol) RequiresUser() bool { return false }
 
 func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortIPP
-	}
-	scheme := schemeHTTP
-	client := httpProbeClient(cfg.Interface, nil)
-	if mode := normalizeTLS(cfg.TLS); mode != "" {
-		scheme = schemeHTTPS
-		tlsConfig := tlsClientConfig(host)
-		if mode == tlsSkipVerify {
-			tlsConfig.InsecureSkipVerify = true // operator chose tls: skip-verify
-		}
-		client = httpProbeClient(cfg.Interface, tlsConfig)
-	}
-
-	url := scheme + urlSchemeSeparator + hostPort(host, port) + ippEndpointRoot
+	client, base := httpProbeBase(cfg, defaultPortIPP)
+	url := base + ippEndpointRoot
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buildIPPRequest(ippCUPSGetDefault, ippRequestIDDefault)))
 	if err != nil {
 		return Result{}, err
@@ -144,18 +126,14 @@ func parseIPPResponse(b []byte) (version string, status uint16, err error) {
 	return version, status, nil
 }
 
-// ippStatusName maps a few common IPP status codes; others render as hex.
+// ippStatusNames maps a few common IPP status codes; others render as hex.
+var ippStatusNames = map[uint16]string{
+	ippStatusOK:                  ippStatusNameOK,
+	ippStatusClientUnauthorized:  ippStatusNameUnauthorized,
+	ippStatusClientNotFound:      ippStatusNameNotFound,
+	ippStatusServerInternalError: ippStatusNameInternalError,
+}
+
 func ippStatusName(code uint16) string {
-	switch code {
-	case ippStatusOK:
-		return ippStatusNameOK
-	case ippStatusClientUnauthorized:
-		return ippStatusNameUnauthorized
-	case ippStatusClientNotFound:
-		return ippStatusNameNotFound
-	case ippStatusServerInternalError:
-		return ippStatusNameInternalError
-	default:
-		return fmt.Sprintf("0x%04x", code)
-	}
+	return codeName(code, ippStatusNames, "0x%04x")
 }

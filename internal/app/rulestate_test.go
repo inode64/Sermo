@@ -45,14 +45,7 @@ func TestLoadedRuleWindowStateFiresAfterRestart(t *testing.T) {
 		t.Fatalf("SetRuleWindowStates: %v", err)
 	}
 
-	tree := map[string]any{"rules": map[string]any{
-		"restart-if-down": map[string]any{
-			"type": "remediation",
-			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
-			"for":  map[string]any{"cycles": 3},
-			"then": map[string]any{"action": "restart"},
-		},
-	}}
+	tree := remediationTreeFor("restart-if-down", "cycles", 3)
 	remediation, windows := loadRuleStateForTest(t, store, tree)
 
 	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
@@ -73,14 +66,7 @@ func TestLoadedDurationRuleWindowStateFiresAfterRestart(t *testing.T) {
 		t.Fatalf("SetRuleWindowStates: %v", err)
 	}
 
-	tree := map[string]any{"rules": map[string]any{
-		"restart-if-down": map[string]any{
-			"type": "remediation",
-			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
-			"for":  map[string]any{"duration": "6m"},
-			"then": map[string]any{"action": "restart"},
-		},
-	}}
+	tree := remediationTreeFor("restart-if-down", "duration", "6m")
 	remediation, windows := loadRuleStateForTest(t, store, tree)
 
 	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
@@ -96,14 +82,7 @@ func TestLoadedDurationRuleWindowStateFiresAfterRestart(t *testing.T) {
 
 func TestWorkerPersistsRuleState(t *testing.T) {
 	store := openRuleStateStore(t)
-	tree := map[string]any{"rules": map[string]any{
-		"restart-if-down": map[string]any{
-			"type": "remediation",
-			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
-			"for":  map[string]any{"cycles": 3},
-			"then": map[string]any{"action": "restart"},
-		},
-	}}
+	tree := remediationTreeFor("restart-if-down", "cycles", 3)
 	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
 	w := h.worker(tree, rules.Policy{}, nil)
 	w.PersistState = ruleStatePersister(store, w.Emit, w.Service, w.Rules)
@@ -124,14 +103,7 @@ func TestWorkerPersistsRuleState(t *testing.T) {
 
 func TestWorkerPersistsDurationRuleState(t *testing.T) {
 	store := openRuleStateStore(t)
-	tree := map[string]any{"rules": map[string]any{
-		"restart-if-down": map[string]any{
-			"type": "remediation",
-			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
-			"for":  map[string]any{"duration": "6m"},
-			"then": map[string]any{"action": "restart"},
-		},
-	}}
+	tree := remediationTreeFor("restart-if-down", "duration", "6m")
 	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
 	w := h.worker(tree, rules.Policy{}, nil)
 	w.PersistState = ruleStatePersister(store, w.Emit, w.Service, w.Rules)

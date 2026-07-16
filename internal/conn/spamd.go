@@ -2,8 +2,6 @@ package conn
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"strings"
 )
 
@@ -26,24 +24,10 @@ const (
 )
 
 func (spamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, defaultPortSpamd)
-	if err != nil {
-		return Result{}, err
-	}
-	defer func() { _ = c.Close() }()
-
-	if _, err := io.WriteString(c, spamdCommandPing); err != nil {
-		return Result{}, err
-	}
-	line, err := readGreetingLine(c)
-	if err != nil {
-		return Result{}, err
-	}
-	version, ok := parseSpamdPong(line)
-	if !ok {
-		return Result{}, fmt.Errorf("not a spamd PONG reply: %q", line)
-	}
-	return Result{Extra: map[string]string{extraProtocol: version, extraPing: respPong}}, nil
+	return probeLineCommand(ctx, cfg, defaultPortSpamd, spamdCommandPing, func(line string) (Result, bool) {
+		version, ok := parseSpamdPong(line)
+		return Result{Extra: map[string]string{extraProtocol: version, extraPing: respPong}}, ok
+	}, "not a spamd PONG reply: %q")
 }
 
 // parseSpamdPong validates a spamd PING reply ("SPAMD/1.5 0 PONG") and returns

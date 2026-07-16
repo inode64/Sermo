@@ -150,21 +150,27 @@ func hostOf(t *testing.T, raw string) string {
 	return u.Hostname()
 }
 
-func TestHTTPCheckCertExpiry(t *testing.T) {
+// runHTTPCertCheck runs an httpCheck with the given certOpts against a fresh
+// self-signed TLS test server (read with an insecure client), returning the
+// result.
+func runHTTPCertCheck(t *testing.T, opts certOptions) Result {
+	t.Helper()
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
-	defer srv.Close()
-
+	t.Cleanup(srv.Close)
 	insecure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}} //nolint:gosec // test client must read the test server's self-signed cert
-
-	// Threshold far in the future → the server's short-lived cert "expires soon".
 	c := &httpCheck{
 		base: base{name: "h", timeout: time.Second}, client: insecure, certClient: insecure,
 		url: srv.URL, method: "GET", expect: statusMatcher{codes: []int{200}},
-		certHost: hostOf(t, srv.URL), certOpts: certOptions{expiresInDays: 1000000},
+		certHost: hostOf(t, srv.URL), certOpts: opts,
 	}
-	res := c.Run(context.Background())
+	return c.Run(context.Background())
+}
+
+func TestHTTPCheckCertExpiry(t *testing.T) {
+	// Threshold far in the future → the server's short-lived cert "expires soon".
+	res := runHTTPCertCheck(t, certOptions{expiresInDays: 1000000})
 	if res.OK {
 		t.Fatalf("a cert inside the expiry threshold must fail the http check: %q", res.Message)
 	}
@@ -174,18 +180,7 @@ func TestHTTPCheckCertExpiry(t *testing.T) {
 }
 
 func TestHTTPCheckCertVerifyDisabledPasses(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-	insecure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}} //nolint:gosec // test client must read the test server's self-signed cert
-
-	c := &httpCheck{
-		base: base{name: "h", timeout: time.Second}, client: insecure, certClient: insecure,
-		url: srv.URL, method: "GET", expect: statusMatcher{codes: []int{200}},
-		certHost: hostOf(t, srv.URL), certOpts: certOptions{verify: false},
-	}
-	res := c.Run(context.Background())
+	res := runHTTPCertCheck(t, certOptions{verify: false})
 	if !res.OK {
 		t.Fatalf("a reachable cert with no failing assertion must pass: %q", res.Message)
 	}
@@ -195,18 +190,7 @@ func TestHTTPCheckCertVerifyDisabledPasses(t *testing.T) {
 }
 
 func TestHTTPCheckCertVerifyFails(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer srv.Close()
-	insecure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}} //nolint:gosec // test client must read the test server's self-signed cert
-
-	c := &httpCheck{
-		base: base{name: "h", timeout: time.Second}, client: insecure, certClient: insecure,
-		url: srv.URL, method: "GET", expect: statusMatcher{codes: []int{200}},
-		certHost: hostOf(t, srv.URL), certOpts: certOptions{verify: true},
-	}
-	if c.Run(context.Background()).OK {
+	if runHTTPCertCheck(t, certOptions{verify: true}).OK {
 		t.Fatal("verify=true against a self-signed test server must fail")
 	}
 }
@@ -414,6 +398,18 @@ func TestCommandCheck(t *testing.T) {
 	}
 }
 
+// assertRunsAsUser runs check (which must embed runner) and asserts it passes and
+// invoked RunUser as postgres with wantName and a single "--check" argument.
+func assertRunsAsUser(t *testing.T, runner *recordingUserRunner, check Check, wantName string) {
+	t.Helper()
+	if res := check.Run(context.Background()); !res.OK {
+		t.Fatalf("check with user should pass: %s", res.Message)
+	}
+	if runner.user != "postgres" || runner.name != wantName || len(runner.args) != 1 || runner.args[0] != "--check" {
+		t.Fatalf("RunUser call = user=%q name=%q args=%v", runner.user, runner.name, runner.args)
+	}
+}
+
 func TestCommandCheckUser(t *testing.T) {
 	runner := &recordingUserRunner{result: execx.Result{ExitCode: 0}}
 	check := commandCheck{
@@ -423,13 +419,7 @@ func TestCommandCheckUser(t *testing.T) {
 		user:       "postgres",
 		expectExit: []int{0},
 	}
-
-	if res := check.Run(context.Background()); !res.OK {
-		t.Fatalf("command check with user should pass: %s", res.Message)
-	}
-	if runner.user != "postgres" || runner.name != "/usr/bin/postgres" || len(runner.args) != 1 || runner.args[0] != "--check" {
-		t.Fatalf("RunUser call = user=%q name=%q args=%v", runner.user, runner.name, runner.args)
-	}
+	assertRunsAsUser(t, runner, check, "/usr/bin/postgres")
 }
 
 func TestCommandCheckUserRequiresUserRunner(t *testing.T) {

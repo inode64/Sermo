@@ -7,55 +7,43 @@ import (
 	"sermo/internal/execx"
 )
 
+// assertDetectSystemd builds a fakeRunner from results, runs the systemd detector
+// for unit and asserts the exact pidfile/exe pair.
+func assertDetectSystemd(t *testing.T, results map[string]execx.Result, unit, wantPidfile, wantExe string) {
+	t.Helper()
+	runner := fakeRunner{results: results}
+	pidfile, exe := detectProcPidfileExe(context.Background(), runner, nil, BackendSystemd, unit)
+	if pidfile != wantPidfile {
+		t.Fatalf("pidfile = %q, want %q", pidfile, wantPidfile)
+	}
+	if exe != wantExe {
+		t.Fatalf("exe = %q, want %q", exe, wantExe)
+	}
+}
+
 func TestDetectProcSystemd(t *testing.T) {
-	runner := fakeRunner{results: map[string]execx.Result{
+	assertDetectSystemd(t, map[string]execx.Result{
 		"systemctl show -p PIDFile --value -- nginx.service":   {Stdout: "/run/nginx.pid\n"},
 		"systemctl show -p ExecStart --value -- nginx.service": {Stdout: "{ path=/usr/sbin/nginx ; argv[]=/usr/sbin/nginx -g daemon off ; ignore_errors=no }\n"},
-	}}
-	pidfile, exe := detectProcPidfileExe(context.Background(), runner, nil, BackendSystemd, "nginx.service")
-	if pidfile != "/run/nginx.pid" {
-		t.Fatalf("pidfile = %q, want /run/nginx.pid", pidfile)
-	}
-	if exe != "/usr/sbin/nginx" {
-		t.Fatalf("exe = %q, want /usr/sbin/nginx", exe)
-	}
+	}, "nginx.service", "/run/nginx.pid", "/usr/sbin/nginx")
 }
 
 func TestDetectProcSystemdExecStartOnly(t *testing.T) {
 	// No PIDFile= in the unit: pidfile is empty, but the exe is still derived.
-	runner := fakeRunner{results: map[string]execx.Result{
+	assertDetectSystemd(t, map[string]execx.Result{
 		"systemctl show -p ExecStart --value -- sshd.service": {Stdout: "{ path=/usr/sbin/sshd ; argv[]=/usr/sbin/sshd -D }\n"},
-	}}
-	pidfile, exe := detectProcPidfileExe(context.Background(), runner, nil, BackendSystemd, "sshd.service")
-	if pidfile != "" {
-		t.Fatalf("pidfile = %q, want empty", pidfile)
-	}
-	if exe != "/usr/sbin/sshd" {
-		t.Fatalf("exe = %q, want /usr/sbin/sshd", exe)
-	}
+	}, "sshd.service", "", "/usr/sbin/sshd")
 }
 
 func TestDetectProcSystemdNormalizesLegacyVarRun(t *testing.T) {
-	runner := fakeRunner{results: map[string]execx.Result{
+	assertDetectSystemd(t, map[string]execx.Result{
 		"systemctl show -p PIDFile --value -- apache.service":   {Stdout: "/var/run/apache2.pid\n"},
 		"systemctl show -p ExecStart --value -- apache.service": {Stdout: "{ path=/usr/sbin/apache2 ; argv[]=/usr/sbin/apache2 -k start ; ignore_errors=no }\n"},
-	}}
-	pidfile, exe := detectProcPidfileExe(context.Background(), runner, nil, BackendSystemd, "apache.service")
-	if pidfile != "/run/apache2.pid" {
-		t.Fatalf("pidfile = %q, want /run/apache2.pid", pidfile)
-	}
-	if exe != "/usr/sbin/apache2" {
-		t.Fatalf("exe = %q, want /usr/sbin/apache2", exe)
-	}
+	}, "apache.service", "/run/apache2.pid", "/usr/sbin/apache2")
 }
 
 func TestDetectProcOpenRCPidfile(t *testing.T) {
-	read := func(path string) ([]byte, error) {
-		if path == "/etc/init.d/nginx" {
-			return []byte("#!/sbin/openrc-run\ncommand=\"/usr/sbin/nginx\"\npidfile=\"/run/nginx.pid\"\n"), nil
-		}
-		return nil, errNotFound
-	}
+	read := fakeReadFile("/etc/init.d/nginx", "#!/sbin/openrc-run\ncommand=\"/usr/sbin/nginx\"\npidfile=\"/run/nginx.pid\"\n")
 	pidfile, exe := detectProcPidfileExe(context.Background(), nil, read, BackendOpenRC, "nginx")
 	if pidfile != "/run/nginx.pid" {
 		t.Fatalf("pidfile = %q, want /run/nginx.pid", pidfile)
@@ -67,12 +55,7 @@ func TestDetectProcOpenRCPidfile(t *testing.T) {
 
 func TestDetectProcOpenRCStartStopDaemonArg(t *testing.T) {
 	// pidfile passed as a start-stop-daemon argument, command in conf.d.
-	read := func(path string) ([]byte, error) {
-		if path == "/etc/init.d/foo" {
-			return []byte("start() {\n  start-stop-daemon --start --pidfile /run/foo/foo.pid --exec /usr/bin/foo\n}\n"), nil
-		}
-		return nil, errNotFound
-	}
+	read := fakeReadFile("/etc/init.d/foo", "start() {\n  start-stop-daemon --start --pidfile /run/foo/foo.pid --exec /usr/bin/foo\n}\n")
 	pidfile, _ := detectProcPidfileExe(context.Background(), nil, read, BackendOpenRC, "foo")
 	if pidfile != "/run/foo/foo.pid" {
 		t.Fatalf("pidfile = %q, want /run/foo/foo.pid", pidfile)
@@ -80,39 +63,23 @@ func TestDetectProcOpenRCStartStopDaemonArg(t *testing.T) {
 }
 
 func TestDetectProcOpenRCCleansAbsolutePaths(t *testing.T) {
-	read := func(path string) ([]byte, error) {
-		if path == "/etc/init.d/dhcpd" {
-			return []byte(`pidfile="//run/dhcp/dhcpd.pid"
+	assertDetectProc(t, "dhcpd", map[string]string{
+		"/etc/init.d/dhcpd": `pidfile="//run/dhcp/dhcpd.pid"
 command="//usr/sbin/dhcpd"
-`), nil
-		}
-		return nil, errNotFound
-	}
-	info := DetectProcInfo(context.Background(), nil, read, BackendOpenRC, "dhcpd")
-	if info.Pidfile != "/run/dhcp/dhcpd.pid" {
-		t.Fatalf("pidfile = %q, want /run/dhcp/dhcpd.pid", info.Pidfile)
-	}
-	if info.Exe != "/usr/sbin/dhcpd" {
-		t.Fatalf("exe = %q, want /usr/sbin/dhcpd", info.Exe)
-	}
-	if info.Cmd != `(^|[[:space:]])/usr/sbin/dhcpd($|[[:space:]])` {
-		t.Fatalf("cmd = %q", info.Cmd)
-	}
+`,
+	}, ProcInfo{
+		Pidfile: "/run/dhcp/dhcpd.pid",
+		Exe:     "/usr/sbin/dhcpd",
+		Cmd:     `(^|[[:space:]])/usr/sbin/dhcpd($|[[:space:]])`,
+	})
 }
 
 func TestDetectProcNormalizesLegacyVarRun(t *testing.T) {
-	read := func(path string) ([]byte, error) {
-		if path == "/etc/init.d/apache2" {
-			return []byte(`pidfile="/var/run/apache2.pid"
+	assertDetectProc(t, "apache2", map[string]string{
+		"/etc/init.d/apache2": `pidfile="/var/run/apache2.pid"
 command="/usr/sbin/apache2"
-`), nil
-		}
-		return nil, errNotFound
-	}
-	info := DetectProcInfo(context.Background(), nil, read, BackendOpenRC, "apache2")
-	if info.Pidfile != "/run/apache2.pid" {
-		t.Fatalf("pidfile = %q, want /run/apache2.pid", info.Pidfile)
-	}
+`,
+	}, ProcInfo{Pidfile: "/run/apache2.pid"})
 }
 
 func TestDetectProcOpenRCSkipsNonAbsoluteExec(t *testing.T) {
@@ -131,25 +98,15 @@ start-stop-daemon --start --exec ' config_index='
 }
 
 func TestDetectProcOpenRCApacheGentooDefaults(t *testing.T) {
-	read := func(path string) ([]byte, error) {
-		if path == "/etc/init.d/apache2" {
-			return []byte(`PIDFILE="${PIDFILE:-/run/apache2.pid}"
+	assertDetectProc(t, "apache2", map[string]string{
+		"/etc/init.d/apache2": `PIDFILE="${PIDFILE:-/run/apache2.pid}"
 APACHE2="/usr/sbin/apache2"
 start() {
 	start-stop-daemon --start --pidfile "${PIDFILE}" -- \
 		${APACHE2} ${APACHE2_OPTS} -k start
 }
-`), nil
-		}
-		return nil, errNotFound
-	}
-	info := DetectProcInfo(context.Background(), nil, read, BackendOpenRC, "apache2")
-	if info.Pidfile != "/run/apache2.pid" {
-		t.Fatalf("pidfile = %q, want /run/apache2.pid", info.Pidfile)
-	}
-	if info.Exe != "/usr/sbin/apache2" {
-		t.Fatalf("exe = %q, want /usr/sbin/apache2", info.Exe)
-	}
+`,
+	}, ProcInfo{Pidfile: "/run/apache2.pid", Exe: "/usr/sbin/apache2"})
 }
 
 func TestDetectProcOpenRCExpandsServiceNameAndEmptyRoots(t *testing.T) {
@@ -177,28 +134,20 @@ command_args="${SSHD_OPTS} -o PidFile=${pidfile}"
 }
 
 func TestDetectProcOpenRCPrefixRemoval(t *testing.T) {
-	read := func(path string) ([]byte, error) {
-		if path == "/etc/init.d/php8.2" {
-			return []byte(`PHP_SLOT="${SVCNAME#php-fpm-}"
+	assertDetectProc(t, "php8.2", map[string]string{
+		"/etc/init.d/php8.2": `PHP_SLOT="${SVCNAME#php-fpm-}"
 command="/usr/lib64/${PHP_SLOT}/bin/php-fpm"
 pidfile="/run/php-fpm-${PHP_SLOT}.pid"
-`), nil
-		}
-		return nil, errNotFound
-	}
-	info := DetectProcInfo(context.Background(), nil, read, BackendOpenRC, "php8.2")
-	if info.Pidfile != "/run/php-fpm-php8.2.pid" {
-		t.Fatalf("pidfile = %q, want /run/php-fpm-php8.2.pid", info.Pidfile)
-	}
-	if info.Exe != "/usr/lib64/php8.2/bin/php-fpm" {
-		t.Fatalf("exe = %q, want /usr/lib64/php8.2/bin/php-fpm", info.Exe)
-	}
+`,
+	}, ProcInfo{
+		Pidfile: "/run/php-fpm-php8.2.pid",
+		Exe:     "/usr/lib64/php8.2/bin/php-fpm",
+	})
 }
 
 func TestDetectProcOpenRCPatternPrefixRemoval(t *testing.T) {
-	read := func(path string) ([]byte, error) {
-		if path == "/etc/init.d/openvpn.tun1" {
-			return []byte(`VPN=${SVCNAME#*.}
+	assertDetectProc(t, "openvpn.tun1", map[string]string{
+		"/etc/init.d/openvpn.tun1": `VPN=${SVCNAME#*.}
 if [ -n "${VPN}" ] && [ ${SVCNAME} != "openvpn" ]; then
 	VPNPID="/run/openvpn.${VPN}.pid"
 else
@@ -206,101 +155,63 @@ else
 fi
 start-stop-daemon --start --exec /usr/sbin/openvpn -- \
 	--config "/etc/openvpn/${VPN}.conf" --writepid "${VPNPID}" --daemon
-`), nil
-		}
-		return nil, errNotFound
-	}
-	info := DetectProcInfo(context.Background(), nil, read, BackendOpenRC, "openvpn.tun1")
-	if info.Pidfile != "/run/openvpn.tun1.pid" {
-		t.Fatalf("pidfile = %q, want /run/openvpn.tun1.pid", info.Pidfile)
-	}
-	if info.Exe != "/usr/sbin/openvpn" {
-		t.Fatalf("exe = %q, want /usr/sbin/openvpn", info.Exe)
-	}
+`,
+	}, ProcInfo{
+		Pidfile: "/run/openvpn.tun1.pid",
+		Exe:     "/usr/sbin/openvpn",
+	})
 }
 
 func TestDetectProcOpenRCChrootDefaultsToHostRoot(t *testing.T) {
-	read := func(path string) ([]byte, error) {
-		if path == "/etc/init.d/named" {
-			return []byte(`PIDFILE="${CHROOT}/run/named/named.pid"
+	assertDetectProc(t, "named", map[string]string{
+		"/etc/init.d/named": `PIDFILE="${CHROOT}/run/named/named.pid"
 start-stop-daemon --start --pidfile ${PIDFILE} --exec /usr/sbin/named
-`), nil
-		}
-		return nil, errNotFound
-	}
-	info := DetectProcInfo(context.Background(), nil, read, BackendOpenRC, "named")
-	if info.Pidfile != "/run/named/named.pid" {
-		t.Fatalf("pidfile = %q, want /run/named/named.pid", info.Pidfile)
-	}
-	if info.Exe != "/usr/sbin/named" {
-		t.Fatalf("exe = %q, want /usr/sbin/named", info.Exe)
-	}
+`,
+	}, ProcInfo{
+		Pidfile: "/run/named/named.pid",
+		Exe:     "/usr/sbin/named",
+	})
 }
 
 func TestDetectProcOpenRCCommandUser(t *testing.T) {
-	read := func(path string) ([]byte, error) {
-		if path == "/etc/init.d/influxdb" {
-			return []byte(`user=${user:-influxdb}
+	assertDetectProc(t, "influxdb", map[string]string{
+		"/etc/init.d/influxdb": `user=${user:-influxdb}
 group=${group:-influxdb}
 command=/usr/bin/influxd
 command_user="${user}:${group}"
-`), nil
-		}
-		return nil, errNotFound
-	}
-	info := DetectProcInfo(context.Background(), nil, read, BackendOpenRC, "influxdb")
-	if info.Exe != "/usr/bin/influxd" {
-		t.Fatalf("exe = %q, want /usr/bin/influxd", info.Exe)
-	}
-	if info.User != "influxdb" {
-		t.Fatalf("user = %q, want influxdb", info.User)
-	}
-	if info.Cmd != `(^|[[:space:]])/usr/bin/influxd($|[[:space:]])` {
-		t.Fatalf("cmd = %q", info.Cmd)
-	}
+`,
+	}, ProcInfo{
+		Exe:  "/usr/bin/influxd",
+		User: "influxdb",
+		Cmd:  `(^|[[:space:]])/usr/bin/influxd($|[[:space:]])`,
+	})
 }
 
 func TestDetectProcOpenRCRuntimeOptionsFallback(t *testing.T) {
-	read := func(path string) ([]byte, error) {
-		switch path {
-		case "/etc/init.d/mysql":
-			return []byte(`MY_CNF="${MY_CNF:-/etc/${SVCNAME}/my.cnf}"
+	assertDetectProc(t, "mysql", map[string]string{
+		"/etc/init.d/mysql": `MY_CNF="${MY_CNF:-/etc/${SVCNAME}/my.cnf}"
 start() {
 	pidfile=$(get_config "${MY_CNF}" 'pid[_-]file' | tail -n1)
 	start-stop-daemon --start --exec /usr/sbin/mysqld --pidfile "${pidfile}"
 	save_options pidfile "${pidfile}"
 }
-`), nil
-		case "/run/openrc/daemons/mysql/001":
-			return []byte(`exec=/usr/sbin/mysqld
+`,
+		"/run/openrc/daemons/mysql/001": `exec=/usr/sbin/mysqld
 argv_0=/usr/sbin/mysqld
 argv_1=--defaults-file=/etc/mysql/my.cnf
 pidfile=/run/mysqld/mariadb.pid
-`), nil
-		}
-		return nil, errNotFound
-	}
-	info := DetectProcInfo(context.Background(), nil, read, BackendOpenRC, "mysql")
-	if info.Pidfile != "/run/mysqld/mariadb.pid" {
-		t.Fatalf("pidfile = %q, want /run/mysqld/mariadb.pid", info.Pidfile)
-	}
-	if info.Exe != "/usr/sbin/mysqld" {
-		t.Fatalf("exe = %q, want /usr/sbin/mysqld", info.Exe)
-	}
-	if info.Cmd != `(^|[[:space:]])/usr/sbin/mysqld($|[[:space:]])` {
-		t.Fatalf("cmd = %q", info.Cmd)
-	}
+`,
+	}, ProcInfo{
+		Pidfile: "/run/mysqld/mariadb.pid",
+		Exe:     "/usr/sbin/mysqld",
+		Cmd:     `(^|[[:space:]])/usr/sbin/mysqld($|[[:space:]])`,
+	})
 }
 
 func TestDetectProcOpenRCSkipsVariablePidfile(t *testing.T) {
 	// A pidfile built from a variable is not a literal path; it must be skipped
 	// rather than emitting a useless `pidfile: ${...}`.
-	read := func(path string) ([]byte, error) {
-		if path == "/etc/init.d/bar" {
-			return []byte("pidfile=\"${RUNTIME_DIR}/bar.pid\"\ncommand=/usr/bin/bar\n"), nil
-		}
-		return nil, errNotFound
-	}
+	read := fakeReadFile("/etc/init.d/bar", "pidfile=\"${RUNTIME_DIR}/bar.pid\"\ncommand=/usr/bin/bar\n")
 	pidfile, exe := detectProcPidfileExe(context.Background(), nil, read, BackendOpenRC, "bar")
 	if pidfile != "" {
 		t.Fatalf("pidfile = %q, want empty (variable, not literal)", pidfile)
@@ -322,6 +233,42 @@ var errNotFound = &fakeFSError{}
 type fakeFSError struct{}
 
 func (*fakeFSError) Error() string { return "not found" }
+
+// fakeReadFile returns a readFile closure yielding body for path and errNotFound
+// for any other path.
+func fakeReadFile(path, body string) func(string) ([]byte, error) {
+	return func(p string) ([]byte, error) {
+		if p == path {
+			return []byte(body), nil
+		}
+		return nil, errNotFound
+	}
+}
+
+// assertDetectProc runs DetectProcInfo over the OpenRC init scripts in files
+// and asserts every non-empty field of want; empty want fields are not checked.
+func assertDetectProc(t *testing.T, name string, files map[string]string, want ProcInfo) {
+	t.Helper()
+	read := func(p string) ([]byte, error) {
+		if body, ok := files[p]; ok {
+			return []byte(body), nil
+		}
+		return nil, errNotFound
+	}
+	info := DetectProcInfo(context.Background(), nil, read, BackendOpenRC, name)
+	if want.Pidfile != "" && info.Pidfile != want.Pidfile {
+		t.Fatalf("pidfile = %q, want %q", info.Pidfile, want.Pidfile)
+	}
+	if want.Exe != "" && info.Exe != want.Exe {
+		t.Fatalf("exe = %q, want %q", info.Exe, want.Exe)
+	}
+	if want.Cmd != "" && info.Cmd != want.Cmd {
+		t.Fatalf("cmd = %q, want %q", info.Cmd, want.Cmd)
+	}
+	if want.User != "" && info.User != want.User {
+		t.Fatalf("user = %q, want %q", info.User, want.User)
+	}
+}
 
 func TestSuffixVarPicksSortedFirstOnMultipleMatches(t *testing.T) {
 	// Several variables share the suffix; the result must be the alphabetically

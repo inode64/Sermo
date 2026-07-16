@@ -539,16 +539,21 @@ async function performLoad() {
   clearStatusAfterRefresh();
 }
 
+// jsonOrThrow parses a POST response as JSON (tolerating an empty body) and throws
+// with the server message (or HTTP status) when the request or its result failed.
+async function jsonOrThrow(res) {
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
+  return body;
+}
+
 async function reloadConfig() {
   setStatus("");
   const btn = $("#reload-btn");
   if (btn) btn.disabled = true;
   try {
     const res = await fetch(apiReloadPath, csrfPostOptions());
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok || body.ok === false) {
-      throw new Error(body.message || ("HTTP " + res.status));
-    }
+    const body = await jsonOrThrow(res);
     setStatus("config reload requested", feedbackStatusOK);
     // next auto-refresh (or manual load) will pick up any service changes
     setTimeout(load, 800);
@@ -735,8 +740,7 @@ async function requestPanic(enable) {
   if (btn) btn.disabled = true;
   try {
     const res = await fetch(panicAPI(enable), csrfPostOptions());
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
+    const body = await jsonOrThrow(res);
     updatePanicView(enable);
     setStatus(body.message || (enable ? "panic mode enabled" : "panic mode disabled"), enable ? feedbackStatusErr : feedbackStatusOK);
     await load();
@@ -760,8 +764,7 @@ async function clearEventLog(beforeValue) {
   try {
     const q = before ? `?before=${encodeURIComponent(before)}` : "";
     const res = await fetch(eventsClearAPI(q), csrfPostOptions());
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
+    const body = await jsonOrThrow(res);
     const n = Number(body.pruned) || 0;
     setStatus(n ? `cleared ${n} event${n === 1 ? "" : "s"}` : "no events to clear", feedbackStatusOK);
     await load();
@@ -785,8 +788,7 @@ async function compactState() {
   try {
     const q = before ? `?before=${encodeURIComponent(before)}` : "";
     const res = await fetch(stateCompactAPI(q), csrfPostOptions());
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
+    const body = await jsonOrThrow(res);
     const n = Number(body.pruned) || 0;
     setStatus(n ? `compacted state: pruned ${n} row${n === 1 ? "" : "s"}` : (body.message || "state compact completed"), feedbackStatusOK);
     await load();
@@ -5138,8 +5140,7 @@ async function releaseLock(service, name) {
   const qs = name ? `?${apiQueryName}=${encodeURIComponent(name)}` : "";
   try {
     const res = await fetch(lockReleaseAPI(service, qs), csrfPostOptions());
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
+    const body = await jsonOrThrow(res);
     setStatus(`released lock ${label}`, feedbackStatusOK);
     await load();
   } catch (e) {
@@ -5609,10 +5610,7 @@ async function act(name, action) {
   try {
     const q = noCascade ? `?${apiQueryNoCascade}=${queryBoolOne}` : "";
     const res = await fetch(serviceAPI(name, apiActionSuffix(action, q)), csrfPostOptions());
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok || body.ok === false) {
-      throw new Error(body.message || ("HTTP " + res.status));
-    }
+    const body = await jsonOrThrow(res);
     if (tracked) finishOperation(name, true, body.message || body.status || "operation completed");
   } catch (e) {
     if (tracked) finishOperation(name, false, e.message);
@@ -5706,10 +5704,7 @@ async function testNotifier(name) {
   setStatus("");
   try {
     const res = await fetch(notifierTestAPI(name), csrfPostOptions());
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok || body.ok === false) {
-      throw new Error(body.message || ("HTTP " + res.status));
-    }
+    const body = await jsonOrThrow(res);
     setStatus(body.message || `test notification sent to ${name}`, feedbackStatusOK);
   } catch (e) {
     setStatus(`test notifier ${name}: ${e.message}`, feedbackStatusErr);
@@ -5719,11 +5714,7 @@ async function testNotifier(name) {
 
 async function fetchMountBlockers(name) {
   const res = await fetch(mountBlockersAPI(name), csrfPostOptions());
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok || body.ok === false) {
-    throw new Error(body.message || ("HTTP " + res.status));
-  }
-  return body;
+  return jsonOrThrow(res);
 }
 
 function mountBlockerSummary(blockers) {
@@ -6632,6 +6623,40 @@ function bindSortHeader(th, action) {
   });
 }
 
+// bindActionClick wires a click on el that suppresses default/propagation before
+// invoking fn — the group-toggle button idiom. A missing el is a no-op.
+function bindActionClick(el, fn) {
+  if (!el) return;
+  el.addEventListener(domEventClick, (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    fn();
+  });
+}
+
+// bindSearchBox wires a panel search input: apply(value) on input, and clear on
+// Escape. A missing el is a no-op.
+function bindSearchBox(el, apply) {
+  if (!el) return;
+  el.addEventListener(domEventInput, () => apply(el.value));
+  el.addEventListener(domEventKeydown, (e) => {
+    if (e.key === keyEscape) {
+      el.value = "";
+      apply("");
+    }
+  });
+}
+
+// bindFilterButtons wires a filter bar: a click on a button[data-<dataKey>] calls
+// apply with its dataset value (or filterAll). A missing el is a no-op.
+function bindFilterButtons(el, dataKey, apply) {
+  if (!el) return;
+  el.addEventListener(domEventClick, (e) => {
+    const btn = closestFrom(e, `button[data-${dataKey}]`);
+    if (btn) apply(btn.dataset[dataKey] || filterAll);
+  });
+}
+
 function initStaticHandlers() {
   const targetSearch = $("#target-search");
   if (targetSearch) {
@@ -6658,77 +6683,22 @@ function initStaticHandlers() {
     shortcutToggle.addEventListener(domEventChange, () => setKeyboardShortcutsEnabled(shortcutToggle.checked));
   }
 
-  const svcSearch = $("#svc-search");
-  if (svcSearch) {
-    svcSearch.addEventListener(domEventInput, () => setSvcQuery(svcSearch.value));
-    svcSearch.addEventListener(domEventKeydown, (e) => {
-      if (e.key === keyEscape) {
-        svcSearch.value = "";
-        setSvcQuery("");
-      }
-    });
-  }
-
-  const svcFilters = $("#svc-filters");
-  if (svcFilters) {
-    svcFilters.addEventListener(domEventClick, (e) => {
-      const btn = closestFrom(e, "button[data-f]");
-      if (btn) setSvcStatus(btn.dataset.f || filterAll);
-    });
-  }
+  bindSearchBox($("#svc-search"), setSvcQuery);
+  bindFilterButtons($("#svc-filters"), "f", setSvcStatus);
 
   const svcCategorySelect = $("#svc-category");
   if (svcCategorySelect) svcCategorySelect.addEventListener(domEventChange, () => setSvcCategory(svcCategorySelect.value));
 
-  const svcGroupToggle = $("#svc-group-toggle");
-  if (svcGroupToggle) {
-    svcGroupToggle.addEventListener(domEventClick, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setSvcGrouped(!svcGrouped);
-    });
-  }
-  const svcGroupsToggle = $("#svc-groups-toggle");
-  if (svcGroupsToggle) {
-    svcGroupsToggle.addEventListener(domEventClick, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleAllSvcGroups();
-    });
-  }
+  bindActionClick($("#svc-group-toggle"), () => setSvcGrouped(!svcGrouped));
+  bindActionClick($("#svc-groups-toggle"), toggleAllSvcGroups);
 
   function bindSplitServicePanelControls(panelKey) {
     const panel = getSplitServicePanel(panelKey);
     if (!panel) return;
-    const search = $(panel.search);
-    if (search) {
-      search.addEventListener(domEventInput, () => setSplitServiceQuery(panelKey, search.value));
-      search.addEventListener(domEventKeydown, (e) => {
-        if (e.key === keyEscape) {
-          search.value = "";
-          setSplitServiceQuery(panelKey, "");
-        }
-      });
-    }
-    const filters = $(panel.filters);
-    if (filters) {
-      filters.addEventListener(domEventClick, (e) => {
-        const btn = closestFrom(e, `button[data-${panel.filterDataset}]`);
-        if (btn) setSplitServiceStatus(panelKey, btn.dataset[panel.filterDataset] || filterAll);
-      });
-    }
-    const groupToggle = $("#" + panelKey + "-group-toggle");
-    if (groupToggle) groupToggle.addEventListener(domEventClick, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setSplitServiceGrouped(panelKey, !panel.grouped);
-    });
-    const groupsToggle = $("#" + panelKey + "-groups-toggle");
-    if (groupsToggle) groupsToggle.addEventListener(domEventClick, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleAllSplitServiceGroups(panelKey);
-    });
+    bindSearchBox($(panel.search), (v) => setSplitServiceQuery(panelKey, v));
+    bindFilterButtons($(panel.filters), panel.filterDataset, (v) => setSplitServiceStatus(panelKey, v));
+    bindActionClick($("#" + panelKey + "-group-toggle"), () => setSplitServiceGrouped(panelKey, !panel.grouped));
+    bindActionClick($("#" + panelKey + "-groups-toggle"), () => toggleAllSplitServiceGroups(panelKey));
     document.querySelectorAll(`${panel.section} .services-table th.sortable[data-${panel.sortAttr}]`).forEach((th) => {
       bindSortHeader(th, () => setSplitServiceSort(panelKey, th.dataset[panel.sortDataset] || ""));
     });
@@ -6747,40 +6717,14 @@ function initStaticHandlers() {
 
   function bindWatchPanelControls(panelKey) {
     const panel = getWatchPanel(panelKey);
-    const search = $(panel.search);
-    if (search) {
-      search.addEventListener(domEventInput, () => setWatchQuery(panelKey, search.value));
-      search.addEventListener(domEventKeydown, (e) => {
-        if (e.key === keyEscape) {
-          search.value = "";
-          setWatchQuery(panelKey, "");
-        }
-      });
-    }
+    bindSearchBox($(panel.search), (v) => setWatchQuery(panelKey, v));
 
     const typeSelect = $(panel.typeSelect);
     if (typeSelect) typeSelect.addEventListener(domEventChange, () => setWatchType(panelKey, typeSelect.value));
 
-    const groupToggle = $("#" + panelKey + "-group-toggle");
-    if (groupToggle) groupToggle.addEventListener(domEventClick, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setWatchGrouped(panelKey, !panel.grouped);
-    });
-    const groupsToggle = $("#" + panelKey + "-groups-toggle");
-    if (groupsToggle) groupsToggle.addEventListener(domEventClick, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleAllWatchGroups(panelKey);
-    });
-
-    const filters = $(panel.filters);
-    if (filters) {
-      filters.addEventListener(domEventClick, (e) => {
-        const btn = closestFrom(e, "button[data-wf]");
-        if (btn) setWatchStatus(panelKey, btn.dataset.wf || filterAll);
-      });
-    }
+    bindActionClick($("#" + panelKey + "-group-toggle"), () => setWatchGrouped(panelKey, !panel.grouped));
+    bindActionClick($("#" + panelKey + "-groups-toggle"), () => toggleAllWatchGroups(panelKey));
+    bindFilterButtons($(panel.filters), "wf", (v) => setWatchStatus(panelKey, v));
   }
   ["host"].forEach(bindWatchPanelControls);
 
@@ -6788,121 +6732,38 @@ function initStaticHandlers() {
     bindSortHeader(th, () => setWatchSort(watchPanelKeyForElement(th), th.dataset.watchSort || ""));
   });
 
-  const mountSearch = $("#mount-search");
-  if (mountSearch) {
-    mountSearch.addEventListener(domEventInput, () => setMountQuery(mountSearch.value));
-    mountSearch.addEventListener(domEventKeydown, (e) => {
-      if (e.key === keyEscape) {
-        mountSearch.value = "";
-        setMountQuery("");
-      }
-    });
-  }
+  bindSearchBox($("#mount-search"), setMountQuery);
 
   const mountCategorySelect = $("#mount-category");
   if (mountCategorySelect) mountCategorySelect.addEventListener(domEventChange, () => setMountCategory(mountCategorySelect.value));
-  const mountGroupToggle = $("#mount-group-toggle");
-  if (mountGroupToggle) mountGroupToggle.addEventListener(domEventClick, (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setMountGrouped(!mountGrouped);
-  });
-  const mountGroupsToggle = $("#mount-groups-toggle");
-  if (mountGroupsToggle) mountGroupsToggle.addEventListener(domEventClick, (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    toggleAllMountGroups();
-  });
+  bindActionClick($("#mount-group-toggle"), () => setMountGrouped(!mountGrouped));
+  bindActionClick($("#mount-groups-toggle"), toggleAllMountGroups);
 
-  const mountFilters = $("#mount-filters");
-  if (mountFilters) {
-    mountFilters.addEventListener(domEventClick, (e) => {
-      const btn = closestFrom(e, "button[data-mf]");
-      if (btn) setMountStatus(btn.dataset.mf || filterAll);
-    });
-  }
+  bindFilterButtons($("#mount-filters"), "mf", setMountStatus);
 
   document.querySelectorAll(".mount-table th.sortable[data-mount-sort]").forEach((th) => {
     bindSortHeader(th, () => setMountSort(th.dataset.mountSort || ""));
   });
 
-  const appSearch = $("#app-search");
-  if (appSearch) {
-    appSearch.addEventListener(domEventInput, () => setAppQuery(appSearch.value));
-    appSearch.addEventListener(domEventKeydown, (e) => {
-      if (e.key === keyEscape) {
-        appSearch.value = "";
-        setAppQuery("");
-      }
-    });
-  }
+  bindSearchBox($("#app-search"), setAppQuery);
 
   const appCategorySelect = $("#app-category");
   if (appCategorySelect) appCategorySelect.addEventListener(domEventChange, () => setAppCategory(appCategorySelect.value));
-  const appFilters = $("#app-filters");
-  if (appFilters) {
-    appFilters.addEventListener(domEventClick, (e) => {
-      const btn = closestFrom(e, "button[data-af]");
-      if (btn) setAppStatus(btn.dataset.af || filterAll);
-    });
-  }
+  bindFilterButtons($("#app-filters"), "af", setAppStatus);
 
-  const appGroupToggle = $("#app-group-toggle");
-  if (appGroupToggle) {
-    appGroupToggle.addEventListener(domEventClick, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setAppGrouped(!appGrouped);
-    });
-  }
-  const appGroupsToggle = $("#app-groups-toggle");
-  if (appGroupsToggle) {
-    appGroupsToggle.addEventListener(domEventClick, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleAllAppGroups();
-    });
-  }
+  bindActionClick($("#app-group-toggle"), () => setAppGrouped(!appGrouped));
+  bindActionClick($("#app-groups-toggle"), toggleAllAppGroups);
 
   document.querySelectorAll(".apps-table th.sortable[data-app-sort]").forEach((th) => {
     bindSortHeader(th, () => setAppSort(th.dataset.appSort || ""));
   });
 
-  const librarySearch = $("#library-search");
-  if (librarySearch) {
-    librarySearch.addEventListener(domEventInput, () => setLibraryQuery(librarySearch.value));
-    librarySearch.addEventListener(domEventKeydown, (e) => {
-      if (e.key === keyEscape) {
-        librarySearch.value = "";
-        setLibraryQuery("");
-      }
-    });
-  }
+  bindSearchBox($("#library-search"), setLibraryQuery);
   const libraryCategorySelect = $("#library-category");
   if (libraryCategorySelect) libraryCategorySelect.addEventListener(domEventChange, () => setLibraryCategory(libraryCategorySelect.value));
-  const libraryFilters = $("#library-filters");
-  if (libraryFilters) {
-    libraryFilters.addEventListener(domEventClick, (e) => {
-      const btn = closestFrom(e, "button[data-lf]");
-      if (btn) setLibraryStatus(btn.dataset.lf || filterAll);
-    });
-  }
-  const libraryGroupToggle = $("#library-group-toggle");
-  if (libraryGroupToggle) {
-    libraryGroupToggle.addEventListener(domEventClick, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setLibraryGrouped(!libraryGrouped);
-    });
-  }
-  const libraryGroupsToggle = $("#library-groups-toggle");
-  if (libraryGroupsToggle) {
-    libraryGroupsToggle.addEventListener(domEventClick, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleAllLibraryGroups();
-    });
-  }
+  bindFilterButtons($("#library-filters"), "lf", setLibraryStatus);
+  bindActionClick($("#library-group-toggle"), () => setLibraryGrouped(!libraryGrouped));
+  bindActionClick($("#library-groups-toggle"), toggleAllLibraryGroups);
   document.querySelectorAll(".libraries-table th.sortable[data-library-sort]").forEach((th) => {
     bindSortHeader(th, () => setLibrarySort(th.dataset.librarySort || ""));
   });

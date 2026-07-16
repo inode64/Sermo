@@ -553,6 +553,19 @@ func (c Controller) run(ctx context.Context, name string, args ...string) error 
 	return nil
 }
 
+// pathMatchesAny reports whether path (cleaned) equals the cleaned mountpoint of
+// any entry, the comparison shared by isMounted and PathInFstab over their
+// different entry types.
+func pathMatchesAny[T any](path string, entries []T, mountpoint func(T) string) bool {
+	cleanPath := filepath.Clean(path)
+	for _, entry := range entries {
+		if filepath.Clean(mountpoint(entry)) == cleanPath {
+			return true
+		}
+	}
+	return false
+}
+
 func (c Controller) isMounted(path string) (bool, error) {
 	mountSampler := c.Mounts
 	if mountSampler == nil {
@@ -562,13 +575,7 @@ func (c Controller) isMounted(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	cleanPath := filepath.Clean(path)
-	for _, mount := range entries {
-		if filepath.Clean(mount.MountPoint) == cleanPath {
-			return true, nil
-		}
-	}
-	return false, nil
+	return pathMatchesAny(path, entries, func(m checks.Mount) string { return m.MountPoint }), nil
 }
 
 func (c Controller) inFstab(path string) (bool, error) {
@@ -661,13 +668,7 @@ func PathInFstab(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	cleanPath := filepath.Clean(path)
-	for _, entry := range entries {
-		if filepath.Clean(entry.Path) == cleanPath {
-			return true, nil
-		}
-	}
-	return false, nil
+	return pathMatchesAny(path, entries, func(e FstabEntry) string { return e.Path }), nil
 }
 
 // usersWithLookup is the context-aware scan: it walks /proc and stops early if
@@ -795,44 +796,4 @@ func sortedMountMatches(matches map[string]struct{}) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-func pidUsesPath(ctx context.Context, pid int, mountPath string) bool {
-	if err := ctx.Err(); err != nil {
-		return false
-	}
-	for _, name := range []string{process.ProcFileCWD, process.ProcFileRoot} {
-		if err := ctx.Err(); err != nil {
-			return false
-		}
-		if linkUnderMount(ctx, process.PIDPath(pid, name), mountPath) {
-			return true
-		}
-	}
-	fdDir := process.PIDPath(pid, process.ProcFileFD)
-	entries, err := os.ReadDir(fdDir)
-	if err != nil {
-		return false
-	}
-	for _, entry := range entries {
-		if err := ctx.Err(); err != nil {
-			return false
-		}
-		if linkUnderMount(ctx, filepath.Join(fdDir, entry.Name()), mountPath) {
-			return true
-		}
-	}
-	return false
-}
-
-func linkUnderMount(ctx context.Context, link, mountPath string) bool {
-	if err := ctx.Err(); err != nil {
-		return false
-	}
-	target, err := os.Readlink(link)
-	if err != nil || !filepath.IsAbs(target) {
-		return false
-	}
-	target = process.TrimDeletedSuffix(target)
-	return mounts.PathUnder(filepath.Clean(target), mountPath)
 }

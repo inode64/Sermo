@@ -132,16 +132,9 @@ func mongoRawScalar(rv bson.RawValue) (string, bool) {
 
 // buildMongoCheck builds a mongodb-query check.
 func buildMongoCheck(b base, entry map[string]any) (Check, string) {
-	op := cfgval.AsString(entry[CheckKeyOp])
-	if !validCompareOp(op) {
-		return nil, "mongodb-query check op must be one of " + cfgval.AssertOpSummary
-	}
-	value := cfgval.String(entry[CheckKeyValue])
-	if value == "" {
-		return nil, "mongodb-query check requires a value"
-	}
-	if err := ValidateAssertionValue(CheckKeyValue, op, value); err != nil {
-		return nil, "mongodb-query check " + err.Error()
+	op, value, msg := assertOpValue(entry, "mongodb-query")
+	if msg != "" {
+		return nil, msg
 	}
 
 	collection := cfgval.AsString(entry[CheckKeyCollection])

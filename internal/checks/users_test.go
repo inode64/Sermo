@@ -38,21 +38,8 @@ func TestUsersSamplerErrorFails(t *testing.T) {
 }
 
 func TestBuildUsersCheck(t *testing.T) {
-	built, warns := Build(map[string]any{
-		"u": map[string]any{
-			"type":  "users",
-			"count": map[string]any{"op": ">=", "value": 3.0},
-		},
-	}, Deps{UsersSampler: fakeUsers(3, nil)})
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
-	}
-	if len(built) != 1 || !built[0].Check.Run(context.Background()).OK {
-		t.Fatal("3 users should build and satisfy >= 3")
-	}
-
-	// A users check without a threshold is meaningless and must warn.
-	if _, warns := Build(map[string]any{"u": map[string]any{"type": "users"}}, Deps{}); len(warns) == 0 {
-		t.Fatal("users check without a predicate should warn")
-	}
+	// 3 users satisfies >= 3; a threshold-less users check is meaningless and warns.
+	assertBuildThresholdFires(t, "users",
+		map[string]any{"count": map[string]any{"op": ">=", "value": 3.0}},
+		Deps{UsersSampler: fakeUsers(3, nil)})
 }

@@ -71,19 +71,9 @@ type OSReader struct{}
 
 // ProcessCPU sums utime (field 14) and stime (field 15) of /proc/<pid>/stat.
 func (OSReader) ProcessCPU(pid int) (uint64, bool) {
-	data, err := os.ReadFile(process.PIDPath(pid, process.ProcFileStat))
-	if err != nil {
-		return 0, false
-	}
-	stat := string(data)
-	closeParen := strings.LastIndex(stat, ")")
-	if closeParen < 0 {
-		return 0, false
-	}
-	// After ')', tokens begin at field 3 (state); utime is field 14 (index 11),
-	// stime field 15 (index 12).
-	fields := strings.Fields(stat[closeParen+1:])
-	if len(fields) <= procStatSTimeIndex {
+	// utime is field 14 (index 11 post-comm), stime field 15 (index 12).
+	fields, ok := process.StatFields(pid)
+	if !ok || len(fields) <= procStatSTimeIndex {
 		return 0, false
 	}
 	utime, err1 := strconv.ParseUint(fields[procStatUTimeIndex], procDecimalBase, procUintBits)
@@ -97,11 +87,7 @@ func (OSReader) ProcessCPU(pid int) (uint64, bool) {
 // ProcessStartTime reads field 22 of /proc/<pid>/stat and converts it to a wall
 // clock timestamp using the system boot time from /proc/stat.
 func (OSReader) ProcessStartTime(pid int) (time.Time, bool) {
-	data, err := os.ReadFile(process.PIDPath(pid, process.ProcFileStat))
-	if err != nil {
-		return time.Time{}, false
-	}
-	startTicks, ok := parseProcStartTicks(string(data))
+	startTicks, ok := process.StartTicks(pid)
 	if !ok {
 		return time.Time{}, false
 	}
@@ -115,21 +101,8 @@ func (OSReader) ProcessStartTime(pid int) (time.Time, bool) {
 	return time.Unix(boot+whole, nsec), true
 }
 
-func parseProcStartTicks(stat string) (uint64, bool) {
-	closeParen := strings.LastIndex(stat, ")")
-	if closeParen < 0 {
-		return 0, false
-	}
-	// After ')', tokens begin at field 3 (state); starttime is field 22, so
-	// index 19 in this slice.
-	fields := strings.Fields(stat[closeParen+1:])
-	if len(fields) <= procStatStartTimeIndex {
-		return 0, false
-	}
-	start, err := strconv.ParseUint(fields[procStatStartTimeIndex], procDecimalBase, procUintBits)
-	return start, err == nil
-}
-
+// processStartTicks reads starttime (field 22, index 19 post-comm) from
+// /proc/<pid>/stat.
 func procBootTime() (int64, bool) {
 	data, err := os.ReadFile(procPath(procFileStat))
 	if err != nil {
@@ -275,22 +248,33 @@ func readProcMeminfoTotals() procMeminfoTotals {
 	return parseProcMeminfoTotals(data)
 }
 
-func parseProcMeminfoTotals(data []byte) procMeminfoTotals {
-	var totals procMeminfoTotals
-	var memoryAvailable, swapFree uint64
-	var haveMemoryAvailable, haveSwapFree bool
+// ParseMeminfo extracts the MemTotal, MemAvailable, SwapTotal and SwapFree values
+// (in bytes) from raw /proc/meminfo content. Each have* flag reports whether the
+// corresponding field was present and parsed; a missing or malformed field leaves
+// its value zero. It is the single scanner shared by the metrics collector (which
+// derives used = total - available) and the checks package (which needs the raw
+// MemAvailable/SwapFree readings).
+func ParseMeminfo(data []byte) (memTotal, memAvailable, swapTotal, swapFree uint64, haveMemTotal, haveMemAvailable, haveSwapTotal, haveSwapFree bool) {
 	for line := range strings.SplitSeq(string(data), procLineSeparator) {
 		switch {
 		case strings.HasPrefix(line, procMeminfoMemTotalPrefix):
-			totals.memoryTotal, totals.memoryOK = parseMeminfoKB(line)
+			memTotal, haveMemTotal = parseMeminfoKB(line)
 		case strings.HasPrefix(line, procMeminfoMemAvailablePrefix):
-			memoryAvailable, haveMemoryAvailable = parseMeminfoKB(line)
+			memAvailable, haveMemAvailable = parseMeminfoKB(line)
 		case strings.HasPrefix(line, procMeminfoSwapTotalPrefix):
-			totals.swapTotal, totals.swapOK = parseMeminfoKB(line)
+			swapTotal, haveSwapTotal = parseMeminfoKB(line)
 		case strings.HasPrefix(line, procMeminfoSwapFreePrefix):
 			swapFree, haveSwapFree = parseMeminfoKB(line)
 		}
 	}
+	return
+}
+
+func parseProcMeminfoTotals(data []byte) procMeminfoTotals {
+	var totals procMeminfoTotals
+	memTotal, memoryAvailable, swapTotal, swapFree, haveMemTotal, haveMemoryAvailable, haveSwapTotal, haveSwapFree := ParseMeminfo(data)
+	totals.memoryTotal, totals.memoryOK = memTotal, haveMemTotal
+	totals.swapTotal, totals.swapOK = swapTotal, haveSwapTotal
 	if !totals.memoryOK || !haveMemoryAvailable || totals.memoryTotal < memoryAvailable {
 		totals.memoryOK = false
 		totals.memoryTotal = 0

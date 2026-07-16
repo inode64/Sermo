@@ -91,25 +91,16 @@ func TestNUTHandshakeAuthAndVars(t *testing.T) {
 
 func TestNUTHandshakeLoginDenied(t *testing.T) {
 	in := "Network UPS Tools upsd 2.8.0\n" + "OK\n" + "OK\n" + "ERR ACCESS-DENIED\n"
-	conn := rw{in: strings.NewReader(in), out: &bytes.Buffer{}}
-	if _, err := nutHandshake(conn, Config{User: "mon", Password: "bad", Query: "myups"}); err == nil {
-		t.Fatal("a denied LOGIN must fail")
-	}
+	assertHandshakeFails(t, nutHandshake, in, Config{User: "mon", Password: "bad", Query: "myups"})
 }
 
 func TestNUTHandshakeUnknownUPS(t *testing.T) {
 	in := "Network UPS Tools upsd 2.8.0\n" + "ERR UNKNOWN-UPS\n"
-	conn := rw{in: strings.NewReader(in), out: &bytes.Buffer{}}
-	if _, err := nutHandshake(conn, Config{Query: "ghost"}); err == nil {
-		t.Fatal("an UNKNOWN-UPS LIST VAR must fail")
-	}
+	assertHandshakeFails(t, nutHandshake, in, Config{Query: "ghost"})
 }
 
 func TestNUTHandshakeVerError(t *testing.T) {
-	conn := rw{in: strings.NewReader("ERR UNKNOWN-COMMAND\n"), out: &bytes.Buffer{}}
-	if _, err := nutHandshake(conn, Config{}); err == nil {
-		t.Fatal("an ERR reply to VER must fail")
-	}
+	assertHandshakeFails(t, nutHandshake, "ERR UNKNOWN-COMMAND\n", Config{})
 }
 
 func TestNUTProbeAgainstFakeServer(t *testing.T) {

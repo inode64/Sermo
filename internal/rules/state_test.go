@@ -7,6 +7,16 @@ import (
 
 var t0 = time.Date(2026, 6, 6, 12, 0, 0, 0, time.UTC)
 
+// recordActions returns a RemediationState with an action recorded at each time,
+// each under a policy carrying the given max-actions window.
+func recordActions(window time.Duration, times ...time.Time) *RemediationState {
+	st := &RemediationState{}
+	for _, at := range times {
+		st.Record(at, Policy{MaxActionsWindow: window})
+	}
+	return st
+}
+
 func TestPolicyCooldown(t *testing.T) {
 	p := Policy{Cooldown: time.Minute}
 	st := &RemediationState{LastActionAt: t0}
@@ -28,9 +38,7 @@ func TestPolicyFirstActionAllowed(t *testing.T) {
 
 func TestPolicyMaxActions(t *testing.T) {
 	p := Policy{MaxActions: 2, MaxActionsWindow: time.Hour}
-	st := &RemediationState{}
-	st.Record(t0, Policy{MaxActionsWindow: time.Hour})
-	st.Record(t0.Add(time.Minute), Policy{MaxActionsWindow: time.Hour})
+	st := recordActions(time.Hour, t0, t0.Add(time.Minute))
 
 	if ok, reason := p.Allow(st, t0.Add(2*time.Minute)); ok || reason != "rate limit" {
 		t.Fatalf("at max_actions: ok=%v reason=%q, want suppressed/rate limit", ok, reason)
@@ -108,9 +116,7 @@ func TestPolicyReportCooldownUntil(t *testing.T) {
 
 func TestPolicyReportRateLimit(t *testing.T) {
 	p := Policy{MaxActions: 2, MaxActionsWindow: time.Hour}
-	st := &RemediationState{}
-	st.Record(t0, Policy{MaxActionsWindow: time.Hour})
-	st.Record(t0.Add(time.Minute), Policy{MaxActionsWindow: time.Hour})
+	st := recordActions(time.Hour, t0, t0.Add(time.Minute))
 	rep := p.Report(st, t0.Add(2*time.Minute))
 	if rep.Allowed || rep.Reason != "rate limit" || rep.RecentActions != 2 {
 		t.Fatalf("Report = %+v", rep)
@@ -123,10 +129,7 @@ func TestPolicyReportRateLimit(t *testing.T) {
 
 func TestPolicyReportRateLimitNextEligibleAfterEnoughActionsExpire(t *testing.T) {
 	p := Policy{MaxActions: 2, MaxActionsWindow: time.Hour}
-	st := &RemediationState{}
-	st.Record(t0, Policy{MaxActionsWindow: time.Hour})
-	st.Record(t0.Add(time.Minute), Policy{MaxActionsWindow: time.Hour})
-	st.Record(t0.Add(2*time.Minute), Policy{MaxActionsWindow: time.Hour})
+	st := recordActions(time.Hour, t0, t0.Add(time.Minute), t0.Add(2*time.Minute))
 
 	rep := p.Report(st, t0.Add(3*time.Minute))
 	if rep.Allowed || rep.Reason != "rate limit" {

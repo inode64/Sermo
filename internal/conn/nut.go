@@ -158,62 +158,58 @@ func nutHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 
 // nutListUPS returns the UPS names from `LIST UPS`.
 func nutListUPS(rw io.ReadWriter, br *bufio.Reader) ([]string, error) {
-	if err := writeNUT(rw, nutCmdListUPS); err != nil {
-		return nil, err
-	}
-	first, err := readNUTLine(br)
-	if err != nil {
-		return nil, err
-	}
-	if strings.HasPrefix(first, nutReplyERR) {
-		return nil, errors.New(nutErr(first))
-	}
-	if !strings.HasPrefix(first, nutReplyBeginListUPS) {
-		return nil, fmt.Errorf("unexpected reply: %s", first)
-	}
 	var names []string
-	for {
-		line, err := readNUTLine(br)
-		if err != nil {
-			return nil, err
-		}
-		if strings.HasPrefix(line, nutReplyEndListUPS) {
-			return names, nil
-		}
+	err := nutList(rw, br, nutCmdListUPS, nutReplyBeginListUPS, nutReplyEndListUPS, func(line string) {
 		if f := strings.Fields(line); len(f) >= nutUPSLineMinFields && f[nutUPSLineTypeIndex] == nutReplyUPSToken {
 			names = append(names, f[nutUPSLineNameIndex])
 		}
+	})
+	if err != nil {
+		return nil, err
+	}
+	return names, nil
+}
+
+// nutList sends a LIST command and yields every line between the matching
+// BEGIN/END replies; an ERR reply or an unexpected first line is an error.
+func nutList(rw io.ReadWriter, br *bufio.Reader, cmd, begin, end string, line func(string)) error {
+	if err := writeNUT(rw, cmd); err != nil {
+		return err
+	}
+	first, err := readNUTLine(br)
+	if err != nil {
+		return err
+	}
+	if strings.HasPrefix(first, nutReplyERR) {
+		return errors.New(nutErr(first))
+	}
+	if !strings.HasPrefix(first, begin) {
+		return fmt.Errorf("unexpected reply: %s", first)
+	}
+	for {
+		l, err := readNUTLine(br)
+		if err != nil {
+			return err
+		}
+		if strings.HasPrefix(l, end) {
+			return nil
+		}
+		line(l)
 	}
 }
 
 // nutListVars returns every variable for ups from `LIST VAR <ups>`.
 func nutListVars(rw io.ReadWriter, br *bufio.Reader, ups string) (map[string]string, error) {
-	if err := writeNUT(rw, nutCmdListVarPrefix+ups); err != nil {
-		return nil, err
-	}
-	first, err := readNUTLine(br)
-	if err != nil {
-		return nil, err
-	}
-	if strings.HasPrefix(first, nutReplyERR) {
-		return nil, errors.New(nutErr(first))
-	}
-	if !strings.HasPrefix(first, nutReplyBeginListVar) {
-		return nil, fmt.Errorf("unexpected reply: %s", first)
-	}
 	vars := map[string]string{}
-	for {
-		line, err := readNUTLine(br)
-		if err != nil {
-			return nil, err
-		}
-		if strings.HasPrefix(line, nutReplyEndListVar) {
-			return vars, nil
-		}
+	err := nutList(rw, br, nutCmdListVarPrefix+ups, nutReplyBeginListVar, nutReplyEndListVar, func(line string) {
 		if name, val, ok := parseNUTVarLine(line); ok {
 			vars[name] = val
 		}
+	})
+	if err != nil {
+		return nil, err
 	}
+	return vars, nil
 }
 
 // writeNUT sends a single newline-terminated command.

@@ -23,23 +23,29 @@ func serviceTestEnv() Env {
 	}
 }
 
+// serviceEnv builds an Env whose CatalogServices returns the given candidates.
+func serviceEnv(cands ...ServiceCandidate) Env {
+	return Env{CatalogServices: func() ([]ServiceCandidate, error) { return cands, nil }}
+}
+
+// runServiceAssistant drives the service wizard with the newline-joined script
+// steps against env and returns the result plus captured output.
+func runServiceAssistant(t *testing.T, env Env, steps ...string) (Result, string) {
+	t.Helper()
+	return runAssistant(t, serviceAssistant{}, env, steps...)
+}
+
 func TestServiceAssistant(t *testing.T) {
 	// Select nginx (1) with a port override; monitor enabled, inherit interval.
 	// The wizard never asks for a name; it is the candidate's.
-	script := strings.Join([]string{
+	res, _ := runServiceAssistant(t, serviceTestEnv(),
 		"1",    // MultiChoose -> nginx
 		"8080", // port override
 		"y",    // add detected configuration watch
 		"1",    // monitor state: enabled
 		"",     // interval: inherit
 		"y",    // dry-run automatic actions
-	}, "\n") + "\n"
-
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := serviceAssistant{}.Run(p, serviceTestEnv())
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	)
 	svc, ok := res.Services["nginx"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected service nginx, got %v", res.Services)
@@ -73,14 +79,11 @@ func TestServiceAssistant(t *testing.T) {
 }
 
 func TestServiceAssistantCatalogThenGenericServices(t *testing.T) {
-	env := Env{CatalogServices: func() ([]ServiceCandidate, error) {
-		return []ServiceCandidate{
-			{Name: "nginx", Title: "Nginx", Unit: "nginx", Status: string(servicemgr.StatusActive), Port: 80},
-			{Name: "redis", Title: "Redis", Unit: "redis", Status: string(servicemgr.StatusInactive)},
-			{Name: "customd", Title: "customd", Unit: "customd", Status: string(servicemgr.StatusActive), Generic: true, Pidfile: "/run/customd.pid"},
-		}, nil
-	}}
-	script := strings.Join([]string{
+	res, out := runServiceAssistant(t, serviceEnv(
+		ServiceCandidate{Name: "nginx", Title: "Nginx", Unit: "nginx", Status: string(servicemgr.StatusActive), Port: 80},
+		ServiceCandidate{Name: "redis", Title: "Redis", Unit: "redis", Status: string(servicemgr.StatusInactive)},
+		ServiceCandidate{Name: "customd", Title: "customd", Unit: "customd", Status: string(servicemgr.StatusActive), Generic: true, Pidfile: "/run/customd.pid"},
+	),
 		"1", // choose nginx from the active catalog list; redis is inactive
 		"",  // keep catalog port
 		"1", // monitor nginx
@@ -92,15 +95,9 @@ func TestServiceAssistantCatalogThenGenericServices(t *testing.T) {
 		"1", // monitor customd
 		"",  // interval inherit
 		"n", // dry-run automatic actions
-	}, "\n") + "\n"
-	var out strings.Builder
-	p := NewPrompt(strings.NewReader(script), &out)
-	res, err := serviceAssistant{}.Run(p, env)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if strings.Contains(out.String(), "Redis") {
-		t.Fatalf("inactive catalog service was offered:\n%s", out.String())
+	)
+	if strings.Contains(out, "Redis") {
+		t.Fatalf("inactive catalog service was offered:\n%s", out)
 	}
 	nginx := res.Services["nginx"].(map[string]any)
 	if nginx[config.ServiceKeyUses] != "nginx" {
@@ -130,21 +127,12 @@ func TestServiceAssistantCatalogThenGenericServices(t *testing.T) {
 }
 
 func TestServiceAssistantSkipsMissingStatus(t *testing.T) {
-	env := Env{CatalogServices: func() ([]ServiceCandidate, error) {
-		return []ServiceCandidate{
-			{Name: "nginx", Title: "Nginx", Unit: "nginx", Status: string(servicemgr.StatusActive)},
-			{Name: "redis", Title: "Redis", Unit: "redis"},
-		}, nil
-	}}
-	script := strings.Join([]string{config.SelectionKeywordAll, "1", "", "n"}, "\n") + "\n"
-	var out strings.Builder
-	p := NewPrompt(strings.NewReader(script), &out)
-	res, err := serviceAssistant{}.Run(p, env)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if strings.Contains(out.String(), "Redis") {
-		t.Fatalf("missing-status service was offered:\n%s", out.String())
+	res, out := runServiceAssistant(t, serviceEnv(
+		ServiceCandidate{Name: "nginx", Title: "Nginx", Unit: "nginx", Status: string(servicemgr.StatusActive)},
+		ServiceCandidate{Name: "redis", Title: "Redis", Unit: "redis"},
+	), config.SelectionKeywordAll, "1", "", "n")
+	if strings.Contains(out, "Redis") {
+		t.Fatalf("missing-status service was offered:\n%s", out)
 	}
 	if _, ok := res.Services["redis"]; ok {
 		t.Fatalf("missing-status service was configured: %v", res.Services["redis"])
@@ -154,15 +142,10 @@ func TestServiceAssistantSkipsMissingStatus(t *testing.T) {
 func TestServiceAssistantCatalogDetectedPidfileIsInherited(t *testing.T) {
 	// Catalog service profiles own PID detection. A detected pidfile must not be
 	// written into the generated service override.
-	env := Env{CatalogServices: func() ([]ServiceCandidate, error) {
-		return []ServiceCandidate{{Name: "nginx", Title: "Nginx", Unit: "nginx", Status: string(servicemgr.StatusActive), Pidfile: "/run/nginx.pid"}}, nil
-	}}
-	script := strings.Join([]string{"1", "1", "", "n"}, "\n") + "\n" // select; monitor enabled; interval inherit; no dry-run
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := serviceAssistant{}.Run(p, env)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	// select; monitor enabled; interval inherit; no dry-run
+	res, _ := runServiceAssistant(t, serviceEnv(
+		ServiceCandidate{Name: "nginx", Title: "Nginx", Unit: "nginx", Status: string(servicemgr.StatusActive), Pidfile: "/run/nginx.pid"},
+	), "1", "1", "", "n")
 	svc := res.Services["nginx"].(map[string]any)
 	if _, ok := svc[config.ServiceKeyPidfile]; ok {
 		t.Fatalf("catalog service must not write pidfile override: %v", svc)
@@ -173,22 +156,14 @@ func TestServiceAssistantCatalogDetectedPidfileIsInherited(t *testing.T) {
 }
 
 func TestServiceAssistantCatalogDetectedVariablesAreWritten(t *testing.T) {
-	env := Env{CatalogServices: func() ([]ServiceCandidate, error) {
-		return []ServiceCandidate{{
-			Name:      "ceph-mon",
-			Title:     "Ceph Monitor",
-			Unit:      "ceph-mon@node1.service",
-			Status:    string(servicemgr.StatusActive),
-			Port:      3300,
-			Variables: map[string]any{"host": "192.0.2.102", "port": 3300},
-		}}, nil
-	}}
-	script := strings.Join([]string{"1", "", "1", "", "n"}, "\n") + "\n"
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := serviceAssistant{}.Run(p, env)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	res, _ := runServiceAssistant(t, serviceEnv(ServiceCandidate{
+		Name:      "ceph-mon",
+		Title:     "Ceph Monitor",
+		Unit:      "ceph-mon@node1.service",
+		Status:    string(servicemgr.StatusActive),
+		Port:      3300,
+		Variables: map[string]any{"host": "192.0.2.102", "port": 3300},
+	}), "1", "", "1", "", "n")
 	svc := res.Services["ceph-mon"].(map[string]any)
 	vars := svc[config.SectionVariables].(map[string]any)
 	if vars[config.VariableKeyHost] != "192.0.2.102" || vars[config.VariableKeyPort] != 3300 {
@@ -199,15 +174,10 @@ func TestServiceAssistantCatalogDetectedVariablesAreWritten(t *testing.T) {
 func TestServiceAssistantGenericDetectedPidfile(t *testing.T) {
 	// Generic services have no catalog service profile, so accepting the detected
 	// pidfile writes it into the generated service entry.
-	env := Env{CatalogServices: func() ([]ServiceCandidate, error) {
-		return []ServiceCandidate{{Name: "customd", Title: "customd", Unit: "customd", Status: string(servicemgr.StatusActive), Generic: true, Pidfile: "/run/customd.pid"}}, nil
-	}}
-	script := strings.Join([]string{"y", "1", "", "1", "", "n"}, "\n") + "\n" // review generic; select; pidfile=default; monitor enabled; interval inherit; no dry-run
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := serviceAssistant{}.Run(p, env)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	// review generic; select; pidfile=default; monitor enabled; interval inherit; no dry-run
+	res, _ := runServiceAssistant(t, serviceEnv(
+		ServiceCandidate{Name: "customd", Title: "customd", Unit: "customd", Status: string(servicemgr.StatusActive), Generic: true, Pidfile: "/run/customd.pid"},
+	), "y", "1", "", "1", "", "n")
 	svc := res.Services["customd"].(map[string]any)
 	if svc[config.ServiceKeyPidfile] != "/run/customd.pid" {
 		t.Fatalf("pidfile = %v, want /run/customd.pid", svc[config.ServiceKeyPidfile])
@@ -215,33 +185,21 @@ func TestServiceAssistantGenericDetectedPidfile(t *testing.T) {
 }
 
 func TestServiceAssistantSkipsGenericServicesWithNone(t *testing.T) {
-	env := Env{CatalogServices: func() ([]ServiceCandidate, error) {
-		return []ServiceCandidate{{Name: "customd", Title: "customd", Unit: "customd", Status: string(servicemgr.StatusActive), Generic: true, Pidfile: "/run/customd.pid"}}, nil
-	}}
-	script := strings.Join([]string{"y", config.SelectionKeywordNone}, "\n") + "\n"
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := serviceAssistant{}.Run(p, env)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	res, _ := runServiceAssistant(t, serviceEnv(
+		ServiceCandidate{Name: "customd", Title: "customd", Unit: "customd", Status: string(servicemgr.StatusActive), Generic: true, Pidfile: "/run/customd.pid"},
+	), "y", config.SelectionKeywordNone)
 	if len(res.Services) != 0 {
 		t.Fatalf("services = %v, want none", res.Services)
 	}
 }
 
 func TestServiceAssistantRejectsNonAbsolutePidfile(t *testing.T) {
-	env := Env{CatalogServices: func() ([]ServiceCandidate, error) {
-		return []ServiceCandidate{{Name: "customd", Title: "customd", Unit: "customd", Status: string(servicemgr.StatusActive), Generic: true, Pidfile: "/run/customd.pid"}}, nil
-	}}
-	script := strings.Join([]string{"y", "1", "y", "", "1", "", "n"}, "\n") + "\n" // review generic; invalid pidfile; accept default; monitor enabled; inherit interval; no dry-run
-	var out strings.Builder
-	p := NewPrompt(strings.NewReader(script), &out)
-	res, err := serviceAssistant{}.Run(p, env)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if !strings.Contains(out.String(), "pidfile must be an absolute path or blank") {
-		t.Fatalf("expected validation message, got:\n%s", out.String())
+	// review generic; invalid pidfile; accept default; monitor enabled; inherit interval; no dry-run
+	res, out := runServiceAssistant(t, serviceEnv(
+		ServiceCandidate{Name: "customd", Title: "customd", Unit: "customd", Status: string(servicemgr.StatusActive), Generic: true, Pidfile: "/run/customd.pid"},
+	), "y", "1", "y", "", "1", "", "n")
+	if !strings.Contains(out, "pidfile must be an absolute path or blank") {
+		t.Fatalf("expected validation message, got:\n%s", out)
 	}
 	svc := res.Services["customd"].(map[string]any)
 	if svc[config.ServiceKeyPidfile] != "/run/customd.pid" {
@@ -252,15 +210,10 @@ func TestServiceAssistantRejectsNonAbsolutePidfile(t *testing.T) {
 func TestServiceAssistantCommandMatchFallback(t *testing.T) {
 	// No pidfile, but an exe was detected: accepting the fallback writes a
 	// process selector.
-	env := Env{CatalogServices: func() ([]ServiceCandidate, error) {
-		return []ServiceCandidate{{Name: "sshd", Title: "OpenSSH", Unit: "sshd", Status: string(servicemgr.StatusActive), Generic: true, Exe: "/usr/sbin/sshd"}}, nil
-	}}
-	script := strings.Join([]string{"y", "1", "", "y", "1", "", "n"}, "\n") + "\n" // review generic; select; pidfile skip; match-by-exe yes; monitor enabled; interval inherit; no dry-run
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := serviceAssistant{}.Run(p, env)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	// review generic; select; pidfile skip; match-by-exe yes; monitor enabled; interval inherit; no dry-run
+	res, _ := runServiceAssistant(t, serviceEnv(
+		ServiceCandidate{Name: "sshd", Title: "OpenSSH", Unit: "sshd", Status: string(servicemgr.StatusActive), Generic: true, Exe: "/usr/sbin/sshd"},
+	), "y", "1", "", "y", "1", "", "n")
 	procs := res.Services["sshd"].(map[string]any)[config.SectionProcesses].(map[string]any)
 	main := procs[process.RoleMain].(map[string]any)
 	if _, present := main[config.EntryKeyType]; present || main[process.SelectorKeyExe] != "/usr/sbin/sshd" {
@@ -271,15 +224,10 @@ func TestServiceAssistantCommandMatchFallback(t *testing.T) {
 func TestServiceAssistantCommandPatternFallback(t *testing.T) {
 	// A shared runtime/script service should use the detected cmdline pattern and
 	// owner instead of assuming the configured command is the resolved exe.
-	env := Env{CatalogServices: func() ([]ServiceCandidate, error) {
-		return []ServiceCandidate{{Name: "homeassistant", Title: "Home Assistant", Unit: "homeassistant", Status: string(servicemgr.StatusActive), Generic: true, Cmd: `(^|[[:space:]])/usr/bin/hass($|[[:space:]])`, User: "homeassistant"}}, nil
-	}}
-	script := strings.Join([]string{"y", "1", "", "y", "1", "", "n"}, "\n") + "\n" // review generic; select; pidfile skip; match-by-cmd yes; monitor enabled; interval inherit; no dry-run
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := serviceAssistant{}.Run(p, env)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	// review generic; select; pidfile skip; match-by-cmd yes; monitor enabled; interval inherit; no dry-run
+	res, _ := runServiceAssistant(t, serviceEnv(
+		ServiceCandidate{Name: "homeassistant", Title: "Home Assistant", Unit: "homeassistant", Status: string(servicemgr.StatusActive), Generic: true, Cmd: `(^|[[:space:]])/usr/bin/hass($|[[:space:]])`, User: "homeassistant"},
+	), "y", "1", "", "y", "1", "", "n")
 	procs := res.Services["homeassistant"].(map[string]any)[config.SectionProcesses].(map[string]any)
 	main := procs[process.RoleMain].(map[string]any)
 	if _, present := main[config.EntryKeyType]; present || main[process.SelectorKeyCmd] != `(^|[[:space:]])/usr/bin/hass($|[[:space:]])` || main[process.SelectorKeyUser] != "homeassistant" {
@@ -290,16 +238,11 @@ func TestServiceAssistantCommandPatternFallback(t *testing.T) {
 func TestServiceAssistantBatchMonitoring(t *testing.T) {
 	// Selecting two services and answering "apply to all" asks monitor+interval
 	// once and applies them to every selected service.
-	env := Env{CatalogServices: func() ([]ServiceCandidate, error) {
-		return []ServiceCandidate{{Name: "nginx", Unit: "nginx", Status: string(servicemgr.StatusActive)}, {Name: "sshd", Unit: "sshd", Status: string(servicemgr.StatusActive)}}, nil
-	}}
 	// select 1,2; batch=yes; monitor disabled; interval 30s; dry-run=no.
-	script := strings.Join([]string{"1,2", "y", "2", "30s", "n"}, "\n") + "\n"
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := serviceAssistant{}.Run(p, env)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	res, _ := runServiceAssistant(t, serviceEnv(
+		ServiceCandidate{Name: "nginx", Unit: "nginx", Status: string(servicemgr.StatusActive)},
+		ServiceCandidate{Name: "sshd", Unit: "sshd", Status: string(servicemgr.StatusActive)},
+	), "1,2", "y", "2", "30s", "n")
 	for _, name := range []string{"nginx", "sshd"} {
 		svc := res.Services[name].(map[string]any)
 		if svc[config.EntryKeyMonitor] != config.MonitorDisabled || svc[config.EntryKeyInterval] != "30s" {
@@ -309,21 +252,13 @@ func TestServiceAssistantBatchMonitoring(t *testing.T) {
 }
 
 func TestServiceAssistantBatchSkipsPortPromptsByDefault(t *testing.T) {
-	env := Env{CatalogServices: func() ([]ServiceCandidate, error) {
-		return []ServiceCandidate{
-			{Name: "apache", Unit: "apache2", Status: string(servicemgr.StatusActive), Port: 80},
-			{Name: "redis", Unit: "redis", Status: string(servicemgr.StatusActive), Port: 6379},
-		}, nil
-	}}
 	// select all; do not review port overrides; batch=yes; monitor enabled;
 	// inherit interval; dry-run=yes. The script deliberately has no blank lines
 	// for individual port prompts.
-	script := strings.Join([]string{config.SelectionKeywordAll, "n", "y", "1", "", "y"}, "\n") + "\n"
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := serviceAssistant{}.Run(p, env)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	res, _ := runServiceAssistant(t, serviceEnv(
+		ServiceCandidate{Name: "apache", Unit: "apache2", Status: string(servicemgr.StatusActive), Port: 80},
+		ServiceCandidate{Name: "redis", Unit: "redis", Status: string(servicemgr.StatusActive), Port: 6379},
+	), config.SelectionKeywordAll, "n", "y", "1", "", "y")
 	for _, name := range []string{"apache", "redis"} {
 		svc := res.Services[name].(map[string]any)
 		if _, hasVars := svc[config.SectionVariables]; hasVars {
