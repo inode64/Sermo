@@ -1286,7 +1286,11 @@ display_name: "Nebula ${instance}"
 apps: ["nebula-${instance}"]
 ```
 
-A configured service then targets a concrete instance, e.g. `uses: nebula-vpn0`.
+A configured service then targets a concrete instance, e.g. `uses: nebula-nebula0`.
+Active systemd/OpenRC units normally materialize catalog instances for discovery.
+An explicitly configured `uses:` instance also materializes when its unit is
+stopped or failed, so `sermod` can report that service state instead of rejecting
+the whole configuration.
 
 ## Service unit
 

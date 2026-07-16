@@ -1289,7 +1289,11 @@ display_name: "Nebula ${instance}"
 apps: ["nebula-${instance}"]
 ```
 
-Un servicio configurado entonces apunta a una instancia concreta, p. ej. `uses: nebula-vpn0`.
+Un servicio configurado entonces apunta a una instancia concreta, p. ej. `uses: nebula-nebula0`.
+Las unidades systemd/OpenRC activas normalmente materializan instancias de catálogo
+para el descubrimiento. Una instancia explícita en `uses:` también se materializa
+cuando su unidad está parada o fallida, de modo que `sermod` informa ese estado en
+lugar de rechazar toda la configuración.
 
 ## Unidad de servicio
 

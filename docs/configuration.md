@@ -2463,8 +2463,11 @@ entry report the same `version_short`.
 `openrc` branches. Map branches are exclusive: Sermo selects only the active init
 backend from `engine.backend` or `SERMO_BACKEND`, falling back to detected
 `${init}`. Catalog service templates should put tokens in `service:` instead;
-their daemon instances materialize from active systemd/OpenRC units, while linked
-apps own binary discovery and validation.
+active systemd/OpenRC units materialize their daemon instances for discovery.
+When a configured service explicitly names a materialized instance in `uses:`,
+that instance remains available while its unit is stopped or failed so validation
+and monitoring can report its state. Linked apps own binary discovery and
+validation.
 
 ## Binary resource variables
 
