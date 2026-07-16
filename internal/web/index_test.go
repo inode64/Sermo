@@ -689,7 +689,7 @@ func TestSourceCompactsRowActionsWithoutChangingDispatch(t *testing.T) {
 	text := string(src)
 	for _, marker := range []string{
 		`data-service-action="${action}"`,
-		`data-watch-action="${actionUnmonitor}"`,
+		`data-watch-action="${action}"`,
 		`data-mount-action="${actionUmount}"`,
 		`act(serviceAction.dataset.service || "", serviceAction.dataset.serviceAction || "")`,
 	} {
