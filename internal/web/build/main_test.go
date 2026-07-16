@@ -30,6 +30,7 @@ func TestWatchPanelDescriptorsMatchShellMarkers(t *testing.T) {
 			`id="` + panel.SectionID + `"`,
 			`data-panel="` + panel.Key + `"`,
 			`id="` + panel.RowsID + `"`,
+			`data-wf="stale"`,
 		} {
 			if !strings.Contains(markup, expected) {
 				t.Errorf("panel %q markup missing %q", panel.Key, expected)

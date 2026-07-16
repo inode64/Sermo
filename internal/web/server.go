@@ -431,6 +431,14 @@ type Application = CatalogItem
 // Library is an installed catalog library returned by the dashboard.
 type Library = CatalogItem
 
+// WatchSampleState reports whether the latest daemon-published watch sample is
+// usable for dashboard readings.
+const (
+	WatchSampleStateCollecting = "collecting"
+	WatchSampleStateFresh      = "fresh"
+	WatchSampleStateStale      = "stale"
+)
+
 // Watch is a view of a host watch for the dashboard (when services=0
 // the watches section is the main thing to show). Enriched with useful
 // runtime/config info for operators.
@@ -466,6 +474,7 @@ type Watch struct {
 	LastActivity      string            `json:"last_activity,omitempty"` // RFC3339 of last watch activity, if any
 	LastActivityKind  string            `json:"last_activity_kind,omitempty"`
 	LastCheckedAt     string            `json:"last_checked_at,omitempty"` // RFC3339 of latest completed check sample
+	SampleState       string            `json:"sample_state,omitempty"`    // collecting | fresh | stale
 	Probe             *WatchProbe       `json:"probe,omitempty"`           // current manual probe, if one is running
 }
 

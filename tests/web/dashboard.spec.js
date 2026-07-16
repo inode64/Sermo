@@ -49,6 +49,10 @@ const watches = [{
   enabled: true, monitored: true, state: "ok", check_type: "icmp",
   summary: "gateway reachable", interval: "30s", status_observed_at: "2026-07-10T12:00:00Z",
 }, {
+  name: "dns-upstream", display_name: "Upstream DNS", category: "network",
+  enabled: true, monitored: true, state: "stale", sample_state: "stale", check_type: "dns",
+  summary: "", interval: "1m", last_checked_at: "2026-07-10T11:57:00Z",
+}, {
   name: "storage-data", display_name: "Data volume", category: "storage",
   enabled: true, monitored: true, state: "ok", check_type: "storage",
   storage: { filesystem: "ext4", mount_point: "/data", used_bytes: 10, total_bytes: 100 },
@@ -226,6 +230,17 @@ test("a running manual probe keeps health visible and disables a duplicate", asy
   await expect(probe).toHaveAttribute("aria-describedby", "wat-hdparm-sda-probe-hint");
   await expect(page.locator("#wat-hdparm-sda-probe-hint")).toHaveText("manual probe is already running");
   await expect(row.locator("[data-probe-started-at]")).toBeVisible();
+});
+
+test("stale watch samples are visible and filterable", async ({ page }) => {
+  const row = page.locator("#wat-row-dns-upstream");
+  await expect(row).toContainText("stale");
+  await expect(row).toHaveClass(/row-warning/);
+  await expect(row.locator(".watch-sample-note")).toHaveText("stale");
+
+  await page.locator('[data-wf="stale"]').click();
+  await expect(row).toBeVisible();
+  await expect(page.locator("#wat-row-net-wan")).toBeHidden();
 });
 
 test("a SMART self-test remains the device state after its start command returns", async ({ page }) => {
