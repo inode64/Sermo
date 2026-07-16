@@ -15,8 +15,6 @@ func storeAppSample(samples *ArtifactSamples, name string, report appinspect.Rep
 	samples.StoreAppVersion(name, report.Version, report.Status)
 }
 
-const appWatchCheckType = config.CategoryApp
-
 // BuildAppWatches builds one app-watch per installed catalog application. Each
 // reuses the whole Watch cycle: every engine.artifact_interval it inspects its app,
 // and because FireOnFail is set it "fires" when the app is not ok — emitting a
