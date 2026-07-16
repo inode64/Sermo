@@ -228,13 +228,6 @@ func watchReadingIntMetricValue(value int64, unit string) string {
 	return fmt.Sprintf("%d %s", value, unit)
 }
 
-func watchReadingUintMetricValue(value uint64, unit string) string {
-	if unit == "" {
-		return strconv.FormatUint(value, 10)
-	}
-	return fmt.Sprintf("%d %s", value, unit)
-}
-
 func watchReadingMetricValue(value float64, decimals int, unit string) string {
 	if unit == "" {
 		return fmt.Sprintf("%.*f", decimals, value)
