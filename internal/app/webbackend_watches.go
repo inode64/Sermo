@@ -35,14 +35,14 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 }
 
 func (b *WebBackend) watchView(ctx context.Context, w *webWatch, system metrics.Snapshot, activity watchActivity) web.Watch {
-	storage, swap, meter, readings, liveSummary := b.watchPresentationLiveView(ctx, w, system)
+	storage, swap, meter, readings, summary := b.watchPresentation(ctx, w, system)
 	monitorMode := w.monitorMode
 	if monitorMode == "" {
 		monitorMode = config.MonitorEnabled
 	}
 	view := web.Watch{
 		Name: w.name, DisplayName: w.displayName, Category: w.category, CheckType: w.checkType,
-		Summary: watchSummary(w, storage, liveSummary), SummaryConfigured: cfgval.String(w.check[checks.CheckKeySummary]) != "",
+		Summary: watchSummary(w, storage, summary), SummaryConfigured: cfgval.String(w.check[checks.CheckKeySummary]) != "",
 		Interval: units.HumanizeDuration(w.interval), Enabled: !w.disabled, Monitor: monitorMode,
 		Monitored: !w.disabled && monitorMode != config.MonitorDisabled, FireOnFail: w.fireOnFail,
 		HasHook: w.hasHook, HookCommand: slices.Clone(w.hookCommand), Notifiers: slices.Clone(w.notifiers),
@@ -55,7 +55,7 @@ func (b *WebBackend) watchView(ctx context.Context, w *webWatch, system metrics.
 	return view
 }
 
-func (b *WebBackend) watchPresentationLiveView(ctx context.Context, w *webWatch, system metrics.Snapshot) (*web.StorageWatchInfo, *web.SwapWatchInfo, *web.WatchMeter, []web.WatchReading, string) {
+func (b *WebBackend) watchPresentation(ctx context.Context, w *webWatch, system metrics.Snapshot) (*web.StorageWatchInfo, *web.SwapWatchInfo, *web.WatchMeter, []web.WatchReading, string) {
 	if w.disabled {
 		return nil, nil, nil, nil, ""
 	}

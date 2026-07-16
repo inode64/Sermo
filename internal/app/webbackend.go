@@ -31,12 +31,6 @@ const (
 	// The dashboard refreshes every 30s by default, so keep status warm across
 	// ordinary refreshes instead of running one init status probe per service.
 	serviceStatusCacheTTL = 2 * time.Minute
-	// diskIORateMinWindow is the shortest elapsed span disk I/O rates may be
-	// computed over. The delta baseline is shared by every dashboard viewer, so
-	// without a floor two tabs polling moments apart would re-base the deltas
-	// over a near-zero window and report garbage rates; polls arriving inside
-	// the window keep the previous baseline and serve the last computed rates.
-	diskIORateMinWindow = time.Second
 	// serviceReloadCapabilityTimeout bounds init metadata checks used only to
 	// decide whether the dashboard should offer a per-service reload action.
 	serviceReloadCapabilityTimeout = 2 * time.Second
@@ -174,22 +168,7 @@ type WebBackend struct {
 	storageUsage      checks.StorageUsageFunc
 	mountSampler      checks.MountSamplerFunc
 	openFilesSampler  func(mounts []checks.Mount) map[string]int64
-	netSampler        checks.NetSamplerFunc
-	pingSampler       checks.PingSamplerFunc
-	oomSampler        checks.OomSamplerFunc
-	fdsSampler        checks.FdsSamplerFunc
-	pidsSampler       checks.PidsSamplerFunc
-	pressureSampler   checks.PressureSamplerFunc
-	conntrackSampler  checks.ConntrackSamplerFunc
-	entropySampler    checks.EntropySamplerFunc
-	zombieSampler     checks.ZombieSamplerFunc
-	procSampler       ProcSampler
-	diskIOSampler     checks.DiskIOSamplerFunc
-	sensorSampler     checks.SensorSamplerFunc
 	raidSampler       checks.RaidSamplerFunc
-	edacSampler       checks.EdacSamplerFunc
-	routeSampler      checks.RouteSamplerFunc
-	firewallSampler   checks.FirewallRulesSamplerFunc
 	execRunner        execx.Runner
 	expander          VolumeExpander
 	userLookup        *process.UserLookup
@@ -201,9 +180,6 @@ type WebBackend struct {
 	defaultTimeout    time.Duration
 	operationTimeout  time.Duration
 	now               func() time.Time
-
-	diskIOMu    sync.Mutex
-	diskIOState map[string]webDiskIOState
 
 	probeMu sync.Mutex
 	probes  map[string]time.Time
@@ -269,22 +245,7 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		storageUsage:      deps.StorageUsage,
 		mountSampler:      deps.MountSampler,
 		openFilesSampler:  deps.OpenFilesByMount,
-		netSampler:        deps.NetSampler,
-		pingSampler:       deps.PingSampler,
-		oomSampler:        deps.OomSampler,
-		fdsSampler:        deps.FdsSampler,
-		pidsSampler:       deps.PidsSampler,
-		pressureSampler:   deps.PressureSampler,
-		conntrackSampler:  deps.ConntrackSampler,
-		entropySampler:    deps.EntropySampler,
-		zombieSampler:     deps.ZombieSampler,
-		procSampler:       deps.ProcSampler,
-		diskIOSampler:     deps.DiskIOSampler,
-		sensorSampler:     deps.SensorSampler,
 		raidSampler:       deps.RaidSampler,
-		edacSampler:       deps.EdacSampler,
-		routeSampler:      deps.RouteSampler,
-		firewallSampler:   deps.FirewallRulesSampler,
 		execRunner:        deps.ExecxRunner,
 		expander:          configuredVolumeExpander(deps),
 		userLookup:        deps.UserLookup,

@@ -9,6 +9,9 @@ import (
 	"sermo/internal/web"
 )
 
+// readingSummarySeparator joins the parts of a watch's one-line reading summary.
+const readingSummarySeparator = " · "
+
 // watchDashboardView returns the latest result published by the daemon watch
 // cycle. The web handler never samples watches itself.
 func (b *WebBackend) watchDashboardView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
