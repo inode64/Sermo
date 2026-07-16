@@ -759,6 +759,22 @@ Estos alimentan la monitorización **y** el reaper residual, de modo que un sele
 stop atrapar y matar más restos (un residual no matable permanece como
 `orphan_processes`). El *check* `process` sigue coincidiendo solo por `exe`/`user`.
 
+### Evidencia de continuidad de proceso
+
+En un ciclo monitorizado elegible, Sermo puede persistir evidencia confiable de
+continuidad desde la hora de inicio de un proceso de servicio. Así `sermoctl sla
+--process-uptime` y la Web UI pueden cubrir tiempo anterior a un reinicio de
+`sermod` sin inventar resultados de comprobaciones. Las raíces de proceso
+derivadas del backend son confiables; una coincidencia explícita de cmdline solo
+lo es si su selector también tiene `exe` y `user` exactos. Hijos, coincidencias
+solo de pidfile y coincidencias solo de cmdline no prueban continuidad.
+
+No hace falta YAML adicional. Este historial se registra únicamente mientras el
+servicio está monitorizado activamente y permanece separado del SLA y de la
+salud de comprobaciones. Un proceso confiable reciente puede mostrar el estado
+`active` en el panel antes del primer snapshot de comprobaciones; confirma solo
+el proceso, no la aplicación.
+
 ### Invariantes de estado parado (`stop_policy`)
 
 Tras un stop **limpio**, el motor puede verificar que el servicio no dejó nada detrás:
