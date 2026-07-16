@@ -78,6 +78,16 @@ func TestCommandRunnerTimeout(t *testing.T) {
 	}
 }
 
+func TestRunnerOrDefault(t *testing.T) {
+	if _, ok := RunnerOrDefault(nil).(CommandRunner); !ok {
+		t.Fatalf("RunnerOrDefault(nil) did not return CommandRunner")
+	}
+	runner := basicRunner{}
+	if got := RunnerOrDefault(runner); got != runner {
+		t.Fatalf("RunnerOrDefault() = %T, want supplied runner", got)
+	}
+}
+
 func TestCommandRunnerTimeoutKillsProcessGroup(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("process-group cancellation is linux-specific")

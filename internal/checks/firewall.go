@@ -121,9 +121,7 @@ func validFirewallBackend(backend string) bool {
 var DefaultFirewallRulesSampler FirewallRulesSamplerFunc = defaultFirewallRulesSampler
 
 func defaultFirewallRulesSampler(ctx context.Context, backend string, runner execx.Runner) (FirewallRulesSample, error) {
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 	switch backend {
 	case FirewallBackendAuto:
 		var errs []error

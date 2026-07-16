@@ -247,9 +247,7 @@ func configuredVolumeExpander(deps Deps) VolumeExpander {
 		return deps.VolumeExpander
 	}
 	runner := deps.ExecxRunner
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 	return volume.Expander{Runner: runner}
 }
 

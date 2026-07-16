@@ -81,9 +81,7 @@ func MainPIDContext(ctx context.Context, runner execx.Runner, backend Backend, u
 	if backend != BackendSystemd {
 		return 0, false
 	}
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 	res, err := runSystemctlShow(ctx, runner, defaultDetectTimeout, systemctlPropertyMainPID, unit)
 	if err != nil {
 		return 0, false
@@ -108,9 +106,7 @@ func CgroupPIDsContext(ctx context.Context, runner execx.Runner, readFile func(s
 	if backend != BackendSystemd {
 		return nil, false
 	}
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 	if readFile == nil {
 		readFile = os.ReadFile
 	}

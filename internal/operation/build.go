@@ -349,9 +349,7 @@ func verifyReloadPID(pid int, source reloadPIDSource, pidfile string, discoverer
 }
 
 func nativeCommandReloadFunc(argv []string, runner execx.Runner) func(context.Context) error {
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 	return func(ctx context.Context) error {
 		res, err := runner.Run(ctx, argv[0], argv[1:]...)
 		return reloadCommandError(res, err)

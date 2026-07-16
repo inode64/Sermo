@@ -95,9 +95,7 @@ func (r OSHookRunner) RunHook(ctx context.Context, argv []string, env map[string
 	}
 
 	runner := r.Runner
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 
 	// RunEnv honors the custom environment and applies the timeout (if > 0).
 	res, err := execx.RunEnv(ctx, runner, fullEnv, timeout, argv[0], argv[1:]...)

@@ -48,9 +48,7 @@ func (b *WebBackend) loadCatalogItems(ctx context.Context, category string, expo
 		return nil
 	}
 	runner := b.execRunner
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
+	runner = execx.RunnerOrDefault(runner)
 	opts := appinspect.WithUserLookup(b.userLookup)
 	type catalogResult struct {
 		item web.CatalogItem
