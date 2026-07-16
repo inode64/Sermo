@@ -37,15 +37,22 @@ const (
 	securityKeyRequireKillSelector           = "require_kill_selector"
 	securityKeyRequirePreflightBeforeRestart = "require_preflight_before_restart"
 
-	validationAnalyzeMappingFormat   = "%s.analyze must be a mapping"
-	validationBooleanFormat          = "%s must be a boolean"
-	validationBooleanLiteralFormat   = "%s must be true or false"
-	validationMappingFormat          = "%s must be a mapping"
-	validationNonEmptyPathListFormat = "%s must be a non-empty path string or list"
-	validationPathListFormat         = "%s must be a path string or list of path strings"
-	validationPidfilesMappingMsg     = "pidfiles must be a mapping of process role to path string or candidate list"
-	validationStringListFormat       = "%s must be a string or list of strings"
-	validationTCPPortRangeFormat     = "%s must be an integer in %s"
+	validationAnalyzeMappingFormat    = "%s.analyze must be a mapping"
+	validationBooleanFormat           = "%s must be a boolean"
+	validationBooleanLiteralFormat    = "%s must be true or false"
+	validationListIndexFormat         = "%s[%d]"
+	validationMappingFormat           = "%s must be a mapping"
+	validationNonEmptyPathListFormat  = "%s must be a non-empty path string or list"
+	validationNotOneOfFormat          = "%s %q is not one of %s"
+	validationNotSupportedFormat      = "%s is not supported"
+	validationPathAbsoluteFormat      = "%s path %q must be absolute"
+	validationPathListFormat          = "%s must be a path string or list of path strings"
+	validationPidfilesMappingMsg      = "pidfiles must be a mapping of process role to path string or candidate list"
+	validationPositiveDurationFormat  = "%s %q must be a valid positive duration"
+	validationRequiredFormat          = "%s is required"
+	validationStringListFormat        = "%s must be a string or list of strings"
+	validationTCPPortRangeFormat      = "%s must be an integer in %s"
+	validationValueNotSupportedFormat = "%s %q is not supported"
 )
 
 // rejectedSecurityToggles are keys under `security:` that try to disable hard
@@ -129,25 +136,25 @@ func validateGlobalEngine(raw map[string]any, add addFunc) {
 	}
 	for _, key := range slices.Sorted(maps.Keys(engine)) {
 		if _, allowed := validEngineKeys[key]; !allowed {
-			add("%s is not supported", engineFieldPath(key))
+			add(validationNotSupportedFormat, engineFieldPath(key))
 		}
 	}
 	if backend := cfgval.String(engine[EngineKeyBackend]); !isValidBackend(backend) {
-		add("%s %q is not one of %s", enginePathBackend, backend, backendSummary)
+		add(validationNotOneOfFormat, enginePathBackend, backend, backendSummary)
 	}
 	for _, field := range []string{keyInterval, EngineKeyArtifactInterval, EngineKeyDefaultTimeout, EngineKeyOperationTimeout} {
 		if v, present := engine[field]; present && !isPositiveDuration(cfgval.String(v)) {
-			add("%s %q must be a valid positive duration", engineFieldPath(field), cfgval.String(v))
+			add(validationPositiveDurationFormat, engineFieldPath(field), cfgval.String(v))
 		}
 	}
 	if v, present := engine[EngineKeyStartupDelay]; present && !isNonNegativeDuration(cfgval.String(v)) {
 		add("%s %q must be a valid non-negative duration (0 disables the wait)", enginePathStartupDelay, cfgval.String(v))
 	}
 	if mode := cfgval.String(engine[EngineKeyUserLookup]); !process.ValidUserLookupMode(mode) {
-		add("%s %q is not one of %s", enginePathUserLookup, mode, userLookupModeSummary)
+		add(validationNotOneOfFormat, enginePathUserLookup, mode, userLookupModeSummary)
 	}
 	if v, present := engine[EngineKeyUserLookupTimeout]; present && !isPositiveDuration(cfgval.String(v)) {
-		add("%s %q must be a valid positive duration", enginePathUserLookupTimeout, cfgval.String(v))
+		add(validationPositiveDurationFormat, enginePathUserLookupTimeout, cfgval.String(v))
 	}
 	validateGlobalEnginePositiveInt(engine, EngineKeyMaxParallelChecks, enginePathMaxParallelChecks, add)
 	validateGlobalEnginePositiveInt(engine, EngineKeyMaxParallelOperations, enginePathMaxParallelOperations, add)
@@ -171,7 +178,7 @@ func validateGlobalEngine(raw map[string]any, add addFunc) {
 		if cfgval.String(engine[EngineKeyDiagnostics]) == "" {
 			add("%s is set but %s is not configured", enginePathDiagnosticsInterval, enginePathDiagnostics)
 		} else if !isPositiveDuration(cfgval.String(v)) {
-			add("%s %q must be a valid positive duration", enginePathDiagnosticsInterval, cfgval.String(v))
+			add(validationPositiveDurationFormat, enginePathDiagnosticsInterval, cfgval.String(v))
 		}
 	}
 }
@@ -195,7 +202,7 @@ func validateGlobalPaths(cfg *Config, raw map[string]any, add addFunc) {
 			continue
 		}
 		if _, known := validGlobalPathKeys[key]; !known {
-			add("%s is not supported", pathsFieldPath(key))
+			add(validationNotSupportedFormat, pathsFieldPath(key))
 		}
 	}
 	for _, path := range []struct{ key, value string }{
@@ -249,7 +256,7 @@ func validateGlobalDefaults(cfg *Config, raw map[string]any, add addFunc) {
 	case !present:
 		add("%s is required and must be a positive duration", defaultsPathPolicyCooldown)
 	case !isPositiveDuration(cooldown):
-		add("%s %q must be a valid positive duration", defaultsPathPolicyCooldown, cooldown)
+		add(validationPositiveDurationFormat, defaultsPathPolicyCooldown, cooldown)
 	}
 	validateDefaultsKeys(cfg.Global.Defaults, add)
 	validateDefaultsVariables(cfg.Global.Defaults, add)
@@ -274,7 +281,7 @@ func validateGlobalDefaults(cfg *Config, raw map[string]any, add addFunc) {
 func validateDefaultsKeys(defaults map[string]any, add func(string, ...any)) {
 	for _, key := range slices.Sorted(maps.Keys(defaults)) {
 		if _, ok := validDefaultsKeys[key]; !ok {
-			add("%s is not supported", defaultsFieldPath(key))
+			add(validationNotSupportedFormat, defaultsFieldPath(key))
 		}
 	}
 }
@@ -286,13 +293,13 @@ func validateDefaultsRestartOnChange(defaults map[string]any, add addFunc) {
 	}
 	roc, ok := raw.(map[string]any)
 	if !ok {
-		add("%s must be a mapping", defaultsFieldPath(keyRestartOnChange))
+		add(validationMappingFormat, defaultsFieldPath(keyRestartOnChange))
 		return
 	}
 	allowed := set(keyRestartConfig, keyRestartVersion)
 	for _, key := range slices.Sorted(maps.Keys(roc)) {
 		if _, ok := allowed[key]; !ok {
-			add("%s is not supported", defaultsRestartOnChangeFieldPath(key))
+			add(validationNotSupportedFormat, defaultsRestartOnChangeFieldPath(key))
 		}
 	}
 	validateRestartOnChangeFlags(defaultsFieldPath(keyRestartOnChange), roc, add)
@@ -610,7 +617,7 @@ func validateVersionsFromValue(path string, raw any, add addFunc) {
 		}
 	case []any:
 		for i, item := range v {
-			validateVersionsFromValue(fmt.Sprintf("%s[%d]", path, i), item, add)
+			validateVersionsFromValue(fmt.Sprintf(validationListIndexFormat, path, i), item, add)
 		}
 	case map[string]any:
 		for _, key := range slices.Sorted(maps.Keys(v)) {
@@ -642,7 +649,7 @@ func validateVersionsCurrentFromValue(path string, raw any, add addFunc) {
 		}
 	case []any:
 		for i, item := range v {
-			validateVersionsCurrentFromValue(fmt.Sprintf("%s[%d]", path, i), item, add)
+			validateVersionsCurrentFromValue(fmt.Sprintf(validationListIndexFormat, path, i), item, add)
 		}
 	default:
 		add(validationPathListFormat, path)
@@ -688,7 +695,7 @@ func validateBinaryVariables(doc *Document, scope string) []Issue {
 		}
 		for _, path := range candidates {
 			if !filepath.IsAbs(path) {
-				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("%s path %q must be absolute", variablePath(VariableKeyBinary), path)})
+				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf(validationPathAbsoluteFormat, variablePath(VariableKeyBinary), path)})
 			}
 		}
 	} else {
@@ -752,7 +759,7 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 
 	umount, _ := mount[MountKeyUmount].(map[string]any)
 	if _, present := mount[MountKeyUmount]; present && umount == nil {
-		add("%s must be a mapping", mountPathUmount)
+		add(validationMappingFormat, mountPathUmount)
 	}
 	if umount != nil {
 		allowedUmount := set(StopPolicyKeyTermTimeout, StopPolicyKeyKillTimeout)
@@ -763,7 +770,7 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 		}
 		for _, field := range []string{StopPolicyKeyTermTimeout, StopPolicyKeyKillTimeout} {
 			if v, present := umount[field]; present && !isPositiveDuration(cfgval.String(v)) {
-				add("%s %q must be a valid positive duration", mountUmountFieldPath(field), cfgval.String(v))
+				add(validationPositiveDurationFormat, mountUmountFieldPath(field), cfgval.String(v))
 			}
 		}
 	}
@@ -776,7 +783,7 @@ func validateStorageMount(mount map[string]any, add addFunc) {
 			}
 		}
 	} else if _, present := mount[sectionStopPolicy]; present {
-		add("%s must be a mapping", mountPathStopPolicy)
+		add(validationMappingFormat, mountPathStopPolicy)
 	}
 	validateStopPolicy(map[string]any{sectionStopPolicy: mount[sectionStopPolicy]}, func(format string, args ...any) {
 		add(mountPath + "." + fmt.Sprintf(format, args...))
@@ -829,7 +836,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	case !present:
 		add("%s is required and must be positive after resolution", policyPathCooldown)
 	case !isPositiveDuration(cooldown):
-		add("%s %q must be a valid positive duration", policyPathCooldown, cooldown)
+		add(validationPositiveDurationFormat, policyPathCooldown, cooldown)
 	}
 
 	walkScalars(tree, func(path, key, value string) {

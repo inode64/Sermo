@@ -13,6 +13,10 @@ import (
 	"time"
 )
 
+// readingSummarySeparator joins the parts of a watch's one-line reading summary
+// (the host/net/snapshot views and the RAID state detail).
+const readingSummarySeparator = " · "
+
 type webDiskIOState struct {
 	primed   bool
 	at       time.Time
@@ -281,7 +285,7 @@ func (b *WebBackend) netWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRead
 		readings = append(readings, web.WatchReading{Field: checks.NetMetricAddress, Label: watchReadingLabelAddresses, Value: value})
 		parts = append(parts, fmt.Sprintf("%d address%s", len(s.Addrs), pluralSuffix(len(s.Addrs), "address")))
 	}
-	return nil, readings, strings.Join(parts, " · ")
+	return nil, readings, strings.Join(parts, readingSummarySeparator)
 }
 
 func (b *WebBackend) icmpWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
@@ -320,7 +324,7 @@ func (b *WebBackend) icmpWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 		readings = append(readings, web.WatchReading{Field: checks.IcmpMetricLatency, Label: watchReadingLabelRTT, Value: watchReadingValueUnknown})
 		parts = append(parts, "rtt "+watchReadingValueUnknown)
 	}
-	return nil, readings, strings.Join(parts, " · ")
+	return nil, readings, strings.Join(parts, readingSummarySeparator)
 }
 
 func (b *WebBackend) oomWatchView() (*web.WatchMeter, []web.WatchReading, string) {

@@ -76,7 +76,7 @@ func validateNotifier(name string, raw any, templateDir string, add func(string,
 	}
 	entry, ok := raw.(map[string]any)
 	if !ok {
-		add("%s must be a mapping", notifierPath(name))
+		add(validationMappingFormat, notifierPath(name))
 		return
 	}
 	if value, present := entry[keyEnabled]; present {
@@ -107,7 +107,7 @@ func validateNotifierType(name string, entry map[string]any, add func(string, ..
 			add("%s is not supported for a wall notifier; use type tty to target specific users", notifierFieldPath(name, notify.KeyUsers))
 		}
 	case "":
-		add("%s is required", notifierFieldPath(name, notify.KeyType))
+		add(validationRequiredFormat, notifierFieldPath(name, notify.KeyType))
 	default:
 		if !slices.Contains(notify.SupportedTypes(), typ) {
 			add("%s %q is not supported (%s)", notifierFieldPath(name, notify.KeyType), typ, strings.Join(notify.SupportedTypes(), ", "))

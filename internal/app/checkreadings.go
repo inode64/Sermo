@@ -347,7 +347,7 @@ func raidArrayReading(detail checks.RaidArrayStatus) string {
 	if detail.HasProgress {
 		return fmt.Sprintf("%s · %s %.1f%%", state, detail.Operation, detail.ProgressPct)
 	}
-	return state + " · " + detail.Operation
+	return state + readingSummarySeparator + detail.Operation
 }
 
 func certCheckReadings(data map[string]any) []web.WatchReading {

@@ -307,6 +307,11 @@ func ValidateAssertionValue(label, op, value string) error {
 	return nil
 }
 
+// mustBeMappingSuffix completes a "<field> must be a mapping" build error when a
+// check field that must hold a YAML mapping does not. Distinct from config's own
+// mapping-validation messages (different construction and surface).
+const mustBeMappingSuffix = " must be a mapping"
+
 // parseAssertionMap reads a field -> value/{op,value} mapping into ordered
 // assertions. It is shared by HTTP JSON checks and connection-protocol checks.
 func parseAssertionMap(v any, field string) ([]jsonAssertion, string) {
@@ -315,7 +320,7 @@ func parseAssertionMap(v any, field string) ([]jsonAssertion, string) {
 	}
 	m, ok := v.(map[string]any)
 	if !ok {
-		return nil, field + " must be a mapping"
+		return nil, field + mustBeMappingSuffix
 	}
 	if len(m) == 0 {
 		return nil, ""

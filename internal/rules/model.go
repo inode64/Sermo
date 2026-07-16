@@ -236,6 +236,10 @@ func ReferencedChecks(tree map[string]any) map[string]any {
 	return out
 }
 
+// ruleSubjectPrefix names a rule as the subject of a parse warning, e.g.
+// "rule <name> is not a mapping".
+const ruleSubjectPrefix = "rule "
+
 // ParseRules extracts the resolved `rules` section into Rules, skipping
 // `enabled: false` entries and reporting malformed ones as warnings. Rules are
 // returned in name order (guards are evaluated in this order).
@@ -257,7 +261,7 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 	for _, name := range slices.Sorted(maps.Keys(raw)) {
 		entry, ok := raw[name].(map[string]any)
 		if !ok {
-			warnings = append(warnings, "rule "+name+" is not a mapping")
+			warnings = append(warnings, ruleSubjectPrefix+name+" is not a mapping")
 			continue
 		}
 		if cfgval.Disabled(entry) {
@@ -265,16 +269,16 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 		}
 		ifNode, ok := entry[RuleFieldIf].(map[string]any)
 		if !ok {
-			warnings = append(warnings, "rule "+name+" has no if condition")
+			warnings = append(warnings, ruleSubjectPrefix+name+" has no if condition")
 			continue
 		}
 		thenNode, ok := entry[RuleFieldThen].(map[string]any)
 		if !ok {
-			warnings = append(warnings, "rule "+name+" has no then action")
+			warnings = append(warnings, ruleSubjectPrefix+name+" has no then action")
 			continue
 		}
 		if RuleType(cfgval.AsString(entry[RuleFieldType])) != RuleAlert && ConditionUsesSystemMetric(ifNode, refChecks) {
-			warnings = append(warnings, "rule "+name+": a scope: system metric may only drive alert rules; rule dropped (safety invariant)")
+			warnings = append(warnings, ruleSubjectPrefix+name+": a scope: system metric may only drive alert rules; rule dropped (safety invariant)")
 			continue
 		}
 		actions := parseActions(thenNode)

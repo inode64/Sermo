@@ -148,7 +148,7 @@ func stopPolicyFieldPath(field string) string {
 }
 
 func stopPolicyCleanOnStopEntryPath(i int) string {
-	return fmt.Sprintf("%s[%d]", stopPolicyPathCleanOnStop, i)
+	return fmt.Sprintf(validationListIndexFormat, stopPolicyPathCleanOnStop, i)
 }
 
 func watchPath(name string) string {

@@ -146,18 +146,21 @@ func (r Reaper) Signal(ctx context.Context, procs []Process, selector KillSelect
 	return ReapResult{Remaining: remaining, Signalled: sortedInts(signalled), Failed: failed}
 }
 
+// waitCancelledFormat wraps the context error when a cancellable Wait is aborted.
+const waitCancelledFormat = "wait cancelled: %w"
+
 // Wait blocks for d, returning early if ctx is cancelled. A non-positive d is an
 // immediate ctx-check. sleep is injectable for tests (defaults to time.Sleep). It
 // is the shared cancellable-sleep used by the reaper and the operation engine.
 func Wait(ctx context.Context, sleep func(time.Duration), d time.Duration) error {
 	if d <= 0 {
 		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("wait cancelled: %w", err)
+			return fmt.Errorf(waitCancelledFormat, err)
 		}
 		return nil
 	}
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("wait cancelled: %w", err)
+		return fmt.Errorf(waitCancelledFormat, err)
 	}
 	if sleep == nil {
 		// Default: a stoppable timer so a cancelled Wait leaks no goroutine. An
@@ -168,10 +171,10 @@ func Wait(ctx context.Context, sleep func(time.Duration), d time.Duration) error
 		defer timer.Stop()
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("wait cancelled: %w", ctx.Err())
+			return fmt.Errorf(waitCancelledFormat, ctx.Err())
 		case <-timer.C:
 			if err := ctx.Err(); err != nil {
-				return fmt.Errorf("wait cancelled: %w", err)
+				return fmt.Errorf(waitCancelledFormat, err)
 			}
 			return nil
 		}
@@ -183,10 +186,10 @@ func Wait(ctx context.Context, sleep func(time.Duration), d time.Duration) error
 	}()
 	select {
 	case <-ctx.Done():
-		return fmt.Errorf("wait cancelled: %w", ctx.Err())
+		return fmt.Errorf(waitCancelledFormat, ctx.Err())
 	case <-done:
 		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("wait cancelled: %w", err)
+			return fmt.Errorf(waitCancelledFormat, err)
 		}
 		return nil
 	}

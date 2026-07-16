@@ -347,22 +347,25 @@ func raidTransitionResult(base checks.Result, transition checks.RaidTransition) 
 	return result
 }
 
+// raidSubjectPrefix names a RAID array as the subject of a transition message.
+const raidSubjectPrefix = "raid "
+
 func raidTransitionMessage(transition checks.RaidTransition) string {
 	switch transition.Event {
 	case checks.RaidNotifyOnDegraded:
-		return "raid " + transition.Array + " degraded"
+		return raidSubjectPrefix + transition.Array + " degraded"
 	case checks.RaidNotifyOnRecovering:
-		return "raid " + transition.Array + " reconstruction started"
+		return raidSubjectPrefix + transition.Array + " reconstruction started"
 	case checks.RaidNotifyOnGood:
-		return "raid " + transition.Array + " is healthy after reconstruction"
+		return raidSubjectPrefix + transition.Array + " is healthy after reconstruction"
 	case checks.RaidNotifyOnArrayChange:
-		target := "raid " + transition.Array
+		target := raidSubjectPrefix + transition.Array
 		if transition.Member != "" {
 			target += " member " + transition.Member
 		}
 		return fmt.Sprintf("%s %s changed: %s -> %s", target, transition.Field, transition.Old, transition.New)
 	default:
-		return "raid " + transition.Array + " changed"
+		return raidSubjectPrefix + transition.Array + " changed"
 	}
 }
 

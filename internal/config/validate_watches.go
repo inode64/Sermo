@@ -21,7 +21,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		checkPath := watchCheckPath(name)
 		entry, ok := watches[name].(map[string]any)
 		if !ok {
-			add("%s must be a mapping", prefix)
+			add(validationMappingFormat, prefix)
 			continue
 		}
 		validateWatchMetadata(name, entry, add)
@@ -35,7 +35,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		// Entry-level fields are validated before the check so a watch with a
 		// missing/invalid check still reports every other problem in one pass.
 		if v, present := entry[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
-			add("%s %q must be a valid positive duration", watchFieldPath(name, keyInterval), cfgval.String(v))
+			add(validationPositiveDurationFormat, watchFieldPath(name, keyInterval), cfgval.String(v))
 		}
 		if v, present := entry[keyDryRun]; present {
 			if _, ok := v.(bool); !ok {
@@ -49,7 +49,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 
 		check, ok := entry[WatchKeyCheck].(map[string]any)
 		if !ok {
-			add("%s is required", checkPath)
+			add(validationRequiredFormat, checkPath)
 			continue
 		}
 		validateCheckSummary(checkPath, check, add)
@@ -74,7 +74,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		case checks.CheckTypeProcess:
 			validateProcessWatch(name, check, entry, defaultNotify, add)
 		case "":
-			add("%s is required", watchCheckFieldPath(name, checks.CheckKeyType))
+			add(validationRequiredFormat, watchCheckFieldPath(name, checks.CheckKeyType))
 		default:
 			// Any single-shot service check (tcp, http, load, oom, cert, …) can be
 			// a host watch: validate its fields with the same per-type validators a
@@ -82,7 +82,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			if validateWatchableCheck(checkPath, typ, check, locksDir, add) {
 				validateHookBlock(prefix, entry, false, false, defaultNotify, add)
 			} else {
-				add("%s %q is not supported", watchCheckFieldPath(name, checks.CheckKeyType), typ)
+				add(validationValueNotSupportedFormat, watchCheckFieldPath(name, checks.CheckKeyType), typ)
 			}
 		}
 	}
@@ -96,7 +96,7 @@ func validateRAIDControl(name, typ string, entry, check map[string]any, add addF
 	}
 	control, ok := value.(map[string]any)
 	if !ok {
-		add("%s must be a mapping", prefix)
+		add(validationMappingFormat, prefix)
 		return
 	}
 	if typ != checks.CheckTypeRAID {
@@ -125,7 +125,7 @@ func validateWatchMountBlock(name, typ string, entry map[string]any, add func(st
 		return
 	}
 	if !ok {
-		add("%s must be a mapping", mountPath)
+		add(validationMappingFormat, mountPath)
 		return
 	}
 	if typ != checks.CheckTypeStorage {
@@ -156,7 +156,7 @@ func validateServiceWatches(tree map[string]any, locksDir string, notifiers map[
 	for _, name := range slices.Sorted(maps.Keys(watches)) {
 		entry, ok := watches[name].(map[string]any)
 		if !ok {
-			add("%s must be a mapping", watchPath(name))
+			add(validationMappingFormat, watchPath(name))
 			continue
 		}
 		validateServiceWatch(name, entry, locksDir, notifiers, defaultNotify, add)
@@ -176,20 +176,20 @@ func validateServiceWatch(name string, entry map[string]any, locksDir string, no
 	checkPath := watchCheckPath(name)
 	check, ok := entry[WatchKeyCheck].(map[string]any)
 	if !ok {
-		add("%s is required", checkPath)
+		add(validationRequiredFormat, checkPath)
 		return
 	}
 	validateCheckSummary(checkPath, check, add)
 	typ := cfgval.String(check[checks.CheckKeyType])
 	if typ == "" {
-		add("%s is required", watchCheckFieldPath(name, checks.CheckKeyType))
+		add(validationRequiredFormat, watchCheckFieldPath(name, checks.CheckKeyType))
 		return
 	}
 	rawThen, hasThen := entry[rules.RuleFieldThen]
 	then, _ := rawThen.(map[string]any)
 	if !hasThen {
 		if !validateSingleShotCheckFields(checkPath, typ, check, locksDir, add) {
-			add("%s %q is not supported", watchCheckFieldPath(name, checks.CheckKeyType), typ)
+			add(validationValueNotSupportedFormat, watchCheckFieldPath(name, checks.CheckKeyType), typ)
 		}
 		return
 	}
@@ -210,7 +210,7 @@ func validateServiceWatchEntry(name string, entry map[string]any, notifiers map[
 		validateMonitorMode(watchFieldPath(name, keyMonitor), mode, add)
 	}
 	if v, present := entry[keyInterval]; present && !isPositiveDuration(cfgval.String(v)) {
-		add("%s %q must be a valid positive duration", watchFieldPath(name, keyInterval), cfgval.String(v))
+		add(validationPositiveDurationFormat, watchFieldPath(name, keyInterval), cfgval.String(v))
 	}
 	if v, present := entry[keyDryRun]; present {
 		if _, ok := v.(bool); !ok {
@@ -237,7 +237,7 @@ func validateServiceWatchType(name, typ, checkPath string, check map[string]any,
 		add("%s \"process\" matches host-wide (and can kill); use process_count or metric for service-scoped process monitoring, or a host watch", checkTypePath)
 		return false
 	case !serviceWatchableType(typ):
-		add("%s %q is not supported", checkTypePath, typ)
+		add(validationValueNotSupportedFormat, checkTypePath, typ)
 		return false
 	}
 	validateSingleShotCheckFields(checkPath, typ, check, locksDir, add)
@@ -274,7 +274,7 @@ func isOperationAction(action string) bool {
 // effects or watch-only notification cadence.
 func validateWatchThenAction(prefix, action string, then map[string]any, add func(string, ...any)) {
 	if !isRuleClassAction(action) {
-		add("%s %q is not one of %s", thenFieldPath(prefix, rules.RuleFieldAction), action, rules.RuleActionSummary)
+		add(validationNotOneOfFormat, thenFieldPath(prefix, rules.RuleFieldAction), action, rules.RuleActionSummary)
 		return
 	}
 	for _, k := range []string{WatchThenKeyHook, WatchThenKeyExpand, WatchThenKeyKill} {
@@ -374,7 +374,7 @@ func watchThenMapping(prefix string, block map[string]any, add func(string, ...a
 	}
 	then, ok := rawThen.(map[string]any)
 	if !ok {
-		add("%s must be a mapping", prefix+"."+rules.RuleFieldThen)
+		add(validationMappingFormat, prefix+"."+rules.RuleFieldThen)
 	}
 	return then, ok
 }
@@ -383,7 +383,7 @@ func validateWatchThenKeys(prefix string, then map[string]any, add func(string, 
 	allowed := set(WatchThenKeyHook, rules.RuleFieldNotify, WatchThenKeyNotifyInterval, WatchThenKeyNotifyOn, WatchThenKeyExpand, WatchThenKeyKill)
 	for _, key := range slices.Sorted(maps.Keys(then)) {
 		if _, ok := allowed[key]; !ok {
-			add("%s is not supported", thenFieldPath(prefix, key))
+			add(validationNotSupportedFormat, thenFieldPath(prefix, key))
 		}
 	}
 }
@@ -397,7 +397,7 @@ func validateWatchNotifyInterval(prefix string, then map[string]any, hasNotifyOn
 	// and cannot be combined with event-specific notification routing.
 	switch {
 	case !isPositiveDuration(cfgval.String(v)):
-		add("%s %q must be a valid positive duration", thenFieldPath(prefix, WatchThenKeyNotifyInterval), cfgval.String(v))
+		add(validationPositiveDurationFormat, thenFieldPath(prefix, WatchThenKeyNotifyInterval), cfgval.String(v))
 	case hasNotifyOn:
 		add("%s is not supported with %s", thenFieldPath(prefix, WatchThenKeyNotifyInterval), thenFieldPath(prefix, WatchThenKeyNotifyOn))
 	case !HasEffectiveNotifyAction(notify, defaultNotify):
@@ -426,7 +426,7 @@ func validateWatchKillAction(prefix string, then map[string]any, allowKill bool,
 	kill, hasKill := rawKill.(map[string]any)
 	switch {
 	case present && !hasKill:
-		add("%s must be a mapping", thenKillPath(prefix))
+		add(validationMappingFormat, thenKillPath(prefix))
 	case hasKill && !allowKill:
 		add("%s is only valid on a process watch", thenKillPath(prefix))
 	case hasKill:
@@ -443,7 +443,7 @@ func validateWatchHookAction(prefix string, hook map[string]any, hasHook bool, a
 		add("%s must be a non-empty array", thenHookPath(prefix)+"."+WatchHookKeyCommand)
 	}
 	if v, present := hook[WatchHookKeyTimeout]; present && !isPositiveDuration(cfgval.String(v)) {
-		add("%s %q must be a valid positive duration", thenHookPath(prefix)+"."+WatchHookKeyTimeout, cfgval.String(v))
+		add(validationPositiveDurationFormat, thenHookPath(prefix)+"."+WatchHookKeyTimeout, cfgval.String(v))
 	}
 	validateCommandExpectations(thenHookPath(prefix), hook, add)
 }
@@ -476,7 +476,7 @@ func validateRaidNotifyOn(name, typ string, entry map[string]any, notifiers map[
 	}
 	for _, event := range events {
 		if _, ok := allowed[event]; !ok {
-			add("%s %q is not supported", prefix, event)
+			add(validationValueNotSupportedFormat, prefix, event)
 		}
 	}
 	if notify, present := then[rules.RuleFieldNotify]; present {
@@ -504,7 +504,7 @@ func validateKillAction(prefix string, kill map[string]any, add func(string, ...
 	}
 	for _, f := range []string{WatchKillKeyTermTimeout, WatchKillKeyKillTimeout} {
 		if v, present := kill[f]; present && !isPositiveDuration(cfgval.String(v)) {
-			add("%s %q must be a valid positive duration", thenKillPath(prefix)+"."+f, cfgval.String(v))
+			add(validationPositiveDurationFormat, thenKillPath(prefix)+"."+f, cfgval.String(v))
 		}
 	}
 }
@@ -525,7 +525,7 @@ func validateWatchPolicy(prefix string, entry map[string]any, add addFunc) {
 	}
 	padd := func(format string, args ...any) { add(prefix+"."+format, args...) }
 	if v, has := policy[rules.PolicyKeyCooldown]; has && !isPositiveDuration(cfgval.String(v)) {
-		add("%s %q must be a valid positive duration", prefix+"."+policyPathCooldown, cfgval.String(v))
+		add(validationPositiveDurationFormat, prefix+"."+policyPathCooldown, cfgval.String(v))
 	}
 	validatePolicyExtras(entry, padd)
 }
@@ -629,7 +629,7 @@ func validateNetMetricCondition(prefix, metric string, m map[string]any, add add
 		if !ok {
 			add("%s.delta {op, value} is required", prefix)
 		} else {
-			validateOpNumeric(prefix+".delta", delta, add)
+			validateOpNumeric(prefix+"."+checks.CheckKeyDelta, delta, add)
 		}
 		if c, present := m[checks.CheckKeyCounters]; present {
 			if !cfgval.IsNonEmptyStringArray(c) {
@@ -681,7 +681,7 @@ func validateSwapMetricCondition(prefix, metric string, m map[string]any, add ad
 		if !ok {
 			add("%s.delta {op, value} is required", prefix)
 		} else {
-			validateOpNumeric(prefix+".delta", delta, add)
+			validateOpNumeric(prefix+"."+checks.CheckKeyDelta, delta, add)
 		}
 	default:
 		add("%s is not a supported swap metric (%s)", prefix, checks.SwapMetricSummary)
@@ -813,7 +813,7 @@ func validateProcessWatch(name string, check, entry map[string]any, defaultNotif
 	if v, present := check[checks.CheckKeyFor]; present {
 		conds++
 		if !isPositiveDuration(cfgval.String(v)) {
-			add("%s %q must be a valid positive duration", watchCheckFieldPath(name, checks.CheckKeyFor), cfgval.String(v))
+			add(validationPositiveDurationFormat, watchCheckFieldPath(name, checks.CheckKeyFor), cfgval.String(v))
 		}
 	}
 	for _, attr := range []string{metrics.MetricCPU, metrics.MetricMemory, metrics.MetricIO} {

@@ -245,7 +245,7 @@ func expandPidfiles(tree map[string]any) []string {
 		}
 		for _, path := range paths {
 			if !filepath.IsAbs(path) {
-				errs = append(errs, fmt.Sprintf("%s path %q must be absolute", pidfilesRolePath(role), path))
+				errs = append(errs, fmt.Sprintf(validationPathAbsoluteFormat, pidfilesRolePath(role), path))
 			}
 		}
 		pathValue := serviceArtifactPathValue(paths)
@@ -302,7 +302,7 @@ func parseServiceArtifactPaths(kind string, raw any) (serviceArtifactPaths, []st
 	var errs []string
 	for _, path := range paths {
 		if !filepath.IsAbs(path) {
-			errs = append(errs, fmt.Sprintf("%s path %q must be absolute", kind, path))
+			errs = append(errs, fmt.Sprintf(validationPathAbsoluteFormat, kind, path))
 		}
 	}
 	return serviceArtifactPaths{paths: paths, optional: optional}, errs
@@ -546,7 +546,7 @@ func expandServiceWatches(tree map[string]any) []string {
 		if !hasThen {
 			check, ok := entry[WatchKeyCheck].(map[string]any)
 			if !ok {
-				add("%s is required", watchCheckPath(name))
+				add(validationRequiredFormat, watchCheckPath(name))
 				continue
 			}
 			if _, ok := promoteServiceWatchCheck(checksMap, name, entry, check, add); !ok {
@@ -563,7 +563,7 @@ func expandServiceWatches(tree map[string]any) []string {
 		validateWatchThenAction(watchPath(name), action, then, add)
 		check, ok := entry[WatchKeyCheck].(map[string]any)
 		if !ok {
-			add("%s is required", watchCheckPath(name))
+			add(validationRequiredFormat, watchCheckPath(name))
 			continue
 		}
 		if _, exists := rulesMap[name]; exists {
@@ -608,7 +608,7 @@ func promoteServiceWatchCheck(checksMap map[string]any, name string, entry, chec
 	}
 	checkType := cfgval.String(check[checks.CheckKeyType])
 	if checkType == "" {
-		add("%s is required", watchCheckFieldPath(name, checks.CheckKeyType))
+		add(validationRequiredFormat, watchCheckFieldPath(name, checks.CheckKeyType))
 		return serviceWatchRuleTarget{}, false
 	}
 	genCheck := cloneMap(check)

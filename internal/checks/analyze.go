@@ -115,7 +115,7 @@ func parseAnalyzer(v any) (*outputAnalyzer, string) {
 	}
 	m, ok := v.(map[string]any)
 	if !ok {
-		return nil, CheckKeyAnalyze + " must be a mapping"
+		return nil, CheckKeyAnalyze + mustBeMappingSuffix
 	}
 	raw, ok := m[CheckKeyRules].([]any)
 	if !ok || len(raw) == 0 {
@@ -126,7 +126,7 @@ func parseAnalyzer(v any) (*outputAnalyzer, string) {
 	for i, item := range raw {
 		rm, ok := item.(map[string]any)
 		if !ok {
-			return nil, analyzeRuleIndex(i) + " must be a mapping"
+			return nil, analyzeRuleIndex(i) + mustBeMappingSuffix
 		}
 		id := cfgval.AsString(rm[CheckKeyID])
 		if id == "" {
