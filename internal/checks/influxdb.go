@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -59,17 +58,9 @@ func (c influxCheck) Run(ctx context.Context) Result {
 		return c.result(false, "influxdb: query returned no value", start)
 	}
 
-	ok, err := compareValue(result, c.op, c.value)
-	if err != nil {
-		return c.result(false, "influxdb: "+err.Error(), start)
-	}
-	res := c.result(ok, fmt.Sprintf("influxdb: %q %s %q = %t", result, c.op, c.value, ok), start)
 	data := map[string]any{
-		DataKeyLanguage:  c.language,
-		DataKeyQuery:     c.query,
-		DataKeyOp:        c.op,
-		DataKeyThreshold: c.value,
-		DataKeyResult:    result,
+		DataKeyLanguage: c.language,
+		DataKeyQuery:    c.query,
 	}
 	if c.database != "" {
 		data[DataKeyDatabase] = c.database
@@ -77,11 +68,7 @@ func (c influxCheck) Run(ctx context.Context) Result {
 	if c.org != "" {
 		data[DataKeyOrg] = c.org
 	}
-	if f, perr := strconv.ParseFloat(strings.TrimSpace(result), numericBits64); perr == nil {
-		data[DataKeyValue] = f
-	}
-	res.Data = data
-	return res
+	return finishScalarCompare(c.base, "influxdb", result, c.op, c.value, start, data)
 }
 
 // queryScalar runs the query and returns the chosen scalar. The second return

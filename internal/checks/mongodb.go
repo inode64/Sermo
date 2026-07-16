@@ -61,22 +61,9 @@ func (c mongoCheck) Run(ctx context.Context) Result {
 		return c.result(false, "mongodb: "+err.Error(), start)
 	}
 
-	ok, err := compareValue(result, c.op, c.value)
-	if err != nil {
-		return c.result(false, "mongodb: "+err.Error(), start)
-	}
-	res := c.result(ok, fmt.Sprintf("mongodb: %q %s %q = %t", result, c.op, c.value, ok), start)
-	data := map[string]any{
-		DataKeyOp:        c.op,
-		DataKeyThreshold: c.value,
-		DataKeyResult:    result,
-		DataKeyMode:      c.mode,
-	}
-	if f, perr := strconv.ParseFloat(strings.TrimSpace(result), numericBits64); perr == nil {
-		data[DataKeyValue] = f
-	}
-	res.Data = data
-	return res
+	return finishScalarCompare(c.base, "mongodb", result, c.op, c.value, start, map[string]any{
+		DataKeyMode: c.mode,
+	})
 }
 
 // scalar runs the configured query and returns the scalar to compare.
