@@ -299,34 +299,12 @@ func TestBuildIMAPCheckAnonymousAndLogin(t *testing.T) {
 
 func TestBuildPOPCheck(t *testing.T) {
 	// Anonymous (no user), default port 110; alias pop3 resolves.
-	for _, typ := range []string{"pop", "pop3"} {
-		built, warns := Build(map[string]any{
-			"mail": map[string]any{"type": typ, "host": "mail.example"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s anonymous should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "pop" || cc.cfg.Port != 110 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "mail", []string{"pop", "pop3"}, "pop", 110)
 }
 
 func TestBuildNNTPCheck(t *testing.T) {
 	// Anonymous (no user), default port 119; alias nntps resolves.
-	for _, typ := range []string{"nntp", "nntps"} {
-		built, warns := Build(map[string]any{
-			"news": map[string]any{"type": typ, "host": "news.example"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s anonymous should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "nntp" || cc.cfg.Port != 119 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "news", []string{"nntp", "nntps"}, "nntp", 119)
 
 	// NNTPS with credentials on 563.
 	built, warns := Build(map[string]any{
@@ -516,33 +494,11 @@ func TestBuildAJPCheck(t *testing.T) {
 }
 
 func TestBuildIPPCheck(t *testing.T) {
-	for _, typ := range []string{"ipp", "cups"} {
-		built, warns := Build(map[string]any{
-			"printer": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "ipp" || cc.cfg.Port != 631 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "printer", []string{"ipp", "cups"}, "ipp", 631)
 }
 
 func TestBuildRsyncCheck(t *testing.T) {
-	for _, typ := range []string{"rsync", "rsyncd"} {
-		built, warns := Build(map[string]any{
-			"backup": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "rsync" || cc.cfg.Port != 873 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "backup", []string{"rsync", "rsyncd"}, "rsync", 873)
 }
 
 func TestBuildSyncthingCheck(t *testing.T) {
@@ -568,33 +524,11 @@ func TestBuildSyncthingCheck(t *testing.T) {
 }
 
 func TestBuildPrometheusCheck(t *testing.T) {
-	for _, typ := range []string{"prometheus", "prom"} {
-		built, warns := Build(map[string]any{
-			"mon": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "prometheus" || cc.cfg.Port != 9090 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "mon", []string{"prometheus", "prom"}, "prometheus", 9090)
 }
 
 func TestBuildCloudflaredCheck(t *testing.T) {
-	for _, typ := range []string{"cloudflared", "cloudflare-tunnel"} {
-		built, warns := Build(map[string]any{
-			"tunnel": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "cloudflared" || cc.cfg.Port != 60123 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "tunnel", []string{"cloudflared", "cloudflare-tunnel"}, "cloudflared", 60123)
 }
 
 func TestBuildInfluxdbCheck(t *testing.T) {
@@ -606,18 +540,7 @@ func TestBuildInfluxdbCheck(t *testing.T) {
 }
 
 func TestBuildUnifiCheck(t *testing.T) {
-	for _, typ := range []string{"unifi", "unifi-controller", "unifi-network"} {
-		built, warns := Build(map[string]any{
-			"unifi": map[string]any{"type": typ, "host": "10.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "unifi" || cc.cfg.Port != 8443 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "unifi", []string{"unifi", "unifi-controller", "unifi-network"}, "unifi", 8443)
 	// tls: true (require a valid certificate) is carried through.
 	built, _ := Build(map[string]any{
 		"unifi": map[string]any{"type": "unifi", "host": "10.0.0.1", "tls": true},
@@ -807,18 +730,7 @@ func TestBuildDHClientCheck(t *testing.T) {
 
 func TestBuildSMBCheck(t *testing.T) {
 	// Anonymous (no user): builds, default port 445.
-	for _, typ := range []string{"smb", "samba", "cifs"} {
-		built, warns := Build(map[string]any{
-			"share": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "smb" || cc.cfg.Port != 445 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "share", []string{"smb", "samba", "cifs"}, "smb", 445)
 	// With credentials + a share to verify.
 	built, _ := Build(map[string]any{
 		"share": map[string]any{"type": "smb", "host": "fs", "user": `WG\joe`, "password": "p", "query": "data"},
@@ -829,18 +741,7 @@ func TestBuildSMBCheck(t *testing.T) {
 }
 
 func TestBuildSpamdCheck(t *testing.T) {
-	for _, typ := range []string{"spamd", "spamassassin"} {
-		built, warns := Build(map[string]any{
-			"sa": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "spamd" || cc.cfg.Port != 783 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "sa", []string{"spamd", "spamassassin"}, "spamd", 783)
 	// Unix socket form.
 	built, _ := Build(map[string]any{
 		"sa": map[string]any{"type": "spamd", "socket": "/run/spamd.sock"},
@@ -851,18 +752,7 @@ func TestBuildSpamdCheck(t *testing.T) {
 }
 
 func TestBuildClamdCheck(t *testing.T) {
-	for _, typ := range []string{"clamd", "clamav"} {
-		built, warns := Build(map[string]any{
-			"av": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "clamd" || cc.cfg.Port != 3310 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "av", []string{"clamd", "clamav"}, "clamd", 3310)
 
 	// Unix socket form, and the inherited on_version_change toggle.
 	built, _ := Build(map[string]any{
@@ -875,63 +765,19 @@ func TestBuildClamdCheck(t *testing.T) {
 }
 
 func TestBuildGlusterFSCheck(t *testing.T) {
-	for _, typ := range []string{"glusterfs", "glusterd", "gluster"} {
-		built, warns := Build(map[string]any{
-			"gfs": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "glusterfs" || cc.cfg.Port != 24007 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "gfs", []string{"glusterfs", "glusterd", "gluster"}, "glusterfs", 24007)
 }
 
 func TestBuildCephCheck(t *testing.T) {
-	for _, typ := range []string{"ceph", "ceph-mon"} {
-		built, warns := Build(map[string]any{
-			"mon": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "ceph" || cc.cfg.Port != 3300 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "mon", []string{"ceph", "ceph-mon"}, "ceph", 3300)
 }
 
 func TestBuildVarnishCheck(t *testing.T) {
-	for _, typ := range []string{"varnish", "varnishadm"} {
-		built, warns := Build(map[string]any{
-			"cache": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "varnish" || cc.cfg.Port != 6082 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "cache", []string{"varnish", "varnishadm"}, "varnish", 6082)
 }
 
 func TestBuildOpenvswitchCheck(t *testing.T) {
-	for _, typ := range []string{"openvswitch", "ovs", "ovsdb", "ovsdb-server"} {
-		built, warns := Build(map[string]any{
-			"sw": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "openvswitch" || cc.cfg.Port != 6640 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "sw", []string{"openvswitch", "ovs", "ovsdb", "ovsdb-server"}, "openvswitch", 6640)
 	// Unix socket form.
 	built, _ := Build(map[string]any{
 		"sw": map[string]any{"type": "ovs", "socket": "/run/openvswitch/db.sock"},
@@ -946,33 +792,11 @@ func TestBuildMQTTCheck(t *testing.T) {
 }
 
 func TestBuildSieveCheck(t *testing.T) {
-	for _, typ := range []string{"sieve", "managesieve"} {
-		built, warns := Build(map[string]any{
-			"filter": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "sieve" || cc.cfg.Port != 4190 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "filter", []string{"sieve", "managesieve"}, "sieve", 4190)
 }
 
 func TestBuildAsteriskCheck(t *testing.T) {
-	for _, typ := range []string{"asterisk", "ami"} {
-		built, warns := Build(map[string]any{
-			"pbx": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "asterisk" || cc.cfg.Port != 5038 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "pbx", []string{"asterisk", "ami"}, "asterisk", 5038)
 }
 
 func TestBuildGuacdCheck(t *testing.T) {
@@ -985,48 +809,15 @@ func TestBuildGuacdCheck(t *testing.T) {
 }
 
 func TestBuildRDPCheck(t *testing.T) {
-	for _, typ := range []string{"rdp", "ms-wbt-server"} {
-		built, warns := Build(map[string]any{
-			"desktop": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "rdp" || cc.cfg.Port != 3389 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "desktop", []string{"rdp", "ms-wbt-server"}, "rdp", 3389)
 }
 
 func TestBuildNFSCheck(t *testing.T) {
-	for _, typ := range []string{"nfs", "nfs-server", "nfsd"} {
-		built, warns := Build(map[string]any{
-			"share": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "nfs" || cc.cfg.Port != 2049 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "share", []string{"nfs", "nfs-server", "nfsd"}, "nfs", 2049)
 }
 
 func TestBuildMountdCheck(t *testing.T) {
-	for _, typ := range []string{"mountd", "rpc.mountd", "nfs-mountd"} {
-		built, warns := Build(map[string]any{
-			"mnt": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "mountd" || cc.cfg.Port != 20048 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "mnt", []string{"mountd", "rpc.mountd", "nfs-mountd"}, "mountd", 20048)
 	// An explicit port (mountd often runs on a configured/random port) is kept.
 	built, _ := Build(map[string]any{
 		"mnt": map[string]any{"type": "mountd", "host": "127.0.0.1", "port": 32767},
@@ -1037,18 +828,7 @@ func TestBuildMountdCheck(t *testing.T) {
 }
 
 func TestBuildStatdCheck(t *testing.T) {
-	for _, typ := range []string{"statd", "rpc.statd", "nsm", "nfs-statd"} {
-		built, warns := Build(map[string]any{
-			"sm": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "statd" || cc.cfg.Port != 662 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "sm", []string{"statd", "rpc.statd", "nsm", "nfs-statd"}, "statd", 662)
 	// An explicit port (statd often runs on a configured/random port) is kept.
 	built, _ := Build(map[string]any{
 		"sm": map[string]any{"type": "statd", "host": "127.0.0.1", "port": 32765},
@@ -1090,33 +870,11 @@ func TestBuildOpenVPNCheck(t *testing.T) {
 }
 
 func TestBuildNebulaCheck(t *testing.T) {
-	for _, typ := range []string{"nebula", "nebula-vpn"} {
-		built, warns := Build(map[string]any{
-			"mesh": map[string]any{"type": typ, "host": "10.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "nebula" || cc.cfg.Port != 4242 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "mesh", []string{"nebula", "nebula-vpn"}, "nebula", 4242)
 }
 
 func TestBuildRpcbindCheck(t *testing.T) {
-	for _, typ := range []string{"rpcbind", "portmap", "portmapper"} {
-		built, warns := Build(map[string]any{
-			"rpc": map[string]any{"type": typ, "host": "127.0.0.1"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s check should build: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "rpcbind" || cc.cfg.Port != 111 {
-			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
-		}
-	}
+	assertProtocolAliases(t, "rpc", []string{"rpcbind", "portmap", "portmapper"}, "rpcbind", 111)
 }
 
 func TestBuildUnixSocketChecks(t *testing.T) {
