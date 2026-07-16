@@ -4428,67 +4428,7 @@ function toggleGroup(panel, group) {
 // version string, binary location, permissions, user and group (all already in
 // hand, so no extra request is needed).
 function renderApps(apps) {
-  if (apps) allApps = apps;
-  scheduleGlobalTargetSync();
-  const section = $("#apps-section");
-  const tbody = $("#app-rows");
-  const cnt = $("#apps-count");
-  const filterCount = $("#app-count");
-  if (!section || !tbody) return;
-  const total = (allApps || []).length;
-  if (total === 0) {
-    setPanelVisible(section, false);
-    if (cnt) cnt.textContent = "";
-    if (filterCount) filterCount.textContent = "";
-    updateSectionNav();
-    return;
-  }
-  setPanelVisible(section, true);
-  if (cnt) cnt.textContent = `(${total})`;
-  appCategory = syncCategorySelect("#app-category", allApps || [], "app", appCategory);
-  renderAppFilterCounts();
-  const list = (allApps || []).filter(appMatches);
-  if (appSort.key && appSortKeys[appSort.key]) {
-    sortedBy(list, appSort, appSortKeys, "name");
-  }
-  updateAppSortIndicators();
-  const visibleCategories = sortedCategories(list, "app");
-  appCollapsedGroups.forEach((category) => { if (!visibleCategories.includes(category)) appCollapsedGroups.delete(category); });
-  if (visibleCategories.length < 2) appGrouped = false;
-  updateGroupButtons("app", appGrouped, visibleCategories, appCollapsedGroups, "applications");
-  if (filterCount) filterCount.textContent = (appQuery || appCategory !== filterAll || appStatus !== filterAll) ? `showing ${list.length} of ${total}` : "";
-  const appRow = (a) => {
-    const category = categoryOf(a, "app");
-    const state = appStateText(a);
-    const rowClass = state === targetStateFailed ? "row-failing" : (state === targetStateWarning ? "row-warning" : "");
-    const label = displayName(a);
-    const key = appExpansionKey(a.name);
-    const open = expanded.has(key);
-    const chev = tpl`<span class="exp" aria-hidden="true">${open ? '▾' : '▸'}</span>`;
-    const ver = a.version_short || a.version || "—";
-    const row = tpl`<tr id="app-row-${a.name}" class="clickable ${rowClass}" data-exp-key="${key}">
-      <td>${chev}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(label, open, "application details")}">${label}</button></td>
-      <td>${categoryBadge(category)}</td>
-      ${appStatusCell(a)}
-      <td>${ver}</td>
-      <td>${lastEventCell(a)}</td>
-    </tr>`;
-    const expRow = open
-      ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="5">${renderAppExpansion(a)}</td></tr>`
-      : null;
-    return expRow ? [row, expRow] : [row];
-  };
-  const content = list.length
-    ? (appGrouped
-      ? renderGroupedRows(list, appCollapsedGroups, "app", "app", (app) => categoryOf(app, "app"), 5, appRow, appSort.key === "category" ? appSort.dir : 1)
-      : list.flatMap(appRow))
-    : tpl`<tr><td colspan="5" class="muted">No applications match the filter.</td></tr>`;
-  litRender(content, tbody);
-  // Fill the recent-events table of each expanded app (async), mirroring how
-  // expanded services load their events.
-  (allApps || []).forEach((a) => { if (expanded.has(appExpansionKey(a.name))) loadAppEvents(a.name); });
-  applyHash();
-  updateSectionNav();
+  renderArtifactPanel(appArtifactPanel, apps);
 }
 
 // renderAppExpansion shows one application's full version, binary location and
@@ -4598,66 +4538,7 @@ function toggleAllLibraryGroups() {
 }
 
 function renderLibraries(libraries) {
-  if (libraries) allLibraries = libraries;
-  scheduleGlobalTargetSync();
-  const section = $("#libraries-section");
-  const tbody = $("#library-rows");
-  const cnt = $("#libraries-count");
-  const filterCount = $("#library-count");
-  if (!section || !tbody) return;
-  const total = (allLibraries || []).length;
-  if (total === 0) {
-    setPanelVisible(section, false);
-    if (cnt) cnt.textContent = "";
-    if (filterCount) filterCount.textContent = "";
-    updateSectionNav();
-    return;
-  }
-  setPanelVisible(section, true);
-  if (cnt) cnt.textContent = `(${total})`;
-  libraryCategory = syncCategorySelect("#library-category", allLibraries || [], "library", libraryCategory);
-  renderLibraryFilterCounts();
-  const list = (allLibraries || []).filter(libraryMatches);
-  if (librarySort.key && librarySortKeys[librarySort.key]) sortedBy(list, librarySort, librarySortKeys, "name");
-  updateLibrarySortIndicators();
-  const visibleCategories = sortedCategories(list, "library");
-  libraryCollapsedGroups.forEach((category) => {
-    if (!visibleCategories.includes(category)) libraryCollapsedGroups.delete(category);
-  });
-  if (visibleCategories.length < 2) libraryGrouped = false;
-  updateGroupButtons("library", libraryGrouped, visibleCategories, libraryCollapsedGroups, "libraries");
-  if (filterCount) {
-    filterCount.textContent = (libraryQuery || libraryCategory !== filterAll || libraryStatus !== filterAll)
-      ? `showing ${list.length} of ${total}` : "";
-  }
-  const libraryRow = (library) => {
-    const category = categoryOf(library, "library");
-    const state = appStateText(library);
-    const rowClass = state === targetStateFailed ? "row-failing" : (state === targetStateWarning ? "row-warning" : "");
-    const label = displayName(library);
-    const key = libraryExpansionKey(library.name);
-    const open = expanded.has(key);
-    const chev = tpl`<span class="exp" aria-hidden="true">${open ? "▾" : "▸"}</span>`;
-    const version = library.version_short || library.version || "—";
-    const row = tpl`<tr id="library-row-${library.name}" class="clickable ${rowClass}" data-exp-key="${key}">
-      <td>${chev}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(label, open, "library details")}">${label}</button></td>
-      <td>${categoryBadge(category)}</td>
-      ${appStatusCell(library)}
-      <td>${version}</td>
-    </tr>`;
-    const expRow = open
-      ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="4">${renderLibraryExpansion(library)}</td></tr>`
-      : null;
-    return expRow ? [row, expRow] : [row];
-  };
-  const content = list.length
-    ? (libraryGrouped
-      ? renderGroupedRows(list, libraryCollapsedGroups, "library", "library", (library) => categoryOf(library, "library"), 4, libraryRow, librarySort.key === "category" ? librarySort.dir : 1)
-      : list.flatMap(libraryRow))
-    : tpl`<tr><td colspan="4" class="muted">No libraries match the filter.</td></tr>`;
-  litRender(content, tbody);
-  applyHash();
-  updateSectionNav();
+  renderArtifactPanel(libraryArtifactPanel, libraries);
 }
 
 function renderLibraryExpansion(library) {
@@ -4681,6 +4562,133 @@ function renderLibraryExpansion(library) {
     <div><span class="muted">Group</span><br>${grp}</div>
     <div><span class="muted">Status</span><br>${status}</div>
   </div>`;
+}
+
+const appArtifactPanel = {
+  surface: "app",
+  section: "#apps-section",
+  rows: "#app-rows",
+  count: "#apps-count",
+  filterCount: "#app-count",
+  categorySelect: "#app-category",
+  groupLabel: "applications",
+  cols: 5,
+  empty: "No applications match the filter.",
+  detailLabel: "application details",
+  rowPrefix: "app-row-",
+  items: () => allApps || [],
+  setItems: (items) => { allApps = items; },
+  category: () => appCategory,
+  setCategory: (category) => { appCategory = category; },
+  renderFilterCounts: renderAppFilterCounts,
+  matches: appMatches,
+  sort: () => appSort,
+  sortKeys: appSortKeys,
+  updateSortIndicators: updateAppSortIndicators,
+  grouped: () => appGrouped,
+  setGrouped: (grouped) => { appGrouped = grouped; },
+  collapsedGroups: () => appCollapsedGroups,
+  filterActive: () => appQuery || appCategory !== filterAll || appStatus !== filterAll,
+  expansionKey: appExpansionKey,
+  renderExpansion: renderAppExpansion,
+  extraCell: lastEventCell,
+  loadExpanded: (items) => {
+    items.forEach((app) => { if (expanded.has(appExpansionKey(app.name))) loadAppEvents(app.name); });
+  },
+};
+
+const libraryArtifactPanel = {
+  surface: "library",
+  section: "#libraries-section",
+  rows: "#library-rows",
+  count: "#libraries-count",
+  filterCount: "#library-count",
+  categorySelect: "#library-category",
+  groupLabel: "libraries",
+  cols: 4,
+  empty: "No libraries match the filter.",
+  detailLabel: "library details",
+  rowPrefix: "library-row-",
+  items: () => allLibraries || [],
+  setItems: (items) => { allLibraries = items; },
+  category: () => libraryCategory,
+  setCategory: (category) => { libraryCategory = category; },
+  renderFilterCounts: renderLibraryFilterCounts,
+  matches: libraryMatches,
+  sort: () => librarySort,
+  sortKeys: librarySortKeys,
+  updateSortIndicators: updateLibrarySortIndicators,
+  grouped: () => libraryGrouped,
+  setGrouped: (grouped) => { libraryGrouped = grouped; },
+  collapsedGroups: () => libraryCollapsedGroups,
+  filterActive: () => libraryQuery || libraryCategory !== filterAll || libraryStatus !== filterAll,
+  expansionKey: libraryExpansionKey,
+  renderExpansion: renderLibraryExpansion,
+};
+
+function renderArtifactPanel(panel, items) {
+  if (items) panel.setItems(items);
+  scheduleGlobalTargetSync();
+  const section = $(panel.section);
+  const tbody = $(panel.rows);
+  const count = $(panel.count);
+  const filterCount = $(panel.filterCount);
+  if (!section || !tbody) return;
+  const inventory = panel.items();
+  const total = inventory.length;
+  if (total === 0) {
+    setPanelVisible(section, false);
+    if (count) count.textContent = "";
+    if (filterCount) filterCount.textContent = "";
+    updateSectionNav();
+    return;
+  }
+  setPanelVisible(section, true);
+  if (count) count.textContent = `(${total})`;
+  panel.setCategory(syncCategorySelect(panel.categorySelect, inventory, panel.surface, panel.category()));
+  panel.renderFilterCounts();
+  const list = inventory.filter(panel.matches);
+  const sort = panel.sort();
+  if (sort.key && panel.sortKeys[sort.key]) sortedBy(list, sort, panel.sortKeys, "name");
+  panel.updateSortIndicators();
+  const visibleCategories = sortedCategories(list, panel.surface);
+  const collapsedGroups = panel.collapsedGroups();
+  collapsedGroups.forEach((category) => { if (!visibleCategories.includes(category)) collapsedGroups.delete(category); });
+  if (visibleCategories.length < 2) panel.setGrouped(false);
+  updateGroupButtons(panel.surface, panel.grouped(), visibleCategories, collapsedGroups, panel.groupLabel);
+  if (filterCount) filterCount.textContent = panel.filterActive() ? `showing ${list.length} of ${total}` : "";
+  const row = (item) => renderArtifactRow(item, panel);
+  const content = list.length
+    ? (panel.grouped()
+      ? renderGroupedRows(list, collapsedGroups, panel.surface, panel.surface, (item) => categoryOf(item, panel.surface), panel.cols, row, sort.key === "category" ? sort.dir : 1)
+      : list.flatMap(row))
+    : tpl`<tr><td colspan="${panel.cols}" class="muted">${panel.empty}</td></tr>`;
+  litRender(content, tbody);
+  if (panel.loadExpanded) panel.loadExpanded(inventory);
+  applyHash();
+  updateSectionNav();
+}
+
+function renderArtifactRow(item, panel) {
+  const category = categoryOf(item, panel.surface);
+  const state = appStateText(item);
+  const rowClass = state === targetStateFailed ? "row-failing" : (state === targetStateWarning ? "row-warning" : "");
+  const label = displayName(item);
+  const key = panel.expansionKey(item.name);
+  const open = expanded.has(key);
+  const chevron = tpl`<span class="exp" aria-hidden="true">${open ? "▾" : "▸"}</span>`;
+  const version = item.version_short || item.version || "—";
+  const row = tpl`<tr id="${panel.rowPrefix}${item.name}" class="clickable ${rowClass}" data-exp-key="${key}">
+    <td>${chevron}<button type="button" class="row-toggle" data-exp-toggle="${key}" aria-expanded="${open}" aria-controls="${open ? "exp-" + key : nothing}" aria-label="${expandToggleAriaLabel(label, open, panel.detailLabel)}">${label}</button></td>
+    <td>${categoryBadge(category)}</td>
+    ${appStatusCell(item)}
+    <td>${version}</td>
+    ${panel.extraCell ? panel.extraCell(item) : nothing}
+  </tr>`;
+  const expansion = open
+    ? tpl`<tr class="exp-row" id="exp-${key}" data-exp="${key}"><td colspan="${panel.cols}">${panel.renderExpansion(item)}</td></tr>`
+    : null;
+  return expansion ? [row, expansion] : [row];
 }
 
 // renderWatchExpansion shows a host watch's config summary and its recent
