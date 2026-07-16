@@ -1156,7 +1156,7 @@ type Server struct {
 // Backend interface stays granular for simple integrations, while sermod's
 // reloadable holder implements this to keep one response on one generation.
 type dashboardSnapshotSource interface {
-	DashboardSnapshot(context.Context, time.Duration) DashboardSnapshot
+	DashboardSnapshot(ctx context.Context, since time.Duration) DashboardSnapshot
 }
 
 // Handler returns the router behind the auth middleware: the dashboard at /, the
