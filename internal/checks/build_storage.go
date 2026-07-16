@@ -9,9 +9,9 @@ import (
 
 // buildCountCheck builds a check on the number of entries under a path.
 func buildCountCheck(b base, entry map[string]any) (Check, string) {
-	path := cfgval.AsString(entry[CheckKeyPath])
-	if path == "" {
-		return nil, "count check requires a path"
+	path, errs := requireCheckPath(entry, CheckTypeCount)
+	if errs != "" {
+		return nil, errs
 	}
 	kind := cfgval.AsString(entry[CheckKeyOf])
 	if kind == "" {
@@ -72,9 +72,9 @@ func buildCountCheck(b base, entry map[string]any) (Check, string) {
 
 // buildStorageCheck builds a storage space/inode and/or mount check.
 func buildStorageCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	path := cfgval.AsString(entry[CheckKeyPath])
-	if path == "" {
-		return nil, "storage check requires a path"
+	path, errs := requireCheckPath(entry, CheckTypeStorage)
+	if errs != "" {
+		return nil, errs
 	}
 	preds, err := parseLevelPreds(entry, StoragePredFields)
 	if err != nil {
@@ -110,9 +110,9 @@ func buildAutofsCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 
 // buildSizeCheck builds a path-growth check over a time window.
 func buildSizeCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	path := cfgval.AsString(entry[CheckKeyPath])
-	if path == "" {
-		return nil, "size check requires a path"
+	path, errs := requireCheckPath(entry, CheckTypeSize)
+	if errs != "" {
+		return nil, errs
 	}
 	// parseSize already rejects zero, negative and unitless values, so a nil
 	// error guarantees growBy > 0 — no redundant positivity guard needed.
