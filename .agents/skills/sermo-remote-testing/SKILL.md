@@ -96,12 +96,12 @@ Use the current checkout as the source of truth. If remote findings require code
 - Do not invent, scan, or prompt for additional hosts while `.env.ssh` exists; if it is missing or has no usable hosts, stop and report that there are no remote targets to test.
 - When the user asks for the first `N` servers/hosts, use exactly the first `N`
   usable non-comment entries from `.env.ssh`.
-- When the user asks to test **all servers**, **all hosts**, **the whole `.env.ssh` list**, or similar full-fleet scope, run in two stages:
-  1. Test only the first four usable `.env.ssh` entries, end-to-end for the requested scope.
+- When a full-fleet scope includes a **mutating** Sermo action—temporary artifact execution, installation, update, config apply, daemon activation or service-manager change—run in two stages:
+  1. Run the requested mutating workflow end-to-end on only the first four usable `.env.ssh` entries.
   2. Review the first-four results before continuing. Continue with the remaining entries when every first-stage outcome is either successful or a documented host-local skip, and no Sermo blocker indicates a project/catalog/deployment bug that would invalidate the rest of the run.
-- Apply the same first-four gate to any selected set larger than four hosts,
-  including "first N" installation requests.
-- If the first-four stage finds a Sermo blocker, stop before touching the remaining hosts and report the exact failing host, command phase, output path, and whether any remote `/tmp/sermo-remote-test-*` directory was created. A host-local skip is not a fleet blocker: continue after reporting it.
+- The first-four gate does **not** apply to read-only collection or analysis: inventory, logs, events, service status and other SSH reads may cover every selected host in one pass. Record failures and Sermo findings, but do not pause that read-only collection after the first four hosts.
+- Apply the same first-four gate to any selected mutating set larger than four hosts, including "first N" installation or update requests.
+- If the mutating first-four stage finds a Sermo blocker, stop before changing the remaining hosts and report the exact failing host, command phase, output path, and whether any remote `/tmp/sermo-remote-test-*` directory was created. A host-local skip is not a fleet blocker: continue after reporting it.
 - Use batch SSH options and bounded connection timeouts:
 
 ```sh

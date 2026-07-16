@@ -35,7 +35,14 @@ The remote scripts must run as root on the target host:
   after copying any required evidence locally, remove the exact staging directory
   created for that run.
 
-## Fleet failure handling
+## Fleet install and update failure handling
+
+The first-four-host gate applies only to workflows that install, update, apply
+configuration, start a daemon or otherwise mutate remote Sermo state. Read-only
+inventory, event collection and event analysis may inspect the whole selected
+fleet in one pass; they do not pause after four hosts. Record any SSH failure or
+Sermo finding, but do not use a read-only finding as a reason to stop collecting
+the remaining hosts' evidence.
 
 For a fleet run, record and skip a host that cannot be reached, cannot execute
 from `/tmp`, lacks temporary disk space or inodes, or has a pre-existing local
