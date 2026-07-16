@@ -122,6 +122,22 @@ func dialUnix(ctx context.Context, socket string) (net.Conn, error) {
 	return (&net.Dialer{}).DialContext(ctx, networkUnix, socket)
 }
 
+// probeUnixSocket verifies that a socket-only daemon is listening. A successful
+// connection proves liveness; socket-only protocols that have no safe request
+// or reply exchange can use this without blocking for daemon activity.
+func probeUnixSocket(ctx context.Context, cfg Config, defaultSocket string) (Result, error) {
+	socket := cfg.Socket
+	if socket == "" {
+		socket = defaultSocket
+	}
+	c, err := dialUnix(ctx, socket)
+	if err != nil {
+		return Result{}, err
+	}
+	_ = c.Close()
+	return Result{Extra: map[string]string{extraSocket: socket}}, nil
+}
+
 // probeDialer returns a dialer for driver-backed protocol probes. When iface is
 // non-empty it egresses through SO_BINDTODEVICE (BindDialer); timeout bounds the
 // TCP connect only.
