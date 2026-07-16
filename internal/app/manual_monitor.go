@@ -17,16 +17,11 @@ type ManualMonitorChange struct {
 	Message   string
 }
 
-// SyncManualActionMonitoring pauses monitoring after a successful manual stop
-// and restores it after a successful manual start when the stop created the
-// pause. Existing manual unmonitor state is preserved.
-func SyncManualActionMonitoring(store MonitorStore, service, action string, result operation.Result, stopSource, restoreSource string) (ManualMonitorChange, error) {
-	return SyncManualActionMonitoringWithActive(store, service, action, result, stopSource, restoreSource, false)
-}
-
-// SyncManualActionMonitoringWithActive is SyncManualActionMonitoring plus an
-// explicit post-operation active signal for starts that reached the backend but
-// failed postflight. It restores monitoring only when the service is active.
+// SyncManualActionMonitoringWithActive pauses monitoring after a successful
+// manual stop and restores it after a successful manual start when the stop
+// created the pause. Existing manual unmonitor state is preserved.
+// activeAfterStart restores monitoring for starts that reached the backend but
+// failed postflight when the service is still active.
 func SyncManualActionMonitoringWithActive(store MonitorStore, service, action string, result operation.Result, stopSource, restoreSource string, activeAfterStart bool) (ManualMonitorChange, error) {
 	if store == nil {
 		return ManualMonitorChange{}, nil

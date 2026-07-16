@@ -174,7 +174,6 @@ func TestPromptAbortsOnExhaustedInput(t *testing.T) {
 	}{
 		"Choose invalid then EOF":      {"zzz\n", func(p *Prompt) { p.Choose("pick", []string{"a", "b"}) }},
 		"MultiChoose invalid then EOF": {"zzz\n", func(p *Prompt) { p.MultiChoose("pick", []string{"a", "b"}) }},
-		"AskNonEmpty empty then EOF":   {"\n", func(p *Prompt) { p.AskNonEmpty("value") }},
 		"Confirm empty then EOF":       {"\n", func(p *Prompt) { p.Confirm("ok?", true) }},
 	}
 	for name, tc := range cases {

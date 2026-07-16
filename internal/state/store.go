@@ -330,15 +330,10 @@ type PruneHistoryResult struct {
 	Rows           int64
 }
 
-// Open opens (creating if needed) the database at path, creating the parent
-// directory and running any pending migrations. WAL mode plus a busy timeout let
-// the daemon (long-lived reader/writer) and sermoctl (short-lived writer)
-// coexist across processes.
-func Open(path string) (*Store, error) {
-	return OpenContext(context.Background(), path)
-}
-
-// OpenContext is Open with an explicit context for migrations and SQL calls.
+// OpenContext opens (creating if needed) the database at path, creating the
+// parent directory and running any pending migrations. WAL mode plus a busy
+// timeout let the daemon (long-lived reader/writer) and sermoctl (short-lived
+// writer) coexist across processes.
 func OpenContext(ctx context.Context, path string) (*Store, error) {
 	return OpenContextWith(ctx, path, Options{})
 }
@@ -357,7 +352,7 @@ type Options struct {
 	CacheBytes int64
 }
 
-// OpenWith opens the store with explicit options. Open is the zero-option form.
+// OpenWith opens the store with explicit options and a background context.
 func OpenWith(path string, opts Options) (*Store, error) {
 	return OpenContextWith(context.Background(), path, opts)
 }

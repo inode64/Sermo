@@ -177,7 +177,7 @@ func TestEventLogConcurrentAddRecent(t *testing.T) {
 
 func TestPersistentEventLogHydratesServiceEvents(t *testing.T) {
 	path := filepath.Join(t.TempDir(), state.Filename)
-	first, err := state.Open(path)
+	first, err := state.OpenContext(context.Background(), path)
 	if err != nil {
 		t.Fatalf("open first store: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestPersistentEventLogHydratesServiceEvents(t *testing.T) {
 		t.Fatalf("close first store: %v", err)
 	}
 
-	second, err := state.Open(path)
+	second, err := state.OpenContext(context.Background(), path)
 	if err != nil {
 		t.Fatalf("open second store: %v", err)
 	}

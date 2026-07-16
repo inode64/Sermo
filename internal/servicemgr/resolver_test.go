@@ -127,13 +127,13 @@ func (r stdoutRunner) Run(_ context.Context, _ string, _ ...string) (execx.Resul
 }
 
 func TestMainPID(t *testing.T) {
-	if pid, ok := MainPID(stdoutRunner{out: "4242\n"}, BackendSystemd, "nginx.service"); !ok || pid != 4242 {
+	if pid, ok := MainPIDContext(context.Background(), stdoutRunner{out: "4242\n"}, BackendSystemd, "nginx.service"); !ok || pid != 4242 {
 		t.Fatalf("MainPID = %d/%v, want 4242/true", pid, ok)
 	}
-	if _, ok := MainPID(stdoutRunner{out: "0\n"}, BackendSystemd, "nginx.service"); ok {
+	if _, ok := MainPIDContext(context.Background(), stdoutRunner{out: "0\n"}, BackendSystemd, "nginx.service"); ok {
 		t.Error("MainPID 0 should report not found")
 	}
-	if _, ok := MainPID(stdoutRunner{out: "4242\n"}, BackendOpenRC, "nginx"); ok {
+	if _, ok := MainPIDContext(context.Background(), stdoutRunner{out: "4242\n"}, BackendOpenRC, "nginx"); ok {
 		t.Error("OpenRC must report no MainPID")
 	}
 }
@@ -150,7 +150,7 @@ func TestCgroupPIDs(t *testing.T) {
 		return nil, os.ErrNotExist
 	}
 
-	pids, ok := CgroupPIDs(runner, readFile, BackendSystemd, "nginx.service")
+	pids, ok := CgroupPIDsContext(context.Background(), runner, readFile, BackendSystemd, "nginx.service")
 	if !ok {
 		t.Fatal("CgroupPIDs ok = false, want true")
 	}
@@ -165,11 +165,11 @@ func TestCgroupPIDs(t *testing.T) {
 	}
 
 	// Empty control group -> not found.
-	if _, ok := CgroupPIDs(stdoutRunner{out: "/\n"}, readFile, BackendSystemd, "x"); ok {
+	if _, ok := CgroupPIDsContext(context.Background(), stdoutRunner{out: "/\n"}, readFile, BackendSystemd, "x"); ok {
 		t.Error("root/empty control group should report no cgroup PIDs")
 	}
 	// OpenRC has no cgroup query.
-	if _, ok := CgroupPIDs(runner, readFile, BackendOpenRC, "nginx"); ok {
+	if _, ok := CgroupPIDsContext(context.Background(), runner, readFile, BackendOpenRC, "nginx"); ok {
 		t.Error("OpenRC must report no cgroup PIDs")
 	}
 }
@@ -216,12 +216,12 @@ func TestCgroupPIDsFiltersZeroAndEmpty(t *testing.T) {
 		}
 	}
 	// PID 0 is not a real process and must be excluded.
-	pids, ok := CgroupPIDs(runner, rf("0\n42\n"), BackendSystemd, "x.service")
+	pids, ok := CgroupPIDsContext(context.Background(), runner, rf("0\n42\n"), BackendSystemd, "x.service")
 	if !ok || len(pids) != 1 || pids[0] != 42 {
 		t.Fatalf("pids = %v ok=%v, want [42]", pids, ok)
 	}
 	// A cgroup with no valid PIDs reports not-found.
-	if _, ok := CgroupPIDs(runner, rf("0\n\n"), BackendSystemd, "x.service"); ok {
+	if _, ok := CgroupPIDsContext(context.Background(), runner, rf("0\n\n"), BackendSystemd, "x.service"); ok {
 		t.Fatal("a cgroup with only invalid PIDs must report not-found")
 	}
 }

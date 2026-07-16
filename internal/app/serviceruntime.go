@@ -106,12 +106,6 @@ func (s *ServiceMetricSampler) recordLocked(name string, cur web.ServiceRuntime,
 	return cur
 }
 
-// Latest returns the most recent worker-published runtime sample.
-func (s *ServiceMetricSampler) Latest(name string) (web.ServiceRuntime, bool) {
-	cur, _, ok := s.LatestWithAt(name)
-	return cur, ok
-}
-
 // LatestWithAt returns the latest worker-published sample and its observation time.
 func (s *ServiceMetricSampler) LatestWithAt(name string) (web.ServiceRuntime, time.Time, bool) {
 	if s == nil {

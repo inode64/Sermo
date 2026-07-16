@@ -53,6 +53,15 @@ func has(r Result, substr string) bool {
 	return false
 }
 
+func countLevel(r Result, level Level) (n int) {
+	for _, f := range r.Findings {
+		if f.Level == level {
+			n++
+		}
+	}
+	return n
+}
+
 const baseGlobal = `
 engine: { backend: auto, interval: 30s }
 paths: { services: [ @ROOT@/services ], state: @ROOT@/state }
@@ -107,7 +116,7 @@ watches:
 		ifaces: map[string]bool{"eth0": true},
 		mounts: map[string]bool{"/data": true},
 	})
-	if clean.Warnings() != 0 {
+	if n := countLevel(clean, LevelWarning); n != 0 {
 		t.Fatalf("expected no host warnings when present: %+v", clean.Findings)
 	}
 }
@@ -154,7 +163,7 @@ watches:
 		"/proc/pressure/memory": true,
 		"/dev/sdz":              true,
 	}})
-	if clean.Warnings() != 0 {
+	if n := countLevel(clean, LevelWarning); n != 0 {
 		t.Fatalf("expected no warnings when resources exist: %+v", clean.Findings)
 	}
 }

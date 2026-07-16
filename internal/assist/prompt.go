@@ -33,7 +33,7 @@ func NewPrompt(in io.Reader, out io.Writer) *Prompt {
 // ErrInputClosed reports that the prompt's input ended (EOF) while an answer
 // was still required — e.g. piped stdin with too few lines. The helpers that
 // accept an empty answer (Ask, AskInt) still return their default on EOF; the
-// ones that re-prompt until a valid answer (Confirm, Choose, AskNonEmpty, …)
+// ones that re-prompt until a valid answer (Confirm, Choose, MultiChoose, …)
 // abort with this error.
 var ErrInputClosed = errors.New("input ended before the prompt was answered")
 
@@ -103,18 +103,6 @@ func (p *Prompt) Ask(question, def string) string {
 		return line
 	}
 	return def
-}
-
-// AskNonEmpty reads a free-text answer, re-prompting until it is non-empty.
-func (p *Prompt) AskNonEmpty(question string) string {
-	for {
-		p.printf("%s: ", question)
-		if line := p.readLine(); line != "" {
-			return line
-		}
-		p.printf("  a value is required\n")
-		p.abortIfClosed()
-	}
 }
 
 // Confirm reads a yes/no answer. It always forces an explicit y/n: an empty

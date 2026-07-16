@@ -68,7 +68,7 @@ func tree(binary string, version map[string]any) map[string]any {
 
 func inspect(t *testing.T, runner execx.Runner, tr map[string]any) Report {
 	t.Helper()
-	return Inspect(context.Background(), runner, "app", config.Resolved{Name: "app", Tree: tr})
+	return inspectResolved(context.Background(), runner, "app", config.Resolved{Name: "app", Tree: tr}, config.CategoryApp)
 }
 
 func writeBinary(t *testing.T, mode os.FileMode) string {
@@ -154,7 +154,7 @@ func TestInspectUsesConfiguredUserLookupForOwners(t *testing.T) {
 		Runner: runner,
 	})
 
-	report := Inspect(context.Background(), fakeRunner{}, "app", config.Resolved{Name: "app", Tree: tree(path, nil)}, WithUserLookup(lookup))
+	report := inspectResolved(context.Background(), fakeRunner{}, "app", config.Resolved{Name: "app", Tree: tree(path, nil)}, config.CategoryApp, WithUserLookup(lookup))
 	if report.User != "ldap-owner" || report.Group != "ldap-group" {
 		t.Fatalf("owner = %q/%q, want ldap-owner/ldap-group", report.User, report.Group)
 	}

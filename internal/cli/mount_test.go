@@ -159,7 +159,7 @@ func TestUmountCommandPausesStorageWatch(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("umount exit = %d, want success", code)
 	}
-	store, err := state.Open(filepath.Join(root, "state", state.Filename))
+	store, err := state.OpenContext(context.Background(), filepath.Join(root, "state", state.Filename))
 	if err != nil {
 		t.Fatalf("open state: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestUmountCommandPausesStorageWatch(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("mount exit = %d, want success", code)
 	}
-	store, err = state.Open(filepath.Join(root, "state", state.Filename))
+	store, err = state.OpenContext(context.Background(), filepath.Join(root, "state", state.Filename))
 	if err != nil {
 		t.Fatalf("reopen state: %v", err)
 	}

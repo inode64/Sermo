@@ -22,7 +22,7 @@ defaults: { policy: { cooldown: 5m } }
 `)
 	global := filepath.Join(root, "sermo.yml")
 
-	store, err := state.Open(filepath.Join(root, "state", state.Filename))
+	store, err := state.OpenContext(context.Background(), filepath.Join(root, "state", state.Filename))
 	if err != nil {
 		t.Fatalf("open state: %v", err)
 	}
@@ -65,7 +65,7 @@ defaults: { policy: { cooldown: 5m } }
 		t.Fatalf("state compact output = %q, want pruned history summary", got)
 	}
 
-	store, err = state.Open(filepath.Join(root, "state", state.Filename))
+	store, err = state.OpenContext(context.Background(), filepath.Join(root, "state", state.Filename))
 	if err != nil {
 		t.Fatalf("reopen state: %v", err)
 	}
