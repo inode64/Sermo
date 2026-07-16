@@ -79,6 +79,53 @@ defaults: { policy: { cooldown: 5m } }
 	}
 }
 
+func TestUpdateMonitorState(t *testing.T) {
+	store, err := state.Open(filepath.Join(t.TempDir(), state.Filename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	boolPointer := func(value bool) *bool { return &value }
+	tests := []struct {
+		name       string
+		pause      bool
+		setup      *bool
+		wantStatus string
+		wantActive bool
+	}{
+		{name: "pause new entry", pause: true, wantStatus: monitorStatusPaused, wantActive: false},
+		{name: "resume paused entry", setup: boolPointer(false), wantStatus: monitorStatusResumed, wantActive: true},
+		{name: "resume active entry", setup: boolPointer(true), wantStatus: monitorStatusNotPaused, wantActive: true},
+		{name: "resume unrecorded entry", wantStatus: monitorStatusNotPaused, wantActive: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key := tt.name
+			if tt.setup != nil {
+				if err := store.SetActive(key, *tt.setup, state.SourceCLI); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			status, err := updateMonitorState(store, key, tt.pause)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if status != tt.wantStatus {
+				t.Errorf("status = %q, want %q", status, tt.wantStatus)
+			}
+			active, found, err := store.Active(key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !found || active != tt.wantActive {
+				t.Errorf("state = active:%t found:%t, want active:%t found:true", active, found, tt.wantActive)
+			}
+		})
+	}
+}
+
 func TestWatchMonitorUnmonitorCommand(t *testing.T) {
 	root := t.TempDir()
 	servicesDir := filepath.Join(root, "services")
