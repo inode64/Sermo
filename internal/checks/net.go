@@ -115,87 +115,87 @@ func (c *netCheck) Run(_ context.Context) Result {
 
 	switch c.metric {
 	case NetMetricState:
-		ok, message := evaluateStateTransition(stateTransitionSpec{
-			target: c.iface, current: s.State, expected: c.expect, expectedLabel: NetMetricState,
-			data: data, primed: &c.primed, previous: &c.lastState,
-		})
-		res := c.result(ok, message, start)
-		res.Data = data
-		return res
-
+		return c.runState(s, data, start)
 	case NetMetricSpeed:
-		if !s.SpeedKnown {
-			res := c.result(false, c.iface+" speed unknown", start)
-			res.Data = data
-			return res
-		}
-		if !c.primed {
-			c.primed, c.lastSpeed = true, s.SpeedMbps
-			res := c.result(false, fmt.Sprintf("%s speed baseline %d", c.iface, s.SpeedMbps), start)
-			res.Data = data
-			return res
-		}
-		changed := s.SpeedMbps != c.lastSpeed
-		data[DataKeyOld], data[DataKeyNew], data[DataKeyValue] = c.lastSpeed, s.SpeedMbps, s.SpeedMbps
-		msg := fmt.Sprintf("%s speed %d->%d", c.iface, c.lastSpeed, s.SpeedMbps)
-		c.lastSpeed = s.SpeedMbps
-		res := c.result(changed, msg, start)
-		res.Data = data
-		return res
-
+		return c.runSpeed(s, data, start)
 	case NetMetricErrors:
-		var total uint64
-		for _, name := range c.counters {
-			total += s.Counters[name]
-		}
-		if !c.primed {
-			c.primed, c.lastErrTotal = true, total
-			res := c.result(false, fmt.Sprintf("%s errors baseline %d", c.iface, total), start)
-			res.Data = data
-			return res
-		}
-		delta := deltaOrZero(total, c.lastErrTotal)
-		c.lastErrTotal = total
-		data[DataKeyValue], data[DataKeyTotal] = delta, total
-		met := compareFloat(float64(delta), c.op, c.value)
-		res := c.result(met, fmt.Sprintf("%s errors +%d (total %d)", c.iface, delta, total), start)
-		res.Data = data
-		return res
-
+		return c.runErrors(s, data, start)
 	case NetMetricAddress:
-		joined := strings.Join(s.Addrs, ",")
-		display := joined
-		if display == "" {
-			display = netAddrNone
-		}
-		data[DataKeyAddresses] = s.Addrs
-		if c.expect != "" {
-			present := len(s.Addrs) > 0
-			data[DataKeyValue] = len(s.Addrs)
-			ok := (c.expect == NetAddrPresent) == present
-			res := c.result(ok, fmt.Sprintf("%s address %s (want %s)", c.iface, display, c.expect), start)
-			res.Data = data
-			return res
-		}
-		if !c.primed {
-			c.primed, c.lastAddrs = true, joined
-			res := c.result(false, fmt.Sprintf("%s address baseline %s", c.iface, display), start)
-			res.Data = data
-			return res
-		}
-		changed := joined != c.lastAddrs
-		data[DataKeyOld], data[DataKeyNew], data[DataKeyValue] = c.lastAddrs, joined, joined
-		msg := fmt.Sprintf("%s address %s->%s", c.iface, c.lastAddrs, joined)
-		c.lastAddrs = joined
-		res := c.result(changed, msg, start)
-		res.Data = data
-		return res
-
+		return c.runAddress(s, data, start)
 	default:
 		res := c.result(false, "unknown net metric "+c.metric, start)
 		res.Data = data
 		return res
 	}
+}
+
+func (c *netCheck) runState(sample NetSample, data map[string]any, start time.Time) Result {
+	ok, message := evaluateStateTransition(stateTransitionSpec{
+		target: c.iface, current: sample.State, expected: c.expect, expectedLabel: NetMetricState,
+		data: data, primed: &c.primed, previous: &c.lastState,
+	})
+	return c.netResult(ok, message, data, start)
+}
+
+func (c *netCheck) runSpeed(sample NetSample, data map[string]any, start time.Time) Result {
+	if !sample.SpeedKnown {
+		return c.netResult(false, c.iface+" speed unknown", data, start)
+	}
+	if !c.primed {
+		c.primed, c.lastSpeed = true, sample.SpeedMbps
+		return c.netResult(false, fmt.Sprintf("%s speed baseline %d", c.iface, sample.SpeedMbps), data, start)
+	}
+	changed := sample.SpeedMbps != c.lastSpeed
+	data[DataKeyOld], data[DataKeyNew], data[DataKeyValue] = c.lastSpeed, sample.SpeedMbps, sample.SpeedMbps
+	message := fmt.Sprintf("%s speed %d->%d", c.iface, c.lastSpeed, sample.SpeedMbps)
+	c.lastSpeed = sample.SpeedMbps
+	return c.netResult(changed, message, data, start)
+}
+
+func (c *netCheck) runErrors(sample NetSample, data map[string]any, start time.Time) Result {
+	var total uint64
+	for _, name := range c.counters {
+		total += sample.Counters[name]
+	}
+	if !c.primed {
+		c.primed, c.lastErrTotal = true, total
+		return c.netResult(false, fmt.Sprintf("%s errors baseline %d", c.iface, total), data, start)
+	}
+	delta := deltaOrZero(total, c.lastErrTotal)
+	c.lastErrTotal = total
+	data[DataKeyValue], data[DataKeyTotal] = delta, total
+	met := compareFloat(float64(delta), c.op, c.value)
+	return c.netResult(met, fmt.Sprintf("%s errors +%d (total %d)", c.iface, delta, total), data, start)
+}
+
+func (c *netCheck) runAddress(sample NetSample, data map[string]any, start time.Time) Result {
+	joined := strings.Join(sample.Addrs, ",")
+	display := joined
+	if display == "" {
+		display = netAddrNone
+	}
+	data[DataKeyAddresses] = sample.Addrs
+	if c.expect != "" {
+		present := len(sample.Addrs) > 0
+		data[DataKeyValue] = len(sample.Addrs)
+		ok := (c.expect == NetAddrPresent) == present
+		return c.netResult(ok, fmt.Sprintf("%s address %s (want %s)", c.iface, display, c.expect), data, start)
+	}
+	if !c.primed {
+		c.primed, c.lastAddrs = true, joined
+		return c.netResult(false, fmt.Sprintf("%s address baseline %s", c.iface, display), data, start)
+	}
+	changed := joined != c.lastAddrs
+	data[DataKeyOld], data[DataKeyNew], data[DataKeyValue] = c.lastAddrs, joined, joined
+	message := fmt.Sprintf("%s address %s->%s", c.iface, c.lastAddrs, joined)
+	c.lastAddrs = joined
+	return c.netResult(changed, message, data, start)
+}
+
+func (c *netCheck) netResult(ok bool, message string, data map[string]any, start time.Time) Result {
+	result := c.result(ok, message, start)
+	result.Data = data
+	return result
 }
 
 // SampleNet returns one live network-interface observation using the default
