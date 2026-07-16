@@ -874,9 +874,7 @@ func validateFileExistsCheck(path string, entry map[string]any, locksDir string,
 }
 
 func validateSingleShotFileCheck(path string, entry map[string]any, _ string, add addFunc) {
-	if cfgval.String(entry[checks.CheckKeyPath]) == "" {
-		add("%s.path is required for a file check", path)
-	}
+	validateRequiredStringField(path, entry, checks.CheckKeyPath, checks.CheckTypeFile, add)
 	if v, present := entry[checks.CheckKeyNonEmpty]; present {
 		if _, ok := v.(bool); !ok {
 			add("%s.non_empty must be a boolean", path)
@@ -898,26 +896,30 @@ func validateLockfileCheck(path string, entry map[string]any, locksDir string, a
 }
 
 func validateBinaryCheck(path string, entry map[string]any, _ string, add addFunc) {
-	if cfgval.String(entry[checks.CheckKeyPath]) == "" {
-		add("%s.path is required for a binary check", path)
-	}
+	validateRequiredStringField(path, entry, checks.CheckKeyPath, checks.CheckTypeBinary, add)
 }
 
 func validatePidfileCheck(path string, entry map[string]any, _ string, add addFunc) {
-	if !cfgval.IsNonEmptyStringList(entry[checks.CheckKeyPath]) {
-		add("%s.path is required for a pidfile check", path)
-	}
+	validateRequiredStringListField(path, entry, checks.CheckKeyPath, checks.CheckTypePidfile, add)
 }
 
 func validateSocketCheck(path string, entry map[string]any, _ string, add addFunc) {
-	if !cfgval.IsNonEmptyStringList(entry[checks.CheckKeyPath]) {
-		add("%s.path is required for a socket check", path)
-	}
+	validateRequiredStringListField(path, entry, checks.CheckKeyPath, checks.CheckTypeSocket, add)
 }
 
 func validateLibrariesCheck(path string, entry map[string]any, _ string, add addFunc) {
-	if cfgval.String(entry[checks.CheckKeyBinary]) == "" {
-		add("%s.binary is required for a libraries check", path)
+	validateRequiredStringField(path, entry, checks.CheckKeyBinary, checks.CheckTypeLibraries, add)
+}
+
+func validateRequiredStringField(path string, entry map[string]any, field, checkType string, add addFunc) {
+	if cfgval.String(entry[field]) == "" {
+		add("%s.%s is required for a %s check", path, field, checkType)
+	}
+}
+
+func validateRequiredStringListField(path string, entry map[string]any, field, checkType string, add addFunc) {
+	if !cfgval.IsNonEmptyStringList(entry[field]) {
+		add("%s.%s is required for a %s check", path, field, checkType)
 	}
 }
 
