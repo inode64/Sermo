@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"strings"
 
 	"sermo/internal/cfgval"
@@ -10,26 +9,13 @@ import (
 	"sermo/internal/web"
 )
 
-// heavyLiveViewTypes are the watch check types whose dashboard live view runs
-// an expensive external command. The daemon watch cycle already owns those
-// probes, so /api/watches only serves cached data for them and never starts a
-// fresh disk command just because the panel opened.
-// Deliberately excluded: cheap/proc/sys views (memory/load/net/sensors/process),
-// filesystem state views used by tests and operators, and rate-based diskio,
-// which must sample on every poll to compute deltas.
-var heavyLiveViewTypes = map[string]struct{}{
-	checks.CheckTypeHdparm: {},
-	checks.CheckTypeSmart:  {},
-}
-
-func (b *WebBackend) watchDashboardView(ctx context.Context, w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
+// watchDashboardView returns the latest result published by the daemon watch
+// cycle. The web handler never samples watches itself.
+func (b *WebBackend) watchDashboardView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
 	if w == nil {
 		return nil, nil, ""
 	}
-	if b.watchSnapshots != nil {
-		return b.watchSnapshotView(w, system)
-	}
-	return b.legacyWatchLiveView(ctx, w, system)
+	return b.watchSnapshotView(w, system)
 }
 
 func (b *WebBackend) watchSnapshotView(w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
@@ -147,17 +133,4 @@ func watchCountMeter(kind string, data map[string]any, countKey string) *web.Wat
 		return nil
 	}
 	return &web.WatchMeter{Kind: kind, UsedPct: usedPct, Count: count, Max: limit}
-}
-
-// legacyWatchLiveView serves older in-process web backends that were not wired
-// with WatchSnapshots. Expensive disk commands are still blocked here; sermod
-// publishes their daemon-cycle results through WatchSnapshots instead.
-func (b *WebBackend) legacyWatchLiveView(ctx context.Context, w *webWatch, system metrics.Snapshot) (*web.WatchMeter, []web.WatchReading, string) {
-	if w == nil {
-		return nil, nil, ""
-	}
-	if _, heavy := heavyLiveViewTypes[w.checkType]; heavy {
-		return nil, nil, ""
-	}
-	return b.watchLiveView(ctx, w, system)
 }

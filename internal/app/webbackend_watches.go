@@ -70,7 +70,7 @@ func (b *WebBackend) watchPresentationLiveView(ctx context.Context, w *webWatch,
 	if w.serviceScoped {
 		return storage, swap, nil, nil, ""
 	}
-	meter, readings, summary := b.watchDashboardView(ctx, w, system)
+	meter, readings, summary := b.watchDashboardView(w, system)
 	return storage, swap, meter, readings, summary
 }
 
