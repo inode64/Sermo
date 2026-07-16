@@ -3431,9 +3431,8 @@ function watchSummaryCell(w) {
     const mount = d.mount_point && d.mount_point !== d.path ? ` · ${d.mount_point}` : "";
     const usedPct = storageUsedPct(d);
     const bar = usedPct == null ? tpl`<span class="muted">—</span>` : usageBar(usedPct);
-    const openFiles = d.open_files ? tpl` · <span title="open files on this filesystem">${Number(d.open_files).toLocaleString()} open files</span>` : nothing;
     return tpl`<div>${d.path || ""}<span class="muted">${fs}${mount}</span></div>
-      <div>${bar} <span class="muted">· ${fmtBytes(d.used_bytes)} used · ${fmtBytes(d.free_bytes)} free${openFiles}</span></div>`;
+      <div>${bar} <span class="muted">· ${fmtBytes(d.used_bytes)} used · ${fmtBytes(d.free_bytes)} free</span></div>`;
   }
   return w.summary ? w.summary : "—";
 }

@@ -1805,188 +1805,68 @@ func TestWebBackendWatchesShareSystemSnapshot(t *testing.T) {
 	}
 }
 
-func TestWebBackendStorageOpenFiles(t *testing.T) {
+func TestWebBackendStorageWatchUsesSnapshot(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"storage-data": map[string]any{
 			"interval": "45s",
 			"check": map[string]any{
 				"type":     "storage",
-				"path":     "/data/app",
+				"path":     "/data",
 				"free_pct": map[string]any{"op": "<", "value": 10},
 			},
 		},
 	})
-	scans := 0
 	now := time.Unix(1000, 0)
+	snapshots := NewWatchSnapshots()
+	snapshots.now = func() time.Time { return now }
+	snapshots.Publish("storage-data", checks.CheckTypeStorage, checks.Result{
+		Check:     "storage-data",
+		Condition: true,
+		Message:   "/data used 87.5% free 12.5% inodes 80.0% used",
+		Data: map[string]any{
+			checks.DataKeyPath:          "/data",
+			checks.DataKeyMounted:       true,
+			checks.DataKeyMountPoint:    "/data",
+			checks.DataKeyDevice:        "/dev/mapper/data",
+			checks.DataKeyFSType:        "xfs",
+			checks.DataKeyOptions:       "rw,noatime",
+			checks.DataKeyUsedPct:       87.5,
+			checks.DataKeyFreePct:       12.5,
+			checks.DataKeyTotalBytes:    uint64(1000),
+			checks.DataKeyUsedBytes:     uint64(875),
+			checks.DataKeyFreeBytes:     uint64(125),
+			checks.DataKeyInodesTotal:   uint64(100),
+			checks.DataKeyInodesFree:    uint64(20),
+			checks.DataKeyInodesUsedPct: 80.0,
+			checks.DataKeyInodesFreePct: 20.0,
+		},
+	})
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
-		Now: func() time.Time { return now },
+		WatchSnapshots: snapshots,
+		Now:            func() time.Time { return now },
 		StorageUsage: func(string) (checks.StorageStats, error) {
-			return checks.StorageStats{TotalBytes: 1000, FreeBytes: 500, UsedPct: 50}, nil
+			t.Fatal("web storage view must not call statfs")
+			return checks.StorageStats{}, nil
 		},
 		MountSampler: func() ([]checks.Mount, error) {
-			return []checks.Mount{
-				{Device: "/dev/root", MountPoint: "/", FSType: "ext4"},
-				{Device: "/dev/data", MountPoint: "/data", FSType: "xfs"},
-			}, nil
-		},
-		OpenFilesByMount: func([]checks.Mount) map[string]int64 {
-			scans++
-			return map[string]int64{"/data": 4242, "/": 7}
+			t.Fatal("web storage view must not read mounts")
+			return nil, nil
 		},
 	})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
-	get := func() *web.StorageWatchInfo {
-		ws := b.Watches(context.Background())
-		if len(ws) != 1 || ws[0].Storage == nil {
-			t.Fatalf("want 1 storage watch with storage info, got %+v", ws)
-		}
-		return ws[0].Storage
-	}
-	// /data/app resolves to the /data mount (longest prefix), so it reports /data's tally.
-	if si := get(); si.OpenFiles != 4242 {
-		t.Fatalf("OpenFiles = %d, want 4242 (from the /data mount tally)", si.OpenFiles)
-	}
-	// A second call within the TTL reuses the cached tally (no re-scan).
-	_ = get()
-	if scans != 1 {
-		t.Fatalf("open-files scanned %d times within TTL, want 1", scans)
-	}
-	// Once the TTL elapses, the next call re-scans.
-	now = now.Add(openFilesTallyTTL + time.Second)
-	_ = get()
-	if scans != 2 {
-		t.Fatalf("open-files scans after TTL = %d, want 2", scans)
-	}
-}
-
-func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
-	usagePath := ""
-	mountSampled := false
-	b, warns := NewWebBackend(t.Context(), storageWatchFilesystemConfig(), storageWatchFilesystemDeps(&usagePath, &mountSampled))
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
-	}
-	assertStorageWatchFilesystemDetails(t, storageWatch(t, b), usagePath, mountSampled)
-}
-
-func storageWatchFilesystemConfig() *config.Config {
-	return cfgWithWatches(map[string]any{
-		"storage-data": map[string]any{
-			"interval": "45s",
-			"dry_run":  true,
-			"check": map[string]any{
-				"type":     "storage",
-				"path":     "/data",
-				"mounted":  true,
-				"free_pct": map[string]any{"op": "<", "value": 15},
-				"free_bytes": map[string]any{
-					"op":    "<",
-					"value": "10G",
-				},
-			},
-			"then": map[string]any{
-				"notify": []any{"ops", "pager"},
-				"expand": map[string]any{"by": "5G"},
-				"hook": map[string]any{
-					"command": []any{"/usr/local/bin/sermo-disk-alert", "--path", "/data"},
-				},
-			},
-		},
-	})
-}
-
-func storageWatchFilesystemDeps(usagePath *string, mountSampled *bool) Deps {
-	return Deps{
-		StorageUsage: func(path string) (checks.StorageStats, error) {
-			*usagePath = path
-			return checks.StorageStats{
-				UsedPct:       87.5,
-				FreePct:       12.5,
-				TotalBytes:    1000,
-				FreeBytes:     125,
-				InodesTotal:   100,
-				InodesFree:    20,
-				InodesUsedPct: 80,
-				InodesFreePct: 20,
-			}, nil
-		},
-		MountSampler: func() ([]checks.Mount, error) {
-			*mountSampled = true
-			return []checks.Mount{
-				{Device: "/dev/root", MountPoint: "/", FSType: "ext4", Options: []string{"rw"}},
-				{Device: "/dev/mapper/data", MountPoint: "/data", FSType: "xfs", Options: []string{"rw", "noatime"}},
-			}, nil
-		},
-	}
-}
-
-func storageWatch(t *testing.T, b *WebBackend) web.Watch {
-	t.Helper()
 	watches := b.Watches(context.Background())
-	if len(watches) != 1 {
-		t.Fatalf("got %d watches, want 1: %+v", len(watches), watches)
+	if len(watches) != 1 || watches[0].Storage == nil {
+		t.Fatalf("watch storage info = %+v", watches)
 	}
-	return watches[0]
-}
-
-func assertStorageWatchFilesystemDetails(t *testing.T, w web.Watch, usagePath string, mountSampled bool) {
-	t.Helper()
-	if usagePath != "/data" || !mountSampled {
-		t.Fatalf("samplers not called as expected: usagePath=%q mountSampled=%v", usagePath, mountSampled)
-	}
-	if w.Name != "storage-data" || w.Interval != "45s" || w.CheckType != "storage" {
-		t.Fatalf("watch identity = %+v", w)
-	}
-	if !slices.Equal(w.Notifiers, []string{"ops", "pager"}) {
-		t.Fatalf("notifiers = %v, want ops,pager", w.Notifiers)
-	}
-	if !w.DryRun {
-		t.Fatal("dry_run flag not exposed")
-	}
-	if !slices.Equal(w.HookCommand, []string{"/usr/local/bin/sermo-disk-alert", "--path", "/data"}) {
-		t.Fatalf("hook command = %v", w.HookCommand)
-	}
-	if w.Summary == "" || !strings.Contains(w.Summary, "/data") || !strings.Contains(w.Summary, "xfs") {
-		t.Fatalf("summary = %q, want path and filesystem", w.Summary)
-	}
-	if len(w.Conditions) != 3 {
-		t.Fatalf("conditions = %+v, want free_pct/free_bytes/mounted", w.Conditions)
-	}
-	cond := storageWatchConditions(w.Conditions)
-	if cond["free_pct"].Op != "<" || cond["free_pct"].Value != "15" {
-		t.Fatalf("free_pct condition = %+v", cond["free_pct"])
-	}
-	if cond["free_bytes"].Op != "<" || cond["free_bytes"].Value != "10G" {
-		t.Fatalf("free_bytes condition = %+v", cond["free_bytes"])
-	}
-	if cond["mounted"].Op != "==" || cond["mounted"].Value != "true" {
-		t.Fatalf("mounted condition = %+v", cond["mounted"])
-	}
-	if w.Storage == nil {
-		t.Fatal("storage watch should include live filesystem info")
-	}
-	if w.Storage.MountPoint != "/data" || w.Storage.Device != "/dev/mapper/data" || w.Storage.FileSystem != "xfs" {
-		t.Fatalf("storage mount info = %+v", w.Storage)
-	}
-	if w.Storage.FreeBytes != 125 || w.Storage.UsedBytes != 875 || w.Storage.FreePct != 12.5 || w.Storage.InodesFree != 20 {
-		t.Fatalf("storage usage info = %+v", w.Storage)
-	}
-	if w.Expand == nil || w.Expand.ByBytes != 5<<30 {
-		t.Fatalf("expand info = %+v, want 5G", w.Expand)
+	info := watches[0].Storage
+	if info.MountPoint != "/data" || info.Device != "/dev/mapper/data" || info.FileSystem != "xfs" || !slices.Equal(info.Options, []string{"rw", "noatime"}) || info.UsedBytes != 875 || info.FreeBytes != 125 || info.InodesFree != 20 {
+		t.Fatalf("storage snapshot = %+v", info)
 	}
 }
 
-func storageWatchConditions(conditions []web.WatchCondition) map[string]web.WatchCondition {
-	byField := make(map[string]web.WatchCondition, len(conditions))
-	for _, condition := range conditions {
-		byField[condition.Field] = condition
-	}
-	return byField
-}
-
-func TestWebBackendStorageMountOnlySkipsUsageProbe(t *testing.T) {
+func TestWebBackendStorageMountOnlyUsesSnapshot(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"mount-backup": map[string]any{
 			"check": map[string]any{
@@ -1996,19 +1876,32 @@ func TestWebBackendStorageMountOnlySkipsUsageProbe(t *testing.T) {
 			},
 		},
 	})
+	now := time.Unix(1000, 0)
+	snapshots := NewWatchSnapshots()
+	snapshots.now = func() time.Time { return now }
+	snapshots.Publish("mount-backup", checks.CheckTypeStorage, checks.Result{
+		Check:     "mount-backup",
+		Condition: true,
+		Message:   "/mnt/backup mounted as expected",
+		Data: map[string]any{
+			checks.DataKeyPath:       "/mnt/backup",
+			checks.DataKeyMounted:    true,
+			checks.DataKeyMountPoint: "/mnt/backup",
+			checks.DataKeyDevice:     "server:/backup",
+			checks.DataKeyFSType:     "nfs4",
+			checks.DataKeyOptions:    "rw,hard",
+		},
+	})
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
+		WatchSnapshots: snapshots,
+		Now:            func() time.Time { return now },
 		StorageUsage: func(string) (checks.StorageStats, error) {
-			t.Fatal("mount-only storage watch must not statfs the target")
+			t.Fatal("web storage view must not call statfs")
 			return checks.StorageStats{}, nil
 		},
 		MountSampler: func() ([]checks.Mount, error) {
-			return []checks.Mount{
-				{Device: "server:/backup", MountPoint: "/mnt/backup", FSType: "nfs4", Options: []string{"rw", "hard"}},
-			}, nil
-		},
-		OpenFilesByMount: func([]checks.Mount) map[string]int64 {
-			t.Fatal("mount-only storage watch must not scan open files")
-			return nil
+			t.Fatal("web storage view must not read mounts")
+			return nil, nil
 		},
 	})
 	if len(warns) != 0 {
@@ -2029,12 +1922,12 @@ func TestWebBackendStorageMountOnlySkipsUsageProbe(t *testing.T) {
 	if w.Storage == nil || !w.Storage.Mounted || w.Storage.MountPoint != "/mnt/backup" || w.Storage.FileSystem != "nfs4" {
 		t.Fatalf("storage info = %+v", w.Storage)
 	}
-	if w.Storage.TotalBytes != 0 || w.Storage.FreeBytes != 0 || w.Storage.OpenFiles != 0 {
+	if w.Storage.TotalBytes != 0 || w.Storage.FreeBytes != 0 {
 		t.Fatalf("mount-only storage usage fields = %+v, want unset", w.Storage)
 	}
 }
 
-func TestWebBackendStorageMountedExpectationDoesNotUseParentMount(t *testing.T) {
+func TestWebBackendStorageMountedExpectationProjectsSnapshot(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"storage-boot-desktop": map[string]any{
 			"check": map[string]any{
@@ -2045,14 +1938,29 @@ func TestWebBackendStorageMountedExpectationDoesNotUseParentMount(t *testing.T) 
 			},
 		},
 	})
-	usageCalled := false
+	now := time.Unix(1000, 0)
+	snapshots := NewWatchSnapshots()
+	snapshots.now = func() time.Time { return now }
+	snapshots.Publish("storage-boot-desktop", checks.CheckTypeStorage, checks.Result{
+		Check:     "storage-boot-desktop",
+		OK:        true,
+		Condition: true,
+		Message:   "/var/spool/boot_desktop is not mounted",
+		Data: map[string]any{
+			checks.DataKeyPath:    "/var/spool/boot_desktop",
+			checks.DataKeyMounted: false,
+		},
+	})
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
+		WatchSnapshots: snapshots,
+		Now:            func() time.Time { return now },
 		StorageUsage: func(string) (checks.StorageStats, error) {
-			usageCalled = true
-			return checks.StorageStats{TotalBytes: 1000, FreeBytes: 900, FreePct: 90}, nil
+			t.Fatal("web storage view must not call statfs")
+			return checks.StorageStats{}, nil
 		},
 		MountSampler: func() ([]checks.Mount, error) {
-			return []checks.Mount{{Device: "/dev/root", MountPoint: "/", FSType: "ext4"}}, nil
+			t.Fatal("web storage view must not read mounts")
+			return nil, nil
 		},
 	})
 	if len(warns) != 0 {
@@ -2064,9 +1972,6 @@ func TestWebBackendStorageMountedExpectationDoesNotUseParentMount(t *testing.T) 
 		t.Fatalf("got %d watches, want 1: %+v", len(watches), watches)
 	}
 	w := watches[0]
-	if usageCalled {
-		t.Fatal("storage usage must not read parent filesystem when expected mountpoint is absent")
-	}
 	if w.State != TargetStateFailed {
 		t.Fatalf("state = %q, want failed", w.State)
 	}
@@ -2233,7 +2138,7 @@ func TestWebBackendExpandWatchRejectsUnconfiguredAction(t *testing.T) {
 	}
 }
 
-func TestWebBackendStorageWatchReportsSamplerErrors(t *testing.T) {
+func TestWebBackendStorageWatchProjectsSnapshotErrors(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"storage-data": map[string]any{
 			"check": map[string]any{
@@ -2244,12 +2149,29 @@ func TestWebBackendStorageWatchReportsSamplerErrors(t *testing.T) {
 			"then": map[string]any{"notify": []any{"ops"}},
 		},
 	})
+	now := time.Unix(1000, 0)
+	snapshots := NewWatchSnapshots()
+	snapshots.now = func() time.Time { return now }
+	snapshots.Publish("storage-data", checks.CheckTypeStorage, checks.Result{
+		Check:     "storage-data",
+		Condition: true,
+		Message:   "statfs /data: statfs failed",
+		Data: map[string]any{
+			checks.DataKeyPath:             "/data",
+			checks.DataKeySampleError:      "statfs failed",
+			checks.DataKeyMountSampleError: "mount table failed",
+		},
+	})
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
+		WatchSnapshots: snapshots,
+		Now:            func() time.Time { return now },
 		StorageUsage: func(string) (checks.StorageStats, error) {
-			return checks.StorageStats{}, errors.New("statfs failed")
+			t.Fatal("web storage view must not call statfs")
+			return checks.StorageStats{}, nil
 		},
 		MountSampler: func() ([]checks.Mount, error) {
-			return nil, errors.New("mount table failed")
+			t.Fatal("web storage view must not read mounts")
+			return nil, nil
 		},
 	})
 	if len(warns) != 0 {

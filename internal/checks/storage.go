@@ -48,23 +48,23 @@ func (c storageCheck) Run(_ context.Context) Result {
 	start := time.Now()
 	data := map[string]any{DataKeyPath: c.path}
 
+	sampler := c.mountSampler
+	if sampler == nil {
+		sampler = defaultMountSampler
+	}
+	mounts, mountErr := sampler()
+
 	// Mount verification takes precedence: a wrong/absent mount makes the space
 	// numbers meaningless (statfs would report the parent filesystem).
 	if c.mount.active {
-		sampler := c.mountSampler
-		if sampler == nil {
-			sampler = defaultMountSampler
-		}
-		mounts, err := sampler()
-		if err != nil {
-			return c.result(false, "mount "+c.path+": "+err.Error(), start)
+		if mountErr != nil {
+			data[DataKeyMountSampleError] = mountErr.Error()
+			res := c.result(false, "mount "+c.path+": "+mountErr.Error(), start)
+			res.Data = data
+			return res
 		}
 		mounted, problem, reason, info := c.mount.evaluate(mounts, c.path)
-		data[DataKeyMounted] = mounted
-		if info != nil {
-			data[DataKeyFSType], data[DataKeyDevice] = info.FSType, info.Device
-			data[DataKeyOptions] = strings.Join(info.Options, ",")
-		}
+		storageMountData(data, mounted, info)
 		if problem {
 			res := c.result(true, c.path+" "+reason, start)
 			res.Data = data
@@ -75,6 +75,14 @@ func (c storageCheck) Run(_ context.Context) Result {
 			res.Data = data
 			return res
 		}
+	} else if mountErr == nil {
+		// The mount metadata is presentation data for the daemon-published
+		// snapshot. A usage-only check remains independent of a failed mount-table
+		// read, so a transient display detail never changes its alert outcome.
+		info := MountForPath(mounts, c.path)
+		storageMountData(data, info != nil, info)
+	} else {
+		data[DataKeyMountSampleError] = mountErr.Error()
 	}
 
 	usage := c.usage
@@ -83,7 +91,10 @@ func (c storageCheck) Run(_ context.Context) Result {
 	}
 	st, err := usage(c.path)
 	if err != nil {
-		return c.result(false, fmt.Sprintf("statfs %s: %v", c.path, err), start)
+		data[DataKeySampleError] = err.Error()
+		res := c.result(false, fmt.Sprintf("statfs %s: %v", c.path, err), start)
+		res.Data = data
+		return res
 	}
 	usedBytes := storageUsedBytes(st)
 	values := map[string]float64{
@@ -114,6 +125,16 @@ func (c storageCheck) Run(_ context.Context) Result {
 	data[DataKeyValue] = firstPredValue(c.preds, values, st.UsedPct)
 	res.Data = data
 	return res
+}
+
+func storageMountData(data map[string]any, mounted bool, info *Mount) {
+	data[DataKeyMounted] = mounted
+	if info == nil {
+		return
+	}
+	data[DataKeyFSType], data[DataKeyDevice] = info.FSType, info.Device
+	data[DataKeyMountPoint] = info.MountPoint
+	data[DataKeyOptions] = strings.Join(info.Options, ",")
 }
 
 func storageUsedBytes(st StorageStats) uint64 {

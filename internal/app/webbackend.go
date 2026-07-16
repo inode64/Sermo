@@ -165,9 +165,7 @@ type WebBackend struct {
 	daemonMetrics     *DaemonMetricSampler
 	serviceMetrics    *ServiceMetricSampler
 	live              *LiveMetrics
-	storageUsage      checks.StorageUsageFunc
 	mountSampler      checks.MountSamplerFunc
-	openFilesSampler  func(mounts []checks.Mount) map[string]int64
 	raidSampler       checks.RaidSamplerFunc
 	execRunner        execx.Runner
 	expander          VolumeExpander
@@ -189,10 +187,6 @@ type WebBackend struct {
 
 	slaCacheMu sync.Mutex
 	slaCache   map[slaCacheKey]cachedSLATimelines
-
-	openFilesMu      sync.Mutex
-	openFilesTally   map[string]int64
-	openFilesTallyAt time.Time
 
 	mountUsageMu     sync.Mutex
 	mountUsageAt     time.Time
@@ -242,9 +236,7 @@ func NewWebBackend(ctx context.Context, cfg *config.Config, deps Deps) (*WebBack
 		daemonMetrics:     daemonMetrics,
 		serviceMetrics:    deps.ServiceMetrics,
 		live:              deps.Live,
-		storageUsage:      deps.StorageUsage,
 		mountSampler:      deps.MountSampler,
-		openFilesSampler:  deps.OpenFilesByMount,
 		raidSampler:       deps.RaidSampler,
 		execRunner:        deps.ExecxRunner,
 		expander:          configuredVolumeExpander(deps),

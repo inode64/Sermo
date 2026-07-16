@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -55,6 +56,19 @@ func TestStorageNotMountedAlerts(t *testing.T) {
 	}
 	if res.Data["mounted"] != false {
 		t.Fatalf("data mounted should be false: %+v", res.Data)
+	}
+}
+
+func TestStorageMountSamplerErrorIsPublished(t *testing.T) {
+	c := storageMount(mountCond{active: true, expectMount: true}, func() ([]Mount, error) {
+		return nil, errors.New("mount table unavailable")
+	})
+	res := c.Run(context.Background())
+	if res.OK {
+		t.Fatalf("mount sampler error should not alert: %+v", res)
+	}
+	if res.Data[DataKeyPath] != "/data" || res.Data[DataKeyMountSampleError] != "mount table unavailable" {
+		t.Fatalf("mount sampler error data = %+v", res.Data)
 	}
 }
 
