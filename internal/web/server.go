@@ -1152,6 +1152,13 @@ type Server struct {
 	shutdown context.Context // daemon lifetime; set in Run
 }
 
+// dashboardSnapshotSource is an optional atomic aggregate source. The normal
+// Backend interface stays granular for simple integrations, while sermod's
+// reloadable holder implements this to keep one response on one generation.
+type dashboardSnapshotSource interface {
+	DashboardSnapshot(context.Context, time.Duration) DashboardSnapshot
+}
+
 // Handler returns the router behind the auth middleware: the dashboard at /, the
 // service list at /api/services, and POST /api/services/{name}/{action} for
 // actions.
@@ -1445,27 +1452,39 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) dashboardSnapshot(ctx context.Context, since time.Duration) DashboardSnapshot {
 	var snapshot DashboardSnapshot
-	var wg sync.WaitGroup
-	run := func(fn func()) {
-		wg.Go(func() {
-			fn()
-		})
+	if source, ok := s.Backend.(dashboardSnapshotSource); ok {
+		if s.Readiness == nil {
+			snapshot = source.DashboardSnapshot(ctx, since)
+		} else {
+			var sourceSnapshot DashboardSnapshot
+			var ready ReadyReport
+			var wg sync.WaitGroup
+			wg.Go(func() { sourceSnapshot = source.DashboardSnapshot(ctx, since) })
+			wg.Go(func() { ready = s.Readiness.Report(ctx) })
+			wg.Wait()
+			snapshot = sourceSnapshot
+			snapshot.Ready = ready
+		}
+	} else {
+		var wg sync.WaitGroup
+		run := func(fn func()) {
+			wg.Go(fn)
+		}
+		run(func() { snapshot.Services = s.Backend.Services(ctx) })
+		run(func() { snapshot.Mounts = s.Backend.Mounts(ctx) })
+		run(func() { snapshot.Notifiers = s.Backend.Notifiers(ctx) })
+		run(func() { snapshot.Daemon = s.Backend.DaemonInfo(ctx) })
+		run(func() { snapshot.DaemonMetrics = s.Backend.DaemonMetrics(ctx, since) })
+		run(func() { snapshot.Locks = s.Backend.Locks(ctx) })
+		run(func() { snapshot.Activity = s.Backend.ActivitySummary(ctx) })
+		run(func() { snapshot.Monitoring = s.Backend.MonitoringStatus(ctx) })
+		run(func() { snapshot.Operations = s.Backend.Operations(ctx) })
+		run(func() { snapshot.HostMetrics = s.Backend.HostMetrics(ctx) })
+		if s.Readiness != nil {
+			run(func() { snapshot.Ready = s.Readiness.Report(ctx) })
+		}
+		wg.Wait()
 	}
-
-	run(func() { snapshot.Services = s.Backend.Services(ctx) })
-	run(func() { snapshot.Mounts = s.Backend.Mounts(ctx) })
-	run(func() { snapshot.Notifiers = s.Backend.Notifiers(ctx) })
-	run(func() { snapshot.Daemon = s.Backend.DaemonInfo(ctx) })
-	run(func() { snapshot.DaemonMetrics = s.Backend.DaemonMetrics(ctx, since) })
-	run(func() { snapshot.Locks = s.Backend.Locks(ctx) })
-	run(func() { snapshot.Activity = s.Backend.ActivitySummary(ctx) })
-	run(func() { snapshot.Monitoring = s.Backend.MonitoringStatus(ctx) })
-	run(func() { snapshot.Operations = s.Backend.Operations(ctx) })
-	run(func() { snapshot.HostMetrics = s.Backend.HostMetrics(ctx) })
-	if s.Readiness != nil {
-		run(func() { snapshot.Ready = s.Readiness.Report(ctx) })
-	}
-	wg.Wait()
 
 	if s.Readiness == nil {
 		snapshot.Ready = ReadyReport{Ready: true, Status: apiStatusOK, Services: len(snapshot.Services)}
