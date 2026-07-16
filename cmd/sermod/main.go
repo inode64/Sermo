@@ -431,7 +431,7 @@ func run(args []string) int {
 }
 
 func openDaemonStore(cfg *config.Config, logger *slog.Logger) (*state.Store, int) {
-	store, err := state.OpenWith(filepath.Join(cfg.Global.StateDir(), state.Filename), state.Options{CacheBytes: app.EngineByteSize(cfg, config.EngineKeyStateCacheSize, state.DefaultCacheBytes)})
+	store, err := state.OpenContextWith(context.Background(), filepath.Join(cfg.Global.StateDir(), state.Filename), state.Options{CacheBytes: app.EngineByteSize(cfg, config.EngineKeyStateCacheSize, state.DefaultCacheBytes)})
 	if err != nil {
 		logger.Error("open state store", logFieldError, err)
 		return nil, exitFailure
