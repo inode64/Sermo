@@ -63,22 +63,12 @@ func TestParseOpenVPNReset(t *testing.T) {
 }
 
 func TestOpenVPNProbeUDP(t *testing.T) {
-	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = pc.Close() }()
-	go func() {
-		buf := make([]byte, 64)
-		n, addr, err := pc.ReadFrom(buf)
-		if err != nil || n < 9 {
-			return
+	port := serveUDPOnce(t, func(req []byte) []byte {
+		if len(req) < 9 {
+			return nil
 		}
-		_, _ = pc.WriteTo(openvpnServerReply(buf[1:9]), addr)
-	}()
-
-	_, portStr, _ := net.SplitHostPort(pc.LocalAddr().String())
-	port, _ := strconv.Atoi(portStr)
+		return openvpnServerReply(req[1:9])
+	})
 	res, err := openvpnProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: port})
 	if err != nil {
 		t.Fatalf("probe: %v", err)

@@ -393,18 +393,11 @@ func containerPath(container, suffix string) string {
 	return dockerContainerPathPrefix + url.PathEscape(container) + suffix
 }
 
-// NormalizeTLS maps friendly TLS values to Docker HTTP client modes.
+// NormalizeTLS maps friendly TLS values to Docker HTTP client modes. It shares
+// the conn probes' normalization: the accepted spellings and canonical modes
+// are the same (netutil.NormalizeTLS).
 func NormalizeTLS(s string) string {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "", tlsModeFalse, tlsModeNo, tlsModeOff:
-		return ""
-	case tlsModeTrue, tlsModeYes, tlsModeOn, tlsModeRequired:
-		return tlsModeTrue
-	case tlsModeSkipVerify:
-		return tlsModeSkipVerify
-	default:
-		return s
-	}
+	return netutil.NormalizeTLS(s)
 }
 
 // ValidTLSValue reports whether v is accepted by Sermo's Docker transport.

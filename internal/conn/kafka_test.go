@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
-	"strconv"
 	"testing"
 )
 
@@ -28,62 +27,33 @@ func buildKafkaAPIVersions(errorCode uint16, apiKeys ...uint16) []byte {
 // ApiVersions request and replies with reply.
 func serveKafka(t *testing.T, reply []byte) int {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = ln.Close() })
-	go func() {
-		c, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer func() { _ = c.Close() }()
+	return serveOnce(t, func(c net.Conn) {
 		var sz [4]byte
 		if _, err := io.ReadFull(c, sz[:]); err != nil {
 			return
 		}
 		_, _ = io.CopyN(io.Discard, c, int64(binary.BigEndian.Uint32(sz[:])))
 		_, _ = c.Write(reply)
-	}()
-	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
-	port, _ := strconv.Atoi(portStr)
-	return port
+	})
 }
 
-func TestKafkaProbeBroker(t *testing.T) {
-	// A broker listener advertises Produce (key 0) plus assorted others.
-	reply := buildKafkaAPIVersions(0, kafkaProduceKey, 1, 3, kafkaAPIVersionsKey)
-	res, err := kafkaProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: serveKafka(t, reply)})
-	if err != nil {
-		t.Fatalf("probe: %v", err)
+func TestKafkaProbeRole(t *testing.T) {
+	cases := []struct {
+		name  string
+		reply []byte
+		want  map[string]string
+	}{
+		// A broker listener advertises Produce (key 0) plus assorted others.
+		{"broker", buildKafkaAPIVersions(0, kafkaProduceKey, 1, 3, kafkaAPIVersionsKey),
+			map[string]string{"role": "broker", "produce_api": "yes", "error_code": "0"}},
+		// A KRaft controller listener advertises the Vote quorum API but not Produce.
+		{"controller", buildKafkaAPIVersions(0, kafkaVoteKey, 53, 55, kafkaAPIVersionsKey),
+			map[string]string{"role": "controller", "vote_api": "yes", "produce_api": "no"}},
 	}
-	if res.Extra["role"] != "broker" {
-		t.Fatalf("role = %q, want broker", res.Extra["role"])
-	}
-	if res.Extra["produce_api"] != "yes" {
-		t.Fatalf("produce_api = %q, want yes", res.Extra["produce_api"])
-	}
-	if res.Extra["error_code"] != "0" {
-		t.Fatalf("error_code = %q, want 0", res.Extra["error_code"])
-	}
-}
-
-func TestKafkaProbeController(t *testing.T) {
-	// A KRaft controller listener advertises the Vote quorum API but not Produce.
-	reply := buildKafkaAPIVersions(0, kafkaVoteKey, 53, 55, kafkaAPIVersionsKey)
-	res, err := kafkaProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: serveKafka(t, reply)})
-	if err != nil {
-		t.Fatalf("probe: %v", err)
-	}
-	if res.Extra["role"] != "controller" {
-		t.Fatalf("role = %q, want controller", res.Extra["role"])
-	}
-	if res.Extra["vote_api"] != "yes" {
-		t.Fatalf("vote_api = %q, want yes", res.Extra["vote_api"])
-	}
-	if res.Extra["produce_api"] != "no" {
-		t.Fatalf("produce_api = %q, want no", res.Extra["produce_api"])
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			assertProbeExtras(t, kafkaProtocol{}, serveKafka(t, c.reply), c.want)
+		})
 	}
 }
 

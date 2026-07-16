@@ -7,17 +7,7 @@ import (
 )
 
 func TestFTPHandshakeAnonymous(t *testing.T) {
-	conn := rw{in: strings.NewReader("220-Welcome\r\n220 ProFTPD 1.3 ready\r\n"), out: &bytes.Buffer{}}
-	res, err := ftpHandshake(conn, Config{})
-	if err != nil {
-		t.Fatalf("handshake: %v", err)
-	}
-	if strings.Contains(conn.out.String(), "USER") {
-		t.Fatalf("anonymous check must not send USER: %q", conn.out.String())
-	}
-	if !strings.Contains(res.Extra["greeting"], "ProFTPD") {
-		t.Fatalf("greeting (multi-line) not captured: %v", res.Extra)
-	}
+	assertHandshakeAnonymous(t, ftpHandshake, "220-Welcome\r\n220 ProFTPD 1.3 ready\r\n", "USER", "ProFTPD")
 }
 
 func TestFTPHandshakeLogin(t *testing.T) {
@@ -57,15 +47,9 @@ func TestFTPHandshakePasswordOnlyIsAnonymous(t *testing.T) {
 
 func TestFTPHandshakeLoginFails(t *testing.T) {
 	replies := "220 ready\r\n" + "331 need password\r\n" + "530 login incorrect\r\n"
-	conn := rw{in: strings.NewReader(replies), out: &bytes.Buffer{}}
-	if _, err := ftpHandshake(conn, Config{User: "joe", Password: "bad"}); err == nil {
-		t.Fatal("a 530 reply must fail")
-	}
+	assertHandshakeFails(t, ftpHandshake, replies, Config{User: "joe", Password: "bad"})
 }
 
 func TestFTPHandshakeBadGreeting(t *testing.T) {
-	conn := rw{in: strings.NewReader("421 service not available\r\n"), out: &bytes.Buffer{}}
-	if _, err := ftpHandshake(conn, Config{}); err == nil {
-		t.Fatal("a non-220 greeting must fail")
-	}
+	assertHandshakeFails(t, ftpHandshake, "421 service not available\r\n", Config{})
 }

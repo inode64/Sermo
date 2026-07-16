@@ -34,25 +34,16 @@ func (guacdProtocol) DefaultPort() int   { return defaultPortGuacd }
 func (guacdProtocol) RequiresUser() bool { return false }
 
 func (guacdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortGuacd
-	}
 	selectProto := cfg.Query
 	if selectProto == "" {
 		selectProto = guacdDefaultProtocol
 	}
 
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, hostPort(host, port))
+	c, err := dialTCPDeadline(ctx, cfg, defaultPortGuacd)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	applyDeadline(ctx, c)
 
 	if _, err := io.WriteString(c, guacInstruction(guacdSelectOp, selectProto)); err != nil {
 		return Result{}, err

@@ -16,22 +16,13 @@ checks:
     expect_json:
       version: { op: "=~", value: "^v[0-9]+" }
 `)
-	for _, is := range issues {
-		if hasIssue([]Issue{is}, "checks.api") {
-			t.Fatalf("valid http comparisons must produce no issue: %v", issues)
-		}
-	}
+	mustNotHave(t, issues, "checks.api")
 }
 
 func TestValidateHTTPMethods(t *testing.T) {
 	// Every standard verb (any case) validates cleanly.
 	for _, m := range []string{"GET", "head", "POST", "Put", "PATCH", "delete", "OPTIONS", "TRACE", "CONNECT", `" patch "`} {
-		issues := validateService(t, "name: web\nservice: x\nchecks:\n  api: { type: http, url: \"http://h/\", method: "+m+" }\n")
-		for _, is := range issues {
-			if hasIssue([]Issue{is}, "checks.api") {
-				t.Fatalf("method %q must be valid: %v", m, issues)
-			}
-		}
+		mustNotHave(t, validateService(t, "name: web\nservice: x\nchecks:\n  api: { type: http, url: \"http://h/\", method: "+m+" }\n"), "checks.api")
 	}
 	// A typo / non-standard verb warns.
 	mustHave(t, validateService(t, `
@@ -50,11 +41,7 @@ service: x
 checks:
   h3: { type: http, url: "https://h/", http3: true }
 `)
-	for _, is := range issues {
-		if hasIssue([]Issue{is}, "checks.h3") {
-			t.Fatalf("valid http3 check must produce no issue: %v", issues)
-		}
-	}
+	mustNotHave(t, issues, "checks.h3")
 	// http3 over http:// is rejected.
 	mustHave(t, validateService(t, `
 name: web
@@ -85,11 +72,7 @@ service: x
 checks:
   api: { type: http, url: "http://h/", follow_redirects: false }
 `)
-	for _, is := range issues {
-		if hasIssue([]Issue{is}, "checks.api") {
-			t.Fatalf("boolean follow_redirects must be valid: %v", issues)
-		}
-	}
+	mustNotHave(t, issues, "checks.api")
 	mustHave(t, validateService(t, `
 name: web
 service: x

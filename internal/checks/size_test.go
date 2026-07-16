@@ -115,19 +115,7 @@ func TestBuildAndRunSizeCheckRealFile(t *testing.T) {
 
 func TestDirOrFileSizeSkipsHiddenEntriesByDefault(t *testing.T) {
 	root := t.TempDir()
-	for path, size := range map[string]int{
-		"visible.txt":       3,
-		".hidden.txt":       5,
-		".cache/nested.txt": 7,
-	} {
-		fullPath := filepath.Join(root, path)
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(fullPath, make([]byte, size), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	writeSizedTree(t, root, map[string]int{"visible.txt": 3, ".hidden.txt": 5, ".cache/nested.txt": 7})
 
 	if size, err := dirOrFileSize(context.Background(), root, false); err != nil || size != 3 {
 		t.Fatalf("default recursive size = %d, %v; want 3, nil", size, err)

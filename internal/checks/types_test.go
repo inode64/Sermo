@@ -60,33 +60,37 @@ func TestParseLdSoConf(t *testing.T) {
 	}
 }
 
-func TestLockfileCheckFailureVsMissing(t *testing.T) {
+// assertPathCheckFailureVsMissing checks that mk(path) reports a wrong-type path
+// (built by setupWrong) distinctly from a simply-missing one.
+func assertPathCheckFailureVsMissing(t *testing.T, mk func(paths []string) Check, setupWrong func(dir string) (path, wantMsg string)) {
+	t.Helper()
 	dir := t.TempDir()
-	// A path that exists but is not a regular file is a failure, reported
-	// distinctly from a path that is simply missing.
-	res := lockfileCheck{base: base{name: "l"}, paths: []string{dir}}.Run(context.Background())
-	if res.OK || !strings.Contains(res.Message, "not a regular file") {
-		t.Fatalf("directory path: %+v", res)
+	wrongPath, wantMsg := setupWrong(dir)
+	if res := mk([]string{wrongPath}).Run(context.Background()); res.OK || !strings.Contains(res.Message, wantMsg) {
+		t.Fatalf("wrong-type path: %+v", res)
 	}
-	res2 := lockfileCheck{base: base{name: "l"}, paths: []string{filepath.Join(dir, "missing")}}.Run(context.Background())
-	if res2.OK || !strings.Contains(res2.Message, "does not exist") {
-		t.Fatalf("missing path: %+v", res2)
+	if res := mk([]string{filepath.Join(dir, "missing")}).Run(context.Background()); res.OK || !strings.Contains(res.Message, "does not exist") {
+		t.Fatalf("missing path: %+v", res)
 	}
 }
 
+func TestLockfileCheckFailureVsMissing(t *testing.T) {
+	// A path that exists but is not a regular file is a failure, reported
+	// distinctly from a path that is simply missing.
+	assertPathCheckFailureVsMissing(t,
+		func(paths []string) Check { return lockfileCheck{base: base{name: "l"}, paths: paths} },
+		func(dir string) (string, string) { return dir, "not a regular file" })
+}
+
 func TestSocketCheckFailureVsMissing(t *testing.T) {
-	dir := t.TempDir()
 	// A regular file where a socket is expected is a failure, distinct from missing.
-	regular := filepath.Join(dir, "not.sock")
-	writeFile(t, regular, "x")
-	res := socketCheck{base: base{name: "s"}, paths: []string{regular}}.Run(context.Background())
-	if res.OK || !strings.Contains(res.Message, "is not a socket") {
-		t.Fatalf("regular file: %+v", res)
-	}
-	res2 := socketCheck{base: base{name: "s"}, paths: []string{filepath.Join(dir, "missing")}}.Run(context.Background())
-	if res2.OK || !strings.Contains(res2.Message, "does not exist") {
-		t.Fatalf("missing path: %+v", res2)
-	}
+	assertPathCheckFailureVsMissing(t,
+		func(paths []string) Check { return socketCheck{base: base{name: "s"}, paths: paths} },
+		func(dir string) (string, string) {
+			regular := filepath.Join(dir, "not.sock")
+			writeFile(t, regular, "x")
+			return regular, "is not a socket"
+		})
 }
 
 func TestLevelCountResultFreeOmittedWhenLimitUnknown(t *testing.T) {

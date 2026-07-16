@@ -19,65 +19,62 @@ import (
 
 func writeActionConfig(t *testing.T) string {
 	t.Helper()
-	root := t.TempDir()
-	global := filepath.Join(root, "sermo.yml")
-	mustWrite(t, global, `
+	global := writeServiceConfig(t, `
 paths:
-  services: [ `+root+`/services ]
-  runtime: `+root+`/run
-  state: `+root+`/state
+  services: [ @ROOT@/services ]
+  runtime: @ROOT@/run
+  state: @ROOT@/state
 defaults:
   policy:
     cooldown: 5m
-`)
-	mustWrite(t, filepath.Join(root, "services", "web.yml"), `
+`, map[string]string{
+		"services/web.yml": `
 name: web
 service: web
-`)
+`,
+	})
 	return global
 }
 
 func writeInvalidActionConfig(t *testing.T) string {
 	t.Helper()
-	root := t.TempDir()
-	global := filepath.Join(root, "sermo.yml")
-	mustWrite(t, global, `
+	global := writeServiceConfig(t, `
 paths:
-  services: [ `+root+`/services ]
-  runtime: `+root+`/run
-  locks: `+root+`/locks
-  state: `+root+`/state
+  services: [ @ROOT@/services ]
+  runtime: @ROOT@/run
+  locks: @ROOT@/locks
+  state: @ROOT@/state
 defaults:
   policy:
     cooldown: 5m
-`)
-	mustWrite(t, filepath.Join(root, "services", "web.yml"), `
+`, map[string]string{
+		"services/web.yml": `
 name: web
 service: web
-`)
+`,
+	})
 	return global
 }
 
 func writeReloadCommandConfig(t *testing.T) string {
 	t.Helper()
-	root := t.TempDir()
-	global := filepath.Join(root, "sermo.yml")
-	mustWrite(t, global, `
+	global := writeServiceConfig(t, `
 paths:
-  services: [ `+root+`/services ]
-  runtime: `+root+`/run
-  state: `+root+`/state
+  services: [ @ROOT@/services ]
+  runtime: @ROOT@/run
+  state: @ROOT@/state
 defaults:
   policy:
     cooldown: 5m
-`)
-	mustWrite(t, filepath.Join(root, "services", "web.yml"), `
+`, map[string]string{
+		"services/web.yml": `
 name: web
 service: web
 reload:
   command: [reload-web, --check]
   when: always
-`)
+`,
+	})
 	return global
 }
 
@@ -100,7 +97,14 @@ func actionApp(result operation.Result, opErr error, stdout, stderr *bytes.Buffe
 	}
 }
 
-func readMonitorRecord(t *testing.T, global, service string) state.MonitorRecord {
+// okOperate is an App.Operate stub that echoes the request as a successful result.
+func okOperate(_ context.Context, _ options, _ *config.Config, _ config.Resolved, service, action string) (operation.Result, error) {
+	return operation.Result{Service: service, Action: action, Status: operation.ResultOK}, nil
+}
+
+// openTestStateStore loads the config at global and opens its state store. The
+// caller is responsible for closing the returned store.
+func openTestStateStore(t *testing.T, global string) *state.Store {
 	t.Helper()
 	cfg, err := config.Load(global)
 	if err != nil {
@@ -110,6 +114,12 @@ func readMonitorRecord(t *testing.T, global, service string) state.MonitorRecord
 	if err != nil {
 		t.Fatalf("open state: %v", err)
 	}
+	return store
+}
+
+func readMonitorRecord(t *testing.T, global, service string) state.MonitorRecord {
+	t.Helper()
+	store := openTestStateStore(t, global)
 	defer func() { _ = store.Close() }()
 	rec, found, err := store.MonitorState(service)
 	if err != nil {
@@ -123,14 +133,7 @@ func readMonitorRecord(t *testing.T, global, service string) state.MonitorRecord
 
 func readOperationSettling(t *testing.T, global, service string) (state.OperationSettlingRecord, bool) {
 	t.Helper()
-	cfg, err := config.Load(global)
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
-	if err != nil {
-		t.Fatalf("open state: %v", err)
-	}
+	store := openTestStateStore(t, global)
 	defer func() { _ = store.Close() }()
 	rec, found, err := store.OperationSettling(service)
 	if err != nil {
@@ -141,14 +144,7 @@ func readOperationSettling(t *testing.T, global, service string) (state.Operatio
 
 func writeMonitorRecord(t *testing.T, global, service string, active bool, source string) {
 	t.Helper()
-	cfg, err := config.Load(global)
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
-	if err != nil {
-		t.Fatalf("open state: %v", err)
-	}
+	store := openTestStateStore(t, global)
 	defer func() { _ = store.Close() }()
 	if err := store.SetActive(service, active, source); err != nil {
 		t.Fatalf("set active: %v", err)
@@ -247,12 +243,16 @@ func TestRestartBlockedByBackupNotifiesInteractiveUser(t *testing.T) {
 	}
 }
 
-func TestRestartBlockedByBackupDoesNotNotifyCron(t *testing.T) {
+// assertBlockedDoesNotNotify runs a restart that the engine blocks with reason
+// msg under the given interactive context and fails if the CLI notifies a
+// terminal user.
+func assertBlockedDoesNotNotify(t *testing.T, msg string, interactive func() (string, bool)) {
+	t.Helper()
 	global := writeActionConfig(t)
-	app := actionApp(operation.Result{Service: "db", Action: "restart", Status: operation.ResultBlocked, Message: "database backup is running"}, nil, nil, nil)
-	app.InteractiveUser = func() (string, bool) { return "", false }
+	app := actionApp(operation.Result{Service: "db", Action: "restart", Status: operation.ResultBlocked, Message: msg}, nil, nil, nil)
+	app.InteractiveUser = interactive
 	app.NotifyBlockedAction = func(context.Context, operation.Result, string) error {
-		t.Fatal("cron/non-interactive action must not notify a terminal user")
+		t.Fatal("blocked action must not notify a terminal user")
 		return nil
 	}
 
@@ -262,19 +262,12 @@ func TestRestartBlockedByBackupDoesNotNotifyCron(t *testing.T) {
 	}
 }
 
-func TestRestartBlockedForNonBackupDoesNotNotify(t *testing.T) {
-	global := writeActionConfig(t)
-	app := actionApp(operation.Result{Service: "db", Action: "restart", Status: operation.ResultBlocked, Message: "configuration invalid"}, nil, nil, nil)
-	app.InteractiveUser = func() (string, bool) { return "fran", true }
-	app.NotifyBlockedAction = func(context.Context, operation.Result, string) error {
-		t.Fatal("non-backup block must not notify through tty")
-		return nil
-	}
+func TestRestartBlockedByBackupDoesNotNotifyCron(t *testing.T) {
+	assertBlockedDoesNotNotify(t, "database backup is running", func() (string, bool) { return "", false })
+}
 
-	code := app.Run(context.Background(), []string{"--config", global, "restart", "web"})
-	if code != exitBlocked {
-		t.Fatalf("Run() exit = %d, want %d", code, exitBlocked)
-	}
+func TestRestartBlockedForNonBackupDoesNotNotify(t *testing.T) {
+	assertBlockedDoesNotNotify(t, "configuration invalid", func() (string, bool) { return "fran", true })
 }
 
 func TestPreflightFailedExit1(t *testing.T) {
@@ -302,9 +295,7 @@ func TestStopPausesMonitoringAndStartRestores(t *testing.T) {
 	global := writeActionConfig(t)
 	var stdout bytes.Buffer
 	app := actionApp(operation.Result{}, nil, &stdout, nil)
-	app.Operate = func(_ context.Context, _ options, _ *config.Config, _ config.Resolved, service, action string) (operation.Result, error) {
-		return operation.Result{Service: service, Action: action, Status: operation.ResultOK}, nil
-	}
+	app.Operate = okOperate
 
 	if code := app.Run(context.Background(), []string{"--config", global, "stop", "web"}); code != exitSuccess {
 		t.Fatalf("stop exit = %d, want %d", code, exitSuccess)
@@ -334,9 +325,7 @@ func TestStopStartPreservesExistingUnmonitor(t *testing.T) {
 	global := writeActionConfig(t)
 	writeMonitorRecord(t, global, "web", false, state.SourceCLI)
 	app := actionApp(operation.Result{}, nil, nil, nil)
-	app.Operate = func(_ context.Context, _ options, _ *config.Config, _ config.Resolved, service, action string) (operation.Result, error) {
-		return operation.Result{Service: service, Action: action, Status: operation.ResultOK}, nil
-	}
+	app.Operate = okOperate
 
 	if code := app.Run(context.Background(), []string{"--config", global, "stop", "web"}); code != exitSuccess {
 		t.Fatalf("stop exit = %d, want %d", code, exitSuccess)
@@ -354,26 +343,25 @@ func TestStopStartPreservesExistingUnmonitor(t *testing.T) {
 // also_apply, so restart web runs both services through Operate.
 func writeCascadeConfig(t *testing.T) string {
 	t.Helper()
-	root := t.TempDir()
-	global := filepath.Join(root, "sermo.yml")
-	mustWrite(t, global, `
+	global := writeServiceConfig(t, `
 paths:
-  services: [ `+root+`/services ]
-  runtime: `+root+`/run
-  state: `+root+`/state
+  services: [ @ROOT@/services ]
+  runtime: @ROOT@/run
+  state: @ROOT@/state
 defaults:
   policy:
     cooldown: 5m
-`)
-	mustWrite(t, filepath.Join(root, "services", "web.yml"), `
+`, map[string]string{
+		"services/web.yml": `
 name: web
 service: web
 also_apply: [db]
-`)
-	mustWrite(t, filepath.Join(root, "services", "db.yml"), `
+`,
+		"services/db.yml": `
 name: db
 service: db
-`)
+`,
+	})
 	return global
 }
 
@@ -479,56 +467,44 @@ func TestReloadValidatesConfigBeforeOperate(t *testing.T) {
 	}
 }
 
-func TestReloadUnsupportedDoesNotOperate(t *testing.T) {
-	global := writeActionConfig(t)
-	var stderr bytes.Buffer
-	called := false
+func TestReloadPreconditionDoesNotOperate(t *testing.T) {
 	noReload := false
-	app := actionApp(operation.Result{Service: "web", Action: "reload", Status: operation.ResultOK}, nil, nil, &stderr)
-	app.Detector = fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendOpenRC}}
-	app.NewManager = func(servicemgr.Backend) (servicemgr.Manager, error) {
-		return fakeManager{supportsReload: &noReload}, nil
-	}
-	app.Operate = func(context.Context, options, *config.Config, config.Resolved, string, string) (operation.Result, error) {
-		called = true
-		return operation.Result{}, nil
-	}
+	for _, tc := range []struct {
+		name       string
+		manager    fakeManager
+		wantStderr []string
+	}{
+		{"unsupported", fakeManager{supportsReload: &noReload}, []string{"does not support reload", "reload.command"}},
+		{"support error", fakeManager{supportsReloadErr: errors.New("init query failed")}, []string{"reload support unavailable", "init query failed"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			global := writeActionConfig(t)
+			var stderr bytes.Buffer
+			called := false
+			app := actionApp(operation.Result{Service: "web", Action: "reload", Status: operation.ResultOK}, nil, nil, &stderr)
+			app.Detector = fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendOpenRC}}
+			app.NewManager = func(servicemgr.Backend) (servicemgr.Manager, error) {
+				return tc.manager, nil
+			}
+			app.Operate = func(context.Context, options, *config.Config, config.Resolved, string, string) (operation.Result, error) {
+				called = true
+				return operation.Result{}, nil
+			}
 
-	code := app.Run(context.Background(), []string{"--config", global, "reload", "web"})
-	if code != exitRuntimeError {
-		t.Fatalf("Run() exit = %d, want %d", code, exitRuntimeError)
-	}
-	if called {
-		t.Fatal("unsupported reload called the operation engine")
-	}
-	if got := stderr.String(); !strings.Contains(got, "does not support reload") || !strings.Contains(got, "reload.command") {
-		t.Fatalf("stderr = %q", got)
-	}
-}
-
-func TestReloadSupportErrorDoesNotOperate(t *testing.T) {
-	global := writeActionConfig(t)
-	var stderr bytes.Buffer
-	called := false
-	app := actionApp(operation.Result{Service: "web", Action: "reload", Status: operation.ResultOK}, nil, nil, &stderr)
-	app.Detector = fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendOpenRC}}
-	app.NewManager = func(servicemgr.Backend) (servicemgr.Manager, error) {
-		return fakeManager{supportsReloadErr: errors.New("init query failed")}, nil
-	}
-	app.Operate = func(context.Context, options, *config.Config, config.Resolved, string, string) (operation.Result, error) {
-		called = true
-		return operation.Result{}, nil
-	}
-
-	code := app.Run(context.Background(), []string{"--config", global, "reload", "web"})
-	if code != exitRuntimeError {
-		t.Fatalf("Run() exit = %d, want %d", code, exitRuntimeError)
-	}
-	if called {
-		t.Fatal("reload with support error called the operation engine")
-	}
-	if got := stderr.String(); !strings.Contains(got, "reload support unavailable") || !strings.Contains(got, "init query failed") {
-		t.Fatalf("stderr = %q", got)
+			code := app.Run(context.Background(), []string{"--config", global, "reload", "web"})
+			if code != exitRuntimeError {
+				t.Fatalf("Run() exit = %d, want %d", code, exitRuntimeError)
+			}
+			if called {
+				t.Fatal("reload precondition failure called the operation engine")
+			}
+			got := stderr.String()
+			for _, want := range tc.wantStderr {
+				if !strings.Contains(got, want) {
+					t.Fatalf("stderr = %q, want %q", got, want)
+				}
+			}
+		})
 	}
 }
 

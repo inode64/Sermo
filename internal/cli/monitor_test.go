@@ -16,30 +16,9 @@ import (
 )
 
 func TestMonitorUnmonitorCommand(t *testing.T) {
-	root := t.TempDir()
+	root, global := writeCatalogServiceConfig(t)
 	catalogDir := filepath.Join(root, "catalog")
-	catalogServicesDir := filepath.Join(catalogDir, "services")
-	servicesDir := filepath.Join(root, "services")
-	runDir := filepath.Join(root, "run")
 	stateDir := filepath.Join(root, "state")
-	for _, d := range []string{catalogServicesDir, servicesDir, runDir, stateDir} {
-		if err := os.MkdirAll(d, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write := func(path, body string) {
-		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write(filepath.Join(catalogServicesDir, "nginx.yml"), "name: nginx\nservice: nginx\n")
-	write(filepath.Join(servicesDir, "web.yml"), "name: web\nuses: nginx\n")
-	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
-engine: { backend: auto }
-paths: { services: [ %s ], runtime: %s, state: %s }
-defaults: { policy: { cooldown: 5m } }
-`, servicesDir, runDir, stateDir))
-	global := filepath.Join(root, "sermo.yml")
 
 	run := func(args ...string) int {
 		var out bytes.Buffer
@@ -208,7 +187,7 @@ defaults: { policy: { cooldown: 5m } }
 }
 
 func TestMonitorJSONIncludesSource(t *testing.T) {
-	root, global := monitorTestConfig(t)
+	root, global := writeCatalogServiceConfig(t)
 	var out bytes.Buffer
 	app := monitorTestApp(root, &out)
 	if code := app.Run(context.Background(), []string{"--config", global, "--json", "unmonitor", "web"}); code != exitSuccess {
@@ -227,7 +206,7 @@ func TestMonitorJSONIncludesSource(t *testing.T) {
 }
 
 func TestStatusShowsPauseSource(t *testing.T) {
-	root, global := monitorTestConfig(t)
+	root, global := writeCatalogServiceConfig(t)
 	app := monitorTestApp(root, nil)
 	if code := app.Run(context.Background(), []string{"--config", global, "unmonitor", "web"}); code != exitSuccess {
 		t.Fatalf("unmonitor exit = %d", code)
@@ -260,7 +239,7 @@ func TestStatusShowsPauseSource(t *testing.T) {
 }
 
 func TestStatusShowsDisabledState(t *testing.T) {
-	root, global := monitorTestConfig(t)
+	root, global := writeCatalogServiceConfig(t)
 	if err := os.WriteFile(filepath.Join(root, "services", "web.yml"), []byte("name: web\nuses: nginx\nenabled: false\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +267,7 @@ func TestStatusShowsDisabledState(t *testing.T) {
 	}
 }
 
-func monitorTestConfig(t *testing.T) (root, global string) {
+func writeCatalogServiceConfig(t *testing.T) (root, global string) {
 	t.Helper()
 	root = t.TempDir()
 	catalogDir := filepath.Join(root, "catalog")

@@ -1317,16 +1317,8 @@ func (c *Config) expandAppsChain(tree map[string]any, chain []string) []string {
 // catalogRegistry returns the registry that holds a given category's
 // definitions (apps, libraries, patterns, else the catalog services).
 func (c *Config) catalogRegistry(category string) map[string]*Document {
-	switch category {
-	case CategoryApp:
-		return c.Apps
-	case CategoryLibrary:
-		return c.Libraries
-	case CategoryPatterns:
-		return c.Patterns
-	default:
-		return c.CatalogServices
-	}
+	_, registry := c.catalogSet(category)
+	return registry
 }
 
 // ResolveCatalog expands a catalog definition from the registry for its category

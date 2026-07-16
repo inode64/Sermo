@@ -8,35 +8,25 @@ import (
 )
 
 func TestRcodeName(t *testing.T) {
-	cases := map[int]string{
+	runMapCases(t, "rcodeName", rcodeName, map[int]string{
 		0: "NOERROR", 1: "FORMERR", 2: "SERVFAIL",
 		3: "NXDOMAIN", 4: "NOTIMP", 5: "REFUSED",
 		9: "RCODE9",
-	}
-	for code, want := range cases {
-		if got := rcodeName(code); got != want {
-			t.Errorf("rcodeName(%d) = %q, want %q", code, got, want)
-		}
-	}
+	})
 }
 
 func TestIPPStatusName(t *testing.T) {
-	cases := map[uint16]string{
+	runMapCases(t, "ippStatusName", ippStatusName, map[uint16]string{
 		0x0000: "successful-ok",
 		0x0401: "client-error-not-authorized",
 		0x0406: "client-error-not-found",
 		0x0500: "server-error-internal-error",
 		0x0599: "0x0599",
-	}
-	for code, want := range cases {
-		if got := ippStatusName(code); got != want {
-			t.Errorf("ippStatusName(%#04x) = %q, want %q", code, got, want)
-		}
-	}
+	})
 }
 
 func TestMQTTConnackName(t *testing.T) {
-	cases := map[byte]string{
+	runMapCases(t, "mqttConnackName", mqttConnackName, map[byte]string{
 		0: "accepted",
 		1: "unacceptable-protocol-version",
 		2: "identifier-rejected",
@@ -44,12 +34,7 @@ func TestMQTTConnackName(t *testing.T) {
 		4: "bad-username-or-password",
 		5: "not-authorized",
 		7: "code-7",
-	}
-	for code, want := range cases {
-		if got := mqttConnackName(code); got != want {
-			t.Errorf("mqttConnackName(%d) = %q, want %q", code, got, want)
-		}
-	}
+	})
 }
 
 func TestMySQLDSNDefaultsAndEscaping(t *testing.T) {

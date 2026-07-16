@@ -57,7 +57,7 @@ func dialConn(ctx context.Context, cfg Config, port int) (net.Conn, error) {
 	}
 	addr := hostPort(host, port)
 	d := BindDialer(cfg.Interface)
-	switch normalizeTLS(cfg.TLS) {
+	switch NormalizeTLS(cfg.TLS) {
 	case "":
 		return d.DialContext(ctx, networkTCP, addr)
 	case tlsSkipVerify:
@@ -137,6 +137,83 @@ func probeUnixSocket(ctx context.Context, cfg Config, defaultSocket string) (Res
 	}
 	_ = c.Close()
 	return Result{Extra: map[string]string{extraSocket: socket}}, nil
+}
+
+// dialTCPDeadline opens a plain TCP connection to cfg's host (defaulting to
+// DefaultHost) and port (defaulting to defaultPort) through BindDialer and
+// applies the context deadline. The prologue shared by the byte-protocol
+// probes that never upgrade to TLS; the caller closes the connection.
+func dialTCPDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, error) {
+	host := cfg.Host
+	if host == "" {
+		host = DefaultHost
+	}
+	port := cfg.Port
+	if port == 0 {
+		port = defaultPort
+	}
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkTCP, hostPort(host, port))
+	if err != nil {
+		return nil, err
+	}
+	applyDeadline(ctx, c)
+	return c, nil
+}
+
+// probeLineCommand dials cfg (dialDeadline semantics), optionally sends
+// command, reads one greeting line and parses it with parse; a foreign reply
+// (parse ok=false) fails with errFormat applied to the offending line. The
+// command→greeting skeleton shared by clamd, spamd and asterisk.
+func probeLineCommand(ctx context.Context, cfg Config, defaultPort int, command string, parse func(line string) (Result, bool), errFormat string) (Result, error) {
+	c, err := dialDeadline(ctx, cfg, defaultPort)
+	if err != nil {
+		return Result{}, err
+	}
+	defer func() { _ = c.Close() }()
+	if command != "" {
+		if _, err := io.WriteString(c, command); err != nil {
+			return Result{}, err
+		}
+	}
+	line, err := readGreetingLine(c)
+	if err != nil {
+		return Result{}, err
+	}
+	res, ok := parse(line)
+	if !ok {
+		return Result{}, fmt.Errorf(errFormat, line)
+	}
+	return res, nil
+}
+
+// exchangeUDP dials cfg's host (defaulting to DefaultHost) and port
+// (defaulting to defaultPort) over UDP through BindDialer, applies the context
+// deadline, sends request, and returns the first reply datagram (up to
+// bufBytes). The round-trip shared by the datagram probes (rpcbind, nebula).
+func exchangeUDP(ctx context.Context, cfg Config, defaultPort int, request []byte, bufBytes int) ([]byte, error) {
+	host := cfg.Host
+	if host == "" {
+		host = DefaultHost
+	}
+	port := cfg.Port
+	if port == 0 {
+		port = defaultPort
+	}
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, networkUDP, hostPort(host, port))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = c.Close() }()
+	applyDeadline(ctx, c)
+	if _, err := c.Write(request); err != nil {
+		return nil, err
+	}
+	buf := make([]byte, bufBytes)
+	n, err := c.Read(buf)
+	if err != nil {
+		return nil, err
+	}
+	return buf[:n], nil
 }
 
 // socketOnlyProtocol is a Unix-socket-only liveness protocol whose probe is

@@ -51,13 +51,10 @@ func (volumeAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	if len(vols) == 0 {
 		return Result{}, errors.New("no storage volumes found to monitor")
 	}
-	selected := chooseCandidates(p, "Which volumes do you want to monitor?", vols, volumeLabel)
-
-	var shared *volSettings
-	if len(selected) > 1 && p.Confirm("Apply the same settings to all selected volumes?", true) {
-		s := askVolSettings(p, env, "the selected volumes")
-		shared = &s
-	}
+	selected, shared := chooseSharedSettings(p,
+		"Which volumes do you want to monitor?", vols, volumeLabel,
+		"Apply the same settings to all selected volumes?", "the selected volumes",
+		func(label string) volSettings { return askVolSettings(p, env, label) })
 
 	watches := map[string]any{}
 	for _, v := range selected {

@@ -85,28 +85,40 @@ func TestRaidCheck(t *testing.T) {
 	}
 }
 
-func TestRaidDeviceState(t *testing.T) {
-	tests := []struct {
-		name       string
-		detail     RaidArrayStatus
-		wantState  string
-		wantPct    float64
-		wantActive bool
-	}{
-		{name: "idle", detail: RaidArrayStatus{Name: "md0"}},
-		{name: "check", detail: RaidArrayStatus{Name: "md0", Operation: "check", ProgressPct: 12.5, HasProgress: true}, wantState: DeviceStateTesting, wantPct: 12.5, wantActive: true},
-		{name: "recovery", detail: RaidArrayStatus{Name: "md0", Operation: "recovery"}, wantState: DeviceStateRecovering, wantActive: false},
-		{name: "resync", detail: RaidArrayStatus{Name: "md0", Operation: "resync"}, wantState: DeviceStateRebuilding, wantActive: false},
-		{name: "reshape", detail: RaidArrayStatus{Name: "md0", Operation: "reshape"}, wantState: DeviceStateRebuilding, wantActive: false},
-	}
-	for _, tt := range tests {
+// deviceStateCase is one row for a device-state mapping function returning
+// (state, progressPct, active).
+type deviceStateCase[T any] struct {
+	name       string
+	in         T
+	wantState  string
+	wantPct    float64
+	wantActive bool
+}
+
+// runDeviceStateCases exercises fn over the cases, asserting the (state, pct,
+// active) triple per row.
+func runDeviceStateCases[T any](t *testing.T, fn func(T) (string, float64, bool), cases []deviceStateCase[T]) {
+	t.Helper()
+	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			state, pct, active := RaidDeviceState([]RaidArrayStatus{tt.detail})
+			state, pct, active := fn(tt.in)
 			if state != tt.wantState || pct != tt.wantPct || active != tt.wantActive {
-				t.Fatalf("RaidDeviceState(%+v) = %q, %v, %v; want %q, %v, %v", tt.detail, state, pct, active, tt.wantState, tt.wantPct, tt.wantActive)
+				t.Fatalf("(%+v) = %q, %v, %v; want %q, %v, %v", tt.in, state, pct, active, tt.wantState, tt.wantPct, tt.wantActive)
 			}
 		})
 	}
+}
+
+func TestRaidDeviceState(t *testing.T) {
+	runDeviceStateCases(t,
+		func(d RaidArrayStatus) (string, float64, bool) { return RaidDeviceState([]RaidArrayStatus{d}) },
+		[]deviceStateCase[RaidArrayStatus]{
+			{name: "idle", in: RaidArrayStatus{Name: "md0"}},
+			{name: "check", in: RaidArrayStatus{Name: "md0", Operation: "check", ProgressPct: 12.5, HasProgress: true}, wantState: DeviceStateTesting, wantPct: 12.5, wantActive: true},
+			{name: "recovery", in: RaidArrayStatus{Name: "md0", Operation: "recovery"}, wantState: DeviceStateRecovering},
+			{name: "resync", in: RaidArrayStatus{Name: "md0", Operation: "resync"}, wantState: DeviceStateRebuilding},
+			{name: "reshape", in: RaidArrayStatus{Name: "md0", Operation: "reshape"}, wantState: DeviceStateRebuilding},
+		})
 }
 
 func TestRaidDegradedNamesSurfaced(t *testing.T) {

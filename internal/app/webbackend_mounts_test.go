@@ -306,8 +306,10 @@ func TestWebBackendRootMountCannotUnmountOrScanBlockers(t *testing.T) {
 	}
 }
 
-func TestWebBackendMountBlockersMarksPolicyKillable(t *testing.T) {
-	cfg := mountTestConfig(t)
+// mountBlockersBackend builds a WebBackend over cfg with a single /mnt/backup
+// mount held by one backup rsync process, failing on setup warnings.
+func mountBlockersBackend(t *testing.T, cfg *config.Config) *WebBackend {
+	t.Helper()
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		MountSampler: func() ([]checks.Mount, error) {
 			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
@@ -321,6 +323,12 @@ func TestWebBackendMountBlockersMarksPolicyKillable(t *testing.T) {
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
+	return b
+}
+
+func TestWebBackendMountBlockersMarksPolicyKillable(t *testing.T) {
+	cfg := mountTestConfig(t)
+	b := mountBlockersBackend(t, cfg)
 	res := b.MountBlockers(context.Background(), "mount-backup")
 	if !res.OK || !res.CanUmount || !res.HasKillPolicy || !res.CanKill || !res.CanAlert || len(res.Blockers) != 1 {
 		t.Fatalf("MountBlockers = %+v", res)
@@ -336,19 +344,7 @@ func TestWebBackendMountBlockersShowsProcessesWithoutKillPolicy(t *testing.T) {
 	mountBackup, _ := watches["mount-backup"].(map[string]any)
 	mount, _ := mountBackup["mount"].(map[string]any)
 	delete(mount, "stop_policy")
-	b, warns := NewWebBackend(t.Context(), cfg, Deps{
-		MountSampler: func() ([]checks.Mount, error) {
-			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
-		},
-		MountDiscoverUsers: func(string) ([]process.Process, error) {
-			return []process.Process{{
-				PID: 123, User: "backup", UID: 1000, Group: "backup", GID: 1000, Exe: "/usr/bin/rsync", ExeOK: true, Source: "mount",
-			}}, nil
-		},
-	})
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
-	}
+	b := mountBlockersBackend(t, cfg)
 	res := b.MountBlockers(context.Background(), "mount-backup")
 	if !res.OK || !res.CanUmount || res.HasKillPolicy || res.CanKill || len(res.Blockers) != 1 {
 		t.Fatalf("MountBlockers = %+v, want blocker table without kill policy", res)
@@ -559,48 +555,35 @@ func TestWebBackendMountActionIgnoresDryRunForManualCommands(t *testing.T) {
 }
 
 func TestWebBackendAlertMountUsers(t *testing.T) {
-	cfg := mountTestConfig(t)
-	alerter := &fakeMountAlerter{}
-	b, warns := NewWebBackend(t.Context(), cfg, Deps{
-		MountSampler: func() ([]checks.Mount, error) {
-			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
-		},
-		MountDiscoverUsers: func(string) ([]process.Process, error) {
-			return []process.Process{{PID: 123, User: "backup", UID: 1000}}, nil
-		},
-		MountUserAlerter: alerter,
-	})
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
-	}
+	for _, tc := range []struct {
+		name string
+		cfg  *config.Config
+	}{
+		{"default", mountTestConfig(t)},
+		{"ignores dry-run for manual command", dryRunMountTestConfig(t)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			alerter := &fakeMountAlerter{}
+			scans := 0
+			b, warns := NewWebBackend(t.Context(), tc.cfg, Deps{
+				MountSampler: func() ([]checks.Mount, error) {
+					return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
+				},
+				MountDiscoverUsers: func(string) ([]process.Process, error) {
+					scans++
+					return []process.Process{{PID: 123, User: "backup", UID: 1000}}, nil
+				},
+				MountUserAlerter: alerter,
+			})
+			if len(warns) != 0 {
+				t.Fatalf("unexpected warnings: %v", warns)
+			}
 
-	res := b.AlertMountUsers(context.Background(), "mount-backup")
-	if !res.OK || !alerter.called || res.Delivered != 1 || len(res.Users) != 1 || res.Users[0] != "backup" {
-		t.Fatalf("AlertMountUsers = %+v called=%v", res, alerter.called)
-	}
-}
-
-func TestWebBackendAlertMountUsersIgnoresDryRunForManualCommand(t *testing.T) {
-	cfg := dryRunMountTestConfig(t)
-	alerter := &fakeMountAlerter{}
-	scans := 0
-	b, warns := NewWebBackend(t.Context(), cfg, Deps{
-		MountSampler: func() ([]checks.Mount, error) {
-			return []checks.Mount{{MountPoint: "/mnt/backup", Device: "/dev/sdb1"}}, nil
-		},
-		MountDiscoverUsers: func(string) ([]process.Process, error) {
-			scans++
-			return []process.Process{{PID: 123, User: "backup", UID: 1000}}, nil
-		},
-		MountUserAlerter: alerter,
-	})
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
-	}
-
-	res := b.AlertMountUsers(context.Background(), "mount-backup")
-	if !res.OK || !alerter.called || scans != 1 || res.Delivered != 1 {
-		t.Fatalf("manual dry-run AlertMountUsers = %+v called=%v scans=%d", res, alerter.called, scans)
+			res := b.AlertMountUsers(context.Background(), "mount-backup")
+			if !res.OK || !alerter.called || scans != 1 || res.Delivered != 1 || len(res.Users) != 1 || res.Users[0] != "backup" {
+				t.Fatalf("AlertMountUsers = %+v called=%v scans=%d", res, alerter.called, scans)
+			}
+		})
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"sermo/internal/netutil"
 	"strings"
 
 	"github.com/go-sql-driver/mysql"
@@ -152,7 +153,7 @@ func buildMySQLConfig(cfg Config) *mysql.Config {
 		d := BindDialer(cfg.Interface)
 		c.DialFunc = d.DialContext
 	}
-	if tls := normalizeTLS(cfg.TLS); tls != "" {
+	if tls := NormalizeTLS(cfg.TLS); tls != "" {
 		c.TLSConfig = tls
 	}
 	if len(cfg.Params) > 0 {
@@ -168,17 +169,9 @@ func buildDSN(cfg Config) string {
 	return buildMySQLConfig(cfg).FormatDSN()
 }
 
-// normalizeTLS maps a friendly tls value to the go-sql-driver tls key. An empty
-// result means plaintext (the driver default).
-func normalizeTLS(s string) string {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "", tlsModeFalse, tlsModeNo, tlsModeOff:
-		return ""
-	case ParamValueTrue, tlsModeYes, tlsModeOn, tlsRequired:
-		return ParamValueTrue
-	case tlsSkipVerify:
-		return tlsSkipVerify
-	default:
-		return s // allow a custom registered tls config name
-	}
+// NormalizeTLS maps a friendly tls value to the canonical mode ("" plaintext,
+// "true" verified TLS, "skip-verify", or a custom registered config name); the
+// shared normalization lives in netutil.
+func NormalizeTLS(s string) string {
+	return netutil.NormalizeTLS(s)
 }

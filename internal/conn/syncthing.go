@@ -28,25 +28,7 @@ func (syncthingProtocol) DefaultPort() int   { return defaultPortSyncthing }
 func (syncthingProtocol) RequiresUser() bool { return false }
 
 func (syncthingProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortSyncthing
-	}
-	scheme := schemeHTTP
-	client := httpProbeClient(cfg.Interface, nil)
-	if mode := normalizeTLS(cfg.TLS); mode != "" {
-		scheme = schemeHTTPS
-		tlsConfig := tlsClientConfig(host)
-		if mode == tlsSkipVerify {
-			tlsConfig.InsecureSkipVerify = true // operator chose tls: skip-verify
-		}
-		client = httpProbeClient(cfg.Interface, tlsConfig)
-	}
-	base := scheme + urlSchemeSeparator + hostPort(host, port)
+	client, base := httpProbeBase(cfg, defaultPortSyncthing)
 
 	// 1. Unauthenticated health check — proves the daemon is up.
 	var health struct {

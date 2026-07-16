@@ -83,13 +83,7 @@ func (c countCheck) runDelta(n int, start time.Time) Result {
 	}
 	now := clock()
 	cutoff := now.Add(-c.window)
-	old := st.samples
-	st.samples = st.samples[:0]
-	for _, s := range old {
-		if !s.t.Before(cutoff) {
-			st.samples = append(st.samples, s)
-		}
-	}
+	st.samples = pruneWindow(st.samples, cutoff, func(s countSample) time.Time { return s.t })
 	st.samples = append(st.samples, countSample{t: now, count: n})
 
 	baseline := st.samples[0]

@@ -85,6 +85,22 @@ func assertBuildConnCheck(t *testing.T, name string, entry map[string]any, wantP
 	}
 }
 
+// assertBuildConnCheckVariants builds a protocol's anonymous and credentialed
+// entries, asserting each resolved connCheck against its predicate. It captures
+// the "build twice, assert cfg" shape shared across the credential/on_change
+// conn-check build tests.
+func assertBuildConnCheckVariants(t *testing.T, name string,
+	anon map[string]any, anonCheck func(connCheck) bool,
+	creds map[string]any, credsCheck func(connCheck) bool) {
+	t.Helper()
+	if cc := buildConnCheckForTest(t, name, anon); !anonCheck(cc) {
+		t.Fatalf("%s anonymous cfg = %+v (proto %s)", name, cc.cfg, cc.proto.Name())
+	}
+	if cc := buildConnCheckForTest(t, name, creds); !credsCheck(cc) {
+		t.Fatalf("%s credentialed cfg = %+v", name, cc.cfg)
+	}
+}
+
 func assertUnixSocketCheck(t *testing.T, name, protocol, socket string) {
 	t.Helper()
 	defaultCheck := buildConnCheckForTest(t, name, map[string]any{"type": protocol})
@@ -230,25 +246,12 @@ func TestConnCheckRunFailure(t *testing.T) {
 }
 
 func TestBuildMySQLCheck(t *testing.T) {
-	built, warns := Build(map[string]any{
-		"db": map[string]any{
-			"type": "mysql", "user": "monitor", "password": "secret",
-			"host": "10.0.0.5", "port": 3307, "tls": "skip-verify",
-		},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("expected a clean build, warns=%v built=%d", warns, len(built))
-	}
-	cc, ok := built[0].Check.(connCheck)
-	if !ok {
-		t.Fatalf("expected connCheck, got %T", built[0].Check)
-	}
-	if cc.proto.Name() != "mysql" || cc.cfg.Host != "10.0.0.5" || cc.cfg.Port != 3307 {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
-	if cc.cfg.User != "monitor" || cc.cfg.Password != "secret" || cc.cfg.TLS != "skip-verify" {
-		t.Fatalf("creds/tls = %+v", cc.cfg)
-	}
+	assertBuildConnCheck(t, "db", map[string]any{
+		"type": "mysql", "user": "monitor", "password": "secret",
+		"host": "10.0.0.5", "port": 3307, "tls": "skip-verify",
+	}, "mysql", 3307, func(c conn.Config) bool {
+		return c.Host == "10.0.0.5" && c.User == "monitor" && c.Password == "secret" && c.TLS == "skip-verify"
+	})
 }
 
 func TestBuildMySQLCheckDefaultsAndOptionalUser(t *testing.T) {
@@ -278,58 +281,28 @@ func TestBuildPostgresCheck(t *testing.T) {
 	// The generic dispatch picks up any registered protocol — postgres needed no
 	// change to buildCheck. Alias "postgresql" resolves too.
 	for _, typ := range []string{"postgres", "postgresql"} {
-		built, warns := Build(map[string]any{
-			"db": map[string]any{"type": typ, "user": "monitor"},
-		}, Deps{DefaultTimeout: time.Second})
-		if len(warns) != 0 || len(built) != 1 {
-			t.Fatalf("%s should build cleanly: warns=%v", typ, warns)
-		}
-		cc := built[0].Check.(connCheck)
-		if cc.proto.Name() != "postgres" || cc.cfg.Port != 5432 || cc.cfg.Host != "127.0.0.1" {
-			t.Fatalf("%s cfg = %+v (proto %s)", typ, cc.cfg, cc.proto.Name())
-		}
+		assertBuildConnCheck(t, "db", map[string]any{"type": typ, "user": "monitor"}, "postgres", 5432,
+			func(c conn.Config) bool { return c.Host == "127.0.0.1" })
 	}
 }
 
 func TestBuildRedisCheckUserOptional(t *testing.T) {
 	// redis does not require a user (password-only / no-auth) — must build with
 	// just a password, and default to port 6379.
-	built, warns := Build(map[string]any{
-		"cache": map[string]any{"type": "redis", "password": "secret"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("redis with only a password should build: warns=%v", warns)
-	}
-	cc := built[0].Check.(connCheck)
-	if cc.proto.Name() != "redis" || cc.cfg.Port != 6379 || cc.cfg.Password != "secret" {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
+	assertBuildConnCheck(t, "cache", map[string]any{"type": "redis", "password": "secret"}, "redis", 6379,
+		func(c conn.Config) bool { return c.Password == "secret" })
 }
 
 func TestBuildIMAPCheckAnonymousAndLogin(t *testing.T) {
-	// Anonymous: no user/password — must build (imap allows it), default port 143.
-	built, warns := Build(map[string]any{
-		"mail": map[string]any{"type": "imap", "host": "mail.example"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("anonymous imap should build: warns=%v", warns)
-	}
-	cc := built[0].Check.(connCheck)
-	if cc.proto.Name() != "imap" || cc.cfg.Port != 143 || cc.cfg.Host != "mail.example" {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
-
-	// With credentials + implicit TLS on 993.
-	built, warns = Build(map[string]any{
-		"mail": map[string]any{"type": "imap", "port": 993, "tls": true, "user": "joe", "password": "p"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("imap with creds should build: warns=%v", warns)
-	}
-	cc = built[0].Check.(connCheck)
-	if cc.cfg.Port != 993 || cc.cfg.User != "joe" || cc.cfg.TLS != "true" {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
+	assertBuildConnCheckVariants(t, "mail",
+		// Anonymous: no user/password — must build (imap allows it), default port 143.
+		map[string]any{"type": "imap", "host": "mail.example"},
+		func(cc connCheck) bool {
+			return cc.proto.Name() == "imap" && cc.cfg.Port == 143 && cc.cfg.Host == "mail.example"
+		},
+		// With credentials + implicit TLS on 993.
+		map[string]any{"type": "imap", "port": 993, "tls": true, "user": "joe", "password": "p"},
+		func(cc connCheck) bool { return cc.cfg.Port == 993 && cc.cfg.User == "joe" && cc.cfg.TLS == "true" })
 }
 
 func TestBuildPOPCheck(t *testing.T) {
@@ -354,54 +327,25 @@ func TestBuildNNTPCheck(t *testing.T) {
 }
 
 func TestBuildSMTPCheck(t *testing.T) {
-	// Anonymous (no user), default port 25.
-	built, warns := Build(map[string]any{
-		"mx": map[string]any{"type": "smtp", "host": "mail.example"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("anonymous smtp should build: warns=%v", warns)
-	}
-	cc := built[0].Check.(connCheck)
-	if cc.proto.Name() != "smtp" || cc.cfg.Port != 25 {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
-
-	// Submission with credentials on 587.
-	built, warns = Build(map[string]any{
-		"mx": map[string]any{"type": "smtp", "port": 587, "user": "joe", "password": "p"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("smtp with creds should build: warns=%v", warns)
-	}
-	if built[0].Check.(connCheck).cfg.Port != 587 {
-		t.Fatalf("port not parsed")
-	}
+	assertBuildConnCheckVariants(t, "mx",
+		// Anonymous (no user), default port 25.
+		map[string]any{"type": "smtp", "host": "mail.example"},
+		func(cc connCheck) bool { return cc.proto.Name() == "smtp" && cc.cfg.Port == 25 },
+		// Submission with credentials on 587.
+		map[string]any{"type": "smtp", "port": 587, "user": "joe", "password": "p"},
+		func(cc connCheck) bool { return cc.cfg.Port == 587 })
 }
 
 func TestBuildFPMCheck(t *testing.T) {
-	// Unix socket form: no user; socket carried into the config and reflected in
-	// the result addr.
-	built, warns := Build(map[string]any{
-		"php": map[string]any{"type": "fpm", "socket": "/run/php/php8.2-fpm.sock"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("fpm socket check should build: warns=%v", warns)
-	}
-	cc := built[0].Check.(connCheck)
-	if cc.proto.Name() != "fpm" || cc.cfg.Socket != "/run/php/php8.2-fpm.sock" {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
-
-	// TCP form via the php-fpm alias, default port 9000.
-	built, _ = Build(map[string]any{
-		"php": map[string]any{"type": "php-fpm", "host": "127.0.0.1"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(built) != 1 {
-		t.Fatal("php-fpm alias should build")
-	}
-	if built[0].Check.(connCheck).cfg.Port != 9000 {
-		t.Fatal("fpm default tcp port should be 9000")
-	}
+	assertBuildConnCheckVariants(t, "php",
+		// Unix socket form: no user; socket carried into the config.
+		map[string]any{"type": "fpm", "socket": "/run/php/php8.2-fpm.sock"},
+		func(cc connCheck) bool {
+			return cc.proto.Name() == "fpm" && cc.cfg.Socket == "/run/php/php8.2-fpm.sock"
+		},
+		// TCP form via the php-fpm alias, default port 9000.
+		map[string]any{"type": "php-fpm", "host": "127.0.0.1"},
+		func(cc connCheck) bool { return cc.cfg.Port == 9000 })
 }
 
 func TestBuildDNSCheck(t *testing.T) {
@@ -415,28 +359,15 @@ func TestBuildFTPCheck(t *testing.T) {
 }
 
 func TestBuildSSHCheck(t *testing.T) {
-	// Anonymous (no user), default port 22, with fingerprint-change detection.
-	built, warns := Build(map[string]any{
-		"ssh": map[string]any{"type": "ssh", "host": "host.example", "on_change": true},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("anonymous ssh should build: warns=%v", warns)
-	}
-	cc := built[0].Check.(connCheck)
-	if cc.proto.Name() != "ssh" || cc.cfg.Port != 22 {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
-	if !cc.onChange || cc.state == nil {
-		t.Fatal("on_change must enable stateful fingerprint detection")
-	}
-
-	// With credentials.
-	built, _ = Build(map[string]any{
-		"ssh": map[string]any{"type": "ssh", "host": "host.example", "user": "admin", "password": "p"},
-	}, Deps{DefaultTimeout: time.Second})
-	if cc := built[0].Check.(connCheck); cc.cfg.User != "admin" || cc.cfg.Password != "p" {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
+	assertBuildConnCheckVariants(t, "ssh",
+		// Anonymous (no user), default port 22, with fingerprint-change detection.
+		map[string]any{"type": "ssh", "host": "host.example", "on_change": true},
+		func(cc connCheck) bool {
+			return cc.proto.Name() == "ssh" && cc.cfg.Port == 22 && cc.onChange && cc.state != nil
+		},
+		// With credentials.
+		map[string]any{"type": "ssh", "host": "host.example", "user": "admin", "password": "p"},
+		func(cc connCheck) bool { return cc.cfg.User == "admin" && cc.cfg.Password == "p" })
 }
 
 func TestBuildNTPCheck(t *testing.T) {
@@ -445,24 +376,15 @@ func TestBuildNTPCheck(t *testing.T) {
 }
 
 func TestBuildSNMPCheck(t *testing.T) {
-	// v2c anonymous (community), default port 161, with identity-change detection.
-	built, warns := Build(map[string]any{
-		"router": map[string]any{"type": "snmp", "host": "10.0.0.1", "on_change": true},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("snmp v2c should build: warns=%v", warns)
-	}
-	cc := built[0].Check.(connCheck)
-	if cc.proto.Name() != "snmp" || cc.cfg.Port != 161 || !cc.onChange {
-		t.Fatalf("cfg = %+v onChange=%v", cc.cfg, cc.onChange)
-	}
-	// v3 with user/password.
-	built, _ = Build(map[string]any{
-		"router": map[string]any{"type": "snmp", "host": "10.0.0.1", "user": "monitor", "password": "p"},
-	}, Deps{DefaultTimeout: time.Second})
-	if cc := built[0].Check.(connCheck); cc.cfg.User != "monitor" || cc.cfg.Password != "p" {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
+	assertBuildConnCheckVariants(t, "router",
+		// v2c anonymous (community), default port 161, with identity-change detection.
+		map[string]any{"type": "snmp", "host": "10.0.0.1", "on_change": true},
+		func(cc connCheck) bool {
+			return cc.proto.Name() == "snmp" && cc.cfg.Port == 161 && cc.onChange
+		},
+		// v3 with user/password.
+		map[string]any{"type": "snmp", "host": "10.0.0.1", "user": "monitor", "password": "p"},
+		func(cc connCheck) bool { return cc.cfg.User == "monitor" && cc.cfg.Password == "p" })
 }
 
 func TestBuildTFTPCheck(t *testing.T) {
@@ -472,25 +394,14 @@ func TestBuildTFTPCheck(t *testing.T) {
 }
 
 func TestBuildLDAPCheck(t *testing.T) {
-	// Anonymous (no user), default port 389.
-	built, warns := Build(map[string]any{
-		"dir": map[string]any{"type": "ldap", "host": "ldap.example"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("anonymous ldap should build: warns=%v", warns)
-	}
-	cc := built[0].Check.(connCheck)
-	if cc.proto.Name() != "ldap" || cc.cfg.Port != 389 {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
-	// LDAPS + simple bind.
-	built, _ = Build(map[string]any{
-		"dir": map[string]any{"type": "ldap", "host": "ldap.example", "port": 636, "tls": true,
+	assertBuildConnCheckVariants(t, "dir",
+		// Anonymous (no user), default port 389.
+		map[string]any{"type": "ldap", "host": "ldap.example"},
+		func(cc connCheck) bool { return cc.proto.Name() == "ldap" && cc.cfg.Port == 389 },
+		// LDAPS + simple bind.
+		map[string]any{"type": "ldap", "host": "ldap.example", "port": 636, "tls": true,
 			"user": "cn=monitor,dc=example,dc=com", "password": "p"},
-	}, Deps{DefaultTimeout: time.Second})
-	if cc := built[0].Check.(connCheck); cc.cfg.Port != 636 || cc.cfg.TLS != "true" || cc.cfg.User == "" {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
+		func(cc connCheck) bool { return cc.cfg.Port == 636 && cc.cfg.TLS == "true" && cc.cfg.User != "" })
 }
 
 func TestBuildAJPCheck(t *testing.T) {
@@ -507,25 +418,13 @@ func TestBuildRsyncCheck(t *testing.T) {
 }
 
 func TestBuildSyncthingCheck(t *testing.T) {
-	// Anonymous health check: no user, default port 8384.
-	built, warns := Build(map[string]any{
-		"sync": map[string]any{"type": "syncthing", "host": "127.0.0.1"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("syncthing check should build: warns=%v", warns)
-	}
-	cc := built[0].Check.(connCheck)
-	if cc.proto.Name() != "syncthing" || cc.cfg.Port != 8384 {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
-
-	// API key (password) + HTTPS skip-verify carried through.
-	built, _ = Build(map[string]any{
-		"sync": map[string]any{"type": "syncthing", "password": "the-key", "tls": "skip-verify"},
-	}, Deps{DefaultTimeout: time.Second})
-	if cc := built[0].Check.(connCheck); cc.cfg.Password != "the-key" || cc.cfg.TLS != "skip-verify" {
-		t.Fatalf("cfg = %+v", cc.cfg)
-	}
+	assertBuildConnCheckVariants(t, "sync",
+		// Anonymous health check: no user, default port 8384.
+		map[string]any{"type": "syncthing", "host": "127.0.0.1"},
+		func(cc connCheck) bool { return cc.proto.Name() == "syncthing" && cc.cfg.Port == 8384 },
+		// API key (password) + HTTPS skip-verify carried through.
+		map[string]any{"type": "syncthing", "password": "the-key", "tls": "skip-verify"},
+		func(cc connCheck) bool { return cc.cfg.Password == "the-key" && cc.cfg.TLS == "skip-verify" })
 }
 
 func TestBuildPrometheusCheck(t *testing.T) {

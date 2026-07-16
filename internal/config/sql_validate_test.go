@@ -9,11 +9,7 @@ service: x
 checks:
   q: { type: sql, engine: sqlite, path: /var/lib/app.db, query: "SELECT count(*) FROM t", op: ">", value: "0" }
 `)
-	for _, is := range issues {
-		if hasIssue([]Issue{is}, "checks.q") {
-			t.Fatalf("a valid sql check must produce no issue: %v", issues)
-		}
-	}
+	mustNotHave(t, issues, "checks.q")
 }
 
 func TestValidateSQLCheckErrors(t *testing.T) {

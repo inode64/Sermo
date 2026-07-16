@@ -17,26 +17,25 @@ import (
 
 func writeMountConfig(t *testing.T) string {
 	t.Helper()
-	root := t.TempDir()
-	global := filepath.Join(root, "sermo.yml")
-	mustWrite(t, global, `
+	global := writeServiceConfig(t, `
 paths:
-  services: [ `+root+`/services ]
-  watches: [ `+root+`/mounts ]
-  runtime: `+root+`/run
-  state: `+root+`/state
+  services: [ @ROOT@/services ]
+  watches: [ @ROOT@/mounts ]
+  runtime: @ROOT@/run
+  state: @ROOT@/state
 defaults:
   policy:
     cooldown: 5m
-`)
-	mustWrite(t, filepath.Join(root, "mounts", "backup.yml"), `
+`, map[string]string{
+		"mounts/backup.yml": `
 name: mount-backup
 check:
   type: storage
   path: /mnt/backup
   mounted: true
 mount: {}
-`)
+`,
+	})
 	return global
 }
 

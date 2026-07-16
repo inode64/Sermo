@@ -3,7 +3,6 @@ package conn
 import (
 	"context"
 	"net"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -12,27 +11,14 @@ import (
 // closes. It returns the listening port.
 func fakeMemcached(t *testing.T, reply string) int {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = ln.Close() })
-	go func() {
-		c, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer func() { _ = c.Close() }()
+	return serveOnce(t, func(c net.Conn) {
 		buf := make([]byte, 64)
 		n, _ := c.Read(buf)
 		if !strings.HasPrefix(string(buf[:n]), "stats") {
 			return
 		}
 		_, _ = c.Write([]byte(reply))
-	}()
-	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
-	port, _ := strconv.Atoi(portStr)
-	return port
+	})
 }
 
 func TestMemcachedProbeAgainstFakeServer(t *testing.T) {

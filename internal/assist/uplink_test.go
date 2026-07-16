@@ -83,12 +83,7 @@ func TestUplinkAssistantDefaultRouteKeyword(t *testing.T) {
 		}, nil
 	}
 	env.DefaultIfaces = []string{"wg0"}
-	script := strings.Join([]string{config.SelectionKeywordDefault, "1", "", "", "", "", "1", "y"}, "\n") + "\n"
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := uplinkAssistant{}.Run(p, env)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	res, _ := runAssistant(t, uplinkAssistant{}, env, config.SelectionKeywordDefault, "1", "", "", "", "", "1", "y")
 	if _, ok := res.Watches["uplink-wg0-route"]; !ok {
 		t.Fatalf("default route interface was not selected: %v", res.Watches)
 	}

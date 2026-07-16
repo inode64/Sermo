@@ -136,18 +136,7 @@ func TestWebBackendDetailRanFlag(t *testing.T) {
 		"slow": {Check: "slow", OK: true, Message: "cached"},
 	}, map[string]bool{"fast": true})
 
-	b := &WebBackend{
-		order: []string{"web"},
-		entries: map[string]*webEntry{
-			"web": {
-				displayName: "web",
-				checkNames:  []string{"fast", "slow"},
-				checkTypes:  map[string]string{"fast": "tcp", "slow": "http"},
-				status:      func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
-			},
-		},
-		snapshots: snaps,
-	}
+	b := webBackendWithEntry(snaps, []string{"fast", "slow"}, map[string]string{"fast": "tcp", "slow": "http"})
 
 	detail, ok := b.Detail(context.Background(), "web")
 	if !ok {
@@ -180,18 +169,7 @@ func TestWebBackendDetailCheckReadings(t *testing.T) {
 			Data: map[string]any{"backend": "nftables", "rules": uint64(10), "min_rules": 1},
 		},
 	}, map[string]bool{"tls": true, "fw": true})
-	b := &WebBackend{
-		order: []string{"web"},
-		entries: map[string]*webEntry{
-			"web": {
-				displayName: "web",
-				checkNames:  []string{"tls", "fw"},
-				checkTypes:  map[string]string{"tls": "cert", "fw": "firewall_rules"},
-				status:      func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
-			},
-		},
-		snapshots: snap,
-	}
+	b := webBackendWithEntry(snap, []string{"tls", "fw"}, map[string]string{"tls": "cert", "fw": "firewall_rules"})
 	detail, ok := b.Detail(context.Background(), "web")
 	if !ok {
 		t.Fatal("detail not found")
@@ -599,19 +577,23 @@ func TestWebBackendApplicationsCacheIgnoresCancelledRequests(t *testing.T) {
 	}
 }
 
+// blockingCatalogCache returns a catalog inventory cache whose first scan closes
+// scanning and blocks until release closes, counting every scan in calls.
+func blockingCatalogCache(calls *atomic.Int32, scanning, release chan struct{}) catalogInventoryCache {
+	return catalogInventoryCache{list: func(context.Context) []web.CatalogItem {
+		if calls.Add(1) == 1 {
+			close(scanning)
+			<-release
+		}
+		return []web.Application{{Name: "fresh"}}
+	}}
+}
+
 func TestWebBackendApplicationsServeStaleWhileRefreshing(t *testing.T) {
 	scanning := make(chan struct{})
 	release := make(chan struct{})
 	var calls atomic.Int32
-	b := &WebBackend{
-		applications: catalogInventoryCache{list: func(context.Context) []web.CatalogItem {
-			if calls.Add(1) == 1 {
-				close(scanning)
-				<-release
-			}
-			return []web.Application{{Name: "fresh"}}
-		}},
-	}
+	b := &WebBackend{applications: blockingCatalogCache(&calls, scanning, release)}
 	b.applications.items = []web.CatalogItem{{Name: "stale"}}
 	b.applications.at = time.Now().Add(-catalogInventoryCacheTTL - time.Nanosecond)
 
@@ -640,15 +622,7 @@ func TestWebBackendApplicationsColdStartSingleScan(t *testing.T) {
 	scanning := make(chan struct{})
 	release := make(chan struct{})
 	var calls atomic.Int32
-	b := &WebBackend{
-		applications: catalogInventoryCache{list: func(context.Context) []web.CatalogItem {
-			if calls.Add(1) == 1 {
-				close(scanning)
-				<-release
-			}
-			return []web.Application{{Name: "fresh"}}
-		}},
-	}
+	b := &WebBackend{applications: blockingCatalogCache(&calls, scanning, release)}
 
 	leader := make(chan []web.Application)
 	go func() { leader <- b.Applications(context.Background()) }()
@@ -776,15 +750,13 @@ func TestWebBackendLibrariesInspectInstalledCatalogFiles(t *testing.T) {
 }
 
 func TestWebBackendWatchPolarityUsesSharedHealthTypes(t *testing.T) {
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"autofs": map[string]any{"check": map[string]any{"type": "autofs"}},
-			"count":  map[string]any{"check": map[string]any{"type": "count"}},
-			"mysql":  map[string]any{"check": map[string]any{"type": "mysql"}},
-			"ports":  map[string]any{"check": map[string]any{"type": "ports"}},
-			"ws":     map[string]any{"check": map[string]any{"type": "websocket"}},
-		},
-	}}}
+	cfg := cfgWithWatches(map[string]any{
+		"autofs": map[string]any{"check": map[string]any{"type": "autofs"}},
+		"count":  map[string]any{"check": map[string]any{"type": "count"}},
+		"mysql":  map[string]any{"check": map[string]any{"type": "mysql"}},
+		"ports":  map[string]any{"check": map[string]any{"type": "ports"}},
+		"ws":     map[string]any{"check": map[string]any{"type": "websocket"}},
+	})
 
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{})
 	if len(warns) != 0 {
@@ -809,16 +781,14 @@ func TestWebBackendWatchesExposeMonitorMode(t *testing.T) {
 	if err := store.SetActive(watchMonitorKey("storage-root"), false, state.SourceConfig); err != nil {
 		t.Fatalf("SetActive: %v", err)
 	}
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"storage-root": map[string]any{
-				"display_name": "Root disk",
-				"category":     "storage",
-				"monitor":      config.MonitorDisabled,
-				"check":        map[string]any{"type": "storage", "path": "/"},
-			},
+	cfg := cfgWithWatches(map[string]any{
+		"storage-root": map[string]any{
+			"display_name": "Root disk",
+			"category":     "storage",
+			"monitor":      config.MonitorDisabled,
+			"check":        map[string]any{"type": "storage", "path": "/"},
 		},
-	}}}
+	})
 
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{Monitor: store})
 	if len(warns) != 0 {
@@ -834,27 +804,25 @@ func TestWebBackendWatchesExposeMonitorMode(t *testing.T) {
 }
 
 func TestWebBackendKernelWatchReadings(t *testing.T) {
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"mem-pressure": map[string]any{"check": map[string]any{
-				"type":       "pressure",
-				"resource":   "memory",
-				"some_avg60": map[string]any{"op": ">", "value": 10},
-			}},
-			"entropy": map[string]any{"check": map[string]any{
-				"type":  "entropy",
-				"avail": map[string]any{"op": "<", "value": 200},
-			}},
-			"zombies": map[string]any{"check": map[string]any{
-				"type":  "zombies",
-				"count": map[string]any{"op": ">", "value": 20},
-			}},
-			"conntrack": map[string]any{"check": map[string]any{
-				"type":  "conntrack",
-				"count": map[string]any{"op": ">", "value": 100},
-			}},
-		},
-	}}}
+	cfg := cfgWithWatches(map[string]any{
+		"mem-pressure": map[string]any{"check": map[string]any{
+			"type":       "pressure",
+			"resource":   "memory",
+			"some_avg60": map[string]any{"op": ">", "value": 10},
+		}},
+		"entropy": map[string]any{"check": map[string]any{
+			"type":  "entropy",
+			"avail": map[string]any{"op": "<", "value": 200},
+		}},
+		"zombies": map[string]any{"check": map[string]any{
+			"type":  "zombies",
+			"count": map[string]any{"op": ">", "value": 20},
+		}},
+		"conntrack": map[string]any{"check": map[string]any{
+			"type":  "conntrack",
+			"count": map[string]any{"op": ">", "value": 100},
+		}},
+	})
 
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		PressureSampler: func(resource string) (checks.PressureSample, error) {
@@ -918,15 +886,13 @@ func TestWebBackendKernelWatchReadings(t *testing.T) {
 }
 
 func TestWebBackendKernelWatchReadingErrorMarksWatchFailed(t *testing.T) {
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"mem-pressure": map[string]any{"check": map[string]any{
-				"type":       "pressure",
-				"resource":   "memory",
-				"some_avg60": map[string]any{"op": ">", "value": 10},
-			}},
-		},
-	}}}
+	cfg := cfgWithWatches(map[string]any{
+		"mem-pressure": map[string]any{"check": map[string]any{
+			"type":       "pressure",
+			"resource":   "memory",
+			"some_avg60": map[string]any{"op": ">", "value": 10},
+		}},
+	})
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		PressureSampler: func(string) (checks.PressureSample, error) {
 			return checks.PressureSample{}, errors.New("PSI disabled")
@@ -946,35 +912,33 @@ func TestWebBackendKernelWatchReadingErrorMarksWatchFailed(t *testing.T) {
 }
 
 func TestWebBackendOomNetICMPAndPidsReadings(t *testing.T) {
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"oom": map[string]any{"check": map[string]any{"type": "oom"}},
-			"pid-table": map[string]any{"check": map[string]any{
-				"type":     "pids",
-				"used_pct": map[string]any{"op": ">=", "value": 90},
-			}},
-			"fd-table": map[string]any{"check": map[string]any{
-				"type":     "fds",
-				"used_pct": map[string]any{"op": ">=", "value": 80},
-			}},
-			"net-eth0": map[string]any{
-				"check": map[string]any{"type": "net", "interface": "eth0"},
-				"metrics": map[string]any{
-					"state":   map[string]any{"on": "change"},
-					"errors":  map[string]any{"delta": map[string]any{"op": ">", "value": 10}},
-					"address": map[string]any{"expect": "present"},
-					"speed":   map[string]any{"on": "change"},
-				},
-			},
-			"ping-gw": map[string]any{
-				"check": map[string]any{"type": "icmp", "host": "8.8.8.8", "count": 3},
-				"metrics": map[string]any{
-					"state":   map[string]any{"on": "change"},
-					"latency": map[string]any{"threshold": map[string]any{"op": ">", "value": 100}},
-				},
+	cfg := cfgWithWatches(map[string]any{
+		"oom": map[string]any{"check": map[string]any{"type": "oom"}},
+		"pid-table": map[string]any{"check": map[string]any{
+			"type":     "pids",
+			"used_pct": map[string]any{"op": ">=", "value": 90},
+		}},
+		"fd-table": map[string]any{"check": map[string]any{
+			"type":     "fds",
+			"used_pct": map[string]any{"op": ">=", "value": 80},
+		}},
+		"net-eth0": map[string]any{
+			"check": map[string]any{"type": "net", "interface": "eth0"},
+			"metrics": map[string]any{
+				"state":   map[string]any{"on": "change"},
+				"errors":  map[string]any{"delta": map[string]any{"op": ">", "value": 10}},
+				"address": map[string]any{"expect": "present"},
+				"speed":   map[string]any{"on": "change"},
 			},
 		},
-	}}}
+		"ping-gw": map[string]any{
+			"check": map[string]any{"type": "icmp", "host": "8.8.8.8", "count": 3},
+			"metrics": map[string]any{
+				"state":   map[string]any{"on": "change"},
+				"latency": map[string]any{"threshold": map[string]any{"op": ">", "value": 100}},
+			},
+		},
+	})
 
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		OomSampler:  func() (uint64, bool) { return 7, true },
@@ -1100,22 +1064,20 @@ func TestScalarWatchView(t *testing.T) {
 }
 
 func TestWebBackendProcessWatchReadings(t *testing.T) {
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"hot-workers": map[string]any{
-				"check": map[string]any{
-					"type":   "process",
-					"name":   "apache2",
-					"user":   "apache",
-					"for":    "5m",
-					"cpu":    map[string]any{"op": ">", "value": 80},
-					"memory": map[string]any{"op": ">", "value": 524288000},
-					"io":     map[string]any{"op": ">", "value": 10485760},
-					"gone":   true,
-				},
+	cfg := cfgWithWatches(map[string]any{
+		"hot-workers": map[string]any{
+			"check": map[string]any{
+				"type":   "process",
+				"name":   "apache2",
+				"user":   "apache",
+				"for":    "5m",
+				"cpu":    map[string]any{"op": ">", "value": 80},
+				"memory": map[string]any{"op": ">", "value": 524288000},
+				"io":     map[string]any{"op": ">", "value": 10485760},
+				"gone":   true,
 			},
 		},
-	}}}
+	})
 	sampler := &webProcSampler{samples: []ProcInfo{
 		{PID: 42, CPUTicks: 20, RSS: 100, IOBytes: 500, HasIO: true},
 		{PID: 7, CPUTicks: 30, RSS: 200},
@@ -1158,36 +1120,34 @@ func TestWebBackendProcessWatchReadings(t *testing.T) {
 }
 
 func TestWebBackendAdditionalHostWatchReadings(t *testing.T) {
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"autofs-net": map[string]any{"check": map[string]any{
-				"type": "autofs",
-				"path": "/net",
-			}},
-			"diskio-root": map[string]any{"check": map[string]any{
-				"type":     "diskio",
-				"device":   "sda",
-				"util_pct": map[string]any{"op": ">", "value": 80},
-			}},
-			"edac": map[string]any{"check": map[string]any{
-				"type": "edac",
-				"ue":   map[string]any{"op": ">", "value": 0},
-			}},
-			"raid": map[string]any{"check": map[string]any{
-				"type":     "raid",
-				"degraded": map[string]any{"op": ">", "value": 0},
-			}},
-			"route-wan": map[string]any{"check": map[string]any{
-				"type":      "route",
-				"family":    "ipv4",
-				"interface": "ppp0",
-			}},
-			"sensors": map[string]any{"check": map[string]any{
-				"type": "sensors",
-				"temp": map[string]any{"op": ">", "value": 70},
-			}},
-		},
-	}}}
+	cfg := cfgWithWatches(map[string]any{
+		"autofs-net": map[string]any{"check": map[string]any{
+			"type": "autofs",
+			"path": "/net",
+		}},
+		"diskio-root": map[string]any{"check": map[string]any{
+			"type":     "diskio",
+			"device":   "sda",
+			"util_pct": map[string]any{"op": ">", "value": 80},
+		}},
+		"edac": map[string]any{"check": map[string]any{
+			"type": "edac",
+			"ue":   map[string]any{"op": ">", "value": 0},
+		}},
+		"raid": map[string]any{"check": map[string]any{
+			"type":     "raid",
+			"degraded": map[string]any{"op": ">", "value": 0},
+		}},
+		"route-wan": map[string]any{"check": map[string]any{
+			"type":      "route",
+			"family":    "ipv4",
+			"interface": "ppp0",
+		}},
+		"sensors": map[string]any{"check": map[string]any{
+			"type": "sensors",
+			"temp": map[string]any{"op": ">", "value": 70},
+		}},
+	})
 	now := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
 	storageSamples := []checks.DiskIOSample{
 		{ReadsCompleted: 10, SectorsRead: 100, ReadTicksMs: 100, WritesCompleted: 10, SectorsWritten: 200, WriteTicksMs: 100, IOTicksMs: 1000},
@@ -1422,14 +1382,12 @@ func TestWebBackendProbeWatchReadings(t *testing.T) {
 	if err := os.WriteFile(certPath, certDER, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"tls-file": map[string]any{"check": map[string]any{
-				"type": "cert",
-				"path": certPath,
-			}},
-		},
-	}}}
+	cfg := cfgWithWatches(map[string]any{
+		"tls-file": map[string]any{"check": map[string]any{
+			"type": "cert",
+			"path": certPath,
+		}},
+	})
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{DefaultTimeout: 5 * time.Second})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
@@ -1449,21 +1407,8 @@ func TestWebBackendProbeWatchRecordsSnapshotAndEvent(t *testing.T) {
 	snapshots.now = func() time.Time { return now }
 	var events []Event
 	b := &WebBackend{
-		watchOrder: []string{"disk-speed"},
-		watches: map[string]*webWatch{
-			"disk-speed": {
-				name:      "disk-speed",
-				checkType: checks.CheckTypeHdparm,
-				check: map[string]any{
-					checks.CheckKeyType:   checks.CheckTypeHdparm,
-					checks.CheckKeyDevice: "/dev/sda",
-					checks.HdparmFieldRead: map[string]any{
-						checks.CheckKeyOp:    ">",
-						checks.CheckKeyValue: 200,
-					},
-				},
-			},
-		},
+		watchOrder:     []string{"disk-speed"},
+		watches:        map[string]*webWatch{"disk-speed": diskSpeedWatch(200)},
 		watchSnapshots: snapshots,
 		execRunner: webBackendTestRunner{byCommand: map[string]execx.Result{
 			checks.CheckTypeHdparm: {ExitCode: 0, Stdout: " Timing buffered disk reads: 500 MB in 3.00 seconds = 166.67 MB/sec\n"},
@@ -1493,20 +1438,7 @@ func TestWebBackendProbeWatchShowsRunningStateAndRejectsDuplicate(t *testing.T) 
 	var events []Event
 	b := &WebBackend{
 		watchOrder: []string{"disk-speed"},
-		watches: map[string]*webWatch{
-			"disk-speed": {
-				name:      "disk-speed",
-				checkType: checks.CheckTypeHdparm,
-				check: map[string]any{
-					checks.CheckKeyType:   checks.CheckTypeHdparm,
-					checks.CheckKeyDevice: "/dev/sda",
-					checks.HdparmFieldRead: map[string]any{
-						checks.CheckKeyOp:    ">",
-						checks.CheckKeyValue: 200,
-					},
-				},
-			},
-		},
+		watches:    map[string]*webWatch{"disk-speed": diskSpeedWatch(200)},
 		execRunner: runner,
 		now:        func() time.Time { return startedAt },
 		emit:       func(event Event) { events = append(events, event) },
@@ -1544,20 +1476,7 @@ func TestWebBackendProbeWatchFailureEventIncludesDuration(t *testing.T) {
 	nowCalls := 0
 	var events []Event
 	b := &WebBackend{
-		watches: map[string]*webWatch{
-			"disk-speed": {
-				name:      "disk-speed",
-				checkType: checks.CheckTypeHdparm,
-				check: map[string]any{
-					checks.CheckKeyType:   checks.CheckTypeHdparm,
-					checks.CheckKeyDevice: "/dev/sda",
-					checks.HdparmFieldRead: map[string]any{
-						checks.CheckKeyOp:    ">",
-						checks.CheckKeyValue: 100,
-					},
-				},
-			},
-		},
+		watches: map[string]*webWatch{"disk-speed": diskSpeedWatch(100)},
 		execRunner: webBackendTestRunner{byCommand: map[string]execx.Result{
 			checks.CheckTypeHdparm: {ExitCode: 0, Stdout: " Timing buffered disk reads: 500 MB in 3.00 seconds = 166.67 MB/sec\n"},
 		}},
@@ -1640,13 +1559,45 @@ func mustProbeCertPEM(t *testing.T) []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 }
 
+// diskSpeedWatch builds an hdparm webWatch on /dev/sda whose read speed must
+// exceed threshold MB/s.
+func diskSpeedWatch(threshold int) *webWatch {
+	return &webWatch{
+		name:      "disk-speed",
+		checkType: checks.CheckTypeHdparm,
+		check: map[string]any{
+			checks.CheckKeyType:   checks.CheckTypeHdparm,
+			checks.CheckKeyDevice: "/dev/sda",
+			checks.HdparmFieldRead: map[string]any{
+				checks.CheckKeyOp:    ">",
+				checks.CheckKeyValue: threshold,
+			},
+		},
+	}
+}
+
+// webBackendWithEntry builds a WebBackend holding one active "web" entry that
+// exposes the given check names and types backed by snaps.
+func webBackendWithEntry(snaps *Snapshots, checkNames []string, checkTypes map[string]string) *WebBackend {
+	return &WebBackend{
+		order: []string{"web"},
+		entries: map[string]*webEntry{
+			"web": {
+				displayName: "web",
+				checkNames:  checkNames,
+				checkTypes:  checkTypes,
+				status:      func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
+			},
+		},
+		snapshots: snaps,
+	}
+}
+
 func assertWebBackendReadingErrorMarksWatchFailed(t *testing.T, name string, check map[string]any, deps Deps, wantError string) {
 	t.Helper()
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			name: map[string]any{"check": check},
-		},
-	}}}
+	cfg := cfgWithWatches(map[string]any{
+		name: map[string]any{"check": check},
+	})
 	b, warns := NewWebBackend(t.Context(), cfg, deps)
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
@@ -1856,19 +1807,17 @@ func (r *countingSystemReader) TotalSwap() (uint64, uint64, bool) {
 }
 
 func TestWebBackendSwapWatchIncludesUsage(t *testing.T) {
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"swap": map[string]any{
-				"check": map[string]any{"type": "swap"},
-				"metrics": map[string]any{
-					"usage": map[string]any{
-						"used_pct": map[string]any{"op": ">=", "value": 80},
-						"then":     map[string]any{"notify": []any{"none"}},
-					},
+	cfg := cfgWithWatches(map[string]any{
+		"swap": map[string]any{
+			"check": map[string]any{"type": "swap"},
+			"metrics": map[string]any{
+				"usage": map[string]any{
+					"used_pct": map[string]any{"op": ">=", "value": 80},
+					"then":     map[string]any{"notify": []any{"none"}},
 				},
 			},
 		},
-	}}}
+	})
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{Collector: metrics.New(fakeSwapReader{total: 2048, used: 512})})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
@@ -1887,13 +1836,11 @@ func TestWebBackendSwapWatchIncludesUsage(t *testing.T) {
 }
 
 func TestWebBackendWatchesShareSystemSnapshot(t *testing.T) {
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"load":   map[string]any{"check": map[string]any{"type": "load"}},
-			"memory": map[string]any{"check": map[string]any{"type": "memory"}},
-			"swap":   map[string]any{"check": map[string]any{"type": "swap"}},
-		},
-	}}}
+	cfg := cfgWithWatches(map[string]any{
+		"load":   map[string]any{"check": map[string]any{"type": "load"}},
+		"memory": map[string]any{"check": map[string]any{"type": "memory"}},
+		"swap":   map[string]any{"check": map[string]any{"type": "swap"}},
+	})
 	reader := &countingSystemReader{}
 	collector := metrics.New(reader)
 	collector.SystemFreshness = 0
@@ -1912,18 +1859,16 @@ func TestWebBackendWatchesShareSystemSnapshot(t *testing.T) {
 }
 
 func TestWebBackendStorageOpenFiles(t *testing.T) {
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"storage-data": map[string]any{
-				"interval": "45s",
-				"check": map[string]any{
-					"type":     "storage",
-					"path":     "/data/app",
-					"free_pct": map[string]any{"op": "<", "value": 10},
-				},
+	cfg := cfgWithWatches(map[string]any{
+		"storage-data": map[string]any{
+			"interval": "45s",
+			"check": map[string]any{
+				"type":     "storage",
+				"path":     "/data/app",
+				"free_pct": map[string]any{"op": "<", "value": 10},
 			},
 		},
-	}}}
+	})
 	scans := 0
 	now := time.Unix(1000, 0)
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
@@ -1980,31 +1925,29 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 }
 
 func storageWatchFilesystemConfig() *config.Config {
-	return &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"storage-data": map[string]any{
-				"interval": "45s",
-				"dry_run":  true,
-				"check": map[string]any{
-					"type":     "storage",
-					"path":     "/data",
-					"mounted":  true,
-					"free_pct": map[string]any{"op": "<", "value": 15},
-					"free_bytes": map[string]any{
-						"op":    "<",
-						"value": "10G",
-					},
+	return cfgWithWatches(map[string]any{
+		"storage-data": map[string]any{
+			"interval": "45s",
+			"dry_run":  true,
+			"check": map[string]any{
+				"type":     "storage",
+				"path":     "/data",
+				"mounted":  true,
+				"free_pct": map[string]any{"op": "<", "value": 15},
+				"free_bytes": map[string]any{
+					"op":    "<",
+					"value": "10G",
 				},
-				"then": map[string]any{
-					"notify": []any{"ops", "pager"},
-					"expand": map[string]any{"by": "5G"},
-					"hook": map[string]any{
-						"command": []any{"/usr/local/bin/sermo-disk-alert", "--path", "/data"},
-					},
+			},
+			"then": map[string]any{
+				"notify": []any{"ops", "pager"},
+				"expand": map[string]any{"by": "5G"},
+				"hook": map[string]any{
+					"command": []any{"/usr/local/bin/sermo-disk-alert", "--path", "/data"},
 				},
 			},
 		},
-	}}}
+	})
 }
 
 func storageWatchFilesystemDeps(usagePath *string, mountSampled *bool) Deps {
@@ -2097,17 +2040,15 @@ func storageWatchConditions(conditions []web.WatchCondition) map[string]web.Watc
 }
 
 func TestWebBackendStorageMountOnlySkipsUsageProbe(t *testing.T) {
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"mount-backup": map[string]any{
-				"check": map[string]any{
-					"type":    "storage",
-					"path":    "/mnt/backup",
-					"mounted": true,
-				},
+	cfg := cfgWithWatches(map[string]any{
+		"mount-backup": map[string]any{
+			"check": map[string]any{
+				"type":    "storage",
+				"path":    "/mnt/backup",
+				"mounted": true,
 			},
 		},
-	}}}
+	})
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		StorageUsage: func(string) (checks.StorageStats, error) {
 			t.Fatal("mount-only storage watch must not statfs the target")
@@ -2147,18 +2088,16 @@ func TestWebBackendStorageMountOnlySkipsUsageProbe(t *testing.T) {
 }
 
 func TestWebBackendStorageMountedExpectationDoesNotUseParentMount(t *testing.T) {
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"storage-boot-desktop": map[string]any{
-				"check": map[string]any{
-					"type":     "storage",
-					"path":     "/var/spool/boot_desktop",
-					"mounted":  true,
-					"free_pct": map[string]any{"op": "<", "value": 10},
-				},
+	cfg := cfgWithWatches(map[string]any{
+		"storage-boot-desktop": map[string]any{
+			"check": map[string]any{
+				"type":     "storage",
+				"path":     "/var/spool/boot_desktop",
+				"mounted":  true,
+				"free_pct": map[string]any{"op": "<", "value": 10},
 			},
 		},
-	}}}
+	})
 	usageCalled := false
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		StorageUsage: func(string) (checks.StorageStats, error) {
@@ -2275,91 +2214,63 @@ func TestWebBackendTestNotifierRejectsDisabledAndUnavailable(t *testing.T) {
 	}
 }
 
-func TestWebBackendExpandWatchUsesConfiguredPathAndSize(t *testing.T) {
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"storage-data": map[string]any{
+func TestWebBackendExpandWatchExpands(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		dryRun bool
+	}{
+		{"configured path and size", false},
+		{"ignores dry-run for manual command", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			watch := map[string]any{
 				"check": map[string]any{
 					"type":     "storage",
 					"path":     "/data/app",
 					"used_pct": map[string]any{"op": ">=", "value": 90},
 				},
 				"then": map[string]any{"expand": map[string]any{"by": "5G"}},
-			},
-		},
-	}}}
-	exp := &fakeExpander{res: volume.Result{VG: "vg0", LV: "data", GrewBytes: 5 << 30}}
-	var events []Event
-	b, warns := NewWebBackend(t.Context(), cfg, Deps{
-		VolumeExpander:   exp,
-		OperationTimeout: time.Second,
-		Emit:             func(e Event) { events = append(events, e) },
-	})
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
-	}
+			}
+			if tc.dryRun {
+				watch["dry_run"] = true
+			}
+			cfg := cfgWithWatches(map[string]any{"storage-data": watch})
+			exp := &fakeExpander{res: volume.Result{VG: "vg0", LV: "data", GrewBytes: 5 << 30}}
+			var events []Event
+			b, warns := NewWebBackend(t.Context(), cfg, Deps{
+				VolumeExpander:   exp,
+				OperationTimeout: time.Second,
+				Emit:             func(e Event) { events = append(events, e) },
+			})
+			if len(warns) != 0 {
+				t.Fatalf("unexpected warnings: %v", warns)
+			}
 
-	res := b.ExpandWatch(context.Background(), "storage-data")
-	if !res.OK {
-		t.Fatalf("ExpandWatch failed: %+v", res)
-	}
-	if !slices.Equal(exp.calls, []string{"/data/app:5368709120"}) {
-		t.Fatalf("expand calls = %v, want configured path and 5G", exp.calls)
-	}
-	if len(events) != 1 || events[0].Watch != "storage-data" || events[0].Kind != eventKindExpand || events[0].Action != eventActionExpand || events[0].Status != eventStatusOK {
-		t.Fatalf("events = %+v, want successful expand event", events)
-	}
-}
-
-func TestWebBackendExpandWatchIgnoresDryRunForManualCommand(t *testing.T) {
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"storage-data": map[string]any{
-				"dry_run": true,
-				"check": map[string]any{
-					"type":     "storage",
-					"path":     "/data/app",
-					"used_pct": map[string]any{"op": ">=", "value": 90},
-				},
-				"then": map[string]any{"expand": map[string]any{"by": "5G"}},
-			},
-		},
-	}}}
-	exp := &fakeExpander{res: volume.Result{VG: "vg0", LV: "data", GrewBytes: 5 << 30}}
-	var events []Event
-	b, warns := NewWebBackend(t.Context(), cfg, Deps{
-		VolumeExpander: exp,
-		Emit:           func(e Event) { events = append(events, e) },
-	})
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
-	}
-
-	res := b.ExpandWatch(context.Background(), "storage-data")
-	if !res.OK {
-		t.Fatalf("ExpandWatch = %+v, want success", res)
-	}
-	if !slices.Equal(exp.calls, []string{"/data/app:5368709120"}) {
-		t.Fatalf("manual dry-run expand calls = %v, want configured path and 5G", exp.calls)
-	}
-	if len(events) != 1 || events[0].Watch != "storage-data" || events[0].Kind != eventKindExpand || events[0].Action != eventActionExpand || events[0].Status != eventStatusOK {
-		t.Fatalf("events = %+v, want successful expand event", events)
+			res := b.ExpandWatch(context.Background(), "storage-data")
+			if !res.OK {
+				t.Fatalf("ExpandWatch = %+v, want success", res)
+			}
+			if !slices.Equal(exp.calls, []string{"/data/app:5368709120"}) {
+				t.Fatalf("expand calls = %v, want configured path and 5G", exp.calls)
+			}
+			if len(events) != 1 || events[0].Watch != "storage-data" || events[0].Kind != eventKindExpand || events[0].Action != eventActionExpand || events[0].Status != eventStatusOK {
+				t.Fatalf("events = %+v, want successful expand event", events)
+			}
+		})
 	}
 }
 
 func TestWebBackendExpandWatchRejectsUnconfiguredAction(t *testing.T) {
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"storage-data": map[string]any{
-				"check": map[string]any{
-					"type":     "storage",
-					"path":     "/data/app",
-					"used_pct": map[string]any{"op": ">=", "value": 90},
-				},
-				"then": map[string]any{"notify": []any{"ops"}},
+	cfg := cfgWithWatches(map[string]any{
+		"storage-data": map[string]any{
+			"check": map[string]any{
+				"type":     "storage",
+				"path":     "/data/app",
+				"used_pct": map[string]any{"op": ">=", "value": 90},
 			},
+			"then": map[string]any{"notify": []any{"ops"}},
 		},
-	}}}
+	})
 	exp := &fakeExpander{res: volume.Result{VG: "vg0", LV: "data", GrewBytes: 5 << 30}}
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{VolumeExpander: exp, OperationTimeout: time.Second})
 	if len(warns) != 0 {
@@ -2376,18 +2287,16 @@ func TestWebBackendExpandWatchRejectsUnconfiguredAction(t *testing.T) {
 }
 
 func TestWebBackendStorageWatchReportsSamplerErrors(t *testing.T) {
-	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
-		"watches": map[string]any{
-			"storage-data": map[string]any{
-				"check": map[string]any{
-					"type":     "storage",
-					"path":     "/data",
-					"free_pct": map[string]any{"op": "<", "value": 15},
-				},
-				"then": map[string]any{"notify": []any{"ops"}},
+	cfg := cfgWithWatches(map[string]any{
+		"storage-data": map[string]any{
+			"check": map[string]any{
+				"type":     "storage",
+				"path":     "/data",
+				"free_pct": map[string]any{"op": "<", "value": 15},
 			},
+			"then": map[string]any{"notify": []any{"ops"}},
 		},
-	}}}
+	})
 	b, warns := NewWebBackend(t.Context(), cfg, Deps{
 		StorageUsage: func(string) (checks.StorageStats, error) {
 			return checks.StorageStats{}, errors.New("statfs failed")

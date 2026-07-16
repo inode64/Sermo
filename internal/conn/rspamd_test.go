@@ -4,13 +4,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"strconv"
 	"testing"
 )
 
 func TestRspamdVersion(t *testing.T) {
-	cases := map[string]string{
+	runMapCases(t, "rspamdVersion", rspamdVersion, map[string]string{
 		"Rspamd/3.8.4":            "3.8.4",
 		"rspamd/3.8.4":            "3.8.4",
 		"Rspamd/3.8.4 (proxy)":    "3.8.4",
@@ -18,12 +16,7 @@ func TestRspamdVersion(t *testing.T) {
 		"":                        "",
 		"Rspamd/2.7; extra":       "2.7",
 		"prefix Rspamd/1.9.0 end": "1.9.0",
-	}
-	for header, want := range cases {
-		if got := rspamdVersion(header); got != want {
-			t.Fatalf("rspamdVersion(%q) = %q, want %q", header, got, want)
-		}
-	}
+	})
 }
 
 func TestRspamdProbeAgainstFakeServer(t *testing.T) {
@@ -35,9 +28,8 @@ func TestRspamdProbeAgainstFakeServer(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	u, _ := url.Parse(srv.URL)
-	port, _ := strconv.Atoi(u.Port())
-	res, err := rspamdProtocol{}.Probe(context.Background(), Config{Host: u.Hostname(), Port: port})
+	host, port := serverHostPort(t, srv)
+	res, err := rspamdProtocol{}.Probe(context.Background(), Config{Host: host, Port: port})
 	if err != nil {
 		t.Fatalf("probe: %v", err)
 	}
@@ -59,9 +51,8 @@ func TestRspamdProbeTLSSkipVerify(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	u, _ := url.Parse(srv.URL)
-	port, _ := strconv.Atoi(u.Port())
-	res, err := rspamdProtocol{}.Probe(context.Background(), Config{Host: u.Hostname(), Port: port, TLS: "skip-verify"})
+	host, port := serverHostPort(t, srv)
+	res, err := rspamdProtocol{}.Probe(context.Background(), Config{Host: host, Port: port, TLS: "skip-verify"})
 	if err != nil {
 		t.Fatalf("probe: %v", err)
 	}
@@ -75,9 +66,8 @@ func TestRspamdProbeFailures(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
-	u, _ := url.Parse(srv.URL)
-	port, _ := strconv.Atoi(u.Port())
-	if _, err := (rspamdProtocol{}).Probe(context.Background(), Config{Host: u.Hostname(), Port: port}); err == nil {
+	host, port := serverHostPort(t, srv)
+	if _, err := (rspamdProtocol{}).Probe(context.Background(), Config{Host: host, Port: port}); err == nil {
 		t.Fatal("a 500 response must fail the probe")
 	}
 	srv.Close()
@@ -87,9 +77,8 @@ func TestRspamdProbeFailures(t *testing.T) {
 		_, _ = w.Write([]byte("<html>not rspamd</html>"))
 	}))
 	defer srv.Close()
-	u, _ = url.Parse(srv.URL)
-	port, _ = strconv.Atoi(u.Port())
-	if _, err := (rspamdProtocol{}).Probe(context.Background(), Config{Host: u.Hostname(), Port: port}); err == nil {
+	host, port = serverHostPort(t, srv)
+	if _, err := (rspamdProtocol{}).Probe(context.Background(), Config{Host: host, Port: port}); err == nil {
 		t.Fatal("a non-pong body must fail the probe")
 	}
 }

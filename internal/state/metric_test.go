@@ -55,17 +55,73 @@ func TestMetricSummaryAndSeries(t *testing.T) {
 	}
 }
 
-func TestPruneMetrics(t *testing.T) {
+// assertMetricSummaryAndSeries drives the summarize + series + isolation shape
+// shared by the daemon and service metric tests: a main series with three samples
+// at base and one a minute later, plus a second isolated series. setup records the
+// rows; summary/series/isolated query the family under test.
+func assertMetricSummaryAndSeries(t *testing.T,
+	setup func(s *Store, base time.Time),
+	summary func(s *Store, span time.Duration, now time.Time) (MeasurementStat, error),
+	series func(s *Store, from, to time.Time) ([]MeasurementPoint, error),
+	isolated func(s *Store, span time.Duration, now time.Time) (MeasurementStat, error),
+	wantStat MeasurementStat, wantB0, wantB1 MeasurementPoint, wantIsolated MeasurementStat) {
+	t.Helper()
 	s := openTemp(t)
-	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-	if err := s.RecordMetric("disks", "speed", "read", 100, old); err != nil {
+	base := time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC)
+	setup(s, base)
+
+	now := base.Add(2 * time.Minute)
+	stat, err := summary(s, time.Hour, now)
+	if err != nil {
 		t.Fatal(err)
 	}
-	n, err := s.PruneMetrics(old.Add(time.Hour))
+	if stat.Count != wantStat.Count || stat.Min != wantStat.Min || stat.Max != wantStat.Max || stat.Avg != wantStat.Avg {
+		t.Fatalf("summary = %+v, want %+v", stat, wantStat)
+	}
+
+	points, err := series(s, base.Add(-time.Minute), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(points) != 2 {
+		t.Fatalf("points = %d, want 2 buckets", len(points))
+	}
+	if points[0].N != wantB0.N || points[0].Avg != wantB0.Avg || points[0].Min != wantB0.Min || points[0].Max != wantB0.Max {
+		t.Fatalf("bucket 0 = %+v, want %+v", points[0], wantB0)
+	}
+	if points[1].N != wantB1.N || points[1].Avg != wantB1.Avg {
+		t.Fatalf("bucket 1 = %+v, want N=%d Avg=%v", points[1], wantB1.N, wantB1.Avg)
+	}
+
+	iso, err := isolated(s, time.Hour, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if iso.Count != wantIsolated.Count || iso.Avg != wantIsolated.Avg {
+		t.Fatalf("isolated summary = %+v, want count %d avg %v", iso, wantIsolated.Count, wantIsolated.Avg)
+	}
+}
+
+// assertPrunesOne records a single old sample via record, prunes everything up to
+// an hour later via prune, and asserts exactly one row was removed.
+func assertPrunesOne(t *testing.T, record func(*Store, time.Time) error, prune func(*Store, time.Time) (int64, error)) {
+	t.Helper()
+	s := openTemp(t)
+	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	if err := record(s, old); err != nil {
+		t.Fatal(err)
+	}
+	n, err := prune(s, old.Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if n != 1 {
 		t.Fatalf("pruned %d rows, want 1", n)
 	}
+}
+
+func TestPruneMetrics(t *testing.T) {
+	assertPrunesOne(t,
+		func(s *Store, at time.Time) error { return s.RecordMetric("disks", "speed", "read", 100, at) },
+		(*Store).PruneMetrics)
 }

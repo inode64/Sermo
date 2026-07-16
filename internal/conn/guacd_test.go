@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"net"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -34,25 +33,12 @@ func TestParseGuacInstruction(t *testing.T) {
 }
 
 func TestGuacdProbeAgainstFakeServer(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = ln.Close() }()
 	var gotSelect string
-	go func() {
-		c, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer func() { _ = c.Close() }()
+	port := serveOnce(t, func(c net.Conn) {
 		line, _ := bufio.NewReader(c).ReadString(';')
 		gotSelect = line
 		_, _ = c.Write([]byte("4.args,8.hostname,4.port;"))
-	}()
-
-	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
-	port, _ := strconv.Atoi(portStr)
+	})
 	res, err := guacdProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: port})
 	if err != nil {
 		t.Fatalf("probe: %v", err)
@@ -66,23 +52,10 @@ func TestGuacdProbeAgainstFakeServer(t *testing.T) {
 }
 
 func TestGuacdProbeCustomProtocol(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = ln.Close() }()
-	go func() {
-		c, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer func() { _ = c.Close() }()
+	port := serveOnce(t, func(c net.Conn) {
 		_, _ = bufio.NewReader(c).ReadString(';')
 		_, _ = c.Write([]byte("4.args,8.hostname;"))
-	}()
-
-	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
-	port, _ := strconv.Atoi(portStr)
+	})
 	// query selects the protocol (e.g. rdp instead of the default vnc).
 	res, err := guacdProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: port, Query: "rdp"})
 	if err != nil {

@@ -1,10 +1,8 @@
 package conn
 
 import (
-	"context"
 	"encoding/binary"
 	"net"
-	"strconv"
 	"testing"
 )
 
@@ -69,31 +67,12 @@ func TestParseRDPConfirm(t *testing.T) {
 }
 
 func TestRDPProbeAgainstFakeServer(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = ln.Close() }()
-	go func() {
-		c, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer func() { _ = c.Close() }()
+	port := serveOnce(t, func(c net.Conn) {
 		buf := make([]byte, 64)
 		if _, err := c.Read(buf); err != nil {
 			return
 		}
 		_, _ = c.Write(rdpConfirm(0x02, 2)) // CredSSP/NLA selected
-	}()
-
-	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
-	port, _ := strconv.Atoi(portStr)
-	res, err := rdpProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: port})
-	if err != nil {
-		t.Fatalf("probe: %v", err)
-	}
-	if res.Extra["security"] != "hybrid" {
-		t.Fatalf("security = %q, want hybrid", res.Extra["security"])
-	}
+	})
+	assertProbeExtra(t, rdpProtocol{}, port, "security", "hybrid")
 }

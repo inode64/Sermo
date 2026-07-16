@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"net"
-	"strconv"
 	"testing"
 
 	"github.com/go-sql-driver/mysql"
@@ -34,23 +33,10 @@ func buildMySQLHandshake(version string) []byte {
 // serveMySQL accepts one connection and writes reply (the server speaks first).
 func serveMySQL(t *testing.T, reply []byte) int {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = ln.Close() })
-	go func() {
-		c, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer func() { _ = c.Close() }()
+	return serveOnce(t, func(c net.Conn) {
 		_, _ = c.Write(reply)
 		_, _ = io.Copy(io.Discard, c)
-	}()
-	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
-	port, _ := strconv.Atoi(portStr)
-	return port
+	})
 }
 
 func TestMySQLGreeting(t *testing.T) {
@@ -121,15 +107,10 @@ func TestBuildDSNDefaultsAndPlaintext(t *testing.T) {
 }
 
 func TestNormalizeTLS(t *testing.T) {
-	cases := map[string]string{
+	runMapCases(t, "NormalizeTLS", NormalizeTLS, map[string]string{
 		"": "", "false": "", "no": "",
 		"true": "true", "yes": "true",
 		"skip-verify": "skip-verify",
 		"custom":      "custom",
-	}
-	for in, want := range cases {
-		if got := normalizeTLS(in); got != want {
-			t.Errorf("normalizeTLS(%q) = %q, want %q", in, got, want)
-		}
-	}
+	})
 }

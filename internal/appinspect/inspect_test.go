@@ -80,6 +80,21 @@ func writeBinary(t *testing.T, mode os.FileMode) string {
 	return path
 }
 
+// writeConfigTree writes each file (keyed by its path relative to root),
+// creating parent directories as needed.
+func writeConfigTree(t *testing.T, root string, files map[string]string) {
+	t.Helper()
+	for rel, content := range files {
+		path := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestInspectBinaryStates(t *testing.T) {
 	runner := fakeRunner{}
 
@@ -266,22 +281,14 @@ func TestInspectHealthCommandTakesPriority(t *testing.T) {
 func TestListFiltersMissingBinaries(t *testing.T) {
 	root := t.TempDir()
 	installed := writeBinary(t, 0o755)
-	for dir, content := range map[string]string{
+	writeConfigTree(t, root, map[string]string{
 		"catalog/apps/present.yml": "name: present\nvariables:\n  binary: " + installed + "\n",
 		"catalog/apps/absent.yml":  "name: absent\nvariables:\n  binary: /nonexistent/absent\n",
 		"services/.keep":           "",
 		"sermo.yml": "engine: { backend: systemd }\n" +
 			"paths:\n  services: [" + filepath.Join(root, "services") + "]\n  runtime: /run/sermo\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n",
-	} {
-		path := filepath.Join(root, dir)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	})
 	cfg, err := config.Load(filepath.Join(root, "sermo.yml"), config.WithCatalogDirs(filepath.Join(root, "catalog")))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -416,15 +423,7 @@ preflight:
 			"paths:\n  services: [" + servicesDir + "]\n  runtime: /run/sermo\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n",
 	}
-	for relativePath, content := range files {
-		path := filepath.Join(root, relativePath)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	writeConfigTree(t, root, files)
 }
 
 func reportNames(reports []Report) []string {
@@ -462,7 +461,7 @@ func TestListAppVersionFromProvider(t *testing.T) {
 	rpcmountd := write("rpc.mountd")
 	local := write("local")
 
-	for dir, content := range map[string]string{
+	writeConfigTree(t, root, map[string]string{
 		"catalog/apps/rpcbind.yml": fmt.Sprintf(`
 name: rpcbind
 variables:
@@ -494,15 +493,7 @@ preflight:
 		"sermo.yml": "engine: { backend: systemd }\n" +
 			"paths:\n  services: [" + filepath.Join(root, "services") + "]\n  runtime: /run/sermo\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n",
-	} {
-		path := filepath.Join(root, dir)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	})
 	cfg, err := config.Load(filepath.Join(root, "sermo.yml"), config.WithCatalogDirs(filepath.Join(root, "catalog")))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -545,7 +536,7 @@ func TestListIncludesUnversionedTemplateApp(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for dir, content := range map[string]string{
+	writeConfigTree(t, root, map[string]string{
 		"catalog/apps/php.yml": fmt.Sprintf(`
 name: php%%v
 display_name: "PHP ${version}"
@@ -558,15 +549,7 @@ preflight:
 		"sermo.yml": "engine: { backend: systemd }\n" +
 			"paths:\n  services: [" + filepath.Join(root, "services") + "]\n  runtime: /run/sermo\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n",
-	} {
-		path := filepath.Join(root, dir)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	})
 	cfg, err := config.Load(filepath.Join(root, "sermo.yml"), config.WithCatalogDirs(filepath.Join(root, "catalog")))
 	if err != nil {
 		t.Fatalf("Load: %v", err)

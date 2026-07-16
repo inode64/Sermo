@@ -8,21 +8,8 @@ import (
 )
 
 func TestBuildTeamsRequiresWebhook(t *testing.T) {
-	good, err := buildTeams("ops", map[string]any{"type": "teams", "webhook": "https://prod-01.westeurope.logic.azure.com/workflows/x"})
-	if err != nil {
-		t.Fatalf("valid teams: %v", err)
-	}
-	if n := good.(*Teams); n.Type() != "teams" || n.Name() != "ops" {
-		t.Fatalf("unexpected teams: %+v", n)
-	}
-	for _, entry := range []map[string]any{
-		{"type": "teams"}, // no webhook
-		{"type": "teams", "webhook": "logic.azure.com/x"}, // not an http(s) URL
-	} {
-		if _, err := buildTeams("n", entry); err == nil {
-			t.Fatalf("expected error for %v", entry)
-		}
-	}
+	assertBuildWebhookNotifier(t, buildTeams, "teams", "ops",
+		"https://prod-01.westeurope.logic.azure.com/workflows/x", "logic.azure.com/x")
 }
 
 func TestTeamsSendPostsAdaptiveCard(t *testing.T) {
@@ -31,13 +18,7 @@ func TestTeamsSendPostsAdaptiveCard(t *testing.T) {
 	n := &Teams{
 		name:    "ops",
 		webhook: "https://prod-01.westeurope.logic.azure.com/workflows/x",
-		post: func(_ context.Context, label, url string, payload []byte) error {
-			if label != TypeTeams {
-				t.Fatalf("label = %q, want teams", label)
-			}
-			gotURL, gotPayload = url, payload
-			return nil
-		},
+		post:    capturingPost(t, TypeTeams, &gotURL, &gotPayload),
 	}
 	if err := n.Send(context.Background(), Message{Subject: "[sermo] storage-root: 95% used", Body: "SERMO_PATH=/"}); err != nil {
 		t.Fatal(err)

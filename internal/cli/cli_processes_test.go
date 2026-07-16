@@ -17,20 +17,13 @@ import (
 
 func writeProcessConfig(t *testing.T, pidfile string) string {
 	t.Helper()
-	root := t.TempDir()
-	global := filepath.Join(root, "sermo.yml")
-	mustWrite(t, global, `
-paths:
-  services: [ `+root+`/services ]
-defaults:
-  policy:
-    cooldown: 5m
-`)
-	mustWrite(t, filepath.Join(root, "services", "mysql-main.yml"), `
+	global := writeServiceConfig(t, servicesDirGlobal, map[string]string{
+		"services/mysql-main.yml": `
 name: mysql-main
 service: mysql
-pidfile: `+pidfile+`
-`)
+pidfile: ` + pidfile + `
+`,
+	})
 	return global
 }
 
@@ -97,21 +90,38 @@ func TestProcessesJSON(t *testing.T) {
 	}
 }
 
-func TestProcessesNoneFound(t *testing.T) {
-	global := writeProcessConfig(t, "/run/x.pid")
-	var stdout bytes.Buffer
-	app := App{
-		Env:      func(string) string { return "" },
-		Stdout:   &stdout,
-		Stderr:   &bytes.Buffer{},
-		Discover: func([]process.Selector) ([]process.Process, []string) { return nil, nil },
-	}
-	code := app.Run(context.Background(), []string{"--config", global, "processes", "mysql-main"})
-	if code != exitSuccess {
-		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
-	}
-	if !strings.Contains(stdout.String(), "no processes found for mysql-main") {
-		t.Fatalf("stdout = %q", stdout.String())
+func TestProcessesNoResults(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		service   string
+		wantExit  int
+		useStderr bool
+		wantMsg   string
+	}{
+		{"none found", "mysql-main", exitSuccess, false, "no processes found for mysql-main"},
+		{"unknown service", "nope", exitRuntimeError, true, "unknown service"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			global := writeProcessConfig(t, "/run/x.pid")
+			var stdout, stderr bytes.Buffer
+			app := App{
+				Env:      func(string) string { return "" },
+				Stdout:   &stdout,
+				Stderr:   &stderr,
+				Discover: func([]process.Selector) ([]process.Process, []string) { return nil, nil },
+			}
+			code := app.Run(context.Background(), []string{"--config", global, "processes", tc.service})
+			if code != tc.wantExit {
+				t.Fatalf("Run() exit = %d, want %d", code, tc.wantExit)
+			}
+			out := stdout.String()
+			if tc.useStderr {
+				out = stderr.String()
+			}
+			if !strings.Contains(out, tc.wantMsg) {
+				t.Fatalf("output = %q, want %q", out, tc.wantMsg)
+			}
+		})
 	}
 }
 
@@ -136,21 +146,6 @@ func TestProcessesUsesSystemdMainPIDWhenPidfileMissing(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), "pidfile") {
 		t.Fatalf("stderr = %q, want no pidfile warning", stderr.String())
-	}
-}
-
-func TestProcessesUnknownService(t *testing.T) {
-	global := writeProcessConfig(t, "/run/x.pid")
-	var stderr bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr,
-		Discover: func([]process.Selector) ([]process.Process, []string) { return nil, nil }}
-
-	code := app.Run(context.Background(), []string{"--config", global, "processes", "nope"})
-	if code != exitRuntimeError {
-		t.Fatalf("Run() exit = %d, want %d", code, exitRuntimeError)
-	}
-	if !strings.Contains(stderr.String(), "unknown service") {
-		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
 

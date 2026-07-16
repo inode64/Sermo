@@ -17,7 +17,10 @@ import (
 	"sermo/internal/servicemgr"
 )
 
-func writeWebProcessConfig(t *testing.T, pidfile string) *config.Config {
+// writeWebServiceConfig writes a global config with a single services dir plus one
+// service file (serviceFile under services/, holding body), loads it, and returns
+// the resulting config.
+func writeWebServiceConfig(t *testing.T, serviceFile, body string) *config.Config {
 	t.Helper()
 	root := t.TempDir()
 	enabled := filepath.Join(root, "services")
@@ -34,12 +37,7 @@ defaults:
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	svcPath := filepath.Join(enabled, "mysql-main.yml")
-	if err := os.WriteFile(svcPath, []byte(`
-name: mysql-main
-service: mysql
-pidfile: `+pidfile+`
-`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(enabled, serviceFile), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.Load(globalPath)
@@ -47,6 +45,15 @@ pidfile: `+pidfile+`
 		t.Fatalf("load config: %v", err)
 	}
 	return cfg
+}
+
+func writeWebProcessConfig(t *testing.T, pidfile string) *config.Config {
+	t.Helper()
+	return writeWebServiceConfig(t, "mysql-main.yml", `
+name: mysql-main
+service: mysql
+pidfile: `+pidfile+`
+`)
 }
 
 func TestWebBackendDetailProcessesRealPidfile(t *testing.T) {
@@ -220,32 +227,11 @@ func TestServiceNoResidentProcessKeepsBackendPIDServiceResident(t *testing.T) {
 }
 
 func TestWebBackendDetailNoResidentProcess(t *testing.T) {
-	root := t.TempDir()
-	enabled := filepath.Join(root, "services")
-	if err := os.MkdirAll(enabled, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	globalPath := filepath.Join(root, "sermo.yml")
-	if err := os.WriteFile(globalPath, []byte(`
-paths:
-  services: [`+enabled+`]
-defaults:
-  policy:
-    cooldown: 5m
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(enabled, "firehol.yml"), []byte(`
+	cfg := writeWebServiceConfig(t, "firehol.yml", `
 name: firehol
 service: firehol
 processes: {}
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := config.Load(globalPath)
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
+`)
 	wb, warnings := NewWebBackend(t.Context(), cfg, Deps{
 		Backend:     servicemgr.BackendSystemd,
 		Manager:     fakeManager{},
@@ -281,35 +267,14 @@ processes: {}
 }
 
 func TestWebBackendInitHelperWithoutPIDsDoesNotWaitForRuntimeMetrics(t *testing.T) {
-	root := t.TempDir()
-	enabled := filepath.Join(root, "services")
-	if err := os.MkdirAll(enabled, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	globalPath := filepath.Join(root, "sermo.yml")
-	if err := os.WriteFile(globalPath, []byte(`
-paths:
-  services: [`+enabled+`]
-defaults:
-  policy:
-    cooldown: 5m
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(enabled, "wait-online.yml"), []byte(`
+	cfg := writeWebServiceConfig(t, "wait-online.yml", `
 name: wait-online
 service: NetworkManager-wait-online
 checks:
   state:
     type: service
     expect: active
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := config.Load(globalPath)
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
+`)
 	snaps := NewSnapshots()
 	snaps.Publish("wait-online", map[string]checks.Result{
 		"state": {Check: "state", OK: true},
@@ -477,33 +442,12 @@ func TestServiceRuntimePidfileCheckUsesBackendFallbackWhenSystemdHasNoPIDFile(t 
 }
 
 func TestWebBackendDetailIncludesProcessSelectorWarnings(t *testing.T) {
-	root := t.TempDir()
-	enabled := filepath.Join(root, "services")
-	if err := os.MkdirAll(enabled, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	globalPath := filepath.Join(root, "sermo.yml")
-	if err := os.WriteFile(globalPath, []byte(`
-paths:
-  services: [`+enabled+`]
-defaults:
-  policy:
-    cooldown: 5m
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(enabled, "web.yml"), []byte(`
+	cfg := writeWebServiceConfig(t, "web.yml", `
 name: web
 service: web
 processes:
   main: {}
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := config.Load(globalPath)
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
+`)
 	wb, warnings := NewWebBackend(t.Context(), cfg, Deps{Backend: servicemgr.BackendOpenRC, Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{}})
 	if len(warnings) > 0 {
 		t.Fatalf("NewWebBackend warnings: %v", warnings)

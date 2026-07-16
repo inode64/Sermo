@@ -199,21 +199,30 @@ func TestServiceIOFDsThreadsAggregateOverTree(t *testing.T) {
 	}
 }
 
-func TestServiceIORateClampsOnShrink(t *testing.T) {
+// assertServiceIORate primes a one-PID service at read0/write0 bytes, advances a
+// second to read1/write1, and asserts the io metric is ready with wantAbsolute
+// (the clamped read+write delta).
+func assertServiceIORate(t *testing.T, read0, write0, read1, write1 uint64, wantAbsolute float64) {
+	t.Helper()
 	clock := time.Unix(0, 0)
-	reader := fakeReader{ioRead: map[int]uint64{10: 5000}, ioWrite: map[int]uint64{10: 0}, hz: 100, ncpu: 1}
+	reader := fakeReader{ioRead: map[int]uint64{10: read0}, ioWrite: map[int]uint64{10: write0}, hz: 100, ncpu: 1}
 	c := New(reader)
 	c.Now = func() time.Time { return clock }
-	c.SampleService("svc", []int{10}) // prime at 5000
+	c.SampleService("svc", []int{10}) // prime
 
-	// A child exits / counter resets -> totals drop. Rate must clamp to 0, not underflow.
 	clock = clock.Add(time.Second)
-	reader.ioRead[10] = 1000
+	reader.ioRead[10] = read1
+	reader.ioWrite[10] = write1
 	c.Reader = reader
 	snap := c.SampleService("svc", []int{10})
-	if !snap["io"].Ready || snap["io"].Absolute != 0 {
-		t.Fatalf("io on counter shrink = %+v, want clamped to 0", snap["io"])
+	if !snap["io"].Ready || snap["io"].Absolute != wantAbsolute {
+		t.Fatalf("io = %+v, want ready %v", snap["io"], wantAbsolute)
 	}
+}
+
+func TestServiceIORateClampsOnShrink(t *testing.T) {
+	// A child exits / counter resets -> totals drop. Rate must clamp to 0, not underflow.
+	assertServiceIORate(t, 5000, 0, 1000, 0, 0)
 }
 
 func TestServiceMemoryAndCount(t *testing.T) {
@@ -335,49 +344,40 @@ func TestSampleServiceUsesCombinedMemoryTotals(t *testing.T) {
 	}
 }
 
-func TestServiceCPURate(t *testing.T) {
+// assertServiceCPURate samples a one-PID service twice a second apart — baseTicks
+// then nextTicks of cumulative CPU on a 100Hz/2-CPU reader — and asserts cpu is
+// ready with a percentage accepted by wantPct.
+func assertServiceCPURate(t *testing.T, baseTicks, nextTicks uint64, wantPct func(float64) bool) {
+	t.Helper()
 	clock := time.Unix(0, 0)
-	reader := fakeReader{cpu: map[int]uint64{10: 0}, hz: 100, ncpu: 2}
+	reader := fakeReader{cpu: map[int]uint64{10: baseTicks}, hz: 100, ncpu: 2}
 	c := New(reader)
 	c.Now = func() time.Time { return clock }
+	c.SampleService("svc", []int{10}) // baseline
 
-	c.SampleService("svc", []int{10}) // first sample: 0 ticks at t=0
-
-	// One second later, the process used 100 ticks = 1 CPU-second. With 2 CPUs,
-	// that is 1/(1*2)*100 = 50%.
 	clock = clock.Add(time.Second)
-	reader.cpu[10] = 100
+	reader.cpu[10] = nextTicks
 	c.Reader = reader
 	snap := c.SampleService("svc", []int{10})
 
 	if !snap["cpu"].Ready {
 		t.Fatal("cpu should be ready on the second cycle")
 	}
-	if got := snap["cpu"].Percent; got < 49.9 || got > 50.1 {
-		t.Fatalf("cpu%% = %v, want ~50", got)
+	if got := snap["cpu"].Percent; !wantPct(got) {
+		t.Fatalf("cpu%% = %v", got)
 	}
+}
+
+func TestServiceCPURate(t *testing.T) {
+	// 100 ticks over 1s = 1 CPU-second; with 2 CPUs that is 1/(1*2)*100 = 50%.
+	assertServiceCPURate(t, 0, 100, func(p float64) bool { return p >= 49.9 && p <= 50.1 })
 }
 
 func TestServiceCPURateClampsOnTickDrop(t *testing.T) {
 	// When the tree's cumulative CPU ticks drop between cycles (a worker restarts,
 	// or a busy PID is replaced by a fresh one), cur < prev. The rate must clamp
 	// to 0, not underflow the unsigned subtraction into a bogus huge percentage.
-	clock := time.Unix(0, 0)
-	reader := fakeReader{cpu: map[int]uint64{10: 500}, hz: 100, ncpu: 2}
-	c := New(reader)
-	c.Now = func() time.Time { return clock }
-	c.SampleService("svc", []int{10}) // baseline at 500 ticks
-
-	clock = clock.Add(time.Second)
-	reader.cpu[10] = 100 // dropped below the baseline
-	c.Reader = reader
-	snap := c.SampleService("svc", []int{10})
-	if got := snap["cpu"].Percent; got != 0 {
-		t.Fatalf("cpu%% on a tick drop = %v, want 0 (clamped)", got)
-	}
-	if !snap["cpu"].Ready {
-		t.Fatal("cpu should still be ready after two samples")
-	}
+	assertServiceCPURate(t, 500, 100, func(p float64) bool { return p == 0 })
 }
 
 func TestSampleServiceCPUPerProcessAndAggregate(t *testing.T) {
@@ -605,21 +605,8 @@ func TestCountCPULinesEdgeLines(t *testing.T) {
 }
 
 func TestServiceIOCombinedSumsReadAndWrite(t *testing.T) {
-	clock := time.Unix(0, 0)
-	reader := fakeReader{ioRead: map[int]uint64{10: 1000}, ioWrite: map[int]uint64{10: 2000}, hz: 100, ncpu: 1}
-	c := New(reader)
-	c.Now = func() time.Time { return clock }
-	c.SampleService("svc", []int{10}) // prime read+write = 3000
-
-	clock = clock.Add(time.Second)
-	reader.ioRead[10] = 4000
-	reader.ioWrite[10] = 6000
-	c.Reader = reader
-	snap := c.SampleService("svc", []int{10})
 	// io = Δ(read+write) = (4000+6000)-(1000+2000) = 7000 B over 1s.
-	if !snap["io"].Ready || snap["io"].Absolute != 7000 {
-		t.Fatalf("io = %+v, want 7000 (read+write delta)", snap["io"])
-	}
+	assertServiceIORate(t, 1000, 2000, 4000, 6000, 7000)
 }
 
 func TestSystemCPUDeltaWithNonzeroBaseline(t *testing.T) {

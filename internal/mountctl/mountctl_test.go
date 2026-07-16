@@ -92,8 +92,12 @@ func TestPidUsesPathHonorsCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	// The current process always uses /; a cancelled context must abort before readlink.
-	if pidUsesPath(ctx, os.Getpid(), "/") {
-		t.Fatal("pidUsesPath must stop immediately when the context is cancelled")
+	matches, err := pidUsesMounts(ctx, os.Getpid(), []string{"/"})
+	if err == nil {
+		t.Fatal("pidUsesMounts must return an error when the context is cancelled")
+	}
+	if len(matches) != 0 {
+		t.Fatalf("pidUsesMounts must stop immediately when the context is cancelled; got %d matches", len(matches))
 	}
 }
 
@@ -261,76 +265,60 @@ func TestBlockersScansOnlyWhenMounted(t *testing.T) {
 	}
 }
 
-func TestReleaseBusySurfacesCanceledDiscoveryError(t *testing.T) {
+// assertReleaseBusyDiscoveryError drives a busy mount whose blocker discovery
+// fails with discErr and asserts Release errors, surfacing wantMsg.
+func assertReleaseBusyDiscoveryError(t *testing.T, discErr error, wantMsg string) {
+	t.Helper()
 	mounted := true
 	runner := &fakeRunner{mounted: &mounted, busy: true}
 	c := testController(t, &mounted, runner)
-	c.DiscoverUsers = func(string) ([]process.Process, error) {
-		return nil, context.Canceled
-	}
-	spec := EphemeralSpec("/mnt/backup")
+	c.DiscoverUsers = func(string) ([]process.Process, error) { return nil, discErr }
 
-	res, err := c.Release(context.Background(), spec)
+	res, err := c.Release(context.Background(), EphemeralSpec("/mnt/backup"))
 	if err == nil {
 		t.Fatal("Release busy mount succeeded")
 	}
-	if !strings.Contains(res.Message, "could not enumerate blockers: cancelled") {
-		t.Fatalf("Release message = %q, want cancelled discovery error", res.Message)
+	if !strings.Contains(res.Message, wantMsg) {
+		t.Fatalf("Release message = %q, want %q", res.Message, wantMsg)
 	}
 }
 
-func TestReleaseBusySurfacesDiscoveryError(t *testing.T) {
-	mounted := true
-	runner := &fakeRunner{mounted: &mounted, busy: true}
-	c := testController(t, &mounted, runner)
-	c.DiscoverUsers = func(string) ([]process.Process, error) {
-		return nil, errors.New("read /proc: permission denied")
-	}
-	spec := EphemeralSpec("/mnt/backup")
+func TestReleaseBusySurfacesCanceledDiscoveryError(t *testing.T) {
+	assertReleaseBusyDiscoveryError(t, context.Canceled, "could not enumerate blockers: cancelled")
+}
 
-	res, err := c.Release(context.Background(), spec)
-	if err == nil {
-		t.Fatal("Release busy mount succeeded")
+func TestReleaseBusySurfacesDiscoveryError(t *testing.T) {
+	assertReleaseBusyDiscoveryError(t, errors.New("read /proc: permission denied"), "could not enumerate blockers")
+}
+
+// assertReleaseUnmountsWith drives a busy mount released under opts and asserts the
+// mount is gone, flag(res) holds, and the exact umount command sequence ran.
+func assertReleaseUnmountsWith(t *testing.T, runnerForce bool, opts ReleaseOptions, flag func(Result) bool, wantCommands string) {
+	t.Helper()
+	mounted := true
+	runner := &fakeRunner{mounted: &mounted, busy: true, force: runnerForce}
+	c := testController(t, &mounted, runner)
+
+	res, err := c.ReleaseWithOptions(context.Background(), EphemeralSpec("/mnt/backup"), opts)
+	if err != nil {
+		t.Fatalf("Release: %v", err)
 	}
-	if !strings.Contains(res.Message, "could not enumerate blockers") {
-		t.Fatalf("Release message = %q, want it to surface the discovery error", res.Message)
+	if !flag(res) || mounted {
+		t.Fatalf("Release = %+v mounted=%t, want unmounted with flag set", res, mounted)
+	}
+	if got := strings.Join(runner.calls, "|"); got != wantCommands {
+		t.Fatalf("commands = %q, want %q", got, wantCommands)
 	}
 }
 
 func TestReleaseAllowsLazyOnlyWhenExplicit(t *testing.T) {
-	mounted := true
-	runner := &fakeRunner{mounted: &mounted, busy: true}
-	c := testController(t, &mounted, runner)
-	spec := EphemeralSpec("/mnt/backup")
-
-	res, err := c.ReleaseWithOptions(context.Background(), spec, ReleaseOptions{AllowLazy: true})
-	if err != nil {
-		t.Fatalf("Release lazy: %v", err)
-	}
-	if !res.Lazy || mounted {
-		t.Fatalf("Release = %+v mounted=%t, want lazy unmounted", res, mounted)
-	}
-	if got := strings.Join(runner.calls, "|"); got != "umount /mnt/backup|umount -l /mnt/backup" {
-		t.Fatalf("commands = %q", got)
-	}
+	assertReleaseUnmountsWith(t, false, ReleaseOptions{AllowLazy: true},
+		func(r Result) bool { return r.Lazy }, "umount /mnt/backup|umount -l /mnt/backup")
 }
 
 func TestReleaseAllowsForceOnlyWhenRequested(t *testing.T) {
-	mounted := true
-	runner := &fakeRunner{mounted: &mounted, busy: true, force: true}
-	c := testController(t, &mounted, runner)
-	spec := EphemeralSpec("/mnt/backup")
-
-	res, err := c.ReleaseWithOptions(context.Background(), spec, ReleaseOptions{AllowForce: true})
-	if err != nil {
-		t.Fatalf("Release force: %v", err)
-	}
-	if !res.Forced || mounted {
-		t.Fatalf("Release = %+v mounted=%t, want forced unmounted", res, mounted)
-	}
-	if got := strings.Join(runner.calls, "|"); got != "umount /mnt/backup|umount -f /mnt/backup" {
-		t.Fatalf("commands = %q", got)
-	}
+	assertReleaseUnmountsWith(t, true, ReleaseOptions{AllowForce: true},
+		func(r Result) bool { return r.Forced }, "umount /mnt/backup|umount -f /mnt/backup")
 }
 
 func TestReleaseSignalsOnlyWithKillPolicy(t *testing.T) {

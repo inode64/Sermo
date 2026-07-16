@@ -56,6 +56,27 @@ func TestWebBackendSetMonitoredEmitsEvent(t *testing.T) {
 	}
 }
 
+// assertSetMonitoredEmitsError drives set for an unknown target then a store
+// failure, asserting each emits an unmonitor error event tagged with the given
+// watch name (empty for service entries, which carry no Watch).
+func assertSetMonitoredEmitsError(t *testing.T, store *fakeStore, events *[]Event, set func(context.Context, string, bool) error, known, unknownWatch, knownWatch string) {
+	t.Helper()
+	if err := set(context.Background(), "ghost", false); err == nil {
+		t.Fatal("unknown target should fail")
+	}
+	if len(*events) != 1 || (*events)[0].Kind != eventKindError || (*events)[0].Action != eventActionUnmonitor || (*events)[0].Watch != unknownWatch {
+		t.Fatalf("unknown target event = %+v", (*events)[0])
+	}
+
+	store.failSet = true
+	if err := set(context.Background(), known, false); err == nil {
+		t.Fatal("store failure should fail")
+	}
+	if len(*events) != 2 || (*events)[1].Kind != eventKindError || (*events)[1].Action != eventActionUnmonitor || (*events)[1].Watch != knownWatch {
+		t.Fatalf("store failure event = %+v", (*events)[1])
+	}
+}
+
 func TestWebBackendSetMonitoredEmitsError(t *testing.T) {
 	store := newFakeStore()
 	var events []Event
@@ -64,21 +85,7 @@ func TestWebBackendSetMonitoredEmitsError(t *testing.T) {
 		store:   store,
 		emit:    func(e Event) { events = append(events, e) },
 	}
-
-	if err := b.SetMonitored(context.Background(), "ghost", false); err == nil {
-		t.Fatal("unknown service should fail")
-	}
-	if len(events) != 1 || events[0].Kind != eventKindError || events[0].Action != eventActionUnmonitor {
-		t.Fatalf("unknown service event = %+v", events[0])
-	}
-
-	store.failSet = true
-	if err := b.SetMonitored(context.Background(), "web", false); err == nil {
-		t.Fatal("store failure should fail")
-	}
-	if len(events) != 2 || events[1].Kind != eventKindError || events[1].Action != eventActionUnmonitor {
-		t.Fatalf("store failure event = %+v", events[1])
-	}
+	assertSetMonitoredEmitsError(t, store, &events, b.SetMonitored, "web", "", "")
 }
 
 func TestWebBackendSetMonitoredAppearsInEventLog(t *testing.T) {
@@ -146,21 +153,7 @@ func TestWebBackendSetWatchMonitoredEmitsError(t *testing.T) {
 		store:   store,
 		emit:    func(e Event) { events = append(events, e) },
 	}
-
-	if err := b.SetWatchMonitored(context.Background(), "ghost", false); err == nil {
-		t.Fatal("unknown watch should fail")
-	}
-	if len(events) != 1 || events[0].Kind != eventKindError || events[0].Action != eventActionUnmonitor || events[0].Watch != "ghost" {
-		t.Fatalf("unknown watch event = %+v", events[0])
-	}
-
-	store.failSet = true
-	if err := b.SetWatchMonitored(context.Background(), "storage-root", false); err == nil {
-		t.Fatal("store failure should fail")
-	}
-	if len(events) != 2 || events[1].Kind != eventKindError || events[1].Action != eventActionUnmonitor || events[1].Watch != "storage-root" {
-		t.Fatalf("store failure event = %+v", events[1])
-	}
+	assertSetMonitoredEmitsError(t, store, &events, b.SetWatchMonitored, "storage-root", "ghost", "storage-root")
 }
 
 func TestWebBackendWatchesIncludeMonitoringState(t *testing.T) {

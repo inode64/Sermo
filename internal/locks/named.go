@@ -1,7 +1,6 @@
 package locks
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -121,15 +120,7 @@ func (l NamedLocker) identity() (int, uint64) {
 }
 
 func (l NamedLocker) dependencies() (ProcessProber, func() time.Time) {
-	proc := l.Proc
-	if proc == nil {
-		proc = OSProcessProber{}
-	}
-	now := l.Now
-	if now == nil {
-		now = time.Now
-	}
-	return proc, now
+	return procNowDefaults(l.Proc, l.Now)
 }
 
 func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ownerPID int, ownerTicks uint64) (*Handle, error) {
@@ -143,8 +134,13 @@ func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ow
 	}
 
 	path := l.path(service, name)
-	for range maxAcquireAttempts {
-		lf := lockFile{
+	held := func(lf lockFile, state State, staleReason string) error {
+		return &HeldError{Service: service, Lock: toLock(lf, path, state, staleReason)}
+	}
+	exhausted := &HeldError{Service: service, Lock: Lock{Service: service, Name: name, Path: path, State: StateActive}}
+
+	ol, err := acquireExclusive(path, func() lockFile {
+		return lockFile{
 			Service:         service,
 			Name:            name,
 			Reason:          reason,
@@ -153,35 +149,11 @@ func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ow
 			CreatedAt:       now(),
 			ExpiresAt:       now().Add(ttl),
 		}
-		err := writeLockFileExclusive(path, lf)
-		if err == nil {
-			return &Handle{ownedLock{path: path, ownerPID: ownerPID, ownerStartTicks: ownerTicks}}, nil
-		}
-		if !errors.Is(err, os.ErrExist) {
-			return nil, fmt.Errorf(lockAcquireErrorFormat, path, err)
-		}
-
-		existing, rerr := readLockFile(path)
-		if rerr != nil {
-			if isRetryableLockRead(rerr) {
-				continue
-			}
-			return nil, fmt.Errorf(lockAcquireErrorFormat, path, rerr)
-		}
-		state, staleReason := classify(existing, now(), proc)
-		if state == StateActive {
-			return nil, &HeldError{Service: service, Lock: toLock(existing, path, state, staleReason)}
-		}
-		if reclaimStale(path, existing, proc, now) {
-			continue
-		}
-		if cur, err := readLockFile(path); err == nil {
-			if st, rs := classify(cur, now(), proc); st == StateActive {
-				return nil, &HeldError{Service: service, Lock: toLock(cur, path, st, rs)}
-			}
-		}
+	}, proc, now, held, nil, true, exhausted)
+	if err != nil {
+		return nil, err
 	}
-	return nil, &HeldError{Service: service, Lock: Lock{Service: service, Name: name, Path: path, State: StateActive}}
+	return &Handle{ol}, nil
 }
 
 func validateLockIDs(service, name string) error {

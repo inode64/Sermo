@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -50,24 +49,11 @@ func buildAMQPStart(props map[string]string) []byte {
 // replies with reply.
 func serveAMQP(t *testing.T, reply []byte) int {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = ln.Close() })
-	go func() {
-		c, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		defer func() { _ = c.Close() }()
+	return serveOnce(t, func(c net.Conn) {
 		var hdr [8]byte
 		_, _ = io.ReadFull(c, hdr[:])
 		_, _ = c.Write(reply)
-	}()
-	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
-	port, _ := strconv.Atoi(portStr)
-	return port
+	})
 }
 
 func TestAMQPProbeStart(t *testing.T) {

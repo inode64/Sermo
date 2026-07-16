@@ -41,17 +41,11 @@ func pinger(samples ...PingSample) PingSamplerFunc {
 }
 
 func TestICMPStateExpect(t *testing.T) {
-	c := &icmpCheck{base: base{name: "p"}, host: "h", metric: "state", expect: "up",
-		sampler: pinger(PingSample{Reachable: true})}
-	res := c.Run(context.Background())
-	if !res.OK || res.Data["value"] != "up" || res.Data["host"] != "h" {
-		t.Fatalf("expect-up should fire when reachable: %+v", res)
+	mk := func(reachable bool) Check {
+		return &icmpCheck{base: base{name: "p"}, host: "h", metric: "state", expect: "up",
+			sampler: pinger(PingSample{Reachable: reachable})}
 	}
-	c2 := &icmpCheck{base: base{name: "p"}, host: "h", metric: "state", expect: "up",
-		sampler: pinger(PingSample{Reachable: false})}
-	if c2.Run(context.Background()).OK {
-		t.Fatal("expect-up must not fire when unreachable")
-	}
+	assertStateExpect(t, mk(true), mk(false), "value", "up", "host", "h")
 }
 
 func TestICMPStateOnChange(t *testing.T) {

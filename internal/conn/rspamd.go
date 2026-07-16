@@ -28,26 +28,8 @@ const (
 )
 
 func (rspamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortRspamd
-	}
-	scheme := schemeHTTP
-	client := httpProbeClient(cfg.Interface, nil)
-	if mode := normalizeTLS(cfg.TLS); mode != "" {
-		scheme = schemeHTTPS
-		tlsConfig := tlsClientConfig(host)
-		if mode == tlsSkipVerify {
-			tlsConfig.InsecureSkipVerify = true // operator chose tls: skip-verify
-		}
-		client = httpProbeClient(cfg.Interface, tlsConfig)
-	}
-
-	url := scheme + urlSchemeSeparator + hostPort(host, port) + rspamdPingEndpoint
+	client, base := httpProbeBase(cfg, defaultPortRspamd)
+	url := base + rspamdPingEndpoint
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return Result{}, err

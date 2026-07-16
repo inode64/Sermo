@@ -24,6 +24,22 @@ func resolveWatchService(t *testing.T, body string) (map[string]any, []string) {
 	return resolved.Tree, errs
 }
 
+// resolveWatchRule resolves a single-service config with the given service body,
+// asserts no resolve errors, and returns the desugared rule named name after
+// checking its type equals wantType.
+func resolveWatchRule(t *testing.T, body, name, wantType string) map[string]any {
+	t.Helper()
+	tree, errs := resolveWatchService(t, body)
+	if len(errs) != 0 {
+		t.Fatalf("resolve errors = %v", errs)
+	}
+	rule := nested(t, tree, "rules", name)
+	if got := cfgval.String(rule["type"]); got != wantType {
+		t.Fatalf("rule type = %q, want %s", got, wantType)
+	}
+	return rule
+}
+
 func TestExpandServiceWatchesRemediation(t *testing.T) {
 	tree, errs := resolveWatchService(t, `
 watches:
@@ -85,19 +101,12 @@ watches:
 }
 
 func TestExpandServiceWatchesGuard(t *testing.T) {
-	tree, errs := resolveWatchService(t, `
+	rule := resolveWatchRule(t, `
 watches:
   block-restart-if-tcp-down:
     check: { type: tcp, host: 127.0.0.1, port: 80 }
     then: { action: block, blocks: [restart, start], message: "tcp down" }
-`)
-	if len(errs) != 0 {
-		t.Fatalf("resolve errors = %v", errs)
-	}
-	rule := nested(t, tree, "rules", "block-restart-if-tcp-down")
-	if got := cfgval.String(rule["type"]); got != "guard" {
-		t.Fatalf("rule type = %q, want guard", got)
-	}
+`, "block-restart-if-tcp-down", "guard")
 	if got := cfgval.StringList(rule["blocks"]); len(got) != 2 || got[0] != "restart" || got[1] != "start" {
 		t.Fatalf("rule blocks = %v, want [restart start] at the rule level", got)
 	}
@@ -108,20 +117,13 @@ watches:
 }
 
 func TestExpandServiceWatchesAlert(t *testing.T) {
-	tree, errs := resolveWatchService(t, `
+	rule := resolveWatchRule(t, `
 watches:
   alert-if-fds-high:
     check: { type: metric, scope: service, name: fds, op: ">", value: 50000 }
     within: { cycles: 10, min_matches: 3 }
     then: { action: alert, message: "fds high", notify: [ops] }
-`)
-	if len(errs) != 0 {
-		t.Fatalf("resolve errors = %v", errs)
-	}
-	rule := nested(t, tree, "rules", "alert-if-fds-high")
-	if got := cfgval.String(rule["type"]); got != "alert" {
-		t.Fatalf("rule type = %q, want alert", got)
-	}
+`, "alert-if-fds-high", "alert")
 	// notify is an entry-level rule field, not part of then.
 	if got := cfgval.StringList(rule["notify"]); len(got) != 1 || got[0] != "ops" {
 		t.Fatalf("rule notify = %v, want [ops] at the rule level", got)

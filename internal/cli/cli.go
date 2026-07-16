@@ -966,24 +966,7 @@ func issuesJSON(issues []config.Issue) []map[string]string {
 // runPreflight resolves a service, builds its preflight checks and runs them
 // under engine.default_timeout. A required check failure exits 1.
 func (a App) runPreflight(ctx context.Context, opts options) int {
-	if opts.service() == "" {
-		return a.commandUsageError(commandPreflight, "preflight requires a service name")
-	}
-	if len(opts.args) > 1 {
-		return a.commandUsageError(commandPreflight, "preflight takes exactly one service name")
-	}
-	service := opts.service()
-
-	cfg, code := a.loadConfig(opts)
-	if cfg == nil {
-		return code
-	}
-	service, code = a.canonicalService(opts, cfg, service)
-	if code != exitSuccess {
-		return code
-	}
-
-	resolved, code := a.resolveService(opts, cfg, service)
+	cfg, service, resolved, code := a.resolveServiceCommand(opts, commandPreflight, "preflight")
 	if code != exitSuccess {
 		return code
 	}
@@ -1096,26 +1079,29 @@ func (a App) runLocks(opts options) int {
 		return a.fail(opts, fmt.Sprintf("scan locks failed: %v", err))
 	}
 
-	for _, w := range report.Warnings {
+	return renderServiceList(a, opts, report.Service, cliJSONKeyLocks, report.Locks,
+		report.Warnings, "no named runtime locks for %s\n", formatLock)
+}
+
+// renderServiceList prints the shared tail of the per-service list commands
+// (locks, processes): warnings to stderr, JSON on --json, an empty notice
+// unless --quiet, else one formatted line per item.
+func renderServiceList[T any](a App, opts options, service, jsonKey string, items []T, warnings []string, emptyFormat string, format func(T) string) int {
+	for _, w := range warnings {
 		fmt.Fprintf(a.Stderr, cliWarningFormat, w)
 	}
-
 	if opts.json {
-		writeJSON(a.Stdout, map[string]any{
-			cliJSONKeyService: report.Service,
-			cliJSONKeyLocks:   report.Locks,
-		})
+		writeJSON(a.Stdout, map[string]any{cliJSONKeyService: service, jsonKey: items})
 		return exitSuccess
 	}
-
-	if len(report.Locks) == 0 {
+	if len(items) == 0 {
 		if !opts.quiet {
-			fmt.Fprintf(a.Stdout, "no named runtime locks for %s\n", report.Service)
+			fmt.Fprintf(a.Stdout, emptyFormat, service)
 		}
 		return exitSuccess
 	}
-	for _, lock := range report.Locks {
-		fmt.Fprintln(a.Stdout, formatLock(lock))
+	for _, item := range items {
+		fmt.Fprintln(a.Stdout, format(item))
 	}
 	return exitSuccess
 }
@@ -1140,25 +1126,35 @@ func formatLock(lock locks.Lock) string {
 
 // runProcesses discovers and reports the processes belonging to a service
 // , reading the service's `processes` selectors from resolved config.
-func (a App) runProcesses(ctx context.Context, opts options) int {
+// resolveServiceCommand runs the shared single-service command header: usage
+// guards, config load, service canonicalization and resolve. noun names the
+// command in the usage messages.
+func (a App) resolveServiceCommand(opts options, cmd, noun string) (cfg *config.Config, service string, resolved config.Resolved, code int) {
 	if opts.service() == "" {
-		return a.commandUsageError(commandProcesses, "processes requires a service name")
+		return nil, "", config.Resolved{}, a.commandUsageError(cmd, noun+" requires a service name")
 	}
 	if len(opts.args) > 1 {
-		return a.commandUsageError(commandProcesses, "processes takes exactly one service name")
+		return nil, "", config.Resolved{}, a.commandUsageError(cmd, noun+" takes exactly one service name")
 	}
-	service := opts.service()
+	service = opts.service()
 
-	cfg, code := a.loadConfig(opts)
+	cfg, code = a.loadConfig(opts)
 	if cfg == nil {
-		return code
+		return nil, "", config.Resolved{}, code
 	}
 	service, code = a.canonicalService(opts, cfg, service)
 	if code != exitSuccess {
-		return code
+		return nil, "", config.Resolved{}, code
 	}
+	resolved, code = a.resolveService(opts, cfg, service)
+	if code != exitSuccess {
+		return nil, "", config.Resolved{}, code
+	}
+	return cfg, service, resolved, exitSuccess
+}
 
-	resolved, code := a.resolveService(opts, cfg, service)
+func (a App) runProcesses(ctx context.Context, opts options) int {
+	cfg, service, resolved, code := a.resolveServiceCommand(opts, commandProcesses, "processes")
 	if code != exitSuccess {
 		return code
 	}
@@ -1167,25 +1163,8 @@ func (a App) runProcesses(ctx context.Context, opts options) int {
 	procs, discWarnings := a.discoverProcesses(ctx, opts, cfg, resolved, service, selectors)
 	warnings = append(warnings, discWarnings...)
 
-	for _, w := range warnings {
-		fmt.Fprintf(a.Stderr, cliWarningFormat, w)
-	}
-
-	if opts.json {
-		writeJSON(a.Stdout, map[string]any{cliJSONKeyService: service, cliJSONKeyProcesses: procs})
-		return exitSuccess
-	}
-
-	if len(procs) == 0 {
-		if !opts.quiet {
-			fmt.Fprintf(a.Stdout, "no processes found for %s\n", service)
-		}
-		return exitSuccess
-	}
-	for _, p := range procs {
-		fmt.Fprintln(a.Stdout, formatProcess(p))
-	}
-	return exitSuccess
+	return renderServiceList(a, opts, service, cliJSONKeyProcesses, procs,
+		warnings, "no processes found for %s\n", formatProcess)
 }
 
 func (a App) discoverProcesses(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service string, selectors []process.Selector) ([]process.Process, []string) {
@@ -1551,33 +1530,47 @@ func parseBefore(value string, now func() time.Time) (time.Time, error) {
 // to prune its event log. It reads the web: address/port and any
 // admin password from the shared config so local sermoctl can authenticate
 // the same way the operator would via the UI.
-func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Time) (int, error) {
+// daemonWebRequest runs the shared prologue of a daemon web API call: load
+// config, resolve the API base, build the request via buildURL, attach the
+// CSRF header when asked plus configured Basic auth, and perform the request.
+// The caller owns the response body and its own status/decode handling.
+func (a App) daemonWebRequest(ctx context.Context, opts options, method, what string, csrf bool, buildURL func(base string) string) (*http.Response, error) {
 	cfg, code := a.loadConfig(opts)
 	if code != exitSuccess || cfg == nil {
-		return 0, errors.New("failed to load config")
+		return nil, errors.New("failed to load config")
 	}
 	base, err := webAPIBase(cfg)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	u := base + daemonAPIPathEventsClear
-	if !before.IsZero() {
-		u += "?" + daemonAPIQueryBefore + "=" + before.Format(time.RFC3339)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, method, buildURL(base), http.NoBody)
 	if err != nil {
-		return 0, fmt.Errorf("build clear events request: %w", err)
+		return nil, fmt.Errorf("build %s request: %w", what, err)
 	}
-	req.Header.Set(daemonWebCSRFHeader, daemonWebCSRFValue)
-
+	if csrf {
+		req.Header.Set(daemonWebCSRFHeader, daemonWebCSRFValue)
+	}
 	// If the config declares an admin password, send Basic auth (any user + pw).
 	applyDaemonWebAuth(req, cfg)
 
 	client := &http.Client{Timeout: daemonWebClientTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("talking to daemon web UI: %w (is sermod running with web.port set?)", err)
+		return nil, fmt.Errorf("talking to daemon web UI: %w (is sermod running with web.port set?)", err)
+	}
+	return resp, nil
+}
+
+func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Time) (int, error) {
+	resp, err := a.daemonWebRequest(ctx, opts, http.MethodPost, "clear events", true, func(base string) string {
+		u := base + daemonAPIPathEventsClear
+		if !before.IsZero() {
+			u += "?" + daemonAPIQueryBefore + "=" + before.Format(time.RFC3339)
+		}
+		return u
+	})
+	if err != nil {
+		return 0, err
 	}
 	defer resp.Body.Close()
 
@@ -1600,33 +1593,15 @@ func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Ti
 // fetchEvents (the default for App.FetchEvents) calls the daemon web API to retrieve
 // recent events. If service != "", uses the per-service endpoint.
 func (a App) fetchEvents(ctx context.Context, opts options, service string, limit int) ([]event, error) {
-	cfg, code := a.loadConfig(opts)
-	if code != exitSuccess || cfg == nil {
-		return nil, errors.New("failed to load config")
-	}
-	base, err := webAPIBase(cfg)
+	// no CSRF needed for GET; auth is attached when configured
+	resp, err := a.daemonWebRequest(ctx, opts, http.MethodGet, "events", false, func(base string) string {
+		if service != "" {
+			return fmt.Sprintf("%s%s/%s%s?%s=%d", base, daemonAPIPathServices, service, daemonAPIPathServiceEvents, daemonAPIQueryLimit, limit)
+		}
+		return fmt.Sprintf("%s%s?%s=%d", base, daemonAPIPathEvents, daemonAPIQueryLimit, limit)
+	})
 	if err != nil {
 		return nil, err
-	}
-
-	var u string
-	if service != "" {
-		u = fmt.Sprintf("%s%s/%s%s?%s=%d", base, daemonAPIPathServices, service, daemonAPIPathServiceEvents, daemonAPIQueryLimit, limit)
-	} else {
-		u = fmt.Sprintf("%s%s?%s=%d", base, daemonAPIPathEvents, daemonAPIQueryLimit, limit)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody)
-	if err != nil {
-		return nil, fmt.Errorf("build events request: %w", err)
-	}
-	// no CSRF needed for GET; add auth if configured
-	applyDaemonWebAuth(req, cfg)
-
-	client := &http.Client{Timeout: daemonWebClientTimeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("talking to daemon web UI: %w (is sermod running with web.port set?)", err)
 	}
 	defer resp.Body.Close()
 

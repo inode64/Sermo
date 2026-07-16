@@ -9,11 +9,7 @@ service: x
 checks:
   log-growth: { type: size, path: /var/log/app.log, grow_by: 1GB, within: 1h }
 `)
-	for _, is := range issues {
-		if hasIssue([]Issue{is}, "checks.log-growth") {
-			t.Fatalf("valid size check must produce no issue: %v", issues)
-		}
-	}
+	mustNotHave(t, issues, "checks.log-growth")
 }
 
 func TestValidateSizeCheckErrors(t *testing.T) {

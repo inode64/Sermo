@@ -65,34 +65,28 @@ func TestValidateCommandsValid(t *testing.T) {
 	}
 }
 
-func TestValidateCommandRejectsEmptyArgvItem(t *testing.T) {
+// assertCheckSectionIssue runs validateCheckSection over a single named check and
+// asserts want appears in the reported issues.
+func assertCheckSectionIssue(t *testing.T, name string, check map[string]any, want string) {
+	t.Helper()
 	var issues []string
 	add := func(format string, args ...any) { issues = append(issues, fmt.Sprintf(format, args...)) }
-
-	tree := map[string]any{"checks": map[string]any{
-		"version": map[string]any{"type": "command", "command": []any{""}},
-	}}
-	validateCheckSection(tree, "checks", "/run/sermo/locks", add)
-
-	joined := strings.Join(issues, "\n")
-	if !strings.Contains(joined, "checks.version command must be an array, not a shell string") {
-		t.Fatalf("missing empty command issue in:\n%s", joined)
+	validateCheckSection(map[string]any{"checks": map[string]any{name: check}}, "checks", "/run/sermo/locks", add)
+	if joined := strings.Join(issues, "\n"); !strings.Contains(joined, want) {
+		t.Fatalf("missing issue %q in:\n%s", want, joined)
 	}
 }
 
+func TestValidateCommandRejectsEmptyArgvItem(t *testing.T) {
+	assertCheckSectionIssue(t, "version",
+		map[string]any{"type": "command", "command": []any{""}},
+		"checks.version command must be an array, not a shell string")
+}
+
 func TestValidateCommandCheckUser(t *testing.T) {
-	var issues []string
-	add := func(format string, args ...any) { issues = append(issues, fmt.Sprintf(format, args...)) }
-
-	tree := map[string]any{"checks": map[string]any{
-		"config": map[string]any{"type": "command", "command": []any{"/bin/tool"}, "user": []any{"postgres"}},
-	}}
-	validateCheckSection(tree, "checks", "/run/sermo/locks", add)
-
-	joined := strings.Join(issues, "\n")
-	if !strings.Contains(joined, "checks.config user must be a non-empty string") {
-		t.Fatalf("missing command user issue in:\n%s", joined)
-	}
+	assertCheckSectionIssue(t, "config",
+		map[string]any{"type": "command", "command": []any{"/bin/tool"}, "user": []any{"postgres"}},
+		"checks.config user must be a non-empty string")
 }
 
 func TestValidateCommandsExport(t *testing.T) {

@@ -63,13 +63,7 @@ func TestConfigCheckCommandUser(t *testing.T) {
 		argv:   []string{"postgres", "--check"},
 		user:   "postgres",
 	}
-
-	if res := check.Run(context.Background()); !res.OK {
-		t.Fatalf("config check with user should pass: %s", res.Message)
-	}
-	if runner.user != "postgres" || runner.name != "postgres" || len(runner.args) != 1 || runner.args[0] != "--check" {
-		t.Fatalf("RunUser call = user=%q name=%q args=%v", runner.user, runner.name, runner.args)
-	}
+	assertRunsAsUser(t, runner, check, "postgres")
 }
 
 func TestConfigCheckChange(t *testing.T) {

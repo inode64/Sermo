@@ -1,6 +1,45 @@
 package notify
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
+
+// assertBuildWebhookNotifier builds a webhook notifier with a valid URL and
+// asserts its identity, then asserts build rejects a missing and a non-http(s)
+// webhook.
+func assertBuildWebhookNotifier(t *testing.T, build func(name string, entry map[string]any) (Notifier, error), typ, name, goodWebhook, badWebhook string) {
+	t.Helper()
+	good, err := build(name, map[string]any{"type": typ, "webhook": goodWebhook})
+	if err != nil {
+		t.Fatalf("valid %s: %v", typ, err)
+	}
+	if good.Type() != typ || good.Name() != name {
+		t.Fatalf("unexpected %s: %+v", typ, good)
+	}
+	for _, entry := range []map[string]any{
+		{"type": typ},                        // no webhook
+		{"type": typ, "webhook": badWebhook}, // not an http(s) URL
+	} {
+		if _, err := build("n", entry); err == nil {
+			t.Fatalf("expected error for %v", entry)
+		}
+	}
+}
+
+// capturingPost returns a post func that asserts the label equals wantLabel and
+// records the posted url and payload into the given pointers.
+func capturingPost(t *testing.T, wantLabel string, url *string, payload *[]byte) func(context.Context, string, string, []byte) error {
+	t.Helper()
+	return func(_ context.Context, label, gotURL string, gotPayload []byte) error {
+		t.Helper()
+		if label != wantLabel {
+			t.Fatalf("label = %q, want %q", label, wantLabel)
+		}
+		*url, *payload = gotURL, gotPayload
+		return nil
+	}
+}
 
 func TestTestMessage(t *testing.T) {
 	msg := TestMessage()
@@ -75,21 +114,14 @@ func TestSupportedTypes(t *testing.T) {
 	}
 }
 
-func TestBuildTTYRegistry(t *testing.T) {
-	notifiers, warns := Build(map[string]any{
-		"tty": map[string]any{"type": "tty"},
-	})
-	if _, ok := notifiers["tty"]; !ok || len(warns) != 0 {
-		t.Fatalf("tty notifier should build cleanly: %v %v", notifiers, warns)
-	}
-}
-
-func TestBuildWallRegistry(t *testing.T) {
-	notifiers, warns := Build(map[string]any{
-		"wall": map[string]any{"type": "wall"},
-	})
-	if _, ok := notifiers["wall"]; !ok || len(warns) != 0 {
-		t.Fatalf("wall notifier should build cleanly: %v %v", notifiers, warns)
+func TestBuildLocalRegistry(t *testing.T) {
+	for _, typ := range []string{"tty", "wall"} {
+		t.Run(typ, func(t *testing.T) {
+			notifiers, warns := Build(map[string]any{typ: map[string]any{"type": typ}})
+			if _, ok := notifiers[typ]; !ok || len(warns) != 0 {
+				t.Fatalf("%s notifier should build cleanly: %v %v", typ, notifiers, warns)
+			}
+		})
 	}
 }
 

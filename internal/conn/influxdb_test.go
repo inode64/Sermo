@@ -3,36 +3,13 @@ package conn
 import (
 	"context"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
-	"strings"
 	"testing"
-	"time"
 )
 
-func influxHostPort(t *testing.T, srv *httptest.Server) (string, int) {
-	t.Helper()
-	host, portStr, err := net.SplitHostPort(strings.TrimPrefix(srv.URL, "http://"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	port, _ := strconv.Atoi(portStr)
-	return host, port
-}
-
 func TestInfluxdbProbeHealth(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/health" {
-			http.NotFound(w, r)
-			return
-		}
-		_, _ = io.WriteString(w, `{"name":"influxdb","message":"ready","status":"pass","version":"2.7.1"}`)
-	}))
-	defer srv.Close()
-
-	host, port := influxHostPort(t, srv)
+	host, port := serveJSON(t, "/health", `{"name":"influxdb","message":"ready","status":"pass","version":"2.7.1"}`)
 	res, err := influxdbProtocol{}.Probe(context.Background(), Config{Host: host, Port: port})
 	if err != nil {
 		t.Fatalf("probe: %v", err)
@@ -48,7 +25,7 @@ func TestInfluxdbProbeHealthFail(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	host, port := influxHostPort(t, srv)
+	host, port := serverHostPort(t, srv)
 	if _, err := (influxdbProtocol{}).Probe(context.Background(), Config{Host: host, Port: port}); err == nil {
 		t.Fatal("a fail health status must error")
 	}
@@ -66,7 +43,7 @@ func TestInfluxdbProbePingFallback(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	host, port := influxHostPort(t, srv)
+	host, port := serverHostPort(t, srv)
 	res, err := influxdbProtocol{}.Probe(context.Background(), Config{Host: host, Port: port})
 	if err != nil {
 		t.Fatalf("probe: %v", err)
@@ -77,17 +54,5 @@ func TestInfluxdbProbePingFallback(t *testing.T) {
 }
 
 func TestInfluxdbProbeDown(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
-	_ = ln.Close()
-	port, _ := strconv.Atoi(portStr)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	if _, err := (influxdbProtocol{}).Probe(ctx, Config{Host: "127.0.0.1", Port: port}); err == nil {
-		t.Fatal("probing a down InfluxDB must error")
-	}
+	assertProbeRefused(t, influxdbProtocol{}, deadPort(t))
 }

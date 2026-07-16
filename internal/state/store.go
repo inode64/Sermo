@@ -479,23 +479,44 @@ type CheckSnapshotRecord struct {
 // MonitorState returns a persisted monitoring row. found is false when the entry
 // has no recorded state yet.
 func (s *Store) MonitorState(service string) (MonitorRecord, bool, error) {
-	var active int
-	var source, updated string
-	err := s.db.QueryRowContext(s.sqlCtx(),
+	on, source, at, found, err := s.loadFlagRow(
 		`SELECT active, source, updated_at FROM monitor_state WHERE service = ?;`,
-		service,
-	).Scan(&active, &source, &updated)
+		service, "load monitor state for "+service)
+	if !found || err != nil {
+		return MonitorRecord{}, false, err
+	}
+	return MonitorRecord{Active: on, Source: source, UpdatedAt: at}, true, nil
+}
+
+// loadFlagRow runs a single-row (flag, source, updated_at) query and decodes
+// it; found is false when no row exists and errContext labels failures. It is
+// the read half shared by the boolean flag tables (monitor_state, global_state).
+func (s *Store) loadFlagRow(query string, key any, errContext string) (on bool, source string, at time.Time, found bool, err error) {
+	var v int
+	var updated string
+	err = s.db.QueryRowContext(s.sqlCtx(), query, key).Scan(&v, &source, &updated)
 	switch {
 	case err == sql.ErrNoRows:
-		return MonitorRecord{}, false, nil
+		return false, "", time.Time{}, false, nil
 	case err != nil:
-		return MonitorRecord{}, false, fmt.Errorf("load monitor state for %s: %w", service, err)
+		return false, "", time.Time{}, false, fmt.Errorf("%s: %w", errContext, err)
 	default:
-		at, _ := time.Parse(time.RFC3339, updated)
-		return MonitorRecord{
-			Active: active != 0, Source: source, UpdatedAt: at,
-		}, true, nil
+		at, _ = time.Parse(time.RFC3339, updated)
+		return v != 0, source, at, true, nil
 	}
+}
+
+// upsertFlagRow writes an on/off flag row keyed by key with source and the
+// current timestamp; the write half shared by the boolean flag tables.
+func (s *Store) upsertFlagRow(query string, key any, on bool, source, errContext string) error {
+	v := 0
+	if on {
+		v = 1
+	}
+	if _, err := s.db.ExecContext(s.sqlCtx(), query, key, v, source, s.now().UTC().Format(time.RFC3339)); err != nil {
+		return fmt.Errorf("%s: %w", errContext, err)
+	}
+	return nil
 }
 
 // Active reports whether monitoring is currently active for an entry. found is
@@ -517,23 +538,14 @@ func (s *Store) Active(service string) (active, found bool, err error) {
 // SetActive records an entry's monitoring state, upserting the row. source notes
 // who set it (SourceConfig, SourceCLI, SourceDaemon, SourceWeb) for inspection.
 func (s *Store) SetActive(service string, active bool, source string) error {
-	v := 0
-	if active {
-		v = 1
-	}
-	_, err := s.db.ExecContext(s.sqlCtx(),
+	return s.upsertFlagRow(
 		`INSERT INTO monitor_state (service, active, source, updated_at)
 		 VALUES (?, ?, ?, ?)
 		 ON CONFLICT(service) DO UPDATE SET
 		   active     = excluded.active,
 		   source     = excluded.source,
 		   updated_at = excluded.updated_at;`,
-		service, v, source, s.now().UTC().Format(time.RFC3339),
-	)
-	if err != nil {
-		return fmt.Errorf("set monitor state for %s: %w", service, err)
-	}
-	return nil
+		service, active, source, "set monitor state for "+service)
 }
 
 // SetOperationSettling records that a service operation is running or awaiting
@@ -594,14 +606,39 @@ func (s *Store) ServiceCheckSnapshots() (map[string]map[string]CheckSnapshotReco
 
 // SetServiceCheckSnapshots replaces one service's latest check snapshots.
 func (s *Store) SetServiceCheckSnapshots(service string, records map[string]CheckSnapshotRecord) error {
+	return replaceServiceRows(s, service, `DELETE FROM service_check_snapshot WHERE service = ?;`,
+		"service check snapshot", records, func(tx *sql.Tx, name string, rec CheckSnapshotRecord) error {
+			data, err := encodeSnapshotData(rec.Data)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(s.sqlCtx(),
+				`INSERT INTO service_check_snapshot
+				   (service, check_name, ok, condition, optional, skipped, message, data, ran, at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+				service, name, boolInt(rec.OK), boolInt(rec.Condition), boolInt(rec.Optional), boolInt(rec.Skipped),
+				rec.Message, data, boolInt(rec.Ran), timeUnixNano(rec.At),
+			); err != nil {
+				return fmt.Errorf("insert service check snapshot %s/%s: %w", service, name, err)
+			}
+			return nil
+		})
+}
+
+// replaceServiceRows swaps one service's rows in a name-keyed table inside a
+// transaction: DELETE via deleteSQL, then insert each record in sorted-name
+// order. what labels the transaction-step errors ("<what> update",
+// "clear <what>s", "commit <what>s"); insert keeps each table's own SQL and
+// per-row error context.
+func replaceServiceRows[T any](s *Store, service, deleteSQL, what string, records map[string]T, insert func(tx *sql.Tx, name string, rec T) error) error {
 	tx, err := s.db.BeginTx(s.sqlCtx(), nil)
 	if err != nil {
-		return fmt.Errorf("begin service check snapshot update for %s: %w", service, err)
+		return fmt.Errorf("begin %s update for %s: %w", what, service, err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err := tx.ExecContext(s.sqlCtx(), `DELETE FROM service_check_snapshot WHERE service = ?;`, service); err != nil {
-		return fmt.Errorf("clear service check snapshots for %s: %w", service, err)
+	if _, err := tx.ExecContext(s.sqlCtx(), deleteSQL, service); err != nil {
+		return fmt.Errorf("clear %ss for %s: %w", what, service, err)
 	}
 	names := make([]string, 0, len(records))
 	for name := range records {
@@ -609,23 +646,12 @@ func (s *Store) SetServiceCheckSnapshots(service string, records map[string]Chec
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		rec := records[name]
-		data, err := encodeSnapshotData(rec.Data)
-		if err != nil {
+		if err := insert(tx, name, records[name]); err != nil {
 			return err
-		}
-		if _, err := tx.ExecContext(s.sqlCtx(),
-			`INSERT INTO service_check_snapshot
-			   (service, check_name, ok, condition, optional, skipped, message, data, ran, at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-			service, name, boolInt(rec.OK), boolInt(rec.Condition), boolInt(rec.Optional), boolInt(rec.Skipped),
-			rec.Message, data, boolInt(rec.Ran), timeUnixNano(rec.At),
-		); err != nil {
-			return fmt.Errorf("insert service check snapshot %s/%s: %w", service, name, err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit service check snapshots for %s: %w", service, err)
+		return fmt.Errorf("commit %ss for %s: %w", what, service, err)
 	}
 	return nil
 }
@@ -793,43 +819,26 @@ type GlobalRecord struct {
 // SetPanic records the daemon-wide panic-mode flag, upserting the row. source
 // notes who set it (SourceCLI, SourceWeb) for inspection.
 func (s *Store) SetPanic(on bool, source string) error {
-	v := 0
-	if on {
-		v = 1
-	}
-	_, err := s.db.ExecContext(s.sqlCtx(),
+	return s.upsertFlagRow(
 		`INSERT INTO global_state (key, value, source, updated_at)
 		 VALUES (?, ?, ?, ?)
 		 ON CONFLICT(key) DO UPDATE SET
 		   value      = excluded.value,
 		   source     = excluded.source,
 		   updated_at = excluded.updated_at;`,
-		panicFlagKey, v, source, s.now().UTC().Format(time.RFC3339),
-	)
-	if err != nil {
-		return fmt.Errorf("set panic mode: %w", err)
-	}
-	return nil
+		panicFlagKey, on, source, "set panic mode")
 }
 
 // Panic returns the persisted panic-mode flag. found is false when no row has
 // been written yet (the caller treats that as panic off).
 func (s *Store) Panic() (rec GlobalRecord, found bool, err error) {
-	var v int
-	var source, updated string
-	err = s.db.QueryRowContext(s.sqlCtx(),
+	on, source, at, found, err := s.loadFlagRow(
 		`SELECT value, source, updated_at FROM global_state WHERE key = ?;`,
-		panicFlagKey,
-	).Scan(&v, &source, &updated)
-	switch {
-	case err == sql.ErrNoRows:
-		return GlobalRecord{}, false, nil
-	case err != nil:
-		return GlobalRecord{}, false, fmt.Errorf("load panic mode: %w", err)
-	default:
-		at, _ := time.Parse(time.RFC3339, updated)
-		return GlobalRecord{On: v != 0, Source: source, UpdatedAt: at}, true, nil
+		panicFlagKey, "load panic mode")
+	if !found || err != nil {
+		return GlobalRecord{}, false, err
 	}
+	return GlobalRecord{On: on, Source: source, UpdatedAt: at}, true, nil
 }
 
 // RemediationRecord is the persisted automatic-remediation control state for one
@@ -1088,42 +1097,25 @@ func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, e
 // SetRuleWindowStates replaces the persisted rule-window state for a service.
 // Passing an empty map removes stale rows for rules that no longer exist.
 func (s *Store) SetRuleWindowStates(service string, records map[string]RuleWindowRecord) error {
-	tx, err := s.db.BeginTx(s.sqlCtx(), nil)
-	if err != nil {
-		return fmt.Errorf("begin rule window state update for %s: %w", service, err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.ExecContext(s.sqlCtx(), `DELETE FROM rule_window_state WHERE service = ?;`, service); err != nil {
-		return fmt.Errorf("clear rule window states for %s: %w", service, err)
-	}
-	names := make([]string, 0, len(records))
-	for name := range records {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		rec := records[name]
-		history, err := json.Marshal(rec.History)
-		if err != nil {
-			return fmt.Errorf("encode rule window history for %s/%s: %w", service, name, err)
-		}
-		timed, err := encodeRuleWindowSamples(rec.TimedHistory)
-		if err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(s.sqlCtx(),
-			`INSERT INTO rule_window_state (service, rule_name, consecutive, history, true_since, timed_history)
-			 VALUES (?, ?, ?, ?, ?, ?);`,
-			service, name, rec.Consecutive, string(history), timeUnixNano(rec.TrueSince), timed,
-		); err != nil {
-			return fmt.Errorf("insert rule window state for %s/%s: %w", service, name, err)
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit rule window states for %s: %w", service, err)
-	}
-	return nil
+	return replaceServiceRows(s, service, `DELETE FROM rule_window_state WHERE service = ?;`,
+		"rule window state", records, func(tx *sql.Tx, name string, rec RuleWindowRecord) error {
+			history, err := json.Marshal(rec.History)
+			if err != nil {
+				return fmt.Errorf("encode rule window history for %s/%s: %w", service, name, err)
+			}
+			timed, err := encodeRuleWindowSamples(rec.TimedHistory)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(s.sqlCtx(),
+				`INSERT INTO rule_window_state (service, rule_name, consecutive, history, true_since, timed_history)
+				 VALUES (?, ?, ?, ?, ?, ?);`,
+				service, name, rec.Consecutive, string(history), timeUnixNano(rec.TrueSince), timed,
+			); err != nil {
+				return fmt.Errorf("insert rule window state for %s/%s: %w", service, name, err)
+			}
+			return nil
+		})
 }
 
 func encodeUnixNanos(times []time.Time) (string, error) {

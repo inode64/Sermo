@@ -208,14 +208,20 @@ func (w BuildWarning) Result() Result {
 
 // BuildWarningResults converts build warnings into check results.
 func BuildWarningResults(warnings []BuildWarning) []Result {
+	return mapWarnings(warnings, BuildWarning.Result)
+}
+
+// mapWarnings converts warnings element-by-element via conv, preserving the
+// nil-in/nil-out convention of the warning views.
+func mapWarnings[T any](warnings []BuildWarning, conv func(BuildWarning) T) []T {
 	if len(warnings) == 0 {
 		return nil
 	}
-	results := make([]Result, 0, len(warnings))
+	out := make([]T, 0, len(warnings))
 	for _, w := range warnings {
-		results = append(results, w.Result())
+		out = append(out, conv(w))
 	}
-	return results
+	return out
 }
 
 // Build turns a checks/preflight section (a map keyed by check name)
@@ -228,14 +234,7 @@ func Build(section map[string]any, deps Deps) ([]Built, []string) {
 
 // BuildWarningStrings renders build warnings as operator-facing strings.
 func BuildWarningStrings(warnings []BuildWarning) []string {
-	if len(warnings) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(warnings))
-	for _, w := range warnings {
-		out = append(out, w.String())
-	}
-	return out
+	return mapWarnings(warnings, BuildWarning.String)
 }
 
 // BuildWithWarnings is Build's structured form. Use it where build warnings
@@ -490,4 +489,17 @@ func Evaluate(results []Result) Outcome {
 		}
 	}
 	return Outcome{OK: ok, Results: results}
+}
+
+// pruneWindow drops the samples older than cutoff in place (keeping the
+// backing array), preserving order; the sliding-window trim shared by the
+// growth-delta checks (count, size).
+func pruneWindow[S any](samples []S, cutoff time.Time, at func(S) time.Time) []S {
+	kept := samples[:0]
+	for _, s := range samples {
+		if !at(s).Before(cutoff) {
+			kept = append(kept, s)
+		}
+	}
+	return kept
 }

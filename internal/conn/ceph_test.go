@@ -2,8 +2,6 @@ package conn
 
 import (
 	"context"
-	"net"
-	"strconv"
 	"testing"
 )
 
@@ -22,22 +20,7 @@ func TestParseCephBanner(t *testing.T) {
 // serveCeph writes a fixed banner and closes.
 func serveCeph(t *testing.T, banner string) int {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = ln.Close() })
-	go func() {
-		c, err := ln.Accept()
-		if err != nil {
-			return
-		}
-		_, _ = c.Write([]byte(banner))
-		_ = c.Close()
-	}()
-	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
-	port, _ := strconv.Atoi(portStr)
-	return port
+	return serveBanner(t, banner, nil)
 }
 
 func TestCephProbeMsgrV2(t *testing.T) {

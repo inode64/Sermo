@@ -1538,13 +1538,19 @@ func (s *Server) handleMonitoring(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.MonitoringStatus(r.Context()))
 }
 
-func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
-	detail, ok := s.Backend.Detail(r.Context(), r.PathValue(apiParamName))
+// handleNamed answers a lookup keyed by the request's name path parameter:
+// 404 with notFoundMsg when fn reports no match, the JSON result otherwise.
+func handleNamed[T any](w http.ResponseWriter, r *http.Request, notFoundMsg string, fn func(ctx context.Context, name string) (T, bool)) {
+	res, ok := fn(r.Context(), r.PathValue(apiParamName))
 	if !ok {
-		writeError(w, http.StatusNotFound, apiErrorUnknownService)
+		writeError(w, http.StatusNotFound, notFoundMsg)
 		return
 	}
-	writeJSON(w, http.StatusOK, detail)
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
+	handleNamed(w, r, apiErrorUnknownService, s.Backend.Detail)
 }
 
 // seriesSince reads the `since` query param, defaulting and capping it.
@@ -1580,12 +1586,9 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleServiceRuntime(w http.ResponseWriter, r *http.Request) {
-	res, ok := s.Backend.ServiceRuntime(r.Context(), r.PathValue(apiParamName), seriesSince(r))
-	if !ok {
-		writeError(w, http.StatusNotFound, apiErrorUnknownService)
-		return
-	}
-	writeJSON(w, http.StatusOK, res)
+	handleNamed(w, r, apiErrorUnknownService, func(ctx context.Context, name string) (ServiceRuntimeMetrics, bool) {
+		return s.Backend.ServiceRuntime(ctx, name, seriesSince(r))
+	})
 }
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
@@ -1768,31 +1771,19 @@ func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleServiceEvents(w http.ResponseWriter, r *http.Request) {
-	events, ok := s.Backend.ServiceEvents(r.Context(), r.PathValue(apiParamName), eventLimit(r))
-	if !ok {
-		writeError(w, http.StatusNotFound, apiErrorUnknownService)
-		return
-	}
-	writeJSON(w, http.StatusOK, events)
+	handleNamed(w, r, apiErrorUnknownService, func(ctx context.Context, name string) ([]Event, bool) {
+		return s.Backend.ServiceEvents(ctx, name, eventLimit(r))
+	})
 }
 
 func (s *Server) handleApplicationEvents(w http.ResponseWriter, r *http.Request) {
-	events, ok := s.Backend.ApplicationEvents(r.Context(), r.PathValue(apiParamName), eventLimit(r))
-	if !ok {
-		writeError(w, http.StatusNotFound, apiErrorUnknownApplication)
-		return
-	}
-	writeJSON(w, http.StatusOK, events)
+	handleNamed(w, r, apiErrorUnknownApplication, func(ctx context.Context, name string) ([]Event, bool) {
+		return s.Backend.ApplicationEvents(ctx, name, eventLimit(r))
+	})
 }
 
 func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue(apiParamName)
-	res, ok := s.Backend.Preflight(r.Context(), name)
-	if !ok {
-		writeError(w, http.StatusNotFound, apiErrorUnknownService)
-		return
-	}
-	writeJSON(w, http.StatusOK, res)
+	handleNamed(w, r, apiErrorUnknownService, s.Backend.Preflight)
 }
 
 func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
