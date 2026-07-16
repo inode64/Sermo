@@ -56,7 +56,8 @@ func (c storageCheck) Run(_ context.Context) Result {
 
 	// Mount verification takes precedence: a wrong/absent mount makes the space
 	// numbers meaningless (statfs would report the parent filesystem).
-	if c.mount.active {
+	switch {
+	case c.mount.active:
 		if mountErr != nil {
 			data[DataKeyMountSampleError] = mountErr.Error()
 			res := c.result(false, "mount "+c.path+": "+mountErr.Error(), start)
@@ -75,13 +76,13 @@ func (c storageCheck) Run(_ context.Context) Result {
 			res.Data = data
 			return res
 		}
-	} else if mountErr == nil {
+	case mountErr == nil:
 		// The mount metadata is presentation data for the daemon-published
 		// snapshot. A usage-only check remains independent of a failed mount-table
 		// read, so a transient display detail never changes its alert outcome.
 		info := MountForPath(mounts, c.path)
 		storageMountData(data, info != nil, info)
-	} else {
+	default:
 		data[DataKeyMountSampleError] = mountErr.Error()
 	}
 
