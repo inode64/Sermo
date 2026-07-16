@@ -193,40 +193,49 @@ func WindowStateFromSnapshot(snapshot WindowStateSnapshot) *WindowState {
 
 // WindowDescription summarizes the configured for/within window.
 func WindowDescription(r Rule) string {
-	if cycles, duration, minMatches, ok := r.withinWindow(); ok {
-		if duration > 0 {
-			return fmt.Sprintf("within %s (min %d)", formatWindowDuration(duration), minMatches)
+	window := describeWindow(r)
+	if window.within {
+		if window.duration > 0 {
+			return fmt.Sprintf("within %s (min %d)", formatWindowDuration(window.duration), window.minMatches)
 		}
-		return fmt.Sprintf("within %d cycles (min %d)", cycles, minMatches)
+		return fmt.Sprintf("within %d cycles (min %d)", window.cycles, window.minMatches)
 	}
-	if r.For != nil {
-		if r.For.Duration > 0 {
-			return "for " + formatWindowDuration(r.For.Duration)
-		}
-		if r.For.Cycles > 0 {
-			return fmt.Sprintf("for %d consecutive", r.For.Cycles)
-		}
+	if window.duration > 0 {
+		return "for " + formatWindowDuration(window.duration)
+	}
+	if window.cycles > 0 {
+		return fmt.Sprintf("for %d consecutive", window.cycles)
 	}
 	return "immediate"
+}
+
+type windowDescription struct {
+	within     bool
+	cycles     int
+	duration   time.Duration
+	minMatches int
+}
+
+func describeWindow(r Rule) windowDescription {
+	if cycles, duration, minMatches, ok := r.withinWindow(); ok {
+		return windowDescription{within: true, cycles: cycles, duration: duration, minMatches: minMatches}
+	}
+	if r.For != nil {
+		return windowDescription{cycles: r.For.Cycles, duration: r.For.Duration}
+	}
+	return windowDescription{}
 }
 
 // WindowDurationDescription summarizes only the rule's configured time/span,
 // suitable for short alert templates. It returns "current cycle" for immediate
 // rules that have no explicit for/within window.
 func WindowDurationDescription(r Rule) string {
-	if cycles, duration, _, ok := r.withinWindow(); ok {
-		if duration > 0 {
-			return formatWindowDuration(duration)
-		}
-		return fmt.Sprintf("%d cycles", cycles)
+	window := describeWindow(r)
+	if window.duration > 0 {
+		return formatWindowDuration(window.duration)
 	}
-	if r.For != nil {
-		if r.For.Duration > 0 {
-			return formatWindowDuration(r.For.Duration)
-		}
-		if r.For.Cycles > 0 {
-			return fmt.Sprintf("%d cycles", r.For.Cycles)
-		}
+	if window.cycles > 0 {
+		return fmt.Sprintf("%d cycles", window.cycles)
 	}
 	return "current cycle"
 }
