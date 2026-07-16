@@ -154,7 +154,7 @@ func manualProbeFailedMessage(summary string, duration time.Duration) string {
 func (b *WebBackend) ProbeWatch(ctx context.Context, name string) web.ActionResult {
 	w := b.watches[name]
 	if w == nil {
-		return web.ActionResult{Message: fmt.Sprintf("unknown watch %q", name)}
+		return web.ActionResult{Message: fmt.Sprintf(unknownWatchMessageFmt, name)}
 	}
 	if w.disabled || w.serviceScoped || !manualProbeCheckType(w.checkType) {
 		return web.ActionResult{Message: fmt.Sprintf("watch %q does not support manual probing", name)}

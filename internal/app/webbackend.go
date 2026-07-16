@@ -72,6 +72,7 @@ const (
 	lockReleaseDefaultRule           = "default"
 	unknownServiceMessage            = "unknown service "
 	unknownServiceMessageFmt         = unknownServiceMessage + "%q"
+	unknownWatchMessageFmt           = "unknown watch %q"
 	watchReadingValueNone            = "none"
 	watchReadingValueUnknown         = checks.NetStateUnknown
 )
@@ -334,7 +335,7 @@ func (b *WebBackend) registerService(ctx context.Context, cfg *config.Config, na
 	disabled := cfgval.Disabled(doc.Body)
 	target, warn := control.ResolveWithFallback(ctx, name, resolved.Tree, deps.Backend, deps.Manager, resolver)
 	if warn != "" {
-		warnings = append(warnings, "service "+name+": "+warn)
+		warnings = append(warnings, serviceSubjectPrefix+name+": "+warn)
 	}
 	if target.Unit == "" {
 		return warnings
@@ -389,7 +390,7 @@ func attachServiceRuntime(ctx context.Context, entry *webEntry, name string, tre
 	cancel()
 	entry.canReload = canReload
 	if reloadErr != nil {
-		return []string{"service " + name + ": reload support unavailable: " + reloadErr.Error()}
+		return []string{serviceSubjectPrefix + name + ": reload support unavailable: " + reloadErr.Error()}
 	}
 	return nil
 }
@@ -424,7 +425,7 @@ func (b *WebBackend) registerHostWatches(cfg *config.Config, deps Deps) []string
 		entry, _ := raw[name].(map[string]any)
 		watch, warn := newWebWatch(name, entry, deps.GlobalNotify, config.DefaultEngineInterval, false)
 		if warn != "" {
-			warnings = append(warnings, "watch "+name+": "+warn)
+			warnings = append(warnings, watchSubjectPrefix+name+": "+warn)
 		}
 		b.watches[name] = watch
 		b.watchOrder = append(b.watchOrder, name)

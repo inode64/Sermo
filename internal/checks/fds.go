@@ -58,12 +58,12 @@ func defaultFdsSampler() (FdsSample, error) {
 	}
 	fields := strings.Fields(string(data))
 	if len(fields) < fileNRMinFields {
-		return FdsSample{}, fmt.Errorf("malformed %s", procFileNRPath)
+		return FdsSample{}, fmt.Errorf(malformedFileFormat, procFileNRPath)
 	}
 	alloc, e1 := strconv.ParseUint(fields[fileNRAllocatedIndex], numericBaseDecimal, numericBits64)
 	maxFds, e3 := strconv.ParseUint(fields[fileNRMaxIndex], numericBaseDecimal, numericBits64)
 	if e1 != nil || e3 != nil {
-		return FdsSample{}, fmt.Errorf("malformed %s", procFileNRPath)
+		return FdsSample{}, fmt.Errorf(malformedFileFormat, procFileNRPath)
 	}
 	return FdsSample{Allocated: alloc, Max: maxFds}, nil
 }

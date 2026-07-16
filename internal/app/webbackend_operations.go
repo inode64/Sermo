@@ -75,14 +75,14 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	if e.disabled {
-		msg := "service " + name + " is disabled in configuration"
+		msg := serviceSubjectPrefix + name + " is disabled in configuration"
 		if b.emit != nil {
 			b.emit(Event{Service: name, Kind: eventKindError, Action: action, Message: msg})
 		}
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	if action == string(rules.ActionReload) && !e.canReload {
-		msg := "service " + name + " does not support reload"
+		msg := serviceSubjectPrefix + name + " does not support reload"
 		if b.emit != nil {
 			b.emit(Event{Service: name, Kind: eventKindError, Action: action, Message: msg})
 		}
@@ -160,7 +160,7 @@ func (b *WebBackend) operationResult(ctx context.Context, name, action string) o
 		return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: unknownServiceMessage + name}
 	}
 	if e.disabled {
-		return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: "service " + name + " is disabled in configuration"}
+		return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: serviceSubjectPrefix + name + " is disabled in configuration"}
 	}
 	timeout := b.operationTimeout
 	if timeout <= 0 {
@@ -235,7 +235,7 @@ func (b *WebBackend) CompactState(ctx context.Context, before time.Time) web.Sta
 func (b *WebBackend) ControlRAID(ctx context.Context, name, action, confirmation string) web.ActionResult {
 	w := b.watches[name]
 	if w == nil {
-		return web.ActionResult{Message: fmt.Sprintf("unknown watch %q", name)}
+		return web.ActionResult{Message: fmt.Sprintf(unknownWatchMessageFmt, name)}
 	}
 	if w.disabled || !w.raidControl || w.checkType != checks.CheckTypeRAID {
 		return web.ActionResult{Message: fmt.Sprintf("watch %q has no RAID pause/resume control configured", name)}

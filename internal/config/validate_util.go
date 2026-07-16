@@ -57,7 +57,7 @@ func walkScalarValue(path, key string, v any, visit func(path, key, value string
 		}
 	case []any:
 		for i, e := range t {
-			walkScalarValue(fmt.Sprintf("%s[%d]", path, i), key, e, visit)
+			walkScalarValue(fmt.Sprintf(validationListIndexFormat, path, i), key, e, visit)
 		}
 	default:
 		visit(path, key, cfgval.String(t))

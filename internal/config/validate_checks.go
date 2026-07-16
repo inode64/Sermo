@@ -140,7 +140,7 @@ func validateOomFields(prefix string, fields map[string]any, add addFunc) {
 		add("%s.delta must be a mapping {op, value}", prefix)
 		return
 	}
-	validateOpNumeric(prefix+".delta", m, add)
+	validateOpNumeric(prefix+"."+checks.CheckKeyDelta, m, add)
 }
 
 // validateCheckGate validates a check's interdependency fields: `requires` is a
@@ -1385,7 +1385,7 @@ func validateCount(entry map[string]any, path string, add addFunc) {
 		if !ok {
 			add("%s.delta must be a mapping {op, value}", path)
 		} else {
-			validateOpNumeric(path+".delta", m, add)
+			validateOpNumeric(path+"."+checks.CheckKeyDelta, m, add)
 		}
 		within := cfgval.String(entry[checks.CheckKeyWithin])
 		if within == "" {

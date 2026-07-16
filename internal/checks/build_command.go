@@ -78,7 +78,7 @@ func parseCommandExports(checkName string, raw any) ([]commandExport, string) {
 	for _, name := range slices.Sorted(maps.Keys(specs)) {
 		spec, ok := specs[name].(map[string]any)
 		if !ok {
-			return nil, commandExportPath(name) + " must be a mapping"
+			return nil, commandExportPath(name) + mustBeMappingSuffix
 		}
 		e := defaultCommandExport(name)
 		if from := cfgval.String(spec[CheckKeyFrom]); from != "" {

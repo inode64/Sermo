@@ -15,7 +15,7 @@ func validateEmission(tree map[string]any, path string, add addFunc) {
 	}
 	m, ok := raw.(map[string]any)
 	if !ok {
-		add("%s must be a mapping", path)
+		add(validationMappingFormat, path)
 		return
 	}
 	allowed := set(emission.KeyEvents, emission.KeyNotify)

@@ -332,7 +332,7 @@ func expandValue(v any, vars map[string]string, path string, errs *[]string) any
 	case []any:
 		out := make([]any, len(t))
 		for i, e := range t {
-			out[i] = expandValue(e, vars, fmt.Sprintf("%s[%d]", path, i), errs)
+			out[i] = expandValue(e, vars, fmt.Sprintf(validationListIndexFormat, path, i), errs)
 		}
 		return out
 	default:

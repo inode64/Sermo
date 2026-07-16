@@ -59,7 +59,7 @@ func (b *WebBackend) watchSnapshotView(w *webWatch, system metrics.Snapshot) (*w
 	if meter == nil {
 		meter = watchMeter(w.checkType, system)
 	}
-	return meter, readings, strings.Join(summaries, " · ")
+	return meter, readings, strings.Join(summaries, readingSummarySeparator)
 }
 
 func (b *WebBackend) watchSnapshotCurrent(w *webWatch, snap CheckSnapshot) bool {

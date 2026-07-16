@@ -14,7 +14,7 @@ func SyncStorageMountMonitoring(store MonitorStore, storage, action string, resu
 		return ManualMonitorChange{}, nil
 	}
 	key := watchMonitorKey(storage)
-	subject := "watch " + storage
+	subject := watchSubjectPrefix + storage
 	switch action {
 	case mountctl.ActionUmount:
 		return syncMonitorPause(store, key, subject, pauseSource, eventMessageMonitoringPausedAfterStorageUmount)
