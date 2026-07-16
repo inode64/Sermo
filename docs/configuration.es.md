@@ -2466,8 +2466,11 @@ versión como actual cuando el wrapper de slot activo y esa entrada reportan el 
 `systemd` y `openrc`. Las ramas de mapa son exclusivas: Sermo selecciona solo el backend
 de init activo de `engine.backend` o `SERMO_BACKEND`, recurriendo al `${init}` detectado.
 Las plantillas de catalog service deberían poner los tokens en `service:` en su lugar;
-sus instancias de daemon se materializan a partir de unidades systemd/OpenRC activas,
-mientras que las apps enlazadas poseen el descubrimiento y la validación de binarios.
+las unidades systemd/OpenRC activas materializan sus instancias de daemon para el
+descubrimiento. Cuando un servicio configurado nombra explícitamente una instancia
+materializada en `uses:`, dicha instancia sigue disponible aunque la unidad esté parada
+o fallida para que la validación y la monitorización informen su estado. Las apps
+enlazadas poseen el descubrimiento y la validación de binarios.
 
 ## Variables de recurso de binario
 

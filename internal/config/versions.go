@@ -148,6 +148,9 @@ func (c *Config) materializeRegistry(ctx context.Context, names []string, reg ma
 			tok := toks[0]
 			source := c.versionDiscoverySource(ctx, body, tok, kind)
 			matches := source.templateMatches(toks)
+			matches = append(matches, c.configuredServiceTemplateMatches(tmpl.Name, toks, kind)...)
+			matches = dedupeTemplateMatches(matches, toks)
+			sortTemplateMatches(matches)
 			matches = c.withCurrentMatches(matches, tmpl.Name, toks, kind)
 			for _, match := range matches {
 				instances = append(instances, instantiateVersion(
@@ -188,12 +191,16 @@ func (c *Config) recordMaterializedNameCollision(kind string, tmpl, inst, existi
 // a concrete document with every token bound in the name and body at once.
 func (c *Config) materializeMultiToken(ctx context.Context, tmpl *Document, body map[string]any, toks []tmplToken, kind string) []*Document {
 	source := c.multiTokenDiscoverySource(ctx, body, toks, kind)
-	if len(source.paths) == 0 && len(source.matches) == 0 && len(versionsCurrentFromCandidates(body)) == 0 {
+	demanded := c.configuredServiceTemplateMatches(tmpl.Name, toks, kind)
+	if len(source.paths) == 0 && len(source.matches) == 0 && len(demanded) == 0 && len(versionsCurrentFromCandidates(body)) == 0 {
 		return nil
 	}
 	require := versionsRequire(body)
 	var out []*Document
 	matches := source.templateMatches(toks)
+	matches = append(matches, demanded...)
+	matches = dedupeTemplateMatches(matches, toks)
+	sortTemplateMatches(matches)
 	matches = c.withCurrentMatches(matches, tmpl.Name, toks, kind)
 	for _, match := range matches {
 		if !requireSatisfied(require, match.values, toks) {
@@ -385,6 +392,47 @@ func materializedServiceUnitMatches(patterns, units []string, toks []tmplToken) 
 	matches := dedupeTemplateMatches(out, toks)
 	sortTemplateMatches(matches)
 	return matches
+}
+
+// configuredServiceTemplateMatches materializes catalog service templates that
+// are explicitly referenced by a deployed service. This keeps a configured
+// instance resolvable after its init unit stops or fails, so the daemon can
+// report that state instead of rejecting its whole configuration. Active-unit
+// discovery remains responsible for finding new catalog instances.
+func (c *Config) configuredServiceTemplateMatches(templateName string, toks []tmplToken, kind string) []templateMatch {
+	if c == nil || kind != kindService || len(toks) == 0 {
+		return nil
+	}
+	pattern := templateName
+	for _, tok := range toks {
+		pattern = strings.ReplaceAll(pattern, tok.placeholder, tok.marker())
+	}
+	re, order := buildMultiRegex(pattern, toks)
+	if re == nil {
+		return nil
+	}
+
+	matches := make([]templateMatch, 0)
+	for _, serviceName := range c.ServiceNames {
+		doc := c.Services[serviceName]
+		uses := cfgval.String(doc.Body[ServiceKeyUses])
+		sub := re.FindStringSubmatch(uses)
+		if sub == nil {
+			continue
+		}
+		values := make(map[string]string, len(order))
+		for i, tok := range order {
+			values[tok.variable] = sub[i+templateCaptureOffset]
+		}
+		addImplicitTokenValues(values, toks)
+		normalizeOptionalTupleValues(values)
+		matches = append(matches, templateMatch{
+			values:      values,
+			matchedPath: uses,
+			realPath:    uses,
+		})
+	}
+	return dedupeTemplateMatches(matches, toks)
 }
 
 func linkedAppTemplateNameMulti(name string, toks []tmplToken) string {

@@ -4811,6 +4811,89 @@ defaults: { policy: { cooldown: 5m } }
 	}
 }
 
+func TestInstanceTemplateMaterializesConfiguredFailedService(t *testing.T) {
+	tests := []struct {
+		name        string
+		backend     string
+		serviceUnit string
+		activeUnit  string
+	}{
+		{
+			name:        "systemd",
+			backend:     "systemd",
+			serviceUnit: "nebula@${instance}",
+			activeUnit:  "nebula@nebula1.service",
+		},
+		{
+			name:        "openrc",
+			backend:     "openrc",
+			serviceUnit: "nebula.${instance}",
+			activeUnit:  "nebula.nebula1",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertInstanceTemplateMaterializesConfiguredFailedService(t, tt.backend, tt.serviceUnit, tt.activeUnit)
+		})
+	}
+}
+
+func assertInstanceTemplateMaterializesConfiguredFailedService(t *testing.T, backend, serviceUnit, activeUnit string) {
+	t.Helper()
+	root := t.TempDir()
+	catalogDir := filepath.Join(root, "catalog", "services")
+	servicesDir := filepath.Join(root, "services")
+	for _, dir := range []string{catalogDir, servicesDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(catalogDir, "nebula.yml"), fmt.Appendf(nil, `
+name: nebula-%%i
+service: %s
+checks:
+  service: { type: service, expect: active }
+`, serviceUnit), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(servicesDir, "nebula-nebula0.yml"), []byte(`
+name: nebula-nebula0
+uses: nebula-nebula0
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, fmt.Appendf(nil, `
+engine: { backend: %s }
+paths: { services: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, backend, servicesDir), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(t, global,
+		WithCatalogDirs(filepath.Dir(catalogDir)),
+		WithServiceUnits(backend, []string{activeUnit}),
+	)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if issues := Validate(cfg); len(issues) != 0 {
+		t.Fatalf("Validate() issues = %v", issues)
+	}
+	resolved, errs := cfg.Resolve("nebula-nebula0")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve(nebula-nebula0) errors = %v", errs)
+	}
+	wantUnit := strings.ReplaceAll(serviceUnit, "${instance}", "nebula0")
+	if got := ServiceUnit(resolved.Tree, "nebula-nebula0"); got != wantUnit {
+		t.Fatalf("resolved unit = %q, want %q", got, wantUnit)
+	}
+	if _, ok := cfg.CatalogServices["nebula-nebula1"]; !ok {
+		t.Fatal("active instance nebula-nebula1 must still materialize from the unit inventory")
+	}
+}
+
 // TestVersionTemplateMaterialization exercises a `name: foo-%v` service template:
 // it must produce one service per installed app version, inherit a `uses` base,
 // and drop the template itself.
