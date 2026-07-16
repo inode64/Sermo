@@ -4,6 +4,7 @@ import (
 	"runtime"
 	"testing"
 
+	"sermo/internal/checks"
 	"sermo/internal/metrics"
 )
 
@@ -44,6 +45,23 @@ func TestByteUsage(t *testing.T) {
 	// No capacity (missing metric / no total) reports not-ok.
 	if _, _, _, ok := byteUsage(metrics.Reading{Absolute: 5}); ok {
 		t.Fatal("a reading with no total must report ok=false")
+	}
+}
+
+func TestWatchCountMeter(t *testing.T) {
+	meter := watchCountMeter(checks.CheckTypeFDS, map[string]any{
+		checks.DataKeyAllocated: 8_000,
+		checks.DataKeyMax:       10_000,
+		checks.DataKeyUsedPct:   80.0,
+	}, checks.DataKeyAllocated)
+	if meter == nil || meter.Kind != checks.CheckTypeFDS || meter.Count != 8_000 || meter.Max != 10_000 || meter.UsedPct != 80 {
+		t.Fatalf("watchCountMeter = %+v, want fds 8000/10000 80%%", meter)
+	}
+	if meter := watchCountMeter(checks.CheckTypePIDs, map[string]any{
+		checks.DataKeyCount:   100,
+		checks.DataKeyUsedPct: 0.0,
+	}, checks.DataKeyCount); meter != nil {
+		t.Fatal("missing max must produce no meter")
 	}
 }
 
