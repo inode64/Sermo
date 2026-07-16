@@ -324,18 +324,16 @@ func (b *WebBackend) icmpWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 }
 
 func (b *WebBackend) oomWatchView() (*web.WatchMeter, []web.WatchReading, string) {
-	sampler := b.oomSampler
-	if sampler == nil {
-		sampler = checks.SampleOom
-	}
-	count, ok := sampler()
-	if !ok {
-		msg := "oom_kill counter unavailable"
-		return nil, watchErrorReadings(msg), "oom: " + msg
-	}
-	return nil,
-		[]web.WatchReading{{Field: checks.DataKeyTotal, Label: watchReadingLabelOOMKills, Value: strconv.FormatUint(count, 10)}},
-		fmt.Sprintf("%d oom_kill total", count)
+	return scalarWatchView(scalarWatchViewSpec{
+		resource:      checks.CheckTypeOOM,
+		unavailable:   "oom_kill counter unavailable",
+		field:         checks.DataKeyTotal,
+		label:         watchReadingLabelOOMKills,
+		sampler:       b.oomSampler,
+		fallback:      checks.SampleOom,
+		formatReading: formatCountReading,
+		summaryFormat: "%d oom_kill total",
+	})
 }
 
 func (b *WebBackend) fdsWatchView() (*web.WatchMeter, []web.WatchReading, string) {
@@ -443,32 +441,57 @@ func formatCountReading(count uint64) string { return strconv.FormatUint(count, 
 
 func formatEntriesReading(count uint64) string { return formatCountReading(count) + " entries" }
 
-func (b *WebBackend) entropyWatchView() (*web.WatchMeter, []web.WatchReading, string) {
-	sampler := b.entropySampler
-	if sampler == nil {
-		sampler = checks.SampleEntropy
-	}
-	avail, ok := sampler()
-	if !ok {
-		msg := "entropy_avail unavailable"
-		return nil, watchErrorReadings(msg), "entropy: " + msg
-	}
-	return nil,
-		[]web.WatchReading{{Field: checks.DataKeyAvail, Label: watchReadingLabelAvailable, Value: watchReadingUintMetricValue(avail, watchReadingUnitBits)}},
-		fmt.Sprintf("%d available bits", avail)
+func formatBitsReading(count uint64) string {
+	return watchReadingUintMetricValue(count, watchReadingUnitBits)
 }
 
-func (b *WebBackend) zombieWatchView() (*web.WatchMeter, []web.WatchReading, string) {
-	sampler := b.zombieSampler
+type scalarWatchViewSpec struct {
+	resource      string
+	unavailable   string
+	field         string
+	label         string
+	sampler       func() (uint64, bool)
+	fallback      func() (uint64, bool)
+	formatReading func(uint64) string
+	summaryFormat string
+}
+
+func scalarWatchView(spec scalarWatchViewSpec) (*web.WatchMeter, []web.WatchReading, string) {
+	sampler := spec.sampler
 	if sampler == nil {
-		sampler = checks.SampleZombies
+		sampler = spec.fallback
 	}
 	count, ok := sampler()
 	if !ok {
-		msg := "cannot read /proc"
-		return nil, watchErrorReadings(msg), "zombies: " + msg
+		return nil, watchErrorReadings(spec.unavailable), spec.resource + ": " + spec.unavailable
 	}
 	return nil,
-		[]web.WatchReading{{Field: checks.DataKeyCount, Label: watchReadingLabelZombies, Value: strconv.FormatUint(count, 10)}},
-		fmt.Sprintf("%d zombie processes", count)
+		[]web.WatchReading{{Field: spec.field, Label: spec.label, Value: spec.formatReading(count)}},
+		fmt.Sprintf(spec.summaryFormat, count)
+}
+
+func (b *WebBackend) entropyWatchView() (*web.WatchMeter, []web.WatchReading, string) {
+	return scalarWatchView(scalarWatchViewSpec{
+		resource:      checks.CheckTypeEntropy,
+		unavailable:   "entropy_avail unavailable",
+		field:         checks.DataKeyAvail,
+		label:         watchReadingLabelAvailable,
+		sampler:       b.entropySampler,
+		fallback:      checks.SampleEntropy,
+		formatReading: formatBitsReading,
+		summaryFormat: "%d available bits",
+	})
+}
+
+func (b *WebBackend) zombieWatchView() (*web.WatchMeter, []web.WatchReading, string) {
+	return scalarWatchView(scalarWatchViewSpec{
+		resource:      checks.CheckTypeZombies,
+		unavailable:   "cannot read /proc",
+		field:         checks.DataKeyCount,
+		label:         watchReadingLabelZombies,
+		sampler:       b.zombieSampler,
+		fallback:      checks.SampleZombies,
+		formatReading: formatCountReading,
+		summaryFormat: "%d zombie processes",
+	})
 }
