@@ -55,24 +55,5 @@ func (cloudflaredProtocol) Probe(ctx context.Context, cfg Config) (Result, error
 }
 
 func cloudflaredClient(cfg Config) (*http.Client, string) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortCloudflared
-	}
-	scheme := schemeHTTP
-	client := httpProbeClient(cfg.Interface, nil)
-	mode := normalizeTLS(cfg.TLS)
-	if mode != "" {
-		scheme = schemeHTTPS
-		tlsConfig := tlsClientConfig(host)
-		if mode == tlsSkipVerify {
-			tlsConfig.InsecureSkipVerify = true // operator chose tls: skip-verify
-		}
-		client = httpProbeClient(cfg.Interface, tlsConfig)
-	}
-	return client, scheme + urlSchemeSeparator + hostPort(host, port)
+	return httpProbeBase(cfg, defaultPortCloudflared)
 }

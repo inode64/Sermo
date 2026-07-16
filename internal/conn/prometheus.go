@@ -42,26 +42,7 @@ func (prometheusProtocol) Probe(ctx context.Context, cfg Config) (Result, error)
 // from cfg (host/port/tls — https when tls is set). Exported so a PromQL query
 // check can reuse the same transport and addressing.
 func PrometheusClient(cfg Config) (*http.Client, string) {
-	host := cfg.Host
-	if host == "" {
-		host = DefaultHost
-	}
-	port := cfg.Port
-	if port == 0 {
-		port = defaultPortPrometheus
-	}
-	scheme := schemeHTTP
-	client := httpProbeClient(cfg.Interface, nil)
-	mode := normalizeTLS(cfg.TLS)
-	if mode != "" {
-		scheme = schemeHTTPS
-		tlsConfig := tlsClientConfig(host)
-		if mode == tlsSkipVerify {
-			tlsConfig.InsecureSkipVerify = true // operator chose tls: skip-verify
-		}
-		client = httpProbeClient(cfg.Interface, tlsConfig)
-	}
-	return client, scheme + urlSchemeSeparator + hostPort(host, port)
+	return httpProbeBase(cfg, defaultPortPrometheus)
 }
 
 // promBuildInfo queries /api/v1/status/buildinfo. handled is true when the result
