@@ -212,29 +212,16 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	w := &Watch{
-		Name:              name,
-		CheckType:         typ,
-		Check:             check,
-		Window:            rules.ParseWindowRule(entry),
-		Hook:              actions.hook,
-		Notifiers:         resolveNotifiers(actions.effectiveNames, deps.Notifiers),
-		RaidNotifyEvents:  actions.raidNotifyEvents,
-		LVMNotifyOnChange: actions.lvmNotifyOnChange,
-		NotifyInterval:    actions.notifyInterval,
-		Emission:          emission.Merge(entry[emission.Section], deps.GlobalEmission),
-		DryRun:            config.DryRun(entry),
-		Runner:            OSHookRunner{Runner: deps.ExecxRunner},
-		Interval:          interval,
-		IsPaused:          monitorPaused(deps.Monitor, watchMonitorKey(name)),
-		InPanic:           deps.Panic.Active,
-		Settling:          deps.Settling,
-		FireOnFail:        checks.IsHealthType(typ),
-		Now:               deps.Now,
-		Emit:              deps.Emit,
-		Publish:           publishWatchSnapshots(deps.WatchSnapshots),
-		StateStore:        deps.WatchState,
-	}
+	w := newCheckWatch(checkWatchSpec{
+		name:      name,
+		checkType: typ,
+		check:     check,
+		window:    rules.ParseWindowRule(entry),
+		actions:   actions,
+		emission:  emission.Merge(entry[emission.Section], deps.GlobalEmission),
+		dryRun:    config.DryRun(entry),
+		interval:  interval,
+	}, deps)
 	if actions.expand != nil {
 		w.Expand = actions.expand
 		w.Policy = rules.ParsePolicy(entry)
@@ -298,29 +285,60 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			warns = append(warns, "watch "+name+".metrics."+key+": "+err.Error())
 			continue
 		}
-		out = append(out, &Watch{
-			Name:           name,
-			CheckType:      cfgval.AsString(checkEntry[checks.CheckKeyType]),
-			Check:          check,
-			Window:         rules.ParseWindowRule(mEntry),
-			Hook:           actions.hook,
-			Notifiers:      resolveNotifiers(actions.effectiveNames, deps.Notifiers),
-			NotifyInterval: actions.notifyInterval,
-			Emission:       emission.Merge(mEntry[emission.Section], emission.Merge(entry[emission.Section], deps.GlobalEmission)),
-			DryRun:         config.DryRun(entry),
-			Runner:         OSHookRunner{Runner: deps.ExecxRunner},
-			Interval:       interval,
-			IsPaused:       monitorPaused(deps.Monitor, watchMonitorKey(name)),
-			InPanic:        deps.Panic.Active,
-			Settling:       deps.Settling,
-			Now:            deps.Now,
-			Emit:           deps.Emit,
-			Publish:        publishWatchSnapshots(deps.WatchSnapshots),
-			StateStore:     deps.WatchState,
-			StateSlot:      checks.DataKeyMetric + ":" + key,
-		})
+		out = append(out, newCheckWatch(checkWatchSpec{
+			name:      name,
+			checkType: cfgval.AsString(checkEntry[checks.CheckKeyType]),
+			check:     check,
+			window:    rules.ParseWindowRule(mEntry),
+			actions:   actions,
+			emission:  emission.Merge(mEntry[emission.Section], emission.Merge(entry[emission.Section], deps.GlobalEmission)),
+			dryRun:    config.DryRun(entry),
+			interval:  interval,
+			stateSlot: checks.DataKeyMetric + ":" + key,
+		}, deps))
 	}
 	return out, warns
+}
+
+type checkWatchSpec struct {
+	name      string
+	checkType string
+	check     checks.Check
+	window    rules.Rule
+	actions   watchActions
+	emission  emission.Policy
+	dryRun    bool
+	interval  time.Duration
+	stateSlot string
+}
+
+// newCheckWatch wires the shared runtime for one check-backed watch. Metric
+// expansions supply a stateSlot, while ordinary watches leave it empty.
+func newCheckWatch(spec checkWatchSpec, deps Deps) *Watch {
+	return &Watch{
+		Name:              spec.name,
+		CheckType:         spec.checkType,
+		Check:             spec.check,
+		Window:            spec.window,
+		Hook:              spec.actions.hook,
+		Notifiers:         resolveNotifiers(spec.actions.effectiveNames, deps.Notifiers),
+		RaidNotifyEvents:  spec.actions.raidNotifyEvents,
+		LVMNotifyOnChange: spec.actions.lvmNotifyOnChange,
+		NotifyInterval:    spec.actions.notifyInterval,
+		Emission:          spec.emission,
+		DryRun:            spec.dryRun,
+		Runner:            OSHookRunner{Runner: deps.ExecxRunner},
+		Interval:          spec.interval,
+		IsPaused:          monitorPaused(deps.Monitor, watchMonitorKey(spec.name)),
+		InPanic:           deps.Panic.Active,
+		Settling:          deps.Settling,
+		FireOnFail:        checks.IsHealthType(spec.checkType),
+		Now:               deps.Now,
+		Emit:              deps.Emit,
+		Publish:           publishWatchSnapshots(deps.WatchSnapshots),
+		StateStore:        deps.WatchState,
+		StateSlot:         spec.stateSlot,
+	}
 }
 
 // buildFileWatch builds a stateful file watch: a fileWatcher (its own per-path
