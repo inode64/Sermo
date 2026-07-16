@@ -35,22 +35,9 @@ func (udisks2Protocol) RequiresUser() bool { return false }
 
 func (udisks2Protocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	addr := DBusAddress(cfg.Socket, cfg.Query)
-
-	type probeOut struct {
-		res Result
-		err error
-	}
-	ch := make(chan probeOut, 1)
-	go func() {
-		res, err := udisks2Probe(ctx, addr)
-		ch <- probeOut{res, err}
-	}()
-	select {
-	case <-ctx.Done():
-		return Result{}, ctx.Err()
-	case out := <-ch:
-		return out.res, out.err
-	}
+	return probeWithDeadline(ctx, func(ctx context.Context) (Result, error) {
+		return udisks2Probe(ctx, addr)
+	})
 }
 
 func udisks2Probe(ctx context.Context, addr string) (Result, error) {

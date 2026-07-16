@@ -12,9 +12,8 @@ const (
 	// dbusDefaultAddress is the well-known system bus address.
 	dbusDefaultAddress = "unix:path=/run/dbus/system_bus_socket"
 
-	dbusCallFlags         = 0
-	dbusFirstNameIndex    = 0
-	dbusProbeResultBuffer = 1
+	dbusCallFlags      = 0
+	dbusFirstNameIndex = 0
 )
 
 // dbusProtocol probes a D-Bus daemon natively over its wire protocol using the
@@ -43,24 +42,10 @@ func (dbusProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 
 	// godbus' connect/call are context-aware (WithContext / CallWithContext);
-	// the goroutine+select is an outer backstop so a stuck handshake cannot
-	// outlive the deadline. The buffered channel keeps the goroutine from
-	// leaking if ctx fires first.
-	type probeOut struct {
-		res Result
-		err error
-	}
-	ch := make(chan probeOut, dbusProbeResultBuffer)
-	go func() {
-		res, err := dbusProbe(ctx, addr)
-		ch <- probeOut{res, err}
-	}()
-	select {
-	case <-ctx.Done():
-		return Result{}, ctx.Err()
-	case out := <-ch:
-		return out.res, out.err
-	}
+	// keep an outer backstop for a stuck handshake.
+	return probeWithDeadline(ctx, func(ctx context.Context) (Result, error) {
+		return dbusProbe(ctx, addr)
+	})
 }
 
 // dbusProbe connects to the bus (auth + Hello), reads the bus id and closes.

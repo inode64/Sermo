@@ -67,25 +67,11 @@ func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		l = libvirt.NewWithDialer(libvirtRemoteDialer{addr: addr, iface: cfg.Interface, timeout: timeout})
 	}
 
-	// go-libvirt's connect/RPC calls are not context-aware, so run them on a
-	// goroutine and honor ctx. The dialer timeout is a backstop so the goroutine
-	// cannot hang past the deadline; the buffered channel keeps it from leaking
-	// if ctx fires first.
-	type probeOut struct {
-		res Result
-		err error
-	}
-	ch := make(chan probeOut, 1)
-	go func() {
-		res, err := libvirtProbe(l, uri, mode, cfg.Params[ParamKeyDomain])
-		ch <- probeOut{res, err}
-	}()
-	select {
-	case <-ctx.Done():
-		return Result{}, ctx.Err()
-	case out := <-ch:
-		return out.res, out.err
-	}
+	// go-libvirt's connect/RPC calls are not context-aware; the dialer timeout
+	// complements the shared context backstop.
+	return probeWithDeadline(ctx, func(context.Context) (Result, error) {
+		return libvirtProbe(l, uri, mode, cfg.Params[ParamKeyDomain])
+	})
 }
 
 type libvirtRemoteDialer struct {
