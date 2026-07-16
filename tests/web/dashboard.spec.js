@@ -53,6 +53,14 @@ const watches = [{
   enabled: true, monitored: true, state: "stale", sample_state: "stale", check_type: "dns",
   summary: "", interval: "1m", last_checked_at: "2026-07-10T11:57:00Z",
 }, {
+  name: "firewall-paused", display_name: "Firewall", category: "network",
+  enabled: true, monitored: false, state: "disabled", monitor: "previous", monitor_source: "web",
+  monitor_changed_at: "2026-07-10T11:55:00Z", check_type: "firewall", interval: "1m",
+  last_checked_at: "2026-07-10T11:54:00Z",
+}, {
+  name: "legacy-watch", display_name: "Legacy watch", category: "watch",
+  enabled: false, monitored: false, state: "disabled", check_type: "process", interval: "1m",
+}, {
   name: "storage-data", display_name: "Data volume", category: "storage",
   enabled: true, monitored: true, state: "ok", check_type: "storage",
   storage: { filesystem: "ext4", mount_point: "/data", used_bytes: 10, total_bytes: 100 },
@@ -129,10 +137,14 @@ async function mockAPI(page) {
         body = libraries;
         break;
       case "/api/events":
-        body = {
-          events: [{ id: 1, time: "2026-07-10T12:00:00Z", service: "web", kind: "action", status: "ok", message: "started" }],
-          has_more: false,
-        };
+        if (url.searchParams.has("page")) {
+          body = {
+            events: [{ id: 1, time: "2026-07-10T12:00:00Z", service: "web", kind: "action", status: "ok", message: "started" }],
+            has_more: false,
+          };
+        } else {
+          body = [];
+        }
         break;
       default: {
         const detailMatch = path.match(/^\/api\/services\/([^/]+)$/);
@@ -240,6 +252,27 @@ test("stale watch samples are visible and filterable", async ({ page }) => {
 
   await page.locator('[data-wf="stale"]').click();
   await expect(row).toBeVisible();
+  await expect(page.locator("#wat-row-net-wan")).toBeHidden();
+});
+
+test("paused monitoring is distinct from disabled configuration", async ({ page }) => {
+  const paused = page.locator("#wat-row-firewall-paused");
+  await expect(paused.locator(".target-state")).toHaveText("monitoring paused");
+  await expect(paused).toContainText("via web UI");
+
+  await paused.locator(".row-toggle").click();
+  const detail = page.locator('[id="exp-wat:firewall-paused"]');
+  await expect(detail).toContainText("Monitoring");
+  await expect(detail).toContainText("Configured monitor");
+  await expect(detail).toContainText("previous");
+  await expect(detail).toContainText("Last checked");
+
+  const disabled = page.locator("#wat-row-legacy-watch");
+  await expect(disabled.locator(".target-state")).toHaveText("disabled in config");
+
+  await page.locator('[data-wf="disabled"]').click();
+  await expect(paused).toBeVisible();
+  await expect(disabled).toBeVisible();
   await expect(page.locator("#wat-row-net-wan")).toBeHidden();
 });
 

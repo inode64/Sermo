@@ -3445,6 +3445,12 @@ function watchMonitorHint(w) {
   return bits.length ? tpl` <span class="muted">${bits.join(" · ")}</span>` : nothing;
 }
 
+function watchMonitoringCell(w) {
+  if (!w || !w.enabled) return stateBadgeLabel(targetStateDisabled, "disabled in config");
+  if (!w.monitored) return tpl`${stateBadgeLabel(targetStateDisabled, "monitoring paused")}${watchMonitorHint(w)}`;
+  return tpl`${stateBadgeLabel(targetStateOK, "active")}${watchMonitorHint(w)}`;
+}
+
 function watchMonitorMode(w) {
   return w && w.monitor ? w.monitor : monitorModeEnabled;
 }
@@ -3477,6 +3483,7 @@ function watchStateCell(w) {
     const startedAt = w.probe.started_at;
     return tpl`${stateBadgeLabel(targetStateCollecting, "checking")} <span class="watch-probe" data-probe-started-at="${startedAt}" role="status" aria-live="polite">· ${watchProbeElapsed(startedAt)}</span> <span class="muted">previously ${watchStateText(w)}</span>`;
   }
+  if (!w || !w.enabled || !w.monitored) return watchMonitoringCell(w);
   return stateBadge(watchStateText(w));
 }
 
@@ -4715,7 +4722,9 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">Interval</span><br><b>${w.interval || ""}</b></div>
     <div><span class="muted">Fires</span><br><b>${polarity}</b></div>
     <div><span class="muted">State</span><br>${watchStateCell(w)}</div>
-    <div><span class="muted">Monitor flag</span><br><code>${mode}</code></div>
+    <div><span class="muted">Monitoring</span><br>${watchMonitoringCell(w)}</div>
+    <div><span class="muted">Configured monitor</span><br><code>${mode}</code></div>
+    <div><span class="muted">Last checked</span><br>${watchLastCheckedCell(w)}</div>
     <div><span class="muted">Hook</span><br>${hook}</div>
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
     <div><span class="muted">Dry run</span><br><b>${w.dry_run ? "yes" : "no"}</b></div>
