@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -277,6 +279,92 @@ func TestBuildArtifactWatchesSamplesChangedMissingApp(t *testing.T) {
 	if !sampled || status != appinspect.StatusNotInstalled {
 		t.Fatalf("missing app sample = sampled:%t status:%q, want true %q", sampled, status, appinspect.StatusNotInstalled)
 	}
+}
+
+func TestBuildArtifactWatchesCollectsSharedDependencies(t *testing.T) {
+	const (
+		appAlpha   = "alpha"
+		appBeta    = "beta"
+		pathAPI    = "/etc/demo/api.conf"
+		pathShared = "/etc/demo/shared.conf"
+		pathWeb    = "/etc/demo/web.conf"
+	)
+	cfg := &config.Config{
+		Global: config.Global{Raw: map[string]any{
+			config.SectionEngine: map[string]any{config.EngineKeyArtifactInterval: "7m"},
+		}},
+		AppNames: []string{appAlpha, appBeta},
+		Apps: map[string]*config.Document{
+			appAlpha: artifactAppDocument(appAlpha, "5m"),
+			appBeta:  artifactAppDocument(appBeta, "11m"),
+		},
+		ServiceNames: []string{"api", "web"},
+		Services: map[string]*config.Document{
+			"api": artifactServiceDocument("api", "3m", []string{appBeta}, []string{pathAPI, pathShared}),
+			"web": artifactServiceDocument("web", "9m", []string{appAlpha}, []string{pathShared, pathWeb}),
+		},
+	}
+
+	watches := BuildArtifactWatches(t.Context(), cfg, Deps{ArtifactSamples: NewArtifactSamples()})
+	want := map[string]time.Duration{
+		artifactWatchNamePrefix + appAlpha:   5 * time.Minute,
+		artifactWatchNamePrefix + appBeta:    11 * time.Minute,
+		artifactWatchNamePrefix + pathAPI:    3 * time.Minute,
+		artifactWatchNamePrefix + pathShared: 3 * time.Minute,
+		artifactWatchNamePrefix + pathWeb:    9 * time.Minute,
+	}
+	got := map[string]*Watch{}
+	for _, watch := range watches {
+		if strings.HasPrefix(watch.Name, artifactWatchNamePrefix) {
+			got[watch.Name] = watch
+		}
+	}
+	if len(got) != len(want) {
+		t.Fatalf("artifact watch count = %d, want %d", len(got), len(want))
+	}
+	for name, interval := range want {
+		watch := got[name]
+		if watch == nil {
+			t.Errorf("missing artifact watch %q", name)
+			continue
+		}
+		if watch.Interval != interval {
+			t.Errorf("%s interval = %s, want %s", name, watch.Interval, interval)
+		}
+		if watch.Check != nil || watch.Cycle == nil {
+			t.Errorf("%s = %+v, want a silent custom sampler", name, watch)
+		}
+	}
+}
+
+func artifactAppDocument(name, interval string) *config.Document {
+	return &config.Document{Name: name, Kind: config.CategoryApp, Body: map[string]any{
+		config.EntryKeyInterval: interval,
+		"variables":             map[string]any{"binary": "/nonexistent/" + name},
+		"preflight": map[string]any{
+			"version": map[string]any{"type": "command", "command": []any{"${binary}", "--version"}},
+		},
+	}}
+}
+
+func artifactServiceDocument(name, interval string, apps, paths []string) *config.Document {
+	rulesByName := map[string]any{}
+	for i, app := range apps {
+		rulesByName["app-"+strconv.Itoa(i)] = map[string]any{
+			rules.RuleFieldIf: map[string]any{rules.ConditionChanged: map[string]any{rules.FieldApp: app}},
+		}
+	}
+	for i, path := range paths {
+		rulesByName["path-"+strconv.Itoa(i)] = map[string]any{
+			rules.RuleFieldIf: map[string]any{rules.ConditionChanged: map[string]any{rules.FieldPath: path}},
+		}
+	}
+	return &config.Document{Name: name, Kind: config.CategoryService, Body: map[string]any{
+		"service":               name,
+		config.EntryKeyInterval: interval,
+		"apps":                  apps,
+		"rules":                 rulesByName,
+	}}
 }
 
 func TestBuildArtifactPathWatchesSampleSilently(t *testing.T) {
