@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -10,7 +9,6 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/config"
 	"sermo/internal/servicemgr"
-	"sermo/internal/state"
 )
 
 // serviceDisplayState returns the operator-facing state for status output.
@@ -65,7 +63,7 @@ func (a App) serviceMonitorState(ctx context.Context, opts options) monitorView 
 			}
 		}
 	}
-	store, err := state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := openStateStore(ctx, cfg)
 	if err != nil {
 		return view
 	}

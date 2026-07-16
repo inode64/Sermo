@@ -46,15 +46,10 @@ func TestBuildPGDSNDefaults(t *testing.T) {
 }
 
 func TestSSLMode(t *testing.T) {
-	cases := map[string]string{
+	runMapCases(t, "sslMode", sslMode, map[string]string{
 		"": "disable", "false": "disable", "off": "disable",
 		"true": "require", "on": "require",
 		"skip-verify": "require",
 		"verify-full": "verify-full", "verify-ca": "verify-ca", "prefer": "prefer",
-	}
-	for in, want := range cases {
-		if got := sslMode(in); got != want {
-			t.Errorf("sslMode(%q) = %q, want %q", in, got, want)
-		}
-	}
+	})
 }

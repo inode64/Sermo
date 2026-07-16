@@ -8,13 +8,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"strings"
 
 	"sermo/internal/app"
 	"sermo/internal/checks"
 	"sermo/internal/config"
-	"sermo/internal/state"
 )
 
 type daemonWatchReading struct {
@@ -208,7 +206,7 @@ func (a App) runWatchMonitor(ctx context.Context, opts options, pause bool) int 
 	if !knownWatchName(cfg, name) {
 		return a.fail(opts, fmt.Sprintf("unknown watch %q", name))
 	}
-	store, err := state.OpenContext(ctx, filepath.Join(cfg.Global.StateDir(), state.Filename))
+	store, err := openStateStore(ctx, cfg)
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("watch %s failed: %v", verb, err))
 	}
@@ -223,14 +221,7 @@ func (a App) runWatchMonitor(ctx context.Context, opts options, pause bool) int 
 		writeJSON(a.Stdout, map[string]any{cliJSONKeyWatch: name, cliJSONKeyMonitoring: status})
 		return exitSuccess
 	}
-	switch status {
-	case monitorStatusPaused:
-		fmt.Fprintf(a.Stdout, "monitoring paused for watch %s\n", name)
-	case monitorStatusResumed:
-		fmt.Fprintf(a.Stdout, "monitoring resumed for watch %s\n", name)
-	default:
-		fmt.Fprintf(a.Stdout, "watch %s was not paused\n", name)
-	}
+	a.printMonitorStatus("watch "+name, status, "")
 	return exitSuccess
 }
 

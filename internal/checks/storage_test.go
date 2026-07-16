@@ -57,36 +57,33 @@ func TestStorageCheckMultiPredAnd(t *testing.T) {
 	}
 }
 
-func TestStorageCheckFreeBytesBreached(t *testing.T) {
+// assertStorageDataFires runs a storage check with one byte-sized predicate and
+// asserts it fires with the breached value exposed under key and "value".
+func assertStorageDataFires(t *testing.T, pred levelPred, usage func(string) (StorageStats, error), key string, want uint64) {
+	t.Helper()
 	c := storageCheck{
 		base:  base{name: "storage"},
 		path:  "/",
-		preds: []levelPred{{field: "free_bytes", op: "<", value: float64(10 << 30)}},
-		usage: fakeStorage(92, 8, 9<<30, 100<<30),
+		preds: []levelPred{pred},
+		usage: usage,
 	}
 	res := c.Run(context.Background())
 	if !res.OK {
-		t.Fatalf("expected free_bytes threshold crossed, got %+v", res)
+		t.Fatalf("expected %s threshold crossed, got %+v", pred.field, res)
 	}
-	if res.Data["value"] != float64(9<<30) || res.Data["free_bytes"] != uint64(9<<30) {
+	if res.Data["value"] != float64(want) || res.Data[key] != want {
 		t.Fatalf("unexpected data: %+v", res.Data)
 	}
 }
 
+func TestStorageCheckFreeBytesBreached(t *testing.T) {
+	assertStorageDataFires(t, levelPred{field: "free_bytes", op: "<", value: float64(10 << 30)},
+		fakeStorage(92, 8, 9<<30, 100<<30), "free_bytes", 9<<30)
+}
+
 func TestStorageCheckUsedBytesBreached(t *testing.T) {
-	c := storageCheck{
-		base:  base{name: "storage"},
-		path:  "/",
-		preds: []levelPred{{field: "used_bytes", op: ">=", value: float64(90 << 30)}},
-		usage: fakeStorage(92, 8, 8<<30, 100<<30),
-	}
-	res := c.Run(context.Background())
-	if !res.OK {
-		t.Fatalf("expected used_bytes threshold crossed, got %+v", res)
-	}
-	if res.Data["value"] != float64(92<<30) || res.Data["used_bytes"] != uint64(92<<30) {
-		t.Fatalf("unexpected data: %+v", res.Data)
-	}
+	assertStorageDataFires(t, levelPred{field: "used_bytes", op: ">=", value: float64(90 << 30)},
+		fakeStorage(92, 8, 8<<30, 100<<30), "used_bytes", 92<<30)
 }
 
 func TestStorageCheckStatError(t *testing.T) {
@@ -101,58 +98,36 @@ func TestStorageCheckStatError(t *testing.T) {
 	}
 }
 
-func TestBuildStorageCheck(t *testing.T) {
+// assertStorageBuildFires builds a one-entry storage section with the given
+// predicate and asserts it builds without warnings and fires.
+func assertStorageBuildFires(t *testing.T, field, op string, value any, usage func(string) (StorageStats, error)) {
+	t.Helper()
 	section := map[string]any{
 		"d": map[string]any{
-			"type":     "storage",
-			"path":     "/",
-			"used_pct": map[string]any{"op": ">=", "value": 90},
+			"type": "storage",
+			"path": "/",
+			field:  map[string]any{"op": op, "value": value},
 		},
 	}
-	built, warns := Build(section, Deps{StorageUsage: fakeStorage(92, 8, 80, 1000)})
+	built, warns := Build(section, Deps{StorageUsage: usage})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
-	if len(built) != 1 {
-		t.Fatalf("expected 1 built check, got %d", len(built))
+	if len(built) != 1 || !built[0].Check.Run(context.Background()).OK {
+		t.Fatalf("storage check (%s %s %v) should build and fire", field, op, value)
 	}
-	if !built[0].Check.Run(context.Background()).OK {
-		t.Fatal("expected storage check to fire above threshold")
-	}
+}
+
+func TestBuildStorageCheck(t *testing.T) {
+	assertStorageBuildFires(t, "used_pct", ">=", 90, fakeStorage(92, 8, 80, 1000))
 }
 
 func TestBuildStorageByteSizeCheck(t *testing.T) {
-	section := map[string]any{
-		"d": map[string]any{
-			"type":       "storage",
-			"path":       "/",
-			"free_bytes": map[string]any{"op": "<", "value": "10G"},
-		},
-	}
-	built, warns := Build(section, Deps{StorageUsage: fakeStorage(92, 8, 9<<30, 100<<30)})
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
-	}
-	if len(built) != 1 || !built[0].Check.Run(context.Background()).OK {
-		t.Fatal("byte-sized storage check should build and fire below threshold")
-	}
+	assertStorageBuildFires(t, "free_bytes", "<", "10G", fakeStorage(92, 8, 9<<30, 100<<30))
 }
 
 func TestBuildStoragePercentSuffixCheck(t *testing.T) {
-	section := map[string]any{
-		"d": map[string]any{
-			"type":     "storage",
-			"path":     "/",
-			"used_pct": map[string]any{"op": ">=", "value": "90%"},
-		},
-	}
-	built, warns := Build(section, Deps{StorageUsage: fakeStorage(92, 8, 9<<30, 100<<30)})
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
-	}
-	if len(built) != 1 || !built[0].Check.Run(context.Background()).OK {
-		t.Fatal("percent-suffixed storage check should build and fire above threshold")
-	}
+	assertStorageBuildFires(t, "used_pct", ">=", "90%", fakeStorage(92, 8, 9<<30, 100<<30))
 }
 
 func TestBuildStorageByteSizeCheckRejectsUnitless(t *testing.T) {

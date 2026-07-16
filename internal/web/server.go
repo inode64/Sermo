@@ -12,6 +12,7 @@ package web
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/rand"
 	"embed"
@@ -1237,18 +1238,27 @@ func cspNonceFrom(ctx context.Context) string {
 	return nonce
 }
 
-// eventLimit reads the `limit` query param, defaulting and capping it.
-func eventLimit(r *http.Request) int {
-	limit := defaultEventLimit
-	if q := r.URL.Query().Get(apiQueryLimit); q != "" {
-		if n, err := strconv.Atoi(q); err == nil && n > 0 {
-			limit = n
+// queryCapped reads query param name via parse (which reports whether the
+// value is usable), defaulting to def and capping at maxV; the shared clamp
+// behind the limit/since query readers.
+//
+//nolint:ireturn // T is a scalar type parameter (int/Duration), not an interface.
+func queryCapped[T cmp.Ordered](r *http.Request, name string, def, maxV T, parse func(string) (T, bool)) T {
+	v := def
+	if q := r.URL.Query().Get(name); q != "" {
+		if n, ok := parse(q); ok {
+			v = n
 		}
 	}
-	if limit > maxEventLimit {
-		limit = maxEventLimit
-	}
-	return limit
+	return min(v, maxV)
+}
+
+// eventLimit reads the `limit` query param, defaulting and capping it.
+func eventLimit(r *http.Request) int {
+	return queryCapped(r, apiQueryLimit, defaultEventLimit, maxEventLimit, func(q string) (int, bool) {
+		n, err := strconv.Atoi(q)
+		return n, err == nil && n > 0
+	})
 }
 
 type eventFilter struct {
@@ -1539,16 +1549,10 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
 
 // seriesSince reads the `since` query param, defaulting and capping it.
 func seriesSince(r *http.Request) time.Duration {
-	since := defaultSeriesWindow
-	if q := r.URL.Query().Get(apiQuerySince); q != "" {
-		if d, err := time.ParseDuration(q); err == nil && d > 0 {
-			since = d
-		}
-	}
-	if since > maxSeriesWindow {
-		since = maxSeriesWindow
-	}
-	return since
+	return queryCapped(r, apiQuerySince, defaultSeriesWindow, maxSeriesWindow, func(q string) (time.Duration, bool) {
+		d, err := time.ParseDuration(q)
+		return d, err == nil && d > 0
+	})
 }
 
 func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {

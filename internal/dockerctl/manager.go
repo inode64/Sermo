@@ -23,6 +23,8 @@ type DockerClient interface {
 
 // Manager implements service management over one Docker container.
 type Manager struct {
+	servicemgr.ComposedRestart
+
 	Spec      Spec
 	NewClient func(Spec) (DockerClient, error)
 }
@@ -48,55 +50,37 @@ func (m Manager) Status(ctx context.Context, service string) (servicemgr.Service
 	}, nil
 }
 
-// Start starts the configured container.
-func (m Manager) Start(ctx context.Context, _ string) error {
+// withContainerAction runs act against the configured container and wraps any
+// error with the action verb; the Docker counterpart of virt's withDomainAction.
+func (m Manager) withContainerAction(ctx context.Context, verb string, act func(DockerClient, context.Context, string) error) error {
 	return m.withClient(func(c DockerClient) error {
-		if err := c.Start(ctx, m.Spec.Container); err != nil {
-			return fmt.Errorf("start container %q: %w", m.Spec.Container, err)
+		if err := act(c, ctx, m.Spec.Container); err != nil {
+			return fmt.Errorf("%s container %q: %w", verb, m.Spec.Container, err)
 		}
 		return nil
 	})
+}
+
+// Start starts the configured container.
+func (m Manager) Start(ctx context.Context, _ string) error {
+	return m.withContainerAction(ctx, "start", DockerClient.Start)
 }
 
 // Stop asks Docker to stop the configured container without Docker-side SIGKILL
 // escalation; see Client.Stop.
 func (m Manager) Stop(ctx context.Context, _ string) error {
-	return m.withClient(func(c DockerClient) error {
-		if err := c.Stop(ctx, m.Spec.Container); err != nil {
-			return fmt.Errorf("stop container %q: %w", m.Spec.Container, err)
-		}
-		return nil
-	})
+	return m.withContainerAction(ctx, "stop", DockerClient.Stop)
 }
 
-// Restart is composed by the safe operation engine as Stop+Start.
-func (m Manager) Restart(context.Context, string) error {
-	return errors.New("restart is composed by the operation engine")
-}
-
-// Reload is not meaningful for a Docker container.
+// Reload is not meaningful for a Docker container. Restart, SupportsReload and
+// ResetState come from the embedded servicemgr.ComposedRestart.
 func (m Manager) Reload(context.Context, string) error {
 	return errors.New("reload is not supported for Docker containers")
 }
 
-// SupportsReload reports false for Docker containers.
-func (m Manager) SupportsReload(context.Context, string) (bool, error) {
-	return false, nil
-}
-
-// ResetState has no Docker equivalent; inspect reads the live container state.
-func (m Manager) ResetState(context.Context, string) error {
-	return nil
-}
-
 // Resume unpauses the configured container.
 func (m Manager) Resume(ctx context.Context, _ string) error {
-	return m.withClient(func(c DockerClient) error {
-		if err := c.Unpause(ctx, m.Spec.Container); err != nil {
-			return fmt.Errorf("resume container %q: %w", m.Spec.Container, err)
-		}
-		return nil
-	})
+	return m.withContainerAction(ctx, "resume", DockerClient.Unpause)
 }
 
 // PIDs returns the container's init PID as a process-discovery seed.

@@ -34,6 +34,45 @@ func testEnvWithDefaultNotify() Env {
 	return env
 }
 
+// runVolumeAssistant drives the volume wizard with the newline-joined script
+// steps against env and returns the produced watch entry.
+func runVolumeAssistant(t *testing.T, env Env, watch string, steps ...string) map[string]any {
+	t.Helper()
+	p := NewPrompt(strings.NewReader(strings.Join(steps, "\n")+"\n"), &strings.Builder{})
+	res, err := volumeAssistant{}.Run(p, env)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	entry, ok := res.Watches[watch].(map[string]any)
+	if !ok {
+		t.Fatalf("expected watch %s, got %v", watch, res.Watches)
+	}
+	return entry
+}
+
+// assertCheckPred asserts the entry check's field predicate op and value.
+func assertCheckPred(t *testing.T, entry map[string]any, field, op string, value any) {
+	t.Helper()
+	pred := entry[config.WatchKeyCheck].(map[string]any)[field].(map[string]any)
+	if pred[checks.CheckKeyOp] != op || pred[checks.CheckKeyValue] != value {
+		t.Fatalf("%s = %v", field, pred)
+	}
+}
+
+// entryThen returns the entry's then block.
+func entryThen(entry map[string]any) map[string]any {
+	return entry[config.WatchKeyThen].(map[string]any)
+}
+
+// assertNotifyNone asserts the then block's notify is exactly [none].
+func assertNotifyNone(t *testing.T, then map[string]any) {
+	t.Helper()
+	notify := then[rules.RuleFieldNotify].([]string)
+	if len(notify) != 1 || notify[0] != config.NotifyNone {
+		t.Fatalf("notify = %v, want [none]", notify)
+	}
+}
+
 func TestVolumeAssistantFreePctWithExpand(t *testing.T) {
 	// Select volume 1 (/mnt/backup); free space condition, 10%; for 3 cycles;
 	// notifier ops-email; enable expand 5G cooldown 30m.
@@ -93,19 +132,9 @@ func TestVolumeAssistantFreePctWithExpand(t *testing.T) {
 
 func TestVolumeAssistantUsedPctNoExpand(t *testing.T) {
 	// Select volume 2 (/), used-space condition 90, for 1, notifier team-slack, no expand.
-	script := strings.Join([]string{"2", "1", "", "2", "90", "1", "2", "n", "n"}, "\n") + "\n"
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := volumeAssistant{}.Run(p, testEnv())
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	entry := res.Watches["storage-root"].(map[string]any)
-	check := entry[config.WatchKeyCheck].(map[string]any)
-	up := check[checks.LevelFieldUsedPct].(map[string]any)
-	if up[checks.CheckKeyOp] != cfgval.CompareOpGreaterEqual || up[checks.CheckKeyValue] != volumeDefaultUsedPct {
-		t.Fatalf("used_pct = %v", up)
-	}
-	then := entry[config.WatchKeyThen].(map[string]any)
+	entry := runVolumeAssistant(t, testEnv(), "storage-root", "2", "1", "", "2", "90", "1", "2", "n", "n")
+	assertCheckPred(t, entry, checks.LevelFieldUsedPct, cfgval.CompareOpGreaterEqual, volumeDefaultUsedPct)
+	then := entryThen(entry)
 	if _, hasExpand := then[config.WatchThenKeyExpand]; hasExpand {
 		t.Fatalf("must not have expand: %v", then)
 	}
@@ -143,34 +172,14 @@ func TestVolumeAssistantSkipsRPCPipeFS(t *testing.T) {
 
 func TestVolumeAssistantPercentSuffix(t *testing.T) {
 	// Select volume 2 (/), used-space condition 90%, for 1, notifier team-slack, no expand.
-	script := strings.Join([]string{"2", "1", "", "2", "90%", "1", "2", "n", "n"}, "\n") + "\n"
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := volumeAssistant{}.Run(p, testEnv())
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	entry := res.Watches["storage-root"].(map[string]any)
-	check := entry[config.WatchKeyCheck].(map[string]any)
-	up := check[checks.LevelFieldUsedPct].(map[string]any)
-	if up[checks.CheckKeyOp] != cfgval.CompareOpGreaterEqual || up[checks.CheckKeyValue] != "90%" {
-		t.Fatalf("used_pct = %v", up)
-	}
+	entry := runVolumeAssistant(t, testEnv(), "storage-root", "2", "1", "", "2", "90%", "1", "2", "n", "n")
+	assertCheckPred(t, entry, checks.LevelFieldUsedPct, cfgval.CompareOpGreaterEqual, "90%")
 }
 
 func TestVolumeAssistantFreeBytesNoExpand(t *testing.T) {
 	// Select volume 1; free-space size condition 10G; for 2; notifier ops-email.
-	script := strings.Join([]string{"1", "1", "", "3", volumeDefaultFreeSize, "2", "1", "n", "n"}, "\n") + "\n"
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := volumeAssistant{}.Run(p, testEnv())
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	entry := res.Watches["storage-mnt-backup"].(map[string]any)
-	check := entry[config.WatchKeyCheck].(map[string]any)
-	free := check[checks.LevelFieldFreeBytes].(map[string]any)
-	if free[checks.CheckKeyOp] != cfgval.CompareOpLess || free[checks.CheckKeyValue] != volumeDefaultFreeSize {
-		t.Fatalf("free_bytes = %v", free)
-	}
+	entry := runVolumeAssistant(t, testEnv(), "storage-mnt-backup", "1", "1", "", "3", volumeDefaultFreeSize, "2", "1", "n", "n")
+	assertCheckPred(t, entry, checks.LevelFieldFreeBytes, cfgval.CompareOpLess, volumeDefaultFreeSize)
 }
 
 func TestVolumeAssistantSizeRequiresSuffix(t *testing.T) {
@@ -195,31 +204,16 @@ func TestVolumeAssistantSizeRequiresSuffix(t *testing.T) {
 
 func TestVolumeAssistantUsedBytesNoExpand(t *testing.T) {
 	// Select volume 1; used-space size condition 100G; for 2; notifier ops-email.
-	script := strings.Join([]string{"1", "1", "", "4", volumeDefaultUsedSize, "2", "1", "n", "n"}, "\n") + "\n"
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := volumeAssistant{}.Run(p, testEnv())
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	entry := res.Watches["storage-mnt-backup"].(map[string]any)
-	check := entry[config.WatchKeyCheck].(map[string]any)
-	used := check[checks.LevelFieldUsedBytes].(map[string]any)
-	if used[checks.CheckKeyOp] != cfgval.CompareOpGreaterEqual || used[checks.CheckKeyValue] != volumeDefaultUsedSize {
-		t.Fatalf("used_bytes = %v", used)
-	}
+	entry := runVolumeAssistant(t, testEnv(), "storage-mnt-backup", "1", "1", "", "4", volumeDefaultUsedSize, "2", "1", "n", "n")
+	assertCheckPred(t, entry, checks.LevelFieldUsedBytes, cfgval.CompareOpGreaterEqual, volumeDefaultUsedSize)
 }
 
 func TestVolumeAssistantInheritsGlobalNotify(t *testing.T) {
 	// Select volume 1; monitor enabled; inherit interval; free 10; for 3; inherit
 	// global notify; no expand.
-	script := strings.Join([]string{"1", "1", "", "1", "10", "3", config.NotifyKeywordDefault, "n", "n"}, "\n") + "\n"
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := volumeAssistant{}.Run(p, testEnvWithDefaultNotify())
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	entry := res.Watches["storage-mnt-backup"].(map[string]any)
-	then := entry[config.WatchKeyThen].(map[string]any)
+	entry := runVolumeAssistant(t, testEnvWithDefaultNotify(), "storage-mnt-backup",
+		"1", "1", "", "1", "10", "3", config.NotifyKeywordDefault, "n", "n")
+	then := entryThen(entry)
 	if _, hasNotify := then[rules.RuleFieldNotify]; hasNotify {
 		t.Fatalf("notify should be omitted to inherit global default: %v", then)
 	}
@@ -253,16 +247,22 @@ func TestVolumeAssistantDefaultWithoutGlobalMonitorOnly(t *testing.T) {
 func TestVolumeAssistantNoneWithoutExpandMonitorOnly(t *testing.T) {
 	// 'none' with expand declined is the reserved monitor-only opt-out: it is
 	// accepted directly.
-	script := strings.Join([]string{"1", "1", "", "1", "10", "3", config.NotifyNone, "n"}, "\n") + "\n"
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := volumeAssistant{}.Run(p, testEnv())
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	then := res.Watches["storage-mnt-backup"].(map[string]any)[config.WatchKeyThen].(map[string]any)
-	notify := then[rules.RuleFieldNotify].([]string)
-	if len(notify) != 1 || notify[0] != config.NotifyNone {
-		t.Fatalf("notify = %v, want [none]", notify)
+	entry := runVolumeAssistant(t, testEnv(), "storage-mnt-backup",
+		"1", "1", "", "1", "10", "3", config.NotifyNone, "n")
+	assertNotifyNone(t, entryThen(entry))
+}
+
+// assertNotifyNoneWithExpand runs a free-10-for-3 wizard script with the given
+// notify answer plus expand enabled, asserting a monitor-only notify with the
+// expand action still attached.
+func assertNotifyNoneWithExpand(t *testing.T, env Env, notifyAnswer string) {
+	t.Helper()
+	entry := runVolumeAssistant(t, env, "storage-mnt-backup",
+		"1", "1", "", "1", "10", "3", notifyAnswer, "y", volumeDefaultExpandBy, volumeDefaultExpandCooldown, "n")
+	then := entryThen(entry)
+	assertNotifyNone(t, then)
+	if _, ok := then[config.WatchThenKeyExpand].(map[string]any); !ok {
+		t.Fatalf("expand missing from then: %v", then)
 	}
 }
 
@@ -272,40 +272,13 @@ func TestVolumeAssistantDefaultWithoutGlobalWithExpand(t *testing.T) {
 	// Select volume 1; monitor enabled; inherit interval; free 10; for 3; default
 	// notify (not configured); enable expand. default degrades to monitor-only
 	// (notify [none]); the expand action is still attached.
-	script := strings.Join([]string{"1", "1", "", "1", "10", "3", config.NotifyKeywordDefault, "y", volumeDefaultExpandBy, volumeDefaultExpandCooldown, "n"}, "\n") + "\n"
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := volumeAssistant{}.Run(p, env)
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	then := res.Watches["storage-mnt-backup"].(map[string]any)[config.WatchKeyThen].(map[string]any)
-	notify := then[rules.RuleFieldNotify].([]string)
-	if len(notify) != 1 || notify[0] != config.NotifyNone {
-		t.Fatalf("notify = %v, want [none] (monitor-only)", notify)
-	}
-	if _, ok := then[config.WatchThenKeyExpand].(map[string]any); !ok {
-		t.Fatalf("expand missing from then: %v", then)
-	}
+	assertNotifyNoneWithExpand(t, env, config.NotifyKeywordDefault)
 }
 
 func TestVolumeAssistantNotifyNoneWithExpand(t *testing.T) {
 	// Select volume 1; monitor enabled; inherit interval; free 10; for 3; explicit
 	// none; enable expand.
-	script := strings.Join([]string{"1", "1", "", "1", "10", "3", config.NotifyNone, "y", volumeDefaultExpandBy, volumeDefaultExpandCooldown, "n"}, "\n") + "\n"
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	res, err := volumeAssistant{}.Run(p, testEnv())
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	entry := res.Watches["storage-mnt-backup"].(map[string]any)
-	then := entry[config.WatchKeyThen].(map[string]any)
-	notify := then[rules.RuleFieldNotify].([]string)
-	if len(notify) != 1 || notify[0] != config.NotifyNone {
-		t.Fatalf("notify = %v, want [none]", notify)
-	}
-	if _, ok := then[config.WatchThenKeyExpand].(map[string]any); !ok {
-		t.Fatalf("expand missing from then: %v", then)
-	}
+	assertNotifyNoneWithExpand(t, testEnv(), config.NotifyNone)
 }
 
 func TestVolumeAssistantNotifyKeywordsWithoutNotifiers(t *testing.T) {
@@ -317,32 +290,12 @@ func TestVolumeAssistantNotifyKeywordsWithoutNotifiers(t *testing.T) {
 	t.Run("none", func(t *testing.T) {
 		// Select volume 1; monitor enabled; inherit interval; free 10; for 3; type
 		// "none"; enable expand.
-		script := strings.Join([]string{"1", "1", "", "1", "10", "3", config.NotifyNone, "y", volumeDefaultExpandBy, volumeDefaultExpandCooldown, "n"}, "\n") + "\n"
-		p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-		res, err := volumeAssistant{}.Run(p, base)
-		if err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-		then := res.Watches["storage-mnt-backup"].(map[string]any)[config.WatchKeyThen].(map[string]any)
-		notify := then[rules.RuleFieldNotify].([]string)
-		if len(notify) != 1 || notify[0] != config.NotifyNone {
-			t.Fatalf("notify = %v, want [none]", notify)
-		}
+		assertNotifyNoneWithExpand(t, base, config.NotifyNone)
 	})
 
 	t.Run("default", func(t *testing.T) {
 		// With no notifiers and no global default, "default" is still selectable
 		// and degrades to monitor-only (notify [none]).
-		script := strings.Join([]string{"1", "1", "", "1", "10", "3", config.NotifyKeywordDefault, "y", volumeDefaultExpandBy, volumeDefaultExpandCooldown, "n"}, "\n") + "\n"
-		p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-		res, err := volumeAssistant{}.Run(p, base)
-		if err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-		then := res.Watches["storage-mnt-backup"].(map[string]any)[config.WatchKeyThen].(map[string]any)
-		notify := then[rules.RuleFieldNotify].([]string)
-		if len(notify) != 1 || notify[0] != config.NotifyNone {
-			t.Fatalf("notify = %v, want [none] (monitor-only)", notify)
-		}
+		assertNotifyNoneWithExpand(t, base, config.NotifyKeywordDefault)
 	})
 }

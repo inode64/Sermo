@@ -34,17 +34,22 @@ func (dbusProtocol) DefaultPort() int   { return defaultPortNone }
 func (dbusProtocol) RequiresUser() bool { return false }
 
 func (dbusProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	// buildConnCheck pre-resolves the address into Socket; fall back here so a
-	// direct Probe call (e.g. from a test) still resolves query/default.
+	return probeBusWithDeadline(ctx, cfg, dbusProbe)
+}
+
+// probeBusWithDeadline resolves the bus address from cfg and runs probe under
+// the shared deadline backstop; the prologue every D-Bus-based probe repeats.
+// buildConnCheck pre-resolves the address into Socket; the fallback keeps a
+// direct Probe call (e.g. from a test) resolving query/default. godbus'
+// connect/call are context-aware (WithContext / CallWithContext); the outer
+// backstop covers a stuck handshake.
+func probeBusWithDeadline(ctx context.Context, cfg Config, probe func(ctx context.Context, addr string) (Result, error)) (Result, error) {
 	addr := cfg.Socket
 	if addr == "" {
 		addr = DBusAddress("", cfg.Query)
 	}
-
-	// godbus' connect/call are context-aware (WithContext / CallWithContext);
-	// keep an outer backstop for a stuck handshake.
 	return probeWithDeadline(ctx, func(ctx context.Context) (Result, error) {
-		return dbusProbe(ctx, addr)
+		return probe(ctx, addr)
 	})
 }
 

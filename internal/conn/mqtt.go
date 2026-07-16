@@ -152,22 +152,17 @@ func parseMQTTConnack(b []byte) (code byte, sessionPresent bool, err error) {
 	return b[mqttConnackReturnCodeOffset], b[mqttConnackSessionFlagOffset]&mqttConnackSessionPresent != 0, nil
 }
 
+// mqttConnackNames names each CONNACK return code (MQTT 3.1.1).
+var mqttConnackNames = map[byte]string{
+	mqttConnackCodeAccepted:          mqttConnackNameAccepted,
+	mqttConnackCodeUnacceptableProto: mqttConnackNameUnacceptableProto,
+	mqttConnackCodeIDRejected:        mqttConnackNameIDRejected,
+	mqttConnackCodeServerUnavailable: mqttConnackNameServerUnavailable,
+	mqttConnackCodeBadCredentials:    mqttConnackNameBadCredentials,
+	mqttConnackCodeNotAuthorized:     mqttConnackNameNotAuthorized,
+}
+
 // mqttConnackName names a CONNACK return code (MQTT 3.1.1).
 func mqttConnackName(code byte) string {
-	switch code {
-	case mqttConnackCodeAccepted:
-		return mqttConnackNameAccepted
-	case mqttConnackCodeUnacceptableProto:
-		return mqttConnackNameUnacceptableProto
-	case mqttConnackCodeIDRejected:
-		return mqttConnackNameIDRejected
-	case mqttConnackCodeServerUnavailable:
-		return mqttConnackNameServerUnavailable
-	case mqttConnackCodeBadCredentials:
-		return mqttConnackNameBadCredentials
-	case mqttConnackCodeNotAuthorized:
-		return mqttConnackNameNotAuthorized
-	default:
-		return fmt.Sprintf("code-%d", code)
-	}
+	return codeName(code, mqttConnackNames, "code-%d")
 }
