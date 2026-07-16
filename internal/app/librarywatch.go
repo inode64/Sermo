@@ -119,22 +119,29 @@ func (s *ArtifactSamples) AppVersion(name string) (string, string, bool) {
 	return entry.version, entry.status, true
 }
 
-type libraryCheck struct {
+type artifactCheck struct {
 	name    string
 	inspect func(context.Context) appinspect.Report
 	samples *ArtifactSamples
+	store   func(*ArtifactSamples, string, appinspect.Report)
 }
 
-func (c libraryCheck) Name() string { return c.name }
+func (c artifactCheck) Name() string { return c.name }
 
-func (c libraryCheck) Run(ctx context.Context) checks.Result {
+func (c artifactCheck) Run(ctx context.Context) checks.Result {
 	report := c.inspect(ctx)
-	c.samples.StoreFile(report.Binary)
+	if c.store != nil {
+		c.store(c.samples, c.name, report)
+	}
 	result := checks.Result{Check: c.name, OK: report.Status == appinspect.StatusOK, Message: report.Status}
 	if !result.OK && report.Output != "" {
 		result.Data = map[string]any{checks.DataKeyOutput: report.Output}
 	}
 	return result
+}
+
+func storeLibrarySample(samples *ArtifactSamples, _ string, report appinspect.Report) {
+	samples.StoreFile(report.Binary)
 }
 
 // artifactWatchInterval resolves a catalog app or library's explicit interval,
@@ -175,10 +182,15 @@ func BuildLibraryWatches(ctx context.Context, cfg *config.Config, deps Deps) []*
 		out = append(out, &Watch{
 			Name:      libraryWatchNamePrefix + name,
 			CheckType: config.CategoryLibrary,
-			Check: libraryCheck{name: name, samples: samples, inspect: func(ctx context.Context) appinspect.Report {
-				return appinspect.InspectCategoryOne(ctx, runner, cfg, config.CategoryLibrary, name,
-					appinspect.WithUserLookup(deps.UserLookup))
-			}},
+			Check: artifactCheck{
+				name:    name,
+				samples: samples,
+				store:   storeLibrarySample,
+				inspect: func(ctx context.Context) appinspect.Report {
+					return appinspect.InspectCategoryOne(ctx, runner, cfg, config.CategoryLibrary, name,
+						appinspect.WithUserLookup(deps.UserLookup))
+				},
+			},
 			FireOnFail: true,
 			Interval:   artifactWatchInterval(cfg, config.CategoryLibrary, name),
 			Notifiers:  notifiers,
