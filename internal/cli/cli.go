@@ -638,7 +638,7 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 	if opts.noCascade || action == actionReload || action == actionResume || len(targets) == 0 {
 		a.beginManualOperationSettling(cfg, actionStore, service, action)
 		out, err := a.Operate(ctx, opts, cfg, resolved, service, action)
-		activeAfterStart := a.manualActionActiveAfterStart(ctx, opts, cfg, resolved, service, action, out, err)
+		activeAfterStart := a.activeAfterPostflightFailure(ctx, opts, cfg, resolved, service, action, out, err)
 		a.finishManualOperationSettling(cfg, actionStore, service, action, out, err, activeAfterStart)
 		return out, err
 	}
@@ -665,7 +665,7 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 		}
 		a.beginManualOperationSettling(cfg, actionStore, svc, action)
 		out, err := a.Operate(ctx, opts, cfg, res, svc, action)
-		activeAfterStart := a.manualActionActiveAfterStart(ctx, opts, cfg, res, svc, action, out, err)
+		activeAfterStart := a.activeAfterPostflightFailure(ctx, opts, cfg, res, svc, action, out, err)
 		a.finishManualOperationSettling(cfg, actionStore, svc, action, out, err, activeAfterStart)
 		if svc == service {
 			primary, primaryErr = out, err
@@ -738,8 +738,8 @@ func (a App) finishManualOperationSettling(cfg *config.Config, store *state.Stor
 	}
 }
 
-func (a App) manualActionActiveAfterStart(ctx context.Context, opts options, _ *config.Config, resolved config.Resolved, service, action string, result operation.Result, opErr error) bool {
-	if opErr != nil || result.Status != operation.ResultPostflightFailed || !cliManualStartLikeAction(action) {
+func (a App) activeAfterPostflightFailure(ctx context.Context, opts options, _ *config.Config, resolved config.Resolved, service, action string, result operation.Result, opErr error) bool {
+	if opErr != nil || result.Status != operation.ResultPostflightFailed || !app.ManualActionCanRemainActiveAfterPostflightFailure(action) {
 		return false
 	}
 	if a.Detector == nil || a.NewManager == nil {
@@ -761,10 +761,6 @@ func (a App) manualActionActiveAfterStart(ctx context.Context, opts options, _ *
 	}
 	st, err := target.Manager.Status(ctx, target.Unit)
 	return err == nil && st.Status == servicemgr.StatusActive
-}
-
-func cliManualStartLikeAction(action string) bool {
-	return action == actionStart || action == actionRestart || action == actionResume
 }
 
 // defaultOperate wires the real operation engine from a resolved service and
